@@ -1,0 +1,322 @@
+{
+  "schema": 2,
+  "version": "git-object-v2",
+  "sourceHash": "82631b1d2a58cdf33fe8256127adb9053294a9f3",
+  "provenance": {
+    "authority": "exact pinned Git blob bytes; git show, no checkout conversion",
+    "historicalVersion": "aq004-crlf-archive-v1",
+    "historicalFile": "baseline-corpus.json",
+    "historicalSha256": "c2afb5ba5df3bcc87ad1282e5d4ee835a56730d5161431d3b833923a3969b985",
+    "task": "AQ-009",
+    "planRevision": "AQ-R3",
+    "blobs": [
+      {
+        "path": "tests/playwright/README.md",
+        "gitBlob": "d568f0c0508eb146c726510311b2336a61ecbe5e"
+      },
+      {
+        "path": "tests/playwright/assertions/consoleAssertions.ts",
+        "gitBlob": "0d09d9d05bd6e0734903dd3bd3738e34d301efdb"
+      },
+      {
+        "path": "tests/playwright/assertions/maskFrameAssertions.ts",
+        "gitBlob": "060764134c7658240f2fd5ad1b56c7df4a56290d"
+      },
+      {
+        "path": "tests/playwright/assertions/mediaArtifactAssertions.ts",
+        "gitBlob": "f20d10429c2215e20d41de1c25e27a9bc1bcd4e6"
+      },
+      {
+        "path": "tests/playwright/assertions/videoArtifactFrameAssertions.ts",
+        "gitBlob": "39a7aab48b499a69087e04b33ad56dce10f835e4"
+      },
+      {
+        "path": "tests/playwright/beta/README.md",
+        "gitBlob": "f9d9e11417d3eab32d284717fc66b7922394df02"
+      },
+      {
+        "path": "tests/playwright/beta/WindowsDesktop.cs",
+        "gitBlob": "d77c2b68ba591cf3509d881d8a6100cfa75d43b4"
+      },
+      {
+        "path": "tests/playwright/beta/cleanup.spec.ts",
+        "gitBlob": "732e3830b2c6393acda138d14b9260d691eb3e16"
+      },
+      {
+        "path": "tests/playwright/beta/cleanup.ts",
+        "gitBlob": "bb1711cb2e27051405f9853bd19983b800a84395"
+      },
+      {
+        "path": "tests/playwright/beta/cleanupWindowsTest.ps1",
+        "gitBlob": "bc3d6952cae34a4ce9512c310373d592aed03c20"
+      },
+      {
+        "path": "tests/playwright/beta/edit-mask-export.spec.ts",
+        "gitBlob": "c386a95ea6c7449730e73c8d61b4c2a2651075d0"
+      },
+      {
+        "path": "tests/playwright/beta/exportPlayback.ts",
+        "gitBlob": "50bd5a0f7dec0a51e8640976358befc22f822c01"
+      },
+      {
+        "path": "tests/playwright/beta/mediaOracle.ts",
+        "gitBlob": "3daa438cc2e130d859a6bbf7960d0d5306ff6394"
+      },
+      {
+        "path": "tests/playwright/beta/readiness.spec.ts",
+        "gitBlob": "cfa2b821ec9453b9c240c6475d71ccca99a8b027"
+      },
+      {
+        "path": "tests/playwright/beta/readiness.ts",
+        "gitBlob": "d4de5fdf7ac99fdbd9d90903767fa504165beca1"
+      },
+      {
+        "path": "tests/playwright/beta/selectWindowsFolder.ps1",
+        "gitBlob": "226f55fad0f16db3d0f33f52a2d1f6ce2c8ad889"
+      },
+      {
+        "path": "tests/playwright/beta/temporalOracle.spec.ts",
+        "gitBlob": "7cdc2f930050c6d44dbdc2ea94d7b6b6598d6875"
+      },
+      {
+        "path": "tests/playwright/beta/temporalOracle.ts",
+        "gitBlob": "f4502e47fdb1bd0550c3bc9954b1570309fbfac5"
+      },
+      {
+        "path": "tests/playwright/beta/windowsFixture.ts",
+        "gitBlob": "b35266396675a07e69ffe2b2c23a98dafc603409"
+      },
+      {
+        "path": "tests/playwright/config/moduleGates.ts",
+        "gitBlob": "1fe252531fddcb793f783d5d46acd1826b574654"
+      },
+      {
+        "path": "tests/playwright/config/runtimeProfile.ts",
+        "gitBlob": "2a83d9ed32261d8e6f183a47ec83af0321f93113"
+      },
+      {
+        "path": "tests/playwright/drivers/ExportDriver.ts",
+        "gitBlob": "14e8ae1552b581d7007629f1f813c6f1633eb2cd"
+      },
+      {
+        "path": "tests/playwright/drivers/MaskDriver.ts",
+        "gitBlob": "14157bf917074a64a62e9506ffb54a9bd91041f4"
+      },
+      {
+        "path": "tests/playwright/drivers/PreviewDriver.ts",
+        "gitBlob": "b51524cc3a2705fa5f02088186faab58a9770b6e"
+      },
+      {
+        "path": "tests/playwright/drivers/TimelineDriver.ts",
+        "gitBlob": "19ffb959a4b04237d33104b6a1b5031d551a189b"
+      },
+      {
+        "path": "tests/playwright/fixtures/bridgeClient.ts",
+        "gitBlob": "edb77f47e6ce004701778e0576da22301c292459"
+      },
+      {
+        "path": "tests/playwright/fixtures/editorPage.ts",
+        "gitBlob": "8430effe067644458c41ac1c58f071cb50cdfb3f"
+      },
+      {
+        "path": "tests/playwright/fixtures/failureEvidence.ts",
+        "gitBlob": "f262b70a0943df94edb8bcec3221b159914d4993"
+      },
+      {
+        "path": "tests/playwright/fixtures/isolatedProject.ts",
+        "gitBlob": "aaf058d7cb09c0936b5d5237e9b4aa9bc3b5c5be"
+      },
+      {
+        "path": "tests/playwright/fixtures/mediaFixture.ts",
+        "gitBlob": "522791ea0f3579eda54bf7b2590bcd8ed122e12d"
+      },
+      {
+        "path": "tests/playwright/fixtures/referenceProject.ts",
+        "gitBlob": "35ab7e372f0878c2cbe88000bb7dbda669feb4cd"
+      },
+      {
+        "path": "tests/playwright/fixtures/test.ts",
+        "gitBlob": "7cf5c75e1aba40f5decac550f3b91b2cd4e19817"
+      },
+      {
+        "path": "tests/playwright/foundation/built-editor-shell.spec.ts",
+        "gitBlob": "32c117d6a69a1ea583f86c7fdb6f8e2456ed6128"
+      },
+      {
+        "path": "tests/playwright/foundation/golden-smoke.spec.ts",
+        "gitBlob": "5720db6d87e068812f00f7130ca68083f166ce07"
+      },
+      {
+        "path": "tests/playwright/masks/reference-mask.spec.ts",
+        "gitBlob": "764e889be59ed504975893f9bb1e64cdc2941e59"
+      },
+      {
+        "path": "tests/playwright/nested-compositions/super-project.spec.ts",
+        "gitBlob": "c64653cc6c6455f80ca6f8ee358ab9bc030a74a7"
+      },
+      {
+        "path": "tests/playwright/tsconfig.json",
+        "gitBlob": "fdb7d473daf91e347c92f1c023bc7bc3702eef74"
+      },
+      {
+        "path": "playwright.beta.config.ts",
+        "gitBlob": "76b19e3fc3e457f44d844912bcbd4e7b382af3c3"
+      }
+    ]
+  },
+  "metadataPolicy": "direct-object-json-under-tests/playwright/campaigns-v1",
+  "inputs": [
+    {
+      "path": "tests/playwright/README.md",
+      "sha256": "76326cc8ff76de3d2c038ad0318c7d084fb3dfcce9d306a75a0085d8fadd1cad"
+    },
+    {
+      "path": "tests/playwright/assertions/consoleAssertions.ts",
+      "sha256": "9ee9b31c55e933992c3149aea543ff6dcb0caa39236bd8706c3ecd280b3a4a91"
+    },
+    {
+      "path": "tests/playwright/assertions/maskFrameAssertions.ts",
+      "sha256": "ec3ce44a4fd3c649eb0e439d3e8fd241488afd6f45198fe2db793b7b8c0b799c"
+    },
+    {
+      "path": "tests/playwright/assertions/mediaArtifactAssertions.ts",
+      "sha256": "a1974f1c59718d3033fcc6d91b218db46b285da4821a4faf3d31b5d4e5b69057"
+    },
+    {
+      "path": "tests/playwright/assertions/videoArtifactFrameAssertions.ts",
+      "sha256": "f447c9b51c4286c15a3d6a112bc9b2055eae4ec9f7b1e77d905da002eabfc529"
+    },
+    {
+      "path": "tests/playwright/beta/README.md",
+      "sha256": "3d8cdc955c008bed279ce7ffd22f3d81d561eee2558add7cbecad46e0de490da"
+    },
+    {
+      "path": "tests/playwright/beta/WindowsDesktop.cs",
+      "sha256": "88a39e488a92071fe8eb2c1ae61c21a3f202a405544280603b55f1617c5c98b1"
+    },
+    {
+      "path": "tests/playwright/beta/cleanup.spec.ts",
+      "sha256": "9c39488360046f2a9e2bc8065eddf66b4b3811a54bf825aa86486e0dfa495000"
+    },
+    {
+      "path": "tests/playwright/beta/cleanup.ts",
+      "sha256": "2c091b21b9bd2dca8d575630e492c19d6ffaee3c18a07db7f18d54fac955d0cb"
+    },
+    {
+      "path": "tests/playwright/beta/cleanupWindowsTest.ps1",
+      "sha256": "bcef51bfe8be50f7c0f6dc876c71f4d0c806c2684be66bab99a6c8cdc5848b33"
+    },
+    {
+      "path": "tests/playwright/beta/edit-mask-export.spec.ts",
+      "sha256": "ba2d8da87e87233ddb530655c659aeab535fa29a384df824e027e1f243d86eaf"
+    },
+    {
+      "path": "tests/playwright/beta/exportPlayback.ts",
+      "sha256": "6474c20ce40f46b9583ede83106a95c2c25caf2793e37faf77851958d4db6e63"
+    },
+    {
+      "path": "tests/playwright/beta/mediaOracle.ts",
+      "sha256": "b7f4100184c535d96ae5149b9845c1981aec5e934d13ab91208875509e9fc16f"
+    },
+    {
+      "path": "tests/playwright/beta/readiness.spec.ts",
+      "sha256": "1fad58b21a2c18dcd11e5da02ec2259614707e7ca8f8fdbff6b43cb7a13b13e4"
+    },
+    {
+      "path": "tests/playwright/beta/readiness.ts",
+      "sha256": "97adc43b436c239f0cb84d1d284894ec4d854d8e1cb69b72cc81fc0d14d21258"
+    },
+    {
+      "path": "tests/playwright/beta/selectWindowsFolder.ps1",
+      "sha256": "626312864870b3561a3c8b5255e1ae549eec985ff9b9a6f48dcab1cec700609c"
+    },
+    {
+      "path": "tests/playwright/beta/temporalOracle.spec.ts",
+      "sha256": "8a05c4422020d675f920102dffce53ad5ecbdc4d9c72b87e5d555cd6c6892a4c"
+    },
+    {
+      "path": "tests/playwright/beta/temporalOracle.ts",
+      "sha256": "1c318d756a75fc203a325693eebc1feacd22bf5e723566d579e153c92c1fc755"
+    },
+    {
+      "path": "tests/playwright/beta/windowsFixture.ts",
+      "sha256": "002e9b1f3a19b13650334601d377c4edbd50782c1edf9f7c93008324d3fa0f89"
+    },
+    {
+      "path": "tests/playwright/config/moduleGates.ts",
+      "sha256": "b9c46ab416b8fe06f74f9104300ee1d42a261363228f6315e7e0c5f64ccda2d2"
+    },
+    {
+      "path": "tests/playwright/config/runtimeProfile.ts",
+      "sha256": "4db78990016c4e031565176d8aa4e394f94b534cb72464798a41a4f761cbd743"
+    },
+    {
+      "path": "tests/playwright/drivers/ExportDriver.ts",
+      "sha256": "b2431f7ad0d9cf1075de6a2e094e8d47ada80d0fc086824de7560e144c38f3cb"
+    },
+    {
+      "path": "tests/playwright/drivers/MaskDriver.ts",
+      "sha256": "0b18c84eae1b097436b3a0a06312340e443a1b5b81c2d0716e935e63b18a4271"
+    },
+    {
+      "path": "tests/playwright/drivers/PreviewDriver.ts",
+      "sha256": "44da64fe978e3d3c9dfc8c158e5f753910d2384db12fcc01759807eeffdad0c0"
+    },
+    {
+      "path": "tests/playwright/drivers/TimelineDriver.ts",
+      "sha256": "81b3c37da1d35e307e86eaac503e1613ea9157a8d91e6983e0cc713e22a75173"
+    },
+    {
+      "path": "tests/playwright/fixtures/bridgeClient.ts",
+      "sha256": "7f529429104b1da48a4d6a9b9aad61da24fe72b3af1a9456164b5b055c24a105"
+    },
+    {
+      "path": "tests/playwright/fixtures/editorPage.ts",
+      "sha256": "6565de5e0339284e4fbd361e84ee0fdf27f6e2fd04b5d40a9abb3fb78ad9f03b"
+    },
+    {
+      "path": "tests/playwright/fixtures/failureEvidence.ts",
+      "sha256": "22253c0d6db13dcda6fae91e1a0d7e02a61bd4ce6ed47a161cf34990ebb088af"
+    },
+    {
+      "path": "tests/playwright/fixtures/isolatedProject.ts",
+      "sha256": "5840b1247a56bfea50dd2f46d3cf66755f6a102d3b8aca1de055d43f19498ed1"
+    },
+    {
+      "path": "tests/playwright/fixtures/mediaFixture.ts",
+      "sha256": "92cae9d89f380359c3d316e2c6f290fc3d9677ebcf8bbf129470139031ac061d"
+    },
+    {
+      "path": "tests/playwright/fixtures/referenceProject.ts",
+      "sha256": "f0c245fd173e8976067890bd92f20c542ff573c558db939f9daffae54c68fb4f"
+    },
+    {
+      "path": "tests/playwright/fixtures/test.ts",
+      "sha256": "e08bc33d91f6ad2d3799ad62741dd345d0282bc70873bd07201afe94ddea5360"
+    },
+    {
+      "path": "tests/playwright/foundation/built-editor-shell.spec.ts",
+      "sha256": "c45cc191b99ab173050916cb74af46c715cdaf7083b32750940ddef1443063b3"
+    },
+    {
+      "path": "tests/playwright/foundation/golden-smoke.spec.ts",
+      "sha256": "67d01ba97d0f066644ec10d1f01e32f3a5acaea30a1d9eed7b27da18f3a7a07e"
+    },
+    {
+      "path": "tests/playwright/masks/reference-mask.spec.ts",
+      "sha256": "e566cd678d900e9993e8cad09887cf01ade7f0fbf983ee41f37fbf376fc11fda"
+    },
+    {
+      "path": "tests/playwright/nested-compositions/super-project.spec.ts",
+      "sha256": "4853a5432208456823f6f95903fb2213a95008fdc54d73bbce48f19f988e62a5"
+    },
+    {
+      "path": "tests/playwright/tsconfig.json",
+      "sha256": "658a99ec1a21f6c3c80c6fd9784a5f043b2d961db715bfbf24b40e7fd0545839"
+    },
+    {
+      "path": "playwright.beta.config.ts",
+      "sha256": "d51ab960f654471d6ccb9eac11769b03a81dd996a1e5431f20200d071e3d1a8c"
+    }
+  ]
+}

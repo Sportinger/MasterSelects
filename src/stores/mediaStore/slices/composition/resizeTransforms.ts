@@ -3,8 +3,10 @@ import type { Keyframe } from '../../../../types/keyframes';
 import { useTimelineStore } from '../../../timeline';
 
 /**
- * Adjust clip transforms when a composition is resized so content stays at
- * the same pixel position (more canvas space around it, no scaling).
+ * Keep layer offsets at the same composition-pixel distance when the canvas is
+ * resized. Scale is intentionally untouched: the compositor already derives
+ * native pixel size from the source and the new composition dimensions. Scaling
+ * x/y here would stretch layers whenever the composition aspect ratio changes.
  */
 export function adjustClipTransformsOnResize(
   get: () => MediaState,
@@ -33,20 +35,16 @@ export function adjustClipTransformsOnResize(
           y: clip.transform.position.y * scaleY,
           z: clip.transform.position.z,
         },
-        scale: {
-          x: clip.transform.scale.x * scaleX,
-          y: clip.transform.scale.y * scaleY,
-        },
       },
     }));
 
     const updatedKeyframes = new Map<string, Keyframe[]>();
     clipKeyframes.forEach((keyframes: Keyframe[], clipId: string) => {
       updatedKeyframes.set(clipId, keyframes.map(kf => {
-        if (kf.property === 'position.x' || kf.property === 'scale.x') {
+        if (kf.property === 'position.x') {
           return { ...kf, value: kf.value * scaleX };
         }
-        if (kf.property === 'position.y' || kf.property === 'scale.y') {
+        if (kf.property === 'position.y') {
           return { ...kf, value: kf.value * scaleY };
         }
         return kf;
@@ -67,16 +65,12 @@ export function adjustClipTransformsOnResize(
           y: clip.transform.position.y * scaleY,
           z: clip.transform.position.z,
         },
-        scale: {
-          x: clip.transform.scale.x * scaleX,
-          y: clip.transform.scale.y * scaleY,
-        },
       },
       keyframes: clip.keyframes?.map(kf => {
-        if (kf.property === 'position.x' || kf.property === 'scale.x') {
+        if (kf.property === 'position.x') {
           return { ...kf, value: kf.value * scaleX };
         }
-        if (kf.property === 'position.y' || kf.property === 'scale.y') {
+        if (kf.property === 'position.y') {
           return { ...kf, value: kf.value * scaleY };
         }
         return kf;

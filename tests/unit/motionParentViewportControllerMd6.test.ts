@@ -124,17 +124,17 @@ describe('MD6 Motion Null viewport controller', () => {
     expect(result.controller.version).toBe(MOTION_NULL_VIEWPORT_CONTROLLER_VERSION);
     expect(result.controller.timelineTime).toBe(3);
     expect(result.controller.localTransform.position).toEqual({ x: 0.2, y: 0.1 });
-    expect(result.controller.worldTransform.position.x).toBeCloseTo(0);
-    expect(result.controller.worldTransform.position.y).toBeCloseTo(0);
+    expect(result.controller.worldTransform.position.x).toBeCloseTo(-0.1);
+    expect(result.controller.worldTransform.position.y).toBeCloseTo(0.2);
     expect(result.controller.worldTransform.scale).toEqual({ all: 1, x: 2.25, y: 0.75 });
     expect(result.controller.worldTransform.rotationZ).toBe(105);
-    expect(result.controller.worldTransform.opacity).toBeCloseTo(0.4);
+    expect(result.controller.worldTransform.opacity).toBeCloseTo(0.8);
     expect(result.controller.position).toMatchObject({
-      composition: { x: 960, y: 540 },
-      screen: { x: 580, y: 320 },
+      composition: { x: 864, y: 648 },
+      screen: { x: 532, y: 374 },
       insideComposition: true,
     });
-    expect(result.controller.handle.geometry.center).toEqual({ x: 580, y: 320 });
+    expect(result.controller.handle.geometry.center).toEqual({ x: 532, y: 374 });
     expect(result.controller.handle.geometry.rotationDegrees).toBe(105);
     expect(result.controller.handle.geometry.xAxis.from.x)
       .not.toBe(result.controller.handle.geometry.xAxis.to.x);
@@ -221,17 +221,18 @@ describe('MD6 Motion Null viewport controller', () => {
     expect(drag.intent.delta.composition).toEqual({ x: 192, y: 108 });
     expect(drag.intent.delta.world.x).toBeCloseTo(0.2);
     expect(drag.intent.delta.world.y).toBeCloseTo(0.2);
-    expect(drag.intent.delta.local.x).toBeCloseTo(0.2);
-    expect(drag.intent.delta.local.y).toBeCloseTo(-0.2);
-    expect(drag.intent.to.local.x).toBeCloseTo(0.4);
-    expect(drag.intent.to.local.y).toBeCloseTo(-0.1);
-    expect(drag.intent.to.world).toEqual({ x: 0.2, y: 0.2 });
+    expect(drag.intent.delta.local.x).toBeCloseTo(0.1);
+    expect(drag.intent.delta.local.y).toBeCloseTo(-0.1);
+    expect(drag.intent.to.local.x).toBeCloseTo(0.3);
+    expect(drag.intent.to.local.y).toBeCloseTo(0);
+    expect(drag.intent.to.world.x).toBeCloseTo(0.1);
+    expect(drag.intent.to.world.y).toBeCloseTo(0.4);
     expect(drag.intent.propertyValues[0]).toMatchObject({
       property: 'position.x',
       fromValue: 0.2,
-      toValue: 0.4,
     });
-    expect(drag.intent.localTransformPatch.position.y).toBeCloseTo(-0.1);
+    expect(drag.intent.propertyValues[0].toValue).toBeCloseTo(0.3);
+    expect(drag.intent.localTransformPatch.position.y).toBeCloseTo(0);
     expect(drag.intent.previewWorldTransform.scale).toEqual({ all: 1, x: 2.25, y: 0.75 });
     expect(drag.intent.history).toEqual({
       mode: 'single-entry',

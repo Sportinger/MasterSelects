@@ -7,11 +7,13 @@ import { applyClipDragPreview } from '../stores/timeline/clipDragPreview';
 import { useMediaStore } from '../stores/mediaStore';
 import { getPlayheadPosition, layerBuilder } from '../services/layerBuilder';
 import { layerPlaybackManager } from '../services/layerPlaybackManager';
+import { liveInputRuntime } from '../services/mediaRuntime/liveInputRuntime';
 import { renderScheduler } from '../services/renderScheduler';
 import { framePhaseMonitor } from '../services/framePhaseMonitor';
 import { Logger } from '../services/logger';
 import { hasActiveTimelineVisualClip } from '../services/timeline/timelineVisualDemand';
 import { renderHostPort } from '../services/render/renderHostPort';
+import type { RenderFrameCallback } from '../services/render/renderHostTypes';
 import {
   hasActiveContinuousRenderClip,
   hasContinuousRenderLayers,
@@ -32,6 +34,21 @@ function getVisualTargetFps(): number {
   return typeof frameRate === 'number' && Number.isFinite(frameRate) && frameRate > 0
     ? Math.max(1, Math.min(60, Math.round(frameRate)))
     : 60;
+}
+
+function getVisualPlaybackFrameKey(playheadPosition: number): string {
+  const mediaState = useMediaStore.getState();
+  const activeComposition = mediaState.activeCompositionId
+    ? mediaState.compositions.find((composition) => composition.id === mediaState.activeCompositionId)
+    : null;
+  const frameRate =
+    typeof activeComposition?.frameRate === 'number' &&
+    Number.isFinite(activeComposition.frameRate) &&
+    activeComposition.frameRate > 0
+      ? activeComposition.frameRate
+      : 30;
+  const frameNumber = Math.floor(playheadPosition * frameRate + 1e-6);
+  return `${activeComposition?.id ?? 'timeline:active'}:${frameRate}:${frameNumber}`;
 }
 
 export function useEngine() {
@@ -75,8 +92,9 @@ export function useEngine() {
 
     let lastPlayhead = -1;
     let lastNoDemandFrameWasCleared = false;
+    let lastPlaybackVisualFrameKey: string | null = null;
 
-    const renderFrame = () => {
+    const renderFrame: RenderFrameCallback = (frameReason) => {
       const frameStart = performance.now();
       let buildMs = 0;
       let renderMs = 0;
@@ -120,7 +138,8 @@ export function useEngine() {
         const hasActiveTemporalClip = hasActiveContinuousRenderClip(
           timelineClips,
           timelineState.tracks,
-          currentPlayhead
+          currentPlayhead,
+          liveInputId => liveInputRuntime.getVideoElement(liveInputId) !== null,
         );
         const hasActiveVisualClip = hasActiveTimelineVisualClip(
           timelineClips,
@@ -136,6 +155,23 @@ export function useEngine() {
         renderHostPort.setTimelineVisualDemand(hasVisualRenderDemand);
         renderHostPort.setIsScrubbing(isInteractiveScrub);
         renderHostPort.setContinuousRender(hasActiveTemporalClip || hasPlaybackWarmup);
+
+        if (timelineState.isPlaying && hasVisualRenderDemand) {
+          const visualFrameKey = getVisualPlaybackFrameKey(currentPlayhead);
+          const canSkipDuplicateVisualFrame =
+            !frameReason?.newFrameReady &&
+            !hasPlaybackWarmup &&
+            !hasActiveTemporalClip &&
+            !hasActiveBackgroundLayer &&
+            lastPlaybackVisualFrameKey === visualFrameKey;
+          if (canSkipDuplicateVisualFrame) {
+            recordFramePhases('skipped');
+            return false;
+          }
+          lastPlaybackVisualFrameKey = visualFrameKey;
+        } else {
+          lastPlaybackVisualFrameKey = null;
+        }
 
         // Track playhead changes for idle detection
         // During playback, playhead constantly changes -> keeps engine active
@@ -290,11 +326,15 @@ export function useEngine() {
           !hasInteractiveVisualPreview &&
           !needsContinuousRender
         ) {
-          renderHostPort.cacheActiveCompOutput(activeCompId);
+          renderHostPort.cacheActiveCompOutput(
+            activeCompId,
+            frameContext.timelineTimeSeconds,
+          );
         }
         cacheMs += performance.now() - cacheStart;
         recordFramePhases('live');
       } catch (e) {
+        lastPlaybackVisualFrameKey = null;
         recordFramePhases('skipped');
         log.error('Render error', e);
       }

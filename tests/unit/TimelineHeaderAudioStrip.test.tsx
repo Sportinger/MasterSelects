@@ -3,9 +3,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TimelineHeader } from '../../src/components/timeline/TimelineHeader';
 import { createDefaultAudioEqParams } from '../../src/engine/audio/eq/AudioEqDefaults';
 import { useTimelineStore } from '../../src/stores/timeline';
+import {
+  FACTORY_MOBILE_LAYOUT_ID,
+  FACTORY_VIDEO_EDIT_LAYOUT_ID,
+  useDockStore,
+} from '../../src/stores/dockStore';
 import type { TimelineHeaderProps } from '../../src/components/timeline/types';
 import type { AnimatableProperty, ClipTransform, TimelineTrack } from '../../src/types';
 import { createMockClip } from '../helpers/mockData';
+
+vi.mock('../../src/services/audioRoutingManager', () => ({
+  audioRoutingManager: { disposeRoute: vi.fn() },
+}));
 
 function createAudioTrack(height: number): TimelineTrack {
   return {
@@ -83,6 +92,7 @@ function renderAudioHeader(height: number, props: Partial<TimelineHeaderProps> =
 }
 
 afterEach(() => {
+  useDockStore.setState({ activeSavedLayoutId: FACTORY_VIDEO_EDIT_LAYOUT_ID });
   vi.restoreAllMocks();
 });
 
@@ -155,6 +165,34 @@ describe('TimelineHeader audio mixer strip', () => {
     expect(container.querySelector('.track-header.audio.audio-strip-condensed')).not.toBeNull();
     expect(container.querySelector('.audio-track-pan-row.audio-track-pan-footer')).toBeNull();
     expect(container.querySelectorAll('.track-controls .btn-icon').length).toBeGreaterThanOrEqual(7);
+  });
+
+  it('moves all mixer buttons into a tap-open action bubble in mobile layouts', () => {
+    useDockStore.setState({ activeSavedLayoutId: FACTORY_MOBILE_LAYOUT_ID });
+    const { container, getByRole } = renderAudioHeader(48);
+
+    // Bubble content stays mounted for the liquid morph but is parked
+    // inert + hidden until the trigger opens it.
+    expect(container.querySelector('.ms-liquid-bubble-drawer[inert]')).not.toBeNull();
+
+    fireEvent.click(getByRole('button', { name: 'Audio 1 track actions' }));
+
+    expect(container.querySelector('.ms-liquid-bubble-drawer[inert]')).toBeNull();
+    expect(getByRole('group', { name: 'Audio 1 track actions' })).toBeTruthy();
+    expect(container.querySelectorAll('.ms-liquid-bubble-drawer .track-controls .btn-icon')).toHaveLength(7);
+  });
+
+  it('selects on a single name click and only edits the name on double-click', () => {
+    const targetSpy = vi.spyOn(useTimelineStore.getState(), 'setTargetTrack').mockImplementation(() => undefined);
+    const { container, getByTitle } = renderAudioHeader(48);
+    const name = getByTitle('Double-click to rename');
+
+    fireEvent.click(name);
+    expect(container.querySelector('.track-name-input')).toBeNull();
+    expect(targetSpy).toHaveBeenCalledWith('audio-48');
+
+    fireEvent.doubleClick(name);
+    expect(container.querySelector<HTMLInputElement>('.track-name-input')?.value).toBe('Audio 1');
   });
 
   it('shows nested EQ keyframe rows with readable labels and current values', () => {

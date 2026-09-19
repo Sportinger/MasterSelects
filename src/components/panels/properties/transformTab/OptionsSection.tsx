@@ -1,13 +1,17 @@
 import { SCENE_NAV_FPS_MOVE_SPEED_STEPS } from '../../../../stores/engineStore';
-import { DraggableNumber, KeyframeToggle } from '../shared';
+import { KeyframeToggle } from '../shared';
 import { BLEND_MODE_GROUPS, formatBlendModeName } from '../sharedConstants';
-import { MIDIParameterLabel } from '../MIDIParameterLabel';
+import { InspectorSelect } from '../../../inspector/InspectorSelect';
 import {
-  FpsModeIcon,
+  ResolveInspectorIconButton,
+  ResolveInspectorRow,
+  ResolveInspectorSection,
+} from '../resolveInspector/ResolveInspectorPrimitives';
+import {
   NoKeyframesIcon,
-  ResetAllIcon,
-  SetAllKeyframesIcon,
 } from './SceneNavIcons';
+import { LayerModeControls } from './LayerModeControls';
+import { LabeledValue } from './ValueControls';
 import type { CreateMidiTarget } from './transformTabTypes';
 import {
   CLIP_SPEED_MAX_MULTIPLIER,
@@ -15,6 +19,15 @@ import {
   CLIP_SPEED_MIN_PERCENT,
   CLIP_SPEED_MIN_SIGNED_MULTIPLIER,
 } from '../../../../stores/timeline/helpers/linkedClipSpeed';
+
+function LinkedAudioIcon() {
+  return (
+    <svg className="transform-option-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  );
+}
 
 interface OptionsSectionProps {
   clipId: string;
@@ -24,6 +37,8 @@ interface OptionsSectionProps {
   isEffectively3D: boolean;
   isLocked3D: boolean;
   isModel: boolean;
+  inspectorOnly?: boolean;
+  layerModeControlsInSource: boolean;
   modelPrimitiveIndex?: number;
   modelPrimitiveOptions: readonly { index: number; label: string }[];
   opacity: number;
@@ -32,6 +47,7 @@ interface OptionsSectionProps {
   sceneNavFpsMoveSpeed: number;
   sceneNavFpsMoveSpeedIndex: number;
   sceneNavNoKeyframes: boolean;
+  sceneNavTouchControlsVisible: boolean;
   speed: number;
   speedPct: number;
   linkedAudioSpeedEnabled?: boolean;
@@ -46,11 +62,10 @@ interface OptionsSectionProps {
   onBlendModeChange: (blendMode: string) => void;
   onModelPrimitiveIndexChange: (index: number | undefined) => void;
   onOpacityChange: (pct: number) => void;
-  onResetAll: () => void;
   onSceneNavFpsModeChange: (enabled: boolean) => void;
   onSceneNavFpsMoveSpeedChange: (speed: number) => void;
   onSceneNavNoKeyframesChange: (enabled: boolean) => void;
-  onSetAllCameraKeyframes: () => void;
+  onSceneNavTouchControlsVisibleChange: (visible: boolean) => void;
   onSpeedChange: (pct: number) => void;
   onLinkedAudioSpeedChange?: (enabled: boolean) => void;
   onFreeRunToggle: () => void;
@@ -67,6 +82,8 @@ export function OptionsSection({
   isEffectively3D,
   isLocked3D,
   isModel,
+  inspectorOnly = false,
+  layerModeControlsInSource,
   modelPrimitiveIndex,
   modelPrimitiveOptions,
   opacity,
@@ -75,6 +92,7 @@ export function OptionsSection({
   sceneNavFpsMoveSpeed,
   sceneNavFpsMoveSpeedIndex,
   sceneNavNoKeyframes,
+  sceneNavTouchControlsVisible,
   speed,
   speedPct,
   linkedAudioSpeedEnabled,
@@ -89,11 +107,10 @@ export function OptionsSection({
   onBlendModeChange,
   onModelPrimitiveIndexChange,
   onOpacityChange,
-  onResetAll,
   onSceneNavFpsModeChange,
   onSceneNavFpsMoveSpeedChange,
   onSceneNavNoKeyframesChange,
-  onSetAllCameraKeyframes,
+  onSceneNavTouchControlsVisibleChange,
   onSpeedChange,
   onLinkedAudioSpeedChange,
   onFreeRunToggle,
@@ -101,81 +118,150 @@ export function OptionsSection({
   onToggle3D,
   onWireframeToggle,
 }: OptionsSectionProps) {
+  if (isCameraClip) {
+    const navigationTitle = 'Click preview, then WASD move, Q/E up-down, LMB orbit, RMB look, MMB/Shift+LMB pan, wheel moves camera.';
+
+    return (
+      <ResolveInspectorSection
+        className="resolve-camera-navigation-section"
+        indicator="none"
+        title="Navigation"
+      >
+        <ResolveInspectorRow
+          actions={(
+            <ResolveInspectorIconButton
+              active={sceneNavNoKeyframes}
+              ariaLabel="Live camera override: MIDI and scene-nav controls do not write camera keyframes"
+              className="resolve-camera-keyframe-mode-button"
+              onClick={() => onSceneNavNoKeyframesChange(!sceneNavNoKeyframes)}
+            >
+              <NoKeyframesIcon crossedOut={sceneNavNoKeyframes} />
+            </ResolveInspectorIconButton>
+          )}
+          label="Controls"
+          title={navigationTitle}
+        >
+          <span className="resolve-camera-navigation-summary">Orbit / Look / Pan</span>
+        </ResolveInspectorRow>
+        <ResolveInspectorRow label="Mode">
+          <div className="resolve-camera-navigation-actions">
+            <ResolveInspectorIconButton
+              active={!sceneNavFpsMode}
+              ariaLabel="Orbit camera navigation"
+              onClick={() => onSceneNavFpsModeChange(false)}
+            >
+              Orbit
+            </ResolveInspectorIconButton>
+            <ResolveInspectorIconButton
+              active={sceneNavFpsMode}
+              ariaLabel="FPS camera navigation"
+              onClick={() => onSceneNavFpsModeChange(true)}
+            >
+              FPS
+            </ResolveInspectorIconButton>
+          </div>
+        </ResolveInspectorRow>
+        <ResolveInspectorRow label="Touch Overlay">
+          <button
+            aria-label="Show FPS touch controls on Preview"
+            aria-pressed={sceneNavTouchControlsVisible}
+            className={`transform-inspector-button${sceneNavTouchControlsVisible ? ' is-active' : ''}`}
+            onClick={() => onSceneNavTouchControlsVisibleChange(!sceneNavTouchControlsVisible)}
+            type="button"
+          >
+            {sceneNavTouchControlsVisible ? 'On' : 'Off'}
+          </button>
+        </ResolveInspectorRow>
+        <ResolveInspectorRow label="Move Speed">
+          <div className="resolve-camera-navigation-speed" title="WASD/QE movement speed">
+            <input
+              aria-label="Camera movement speed"
+              max={SCENE_NAV_FPS_MOVE_SPEED_STEPS.length - 1}
+              min={0}
+              onChange={(event) => {
+                const nextSpeed = SCENE_NAV_FPS_MOVE_SPEED_STEPS[Number(event.target.value)];
+                if (nextSpeed !== undefined) onSceneNavFpsMoveSpeedChange(nextSpeed);
+              }}
+              step={1}
+              type="range"
+              value={sceneNavFpsMoveSpeedIndex}
+            />
+            <output>{sceneNavFpsMoveSpeed.toFixed(1)}x</output>
+          </div>
+        </ResolveInspectorRow>
+      </ResolveInspectorSection>
+    );
+  }
+
+  if (inspectorOnly) {
+    return (
+      <ResolveInspectorSection
+        className="resolve-model-options-section"
+        indicator="none"
+        title="3D Options"
+      >
+        {isModel && modelPrimitiveOptions.length > 1 && (
+          <ResolveInspectorRow label="Mesh">
+            <InspectorSelect
+              ariaLabel="Mesh"
+              onChange={(value) => {
+                onModelPrimitiveIndexChange(value === '' ? undefined : Number(value));
+              }}
+              options={[
+                { label: 'All Meshes', value: '' },
+                ...modelPrimitiveOptions.map(option => ({
+                  label: option.label,
+                  value: String(option.index),
+                })),
+              ]}
+              value={modelPrimitiveIndex === undefined ? '' : String(modelPrimitiveIndex)}
+            />
+          </ResolveInspectorRow>
+        )}
+        {isModel && (
+          <ResolveInspectorRow label="Wireframe">
+            <button
+              aria-label="Wireframe"
+              aria-pressed={wireframe}
+              className={`transform-inspector-button${wireframe ? ' is-active' : ''}`}
+              onClick={onWireframeToggle}
+              type="button"
+            >
+              {wireframe ? 'On' : 'Off'}
+            </button>
+          </ResolveInspectorRow>
+        )}
+        {supportsThreeDEffectorToggle && (
+          <ResolveInspectorRow label="3D Effector">
+            <button
+              aria-label="3D Effector"
+              aria-pressed={threeDEffectorsEnabled}
+              className={`transform-inspector-button${threeDEffectorsEnabled ? ' is-active' : ''}`}
+              disabled={!canToggleThreeDEffectors}
+              onClick={onThreeDEffectorsToggle}
+              type="button"
+            >
+              {threeDEffectorsEnabled ? 'On' : 'Off'}
+            </button>
+          </ResolveInspectorRow>
+        )}
+      </ResolveInspectorSection>
+    );
+  }
+
   const realtimeAudioPreviewLimited = Math.abs(speed) < 0.25 || Math.abs(speed) > 4;
   return (
-    <div className="properties-section">
-      {isCameraClip && (
-        <div
-          className="control-row transform-option-row scene-nav-row"
-          title={sceneNavFpsMode
-            ? 'Click preview, hold LMB to look, WASD/QE move, MMB/RMB/Shift+LMB pan, wheel speed while moving/looking, wheel moves camera otherwise.'
-            : 'Click preview, then WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel moves camera.'}
-        >
-          <label className="prop-label">Nav Mode</label>
-          <button
-            className={`btn btn-xs scene-nav-icon-btn ${sceneNavFpsMode ? 'btn-active' : ''}`}
-            onClick={() => onSceneNavFpsModeChange(!sceneNavFpsMode)}
-            title={sceneNavFpsMode ? 'Use orbit mouse look' : 'Use FPS mouse look'}
-            aria-label={sceneNavFpsMode ? 'Use orbit mouse look' : 'Use FPS mouse look'}
-          >
-            <FpsModeIcon />
-          </button>
-          <button
-            className={`btn btn-xs scene-nav-icon-btn ${sceneNavNoKeyframes ? 'btn-active' : ''}`}
-            onClick={() => onSceneNavNoKeyframesChange(!sceneNavNoKeyframes)}
-            title="Live camera override: MIDI and scene-nav controls do not write camera keyframes"
-            aria-label="Live camera override: MIDI and scene-nav controls do not write camera keyframes"
-          >
-            <NoKeyframesIcon />
-          </button>
-          <button
-            className="btn btn-xs scene-nav-icon-btn"
-            onClick={onSetAllCameraKeyframes}
-            title="Enable all camera transform stopwatches and set keyframes at the playhead"
-            aria-label="Enable all camera transform stopwatches and set keyframes at the playhead"
-          >
-            <SetAllKeyframesIcon />
-          </button>
-          <button
-            className="btn btn-xs scene-nav-icon-btn"
-            onClick={onResetAll}
-            title="Reset camera transform"
-            aria-label="Reset camera transform"
-          >
-            <ResetAllIcon />
-          </button>
-          {sceneNavFpsMode && (
-            <div className="scene-nav-speed-control" title="FPS movement speed">
-              <input
-                type="range"
-                min={0}
-                max={SCENE_NAV_FPS_MOVE_SPEED_STEPS.length - 1}
-                step={1}
-                value={sceneNavFpsMoveSpeedIndex}
-                onChange={(event) => {
-                  const nextSpeed = SCENE_NAV_FPS_MOVE_SPEED_STEPS[Number(event.target.value)];
-                  if (nextSpeed !== undefined) onSceneNavFpsMoveSpeedChange(nextSpeed);
-                }}
-              />
-              <span>{sceneNavFpsMoveSpeed.toFixed(1)}x</span>
-            </div>
-          )}
-        </div>
-      )}
-      {!isCameraClip && (
-        <div className="control-row transform-option-row">
-          <label className="prop-label">3D Layer</label>
-          {isLocked3D ? (
-            <span className="btn btn-xs btn-active" style={{ cursor: 'default' }}>3D</span>
-          ) : (
-            <button
-              className={`btn btn-xs ${isEffectively3D ? 'btn-active' : ''}`}
-              onClick={onToggle3D}
-              title={isEffectively3D ? 'Disable 3D layer' : 'Enable 3D layer'}
-            >
-              {isEffectively3D ? '3D' : '2D'}
-            </button>
-          )}
+    <div className="properties-section transform-options-section">
+      {!isCameraClip && !layerModeControlsInSource && (
+        <div className="control-row transform-mode-row">
+          <LayerModeControls
+            freeRun={freeRun}
+            isEffectively3D={isEffectively3D}
+            isLocked3D={isLocked3D}
+            supportsFreeRun={supportsFreeRun}
+            onFreeRunToggle={onFreeRunToggle}
+            onToggle3D={onToggle3D}
+          />
           {isModel && (
             <button
               className={`btn btn-xs ${wireframe ? 'btn-active' : ''}`}
@@ -191,20 +277,20 @@ export function OptionsSection({
       {isModel && modelPrimitiveOptions.length > 1 && (
         <div className="control-row transform-option-row">
           <label className="prop-label">Mesh</label>
-          <select
-            value={modelPrimitiveIndex ?? ''}
-            onChange={(event) => {
-              const value = event.target.value;
+          <InspectorSelect
+            ariaLabel="Mesh"
+            onChange={(value) => {
               onModelPrimitiveIndexChange(value === '' ? undefined : Number(value));
             }}
-          >
-            <option value="">All Meshes</option>
-            {modelPrimitiveOptions.map((option) => (
-              <option key={option.index} value={option.index}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            options={[
+              { label: 'All Meshes', value: '' },
+              ...modelPrimitiveOptions.map(option => ({
+                label: option.label,
+                value: String(option.index),
+              })),
+            ]}
+            value={modelPrimitiveIndex === undefined ? '' : String(modelPrimitiveIndex)}
+          />
         </div>
       )}
       {supportsThreeDEffectorToggle && (
@@ -222,100 +308,91 @@ export function OptionsSection({
         </div>
       )}
       {!isCameraClip && (
-        <div className="control-row transform-option-row">
-          <label className="prop-label">Blend</label>
-          <select value={blendMode} onChange={(event) => onBlendModeChange(event.target.value)}>
-            {BLEND_MODE_GROUPS.map((group) => (
-              <optgroup key={group.label} label={group.label}>
-                {group.modes.map((mode) => (
-                  <option key={mode} value={mode}>{formatBlendModeName(mode)}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+        <div className="control-row transform-blend-opacity-row">
+          <div className="transform-inline-opacity-control">
+            <label className="prop-label">Opacity</label>
+            <LabeledValue
+              className="transform-inline-keyframed-value"
+              label=""
+              value={opacityPct}
+              onChange={onOpacityChange}
+              defaultValue={100}
+              decimals={1}
+              suffix="%"
+              min={0}
+              max={100}
+              sensitivity={1}
+              onDragStart={onBatchStart}
+              onDragEnd={onBatchEnd}
+              keyframeToggle={<KeyframeToggle clipId={clipId} property="opacity" value={opacity} />}
+              midiTarget={createMidiTarget('opacity', 'Opacity', opacity, 0, 1)}
+            />
+          </div>
+          <div className="transform-inline-blend-control">
+            <label className="prop-label">Blend</label>
+            <InspectorSelect
+              ariaLabel="Blend mode"
+              groups={BLEND_MODE_GROUPS.map(group => ({
+                label: group.label,
+                options: group.modes.map(mode => ({
+                  label: formatBlendModeName(mode),
+                  value: mode,
+                })),
+              }))}
+              onChange={onBlendModeChange}
+              touchScrollSelection
+              value={blendMode}
+              wheelSelection
+            />
+          </div>
         </div>
       )}
       {!isCameraClip && (
-        <div className="control-row transform-param-row">
-          <KeyframeToggle clipId={clipId} property="opacity" value={opacity} />
-          <MIDIParameterLabel
-            as="label"
-            className="prop-label"
-            target={createMidiTarget('opacity', 'Opacity', opacity, 0, 1)}
-          >
-            Opacity
-          </MIDIParameterLabel>
-          <DraggableNumber
-            value={opacityPct}
-            onChange={onOpacityChange}
-            defaultValue={100}
-            decimals={1}
-            suffix="%"
-            min={0}
-            max={100}
-            sensitivity={1}
-            onDragStart={onBatchStart}
-            onDragEnd={onBatchEnd}
-          />
-        </div>
-      )}
-      {!isCameraClip && (
-        <div className="control-row transform-param-row">
-          <KeyframeToggle clipId={clipId} property="speed" value={speed} />
-          <MIDIParameterLabel
-            as="label"
-            className="prop-label"
-            target={createMidiTarget(
-              'speed',
-              'Speed',
-              speed,
-              CLIP_SPEED_MIN_SIGNED_MULTIPLIER,
-              CLIP_SPEED_MAX_MULTIPLIER,
+        <div className="control-row transform-speed-row">
+          <label className="prop-label">Speed</label>
+          <div className="transform-speed-controls">
+            <LabeledValue
+              className="transform-inline-keyframed-value"
+              label=""
+              value={speedPct}
+              onChange={onSpeedChange}
+              defaultValue={100}
+              decimals={0}
+              suffix="%"
+              min={CLIP_SPEED_MIN_PERCENT}
+              max={CLIP_SPEED_MAX_PERCENT}
+              sensitivity={1}
+              onDragStart={onBatchStart}
+              onDragEnd={onBatchEnd}
+              keyframeToggle={<KeyframeToggle clipId={clipId} property="speed" value={speed} />}
+              midiTarget={createMidiTarget(
+                'speed',
+                'Speed',
+                speed,
+                CLIP_SPEED_MIN_SIGNED_MULTIPLIER,
+                CLIP_SPEED_MAX_MULTIPLIER,
+              )}
+            />
+            {linkedAudioSpeedEnabled !== undefined && onLinkedAudioSpeedChange && (
+              <button
+                type="button"
+                className={`transform-icon-toggle transform-compact-action-button${linkedAudioSpeedEnabled ? ' is-active' : ''}`}
+                onClick={() => onLinkedAudioSpeedChange(!linkedAudioSpeedEnabled)}
+                aria-label="Linked Audio"
+                aria-pressed={linkedAudioSpeedEnabled}
+                title={linkedAudioSpeedEnabled
+                  ? 'Unlink audio from video speed'
+                  : 'Link audio to video speed'}
+              >
+                <LinkedAudioIcon />
+              </button>
             )}
-          >
-            Speed
-          </MIDIParameterLabel>
-          <DraggableNumber
-            value={speedPct}
-            onChange={onSpeedChange}
-            defaultValue={100}
-            decimals={0}
-            suffix="%"
-            min={CLIP_SPEED_MIN_PERCENT}
-            max={CLIP_SPEED_MAX_PERCENT}
-            sensitivity={1}
-            onDragStart={onBatchStart}
-            onDragEnd={onBatchEnd}
-          />
+          </div>
         </div>
       )}
       {!isCameraClip && realtimeAudioPreviewLimited && (
         <div className="control-row">
           <span className="hint">Exact audio timing is used for export; browser preview is limited outside 25-400%.</span>
-        </div>
-      )}
-      {!isCameraClip && linkedAudioSpeedEnabled !== undefined && onLinkedAudioSpeedChange && (
-        <div className="control-row transform-option-row">
-          <label className="prop-label" htmlFor={`linked-audio-speed-${clipId}`}>Link Audio Speed</label>
-          <input
-            id={`linked-audio-speed-${clipId}`}
-            type="checkbox"
-            checked={linkedAudioSpeedEnabled}
-            onChange={(event) => onLinkedAudioSpeedChange(event.target.checked)}
-            title="Make the linked audio follow this video's speed and duration"
-          />
-        </div>
-      )}
-      {supportsFreeRun && (
-        <div className="control-row transform-option-row">
-          <label className="prop-label" htmlFor={`free-run-${clipId}`}>Free Run</label>
-          <input
-            id={`free-run-${clipId}`}
-            type="checkbox"
-            checked={freeRun}
-            onChange={onFreeRunToggle}
-            title="Loop this video independently of the timeline playhead"
-          />
         </div>
       )}
     </div>

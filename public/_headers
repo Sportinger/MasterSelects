@@ -1,6 +1,12 @@
 /*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: credentialless
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Frame-Options: SAMEORIGIN
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), payment=(), interest-cohort=()
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' blob: 'wasm-unsafe-eval' 'unsafe-eval' 'sha256-mT9rMsSY3ckk7bpF1GYnyFg3ho0Qvqe1PgRuXR1S2/g=' 'sha256-jz00Uinsl2TEyCnc8yGCSKRc1GQhayrFohw2IBuNcPA=' https://cdn.jsdelivr.net; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' blob: data: https:; media-src 'self' blob: data: https: http://127.0.0.1:9877 http://localhost:9877; connect-src 'self' blob: data: https://huggingface.co https://*.hf.co https://cdn-lfs.huggingface.co https://cdn-lfs-us-1.huggingface.co https://cdn.jsdelivr.net https://storage.googleapis.com https://www.googleapis.com https://raw.githubusercontent.com https://media.githubusercontent.com https://api.github.com https://api.openverse.org https://commons.wikimedia.org https://api.memegen.link https://api.imgflip.com ws://127.0.0.1:9876 http://127.0.0.1:9877 ws://localhost:9876 http://localhost:9877 http://localhost:5555; frame-src 'self' https://www.youtube.com https://www.twitch.tv; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; report-uri /api/analytics/csp-report
 
 /api/*
   Cache-Control: no-store

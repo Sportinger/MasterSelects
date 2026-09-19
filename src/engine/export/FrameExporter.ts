@@ -2,7 +2,7 @@ import { Logger } from '../../services/logger';
 import { exportDiagnostics } from '../../services/export/exportDiagnostics';
 
 const log = Logger.create('FrameExporter');
-import { AudioExportPipeline, type EncodedAudioResult } from '../audio';
+import { AudioExportPipeline, DEFAULT_AUDIO_BITRATE, type EncodedAudioResult } from '../audio';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
@@ -235,7 +235,7 @@ export class FrameExporter {
     const encoderInitStart = performance.now();
     let initialized = false;
     try {
-      initialized = await this.encoder.init();
+      initialized = await this.encoder.init({ deferVideoEncoder: true });
     } catch (error) {
       exportDiagnostics.recordPhase('encoderInit', performance.now() - encoderInitStart);
       exportDiagnostics.finish('failed', error);
@@ -253,8 +253,9 @@ export class FrameExporter {
     if (shouldExportAudio) {
       this.audioPipeline = new AudioExportPipeline({
         sampleRate: this.settings.audioSampleRate ?? 48000,
-        bitrate: this.settings.audioBitrate ?? 256000,
+        bitrate: this.settings.audioBitrate ?? DEFAULT_AUDIO_BITRATE,
         normalize: this.settings.normalizeAudio ?? false,
+        codec: this.encoder.getAudioCodec(),
       }, {
         exportRunId,
       });

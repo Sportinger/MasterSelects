@@ -24,8 +24,13 @@ import type { RuntimeFrameProvider } from '../../src/services/mediaRuntime/types
 import type { Keyframe, Layer, TimelineClip, TimelineTrack } from '../../src/types';
 import {
   addClipCustomNodeDefinition,
+  clearAINodeRuntimeCache,
   createClipAICustomNodeDefinition,
+  waitForAINodeRuntimeIdle,
 } from '../../src/services/nodeGraph';
+import { setAINodeSandboxTestExecutor } from '../../src/services/nodeGraph/aiNodeSandboxClient';
+import { installCanvas2DMock } from '../helpers/mockCanvas2d';
+import { runAINodeSandboxTestExecutor } from '../helpers/aiNodeSandboxTestExecutor';
 
 const initialTimelineState = useTimelineStore.getState();
 const initialMediaState = useMediaStore.getState();
@@ -96,7 +101,12 @@ function withMediaStoreState<T>(
 }
 
 describe('LayerBuilderService paused visual provider selection', () => {
+  let canvas2DMock: ReturnType<typeof installCanvas2DMock>;
+
   beforeEach(() => {
+    canvas2DMock = installCanvas2DMock();
+    setAINodeSandboxTestExecutor(runAINodeSandboxTestExecutor);
+    clearAINodeRuntimeCache();
     mediaRuntimeRegistry.clear();
     releaseAllLazyTimelineImageElements();
     timelineRuntimeCoordinator.clearResources();
@@ -108,6 +118,9 @@ describe('LayerBuilderService paused visual provider selection', () => {
   });
 
   afterEach(() => {
+    clearAINodeRuntimeCache();
+    setAINodeSandboxTestExecutor(null);
+    canvas2DMock.restore();
     releaseAllLazyTimelineImageElements();
     timelineRuntimeCoordinator.clearResources();
     vi.unstubAllGlobals();
@@ -721,7 +734,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
     expect(overlayLayer?.source?.textCanvas).toBeInstanceOf(HTMLCanvasElement);
   });
 
-  it('passes linked audio analysis context into rendered AI node layers', () => {
+  it('passes linked audio analysis context into rendered AI node layers', async () => {
     const service = new LayerBuilderService();
     const sourceCanvas = document.createElement('canvas');
     sourceCanvas.width = 2;
@@ -856,6 +869,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
     expect(layers).toHaveLength(1);
     const outputCanvas = layers[0]?.source?.textCanvas;
     expect(outputCanvas).toBeInstanceOf(HTMLCanvasElement);
+    await waitForAINodeRuntimeIdle();
     const outputData = outputCanvas?.getContext('2d')?.getImageData(0, 0, 2, 1).data;
     expect(outputData?.[0]).toBe(141);
     expect(outputData?.[1]).toBe(142);
@@ -1275,7 +1289,8 @@ describe('LayerBuilderService paused visual provider selection', () => {
 
   it('keeps full WebCodecs preview bound to the scrub runtime while actively dragging the playhead', () => {
     const service = new LayerBuilderService();
-    const videoElement = { currentTime: 1.25 } as HTMLVideoElement;
+    const videoElement = document.createElement('video');
+    videoElement.currentTime = 1.25;
     const clipPlayer = {
       isFullMode: () => true,
       isSimpleMode: () => false,

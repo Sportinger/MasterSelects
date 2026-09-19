@@ -137,7 +137,7 @@ function shouldDeferToFocusedControl(
   const key = event.key.toLowerCase();
   if (
     isShortcutControlElement(focusedElement) &&
-    (event.code === 'Space' || key === ' ' || key === 'enter')
+    (event.code === 'Space' || key === ' ' || key === 'enter' || key === 'tab')
   ) {
     return true;
   }
@@ -195,6 +195,16 @@ export function handoffPointerFocus(event: PointerEvent): void {
   const target = asElement(event.target);
   const focusedElement = getFocusedElement(event.target);
   if (!focusedElement || !target || focusedElement.contains(target)) return;
+
+  const focusScope = focusedElement.closest('[data-pointer-focus-scope]');
+  const targetScope = target.closest('[data-pointer-focus-scope]');
+  if (
+    focusScope?.contains(target)
+    || (
+      focusScope?.getAttribute('data-pointer-focus-scope')
+      && focusScope.getAttribute('data-pointer-focus-scope') === targetScope?.getAttribute('data-pointer-focus-scope')
+    )
+  ) return;
 
   focusedElement.blur();
 }

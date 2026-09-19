@@ -19,4 +19,5 @@ export type TimelineSourceType =
   | 'motion-adjustment'
   | 'storyboard'
   | 'midi'
+  | 'flock'
   | VectorAnimationProvider;

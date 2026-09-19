@@ -37,6 +37,7 @@ import {
 } from './ClipAudioAIContextMenuItems';
 import { openMuscriptorDialog } from '../common/muscriptorSetup/dialogController';
 import type { TimelineContextMenuProps } from './timelineContextMenuTypes';
+import { ClipOriginContextMenuItem } from './ClipOriginContextMenuItem';
 
 const log = Logger.create('TimelineContextMenu');
 const COPY_PROMPT_TOAST_MS = 900;
@@ -116,6 +117,7 @@ export function TimelineContextMenu({
   const playheadPosition = useTimelineStore((state) => state.playheadPosition);
   const showFaceRanges = useTimelineStore((state) => state.showFaceRanges);
   const toggleFaceRanges = useTimelineStore((state) => state.toggleFaceRanges);
+  const setClipRenameId = useTimelineStore((state) => state.setClipRenameId);
   const [showCopiedPromptToast, setShowCopiedPromptToast] = useState(false);
   const copiedPromptTimeoutRef = useRef<number | null>(null);
   const confirmPromptCopied = useCallback(() => {
@@ -261,6 +263,7 @@ export function TimelineContextMenu({
   const { mediaItemId, currentColor } = resolveClipContextMenuLabelTarget(clip, useMediaStore.getState());
   const canSetLabelColor = Boolean(mediaItemId);
   const clipboardActions = {
+    copyClips: () => useTimelineStore.getState().copyClips(),
     copyClipEffects,
     pasteClipEffects,
     copyClipColor,
@@ -352,7 +355,7 @@ export function TimelineContextMenu({
           <div
             className="context-menu-item"
             onClick={() => {
-              useTimelineStore.getState().setClipRenameId(clip.id);
+              setClipRenameId(clip.id);
               setContextMenu(null);
             }}
           >
@@ -539,6 +542,12 @@ export function TimelineContextMenu({
 
       <div className="context-menu-separator" />
       <div
+        className={`context-menu-item ${!clip ? 'disabled' : ''}`}
+        onClick={() => runCommand({ kind: 'clipboard', command: 'copy-clips', canExecute: Boolean(clip) })}
+      >
+        Copy
+      </div>
+      <div
         className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}
         onClick={() => runCommand({ kind: 'timeline', command: 'split-at-playhead', canExecute: canModifyTargets })}
       >
@@ -616,6 +625,7 @@ export function TimelineContextMenu({
           {clip?.reversed ? '\u2713 ' : ''}Reverse
         </div>
       )}
+      <ClipOriginContextMenuItem clip={clip} canModify={canModifyTargets} onDone={() => setContextMenu(null)} />
 
       <div
         className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}

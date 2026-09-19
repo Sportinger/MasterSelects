@@ -1,6 +1,7 @@
 import type { Layer, LayerRenderData } from '../../core/types';
 import { getMotionReplicatorSourceGeometry } from '../../motion/MotionTypes';
 import type { LayerCollectorDeps } from '../LayerCollector';
+import type { TextureManager } from '../../texture/TextureManager';
 
 function collectImageElementLayer(
   layer: Layer,
@@ -28,20 +29,24 @@ function collectImageElementLayer(
   return null;
 }
 
-function collectTextCanvasLayer(
+export function collectCanvasElementLayer(
   layer: Layer,
   canvas: HTMLCanvasElement,
-  deps: LayerCollectorDeps
+  textureManager: TextureManager,
 ): LayerRenderData | null {
-  const texture = deps.textureManager.createCanvasTexture(canvas);
+  const texture = textureManager.createCanvasTexture(canvas);
   if (texture) {
     return {
       layer,
       isVideo: false,
+      isDynamic: Boolean(canvas.dataset.masterselectsDynamic),
       externalTexture: null,
-      textureView: deps.textureManager.getImageView(texture),
+      textureView: textureManager.getImageView(texture),
       sourceWidth: canvas.width,
       sourceHeight: canvas.height,
+      displayedMediaTime: layer.source?.videoElement?.currentTime ?? layer.source?.mediaTime,
+      targetMediaTime: layer.source?.videoElement?.currentTime ?? layer.source?.targetMediaTime,
+      previewPath: layer.source?.isLiveInput ? 'live-canvas' : layer.source?.previewPath,
     };
   }
   return null;
@@ -67,6 +72,10 @@ export function collectStaticLayerData(
     return null;
   }
 
+  if (source.canvasElement) {
+    return collectCanvasElementLayer(layer, source.canvasElement, deps.textureManager);
+  }
+
   if (source.type === 'image') {
     if (source.imageElement) {
       return collectImageElementLayer(layer, source.imageElement, deps);
@@ -89,14 +98,15 @@ export function collectStaticLayerData(
     source.type === 'model' ||
     source.type === 'light' ||
     source.type === 'gaussian-avatar' ||
-    source.type === 'gaussian-splat'
+    source.type === 'gaussian-splat' ||
+    source.type === 'flock'
   ) {
     return collectZeroSizedPlaceholderLayer(layer);
   }
 
   if (source.type === 'text' || source.type === 'solid') {
     if (source.textCanvas) {
-      return collectTextCanvasLayer(layer, source.textCanvas, deps);
+      return collectCanvasElementLayer(layer, source.textCanvas, deps.textureManager);
     }
     return null;
   }

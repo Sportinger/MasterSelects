@@ -1,3 +1,5 @@
+import { startProjectAutosaveTimer } from '../../services/project/projectAutosaveTimer';
+import { createProjectSaveInteractionGate } from '../../services/project/projectSaveInteractionGate';
 // Toolbar component - After Effects style menu bar
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -11,15 +13,14 @@ import {
 } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useRenderTargetStore } from '../../stores/renderTargetStore';
-import { useAccountStore } from '../../stores/accountStore';
+import { useEngineStore } from '../../stores/engineStore';
 import { SettingsDialog } from './SettingsDialog';
 import { SavedToast } from './SavedToast';
-import { InfoDialog } from './InfoDialog';
+import { ToolbarSaveStatus } from './toolbar/ToolbarSaveStatus';
 import { DevChatDialog } from './DevChatDialog';
 import { LeaveNoteDialog } from './LeaveNoteDialog';
 import { LegalDialog } from './LegalDialog';
 import type { LegalPage } from './LegalDialog';
-import { NativeHelperStatus } from './NativeHelperStatus';
 import {
   ProjectNameDialog,
   type ProjectNameDialogRequest,
@@ -40,7 +41,6 @@ import { openOutputManager } from '../outputManager/OutputManagerBoot';
 import { EditMenu } from './toolbar/EditMenu';
 import { FileMenu } from './toolbar/FileMenu';
 import { InfoMenu } from './toolbar/InfoMenu';
-import { HelpMenu } from './toolbar/HelpMenu';
 import { OutputMenu } from './toolbar/OutputMenu';
 import { ViewMenu } from './toolbar/ViewMenu';
 import { getToolbarShortcutLabels } from './toolbar/shortcutLabels';
@@ -51,18 +51,23 @@ import { useToolbarProjectShortcuts } from './toolbar/useToolbarProjectShortcuts
 import { useToolbarViewActions } from './toolbar/useToolbarViewActions';
 import { useDevChatNotification } from './toolbar/useDevChatNotification';
 import { screenCaptureService } from '../../services/capture/ScreenCaptureService';
+import { ToolbarLiveStatus } from './toolbar/ToolbarLiveStatus';
 import { CreditBurnMeter } from './CreditBurnMeter';
 import { runToolbarProjectBootRestore } from './toolbar/toolbarProjectStartup';
+import { restoreAndroidProjectAutomatically } from '../../services/project/androidProjectAutoRestore';
 
 const log = Logger.create('Toolbar');
 
 interface ToolbarProps {
-  onOpenChangelog?: () => void;
-  onOpenSplash?: () => void;
+  onProjectBootResolved?: (isProjectOpen: boolean) => void;
 }
 
-export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
+export function Toolbar({
+  onProjectBootResolved,
+}: ToolbarProps) {
   const { isEngineReady, createOutputWindow } = useEngine();
+  const engineInitFailed = useEngineStore((s) => s.engineInitFailed);
+  const engineInitError = useEngineStore((s) => s.engineInitError);
   const targets = useRenderTargetStore((s) => s.targets);
   const outputTargets = useMemo(() => {
     const result: { id: string; name: string }[] = [];
@@ -84,6 +89,7 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
     savedLayouts,
     defaultSavedLayoutId,
     activeSavedLayoutId,
+    overLayoutBaseId,
     setDefaultSavedLayout,
     toggleFavoriteSavedLayout,
   } = useDockStore(useShallow(s => ({
@@ -98,14 +104,11 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
     savedLayouts: s.savedLayouts,
     defaultSavedLayoutId: s.defaultSavedLayoutId,
     activeSavedLayoutId: s.activeSavedLayoutId,
+    overLayoutBaseId: s.overLayoutBaseId,
     setDefaultSavedLayout: s.setDefaultSavedLayout,
     toggleFavoriteSavedLayout: s.toggleFavoriteSavedLayout,
   })));
 
-  const accountSession = useAccountStore((s) => s.session);
-  const accountUser = useAccountStore((s) => s.user);
-  const openAccountDialog = useAccountStore((s) => s.openAccountDialog);
-  const openAuthDialog = useAccountStore((s) => s.openAuthDialog);
   const {
     isSettingsOpen, openSettings, closeSettings,
     saveMode,
@@ -123,27 +126,22 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   })));
 
   const [openMenu, setOpenMenu] = useState<MenuId>(null);
-  const [isEditingName, setIsEditingName] = useState(false);
   const [projectName, setProjectName] = useState('Untitled Project');
-  const [editName, setEditName] = useState(projectName);
   const [isProjectOpen, setIsProjectOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [needsPermission, setNeedsPermission] = useState(false);
   const [pendingProjectName, setPendingProjectName] = useState<string | null>(null);
   const [showSavedToast, setShowSavedToast] = useState(false);
-  const [showInfoDialog, setShowInfoDialog] = useState(false);
   const [showDevChatDialog, setShowDevChatDialog] = useState(false);
   const [showLeaveNoteDialog, setShowLeaveNoteDialog] = useState(false);
   const [showLegalDialog, setShowLegalDialog] = useState<LegalPage | null>(null);
-  const [renameError, setRenameError] = useState<string | null>(null);
   const [projectNameDialog, setProjectNameDialog] = useState<
     (ProjectNameDialogRequest & { restoreFocusTo: HTMLElement | null }) | null
   >(null);
   const [recentProjects, setRecentProjects] = useState<RecentProjectEntry[]>([]);
   const [capturePhase, setCapturePhase] = useState(() => screenCaptureService.getSnapshot().phase);
   const menuBarRef = useRef<HTMLDivElement>(null);
-  const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const isRenamingRef = useRef(false);
+  const autosaveTimerRef = useRef<(() => void) | null>(null);
   const {
     markMessagesSeen: markDevChatMessagesSeen,
     unreadCount: devChatUnreadCount,
@@ -202,13 +200,25 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
       });
       const restoreResult = await runToolbarProjectBootRestore({
         url: window.location.href,
-        restoreLastProject: () => projectFileService.restoreLastProject(),
+        restoreLastProject: async () => (
+          await restoreAndroidProjectAutomatically((handle) => projectFileService.loadProject(handle))
+          || projectFileService.restoreLastProject()
+        ),
         loadProjectToStores,
       });
       if (restoreResult === 'evidence-isolated') {
         log.info('Skipping automatic project restore for isolated Motion Design evidence session');
         setProjectLoadProgress(null);
         setIsLoading(false);
+        onProjectBootResolved?.(projectFileService.isProjectOpen());
+        return;
+      }
+      if (restoreResult === 'selection-deferred') {
+        log.info('Deferring project restore until the entry project picker resolves');
+        setProjectLoadProgress(null);
+        setIsLoading(false);
+        setupAutoSync();
+        onProjectBootResolved?.(projectFileService.isProjectOpen());
         return;
       }
       if (restoreResult === 'restored') {
@@ -226,9 +236,16 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
       }
       setIsLoading(false);
       setupAutoSync();
+      onProjectBootResolved?.(projectFileService.isProjectOpen());
     };
-    restoreProject();
-  }, []);
+    void restoreProject().catch((error) => {
+      log.error('Failed to resolve project boot state', error);
+      setProjectLoadProgress(null);
+      setIsLoading(false);
+      setupAutoSync();
+      onProjectBootResolved?.(projectFileService.isProjectOpen());
+    });
+  }, [onProjectBootResolved]);
 
   useEffect(() => {
     if (!openMenu) return;
@@ -243,7 +260,7 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
 
   useEffect(() => {
     if (autosaveTimerRef.current) {
-      clearInterval(autosaveTimerRef.current);
+      autosaveTimerRef.current();
       autosaveTimerRef.current = null;
     }
 
@@ -251,21 +268,33 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
       const intervalMs = autosaveInterval * 60 * 1000;
       log.info(`Interval save enabled with ${autosaveInterval} minute interval`);
 
-      autosaveTimerRef.current = setInterval(async () => {
+      const gestures = createProjectSaveInteractionGate(window, () => undefined);
+      const stopTimer = startProjectAutosaveTimer({
+        intervalMs,
+        isBusy: () => gestures.isActive() || gestures.remainingQuietMs() > 0
+          || Boolean(projectFileService.getProjectPackageSession?.()?.isBatchingWrites)
+          || useMediaStore.getState().files.some(file => file.isImporting || file.audioProxyStatus === 'generating'),
+        save: async () => {
         if (projectFileService.isProjectOpen() && projectFileService.hasUnsavedChanges()) {
           log.info('Interval save: Creating backup and saving project...');
-          await projectFileService.createBackup();
-          await saveCurrentProject();
-          setShowSavedToast(true);
+          setShowSavedToast(false);
+          try {
+            await projectFileService.createBackup();
+            const saved = await saveCurrentProject();
+            if (saved) setShowSavedToast(true);
+            else log.warn('Interval save did not complete; project remains unsaved');
+          } catch (error) {
+            log.error('Interval save failed', error);
+          }
         }
-      }, intervalMs);
-    } else if (saveMode === 'continuous' && isProjectOpen) {
-      log.info('Continuous save active \u2014 project saves automatically on every change');
+        },
+      });
+      autosaveTimerRef.current = () => { stopTimer(); gestures.dispose(); };
     }
 
     return () => {
       if (autosaveTimerRef.current) {
-        clearInterval(autosaveTimerRef.current);
+        autosaveTimerRef.current();
       }
     };
   }, [saveMode, autosaveEnabled, autosaveInterval, isProjectOpen]);
@@ -281,8 +310,9 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   }, []);
 
   const resetMediaProject = useCallback((name: string) => {
-    useMediaStore.getState().newProject();
-    useMediaStore.getState().setProjectName(name);
+    const mediaState = useMediaStore.getState();
+    mediaState.newProject();
+    mediaState.setProjectName(name);
   }, []);
 
   const openProjectNameDialog = useCallback((request: ProjectNameDialogRequest) => {
@@ -296,20 +326,15 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
 
   const projectActions = useToolbarProjectActions({
     closeMenu,
-    editName,
-    isRenamingRef,
     openProjectNameDialog,
     projectName,
     resetMediaProject,
-    setEditName,
-    setIsEditingName,
     setIsLoading,
     setIsProjectOpen,
     setNeedsPermission,
     setPendingProjectName,
     setProjectName,
     setRecentProjects,
-    setRenameError,
     setShowSavedToast,
   });
 
@@ -329,6 +354,7 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
     hidePanelType,
     isPanelTypeVisible,
     loadSavedLayout,
+    overLayoutBaseId,
     resetLayout,
     saveCurrentNamedLayout,
     saveLayoutAsDefault,
@@ -355,8 +381,8 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
 
   return (
     <div className="toolbar">
-      <div className="toolbar-project">
-        {needsPermission ? (
+      {needsPermission && (
+        <div className="toolbar-project">
           <button
             className="restore-permission-btn"
             onClick={projectActions.handleRestorePermission}
@@ -365,35 +391,8 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
           >
             {isLoading ? 'Restoring...' : `Restore "${pendingProjectName}"`}
           </button>
-        ) : isEditingName ? (
-          <input
-            type="text"
-            className="project-name-input"
-            value={editName}
-            onChange={(event) => setEditName(event.target.value)}
-            onBlur={projectActions.handleNameSubmit}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') projectActions.handleNameSubmit();
-              if (event.key === 'Escape') setIsEditingName(false);
-            }}
-            autoFocus
-          />
-        ) : (
-          <span
-            className={`project-name ${!isProjectOpen ? 'no-project' : ''}`}
-            onClick={() => {
-              if (isProjectOpen) {
-                setEditName(projectName);
-                setIsEditingName(true);
-              }
-            }}
-            title={isProjectOpen ? 'Click to rename project' : 'No project open'}
-          >
-            {projectName}
-            {projectFileService.hasUnsavedChanges() && ' \u2022'}
-          </span>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="menu-bar" ref={menuBarRef}>
         <FileMenu
@@ -408,6 +407,7 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
           onNew={projectActions.handleNew}
           onOpen={projectActions.handleOpen}
           onOpenRecent={projectActions.handleOpenRecent}
+          onRename={projectActions.handleRename}
           onSave={projectActions.handleSave}
           onSaveAs={projectActions.handleSaveAs}
           openMenu={openMenu}
@@ -429,10 +429,10 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
 
         <ViewMenu
           activeSavedLayout={viewActions.activeSavedLayout}
-          activeSavedLayoutId={activeSavedLayoutId}
+          activeSavedLayoutId={viewActions.visibleActiveSavedLayoutId}
           activeSavedLayoutProtected={viewActions.activeSavedLayoutProtected}
           canEditFactoryDockLayouts={CAN_EDIT_FACTORY_DOCK_LAYOUTS}
-          defaultSavedLayoutId={defaultSavedLayoutId}
+          defaultSavedLayoutId={viewActions.visibleDefaultSavedLayoutId}
           isPanelTypeVisible={isPanelTypeVisible}
           onLoadDefaultLayout={viewActions.handleResetLayout}
           onLoadSavedLayout={viewActions.handleLoadSavedLayout}
@@ -460,48 +460,20 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
 
         <InfoMenu
           closeMenu={closeMenu}
-          onMenuClick={handleMenuClick}
-          onMenuHover={handleMenuHover}
-          onOpenChangelog={onOpenChangelog}
-          onOpenSplash={onOpenSplash}
-          openMenu={openMenu}
-          setShowLegalDialog={setShowLegalDialog}
-        />
-
-        <HelpMenu
-          closeMenu={closeMenu}
           devChatUnreadCount={devChatUnreadCount}
           onMenuClick={handleMenuClick}
           onMenuHover={handleMenuHover}
           onOpenDevChat={openDevChat}
           onOpenLeaveNote={() => setShowLeaveNoteDialog(true)}
           openMenu={openMenu}
+          setShowLegalDialog={setShowLegalDialog}
         />
       </div>
 
       <div className="toolbar-spacer" />
 
-      <div className="toolbar-center">
-        {viewActions.favoriteSavedLayouts.length > 0 && (
-          <div className="toolbar-layout-switcher" aria-label="Favorite layouts">
-            {viewActions.favoriteSavedLayouts.map((savedLayout) => (
-              <button
-                key={savedLayout.id}
-                className={`toolbar-layout-switch ${savedLayout.id === activeSavedLayoutId ? 'active' : ''}`}
-                onClick={() => loadSavedLayout(savedLayout.id)}
-                title={`Load ${savedLayout.name}`}
-                type="button"
-              >
-                {savedLayout.name}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="toolbar-spacer" />
-
       <div className="toolbar-section toolbar-right">
+        <ToolbarSaveStatus onSave={() => { void projectActions.handleSave(); }} />
         {(capturePhase === 'recording' || capturePhase === 'paused' || capturePhase === 'stopping') && (
           <button
             className={`toolbar-capture-rec${capturePhase === 'recording' ? ' recording' : ''}`}
@@ -512,21 +484,16 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
             <span aria-hidden="true" /> REC
           </button>
         )}
-        {accountSession?.authenticated && (
-          <CreditBurnMeter />
+        <ToolbarLiveStatus onOpen={() => activatePanelType('go-live')} />
+        {!isEngineReady && engineInitFailed && (
+          <span className="status error" title={engineInitError ?? 'WebGPU initialization failed'}>
+            {'\u2715 WebGPU failed'}
+          </span>
         )}
-        <button
-          className="menu-trigger"
-          onClick={() => (accountSession?.authenticated ? openAccountDialog() : openAuthDialog())}
-          type="button"
-        >
-          {accountSession?.authenticated ? (accountUser?.email?.split('@')[0] || 'Account') : 'Sign in'}
-        </button>
-        <NativeHelperStatus />
-
-        {!isEngineReady && (
+        {!isEngineReady && !engineInitFailed && (
           <span className="status loading">{'\u25cb Loading...'}</span>
         )}
+        <CreditBurnMeter />
       </div>
 
       {isSettingsOpen && <SettingsDialog onClose={closeSettings} />}
@@ -539,25 +506,6 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
       )}
       <SavedToast visible={showSavedToast} onHide={() => setShowSavedToast(false)} />
 
-      {renameError && (
-        <div style={{
-          position: 'fixed',
-          top: 40,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          background: '#dc3545',
-          color: '#fff',
-          padding: '8px 16px',
-          borderRadius: 6,
-          fontSize: 12,
-          zIndex: 9999,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-        }}>
-          {renameError}
-        </div>
-      )}
-
-      {showInfoDialog && <InfoDialog onClose={() => setShowInfoDialog(false)} />}
       {showDevChatDialog && (
         <DevChatDialog
           onClose={() => setShowDevChatDialog(false)}

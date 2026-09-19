@@ -1,7 +1,7 @@
 // Clip effect actions slice - extracted from clipSlice
 
 import type { AudioEffectInstance, Effect, EffectType, Keyframe, TimelineClip } from '../../types';
-import type { ClipEffectActions, SliceCreator } from './types';
+import type { ClipEffectActions, SliceCreator, TimelineStore } from './types';
 import { captureSnapshot } from '../historyStore';
 import { getDefaultEffectParams } from './utils';
 import { generateEffectId } from './helpers/idGenerator';
@@ -17,6 +17,12 @@ import {
   hasAudioEffect,
 } from '../../engine/audio/AudioEffectRegistry';
 import { mergeAudioEffectParamPatch } from '../../utils/audioEffectParamPath';
+import { reconcileClipNodeGraphState } from '../../services/nodeGraph';
+import {
+  createNodeGraphOwnerClip,
+  resolveLinkedClipNodeGraphContext,
+} from '../../services/nodeGraph/clipGraphLinking';
+import { cleanupEffectParamTimelineState } from './helpers/propertyTimelineCleanup';
 
 function updateClipEffectState(
   clip: TimelineClip,
@@ -77,6 +83,52 @@ function effectStackRequiresProcessedAnalysis(
   return (effectStack ?? []).some(effect => audioEffectInstanceRequiresProcessedAnalysis(effect, keyframes));
 }
 
+function reconcileEffectRemovalInNodeGraph(
+  state: TimelineStore,
+  updatedClip: TimelineClip,
+): TimelineClip[] {
+  const context = resolveLinkedClipNodeGraphContext(state.clips, state.tracks, updatedClip.id);
+  if (!context) {
+    return state.clips;
+  }
+
+  const graphOwnerClip = createNodeGraphOwnerClip(context);
+  const existingGraph = graphOwnerClip.nodeGraph;
+  if (!existingGraph) {
+    return state.clips.map((clip) => clip.id === updatedClip.id ? updatedClip : clip);
+  }
+
+  if (context.ownerClip.id === updatedClip.id) {
+    const nodeGraph = reconcileClipNodeGraphState(
+      updatedClip,
+      context.ownerTrack ?? undefined,
+      existingGraph,
+      {
+        linkedClip: context.linkedClip,
+        linkedTrack: context.linkedTrack,
+      },
+    );
+    return state.clips.map((clip) => (
+      clip.id === updatedClip.id ? { ...updatedClip, nodeGraph } : clip
+    ));
+  }
+
+  const ownerNodeGraph = reconcileClipNodeGraphState(
+    graphOwnerClip,
+    context.ownerTrack ?? undefined,
+    existingGraph,
+    {
+      linkedClip: updatedClip,
+      linkedTrack: context.selectedTrack,
+    },
+  );
+  return state.clips.map((clip) => {
+    if (clip.id === updatedClip.id) return updatedClip;
+    if (clip.id === context.ownerClip.id) return { ...context.ownerClip, nodeGraph: ownerNodeGraph };
+    return clip;
+  });
+}
+
 export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get) => ({
   addClipEffect: (clipId, effectType) => {
     const { clips, clipKeyframes, invalidateCache } = get();
@@ -103,18 +155,24 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
   },
 
   removeClipEffect: (clipId, effectId) => {
-    const { clips, clipKeyframes, invalidateCache } = get();
+    const state = get();
+    const { clipKeyframes, invalidateCache } = state;
+    const clip = state.clips.find(candidate => candidate.id === clipId);
+    const removedEffect = clip?.effects.find(effect => effect.id === effectId);
+    if (!clip || !removedEffect) return;
+
     const keyframes = clipKeyframes.get(clipId) ?? [];
-    set({
-      clips: clips.map(c => {
-        if (c.id !== clipId) return c;
-        const removedEffect = c.effects.find(e => e.id === effectId);
-        return updateClipEffectState(
-          c,
-          clip => ({ ...clip, effects: clip.effects.filter(e => e.id !== effectId) }),
-          legacyAudioEffectRequiresProcessedAnalysis(removedEffect, keyframes),
-        );
+    const updatedClip = updateClipEffectState(
+      clip,
+      candidate => ({
+        ...candidate,
+        effects: candidate.effects.filter(effect => effect.id !== effectId),
       }),
+      legacyAudioEffectRequiresProcessedAnalysis(removedEffect, keyframes),
+    );
+    set({
+      clips: reconcileEffectRemovalInNodeGraph(state, updatedClip),
+      ...cleanupEffectParamTimelineState(state, clipId, effectId),
     });
     invalidateCache();
     captureSnapshot('Remove effect');
@@ -225,24 +283,27 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
   },
 
   removeClipAudioEffectInstance: (clipId, effectId) => {
-    const { clips, clipKeyframes, invalidateCache } = get();
+    const state = get();
+    const { clipKeyframes, invalidateCache } = state;
+    const clip = state.clips.find(candidate => candidate.id === clipId);
+    const removedEffect = clip?.audioState?.effectStack?.find(effect => effect.id === effectId);
+    if (!clip || !removedEffect) return;
+
     const keyframes = clipKeyframes.get(clipId) ?? [];
-    set({
-      clips: clips.map(c => {
-        if (c.id !== clipId || !c.audioState?.effectStack?.length) return c;
-        const removedEffect = c.audioState.effectStack.find(effect => effect.id === effectId);
-        return updateClipEffectState(
-          c,
-          clip => ({
-            ...clip,
-            audioState: {
-              ...(clip.audioState ?? {}),
-              effectStack: clip.audioState?.effectStack?.filter(effect => effect.id !== effectId) ?? [],
-            },
-          }),
-          audioEffectInstanceRequiresProcessedAnalysis(removedEffect, keyframes),
-        );
+    const updatedClip = updateClipEffectState(
+      clip,
+      candidate => ({
+        ...candidate,
+        audioState: {
+          ...(candidate.audioState ?? {}),
+          effectStack: candidate.audioState?.effectStack?.filter(effect => effect.id !== effectId) ?? [],
+        },
       }),
+      audioEffectInstanceRequiresProcessedAnalysis(removedEffect, keyframes),
+    );
+    set({
+      clips: reconcileEffectRemovalInNodeGraph(state, updatedClip),
+      ...cleanupEffectParamTimelineState(state, clipId, effectId),
     });
     invalidateCache();
     captureSnapshot('Remove audio effect');

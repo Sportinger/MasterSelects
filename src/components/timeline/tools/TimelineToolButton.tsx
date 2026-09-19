@@ -30,6 +30,7 @@ export function TimelineToolButton({
 }: TimelineToolButtonProps) {
   const holdTimerRef = useRef<number | null>(null);
   const releaseListenerRef = useRef<((event: PointerEvent) => void) | null>(null);
+  const pressedPointerIdRef = useRef<number | null>(null);
   const openedRef = useRef(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -63,12 +64,21 @@ export function TimelineToolButton({
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return;
+    pressedPointerIdRef.current = event.pointerId;
     openedRef.current = false;
     clearHold();
 
     // Watch for the release on the window too, so a quick click that lifts off
     // the (tiny) button never leaves a pending hold that opens the flyout late.
-    const onRelease = () => clearHold();
+    const onRelease = (releaseEvent: PointerEvent) => {
+      clearHold();
+      if (
+        releaseEvent.pointerId === pressedPointerIdRef.current &&
+        !buttonRef.current?.contains(releaseEvent.target as Node)
+      ) {
+        pressedPointerIdRef.current = null;
+      }
+    };
     releaseListenerRef.current = onRelease;
     window.addEventListener('pointerup', onRelease, true);
 
@@ -82,8 +92,11 @@ export function TimelineToolButton({
 
   const handlePointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return;
+    const startedOnButton = pressedPointerIdRef.current === event.pointerId;
+    pressedPointerIdRef.current = null;
     clearHold();
     openedRef.current = false;
+    if (!startedOnButton) return;
     // Released over the button itself — either a quick click, or a hold released
     // without sliding onto a flyout item. Either way activate the current tool
     // so a press never swallows the click. Releases over a flyout item (select)

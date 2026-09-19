@@ -2,6 +2,7 @@
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import https from 'node:https';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,7 +14,28 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const baseUrl = (process.env.MASTERSELECTS_BRIDGE_URL || 'http://localhost:5173').replace(/\/+$/, '');
+const bridgeUrlPath = process.env.MASTERSELECTS_BRIDGE_URL_FILE
+  ? path.resolve(process.env.MASTERSELECTS_BRIDGE_URL_FILE)
+  : path.join(projectRoot, '.ai-bridge-url');
+
+// The dev server records the origin it actually listens on next to the token.
+// LAN device testing serves TLS, plain dev does not, and .mcp.json is shared
+// across agents - it cannot hardcode either. An explicit env override wins.
+function resolveBaseUrl() {
+  const explicit = process.env.MASTERSELECTS_BRIDGE_URL?.trim();
+  if (explicit) {
+    return explicit.replace(/\/+$/, '');
+  }
+  try {
+    const recorded = fs.readFileSync(bridgeUrlPath, 'utf-8').trim();
+    if (recorded) {
+      return recorded.replace(/\/+$/, '');
+    }
+  } catch { /* dev server not running yet */ }
+  return 'http://localhost:5173';
+}
+
+let baseUrl = resolveBaseUrl();
 const tokenPath = process.env.MASTERSELECTS_BRIDGE_TOKEN_FILE
   ? path.resolve(process.env.MASTERSELECTS_BRIDGE_TOKEN_FILE)
   : path.join(projectRoot, '.ai-bridge-token');
@@ -78,7 +100,9 @@ const CONTROL_TOOLS = [
     description: 'Send a prompt through the real visible FlashBoard chat and wait for the terminal result. When requestedModelClass is supplied, the visible UI selector is switched to that class before the prompt runs.',
     inputSchema: objectSchema({
       idempotencyKey: { type: 'string' },
+      preproductionRunId: { type: 'string' },
       prompt: { type: 'string' },
+      requestedAgentMode: { type: 'string', enum: ['logic'] },
       requestedModelClass: { type: 'string', enum: ['very-fast', 'fast', 'slow'] },
       sessionId: { type: 'string' },
       timeoutMs: { type: 'number', minimum: 1000, maximum: 600000, default: 600000 },
@@ -88,6 +112,21 @@ const CONTROL_TOOLS = [
       destructiveHint: true,
       idempotentHint: false,
       openWorldHint: true,
+    },
+  },
+  {
+    name: 'bridge_new_chat',
+    description: 'Clear the visible FlashBoard chat history and start a new chat, exactly like the New button.',
+    inputSchema: objectSchema({
+      idempotencyKey: { type: 'string' },
+      sessionId: { type: 'string' },
+      timeoutMs: { type: 'number', minimum: 1000, maximum: 600000, default: 30000 },
+    }),
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
     },
   },
   {
@@ -231,8 +270,22 @@ async function callControlTool(name, args) {
         timeoutMs,
         body: {
           idempotencyKey: optionalString(args.idempotencyKey) || createIdempotencyKey(),
+          preproductionRunId: optionalString(args.preproductionRunId) || undefined,
           prompt: requiredString(args.prompt, 'prompt'),
+          requestedAgentMode: optionalString(args.requestedAgentMode) || undefined,
           requestedModelClass: optionalString(args.requestedModelClass) || undefined,
+          sessionId: optionalString(args.sessionId) || selectedSessionId,
+          timeoutMs,
+        },
+      });
+    }
+    case 'bridge_new_chat': {
+      const timeoutMs = normalizeTimeout(args.timeoutMs, 30_000);
+      return bridgeFetch('/api/agent-control/chat/new', {
+        method: 'POST',
+        timeoutMs,
+        body: {
+          idempotencyKey: optionalString(args.idempotencyKey) || createIdempotencyKey(),
           sessionId: optionalString(args.sessionId) || selectedSessionId,
           timeoutMs,
         },
@@ -376,10 +429,46 @@ function withExecutionControls(parameters, policy) {
   };
 }
 
+// Global fetch has no per-request CA option, and LAN mode presents a
+// locally-issued certificate. Dropping to node:https for that case keeps
+// verification switched on instead of weakening TLS process-wide.
+function httpsRequest(url, init, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let ca;
+    try {
+      ca = fs.readFileSync(path.join(projectRoot, '.certs', 'rootCA.pem'));
+    } catch { /* fall back to the system trust store */ }
+
+    const request = https.request(
+      url,
+      { method: init.method, headers: init.headers, ca, timeout: timeoutMs },
+      (response) => {
+        let text = '';
+        response.setEncoding('utf-8');
+        response.on('data', (chunk) => { text += chunk; });
+        response.on('end', () => resolve({
+          ok: response.statusCode >= 200 && response.statusCode < 300,
+          status: response.statusCode,
+          text,
+        }));
+      },
+    );
+
+    request.on('timeout', () => request.destroy(new Error(`Bridge request timed out after ${timeoutMs}ms.`)));
+    request.on('error', reject);
+    if (init.body !== undefined) {
+      request.write(init.body);
+    }
+    request.end();
+  });
+}
+
 async function bridgeFetch(route, options = {}) {
+  baseUrl = resolveBaseUrl();
   const token = readBridgeToken();
   const timeoutMs = normalizeTimeout(options.timeoutMs, defaultTimeoutMs);
-  const response = await fetch(`${baseUrl}${route}`, {
+  const url = `${baseUrl}${route}`;
+  const init = {
     method: options.method || 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -387,9 +476,12 @@ async function bridgeFetch(route, options = {}) {
       'X-MasterSelects-Bridge-Client': 'mcp',
     },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  const text = await response.text();
+  };
+
+  const response = url.startsWith('https:')
+    ? await httpsRequest(url, init, timeoutMs)
+    : await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  const text = typeof response.text === 'string' ? response.text : await response.text();
   let payload;
   try {
     payload = text ? JSON.parse(text) : {};

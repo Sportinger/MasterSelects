@@ -32,7 +32,7 @@ interface UsePlayheadDragReturn {
   markerDrag: MarkerDragState | null;
   handleRulerMouseDown: (e: React.MouseEvent) => void;
   handlePlayheadMouseDown: (e: React.MouseEvent) => void;
-  handleMarkerMouseDown: (e: React.MouseEvent, type: 'in' | 'out') => void;
+  handleMarkerPointerDown: (e: React.PointerEvent<HTMLElement>, type: 'in' | 'out') => void;
 }
 
 export function usePlayheadDrag({
@@ -125,10 +125,10 @@ export function usePlayheadDrag({
   );
 
   // Handle In/Out marker drag
-  const handleMarkerMouseDown = useCallback(
-    (e: React.MouseEvent, type: 'in' | 'out') => {
+  const handleMarkerPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLElement>, type: 'in' | 'out') => {
       e.stopPropagation();
-      if (e.button !== 0) return;
+      if (!e.isPrimary || e.button !== 0) return;
       e.preventDefault();
       if (isExporting) return;
 
@@ -139,8 +139,11 @@ export function usePlayheadDrag({
       const originalTime = type === 'in' ? inPoint : outPoint;
       if (originalTime === null) return;
 
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+
       setMarkerDrag({
         type,
+        pointerId: e.pointerId,
         startX: e.clientX,
         originalTime,
       });
@@ -152,7 +155,11 @@ export function usePlayheadDrag({
   useEffect(() => {
     if (!markerDrag) return;
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const interactionDocument = timelineRef.current?.ownerDocument ?? document;
+    const interactionWindow = interactionDocument.defaultView ?? window;
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (e.pointerId !== markerDrag.pointerId) return;
       if (!timelineRef.current) return;
       const rect = timelineRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left + scrollX;
@@ -165,17 +172,25 @@ export function usePlayheadDrag({
         const minTime = inPoint !== null ? inPoint : 0;
         setOutPoint(Math.max(time, minTime));
       }
+      e.preventDefault();
     };
 
-    const handleMouseUp = () => {
+    const handlePointerEnd = (e: PointerEvent) => {
+      if (e.pointerId !== markerDrag.pointerId) return;
       setMarkerDrag(null);
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    const handleDragCancel = () => setMarkerDrag(null);
+
+    interactionDocument.addEventListener('pointermove', handlePointerMove, { passive: false });
+    interactionDocument.addEventListener('pointerup', handlePointerEnd);
+    interactionDocument.addEventListener('pointercancel', handlePointerEnd);
+    interactionWindow.addEventListener('blur', handleDragCancel);
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      interactionDocument.removeEventListener('pointermove', handlePointerMove);
+      interactionDocument.removeEventListener('pointerup', handlePointerEnd);
+      interactionDocument.removeEventListener('pointercancel', handlePointerEnd);
+      interactionWindow.removeEventListener('blur', handleDragCancel);
     };
   }, [markerDrag, timelineRef, scrollX, duration, inPoint, outPoint, setInPoint, setOutPoint, pixelToTime]);
 
@@ -183,6 +198,6 @@ export function usePlayheadDrag({
     markerDrag,
     handleRulerMouseDown,
     handlePlayheadMouseDown,
-    handleMarkerMouseDown,
+    handleMarkerPointerDown,
   };
 }

@@ -20,7 +20,7 @@ interface TimelineMarkerOverlaysProps {
   markerCreateDrag: MarkerCreateDragState | null;
   markers: TimelineMarker[];
   onMarkerContextMenu: (event: React.MouseEvent, markerId: string) => void;
-  onMarkerMouseDown: (event: React.MouseEvent, markerId: string) => void;
+  onMarkerPointerDown: (event: React.PointerEvent<HTMLElement>, markerId: string) => void;
   scrollX: number;
   switchMotionClass: string;
   timeToPixel: (time: number) => number;
@@ -45,7 +45,7 @@ export function TimelineMarkerOverlays({
   markerCreateDrag,
   markers,
   onMarkerContextMenu,
-  onMarkerMouseDown,
+  onMarkerPointerDown,
   scrollX,
   switchMotionClass,
   timeToPixel,
@@ -70,10 +70,14 @@ export function TimelineMarkerOverlays({
               '--timeline-line-opacity': markerLineOpacity,
             } as CSSProperties}
             title={`${marker.stopPlayback ? 'Stop Marker' : (marker.label || 'Marker')}: ${formatTime(marker.time)} (drag to move, right-click for MIDI and transport actions)${marker.stopPlayback ? ' - playback stops automatically here' : ''}`}
-            onMouseDown={(event) => onMarkerMouseDown(event, marker.id)}
             onContextMenu={(event) => onMarkerContextMenu(event, marker.id)}
           >
-            <div className="timeline-marker-head">{marker.stopPlayback ? 'S' : 'M'}</div>
+            <div
+              className="timeline-marker-head"
+              onPointerDown={(event) => onMarkerPointerDown(event, marker.id)}
+            >
+              {marker.stopPlayback ? 'S' : 'M'}
+            </div>
             <div className="timeline-marker-line" />
           </div>
         );

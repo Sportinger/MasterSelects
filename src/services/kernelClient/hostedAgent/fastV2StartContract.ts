@@ -2,32 +2,34 @@ import {
   PUBLIC_OPERATION_CONTRACT_DIGEST_V1,
   PUBLIC_OPERATION_CONTRACT_V1,
 } from '../wp1Spike/publicOperationContracts';
+import { TIMELINE_SPEECH_MAX_WORDS } from '../../transcription/timelineSpeechContract';
 
 export const HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION = 'fast-agent-v2' as const;
-// Whole-timeline bulk edits should be byte/timeout-bound, not stopped by the
+// Whole-timeline bulk edits remain byte/timeout-bound, not stopped by the
 // former eight-call batching default. Keep a finite fail-closed ceiling.
 export const HOSTED_AGENT_FAST_V2_MAX_TOOL_CALLS_PER_ROUND = 256 as const;
 export const HOSTED_AGENT_FAST_V2_EDITOR_TOOL_CATALOG_DIGEST =
-  'sha256:d1a075975a98160f7997d592ab7e019e4516ca98a80503f6d9c59efdb7a74277' as const;
+  'sha256:e617def862be50ee817a20537dab849efb2eeb16bc8a270ab30b13aea7632d13' as const;
 export const HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION =
   PUBLIC_OPERATION_CONTRACT_V1.contractVersion;
 export const HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST =
   PUBLIC_OPERATION_CONTRACT_DIGEST_V1;
 export const HOSTED_AGENT_FAST_V2_SERVICE_ENVELOPE_VERSION = 1 as const;
 export const HOSTED_AGENT_FAST_V2_PROMPT_VERSION =
-  'fast-v2-prompt-unbounded-keyframe-sequences-2026-08-03' as const;
+  'fast-v2-prompt-editable-motion-graphic-subcomp-2026-08-28' as const;
 export const HOSTED_AGENT_FAST_V2_CAPABILITY_BUNDLE_VERSION =
-  'fast-v2-transcript-assembly-2026-08-03' as const;
+  'fast-v2-editable-motion-graphic-subcomp-2026-08-28' as const;
 export const HOSTED_AGENT_FAST_V2_MODEL_POLICY_VERSION =
-  'fast-v2-model-policy-2026-08-02' as const;
+  'fast-v2-model-policy-agent-mode-2026-08-05' as const;
 export const HOSTED_AGENT_FAST_V2_BUDGET_POLICY_VERSION =
   'fast-v2-budget-policy-large-session-2026-08-03' as const;
 export const HOSTED_AGENT_FAST_V2_MAXIMUM_ITERATIONS = 24 as const;
 export const HOSTED_AGENT_FAST_V2_MAXIMUM_SPEND_CREDITS = 2_000 as const;
+export const HOSTED_AGENT_FAST_V2_MAX_TIMELINE_TRANSCRIPT_WORDS = TIMELINE_SPEECH_MAX_WORDS;
 // Large projects still cross one finite browser/edge/kernel boundary. Keep the
 // byte and structural ceilings aligned with the private contract so future
 // split-heavy timelines have substantial headroom without admitting binaries.
-export const HOSTED_AGENT_FAST_V2_MAX_START_BYTES = 8 * 1024 * 1024;
+export const HOSTED_AGENT_FAST_V2_MAX_START_BYTES = 48 * 1024 * 1024;
 export const HOSTED_AGENT_FAST_V2_MAX_SNAPSHOT_JSON_NODES = 2_000_000 as const;
 export const HOSTED_AGENT_FAST_V2_MAX_SNAPSHOT_ARRAY_ITEMS = 250_000 as const;
 
@@ -43,8 +45,10 @@ const START_REQUEST_KEYS = [
   'executionContractDigest',
   'executionContractVersion',
   'executionProfile',
+  'preproductionRunId',
   'protocolVersion',
   'request',
+  'requestedAgentMode',
   'requestedExecutionMode',
   'requestedModelClass',
   'runSource',
@@ -54,9 +58,11 @@ const START_REQUEST_KEYS = [
 ] as const;
 
 export type HostedAgentFastV2RunSource = 'bridge' | 'mcp' | 'ui';
+export type HostedAgentFastV2AgentMode = 'standard' | 'logic';
+export type HostedAgentFastV2RequestedAgentMode = 'logic';
 export type HostedAgentFastV2RequestedExecutionMode = 'normal' | 'plan' | 'read-only';
 export type HostedAgentFastV2RequestedModelClass = 'very-fast' | 'fast' | 'slow';
-export type HostedAgentFastV2ExecutionProfile = 'fast' | 'verified';
+export type HostedAgentFastV2ExecutionProfile = 'fast';
 
 export type HostedAgentFastV2EditorToolRisk = 'destructive' | 'mutating' | 'read-only';
 
@@ -97,8 +103,11 @@ export interface HostedAgentFastV2StartRequest {
   executionContractDigest: typeof HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST;
   executionContractVersion: typeof HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION;
   executionProfile?: HostedAgentFastV2ExecutionProfile;
+  preproductionRunId?: string;
   protocolVersion: typeof HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION;
   request: string;
+  /** Semantic agent mode only; provider and concrete model resolution remain kernel-owned. */
+  requestedAgentMode?: HostedAgentFastV2RequestedAgentMode;
   requestedExecutionMode?: HostedAgentFastV2RequestedExecutionMode;
   requestedModelClass?: HostedAgentFastV2RequestedModelClass;
   runSource: HostedAgentFastV2RunSource;
@@ -167,9 +176,9 @@ export function resolveHostedAgentFastV2ExecutionProfile(
   value: unknown,
 ): HostedAgentFastV2ExecutionProfile {
   if (value === undefined) return 'fast';
-  if (value === 'fast' || value === 'verified') return value;
+  if (value === 'fast') return value;
   throw new HostedAgentFastV2ContractError(
-    'executionProfile must be fast or verified when explicitly provided.',
+    'executionProfile must be fast when explicitly provided.',
   );
 }
 
@@ -187,6 +196,16 @@ function validIdentifier(value: unknown, maximumLength: number): value is string
     && value.length > 0
     && value.length <= maximumLength
     && IDENTIFIER_PATTERN.test(value);
+}
+
+function timelineTranscriptWordCount(payload: Record<string, unknown>): number {
+  if (!Array.isArray(payload.clips)) return 0;
+  return payload.clips.reduce((total, clip) => {
+    if (!isRecord(clip) || !isRecord(clip.transcript) || !Array.isArray(clip.transcript.words)) {
+      return total;
+    }
+    return total + clip.transcript.words.length;
+  }, 0);
 }
 
 function validJsonValue(
@@ -226,6 +245,7 @@ function parseSnapshot(value: unknown): HostedAgentFastV2CompactSnapshot {
     || !SHA256_PATTERN.test(value.stateFingerprint)
     || !isRecord(value.payload)
     || !validJsonValue(value.payload)
+    || timelineTranscriptWordCount(value.payload) > HOSTED_AGENT_FAST_V2_MAX_TIMELINE_TRANSCRIPT_WORDS
   ) {
     throw new HostedAgentFastV2ContractError(
       'compactSnapshot must contain bounded complete semantic timeline state with a revision and SHA-256 fingerprint.',
@@ -328,7 +348,7 @@ export function parseHostedAgentFastV2StartRequest(
 ): HostedAgentFastV2StartRequest {
   if (!isRecord(value) || !hasOnlyKeys(value, START_REQUEST_KEYS)) {
     throw new HostedAgentFastV2ContractError(
-      'The Fast V2 start request contains an unknown or forbidden field.',
+      'The Auto start request contains an unknown or forbidden field.',
     );
   }
   const executionProfile = value.executionProfile === undefined
@@ -346,12 +366,17 @@ export function parseHostedAgentFastV2StartRequest(
     || value.request.length > 100_000
     || !['bridge', 'mcp', 'ui'].includes(String(value.runSource))
     || (value.conversationRef !== undefined && !validIdentifier(value.conversationRef, 200))
+    || (value.preproductionRunId !== undefined && (
+      typeof value.preproductionRunId !== 'string'
+      || !/^seedance-preproduction-[A-Za-z0-9._:-]{8,180}$/.test(value.preproductionRunId)
+    ))
+    || (value.requestedAgentMode !== undefined && value.requestedAgentMode !== 'logic')
     || (value.requestedModelClass !== undefined
       && !['very-fast', 'fast', 'slow'].includes(String(value.requestedModelClass)))
     || (value.requestedExecutionMode !== undefined
       && !['normal', 'plan', 'read-only'].includes(String(value.requestedExecutionMode)))
   ) {
-    throw new HostedAgentFastV2ContractError('The Fast V2 start request is invalid.');
+    throw new HostedAgentFastV2ContractError('The Auto start request is invalid.');
   }
 
   const compactSnapshot = parseSnapshot(value.compactSnapshot);
@@ -367,8 +392,14 @@ export function parseHostedAgentFastV2StartRequest(
     executionContractDigest: HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST,
     executionContractVersion: HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION,
     ...(executionProfile === undefined ? {} : { executionProfile }),
+    ...(value.preproductionRunId === undefined
+      ? {}
+      : { preproductionRunId: value.preproductionRunId }),
     protocolVersion: HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION,
     request: value.request.trim(),
+    ...(value.requestedAgentMode === undefined
+      ? {}
+      : { requestedAgentMode: value.requestedAgentMode as HostedAgentFastV2RequestedAgentMode }),
     ...(value.requestedExecutionMode === undefined
       ? {}
       : { requestedExecutionMode: value.requestedExecutionMode as HostedAgentFastV2RequestedExecutionMode }),
@@ -383,7 +414,7 @@ export function parseHostedAgentFastV2StartRequest(
   if (new TextEncoder().encode(JSON.stringify(parsed)).byteLength
     > HOSTED_AGENT_FAST_V2_MAX_START_BYTES) {
     throw new HostedAgentFastV2ContractError(
-      'The Fast V2 start request exceeds the canonical total byte bound.',
+      'The Auto start request exceeds the canonical total byte bound.',
     );
   }
   return parsed;

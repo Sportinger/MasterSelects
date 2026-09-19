@@ -1,3 +1,6 @@
+import { reportChunkLoadRecovery } from '../services/diagnostics/diagnosticReporter';
+import { canReloadAfterChunkFailure } from './chunkReloadGuard';
+
 const CHUNK_RELOAD_MARKER = 'masterselects:chunk-reload';
 const CHUNK_RELOAD_COOLDOWN_MS = 60_000;
 
@@ -26,8 +29,19 @@ function isChunkResource(target: EventTarget | null): boolean {
   return false;
 }
 
-function reloadOnce(): boolean {
+function describeResource(target: EventTarget | null): string {
+  if (target instanceof HTMLScriptElement) return target.src;
+  if (target instanceof HTMLLinkElement) return target.href;
+  return '';
+}
+
+function reloadOnce(reason: string): boolean {
   if (reloadRequested) {
+    return false;
+  }
+
+  if (!canReloadAfterChunkFailure()) {
+    reportChunkLoadRecovery('reload_deferred', reason);
     return false;
   }
 
@@ -36,6 +50,7 @@ function reloadOnce(): boolean {
   try {
     const previousReload = Number(window.sessionStorage.getItem(CHUNK_RELOAD_MARKER));
     if (Number.isFinite(previousReload) && now - previousReload < CHUNK_RELOAD_COOLDOWN_MS) {
+      reportChunkLoadRecovery('reload_suppressed', reason);
       return false;
     }
 
@@ -45,19 +60,24 @@ function reloadOnce(): boolean {
   }
 
   reloadRequested = true;
+  // The reporter flushes on pagehide, so the report survives the reload.
+  reportChunkLoadRecovery('reload', reason);
   window.location.reload();
   return true;
 }
 
 export function installChunkLoadRecovery(): void {
   window.addEventListener('vite:preloadError', (event) => {
-    if (reloadOnce()) {
-      event.preventDefault();
-    }
+    const payload = (event as Event & { payload?: unknown }).payload;
+    reloadOnce(getErrorMessage(payload) || 'vite:preloadError');
+    // Keep Vite's original rejection. preventDefault makes its preload helper
+    // resolve undefined, which breaks React.lazy before navigation completes
+    // (or when the unsaved-project warning cancels the reload).
   });
 
   window.addEventListener('unhandledrejection', (event) => {
-    if (CHUNK_ERROR_PATTERN.test(getErrorMessage(event.reason)) && reloadOnce()) {
+    const message = getErrorMessage(event.reason);
+    if (CHUNK_ERROR_PATTERN.test(message) && reloadOnce(message)) {
       event.preventDefault();
     }
   });
@@ -65,10 +85,9 @@ export function installChunkLoadRecovery(): void {
   window.addEventListener(
     'error',
     (event) => {
-      if (
-        (CHUNK_ERROR_PATTERN.test(getErrorMessage(event.error) || event.message) || isChunkResource(event.target))
-        && reloadOnce()
-      ) {
+      const message = getErrorMessage(event.error) || event.message;
+      const resource = isChunkResource(event.target) ? describeResource(event.target) : '';
+      if ((CHUNK_ERROR_PATTERN.test(message) || resource) && reloadOnce(resource || message)) {
         event.preventDefault();
       }
     },

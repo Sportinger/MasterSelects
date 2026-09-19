@@ -7,6 +7,7 @@ export interface AudioRoute {
   // can route a generated source - e.g. the MIDI synth bus - through track
   // gain/FX/EQ/pan/meter into the shared master bus.
   sourceNode: AudioNode;
+  cutGainNode: GainNode;
   gainNode: GainNode;
   panNode: StereoPannerNode;
   analyserNode: AnalyserNode;

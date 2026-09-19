@@ -69,6 +69,7 @@ export const MODIFYING_TOOLS = new Set([
   'mergeClipFacePeople', 'moveClipFaceAppearance', 'assignClipFaceReviewCandidate',
   // YouTube
   'downloadAndImportVideo',
+  'startMediaGeneration',
   // Transform & Effects
   'setTransform', 'addEffect', 'removeEffect', 'updateEffect',
   // Node workspace
@@ -84,6 +85,10 @@ export const MODIFYING_TOOLS = new Set([
   'editMotionModifier',
   'setMotionExpression',
   'editMotionAdjustment',
+  // Flock clips
+  'createFlockClip', 'applyFlockPreset', 'addFlockNode', 'updateFlockNode', 'removeFlockNodes',
+  'connectFlockPorts', 'disconnectFlockEdge', 'exposeFlockParam', 'unexposeFlockParam',
+  'scheduleFlockPrecompute', 'cancelFlockPrecompute',
   // Speed & Playback
   'setClipSpeed',
   // Markers
@@ -103,6 +108,7 @@ export interface ToolDefinition {
     description: string;
     parameters: {
       type: 'object';
+      additionalProperties?: boolean;
       properties: Record<string, unknown>;
       required: string[];
     };

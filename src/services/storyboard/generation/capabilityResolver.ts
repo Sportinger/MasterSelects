@@ -188,6 +188,7 @@ function submissionSupport(entry: CatalogEntry): {
   const exactHostedVideo = outputType === 'video'
     && (
       entry.providerId === 'cloud-kling'
+      || entry.providerId === 'bytedance/seedance-2-5'
       || entry.providerId === 'bytedance/seedance-2'
       || entry.providerId === 'bytedance/seedance-2-fast'
     );

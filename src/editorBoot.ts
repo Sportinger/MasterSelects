@@ -1,18 +1,17 @@
 import { setClipStemSeparationRunner, useTimelineStore } from './stores/timeline';
 import { AI_TOOLS, executeAITool, getQuickTimelineSummary } from './services/aiTools';
-import { isFileSystemAccessSupported } from './services/fileSystemService';
 import { NativeHelperClient } from './services/nativeHelper/NativeHelperClient';
 import { useSettingsStore } from './stores/settingsStore';
-import { installRuntimeDiagnostics } from './services/runtimeDiagnostics';
 import { getStemSeparationService } from './services/audio/stemSeparation';
 import { startEditorAgentTimelinePersistence } from './services/agentTimeline/runtime/persistence/editorPersistenceBootstrap';
 import { ensureMetronomeScheduler } from './services/audio/metronomeScheduler';
 
-installRuntimeDiagnostics();
+// Runtime diagnostics and the error reporter are installed by
+// `src/bootDiagnostics.ts` (first import of main.tsx), before this chunk loads.
 startEditorAgentTimelinePersistence();
 
-function warmNativeHelperForProjectBackend(): void {
-  if (typeof window === 'undefined' || isFileSystemAccessSupported()) {
+function warmNativeHelper(): void {
+  if (typeof window === 'undefined') {
     return;
   }
 
@@ -36,7 +35,7 @@ function warmNativeHelperForProjectBackend(): void {
     .catch(() => setNativeHelperConnected(false));
 }
 
-warmNativeHelperForProjectBackend();
+warmNativeHelper();
 
 setClipStemSeparationRunner((request) => getStemSeparationService().separateClip(request));
 

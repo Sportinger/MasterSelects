@@ -148,5 +148,6 @@ export function buildClipNodeGraphView(
     },
     nodes,
     edges,
+    domain: 'clip',
   };
 }

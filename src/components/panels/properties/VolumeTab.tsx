@@ -34,6 +34,7 @@ import {
   isLinkedAudioFollowingVideo,
   resolveLinkedVideoAudioPair,
 } from '../../../stores/timeline/helpers/linkedClipSpeed';
+import { trackEditorControlCommitted } from '../../../services/productAnalytics';
 
 // dB conversion helpers (internal gain 0–2 ↔ display dB)
 const SILENCE_THRESHOLD_DB = -60;
@@ -304,6 +305,17 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
             decimals={1}
             suffix=" dB"
             sensitivity={4}
+            onDragStart={() => startBatch('Adjust audio volume')}
+            onDragEnd={() => endBatch()}
+            onCommit={(method) => trackEditorControlCommitted({
+              area: 'audio',
+              controlId: 'volume',
+              controlKind: 'number',
+              inputMethod: method,
+              interaction: method === 'reset' ? 'reset' : 'change',
+              itemId: 'volume',
+              itemKind: 'property',
+            })}
           />
         </div>
       </div>
@@ -344,6 +356,15 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
             ariaLabel="Audio speed"
             onDragStart={() => startBatch('Adjust audio speed')}
             onDragEnd={() => endBatch()}
+            onCommit={(method) => trackEditorControlCommitted({
+              area: 'audio',
+              controlId: 'speed',
+              controlKind: 'number',
+              inputMethod: method,
+              interaction: method === 'reset' ? 'reset' : 'change',
+              itemId: 'speed',
+              itemKind: 'property',
+            })}
           />
         </div>
         {(Math.abs(speed) < 0.25 || Math.abs(speed) > 4) && (

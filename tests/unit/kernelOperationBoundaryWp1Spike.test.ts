@@ -33,6 +33,7 @@ import {
   PUBLIC_COMPILED_PLAN_EXTENSION_V1,
   PUBLIC_OPERATION_CONTRACT_DIGEST_V1,
   PUBLIC_OPERATION_CONTRACT_V1,
+  projectPublicOperationResultV1,
 } from '../../src/services/kernelClient/wp1Spike/publicOperationContracts';
 
 function sha256(value: string): string {
@@ -382,6 +383,95 @@ describe('WP1 public operation boundary spike', () => {
     expect(transaction.begin).not.toHaveBeenCalled();
   });
 
+  it('projects a validated source preview image through the generic read-only boundary', () => {
+    const dataUrl = 'data:image/jpeg;base64,/9j/2Q==';
+    const operationArguments = {
+      requestJson: JSON.stringify({
+        requests: [{
+          args: { mediaFileId: 'video-a' },
+          toolName: 'getMediaPreviewFrames',
+        }],
+      }),
+    };
+    const result = projectPublicOperationResultV1(
+      'timeline.editor.inspect.v1',
+      {
+        data: {
+          results: [{
+            result: {
+              data: {
+                dataUrl,
+                duration: 10,
+                frameCount: 3,
+                frameTimes: [1, 5, 9.95],
+                height: 240,
+                mediaFileId: 'video-a',
+                mediaName: 'a.mp4',
+                visualReviewKind: 'source-three-frame-v1',
+                width: 1_080,
+              },
+              success: true,
+            },
+            toolName: 'getMediaPreviewFrames',
+          }],
+        },
+        success: true,
+      },
+      operationArguments,
+    );
+
+    expect(result).toMatchObject({
+      data: {
+        results: [{
+          result: { data: { dataUrl, mediaFileId: 'video-a' }, success: true },
+          toolName: 'getMediaPreviewFrames',
+        }],
+      },
+      success: true,
+    });
+  });
+
+  it('does not pass source preview pixels for a mismatched media binding', () => {
+    const result = projectPublicOperationResultV1(
+      'timeline.editor.inspect.v1',
+      {
+        data: {
+          results: [{
+            result: {
+              data: {
+                dataUrl: 'data:image/jpeg;base64,/9j/2Q==',
+                duration: 10,
+                frameCount: 3,
+                frameTimes: [1, 5, 9.95],
+                height: 240,
+                mediaFileId: 'video-b',
+                mediaName: 'b.mp4',
+                visualReviewKind: 'source-three-frame-v1',
+                width: 1_080,
+              },
+              success: true,
+            },
+            toolName: 'getMediaPreviewFrames',
+          }],
+        },
+        success: true,
+      },
+      {
+        requestJson: JSON.stringify({
+          requests: [{
+            args: { mediaFileId: 'video-a' },
+            toolName: 'getMediaPreviewFrames',
+          }],
+        }),
+      },
+    );
+
+    expect(result).toEqual({
+      error: 'editor operation returned invalid source visual evidence',
+      success: false,
+    });
+  });
+
   it('executes candidate two bindings sequentially inside one transaction', async () => {
     const transaction = transactionSpies();
     const dispatch = vi.fn(async (operationId: string, args: Record<string, unknown>) => {
@@ -468,6 +558,37 @@ describe('WP1 public operation boundary spike', () => {
     }
   });
 
+  it('accepts the two-hour kernel session lifetime and rejects anything longer', () => {
+    const plan = candidateTwoPlan();
+    const binding = {
+      clientInstanceId: 'client-1',
+      sessionId: 'session-1',
+      turnId: 'turn-1',
+    };
+    const twoHoursMs = 2 * 60 * 60 * 1_000;
+    const descriptor = operationSessionDescriptor(plan);
+
+    expect(() => new KernelOperationSessionAuthorityV1({
+      binding,
+      descriptor: {
+        ...descriptor,
+        expiresAtEpochMs: SESSION_NOW + twoHoursMs,
+        issuedAtEpochMs: SESSION_NOW,
+      },
+      nowEpochMs: SESSION_NOW,
+    })).not.toThrow();
+
+    expect(() => new KernelOperationSessionAuthorityV1({
+      binding,
+      descriptor: {
+        ...descriptor,
+        expiresAtEpochMs: SESSION_NOW + twoHoursMs + 1,
+        issuedAtEpochMs: SESSION_NOW,
+      },
+      nowEpochMs: SESSION_NOW,
+    })).toThrow('invalid or expired lifetime');
+  });
+
   it('rejects a valid plan whose operation is outside the authenticated capability set', () => {
     const plan = candidateTwoPlan();
     const authority = new KernelOperationSessionAuthorityV1({
@@ -505,6 +626,7 @@ describe('WP1 public operation boundary spike', () => {
       }
       return { success: true };
     });
+    const onProgress = vi.fn();
     const roundTrip = new KernelOperationRoundTripV1({
       authority: createOperationSessionAuthority(plan),
       requestConfirmation: approveConfirmation,
@@ -514,6 +636,7 @@ describe('WP1 public operation boundary spike', () => {
         getTimelineRevision: () => 7,
         transaction,
       },
+      onProgress,
     });
 
     const request = operationPlanRequest(plan, {
@@ -535,6 +658,11 @@ describe('WP1 public operation boundary spike', () => {
     expect(transaction.abort).not.toHaveBeenCalled();
     expect(await roundTrip.execute(structuredClone(request), SESSION_NOW)).toEqual(prepared);
     expect(dispatch).toHaveBeenCalledTimes(3);
+    expect(onProgress.mock.calls.map(([progress]) => progress)).toEqual([
+      expect.objectContaining({ current: 1, stage: 'executing', total: 3 }),
+      expect.objectContaining({ current: 2, stage: 'executing', total: 3 }),
+      expect.objectContaining({ current: 3, stage: 'inspecting', total: 3 }),
+    ]);
     const conflictingReplay = structuredClone(request);
     conflictingReplay.plan.batchId = 'conflicting-replay';
     await expect(roundTrip.execute(conflictingReplay, SESSION_NOW))
@@ -936,6 +1064,23 @@ describe('WP1 public operation boundary spike', () => {
           tool: 'addClipSegment',
         },
       ],
+      'kernel',
+      { guidedReplay: false, suppressHistory: false },
+    );
+    const hookRequestJson = JSON.stringify({
+      action: 'create',
+      hookId: 'hook-native-motion',
+      rows: [{ text: 'NATIVE MOTION' }],
+    });
+    await expect(dispatch('timeline.hook.commit.v1', {
+      requestJson: hookRequestJson,
+    })).resolves.toMatchObject({ success: true });
+    expect(executeToolCalls).toHaveBeenLastCalledWith(
+      [{
+        id: 'wp1:timeline.hook.commit.v1',
+        tool: 'manageEditableHook',
+        args: { requestJson: hookRequestJson },
+      }],
       'kernel',
       { guidedReplay: false, suppressHistory: false },
     );

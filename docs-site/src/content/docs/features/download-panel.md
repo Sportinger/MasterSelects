@@ -4,13 +4,13 @@ title: "Media Downloads"
 
 [Back to Index](/features/readme/)
 
-Paste and queue online video downloads through the Media panel, Native Helper, and `yt-dlp`.
+Paste and queue online media downloads through Discover or the Media panel, Native Helper, and `yt-dlp`.
 
 ---
 
 ## Overview
 
-The Downloads prompt at the bottom of the Media panel is the active download surface. The surface supports:
+The Downloads prompt at the bottom of the Media panel and the Web downloads section in Discover share the same active download surface. The surface supports:
 
 - direct URL paste for YouTube and other `yt-dlp`-supported sites
 - one-item format selection before queueing, including video recommendations and YouTube MP3 audio
@@ -53,7 +53,9 @@ Any site that `yt-dlp` can fetch can be downloaded even if it is not listed in t
 ### YouTube Search Compatibility
 
 - AI tools can search YouTube and keep results in the legacy in-memory `youtubeStore` for the current session
-- The visible user workflow is URL-first from the Media panel Downloads prompt
+- Discover can show direct YouTube Data API results when the user has configured a YouTube API key
+- Choosing a Discover result places its URL into the same Native Helper format chooser used by the Media panel
+- Instagram and TikTok keyword searches open on their signed-in sites; the user pastes the selected result URL back into Discover
 
 ---
 

@@ -21,6 +21,7 @@ import {
 } from './sourceResolution';
 import { revokeMediaFileUrls } from './deleteRuntimeCleanup';
 import { updateTimelineClips } from './timelineClipReload';
+import { isRestoredMediaSourceCompatible } from '../../../../services/project/mediaSourceValidation';
 
 function isBlobUrl(value?: string): value is string {
   return typeof value === 'string' && value.startsWith('blob:');
@@ -86,7 +87,7 @@ export const createMediaReloadActions: MediaSliceCreator<Pick<
     // Try 1: Get from project RAW folder (we already have folder permission!)
     if (mediaFile.projectPath && projectFileService.isProjectOpen()) {
       const result = await projectFileService.getFileFromRaw(mediaFile.projectPath);
-      if (result) {
+      if (result && await isRestoredMediaSourceCompatible(mediaFile, result.file)) {
         file = result.file;
         handle = result.handle;
         log.debug('Got file from RAW folder:', mediaFile.projectPath);
@@ -117,6 +118,7 @@ export const createMediaReloadActions: MediaSliceCreator<Pick<
       }
     }
 
+    if (file && !await isRestoredMediaSourceCompatible(mediaFile, file)) file = undefined;
     if (!file) {
       log.warn('Could not reload file:', mediaFile.name);
       return false;
@@ -178,7 +180,7 @@ export const createMediaReloadActions: MediaSliceCreator<Pick<
       // Try 1: Get from project RAW folder
       if (mediaFileToReload.projectPath && projectFileService.isProjectOpen()) {
         const result = await projectFileService.getFileFromRaw(mediaFileToReload.projectPath);
-        if (result) {
+        if (result && await isRestoredMediaSourceCompatible(mediaFileToReload, result.file)) {
           file = result.file;
           handle = result.handle;
         }
@@ -200,7 +202,7 @@ export const createMediaReloadActions: MediaSliceCreator<Pick<
         }
       }
 
-      if (!file) continue;
+      if (!file || !await isRestoredMediaSourceCompatible(mediaFileToReload, file)) continue;
 
       if (handle) {
         fileSystemService.storeFileHandle(mediaFileToReload.id, handle);

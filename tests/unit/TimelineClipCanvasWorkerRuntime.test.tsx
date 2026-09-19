@@ -330,18 +330,39 @@ describe('TimelineClipCanvas worker runtime', () => {
 
   it('shows a type pictogram and neutral clip body when thumbnails and track colors are absent', async () => {
     const { container } = renderWorkerCanvas({
-      clips: [createClip({ name: 'Camera', source: { type: 'camera', naturalDuration: 3 } })],
+      clips: [createClip({
+        duration: 8,
+        name: 'Camera',
+        source: { type: 'camera', naturalDuration: 8 },
+      })],
       trackColor: 'transparent',
     });
 
-    const typeIcon = container.querySelector('[data-clip-type="camera"] svg');
+    const cameraChrome = container.querySelector('[data-clip-type="camera"]');
+    const cameraPrefix = cameraChrome?.querySelector('.timeline-clip-camera-prefix');
+    const typeIcon = cameraChrome?.querySelector('svg');
+    expect(cameraChrome).toHaveTextContent('3D');
+    expect(cameraPrefix).toHaveStyle({ fontSize: '26px' });
     expect(typeIcon).toHaveAttribute('stroke', 'currentColor');
-    expect(typeIcon).toHaveStyle({ width: '22px', height: '22px' });
+    expect(typeIcon).toHaveClass('tabler-icon-video');
+    expect(typeIcon).toHaveStyle({ width: '35px', height: '35px' });
     await waitFor(() => expect(workers).toHaveLength(1));
     await act(async () => workers[0].emit({ type: 'ready' }));
     await waitFor(() => expect(workers[0].postedMessages.some((message) => message.type === 'draw')).toBe(true));
 
     expect(workers[0].postedMessages.find((message) => message.type === 'draw')?.trackColor).toBe('#303030');
+  });
+
+  it('keeps the video-camera pictogram visible when a camera clip is too narrow for the 3D prefix', () => {
+    const { container } = renderWorkerCanvas({
+      clips: [createClip({ name: 'Camera', source: { type: 'camera', naturalDuration: 3 } })],
+    });
+
+    const cameraChrome = container.querySelector('[data-clip-type="camera"]');
+    const typeIcon = cameraChrome?.querySelector('svg');
+    expect(cameraChrome).not.toHaveTextContent('3D');
+    expect(typeIcon).toHaveClass('tabler-icon-video');
+    expect(typeIcon).toHaveStyle({ width: '22px', height: '22px' });
   });
 
   it('queues the first draw until ready, records draw acks, and falls back after worker failure', async () => {

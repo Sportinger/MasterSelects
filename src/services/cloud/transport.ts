@@ -1,4 +1,8 @@
 import { APP_VERSION } from '../../version';
+import {
+  notifyBillingUpgradeRequired,
+  responseRequiresBillingUpgrade,
+} from '../billingPromptEvents';
 import type { ApiErrorResponse } from './apiContracts';
 
 interface ApiErrorShape {
@@ -243,6 +247,9 @@ export async function requestJson<T>(path: string, init: ApiRequestInit = {}): P
 
   if (!response.ok) {
     const error = data as T & ApiErrorResponse;
+    if (response.status === 402 || responseRequiresBillingUpgrade(error)) {
+      notifyBillingUpgradeRequired();
+    }
     throw new Error(getApiErrorMessage(error, response.status));
   }
 
@@ -264,7 +271,11 @@ export async function requestBinary(path: string, init: RequestInit = {}): Promi
 
     if (text.trim()) {
       try {
-        message = getApiErrorMessage(JSON.parse(text) as ApiErrorResponse, response.status);
+        const error = JSON.parse(text) as ApiErrorResponse;
+        if (response.status === 402 || responseRequiresBillingUpgrade(error)) {
+          notifyBillingUpgradeRequired();
+        }
+        message = getApiErrorMessage(error, response.status);
       } catch {
         message = text.trim();
       }

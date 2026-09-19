@@ -1,3 +1,4 @@
+import { timingSafeEqualStrings } from './constantTime';
 import type { Env } from './env';
 import { getBillingPlan, type BillingPlanId } from './entitlements';
 
@@ -238,6 +239,23 @@ export function getStripePriceId(env: Env, planId: BillingPlanId | string): stri
   return null;
 }
 
+/**
+ * Upstream Stripe failure. The response body stays in `detail` for server-side
+ * logs; the message itself carries only the status so it can be surfaced
+ * without echoing Stripe's error text to the caller.
+ */
+export class StripeApiError extends Error {
+  readonly detail: string;
+  readonly status: number;
+
+  constructor(status: number, detail: string) {
+    super(`stripe_api_error:${status}`);
+    this.name = 'StripeApiError';
+    this.detail = detail;
+    this.status = status;
+  }
+}
+
 async function stripeApiRequest<T>(
   config: StripeConfig,
   method: string,
@@ -257,10 +275,31 @@ async function stripeApiRequest<T>(
 
   const text = await response.text();
   if (!response.ok) {
-    throw new Error(`stripe_api_error:${response.status}:${text.slice(0, 500)}`);
+    const detail = text.slice(0, 500);
+    console.error(`[stripe] ${method} ${path.split('?')[0]} failed`, response.status, detail);
+    throw new StripeApiError(response.status, detail);
   }
 
   return text.length > 0 ? (JSON.parse(text) as T) : ({} as T);
+}
+
+/**
+ * Idempotency key for a Stripe write. Derived from the caller, the target,
+ * and a 10-minute bucket, so a retried or double-submitted request inside
+ * that window replays Stripe's original response instead of creating a second
+ * session, while a later intentional repeat gets a fresh key.
+ */
+export async function buildStripeIdempotencyKey(
+  scope: string,
+  parts: Array<string | number | null | undefined>,
+  now = Date.now(),
+): Promise<string> {
+  const bucket = Math.floor(now / (10 * 60 * 1000));
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode([scope, ...parts.map((part) => part ?? ''), bucket].join('\n')),
+  );
+  return `ms-${scope}-${hexFromBuffer(digest).slice(0, 48)}`;
 }
 
 function appendObjectParams(params: URLSearchParams, prefix: string, value: Record<string, string | undefined> | undefined): void {
@@ -488,7 +527,7 @@ export async function verifyStripeWebhookSignature(
 
   const signedPayload = `${parsed.timestamp}.${payload}`;
   const expectedSignature = await hmacSha256(signedPayload, secret);
-  return parsed.signatures.some((candidate) => candidate === expectedSignature);
+  return parsed.signatures.some((candidate) => timingSafeEqualStrings(candidate, expectedSignature));
 }
 
 export function getStripeCustomerIdFromObject(

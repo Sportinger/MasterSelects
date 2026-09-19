@@ -8,16 +8,16 @@ The meter supports authenticated hosted-AI workflows, including agent chat, chat
 
 ## What users see
 
-The right side of the 28 px editor toolbar shows the authenticated account's exact credit balance and a thin reserve bar. Starting a tracked hosted operation changes the fixed-size control to `AI ACTIVE` (or an active-operation count) and a `RUN` spend indicator without lowering the balance speculatively.
+The far right of the 28 px editor toolbar shows a compact, content-sized Account pill with the exact credit balance and a thin reserve bar. Signed-out users see the current plan label, which defaults to `Free`; authenticated users always see their display name or email prefix. The label no longer changes on hover or keyboard focus. Click or touch always opens Account. Native Helper status is not part of this compact toolbar area.
 
 When the client accepts a server-confirmed ledger debit, the same settlement drives four synchronized cues:
 
 - changed balance digits roll downward with short motion trails;
 - the reserve bar eases to the new authoritative ratio and flashes at its leading edge;
 - a bounded seven-particle drain and one amount cue travel toward the operation's target element, or use a local toolbar fallback;
-- the `RUN` indicator reports confirmed spend for the active hosted-work session.
+- the pill's active styling reports that hosted work is in progress without adding a separate `RUN` label.
 
-Overlapping operations show their active count and aggregate confirmed spend. After the last operation completes, fails, or is canceled, the `LAST` spend indicator remains visible for 1.5 seconds. Clicking the meter opens Account.
+Overlapping operations retain aggregate confirmed-spend accounting for settlement animation and accessibility. The balance itself changes only when the corresponding server-confirmed event arrives.
 
 Grants and newly created refunds roll upward with a quieter green `+N CREDITS` or `+N REFUND` treatment. Replayed/no-op refunds and balance-only reads reconcile silently.
 
@@ -29,7 +29,7 @@ Hosted-agent billing events carry the whole-account balance, round debit, cumula
 
 If cancellation races with completed provider work, the client performs one 1.5-second accounting-only cancel/replay drain. It accepts settlement and terminal events but never executes a queued editor tool after cancellation. A debounced Account refresh after the final activity is the convergence point for other tabs, grants, refunds, and any unavailable drain.
 
-Balance-only reads and account/bootstrap responses are reconciliation only. They may correct the exact number and bar, but cannot create spend motion or increment `RUN`.
+Balance-only reads and account/bootstrap responses are reconciliation only. They may correct the exact number and bar, but cannot create spend motion.
 
 ## Reserve reference
 

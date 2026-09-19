@@ -10,18 +10,18 @@ import {
   type TimelineZoomAnchor,
 } from '../../../stores/settingsStore';
 // AutosaveInterval used in interval select onChange cast
-import { useIsMobile } from '../../../hooks/useIsMobile';
 import { requestShortcutDisplayPreview } from '../shortcutDisplayPreview';
 import { OutputSettings } from './OutputSettings';
 import { AIFeaturesSettings } from './AIFeaturesSettings';
+import { ProductAnalyticsSettings } from './ProductAnalyticsSettings';
 
 export function GeneralSettings() {
   const {
     saveMode,
     autosaveInterval,
     copyMediaToProject,
-    forceDesktopMode,
     timelineZoomAnchor,
+    automaticMobileLayoutEnabled,
     showShortcutDisplay,
     shortcutDisplayScale,
     previewQuality,
@@ -29,20 +29,13 @@ export function GeneralSettings() {
     setSaveMode,
     setAutosaveInterval,
     setCopyMediaToProject,
-    setForceDesktopMode,
     setTimelineZoomAnchor,
+    setAutomaticMobileLayoutEnabled,
     setShowShortcutDisplay,
     setShortcutDisplayScale,
     setPreviewQuality,
     setGpuPowerPreference,
   } = useSettingsStore();
-
-  const isMobileDevice = useIsMobile();
-
-  const handleSwitchToMobile = useCallback(() => {
-    setForceDesktopMode(false);
-    window.location.reload();
-  }, [setForceDesktopMode]);
 
   const handleShortcutDisplayToggle = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setShowShortcutDisplay(event.target.checked);
@@ -89,13 +82,13 @@ export function GeneralSettings() {
             onChange={(e) => setSaveMode(e.target.value as SaveMode)}
             className="settings-select"
           >
-            <option value="continuous">Continuous (every change)</option>
+            <option value="manual">Manual (Save / Ctrl+S)</option>
             <option value="interval">Interval (timed)</option>
           </select>
         </label>
         <p className="settings-hint">
-          {saveMode === 'continuous'
-            ? 'Project is saved automatically after every change. You never have to think about saving.'
+          {saveMode === 'manual'
+            ? 'Changes stay unsaved until you choose Save or press Ctrl+S.'
             : 'Project is saved on a timer interval. You can also save manually with Ctrl+S.'}
         </p>
 
@@ -118,17 +111,7 @@ export function GeneralSettings() {
         )}
       </div>
 
-      {isMobileDevice && forceDesktopMode && (
-        <div className="settings-group">
-          <div className="settings-group-title">View Mode</div>
-          <p className="settings-description">
-            You're viewing the desktop interface on a mobile device.
-          </p>
-          <button className="settings-button" onClick={handleSwitchToMobile}>
-            Switch to Mobile View
-          </button>
-        </div>
-      )}
+      <ProductAnalyticsSettings />
 
       {/* Timeline */}
       <div className="settings-group">
@@ -147,6 +130,25 @@ export function GeneralSettings() {
         </label>
         <p className="settings-hint">
           Controls whether Ctrl/Alt+scroll zooms toward the cursor or the playhead.
+        </p>
+      </div>
+
+      {/* Layout */}
+      <div className="settings-group">
+        <div className="settings-group-title">Layout</div>
+
+        <label className="settings-row">
+          <span className="settings-label">Automatically use Mobile layout when space is limited</span>
+          <input
+            type="checkbox"
+            checked={automaticMobileLayoutEnabled}
+            onChange={(event) => setAutomaticMobileLayoutEnabled(event.target.checked)}
+            className="settings-checkbox"
+          />
+        </label>
+        <p className="settings-hint">
+          Switches to H/V Mobile below 900 px. Detected mobile devices always use Mobile;
+          your previous desktop layout returns when the mobile condition ends.
         </p>
       </div>
 

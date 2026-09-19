@@ -1,3 +1,5 @@
+import { clonePlanarTracks } from '../../services/planarTracking/clonePlanarTracks';
+import { cloneTerrainAnchorConnector, cloneTerrainAttachment, cloneTerrainScreenAnchor } from '../../types/terrainAttachment';
 import type {
   Keyframe,
   Layer,
@@ -94,17 +96,21 @@ function createHistoryPlaceholderFile(
 
 function isReusableSourceForRuntimeRef(
   source: TimelineClip['source'],
-  clip: Pick<TimelineClip, 'mediaFileId' | 'compositionId' | 'signalAssetId' | 'signalRefId' | 'signalRenderAdapterId'>,
+  clip: HistoryTimelineClipEditState,
   runtimeRef: HistoryTimelineRuntimeRef,
 ): boolean {
   if (!source || source.type !== runtimeRef.sourceType) return false;
 
+  const liveInputId = clip.liveInputId ?? runtimeRef.liveInputId;
+  if (liveInputId) {
+    return source.liveInputId === liveInputId;
+  }
+
   if (runtimeRef.kind === 'media-file') {
-    const mediaFileId = clip.mediaFileId ?? source.mediaFileId;
+    const mediaFileId = clip.mediaFileId ?? source.mediaFileId ?? source.liveInputId;
     return Boolean(
       runtimeRef.mediaFileId &&
-      mediaFileId === runtimeRef.mediaFileId &&
-      (!runtimeRef.liveInputId || source.liveInputId === runtimeRef.liveInputId)
+      mediaFileId === runtimeRef.mediaFileId
     );
   }
 
@@ -124,21 +130,54 @@ function isReusableSourceForRuntimeRef(
     return true;
   }
 
+  // Older snapshots used `missing-media` for generated sources. They are
+  // self-contained only when their required durable data is actually present.
+  if (
+    runtimeRef.kind === 'generated' ||
+    (
+      runtimeRef.kind === 'missing-media' &&
+      isSelfContainedGeneratedClip(clip)
+    )
+  ) {
+    return clip.sourceType !== 'model' || source.meshType === clip.meshType;
+  }
+
   return false;
 }
 
 function createDataOnlyClipSource(
   clip: HistoryTimelineClipEditState,
-): TimelineClip['source'] {
+): NonNullable<TimelineClip['source']> {
+  const liveInputId = clip.liveInputId ?? clip.runtimeRef.liveInputId;
   return {
     type: clip.sourceType,
     naturalDuration: clip.naturalDuration ?? clip.runtimeRef.naturalDuration ?? clip.outPoint,
-    mediaFileId: clip.mediaFileId ?? clip.runtimeRef.mediaFileId,
-    liveInputId: clip.liveInputId ?? clip.runtimeRef.liveInputId,
-    vectorAnimationSettings: clip.vectorAnimationSettings,
-    text3DProperties: clip.text3DProperties,
+    mediaFileId: clip.mediaFileId ?? clip.runtimeRef.mediaFileId ?? liveInputId,
+    liveInputId,
+    vectorAnimationSettings: clonePlain(clip.vectorAnimationSettings),
+    text3DProperties: clonePlain(clip.text3DProperties),
     meshType: clip.meshType,
+    cameraSettings: clonePlain(clip.cameraSettings),
+    threeDEffectorsEnabled: clip.threeDEffectorsEnabled,
   };
+}
+
+function mergeRestoredSourceData(
+  runtimeSource: NonNullable<TimelineClip['source']>,
+  restoredSource: NonNullable<TimelineClip['source']>,
+): NonNullable<TimelineClip['source']> {
+  const merged = { ...runtimeSource } as Record<string, unknown>;
+  for (const [key, value] of Object.entries(restoredSource)) {
+    if (value !== undefined) merged[key] = value;
+  }
+  return merged as unknown as NonNullable<TimelineClip['source']>;
+}
+
+function isSelfContainedGeneratedClip(clip: HistoryTimelineClipEditState): boolean {
+  return clip.sourceType === 'camera' ||
+    (clip.sourceType === 'flock' && Boolean(clip.flock)) || (
+    clip.sourceType === 'model' && Boolean(clip.meshType)
+  );
 }
 
 function createRestoredClip(
@@ -149,11 +188,12 @@ function createRestoredClip(
 ): { clip: TimelineClip; reusedRuntime: boolean } {
   const reusedRuntime = Boolean(
     currentClip &&
-      isReusableSourceForRuntimeRef(currentClip.source, currentClip, clip.runtimeRef)
+      isReusableSourceForRuntimeRef(currentClip.source, clip, clip.runtimeRef)
   );
+  const restoredSource = createDataOnlyClipSource(clip);
   const source = reusedRuntime && currentClip?.source
-    ? currentClip.source
-    : createDataOnlyClipSource(clip);
+    ? mergeRestoredSourceData(currentClip.source, restoredSource)
+    : restoredSource;
   const file = reusedRuntime && currentClip?.file
     ? currentClip.file
     : createHistoryPlaceholderFile(clip.name, clip.sourceType, options.placeholderFileMode);
@@ -182,6 +222,11 @@ function createRestoredClip(
       audioState: clonePlain(clip.audioState),
       transform: clonePlain(clip.transform),
       effects: clonePlain(clip.effects),
+    planarTracks: clonePlanarTracks(clip.planarTracks),
+    terrainAttachment: cloneTerrainAttachment(clip.terrainAttachment),
+    terrainScreenAnchor: cloneTerrainScreenAnchor(clip.terrainScreenAnchor),
+    terrainAnchorConnector: cloneTerrainAnchorConnector(clip.terrainAnchorConnector),
+    trackingBinding: clip.trackingBinding ? structuredClone(clip.trackingBinding) : undefined,
       colorCorrection: clonePlain(clip.colorCorrection),
       nodeGraph: clonePlain(clip.nodeGraph),
       masks: clonePlain(clip.masks),
@@ -219,6 +264,7 @@ function createRestoredClip(
       motion: clip.motion
         ? normalizeMotionLayerDefinitionForLoad(clip.motion)
         : undefined,
+      flock: clonePlain(clip.flock),
       isComposition: clip.isComposition,
       compositionId: clip.compositionId ?? clip.runtimeRef.compositionId,
       transitionIn: clonePlain(clip.transitionIn),
@@ -227,9 +273,13 @@ function createRestoredClip(
       wireframe: clip.wireframe,
       meshType: clip.meshType,
       storyboardProperties: clonePlain(clip.storyboardProperties),
-      needsReload: !reusedRuntime && !(clip.liveInputId ?? clip.runtimeRef.liveInputId) && clip.runtimeRef.kind !== 'inline-data'
-        ? true
-        : clip.runtimeRef.needsReload,
+      needsReload: clip.runtimeRef.kind === 'inline-data' ||
+        clip.runtimeRef.kind === 'generated' ||
+        isSelfContainedGeneratedClip(clip)
+        ? false
+        : !reusedRuntime && !(clip.liveInputId ?? clip.runtimeRef.liveInputId)
+          ? true
+          : clip.runtimeRef.needsReload,
       isLoading: false,
     },
   };
@@ -331,7 +381,12 @@ export function createHistoryTimelineRestoreState(
     );
     if (restored.reusedRuntime) {
       reusedRuntimeClipIds.push(clip.id);
-    } else if (!(clip.liveInputId ?? clip.runtimeRef.liveInputId)) {
+    } else if (
+      !(clip.liveInputId ?? clip.runtimeRef.liveInputId) &&
+      clip.runtimeRef.kind !== 'inline-data' &&
+      clip.runtimeRef.kind !== 'generated' &&
+      !isSelfContainedGeneratedClip(clip)
+    ) {
       deferredRuntimeClipIds.push(clip.id);
     }
     return restored.clip;

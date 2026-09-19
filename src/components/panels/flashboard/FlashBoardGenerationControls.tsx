@@ -24,9 +24,11 @@ interface FlashBoardGenerationControlsProps {
   isAudioMode: boolean;
   isElevenLabsMode: boolean;
   isSunoMode: boolean;
+  isSeedance25Mode: boolean;
   modeLabel: string;
   modelButtonLabel: string;
   multiShots: boolean;
+  returnLastFrame: boolean;
   popoverHostClassName: string;
   popoverRef: RefObject<HTMLDivElement | null>;
   selectedEntryHasAspectRatios: boolean;
@@ -39,12 +41,17 @@ interface FlashBoardGenerationControlsProps {
   sunoVoiceControlsDisabled: boolean;
   supportsAudio: boolean;
   supportsMultiShot: boolean;
+  videoOutputFormat: 'mov' | 'mp4';
   voiceSettingsChanged: boolean;
+  webSearch: boolean;
   onAudioToggle: () => void;
   onMultiShotToggle: () => void;
+  onReturnLastFrameToggle: () => void;
   onOpenPromptBook: () => void;
   onOpenPopover: (type: GenerationControlPopover) => void;
   onSunoVocalGenderChange: (value: string) => void;
+  onVideoOutputFormatToggle: () => void;
+  onWebSearchToggle: () => void;
 }
 
 export function FlashBoardGenerationControls({
@@ -59,9 +66,11 @@ export function FlashBoardGenerationControls({
   isAudioMode,
   isElevenLabsMode,
   isSunoMode,
+  isSeedance25Mode,
   modeLabel,
   modelButtonLabel,
   multiShots,
+  returnLastFrame,
   popoverHostClassName,
   popoverRef,
   selectedEntryHasAspectRatios,
@@ -74,12 +83,17 @@ export function FlashBoardGenerationControls({
   sunoVoiceControlsDisabled,
   supportsAudio,
   supportsMultiShot,
+  videoOutputFormat,
   voiceSettingsChanged,
+  webSearch,
   onAudioToggle,
   onMultiShotToggle,
+  onReturnLastFrameToggle,
   onOpenPromptBook,
   onOpenPopover,
   onSunoVocalGenderChange,
+  onVideoOutputFormatToggle,
+  onWebSearchToggle,
 }: FlashBoardGenerationControlsProps) {
   return (
     <div className="fb-control-stack">
@@ -180,6 +194,19 @@ export function FlashBoardGenerationControls({
           <button className={`fb-pill ${effectiveGenerateAudio ? 'active' : ''}`} onClick={onAudioToggle} title={multiShots ? 'Required for multishot' : 'Generate sound'}>
             {multiShots ? 'Sound req.' : 'Sound'}
           </button>
+        )}
+        {isSeedance25Mode && (
+          <>
+            <button className={`fb-pill ${videoOutputFormat === 'mov' ? 'active' : ''}`} onClick={onVideoOutputFormatToggle} title="Toggle Seedance output format">
+              {videoOutputFormat.toUpperCase()}
+            </button>
+            <button className={`fb-pill ${webSearch ? 'active' : ''}`} onClick={onWebSearchToggle} title="Use web search during generation">
+              Web search
+            </button>
+            <button className={`fb-pill ${returnLastFrame ? 'active' : ''}`} onClick={onReturnLastFrameToggle} title="Import the generated last frame alongside the video">
+              Last frame
+            </button>
+          </>
         )}
         {supportsMultiShot && (
           <button className={`fb-pill ${multiShots ? 'active' : ''}`} onClick={onMultiShotToggle} title="Split the generation into multiple shots">

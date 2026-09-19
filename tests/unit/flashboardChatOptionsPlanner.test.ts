@@ -28,19 +28,12 @@ describe('FlashBoard chat options planner', () => {
       id: 'none',
       label: 'None',
     });
-    expect(buildFlashBoardChatModelOptions({
-      chatModel: 'masterselects-ai',
-      chatProvider: 'kernel',
-    })).toEqual([
-      expect.objectContaining({
-        id: 'masterselects-ai',
-        provider: 'kernel',
-      }),
-    ]);
+    expect(buildFlashBoardChatModelOptions({ chatProvider: 'kie' }))
+      .toBe(FLASHBOARD_CHAT_MODEL_OPTIONS.kie);
     expect(buildFlashBoardChatProviderFallback({
-      chatProvider: 'kernel',
+      chatProvider: 'kie',
       chatProviderOptions: FLASHBOARD_CHAT_PROVIDERS,
-    })).toBe('kie');
+    })).toBeUndefined();
   });
 
   it('falls back from a stale hosted model to the current default', () => {

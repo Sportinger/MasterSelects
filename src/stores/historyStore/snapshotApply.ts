@@ -19,6 +19,7 @@ import {
 import { flashBoardMediaBridge } from '../../services/flashboard/FlashBoardMediaBridge';
 import { Logger } from '../../services/logger';
 import { sanitizeTimelineParentRestoreTree } from '../../services/motionDesign/structure/timelineParentRestoreAdapter';
+import { cloneTrackingAssets } from '../trackingStore';
 
 const log = Logger.create('HistorySnapshotApply');
 
@@ -191,6 +192,13 @@ export function applyHistorySnapshot(
 
   if (refs.setStoryboardState && snapshot.storyboard) {
     refs.setStoryboardState(deepClone(snapshot.storyboard));
+  }
+
+  if (refs.setTrackingState && snapshot.tracking) {
+    refs.setTrackingState({
+      assets: cloneTrackingAssets(snapshot.tracking.assets),
+      selectedAssetId: snapshot.tracking.selectedAssetId,
+    });
   }
 
   if (refs.setExportState) {

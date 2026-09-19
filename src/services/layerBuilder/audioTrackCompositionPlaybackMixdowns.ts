@@ -8,16 +8,19 @@ import {
 import { applyCompositionAudioMixdownToTimelineClip } from '../timeline/compositionAudioMixdownTimelineState';
 import { resolveAudioSyncMedia } from './audioSyncMediaResolver';
 import { shouldUseInlineCompositionMixdown } from '../timeline/compositionAudioClipLinks';
+import { CompositionPlaybackMixdownSilenceTracker } from './compositionPlaybackMixdownSilence';
 
 export class AudioTrackCompositionPlaybackMixdownManager {
   private pendingCompositionPlaybackMixdowns = new Set<string>();
-
+  private silenceTracker = new CompositionPlaybackMixdownSilenceTracker();
   ensureCompositionAudioPlaybackElement(
     clip: TimelineClip,
     attachTo: 'source' | 'mixdown',
     clips: readonly TimelineClip[],
   ): HTMLAudioElement | null {
     if (!clip.isComposition || !clip.compositionId) return null;
+    const requestedKey = getCompositionAudioMixdownKey(clip);
+    if (this.silenceTracker.shouldSkip(clip, requestedKey)) return null;
     if (attachTo === 'mixdown' && !shouldUseInlineCompositionMixdown(clips, clip)) {
       return null;
     }
@@ -29,7 +32,6 @@ export class AudioTrackCompositionPlaybackMixdownManager {
     } else if (clip.mixdownAudio) {
       return clip.mixdownAudio;
     }
-
     const existingBuffer = clip.mixdownBuffer;
     if (existingBuffer && clip.hasMixdownAudio !== false) {
       const element = createCompositionMixdownAudioElement(clip.id, existingBuffer, {
@@ -62,6 +64,8 @@ export class AudioTrackCompositionPlaybackMixdownManager {
 
     void requestCompositionAudioMixdown(clip)
       .then((result) => {
+        const current = useTimelineStore.getState().clips.find(candidate => candidate.id === clip.id);
+        if (!this.silenceTracker.isCurrent(current, requestedKey)) return;
         if (!result) {
           useTimelineStore.setState((state) => ({
             clips: state.clips.map(candidate =>
@@ -73,6 +77,7 @@ export class AudioTrackCompositionPlaybackMixdownManager {
           return;
         }
         if (!result.hasAudio) {
+          this.silenceTracker.remember(clip.id, result.key);
           applyCompositionAudioMixdownToTimelineClip(clip.id, result);
           return;
         }

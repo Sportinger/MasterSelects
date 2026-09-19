@@ -32,6 +32,9 @@ export class VideoSyncWarmupState {
       if (!video.paused) {
         video.pause();
       }
+      if (video.playbackRate !== 1) {
+        video.playbackRate = 1;
+      }
     }
     this.upcomingPreplays.clear();
   }

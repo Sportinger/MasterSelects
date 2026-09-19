@@ -49,16 +49,39 @@ const FLASHBOARD_CHAT_PRIORITY_TOOL_NAMES = new Set([
   'updateMotionAppearances',
   'configureMotionReplicator',
   'editMotionModifier',
+  // Flock clips: the eligible chat surface exceeds the provider cap, so the core
+  // authoring set is prioritized explicitly (the rest stays reachable via the kernel catalog).
+  'listFlockOperators',
+  'createFlockClip',
+  'getFlockClip',
+  'applyFlockPreset',
+  'addFlockNode',
+  'updateFlockNode',
+  'connectFlockPorts',
+  'exposeFlockParam',
+]);
+
+// Playback simulation probes are verification tools rather than editing tools; they
+// yield provider slots to editing tools first (they stay reachable via the dev bridge).
+const FLASHBOARD_CHAT_DEFERRED_TOOL_NAMES = new Set([
+  'simulateScrub',
+  'simulateFrameKeypresses',
+  'simulatePlayback',
+  'simulatePlaybackPulses',
+  'simulatePlaybackPath',
 ]);
 
 const eligibleFlashBoardChatTools = AI_TOOLS.filter((tool) => (
   getToolPolicy(tool.function.name)?.allowedCallers.includes('chat') === true
 ));
 
-export const FLASHBOARD_CHAT_TOOLS = [
-  ...eligibleFlashBoardChatTools.filter((tool) => FLASHBOARD_CHAT_PRIORITY_TOOL_NAMES.has(tool.function.name)),
-  ...eligibleFlashBoardChatTools.filter((tool) => !FLASHBOARD_CHAT_PRIORITY_TOOL_NAMES.has(tool.function.name)),
-].slice(0, FLASHBOARD_CHAT_MAX_PROVIDER_TOOLS);
+const flashBoardChatToolRank = (name: string): number => (
+  FLASHBOARD_CHAT_PRIORITY_TOOL_NAMES.has(name) ? 0 : FLASHBOARD_CHAT_DEFERRED_TOOL_NAMES.has(name) ? 2 : 1
+);
+
+export const FLASHBOARD_CHAT_TOOLS = [0, 1, 2].flatMap((rank) => (
+  eligibleFlashBoardChatTools.filter((tool) => flashBoardChatToolRank(tool.function.name) === rank)
+)).slice(0, FLASHBOARD_CHAT_MAX_PROVIDER_TOOLS);
 
 export const OPENAI_RESPONSES_TOOLS: OpenAiResponsesToolDefinition[] = FLASHBOARD_CHAT_TOOLS.map((tool) => ({
   type: 'function',

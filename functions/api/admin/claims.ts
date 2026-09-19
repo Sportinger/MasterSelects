@@ -1,5 +1,9 @@
 import { hasAdminTrustedOrigin, hasValidAdminCsrf, requireAdminSession } from '../../lib/adminAuth';
-import { createAdminCreditClaim, type CreateAdminCreditClaimInput } from '../../lib/adminCreditClaims';
+import {
+  AdminCreditClaimInputError,
+  createAdminCreditClaim,
+  type CreateAdminCreditClaimInput,
+} from '../../lib/adminCreditClaims';
 import { json, methodNotAllowed, parseJson } from '../../lib/db';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
 
@@ -19,9 +23,15 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     const claim = await createAdminCreditClaim(context.env.DB, context.request, context.env, body);
     return json({ claim }, { status: 201 });
   } catch (error) {
+    const requestId = context.data.requestId ?? null;
+    if (error instanceof AdminCreditClaimInputError) {
+      return json({ error: 'invalid_credit_claim', message: error.message, requestId }, { status: 400 });
+    }
+    console.error('[admin] credit link creation failed', requestId, error instanceof Error ? error.message : error);
     return json({
-      error: 'invalid_credit_claim',
-      message: error instanceof Error ? error.message : 'The credit link could not be created.',
-    }, { status: 400 });
+      error: 'credit_claim_failed',
+      message: 'The credit link could not be created.',
+      requestId,
+    }, { status: 500 });
   }
 };

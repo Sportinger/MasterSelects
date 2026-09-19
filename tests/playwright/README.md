@@ -26,6 +26,9 @@ npm run test:e2e:report
 - `canary` and `release` derive their module filters from
   `config/moduleGates.ts`; `release` includes only `required` modules.
 - `built` creates the deploy artifact and checks it without the Dev Bridge.
+  It creates a project through the current chooser using real browser storage
+  (native file pickers disabled), then checks Preview transport and Export.
+  The Windows beta journey separately covers native folder selection.
 - `release` runs the full repository build/type gate, the built smoke, then the
   required headed Dev Bridge journeys.
 - `report` opens the latest HTML report without rerunning tests.

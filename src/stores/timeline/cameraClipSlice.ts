@@ -11,7 +11,7 @@ import { Logger } from '../../services/logger';
 const log = Logger.create('CameraClipSlice');
 
 export const createCameraClipSlice: SliceCreator<CameraClipActions> = (set, get) => ({
-  addCameraClip: (trackId, startTime, duration = 10, skipMediaItem = false) => {
+  addCameraClip: (trackId, startTime, duration = 10, skipMediaItem = true) => {
     const { clips, tracks, updateDuration, invalidateCache } = get();
     const track = tracks.find(t => t.id === trackId);
 

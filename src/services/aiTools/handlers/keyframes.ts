@@ -15,14 +15,27 @@ import {
   keyframeValueFromStore,
   keyframeValueToStore,
 } from './keyframePositionUnits';
+import { isFlockProperty } from '../../../types/flock';
+import {
+  clipLocalToKeyframeTime,
+  keyframeTimeToClipLocal,
+} from '../../flock/time/flockKeyframeTime';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
+
+/** Snaps time-basis conversions so round trips stay exact (sourceTime 6 is stored as 6, not 5.999999999999999). */
+function snapSeconds(seconds: number): number;
+function snapSeconds(seconds: number | null): number | null;
+function snapSeconds(seconds: number | null): number | null {
+  return seconds === null ? null : Math.round(seconds * 1e9) / 1e9;
+}
 
 interface KeyframeAuthoringRequest {
   clipId: string;
   property: AnimatableProperty;
   requestedValue: number;
   requestedTime: number | undefined;
+  requestedSourceTime: number | undefined;
   easing: EasingType;
 }
 
@@ -31,10 +44,12 @@ interface PlannedKeyframe extends KeyframeAuthoringRequest {
   canonicalValue: number;
   storedValue: number;
   resolvedTime: number;
+  /** Time as stored: clip-local, or simulation source time for flock graph parameters. */
+  storedTime: number;
   existingKeyframeId: string | null;
 }
 
-const LEGACY_KEYFRAME_FIELDS = ['clipId', 'property', 'value', 'time', 'easing'] as const;
+const LEGACY_KEYFRAME_FIELDS = ['clipId', 'property', 'value', 'time', 'sourceTime', 'easing'] as const;
 const VALID_EASING_KEYS = new Set([
   'linear',
   'easein',
@@ -72,6 +87,12 @@ export async function handleGetKeyframes(
         value: keyframeValueFromStore(clip, kf.property, kf.value),
         pathValue: kf.pathValue,
         time: kf.time,
+        ...(isFlockProperty(kf.property)
+          ? {
+              timeBasis: 'source',
+              clipLocalTime: snapSeconds(keyframeTimeToClipLocal(clip, kf, timelineStore.getSourceTimeForClip)),
+            }
+          : {}),
         easing: normalizeEasingType(kf.easing, 'linear'),
         rotationInterpolation: kf.rotationInterpolation,
       })),
@@ -135,7 +156,7 @@ export async function handleAddKeyframe(
       const actual = getKeyframeAtTime(
         finalTimeline.getClipKeyframes(keyframe.clipId),
         keyframe.property,
-        keyframe.resolvedTime,
+        keyframe.storedTime,
       );
       if (!actual) {
         throw new Error(`Keyframe was not written: ${keyframe.clipId}/${keyframe.property}`);
@@ -150,6 +171,9 @@ export async function handleAddKeyframe(
         storedValue: actual.value,
         requestedTime: keyframe.requestedTime,
         resolvedTime: actual.time,
+        ...(isFlockProperty(keyframe.property)
+          ? { timeBasis: 'source', clipLocalTime: keyframe.resolvedTime }
+          : {}),
         easing: normalizeEasingType(actual.easing, keyframe.easing),
         status,
         created: status === 'created',
@@ -180,6 +204,7 @@ export async function handleAddKeyframe(
           storedValue: keyframe.storedValue,
           requestedTime: keyframe.requestedTime,
           resolvedTime: keyframe.resolvedTime,
+          ...('timeBasis' in keyframe ? { timeBasis: keyframe.timeBasis, clipLocalTime: keyframe.clipLocalTime } : {}),
           status: keyframe.status,
           created: keyframe.created,
           updated: keyframe.updated,
@@ -250,11 +275,23 @@ function parseKeyframeRequest(
   )) {
     throw new Error(`${label}.time must be a finite number`);
   }
+  if (input.sourceTime !== undefined) {
+    if (typeof input.sourceTime !== 'number' || !Number.isFinite(input.sourceTime) || input.sourceTime < 0) {
+      throw new Error(`${label}.sourceTime must be a finite number >= 0`);
+    }
+    if (input.time !== undefined) {
+      throw new Error(`${label}: use either time or sourceTime, not both`);
+    }
+    if (!isFlockProperty(property)) {
+      throw new Error(`${label}.sourceTime is only supported for flock graph properties (flock.node.*)`);
+    }
+  }
   return {
     clipId,
     property,
     requestedValue: input.value,
     requestedTime: input.time as number | undefined,
+    requestedSourceTime: input.sourceTime as number | undefined,
     easing: parseEasing(input.easing, `${label}.easing`),
   };
 }
@@ -312,17 +349,27 @@ function planKeyframe(
   if (!Number.isFinite(storedValue)) {
     throw new Error(`${request.property} resolved to a non-finite stored value`);
   }
-  const resolvedTime = Math.max(
-    0,
-    Math.min(
-      request.requestedTime ?? (timeline.playheadPosition - clip.startTime),
-      clip.duration,
-    ),
-  );
+  let requestedLocalTime = request.requestedTime ?? (timeline.playheadPosition - clip.startTime);
+  if (request.requestedSourceTime !== undefined) {
+    const local = keyframeTimeToClipLocal(
+      clip,
+      { property: request.property, time: request.requestedSourceTime },
+      timeline.getSourceTimeForClip,
+    );
+    if (local === null || local < -1e-6 || local > clip.duration + 1e-6) {
+      throw new Error(
+        `sourceTime ${request.requestedSourceTime}s is outside the visible source window of clip ${clip.id}; extend or slip the clip, or choose a source time it shows`,
+      );
+    }
+    requestedLocalTime = snapSeconds(local);
+  }
+  const resolvedTime = Math.max(0, Math.min(requestedLocalTime, clip.duration));
+  // Flock graph parameters store keyframes in source time; lookups must match.
+  const storedTime = clipLocalToKeyframeTime(clip, request.property, resolvedTime, timeline.getSourceTimeForClip);
   const existing = getKeyframeAtTime(
     timeline.getClipKeyframes(clip.id),
     request.property,
-    resolvedTime,
+    storedTime,
   );
   return {
     ...request,
@@ -330,6 +377,7 @@ function planKeyframe(
     canonicalValue,
     storedValue,
     resolvedTime,
+    storedTime,
     existingKeyframeId: existing?.id ?? null,
   };
 }

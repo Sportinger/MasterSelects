@@ -17,6 +17,7 @@ import type {
 } from '../../../../stores/mediaStore';
 import type { MediaFileUsageSummary } from '../../../../stores/mediaStore/slices/fileManageSlice';
 import { isUserVisibleComposition } from '../../../../stores/mediaStore/compositionVisibility';
+import type { TrackingAsset } from '../../../../types/trackingAsset';
 
 const log = Logger.create('MediaPanel');
 
@@ -43,13 +44,17 @@ interface UseMediaPanelRenameDeleteCommandsInput {
   mathSceneItems: MathSceneItem[];
   motionShapeItems: MotionShapeItem[];
   signalAssets: SignalAssetItem[];
+  trackingAssets: TrackingAsset[];
   renameFile: MediaStoreState['renameFile'];
   renameSignalAsset: MediaStoreState['renameSignalAsset'];
   renameFolder: MediaStoreState['renameFolder'];
+  renameTrackingAsset: (id: string, name: string) => void;
   updateComposition: MediaStoreState['updateComposition'];
   getMediaFileUsages: MediaStoreState['getMediaFileUsages'];
   deleteMediaFilesEverywhere: MediaStoreState['deleteMediaFilesEverywhere'];
   removeSignalAsset: MediaStoreState['removeSignalAsset'];
+  removeTrackingAsset: (id: string) => void;
+  moveTrackingAsset: (id: string, parentId: string | null) => void;
   removeComposition: MediaStoreState['removeComposition'];
   removeFolder: MediaStoreState['removeFolder'];
   removeTextItem: MediaStoreState['removeTextItem'];
@@ -90,13 +95,17 @@ export function useMediaPanelRenameDeleteCommands({
   mathSceneItems,
   motionShapeItems,
   signalAssets,
+  trackingAssets,
   renameFile,
   renameSignalAsset,
   renameFolder,
+  renameTrackingAsset,
   updateComposition,
   getMediaFileUsages,
   deleteMediaFilesEverywhere,
   removeSignalAsset,
+  removeTrackingAsset,
+  moveTrackingAsset,
   removeComposition,
   removeFolder,
   removeTextItem,
@@ -145,11 +154,14 @@ export function useMediaPanelRenameDeleteCommands({
     const folder = folders.find(f => f.id === renamingId);
     const composition = compositions.filter(isUserVisibleComposition).find(c => c.id === renamingId);
     const signalAsset = signalAssets.find(item => item.id === renamingId);
+    const trackingAsset = trackingAssets.find(item => item.id === renamingId);
 
     if (file) {
       renameFile(renamingId, renameValue.trim());
     } else if (signalAsset) {
       renameSignalAsset(renamingId, renameValue.trim());
+    } else if (trackingAsset) {
+      renameTrackingAsset(renamingId, renameValue.trim());
     } else if (folder) {
       renameFolder(renamingId, renameValue.trim());
     } else if (composition) {
@@ -157,7 +169,7 @@ export function useMediaPanelRenameDeleteCommands({
     }
 
     setRenamingId(null);
-  }, [renamingId, renameValue, files, folders, compositions, signalAssets, renameFile, renameSignalAsset, renameFolder, updateComposition]);
+  }, [renamingId, renameValue, files, folders, compositions, signalAssets, trackingAssets, renameFile, renameSignalAsset, renameTrackingAsset, renameFolder, updateComposition]);
 
   const handleNameClick = useCallback((e: ReactMouseEvent, id: string, currentName: string) => {
     if (selectedIds.includes(id)) {
@@ -183,6 +195,7 @@ export function useMediaPanelRenameDeleteCommands({
     const mathSceneItemIds = new Set(mathSceneItems.map((item) => item.id));
     const motionShapeItemIds = new Set(motionShapeItems.map((item) => item.id));
     const signalAssetIds = new Set(signalAssets.map((item) => item.id));
+    const trackingAssetIds = new Set(trackingAssets.map((item) => item.id));
 
     if (fileIdsToDelete.length > 0) {
       const result = await deleteMediaFilesEverywhere(fileIdsToDelete);
@@ -194,7 +207,13 @@ export function useMediaPanelRenameDeleteCommands({
     idsToDelete.forEach(id => {
       if (fileIdSet.has(id)) return;
       if (compositionIds.has(id)) removeComposition(id);
-      else if (folderIds.has(id)) removeFolder(id);
+      else if (folderIds.has(id)) {
+        const parentId = folders.find((folder) => folder.id === id)?.parentId ?? null;
+        trackingAssets.forEach((asset) => {
+          if (asset.parentId === id) moveTrackingAsset(asset.id, parentId);
+        });
+        removeFolder(id);
+      }
       else if (textItemIds.has(id)) removeTextItem(id);
       else if (solidItemIds.has(id)) removeSolidItem(id);
       else if (meshItemIds.has(id)) removeMeshItem(id);
@@ -204,9 +223,10 @@ export function useMediaPanelRenameDeleteCommands({
       else if (mathSceneItemIds.has(id)) removeMathSceneItem(id);
       else if (motionShapeItemIds.has(id)) removeMotionShapeItem(id);
       else if (signalAssetIds.has(id)) removeSignalAsset(id);
+      else if (trackingAssetIds.has(id)) removeTrackingAsset(id);
     });
     closeContextMenu();
-  }, [compositions, folders, textItems, solidItems, meshItems, cameraItems, lightItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets, deleteMediaFilesEverywhere, removeSignalAsset, removeComposition, removeFolder, removeTextItem, removeSolidItem, removeMeshItem, removeCameraItem, removeLightItem, removeSplatEffectorItem, removeMathSceneItem, removeMotionShapeItem, closeContextMenu]);
+  }, [compositions, folders, textItems, solidItems, meshItems, cameraItems, lightItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets, trackingAssets, deleteMediaFilesEverywhere, removeSignalAsset, removeTrackingAsset, moveTrackingAsset, removeComposition, removeFolder, removeTextItem, removeSolidItem, removeMeshItem, removeCameraItem, removeLightItem, removeSplatEffectorItem, removeMathSceneItem, removeMotionShapeItem, closeContextMenu]);
 
   const handleDelete = useCallback(async () => {
     const selectedIdSet = new Set(selectedIds);
@@ -215,22 +235,7 @@ export function useMediaPanelRenameDeleteCommands({
 
     if (selectedFiles.length > 0) {
       const usages = getMediaFileUsages(selectedFileIds);
-      const hasProjectArtifacts = selectedFiles.some(file =>
-        Boolean(
-          file.projectPath ||
-          file.fileHash ||
-          file.audioAnalysisRefs ||
-          file.proxyStatus ||
-          file.audioProxyStatus ||
-          file.hasProxyAudio ||
-          file.proxyFrameCount ||
-          file.thumbnailUrl ||
-          file.transcriptStatus ||
-          file.analysisStatus
-        )
-      );
-
-      if (usages.length > 0 || hasProjectArtifacts) {
+      if (usages.length > 0) {
         setDeleteConfirmation({
           selectedIds: [...selectedIds],
           fileIds: selectedFileIds,

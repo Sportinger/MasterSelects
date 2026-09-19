@@ -2,8 +2,30 @@
 // helpers for the settings store. No store access, no persistence — the
 // persist config and store creator stay in src/stores/settingsStore.ts.
 
-// Theme mode options
-export type ThemeMode = 'dark' | 'light' | 'midnight' | 'system' | 'crazy' | 'custom';
+// `resolve` is hidden by default. Older persisted selections normalize to
+// dark unless the user has explicitly unlocked the theme.
+export type ActiveThemeMode = 'dark' | 'light' | 'midnight' | 'system' | 'crazy' | 'custom';
+export type ThemeMode = ActiveThemeMode | 'resolve';
+
+const ACTIVE_THEME_MODES: readonly ActiveThemeMode[] = [
+  'dark',
+  'light',
+  'midnight',
+  'system',
+  'crazy',
+  'custom',
+];
+
+export function normalizeThemeMode(theme: unknown): ActiveThemeMode;
+export function normalizeThemeMode(theme: unknown, allowResolve: boolean): ThemeMode;
+export function normalizeThemeMode(theme: unknown, allowResolve = false): ThemeMode {
+  if (theme === 'resolve') {
+    return allowResolve ? 'resolve' : 'dark';
+  }
+  return ACTIVE_THEME_MODES.includes(theme as ActiveThemeMode)
+    ? theme as ActiveThemeMode
+    : 'dark';
+}
 
 // Transcription provider options
 export type TranscriptionProvider = 'local' | 'openai' | 'deepgram' | 'hybrid';
@@ -41,4 +63,4 @@ export function clampShortcutDisplayScale(value: number): number {
 export type AutosaveInterval = 1 | 2 | 5 | 10;
 
 // Save mode: continuous saves on every change (debounced), interval saves on a timer
-export type SaveMode = 'continuous' | 'interval';
+export type SaveMode = 'manual' | 'interval' | 'continuous'; // continuous is accepted only for legacy migration

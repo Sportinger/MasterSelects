@@ -31,7 +31,7 @@ import {
 import { MIN_CLIP_DURATION } from './timelineRenderConstants';
 import { resolveAudioVolumeAutomationCurveKeyframes } from './utils/audioAutomationCurve';
 import type { FadeCurveKeyframe } from './utils/fadeCurvePath';
-import { isInfiniteTimelineSourceType } from './utils/clipSourceTiming';
+import { isInfiniteTimelineClipSource } from './utils/clipSourceTiming';
 import { isAudioSectionTrack } from './utils/trackSection';
 import {
   buildTimelineTrackClipGeometryMap,
@@ -43,6 +43,7 @@ import {
   type TimelinePaintFadeVisuals,
 } from '../../timeline';
 import { createWorkerDrawableClips } from './utils/timelineClipCanvasClipGeometry';
+import { applyTimelineTrimFadePreview } from './utils/timelineTrimFadePreview';
 import {
   getClipSourceRate,
   timelineDeltaToSourceDelta,
@@ -308,14 +309,14 @@ function TimelineTrackComponent({
     }
 
     return Array.from(nextClips.values()).map((clip) => {
-      const fade = getClipFadeVisualState(clip);
+      const fade = applyTimelineTrimFadePreview(getClipFadeVisualState(clip), clip, clipTrim);
       return {
         ...clip,
         trackType: track.type,
         ...(fade.keyframes.length >= 2 ? { fade } : {}),
       };
     });
-  }, [clipDrag, clipDragPreview, track.id, track.type, allTrackClips, clips, getClipFadeVisualState]);
+  }, [clipDrag, clipDragPreview, clipTrim, track.id, track.type, allTrackClips, clips, getClipFadeVisualState]);
   const {
     activeShellSlotCounts,
     domControlClips,
@@ -327,6 +328,7 @@ function TimelineTrackComponent({
     trackClips,
     canvasClips,
     clipKeyframes,
+    selectedClipIds,
     selectedKeyframeIds,
     clipDrag,
     clipTrim,
@@ -374,7 +376,7 @@ function TimelineTrackComponent({
         const sourceRate = getClipSourceRate(originalWindow);
 
         if (clipTrim.edge === 'right') {
-          const maxExtend = isInfiniteTimelineSourceType(sourceType) ||
+          const maxExtend = isInfiniteTimelineClipSource(clip) ||
             (
               isVectorAnimationSourceType(sourceType) &&
               shouldLoopVectorAnimation(clip.source?.vectorAnimationSettings)
@@ -388,7 +390,7 @@ function TimelineTrackComponent({
           previewEnd = clipTrim.originalStartTime + previewDuration;
           sourceExtensionEnd = previewEnd + Math.max(0, sourceDuration - previewOutPoint) / sourceRate;
         } else {
-          const minTrim = isInfiniteTimelineSourceType(sourceType)
+          const minTrim = isInfiniteTimelineClipSource(clip)
             ? -clipTrim.originalStartTime
             : Math.max(-clipTrim.originalStartTime, -clipTrim.originalInPoint / sourceRate);
           const maxTrim = clipTrim.originalDuration - MIN_CLIP_DURATION;
@@ -524,9 +526,9 @@ function TimelineTrackComponent({
       data-track-id={track.id}
       data-dock-layout-child-anim-id={`timeline-track-lane:${track.id}`}
       style={trackLaneStyle}
-      onDrop={onDrop}
-      onDragOver={onDragOver}
-      onDragEnter={onDragEnter}
+      onDrop={(event) => onDrop(event, track.id)}
+      onDragOver={(event) => onDragOver(event, track.id)}
+      onDragEnter={(event) => onDragEnter(event, track.id)}
       onDragLeave={onDragLeave}
     >
       {/* Clip row - the normal clip area */}

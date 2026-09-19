@@ -42,6 +42,29 @@ export function TimelineTrackExternalDropPreviews({
 
   const duration = externalDrag.duration ?? 5;
   const previewRect = getTrackRangeShellRect(externalDrag.startTime, duration);
+  if (externalDrag.replaceClipId) {
+    if (externalDrag.trackId !== trackId) return null;
+    return (
+      <div
+        className={`timeline-clip-preview video timeline-clip-replace-preview${externalDrag.thumbnailUrl ? ' has-thumbnail' : ''}`}
+        data-replace-clip-id={externalDrag.replaceClipId}
+        style={{ left: previewRect.x, width: previewRect.width }}
+      >
+        {externalDrag.thumbnailUrl && (
+          <div
+            className="timeline-clip-preview-thumbnail"
+            style={{ backgroundImage: `url("${externalDrag.thumbnailUrl.replace(/"/g, '\\"')}")` }}
+          />
+        )}
+        <div className="clip-content">
+          <span className="timeline-clip-replace-kicker">Replace source</span>
+          <span className="clip-name">{externalDrag.label ?? 'New video'}</span>
+          <span className="timeline-clip-replace-note">Effects + keyframes stay</span>
+        </div>
+      </div>
+    );
+  }
+
   const primaryTrackType = externalDrag.isAudio || externalDrag.videoTrackId
     ? 'audio'
     : 'video';

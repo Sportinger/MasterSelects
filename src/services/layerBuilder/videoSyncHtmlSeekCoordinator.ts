@@ -3,16 +3,8 @@ import { renderHostPort } from '../render/renderHostPort';
 import { scrubSettleState } from '../scrubSettleState';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
 import type { FrameContext } from './types';
+import { cancelHtmlVideoFrameCallback, VideoSyncHtmlFramePresenter } from './videoSyncHtmlFramePresenter';
 import type { VideoSyncHtmlSeekState } from './videoSyncHtmlSeekState';
-
-type VideoFrameCallbackVideo = HTMLVideoElement & {
-  requestVideoFrameCallback: (callback: () => void) => number;
-  cancelVideoFrameCallback: (handle: number) => void;
-};
-
-function hasVideoFrameCallback(video: HTMLVideoElement): video is VideoFrameCallbackVideo {
-  return 'requestVideoFrameCallback' in video;
-}
 
 function getFastSeek(video: HTMLVideoElement): ((time: number) => void) | null {
   const fastSeek = (video as HTMLVideoElement & {
@@ -46,9 +38,23 @@ export class VideoSyncHtmlSeekCoordinator {
   private static readonly SCRUB_DRAG_PENDING_RETARGET_NEAR_MS = 100;
 
   private readonly deps: VideoSyncHtmlSeekCoordinatorDeps;
+  private readonly framePresenter: VideoSyncHtmlFramePresenter;
 
   constructor(deps: VideoSyncHtmlSeekCoordinatorDeps) {
     this.deps = deps;
+    this.framePresenter = new VideoSyncHtmlFramePresenter({
+      htmlSeeks: deps.htmlSeeks,
+      flushQueuedSeekTarget: (clipId, video, source) => {
+        this.flushQueuedSeekTarget(clipId, video, source);
+      },
+      getTimelinePlaybackState: () => {
+        const state = useTimelineStore.getState();
+        return {
+          isDragging: state.isDraggingPlayhead || state.clipDragPreview != null,
+          isPlaying: state.isPlaying,
+        };
+      },
+    });
   }
 
   beginOrQueueSettleSeek(
@@ -96,7 +102,7 @@ export class VideoSyncHtmlSeekCoordinator {
   cancelRvfcHandle(clipId: string, video?: HTMLVideoElement): void {
     const handle = this.deps.htmlSeeks.getRvfcHandle(clipId);
     if (handle !== undefined) {
-      if (video && hasVideoFrameCallback(video)) video.cancelVideoFrameCallback(handle);
+      if (video) cancelHtmlVideoFrameCallback(video, handle);
       this.deps.htmlSeeks.deleteRvfcHandle(clipId);
     }
   }
@@ -463,57 +469,10 @@ export class VideoSyncHtmlSeekCoordinator {
   }
 
   private armSeekedFlush(clipId: string, video: HTMLVideoElement): void {
-    if (this.deps.htmlSeeks.hasSeekedFlushArmed(clipId)) {
-      return;
-    }
-
-    this.deps.htmlSeeks.armSeekedFlush(clipId);
-    video.addEventListener('seeked', () => {
-      this.deps.htmlSeeks.clearSeekedFlush(clipId);
-      const presentedTime = video.currentTime;
-      renderHostPort.markVideoFramePresented(video, presentedTime, clipId);
-      renderHostPort.captureVideoFrameAtTime(video, presentedTime, clipId);
-      renderHostPort.cacheFrameAtTime(video, presentedTime, clipId);
-      renderHostPort.requestNewFrameRender();
-
-      const timelineState = useTimelineStore.getState();
-      const isDragging = timelineState.isDraggingPlayhead || timelineState.clipDragPreview != null;
-      if (isDragging && this.deps.htmlSeeks.getQueuedTarget(clipId) !== undefined) {
-        const flush = () => this.flushQueuedSeekTarget(clipId, video, 'seeked');
-        if (typeof requestAnimationFrame === 'function') {
-          requestAnimationFrame(flush);
-        } else {
-          setTimeout(flush, 16);
-        }
-        return;
-      }
-
-      this.flushQueuedSeekTarget(clipId, video, 'seeked');
-    }, { once: true });
+    this.framePresenter.armSeekedFlush(clipId, video);
   }
 
   private registerRVFC(clipId: string, video: HTMLVideoElement): void {
-    if (hasVideoFrameCallback(video)) {
-      const prevHandle = this.deps.htmlSeeks.getRvfcHandle(clipId);
-      if (prevHandle !== undefined) {
-        video.cancelVideoFrameCallback(prevHandle);
-      }
-      this.deps.htmlSeeks.setRvfcHandle(clipId, video.requestVideoFrameCallback((_now, metadata) => {
-        const metadataTime = metadata?.mediaTime;
-        const presentedTime =
-          typeof metadataTime === 'number' && Number.isFinite(metadataTime)
-            ? metadataTime
-            : video.currentTime;
-        this.deps.htmlSeeks.deleteRvfcHandle(clipId);
-        this.deps.htmlSeeks.clearPendingTarget(clipId);
-        renderHostPort.markVideoFramePresented(video, presentedTime, clipId);
-        renderHostPort.captureVideoFrameAtTime(video, presentedTime, clipId);
-        renderHostPort.cacheFrameAtTime(video, presentedTime, clipId);
-        scrubSettleState.resolve(clipId);
-        vfPipelineMonitor.record('vf_seek_done', { clipId });
-        this.flushQueuedSeekTarget(clipId, video, 'rvfc');
-        renderHostPort.requestNewFrameRender();
-      }));
-    }
+    this.framePresenter.registerRVFC(clipId, video);
   }
 }

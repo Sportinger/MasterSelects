@@ -19,6 +19,7 @@ import {
   updatePanelDataInLayout,
 } from './layoutTree';
 import type { DockSliceCreator, PanelVisibilityActions } from './storeTypes';
+import { trackPanelOpened } from '../../services/productAnalytics';
 
 export const createPanelVisibilityActions: DockSliceCreator<PanelVisibilityActions> = (set, get) => ({
   getVisiblePanelTypes: () => {
@@ -64,9 +65,12 @@ export const createPanelVisibilityActions: DockSliceCreator<PanelVisibilityActio
     };
 
     const rightGroup = findTabGroupById(layout.root, 'right-group');
-    if (rightGroup) {
+    const preferredGroup = type === 'stats'
+      ? findTabGroupById(layout.root, 'live-analytics-group') ?? rightGroup
+      : rightGroup;
+    if (preferredGroup) {
       const newLayout = insertPanelAtTarget(layout, newPanel, {
-        groupId: 'right-group',
+        groupId: preferredGroup.id,
         position: 'center',
       });
       set({ layout: newLayout });
@@ -149,6 +153,7 @@ export const createPanelVisibilityActions: DockSliceCreator<PanelVisibilityActio
     if (floatingPanel) {
       bringToFront(floatingPanel.id);
     }
+    trackPanelOpened(type);
   },
 
   addPanelTypeToGroup: (type, groupId) => {
@@ -157,7 +162,26 @@ export const createPanelVisibilityActions: DockSliceCreator<PanelVisibilityActio
     if (MULTI_INSTANCE_PANEL_TYPES.includes(type)) {
       if (type === 'preview') {
         get().addPreviewPanel(null, groupId);
+        return;
       }
+
+      const { layout } = get();
+      const targetGroupId = findTabGroupById(layout.root, groupId)
+        ? groupId
+        : findFirstTabGroup(layout.root)?.id;
+      if (!targetGroupId) return;
+
+      const config = getPanelConfig(type);
+      const instanceId = `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const newLayout = insertPanelAtTarget(layout, {
+        id: instanceId,
+        type,
+        title: config.title,
+      }, {
+        groupId: targetGroupId,
+        position: 'center',
+      });
+      set({ layout: newLayout });
       return;
     }
 

@@ -37,10 +37,11 @@ const log = Logger.create('MediaBunnyMuxer');
 // ---------------------------------------------------------------------------
 
 /** Map internal video codec name to the MediaBunny VideoCodec identifier. */
-export function toMediaBunnyVideoCodec(codec: VideoCodec): MBVideoCodec {
+export function toMediaBunnyVideoCodec(codec: VideoCodec | 'vp8'): MBVideoCodec {
   switch (codec) {
     case 'h264': return 'avc';
     case 'h265': return 'hevc';
+    case 'vp8':  return 'vp8';
     case 'vp9':  return 'vp9';
     case 'av1':  return 'av1';
     default:     return 'avc';
@@ -102,7 +103,7 @@ type QueuedEntry = QueuedVideoPacket | QueuedAudioPacket;
 
 export interface MediaBunnyMuxerAdapterOptions {
   container: ContainerFormat;
-  videoCodec: VideoCodec;
+  videoCodec: VideoCodec | 'vp8';
   fps: number;
   hasAudio: boolean;
   audioCodec: AudioCodec;

@@ -74,4 +74,37 @@ describe('AI node definition helpers', () => {
     const code = 'defineNode({ process(input) { return { output: input.input }; } })';
     expect(extractAINodeGeneratedCode(code)).toBe(code);
   });
+
+  it('rejects top-level side effects before defineNode', () => {
+    expect(extractAINodeGeneratedCode(`
+      fetch('/api/account');
+      defineNode({ process(input) { return { output: input.input }; } })
+    `)).toBeNull();
+  });
+
+  it('rejects browser capabilities and constructor escapes inside process', () => {
+    expect(extractAINodeGeneratedCode(`
+      defineNode({ process(input) { window.localStorage.clear(); return { output: input.input }; } })
+    `)).toBeNull();
+    expect(extractAINodeGeneratedCode(`
+      defineNode({ process(input) { input.constructor.constructor('return globalThis')(); return { output: input.input }; } })
+    `)).toBeNull();
+  });
+
+  it('does not execute code while extracting static parameter definitions', () => {
+    (globalThis as { __aiNodeSchemaSideEffect?: boolean }).__aiNodeSchemaSideEffect = false;
+    const schema = extractAINodeParameterSchemaFromCode(`
+      defineNode({
+        params: [{ id: 'amount', type: 'number', default: 0.25 }],
+        process(input) {
+          globalThis.__aiNodeSchemaSideEffect = true;
+          return { output: input.input };
+        }
+      })
+    `);
+
+    expect(schema).toEqual([]);
+    expect((globalThis as { __aiNodeSchemaSideEffect?: boolean }).__aiNodeSchemaSideEffect).toBe(false);
+    delete (globalThis as { __aiNodeSchemaSideEffect?: boolean }).__aiNodeSchemaSideEffect;
+  });
 });

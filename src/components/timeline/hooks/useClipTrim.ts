@@ -6,10 +6,11 @@ import type { TimelineClip, TimelineTrack } from '../../../types';
 import type { ClipTrimState } from '../types';
 import type { TimelineEditOperation, TimelineEditResult } from '../../../stores/timeline/editOperations/types';
 import type { TimelineToolId, TimelineToolPreview, TimelineToolPreviewGhostRange } from '../../../stores/timeline/types';
-import { LAYER_BUILDER_CONSTANTS } from '../../../services/layerBuilder/types';
 import { MIN_CLIP_DURATION } from '../timelineRenderConstants';
 import { computeTrimTiming, trimOriginalsFromClip } from '../utils/clipTrimTiming';
+import { createTimelineMouseMoveScheduler } from '../utils/clipDragMouseMoveScheduler';
 import { isTimelineSnappingActive } from '../utils/timelineSnappingModifiers';
+import { isFrameLockedClip, quantizeTimeToFrame } from '../../../utils/timelineFrameQuantization';
 
 const EPSILON = 0.0001;
 // Pixel radius within which a trim edge snaps to a clip edge / playhead / marker.
@@ -32,6 +33,7 @@ interface UseClipTrimProps {
   selectedClipIds: Set<string>;
   snappingEnabled: boolean;
   playheadPosition: number;
+  frameRate: number;
   markers?: ReadonlyArray<{ time: number }>;
 
   // Actions
@@ -92,10 +94,6 @@ function createGhostRange(
   };
 }
 
-function isAudioClip(clip: TimelineClip): boolean {
-  return clip.source?.type === 'audio';
-}
-
 // Snap targets for a trim edge: every other clip's edges, the playhead, markers,
 // and the timeline start. The dragged clip's own edges are excluded.
 function getTrimSnapTimes(
@@ -117,7 +115,7 @@ function getTrimSnapTimes(
 
 // Turn a raw drag delta into the applied delta: first snap the resulting edge to
 // nearby targets (clips/playhead/markers), else quantize to a frame boundary for
-// visual clips. Audio stays continuous (sample-accurate). Alt suppresses snapping.
+// visual clips and linked audio. Only unlinked audio/MIDI stays continuous.
 interface TrimDeltaResult {
   delta: number;
   // The clip/playhead/marker time the edge snapped to (for the green snap line),
@@ -128,7 +126,8 @@ interface TrimDeltaResult {
 function adjustTrimDelta(
   trim: ClipTrimState,
   rawDelta: number,
-  isAudio: boolean,
+  frameLocked: boolean,
+  frameRate: number,
   snap: TrimSnapContext,
 ): TrimDeltaResult {
   const originalEdge = trim.edge === 'left'
@@ -146,12 +145,14 @@ function adjustTrimDelta(
         best = target;
       }
     }
-    if (best !== null) return { delta: best - originalEdge, snapTime: best };
+    if (best !== null) {
+      const resolvedEdge = frameLocked ? quantizeTimeToFrame(best, frameRate) : best;
+      return { delta: resolvedEdge - originalEdge, snapTime: resolvedEdge };
+    }
   }
 
-  if (!isAudio) {
-    const fps = LAYER_BUILDER_CONSTANTS.FRAME_RATE;
-    const snappedEdge = Math.round(desiredEdge * fps) / fps;
+  if (frameLocked) {
+    const snappedEdge = quantizeTimeToFrame(desiredEdge, frameRate);
     return { delta: snappedEdge - originalEdge, snapTime: null };
   }
 
@@ -207,13 +208,19 @@ function buildTrimToolPreview(
   pixelToTime: (pixel: number) => number,
   computeDelta: (trim: ClipTrimState, rawDelta: number, clip: TimelineClip) => TrimDeltaResult,
 ): TimelineToolPreview | null {
+  if (
+    activeTimelineToolId !== 'ripple-trim' &&
+    activeTimelineToolId !== 'rolling-edit' &&
+    activeTimelineToolId !== 'rate-stretch'
+  ) return null;
+
   const clip = clipMap.get(trim.clipId);
   if (!clip) return null;
 
   const deltaTime = computeDelta(trim, pixelToTime(trim.currentX - trim.startX), clip).delta;
   const timing = resolveTrimDragTiming(clip, trim, deltaTime);
   const clips = [...clipMap.values()];
-  const previewToolId = activeTimelineToolId === 'select' ? 'edge-trim' : activeTimelineToolId;
+  const previewToolId = activeTimelineToolId;
   const includeLinked = trim.singleClip === true ? false : trim.includeLinked === true;
   const ghostRanges: TimelineToolPreviewGhostRange[] = [];
 
@@ -320,6 +327,7 @@ export function useClipTrim({
   selectedClipIds,
   snappingEnabled,
   playheadPosition,
+  frameRate,
   markers,
   selectClip,
   applyTimelineEditOperation,
@@ -328,29 +336,12 @@ export function useClipTrim({
 }: UseClipTrimProps): UseClipTrimReturn {
   const [clipTrim, setClipTrim] = useState<ClipTrimState | null>(null);
   const clipTrimRef = useRef<ClipTrimState | null>(clipTrim);
+  const playheadPositionRef = useRef(playheadPosition);
+  playheadPositionRef.current = playheadPosition;
 
   useEffect(() => {
     clipTrimRef.current = clipTrim;
   }, [clipTrim]);
-
-  // Convert a raw drag delta into the applied delta (snap to clips/playhead/markers,
-  // else frame-quantize visual clips; audio stays continuous). Shared by the live
-  // preview and the commit so both agree on where the edge lands.
-  const computeAdjustedDelta = useCallback(
-    (trim: ClipTrimState, rawDelta: number, clip: TimelineClip): TrimDeltaResult => {
-      const snapTimes = getTrimSnapTimes(clipMap, trim.clipId, playheadPosition, markers);
-      const threshold = Math.abs(pixelToTime(TRIM_SNAP_PIXELS));
-      return adjustTrimDelta(trim, rawDelta, isAudioClip(clip), {
-        enabled: isTimelineSnappingActive(snappingEnabled, {
-          altKey: trim.altKey,
-          shiftKey: trim.singleClip === true,
-        }),
-        times: snapTimes,
-        threshold,
-      });
-    },
-    [clipMap, playheadPosition, markers, pixelToTime, snappingEnabled],
-  );
 
   const handleTrimStart = useCallback(
     (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => {
@@ -360,6 +351,9 @@ export function useClipTrim({
 
       const clip = clipMap.get(clipId);
       if (!clip) return;
+      const activePointerId = 'pointerId' in e.nativeEvent
+        ? (e.nativeEvent as PointerEvent).pointerId
+        : null;
       const isClipLocked = (candidate: TimelineClip): boolean =>
         tracks.find(track => track.id === candidate.trackId)?.locked === true;
       if (isClipLocked(clip)) return;
@@ -369,6 +363,35 @@ export function useClipTrim({
         const linkedClip = clipMap.get(clip.linkedClipId);
         if (linkedClip && isClipLocked(linkedClip)) return;
       }
+
+      const trimSnapTimes = getTrimSnapTimes(
+        clipMap,
+        clipId,
+        playheadPositionRef.current,
+        markers,
+      );
+      const trimSnapThreshold = Math.abs(pixelToTime(TRIM_SNAP_PIXELS));
+      const computeGestureAdjustedDelta = (
+        trim: ClipTrimState,
+        rawDelta: number,
+        trimClip: TimelineClip,
+      ): TrimDeltaResult => adjustTrimDelta(
+        trim,
+        rawDelta,
+        isFrameLockedClip(trimClip),
+        frameRate,
+        {
+          enabled: isTimelineSnappingActive(snappingEnabled, {
+            altKey: trim.altKey,
+            shiftKey: trim.singleClip === true,
+          }),
+          times: trimSnapTimes,
+          threshold: trimSnapThreshold,
+        },
+      );
+      const publishesToolPreview = activeTimelineToolId === 'ripple-trim' ||
+        activeTimelineToolId === 'rolling-edit' ||
+        activeTimelineToolId === 'rate-stretch';
 
       // Preserve an existing multi-selection when grabbing one of its clips.
       // Grabbing an unselected linked clip uses linked trim by default, then
@@ -395,7 +418,16 @@ export function useClipTrim({
       };
       setClipTrim(initialTrim);
       clipTrimRef.current = initialTrim;
-      setTimelineToolPreview(buildTrimToolPreview(initialTrim, clipMap, tracks, activeTimelineToolId, pixelToTime, computeAdjustedDelta));
+      if (publishesToolPreview) {
+        setTimelineToolPreview(buildTrimToolPreview(
+          initialTrim,
+          clipMap,
+          tracks,
+          activeTimelineToolId,
+          pixelToTime,
+          computeGestureAdjustedDelta,
+        ));
+      }
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
         const newTrim = clipTrimRef.current;
@@ -411,7 +443,7 @@ export function useClipTrim({
         const clipForSnap = clipMap.get(base.clipId);
         const includeLinked = clipForSnap ? shouldIncludeLinkedTrim(clipForSnap, selectedClipIds, base.singleClip === true) : false;
         const adjusted = clipForSnap
-          ? computeAdjustedDelta(base, pixelToTime(base.currentX - base.startX), clipForSnap)
+          ? computeGestureAdjustedDelta(base, pixelToTime(base.currentX - base.startX), clipForSnap)
           : { delta: pixelToTime(base.currentX - base.startX), snapTime: null };
         const updated: ClipTrimState = {
           ...base,
@@ -422,17 +454,41 @@ export function useClipTrim({
         };
         setClipTrim(updated);
         clipTrimRef.current = updated;
-        setTimelineToolPreview(buildTrimToolPreview(updated, clipMap, tracks, activeTimelineToolId, pixelToTime, computeAdjustedDelta));
+        if (publishesToolPreview) {
+          setTimelineToolPreview(buildTrimToolPreview(
+            updated,
+            clipMap,
+            tracks,
+            activeTimelineToolId,
+            pixelToTime,
+            computeGestureAdjustedDelta,
+          ));
+        }
+      };
+
+      const mouseMoveScheduler = createTimelineMouseMoveScheduler(handleMouseMove);
+
+      const cleanupListeners = () => {
+        mouseMoveScheduler.clear();
+        if (activePointerId === null) {
+          document.removeEventListener('mousemove', mouseMoveScheduler.handleMouseMove);
+          document.removeEventListener('mouseup', handleMouseUp);
+        } else {
+          document.removeEventListener('pointermove', handlePointerMove);
+          document.removeEventListener('pointerup', handlePointerUp);
+          document.removeEventListener('pointercancel', handlePointerCancel);
+        }
       };
 
       const handleMouseUp = (upEvent: MouseEvent) => {
+        mouseMoveScheduler.flushPendingMouseMove();
+        handleMouseMove(upEvent);
         const trim = clipTrimRef.current;
         if (!trim) {
           setClipTrim(null);
           clipTrimRef.current = null;
           setTimelineToolPreview(null);
-          document.removeEventListener('mousemove', handleMouseMove);
-          document.removeEventListener('mouseup', handleMouseUp);
+          cleanupListeners();
           return;
         }
 
@@ -441,8 +497,7 @@ export function useClipTrim({
           setClipTrim(null);
           clipTrimRef.current = null;
           setTimelineToolPreview(null);
-          document.removeEventListener('mousemove', handleMouseMove);
-          document.removeEventListener('mouseup', handleMouseUp);
+          cleanupListeners();
           return;
         }
 
@@ -452,7 +507,7 @@ export function useClipTrim({
           singleClip: upEvent.shiftKey,
         };
         const rawDelta = pixelToTime(commitTrim.currentX - commitTrim.startX);
-        const deltaTime = computeAdjustedDelta(commitTrim, rawDelta, clipToTrim).delta;
+        const deltaTime = computeGestureAdjustedDelta(commitTrim, rawDelta, clipToTrim).delta;
 
         const timing = resolveTrimDragTiming(clipToTrim, commitTrim, deltaTime);
         const edge = timing.edge;
@@ -524,14 +579,33 @@ export function useClipTrim({
         setClipTrim(null);
         clipTrimRef.current = null;
         setTimelineToolPreview(null);
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
+        cleanupListeners();
       };
 
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        if (moveEvent.pointerId === activePointerId) mouseMoveScheduler.handleMouseMove(moveEvent);
+      };
+      const handlePointerUp = (upEvent: PointerEvent) => {
+        if (upEvent.pointerId === activePointerId) handleMouseUp(upEvent);
+      };
+      const handlePointerCancel = (cancelEvent: PointerEvent) => {
+        if (cancelEvent.pointerId !== activePointerId) return;
+        setClipTrim(null);
+        clipTrimRef.current = null;
+        setTimelineToolPreview(null);
+        cleanupListeners();
+      };
+
+      if (activePointerId === null) {
+        document.addEventListener('mousemove', mouseMoveScheduler.handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+      } else {
+        document.addEventListener('pointermove', handlePointerMove);
+        document.addEventListener('pointerup', handlePointerUp);
+        document.addEventListener('pointercancel', handlePointerCancel);
+      }
     },
-    [activeTimelineToolId, applyTimelineEditOperation, clipMap, tracks, isExporting, pixelToTime, selectClip, setTimelineToolPreview, computeAdjustedDelta, selectedClipIds]
+    [activeTimelineToolId, applyTimelineEditOperation, clipMap, tracks, isExporting, markers, pixelToTime, frameRate, selectClip, selectedClipIds, setTimelineToolPreview, snappingEnabled]
   );
 
   return {

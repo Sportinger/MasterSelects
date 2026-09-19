@@ -1,0 +1,68 @@
+.flock-guidance-overlay {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  overflow: visible;
+  pointer-events: none;
+}
+
+.flock-guidance-outline {
+  fill: none;
+  stroke: rgba(120, 220, 255, 0.55);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.flock-guidance-handle {
+  cursor: grab;
+  outline: none;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.flock-guidance-handle:focus {
+  outline: none;
+}
+
+.flock-guidance-handle[data-dragging='true'] {
+  cursor: grabbing;
+}
+
+.flock-guidance-handle-dot {
+  fill: #58d6ff;
+  stroke: rgba(0, 0, 0, 0.9);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.flock-guidance-handle:hover .flock-guidance-handle-dot,
+.flock-guidance-handle[data-dragging='true'] .flock-guidance-handle-dot {
+  fill: #ffffff;
+}
+
+.flock-guidance-focus-ring {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 2;
+  stroke-dasharray: 3 2;
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.flock-guidance-handle:focus-visible .flock-guidance-focus-ring {
+  opacity: 1;
+}
+
+.flock-guidance-label {
+  fill: rgba(220, 245, 255, 0.9);
+  font-size: 10px;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.85);
+  stroke-width: 3px;
+  pointer-events: none;
+  user-select: none;
+}

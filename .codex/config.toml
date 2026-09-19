@@ -1,0 +1,6 @@
+[mcp_servers.masterselects]
+command = "node"
+args = ["scripts/masterselects-mcp.mjs"]
+
+[mcp_servers.masterselects.env]
+MASTERSELECTS_BRIDGE_SURFACE = "chat"

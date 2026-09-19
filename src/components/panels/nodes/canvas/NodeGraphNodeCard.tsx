@@ -1,9 +1,11 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { NodeGraphNode, NodeGraphPort } from '../../../../services/nodeGraph';
+import { getNodeGraphPortCompatibilityKey } from '../../../../services/nodeGraph';
 import type { ConnectionDraft } from './canvasGeometry';
 import {
   clamp,
   getAudioAnalysisBadges,
+  getNodeBadges,
   getNodeHeight,
   getNodeParamNumber,
   getNodePortStartY,
@@ -16,6 +18,7 @@ import {
 interface NodeGraphNodeCardProps {
   node: NodeGraphNode;
   selectedNodeId: string | null;
+  isInSelection?: boolean;
   connectionDraft: ConnectionDraft | null;
   onSelectNode: (nodeId: string) => void;
   onStartNodeDrag: (event: ReactPointerEvent<HTMLDivElement>, node: NodeGraphNode) => void;
@@ -30,9 +33,15 @@ interface NodeGraphNodeCardProps {
   onToggleNodeBypass?: (nodeId: string) => void;
 }
 
+function getNodeHeaderLabel(node: NodeGraphNode): string {
+  const categoryLabel = node.binding?.kind === 'flock-node' ? node.params?.categoryLabel : undefined;
+  return typeof categoryLabel === 'string' ? categoryLabel : node.kind;
+}
+
 export function NodeGraphNodeCard({
   node,
   selectedNodeId,
+  isInSelection = false,
   connectionDraft,
   onSelectNode,
   onStartNodeDrag,
@@ -43,17 +52,18 @@ export function NodeGraphNodeCard({
   onToggleNodeBypass,
 }: NodeGraphNodeCardProps) {
   const nodeHeight = getNodeHeight(node);
-  const isSelected = node.id === selectedNodeId;
+  const isSelected = node.id === selectedNodeId || isInSelection;
   const isBypassable = isNodeBypassable(node);
   const isBypassed = isNodeBypassed(node);
-  const nodeBadges = getAudioAnalysisBadges(node);
+  const nodeBadges = getNodeBadges(node);
+  const hasAudioBadges = getAudioAnalysisBadges(node).length > 0;
   const analysisProgress = clamp(getNodeParamNumber(node, 'progressPercent'), 0, 100);
 
   const renderPort = (port: NodeGraphPort) => {
     const isConnectableTarget = !!connectionDraft &&
       connectionDraft.nodeId !== node.id &&
       connectionDraft.direction !== port.direction &&
-      connectionDraft.type === port.type;
+      connectionDraft.compatibilityKey === getNodeGraphPortCompatibilityKey(port);
     const isDraftStart = connectionDraft?.nodeId === node.id && connectionDraft.portId === port.id;
 
     return (
@@ -62,6 +72,7 @@ export function NodeGraphNodeCard({
         className={[
           'node-workspace-port',
           `node-workspace-port-${port.direction}`,
+          port.metadata?.required ? 'required' : '',
           isConnectableTarget ? 'connectable' : '',
           isDraftStart ? 'connecting' : '',
         ].filter(Boolean).join(' ')}
@@ -89,6 +100,7 @@ export function NodeGraphNodeCard({
       className={[
         'node-workspace-node',
         `node-workspace-node-${node.kind}`,
+        node.binding?.kind === 'flock-node' ? 'node-workspace-node-flock' : '',
         isSelected ? 'selected' : '',
         isBypassed ? 'bypassed' : '',
       ].filter(Boolean).join(' ')}
@@ -115,7 +127,7 @@ export function NodeGraphNodeCard({
       }}
     >
       <div className="node-workspace-node-header">
-        <span>{node.kind}</span>
+        <span>{getNodeHeaderLabel(node)}</span>
         <div className="node-workspace-node-header-actions">
           {isBypassable && onToggleNodeBypass && (
             <button
@@ -129,6 +141,8 @@ export function NodeGraphNodeCard({
                 event.preventDefault();
                 event.stopPropagation();
                 onToggleNodeBypass(node.id);
+                // Pointer activation must not leave a stuck focus ring.
+                if (event.detail > 0) event.currentTarget.blur();
               }}
             >
               Byp
@@ -152,9 +166,11 @@ export function NodeGraphNodeCard({
               {badge.label}
             </span>
           ))}
-          <span className="node-workspace-node-progress" title={`${analysisProgress}% available`}>
-            <span style={{ width: `${analysisProgress}%` }} />
-          </span>
+          {hasAudioBadges && (
+            <span className="node-workspace-node-progress" title={`${analysisProgress}% available`}>
+              <span style={{ width: `${analysisProgress}%` }} />
+            </span>
+          )}
         </div>
       )}
       <div className="node-workspace-node-ports" style={{ top: getNodePortStartY(node) }}>

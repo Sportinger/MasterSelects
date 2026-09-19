@@ -62,10 +62,12 @@ export type MotionParentDiagnosticCode =
 export type MotionParentSpace = '2d' | '3d';
 
 /**
- * This mirrors the existing 2D portion of `composeTransforms`: parent scale
- * does not affect child position, scale.all and axis scale compose separately,
- * Z rotation rotates XY position, and opacity multiplies. Blend mode is omitted
- * because the child blend mode wins and is therefore not parent-relative.
+ * This mirrors the existing 2D portion of `composeTransforms`: parent
+ * scale.all affects child position while source-local axis scale does not;
+ * scale.all and axis scale compose separately,
+ * Z rotation rotates XY position. Opacity stays clip-local and is carried in
+ * snapshots only to preserve the child value across parent mutations. Blend
+ * mode is omitted because the child blend mode wins and is not parent-relative.
  */
 export interface MotionParentTransform2D {
   readonly position: {

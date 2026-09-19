@@ -10,6 +10,16 @@ interface TimelineZoomAnchorInput {
   maxScrollX: number;
 }
 
+interface TimelinePinchAnchorInput {
+  startScrollX: number;
+  startZoom: number;
+  nextZoom: number;
+  startPointerX: number;
+  nextPointerX: number;
+  viewportWidth: number;
+  maxScrollX: number;
+}
+
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
 }
@@ -53,4 +63,25 @@ export function calculateTimelineZoomScrollX({
 
   const anchorTime = (Math.max(0, scrollX) + clampedPointerX) / safeZoom;
   return clamp(anchorTime * safeNextZoom - clampedPointerX, 0, safeMaxScrollX);
+}
+
+/** Keeps the time below the initial pinch midpoint attached to the moving midpoint. */
+export function calculateTimelinePinchScrollX({
+  startScrollX,
+  startZoom,
+  nextZoom,
+  startPointerX,
+  nextPointerX,
+  viewportWidth,
+  maxScrollX,
+}: TimelinePinchAnchorInput): number {
+  const safeViewportWidth = Math.max(0, viewportWidth);
+  const anchorTime = (
+    Math.max(0, startScrollX) + clamp(startPointerX, 0, safeViewportWidth)
+  ) / Math.max(MIN_SAFE_ZOOM, startZoom);
+  return clamp(
+    anchorTime * Math.max(MIN_SAFE_ZOOM, nextZoom) - clamp(nextPointerX, 0, safeViewportWidth),
+    0,
+    Math.max(0, maxScrollX),
+  );
 }

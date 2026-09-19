@@ -3,7 +3,7 @@ import {
   createCompositionHistorySignature,
   createMediaFilesHistorySignature,
   createTimelineClipsHistorySignature,
-} from '../../src/hooks/useGlobalHistory';
+} from '../../src/hooks/historyContentSignatures';
 import type { Composition, MediaFile } from '../../src/stores/mediaStore/types';
 import { createMockClip } from '../helpers/mockData';
 

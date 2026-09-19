@@ -61,8 +61,8 @@ describe('AI Tool Policy Registry', () => {
 
   it('read-only tools are marked readOnly=true', () => {
     const readOnlyTools = [
-      'getTimelineState', 'getClipDetails', 'getClipsInTimeRange',
-      'getMediaItems', 'play', 'pause', 'undo', 'redo',
+      'getTimelineState', 'getTimelineTranscript', 'getClipDetails', 'getClipsInTimeRange',
+      'getMediaItems', 'getMediaTranscript', 'play', 'pause', 'undo', 'redo',
       'simulateFrameKeypresses', 'simulateScrub', 'simulatePlayback', 'simulatePlaybackPath', 'captureFrame', 'getKeyframes', 'getMarkers', 'getMasks',
     ];
     for (const name of readOnlyTools) {

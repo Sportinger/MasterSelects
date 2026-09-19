@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   extractAINodeParameterSchemaFromCode,
   mergeAINodeParamDefaults,
+  validateAINodeGeneratedCode,
   type NodeGraphNode,
   type ClipCustomNodeConversationMessage,
 } from '../../../../services/nodeGraph';
-import { useAccountStore } from '../../../../stores/accountStore';
+import { hasHostedAiSession, useAccountStore } from '../../../../stores/accountStore';
 import { useTimelineStore } from '../../../../stores/timeline';
 import type { TimelineClip } from '../../../../stores/timeline/types';
 import { AINodeExposedParameters } from './AINodeExposedParameters';
@@ -19,6 +20,7 @@ import {
 import { AIPortDropdown } from './AIPortDropdown';
 
 export function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node: NodeGraphNode }) {
+  const definition = clip.nodeGraph?.customNodes?.find((candidate) => candidate.id === node.id);
   const updateClipAICustomNode = useTimelineStore((state) => state.updateClipAICustomNode);
   const hostedAIEnabled = useAccountStore((state) => state.hostedAIEnabled);
   const accountSession = useAccountStore((state) => state.session);
@@ -27,6 +29,7 @@ export function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node:
   const masterAudioState = useTimelineStore((state) => state.masterAudioState);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [codeDraft, setCodeDraft] = useState(definition?.ai.generatedCode ?? '');
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const copiedMessageTimeoutRef = useRef<number | null>(null);
   useEffect(() => () => {
@@ -34,6 +37,9 @@ export function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node:
       window.clearTimeout(copiedMessageTimeoutRef.current);
     }
   }, []);
+  useEffect(() => {
+    setCodeDraft(definition?.ai.generatedCode ?? '');
+  }, [definition?.id, definition?.ai.generatedCode]);
 
   const copyConversationMessage = useCallback(async (message: ClipCustomNodeConversationMessage) => {
     try {
@@ -58,13 +64,11 @@ export function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node:
       copiedMessageTimeoutRef.current = null;
     }, 900);
   }, []);
-  const definition = clip.nodeGraph?.customNodes?.find((candidate) => candidate.id === node.id);
-
   if (!definition) {
     return <div className="node-workspace-inspector-empty">Custom node not found</div>;
   }
 
-  const access: NodeAIGenerationAccess = accountSession?.authenticated && hostedAIEnabled
+  const access: NodeAIGenerationAccess = hasHostedAiSession(accountSession) && hostedAIEnabled
     ? { kind: 'hosted', label: 'Cloud' }
     : { kind: 'none', label: 'No AI' };
   const canSendPrompt = access.kind !== 'none' && definition.ai.prompt.trim().length > 0 && !isGenerating;
@@ -72,7 +76,7 @@ export function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node:
 
   const sendPromptToAI = async () => {
     if (access.kind === 'none') {
-      setGenerationError('Sign in to use hosted AI.');
+      setGenerationError('Free AI credits are unavailable. Choose a plan to continue.');
       return;
     }
 
@@ -148,30 +152,31 @@ export function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node:
       <label className="node-workspace-field node-workspace-ai-code">
         <span>Active Code</span>
         <textarea
-          value={definition.ai.generatedCode ?? ''}
+          value={codeDraft}
           rows={5}
           spellCheck={false}
-          onChange={(event) => updateClipAICustomNode(clip.id, definition.id, {
-            status: extractGeneratedNodeCode(event.target.value) ? 'ready' : 'draft',
-            ai: { generatedCode: event.target.value },
-          })}
+          onChange={(event) => setCodeDraft(event.target.value)}
           onBlur={(event) => {
             const code = event.target.value.trim();
-            if (!code) return;
+            if (!code) {
+              setGenerationError(null);
+              updateClipAICustomNode(clip.id, definition.id, { ai: { generatedCode: '' } });
+              return;
+            }
             const generatedCode = extractGeneratedNodeCode(code);
             if (!generatedCode) {
-              updateClipAICustomNode(clip.id, definition.id, {
-                status: 'draft',
-                parameterSchema: [],
-                params: {},
-              });
+              const validation = validateAINodeGeneratedCode(code);
+              setGenerationError(validation.error ?? 'Active code was rejected by the node sandbox.');
+              setCodeDraft(definition.ai.generatedCode ?? '');
               return;
             }
             const parameterSchema = extractAINodeParameterSchemaFromCode(generatedCode);
+            setGenerationError(null);
             updateClipAICustomNode(clip.id, definition.id, {
               status: 'ready',
               parameterSchema,
               params: mergeAINodeParamDefaults(parameterSchema, definition.params),
+              ai: { generatedCode },
             });
           }}
         />
@@ -256,7 +261,7 @@ export function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node:
         <div className="node-workspace-ai-footer">
           <span>{definition.status === 'ready' ? 'Ready' : 'Draft'}</span>
           <span>{conversationCount > 0 ? `${conversationCount} messages` : access.label}</span>
-          {access.kind === 'none' && <span>Sign in to use AI</span>}
+          {access.kind === 'none' && <span>Choose a plan to use AI</span>}
         </div>
       </div>
     </div>

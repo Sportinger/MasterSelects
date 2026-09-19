@@ -9,6 +9,7 @@ interface TimelineToolFlyoutProps {
   activeToolId: TimelineToolId;
   initialHighlightedToolId?: TimelineToolId | null;
   armPressDrag?: boolean;
+  glassBubble?: boolean;
   tools: TimelineToolDefinition[];
   isExporting: boolean;
   onSelect: (tool: TimelineToolDefinition) => void;
@@ -67,6 +68,7 @@ export function TimelineToolFlyout({
   activeToolId,
   initialHighlightedToolId,
   armPressDrag = false,
+  glassBubble = false,
   tools,
   isExporting,
   onSelect,
@@ -196,7 +198,7 @@ export function TimelineToolFlyout({
   return createPortal(
     <div
       ref={flyoutRef}
-      className="timeline-tool-flyout"
+      className={`timeline-tool-flyout${glassBubble ? ' timeline-tool-flyout-glass-bubble' : ''}`}
       role="menu"
       tabIndex={-1}
       style={{ left: position.left, top: position.top, bottom: position.bottom, maxHeight: position.maxHeight }}

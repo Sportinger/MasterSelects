@@ -4,6 +4,7 @@ import type {
   ProjectHistoryState,
 } from '../../types/history';
 import type { HistoryState } from './historyStoreTypes';
+import { productAnalytics, trackTimelineEdit } from '../../services/productAnalytics';
 
 type HistoryStoreAccessor = {
   getState: () => HistoryState;
@@ -11,20 +12,44 @@ type HistoryStoreAccessor = {
 
 export function createHistoryFacade(useHistoryStore: HistoryStoreAccessor) {
   return {
-    captureSnapshot: (label: string, options?: { isAutoCapture?: boolean }) =>
-      useHistoryStore.getState().captureSnapshot(label, options),
-    undo: () => useHistoryStore.getState().undo(),
-    redo: () => useHistoryStore.getState().redo(),
+    captureSnapshot: (label: string, options?: { isAutoCapture?: boolean }) => {
+      const wasBatching = useHistoryStore.getState().batchId !== null;
+      useHistoryStore.getState().captureSnapshot(label, options);
+      // A batch is reported once by endBatch. Individual high-frequency
+      // captures inside a slider/drag gesture must not become analytics spam.
+      if (!wasBatching) trackTimelineEdit(label);
+    },
+    undo: () => {
+      const result = useHistoryStore.getState().undo();
+      if (result) productAnalytics.track('timeline_history_used', { action: 'undo' });
+      return result;
+    },
+    redo: () => {
+      const result = useHistoryStore.getState().redo();
+      if (result) productAnalytics.track('timeline_history_used', { action: 'redo' });
+      return result;
+    },
     startBatch: (label: string) => useHistoryStore.getState().startBatch(label),
-    endBatch: () => useHistoryStore.getState().endBatch(),
+    endBatch: () => {
+      const state = useHistoryStore.getState();
+      const label = state.batchId === null ? null : state.batchLabel;
+      state.endBatch();
+      if (label) trackTimelineEdit(label);
+    },
     cancelHistoryBatch: () => useHistoryStore.getState().cancelBatch(),
     recordHistoryEvent: (type: HistoryEventType, label: string) => {
       useHistoryStore.getState().recordEvent(type, label);
     },
-    restoreHistoryEntry: (entry: HistoryListEntry) => useHistoryStore.getState().restoreEntry(entry),
-    restoreHistoryBranch: (branchId: string, snapshotIndex?: number) => (
-      useHistoryStore.getState().restoreBranch(branchId, snapshotIndex)
-    ),
+    restoreHistoryEntry: (entry: HistoryListEntry) => {
+      const result = useHistoryStore.getState().restoreEntry(entry);
+      if (result) productAnalytics.track('timeline_history_used', { action: 'restore' });
+      return result;
+    },
+    restoreHistoryBranch: (branchId: string, snapshotIndex?: number) => {
+      const result = useHistoryStore.getState().restoreBranch(branchId, snapshotIndex);
+      if (result) productAnalytics.track('timeline_history_used', { action: 'restore' });
+      return result;
+    },
     serializeHistoryStateForProject: () => useHistoryStore.getState().serializeForProject()!,
     hydrateHistoryStateFromProject: (history: ProjectHistoryState | null | undefined) => {
       useHistoryStore.getState().hydrateFromProject(history);

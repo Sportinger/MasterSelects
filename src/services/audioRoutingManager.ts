@@ -1,3 +1,6 @@
+import type { TimelineClip } from '../types';
+import { reconnectAudioRoute } from './audio/routing/connectAudioRoute';
+import { syncMediaCutFades } from './audio/routing/mediaCutFades';
 /**
  * AudioRoutingManager - Routes audio through Web Audio API for live EQ and volume
  *
@@ -27,6 +30,7 @@ import {
   processorSignature,
 } from './audio/routing/routeEffectState';
 import { createAudioRouteGraph, createMasterRouteGraph } from './audio/routing/routeGraphFactory';
+import { publishMasterTerminal, setMasterTapActivator } from './audio/routing/masterTap';
 import { applyAudioContextOutputDevice, applyMediaElementOutputDevice } from './audio/routing/outputDeviceRouting';
 import type {
   AudioRoute,
@@ -89,6 +93,7 @@ class AudioRoutingManager {
   };
 
   constructor() {
+    setMasterTapActivator(() => this.ensureSharedContext());
     // The master tap resolves the route lazily, so registering once at
     // construction covers context/route rebuilds for the manager's lifetime.
     runtimeSpectrumTaps.registerMaster(() => (
@@ -227,6 +232,11 @@ class AudioRoutingManager {
     return true;
   }
 
+  syncCutFades(element: HTMLMediaElement, clip: TimelineClip | null): void {
+    const route = this.routes.get(element);
+    if (route && this.audioContext) syncMediaCutFades(route.cutGainNode.gain, this.audioContext, element, clip);
+  }
+
   /**
    * Ensure the shared AudioContext + master bus exist and return the context.
    * Synchronous (creates the context if needed and kicks a background resume) so
@@ -318,6 +328,7 @@ class AudioRoutingManager {
     const route = this.nodeRoutes.get(key);
     if (!route) return;
     try {
+      route.cutGainNode.disconnect();
       route.gainNode.disconnect();
       route.panNode.disconnect();
       route.analyserNode.disconnect();
@@ -448,6 +459,7 @@ class AudioRoutingManager {
     if (route) {
       try {
         route.sourceNode.disconnect();
+        route.cutGainNode.disconnect();
         route.gainNode.disconnect();
         route.panNode.disconnect();
         route.analyserNode.disconnect();
@@ -631,47 +643,7 @@ class AudioRoutingManager {
   }
 
   private reconnectRouteChain(route: AudioRoute): void {
-    try {
-      route.sourceNode.disconnect();
-      route.gainNode.disconnect();
-      route.eqFilters.forEach(filter => filter.disconnect());
-      route.panNode.disconnect();
-      route.analyserNode.disconnect();
-      route.stereoSplitterNode.disconnect();
-      route.leftAnalyserNode.disconnect();
-      route.rightAnalyserNode.disconnect();
-      route.processorNodes.forEach(processor => processor.nodes.forEach(node => node.disconnect()));
-    } catch {
-      // Disconnecting a partially connected graph can throw; rebuild below.
-    }
-
-    let tail: AudioNode = route.gainNode;
-    route.sourceNode.connect(route.gainNode);
-
-    for (const processor of route.processorNodes) {
-      if (processor.inputNode && processor.outputNode) {
-        reconnectCustomProcessorInternal(processor);
-        tail.connect(processor.inputNode);
-        tail = processor.outputNode;
-      } else {
-        for (const node of processor.nodes) {
-          tail.connect(node);
-          tail = node;
-        }
-      }
-    }
-
-    tail.connect(route.eqFilters[0]);
-    for (let i = 0; i < route.eqFilters.length - 1; i++) {
-      route.eqFilters[i].connect(route.eqFilters[i + 1]);
-    }
-    route.eqFilters[route.eqFilters.length - 1].connect(route.panNode);
-    route.panNode.connect(route.stereoSplitterNode);
-    route.stereoSplitterNode.connect(route.leftAnalyserNode, 0);
-    route.stereoSplitterNode.connect(route.rightAnalyserNode, 1);
-    route.panNode.connect(route.analyserNode);
-    route.analyserNode.connect(this.getOrCreateMasterRoute(this.audioContext!).inputNode);
-    route.isConnected = true;
+    reconnectAudioRoute(route, this.getOrCreateMasterRoute(this.audioContext!).inputNode);
   }
 
   private reconnectMasterRouteChain(route: MasterAudioRoute): void {
@@ -713,8 +685,13 @@ class AudioRoutingManager {
     route.stereoSplitterNode.connect(route.rightAnalyserNode, 1);
     route.gainNode.connect(route.analyserNode);
     route.analyserNode.connect(this.audioContext!.destination);
+    publishMasterTerminal(this.audioContext!, route.analyserNode);
   }
 }
 
 // Singleton instance
-export const audioRoutingManager = new AudioRoutingManager();
+export const audioRoutingManager: AudioRoutingManager = import.meta.hot?.data?.audioRoutingManager ?? new AudioRoutingManager();
+if (import.meta.hot) {
+  Object.setPrototypeOf(audioRoutingManager, AudioRoutingManager.prototype);
+  import.meta.hot.dispose(data => { data.audioRoutingManager = audioRoutingManager; });
+}

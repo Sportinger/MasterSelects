@@ -1,5 +1,9 @@
 import { useCallback, useMemo } from 'react';
-import { isProtectedFactoryDockLayout } from '../../../stores/dockStore';
+import {
+  getVisibleSubLayoutId,
+  isWorkspaceOverLayoutId,
+  isProtectedFactoryDockLayout,
+} from '../../../stores/dockStore';
 import type { PanelType, SavedDockLayout } from '../../../types/dock';
 
 interface UseToolbarViewActionsArgs {
@@ -9,6 +13,7 @@ interface UseToolbarViewActionsArgs {
   hidePanelType: (type: PanelType) => void;
   isPanelTypeVisible: (type: PanelType) => boolean;
   loadSavedLayout: (layoutId: string) => void;
+  overLayoutBaseId: string | null;
   resetLayout: () => void;
   saveCurrentNamedLayout: () => SavedDockLayout | null;
   saveLayoutAsDefault: () => void;
@@ -26,6 +31,7 @@ export function useToolbarViewActions({
   hidePanelType,
   isPanelTypeVisible,
   loadSavedLayout,
+  overLayoutBaseId,
   resetLayout,
   saveCurrentNamedLayout,
   saveLayoutAsDefault,
@@ -35,26 +41,38 @@ export function useToolbarViewActions({
   toggleFavoriteSavedLayout,
   closeMenu,
 }: UseToolbarViewActionsArgs) {
+  const visibleActiveSavedLayoutId = getVisibleSubLayoutId(
+    activeSavedLayoutId,
+    overLayoutBaseId,
+  );
+  const visibleDefaultSavedLayoutId = getVisibleSubLayoutId(defaultSavedLayoutId, null);
   const sortedSavedLayouts = useMemo(() => {
-    return [...savedLayouts].sort((left, right) => {
-      const leftIsDefault = left.id === defaultSavedLayoutId;
-      const rightIsDefault = right.id === defaultSavedLayoutId;
-      if (leftIsDefault !== rightIsDefault) {
-        return leftIsDefault ? -1 : 1;
-      }
-      return right.updatedAt - left.updatedAt;
-    });
-  }, [defaultSavedLayoutId, savedLayouts]);
+    return savedLayouts
+      .filter((savedLayout) => !isWorkspaceOverLayoutId(savedLayout.id))
+      .toSorted((left, right) => {
+        const leftIsDefault = left.id === visibleDefaultSavedLayoutId;
+        const rightIsDefault = right.id === visibleDefaultSavedLayoutId;
+        if (leftIsDefault !== rightIsDefault) {
+          return leftIsDefault ? -1 : 1;
+        }
+        return right.updatedAt - left.updatedAt;
+      });
+  }, [savedLayouts, visibleDefaultSavedLayoutId]);
 
   const favoriteSavedLayouts = useMemo(() => {
     return sortedSavedLayouts.filter((savedLayout) => savedLayout.favorite === true);
   }, [sortedSavedLayouts]);
 
   const activeSavedLayout = useMemo(() => {
-    return savedLayouts.find((savedLayout) => savedLayout.id === activeSavedLayoutId) ?? null;
-  }, [activeSavedLayoutId, savedLayouts]);
+    return savedLayouts.find(
+      (savedLayout) => savedLayout.id === visibleActiveSavedLayoutId,
+    ) ?? null;
+  }, [savedLayouts, visibleActiveSavedLayoutId]);
 
-  const activeSavedLayoutProtected = isProtectedFactoryDockLayout(activeSavedLayout);
+  const activeSavedLayoutProtected = (
+    isWorkspaceOverLayoutId(activeSavedLayoutId)
+    || isProtectedFactoryDockLayout(activeSavedLayout)
+  );
 
   const handleToggleViewPanelType = useCallback((type: PanelType) => {
     if (isPanelTypeVisible(type)) {
@@ -123,5 +141,7 @@ export function useToolbarViewActions({
     handleToggleFavoriteSavedLayout,
     handleToggleViewPanelType,
     sortedSavedLayouts,
+    visibleActiveSavedLayoutId,
+    visibleDefaultSavedLayoutId,
   };
 }

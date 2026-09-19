@@ -110,6 +110,27 @@ interface MutableWorkerSoftwarePixelEffects {
     centerX: number;
     centerY: number;
   }[];
+  fisheyeAdjustments?: {
+    projection: 'equidistant' | 'equisolid' | 'stereographic' | 'orthographic';
+    strength: number;
+    fieldOfView: number;
+    curveBias: number;
+    radius: number;
+    zoom: number;
+    centerX: number;
+    centerY: number;
+    squeeze: number;
+    rotation: number;
+    preserveAspect: boolean;
+    outside: 'original' | 'transparent';
+    feather: number;
+    edgeMode: 'transparent' | 'clamp' | 'mirror' | 'repeat';
+    edgeFeather: number;
+    chromaticAberration: number;
+    vignette: number;
+    vignetteSoftness: number;
+    samples: number;
+  }[];
   motionBlurAdjustments?: { amount: number; angle: number; samples: number }[];
   radialBlurAdjustments?: {
     amount: number;
@@ -272,12 +293,12 @@ function effectFilterPart(
       return '';
     case 'glow':
       (pixelEffects.glowAdjustments ??= []).push({
-        amount: finiteEffectNumber(effect.params.amount, 1),
-        threshold: finiteEffectNumber(effect.params.threshold, 0.6),
-        radius: Math.max(0, finiteEffectNumber(effect.params.radius, 20)),
-        softness: Math.max(0.001, finiteEffectNumber(effect.params.softness, 0.5)),
-        rings: Math.max(1, Math.min(32, Math.round(finiteEffectNumber(effect.params.rings, 4)))),
-        samplesPerRing: Math.max(4, Math.min(64, Math.round(finiteEffectNumber(effect.params.samplesPerRing, 16)))),
+        amount: finiteEffectNumber(effect.params.amount, 5),
+        threshold: finiteEffectNumber(effect.params.threshold, 0.7935),
+        radius: Math.max(0, finiteEffectNumber(effect.params.radius, 1)),
+        softness: Math.max(0.001, finiteEffectNumber(effect.params.softness, 0.496)),
+        rings: Math.max(1, Math.min(32, Math.round(finiteEffectNumber(effect.params.rings, 6.85)))),
+        samplesPerRing: Math.max(4, Math.min(64, Math.round(finiteEffectNumber(effect.params.samplesPerRing, 17.95)))),
       });
       return '';
     case 'scanlines':
@@ -328,6 +349,40 @@ function effectFilterPart(
         centerY: finiteEffectNumber(effect.params.centerY, 0.5),
       });
       return '';
+    case 'fisheye': {
+      if (!canAddSourceResamplingEffect(pixelEffects)) return null;
+      const projection = effect.params.projection;
+      const edgeMode = effect.params.edgeMode;
+      const parsedSamples = Number(effect.params.samples);
+      (pixelEffects.fisheyeAdjustments ??= []).push({
+        projection: projection === 'equisolid'
+          || projection === 'stereographic'
+          || projection === 'orthographic'
+          ? projection
+          : 'equidistant',
+        strength: Math.max(-1, Math.min(1, finiteEffectNumber(effect.params.strength, 1))),
+        fieldOfView: Math.max(20, Math.min(175, finiteEffectNumber(effect.params.fieldOfView, 140))),
+        curveBias: Math.max(-1, Math.min(1, finiteEffectNumber(effect.params.curveBias, 0))),
+        radius: Math.max(0.1, Math.min(3, finiteEffectNumber(effect.params.radius, 2.1))),
+        zoom: Math.max(0.25, Math.min(4, finiteEffectNumber(effect.params.zoom, 1))),
+        centerX: Math.max(0, Math.min(1, finiteEffectNumber(effect.params.centerX, 0.5))),
+        centerY: Math.max(0, Math.min(1, finiteEffectNumber(effect.params.centerY, 0.5))),
+        squeeze: Math.max(0.25, Math.min(4, finiteEffectNumber(effect.params.squeeze, 1))),
+        rotation: Math.max(-180, Math.min(180, finiteEffectNumber(effect.params.rotation, 0))),
+        preserveAspect: effect.params.preserveAspect !== false,
+        outside: effect.params.outside === 'transparent' ? 'transparent' : 'original',
+        feather: Math.max(0, Math.min(0.5, finiteEffectNumber(effect.params.feather, 0.05))),
+        edgeMode: edgeMode === 'clamp' || edgeMode === 'mirror' || edgeMode === 'repeat'
+          ? edgeMode
+          : 'transparent',
+        edgeFeather: Math.max(0, Math.min(0.1, finiteEffectNumber(effect.params.edgeFeather, 0.005))),
+        chromaticAberration: Math.max(0, Math.min(0.05, finiteEffectNumber(effect.params.chromaticAberration, 0))),
+        vignette: Math.max(0, Math.min(1, finiteEffectNumber(effect.params.vignette, 0))),
+        vignetteSoftness: Math.max(0.01, Math.min(1, finiteEffectNumber(effect.params.vignetteSoftness, 0.25))),
+        samples: parsedSamples >= 8 ? 8 : parsedSamples >= 4 ? 4 : 1,
+      });
+      return '';
+    }
     case 'motion-blur':
       if (!canAddSourceResamplingEffect(pixelEffects)) return null;
       (pixelEffects.motionBlurAdjustments ??= []).push({

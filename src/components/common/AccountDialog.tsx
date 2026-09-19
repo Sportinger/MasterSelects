@@ -63,8 +63,10 @@ export function AccountDialog({ initialRedeemCode = '', onClose, onRedeemed }: A
     isLoading,
     loadAccountState,
     logout,
+    openAuthDialog,
     openBillingPortal,
     openPricingDialog,
+    session,
   } = useAccountStore();
   const [isClosing, setIsClosing] = useState(false);
   const [showPrices, setShowPrices] = useState(false);
@@ -103,6 +105,7 @@ export function AccountDialog({ initialRedeemCode = '', onClose, onRedeemed }: A
   };
 
   const summary = billingSummary;
+  const isAuthenticated = session?.authenticated === true;
   const displayName = summary?.user?.displayName || summary?.user?.email || 'Guest';
   const email = summary?.user?.email ?? '';
   const hasBillingAccount = Boolean(summary?.stripeCustomerId);
@@ -301,8 +304,13 @@ export function AccountDialog({ initialRedeemCode = '', onClose, onRedeemed }: A
           </div>
 
           <div className="account-signout-row">
-            <button className="auth-dialog-action-ghost" disabled={isLoading} onClick={() => logout()} type="button">
-              Sign out
+            <button
+              className="auth-dialog-action-ghost"
+              disabled={isLoading}
+              onClick={() => isAuthenticated ? void logout() : openAuthDialog()}
+              type="button"
+            >
+              {isAuthenticated ? 'Sign out' : 'Sign in'}
             </button>
           </div>
 

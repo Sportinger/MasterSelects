@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { openNativeHelperDialog } from '../../common/nativeHelperDialog';
 import { NativeHelperClient, type FormatRecommendation, type VideoInfo } from '../../../services/nativeHelper';
+import {
+  compactDownloadCodecLabel,
+  downloadFormatAudioCodecLabel,
+  downloadFormatQueueLabel,
+  isAudioOnlyDownloadFormat,
+} from '../../../services/mediaDiscovery/downloadFormats';
 import { isDownloadAvailable } from '../../../services/youtubeDownloader';
 import { parseDownloadUrls, useMediaDownloadStore } from '../../../stores/mediaDownloadStore';
 
 const EMPTY_FORMAT_RECOMMENDATIONS: FormatRecommendation[] = [];
-const AUDIO_MP3_FORMAT_ID = '__masterselects_audio_mp3';
 
 interface FormatResolutionState {
   url: string | null;
@@ -14,55 +19,21 @@ interface FormatResolutionState {
   selectedFormatId: string | null;
 }
 
-function compactCodecLabel(codec: string | null, emptyLabel: string): string {
-  if (!codec || codec === 'none') {
-    return emptyLabel;
-  }
-
-  const normalized = codec.toLowerCase();
-  if (normalized.includes('h.264') || normalized.includes('avc')) return 'H.264';
-  if (normalized.includes('h.265') || normalized.includes('hevc') || normalized.includes('hvc1')) return 'H.265';
-  if (normalized.includes('vp9') || normalized.includes('vp09')) return 'VP9';
-  if (normalized.includes('av01')) return 'AV1';
-  if (normalized.includes('mp4a') || normalized.includes('aac')) return 'AAC';
-  if (normalized.includes('opus')) return 'Opus';
-
-  return codec.split('.')[0].toUpperCase();
+interface MediaDownloadComposerProps {
+  value?: string;
+  onValueChange?: (value: string) => void;
+  onQueued?: (jobIds: string[]) => void;
+  className?: string;
 }
 
-function getAudioCodecLabel(format: FormatRecommendation): string {
-  if (format.id === AUDIO_MP3_FORMAT_ID || format.acodec?.toLowerCase() === 'mp3') {
-    return 'MP3';
-  }
-  if (format.needsMerge && !format.acodec) {
-    return 'M4A audio';
-  }
-  return compactCodecLabel(format.acodec, 'No audio');
-}
-
-function isAudioOnlyRecommendation(format: FormatRecommendation): boolean {
-  return format.id === AUDIO_MP3_FORMAT_ID
-    || (format.resolution.toLowerCase() === 'audio' && !format.vcodec && Boolean(format.acodec));
-}
-
-function getQueueFormatLabel(format: FormatRecommendation): string {
-  if (isAudioOnlyRecommendation(format)) {
-    return [
-      format.label || 'Audio',
-      getAudioCodecLabel(format),
-    ].filter(Boolean).join(' / ');
-  }
-
-  return [
-    format.resolution || 'Auto',
-    compactCodecLabel(format.vcodec, 'Video'),
-    getAudioCodecLabel(format),
-  ].filter(Boolean).join(' / ');
-}
-
-export function MediaDownloadComposer() {
+export function MediaDownloadComposer({
+  value,
+  onValueChange,
+  onQueued,
+  className = '',
+}: MediaDownloadComposerProps = {}) {
   const enqueueDownloads = useMediaDownloadStore((state) => state.enqueueDownloads);
-  const [input, setInput] = useState('');
+  const [internalInput, setInternalInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [helperConnected, setHelperConnected] = useState(isDownloadAvailable());
   const [formatState, setFormatState] = useState<FormatResolutionState>({
@@ -71,6 +42,13 @@ export function MediaDownloadComposer() {
     error: null,
     selectedFormatId: null,
   });
+  const input = value ?? internalInput;
+  const setInput = useCallback((nextValue: string) => {
+    if (value === undefined) {
+      setInternalInput(nextValue);
+    }
+    onValueChange?.(nextValue);
+  }, [onValueChange, value]);
 
   useEffect(() => {
     const unsubscribe = NativeHelperClient.onStatusChange((status) => {
@@ -171,10 +149,11 @@ export function MediaDownloadComposer() {
     const ids = enqueueDownloads([{
       url,
       formatId: selectedFormat?.id,
-      formatLabel: selectedFormat ? getQueueFormatLabel(selectedFormat) : 'Helper default',
+      formatLabel: selectedFormat ? downloadFormatQueueLabel(selectedFormat) : 'Helper default',
     }]);
     if (ids.length > 0) {
       setInput('');
+      onQueued?.(ids);
       setError(null);
       setFormatState({
         url: null,
@@ -192,8 +171,10 @@ export function MediaDownloadComposer() {
     loadingFormats,
     recommendations.length,
     selectedFormat,
+    setInput,
     urls,
     videoInfo,
+    onQueued,
   ]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -212,7 +193,10 @@ export function MediaDownloadComposer() {
   }, []);
 
   return (
-    <div className="fb-bubble media-download-bubble" onMouseDown={(event) => event.stopPropagation()}>
+    <div
+      className={`fb-bubble media-download-bubble ${className}`.trim()}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
       <div className="fb-bubble-main">
         <div className="fb-bubble-prompt media-download-prompt">
           <div className="fb-bubble-row">
@@ -274,7 +258,7 @@ export function MediaDownloadComposer() {
                 <div className="media-download-format-list">
                   {recommendations.map((format) => {
                     const isSelected = selectedFormatId === format.id;
-                    const audioOnly = isAudioOnlyRecommendation(format);
+                    const audioOnly = isAudioOnlyDownloadFormat(format);
                     return (
                       <button
                         key={format.id}
@@ -289,15 +273,15 @@ export function MediaDownloadComposer() {
                           setError(null);
                         }}
                         aria-pressed={isSelected}
-                        title={format.label || getQueueFormatLabel(format)}
+                        title={format.label || downloadFormatQueueLabel(format)}
                       >
                         <span className="media-download-format-title">
-                          {format.label || getQueueFormatLabel(format)}
+                          {format.label || downloadFormatQueueLabel(format)}
                         </span>
                         <span className="media-download-format-codecs">
                           <span>{audioOnly ? 'Audio only' : format.resolution || 'Auto'}</span>
-                          {!audioOnly && <span>{compactCodecLabel(format.vcodec, 'Video')}</span>}
-                          <span>{getAudioCodecLabel(format)}</span>
+                          {!audioOnly && <span>{compactDownloadCodecLabel(format.vcodec, 'Video')}</span>}
+                          <span>{downloadFormatAudioCodecLabel(format)}</span>
                         </span>
                         <span className="media-download-format-meta">
                           {audioOnly ? 'audio only' : format.needsMerge ? 'merge' : 'single file'}

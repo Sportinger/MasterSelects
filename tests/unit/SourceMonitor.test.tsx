@@ -3,6 +3,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SourceMonitor } from '../../src/components/preview/SourceMonitor';
+import { PreviewTransportPortalContext } from '../../src/components/preview/PreviewTransportPortalContext';
 import { useMediaStore, type MediaFile } from '../../src/stores/mediaStore';
 
 vi.mock('../../src/services/timelinePlacementCommands', () => ({
@@ -394,5 +395,31 @@ describe('SourceMonitor edit commands', () => {
     });
 
     expect(screen.getByText('0:07:00')).toBeInTheDocument();
+  });
+
+  it('ports source actions into the shared Preview transport', async () => {
+    const transportTarget = document.createElement('div');
+    document.body.append(transportTarget);
+
+    const { container } = render(
+      <PreviewTransportPortalContext.Provider value={{
+        externalSourceControls: true,
+        sourceControlsTarget: transportTarget,
+        setSourceControlsTarget: vi.fn(),
+      }}>
+        <SourceMonitor file={createVideoFile()} onClose={vi.fn()} />
+      </PreviewTransportPortalContext.Provider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.source-monitor')).toHaveClass('source-monitor-external-controls');
+    expect(container.querySelector('.source-monitor-toolbar')).not.toBeInTheDocument();
+    expect(transportTarget.querySelector('.source-monitor-toolbar')).toHaveClass('source-monitor-toolbar-external');
+    expect(transportTarget.querySelector('[aria-label="Source timeline"]')).toBeInTheDocument();
+    expect(transportTarget.querySelector('[aria-label="Source edit commands"]')).toBeInTheDocument();
+
+    transportTarget.remove();
   });
 });

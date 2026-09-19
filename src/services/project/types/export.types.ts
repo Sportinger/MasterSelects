@@ -1,4 +1,4 @@
-export type ProjectExportEncoderType = 'webcodecs' | 'htmlvideo' | 'ffmpeg';
+export type ProjectExportEncoderType = 'webcodecs' | 'htmlvideo' | 'ffmpeg' | 'hap';
 export type ProjectExportVisualMode = 'video' | 'image' | 'gif';
 export type ProjectExportImageFormat = 'png' | 'jpg' | 'webp' | 'bmp';
 export type ProjectExportImageMode = 'frame' | 'sequence';
@@ -13,6 +13,7 @@ export type ProjectFFmpegVideoCodec =
   | 'utvideo'
   | 'mjpeg'
   | 'gif';
+export type ProjectHapFormat = 'hap' | 'hap_alpha' | 'hap_q';
 export type ProjectFFmpegContainer =
   | 'mov'
   | 'mkv'
@@ -61,6 +62,7 @@ export interface ProjectExportSettings {
   ffmpegPreset: string;
   proresProfile: ProjectProResProfile;
   dnxhrProfile: ProjectDnxhrProfile;
+  hapFormat: ProjectHapFormat;
   ffmpegQuality: number;
   ffmpegBitrate: number;
   ffmpegRateControl: 'crf' | 'cbr' | 'vbr';
@@ -73,6 +75,7 @@ export interface ProjectExportSettings {
   gifTransparency: boolean;
   gifAlphaThreshold: number;
   gifBayerScale: number;
+  includeAlpha: boolean;
   stackedAlpha: boolean;
   includeAudio: boolean;
   audioOnlyFormat: ProjectExportAudioFormat;

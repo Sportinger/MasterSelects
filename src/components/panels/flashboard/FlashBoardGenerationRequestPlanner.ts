@@ -31,6 +31,7 @@ interface BuildFlashBoardGenerationRequestInput {
   normalizedMultiPrompt: FlashBoardMultiShotPrompt[];
   originalPrompt?: string | null;
   outputFormat: string;
+  returnLastFrame: boolean;
   providerId: string;
   selectedEntry: FlashBoardGenerationRequestEntry;
   service: FlashBoardService;
@@ -45,6 +46,8 @@ interface BuildFlashBoardGenerationRequestInput {
   sunoVocalGender: FlashBoardSunoVocalGender | '';
   sunoWeirdnessConstraint: number;
   version: string;
+  videoOutputFormat: 'mov' | 'mp4';
+  webSearch: boolean;
   voiceId: string;
   voiceName: string;
   voiceSettings: FlashBoardVoiceSettings;
@@ -76,6 +79,7 @@ export function buildFlashBoardGenerationRequest({
   normalizedMultiPrompt,
   originalPrompt,
   outputFormat,
+  returnLastFrame,
   providerId,
   selectedEntry,
   service,
@@ -89,11 +93,16 @@ export function buildFlashBoardGenerationRequest({
   sunoVocalGender,
   sunoWeirdnessConstraint,
   version,
+  videoOutputFormat,
+  webSearch,
   voiceId,
   voiceName,
   voiceSettings,
 }: BuildFlashBoardGenerationRequestInput): FlashBoardGenerationRequest {
   const requestIsElevenLabs = isAudioRequest && providerId === 'cloud-elevenlabs-tts';
+  const requestIsSeedance25 = !isAudioRequest && providerId === 'bytedance/seedance-2-5';
+  const requestUsesSeedance25ExactFrames = requestIsSeedance25
+    && Boolean(startMediaFileId || endMediaFileId);
   const modeSupportedForAudio = isAudioRequest && selectedEntry.modes.length > 0;
   const trimmedOriginalPrompt = originalPrompt?.trim();
   const requestOriginalPrompt = trimmedOriginalPrompt && trimmedOriginalPrompt !== effectivePrompt.trim()
@@ -111,7 +120,9 @@ export function buildFlashBoardGenerationRequest({
     duration: isSunoRequest && sunoCustomMode && version === 'V5_5'
       ? duration
       : isAudioRequest ? undefined : duration,
-    aspectRatio: isAudioRequest ? undefined : aspectRatio,
+    aspectRatio: isAudioRequest
+      ? undefined
+      : requestUsesSeedance25ExactFrames ? 'adaptive' : aspectRatio,
     imageSize: !isAudioRequest && selectedEntry.supportsTextToImage ? imageSize : undefined,
     generateAudio: isAudioRequest ? false : effectiveGenerateAudio,
     multiShots: isAudioRequest ? false : multiShots,
@@ -120,7 +131,9 @@ export function buildFlashBoardGenerationRequest({
     voiceName: requestIsElevenLabs ? voiceName.trim() || undefined : undefined,
     languageOverride: requestIsElevenLabs ? languageOverride : undefined,
     languageCode: requestIsElevenLabs && languageOverride ? languageCode.trim() : undefined,
-    outputFormat: requestIsElevenLabs ? outputFormat : undefined,
+    outputFormat: requestIsElevenLabs ? outputFormat : requestIsSeedance25 ? videoOutputFormat : undefined,
+    returnLastFrame: requestIsSeedance25 ? returnLastFrame : undefined,
+    webSearch: requestIsSeedance25 ? webSearch : undefined,
     voiceSettings: requestIsElevenLabs ? { ...voiceSettings } : undefined,
     sunoCustomMode: isSunoRequest ? sunoCustomMode : undefined,
     sunoInstrumental: isSunoRequest ? sunoInstrumental : undefined,

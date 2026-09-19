@@ -5,6 +5,7 @@ import type { ScrubbingCache } from '../../texture/ScrubbingCache';
 import { scrubSettleState } from '../../../services/scrubSettleState';
 import { useTimelineStore } from '../../../stores/timeline';
 import { getCopiedHtmlVideoPreviewFrame } from '../htmlVideoPreviewFallback';
+import { collectSurfaceVideoFrame } from '../surfaceVideoFrame';
 
 const ENABLE_VISUAL_HTML_VIDEO_FALLBACK = false;
 const MAX_DRAG_FALLBACK_DRIFT_SECONDS = 1.2;
@@ -23,8 +24,15 @@ interface TryCollectHtmlVideoPreviewParams {
   textureManager: TextureManager;
   scrubbingCache: ScrubbingCache | null;
   htmlHoldUntil: Map<string, number>;
+  stableCanvasFrames: Map<string, StableHtmlVideoCanvasFrame>;
   debug: (message: string, context: Record<string, string>) => void;
   warn: (message: string, context: Record<string, string>) => void;
+}
+
+export interface StableHtmlVideoCanvasFrame {
+  canvas: HTMLCanvasElement;
+  hasFrame: boolean;
+  mediaTime?: number;
 }
 
 export function getNestedVideoOwnerId(layer: Pick<Layer, 'sourceClipId'>): string | undefined {
@@ -58,6 +66,80 @@ export function getNestedVideoReuseKey(layer: Pick<Layer, 'id' | 'sourceClipId'>
   const ownerId = getNestedVideoOwnerId(layer);
   if (ownerId?.startsWith('transition-comp:')) return ownerId;
   return ownerId ? `${layer.id}:${ownerId}` : layer.id;
+}
+
+export function shouldStageStableHtmlVideoLayer(
+  layer: Pick<Layer, 'sourceClipId'>,
+): boolean {
+  return layer.sourceClipId?.startsWith('nested-video:') === true
+    && layer.sourceClipId.endsWith(':datamosh');
+}
+
+function collectStableHtmlVideoCanvasFrame(input: {
+  layer: Layer;
+  video: HTMLVideoElement;
+  layerReuseKey: string;
+  targetTime: number;
+  reportedDisplayedTime?: number;
+  stableCanvasFrames: Map<string, StableHtmlVideoCanvasFrame>;
+  textureManager: TextureManager;
+  warn: TryCollectHtmlVideoPreviewParams['warn'];
+}): LayerRenderData | null | undefined {
+  if (!shouldStageStableHtmlVideoLayer(input.layer)) return undefined;
+
+  const { video } = input;
+  const hasDrawableFrame = video.readyState >= 2
+    && !video.seeking
+    && video.videoWidth > 0
+    && video.videoHeight > 0
+    && Number.isFinite(video.currentTime)
+    && Math.abs(video.currentTime - input.targetTime) <= 0.35;
+  let frame = input.stableCanvasFrames.get(input.layerReuseKey);
+
+  if (hasDrawableFrame) {
+    if (!frame) {
+      const canvas = document.createElement('canvas');
+      canvas.dataset.masterselectsDynamic = 'true';
+      frame = { canvas, hasFrame: false };
+      input.stableCanvasFrames.set(input.layerReuseKey, frame);
+    }
+    const { canvas } = frame;
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      frame.hasFrame = false;
+    }
+    try {
+      const context = canvas.getContext('2d', { alpha: false });
+      if (!context) return null;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      frame.hasFrame = true;
+      frame.mediaTime = video.currentTime;
+    } catch (cause) {
+      input.warn('Failed to stage stable HTML video frame', {
+        layerId: input.layer.id,
+        cause: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
+  }
+
+  if (!frame?.hasFrame) return null;
+  const texture = input.textureManager.createCanvasTexture(frame.canvas);
+  if (!texture) return null;
+
+  return {
+    layer: input.layer,
+    isVideo: false,
+    externalTexture: null,
+    textureView: input.textureManager.getImageView(texture),
+    sourceWidth: frame.canvas.width,
+    sourceHeight: frame.canvas.height,
+    displayedMediaTime: hasDrawableFrame
+      ? input.reportedDisplayedTime ?? frame.mediaTime
+      : frame.mediaTime,
+    targetMediaTime: input.targetTime,
+    previewPath: hasDrawableFrame ? 'stable-canvas' : 'stable-canvas-hold',
+  };
 }
 
 function getTargetVideoTime(layer: Layer, video: HTMLVideoElement): number {
@@ -154,6 +236,14 @@ function shouldPreferHtmlHold(
 export function tryCollectHtmlVideoPreview(
   params: TryCollectHtmlVideoPreviewParams
 ): LayerRenderData | null | undefined {
+  const fallback = collectHtmlVideoPreviewFallback(params);
+  const video = params.layer.source?.videoElement;
+  if (fallback === undefined || !video || useTimelineStore.getState().isExporting) return fallback;
+  const surface = collectSurfaceVideoFrame(params.layer, video, params.textureManager);
+  return surface === undefined ? fallback : surface ?? (fallback ? { ...fallback, displayedMediaTime: undefined } : fallback);
+}
+
+function collectHtmlVideoPreviewFallback(params: TryCollectHtmlVideoPreviewParams): LayerRenderData | null | undefined {
   const {
     layer,
     runtimeProvider,
@@ -161,6 +251,7 @@ export function tryCollectHtmlVideoPreview(
     textureManager,
     scrubbingCache,
     htmlHoldUntil,
+    stableCanvasFrames,
     debug,
     warn,
   } = params;
@@ -285,6 +376,21 @@ export function tryCollectHtmlVideoPreview(
     : !awaitingPausedTargetFrame &&
       (((!isDragging && !isSettling) || hasFreshPresentedFrame)));
   const captureOwnerId = allowConfirmedFrameCaching ? ownerId : undefined;
+
+  const stableCanvasFrame = collectStableHtmlVideoCanvasFrame({
+    layer,
+    video,
+    layerReuseKey,
+    targetTime,
+    reportedDisplayedTime,
+    stableCanvasFrames,
+    textureManager,
+    warn,
+  });
+  if (stableCanvasFrame !== undefined) {
+    if (stableCanvasFrame) clearHtmlHold(htmlHoldUntil, layerReuseKey);
+    return stableCanvasFrame;
+  }
 
   if ((video.seeking || awaitingPausedTargetFrame) && scrubbingCache) {
     const cachedView =

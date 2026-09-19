@@ -11,6 +11,9 @@ import {
   RECRAFT_REMOVE_BACKGROUND_PROVIDER_ID,
   RUNWAY_ASPECT_RATIOS,
   RUNWAY_VIDEO_PROVIDER_ID,
+  SEEDANCE_2_5_ASPECT_RATIOS,
+  SEEDANCE_2_5_DURATIONS,
+  SEEDANCE_2_5_PROVIDER_ID,
   SEEDANCE_2_ASPECT_RATIOS,
   TOPAZ_IMAGE_UPSCALE_PROVIDER_ID,
   TOPAZ_VIDEO_UPSCALE_PROVIDER_ID,
@@ -364,6 +367,28 @@ export function getCatalogEntries(): CatalogEntry[] {
     supportsGenerateAudio: true,
     supportsMultiShot: true,
     maxReferenceMedia: 3,
+    outputType: 'video',
+  });
+
+  entries.push({
+    service: 'cloud',
+    providerId: SEEDANCE_2_5_PROVIDER_ID,
+    name: 'Seedance 2.5',
+    description: 'Hosted Seedance 2.5 with up to 30-second multimodal video generation',
+    versions: ['latest'],
+    modes: ['480p', '720p'],
+    modeControlLabel: 'Resolution',
+    durations: SEEDANCE_2_5_DURATIONS,
+    aspectRatios: SEEDANCE_2_5_ASPECT_RATIOS,
+    referenceInputKinds: ['start-frame', 'end-frame', 'image-reference', 'video-reference', 'audio-reference'],
+    supportsTextToVideo: true,
+    supportsImageToVideo: true,
+    supportsGenerateAudio: true,
+    supportsMultiShot: false,
+    maxReferenceImages: 30,
+    maxReferenceVideos: 10,
+    maxReferenceAudio: 10,
+    maxReferenceMedia: 50,
     outputType: 'video',
   });
 

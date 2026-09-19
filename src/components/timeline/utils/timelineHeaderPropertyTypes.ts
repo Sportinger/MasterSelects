@@ -9,6 +9,7 @@ export type KeyframeTrackClip = {
   effects?: Array<{ id: string; type?: string; name: string; params: Record<string, unknown> }>;
   colorCorrection?: ColorCorrectionState;
   masks?: ClipMask[];
+  flock?: import('../../../types/flock').FlockDefinition;
   source?: {
     type?: string;
     mediaFileId?: string;

@@ -16,12 +16,12 @@ export const BILLING_PLANS: readonly BillingPlanDefinition[] = [
   {
     id: 'free',
     badge: 'Entry',
-    credits: 25,
-    description: 'A lightweight way to try the hosted workflow before subscribing.',
+    credits: 400,
+    description: 'Start using hosted AI immediately, even without signing in.',
     featured: false,
     features: [
-      '25 credits every month',
-      'Good for chat and small image runs',
+      '400 free welcome credits',
+      'Available without an account',
       'No payment setup required',
     ],
     priceAmount: '0',

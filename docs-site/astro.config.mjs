@@ -1,9 +1,11 @@
-// docs.masterselects.com — Astro Starlight site seeded from docs/Features.
+// www.masterselects.com/docs — Astro Starlight site seeded from docs/Features.
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
 export default defineConfig({
-  site: 'https://docs.masterselects.com',
+  site: 'https://www.masterselects.com',
+  base: '/docs',
+  outDir: '../dist/docs',
   integrations: [
     starlight({
       title: 'MasterSelects Documentation',
@@ -11,13 +13,6 @@ export default defineConfig({
         'Browser-based WebGPU video editor: timeline editing, motion design, replicators, audio workstation, and AI-assisted workflows.',
       logo: { src: './src/assets/ms-mark.png' },
       customCss: ['./src/styles/custom.css'],
-      social: [
-        {
-          icon: 'github',
-          label: 'GitHub',
-          href: 'https://github.com/Sportinger/MasterSelects',
-        },
-      ],
       sidebar: [
         {
           label: 'Getting Started',

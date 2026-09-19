@@ -1,5 +1,6 @@
 import { Logger } from '../logger';
 import { splitLayerEffects } from '../../engine/render/layerEffectStack';
+import { getVideoFrameEffectSourceRotation } from '../../engine/render/externalEffectSourceOrientation';
 import { getPixelParticleDisintegrateRenderer } from '../../engine/particles/PixelParticleDisintegrateRenderer';
 import type { Layer } from '../../types/layers';
 import type { ThumbnailLayerData, ThumbnailRenderTarget, ThumbnailResources } from './contracts';
@@ -99,7 +100,11 @@ function renderLayerToTarget(
   );
 
   const maskInfo = maskTextureManager.getMaskInfo(options.maskLookupId(layer));
-  const { inlineEffects } = splitLayerEffects(layer.effects);
+  const { inlineEffects, complexEffects, renderEffects } = splitLayerEffects(layer.effects);
+  const hasPreprocessedEffects = !!complexEffects?.length || !!renderEffects?.length;
+  const effectSourceRotation = hasPreprocessedEffects
+    ? getVideoFrameEffectSourceRotation(layer)
+    : 0;
   compositorPipeline.updateLayerUniforms(
     layer,
     sourceAspect,
@@ -108,6 +113,7 @@ function renderLayerToTarget(
     uniformBuffer,
     inlineEffects,
     sourcePixelScale,
+    effectSourceRotation === 0 ? undefined : 0,
   );
 
   const source = applyComplexEffectsIfNeeded(resources, target, commandEncoder, data, width, height);
@@ -125,7 +131,7 @@ function renderLayerToTarget(
   });
   pass.setPipeline(composite.pipeline);
   pass.setBindGroup(0, composite.bindGroup);
-  pass.draw(6);
+  pass.draw(3);
   pass.end();
 
   return { readView: writeView, writeView: readView };
@@ -162,7 +168,9 @@ function applyComplexEffectsIfNeeded(
   }
 
   if (useExternalTexture && externalTexture) {
-    const copyPipeline = compositorPipeline.getExternalCopyPipeline?.();
+    const copyPipeline = compositorPipeline.getExternalCopyPipeline?.(
+      getVideoFrameEffectSourceRotation(data.layer),
+    );
     const copyBindGroup = copyPipeline
       ? compositorPipeline.createExternalCopyBindGroup?.(sampler, externalTexture, data.layer.id)
       : null;
@@ -251,7 +259,7 @@ function copySourceToTemp(
   });
   copyPass.setPipeline(copyPipeline);
   copyPass.setBindGroup(0, copyBindGroup);
-  copyPass.draw(6);
+  copyPass.draw(3);
   copyPass.end();
 }
 

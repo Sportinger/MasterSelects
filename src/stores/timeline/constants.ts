@@ -10,6 +10,7 @@ export const DEFAULT_TRANSFORM: ClipTransform = {
   opacity: 1,
   blendMode: 'normal',
   position: { x: 0, y: 0, z: 0 },
+  anchor: { x: 0, y: 0, z: 0 },
   scale: { x: 1, y: 1 },
   rotation: { x: 0, y: 0, z: 0 },
 };
@@ -31,10 +32,9 @@ export const SNAP_THRESHOLD_SECONDS = 0.15;
 // tool dispatcher's existing pixel budget.
 export const TIMELINE_GRID_SNAP_THRESHOLD_PX = 10;
 
-// Resistance threshold - how far past a clip edge the user must drag to "break through"
-// and be allowed to overlap (in PIXELS). Higher = harder to overlap.
-// 100 pixels means user must drag about 2 inches on screen to force an overlap.
-export const OVERLAP_RESISTANCE_PIXELS = 100;
+// Maximum automatic horizontal jump used to avoid an audio overlap. When the
+// nearest free position is farther away, the clip moves to another/new lane.
+export const AUDIO_OVERLAP_FREE_SPACE_JUMP_PIXELS = 100;
 
 // Property row heights for expanded tracks
 export const PROPERTY_ROW_HEIGHT = 18;

@@ -29,12 +29,13 @@ export async function encodeExportAudio(options: EncodeExportAudioOptions): Prom
     sampleRate: options.settings.sampleRate,
     numberOfChannels: 2,
     bitrate: options.settings.bitrate,
+    codec: options.settings.codec,
   });
   options.setEncoder(encoder);
 
   const supported = await encoder.init();
   if (!supported) {
-    throw new Error('AAC audio encoding is not supported in this browser');
+    throw new Error('The requested audio encoding is not supported in this browser');
   }
   if (options.shouldCancel()) return null;
 

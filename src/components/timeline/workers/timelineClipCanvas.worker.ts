@@ -32,6 +32,11 @@ import {
   drawWorkerWaveformResource,
 } from './timelineClipCanvasWorkerWaveformPainter';
 import { paintStoryboardCardWorker } from '../storyboard';
+import {
+  TIMELINE_MISSING_MEDIA_BORDER,
+  TIMELINE_MISSING_MEDIA_TINT,
+} from '../utils/timelineClipCanvasAppearance';
+import { getResolveTimelineClipFooterHeight, paintResolveTimelineClipFooter, RESOLVE_TIMELINE_CLIP_PREVIEW_INSET_PX } from '../utils/resolveTimelineClipCanvas';
 
 const LOD_BAR_PX = TIMELINE_CLIP_CANVAS_LOD_BAR_PX;
 
@@ -116,6 +121,7 @@ function drawClipThumbnailStrip(
   top: number,
   resourceById: WorkerPaintResourceById,
   thumbnailPayloadByResourceId: WorkerThumbnailPayloadByResourceId,
+  resolveStyle = false,
 ): number {
   const resourceId = workerClipPaintResourceId(clip, 'thumbnail-strip', resourceById, 'thumbnail-bitmap');
   if (!resourceId) return 0;
@@ -124,16 +130,25 @@ function drawClipThumbnailStrip(
 
   context.save();
   try {
+    const inset = resolveStyle ? RESOLVE_TIMELINE_CLIP_PREVIEW_INSET_PX : 0;
+    const drawX = strip.x + inset;
+    const drawTop = top + inset;
+    const drawWidth = Math.max(1, strip.width - inset * 2);
+    const drawHeight = Math.max(1, strip.height - inset * 2);
+    if (resolveStyle) {
+      context.fillStyle = '#111114';
+      context.fillRect(strip.x + 1, top + 1, Math.max(1, strip.width - 2), Math.max(1, strip.height - 2));
+    }
     context.beginPath();
-    context.roundRect(strip.x, top, strip.width, strip.height, Math.min(4, strip.height / 4));
+    context.roundRect(drawX, drawTop, drawWidth, drawHeight, resolveStyle ? 0 : Math.min(4, drawHeight / 4));
     context.clip();
-    context.drawImage(strip.bitmap, strip.x, top, strip.width, strip.height);
+    context.drawImage(strip.bitmap, drawX, drawTop, drawWidth, drawHeight);
 
-    const gradient = context.createLinearGradient(0, top + strip.height - 16, 0, top + strip.height);
+    const gradient = context.createLinearGradient(0, drawTop + drawHeight - 16, 0, drawTop + drawHeight);
     gradient.addColorStop(0, 'rgba(0,0,0,0)');
     gradient.addColorStop(1, 'rgba(0,0,0,0.55)');
     context.fillStyle = gradient;
-    context.fillRect(strip.x, top + strip.height - 16, strip.width, 16);
+    context.fillRect(drawX, drawTop + drawHeight - 16, drawWidth, 16);
     return strip.drawCount;
   } finally {
     context.restore();
@@ -186,22 +201,24 @@ function drawClipWaveform(
   height: number,
   resourceById: WorkerPaintResourceById,
   waveformPayloadByResourceId: WorkerWaveformPayloadByResourceId,
+  resolveStyle = false,
+  footerHeight = 0,
 ): void {
   if (!workerClipHasPaintResource(clip, 'waveform', resourceById, 'waveform-columns')) return;
   const waveformResourceId = workerClipPaintResourceId(clip, 'waveform', resourceById, 'waveform-columns');
   const waveform = waveformResourceId ? waveformPayloadByResourceId.get(waveformResourceId) : undefined;
   const x = workerClipPaintX(clip);
   const w = workerClipPaintWidth(clip);
-  const h = height - 2;
+  const h = Math.max(1, height - 2 - footerHeight);
   context.save();
   context.beginPath();
   context.roundRect(x, top, w, h, Math.min(4, h / 4));
   context.clip();
-  context.fillStyle = 'rgba(4, 10, 18, 0.24)';
+  context.fillStyle = resolveStyle ? 'rgba(0, 0, 0, 0.07)' : 'rgba(4, 10, 18, 0.24)';
   context.fillRect(x, top, w, h);
   context.translate(x, top);
   if (waveform) {
-    drawWorkerWaveformResource(context, waveform, w, h);
+    drawWorkerWaveformResource(context, waveform, w, h, resolveStyle);
   } else {
     drawWorkerWaveformCenterLine(context, w, h, 0.18);
   }
@@ -358,7 +375,7 @@ function drawWorkerCompositionDecorations(
   context.clip();
   if (composition.segmentThumbnailStrip) {
     try {
-      context.drawImage(composition.segmentThumbnailStrip.bitmap, x, top, width, bodyHeight);
+      context.drawImage(composition.segmentThumbnailStrip.bitmap, x, top, width, Math.min(bodyHeight, composition.segmentThumbnailStrip.height));
       thumbnailDrawCount += composition.segmentThumbnailStrip.drawCount;
     } finally {
       composition.segmentThumbnailStrip.bitmap.close();
@@ -519,7 +536,7 @@ function draw(msg: DrawMessage): DrawnMessage {
   if (!canvas || !ctx) {
     throw new Error('worker canvas is not initialized');
   }
-  const { clips, height, cssWidth, dpr, trackColor } = msg;
+  const { clips, height, cssWidth, dpr, trackColor, selectionBorderColor = '#ffffff' } = msg;
   const startedAt = performance.now();
 
   canvas.width = Math.max(0, Math.round(cssWidth * dpr));
@@ -538,7 +555,8 @@ function draw(msg: DrawMessage): DrawnMessage {
     };
   }
 
-  const radius = Math.min(4, height / 4);
+  const resolveStyle = selectionBorderColor !== '#ffffff';
+  const radius = resolveStyle ? 1 : Math.min(4, height / 4);
   // Clip body color comes from `trackColor` (resolved by getTimelineTrackColor),
   // NOT from `.timeline-clip.*` CSS. Per-type clip colors (e.g. MIDI's identity
   // blue) live in getTimelineTrackColor — do not reintroduce them as CSS, it will
@@ -593,6 +611,7 @@ function draw(msg: DrawMessage): DrawnMessage {
     }
     const top = 1;
     const h = height - 2;
+    const footerHeight = resolveStyle ? getResolveTimelineClipFooterHeight(h) : 0;
     ctx.beginPath();
     ctx.roundRect(x, top, w, h, radius);
     ctx.fillStyle = clip.bodyFill ?? (isSel ? fillSelected : fill);
@@ -602,11 +621,11 @@ function draw(msg: DrawMessage): DrawnMessage {
     }
     if (workerClipPaintResourceId(clip, 'thumbnail-strip', paintResourceById, 'thumbnail-bitmap')) {
       thumbnailClipCount += 1;
-      thumbnailDrawCount += drawClipThumbnailStrip(ctx, clip, top, paintResourceById, thumbnailPayloadByResourceId);
+      thumbnailDrawCount += drawClipThumbnailStrip(ctx, clip, top, paintResourceById, thumbnailPayloadByResourceId, resolveStyle);
     }
     drawWorkerMidiPreview(ctx, clip, undefined, x, top, w, height, paintResourceById, midiPayloadByResourceId);
     drawClipSpectrogram(ctx, clip, top, height, paintResourceById, spectrogramPayloadByResourceId);
-    drawClipWaveform(ctx, clip, top, height, paintResourceById, waveformPayloadByResourceId);
+    drawClipWaveform(ctx, clip, top, height, paintResourceById, waveformPayloadByResourceId, resolveStyle, footerHeight);
     const compositionThumbnailDraws = drawWorkerCompositionDecorations(
       ctx,
       clip,
@@ -621,10 +640,25 @@ function draw(msg: DrawMessage): DrawnMessage {
     drawWorkerTrimVisuals(ctx, clip, top, height, trimPayloadByFacetId);
     drawWorkerFadeVisuals(ctx, clip, top, height, paintResourceById, fadePayloadByResourceId);
     drawWorkerPassiveDecorations(ctx, clip, top, height, passiveDecorationsPayloadByFacetId, false);
+    if (footerHeight > 0) {
+      paintResolveTimelineClipFooter(ctx, x, top + h - footerHeight, w, footerHeight, isSel ? fillSelected : fill);
+    }
+    if (clip.missingMedia) {
+      ctx.beginPath();
+      ctx.roundRect(x, top, w, h, radius);
+      ctx.fillStyle = TIMELINE_MISSING_MEDIA_TINT;
+      ctx.fill();
+    }
     ctx.beginPath();
     ctx.roundRect(x, top, w, h, radius);
     ctx.lineWidth = isSel ? 2 : 1;
-    ctx.strokeStyle = isSel ? '#ffffff' : isHovered ? '#9dc8ff' : border;
+    ctx.strokeStyle = isSel
+      ? selectionBorderColor
+      : clip.missingMedia
+        ? TIMELINE_MISSING_MEDIA_BORDER
+        : isHovered
+          ? '#9dc8ff'
+          : border;
     ctx.stroke();
     if (!isSel) {
       drawTimelineClipCanvasEdgeBrackets(ctx, x, top, w, h);

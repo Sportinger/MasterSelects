@@ -10,7 +10,7 @@
 import type { TimelineClip } from '../../../types/timeline';
 import {
   canLoopExtendTimelineVectorClip,
-  isInfiniteTimelineSourceType,
+  isInfiniteTimelineClipSource,
 } from './clipSourceTiming';
 import { MIN_CLIP_DURATION } from '../timelineRenderConstants';
 import {
@@ -38,7 +38,7 @@ export interface TrimTimingResult {
 // Works for any clip from its current state, so multi-select followers each clamp
 // independently ("only as much as each clip can").
 export function computeTrimTiming(
-  clip: TimelineClip,
+  clip: Pick<TimelineClip, 'source' | 'speed'>,
   edge: 'left' | 'right',
   orig: TrimOriginals,
   deltaTime: number,
@@ -50,7 +50,7 @@ export function computeTrimTiming(
     speed: clip.speed,
   };
   const sourceRate = getClipSourceRate(originalWindow);
-  const maxDuration = isInfiniteTimelineSourceType(clip.source?.type)
+  const maxDuration = isInfiniteTimelineClipSource(clip)
     ? Number.MAX_SAFE_INTEGER
     : (clip.source?.naturalDuration || Math.max(orig.outPoint, orig.inPoint));
 
@@ -61,7 +61,7 @@ export function computeTrimTiming(
 
   if (edge === 'left') {
     const maxTrim = orig.duration - MIN_CLIP_DURATION;
-    const minTrim = isInfiniteTimelineSourceType(clip.source?.type)
+    const minTrim = isInfiniteTimelineClipSource(clip)
       ? -orig.startTime
       : Math.max(-orig.startTime, -orig.inPoint / sourceRate);
     const clampedDelta = Math.max(minTrim, Math.min(maxTrim, deltaTime));

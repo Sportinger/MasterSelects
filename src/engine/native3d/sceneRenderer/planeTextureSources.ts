@@ -53,6 +53,12 @@ export function resolvePlaneTextureSource(
     if ((layer.videoElement.readyState ?? 0) < 2) {
       return null;
     }
+    // While the element is mid-seek (scrubbing), drawImage/copyExternalImage
+    // can legally produce an empty frame. Returning null makes the caller
+    // hold the last uploaded texture instead of flashing black.
+    if (layer.videoElement.seeking && cached) {
+      return null;
+    }
 
     if (layer.preciseVideoSampling) {
       if (typeof document === 'undefined') {

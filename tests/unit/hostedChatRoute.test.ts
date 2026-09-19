@@ -155,6 +155,26 @@ describe('hosted chat route billing actions', () => {
     mocks.completeUsage.mockResolvedValue(undefined);
   });
 
+  it('advertises hosted chat to a guest without claiming an account login', async () => {
+    mocks.snapshot.mockResolvedValue({ balance: 400, hostedAIEnabled: true });
+    const context = contextFor(null);
+    context.data.user = null;
+    context.data.guestUser = {
+      email: 'guest-id@guest.masterselects.invalid',
+      id: 'guest:00000000-0000-4000-8000-000000000000',
+    };
+    context.request = new Request('https://masterselects.test/api/ai/chat', { method: 'GET' });
+
+    const response = await onRequest(context);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      creditBalance: 400,
+      ok: true,
+      session: { authenticated: false, guest: true, provider: 'guest' },
+    });
+  });
+
   it('completes a turn explicitly without invoking the provider', async () => {
     mocks.complete.mockResolvedValue({
       ...turn,

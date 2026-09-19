@@ -1,7 +1,7 @@
 /* @refresh reset */
 // TimelineKeyframes component - Keyframe diamonds/handles with drag support
 
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { memo, useMemo, useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { TimelineKeyframesProps } from './types';
 import type { EasingType, AnimatableProperty, RotationInterpolationMode } from '../../types';
@@ -9,6 +9,9 @@ import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { normalizeEasingType } from '../../utils/easing';
 import { parseVectorAnimationStateProperty } from '../../types/vectorAnimation';
 import './TimelineKeyframes.css';
+import { getKeyframeSegmentIndex } from './utils/keyframeSegmentIndex';
+import { visibleKeyframeMarkers } from './utils/visibleKeyframeMarkers';
+import { DenseKeyframeCanvas } from './components/DenseKeyframeCanvas';
 
 interface KeyframeData {
   id: string;
@@ -28,6 +31,7 @@ interface KeyframeDisplay {
 }
 
 const KEYFRAME_SNAP_THRESHOLD_PX = 10;
+const DENSE_KEYFRAME_ROW_THRESHOLD = 120;
 
 // Easing options for context menu
 const EASING_OPTIONS: { value: EasingType; label: string }[] = [
@@ -60,6 +64,8 @@ function TimelineKeyframesComponent({
   selectedKeyframeIds,
   clipKeyframes,
   clipDrag,
+  scrollX,
+  timelineRef,
   onSelectKeyframe,
   onMoveKeyframe,
   onDeleteKeyframes,
@@ -70,6 +76,14 @@ function TimelineKeyframesComponent({
   isRowHovered = false,
   onKeyframeRowHover,
 }: TimelineKeyframesProps) {
+  const [viewportWidth, setViewportWidth] = useState(() => timelineRef.current?.clientWidth || window.innerWidth || 1024);
+  useEffect(() => {
+    const element = timelineRef.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => setViewportWidth(element.clientWidth || window.innerWidth || 1024));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [timelineRef]);
   // Drag state - includes original times for all selected keyframes
   const [dragState, setDragState] = useState<{
     keyframeId: string;
@@ -144,52 +158,29 @@ function TimelineKeyframesComponent({
 
     return result;
   }, [trackClips, property, clipKeyframes]);
+  const isDenseKeyframeRow = allKeyframes.length >= DENSE_KEYFRAME_ROW_THRESHOLD;
 
-  const keyframeLookup = useMemo(() => {
-    const result = new Map<string, KeyframeData>();
+  const clipsById = useMemo(() => new Map(clips.map(clip => [clip.id, clip])), [clips]);
 
-    clipKeyframes.forEach((keyframes, clipId) => {
-      const clip = clips.find((candidate) => candidate.id === clipId);
-      keyframes.forEach((kf) => {
-        result.set(kf.id, { ...kf, clipId, sourceType: clip?.source?.type });
-      });
-    });
-
-    return result;
-  }, [clipKeyframes, clips]);
-
-  const getClipSourceType = useCallback((clipId: string): string | undefined => {
-    return clips.find((clip) => clip.id === clipId)?.source?.type;
-  }, [clips]);
+  // Cross-row selection is only resolved when opening a context menu. Mounting
+  // a property row must not clone every keyframe in the composition.
+  const findKeyframe = useCallback((id: string): KeyframeData | undefined => {
+    for (const [clipId, keyframes] of clipKeyframes) {
+      const keyframe = getKeyframeSegmentIndex(keyframes).byId.get(id);
+      if (keyframe) return { ...keyframe, clipId, sourceType: clipsById.get(clipId)?.source?.type };
+    }
+    return undefined;
+  }, [clipKeyframes, clipsById]);
 
   const getEditableEasingTarget = useCallback((kf: KeyframeData): KeyframeData => {
-    const propKeyframes = (clipKeyframes.get(kf.clipId) || [])
-      .filter(candidate => candidate.property === kf.property)
-      .sort((a, b) => a.time - b.time);
-    const keyframeIndex = propKeyframes.findIndex(candidate => candidate.id === kf.id);
-
-    if (keyframeIndex === -1) {
-      return kf;
-    }
-
-    const target = keyframeIndex === propKeyframes.length - 1 && keyframeIndex > 0
-      ? propKeyframes[keyframeIndex - 1]
-      : propKeyframes[keyframeIndex];
-
-    return {
-      ...target,
-      clipId: kf.clipId,
-      sourceType: getClipSourceType(kf.clipId),
-    };
-  }, [clipKeyframes, getClipSourceType]);
+    const keyframes = clipKeyframes.get(kf.clipId);
+    const target = keyframes ? getKeyframeSegmentIndex(keyframes).easingTargets.get(kf.id) : undefined;
+    return target ? { ...target, clipId: kf.clipId, sourceType: clipsById.get(kf.clipId)?.source?.type } : kf;
+  }, [clipKeyframes, clipsById]);
 
   const hasOutgoingPropertySegment = useCallback((kf: KeyframeData): boolean => {
-    const propKeyframes = (clipKeyframes.get(kf.clipId) || [])
-      .filter(candidate => candidate.property === kf.property)
-      .sort((a, b) => a.time - b.time);
-    const keyframeIndex = propKeyframes.findIndex(candidate => candidate.id === kf.id);
-
-    return keyframeIndex >= 0 && keyframeIndex < propKeyframes.length - 1;
+    const keyframes = clipKeyframes.get(kf.clipId);
+    return !!keyframes && getKeyframeSegmentIndex(keyframes).outgoingIds.has(kf.id);
   }, [clipKeyframes]);
 
   const getContextMenuTargets = useCallback((clickedKeyframe: KeyframeData) => {
@@ -207,7 +198,7 @@ function TimelineKeyframesComponent({
     const seenTargetIds = new Set<string>();
 
     for (const keyframeId of sourceIds) {
-      const sourceKeyframe = keyframeLookup.get(keyframeId);
+      const sourceKeyframe = findKeyframe(keyframeId);
       if (!sourceKeyframe) continue;
 
       if (!seenSourceIds.has(sourceKeyframe.id)) {
@@ -257,7 +248,7 @@ function TimelineKeyframesComponent({
       rotationTargetKeyframeIds: rotationTargetKeyframes.map((targetKeyframe) => targetKeyframe.id),
       currentRotationInterpolation,
     };
-  }, [getEditableEasingTarget, hasOutgoingPropertySegment, keyframeLookup, selectedKeyframeIds]);
+  }, [getEditableEasingTarget, hasOutgoingPropertySegment, findKeyframe, selectedKeyframeIds]);
 
   const getRotationPathDisplayMode = useCallback((
     kf: KeyframeData,
@@ -479,9 +470,23 @@ function TimelineKeyframesComponent({
     setContextMenu(null);
   }, [contextMenu, onDeleteKeyframes]);
 
+  const visibleMarkers = visibleKeyframeMarkers(allKeyframes,
+    item => timeToPixel(getEffectiveClipStartTime(item.clip) + item.kf.time), scrollX, viewportWidth);
   return (
     <>
-      {allKeyframes.map(({ kf, clip }) => {
+      {isDenseKeyframeRow ? <DenseKeyframeCanvas left={scrollX} width={viewportWidth} highlighted={isRowHovered}
+        markers={visibleMarkers.map(item => ({
+          x: timeToPixel(getEffectiveClipStartTime(item.clip) + item.kf.time), id: item.kf.id, data: item,
+          selected: selectedKeyframeIds.has(item.kf.id), dragging: dragState?.keyframeId === item.kf.id,
+          stateChange: Boolean(parseVectorAnimationStateProperty(item.kf.property)),
+          title: `${property}: ${item.kf.value.toFixed(3)} @ ${(getEffectiveClipStartTime(item.clip) + item.kf.time).toFixed(3)}s
+Easing: ${item.kf.easing}
+Drag to move; right-click for options; double-click for Graph`,
+        }))}
+        onDown={(event, item) => handleMouseDown(event, item.kf, item.clip)}
+        onContext={(event, item) => handleContextMenu(event, item.kf)} onDoubleClick={handleDoubleClick}
+        onHover={hovered => onKeyframeRowHover?.(trackId, property, hovered)}
+      /> : visibleMarkers.map(({ kf, clip }) => {
         // Calculate position directly in render to use latest clipDrag state
         const effectiveStartTime = getEffectiveClipStartTime(clip);
         const absTime = effectiveStartTime + kf.time;
@@ -503,7 +508,7 @@ function TimelineKeyframesComponent({
         return (
           <div
             key={kf.id}
-            className={`keyframe-diamond easing-${easing} ${rotationPathDisplayMode ? `rotation-path-${rotationPathDisplayMode}` : ''} ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isRowHovered ? 'row-highlighted' : ''} ${isStateChange ? 'state-change' : ''} ${aiAnimatedKeyframes.has(kf.id) ? 'ai-keyframe-added' : ''}`}
+            className={`keyframe-diamond easing-${easing} ${isDenseKeyframeRow ? 'dense-row' : ''} ${rotationPathDisplayMode ? `rotation-path-${rotationPathDisplayMode}` : ''} ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isRowHovered ? 'row-highlighted' : ''} ${isStateChange ? 'state-change' : ''} ${aiAnimatedKeyframes.has(kf.id) ? 'ai-keyframe-added' : ''}`}
             style={{ left: `${xPos}px` }}
             data-keyframe-id={kf.id}
             onMouseDown={(e) => handleMouseDown(e, kf, clip)}
@@ -597,5 +602,7 @@ function TimelineKeyframesComponent({
   );
 }
 
-// Don't use memo here - we need immediate re-renders when clipDrag changes for smooth keyframe movement
-export const TimelineKeyframes = TimelineKeyframesComponent;
+// Playback updates the parent Timeline many times per second. Keyframe rows only
+// need to render when one of their own props changes; clipDrag still changes its
+// prop reference and therefore remains immediate while dragging.
+export const TimelineKeyframes = memo(TimelineKeyframesComponent);

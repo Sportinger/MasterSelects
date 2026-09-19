@@ -57,6 +57,7 @@ const engineState = {
   sceneNavFpsMode: false,
   sceneNavFpsMoveSpeed: 1,
   sceneNavNoKeyframes: false,
+  sceneNavTouchControlsOverride: null,
   previewCameraOverride: null,
   activeGaussianSplatLoadProgress: null,
   setPreviewCameraOverride: vi.fn(),
@@ -66,6 +67,7 @@ const engineState = {
 };
 
 vi.mock('../../src/stores/engineStore', () => ({
+  resolveSceneNavTouchControlsVisible: (override: boolean | null | undefined, mobile: boolean) => override ?? mobile,
   selectActiveGaussianSplatLoadProgress: (state: typeof engineState) => state.activeGaussianSplatLoadProgress,
   selectSceneNavClipId: (state: typeof engineState) => state.sceneNavClipId,
   selectSceneNavFpsMode: (state: typeof engineState) => state.sceneNavFpsMode,
@@ -78,12 +80,16 @@ vi.mock('../../src/stores/engineStore', () => ({
 }));
 
 const dockState = {
+  activeSavedLayoutId: null,
+  activatePanelType: vi.fn(),
   addPreviewPanel: vi.fn(),
   updatePanelData: vi.fn(),
   closePanelById: vi.fn(),
 };
 
 vi.mock('../../src/stores/dockStore', () => ({
+  FACTORY_MOBILE_LAYOUT_ID: 'factory-mobile',
+  FACTORY_VERTICAL_MOBILE_LAYOUT_ID: 'factory-mobile-vertical',
   useDockStore: vi.fn((selector: (state: typeof dockState) => unknown) => selector(dockState)),
 }));
 
@@ -158,7 +164,7 @@ vi.mock('../../src/components/preview/SceneObjectOverlay', () => ({
 vi.mock('../../src/components/preview/useEditModeOverlay', () => ({
   useEditModeOverlay: () => ({
     calculateLayerBounds: vi.fn(),
-    findLayerAtPosition: vi.fn(),
+    findLayersAtPosition: vi.fn(() => []),
     findHandleAtPosition: vi.fn(),
     getCursorForHandle: vi.fn(() => 'default'),
   }),
@@ -254,10 +260,26 @@ describe('Preview source monitor lifecycle', () => {
   });
 
   it('does not close the source monitor just because a source file was selected', () => {
-    render(<Preview panelId="preview" source={{ type: 'activeComp' }} showTransparencyGrid={false} />);
+    mediaState.sourceMonitorFileId = null;
+    const { rerender } = render(
+      <Preview panelId="preview" source={{ type: 'activeComp' }} showTransparencyGrid={false} />,
+    );
+
+    mediaState.sourceMonitorFileId = 'file-1';
+    mediaState.sourceMonitorPlaybackRequestId += 1;
+    rerender(<Preview panelId="preview" source={{ type: 'activeComp' }} showTransparencyGrid={false} />);
 
     expect(screen.getByTestId('source-monitor')).toHaveTextContent('Clip.mp4');
     expect(mediaState.setSourceMonitorFile).not.toHaveBeenCalledWith(null);
+  });
+
+  it('keeps the preview Compare control hidden', () => {
+    mediaState.sourceMonitorFileId = null;
+    render(<Preview panelId="preview" source={{ type: 'activeComp' }} showTransparencyGrid={false} />);
+
+    expect(screen.queryByRole('button', {
+      name: 'Compare effects with untreated source',
+    })).not.toBeInTheDocument();
   });
 
   it('still closes the source monitor when the active composition actually changes', () => {

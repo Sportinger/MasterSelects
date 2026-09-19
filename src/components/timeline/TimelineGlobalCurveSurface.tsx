@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type WheelEvent as ReactWheelEvent,
+} from 'react';
 import { buildMotionPropertyTargetModel } from '../../services/motionDesign/propertyTargets';
 import {
   propertyRegistry,
@@ -11,10 +18,14 @@ import {
 } from '../../stores/timeline/viewPreferences';
 import type { Keyframe } from '../../types/keyframes';
 import type { TimelineClip } from '../../types/timeline';
+import type { TimelineClipDragPreview } from '../../stores/timeline/types';
+import { applyClipDragPreview } from '../../stores/timeline/clipDragPreview';
 import type { PropertyAuthoringCompositionLike } from '../../services/properties/propertyAuthoring';
 import { GlobalCurveEditor } from './GlobalCurveEditor';
 import type { TimelineGraphTarget } from './hooks/useTimelineGraphController';
 import type { TimelineTrackProps } from './types';
+import type { ClipTrimState } from './types';
+import { applyTimelineGraphTrimPreview } from './utils/timelineGraphTrimPreview';
 import {
   buildCurveGraphModel,
   getCurveSeriesId,
@@ -24,14 +35,27 @@ import {
 
 export type { TimelineGraphTarget } from './hooks/useTimelineGraphController';
 
+const MIN_CURVE_VERTICAL_ZOOM = 0.25;
+const MAX_CURVE_VERTICAL_ZOOM = 8;
+const CURVE_VERTICAL_ZOOM_STEP = 1.15;
+
+interface CurveSeriesTimeBounds {
+  startTime: number;
+  endTime: number;
+}
+
 interface TimelineGlobalCurveSurfaceProps {
   activeComposition: PropertyAuthoringCompositionLike | null;
   applyTimelineEditOperation: NonNullable<TimelineTrackProps['applyTimelineEditOperation']>;
   clipKeyframes: ReadonlyMap<string, readonly Keyframe[]>;
+  clipDragPreview?: TimelineClipDragPreview | null;
+  clipTrim?: ClipTrimState | null;
   clips: readonly TimelineClip[];
   height: number;
   onActiveSeriesChange?: (target: TimelineGraphTarget) => void;
   onClose?: () => void;
+  onFitSeries?: (timeBounds: CurveSeriesTimeBounds) => void;
+  onGraphWheel?: (event: ReactWheelEvent<HTMLDivElement>) => void;
   onSelectKeyframe: TimelineTrackProps['onSelectKeyframe'];
   pixelToTime: (pixel: number) => number;
   preferredTarget?: TimelineGraphTarget | null;
@@ -85,14 +109,42 @@ function buildVisibleCurveModel(
   };
 }
 
+export function scaleCurveGraphModelRanges(
+  model: CurveGraphModel,
+  verticalZoom: number,
+): CurveGraphModel {
+  const normalizedZoom = Math.max(
+    MIN_CURVE_VERTICAL_ZOOM,
+    Math.min(MAX_CURVE_VERTICAL_ZOOM, verticalZoom),
+  );
+  if (Math.abs(normalizedZoom - 1) < 0.000001) return model;
+
+  return {
+    ...model,
+    series: model.series.map(series => {
+      const center = (series.range.min + series.range.max) / 2;
+      const halfSpan = Math.max(0.000001, (series.range.max - series.range.min) / 2)
+        / normalizedZoom;
+      return {
+        ...series,
+        range: { min: center - halfSpan, max: center + halfSpan },
+      };
+    }),
+  };
+}
+
 export function TimelineGlobalCurveSurface({
   activeComposition,
   applyTimelineEditOperation,
   clipKeyframes,
+  clipDragPreview,
+  clipTrim,
   clips,
   height,
   onActiveSeriesChange,
   onClose,
+  onFitSeries,
+  onGraphWheel,
   onSelectKeyframe,
   pixelToTime,
   preferredTarget,
@@ -105,19 +157,32 @@ export function TimelineGlobalCurveSurface({
   width,
 }: TimelineGlobalCurveSurfaceProps) {
   const favoritePaths = useMotionPropertyFavorites();
+  const sidebarRef = useRef<HTMLElement>(null);
   const [mutedSeriesIds, setMutedSeriesIds] = useState<Set<string>>(() => new Set());
+  const [verticalZoom, setVerticalZoom] = useState(1);
+  const trimPreview = useMemo(() => applyTimelineGraphTrimPreview({
+    clips,
+    clipKeyframes,
+    clipTrim,
+    selectedClipIds,
+  }), [clipKeyframes, clipTrim, clips, selectedClipIds]);
+  const previewClips = useMemo(
+    () => applyClipDragPreview([...trimPreview.clips], clipDragPreview),
+    [clipDragPreview, trimPreview.clips],
+  );
+  const previewClipKeyframes = trimPreview.clipKeyframes;
 
   const selectedClips = useMemo(() => {
-    const ordered = clips.filter((clip) => selectedClipIds.has(clip.id));
+    const ordered = previewClips.filter((clip) => selectedClipIds.has(clip.id));
     if (!primaryClipId) return ordered;
     const primaryIndex = ordered.findIndex((clip) => clip.id === primaryClipId);
     if (primaryIndex <= 0) return ordered;
     return [ordered[primaryIndex], ...ordered.slice(0, primaryIndex), ...ordered.slice(primaryIndex + 1)];
-  }, [clips, primaryClipId, selectedClipIds]);
+  }, [previewClips, primaryClipId, selectedClipIds]);
 
   const allSelectedClipKeyframes = useMemo(
-    () => selectedClips.flatMap((clip) => [...(clipKeyframes.get(clip.id) ?? [])]),
-    [clipKeyframes, selectedClips],
+    () => selectedClips.flatMap((clip) => [...(previewClipKeyframes.get(clip.id) ?? [])]),
+    [previewClipKeyframes, selectedClips],
   );
   const selectedTargets = useMemo(() => {
     const targets: Array<{ clipId: string; path: string }> = [];
@@ -129,9 +194,6 @@ export function TimelineGlobalCurveSurface({
       targets.push({ clipId: target.clipId, path: target.property });
     };
 
-    if (preferredTarget && selectedClipIds.has(preferredTarget.clipId)) {
-      addTarget(preferredTarget);
-    }
     allSelectedClipKeyframes
       .filter((keyframe) => selectedKeyframeIds.has(keyframe.id))
       .forEach((keyframe) => addTarget({
@@ -139,10 +201,10 @@ export function TimelineGlobalCurveSurface({
         property: keyframe.property,
       }));
     return targets;
-  }, [allSelectedClipKeyframes, preferredTarget, selectedClipIds, selectedKeyframeIds]);
+  }, [allSelectedClipKeyframes, selectedKeyframeIds]);
   const animatedByClip = useMemo(() => new Map(
-    selectedClips.map((clip) => [clip.id, clipKeyframes.get(clip.id) ?? []] as const),
-  ), [clipKeyframes, selectedClips]);
+    selectedClips.map((clip) => [clip.id, previewClipKeyframes.get(clip.id) ?? []] as const),
+  ), [previewClipKeyframes, selectedClips]);
   const propertyTargets = useMemo(() => buildMotionPropertyTargetModel({
     registry: propertyRegistry,
     clips: selectedClips,
@@ -174,18 +236,22 @@ export function TimelineGlobalCurveSurface({
   const model = useMemo(() => buildCurveGraphModel({
     propertyTargets: propertyTargets.targets,
     clips: selectedClips,
-    clipKeyframes,
+    clipKeyframes: previewClipKeyframes,
     selectedKeyframeIds,
     activeSeriesId: preferredSeriesId,
     authoringContextByClipId,
   }), [
     authoringContextByClipId,
-    clipKeyframes,
+    previewClipKeyframes,
     preferredSeriesId,
     propertyTargets.targets,
     selectedClips,
     selectedKeyframeIds,
   ]);
+  const scaledModel = useMemo(
+    () => scaleCurveGraphModelRanges(model, verticalZoom),
+    [model, verticalZoom],
+  );
 
   const visibleSeries = model.series.filter((series) => !mutedSeriesIds.has(series.id));
   const effectiveActiveSeriesId = [preferredSeriesId, model.activeSeriesId]
@@ -193,9 +259,30 @@ export function TimelineGlobalCurveSurface({
     ?? visibleSeries[0]?.id
     ?? null;
   const visibleModel = useMemo(
-    () => buildVisibleCurveModel(model, mutedSeriesIds, effectiveActiveSeriesId),
-    [effectiveActiveSeriesId, model, mutedSeriesIds],
+    () => buildVisibleCurveModel(scaledModel, mutedSeriesIds, effectiveActiveSeriesId),
+    [effectiveActiveSeriesId, mutedSeriesIds, scaledModel],
   );
+
+  useEffect(() => {
+    const sidebar = sidebarRef.current;
+    if (!sidebar) return undefined;
+
+    const handleWheel = (event: WheelEvent) => {
+      if (!event.shiftKey || event.deltaY === 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const multiplier = event.deltaY < 0
+        ? CURVE_VERTICAL_ZOOM_STEP
+        : 1 / CURVE_VERTICAL_ZOOM_STEP;
+      setVerticalZoom(current => Math.max(
+        MIN_CURVE_VERTICAL_ZOOM,
+        Math.min(MAX_CURVE_VERTICAL_ZOOM, current * multiplier),
+      ));
+    };
+
+    sidebar.addEventListener('wheel', handleWheel, { capture: true, passive: false });
+    return () => sidebar.removeEventListener('wheel', handleWheel, true);
+  }, []);
 
   const notifyActiveSeries = useCallback((series: CurveGraphSeries) => {
     onActiveSeriesChange?.({ clipId: series.clipId, property: series.property });
@@ -212,6 +299,25 @@ export function TimelineGlobalCurveSurface({
     }
     notifyActiveSeries(series);
   }, [model.series, mutedSeriesIds, notifyActiveSeries]);
+  const fitSeries = useCallback((series: CurveGraphSeries) => {
+    activateSeries(series.id);
+    setVerticalZoom(1);
+    if (!onFitSeries) return;
+
+    const firstKeyframe = series.keyframes[0];
+    const lastKeyframe = series.keyframes[series.keyframes.length - 1];
+    const hasTimeSpan = firstKeyframe && lastKeyframe
+      && lastKeyframe.compositionTime > firstKeyframe.compositionTime;
+    onFitSeries(hasTimeSpan
+      ? {
+          startTime: firstKeyframe.compositionTime,
+          endTime: lastKeyframe.compositionTime,
+        }
+      : {
+          startTime: series.clipStartTime,
+          endTime: series.clipStartTime + series.clipDuration,
+        });
+  }, [activateSeries, onFitSeries]);
 
   const toggleSeriesVisibility = useCallback((series: CurveGraphSeries) => {
     const willMute = !mutedSeriesIds.has(series.id);
@@ -238,6 +344,15 @@ export function TimelineGlobalCurveSurface({
     ));
   }, [effectiveActiveSeriesId, model.series]);
 
+  const handleGraphWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+    const target = event.target as Element;
+    if (!target.closest('.timeline-global-curve-editor-pane')) return;
+
+    if ((event.altKey || event.shiftKey) && onGraphWheel) {
+      onGraphWheel(event);
+    }
+  }, [onGraphWheel]);
+
   const graphWidth = Math.max(1, width);
   const graphHeight = Math.max(180, height);
 
@@ -246,12 +361,19 @@ export function TimelineGlobalCurveSurface({
       className="timeline-global-curve-surface"
       style={{ gridTemplateColumns: `${trackHeaderWidth}px minmax(0, 1fr)` }}
       data-testid="timeline-global-curve-surface"
+      onWheelCapture={handleGraphWheel}
     >
-      <aside className="timeline-global-curve-sidebar" aria-label="Graph parameters">
+      <aside
+        ref={sidebarRef}
+        className="timeline-global-curve-sidebar"
+        aria-label="Graph parameters"
+        data-vertical-zoom={verticalZoom.toFixed(3)}
+        title="Shift+wheel to scale curve height"
+      >
         <div className="timeline-global-curve-sidebar-header">
           <div>
             <strong>Graph</strong>
-            <span>{visibleSeries.length}/{model.series.length}</span>
+            <span>{visibleSeries.length}/{model.series.length} · {verticalZoom.toFixed(2)}×</span>
           </div>
           <div className="timeline-global-curve-sidebar-actions">
             <button
@@ -294,11 +416,12 @@ export function TimelineGlobalCurveSurface({
                   aria-selected={isActive}
                   className="timeline-global-curve-series-main"
                   onClick={() => activateSeries(series.id)}
+                  onDoubleClick={() => fitSeries(series)}
                   title={`${series.clipName} · ${series.property}`}
                 >
                   <span
                     className="timeline-global-curve-series-swatch"
-                    style={{ backgroundColor: series.color }}
+                    style={{ backgroundColor: isActive ? series.color : 'var(--text-muted)' }}
                   />
                   <span className="timeline-global-curve-series-copy">
                     <strong>{series.label}</strong>
@@ -323,7 +446,10 @@ export function TimelineGlobalCurveSurface({
           )}
         </div>
       </aside>
-      <div className="timeline-global-curve-editor-pane">
+      <div
+        className="timeline-global-curve-editor-pane"
+        title="Alt+wheel to zoom time · Shift+wheel to scroll horizontally"
+      >
         <GlobalCurveEditor
           model={visibleModel}
           width={graphWidth}

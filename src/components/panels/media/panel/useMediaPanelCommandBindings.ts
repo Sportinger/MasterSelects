@@ -11,6 +11,7 @@ import { useMediaPanelAddImportCommands } from './useMediaPanelAddImportCommands
 import { useMediaPanelSelectionCommands } from './useMediaPanelSelectionCommands';
 import { useMediaPanelSourceMonitorBadges } from './useMediaPanelSourceMonitorBadges';
 import type { MediaPanelViewMode } from './types';
+import type { NewCompositionSettingsRequest } from './useMediaPanelCompositionSettings';
 
 type MediaStoreState = ReturnType<typeof useMediaStore.getState>;
 
@@ -36,6 +37,7 @@ interface UseMediaPanelCommandBindingsInput {
   importFilesWithHandles: MediaStoreState['importFilesWithHandles'];
   importFilesWithPicker: MediaStoreState['importFilesWithPicker'];
   createComposition: MediaStoreState['createComposition'];
+  openNewCompositionSettings: (request: NewCompositionSettingsRequest) => void;
   updateComposition: MediaStoreState['updateComposition'];
   createFolder: MediaStoreState['createFolder'];
   showInExplorer: MediaStoreState['showInExplorer'];
@@ -99,6 +101,7 @@ export function useMediaPanelCommandBindings({
   importFilesWithHandles,
   importFilesWithPicker,
   createComposition,
+  openNewCompositionSettings,
   updateComposition,
   createFolder,
   showInExplorer,
@@ -168,8 +171,7 @@ export function useMediaPanelCommandBindings({
     compositionCount,
     importFiles,
     importFilesWithPicker,
-    createComposition,
-    openCompositionTab,
+    openNewCompositionSettings,
     createFolder,
     createTextItem,
     getOrCreateTextFolder,

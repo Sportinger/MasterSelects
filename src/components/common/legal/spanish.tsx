@@ -1,3 +1,5 @@
+import { LegalContactMethods, LegalPostalAddress } from './LegalContactDetails';
+
 // =====================================================
 // ESPAÑOL
 // =====================================================
@@ -6,11 +8,11 @@ export function ImprintES() {
   return (
     <div className="legal-text">
       <h3>Información según § 5 TMG (Ley alemana de telemedios)</h3>
-      <p>Roman Kuskowski<br />[Dirección pendiente]</p>
+      <p><LegalPostalAddress /></p>
       <h3>Contacto</h3>
-      <p>Email: admin@masterselects.com</p>
+      <p><LegalContactMethods emailLabel="Email" phoneLabel="Teléfono" /></p>
       <h3>Responsable del contenido según § 55 Abs. 2 RStV</h3>
-      <p>Roman Kuskowski<br />[Dirección pendiente]</p>
+      <p><LegalPostalAddress /></p>
       <h3>Resolución de disputas en línea (UE)</h3>
       <p>
         La Comisión Europea proporciona una plataforma para la resolución de disputas en línea:{' '}
@@ -18,8 +20,8 @@ export function ImprintES() {
       </p>
       <h3>Derechos de autor</h3>
       <p>
-        MasterSelects es software de código abierto, publicado en{' '}
-        <a href="https://github.com/Sportinger/MasterSelects" target="_blank" rel="noopener noreferrer">GitHub</a>.
+        El editor MasterSelects se distribuye bajo GNU AGPL-3.0-only. Copyright © 2026 Jan Roman Kuskowski.
+        Los componentes de terceros siguen sujetos a sus respectivas licencias.
       </p>
     </div>
   );
@@ -34,16 +36,18 @@ export function PrivacyES() {
         exclusivamente en su dispositivo. Sus archivos multimedia nunca salen de su ordenador.
       </p>
       <h3>2. Responsable del tratamiento</h3>
-      <p>Roman Kuskowski<br />Email: admin@masterselects.com</p>
+      <p><LegalPostalAddress /><br /><LegalContactMethods emailLabel="Email" phoneLabel="Teléfono" /></p>
       <h3>3. Alojamiento</h3>
       <p>Alojado por <strong>Cloudflare, Inc.</strong> (EE.UU.), certificado EU-US Data Privacy Framework. Se aplican cláusulas contractuales tipo (CCT).</p>
       <p>
         Adem&aacute;s, procesamos temporalmente eventos de visita en el servidor para la supervisi&oacute;n t&eacute;cnica
         del servicio y para notificaciones internas en tiempo real cuando se abre una p&aacute;gina de este sitio web.
-        Estos eventos pueden incluir la ruta solicitada, la marca temporal, el pa&iacute;s y la ciudad derivados de los
-        datos geogr&aacute;ficos de Cloudflare, el referer, una cadena abreviada del agente de usuario y un identificador
-        seudonimizado del visitante generado a partir de la direcci&oacute;n IP y un valor secreto. No almacenamos la IP
-        en texto claro en este registro interno. El plazo de conservaci&oacute;n suele ser de aproximadamente una hora.
+        Estos eventos pueden incluir la ruta solicitada, la marca temporal, el pa&iacute;s derivado de los datos
+        geogr&aacute;ficos de Cloudflare, categor&iacute;as generales de navegador, sistema operativo y dispositivo, el dominio
+        del referer y un identificador seudonimizado del visitante que cambia cada d&iacute;a y se genera mediante HMAC a
+        partir de la direcci&oacute;n IP y una clave secreta. No almacenamos la ciudad, el agente de usuario completo, la URL
+        completa del referer ni la IP en texto claro; el identificador no permite vincular visitas de d&iacute;as distintos.
+        Los eventos se eliminan autom&aacute;ticamente despu&eacute;s de 180 d&iacute;as.
         Base jur&iacute;dica: art. 6(1)(f) RGPD (inter&eacute;s leg&iacute;timo en el funcionamiento seguro, la detecci&oacute;n
         de abusos y el conocimiento de la actividad actual del sitio).
       </p>
@@ -66,7 +70,16 @@ export function PrivacyES() {
         Solo cookies técnicamente necesarias. Sin cookies de seguimiento o marketing. La supervisión de visitas
         descrita arriba no almacena información en su dispositivo con esta finalidad.
       </p>
-      <p className="legal-meta">Última actualización: mayo 2026</p>
+      <p>
+        <strong>Análisis de producto:</strong> tratamos una lista fija de eventos generales (apertura, tutorial,
+        importación, categorías de edición, reproducción, pago y exportación). Los eventos de usuarios conectados
+        pueden vincularse al identificador interno de la cuenta; los eventos anónimos usan solo un identificador de
+        sesión temporal en memoria. No recopilamos nombres de archivo, contenido del proyecto o multimedia, prompts,
+        texto de chat/transcripción, errores sin procesar, cookies analíticas ni un identificador persistente del
+        dispositivo. Los eventos se eliminan después de 180 días. Puede oponerse en Ajustes &gt; General &gt; Privacidad;
+        se respetan Do Not Track y Global Privacy Control.
+      </p>
+      <p className="legal-meta">Última actualización: 16 de agosto de 2026</p>
     </div>
   );
 }
@@ -80,10 +93,6 @@ export function ContactES() {
         <div className="legal-contact-row">
           <span className="legal-contact-label">Email</span>
           <a href="mailto:admin@masterselects.com">admin@masterselects.com</a>
-        </div>
-        <div className="legal-contact-row">
-          <span className="legal-contact-label">GitHub</span>
-          <a href="https://github.com/Sportinger/MasterSelects" target="_blank" rel="noopener noreferrer">Sportinger/MasterSelects</a>
         </div>
       </div>
       <h3>Solicitudes de privacidad</h3>

@@ -53,6 +53,7 @@ const IDLE_RELEASE_MS = 1800;
 const MAX_LAZY_MEDIA_ELEMENTS = 24;
 const MAX_DESIRED_CLIPS_PER_TRACK = 3;
 const NATIVE_FILE_REFERENCE_PREFIX = 'native-helper-file://';
+const LAZY_MEDIA_OWNER_DATASET_KEY = 'msLazyTimelineOwner';
 
 const lazyMediaRecords = new Map<string, LazyMediaRecord>();
 const nativeReferenceResolutions = new Map<string, Promise<void>>();
@@ -69,8 +70,104 @@ interface LazyClipCandidate {
   rankDuration: number;
 }
 
+interface DesiredClipQueryCacheEntry {
+  clips: TimelineClip[];
+  playheadPosition: number;
+  trackIds: Set<string>;
+  windowStart: number;
+  windowEnd: number;
+  result: TimelineClip[];
+}
+
+const desiredClipQueryCache = new WeakMap<
+  FrameContext,
+  Partial<Record<LazyMediaKind, DesiredClipQueryCacheEntry>>
+>();
+
 function getRecordKey(kind: LazyMediaKind, clipId: string): string {
   return `${kind}:${clipId}`;
+}
+
+function getAttachedElement(
+  clip: TimelineClip,
+  kind: LazyMediaKind,
+): HTMLVideoElement | HTMLAudioElement | undefined {
+  return kind === 'video' ? clip.source?.videoElement : clip.source?.audioElement;
+}
+
+function setAttachedElement(
+  clip: TimelineClip,
+  kind: LazyMediaKind,
+  element: HTMLVideoElement | HTMLAudioElement | undefined,
+): void {
+  if (!clip.source) return;
+  const nextSource = { ...clip.source };
+  if (kind === 'video') {
+    if (element instanceof HTMLVideoElement) nextSource.videoElement = element;
+    else delete nextSource.videoElement;
+  } else {
+    if (element instanceof HTMLAudioElement) nextSource.audioElement = element;
+    else delete nextSource.audioElement;
+  }
+  clip.source = nextSource;
+}
+
+function findLazyRecordForElement(
+  kind: LazyMediaKind,
+  element: HTMLVideoElement | HTMLAudioElement,
+): LazyMediaRecord | undefined {
+  for (const record of lazyMediaRecords.values()) {
+    if (record.kind === kind && record.element === element) return record;
+  }
+  return undefined;
+}
+
+function shouldAttachFreshLazyElement(
+  ctx: FrameContext,
+  clip: TimelineClip,
+  kind: LazyMediaKind,
+): boolean {
+  const attachedElement = getAttachedElement(clip, kind);
+  const expectedOwner = getRecordKey(kind, clip.id);
+  const currentRecord = lazyMediaRecords.get(expectedOwner);
+  if (!attachedElement) {
+    if (!currentRecord) return true;
+
+    // Materialized transition clips are hydrated into fresh runtime objects on
+    // every frame. Reattach the decoder owned by their stable clip id instead
+    // of replacing it before it can finish loading.
+    setAttachedElement(clip, kind, currentRecord.element);
+    currentRecord.clip = clip;
+    currentRecord.lastDesiredAt = ctx.now;
+    return false;
+  }
+
+  if (currentRecord) {
+    if (currentRecord.element !== attachedElement) {
+      setAttachedElement(clip, kind, currentRecord.element);
+    }
+    currentRecord.clip = clip;
+    currentRecord.lastDesiredAt = ctx.now;
+    return false;
+  }
+
+  const recordedOwner = findLazyRecordForElement(kind, attachedElement);
+  const taggedOwner = attachedElement.dataset[LAZY_MEDIA_OWNER_DATASET_KEY];
+  const inheritedLazyElement =
+    (recordedOwner !== undefined && recordedOwner.clipId !== clip.id) ||
+    (taggedOwner !== undefined && taggedOwner !== expectedOwner);
+  const detachedColdElement =
+    attachedElement.readyState === HTMLMediaElement.HAVE_NOTHING &&
+    attachedElement.networkState === HTMLMediaElement.NETWORK_EMPTY &&
+    getPlannedLazySourceKind(ctx, clip).srcKind !== 'unknown';
+
+  if (!inheritedLazyElement && !detachedColdElement) return false;
+
+  // Timeline edits may shallow-copy a source object while assigning a new clip
+  // id. The copied runtime element remains owned by the old clip and is later
+  // detached by that clip's lease cleanup. Never let the new clip inherit it.
+  setAttachedElement(clip, kind, undefined);
+  return true;
 }
 
 function getResourceId(record: Pick<LazyMediaRecord, 'kind' | 'clipId'>): string {
@@ -393,9 +490,9 @@ function attachVideoElement(ctx: FrameContext, clip: TimelineClip, now: number):
   if (
     !clip.source ||
     clip.source.type !== 'video' ||
-    clip.source.videoElement ||
     (hasNativeDecoderForTimelineClip(clip) && !clip.freeRun)
   ) return;
+  if (!shouldAttachFreshLazyElement(ctx, clip, 'video')) return;
   if (!canAttachLazyMedia(ctx, clip, 'video')) return;
 
   const source = getLazySource(ctx, clip, 'video');
@@ -417,6 +514,7 @@ function attachVideoElement(ctx: FrameContext, clip: TimelineClip, now: number):
     lastDesiredAt: now,
     createdAt: now,
   };
+  video.dataset[LAZY_MEDIA_OWNER_DATASET_KEY] = key;
   replaceLazyRecord(key, record, ctx);
 
   clip.source = {
@@ -435,7 +533,8 @@ function attachVideoElement(ctx: FrameContext, clip: TimelineClip, now: number):
 }
 
 function attachAudioElement(ctx: FrameContext, clip: TimelineClip, now: number): void {
-  if (!clip.source || clip.source.type !== 'audio' || clip.source.audioElement) return;
+  if (!clip.source || clip.source.type !== 'audio') return;
+  if (!shouldAttachFreshLazyElement(ctx, clip, 'audio')) return;
   if (!canAttachLazyMedia(ctx, clip, 'audio')) return;
 
   const source = getLazySource(ctx, clip, 'audio');
@@ -457,6 +556,7 @@ function attachAudioElement(ctx: FrameContext, clip: TimelineClip, now: number):
     lastDesiredAt: now,
     createdAt: now,
   };
+  audio.dataset[LAZY_MEDIA_OWNER_DATASET_KEY] = key;
   replaceLazyRecord(key, record, ctx);
 
   clip.source = {
@@ -607,6 +707,14 @@ function addCandidate(
   } else {
     byTrack.set(candidate.trackKey, [candidate]);
   }
+}
+
+function areTrackIdSetsEqual(left: Set<string>, right: Set<string>): boolean {
+  if (left.size !== right.size) return false;
+  for (const trackId of left) {
+    if (!right.has(trackId)) return false;
+  }
+  return true;
 }
 
 function nestedTrackAllowsKind(
@@ -842,6 +950,18 @@ function collectDesiredClips(
   start: number,
   end: number,
 ): TimelineClip[] {
+  const cached = desiredClipQueryCache.get(ctx)?.[kind];
+  if (
+    cached
+    && cached.clips === ctx.clips
+    && cached.playheadPosition === ctx.playheadPosition
+    && cached.windowStart === start
+    && cached.windowEnd === end
+    && areTrackIdSetsEqual(cached.trackIds, trackIds)
+  ) {
+    return cached.result;
+  }
+
   const byTrack = new Map<string, LazyClipCandidate[]>();
   const getMediaDuration = (mediaFileId: string) => ctx.mediaFileById.get(mediaFileId)?.duration;
 
@@ -982,6 +1102,16 @@ function collectDesiredClips(
     selected.push(...trackClips.slice(0, MAX_DESIRED_CLIPS_PER_TRACK).map(candidate => candidate.clip));
   }
 
+  const cache = desiredClipQueryCache.get(ctx) ?? {};
+  cache[kind] = {
+    clips: ctx.clips,
+    playheadPosition: ctx.playheadPosition,
+    trackIds: new Set(trackIds),
+    windowStart: start,
+    windowEnd: end,
+    result: selected,
+  };
+  desiredClipQueryCache.set(ctx, cache);
   return selected;
 }
 

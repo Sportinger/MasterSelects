@@ -1,6 +1,7 @@
 import type { BrowserWindowPanel, DockLayout, SavedDockLayout, SavedDockTimelineLayout } from '../../types/dock';
 import { Logger } from '../../services/logger';
-import { DEFAULT_LAYOUT } from './layoutDefaults';
+import { getVideoEditLayoutForTheme } from './layoutDefaults';
+import { useSettingsStore } from '../settingsStore';
 import {
   cleanupPersistedLayout,
   applyFactory3DEditPreviewDefaults,
@@ -11,7 +12,9 @@ import {
 } from './layoutPersistence';
 import {
   FACTORY_3D_EDIT_LAYOUT_ID,
+  FACTORY_MOBILE_LAYOUT_ID,
   FACTORY_START_LAYOUT_ID,
+  FACTORY_VERTICAL_MOBILE_LAYOUT_ID,
   FACTORY_VIDEO_EDIT_LAYOUT_ID,
   START_LAYOUT_OUTRO_DURATION_MS,
   START_LAYOUT_REVEAL_DURATION_MS,
@@ -25,10 +28,24 @@ import {
 import { findGroupIdByPanelId, nodeContainsPanelType } from './layoutTree';
 import { collapseSingleChildSplits, removePanel } from '../../utils/dockLayout';
 import type { DockSliceCreator, SavedLayoutActions } from './storeTypes';
+import {
+  getTimelinePanelHeightRatio,
+  preserveTimelinePanelHeightRatio,
+} from './timelinePanelHeight';
+import { isWorkspaceOverLayoutId } from './overLayoutMode';
 
 const log = Logger.create('DockStore');
 const LEGACY_DEFAULT_LAYOUT_STORAGE_KEY = 'webvj-dock-layout-default';
 const DEFAULT_TIMELINE_LAYOUT_STORAGE_KEY = 'webvj-dock-layout-default-timeline';
+
+function isMobileLayoutId(layoutId: string | null): boolean {
+  return layoutId === FACTORY_MOBILE_LAYOUT_ID
+    || layoutId === FACTORY_VERTICAL_MOBILE_LAYOUT_ID;
+}
+
+function getCurrentThemeVideoEditLayout(): DockLayout {
+  return getVideoEditLayoutForTheme(useSettingsStore.getState().theme);
+}
 
 function removeBrowserWindowPanelsFromLayout(
   layout: DockLayout,
@@ -138,6 +155,16 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
       return;
     }
     const activeSavedLayoutId = get().activeSavedLayoutId;
+    const preserveTimelineGeometry = (
+      isMobileLayoutId(activeSavedLayoutId)
+      || isMobileLayoutId(savedLayout.id)
+    );
+    const currentTimelinePanelHeightRatio = preserveTimelineGeometry
+      ? getTimelinePanelHeightRatio(get().layout)
+      : null;
+    const currentTimelineLayout = (preserveTimelineGeometry || options?.preserveTimelineLayout)
+      ? captureTimelineLayout()
+      : undefined;
     const currentRoot = get().layout.root;
     const currentLayoutIsStart = (
       activeSavedLayoutId === FACTORY_START_LAYOUT_ID
@@ -154,11 +181,14 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
         : undefined;
 
     const savedDockLayout = savedLayout.id === FACTORY_VIDEO_EDIT_LAYOUT_ID
-      ? DEFAULT_LAYOUT
+      ? getCurrentThemeVideoEditLayout()
       : savedLayout.id === FACTORY_3D_EDIT_LAYOUT_ID
         ? applyFactory3DEditPreviewDefaults(savedLayout.layout)
         : savedLayout.layout;
-    const nextLayout = cleanupPersistedLayout(cloneDockLayout(savedDockLayout));
+    const nextLayout = preserveTimelinePanelHeightRatio(
+      cleanupPersistedLayout(cloneDockLayout(savedDockLayout)),
+      currentTimelinePanelHeightRatio,
+    );
     requestDockLayoutTransition(
       options?.transitionDurationMs
         ?? (
@@ -180,7 +210,7 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
       maximizedPanelId: null,
       activeSavedLayoutId: savedLayout.id,
     });
-    applySavedTimelineLayout(savedLayout.timeline);
+    applySavedTimelineLayout(currentTimelineLayout ?? savedLayout.timeline);
     if (savedLayout.id === FACTORY_3D_EDIT_LAYOUT_ID) activate3DEditSceneCamera();
   },
 
@@ -207,7 +237,10 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
     if (defaultSavedLayoutId) {
       const defaultSavedLayout = savedLayouts.find((savedLayout) => savedLayout.id === defaultSavedLayoutId);
       if (defaultSavedLayout) {
-        const nextLayout = cleanupPersistedLayout(cloneDockLayout(defaultSavedLayout.layout));
+        const defaultLayout = defaultSavedLayout.id === FACTORY_VIDEO_EDIT_LAYOUT_ID
+          ? getCurrentThemeVideoEditLayout()
+          : defaultSavedLayout.layout;
+        const nextLayout = cleanupPersistedLayout(cloneDockLayout(defaultLayout));
         requestDockLayoutTransition();
         set({
           layout: nextLayout,
@@ -250,9 +283,9 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
     }
     requestDockLayoutTransition();
     set({
-      layout: cloneDockLayout(DEFAULT_LAYOUT),
+      layout: cloneDockLayout(getCurrentThemeVideoEditLayout()),
       browserWindowPanels: [],
-      maxZIndex: getLayoutMaxZIndex(DEFAULT_LAYOUT),
+      maxZIndex: getLayoutMaxZIndex(getCurrentThemeVideoEditLayout()),
       hoveredTabTarget: null,
       maximizedPanelId: null,
       activeSavedLayoutId: null,
@@ -295,10 +328,22 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
   },
 
   setLayoutFromProject: (layout: DockLayout) => {
+    const currentState = get();
+    const currentLayoutIsStart = (
+      currentState.activeSavedLayoutId === FACTORY_START_LAYOUT_ID
+      || nodeContainsPanelType(currentState.layout.root, 'start')
+    );
+    const currentLayoutIsOverLayout = isWorkspaceOverLayoutId(currentState.activeSavedLayoutId);
+    // START is a facade over the live project, while Medium and Mobile are
+    // presentation layers over a selected editing workspace. Project
+    // hydration may update timeline/media state behind them, but must not
+    // replace their live dock trees with a stale project snapshot.
+    if (currentLayoutIsStart || currentLayoutIsOverLayout) return;
+
     const browserWindowPanels = get().browserWindowPanels;
     const projectLayoutIsStart = nodeContainsPanelType(layout.root, 'start');
     const cleanedLayout = removeBrowserWindowPanelsFromLayout(
-      cleanupPersistedLayout(projectLayoutIsStart ? cloneDockLayout(DEFAULT_LAYOUT) : layout),
+      cleanupPersistedLayout(projectLayoutIsStart ? cloneDockLayout(getCurrentThemeVideoEditLayout()) : layout),
       browserWindowPanels,
     );
     set({

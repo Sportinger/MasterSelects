@@ -24,6 +24,7 @@ interface BuildFlashBoardGenerationActionStateInput {
   hasImageReferenceInput: boolean;
   hasReferenceMediaInput: boolean;
   hasVideoReferenceInput: boolean;
+  referenceVideoDuration?: number;
   hostedAIEnabled: boolean;
   imageSize: string;
   isAudioMode: boolean;
@@ -136,7 +137,7 @@ function buildAudioValidationError({
   if (isSunoMode) {
     if (service === 'cloud') {
       if (!accountAuthenticated) {
-        return 'Sign in to use MasterSelects Cloud music.';
+        return 'Choose a plan to use MasterSelects Cloud music.';
       }
 
       if (!hostedAIEnabled) {
@@ -165,7 +166,7 @@ function buildAudioValidationError({
   }
 
   if (!accountAuthenticated) {
-    return 'Sign in to use MasterSelects Cloud speech.';
+    return 'Choose a plan to use MasterSelects Cloud speech.';
   }
 
   if (!hostedAIEnabled) {
@@ -226,7 +227,7 @@ function buildBackendValidationError({
   }
 
   if (service === 'cloud' && !isHostedAudioMode && !hasHostedSession) {
-    return 'Sign in to use MasterSelects Cloud generation.';
+    return 'Choose a plan to use MasterSelects Cloud generation.';
   }
 
   return null;
@@ -250,6 +251,7 @@ export function buildFlashBoardGenerationActionState(input: BuildFlashBoardGener
       generateAudio: input.effectiveGenerateAudio,
       multiShots: input.multiShots,
       hasVideoInput: input.hasVideoReferenceInput,
+      videoInputDuration: input.referenceVideoDuration,
     })
     : null;
   const generateActionLabel = input.isSunoMode ? 'Compose' : input.isAudioMode ? 'Speak' : 'Generate';

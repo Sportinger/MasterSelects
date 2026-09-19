@@ -5,6 +5,7 @@ import type { TimelineStore } from '../../src/stores/timeline/types';
 
 const getRuntimeFrameProvider = vi.fn();
 const requestNewFrameRender = vi.fn();
+const getLastPresentedVideoTime = vi.fn();
 const primeReverseWorkerRuntimeSourcesForPlayback = vi.hoisted(() => vi.fn().mockResolvedValue(0));
 
 const mediaStoreMock = vi.hoisted(() => ({
@@ -38,6 +39,7 @@ vi.mock('../../src/engine/WebGPUEngine', () => ({
     setIsPlaying: vi.fn(),
     clearScrubbingCache: vi.fn(),
     clearVideoCache: vi.fn(),
+    getLastPresentedVideoTime: (...args: unknown[]) => getLastPresentedVideoTime(...args),
   },
 }));
 
@@ -49,6 +51,8 @@ function createPlaybackTestStore(initialState: Partial<TimelineStore>): Playback
     tracks: [],
     markers: [],
     clipDragPreview: null,
+    getSourceTimeForClip: (_clipId: string, localTime: number) => localTime,
+    getInterpolatedSpeed: () => 1,
     ...initialState,
   } as PlaybackTestStore;
   const set: Parameters<typeof createPlaybackSlice>[0] = (partial) => {
@@ -64,6 +68,8 @@ describe('playbackSlice HTML readiness gate', () => {
   beforeEach(() => {
     getRuntimeFrameProvider.mockReset();
     requestNewFrameRender.mockReset();
+    getLastPresentedVideoTime.mockReset();
+    getLastPresentedVideoTime.mockReturnValue(undefined);
     primeReverseWorkerRuntimeSourcesForPlayback.mockReset();
     primeReverseWorkerRuntimeSourcesForPlayback.mockResolvedValue(0);
     mediaStoreMock.sourceMonitorFileId = null;
@@ -208,6 +214,8 @@ describe('playbackSlice HTML readiness gate', () => {
     getRuntimeFrameProvider.mockReturnValue(null);
 
     const htmlVideo = {
+      currentTime: 1,
+      duration: 10,
       readyState: 2,
       seeking: false,
       play: vi.fn(),
@@ -233,6 +241,107 @@ describe('playbackSlice HTML readiness gate', () => {
     expect(state.isPlaying).toBe(true);
     expect(state.playbackWarmup).toBeNull();
     expect(htmlVideo.play).not.toHaveBeenCalled();
+  });
+
+  it('starts immediately from a reusable presented frame while the HTML seek catches up', async () => {
+    getRuntimeFrameProvider.mockReturnValue(null);
+    getLastPresentedVideoTime.mockReturnValue(1.05);
+
+    const htmlVideo = {
+      currentTime: 0,
+      duration: 10,
+      readyState: 1,
+      seeking: true,
+      play: vi.fn(),
+      pause: vi.fn(),
+    };
+    const state = createPlaybackTestStore({
+      clips: [{
+        id: 'clip-1',
+        trackId: 'video-1',
+        startTime: 0,
+        duration: 10,
+        inPoint: 0,
+        outPoint: 10,
+        source: { videoElement: htmlVideo },
+      }],
+      tracks: [{ id: 'video-1', type: 'video', visible: true }],
+      playheadPosition: 1,
+      duration: 60,
+      isPlaying: false,
+      playbackWarmup: null,
+      getSourceTimeForClip: (_clipId: string, localTime: number) => localTime,
+      getInterpolatedSpeed: () => 1,
+    } as Partial<TimelineStore>);
+
+    await state.play();
+
+    expect(state.isPlaying).toBe(true);
+    expect(state.playbackWarmup).toBeNull();
+    expect(htmlVideo.play).not.toHaveBeenCalled();
+  });
+
+  it('positions an active nested video before allowing playback to start', async () => {
+    vi.useFakeTimers();
+    getRuntimeFrameProvider.mockReturnValue(null);
+
+    let currentTime = 3.12;
+    let seeking = false;
+    const htmlVideo = {
+      readyState: 4,
+      duration: 5,
+      play: vi.fn().mockImplementation(() => {
+        seeking = false;
+        return Promise.resolve();
+      }),
+      pause: vi.fn(),
+    } as unknown as HTMLVideoElement;
+    Object.defineProperty(htmlVideo, 'currentTime', {
+      get: () => currentTime,
+      set: (value: number) => {
+        currentTime = value;
+        seeking = true;
+      },
+    });
+    Object.defineProperty(htmlVideo, 'seeking', { get: () => seeking });
+
+    const state = createPlaybackTestStore({
+      clips: [{
+        id: 'comp-1',
+        trackId: 'video-1',
+        startTime: 10,
+        duration: 10,
+        inPoint: 2,
+        isComposition: true,
+        nestedClips: [{
+          id: 'nested-1',
+          trackId: 'nested-video-1',
+          startTime: 1,
+          duration: 5,
+          inPoint: 0.5,
+          source: { type: 'video', videoElement: htmlVideo },
+        }],
+        nestedTracks: [{ id: 'nested-video-1', type: 'video', visible: true }],
+      }],
+      tracks: [{ id: 'video-1', type: 'video', visible: true }],
+      playheadPosition: 12,
+      duration: 60,
+      isPlaying: false,
+      playbackWarmup: null,
+    } as Partial<TimelineStore>);
+
+    const playPromise = state.play();
+
+    expect(currentTime).toBeCloseTo(3.5, 5);
+    expect(state.isPlaying).toBe(false);
+    expect(state.playbackWarmup).toMatchObject({ pendingVideoCount: 1, totalVideoCount: 1 });
+
+    await vi.advanceTimersByTimeAsync(60);
+    await playPromise;
+
+    expect(state.playbackWarmup).toBeNull();
+    expect(state.isPlaying).toBe(true);
+    expect(htmlVideo.pause).toHaveBeenCalled();
   });
 
   it('does not start playback when a pending warmup was canceled', async () => {

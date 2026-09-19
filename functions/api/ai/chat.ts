@@ -17,7 +17,7 @@ import {
   settleHostedChatRound,
 } from '../../lib/chatBilling';
 import { insertChatLog } from '../../lib/chatLog';
-import { getCurrentUser, json, methodNotAllowed, parseJson } from '../../lib/db';
+import { getAiUser, isGuestAiUser, json, methodNotAllowed, parseJson } from '../../lib/db';
 import { rejectByokCredentials } from '../../lib/noByok';
 import {
   getKieChatCapabilities,
@@ -36,7 +36,8 @@ import type { AppContext, AppRouteHandler } from '../../lib/env';
 
 interface HostedAiContext {
   billing: Awaited<ReturnType<typeof getUserBillingSnapshot>> | null;
-  user: ReturnType<typeof getCurrentUser>;
+  guest: boolean;
+  user: ReturnType<typeof getAiUser>;
 }
 
 function buildRouteEnvelope<TData>(
@@ -45,20 +46,25 @@ function buildRouteEnvelope<TData>(
     provider?: string;
   },
 ): HostedGatewayEnvelope<TData> {
+  const session = input.session?.email?.endsWith('@guest.masterselects.invalid')
+    ? { authenticated: false, email: null, guest: true, provider: 'guest' }
+    : input.session;
   return createHostedGatewayEnvelope({
     ...input,
     kind: 'ai.chat',
     mode: 'hosted',
     provider: input.provider ?? 'kie.ai',
     requestId: input.requestId,
+    session,
   });
 }
 
 function resolveHostedContext(context: AppContext): HostedAiContext {
-  const user = getCurrentUser(context);
+  const user = getAiUser(context);
 
   return {
     billing: null,
+    guest: isGuestAiUser(context),
     user,
   };
 }
@@ -69,12 +75,14 @@ async function loadHostedContext(context: AppContext): Promise<HostedAiContext> 
   if (!user) {
     return {
       billing: null,
+      guest: false,
       user: null,
     };
   }
 
   return {
-    billing: await getUserBillingSnapshot(context.env.DB, user.id),
+    billing: await getUserBillingSnapshot(context.env.DB, user.id, { guest: isGuestAiUser(context) }),
+    guest: isGuestAiUser(context),
     user,
   };
 }

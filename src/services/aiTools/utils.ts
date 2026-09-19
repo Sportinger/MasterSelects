@@ -202,6 +202,9 @@ export function formatClipInfo(
     uniquePeople: clip.analysis?.faceAnalysis?.people.length ?? 0,
     faceObservationCount: clip.analysis?.faceAnalysis?.observationCount ?? 0,
     hasTranscript: clipHasTranscript(clip),
+    transcriptStatus: clip.transcriptStatus ?? 'none',
+    transcriptProgress: clip.transcriptProgress ?? 0,
+    transcriptMessage: clip.transcriptMessage,
     // Transform info
     transform: {
       ...structuredClone(clip.transform),
@@ -255,6 +258,8 @@ export function formatTrackInfo(track: TimelineTrack, clips: TimelineClip[]) {
       transitionOut: c.transitionOut ? { ...c.transitionOut } : undefined,
       hasAnalysis: c.analysisStatus === 'ready',
       hasTranscript: clipHasTranscript(c),
+      transcriptStatus: c.transcriptStatus ?? 'none',
+      transcriptProgress: c.transcriptProgress ?? 0,
     })),
   };
 }

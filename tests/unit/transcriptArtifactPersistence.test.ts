@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
+import { getTimelineRevision } from '../../src/stores/timeline/revisionMiddleware';
 import {
+  correctTranscriptWordFromCaption,
   persistTranscriptCheckpoint,
   propagateTranscriptToMediaFile,
   updateClipTranscript,
@@ -64,6 +66,7 @@ describe('transcript artifact persistence', () => {
         createMockClip({ id: 'other-clip', source: { type: 'video' } }),
       ],
     });
+    const revisionBeforeTranscript = getTimelineRevision();
 
     updateClipTranscript('audio-clip', {
       status: 'ready',
@@ -76,6 +79,7 @@ describe('transcript artifact persistence', () => {
     expect(clips.find(clip => clip.id === 'video-clip')?.transcript).toEqual(words);
     expect(clips.find(clip => clip.id === 'audio-clip')?.transcript).toEqual(words);
     expect(clips.find(clip => clip.id === 'other-clip')?.transcript).toBeUndefined();
+    expect(getTimelineRevision()).toBe(revisionBeforeTranscript);
 
     updateClipTranscript('video-clip', {
       status: 'none',
@@ -87,6 +91,7 @@ describe('transcript artifact persistence', () => {
     clips = useTimelineStore.getState().clips;
     expect(clips.find(clip => clip.id === 'video-clip')?.transcript).toBeUndefined();
     expect(clips.find(clip => clip.id === 'audio-clip')?.transcript).toBeUndefined();
+    expect(getTimelineRevision()).toBe(revisionBeforeTranscript);
   });
 
   it('deduplicates a coherent text run despite provider timing drift', () => {
@@ -132,6 +137,21 @@ describe('transcript artifact persistence', () => {
         transcribedRanges: [[0, 0.5]],
       }],
     });
+    useTimelineStore.setState({
+      clips: [
+        createMockClip({
+          id: 'video-clip',
+          mediaFileId: 'media-1',
+          source: { type: 'video', mediaFileId: 'media-1' },
+          transcriptStatus: 'transcribing',
+        }),
+        createMockClip({
+          id: 'unrelated-clip',
+          mediaFileId: 'media-2',
+          source: { type: 'video', mediaFileId: 'media-2' },
+        }),
+      ],
+    });
 
     propagateTranscriptToMediaFile('media-1', [replacement], [[1, 2]]);
 
@@ -142,6 +162,12 @@ describe('transcript artifact persistence', () => {
       expect.objectContaining({ words: [outsideBefore, replacement, outsideAfter] }),
       [[0, 0.5], [1, 2]],
     );
+    expect(useTimelineStore.getState().clips[0]).toMatchObject({
+      transcript: [outsideBefore, replacement, outsideAfter],
+      transcriptProgress: 100,
+      transcriptStatus: 'ready',
+    });
+    expect(useTimelineStore.getState().clips[1].transcript).toBeUndefined();
   });
 
   it('allows an authoritative silent range to clear stale media words', () => {
@@ -152,11 +178,115 @@ describe('transcript artifact persistence', () => {
         transcript: [{ id: 'stale', text: 'stale', start: 0.2, end: 0.5 }],
       }],
     });
+    useTimelineStore.setState({
+      clips: [createMockClip({
+        id: 'silent-clip',
+        mediaFileId: 'media-1',
+        source: { type: 'audio', mediaFileId: 'media-1' },
+        transcriptStatus: 'transcribing',
+      })],
+    });
 
     propagateTranscriptToMediaFile('media-1', [], [[0, 2]]);
 
     expect(useMediaStore.getState().files[0].transcript).toEqual([]);
     expect(useMediaStore.getState().files[0].transcribedRanges).toEqual([[0, 2]]);
+    expect(useTimelineStore.getState().clips[0]).toMatchObject({
+      transcript: [],
+      transcriptProgress: 100,
+      transcriptStatus: 'ready',
+    });
+  });
+
+  it('corrects one caption word across split clips without changing provider evidence or timing', async () => {
+    const originalWord: TranscriptWord = {
+      id: 'word-1',
+      text: 'ausgelernt',
+      start: 1.25,
+      end: 1.8,
+      confidence: 0.72,
+    };
+    const artifact: TranscriptFusionArtifact = {
+      agent: { status: 'not-requested' },
+      conflicts: [],
+      createdAt: 1,
+      patches: [],
+      primaryProvider: 'deepgram',
+      rawRuns: [{
+        id: 'raw-run',
+        provider: 'deepgram',
+        model: 'nova-3',
+        language: 'de',
+        range: [0, 3],
+        createdAt: 1,
+        words: [originalWord],
+      }],
+      schemaVersion: 1,
+      words: [originalWord],
+    };
+    useMediaStore.setState({
+      files: [{
+        id: 'media-1', name: 'speech.mp4', type: 'video', parentId: null,
+        createdAt: 1, url: 'blob:speech', duration: 3,
+        transcript: [originalWord], transcriptArtifact: artifact,
+        transcribedRanges: [[0, 3]],
+      }],
+    });
+    useTimelineStore.setState({
+      clips: [
+        createMockClip({
+          id: 'split-a', mediaFileId: 'media-1', transcript: [originalWord],
+          source: { type: 'video', mediaFileId: 'media-1' },
+        }),
+        createMockClip({
+          id: 'split-b', mediaFileId: 'media-1', transcript: [originalWord],
+          source: { type: 'video', mediaFileId: 'media-1' },
+        }),
+      ],
+    });
+
+    const result = correctTranscriptWordFromCaption({
+      sourceClipId: 'split-a',
+      wordId: 'word-1',
+      text: 'ausgebildet',
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) await result.persistence;
+    expect(useTimelineStore.getState().clips.map(clip => clip.transcript?.[0]?.text))
+      .toEqual(['ausgebildet', 'ausgebildet']);
+    const savedFile = useMediaStore.getState().files[0];
+    expect(savedFile.transcript?.[0]).toMatchObject({
+      text: 'ausgebildet', start: 1.25, end: 1.8,
+    });
+    expect(savedFile.transcriptArtifact?.rawRuns[0].words[0].text).toBe('ausgelernt');
+    expect(savedFile.transcriptArtifact?.patches.at(-1)).toMatchObject({
+      source: 'manual', operation: 'choose-text',
+      before: 'ausgelernt', after: 'ausgebildet', wordIds: ['word-1'],
+    });
+    expect(saveTranscriptMock).toHaveBeenCalledWith(
+      'media-1',
+      expect.objectContaining({
+        words: [expect.objectContaining({ text: 'ausgebildet', start: 1.25, end: 1.8 })],
+      }),
+      [[0, 3]],
+    );
+  });
+
+  it('rejects multiple words for a single caption timing slot', () => {
+    useTimelineStore.setState({
+      clips: [createMockClip({
+        id: 'source',
+        transcript: [{ id: 'word-1', text: 'one', start: 0, end: 1 }],
+      })],
+    });
+
+    expect(correctTranscriptWordFromCaption({
+      sourceClipId: 'source',
+      wordId: 'word-1',
+      text: 'two words',
+    })).toMatchObject({ ok: false });
+    expect(useTimelineStore.getState().clips[0].transcript?.[0].text).toBe('one');
   });
 
   it('durably saves a completed chunk while keeping the larger run active', async () => {

@@ -24,6 +24,29 @@ function getRuntimeKind(type: ClipSource['type']): MediaRuntimeKind | null {
   return null;
 }
 
+export function buildRuntimeMetadataFromMediaFile(
+  mediaFile: ReturnType<typeof useMediaStore.getState>['files'][number],
+): MediaSourceMetadata {
+  return {
+    duration: mediaFile.duration,
+    width: mediaFile.width,
+    height: mediaFile.height,
+    fps: mediaFile.fps,
+    codec: mediaFile.codec,
+    videoCodecId: mediaFile.videoCodecId,
+    codedWidth: mediaFile.codedWidth,
+    codedHeight: mediaFile.codedHeight,
+    rotation: mediaFile.rotation,
+    pixelAspectRatio: mediaFile.pixelAspectRatio,
+    videoColorSpace: mediaFile.videoColorSpace,
+    hasHighDynamicRange: mediaFile.hasHighDynamicRange,
+    canBeTransparent: mediaFile.canBeTransparent,
+    audioCodec: mediaFile.audioCodec,
+    container: mediaFile.container,
+    hasAudio: mediaFile.hasAudio,
+  };
+}
+
 function buildRuntimeMetadata(
   source: ClipSource,
   mediaFileId?: string
@@ -31,16 +54,10 @@ function buildRuntimeMetadata(
   const mediaFile = mediaFileId
     ? useMediaStore.getState().files.find((file) => file.id === mediaFileId)
     : undefined;
-
+  const mediaMetadata = mediaFile ? buildRuntimeMetadataFromMediaFile(mediaFile) : {};
   return {
-    duration: source.naturalDuration ?? mediaFile?.duration,
-    width: mediaFile?.width,
-    height: mediaFile?.height,
-    fps: mediaFile?.fps,
-    codec: mediaFile?.codec,
-    audioCodec: mediaFile?.audioCodec,
-    container: mediaFile?.container,
-    hasAudio: mediaFile?.hasAudio,
+    ...mediaMetadata,
+    duration: source.naturalDuration ?? mediaMetadata.duration,
   };
 }
 

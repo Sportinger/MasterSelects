@@ -1,0 +1,18 @@
+.slot-grid-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-primary, #111);
+}
+
+.slot-grid-panel-toolbar {
+  flex: 0 0 auto;
+}
+
+.slot-grid-panel-content {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}

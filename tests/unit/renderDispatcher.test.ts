@@ -25,17 +25,22 @@ type RenderDispatcherTestAccess = {
   lastRenderHadContent: boolean;
   lastPreviewTargetTimeMs?: number;
   lastPreviewDisplayedTimeMs?: number;
+  lastPreviewTimelineTimeSeconds: number | null;
   render: RenderDispatcher['render'];
   renderToPreviewCanvas: RenderDispatcher['renderToPreviewCanvas'];
-  collectActiveSplatEffectors: (width: number, height: number) => unknown[];
-  process3DLayers: (
-    layerData: LayerRenderData[],
-    device: GPUDevice,
-    width: number,
-    height: number,
-    cameraOverride?: SceneCameraConfig | null,
-    targetId?: string,
-  ) => void;
+  sharedScene3DProcessor: {
+    options: {
+      collectActiveSplatEffectors: (width: number, height: number) => unknown[];
+    };
+    process3DLayers: (
+      layerData: LayerRenderData[],
+      device: GPUDevice,
+      width: number,
+      height: number,
+      cameraOverride?: SceneCameraConfig | null,
+      targetId?: string,
+    ) => void;
+  };
   renderEmptyFrame: RenderDispatcher['renderEmptyFrame'];
   setRenderTimeOverride: RenderDispatcher['setRenderTimeOverride'];
   recordMainPreviewFrame: () => void;
@@ -72,6 +77,7 @@ function createDispatcher(isPlaying = true) {
     compositorPipeline: {
       beginFrame: vi.fn(),
     },
+    effectsPipeline: {},
     outputPipeline: {},
     slicePipeline: null,
     textureManager: {},
@@ -80,6 +86,7 @@ function createDispatcher(isPlaying = true) {
       getPingView: vi.fn(() => ({})),
       getPongView: vi.fn(() => ({})),
       getResolution: vi.fn(() => ({ width: 1920, height: 1080 })),
+      getEffectCompareView: vi.fn(() => null),
     },
     layerCollector: {
       collect,
@@ -96,6 +103,7 @@ function createDispatcher(isPlaying = true) {
     },
     exportCanvasManager: {
       getIsExporting: vi.fn(() => false),
+      shouldSkipPreviewOutput: vi.fn(() => false),
     },
     performanceStats: {
       setDecoder: vi.fn(),
@@ -162,6 +170,7 @@ describe('RenderDispatcher empty playback hold', () => {
       sceneNavClipId: null,
       sceneNavFpsMode: false,
       sceneGizmoVisible: true,
+      activeSceneOverlayOwners: new Set<string>(),
       sceneGizmoClipIdOverride: null,
       sceneGizmoHoveredAxis: null,
       previewCameraOverride: null,
@@ -225,6 +234,62 @@ describe('RenderDispatcher empty playback hold', () => {
     expect(recordMainPreviewFrame).toHaveBeenCalledWith('empty', undefined, {});
     expect(deps.performanceStats.setLayerCount).toHaveBeenCalledWith(0);
     expect(dispatcher.lastRenderHadContent).toBe(false);
+  });
+
+  it('holds the last composite across a clip boundary when source time resets', () => {
+    const { dispatcher, deps, renderEmptyFrame, recordMainPreviewFrame } = createDispatcher(true);
+
+    dispatcher.lastRenderHadContent = true;
+    dispatcher.lastPreviewTargetTimeMs = 14_967;
+    dispatcher.lastPreviewTimelineTimeSeconds = 15.04;
+
+    dispatcher.render([{
+      id: 'incoming-layer',
+      sourceClipId: 'incoming-clip',
+      visible: true,
+      opacity: 1,
+      source: {
+        type: 'video',
+        mediaTime: 0.68,
+      },
+    } as unknown as Layer], { timelineTimeSeconds: 15.08 });
+
+    expect(renderEmptyFrame).not.toHaveBeenCalled();
+    expect(recordMainPreviewFrame).toHaveBeenCalledWith('playback-stall-hold', undefined, {
+      clipId: 'incoming-clip',
+      targetTimeMs: 680,
+      displayedTimeMs: undefined,
+    });
+    expect(deps.performanceStats.setLayerCount).toHaveBeenCalledWith(0);
+    expect(dispatcher.lastRenderHadContent).toBe(true);
+    expect(dispatcher.lastPreviewTimelineTimeSeconds).toBe(15.08);
+  });
+
+  it('clears an empty active layer after a large timeline jump', () => {
+    const { dispatcher, renderEmptyFrame, recordMainPreviewFrame } = createDispatcher(true);
+
+    dispatcher.lastRenderHadContent = true;
+    dispatcher.lastPreviewTargetTimeMs = 14_967;
+    dispatcher.lastPreviewTimelineTimeSeconds = 4;
+
+    dispatcher.render([{
+      id: 'jumped-layer',
+      sourceClipId: 'jumped-clip',
+      visible: true,
+      opacity: 1,
+      source: {
+        type: 'video',
+        mediaTime: 0.68,
+      },
+    } as unknown as Layer], { timelineTimeSeconds: 12 });
+
+    expect(renderEmptyFrame).toHaveBeenCalledTimes(1);
+    expect(recordMainPreviewFrame).toHaveBeenCalledWith('empty', undefined, {
+      clipId: 'jumped-clip',
+      targetTimeMs: 680,
+    });
+    expect(dispatcher.lastRenderHadContent).toBe(false);
+    expect(dispatcher.lastPreviewTimelineTimeSeconds).toBeNull();
   });
 
   it('holds an independent preview canvas during empty scrub frames', () => {
@@ -534,10 +599,10 @@ describe('RenderDispatcher empty playback hold', () => {
       }],
     });
 
-    expect(dispatcher.collectActiveSplatEffectors(1920, 1080)).toHaveLength(0);
+    expect(dispatcher.sharedScene3DProcessor.options.collectActiveSplatEffectors(1920, 1080)).toHaveLength(0);
 
     dispatcher.setRenderTimeOverride(5.5);
-    const effectors = dispatcher.collectActiveSplatEffectors(1920, 1080);
+    const effectors = dispatcher.sharedScene3DProcessor.options.collectActiveSplatEffectors(1920, 1080);
 
     expect(effectors).toHaveLength(1);
     expect(effectors[0]).toMatchObject({
@@ -642,7 +707,7 @@ describe('RenderDispatcher empty playback hold', () => {
       },
     ] as unknown as LayerRenderData[];
 
-    dispatcher.process3DLayers(layerData, {} as GPUDevice, 477, 696, {
+    dispatcher.sharedScene3DProcessor.process3DLayers(layerData, {} as GPUDevice, 477, 696, {
       position: { x: 2, y: 3, z: 4 },
       target: { x: 0, y: 0, z: 0 },
       up: { x: 0, y: 1, z: 0 },
@@ -689,6 +754,7 @@ describe('RenderDispatcher empty playback hold', () => {
     deps.sceneRenderer = {
       isInitialized: true,
       renderScene: vi.fn(() => ({ label: 'shared-scene-view' })),
+      getGizmoOverlayView: vi.fn(() => ({ label: 'scene-gizmo-view' })),
     };
 
     useTimelineStore.setState({
@@ -743,13 +809,35 @@ describe('RenderDispatcher empty playback hold', () => {
     ] as unknown as LayerRenderData[];
 
     useEngineStore.getState().setSceneGizmoVisible(true);
-    dispatcher.process3DLayers(createLayerData(), {} as GPUDevice, 1920, 1080);
+    const layerDataWithGizmo = createLayerData();
+    dispatcher.sharedScene3DProcessor.process3DLayers(layerDataWithGizmo, {} as GPUDevice, 1920, 1080);
+    expect(deps.sceneRenderer.renderScene.mock.calls[0][5]).toMatchObject({
+      clipId: 'native-splat-clip',
+    });
+    expect(layerDataWithGizmo).toHaveLength(2);
+    expect(layerDataWithGizmo[0]?.layer.id).toBe('__scene_3d__');
+    expect(layerDataWithGizmo[1]).toMatchObject({
+      layer: { id: '__scene_gizmo__', effects: [] },
+      textureView: { label: 'scene-gizmo-view' },
+    });
+
+    deps.sceneRenderer.renderScene.mockClear();
+    useTimelineStore.setState({ isPlaying: true });
+    dispatcher.sharedScene3DProcessor.process3DLayers(createLayerData(), {} as GPUDevice, 1920, 1080);
+    expect(deps.sceneRenderer.renderScene.mock.calls[0][5]).toBeNull();
+
+    deps.sceneRenderer.renderScene.mockClear();
+    useEngineStore.getState().setSceneOverlayActive('edit-preview', true);
+    dispatcher.sharedScene3DProcessor.process3DLayers(createLayerData(), {} as GPUDevice, 1920, 1080);
     expect(deps.sceneRenderer.renderScene.mock.calls[0][5]).toMatchObject({
       clipId: 'native-splat-clip',
     });
 
+    useEngineStore.getState().setSceneOverlayActive('edit-preview', false);
+    useTimelineStore.setState({ isPlaying: false });
+
     deps.sceneRenderer.renderScene.mockClear();
-    dispatcher.process3DLayers(createLayerData(), {} as GPUDevice, 477, 696, {
+    dispatcher.sharedScene3DProcessor.process3DLayers(createLayerData(), {} as GPUDevice, 477, 696, {
       position: { x: 2, y: 3, z: 4 },
       target: { x: 0, y: 0, z: 0 },
       up: { x: 0, y: 1, z: 0 },
@@ -763,8 +851,86 @@ describe('RenderDispatcher empty playback hold', () => {
 
     deps.sceneRenderer.renderScene.mockClear();
     useEngineStore.getState().setSceneGizmoVisible(false);
-    dispatcher.process3DLayers(createLayerData(), {} as GPUDevice, 1920, 1080);
+    dispatcher.sharedScene3DProcessor.process3DLayers(createLayerData(), {} as GPUDevice, 1920, 1080);
     expect(deps.sceneRenderer.renderScene.mock.calls[0][5]).toBeNull();
+  });
+
+  it('hides a selected camera gizmo while that camera drives the preview view', () => {
+    const { dispatcher, deps } = createDispatcher(false);
+    deps.sceneRenderer = {
+      isInitialized: true,
+      renderScene: vi.fn(() => ({ label: 'shared-scene-view' })),
+      getGizmoOverlayView: vi.fn(() => ({ label: 'scene-gizmo-view' })),
+    };
+
+    const cameraClip = {
+      id: 'camera-clip',
+      trackId: 'track-camera',
+      startTime: 0,
+      duration: 10,
+      transform: {
+        position: { x: 0, y: 0, z: 5 },
+        scale: { x: 1, y: 1, z: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+        opacity: 1,
+        blendMode: 'normal',
+      },
+      source: {
+        type: 'camera',
+        cameraSettings: { fov: 60, near: 0.1, far: 1000 },
+      },
+    } as const;
+    useTimelineStore.setState({
+      selectedClipIds: new Set([cameraClip.id]),
+      primarySelectedClipId: cameraClip.id,
+      clips: [cameraClip],
+    });
+    useEngineStore.setState({
+      sceneNavClipId: cameraClip.id,
+      sceneGizmoVisible: true,
+      previewCameraOverride: null,
+    });
+
+    const createLayerData = () => [{
+      layer: {
+        id: 'native-splat-layer',
+        sourceClipId: 'native-splat-clip',
+        name: 'Native Splat',
+        visible: true,
+        opacity: 1,
+        blendMode: 'normal',
+        is3D: true,
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+        source: {
+          type: 'gaussian-splat',
+          gaussianSplatUrl: 'blob:native-splat',
+          gaussianSplatFileName: 'native.ply',
+        },
+      },
+      isVideo: false,
+      externalTexture: null,
+      textureView: null,
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+    }] as unknown as LayerRenderData[];
+
+    dispatcher.sharedScene3DProcessor.process3DLayers(createLayerData(), {} as GPUDevice, 1920, 1080);
+    expect(deps.sceneRenderer.renderScene.mock.calls[0][5]).toBeNull();
+
+    deps.sceneRenderer.renderScene.mockClear();
+    dispatcher.sharedScene3DProcessor.process3DLayers(createLayerData(), {} as GPUDevice, 1920, 1080, {
+      position: { x: 8, y: 6, z: 10 },
+      target: { x: 0, y: 0, z: 0 },
+      up: { x: 0, y: 1, z: 0 },
+      fov: 50,
+      near: 0.1,
+      far: 1000,
+    });
+    expect(deps.sceneRenderer.renderScene.mock.calls[0][5]).toMatchObject({
+      clipId: cameraClip.id,
+    });
   });
 
   it('routes pure native gaussian-splat scenes through the shared scene renderer', () => {
@@ -809,7 +975,7 @@ describe('RenderDispatcher empty playback hold', () => {
       },
     ] as unknown as LayerRenderData[];
 
-    dispatcher.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+    dispatcher.sharedScene3DProcessor.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
 
     expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
     const [deviceArg, layers3D] = deps.sceneRenderer.renderScene.mock.calls[0];
@@ -827,6 +993,58 @@ describe('RenderDispatcher empty playback hold', () => {
     expect(layerData[0]?.layer.opacity).toBeCloseTo(0.75);
     expect(layerData[0]?.layer.blendMode).toBe('screen');
     expect(layerData[0]?.layer.colorCorrection).toBe(colorCorrection);
+  });
+
+  it('composites a landscape 3D editor target without reapplying portrait composition aspect', () => {
+    const { dispatcher, deps } = createDispatcher(false);
+    deps.sceneRenderer = {
+      isInitialized: true,
+      renderScene: vi.fn(() => ({ label: 'shared-scene-view' })),
+    };
+    const layerData = [{
+      layer: {
+        id: 'native-plane-layer',
+        sourceClipId: 'native-plane-clip',
+        name: 'Native Plane',
+        visible: true,
+        opacity: 1,
+        blendMode: 'normal',
+        is3D: true,
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+        source: { type: 'image', textCanvas: document.createElement('canvas') },
+      },
+      isVideo: false,
+      externalTexture: null,
+      textureView: null,
+      sourceWidth: 576,
+      sourceHeight: 1024,
+    }] as unknown as LayerRenderData[];
+
+    dispatcher.sharedScene3DProcessor.process3DLayers(
+      layerData,
+      {} as GPUDevice,
+      595,
+      327,
+      1080,
+      1920,
+      {
+        position: { x: 0, y: 0, z: 3 },
+        target: { x: 0, y: 0, z: 0 },
+        up: { x: 0, y: 1, z: 0 },
+        fov: 50,
+        near: 0.1,
+        far: 100,
+        applyDefaultDistance: false,
+      },
+      '3d-preview-front',
+    );
+
+    expect(layerData[0]?.sourceWidth).toBe(595);
+    expect(layerData[0]?.sourceHeight).toBe(327);
+    expect(layerData[0]?.layer.scale.x * (595 / 1080)).toBeCloseTo(1);
+    expect(layerData[0]?.layer.scale.y * (595 / 1080)).toBeCloseTo(1);
   });
 
   it('does not substitute a nearby loaded gaussian-splat sequence frame while the playhead is dragged', () => {
@@ -881,7 +1099,7 @@ describe('RenderDispatcher empty playback hold', () => {
       sourceHeight: 1080,
     }] as unknown as LayerRenderData[];
 
-    dispatcher.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+    dispatcher.sharedScene3DProcessor.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
 
     expect(ensureSpy).toHaveBeenCalledWith(expect.objectContaining({
       sceneKey: 'frame_0005.ply|preview-lod-65536',
@@ -954,7 +1172,7 @@ describe('RenderDispatcher empty playback hold', () => {
       sourceHeight: 1080,
     }] as unknown as LayerRenderData[];
 
-    dispatcher.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+    dispatcher.sharedScene3DProcessor.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
 
     const [, layers3D] = deps.sceneRenderer.renderScene.mock.calls[0];
     expect(layers3D[0]).toMatchObject({
@@ -1028,10 +1246,10 @@ describe('RenderDispatcher empty playback hold', () => {
     }] as unknown as LayerRenderData[];
 
     const firstFrame = createLayerData(1);
-    dispatcher.process3DLayers(firstFrame, {} as GPUDevice, 1920, 1080);
+    dispatcher.sharedScene3DProcessor.process3DLayers(firstFrame, {} as GPUDevice, 1920, 1080);
 
     const targetFrame = createLayerData(2);
-    dispatcher.process3DLayers(targetFrame, {} as GPUDevice, 1920, 1080);
+    dispatcher.sharedScene3DProcessor.process3DLayers(targetFrame, {} as GPUDevice, 1920, 1080);
 
     const targetCall = ensureSpy.mock.calls
       .map(([request]) => request)
@@ -1107,10 +1325,10 @@ describe('RenderDispatcher empty playback hold', () => {
     }] as unknown as LayerRenderData[];
 
     const firstFrame = createLayerData(1);
-    dispatcher.process3DLayers(firstFrame, {} as GPUDevice, 1920, 1080);
+    dispatcher.sharedScene3DProcessor.process3DLayers(firstFrame, {} as GPUDevice, 1920, 1080);
 
     const draggedFrame = createLayerData(2);
-    dispatcher.process3DLayers(draggedFrame, {} as GPUDevice, 1920, 1080);
+    dispatcher.sharedScene3DProcessor.process3DLayers(draggedFrame, {} as GPUDevice, 1920, 1080);
 
     expect(ensureSpy).toHaveBeenCalledWith(expect.objectContaining({
       sceneKey: 'frame_0002.ply|preview-lod-65536',
@@ -1174,11 +1392,11 @@ describe('RenderDispatcher empty playback hold', () => {
     }] as unknown as LayerRenderData[];
 
     const firstFrame = createLayerData(0);
-    dispatcher.process3DLayers(firstFrame, {} as GPUDevice, 1920, 1080);
+    dispatcher.sharedScene3DProcessor.process3DLayers(firstFrame, {} as GPUDevice, 1920, 1080);
     expect(firstFrame[0]?.textureView).toEqual({ label: 'shared-scene-frame-0' });
 
     const missingFrame = createLayerData(1);
-    dispatcher.process3DLayers(missingFrame, {} as GPUDevice, 1920, 1080);
+    dispatcher.sharedScene3DProcessor.process3DLayers(missingFrame, {} as GPUDevice, 1920, 1080);
 
     expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(2);
     expect(missingFrame).toHaveLength(1);
@@ -1241,7 +1459,7 @@ describe('RenderDispatcher empty playback hold', () => {
       sourceHeight: 1080,
     }] as unknown as LayerRenderData[];
 
-    dispatcher.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+    dispatcher.sharedScene3DProcessor.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
 
     const [, layers3D] = deps.sceneRenderer.renderScene.mock.calls[0];
     expect(layers3D[0]).toMatchObject({
@@ -1340,7 +1558,7 @@ describe('RenderDispatcher empty playback hold', () => {
       },
     ] as unknown as LayerRenderData[];
 
-    dispatcher.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+    dispatcher.sharedScene3DProcessor.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
 
     expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
     const [, layers3D] = deps.sceneRenderer.renderScene.mock.calls[0];
@@ -1370,6 +1588,22 @@ describe('RenderDispatcher empty playback hold', () => {
           visible: true,
           opacity: 1,
           blendMode: 'normal',
+          effects: [
+            {
+              id: 'analog-fx',
+              name: 'Analog Signal Lab',
+              type: 'analog-signal-lab',
+              enabled: true,
+              params: {},
+            },
+            {
+              id: 'grain-fx',
+              name: 'Grain',
+              type: 'grain',
+              enabled: true,
+              params: {},
+            },
+          ],
           is3D: true,
           position: { x: 0, y: 0, z: 0 },
           scale: { x: 1, y: 1, z: 1 },
@@ -1391,7 +1625,7 @@ describe('RenderDispatcher empty playback hold', () => {
       },
     ] as unknown as LayerRenderData[];
 
-    dispatcher.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+    dispatcher.sharedScene3DProcessor.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
 
     expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
     const [, layers3D, camera] = deps.sceneRenderer.renderScene.mock.calls[0];
@@ -1401,11 +1635,13 @@ describe('RenderDispatcher empty playback hold', () => {
       kind: 'plane',
       layerId: 'video-plane',
       clipId: 'video-plane-clip',
+      layerSpaceEffects: [{ id: 'analog-fx', type: 'analog-signal-lab' }],
     });
     expect(camera.cameraPosition).toEqual({ x: 0, y: 0, z: defaultDistance });
     expect(camera.cameraTarget).toEqual({ x: 0, y: 0, z: 0 });
     expect(camera.viewMatrix[14]).toBeCloseTo(-defaultDistance);
     expect(layerData[0]?.textureView).toEqual({ label: 'shared-scene-video-view' });
+    expect(layerData[0]?.layer.effects.map((effect) => effect.type)).toEqual(['grain']);
   });
 
   it('routes 3D text plus native gaussian-splat scenes through the shared scene renderer once native assets are ready', () => {
@@ -1487,7 +1723,7 @@ describe('RenderDispatcher empty playback hold', () => {
       },
     ] as unknown as LayerRenderData[];
 
-    dispatcher.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+    dispatcher.sharedScene3DProcessor.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
 
     expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
     const [, layers3D] = deps.sceneRenderer.renderScene.mock.calls[0];
@@ -1563,7 +1799,7 @@ describe('RenderDispatcher empty playback hold', () => {
       },
     ] as unknown as LayerRenderData[];
 
-    dispatcher.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+    dispatcher.sharedScene3DProcessor.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
 
     expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
     const [, layers3D] = deps.sceneRenderer.renderScene.mock.calls[0];

@@ -5,6 +5,7 @@ import { isVectorAnimationSourceType, type VectorAnimationClipSettings } from '.
 import type { Composition } from '../../stores/mediaStore/types';
 import { calculateSourceTime } from '../../utils/speedIntegration';
 import { getEffectiveScale } from '../../utils/transformScale';
+import { degreesToRadians, rotationDegreesToRadians } from '../../utils/rotationUnits';
 import { getInterpolatedMotionLayer } from '../../utils/motionInterpolation';
 import { evaluateTransitionRenderState } from '../../utils/transitionRenderInterpolation';
 import { mathSceneRenderer } from '../mathScene/MathSceneRenderer';
@@ -112,6 +113,7 @@ export function buildBackgroundVideoLayerSource(
 
   if (
     entry.videoElement &&
+    !entry.isLiveInput &&
     !isRuntimeFullWebCodecs
   ) {
     syncBackgroundVideoElement(entry.videoElement, clipTime, options);
@@ -119,8 +121,8 @@ export function buildBackgroundVideoLayerSource(
 
   return {
     ...baseSource,
-    mediaTime: clipTime,
-    targetMediaTime: clipTime,
+    mediaTime: entry.isLiveInput ? undefined : clipTime,
+    targetMediaTime: entry.isLiveInput ? undefined : clipTime,
     webCodecsPlayer: runtimeProvider ?? baseSource.webCodecsPlayer,
   };
 }
@@ -190,7 +192,7 @@ export function buildEvaluatedClipLayer(params: {
   };
   const transform = mappedAnimation?.transform ?? evaluateCompositionClipTransform(baseTransform, keyframes, timelineLocalTime);
   const masks = mappedAnimation?.masks ?? evaluateCompositionClipMasks(clipAtTime.masks, keyframes, timelineLocalTime);
-  const effects = mappedAnimation?.effects ?? evaluateCompositionClipEffects(clipAtTime.effects, keyframes, timelineLocalTime);
+  const effects = mappedAnimation?.effects ?? evaluateCompositionClipEffects(clipAtTime.effects, keyframes, timelineLocalTime, clipAtTime);
   const transitionRender = evaluateTransitionRenderState(
     timelineClip.transitionRender,
     keyframes,
@@ -249,10 +251,11 @@ export function buildEvaluatedClipLayer(params: {
     source: layerSource,
     effects,
     position: transform.position || { x: 0, y: 0, z: 0 },
+    anchor: transform.anchor ?? { x: 0, y: 0, z: 0 },
     scale: getEffectiveScale(transform.scale),
     rotation: typeof transform.rotation === 'number'
-      ? transform.rotation
-      : transform.rotation?.z || 0,
+      ? degreesToRadians(transform.rotation)
+      : rotationDegreesToRadians(transform.rotation ?? {}),
     sourceRect: clipAtTime.sourceRect ? { ...clipAtTime.sourceRect } : undefined,
     ...(masks?.some((mask) => mask.enabled !== false) ? { maskClipId: clipAtTime.id, maskInvert: false, masks } : {}),
     ...(transitionRender ? { transitionRender } : {}),
@@ -297,10 +300,6 @@ export function evaluateNestedComposition(params: {
     evaluateCompositionAtTime,
   } = params;
 
-  if (!clip.nestedClips || !clip.nestedTracks) {
-    return null;
-  }
-
   const clipLocalTime = parentTime - clip.startTime;
   const keyframes = getCompositionClipKeyframes(clip, getClipKeyframes);
   const mappedAnimation = clip.transitionSourceMap?.version === 2
@@ -311,13 +310,99 @@ export function evaluateNestedComposition(params: {
     clip.transitionSourceMap,
     clipLocalTime,
   )?.sourceTime ?? clipLocalTime + (clip.inPoint || 0);
-  const nestedComp = compositions.find(c => c.id === clip.compositionId);
+  const referencedComposition = clip.compositionId
+    ? getComposition(clip.compositionId)
+    : undefined;
+  const nestedComp = referencedComposition
+    ?? compositions.find(c => c.id === clip.compositionId);
   const compWidth = nestedComp?.width || 1920;
   const compHeight = nestedComp?.height || 1080;
+
+  const buildNestedCompositionLayer = (
+    nestedComposition: NestedCompositionData,
+  ): EvaluatedLayer => {
+    const clipTransform = clip.transform || {
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: { x: 0, y: 0, z: 0 },
+      opacity: 1,
+      blendMode: 'normal' as const,
+    };
+    const transform = mappedAnimation?.transform ?? clipTransform;
+    const transitionRender = evaluateTransitionRenderState(
+      clip.transitionRender,
+      keyframes,
+      clipLocalTime,
+    );
+
+    return {
+      id: `${parentCompId}-${clip.id}`,
+      clipId: clip.id,
+      name: clip.name,
+      visible: true,
+      opacity: transform.opacity ?? 1,
+      blendMode: resolveTransitionRecipeBlendMode(
+        clip.transitionRecipeBlendWindows,
+        parentTime,
+        transform.blendMode || 'normal',
+      ),
+      source: {
+        type: 'video',
+        nestedComposition,
+      },
+      effects: mappedAnimation?.effects
+        ?? evaluateCompositionClipEffects(clip.effects, keyframes, clipLocalTime, clip),
+      position: transform.position || { x: 0, y: 0, z: 0 },
+      anchor: transform.anchor ?? { x: 0, y: 0, z: 0 },
+      scale: getEffectiveScale(transform.scale),
+      rotation: typeof transform.rotation === 'number'
+        ? degreesToRadians(transform.rotation)
+        : rotationDegreesToRadians(transform.rotation ?? {}),
+      ...(mappedAnimation?.masks?.some((mask) => mask.enabled !== false)
+        ? { maskClipId: clip.id, maskInvert: false, masks: mappedAnimation.masks }
+        : {}),
+      ...(transitionRender ? { transitionRender } : {}),
+      ...(clip.is3D ? { is3D: true } : {}),
+    };
+  };
+
+  // Serialized composition clips retain the referenced composition ID, but
+  // deliberately do not persist runtime-only nestedClips/nestedTracks. This
+  // is the normal shape when a parent composition is rendered in an
+  // independent preview while another composition owns the live timeline.
+  if (!clip.nestedClips || !clip.nestedTracks) {
+    if (!clip.compositionId || !referencedComposition) {
+      return null;
+    }
+    if (!isCompositionReady(clip.compositionId)) {
+      prepareComposition(clip.compositionId);
+      return null;
+    }
+
+    const nestedLayers = evaluateCompositionAtTime(
+      clip.compositionId,
+      nestedTime,
+      { playbackOptions },
+    );
+    if (nestedLayers.length === 0) {
+      return null;
+    }
+
+    return buildNestedCompositionLayer({
+      compositionId: clip.compositionId,
+      layers: nestedLayers,
+      width: compWidth,
+      height: compHeight,
+      currentTime: nestedTime,
+    });
+  }
+
   const nestedVideoTracks = clip.nestedTracks.filter((t: TimelineTrack) => t.type === 'video' && t.visible);
   const nestedLayers: Layer[] = [];
 
-  for (let i = nestedVideoTracks.length - 1; i >= 0; i--) {
+  // Nested renderers consume the same top-to-bottom layer contract as the main
+  // renderer and reverse it once while collecting GPU layer data.
+  for (let i = 0; i < nestedVideoTracks.length; i++) {
     const nestedTrack = nestedVideoTracks[i];
     const transitionLayers = buildCompositionTransitionLayersForTrack({
       compositionId: clip.compositionId || clip.id,
@@ -375,7 +460,7 @@ export function evaluateNestedComposition(params: {
       position: { x: 0, y: 0, z: 0 },
       scale: { x: 1, y: 1 },
       rotation: { x: 0, y: 0, z: 0 },
-      anchor: { x: 0.5, y: 0.5 },
+      anchor: { x: 0, y: 0, z: 0 },
       opacity: 1,
       blendMode: 'normal' as const,
     });
@@ -397,18 +482,19 @@ export function evaluateNestedComposition(params: {
         nestedTime,
         transform.blendMode || 'normal',
       ),
-      effects: nestedAnimation?.effects ?? evaluateCompositionClipEffects(nestedClip.effects, nestedKeyframes, nestedLocalTime),
+      effects: nestedAnimation?.effects ?? evaluateCompositionClipEffects(nestedClip.effects, nestedKeyframes, nestedLocalTime, nestedClip),
       position: {
         x: transform.position?.x || 0,
         y: transform.position?.y || 0,
         z: transform.position?.z || 0,
       },
-      scale: getEffectiveScale(transform.scale),
-      rotation: {
-        x: ((transform.rotation?.x || 0) * Math.PI) / 180,
-        y: ((transform.rotation?.y || 0) * Math.PI) / 180,
-        z: ((transform.rotation?.z || 0) * Math.PI) / 180,
+      anchor: {
+        x: transform.anchor?.x ?? 0,
+        y: transform.anchor?.y ?? 0,
+        z: transform.anchor?.z ?? 0,
       },
+      scale: getEffectiveScale(transform.scale),
+      rotation: rotationDegreesToRadians(transform.rotation ?? {}),
       ...(nestedMasks?.some((mask) => mask.enabled !== false)
         ? { maskClipId: nestedClip.id, maskInvert: false, masks: nestedMasks }
         : {}),
@@ -534,47 +620,10 @@ export function evaluateNestedComposition(params: {
     layers: nestedLayers,
     width: compWidth,
     height: compHeight,
+    currentTime: nestedTime,
+    sceneClips: clip.nestedClips,
+    sceneTracks: clip.nestedTracks,
   };
 
-  const clipTransform = clip.transform || {
-    position: { x: 0, y: 0, z: 0 },
-    scale: { x: 1, y: 1 },
-    rotation: { x: 0, y: 0, z: 0 },
-    opacity: 1,
-    blendMode: 'normal' as const,
-  };
-  const transform = mappedAnimation?.transform ?? clipTransform;
-  const transitionRender = evaluateTransitionRenderState(
-    clip.transitionRender,
-    keyframes,
-    clipLocalTime,
-  );
-
-  return {
-    id: `${parentCompId}-${clip.id}`,
-    clipId: clip.id,
-    name: clip.name,
-    visible: true,
-    opacity: transform.opacity ?? 1,
-    blendMode: resolveTransitionRecipeBlendMode(
-      clip.transitionRecipeBlendWindows,
-      parentTime,
-      transform.blendMode || 'normal',
-    ),
-    source: {
-      type: 'video',
-      nestedComposition: nestedCompData,
-    },
-    effects: mappedAnimation?.effects ?? evaluateCompositionClipEffects(clip.effects, keyframes, clipLocalTime),
-    position: transform.position || { x: 0, y: 0, z: 0 },
-    scale: getEffectiveScale(transform.scale),
-    rotation: typeof transform.rotation === 'number'
-      ? transform.rotation
-      : (transform.rotation?.z || 0) * Math.PI / 180,
-    ...(mappedAnimation?.masks?.some((mask) => mask.enabled !== false)
-      ? { maskClipId: clip.id, maskInvert: false, masks: mappedAnimation.masks }
-      : {}),
-    ...(transitionRender ? { transitionRender } : {}),
-    ...(clip.is3D ? { is3D: true } : {}),
-  };
+  return buildNestedCompositionLayer(nestedCompData);
 }

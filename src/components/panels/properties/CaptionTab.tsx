@@ -1,5 +1,4 @@
 import { useEffect, useMemo } from 'react';
-import { getCaptionSourceCandidates } from '../../../services/captions/captionRuntime';
 import { useTimelineStore } from '../../../stores/timeline';
 import type {
   CaptionClipProperties,
@@ -8,13 +7,46 @@ import type {
   CaptionTextTransform,
 } from '../../../types/caption';
 import type { CaptionPropertiesPatch } from '../../../stores/timeline/types';
+import { DEFAULT_TEXT_PROPERTIES } from '../../../stores/timeline/constants';
+import {
+  DEFAULT_CAPTION_PROPERTIES,
+  createCaptionTextProperties,
+} from '../../../services/captions/captionDefaults';
 import { TextTab } from '../TextTab';
 import { LabeledValue } from './transformTab/ValueControls';
+import {
+  PROPERTY_VALUE_RESET_TITLE,
+  resetPropertyValueOnContextMenu,
+} from './propertyValueReset';
+import {
+  PropertyPillSelect,
+  type PropertyPillOption,
+} from './PropertyPillSelect';
+import { CaptionTranscriptPanel } from './CaptionTranscriptPanel';
 
 interface CaptionTabProps {
   clipId: string;
   properties: CaptionClipProperties;
 }
+
+const TEXT_TRANSFORM_OPTIONS: readonly PropertyPillOption<CaptionTextTransform>[] = [
+  { value: 'none', label: 'Original', title: 'As transcribed' },
+  { value: 'uppercase', label: 'UPPERCASE' },
+  { value: 'lowercase', label: 'lowercase' },
+  { value: 'capitalize', label: 'Capitalize' },
+];
+
+const HIGHLIGHT_MODE_OPTIONS: readonly PropertyPillOption<CaptionHighlightMode>[] = [
+  { value: 'active-word', label: 'Current', title: 'Current word' },
+  { value: 'spoken-words', label: 'Spoken', title: 'Spoken words' },
+  { value: 'caption-group', label: 'Whole', title: 'Whole caption' },
+];
+
+const HIGHLIGHT_STYLE_OPTIONS: readonly PropertyPillOption<CaptionHighlightStyle>[] = [
+  { value: 'text', label: 'Color', title: 'Text color' },
+  { value: 'background', label: 'Background', title: 'Word background' },
+  { value: 'underline', label: 'Underline' },
+];
 
 function NumberValue({
   label,
@@ -53,10 +85,12 @@ function ToggleRow({
   label,
   checked,
   onChange,
+  defaultValue,
 }: {
   label: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  defaultValue: boolean;
 }) {
   return (
     <div className="control-row transform-option-row">
@@ -65,6 +99,11 @@ function ToggleRow({
         type="button"
         className={`btn btn-xs ${checked ? 'btn-active' : ''}`}
         onClick={() => onChange(!checked)}
+        onContextMenu={(event) => resetPropertyValueOnContextMenu(
+          event,
+          () => onChange(defaultValue),
+        )}
+        title={PROPERTY_VALUE_RESET_TITLE}
       >
         {checked ? 'On' : 'Off'}
       </button>
@@ -76,10 +115,12 @@ function ColorRow({
   label,
   value,
   onChange,
+  defaultValue,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  defaultValue: string;
 }) {
   return (
     <div className="control-row">
@@ -88,6 +129,11 @@ function ColorRow({
         type="color"
         value={value.startsWith('#') ? value.slice(0, 7) : '#ffffff'}
         onChange={event => onChange(event.target.value)}
+        onContextMenu={(event) => resetPropertyValueOnContextMenu(
+          event,
+          () => onChange(defaultValue),
+        )}
+        title={PROPERTY_VALUE_RESET_TITLE}
         style={{ width: 28, height: 22, padding: 0 }}
       />
       <input
@@ -96,6 +142,11 @@ function ColorRow({
         value={value}
         onChange={event => onChange(event.target.value)}
         aria-label={`${label} value`}
+        onContextMenu={(event) => resetPropertyValueOnContextMenu(
+          event,
+          () => onChange(defaultValue),
+        )}
+        title={PROPERTY_VALUE_RESET_TITLE}
       />
     </div>
   );
@@ -131,18 +182,19 @@ function NumberRow({
 
 export function CaptionTab({ clipId, properties }: CaptionTabProps) {
   const clips = useTimelineStore(state => state.clips);
-  const tracks = useTimelineStore(state => state.tracks);
   const updateCaptionProperties = useTimelineStore(state => state.updateCaptionProperties);
   const ensureCaptionTextClip = useTimelineStore(state => state.ensureCaptionTextClip);
   const clip = clips.find(candidate => candidate.id === clipId);
-  const sources = useMemo(
-    () => getCaptionSourceCandidates(clips, clipId),
-    [clipId, clips],
-  );
-  const sourceIds = new Set(sources.map(source => source.clip.id));
-  const sourceValue = properties.sourceClipId && sourceIds.has(properties.sourceClipId)
-    ? properties.sourceClipId
-    : 'auto';
+  const captionTextCanvasSize = {
+    width: clip?.source?.textCanvas?.width ?? 1920,
+    height: clip?.source?.textCanvas?.height ?? 1080,
+  };
+  const captionTextResetDefaults = useMemo(() => createCaptionTextProperties({
+    caption: DEFAULT_CAPTION_PROPERTIES,
+    base: DEFAULT_TEXT_PROPERTIES,
+    width: captionTextCanvasSize.width,
+    height: captionTextCanvasSize.height,
+  }), [captionTextCanvasSize.height, captionTextCanvasSize.width]);
   const update = (patch: CaptionPropertiesPatch) => updateCaptionProperties(clipId, patch);
 
   useEffect(() => {
@@ -151,60 +203,30 @@ export function CaptionTab({ clipId, properties }: CaptionTabProps) {
 
   return (
     <div className="properties-tab-content transform-tab-compact" aria-label="Caption clip properties">
-      <div className="properties-section">
-        <h4>Transcript source</h4>
-        <div className="control-row">
-          <label className="prop-label">Source</label>
-          <select
-            className="caption-compact-select caption-source-select"
-            value={sourceValue}
-            onChange={event => update({
-              sourceClipId: event.target.value === 'auto' ? null : event.target.value,
-            })}
-          >
-            <option value="auto">Auto - active transcript</option>
-            {sources.map(({ clip: sourceClip }) => {
-              const track = tracks.find(candidate => candidate.id === sourceClip.trackId);
-              return (
-                <option key={sourceClip.id} value={sourceClip.id}>
-                  {sourceClip.name} - {track?.name ?? 'Timeline'} - {sourceClip.startTime.toFixed(1)}s
-                </option>
-              );
-            })}
-          </select>
-        </div>
-        {properties.sourceClipId && !sourceIds.has(properties.sourceClipId) && (
-          <p className="properties-hint">The selected source is missing. Auto source is used.</p>
-        )}
-        {sources.length === 0 && (
-          <p className="properties-hint">No transcript is available yet.</p>
-        )}
-      </div>
+      <CaptionTranscriptPanel captionClipId={clipId} />
 
       <div className="properties-section">
         <h4>Caption layout</h4>
         <div className="control-row">
           <label className="prop-label">Timing</label>
           <div className="multi-value-row">
-            <NumberValue label="Words" value={properties.wordsPerCaption} onChange={value => update({ wordsPerCaption: Math.round(value) })} min={1} max={20} defaultValue={5} />
-            <NumberValue label="Gap" value={properties.gapThreshold} onChange={gapThreshold => update({ gapThreshold })} min={0} max={5} decimals={2} suffix="s" defaultValue={0.8} />
-            <NumberValue label="Hold" value={properties.holdAfter} onChange={holdAfter => update({ holdAfter })} min={0} max={3} decimals={2} suffix="s" defaultValue={0.2} />
+            <NumberValue label="Words" value={properties.wordsPerCaption} onChange={value => update({ wordsPerCaption: Math.round(value) })} min={1} max={20} defaultValue={DEFAULT_CAPTION_PROPERTIES.wordsPerCaption} />
+            <NumberValue label="Gap" value={properties.gapThreshold} onChange={gapThreshold => update({ gapThreshold })} min={0} max={5} decimals={2} suffix="s" defaultValue={DEFAULT_CAPTION_PROPERTIES.gapThreshold} />
+            <NumberValue label="Hold" value={properties.holdAfter} onChange={holdAfter => update({ holdAfter })} min={0} max={3} decimals={2} suffix="s" defaultValue={DEFAULT_CAPTION_PROPERTIES.holdAfter} />
           </div>
         </div>
-        <div className="control-row">
+        <NumberRow label="Lines" value={properties.maxLines} onChange={value => update({ maxLines: Math.round(value) })} min={1} max={10} defaultValue={DEFAULT_CAPTION_PROPERTIES.maxLines} />
+        <div className="control-row caption-choice-row">
           <label className="prop-label">Case</label>
-          <select
-            className="caption-compact-select"
+          <PropertyPillSelect
+            ariaLabel="Caption case"
             value={properties.textTransform}
-            onChange={event => update({ textTransform: event.target.value as CaptionTextTransform })}
-          >
-            <option value="none">As transcribed</option>
-            <option value="uppercase">UPPERCASE</option>
-            <option value="lowercase">lowercase</option>
-            <option value="capitalize">Capitalize</option>
-          </select>
+            onChange={textTransform => update({ textTransform })}
+            onReset={() => update({ textTransform: DEFAULT_CAPTION_PROPERTIES.textTransform })}
+            options={TEXT_TRANSFORM_OPTIONS}
+          />
         </div>
-        <p className="properties-hint">Line wrapping and position use the Text section's Area Text bounds.</p>
+        <p className="properties-hint">Lines sets the visible line limit. Wrapping and position use the Text section's Area Text bounds.</p>
       </div>
 
       {clip?.source?.type === 'text' && clip.textProperties && (
@@ -215,27 +237,26 @@ export function CaptionTab({ clipId, properties }: CaptionTabProps) {
             liveText
             hideContent
             compact
-            canvasSize={{
-              width: clip.source.textCanvas?.width ?? 1920,
-              height: clip.source.textCanvas?.height ?? 1080,
-            }}
+            canvasSize={captionTextCanvasSize}
+            resetDefaults={captionTextResetDefaults}
+            selectionPills
           />
         </div>
       )}
 
       <div className="properties-section">
         <h4>Caption background</h4>
-        <ToggleRow label="Enabled" checked={properties.background.enabled} onChange={enabled => update({ background: { enabled } })} />
+        <ToggleRow label="Enabled" checked={properties.background.enabled} onChange={enabled => update({ background: { enabled } })} defaultValue={DEFAULT_CAPTION_PROPERTIES.background.enabled} />
         {properties.background.enabled && (
           <>
-            <ColorRow label="Color" value={properties.background.color} onChange={color => update({ background: { color } })} />
+            <ColorRow label="Color" value={properties.background.color} onChange={color => update({ background: { color } })} defaultValue={DEFAULT_CAPTION_PROPERTIES.background.color} />
             <div className="control-row">
               <label className="prop-label">Box</label>
               <div className="multi-value-row">
-                <NumberValue label="Opacity" value={properties.background.opacity * 100} onChange={value => update({ background: { opacity: value / 100 } })} min={0} max={100} suffix="%" defaultValue={70} />
-                <NumberValue label="Pad X" value={properties.background.paddingX} onChange={paddingX => update({ background: { paddingX } })} min={0} max={200} suffix="px" defaultValue={26} />
-                <NumberValue label="Pad Y" value={properties.background.paddingY} onChange={paddingY => update({ background: { paddingY } })} min={0} max={200} suffix="px" defaultValue={14} />
-                <NumberValue label="Radius" value={properties.background.borderRadius} onChange={borderRadius => update({ background: { borderRadius } })} min={0} max={200} suffix="px" defaultValue={16} />
+                <NumberValue label="Opacity" value={properties.background.opacity * 100} onChange={value => update({ background: { opacity: value / 100 } })} min={0} max={100} suffix="%" defaultValue={DEFAULT_CAPTION_PROPERTIES.background.opacity * 100} />
+                <NumberValue label="Pad X" value={properties.background.paddingX} onChange={paddingX => update({ background: { paddingX } })} min={0} max={200} suffix="px" defaultValue={DEFAULT_CAPTION_PROPERTIES.background.paddingX} />
+                <NumberValue label="Pad Y" value={properties.background.paddingY} onChange={paddingY => update({ background: { paddingY } })} min={0} max={200} suffix="px" defaultValue={DEFAULT_CAPTION_PROPERTIES.background.paddingY} />
+                <NumberValue label="Radius" value={properties.background.borderRadius} onChange={borderRadius => update({ background: { borderRadius } })} min={0} max={200} suffix="px" defaultValue={DEFAULT_CAPTION_PROPERTIES.background.borderRadius} />
               </div>
             </div>
           </>
@@ -244,41 +265,45 @@ export function CaptionTab({ clipId, properties }: CaptionTabProps) {
 
       <div className="properties-section">
         <h4>Word highlight</h4>
-        <ToggleRow label="Enabled" checked={properties.highlight.enabled} onChange={enabled => update({ highlight: { enabled } })} />
+        <ToggleRow label="Enabled" checked={properties.highlight.enabled} onChange={enabled => update({ highlight: { enabled } })} defaultValue={DEFAULT_CAPTION_PROPERTIES.highlight.enabled} />
         {properties.highlight.enabled && (
           <>
-            <div className="control-row">
+            <div className="control-row caption-choice-row">
               <label className="prop-label">Timing</label>
-              <select className="caption-compact-select" value={properties.highlight.mode} onChange={event => update({ highlight: { mode: event.target.value as CaptionHighlightMode } })}>
-                <option value="active-word">Current word</option>
-                <option value="spoken-words">Spoken words</option>
-                <option value="caption-group">Whole caption</option>
-              </select>
+              <PropertyPillSelect
+                ariaLabel="Word highlight timing"
+                value={properties.highlight.mode}
+                onChange={mode => update({ highlight: { mode } })}
+                onReset={() => update({ highlight: { mode: DEFAULT_CAPTION_PROPERTIES.highlight.mode } })}
+                options={HIGHLIGHT_MODE_OPTIONS}
+              />
             </div>
-            <div className="control-row">
+            <div className="control-row caption-choice-row">
               <label className="prop-label">Style</label>
-              <select className="caption-compact-select" value={properties.highlight.style} onChange={event => update({ highlight: { style: event.target.value as CaptionHighlightStyle } })}>
-                <option value="text">Text color</option>
-                <option value="background">Word background</option>
-                <option value="underline">Underline</option>
-              </select>
+              <PropertyPillSelect
+                ariaLabel="Word highlight style"
+                value={properties.highlight.style}
+                onChange={style => update({ highlight: { style } })}
+                onReset={() => update({ highlight: { style: DEFAULT_CAPTION_PROPERTIES.highlight.style } })}
+                options={HIGHLIGHT_STYLE_OPTIONS}
+              />
             </div>
-            {properties.highlight.style === 'text' && <ColorRow label="Color" value={properties.highlight.textColor} onChange={textColor => update({ highlight: { textColor } })} />}
+            {properties.highlight.style === 'text' && <ColorRow label="Color" value={properties.highlight.textColor} onChange={textColor => update({ highlight: { textColor } })} defaultValue={DEFAULT_CAPTION_PROPERTIES.highlight.textColor} />}
             {properties.highlight.style === 'background' && (
               <>
-                <ColorRow label="Color" value={properties.highlight.backgroundColor} onChange={backgroundColor => update({ highlight: { backgroundColor } })} />
-                <NumberRow label="Opacity" value={properties.highlight.backgroundOpacity * 100} onChange={value => update({ highlight: { backgroundOpacity: value / 100 } })} min={0} max={100} suffix="%" defaultValue={95} />
+                <ColorRow label="Color" value={properties.highlight.backgroundColor} onChange={backgroundColor => update({ highlight: { backgroundColor } })} defaultValue={DEFAULT_CAPTION_PROPERTIES.highlight.backgroundColor} />
+                <NumberRow label="Opacity" value={properties.highlight.backgroundOpacity * 100} onChange={value => update({ highlight: { backgroundOpacity: value / 100 } })} min={0} max={100} suffix="%" defaultValue={DEFAULT_CAPTION_PROPERTIES.highlight.backgroundOpacity * 100} />
               </>
             )}
             {properties.highlight.style === 'underline' && (
               <>
-                <ColorRow label="Color" value={properties.highlight.underlineColor} onChange={underlineColor => update({ highlight: { underlineColor } })} />
-                <NumberRow label="Width" value={properties.highlight.underlineWidth} onChange={underlineWidth => update({ highlight: { underlineWidth } })} min={1} max={30} suffix="px" defaultValue={6} />
+                <ColorRow label="Color" value={properties.highlight.underlineColor} onChange={underlineColor => update({ highlight: { underlineColor } })} defaultValue={DEFAULT_CAPTION_PROPERTIES.highlight.underlineColor} />
+                <NumberRow label="Width" value={properties.highlight.underlineWidth} onChange={underlineWidth => update({ highlight: { underlineWidth } })} min={1} max={30} suffix="px" defaultValue={DEFAULT_CAPTION_PROPERTIES.highlight.underlineWidth} />
               </>
             )}
-            <ToggleRow label="Scale" checked={properties.highlight.scaleEnabled ?? false} onChange={scaleEnabled => update({ highlight: { scaleEnabled } })} />
+            <ToggleRow label="Scale" checked={properties.highlight.scaleEnabled ?? false} onChange={scaleEnabled => update({ highlight: { scaleEnabled } })} defaultValue={DEFAULT_CAPTION_PROPERTIES.highlight.scaleEnabled} />
             {(properties.highlight.scaleEnabled ?? false) && (
-              <NumberRow label="Peak" value={(properties.highlight.scale ?? 1.18) * 100} onChange={value => update({ highlight: { scale: value / 100 } })} min={100} max={300} decimals={0} suffix="%" defaultValue={118} />
+              <NumberRow label="Peak" value={(properties.highlight.scale ?? DEFAULT_CAPTION_PROPERTIES.highlight.scale) * 100} onChange={value => update({ highlight: { scale: value / 100 } })} min={100} max={300} decimals={0} suffix="%" defaultValue={DEFAULT_CAPTION_PROPERTIES.highlight.scale * 100} />
             )}
           </>
         )}

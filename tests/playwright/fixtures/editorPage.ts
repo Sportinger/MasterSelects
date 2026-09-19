@@ -12,6 +12,7 @@ export interface EditorBootstrapOptions {
   welcomeTimeoutMs?: number
   bridgeTimeoutMs?: number
   readyTimeoutMs?: number
+  prepareEntry?: (page: Page) => Promise<void>
 }
 
 interface EditorStats {
@@ -33,16 +34,27 @@ export class EditorPage {
   readonly shell: Locator
   readonly startEditingButton: Locator
 
-  private constructor(page: Page, baseURL: string, tabId: string) {
+  private constructor(page: Page, baseURL: string, tabId: string, bridge?: BridgeClient) {
     this.page = page
     this.baseURL = baseURL
     this.tabId = tabId
-    this.bridge = new BridgeClient({ baseURL, targetTabId: tabId })
+    this.bridge = bridge ?? new BridgeClient({ baseURL, targetTabId: tabId })
     this.shell = page.locator('.app--editor-layout')
     // The visible button also contains an Enter-key hint, which is part of its
     // computed accessible name. Match the stable text without requiring the
     // decorative keyboard glyph.
     this.startEditingButton = page.getByRole('button', { name: /^Start editing\b/i })
+  }
+
+  static async adoptExistingReady(page: Page, bridge: BridgeClient): Promise<EditorPage> {
+    if (page.url() !== `${bridge.baseURL}/editor`) throw new Error('Existing editor URL changed')
+    const editor = new EditorPage(page, bridge.baseURL, bridge.targetTabId, bridge)
+    await editor.shell.waitFor({ state: 'visible', timeout: 15_000 })
+    if (await page.getByRole('dialog', { name: 'Choose project' }).isVisible()) {
+      throw new Error('Root must provide the already-loaded MSTEST project')
+    }
+    await editor.waitForProjectIdle()
+    return editor
   }
 
   static async bootstrap(
@@ -62,7 +74,8 @@ export class EditorPage {
     })
 
     await editor.shell.waitFor({ state: 'visible', timeout: options.welcomeTimeoutMs ?? 30_000 })
-    await editor.dismissWelcomeThroughUI(options.welcomeTimeoutMs ?? 30_000)
+    if (options.prepareEntry) await options.prepareEntry(page)
+    else await editor.dismissWelcomeThroughUI(options.welcomeTimeoutMs ?? 30_000)
     await editor.bridge.waitForTarget({
       timeoutMs: options.bridgeTimeoutMs ?? 30_000,
       requireVisible: true,

@@ -2,14 +2,17 @@
 // Extracted from LayerBuilderService for separation of concerns
 import type { TimelineClip } from '../../types';
 import type { FrameContext } from './types';
-import { createFrameContext } from './FrameContext';
+import { createFrameContext, getClipTimeInfo } from './FrameContext';
 import { layerPlaybackManager } from '../layerPlaybackManager';
 import { flags } from '../../engine/featureFlags';
 import { renderHostPort } from '../render/renderHostPort';
 import {
   canUseSharedPreviewRuntimeSession,
+  ensureRuntimeFrameProvider,
   getPreviewRuntimeSource,
   getRuntimeFrameProvider,
+  getScrubRuntimeSource,
+  isProviderBackedRuntimeSource,
   updateRuntimePlaybackTime,
 } from '../mediaRuntime/runtimePlayback';
 import { scrubSettleState } from '../scrubSettleState';
@@ -26,6 +29,7 @@ import { VideoSyncNestedCompositionCoordinator } from './videoSyncNestedComposit
 import { VideoSyncNativeDecoderSync } from './videoSyncNativeDecoderSync';
 import { VideoSyncRecoveryCoordinator } from './videoSyncRecoveryCoordinator';
 import {
+  canClipOwnVideoSyncMedia,
   getActiveClipsAtTime,
   getVisibleVideoTrackClipsAtTime,
 } from './videoSyncTimelineQueries';
@@ -38,6 +42,7 @@ import {
   releaseReverseWorkerRuntimeSources,
 } from './reverseWorkerWebCodecsRuntime';
 import { VideoSyncFreeRunCoordinator } from './videoSyncFreeRunCoordinator';
+import { syncActiveTransitionCompositionVideosWithCoordinator } from './videoSyncTransitionCompositionCoordinator';
 
 export class VideoSyncManager {
   // Video sync throttling
@@ -164,9 +169,7 @@ export class VideoSyncManager {
     });
   }
 
-  private isVideoGpuReady(video: HTMLVideoElement): boolean {
-    return this.warmups.isGpuReady(video) || renderHostPort.getLayerCollector()?.isVideoGpuReady(video) === true;
-  }
+  private isVideoGpuReady(video: HTMLVideoElement): boolean { return this.warmups.isGpuReady(video) || renderHostPort.getLayerCollector()?.isVideoGpuReady(video) === true; }
 
   /**
    * Reset all per-clip state. Called during composition switch to prevent
@@ -203,17 +206,20 @@ export class VideoSyncManager {
   }
 
   private usesFullWebCodecsPreview(clip: TimelineClip): boolean {
+    const provider = this.getClipRuntimeProvider(clip);
     return !!(
-      flags.useFullWebCodecsPlayback &&
-      this.getClipRuntimeProvider(clip)?.isFullMode?.()
+      (flags.useFullWebCodecsPlayback || provider?.backend === 'turbores') &&
+      provider?.isFullMode?.()
     );
   }
 
   private getClipRuntimeProvider(clip: TimelineClip) {
+    if (!canClipOwnVideoSyncMedia(clip)) return null;
     return resolveVideoSyncMedia(clip).runtimeFrameProvider;
   }
 
   private getClipHtmlVideoElement(clip: TimelineClip): HTMLVideoElement | null {
+    if (!canClipOwnVideoSyncMedia(clip)) return null;
     return resolveVideoSyncMedia(clip).htmlVideoElement;
   }
 
@@ -228,13 +234,9 @@ export class VideoSyncManager {
     if (!video.muted) video.muted = true;
   }
 
-  private pruneUpcomingPreplays(ctx: FrameContext, isInteractivePreview: boolean): void {
-    this.warmupCoordinator.pruneUpcomingPreplays(ctx, isInteractivePreview);
-  }
+  private pruneUpcomingPreplays(ctx: FrameContext, isInteractivePreview: boolean): void { this.warmupCoordinator.pruneUpcomingPreplays(ctx, isInteractivePreview); }
 
-  private preloadPausedJumpNeighborhood(ctx: FrameContext): void {
-    this.warmupCoordinator.preloadPausedJumpNeighborhood(ctx);
-  }
+  private preloadPausedJumpNeighborhood(ctx: FrameContext): void { this.warmupCoordinator.preloadPausedJumpNeighborhood(ctx); }
 
   private beginOrQueueSettleSeek(
     clipId: string,
@@ -312,9 +314,7 @@ export class VideoSyncManager {
     frameProvider.seek(clipTime);
   }
 
-  private clearHtmlSeekState(clipId: string, video?: HTMLVideoElement): void {
-    this.htmlSeekCoordinator.clearHtmlSeekState(clipId, video);
-  }
+  private clearHtmlSeekState(clipId: string, video?: HTMLVideoElement): void { this.htmlSeekCoordinator.clearHtmlSeekState(clipId, video); }
 
   private maybeRetargetActiveWarmup(
     clipId: string,
@@ -422,9 +422,7 @@ export class VideoSyncManager {
     );
   }
 
-  getHandoffVideoElement(clipId: string): HTMLVideoElement | null {
-    return this.handoffs.getHandoffVideoElement(clipId);
-  }
+  getHandoffVideoElement(clipId: string): HTMLVideoElement | null { return this.handoffs.getHandoffVideoElement(clipId); }
   getPreviewContinuationVideoElement(clip: TimelineClip, targetTime: number, options: PreviewContinuationOptions = {}): HTMLVideoElement | null {
     return this.handoffs.getPreviewContinuationVideoElement(
       clip,
@@ -471,6 +469,8 @@ export class VideoSyncManager {
       this.preBufferUpcomingVideoAudio(ctx);
       this.preBufferUpcomingNestedCompVideos(ctx);
     }
+
+    syncActiveTransitionCompositionVideosWithCoordinator(ctx, this.nestedCompositionCoordinator);
 
     // Sync each clip at playhead
     const visibleVideoClipsAtTime = getVisibleVideoTrackPlaybackClipsAtTime(ctx);
@@ -533,9 +533,7 @@ export class VideoSyncManager {
     layerPlaybackManager.syncVideoElements(ctx.playheadPosition, ctx.isPlaying);
   }
 
-  private syncNestedCompVideos(compClip: TimelineClip, ctx: FrameContext, depth: number = 0): void {
-    this.nestedCompositionCoordinator.syncNestedCompVideos(compClip, ctx, depth);
-  }
+  private syncNestedCompVideos(compClip: TimelineClip, ctx: FrameContext, depth: number = 0): void { this.nestedCompositionCoordinator.syncNestedCompVideos(compClip, ctx, depth); }
 
   private startTargetedWarmup(
     clipId: string,
@@ -550,6 +548,8 @@ export class VideoSyncManager {
    * Sync a single clip's video element
    */
   private syncClipVideo(clip: TimelineClip, ctx: FrameContext): void {
+    if (!canClipOwnVideoSyncMedia(clip)) return;
+
     const syncMedia = resolveVideoSyncMedia(clip);
     const clipVideoElement = syncMedia.htmlVideoElement;
 
@@ -568,6 +568,27 @@ export class VideoSyncManager {
       return;
     }
 
+    // ProRes has no usable HTMLVideoElement to bootstrap preview from. Resolve
+    // the same track-scoped session that layer building will consume and start
+    // its decoder asynchronously; the provider callback requests a new render.
+    const turboResSource = isProviderBackedRuntimeSource(clip.source);
+    let turboResProvider = null;
+    if (turboResSource) {
+      const allowSharedRuntimeSession = canUseSharedPreviewRuntimeSession(
+        clip,
+        ctx.clipsAtTime,
+      );
+      const runtimeSource = ctx.isDraggingPlayhead || ctx.hasClipDragPreview
+        ? getScrubRuntimeSource(clip.source, clip.trackId, allowSharedRuntimeSession)
+        : getPreviewRuntimeSource(clip.source, clip.trackId, allowSharedRuntimeSession);
+      const clipTime = getClipTimeInfo(ctx, clip).clipTime;
+      updateRuntimePlaybackTime(runtimeSource, clipTime);
+      turboResProvider = getRuntimeFrameProvider(runtimeSource);
+      if (!turboResProvider) {
+        void ensureRuntimeFrameProvider(runtimeSource, 'interactive', clipTime);
+      }
+    }
+
     // Full-mode WebCodecs owns preview sync whenever it's enabled.
     // Drag scrubbing uses the dedicated scrub session inside syncFullWebCodecs.
     const reverseWorkerRuntimeSource = getReverseWorkerRuntimeSource(clip, ctx);
@@ -577,8 +598,8 @@ export class VideoSyncManager {
         : clip;
     const useFullWebCodecsPreview =
       (
-        flags.useFullWebCodecsPlayback &&
-        this.getClipRuntimeProvider(clip)?.isFullMode()
+        (flags.useFullWebCodecsPlayback || turboResSource) &&
+        (turboResProvider ?? this.getClipRuntimeProvider(clip))?.isFullMode()
       ) ||
       Boolean(reverseWorkerRuntimeSource);
 
@@ -595,47 +616,27 @@ export class VideoSyncManager {
     this.htmlClipCoordinator.syncHtmlClipVideo(clip, ctx, clipVideoElement);
   }
 
-  private throttledSeek(clipId: string, video: HTMLVideoElement, time: number, ctx: FrameContext): void {
-    this.htmlSeekCoordinator.throttledSeek(clipId, video, time, ctx);
-  }
+  private throttledSeek(clipId: string, video: HTMLVideoElement, time: number, ctx: FrameContext): void { this.htmlSeekCoordinator.throttledSeek(clipId, video, time, ctx); }
 
-  private warmupUpcomingClips(ctx: FrameContext): void {
-    this.warmupCoordinator.warmupUpcomingClips(ctx);
-  }
+  private warmupUpcomingClips(ctx: FrameContext): void { this.warmupCoordinator.warmupUpcomingClips(ctx); }
 
-  private preBufferUpcomingVideoAudio(ctx: FrameContext): void {
-    this.warmupCoordinator.preBufferUpcomingVideoAudio(ctx);
-  }
+  private preBufferUpcomingVideoAudio(ctx: FrameContext): void { this.warmupCoordinator.preBufferUpcomingVideoAudio(ctx); }
 
-  private preBufferUpcomingNestedCompVideos(ctx: FrameContext): void {
-    this.warmupCoordinator.preBufferUpcomingNestedCompVideos(ctx);
-  }
+  private preBufferUpcomingNestedCompVideos(ctx: FrameContext): void { this.warmupCoordinator.preBufferUpcomingNestedCompVideos(ctx); }
 
   // --- Health Monitor Accessors ---
 
-  getActiveRvfcClipIds(): string[] {
-    return this.htmlSeeks.getActiveRvfcClipIds();
-  }
+  getActiveRvfcClipIds(): string[] { return this.htmlSeeks.getActiveRvfcClipIds(); }
 
-  getActivePreciseSeekClipIds(): string[] {
-    return this.htmlSeeks.getActivePreciseSeekClipIds();
-  }
+  getActivePreciseSeekClipIds(): string[] { return this.htmlSeeks.getActivePreciseSeekClipIds(); }
 
-  getForceDecodeClipIds(): string[] {
-    return this.forceDecodes.getClipIds();
-  }
+  getForceDecodeClipIds(): string[] { return this.forceDecodes.getClipIds(); }
 
-  isVideoWarmingUp(video: HTMLVideoElement): boolean {
-    return this.warmups.isWarming(video);
-  }
+  isVideoWarmingUp(video: HTMLVideoElement): boolean { return this.warmups.isWarming(video); }
 
-  cancelRvfcHandle(clipId: string, video?: HTMLVideoElement): void {
-    this.htmlSeekCoordinator.cancelRvfcHandle(clipId, video);
-  }
+  cancelRvfcHandle(clipId: string, video?: HTMLVideoElement): void { this.htmlSeekCoordinator.cancelRvfcHandle(clipId, video); }
 
-  clearWarmupState(video: HTMLVideoElement): void {
-    this.warmupCoordinator.clearWarmupState(video);
-  }
+  clearWarmupState(video: HTMLVideoElement): void { this.warmupCoordinator.clearWarmupState(video); }
 
   resetClipRecoveryState(clipId: string, video?: HTMLVideoElement): void {
     this.clearHtmlSeekState(clipId, video);
@@ -679,9 +680,7 @@ export class VideoSyncManager {
    * branch, while the WebCodecs playback/scrub orchestration lives in its own
    * coordinator.
    */
-  private syncFullWebCodecs(clip: TimelineClip, ctx: FrameContext): void {
-    this.fullWebCodecs.syncFullWebCodecs(clip, ctx);
-  }
+  private syncFullWebCodecs(clip: TimelineClip, ctx: FrameContext): void { this.fullWebCodecs.syncFullWebCodecs(clip, ctx); }
 
   /**
    * Schedule a debounced precise WebCodecs seek.

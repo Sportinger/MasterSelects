@@ -62,6 +62,8 @@ The MCP server publishes the current FlashBoard Chat tools with their exact live
 | `bridge_list_tools` | Read the live tool registry for either surface |
 | `bridge_get_tool_schema` | Inspect one live schema and policy |
 | `bridge_call_tool` | Execute a named tool, optionally as a dry run |
+| `bridge_send_chat_message` | Submit a prompt through the real visible FlashBoard chat and wait for its terminal result |
+| `bridge_set_chat_model_class` | Switch the visible chat speed selector between Very Fast, Fast, and Slow without sending a prompt |
 | `bridge_get_history` | Merge current project chat calls, browser audit calls, and bridge traces |
 | `bridge_get_tool_result` | Read the stored details of one call |
 | `bridge_replay_tool_call` | Replay a stored call with optional replacement arguments |
@@ -69,6 +71,18 @@ The MCP server publishes the current FlashBoard Chat tools with their exact live
 Direct MCP calls to a published editor tool use the `chat` surface by default. That route invokes the FlashBoard Chat tool executor. The `devBridge` surface instead invokes the policy-filtered AI tool dispatcher.
 
 `dryRun: true` resolves the target session, reads the selected tool schema and policy, and does not execute the tool. It does not invoke a model or validate the tool arguments. Direct `devBridge` calls require `confirm: true` when policy marks the tool as mutating, sensitive, or local-file access.
+
+### Full-App Debugging
+
+The development surface includes three UI/API inspection helpers:
+
+| Tool | Purpose |
+|---|---|
+| `captureAppScreenshot` | Capture the connected app viewport or full scrolling document as a bounded PNG; browser chrome and operating-system UI are excluded |
+| `clickAppControl` | Click one visible control by accessible text or a specific CSS selector, then wait for UI work to settle |
+| `probeSameOriginRequest` | Make a credentialed same-origin `/api/` request in the selected tab and return bounded, redacted status/error data |
+
+Always select and pass an explicit `sessionId` when several tabs are connected. These helpers are restricted to `devBridge`, console, and internal callers. Screenshot and same-origin data are treated as sensitive bridge access, so direct calls must include the confirmation required by the resolved policy. Durable traces omit embedded image data and redact secret-like response fields.
 
 ## HTTP API
 
@@ -82,6 +96,8 @@ All routes are under `/api/agent-control` and require the same bridge token acce
 | `GET` | `/history?sessionId=...&limit=500` | Merged history |
 | `GET` | `/calls/:callId?sessionId=...` | One stored result |
 | `POST` | `/call` | Execute or dry-run a tool |
+| `POST` | `/chat` | Submit a prompt through the visible chat controller |
+| `POST` | `/chat/model-class` | Switch the visible chat speed selector |
 | `POST` | `/replay` | Replay a stored call |
 
 Example request body:
@@ -98,6 +114,8 @@ Example request body:
 ```
 
 Explicit unknown or stale session IDs fail instead of silently targeting another tab.
+
+`POST /chat` and `bridge_send_chat_message` use the selected tab's current model class and Auto/Co-direct setting. Tests may provide `requestedModelClass` (`very-fast`, `fast`, or `slow`) explicitly; that also updates the visible selector before the prompt runs. `POST /chat/model-class` and `bridge_set_chat_model_class` switch the same UI selector without sending a prompt. The prompt is inserted into the normal visible chat history and follows the same hosted-agent, cancellation, and timeline-edit path as clicking the Chat button.
 
 ## FlashBoard Chat Runs
 

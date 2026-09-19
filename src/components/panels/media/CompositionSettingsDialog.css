@@ -1,0 +1,299 @@
+@layer features {
+
+.comp-settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: transparent;
+}
+
+.comp-settings-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 8, 12, 0.42);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+}
+
+.composition-settings-dialog {
+  --ms-lg-radius: 18px;
+  --ms-lg-blur: 14px;
+  --ms-lg-tint: rgba(10, 13, 18, 0.48);
+  width: min(620px, calc(100vw - 32px));
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--ms-lg-radius);
+  background: none;
+  box-shadow:
+    0 26px 72px rgba(0, 0, 0, 0.54),
+    0 8px 22px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.composition-settings-dialog > :not(.ms-liquid-glass-lens) {
+  position: relative;
+  z-index: 3;
+}
+
+.composition-settings-dialog:has(> .ms-liquid-glass-lens) {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.composition-settings-header,
+.composition-settings-section-head,
+.composition-settings-resolution-summary,
+.composition-settings-actions {
+  display: flex;
+  align-items: center;
+}
+
+.composition-settings-header {
+  margin-bottom: 18px;
+}
+
+.composition-settings-name > span,
+.composition-settings-section-head > span,
+.composition-settings-timing-row > label,
+.composition-settings-timing-row > span {
+  color: var(--text-muted);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0.025em;
+}
+
+.composition-settings-header h3 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 650;
+}
+
+.composition-settings-header > strong,
+.composition-settings-section-head strong {
+  color: #7aabe0;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.composition-settings-name {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.composition-settings-name input,
+.composition-settings-timing-row select {
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  outline: none;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+.composition-settings-name input:focus,
+.composition-settings-timing-row select:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.composition-settings-dialog .composition-settings-section {
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+.composition-settings-section-head {
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+
+.composition-settings-resolution-summary {
+  gap: 5px;
+}
+
+.composition-settings-resolution-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.composition-settings-resolution-row .labeled-value {
+  grid-template-columns: 28px minmax(0, 1fr);
+  justify-content: stretch;
+  padding: 4px 0;
+  border-color: transparent;
+  background: transparent;
+}
+
+.composition-settings-dialog .labeled-value-label,
+.composition-settings-dialog .labeled-value .draggable-number {
+  font-size: 16px;
+}
+
+.composition-settings-dialog .labeled-value .draggable-number {
+  padding: 5px 4px;
+}
+
+.composition-settings-resolution-row .draggable-number-anchor {
+  justify-content: flex-end;
+}
+
+.composition-resolution-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--bg-primary);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.composition-resolution-link svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+}
+
+.composition-resolution-link:hover,
+.composition-resolution-link:focus-visible,
+.composition-resolution-link.is-active {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border-color));
+  color: var(--accent);
+  outline: none;
+}
+
+.composition-resolution-link.is-active {
+  background: color-mix(in srgb, var(--accent) 13%, var(--bg-primary));
+}
+
+.composition-settings-preset-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.composition-settings-chip {
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.composition-settings-chip:hover,
+.composition-settings-chip:focus-visible,
+.composition-settings-chip.is-active {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border-color));
+  color: var(--text-primary);
+  outline: none;
+}
+
+.composition-settings-chip.is-active {
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-primary));
+  color: #a9d0f8;
+}
+
+.composition-settings-timing-row {
+  display: grid;
+  grid-template-columns: 112px minmax(150px, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+}
+
+.composition-settings-timing-row + .composition-settings-timing-row {
+  margin-top: 5px;
+}
+
+.composition-settings-timing-row .labeled-value {
+  justify-self: end;
+}
+
+.composition-settings-duration {
+  grid-column: 2 / -1;
+  justify-self: start !important;
+}
+
+.composition-settings-preview-note {
+  margin: 9px 2px 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.composition-settings-actions {
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 13px;
+}
+
+.composition-settings-actions .btn {
+  min-width: 76px;
+  min-height: 36px;
+  font-size: 14px;
+}
+
+@media (pointer: coarse) {
+  .composition-settings-dialog {
+    width: min(560px, calc(100vw - 20px));
+    padding: 14px;
+  }
+
+  .composition-resolution-link,
+  .composition-settings-chip,
+  .composition-settings-actions .btn,
+  .composition-settings-timing-row select,
+  .composition-settings-name input {
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 520px) {
+  .composition-settings-dialog {
+    padding: 12px;
+  }
+
+  .composition-settings-timing-row {
+    grid-template-columns: 62px minmax(0, 1fr);
+  }
+
+  .composition-settings-custom-fps {
+    grid-column: 2;
+    justify-self: start !important;
+  }
+
+  .composition-settings-preset-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+}

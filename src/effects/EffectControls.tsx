@@ -1,9 +1,13 @@
 // Generic Effect Controls Component
 // Renders UI controls based on effect parameter definitions
 
-import React from 'react';
+import React, { Suspense, lazy, type ComponentType, type LazyExoticComponent } from 'react';
 import { EFFECT_REGISTRY } from './index';
-import type { EffectParam } from './types';
+import type { EffectControlProps, EffectParam } from './types';
+import { groupEffectParameters } from './parameterGroups';
+import { LabeledValue } from '../components/panels/properties/LabeledValue';
+import '../components/panels/properties/effectValueControls.css';
+import './effectParameterGroups.css';
 
 interface EffectControlsComponentProps {
   effectType: string;
@@ -39,22 +43,59 @@ export function EffectControls({
     );
   }
 
-  // Render generic controls based on parameter definitions
+  const groups = groupEffectParameters(effect.params);
+  const ExtraControls = 'extraControls' in effect && effect.extraControls
+    ? getExtraControls(effectType, effect.extraControls)
+    : undefined;
+
+  const renderParams = (entries: Array<[string, EffectParam]>) => entries.map(([key, paramDef]) => (
+    <EffectParamControl
+      key={key}
+      paramKey={key}
+      paramDef={paramDef}
+      value={params[key] ?? paramDef.default}
+      onChange={(value) => onChange({ ...params, [key]: value })}
+      clipId={clipId}
+      renderKeyframeToggle={renderKeyframeToggle}
+    />
+  ));
+
   return (
-    <div className="effect-controls">
-      {Object.entries(effect.params).map(([key, paramDef]) => (
-        <EffectParamControl
-          key={key}
-          paramKey={key}
-          paramDef={paramDef}
-          value={params[key] ?? paramDef.default}
-          onChange={(value) => onChange({ ...params, [key]: value })}
-          clipId={clipId}
-          renderKeyframeToggle={renderKeyframeToggle}
-        />
+    <div className="effect-controls effects-tab transform-tab-compact">
+      {groups.map((group) => group.quality ? (
+        <details className="effect-param-section" key={group.id}>
+          <summary className="effect-param-section-title">Quality</summary>
+          {renderParams(group.params)}
+        </details>
+      ) : group.label ? (
+        <fieldset className="effect-param-section" key={group.id}>
+          <legend className="effect-param-section-title">{group.label}</legend>
+          {renderParams(group.params)}
+        </fieldset>
+      ) : (
+        <div className="effect-param-section" key={group.id}>{renderParams(group.params)}</div>
       ))}
+      {ExtraControls && (
+        <div className="effect-param-section">
+          <Suspense fallback={null}>
+            <ExtraControls effectId={effectType} params={params} onChange={onChange} clipId={clipId} />
+          </Suspense>
+        </div>
+      )}
     </div>
   );
+}
+
+type ExtraControlsLoader = () => Promise<{ default: ComponentType<EffectControlProps> }>;
+const extraControlsCache = new Map<string, LazyExoticComponent<ComponentType<EffectControlProps>>>();
+
+export function getExtraControls(effectType: string, loader: ExtraControlsLoader) {
+  let component = extraControlsCache.get(effectType);
+  if (!component) {
+    component = lazy(loader);
+    extraControlsCache.set(effectType, component);
+  }
+  return component;
 }
 
 interface EffectParamControlProps {
@@ -85,20 +126,22 @@ function EffectParamControl({
   switch (paramDef.type) {
     case 'number':
       return (
-        <div className="control-row" onContextMenu={handleReset}>
-          <label>{paramDef.label}</label>
-          <input
-            type="range"
+        <div className="control-row effect-param-row">
+          <LabeledValue
+            className="effect-param-value"
+            label={paramDef.label}
             min={paramDef.min ?? 0}
             max={paramDef.max ?? 1}
-            step={paramDef.step ?? 0.01}
             value={value as number}
-            onChange={(e) => onChange(parseFloat(e.target.value))}
+            onChange={onChange}
+            defaultValue={paramDef.default as number}
+            decimals={paramDef.step && paramDef.step >= 1 ? 0 : paramDef.step && paramDef.step >= 0.1 ? 1 : 2}
+            sensitivity={Math.max(0.5, ((paramDef.max ?? 1) - (paramDef.min ?? 0)) / 100)}
+            ariaLabel={paramDef.label}
+            keyframeToggle={paramDef.animatable && clipId
+              ? renderKeyframeToggle?.(paramKey)
+              : undefined}
           />
-          <span className="value-display">
-            {typeof value === 'number' ? value.toFixed(2) : value}
-          </span>
-          {paramDef.animatable && clipId && renderKeyframeToggle?.(paramKey)}
         </div>
       );
 
@@ -143,6 +186,14 @@ function EffectParamControl({
             onChange={(e) => onChange(e.target.value)}
           />
           {paramDef.animatable && clipId && renderKeyframeToggle?.(paramKey)}
+        </div>
+      );
+
+    case 'text':
+      return (
+        <div className="control-row" onContextMenu={handleReset}>
+          <label>{paramDef.label}</label>
+          <input type="text" value={value as string} onChange={(e) => onChange(e.target.value)} />
         </div>
       );
 

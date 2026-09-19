@@ -1,16 +1,12 @@
-import {
-  DEFAULT_FLASHBOARD_PROVIDER_ID,
-} from '../../../stores/flashboardStore/defaults';
+import { DEFAULT_FLASHBOARD_PROVIDER_ID } from '../../../stores/flashboardStore/defaults';
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
-import { useAccountStore } from '../../../stores/accountStore';
+import { hasHostedAiSession, useAccountStore } from '../../../stores/accountStore';
 import { FlashBoardComposer } from '../flashboard/FlashBoardComposer';
 import { MediaDownloadComposer } from './MediaDownloadComposer';
 import { MediaAIGenerationQueue } from './MediaAIGenerationQueue';
 import '../flashboard/FlashBoard.css';
 
-const MEDIA_GENERATIVE_SERVICES: Array<'cloud'> = [
-  'cloud',
-];
+const MEDIA_GENERATIVE_SERVICES: Array<'cloud'> = ['cloud'];
 
 interface MediaAIGenerativeTrayExpandedProps {
   initialChatPrompt?: string;
@@ -28,11 +24,14 @@ export function MediaAIGenerativeTrayExpanded({
   mode,
   onCollapse,
 }: MediaAIGenerativeTrayExpandedProps) {
-  const accountSession = useAccountStore((s) => s.session);
-  const hostedAIEnabled = useAccountStore((s) => s.hostedAIEnabled);
-  const flashBoardComposer = useFlashBoardStore((s) => s.composer);
-  const useHostedDefaults = Boolean(accountSession?.authenticated && hostedAIEnabled);
-  const initialProviderId = getHostedInitialProviderId(flashBoardComposer.service, flashBoardComposer.providerId);
+  const accountSession = useAccountStore((state) => state.session);
+  const hostedAIEnabled = useAccountStore((state) => state.hostedAIEnabled);
+  const flashBoardComposer = useFlashBoardStore((state) => state.composer);
+  const useHostedDefaults = hasHostedAiSession(accountSession) && hostedAIEnabled;
+  const initialProviderId = getHostedInitialProviderId(
+    flashBoardComposer.service,
+    flashBoardComposer.providerId,
+  );
 
   return (
     <>

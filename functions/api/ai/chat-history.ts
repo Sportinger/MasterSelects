@@ -58,7 +58,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   // List logs
   const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '50', 10) || 50, 200);
   const offset = parseInt(url.searchParams.get('offset') ?? '0', 10) || 0;
-  const search = url.searchParams.get('search') ?? undefined;
+  const search = url.searchParams.get('search')?.trim().slice(0, 100) || undefined;
 
   const result = await getChatLogs(context.env.DB, {
     userId: user.id,

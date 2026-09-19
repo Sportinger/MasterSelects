@@ -1,0 +1,12 @@
+@layer features {
+  [data-theme="resolve"] .properties-tabs .resolve-property-tab {
+    min-width: 52px;
+    flex: 0 0 52px;
+  }
+
+  [data-theme="resolve"] .resolve-properties-tab-icon--video {
+    color: #8c8c8e;
+    stroke-width: 0.95;
+    transform: scale(1.35, 1);
+  }
+}

@@ -24,12 +24,29 @@ import {
 } from './htmlVideoPausedFrameGuard';
 import { collectExportHtmlVideo } from './htmlVideoExportCollector';
 import type { HtmlVideoCollectRequest } from './htmlVideoCollector';
+import { collectSurfaceVideoFrame } from '../surfaceVideoFrame';
 
 const PLAYBACK_CACHE_CAPTURE_INTERVAL_MS = 2000;
 
 export function collectReadyHtmlVideo(
   request: HtmlVideoCollectRequest
 ): LayerRenderData | null {
+  if (!request.deps.isExporting) {
+    const surface = collectSurfaceVideoFrame(request.layer, request.video, request.deps.textureManager);
+    if (surface) {
+      request.controller.setDecoder('HTMLVideo(VF)');
+      request.controller.markHasVideo();
+      return surface;
+    }
+    if (surface === null) {
+      const fallback = collectReadyHtmlVideoFallback(request);
+      return fallback ? { ...fallback, displayedMediaTime: undefined } : null;
+    }
+  }
+  return collectReadyHtmlVideoFallback(request);
+}
+
+function collectReadyHtmlVideoFallback(request: HtmlVideoCollectRequest): LayerRenderData | null {
   const { layer, video, deps, options, videoKey, layerReuseKey, controller } = request;
   const currentTime = video.currentTime;
   const targetTime = getTargetVideoTime(layer, video);
@@ -53,10 +70,22 @@ export function collectReadyHtmlVideo(
   });
   const lastPresentedTime = deps.scrubbingCache?.getLastPresentedTime(video);
   const lastPresentedOwner = deps.scrubbingCache?.getLastPresentedOwner(video);
+  const hasUsableLivePlaybackFrame =
+    deps.isPlaying &&
+    !video.paused &&
+    !video.seeking &&
+    video.readyState >= 2 &&
+    video.videoWidth > 0 &&
+    video.videoHeight > 0 &&
+    (
+      typeof layer.source?.mediaTime !== 'number' ||
+      isPlaybackHtmlLiveFrameUsable(layer, video)
+    );
   const hasPresentedOwnerMismatch =
     !!layer.sourceClipId &&
     !!lastPresentedOwner &&
-    lastPresentedOwner !== layer.sourceClipId;
+    lastPresentedOwner !== layer.sourceClipId &&
+    !hasUsableLivePlaybackFrame;
   const hasConfirmedPresentedFrame =
     !hasPresentedOwnerMismatch &&
     typeof lastPresentedTime === 'number' &&
@@ -109,7 +138,10 @@ export function collectReadyHtmlVideo(
       : (isSettling || awaitingPausedTargetFrame) && isFrameNearTarget(lastSameClipFrame, targetTime)
       ? lastSameClipFrame
     : null;
-  const emergencyHoldFrame = dragHoldFrame;
+  // A ready element can still reject GPU import while a rapid seek is in
+  // flight. Preserve the last owner-matched layer frame even when it is farther
+  // from the moving target than the normal near-frame tolerance.
+  const emergencyHoldFrame = isDragging ? lastSameClipFrame : dragHoldFrame;
   const sameClipHoldFrame =
     (isDragging || isSettling || awaitingPausedTargetFrame || video.seeking)
       ? isFrameNearTarget(
@@ -413,7 +445,7 @@ export function collectReadyHtmlVideo(
     };
   }
   if (deps.isPlaying) {
-    const anyFrame = getPlaybackStallHoldFrame(layer, video, deps, targetTime);
+    const anyFrame = getPlaybackStallHoldFrame(layer, video, deps);
     if (anyFrame) {
       controller.traceScrubPath(layer, 'playback-stall-hold', video, targetTime, lastPresentedTime);
       controller.setDecoder('HTMLVideo(cached)');

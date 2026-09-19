@@ -24,6 +24,18 @@ afterEach(() => {
 });
 
 describe('FlashBoard project-folder chat journal', () => {
+  it('does not rewrite an unchanged durable journal merely to refresh its timestamp', async () => {
+    mockFsaProject({} as FileSystemDirectoryHandle);
+    const previous = JSON.stringify({ version: 1, projectCreatedAt: PROJECT_CREATED_AT,
+      updatedAt: '2026-07-28T12:01:00.000Z', messages: [] });
+    vi.spyOn(fileStorageService, 'readFile').mockResolvedValue({ text: async () => previous } as File);
+    const writeFile = vi.spyOn(fileStorageService, 'writeFile').mockResolvedValue(true);
+    expect(await persistFlashBoardChatJournal([])).toBe(true);
+    expect(writeFile).not.toHaveBeenCalled();
+    await persistFlashBoardChatJournal([{ id: 'new', role: 'user', text: 'new', createdAt: Date.now() }]);
+    expect(writeFile).toHaveBeenCalledTimes(1);
+  });
+
   it('persists text and tool calls while redacting embedded image data', () => {
     const message = serializeFlashBoardChatMessage({
       id: 'assistant-1',

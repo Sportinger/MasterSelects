@@ -47,14 +47,22 @@ export interface HostedAgentK2ClientRunResult {
   status: Exclude<HostedAgentK2SessionStatus, 'active'>;
 }
 
+export interface HostedAgentK2OperationCheckpoint {
+  descriptor: KernelOperationSessionDescriptorV1;
+  nextSequence: number;
+}
+
 export interface HostedAgentK2ClientPersistedState {
   completedBatches: HostedAgentK1ToolBatchResult[];
   cursor: string | null;
+  operationCheckpoint: HostedAgentK2OperationCheckpoint | null;
+  reloadResumable: boolean;
   status: HostedAgentK2SessionStatus;
 }
 
 export type HostedAgentK2OperationRoundTripFactory = (
   descriptor: KernelOperationSessionDescriptorV1,
+  restoredNextSequence?: number,
 ) => KernelOperationRoundTripV1;
 
 export class HostedAgentK2ReconnectableError extends Error {
@@ -127,7 +135,10 @@ export class HostedAgentK2ClientSession {
     turnId: string;
   };
   private terminalStatus: Exclude<HostedAgentK2SessionStatus, 'active'> | null = null;
+  private operationDescriptor: KernelOperationSessionDescriptorV1 | null = null;
+  private operationReloadUnsafe = false;
   private operationRoundTrip: KernelOperationRoundTripV1 | null = null;
+  private restoredOperationNextSequence: number | null = null;
 
   readonly ledger: HostedAgentK2InPageLedger;
 
@@ -137,6 +148,7 @@ export class HostedAgentK2ClientSession {
     cursor?: string | null;
     lease: HostedAgentK2PageLease;
     onStateChange?: (state: HostedAgentK2ClientPersistedState) => void;
+    operationCheckpoint?: HostedAgentK2OperationCheckpoint | null;
     toolSchemaVersion: string;
     transport: HostedAgentK2ClientTransport;
     turnId: string;
@@ -144,8 +156,23 @@ export class HostedAgentK2ClientSession {
     if (input.cursor !== undefined && input.cursor !== null && !/^[1-9]\d*$/.test(input.cursor)) {
       throw new Error('The restored hosted-agent event cursor is invalid.');
     }
+    if (
+      input.operationCheckpoint
+      && (
+        input.cursor === undefined
+        || input.cursor === null
+        || !Number.isSafeInteger(input.operationCheckpoint.nextSequence)
+        || input.operationCheckpoint.nextSequence < 0
+      )
+    ) {
+      throw new Error('The restored hosted-agent operation checkpoint is invalid.');
+    }
     this.input = input;
     this.cursor = input.cursor ?? null;
+    if (input.operationCheckpoint) {
+      this.operationDescriptor = structuredClone(input.operationCheckpoint.descriptor);
+      this.restoredOperationNextSequence = input.operationCheckpoint.nextSequence;
+    }
     this.ledger = new HostedAgentK2InPageLedger({
       clientInstanceId: input.clientInstanceId,
       completedBatches: input.completedBatches,
@@ -173,9 +200,18 @@ export class HostedAgentK2ClientSession {
   }
 
   private persistState(): void {
+    const operationCheckpoint = this.operationDescriptor && this.operationRoundTrip
+      ? {
+          descriptor: structuredClone(this.operationDescriptor),
+          nextSequence: this.operationRoundTrip.nextSequence,
+        }
+      : null;
     this.input.onStateChange?.({
       completedBatches: this.ledger.completedBatches(),
       cursor: this.cursor,
+      operationCheckpoint,
+      reloadResumable: !this.operationReloadUnsafe
+        && !(this.operationRoundTrip?.hasPendingExecution ?? false),
       status: this.status,
     });
   }
@@ -200,6 +236,7 @@ export class HostedAgentK2ClientSession {
     event: HostedAgentEvent,
     execute: HostedAgentK2BatchExecutor,
     onEvent?: (event: HostedAgentEvent) => void,
+    onEventStart?: (event: HostedAgentEvent) => void,
     signal?: AbortSignal,
     createOperationRoundTrip?: HostedAgentK2OperationRoundTripFactory,
   ): Promise<void> {
@@ -219,15 +256,27 @@ export class HostedAgentK2ClientSession {
       throw new Error('The hosted-agent event stream skipped or reordered an event.');
     }
 
+    onEventStart?.(event);
+    let operationPlanLeavesPrepared = false;
+    let operationSettlementCompleted = false;
     if (event.kind === 'operation-session-ready') {
-      if (this.operationRoundTrip !== null || !createOperationRoundTrip) {
+      if (
+        this.operationRoundTrip !== null
+        || this.operationDescriptor !== null
+        || !createOperationRoundTrip
+      ) {
         throw new Error('The hosted-agent operation session is duplicated or unsupported.');
       }
+      this.operationDescriptor = structuredClone(event.descriptor);
       this.operationRoundTrip = createOperationRoundTrip(event.descriptor);
     } else if (event.kind === 'operation-plan-request') {
       if (!this.operationRoundTrip) {
         throw new Error('The hosted-agent operation plan has no authenticated session authority.');
       }
+      // From authority acceptance until the result acknowledgement and cursor
+      // advance, a new page cannot know whether replay would duplicate an edit.
+      this.operationReloadUnsafe = true;
+      this.persistState();
       const operationSignal = this.operationAbortController.signal;
       const result = await this.operationRoundTrip.execute(
         event.request,
@@ -243,10 +292,13 @@ export class HostedAgentK2ClientSession {
         ...this.boundRequest(),
         result,
       });
+      operationPlanLeavesPrepared = result.status === 'prepared';
     } else if (event.kind === 'operation-plan-settlement') {
       if (!this.operationRoundTrip) {
         throw new Error('The hosted-agent operation settlement has no prepared execution.');
       }
+      this.operationReloadUnsafe = true;
+      this.persistState();
       if (this.operationAbortController.signal.aborted) {
         this.operationRoundTrip.abortPending();
         throw abortError(this.operationAbortController.signal);
@@ -257,6 +309,7 @@ export class HostedAgentK2ClientSession {
         ...this.boundRequest(),
         receipt,
       });
+      operationSettlementCompleted = true;
     } else if (event.kind === 'tool-batch-request') {
       const batch = await this.ledger.executeOnce(event as ToolBatchEvent, execute);
       // Persist the complete result before posting it. If the page reloads
@@ -273,8 +326,14 @@ export class HostedAgentK2ClientSession {
     }
     onEvent?.(event);
     this.cursor = event.eventId;
+    if (event.kind === 'operation-plan-request') {
+      this.operationReloadUnsafe = operationPlanLeavesPrepared;
+    } else if (event.kind === 'operation-plan-settlement' && operationSettlementCompleted) {
+      this.operationReloadUnsafe = false;
+    }
     if (isTerminalEvent(event)) {
       this.operationRoundTrip?.abortPending();
+      this.operationReloadUnsafe = false;
       this.terminalStatus = statusForTerminalEvent(event);
       this.closed = true;
     }
@@ -286,11 +345,22 @@ export class HostedAgentK2ClientSession {
     execute: HostedAgentK2BatchExecutor;
     maximumReconnects?: number;
     onEvent?: (event: HostedAgentEvent) => void;
+    onEventStart?: (event: HostedAgentEvent) => void;
     reconnectDelayMs?: number;
     signal?: AbortSignal;
   }): Promise<HostedAgentK2ClientRunResult> {
     const maximumReconnects = input.maximumReconnects ?? 32;
     let reconnects = 0;
+    if (this.operationDescriptor && !this.operationRoundTrip) {
+      if (!input.createOperationRoundTrip || this.restoredOperationNextSequence === null) {
+        throw new Error('The hosted-agent operation checkpoint cannot be restored.');
+      }
+      this.operationRoundTrip = input.createOperationRoundTrip(
+        this.operationDescriptor,
+        this.restoredOperationNextSequence,
+      );
+      this.restoredOperationNextSequence = null;
+    }
     if (input.signal) {
       const externalSignal = input.signal;
       const abortOperations = () => this.abortLocalOperations(abortError(externalSignal));
@@ -314,6 +384,7 @@ export class HostedAgentK2ClientSession {
             event,
             input.execute,
             input.onEvent,
+            input.onEventStart,
             input.signal,
             input.createOperationRoundTrip,
           );
@@ -444,23 +515,28 @@ export class HostedAgentK2ClientSession {
   }
 
   /**
-   * Legacy tool-batch turns remain resumable from their persisted ledger.
-   * A live operation round trip owns an in-memory editor transaction and is
-   * therefore terminal on full-page detach: abort locally, discard resumable
-   * state, and best-effort interrupt the server with the short lease as the
-   * orphan fallback.
+   * A quiescent operation session is resumable from its descriptor, ordered
+   * sequence, event cursor, and revision-bound timeline checkpoint. A page
+   * detach during execution, acknowledgement, or a prepared transaction still
+   * fails closed because replay could otherwise duplicate or orphan an edit.
    */
   detachForReload(): void {
     if (this.closed) return;
     this.closed = true;
+    const reloadResumable = !this.operationReloadUnsafe
+      && !(this.operationRoundTrip?.hasPendingExecution ?? false);
+    if (reloadResumable) {
+      // Keep status active so the host retains the checkpoint. The old page
+      // lease can expire while the replacement page rebinds the same turn.
+      this.persistState();
+      return;
+    }
     this.terminalStatus = 'interrupted';
     this.abortLocalOperations(new DOMException('Hosted-agent page detached.', 'AbortError'));
-    if (this.operationRoundTrip) {
-      this.persistState();
-      void this.input.transport.interrupt(this.boundRequest()).catch(() => {
-        // Page-unload delivery is best effort; lease expiry is authoritative.
-      });
-    }
+    this.persistState();
+    void this.input.transport.interrupt(this.boundRequest()).catch(() => {
+      // Page-unload delivery is best effort; lease expiry is authoritative.
+    });
   }
 
   /**

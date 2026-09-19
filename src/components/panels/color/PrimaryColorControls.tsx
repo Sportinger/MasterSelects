@@ -7,6 +7,19 @@ import {
 import { MIDIParameterLabel } from '../properties/MIDIParameterLabel';
 import { clampNumber } from './colorEditorMath';
 import type { ColorEditorNode, ColorEditorParamDefinition } from './colorEditorTypes';
+import { trackEditorControlCommitted } from '../../../services/productAnalytics';
+
+function trackColorControl(controlId: string, controlKind: 'number' | 'slider', inputMethod: 'drag' | 'keyboard' | 'reset' | 'type') {
+  trackEditorControlCommitted({
+    area: 'color',
+    controlId,
+    controlKind,
+    inputMethod,
+    interaction: inputMethod === 'reset' ? 'reset' : 'change',
+    itemId: controlId,
+    itemKind: 'property',
+  });
+}
 
 type KeyframeProperty = ComponentProps<typeof KeyframeToggle>['property'];
 
@@ -68,6 +81,16 @@ export function PrimaryColorControls({
                   step={def.step}
                   value={clampNumber(value, sliderMin, sliderMax)}
                   onChange={(rangeEvent) => setParam(node.id, def.key, Number(rangeEvent.target.value))}
+                  onPointerDown={onBatchStart}
+                  onPointerUp={() => {
+                    onBatchEnd();
+                    trackColorControl(def.key, 'slider', 'drag');
+                  }}
+                  onKeyDown={onBatchStart}
+                  onKeyUp={() => {
+                    onBatchEnd();
+                    trackColorControl(def.key, 'slider', 'keyboard');
+                  }}
                 />
                 <DraggableNumber
                   value={value}
@@ -80,6 +103,7 @@ export function PrimaryColorControls({
                   persistenceKey={persistenceKey}
                   onDragStart={onBatchStart}
                   onDragEnd={onBatchEnd}
+                  onCommit={(method) => trackColorControl(def.key, 'number', method)}
                 />
               </div>
             );

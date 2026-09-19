@@ -14,8 +14,13 @@ export interface ApiErrorResponse {
 }
 
 export interface CloudSessionUser {
+  avatarUrl?: string | null;
+  displayName?: string;
   email: string;
   id: string;
+  lastAiModel?: string | null;
+  lastAppVersion?: string | null;
+  lastLoginAt?: string | null;
 }
 
 export interface CloudMeResponse {
@@ -32,6 +37,7 @@ export interface CloudMeResponse {
   session: {
     authenticated: boolean;
     expiresAt?: string;
+    guest?: boolean;
     provider?: AuthProvider | string;
   };
   user: CloudSessionUser | null;
@@ -177,6 +183,7 @@ export interface CloudAiGatewayEnvelope<TData = unknown> {
   session?: {
     authenticated: boolean;
     email?: string | null;
+    guest?: boolean;
     provider?: string | null;
   } | null;
   status: CloudAiGatewayStatus;
@@ -229,7 +236,7 @@ export interface CloudAiVideoRequest {
     multiPrompt?: Array<{ index: number; prompt: string; duration: number }>;
     multiShots?: boolean;
     negativePrompt?: string;
-    outputFormat?: 'jpeg' | 'png' | 'webp';
+    outputFormat?: 'jpeg' | 'mov' | 'mp4' | 'png' | 'webp';
     outputType?: 'image' | 'video';
     provider?: string;
     prompt?: string;
@@ -238,11 +245,14 @@ export interface CloudAiVideoRequest {
       label?: string;
       mediaType: 'audio' | 'image' | 'video';
       mimeType?: string;
+      duration?: number;
       source: string;
     }>;
     resolution?: string;
     sound?: boolean;
     startImageUrl?: string;
+    returnLastFrame?: boolean;
+    webSearch?: boolean;
   };
   taskId?: string;
 }

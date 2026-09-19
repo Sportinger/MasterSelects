@@ -1,0 +1,116 @@
+@layer components {
+.color-workspace-top-bar {
+  position: relative;
+  z-index: 205;
+  display: grid;
+  height: 40px;
+  min-height: 40px;
+  flex: 0 0 40px;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, auto) minmax(0, 1fr);
+  align-items: stretch;
+  border-bottom: 1px solid #07080a;
+  background: color-mix(in srgb, var(--bg-tertiary) 90%, #08080a);
+  box-shadow: inset 0 1px rgb(255 255 255 / 3%);
+  color: #c7c9ce;
+  user-select: none;
+}
+
+.color-workspace-top-bar-group {
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+}
+
+.color-workspace-top-bar-group--left {
+  justify-content: flex-start;
+}
+
+.color-workspace-top-bar-group--right {
+  position: relative;
+  justify-content: flex-end;
+}
+
+.color-workspace-top-bar-group--right::before {
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: 0;
+  width: 1px;
+  background: rgb(255 255 255 / 9%);
+  content: '';
+}
+
+.color-workspace-top-bar-button {
+  position: relative;
+  display: inline-grid;
+  width: 48px;
+  min-width: 48px;
+  height: 39px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #747880;
+  cursor: pointer;
+  transition: color 100ms ease;
+}
+
+.color-workspace-top-bar-button::before {
+  position: absolute;
+  top: 9px;
+  right: 0;
+  bottom: 9px;
+  width: 1px;
+  background: rgb(255 255 255 / 9%);
+  content: '';
+}
+
+.color-workspace-top-bar-button svg {
+  width: 22px;
+  height: 22px;
+  filter: drop-shadow(0 1px 0 rgb(0 0 0 / 70%));
+}
+
+.color-workspace-top-bar-button:hover:not(:disabled),
+.color-workspace-top-bar-button:focus-visible,
+.color-workspace-top-bar-button.active {
+  background: transparent;
+  color: #e7e8eb;
+}
+
+.color-workspace-top-bar-button:focus-visible {
+  z-index: 1;
+  outline: 1px solid #9297a0;
+  outline-offset: -2px;
+}
+
+.color-workspace-top-bar-button:disabled {
+  color: #4b4e55;
+  cursor: not-allowed;
+}
+
+.color-workspace-top-bar-project {
+  align-self: center;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 14px;
+  color: #f0f1f3;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  text-align: center;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 0 #000;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .color-workspace-top-bar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .color-workspace-top-bar-project {
+    display: none;
+  }
+}
+}

@@ -6,10 +6,11 @@ import { useSettingsStore } from '../../src/stores/settingsStore';
 describe('TutorialSetupOverlay', () => {
   const setUserBackground = vi.fn();
   const setActiveShortcutPreset = vi.fn();
+  const setTheme = vi.fn();
 
   beforeEach(() => {
     vi.mocked(useSettingsStore).mockImplementation(((selector: (state: unknown) => unknown) => (
-      selector({ setActiveShortcutPreset, setUserBackground })
+      selector({ setActiveShortcutPreset, setTheme, setUserBackground })
     )) as typeof useSettingsStore);
   });
 
@@ -20,13 +21,15 @@ describe('TutorialSetupOverlay', () => {
 
   it('switches the shortcut preset and continues into the walkthrough', () => {
     const onComplete = vi.fn();
-    render(<TutorialSetupOverlay onCancel={vi.fn()} onComplete={onComplete} />);
+    const { container } = render(<TutorialSetupOverlay onCancel={vi.fn()} onComplete={onComplete} />);
 
     expect(screen.getByText('Where are you coming from?')).toBeTruthy();
+    expect(container.querySelector('.tutorial-setup-choice img')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'DaVinci Resolve' }));
 
     expect(setUserBackground).toHaveBeenCalledWith('davinci');
     expect(setActiveShortcutPreset).toHaveBeenCalledWith('davinci');
+    expect(setTheme).not.toHaveBeenCalled();
     expect(screen.getByText('Shortcuts switched')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Start walkthrough' }));

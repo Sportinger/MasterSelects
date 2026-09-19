@@ -149,6 +149,32 @@ function makeCompositorHarness() {
   };
 }
 
+describe('Compositor source sizing', () => {
+  it('uses current canvas texture dimensions instead of stale intrinsic metadata', () => {
+    const harness = makeCompositorHarness();
+    const liveCanvasLayer = makeSourceLayerData('live-camera', 'live-camera-source');
+    liveCanvasLayer.layer.source = {
+      type: 'video',
+      canvasElement: {} as HTMLCanvasElement,
+      isLiveInput: true,
+      intrinsicWidth: 1920,
+      intrinsicHeight: 1080,
+    };
+    liveCanvasLayer.sourceWidth = 1080;
+    liveCanvasLayer.sourceHeight = 1920;
+
+    harness.compositor.composite(
+      [liveCanvasLayer],
+      harness.commandEncoder,
+      harness.state,
+    );
+
+    const uniformCall = harness.updateLayerUniforms.mock.calls[0];
+    expect(uniformCall[1]).toBeCloseTo(1080 / 1920);
+    expect(uniformCall[6]).toBeCloseTo(1920 / 1080);
+  });
+});
+
 describe('Compositor motion adjustment layers', () => {
   it('processes the accumulated lower frame in layer order and mixes before the upper layer', () => {
     const harness = makeCompositorHarness();

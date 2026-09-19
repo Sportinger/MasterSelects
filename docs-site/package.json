@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "astro dev",
-    "build": "astro build",
+    "sync": "node scripts/sync-features.mjs",
+    "sync:head": "node scripts/sync-features.mjs --source-ref HEAD",
+    "dev": "npm run sync && astro dev",
+    "build": "npm run sync && astro build",
+    "build:head": "npm run sync:head && astro build",
     "preview": "astro preview"
   },
   "dependencies": {

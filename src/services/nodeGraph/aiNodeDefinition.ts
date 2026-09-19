@@ -5,9 +5,10 @@ import type {
   ClipCustomNodeParamValue,
 } from '../../types';
 import { normalizeHexColor } from '../../utils/colorParam';
-import { Logger } from '../logger';
-
-const log = Logger.create('AINodeDefinition');
+import {
+  extractAINodeStaticDefinition,
+  validateAINodeGeneratedCode,
+} from './aiNodeCodeValidation';
 
 interface AINodeDefinitionPayload {
   params?: unknown;
@@ -19,25 +20,25 @@ export function stripAINodeCodeFence(value: string): string {
   return (fenceMatch?.[1] ?? trimmed).trim();
 }
 
-function isAINodeCode(value: string): boolean {
-  return /defineNode\s*\(/.test(value);
+function acceptAINodeCode(value: string): string | null {
+  return validateAINodeGeneratedCode(value).valid ? value : null;
 }
 
 export function extractAINodeGeneratedCode(value: string): string | null {
   const activationMatch = /<activate[_-](?:node[_-])?code>\s*([\s\S]*?)\s*<\/activate[_-](?:node[_-])?code>/i.exec(value);
   if (activationMatch) {
     const activatedCode = stripAINodeCodeFence(activationMatch[1]);
-    return isAINodeCode(activatedCode) ? activatedCode : null;
+    return acceptAINodeCode(activatedCode);
   }
 
   const fencedBlock = /```(?:ts|tsx|typescript|js|javascript)?\s*([\s\S]*?defineNode\s*\([\s\S]*?)```/i.exec(value);
   if (fencedBlock) {
     const fencedCode = stripAINodeCodeFence(fencedBlock[1]);
-    return isAINodeCode(fencedCode) ? fencedCode : null;
+    return acceptAINodeCode(fencedCode);
   }
 
   const candidate = stripAINodeCodeFence(value);
-  return /^\s*defineNode\s*\(/.test(candidate) ? candidate : null;
+  return acceptAINodeCode(candidate);
 }
 
 function isParamValue(value: unknown): value is ClipCustomNodeParamValue {
@@ -167,25 +168,8 @@ function normalizeParams(params: unknown): ClipCustomNodeParamDefinition[] {
   });
 }
 
-function compileNodeDefinition(code: string): AINodeDefinitionPayload | null {
-  let captured: AINodeDefinitionPayload | null = null;
-  const defineNode = (definition: AINodeDefinitionPayload) => {
-    captured = definition;
-    return definition;
-  };
-
-  try {
-    const run = new Function('defineNode', `"use strict";\n${code}\n;`);
-    run(defineNode);
-  } catch (error) {
-    log.warn('Failed to inspect generated AI node definition', error);
-  }
-
-  return captured;
-}
-
 export function extractAINodeParameterSchemaFromCode(code: string): ClipCustomNodeParamDefinition[] {
-  const definition = compileNodeDefinition(code.trim());
+  const definition = extractAINodeStaticDefinition(code.trim()) as AINodeDefinitionPayload | null;
   return normalizeParams(definition?.params);
 }
 

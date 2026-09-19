@@ -1,0 +1,6 @@
+.properties-tabs-shell button { -webkit-tap-highlight-color: transparent; }
+.properties-tabs-shell button:focus:not(:focus-visible) { outline: none; }
+.properties-tabs-shell .tab-btn:focus-visible {
+  outline: 1px solid var(--accent, #8dc9ff);
+  outline-offset: -2px;
+}

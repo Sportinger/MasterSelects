@@ -36,8 +36,8 @@ export function useFlashBoardMultishotController({
   const [isMultiShotPanelClosing, setIsMultiShotPanelClosing] = useState(false);
   const [multiPrompt, setMultiPrompt] = useState<FlashBoardMultishotPlannerPrompt[]>([]);
   const audioBeforeMultiShotRef = useRef(generateAudio);
-  const previousSelectionKeyRef = useRef(selectionKey);
-  const selectionChanged = previousSelectionKeyRef.current !== selectionKey;
+  const [previousSelectionKey, setPreviousSelectionKey] = useState(selectionKey);
+  const selectionChanged = previousSelectionKey !== selectionKey;
 
   const normalizedMultiPrompt = useMemo(
     () => rebalanceMultiPrompts(multiPrompt, duration),
@@ -54,10 +54,10 @@ export function useFlashBoardMultishotController({
       return;
     }
 
-    previousSelectionKeyRef.current = selectionKey;
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
+      setPreviousSelectionKey(selectionKey);
       setMultiShots(false);
       setRenderMultiShotPanel(false);
       setIsMultiShotPanelClosing(false);

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { compositionRenderer } from '../../src/services/compositionRenderer';
 import { mediaRuntimeRegistry } from '../../src/services/mediaRuntime/registry';
+import { liveInputRuntime } from '../../src/services/mediaRuntime/liveInputRuntime';
 import { textRenderer } from '../../src/services/textRenderer';
 import { timelineRuntimeCoordinator } from '../../src/services/timeline/timelineRuntimeCoordinator';
 import { useMediaStore } from '../../src/stores/mediaStore';
@@ -108,6 +109,27 @@ function makeActiveImageClip(): TimelineClip {
       mediaFileId: 'media-image',
       imageUrl: 'blob:active-image',
       naturalDuration: 5,
+    },
+    transform: defaultTransform,
+    effects: [],
+    isLoading: false,
+  } as TimelineClip;
+}
+
+function makeActiveLiveInputClip(): TimelineClip {
+  return {
+    id: 'clip-live',
+    trackId: 'video-track',
+    name: 'Live Camera',
+    startTime: 0,
+    duration: 60,
+    inPoint: 0,
+    outPoint: 60,
+    source: {
+      type: 'video',
+      liveInputId: 'live-camera',
+      mediaFileId: 'live-camera',
+      naturalDuration: 60,
     },
     transform: defaultTransform,
     effects: [],
@@ -505,6 +527,53 @@ describe('compositionRenderer runtime reporting', () => {
     compositionRenderer.disposeComposition('comp-render');
 
     expect(URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:active-image');
+  });
+
+  it('keeps an active fileless live input renderable across composition rebuilds', async () => {
+    const clip = makeActiveLiveInputClip();
+    const video = document.createElement('video');
+    const canvas = document.createElement('canvas');
+    canvas.width = 1920;
+    canvas.height = 1080;
+    vi.spyOn(liveInputRuntime, 'getVideoElement').mockReturnValue(video);
+    vi.spyOn(liveInputRuntime, 'getPresentationVideoElement').mockReturnValue(video);
+    vi.spyOn(liveInputRuntime, 'getPresentationCanvas').mockReturnValue(canvas);
+    vi.spyOn(liveInputRuntime, 'getVideoPresentation').mockReturnValue({
+      width: 1920,
+      height: 1080,
+      rotation: 0,
+    });
+
+    useTimelineStore.setState({ clips: [clip], tracks });
+    mockedUseMediaStore.getState.mockReturnValue({
+      activeCompositionId: 'comp-render',
+      compositions: [makeComposition('comp-render', [])],
+      files: [{
+        id: 'live-camera',
+        name: 'Live Camera',
+        type: 'video',
+        parentId: null,
+        createdAt: 1,
+        liveInput: { kind: 'video-device', deviceId: 'front-camera' },
+      }],
+      activeLayerSlots: {},
+    });
+
+    await expect(compositionRenderer.prepareComposition('comp-render')).resolves.toBe(true);
+    vi.mocked(HTMLMediaElement.prototype.pause).mockClear();
+    const layers = compositionRenderer.evaluateAtTime('comp-render', 10);
+
+    expect(layers).toHaveLength(1);
+    expect(layers[0]?.source).toMatchObject({
+      type: 'video',
+      videoElement: video,
+      canvasElement: canvas,
+      isLiveInput: true,
+      intrinsicWidth: 1920,
+      intrinsicHeight: 1080,
+    });
+    expect(layers[0]?.source?.mediaTime).toBeUndefined();
+    expect(HTMLMediaElement.prototype.pause).not.toHaveBeenCalled();
   });
 
   it('prepares active nested restored image clips from imageUrl for nested composition layers', async () => {

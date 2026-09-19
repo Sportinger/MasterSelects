@@ -1,20 +1,28 @@
 import type { TimelineClip } from '../../types';
 import { WebCodecsPlayer } from '../../engine/WebCodecsPlayer';
+import { flags } from '../../engine/featureFlags';
 import { useMediaStore } from '../../stores/mediaStore';
 import { renderHostPort } from '../render/renderHostPort';
-import type { TimelineRuntimeAdmissionDecision } from '../timeline/runtimeCoordinatorTypes';
 import { timelineRuntimeCoordinator } from '../timeline/timelineRuntimeCoordinator';
 import { mediaRuntimeRegistry } from './registry';
 import {
   createWorkerWebCodecsFrameProvider,
   WorkerWebCodecsFrameProvider,
 } from './workerWebCodecsFrameProvider';
+import { selectRuntimeFrameProviderPlan } from './providerSelection';
+import { buildRuntimeMetadataFromMediaFile } from './clipBindings';
+import { createTurboResFrameProvider } from './prores/TurboResFrameProvider';
+import { createHapFrameProvider } from './hap/HapFrameProvider';
+import { Logger } from '../logger';
+import {
+  reserveRuntimeProviderResources,
+  type RuntimeProviderReservation,
+} from './runtimeProviderReservation';
 import {
   INTERACTIVE_PLAYBACK_SESSION_PREFIX,
   INTERACTIVE_SCRUB_SESSION_PREFIX,
   PLAYBACK_RUNTIME_POLICY_IDS,
   buildPolicyRuntimeSessionKey,
-  createRuntimeProviderAdmissionResources,
   getPendingProviderLoadKey,
   getRuntimeProviderResourceId,
   hasRuntimeBinding,
@@ -38,19 +46,7 @@ export interface RuntimePlaybackBinding {
 }
 
 const pendingRuntimeProviderLoads = new Map<string, Promise<RuntimeFrameProvider | null>>();
-
-type RuntimeProviderReservation =
-  | {
-      admitted: true;
-      resourceIds: readonly string[];
-      release: () => void;
-    }
-  | {
-      admitted: false;
-      decision: TimelineRuntimeAdmissionDecision;
-      resourceIds: readonly string[];
-      release: () => void;
-    };
+const log = Logger.create('RuntimePlayback');
 
 function getRuntimeFile(runtime: MediaSourceRuntime): File | null {
   if (runtime.descriptor.file) {
@@ -69,41 +65,6 @@ function getRuntimeFile(runtime: MediaSourceRuntime): File | null {
   return null;
 }
 
-function reserveRuntimeProviderResources(
-  policy: DecodeSessionPolicy,
-  runtime: MediaSourceRuntime,
-  sessionKey: string,
-  file: File
-): RuntimeProviderReservation {
-  const retainedResourceIds: string[] = [];
-  const release = () => {
-    for (const resourceId of retainedResourceIds) {
-      timelineRuntimeCoordinator.releaseResource(resourceId);
-    }
-  };
-
-  for (const resource of createRuntimeProviderAdmissionResources(policy, runtime, sessionKey, file)) {
-    const decision = timelineRuntimeCoordinator.canRetainResource(resource);
-    if (!decision.admitted) {
-      release();
-      return {
-        admitted: false,
-        decision,
-        resourceIds: [],
-        release: () => undefined,
-      };
-    }
-    timelineRuntimeCoordinator.retainResource(resource);
-    retainedResourceIds.push(resource.id);
-  }
-
-  return {
-    admitted: true,
-    resourceIds: retainedResourceIds,
-    release,
-  };
-}
-
 function releaseRuntimeProviderResources(sourceId: string, sessionKey: string): void {
   for (const policy of PLAYBACK_RUNTIME_POLICY_IDS) {
     timelineRuntimeCoordinator.releaseResource(
@@ -115,8 +76,41 @@ function releaseRuntimeProviderResources(sourceId: string, sessionKey: string): 
   }
 }
 
+function refreshRuntimeMetadataFromMediaStore(runtime: MediaSourceRuntime): void {
+  const mediaFileId = runtime.descriptor.mediaFileId;
+  if (!mediaFileId) return;
+  const mediaFile = useMediaStore.getState().files.find((file) => file.id === mediaFileId);
+  if (mediaFile) runtime.updateMetadata(buildRuntimeMetadataFromMediaFile(mediaFile));
+}
+
 export interface EnsureRuntimeFrameProviderOptions {
   readonly preferWorkerWebCodecs?: boolean;
+  readonly onFrame?: () => void;
+  readonly onError?: (error: Error) => void;
+}
+
+function attachOwnedRuntimeProvider(
+  runtime: MediaSourceRuntime,
+  binding: RuntimePlaybackBinding,
+  provider: RuntimeFrameProvider,
+  reservation: RuntimeProviderReservation,
+): boolean {
+  if (
+    mediaRuntimeRegistry.getRuntime(binding.sourceId) !== runtime
+    || !runtime.peekSession(binding.sessionKey)
+  ) {
+    provider.destroy?.();
+    reservation.release();
+    return false;
+  }
+  const session = runtime.setSessionFrameProvider(binding.sessionKey, provider, {
+    ownsProvider: true,
+    onDispose: reservation.release,
+  });
+  if (session) return true;
+  provider.destroy?.();
+  reservation.release();
+  return false;
 }
 
 function canUseWorkerWebCodecsFrameProvider(): boolean {
@@ -184,6 +178,66 @@ export function getRuntimeFrameProvider(
   return resolveRuntimePlaybackBinding(source, policy)?.frameProvider ?? null;
 }
 
+/**
+ * Returns whether the source is eligible for the opt-in TurboRes path.
+ * Unlike checking the current provider, this also works before the first
+ * asynchronous decoder has been created and lets preview sessions bootstrap.
+ */
+export function isTurboResRuntimeSource(
+  source: RuntimeBackedSource | null | undefined
+): boolean {
+  if (!flags.turboResProRes || !hasRuntimeBinding(source)) {
+    return false;
+  }
+
+  const runtime = mediaRuntimeRegistry.getRuntime(source.runtimeSourceId);
+  if (!runtime) {
+    return false;
+  }
+
+  refreshRuntimeMetadataFromMediaStore(runtime);
+
+  return selectRuntimeFrameProviderPlan({
+    videoCodecId: runtime.metadata.videoCodecId,
+    turboResEnabled: flags.turboResProRes,
+  }).backend === 'turbores';
+}
+
+/**
+ * Returns whether the source decodes through the HAP provider. HAP has no
+ * HTMLVideoElement or WebCodecs fallback, so this is not feature-gated.
+ */
+export function isHapRuntimeSource(
+  source: RuntimeBackedSource | null | undefined
+): boolean {
+  if (!hasRuntimeBinding(source)) {
+    return false;
+  }
+
+  const runtime = mediaRuntimeRegistry.getRuntime(source.runtimeSourceId);
+  if (!runtime) {
+    return false;
+  }
+
+  refreshRuntimeMetadataFromMediaStore(runtime);
+
+  return selectRuntimeFrameProviderPlan({
+    videoCodecId: runtime.metadata.videoCodecId,
+    turboResEnabled: flags.turboResProRes,
+  }).backend === 'hap';
+}
+
+/**
+ * Source is served by a session-owned codec provider (TurboRes or HAP)
+ * instead of an HTMLVideoElement/WebCodecs player. Lets preview sessions
+ * bootstrap before the first asynchronous decoder exists.
+ */
+export function isProviderBackedRuntimeSource(
+  source: RuntimeBackedSource | null | undefined
+): boolean {
+  return isTurboResRuntimeSource(source) || isHapRuntimeSource(source);
+}
+
 export function peekRuntimeFrameProvider(
   source: RuntimeBackedSource | null | undefined
 ): RuntimeFrameProvider | null {
@@ -248,7 +302,7 @@ export function getSharedPreviewRuntimeSessionKey(
   const runtimeProvider = clipPlayer?.isFullMode()
     ? clipPlayer
     : getRuntimeFrameProvider(source);
-  if (!runtimeProvider?.isFullMode()) {
+  if (!runtimeProvider?.isFullMode() && !isProviderBackedRuntimeSource(source)) {
     return source.runtimeSessionKey;
   }
 
@@ -275,7 +329,7 @@ export function getScrubRuntimeSessionKey(
   const runtimeProvider = clipPlayer?.isFullMode()
     ? clipPlayer
     : getRuntimeFrameProvider(source);
-  if (!runtimeProvider?.isFullMode()) {
+  if (!runtimeProvider?.isFullMode() && !isProviderBackedRuntimeSource(source)) {
     return source.runtimeSessionKey;
   }
 
@@ -392,6 +446,7 @@ export function setRuntimeFrameProvider(
   policy: DecodeSessionPolicy = 'interactive',
   options?: {
     ownsProvider?: boolean;
+    onDispose?: () => void;
   }
 ): RuntimePlaybackBinding | null {
   if (!hasRuntimeBinding(source)) {
@@ -437,27 +492,48 @@ export async function ensureRuntimeFrameProvider(
     return null;
   }
 
+  refreshRuntimeMetadataFromMediaStore(runtime);
+
   if (sourceTime !== undefined) {
     runtime.updateSessionTime(binding.sessionKey, sourceTime);
   }
 
+  const providerPlan = selectRuntimeFrameProviderPlan({
+    videoCodecId: runtime.metadata.videoCodecId,
+    turboResEnabled: flags.turboResProRes,
+  });
+  if (providerPlan.backend === 'unsupported') {
+    return null;
+  }
+  const wantsTurboRes = providerPlan.backend === 'turbores';
+  const wantsHap = providerPlan.backend === 'hap';
+  const wantsCodecProvider = wantsTurboRes || wantsHap;
+
   const wantsWorkerWebCodecs =
+    !wantsCodecProvider &&
     options.preferWorkerWebCodecs === true &&
     canUseWorkerWebCodecsFrameProvider();
 
-  if (binding.frameProvider && !wantsWorkerWebCodecs) {
+  if (
+    binding.frameProvider
+    && (wantsCodecProvider
+      ? binding.frameProvider.backend === (wantsTurboRes ? 'turbores' : 'hap')
+      : !wantsWorkerWebCodecs)
+  ) {
     return binding.frameProvider;
   }
 
-  if (binding.frameProvider instanceof WorkerWebCodecsFrameProvider) {
+  if (!wantsCodecProvider && binding.frameProvider instanceof WorkerWebCodecsFrameProvider) {
     return binding.frameProvider;
   }
 
   const canBuildMainThreadWebCodecsProvider = source?.webCodecsPlayer?.isFullMode() === true;
   if (
-    policy !== 'interactive' ||
-    (!isInteractiveScrubSessionKey(binding.sessionKey) && !wantsWorkerWebCodecs) ||
-    (!wantsWorkerWebCodecs && !canBuildMainThreadWebCodecsProvider)
+    !wantsCodecProvider && (
+      policy !== 'interactive' ||
+      (!isInteractiveScrubSessionKey(binding.sessionKey) && !wantsWorkerWebCodecs) ||
+      (!wantsWorkerWebCodecs && !canBuildMainThreadWebCodecsProvider)
+    )
   ) {
     return null;
   }
@@ -477,7 +553,8 @@ export async function ensureRuntimeFrameProvider(
     policy,
     runtime,
     binding.sessionKey,
-    file
+    file,
+    wantsTurboRes ? 'turbores' : wantsHap ? 'hap' : 'webcodecs',
   );
   if (!reservation.admitted) {
     if (!hadSession) {
@@ -489,6 +566,74 @@ export async function ensureRuntimeFrameProvider(
   const initialTime = sourceTime ?? binding.session.currentTime;
   const loadPromise = (async () => {
     try {
+      if (providerPlan.backend === 'hap') {
+        const hapProvider = await createHapFrameProvider({
+          sourceId: `${binding.sourceId}:${binding.sessionKey}`,
+          file,
+          fourCC: providerPlan.fourCC,
+          policy,
+          onFrame: () => {
+            options.onFrame?.();
+            renderHostPort.requestNewFrameRender();
+          },
+          onError: (error) => {
+            options.onError?.(error);
+            log.warn('HAP provider error', { sourceId: binding.sourceId, message: error.message });
+            renderHostPort.requestRender();
+          },
+        });
+        if (!hapProvider) {
+          log.warn('HAP provider failed to initialize', {
+            sourceId: binding.sourceId,
+            sessionKey: binding.sessionKey,
+            fourCC: providerPlan.fourCC,
+          });
+          reservation.release();
+          return null;
+        }
+        log.info('HAP provider ready', { sourceId: binding.sourceId, fourCC: providerPlan.fourCC });
+        if (!attachOwnedRuntimeProvider(runtime, binding, hapProvider, reservation)) return null;
+        if (Number.isFinite(initialTime) && initialTime !== undefined) {
+          hapProvider.seek(initialTime);
+        }
+        renderHostPort.requestRender();
+        return hapProvider;
+      }
+
+      if (providerPlan.backend === 'turbores') {
+        const turboResProvider = await createTurboResFrameProvider({
+          sourceId: `${binding.sourceId}:${binding.sessionKey}`,
+          file,
+          fourCC: providerPlan.fourCC,
+          policy,
+          onFrame: () => {
+            options.onFrame?.();
+            renderHostPort.requestNewFrameRender();
+          },
+          onError: (error) => {
+            options.onError?.(error);
+            log.warn('TurboRes provider error', { sourceId: binding.sourceId, message: error.message });
+            renderHostPort.requestRender();
+          },
+        });
+        if (!turboResProvider) {
+          log.warn('TurboRes provider failed to initialize', {
+            sourceId: binding.sourceId,
+            sessionKey: binding.sessionKey,
+            fourCC: providerPlan.fourCC,
+          });
+          reservation.release();
+          return null;
+        }
+        log.info('TurboRes provider ready', { sourceId: binding.sourceId, fourCC: providerPlan.fourCC });
+        if (!attachOwnedRuntimeProvider(runtime, binding, turboResProvider, reservation)) return null;
+        if (Number.isFinite(initialTime) && initialTime !== undefined) {
+          turboResProvider.seek(initialTime);
+        }
+        renderHostPort.requestRender();
+        return turboResProvider;
+      }
+
       if (wantsWorkerWebCodecs) {
         const workerProvider = await createWorkerWebCodecsFrameProvider({
           sourceId: `${binding.sourceId}:${binding.sessionKey}`,
@@ -502,9 +647,7 @@ export async function ensureRuntimeFrameProvider(
         });
 
         if (workerProvider) {
-          runtime.setSessionFrameProvider(binding.sessionKey, workerProvider, {
-            ownsProvider: true,
-          });
+          if (!attachOwnedRuntimeProvider(runtime, binding, workerProvider, reservation)) return null;
           if (Number.isFinite(initialTime) && initialTime !== undefined) {
             workerProvider.seek(initialTime);
           }
@@ -526,9 +669,7 @@ export async function ensureRuntimeFrameProvider(
 
       try {
         await player.loadFile(file);
-        runtime.setSessionFrameProvider(binding.sessionKey, player, {
-          ownsProvider: true,
-        });
+        if (!attachOwnedRuntimeProvider(runtime, binding, player, reservation)) return null;
 
         if (Number.isFinite(initialTime) && initialTime !== undefined) {
           player.seek(initialTime);

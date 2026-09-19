@@ -1,0 +1,306 @@
+.annotations-panel {
+  --annotation-accent: #f2b94b;
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 100% 0%, rgb(242 185 75 / 8%), transparent 38%),
+    var(--bg-primary, #15181c);
+  color: var(--text-primary, #f4f5f6);
+}
+
+.annotations-panel button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.annotations-panel button:focus {
+  outline: none;
+}
+
+.annotations-panel button:focus-visible,
+.annotations-panel textarea:focus-visible,
+.annotations-panel input:focus-visible {
+  outline: 2px solid var(--annotation-accent);
+  outline-offset: 2px;
+}
+
+.annotations-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 13px;
+  border-bottom: 1px solid rgb(255 255 255 / 8%);
+}
+
+.annotations-panel-header h2 {
+  max-width: 240px;
+  margin: 3px 0 0;
+  overflow: hidden;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  font-size: 15px;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.annotations-panel-eyebrow {
+  color: var(--annotation-accent);
+  font-size: 9px;
+  font-weight: 760;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.annotations-panel-time {
+  flex: none;
+  color: var(--text-secondary, #aeb4bc);
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.annotations-panel-composer {
+  margin: 12px;
+  padding: 11px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 3%);
+}
+
+.annotations-panel-composer textarea,
+.annotations-panel-composer input {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 6px;
+  background: rgb(0 0 0 / 20%);
+  color: inherit;
+  font: inherit;
+}
+
+.annotations-panel-composer textarea {
+  display: block;
+  min-height: 70px;
+  padding: 9px 10px;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.annotations-panel-composer textarea::placeholder {
+  color: var(--text-tertiary, #747b84);
+}
+
+.annotations-panel-scope {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  margin-bottom: 9px;
+  padding: 3px;
+  border-radius: 7px;
+  background: rgb(0 0 0 / 18%);
+}
+
+.annotations-panel-scope button {
+  height: 27px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary, #aeb4bc);
+  font-size: 10px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.annotations-panel-scope button.active {
+  background: rgb(242 185 75 / 18%);
+  color: #ffd77b;
+}
+
+.annotations-panel-scope button:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.annotations-panel-selected-clip {
+  margin: -2px 2px 9px;
+  overflow: hidden;
+  color: #75eadc;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.annotations-panel-range {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.annotations-panel-range label span {
+  display: block;
+  margin: 0 0 4px 2px;
+  color: var(--text-secondary, #aeb4bc);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.annotations-panel-range input {
+  height: 30px;
+  padding: 0 8px;
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.annotations-panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.annotations-panel-actions button {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.annotations-panel-time-button {
+  border: 1px solid rgb(255 255 255 / 12%);
+  background: transparent;
+  color: var(--text-secondary, #b8bec6);
+}
+
+.annotations-panel-add-button {
+  border: 1px solid #d89f32;
+  background: var(--annotation-accent);
+  color: #201707;
+}
+
+.annotations-panel-add-button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.annotations-panel-list-heading {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 15px 7px;
+  color: var(--text-secondary, #9ea5ae);
+  font-size: 9px;
+  font-weight: 740;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.annotations-panel-list {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 10px 12px;
+}
+
+.annotations-panel-item {
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 6px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 7px;
+  background: rgb(255 255 255 / 2.5%);
+  overflow: hidden;
+}
+
+.annotations-panel-item.active {
+  border-color: rgb(242 185 75 / 55%);
+  background: rgb(242 185 75 / 8%);
+  box-shadow: inset 3px 0 0 var(--annotation-accent);
+}
+
+.annotations-panel-item.scope-clip {
+  border-left: 3px solid #4dd5c5;
+}
+
+.annotations-panel-item-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.annotations-panel-item-range {
+  color: var(--annotation-accent);
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.annotations-panel-item-scope {
+  color: var(--text-tertiary, #9299a2);
+  font-size: 8px;
+  font-weight: 760;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.annotations-panel-item.scope-clip .annotations-panel-item-scope,
+.annotations-panel-item.scope-clip .annotations-panel-item-range {
+  color: #75eadc;
+}
+
+.annotations-panel-item-text {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.annotations-panel-delete {
+  width: 34px;
+  border: 0;
+  border-left: 1px solid rgb(255 255 255 / 7%);
+  background: transparent;
+  color: var(--text-tertiary, #7e858e);
+  cursor: pointer;
+}
+
+.annotations-panel-delete:hover {
+  background: rgb(220 77 70 / 13%);
+  color: #f18b84;
+}
+
+.annotations-panel-empty,
+.annotations-panel-placeholder {
+  color: var(--text-tertiary, #7f8791);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.annotations-panel-empty {
+  padding: 28px 16px;
+}
+
+.annotations-panel-placeholder {
+  margin: auto;
+  max-width: 250px;
+  padding: 24px;
+}

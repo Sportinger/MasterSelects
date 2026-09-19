@@ -16,6 +16,8 @@ import {
   getCustomNodeParamDefaults,
 } from './nodeCameraKeyframeValues';
 import { findClipById } from './keyframeClipLookup';
+import { appendSurfaceEffects } from '../../../services/planarTracking/surfaceEffects';
+import { bindCableRenderTime } from '../../../services/faceCables/cableRenderTime';
 
 type KeyframeEffectInterpolationActions = Pick<
   KeyframeActions,
@@ -33,16 +35,17 @@ export const createKeyframeEffectInterpolationActions: SliceCreator<KeyframeEffe
     }
 
     const keyframes = clipKeyframes.get(clipId) || [];
+    const withSurfaces = (effects: typeof clip.effects) => appendSurfaceEffects(bindCableRenderTime(effects, clipLocalTime), clip, clipLocalTime, keyframes);
     if (keyframes.length === 0) {
-      return clip.effects;
+      return withSurfaces(clip.effects);
     }
 
     const effectKeyframes = keyframes.filter(k => k.property.startsWith('effect.'));
     if (effectKeyframes.length === 0) {
-      return clip.effects;
+      return withSurfaces(clip.effects);
     }
 
-    return clip.effects.map(effect => {
+    return withSurfaces(clip.effects.map(effect => {
       let newParams = { ...effect.params };
       const paramNames = new Set<string>();
 
@@ -84,7 +87,7 @@ export const createKeyframeEffectInterpolationActions: SliceCreator<KeyframeEffe
       });
 
       return { ...effect, params: newParams };
-    });
+    }));
   },
 
   getInterpolatedNodeGraphParams: (clipId, nodeId, clipLocalTime) => {

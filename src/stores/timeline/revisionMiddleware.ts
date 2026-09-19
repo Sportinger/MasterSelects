@@ -1,5 +1,6 @@
 import type { StateCreator, StoreApi } from 'zustand';
 
+import type { TimelineClip } from '../../types/timeline';
 import type { TimelineStore } from './types';
 import { assertExclusiveTimelineMutationAllowed } from './exclusiveMutationLease';
 
@@ -47,6 +48,81 @@ type TimelineStateUpdate =
 // That is acceptable for now: monotonicity is session-scoped, and the agent
 // kernel re-snapshots each run.
 let readTimelineState: StoreApi<TimelineStore>['getState'] | null = null;
+let updateDerivedClips: ((updater: (clips: TimelineClip[]) => TimelineClip[]) => void) | null = null;
+let restoreHostedAgentRevision: ((revision: number) => void) | null = null;
+
+const DERIVED_CLIP_KEYS = new Set<keyof TimelineClip>([
+  'analysis',
+  'analysisProgress',
+  'analysisStatus',
+  'audioAnalysisJob',
+  'faceAnalysisMessage',
+  'faceAnalysisProgress',
+  'faceAnalysisStatus',
+  'sceneDescriptionMessage',
+  'sceneDescriptionProgress',
+  'sceneDescriptionStatus',
+  'sceneDescriptions',
+  'transcript',
+  'transcriptMessage',
+  'transcriptProgress',
+  'transcriptStatus',
+  'waveform',
+  'waveformChannels',
+  'waveformGenerating',
+  'waveformProgress',
+]);
+
+const DERIVED_AUDIO_STATE_KEYS = new Set(['processedAnalysisRefs', 'sourceAnalysisRefs']);
+
+function sameAudioEditState(
+  before: TimelineClip['audioState'],
+  after: TimelineClip['audioState'],
+): boolean {
+  if (Object.is(before, after)) return true;
+  // Creating/removing an analysis-only container does not edit the audio.
+  const previous = before ?? {};
+  const next = after ?? {};
+  const keys = new Set([...Object.keys(previous), ...Object.keys(next)]);
+  for (const key of keys) {
+    if (DERIVED_AUDIO_STATE_KEYS.has(key)) continue;
+    if (!Object.is(
+      (previous as Record<string, unknown>)[key],
+      (next as Record<string, unknown>)[key],
+    )) return false;
+  }
+  return true;
+}
+
+function assertDerivedClipUpdate(
+  before: readonly TimelineClip[],
+  after: readonly TimelineClip[],
+): void {
+  if (before.length !== after.length) {
+    throw new Error('Derived timeline updates cannot add or remove clips.');
+  }
+  for (let index = 0; index < before.length; index += 1) {
+    const previousClip = before[index];
+    const nextClip = after[index];
+    if (!previousClip || !nextClip || previousClip.id !== nextClip.id) {
+      throw new Error('Derived timeline updates cannot reorder or replace clip identities.');
+    }
+    if (Object.is(previousClip, nextClip)) continue;
+    const keys = new Set([
+      ...Object.keys(previousClip),
+      ...Object.keys(nextClip),
+    ] as Array<keyof TimelineClip>);
+    for (const key of keys) {
+      if (DERIVED_CLIP_KEYS.has(key)) continue;
+      if (key === 'audioState' && sameAudioEditState(previousClip.audioState, nextClip.audioState)) {
+        continue;
+      }
+      if (!Object.is(previousClip[key], nextClip[key])) {
+        throw new Error(`Derived timeline updates cannot change durable clip field "${String(key)}".`);
+      }
+    }
+  }
+}
 
 function hasOwnKey(patch: TimelineStatePatch, key: keyof TimelineStore): boolean {
   return Object.prototype.hasOwnProperty.call(patch, key);
@@ -123,10 +199,50 @@ export const withTimelineRevision = (
   const revisionSetState = setWithTimelineRevision as StoreApi<TimelineStore>['setState'];
   store.setState = revisionSetState;
   readTimelineState = store.getState;
+  restoreHostedAgentRevision = (revision) => {
+    if (!Number.isSafeInteger(revision) || revision < 0) {
+      throw new Error('The hosted-agent resume revision is invalid.');
+    }
+    // This uses Zustand's underlying setter intentionally. The caller first
+    // proves that the reload-restored canonical timeline equals the persisted
+    // in-flight timeline, so restoring the revision does not mutate content.
+    set({ timelineRevision: revision });
+  };
+  updateDerivedClips = (updater) => {
+    assertExclusiveTimelineMutationAllowed();
+    const currentState = get();
+    const clips = updater(currentState.clips);
+    if (Object.is(clips, currentState.clips)) return;
+    assertDerivedClipUpdate(currentState.clips, clips);
+    set({ clips });
+  };
 
   return initializer(revisionSetState, get, store);
 };
 
 export function getTimelineRevision(): number {
   return readTimelineState?.().timelineRevision ?? 0;
+}
+
+/**
+ * Restores the exact revision of an in-flight Normal Path turn after a page reload.
+ * Callers must first verify the canonical durable timeline state from the same
+ * resume checkpoint; ordinary state loads must continue through the middleware.
+ */
+export function restoreTimelineRevisionForHostedAgentResume(revision: number): void {
+  if (!restoreHostedAgentRevision) throw new Error('The timeline store is not initialized.');
+  restoreHostedAgentRevision(revision);
+}
+
+/**
+ * Projects source intelligence and runtime analysis onto existing clips without
+ * invalidating structural edit plans. The update is fail-closed: clip identity,
+ * timing, effects, transforms, audio edits, and every other durable field must
+ * remain referentially unchanged.
+ */
+export function updateDerivedTimelineClips(
+  updater: (clips: TimelineClip[]) => TimelineClip[],
+): void {
+  if (!updateDerivedClips) throw new Error('The timeline store is not initialized.');
+  updateDerivedClips(updater);
 }

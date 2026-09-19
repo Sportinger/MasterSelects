@@ -8,7 +8,11 @@ const log = Logger.create('RenderLoop');
 export interface RenderLoopCallbacks {
   isRecovering: () => boolean;
   isExporting: () => boolean;
-  onRender: () => void;
+  onRender: (reason?: RenderLoopFrameReason) => boolean | void;
+}
+
+export interface RenderLoopFrameReason {
+  newFrameReady: boolean;
 }
 
 export class RenderLoop {
@@ -40,7 +44,13 @@ export class RenderLoop {
   private newFrameReady = false; // Set by RVFC to bypass scrub limiter
   private lastRenderTime = 0;
   private playbackTargetFps = 60;
-  private playbackFrameTime = 15;
+  // The browser clock samples at least twice per visual frame. A source-rate
+  // limiter alone can phase-lock badly against a 60 Hz display (24 fps is the
+  // common case): one source frame is sampled twice and the next is skipped.
+  // The render callback cheaply rejects duplicate visual frames, so this is a
+  // sampling cadence rather than extra GPU work.
+  private playbackFrameInterval = 1000 / 60;
+  private playbackNextRenderTime = 0;
 
   // Health monitoring - detect frozen render loop
   private lastSuccessfulRender = 0;
@@ -87,6 +97,7 @@ export class RenderLoop {
     this.lastSuccessfulRender = performance.now();
     this.isIdle = false;
     this.renderCount = 0;
+    this.playbackNextRenderTime = 0;
     log.info('Starting');
 
     let lastTimestamp = 0;
@@ -97,6 +108,7 @@ export class RenderLoop {
       const rafGap = lastTimestamp > 0 ? timestamp - lastTimestamp : 0;
       lastTimestamp = timestamp;
       let renderedFrameGap = rafGap;
+      let didRender = false;
 
       if (
         this.idleSuppressed
@@ -120,6 +132,9 @@ export class RenderLoop {
           this.renderRequested ||
           timestamp - this.lastRenderTime >= this.PAUSED_PREVIEW_HOLD_FRAME_TIME
         );
+      if (!playbackRenderActive) {
+        this.playbackNextRenderTime = 0;
+      }
 
       if (this.continuousRender || playbackRenderActive || scrubRenderActive) {
         this.isIdle = false;
@@ -166,7 +181,10 @@ export class RenderLoop {
         const previousRenderTime = this.lastRenderTime;
         const timeSinceLastRender = timestamp - previousRenderTime;
         if (playbackRenderActive) {
-          if (timeSinceLastRender < this.playbackFrameTime) {
+          if (
+            this.playbackNextRenderTime > 0
+            && timestamp + this.FRAME_TIME_TOLERANCE < this.playbackNextRenderTime
+          ) {
             this.animationId = requestAnimationFrame(loop);
             return;
           }
@@ -191,18 +209,40 @@ export class RenderLoop {
           }
           this.newFrameReady = false;
         }
+        if (playbackRenderActive) {
+          if (this.playbackNextRenderTime <= 0) {
+            this.playbackNextRenderTime = timestamp + this.playbackFrameInterval;
+          } else {
+            do {
+              this.playbackNextRenderTime += this.playbackFrameInterval;
+            } while (
+              this.playbackNextRenderTime <= timestamp + this.FRAME_TIME_TOLERANCE
+            );
+          }
+        }
         this.lastRenderTime = timestamp;
         if (previousRenderTime > 0) {
           renderedFrameGap = timeSinceLastRender;
         }
       }
 
-      // Call render callback (unless exporting)
+      // Call render callback (unless exporting). Clear the fresh-frame signal
+      // before entering the callback so a provider that publishes while this
+      // frame is being assembled schedules one more presentation tick.
       if (!this.callbacks.isExporting()) {
         try {
-          this.callbacks.onRender();
-          this.lastSuccessfulRender = timestamp;
-          this.renderCount++;
+          const frameReason = { newFrameReady: this.newFrameReady };
+          this.newFrameReady = false;
+          const rendered = this.callbacks.onRender(frameReason) !== false;
+          if (rendered) {
+            const previousSuccessfulRender = this.lastSuccessfulRender;
+            if (previousSuccessfulRender > 0 && timestamp >= previousSuccessfulRender) {
+              renderedFrameGap = timestamp - previousSuccessfulRender;
+            }
+            this.lastSuccessfulRender = timestamp;
+            this.renderCount++;
+            didRender = true;
+          }
         } catch (e) {
           log.error('Error in render callback', e);
           // Continue loop despite error to prevent freeze
@@ -211,7 +251,7 @@ export class RenderLoop {
 
       // Record rendered-frame cadence for stats. The RAF loop itself may keep
       // ticking at display rate while playback is intentionally frame-limited.
-      if (lastTimestamp > 0) {
+      if (didRender) {
         this.performanceStats.recordRafGap(renderedFrameGap, this.isScrubbing);
       }
 
@@ -401,6 +441,7 @@ export class RenderLoop {
 
   setIsPlaying(playing: boolean): void {
     this.isPlaying = playing;
+    this.playbackNextRenderTime = 0;
     if (playing && this.idleSuppressed) {
       // First play — video GPU surfaces are now warm, enable idle detection
       this.idleSuppressed = false;
@@ -441,10 +482,9 @@ export class RenderLoop {
 
     this.playbackTargetFps = nextTargetFps;
     this.performanceStats.setTargetFps(nextTargetFps);
-    this.playbackFrameTime = Math.max(
-      this.VIDEO_FRAME_TIME,
-      (1000 / nextTargetFps) - this.FRAME_TIME_TOLERANCE,
-    );
+    const samplingFps = Math.min(this.MAX_VISUAL_TARGET_FPS, nextTargetFps * 2);
+    this.playbackFrameInterval = 1000 / samplingFps;
+    this.playbackNextRenderTime = 0;
     if (this.isPlaying && this.timelineVisualDemand) {
       this.lastRenderTime = 0;
       this.requestRender();

@@ -8,6 +8,7 @@ import './LiveInputTab.css';
 
 interface LiveInputTabProps {
   clipId?: string | null;
+  embedded?: boolean;
 }
 
 type SourceKind = LiveInputSource['kind'];
@@ -26,7 +27,7 @@ function useLiveInputRuntimeRevision(): number {
   );
 }
 
-export function LiveInputTab({ clipId = null }: LiveInputTabProps) {
+export function LiveInputTab({ clipId = null, embedded = false }: LiveInputTabProps) {
   const clips = useTimelineStore((state) => state.clips);
   const files = useMediaStore((state) => state.files);
   const compositions = useMediaStore((state) => state.compositions);
@@ -112,8 +113,8 @@ export function LiveInputTab({ clipId = null }: LiveInputTabProps) {
   };
 
   return (
-    <div className="live-input-tab">
-      {reconnectItems.length > 0 && (
+    <div className={`live-input-tab${embedded ? ' live-input-tab--embedded' : ''}`}>
+      {!embedded && reconnectItems.length > 0 && (
         <section className="properties-section live-input-reconnect-section">
           <h4>Reconnect after project load</h4>
           <p className="live-input-help">
@@ -143,7 +144,7 @@ export function LiveInputTab({ clipId = null }: LiveInputTabProps) {
         <section className="properties-section">
           <div className="live-input-heading">
             <div>
-              <h4>Source</h4>
+              <h4>{embedded ? 'Live Input' : 'Source'}</h4>
               <strong>{item.name}</strong>
             </div>
             <span className={liveInputRuntime.getVideoElement(item.id) ? 'connected' : 'disconnected'}>

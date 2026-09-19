@@ -35,6 +35,7 @@ export class ThumbnailMemoryTier {
 
     const duration = outPoint - inPoint;
     const result: (string | null)[] = [];
+    const availableSeconds = [...sourceCache.keys()].toSorted((a, b) => a - b);
 
     for (let i = 0; i < count; i++) {
       const t = inPoint + (i / count) * duration;
@@ -42,6 +43,17 @@ export class ThumbnailMemoryTier {
       let thumb = sourceCache.get(secondIndex) ?? null;
       if (!thumb && secondIndex > 0) {
         thumb = sourceCache.get(secondIndex - 1) ?? sourceCache.get(secondIndex + 1) ?? null;
+      }
+      if (!thumb && availableSeconds.length > 0) {
+        let nearestSecond = availableSeconds[0];
+        let nearestDistance = Math.abs(nearestSecond - secondIndex);
+        for (const candidate of availableSeconds) {
+          const distance = Math.abs(candidate - secondIndex);
+          if (distance >= nearestDistance) continue;
+          nearestSecond = candidate;
+          nearestDistance = distance;
+        }
+        thumb = sourceCache.get(nearestSecond) ?? null;
       }
       result.push(thumb);
     }

@@ -15,7 +15,7 @@ describe('AnimatedTransitionPreview', () => {
 
   it('provides a dedicated animated SVG for every active transition', () => {
     const transitions = getAllTransitions();
-    expect(transitions).toHaveLength(74);
+    expect(transitions).toHaveLength(75);
 
     const { container } = render(
       <>

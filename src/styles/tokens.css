@@ -93,6 +93,19 @@
   --border-strong: var(--gray-400);
   --border-focus: var(--blue-500);
 
+  /* Translucent veils — surfaces and hairlines that sit on top of whatever
+     ground they land on instead of naming an opaque color. Each theme inverts
+     them, so a panel built from veils stays legible in light mode. Use these
+     instead of literal rgba(255,255,255,…) in panel CSS. */
+  --veil-1: rgba(255, 255, 255, 0.04);
+  --veil-2: rgba(255, 255, 255, 0.06);
+  --veil-3: rgba(255, 255, 255, 0.09);
+  --veil-4: rgba(255, 255, 255, 0.12);
+  --veil-5: rgba(255, 255, 255, 0.18);
+  --veil-border-subtle: rgba(255, 255, 255, 0.09);
+  --veil-border: rgba(255, 255, 255, 0.12);
+  --veil-border-strong: rgba(255, 255, 255, 0.20);
+
   /* Text */
   --text-primary: var(--gray-50);
   --text-secondary: var(--gray-150);
@@ -110,6 +123,8 @@
   /* Timeline accent (slightly different blue for timeline elements) */
   --accent-timeline: #2997E5;
   --accent-timeline-hover: var(--blue-600);
+  --timeline-playhead: var(--accent-timeline);
+  --timeline-playhead-hover: var(--accent-hover);
 
   /* Status colors */
   --danger: var(--red-600);
@@ -237,8 +252,28 @@
 
   /* Tab bar */
   --tab-height: 26px;
+  --tab-bar-bg: var(--bg-tertiary);
   --tab-font-size: var(--font-sm);
+  --view-tab-font-size: var(--font-xl);
   --tab-active-bg: var(--gray-550);
+
+  /* Shared surface and control geometry. Feature CSS should consume these
+     instead of inventing local heights, gaps, or surface colors. Themes can
+     then change the whole interface density from one module. */
+  --surface-app: var(--bg-primary);
+  --surface-panel: var(--bg-secondary);
+  --surface-chrome: var(--bg-tertiary);
+  --surface-control: var(--bg-tertiary);
+  --surface-control-hover: var(--bg-hover);
+  --surface-control-active: var(--bg-active);
+  --separator-color: var(--border-color);
+  --separator-size: 1px;
+  --control-height-xs: 20px;
+  --control-height-sm: 24px;
+  --control-height-md: 28px;
+  --panel-padding: var(--sp-3);
+  --section-gap: var(--sp-3);
+  --focus-ring: 0 0 0 1px var(--accent);
 
   /* Panel headers */
   --panel-header-bg: var(--bg-tertiary);
@@ -256,9 +291,9 @@
 
   /* Buttons */
   --btn-radius: var(--radius-md);
-  --btn-padding: var(--sp-2) var(--sp-4);
-  --btn-font-size: var(--font-md);
-  --btn-font-weight: var(--font-medium);
+  --btn-padding: var(--sp-1) var(--sp-2-5);
+  --btn-font-size: var(--font-sm);
+  --btn-font-weight: var(--font-normal);
 
   /* Scrollbar */
   --scrollbar-width: 6px;
@@ -333,6 +368,16 @@
   --border-color: #c0c0c0;
   --border-subtle: #d0d0d0;
   --border-strong: #a0a0a0;
+
+  /* Veils invert to dark on light grounds */
+  --veil-1: rgba(0, 0, 0, 0.03);
+  --veil-2: rgba(0, 0, 0, 0.05);
+  --veil-3: rgba(0, 0, 0, 0.07);
+  --veil-4: rgba(0, 0, 0, 0.10);
+  --veil-5: rgba(0, 0, 0, 0.15);
+  --veil-border-subtle: rgba(0, 0, 0, 0.10);
+  --veil-border: rgba(0, 0, 0, 0.15);
+  --veil-border-strong: rgba(0, 0, 0, 0.24);
 
   /* Text */
   --text-primary: #1a1a1a;
@@ -422,6 +467,16 @@
   --border-color: #1a1a1a;
   --border-subtle: #2a2a2a;
   --border-strong: #3a3a3a;
+
+  /* Veils lift a little more against the true-black ground */
+  --veil-1: rgba(255, 255, 255, 0.05);
+  --veil-2: rgba(255, 255, 255, 0.07);
+  --veil-3: rgba(255, 255, 255, 0.10);
+  --veil-4: rgba(255, 255, 255, 0.14);
+  --veil-5: rgba(255, 255, 255, 0.20);
+  --veil-border-subtle: rgba(255, 255, 255, 0.10);
+  --veil-border: rgba(255, 255, 255, 0.14);
+  --veil-border-strong: rgba(255, 255, 255, 0.22);
 
   /* Text */
   --text-primary: #e0e0e0;

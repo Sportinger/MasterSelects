@@ -1,13 +1,13 @@
-interface ClipDragMouseMoveScheduler {
-  handleMouseMove: (moveEvent: MouseEvent) => void;
+interface TimelineMouseMoveScheduler<TEvent extends MouseEvent> {
+  handleMouseMove: (moveEvent: TEvent) => void;
   flushPendingMouseMove: () => void;
   clear: () => void;
 }
 
-export function createClipDragMouseMoveScheduler(
-  processMouseMove: (moveEvent: MouseEvent) => void,
-): ClipDragMouseMoveScheduler {
-  let pendingMoveEvent: MouseEvent | null = null;
+export function createTimelineMouseMoveScheduler<TEvent extends MouseEvent = MouseEvent>(
+  processMouseMove: (moveEvent: TEvent) => void,
+): TimelineMouseMoveScheduler<TEvent> {
+  let pendingMoveEvent: TEvent | null = null;
   let moveAnimationFrameId: number | null = null;
 
   const cancelPendingMouseMoveFrame = () => {
@@ -26,7 +26,7 @@ export function createClipDragMouseMoveScheduler(
     }
   };
 
-  const handleMouseMove = (moveEvent: MouseEvent) => {
+  const handleMouseMove = (moveEvent: TEvent) => {
     pendingMoveEvent = moveEvent;
     if (moveAnimationFrameId !== null) return;
 
@@ -49,3 +49,5 @@ export function createClipDragMouseMoveScheduler(
     },
   };
 }
+
+export const createClipDragMouseMoveScheduler = createTimelineMouseMoveScheduler;

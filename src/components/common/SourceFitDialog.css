@@ -1,0 +1,202 @@
+@layer overlays {
+  .source-fit-dialog-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 10025;
+    background: rgba(0, 0, 0, 0.2);
+    pointer-events: none;
+  }
+
+  .source-fit-dialog {
+    position: fixed;
+    width: min(370px, calc(100vw - 24px));
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 17px;
+    background: rgba(18, 20, 24, 0.15);
+    box-shadow:
+      0 22px 58px rgba(0, 0, 0, 0.32),
+      0 1px 0 rgba(255, 255, 255, 0.16) inset,
+      1px 0 0 rgba(255, 255, 255, 0.055) inset,
+      -1px 0 0 rgba(255, 255, 255, 0.03) inset;
+    -webkit-backdrop-filter: blur(15px) saturate(92%) contrast(108%);
+    backdrop-filter: blur(15px) saturate(92%) contrast(108%);
+    pointer-events: auto;
+    animation: source-fit-dialog-in 130ms ease-out both;
+  }
+
+  .source-fit-dialog::before {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    background:
+      radial-gradient(ellipse at 18% -12%, rgba(255, 255, 255, 0.16), transparent 44%),
+      linear-gradient(145deg, rgba(255, 255, 255, 0.045), transparent 45%, rgba(255, 255, 255, 0.02));
+    content: '';
+    pointer-events: none;
+  }
+
+  @supports (backdrop-filter: url("#source-fit-liquid-refraction")) {
+    .source-fit-dialog {
+      -webkit-backdrop-filter: blur(15px) saturate(92%) contrast(108%);
+      backdrop-filter:
+        url("#source-fit-liquid-refraction")
+        blur(8px)
+        saturate(92%)
+        contrast(108%);
+    }
+  }
+
+  .source-fit-dialog.is-dragging {
+    cursor: grabbing;
+    user-select: none;
+  }
+
+  .source-fit-dialog-filter {
+    position: absolute;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+  }
+
+  .source-fit-dialog-drag-handle {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    height: 47px;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 5px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    cursor: grab;
+  }
+
+  .source-fit-dialog.is-dragging .source-fit-dialog-drag-handle {
+    cursor: grabbing;
+  }
+
+  .source-fit-dialog-grip {
+    width: 26px;
+    height: 3px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.34);
+  }
+
+  .source-fit-dialog-drag-handle p {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 520;
+    letter-spacing: 0.01em;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .source-fit-dialog-drag-handle strong {
+    color: rgba(255, 255, 255, 0.92);
+    font-weight: 650;
+  }
+
+  .source-fit-dialog-options {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 7px;
+    padding: 9px;
+  }
+
+  .source-fit-dialog-option {
+    height: 46px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    outline: none;
+    background: rgba(255, 255, 255, 0.045);
+    color: rgba(255, 255, 255, 0.68);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 620;
+    letter-spacing: 0.015em;
+    cursor: pointer;
+    transition:
+      background var(--transition-fast),
+      border-color var(--transition-fast),
+      color var(--transition-fast),
+      transform var(--transition-fast);
+  }
+
+  .source-fit-dialog-option:hover,
+  .source-fit-dialog-option:focus-visible {
+    border-color: rgba(255, 255, 255, 0.24);
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.94);
+  }
+
+  .source-fit-dialog-option:focus-visible {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
+  }
+
+  .source-fit-dialog-option:active {
+    transform: scale(0.97);
+  }
+
+  .source-fit-dialog-option.is-default {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.075);
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  [data-theme="light"] .source-fit-dialog {
+    border-color: rgba(0, 0, 0, 0.13);
+    background: rgba(246, 247, 249, 0.22);
+    box-shadow:
+      0 20px 54px rgba(22, 27, 35, 0.22),
+      0 1px 0 rgba(255, 255, 255, 0.72) inset;
+  }
+
+  [data-theme="light"] .source-fit-dialog-drag-handle {
+    border-bottom-color: rgba(0, 0, 0, 0.08);
+  }
+
+  [data-theme="light"] .source-fit-dialog-grip {
+    background: rgba(0, 0, 0, 0.23);
+  }
+
+  [data-theme="light"] .source-fit-dialog-drag-handle p {
+    color: rgba(0, 0, 0, 0.58);
+  }
+
+  [data-theme="light"] .source-fit-dialog-drag-handle strong {
+    color: rgba(0, 0, 0, 0.86);
+  }
+
+  [data-theme="light"] .source-fit-dialog-option {
+    border-color: rgba(0, 0, 0, 0.1);
+    background: rgba(255, 255, 255, 0.28);
+    color: rgba(0, 0, 0, 0.62);
+  }
+
+  [data-theme="light"] .source-fit-dialog-option:hover,
+  [data-theme="light"] .source-fit-dialog-option:focus-visible,
+  [data-theme="light"] .source-fit-dialog-option.is-default {
+    border-color: rgba(0, 0, 0, 0.2);
+    background: rgba(255, 255, 255, 0.6);
+    color: rgba(0, 0, 0, 0.88);
+  }
+
+  @keyframes source-fit-dialog-in {
+    from {
+      opacity: 0;
+      transform: translateY(5px) scale(0.985);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .source-fit-dialog {
+      animation: none;
+    }
+  }
+}

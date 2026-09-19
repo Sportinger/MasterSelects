@@ -1,3 +1,4 @@
+import { cloneTimelineTrackingMetadata } from '../trackingMetadataClone';
 import type {
   CompositionTimelineData,
   Keyframe,
@@ -15,7 +16,6 @@ import { normalizeMotionLayerDefinition } from '../../../services/motionDesign/c
 import { useMediaStore } from '../../mediaStore';
 import { getDataOnlyTimelineSource } from '../sourceRuntimeSanitizer';
 import { serializeVideoBakeRegion } from '../videoBakeSlice';
-
 type SerializableTimelineStateInput = Pick<
   TimelineState,
   | 'tracks'
@@ -43,7 +43,6 @@ function createSerializableTrack(track: TimelineTrack): TimelineTrack {
     audioState: track.audioState ? structuredClone(track.audioState) : undefined,
   };
 }
-
 function resolveSerializableMediaFileId(
   clip: TimelineClip,
   dataOnlySource: ReturnType<typeof getDataOnlyTimelineSource>,
@@ -61,7 +60,6 @@ function resolveSerializableMediaFileId(
 
   return resolvedMediaFileId;
 }
-
 function createSerializableClip(
   clip: TimelineClip,
   clipKeyframes: Map<string, Keyframe[]>,
@@ -112,14 +110,22 @@ function createSerializableClip(
       ? undefined
       : clip.waveformChannels,
     transform: clip.transform,
+    videoInspectorSections: clip.videoInspectorSections
+      ? { ...clip.videoInspectorSections }
+      : undefined,
     sourceRect: clip.sourceRect ? structuredClone(clip.sourceRect) : undefined,
     transitionRender: clip.transitionRender ? structuredClone(clip.transitionRender) : undefined,
     effects: clip.effects,
+    ...cloneTimelineTrackingMetadata(clip),
     transitionIn: clip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(clip.transitionIn)) : undefined,
     transitionOut: clip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(clip.transitionOut)) : undefined,
     transitionSourceMap: clip.transitionSourceMap ? structuredClone(clip.transitionSourceMap) : undefined,
     transitionRecipeBlendWindows: clip.transitionRecipeBlendWindows ? structuredClone(clip.transitionRecipeBlendWindows) : undefined,
     colorCorrection: clip.colorCorrection ? structuredClone(clip.colorCorrection) : undefined,
+    colorGradeMode: clip.colorGradeMode,
+    localColorCorrection: clip.localColorCorrection
+      ? structuredClone(clip.localColorCorrection)
+      : undefined,
     nodeGraph: cloneClipNodeGraph(clip.nodeGraph),
     keyframes: keyframes.length > 0 ? keyframes : undefined,
     isComposition: clip.isComposition,
@@ -148,9 +154,8 @@ function createSerializableClip(
       ? structuredClone(clip.transitionOverlay ?? dataOnlySource.transitionOverlay)
       : undefined,
     vectorAnimationSettings: dataOnlySource?.vectorAnimationSettings,
-    mathScene: dataOnlySource?.type === 'math-scene' && clip.mathScene
-      ? structuredClone(clip.mathScene)
-      : undefined,
+    mathScene: dataOnlySource?.type === 'math-scene' && clip.mathScene ? structuredClone(clip.mathScene) : undefined,
+    flock: dataOnlySource?.type === 'flock' && clip.flock ? structuredClone(clip.flock) : undefined,
     motion: clip.motion ? normalizeMotionLayerDefinition(clip.motion) : undefined,
     is3D: clip.is3D || undefined,
     threeDEffectorsEnabled: dataOnlySource?.threeDEffectorsEnabled,

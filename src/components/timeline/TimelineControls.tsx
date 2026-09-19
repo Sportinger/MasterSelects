@@ -16,6 +16,7 @@ import {
 import './TimelineControls.css';
 import type { TimelineControlsProps } from './types';
 import { useTimelineStore } from '../../stores/timeline';
+import { useAnnotationStore } from '../../stores/annotationStore';
 import { AudioEffectStackControl } from '../panels/properties/AudioEffectStackControl';
 import { AudioLevelMeter } from './components/AudioLevelMeter';
 import { RulerLanesMenu } from './RulerLanesMenu';
@@ -87,6 +88,8 @@ function TimelineControlsComponent({
   const runAudioExportPreflight = useTimelineStore(state => state.runAudioExportPreflight);
   const showFaceRanges = useTimelineStore(state => state.showFaceRanges);
   const toggleFaceRanges = useTimelineStore(state => state.toggleFaceRanges);
+  const rulerAnnotationsVisible = useAnnotationStore(state => state.rulerAnnotationsVisible);
+  const toggleRulerAnnotations = useAnnotationStore(state => state.toggleRulerAnnotations);
   const timelineTracks = useTimelineStore(state => state.tracks);
   const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
   const armedAudioTracks = useMemo(
@@ -268,13 +271,6 @@ function TimelineControlsComponent({
         >
           <IconPlayerRecordFilled className="timeline-transport-icon" aria-hidden="true" />
         </button>
-        <button
-          className={`btn btn-sm timeline-proxy-button ${proxyEnabled ? 'btn-active' : ''} ${isProxyGenerating ? 'is-generating' : ''}`}
-          onClick={onToggleProxy}
-          title={proxyTitle}
-        >
-          {isProxyGenerating ? proxyGenerationLabel : 'Proxy'}
-        </button>
         {recoveryEntries.length > 0 && (
           <button
             type="button"
@@ -293,6 +289,13 @@ function TimelineControlsComponent({
             !
           </span>
         )}
+        <button
+          className={`btn btn-sm timeline-proxy-button ${proxyEnabled ? 'btn-active' : ''} ${isProxyGenerating ? 'is-generating' : ''}`}
+          onClick={onToggleProxy}
+          title={proxyTitle}
+        >
+          {isProxyGenerating ? proxyGenerationLabel : 'Proxy'}
+        </button>
       </div>
       <div className="timeline-edit-tools" data-guided-target="timeline-edit-tools">
         <div className="timeline-edit-tools-items">
@@ -487,6 +490,13 @@ function TimelineControlsComponent({
               >
                 <span className={`view-check ${showFaceRanges ? 'checked' : ''}`}>✓</span>
                 <span>Face Ranges</span>
+              </div>
+              <div
+                className="view-dropdown-item"
+                onClick={toggleRulerAnnotations}
+              >
+                <span className={`view-check ${rulerAnnotationsVisible ? 'checked' : ''}`}>✓</span>
+                <span>Annotation Bars</span>
               </div>
               <div className="view-dropdown-divider" />
               <div

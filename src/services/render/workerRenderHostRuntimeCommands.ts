@@ -218,6 +218,27 @@ export interface WorkerRenderSoftwarePixelEffects {
     readonly centerX: number;
     readonly centerY: number;
   }[];
+  readonly fisheyeAdjustments?: readonly {
+    readonly projection: 'equidistant' | 'equisolid' | 'stereographic' | 'orthographic';
+    readonly strength: number;
+    readonly fieldOfView: number;
+    readonly curveBias: number;
+    readonly radius: number;
+    readonly zoom: number;
+    readonly centerX: number;
+    readonly centerY: number;
+    readonly squeeze: number;
+    readonly rotation: number;
+    readonly preserveAspect: boolean;
+    readonly outside: 'original' | 'transparent';
+    readonly feather: number;
+    readonly edgeMode: 'transparent' | 'clamp' | 'mirror' | 'repeat';
+    readonly edgeFeather: number;
+    readonly chromaticAberration: number;
+    readonly vignette: number;
+    readonly vignetteSoftness: number;
+    readonly samples: number;
+  }[];
   readonly motionBlurAdjustments?: readonly {
     readonly amount: number;
     readonly angle: number;

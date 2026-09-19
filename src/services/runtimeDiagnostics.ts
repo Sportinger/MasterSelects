@@ -6,6 +6,7 @@ export type RuntimeDiagnosticSource =
   | 'console'
   | 'window-error'
   | 'unhandledrejection'
+  | 'resource-error'
   | 'webgpu-uncapturederror'
   | 'webgpu-device-lost';
 
@@ -36,6 +37,9 @@ interface RuntimeDiagnosticsState {
   nextId: number;
   originalConsole: Partial<Record<CapturedConsoleMethod, (...args: unknown[]) => void>>;
   attachedDevices: WeakSet<GPUDevice>;
+  expectedDeviceDestructions?: WeakSet<GPUDevice>;
+  gpuInfo: Record<string, unknown> | null;
+  sink?: (entry: RuntimeDiagnosticEntry) => void;
 }
 
 type RuntimeDiagnosticsHost = typeof globalThis & {
@@ -49,8 +53,10 @@ const MAX_LIMIT = 1000;
 const MAX_BUFFER_ENTRIES = 2000;
 const MAX_ARG_LENGTH = 2000;
 const MAX_MESSAGE_LENGTH = 4000;
+const MAX_STACK_LENGTH = 8000;
 
 const CONSOLE_METHODS: CapturedConsoleMethod[] = ['debug', 'info', 'log', 'warn', 'error'];
+const RESOURCE_TAGS = new Set(['script', 'link', 'img', 'video', 'audio', 'source', 'iframe', 'track']);
 
 const LEVEL_WEIGHTS: Record<RuntimeDiagnosticLevel, number> = {
   DEBUG: 0,
@@ -69,7 +75,11 @@ function getState(): RuntimeDiagnosticsState {
       nextId: 1,
       originalConsole: {},
       attachedDevices: new WeakSet<GPUDevice>(),
+      gpuInfo: null,
     };
+  }
+  if (host.__MASTERSELECTS_RUNTIME_DIAGNOSTICS__.gpuInfo === undefined) {
+    host.__MASTERSELECTS_RUNTIME_DIAGNOSTICS__.gpuInfo = null;
   }
   return host.__MASTERSELECTS_RUNTIME_DIAGNOSTICS__;
 }
@@ -161,7 +171,12 @@ function getErrorDetails(error: unknown): { name?: string; message: string; stac
 
   if (typeof error === 'object' && error !== null) {
     const record = error as Record<string, unknown>;
-    const name = typeof record.name === 'string' ? record.name : undefined;
+    const ctorName = (error as { constructor?: { name?: string } }).constructor?.name;
+    const name = typeof record.name === 'string'
+      ? record.name
+      : ctorName && ctorName !== 'Object'
+        ? ctorName
+        : undefined;
     const message = typeof record.message === 'string' ? record.message : serializeArg(error);
     const stack = typeof record.stack === 'string' ? record.stack : undefined;
     return { name, message, stack };
@@ -179,7 +194,7 @@ function recordDiagnostic(entry: Omit<RuntimeDiagnosticEntry, 'id' | 'timestamp'
     performanceNow: typeof performance !== 'undefined' ? Math.round(performance.now() * 100) / 100 : undefined,
     message: redactSecrets(truncate(entry.message, MAX_MESSAGE_LENGTH)),
     args: entry.args?.map((arg) => redactSecrets(truncate(arg, MAX_ARG_LENGTH))),
-    stack: entry.stack ? redactSecrets(truncate(entry.stack, MAX_MESSAGE_LENGTH)) : undefined,
+    stack: entry.stack ? redactSecrets(truncate(entry.stack, MAX_STACK_LENGTH)) : undefined,
     details: entry.details ? redactObject(entry.details) as Record<string, unknown> : undefined,
   };
 
@@ -187,18 +202,65 @@ function recordDiagnostic(entry: Omit<RuntimeDiagnosticEntry, 'id' | 'timestamp'
   while (state.entries.length > state.maxEntries) {
     state.entries.shift();
   }
+  try {
+    state.sink?.(diagnostic);
+  } catch {
+    // Diagnostics must never destabilize the editor runtime.
+  }
+}
+
+export function setRuntimeDiagnosticSink(
+  sink: ((entry: RuntimeDiagnosticEntry) => void) | undefined,
+): void {
+  getState().sink = sink;
+}
+
+/** Newest-last slice of the in-memory buffer, used as breadcrumbs on error reports. */
+export function getRecentRuntimeDiagnosticEntries(limit: number): RuntimeDiagnosticEntry[] {
+  const safeLimit = Math.min(Math.max(Math.floor(limit) || 0, 0), MAX_LIMIT);
+  return safeLimit === 0 ? [] : getState().entries.slice(-safeLimit);
+}
+
+/** Adapter description captured from the main WebGPU device, if one exists. */
+export function getRuntimeGpuInfo(): Record<string, unknown> | null {
+  return getState().gpuInfo;
+}
+
+/** The console method as it was before the capture patch (bypasses the buffer). */
+export function getOriginalConsoleMethod(
+  method: CapturedConsoleMethod,
+): ((...args: unknown[]) => void) | undefined {
+  const original = getState().originalConsole[method];
+  if (original) return original;
+  const fallback = (console as unknown as Record<CapturedConsoleMethod, ((...args: unknown[]) => void) | undefined>)[method];
+  return fallback ? fallback.bind(console) : undefined;
 }
 
 function recordConsole(method: CapturedConsoleMethod, args: unknown[]): void {
   const serializedArgs = args.map((arg) => serializeArg(arg));
   const message = serializedArgs.join(' ');
+  const firstError = args.find((arg): arg is Error => arg instanceof Error);
+  // TFLite initialization can arrive through the console.error channel.
+  // Match only the standalone string: accompanying errors must stay errors.
+  const isXnnpackInitialization = method === 'error' && args.length === 1
+    && args[0] === 'INFO: Created TensorFlow Lite XNNPACK delegate for CPU.';
   recordDiagnostic({
     source: 'console',
-    level: consoleMethodToLevel(method),
+    level: isXnnpackInitialization ? 'INFO' : consoleMethodToLevel(method),
     message: message || `[console.${method}]`,
     args: serializedArgs,
-    details: { method },
+    stack: firstError?.stack,
+    details: firstError ? { method, errorName: firstError.name } : { method },
   });
+}
+
+function describeResourceTarget(target: EventTarget | null): { tagName: string; url: string } | null {
+  if (typeof Element === 'undefined' || !(target instanceof Element)) return null;
+  const tagName = target.tagName.toLowerCase();
+  if (!RESOURCE_TAGS.has(tagName)) return null;
+  const candidate = target as Element & { currentSrc?: string; href?: string; src?: string };
+  const url = candidate.currentSrc || candidate.src || candidate.href || '';
+  return { tagName, url: typeof url === 'string' ? url.slice(0, 500) : '' };
 }
 
 export function installRuntimeDiagnostics(): void {
@@ -236,6 +298,22 @@ export function installRuntimeDiagnostics(): void {
     });
   });
 
+  // Resource load failures (scripts, chunks, stylesheets, media) do not bubble,
+  // so they only reach a capture-phase listener. Broken chunks are errors;
+  // broken media is a warning breadcrumb.
+  window.addEventListener('error', (event) => {
+    if (event.target === window) return;
+    const resource = describeResourceTarget(event.target);
+    if (!resource) return;
+    const isCodeResource = resource.tagName === 'script' || resource.tagName === 'link';
+    recordDiagnostic({
+      source: 'resource-error',
+      level: isCodeResource ? 'ERROR' : 'WARN',
+      message: `Failed to load ${resource.tagName}: ${resource.url || '(no url)'}`,
+      details: { tagName: resource.tagName, url: resource.url },
+    });
+  }, true);
+
   window.addEventListener('unhandledrejection', (event) => {
     const details = getErrorDetails(event.reason);
     recordDiagnostic({
@@ -250,12 +328,40 @@ export function installRuntimeDiagnostics(): void {
   });
 }
 
+function describeAdapter(device: GPUDevice): Record<string, unknown> | null {
+  try {
+    const info = (device as GPUDevice & { adapterInfo?: Partial<GPUAdapterInfo> }).adapterInfo;
+    if (!info) return null;
+    const described: Record<string, unknown> = {
+      architecture: info.architecture || undefined,
+      description: info.description || undefined,
+      device: info.device || undefined,
+      vendor: info.vendor || undefined,
+    };
+    const limits = device.limits;
+    if (limits) {
+      described.maxTextureDimension2D = limits.maxTextureDimension2D;
+      described.maxBufferSize = limits.maxBufferSize;
+    }
+    return described;
+  } catch {
+    return null;
+  }
+}
+
+export function markExpectedWebGPUDeviceDestruction(device: GPUDevice | null): void {
+  if (!device) return;
+  const state = getState();
+  (state.expectedDeviceDestructions ??= new WeakSet()).add(device);
+}
+
 export function attachWebGPUDeviceDiagnostics(device: GPUDevice | null, label = 'main'): void {
   if (!device) return;
 
   const state = getState();
   if (state.attachedDevices.has(device)) return;
   state.attachedDevices.add(device);
+  state.gpuInfo = describeAdapter(device) ?? state.gpuInfo;
 
   try {
     device.addEventListener('uncapturederror', (event: Event) => {
@@ -274,13 +380,15 @@ export function attachWebGPUDeviceDiagnostics(device: GPUDevice | null, label = 
     });
 
     void device.lost.then((info) => {
+      const expected = info.reason === 'destroyed' && state.expectedDeviceDestructions?.has(device) === true;
       recordDiagnostic({
         source: 'webgpu-device-lost',
-        level: 'ERROR',
+        level: expected ? 'INFO' : 'ERROR',
         message: info.message || 'WebGPU device lost',
         details: {
           label,
           reason: info.reason,
+          expected,
         },
       });
     });
@@ -374,6 +482,7 @@ export function getRuntimeDiagnostics(query: RuntimeDiagnosticsQuery = {}): Reco
     maxEntries: state.maxEntries,
     summary: summarize(state.entries),
     querySummary: summarize(matched),
+    gpu: state.gpuInfo,
     page: typeof window !== 'undefined' ? {
       href: window.location.href,
       visibilityState: typeof document !== 'undefined' ? document.visibilityState : undefined,

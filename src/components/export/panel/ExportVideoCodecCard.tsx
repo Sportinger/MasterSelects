@@ -3,9 +3,10 @@ import type { VideoCodec } from '../../../engine/export';
 import {
   DNXHR_PROFILES,
   getCodecsForContainer,
+  HAP_FORMATS,
   PRORES_PROFILES,
 } from '../../../engine/ffmpeg';
-import type { DnxhrProfile, FFmpegVideoCodec, ProResProfile } from '../../../engine/ffmpeg';
+import type { DnxhrProfile, FFmpegVideoCodec, HapFormat, ProResProfile } from '../../../engine/ffmpeg';
 import type {
   ExportBasicsActions,
   ExportBasicsDisplayState,
@@ -37,29 +38,47 @@ export function ExportVideoCodecCard({
           <span className="export-chip export-chip-static">
             {mode.encoder === 'ffmpeg' ? 'FFmpeg palette' : 'Browser encoder'}
           </span>
-        ) : mode.isWebCodecsEncoder
-          ? FrameExporter.getVideoCodecs(video.containerFormat).map(({ id, label }) => (
+        ) : mode.encoder === 'hap'
+          ? HAP_FORMATS.map((format) => (
               <button
-                key={id}
+                key={format.id}
                 type="button"
-                className={`export-chip${video.videoCodec === id ? ' is-active' : ''}`}
-                onClick={() => actions.setVideoCodec(id as VideoCodec)}
-                disabled={!video.codecSupport[id]}
+                className={`export-chip${video.hapFormat === format.id ? ' is-active' : ''}`}
+                onClick={() => actions.setHapFormat(format.id as HapFormat)}
               >
-                {label}
+                {format.name}
               </button>
             ))
-          : getCodecsForContainer(video.ffmpegContainer).map((codec) => (
-              <button
-                key={codec.id}
-                type="button"
-                className={`export-chip${video.ffmpegCodec === codec.id ? ' is-active' : ''}`}
-                onClick={() => actions.handleFFmpegCodecChange(codec.id as FFmpegVideoCodec)}
-              >
-                {codec.name}
-              </button>
-            ))}
+          : mode.isWebCodecsEncoder
+            ? FrameExporter.getVideoCodecs(video.containerFormat).map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`export-chip${video.videoCodec === id ? ' is-active' : ''}`}
+                  onClick={() => actions.setVideoCodec(id as VideoCodec)}
+                  disabled={!video.codecSupport[id]}
+                >
+                  {label}
+                </button>
+              ))
+            : getCodecsForContainer(video.ffmpegContainer).map((codec) => (
+                <button
+                  key={codec.id}
+                  type="button"
+                  className={`export-chip${video.ffmpegCodec === codec.id ? ' is-active' : ''}`}
+                  onClick={() => actions.handleFFmpegCodecChange(codec.id as FFmpegVideoCodec)}
+                >
+                  {codec.name}
+                </button>
+              ))}
       </div>
+
+      {mode.encoder === 'hap' && !mode.isGifMode && (
+        <div className="export-inline-note">
+          {HAP_FORMATS.find(({ id }) => id === video.hapFormat)?.description}
+          {video.hapFormat === 'hap_alpha' && ' | Alpha'}
+        </div>
+      )}
 
       {(mode.encoder === 'ffmpeg' || mode.isGifMode) && display.ffmpegCodecInfo && (
         <div className="export-inline-note">
@@ -98,6 +117,7 @@ export function ExportVideoCodecCard({
           ))}
         </div>
       )}
+
     </div>
   );
 }

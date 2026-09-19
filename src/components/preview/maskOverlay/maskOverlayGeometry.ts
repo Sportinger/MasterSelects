@@ -1,4 +1,5 @@
 import { inferMaskVertexHandleMode } from '../../../utils/maskVertexHandles';
+import { transformMaskPoint, type MaskTransformSize } from '../../../utils/maskTransform';
 import type { ClipMask, MaskPathKeyframeValue, MaskVertex } from "../../../types/masks";
 import type {
   MaskOverlayPoint,
@@ -159,11 +160,10 @@ export function getNearestMaskEdgeInsert(
   maxDistancePx: number,
   projectPoint?: ProjectMaskPoint,
   pointerCanvas?: MaskOverlayPoint,
+  sourceSize: MaskTransformSize = { width: 1, height: 1 },
 ): PenEdgeInsertPreview | null {
   if (mask.vertices.length < 2) return null;
 
-  const posX = mask.position?.x || 0;
-  const posY = mask.position?.y || 0;
   const pointerX = pointerCanvas?.x ?? point.x * canvasWidth;
   const pointerY = pointerCanvas?.y ?? point.y * canvasHeight;
   const segmentCount = mask.closed ? mask.vertices.length : mask.vertices.length - 1;
@@ -183,9 +183,10 @@ export function getNearestMaskEdgeInsert(
     for (let step = 1; step < 40; step += 1) {
       const t = step / 40;
       const sample = cubicPoint(p0, p1, p2, p3, t);
+      const transformedSample = transformMaskPoint(mask, sample, sourceSize);
       const projected = projectPoint
-        ? projectPoint({ x: sample.x + posX, y: sample.y + posY })
-        : { x: (sample.x + posX) * canvasWidth, y: (sample.y + posY) * canvasHeight };
+        ? projectPoint(transformedSample)
+        : { x: transformedSample.x * canvasWidth, y: transformedSample.y * canvasHeight };
       const sampleDistance = Math.hypot(projected.x - pointerX, projected.y - pointerY);
 
       if (sampleDistance < closestDistance) {

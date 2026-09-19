@@ -426,6 +426,26 @@ function getClipTimeCacheKey(clip: TimelineClip): string {
     : clip.id;
 }
 
+export function getClipSourceTimeAtTimelineTime(
+  ctx: FrameContext,
+  clip: TimelineClip,
+  timelineTime: number,
+): number {
+  const clipLocalTime = timelineTime - clip.startTime;
+  const mappedTime = resolveTransitionSourceMapTime(clip.transitionSourceMap, clipLocalTime);
+  if (mappedTime) return mappedTime.sourceTime;
+  if (Number.isFinite(clip.transitionSourceTimeOverride)) {
+    return clip.transitionSourceTimeOverride!;
+  }
+
+  const initialSpeed = clip.transitionSourceHold
+    ? 1
+    : ctx.getInterpolatedSpeed(clip.id, 0);
+  const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
+  const sourceTime = ctx.getSourceTimeForClip(clip.id, clipLocalTime);
+  return Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
+}
+
 /**
  * Get clip time info with memoization
  * Eliminates repeated calculations of the same clip time

@@ -9,7 +9,7 @@ import {
 import './ProjectNameDialog.css';
 import { validateProjectName } from './projectNameValidation';
 
-export type ProjectNameDialogMode = 'new' | 'save' | 'saveAs';
+export type ProjectNameDialogMode = 'new' | 'rename' | 'save' | 'saveAs';
 
 export interface ProjectNameDialogRequest {
   mode: ProjectNameDialogMode;
@@ -34,6 +34,12 @@ const MODE_COPY: Record<ProjectNameDialogMode, {
     description: 'Name the project before choosing where its files should be stored.',
     kicker: 'Project setup',
     title: 'Create a new project',
+  },
+  rename: {
+    action: 'Rename',
+    description: 'Change the name of the current project and its project folder.',
+    kicker: 'Project settings',
+    title: 'Rename project',
   },
   save: {
     action: 'Choose Location',
@@ -132,7 +138,7 @@ export function ProjectNameDialog({
       }
       onClose();
     } catch {
-      setError('The project could not be created. Please try again.');
+      setError('The project could not be updated. Please try again.');
       setIsSubmitting(false);
       inputRef.current?.focus();
     }

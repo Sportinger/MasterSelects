@@ -1,6 +1,6 @@
 import type { ArtifactManifest } from '../../artifacts/types';
 import { STORES } from './stores';
-import { requestSuccess } from './transactions';
+import { requestSuccess, transactionSuccess } from './transactions';
 import type { StoredArtifactBlob, StoredArtifactManifest } from './types';
 
 export async function saveArtifactManifest(db: IDBDatabase, manifest: ArtifactManifest): Promise<void> {
@@ -39,8 +39,7 @@ export async function saveArtifact(db: IDBDatabase, manifest: ArtifactManifest, 
   transaction.objectStore(STORES.ARTIFACT_BLOBS).put(blobRecord);
 
   return new Promise((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
+    void transactionSuccess(transaction).then(resolve, reject);
   });
 }
 

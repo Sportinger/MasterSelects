@@ -1,5 +1,4 @@
-// IndexedDBErrorDialog - Shows when browser storage is corrupted
-// Provides instructions for clearing site data to fix the issue
+// IndexedDBErrorDialog - Reports unavailable browser storage without assuming corruption.
 
 import { useState, useEffect, useCallback } from 'react';
 import './WelcomeOverlay.css';
@@ -68,30 +67,28 @@ export function IndexedDBErrorDialog({ onClose }: IndexedDBErrorDialogProps) {
         {/* Description */}
         <div className="indexeddb-error-content">
           <p className="indexeddb-error-description">
-            Chrome's IndexedDB storage has become corrupted. This prevents the app from
-            saving your project folder location and settings between sessions.
+            Browser storage could not be opened. This may be temporary or caused by
+            browser permissions or unavailable disk space. Project recovery, cached media
+            and settings may be unavailable until storage access is restored.
           </p>
 
           <div className="indexeddb-error-note">
-            <strong>Your project files are safe</strong> - they're stored in your project folder,
-            not in the browser. You just need to re-select the folder after fixing this.
+            <strong>Protect your work before refreshing.</strong> Save or back up your
+            current project if possible. Unsaved changes may be lost when the page reloads.
           </div>
 
           <div className="indexeddb-error-steps">
-            <h3>To fix this issue:</h3>
+            <h3>Next steps:</h3>
             <ol>
-              <li>Press <kbd>F12</kbd> to open DevTools</li>
-              <li>Go to the <strong>Application</strong> tab</li>
-              <li>In the left sidebar, click <strong>Storage</strong></li>
-              <li>Click the <strong>Clear site data</strong> button</li>
-              <li>Refresh the page</li>
+              <li>Check available disk space and this site's browser storage permissions.</li>
+              <li>Save or back up your work before refreshing the page.</li>
+              <li>If the problem continues, keep your project files and report the storage error.</li>
             </ol>
           </div>
 
           <p className="indexeddb-error-alternative">
-            Or paste this in your browser URL bar:<br />
-            <code>chrome://settings/content/siteDetails?site=http://localhost:5173</code><br />
-            Then click "Clear data"
+            Do not clear site data to troubleshoot this error before backing up projects
+            stored in this browser. Clearing site data can delete those projects.
           </p>
         </div>
 

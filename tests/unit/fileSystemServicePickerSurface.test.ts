@@ -24,6 +24,23 @@ function restoreWindowProperty(property: 'showOpenFilePicker' | 'showDirectoryPi
 }
 
 describe('fileSystemService picker surface', () => {
+  it('ignores duplicate open requests and allows a new picker after cancellation', async () => {
+    let rejectPicker!: (error: Error) => void;
+    const showOpenFilePicker = vi.fn()
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectPicker = reject; }))
+      .mockResolvedValue([]);
+    Object.defineProperty(window, 'showOpenFilePicker', { configurable: true, value: showOpenFilePicker });
+    Object.defineProperty(window, 'showDirectoryPicker', { configurable: true, value: vi.fn() });
+    const { pickFiles } = await vi.importActual<typeof import('../../src/services/fileSystemService')>('../../src/services/fileSystemService');
+    const first = pickFiles();
+    await expect(pickFiles()).resolves.toBeNull();
+    expect(showOpenFilePicker).toHaveBeenCalledTimes(1);
+    rejectPicker(new DOMException('Cancelled', 'AbortError'));
+    await expect(first).resolves.toBeNull();
+    await expect(pickFiles()).resolves.toEqual([]);
+    expect(showOpenFilePicker).toHaveBeenCalledTimes(2);
+  });
+
   afterEach(() => {
     restoreWindowProperty('showOpenFilePicker', originalOpenPicker);
     restoreWindowProperty('showDirectoryPicker', originalDirectoryPicker);

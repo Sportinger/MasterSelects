@@ -193,6 +193,22 @@
   grid-template-columns: minmax(260px, 1fr) 32px;
 }
 
+.color-editor-surface-nodes .color-main,
+.color-editor-workspace.color-editor-surface-nodes .color-main {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.color-editor-surface-controls .color-main {
+  display: block;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.color-editor-surface-controls .color-inspector {
+  height: 100%;
+  border: 0;
+}
+
 .color-view,
 .color-inspector {
   min-height: 0;
@@ -276,179 +292,6 @@
 .color-node-chip.output {
   color: var(--text-secondary);
   background: var(--bg-primary);
-}
-
-.color-graph-scroll {
-  height: 100%;
-  min-height: 128px;
-  overflow: auto;
-  background-color: var(--bg-primary);
-  background-image:
-    linear-gradient(var(--border-color) 1px, transparent 1px),
-    linear-gradient(90deg, var(--border-color) 1px, transparent 1px);
-  background-size: 32px 32px;
-}
-
-.color-editor-workspace .color-graph-scroll {
-  min-height: 320px;
-  overflow: hidden;
-  cursor: grab;
-}
-
-.color-editor-compact .color-graph-scroll {
-  height: 128px;
-  min-height: 128px;
-  max-height: 128px;
-}
-
-.color-graph-canvas {
-  position: relative;
-  min-width: 100%;
-  min-height: 100%;
-}
-
-.color-graph-canvas.panning {
-  cursor: grabbing;
-}
-
-.color-graph-content {
-  position: absolute;
-  left: 0;
-  top: 0;
-  transform-origin: 0 0;
-  will-change: transform;
-}
-
-.color-graph-edges {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: auto;
-  height: auto;
-  display: block;
-  overflow: visible;
-  z-index: 1;
-}
-
-.color-graph-edge {
-  fill: none;
-  stroke: var(--warning-light);
-  stroke-width: 2.5;
-  pointer-events: none;
-}
-
-.color-graph-edge.selected {
-  stroke-width: 3.5;
-  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--warning-light) 60%, transparent));
-}
-
-.color-graph-edge.dragging {
-  stroke-dasharray: 6 5;
-  opacity: 0.9;
-}
-
-.color-graph-edge-hit {
-  fill: none;
-  stroke: transparent;
-  stroke-width: 14;
-  pointer-events: stroke;
-  cursor: pointer;
-}
-
-.color-graph-node {
-  position: absolute;
-  z-index: 2;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto 1fr;
-  align-items: center;
-  gap: 2px 6px;
-  padding: 7px 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  cursor: grab;
-  user-select: none;
-  box-shadow: 0 6px 18px rgb(0 0 0 / 18%);
-}
-
-.color-graph-node:active {
-  cursor: grabbing;
-}
-
-.color-graph-node.compact-locked {
-  cursor: pointer;
-  box-shadow: 0 4px 14px rgb(0 0 0 / 16%);
-}
-
-.color-graph-node.compact-locked:active {
-  cursor: pointer;
-}
-
-.color-graph-node.selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), 0 8px 20px rgb(0 0 0 / 22%);
-}
-
-.color-graph-node.disabled {
-  opacity: 0.48;
-}
-
-.color-graph-node.input,
-.color-graph-node.output {
-  color: var(--text-secondary);
-  background: var(--bg-secondary);
-}
-
-.color-graph-node-type {
-  grid-column: 1 / -1;
-  color: var(--text-secondary);
-  font-size: 9px;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.color-graph-node-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  line-height: 1.15;
-}
-
-.color-graph-node input {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-}
-
-.color-graph-port {
-  position: absolute;
-  top: 50%;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: 2px solid var(--warning-light);
-  border-radius: 50%;
-  background: var(--bg-primary);
-  transform: translateY(-50%);
-  cursor: crosshair;
-  z-index: 3;
-}
-
-.color-graph-port:hover {
-  background: var(--warning-light);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--warning-light) 18%, transparent);
-}
-
-.color-graph-port.input-port {
-  left: -9px;
-}
-
-.color-graph-port.output-port {
-  right: -9px;
 }
 
 .color-node-list {

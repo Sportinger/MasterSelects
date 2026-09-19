@@ -1,5 +1,6 @@
 import type { DebugInfrastructureState } from '../../engine/engineCore/debugInfrastructureState';
 import type { RenderDispatcherDebugSnapshot } from '../../engine/render/RenderDispatcher';
+import type { RenderLoopFrameReason } from '../../engine/render/RenderLoop';
 import type {
   ScrubbingCacheStats,
   WorkerFirstCacheRuntimeSnapshot,
@@ -10,7 +11,7 @@ import type { RenderCapabilityProbeResult, RenderPresentationStrategy } from './
 import type { RenderHostSelectionTelemetry } from './renderHostSelection';
 
 export type RendererMode = 'main' | 'worker-shadow' | 'worker-presenting' | 'worker-only' | 'worker-gpu-only';
-export type RenderFrameCallback = () => void;
+export type RenderFrameCallback = (reason?: RenderLoopFrameReason) => boolean | void;
 
 export interface RenderCaptureCanvas {
   canvas: HTMLCanvasElement;
@@ -44,6 +45,18 @@ export interface RenderHostTelemetry {
   readonly diagnostics?: Record<string, unknown>;
 }
 
+export type RenderPhaseCostProbeResult = {
+  success: true;
+  data: {
+    elapsedMs: number;
+    note: string;
+    entries: Array<{ name: string; calls: number; totalMs: number; maxMs: number }>;
+  };
+} | {
+  success: false;
+  error: string;
+};
+
 export interface RenderHostPort {
   getTelemetry(): RenderHostTelemetry;
   initialize(): Promise<boolean>;
@@ -61,7 +74,7 @@ export interface RenderHostPort {
   render(layers: Layer[], frameContext?: RenderSurfaceFrameContext): void;
   renderCachedFrame(time: number): boolean;
   cacheCompositeFrame(time: number): Promise<void>;
-  cacheActiveCompOutput(compositionId: string): void;
+  cacheActiveCompOutput(compositionId: string, timelineTimeSeconds?: number): void;
   getIsExporting(): boolean;
   renderToPreviewCanvas(
     canvasId: string,
@@ -103,6 +116,7 @@ export interface RenderHostPort {
   getRenderLoop(): RenderHostRenderLoop | null;
   getDebugInfrastructureState(): DebugInfrastructureState;
   getRenderDispatcherDebugSnapshot(): RenderDispatcherDebugSnapshot | null;
+  measureRenderPhaseCosts(durationMs: number): Promise<RenderPhaseCostProbeResult>;
   cleanupVideo(video: HTMLVideoElement): void;
   preCacheVideoFrame(video: HTMLVideoElement, ownerId?: string): Promise<boolean>;
   ensureVideoFrameCached(video: HTMLVideoElement, ownerId?: string): void;

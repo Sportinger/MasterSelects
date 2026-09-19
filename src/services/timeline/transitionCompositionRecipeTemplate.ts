@@ -14,6 +14,7 @@ import {
   cloneTransitionSourceMapForClip,
   getSerializableClip,
 } from './transitionCompositionSourceClips';
+import { buildBakedDatamoshTimelineData } from './datamoshTransitionComposition';
 
 const TRANSITION_TEMPLATE_VERSION = 4;
 
@@ -463,6 +464,13 @@ export function buildTransitionTimelineData(input: {
     outgoingMediaDuration,
     incomingMediaDuration,
   } = input;
+  const bakedDatamosh = buildBakedDatamoshTimelineData({
+    outgoingClip,
+    incomingClip,
+    transition,
+  });
+  if (bakedDatamosh) return bakedDatamosh;
+
   const duration = Math.max(0.0001, transition.duration);
   const bodyStart = 0;
   const bodyEnd = duration;

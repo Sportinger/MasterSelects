@@ -96,6 +96,24 @@ describe('compositor uniforms', () => {
     }
   });
 
+  it('encodes the source-space anchor in both compositor shaders', () => {
+    const buffer = new ArrayBuffer(COMPOSITOR_UNIFORM_FLOAT_COUNT * 4);
+    const floats = new Float32Array(buffer);
+    const u32 = new Uint32Array(buffer);
+
+    writeLayerUniformData(createLayer({ anchor: { x: 0.25, y: -0.125, z: 0 } }), 1, 1, false, floats, u32);
+
+    expect(floats[30]).toBeCloseTo(0.25);
+    expect(floats[31]).toBeCloseTo(-0.125);
+    for (const shaderPath of [
+      'src/shaders/composite.wgsl',
+      'src/engine/pipeline/compositor/externalCompositeShader.ts',
+    ]) {
+      const shader = normalizeWgsl(readRepoText(shaderPath));
+      expect(shader).toContain('vec2f(layer.anchorX, layer.anchorY)');
+    }
+  });
+
   it('applies normalized 2D position in composition space in both compositor shaders', () => {
     const normalShader = normalizeWgsl(readRepoText('src/shaders/composite.wgsl'));
     const externalShader = normalizeWgsl(

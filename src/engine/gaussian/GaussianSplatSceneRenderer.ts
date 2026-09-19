@@ -2,6 +2,7 @@
 // Manages lifecycle, blendshape expression data, and canvas access for compositor integration.
 
 import { Logger } from '../../services/logger';
+import { fetchWithDevBridgeAuth } from '../../services/security/devBridgeAuth';
 
 const log = Logger.create('GaussianSplatSceneRenderer');
 
@@ -141,7 +142,7 @@ export class GaussianSplatSceneRenderer {
         try {
           const blobResp = await fetch(zipUrl);
           const blobData = await blobResp.arrayBuffer();
-          const storeResp = await fetch('/api/blob-store', {
+          const storeResp = await fetchWithDevBridgeAuth('/api/blob-store', {
             method: 'POST',
             headers: { 'Content-Type': 'application/zip' },
             body: blobData,

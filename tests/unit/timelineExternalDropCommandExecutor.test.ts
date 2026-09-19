@@ -117,6 +117,39 @@ describe('timeline external drop command executor', () => {
     );
   });
 
+  it('applies the placement choice resolved for a visual media drop', async () => {
+    const actions = createActions();
+    const file = new File(['video'], 'portrait.mp4', { type: 'video/mp4' });
+    const source = mediaFile({
+      id: 'media-portrait',
+      file,
+      width: 576,
+      height: 1024,
+    });
+    setMediaState({ files: [source] });
+
+    await executeTimelineExternalDropCommand({
+      actions,
+      command: { kind: 'media-file', itemId: source.id },
+      isAudioOnlyMediaFile: () => false,
+      isVideoTrack: true,
+      mediaFilePolicy: 'strict-track-type',
+      resolveAddClipOptions: () => ({ visualScaleMode: 'fit' }),
+      resolveStartTime: () => 0,
+      trackId: 'video-1',
+    });
+
+    expect(actions.addClip).toHaveBeenCalledWith(
+      'video-1',
+      file,
+      0,
+      undefined,
+      'media-portrait',
+      undefined,
+      { visualScaleMode: 'fit' },
+    );
+  });
+
   it('places audio media on audio tracks under strict track validation', async () => {
     const actions = createActions();
     const file = new File(['audio'], 'dialog.wav', { type: 'audio/wav' });

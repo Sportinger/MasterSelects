@@ -140,7 +140,7 @@ export function buildNestedBaseLayer(
 
   const effects = mappedAnimation
     ? mappedAnimation.effects
-    : evaluateCompositionClipEffects(nestedClip.effects, keyframes, nestedClipLocalTime);
+    : evaluateCompositionClipEffects(nestedClip.effects, keyframes, nestedClipLocalTime, nestedClip);
   const masks = mappedAnimation
     ? mappedAnimation.masks
     : evaluateCompositionClipMasks(nestedClip.masks, keyframes, nestedClipLocalTime);

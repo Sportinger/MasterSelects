@@ -1,0 +1,9 @@
+@layer components {
+  .glyph-artifact-export { border-top: 1px solid var(--border-color); margin-top: var(--sp-3); padding: var(--sp-3); }
+  .glyph-artifact-export p, .glyph-artifact-export small { color: var(--text-secondary); font-size: var(--font-sm); }
+  .glyph-artifact-controls { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
+  .glyph-artifact-controls label { align-items: center; display: flex; gap: 6px; }
+  .glyph-artifact-controls input[type='number'] { width: 72px; }
+  .glyph-artifact-actions { display: flex; gap: 6px; }
+  .glyph-artifact-actions button { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 5px; color: var(--text-primary); cursor: pointer; padding: 6px 10px; }
+}

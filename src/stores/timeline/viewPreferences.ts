@@ -10,6 +10,8 @@ const TIMELINE_TRACK_HEADER_WIDTH_STORAGE_KEY = 'masterselects.timelineTrackHead
 const TIMELINE_SPLIT_RATIO_STORAGE_KEY = 'masterselects.timelineSplitRatio';
 const TIMELINE_SNAPPING_ENABLED_STORAGE_KEY = 'masterselects.timelineSnappingEnabled';
 const TIMELINE_GRID_SUBDIVISION_STORAGE_KEY = 'masterselects.timelineGridSubdivision';
+const PIANO_ROLL_SNAP_ENABLED_STORAGE_KEY = 'masterselects.pianoRollSnapEnabled';
+const PIANO_ROLL_GRID_SUBDIVISION_STORAGE_KEY = 'masterselects.pianoRollGridSubdivision';
 const METRONOME_ENABLED_STORAGE_KEY = 'masterselects.metronomeEnabled';
 const METRONOME_VOLUME_STORAGE_KEY = 'masterselects.metronomeVolume';
 const METRONOME_MODE_STORAGE_KEY = 'masterselects.metronomeMode';
@@ -272,6 +274,45 @@ export function readStoredTimelineGridSubdivision(
 
 export function persistTimelineGridSubdivision(subdivision: TimelineGridSubdivision): void {
   persistStoredValue(TIMELINE_GRID_SUBDIVISION_STORAGE_KEY, subdivision);
+}
+
+// The piano roll keeps its OWN snap toggle and subdivision, deliberately not
+// shared with the timeline's: a key editor is normally quantized much finer
+// (1/16) than the arrangement grid you drag clips on, and every DAW separates
+// the two. Same storage shape, separate keys.
+export function readStoredPianoRollSnapEnabled(fallback: boolean): boolean {
+  if (!canUseLocalStorage()) return fallback;
+  try {
+    const stored = localStorage.getItem(PIANO_ROLL_SNAP_ENABLED_STORAGE_KEY);
+    if (stored === 'true') return true;
+    if (stored === 'false') return false;
+  } catch {
+    // localStorage can be unavailable in restricted browser contexts.
+  }
+  return fallback;
+}
+
+export function persistPianoRollSnapEnabled(enabled: boolean): void {
+  persistStoredValue(PIANO_ROLL_SNAP_ENABLED_STORAGE_KEY, enabled ? 'true' : 'false');
+}
+
+export function readStoredPianoRollGridSubdivision(
+  fallback: TimelineGridSubdivision,
+): TimelineGridSubdivision {
+  if (!canUseLocalStorage()) return fallback;
+  try {
+    const stored = localStorage.getItem(PIANO_ROLL_GRID_SUBDIVISION_STORAGE_KEY);
+    if (stored && (TIMELINE_GRID_SUBDIVISIONS as string[]).includes(stored)) {
+      return stored as TimelineGridSubdivision;
+    }
+  } catch {
+    // localStorage can be unavailable in restricted browser contexts.
+  }
+  return fallback;
+}
+
+export function persistPianoRollGridSubdivision(subdivision: TimelineGridSubdivision): void {
+  persistStoredValue(PIANO_ROLL_GRID_SUBDIVISION_STORAGE_KEY, subdivision);
 }
 
 // Metronome settings are per-USER view state, never project content (plan §3.6).

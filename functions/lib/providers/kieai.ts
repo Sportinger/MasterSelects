@@ -119,6 +119,7 @@ function normalizeHostedReferenceMedia(value: unknown): HostedReferenceMedia[] |
       }
 
       return {
+        duration: clampOptionalNumber(candidate.duration, 0, 3600),
         fileName: asString(candidate.fileName ?? candidate.file_name),
         label: asString(candidate.label),
         mediaType,
@@ -323,7 +324,11 @@ export function normalizeHostedSeedanceParams(value: unknown): HostedVideoParams
   const requestedProvider = asString(value.provider ?? value.providerId ?? value.provider_id);
   const referenceMedia = normalizeHostedReferenceMedia(value.referenceMedia ?? value.reference_media);
 
-  if (requestedProvider !== 'bytedance/seedance-2' && requestedProvider !== 'bytedance/seedance-2-fast') {
+  if (
+    requestedProvider !== 'bytedance/seedance-2'
+    && requestedProvider !== 'bytedance/seedance-2-fast'
+    && requestedProvider !== 'bytedance/seedance-2-5'
+  ) {
     return null;
   }
 
@@ -341,15 +346,21 @@ export function normalizeHostedSeedanceParams(value: unknown): HostedVideoParams
 
   return {
     aspectRatio: typeof value.aspectRatio === 'string' && value.aspectRatio.trim() ? value.aspectRatio.trim() : '16:9',
-    duration: Math.max(4, Math.min(15, Math.floor(duration))),
+    duration: Math.max(4, Math.min(provider === 'bytedance/seedance-2-5' ? 30 : 15, Math.floor(duration))),
     endImageUrl: typeof value.endImageUrl === 'string' && value.endImageUrl.trim() ? value.endImageUrl.trim() : undefined,
     mode,
     multiShots: false,
+    outputFormat: provider === 'bytedance/seedance-2-5'
+      && (value.outputFormat === 'mov' || value.output_format === 'mov') ? 'mov' : 'mp4',
     prompt,
     provider,
     referenceMedia,
     sound: value.sound === true,
     startImageUrl: typeof value.startImageUrl === 'string' && value.startImageUrl.trim() ? value.startImageUrl.trim() : undefined,
+    returnLastFrame: provider === 'bytedance/seedance-2-5'
+      && (value.returnLastFrame === true || value.return_last_frame === true),
+    webSearch: provider === 'bytedance/seedance-2-5'
+      && (value.webSearch === true || value.web_search === true),
   };
 }
 
@@ -379,7 +390,7 @@ export function buildHostedKlingCapabilities(): HostedKlingCapabilities {
   return {
     byoExplicit: true,
     musicProvider: 'suno-music',
-    providers: ['kling-3.0', 'bytedance/seedance-2', 'bytedance/seedance-2-fast', 'veo-3.1', 'runway-video', 'topaz/video-upscale'],
+    providers: ['kling-3.0', 'bytedance/seedance-2-5', 'bytedance/seedance-2', 'bytedance/seedance-2-fast', 'veo-3.1', 'runway-video', 'topaz/video-upscale'],
     pollingSupported: true,
     sunoModels: ['V5_5', 'V5', 'V4_5PLUS', 'V4_5', 'V4'],
   };

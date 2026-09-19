@@ -12,7 +12,7 @@ The keyframe system animates clip properties over time using per-clip keyframe m
 
 | Property | Notes |
 |----------|-------|
-| `opacity` | 0-1 value, shown as percent in the UI. |
+| `opacity` | 0-1 value, shown as percent in the UI. Static edits and keyframe writes are clamped to 0-100%, so neither timeline controls nor Graph mode can store negative opacity. |
 | `position.x` | Horizontal position. |
 | `position.y` | Vertical position. |
 | `position.z` | World-space Z position when the clip exposes it. For camera clips this is the real camera eye Z. |
@@ -208,6 +208,7 @@ npm run docs:screenshots -- --id=keyframes-bezier-curve-editor
 - `Ctrl+V` pastes keyframes relative to the current playhead.
 - Keyframes are normalized on copy so pasted timing stays relative to the first copied keyframe.
 - If the clipboard does not contain keyframes, paste falls back to the clip clipboard flow.
+- Removing an effect also removes every `effect.{effectId}.*` keyframe owned by that effect, so deleted effect curves disappear from Graph mode immediately.
 
 ### Disable / Toggle Off
 
@@ -275,3 +276,18 @@ The row-height constant is 18 px.
 - [Keyboard Shortcuts](./Keyboard-Shortcuts.md)
 - [Preview](./Preview.md)
 - [Effects](./Effects.md)
+
+## Dense tracking and stabilization keys
+
+Expanded timeline rows draw every key in the horizontal viewport (plus a small
+overscan). Dense rows use one main-thread 2D canvas per property instead of one
+DOM element per point. Overlapping keys are all painted, with selected points
+on top; pointer hit testing finds the nearest original key for selection, drag,
+double-click, and context-menu actions. Zoom exposes individually spaced points.
+Canvas backing stores are viewport-sized and capped at 4096 pixels in width.
+Stored keys, interpolation, export, marquee selection, and group edits retain
+every keyframe. Sparse rows keep their existing DOM controls.
+
+Interpolation shares a weakly cached property/time index for each immutable
+keyframe array and finds adjacent keys by binary search. Editing or undoing
+creates a new array and therefore a fresh index; old indexes can be collected.

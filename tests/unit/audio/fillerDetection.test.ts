@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { detectFillerMarkers } from '../../../src/services/audio/intelligence/speechMarkers/fillerDetection';
+import { isFillerToken } from '../../../src/services/audio/intelligence/speechMarkers/fillerLexicon';
 import type { TranscriptWord } from '../../../src/types/clipMetadata';
 
 function word(id: string, text: string, start: number, end: number): TranscriptWord {
@@ -7,6 +8,12 @@ function word(id: string, text: string, start: number, end: number): TranscriptW
 }
 
 describe('detectFillerMarkers', () => {
+  it('recognizes common German transcript variants used in the review UI', () => {
+    expect(['Äh', 'ähm,', 'EHM', 'ah', 'hmm'].map((token) => isFillerToken(token, 'de')))
+      .toEqual([true, true, true, true, true]);
+    expect(isFillerToken('aber', 'de')).toBe(false);
+  });
+
   it('finds German fillers, repetition, false start, and a VAD-confirmed long pause', () => {
     const words = [
       word('w1', 'Heute', 0, 0.3),

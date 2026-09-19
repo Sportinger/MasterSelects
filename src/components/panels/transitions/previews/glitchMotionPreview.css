@@ -517,6 +517,37 @@
   }
 }
 
+.transition-preview-datamosh .tp-gm-datamosh-source {
+  animation: tp-gm-datamosh-source 1.7s steps(1, end) infinite;
+}
+.transition-preview-datamosh .tp-gm-datamosh-vectors {
+  animation: tp-gm-datamosh-vectors 1.7s steps(1, end) infinite;
+  transform: translateX(4px);
+}
+.transition-preview-datamosh .tp-gm-datamosh-trace {
+  animation: tp-gm-datamosh-trace 1.7s steps(1, end) infinite;
+}
+@keyframes tp-gm-datamosh-source {
+  0%, 18% { opacity: 1; transform: translateX(0); }
+  19%, 34% { opacity: 0.72; transform: translateX(7px); }
+  35%, 54% { opacity: 0.5; transform: translateX(14px); }
+  55%, 76% { opacity: 0.24; transform: translateX(22px); }
+  77%, 100% { opacity: 0; transform: translateX(30px); }
+}
+@keyframes tp-gm-datamosh-vectors {
+  0%, 18% { opacity: 0; transform: translateX(-6px) scaleX(0.55); }
+  19%, 34% { opacity: 0.86; transform: translateX(2px) scaleX(0.82); }
+  35%, 54% { opacity: 0.72; transform: translateX(8px) scaleX(1.08); }
+  55%, 76% { opacity: 0.48; transform: translateX(15px) scaleX(1.28); }
+  77%, 100% { opacity: 0; transform: translateX(24px) scaleX(1.5); }
+}
+@keyframes tp-gm-datamosh-trace {
+  0%, 18%, 77%, 100% { opacity: 0; transform: translateX(-4px); }
+  19%, 34% { opacity: 0.74; transform: translateX(3px); }
+  35%, 54% { opacity: 0.46; transform: translateX(10px); }
+  55%, 76% { opacity: 0.22; transform: translateX(18px); }
+}
+
 .transition-preview-directional-blur .tp-gm-direction-out {
   animation: tp-gm-direction-out 1.82s cubic-bezier(0.45, 0, 0.2, 1) infinite;
   transform: translateX(3px);

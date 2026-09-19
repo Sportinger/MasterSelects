@@ -13,6 +13,7 @@ import {
 } from '../../../services/layerBuilder';
 import { findStopMarkerInPlaybackRange } from '../../../services/timeline/stopMarkers';
 import { hasTimelineVisualRenderDemand } from '../../../services/timeline/timelineVisualDemand';
+import { resolvePlaybackRange } from '../../../stores/timeline/playbackRange';
 import type { TimelineClip, TimelineTrack } from '../../../types';
 
 interface UsePlaybackLoopProps {
@@ -180,8 +181,9 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
           nestedComplexityClips = clips;
           nestedComplexity = getNestedPlaybackComplexity(clips);
         }
-        const effectiveEnd = op !== null ? op : dur;
-        const effectiveStart = ip !== null ? ip : 0;
+        const playbackRange = resolvePlaybackRange(ip, op, dur);
+        const effectiveEnd = playbackRange.end;
+        const effectiveStart = playbackRange.start;
         const previousPosition = playheadState.position;
 
         let newPosition: number;

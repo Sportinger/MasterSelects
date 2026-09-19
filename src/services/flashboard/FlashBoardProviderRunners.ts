@@ -3,6 +3,7 @@ import type {
   TextToVideoParams,
   ImageToVideoParams,
   GenerationReferenceMedia,
+  VideoTask,
 } from '../aiGenerationContracts';
 import type {
   FlashBoardGenerationOutput,
@@ -123,6 +124,27 @@ function assertManagedProviderRequest(request: FlashBoardGenerationRequest): voi
   }
 }
 
+function buildCompletedVideoResult(
+  task: VideoTask,
+  request: FlashBoardGenerationRequest,
+  remoteTaskId: string,
+): FlashBoardProviderRunnerResult {
+  if (task.status !== 'completed' || !task.videoUrl) return null;
+  const assets = request.returnLastFrame && task.imageUrl
+    ? [
+        { mediaType: 'video' as const, outputId: 'video', title: 'Generated video', url: task.videoUrl },
+        { mediaType: 'image' as const, outputId: 'last-frame', title: 'Last frame', url: task.imageUrl },
+      ]
+    : undefined;
+  return {
+    status: 'completed',
+    assetUrl: task.videoUrl,
+    assets,
+    mediaType: 'video',
+    remoteTaskId,
+  };
+}
+
 function isElevenLabsSpeechRequest(request: FlashBoardGenerationRequest): boolean {
   return request.outputType === 'audio'
     || request.providerId === 'cloud-elevenlabs-tts';
@@ -240,9 +262,8 @@ export async function resumeFlashBoardProviderJob({
     15000,
   );
 
-  if (task.status === 'completed' && task.videoUrl) {
-    return { status: 'completed', assetUrl: task.videoUrl, mediaType: 'video', remoteTaskId };
-  }
+  const completedResult = buildCompletedVideoResult(task, request, remoteTaskId);
+  if (completedResult) return completedResult;
   if (task.status === 'failed') {
     return { status: 'failed', error: task.error || 'Generation failed', refund: task.refund, remoteTaskId };
   }
@@ -506,14 +527,18 @@ async function runVideoJob({
   resolveReferenceImage,
   resolveHostedReferenceMedia,
 }: FlashBoardProviderRunnerContext): Promise<FlashBoardProviderRunnerResult> {
-  const hasStartImage = !!request.startMediaFileId;
-  const isTextToVideo = !hasStartImage;
+  const hasExactFrame = Boolean(request.startMediaFileId || request.endMediaFileId);
+  const isTextToVideo = !hasExactFrame;
   const videoCatalogEntry = getCatalogEntry(request.service, request.providerId);
   const effectiveVideoReferenceMediaFileIds = typeof videoCatalogEntry?.maxReferenceMedia === 'number'
     ? (request.referenceMediaFileIds ?? []).slice(0, videoCatalogEntry.maxReferenceMedia)
     : (request.referenceMediaFileIds ?? []);
   const isHostedSeedanceRequest = request.service === 'cloud'
-    && (request.providerId === 'bytedance/seedance-2' || request.providerId === 'bytedance/seedance-2-fast');
+    && (
+      request.providerId === 'bytedance/seedance-2'
+      || request.providerId === 'bytedance/seedance-2-fast'
+      || request.providerId === 'bytedance/seedance-2-5'
+    );
   const isHostedKlingRequest = request.service === 'cloud' && request.providerId === 'cloud-kling';
   const isHostedSpecialKieVideoRequest = request.service === 'cloud'
     && (
@@ -527,8 +552,18 @@ async function runVideoJob({
         )
       : undefined;
   const seedanceReferenceValidationError = getSeedanceReferenceValidationError({
+    audioReferenceCount: referenceMedia?.filter((reference) => reference.mediaType === 'audio').length ?? 0,
+    audioReferenceDuration: referenceMedia
+      ?.filter((reference) => reference.mediaType === 'audio')
+      .reduce((sum, reference) => sum + Math.max(0, reference.duration ?? 0), 0) ?? 0,
+    hasExactFrames: Boolean(request.startMediaFileId || request.endMediaFileId),
     hasReferenceMedia: (referenceMedia?.length ?? 0) > 0,
+    imageReferenceCount: referenceMedia?.filter((reference) => reference.mediaType === 'image').length ?? 0,
     providerId: request.providerId,
+    videoReferenceCount: referenceMedia?.filter((reference) => reference.mediaType === 'video').length ?? 0,
+    videoReferenceDuration: referenceMedia
+      ?.filter((reference) => reference.mediaType === 'video')
+      .reduce((sum, reference) => sum + Math.max(0, reference.duration ?? 0), 0) ?? 0,
   });
 
   if (seedanceReferenceValidationError) {
@@ -549,7 +584,10 @@ async function runVideoJob({
       sound: request.multiShots ? true : request.generateAudio,
       multiShots: request.multiShots,
       multiPrompt: request.multiPrompt,
+      outputFormat: request.outputFormat === 'mov' ? 'mov' : 'mp4',
       referenceMedia,
+      returnLastFrame: request.returnLastFrame,
+      webSearch: request.webSearch,
     };
 
     remoteTaskId = await cloudAiService.createTextToVideo(params, request.idempotencyKey);
@@ -567,9 +605,12 @@ async function runVideoJob({
       sound: request.multiShots ? true : request.generateAudio,
       multiShots: request.multiShots,
       multiPrompt: request.multiPrompt,
+      outputFormat: request.outputFormat === 'mov' ? 'mov' : 'mp4',
       startImageUrl,
       endImageUrl: request.multiShots ? undefined : endImageUrl,
       referenceMedia,
+      returnLastFrame: request.returnLastFrame,
+      webSearch: request.webSearch,
     };
 
     remoteTaskId = await cloudAiService.createImageToVideo(params, request.idempotencyKey);
@@ -592,9 +633,8 @@ async function runVideoJob({
     15000,
   );
 
-  if (task.status === 'completed' && task.videoUrl) {
-    return { status: 'completed', assetUrl: task.videoUrl, mediaType: 'video', remoteTaskId };
-  }
+  const completedResult = buildCompletedVideoResult(task, request, remoteTaskId);
+  if (completedResult) return completedResult;
   if (task.status === 'failed') {
     return { status: 'failed', error: task.error || 'Generation failed', refund: task.refund, remoteTaskId };
   }

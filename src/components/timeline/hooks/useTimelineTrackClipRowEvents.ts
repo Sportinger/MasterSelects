@@ -4,9 +4,12 @@ import type {
   MouseEvent as ReactMouseEvent,
   SetStateAction,
 } from 'react';
-
 import type { TimelineTrackProps } from '../types';
 import { isTimelineActiveTarget } from '../utils/timelineActiveTargets';
+import { hitTestTimelineClipRowHover } from '../utils/timelineClipRowHoverHitTest';
+import { useTimelineTrackClipDoubleClick } from './useTimelineTrackClipDoubleClick';
+import { useTimelineTrackClipTouchRowEvent } from './useTimelineTrackClipTouchRowEvent';
+import { useTouchCompatibilityMouseSuppression } from './useTouchCompatibilityMouseSuppression';
 
 type UseTimelineTrackClipRowEventsArgs = Pick<
   TimelineTrackProps,
@@ -45,8 +48,10 @@ export function useTimelineTrackClipRowEvents({
   setHoveredClipId,
   trackId,
 }: UseTimelineTrackClipRowEventsArgs) {
+  const { onTouchPointerHandled, suppressCompatibilityMouseEvent } = useTouchCompatibilityMouseSuppression();
+
   const onMouseMove = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
-    const hit = hitTestClipAtClientX(event.clientX, event.currentTarget);
+    const hit = hitTestTimelineClipRowHover(event, hitTestClipAtClientX);
     setHoveredClipId((previous) => (previous === hit ? previous : hit));
     handleTimelineToolPointerMove(event, hit);
   }, [handleTimelineToolPointerMove, hitTestClipAtClientX, setHoveredClipId]);
@@ -57,6 +62,7 @@ export function useTimelineTrackClipRowEvents({
   }, [clearPointerToolPreview, setHoveredClipId]);
 
   const onMouseDown = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    if (suppressCompatibilityMouseEvent(event)) return;
     if (event.button === 0) {
       const target = event.target as HTMLElement;
       if (!isTimelineActiveTarget(target)) {
@@ -84,17 +90,24 @@ export function useTimelineTrackClipRowEvents({
     onEmptyMouseDown,
     pixelToTime,
     setHoveredClipId,
+    suppressCompatibilityMouseEvent,
     trackId,
   ]);
 
-  const onDoubleClick = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement;
-    if (target.closest('button, input, select, textarea, [data-shell-trim-edge], [data-shell-fade-edge]')) return;
-    const hit = hitTestClipAtClientX(event.clientX, event.currentTarget);
-    if (!hit) return;
-    setHoveredClipId(hit);
-    onClipDoubleClick(event, hit);
-  }, [hitTestClipAtClientX, onClipDoubleClick, setHoveredClipId]);
+  const onPointerDown = useTimelineTrackClipTouchRowEvent({
+    handleTimelineToolPointerClick,
+    hitTestClipAtClientX,
+    onClipDoubleClick,
+    onClipMouseDown,
+    onTouchPointerHandled,
+    setHoveredClipId,
+  });
+
+  const onDoubleClick = useTimelineTrackClipDoubleClick({
+    hitTestClipAtClientX,
+    onClipDoubleClick,
+    setHoveredClipId,
+  });
 
   const onContextMenu = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
@@ -121,5 +134,6 @@ export function useTimelineTrackClipRowEvents({
     onMouseDown,
     onMouseLeave,
     onMouseMove,
+    onPointerDown,
   };
 }

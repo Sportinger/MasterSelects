@@ -1,3 +1,6 @@
+import { isRetainedTerrainMesh } from '../../services/planarTracking/immutableTerrainMesh';
+import { clonePlanarTracks } from '../../services/planarTracking/clonePlanarTracks';
+import { cloneTerrainAnchorConnector, cloneTerrainAttachment, cloneTerrainScreenAnchor } from '../../types/terrainAttachment';
 import type {
   ClipAudioState,
   ClipMask,
@@ -90,6 +93,11 @@ export interface HistoryTimelineClipEditState {
   audioState?: ClipAudioState;
   transform: ClipTransform;
   effects: Effect[];
+  planarTracks?: TimelineClip['planarTracks'];
+  trackingBinding?: TimelineClip['trackingBinding'];
+  terrainAttachment?: TimelineClip['terrainAttachment'];
+  terrainScreenAnchor?: TimelineClip['terrainScreenAnchor'];
+  terrainAnchorConnector?: TimelineClip['terrainAnchorConnector'];
   colorCorrection?: ColorCorrectionState;
   nodeGraph?: ClipNodeGraph;
   keyframes?: Keyframe[];
@@ -108,6 +116,8 @@ export interface HistoryTimelineClipEditState {
   captionProperties?: TimelineClip['captionProperties'];
   captionLayerBinding?: TimelineClip['captionLayerBinding'];
   text3DProperties?: TimelineClip['text3DProperties'];
+  cameraSettings?: SerializableClip['cameraSettings'];
+  threeDEffectorsEnabled?: boolean;
   solidColor?: string;
   transitionOverlay?: TimelineClip['transitionOverlay'];
   midiData?: TimelineClip['midiData'];
@@ -115,6 +125,7 @@ export interface HistoryTimelineClipEditState {
   vectorAnimationSettings?: SerializableClip['vectorAnimationSettings'];
   mathScene?: TimelineClip['mathScene'];
   motion?: TimelineClip['motion'];
+  flock?: TimelineClip['flock'];
   isComposition?: boolean;
   compositionId?: string;
   transitionIn?: TimelineClip['transitionIn'];
@@ -201,7 +212,10 @@ const HISTORY_RUNTIME_PAYLOAD_KEYS = new Set([
   'audioAnalysisJob',
 ]);
 
+const validatedTerrainMeshes = new WeakSet<object>();
+
 function stripUndefinedDeep(value: unknown): unknown {
+  if (value && typeof value === 'object' && isRetainedTerrainMesh(value)) return value;
   if (Array.isArray(value)) {
     return value.map(stripUndefinedDeep);
   }
@@ -251,6 +265,8 @@ export function findHistoryStateBoundaryViolations(value: unknown): string[] {
     }
 
     if (!candidate || valueType !== 'object') return;
+    if (validatedTerrainMeshes.has(candidate as object)) return;
+    const violationCount = violations.length;
 
     if (stack.has(candidate)) {
       violations.push(`${path}: circular reference`);
@@ -286,6 +302,9 @@ export function findHistoryStateBoundaryViolations(value: unknown): string[] {
       visit(child, childPath);
     }
     stack.delete(candidate);
+    if (isRetainedTerrainMesh(candidate) && violations.length === violationCount) {
+      validatedTerrainMeshes.add(candidate);
+    }
   };
 
   visit(value, '$');
@@ -302,12 +321,13 @@ export function assertHistoryTimelineEditStateSerializable(value: unknown): asse
 export function cloneHistoryPlainData<T>(value: T): T {
   const withoutUndefined = stripUndefinedDeep(value);
   assertHistoryTimelineEditStateSerializable(withoutUndefined);
-  return JSON.parse(JSON.stringify(withoutUndefined)) as T;
+  return withoutUndefined as T;
 }
 
 export function createHistoryTimelineRuntimeRef(clip: TimelineClip): HistoryTimelineRuntimeRef {
   const sourceType = clip.source?.type ?? 'video';
   const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
+  const liveInputId = clip.source?.liveInputId;
 
   if (clip.isComposition && clip.compositionId) {
     return {
@@ -331,12 +351,36 @@ export function createHistoryTimelineRuntimeRef(clip: TimelineClip): HistoryTime
     };
   }
 
+  if (
+    sourceType === 'camera' ||
+    (sourceType === 'model' && Boolean(clip.meshType ?? clip.source?.meshType)) ||
+    (sourceType === 'flock' && Boolean(clip.flock))
+  ) {
+    return {
+      kind: 'generated',
+      sourceType,
+      mediaFileId,
+      naturalDuration: clip.source?.naturalDuration,
+      needsReload: false,
+    };
+  }
+
+  if (liveInputId) {
+    return {
+      kind: 'media-file',
+      sourceType,
+      mediaFileId: mediaFileId ?? liveInputId,
+      liveInputId,
+      naturalDuration: clip.source?.naturalDuration,
+    };
+  }
+
   if (mediaFileId) {
     return {
       kind: 'media-file',
       sourceType,
       mediaFileId,
-      liveInputId: clip.source?.liveInputId,
+      liveInputId,
       naturalDuration: clip.source?.naturalDuration,
       needsReload: clip.needsReload,
     };
@@ -514,6 +558,11 @@ export function toHistoryTimelineClipEditState(
     audioState: cloneAudioPlainData<ClipAudioState>(clip.audioState),
     transform: clip.transform,
     effects: clip.effects,
+        planarTracks: clonePlanarTracks(clip.planarTracks),
+        trackingBinding: clip.trackingBinding ? structuredClone(clip.trackingBinding) : undefined,
+        terrainAttachment: cloneTerrainAttachment(clip.terrainAttachment),
+        terrainScreenAnchor: cloneTerrainScreenAnchor(clip.terrainScreenAnchor),
+        terrainAnchorConnector: cloneTerrainAnchorConnector(clip.terrainAnchorConnector),
     colorCorrection: clip.colorCorrection,
     nodeGraph: clip.nodeGraph,
     keyframes: keyframes.length > 0 ? keyframes : undefined,
@@ -532,6 +581,8 @@ export function toHistoryTimelineClipEditState(
     captionProperties: clip.captionProperties,
     captionLayerBinding: clip.captionLayerBinding,
     text3DProperties: clip.text3DProperties ?? clip.source?.text3DProperties,
+    cameraSettings: clip.source?.cameraSettings,
+    threeDEffectorsEnabled: clip.source?.threeDEffectorsEnabled,
     solidColor: clip.solidColor,
     transitionOverlay: clip.transitionOverlay ?? clip.source?.transitionOverlay,
     midiData: clip.midiData,
@@ -539,6 +590,7 @@ export function toHistoryTimelineClipEditState(
     vectorAnimationSettings: clip.source?.vectorAnimationSettings,
     mathScene: clip.mathScene,
     motion: clip.motion ? normalizeMotionLayerDefinition(clip.motion) : undefined,
+    flock: clip.flock,
     isComposition: clip.isComposition,
     compositionId: clip.compositionId,
     transitionIn: clip.transitionIn,

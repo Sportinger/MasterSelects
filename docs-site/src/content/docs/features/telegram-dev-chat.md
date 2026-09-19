@@ -22,9 +22,9 @@ The browser polls every three seconds while the dialog is open. Telegram calls
 the webhook; the backend does not poll Telegram.
 
 The dialog keeps up to 12 recent conversation IDs and previews in browser local
-storage. While the dialog is closed, the Help menu checks those saved
-conversations every 10 seconds while the page is visible and shows an unread
-reply indicator.
+storage. While the dialog is closed, the Info menu checks those saved
+conversations every 10 seconds while the page is visible and shows `+1` plus
+an unread reply indicator in the menu.
 
 ```text
 MasterSelects dialog

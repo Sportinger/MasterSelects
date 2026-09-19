@@ -55,8 +55,10 @@ export function composeMotionParentTransforms2D(
   const radians = (parent.rotationZ * Math.PI) / 180;
   const cosine = Math.cos(radians);
   const sine = Math.sin(radians);
-  const rotatedX = child.position.x * cosine - child.position.y * sine;
-  const rotatedY = child.position.x * sine + child.position.y * cosine;
+  const scaledChildX = child.position.x * parent.scale.all;
+  const scaledChildY = child.position.y * parent.scale.all;
+  const rotatedX = scaledChildX * cosine - scaledChildY * sine;
+  const rotatedY = scaledChildX * sine + scaledChildY * cosine;
 
   return {
     position: {
@@ -69,7 +71,8 @@ export function composeMotionParentTransforms2D(
       y: parent.scale.y * child.scale.y,
     },
     rotationZ: parent.rotationZ + child.rotationZ,
-    opacity: parent.opacity * child.opacity,
+    // Opacity is not part of pick-whip inheritance.
+    opacity: child.opacity,
   };
 }
 
@@ -112,8 +115,7 @@ export function deriveMotionParentLocalTransform2D(
   const singular =
     Math.abs(parentWorld.scale.all) <= INVERSE_EPSILON ||
     Math.abs(parentWorld.scale.x) <= INVERSE_EPSILON ||
-    Math.abs(parentWorld.scale.y) <= INVERSE_EPSILON ||
-    Math.abs(parentWorld.opacity) <= INVERSE_EPSILON;
+    Math.abs(parentWorld.scale.y) <= INVERSE_EPSILON;
   if (singular) {
     return {
       ok: false,
@@ -133,8 +135,8 @@ export function deriveMotionParentLocalTransform2D(
 
   const transform: MotionParentTransform2D = {
     position: {
-      x: deltaX * cosine - deltaY * sine,
-      y: deltaX * sine + deltaY * cosine,
+      x: (deltaX * cosine - deltaY * sine) / parentWorld.scale.all,
+      y: (deltaX * sine + deltaY * cosine) / parentWorld.scale.all,
     },
     scale: {
       all: childWorld.scale.all / parentWorld.scale.all,
@@ -142,7 +144,7 @@ export function deriveMotionParentLocalTransform2D(
       y: childWorld.scale.y / parentWorld.scale.y,
     },
     rotationZ: childWorld.rotationZ - parentWorld.rotationZ,
-    opacity: childWorld.opacity / parentWorld.opacity,
+    opacity: childWorld.opacity,
   };
   if (!isFiniteMotionParentTransform2D(transform)) {
     return {

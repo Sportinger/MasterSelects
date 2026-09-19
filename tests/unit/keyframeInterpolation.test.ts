@@ -8,6 +8,8 @@ import {
   interpolateKeyframes,
   getInterpolatedClipTransform,
   convertPresetToBezierHandles,
+  clampBezierHandleTimeOffset,
+  resolveBezierSegmentHandles,
   hasKeyframesForProperty,
   getAnimatedProperties,
   getKeyframeAtTime,
@@ -108,6 +110,40 @@ describe('interpolateBezier', () => {
     // With slow start/end, midpoint value should differ from 50
     expect(result).toBeDefined();
     expect(typeof result).toBe('number');
+  });
+
+  it('projects crossing or out-of-segment control times onto a forward-only segment', () => {
+    const prevKey = createMockKeyframe({
+      time: 0,
+      value: 0,
+      handleOut: { x: 3, y: 0.5 },
+    });
+    const nextKey = createMockKeyframe({
+      time: 2,
+      value: 1,
+      handleIn: { x: -3, y: -0.5 },
+    });
+
+    const resolved = resolveBezierSegmentHandles(prevKey, nextKey);
+
+    expect(resolved.handleOut.x).toBe(1);
+    expect(2 + resolved.handleIn.x).toBe(1);
+  });
+
+  it('caps an active handle at the opposing control time', () => {
+    const prevKey = createMockKeyframe({
+      time: 0,
+      value: 0,
+      handleOut: { x: 0.5, y: 0 },
+    });
+    const nextKey = createMockKeyframe({
+      time: 2,
+      value: 1,
+      handleIn: { x: -0.5, y: 0 },
+    });
+
+    expect(clampBezierHandleTimeOffset(prevKey, nextKey, 'out', 3)).toBe(1.5);
+    expect(clampBezierHandleTimeOffset(prevKey, nextKey, 'in', -3)).toBe(-1.5);
   });
 });
 

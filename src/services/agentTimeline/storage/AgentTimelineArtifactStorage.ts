@@ -236,6 +236,17 @@ export class AgentTimelineArtifactStorage {
       publishedAt: this.dependencies.now(),
     };
     if (!isPointer(pointer)) throw new TypeError('Storage clock did not return a canonical ISO timestamp.');
+    // Rehydrating an already published generation must not rewrite the project
+    // merely to refresh publishedAt. All referenced artifacts are durable above.
+    const existingPointer = await this.dependencies.pointers.get(pointerKey(mediaFileId));
+    assertNotAborted(signal);
+    if (isPointer(existingPointer)
+      && existingPointer.mediaFileId === pointer.mediaFileId
+      && existingPointer.sourceIdentityHash === pointer.sourceIdentityHash
+      && existingPointer.manifestRef === pointer.manifestRef
+      && existingPointer.shardIndexRef === pointer.shardIndexRef) {
+      return { pointer: existingPointer, manifest, shardIndex, shards };
+    }
     // This is intentionally last: readers never observe an incomplete generation.
     await this.dependencies.pointers.set(pointerKey(mediaFileId), pointer);
     return { pointer, manifest, shardIndex, shards };

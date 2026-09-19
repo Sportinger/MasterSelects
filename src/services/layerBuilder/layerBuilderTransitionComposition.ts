@@ -11,6 +11,7 @@ import type {
 } from '../../types';
 import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import { getRuntimeTransition } from '../../transitions';
+import { calculateFitToFrameScale } from '../../utils/sourcePixelScale';
 import {
   createTimelineMathSceneCanvasRuntime,
   createTimelineTransitionOverlayCanvasRuntime,
@@ -30,7 +31,7 @@ import type { FrameContext } from './types';
 
 const generatedCanvasCache = new Map<string, HTMLCanvasElement>();
 
-type TransitionCompositionMediaFileLike = { file?: File };
+type TransitionCompositionMediaFileLike = { file?: File; width?: number; height?: number };
 
 export interface TransientTransitionCompositionInput {
   activeTransition: ActiveTransitionPlan;
@@ -277,6 +278,45 @@ function buildHydratedSource(
   return buildGeneratedSource(clip, composition);
 }
 
+function buildHydratedTransform(
+  clip: SerializableClip,
+  composition: Composition,
+  mediaFile: TransitionCompositionMediaFileLike | undefined,
+) {
+  const transform = clip.transform ? clone(clip.transform) : clone(DEFAULT_TRANSFORM);
+  const link = composition.transitionComp;
+  const isBakedDatamoshClip = link?.templateType === 'datamosh-baked'
+    && clip.id === `transition-comp:${link.parentTransitionId}:datamosh`;
+  const sourceWidth = mediaFile?.width;
+  const sourceHeight = mediaFile?.height;
+  if (
+    !isBakedDatamoshClip
+    || typeof sourceWidth !== 'number'
+    || typeof sourceHeight !== 'number'
+    || sourceWidth <= 0
+    || sourceHeight <= 0
+  ) {
+    return transform;
+  }
+
+  // The codec bake is deliberately resolution-capped. It represents the
+  // complete transition frame, so restore it to the composition footprint.
+  const fitScale = calculateFitToFrameScale(
+    sourceWidth,
+    sourceHeight,
+    composition.width,
+    composition.height,
+  );
+  return {
+    ...transform,
+    scale: {
+      ...transform.scale,
+      x: transform.scale.x * fitScale,
+      y: transform.scale.y * fitScale,
+    },
+  };
+}
+
 function hydrateTransitionClip(
   clip: SerializableClip,
   composition: Composition,
@@ -309,7 +349,7 @@ function hydrateTransitionClip(
     audioState: optionalClone(clip.audioState),
     waveform: clip.waveform,
     waveformChannels: clip.waveformChannels,
-    transform: clip.transform ? clone(clip.transform) : clone(DEFAULT_TRANSFORM),
+    transform: buildHydratedTransform(clip, composition, mediaFile),
     sourceRect: optionalClone(clip.sourceRect),
     effects: clone(clip.effects ?? []),
     colorCorrection: optionalClone(clip.colorCorrection),
@@ -379,12 +419,18 @@ export function getTransitionCompositionTime(
   return Math.min(maxSampleTime, Math.max(0, parentTime - activeTransition.plan.bodyStart));
 }
 
-export function buildLayerBuilderTransitionCompositionLayer(
+export interface TransitionCompositionRuntime {
+  composition: Composition;
+  compositionTime: number;
+  nestedTimeline: { clips: TimelineClip[]; tracks: TimelineTrack[] };
+  syntheticClip: TimelineClip;
+}
+
+/** Materializes the runtime clip tree shared by preview rendering and video sync. */
+export function resolveTransitionCompositionRuntime(
   activeTransition: ActiveTransitionPlan,
-  layerIndex: number,
   ctx: FrameContext,
-  proxyFrames: LayerBuilderProxyFrames,
-): Layer | null {
+): TransitionCompositionRuntime | null {
   const transition = activeTransition.outgoingClip.transitionOut;
   const compositionId = transition?.compositionId;
   if (!transition || compositionId === ctx.activeCompId) return null;
@@ -430,6 +476,21 @@ export function buildLayerBuilderTransitionCompositionLayer(
     nestedTracks: nestedTimeline.tracks,
     isLoading: false,
   };
+
+  return { composition, compositionTime, nestedTimeline, syntheticClip };
+}
+
+export function buildLayerBuilderTransitionCompositionLayer(
+  activeTransition: ActiveTransitionPlan,
+  layerIndex: number,
+  ctx: FrameContext,
+  proxyFrames: LayerBuilderProxyFrames,
+): Layer | null {
+  const transition = activeTransition.outgoingClip.transitionOut;
+  if (!transition) return null;
+  const runtime = resolveTransitionCompositionRuntime(activeTransition, ctx);
+  if (!runtime) return null;
+  const { composition, compositionTime, nestedTimeline, syntheticClip } = runtime;
   const nestedLayers = buildLayerBuilderNestedLayers({
     clip: syntheticClip,
     clipTime: compositionTime,

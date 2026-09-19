@@ -28,6 +28,7 @@ absolute-speed handling is not used as the primary playback path.
 - Current drift is corrected when the element gets too far from the expected time.
 - Same-source sequential audio clips can hand off to the previous element, and upcoming clips may be pre-buffered before they hit the playhead.
 - Nested composition mixdown audio and proxy audio are synced through the same runtime path.
+- An audio clip that reaches its clamped source end is paused and removed from timing-source eligibility instead of being restarted. This prevents an overextended or retrimmed clip from stalling the timeline or repeating its final second.
 - Audio status is tracked as `playing`, `drift`, `silent`, or `error` for performance stats.
 - Timeline track headers and the master bus show runtime Peak/RMS meters plus stereo phase-correlation metadata when routed stereo samples are available. Timeline audio-layer meters and the docked Audio Mixer render stereo snapshots as fixed-scale left/right bars, so the color bands stay tied to the dB scale instead of being rescaled with the active fill. Active meter fills render as segmented LED cells and smooth movement with a 300ms attack and 1s decay. Meter snapshots are collected from the live Web Audio route or the varispeed scrub graph, aggregated in `runtimeAudioMeters`, and are never serialized into project files.
 - Settings -> Audio exposes browser input/output devices, latency mode, device API support, output-routing support, current AudioContext state, sample rate, latency, and active route count. Output routing uses browser `AudioContext.setSinkId` when available and falls back to routed media-element `setSinkId`; unsupported browsers stay on the system default output.
@@ -111,6 +112,8 @@ Live routing uses `audioRoutingManager` when EQ, pan, above-unity gain, Aux send
 - Node Workspace audio ports can generate/refresh waveform, processed waveform, spectrogram, loudness, beat, onset, phase, and frequency-summary artifacts from the node inspector. AI/custom-node authoring and runtime context receive bounded artifact refs, cached loudness/frequency/phase summaries, and clip/track/master routing snapshots without exposing raw audio buffers.
 - Spectrogram, loudness, beat/onset, and frequency/phase timeline jobs share `ClipAudioAnalysisOrchestrator` for source/processed buffer preparation and expose a semantic `audioAnalysisJob` while keeping the waveform progress indicator compatible.
 - Source waveform pyramids are generated during import, with lazy upgrade remaining as a fallback for legacy media or clips that have only a lightweight waveform preview.
+- Lazy source-waveform warmup rejects empty files, can resolve a valid source from the media store, and limits failed generation to three attempts per unchanged source with at least 60 seconds between retries. Relinking to a new source resets that failure budget. A job is successful only when waveform data is actually present.
+- Derived waveform/analysis updates may attach artifact references without changing durable audio edits. Missing-source handling in derived-only jobs does not mutate clip persistence fields, and non-cancellation failures propagate to the warmup scheduler.
 - Source waveform-pyramid bucket analysis yields back to the browser between bounded chunks so timeout/cancel signals can be handled and the timeline does not freeze during detailed analysis. Divisible pyramid levels derive from the finest PCM pass instead of re-scanning the decoded audio for each level.
 - Detailed waveform display uses a perceptual display scale: the RMS/loudness body is the primary readable shape, the peak envelope is a quieter underlay, and high-crest peaks are drawn as selective transient spikes instead of a continuous outer peak trace. Worker-rendered clip waveforms preserve available stereo/multichannel lanes and match the main-thread fallback styling instead of collapsing artifact-backed stereo data to a mono canvas.
 - Nested composition clips generate waveforms from the mixed-down buffer when available.
@@ -215,8 +218,11 @@ FFmpeg exports can still receive raw audio because they use `exportRawAudio()`.
 
 ## Sources
 
+The audio routing singleton survives Vite hot reload through `import.meta.hot.data`. Initial loading also supports test runtimes where the hot-reload handle exists before its data container is available; audio initialization does not depend on a previously stored singleton.
+
 `src/services/audioManager.ts`, `src/services/audioRoutingManager.ts`, `src/services/layerBuilder/AudioSyncHandler.ts`,
-`src/services/layerBuilder/AudioTrackSyncManager.ts`, `src/services/audioAnalyzer.ts`, `src/services/audioSync.ts`,
+`src/services/layerBuilder/AudioTrackSyncManager.ts`, `src/services/layerBuilder/audioSourcePlaybackRange.ts`,
+`src/services/layerBuilder/audioTrackStemBufferMixers.ts`, `src/services/audioAnalyzer.ts`, `src/services/audioSync.ts`,
 `src/services/compositionAudioMixer.ts`, `src/stores/timeline/helpers/audioDetection.ts`,
 `src/stores/timeline/helpers/audioTrackHelpers.ts`, `src/stores/timeline/helpers/waveformHelpers.ts`,
 `src/stores/timeline/audioEditSlice.ts`, `src/services/audio/ClipAudioRenderService.ts`,
@@ -239,3 +245,5 @@ FFmpeg exports can still receive raw audio because they use `exportRawAudio()`.
 `src/services/audio/AudioRecordingService.ts`,
 `src/components/panels/audio-mixer/AudioMixerPanel.tsx`,
 `src/engine/export/FrameExporter.ts`, `src/engine/audio/*`
+
+The initial gesture-based audio unlock runs once, removes its capture listeners on success or failure, and is skipped when AudioContext is unavailable. A browser audio initialization failure cannot escape into the global gesture handler; explicit playback remains able to retry.

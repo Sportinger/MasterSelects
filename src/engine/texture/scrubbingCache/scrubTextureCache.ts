@@ -5,6 +5,7 @@ import {
   getScrubbingKeyTime,
   SCRUB_CACHE_FPS,
 } from './cacheKeys';
+import { shouldStageHtmlVideoFrame } from '../videoFrameCopyPolicy';
 
 type ScrubbingTextureEntry = {
   texture: GPUTexture;
@@ -49,7 +50,11 @@ export class ScrubTextureCache {
     const target = this.computeSize(video.videoWidth, video.videoHeight);
     const needsDownscale = target.width !== video.videoWidth || target.height !== video.videoHeight;
 
-    if (!needsDownscale || typeof createImageBitmap !== 'function') {
+    const shouldCreateBitmap =
+      typeof createImageBitmap === 'function' &&
+      (needsDownscale || shouldStageHtmlVideoFrame(video));
+
+    if (!shouldCreateBitmap) {
       this.addFrameFromSource(video, video.src, time, video.videoWidth, video.videoHeight);
       return;
     }
@@ -60,11 +65,14 @@ export class ScrubTextureCache {
     if (this.cache.has(key) || this.pendingCaptures.has(key)) return;
 
     this.pendingCaptures.add(key);
-    void createImageBitmap(video, {
-      resizeWidth: target.width,
-      resizeHeight: target.height,
-      resizeQuality: 'medium',
-    })
+    const bitmapOptions = needsDownscale
+      ? {
+          resizeWidth: target.width,
+          resizeHeight: target.height,
+          resizeQuality: 'medium' as const,
+        }
+      : undefined;
+    void createImageBitmap(video, bitmapOptions)
       .then((bitmap) => {
         this.addFrameFromSource(bitmap, videoSrc, time, bitmap.width, bitmap.height);
         bitmap.close();

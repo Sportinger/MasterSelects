@@ -17,7 +17,10 @@ import {
 } from '../../services/mediaRuntime/runtimePlayback';
 import { scrubSettleState } from '../../services/scrubSettleState';
 import { wcPipelineMonitor } from '../../services/wcPipelineMonitor';
-import { useTimelineStore } from '../../stores/timeline';
+import {
+  isActiveNestedComposition,
+  isTimelinePlayheadDragging,
+} from '../../services/render/nestedCompRenderStoreAccess';
 import type { MotionRenderer } from '../motion/MotionRenderer';
 import { Compositor } from './Compositor';
 import { applyMotionRenderPlacement } from '../motion/MotionTypes';
@@ -31,7 +34,11 @@ import {
   type MotionFrameRuntimeAdmission,
 } from '../motion/MotionFrameRuntime';
 import { compositeNestedLayers } from './nestedComp/compositeNestedLayers';
-import { tryCollectHtmlVideoPreview } from './nestedComp/htmlVideoPreview';
+import {
+  tryCollectHtmlVideoPreview,
+  type StableHtmlVideoCanvasFrame,
+} from './nestedComp/htmlVideoPreview';
+import { collectCanvasElementLayer } from './layerCollector/staticSourceCollectors';
 import { NestedCompositionTexturePool } from './nestedComp/NestedCompositionTexturePool';
 import { process3DLayersForNestedScene } from './nestedComp/sharedScene';
 import {
@@ -108,6 +115,13 @@ function isCriticalNestedLayer(layer: Layer): boolean {
   );
 }
 
+function hasMutableAuthoredContent(layers: readonly Layer[]): boolean {
+  // Text canvases are painted in place and Motion definitions can be edited
+  // without advancing the playhead. They do not expose a renderer revision,
+  // so a time-only cache would retain stale native authoring content.
+  return layers.some(layer => layer.source?.type === 'text' || layer.source?.type === 'motion');
+}
+
 function hasMissingCriticalNestedLayer(
   layers: readonly Layer[],
   layerData: readonly LayerRenderData[],
@@ -116,13 +130,35 @@ function hasMissingCriticalNestedLayer(
   return layers.some((layer) => isCriticalNestedLayer(layer) && !collectedLayerIds.has(layer.id));
 }
 
-function scaleNestedLayerGeometryForPreview(
+function scaleNested3DSourceGeometryForPreview(
   layerData: LayerRenderData[],
   renderScale: number,
 ): void {
   if (renderScale === 1) return;
-
   for (const data of layerData) {
+    if (!data.layer.is3D) continue;
+    const source = data.layer.source;
+    if (source) {
+      const intrinsicWidth = source.intrinsicWidth;
+      const intrinsicHeight = source.intrinsicHeight;
+      if (
+        (Number.isFinite(intrinsicWidth) && (intrinsicWidth ?? 0) > 0) ||
+        (Number.isFinite(intrinsicHeight) && (intrinsicHeight ?? 0) > 0)
+      ) {
+        data.layer = {
+          ...data.layer,
+          source: {
+            ...source,
+            ...(Number.isFinite(intrinsicWidth) && (intrinsicWidth ?? 0) > 0
+              ? { intrinsicWidth: intrinsicWidth! * renderScale }
+              : {}),
+            ...(Number.isFinite(intrinsicHeight) && (intrinsicHeight ?? 0) > 0
+              ? { intrinsicHeight: intrinsicHeight! * renderScale }
+              : {}),
+          },
+        };
+      }
+    }
     if (Number.isFinite(data.sourceWidth) && data.sourceWidth > 0) {
       data.sourceWidth *= renderScale;
     }
@@ -134,6 +170,7 @@ function scaleNestedLayerGeometryForPreview(
 
 export class NestedCompRenderer {
   private device: GPUDevice;
+  private effectsPipeline: EffectsPipeline;
   private compositor: Compositor;
   private textureManager: TextureManager;
   private maskTextureManager: MaskTextureManager;
@@ -153,6 +190,7 @@ export class NestedCompRenderer {
   private lastSuccessfulVideoProviderKey = new Map<string, string>();
   private lastCollectorState = new Map<string, 'render' | 'hold' | 'drop'>();
   private htmlHoldUntil = new Map<string, number>();
+  private stableCanvasFrames = new Map<string, StableHtmlVideoCanvasFrame>();
 
   private initializeFromRecentOccurrence(
     target: NestedCompTexture,
@@ -257,6 +295,7 @@ export class NestedCompRenderer {
     motionRenderer: MotionRenderer | null = null
   ) {
     this.device = device;
+    this.effectsPipeline = effectsPipeline;
     this.compositor = new Compositor(
       compositorPipeline,
       effectsPipeline,
@@ -298,6 +337,26 @@ export class NestedCompRenderer {
       : Math.max(0.01, Math.min(1, previewRenderScale));
     const renderWidth = Math.max(1, Math.round(width * effectiveRenderScale));
     const renderHeight = Math.max(1, Math.round(height * effectiveRenderScale));
+
+    // The active composition was already composited by the main render pass.
+    // When an inactive parent needs that exact child frame, sample the raw
+    // active output directly instead of rendering every child layer again.
+    // The parent compositor still applies the wrapper transform/effects.
+    const activeOutput = renderOccurrenceKey !== undefined
+      && particleQuality === 'preview'
+      && isActiveNestedComposition(compositionId)
+      ? this.nestedCompTextures.get(compositionId)
+      : undefined;
+    if (
+      activeOutput?.initialized
+      && activeOutput.texture.width === renderWidth
+      && activeOutput.texture.height === renderHeight
+      && Number.isFinite(currentTime)
+      && Number.isFinite(activeOutput.lastRenderedTimeSeconds)
+      && Math.round(activeOutput.lastRenderedTimeSeconds! * 60) === Math.round(currentTime! * 60)
+    ) {
+      return activeOutput.view;
+    }
 
     // Get or create one output texture per render occurrence. Two wrapper layers
     // can reference the same composition at different local times in one frame,
@@ -356,7 +415,7 @@ export class NestedCompRenderer {
       });
     }
 
-    if (!nestedLayers.some(isCriticalNestedLayer) && compTexture.initialized && quantizedTime >= 0 && lastTime === quantizedTime && lastCount === nestedLayers.length && lastMotionFrameRevision === motionFrameRevision) {
+    if (!nestedLayers.some(isCriticalNestedLayer) && !hasMutableAuthoredContent(nestedLayers) && compTexture.initialized && quantizedTime >= 0 && lastTime === quantizedTime && lastCount === nestedLayers.length && lastMotionFrameRevision === motionFrameRevision) {
       // Same frame, return cached texture
       return compTexture.view;
     }
@@ -389,14 +448,13 @@ export class NestedCompRenderer {
         return compTexture.initialized ? compTexture.view : null;
       }
 
-      // The reduced preview texture represents the same logical composition,
-      // so its source geometry must shrink by the same factor. Otherwise the
-      // compositor interprets full-resolution source pixels inside a smaller
-      // target and the nested result appears zoomed during playback.
-      scaleNestedLayerGeometryForPreview(nestedLayerData, effectiveRenderScale);
-
       // Process 3D layers through the shared scene renderer.
       if (flags.use3DLayers) {
+        // The nested-scene helper currently builds its camera from the render
+        // viewport. Keep its plane/voxel footprint stable at reduced quality;
+        // the synthetic scene texture is restored to composition-space size
+        // immediately afterward for the reference-aware 2D compositor.
+        scaleNested3DSourceGeometryForPreview(nestedLayerData, effectiveRenderScale);
         this.process3DLayersForNested(
           nestedLayerData,
           renderWidth,
@@ -405,7 +463,15 @@ export class NestedCompRenderer {
           compositionId,
           sceneClips,
           sceneTracks,
+          sampler,
         );
+        const nestedSceneLayer = nestedLayerData.find(
+          (data) => data.layer.id === '__scene_3d_nested__',
+        );
+        if (nestedSceneLayer) {
+          nestedSceneLayer.sourceWidth = width;
+          nestedSceneLayer.sourceHeight = height;
+        }
       }
 
       // Handle empty composition
@@ -444,6 +510,8 @@ export class NestedCompRenderer {
         compositionId,
         width: renderWidth,
         height: renderHeight,
+        referenceWidth: width,
+        referenceHeight: height,
         commandEncoder,
         sampler,
         compositor: this.compositor,
@@ -488,6 +556,7 @@ export class NestedCompRenderer {
     compositionId?: string,
     sceneClips?: TimelineClip[],
     sceneTracks?: TimelineTrack[],
+    sampler?: GPUSampler,
   ): void {
     process3DLayersForNestedScene({
       layerData,
@@ -500,6 +569,8 @@ export class NestedCompRenderer {
       compositionId,
       sceneClips,
       sceneTracks,
+      effectsPipeline: this.effectsPipeline,
+      sampler,
     });
   }
 
@@ -546,8 +617,8 @@ export class NestedCompRenderer {
             isVideo: false,
             externalTexture: null,
             textureView: subTextureView,
-            sourceWidth: nc.width,
-            sourceHeight: nc.height,
+            sourceWidth: nc.width * previewRenderScale,
+            sourceHeight: nc.height * previewRenderScale,
           });
         }
         continue;
@@ -598,6 +669,18 @@ export class NestedCompRenderer {
       }
 
       // NativeDecoder (turbo mode — ImageBitmap-based)
+      if (layer.source.canvasElement) {
+        const canvasLayer = collectCanvasElementLayer(
+          layer,
+          layer.source.canvasElement,
+          this.textureManager,
+        );
+        if (canvasLayer) {
+          result.push(canvasLayer);
+          continue;
+        }
+      }
+
       if (layer.source.nativeDecoder) {
         const bitmap = layer.source.nativeDecoder.getCurrentFrame();
         if (bitmap) {
@@ -637,6 +720,7 @@ export class NestedCompRenderer {
         textureManager: this.textureManager,
         scrubbingCache: this.scrubbingCache,
         htmlHoldUntil: this.htmlHoldUntil,
+        stableCanvasFrames: this.stableCanvasFrames,
         debug: (message, context) => log.debug(message, context),
         warn: (message, context) => log.warn(message, context),
       });
@@ -651,7 +735,7 @@ export class NestedCompRenderer {
       const runtimeHasFrame =
         (runtimeProvider?.hasFrame?.() ?? false) ||
         !!runtimeProvider?.getCurrentFrame?.();
-      const allowPendingScrubFrame = useTimelineStore.getState().isDraggingPlayhead;
+      const allowPendingScrubFrame = isTimelinePlayheadDragging();
       const shouldPreferRuntimeProvider =
         !!runtimeProvider?.isFullMode() &&
         runtimeProvider !== clipProvider &&
@@ -841,6 +925,8 @@ export class NestedCompRenderer {
       this.lastMotionFrameRevision.delete(cacheKey);
     }
     this.activeOccurrenceCacheKeys.clear();
+    this.motionRenderer?.cleanupPendingCaches();
+    this.maskTextureManager.cleanupPendingFrameScopedTextures?.();
   }
 
   cleanupTexture(compositionId: string): void {
@@ -858,7 +944,13 @@ export class NestedCompRenderer {
   /**
    * Cache the current main render output for a composition
    */
-  cacheActiveCompOutput(compositionId: string, sourceTexture: GPUTexture, width: number, height: number): void {
+  cacheActiveCompOutput(
+    compositionId: string,
+    sourceTexture: GPUTexture,
+    width: number,
+    height: number,
+    timelineTimeSeconds?: number,
+  ): void {
     let compTexture = this.nestedCompTextures.get(compositionId);
     if (!compTexture || compTexture.texture.width !== width || compTexture.texture.height !== height) {
       if (compTexture) compTexture.texture.destroy();
@@ -866,7 +958,10 @@ export class NestedCompRenderer {
       const texture = this.device.createTexture({
         size: { width, height },
         format: 'rgba8unorm',
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT
+          | GPUTextureUsage.TEXTURE_BINDING
+          | GPUTextureUsage.COPY_SRC
+          | GPUTextureUsage.COPY_DST,
       });
       compTexture = { compositionId, texture, view: texture.createView(), initialized: false };
       this.nestedCompTextures.set(compositionId, compTexture);
@@ -880,6 +975,9 @@ export class NestedCompRenderer {
     );
     this.device.queue.submit([commandEncoder.finish()]);
     compTexture.initialized = true;
+    compTexture.lastRenderedTimeSeconds = Number.isFinite(timelineTimeSeconds)
+      ? timelineTimeSeconds
+      : undefined;
   }
 
   /**
@@ -907,12 +1005,18 @@ export class NestedCompRenderer {
     this.lastMotionFrameRevision.clear();
     this.activeOccurrenceCacheKeys.clear();
 
+    for (const frame of this.stableCanvasFrames.values()) {
+      this.textureManager.removeCanvasTexture(frame.canvas);
+    }
+    this.stableCanvasFrames.clear();
+
     // Destroy nested comp textures
     for (const tex of this.nestedCompTextures.values()) {
       tex.texture.destroy();
     }
     this.nestedCompTextures.clear();
 
+    this.compositor.destroy();
     this.texturePool.destroy();
   }
 }

@@ -343,6 +343,8 @@ describe('serialization nested video restore', () => {
       mediaFileId: videoFile.id,
       naturalDuration: 10,
       filePath: videoFile.absolutePath,
+      runtimeSourceId: `media:${videoFile.id}`,
+      runtimeSessionKey: 'interactive:video-clip',
     });
     expect(restoredVideo?.source?.videoElement).toBeUndefined();
     expect(restoredVideo?.source?.webCodecsPlayer).toBeUndefined();
@@ -352,6 +354,8 @@ describe('serialization nested video restore', () => {
       mediaFileId: audioFile.id,
       naturalDuration: 10,
       filePath: audioFile.absolutePath,
+      runtimeSourceId: `media:${audioFile.id}`,
+      runtimeSessionKey: 'interactive:audio-clip',
     });
     expect(restoredAudio?.source?.audioElement).toBeUndefined();
     expect(restoredAudio?.isLoading).toBe(false);

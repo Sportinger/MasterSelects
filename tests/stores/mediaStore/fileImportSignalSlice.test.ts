@@ -31,7 +31,10 @@ vi.mock('../../../src/services/projectFileService', () => ({
   },
 }));
 
-type TestState = MediaState & FileImportActions;
+type TestState = MediaState & FileImportActions & {
+  reloadFile: (id: string) => Promise<boolean>;
+  ensureFileThumbnail: (id: string) => Promise<boolean>;
+};
 
 function createInitialMediaState(): MediaState {
   return {
@@ -80,10 +83,15 @@ function createInitialMediaState(): MediaState {
   };
 }
 
-function createTestStore() {
+function createTestStore(
+  reloadFile = vi.fn(async () => true),
+  ensureFileThumbnail = vi.fn(async () => true),
+) {
   return create<TestState>()((set, get) => ({
     ...createInitialMediaState(),
     ...createFileImportSlice(set, get),
+    reloadFile,
+    ensureFileThumbnail,
   }));
 }
 
@@ -194,5 +202,84 @@ describe('fileImportSlice Signal imports', () => {
       },
       waveformProgress: 100,
     });
+  });
+
+  it('finishes batch video import before starting its thumbnail in the background', async () => {
+    const ensureFileThumbnail = vi.fn(async () => true);
+    const store = createTestStore(undefined, ensureFileThumbnail);
+    const file = new File(['video'], 'ipad-video.mov', { type: 'video/quicktime' });
+    const slice = vi.spyOn(file, 'slice');
+    const mediaFile = {
+      id: 'test-import-1',
+      name: file.name,
+      type: 'video',
+      parentId: null,
+      createdAt: 1,
+      file,
+      fileSize: file.size,
+      url: 'blob:ipad-video',
+      duration: 12,
+    } as const;
+    importPipelineMocks.processImport.mockResolvedValue({ mediaFile });
+
+    const importedItems = await store.getState().importFiles([file]);
+
+    expect(importedItems).toEqual([mediaFile]);
+    expect(store.getState().files[0]?.isImporting).toBe(false);
+    expect(importPipelineMocks.processImport).toHaveBeenCalledWith(expect.objectContaining({
+      file,
+      id: 'test-import-1',
+      generateThumbnail: false,
+      typeOverride: 'video',
+    }));
+    expect(slice).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(ensureFileThumbnail).toHaveBeenCalledWith('test-import-1'));
+  });
+
+  it('repairs a restored media item with a missing source when the same file is imported again', async () => {
+    const reloadFile = vi.fn(async () => true);
+    const store = createTestStore(reloadFile);
+    const file = new File(['android-image'], 'android-photo.jpg', { type: 'image/jpeg' });
+    store.setState({
+      files: [{
+        id: 'media-android',
+        name: file.name,
+        type: 'image',
+        parentId: null,
+        createdAt: 1,
+        fileSize: file.size,
+        duration: 5,
+      }],
+    });
+    importPipelineMocks.processImport.mockResolvedValue({
+      mediaFile: {
+        id: 'media-android',
+        name: file.name,
+        type: 'image',
+        parentId: null,
+        createdAt: 2,
+        file,
+        fileSize: file.size,
+        url: 'blob:android-project-copy',
+        projectPath: 'Raw/android-photo.jpg',
+        duration: 5,
+      },
+    });
+
+    const result = await store.getState().importFile(file);
+
+    expect(importPipelineMocks.processImport).toHaveBeenCalledWith(expect.objectContaining({
+      file,
+      id: 'media-android',
+      forceCopyToProject: true,
+      typeOverride: 'image',
+    }));
+    expect(store.getState().files).toHaveLength(1);
+    expect(result).toMatchObject({
+      id: 'media-android',
+      file,
+      projectPath: 'Raw/android-photo.jpg',
+    });
+    expect(reloadFile).toHaveBeenCalledWith('media-android');
   });
 });

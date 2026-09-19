@@ -88,12 +88,12 @@ describe('composeTransforms', () => {
     expect(result.rotation.z).toBeCloseTo(45, 5);
   });
 
-  it('opacity multiplication', () => {
+  it('keeps child opacity independent from parent opacity', () => {
     const parent = createMockTransform({ opacity: 0.5 });
     const child = createMockTransform({ opacity: 0.6 });
 
     const result = composeTransforms(parent, child);
-    expect(result.opacity).toBeCloseTo(0.3, 5);
+    expect(result.opacity).toBeCloseTo(0.6, 5);
   });
 
   it('blendMode: child takes precedence', () => {
@@ -255,12 +255,12 @@ describe('composeTransforms', () => {
 
   // ─── Opacity edge cases ──────────────────────────────────────────────────
 
-  it('opacity: zero parent makes result zero', () => {
+  it('opacity: zero parent does not hide the child', () => {
     const parent = createMockTransform({ opacity: 0 });
     const child = createMockTransform({ opacity: 0.8 });
 
     const result = composeTransforms(parent, child);
-    expect(result.opacity).toBeCloseTo(0, 5);
+    expect(result.opacity).toBeCloseTo(0.8, 5);
   });
 
   it('opacity: zero child makes result zero', () => {
@@ -279,12 +279,12 @@ describe('composeTransforms', () => {
     expect(result.opacity).toBeCloseTo(1, 5);
   });
 
-  it('opacity: very small values compose correctly', () => {
+  it('opacity: parent value is ignored', () => {
     const parent = createMockTransform({ opacity: 0.01 });
     const child = createMockTransform({ opacity: 0.01 });
 
     const result = composeTransforms(parent, child);
-    expect(result.opacity).toBeCloseTo(0.0001, 5);
+    expect(result.opacity).toBeCloseTo(0.01, 5);
   });
 
   // ─── Rotation edge cases ─────────────────────────────────────────────────
@@ -340,28 +340,26 @@ describe('composeTransforms', () => {
 
   // ─── Position NOT affected by parent scale ────────────────────────────────
 
-  it('child position is NOT multiplied by parent scale (shader handles scale in UV space)', () => {
+  it('source-local X/Y scale does not change the child offset', () => {
     const parent = createMockTransform({ scale: { x: 2, y: 3 } });
     const child = createMockTransform({ position: { x: 100, y: 200, z: 0 } });
 
     const result = composeTransforms(parent, child);
-    // Key behavior: position should be 100, 200 (NOT 200, 600)
     expect(result.position.x).toBeCloseTo(100, 5);
     expect(result.position.y).toBeCloseTo(200, 5);
   });
 
-  it('child position not affected by parent scale even with rotation', () => {
+  it('Scale All scales the child offset before parent rotation', () => {
     const parent = createMockTransform({
-      scale: { x: 3, y: 3 },
+      scale: { all: 3, x: 1, y: 1 },
       rotation: { x: 0, y: 0, z: 90 },
     });
     const child = createMockTransform({ position: { x: 10, y: 0, z: 0 } });
 
     const result = composeTransforms(parent, child);
-    // Only rotation is applied to position, not scale
-    // 90° rotation: (10, 0) → (0, 10) regardless of parent scale
+    // Uniformly scale (10, 0) to (30, 0), then rotate it by 90°.
     expect(result.position.x).toBeCloseTo(0, 3);
-    expect(result.position.y).toBeCloseTo(10, 3);
+    expect(result.position.y).toBeCloseTo(30, 3);
   });
 
   // ─── Full combined transforms ─────────────────────────────────────────────
@@ -383,8 +381,8 @@ describe('composeTransforms', () => {
     });
 
     const result = composeTransforms(parent, child);
-    // Opacity: 0.8 * 0.5 = 0.4
-    expect(result.opacity).toBeCloseTo(0.4, 5);
+    // Opacity: child remains independent from parent
+    expect(result.opacity).toBeCloseTo(0.5, 5);
     // BlendMode: child wins
     expect(result.blendMode).toBe('overlay');
     // Scale: multiply
@@ -414,7 +412,7 @@ describe('composeTransforms', () => {
     const identity = createMockTransform();
 
     const result = composeTransforms(parent, identity);
-    expect(result.opacity).toBeCloseTo(0.7, 5);
+    expect(result.opacity).toBeCloseTo(1, 5);
     // BlendMode: child (normal) takes precedence over parent
     expect(result.blendMode).toBe('normal');
     expect(result.position.x).toBeCloseTo(50, 5);
@@ -486,8 +484,8 @@ describe('composeTransforms', () => {
     // Scale: 2 * 0.5 * 1 = 1
     expect(result.scale.x).toBeCloseTo(1, 5);
     expect(result.scale.y).toBeCloseTo(1, 5);
-    // Opacity: 0.5 * 0.8 * 1 = 0.4
-    expect(result.opacity).toBeCloseTo(0.4, 5);
+    // Opacity is local to the leaf child.
+    expect(result.opacity).toBeCloseTo(1, 5);
     // Rotation: 0 + 90 + 0 = 90
     expect(result.rotation.z).toBeCloseTo(90, 5);
     // Intermediate position: 100 + 50 = 150 (no rotation on gp)
@@ -514,7 +512,7 @@ describe('composeTransforms', () => {
     const child = createMockTransform({ opacity: 0.001 });
 
     const result = composeTransforms(parent, child);
-    expect(result.opacity).toBeCloseTo(0.000001, 8);
+    expect(result.opacity).toBeCloseTo(0.001, 8);
   });
 });
 

@@ -121,7 +121,7 @@ export type {
 } from './renderTarget';
 export type { Text3DProperties, TextClipProperties } from './text';
 export type {
-  CompositionTimelineData,
+  CompositionTimelineData, ClipVideoInspectorSections,
   EditableHookLayerMetadata,
   EditableHookLayerRole,
   RulerLane,
@@ -136,7 +136,7 @@ export type {
   TimelineClipSourceRuntimeHandles,
   TimelineState,
   TimelineTrack,
-  TransitionOverlayClipDefinition,
+  TransitionOverlayClipDefinition, VideoInspectorSectionKey,
 } from './timeline';
 export type { ClipTransform, TimelineTransition, TransitionCompositionLink } from './timelineCore';
 export type { TimelineSourceType } from './timelineSource';

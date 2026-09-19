@@ -1,9 +1,10 @@
 import { useEffect, useMemo } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 import type { ThemeMode } from '../stores/settingsStore';
+import { normalizeThemeMode } from '../stores/settings/settingsOptions';
 import { useUiSettingsStore, type InterfaceFontFamily } from '../stores/uiSettingsStore';
 
-type ResolvedTheme = 'dark' | 'light' | 'midnight' | 'crazy' | 'custom';
+type ResolvedTheme = 'dark' | 'resolve' | 'light' | 'midnight' | 'crazy' | 'custom';
 
 const FONT_FAMILY_STACKS: Record<InterfaceFontFamily, string> = {
   system: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
@@ -12,6 +13,8 @@ const FONT_FAMILY_STACKS: Record<InterfaceFontFamily, string> = {
   verdana: "Verdana, Geneva, sans-serif",
   mono: "var(--font-mono, 'Cascadia Code', Consolas, monospace)",
 };
+
+const RESOLVE_FONT_STACK = "'Segoe UI', Arial, Helvetica, sans-serif";
 
 const BASE_FONT_SIZES = {
   '--font-2xs': 9,
@@ -24,15 +27,24 @@ const BASE_FONT_SIZES = {
   '--font-3xl': 18,
 } as const;
 
-function resolveTheme(theme: ThemeMode): ResolvedTheme {
-  if (theme === 'system') {
+function resolveTheme(theme: ThemeMode, resolveThemeUnlocked: boolean): ResolvedTheme {
+  const activeTheme = normalizeThemeMode(theme, resolveThemeUnlocked);
+  if (activeTheme === 'system') {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
-  return theme;
+  return activeTheme;
 }
 
-function applyInterfaceTypography(root: HTMLElement, scale: number, fontFamily: InterfaceFontFamily): void {
-  root.style.setProperty('--font-family', FONT_FAMILY_STACKS[fontFamily]);
+function applyInterfaceTypography(
+  root: HTMLElement,
+  scale: number,
+  fontFamily: InterfaceFontFamily,
+  resolvedTheme: ResolvedTheme,
+): void {
+  root.style.setProperty(
+    '--font-family',
+    resolvedTheme === 'resolve' ? RESOLVE_FONT_STACK : FONT_FAMILY_STACKS[fontFamily],
+  );
   Object.entries(BASE_FONT_SIZES).forEach(([token, value]) => {
     root.style.setProperty(token, `${Math.round(value * scale * 10) / 10}px`);
   });
@@ -215,17 +227,21 @@ function clearInlineColors(root: HTMLElement) {
 export function useTheme() {
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
+  const resolveThemeUnlocked = useSettingsStore((s) => s.resolveThemeUnlocked);
   const customHue = useSettingsStore((s) => s.customHue);
   const customBrightness = useSettingsStore((s) => s.customBrightness);
   const interfaceTextScale = useUiSettingsStore((s) => s.interfaceTextScale);
   const interfaceFontFamily = useUiSettingsStore((s) => s.interfaceFontFamily);
   const highReadabilityMode = useUiSettingsStore((s) => s.highReadabilityMode);
 
-  const resolvedTheme = useMemo(() => resolveTheme(theme), [theme]);
+  const resolvedTheme = useMemo(
+    () => resolveTheme(theme, resolveThemeUnlocked),
+    [resolveThemeUnlocked, theme],
+  );
 
   useEffect(() => {
     const root = document.documentElement;
-    const resolved = resolveTheme(theme);
+    const resolved = resolveTheme(theme, resolveThemeUnlocked);
 
     // Clear any inline overrides before switching
     clearInlineColors(root);
@@ -239,7 +255,7 @@ export function useTheme() {
     } else if (theme === 'custom') {
       applyCustomColors(root, customHue, customBrightness);
     }
-    applyInterfaceTypography(root, interfaceTextScale, interfaceFontFamily);
+    applyInterfaceTypography(root, interfaceTextScale, interfaceFontFamily, resolved);
     if (highReadabilityMode) {
       applyHighReadability(root, resolved);
     }
@@ -252,7 +268,7 @@ export function useTheme() {
     if (theme === 'system') {
       const mql = window.matchMedia('(prefers-color-scheme: dark)');
       const handler = () => {
-        const nextResolved = resolveTheme(theme);
+        const nextResolved = resolveTheme(theme, resolveThemeUnlocked);
         root.dataset.theme = nextResolved;
         if (highReadabilityMode) {
           applyHighReadability(root, nextResolved);
@@ -261,7 +277,15 @@ export function useTheme() {
       mql.addEventListener('change', handler);
       return () => mql.removeEventListener('change', handler);
     }
-  }, [theme, customHue, customBrightness, interfaceTextScale, interfaceFontFamily, highReadabilityMode]);
+  }, [
+    theme,
+    resolveThemeUnlocked,
+    customHue,
+    customBrightness,
+    interfaceTextScale,
+    interfaceFontFamily,
+    highReadabilityMode,
+  ]);
 
   return { theme, resolvedTheme, setTheme };
 }

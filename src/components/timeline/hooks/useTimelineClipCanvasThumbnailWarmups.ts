@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { thumbnailCacheService } from '../../../services/thumbnailCacheService';
+import { flockThumbnailService } from '../../../services/flock/flockThumbnailService';
+import { useTimelineStore } from '../../../stores/timeline';
 import { ensureThumbnailBitmap } from '../../../services/timeline/thumbnailBitmapCache';
 import {
   collectVisibleTimelineThumbnailRefs,
@@ -78,6 +80,31 @@ export function useTimelineClipCanvasThumbnailWarmups(
     }),
     [clips, resolveGeometry, scrollX, thumbnailViewportOverscanPx, timeToPixel, viewportWidth],
   );
+
+  const storeClips = useTimelineStore((state) => state.clips);
+  const clipKeyframes = useTimelineStore((state) => state.clipKeyframes);
+  const timelineBusy = useTimelineStore((state) => state.isPlaying === true || state.isExporting === true);
+  const flockClipIds = useMemo(
+    () => new Set(clips.filter((clip) => clip.source?.type === 'flock').map((clip) => clip.id)),
+    [clips],
+  );
+
+  useEffect(() => {
+    flockThumbnailService.setBusy(timelineBusy);
+  }, [timelineBusy]);
+
+  useEffect(() => {
+    if (flockClipIds.size === 0) return;
+    for (const clip of storeClips ?? []) {
+      if (!flockClipIds.has(clip.id) || !clip.flock) continue;
+      flockThumbnailService.request(clip, clipKeyframes?.get(clip.id));
+    }
+  }, [clipKeyframes, flockClipIds, storeClips]);
+
+  useEffect(() => {
+    if (flockClipIds.size === 0) return;
+    return flockThumbnailService.subscribe(requestRedraw);
+  }, [flockClipIds, requestRedraw]);
 
   useEffect(() => {
     if (missingBitmapRefs.length === 0) return;

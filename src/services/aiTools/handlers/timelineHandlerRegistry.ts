@@ -1,9 +1,11 @@
 import type { useTimelineStore } from '../../../stores/timeline';
 import type { CallerContext } from '../policy';
 import type { ToolResult } from '../types';
+import { handleCaptureAppScreenshot } from '../appScreenshot';
 import {
   handleGetTimelineRangeSelection,
   handleGetTimelineState,
+  handleGetTimelineTranscript,
   handleSetInOutPoints,
   handleSetPlayhead,
 } from './timeline';
@@ -133,6 +135,22 @@ import {
   handleListStoryboardScenes,
   handleUpdateStoryboardScene,
 } from './storyboard';
+import {
+  handleAddFlockNode,
+  handleApplyFlockPreset,
+  handleCancelFlockPrecompute,
+  handleConnectFlockPorts,
+  handleCreateFlockClip,
+  handleDisconnectFlockEdge,
+  handleExposeFlockParam,
+  handleGetFlockClip,
+  handleListFlockOperators,
+  handleRemoveFlockNodes,
+  handleSampleFlockParticles,
+  handleScheduleFlockPrecompute,
+  handleUnexposeFlockParam,
+  handleUpdateFlockNode,
+} from './flock';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 type TimelineHandler = (
@@ -143,8 +161,10 @@ type TimelineHandler = (
 
 /** Handlers that operate on the caller's single fresh timeline-store snapshot. */
 export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
+  captureAppScreenshot: async (args) => handleCaptureAppScreenshot(args),
   getTimelineRangeSelection: handleGetTimelineRangeSelection,
   getTimelineState: handleGetTimelineState,
+  getTimelineTranscript: handleGetTimelineTranscript,
   setPlayhead: handleSetPlayhead,
   setInOutPoints: handleSetInOutPoints,
   getClipDetails: handleGetClipDetails,
@@ -244,4 +264,18 @@ export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
   addStoryboardScene: handleAddStoryboardScene,
   updateStoryboardScene: handleUpdateStoryboardScene,
   listStoryboardScenes: handleListStoryboardScenes,
+  listFlockOperators: handleListFlockOperators,
+  createFlockClip: handleCreateFlockClip,
+  getFlockClip: handleGetFlockClip,
+  applyFlockPreset: handleApplyFlockPreset,
+  addFlockNode: handleAddFlockNode,
+  updateFlockNode: handleUpdateFlockNode,
+  removeFlockNodes: handleRemoveFlockNodes,
+  connectFlockPorts: handleConnectFlockPorts,
+  disconnectFlockEdge: handleDisconnectFlockEdge,
+  exposeFlockParam: handleExposeFlockParam,
+  unexposeFlockParam: handleUnexposeFlockParam,
+  scheduleFlockPrecompute: handleScheduleFlockPrecompute,
+  cancelFlockPrecompute: handleCancelFlockPrecompute,
+  sampleFlockParticles: handleSampleFlockParticles,
 };

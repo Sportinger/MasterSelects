@@ -16,6 +16,7 @@ import {
 import { getTimelineRevision } from '../../../stores/timeline/revisionMiddleware';
 import type { Effect, TimelineClip, TimelineTrack } from '../../../types';
 import { createDefaultMotionLayerDefinition } from '../../../types/motionDesign';
+import { transformMaskPoint } from '../../../utils/maskTransform';
 import {
   IDENTITY_ADJUSTMENT_TRANSFORM,
   MOTION_ADJUSTMENT_STACK_CONTRACT_VERSION,
@@ -753,10 +754,7 @@ function timelineClipToAdjustmentLayer(
         inverted: mask.inverted,
         opacity: mask.opacity,
         feather: mask.feather,
-        points: mask.vertices.map((point) => ({
-          x: point.x + mask.position.x,
-          y: point.y + mask.position.y,
-        })),
+        points: mask.vertices.map(point => transformMaskPoint(mask, point, { width: 1, height: 1 })),
       };
     }),
   } satisfies MotionAdjustmentLayerContract['mix'];

@@ -1,10 +1,16 @@
+import { timingSafeEqualStrings } from '../lib/constantTime';
 import { json, methodNotAllowed } from '../lib/db';
 import type { AppContext, AppRouteHandler } from '../lib/env';
 
 interface VisitEntry {
+  browser?: string;
   ts: number;
   path: string;
   country?: string;
+  device?: string;
+  os?: string;
+  referrerHost?: string;
+  // Legacy fields remain readable until the old one-hour entries expire.
   city?: string;
   ua?: string;
   referer?: string;
@@ -37,10 +43,14 @@ async function loadVisitEntry(context: AppContext, key: ListedVisitKey): Promise
     const metadata = key.metadata as Partial<VisitEntry>;
     if (typeof metadata.ts === 'number' && typeof metadata.path === 'string') {
       return {
+        browser: metadata.browser,
         city: metadata.city,
         country: metadata.country,
+        device: metadata.device,
+        os: metadata.os,
         path: metadata.path,
         referer: metadata.referer,
+        referrerHost: metadata.referrerHost,
         ts: metadata.ts,
         ua: metadata.ua,
         visitorId: metadata.visitorId,
@@ -56,12 +66,15 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     return methodNotAllowed(['GET']);
   }
 
-  // Auth: require VISITOR_NOTIFY_SECRET as query param or header
+  // Auth: VISITOR_NOTIFY_SECRET as `Authorization: Bearer` or `X-Visitor-Secret`
+  // header only. Query strings land in edge and proxy logs, so the secret is
+  // no longer accepted there.
   const url = new URL(context.request.url);
-  const secret = url.searchParams.get('secret') ?? context.request.headers.get('x-visitor-secret');
-  const expected = context.env.VISITOR_NOTIFY_SECRET;
+  const bearer = /^Bearer\s+(\S+)$/i.exec(context.request.headers.get('Authorization') ?? '')?.[1] ?? null;
+  const supplied = bearer ?? context.request.headers.get('X-Visitor-Secret')?.trim() ?? null;
+  const expected = context.env.VISITOR_NOTIFY_SECRET?.trim();
 
-  if (!expected || !secret || secret !== expected) {
+  if (!expected || !supplied || !timingSafeEqualStrings(supplied, expected)) {
     return json({ error: 'unauthorized' }, { status: 401 });
   }
 
@@ -96,9 +109,10 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       count: visits.length,
       visits,
     });
-  } catch (err) {
+  } catch (error) {
+    console.error('[visits] listing failed', context.data.requestId, error instanceof Error ? error.message : error);
     return json(
-      { error: 'internal_error', message: String(err) },
+      { error: 'internal_error', requestId: context.data.requestId ?? null },
       { status: 500 },
     );
   }

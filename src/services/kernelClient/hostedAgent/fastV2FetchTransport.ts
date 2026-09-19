@@ -1,6 +1,5 @@
 import {
   HOSTED_AGENT_HEADERS,
-  HOSTED_AGENT_K2_PROTOCOL_VERSION,
   type HostedAgentK2SessionStatus,
 } from './contracts';
 import {
@@ -14,7 +13,7 @@ import {
   HOSTED_AGENT_FAST_V2_PROMPT_VERSION,
   HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION,
   parseHostedAgentFastV2StartRequest,
-  type HostedAgentFastV2ExecutionProfile,
+  type HostedAgentFastV2AgentMode,
   type HostedAgentFastV2StartRequest,
 } from './fastV2StartContract';
 import type {
@@ -24,7 +23,6 @@ import type {
 } from '../wp1Spike/operationSessionAuthority';
 import type {
   KernelOperationPlanResultV1,
-  KernelOperationSettlementReceiptV1,
 } from '../wp1Spike/operationRoundTrip';
 import {
   PUBLIC_COMPILED_PLAN_DIGEST_V1,
@@ -33,11 +31,13 @@ import {
   PUBLIC_OPERATION_CONTRACT_V1,
   PUBLIC_OPERATION_EFFECTS_V1,
   getPublicOperationSpecV1,
+  validBoundedEditorOperationDataV1,
 } from '../wp1Spike/publicOperationContracts';
 import {
   validateCandidateTwoCompiledPlanV1,
 } from '../wp1Spike/candidateTwoCompiledPlanExecutor';
 import { HostedAgentK2ReconnectableError } from './k2Client';
+import { notifyBillingUpgradeRequired } from '../../billingPromptEvents';
 
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9._:-]+$/;
 const EVENT_ID_PATTERN = /^[1-9]\d*$/;
@@ -114,6 +114,7 @@ export type HostedAgentFastV2Event =
       kind: 'turn-complete';
       message: string;
       rounds: number;
+      inputRequest?: import('../types').KernelUserInputRequest;
     })
   | (HostedAgentFastV2EventBase & {
       kind: 'turn-canceled' | 'turn-failed' | 'turn-interrupted';
@@ -154,20 +155,12 @@ export interface HostedAgentFastV2CancelResponse {
 }
 
 export type HostedAgentProtocolSelection =
-  | {
-      availableExecutionProfiles: readonly HostedAgentFastV2ExecutionProfile[];
-      protocolVersion: typeof HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION;
-      reason: 'canary_selected';
-    }
-  | {
-      availableExecutionProfiles: readonly ['fast'];
-      protocolVersion: typeof HOSTED_AGENT_K2_PROTOCOL_VERSION;
-      reason:
-        | 'emergency_rollback'
-        | 'feature_disabled'
-        | 'invalid_configuration'
-        | 'outside_canary';
-    };
+  {
+    availableAgentModes: readonly HostedAgentFastV2AgentMode[];
+    availableExecutionProfiles: readonly ['fast'];
+    protocolVersion: typeof HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION;
+    reason: 'normal_path';
+  };
 
 export interface HostedAgentFastV2FetchTransport {
   cancel(input: HostedAgentFastV2Binding & {
@@ -178,10 +171,6 @@ export interface HostedAgentFastV2FetchTransport {
   }): Promise<HostedAgentProtocolSelection>;
   postOperationResult(input: HostedAgentFastV2Binding & {
     result: KernelOperationPlanResultV1;
-    signal?: AbortSignal;
-  }): Promise<HostedAgentFastV2OperationPostResponse>;
-  postOperationSettlement(input: HostedAgentFastV2Binding & {
-    receipt: KernelOperationSettlementReceiptV1;
     signal?: AbortSignal;
   }): Promise<HostedAgentFastV2OperationPostResponse>;
   replayEvents(input: HostedAgentFastV2Binding & {
@@ -386,12 +375,33 @@ function validOperationSettlement(value: unknown): value is KernelOperationPlanS
       : true);
 }
 
+function validKernelUserInputRequest(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value) || !hasExactKeys(value, [
+    'allowFreeform', 'allowMultiple', 'id', 'options', 'question',
+  ])) return false;
+  if (
+    typeof value.allowFreeform !== 'boolean'
+    || typeof value.allowMultiple !== 'boolean'
+    || !validIdentifier(value.id)
+    || !validBoundedString(value.question, 500)
+    || !Array.isArray(value.options)
+    || value.options.length < 2
+    || value.options.length > 4
+  ) return false;
+  return value.options.every(option => isRecord(option)
+    && hasExactKeys(option, ['description', 'id', 'title'])
+    && validIdentifier(option.id)
+    && validBoundedString(option.title, 120)
+    && validBoundedString(option.description, 240));
+}
+
 function parseFastV2Event(
   value: unknown,
   binding?: Pick<HostedAgentFastV2Binding, 'sessionId' | 'turnId'>,
 ): HostedAgentFastV2Event {
   if (!isRecord(value) || typeof value.kind !== 'string' || !validBinding(value, binding)) {
-    throw new Error('The Fast V2 event is malformed or is not bound to this turn.');
+    throw new Error('The Auto event is malformed or is not bound to this turn.');
   }
   let valid = false;
   switch (value.kind) {
@@ -481,13 +491,14 @@ function parseFastV2Event(
       break;
     case 'turn-complete':
       valid = hasExactKeys(value, [
-        'creditsCharged', 'eventId', 'kind', 'message', 'protocolVersion', 'rounds', 'sessionId', 'turnId',
+        'creditsCharged', 'eventId', ...(value.inputRequest === undefined ? [] : ['inputRequest']), 'kind', 'message', 'protocolVersion', 'rounds', 'sessionId', 'turnId',
       ])
         && typeof value.creditsCharged === 'number'
         && Number.isFinite(value.creditsCharged)
         && value.creditsCharged >= 0
         && validBoundedString(value.message, 200_000)
-        && validNonNegativeInteger(value.rounds);
+        && validNonNegativeInteger(value.rounds)
+        && validKernelUserInputRequest(value.inputRequest);
       break;
     case 'turn-canceled':
     case 'turn-failed':
@@ -502,7 +513,7 @@ function parseFastV2Event(
       valid = false;
   }
   if (!valid) {
-    throw new Error('The Fast V2 event has an invalid or unexpected payload.');
+    throw new Error('The Auto event has an invalid or unexpected payload.');
   }
   return value as unknown as HostedAgentFastV2Event;
 }
@@ -526,25 +537,25 @@ export function parseHostedAgentFastV2Sse(
       } else if (line.startsWith('data:')) {
         data.push(line.slice(5).trimStart());
       } else {
-        throw new Error('The Fast V2 event stream contains an unexpected SSE field.');
+      throw new Error('The Auto event stream contains an unexpected SSE field.');
       }
     }
     if (!id || !eventName || data.length === 0 || !EVENT_ID_PATTERN.test(id)) {
-      throw new Error('The Fast V2 event stream contains an incomplete SSE envelope.');
+      throw new Error('The Auto event stream contains an incomplete SSE envelope.');
     }
     const numericEventId = Number(id);
     if (!Number.isSafeInteger(numericEventId) || numericEventId <= previousEventId) {
-      throw new Error('The Fast V2 event stream is out of order.');
+      throw new Error('The Auto event stream is out of order.');
     }
     let parsed: unknown;
     try {
       parsed = JSON.parse(data.join('\n')) as unknown;
     } catch {
-      throw new Error('The Fast V2 event stream contains invalid JSON.');
+      throw new Error('The Auto event stream contains invalid JSON.');
     }
     const event = parseFastV2Event(parsed, binding);
     if (event.eventId !== id || event.kind !== eventName) {
-      throw new Error('The Fast V2 SSE envelope does not match its event payload.');
+      throw new Error('The Auto SSE envelope does not match its event payload.');
     }
     previousEventId = numericEventId;
     events.push(event);
@@ -581,7 +592,7 @@ async function fastV2Fetch(
     if (isAbortFailure(error, init.signal ?? undefined)) throw error;
     if (error instanceof HostedAgentFastV2ReconnectableError) throw error;
     throw new HostedAgentFastV2ReconnectableError(
-      'The Fast V2 hosted-agent connection is temporarily unavailable.',
+      'The Auto connection is temporarily unavailable.',
     );
   }
 }
@@ -602,14 +613,17 @@ async function safeResponseErrorCode(response: Response): Promise<string | undef
 }
 
 async function responseError(response: Response): Promise<Error> {
+  if (response.status === 402) {
+    notifyBillingUpgradeRequired();
+  }
   if ([502, 503, 504].includes(response.status)) {
     return new HostedAgentFastV2ReconnectableError(
-      `The Fast V2 hosted-agent connection is temporarily unavailable (${response.status}).`,
+      `The Auto connection is temporarily unavailable (${response.status}).`,
     );
   }
   const code = await safeResponseErrorCode(response);
   const detail = code === undefined ? String(response.status) : `${response.status}: ${code}`;
-  return new Error(`The Fast V2 hosted-agent request failed safely (${detail}).`);
+  return new Error(`The Auto request failed safely (${detail}).`);
 }
 
 async function startResponseError(response: Response): Promise<Error> {
@@ -619,15 +633,13 @@ async function startResponseError(response: Response): Promise<Error> {
   ) {
     try {
       const value = await response.clone().json() as unknown;
-      if (
-        isRecord(value)
-        && hasExactKeys(value, ['error', 'message'])
-        && value.error === 'verified_profile_not_enabled'
-        && typeof value.message === 'string'
-      ) {
-        return new Error(
-          'The Verified profile is not available for this account. Choose Fast and try again.',
-        );
+      if (isRecord(value) && hasExactKeys(value, ['error', 'message'])
+        && typeof value.message === 'string') {
+        if (value.error === 'logic_agent_not_enabled') {
+          return new Error(
+            'Logic is not available for this account yet. Choose the standard agent and try again.',
+          );
+        }
       }
     } catch {
       // Unknown or malformed error bodies remain generic and fail closed.
@@ -638,12 +650,12 @@ async function startResponseError(response: Response): Promise<Error> {
 
 async function readStrictJson(response: Response): Promise<unknown> {
   if (!JSON_CONTENT_TYPE_PATTERN.test(response.headers.get('Content-Type') ?? '')) {
-    throw new Error('The Fast V2 hosted-agent response is not JSON.');
+    throw new Error('The Auto response is not JSON.');
   }
   try {
     return await response.json() as unknown;
   } catch {
-    throw new Error('The Fast V2 hosted-agent response contains invalid JSON.');
+    throw new Error('The Auto response contains invalid JSON.');
   }
 }
 
@@ -667,7 +679,7 @@ function parseTurnAccepted(
   ]) || !isRecord(value.pageLease) || !hasExactKeys(value.pageLease, [
     'expiresAt', 'leaseToken', 'sessionId',
   ])) {
-    throw new Error('The Fast V2 start response has an unexpected shape.');
+    throw new Error('The Auto start response has an unexpected shape.');
   }
   if (
     value.protocolVersion !== HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION
@@ -686,13 +698,14 @@ function parseTurnAccepted(
     || !validBoundedString(value.pageLease.leaseToken, 2_000)
     || value.pageLease.leaseToken.length === 0
   ) {
-    throw new Error('The Fast V2 start response is not bound to the requested turn.');
+    throw new Error('The Auto start response is not bound to the requested turn.');
   }
   return value as unknown as HostedAgentFastV2TurnAccepted;
 }
 
 function parseProtocolSelection(value: unknown): HostedAgentProtocolSelection {
-  if (!isRecord(value) || !hasExactKeys(value, [
+  if (!isRecord(value) || !hasOnlyKeys(value, [
+    'availableAgentModes',
     'availableExecutionProfiles',
     'protocolVersion',
     'reason',
@@ -700,29 +713,25 @@ function parseProtocolSelection(value: unknown): HostedAgentProtocolSelection {
     throw new Error('The hosted-agent protocol selection has an unexpected shape.');
   }
   const profiles = value.availableExecutionProfiles;
-  if (!Array.isArray(profiles)) {
+  const agentModes = value.availableAgentModes ?? ['standard'];
+  if (!Array.isArray(profiles) || !Array.isArray(agentModes)) {
     throw new Error('The hosted-agent protocol selection is invalid or contradictory.');
   }
   const fastOnly = profiles.length === 1 && profiles[0] === 'fast';
-  const fastAndVerified = profiles.length === 2
-    && profiles[0] === 'fast'
-    && profiles[1] === 'verified';
+  const standardOnly = agentModes.length === 1 && agentModes[0] === 'standard';
+  const standardAndLogic = agentModes.length === 2
+    && agentModes[0] === 'standard'
+    && agentModes[1] === 'logic';
   if (
-    (value.protocolVersion === HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION
-      && value.reason === 'canary_selected'
-      && (fastOnly || fastAndVerified))
-    || (
-      value.protocolVersion === HOSTED_AGENT_K2_PROTOCOL_VERSION
-      && [
-        'emergency_rollback',
-        'feature_disabled',
-        'invalid_configuration',
-        'outside_canary',
-      ].includes(String(value.reason))
-      && fastOnly
-    )
+    value.protocolVersion === HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION
+    && value.reason === 'normal_path'
+    && fastOnly
+    && (standardOnly || standardAndLogic)
   ) {
-    return value as unknown as HostedAgentProtocolSelection;
+    return {
+      ...value,
+      availableAgentModes: agentModes,
+    } as unknown as HostedAgentProtocolSelection;
   }
   throw new Error('The hosted-agent protocol selection is invalid or contradictory.');
 }
@@ -739,16 +748,24 @@ function validProjectedOperationResult(value: unknown, operationId: string): boo
   }
   if (value.error !== undefined) return false;
   if (
-    operationId === 'timeline.editor.destructive.v1'
+    operationId === 'media.generation.commit.v1'
+    || operationId === 'media.generation.model.inspect.v1'
+    || operationId === 'media.generation.preview.v1'
+    || operationId === 'media.generation.status.v1'
+    || operationId === 'timeline.editor.destructive.v1'
     || operationId === 'timeline.editor.inspect.v1'
     || operationId === 'timeline.editor.mutate.v1'
     || operationId === 'timeline.editor.program.commit.v1'
   ) {
     if (value.data === undefined) return true;
+    if (operationId === 'timeline.editor.inspect.v1') {
+      return validBoundedEditorOperationDataV1(operationId, value.data);
+    }
     try {
       const serialized = JSON.stringify(value.data);
+      const maximumCharacters = operationId.startsWith('media.generation.') ? 100_000 : 500_000;
       return typeof serialized === 'string'
-        && serialized.length <= 500_000
+        && serialized.length <= maximumCharacters
         && !/(?:^|["'])data:/i.test(serialized);
     } catch {
       return false;
@@ -847,44 +864,6 @@ function validOperationResult(
     && ((result.status === 'prepared') === validFingerprint(result.preparedStateFingerprint));
 }
 
-function validOperationSettlementReceipt(
-  receipt: unknown,
-  binding: HostedAgentFastV2Binding,
-): receipt is KernelOperationSettlementReceiptV1 {
-  if (!isRecord(receipt) || !hasOnlyKeys(receipt, [
-    'batchId',
-    'capabilitySetId',
-    'clientInstanceId',
-    'committedStateFingerprint',
-    'kind',
-    'outcome',
-    'preparedStateFingerprint',
-    'schemaVersion',
-    'sequence',
-    'sessionId',
-    'simulatedStateFingerprint',
-    'stateRevisionAfterSettlement',
-    'turnId',
-  ])) return false;
-  return receipt.schemaVersion === 1
-    && receipt.kind === 'operation-plan-settlement-receipt'
-    && validIdentifier(receipt.batchId, 160)
-    && validIdentifier(receipt.capabilitySetId)
-    && receipt.clientInstanceId === binding.clientInstanceId
-    && receipt.sessionId === binding.sessionId
-    && receipt.turnId === binding.turnId
-    && validNonNegativeInteger(receipt.sequence)
-    && validNonNegativeInteger(receipt.stateRevisionAfterSettlement)
-    && validFingerprint(receipt.preparedStateFingerprint)
-    && validFingerprint(receipt.simulatedStateFingerprint)
-    && ['aborted', 'committed', 'ownership-lost'].includes(String(receipt.outcome))
-    && (receipt.outcome === 'committed'
-      ? validFingerprint(receipt.committedStateFingerprint)
-        && receipt.committedStateFingerprint === receipt.preparedStateFingerprint
-        && receipt.committedStateFingerprint === receipt.simulatedStateFingerprint
-      : receipt.committedStateFingerprint === undefined);
-}
-
 function boundHeaders(binding: HostedAgentFastV2Binding): Headers {
   return new Headers({
     [HOSTED_AGENT_HEADERS.clientInstanceId]: binding.clientInstanceId,
@@ -910,7 +889,7 @@ function parseOperationPostResponse(
     || typeof value.cursor !== 'string'
     || !/^\d+$/.test(value.cursor)
     || !validStatus(value.status)) {
-    throw new Error('The Fast V2 operation response is malformed or unbound.');
+    throw new Error('The Auto operation response is malformed or unbound.');
   }
   return value as unknown as HostedAgentFastV2OperationPostResponse;
 }
@@ -922,7 +901,7 @@ export function createHostedAgentFastV2FetchTransport(input: {
 } = {}): HostedAgentFastV2FetchTransport {
   const apiBasePath = (input.apiBasePath ?? '/api/kernel').replace(/\/+$/, '');
   const request = input.fetchImplementation ?? fetch;
-  const turnsPath = `${apiBasePath}/hosted-agent/v2/turns`;
+  const turnsPath = `${apiBasePath}/normal/turns`;
   const turnPath = (turnId: string) => `${turnsPath}/${encodeURIComponent(turnId)}`;
 
   async function postOperation(inputValue: HostedAgentFastV2Binding & {
@@ -932,7 +911,7 @@ export function createHostedAgentFastV2FetchTransport(input: {
     const { signal, ...binding } = inputValue;
     const sequence = inputValue.result.sequence;
     if (!validOperationResult(inputValue.result, binding)) {
-      throw new Error('The Fast V2 operation payload is malformed or unbound.');
+      throw new Error('The Auto operation payload is malformed or unbound.');
     }
     const headers = boundHeaders(binding);
     headers.set('Content-Type', 'application/json');
@@ -960,13 +939,16 @@ export function createHostedAgentFastV2FetchTransport(input: {
         || parsed.terminalReason !== 'explicit_cancel'
         || parsed.turnStatus !== 'cancelled'
         || parsed.turnId !== binding.turnId) {
-        throw new Error('The Fast V2 cancel response is malformed or unbound.');
+        throw new Error('The Auto cancel response is malformed or unbound.');
       }
       return parsed as unknown as HostedAgentFastV2CancelResponse;
     },
     async getProtocol({ signal } = {}) {
-      const response = await fastV2Fetch(request, `${apiBasePath}/hosted-agent/protocol`, {
-        headers: { Accept: 'application/json' },
+      const response = await fastV2Fetch(request, `${apiBasePath}/normal/capabilities`, {
+        headers: {
+          Accept: 'application/json',
+          'X-MasterSelects-Capabilities': 'agent-modes-v1',
+        },
         method: 'GET',
         signal: signal ?? input.signal,
       });
@@ -976,28 +958,9 @@ export function createHostedAgentFastV2FetchTransport(input: {
     async postOperationResult(inputValue) {
       return postOperation(inputValue);
     },
-    async postOperationSettlement({ receipt, signal, ...binding }) {
-      if (!validOperationSettlementReceipt(receipt, binding)) {
-        throw new Error('The Fast V2 settlement payload is malformed or unbound.');
-      }
-      const headers = boundHeaders(binding);
-      headers.set('Content-Type', 'application/json');
-      const response = await fastV2Fetch(
-        request,
-        `${turnPath(binding.turnId)}/operation-settlements`,
-        {
-          body: JSON.stringify({ receipt }),
-          headers,
-          method: 'POST',
-          signal: signal ?? input.signal,
-        },
-      );
-      if (!response.ok) throw await responseError(response);
-      return parseOperationPostResponse(await readStrictJson(response), binding, receipt.sequence);
-    },
     async replayEvents({ afterEventId, signal, ...binding }) {
       if (afterEventId !== null && !/^\d+$/.test(afterEventId)) {
-        throw new Error('The Fast V2 event cursor is invalid.');
+        throw new Error('The Auto event cursor is invalid.');
       }
       const headers = boundHeaders(binding);
       headers.set('Accept', 'text/event-stream');
@@ -1009,12 +972,12 @@ export function createHostedAgentFastV2FetchTransport(input: {
       });
       if (!response.ok) throw await responseError(response);
       if (!(response.headers.get('Content-Type') ?? '').toLowerCase().includes('text/event-stream')) {
-        throw new Error('The Fast V2 hosted-agent event response is not an SSE stream.');
+        throw new Error('The Auto event response is not an SSE stream.');
       }
       const events = parseHostedAgentFastV2Sse(await response.text(), binding);
       const responseCursor = response.headers.get(HOSTED_AGENT_HEADERS.eventCursor);
       if (responseCursor !== null && !/^\d+$/.test(responseCursor)) {
-        throw new Error('The Fast V2 event response contains an invalid cursor.');
+        throw new Error('The Auto event response contains an invalid cursor.');
       }
       const cursor = responseCursor ?? events.at(-1)?.eventId ?? afterEventId;
       const leaseMs = Number(response.headers.get(HOSTED_AGENT_HEADERS.streamLeaseMs));

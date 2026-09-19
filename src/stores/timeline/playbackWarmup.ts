@@ -1,7 +1,9 @@
 import type { TimelineClip, TimelineTrack } from '../../types/timeline';
 import { getTimelinePlaybackWarmupVideo } from '../../services/timeline/timelinePlaybackWarmupRuntime';
 import { hasWorkerGpuPlaybackStartVideoSource } from '../../services/timeline/workerGpuPlaybackStartWarmup';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import { resolveTransitionSourceMapTime } from '../../services/timeline/transitionSourceMap';
+import { getNestedClipSourceTiming } from '../../services/layerBuilder/layerBuilderNestedSourceTiming';
 import { createTimelineTransitionMediaDurationResolver } from '../../services/timeline/timelineTransitionMediaDurations';
 import {
   createTransitionSourceClip,
@@ -11,6 +13,18 @@ import {
 import type { PlaybackWarmupState } from './storeTypes/feedbackTypes';
 
 type ReverseWorkerRuntimeModule = typeof import('../../services/layerBuilder/reverseWorkerWebCodecsRuntime');
+
+export interface PlaybackWarmupVideo {
+  readonly video: HTMLVideoElement;
+  readonly targetTime?: number;
+}
+
+const PLAYBACK_WARMUP_TARGET_TOLERANCE_SECONDS = 0.04;
+// Match the normal forward HTML playback's accepted startup drift. Within
+// this window VideoSync can converge without a blocking pre-start seek, while
+// the cached-frame hold prevents a transient transparent/black layer.
+const PLAYBACK_WARMUP_REUSABLE_FRAME_TOLERANCE_SECONDS = 0.35;
+const PLAYBACK_WARMUP_TIMEOUT_MS = 1_000;
 
 let reverseWorkerRuntimeModulePromise: Promise<ReverseWorkerRuntimeModule> | null = null;
 
@@ -41,6 +55,99 @@ export function waitForPlaybackWarmupFrame(): Promise<void> {
     });
   }
   return new Promise((resolve) => setTimeout(resolve, 16));
+}
+
+function getSafeWarmupTarget(video: HTMLVideoElement, targetTime: number): number {
+  const nonNegativeTarget = Math.max(0, targetTime);
+  if (!Number.isFinite(video.duration) || video.duration <= 0) return nonNegativeTarget;
+  return Math.min(nonNegativeTarget, Math.max(0, video.duration - 0.001));
+}
+
+export function positionPlaybackWarmupVideo(entry: PlaybackWarmupVideo): void {
+  if (entry.targetTime === undefined || !Number.isFinite(entry.targetTime) || entry.video.seeking) return;
+  const targetTime = getSafeWarmupTarget(entry.video, entry.targetTime);
+  if (Math.abs(entry.video.currentTime - targetTime) <= PLAYBACK_WARMUP_TARGET_TOLERANCE_SECONDS) return;
+  try {
+    entry.video.currentTime = targetTime;
+  } catch {
+    // A detached or not-yet-loaded element will be retried by the warm-up poll.
+  }
+}
+
+export function isPlaybackWarmupVideoSettled(entry: PlaybackWarmupVideo): boolean {
+  const lastPresentedTime = renderHostPort.getLastPresentedVideoTime(entry.video);
+  if (
+    entry.targetTime !== undefined &&
+    Number.isFinite(entry.targetTime) &&
+    typeof lastPresentedTime === 'number' &&
+    Number.isFinite(lastPresentedTime)
+  ) {
+    const targetTime = getSafeWarmupTarget(entry.video, entry.targetTime);
+    if (
+      Math.abs(lastPresentedTime - targetTime) <=
+      PLAYBACK_WARMUP_REUSABLE_FRAME_TOLERANCE_SECONDS
+    ) {
+      // The renderer already owns a target-adjacent GPU frame. Playback can
+      // begin immediately while an in-flight HTML seek catches up behind the
+      // per-layer stall hold, instead of blocking on the full warmup timeout.
+      return true;
+    }
+  }
+  if (entry.video.readyState < 2 || entry.video.seeking) return false;
+  if (entry.targetTime === undefined || !Number.isFinite(entry.targetTime)) return true;
+  const targetTime = getSafeWarmupTarget(entry.video, entry.targetTime);
+  return Math.abs(entry.video.currentTime - targetTime) <= PLAYBACK_WARMUP_TARGET_TOLERANCE_SECONDS;
+}
+
+export function waitForPlaybackWarmupVideo(
+  entry: PlaybackWarmupVideo,
+  timeoutMs = PLAYBACK_WARMUP_TIMEOUT_MS,
+): Promise<void> {
+  positionPlaybackWarmupVideo(entry);
+  if (isPlaybackWarmupVideoSettled(entry)) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    let finished = false;
+    let warmupPlaybackRequested = false;
+    let pauseTimer: ReturnType<typeof setTimeout> | null = null;
+    const video = entry.video;
+    const events = ['loadeddata', 'canplaythrough', 'seeked'] as const;
+
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearInterval(pollTimer);
+      clearTimeout(timeoutTimer);
+      if (pauseTimer) clearTimeout(pauseTimer);
+      if (warmupPlaybackRequested) video.pause();
+      if (typeof video.removeEventListener === 'function') {
+        for (const event of events) video.removeEventListener(event, checkReady);
+      }
+      resolve();
+    };
+    const checkReady = () => {
+      positionPlaybackWarmupVideo(entry);
+      if (isPlaybackWarmupVideoSettled(entry)) finish();
+    };
+
+    if (typeof video.addEventListener === 'function') {
+      for (const event of events) video.addEventListener(event, checkReady);
+    }
+    const pollTimer = setInterval(checkReady, 50);
+    const timeoutTimer = setTimeout(finish, Math.max(0, timeoutMs));
+
+    warmupPlaybackRequested = true;
+    video.play().then(() => {
+      if (finished) return;
+      pauseTimer = setTimeout(() => {
+        video.pause();
+        warmupPlaybackRequested = false;
+        checkReady();
+      }, 50);
+    }).catch(() => {
+      // Event listeners and polling still cover autoplay-restricted browsers.
+    });
+  });
 }
 
 export function closeSourceMonitorForTimelinePlayback(input: {
@@ -95,6 +202,34 @@ function getVisibleVideoTrackIds(tracks: readonly TimelineTrack[]): Set<string> 
       .filter((track) => track.type === 'video' && track.visible !== false)
       .map((track) => track.id)
   );
+}
+
+function getPlaybackWarmupTargetTime(
+  clip: TimelineClip,
+  timelineTime: number,
+  getSourceTimeForClip: (clipId: string, clipLocalTime: number) => number,
+  getInterpolatedSpeed: (clipId: string, clipLocalTime: number) => number,
+): number | undefined {
+  const clipLocalTime = timelineTime - clip.startTime;
+  const mappedTime = resolveTransitionSourceMapTime(clip.transitionSourceMap, clipLocalTime);
+  if (mappedTime) return mappedTime.sourceTime;
+  if (Number.isFinite(clip.transitionSourceTimeOverride)) {
+    return clip.transitionSourceTimeOverride;
+  }
+
+  const inPoint = Number.isFinite(clip.inPoint) ? clip.inPoint : 0;
+  const outPoint = Number.isFinite(clip.outPoint)
+    ? clip.outPoint
+    : inPoint + Math.max(0, Number.isFinite(clip.duration) ? clip.duration : 0);
+  const initialSpeed = clip.transitionSourceHold
+    ? 1
+    : getInterpolatedSpeed(clip.id, 0);
+  const startPoint = initialSpeed >= 0 ? inPoint : outPoint;
+  const sourceOffset = getSourceTimeForClip(clip.id, clipLocalTime);
+  const sourceTime = startPoint + sourceOffset;
+  return Number.isFinite(sourceTime)
+    ? Math.max(inPoint, Math.min(outPoint, sourceTime))
+    : undefined;
 }
 
 function getReversePrimeClipsAtTime(
@@ -175,7 +310,7 @@ export function preparePlaybackStartWarmup(input: {
   readonly getSourceTimeForClip: (clipId: string, clipLocalTime: number) => number;
   readonly getInterpolatedSpeed: (clipId: string, clipLocalTime: number) => number;
 }): {
-  readonly videosToCheck: readonly HTMLVideoElement[];
+  readonly videosToCheck: readonly PlaybackWarmupVideo[];
   readonly hasWorkerGpuStartVideo: boolean;
   readonly reverseWorkerPrimeReady: Promise<number>;
 } {
@@ -207,21 +342,48 @@ export function preparePlaybackStartWarmup(input: {
     getSourceTimeForClip: input.getSourceTimeForClip,
     getInterpolatedSpeed: input.getInterpolatedSpeed,
   });
-  const nestedVideos: HTMLVideoElement[] = [];
+  const warmupVideos = new Map<HTMLVideoElement, PlaybackWarmupVideo>();
+  const rememberWarmupVideo = (video: HTMLVideoElement, targetTime?: number) => {
+    const existing = warmupVideos.get(video);
+    if (!existing || targetTime !== undefined) {
+      warmupVideos.set(video, targetTime === undefined ? { video } : { video, targetTime });
+    }
+  };
+
+  for (const clip of [...clipsAtPlayhead, ...transitionClipsAtPlayhead]) {
+    const video = getTimelinePlaybackWarmupVideo(clip.source);
+    if (video) {
+      rememberWarmupVideo(
+        video,
+        getPlaybackWarmupTargetTime(
+          clip,
+          input.playheadPosition,
+          input.getSourceTimeForClip,
+          input.getInterpolatedSpeed,
+        ),
+      );
+    }
+  }
 
   for (const clip of input.clips) {
     if (clip.isComposition && clip.nestedClips && visibleVideoTrackIds.has(clip.trackId)) {
       const isAtPlayhead = input.playheadPosition >= clip.startTime &&
         input.playheadPosition < clip.startTime + clip.duration;
       if (isAtPlayhead) {
-        const compTime = input.playheadPosition - clip.startTime + clip.inPoint;
+        const compLocalTime = input.playheadPosition - clip.startTime;
+        const mappedCompTime = resolveTransitionSourceMapTime(clip.transitionSourceMap, compLocalTime);
+        const compTime = mappedCompTime?.sourceTime ?? compLocalTime + clip.inPoint;
         for (const nestedClip of clip.nestedClips) {
           const warmupVideo = getTimelinePlaybackWarmupVideo(nestedClip.source);
           if (warmupVideo) {
             const isNestedAtTime = compTime >= nestedClip.startTime &&
               compTime < nestedClip.startTime + nestedClip.duration;
             if (isNestedAtTime) {
-              nestedVideos.push(warmupVideo);
+              const timing = getNestedClipSourceTiming(
+                nestedClip,
+                compTime - nestedClip.startTime,
+              );
+              rememberWarmupVideo(warmupVideo, timing.sourceTime);
             }
           }
         }
@@ -230,18 +392,9 @@ export function preparePlaybackStartWarmup(input: {
   }
 
   return {
-    videosToCheck: Array.from(new Set([
-      ...clipsAtPlayhead.flatMap((clip) => {
-        const warmupVideo = getTimelinePlaybackWarmupVideo(clip.source);
-        return warmupVideo ? [warmupVideo] : [];
-      }),
-      ...transitionClipsAtPlayhead.flatMap((clip) => {
-        const warmupVideo = getTimelinePlaybackWarmupVideo(clip.source);
-        return warmupVideo ? [warmupVideo] : [];
-      }),
-      ...nestedVideos,
-    ])),
-    hasWorkerGpuStartVideo: hasTopLevelWorkerGpuStartVideo || nestedVideos.length > 0,
+    videosToCheck: [...warmupVideos.values()],
+    hasWorkerGpuStartVideo: hasTopLevelWorkerGpuStartVideo ||
+      [...warmupVideos.values()].some(entry => entry.targetTime !== undefined),
     reverseWorkerPrimeReady,
   };
 }

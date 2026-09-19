@@ -27,6 +27,7 @@ export const canvasClipFieldCoverage = [
   { field: 'startTime', disposition: 'geometry', replacement: 'TimelineClipBodyGeometry.bodyRect', runtimeBoundary: 'plain-data' },
   { field: 'duration', disposition: 'geometry', replacement: 'TimelineClipBodyGeometry.bodyRect', runtimeBoundary: 'plain-data' },
   { field: 'name', disposition: 'paint-packet', replacement: 'TimelinePaintPacket.label', runtimeBoundary: 'plain-data' },
+  { field: 'needsReload', disposition: 'projection', replacement: 'TimelineProjectionClip.badges.missingMedia', runtimeBoundary: 'plain-data' },
   { field: 'inPoint', disposition: 'projection', replacement: 'TimelineProjectionClip.inPoint', runtimeBoundary: 'plain-data' },
   { field: 'outPoint', disposition: 'projection', replacement: 'TimelineProjectionClip.outPoint', runtimeBoundary: 'plain-data' },
   { field: 'reversed', disposition: 'projection', replacement: 'TimelineProjectionClip.reversed', runtimeBoundary: 'plain-data' },

@@ -2,28 +2,26 @@ import { describe, expect, it } from 'vitest';
 
 import { buildFlashBoardChatSendPlan } from '../../src/components/panels/flashboard/FlashBoardChatSendPlanner';
 import type {
-  FlashBoardChatExecutionProfile,
+  FlashBoardChatAgentMode,
   FlashBoardChatModelClass,
-  FlashBoardChatProvider,
 } from '../../src/services/flashboard/FlashBoardChatService';
 
-function planFor(
-  provider: FlashBoardChatProvider,
-  input: {
-    canUseHostedChat: boolean;
-    executionProfile?: FlashBoardChatExecutionProfile;
-    modelClass?: FlashBoardChatModelClass;
-  },
-) {
+function planFor(input: {
+  agentMode?: FlashBoardChatAgentMode;
+  decisionPolicy?: 'automatic' | 'milestones';
+  modelClass?: FlashBoardChatModelClass;
+} = {}) {
   return buildFlashBoardChatSendPlan({
-    activeChatModelId: provider === 'kernel' ? 'masterselects-ai' : 'gpt-5-6-terra',
-    canUseHostedChat: input.canUseHostedChat,
-    chatExecutionProfile: input.executionProfile,
+    activeChatModelId: 'gpt-5-6-terra',
+    canUseHostedChat: true,
+    chatAgentMode: input.agentMode,
+    chatExecutionProfile: 'fast',
     chatModelClass: input.modelClass,
     chatMessages: [],
     chatPanelOpen: true,
-    chatProvider: provider,
+    chatProvider: 'kie',
     chatTemperature: 0.7,
+    decisionPolicy: input.decisionPolicy,
     effectiveChatPrompt: 'Inspect the marked range.',
     hasHostedSession: true,
     hostedAIEnabled: true,
@@ -33,50 +31,49 @@ function planFor(
   });
 }
 
-describe('FlashBoard hosted execution-profile request routing', () => {
-  it('defaults an eligible hosted Kie request to Fast without a model class', () => {
-    const plan = planFor('kie', { canUseHostedChat: true });
+describe('Normal Path chat request routing', () => {
+  it('always uses the single internal execution profile', () => {
+    const plan = planFor();
 
     expect(plan.action).toBe('send');
     if (plan.action !== 'send') return;
     expect(plan.request.executionProfile).toBe('fast');
-    // Without a confirmed availability probe no class is forwarded; the Fast
-    // V2 transport applies the server-side 'fast' default, and a K2-selected
-    // account never sees the field.
-    expect(plan.request).not.toHaveProperty('requestedModelClass');
   });
 
-  it('writes only the selected server-owned model class to hosted requests', () => {
-    const hosted = planFor('kie', {
-      canUseHostedChat: true,
-      modelClass: 'very-fast',
-    });
-    const kernel = planFor('kernel', {
-      canUseHostedChat: false,
+  it('forwards only the selected server-owned speed class', () => {
+    const plan = planFor({ modelClass: 'very-fast' });
+
+    expect(plan.action).toBe('send');
+    if (plan.action !== 'send') return;
+    expect(plan.request.requestedModelClass).toBe('very-fast');
+    expect(plan.request).not.toHaveProperty('providerId');
+  });
+
+  it('routes Codex Direct outside the Normal Path and never requests Logic', () => {
+    const direct = planFor({ agentMode: 'direct' });
+    const staleLogic = planFor({ agentMode: 'logic' });
+    const standard = planFor({ agentMode: 'standard' });
+
+    expect(direct.action).toBe('send');
+    expect(staleLogic.action).toBe('send');
+    expect(standard.action).toBe('send');
+    if (direct.action !== 'send' || staleLogic.action !== 'send' || standard.action !== 'send') return;
+    expect(direct.request.agentPath).toBe('direct-codex');
+    expect(direct.request).not.toHaveProperty('requestedAgentMode');
+    expect(staleLogic.request).not.toHaveProperty('requestedAgentMode');
+    expect(standard.request).not.toHaveProperty('requestedAgentMode');
+  });
+
+  it('routes Guided to the DeepSeek class regardless of hidden speed state', () => {
+    const guided = planFor({
+      agentMode: 'logic',
+      decisionPolicy: 'milestones',
       modelClass: 'slow',
     });
 
-    expect(hosted.action).toBe('send');
-    expect(kernel.action).toBe('send');
-    if (hosted.action !== 'send' || kernel.action !== 'send') return;
-    expect(hosted.request.requestedModelClass).toBe('very-fast');
-    expect(kernel.request).not.toHaveProperty('requestedModelClass');
-  });
-
-  it('writes an explicit Verified profile only to an eligible hosted Kie request', () => {
-    const hosted = planFor('kie', {
-      canUseHostedChat: true,
-      executionProfile: 'verified',
-    });
-    const kernel = planFor('kernel', {
-      canUseHostedChat: false,
-      executionProfile: 'verified',
-    });
-
-    expect(hosted.action).toBe('send');
-    expect(kernel.action).toBe('send');
-    if (hosted.action !== 'send' || kernel.action !== 'send') return;
-    expect(hosted.request.executionProfile).toBe('verified');
-    expect(kernel.request).not.toHaveProperty('executionProfile');
+    expect(guided.action).toBe('send');
+    if (guided.action !== 'send') return;
+    expect(guided.request.requestedModelClass).toBe('very-fast');
+    expect(guided.request).not.toHaveProperty('requestedAgentMode');
   });
 });

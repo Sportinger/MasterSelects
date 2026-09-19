@@ -9,6 +9,11 @@ import {
 } from '../../../utils/keyframeInterpolation';
 import { calculateSourceTime, getSpeedAtTime } from '../../../utils/speedIntegration';
 import { composeTransforms } from '../../../utils/transformComposition';
+import {
+  applyVideoInspectorSpeedBypass,
+  applyVideoInspectorTransformBypass,
+  isVideoInspectorSectionEnabled,
+} from '../../../services/videoInspector/sectionBypass';
 import { findClipById } from './keyframeClipLookup';
 
 type KeyframeTransformInterpolationActions = Pick<
@@ -36,6 +41,11 @@ export const createKeyframeTransformInterpolationActions: SliceCreator<KeyframeT
         y: clip.transform?.position?.y ?? DEFAULT_TRANSFORM.position.y,
         z: clip.transform?.position?.z ?? DEFAULT_TRANSFORM.position.z,
       },
+      anchor: {
+        x: clip.transform?.anchor?.x ?? DEFAULT_TRANSFORM.anchor?.x ?? 0,
+        y: clip.transform?.anchor?.y ?? DEFAULT_TRANSFORM.anchor?.y ?? 0,
+        z: clip.transform?.anchor?.z ?? DEFAULT_TRANSFORM.anchor?.z ?? 0,
+      },
       scale: {
         ...(clip.transform?.scale?.all !== undefined ? { all: clip.transform.scale.all } : {}),
         x: clip.transform?.scale?.x ?? DEFAULT_TRANSFORM.scale.x,
@@ -50,11 +60,12 @@ export const createKeyframeTransformInterpolationActions: SliceCreator<KeyframeT
     };
 
     const keyframes = clipKeyframes.get(clipId) || [];
-    const ownTransform = keyframes.length === 0
+    const interpolatedTransform = keyframes.length === 0
       ? baseTransform
       : getInterpolatedClipTransform(keyframes, clipLocalTime, baseTransform, {
           rotationMode: clip.source?.type === 'camera' ? 'shortest' : 'linear',
         });
+    const ownTransform = applyVideoInspectorTransformBypass(clip, interpolatedTransform);
 
     if (clip.parentClipId) {
       const parentClip = clips.find(c => c.id === clip.parentClipId);
@@ -107,13 +118,20 @@ export const createKeyframeTransformInterpolationActions: SliceCreator<KeyframeT
     const keyframes = clipKeyframes.get(clipId) || [];
     const defaultSpeed = clip.speed ?? 1;
 
-    return getSpeedAtTime(keyframes, clipLocalTime, defaultSpeed);
+    return applyVideoInspectorSpeedBypass(
+      clip,
+      getSpeedAtTime(keyframes, clipLocalTime, defaultSpeed),
+    );
   },
 
   getSourceTimeForClip: (clipId, clipLocalTime) => {
     const { clips, clipKeyframes } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return clipLocalTime;
+
+    if (!isVideoInspectorSectionEnabled(clip.videoInspectorSections, 'speedChange')) {
+      return clipLocalTime;
+    }
 
     const keyframes = clipKeyframes.get(clipId) || [];
     const defaultSpeed = clip.speed ?? 1;

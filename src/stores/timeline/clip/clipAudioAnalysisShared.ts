@@ -71,7 +71,8 @@ export function isAudioAnalysisCancellation(error: unknown): boolean {
 
 export async function resolveClipSourceFile(clip: TimelineClip): Promise<File | undefined> {
   if (clip.file instanceof File) {
-    return clip.file;
+    const sourceFile = await readAccessibleFile(clip.file);
+    if (sourceFile) return sourceFile;
   }
 
   const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
@@ -80,7 +81,24 @@ export async function resolveClipSourceFile(clip: TimelineClip): Promise<File | 
   try {
     const { useMediaStore } = await import('../../mediaStore');
     const mediaFile = useMediaStore.getState().files.find(file => file.id === mediaFileId);
-    return mediaFile?.file;
+    return mediaFile?.file ? await readAccessibleFile(mediaFile.file) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function isUnreadableClipSourceError(error: unknown): boolean {
+  return Boolean(error)
+    && typeof error === 'object'
+    && (error as { name?: unknown }).name === 'NotReadableError';
+}
+
+async function readAccessibleFile(file: File): Promise<File | undefined> {
+  // Restored clips can temporarily carry empty placeholder Files.
+  if (file.size === 0) return undefined;
+  try {
+    await file.slice(0, Math.min(1, file.size)).arrayBuffer();
+    return file;
   } catch {
     return undefined;
   }

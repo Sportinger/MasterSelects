@@ -3,6 +3,7 @@ export { FileSystemArtifactStorageAdapter } from './fileSystemStorageAdapter';
 export { MemoryArtifactStorageAdapter } from './memoryStorageAdapter';
 export { ProjectDBArtifactManifestIndex } from './projectDBArtifactIndex';
 export { ProjectDBArtifactStorageAdapter } from './projectDBStorageAdapter';
+export { ProjectPackageArtifactStorageAdapter } from './projectPackageStorageAdapter';
 export {
   buildArtifactId,
   buildArtifactManifestProjectRelativePath,

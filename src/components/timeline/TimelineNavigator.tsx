@@ -44,6 +44,10 @@ export function TimelineNavigator({
     };
 
     updateTrackWidth();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateTrackWidth);
+      return () => window.removeEventListener('resize', updateTrackWidth);
+    }
     const observer = new ResizeObserver(updateTrackWidth);
     observer.observe(track);
     return () => observer.disconnect();

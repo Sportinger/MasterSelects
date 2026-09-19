@@ -2,16 +2,18 @@
 title: "FlashBoard"
 ---
 
-FlashBoard is the AI generation runtime behind the Media Panel's bottom-right prompt tray. Its compact composer supports text-to-video, image-to-video, image generation, ElevenLabs text-to-speech, and Suno music generation, with direct import into the Media Pool. Projects persist the last selected model plus per-model generation settings. Prompt refinement treats START and END frame references as supplied video anchors and focuses on the motion between them instead of redescribing the images.
+FlashBoard is the AI generation runtime shared by the Media Panel's bottom-right prompt tray and the dockable [AI Studio](/features/ai-studio/). Its compact composer supports text-to-video, image-to-video, image generation, ElevenLabs text-to-speech, and Suno music generation, with direct import into the Media Pool. Projects persist the last selected model plus per-model generation settings. Prompt refinement treats START and END frame references as supplied video anchors and focuses on the motion between them instead of redescribing the images.
 
 ## What It Does
 
 FlashBoard is not a separate model backend. It is a composer/runtime layer on top of the existing AI services:
 
-- `cloud` for the hosted Kie.ai video, image, Suno, ElevenLabs, and chat routes
-- compact chat for prompt discussion and editor actions through managed Kie.ai. Requests include the Media-chat system prompt, current timeline summary, and callable AI tools routed through the shared chat dispatcher. Hosted chat requires a signed-in hosted session and uses the hosted agent client (see `docs/Features/Kernel-Client.md`)
+- `cloud` for hosted Kie.ai video/image generation, Suno, ElevenLabs, account billing, and authenticated API relays
+- compact editor chat through either the resumable Codex Direct relay or Hosted Agent V2. Direct is the default in development and production; Fast remains the kernel-owned route. The public editor still validates and executes only registered atomic tools through its normal policy, confirmation, transaction, and undo boundary. Production chat requires a signed-in session (see [Kernel Client](/features/kernel-client/))
 
-The Media Panel generator tray offers three collapsed launch actions: `Chat`, `Generate`, and `Downloads`. `Generate` opens the normal generation prompt, while `Chat` opens a separate chat prompt window with provider/model controls, Claude temperature controls, and reasoning effort for Kie.ai GPT models. The chat model menu includes GPT 5.6 Terra/Luna/Sol, GPT 5.5/5.4, Claude Opus 4.8, Claude Sonnet 5, and chat-only Claude Fable 5. The generator tray exposes media generation only as signed-in hosted Cloud entries. `Generate` remains the action that queues media generation.
+The Media Panel generator tray offers four collapsed launch actions: `Chat`, `Generate`, `Studio`, and `Downloads`. `Generate` opens the original compact media-generation prompt, while `Studio` opens the separate dock panel for parallel generation workspaces. Chat has exactly two product paths: `Auto` and `Story`. Inside Auto, the `Model` menu exposes only `Fast` and `Codex Direct`. Direct is the default in development and production and connects to the isolated Codex app-server through authenticated same-origin relays. Fast selects the hosted kernel Standard route. Logic is no longer exposed or requested by the product UI, and stale persisted Logic selections resolve to Direct.
+
+The action pill has the `Auto` and `Story` prompt-path menu. `Auto` sends the prompt through the selected Fast or Codex Direct model choice. Direct keeps one resumable thread and active run across `/chat`, FlashBoard, and AI Studio; Fast keeps planning, execution, result review, retries, and refinement inside one kernel-owned turn. `Story` starts or reopens the preproduction workflow from the same Chat button, automatically activates the docked Story panel, and keeps the active run there. Story is a workflow surface rather than a mirrored chat: it has no second prompt input or copied chat history. The generator tray exposes media generation only as signed-in hosted Cloud entries. `Generate` remains the action that queues media generation.
 
 ---
 
@@ -21,10 +23,13 @@ FlashBoard is composed of:
 
 - `MediaAIGenerativeTray` - Media Panel bottom-right expand/collapse shell
 - `MediaAIGenerationQueue` - compact Media Panel preview cards for queued, processing, failed, and canceled generation nodes, including model/settings labels and local cancellation for running AI jobs
-- `useFlashBoardRuntime` - active-generation initialization plus queue/import callbacks
+- `FlashBoardRuntimeHost` - editor-level active-generation initialization plus queue/import callbacks, independent of the visible dock panel
 - `FlashBoardComposer` - provider/output selection, separate generate/chat prompt windows, ordered media reference cards, compact chat controls, text-to-speech or music editing, durations, aspect ratio, image size, multi-shot setup, audio voice settings, and Suno song controls
+- `AIStudioPanel` - tabbed, persistent generation workspaces with an integrated bottom control bar and durable generation tiles
+- `SeedanceEditorWorkflowContext` - one editor-level Seedance controller shared by Media and the docked Story panel
+- `StoryPanel` - dockable Story direction, treatment, source, master-look, keyframe, progress, and review surface
 
-The project persists the composer state, active generation records, generation metadata, prompt history, and chat messages. Pending resumable remote jobs are restored on project load. The prompt book keeps the project's generated and chat prompts available for review and copy. Prompt book generation pages group outputs by user prompt, show the Magic Wand prompt when one produced the final request, and preview generated images/videos directly on the page.
+The project persists the composer state, open AI Studio workspaces, per-workspace drafts and chat messages, active generation records, workspace-linked generation metadata, and prompt history. Pending resumable remote jobs are restored on project load. Hosted image/video status polling treats browser network failures and individual request timeouts as transient, retries them with bounded backoff, and only marks the node failed after the retry budget is exhausted or the provider reports a terminal failure. The prompt book keeps the project's generated and chat prompts available for review and copy. Prompt book generation pages group outputs by user prompt, show the Magic Wand prompt when one produced the final request, and preview generated images/videos directly on the page.
 
 The prompt book is presented as a "magic book": it opens with a one-shot fall-open animation, page navigation flips a blank textured overlay sheet across the spread, a short glitter burst accompanies opening and turning, and the pages carry a static paper-grain texture over a leather cover body. All effects are transform/opacity-only CSS animations that are time-boxed and removed from the DOM afterwards (the idle book is fully static), they are skipped entirely under `prefers-reduced-motion` and in the single-column mobile layout, and the animation state lives in `promptBookAnimations.ts` / `PromptBookSparkles.tsx` next to the book component.
 

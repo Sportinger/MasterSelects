@@ -2,7 +2,9 @@ import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 import type { ViteDevServer } from 'vite'
-import { devBridgeRoot, setCorsHeaders, validateBridgeRequest } from './auth.ts'
+import { devBridgeRoot, validateBridgeRequest } from './auth.ts'
+
+const BLOB_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export function installBrowserLogEndpoint(server: ViteDevServer): void {
   const logFile = path.resolve(devBridgeRoot, '.browser-logs.json')
@@ -45,8 +47,29 @@ export function installBlobStoreEndpoint(server: ViteDevServer): void {
   const blobs = new Map<string, Buffer>()
 
   server.middlewares.use('/api/blob-store', (req, res) => {
-    setCorsHeaders(req, res)
-    if (req.method === 'OPTIONS') { res.statusCode = 204; res.end(); return }
+    if (req.method === 'GET') {
+      // Reads are deliberately token-free: the stored URL is handed to the
+      // third-party avatar renderer, whose internal fetch cannot attach the
+      // bridge header. The random UUID is the capability (unguessable, 10 min
+      // TTL); cross-site page fetches are refused outright.
+      const fetchSite = req.headers['sec-fetch-site']
+      if (typeof fetchSite === 'string' && fetchSite !== 'same-origin' && fetchSite !== 'none') {
+        res.statusCode = 403
+        res.end('Forbidden')
+        return
+      }
+      const urlPath = req.url?.replace(/^\//, '').split('?')[0] || ''
+      const id = urlPath.split('/')[0]
+      const data = BLOB_ID_PATTERN.test(id) ? blobs.get(id) : undefined
+      if (!data) { res.statusCode = 404; res.end('Not found'); return }
+      res.setHeader('Content-Type', 'application/zip')
+      res.setHeader('Content-Length', data.length)
+      res.end(data)
+      return
+    }
+
+    // Uploads (and their preflights) require the bridge token like every other endpoint.
+    if (!validateBridgeRequest(req, res)) return
 
     if (req.method === 'POST') {
       const chunks: Buffer[] = []
@@ -58,17 +81,6 @@ export function installBlobStoreEndpoint(server: ViteDevServer): void {
         res.end(JSON.stringify({ id, url: `/api/blob-store/${id}/avatar.zip` }))
         setTimeout(() => blobs.delete(id), 10 * 60 * 1000)
       })
-      return
-    }
-
-    if (req.method === 'GET') {
-      const urlPath = req.url?.replace(/^\//, '').split('?')[0] || ''
-      const id = urlPath.split('/')[0]
-      const data = id ? blobs.get(id) : undefined
-      if (!data) { res.statusCode = 404; res.end('Not found'); return }
-      res.setHeader('Content-Type', 'application/zip')
-      res.setHeader('Content-Length', data.length)
-      res.end(data)
       return
     }
 

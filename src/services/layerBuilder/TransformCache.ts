@@ -5,12 +5,14 @@ import type { ClipTransform } from '../../types';
 import type { CachedTransform } from './types';
 import { LAYER_BUILDER_CONSTANTS } from './types';
 import { getEffectiveScale } from '../../utils/transformScale';
+import { rotationDegreesToRadians } from '../../utils/rotationUnits';
 
 /**
  * Layer transform data as used in Layer objects
  */
 export interface LayerTransform {
   position: { x: number; y: number; z: number };
+  anchor: { x: number; y: number; z: number };
   scale: { x: number; y: number; z?: number };
   rotation: { x: number; y: number; z: number };
   opacity: number;
@@ -36,6 +38,7 @@ export class TransformCache {
     if (cached && cached.sourceRef === transform) {
       return {
         position: cached.position,
+        anchor: cached.anchor,
         scale: cached.scale,
         rotation: cached.rotation,
         opacity: cached.opacity,
@@ -50,14 +53,15 @@ export class TransformCache {
       z: transform.position.z,
     };
 
+    const anchor = {
+      x: transform.anchor?.x ?? 0,
+      y: transform.anchor?.y ?? 0,
+      z: transform.anchor?.z ?? 0,
+    };
+
     const scale = getEffectiveScale(transform.scale);
 
-    // Convert rotation from degrees to radians
-    const rotation = {
-      x: (transform.rotation.x * Math.PI) / 180,
-      y: (transform.rotation.y * Math.PI) / 180,
-      z: (transform.rotation.z * Math.PI) / 180,
-    };
+    const rotation = rotationDegreesToRadians(transform.rotation);
 
     const opacity = transform.opacity;
     const blendMode = transform.blendMode;
@@ -65,6 +69,7 @@ export class TransformCache {
     // Store in cache
     this.cache.set(layerId, {
       position,
+      anchor,
       scale,
       rotation,
       opacity,
@@ -79,7 +84,7 @@ export class TransformCache {
       if (firstKey) this.cache.delete(firstKey);
     }
 
-    return { position, scale, rotation, opacity, blendMode };
+    return { position, anchor, scale, rotation, opacity, blendMode };
   }
 
   /**

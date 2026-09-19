@@ -2,7 +2,7 @@
 // Shows on first load to ask for project storage folder
 // Supports FSA (Chrome) and Native Helper (Firefox) backends
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import './WelcomeOverlay.css';
 import { Logger } from '../../services/logger';
 
@@ -15,71 +15,15 @@ import { loadProjectToStores } from '../../services/project/projectLoad';
 import { syncStoresToProject } from '../../services/project/projectSave';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { resetStoryboardProjectState } from '../../stores/storyboardStore';
+import {
+  acquireProjectRoot,
+  resolveProjectRootMode,
+} from '../../services/project/core/projectRootAccess';
 
 type NativeStatus = 'checking' | 'available' | 'outdated' | 'unavailable';
-type DirectoryPickerWindow = Window & typeof globalThis & {
-  showDirectoryPicker: (options?: object) => Promise<FileSystemDirectoryHandle>;
-};
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
-}
-
-// Browser identity drives only the friendly Chrome recommendation. Runtime
-// capability decisions remain based on the actual WebGPU/FSA probes.
-type NavigatorWithBrowserBrands = Navigator & {
-  brave?: unknown;
-  userAgentData?: {
-    brands?: Array<{ brand: string }>;
-  };
-};
-
-interface BrowserInfo {
-  name: string;
-  isChrome: boolean;
-  hasWebGPU: boolean;
-}
-
-function detectBrowser(): BrowserInfo {
-  const browserNavigator = navigator as NavigatorWithBrowserBrands;
-  const ua = browserNavigator.userAgent;
-  const hasWebGPU = typeof navigator.gpu !== 'undefined';
-  const brands = browserNavigator.userAgentData?.brands
-    ?.map(({ brand }) => brand.toLowerCase()) ?? [];
-
-  // Check specific browsers (order matters - more specific first)
-  if (/Edg(?:A|iOS)?\//.test(ua) || brands.some((brand) => brand.includes('microsoft edge'))) {
-    return { name: 'Microsoft Edge', isChrome: false, hasWebGPU };
-  }
-  if (/OPR\/|OPiOS\/|Opera/.test(ua) || brands.some((brand) => brand.includes('opera'))) {
-    return { name: 'Opera', isChrome: false, hasWebGPU };
-  }
-  if (browserNavigator.brave || brands.some((brand) => brand.includes('brave'))) {
-    return { name: 'Brave', isChrome: false, hasWebGPU };
-  }
-  if (/SamsungBrowser\//.test(ua)) {
-    return { name: 'Samsung Internet', isChrome: false, hasWebGPU };
-  }
-  if (/Vivaldi\//.test(ua)) {
-    return { name: 'Vivaldi', isChrome: false, hasWebGPU };
-  }
-  if (/Firefox\/|FxiOS\//.test(ua)) {
-    return { name: 'Firefox', isChrome: false, hasWebGPU };
-  }
-  if (/Chromium\//.test(ua)) {
-    return { name: 'Chromium', isChrome: false, hasWebGPU };
-  }
-  if (
-    brands.some((brand) => brand === 'google chrome')
-    || (brands.length === 0 && /Chrome\/|CriOS\/|HeadlessChrome\//.test(ua))
-  ) {
-    return { name: 'Google Chrome', isChrome: true, hasWebGPU };
-  }
-  if (/Safari\//.test(ua)) {
-    return { name: 'Safari', isChrome: false, hasWebGPU };
-  }
-
-  return { name: 'another browser', isChrome: false, hasWebGPU };
 }
 
 interface WelcomeOverlayProps {
@@ -121,8 +65,8 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
   const setNativeHelperConnected = useSettingsStore((state) => state.setNativeHelperConnected);
 
   const isSupported = isFileSystemAccessSupported();
-  const browser = useMemo(() => detectBrowser(), []);
-  const needsNativeHelper = !isSupported && browser.hasWebGPU;
+  const hasWebGPU = typeof navigator.gpu !== 'undefined';
+  const needsNativeHelper = !isSupported && hasWebGPU;
 
   // Check Native Helper availability (only when FSA is not supported)
   useEffect(() => {
@@ -283,10 +227,9 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
 
     try {
       // Let user pick where to store projects
-      const handle = await (window as DirectoryPickerWindow).showDirectoryPicker({
-        mode: 'readwrite',
-        startIn: 'documents',
-      });
+      // WebKit has no picker; acquireProjectRoot falls back to browser
+      // storage there and returns null only on cancel or genuine failure.
+      const handle = await acquireProjectRoot(resolveProjectRootMode());
 
       if (handle) {
         setSelectedFolder(handle.name);
@@ -336,8 +279,8 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
           onComplete();
         }, noFadeOnClose ? 80 : 120);
       } else {
-        // User cancelled or folder has no project.json
-        setError('No valid project found. Select a folder containing project.json');
+        // User cancelled or the folder has no current/legacy project file.
+        setError('No valid project found. Select a folder containing an .msproj package or legacy project.json');
       }
     } catch (e) {
       if (isAbortError(e)) {
@@ -396,7 +339,7 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
         setIsClosing(true);
         setTimeout(() => onComplete(), noFadeOnClose ? 80 : 120);
       } else {
-        setError('No valid project found. Select a folder containing project.json');
+        setError('No valid project found. Select a folder containing an .msproj package or legacy project.json');
       }
     } catch (e) {
       log.error('Native project open failed', e);
@@ -458,36 +401,8 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
 
         <p className="welcome-subtitle">Video editing in your browser</p>
 
-        {/* Friendly Chrome recommendation for every detected non-Chrome browser */}
-        {!browser.isChrome && (
-          <div className="welcome-browser-warning">
-            <svg className="welcome-browser-warning-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10"/>
-              <circle cx="12" cy="12" r="4"/>
-              <line x1="21.17" y1="8" x2="12" y2="8"/>
-              <line x1="3.95" y1="6.06" x2="8.54" y2="14"/>
-              <line x1="10.88" y1="21.94" x2="15.46" y2="14"/>
-            </svg>
-            <span className="welcome-browser-warning-label">For the best experience</span>
-            <span className="welcome-browser-warning-name">Chrome is recommended</span>
-            <span className="welcome-browser-warning-desc">
-              You are using {browser.name}. Safari works only on some systems, and Firefox needs the Native Helper for file-system access.
-            </span>
-            <a className="welcome-browser-warning-btn" href="https://www.google.com/chrome/" target="_blank" rel="noopener noreferrer">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/>
-                <circle cx="12" cy="12" r="4"/>
-                <line x1="21.17" y1="8" x2="12" y2="8"/>
-                <line x1="3.95" y1="6.06" x2="8.54" y2="14"/>
-                <line x1="10.88" y1="21.94" x2="15.46" y2="14"/>
-              </svg>
-              Get Google Chrome
-            </a>
-          </div>
-        )}
-
-        {/* Folder Selection Card - hide if browser not supported */}
-        {(isSupported || browser.hasWebGPU) && (
+        {/* Project storage is capability-driven; no browser recommendation is shown. */}
+        {(isSupported || hasWebGPU) && (
           <div className="welcome-folder-card">
             <div className="welcome-folder-card-header">
               <span className="welcome-folder-card-label">Project</span>
@@ -614,7 +529,7 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
             {/* Mode 4: No FSA + Native Helper outdated */}
             {!isSupported && nativeStatus === 'outdated' && (
               <p className="welcome-note">
-                Native Helper is outdated. Please update to enable project saving in {browser.name}.
+                Native Helper is outdated. Please update it to enable project saving.
                 You can still edit — click "Start editing" below.
               </p>
             )}
@@ -622,8 +537,8 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
             {/* Mode 5: No FSA + no Native Helper */}
             {!isSupported && nativeStatus === 'unavailable' && (
               <p className="welcome-note">
-                Project saving requires the Native Helper in {browser.name}.
-                Install it for full project support, or use Chrome/Edge.
+                Project saving requires the Native Helper when direct folder access is unavailable.
+                Install it for full project support.
                 You can still edit — click "Start editing" below.
               </p>
             )}

@@ -65,6 +65,13 @@ const seedanceEntry: CatalogEntry = {
   outputType: 'video',
 };
 
+const seedance25Entry: CatalogEntry = {
+  ...seedanceEntry,
+  providerId: 'bytedance/seedance-2-5',
+  name: 'Seedance 2.5',
+  maxReferenceMedia: 50,
+};
+
 const gptImageEditEntry: CatalogEntry = {
   service: 'cloud',
   providerId: 'gpt-image-2-image-to-image',
@@ -241,6 +248,22 @@ describe('FlashBoardPromptRefiner', () => {
     expect(instructions).not.toContain('multimodal reference mode');
     expect(userText).toContain('IN (start image): opening.png');
     expect(userText).toContain('OUT (end image): ending.png');
+  });
+
+  it('preserves typed multimodal reference tokens for Seedance 2.5', () => {
+    const instructions = buildFlashBoardPromptRefinerInstructions({
+      entry: seedance25Entry,
+      service: seedance25Entry.service,
+      providerId: seedance25Entry.providerId,
+      version: 'latest',
+      generateAudio: true,
+      multiShots: false,
+    });
+
+    expect(instructions).toContain('ByteDance Seedance 2.5 multimodal');
+    expect(instructions).toContain('@ImageN, @VideoN, and @AudioN');
+    expect(instructions).toContain('Preserve every explicit');
+    expect(instructions).toContain('mutually exclusive');
   });
 
   it('includes selected generation settings and reference labels in user text', () => {

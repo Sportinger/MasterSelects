@@ -4,70 +4,54 @@ import { describe, expect, it, vi } from 'vitest';
 import { FlashBoardChatControls } from '../../src/components/panels/flashboard/FlashBoardChatControls';
 
 function renderControls(input?: {
-  availableModelClasses?: readonly ('very-fast' | 'fast' | 'slow')[];
-  modelClass?: 'very-fast' | 'fast' | 'slow';
+  agentMode?: 'standard' | 'direct';
   renderedPopover?: 'chatModelClass' | 'chatProvider' | null;
 }) {
-  const onChatModelClassSelect = vi.fn();
+  const onChatAgentModeSelect = vi.fn();
   const view = render(
     <FlashBoardChatControls
       activePopover={input?.renderedPopover ?? null}
-      availableChatModelClasses={input?.availableModelClasses ?? ['very-fast', 'fast', 'slow']}
+      chatAgentMode={input?.agentMode ?? 'standard'}
       chatError={null}
-      chatModelClass={input?.modelClass ?? 'fast'}
-      chatModelClassAvailabilityStatus="ready"
       chatPrompt=""
-      chatProvider="kie"
-      chatProviderLabel="Kie"
-      chatProviderOptions={[
-        { id: 'kie', label: 'AI' },
-        { id: 'kernel', label: 'MasterSelectsAI' },
-      ]}
       hasChatMessages={false}
       isChatting={false}
       popoverHostClassName="fb-pill-group"
       popoverRef={createRef<HTMLDivElement>()}
       renderedPopover={input?.renderedPopover ?? null}
-      showChatModelClass
-      onChatModelClassSelect={onChatModelClassSelect}
-      onChatProviderSelect={vi.fn()}
+      onChatAgentModeSelect={onChatAgentModeSelect}
       onClearChatHistory={vi.fn()}
       onClosePopover={vi.fn()}
       onOpenPopover={vi.fn()}
       onOpenPromptBook={vi.fn()}
     />,
   );
-  return { onChatModelClassSelect, unmount: view.unmount };
+  return { onChatAgentModeSelect, unmount: view.unmount };
 }
 
-describe('FlashBoard hosted Fast V2 model-speed control', () => {
-  it('keeps Fast as the visible default and leaves the model control intact', () => {
-    renderControls();
+describe('FlashBoard hosted route controls', () => {
+  it('offers only Fast and Codex Direct in the Model menu', () => {
+    renderControls({ renderedPopover: 'chatModelClass' });
 
-    expect(screen.getByRole('button', { name: 'Fast' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Model' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Prompt Book' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Very Fast' })).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitemradio', { name: 'Fast' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Slow' })).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitemradio', { name: 'Codex Direct' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitemradio', { name: 'Logic' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'AI' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'MasterSelectsAI' })).not.toBeInTheDocument();
   });
 
-  it('offers all three fixed Fast V2 model classes and respects availability', () => {
-    const available = renderControls({ renderedPopover: 'chatModelClass' });
-    const veryFast = screen.getByRole('menuitemradio', { name: 'Very Fast' });
-    const fast = screen.getByRole('menuitemradio', { name: 'Fast' });
-    const slow = screen.getByRole('menuitemradio', { name: 'Slow' });
-    expect(veryFast).toBeEnabled();
-    expect(fast).toBeEnabled();
-    expect(slow).toBeEnabled();
-    fireEvent.click(slow);
-    expect(available.onChatModelClassSelect).toHaveBeenCalledWith('slow');
+  it('selects both Fast and Codex Direct', () => {
+    const fast = renderControls({ agentMode: 'direct', renderedPopover: 'chatModelClass' });
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Fast' }));
+    expect(fast.onChatAgentModeSelect).toHaveBeenCalledWith('standard');
+    fast.unmount();
 
-    available.unmount();
-    const unavailable = renderControls({
-      availableModelClasses: [],
-      renderedPopover: 'chatModelClass',
-    });
-    const unavailableVeryFast = screen.getByRole('menuitemradio', { name: 'Very Fast' });
-    expect(unavailableVeryFast).toBeDisabled();
-    fireEvent.click(unavailableVeryFast);
-    expect(unavailable.onChatModelClassSelect).not.toHaveBeenCalled();
+    const direct = renderControls({ renderedPopover: 'chatModelClass' });
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Codex Direct' }));
+    expect(direct.onChatAgentModeSelect).toHaveBeenCalledWith('direct');
   });
 });

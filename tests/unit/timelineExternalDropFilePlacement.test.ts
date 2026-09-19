@@ -182,6 +182,39 @@ describe('timeline external drop file placement', () => {
     expect(addSignalAssetClip).not.toHaveBeenCalled();
   });
 
+  it('forwards a visual placement choice for newly imported files', async () => {
+    const addClip = vi.fn().mockResolvedValue('clip-fit');
+    const addSignalAssetClip = vi.fn();
+    const file = new File(['video'], 'portrait.mp4', { type: 'video/mp4' });
+    resolveTimelineDropMediaFileMock.mockResolvedValue(mediaFile({
+      id: 'portrait',
+      name: file.name,
+      file,
+      width: 576,
+      height: 1024,
+      duration: 5,
+    }));
+
+    await placeTimelineExternalDropFiles({
+      actions: { addClip, addSignalAssetClip },
+      records: [{ file }],
+      trackId: 'video-1',
+      trackIsVideo: true,
+      baseStartTime: 0,
+      resolveAddClipOptions: () => ({ visualScaleMode: 'fit' }),
+    });
+
+    expect(addClip).toHaveBeenCalledWith(
+      'video-1',
+      file,
+      0,
+      5,
+      'portrait',
+      'video',
+      { visualScaleMode: 'fit' },
+    );
+  });
+
   it('imports unknown dropped files as signal assets and places them on video tracks', async () => {
     const addClip = vi.fn();
     const addSignalAssetClip = vi.fn().mockResolvedValue('signal-clip-1');

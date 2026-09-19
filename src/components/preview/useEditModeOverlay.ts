@@ -78,24 +78,18 @@ export function useEditModeOverlay({
     scaleLayerOverlayBounds(bounds, viewZoom, { x: canvasInContainer.x, y: canvasInContainer.y })
   ), [canvasInContainer, viewZoom]);
 
-  // Find layer at mouse position (container coordinates)
-  const findLayerAtPosition = useCallback((containerX: number, containerY: number): Layer | null => {
+  // Find layers at the pointer in compositor order (topmost first).
+  const findLayersAtPosition = useCallback((containerX: number, containerY: number): Layer[] => {
     // layers[0] is composited on top (see LayerBuilderService), so iterate in
     // array order and return the first hit = the topmost layer under the cursor.
     // (Previously this reversed the list and picked the bottom layer.)
     const visibleLayers = layers.filter(l => l?.visible && l?.source);
 
-    for (const layer of visibleLayers) {
-      if (!layer) continue;
-
+    return visibleLayers.filter((layer) => {
       const bounds = calculateLayerBounds(layer, canvasSize.width, canvasSize.height);
       const containerBounds = toContainerBounds(bounds);
-
-      if (pointInLayerOverlayBounds({ x: containerX, y: containerY }, containerBounds)) {
-        return layer;
-      }
-    }
-    return null;
+      return pointInLayerOverlayBounds({ x: containerX, y: containerY }, containerBounds);
+    });
   }, [layers, canvasSize, calculateLayerBounds, toContainerBounds]);
 
   // Find which handle was clicked on the selected layer
@@ -135,5 +129,5 @@ export function useEditModeOverlay({
     }
   }, []);
 
-  return { calculateLayerBounds, findLayerAtPosition, findHandleAtPosition, getCursorForHandle };
+  return { calculateLayerBounds, findLayersAtPosition, findHandleAtPosition, getCursorForHandle };
 }

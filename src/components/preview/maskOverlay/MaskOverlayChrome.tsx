@@ -9,6 +9,8 @@ import type {
   PenEdgeInsertPreview,
   VisibleMaskPath,
 } from './maskOverlayTypes';
+import type { MaskBoundsCorner, ProjectedMaskBounds } from './maskBoundsGeometry';
+import { useTouchMouseBridge } from '../useTouchMouseBridge';
 
 type VertexMouseTarget = 'vertex' | 'handleIn' | 'handleOut';
 const FEATHER_PREVIEW_GRADIENT_STEPS = 32;
@@ -33,6 +35,8 @@ interface MaskOverlayChromeProps {
   visibleMaskPaths: VisibleMaskPath[];
   edgeSegments: MaskEdgeSegment[];
   canvasVertices: CanvasMaskVertex[];
+  rotationGuide: { center: { x: number; y: number }; anchor: { x: number; y: number } } | null;
+  maskTransformBounds: ProjectedMaskBounds | null;
   onSvgClick: (event: ReactMouseEvent<SVGSVGElement>) => void;
   onPenMouseDown: (event: ReactMouseEvent<SVGSVGElement>) => boolean;
   onShapeMouseDown: (event: ReactMouseEvent<SVGSVGElement>) => void;
@@ -40,9 +44,12 @@ interface MaskOverlayChromeProps {
   onShapeMouseUp: () => void;
   onClearPenInsertPreview: () => void;
   onMaskDragStart: (event: ReactMouseEvent<Element>) => void;
+  onMaskDoubleClick: (event: ReactMouseEvent<Element>) => void;
+  onBoundsResizeMouseDown: (event: ReactMouseEvent<Element>, corner: MaskBoundsCorner) => void;
   onEdgeMouseDown: (event: ReactMouseEvent<Element>, idA: string, idB: string) => void;
   onVertexMouseDown: (event: ReactMouseEvent<Element>, vertexId: string, target: VertexMouseTarget) => void;
   onVertexDoubleClick: (event: ReactMouseEvent<Element>, vertexId: string) => void;
+  onRotationMouseDown: (event: ReactMouseEvent<Element>) => void;
   onFirstVertexClose: (event: ReactMouseEvent<Element>) => void;
   onHoveredEdgeChange: (edgeKey: string | null) => void;
   onHoveredVertexChange: (vertexId: string | null) => void;
@@ -76,6 +83,8 @@ export function MaskOverlayChrome({
   visibleMaskPaths,
   edgeSegments,
   canvasVertices,
+  rotationGuide,
+  maskTransformBounds,
   onSvgClick,
   onPenMouseDown,
   onShapeMouseDown,
@@ -83,13 +92,17 @@ export function MaskOverlayChrome({
   onShapeMouseUp,
   onClearPenInsertPreview,
   onMaskDragStart,
+  onMaskDoubleClick,
+  onBoundsResizeMouseDown,
   onEdgeMouseDown,
   onVertexMouseDown,
   onVertexDoubleClick,
+  onRotationMouseDown,
   onFirstVertexClose,
   onHoveredEdgeChange,
   onHoveredVertexChange,
 }: MaskOverlayChromeProps) {
+  const maskEditTouchBridge = useTouchMouseBridge<SVGSVGElement>();
   const hitPaddingX = canvasWidth * 2;
   const hitPaddingY = canvasHeight * 2;
   const hitViewBoxWidth = canvasWidth + hitPaddingX * 2;
@@ -134,11 +147,24 @@ export function MaskOverlayChrome({
         };
       })
     : [];
+  const rotationHandle = rotationGuide
+    ? (() => {
+        const dx = rotationGuide.anchor.x - rotationGuide.center.x;
+        const dy = rotationGuide.anchor.y - rotationGuide.center.y;
+        const length = Math.max(Math.hypot(dx, dy), 0.0001);
+        const offset = 28 * unitsPerScreenPx;
+        return {
+          x: rotationGuide.anchor.x + (dx / length) * offset,
+          y: rotationGuide.anchor.y + (dy / length) * offset,
+        };
+      })()
+    : null;
 
   return (
     <svg
       ref={svgRef}
       className="mask-overlay-svg"
+      {...maskEditTouchBridge}
       viewBox={`${-hitPaddingX} ${-hitPaddingY} ${hitViewBoxWidth} ${hitViewBoxHeight}`}
       preserveAspectRatio="xMidYMid meet"
       onClick={onSvgClick}
@@ -162,6 +188,7 @@ export function MaskOverlayChrome({
         height: displayHeight * (hitViewBoxHeight / canvasHeight),
         transform: 'translate(-50%, -50%)',
         pointerEvents: 'auto',
+        touchAction: 'none',
         cursor: getCursor(maskEditMode),
       }}
     >
@@ -186,6 +213,7 @@ export function MaskOverlayChrome({
           pointerEvents={maskEditMode === 'editing' ? 'all' : 'none'}
           cursor="move"
           onMouseDown={onMaskDragStart}
+          onDoubleClick={onMaskDoubleClick}
         />
       )}
 
@@ -275,6 +303,52 @@ export function MaskOverlayChrome({
           </g>
         );
       })}
+
+      {maskEditMode === 'editing' && activeMask?.visible && rotationGuide && rotationHandle && (
+        <g
+          className="mask-rotation-control"
+          data-guided-target={`mask-rotation:${activeMask.id}`}
+          data-guided-mask-rotation={activeMask.id}
+        >
+          <line
+            x1={rotationGuide.anchor.x}
+            y1={rotationGuide.anchor.y}
+            x2={rotationHandle.x}
+            y2={rotationHandle.y}
+            stroke="#2997E5"
+            strokeWidth={thinStrokeWidth}
+            pointerEvents="none"
+          />
+          <circle
+            cx={rotationHandle.x}
+            cy={rotationHandle.y}
+            r={15 * unitsPerScreenPx}
+            fill="transparent"
+            stroke="none"
+            cursor="grab"
+            pointerEvents="all"
+            onMouseDown={onRotationMouseDown}
+          />
+          <circle
+            cx={rotationHandle.x}
+            cy={rotationHandle.y}
+            r={9 * unitsPerScreenPx}
+            fill="rgba(18, 22, 28, 0.94)"
+            stroke="#2997E5"
+            strokeWidth={ringStrokeWidth}
+            pointerEvents="none"
+          />
+          <path
+            d={`M ${rotationHandle.x - 4.5 * unitsPerScreenPx} ${rotationHandle.y + 1.5 * unitsPerScreenPx} A ${5 * unitsPerScreenPx} ${5 * unitsPerScreenPx} 0 1 1 ${rotationHandle.x + 3.8 * unitsPerScreenPx} ${rotationHandle.y - 3 * unitsPerScreenPx} M ${rotationHandle.x + 3.8 * unitsPerScreenPx} ${rotationHandle.y - 3 * unitsPerScreenPx} L ${rotationHandle.x + 0.5 * unitsPerScreenPx} ${rotationHandle.y - 3.2 * unitsPerScreenPx} M ${rotationHandle.x + 3.8 * unitsPerScreenPx} ${rotationHandle.y - 3 * unitsPerScreenPx} L ${rotationHandle.x + 3.4 * unitsPerScreenPx} ${rotationHandle.y + 0.2 * unitsPerScreenPx}`}
+            fill="none"
+            stroke="#ffffff"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.35 * unitsPerScreenPx}
+            pointerEvents="none"
+          />
+        </g>
+      )}
 
       {activeMask && canvasVertices.map((vertex, index) => {
         const isSelected = selectedVertexIds.has(vertex.id);
@@ -416,6 +490,43 @@ export function MaskOverlayChrome({
           </g>
         );
       })}
+
+      {maskTransformBounds && (
+        <g className="mask-transform-bounds">
+          <path
+            d={maskTransformBounds.path}
+            fill="none"
+            stroke="rgba(190, 190, 190, 0.95)"
+            strokeWidth={thinStrokeWidth}
+            strokeDasharray={dashPattern}
+            pointerEvents="none"
+          />
+          {maskTransformBounds.corners.map(({ corner, x, y }) => (
+            <g key={`mask-transform-${corner}`}>
+              <circle
+                cx={x}
+                cy={y}
+                r={14 * unitsPerScreenPx}
+                fill="transparent"
+                stroke="none"
+                cursor={corner === 'topLeft' || corner === 'bottomRight' ? 'nwse-resize' : 'nesw-resize'}
+                pointerEvents="all"
+                onMouseDown={(event) => onBoundsResizeMouseDown(event, corner)}
+              />
+              <rect
+                x={x - 4 * unitsPerScreenPx}
+                y={y - 4 * unitsPerScreenPx}
+                width={8 * unitsPerScreenPx}
+                height={8 * unitsPerScreenPx}
+                fill="rgba(36, 39, 44, 0.96)"
+                stroke="rgba(210, 210, 210, 0.98)"
+                strokeWidth={thinStrokeWidth}
+                pointerEvents="none"
+              />
+            </g>
+          ))}
+        </g>
+      )}
     </svg>
   );
 }

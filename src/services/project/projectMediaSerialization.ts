@@ -54,12 +54,25 @@ export function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
       type: file.type as 'video' | 'audio' | 'image' | 'model' | 'gaussian-splat' | 'lottie' | 'rive',
       sourcePath: file.liveInput ? `live:${file.id}` : file.filePath || file.name,
       projectPath: file.projectPath,
+      sourceRootId: file.sourceRootId,
+      sourceRelativePath: file.sourceRelativePath,
+      linkedSources: file.linkedSources?.map((source) => ({ ...source })),
+      sourceSelection: file.sourceSelection ? { ...file.sourceSelection } : undefined,
+      externalOrigin: file.externalOrigin ? structuredClone(file.externalOrigin) : undefined,
       fileHash: file.fileHash,
       duration: file.duration,
       width: file.width,
       height: file.height,
       frameRate: file.fps,
       codec: file.codec ?? file.gaussianSplatSequence?.codec,
+      videoCodecId: file.videoCodecId,
+      codedWidth: file.codedWidth,
+      codedHeight: file.codedHeight,
+      rotation: file.rotation,
+      pixelAspectRatio: file.pixelAspectRatio ? { ...file.pixelAspectRatio } : undefined,
+      videoColorSpace: file.videoColorSpace ? { ...file.videoColorSpace } : undefined,
+      hasHighDynamicRange: file.hasHighDynamicRange,
+      canBeTransparent: file.canBeTransparent,
       audioCodec: file.audioCodec,
       container: file.container ?? (file.gaussianSplatSequence?.container ? `${file.gaussianSplatSequence.container} Seq` : undefined),
       bitrate: file.bitrate,
@@ -88,8 +101,12 @@ export function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
       gaussianSplatSequence: serializeGaussianSplatSequence(file.gaussianSplatSequence),
       folderId: file.parentId,
       labelColor: file.labelColor && file.labelColor !== 'none' ? file.labelColor : undefined,
+      remoteColorGrade: file.remoteColorGrade
+        ? structuredClone(file.remoteColorGrade)
+        : undefined,
       importedAt: new Date(file.createdAt).toISOString(),
       liveInput: file.liveInput ? structuredClone(file.liveInput) : undefined,
+      sourceAnnotations: file.sourceAnnotations?.map((annotation) => ({ ...annotation })),
     };
   });
 }

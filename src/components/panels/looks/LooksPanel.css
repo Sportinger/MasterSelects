@@ -1,0 +1,8 @@
+@layer components {
+  .looks-panel { height: 100%; overflow: auto; padding: 10px; }
+  .looks-panel-tools, .looks-save-row { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr) auto; margin-bottom: 8px; }
+  .looks-panel input, .looks-panel select, .looks-panel button { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); min-width: 0; padding: 6px 8px; }
+  .looks-panel button:disabled { cursor: not-allowed; opacity: 0.45; }
+  .looks-panel-hint { color: var(--text-secondary); font-size: 12px; margin: 8px 0; }
+  .looks-grid { display: grid; gap: 9px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}

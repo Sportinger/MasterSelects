@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import type { BrowserWindowPanel, DockPanel, PanelType } from '../../../types/dock';
 import { clampMenuPosition } from './layoutMath';
@@ -79,6 +79,21 @@ export function useTabPaneMenus({
     addPanelTypeToGroup(type, groupId);
     setAddMenu(null);
   }, [addPanelTypeToGroup, groupId]);
+
+  useLayoutEffect(() => {
+    if (!addMenu || !addMenuRef.current) return;
+
+    const menuRect = addMenuRef.current.getBoundingClientRect();
+    const clampedPosition = clampMenuPosition(
+      addMenu.x,
+      addMenu.y,
+      menuRect.width,
+      menuRect.height,
+    );
+    if (clampedPosition.x === addMenu.x && clampedPosition.y === addMenu.y) return;
+
+    setAddMenu(clampedPosition);
+  }, [addMenu]);
 
   useEffect(() => {
     if (!addMenu) return undefined;

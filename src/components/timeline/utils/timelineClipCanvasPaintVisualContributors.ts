@@ -49,6 +49,7 @@ export const timelineClipCanvasPaintVisualContributors = [
   {
     id: 'thumbnail',
     apply: (clip, visuals) => {
+      if (isTimelineClipCanvasAudioClip(clip)) return;
       if ((clip.thumbnails?.length ?? 0) > 0) {
         visuals.thumbnail = true;
         return;

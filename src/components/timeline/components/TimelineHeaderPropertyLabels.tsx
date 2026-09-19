@@ -37,12 +37,14 @@ export function TimelineHeaderPropertyLabels({
   isAudioTrack: boolean;
   onKeyframeRowHover?: (trackId: string, property: AnimatableProperty, hovered: boolean) => void;
   onToggleCurveExpanded: (trackId: string, property: AnimatableProperty) => void;
-  playheadPosition: number;
+  playheadPosition?: number;
   selectedClip: KeyframeTrackClip | null;
   setPlayheadPosition: (time: number) => void;
   setPropertyValue: (clipId: string, property: AnimatableProperty, value: number) => void;
   trackId: string;
 }) {
+  const livePlayheadPosition = useTimelineStore((state) => state.playheadPosition);
+  const effectivePlayheadPosition = playheadPosition ?? livePlayheadPosition;
   const clipId = selectedClip?.id;
   const keyframes = useMemo(
     () => (clipId ? clipKeyframes.get(clipId) || [] : []),
@@ -118,7 +120,7 @@ export function TimelineHeaderPropertyLabels({
             clip={selectedClip}
             isAudioTrack={isAudioTrack}
             keyframes={keyframes}
-            playheadPosition={playheadPosition}
+            playheadPosition={effectivePlayheadPosition}
             getInterpolatedTransform={getInterpolatedTransform}
             getInterpolatedEffects={getInterpolatedEffects}
             addKeyframe={addKeyframe}

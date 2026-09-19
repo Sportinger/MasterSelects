@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import {
   useFlashBoardActiveGenerationRecords,
   useRemoveFlashBoardActiveGenerationRecord,
@@ -263,7 +263,19 @@ async function animateCardToMediaTarget(source: HTMLElement, mediaFileId: string
   }
 }
 
-function MediaAIGenerationQueueImpl() {
+interface MediaAIGenerationQueueProps {
+  workspaceId?: string;
+  includeDownloads?: boolean;
+  maxItems?: number;
+  emptyState?: ReactNode;
+}
+
+function MediaAIGenerationQueueImpl({
+  workspaceId,
+  includeDownloads = true,
+  maxItems = MAX_VISIBLE_GENERATIONS,
+  emptyState = null,
+}: MediaAIGenerationQueueProps) {
   const generationRecords = useFlashBoardActiveGenerationRecords();
   const removeGenerationRecord = useRemoveFlashBoardActiveGenerationRecord();
   const downloadJobs = useMediaDownloadStore((state) => state.jobs);
@@ -279,26 +291,29 @@ function MediaAIGenerationQueueImpl() {
     .filter((record) => (
       record.request
       && VISIBLE_QUEUE_STATUSES.has(record.job?.status ?? '')
+      && (!workspaceId || !record.workspaceId || record.workspaceId === workspaceId)
     ))
     .map((record) => ({
       kind: 'generation' as const,
       id: record.id,
       createdAt: record.createdAt,
       record,
-    })), [generationRecords]);
+    })), [generationRecords, workspaceId]);
 
-  const downloadItems = useMemo<MediaQueueItem[]>(() => downloadJobs
-    .filter((job) => VISIBLE_QUEUE_STATUSES.has(job.status))
-    .map((job) => ({
-      kind: 'download' as const,
-      id: job.id,
-      createdAt: job.createdAt,
-      job,
-    })), [downloadJobs]);
+  const downloadItems = useMemo<MediaQueueItem[]>(() => includeDownloads
+    ? downloadJobs
+        .filter((job) => VISIBLE_QUEUE_STATUSES.has(job.status))
+        .map((job) => ({
+          kind: 'download' as const,
+          id: job.id,
+          createdAt: job.createdAt,
+          job,
+        }))
+    : [], [downloadJobs, includeDownloads]);
 
   const items = useMemo(() => [...generationItems, ...downloadItems]
     .toSorted((left, right) => right.createdAt - left.createdAt)
-    .slice(0, MAX_VISIBLE_GENERATIONS), [downloadItems, generationItems]);
+    .slice(0, maxItems), [downloadItems, generationItems, maxItems]);
 
   const hasRunningItem = items.some((item) => {
     const status = item.kind === 'generation' ? item.record.job?.status : item.job.status;
@@ -340,7 +355,7 @@ function MediaAIGenerationQueueImpl() {
   }, []);
 
   if (items.length === 0) {
-    return null;
+    return emptyState;
   }
 
   return (

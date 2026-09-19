@@ -10,6 +10,7 @@ import {
   resolveTextBoxRect,
 } from '../../services/textLayout';
 import { googleFontsService } from '../../services/googleFontsService';
+import { renderCaptionTextClipFrame } from '../../services/captions/captionTextRuntime';
 import { layerBuilder } from '../../services/layerBuilder';
 import { renderHostPort } from '../../services/render/renderHostPort';
 import { generateTextClipId } from './helpers/idGenerator';
@@ -144,7 +145,7 @@ function invalidateTextGpuBindings(): void {
 }
 
 export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => ({
-  addTextClip: async (trackId, startTime, duration = DEFAULT_TEXT_DURATION, skipMediaItem = false) => {
+  addTextClip: async (trackId, startTime, duration = DEFAULT_TEXT_DURATION, skipMediaItem = true) => {
     const { clips, tracks, updateDuration, invalidateCache } = get();
     const track = tracks.find(t => t.id === trackId);
 
@@ -240,19 +241,28 @@ export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => 
       dimensions: { width: renderWidth, height: renderHeight },
     });
 
+    const updatedClip: TimelineClip = {
+      ...clip,
+      textProperties: newProps,
+      source: { ...clip.source!, textCanvas: canvas },
+      name: clip.captionProperties ? clip.name : newProps.text.substring(0, 20) || 'Text',
+    };
+    const nextClips = clips.map(candidate => candidate.id === clipId ? updatedClip : candidate);
+    if (updatedClip.captionProperties) {
+      renderCaptionTextClipFrame({
+        captionClip: updatedClip,
+        clips: nextClips,
+        tracks: get().tracks,
+        timelineTime: get().playheadPosition,
+      });
+    }
+
     if (!renderHostPort.updateCanvasTexture(canvas)) {
       log.debug('Canvas texture not cached yet, will create on render');
     }
     invalidateTextGpuBindings();
 
-    set({
-      clips: clips.map(c => c.id !== clipId ? c : {
-        ...c,
-        textProperties: newProps,
-        source: { ...c.source!, textCanvas: canvas },
-        name: newProps.text.substring(0, 20) || 'Text',
-      }),
-    });
+    set({ clips: nextClips });
     invalidateCache();
 
     try {
@@ -267,21 +277,31 @@ export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => 
       const fontFamily = props.fontFamily || newProps.fontFamily;
       const fontWeight = props.fontWeight || newProps.fontWeight;
       googleFontsService.loadFont(fontFamily, fontWeight).then(() => {
-        const { clips: currentClips, invalidateCache: inv } = get();
+        const currentState = get();
+        const currentClips = currentState.clips;
         const currentClip = currentClips.find(cl => cl.id === clipId);
         if (!currentClip?.textProperties) return;
 
         const currentCanvas = getTimelineGeneratedCanvasRuntime(currentClip);
         if (currentCanvas) {
-          renderTimelineTextCanvasRuntime({
-            textProperties: currentClip.textProperties,
-            currentCanvas,
-            dimensions: { width: currentCanvas.width, height: currentCanvas.height },
-          });
+          if (currentClip.captionProperties) {
+            renderCaptionTextClipFrame({
+              captionClip: currentClip,
+              clips: currentClips,
+              tracks: currentState.tracks,
+              timelineTime: currentState.playheadPosition,
+            });
+          } else {
+            renderTimelineTextCanvasRuntime({
+              textProperties: currentClip.textProperties,
+              currentCanvas,
+              dimensions: { width: currentCanvas.width, height: currentCanvas.height },
+            });
+          }
           renderHostPort.updateCanvasTexture(currentCanvas);
           invalidateTextGpuBindings();
         }
-        inv();
+        currentState.invalidateCache();
 
         try {
           layerBuilder.invalidateCache();

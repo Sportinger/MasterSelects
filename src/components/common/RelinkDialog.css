@@ -123,6 +123,47 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.relink-folder-error {
+  margin: 0 4px 12px;
+  color: var(--amber-300);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.relink-known-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0 0 12px;
+  padding: 10px;
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  border-radius: 7px;
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.relink-known-sources-label {
+  color: var(--gray-200);
+  font-size: 11px;
+}
+
+.relink-known-source-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.relink-source-root-btn {
+  padding: 6px 10px;
+  font-size: 11px;
+}
+
+.relink-source-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .relink-actions-right {
@@ -145,6 +186,15 @@
 .relink-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.15);
   color: var(--gray-0);
+}
+
+.relink-btn:focus {
+  outline: none;
+}
+
+.relink-btn:focus-visible {
+  outline: 2px solid var(--blue-300);
+  outline-offset: 2px;
 }
 
 .relink-btn:disabled {

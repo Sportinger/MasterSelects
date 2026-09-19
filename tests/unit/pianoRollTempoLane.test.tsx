@@ -7,7 +7,8 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 
-import { PianoRollRuler, pianoRollRulerHeight } from '../../src/components/pianoRoll/PianoRollRuler';
+import { PianoRollRuler } from '../../src/components/pianoRoll/PianoRollRuler';
+import { pianoRollRulerHeight } from '../../src/components/pianoRoll/pianoRollRulerModel';
 import { normalizeTempoMap } from '../../src/timeline/tempo/tempoEdits';
 
 const TICKS = { bars: [], time: [] };

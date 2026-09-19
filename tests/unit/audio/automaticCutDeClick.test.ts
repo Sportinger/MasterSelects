@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   collectAutomaticAudioFadeTargets,
   collectLinkedDeletionIds,
+  collectMissingAudioJunctionFadeTargets,
   createAutomaticCutDeClickOperation,
 } from '../../../src/services/audio/automaticCutDeClick';
 import type { TimelineClip } from '../../../src/types';
@@ -81,6 +82,27 @@ describe('automatic cut de-click planning', () => {
       params: { gainDb: -120, fadeInSeconds: 0, fadeOutSeconds: 0.006 },
       timeRange: { start: 7, end: 7.006 },
     });
+  });
+
+  it('plans only missing fades at existing audio junctions', () => {
+    const left = clip({ id: 'left', startTime: 0, inPoint: 0, outPoint: 3 });
+    const existingFade = createAutomaticCutDeClickOperation(
+      left,
+      'out',
+      0.012,
+      { createdAt: 1, id: 'existing-fade' },
+    );
+    const clips = [
+      {
+        ...left,
+        audioState: { editStack: existingFade ? [existingFade] : [] },
+      },
+      clip({ id: 'right', startTime: 3, inPoint: 7, outPoint: 10 }),
+    ];
+
+    expect(collectMissingAudioJunctionFadeTargets(clips)).toEqual([
+      { clipId: 'right', edge: 'in' },
+    ]);
   });
 
   it('reverses the source-envelope direction for reversed playback', () => {

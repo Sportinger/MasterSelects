@@ -1,10 +1,13 @@
 import {
+  COLOR_FIXED_ANCHOR_SPACING,
   cloneColorCorrectionState,
   createColorNode,
   createColorNodeId,
   createDefaultColorCorrectionState,
   ensureColorCorrectionState,
   getActiveColorVersion,
+  isColorGradeNode,
+  isFixedColorAnchorNode,
   setColorNodeParamValue,
   type ColorCorrectionState,
   type ColorNode,
@@ -12,6 +15,7 @@ import {
   type ColorViewMode,
 } from '../../types/colorCorrection';
 import type { ColorCorrectionActions, Keyframe, SliceCreator } from './types';
+import { updateClipColorCorrectionWithRemoteSync } from '../../types/colorGradeOwnership';
 
 function wouldCreateCycle(
   edges: { fromNodeId: string; toNodeId: string }[],
@@ -36,6 +40,10 @@ function wouldCreateCycle(
   }
 
   return false;
+}
+
+function colorPortSignal(portId: string): 'texture' | 'mask' {
+  return portId.startsWith('key-') ? 'mask' : 'texture';
 }
 
 function updateClipColorState(
@@ -134,10 +142,10 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
   updateColorCorrection: (clipId, updater) => {
     const { clips, invalidateCache } = get();
     set({
-      clips: clips.map(c =>
-        c.id === clipId
-          ? { ...c, colorCorrection: updateClipColorState(c.colorCorrection, updater) }
-          : c
+      clips: updateClipColorCorrectionWithRemoteSync(
+        clips,
+        clipId,
+        current => updateClipColorState(current, updater),
       ),
     });
     invalidateCache();
@@ -151,6 +159,13 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
     get().updateColorCorrection(clipId, current => ({
       ...current,
       ui: { ...current.ui, viewMode },
+    }));
+  },
+
+  setColorNodeDisplayMode: (clipId, nodeDisplayMode) => {
+    get().updateColorCorrection(clipId, current => ({
+      ...current,
+      ui: { ...current.ui, nodeDisplayMode },
     }));
   },
 
@@ -186,31 +201,29 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
       const activeVersion = getActiveColorVersion(current);
       if (!activeVersion) return current;
 
-      const outputNode = activeVersion.nodes.find(candidate => candidate.type === 'output');
-      const previousNode = activeVersion.nodes
-        .filter(candidate => candidate.type !== 'output')
-        .at(-1);
-      const nextEdges = activeVersion.edges
-        .filter(edge => !(outputNode && edge.toNodeId === outputNode.id));
+      if (type === 'alpha-output') {
+        const existing = activeVersion.nodes.find(candidate => candidate.type === 'alpha-output');
+        if (existing) {
+          node.id = existing.id;
+          return { ...current, ui: { ...current.ui, selectedNodeId: existing.id } };
+        }
+      }
 
-      if (previousNode) {
-        nextEdges.push({
-          id: createColorNodeId('edge'),
-          fromNodeId: previousNode.id,
-          fromPort: 'out',
-          toNodeId: node.id,
-          toPort: 'in',
-        });
-      }
-      if (outputNode) {
-        nextEdges.push({
-          id: createColorNodeId('edge'),
-          fromNodeId: node.id,
-          fromPort: 'out',
-          toNodeId: outputNode.id,
-          toPort: 'in',
-        });
-      }
+      const originalAnchor = activeVersion.nodes.find(candidate => (
+        type === 'source' ? candidate.type === 'input' : candidate.type === 'output'
+      ));
+      const sourceIndex = type === 'source'
+        ? activeVersion.nodes.filter(candidate => candidate.type === 'source').length
+        : 0;
+      const nodePosition = originalAnchor && (type === 'source' || type === 'alpha-output')
+        ? {
+            x: originalAnchor.position.x,
+            y: originalAnchor.position.y + (sourceIndex + 1) * COLOR_FIXED_ANCHOR_SPACING,
+          }
+        : {
+            x: 180 + activeVersion.nodes.length * 34,
+            y: 176 + activeVersion.nodes.length * 18,
+          };
 
       return {
         ...current,
@@ -221,10 +234,10 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
                 ...version,
                 nodes: [
                   ...version.nodes.filter(candidate => candidate.type !== 'output'),
-                  { ...node, position: { x: 160 + version.nodes.length * 120, y: 80 } },
+                  { ...node, position: nodePosition },
                   ...version.nodes.filter(candidate => candidate.type === 'output'),
                 ],
-                edges: nextEdges,
+                edges: [...version.edges],
               }
         )),
         ui: { ...current.ui, selectedNodeId: node.id },
@@ -240,34 +253,33 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
     get().updateColorCorrection(clipId, current => {
       const activeVersion = getActiveColorVersion(current);
       const node = activeVersion?.nodes.find(candidate => candidate.id === nodeId);
-      if (!activeVersion || !node || node.type === 'input' || node.type === 'output') {
+      if (!activeVersion || !node || isFixedColorAnchorNode(node)) {
         return current;
       }
 
       cleanupMatcher = createColorPropertyMatcher(activeVersion.id, nodeId);
 
       const remainingNodes = activeVersion.nodes.filter(candidate => candidate.id !== nodeId);
-      const serialNodes = remainingNodes.filter(candidate => candidate.type !== 'output');
-      const outputNode = remainingNodes.find(candidate => candidate.type === 'output');
-      const edges = serialNodes.slice(0, -1).map((candidate, index) => ({
-        id: createColorNodeId('edge'),
-        fromNodeId: candidate.id,
-        fromPort: 'out',
-        toNodeId: serialNodes[index + 1].id,
-        toPort: 'in',
-      }));
-      if (serialNodes.length > 0 && outputNode) {
+      const incoming = activeVersion.edges.filter(edge => edge.toNodeId === nodeId);
+      const outgoing = activeVersion.edges.filter(edge => edge.fromNodeId === nodeId);
+      const edges = activeVersion.edges.filter(edge => (
+        edge.fromNodeId !== nodeId && edge.toNodeId !== nodeId
+      ));
+      (['texture', 'mask'] as const).forEach(signal => {
+        const signalIncoming = incoming.filter(edge => colorPortSignal(edge.fromPort) === signal);
+        const signalOutgoing = outgoing.filter(edge => colorPortSignal(edge.toPort) === signal);
+        if (signalIncoming.length !== 1 || signalOutgoing.length !== 1) return;
         edges.push({
           id: createColorNodeId('edge'),
-          fromNodeId: serialNodes[serialNodes.length - 1].id,
-          fromPort: 'out',
-          toNodeId: outputNode.id,
-          toPort: 'in',
+          fromNodeId: signalIncoming[0].fromNodeId,
+          fromPort: signalIncoming[0].fromPort,
+          toNodeId: signalOutgoing[0].toNodeId,
+          toPort: signalOutgoing[0].toPort,
         });
-      }
+      });
 
       const selectedNodeId = current.ui.selectedNodeId === nodeId
-        ? remainingNodes.find(candidate => candidate.type !== 'input' && candidate.type !== 'output')?.id
+        ? remainingNodes.find(isColorGradeNode)?.id
         : current.ui.selectedNodeId;
 
       return {
@@ -320,20 +332,27 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
     });
   },
 
-  connectColorNodes: (clipId, fromNodeId, toNodeId) => {
+  connectColorNodes: (clipId, fromNodeId, toNodeId, fromPort = 'out', toPort = 'in') => {
     get().updateColorCorrection(clipId, current => {
       const activeVersion = getActiveColorVersion(current);
       if (!activeVersion || fromNodeId === toNodeId) return current;
 
       const fromNode = activeVersion.nodes.find(node => node.id === fromNodeId);
       const toNode = activeVersion.nodes.find(node => node.id === toNodeId);
-      if (!fromNode || !toNode || fromNode.type === 'output' || toNode.type === 'input') {
+      if (
+        !fromNode
+        || !toNode
+        || fromNode.type === 'output'
+        || fromNode.type === 'alpha-output'
+        || toNode.type === 'input'
+        || toNode.type === 'source'
+        || colorPortSignal(fromPort) !== colorPortSignal(toPort)
+      ) {
         return current;
       }
 
       const nextEdges = activeVersion.edges.filter(edge =>
-        edge.fromNodeId !== fromNodeId &&
-        edge.toNodeId !== toNodeId
+        !(edge.toNodeId === toNodeId && edge.toPort === toPort)
       );
 
       const candidateEdges = [
@@ -356,9 +375,9 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
                   {
                     id: createColorNodeId('edge'),
                     fromNodeId,
-                    fromPort: 'out',
+                    fromPort,
                     toNodeId,
-                    toPort: 'in',
+                    toPort,
                   },
                 ],
               }
@@ -430,6 +449,74 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
     }));
   },
 
+  resetColorNodeStackLayers: (clipId) => {
+    get().updateColorCorrection(clipId, current => ({
+      ...current,
+      versions: current.versions.map(version => ({
+        ...version,
+        nodes: version.nodes.map(node => isColorGradeNode(node)
+          ? { ...node, params: { ...node.params, stackLayer: 0 } }
+          : node),
+      })),
+    }));
+  },
+
+  initializeColorNodeGraphLayout: (clipId, width, height, force = false) => {
+    get().updateColorCorrection(clipId, current => {
+      if (!force && current.ui.nodeLayoutVersion === 2) return current;
+      const activeVersion = getActiveColorVersion(current);
+      if (!activeVersion) return current;
+      const gradeNodes = activeVersion.nodes.filter(isColorGradeNode);
+      const sourceNodes = activeVersion.nodes.filter(node => node.type === 'source');
+      const gradeLaneY = Math.max(64, Math.round(height * 0.4));
+      const anchorLaneY = Math.max(64, Math.round(height * 0.49));
+      const gradeStartX = Math.max(96, Math.round(width * 0.35));
+      const rightAnchorX = Math.max(340, Math.round(width) - 25);
+
+      return {
+        ...current,
+        versions: current.versions.map(version => version.id !== activeVersion.id
+          ? version
+          : {
+              ...version,
+              nodes: version.nodes.map(node => {
+                if (node.type === 'input') return { ...node, position: { x: 8, y: anchorLaneY } };
+                if (node.type === 'output') return { ...node, position: { x: rightAnchorX, y: anchorLaneY } };
+                if (node.type === 'source') {
+                  const sourceIndex = sourceNodes.findIndex(source => source.id === node.id);
+                  return {
+                    ...node,
+                    position: {
+                      x: 8,
+                      y: anchorLaneY + (sourceIndex + 1) * COLOR_FIXED_ANCHOR_SPACING,
+                    },
+                  };
+                }
+                if (node.type === 'alpha-output') {
+                  return {
+                    ...node,
+                    position: {
+                      x: rightAnchorX,
+                      y: anchorLaneY + COLOR_FIXED_ANCHOR_SPACING,
+                    },
+                  };
+                }
+                const gradeIndex = gradeNodes.findIndex(grade => grade.id === node.id);
+                if (gradeIndex >= 0) {
+                  return { ...node, position: { x: gradeStartX + gradeIndex * 92, y: gradeLaneY } };
+                }
+                return node;
+              }),
+            }),
+        ui: {
+          ...current.ui,
+          nodeLayoutVersion: 2,
+          workspaceViewport: { x: 0, y: 0, zoom: 1 },
+        },
+      };
+    });
+  },
+
   resetColorCorrection: (clipId) => {
     const { clips, clipKeyframes, keyframeRecordingEnabled, selectedKeyframeIds, invalidateCache } = get();
     const cleanup = cleanupClipColorKeyframes(clipId, createColorPropertyMatcher(), {
@@ -439,10 +526,10 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
     });
 
     set({
-      clips: clips.map(c =>
-        c.id === clipId
-          ? { ...c, colorCorrection: createDefaultColorCorrectionState() }
-          : c
+      clips: updateClipColorCorrectionWithRemoteSync(
+        clips,
+        clipId,
+        () => createDefaultColorCorrectionState(),
       ),
       ...(cleanup.changed ? {
         clipKeyframes: cleanup.clipKeyframes,

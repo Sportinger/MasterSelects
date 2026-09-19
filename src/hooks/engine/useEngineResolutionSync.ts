@@ -42,7 +42,10 @@ export function useEngineResolutionSync(isEngineReady: boolean): void {
       const scaledWidth = Math.round(baseWidth * previewQuality);
       const scaledHeight = Math.round(baseHeight * previewQuality);
 
-      renderHostPort.setResolution(scaledWidth, scaledHeight);
+      renderHostPort.setResolution(scaledWidth, scaledHeight, {
+        width: baseWidth,
+        height: baseHeight,
+      });
       log.info(`Resolution set to ${scaledWidth}\u00d7${scaledHeight} (${previewQuality * 100}% of ${baseWidth}\u00d7${baseHeight})`);
     };
 

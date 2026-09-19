@@ -23,6 +23,7 @@ export function drawWorkerWaveformColumns(
   width: number,
   height: number,
   mode: TimelineClipCanvasWorkerWaveformResource['mode'],
+  resolveStyle = false,
 ): void {
   if (columnCount <= 0 || columns.length < columnCount * 4) {
     drawWorkerWaveformCenterLine(context, width, height, 0.18);
@@ -96,12 +97,12 @@ export function drawWorkerWaveformColumns(
   }
   context.closePath();
   if (mode === 'compact') {
-    context.fillStyle = 'rgba(235, 241, 248, 0.62)';
+    context.fillStyle = resolveStyle ? 'rgba(250, 248, 235, 0.82)' : 'rgba(235, 241, 248, 0.62)';
   } else {
     const envelopeGradient = context.createLinearGradient(0, 0, 0, height);
-    envelopeGradient.addColorStop(0, 'rgba(216, 230, 240, 0.10)');
-    envelopeGradient.addColorStop(0.5, 'rgba(224, 238, 248, 0.22)');
-    envelopeGradient.addColorStop(1, 'rgba(216, 230, 240, 0.10)');
+    envelopeGradient.addColorStop(0, resolveStyle ? 'rgba(246, 242, 224, 0.28)' : 'rgba(216, 230, 240, 0.10)');
+    envelopeGradient.addColorStop(0.5, resolveStyle ? 'rgba(250, 247, 232, 0.72)' : 'rgba(224, 238, 248, 0.22)');
+    envelopeGradient.addColorStop(1, resolveStyle ? 'rgba(246, 242, 224, 0.28)' : 'rgba(216, 230, 240, 0.10)');
     context.fillStyle = envelopeGradient;
   }
   context.fill();
@@ -133,9 +134,9 @@ export function drawWorkerWaveformColumns(
     }
     context.closePath();
     const rmsGradient = context.createLinearGradient(0, 0, 0, height);
-    rmsGradient.addColorStop(0, 'rgba(92, 203, 255, 0.18)');
-    rmsGradient.addColorStop(0.5, 'rgba(178, 230, 255, 0.44)');
-    rmsGradient.addColorStop(1, 'rgba(92, 203, 255, 0.18)');
+    rmsGradient.addColorStop(0, resolveStyle ? 'rgba(238, 244, 224, 0.34)' : 'rgba(92, 203, 255, 0.18)');
+    rmsGradient.addColorStop(0.5, resolveStyle ? 'rgba(250, 248, 235, 0.88)' : 'rgba(178, 230, 255, 0.44)');
+    rmsGradient.addColorStop(1, resolveStyle ? 'rgba(238, 244, 224, 0.34)' : 'rgba(92, 203, 255, 0.18)');
     context.fillStyle = rmsGradient;
     context.fill();
   }
@@ -151,6 +152,7 @@ export function drawWorkerWaveformResource(
   waveform: TimelineClipCanvasWorkerWaveformResource,
   width: number,
   height: number,
+  resolveStyle = false,
 ): void {
   const valuesPerChannel = waveform.columnCount * 4;
   const availableChannelCount = valuesPerChannel > 0
@@ -162,7 +164,7 @@ export function drawWorkerWaveformResource(
   ));
 
   if (channelCount <= 1) {
-    drawWorkerWaveformColumns(context, waveform.columns, waveform.columnCount, width, height, waveform.mode);
+    drawWorkerWaveformColumns(context, waveform.columns, waveform.columnCount, width, height, waveform.mode, resolveStyle);
     return;
   }
 
@@ -188,6 +190,7 @@ export function drawWorkerWaveformResource(
       width,
       laneHeight,
       waveform.mode,
+      resolveStyle,
     );
     context.restore();
   }

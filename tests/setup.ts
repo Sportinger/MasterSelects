@@ -136,6 +136,8 @@ vi.mock('../src/services/nativeHelper/NativeHelperClient', () => ({
 }))
 
 vi.mock('../src/services/layerBuilder', () => ({
+  clearInternalPlaybackHold: vi.fn(),
+  getPlayheadPosition: vi.fn((fallback: number) => fallback),
   layerBuilder: {
     invalidateCache: vi.fn(),
     buildLayers: vi.fn().mockReturnValue([]),
@@ -144,6 +146,15 @@ vi.mock('../src/services/layerBuilder', () => ({
       reset: vi.fn(),
     }),
   },
+  playheadState: {
+    hasMasterAudio: false,
+    isUsingInternalPosition: false,
+    masterAudioClock: null,
+    masterAudioElement: null,
+    position: 0,
+  },
+  startInternalPosition: vi.fn(),
+  updateInternalPosition: vi.fn(),
 }))
 
 vi.mock('../src/services/proxyFrameCache', () => ({
@@ -151,6 +162,7 @@ vi.mock('../src/services/proxyFrameCache', () => ({
     getCachedRanges: vi.fn().mockReturnValue([]),
     cancelPreload: vi.fn(),
     warmScrubAudioBuffer: vi.fn().mockResolvedValue(null),
+    getCachedAudioBuffer: vi.fn().mockReturnValue(null),
   },
 }))
 
@@ -193,6 +205,7 @@ vi.mock('../src/stores/mediaStore', () => ({
       createSolidItem: vi.fn(),
       getOrCreateCameraFolder: vi.fn().mockReturnValue('camera-folder-1'),
       createCameraItem: vi.fn().mockReturnValue('camera-item-1'),
+      newProject: vi.fn(),
     })),
     setState: vi.fn(),
     subscribe: vi.fn(),

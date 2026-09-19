@@ -54,6 +54,9 @@ export function buildTextEditorStyle(params: {
       return Math.max(1, textProperties.text.split('\n').length);
     }
     ctx.font = getFontCss(textProperties);
+    if (textProperties.wrapMode === 'none') {
+      return Math.max(1, draftText.replace(/\r\n?/g, '\n').split('\n').length);
+    }
     return wrapTextToLines(ctx, draftText, wrapWidth, textProperties.letterSpacing).length;
   })();
   const contentHeight = lineCount * textProperties.fontSize * textProperties.lineHeight;
@@ -113,6 +116,7 @@ export function buildSelectionPolygons(params: {
     textProperties.lineHeight,
     textProperties.letterSpacing,
     topBaseline,
+    textProperties.wrapMode,
   );
   const totalHeight = firstPassLines.length * lineHeightPx;
   const startY = textProperties.verticalAlign === 'bottom'
@@ -131,6 +135,7 @@ export function buildSelectionPolygons(params: {
     textProperties.lineHeight,
     textProperties.letterSpacing,
     startY,
+    textProperties.wrapMode,
   );
 
   const selectionStart = Math.min(textSelection.start, textSelection.end);

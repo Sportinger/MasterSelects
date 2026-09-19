@@ -45,10 +45,26 @@ describe('billing launch hardening', () => {
     const noOrigin = new Request('https://www.masterselects.com/api/billing/checkout', {
       method: 'POST',
     });
+    const sameOriginHint = new Request('https://www.masterselects.com/api/billing/checkout', {
+      headers: { 'Sec-Fetch-Site': 'same-origin' },
+      method: 'POST',
+    });
+    const crossSiteHint = new Request('https://www.masterselects.com/api/billing/checkout', {
+      headers: { 'Sec-Fetch-Site': 'cross-site' },
+      method: 'POST',
+    });
+    const safeGet = new Request('https://www.masterselects.com/api/billing/summary', {
+      method: 'GET',
+    });
 
     expect(hasTrustedOrigin(trusted)).toBe(true);
     expect(hasTrustedOrigin(foreign)).toBe(false);
-    expect(hasTrustedOrigin(noOrigin)).toBe(true);
+    // Browsers always send Origin on POST; a missing header is only trusted
+    // when Sec-Fetch-Site vouches for the same-origin relationship.
+    expect(hasTrustedOrigin(noOrigin)).toBe(false);
+    expect(hasTrustedOrigin(sameOriginHint)).toBe(true);
+    expect(hasTrustedOrigin(crossSiteHint)).toBe(false);
+    expect(hasTrustedOrigin(safeGet)).toBe(true);
   });
 
   it('drops paid entitlements when subscription status is not active or trialing', () => {

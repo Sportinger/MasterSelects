@@ -205,6 +205,21 @@
   font-size: var(--font-md);
 }
 
+@media (pointer: coarse) {
+  .labeled-value .draggable-number,
+  .transform-tab-compact .labeled-value .draggable-number {
+    min-width: 64px;
+    min-height: 36px;
+    padding: 7px 9px;
+    text-align: right;
+  }
+
+  .labeled-value .draggable-number-input,
+  .transform-tab-compact .labeled-value .draggable-number-input {
+    font-size: 16px;
+  }
+}
+
 .properties-section .control-row .caption-compact-select {
   flex: 0 1 220px;
   min-width: 0;
@@ -1425,14 +1440,68 @@
   background: rgba(180, 40, 40, 0.24);
 }
 
+.datamosh-bake-section {
+  display: grid;
+  gap: 8px;
+}
+
+.datamosh-bake-description,
+.datamosh-bake-status {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  line-height: 1.35;
+}
+
+.datamosh-bake-status {
+  min-height: 1.35em;
+  color: var(--text-primary);
+}
+
+.datamosh-bake-button {
+  justify-self: start;
+  padding: 6px 10px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent) 20%, var(--bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border-color));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.datamosh-bake-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 30%, var(--bg-secondary));
+}
+
+.datamosh-bake-button:focus {
+  outline: none;
+}
+
+.datamosh-bake-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.datamosh-bake-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .transform-tab-compact {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
   container-type: inline-size;
+  overflow: hidden;
+  padding: 0;
 }
 
 .transform-tab-compact .properties-section {
-  border-radius: var(--radius-md);
-  margin-bottom: 4px;
-  padding: 6px 8px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  border-radius: 0;
+  margin-bottom: 0;
+  padding: 7px 8px;
 }
 
 .transform-tab-compact .properties-section .control-row {
@@ -1479,7 +1548,7 @@
 
 .transform-tab-compact .transform-param-row {
   display: grid;
-  grid-template-columns: 18px minmax(42px, max-content) minmax(0, 1fr);
+  grid-template-columns: 16px minmax(42px, max-content) minmax(0, 1fr);
   align-items: center;
   column-gap: 6px;
   row-gap: 2px;
@@ -1518,57 +1587,280 @@
   align-items: center;
 }
 
-.transform-tab-compact .scale-flip-controls {
-  display: inline-flex;
+.transform-tab-compact .position-multi-value-row,
+.transform-tab-compact .scale-multi-value-row {
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+}
+
+.transform-tab-compact .transform-mode-row {
   align-items: center;
-  justify-self: start;
+  display: flex;
+  gap: 4px;
+  padding-left: 22px;
+}
+
+.transform-tab-compact .transform-layer-mode-controls {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
   gap: 3px;
 }
 
-.transform-tab-compact .scale-flip-button {
+.transform-tab-compact .transform-dimension-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 4px;
+  height: 24px;
+  padding: 0;
+  width: auto;
+}
+
+.transform-tab-compact .transform-dimension-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  transition: color 150ms ease;
+}
+
+.transform-tab-compact .transform-dimension-required {
+  align-items: center;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border-color));
+  border-radius: 4px;
+  box-sizing: border-box;
+  color: var(--accent);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 650;
+  height: 20px;
+  padding: 0 6px;
+}
+
+.transform-tab-compact .transform-dimension-toggle:not(.is-3d) .transform-dimension-label-2d,
+.transform-tab-compact .transform-dimension-toggle.is-3d .transform-dimension-label-3d,
+.transform-tab-compact .transform-free-run-toggle:not(.is-free) .transform-free-run-label-lock,
+.transform-tab-compact .transform-free-run-toggle.is-free .transform-free-run-label-free {
+  color: var(--accent);
+}
+
+.transform-tab-compact .transform-dimension-track {
+  background: color-mix(in srgb, var(--accent) 42%, var(--bg-primary));
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border-color));
+  border-radius: 999px;
+  box-sizing: border-box;
+  height: 14px;
+  position: relative;
+  transition: background-color 150ms ease, border-color 150ms ease;
+  width: 27px;
+}
+
+.transform-tab-compact .transform-dimension-knob {
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.42);
+  height: 8px;
+  left: 2px;
+  position: absolute;
+  top: 2px;
+  transition: transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  width: 8px;
+}
+
+.transform-tab-compact .transform-dimension-toggle.is-3d .transform-dimension-knob,
+.transform-tab-compact .transform-free-run-toggle.is-free .transform-dimension-knob {
+  transform: translateX(13px);
+}
+
+.transform-tab-compact .transform-dimension-toggle:hover:not(:disabled) .transform-dimension-track {
+  background: color-mix(in srgb, var(--accent) 54%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--accent) 56%, var(--border-color));
+}
+
+.transform-tab-compact .transform-dimension-toggle:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
+  outline: none;
+}
+
+.transform-tab-compact .transform-blend-opacity-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 10px;
+  padding-left: 22px;
+}
+
+.transform-tab-compact .transform-inline-blend-control,
+.transform-tab-compact .transform-inline-opacity-control {
+  align-items: center;
+  display: grid;
+  column-gap: 6px;
+  min-width: 0;
+}
+
+.transform-tab-compact .transform-inline-blend-control {
+  grid-template-columns: 28px minmax(0, 104px);
+}
+
+.transform-tab-compact .transform-inline-opacity-control {
+  grid-template-columns: 42px max-content;
+}
+
+.transform-tab-compact .transform-inline-blend-control .prop-label,
+.transform-tab-compact .transform-inline-opacity-control .prop-label {
+  max-width: none;
+  min-width: 0;
+  width: auto;
+}
+
+.transform-tab-compact .transform-inline-blend-control select {
+  box-sizing: border-box;
+  flex: none;
+  font-size: 11px;
+  height: 24px;
+  padding-block: 2px;
+  min-width: 0;
+  width: 100%;
+}
+
+.transform-tab-compact .transform-inline-keyframed-value {
+  grid-template-columns: 18px max-content;
+  column-gap: 4px;
+}
+
+.transform-tab-compact .transform-inline-keyframed-value .labeled-value-label {
+  display: none;
+}
+
+@container (max-width: 240px) {
+  .transform-tab-compact .transform-blend-opacity-row {
+    align-items: stretch;
+    display: grid;
+    gap: 3px;
+    grid-template-columns: minmax(0, 1fr);
+    padding-left: 0;
+  }
+
+  .transform-tab-compact .transform-inline-blend-control,
+  .transform-tab-compact .transform-inline-opacity-control {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 2px;
+    width: 100%;
+  }
+}
+
+.transform-tab-compact .transform-speed-controls {
+  align-items: center;
+  column-gap: 3px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  width: 100%;
+}
+
+.transform-tab-compact .transform-speed-row {
+  align-items: center;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  column-gap: 6px;
+  padding-left: 22px;
+}
+
+.transform-tab-compact .transform-speed-row .prop-label {
+  max-width: none;
+  min-width: 0;
+  width: auto;
+}
+
+.transform-tab-compact .transform-icon-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 24px;
+  justify-content: center;
+  padding: 0;
+  transition: background-color 120ms ease, color 120ms ease;
+  width: 24px;
+}
+
+.transform-tab-compact .transform-icon-toggle:hover,
+.transform-tab-compact .transform-icon-toggle:focus-visible {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--text-secondary);
+  outline: none;
+}
+
+.transform-tab-compact .transform-icon-toggle:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.transform-tab-compact .transform-icon-toggle.is-active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.transform-tab-compact .transform-option-icon {
+  fill: none;
+  height: 14px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 14px;
+}
+
+.transform-tab-compact .scale-value-with-action {
+  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  column-gap: 3px;
+  justify-self: stretch;
+  min-width: 0;
+  width: 100%;
+}
+
+.transform-tab-compact .transform-compact-action-button,
+.transform-tab-compact .scale-flip-button,
+.transform-tab-compact .scale-fit-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  min-width: 22px;
+  width: 30px;
+  min-width: 30px;
   height: 22px;
   padding: 0;
-  border: 1px solid transparent;
+  border: 1px solid color-mix(in srgb, var(--border-color) 84%, transparent);
   border-radius: 6px;
-  background: transparent;
+  background: color-mix(in srgb, var(--panel-bg) 82%, transparent);
   color: var(--text-muted);
   cursor: pointer;
 }
 
 .transform-tab-compact .scale-fit-button {
-  height: 22px;
-  min-width: 30px;
-  padding: 0 7px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 84%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--panel-bg) 82%, transparent);
-  color: var(--text-muted);
   font-size: 9px;
   font-weight: 650;
   letter-spacing: 0.025em;
-  cursor: pointer;
 }
 
 .transform-tab-compact .scale-fit-button:hover,
-.transform-tab-compact .scale-fit-button:focus-visible {
+.transform-tab-compact .scale-fit-button:focus-visible,
+.transform-tab-compact .transform-compact-action-button:hover,
+.transform-tab-compact .transform-compact-action-button:focus-visible,
+.transform-tab-compact .scale-flip-button:hover,
+.transform-tab-compact .scale-flip-button:focus-visible {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border-color));
   background: color-mix(in srgb, var(--accent) 10%, var(--panel-bg));
   color: var(--accent);
   outline: none;
 }
 
-.transform-tab-compact .scale-flip-button:hover,
-.transform-tab-compact .scale-flip-button:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--border-color));
-  color: var(--accent);
-  outline: none;
-}
-
+.transform-tab-compact .transform-compact-action-button.is-active,
 .transform-tab-compact .scale-flip-button.is-active {
   border-color: color-mix(in srgb, var(--accent) 52%, var(--border-color));
   background: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -1607,12 +1899,16 @@
 }
 
 .transform-tab-compact .rotation-value-ae {
-  grid-template-columns: minmax(28px, max-content) max-content max-content;
+  grid-template-columns: max-content max-content max-content;
   column-gap: 5px;
 }
 
 .transform-tab-compact .rotation-value-ae.with-keyframe-toggle {
-  grid-template-columns: 18px minmax(28px, max-content) max-content max-content;
+  grid-template-columns: 18px max-content max-content max-content;
+}
+
+.transform-tab-compact .rotation-value-ae .draggable-number:first-of-type {
+  min-width: 0;
 }
 
 .transform-tab-compact .labeled-value-label {
@@ -1625,9 +1921,29 @@
   padding: 2px 3px;
 }
 
+.transform-tab-compact .properties-actions {
+  padding: 7px 8px 8px;
+}
+
+.transform-tab-compact .properties-actions .btn {
+  color: var(--text-secondary);
+  min-height: 26px;
+  width: 100%;
+}
+
 @container (max-width: 240px) {
   .transform-tab-compact .properties-section {
-    padding: 5px 6px;
+    padding: 5px 4px;
+  }
+
+  .transform-tab-compact .transform-mode-row,
+  .transform-tab-compact .transform-speed-row {
+    padding-left: 0;
+  }
+
+  .transform-tab-compact .transform-speed-row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 2px;
   }
 
   .transform-tab-compact .transform-option-row .prop-label {
@@ -1646,10 +1962,14 @@
   }
 
   .transform-tab-compact .transform-param-row {
-    grid-template-columns: 18px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "key label"
-      "values values";
+      "label"
+      "values";
+  }
+
+  .transform-tab-compact .transform-param-row > .keyframe-toggle-placeholder {
+    display: none;
   }
 
   .transform-tab-compact .transform-param-row > .keyframe-toggle {
@@ -1666,12 +1986,16 @@
   .transform-tab-compact .transform-param-row > .draggable-number-anchor {
     grid-area: values;
     box-sizing: border-box;
-    padding-left: 22px;
+    padding-left: 0;
   }
 
   .transform-tab-compact .multi-value-row {
     grid-template-columns: 1fr;
     row-gap: 3px;
+  }
+
+  .transform-tab-compact .transform-speed-controls {
+    grid-template-columns: minmax(0, 1fr) 30px;
   }
 
   .transform-tab-compact .rotation-row {
@@ -1683,8 +2007,13 @@
     column-gap: 5px;
   }
 
+  .transform-tab-compact .transform-inline-keyframed-value {
+    grid-template-columns: 18px max-content;
+    column-gap: 4px;
+  }
+
   .transform-tab-compact .rotation-value-ae {
-    grid-template-columns: 34px 22px max-content;
+    grid-template-columns: max-content max-content max-content;
     column-gap: 4px;
   }
 

@@ -1,60 +1,13 @@
 import type { TextClipProperties } from "../../types/text";
 import type { ClipCustomNodeDefinition } from "../../types/nodeGraph";
 import { extractAINodeGeneratedCode } from './aiNodeDefinition';
-import { Logger } from '../logger';
 import { textRenderer } from '../textRenderer';
 import type { AINodeRuntimeTexture } from './aiNodeRuntime';
-import {
-  createRuntimeTime,
-  type AINodeRuntimeContext,
-  type AINodeRuntimeInputValue,
-} from './aiNodeRuntimeGraphSignals';
-
-const log = Logger.create('AINodeRuntime');
-
-type AINodeProcessFunction = (
-  input: Record<string, AINodeRuntimeInputValue>,
-  context: AINodeRuntimeContext,
-) => { output?: AINodeRuntimeTexture } | AINodeRuntimeTexture | undefined;
-
-interface AINodeExecutable {
-  process?: AINodeProcessFunction;
-}
-
-const executableCache = new Map<string, AINodeExecutable | null>();
+import type { AINodeRuntimeContext, AINodeRuntimeInputValue } from './aiNodeRuntimeGraphSignals';
+import type { AINodeSandboxCode, AINodeSandboxNodeRequest } from './aiNodeSandboxProtocol';
 
 function getRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? value as Record<string, unknown> : null;
-}
-
-function isRuntimeTexture(value: unknown): value is AINodeRuntimeTexture {
-  const candidate = value as Partial<AINodeRuntimeTexture> | null;
-  return !!candidate &&
-    candidate.data instanceof Uint8ClampedArray &&
-    typeof candidate.width === 'number' &&
-    candidate.width > 0 &&
-    typeof candidate.height === 'number' &&
-    candidate.height > 0;
-}
-
-function getReturnedTextValue(output: AINodeRuntimeTexture | undefined): string | Partial<TextClipProperties> | undefined {
-  if (!output) {
-    return undefined;
-  }
-
-  if (typeof output.text === 'string' || getRecord(output.text)) {
-    return output.text;
-  }
-
-  const metadata = getRecord(output.metadata);
-  const metadataText = getRecord(metadata?.text);
-  const content = metadataText?.content;
-  if (typeof content === 'string') {
-    return content;
-  }
-
-  const text = metadataText?.text;
-  return typeof text === 'string' ? text : undefined;
 }
 
 function mergeReturnedMetadata(
@@ -71,11 +24,6 @@ function mergeReturnedMetadata(
     ...(resultMetadata ?? {}),
     ...(output?.metadata ?? {}),
   };
-}
-
-function getTopLevelReturnedText(result: unknown): string | Partial<TextClipProperties> | undefined {
-  const text = getRecord(result)?.text;
-  return typeof text === 'string' || getRecord(text) ? text as string | Partial<TextClipProperties> : undefined;
 }
 
 function renderTextSignalToTexture(
@@ -139,88 +87,47 @@ export function resolveCurrentTextProperties(
   };
 }
 
-function compileGeneratedNode(code: string, cacheKey: string): AINodeExecutable | null {
-  const cached = executableCache.get(cacheKey);
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  let executable: AINodeExecutable | null = null;
-  const defineNode = (definition: AINodeExecutable) => {
-    executable = definition;
-    return definition;
+function createSerializableRuntimeTime(context: AINodeRuntimeContext): Record<string, number | undefined> {
+  return {
+    currentTime: context.clipLocalTime,
+    clipLocalTime: context.clipLocalTime,
+    seconds: context.clipLocalTime,
+    mediaTime: context.mediaTime,
   };
-
-  try {
-    const run = new Function('defineNode', `"use strict";\n${code}\n;`);
-    run(defineNode);
-  } catch (error) {
-    log.warn('Failed to compile generated AI node code', error);
-  }
-
-  executableCache.set(cacheKey, executable);
-  return executable;
 }
 
-export function runGeneratedNode(
+export function createAINodeSandboxNodeRequest(
   definition: ClipCustomNodeDefinition,
   texture: AINodeRuntimeTexture,
   context: AINodeRuntimeContext,
   connectedInputs: Record<string, AINodeRuntimeInputValue> = {},
-): AINodeRuntimeTexture {
+  pixelSort = false,
+): { code?: AINodeSandboxCode; request: AINodeSandboxNodeRequest } | null {
   const code = extractAINodeGeneratedCode(definition.ai.generatedCode ?? '');
-  if (!code) {
-    return texture;
-  }
+  if (!code) return null;
+  const time = createSerializableRuntimeTime(context);
+  const serializableContext: AINodeRuntimeContext = {
+    ...context,
+    signals: {
+      ...context.signals,
+      texture,
+      time,
+    },
+  };
+  return {
+    ...(pixelSort ? {} : { code: { id: definition.id, code } }),
+    request: {
+      id: definition.id,
+      kind: pixelSort ? 'pixel-sort' : 'generated',
+      context: serializableContext,
+      connectedInputs,
+    },
+  };
+}
 
-  const executable = compileGeneratedNode(code, `${definition.id}:${code}`);
-  if (!executable?.process) {
-    return texture;
-  }
-
-  try {
-    const result = executable.process(
-      {
-        input: texture,
-        texture,
-        time: createRuntimeTime(context),
-        metadata: context.metadata,
-        params: context.params,
-        clip: context.clip,
-        source: context.source,
-        graph: context.graph,
-        node: context.node,
-        signals: context.signals,
-        audio: context.audio,
-        audioAnalysis: context.signals.audioAnalysis,
-        frequencyBands: context.signals.frequencyBands,
-        beats: context.signals.beats,
-        onsets: context.signals.onsets,
-        audioMetadata: context.signals.audioMetadata,
-        audioRepairSuggestions: context.signals.audioRepairSuggestions,
-        text: context.text,
-        connectedInputs,
-        ...connectedInputs,
-      },
-      context,
-    );
-    const output = 'output' in (result ?? {}) ? (result as { output?: AINodeRuntimeTexture }).output : result;
-    if (!isRuntimeTexture(output)) {
-      return texture;
-    }
-
-    const metadata = mergeReturnedMetadata(context.metadata, output, result);
-    const returnedText = getReturnedTextValue(output) ?? getTopLevelReturnedText(result);
-    return renderTextSignalToTexture(
-      {
-        ...output,
-        metadata,
-      },
-      context.text,
-      returnedText,
-    );
-  } catch (error) {
-    log.warn('Generated AI node failed during render; passing input through', error);
-    return texture;
-  }
+export function applyAINodeSandboxTextResult(
+  texture: AINodeRuntimeTexture,
+  baseText?: TextClipProperties,
+): AINodeRuntimeTexture {
+  return renderTextSignalToTexture(texture, baseText, texture.text);
 }

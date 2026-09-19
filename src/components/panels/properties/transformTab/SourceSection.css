@@ -1,0 +1,156 @@
+.transform-source-section {
+  position: relative;
+}
+
+.transform-source-dropzone {
+  align-items: center;
+  border: 1px dashed transparent;
+  border-radius: 4px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  min-height: 28px;
+  padding: 3px 4px 3px 22px;
+  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, min-height 120ms ease;
+}
+
+.transform-source-dropzone.is-drag-active,
+.transform-source-dropzone.is-drop-hint-active {
+  background: color-mix(in srgb, var(--accent-color, #6f8cff) 16%, var(--bg-secondary, #202227));
+  border-color: var(--accent-color, #6f8cff);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-color, #6f8cff) 45%, transparent);
+  min-height: 36px;
+}
+
+.transform-source-dropzone .transform-layer-mode-controls {
+  transform: translateX(1px);
+}
+
+.transform-source-label,
+.transform-source-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transform-source-value {
+  align-items: center;
+  display: grid;
+  min-width: 0;
+}
+
+.transform-source-name,
+.transform-source-drop-label {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.transform-source-label {
+  color: var(--text-secondary, #bdc2cc);
+  font-size: 11px;
+}
+
+.transform-source-name {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--accent, #4488ff);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: inherit;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  transition: color 120ms ease, opacity 120ms ease;
+  width: 100%;
+}
+
+.transform-source-name:hover,
+.transform-source-name:focus-visible {
+  color: color-mix(in srgb, var(--accent, #4488ff) 78%, white);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.transform-source-name:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.transform-source-name.needs-reconnect,
+.transform-source-name.needs-reconnect:hover,
+.transform-source-name.needs-reconnect:focus-visible {
+  color: var(--danger, #ff626b);
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
+
+.transform-source-name:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid color-mix(in srgb, var(--accent, #4488ff) 52%, transparent);
+  outline-offset: 2px;
+}
+
+.transform-source-drop-label {
+  color: var(--accent, #4488ff);
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+  opacity: 0;
+  pointer-events: none;
+  text-align: center;
+  transform: scale(0.92);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.transform-source-dropzone:is(.is-drag-active, .is-drop-hint-active) .transform-source-name {
+  opacity: 0;
+}
+
+.transform-source-dropzone:is(.is-drag-active, .is-drop-hint-active) .transform-source-drop-label {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.transform-source-message {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.transform-source-message.is-live-input {
+  clip: auto;
+  clip-path: none;
+  display: block;
+  height: auto;
+  margin: 4px 4px 0 80px;
+  overflow: visible;
+  position: static;
+  color: var(--danger, #ff7b7b);
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+  width: auto;
+}
+
+/* Live source selection now lives in the compact Source row above Transform. */
+.transform-tab-compact > .live-input-tab--embedded {
+  display: none;
+}
+
+@container (max-width: 240px) {
+  .transform-source-dropzone {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding-left: 4px;
+  }
+
+  .transform-source-label {
+    display: none;
+  }
+}

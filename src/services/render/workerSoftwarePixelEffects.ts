@@ -383,11 +383,11 @@ function applyGlowAdjustment(
   >[number],
 ): readonly [number, number, number, number] {
   const color = sampleRgba(sourceData, width, height, uvX, uvY);
-  const rings = Math.max(1, Math.min(32, Math.round(finiteNumber(adjustment.rings, 4))));
-  const samplesPerRing = Math.max(4, Math.min(64, Math.round(finiteNumber(adjustment.samplesPerRing, 16))));
-  const radius = Math.max(0, finiteNumber(adjustment.radius, 20));
-  const softness = Math.max(0.001, finiteNumber(adjustment.softness, 0.5));
-  const threshold = finiteNumber(adjustment.threshold, 0.6);
+  const rings = Math.max(1, Math.min(32, Math.round(finiteNumber(adjustment.rings, 6.85))));
+  const samplesPerRing = Math.max(4, Math.min(64, Math.round(finiteNumber(adjustment.samplesPerRing, 17.95))));
+  const radius = Math.max(0, finiteNumber(adjustment.radius, 1));
+  const softness = Math.max(0.001, finiteNumber(adjustment.softness, 0.496));
+  const threshold = finiteNumber(adjustment.threshold, 0.7935);
   let glowR = 0;
   let glowG = 0;
   let glowB = 0;

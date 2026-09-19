@@ -581,4 +581,165 @@ body.track-reordering-active {
   height: 14px;
 }
 
+/* Mobile layouts keep the layer rail deliberately narrow. Track actions move
+   into a touch-sized glass bubble so names retain the available row width. */
+.timeline-mobile-layout .track-header-top,
+.timeline-mobile-layout .track-header.mixer > .track-header-top,
+.timeline-mobile-layout .track-header.mixer.audio-layer-basic > .track-header-top,
+.timeline-mobile-layout .track-header.mixer.audio-layer-basic.audio-strip-condensed > .track-header-top,
+.timeline-mobile-layout .track-header.audio.audio-layer-advanced.audio-strip-full:not(.audio-summary-meter-visible) > .track-header-top,
+.timeline-mobile-layout .track-header.audio.audio-layer-advanced.audio-strip-compact:not(.audio-summary-meter-visible) > .track-header-top {
+  align-items: center;
+  padding: 0 4px;
+}
+
+.timeline-mobile-layout .track-header .track-header-main,
+.timeline-mobile-layout .track-header.mixer .track-header-main,
+.timeline-mobile-layout .track-header.mixer.audio-strip-compact .track-header-main,
+.timeline-mobile-layout .track-header.mixer.audio-strip-condensed .track-header-main,
+.timeline-mobile-layout .track-header.audio.audio-layer-advanced.audio-strip-full:not(.audio-summary-meter-visible) .track-header-main,
+.timeline-mobile-layout .track-header.audio.audio-layer-advanced.audio-strip-compact:not(.audio-summary-meter-visible) .track-header-main {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  position: relative;
+  display: block;
+  align-content: center;
+}
+
+.timeline-mobile-layout .track-header .track-name,
+.timeline-mobile-layout .track-header.mixer .track-header-main > .track-name {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  left: 10px;
+  max-width: none;
+  line-height: 16px;
+  transform: translateY(-50%);
+}
+
+.timeline-mobile-layout .track-header.mobile-second-row .track-name,
+.timeline-mobile-layout .track-header.mobile-second-row.mixer .track-header-main > .track-name {
+  top: 3px;
+  transform: none;
+}
+
+.timeline-mobile-layout .track-header .track-name-input {
+  position: absolute;
+  top: 50%;
+  right: 1px;
+  left: 9px;
+  width: auto;
+  transform: translateY(-50%);
+}
+
+.timeline-mobile-layout .track-header.mobile-second-row .track-name-input {
+  top: 2px;
+  transform: none;
+}
+
+.timeline-mobile-layout .track-header .track-color-chip,
+.timeline-mobile-layout .track-header .track-type-icon-badge,
+.timeline-mobile-layout .track-header .track-reorder-handle {
+  display: none;
+}
+
+.timeline-mobile-layout .track-header .track-expand-arrow {
+  display: none;
+}
+
+.timeline-mobile-layout .track-header.mobile-second-row .track-expand-arrow {
+  position: absolute;
+  bottom: 3px;
+  left: 0;
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+}
+
+.timeline-mobile-layout .track-header .audio-track-pan-row,
+.timeline-mobile-layout .track-header .midi-instrument-row,
+.timeline-mobile-layout .track-header > .track-header-top > .audio-track-faders {
+  display: none;
+}
+
+.timeline-mobile-layout .track-header.mobile-actions-open {
+  overflow: visible;
+  z-index: 96;
+}
+
+/* The action bubble itself is the shared LiquidGlassBubble primitive
+   (src/components/common/liquidGlass/); this block only anchors it in the
+   track header and adapts the track buttons living inside its drawer. */
+.timeline-mobile-track-actions {
+  position: absolute;
+  top: auto;
+  right: 3px;
+  bottom: 3px;
+  z-index: 8;
+  width: 28px;
+  height: 28px;
+  transform: none;
+}
+
+.timeline-mobile-track-actions .ms-liquid-bubble {
+  --lgb-size-closed: 26px;
+  position: absolute;
+  top: 50%;
+  left: 0;
+  z-index: 100;
+  translate: 0 -50%;
+}
+
+.timeline-mobile-track-actions .ms-liquid-bubble-trigger svg {
+  stroke-width: 1.8;
+}
+
+.timeline-mobile-layout .timeline-mobile-track-actions .track-controls {
+  position: relative !important;
+  inset: auto !important;
+  z-index: 1;
+  display: flex !important;
+  width: auto !important;
+  max-width: min(240px, calc(100vw - 170px));
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px !important;
+  margin: 0;
+  transform: none !important;
+}
+
+.timeline-mobile-layout .timeline-mobile-track-actions .track-controls .btn-icon {
+  display: inline-flex;
+  width: 40px !important;
+  height: 40px !important;
+  min-width: 40px !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 999px !important;
+  font-size: 12px !important;
+  touch-action: manipulation;
+}
+
+/* Neutral glass chip skin - state-tinted buttons (solo/lock/rec/...) keep
+   their own colors from the base track-control rules. */
+.timeline-mobile-layout .timeline-mobile-track-actions .track-controls
+  .btn-icon:not(.solo-active):not(.locked-active):not(.btn-active):not(.record-active) {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background:
+    radial-gradient(120% 120% at 30% 20%, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04) 58%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.22),
+    0 2px 6px rgba(0, 0, 0, 0.22);
+}
+
+.timeline-mobile-layout .timeline-mobile-track-actions .ms-liquid-bubble-drawer-inner > .audio-track-faders {
+  display: none;
+}
+
 }

@@ -36,7 +36,9 @@ vi.mock('../../../src/services/layerBuilder', () => ({
 // Mock compositionRenderer used in doSetActiveComposition
 vi.mock('../../../src/services/compositionRenderer', () => ({
   compositionRenderer: {
+    invalidateComposition: vi.fn(),
     invalidateCompositionAndParents: vi.fn(),
+    prepareComposition: vi.fn(async () => true),
   },
 }));
 
@@ -1081,6 +1083,31 @@ describe('compositionSlice', () => {
     expect(store.getState().activeCompositionId).toBe('comp-1');
   });
 
+  it('setActiveComposition: does not render synthetic track rows during dock-tab switches', async () => {
+    const comp2 = store.getState().createComposition('Second', {
+      timelineData: makeTimelineData([], {
+        tracks: [
+          { id: 'video-2', name: 'Video 2', type: 'video', height: 60, muted: false, visible: true, solo: false },
+          { id: 'video-3', name: 'Video 3', type: 'video', height: 60, muted: false, visible: true, solo: false },
+        ],
+      }),
+    });
+    useTimelineStore.setState({
+      clips: [{ id: 'clip-1' } as TimelineClip],
+      compositionSwitchSourceTracks: defaultTimelineTracks,
+      compositionSwitchTargetTracks: defaultTimelineTracks,
+      clipAnimationPhase: 'entering',
+    });
+
+    store.getState().setActiveComposition(comp2.id);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(store.getState().activeCompositionId).toBe(comp2.id);
+    expect(useTimelineStore.getState().clipAnimationPhase).toBe('idle');
+    expect(useTimelineStore.getState().compositionSwitchSourceTracks).toBeNull();
+    expect(useTimelineStore.getState().compositionSwitchTargetTracks).toBeNull();
+  });
+
   // ─── openCompositionTab ─────────────────────────────────────────
 
   it('openCompositionTab: adds comp to openCompositionIds if not present', () => {
@@ -1100,6 +1127,53 @@ describe('compositionSlice', () => {
     const comp2 = store.getState().createComposition('ToOpen');
     store.getState().openCompositionTab(comp2.id, { skipAnimation: true });
     expect(store.getState().activeCompositionId).toBe(comp2.id);
+  });
+
+  it('openCompositionTab: serializes overlapping switches before saving the next timeline', async () => {
+    const secondTracks = [
+      { id: 'second-video', name: 'Second Video', type: 'video' as const, height: 60, muted: false, visible: true, solo: false },
+    ];
+    const thirdTracks = [
+      { id: 'third-video', name: 'Third Video', type: 'video' as const, height: 60, muted: false, visible: true, solo: false },
+    ];
+    const second = store.getState().createComposition('Second', {
+      timelineData: makeTimelineData([], { tracks: secondTracks }),
+    });
+    const third = store.getState().createComposition('Third', {
+      timelineData: makeTimelineData([], { tracks: thirdTracks }),
+    });
+    let releaseFirstLoad!: () => void;
+    const firstLoadGate = new Promise<void>((resolve) => {
+      releaseFirstLoad = resolve;
+    });
+    const loadState = vi.fn(async (data: Composition['timelineData']) => {
+      if (loadState.mock.calls.length === 1) await firstLoadGate;
+      useTimelineStore.setState({
+        tracks: data?.tracks.map((track) => ({ ...track })) ?? [],
+        clips: [],
+      });
+    });
+    useTimelineStore.setState({
+      tracks: defaultTimelineTracks.map((track) => ({ ...track })),
+      clips: [],
+      loadState,
+    });
+
+    const switchToSecond = store.getState().openCompositionTab(second.id, { skipAnimation: true });
+    const switchToThird = store.getState().openCompositionTab(third.id, { skipAnimation: true });
+
+    expect(loadState).toHaveBeenCalledTimes(1);
+    expect(store.getState().activeCompositionId).toBe(second.id);
+
+    releaseFirstLoad();
+    await switchToSecond;
+    await switchToThird;
+
+    expect(loadState).toHaveBeenCalledTimes(2);
+    expect(store.getState().activeCompositionId).toBe(third.id);
+    expect(useTimelineStore.getState().tracks.map((track) => track.id)).toEqual(['third-video']);
+    expect(store.getState().compositions.find((comp) => comp.id === second.id)?.timelineData?.tracks)
+      .toEqual(secondTracks);
   });
 
   it('openCompositionTab: restarts active playback from requested playFromTime', async () => {

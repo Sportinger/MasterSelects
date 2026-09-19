@@ -1,0 +1,12 @@
+@layer components {
+  .effect-catalog-picker { margin-bottom: 8px; }
+  .effect-catalog-picker > summary { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; font-size: 12px; list-style-position: inside; padding: 6px 8px; }
+  .effect-catalog-picker[open] > summary { border-radius: 4px 4px 0 0; }
+  .effect-catalog-picker-body { background: var(--bg-primary); border: 1px solid var(--border-color); border-top: 0; max-height: min(60vh, 540px); overflow: auto; padding: 7px; }
+  .effect-catalog-tools { display: grid; gap: 5px; grid-template-columns: minmax(0, 1fr) auto; margin-bottom: 7px; }
+  .effect-catalog-tools input, .effect-catalog-tools select { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); min-width: 0; padding: 5px 6px; }
+  .effect-catalog-grid { display: grid; gap: 7px; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+  .effect-catalog-grid .look-tile-initials { font-size: 18px; }
+  .effect-catalog-grid .look-tile-apply { background: var(--bg-secondary); color: var(--text-primary); font-size: 11px; padding: 6px; }
+  .effect-catalog-empty { color: var(--text-secondary); font-size: 11px; margin: 8px 2px; }
+}

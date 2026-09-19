@@ -1,3 +1,4 @@
+import type { ConsumerRequestBody, ConsumerRequestKind, ConsumerRequestResponse } from '../legal/consumerRequestTypes';
 import type { ElevenLabsVoiceSearchParams } from './elevenLabsService';
 import type {
   AuthProvider,
@@ -105,6 +106,14 @@ export const cloudApi = {
   billing: {
     checkout(body: {
       cancelUrl?: string;
+      legalConsent?: {
+        immediatePerformanceRequested: boolean;
+        locale: string;
+        termsAccepted: boolean;
+        termsVersion: string;
+        withdrawalPolicyRead: boolean;
+        withdrawalVersion: string;
+      };
       planId?: BillingPlanId | string;
       successUrl?: string;
     }): Promise<CheckoutResponse> {
@@ -121,6 +130,15 @@ export const cloudApi = {
     },
     summary(): Promise<BillingSummaryResponse> {
       return requestJson<BillingSummaryResponse>('/api/billing/summary', { method: 'GET' });
+    },
+  },
+  legal: {
+    /** Public withdrawal (§355 BGB) and cancellation-button (§312k BGB) forms; no login required. */
+    submitRequest(kind: ConsumerRequestKind, body: ConsumerRequestBody): Promise<ConsumerRequestResponse> {
+      return requestJson<ConsumerRequestResponse>(kind === 'cancellation' ? '/api/legal/cancel' : '/api/legal/withdraw', {
+        body: JSON.stringify(body),
+        method: 'POST',
+      });
     },
   },
   credits: {

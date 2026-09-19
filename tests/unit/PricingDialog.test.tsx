@@ -84,7 +84,28 @@ describe('PricingDialog', () => {
 
     expect(proCard).toHaveClass('pricing-plan-selected');
     expect(within(proCard!).getByText('New')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Upgrade to Pro' })).toBeEnabled();
+    // A paid plan change is a new consumer contract: the button waits for the
+    // three consent statements.
+    const upgradeButton = screen.getByRole('button', { name: 'Upgrade to Pro' });
+    expect(upgradeButton).toBeDisabled();
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes).toHaveLength(3);
+    checkboxes.forEach((checkbox) => fireEvent.click(checkbox));
+    expect(upgradeButton).toBeEnabled();
+
+    fireEvent.click(upgradeButton);
+    const startCheckout = useAccountStore.getState().startCheckout as ReturnType<typeof vi.fn>;
+    expect(startCheckout).toHaveBeenCalledWith('pro', expect.objectContaining({
+      immediatePerformanceRequested: true,
+      termsAccepted: true,
+      withdrawalPolicyRead: true,
+    }));
+  });
+
+  it('offers the statutory cancellation button next to the checkout', () => {
+    render(<PricingDialog onClose={vi.fn()} />);
+    const link = screen.getByRole('link', { name: /Cancel contracts here|Verträge hier kündigen/ });
+    expect(link.getAttribute('href')).toMatch(/\/(cancel|kuendigen)$/);
   });
 
   it('shows the Cloud AI price list below the plans', () => {

@@ -1,5 +1,6 @@
 import { getAudioEffect, hasAudioEffect } from '../../engine/audio/AudioEffectRegistry';
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
+import { ensureColorCorrectionState, getActiveColorVersion } from '../../types/colorCorrection';
 import {
   appendAudioAnalysisPorts,
   hasAnyAudioAnalysisRef,
@@ -10,6 +11,7 @@ import {
 } from './clipGraphProjectionAudio';
 import type { AudioEffectInstance, Effect, TimelineClip, TimelineTrack } from './clipGraphProjectionDomain';
 import { clonePort, edge, inputPort, outputPort } from './clipGraphProjectionGraph';
+import { getClipFlockGraphId } from './clipGraphFlockProjection';
 import {
   AUDIO_LANE_Y,
   AUDIO_ANALYSIS_LANE_Y,
@@ -35,6 +37,7 @@ export function sourceOutputType(clip: TimelineClip): NodeGraphSignalType {
     case 'model':
     case 'gaussian-avatar':
     case 'gaussian-splat':
+    case 'flock':
       return 'geometry';
     case 'audio':
       return 'audio';
@@ -163,6 +166,9 @@ export function createSourceNode(
       } : {}),
     },
     layout: { x: 0, y: MAIN_LANE_Y },
+    domain: 'clip',
+    binding: { kind: 'clip-source' },
+    ...(clip.source?.type === 'flock' ? { subgraphId: getClipFlockGraphId(clip.id) } : {}),
   };
 }
 export function createTransformNode(depth: number, signalType: NodeGraphSignalType, clip: TimelineClip): NodeGraphNode {
@@ -186,6 +192,8 @@ export function createTransformNode(depth: number, signalType: NodeGraphSignalTy
       reversed: clip.reversed === true,
     },
     layout: { x: depth * NODE_SPACING_X, y: MAIN_LANE_Y },
+    domain: 'clip',
+    binding: { kind: 'clip-transform' },
   };
 }
 
@@ -204,13 +212,13 @@ export function createMaskNode(depth: number, signalType: NodeGraphSignalType, c
     outputs: [outputPort('output', signalType, signalType)],
     params: { masks: maskCount },
     layout: { x: depth * NODE_SPACING_X, y: MAIN_LANE_Y },
+    domain: 'clip',
+    binding: { kind: 'clip-mask-stack' },
   };
 }
 
 export function createColorNode(depth: number, signalType: NodeGraphSignalType, clip: TimelineClip): NodeGraphNode {
-  const activeVersion = clip.colorCorrection?.versions.find(
-    (version) => version.id === clip.colorCorrection?.activeVersionId,
-  );
+  const activeVersion = getActiveColorVersion(ensureColorCorrectionState(clip.colorCorrection));
 
   return {
     id: 'color',
@@ -225,6 +233,9 @@ export function createColorNode(depth: number, signalType: NodeGraphSignalType, 
       version: activeVersion?.name ?? 'Active',
     },
     layout: { x: depth * NODE_SPACING_X, y: MAIN_LANE_Y },
+    domain: 'color',
+    binding: { kind: 'clip-color-correction' },
+    subgraphId: activeVersion ? `clip-graph:${clip.id}:color:${activeVersion.id}` : undefined,
   };
 }
 
@@ -250,6 +261,8 @@ export function createEffectNode(
       ...(targetClipId ? { targetClipId } : {}),
     },
     layout: { x: depth * NODE_SPACING_X, y: laneY },
+    domain: 'clip',
+    binding: { kind: 'clip-effect', effectId: effect.id },
   };
 }
 
@@ -278,6 +291,8 @@ export function createAudioEffectInstanceNode(
       ...(targetClipId ? { targetClipId } : {}),
     },
     layout: { x: depth * NODE_SPACING_X, y: laneY },
+    domain: 'audio',
+    binding: { kind: 'clip-audio-effect-instance', effectId: effect.id },
   };
 }
 
@@ -298,6 +313,8 @@ export function createCustomNode(definition: ClipCustomNodeDefinition, depth: nu
       ...(definition.params ?? {}),
     },
     layout: { x: depth * NODE_SPACING_X, y: laneY },
+    domain: 'custom',
+    binding: { kind: 'clip-custom-node', nodeId: definition.id },
   };
 }
 
@@ -327,6 +344,8 @@ export function createOutputNode(
       outPoint: clip.outPoint,
     },
     layout: { x: depth * NODE_SPACING_X, y: MAIN_LANE_Y },
+    domain: 'clip',
+    binding: { kind: 'clip-output' },
   };
 }
 

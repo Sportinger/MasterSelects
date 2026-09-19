@@ -27,6 +27,7 @@ import { projectFileService } from '../../../projectFileService';
 import {
   getFlashBoardBridgeChatModelClass,
   hasFlashBoardBridgeChatHandler,
+  resetFlashBoardBridgeChat,
   sendFlashBoardBridgeChatMessage,
   setFlashBoardBridgeChatModelClass,
 } from '../../../flashboard/FlashBoardChatBridgeControl';
@@ -95,6 +96,8 @@ export async function handleAgentControlRequest(
       return getAgentControlCall(args);
     case 'sendChatMessage':
       return sendAgentControlChatMessage(args);
+    case 'resetChat':
+      return resetAgentControlChat();
     case 'setChatModelClass':
       return setAgentControlChatModelClass(args);
     case 'executeTool':
@@ -102,6 +105,13 @@ export async function handleAgentControlRequest(
     default:
       return { success: false, error: `Unknown agent-control operation: ${operation}` };
   }
+}
+
+async function resetAgentControlChat(): Promise<unknown> {
+  if (!hasFlashBoardBridgeChatHandler()) {
+    queueLandingEntryRequest({ mode: 'chat' });
+  }
+  return resetFlashBoardBridgeChat();
 }
 
 async function setAgentControlChatModelClass(args: Record<string, unknown>): Promise<unknown> {
@@ -125,12 +135,25 @@ async function sendAgentControlChatMessage(args: Record<string, unknown>): Promi
   if (requestedModelClass && !['very-fast', 'fast', 'slow'].includes(requestedModelClass)) {
     return { success: false, error: 'Invalid requestedModelClass.' };
   }
+  const requestedAgentMode = readRequiredString(args.requestedAgentMode);
+  if (requestedAgentMode && requestedAgentMode !== 'logic') {
+    return { success: false, error: 'Invalid requestedAgentMode.' };
+  }
+  const preproductionRunId = readRequiredString(args.preproductionRunId);
+  if (
+    preproductionRunId
+    && !/^seedance-preproduction-[A-Za-z0-9._:-]{8,180}$/.test(preproductionRunId)
+  ) {
+    return { success: false, error: 'Invalid preproductionRunId.' };
+  }
 
   if (!hasFlashBoardBridgeChatHandler()) {
     queueLandingEntryRequest({ mode: 'chat' });
   }
   return sendFlashBoardBridgeChatMessage({
     prompt,
+    ...(preproductionRunId ? { preproductionRunId } : {}),
+    ...(requestedAgentMode ? { requestedAgentMode: 'logic' as const } : {}),
     ...(requestedModelClass
       ? { requestedModelClass: requestedModelClass as 'very-fast' | 'fast' | 'slow' }
       : {}),

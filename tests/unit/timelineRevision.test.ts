@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { useTimelineStore } from '../../src/stores/timeline';
-import { getTimelineRevision } from '../../src/stores/timeline/revisionMiddleware';
+import {
+  getTimelineRevision,
+  restoreTimelineRevisionForHostedAgentResume,
+  updateDerivedTimelineClips,
+} from '../../src/stores/timeline/revisionMiddleware';
 
 const initialTimelineState = useTimelineStore.getState();
 
@@ -56,5 +60,83 @@ describe('timeline revision middleware', () => {
     expect(getTimelineRevision()).toBe(revisionAfterDuration);
     expect(useTimelineStore.getState().clips).toBe(watchedClips);
     expect(useTimelineStore.getState().tracks).toBe(watchedTracks);
+  });
+
+  it('restores an exact reload-verified hosted-agent revision without changing timeline content', () => {
+    const before = useTimelineStore.getState();
+    const restoredRevision = getTimelineRevision() + 100;
+
+    restoreTimelineRevisionForHostedAgentResume(restoredRevision);
+
+    expect(getTimelineRevision()).toBe(restoredRevision);
+    expect(useTimelineStore.getState().clips).toBe(before.clips);
+    expect(useTimelineStore.getState().tracks).toBe(before.tracks);
+  });
+
+  it('keeps source intelligence and waveform projections outside the durable revision', () => {
+    const trackId = useTimelineStore.getState().addTrack('midi');
+    const clipId = useTimelineStore.getState().addMidiClip(trackId, 0, 4);
+    expect(clipId).not.toBeNull();
+    const revisionBeforeProjection = getTimelineRevision();
+
+    updateDerivedTimelineClips(clips => clips.map(clip => clip.id === clipId
+      ? {
+          ...clip,
+          transcript: [{ end: 0.5, start: 0, text: 'Hello' }],
+          transcriptProgress: 100,
+          transcriptStatus: 'ready',
+          waveform: [0, 0.5, 1],
+          waveformGenerating: false,
+          waveformProgress: 100,
+        }
+      : clip));
+
+    expect(getTimelineRevision()).toBe(revisionBeforeProjection);
+    expect(useTimelineStore.getState().clips.find(clip => clip.id === clipId)).toMatchObject({
+      transcriptStatus: 'ready',
+      waveformProgress: 100,
+    });
+  });
+
+  it('rejects durable mutations through the derived projection path', () => {
+    const trackId = useTimelineStore.getState().addTrack('midi');
+    const clipId = useTimelineStore.getState().addMidiClip(trackId, 0, 4);
+    const revisionBeforeProjection = getTimelineRevision();
+
+    expect(() => updateDerivedTimelineClips(clips => clips.map(clip => clip.id === clipId
+      ? { ...clip, startTime: clip.startTime + 1 }
+      : clip))).toThrow('cannot change durable clip field "startTime"');
+    expect(getTimelineRevision()).toBe(revisionBeforeProjection);
+  });
+
+  it('allows the first analysis refs without allowing audio edits through the derived path', () => {
+    const trackId = useTimelineStore.getState().addTrack('midi');
+    const clipId = useTimelineStore.getState().addMidiClip(trackId, 0, 4);
+    useTimelineStore.setState({ clips: useTimelineStore.getState().clips.map(clip => (
+      clip.id === clipId ? { ...clip, audioState: undefined } : clip
+    )) });
+    const revision = getTimelineRevision();
+
+    expect(() => updateDerivedTimelineClips(clips => clips.map(clip => clip.id === clipId
+      ? { ...clip, audioState: { muted: true } } : clip)))
+      .toThrow('cannot change durable clip field "audioState"');
+
+    updateDerivedTimelineClips(clips => clips.map(clip => clip.id === clipId
+      ? { ...clip, audioState: { sourceAnalysisRefs: { waveformPyramidId: 'waveform-1' } } }
+      : clip));
+    expect(useTimelineStore.getState().clips.find(clip => clip.id === clipId)?.audioState)
+      .toEqual({ sourceAnalysisRefs: { waveformPyramidId: 'waveform-1' } });
+    expect(getTimelineRevision()).toBe(revision);
+
+    updateDerivedTimelineClips(clips => clips.map(clip => clip.id === clipId
+      ? { ...clip, audioState: undefined } : clip));
+    expect(getTimelineRevision()).toBe(revision);
+
+    useTimelineStore.setState({ clips: useTimelineStore.getState().clips.map(clip => (
+      clip.id === clipId ? { ...clip, audioState: { muted: true } } : clip
+    )) });
+    expect(() => updateDerivedTimelineClips(clips => clips.map(clip => clip.id === clipId
+      ? { ...clip, audioState: undefined } : clip)))
+      .toThrow('cannot change durable clip field "audioState"');
   });
 });

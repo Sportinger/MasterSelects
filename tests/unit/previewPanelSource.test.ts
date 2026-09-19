@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   getCompositionVideoTracks,
+  getPreviewLayerLabel,
+  getPreviewSourceLabel,
   normalizeVisiblePreviewPanelSource,
   resolvePreviewSourceCompositionId,
 } from '../../src/utils/previewPanelSource';
@@ -54,5 +56,25 @@ describe('previewPanelSource hidden compositions', () => {
       visibleComposition.id,
       [],
     )).toEqual([]);
+  });
+});
+
+describe('previewPanelSource layer labels', () => {
+  it('uses the timeline track name without assigning a second layer number', () => {
+    expect(getPreviewLayerLabel(0, 'Video 3')).toBe('Video 3');
+    expect(getPreviewLayerLabel(1, ' Video 2 ')).toBe('Video 2');
+  });
+
+  it('falls back to the preview layer number for unnamed tracks', () => {
+    expect(getPreviewLayerLabel(2, '   ')).toBe('Layer 3');
+  });
+
+  it('uses the matching timeline track name in the selected source label', () => {
+    expect(getPreviewSourceLabel(
+      { type: 'layer-index', compositionId: visibleComposition.id, layerIndex: 0 },
+      [visibleComposition],
+      null,
+      [],
+    )).toBe('Visible Comp / Video 1');
   });
 });

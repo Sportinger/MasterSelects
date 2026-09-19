@@ -40,8 +40,8 @@ export function MediaDeleteConfirmationDialog({
         aria-modal="true"
         aria-labelledby="media-delete-dialog-title"
       >
-        <div className="media-delete-dialog-kicker">Delete media</div>
-        <h3 id="media-delete-dialog-title">Delete {impact.fileLabel}?</h3>
+        <div className="media-delete-dialog-kicker">Remove media</div>
+        <h3 id="media-delete-dialog-title">Remove {impact.fileLabel} from the project?</h3>
         {impact.clipCount > 0 && (
           <p>
             {impact.clipCount} clip{impact.clipCount === 1 ? '' : 's'} in {impact.compositionCount} composition{impact.compositionCount === 1 ? '' : 's'} will be removed from the timeline.
@@ -54,7 +54,7 @@ export function MediaDeleteConfirmationDialog({
           </div>
         )}
         <div className="media-delete-dialog-warning">
-          This also deletes raw source files, proxies, analyses, transcripts, waveform caches, thumbnails, and related audio-analysis artifacts from the project folder.
+          Source files and files in the project folder stay untouched. MasterSelects never deletes media from disk.
         </div>
         <div className="media-delete-dialog-actions">
           <button
@@ -71,7 +71,7 @@ export function MediaDeleteConfirmationDialog({
             disabled={deleteConfirmationBusy}
             onClick={confirmMediaDelete}
           >
-            {deleteConfirmationBusy ? 'Deleting...' : 'Delete'}
+            {deleteConfirmationBusy ? 'Removing...' : 'Remove from project'}
           </button>
         </div>
       </div>

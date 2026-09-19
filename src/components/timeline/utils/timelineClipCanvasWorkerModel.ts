@@ -101,6 +101,7 @@ export interface TimelineClipCanvasWorkerBuildInput extends TimelineClipCanvasWo
   selectedClipIds: ReadonlySet<string>;
   hoveredClipId?: string | null;
   trackColor: string;
+  selectionBorderColor?: string;
   requestId?: number;
 }
 
@@ -594,6 +595,7 @@ export function buildTimelineClipCanvasWorkerDrawMessage(
       id: clip.id,
       paintPacket: paint.paintPacket,
       bodyFill: clip.bodyFill,
+      missingMedia: clip.missingMedia,
       storyboardCard: createStoryboardCardRenderPayload({
         clip: {
           id: clip.id,
@@ -623,6 +625,7 @@ export function buildTimelineClipCanvasWorkerDrawMessage(
       cssWidth: input.cssWidth,
       dpr: input.dpr,
       trackColor: input.trackColor,
+      selectionBorderColor: input.selectionBorderColor,
     },
     transferables,
     inputClipCount: input.clips.length,

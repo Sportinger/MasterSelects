@@ -9,6 +9,7 @@ import {
 } from '../../stores/mediaStore/slices/fileManageSlice';
 import { useMediaStore, type MediaFile } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
+import { useSettingsStore } from '../../stores/settingsStore';
 import {
   collectTimelineAudioCacheRefsFromClips,
   invalidateTimelineMediaCaches,
@@ -29,12 +30,16 @@ import type {
   ModelSequenceFrame,
 } from '../../types';
 import type { RelinkCandidate, RelinkMatch } from './relink/relinkMatching';
+import { attachLinkedMediaSourceFile } from './linkedMediaSources';
+import { getMediaSourceMismatch, readMediaSourceFingerprint } from './mediaSourceValidation';
 
 export {
+  createRelinkCandidateMapFromFiles,
   createRelinkCandidateMapFromHandles,
   findRelinkMatch,
   getRelinkExpectedFileNames,
   setRelinkHandlePath,
+  setRelinkHandleSource,
 } from './relink/relinkMatching';
 export type {
   RelinkCandidate,
@@ -115,7 +120,9 @@ async function copyCandidateToProject(
   let file = await readCandidateFile(candidate);
   let handle = candidate.handle;
 
-  if (!projectFileService.isProjectOpen()) {
+  const shouldCopyToProject = useSettingsStore.getState().copyMediaToProject
+    || projectFileService.requiresProjectLocalMediaCopies();
+  if (!shouldCopyToProject || !projectFileService.isProjectOpen()) {
     return { file, handle };
   }
 
@@ -257,6 +264,13 @@ async function applySingleRelink(
 
   const targetPath = getSingleRelinkTarget(mediaFile, match.candidate);
   const restored = await copyCandidateToProject(match.candidate, targetPath);
+  const candidateFile = await readCandidateFile(match.candidate);
+  const copiedMismatch = await getMediaSourceMismatch({
+    ...mediaFile,
+    fileSize: candidateFile.size,
+    fileHash: await readMediaSourceFingerprint(candidateFile),
+  }, restored.file);
+  if (copiedMismatch) throw new Error(copiedMismatch);
   const url = createPrimaryMediaObjectUrl(mediaFile.id, restored.file, { revokeExisting: false });
   const sourceReplacementPatch = await createMediaSourceReplacementPatch(restored.file);
 
@@ -270,9 +284,14 @@ async function applySingleRelink(
     ...sourceReplacementPatch,
     file: restored.file,
     url,
-    filePath: match.candidate.absolutePath ?? restored.file.name ?? match.candidate.name,
+    filePath: match.candidate.absolutePath
+      ?? match.candidate.relativePath
+      ?? restored.file.name
+      ?? match.candidate.name,
     absolutePath: match.candidate.absolutePath ?? mediaFile.absolutePath,
     projectPath: restored.projectPath ?? mediaFile.projectPath,
+    sourceRootId: match.candidate.sourceRootId ?? mediaFile.sourceRootId,
+    sourceRelativePath: match.candidate.relativePath ?? mediaFile.sourceRelativePath,
     fileSize: restored.file.size || mediaFile.fileSize,
   });
 
@@ -386,7 +405,7 @@ async function applyModelSequenceRelink(
       name: restored.file.name || candidate.name,
       file: restored.file,
       modelUrl,
-      sourcePath: candidate.absolutePath ?? restored.file.name ?? candidate.name,
+      sourcePath: candidate.absolutePath ?? candidate.relativePath ?? restored.file.name ?? candidate.name,
       absolutePath: candidate.absolutePath ?? existingFrame.absolutePath,
       projectPath: restored.projectPath ?? existingFrame.projectPath,
     };
@@ -413,6 +432,8 @@ async function applyModelSequenceRelink(
     filePath: firstFrame.sourcePath,
     absolutePath: firstFrame.absolutePath,
     projectPath: firstFrame.projectPath,
+    sourceRootId: match.frames[0]?.candidate.sourceRootId ?? mediaFile.sourceRootId,
+    sourceRelativePath: match.frames[0]?.candidate.relativePath ?? mediaFile.sourceRelativePath,
     fileSize: frames.reduce((sum, frame) => sum + (frame.file?.size ?? 0), 0) || mediaFile.fileSize,
   });
 
@@ -529,7 +550,7 @@ async function applyGaussianSplatSequenceRelink(
       name: restored.file.name || candidate.name,
       file: restored.file,
       splatUrl,
-      sourcePath: candidate.absolutePath ?? restored.file.name ?? candidate.name,
+      sourcePath: candidate.absolutePath ?? candidate.relativePath ?? restored.file.name ?? candidate.name,
       absolutePath: candidate.absolutePath ?? existingFrame.absolutePath,
       projectPath: restored.projectPath ?? existingFrame.projectPath,
       fileSize: restored.file.size || existingFrame.fileSize,
@@ -559,6 +580,8 @@ async function applyGaussianSplatSequenceRelink(
     filePath: firstFrame.sourcePath,
     absolutePath: firstFrame.absolutePath,
     projectPath: firstFrame.projectPath,
+    sourceRootId: match.frames[0]?.candidate.sourceRootId ?? mediaFile.sourceRootId,
+    sourceRelativePath: match.frames[0]?.candidate.relativePath ?? mediaFile.sourceRelativePath,
     fileSize: totalFileSize || mediaFile.fileSize,
     splatFrameCount: gaussianSplatSequence.frameCount,
   });
@@ -579,8 +602,24 @@ export async function applyRelinkMatch(
   const mediaFile = useMediaStore.getState().files.find((file) => file.id === mediaFileId);
   if (!mediaFile) return false;
 
+  if (match.kind === 'linked-source') {
+    const file = await readCandidateFile(match.candidate);
+    return attachLinkedMediaSourceFile(
+      mediaFile.id,
+      match.sourceId,
+      file,
+      match.candidate.handle,
+    );
+  }
   if (match.kind === 'single') {
-    return applySingleRelink(mediaFile, match, options);
+    const candidateFile = await readCandidateFile(match.candidate);
+    const mismatch = await getMediaSourceMismatch(mediaFile, candidateFile, 'relink');
+    if (mismatch) throw new Error(mismatch);
+    // Validate the same bytes that will be attached, before copies/cache invalidation.
+    return applySingleRelink(mediaFile, {
+      ...match,
+      candidate: { ...match.candidate, file: candidateFile },
+    }, options);
   }
   if (match.kind === 'model-sequence') {
     return applyModelSequenceRelink(mediaFile, match, options);

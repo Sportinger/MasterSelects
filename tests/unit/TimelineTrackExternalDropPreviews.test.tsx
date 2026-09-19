@@ -76,4 +76,35 @@ describe('TimelineTrackExternalDropPreviews', () => {
     );
     expect(container.querySelector('.timeline-clip-preview.video')).not.toBeNull();
   });
+
+  it('renders an animated source-replacement target only on the hovered clip track', () => {
+    const drag = preview({
+      replaceClipId: 'clip-to-replace',
+      label: 'Replacement.mov',
+      thumbnailUrl: 'blob:replacement',
+      duration: 8,
+    });
+    const { container, rerender } = render(
+      <TimelineTrackExternalDropPreviews
+        externalDrag={drag}
+        getTrackRangeShellRect={getTrackRangeShellRect}
+        trackId="video-1"
+      />,
+    );
+
+    const target = container.querySelector('[data-replace-clip-id="clip-to-replace"]');
+    expect(target).toHaveClass('timeline-clip-replace-preview');
+    expect(target).toHaveTextContent('Replace source');
+    expect(target).toHaveTextContent('Replacement.mov');
+    expect(target).toHaveTextContent('Effects + keyframes stay');
+
+    rerender(
+      <TimelineTrackExternalDropPreviews
+        externalDrag={drag}
+        getTrackRangeShellRect={getTrackRangeShellRect}
+        trackId="video-2"
+      />,
+    );
+    expect(container.querySelector('.timeline-clip-replace-preview')).toBeNull();
+  });
 });

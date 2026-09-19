@@ -2,8 +2,8 @@
 
 # Credit Claims
 
-Cloudflare-backed reward links can be created from the admin dashboard or the
-operator script. The globally reserved website-gift backend is available, but
+Cloudflare-backed reward links are created with the operator script. The
+globally reserved website-gift backend is available, but
 its in-app promotional banner is not mounted.
 
 ---
@@ -16,7 +16,7 @@ one-hour chance to claim 3,000 credits.
 
 ---
 
-## Admin Flow
+## Operator Flow
 
 Create a locked claim from the command line:
 
@@ -25,10 +25,6 @@ npm run credits:create-claim -- --amount 3000 --email schickdenkram@gmail.com --
 ```
 
 The script requires `CLOUDFLARE_API_TOKEN` unless `--dry-run` is used. It talks directly to the Cloudflare D1 API and prints a public `/credits/claim?code=...` URL.
-
-The secured `/admin` dashboard also creates locked or unlocked links, lists
-their status, copies available links, and can rotate an available legacy link
-whose token was not retained by the dashboard.
 
 Useful options:
 
@@ -100,7 +96,7 @@ Migrations `0007_credit_claims.sql`, `0009_free_credit_offers.sql`, `0010_free_c
 
 | Table | Purpose |
 |---|---|
-| `credit_claims` | One row per generated reward link or website offer, with token hash, optional gift-code hash, claim fields, and encrypted admin-created token material |
+| `credit_claims` | One row per generated reward link or website offer, with token hash, optional gift-code hash, claim fields, and any legacy encrypted token material |
 | `credit_claim_campaigns` | Independent armed/disarmed and active-claim state for the automatic website offer |
 
 Ledger entries use:
@@ -120,11 +116,7 @@ Ledger entries use:
 - `functions/api/credits/free-offer.ts`
 - `functions/lib/creditClaims.ts`
 - `functions/lib/websiteFreeCreditOffer.ts`
-- `functions/lib/adminCreditClaims.ts`
-- `functions/api/admin/claims.ts`
-- `functions/api/admin/claims/[id]/rotate.ts`
 - `src/creditClaims/CreditClaimPage.tsx`
 - `src/components/common/AccountDialog.tsx`
 - `src/components/common/FreeOfferNotice.tsx`
-- `src/admin/AdminPage.tsx`
 - `migrations/0007_credit_claims.sql`

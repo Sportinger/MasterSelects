@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { captionToolDefinitions } from '../../src/services/aiTools/definitions/captions';
 import {
@@ -7,6 +7,7 @@ import {
   handleUpdateCaptionProperties,
 } from '../../src/services/aiTools/handlers/captions';
 import { useTimelineStore } from '../../src/stores/timeline';
+import { textRenderer } from '../../src/services/textRenderer';
 import type { TimelineClip, TimelineTrack } from '../../src/types/timeline';
 
 const initialTimelineState = useTimelineStore.getState();
@@ -165,5 +166,48 @@ describe('AI caption authoring tools', () => {
       },
     });
     expect((read.data as { availableSources: unknown[] }).availableSources).toHaveLength(1);
+  });
+
+  it('grows the caption text area when the visible line limit increases', async () => {
+    const created = await handleCreateCaptionClip(
+      { sourceClipId: 'source-video' },
+      useTimelineStore.getState(),
+    );
+    const clipId = (created.data as { clipId: string }).clipId;
+    const before = useTimelineStore.getState().clips.find((clip) => clip.id === clipId);
+    const beforeHeight = before?.textProperties?.boxHeight ?? 0;
+
+    useTimelineStore.getState().updateCaptionProperties(clipId, { maxLines: 3 });
+
+    const after = useTimelineStore.getState().clips.find((clip) => clip.id === clipId);
+    expect(after?.captionProperties?.maxLines).toBe(3);
+    expect(after?.textProperties?.boxHeight).toBeGreaterThan(beforeHeight);
+  });
+
+  it('keeps the current transcript frame visible while typography changes', async () => {
+    const created = await handleCreateCaptionClip(
+      { sourceClipId: 'source-video' },
+      useTimelineStore.getState(),
+    );
+    const clipId = (created.data as { clipId: string }).clipId;
+    useTimelineStore.setState({ playheadPosition: 0.6 });
+    vi.mocked(textRenderer.render).mockClear();
+
+    useTimelineStore.getState().updateTextProperties(clipId, {
+      fontFamily: 'Manrope',
+      fontWeight: 600,
+    });
+    await Promise.resolve();
+
+    expect(textRenderer.render).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        fontFamily: 'Manrope',
+        fontWeight: 600,
+        text: 'Hello world',
+      }),
+      expect.any(HTMLCanvasElement),
+    );
+    expect(useTimelineStore.getState().clips.find(clip => clip.id === clipId)?.name)
+      .toBe('Captions');
   });
 });

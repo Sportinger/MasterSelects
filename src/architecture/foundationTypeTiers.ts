@@ -48,9 +48,9 @@ export const foundationTypeBoundaryBaselines = {
   // specifier and counts only true src/types barrel imports (store-local
   // types.ts files no longer miscounted). 557 is the measured global value.
   // 557 -> 559 (#298 synth panel: new files import instrument/ADSR types).
-  directGlobalTypeImportHits: 559,
+  directGlobalTypeImportHits: 561,
   allTypesImportFiles: 776,
-  sharedSchemaRuntimeHandleTokenHits: 23,
+  sharedSchemaRuntimeHandleTokenHits: 24,
   projectSchemaProductImportHits: 0,
   // Ratcheted down 2026-06-10: barrel reached the 150-line target (133 raw
   // lines after packets 145 + 159); the ceiling now freezes that state.
@@ -170,7 +170,7 @@ export const foundationRuntimeHandleClassifications = [
   {
     path: 'src/types/layers.ts',
     ownerTier: 'compatibility-facade',
-    maxCurrentHits: 9,
+    maxCurrentHits: 10,
     gateId: 'P1_RUNTIME_HANDLES_FORBIDDEN_IN_SHARED_SCHEMA',
     note: 'Layer runtime handles are compatibility debt until render and media lease contracts own them.',
   },

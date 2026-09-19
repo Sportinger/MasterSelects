@@ -13,6 +13,7 @@ import { evaluateCompositionClipEffects, evaluateCompositionClipMasks } from '..
 import { resolveTransitionRecipeBlendMode } from '../timeline/transitionRecipeBlendWindows';
 import { evaluateParentedClipTransform } from './parentTransformEvaluation';
 import type { FrameContext } from './types';
+import type { TerrainProjectionDescriptor } from '../../types/terrainAttachment';
 
 export {
   getNestedClipSourceTime,
@@ -70,7 +71,7 @@ export function buildNestedLayerBase(
       nestedClip.startTime + nestedClipLocalTime,
       (transform.blendMode || 'normal') as BlendMode,
     ),
-    effects: mappedAnimation?.effects ?? evaluateCompositionClipEffects(nestedClip.effects, keyframes, nestedClipLocalTime),
+    effects: mappedAnimation?.effects ?? evaluateCompositionClipEffects(nestedClip.effects, keyframes, nestedClipLocalTime, nestedClip),
     colorCorrection: compileRuntimeColorGrade(nestedClip.colorCorrection),
     position: {
       x: transform.position?.x || 0,
@@ -116,9 +117,18 @@ export function buildNestedCompositionSourceLayer(
     sceneTracks: nestedClip.nestedTracks,
   };
 
+  const attachment = nestedClip.terrainAttachment;
+  const targetClip = attachment
+    ? ctx.clips.find(clip => clip.id === attachment.targetVideoClipId)
+    : undefined;
+  const targetTrack = targetClip?.planarTracks?.find(track => track.id === attachment?.trackId);
+  const terrainProjection: TerrainProjectionDescriptor | undefined = attachment && targetTrack?.terrain
+    ? { attachment, terrain: targetTrack.terrain }
+    : undefined;
   return {
     ...baseLayer,
     source: { type: 'image', mediaTime: nestedClipTime, nestedComposition: nestedCompData },
+    ...(terrainProjection ? { terrainProjection } : {}),
   };
 }
 

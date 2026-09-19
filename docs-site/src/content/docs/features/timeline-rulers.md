@@ -13,15 +13,19 @@ editable TempoMap. Issue: #257.
 
 The piano-roll editor builds its own **Bars + Time ruler and tempo-synced grid**
 on this foundation. It reads the **same `TempoMap`** (`selectTempoMap`) and calls
-the **same pure tick generators** (`iterateBarBeatLines`, `createBarsLaneTicks`,
-`createLinearLaneTicks`, plus the shared `formatTimelineClock`), so bar numbers
-and timecodes are **identical to the timeline** at the same musical positions. It
+the **same pure generators** (`createBarsGridPlan` for the bar/beat/sub lines,
+`createBarsLaneTicks` and `createLinearLaneTicks` for the ruler, plus the shared
+`formatTimelineClock`), so bar numbers, timecodes and grid divisions are
+**identical to the timeline** at the same musical positions, and both surfaces
+thin their lines at the same zoom thresholds. It
 does **not** reuse `TimelineRuler.tsx` (coupled to cache ranges / video-bake
 regions / active-lane selection and has no left keyboard column) — only the
 generators. The adapter (`components/pianoRoll/pianoRollGrid.ts`) bridges the
 piano roll's clip-local x-axis to absolute musical time. The piano-roll ruler
 uses an independent horizontal zoom, so only spacing differs; the numbers match
-by construction. See `docs/completed/features/MIDI-Tracks-Plan.md`.
+by construction. Its Bars lane also draws a third, faintest tick tier at the
+active grid division, so the ruler shows what the grid below snaps to. See
+`docs/completed/features/MIDI-Tracks-Plan.md`.
 
 ---
 
@@ -54,6 +58,15 @@ Cubase Ruler Tracks; Ardour "Representing Time"; Pro Tools tempo maps.
   editable flags through `components/TempoRulerLane.tsx`. Its context menu adds,
   edits, ramps or deletes tempo/time-signature changes; non-project flags drag
   to bar positions (Alt allows free placement).
+- Annotation bars for the active composition render above the lanes
+  (`components/RulerAnnotationBars.tsx`, state and interactions in
+  `hooks/useRulerAnnotations.ts`, overlays in
+  `components/RulerAnnotationPortals.tsx`): drag a bar to move it, drag its
+  handles to trim (frame-quantized), double-click or Enter/Space to open the
+  reader popover, arrow keys nudge the focused bar or handle by one frame
+  (Shift: ten). The ruler context menu adds **Add annotation**, and on a bar
+  **Link to clip** / **Detach from clip**. The **Annotation Bars** entry in the
+  timeline view menu hides them. See [Annotations](/features/annotations/).
 - `src/components/timeline/utils/timelineGrid.ts` keeps the legacy zoom-driven
   `createTimelineGridPlan()` for the non-musical body grid, while fixed-format
   lane tick generators are separate. `src/timeline/tempo/barsGrid.ts` supplies

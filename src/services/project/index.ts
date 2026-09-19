@@ -8,6 +8,7 @@ export { projectFileService } from './ProjectFileService';
 export type {
   ProjectFile,
   ProjectSettings,
+  ProjectMediaSourceRoot,
   ProjectMediaFile,
   ProjectComposition,
   ProjectTrack,

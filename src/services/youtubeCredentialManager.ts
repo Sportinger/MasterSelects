@@ -1,3 +1,5 @@
+import { openDatabase } from './projectDb/openDatabase';
+import { requestResult, transactionSuccess } from './projectDb/transactions';
 import { Logger } from './logger';
 
 const log = Logger.create('YouTubeCredentialManager');
@@ -68,67 +70,84 @@ async function decrypt(value: EncryptedCredential, key: CryptoKey): Promise<stri
   return new TextDecoder().decode(decrypted);
 }
 
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+async function openDB(): Promise<IDBDatabase> {
+  const open = () => openDatabase(DB_NAME, DB_VERSION, (db, _event, transaction) => {
+    const store = db.objectStoreNames.contains(STORE_NAME)
+      ? transaction.objectStore(STORE_NAME)
+      : db.createObjectStore(STORE_NAME, { keyPath: 'id' });
 
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      const store = db.objectStoreNames.contains(STORE_NAME)
-        ? request.transaction?.objectStore(STORE_NAME)
-        : db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-
-      for (const id of RETIRED_AI_CREDENTIAL_IDS) {
-        store?.delete(id);
-      }
-    };
+    for (const id of RETIRED_AI_CREDENTIAL_IDS) store.delete(id);
   });
+  try {
+    return await open();
+  } catch (error) {
+    // A transient WebKit open abort must not disable credentials for this load.
+    // Retry only before obtaining a connection; never replay credential writes.
+    if (typeof error !== 'object' || error === null
+      || !('name' in error) || error.name !== 'AbortError') throw error;
+    return open();
+  }
+}
+
+async function withCredentialRequest<T>(
+  mode: IDBTransactionMode,
+  operation: (store: IDBObjectStore) => IDBRequest<T>,
+): Promise<T> {
+  const db = await openDB();
+  try {
+    const transaction = db.transaction(STORE_NAME, mode);
+    const request = operation(transaction.objectStore(STORE_NAME));
+    const [result] = await Promise.all([requestResult(request), transactionSuccess(transaction)]);
+    return result;
+  } finally {
+    db.close();
+  }
 }
 
 async function dbGet<T>(id: string): Promise<T | null> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const request = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(id);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result?.value ?? null);
-  });
+  const record = await withCredentialRequest<{ value: T } | undefined>('readonly', store => store.get(id));
+  return record?.value ?? null;
 }
 
 async function dbSet(id: string, value: unknown): Promise<void> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const request = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).put({ id, value });
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
-  });
+  await withCredentialRequest('readwrite', store => store.put({ id, value }));
 }
 
 async function dbDelete(id: string): Promise<void> {
+  await withCredentialRequest('readwrite', store => store.delete(id));
+}
+
+async function getOrCreateEncryptionKey(candidate: ArrayBuffer): Promise<ArrayBuffer> {
   const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const request = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).delete(id);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
-  });
+  try {
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    let selected = candidate;
+    const request = store.get(ENCRYPTION_KEY_ID);
+    const completed = transactionSuccess(transaction);
+    request.onsuccess = () => {
+      // One readwrite transaction also serializes first-use creation across tabs.
+      if (request.result?.value) selected = request.result.value;
+      else {
+        try { store.put({ id: ENCRYPTION_KEY_ID, value: candidate }); }
+        catch { transaction.abort(); }
+      }
+    };
+    await completed;
+    return selected;
+  } finally {
+    db.close();
+  }
 }
 
 class YouTubeCredentialManager {
-  private encryptionKey: CryptoKey | null = null;
-
   private async getEncryptionKey(): Promise<CryptoKey> {
-    if (this.encryptionKey) return this.encryptionKey;
-
+    // Read durable state on each operation; a failed write must not leave a
+    // cached key that encrypts later credentials without a matching stored key.
     const stored = await dbGet<ArrayBuffer>(ENCRYPTION_KEY_ID);
-    if (stored) {
-      this.encryptionKey = await importKey(stored);
-      return this.encryptionKey;
-    }
-
-    this.encryptionKey = await generateEncryptionKey();
-    await dbSet(ENCRYPTION_KEY_ID, await exportKey(this.encryptionKey));
-    return this.encryptionKey;
+    if (stored) return importKey(stored);
+    const candidate = await exportKey(await generateEncryptionKey());
+    return importKey(await getOrCreateEncryptionKey(candidate));
   }
 
   async store(apiKey: string): Promise<void> {

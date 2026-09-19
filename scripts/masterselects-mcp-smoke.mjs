@@ -46,6 +46,13 @@ const bridgeServer = createServer((request, response) => {
     }));
     return;
   }
+  if (request.method === 'POST' && url.pathname === '/api/agent-control/chat/new') {
+    response.end(JSON.stringify({
+      success: true,
+      data: { success: true },
+    }));
+    return;
+  }
   if (request.method === 'POST' && url.pathname === '/api/agent-control/chat/model-class') {
     response.end(JSON.stringify({
       success: true,
@@ -92,6 +99,7 @@ try {
     'bridge_replay_tool_call',
     'bridge_call_tool',
     'bridge_send_chat_message',
+    'bridge_new_chat',
     'bridge_set_chat_model_class',
     fixtureToolName,
   ]) {
@@ -123,6 +131,12 @@ try {
     arguments: { prompt: 'Smoke-test prompt.' },
   });
   assertSuccessfulTextResult(chat, 'bridge_send_chat_message');
+
+  const newChat = await client.callTool({
+    name: 'bridge_new_chat',
+    arguments: {},
+  });
+  assertSuccessfulTextResult(newChat, 'bridge_new_chat');
 
   const modelClass = await client.callTool({
     name: 'bridge_set_chat_model_class',

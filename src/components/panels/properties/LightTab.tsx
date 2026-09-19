@@ -79,7 +79,8 @@ async function averageImageColor(src: string): Promise<string | null> {
 
 export function LightTab({ clipId }: LightTabProps) {
   const clip = useTimelineStore((state) => state.clips.find((c) => c.id === clipId));
-  const imageFiles = useMediaStore((state) => state.files.filter((file) => file.type === 'image' && !!file.url));
+  const files = useMediaStore((state) => state.files);
+  const imageFiles = useMemo(() => files.filter(file => file.type === 'image' && !!file.url), [files]);
   const playheadPosition = useTimelineStore((state) => state.playheadPosition);
   const getInterpolatedLightSettings = useTimelineStore((state) => state.getInterpolatedLightSettings);
   const setPropertyValue = useTimelineStore((state) => state.setPropertyValue);
@@ -188,7 +189,9 @@ export function LightTab({ clipId }: LightTabProps) {
   if (!clip || clip.source?.type !== 'light') return null;
 
   return (
-    <div className="gaussian-splat-tab" style={{ padding: '8px 10px', fontSize: '11px' }}>
+    <div className="gaussian-splat-tab" style={{ padding: '8px 10px', fontSize: '11px' }} onPointerUp={event => {
+      if (event.target instanceof Element) event.target.closest<HTMLElement>('button, select, input')?.blur();
+    }}>
       <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
         <span style={{ color: '#aaa' }}>{clip.name}</span>
         <span style={{
@@ -291,6 +294,7 @@ export function LightTab({ clipId }: LightTabProps) {
         <label style={{ width: '86px', color: '#999', flexShrink: 0 }}>Shadows</label>
         <input
           type="checkbox"
+          aria-label="Cast shadows"
           checked={settings.castsShadows}
           onChange={(event) => updateStaticSetting('castsShadows', event.target.checked)}
         />

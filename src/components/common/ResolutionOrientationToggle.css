@@ -1,0 +1,123 @@
+/* Shared landscape/portrait switch for resolution controls. */
+.resolution-orientation-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  overflow: visible;
+}
+
+.resolution-orientation-toggle:hover,
+.resolution-orientation-toggle:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border-color));
+  color: var(--accent);
+  outline: none;
+}
+
+.resolution-orientation-toggle:disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.resolution-orientation-toggle:disabled:hover {
+  border-color: transparent;
+}
+
+.resolution-orientation-icon {
+  width: 14px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  transition: transform 500ms ease-in-out;
+}
+
+.resolution-orientation-icon.is-portrait {
+  width: 9px;
+  height: 14px;
+}
+
+.resolution-orientation-preview {
+  position: absolute;
+  inset: -2px;
+  width: 26px;
+  height: 26px;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.resolution-orientation-icon.is-portrait + .resolution-orientation-preview {
+  transform: scaleX(-1);
+}
+
+.resolution-orientation-preview path {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.resolution-orientation-preview-arc {
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  stroke-dashoffset: 28;
+  opacity: 0;
+  transition: stroke-dashoffset 500ms ease-in-out, opacity 500ms ease-in-out;
+}
+
+.resolution-orientation-preview-head {
+  stroke-width: 1.25;
+  opacity: 0;
+  transition: opacity 150ms ease-in-out;
+}
+
+.resolution-orientation-toggle:not(.is-preview-locked):hover .resolution-orientation-preview-arc,
+.resolution-orientation-toggle:not(.is-preview-locked):focus-visible .resolution-orientation-preview-arc {
+  opacity: 0.82;
+  stroke-dashoffset: 0;
+}
+
+.resolution-orientation-toggle:not(.is-preview-locked):hover .resolution-orientation-preview-head,
+.resolution-orientation-toggle:not(.is-preview-locked):focus-visible .resolution-orientation-preview-head {
+  opacity: 1;
+  transition-delay: 350ms;
+}
+
+.resolution-orientation-toggle:not(.is-preview-locked):hover .resolution-orientation-icon,
+.resolution-orientation-toggle:not(.is-preview-locked):focus-visible .resolution-orientation-icon {
+  transform: rotate(90deg);
+}
+
+.resolution-orientation-toggle:not(.is-preview-locked):hover .resolution-orientation-icon.is-portrait,
+.resolution-orientation-toggle:not(.is-preview-locked):focus-visible .resolution-orientation-icon.is-portrait {
+  transform: rotate(-90deg);
+}
+
+.resolution-orientation-toggle.is-preview-locked .resolution-orientation-icon {
+  animation: resolution-orientation-confirm 280ms ease-out;
+}
+
+@keyframes resolution-orientation-confirm {
+  0% { opacity: 0.55; transform: scale(0.82); }
+  65% { opacity: 1; transform: scale(1.12); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .resolution-orientation-icon,
+  .resolution-orientation-preview-arc,
+  .resolution-orientation-preview-head {
+    transition: none;
+  }
+
+  .resolution-orientation-toggle.is-preview-locked .resolution-orientation-icon {
+    animation: none;
+  }
+}

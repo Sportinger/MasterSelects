@@ -11,6 +11,7 @@ export interface UseClipDragProps {
   clipMap: Map<string, TimelineClip>;
   selectedClipIds: Set<string>;
   scrollX: number;
+  frameRate: number;
   snappingEnabled: boolean;
   isExporting: boolean;
   activeTimelineToolId: TimelineToolId;

@@ -1,6 +1,6 @@
 // Detailed stats overlay component — extracted from Preview.tsx
 
-import { useMemo } from 'react';
+import { useId, useMemo, useState, type MouseEvent } from 'react';
 import type { EngineStats } from '../../types';
 import { useEngineStore } from '../../stores/engineStore';
 import { useMediaStore } from '../../stores/mediaStore';
@@ -9,13 +9,16 @@ interface StatsOverlayProps {
   stats: EngineStats;
   resolution: { width: number; height: number };
   expanded: boolean;
-  onToggle: () => void;
+  onToggle?: () => void;
 }
 
 type EffectiveFpsCandidate = {
   label: string;
   value: number;
 };
+
+const EFFECTIVE_FPS_WARMUP_MAX_MS = 2_500;
+const EFFECTIVE_FPS_MIN_CADENCE_SAMPLES = 3;
 
 function normalizeFps(value: number | undefined): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -39,7 +42,23 @@ function resolveVisualTargetFps(stats: EngineStats, compositionFrameRate: number
     : Math.max(1, Math.min(renderTargetFps, compFps));
 }
 
-function getEffectiveFps(stats: EngineStats, visualTargetFps: number): {
+function isEffectiveFpsWarming(stats: EngineStats): boolean {
+  if (stats.isIdle || stats.playbackRunStartedAt === undefined) return false;
+  const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  if (now - stats.playbackRunStartedAt >= EFFECTIVE_FPS_WARMUP_MAX_MS) return false;
+
+  const playback = stats.playback;
+  const cadence = playback?.recentCadence ?? playback;
+  return (normalizeFps(stats.fps) ?? 0) === 0
+    || Boolean(cadence && cadence.previewFrames > 0
+      && cadence.previewFrames < EFFECTIVE_FPS_MIN_CADENCE_SAMPLES)
+    || Boolean(cadence && cadence.previewUpdates > 0
+      && cadence.previewUpdates < EFFECTIVE_FPS_MIN_CADENCE_SAMPLES)
+    || Boolean(cadence && cadence.frameEvents > 0
+      && cadence.frameEvents < EFFECTIVE_FPS_MIN_CADENCE_SAMPLES);
+}
+
+function getEffectiveFps(stats: EngineStats, visualTargetFps: number, warming: boolean): {
   value: number;
   weakestLink: string;
   candidates: EffectiveFpsCandidate[];
@@ -58,21 +77,26 @@ function getEffectiveFps(stats: EngineStats, visualTargetFps: number): {
   }
 
   const playback = stats.playback;
-  if (playback && playback.previewFrames > 0) {
-    const previewRenderFps = normalizeFps(playback.previewRenderFps);
-    const previewUpdateFps = normalizeFps(playback.previewUpdateFps);
+  const cadence = playback?.recentCadence ?? playback;
+  const cadenceLabel = playback?.recentCadence ? ' 1s' : '';
+  if (cadence && cadence.previewFrames >= (warming ? EFFECTIVE_FPS_MIN_CADENCE_SAMPLES : 1)) {
+    const previewRenderFps = normalizeFps(cadence.previewRenderFps);
+    const previewUpdateFps = normalizeFps(cadence.previewUpdateFps);
     if (previewRenderFps !== null) {
-      candidates.push({ label: 'Preview render', value: previewRenderFps });
+      candidates.push({ label: `Preview render${cadenceLabel}`, value: previewRenderFps });
     }
-    if (previewUpdateFps !== null) {
-      candidates.push({ label: 'Preview update', value: previewUpdateFps });
+    if (
+      previewUpdateFps !== null
+      && cadence.previewUpdates >= (warming ? EFFECTIVE_FPS_MIN_CADENCE_SAMPLES : 1)
+    ) {
+      candidates.push({ label: `Preview update${cadenceLabel}`, value: previewUpdateFps });
     }
   }
 
-  if (playback && playback.frameEvents > 0) {
-    const decoderFps = normalizeFps(playback.cadenceFps);
+  if (cadence && cadence.frameEvents >= (warming ? EFFECTIVE_FPS_MIN_CADENCE_SAMPLES : 1)) {
+    const decoderFps = normalizeFps(cadence.cadenceFps);
     if (decoderFps !== null) {
-      candidates.push({ label: 'Decoder', value: decoderFps });
+      candidates.push({ label: `Decoder${cadenceLabel}`, value: decoderFps });
     }
   }
 
@@ -88,6 +112,8 @@ function getEffectiveFps(stats: EngineStats, visualTargetFps: number): {
 }
 
 export function StatsOverlay({ stats, resolution, expanded, onToggle }: StatsOverlayProps) {
+  const tooltipId = useId();
+  const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const gpuInfo = useEngineStore(s => s.gpuInfo);
   const compositionFrameRate = useMediaStore((s) => {
     const activeCompositionId = s.activeCompositionId;
@@ -99,8 +125,14 @@ export function StatsOverlay({ stats, resolution, expanded, onToggle }: StatsOve
     () => resolveVisualTargetFps(stats, compositionFrameRate),
     [compositionFrameRate, stats],
   );
-  const effectiveFps = useMemo(() => getEffectiveFps(stats, visualTargetFps), [stats, visualTargetFps]);
-  const effectiveFpsColor = getFpsColor(effectiveFps.value, visualTargetFps);
+  const effectiveFpsWarming = isEffectiveFpsWarming(stats);
+  const effectiveFps = useMemo(
+    () => getEffectiveFps(stats, visualTargetFps, effectiveFpsWarming),
+    [effectiveFpsWarming, stats, visualTargetFps],
+  );
+  const effectiveFpsColor = stats.isIdle || effectiveFpsWarming
+    ? '#888'
+    : getFpsColor(effectiveFps.value, visualTargetFps);
   const fpsColor = getFpsColor(stats.fps, stats.targetFps);
   const splatFpsColor =
     splatVisualFps === undefined
@@ -121,10 +153,6 @@ export function StatsOverlay({ stats, resolution, expanded, onToggle }: StatsOve
           ? '#fa4'
           : '#888';
   const playbackStatusColor = stats.playback?.status === 'bad' ? '#f44' : stats.playback?.status === 'warn' ? '#ff4' : '#4f4';
-  // Render time color: green < 10ms, yellow < 16.67ms (60fps target), red >= 16.67ms
-  const renderTime = stats.timing.total;
-  const renderTimeColor = renderTime < 10 ? '#4f4' : renderTime < 16.67 ? '#ff4' : '#f44';
-
   // Determine bottleneck
   const bottleneck = useMemo(() => {
     const { timing } = stats;
@@ -156,69 +184,42 @@ export function StatsOverlay({ stats, resolution, expanded, onToggle }: StatsOve
     return sceneKey.split(/[\\/]/).pop() ?? sceneKey;
   };
 
+  const updateTooltipPosition = (event: MouseEvent<HTMLButtonElement>) => {
+    setTooltipPosition({ x: event.clientX - 12, y: event.clientY - 12 });
+  };
+
   if (!expanded) {
     return (
-      <div
+      <button
+        type="button"
         className="preview-stats preview-stats-compact"
         onClick={onToggle}
-        title="Click for detailed stats"
+        onMouseEnter={updateTooltipPosition}
+        onMouseMove={updateTooltipPosition}
+        onMouseLeave={() => setTooltipPosition(null)}
+        aria-label="Open Stats"
+        aria-describedby={tooltipPosition ? tooltipId : undefined}
       >
-        {!stats.isIdle && (
-          <>
-            <span style={{ color: effectiveFpsColor, fontWeight: 'bold' }}>{effectiveFps.value}</span>
-            <span style={{ opacity: 0.7 }}> Eff</span>
-            <span
-              style={{ color: fpsColor, marginLeft: 6, fontSize: 10 }}
-              title={`Render FPS. Weakest link: ${effectiveFps.weakestLink}`}
-            >
-              R {stats.fps}
-            </span>
-          </>
-        )}
-        {stats.isIdle && (
-          <span style={{ color: '#888', fontWeight: 'bold' }}>IDLE</span>
-        )}
-        {!stats.isIdle && renderTime > 0 && (
-          <span style={{ color: renderTimeColor, marginLeft: 6, fontSize: 10 }}>
-            {renderTime.toFixed(1)}ms
-          </span>
-        )}
-        {stats.isIdle && (
-          <span style={{ color: '#888', marginLeft: 6, fontSize: 9 }}>[IDLE]</span>
-        )}
-        {stats.decoder !== 'none' && !stats.isIdle && (
-          <span style={{ color: decoderColor, marginLeft: 6, fontSize: 9 }}>[{stats.decoder === 'WebCodecs' ? 'WC' : stats.decoder === 'WebCodecs+HTMLVideo' ? 'WC+HTML' : stats.decoder === 'HTMLVideo(VF)' ? 'VF' : stats.decoder === 'NativeHelper' ? 'NH' : stats.decoder === 'ParallelDecode' ? 'PD' : 'HTML'}]</span>
-        )}
-        {splatSequence && !stats.isIdle && (
+        <span
+          className={`preview-stats-dot${effectiveFpsColor === '#f44' ? ' preview-stats-dot-critical' : ''}`}
+          aria-hidden="true"
+        />
+        {tooltipPosition && (
           <span
-            style={{ color: splatFpsColor, marginLeft: 6, fontSize: 10, fontWeight: 'bold' }}
-            title={`Splat visible frame updates. Mode: ${splatSequence.mode}`}
+            id={tooltipId}
+            role="tooltip"
+            className="preview-stats-tooltip"
+            style={{ left: tooltipPosition.x, top: tooltipPosition.y }}
           >
-            Splat {splatVisualFps} FPS
+            EFF {effectiveFps.value}
           </span>
         )}
-        {stats.drops.lastSecond > 0 && (
-          <span style={{ color: '#f44', marginLeft: 6 }}>▼{stats.drops.lastSecond}</span>
-        )}
-        {stats.audio?.status && stats.audio.status !== 'silent' && (
-          <span style={{
-            marginLeft: 6,
-            color: stats.audio.status === 'sync' ? '#4f4'
-              : stats.audio.status === 'drift' ? '#ff4'
-              : '#f44'
-          }}>
-            🔊{stats.audio.status === 'drift' ? `(${stats.audio.drift}ms)` : ''}
-          </span>
-        )}
-        <span style={{ opacity: 0.5, marginLeft: 8 }}>
-          {resolution.width}×{resolution.height}
-        </span>
-      </div>
+      </button>
     );
   }
 
   return (
-    <div className="preview-stats preview-stats-expanded" onClick={onToggle}>
+    <div className="preview-stats preview-stats-expanded">
       <div className="stats-header">
         <span style={{ color: effectiveFpsColor, fontWeight: 'bold', fontSize: 18 }}>{effectiveFps.value}</span>
         <span style={{ opacity: 0.7 }}> effective FPS</span>

@@ -35,6 +35,14 @@ export function HistogramScope({ viewMode = 'rgb' }: HistogramScopeProps) {
       <div className="scope-canvas-area">
         <div ref={containerRef} className="scope-canvas-container">
           <canvas ref={canvasRef} />
+          <div aria-hidden="true" className="scope-cartesian-reference-grid">
+            <i className="scope-grid-x-25" />
+            <i className="scope-grid-x-50" />
+            <i className="scope-grid-x-75" />
+            <i className="scope-grid-y-25" />
+            <i className="scope-grid-y-50" />
+            <i className="scope-grid-y-75" />
+          </div>
         </div>
       </div>
       <div className="scope-legend-x">

@@ -7,6 +7,7 @@ export interface StoredSourceThumbnail {
   fileHash?: string;     // For deduplication across re-imports
   secondIndex: number;   // Which second (0-based)
   blob: Blob;            // JPEG blob (~2-5KB each at 160x90)
+  generationVersion?: number;
 }
 
 // Thumbnail stored by file hash for deduplication

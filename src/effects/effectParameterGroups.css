@@ -1,0 +1,68 @@
+@layer components {
+  .effect-param-section {
+    border: 0;
+    border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    margin: 8px 0 0;
+    padding: 8px 0 0;
+  }
+
+  .effect-param-section:first-child {
+    border-top: 0;
+    margin-top: 0;
+  }
+
+  .effect-param-section-title {
+    color: var(--text-secondary, #aab0bc);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+    padding: 0;
+    text-transform: uppercase;
+  }
+
+  details.effect-param-section > summary {
+    cursor: pointer;
+    list-style-position: inside;
+    user-select: none;
+  }
+
+  .landmark-tracking-controls {
+    align-items: center;
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+  }
+}
+
+@layer components {
+  .memory-leak-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .memory-leak-status,
+  .memory-leak-message {
+    color: var(--text-secondary, #aab0bc);
+    font-size: 11px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+
+  .memory-leak-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}
+
+@layer components {
+  .effect-extra-controls {
+    border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+}

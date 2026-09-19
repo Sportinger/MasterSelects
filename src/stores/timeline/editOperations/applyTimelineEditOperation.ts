@@ -11,7 +11,7 @@ import { applyMergeMidiClipsOperation } from './mergeOperations';
 import { generateMidiClipId, generateMidiNoteId } from '../helpers/idGenerator';
 import { resolveSplitAllAtTimeTargets, resolveSplitAtTimeTargets } from './splitOperations';
 import { applyDeleteAllGapsOperation, applyDeleteGapAtTimeOperation, applyRippleDeleteSelectionOperation } from './rippleOperations';
-import { applyRateStretchClipOperation, applyRippleTrimEdgeToTimeOperation, applyRollingEditOperation, applySlideClipOperation, applySlipClipOperation, applyTrimClipOperation, applyTrimEdgeToTimeOperation } from './trimOperations';
+import { applyTimelineTrimOperation } from './applyTimelineTrimOperation';
 import type { TimelineEditOperation, TimelineEditResult } from './types';
 import {
   applyTransitionApplyOperation,
@@ -32,6 +32,7 @@ import { applyKeyframeTransactionOperation, isKeyframeTransactionOperation } fro
 import { applyKeyboardEditCommandOperation, isKeyboardEditCommandOperation } from './keyboardEditCommandOperations';
 import { applyResolvedMoveClipsOperation } from './resolvedMoveApplyOperation';
 import { ensureTransitionCompositionsForChangedClips, getChangedClipIdsAfterReplacement, removeDetachedTransitionCompositions, setClipsAndCleanupTransitionComps } from './transitionCompositionMaintenance';
+import { buildTrimmedKeyframeState } from './trimKeyframeAnchoring';
 import { getPlayheadPosition } from '../../../services/layerBuilder/PlayheadState';
 export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperationActions> = (set, get) => ({
   applyTimelineEditOperation: (operation: TimelineEditOperation, options): TimelineEditResult => {
@@ -529,20 +530,7 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       operation.type === 'rate-stretch-clip'
     ) {
       const previousClips = get().clips;
-      const result =
-        operation.type === 'trim-clip'
-          ? applyTrimClipOperation(operation, previousClips, get().tracks)
-          : operation.type === 'trim-edge-to-time'
-            ? applyTrimEdgeToTimeOperation(operation, previousClips, get().tracks, get().selectedClipIds)
-            : operation.type === 'ripple-trim-edge-to-time'
-              ? applyRippleTrimEdgeToTimeOperation(operation, previousClips, get().tracks, get().selectedClipIds)
-              : operation.type === 'rolling-edit'
-                ? applyRollingEditOperation(operation, previousClips, get().tracks)
-                : operation.type === 'slip-clip'
-                  ? applySlipClipOperation(operation, previousClips, get().tracks)
-                  : operation.type === 'slide-clip'
-                    ? applySlideClipOperation(operation, previousClips, get().tracks)
-                    : applyRateStretchClipOperation(operation, previousClips, get().tracks);
+      const result = applyTimelineTrimOperation(operation, previousClips, get().tracks, get().selectedClipIds);
       if (result.changedClipIds.length === 0 || hasOnlyNoopWarnings(result.warnings)) {
         return resultFromWarnings(operationId, result.warnings);
       }
@@ -561,6 +549,7 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       try {
         setClipsAndCleanupTransitionComps(set, previousClips, {
           clips: nextClips,
+          ...buildTrimmedKeyframeState(previousClips, nextClips, get().clipKeyframes, operation.type),
           ...(shouldClearTransitionPropertiesSelection(get().propertiesSelection, nextClips)
             ? { propertiesSelection: null }
             : {}),

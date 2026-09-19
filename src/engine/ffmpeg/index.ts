@@ -3,6 +3,7 @@
 
 // Main bridge class
 export { FFmpegBridge, getFFmpegBridge } from './FFmpegBridge';
+export type { FFmpegHeapState, FFmpegVirtualCommandInput } from './FFmpegBridge';
 
 // Codec definitions and presets
 export {

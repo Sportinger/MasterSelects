@@ -1,0 +1,91 @@
+@layer features {
+  .text3d-inspector {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    overflow-x: clip;
+  }
+
+  .text3d-inspector .resolve-inspector-section + .resolve-inspector-section {
+    border-top: 0;
+  }
+
+  .text3d-inspector-textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    padding: 5px 7px;
+    resize: vertical;
+    border: 1px solid var(--separator-color);
+    border-radius: 1px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font: inherit;
+    line-height: 1.35;
+  }
+
+  .text3d-inspector-select-pair {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .text3d-inspector-color {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .text3d-inspector-color input[type="color"] {
+    box-sizing: border-box;
+    width: 24px;
+    height: 24px;
+    padding: 1px;
+    border: 1px solid var(--separator-color);
+    border-radius: 1px;
+    background: var(--input-bg);
+  }
+
+  .text3d-inspector-color input[type="text"] {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: 24px;
+    padding: 0 6px;
+    border: 1px solid var(--separator-color);
+    border-radius: 1px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font: inherit;
+  }
+
+  .text3d-inspector-segmented {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .text3d-inspector-segmented button {
+    height: 24px;
+    padding: 0 4px;
+    border: 1px solid var(--separator-color);
+    border-radius: 0;
+    background: var(--input-bg);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 11px;
+  }
+
+  .text3d-inspector-segmented button + button {
+    margin-left: -1px;
+  }
+
+  .text3d-inspector-segmented button.is-active {
+    position: relative;
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+}

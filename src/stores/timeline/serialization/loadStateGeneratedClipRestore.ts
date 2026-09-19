@@ -14,6 +14,7 @@ import {
 } from '../nestedRestore';
 import { applyCommonRestoredClipFields, createLoadStateLiveInputClip } from './loadStateCommonClipRestore';
 import { createLoadStateStoryboardClip } from './loadStateStoryboardClipRestore';
+import { createLoadStateFlockClip } from './loadStateFlockClipRestore';
 
 const log = Logger.create('Timeline');
 type MediaStoreState = ReturnType<typeof useMediaStore.getState>;
@@ -41,6 +42,9 @@ export async function createLoadStateGeneratedClip(params: {
     log.debug('Restored motion clip', { clip: serializedClip.name, sourceType: serializedClip.sourceType });
     return motionClip;
   }
+
+  const flockClip = createLoadStateFlockClip(serializedClip);
+  if (flockClip) return flockClip;
 
   if (serializedClip.sourceType === 'math-scene' && serializedClip.mathScene) {
     const dimensions = activeCompositionDimensions(mediaStore);
@@ -242,6 +246,10 @@ export async function createLoadStateGeneratedClip(params: {
       transitionSourceMap: serializedClip.transitionSourceMap ? structuredClone(serializedClip.transitionSourceMap) : undefined,
       transitionRecipeBlendWindows: serializedClip.transitionRecipeBlendWindows ? structuredClone(serializedClip.transitionRecipeBlendWindows) : undefined,
       masks: serializedClip.masks,
+      colorGradeMode: serializedClip.colorGradeMode,
+      localColorCorrection: serializedClip.localColorCorrection
+        ? structuredClone(serializedClip.localColorCorrection)
+        : undefined,
       parentClipId: serializedClip.parentClipId,
       isLoading: false,
     };

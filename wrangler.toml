@@ -28,18 +28,18 @@ script_name = "masterselects-kieai-rate-limiter"
 
 [[env.preview.d1_databases]]
 binding = "DB"
-database_name = "masterselects"
-database_id = "a2f0a1aa-6bd9-4c75-9406-d09b93635eac"
+database_name = "masterselects-preview"
+database_id = "68479789-056a-474a-90d1-1527adf967dd"
 migrations_dir = "migrations"
 
 [[env.preview.kv_namespaces]]
 binding = "KV"
-id = "daadda485425465791a1c83afc48be67"
+id = "5ff7a2132b3d4b4899702e0bd946fb6b"
 
 [env.preview.vars]
-ENVIRONMENT = "development"
+ENVIRONMENT = "preview"
 CLOUDFLARE_ACCOUNT_ID = "899f606d84090483cd2725e0d54b78df"
-CLOUDFLARE_D1_DATABASE_ID = "a2f0a1aa-6bd9-4c75-9406-d09b93635eac"
+CLOUDFLARE_D1_DATABASE_ID = "68479789-056a-474a-90d1-1527adf967dd"
 CLOUDFLARE_PAGES_PROJECT = "masterselects"
 MASTERSELECTS_PUBLIC_URL = "https://www.masterselects.com"
 
@@ -66,7 +66,4 @@ CLOUDFLARE_ACCOUNT_ID = "899f606d84090483cd2725e0d54b78df"
 CLOUDFLARE_D1_DATABASE_ID = "a2f0a1aa-6bd9-4c75-9406-d09b93635eac"
 CLOUDFLARE_PAGES_PROJECT = "masterselects"
 MASTERSELECTS_PUBLIC_URL = "https://www.masterselects.com"
-HOSTED_AGENT_FAST_V2_EMERGENCY_ROLLBACK = "false"
-HOSTED_AGENT_FAST_V2_ENABLED = "true"
-HOSTED_AGENT_FAST_V2_CANARY_PERCENT = "100"
-HOSTED_AGENT_VERIFIED_PILOT_ENABLED = "false"
+HOSTED_AGENT_LOGIC_ENABLED = "true"

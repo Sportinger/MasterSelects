@@ -10,7 +10,20 @@ import {
   selectViewState,
 } from '../../../stores/timeline/selectors';
 import { useMediaStore } from '../../../stores/mediaStore';
+import { useDockStore } from '../../../stores/dockStore';
+import { isMobileLayoutId } from '../../dock/mobileLayoutOrientation';
 import { getTimelineToolCursor } from '../tools/pointer/timelineToolPointerDispatcher';
+
+export const MOBILE_TIMELINE_TRACK_HEADER_WIDTH = 76;
+
+export function resolveTimelineTrackHeaderWidth(
+  configuredWidth: number,
+  activeDockLayoutId: string | null,
+): number {
+  return isMobileLayoutId(activeDockLayoutId)
+    ? MOBILE_TIMELINE_TRACK_HEADER_WIDTH
+    : configuredWidth;
+}
 
 export function useTimelineRootStoreState() {
   const coreData = useTimelineStore(useShallow(selectCoreData));
@@ -38,6 +51,7 @@ export function useTimelineRootStoreState() {
   const mediaFiles = useMediaStore(state => state.files);
   const currentlyGeneratingProxyId = useMediaStore(state => state.currentlyGeneratingProxyId);
   const showInExplorer = useMediaStore(state => state.showInExplorer);
+  const activeDockLayoutId = useDockStore(state => state.activeSavedLayoutId);
   const activeComposition = getActiveComposition() ?? null;
   const openCompositions = getOpenCompositions();
   const timelineToolCursor = getTimelineToolCursor(uiSettings.activeTimelineToolId);
@@ -67,6 +81,10 @@ export function useTimelineRootStoreState() {
     showInExplorer,
     slotGridProgress,
     timelineRangeSelection,
+    trackHeaderWidth: resolveTimelineTrackHeaderWidth(
+      viewState.trackHeaderWidth,
+      activeDockLayoutId,
+    ),
     timelineToolCursor,
     timelineToolPreview,
     timelineTrackColorsVisible: effectiveAudioLayerAdvancedMode,

@@ -384,6 +384,9 @@ export function executeClipContextMenuClipboardCommand(input: {
   if (!input.canExecute) return false;
 
   switch (input.command) {
+    case 'copy-clips':
+      input.actions.copyClips();
+      return true;
     case 'copy-effects':
       if (!input.clipId) return false;
       input.actions.copyClipEffects(input.clipId);

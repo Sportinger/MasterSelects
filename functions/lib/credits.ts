@@ -1,3 +1,4 @@
+import { readRunChanges } from './d1Result';
 import type { AppD1Database } from './env';
 
 export type CreditLedgerEntryType = 'grant' | 'spend' | 'adjustment';
@@ -54,6 +55,8 @@ export interface FailedTaskCreditRefundResult {
 
 export const FREE_PLAN_MONTHLY_CREDITS = 25;
 export const FREE_PLAN_MONTHLY_SOURCE = 'system:free_plan_monthly_grant';
+export const WELCOME_CREDITS = 400;
+export const WELCOME_CREDIT_SOURCE = 'system:welcome_credit_grant';
 
 function toJson(value: Record<string, unknown> | null | undefined): string | null {
   if (!value) {
@@ -251,60 +254,102 @@ export async function spendCredits(
   metadata?: Record<string, unknown> | null,
 ): Promise<SpendCreditsResult> {
   const safeAmount = Math.max(0, Math.floor(amount));
-  const currentBalance = await getCreditBalance(db, userId);
+  const alreadyCharged = async (entry: CreditLedgerRow): Promise<SpendCreditsResult> => ({
+    balance: await getCreditBalance(db, userId),
+    charged: false,
+    entry,
+    insufficient: false,
+  });
 
   const existingEntry = await getCreditLedgerEntryBySource(db, userId, source, sourceId);
   if (existingEntry) {
-    return {
-      balance: currentBalance,
-      charged: false,
-      entry: existingEntry,
-      insufficient: false,
-    };
+    return alreadyCharged(existingEntry);
   }
 
   if (safeAmount <= 0) {
     return {
-      balance: currentBalance,
+      balance: await getCreditBalance(db, userId),
       charged: false,
       entry: null,
       insufficient: false,
     };
   }
 
-  if (currentBalance < safeAmount) {
+  // Balance check and debit are one statement: SQLite evaluates the SUM under
+  // the same write lock that performs the insert, so N parallel spends can
+  // never overdraw the way a read-compare-insert sequence in JS could. The
+  // unique (user_id, source, source_id) index keeps repeats idempotent.
+  const entryId = crypto.randomUUID();
+  const createdAt = new Date().toISOString();
+  let changes: number | null;
+  try {
+    const result = await db
+      .prepare(
+        `
+          INSERT INTO credit_ledger (
+            id, user_id, entry_type, amount, balance_after, source, source_id,
+            description, metadata_json, created_at
+          )
+          SELECT ?, ?, 'spend', ?,
+                 (SELECT COALESCE(SUM(amount), 0) FROM credit_ledger WHERE user_id = ?) - ?,
+                 ?, ?, ?, ?, ?
+          WHERE (SELECT COALESCE(SUM(amount), 0) FROM credit_ledger WHERE user_id = ?) >= ?
+        `,
+      )
+      .bind(
+        entryId,
+        userId,
+        -safeAmount,
+        userId,
+        safeAmount,
+        source,
+        sourceId,
+        description,
+        toJson(metadata ?? null),
+        createdAt,
+        userId,
+        safeAmount,
+      )
+      .run();
+    changes = readRunChanges(result);
+  } catch (error) {
+    // A concurrent request with the same idempotency key won the unique index.
+    const duplicateEntry = await getCreditLedgerEntryBySource(db, userId, source, sourceId);
+    if (duplicateEntry) {
+      return alreadyCharged(duplicateEntry);
+    }
+    throw error instanceof Error ? error : new Error('Failed to append credit ledger entry');
+  }
+
+  const written = await getCreditLedgerEntryBySource(db, userId, source, sourceId);
+  if (written && written.id !== entryId) {
+    // The WHERE clause filtered our row before the unique index could fire,
+    // but the source id is already charged: report it as such, not as
+    // insufficient balance.
+    return alreadyCharged(written);
+  }
+
+  if (changes === 0 || (changes === null && !written)) {
     return {
-      balance: currentBalance,
+      balance: await getCreditBalance(db, userId),
       charged: false,
       entry: null,
       insufficient: true,
     };
   }
 
-  const entry = await appendCreditLedgerEntry(db, {
+  const entry: CreditLedgerRow = written ?? {
     amount: -safeAmount,
+    balance_after: await getCreditBalance(db, userId),
+    created_at: createdAt,
     description,
-    entryType: 'spend',
-    metadata: metadata ?? null,
+    entry_type: 'spend',
+    id: entryId,
+    metadata_json: toJson(metadata ?? null),
     source,
-    sourceId,
-    userId,
-  });
-
-  if (!entry) {
-    const duplicateEntry = await getCreditLedgerEntryBySource(db, userId, source, sourceId);
-
-    if (duplicateEntry) {
-      return {
-        balance: await getCreditBalance(db, userId),
-        charged: false,
-        entry: duplicateEntry,
-        insufficient: false,
-      };
-    }
-
-    throw new Error('Failed to append credit ledger entry');
-  }
+    source_id: sourceId,
+    user_id: userId,
+  };
 
   return {
     balance: entry.balance_after,
@@ -312,6 +357,32 @@ export async function spendCredits(
     entry,
     insufficient: false,
   };
+}
+
+/**
+ * Records the provider task id on a spend entry after the upstream task
+ * exists. Credits are now reserved before the provider call, so the task id
+ * is not known at insert time; the failed-task refund path and the
+ * diagnostics ownership lookup both find the charge through this field.
+ */
+export async function attachTaskIdToCreditLedgerEntry(
+  db: AppD1Database,
+  entryId: string,
+  taskId: string,
+): Promise<void> {
+  const safeTaskId = taskId.trim();
+  if (!entryId || !safeTaskId) {
+    return;
+  }
+
+  await db
+    .prepare(
+      `UPDATE credit_ledger
+       SET metadata_json = json_set(COALESCE(metadata_json, '{}'), '$.taskId', ?)
+       WHERE id = ?`,
+    )
+    .bind(safeTaskId, entryId)
+    .run();
 }
 
 export async function getCreditMeterReference(
@@ -371,39 +442,16 @@ export async function getCreditMeterReference(
   }
 }
 
-export async function refundCreditsForFailedTask(
+async function refundSpendEntry(
   db: AppD1Database,
   userId: string,
-  taskId: string,
+  spendEntry: CreditLedgerRow,
+  refund: { description: string; jobId: string; reason: string; sourceId: string },
 ): Promise<FailedTaskCreditRefundResult | null> {
-  const jobId = taskId.trim();
-  if (!jobId) {
-    return null;
-  }
-
-  const spendEntry = await db
-    .prepare(
-      `
-        SELECT id, user_id, entry_type, amount, balance_after, source, source_id, description, metadata_json, created_at
-        FROM credit_ledger
-        WHERE user_id = ?
-          AND entry_type = 'spend'
-          AND amount < 0
-          AND instr(COALESCE(metadata_json, ''), ?) > 0
-        ORDER BY created_at DESC, id DESC
-        LIMIT 1
-      `,
-    )
-    .bind(userId, jobId)
-    .first<CreditLedgerRow>();
-
-  if (!spendEntry) {
-    return null;
-  }
-
+  const { jobId } = refund;
   const credits = Math.abs(spendEntry.amount);
   const source = `refund:${spendEntry.source}`;
-  const sourceId = `failed-task:${jobId}`;
+  const sourceId = refund.sourceId;
   const existingRefund = await getCreditLedgerEntryBySource(db, userId, source, sourceId);
 
   if (existingRefund) {
@@ -419,13 +467,14 @@ export async function refundCreditsForFailedTask(
 
   const refundEntry = await appendCreditLedgerEntry(db, {
     amount: credits,
-    description: `Refund for failed hosted AI job ${jobId}`,
+    description: refund.description,
     entryType: 'adjustment',
     metadata: {
       failedTaskId: jobId,
       originalLedgerEntryId: spendEntry.id,
       originalSource: spendEntry.source,
       originalSourceId: spendEntry.source_id,
+      reason: refund.reason,
     },
     source,
     sourceId,
@@ -458,6 +507,70 @@ export async function refundCreditsForFailedTask(
   };
 }
 
+/** Refunds the spend recorded for a provider task that later failed. */
+export async function refundCreditsForFailedTask(
+  db: AppD1Database,
+  userId: string,
+  taskId: string,
+): Promise<FailedTaskCreditRefundResult | null> {
+  const jobId = taskId.trim();
+  if (!jobId) {
+    return null;
+  }
+
+  const spendEntry = await db
+    .prepare(
+      `
+        SELECT id, user_id, entry_type, amount, balance_after, source, source_id, description, metadata_json, created_at
+        FROM credit_ledger
+        WHERE user_id = ?
+          AND entry_type = 'spend'
+          AND amount < 0
+          AND instr(COALESCE(metadata_json, ''), ?) > 0
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+      `,
+    )
+    .bind(userId, jobId)
+    .first<CreditLedgerRow>();
+
+  if (!spendEntry) {
+    return null;
+  }
+
+  return refundSpendEntry(db, userId, spendEntry, {
+    description: `Refund for failed hosted AI job ${jobId}`,
+    jobId,
+    reason: 'task_failed',
+    sourceId: `failed-task:${jobId}`,
+  });
+}
+
+/**
+ * Releases a reservation whose upstream provider call never produced a task:
+ * the spend is located by its idempotency key because no task id exists yet.
+ */
+export async function refundCreditsForFailedCharge(
+  db: AppD1Database,
+  userId: string,
+  source: string,
+  sourceId: string,
+  reason: string,
+): Promise<FailedTaskCreditRefundResult | null> {
+  const spendEntry = await getCreditLedgerEntryBySource(db, userId, source, sourceId);
+  if (!spendEntry || spendEntry.entry_type !== 'spend' || spendEntry.amount >= 0) {
+    return null;
+  }
+
+  const jobId = sourceId.trim();
+  return refundSpendEntry(db, userId, spendEntry, {
+    description: `Refund for failed hosted AI request ${jobId}`,
+    jobId,
+    reason,
+    sourceId: `failed-charge:${jobId}`,
+  });
+}
+
 export async function ensureFreePlanCredits(
   db: AppD1Database,
   userId: string,
@@ -476,6 +589,23 @@ export async function ensureFreePlanCredits(
     },
     source: FREE_PLAN_MONTHLY_SOURCE,
     sourceId: `free-plan:${monthKey}`,
+    userId,
+  });
+}
+
+export async function ensureWelcomeCredits(
+  db: AppD1Database,
+  userId: string,
+): Promise<CreditLedgerRow | null> {
+  return appendCreditLedgerEntry(db, {
+    amount: WELCOME_CREDITS,
+    description: 'MasterSelects welcome credits',
+    entryType: 'grant',
+    metadata: {
+      grant_type: 'welcome',
+    },
+    source: WELCOME_CREDIT_SOURCE,
+    sourceId: 'welcome-credit:v1',
     userId,
   });
 }

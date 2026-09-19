@@ -15,6 +15,8 @@ import {
   synchronizeAllFollowingAudioSpeedKeyframes,
 } from '../helpers/linkedClipSpeed';
 import { finalizeLinkedSpeedKeyframeMutation, isValidSpeedKeyframeValue } from './linkedSpeedKeyframeState';
+import { normalizeTimelinePropertyValue } from './keyframePropertyValue';
+import { clipLocalToKeyframeTime } from '../../../services/flock/time/flockKeyframeTime';
 
 type KeyframeBasicActions = Pick<
   KeyframeActions,
@@ -52,12 +54,15 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
     if (!clip) return;
     const normalizedEasing = normalizeEasingType(easing, 'linear');
     const vectorAnimationState = parseVectorAnimationStateProperty(property);
+    const normalizedPropertyValue = normalizeTimelinePropertyValue(property, value);
     const keyframeValue = vectorAnimationState && isVectorAnimationSourceType(clip.source?.type)
-      ? normalizeVectorAnimationStateKeyframeValue(clip, vectorAnimationState.stateMachineName, value)
-      : value;
+      ? normalizeVectorAnimationStateKeyframeValue(clip, vectorAnimationState.stateMachineName, normalizedPropertyValue)
+      : normalizedPropertyValue;
 
     const clipLocalTime = time ?? (playheadPosition - clip.startTime);
-    const clampedTime = Math.max(0, Math.min(clipLocalTime, clip.duration));
+    const visibleTime = Math.max(0, Math.min(clipLocalTime, clip.duration));
+    // Flock graph parameters store keyframes in simulation source seconds.
+    const clampedTime = clipLocalToKeyframeTime(clip, property, visibleTime, get().getSourceTimeForClip);
     const existingKeyframes = clipKeyframes.get(clipId) || [];
     const existingAtTime = getKeyframeAtTime(existingKeyframes, property, clampedTime);
 
@@ -131,24 +136,29 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
           return k;
         }
         const nextProperty = baseNormalizedUpdates.property ?? k.property;
-        const nextValue = baseNormalizedUpdates.value ?? k.value;
+        const nextValue = baseNormalizedUpdates.value === undefined
+          ? k.value
+          : normalizeTimelinePropertyValue(nextProperty, baseNormalizedUpdates.value);
         if (nextProperty === 'speed' && !isValidSpeedKeyframeValue(nextValue)) return k;
         invalidationTargets.push({ clipId, property: k.property });
         if (baseNormalizedUpdates.property) {
           invalidationTargets.push({ clipId, property: baseNormalizedUpdates.property });
         }
 
-        const vectorAnimationState = parseVectorAnimationStateProperty(k.property);
-        const normalizedUpdates = vectorAnimationState && isVectorAnimationSourceType(clip?.source?.type) && baseNormalizedUpdates.value !== undefined
+        const propertyNormalizedUpdates = baseNormalizedUpdates.value === undefined
+          ? baseNormalizedUpdates
+          : { ...baseNormalizedUpdates, value: nextValue };
+        const vectorAnimationState = parseVectorAnimationStateProperty(nextProperty);
+        const normalizedUpdates = vectorAnimationState && isVectorAnimationSourceType(clip?.source?.type) && propertyNormalizedUpdates.value !== undefined
           ? {
-              ...baseNormalizedUpdates,
+              ...propertyNormalizedUpdates,
               value: normalizeVectorAnimationStateKeyframeValue(
                 clip,
                 vectorAnimationState.stateMachineName,
-                baseNormalizedUpdates.value,
+                propertyNormalizedUpdates.value,
               ),
             }
-          : baseNormalizedUpdates;
+          : propertyNormalizedUpdates;
         return { ...k, ...normalizedUpdates };
       }));
     });
@@ -170,10 +180,11 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
 
       newMap.set(clipId, keyframes.map(k => {
         if (k.id !== keyframeId) return k;
-        if (k.time !== clampedTime) {
+        const nextTime = clip ? clipLocalToKeyframeTime(clip, k.property, clampedTime, get().getSourceTimeForClip) : clampedTime;
+        if (k.time !== nextTime) {
           invalidationTargets.push({ clipId, property: k.property });
         }
-        return { ...k, time: clampedTime };
+        return { ...k, time: nextTime };
       }).sort((a, b) => a.time - b.time));
     });
 
@@ -199,11 +210,12 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
 
       const nextKeyframes = keyframes.map(k => {
         if (!targetIds.has(k.id)) return k;
-        if (k.time === clampedTime) return k;
+        const nextTime = clip ? clipLocalToKeyframeTime(clip, k.property, clampedTime, get().getSourceTimeForClip) : clampedTime;
+        if (k.time === nextTime) return k;
         clipChanged = true;
         changed = true;
         invalidationTargets.push({ clipId, property: k.property });
-        return { ...k, time: clampedTime };
+        return { ...k, time: nextTime };
       });
 
       newMap.set(

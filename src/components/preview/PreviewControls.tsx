@@ -1,4 +1,4 @@
-// Preview top toolbar: source selector, edit mode toggle, zoom controls
+// Preview top toolbar: scene overlay, edit/source controls, and 3D tools
 
 import React from 'react';
 import type { Composition } from '../../stores/mediaStore/types';
@@ -32,6 +32,7 @@ interface PreviewControlsProps {
   activeCompositionVideoTracks: TimelineTrack[];
   selectorOpen: boolean;
   setSelectorOpen: (v: boolean) => void;
+  setSceneGizmoToolbarTarget: (target: HTMLDivElement | null) => void;
   dropdownRef: React.RefObject<HTMLDivElement | null>;
   dropdownStyle: React.CSSProperties;
   compositions: Composition[];
@@ -56,6 +57,7 @@ export function PreviewControls({
   activeCompositionVideoTracks,
   selectorOpen,
   setSelectorOpen,
+  setSceneGizmoToolbarTarget,
   dropdownRef,
   dropdownStyle,
   compositions,
@@ -92,6 +94,52 @@ export function PreviewControls({
     });
   };
 
+  const renderSourceSelector = () => (
+    <div className="preview-comp-dropdown-wrapper">
+      <button
+        className="preview-comp-dropdown-btn"
+        onClick={() => setSelectorOpen(!selectorOpen)}
+        title="Select preview source"
+      >
+        <span className="preview-comp-name">{sourceLabel}</span>
+        <span className="preview-comp-arrow">v</span>
+      </button>
+      {selectorOpen && (
+        <div className="preview-comp-dropdown" ref={dropdownRef} style={dropdownStyle}>
+          <div className="preview-comp-group-label">Dynamic</div>
+          <button
+            className={`preview-comp-option ${source.type === 'activeComp' ? 'active' : ''}`}
+            onClick={() => {
+              setPanelSource({ type: 'activeComp' });
+              setSelectorOpen(false);
+            }}
+          >
+            Active Composition
+          </button>
+          {renderLayerOptions(null)}
+          <div className="preview-comp-separator" />
+          <div className="preview-comp-group-label">Compositions</div>
+          {visibleCompositions.map((comp) => (
+            <React.Fragment key={comp.id}>
+              <button
+                className={`preview-comp-option ${
+                  source.type === 'composition' && source.compositionId === comp.id ? 'active' : ''
+                }`}
+                onClick={() => {
+                  setPanelSource({ type: 'composition', compositionId: comp.id });
+                  setSelectorOpen(false);
+                }}
+              >
+                {comp.name}
+              </button>
+              {renderLayerOptions(comp.id)}
+            </React.Fragment>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="preview-controls">
       {sourceMonitorActive ? (
@@ -109,14 +157,6 @@ export function PreviewControls({
         </>
       ) : (
         <>
-          <button
-            className={`preview-edit-btn ${editMode ? 'active' : ''}`}
-            onClick={() => canEdit && setEditMode(!editMode)}
-            title={canEdit ? 'Toggle Edit Mode [Tab]' : 'Edit mode only works on the full active composition'}
-            disabled={!canEdit}
-          >
-            Edit
-          </button>
           {canEdit && (
             <button
               type="button"
@@ -134,61 +174,35 @@ export function PreviewControls({
               </svg>
             </button>
           )}
-          {showEditViewControls && canEdit && (
+          {sceneObjectOverlayEnabled && (
             <>
-              <span className="preview-zoom-label">{Math.round(viewZoom * 100)}%</span>
               <button
-                className="preview-reset-btn"
-                onClick={resetView}
-                title="Reset View"
+                className={`preview-edit-btn ${editMode ? 'active' : ''}`}
+                onClick={() => canEdit && setEditMode(!editMode)}
+                title={canEdit ? 'Toggle Edit Mode [Tab]' : 'Edit mode only works on the full active composition'}
+                disabled={!canEdit}
               >
-                Reset
+                Edit
               </button>
+              {renderSourceSelector()}
+              <div
+                ref={setSceneGizmoToolbarTarget}
+                className="preview-scene-gizmo-toolbar-slot"
+              />
+              {showEditViewControls && canEdit && (
+                <>
+                  <span className="preview-zoom-label">{Math.round(viewZoom * 100)}%</span>
+                  <button
+                    className="preview-reset-btn"
+                    onClick={resetView}
+                    title="Reset View"
+                  >
+                    Reset
+                  </button>
+                </>
+              )}
             </>
           )}
-          <div className="preview-comp-dropdown-wrapper">
-            <button
-              className="preview-comp-dropdown-btn"
-              onClick={() => setSelectorOpen(!selectorOpen)}
-              title="Select preview source"
-            >
-              <span className="preview-comp-name">{sourceLabel}</span>
-              <span className="preview-comp-arrow">v</span>
-            </button>
-            {selectorOpen && (
-              <div className="preview-comp-dropdown" ref={dropdownRef} style={dropdownStyle}>
-                <div className="preview-comp-group-label">Dynamic</div>
-                <button
-                  className={`preview-comp-option ${source.type === 'activeComp' ? 'active' : ''}`}
-                  onClick={() => {
-                    setPanelSource({ type: 'activeComp' });
-                    setSelectorOpen(false);
-                  }}
-                >
-                  Active Composition
-                </button>
-                {renderLayerOptions(null)}
-                <div className="preview-comp-separator" />
-                <div className="preview-comp-group-label">Compositions</div>
-                {visibleCompositions.map((comp) => (
-                  <React.Fragment key={comp.id}>
-                    <button
-                      className={`preview-comp-option ${
-                        source.type === 'composition' && source.compositionId === comp.id ? 'active' : ''
-                      }`}
-                      onClick={() => {
-                        setPanelSource({ type: 'composition', compositionId: comp.id });
-                        setSelectorOpen(false);
-                      }}
-                    >
-                      {comp.name}
-                    </button>
-                    {renderLayerOptions(comp.id)}
-                  </React.Fragment>
-                ))}
-              </div>
-            )}
-          </div>
         </>
       )}
     </div>

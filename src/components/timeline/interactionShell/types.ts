@@ -107,6 +107,7 @@ export type ClipInteractionShellClipRef = Readonly<
     | 'duration'
     | 'inPoint'
     | 'outPoint'
+    | 'speed'
     | 'reversed'
     | 'mediaFileId'
     | 'source'

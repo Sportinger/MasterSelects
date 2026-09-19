@@ -1,14 +1,37 @@
 import { useEffect } from 'react';
+import { compositionRenderer } from '../../services/compositionRenderer';
 import { layerBuilder } from '../../services/layerBuilder';
 import { renderHostPort } from '../../services/render/renderHostPort';
 import { hasTimelineVisualRenderDemand } from '../../services/timeline/timelineVisualDemand';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTimelineStore } from '../../stores/timeline';
+import { hasCompositionSourceTopologyChanged } from './compositionSourceTopology';
 
 export function useEngineRenderWakeSubscriptions(isEngineReady: boolean): void {
+  const activeCompositionId = useMediaStore((state) => state.activeCompositionId);
+
   useEffect(() => {
     if (!isEngineReady) return;
+
+    let compositionSourceRebindTimer: ReturnType<typeof setTimeout> | null = null;
+    let compositionSourceRebindQueue = Promise.resolve();
+
+    const scheduleCompositionSourceRebind = () => {
+      if (compositionSourceRebindTimer !== null) {
+        clearTimeout(compositionSourceRebindTimer);
+      }
+      compositionSourceRebindTimer = setTimeout(() => {
+        compositionSourceRebindTimer = null;
+        compositionSourceRebindQueue = compositionSourceRebindQueue
+          .then(async () => {
+            if (!activeCompositionId) return;
+            compositionRenderer.invalidateCompositionAndParents(activeCompositionId);
+            await compositionRenderer.prepareComposition(activeCompositionId);
+            renderHostPort.requestRender();
+          });
+      }, 0);
+    };
 
     const unsubPlayhead = useTimelineStore.subscribe(
       (state) => state.playheadPosition,
@@ -31,7 +54,10 @@ export function useEngineRenderWakeSubscriptions(isEngineReady: boolean): void {
 
     const unsubClips = useTimelineStore.subscribe(
       (state) => state.clips,
-      () => {
+      (clips, previousClips) => {
+        if (hasCompositionSourceTopologyChanged(previousClips, clips)) {
+          scheduleCompositionSourceRebind();
+        }
         if (!useTimelineStore.getState().maskDragging) {
           renderHostPort.requestRender();
         }
@@ -96,6 +122,9 @@ export function useEngineRenderWakeSubscriptions(isEngineReady: boolean): void {
     );
 
     return () => {
+      if (compositionSourceRebindTimer !== null) {
+        clearTimeout(compositionSourceRebindTimer);
+      }
       unsubPlayhead();
       unsubClips();
       unsubTracks();
@@ -108,5 +137,5 @@ export function useEngineRenderWakeSubscriptions(isEngineReady: boolean): void {
       unsubSlotGridProgress();
       unsubLayerOpacities();
     };
-  }, [isEngineReady]);
+  }, [activeCompositionId, isEngineReady]);
 }

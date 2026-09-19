@@ -18,16 +18,19 @@ import { drawTimelineClipCanvasPassiveDecorations } from './timelineClipCanvasPa
 import { drawTimelineClipCanvasSceneCutMarkers } from './timelineClipCanvasSceneCutPainter';
 import { getTimelineClipCanvasSpectrogramTileSetForClip, type TimelineClipCanvasSpectrogramTileSetMap } from './timelineClipCanvasSpectrogramResource';
 import { drawTimelineClipCanvasSourceExtensionGhosts } from './timelineClipCanvasSourceExtensionGhostPainter';
-import { drawTimelineClipCanvasThumbnails } from './timelineClipCanvasThumbnailPainter';
-import { getTimelineClipCanvasThumbnailMediaFileId } from './timelineClipCanvasThumbnailPreparation';
+import { drawTimelineClipCanvasThumbnails, paintTimelineClipCanvasThumbnailGradient } from './timelineClipCanvasThumbnailPainter';
+import { getTimelineClipCanvasThumbnailSourceId } from './timelineClipCanvasThumbnailSource';
 import type { TimelineClipCanvasTrimGeometry } from './timelineClipCanvasTrimResource';
 import { drawTimelineClipCanvasAudioWaveform } from './timelineClipCanvasWaveformPainter';
 import { paintTimelineClipCanvasBody } from './timelineClipCanvasBodyPainter';
+import { paintTimelineClipCanvasMissingMediaBorder } from './timelineClipCanvasMissingMediaPainter';
+import { getResolveTimelineClipFooterHeight, paintResolveTimelineClipFooterForBody, paintResolveTimelineClipPreviewBackground, RESOLVE_TIMELINE_CLIP_PREVIEW_INSET_PX } from './resolveTimelineClipCanvas';
+import { getTimelineClipCanvasVisualPreviewHeight } from './timelineClipCanvasVisualLayout';
+import { withTimelineClipCanvasAlpha } from './timelineClipCanvasColor';
 import {
   getTimelineClipCanvasWaveformPyramidForClip,
   type TimelineClipCanvasWaveformPyramidMap,
 } from './timelineClipCanvasWaveformResource';
-
 export interface TimelineClipCanvasMainThreadDrawInput {
   ctx: CanvasRenderingContext2D;
   clips: readonly TimelinePaintSourceClip[];
@@ -37,6 +40,7 @@ export interface TimelineClipCanvasMainThreadDrawInput {
   selectedClipIds: ReadonlySet<string>;
   hoveredClipId?: string | null;
   trackColor: string;
+  selectionBorderColor?: string;
   scrollX: number;
   viewportWidth: number;
   waveformsEnabled?: boolean;
@@ -58,23 +62,6 @@ export interface TimelineClipCanvasMainThreadDrawInput {
   requestRedraw: () => void;
 }
 
-function withAlpha(color: string, alpha: number): string {
-  if (color.startsWith('#') && (color.length === 7 || color.length === 4)) {
-    let r: number, g: number, b: number;
-    if (color.length === 4) {
-      r = parseInt(color[1] + color[1], 16);
-      g = parseInt(color[2] + color[2], 16);
-      b = parseInt(color[3] + color[3], 16);
-    } else {
-      r = parseInt(color.slice(1, 3), 16);
-      g = parseInt(color.slice(3, 5), 16);
-      b = parseInt(color.slice(5, 7), 16);
-    }
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-  return color;
-}
-
 export function drawTimelineClipCanvasMainThread(
   input: TimelineClipCanvasMainThreadDrawInput,
 ): TimelineCanvasDrawDiagnostics {
@@ -87,6 +74,7 @@ export function drawTimelineClipCanvasMainThread(
     selectedClipIds,
     hoveredClipId,
     trackColor,
+    selectionBorderColor = '#ffffff',
     scrollX,
     viewportWidth,
     waveformsEnabled,
@@ -124,11 +112,12 @@ export function drawTimelineClipCanvasMainThread(
   const renderVisibleLeft = scrollX - renderOverscanPx;
   const renderVisibleRight = scrollX + viewportWidth + renderOverscanPx;
 
-  const radius = Math.min(4, height / 4);
-  const fill = withAlpha(trackColor, 0.55);
-  const fillSelected = withAlpha(trackColor, 0.85);
-  const border = withAlpha(trackColor, 0.9);
-  const selectedBorder = '#ffffff';
+  const resolveStyle = selectionBorderColor !== '#ffffff';
+  const radius = resolveStyle ? 1 : Math.min(4, height / 4);
+  const fill = withTimelineClipCanvasAlpha(trackColor, 0.55);
+  const fillSelected = withTimelineClipCanvasAlpha(trackColor, 0.85);
+  const border = withTimelineClipCanvasAlpha(trackColor, 0.9);
+  const selectedBorder = selectionBorderColor;
 
   ctx.textBaseline = 'middle';
 
@@ -166,6 +155,9 @@ export function drawTimelineClipCanvasMainThread(
     });
     const top = 1;
     const h = height - 2;
+    const footerHeight = resolveStyle ? getResolveTimelineClipFooterHeight(h) : 0;
+    const previewHeight = Math.max(1, h - footerHeight);
+    const visualPreviewHeight = Math.min(previewHeight, getTimelineClipCanvasVisualPreviewHeight(h));
     const visibleStartRatio = Math.max(0, Math.min(1, (visibleAbsLeft - absoluteX) / Math.max(1, absoluteW)));
     const visibleEndRatio = Math.max(visibleStartRatio, Math.min(1, (visibleAbsRight - absoluteX) / Math.max(1, absoluteW)));
 
@@ -245,9 +237,10 @@ export function drawTimelineClipCanvasMainThread(
           visibleX,
           top,
           visibleW,
-          h,
+          previewHeight,
           audioDisplayMode,
           timeToPixel(1),
+          resolveStyle,
         );
       }
     }
@@ -259,7 +252,7 @@ export function drawTimelineClipCanvasMainThread(
 
     const inThumbWindow = absoluteRight > thumbVisibleLeft && absoluteX < thumbVisibleRight;
     const mediaFileId = (visibleW >= lodThumbnailPx && inThumbWindow && !hasCompositionSegments)
-      ? getTimelineClipCanvasThumbnailMediaFileId(clip)
+      ? getTimelineClipCanvasThumbnailSourceId(clip)
       : null;
     if (mediaFileId) {
       diagnostics.thumbnailClipCount += 1;
@@ -271,26 +264,30 @@ export function drawTimelineClipCanvasMainThread(
       };
       ctx.save();
       ctx.beginPath();
-      ctx.rect(visibleX, top, visibleW, h);
+      ctx.rect(visibleX, top, visibleW, visualPreviewHeight);
       ctx.clip();
+      const previewInset = resolveStyle ? RESOLVE_TIMELINE_CLIP_PREVIEW_INSET_PX : 0;
+      const leftInset = visibleAbsLeft <= absoluteX ? previewInset : 0;
+      const rightInset = visibleAbsRight >= absoluteRight ? previewInset : 0;
+      const thumbnailX = visibleX + leftInset;
+      const thumbnailWidth = Math.max(1, visibleW - leftInset - rightInset);
+      const thumbnailTop = top + previewInset;
+      const thumbnailHeight = Math.max(1, visualPreviewHeight - previewInset * 2);
+      if (resolveStyle) paintResolveTimelineClipPreviewBackground(ctx, x, top, w, visualPreviewHeight);
       diagnostics.thumbnailDrawCount += drawTimelineClipCanvasThumbnails(
         ctx,
         visibleClip,
         mediaFileId,
-        visibleX,
-        top,
-        visibleW,
-        h,
+        thumbnailX,
+        thumbnailTop,
+        thumbnailWidth,
+        thumbnailHeight,
         requestRedraw,
         maxThumbnailSlots,
         thumbnailSlotPx,
         clip.source?.type === 'image' ? mediaThumbnailUrlsById?.get(mediaFileId) : undefined,
       );
-      const grad = ctx.createLinearGradient(0, top + h - 16, 0, top + h);
-      grad.addColorStop(0, 'rgba(0,0,0,0)');
-      grad.addColorStop(1, 'rgba(0,0,0,0.55)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(visibleX, top + h - 16, visibleW, 16);
+      paintTimelineClipCanvasThumbnailGradient(ctx, thumbnailX, thumbnailTop, thumbnailWidth, thumbnailHeight);
       ctx.restore();
     }
 
@@ -307,6 +304,7 @@ export function drawTimelineClipCanvasMainThread(
         maxThumbSlots: maxThumbnailSlots,
         minThumbnailWidth: lodThumbnailPx,
         thumbSlotPx: thumbnailSlotPx,
+        thumbnailHeight: visualPreviewHeight,
       },
     );
     if (compositionThumbnailDrawCount > 0) {
@@ -318,11 +316,21 @@ export function drawTimelineClipCanvasMainThread(
     drawTimelineClipCanvasPassiveDecorations(ctx, clip, geometry, badges, progressBars, x, top, w, h, false, showFaceRanges);
     drawTimelineClipCanvasSceneCutMarkers(ctx, sceneCutMarkers, x, top, w, h);
 
-    ctx.beginPath();
-    ctx.roundRect(x, top, w, h, radius);
-    ctx.lineWidth = selected ? 2 : hovered ? 1.5 : 1;
-    ctx.strokeStyle = selected ? selectedBorder : hovered ? 'rgba(255,255,255,0.58)' : border;
-    ctx.stroke();
+    paintResolveTimelineClipFooterForBody(ctx, x, top, w, h, footerHeight, selected ? fillSelected : fill);
+
+    paintTimelineClipCanvasMissingMediaBorder({
+      ctx,
+      needsReload: clip.needsReload === true,
+      selected,
+      hovered,
+      x,
+      top,
+      width: w,
+      height: h,
+      radius,
+      border,
+      selectedBorder,
+    });
 
     if (!selected) drawTimelineClipCanvasEdgeBrackets(ctx, x, top, w, h);
   }

@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { ClippyMascot } from './ClippyMascot';
+import { productAnalytics } from '../../../services/productAnalytics';
 import './TutorialSetupOverlay.css';
 
 const BACKGROUND_CHOICES = [
-  { id: 'premiere', label: 'Premiere Pro', logo: '/logo-premiere.svg' },
-  { id: 'davinci', label: 'DaVinci Resolve', logo: '/logo-davinci.svg' },
-  { id: 'finalcut', label: 'Final Cut Pro', logo: '/logo-finalcut.png' },
-  { id: 'aftereffects', label: 'After Effects', logo: '/logo-aftereffects.svg' },
-  { id: 'beginner', label: 'Beginner', logo: null },
+  { id: 'premiere', label: 'Premiere Pro' },
+  { id: 'davinci', label: 'DaVinci Resolve' },
+  { id: 'finalcut', label: 'Final Cut Pro' },
+  { id: 'aftereffects', label: 'After Effects' },
+  { id: 'beginner', label: 'Beginner' },
 ] as const;
 
 type BackgroundId = typeof BACKGROUND_CHOICES[number]['id'];
@@ -26,22 +27,44 @@ export function TutorialSetupOverlay({
   const setUserBackground = useSettingsStore((state) => state.setUserBackground);
   const setActiveShortcutPreset = useSettingsStore((state) => state.setActiveShortcutPreset);
 
+  useEffect(() => {
+    productAnalytics.track('setup_started');
+  }, []);
+
   const chooseBackground = useCallback((id: BackgroundId) => {
     const choice = BACKGROUND_CHOICES.find((candidate) => candidate.id === id);
     setUserBackground(id);
     setActiveShortcutPreset(id);
     setSelectedLabel(choice?.label ?? id);
+    productAnalytics.track('setup_background_selected', { background: id });
   }, [setActiveShortcutPreset, setUserBackground]);
+
+  const cancelSetup = useCallback(() => {
+    productAnalytics.track('setup_cancelled', {
+      stage: selectedLabel ? 'confirmation' : 'background',
+    });
+    onCancel();
+  }, [onCancel, selectedLabel]);
+
+  const completeSetup = useCallback(() => {
+    if (selectedLabel) {
+      const selected = BACKGROUND_CHOICES.find((choice) => choice.label === selectedLabel);
+      productAnalytics.track('setup_completed', {
+        background: selected?.id ?? 'beginner',
+      });
+    }
+    onComplete();
+  }, [onComplete, selectedLabel]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
-      onCancel();
+      cancelSetup();
     };
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [onCancel]);
+  }, [cancelSetup]);
 
   return (
     <div
@@ -89,14 +112,7 @@ export function TutorialSetupOverlay({
                   className="tutorial-setup-choice"
                   onClick={() => chooseBackground(choice.id)}
                 >
-                  <span className="tutorial-setup-choice-icon">
-                    {choice.logo ? (
-                      <img src={choice.logo} alt="" draggable={false} />
-                    ) : (
-                      <span className="tutorial-setup-beginner">★</span>
-                    )}
-                  </span>
-                  <span>{choice.label}</span>
+                  <span className="tutorial-setup-choice-name">{choice.label}</span>
                 </button>
               ))}
             </div>
@@ -109,7 +125,7 @@ export function TutorialSetupOverlay({
             <button
               type="button"
               className="tutorial-setup-exit"
-              onClick={onCancel}
+              onClick={cancelSetup}
             >
               End walkthrough
             </button>
@@ -127,7 +143,7 @@ export function TutorialSetupOverlay({
               <button
                 type="button"
                 className="tutorial-setup-button tutorial-setup-button--primary"
-                onClick={onComplete}
+                onClick={completeSetup}
               >
                 Start walkthrough
               </button>

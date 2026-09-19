@@ -1,13 +1,13 @@
-import { useAccountStore } from '../../../stores/accountStore';
+import { hasHostedAiSession, useAccountStore } from '../../../stores/accountStore';
 
 export function useFlashBoardComposerAccessState() {
   const accountSession = useAccountStore((s) => s.session);
   const hostedAIEnabled = useAccountStore((s) => s.hostedAIEnabled);
   const openAuthDialog = useAccountStore((s) => s.openAuthDialog);
   const openPricingDialog = useAccountStore((s) => s.openPricingDialog);
-  const hasHostedSession = accountSession?.authenticated === true;
-  const hasHostedAudioAccess = Boolean(accountSession?.authenticated && hostedAIEnabled);
-  const canUseHostedPromptRefiner = Boolean(accountSession?.authenticated && hostedAIEnabled);
+  const hasHostedSession = hasHostedAiSession(accountSession);
+  const hasHostedAudioAccess = hasHostedSession && hostedAIEnabled;
+  const canUseHostedPromptRefiner = hasHostedSession && hostedAIEnabled;
 
   return {
     accountSession,

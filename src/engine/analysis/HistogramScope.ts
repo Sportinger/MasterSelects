@@ -148,18 +148,18 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
     color += vec3f(0.6) * e;
   }
 
-  // Grid lines at 64, 128, 192 (anti-aliased)
+  // Resolve-style yellow reference grid at 64, 128, 192 (anti-aliased)
   let gridBins = array<f32, 3>(64.0, 128.0, 192.0);
   for (var i = 0u; i < 3u; i++) {
     let gx = gridBins[i] / 256.0;
     let gAA = smoothstep(0.003, 0.001, abs(uv.x - gx));
-    color = max(color, vec3f(0.10) * gAA);
+    color = max(color, vec3f(0.32, 0.27, 0.02) * gAA);
   }
   // Horizontal grid at 25%, 50%, 75%
   for (var i = 1u; i < 4u; i++) {
     let gy = f32(i) * 0.25;
     let hAA = smoothstep(0.004, 0.001, abs(y - gy));
-    color = max(color, vec3f(0.07) * hAA);
+    color = max(color, vec3f(0.25, 0.21, 0.015) * hAA);
   }
 
   return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), 1.0);

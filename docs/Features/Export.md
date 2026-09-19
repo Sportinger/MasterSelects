@@ -50,7 +50,11 @@ Canvas-backed sources such as text, solids, Lottie, and Rive are re-rendered for
 
 ### Fast Mode
 
+- Export canvas capture snapshots the submitted GPU image immediately, without a per-frame `queue.onSubmittedWorkDone()` round trip. The retained `VideoFrame` remains valid if canvas cleanup happens afterward; capture no longer reads a nullable canvas field after yielding.
+- A canvas capture failure still permits pixel readback, but disables repeated direct-capture attempts only for that export canvas. Initializing a new export retries the direct path.
+- `tests/browser/export-canvas-probe.html` is a dev-only synthetic WebGPU check: it compares immediate/waited capture, verifies alternating frame pixels, encodes H.264, and reproduces the former cleanup race without changing a project. Its timings are not whole-editor export benchmarks.
 - Uses WebCodecs sequential decoding for a single clip.
+- FAST export resolves the requested time to a source sample, waits for that exact decoded frame, and fails if it stays unavailable instead of silently substituting a buffered neighbor. The Windows beta harness verifies the complete exported frame sequence with independently decoded frame counters.
 - Regular multi-clip exports use source-shared sequential WebCodecs decoders; nested-composition video clips use `ParallelDecodeManager`.
 - Parses source media with MP4Box.
 - Decode, buffer, and unsupported-file failures remain in the selected workflow. Errors are logged and surfaced; Fast mode does not automatically switch to HTMLVideo.
@@ -152,7 +156,7 @@ Audio export is handled separately from the video encoder.
 - Audio-only export supports uncompressed WAV (`.wav`) without WebCodecs audio encoding.
 - Audio-only export supports MP3 (`.mp3`) through the browser-side Mediabunny MP3 encoder package, without the Native Helper.
 - Browser-compressed audio-only export writes AAC (`.aac`) or Opus (`.ogg`), according to runtime support.
-- AAC is used for MP4 when supported.
+- AAC is the MP4 default. Browser exports default to 192 kbps and retry with a Chromium-compatible AAC bitrate when the requested bitrate is unsupported.
 - Opus is used for WebM when supported.
 - Clip-local trim, region edit-stack operations including paste/insert/delete silence, reverse, speed/pitch, mute, EQ, and volume are rendered before mixing.
 - If the browser cannot encode a usable audio format, the export can proceed without audio.
@@ -184,11 +188,37 @@ Image export can render a single composited frame at the current playhead positi
 - JPG and WebP expose a quality control in the panel.
 - Audio is ignored while image export is active.
 
+### Glyph Artifact Export
+
+When the current frame contains a supported glyph/cell treatment, the Advanced
+panel can export the exact cell result independently of the normal raster
+deliverable:
+
+- **TXT** writes the character grid as plain UTF-8 text.
+- **SVG** creates real vector `<text>` cells; it does not embed a raster frame.
+- **Web Pack** bundles TXT, SVG, metadata, and optional gzip tracking sidecar
+  data in a ZIP.
+
+The exporter uses the same grid/ramp contract as the GPU glyph path. Files and
+Blobs are created only for the download operation and are never stored in
+durable project state.
+
 ### Batch Source Export
 
 - Media files can be queued for batch export from the export panel.
 - The queue can use each job's own settings or apply one shared technical configuration while retaining individual file names.
 - Direct source jobs bypass timeline-only outputs and In/Out markers; source images are exported at the selected output resolution.
+
+---
+
+## Browser-Native HAP Export
+
+HAP is a dedicated browser encoder choice rather than an FFmpeg codec. It
+produces QuickTime `.mov` files through the WebGPU block encoder and exposes
+HAP, HAP Alpha, and HAP Q formats for VJ and media-server playback. The export
+summary, size estimate, progress UI, persistent presets, and project settings
+all treat HAP as its own encoder; video exports use PCM audio when audio is
+included.
 
 ---
 
@@ -222,7 +252,6 @@ The FFmpeg path is a separate CPU-based export pipeline.
 
 ### Current Limitations
 
-- HAP is not available in this build.
 - GIF export is silent.
 - This build does not expose a shared decoder pool.
 - Multi-threaded mode is only reported as a capability check; the exported core path is synchronous.
@@ -277,6 +306,10 @@ Still-image export renders the current composited frame through an export render
 4. Render procedural motion shapes, nested compositions, transitions, and supported 3D assets, then composite through the GPU engine.
 5. Capture a `VideoFrame` from the export canvas when possible, otherwise fall back to pixel readback.
 6. Encode and mux the file.
+
+Baked Datamosh transitions are prepared as ordinary project-backed video media before frame rendering. Preview and export therefore consume the same cached codec artifact; export does not run the I-frame-removal bake again. Isolated source renders used by the baker stage detached HTML video frames through a canvas before WebGPU import so a newly sought frame cannot collapse into a repeated source column.
+
+WebCodecs decoder startup submits a bounded search window of up to 32 samples before waiting for delayed initial output. It does not insert a separate output wait after each small startup chunk; normal decoding still waits for its target, and end-of-source decoding still drains the decoder. This supports hardware decoders that briefly report an empty queue before delivering their first frame.
 
 ### FFmpeg
 
@@ -342,3 +375,13 @@ Key implementation files:
 - `src/services/export/fcpxmlExport.ts`
 - `src/engine/ffmpeg/FFmpegBridge.ts`
 - `src/engine/ffmpeg/codecs.ts`
+
+### Decoder loss while awaiting a frame
+
+FAST export includes the final exact-frame wait in its bounded decoder recovery. If the browser loses the decoder after samples were submitted, export recreates it and restarts from the preceding keyframe once. It still requires the exact source frame; a missing frame or failed recreation produces an explicit failure instead of substituting a neighboring frame or retrying indefinitely.
+
+Export submissions retain exclusive ownership until the runner and its cleanup settle. Same-tick duplicate starts and restart attempts during cancellation are ignored; cancellation leaves the timeline export lock in place until cleanup finishes. A later export can start normally after completion or failure.
+
+### Encoder allocation during preparation
+
+Video export checks codec support and selects the audio format before preparation, but allocates the video encoder only when the first RGBA or zero-copy frame is ready. Slow source loading, audio rendering, and asset preparation therefore do not hold an idle video codec that the browser can reclaim. Cancellation during preparation discards the pending encoder and muxer. This does not restore inaccessible source files or prevent resource loss after encoding has begun.

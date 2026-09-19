@@ -31,11 +31,20 @@ Current preview-related overlays and modes include:
 - Renders the active composition or a pinned composition source.
 - Uses `renderHostPort.registerTargetCanvas()` through the preview-target registration helper to attach the canvas to WebGPU.
 - Registers as an active-comp or independent render target in `renderTargetStore`.
+- Normal composition previews use the same viewer navigation model as the Source Monitor: wheel or trackpad gestures zoom around the pointer, middle-button drag pans, and zooming fully out stops at Fit (100%) and restores the centered position.
+- The shared lower transport provides scrubbing, edit/frame navigation, playback, and toggleable timeline In/Out flags. Clicking an active In or Out flag removes that point again.
+- A failed WebGPU initialization replaces the canvas with a large, high-contrast error panel. The message distinguishes unavailable WebGPU, missing adapters, request timeouts, and renderer-resource failures without recommending a particular browser and keeps Linux/Vulkan guidance visible.
+- The Linux/Vulkan performance banner remains visible until dismissed. Dismissal is stored locally, so subsequent engine initializations do not show it again.
 
 ### Independent Previews
 
 - Non-active compositions are rendered as independent targets.
 - `renderScheduler` drives those targets without depending on the main editor preview loop.
+- A pinned child preview follows the parent playhead when that child is used as a nested composition. Linked audio companions do not create a second visual occurrence.
+- Parent and child previews reuse the already-composited nested GPU frame when their time and resolution match. The parent still applies its own wrapper transform, effects, masks, and crop.
+- Reusing the same child composition more than once in a parent keeps every visual instance on the normal nested render path during playback; paused preview may use the matching composited passthrough frame without turning the child's audio companion into a visual layer.
+- Pausing preserves the complete final ping-pong accumulator, including the last composited layer.
+- Adding, removing, replacing, or converting a layer in the active nested composition rebinds its runtime sources and invalidates dependent parents automatically. Transform, effect, text, and keyframe edits remain on the lightweight live-evaluation path.
 - Each target can toggle its own transparency grid state.
 - During edit-mode scrubbing, independent previews keep their last visible frame while the video decoder seeks instead of flashing black.
 - Edit mode is panel-local: the Edit button only affects that preview, and the global `Tab` shortcut targets the focused preview or, with no focused preview, the first editable preview.
@@ -59,6 +68,7 @@ The source monitor shows a raw media file in the preview panel instead of the co
 - Images render through a plain `<img>` element in the same panel surface.
 - Supports images, but images do not show transport controls.
 - Images and videos support wheel zoom and middle-button panning; image sources also provide a crop tool with aspect-ratio presets.
+- Source-specific playback and placement controls are hosted in the same lower Preview transport shell used by composition previews, while retaining the Source Monitor's own timeline and marked range.
 - Time display, play/pause, scrubbing, start/end buttons, and frame stepping are provided for video sources.
 - Audio sources provide waveform scrubbing, playback controls, In/Out marking, and placement actions for inserting or dragging the selected range into the timeline.
 - `Space` toggles source playback only while the pointer hovers the playable source monitor. Outside it, `Space` controls timeline playback.
@@ -80,6 +90,7 @@ The engine render loop is RAF-based and has three important behaviors:
 - It idles after about 1 second of inactivity.
 - Idle detection is suppressed until the first play event so browser video surfaces can warm up after reload.
 - A watchdog checks for stalls and restarts the loop if it dies while the engine is expected to render.
+- The composition playback clock is hosted above individual dock layouts. Switching between Video Edit, Color, and other editor layouts therefore preserves active playback and keeps every mounted transport and compact playhead synchronized.
 
 ### Playback Limits
 
@@ -91,12 +102,17 @@ The engine render loop is RAF-based and has three important behaviors:
 - Scrubbing is rate-limited to about 60 fps unless a fresh frame arrives via `requestVideoFrameCallback`.
 - The loop does not render while export is active.
 - During normal playback outside strict worker GPU mode, video clips stay on the live HTMLVideo/WebGPU import path even when JPEG proxy frames are available. Proxy image frames are used for paused preview, scrub fallback, and timeline thumbnails, but not as the primary playback surface because dense cut sequences need the browser video decoder and cut warmup path to remain active.
+- Split, recreate, undo, and similar timeline edits bind lazy media elements to the current clip owner instead of inheriting a predecessor clip's DOM handle. This keeps every active video layer available after continued editing and applies equally inside nested compositions.
+- During forward playback, a healthy live HTML-video frame may replace a stale pre-edit presentation-owner marker when its source time still matches the requested timeline time. Paused preview, scrubbing, and seeking retain strict owner checks, so cached frames cannot leak between clips while live multi-layer composition remains continuous.
 - Worker-first render hosts, including a strict `worker-gpu-only` diagnostic mode, are present but feature-gated. The normal default is the main fallback render host; full WebCodecs playback is also disabled by default.
 - When enabled for worker-GPU diagnostics, the worker path can present HTML-video frames or Worker WebCodecs frames and labels its presentation paths in playback statistics. Capability and browser support determine the active path.
 
 ### Browser Fallbacks
 
-- HTML video preview uses copied textures only on Firefox because imported frames can go black there; Chromium paths stay on live video import to avoid stale or corrupt copied textures.
+- Firefox uses copied HTML-video textures because imported frames can go black there.
+- Android Chromium copies HTML-video preview frames into persistent GPU textures during playback, pause, and seeking. This avoids the session-first and intermittent black frames caused by unstable external video textures on mobile GPU drivers.
+- A collapsed timeline In/Out selection is treated as no active range, so Play uses the full composition instead of stopping immediately.
+- Full-frame composite, copy, and output passes use one oversized triangle instead of a two-triangle quad. This avoids diagonal half-frame loss on affected Android WebGPU drivers.
 - The render path prefers live video import when the frame is ready, but it can fall back to cached frames or the last known frame to avoid black flashes.
 
 ---
@@ -156,6 +172,8 @@ Edit mode is a canvas overlay for layer transforms.
 - Selects a layer from the preview and syncs the corresponding clip in the timeline.
 - Shows bounding boxes and drag handles for the selected layer.
 - Supports zoom, pan, and transform gestures.
+- Touch uses the same edit paths as mouse input: one finger can drag layer and mask controls, including the scene gizmo's axis arrows, rotation rings, and center grip. A free one-finger drag in the perspective 3D Edit view orbits the editor camera without stealing touches that begin on those gizmos.
+- Two-finger pinch cancels an active one-finger orbit and changes edit-view zoom or camera distance continuously from the live finger spacing, without fixed zoom steps. In both 2D and 3D Preview Edit modes its touch zoom delta is amplified to four times the normal preview pinch rate.
 - 2D transform, text, and mask editing preserve the composition resolution and aspect ratio; only camera/3D edit views use the full panel viewport for an independent perspective.
 - Moving or scaling a layer publishes a transient render transform once per animation frame, so the canvas and edit handles stay live without rewriting the durable clip, mask state, or RAM-preview caches. The final transform is committed as one history batch when the pointer is released.
 - Multiple preview panels can mix edit and non-edit views at the same time. Camera and object changes update every visible view immediately, while each panel keeps its own perspective.
@@ -218,10 +236,12 @@ Key implementation files:
 - `src/engine/WebGPUEngine.ts`
 - `src/engine/render/RenderDispatcher.ts`
 - `src/engine/render/htmlVideoPreviewFallback.ts`
+- `src/engine/render/layerCollector/htmlVideoReadyCollector.ts`
 - `src/engine/managers/OutputWindowManager.ts`
 - `src/hooks/engine/useEngineResolutionSync.ts`
 - `src/services/ramPreviewEngine.ts`
 - `src/services/proxyFrameCache.ts`
 - `src/services/render/previewTargetRegistration.ts`
+- `src/services/timeline/lazyMediaElements.ts`
 - `src/stores/timeline/ramPreviewSlice.ts`
 - `src/stores/timeline/proxyCacheSlice.ts`

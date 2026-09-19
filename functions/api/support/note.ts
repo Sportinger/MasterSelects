@@ -1,6 +1,7 @@
 import { sendSupportNoteEmail } from '../../lib/authProviders';
 import { hasTrustedOrigin, json, methodNotAllowed, parseJson } from '../../lib/db';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
+import { buildRateLimitKey, getClientIp } from '../../lib/rateLimit';
 
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_PAGE_LENGTH = 500;
@@ -11,21 +12,15 @@ interface SupportNoteBody {
   page?: unknown;
 }
 
+/** One note per address per minute, tracked as a single-slot lock (pending/sent). */
 async function getRateLimitKey(context: AppContext): Promise<string | null> {
-  const ip = context.request.headers.get('cf-connecting-ip')?.trim();
+  const ip = getClientIp(context.request);
   if (!ip) return null;
-
-  const secret = context.env.VISITOR_NOTIFY_SECRET?.trim()
-    || context.env.SESSION_SECRET?.trim()
-    || 'masterselects-support-note';
-  const bytes = new TextEncoder().encode(`${secret}:${ip}`);
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  const hash = Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('')
-    .slice(0, 24);
-
-  return `support-note-rate:${hash}`;
+  return buildRateLimitKey(
+    'support-note',
+    ip,
+    context.env.VISITOR_NOTIFY_SECRET?.trim() || context.env.SESSION_SECRET,
+  );
 }
 
 function normalizeOptionalString(value: unknown, maxLength: number): string | undefined {

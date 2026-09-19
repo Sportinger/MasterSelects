@@ -3,13 +3,21 @@
 import type { VectorAnimationMetadata } from '../../../types/vectorAnimation';
 import type { MediaFileAudioAnalysisRefs, MediaFileStemInfo } from '../../../types/audio';
 import type { LiveInputSource } from '../../../types/liveInput';
+import type { SourceAnnotation } from '../../../types/sourceAnnotation';
 import type { SceneCutAnalysis } from '../../../types/sceneCutAnalysis';
+import type { RemoteColorGradeState } from '../../../types/colorGradeOwnership';
+import type {
+  ExternalMediaOrigin,
+  LinkedMediaSource,
+  MediaSourceSelection,
+  MediaVideoTrackMetadata,
+} from '../../../types/mediaMetadata';
 import type {
   ProjectGaussianSplatSequenceData,
   ProjectModelSequenceData,
 } from './schema.types';
 
-export interface ProjectMediaFile {
+export interface ProjectMediaFile extends MediaVideoTrackMetadata {
   id: string;
   name: string;
   type: 'video' | 'audio' | 'image' | 'model' | 'gaussian-splat' | 'lottie' | 'rive';
@@ -19,6 +27,12 @@ export interface ProjectMediaFile {
 
   // Path to copied file in project folder (e.g., "Raw/video.mp4")
   projectPath?: string;
+  // Browser source-folder identity plus a path relative to that approved root.
+  sourceRootId?: string;
+  sourceRelativePath?: string;
+  linkedSources?: LinkedMediaSource[];
+  sourceSelection?: MediaSourceSelection;
+  externalOrigin?: ExternalMediaOrigin;
   fileHash?: string;
 
   // Metadata
@@ -57,7 +71,11 @@ export interface ProjectMediaFile {
   // Label color
   labelColor?: string;
 
+  // Source-owned Resolve-style remote grade
+  remoteColorGrade?: RemoteColorGradeState;
+
   // Timestamps
   importedAt: string;
   liveInput?: LiveInputSource;
+  sourceAnnotations?: SourceAnnotation[];
 }

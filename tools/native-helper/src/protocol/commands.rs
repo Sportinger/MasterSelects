@@ -15,6 +15,21 @@ pub enum Command {
     /// Ping for connection keepalive
     Ping { id: String },
 
+    /// Start publishing browser-encoded H.264/AAC media to an RTMP destination.
+    #[serde(rename = "rtmp_start", alias = "rtmpStart")]
+    RtmpStart {
+        id: String,
+        url: String,
+        #[serde(rename = "streamKey", alias = "stream_key")]
+        stream_key: String,
+        video: RtmpVideoConfig,
+        audio: RtmpAudioConfig,
+    },
+
+    /// Stop the RTMP publisher owned by this WebSocket connection.
+    #[serde(rename = "rtmp_stop", alias = "rtmpStop")]
+    RtmpStop { id: String },
+
     /// Download a YouTube video using yt-dlp (legacy command name)
     DownloadYoutube {
         id: String,
@@ -37,6 +52,14 @@ pub enum Command {
 
     /// List available formats for a video URL
     ListFormats { id: String, url: String },
+
+    /// Search YouTube locally through yt-dlp without a platform API key
+    SearchVideos {
+        id: String,
+        query: String,
+        #[serde(default)]
+        max_results: Option<u8>,
+    },
 
     /// Get a file from local filesystem (for serving downloads)
     GetFile { id: String, path: String },
@@ -188,6 +211,26 @@ pub enum Command {
     MuscriptorUninstall { id: String },
 }
 
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RtmpVideoConfig {
+    pub width: u32,
+    pub height: u32,
+    pub fps: f64,
+    #[serde(alias = "bitrate_kbps")]
+    pub bitrate_kbps: u32,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RtmpAudioConfig {
+    #[serde(alias = "sample_rate")]
+    pub sample_rate: u32,
+    pub channels: u8,
+    #[serde(alias = "bitrate_kbps")]
+    pub bitrate_kbps: u32,
+}
+
 fn default_muscriptor_variant() -> String {
     "small".to_string()
 }
@@ -221,6 +264,28 @@ pub struct ErrorInfo {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RtmpStatusEvent {
+    #[serde(rename = "type")]
+    pub event_type: &'static str,
+    pub state: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RtmpStatsEvent {
+    #[serde(rename = "type")]
+    pub event_type: &'static str,
+    pub sent_bytes: u64,
+    pub queued_bytes: u64,
+    pub queued_messages: usize,
+    pub uptime_ms: u64,
+    pub dropped_frames: u64,
+}
+
 /// System info response
 #[derive(Debug, Clone, Serialize)]
 pub struct SystemInfo {
@@ -229,6 +294,7 @@ pub struct SystemInfo {
     pub download_dir: String,
     pub project_root: String,
     pub fs_commands: bool,
+    pub media_search: bool,
     pub matanyone_available: bool,
     pub matanyone_status: String,
 }
@@ -299,6 +365,23 @@ impl Response {
             data,
         })
     }
+
+    pub fn rtmp_status(
+        id: impl Into<String>,
+        state: &'static str,
+        message: Option<String>,
+    ) -> Self {
+        let event = RtmpStatusEvent {
+            event_type: "rtmp-status",
+            state,
+            message,
+        };
+        Self::ok(id, serde_json::to_value(event).unwrap_or_default())
+    }
+
+    pub fn rtmp_stats(id: impl Into<String>, event: RtmpStatsEvent) -> Self {
+        Self::ok(id, serde_json::to_value(event).unwrap_or_default())
+    }
 }
 
 /// Error codes
@@ -325,6 +408,9 @@ pub mod error_codes {
     pub const MUSCRIPTOR_MODEL_DOWNLOAD_FAILED: &str = "MUSCRIPTOR_MODEL_DOWNLOAD_FAILED";
     pub const MUSCRIPTOR_NOT_RUNNING: &str = "MUSCRIPTOR_NOT_RUNNING";
     pub const MUSCRIPTOR_TRANSCRIPTION_FAILED: &str = "MUSCRIPTOR_TRANSCRIPTION_FAILED";
+    pub const RTMP_ALREADY_ACTIVE: &str = "RTMP_ALREADY_ACTIVE";
+    pub const RTMP_NOT_ACTIVE: &str = "RTMP_NOT_ACTIVE";
+    pub const RTMP_INVALID_TARGET: &str = "RTMP_INVALID_TARGET";
 }
 
 impl Command {
@@ -335,9 +421,12 @@ impl Command {
             Self::Auth { .. } => "auth",
             Self::Info { .. } => "info",
             Self::Ping { .. } => "ping",
+            Self::RtmpStart { .. } => "rtmp_start",
+            Self::RtmpStop { .. } => "rtmp_stop",
             Self::DownloadYoutube { .. } => "download_youtube",
             Self::Download { .. } => "download",
             Self::ListFormats { .. } => "list_formats",
+            Self::SearchVideos { .. } => "search_videos",
             Self::GetFile { .. } => "get_file",
             Self::Locate { .. } => "locate",
             Self::WriteFile { .. } => "write_file",
@@ -392,5 +481,39 @@ mod tests {
             }
             _ => panic!("unexpected command"),
         }
+    }
+
+    #[test]
+    fn rtmp_command_accepts_documented_camel_case_wire_shape() {
+        let cmd: Command = serde_json::from_str(
+            r#"{"cmd":"rtmpStart","id":"live-1","url":"rtmp://example.com/live","streamKey":"secret","video":{"width":1920,"height":1080,"fps":30,"bitrateKbps":6000},"audio":{"sampleRate":48000,"channels":2,"bitrateKbps":160}}"#,
+        )
+        .unwrap();
+        match cmd {
+            Command::RtmpStart {
+                id,
+                stream_key,
+                video,
+                audio,
+                ..
+            } => {
+                assert_eq!(id, "live-1");
+                assert_eq!(stream_key, "secret");
+                assert_eq!(video.bitrate_kbps, 6000);
+                assert_eq!(audio.sample_rate, 48_000);
+            }
+            _ => panic!("unexpected command"),
+        }
+    }
+
+    #[test]
+    fn rtmp_event_uses_standard_response_envelope() {
+        let value =
+            serde_json::to_value(Response::rtmp_status("live-1", "publishing", None)).unwrap();
+        assert_eq!(value["id"], "live-1");
+        assert_eq!(value["ok"], true);
+        assert_eq!(value["type"], "rtmp-status");
+        assert_eq!(value["state"], "publishing");
+        assert!(value.get("message").is_none());
     }
 }

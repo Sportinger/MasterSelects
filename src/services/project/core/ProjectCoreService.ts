@@ -2,42 +2,57 @@
 // Handles create, open, save, close, rename, backup operations
 
 import { Logger } from '../../logger';
+import { projectSaveStatus, trackProjectSave } from '../projectSaveStatus';
 import { projectDB } from '../../projectDB';
 import { shouldSkipEmptyProjectSave } from './autosaveRecovery';
-import { addRecentFsaProject, removeRecentFsaProject } from '../recentProjects';
+import { addRecentFsaProject, getRecentProjects, removeRecentFsaProject } from '../recentProjects';
 import { createDefaultRulerLaneState } from '../../../timeline/tempo/rulerDefaults';
+import {
+  clearLastOpfsProjectName,
+  getTabLastProjectHandleKey,
+  LEGACY_LAST_PROJECT_HANDLE_KEY,
+  readLastOpfsProjectName,
+  storeLastOpfsProjectName,
+} from '../tabProjectPersistence';
 
 const log = Logger.create('ProjectCore');
 import { FileStorageService } from './FileStorageService';
-import { MAX_BACKUPS, PROJECT_FOLDERS } from './constants';
+import { PROJECT_FOLDERS } from './constants';
 import {
   PROJECT_AUTOSAVE_FILE_NAME,
   PROJECT_FILE_NAME,
+  importLegacyFsaPackageEntries,
   readFsaProjectFile,
+  readFsaProjectPackage,
   readLatestFsaProjectData,
+  writeFsaProjectPackage,
   writeFsaProjectFile,
   writeFsaProjectJsonWithAutosaveFallback,
 } from './projectCorePersistence';
+import {
+  getFsaProjectPackageSession,
+  getProjectPackageFileName,
+  getProjectMediaFolderName,
+  ProjectPackageSession,
+  registerFsaProjectPackageSession,
+  unregisterFsaProjectPackageSession,
+} from './projectPackage';
+import {
+  acquireProjectRoot,
+  getProjectWriteSupportError,
+  listProjectFolderNames,
+  resolveProjectRootMode,
+} from './projectRootAccess';
 import type { ProjectComposition } from '../types/composition.types';
 import type { ProjectFolder } from '../types/folder.types';
 import type { ProjectMediaFile } from '../types/media.types';
 import type { ProjectFile } from '../types/project.types';
-
-type DirectoryPickerWindow = Window & typeof globalThis & {
-  showDirectoryPicker: (options?: {
-    mode?: 'read' | 'readwrite';
-    startIn?: 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos';
-  }) => Promise<FileSystemDirectoryHandle>;
-};
-
-type FileSystemEntryHandle = FileSystemFileHandle | FileSystemDirectoryHandle;
-type IterableDirectoryHandle = FileSystemDirectoryHandle & {
-  values: () => AsyncIterableIterator<FileSystemEntryHandle>;
-};
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError';
-}
+import {
+  copyFsaDirectoryContents,
+  createFsaProjectBackup,
+  fsaFolderContainsProject,
+} from './fsaProjectDirectoryOperations';
+import { recordProjectDirtyMark } from '../projectDirtyDiagnostics';
 
 export class ProjectCoreService {
   private projectHandle: FileSystemDirectoryHandle | null = null;
@@ -45,6 +60,7 @@ export class ProjectCoreService {
   private isDirty = false;
   private dirtyRevision = 0;
   private saveQueue: Promise<void> = Promise.resolve();
+  private pendingSave: { handle: FileSystemDirectoryHandle | null; promise: Promise<boolean> } | null = null;
   private pendingHandle: FileSystemDirectoryHandle | null = null;
   private permissionNeeded = false;
   private fileStorage: FileStorageService;
@@ -58,7 +74,7 @@ export class ProjectCoreService {
   // ============================================
 
   isSupported(): boolean {
-    return 'showDirectoryPicker' in window && 'showSaveFilePicker' in window;
+    return resolveProjectRootMode() !== 'none';
   }
 
   getProjectHandle(): FileSystemDirectoryHandle | null {
@@ -78,6 +94,7 @@ export class ProjectCoreService {
   }
 
   markDirty(): void {
+    recordProjectDirtyMark('fsa-core', this.isProjectOpen(), this.isDirty);
     this.isDirty = true;
     this.dirtyRevision += 1;
   }
@@ -118,35 +135,39 @@ export class ProjectCoreService {
   // ============================================
 
   async createProject(name: string): Promise<boolean> {
-    if (!this.isSupported()) {
-      log.error('File System Access API not supported');
+    const error = getProjectWriteSupportError();
+    if (error) {
+      log.warn(error);
       return false;
     }
+    const handle = await acquireProjectRoot(resolveProjectRootMode());
+    if (!handle) return false;
 
     try {
-      const handle = await (window as DirectoryPickerWindow).showDirectoryPicker({
-        mode: 'readwrite',
-        startIn: 'documents',
+      // Remembering the folder is optional; the project itself lives on disk.
+      await projectDB.storeHandle('projectsFolder', handle).catch(error => {
+        log.warn('Could not cache projects folder; continuing with selected folder', error);
       });
-
-      await projectDB.storeHandle('projectsFolder', handle);
       const projectFolder = await handle.getDirectoryHandle(name, { create: true });
       return await this.initializeProject(projectFolder, name);
     } catch (e) {
-      if (isAbortError(e)) return false;
       log.error('Failed to create project:', e);
       return false;
     }
   }
 
   async createProjectInFolder(handle: FileSystemDirectoryHandle, name: string): Promise<boolean> {
-    if (!this.isSupported()) {
-      log.error('File System Access API not supported');
+    const error = getProjectWriteSupportError();
+    if (error || !this.isSupported()) {
+      log.warn(error ?? 'File System Access API not supported');
       return false;
     }
 
     try {
-      await projectDB.storeHandle('projectsFolder', handle);
+      // Remembering the folder is optional; the project itself lives on disk.
+      await projectDB.storeHandle('projectsFolder', handle).catch(error => {
+        log.warn('Could not cache projects folder; continuing with selected folder', error);
+      });
       const projectFolder = await handle.getDirectoryHandle(name, { create: true });
       return await this.initializeProject(projectFolder, name);
     } catch (e) {
@@ -157,8 +178,6 @@ export class ProjectCoreService {
 
   private async initializeProject(projectFolder: FileSystemDirectoryHandle, name: string): Promise<boolean> {
     try {
-      await this.fileStorage.createProjectFolders(projectFolder);
-
       const mainCompId = `comp-${Date.now()}`;
 
       const initialProject: ProjectFile = {
@@ -197,7 +216,10 @@ export class ProjectCoreService {
         expandedFolderIds: [],
       };
 
-      await writeFsaProjectFile(projectFolder, PROJECT_FILE_NAME, initialProject);
+      const packageSession = ProjectPackageSession.create(initialProject);
+      this.configurePackageSession(projectFolder, packageSession);
+      await this.fileStorage.createProjectFolders(projectFolder);
+      await writeFsaProjectPackage(projectFolder, packageSession, initialProject);
 
       this.projectHandle = projectFolder;
       this.projectData = initialProject;
@@ -214,33 +236,65 @@ export class ProjectCoreService {
     }
   }
 
+  /**
+   * Picker-based open. On OPFS there is nothing to pick, so callers list
+   * `listStoredProjects()` and open by name instead.
+   */
   async openProject(): Promise<boolean> {
-    if (!this.isSupported()) {
-      log.error('File System Access API not supported');
-      return false;
-    }
+    if (resolveProjectRootMode() !== 'fsa') return false;
+
+    const handle = await acquireProjectRoot('fsa');
+    if (!handle) return false;
 
     try {
-      const handle = await (window as DirectoryPickerWindow).showDirectoryPicker({
-        mode: 'readwrite',
-        startIn: 'documents',
-      });
-
       return await this.loadProject(handle);
     } catch (e) {
-      if (isAbortError(e)) return false;
       log.error('Failed to open project:', e);
+      return false;
+    }
+  }
+
+  /** Project folder names; storage access failure must not masquerade as an empty root. */
+  async listStoredProjects(): Promise<string[]> {
+    const root = await acquireProjectRoot(resolveProjectRootMode(), { throwOnFailure: true });
+    return root ? await listProjectFolderNames(root) : [];
+  }
+
+  async openStoredProject(name: string): Promise<boolean> {
+    const root = await acquireProjectRoot(resolveProjectRootMode());
+    if (!root) return false;
+
+    try {
+      return await this.loadProject(await root.getDirectoryHandle(name, { create: false }));
+    } catch (e) {
+      log.error(`Failed to open stored project "${name}":`, e);
       return false;
     }
   }
 
   async loadProject(handle: FileSystemDirectoryHandle): Promise<boolean> {
     try {
-      const projectData = await readLatestFsaProjectData(handle);
+      const loadedPackage = await readFsaProjectPackage(handle);
+      const projectData = loadedPackage?.projectData ?? await readLatestFsaProjectData(handle);
 
       if (projectData.version !== 1) {
         log.error('Unsupported project version:', projectData.version);
         return false;
+      }
+
+      if (loadedPackage) {
+        this.configurePackageSession(handle, loadedPackage.session);
+      } else {
+        const migrationSession = ProjectPackageSession.create(projectData);
+        migrationSession.setMediaFolderName(PROJECT_FOLDERS.RAW);
+        await importLegacyFsaPackageEntries(handle, migrationSession);
+        try {
+          await writeFsaProjectPackage(handle, migrationSession, projectData);
+          this.configurePackageSession(handle, migrationSession);
+          log.info(`Migrated legacy project to ${migrationSession.getPackageFileName()}; original files were preserved`);
+        } catch (migrationError) {
+          log.warn('Could not migrate legacy project to .msproj; continuing in legacy mode', migrationError);
+        }
       }
 
       await this.fileStorage.createProjectFolders(handle);
@@ -262,10 +316,18 @@ export class ProjectCoreService {
   }
 
   async saveProject(): Promise<boolean> {
-    const queuedSave = this.saveQueue.then(
-      () => this.performSaveProject(),
-      () => this.performSaveProject(),
-    );
+    const session = this.projectHandle ? getFsaProjectPackageSession(this.projectHandle) : null;
+    if (session?.isBatchingWrites) await session.waitForWriteBatch();
+    // Concurrent artifact writes share one upcoming snapshot instead of each
+    // reserializing the entire project. A write already in flight stays separate.
+    if (this.pendingSave?.handle === this.projectHandle) return this.pendingSave.promise;
+    const runSave = async () => {
+      while (session?.isBatchingWrites) await session.waitForWriteBatch();
+      if (this.pendingSave?.promise === queuedSave) this.pendingSave = null;
+      return trackProjectSave(this.projectHandle, () => this.performSaveProject());
+    };
+    const queuedSave = this.saveQueue.then(runSave, runSave);
+    this.pendingSave = { handle: this.projectHandle, promise: queuedSave };
     this.saveQueue = queuedSave.then(() => undefined, () => undefined);
     return queuedSave;
   }
@@ -278,17 +340,22 @@ export class ProjectCoreService {
 
     try {
       const savedRevision = this.dirtyRevision;
-      const autosaveData = await readFsaProjectFile(this.projectHandle, PROJECT_AUTOSAVE_FILE_NAME);
+      const packageSession = getFsaProjectPackageSession(this.projectHandle);
+      const autosaveData = packageSession
+        ? null
+        : await readFsaProjectFile(this.projectHandle, PROJECT_AUTOSAVE_FILE_NAME);
       if (shouldSkipEmptyProjectSave(this.projectData, autosaveData)) {
         log.warn('Skipped empty project save because project.autosave.json contains recoverable project data');
-        if (this.dirtyRevision === savedRevision) {
-          this.isDirty = false;
-        }
-        return true;
+        // Recovery protection is not a successful write. Keep edits unsaved.
+        return false;
       }
 
       this.projectData.updatedAt = new Date().toISOString();
-      await writeFsaProjectJsonWithAutosaveFallback(this.projectHandle, this.projectData);
+      if (packageSession) {
+        await writeFsaProjectPackage(this.projectHandle, packageSession, this.projectData);
+      } else {
+        await writeFsaProjectJsonWithAutosaveFallback(this.projectHandle, this.projectData);
+      }
 
       if (this.dirtyRevision === savedRevision) {
         this.isDirty = false;
@@ -303,6 +370,8 @@ export class ProjectCoreService {
   }
 
   closeProject(): void {
+    projectSaveStatus.reset(this.projectHandle);
+    if (this.projectHandle) unregisterFsaProjectPackageSession(this.projectHandle);
     this.projectHandle = null;
     this.projectData = null;
     this.isDirty = false;
@@ -315,63 +384,9 @@ export class ProjectCoreService {
   // ============================================
 
   async createBackup(): Promise<boolean> {
-    if (!this.projectHandle || !this.projectData) {
-      return false;
-    }
-
-    try {
-      const projectFile = await this.projectHandle.getFileHandle('project.json');
-      const file = await projectFile.getFile();
-      const content = await file.text();
-
-      const now = new Date();
-      const timestamp = now.toISOString()
-        .replace(/[:.]/g, '-')
-        .replace('T', '_')
-        .slice(0, 19);
-      const backupFileName = `project_${timestamp}.json`;
-
-      const backupsFolder = await this.projectHandle.getDirectoryHandle(PROJECT_FOLDERS.BACKUPS, { create: true });
-
-      const backupHandle = await backupsFolder.getFileHandle(backupFileName, { create: true });
-      const writable = await backupHandle.createWritable();
-      await writable.write(content);
-      await writable.close();
-
-      log.debug(`Created backup: ${backupFileName}`);
-
-      await this.cleanupOldBackups(backupsFolder);
-
-      return true;
-    } catch (e) {
-      log.error('Failed to create backup:', e);
-      return false;
-    }
-  }
-
-  private async cleanupOldBackups(backupsFolder: FileSystemDirectoryHandle): Promise<void> {
-    try {
-      const backups: { name: string; file: File }[] = [];
-
-      for await (const entry of (backupsFolder as IterableDirectoryHandle).values()) {
-        if (entry.kind === 'file' && entry.name.startsWith('project_') && entry.name.endsWith('.json')) {
-          const file = await entry.getFile();
-          backups.push({ name: entry.name, file });
-        }
-      }
-
-      backups.sort((a, b) => b.file.lastModified - a.file.lastModified);
-
-      if (backups.length > MAX_BACKUPS) {
-        const toRemove = backups.slice(MAX_BACKUPS);
-        for (const backup of toRemove) {
-          await backupsFolder.removeEntry(backup.name);
-          log.debug(`Removed old backup: ${backup.name}`);
-        }
-      }
-    } catch (e) {
-      log.warn('Failed to cleanup old backups:', e);
-    }
+    return this.projectHandle && this.projectData
+      ? createFsaProjectBackup(this.projectHandle, this.fileStorage)
+      : false;
   }
 
   // ============================================
@@ -398,11 +413,11 @@ export class ProjectCoreService {
     try {
       const parentHandle = await projectDB.getStoredHandle('projectsFolder');
       if (!parentHandle || parentHandle.kind !== 'directory') {
-        // No parent folder stored - just update the display name in project.json
+        // No parent folder stored - just update the package display name.
         log.info(`No parent folder handle, updating display name only to "${trimmedName}"`);
         this.projectData.name = trimmedName;
         this.projectData.updatedAt = new Date().toISOString();
-        await writeFsaProjectFile(this.projectHandle, PROJECT_FILE_NAME, this.projectData);
+        await this.writeProjectState(this.projectHandle, this.projectData, true);
         await addRecentFsaProject(this.projectHandle, this.projectData);
         this.isDirty = false;
         return true;
@@ -413,11 +428,11 @@ export class ProjectCoreService {
       // Verify we have write permission on the parent
       const permission = await parentDir.queryPermission({ mode: 'readwrite' });
       if (permission !== 'granted') {
-        // No permission on parent - just update display name in project.json
+        // No permission on parent - just update the package display name.
         log.info(`No write permission on parent folder, updating display name only to "${trimmedName}"`);
         this.projectData.name = trimmedName;
         this.projectData.updatedAt = new Date().toISOString();
-        await writeFsaProjectFile(this.projectHandle, PROJECT_FILE_NAME, this.projectData);
+        await this.writeProjectState(this.projectHandle, this.projectData, true);
         await addRecentFsaProject(this.projectHandle, this.projectData);
         this.isDirty = false;
         return true;
@@ -430,7 +445,7 @@ export class ProjectCoreService {
       if (trimmedName === oldName) {
         this.projectData.name = trimmedName;
         this.projectData.updatedAt = new Date().toISOString();
-        await writeFsaProjectFile(this.projectHandle, PROJECT_FILE_NAME, this.projectData);
+        await this.writeProjectState(this.projectHandle, this.projectData, true);
         await addRecentFsaProject(this.projectHandle, this.projectData);
         this.isDirty = false;
         log.info(`Project display name updated to "${trimmedName}"`);
@@ -446,16 +461,8 @@ export class ProjectCoreService {
       }
 
       if (existingFolder) {
-        // Check if the existing folder is a leftover (no project.json = not a real project)
-        let hasProjectJson = false;
-        try {
-          await existingFolder.getFileHandle('project.json', { create: false });
-          hasProjectJson = true;
-        } catch {
-          // No project.json
-        }
-
-        if (hasProjectJson) {
+        // Check whether the destination contains either supported project format.
+        if (await fsaFolderContainsProject(existingFolder)) {
           log.error(`Folder "${trimmedName}" already contains a project`);
           return false;
         }
@@ -471,15 +478,35 @@ export class ProjectCoreService {
       }
 
       const newFolder = await parentDir.getDirectoryHandle(trimmedName, { create: true });
-      await this.copyDirectoryContents(this.projectHandle, newFolder);
+      const oldPackageSession = getFsaProjectPackageSession(this.projectHandle);
+      const renamedMediaFolder = oldPackageSession && oldPackageSession.getMediaFolderName() !== PROJECT_FOLDERS.RAW
+        ? {
+          from: oldPackageSession.getMediaFolderName(),
+          to: getProjectMediaFolderName(trimmedName),
+        }
+        : undefined;
+      await copyFsaDirectoryContents(this.projectHandle, newFolder, renamedMediaFolder);
+
+      const newPackageSession = oldPackageSession
+        ? new ProjectPackageSession(
+          oldPackageSession.getManifest(),
+          oldPackageSession.getEntries(),
+          oldPackageSession.getPackageFileName(),
+        )
+        : null;
+      if (newPackageSession && renamedMediaFolder) {
+        newPackageSession.setMediaFolderName(renamedMediaFolder.to);
+      }
 
       this.projectData.name = trimmedName;
       this.projectData.updatedAt = new Date().toISOString();
-      await writeFsaProjectFile(newFolder, PROJECT_FILE_NAME, this.projectData);
+      if (newPackageSession) this.configurePackageSession(newFolder, newPackageSession);
+      await this.writeProjectState(newFolder, this.projectData, true);
 
+      unregisterFsaProjectPackageSession(oldProjectHandle);
       this.projectHandle = newFolder;
 
-      await projectDB.storeHandle('lastProject', newFolder);
+      await this.storeLastProject(newFolder);
       await removeRecentFsaProject(oldProjectHandle);
       await addRecentFsaProject(newFolder, this.projectData);
 
@@ -499,20 +526,35 @@ export class ProjectCoreService {
     }
   }
 
-  private async copyDirectoryContents(
-    source: FileSystemDirectoryHandle,
-    target: FileSystemDirectoryHandle
+  private configurePackageSession(
+    handle: FileSystemDirectoryHandle,
+    session: ProjectPackageSession,
+  ): void {
+    registerFsaProjectPackageSession(handle, session);
+    // Sidecars join the next manual/timed project snapshot; importing is not a Save action.
+    session.setPersistCallback(async () => { this.markDirty(); return true; });
+  }
+
+  private async writeProjectState(
+    handle: FileSystemDirectoryHandle,
+    projectData: ProjectFile,
+    renamePackage = false,
   ): Promise<void> {
-    for await (const entry of (source as IterableDirectoryHandle).values()) {
-      if (entry.kind === 'file') {
-        const sourceFile = await entry.getFile();
-        const targetFile = await target.getFileHandle(entry.name, { create: true });
-        const writable = await targetFile.createWritable();
-        await writable.write(sourceFile);
-        await writable.close();
-      } else if (entry.kind === 'directory') {
-        const subDir = await target.getDirectoryHandle(entry.name, { create: true });
-        await this.copyDirectoryContents(entry, subDir);
+    const session = getFsaProjectPackageSession(handle);
+    if (!session) {
+      await writeFsaProjectFile(handle, PROJECT_FILE_NAME, projectData);
+      return;
+    }
+
+    const previousFileName = session.getPackageFileName();
+    if (renamePackage) session.setPackageFileName(getProjectPackageFileName(projectData.name));
+    await writeFsaProjectPackage(handle, session, projectData);
+
+    if (previousFileName !== session.getPackageFileName()) {
+      try {
+        await handle.removeEntry(previousFileName);
+      } catch {
+        // A copied/migrated project may not contain the previous package name.
       }
     }
   }
@@ -522,8 +564,34 @@ export class ProjectCoreService {
   // ============================================
 
   async restoreLastProject(): Promise<boolean> {
+    if (resolveProjectRootMode() === 'opfs') {
+      const storedName = readLastOpfsProjectName();
+      const recentProjects = getRecentProjects();
+      const recentEntry = recentProjects.find((entry) => (
+        entry.backend === 'opfs' || entry.backend === 'fsa'
+      ));
+      const recentName = recentEntry?.path
+        ?? (recentEntry?.backend === 'fsa' ? recentEntry.name : undefined);
+      const candidates = [...new Set([storedName, recentName].filter((name): name is string => Boolean(name)))];
+
+      for (const name of candidates) {
+        if (await this.openStoredProject(name)) {
+          return true;
+        }
+      }
+
+      // Migration fallback for projects created before the project name was
+      // persisted explicitly. A single OPFS project is unambiguous.
+      const storedProjects = await this.listStoredProjects();
+      if (storedProjects.length === 1) {
+        return this.openStoredProject(storedProjects[0]!);
+      }
+      return false;
+    }
+
     try {
-      const handle = await projectDB.getStoredHandle('lastProject');
+      const handle = await projectDB.getStoredHandle(getTabLastProjectHandleKey())
+        ?? await projectDB.getStoredHandle(LEGACY_LAST_PROJECT_HANDLE_KEY);
       if (!handle || handle.kind !== 'directory') return false;
 
       const permission = await handle.queryPermission({ mode: 'readwrite' });
@@ -580,9 +648,9 @@ export class ProjectCoreService {
 
   private async clearStoredHandles(): Promise<void> {
     try {
-      await projectDB.deleteHandle('lastProject');
-      await projectDB.deleteHandle('projectsFolder');
-      log.debug('Cleared stored handles');
+      await projectDB.deleteHandle(getTabLastProjectHandleKey());
+      clearLastOpfsProjectName();
+      log.debug('Cleared stored project handle for this browser tab');
     } catch (e) {
       log.warn('Failed to clear stored handles:', e);
     }
@@ -617,8 +685,14 @@ export class ProjectCoreService {
   }
 
   private async storeLastProject(handle: FileSystemDirectoryHandle): Promise<void> {
+    if (resolveProjectRootMode() === 'opfs') {
+      storeLastOpfsProjectName(handle.name);
+    }
     try {
-      await projectDB.storeHandle('lastProject', handle);
+      await Promise.all([
+        projectDB.storeHandle(getTabLastProjectHandleKey(), handle),
+        projectDB.storeHandle(LEGACY_LAST_PROJECT_HANDLE_KEY, handle),
+      ]);
     } catch (e) {
       log.warn('Failed to store last project:', e);
     }

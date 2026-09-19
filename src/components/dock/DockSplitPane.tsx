@@ -1,27 +1,37 @@
 // Split container with two children and resize handle
 
-import { useCallback, useState, useEffect, useRef } from 'react';
+import { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import type { DockSplit } from '../../types/dock';
 import { useDockStore } from '../../stores/dockStore';
+import { nodeContainsPanelType } from '../../stores/dockStore/layoutTree';
+import { useTimelineStore } from '../../stores/timeline';
 import { DockNode } from './DockNode';
 import { nodeContainsPanel } from '../../utils/dockLayout';
 import {
   registerDockResizeHandle,
+  registerDockResizeProxyHandle,
   startDockResize,
   type DockResizePointer,
 } from './dockResizeSession';
+import {
+  DOCK_RESIZE_HANDLE_SIZE,
+  findDockResizeDelegateId,
+  getColorTimelinePanelHeight,
+  getDirectChildMinimumSize,
+  getDockNodeFixedSize,
+} from './dockPanelSizing';
 
 interface DockSplitPaneProps {
   split: DockSplit;
 }
 
-// Minimum sizes for panels (in pixels)
 const MIN_PANEL_SIZE = 150;
-const MIN_PREVIEW_HEIGHT = 200; // Preview needs more height for video
+const MIN_PREVIEW_HEIGHT = 200;
 
 export function DockSplitPane({ split }: DockSplitPaneProps) {
   const setSplitRatio = useDockStore((state) => state.setSplitRatio);
   const maximizedPanelId = useDockStore((state) => state.maximizedPanelId);
+  const layoutRoot = useDockStore((state) => state.layout.root);
   const [isResizing, setIsResizing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const firstChildRef = useRef<HTMLDivElement>(null);
@@ -32,20 +42,49 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
   const pendingPointerRef = useRef<DockResizePointer | null>(null);
 
   const isHorizontal = split.direction === 'horizontal';
+  const splitDimension = isHorizontal ? 'width' : 'height';
+  const containsColorTimeline = nodeContainsPanelType(split, 'color-timeline');
+  const colorTimelineTrackCount = useTimelineStore((state) => (
+    containsColorTimeline ? state.tracks.filter(track => track.type === 'video').length : 0
+  ));
+  const fixedSizeOverrides = useMemo(() => (
+    containsColorTimeline
+      ? { 'color-timeline': { height: getColorTimelinePanelHeight(colorTimelineTrackCount) } }
+      : undefined
+  ), [colorTimelineTrackCount, containsColorTimeline]);
+  const firstMinimumSize = getDirectChildMinimumSize(
+    split.children[0],
+    splitDimension,
+    isHorizontal ? MIN_PANEL_SIZE : MIN_PREVIEW_HEIGHT,
+    fixedSizeOverrides,
+  );
+  const secondMinimumSize = getDirectChildMinimumSize(
+    split.children[1],
+    splitDimension,
+    MIN_PANEL_SIZE,
+    fixedSizeOverrides,
+  );
+  const firstFixedSize = getDockNodeFixedSize(split.children[0], splitDimension, fixedSizeOverrides);
+  const secondFixedSize = getDockNodeFixedSize(split.children[1], splitDimension, fixedSizeOverrides);
+  const hasFixedChild = firstFixedSize !== null || secondFixedSize !== null;
+  const resizeDelegateId = hasFixedChild
+    ? findDockResizeDelegateId(layoutRoot, split.id, splitDimension, fixedSizeOverrides)
+    : null;
+  const isResizeHandleInteractive = !hasFixedChild || resizeDelegateId !== null;
   const maximizedChildIndex = maximizedPanelId
     ? (nodeContainsPanel(split.children[0], maximizedPanelId) ? 0 : nodeContainsPanel(split.children[1], maximizedPanelId) ? 1 : null)
     : null;
   const isMaximizedPath = maximizedChildIndex !== null;
 
   const applyLiveRatioToDom = useCallback((ratio: number) => {
-    if (isMaximizedPath) return;
+    if (isMaximizedPath || hasFixedChild) return;
     const firstChild = firstChildRef.current;
     const secondChild = secondChildRef.current;
     if (!firstChild || !secondChild) return;
     const sizeProperty = isHorizontal ? 'width' : 'height';
     firstChild.style.setProperty(sizeProperty, `calc(${ratio * 100}% - 2px)`);
     secondChild.style.setProperty(sizeProperty, `calc(${(1 - ratio) * 100}% - 2px)`);
-  }, [isHorizontal, isMaximizedPath]);
+  }, [hasFixedChild, isHorizontal, isMaximizedPath]);
 
   useEffect(() => {
     if (isResizing) return;
@@ -64,14 +103,16 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
       ? (pointer.clientX - rect.left) / rect.width
       : (pointer.clientY - rect.top) / rect.height;
 
-    // Calculate min ratios based on pixel constraints
-    const minSize = isHorizontal ? MIN_PANEL_SIZE : MIN_PREVIEW_HEIGHT;
-    const minRatio = minSize / dimension;
-    const maxRatio = 1 - (MIN_PANEL_SIZE / dimension);
+    if (firstMinimumSize + secondMinimumSize > dimension) {
+      return firstMinimumSize / (firstMinimumSize + secondMinimumSize);
+    }
+
+    const minRatio = firstMinimumSize / dimension;
+    const maxRatio = 1 - (secondMinimumSize / dimension);
 
     // Clamp ratio to respect minimum sizes
     return Math.max(minRatio, Math.min(maxRatio, ratio));
-  }, [isHorizontal]);
+  }, [firstMinimumSize, isHorizontal, secondMinimumSize]);
 
   const commitLiveRatioFrame = useCallback(() => {
     liveRatioFrameRef.current = null;
@@ -125,6 +166,16 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
     const element = handleRef.current;
     if (!element || isMaximizedPath) return;
 
+    if (hasFixedChild) {
+      if (!resizeDelegateId) return;
+      return registerDockResizeProxyHandle({
+        id: split.id,
+        axis: isHorizontal ? 'x' : 'y',
+        element,
+        proxyTargetId: resizeDelegateId,
+      });
+    }
+
     return registerDockResizeHandle({
       id: split.id,
       axis: isHorizontal ? 'x' : 'y',
@@ -137,8 +188,10 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
     handleResizeEnd,
     handleResizeMove,
     handleResizeStart,
+    hasFixedChild,
     isHorizontal,
     isMaximizedPath,
+    resizeDelegateId,
     split.id,
   ]);
 
@@ -164,6 +217,19 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
   }, [split.id]);
 
   const effectiveRatio = split.ratio;
+  const sizeProperty = isHorizontal ? 'width' : 'height';
+  const minimumProperty = isHorizontal ? 'minWidth' : 'minHeight';
+  const maximumProperty = isHorizontal ? 'maxWidth' : 'maxHeight';
+  const getFixedChildStyle = (fixedSize: number) => ({
+    [sizeProperty]: `${fixedSize}px`,
+    [minimumProperty]: fixedSize,
+    [maximumProperty]: fixedSize,
+    flex: '0 0 auto',
+  });
+  const getFlexibleChildStyle = (fixedSiblingSize: number, minimumSize: number) => ({
+    [sizeProperty]: `calc(100% - ${fixedSiblingSize + DOCK_RESIZE_HANDLE_SIZE}px)`,
+    [minimumProperty]: minimumSize,
+  });
   const firstChildStyle = isMaximizedPath
     ? {
       [isHorizontal ? 'width' : 'height']: maximizedChildIndex === 0 ? '100%' : '0px',
@@ -171,10 +237,14 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
       opacity: maximizedChildIndex === 0 ? 1 : 0,
       pointerEvents: maximizedChildIndex === 0 ? 'auto' as const : 'none' as const,
     }
-    : {
-      [isHorizontal ? 'width' : 'height']: `calc(${effectiveRatio * 100}% - 2px)`,
-      [isHorizontal ? 'minWidth' : 'minHeight']: isHorizontal ? MIN_PANEL_SIZE : MIN_PREVIEW_HEIGHT,
-    };
+    : firstFixedSize !== null
+      ? getFixedChildStyle(firstFixedSize)
+      : secondFixedSize !== null
+        ? getFlexibleChildStyle(secondFixedSize, firstMinimumSize)
+        : {
+            [isHorizontal ? 'width' : 'height']: `calc(${effectiveRatio * 100}% - 2px)`,
+            [isHorizontal ? 'minWidth' : 'minHeight']: firstMinimumSize,
+          };
 
   const secondChildStyle = isMaximizedPath
     ? {
@@ -183,10 +253,14 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
       opacity: maximizedChildIndex === 1 ? 1 : 0,
       pointerEvents: maximizedChildIndex === 1 ? 'auto' as const : 'none' as const,
     }
-    : {
-      [isHorizontal ? 'width' : 'height']: `calc(${(1 - effectiveRatio) * 100}% - 2px)`,
-      [isHorizontal ? 'minWidth' : 'minHeight']: MIN_PANEL_SIZE,
-    };
+    : secondFixedSize !== null
+      ? getFixedChildStyle(secondFixedSize)
+      : firstFixedSize !== null
+        ? getFlexibleChildStyle(firstFixedSize, secondMinimumSize)
+        : {
+            [isHorizontal ? 'width' : 'height']: `calc(${(1 - effectiveRatio) * 100}% - 2px)`,
+            [isHorizontal ? 'minWidth' : 'minHeight']: secondMinimumSize,
+          };
 
   return (
     <div
@@ -201,11 +275,11 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
       {!isMaximizedPath && (
         <div
           ref={handleRef}
-          className={`dock-resize-handle ${isHorizontal ? 'horizontal' : 'vertical'} ${isResizing ? 'active' : ''}`}
+          className={`dock-resize-handle ${isHorizontal ? 'horizontal' : 'vertical'} ${isResizing ? 'active' : ''} ${isResizeHandleInteractive ? '' : 'locked'} ${resizeDelegateId ? 'delegated' : ''}`}
           data-guided-target={`dock-resize:${split.id}`}
-          data-guided-resize-handle="true"
-          data-guided-resize-axis={isHorizontal ? 'x' : 'y'}
-          onPointerDown={handlePointerDown}
+          data-guided-resize-handle={isResizeHandleInteractive ? 'true' : undefined}
+          data-guided-resize-axis={isResizeHandleInteractive ? isHorizontal ? 'x' : 'y' : undefined}
+          onPointerDown={isResizeHandleInteractive ? handlePointerDown : undefined}
         >
           <span
             aria-hidden="true"

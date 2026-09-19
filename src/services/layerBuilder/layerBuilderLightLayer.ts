@@ -42,6 +42,7 @@ export function buildLayerBuilderLightLayer({
     },
     effects: [],
     position: transform.position,
+    anchor: transform.anchor,
     scale: transform.scale,
     rotation: transform.rotation,
     is3D: true,

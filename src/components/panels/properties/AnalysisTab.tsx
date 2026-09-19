@@ -66,7 +66,7 @@ function graphJobText(
 }
 
 function range(start: number, end: number): AgentTimelineRange | undefined {
-  return Number.isFinite(start) && Number.isFinite(end) && end > start
+  return Number.isFinite(start) && Number.isFinite(end) && start >= 0 && end > start
     ? { start, end }
     : undefined;
 }
@@ -568,7 +568,6 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
     sceneDescriptionMessage,
     segments.length,
     sourceMediaFileId,
-    transcriptProgress,
     transcriptStatus,
     transcript.length,
     transcriptGraphText,

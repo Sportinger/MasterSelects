@@ -11,6 +11,7 @@ export interface MaskActions {
   selectVertices: (vertexIds: string[]) => void;
   selectMaskEdge: (edgeId: string | null) => void;
   deselectAllVertices: () => void;
+  setMaskFeatherPreviewEnabled: (enabled: boolean) => void;
   showMaskFeatherPreview: (maskId: string, edgeId?: string | null) => void;
   addMask: (clipId: string, mask?: Partial<ClipMask>) => string;
   removeMask: (clipId: string, maskId: string) => void;

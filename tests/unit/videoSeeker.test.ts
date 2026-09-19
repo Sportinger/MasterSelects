@@ -65,4 +65,52 @@ describe('VideoSeeker', () => {
 
     expect(seekDuringExport).toHaveBeenCalledWith(1.25);
   });
+
+  it('awaits an exact backend-neutral export frame provider without HTML video', async () => {
+    const track = {
+      id: 'track-1',
+      type: 'video',
+      visible: true,
+    } as TimelineTrack;
+    const clip = {
+      id: 'clip-prores',
+      name: 'ProRes',
+      trackId: track.id,
+      startTime: 0,
+      duration: 5,
+      inPoint: 1,
+      outPoint: 6,
+      source: { type: 'video' },
+      transform: createTransform(),
+      effects: [],
+    } as unknown as TimelineClip;
+    const seekExact = vi.fn(async () => undefined);
+    const clipStates = new Map<string, ExportClipState>([[clip.id, {
+      clipId: clip.id,
+      frameProvider: { seekExact } as unknown as NonNullable<ExportClipState['frameProvider']>,
+      webCodecsPlayer: null,
+      lastSampleIndex: 0,
+      isSequential: false,
+    }]]);
+    const ctx = {
+      time: 2.25,
+      fps: 30,
+      frameTolerance: 50_000,
+      clipsAtTime: [clip],
+      renderClipsAtTime: [clip],
+      trackMap: new Map([[track.id, track]]),
+      clipsByTrack: new Map([[track.id, clip]]),
+      getInterpolatedTransform: createTransform,
+      getInterpolatedEffects: () => [],
+      getInterpolatedColorCorrection: () => undefined,
+      getInterpolatedVectorAnimationSettings: () => ({}),
+      getInterpolatedTextBounds: () => undefined,
+      getSourceTimeForClip: (_clipId: string, localTime: number) => localTime,
+      getInterpolatedSpeed: () => 1,
+    } as FrameContext;
+
+    await seekAllClipsToTime(ctx, clipStates, null, false);
+
+    expect(seekExact).toHaveBeenCalledWith(3.25);
+  });
 });

@@ -1,4 +1,5 @@
 import type { SerializableClip, TimelineClip, TimelineStore } from '../types';
+import type { Keyframe } from '../../../types/keyframes';
 import { clonePersistedClipAudioState } from '../../../services/audio/clipAudioStatePersistence';
 import { Logger } from '../../../services/logger';
 import { cloneClipNodeGraph } from '../../../services/nodeGraph';
@@ -9,9 +10,13 @@ import {
   calculateNestedClipBoundaries,
   loadNestedClips,
   scheduleNestedClipSegmentBuild,
-  type NestedMediaRestoreEvent,
 } from '../nestedCompositionLoader';
 import { restorePersistedClipVideoState } from '../nestedRestore';
+import {
+  canBatchGeneratedComposition,
+  createLoadStateMissingNestedRuntimeSource,
+  restoreNestedVideoSourceThumbnails,
+} from './loadStateCompositionNestedRestore';
 
 const log = Logger.create('Timeline');
 
@@ -20,41 +25,6 @@ type TimelineSet = (partial: Partial<TimelineStore> | ((state: TimelineStore) =>
 
 export type RestoreLoadStateCompositionClipResult = 'not-handled' | 'handled' | 'stale';
 
-function createLoadStateMissingNestedRuntimeSource(event: NestedMediaRestoreEvent): TimelineClip['source'] | undefined {
-  const { serializedClip, sourceType } = event;
-  if (!sourceType) {
-    return undefined;
-  }
-
-  return {
-    type: sourceType as NonNullable<TimelineClip['source']>['type'],
-    naturalDuration: serializedClip.naturalDuration || serializedClip.duration,
-    mediaFileId: serializedClip.mediaFileId,
-    threeDEffectorsEnabled: serializedClip.threeDEffectorsEnabled ?? true,
-    ...(serializedClip.meshType ? { meshType: serializedClip.meshType } : {}),
-    ...(serializedClip.text3DProperties ? { text3DProperties: { ...serializedClip.text3DProperties } } : {}),
-  };
-}
-
-function restoreNestedVideoSourceThumbnails(
-  nestedClips: readonly TimelineClip[],
-  restoreSourceThumbnails: (mediaFileId: string | undefined) => void,
-  mediaStore: MediaStoreState,
-): void {
-  for (const nestedClip of nestedClips) {
-    const mediaFileId = nestedClip.source?.type === 'video'
-      ? nestedClip.source.mediaFileId
-      : undefined;
-    if (mediaFileId && mediaStore.files.find(file => file.id === mediaFileId)?.file) {
-      restoreSourceThumbnails(mediaFileId);
-    }
-
-    if (nestedClip.nestedClips?.length) {
-      restoreNestedVideoSourceThumbnails(nestedClip.nestedClips, restoreSourceThumbnails, mediaStore);
-    }
-  }
-}
-
 export async function restoreLoadStateCompositionClip(params: {
   serializedClip: SerializableClip;
   mediaStore: MediaStoreState;
@@ -62,6 +32,8 @@ export async function restoreLoadStateCompositionClip(params: {
   set: TimelineSet;
   pushRestoredClip: (clip: TimelineClip) => void;
   flushRestoredClipBuffer: () => void;
+  patchRestoredClip?: (clipId: string, updater: (clip: TimelineClip) => TimelineClip) => boolean;
+  pushRestoredNestedKeyframes?: (keyframes: ReadonlyMap<string, Keyframe[]>) => void;
   isCurrentTimelineSession: () => boolean;
   wakePreviewAfterRestore: () => void;
   restoreSourceThumbnails: (mediaFileId: string | undefined) => void;
@@ -73,6 +45,8 @@ export async function restoreLoadStateCompositionClip(params: {
     set,
     pushRestoredClip,
     flushRestoredClipBuffer,
+    patchRestoredClip,
+    pushRestoredNestedKeyframes,
     isCurrentTimelineSession,
     wakePreviewAfterRestore,
     restoreSourceThumbnails,
@@ -95,7 +69,10 @@ export async function restoreLoadStateCompositionClip(params: {
 
   const compClip = createCompositionVideoClip(serializedClip);
   pushRestoredClip(compClip);
-  flushRestoredClipBuffer();
+  const batchGenerated = !!patchRestoredClip
+    && !!pushRestoredNestedKeyframes
+    && canBatchGeneratedComposition(composition, mediaStore.compositions);
+  if (!batchGenerated) flushRestoredClipBuffer();
 
   if (!composition.timelineData) {
     if (!isCurrentTimelineSession()) {
@@ -145,6 +122,7 @@ export async function restoreLoadStateCompositionClip(params: {
         createMissingRuntimeSource: createLoadStateMissingNestedRuntimeSource,
       },
     },
+    deferNestedKeyframeMerge: batchGenerated ? pushRestoredNestedKeyframes : undefined,
   });
   restoreNestedVideoSourceThumbnails(nestedClips, restoreSourceThumbnails, mediaStore);
 
@@ -154,26 +132,37 @@ export async function restoreLoadStateCompositionClip(params: {
   if (!isCurrentTimelineSession()) {
     return 'stale';
   }
-  set(state => ({
-    clips: state.clips.map(c =>
-      c.id === compClip.id
-        ? { ...c, nestedClips, nestedTracks, nestedClipBoundaries: boundaries, isLoading: false }
-        : c
-    ),
-  }));
-
-  scheduleNestedClipSegmentBuild({
-    clipId: compClip.id,
-    timelineData: composition.timelineData,
-    compDuration,
+  const finishClip = (clip: TimelineClip): TimelineClip => ({
+    ...clip,
     nestedClips,
-    thumbnailsEnabled: get().thumbnailsEnabled,
-    get,
-    set,
-    isCurrentTimelineSession,
-    delayMs: 1000,
-    logLabel: 'Built clip segments on project load',
+    nestedTracks,
+    nestedClipBoundaries: boundaries,
+    isLoading: false,
   });
+  const remainedBuffered = batchGenerated && patchRestoredClip(compClip.id, finishClip);
+  if (!remainedBuffered) {
+    set(state => ({
+      clips: state.clips.map(c => c.id === compClip.id ? finishClip(c) : c),
+    }));
+  }
+
+  // Generated-only cards/shapes already expose names and clip boundaries.
+  // Avoid scheduling hundreds of redundant nested raster-thumbnail jobs while
+  // a large authored graphics sequence is still being restored.
+  if (!batchGenerated) {
+    scheduleNestedClipSegmentBuild({
+      clipId: compClip.id,
+      timelineData: composition.timelineData,
+      compDuration,
+      nestedClips,
+      thumbnailsEnabled: get().thumbnailsEnabled,
+      get,
+      set,
+      isCurrentTimelineSession,
+      delayMs: 1000,
+      logLabel: 'Built clip segments on project load',
+    });
+  }
   return 'handled';
 }
 
@@ -198,12 +187,19 @@ function createCompositionAudioClip(serializedClip: SerializableClip): TimelineC
     waveform: serializedClip.waveform || [],
     waveformChannels: serializedClip.waveformChannels,
     transform: serializedClip.transform,
+    videoInspectorSections: serializedClip.videoInspectorSections
+      ? { ...serializedClip.videoInspectorSections }
+      : undefined,
     effects: serializedClip.effects || [],
     transitionIn: serializedClip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionIn)) : undefined,
     transitionOut: serializedClip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionOut)) : undefined,
     transitionSourceMap: serializedClip.transitionSourceMap ? structuredClone(serializedClip.transitionSourceMap) : undefined,
     transitionRecipeBlendWindows: serializedClip.transitionRecipeBlendWindows ? structuredClone(serializedClip.transitionRecipeBlendWindows) : undefined,
     colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+    colorGradeMode: serializedClip.colorGradeMode,
+    localColorCorrection: serializedClip.localColorCorrection
+      ? structuredClone(serializedClip.localColorCorrection)
+      : undefined,
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     isLoading: false,
     isComposition: true,
@@ -236,17 +232,28 @@ function createCompositionVideoClip(serializedClip: SerializableClip): TimelineC
     videoState: restorePersistedClipVideoState(serializedClip),
     audioState: clonePersistedClipAudioState(serializedClip.audioState),
     transform: serializedClip.transform,
+    videoInspectorSections: serializedClip.videoInspectorSections
+      ? { ...serializedClip.videoInspectorSections }
+      : undefined,
     effects: serializedClip.effects || [],
     transitionIn: serializedClip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionIn)) : undefined,
     transitionOut: serializedClip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionOut)) : undefined,
     transitionSourceMap: serializedClip.transitionSourceMap ? structuredClone(serializedClip.transitionSourceMap) : undefined,
     transitionRecipeBlendWindows: serializedClip.transitionRecipeBlendWindows ? structuredClone(serializedClip.transitionRecipeBlendWindows) : undefined,
     colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+    colorGradeMode: serializedClip.colorGradeMode,
+    localColorCorrection: serializedClip.localColorCorrection
+      ? structuredClone(serializedClip.localColorCorrection)
+      : undefined,
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     masks: serializedClip.masks || [],
     isLoading: true,
     isComposition: true,
     compositionId: serializedClip.compositionId,
+    terrainAttachment: serializedClip.terrainAttachment ? structuredClone(serializedClip.terrainAttachment) : undefined,
+    terrainScreenAnchor: serializedClip.terrainScreenAnchor ? structuredClone(serializedClip.terrainScreenAnchor) : undefined,
+    terrainAnchorConnector: serializedClip.terrainAnchorConnector ? structuredClone(serializedClip.terrainAnchorConnector) : undefined,
+    trackingBinding: serializedClip.trackingBinding ? structuredClone(serializedClip.trackingBinding) : undefined,
     nestedClips: [],
     nestedTracks: [],
     speed: serializedClip.speed,

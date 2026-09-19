@@ -11,6 +11,7 @@ import {
 } from './exportRenderHostPort';
 import { seekVideo } from './VideoSeeker';
 import type { RenderSurfaceFrameContext } from '../../services/render/renderHostTypes';
+import { waitForLiveInputExportTime } from './liveInputExport';
 
 const MAX_EXPORT_VIDEO_SOURCE_NESTING_DEPTH = 8;
 // Two real-media nesting levels can need several compositor turns after every
@@ -96,6 +97,18 @@ function collectExportLayerVideoSources(
       collectExportLayerVideoSources(nestedLayers, result, depth + 1);
     }
   }
+}
+
+function hasLiveInputExportLayer(layers: Layer[], depth = 0): boolean {
+  if (depth >= MAX_EXPORT_VIDEO_SOURCE_NESTING_DEPTH) return false;
+  return layers.some((layer) => {
+    if (!layer || layer.visible === false || layer.opacity === 0) return false;
+    if (layer.source?.isLiveInput) return true;
+    const nestedLayers = layer.source?.nestedComposition?.layers;
+    return nestedLayers?.length
+      ? hasLiveInputExportLayer(nestedLayers, depth + 1)
+      : false;
+  });
 }
 
 function waitForVideoReady(video: HTMLVideoElement): Promise<void> {
@@ -191,6 +204,8 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
   private originalDimensions: { width: number; height: number } | null = null;
   private disposed = false;
   private useZeroCopy = false;
+  private liveInputTimelineAnchor: number | null = null;
+  private liveInputWallClockAnchor: number | null = null;
 
   constructor(options: ExportRenderSessionOptions) {
     this.runId = options.runId;
@@ -226,6 +241,19 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
 
   async renderFrame(input: ExportRenderFrameInput): Promise<ExportRenderSessionFrameCapture> {
     const layers = input.layers as Layer[];
+
+    if (hasLiveInputExportLayer(layers)) {
+      this.liveInputTimelineAnchor ??= input.time;
+      this.liveInputWallClockAnchor ??= performance.now();
+      await waitForLiveInputExportTime({
+        startedAtMs: this.liveInputWallClockAnchor,
+        elapsedSeconds: input.time - this.liveInputTimelineAnchor,
+        isCancelled: () => this.signal.aborted,
+      });
+    } else {
+      this.liveInputTimelineAnchor = null;
+      this.liveInputWallClockAnchor = null;
+    }
 
     await this.ensureHostAvailable('frame render');
 
@@ -263,7 +291,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
 
     if (this.useZeroCopy) {
       // Zero-copy path: create VideoFrame directly from OffscreenCanvas
-      // await ensures GPU has finished rendering before we capture
+      // The canvas snapshot is taken before yielding; WebCodecs owns GPU synchronization.
       const captureStart = performance.now();
       const videoFrame = await this.host.createVideoFrameFromExport(
         input.timestampMicros ?? 0,

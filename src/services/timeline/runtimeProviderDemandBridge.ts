@@ -30,7 +30,7 @@ export type RuntimeProviderDemandResourceDetails =
   | (RuntimeProviderDemandDescriptorOptions & {
       resourceKind: 'video-frame-provider';
       providerId?: string;
-      providerKind?: 'webcodecs' | 'runtime-frame-provider';
+      providerKind?: 'webcodecs' | 'turbores' | 'hap' | 'runtime-frame-provider';
       canSeek?: boolean;
       canProvideStaleFrame?: boolean;
       frameFormat?: 'video-frame' | 'image-bitmap' | 'canvas-image-source' | 'unknown';

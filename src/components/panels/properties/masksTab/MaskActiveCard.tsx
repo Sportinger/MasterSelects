@@ -4,6 +4,7 @@ import type { ClipMask, MaskVertexHandleMode } from "../../../../types/masks";
 import { IconButton } from './IconButton';
 import { MaskEdgeSection } from './MaskEdgeSection';
 import { MaskModeSegmented } from './MaskModeSegmented';
+import { MaskTransformSection } from './MaskTransformSection';
 import { MaskVertexTools } from './MaskVertexTools';
 
 interface MaskActiveCardShortcutRegistry {
@@ -18,11 +19,13 @@ interface MaskActiveCardProps {
   selectedMaskEdgeId: string | null;
   selectedVertexDisplayCount: number;
   selectedVertexCount: number;
+  maskFeatherPreviewEnabled: boolean;
   onBatchEnd: () => void;
   onBatchStart: () => void;
   onCycleSelectedHandles: () => void;
   onSetSelectedHandles: (mode: MaskVertexHandleMode) => void;
   closeMask: (clipId: string, maskId: string) => void;
+  setMaskFeatherPreviewEnabled: (enabled: boolean) => void;
   showMaskFeatherPreview: (maskId: string, edgeId?: string | null) => void;
   setPropertyValue: (clipId: string, property: MaskProperty, value: number) => void;
   updateMask: (clipId: string, maskId: string, updates: Partial<ClipMask>) => void;
@@ -41,6 +44,8 @@ export function MaskActiveCard({
   selectedMaskEdgeId,
   selectedVertexDisplayCount,
   selectedVertexCount,
+  maskFeatherPreviewEnabled,
+  setMaskFeatherPreviewEnabled,
   showMaskFeatherPreview,
   setPropertyValue,
   updateMask,
@@ -92,12 +97,22 @@ export function MaskActiveCard({
 
       <MaskModeSegmented activeMask={activeMask} clipId={clipId} updateMask={updateMask} />
 
+      <MaskTransformSection
+        activeMask={activeMask}
+        clipId={clipId}
+        onBatchEnd={onBatchEnd}
+        onBatchStart={onBatchStart}
+        setPropertyValue={setPropertyValue}
+      />
+
       <MaskEdgeSection
         activeMask={activeMask}
         clipId={clipId}
         onBatchEnd={onBatchEnd}
         onBatchStart={onBatchStart}
         selectedMaskEdgeId={selectedMaskEdgeId}
+        maskFeatherPreviewEnabled={maskFeatherPreviewEnabled}
+        setMaskFeatherPreviewEnabled={setMaskFeatherPreviewEnabled}
         showMaskFeatherPreview={showMaskFeatherPreview}
         setPropertyValue={setPropertyValue}
       />

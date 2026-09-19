@@ -44,6 +44,7 @@ interface BuildFlashBoardModelEntryOptionsInput {
   duration: number;
   effectiveGenerateAudio: boolean;
   hasVideoReferenceInput: boolean;
+  referenceVideoDuration?: number;
   imageSize: string;
   mode: string;
   multiShots: boolean;
@@ -222,6 +223,7 @@ export function buildFlashBoardModelEntryOptions({
   duration,
   effectiveGenerateAudio,
   hasVideoReferenceInput,
+  referenceVideoDuration,
   imageSize,
   mode,
   multiShots,
@@ -236,6 +238,7 @@ export function buildFlashBoardModelEntryOptions({
       generateAudio: entry.supportsGenerateAudio ? effectiveGenerateAudio : false,
       multiShots: entry.supportsMultiShot ? multiShots : false,
       hasVideoInput: hasVideoReferenceInput,
+      videoInputDuration: referenceVideoDuration,
     });
     const sourceLabel = getModelSourceLabel(entry);
     const label = getModelDisplayName(entry);

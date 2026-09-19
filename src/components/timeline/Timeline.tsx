@@ -1,13 +1,11 @@
 // Timeline component - Main orchestrator for video editing timeline
 // Composes TimelineRuler, TimelineControls, TimelineHeader, TimelineTrack, TimelineKeyframes
-
 import './Timeline.css';
 import './TimelineTracks.css';
 import './TimelineClip.css';
 import { TimelineAuxiliaryLayer } from './components/TimelineAuxiliaryLayer';
 import { TimelineBodySurface } from './components/TimelineBodySurface';
 import { TimelineNavigatorChrome } from './components/TimelineNavigatorChrome';
-import { TimelineSlotGridChrome } from './components/TimelineSlotGridChrome';
 import { TimelineToolbarChrome } from './components/TimelineToolbarChrome';
 import { TimelineRootShell } from './components/TimelineRootShell';
 import { useTimelineZoom } from './hooks/useTimelineZoom';
@@ -26,9 +24,11 @@ import { useTimelineInteractionController } from './hooks/useTimelineInteraction
 import { useTimelineSurfaceController } from './hooks/useTimelineSurfaceController';
 import { useTimelineTrackStackController } from './hooks/useTimelineTrackStackController';
 import { useTimelineGraphHostController } from './hooks/useTimelineGraphHostController';
+import { useTimelineKeyframeContextMenuDelete } from './hooks/useTimelineKeyframeContextMenuDelete';
+import { useFlockDisplayClipKeyframes } from './hooks/useFlockDisplayClipKeyframes';
 import { TimelinePickWhipProvider } from './TimelinePickWhipContext';
 
-export function Timeline() {
+export function Timeline({ onShowSlotGrid = () => undefined }: { onShowSlotGrid?: () => void } = {}) {
   const timelineRootState = useTimelineRootStoreState();
   const {
     activeComposition,
@@ -69,7 +69,6 @@ export function Timeline() {
     selectedClipIds,
     selectedKeyframeIds,
     showInExplorer,
-    slotGridProgress,
     snappingEnabled,
     thumbnailsEnabled,
     timelineRangeSelection,
@@ -86,7 +85,9 @@ export function Timeline() {
     waveformsEnabled,
     zoom,
   } = timelineRootState;
-
+  // Display/interaction surfaces read flock source-time keys in clip-local time;
+  // playback keeps the store map.
+  const displayClipKeyframes = useFlockDisplayClipKeyframes(clips, clipKeyframes);
   const {
     actions: timelineActions,
     effectiveRamPreviewEnabled,
@@ -101,7 +102,6 @@ export function Timeline() {
     ramPreviewRange,
     isRamPreviewing,
   });
-
   const { timelineRef, timelineBodyRef, trackLanesRef, playheadRef, scrollWrapperRef } = useTimelineHostRefs();
 
   const {
@@ -129,7 +129,7 @@ export function Timeline() {
   } = useTimelineRenderedTrackMetrics({
     audioDisplayMode,
     audioFocusMode,
-    clipKeyframes,
+    clipKeyframes: displayClipKeyframes,
     clips,
     expandedCurveProperties,
     getExpandedTrackHeight: timelineActions.getExpandedTrackHeight,
@@ -172,10 +172,10 @@ export function Timeline() {
     handleNewTrackDrop,
     markerDrag,
     markerCreateDrag,
-    handleMarkerMouseDown,
+    handleMarkerPointerDown,
     handlePlayheadMouseDown,
     handleSectionTracksMouseDown,
-    handleTimelineMarkerMouseDown,
+    handleTimelineMarkerPointerDown,
     handleTimelineRulerMouseDown,
     handleTrackDragEnter,
     handleTrackDragLeave,
@@ -203,7 +203,7 @@ export function Timeline() {
     cancelRamPreview: timelineActions.cancelRamPreview,
     clearTimelineRangeSelection: timelineActions.clearTimelineRangeSelection,
     clearVideoBakeRegionSelection: timelineActions.clearVideoBakeRegionSelection,
-    clipKeyframes,
+    clipKeyframes: displayClipKeyframes,
     clipMap,
     clips,
     deselectAllKeyframes: timelineActions.deselectAllKeyframes,
@@ -215,6 +215,7 @@ export function Timeline() {
     getSnapTargetTimes,
     getSnappedPosition: timelineActions.getSnappedPosition,
     getTrackBaseHeight: getRenderedTrackBaseHeight,
+    frameRate: compositionFrameRate,
     inPoint,
     isDraggingPlayhead,
     isExporting,
@@ -229,6 +230,8 @@ export function Timeline() {
     pixelToTime,
     playheadPosition,
     prepareTimelinePlacementRange: timelineActions.prepareTimelinePlacementRange,
+    replaceClipSource: timelineActions.replaceClipSource,
+    replaceClipSourceWithComposition: timelineActions.replaceClipSourceWithComposition,
     scrollX,
     selectClip: timelineActions.selectClip,
     selectClips: timelineActions.selectClips,
@@ -259,7 +262,7 @@ export function Timeline() {
     audioDisplayMode,
     audioFocusMode,
     clipDrag,
-    clipKeyframes,
+    clipKeyframes: displayClipKeyframes,
     clips,
     expandedCurveProperties,
     externalDrag,
@@ -313,12 +316,15 @@ export function Timeline() {
     videoSectionViewportRef,
     audioSectionViewportRef,
     activeTrackResizeId,
+    activeTrackScaleSection,
+    handleSynchronousTrackScaleStart,
+    handleSynchronousTrackScaleEnd,
     handleTrackResizeStart,
     splitDragVideoHeight,
     splitDragSmoothing,
     splitDragPinVideoBottom,
     handleTrackFocusStep,
-    handleSplitDividerMouseDown,
+    handleSplitDividerPointerDown,
     scrollY,
     setScrollY,
     handleSectionWheel,
@@ -331,7 +337,7 @@ export function Timeline() {
     timelineCurveMode,
     toggleTimelineCurveMode,
   } = useTimelineGraphHostController({
-    rootState: timelineRootState,
+    rootState: { ...timelineRootState, clipTrim },
     timelineActions,
     timelineHelpers,
     timelineTrackStack,
@@ -392,6 +398,9 @@ export function Timeline() {
     setZoom: timelineActions.setZoom,
     setScrollX: timelineActions.setScrollX,
     setScrollY,
+    onShowSlotGrid,
+    onSynchronousTrackScaleStart: handleSynchronousTrackScaleStart,
+    onSynchronousTrackScaleEnd: handleSynchronousTrackScaleEnd,
   });
 
   const {
@@ -473,9 +482,9 @@ export function Timeline() {
     handleToggleSlotGrid,
     navigatorChromeProps,
     rootShellProps,
-    slotGridChromeProps,
   } = useTimelineRootChromeController({
     activeTrackResizeId,
+    trackScaleGestureActive: activeTrackScaleSection !== null,
     audioDisplayMode,
     audioFocusMode,
     clipInteractionActive: Boolean(clipDrag || clipTrim),
@@ -483,10 +492,10 @@ export function Timeline() {
     effectiveAudioLayerAdvancedMode,
     isHeaderWidthResizing: isTrackHeaderWidthResizing,
     onScrollChange: timelineActions.setScrollX,
+    onToggleSlotGrid: onShowSlotGrid,
     onZoomChange: handleSetZoom,
     openCompositionCount: openCompositions.length,
     scrollX,
-    slotGridProgress,
     splitDragSmoothing,
     splitDragVideoHeight,
     timelineBodyRef,
@@ -510,6 +519,9 @@ export function Timeline() {
     timelineCurveMode,
     toggleTimelineCurveMode,
   });
+  const handleDeleteKeyframes = useTimelineKeyframeContextMenuDelete(
+    timelineActions.applyTimelineEditOperation,
+  );
 
   const bodySurfaceProps = useTimelineSurfaceController({
     activeJunction,
@@ -534,7 +546,7 @@ export function Timeline() {
     clipDragNewTrackType,
     clipDragPreview,
     clipFade,
-    clipKeyframes,
+    clipKeyframes: displayClipKeyframes,
     clipMap,
     clips,
     clipStemSeparationJobs,
@@ -566,7 +578,7 @@ export function Timeline() {
     gridPlan,
     gridSize,
     inOutMarkerContextMenu: handleInOutMarkerContextMenu,
-    inOutMarkerMouseDown: handleMarkerMouseDown,
+    inOutMarkerPointerDown: handleMarkerPointerDown,
     inPoint,
     isCompositionTrackMorphing,
     isDraggingPlayhead,
@@ -594,24 +606,7 @@ export function Timeline() {
     onEmptyContextMenu: handleEmptyTimelineContextMenu,
     onEmptyMouseDown: handleEmptyTimelineMouseDown,
     onFadeStart: handleFadeStart,
-    onDeleteKeyframes: (keyframeIds) => {
-      const transactionId = `context-menu-delete-keyframes:${Date.now()}`;
-      timelineActions.applyTimelineEditOperation({
-        id: transactionId,
-        type: 'keyboard-delete-command',
-        transactionId,
-        historyBatchId: transactionId,
-        source: 'context-menu',
-        command: 'delete',
-        priority: 'keyframes-only',
-        keyframeIds,
-        clipIds: [],
-        includeLinked: false,
-      }, {
-        source: 'context-menu',
-        historyLabel: keyframeIds.length > 1 ? 'Delete keyframes' : 'Delete keyframe',
-      });
-    },
+    onDeleteKeyframes: handleDeleteKeyframes,
     onRulerMouseDown: handleTimelineRulerMouseDown,
     onMoveKeyframe: timelineActions.moveKeyframe,
     onMoveKeyframeGroup: timelineActions.moveKeyframes,
@@ -624,9 +619,9 @@ export function Timeline() {
     onSectionWheel: handleSectionWheel,
     onSelectKeyframe: timelineActions.selectKeyframe,
     onSetTrackParent: timelineActions.setTrackParent,
-    onSplitDividerMouseDown: handleSplitDividerMouseDown,
+    onSplitDividerPointerDown: handleSplitDividerPointerDown,
     onTimelineMarkerContextMenu: handleTimelineMarkerContextMenu,
-    onTimelineMarkerMouseDown: handleTimelineMarkerMouseDown,
+    onTimelineMarkerPointerDown: handleTimelineMarkerPointerDown,
     onToggleCurveExpanded: openTimelineGraphForProperty,
     onToggleAudioLayerAdvancedMode: timelineActions.toggleAudioLayerAdvancedMode,
     onTrackDragEnter: handleTrackDragEnter,
@@ -660,7 +655,7 @@ export function Timeline() {
     setScrollX: timelineActions.setScrollX,
     setTrackContextMenu,
     setZoom: timelineActions.setZoom,
-    slotGridProgress,
+    slotGridProgress: 0,
     splitDragPinVideoBottom,
     splitDragVideoHeight,
     switchMotionClass: timelineSwitchMotionClass,
@@ -692,20 +687,16 @@ export function Timeline() {
     waveformsEnabled,
     zoom,
   });
-
   return (
     <TimelinePickWhipProvider value={pickWhipContextValue}>
       <TimelineRootShell {...rootShellProps}>
         <TimelineToolbarChrome {...timelineToolbarProps} />
-        <TimelineSlotGridChrome {...slotGridChromeProps} />
         <TimelineBodySurface
           {...bodySurfaceProps}
           timelineCurveMode={timelineCurveMode}
           globalCurveEditor={globalCurveEditor}
         />
-
         <TimelineNavigatorChrome {...navigatorChromeProps} />
-
         <TimelineAuxiliaryLayer {...auxiliaryLayerProps} />
       </TimelineRootShell>
     </TimelinePickWhipProvider>

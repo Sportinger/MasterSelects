@@ -341,12 +341,24 @@ export async function handleGetClipTranscript(
   selectClipAndOpenTab(clipId, 'transcript');
 
   const transcriptWords = resolveClipTranscriptWords(clip);
+  const transcriptStatus = clip.transcriptStatus
+    ?? (transcriptWords?.length ? 'ready' : 'none');
   if (!transcriptWords?.length) {
+    const message = transcriptStatus === 'transcribing'
+      ? clip.transcriptMessage ?? 'Transcription is still running. Poll this tool again.'
+      : transcriptStatus === 'ready'
+        ? 'Transcription completed, but no spoken words were found in this source.'
+        : transcriptStatus === 'error'
+          ? clip.transcriptMessage ?? 'Transcription failed.'
+          : 'No transcript available. Generate a transcript for this clip first.';
     return {
       success: true,
       data: {
+        clipId,
         hasTranscript: false,
-        message: 'No transcript available. Generate a transcript for this clip first.',
+        transcriptStatus,
+        transcriptProgress: clip.transcriptProgress ?? 0,
+        message,
       },
     };
   }
@@ -382,7 +394,10 @@ export async function handleGetClipTranscript(
   return {
     success: true,
     data: {
+      clipId,
       hasTranscript: true,
+      transcriptStatus,
+      transcriptProgress: clip.transcriptProgress ?? 100,
       segmentCount: transcriptWords.length,
       matchingSegmentCount: matchingSegments.length,
       sourceRange: { start: sourceStart, end: sourceEnd },

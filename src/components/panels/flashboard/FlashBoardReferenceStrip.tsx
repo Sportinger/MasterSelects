@@ -1,7 +1,10 @@
-import type { CSSProperties, DragEvent, PointerEvent, Ref } from 'react';
+import { useState, type CSSProperties, type DragEvent, type PointerEvent, type Ref } from 'react';
 import type { FlashBoardComposerReferenceRole } from '../../../stores/flashboardStore';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { FileTypeIcon } from '../media/FileTypeIcon';
+import { MEDIA_FILE_DRAG_MIME } from './useFlashBoardReferenceDrop';
+
+const REFERENCE_REORDER_DRAG_MIME = 'application/x-flashboard-reference-id';
 
 export interface ComposerReferenceBadge {
   key: string;
@@ -35,6 +38,7 @@ interface FlashBoardReferenceStripProps {
   onPointerLeave: (event: PointerEvent<HTMLDivElement>) => void;
   onPointerMove: (event: PointerEvent<HTMLDivElement>) => void;
   onReferenceRoleChange: (badge: ComposerReferenceBadge, role: FlashBoardComposerReferenceRole) => void;
+  onReorderReference: (draggedId: string, targetId: string) => void;
   onRemoveReference: (badge: ComposerReferenceBadge) => void;
   onSlotDragOver: (slot: ComposerReferenceSlot, event: DragEvent<HTMLDivElement>) => void;
   onSlotDrop: (slot: ComposerReferenceSlot, event: DragEvent<HTMLDivElement>) => void;
@@ -57,11 +61,14 @@ export function FlashBoardReferenceStrip({
   onPointerLeave,
   onPointerMove,
   onReferenceRoleChange,
+  onReorderReference,
   onRemoveReference,
   onSlotDragOver,
   onSlotDrop,
 }: FlashBoardReferenceStripProps) {
   const setSourceMonitorFile = useMediaStore((s) => s.setSourceMonitorFile);
+  const [draggedReferenceId, setDraggedReferenceId] = useState<string | null>(null);
+  const [reorderTargetId, setReorderTargetId] = useState<string | null>(null);
   const visualItemCount = badges.length + (slots.length > 0 ? 1 : 0);
 
   return (
@@ -97,9 +104,61 @@ export function FlashBoardReferenceStrip({
       {badges.map((badge) => (
         <div
           key={badge.key}
-          className={`fb-reference-card ${badge.role} ${badge.mediaType}`}
-          title={badge.displayName}
+          className={`fb-reference-card fb-reference-badge ${badge.role} ${badge.mediaType} ${draggedReferenceId === badge.mediaFileId ? 'is-dragging' : ''} ${reorderTargetId === badge.mediaFileId ? 'is-reorder-target' : ''}`}
+          title={badge.role === 'reference'
+            ? `${badge.displayName} - drag to reorder or add it to the prompt`
+            : badge.displayName}
           style={getReferenceViewTransitionStyle(badge.key)}
+          draggable={badge.role === 'reference'}
+          onDragStart={(event) => {
+            if (badge.role !== 'reference' || (event.target as Element).closest('button')) {
+              event.preventDefault();
+              return;
+            }
+            event.stopPropagation();
+            event.dataTransfer.effectAllowed = 'copyMove';
+            event.dataTransfer.setData(MEDIA_FILE_DRAG_MIME, badge.mediaFileId);
+            event.dataTransfer.setData(REFERENCE_REORDER_DRAG_MIME, badge.mediaFileId);
+            setDraggedReferenceId(badge.mediaFileId);
+          }}
+          onDragEnter={(event) => {
+            if (
+              badge.role === 'reference'
+              && event.dataTransfer.types.includes(REFERENCE_REORDER_DRAG_MIME)
+              && draggedReferenceId !== badge.mediaFileId
+            ) {
+              setReorderTargetId(badge.mediaFileId);
+            }
+          }}
+          onDragOver={(event) => {
+            if (
+              badge.role !== 'reference'
+              || !event.dataTransfer.types.includes(REFERENCE_REORDER_DRAG_MIME)
+              || draggedReferenceId === badge.mediaFileId
+            ) return;
+            event.preventDefault();
+            event.stopPropagation();
+            event.dataTransfer.dropEffect = 'move';
+          }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              setReorderTargetId((currentId) => (
+                currentId === badge.mediaFileId ? null : currentId
+              ));
+            }
+          }}
+          onDrop={(event) => {
+            const sourceId = event.dataTransfer.getData(REFERENCE_REORDER_DRAG_MIME);
+            if (badge.role !== 'reference' || !sourceId || sourceId === badge.mediaFileId) return;
+            event.preventDefault();
+            event.stopPropagation();
+            setReorderTargetId(null);
+            onReorderReference(sourceId, badge.mediaFileId);
+          }}
+          onDragEnd={() => {
+            setDraggedReferenceId(null);
+            setReorderTargetId(null);
+          }}
           onDoubleClick={() => setSourceMonitorFile(badge.mediaFileId)}
           onMouseEnter={() => onHoverReference({ mediaFileId: badge.mediaFileId, role: badge.role })}
           onMouseLeave={() => onHoverReference(null)}

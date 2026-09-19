@@ -7,34 +7,40 @@ import { parseFbxMeshNames } from '../../../engine/native3d/assets/modelRuntimeC
 import { DEFAULT_SCENE_CAMERA_SETTINGS, type SceneCameraSettings } from '../../../stores/mediaStore/types';
 import {
   getSceneNavFpsMoveSpeedStepIndex,
+  resolveSceneNavTouchControlsVisible,
   selectSceneNavFpsMode,
   selectSceneNavFpsMoveSpeed,
   selectSceneNavNoKeyframes,
   useEngineStore,
 } from '../../../stores/engineStore';
+import { useDockStore } from '../../../stores/dockStore';
+import { isMobileLayoutId } from '../../dock/mobileLayoutOrientation';
 import { startBatch, endBatch } from '../../../stores/historyStore';
-import type { BlendMode, AnimatableProperty } from '../../../types';
+import type { AnimatableProperty } from '../../../types/animationProperties';
+import type { BlendMode } from '../../../types/blendMode';
+import type { VideoInspectorSectionKey } from '../../../types/timeline';
 import type { MIDIParameterTarget } from '../../../types/midi';
 import {
   clampCameraFov,
   fullFrameFocalLengthMmToFov,
 } from '../../../utils/cameraLens';
 import { CameraSettingsSection } from './transformTab/CameraSettingsSection';
+import { LiveInputTab } from './LiveInputTab';
 import { OptionsSection } from './transformTab/OptionsSection';
-import { PositionSection } from './transformTab/PositionSection';
-import { RotationSection } from './transformTab/RotationSection';
-import { ScaleSection } from './transformTab/ScaleSection';
+import { ResolveTransformSection } from './transformTab/ResolveTransformSection';
+import { ResolveVisualInspectorSections } from './transformTab/ResolveVideoInspectorSections';
+import { SourceSection } from './transformTab/SourceSection';
 import { useCameraKeyframeInteractions } from './transformTab/useCameraKeyframeInteractions';
 import {
   resolveCameraValues,
   resolvePositionValues,
-  resolveScaleValues,
 } from './transformTab/transformValues';
 import { calculateFitToFrameScale } from '../../../utils/sourcePixelScale';
 import {
   isLinkedAudioFollowingVideo,
   resolveLinkedVideoAudioPair,
 } from '../../../stores/timeline/helpers/linkedClipSpeed';
+import { isVideoInspectorSectionEnabled } from '../../../services/videoInspector/sectionBypass';
 
 function positiveDimension(value: number | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -48,6 +54,7 @@ interface TransformTabProps {
     opacity: number;
     blendMode: BlendMode;
     position: { x: number; y: number; z: number };
+    anchor?: { x: number; y: number; z: number };
     scale: { all?: number; x: number; y: number; z?: number };
     rotation: { x: number; y: number; z: number };
   };
@@ -77,14 +84,22 @@ export function TransformTab({
     removeKeyframe,
     getClipKeyframes,
     toggleKeyframeRecording,
+    disablePropertyKeyframes,
   } = useTimelineStore.getState();
   const sceneNavFpsMode = useEngineStore(selectSceneNavFpsMode);
   const sceneNavFpsMoveSpeed = useEngineStore(selectSceneNavFpsMoveSpeed);
   const sceneNavNoKeyframes = useEngineStore(selectSceneNavNoKeyframes);
+  const sceneNavTouchControlsOverride = useEngineStore((s) => s.sceneNavTouchControlsOverride);
+  const activeDockLayoutId = useDockStore((s) => s.activeSavedLayoutId);
   const setSceneNavFpsMode = useEngineStore((s) => s.setSceneNavFpsMode);
   const setSceneNavFpsMoveSpeed = useEngineStore((s) => s.setSceneNavFpsMoveSpeed);
   const setSceneNavNoKeyframes = useEngineStore((s) => s.setSceneNavNoKeyframes);
+  const setSceneNavTouchControlsOverride = useEngineStore((s) => s.setSceneNavTouchControlsOverride);
   const sceneNavFpsMoveSpeedIndex = getSceneNavFpsMoveSpeedStepIndex(sceneNavFpsMoveSpeed);
+  const sceneNavTouchControlsVisible = resolveSceneNavTouchControlsVisible(
+    sceneNavTouchControlsOverride,
+    isMobileLayoutId(activeDockLayoutId),
+  );
   const clip = useTimelineStore((s) => s.clips.find((c) => c.id === clipId));
   const linkedAudioSpeedEnabled = useTimelineStore((state) => {
     const pair = resolveLinkedVideoAudioPair(state.clips, clipId);
@@ -95,6 +110,8 @@ export function TransformTab({
   const supportsFreeRun = sourceType === 'video' && !clip?.source?.liveInputId;
   const freeRun = clip?.freeRun === true;
   const isModel = sourceType === 'model';
+  const selectedMeshType = clip?.meshType ?? clip?.source?.meshType;
+  const isText3D = isModel && selectedMeshType === 'text3d';
   const isCameraClip = sourceType === 'camera';
   const isLightClip = sourceType === 'light';
   const isGaussianSplat = sourceType === 'gaussian-splat';
@@ -104,8 +121,13 @@ export function TransformTab({
   const threeDEffectorsEnabled = clip?.source?.threeDEffectorsEnabled !== false;
   const supportsScaleZ = isModel || isSplatEffector || isGaussianSplat || isLightClip;
   const usesCameraControls = isCameraClip;
-  const isLocked3D = isModel || isGaussianSplat || isSplatEffector || isLightClip;
+  // Flock swarms only exist inside the shared 3D scene; switching them to 2D would drop them.
+  const isLocked3D = isModel || isGaussianSplat || isSplatEffector || isLightClip || sourceType === 'flock';
   const isEffectively3D = isCameraClip || isLocked3D || is3D;
+  const usesVisualInspectorSections = sourceType === 'video'
+    || sourceType === 'image'
+    || sourceType === 'text'
+    || isText3D;
   const cameraSettings: SceneCameraSettings = isCameraClip
     ? (cameraSettingsOverride ?? clip?.source?.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS)
     : DEFAULT_SCENE_CAMERA_SETTINGS;
@@ -116,6 +138,17 @@ export function TransformTab({
 
   const handleBatchStart = useCallback(() => startBatch('Adjust transform'), []);
   const handleBatchEnd = useCallback(() => endBatch(), []);
+  const handleInspectorSectionEnabledChange = useCallback((
+    section: VideoInspectorSectionKey,
+    enabled: boolean,
+  ) => {
+    updateClip(clipId, {
+      videoInspectorSections: {
+        ...clip?.videoInspectorSections,
+        [section]: enabled,
+      },
+    });
+  }, [clip?.videoInspectorSections, clipId, updateClip]);
 
   const mediaState = useMediaStore.getState();
   const activeComp = mediaState.getActiveComposition();
@@ -181,7 +214,6 @@ export function TransformTab({
     isEffectively3D,
     usesCameraControls,
   });
-  const scaleValues = resolveScaleValues(transform);
   const selectedModelPrimitiveIndex = Number.isInteger(clip?.source?.modelPrimitiveIndex)
     ? clip?.source?.modelPrimitiveIndex
     : undefined;
@@ -245,17 +277,8 @@ export function TransformTab({
   const handleCameraFarChange = useCallback((value: number) => {
     handlePropertyChange('camera.far', Math.max(cameraSettings.near + 0.1, value));
   }, [cameraSettings.near, handlePropertyChange]);
-  const handleCameraResolutionWidthChange = useCallback((value: number) => {
-    handlePropertyChange('camera.resolutionWidth', Math.max(1, Math.round(value)));
-  }, [handlePropertyChange]);
-  const handleCameraResolutionHeightChange = useCallback((value: number) => {
-    handlePropertyChange('camera.resolutionHeight', Math.max(1, Math.round(value)));
-  }, [handlePropertyChange]);
-
   const {
-    clearCameraKeyframesAndStopwatches,
     handleCameraLookRotationChange,
-    handleSetAllCameraKeyframes,
   } = useCameraKeyframeInteractions({
     clip,
     clipId,
@@ -276,35 +299,31 @@ export function TransformTab({
     updateCameraTransform: (patch) => updateClipTransform(clipId, patch),
   });
 
-  const handleResetAll = useCallback(() => {
-    if (usesCameraControls) {
-      startBatch('Reset camera transform');
-      try {
-        clearCameraKeyframesAndStopwatches();
-        updateClipTransform(clipId, {
-          position: { x: 0, y: 0, z: 1 },
-          scale: { all: 1, x: 1, y: 1, z: 0 },
-          rotation: { x: 0, y: 0, z: 0 },
-        });
-      } finally {
-        endBatch();
-      }
-      return;
+  const handleResetProperties = useCallback((
+    label: string,
+    entries: Array<{ property: AnimatableProperty; value: number }>,
+  ) => {
+    startBatch(label);
+    try {
+      entries.forEach(({ property, value }) => {
+        disablePropertyKeyframes(clipId, property, value);
+      });
+    } finally {
+      endBatch();
     }
+  }, [clipId, disablePropertyKeyframes]);
 
-    updateClipTransform(clipId, {
-      opacity: 1,
-      blendMode: 'normal',
-      position: { x: 0, y: 0, z: 0 },
-      scale: supportsScaleZ ? { all: 1, x: 1, y: 1, z: 1 } : { all: 1, x: 1, y: 1 },
-      rotation: { x: 0, y: 0, z: 0 },
-    });
-  }, [clearCameraKeyframesAndStopwatches, clipId, supportsScaleZ, updateClipTransform, usesCameraControls]);
+  const handleResetCameraLens = useCallback(() => {
+    handleResetProperties('Reset camera lens', [{
+      property: 'camera.fov',
+      value: DEFAULT_SCENE_CAMERA_SETTINGS.fov,
+    }]);
+  }, [handleResetProperties]);
 
-  const handleScaleAllChange = (pct: number) => handlePropertyChange('scale.all', pct / 100);
-  const handleScaleXChange = (pct: number) => handlePropertyChange('scale.x', pct / 100);
-  const handleScaleYChange = (pct: number) => handlePropertyChange('scale.y', pct / 100);
-  const handleScaleZChange = (pct: number) => handlePropertyChange('scale.z', pct / 100);
+  const handleScaleAllChange = (value: number) => handlePropertyChange('scale.all', value);
+  const handleScaleXChange = (value: number) => handlePropertyChange('scale.x', value);
+  const handleScaleYChange = (value: number) => handlePropertyChange('scale.y', value);
+  const handleScaleZChange = (value: number) => handlePropertyChange('scale.z', value);
   const toggleScaleAxis = (property: 'scale.x' | 'scale.y', value: number) => {
     const magnitude = Math.abs(value) || 1;
     handlePropertyChange(property, value < 0 ? magnitude : -magnitude);
@@ -327,6 +346,19 @@ export function TransformTab({
           endBatch();
         }
       };
+
+  const handleResetComposite = useCallback(() => {
+    startBatch('Reset composite');
+    try {
+      disablePropertyKeyframes(clipId, 'opacity', 1);
+      updateClipTransform(clipId, { blendMode: 'normal' });
+    } finally {
+      endBatch();
+    }
+  }, [clipId, disablePropertyKeyframes, updateClipTransform]);
+  const handleResetSpeed = useCallback(() => {
+    handleResetProperties('Reset speed', [{ property: 'speed', value: 1 }]);
+  }, [handleResetProperties]);
 
   const opacityPct = transform.opacity * 100;
   const handleOpacityChange = (pct: number) => handlePropertyChange('opacity', Math.max(0, Math.min(100, pct)) / 100);
@@ -358,48 +390,67 @@ export function TransformTab({
       data-guided-properties-tab="transform"
       data-guided-target="properties-tab:transform"
     >
-      <OptionsSection
-        clipId={clipId}
-        blendMode={transform.blendMode}
-        canToggleThreeDEffectors={canToggleThreeDEffectors}
-        isCameraClip={isCameraClip}
-        isEffectively3D={isEffectively3D}
-        isLocked3D={isLocked3D}
-        isModel={isModel}
-        opacity={transform.opacity}
-        opacityPct={opacityPct}
-        modelPrimitiveIndex={selectedModelPrimitiveIndex}
-        modelPrimitiveOptions={modelPrimitiveOptions}
-        sceneNavFpsMode={sceneNavFpsMode}
-        sceneNavFpsMoveSpeed={sceneNavFpsMoveSpeed}
-        sceneNavFpsMoveSpeedIndex={sceneNavFpsMoveSpeedIndex}
-        sceneNavNoKeyframes={sceneNavNoKeyframes}
-        speed={speed}
-        speedPct={speedPct}
-        linkedAudioSpeedEnabled={linkedAudioSpeedEnabled}
-        supportsFreeRun={supportsFreeRun}
-        freeRun={freeRun}
-        supportsThreeDEffectorToggle={supportsThreeDEffectorToggle}
-        threeDEffectorsEnabled={threeDEffectorsEnabled}
-        wireframe={wireframe}
-        createMidiTarget={createMIDIParameterTarget}
-        onBatchEnd={handleBatchEnd}
-        onBatchStart={handleBatchStart}
-        onBlendModeChange={(blendMode) => updateClipTransform(clipId, { blendMode: blendMode as BlendMode })}
-        onModelPrimitiveIndexChange={handleModelPrimitiveIndexChange}
-        onOpacityChange={handleOpacityChange}
-        onResetAll={handleResetAll}
-        onSceneNavFpsModeChange={setSceneNavFpsMode}
-        onSceneNavFpsMoveSpeedChange={setSceneNavFpsMoveSpeed}
-        onSceneNavNoKeyframesChange={setSceneNavNoKeyframes}
-        onSetAllCameraKeyframes={handleSetAllCameraKeyframes}
-        onSpeedChange={handleSpeedChange}
-        onLinkedAudioSpeedChange={(enabled) => setLinkedClipSpeedEnabled(clipId, enabled)}
-        onFreeRunToggle={() => updateClip(clipId, { freeRun: !freeRun })}
-        onThreeDEffectorsToggle={handleThreeDEffectorsToggle}
-        onToggle3D={() => toggle3D(clipId)}
-        onWireframeToggle={() => updateClip(clipId, { wireframe: !wireframe })}
-      />
+      {sourceType === 'video' && (
+        <SourceSection
+          clipId={clipId}
+          freeRun={freeRun}
+          isEffectively3D={isEffectively3D}
+          isLocked3D={isLocked3D}
+          mediaFileId={mediaFileId}
+          supportsFreeRun={supportsFreeRun}
+          onFreeRunToggle={() => updateClip(clipId, { freeRun: !freeRun })}
+          onToggle3D={() => toggle3D(clipId)}
+        />
+      )}
+
+      {clip?.source?.liveInputId && <LiveInputTab clipId={clipId} embedded />}
+
+      {(!usesVisualInspectorSections || isText3D) && (
+        <OptionsSection
+          clipId={clipId}
+          blendMode={transform.blendMode}
+          canToggleThreeDEffectors={canToggleThreeDEffectors}
+          isCameraClip={isCameraClip}
+          isEffectively3D={isEffectively3D}
+          isLocked3D={isLocked3D}
+          isModel={isModel}
+          inspectorOnly={usesVisualInspectorSections}
+          layerModeControlsInSource={false}
+          opacity={transform.opacity}
+          opacityPct={opacityPct}
+          modelPrimitiveIndex={selectedModelPrimitiveIndex}
+          modelPrimitiveOptions={modelPrimitiveOptions}
+          sceneNavFpsMode={sceneNavFpsMode}
+          sceneNavFpsMoveSpeed={sceneNavFpsMoveSpeed}
+          sceneNavFpsMoveSpeedIndex={sceneNavFpsMoveSpeedIndex}
+          sceneNavNoKeyframes={sceneNavNoKeyframes}
+          sceneNavTouchControlsVisible={sceneNavTouchControlsVisible}
+          speed={speed}
+          speedPct={speedPct}
+          linkedAudioSpeedEnabled={linkedAudioSpeedEnabled}
+          supportsFreeRun={supportsFreeRun}
+          freeRun={freeRun}
+          supportsThreeDEffectorToggle={supportsThreeDEffectorToggle}
+          threeDEffectorsEnabled={threeDEffectorsEnabled}
+          wireframe={wireframe}
+          createMidiTarget={createMIDIParameterTarget}
+          onBatchEnd={handleBatchEnd}
+          onBatchStart={handleBatchStart}
+          onBlendModeChange={(blendMode) => updateClipTransform(clipId, { blendMode: blendMode as BlendMode })}
+          onModelPrimitiveIndexChange={handleModelPrimitiveIndexChange}
+          onOpacityChange={handleOpacityChange}
+          onSceneNavFpsModeChange={setSceneNavFpsMode}
+          onSceneNavFpsMoveSpeedChange={setSceneNavFpsMoveSpeed}
+          onSceneNavNoKeyframesChange={setSceneNavNoKeyframes}
+          onSceneNavTouchControlsVisibleChange={setSceneNavTouchControlsOverride}
+          onSpeedChange={handleSpeedChange}
+          onLinkedAudioSpeedChange={(enabled) => setLinkedClipSpeedEnabled(clipId, enabled)}
+          onFreeRunToggle={() => updateClip(clipId, { freeRun: !freeRun })}
+          onThreeDEffectorsToggle={handleThreeDEffectorsToggle}
+          onToggle3D={() => toggle3D(clipId)}
+          onWireframeToggle={() => updateClip(clipId, { wireframe: !wireframe })}
+        />
+      )}
 
       {usesCameraControls && (
         <CameraSettingsSection
@@ -412,16 +463,19 @@ export function TransformTab({
           onCameraFocalLengthChange={handleCameraFocalLengthChange}
           onCameraFovChange={handleCameraFovChange}
           onCameraNearChange={handleCameraNearChange}
-          onCameraResolutionHeightChange={handleCameraResolutionHeightChange}
-          onCameraResolutionWidthChange={handleCameraResolutionWidthChange}
+          onResetLens={handleResetCameraLens}
         />
       )}
 
-      <PositionSection
+      <ResolveTransformSection
         clipId={clipId}
         createMidiTarget={createMIDIParameterTarget}
+        enabled={isVideoInspectorSectionEnabled(clip?.videoInspectorSections, 'transform')}
         isEffectively3D={isEffectively3D}
+        isLocked3D={isLocked3D}
         positionValues={positionValues}
+        showLayerDimensionToggle={usesVisualInspectorSections}
+        supportsScaleZ={supportsScaleZ}
         transform={transform}
         usesCameraControls={usesCameraControls}
         onBatchEnd={handleBatchEnd}
@@ -429,48 +483,46 @@ export function TransformTab({
         onCameraPositionXChange={handleCameraPositionXChange}
         onCameraPositionYChange={handleCameraPositionYChange}
         onCameraPositionZChange={handleCameraPositionZChange}
+        onCameraLookRotationChange={handleCameraLookRotationChange}
+        onAnchorChange={handlePropertyChange}
+        onFitToFrame={handleFitToFrame}
+        onFlipX={() => toggleScaleAxis('scale.x', transform.scale.x)}
+        onFlipY={() => toggleScaleAxis('scale.y', transform.scale.y)}
+        onEnabledChange={enabled => handleInspectorSectionEnabledChange('transform', enabled)}
         onPosXChange={handlePosXChange}
         onPosYChange={handlePosYChange}
         onPosZChange={handlePosZChange}
+        onResetProperties={handleResetProperties}
+        onRotationChange={handlePropertyChange}
+        onScaleAllChange={handleScaleAllChange}
+        onScaleXChange={handleScaleXChange}
+        onScaleYChange={handleScaleYChange}
+        onScaleZChange={handleScaleZChange}
+        onToggle3D={() => toggle3D(clipId)}
       />
 
-      {!usesCameraControls && (
-        <ScaleSection
+      {usesVisualInspectorSections && (
+        <ResolveVisualInspectorSections
+          blendMode={transform.blendMode}
           clipId={clipId}
           createMidiTarget={createMIDIParameterTarget}
-          scaleValues={scaleValues}
-          supportsScaleZ={supportsScaleZ}
-          transform={transform}
+          linkedAudioSpeedEnabled={linkedAudioSpeedEnabled}
+          opacity={transform.opacity}
+          sections={clip?.videoInspectorSections}
+          sourceHeight={sourceHeight ?? compHeight}
+          sourceWidth={sourceWidth ?? compWidth}
+          speed={speed}
+          showTemporalSections={sourceType === 'video'}
           onBatchEnd={handleBatchEnd}
           onBatchStart={handleBatchStart}
-          onScaleAllChange={handleScaleAllChange}
-          onFitToFrame={handleFitToFrame}
-          onFlipX={() => toggleScaleAxis('scale.x', transform.scale.x)}
-          onFlipY={() => toggleScaleAxis('scale.y', transform.scale.y)}
-          onScaleXChange={handleScaleXChange}
-          onScaleYChange={handleScaleYChange}
-          onScaleZChange={handleScaleZChange}
+          onBlendModeChange={blendMode => updateClipTransform(clipId, { blendMode: blendMode as BlendMode })}
+          onLinkedAudioSpeedChange={enabled => setLinkedClipSpeedEnabled(clipId, enabled)}
+          onOpacityChange={handleOpacityChange}
+          onSectionEnabledChange={handleInspectorSectionEnabledChange}
+          onResetComposite={handleResetComposite}
+          onResetSpeed={handleResetSpeed}
+          onSpeedChange={handleSpeedChange}
         />
-      )}
-
-      <RotationSection
-        clipId={clipId}
-        createMidiTarget={createMIDIParameterTarget}
-        isEffectively3D={isEffectively3D}
-        transform={transform}
-        usesCameraControls={usesCameraControls}
-        onBatchEnd={handleBatchEnd}
-        onBatchStart={handleBatchStart}
-        onCameraLookRotationChange={handleCameraLookRotationChange}
-        onRotationChange={handlePropertyChange}
-      />
-
-      {!usesCameraControls && (
-        <div className="properties-actions">
-          <button className="btn btn-sm" onClick={handleResetAll}>
-            Reset All
-          </button>
-        </div>
       )}
     </div>
   );

@@ -103,6 +103,8 @@ Options:
 3. Downloads and Firefox file system operations are available
 4. If the helper starts with auth enabled, the browser can usually discover the token automatically from `/startup-token`
 
+The editor warms the helper connection at startup on every supported browser. Each reconnect discards stale credentials, discovers the current startup token again, and reports Connected only after authentication succeeds or the helper explicitly advertises disabled authentication.
+
 ### Status Indicator
 
 The toolbar uses a lightning icon. Its dialog shows one of:
@@ -160,11 +162,13 @@ An HTTP server runs on port 9877 (WebSocket port + 1).
 - **Origin validation** -- Only accepts connections from allowed origins
 - **Auth token** -- Token-based authentication for HTTP and WebSocket bridge operations
 - **Scoped external access** -- Network access is used only for requested downloads such as yt-dlp, pinned provider source, and model weights; inference stays local
-- **Allowed origins** -- WebSocket connections accept localhost and Cloudflare Pages origins; the configured defaults additionally list the MasterSelects production, staging, and local-development origins. Add preview origins with `--allowed-origins` when HTTP CORS requires them.
+- **Allowed origins** -- WebSocket connections accept localhost and Cloudflare Pages origins; defaults include MasterSelects production, staging, HTTP localhost, and HTTPS local/LAN development origins. Add preview origins with `--allowed-origins` when HTTP CORS requires them.
 - **Sidecar path policy** -- Local-AI inputs and outputs are checked against project/granted roots or the exact provider temp root before subprocess access
 - **Transient model credentials** -- Gated HuggingFace tokens are passed only to the model-download subprocess and are excluded from command logging
 
 ## Technical Details
+
+The current browser target and packaged helper version is `0.3.17`.
 
 ### Source Code
 

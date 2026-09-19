@@ -4,8 +4,10 @@ function positiveFinite(value: number): number | null {
 
 /**
  * Scale factor that converts the compositor's aspect-fit footprint to native
- * source pixels. Multiplying the stored clip scale by this value makes 1.0
- * mean one source pixel per composition pixel.
+ * source pixels. The output dimensions must be the unscaled reference
+ * composition, never a quality-scaled render target. Multiplying the stored
+ * clip scale by this value makes 1.0 mean one source pixel per composition
+ * pixel.
  */
 export function calculateSourcePixelScale(
   sourceWidth: number,
@@ -44,4 +46,49 @@ export function calculateFitToFrameScale(
     outputWidth,
     outputHeight,
   );
+}
+
+/**
+ * Stored uniform scale required to cover the whole composition. Parts of a
+ * source with a different aspect ratio may extend beyond the frame.
+ */
+export function calculateFillToFrameScale(
+  sourceWidth: number,
+  sourceHeight: number,
+  outputWidth: number,
+  outputHeight: number,
+): number {
+  const safeSourceWidth = positiveFinite(sourceWidth);
+  const safeSourceHeight = positiveFinite(sourceHeight);
+  const safeOutputWidth = positiveFinite(outputWidth);
+  const safeOutputHeight = positiveFinite(outputHeight);
+  if (!safeSourceWidth || !safeSourceHeight || !safeOutputWidth || !safeOutputHeight) {
+    return 1;
+  }
+
+  return Math.max(
+    safeOutputWidth / safeSourceWidth,
+    safeOutputHeight / safeSourceHeight,
+  );
+}
+
+/** Independent axis scales that stretch the source to every composition edge. */
+export function calculateStretchToFrameScale(
+  sourceWidth: number,
+  sourceHeight: number,
+  outputWidth: number,
+  outputHeight: number,
+): { x: number; y: number } {
+  const safeSourceWidth = positiveFinite(sourceWidth);
+  const safeSourceHeight = positiveFinite(sourceHeight);
+  const safeOutputWidth = positiveFinite(outputWidth);
+  const safeOutputHeight = positiveFinite(outputHeight);
+  if (!safeSourceWidth || !safeSourceHeight || !safeOutputWidth || !safeOutputHeight) {
+    return { x: 1, y: 1 };
+  }
+
+  return {
+    x: safeOutputWidth / safeSourceWidth,
+    y: safeOutputHeight / safeSourceHeight,
+  };
 }

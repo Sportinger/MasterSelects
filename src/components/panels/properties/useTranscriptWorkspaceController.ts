@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useAccountStore } from '../../../stores/accountStore';
+import { hasHostedAiSession, useAccountStore } from '../../../stores/accountStore';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useSettingsStore, type TranscriptionProvider } from '../../../stores/settingsStore';
 import { useTimelineStore } from '../../../stores/timeline';
@@ -122,7 +122,7 @@ export function useTranscriptWorkspaceController({
   const [searchQuery, setSearchQuery] = useState('');
   const provider = useSettingsStore(state => state.transcriptionProvider);
   const setProvider = useSettingsStore(state => state.setTranscriptionProvider);
-  const isSignedIn = useAccountStore(state => Boolean(state.session?.authenticated));
+  const isSignedIn = useAccountStore(state => hasHostedAiSession(state.session));
   const activeProvider = isSignedIn && !['deepgram', 'hybrid'].includes(provider) ? 'openai' : provider;
   const mediaFileId = useTimelineStore(state => {
     const clip = state.clips.find(candidate => candidate.id === clipId);

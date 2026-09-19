@@ -11,6 +11,10 @@ import { BEZIER_HANDLE_SIZE } from '../../stores/timeline/constants';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import {
+  clampBezierHandleTimeOffset,
+  resolveBezierSegmentHandles,
+} from '../../utils/keyframeInterpolation';
+import {
   generateBezierPath,
   generateStepPath,
   getPropertyDefaults,
@@ -56,6 +60,9 @@ export interface CurveEditorProps {
   ) => void;
   timeToPixel: (time: number) => number;
   pixelToTime: (pixel: number) => number;
+  heightOverride?: number;
+  valueRangeOverride?: { min: number; max: number };
+  disableWheelResize?: boolean;
 }
 
 // Compute auto-range that always fits tightly to actual keyframe values
@@ -101,6 +108,9 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
   onUpdateBezierHandle,
   timeToPixel,
   pixelToTime,
+  heightOverride,
+  valueRangeOverride,
+  disableWheelResize = false,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragState, setDragState] = useState<{
@@ -119,7 +129,8 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
     | null
   >(null);
 
-  const height = useTimelineStore(s => s.curveEditorHeight);
+  const timelineCurveEditorHeight = useTimelineStore(s => s.curveEditorHeight);
+  const height = heightOverride ?? timelineCurveEditorHeight;
   const setCurveEditorHeight = useTimelineStore(s => s.setCurveEditorHeight);
   const allClipKeyframes = useTimelineStore(s => s.clipKeyframes.get(clipId) ?? EMPTY_CLIP_KEYFRAMES);
   const timelineClips = useTimelineStore(s => s.clips);
@@ -164,11 +175,12 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
 
   // Compute value range
   const valueRange = useMemo(() => {
+    if (valueRangeOverride) return valueRangeOverride;
     if (isDiscreteStateProperty) {
       return { min: 0, max: Math.max(1, stateNames.length - 1) };
     }
     return computeAutoRange(sortedKeyframes, property);
-  }, [isDiscreteStateProperty, sortedKeyframes, property, stateNames.length]);
+  }, [isDiscreteStateProperty, sortedKeyframes, property, stateNames.length, valueRangeOverride]);
 
   // Convert time to X position (absolute coords — parent handles scrolling via translateX)
   const timeToX = useCallback((time: number) => {
@@ -276,22 +288,21 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
     e.preventDefault();
     e.stopPropagation();
 
-    const prevKf = sortedKeyframes.find((_k, i) =>
-      i < sortedKeyframes.length - 1 && sortedKeyframes[i + 1].id === kf.id
-    );
-    const nextKf = sortedKeyframes.find((_k, i) =>
-      i > 0 && sortedKeyframes[i - 1].id === kf.id
-    );
+    const keyframeIndex = sortedKeyframes.findIndex(candidate => candidate.id === kf.id);
+    const prevKf = keyframeIndex > 0 ? sortedKeyframes[keyframeIndex - 1] : undefined;
+    const nextKf = keyframeIndex < sortedKeyframes.length - 1
+      ? sortedKeyframes[keyframeIndex + 1]
+      : undefined;
 
     let handle: BezierHandle;
     if (handleType === 'in') {
-      const defaultX = prevKf ? -(kf.time - prevKf.time) / 3 : -0.1;
-      const defaultY = prevKf ? -(kf.value - prevKf.value) / 3 : 0;
-      handle = kf.handleIn || { x: defaultX, y: defaultY };
+      handle = prevKf
+        ? resolveBezierSegmentHandles(prevKf, kf).handleIn
+        : kf.handleIn ?? { x: -0.1, y: 0 };
     } else {
-      const defaultX = nextKf ? (nextKf.time - kf.time) / 3 : 0.1;
-      const defaultY = nextKf ? (nextKf.value - kf.value) / 3 : 0;
-      handle = kf.handleOut || { x: defaultX, y: defaultY };
+      handle = nextKf
+        ? resolveBezierSegmentHandles(kf, nextKf).handleOut
+        : kf.handleOut ?? { x: 0.1, y: 0 };
     }
 
     latestDragValueRef.current = {
@@ -328,11 +339,17 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
     if (handleType === 'in') {
       const defaultX = prevKf ? -(kf.time - prevKf.time) / 3 : -0.1;
       const defaultY = prevKf ? -(kf.value - prevKf.value) / 3 : 0;
-      defaultHandle = { x: defaultX, y: defaultY };
+      defaultHandle = {
+        x: prevKf ? clampBezierHandleTimeOffset(prevKf, kf, 'in', defaultX) : defaultX,
+        y: defaultY,
+      };
     } else {
       const defaultX = nextKf ? (nextKf.time - kf.time) / 3 : 0.1;
       const defaultY = nextKf ? (nextKf.value - kf.value) / 3 : 0;
-      defaultHandle = { x: defaultX, y: defaultY };
+      defaultHandle = {
+        x: nextKf ? clampBezierHandleTimeOffset(kf, nextKf, 'out', defaultX) : defaultX,
+        y: defaultY,
+      };
     }
 
     onUpdateBezierHandle(kf.id, handleType, defaultHandle);
@@ -381,7 +398,8 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
       onMoveKeyframe(dragState.keyframeId, newTime, newValue, 'update');
     } else {
       // Move handle
-      const kf = sortedKeyframes.find(k => k.id === dragState.keyframeId);
+      const keyframeIndex = sortedKeyframes.findIndex(k => k.id === dragState.keyframeId);
+      const kf = sortedKeyframes[keyframeIndex];
       if (!kf) return;
 
       const handleTime = xToTime(x) - kf.time;
@@ -390,8 +408,12 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
       // Constrain handle direction
       const isIn = dragState.type === 'handle-in';
       const constrainedTime = isIn
-        ? Math.min(0, handleTime)  // In handle must be <= 0
-        : Math.max(0, handleTime); // Out handle must be >= 0
+        ? keyframeIndex > 0
+          ? clampBezierHandleTimeOffset(sortedKeyframes[keyframeIndex - 1], kf, 'in', handleTime)
+          : Math.min(0, handleTime)
+        : keyframeIndex < sortedKeyframes.length - 1
+          ? clampBezierHandleTimeOffset(kf, sortedKeyframes[keyframeIndex + 1], 'out', handleTime)
+          : Math.max(0, handleTime);
 
       // Shift key: snap to horizontal (no vertical offset)
       if (shiftKey) {
@@ -459,13 +481,13 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
   // Shift+wheel resizes only the curve editor. Use a native capture listener so
   // the parent timeline wheel handler cannot scroll the timeline first.
   const handleWheel = useCallback((e: WheelEvent) => {
-    if (!e.shiftKey) return;
+    if (!e.shiftKey || disableWheelResize || heightOverride !== undefined) return;
 
     e.preventDefault();
     e.stopPropagation();
     const delta = e.deltaY > 0 ? 20 : -20;
     setCurveEditorHeight(height + delta);
-  }, [height, setCurveEditorHeight]);
+  }, [disableWheelResize, height, heightOverride, setCurveEditorHeight]);
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -560,18 +582,14 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
 
         if (isSelected && !isDiscreteStateProperty) {
           if (prevKf) {
-            const defaultInX = -(kf.time - prevKf.time) / 3;
-            const defaultInY = -(kf.value - prevKf.value) / 3;
-            const handleIn = kf.handleIn || { x: defaultInX, y: defaultInY };
+            const handleIn = resolveBezierSegmentHandles(prevKf, kf).handleIn;
             handleInX = timeToX(kf.time + handleIn.x);
             handleInY = valueToY(kf.value + handleIn.y);
             showHandleIn = true;
           }
 
           if (nextKf) {
-            const defaultOutX = (nextKf.time - kf.time) / 3;
-            const defaultOutY = (nextKf.value - kf.value) / 3;
-            const handleOut = kf.handleOut || { x: defaultOutX, y: defaultOutY };
+            const handleOut = resolveBezierSegmentHandles(kf, nextKf).handleOut;
             handleOutX = timeToX(kf.time + handleOut.x);
             handleOutY = valueToY(kf.value + handleOut.y);
             showHandleOut = true;

@@ -1,0 +1,13 @@
+.dock-tab-pane {
+  /* Keep one-finger pane scrolling while reserving two-finger pinch for the editor. */
+  touch-action: pan-x pan-y;
+}
+
+.preview-container[data-preview-edit-mode='true'],
+.preview-container[data-preview-pinch-reserved='true'] {
+  touch-action: none;
+}
+
+/* Dock splitter touch expansion is owned by dockResizeSession. Keeping the
+   physical pseudo-element compact lets the intent-based capture distinguish a
+   resize drag from a tap on a nearby tab or button. */

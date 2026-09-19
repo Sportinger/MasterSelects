@@ -83,8 +83,8 @@ describe('MD2 evidence runner manifest', () => {
       baseUrl: 'http://localhost:5173/',
       sessionUrl: disposableUrl.href,
       mode: 'verify',
-      baselineDir,
     });
+    expect(parsed.baselineDir.toLocaleLowerCase()).toBe(baselineDir.toLocaleLowerCase());
   });
 });
 

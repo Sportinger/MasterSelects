@@ -11,6 +11,7 @@ export class ExportCanvasManager {
   private isExporting = false;
   private isGeneratingRamPreview = false;
   private stackedAlpha = false;
+  private exportCanvasCaptureFailed = false;
 
   // --- State Flags ---
 
@@ -56,6 +57,7 @@ export class ExportCanvasManager {
    * When stackedAlpha is true, canvas height is doubled (RGB top + alpha-as-luma bottom).
    */
   initExportCanvas(device: GPUDevice, width: number, height: number, stackedAlpha = false): boolean {
+    this.exportCanvasCaptureFailed = false;
     this.stackedAlpha = stackedAlpha;
     const canvasHeight = stackedAlpha ? height * 2 : height;
     this.exportCanvas = new OffscreenCanvas(width, canvasHeight);
@@ -81,25 +83,30 @@ export class ExportCanvasManager {
   /**
    * Create VideoFrame directly from the export canvas (zero-copy path).
    * Must call render() first to populate the canvas.
-   * Waits for GPU work to complete before capturing the frame.
+   * Snapshot immediately after queue.submit(), before yielding to another task.
+   * VideoFrame retains the submitted canvas image; the browser synchronizes GPU
+   * access internally. A queue-wide JS wait serializes render and encode, and
+   * lets cleanup/reinitialization replace the source before it is captured.
    */
-  async createVideoFrameFromExport(device: GPUDevice, timestamp: number, duration: number): Promise<VideoFrame | null> {
-    if (!this.exportCanvas) {
+  async createVideoFrameFromExport(_device: GPUDevice, timestamp: number, duration: number): Promise<VideoFrame | null> {
+    const canvas = this.exportCanvas;
+    if (!canvas) {
       log.error('Export canvas not initialized');
       return null;
     }
-
-    // CRITICAL: Wait for GPU to finish rendering before capturing frame
-    await device.queue.onSubmittedWorkDone();
+    // The caller uses pixel readback after a capture failure. Do not retry an
+    // unsupported canvas-to-VideoFrame path on every remaining export frame.
+    if (this.exportCanvasCaptureFailed) return null;
 
     try {
-      const frame = new VideoFrame(this.exportCanvas, {
+      const frame = new VideoFrame(canvas, {
         timestamp,
         duration,
         alpha: 'discard',
       });
       return frame;
     } catch (e) {
+      if (this.exportCanvas === canvas) this.exportCanvasCaptureFailed = true;
       log.error('Failed to create VideoFrame from export canvas', e);
       return null;
     }

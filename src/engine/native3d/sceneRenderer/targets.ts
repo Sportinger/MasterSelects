@@ -6,6 +6,8 @@ import {
 export interface SceneTargetRefs {
   texture: GPUTexture | null;
   view: GPUTextureView | null;
+  gizmoTexture: GPUTexture | null;
+  gizmoView: GPUTextureView | null;
   depthTexture: GPUTexture | null;
   depthView: GPUTextureView | null;
 }
@@ -13,6 +15,8 @@ export interface SceneTargetRefs {
 export interface SceneTargets {
   texture: GPUTexture;
   view: GPUTextureView;
+  gizmoTexture: GPUTexture;
+  gizmoView: GPUTextureView;
   depthTexture: GPUTexture;
   depthView: GPUTextureView;
 }
@@ -27,6 +31,10 @@ export function hasMatchingSceneTargets(
     targets.texture.width === width &&
     targets.texture.height === height &&
     !!targets.view &&
+    !!targets.gizmoTexture &&
+    targets.gizmoTexture.width === width &&
+    targets.gizmoTexture.height === height &&
+    !!targets.gizmoView &&
     !!targets.depthTexture &&
     targets.depthTexture.width === width &&
     targets.depthTexture.height === height &&
@@ -45,6 +53,12 @@ export function createSceneTargets(
     usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
   });
   const view = texture.createView();
+  const gizmoTexture = device.createTexture({
+    size: { width, height },
+    format: SCENE_COLOR_FORMAT,
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
+  });
+  const gizmoView = gizmoTexture.createView();
   const depthTexture = device.createTexture({
     size: { width, height },
     format: SCENE_DEPTH_FORMAT,
@@ -55,6 +69,8 @@ export function createSceneTargets(
   return {
     texture,
     view,
+    gizmoTexture,
+    gizmoView,
     depthTexture,
     depthView,
   };

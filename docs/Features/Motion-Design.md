@@ -11,7 +11,7 @@ Motion Design is native MasterSelects timeline content, not an embedded external
 - Motion definitions are plain JSON and survive timeline/project serialization.
 - `src/services/properties/PropertyRegistry.ts` describes transform, effect, color, mask, vector-animation, and motion properties without owning Zustand state.
 - `src/stores/timeline/motionClipSlice.ts` can create rectangle, ellipse, polygon, star, and path clips, null clips, adjustment clips, update motion definitions, and convert solid clips to motion rectangle clips.
-- `src/components/panels/properties/MotionShapeTab.tsx` exposes primitive-specific point/radius/corner controls plus the ordered appearance editor. Path clips get a minimal section with vertex count, closed toggle, and trim/dash controls; there is no viewport vertex editor yet.
+- `src/components/panels/properties/MotionShapeTab.tsx` exposes primitive-specific point/radius/corner controls plus the ordered appearance editor. Path clips expose a numeric point editor, segment splitting, a closed toggle, and trim/dash controls; there is no viewport vertex editor yet.
 - The appearance editor can add, remove, duplicate, reorder, show/hide, and edit color fills, strokes, linear/radial gradients, and texture fills. Items render bottom-to-top and retain stable ids when reordered.
 - Gradient stops have stable ids and editable colors/offsets. The current renderer accepts up to 8 appearance items and 8 stops per gradient.
 - Per-appearance opacity and the `normal`, `multiply`, `screen`, `add`, `overlay`, and `difference` blend modes render in the shape shader.
@@ -46,3 +46,7 @@ Motion Design is native MasterSelects timeline content, not an embedded external
 - Adjustment-layer transforms and color correction are disabled.
 - Appearance blend modes outside the six listed modes fall back to normal in the Motion shader.
 - Path trim/dash affect stroke appearances only; open paths render no fill, and fills on closed paths ignore trim/dash.
+
+## Inactive preview paths
+
+Preview motion-path authoring evaluates eligibility before generating nodes, samples, handles or onion positions. Disabled paths, camera/3D clips, playback and other ineligible modes use an empty geometry input. Selecting a dense solved camera therefore does not sample an invisible 2D path. Returning to eligible 2D editing restores the normal editable path. Pure node/handle edit operations live in `src/components/preview/motionPathEditOperations.ts`.

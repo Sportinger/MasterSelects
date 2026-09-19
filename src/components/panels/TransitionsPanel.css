@@ -218,6 +218,71 @@
   transform: none;
 }
 
+@media (any-pointer: coarse) {
+  .transition-item {
+    touch-action: pan-y;
+  }
+
+  .transition-item-preview {
+    touch-action: none;
+  }
+}
+
+.transition-item.touch-dragging {
+  border-color: #4a9eff;
+  opacity: 0.72;
+}
+
+.transition-touch-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10040;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 176px;
+  height: 48px;
+  padding: 7px 9px;
+  overflow: hidden;
+  pointer-events: none;
+  border: 1px solid rgba(74, 158, 255, 0.72);
+  border-radius: 8px;
+  background: rgba(24, 24, 26, 0.96);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  color: #e5e5e5;
+  opacity: 0.94;
+  contain: layout paint;
+  will-change: transform, opacity;
+  transition: opacity 150ms ease, border-color 100ms ease, box-shadow 100ms ease;
+}
+
+.transition-touch-drag-ghost.is-over-timeline {
+  border-color: #75b8ff;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.52), 0 0 0 2px rgba(74, 158, 255, 0.34);
+}
+
+.transition-touch-drag-ghost.is-dropping,
+.transition-touch-drag-ghost.is-cancelling {
+  opacity: 0;
+}
+
+.transition-touch-drag-ghost .transition-touch-drag-ghost-preview {
+  flex: 0 0 58px;
+  width: 58px;
+  height: 30px;
+}
+
+.transition-touch-drag-ghost strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #e5e5e5;
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .transition-item-preview {
   width: 64px;
   height: 32px;

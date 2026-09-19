@@ -17,6 +17,7 @@ interface TrackPreviewStateParams {
   hasAudio?: boolean;
   isVideo: boolean;
   isAudio: boolean;
+  replaceMode?: boolean;
 }
 
 interface UseExternalDropTrackDragEnterParams {
@@ -77,6 +78,7 @@ export function useExternalDropTrackDragEnter({
       hasAudio: preview.hasAudio,
       isVideo: preview.isVideo,
       isAudio: preview.isAudio,
+      replaceMode: event.shiftKey,
     }));
   }, [
     tracks,

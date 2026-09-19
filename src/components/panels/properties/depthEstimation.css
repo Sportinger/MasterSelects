@@ -1,0 +1,14 @@
+@layer components {
+  .depth-estimation { font-size: 11px; color: var(--text-secondary); }
+  .depth-estimation p, .depth-estimation output { display: block; margin: 8px 10px; line-height: 1.5; }
+  .depth-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 10px; }
+  .depth-actions button { background: var(--input-bg); border: 1px solid var(--separator-color); color: var(--text-primary); font: inherit; padding: 5px 8px; cursor: pointer; border-radius: 1px; }
+  .depth-actions button:disabled { opacity: 0.45; cursor: default; }
+  .depth-actions button:hover:not(:disabled) { background: var(--surface-control-hover); }
+  .depth-estimation canvas { display: none; max-width: calc(100% - 20px); max-height: 360px; margin: 10px auto; object-fit: fill; }
+  .depth-estimation canvas.depth-map-visible { display: block; }
+  .depth-estimation progress { width: calc(100% - 20px); margin: 5px 10px; }
+  .depth-estimation :is(button, input, select) { -webkit-tap-highlight-color: transparent; }
+  .depth-estimation :is(button, input, select):focus:not(:focus-visible) { outline: none; box-shadow: none; }
+  .depth-estimation :is(button, input, select):focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+}

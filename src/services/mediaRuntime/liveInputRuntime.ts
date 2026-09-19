@@ -1,4 +1,5 @@
 import type { LiveInputSource } from '../../types/liveInput';
+import type { VideoRotationDegrees } from '../../engine/webcodecs/videoTrackOrientation';
 import { prefersSoftwareTimelineCanvas } from '../../utils/canvasPlatform';
 import { renderHostPort } from '../render/renderHostPort';
 
@@ -7,6 +8,10 @@ interface LiveInputRuntimeEntry {
   video: HTMLVideoElement;
   source: LiveInputSource;
   feedbackCanvas?: HTMLCanvasElement;
+  presentationVideoFrameStops: Map<HTMLVideoElement, () => void>;
+  presentationCanvas: HTMLCanvasElement;
+  presentationContext: CanvasRenderingContext2D | null;
+  hasPresentationFrame: boolean;
   lastRenderedAt: number;
   cleanup: () => void;
 }
@@ -21,13 +26,143 @@ export interface ConnectedLiveInput {
   video: HTMLVideoElement;
 }
 
-function createVideoElement(stream: MediaStream): HTMLVideoElement {
+export interface LiveInputVideoPresentation {
+  height: number;
+  /** Rotation required only when sampling the stream through WebGPU. */
+  rotation: VideoRotationDegrees;
+  width: number;
+}
+
+const ACTIVE_RENDER_WINDOW_MS = 2000;
+const IDLE_RENDER_PROBE_INTERVAL_MS = 500;
+const LIVE_VIDEO_STALL_RECOVERY_MS = 3000;
+const LIVE_VIDEO_RECOVERY_COOLDOWN_MS = 5000;
+const LIVE_INPUT_PRESENTATION_FRAME_INTERVAL_MS = 1000 / 30;
+const LIVE_INPUT_RUNTIME_IMPLEMENTATION_VERSION = 9;
+
+export interface LiveInputReconnectOptions {
+  showBulkPrompt?: boolean;
+}
+
+export function resolveLiveInputVideoPresentation(
+  _source: LiveInputSource,
+  videoWidth: number,
+  videoHeight: number,
+): LiveInputVideoPresentation {
+  // Live input is staged through drawImage before WebGPU samples it. Browsers
+  // apply the current device/camera display orientation there, including when
+  // an iPad rotates after capture starts.
+  return {
+    width: Math.max(0, videoWidth),
+    height: Math.max(0, videoHeight),
+    rotation: 0,
+  };
+}
+
+export function createLiveInputVideoElement(stream: MediaStream): HTMLVideoElement {
   const video = document.createElement('video');
   video.srcObject = stream;
   video.autoplay = true;
   video.muted = true;
   video.playsInline = true;
+  video.setAttribute('aria-hidden', 'true');
+  Object.assign(video.style, {
+    position: 'fixed',
+    left: '0',
+    bottom: '0',
+    // iPad Safari heavily throttles 1x1 MediaStream video presentation and can
+    // leave that surface frozen after an orientation change. Keep a real
+    // in-viewport presentation box while making it visually imperceptible.
+    width: '160px',
+    height: '90px',
+    objectFit: 'cover',
+    opacity: '0.001',
+    pointerEvents: 'none',
+  });
+  document.body.appendChild(video);
   return video;
+}
+
+export function selectLiveInputPresentationVideo(
+  fallback: HTMLVideoElement,
+  stream: MediaStream,
+  candidates: Iterable<HTMLVideoElement>,
+): HTMLVideoElement {
+  const orderedCandidates = [...candidates].reverse();
+  const isUsableCandidate = (candidate: HTMLVideoElement) => (
+    candidate.isConnected &&
+    candidate.srcObject === stream &&
+    candidate.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+    candidate.videoWidth > 0 &&
+    candidate.videoHeight > 0
+  );
+  return orderedCandidates.find((candidate) => (
+    candidate.dataset.liveInputPresentationRole === 'media-panel'
+    && isUsableCandidate(candidate)
+  )) ?? orderedCandidates.find(isUsableCandidate) ?? fallback;
+}
+
+export function keepLiveInputVideoActive(
+  video: HTMLVideoElement,
+  stream: MediaStream,
+): () => void {
+  let disposed = false;
+  let lastAdvancingMediaTime = video.currentTime;
+  let lastAdvanceAt = performance.now();
+  let lastRecoveryAt = -Infinity;
+  const resume = () => {
+    if (disposed || !stream.active || video.srcObject !== stream) return;
+    void video.play().catch(() => undefined);
+    renderHostPort.requestNewFrameRender();
+  };
+  const resumeWhenVisible = () => {
+    if (document.visibilityState === 'visible') resume();
+  };
+  video.addEventListener('pause', resume);
+  video.addEventListener('stalled', resume);
+  document.addEventListener('visibilitychange', resumeWhenVisible);
+  window.addEventListener('pageshow', resume);
+  const tracks = stream.getVideoTracks();
+  tracks.forEach((track) => track.addEventListener('unmute', resume));
+
+  const watchdog = window.setInterval(() => {
+    if (disposed || document.visibilityState !== 'visible' || !stream.active) return;
+    const now = performance.now();
+    const mediaTime = video.currentTime;
+    if (Number.isFinite(mediaTime) && mediaTime > lastAdvancingMediaTime + 0.001) {
+      lastAdvancingMediaTime = mediaTime;
+      lastAdvanceAt = now;
+      return;
+    }
+    if (video.paused || video.ended || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      resume();
+    }
+    const hasLiveUnmutedTrack = tracks.some((track) => track.readyState === 'live' && !track.muted);
+    if (
+      hasLiveUnmutedTrack &&
+      now - lastAdvanceAt >= LIVE_VIDEO_STALL_RECOVERY_MS &&
+      now - lastRecoveryAt >= LIVE_VIDEO_RECOVERY_COOLDOWN_MS
+    ) {
+      // iPad Safari can leave a MediaStream-backed video logically playing
+      // while its presentation clock no longer advances. Reattaching the same
+      // stream restarts presentation without reacquiring camera permission.
+      lastRecoveryAt = now;
+      lastAdvanceAt = now;
+      video.srcObject = null;
+      video.srcObject = stream;
+      resume();
+    }
+  }, 1000);
+
+  return () => {
+    disposed = true;
+    window.clearInterval(watchdog);
+    video.removeEventListener('pause', resume);
+    video.removeEventListener('stalled', resume);
+    document.removeEventListener('visibilitychange', resumeWhenVisible);
+    window.removeEventListener('pageshow', resume);
+    tracks.forEach((track) => track.removeEventListener('unmute', resume));
+  };
 }
 
 function findPreviewCanvas(compositionId: string): HTMLCanvasElement | null {
@@ -98,10 +233,11 @@ async function acquireLiveInput(source: LiveInputSource): Promise<{
 }
 
 function stopAcquiredInput(stream: MediaStream, video: HTMLVideoElement, cleanup?: () => void): void {
+  cleanup?.();
   video.pause();
   video.srcObject = null;
+  video.remove();
   stream.getTracks().forEach((track) => track.stop());
-  cleanup?.();
 }
 
 function sourcesMatch(left: LiveInputSource, right: LiveInputSource): boolean {
@@ -144,11 +280,35 @@ export function requestRenderForVideoFrames(
   };
 }
 
+export function createLiveInputRenderGate(
+  getLastRenderedAt: () => number,
+  now: () => number = () => performance.now(),
+): () => boolean {
+  let lastIdleProbeAt = -Infinity;
+  return () => {
+    const currentTime = now();
+    if (currentTime - getLastRenderedAt() < ACTIVE_RENDER_WINDOW_MS) return true;
+    if (currentTime - lastIdleProbeAt < IDLE_RENDER_PROBE_INTERVAL_MS) return false;
+    lastIdleProbeAt = currentTime;
+    return true;
+  };
+}
+
+export function resetLiveInputPresentationCanvas(
+  canvas: HTMLCanvasElement,
+): CanvasRenderingContext2D | null {
+  // Retain both the DOM handle and its last valid dimensions until WebKit
+  // exposes the first frame in the new orientation. A transient 1x1 resize
+  // can poison the 2D GPU texture cache between orientation events.
+  return canvas.getContext('2d', { alpha: false });
+}
+
 class LiveInputRuntime {
   private readonly entries = new Map<string, LiveInputRuntimeEntry>();
   private readonly pending = new Map<string, PendingLiveInputConnection>();
   private readonly connectionVersions = new Map<string, number>();
   private reconnectRequiredIds = new Set<string>();
+  private bulkReconnectPromptIds = new Set<string>();
   private readonly listeners = new Set<() => void>();
   private revision = 0;
 
@@ -162,6 +322,28 @@ class LiveInputRuntime {
     this.listeners.forEach((listener) => listener());
   }
 
+  private startPresentationFramePump(
+    id: string,
+    entry: LiveInputRuntimeEntry,
+  ): () => void {
+    let animationFrame = 0;
+    let lastPresentedAt = -Infinity;
+    const draw = (timestamp: number) => {
+      if (this.entries.get(id) !== entry) return;
+      if (
+        document.visibilityState === 'visible'
+        && timestamp - lastPresentedAt >= LIVE_INPUT_PRESENTATION_FRAME_INTERVAL_MS
+      ) {
+        lastPresentedAt = timestamp;
+        this.updatePresentationCanvas(entry);
+        renderHostPort.requestNewFrameRender();
+      }
+      animationFrame = window.requestAnimationFrame(draw);
+    };
+    animationFrame = window.requestAnimationFrame(draw);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }
+
   connect(id: string, source: LiveInputSource): Promise<ConnectedLiveInput> {
     const pending = this.pending.get(id);
     if (pending && sourcesMatch(pending.source, source)) return pending.connection;
@@ -170,7 +352,7 @@ class LiveInputRuntime {
     this.connectionVersions.set(id, connectionVersion);
 
     const connection: Promise<ConnectedLiveInput> = acquireLiveInput(source).then(async ({ stream, cleanup, feedbackCanvas }) => {
-      const video = createVideoElement(stream);
+      const video = createLiveInputVideoElement(stream);
       try {
         await video.play();
       } catch (error) {
@@ -188,20 +370,36 @@ class LiveInputRuntime {
       }
 
       this.disposeEntry(id);
+      const presentationCanvas = document.createElement('canvas');
+      presentationCanvas.dataset.masterselectsDynamic = 'true';
       const entry: LiveInputRuntimeEntry = {
         stream,
         video,
         source,
         feedbackCanvas,
+        presentationVideoFrameStops: new Map(),
+        presentationCanvas,
+        presentationContext: presentationCanvas.getContext('2d', { alpha: false }),
+        hasPresentationFrame: false,
         lastRenderedAt: 0,
         cleanup: cleanup ?? (() => undefined),
       };
       const stopFrameRendering = requestRenderForVideoFrames(
         video,
-        () => performance.now() - entry.lastRenderedAt < 2000,
+        createLiveInputRenderGate(() => entry.lastRenderedAt),
+        () => {
+          this.updatePresentationCanvas(entry);
+          renderHostPort.requestNewFrameRender();
+        },
       );
+      const stopPlaybackRecovery = keepLiveInputVideoActive(video, stream);
+      const stopPresentationFramePump = this.startPresentationFramePump(id, entry);
       entry.cleanup = () => {
         stopFrameRendering();
+        stopPlaybackRecovery();
+        stopPresentationFramePump();
+        entry.presentationVideoFrameStops.forEach((stop) => stop());
+        entry.presentationVideoFrameStops.clear();
         cleanup?.();
       };
       this.entries.set(id, entry);
@@ -213,6 +411,7 @@ class LiveInputRuntime {
         }, { once: true });
       }
       this.reconnectRequiredIds.delete(id);
+      this.bulkReconnectPromptIds.delete(id);
       this.notifyChanged();
       renderHostPort.requestNewFrameRender();
       return { video, label: stream.getVideoTracks()[0]?.label || 'Live Input' };
@@ -232,6 +431,137 @@ class LiveInputRuntime {
     return entry?.video ?? null;
   }
 
+  getPresentationVideoElement(id: string | undefined): HTMLVideoElement | null {
+    if (!id) return null;
+    const entry = this.entries.get(id);
+    if (!entry) return null;
+    return selectLiveInputPresentationVideo(
+      entry.video,
+      entry.stream,
+      entry.presentationVideoFrameStops.keys(),
+    );
+  }
+
+  getVideoPresentation(id: string | undefined): LiveInputVideoPresentation | null {
+    if (!id) return null;
+    const entry = this.entries.get(id);
+    if (!entry) return null;
+    const video = this.getPresentationVideoElement(id) ?? entry.video;
+    return resolveLiveInputVideoPresentation(
+      entry.source,
+      video.videoWidth,
+      video.videoHeight,
+    );
+  }
+
+  private updatePresentationCanvas(
+    entry: LiveInputRuntimeEntry,
+    preferredVideo?: HTMLVideoElement,
+  ): HTMLCanvasElement | null {
+    if (!entry.presentationContext) return null;
+    const video = preferredVideo ?? selectLiveInputPresentationVideo(
+      entry.video,
+      entry.stream,
+      entry.presentationVideoFrameStops.keys(),
+    );
+    const { presentationCanvas: canvas, presentationContext: context } = entry;
+    if (
+      video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+      video.videoWidth > 0 &&
+      video.videoHeight > 0
+    ) {
+      if (canvas.width !== video.videoWidth) canvas.width = video.videoWidth;
+      if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight;
+      try {
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        entry.hasPresentationFrame = true;
+      } catch {
+        // Preserve the previous successfully staged frame during a transient
+        // stream transition or device rotation.
+      }
+    }
+    return entry.hasPresentationFrame ? canvas : null;
+  }
+
+  private resetPresentationCanvas(entry: LiveInputRuntimeEntry): void {
+    // Keep the canvas object stable: render layers retain this runtime handle.
+    // Replacing it on iPad rotation leaves WebGPU sampling the old frozen
+    // surface until another timeline mutation happens to rebuild the layer.
+    entry.presentationContext = resetLiveInputPresentationCanvas(entry.presentationCanvas);
+    entry.hasPresentationFrame = false;
+  }
+
+  private startPresentationVideoFrames(
+    id: string,
+    entry: LiveInputRuntimeEntry,
+    video: HTMLVideoElement,
+  ): void {
+    const stopFrameRendering = requestRenderForVideoFrames(
+      video,
+      // A visible native presentation surface is already browser-throttled to
+      // the camera cadence. Keep the editor at that cadence too; WebKit can
+      // otherwise fall into the idle-probe path after a couple of seconds.
+      () => true,
+      () => {
+        if (this.entries.get(id) !== entry) return;
+        const activeVideo = selectLiveInputPresentationVideo(
+          entry.video,
+          entry.stream,
+          entry.presentationVideoFrameStops.keys(),
+        );
+        if (activeVideo !== video) return;
+        this.updatePresentationCanvas(entry, video);
+        renderHostPort.requestNewFrameRender();
+      },
+    );
+    entry.presentationVideoFrameStops.set(video, stopFrameRendering);
+  }
+
+  getPresentationCanvas(id: string | undefined): HTMLCanvasElement | null {
+    if (!id) return null;
+    const entry = this.entries.get(id);
+    return entry ? this.updatePresentationCanvas(entry) : null;
+  }
+
+  registerPresentationVideo(id: string, video: HTMLVideoElement): () => void {
+    const entry = this.entries.get(id);
+    if (!entry || video.srcObject !== entry.stream) return () => undefined;
+
+    if (!entry.presentationVideoFrameStops.has(video)) {
+      this.startPresentationVideoFrames(id, entry, video);
+    }
+    this.updatePresentationCanvas(entry, video);
+    renderHostPort.requestNewFrameRender();
+
+    return () => {
+      const stopFrameRendering = entry.presentationVideoFrameStops.get(video);
+      if (!stopFrameRendering) return;
+      stopFrameRendering();
+      entry.presentationVideoFrameStops.delete(video);
+      renderHostPort.requestNewFrameRender();
+    };
+  }
+
+  refreshPresentationVideo(id: string, video: HTMLVideoElement): void {
+    const entry = this.entries.get(id);
+    if (!entry || !entry.presentationVideoFrameStops.has(video)) return;
+
+    entry.presentationVideoFrameStops.get(video)?.();
+    entry.presentationVideoFrameStops.delete(video);
+    this.resetPresentationCanvas(entry);
+
+    // WebKit can keep the MediaStream clock advancing while drawImage and
+    // requestVideoFrameCallback remain attached to the pre-rotation surface.
+    // Reattaching the same stream discards that surface without reacquiring
+    // the camera or showing a second permission prompt.
+    video.pause();
+    video.srcObject = null;
+    video.srcObject = entry.stream;
+    void video.play().catch(() => undefined);
+    this.startPresentationVideoFrames(id, entry, video);
+    renderHostPort.requestNewFrameRender();
+  }
+
   getRevision(): number {
     return this.revision;
   }
@@ -240,17 +570,37 @@ class LiveInputRuntime {
     return true;
   }
 
+  getImplementationVersion(): number {
+    return LIVE_INPUT_RUNTIME_IMPLEMENTATION_VERSION;
+  }
+
   getReconnectRequiredIds(): readonly string[] {
     return [...this.reconnectRequiredIds];
   }
 
-  setReconnectRequiredIds(ids: Iterable<string>): void {
+  getBulkReconnectPromptIds(): readonly string[] {
+    return [...this.bulkReconnectPromptIds];
+  }
+
+  dismissBulkReconnectPrompt(): void {
+    if (this.bulkReconnectPromptIds.size === 0) return;
+    this.bulkReconnectPromptIds.clear();
+    this.notifyChanged();
+  }
+
+  setReconnectRequiredIds(ids: Iterable<string>, options: LiveInputReconnectOptions = {}): void {
     const next = new Set(ids);
+    const nextBulkPromptIds = options.showBulkPrompt
+      ? new Set(next)
+      : new Set([...this.bulkReconnectPromptIds].filter((id) => next.has(id)));
     if (
       next.size === this.reconnectRequiredIds.size &&
-      [...next].every((id) => this.reconnectRequiredIds.has(id))
+      [...next].every((id) => this.reconnectRequiredIds.has(id)) &&
+      nextBulkPromptIds.size === this.bulkReconnectPromptIds.size &&
+      [...nextBulkPromptIds].every((id) => this.bulkReconnectPromptIds.has(id))
     ) return;
     this.reconnectRequiredIds = next;
+    this.bulkReconnectPromptIds = nextBulkPromptIds;
     this.notifyChanged();
   }
 
@@ -283,19 +633,21 @@ class LiveInputRuntime {
   release(id: string): void {
     this.connectionVersions.set(id, (this.connectionVersions.get(id) ?? 0) + 1);
     const reconnectRequirementRemoved = this.reconnectRequiredIds.delete(id);
+    const bulkPromptRemoved = this.bulkReconnectPromptIds.delete(id);
     const hadEntry = this.entries.has(id);
     this.disposeEntry(id);
-    if (reconnectRequirementRemoved && !hadEntry) this.notifyChanged();
+    if ((reconnectRequirementRemoved || bulkPromptRemoved) && !hadEntry) this.notifyChanged();
   }
 
   private disposeEntry(id: string): void {
     const entry = this.entries.get(id);
     if (!entry) return;
     this.entries.delete(id);
+    entry.cleanup?.();
     entry.video.pause();
     entry.video.srcObject = null;
+    entry.video.remove();
     entry.stream.getTracks().forEach((track) => track.stop());
-    entry.cleanup?.();
     this.notifyChanged();
     renderHostPort.requestNewFrameRender();
   }
@@ -315,7 +667,14 @@ if (
   sharedLiveInputRuntime &&
   (
     typeof sharedLiveInputRuntime.subscribe !== 'function' ||
-    typeof sharedLiveInputRuntime.usesPersistentConnectionVersions !== 'function'
+    typeof sharedLiveInputRuntime.usesPersistentConnectionVersions !== 'function' ||
+    typeof sharedLiveInputRuntime.registerPresentationVideo !== 'function' ||
+    typeof sharedLiveInputRuntime.refreshPresentationVideo !== 'function' ||
+    typeof sharedLiveInputRuntime.getBulkReconnectPromptIds !== 'function' ||
+    sharedLiveInputRuntime.getImplementationVersion?.() !== LIVE_INPUT_RUNTIME_IMPLEMENTATION_VERSION ||
+    typeof sharedLiveInputRuntime.getVideoPresentation !== 'function' ||
+    typeof sharedLiveInputRuntime.getPresentationVideoElement !== 'function' ||
+    typeof sharedLiveInputRuntime.getPresentationCanvas !== 'function'
   )
 ) {
   sharedLiveInputRuntime.clear();

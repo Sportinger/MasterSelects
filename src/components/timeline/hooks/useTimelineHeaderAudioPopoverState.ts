@@ -6,6 +6,9 @@ export function useTimelineHeaderAudioPopoverState() {
   const audioFxPopoverRef = useRef<HTMLDivElement>(null);
   const audioSendsPopoverRef = useRef<HTMLDivElement>(null);
 
+  // Capture phase: inside the mobile LiquidGlassBubble drawer, pointer-downs
+  // stop propagating at the bubble root, so a bubbling document listener
+  // would never see taps that must still dismiss an open popover.
   useEffect(() => {
     if (!audioFxOpen) return undefined;
 
@@ -14,8 +17,8 @@ export function useTimelineHeaderAudioPopoverState() {
       setAudioFxOpen(false);
     };
 
-    document.addEventListener('pointerdown', handlePointerDown);
-    return () => document.removeEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
   }, [audioFxOpen]);
 
   useEffect(() => {
@@ -26,9 +29,14 @@ export function useTimelineHeaderAudioPopoverState() {
       setAudioSendsOpen(false);
     };
 
-    document.addEventListener('pointerdown', handlePointerDown);
-    return () => document.removeEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
   }, [audioSendsOpen]);
+
+  const closeAudioPopovers = useCallback(() => {
+    setAudioFxOpen(false);
+    setAudioSendsOpen(false);
+  }, []);
 
   const toggleAudioFxOpen = useCallback(() => {
     setAudioSendsOpen(false);
@@ -45,6 +53,7 @@ export function useTimelineHeaderAudioPopoverState() {
     audioFxPopoverRef,
     audioSendsOpen,
     audioSendsPopoverRef,
+    closeAudioPopovers,
     toggleAudioFxOpen,
     toggleAudioSendsOpen,
   };

@@ -1,0 +1,63 @@
+@layer features {
+
+.hook-tab {
+  display: flex;
+  flex-direction: column;
+}
+
+.hook-id {
+  overflow: hidden;
+  margin-bottom: var(--sp-2);
+  color: var(--text-tertiary);
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-size: var(--font-2xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hook-row-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.hook-row-text {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+
+.hook-row-text input {
+  min-width: 0;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+}
+
+.hook-row-text input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.hook-color-row {
+  height: auto;
+  min-height: 24px;
+}
+
+.hook-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-height: 24px;
+  margin: var(--sp-1) 0;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+}

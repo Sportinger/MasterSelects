@@ -1,4 +1,5 @@
 import type { TimelineSourceType } from './index';
+import type { ColorNodeType } from './colorCorrection';
 
 export type NodeGraphSignalType =
   | 'texture'
@@ -48,6 +49,10 @@ export interface NodeGraphPortMetadata {
   available?: boolean;
   stale?: boolean;
   previewable?: boolean;
+  /** Flock domain: connection requires an input (validation marks it when missing). */
+  required?: boolean;
+  /** Flock domain: input accepts several edges, evaluated in definition edge order. */
+  repeated?: boolean;
   generateAction?: {
     type: string;
     artifactKind?: string;
@@ -83,6 +88,39 @@ export type NodeGraphRuntimeKind =
   | 'native'
   | 'subgraph';
 
+export type NodeGraphDomain =
+  | 'clip'
+  | 'color'
+  | 'motion'
+  | 'audio'
+  | 'custom'
+  | 'flock';
+
+export type NodeGraphViewTheme = 'general' | 'color' | 'motion' | 'audio' | 'flock';
+
+export type NodeGraphNodeBinding =
+  | { kind: 'clip-source' }
+  | { kind: 'clip-transform' }
+  | { kind: 'clip-mask-stack' }
+  | { kind: 'clip-color-correction' }
+  | { kind: 'clip-effect'; effectId: string }
+  | { kind: 'clip-audio-effect-instance'; effectId: string }
+  | { kind: 'clip-audio-analysis' }
+  | { kind: 'clip-custom-node'; nodeId: string }
+  | { kind: 'clip-output' }
+  | { kind: 'clip-audio-output' }
+  | {
+      kind: 'color-node';
+      versionId: string;
+      nodeId: string;
+      nodeType: ColorNodeType;
+    }
+  | {
+      kind: 'flock-node';
+      nodeId: string;
+      operator: string;
+    };
+
 export interface NodeGraphLayout {
   x: number;
   y: number;
@@ -99,6 +137,9 @@ export interface NodeGraphNode {
   outputs: NodeGraphPort[];
   params?: Record<string, ClipCustomNodeParamValue>;
   layout: NodeGraphLayout;
+  domain?: NodeGraphDomain;
+  binding?: NodeGraphNodeBinding;
+  subgraphId?: string;
 }
 
 export interface NodeGraphEdge {
@@ -128,19 +169,25 @@ export interface NodeGraph {
   owner: NodeGraphOwner;
   nodes: NodeGraphNode[];
   edges: NodeGraphEdge[];
+  domain?: NodeGraphDomain;
 }
 
-export type ClipNodeGraphBacking =
-  | { kind: 'clip-source' }
-  | { kind: 'clip-transform' }
-  | { kind: 'clip-mask-stack' }
-  | { kind: 'clip-color-correction' }
-  | { kind: 'clip-effect'; effectId: string }
-  | { kind: 'clip-audio-effect-instance'; effectId: string }
-  | { kind: 'clip-audio-analysis' }
-  | { kind: 'clip-custom-node'; nodeId: string }
-  | { kind: 'clip-output' }
-  | { kind: 'clip-audio-output' };
+export interface NodeGraphView {
+  id: string;
+  theme: NodeGraphViewTheme;
+  label: string;
+  graphId: string;
+}
+
+export interface NodeGraphDocument {
+  id: string;
+  owner: NodeGraphOwner;
+  rootGraphId: string;
+  graphs: NodeGraph[];
+  views: NodeGraphView[];
+}
+
+export type ClipNodeGraphBacking = Exclude<NodeGraphNodeBinding, { kind: 'color-node' } | { kind: 'flock-node' }>;
 
 export interface ClipNodeGraphNodeState {
   id: string;

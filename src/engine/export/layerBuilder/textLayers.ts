@@ -56,9 +56,9 @@ export function buildTextLikeLayer(
       tracks: options.ctx ? [...options.ctx.trackMap.values()] : [],
       timelineTime: renderTime,
       resolveSourceTime: options.ctx
-        ? sourceClip => getClipSourceWindowTime(
+        ? (sourceClip, timelineTime) => getClipSourceWindowTime(
             sourceClip,
-            renderTime - sourceClip.startTime,
+            timelineTime - sourceClip.startTime,
             options.ctx!,
           )
         : undefined,

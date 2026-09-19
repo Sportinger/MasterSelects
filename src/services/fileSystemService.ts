@@ -103,6 +103,7 @@ export async function initFileSystemService(): Promise<void> {
 }
 
 // Pick files using File System Access API
+let filePickerPending = false;
 export async function pickFiles(options?: {
   multiple?: boolean;
   types?: FilePickerType[];
@@ -110,6 +111,10 @@ export async function pickFiles(options?: {
   if (!isFileSystemAccessSupported()) {
     return null;
   }
+  // A second invocation must not open another native dialog or import the
+  // first dialog's result twice. The original caller owns the pending result.
+  if (filePickerPending) return null;
+  filePickerPending = true;
 
   try {
     const handles = await (window as FilePickerWindow).showOpenFilePicker({
@@ -133,6 +138,8 @@ export async function pickFiles(options?: {
     }
     log.error('Failed to pick files', e);
     return null;
+  } finally {
+    filePickerPending = false;
   }
 }
 

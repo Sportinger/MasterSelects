@@ -7,6 +7,10 @@ export type CompositionClipSourceEntry = {
   compositionId?: string;
   type: 'video' | 'image' | 'audio' | 'text' | 'solid' | 'math-scene' | 'transition-overlay' | VectorAnimationProvider;
   videoElement?: HTMLVideoElement;
+  canvasElement?: HTMLCanvasElement;
+  isLiveInput?: boolean;
+  intrinsicWidth?: number;
+  intrinsicHeight?: number;
   webCodecsPlayer?: LayerSource['webCodecsPlayer'];
   imageElement?: HTMLImageElement;
   textCanvas?: HTMLCanvasElement;

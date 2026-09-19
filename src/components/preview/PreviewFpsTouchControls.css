@@ -1,0 +1,130 @@
+@layer features {
+  .preview-fps-touch-controls {
+    position: absolute;
+    inset: auto 0 16px;
+    z-index: 26;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 0 clamp(12px, 3vw, 28px);
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .preview-container.has-transport .preview-fps-touch-controls {
+    bottom: 68px;
+  }
+
+  .preview-fps-touch-cluster {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    pointer-events: none;
+  }
+
+  .preview-fps-touch-cluster--look {
+    justify-content: flex-end;
+  }
+
+  .preview-fps-touch-pad {
+    position: relative;
+    width: clamp(82px, 13vw, 112px);
+    aspect-ratio: 1;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(18, 24, 32, 0.24) 0 42%, rgba(8, 12, 18, 0.52) 72% 100%);
+    box-shadow: inset 0 0 18px rgba(255, 255, 255, 0.07), 0 3px 18px rgba(0, 0, 0, 0.28);
+    pointer-events: auto;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .preview-fps-touch-pad-ring {
+    position: absolute;
+    inset: 20%;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  .preview-fps-touch-pad-ring--cross::before,
+  .preview-fps-touch-pad-ring--cross::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 46%;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.22);
+    content: '';
+    transform: translate(-50%, -50%);
+  }
+
+  .preview-fps-touch-pad-ring--cross::after {
+    transform: translate(-50%, -50%) rotate(90deg);
+  }
+
+  .preview-fps-touch-knob {
+    position: absolute;
+    top: calc(50% - 19px);
+    left: calc(50% - 19px);
+    width: 38px;
+    height: 38px;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 50%;
+    background: rgba(122, 174, 220, 0.36);
+    box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.16), 0 2px 9px rgba(0, 0, 0, 0.36);
+    pointer-events: none;
+    transition: transform 40ms linear;
+  }
+
+  .preview-fps-touch-elevation {
+    display: grid;
+    gap: 6px;
+    pointer-events: auto;
+  }
+
+  .preview-fps-touch-elevation button {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 12px;
+    color: rgba(255, 255, 255, 0.82);
+    background: rgba(8, 12, 18, 0.52);
+    box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.06), 0 2px 9px rgba(0, 0, 0, 0.3);
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .preview-fps-touch-elevation button:active {
+    color: #fff;
+    background: rgba(82, 143, 198, 0.58);
+  }
+
+  @media (max-height: 520px) {
+    .preview-fps-touch-controls {
+      bottom: 10px;
+    }
+
+    .preview-container.has-transport .preview-fps-touch-controls {
+      bottom: 62px;
+    }
+
+    .preview-fps-touch-pad {
+      width: 78px;
+    }
+
+    .preview-fps-touch-knob {
+      top: calc(50% - 16px);
+      left: calc(50% - 16px);
+      width: 32px;
+      height: 32px;
+    }
+
+    .preview-fps-touch-elevation button {
+      width: 34px;
+      height: 34px;
+    }
+  }
+}

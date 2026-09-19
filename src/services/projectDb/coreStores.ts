@@ -95,10 +95,6 @@ export async function getStats(
   projectRequest.onsuccess = () => { projectCount = projectRequest.result; };
   proxyRequest.onsuccess = () => { proxyCount = proxyRequest.result; };
 
-  return new Promise((resolve, reject) => {
-    transaction.oncomplete = () => {
-      resolve({ mediaFiles: mediaCount, projects: projectCount, proxyFrames: proxyCount });
-    };
-    transaction.onerror = () => reject(transaction.error);
-  });
+  await transactionSuccess(transaction);
+  return { mediaFiles: mediaCount, projects: projectCount, proxyFrames: proxyCount };
 }

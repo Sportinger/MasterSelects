@@ -1,0 +1,6 @@
+{
+    "source":  "output/adaptive-quality/root-aq035-review/pages-artifact-original.mjs",
+    "sha256":  "cc2f98d6eb3326b71bb95c2ba5b6e7c742f20153e79adf7aef453cfa9ec03684",
+    "meaning":  "Exact original AQ035 adapter bytes, before root copy-race reproduction and AQ038 staging correction",
+    "authorization":  false
+}

@@ -12,6 +12,8 @@ interface MaskEdgeSectionProps {
   onBatchEnd: () => void;
   onBatchStart: () => void;
   selectedMaskEdgeId: string | null;
+  maskFeatherPreviewEnabled: boolean;
+  setMaskFeatherPreviewEnabled: (enabled: boolean) => void;
   showMaskFeatherPreview: (maskId: string, edgeId?: string | null) => void;
   setPropertyValue: (clipId: string, property: MaskProperty, value: number) => void;
 }
@@ -22,6 +24,8 @@ export function MaskEdgeSection({
   onBatchEnd,
   onBatchStart,
   selectedMaskEdgeId,
+  maskFeatherPreviewEnabled,
+  setMaskFeatherPreviewEnabled,
   showMaskFeatherPreview,
   setPropertyValue,
 }: MaskEdgeSectionProps) {
@@ -133,6 +137,23 @@ export function MaskEdgeSection({
             />
           </div>
         )}
+        <div className="control-row mask-feather-guide-row">
+          <span className="mask-feather-guide-label">Feather guide</span>
+          <button
+            aria-checked={maskFeatherPreviewEnabled}
+            aria-label="Show red feather guide while adjusting masks"
+            className={`mask-feather-guide-toggle ${maskFeatherPreviewEnabled ? 'is-on' : ''}`}
+            onClick={() => setMaskFeatherPreviewEnabled(!maskFeatherPreviewEnabled)}
+            role="switch"
+            title={maskFeatherPreviewEnabled ? 'Hide red feather guide' : 'Show red feather guide'}
+            type="button"
+          >
+            <span className="mask-feather-guide-track" aria-hidden="true"><span /></span>
+            <span className="mask-feather-guide-state" aria-hidden="true">
+              {maskFeatherPreviewEnabled ? 'On' : 'Off'}
+            </span>
+          </button>
+        </div>
         <div className="control-row">
           <MIDIParameterLabel
             as="label"

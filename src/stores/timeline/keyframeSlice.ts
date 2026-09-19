@@ -25,6 +25,7 @@ import {
   parseVectorAnimationStateProperty,
 } from '../../types/vectorAnimation';
 import { isMotionProperty } from '../../types/motionDesign';
+import { isFlockProperty } from '../../types/flock';
 import { mergeLightClipSettings, parseLightProperty, setLightSettingValue } from '../../types/light';
 import { propertyRegistry } from '../../services/properties';
 import { dispatchKeyframeRecordingFeedback } from '../../utils/keyframeRecordingFeedback';
@@ -49,6 +50,7 @@ import { createKeyframeTransformInterpolationActions } from './keyframes/keyfram
 import { isClipOnLockedTrack } from './keyframes/keyframeClipLookup';
 import { createKeyframeViewStateActions } from './keyframes/keyframeViewStateActions';
 import { resolveSpeedMutationTarget } from './helpers/linkedClipSpeed';
+import { normalizeTimelinePropertyValue } from './keyframes/keyframePropertyValue';
 
 export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => ({
   ...createKeyframeBasicActions(set, get),
@@ -66,13 +68,14 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     if (isClipOnLockedTrack(clips, tracks, clipId)) return;
     const currentClip = clips.find(c => c.id === clipId);
     const cameraPropertyForValue = parseCameraProperty(property);
+    const normalizedPropertyValue = normalizeTimelinePropertyValue(property, value);
     const valueForStorage = cameraPropertyForValue && currentClip?.source?.type === 'camera'
       ? normalizeCameraSettingValue(
           cameraPropertyForValue,
-          value,
+          normalizedPropertyValue,
           { ...DEFAULT_SCENE_CAMERA_SETTINGS, ...currentClip.source.cameraSettings },
         )
-      : value;
+      : normalizedPropertyValue;
 
     // Check if this property has keyframes (whether recording or not)
     const propertyHasKeyframes = hasKeyframes(clipId, property);
@@ -204,6 +207,8 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
           updateMask(clipId, mask.id, { position: { ...mask.position, x: value } });
         } else if (maskProperty.property === 'position.y') {
           updateMask(clipId, mask.id, { position: { ...mask.position, y: value } });
+        } else if (maskProperty.property === 'rotation') {
+          updateMask(clipId, mask.id, { rotation: value });
         } else if (maskProperty.property === 'feather') {
           updateMask(clipId, mask.id, { feather: Math.max(0, value) });
         } else if (maskProperty.property === 'edgeFeather') {
@@ -266,6 +271,11 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
         return;
       }
 
+      if (isFlockProperty(property)) {
+        get().setFlockParamFromProperty(clipId, property, value);
+        return;
+      }
+
       const nodeGraphParamProperty = parseNodeGraphParamProperty(property);
       if (nodeGraphParamProperty) {
         set({
@@ -325,6 +335,9 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
       } else if (property.startsWith('position.')) {
         const axis = property.split('.')[1] as 'x' | 'y' | 'z';
         transformUpdate.position = { ...clip.transform.position, [axis]: value };
+      } else if (property.startsWith('anchor.')) {
+        const axis = property.split('.')[1] as 'x' | 'y' | 'z';
+        transformUpdate.anchor = { ...(clip.transform.anchor ?? { x: 0, y: 0, z: 0 }), [axis]: value };
       } else if (property.startsWith('scale.')) {
         const axis = property.split('.')[1] as 'all' | 'x' | 'y' | 'z';
         transformUpdate.scale = { ...clip.transform.scale, [axis]: value };
@@ -477,6 +490,8 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
           } : c.source,
         } : c),
       });
+      } else if (isFlockProperty(property)) {
+      get().setFlockParamFromProperty(clipId, property, currentValue);
       } else if (parseNodeGraphParamProperty(property)) {
       const nodeGraphParamProperty = parseNodeGraphParamProperty(property)!;
       set({
@@ -503,6 +518,8 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
           updateMask(clipId, mask.id, { position: { ...mask.position, x: currentValue } });
         } else if (maskProperty.property === 'position.y') {
           updateMask(clipId, mask.id, { position: { ...mask.position, y: currentValue } });
+        } else if (maskProperty.property === 'rotation') {
+          updateMask(clipId, mask.id, { rotation: currentValue });
         } else if (maskProperty.property === 'feather') {
           updateMask(clipId, mask.id, { feather: Math.max(0, currentValue) });
         } else if (maskProperty.property === 'edgeFeather') {
@@ -548,6 +565,11 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     } else if (property.startsWith('position.')) {
       const axis = property.split('.')[1] as 'x' | 'y' | 'z';
       updateClipTransform(clipId, { position: { ...clip.transform.position, [axis]: currentValue } });
+    } else if (property.startsWith('anchor.')) {
+      const axis = property.split('.')[1] as 'x' | 'y' | 'z';
+      updateClipTransform(clipId, {
+        anchor: { ...(clip.transform.anchor ?? { x: 0, y: 0, z: 0 }), [axis]: currentValue },
+      });
     } else if (property.startsWith('scale.')) {
       const axis = property.split('.')[1] as 'all' | 'x' | 'y' | 'z';
       updateClipTransform(clipId, { scale: { ...clip.transform.scale, [axis]: currentValue } });

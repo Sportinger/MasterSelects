@@ -1,12 +1,15 @@
-// LegalDialog - Imprint, Privacy Policy, Contact (multilingual)
+// LegalDialog - Imprint, Privacy Policy, Terms, Withdrawal, Cancellation, Contact (multilingual)
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { ContactEN, ImprintEN, PrivacyEN } from './legal/english';
 import { ContactDE, ImprintDE, PrivacyDE } from './legal/german';
+import { CancellationPage, TermsPage, WithdrawalPage } from './legal/consumerContractPages';
+import { detectLegalLang, type LegalLang } from './legal/legalLang';
 import './authBillingDialogs.css';
 
-type LegalPage = 'imprint' | 'privacy' | 'contact';
-type LegalLang = 'en' | 'de';
+type LegalPage = 'imprint' | 'privacy' | 'terms' | 'withdrawal' | 'cancellation' | 'contact';
+
+const PAGE_ORDER: LegalPage[] = ['imprint', 'privacy', 'terms', 'withdrawal', 'cancellation', 'contact'];
 
 const LANGUAGES: { code: LegalLang; label: string }[] = [
   { code: 'de', label: 'Deutsch' },
@@ -17,36 +20,37 @@ const LANGUAGES: { code: LegalLang; label: string }[] = [
 
 type ContentFn = () => React.ReactElement;
 
-const T: Record<LegalLang, {
+type LegalCopy = {
   kicker: string;
-  tabs: { imprint: string; privacy: string; contact: string };
-  imprint: { title: string; content: ContentFn };
-  privacy: { title: string; content: ContentFn };
-  contact: { title: string; content: ContentFn };
-}> = {
+  pages: Record<LegalPage, { content: ContentFn; tab: string; title: string }>;
+};
+
+const T: Record<LegalLang, LegalCopy> = {
   // ─── English (default) ───
   en: {
     kicker: 'Legal',
-    tabs: { imprint: 'Imprint', privacy: 'Privacy', contact: 'Contact' },
-    imprint: { title: 'Imprint', content: ImprintEN },
-    privacy: { title: 'Privacy Policy', content: PrivacyEN },
-    contact: { title: 'Contact', content: ContactEN },
+    pages: {
+      imprint: { content: ImprintEN, tab: 'Imprint', title: 'Imprint' },
+      privacy: { content: PrivacyEN, tab: 'Privacy', title: 'Privacy Policy' },
+      terms: { content: () => <TermsPage lang="en" />, tab: 'Terms', title: 'Terms and Conditions' },
+      withdrawal: { content: () => <WithdrawalPage lang="en" />, tab: 'Withdrawal', title: 'Withdrawal Policy' },
+      cancellation: { content: () => <CancellationPage lang="en" />, tab: 'Cancel', title: 'Cancel contracts here' },
+      contact: { content: ContactEN, tab: 'Contact', title: 'Contact' },
+    },
   },
   // ─── Deutsch ───
   de: {
     kicker: 'Rechtliches',
-    tabs: { imprint: 'Impressum', privacy: 'Datenschutz', contact: 'Kontakt' },
-    imprint: { title: 'Impressum', content: ImprintDE },
-    privacy: { title: 'Datenschutzerklärung', content: PrivacyDE },
-    contact: { title: 'Kontakt', content: ContactDE },
+    pages: {
+      imprint: { content: ImprintDE, tab: 'Impressum', title: 'Impressum' },
+      privacy: { content: PrivacyDE, tab: 'Datenschutz', title: 'Datenschutzerklärung' },
+      terms: { content: () => <TermsPage lang="de" />, tab: 'AGB', title: 'Allgemeine Geschäftsbedingungen' },
+      withdrawal: { content: () => <WithdrawalPage lang="de" />, tab: 'Widerruf', title: 'Widerrufsbelehrung' },
+      cancellation: { content: () => <CancellationPage lang="de" />, tab: 'Kündigen', title: 'Verträge hier kündigen' },
+      contact: { content: ContactDE, tab: 'Kontakt', title: 'Kontakt' },
+    },
   },
 };
-
-function detectBrowserLang(): LegalLang {
-  const nav = navigator.language?.toLowerCase() ?? '';
-  if (nav.startsWith('de')) return 'de';
-  return 'en';
-}
 
 // --- Dialog ---
 
@@ -59,7 +63,7 @@ interface LegalDialogProps {
 export function LegalDialog({ onClose, initialLang, initialPage = 'imprint' }: LegalDialogProps) {
   const [isClosing, setIsClosing] = useState(false);
   const [page, setPage] = useState<LegalPage>(initialPage);
-  const [lang, setLang] = useState<LegalLang>(() => initialLang ?? detectBrowserLang());
+  const [lang, setLang] = useState<LegalLang>(() => initialLang ?? detectLegalLang());
 
   const t = T[lang];
 
@@ -81,7 +85,7 @@ export function LegalDialog({ onClose, initialLang, initialPage = 'imprint' }: L
     if (e.target === e.currentTarget) handleClose();
   };
 
-  const Content = t[page].content;
+  const Content = t.pages[page].content;
 
   return (
     <div
@@ -93,7 +97,7 @@ export function LegalDialog({ onClose, initialLang, initialPage = 'imprint' }: L
         <div className="auth-billing-header">
           <div>
             <div className="auth-billing-kicker">{t.kicker}</div>
-            <h2>{t[page].title}</h2>
+            <h2>{t.pages[page].title}</h2>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <select
@@ -112,15 +116,17 @@ export function LegalDialog({ onClose, initialLang, initialPage = 'imprint' }: L
 
         {/* Tab Navigation */}
         <div className="legal-tabs">
-          <button className={`legal-tab ${page === 'imprint' ? 'active' : ''}`} onClick={() => setPage('imprint')}>
-            {t.tabs.imprint}
-          </button>
-          <button className={`legal-tab ${page === 'privacy' ? 'active' : ''}`} onClick={() => setPage('privacy')}>
-            {t.tabs.privacy}
-          </button>
-          <button className={`legal-tab ${page === 'contact' ? 'active' : ''}`} onClick={() => setPage('contact')}>
-            {t.tabs.contact}
-          </button>
+          {PAGE_ORDER.map((candidate) => (
+            <button
+              key={candidate}
+              className={`legal-tab ${page === candidate ? 'active' : ''}`}
+              onClick={() => setPage(candidate)}
+              onPointerUp={(event) => event.currentTarget.blur()}
+              type="button"
+            >
+              {t.pages[candidate].tab}
+            </button>
+          ))}
         </div>
 
         {/* Content */}

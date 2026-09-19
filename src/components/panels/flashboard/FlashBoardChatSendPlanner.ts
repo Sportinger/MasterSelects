@@ -2,6 +2,7 @@ import {
   DEFAULT_FLASHBOARD_DECISION_POLICY,
   type ChatIntent,
   type DecisionPolicy,
+  type FlashBoardChatAgentMode,
   type FlashBoardChatExecutionProfile,
   type FlashBoardChatModelClass,
   type FlashBoardChatProvider,
@@ -23,7 +24,9 @@ interface BuildFlashBoardChatSendPlanInput {
   chatPanelOpen: boolean;
   planThreeEnabled: boolean;
   chatExecutionProfile?: FlashBoardChatExecutionProfile;
+  chatAgentMode?: FlashBoardChatAgentMode;
   chatModelClass?: FlashBoardChatModelClass;
+  conversationRef?: string;
   chatProvider: FlashBoardChatProvider;
   chatTemperature: number;
   chatIntent?: ChatIntent;
@@ -121,7 +124,9 @@ export function buildFlashBoardChatSendPlan({
   chatPanelOpen,
   planThreeEnabled,
   chatExecutionProfile = 'fast',
+  chatAgentMode = 'standard',
   chatModelClass,
+  conversationRef,
   chatProvider,
   chatTemperature,
   chatIntent = 'execute',
@@ -144,15 +149,23 @@ export function buildFlashBoardChatSendPlan({
     return { action: 'error', errorMessage: 'Write a chat prompt before starting chat.' };
   }
 
-  if (chatProvider === 'kie' && !canUseHostedChat) {
+  if (chatProvider === 'kie' && !canUseHostedChat && chatAgentMode !== 'direct') {
     return {
       action: 'error',
       dialogTarget: !hasHostedSession ? 'auth' : 'pricing',
       errorMessage: !hasHostedSession
-        ? 'Sign in to use AI chat.'
+        ? 'Free AI credits are unavailable. Choose a plan to continue.'
         : !hostedAIEnabled
           ? 'Enable hosted credits to use AI chat.'
           : 'Hosted AI is currently unavailable.',
+    };
+  }
+
+  if (chatProvider === 'kie' && !hasHostedSession && chatAgentMode === 'direct' && !import.meta.env.DEV) {
+    return {
+      action: 'error',
+      dialogTarget: 'auth',
+      errorMessage: 'Sign in to use Codex Direct.',
     };
   }
 
@@ -161,16 +174,25 @@ export function buildFlashBoardChatSendPlan({
     chatIntent,
     decisionPolicy,
   );
+  const guided = decisionPolicy !== 'automatic';
+  const nativePlanConversation = chatIntent === 'plan' && conversationRef !== undefined;
+  const directCodex = chatAgentMode === 'direct';
 
   return {
     action: 'send',
     request: {
+      ...(directCodex ? { agentPath: 'direct-codex' as const } : {}),
+      ...(directCodex && conversationRef !== undefined ? { conversationRef } : {}),
       ...(chatProvider === 'kie' && canUseHostedChat
         ? {
+            ...(nativePlanConversation ? { conversationRef } : {}),
             executionProfile: chatExecutionProfile,
-            // Only forward a class the availability probe confirmed; a K2
-            // selection must never receive a Fast V2 model class.
-            ...(chatModelClass === undefined ? {} : { requestedModelClass: chatModelClass }),
+            // Guided uses the server-owned DeepSeek class. Legacy non-automatic
+            // policies follow the same route so persisted sessions cannot
+            // silently fall back to the hidden Fast/Slow choices.
+            ...(guided
+              ? { requestedModelClass: 'very-fast' as const }
+              : chatModelClass === undefined ? {} : { requestedModelClass: chatModelClass }),
           }
         : {}),
       hostedAvailable: canUseHostedChat,
@@ -179,7 +201,13 @@ export function buildFlashBoardChatSendPlan({
       decisionPolicy,
       openAiReasoningEffort,
       playbookPrompt: executionPrompt,
-      prompt: buildFlashBoardChatRequestPrompt(chatMessages, executionPrompt),
+      // Native Plan conversations retain their own provider history. Sending
+      // the flattened visible transcript again would duplicate every turn.
+      prompt: directCodex
+        ? executionPrompt
+        : nativePlanConversation
+        ? effectiveChatPrompt
+        : buildFlashBoardChatRequestPrompt(chatMessages, executionPrompt),
       provider: chatProvider,
       temperature: chatTemperature,
       toolExecutionMode: chatIntent === 'plan' ? 'plan' : 'normal',
@@ -189,17 +217,32 @@ export function buildFlashBoardChatSendPlan({
 
 export function buildFlashBoardChatOptimisticMessages({
   assistantMessageId,
+  conversationRef,
   userMessageId,
   userPrompt,
 }: {
   assistantMessageId: string;
+  conversationRef?: string;
   userMessageId: string;
   userPrompt: string;
 }): FlashBoardChatMessage[] {
   const createdAt = Date.now();
   return [
-    { createdAt, id: userMessageId, role: 'user', text: userPrompt },
-    { createdAt, id: assistantMessageId, role: 'assistant', text: 'Thinking...', isPending: true },
+    {
+      createdAt,
+      id: userMessageId,
+      role: 'user',
+      text: userPrompt,
+      ...(conversationRef === undefined ? {} : { conversationRef }),
+    },
+    {
+      createdAt,
+      id: assistantMessageId,
+      role: 'assistant',
+      text: 'Thinking...',
+      isPending: true,
+      ...(conversationRef === undefined ? {} : { conversationRef }),
+    },
   ];
 }
 

@@ -13,13 +13,28 @@ import {
   type WheelControlConfig,
 } from './colorEditorMath';
 import type { ColorEditorNode, ColorEditorParamDefinition } from './colorEditorTypes';
+import { trackEditorControlCommitted } from '../../../services/productAnalytics';
+import { ResolveWheelColorControls } from './ResolveWheelColorControls';
+
+function trackWheelControl(controlId: string, controlKind: 'number' | 'slider', inputMethod: 'drag' | 'keyboard' | 'reset' | 'type') {
+  trackEditorControlCommitted({
+    area: 'color',
+    controlId,
+    controlKind,
+    inputMethod,
+    interaction: inputMethod === 'reset' ? 'reset' : 'change',
+    itemId: controlId,
+    itemKind: 'property',
+  });
+}
 
 type KeyframeProperty = ComponentProps<typeof KeyframeToggle>['property'];
 
-interface WheelColorControlsProps {
+export interface WheelColorControlsProps {
   clipId: string;
   node: ColorEditorNode;
   wheelParamDefs: ColorEditorParamDefinition[];
+  resolveLayout?: boolean;
   createProperty: (nodeId: string, key: string) => KeyframeProperty;
   getParamValue: (node: ColorEditorNode, key: string, defaultValue: number) => number;
   setParam: (nodeId: string, paramName: string, value: number) => void;
@@ -27,7 +42,8 @@ interface WheelColorControlsProps {
   startWheelDrag: (
     event: PointerEvent<HTMLDivElement>,
     node: ColorEditorNode,
-    config: WheelControlConfig
+    config: WheelControlConfig,
+    sensitivity?: number,
   ) => void;
   onBatchStart: () => void;
   onBatchEnd: () => void;
@@ -37,6 +53,7 @@ export function WheelColorControls({
   clipId,
   node,
   wheelParamDefs,
+  resolveLayout = false,
   createProperty,
   getParamValue,
   setParam,
@@ -45,6 +62,23 @@ export function WheelColorControls({
   onBatchStart,
   onBatchEnd,
 }: WheelColorControlsProps) {
+  if (resolveLayout) {
+    return (
+      <ResolveWheelColorControls
+        clipId={clipId}
+        node={node}
+        wheelParamDefs={wheelParamDefs}
+        createProperty={createProperty}
+        getParamValue={getParamValue}
+        setParam={setParam}
+        resetWheel={resetWheel}
+        startWheelDrag={startWheelDrag}
+        onBatchStart={onBatchStart}
+        onBatchEnd={onBatchEnd}
+      />
+    );
+  }
+
   return (
     <div className="properties-section color-control-section color-wheel-section">
       <div className="color-wheels-grid">
@@ -123,6 +157,16 @@ export function WheelColorControls({
                   step={yDef.step}
                   value={clampNumber(yValue, ySliderMin, ySliderMax)}
                   onChange={(rangeEvent) => setParam(node.id, config.yKey, Number(rangeEvent.target.value))}
+                  onPointerDown={onBatchStart}
+                  onPointerUp={() => {
+                    onBatchEnd();
+                    trackWheelControl(config.yKey, 'slider', 'drag');
+                  }}
+                  onKeyDown={onBatchStart}
+                  onKeyUp={() => {
+                    onBatchEnd();
+                    trackWheelControl(config.yKey, 'slider', 'keyboard');
+                  }}
                 />
                 <DraggableNumber
                   value={yValue}
@@ -135,6 +179,7 @@ export function WheelColorControls({
                   persistenceKey={yPersistenceKey}
                   onDragStart={onBatchStart}
                   onDragEnd={onBatchEnd}
+                  onCommit={(method) => trackWheelControl(config.yKey, 'number', method)}
                 />
               </div>
 
@@ -168,6 +213,7 @@ export function WheelColorControls({
                         persistenceKey={`color.${clipId}.${node.id}.${key}`}
                         onDragStart={onBatchStart}
                         onDragEnd={onBatchEnd}
+                        onCommit={(method) => trackWheelControl(key, 'number', method)}
                       />
                     </div>
                   );

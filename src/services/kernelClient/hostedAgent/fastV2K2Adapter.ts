@@ -29,12 +29,14 @@ export function adaptHostedAgentFastV2TransportToK2(
     async postOperationResult(input): Promise<HostedAgentK2BatchPostResponse> {
       return transport.postOperationResult(input);
     },
-    async postOperationSettlement(input): Promise<HostedAgentK2BatchPostResponse> {
-      return transport.postOperationSettlement(input);
+    async postOperationSettlement(): Promise<HostedAgentK2BatchPostResponse> {
+      throw new HostedAgentFastV2UnsupportedOperationError(
+        'Auto does not accept deferred operation settlements.',
+      );
     },
     async postToolResults() {
       throw new HostedAgentFastV2UnsupportedOperationError(
-        'Fast V2 does not accept client-authored provider tool results.',
+        'Auto does not accept client-authored provider tool results.',
       );
     },
     async replayEvents(input): Promise<HostedAgentK2EventReplay> {

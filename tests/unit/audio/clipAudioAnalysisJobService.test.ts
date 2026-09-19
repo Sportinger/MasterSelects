@@ -56,4 +56,23 @@ describe('ClipAudioAnalysisJobService', () => {
 
     first.resolve('first');
   });
+
+  it('cancels only jobs of the requested kind', async () => {
+    const service = new ClipAudioAnalysisJobService({ maxConcurrent: 1 });
+    const running = defer<string>();
+    const waveformRun = service.run(
+      { clipId: 'clip-waveform', kind: 'waveform-pyramid' },
+      async () => running.promise,
+    );
+    const loudnessRun = service.run(
+      { clipId: 'clip-loudness', kind: 'loudness-envelope' },
+      async () => 'loudness',
+    );
+
+    expect(service.cancelKind('waveform-pyramid')).toBe(1);
+    running.resolve('ignored');
+
+    await expect(waveformRun).rejects.toBeInstanceOf(ClipAudioAnalysisJobCancelledError);
+    await expect(loudnessRun).resolves.toBe('loudness');
+  });
 });

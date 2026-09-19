@@ -4,23 +4,28 @@ import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../gaussian/types';
 import { resolveSharedSplatSceneKey } from '../scene/runtime/SharedSplatRuntimeUtils';
 import type {
   SceneCamera,
+  SceneFaceCableLayer,
+  SceneFlockLayer,
   SceneGizmoRenderOptions,
   SceneLayer3DData,
   SceneLightLayer,
   ScenePlaneLayer,
   SceneSplatEffectorRuntimeData,
   SceneSplatLayer,
+  SceneVoxelLayer,
 } from '../scene/types';
 import type { ModelSequenceData } from '../../types';
 import type { MaskTextureManager } from '../texture/MaskTextureManager';
 import { ModelRuntimeCache } from './assets/ModelRuntimeCache';
 import { EffectorCompute } from './passes/EffectorCompute';
+import { FlockPass } from './passes/FlockPass';
 import { GizmoPass } from './passes/GizmoPass';
 import { MeshPass, type SceneNativeMeshLayer } from './passes/MeshPass';
 import { PlanePass } from './passes/PlanePass';
+import { FaceCablePass } from './passes/FaceCablePass';
 import { SplatPass } from './passes/SplatPass';
+import { VoxelPass } from './passes/VoxelPass';
 import {
-  PLANE_UNIFORM_SIZE,
   SCENE_COLOR_FORMAT,
   SCENE_DEPTH_FORMAT,
   SPLAT_SOFT_DEPTH_ALPHA_CUTOFF,
@@ -36,14 +41,12 @@ import {
   getModelSequencePreloadOptions,
   prepareModelLayerForRender,
 } from './sceneRenderer/modelSequence';
-import {
-  createCompositeResources,
-  createPlaneResources,
-  createPlaneWhiteMaskResource,
-} from './sceneRenderer/pipelineResources';
-import { buildPlaneMvp, buildPlaneUniformData } from './sceneRenderer/planeUniforms';
-import { resolvePlaneTextureSource, type CachedPlaneTexture } from './sceneRenderer/planeTextureSources';
+import { createCompositeResources } from './sceneRenderer/pipelineResources';
 import { createSceneTargets, hasMatchingSceneTargets, type SceneTargets } from './sceneRenderer/targets';
+import {
+  LayerSpaceEffectRenderer,
+  type LayerSpaceEffectContext,
+} from './sceneRenderer/LayerSpaceEffectRenderer';
 
 const log = Logger.create('NativeSceneRenderer');
 
@@ -51,26 +54,25 @@ export class NativeSceneRenderer {
   private initialized = false;
   private sceneTexture: GPUTexture | null = null;
   private sceneView: GPUTextureView | null = null;
+  private sceneGizmoTexture: GPUTexture | null = null;
+  private sceneGizmoView: GPUTextureView | null = null;
   private sceneDepthTexture: GPUTexture | null = null;
   private sceneDepthView: GPUTextureView | null = null;
   private readonly sceneTargets = new Map<string, SceneTargets>();
   private compositePipeline: GPURenderPipeline | null = null;
   private compositeBindGroupLayout: GPUBindGroupLayout | null = null;
   private compositeSampler: GPUSampler | null = null;
-  private planePipelineOpaque: GPURenderPipeline | null = null;
-  private planePipelineTransparent: GPURenderPipeline | null = null;
-  private planeBindGroupLayout: GPUBindGroupLayout | null = null;
-  private planeSampler: GPUSampler | null = null;
-  private planeWhiteMaskTexture: GPUTexture | null = null;
-  private planeWhiteMaskView: GPUTextureView | null = null;
-  private planeTextures = new Map<string, CachedPlaneTexture>();
   private readonly planePass = new PlanePass();
+  private readonly faceCablePass = new FaceCablePass();
   private readonly meshPass = new MeshPass();
   private readonly gizmoPass = new GizmoPass();
   private readonly splatPass = new SplatPass();
+  private readonly voxelPass = new VoxelPass();
+  private readonly flockPass = new FlockPass();
   private readonly effectorCompute = new EffectorCompute();
   private readonly modelRuntimeCache = new ModelRuntimeCache();
   private readonly lastRenderableModelSequenceUrls = new Map<string, string>();
+  private readonly layerSpaceEffectRenderer = new LayerSpaceEffectRenderer();
 
   private getSplatSceneKey(layer: SceneSplatLayer): string {
     return resolveSharedSplatSceneKey({
@@ -101,8 +103,11 @@ export class NativeSceneRenderer {
     for (const [key, targets] of this.sceneTargets) {
       if (activeTargetKeys.has(key)) continue;
       targets.texture.destroy();
+      targets.gizmoTexture?.destroy();
       targets.depthTexture.destroy();
       this.sceneTargets.delete(key);
+      this.layerSpaceEffectRenderer.releaseTarget(key);
+      this.faceCablePass.releaseTarget(key);
     }
   }
 
@@ -110,8 +115,15 @@ export class NativeSceneRenderer {
     const targets = this.sceneTargets.get(targetKey);
     if (!targets) return;
     targets.texture.destroy();
+    targets.gizmoTexture?.destroy();
     targets.depthTexture.destroy();
     this.sceneTargets.delete(targetKey);
+    this.layerSpaceEffectRenderer.releaseTarget(targetKey);
+    this.faceCablePass.releaseTarget(targetKey);
+  }
+
+  getGizmoOverlayView(targetKey: string = 'main'): GPUTextureView | null {
+    return this.sceneTargets.get(targetKey)?.gizmoView ?? null;
   }
 
   renderScene(
@@ -123,6 +135,7 @@ export class NativeSceneRenderer {
     gizmo?: SceneGizmoRenderOptions | null,
     maskTextureManager?: MaskTextureManager | null,
     targetKey: string = 'main',
+    layerSpaceEffects?: LayerSpaceEffectContext,
   ): GPUTextureView | null {
     if (!this.initialized) {
       return null;
@@ -131,6 +144,8 @@ export class NativeSceneRenderer {
     const planeLayers = this.planePass.collect(layers);
     const meshLayers = this.meshPass.collect(layers);
     const splatLayers = this.splatPass.collect(layers);
+    const voxelLayers = this.voxelPass.collect(layers);
+    const flockLayers = this.flockPass.collect(layers);
     const lightLayers = layers.filter((layer): layer is SceneLightLayer => layer.kind === 'light');
     const preparedMeshLayers = meshLayers.map((layer) =>
       layer.kind === 'model'
@@ -151,15 +166,19 @@ export class NativeSceneRenderer {
     const nativeSceneView = this.renderNativeScene(
       device,
       planeLayers,
+      voxelLayers,
+      flockLayers,
       nativeMeshLayers,
       splatLayers,
       lightLayers,
+      layers.filter((layer): layer is SceneFaceCableLayer => layer.kind === 'face-cables'),
       camera,
       effectors,
       realtimePlayback,
       gizmo,
       maskTextureManager,
       targetKey,
+      layerSpaceEffects,
     );
     if (!nativeSceneView) {
       return null;
@@ -170,6 +189,8 @@ export class NativeSceneRenderer {
       planes: planeLayers.length,
       meshes: meshLayers.length,
       splats: splatLayers.length,
+      voxels: voxelLayers.length,
+      flocks: flockLayers.length,
       lights: lightLayers.length,
     });
     return nativeSceneView;
@@ -178,30 +199,26 @@ export class NativeSceneRenderer {
   dispose(): void {
     for (const targets of this.sceneTargets.values()) {
       targets.texture.destroy();
+      targets.gizmoTexture?.destroy();
       targets.depthTexture.destroy();
     }
     this.sceneTargets.clear();
     this.sceneTexture = null;
     this.sceneView = null;
+    this.sceneGizmoTexture = null;
+    this.sceneGizmoView = null;
     this.sceneDepthTexture = null;
     this.sceneDepthView = null;
     this.compositePipeline = null;
     this.compositeBindGroupLayout = null;
     this.compositeSampler = null;
-    this.planePipelineOpaque = null;
-    this.planePipelineTransparent = null;
-    this.planeBindGroupLayout = null;
-    this.planeSampler = null;
-    this.planeWhiteMaskTexture?.destroy();
-    this.planeWhiteMaskTexture = null;
-    this.planeWhiteMaskView = null;
     this.initialized = false;
+    this.planePass.dispose();
+    this.faceCablePass.dispose();
     this.meshPass.dispose();
+    this.voxelPass.dispose();
     this.gizmoPass.dispose();
-    for (const entry of this.planeTextures.values()) {
-      entry.texture.destroy();
-    }
-    this.planeTextures.clear();
+    this.layerSpaceEffectRenderer.destroy();
     this.modelRuntimeCache.clear();
   }
 
@@ -209,12 +226,15 @@ export class NativeSceneRenderer {
     let targets = this.sceneTargets.get(targetKey);
     if (!targets || !hasMatchingSceneTargets(targets, width, height)) {
       targets?.texture.destroy();
+      targets?.gizmoTexture?.destroy();
       targets?.depthTexture.destroy();
       targets = createSceneTargets(device, width, height);
       this.sceneTargets.set(targetKey, targets);
     }
     this.sceneTexture = targets.texture;
     this.sceneView = targets.view;
+    this.sceneGizmoTexture = targets.gizmoTexture;
+    this.sceneGizmoView = targets.gizmoView;
     this.sceneDepthTexture = targets.depthTexture;
     this.sceneDepthView = targets.depthView;
   }
@@ -222,15 +242,19 @@ export class NativeSceneRenderer {
   private renderNativeScene(
     device: GPUDevice,
     planeLayers: ScenePlaneLayer[],
+    voxelLayers: SceneVoxelLayer[],
+    flockLayers: SceneFlockLayer[],
     nativeMeshLayers: SceneNativeMeshLayer[],
     layers: SceneSplatLayer[],
     lightLayers: SceneLightLayer[],
+    cableLayers: SceneFaceCableLayer[],
     camera: SceneCamera,
     effectors: SceneSplatEffectorRuntimeData[],
     realtimePlayback: boolean,
     gizmo?: SceneGizmoRenderOptions | null,
     maskTextureManager?: MaskTextureManager | null,
     targetKey: string = 'main',
+    layerSpaceEffects?: LayerSpaceEffectContext,
   ): GPUTextureView | null {
     const renderer = getGaussianSplatGpuRenderer();
     if (layers.length > 0 && !renderer.isInitialized) {
@@ -243,21 +267,21 @@ export class NativeSceneRenderer {
 
     this.ensureSceneTargets(device, targetKey, camera.viewport.width, camera.viewport.height);
     this.ensureCompositeResources(device);
-    this.ensurePlaneResources(device);
+    this.planePass.ensureResources(device);
     this.meshPass.initialize(device, SCENE_DEPTH_FORMAT);
+    this.voxelPass.initialize(device);
     this.gizmoPass.initialize(device, SCENE_COLOR_FORMAT);
     if (
       !this.sceneTexture ||
       !this.sceneView ||
+      !this.sceneGizmoTexture ||
+      !this.sceneGizmoView ||
       !this.sceneDepthTexture ||
       !this.sceneDepthView ||
       !this.compositePipeline ||
       !this.compositeBindGroupLayout ||
       !this.compositeSampler ||
-      !this.planePipelineOpaque ||
-      !this.planePipelineTransparent ||
-      !this.planeBindGroupLayout ||
-      !this.planeSampler
+      !this.planePass.isReady
     ) {
       return null;
     }
@@ -278,14 +302,30 @@ export class NativeSceneRenderer {
       this.lastRenderableModelSequenceUrls,
     );
     const { opaquePlanes, transparentPlanes } = splitPlaneLayers(planeLayers, camera);
-    this.prunePlaneTextureCache(new Set(planeLayers.map((layer) => layer.layerId)));
+    this.planePass.pruneTextureCache(new Set([...planeLayers, ...voxelLayers, ...cableLayers].map((layer) => layer.layerId)));
+    const effectedTextureViews = layerSpaceEffects
+      ? this.layerSpaceEffectRenderer.prepare({
+          ...layerSpaceEffects,
+          device,
+          commandEncoder,
+          layers: [...planeLayers, ...voxelLayers],
+          targetKey,
+          resolveSource: (layer) => {
+            const view = this.planePass.resolveTextureView(device, layer);
+            const cached = this.planePass.getCachedTexture(layer.layerId);
+            return view && cached ? { view, width: cached.width, height: cached.height } : null;
+          },
+        })
+      : new Map<string, GPUTextureView>();
     this.meshPass.pruneModelCache(activeModelUrls);
+    // Flock simulations advance (compute) before any scene render pass is opened.
+    const flockPlans = this.flockPass.prepare(device, commandEncoder, flockLayers, realtimePlayback);
 
     // Shared native scene pass graph, phase 1:
     //   1. Opaque depth-writing geometry -> scene color + shared depth
     //   2. Splats -> scene color, depth-tested but no writes for full gaussian blending quality
     //   3. Splats -> shared soft depth mask, writing only high-alpha cores for cross-splat occlusion
-    //   4. Transparent planes/materials -> scene color after splats
+    //   4. Transparent planes/materials and blended flock branches -> scene color after splats
     const clearPass = commandEncoder.beginRenderPass({
       colorAttachments: [
         {
@@ -321,9 +361,18 @@ export class NativeSceneRenderer {
       return null;
     }
 
-    if (!this.renderPlanePass(device, commandEncoder, opaquePlanes, camera, false, temporaryBuffers, maskTextureManager)) {
+    if (!this.planePass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, opaquePlanes, camera, false, temporaryBuffers, maskTextureManager, effectedTextureViews)) {
       return null;
     }
+    if (!this.faceCablePass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, cableLayers, lightLayers, camera, targetKey,
+      layer => this.planePass.resolveTextureView(device, layer), temporaryBuffers)) return null;
+
+    const readyVoxels = voxelLayers.flatMap((layer) => {
+      const textureView = effectedTextureViews.get(layer.layerId) ?? this.planePass.resolveTextureView(device, layer);
+      return textureView ? [{ layer, textureView }] : [];
+    });
+    if (!this.voxelPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, readyVoxels, camera, temporaryBuffers)) return null;
+    if (!this.flockPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, flockPlans, camera, 'opaque', temporaryBuffers)) return null;
 
     for (const layer of sortedLayers) {
       const renderSettings = layer.gaussianSplatSettings?.render ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render;
@@ -412,11 +461,12 @@ export class NativeSceneRenderer {
       return null;
     }
 
-    if (!this.renderPlanePass(device, commandEncoder, transparentPlanes, camera, true, temporaryBuffers, maskTextureManager)) {
+    if (!this.planePass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, transparentPlanes, camera, true, temporaryBuffers, maskTextureManager, effectedTextureViews)) {
       return null;
     }
+    if (!this.flockPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, flockPlans, camera, 'transparent', temporaryBuffers)) return null;
     const gizmoLayer = gizmo
-      ? [...planeLayers, ...nativeMeshLayers, ...layers, ...lightLayers].find((layer) => layer.clipId === gizmo.clipId) ??
+      ? [...planeLayers, ...voxelLayers, ...flockLayers, ...nativeMeshLayers, ...layers, ...lightLayers].find((layer) => layer.clipId === gizmo.clipId) ??
         (gizmo.worldMatrix && gizmo.worldTransform
           ? {
               clipId: gizmo.clipId,
@@ -425,15 +475,16 @@ export class NativeSceneRenderer {
             }
           : null)
       : null;
-    if (gizmoLayer && !this.gizmoPass.render(
+    if (gizmo && !this.gizmoPass.render(
       device,
       commandEncoder,
-      this.sceneView,
+      this.sceneGizmoView,
       gizmoLayer,
       camera,
-      gizmo!.mode,
-      gizmo!.hoveredAxis,
+      gizmo.mode,
+      gizmo.hoveredAxis,
       temporaryBuffers,
+      true,
     )) {
       return null;
     }
@@ -461,192 +512,6 @@ export class NativeSceneRenderer {
     this.compositePipeline = resources.pipeline;
     this.compositeBindGroupLayout = resources.bindGroupLayout;
     this.compositeSampler = resources.sampler;
-  }
-
-  private ensurePlaneResources(device: GPUDevice): void {
-    if (
-      this.planePipelineOpaque &&
-      this.planePipelineTransparent &&
-      this.planeBindGroupLayout &&
-      this.planeSampler &&
-      this.planeWhiteMaskView
-    ) {
-      return;
-    }
-
-    const resources = createPlaneResources(device);
-    this.planePipelineOpaque = resources.opaquePipeline;
-    this.planePipelineTransparent = resources.transparentPipeline;
-    this.planeBindGroupLayout = resources.bindGroupLayout;
-    this.planeSampler = resources.sampler;
-    this.planeWhiteMaskTexture?.destroy();
-    const whiteMask = createPlaneWhiteMaskResource(device);
-    this.planeWhiteMaskTexture = whiteMask.whiteMaskTexture;
-    this.planeWhiteMaskView = whiteMask.whiteMaskView;
-  }
-
-  private renderPlanePass(
-    device: GPUDevice,
-    commandEncoder: GPUCommandEncoder,
-    layers: ScenePlaneLayer[],
-    camera: SceneCamera,
-    transparent: boolean,
-    temporaryBuffers: GPUBuffer[],
-    maskTextureManager?: MaskTextureManager | null,
-  ): boolean {
-    if (layers.length === 0) {
-      return true;
-    }
-    if (
-      !this.sceneView ||
-      !this.sceneDepthView ||
-      !this.planePipelineOpaque ||
-      !this.planePipelineTransparent ||
-      !this.planeBindGroupLayout ||
-      !this.planeSampler ||
-      !this.planeWhiteMaskView
-    ) {
-      return false;
-    }
-
-    const renderPass = commandEncoder.beginRenderPass({
-      colorAttachments: [
-        {
-          view: this.sceneView,
-          clearValue: { r: 0, g: 0, b: 0, a: 0 },
-          loadOp: 'load',
-          storeOp: 'store',
-        },
-      ],
-      depthStencilAttachment: {
-        view: this.sceneDepthView,
-        depthClearValue: 1,
-        depthLoadOp: 'load',
-        depthStoreOp: 'store',
-      },
-      label: transparent ? 'native-scene-plane-transparent-pass' : 'native-scene-plane-opaque-pass',
-    });
-    renderPass.setPipeline(transparent ? this.planePipelineTransparent : this.planePipelineOpaque);
-
-    for (const layer of layers) {
-      const textureView = this.resolvePlaneTextureView(device, layer);
-      if (!textureView) {
-        renderPass.end();
-        return false;
-      }
-
-      const uniformBuffer = device.createBuffer({
-        size: PLANE_UNIFORM_SIZE,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        label: `native-scene-plane-uniform-${layer.layerId}`,
-      });
-      temporaryBuffers.push(uniformBuffer);
-      const uniformData = buildPlaneUniformData(
-        buildPlaneMvp(layer, camera),
-        layer.opacity,
-        !transparent && layer.alphaMode === 'opaque',
-        !!(layer.maskClipId && maskTextureManager?.hasMaskTexture(layer.maskClipId)),
-        layer.maskInvert === true,
-      );
-      device.queue.writeBuffer(
-        uniformBuffer,
-        0,
-        uniformData.buffer,
-        uniformData.byteOffset,
-        uniformData.byteLength,
-      );
-
-      const maskTextureView = layer.maskClipId && maskTextureManager
-        ? maskTextureManager.getMaskInfo(layer.maskClipId).view
-        : this.planeWhiteMaskView;
-
-      const bindGroup = device.createBindGroup({
-        layout: this.planeBindGroupLayout,
-        entries: [
-          { binding: 0, resource: this.planeSampler },
-          { binding: 1, resource: textureView },
-          { binding: 2, resource: { buffer: uniformBuffer } },
-          { binding: 3, resource: maskTextureView },
-        ],
-        label: `native-scene-plane-bind-group-${layer.layerId}`,
-      });
-      renderPass.setBindGroup(0, bindGroup);
-      renderPass.draw(6);
-    }
-
-    renderPass.end();
-    return true;
-  }
-
-  private resolvePlaneTextureView(
-    device: GPUDevice,
-    layer: ScenePlaneLayer,
-  ): GPUTextureView | null {
-    const current = this.planeTextures.get(layer.layerId);
-    const sourceState = resolvePlaneTextureSource(layer, current);
-    if (!sourceState) {
-      return layer.videoElement || layer.videoFrame ? current?.view ?? null : null;
-    }
-    const sameSource = sourceState.transient === true || current?.source === sourceState.source;
-    const canReuseCurrent =
-      !!current &&
-      sameSource &&
-      current.width === sourceState.width &&
-      current.height === sourceState.height;
-
-    let cached = current;
-    if (
-      !cached ||
-      (sourceState.transient !== true && cached.source !== sourceState.source) ||
-      cached.width !== sourceState.width ||
-      cached.height !== sourceState.height
-    ) {
-      cached?.texture.destroy();
-      const texture = device.createTexture({
-        size: { width: sourceState.width, height: sourceState.height },
-        format: 'rgba8unorm',
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
-      });
-      cached = {
-        source: sourceState.source,
-        texture,
-        view: texture.createView(),
-        width: sourceState.width,
-        height: sourceState.height,
-        ...(sourceState.videoCanvas ? { videoCanvas: sourceState.videoCanvas } : {}),
-      };
-      this.planeTextures.set(layer.layerId, cached);
-    } else if (sourceState.videoCanvas) {
-      cached.videoCanvas = sourceState.videoCanvas;
-      cached.source = sourceState.source;
-    } else if (sourceState.transient) {
-      cached.source = sourceState.source;
-    }
-
-    try {
-      device.queue.copyExternalImageToTexture(
-        { source: sourceState.source },
-        { texture: cached.texture },
-        { width: sourceState.width, height: sourceState.height },
-      );
-    } catch (error) {
-      if (canReuseCurrent) {
-        return cached.view;
-      }
-      log.warn('Failed to upload native plane texture', { layerId: layer.layerId, error });
-      return null;
-    }
-
-    return cached.view;
-  }
-
-  private prunePlaneTextureCache(activeLayerIds: Set<string>): void {
-    for (const [layerId, entry] of this.planeTextures) {
-      if (!activeLayerIds.has(layerId)) {
-        entry.texture.destroy();
-        this.planeTextures.delete(layerId);
-      }
-    }
   }
 }
 

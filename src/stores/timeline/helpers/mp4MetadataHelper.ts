@@ -4,28 +4,22 @@
 // This handles camera MOV files with moov at end without manual parallel reads.
 
 import { Logger } from '../../../services/logger';
+import type { MediaVideoTrackMetadata } from '../../../types/mediaMetadata';
+import {
+  isIsobmffFileName,
+  readIsobmffMetadata,
+} from '../../../services/mediaMetadata/isobmffMetadata';
 
 const log = Logger.create('MP4Metadata');
 
-// Lazy-load mediabunny only when needed (tree-shaking friendly)
-let _mediabunny: typeof import('mediabunny') | null = null;
-async function getMediaBunny() {
-  if (!_mediabunny) {
-    _mediabunny = await import('mediabunny');
-  }
-  return _mediabunny;
-}
-
-// MP4-based containers
-const MP4_EXTENSIONS = ['mp4', 'm4v', 'mov', '3gp', 'mp4v', 'mxf'];
-
-export interface MP4Metadata {
+export interface MP4Metadata extends MediaVideoTrackMetadata {
   duration: number;
   width?: number;
   height?: number;
   fps?: number;
   hasAudio: boolean;
   codec?: string;
+  audioCodec?: string;
 }
 
 /**
@@ -37,87 +31,41 @@ export interface MP4Metadata {
  * Returns null if file is not MP4/MOV or parsing fails.
  */
 export async function getMP4MetadataFast(file: File, timeoutMs = 5000): Promise<MP4Metadata | null> {
-  const ext = file.name.split('.').pop()?.toLowerCase() || '';
-  if (!MP4_EXTENSIONS.includes(ext)) return null;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cleanup: { input: any } = { input: null };
-  try {
-    const mb = await getMediaBunny();
-
-    const result = await Promise.race([
-      (async () => {
-        const input = new mb.Input({
-          formats: [mb.MP4, mb.QTFF],
-          source: new mb.BlobSource(file),
-        });
-        cleanup.input = input;
-
-        const duration = await input.computeDuration();
-        if (!duration || !isFinite(duration) || duration <= 0) {
-          log.debug('MediaBunny: no valid duration', { file: file.name });
-          return null;
-        }
-
-        const videoTracks = await input.getVideoTracks();
-        const audioTracks = await input.getAudioTracks();
-        const videoTrack = videoTracks[0] ?? null;
-
-        const metadata: MP4Metadata = {
-          duration,
-          hasAudio: audioTracks.length > 0,
-        };
-
-        if (videoTrack) {
-          // Extract dimensions (display dimensions account for rotation + pixel aspect ratio)
-          metadata.width = videoTrack.displayWidth;
-          metadata.height = videoTrack.displayHeight;
-
-          // Extract FPS from packet stats (scan first ~200 packets for speed)
-          try {
-            const stats = await videoTrack.computePacketStats(200);
-            if (stats.averagePacketRate > 0) {
-              metadata.fps = Math.round(stats.averagePacketRate);
-            }
-          } catch {
-            // FPS computation can fail for very short clips
-          }
-
-          // Extract codec parameter string (e.g. 'avc1.64001f')
-          try {
-            const codecStr = await videoTrack.getCodecParameterString();
-            if (codecStr) {
-              metadata.codec = codecStr;
-            }
-          } catch {
-            // Codec detection can fail for exotic codecs
-          }
-        }
-
-        log.debug('MediaBunny metadata extracted', {
-          file: file.name,
-          duration: metadata.duration.toFixed(2),
-          width: metadata.width,
-          height: metadata.height,
-          fps: metadata.fps,
-          hasAudio: metadata.hasAudio,
-        });
-
-        return metadata;
-      })(),
-      new Promise<null>((resolve) => setTimeout(() => {
-        log.debug('MediaBunny metadata timeout', { file: file.name });
-        resolve(null);
-      }, timeoutMs)),
-    ]);
-
-    return result;
-  } catch (err) {
-    log.debug('MediaBunny metadata extraction failed', err);
+  if (!isIsobmffFileName(file.name)) return null;
+  const probed = await readIsobmffMetadata(file, timeoutMs);
+  if (!probed?.duration) {
+    log.debug('MediaBunny: no valid duration', { file: file.name });
     return null;
-  } finally {
-    try { cleanup.input?.dispose(); } catch { /* ignore */ }
   }
+
+  const metadata: MP4Metadata = {
+    duration: probed.duration,
+    width: probed.width,
+    height: probed.height,
+    fps: probed.fps,
+    hasAudio: probed.hasAudio,
+    codec: probed.videoCodecParameter ?? probed.videoCodecId,
+    audioCodec: probed.audioCodecParameter ?? probed.audioCodecId,
+    videoCodecId: probed.videoCodecId,
+    codedWidth: probed.codedWidth,
+    codedHeight: probed.codedHeight,
+    rotation: probed.rotation,
+    pixelAspectRatio: probed.pixelAspectRatio,
+    videoColorSpace: probed.videoColorSpace,
+    hasHighDynamicRange: probed.hasHighDynamicRange,
+    canBeTransparent: probed.canBeTransparent,
+  };
+
+  log.debug('MediaBunny metadata extracted', {
+    file: file.name,
+    duration: metadata.duration.toFixed(2),
+    width: metadata.width,
+    height: metadata.height,
+    fps: metadata.fps,
+    videoCodecId: metadata.videoCodecId,
+    hasAudio: metadata.hasAudio,
+  });
+  return metadata;
 }
 
 /**

@@ -19,6 +19,7 @@ const CLIP_COLORS: Record<string, string> = {
   image: '#9b59b6',
   text: '#e67e22',
   'math-scene': '#5eead4',
+  flock: '#c084fc',
   solid: '#95a5a6',
   audio: '#2ecc71',
 };

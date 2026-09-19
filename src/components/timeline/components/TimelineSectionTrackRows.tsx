@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { TimelineClip, TimelineTrack as TimelineTrackType } from '../../../types';
 import type { TimelineClipDragPreview } from '../../../stores/timeline/types';
 import type { TrackSectionKind } from '../utils/timelineHostTypes';
@@ -10,11 +11,18 @@ import type {
   TimelineTrackProps,
 } from '../types';
 import { TimelineTrack } from '../TimelineTrack';
-import { getTimelineTrackColor, TIMELINE_TRACK_COLOR_HIDDEN } from '../trackColor';
+import { TimelineTrackViewport } from './TimelineTrackViewport';
+import {
+  getResolveTimelineTrackColor,
+  getTimelineTrackColor,
+  TIMELINE_TRACK_COLOR_HIDDEN,
+} from '../trackColor';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { isAudioSectionTrackType } from '../utils/trackSection';
 import {
   clipDragAffectsTrack,
   clipDragPreviewAffectsTrack,
+  clipTrimAffectsTrack,
 } from '../utils/timelineHostLayout';
 
 interface TimelineSectionTrackRowsProps {
@@ -73,7 +81,7 @@ interface TimelineSectionTrackRowsProps {
   zoom: number;
 }
 
-export function TimelineSectionTrackRows({
+export const TimelineSectionTrackRows = memo(function TimelineSectionTrackRows({
   activeTimelineToolId,
   activeTrackResizeId,
   anyViewAudioSolo,
@@ -128,6 +136,8 @@ export function TimelineSectionTrackRows({
   waveformsEnabled,
   zoom,
 }: TimelineSectionTrackRowsProps) {
+  const resolveThemeActive = useSettingsStore((state) => state.theme === 'resolve');
+
   return (
     <>
       {sectionTracks.map((track, trackIndex) => {
@@ -140,6 +150,9 @@ export function TimelineSectionTrackRows({
         const trackClipDragPreview = clipDragPreviewAffectsTrack(clipDragPreview, track.id, clipMap)
           ? clipDragPreview
           : null;
+        const trackClipTrim = clipTrimAffectsTrack(clipTrim, track.id, clipMap)
+          ? clipTrim
+          : null;
         const trackClipFade = clipFade && clipMap.get(clipFade.clipId)?.trackId === track.id
           ? clipFade
           : null;
@@ -148,10 +161,19 @@ export function TimelineSectionTrackRows({
           : null;
 
         return (
+          <TimelineTrackViewport key={track.id}
+            enabled={sectionTracks.length > 8}
+            forceVisible={Boolean(trackClipDrag || trackClipTrim || trackClipFade
+              || activeTrackResizeId === track.id || isCompositionTrackMorphing)}
+            height={getSectionTrackHeight(track, sectionKind)} trackId={track.id}>
           <TimelineTrack
             key={track.id}
             track={track}
-            trackColor={timelineTrackColorsVisible ? getTimelineTrackColor(track, trackIndex) : TIMELINE_TRACK_COLOR_HIDDEN}
+            trackColor={timelineTrackColorsVisible
+              ? resolveThemeActive
+                ? getResolveTimelineTrackColor(track, trackIndex)
+                : getTimelineTrackColor(track, trackIndex)
+              : TIMELINE_TRACK_COLOR_HIDDEN}
             clips={isCompositionTrackMorphing ? [] : clips}
             isDimmed={isDimmed}
             isExpanded={isTrackExpandedForRender(track.id)}
@@ -171,7 +193,7 @@ export function TimelineSectionTrackRows({
             isClipDragActive={clipDrag !== null}
             clipDrag={trackClipDrag}
             clipDragPreview={trackClipDragPreview}
-            clipTrim={clipTrim}
+            clipTrim={trackClipTrim}
             clipFade={trackClipFade}
             clipContextMenu={trackClipContextMenu}
             audioRegionSelection={audioRegionSelection}
@@ -189,9 +211,9 @@ export function TimelineSectionTrackRows({
             onEmptyContextMenu={onEmptyContextMenu}
             onFadeStart={onFadeStart}
             onTrimStart={onTrimStart}
-            onDrop={(event) => onCombinedDrop(event, track.id)}
-            onDragOver={(event) => onCombinedDragOver(event, track.id)}
-            onDragEnter={(event) => onTrackDragEnter(event, track.id)}
+            onDrop={onCombinedDrop}
+            onDragOver={onCombinedDragOver}
+            onDragEnter={onTrackDragEnter}
             onDragLeave={onCombinedDragLeave}
             onResizeStart={onTrackResizeStart}
             isResizeActive={activeTrackResizeId === track.id}
@@ -207,8 +229,9 @@ export function TimelineSectionTrackRows({
             onUpdateBezierHandle={onUpdateBezierHandle}
             addKeyframe={onAddKeyframe}
           />
+          </TimelineTrackViewport>
         );
       })}
     </>
   );
-}
+});

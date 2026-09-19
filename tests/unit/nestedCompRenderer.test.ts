@@ -9,6 +9,7 @@ import {
   getCompatibleNestedVideoOwnerId,
   getNestedVideoOwnerId,
   getNestedVideoReuseKey,
+  shouldStageStableHtmlVideoLayer,
 } from '../../src/engine/render/nestedComp/htmlVideoPreview';
 import type { CompositorPipeline } from '../../src/engine/pipeline/CompositorPipeline';
 import type { EffectsPipeline } from '../../src/effects/EffectsPipeline';
@@ -75,9 +76,11 @@ type NestedCompRendererTestAccess = NestedCompRenderer & {
     layerData: LayerRenderData[],
     width: number,
     height: number,
-    compId: string,
-    clips: TimelineClip[],
-    tracks: TimelineTrack[],
+    currentTime?: number,
+    compId?: string,
+    clips?: TimelineClip[],
+    tracks?: TimelineTrack[],
+    sampler?: GPUSampler,
   ) => void;
 };
 
@@ -624,6 +627,89 @@ describe('NestedCompRenderer shared-scene integration', () => {
       expect((renderer as unknown as { lastRenderTime: Map<string, number> }).lastRenderTime.size).toBe(2);
     } finally {
       renderer.destroy();
+      if (previousGPUTextureUsage === undefined) {
+        delete (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+      } else {
+        Object.defineProperty(globalThis, 'GPUTextureUsage', {
+          configurable: true,
+          value: previousGPUTextureUsage,
+        });
+      }
+    }
+  });
+
+  it('stages only baked Datamosh transition media through a stable canvas', () => {
+    expect(shouldStageStableHtmlVideoLayer({
+      sourceClipId: 'nested-video:stable-key:datamosh',
+    })).toBe(true);
+    expect(shouldStageStableHtmlVideoLayer({
+      sourceClipId: 'nested-video:stable-key',
+    })).toBe(false);
+    expect(shouldStageStableHtmlVideoLayer({
+      sourceClipId: 'transition-comp:transition-1:datamosh',
+    })).toBe(false);
+  });
+
+  it('reuses the exact active composition output inside an inactive parent preview', () => {
+    const previousGPUTextureUsage = (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+    Object.defineProperty(globalThis, 'GPUTextureUsage', {
+      configurable: true,
+      value: { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2, COPY_SRC: 4, COPY_DST: 8 },
+    });
+    const activeView = { id: 'active-composition-view' };
+    const activeTexture = {
+      width: 16,
+      height: 16,
+      createView: vi.fn(() => activeView),
+      destroy: vi.fn(),
+    };
+    const cacheEncoder = {
+      copyTextureToTexture: vi.fn(),
+      finish: vi.fn(() => ({ label: 'active-cache-command' })),
+    };
+    const device = {
+      createTexture: vi.fn(() => activeTexture),
+      createCommandEncoder: vi.fn(() => cacheEncoder),
+      queue: { submit: vi.fn() },
+    } as unknown as GPUDevice;
+    const renderer = createRenderer(device);
+    vi.mocked(useMediaStore.getState).mockReturnValue({
+      ...initialMediaState,
+      activeCompositionId: 'active-child',
+    });
+
+    try {
+      renderer.cacheActiveCompOutput(
+        'active-child',
+        { width: 16, height: 16 } as GPUTexture,
+        16,
+        16,
+        2.5,
+      );
+
+      const reusedView = renderer.preRender(
+        'active-child',
+        [{ id: 'text-layer', visible: true, opacity: 1, source: { type: 'text' } } as Layer],
+        16,
+        16,
+        {} as GPUCommandEncoder,
+        {} as GPUSampler,
+        2.5,
+        undefined,
+        undefined,
+        0,
+        false,
+        'preview',
+        undefined,
+        'inactive-parent-wrapper',
+      );
+
+      expect(reusedView).toBe(activeView);
+      expect(device.createTexture).toHaveBeenCalledOnce();
+      expect(mockCompositeNestedLayers).not.toHaveBeenCalled();
+    } finally {
+      renderer.destroy();
+      vi.mocked(useMediaStore.getState).mockReturnValue(initialMediaState);
       if (previousGPUTextureUsage === undefined) {
         delete (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
       } else {
@@ -1277,7 +1363,22 @@ describe('NestedCompRenderer shared-scene integration', () => {
         visible: true,
         opacity: 1,
         blendMode: 'normal',
-        effects: [],
+        effects: [
+          {
+            id: 'analog-fx',
+            name: 'Analog Signal Lab',
+            type: 'analog-signal-lab',
+            enabled: true,
+            params: {},
+          },
+          {
+            id: 'grain-fx',
+            name: 'Grain',
+            type: 'grain',
+            enabled: true,
+            params: {},
+          },
+        ],
         position: { x: 0, y: 0, z: 0 },
         scale: { x: 1, y: 1, z: 1 },
         rotation: { x: 0, y: 0, z: 0 },
@@ -1306,20 +1407,28 @@ describe('NestedCompRenderer shared-scene integration', () => {
       'nested-comp',
       [],
       [],
+      {} as GPUSampler,
     );
 
     expect(mockNativeSceneRenderer.renderScene).toHaveBeenCalledTimes(1);
-    const [, layers3D, camera] = mockNativeSceneRenderer.renderScene.mock.calls[0];
+    const [, layers3D, camera, , , , , , layerSpaceEffectContext] =
+      mockNativeSceneRenderer.renderScene.mock.calls[0];
     const defaultDistance = getSharedSceneDefaultCameraDistance(50);
     expect(layers3D).toHaveLength(1);
     expect(layers3D[0]).toMatchObject({
       kind: 'plane',
       layerId: 'nested-video-plane',
       clipId: 'nested-video-plane-clip',
+      layerSpaceEffects: [{ id: 'analog-fx', type: 'analog-signal-lab' }],
     });
     expect(camera.cameraPosition).toEqual({ x: 0, y: 0, z: defaultDistance });
     expect(camera.cameraTarget).toEqual({ x: 0, y: 0, z: 0 });
     expect(camera.viewMatrix[14]).toBeCloseTo(-defaultDistance);
     expect(layerData[0]?.textureView).toEqual({ label: 'nested-shared-scene-view' });
+    expect(layerData[0]?.layer.effects.map((effect) => effect.type)).toEqual(['grain']);
+    expect(layerSpaceEffectContext).toMatchObject({
+      effectsPipeline: expect.any(Object),
+      sampler: expect.any(Object),
+    });
   });
 });

@@ -1,4 +1,5 @@
 import { normalizeEasingType } from '../../../utils/easing';
+import { resolveBezierSegmentHandles } from '../../../utils/keyframeInterpolation';
 
 export interface FadeCurveKeyframe {
   id?: string;
@@ -76,11 +77,13 @@ export function buildFadeCurveGeometry({
     let cp2y: number;
     const easing = normalizeEasingType(current.easing, 'linear');
 
-    if (easing === 'bezier' && current.handleOut && next.handleIn) {
-      cp1x = timeToX(current.time + current.handleOut.x);
-      cp1y = valueToY(current.value + current.handleOut.y);
-      cp2x = timeToX(next.time + next.handleIn.x);
-      cp2y = valueToY(next.value + next.handleIn.y);
+    if (easing === 'bezier' || current.handleOut || next.handleIn) {
+      const { handleOut, handleIn } = resolveBezierSegmentHandles(current, next);
+
+      cp1x = timeToX(current.time + handleOut.x);
+      cp1y = valueToY(current.value + handleOut.y);
+      cp2x = timeToX(next.time + handleIn.x);
+      cp2y = valueToY(next.value + handleIn.y);
     } else {
       switch (easing) {
         case 'ease-in':

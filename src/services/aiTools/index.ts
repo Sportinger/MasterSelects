@@ -342,7 +342,14 @@ async function _executeAIToolInternal(
     if (options.signal?.aborted) {
       return createCancelledToolResult(toolName);
     }
-    const result = await executeToolInternal(toolName, args, timelineStore, mediaStore, callerContext);
+    const result = await executeToolInternal(
+      toolName,
+      args,
+      timelineStore,
+      mediaStore,
+      callerContext,
+      options.signal,
+    );
     mutationSucceeded = result.success;
     return result;
   } catch (error) {

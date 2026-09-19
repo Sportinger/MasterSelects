@@ -21,6 +21,7 @@ export function useTimelineTrackStackController(
   const section = useTimelineSectionController(params);
   const handleTrackHeightWheel = useTimelineTrackHeightWheel({
     trackMap: params.trackMap,
+    onSynchronousTrackScaleStep: section.handleSynchronousTrackScaleStep,
   });
 
   return {

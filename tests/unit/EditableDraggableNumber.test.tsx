@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EditableDraggableNumber } from '../../src/components/common/EditableDraggableNumber';
 
@@ -27,10 +27,12 @@ function lastChangedValue(onChange: ReturnType<typeof vi.fn>): number {
 describe('EditableDraggableNumber drag behavior', () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
   });
 
   it('drags from the current value with pointer lock and no initial jump', () => {
     const onChange = vi.fn();
+    const onCommit = vi.fn();
     const requestPointerLock = vi.fn();
     const exitPointerLock = vi.fn();
     let lockedElement: Element | null = null;
@@ -68,6 +70,7 @@ describe('EditableDraggableNumber drag behavior', () => {
           decimals={2}
           sensitivity={1}
           min={1}
+          onCommit={onCommit}
         />,
       );
       const valueElement = container.querySelector('.draggable-number') as HTMLElement;
@@ -97,6 +100,8 @@ describe('EditableDraggableNumber drag behavior', () => {
 
       fireEvent.mouseUp(window, { button: 0, buttons: 0 });
       expect(exitPointerLock).toHaveBeenCalledTimes(1);
+      expect(onCommit).toHaveBeenCalledOnce();
+      expect(onCommit).toHaveBeenCalledWith('drag');
     } finally {
       if (originalRequestPointerLockDescriptor) {
         Object.defineProperty(HTMLElement.prototype, 'requestPointerLock', originalRequestPointerLockDescriptor);
@@ -273,5 +278,350 @@ describe('EditableDraggableNumber drag behavior', () => {
         delete (HTMLElement.prototype as HTMLElement & { requestPointerLock?: () => void }).requestPointerLock;
       }
     }
+  });
+
+  it('supports touch dragging with value feedback above the finger', () => {
+    const onChange = vi.fn();
+    const onDragStart = vi.fn();
+    const onDragEnd = vi.fn();
+    const { container } = render(
+      <EditableDraggableNumber
+        value={100}
+        onChange={onChange}
+        decimals={1}
+        sensitivity={1}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+      />,
+    );
+    const valueElement = container.querySelector('.draggable-number') as HTMLElement;
+
+    fireEvent.pointerDown(valueElement, {
+      pointerId: 7,
+      pointerType: 'touch',
+      clientX: 100,
+      clientY: 220,
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent('100.0');
+    expect(screen.getByRole('status')).toHaveAttribute('data-axis', 'pending');
+
+    fireEvent.pointerMove(valueElement, {
+      pointerId: 7,
+      pointerType: 'touch',
+      clientX: 160,
+      clientY: 222,
+    });
+
+    expect(onDragStart).toHaveBeenCalledOnce();
+    expect(lastChangedValue(onChange)).toBeGreaterThan(100);
+    expect(screen.getByRole('status')).not.toHaveTextContent('100.0');
+    expect(screen.getByRole('status')).toHaveAttribute('data-axis', 'horizontal');
+    expect(screen.getByRole('status')).toHaveTextContent('↔');
+
+    fireEvent.pointerUp(valueElement, {
+      pointerId: 7,
+      pointerType: 'touch',
+      clientX: 160,
+      clientY: 222,
+    });
+
+    expect(onDragEnd).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('locks a touch drag to the first dominant axis and supports vertical adjustment', () => {
+    const onChange = vi.fn();
+    const onDragStart = vi.fn();
+    const onDragEnd = vi.fn();
+    const { container } = render(
+      <EditableDraggableNumber
+        value={100}
+        onChange={onChange}
+        decimals={1}
+        sensitivity={1}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+      />,
+    );
+    const valueElement = container.querySelector('.draggable-number') as HTMLElement;
+
+    fireEvent.pointerDown(valueElement, {
+      pointerId: 9,
+      pointerType: 'touch',
+      clientX: 100,
+      clientY: 220,
+    });
+    fireEvent.pointerMove(valueElement, {
+      pointerId: 9,
+      pointerType: 'touch',
+      clientX: 103,
+      clientY: 160,
+    });
+
+    expect(onDragStart).toHaveBeenCalledOnce();
+    expect(lastChangedValue(onChange)).toBeGreaterThan(100);
+    expect(screen.getByRole('status')).toHaveAttribute('data-axis', 'vertical');
+    expect(screen.getByRole('status')).toHaveTextContent('↕');
+
+    const verticallyAdjustedValue = lastChangedValue(onChange);
+    fireEvent.pointerMove(valueElement, {
+      pointerId: 9,
+      pointerType: 'touch',
+      clientX: 240,
+      clientY: 160,
+    });
+
+    expect(lastChangedValue(onChange)).toBe(verticallyAdjustedValue);
+    expect(screen.getByRole('status')).toHaveAttribute('data-axis', 'vertical');
+
+    fireEvent.pointerUp(valueElement, {
+      pointerId: 9,
+      pointerType: 'touch',
+      clientX: 240,
+      clientY: 160,
+    });
+
+    expect(onDragEnd).toHaveBeenCalledOnce();
+  });
+
+  it('uses horizontal slider semantics when requested by Transform controls', () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <EditableDraggableNumber
+        value={100}
+        onChange={onChange}
+        decimals={1}
+        sensitivity={1}
+        touchDragAxis="horizontal"
+      />,
+    );
+    const valueElement = container.querySelector('.draggable-number') as HTMLElement;
+
+    expect(valueElement).toHaveAttribute('role', 'slider');
+    expect(valueElement).toHaveAttribute('aria-valuenow', '100');
+    fireEvent.pointerDown(valueElement, {
+      pointerId: 10,
+      pointerType: 'touch',
+      clientX: 100,
+      clientY: 220,
+    });
+    fireEvent.pointerMove(valueElement, {
+      pointerId: 10,
+      pointerType: 'touch',
+      clientX: 125,
+      clientY: 160,
+    });
+
+    expect(lastChangedValue(onChange)).toBeGreaterThan(100);
+    expect(screen.getByRole('status')).toHaveAttribute('data-axis', 'horizontal');
+    fireEvent.pointerUp(valueElement, {
+      pointerId: 10,
+      pointerType: 'touch',
+    });
+  });
+
+  it('opens direct typing after the single-touch double-tap window closes', async () => {
+    vi.useFakeTimers();
+    const { container } = render(
+      <EditableDraggableNumber value={12.3} onChange={vi.fn()} decimals={1} />,
+    );
+    const valueElement = container.querySelector('.draggable-number') as HTMLElement;
+
+    fireEvent.pointerDown(valueElement, {
+      pointerId: 8,
+      pointerType: 'touch',
+      clientX: 90,
+      clientY: 180,
+    });
+    fireEvent.pointerUp(valueElement, {
+      pointerId: 8,
+      pointerType: 'touch',
+      clientX: 90,
+      clientY: 180,
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(320);
+    });
+
+    const input = container.querySelector('input.draggable-number-input') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    expect(input.value).toBe('12.3');
+    expect(input).toHaveFocus();
+  });
+
+  it('resets on a double touch without entering or selecting the value input', async () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    const onCommit = vi.fn();
+    const { container } = render(
+      <EditableDraggableNumber
+        value={12.3}
+        defaultValue={0}
+        onChange={onChange}
+        onCommit={onCommit}
+        decimals={1}
+      />,
+    );
+    const valueElement = container.querySelector('.draggable-number') as HTMLElement;
+
+    fireEvent.pointerDown(valueElement, {
+      pointerId: 81,
+      pointerType: 'touch',
+      clientX: 90,
+      clientY: 180,
+    });
+    fireEvent.pointerUp(valueElement, {
+      pointerId: 81,
+      pointerType: 'touch',
+      clientX: 90,
+      clientY: 180,
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120);
+    });
+    fireEvent.pointerDown(valueElement, {
+      pointerId: 82,
+      pointerType: 'touch',
+      clientX: 92,
+      clientY: 181,
+    });
+    fireEvent.pointerUp(valueElement, {
+      pointerId: 82,
+      pointerType: 'touch',
+      clientX: 92,
+      clientY: 181,
+    });
+
+    expect(onChange).toHaveBeenCalledWith(0);
+    expect(onCommit).toHaveBeenCalledWith('reset');
+    expect(container.querySelector('input.draggable-number-input')).toBeNull();
+
+    // Safari follows a double touch with compatibility mouse/dblclick events.
+    fireEvent.doubleClick(valueElement, { button: 0, detail: 2 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(320);
+    });
+
+    expect(container.querySelector('input.draggable-number-input')).toBeNull();
+  });
+
+  it('uses one held finger for fast adjustment and two for fine adjustment', () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <EditableDraggableNumber
+        value={100}
+        onChange={onChange}
+        decimals={3}
+        sensitivity={1}
+      />,
+    );
+    const valueElement = container.querySelector('.draggable-number') as HTMLElement;
+
+    fireEvent.pointerDown(valueElement, {
+      pointerId: 21, pointerType: 'touch', clientX: 100, clientY: 220,
+    });
+    fireEvent.pointerMove(valueElement, {
+      pointerId: 21, pointerType: 'touch', clientX: 110, clientY: 220,
+    });
+    const normalValue = lastChangedValue(onChange);
+    const normalIncrement = normalValue - 100;
+
+    fireEvent.pointerDown(document.body, {
+      pointerId: 22, pointerType: 'touch', clientX: 40, clientY: 40,
+    });
+    expect(screen.getByRole('status')).toHaveAttribute('data-speed', 'fast');
+    fireEvent.pointerMove(valueElement, {
+      pointerId: 21, pointerType: 'touch', clientX: 120, clientY: 220,
+    });
+    const fastValue = lastChangedValue(onChange);
+    expect(fastValue - normalValue).toBeGreaterThan(normalIncrement * 5);
+
+    fireEvent.pointerDown(document.body, {
+      pointerId: 23, pointerType: 'touch', clientX: 60, clientY: 40,
+    });
+    expect(screen.getByRole('status')).toHaveAttribute('data-speed', 'fine');
+    fireEvent.pointerMove(valueElement, {
+      pointerId: 21, pointerType: 'touch', clientX: 130, clientY: 220,
+    });
+    const fineValue = lastChangedValue(onChange);
+    expect(fineValue - fastValue).toBeGreaterThan(0);
+    expect(fineValue - fastValue).toBeLessThan(normalIncrement * 0.3);
+
+    fireEvent.pointerUp(valueElement, { pointerId: 21, pointerType: 'touch' });
+    fireEvent.pointerUp(document.body, { pointerId: 22, pointerType: 'touch' });
+    fireEvent.pointerUp(document.body, { pointerId: 23, pointerType: 'touch' });
+  });
+
+  it('keeps editing while the drag finger is lifted and replaced', () => {
+    const onChange = vi.fn();
+    const onDragStart = vi.fn();
+    const onDragEnd = vi.fn();
+    const { container } = render(
+      <EditableDraggableNumber
+        value={100}
+        onChange={onChange}
+        decimals={2}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+      />,
+    );
+    const valueElement = container.querySelector('.draggable-number') as HTMLElement;
+
+    fireEvent.pointerDown(valueElement, {
+      pointerId: 31, pointerType: 'touch', clientX: 100, clientY: 220,
+    });
+    fireEvent.pointerMove(valueElement, {
+      pointerId: 31, pointerType: 'touch', clientX: 120, clientY: 220,
+    });
+    fireEvent.pointerDown(document.body, {
+      pointerId: 32, pointerType: 'touch', clientX: 50, clientY: 50,
+    });
+    const valueBeforeHandoff = lastChangedValue(onChange);
+
+    fireEvent.pointerUp(valueElement, { pointerId: 31, pointerType: 'touch' });
+    expect(onDragEnd).not.toHaveBeenCalled();
+    expect(screen.getByRole('status')).toBeInTheDocument();
+
+    fireEvent.pointerDown(document.body, {
+      pointerId: 33, pointerType: 'touch', clientX: 300, clientY: 300,
+    });
+    fireEvent.pointerMove(document.body, {
+      pointerId: 33, pointerType: 'touch', clientX: 320, clientY: 300,
+    });
+    expect(lastChangedValue(onChange)).toBeGreaterThan(valueBeforeHandoff);
+    expect(onDragStart).toHaveBeenCalledOnce();
+
+    fireEvent.pointerUp(document.body, { pointerId: 33, pointerType: 'touch' });
+    expect(onDragEnd).not.toHaveBeenCalled();
+    fireEvent.pointerUp(document.body, { pointerId: 32, pointerType: 'touch' });
+    expect(onDragEnd).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('positions the feedback bubble from raw touch updates', () => {
+    const { container } = render(
+      <EditableDraggableNumber value={100} onChange={vi.fn()} decimals={1} />,
+    );
+    const valueElement = container.querySelector('.draggable-number') as HTMLElement;
+    fireEvent.pointerDown(valueElement, {
+      pointerId: 41, pointerType: 'touch', clientX: 100, clientY: 220,
+    });
+
+    const rawUpdate = new Event('pointerrawupdate', {
+      bubbles: true,
+      cancelable: false,
+    }) as PointerEvent;
+    Object.defineProperties(rawUpdate, {
+      pointerId: { value: 41 },
+      pointerType: { value: 'touch' },
+      clientX: { value: 150 },
+      clientY: { value: 200 },
+    });
+    fireEvent(window, rawUpdate);
+
+    expect(screen.getByRole('status')).toHaveStyle({ left: '150px', top: '152px' });
+    fireEvent.pointerUp(valueElement, { pointerId: 41, pointerType: 'touch' });
   });
 });

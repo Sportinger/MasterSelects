@@ -20,7 +20,11 @@ export interface OutputPresenterDeps {
   getRenderDispatcher(): RenderDispatcher | null;
 }
 
-export function cacheActiveCompOutput(deps: OutputPresenterDeps, compositionId: string): void {
+export function cacheActiveCompOutput(
+  deps: OutputPresenterDeps,
+  compositionId: string,
+  timelineTimeSeconds?: number,
+): void {
   const res = deps.getResources();
   if (!res) return;
   const pingTex = res.renderTargetManager.getPingTexture();
@@ -28,10 +32,19 @@ export function cacheActiveCompOutput(deps: OutputPresenterDeps, compositionId: 
   if (!pingTex || !pongTex) return;
 
   const { width, height } = res.renderTargetManager.getResolution();
-  const finalIsPing = !res.compositor.getLastRenderWasPing();
+  // Compositor's legacy getter returns the buffer holding the completed
+  // accumulator. Inverting it selects the previous ping-pong intermediate,
+  // which is the frame before the final layer was composited.
+  const finalIsPing = res.compositor.getLastRenderWasPing();
   const sourceTexture = finalIsPing ? pingTex : pongTex;
 
-  res.nestedCompRenderer.cacheActiveCompOutput(compositionId, sourceTexture, width, height);
+  res.nestedCompRenderer.cacheActiveCompOutput(
+    compositionId,
+    sourceTexture,
+    width,
+    height,
+    timelineTimeSeconds,
+  );
 }
 
 export function copyMainOutputToPreview(deps: OutputPresenterDeps, canvasId: string): boolean {
@@ -44,7 +57,7 @@ export function copyMainOutputToPreview(deps: OutputPresenterDeps, canvasId: str
   const pongView = res.renderTargetManager.getPongView();
   if (!outputPipeline || !sampler || !pingView || !pongView) return false;
 
-  const finalIsPing = !res.compositor.getLastRenderWasPing();
+  const finalIsPing = res.compositor.getLastRenderWasPing();
   const finalView = finalIsPing ? pingView : pongView;
 
   const commandEncoder = device.createCommandEncoder();
@@ -95,7 +108,7 @@ export function renderSlicedToCanvas(
   const enabledSlices = slices.filter((s) => s.enabled);
   if (enabledSlices.length === 0) return false;
 
-  const finalIsPing = !res.compositor.getLastRenderWasPing();
+  const finalIsPing = res.compositor.getLastRenderWasPing();
   const finalView = finalIsPing ? pingView : pongView;
 
   slicePipeline.buildVertexBuffer(enabledSlices);
@@ -152,4 +165,22 @@ export function getLastRenderedTexture(deps: OutputPresenterDeps): GPUTexture | 
   return res.compositor.getLastRenderWasPing()
     ? res.renderTargetManager.getPingTexture()
     : res.renderTargetManager.getPongTexture();
+}
+
+
+/** Rebind retained output registrations to the replacement GPU device. */
+export function restoreOutputCanvases(
+  configure: (canvas: HTMLCanvasElement) => GPUCanvasContext | null,
+  preview: HTMLCanvasElement | null,
+  targets: Map<string, { canvas: HTMLCanvasElement; context: GPUCanvasContext }>,
+): GPUCanvasContext | null {
+  const previewContext = preview ? configure(preview) : null;
+  for (const [id, entry] of targets) {
+    const context = configure(entry.canvas);
+    if (context) {
+      targets.set(id, { canvas: entry.canvas, context });
+      useRenderTargetStore.getState().setTargetCanvas(id, entry.canvas, context);
+    }
+  }
+  return previewContext;
 }

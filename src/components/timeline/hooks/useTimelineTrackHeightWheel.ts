@@ -6,10 +6,12 @@ import { getTimelineTrackBaseHeight } from '../utils/timelineAudioLayout';
 
 interface UseTimelineTrackHeightWheelProps {
   trackMap: Map<string, TimelineTrack>;
+  onSynchronousTrackScaleStep?: (sectionKind: 'video' | 'audio') => void;
 }
 
 export function useTimelineTrackHeightWheel({
   trackMap,
+  onSynchronousTrackScaleStep,
 }: UseTimelineTrackHeightWheelProps): (event: ReactWheelEvent, trackId: string) => void {
   return useCallback(
     (event: ReactWheelEvent, trackId: string) => {
@@ -33,6 +35,7 @@ export function useTimelineTrackHeightWheel({
         event.preventDefault();
         event.stopPropagation();
         const delta = -wheelDelta * 0.05;
+        onSynchronousTrackScaleStep?.(currentTrack.type === 'video' ? 'video' : 'audio');
         timelineState.scaleTracksOfType(currentTrack.type, delta, scaleBaselineHeight);
       } else if (event.shiftKey) {
         event.preventDefault();
@@ -41,6 +44,6 @@ export function useTimelineTrackHeightWheel({
         timelineState.setTrackHeight(trackId, resizeBaseHeight + delta);
       }
     },
-    [trackMap],
+    [onSynchronousTrackScaleStep, trackMap],
   );
 }

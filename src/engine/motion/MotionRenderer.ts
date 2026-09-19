@@ -68,6 +68,7 @@ export class MotionRenderer {
   private caches = new Map<string, MotionClipGpuCache>();
   private instanceBufferStates = new Map<string, ReplicatorInstanceBufferState>();
   private pathBufferStates = new Map<string, MotionPathBufferState>();
+  private activeCacheKeys = new Set<string>();
   private textureBindings = new WeakMap<MotionClipGpuCache, GPUTextureView>();
   private pathBindings = new WeakMap<MotionClipGpuCache, GPUBuffer>();
   private dummyPathBuffer: GPUBuffer;
@@ -248,12 +249,34 @@ export class MotionRenderer {
     this.caches.clear();
     this.instanceBufferStates.clear();
     this.pathBufferStates.clear();
+    this.activeCacheKeys.clear();
     this.textureBindings = new WeakMap<MotionClipGpuCache, GPUTextureView>();
     this.pathBindings = new WeakMap<MotionClipGpuCache, GPUBuffer>();
     this.dummyPathBuffer.destroy();
     this.textureAcquisition.destroy();
     this.pipeline.destroy();
     setMotionRendererCacheCount(0);
+  }
+
+  /**
+   * Release per-layer render targets that were not referenced by the latest
+   * submitted frame. Nested composition layer IDs include their occurrence,
+   * so retaining these forever otherwise grows VRAM as the playhead visits new
+   * occurrences.
+   */
+  cleanupPendingCaches(): void {
+    for (const [key, cache] of this.caches) {
+      if (this.activeCacheKeys.has(key)) continue;
+      cache.texture.destroy();
+      cache.uniformBuffer.destroy();
+      cache.instanceBuffer.destroy();
+      cache.pathBuffer?.destroy();
+      this.caches.delete(key);
+      this.instanceBufferStates.delete(key);
+      this.pathBufferStates.delete(key);
+    }
+    this.activeCacheKeys.clear();
+    setMotionRendererCacheCount(this.caches.size);
   }
 
   private getCacheKey(layer: Layer): string {
@@ -269,6 +292,7 @@ export class MotionRenderer {
     fallbackBinding: { view: GPUTextureView; sampler: GPUSampler },
   ): MotionClipGpuCache {
     const key = this.getCacheKey(layer);
+    this.activeCacheKeys.add(key);
     const existing = this.caches.get(key);
     if (
       existing

@@ -1,7 +1,6 @@
 import type { Layer } from '../../core/types';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { LayerCollectorDeps } from '../LayerCollector';
-import { isFrameNearTarget } from './collectionPredicates';
 
 export type CachedHtmlVideoFrame = {
   view: GPUTextureView;
@@ -52,11 +51,10 @@ export function getDragHoldFrame(
 export function getPlaybackStallHoldFrame(
   layer: Layer,
   video: HTMLVideoElement,
-  deps: LayerCollectorDeps,
-  targetTime: number
+  deps: LayerCollectorDeps
 ): CachedHtmlVideoFrame | null {
   const ownerMatched = deps.scrubbingCache?.getLastFrame(video, layer.sourceClipId) ?? null;
-  if (isFrameNearTarget(ownerMatched, targetTime, 0.15)) {
+  if (ownerMatched) {
     return ownerMatched;
   }
 
@@ -66,7 +64,7 @@ export function getPlaybackStallHoldFrame(
   }
 
   const lastFrame = deps.scrubbingCache?.getLastFrame(video) ?? null;
-  return isFrameNearTarget(lastFrame, targetTime, 0.15) ? lastFrame : null;
+  return lastFrame;
 }
 
 export function scheduleBackgroundScrubPreload(

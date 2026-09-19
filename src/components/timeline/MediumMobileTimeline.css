@@ -1,0 +1,357 @@
+@layer features {
+  .timeline-container.timeline-medium-mobile-layout {
+    --medium-mobile-toolbar: #131415;
+    --medium-mobile-ruler: #171819;
+    --medium-mobile-header: #18191a;
+    --medium-mobile-lane: #1a1b1c;
+    --medium-mobile-line: #292b2d;
+    --medium-mobile-blue: #4b91ca;
+
+    background: var(--medium-mobile-lane);
+    color: #b5b8bc;
+  }
+
+  /* One compact command row: tools left, transport/timecode centered, view controls right. */
+  .timeline-medium-mobile-layout .timeline-timebar {
+    min-height: 42px;
+    justify-content: flex-start;
+    gap: 7px;
+    padding: 0 8px;
+    border-top: 1px solid #242628;
+    border-bottom: 1px solid #080909;
+    background: var(--medium-mobile-toolbar);
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar > .timeline-toolbar-main {
+    order: 1;
+    padding: 0;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar > .timeline-toolbar-transport {
+    order: 2;
+    margin-left: auto;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar > .timeline-ruler-timecode {
+    order: 3;
+    height: 24px;
+    min-width: 0;
+    padding: 0 5px;
+    color: #d7dadd;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar > .timeline-toolbar-utility {
+    display: none;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar > .timeline-toolbar-zoom {
+    order: 4;
+    margin-left: auto;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar > .timeline-curve-mode-toggle,
+  .timeline-medium-mobile-layout .timeline-timebar > .timeline-toolbar-upgrade-sources {
+    display: none;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar > .timeline-toolbar-overflow {
+    display: block;
+    order: 5;
+    margin-left: 0;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar .timeline-ruler-fps-value {
+    display: none;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar .timeline-ruler-separator-wrap {
+    margin: 0 4px;
+    color: #6f7377;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar .timeline-ruler-duration,
+  .timeline-medium-mobile-layout .timeline-timebar .timeline-ruler-duration-input {
+    width: auto;
+    min-width: 0;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #aeb2b6;
+    font: inherit;
+    box-shadow: none;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar .timeline-edit-tools-items {
+    gap: 4px;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar .timeline-tool-palette {
+    gap: 2px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar .timeline-tool-button,
+  .timeline-medium-mobile-layout .timeline-timebar .timeline-edit-tools .btn-icon {
+    width: 27px;
+    height: 27px;
+    border-radius: 3px;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar .timeline-toolbar-transport .timeline-controls {
+    gap: 2px;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar .timeline-toolbar-transport .timeline-transport-button {
+    width: 25px;
+    min-width: 25px;
+    height: 25px;
+    min-height: 25px;
+    color: #c8cbce;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar .timeline-toolbar-transport .timeline-transport-icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar .timeline-toolbar-overflow-toggle {
+    width: 28px;
+    height: 26px;
+    border-color: transparent;
+    border-radius: 3px;
+    background: transparent;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar button:focus {
+    outline: none;
+  }
+
+  .timeline-medium-mobile-layout .timeline-timebar button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--medium-mobile-blue) 78%, transparent);
+  }
+
+  /* Ruler and track matrix share the reference's restrained, low-contrast grid. */
+  .timeline-medium-mobile-layout .timeline-header-row,
+  .timeline-medium-mobile-layout .ruler-header,
+  .timeline-medium-mobile-layout .time-ruler {
+    background: var(--medium-mobile-ruler);
+  }
+
+  .timeline-medium-mobile-layout .ruler-header {
+    padding: 0;
+    border-right-color: #0b0c0c;
+    border-bottom-color: var(--medium-mobile-line);
+  }
+
+  .timeline-medium-mobile-layout .ruler-header .timeline-ruler-control-strip {
+    visibility: hidden;
+  }
+
+  .timeline-medium-mobile-layout .time-ruler-wrapper,
+  .timeline-medium-mobile-layout .time-ruler {
+    border-bottom-color: var(--medium-mobile-line);
+  }
+
+  .timeline-medium-mobile-layout .time-ruler:hover {
+    background: #1c1d1f;
+  }
+
+  .timeline-medium-mobile-layout .time-marker {
+    border-left-color: #2b2d2f;
+  }
+
+  .timeline-medium-mobile-layout .time-marker.main {
+    border-left-color: #3e4144;
+  }
+
+  .timeline-medium-mobile-layout .time-marker.sub {
+    border-left-color: #232527;
+  }
+
+  .timeline-medium-mobile-layout .time-label {
+    top: 4px;
+    color: #7f8387;
+    font-size: 9px;
+    font-weight: 500;
+  }
+
+  .timeline-medium-mobile-layout .track-headers {
+    border-right-color: #0b0c0c;
+    background: var(--medium-mobile-header);
+  }
+
+  .timeline-medium-mobile-layout .track-header,
+  .timeline-medium-mobile-layout .track-header.video,
+  .timeline-medium-mobile-layout .track-header.mixer,
+  .timeline-medium-mobile-layout .track-header.midi.midi-default-tint {
+    border-bottom-color: #0c0d0d;
+    background: var(--medium-mobile-header);
+    box-shadow: none;
+  }
+
+  .timeline-medium-mobile-layout .track-lane,
+  .timeline-medium-mobile-layout .track-lane.video,
+  .timeline-medium-mobile-layout .track-lane.audio,
+  .timeline-medium-mobile-layout .track-lane.midi {
+    border-bottom-color: #0c0d0d;
+    background: var(--medium-mobile-lane);
+  }
+
+  .timeline-medium-mobile-layout .track-lane::before {
+    width: 2px;
+    opacity: 0.72;
+  }
+
+  .timeline-medium-mobile-layout .track-header.video + .track-header.mixer,
+  .timeline-medium-mobile-layout .track-lane.video + .track-lane.audio {
+    border-top: 2px solid #090a0a;
+  }
+
+  /* Keep the normal track controls, but arrange them like a compact editing rail. */
+  .timeline-medium-mobile-layout .track-header-top,
+  .timeline-medium-mobile-layout .track-header.mixer > .track-header-top,
+  .timeline-medium-mobile-layout .track-header.mixer.audio-layer-basic > .track-header-top {
+    display: block;
+    padding: 0;
+  }
+
+  .timeline-medium-mobile-layout .track-header .track-header-main,
+  .timeline-medium-mobile-layout .track-header.mixer .track-header-main,
+  .timeline-medium-mobile-layout .track-header.mixer.audio-strip-compact .track-header-main,
+  .timeline-medium-mobile-layout .track-header.mixer.audio-strip-condensed .track-header-main {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: auto;
+    height: auto;
+    padding: 0;
+  }
+
+  .timeline-medium-mobile-layout .resolve-track-index {
+    position: absolute;
+    top: 9px;
+    left: 11px;
+    display: inline-flex;
+    width: 36px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    border: 0;
+    border-radius: 4px;
+    background: var(--medium-mobile-blue);
+    color: #f4f8fb;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .timeline-medium-mobile-layout .track-header.targeted .resolve-track-index,
+  .timeline-medium-mobile-layout .track-header.resolve-primary-target .resolve-track-index {
+    background: #64a7da;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.34);
+  }
+
+  .timeline-medium-mobile-layout .track-header .track-name,
+  .timeline-medium-mobile-layout .track-header.mixer .track-header-main > .track-name {
+    position: absolute;
+    top: 43px;
+    right: 8px;
+    left: 11px;
+    max-width: none;
+    color: #85898d;
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 13px;
+    transform: none;
+  }
+
+  .timeline-medium-mobile-layout .track-header .track-name-input {
+    position: absolute;
+    top: 41px;
+    right: 7px;
+    left: 9px;
+    width: auto;
+    transform: none;
+  }
+
+  .timeline-medium-mobile-layout .track-header .track-expand-arrow,
+  .timeline-medium-mobile-layout .track-header .track-color-chip,
+  .timeline-medium-mobile-layout .track-header .track-type-icon-badge,
+  .timeline-medium-mobile-layout .track-header .track-reorder-handle {
+    display: none;
+  }
+
+  .timeline-medium-mobile-layout .track-controls,
+  .timeline-medium-mobile-layout .track-header.video .track-controls,
+  .timeline-medium-mobile-layout .track-header.mixer .track-controls,
+  .timeline-medium-mobile-layout .track-header.mixer.audio-strip-compact .track-controls {
+    position: absolute;
+    top: 15px;
+    right: auto;
+    left: 55px;
+    display: flex;
+    width: auto;
+    height: 17px;
+    grid-template-columns: none;
+    grid-auto-rows: auto;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 3px;
+    margin: 0;
+    transform: none;
+  }
+
+  .timeline-medium-mobile-layout .track-controls .btn-icon,
+  .timeline-medium-mobile-layout .track-header.video .track-controls .btn-icon,
+  .timeline-medium-mobile-layout .track-header.mixer .track-controls .btn-icon,
+  .timeline-medium-mobile-layout .track-header.mixer.audio-strip-compact .track-controls .btn-icon {
+    display: inline-flex;
+    width: 18px;
+    min-width: 18px;
+    height: 17px;
+    padding: 0;
+    border: 0;
+    border-radius: 2px;
+    background: transparent;
+    box-shadow: none;
+    color: #8c9094;
+    font-size: 8px;
+  }
+
+  .timeline-medium-mobile-layout .track-controls .btn-icon:hover {
+    background: #242628;
+    color: #eef0f2;
+  }
+
+  .timeline-medium-mobile-layout .track-controls .btn-icon:focus {
+    outline: none;
+  }
+
+  .timeline-medium-mobile-layout .track-controls .btn-icon:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--medium-mobile-blue) 82%, transparent);
+  }
+
+  .timeline-medium-mobile-layout .track-header .audio-track-pan-row,
+  .timeline-medium-mobile-layout .track-header .midi-instrument-row,
+  .timeline-medium-mobile-layout .track-header > .track-header-top > .audio-track-faders {
+    display: none;
+  }
+
+  .timeline-medium-mobile-layout .timeline-mobile-track-actions {
+    display: none;
+  }
+
+  .timeline-medium-mobile-layout .timeline-layer-divider-resize-handle {
+    top: 30px;
+  }
+}

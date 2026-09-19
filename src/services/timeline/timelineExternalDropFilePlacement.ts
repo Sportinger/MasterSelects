@@ -50,6 +50,7 @@ export interface PlaceTimelineExternalDropFilesParams {
   arrangement?: TimelineExternalDropArrangement;
   records: TimelineExternalDropFileRecord[];
   resolveLinkedVideoTrackId?: (startTime: number, duration?: number) => string | undefined;
+  resolveAddClipOptions?: (mediaFile: MediaFile) => AddClipOptions | Promise<AddClipOptions | undefined> | undefined;
   resolveStartTime?: (desiredStartTime: number, duration?: number) => number;
   trackId: string;
   trackIsVideo: boolean;
@@ -91,6 +92,7 @@ async function addTimelineExternalDropMediaClip(params: {
   startTime: number;
   trackId: string;
   typeOverride?: string;
+  resolveAddClipOptions?: (mediaFile: MediaFile) => AddClipOptions | Promise<AddClipOptions | undefined> | undefined;
 }): Promise<TimelineExternalDropClipPlacement | null> {
   const {
     actions,
@@ -103,6 +105,7 @@ async function addTimelineExternalDropMediaClip(params: {
     startTime,
     trackId,
     typeOverride,
+    resolveAddClipOptions,
   } = params;
 
   const mediaFile: MediaFile | null = await resolveTimelineDropMediaFile({
@@ -132,6 +135,7 @@ async function addTimelineExternalDropMediaClip(params: {
   const resolvedDuration = mediaFile.duration ?? duration;
 
   const mediaTypeOverride = getTimelineDropMediaTypeOverride(mediaFile) ?? typeOverride;
+  const addClipOptions = await resolveAddClipOptions?.(mediaFile);
   const clipId = linkedAudioTrackId
     ? await actions.addClip(
       trackId,
@@ -140,9 +144,19 @@ async function addTimelineExternalDropMediaClip(params: {
       resolvedDuration,
       mediaFile.id,
       mediaTypeOverride,
-      { linkedAudioTrackId },
+      { ...addClipOptions, linkedAudioTrackId },
     )
-    : await actions.addClip(
+    : addClipOptions
+      ? await actions.addClip(
+        trackId,
+        timelineFile,
+        startTime,
+        resolvedDuration,
+        mediaFile.id,
+        mediaTypeOverride,
+        addClipOptions,
+      )
+      : await actions.addClip(
       trackId,
       timelineFile,
       startTime,
@@ -250,6 +264,7 @@ async function addTimelineExternalDropImportedMediaClip(params: {
   fallbackDuration?: number;
   linkedAudioTrackId?: string;
   mediaFile: MediaFile;
+  resolveAddClipOptions?: (mediaFile: MediaFile) => AddClipOptions | Promise<AddClipOptions | undefined> | undefined;
   startTime: number;
   trackId: string;
 }): Promise<TimelineExternalDropClipPlacement | null> {
@@ -258,6 +273,7 @@ async function addTimelineExternalDropImportedMediaClip(params: {
     fallbackDuration,
     linkedAudioTrackId,
     mediaFile,
+    resolveAddClipOptions,
     startTime,
     trackId,
   } = params;
@@ -274,6 +290,7 @@ async function addTimelineExternalDropImportedMediaClip(params: {
   setTimelineDroppedFilePath(file, mediaFile.absolutePath ?? mediaFile.filePath);
   const resolvedDuration = mediaFile.duration ?? fallbackDuration ?? 5;
   const mediaTypeOverride = getTimelineDropMediaTypeOverride(mediaFile);
+  const addClipOptions = await resolveAddClipOptions?.(mediaFile);
   const clipId = linkedAudioTrackId
     ? await actions.addClip(
       trackId,
@@ -282,9 +299,19 @@ async function addTimelineExternalDropImportedMediaClip(params: {
       resolvedDuration,
       mediaFile.id,
       mediaTypeOverride,
-      { linkedAudioTrackId },
+      { ...addClipOptions, linkedAudioTrackId },
     )
-    : await actions.addClip(
+    : addClipOptions
+      ? await actions.addClip(
+        trackId,
+        file,
+        startTime,
+        resolvedDuration,
+        mediaFile.id,
+        mediaTypeOverride,
+        addClipOptions,
+      )
+      : await actions.addClip(
       trackId,
       file,
       startTime,
@@ -343,6 +370,7 @@ export async function placeTimelineExternalDropFiles(
     importResults,
     records,
     resolveLinkedVideoTrackId,
+    resolveAddClipOptions,
     resolveStartTime,
     trackId,
     trackIsVideo,
@@ -423,6 +451,7 @@ export async function placeTimelineExternalDropFiles(
           startTime,
           fallbackDuration,
           linkedAudioTrackId: routesLinkedVideoFromAudioTrack ? trackId : undefined,
+          resolveAddClipOptions,
         })
         : await addTimelineExternalDropImportedSignalClip({
           actions,
@@ -508,6 +537,7 @@ export async function placeTimelineExternalDropFiles(
       linkedAudioTrackId: routesLinkedVideoFromAudioTrack ? trackId : undefined,
       requireLinkedAudio: routesLinkedVideoFromAudioTrack,
       typeOverride,
+      resolveAddClipOptions,
     });
 
     if (placement) {

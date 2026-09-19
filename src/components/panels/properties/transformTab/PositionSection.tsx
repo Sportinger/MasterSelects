@@ -41,7 +41,7 @@ export function PositionSection({
       <div className="control-row transform-param-row">
         <span className="keyframe-toggle-placeholder" />
         <label className="prop-label">Position</label>
-        <div className="multi-value-row">
+        <div className="multi-value-row position-multi-value-row">
           <LabeledValue
             label="X"
             value={usesCameraControls ? positionValues.cameraPositionX : positionValues.posXValue}

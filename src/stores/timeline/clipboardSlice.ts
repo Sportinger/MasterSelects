@@ -1,6 +1,5 @@
-import type { ClipboardActions, SliceCreator, ClipboardClipData, ClipboardKeyframeData, Keyframe } from './types';
-import type { EasingType, AnimatableProperty } from '../../types/animationProperties';
-import { createEffectProperty } from '../../types/animationProperties';
+import type { ClipboardActions, SliceCreator, ClipboardClipData, Keyframe } from './types';
+import { createEffectProperty, type AnimatableProperty } from '../../types/animationProperties';
 import { ensureColorCorrectionState } from '../../types/colorCorrection';
 import { Logger } from '../../services/logger';
 import { captureSnapshot } from '../historyStore';
@@ -15,8 +14,10 @@ import {
 } from '../../services/timeline/timelineGeneratedCanvasRuntime';
 import { createClipboardMediaReloadPatch } from '../../services/timeline/timelineMediaSourceRuntimeRestore';
 import { createPastedClipboardClipsPlan } from './clipboard/clipboardClipPastePlanner';
+import { createClipboardKeyframes, planPastedKeyframes } from './clipboard/clipboardKeyframeTransfer';
 import { filterPasteableClipboardData } from './clipboard/clipboardPastedClipSource';
 import { createClipboardClipAnalysisMetadata } from './clipboard/clipboardClipAnalysisMetadata';
+import { cloneTimelineTrackingMetadata } from './trackingMetadataClone';
 import { useMediaStore } from '../mediaStore';
 import { toMotionParentTransform2D } from '../../services/motionDesign/contracts/timelineStructureAdapter';
 import { getPlayheadPosition } from '../../services/layerBuilder/PlayheadState';
@@ -97,6 +98,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
           : undefined,
         transform: { ...clip.transform },
         effects: clip.effects.map(e => ({ ...e, params: { ...e.params } })),
+        ...cloneTimelineTrackingMetadata(clip),
         colorCorrection: clip.colorCorrection ? structuredClone(clip.colorCorrection) : undefined,
         nodeGraph: cloneClipNodeGraph(clip.nodeGraph),
         masks: clip.masks?.map(m => ({
@@ -132,6 +134,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         mathScene: dataOnlySource?.type === 'math-scene' && clip.mathScene
           ? structuredClone(clip.mathScene)
           : undefined,
+        flock: dataOnlySource?.type === 'flock' && clip.flock ? structuredClone(clip.flock) : undefined,
         motion: clip.motion ? normalizeMotionLayerDefinition(clip.motion) : undefined,
         // Visual data - reuse existing thumbnails and waveforms
         thumbnails: clip.thumbnails ? [...clip.thumbnails] : undefined,
@@ -209,6 +212,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
 
     // Reload media for pasted clips asynchronously
     Promise.resolve().then(async () => {
+      const refreshedCompositionIds = new Set<string>();
       for (const newClip of newClips) {
         if (newClip.source?.liveInputId) continue;
         // Skip text clips - they need special handling
@@ -257,7 +261,8 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         if (
           newClip.source?.type === 'motion-shape' ||
           newClip.source?.type === 'motion-null' ||
-          newClip.source?.type === 'motion-adjustment'
+          newClip.source?.type === 'motion-adjustment' ||
+          newClip.source?.type === 'flock'
         ) {
           continue;
         }
@@ -288,14 +293,21 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
           continue;
         }
 
-        // Skip composition clips - they reference compositions, not media files
+        // Restore composition clips from their canonical timeline data. The
+        // linked audio wrapper has no nested visual content of its own.
         if (newClip.isComposition) {
-          // Composition clips need their nested content loaded
-          // For now just mark as not loading - the rendering will handle it
+          if (
+            newClip.source?.type !== 'audio' &&
+            newClip.compositionId &&
+            !refreshedCompositionIds.has(newClip.compositionId)
+          ) {
+            refreshedCompositionIds.add(newClip.compositionId);
+            await get().refreshCompClipNestedData(newClip.compositionId);
+          }
           set(state => ({
             clips: state.clips.map(c =>
               c.id === newClip.id
-                ? { ...c, isLoading: false }
+                ? { ...c, isLoading: false, needsReload: false }
                 : c
             ),
           }));
@@ -336,10 +348,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
     });
   },
 
-  hasClipboardData: () => {
-    const { clipboardData } = get();
-    return clipboardData !== null && clipboardData.length > 0;
-  },
+  hasClipboardData: () => (get().clipboardData?.length ?? 0) > 0,
 
   copyKeyframes: () => {
     const { selectedKeyframeIds, clipKeyframes } = get();
@@ -361,23 +370,10 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
 
     if (selectedKfs.length === 0) return;
 
-    // Find earliest time to normalize (so pasting is relative to playhead)
-    const earliestTime = Math.min(...selectedKfs.map(kf => kf.time));
-
-    const clipboardKeyframes: ClipboardKeyframeData[] = selectedKfs.map(kf => ({
-      clipId: kf.clipId,
-      property: kf.property,
-      time: kf.time - earliestTime,
-      value: kf.value,
-      pathValue: kf.pathValue ? structuredClone(kf.pathValue) : undefined,
-      easing: kf.easing as EasingType,
-      rotationInterpolation: kf.rotationInterpolation,
-      handleIn: kf.handleIn ? { ...kf.handleIn } : undefined,
-      handleOut: kf.handleOut ? { ...kf.handleOut } : undefined,
-    }));
-
+    // Relative clip-local timing (flock source-time keys are converted).
+    const { keyframes: clipboardKeyframes, skipped } = createClipboardKeyframes(selectedKfs, get().clips, get().getSourceTimeForClip);
     set({ clipboardKeyframes, clipboardData: null });
-    log.info('Copied keyframes', { count: clipboardKeyframes.length });
+    log.info('Copied keyframes', { count: clipboardKeyframes.length, skipped });
   },
 
   pasteKeyframes: () => {
@@ -402,40 +398,20 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
 
     captureSnapshot('Paste keyframes');
 
-    const clipLocalTime = playheadPosition - targetClip.startTime;
-    const newMap = new Map(clipKeyframes);
-    const existingKeyframes = newMap.get(targetClipId) || [];
-    const newKeyframes = [...existingKeyframes];
-
     const timestamp = Date.now();
-    const randomSuffix = () => Math.random().toString(36).substr(2, 5);
-
-    for (const kfData of clipboardKeyframes) {
-      const newTime = Math.max(0, Math.min(targetClip.duration, clipLocalTime + kfData.time));
-
-      const newKf: Keyframe = {
-        id: `kf_${timestamp}_${randomSuffix()}`,
-        clipId: targetClipId,
-        time: newTime,
-        property: kfData.property,
-          value: kfData.value,
-          pathValue: kfData.pathValue ? structuredClone(kfData.pathValue) : undefined,
-          easing: kfData.easing,
-          rotationInterpolation: kfData.rotationInterpolation,
-          handleIn: kfData.handleIn ? { ...kfData.handleIn } : undefined,
-          handleOut: kfData.handleOut ? { ...kfData.handleOut } : undefined,
-        };
-
-      newKeyframes.push(newKf);
-    }
-
-    // Sort by time
-    newKeyframes.sort((a, b) => a.time - b.time);
-    newMap.set(targetClipId, newKeyframes);
-
+    const { keyframes, pasted, skipped } = planPastedKeyframes({
+      clipboardKeyframes,
+      targetClip,
+      clipLocalTime: playheadPosition - targetClip.startTime,
+      existing: clipKeyframes.get(targetClipId) || [],
+      resolveSourceOffset: get().getSourceTimeForClip,
+      createId: () => `kf_${timestamp}_${randomSuffix()}`,
+    });
+    const newMap = new Map(clipKeyframes);
+    newMap.set(targetClipId, keyframes);
     set({ clipKeyframes: newMap });
     invalidateCache();
-    log.info('Pasted keyframes', { count: clipboardKeyframes.length, targetClipId });
+    log.info('Pasted keyframes', { count: pasted, skipped, targetClipId });
   },
 
   copyClipEffects: (clipId) => {

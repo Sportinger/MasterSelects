@@ -1,5 +1,6 @@
 import { Logger } from '../../../services/logger';
 import { mediaRuntimeRegistry } from '../../../services/mediaRuntime/registry';
+import { releaseRuntimePlaybackSession } from '../../../services/mediaRuntime/runtimePlayback';
 import { ParallelDecodeManager } from '../../ParallelDecodeManager';
 import type { ExportClipState } from '../ClipPreparation';
 
@@ -26,10 +27,7 @@ export function cleanupExportMode(
         : null;
     if (runtimeSessionId && !releasedRuntimeSessions.has(runtimeSessionId)) {
       releasedRuntimeSessions.add(runtimeSessionId);
-      mediaRuntimeRegistry.releaseSession(
-        state.runtimeSource!.runtimeSourceId!,
-        state.runtimeSource!.runtimeSessionKey!
-      );
+      releaseRuntimePlaybackSession(state.runtimeSource);
     }
     const runtimeOwnerId =
       state.runtimeSource?.runtimeSourceId && state.runtimeOwnerId

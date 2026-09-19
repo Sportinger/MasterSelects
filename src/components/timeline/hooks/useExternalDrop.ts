@@ -15,6 +15,12 @@ import {
   type VideoNewTrackGestureState,
 } from '../utils/externalDragNewTrackGesture';
 import { getExternalDragPayload } from '../utils/externalDragSession';
+import {
+  extractExternalDropFilePath,
+  planExternalDropCommand,
+} from '../utils/externalDropDataTransfer';
+import { resolveExternalDropCompositionReplaceTarget } from '../utils/externalDropCompositionReplaceTarget';
+import { resolveExternalDropReplaceTarget } from '../utils/externalDropReplaceTarget';
 import type { ExternalDragState } from '../types';
 import { useExternalDragBridgeRouting } from './useExternalDragBridgeRouting';
 import { useExternalDropSessionGuards } from './useExternalDropSessionGuards';
@@ -34,9 +40,9 @@ import type { AddClipOptions, TimelineToolId } from '../../../stores/timeline/ty
 import type { TimelineEditResult, TimelinePlacementMode } from '../../../stores/timeline/editOperations/types';
 import {
   canRouteTimelineExternalDropCommandToTrack,
-  planTimelineExternalDropCommand,
 } from '../../../timeline';
 import { executeTimelineExternalDropCommand } from '../../../services/timeline/timelineExternalDropCommandExecutor';
+import { requestSourceFitDecision } from '../../common/sourceFitDialog/sourceFitDialogController';
 
 const log = Logger.create('useExternalDrop');
 
@@ -91,6 +97,8 @@ interface UseExternalDropProps {
   addSplatEffectorClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
   addMathSceneClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
   addMotionShapeClip: (trackId: string, startTime: number, options?: { primitive?: ShapePrimitive; duration?: number; name?: string }) => string | null;
+  replaceClipSource: (clipId: string, mediaFileId: string) => boolean;
+  replaceClipSourceWithComposition: (clipId: string, compositionId: string) => Promise<boolean>;
 }
 
 interface UseExternalDropReturn {
@@ -104,44 +112,6 @@ interface UseExternalDropReturn {
   handleNewTrackDragOver: (e: React.DragEvent, trackType: 'video' | 'audio') => void;
   handleNewTrackDrop: (e: React.DragEvent, trackType: 'video' | 'audio') => Promise<void>;
   handleContainerDragLeave: (e: React.DragEvent) => void;
-}
-
-/**
- * Helper to extract file path from drag event
- */
-function extractFilePath(e: React.DragEvent): string | undefined {
-  // Try text/uri-list (Nautilus, Dolphin)
-  const uriList = e.dataTransfer.getData('text/uri-list');
-  if (uriList) {
-    const uri = uriList.split('\n')[0]?.trim();
-    if (uri?.startsWith('file://')) {
-      return decodeURIComponent(uri.replace('file://', ''));
-    }
-  }
-
-  // Try text/plain (some file managers)
-  const plainText = e.dataTransfer.getData('text/plain');
-  if (plainText?.startsWith('/') || plainText?.startsWith('file://')) {
-    return plainText.startsWith('file://')
-      ? decodeURIComponent(plainText.replace('file://', ''))
-      : plainText;
-  }
-
-  // Try text/x-moz-url (Firefox)
-  const mozUrl = e.dataTransfer.getData('text/x-moz-url');
-  if (mozUrl?.startsWith('file://')) {
-    return decodeURIComponent(mozUrl.split('\n')[0].replace('file://', ''));
-  }
-
-  return undefined;
-}
-
-function planExternalDropCommand(dataTransfer: DataTransfer) {
-  return planTimelineExternalDropCommand({
-    types: Array.from(dataTransfer.types),
-    fileCount: dataTransfer.files.length,
-    getData: (mimeType) => dataTransfer.getData(mimeType),
-  });
 }
 
 export function useExternalDrop({
@@ -166,6 +136,8 @@ export function useExternalDrop({
   addSplatEffectorClip,
   addMathSceneClip,
   addMotionShapeClip,
+  replaceClipSource,
+  replaceClipSourceWithComposition,
 }: UseExternalDropProps): UseExternalDropReturn {
   const [externalDrag, setExternalDrag] = useState<ExternalDragState | null>(null);
   const dragCounterRef = useRef(0);
@@ -208,6 +180,29 @@ export function useExternalDrop({
   }, [addClip, addTextClip, updateClip, updateTextProperties]);
 
   const placeDroppedTimelineMediaFiles = placeTimelineExternalDropFilesViaHook({ addTrack, addClip, addSignalAssetClip });
+
+  const resolveAddClipOptions = useCallback(async (mediaFile: MediaFile): Promise<AddClipOptions | undefined> => {
+    if (mediaFile.type !== 'video' && mediaFile.type !== 'image') return undefined;
+    const sourceWidth = mediaFile.width;
+    const sourceHeight = mediaFile.height;
+    const composition = useMediaStore.getState().getActiveComposition();
+    if (
+      !sourceWidth
+      || !sourceHeight
+      || !composition
+      || (Math.round(sourceWidth) === Math.round(composition.width)
+        && Math.round(sourceHeight) === Math.round(composition.height))
+    ) return undefined;
+
+    const decision = await requestSourceFitDecision({
+      mediaName: mediaFile.name,
+      sourceWidth,
+      sourceHeight,
+      compositionWidth: composition.width,
+      compositionHeight: composition.height,
+    });
+    return { visualScaleMode: decision };
+  }, []);
 
   const updateVideoNewTrackGesture = useCallback((clientY: number, isAudio: boolean) => {
     const rect = timelineRef.current?.getBoundingClientRect();
@@ -285,6 +280,7 @@ export function useExternalDrop({
     hasAudio?: boolean;
     isVideo: boolean;
     isAudio: boolean;
+    replaceMode?: boolean;
   }): ExternalDragState | null => {
     const {
       trackId,
@@ -295,6 +291,7 @@ export function useExternalDrop({
       hasAudio,
       isVideo,
       isAudio,
+      replaceMode,
     } = params;
 
     const targetTrack = tracks.find((t) => t.id === trackId);
@@ -305,6 +302,29 @@ export function useExternalDrop({
 
     if (!targetTrack || targetTrack.locked || targetTrack.type === 'midi') return null;
     if (!canDropExternalMediaPreviewOnTrack(targetTrack.type, { isAudio, isVideo })) return null;
+
+    const replaceTarget = replaceMode
+      ? dragPayload?.kind === 'composition'
+        ? resolveExternalDropCompositionReplaceTarget({ clips, payload: dragPayload, targetTrack, time: desiredStartTime })
+        : resolveExternalDropReplaceTarget({ clips, payload: dragPayload, targetTrack, time: desiredStartTime })
+      : undefined;
+    if (replaceTarget) {
+      return {
+        trackId,
+        startTime: replaceTarget.startTime,
+        x,
+        y,
+        isVideo: true,
+        isAudio: false,
+        hasAudio: previewHasAudio,
+        duration: replaceTarget.duration,
+        label: dragPayload?.label,
+        mediaType: dragPayload?.mediaType,
+        thumbnailUrl: dragPayload?.thumbnailUrl,
+        showVideoNewTrackZone: false,
+        replaceClipId: replaceTarget.id,
+      };
+    }
 
     return {
       trackId,
@@ -320,7 +340,7 @@ export function useExternalDrop({
       thumbnailUrl: dragPayload?.thumbnailUrl,
       showVideoNewTrackZone: updateVideoNewTrackGesture(y, isAudio),
     };
-  }, [tracks, resolveTrackStartTime, updateVideoNewTrackGesture]);
+  }, [clips, tracks, resolveTrackStartTime, updateVideoNewTrackGesture]);
 
   const updateResolvedDragMetadata = useCallback((cacheKey: string, duration: number, hasAudio: boolean) => {
     dragMetadataCacheRef.current = { url: cacheKey, duration, hasAudio };
@@ -343,6 +363,7 @@ export function useExternalDrop({
         hasAudio,
         isVideo: prev.isVideo ?? !prev.isAudio,
         isAudio: !!prev.isAudio,
+        replaceMode: Boolean(prev.replaceClipId),
       });
     });
   }, [buildTrackPreviewState, getDesiredStartTime]);
@@ -493,7 +514,7 @@ export function useExternalDrop({
 
       const x = e.clientX - rect.left + scrollX;
       const startTime = Math.max(0, pixelToTime(x));
-      const filePath = extractFilePath(e);
+      const filePath = extractExternalDropFilePath(e.dataTransfer);
 
       const commandResult = await executeTimelineExternalDropCommand({
         actions: {
@@ -513,6 +534,7 @@ export function useExternalDrop({
         isAudioOnlyMediaFile,
         isVideoTrack: trackType === 'video',
         mediaFilePolicy: 'strict-track-type',
+        resolveAddClipOptions,
         resolveStartTime: () => startTime,
         trackId: newTrackId,
       });
@@ -528,9 +550,10 @@ export function useExternalDrop({
         baseStartTime: startTime,
         fallbackDuration: cachedDuration,
         filePath,
+        resolveAddClipOptions,
       });
     },
-    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addLightClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, placeDroppedTimelineMediaFiles, externalDrag, timelineRef, clearExternalDragSession, updateVideoNewTrackGesture, rejectDropDuringExport]
+    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addLightClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, placeDroppedTimelineMediaFiles, resolveAddClipOptions, externalDrag, timelineRef, clearExternalDragSession, updateVideoNewTrackGesture, rejectDropDuringExport]
   );
 
   // Handle external file drop on track
@@ -550,6 +573,8 @@ export function useExternalDrop({
 
       const cachedDuration =
         externalDrag?.duration ?? dragMetadataCacheRef.current?.duration;
+
+      const dragPayload = getExternalDragPayload();
 
       clearExternalDragSession();
 
@@ -577,6 +602,30 @@ export function useExternalDrop({
         return;
       }
 
+      const replaceMediaFileId = e.shiftKey && dropCommand.kind === 'media-file'
+        ? dropCommand.itemId
+        : undefined;
+      const replaceTarget = replaceMediaFileId
+        ? resolveExternalDropReplaceTarget({ clips, payload: dragPayload, targetTrack, time: desiredStartTime })
+        : undefined;
+      if (replaceTarget && replaceMediaFileId) {
+        e.stopPropagation();
+        replaceClipSource(replaceTarget.id, replaceMediaFileId);
+        return;
+      }
+
+      const replaceCompositionId = e.shiftKey && dropCommand.kind === 'composition'
+        ? dropCommand.itemId
+        : undefined;
+      const compositionReplaceTarget = replaceCompositionId
+        ? resolveExternalDropCompositionReplaceTarget({ clips, payload: dragPayload, targetTrack, time: desiredStartTime })
+        : undefined;
+      if (compositionReplaceTarget && replaceCompositionId) {
+        e.stopPropagation();
+        await replaceClipSourceWithComposition(compositionReplaceTarget.id, replaceCompositionId);
+        return;
+      }
+
       const commandResult = await executeTimelineExternalDropCommand({
         actions: {
           addClip,
@@ -595,6 +644,7 @@ export function useExternalDrop({
         isAudioOnlyMediaFile,
         isVideoTrack,
         mediaFilePolicy: 'strict-track-type',
+        resolveAddClipOptions,
         resolveStartTime: prepareDropStartTime,
         trackId,
       });
@@ -603,7 +653,7 @@ export function useExternalDrop({
       }
 
       // Handle external file drop (supports multiple files via the shared media import path)
-      const filePath = extractFilePath(e);
+      const filePath = extractExternalDropFilePath(e.dataTransfer);
       log.debug('External drop', { items: e.dataTransfer.items?.length, types: Array.from(e.dataTransfer.types) });
       log.debug('Final file path:', filePath || 'NOT AVAILABLE');
 
@@ -614,6 +664,7 @@ export function useExternalDrop({
         baseStartTime: desiredStartTime,
         fallbackDuration: cachedDuration,
         filePath,
+        resolveAddClipOptions,
         // Snap/avoid overlaps the same way single drops do, and prep position-overwrite ranges.
         resolveStartTime: (desired, duration) => {
           const startTime = resolveTrackStartTime(trackId, desired, duration ?? cachedDuration);
@@ -622,7 +673,7 @@ export function useExternalDrop({
         },
       });
     },
-    [addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addLightClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, placeDroppedTimelineMediaFiles, externalDrag, tracks, rejectDropDuringExport, getDesiredStartTime, resolveTrackStartTime, prepareDropPlacement, clearExternalDragSession]
+    [addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addLightClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, placeDroppedTimelineMediaFiles, resolveAddClipOptions, replaceClipSource, replaceClipSourceWithComposition, externalDrag, clips, tracks, rejectDropDuringExport, getDesiredStartTime, resolveTrackStartTime, prepareDropPlacement, clearExternalDragSession]
   );
 
   useExternalDragBridgeRouting({

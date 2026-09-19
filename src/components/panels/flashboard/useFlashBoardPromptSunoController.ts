@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   FlashBoardComposerState,
   FlashBoardSunoVocalGender,
@@ -36,6 +36,7 @@ interface UseFlashBoardPromptSunoControllerInput {
   multiShots: boolean;
   normalizedMultiPrompt: FlashBoardMultishotPlannerPrompt[];
   promptRefineCallbacksRef: PromptRefineCallbacksRef;
+  updateComposer: (patch: Partial<FlashBoardComposerState>) => void;
   version: string;
 }
 
@@ -45,9 +46,10 @@ export function useFlashBoardPromptSunoController({
   multiShots,
   normalizedMultiPrompt,
   promptRefineCallbacksRef,
+  updateComposer,
   version,
 }: UseFlashBoardPromptSunoControllerInput) {
-  const [prompt, setPrompt] = useState('');
+  const [prompt, setPrompt] = useState(composer.draftPrompt ?? '');
   const [sunoCustomMode, setSunoCustomMode] = useState(
     composer.sunoInstrumental
       ? true
@@ -83,6 +85,10 @@ export function useFlashBoardPromptSunoController({
 
     return '';
   }, [multiShots, normalizedMultiPrompt, prompt]);
+
+  useEffect(() => {
+    updateComposer({ draftPrompt: prompt });
+  }, [prompt, updateComposer]);
 
   const sunoOptionsState = useMemo(() => buildFlashBoardSunoOptionsState({
     audioWeight: sunoAudioWeight,

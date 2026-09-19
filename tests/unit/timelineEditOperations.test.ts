@@ -22,6 +22,7 @@ import { createMaskPathProperty, type LayerSource, type TimelineClip } from '../
 import { installFakeMediaStore } from '../helpers/fakeMediaStore';
 import { createMockClip, createMockKeyframe, createMockTrack } from '../helpers/mockData';
 import { handleSetClipSpeed } from '../../src/services/aiTools/handlers/playback';
+import { installCanvas2DMock } from '../helpers/mockCanvas2d';
 
 function createTransitionJunctionFixture(clipAId = 'clip-a', clipBId = 'clip-b', junctionTime = 10) {
   return {
@@ -157,7 +158,10 @@ function createHiddenTransitionComposition(
 }
 
 describe('timeline edit operations kernel', () => {
+  let canvas2DMock: ReturnType<typeof installCanvas2DMock>;
+
   beforeEach(() => {
+    canvas2DMock = installCanvas2DMock();
     initializeTestHistoryRefs();
     useHistoryStore.getState().clearHistory();
     clearAINodeRuntimeCache();
@@ -177,6 +181,7 @@ describe('timeline edit operations kernel', () => {
   });
 
   afterEach(() => {
+    canvas2DMock.restore();
     useHistoryStore.getState().clearHistory();
     clearAINodeRuntimeCache();
     timelineRuntimeCoordinator.clearResources();
@@ -2510,6 +2515,80 @@ describe('timeline edit operations kernel', () => {
     expect(useTimelineStore.getState().clips.find(clip => clip.id === 'video-1')?.analysis).toBe(analysis);
   });
 
+  it('keeps keyframes at their composition times when the left clip edge is trimmed', () => {
+    const clip = createMockClip({
+      id: 'clip-1',
+      trackId: 'video-1',
+      startTime: 5,
+      duration: 8,
+      inPoint: 0,
+      outPoint: 8,
+    });
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [clip],
+      clipKeyframes: new Map([[clip.id, [
+        createMockKeyframe({ id: 'kf-before-edge', clipId: clip.id, time: 1, property: 'opacity' }),
+        createMockKeyframe({ id: 'kf-visible', clipId: clip.id, time: 4, property: 'opacity' }),
+      ]]]),
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'trim-left-with-keyframes',
+      type: 'trim-clip',
+      clipId: clip.id,
+      startTime: 7,
+      inPoint: 2,
+      outPoint: 8,
+    }, { source: 'ui', historyLabel: 'Trim clip edge' });
+
+    expect(result.success).toBe(true);
+    const state = useTimelineStore.getState();
+    const trimmed = state.clips.find((candidate) => candidate.id === clip.id)!;
+    const compositionTimes = (state.clipKeyframes.get(clip.id) ?? [])
+      .map((keyframe) => trimmed.startTime + keyframe.time);
+    expect(compositionTimes).toEqual([6, 9]);
+    expect(state.clipKeyframes.get(clip.id)?.map((keyframe) => keyframe.time)).toEqual([-1, 2]);
+  });
+
+  it('anchors the first and last opacity pairs to clip edges while trimming', () => {
+    const clip = createMockClip({
+      id: 'clip-1',
+      trackId: 'video-1',
+      startTime: 5,
+      duration: 8,
+      inPoint: 0,
+      outPoint: 8,
+    });
+    const opacityKeyframes = [0, 1, 4, 6, 8].map((time, index) => createMockKeyframe({
+      id: `opacity-${index}`,
+      clipId: clip.id,
+      time,
+      property: 'opacity',
+    }));
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [clip],
+      clipKeyframes: new Map([[clip.id, opacityKeyframes]]),
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'trim-opacity-pairs',
+      type: 'trim-clip',
+      clipId: clip.id,
+      startTime: 7,
+      inPoint: 2,
+      outPoint: 8,
+    }, { source: 'ui', historyLabel: 'Trim opacity fade pairs' });
+
+    expect(result.success).toBe(true);
+    const state = useTimelineStore.getState();
+    const trimmed = state.clips.find((candidate) => candidate.id === clip.id)!;
+    const retimed = state.clipKeyframes.get(clip.id) ?? [];
+    expect(retimed.map((keyframe) => keyframe.time)).toEqual([0, 1, 2, 4, 6]);
+    expect(retimed.map((keyframe) => trimmed.startTime + keyframe.time)).toEqual([7, 8, 9, 11, 13]);
+  });
+
   it('preserves linked clip duration differences when trimming again after an independent trim', () => {
     const video = createMockClip({
       id: 'video-1',
@@ -2593,7 +2672,7 @@ describe('timeline edit operations kernel', () => {
 
     expect(wordTrim.success).toBe(true);
     expect(useTimelineStore.getState().clips.every(
-      (clip) => Math.abs(clip.duration - 0.08) < 1e-9,
+      (clip) => Math.abs(clip.duration - (2 / 30)) < 1e-9,
     )).toBe(true);
 
     const tooShort = useTimelineStore.getState().applyTimelineEditOperation({

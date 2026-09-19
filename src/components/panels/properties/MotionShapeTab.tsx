@@ -23,6 +23,7 @@ import { MotionExpressionsSection } from './MotionExpressionsSection';
 import { MotionPropertyBrowser } from './MotionPropertyBrowser';
 import { MotionModifiersSection } from './MotionModifiersSection';
 import { MotionTemplatesSection } from './MotionTemplatesSection';
+import { MotionPathPointsEditor } from './MotionPathPointsEditor';
 
 interface MotionShapeTabProps {
   clipId: string;
@@ -366,6 +367,7 @@ export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
         )}
         {shape.primitive === 'path' && (
           <>
+            <MotionPathPointsEditor clipId={clipId} />
             <div className="control-row">
               <label className="prop-label">Path</label>
               <span>{shape.path?.vertices.length ?? 0} vertices</span>

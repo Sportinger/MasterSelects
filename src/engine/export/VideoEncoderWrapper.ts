@@ -7,6 +7,8 @@ const log = Logger.create('VideoEncoder');
 import { AudioEncoderWrapper, type AudioCodec, type EncodedAudioResult } from '../audio';
 import type { ExportSettings, VideoCodec, ContainerFormat } from './types';
 import { getCodecString, isCodecSupportedInContainer, getFallbackCodec } from './codecHelpers';
+import { isMobileAppleWebKit } from '../../utils/mobileAppleWebKit';
+import { resolveVideoEncoderBitrate } from './videoEncoderConfigPolicy';
 
 export class VideoEncoderWrapper {
   // VideoEncoder.encode() only enqueues work. Without backpressure each queued
@@ -18,6 +20,7 @@ export class VideoEncoderWrapper {
   private static readonly MAX_UNFLUSHED_INPUT_BYTES = 96 * 1024 * 1024;
 
   private encoder: VideoEncoder | null = null;
+  private startEncoder: (() => void) | null = null;
   private muxer: MuxerAdapter | null = null;
   private settings: ExportSettings;
   private encodedFrameCount = 0;
@@ -35,7 +38,7 @@ export class VideoEncoderWrapper {
     this.containerFormat = settings.container ?? 'mp4';
   }
 
-  async init(): Promise<boolean> {
+  async init(options: { deferVideoEncoder?: boolean } = {}): Promise<boolean> {
     if (!('VideoEncoder' in window)) {
       log.error('WebCodecs not supported');
       return false;
@@ -53,13 +56,23 @@ export class VideoEncoderWrapper {
 
     // Check codec support
     const codecString = getCodecString(this.effectiveVideoCodec);
+    const bitratePolicy = resolveVideoEncoderBitrate(
+      this.effectiveVideoCodec,
+      this.settings.bitrate,
+    );
+    if (bitratePolicy.limited) {
+      log.warn(
+        `Limited iPadOS H.264 target bitrate to ${(bitratePolicy.bitrate / 1_000_000).toFixed(1)} Mbps ` +
+        `from ${(this.settings.bitrate / 1_000_000).toFixed(1)} Mbps to satisfy AVC Level 4.0`,
+      );
+    }
     const requestedBitrateMode: VideoEncoderBitrateMode =
       this.settings.rateControl === 'cbr' ? 'constant' : 'variable';
     const supportCheckConfig = {
       codec: codecString,
       width: this.settings.width,
       height: this.settings.height,
-      bitrate: this.settings.bitrate,
+      bitrate: bitratePolicy.bitrate,
       framerate: this.settings.fps,
     };
     // Safari may report realtime H.264 as supported, then close the encoder on
@@ -132,51 +145,67 @@ export class VideoEncoderWrapper {
       return false;
     }
 
+    if (this.isClosed) return false;
+
     // Create muxer (MediaBunny adapter)
     this.createMuxer();
 
-    // Create encoder
-    this.encoder = new VideoEncoder({
-      output: (chunk, meta) => {
-        if (this.muxer) {
-          // Synchronous queue — MediaBunnyMuxerAdapter buffers internally
-          this.muxer.addVideoChunk(chunk, meta);
+    // Source/audio preparation can take minutes. Keep codec resources unallocated
+    // until a frame is ready, while validating support and choosing audio up front.
+    this.startEncoder = () => {
+      // Create encoder
+      this.encoder = new VideoEncoder({
+        output: (chunk, meta) => {
+          if (this.muxer) {
+            // Synchronous queue — MediaBunnyMuxerAdapter buffers internally
+            this.muxer.addVideoChunk(chunk, meta);
+          }
+          this.encodedFrameCount++;
+        },
+        error: (e) => {
+          log.error('Encode error:', e);
+        },
+      });
+
+      let selectedEncoderConfig: VideoEncoderConfig | null = null;
+
+      for (const config of supportedEncoderConfigs) {
+        try {
+          this.encoder.configure(config);
+          selectedEncoderConfig = config;
+          this.effectiveBitrateMode = config.bitrateMode ?? 'variable';
+          break;
+        } catch (error) {
+          log.warn(
+            `Encoder configure failed for ${config.latencyMode ?? 'default'} / ${config.hardwareAcceleration ?? 'default'} / ${config.bitrateMode ?? 'default'}, trying next config`,
+            error
+          );
         }
-        this.encodedFrameCount++;
-      },
-      error: (e) => {
-        log.error('Encode error:', e);
-      },
-    });
-
-    let selectedEncoderConfig: VideoEncoderConfig | null = null;
-
-    for (const config of supportedEncoderConfigs) {
-      try {
-        this.encoder.configure(config);
-        selectedEncoderConfig = config;
-        this.effectiveBitrateMode = config.bitrateMode ?? 'variable';
-        break;
-      } catch (error) {
-        log.warn(
-          `Encoder configure failed for ${config.latencyMode ?? 'default'} / ${config.hardwareAcceleration ?? 'default'} / ${config.bitrateMode ?? 'default'}, trying next config`,
-          error
-        );
       }
-    }
 
-    if (!selectedEncoderConfig) {
-      throw new Error(`Failed to configure encoder for codec ${codecString}`);
-    }
+      if (!selectedEncoderConfig) {
+        throw new Error(`Failed to configure encoder for codec ${codecString}`);
+      }
 
-    if (requestedBitrateMode !== this.effectiveBitrateMode) {
-      log.warn(`Requested ${requestedBitrateMode} bitrate mode is not supported for this encoder config; using ${this.effectiveBitrateMode}`);
-    }
+      if (requestedBitrateMode !== this.effectiveBitrateMode) {
+        log.warn(`Requested ${requestedBitrateMode} bitrate mode is not supported for this encoder config; using ${this.effectiveBitrateMode}`);
+      }
 
-    log.info(
-      `Initialized: ${this.settings.width}x${this.settings.height} @ ${this.settings.fps}fps (${this.effectiveVideoCodec.toUpperCase()}, ${(this.settings.bitrate / 1_000_000).toFixed(1)} Mbps, ${this.effectiveBitrateMode}, ${selectedEncoderConfig.latencyMode ?? 'default'} latency, ${selectedEncoderConfig.hardwareAcceleration ?? 'default'} hw)`
-    );
+      log.info(
+        `Initialized: ${this.settings.width}x${this.settings.height} @ ${this.settings.fps}fps (${this.effectiveVideoCodec.toUpperCase()}, ${(bitratePolicy.bitrate / 1_000_000).toFixed(1)} Mbps, ${this.effectiveBitrateMode}, ${selectedEncoderConfig.latencyMode ?? 'default'} latency, ${selectedEncoderConfig.hardwareAcceleration ?? 'default'} hw)`
+      );
+    };
+    if (!options.deferVideoEncoder) this.ensureEncoderStarted();
     return true;
+  }
+
+  private ensureEncoderStarted(): void {
+    if (this.isClosed) throw new Error('Encoder already closed');
+    const start = this.startEncoder;
+    if (start) {
+      this.startEncoder = null;
+      start();
+    }
   }
 
   private async initializeAudioCodec(): Promise<void> {
@@ -231,6 +260,7 @@ export class VideoEncoderWrapper {
   }
 
   async encodeFrame(pixels: Uint8ClampedArray, frameIndex: number, keyframeInterval?: number): Promise<void> {
+    this.ensureEncoderStarted();
     if (!this.encoder || this.isClosed) {
       throw new Error('Encoder not initialized or already closed');
     }
@@ -281,6 +311,7 @@ export class VideoEncoderWrapper {
    * The caller is responsible for closing the frame after this returns.
    */
   async encodeVideoFrame(frame: VideoFrame, frameIndex: number, keyframeInterval?: number): Promise<void> {
+    this.ensureEncoderStarted();
     if (!this.encoder || this.isClosed) {
       throw new Error('Encoder not initialized or already closed');
     }
@@ -291,6 +322,16 @@ export class VideoEncoderWrapper {
     const keyFrame = frameIndex % interval === 0;
     this.encoder.encode(frame, { keyFrame });
     this.framesSubmittedSinceFlush++;
+
+    // WebKit can keep the GPU-backed canvas surface alive asynchronously after
+    // encode() returns. Re-rendering into that surface before the encode task
+    // finishes invalidates Safari's encoder. Drain each iPadOS zero-copy frame
+    // before the export canvas is reused; pixels remain on the GPU throughout.
+    if (isMobileAppleWebKit()) {
+      await this.encoder.flush();
+      this.framesSubmittedSinceFlush = 0;
+      return;
+    }
 
     // Yield to event loop periodically
     if (frameIndex % 30 === 0) {
@@ -379,16 +420,12 @@ export class VideoEncoderWrapper {
   }
 
   cancel(): void {
-    if (this.encoder && !this.isClosed) {
-      this.isClosed = true;
-      try {
-        this.encoder.close();
-      } catch {}
-      this.framesSubmittedSinceFlush = 0;
-      // Cancel any pending muxer flush
-      if (this.muxer && this.muxer instanceof MediaBunnyMuxerAdapter) {
-        this.muxer.cancel();
-      }
-    }
+    if (this.isClosed) return;
+    this.isClosed = true;
+    this.startEncoder = null;
+    try { this.encoder?.close(); } catch {}
+    this.framesSubmittedSinceFlush = 0;
+    // Preparation may have created a muxer without allocating a codec yet.
+    if (this.muxer instanceof MediaBunnyMuxerAdapter) this.muxer.cancel();
   }
 }

@@ -14,6 +14,7 @@ import { keyframeToolDefinitions } from './keyframes';
 import { textToolDefinitions } from './text';
 import { captionToolDefinitions } from './captions';
 import { motionDesignToolDefinitions } from './motionDesign';
+import { flockToolDefinitions } from './flock';
 import { playbackToolDefinitions } from './playback';
 import { transitionToolDefinitions } from './transitions';
 import { maskToolDefinitions } from './masks';
@@ -42,6 +43,7 @@ export const AI_TOOLS = [
   ...playbackToolDefinitions,
   ...transitionToolDefinitions,
   ...maskToolDefinitions,
+  ...flockToolDefinitions,
   ...statsToolDefinitions,
   ...workerFirstToolDefinitions,
   ...workerFirstRuntimeToolDefinitions,
@@ -65,6 +67,7 @@ export {
   textToolDefinitions,
   captionToolDefinitions,
   motionDesignToolDefinitions,
+  flockToolDefinitions,
   playbackToolDefinitions,
   transitionToolDefinitions,
   maskToolDefinitions,

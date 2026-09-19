@@ -17,6 +17,7 @@ interface TrackPreviewStateParams {
   hasAudio?: boolean;
   isVideo: boolean;
   isAudio: boolean;
+  replaceMode?: boolean;
 }
 
 interface PreviewMetadataFallback {
@@ -92,6 +93,7 @@ export function useExternalDropTrackDragOver({
         hasAudio: preview.hasAudio ?? prev?.hasAudio ?? fallback.hasAudio,
         isVideo: preview.isVideo,
         isAudio: preview.isAudio,
+        replaceMode: event.shiftKey,
       });
       if (!next) {
         event.dataTransfer.dropEffect = 'none';

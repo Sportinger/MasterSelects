@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
-import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { Logger } from '../../../services/logger';
+import { reportProjectSaveFailure } from '../../../services/project/projectSaveStatus';
 import {
   projectFileService,
   type RecentProjectEntry,
@@ -18,44 +19,39 @@ import type {
   ProjectNameDialogRequest,
 } from '../ProjectNameDialog';
 import { resetStoryboardProjectState } from '../../../stores/storyboardStore';
+import { useTrackingStore } from '../../../stores/trackingStore';
+import {
+  markAndroidProjectAutoRestoreReady,
+  prepareAndroidProjectAutoRestore,
+} from '../../../services/project/androidProjectAutoRestore';
 
 const log = Logger.create('Toolbar');
 
 interface UseToolbarProjectActionsArgs {
   closeMenu: () => void;
-  editName: string;
-  isRenamingRef: MutableRefObject<boolean>;
   openProjectNameDialog: (request: ProjectNameDialogRequest) => void;
   projectName: string;
   resetMediaProject: (name: string) => void;
-  setEditName: Dispatch<SetStateAction<string>>;
-  setIsEditingName: Dispatch<SetStateAction<boolean>>;
   setIsLoading: Dispatch<SetStateAction<boolean>>;
   setIsProjectOpen: Dispatch<SetStateAction<boolean>>;
   setNeedsPermission: Dispatch<SetStateAction<boolean>>;
   setPendingProjectName: Dispatch<SetStateAction<string | null>>;
   setProjectName: Dispatch<SetStateAction<string>>;
   setRecentProjects: Dispatch<SetStateAction<RecentProjectEntry[]>>;
-  setRenameError: Dispatch<SetStateAction<string | null>>;
   setShowSavedToast: Dispatch<SetStateAction<boolean>>;
 }
 
 export function useToolbarProjectActions({
   closeMenu,
-  editName,
-  isRenamingRef,
   openProjectNameDialog,
   projectName,
   resetMediaProject,
-  setEditName,
-  setIsEditingName,
   setIsLoading,
   setIsProjectOpen,
   setNeedsPermission,
   setPendingProjectName,
   setProjectName,
   setRecentProjects,
-  setRenameError,
   setShowSavedToast,
 }: UseToolbarProjectActionsArgs) {
   const handleSave = useCallback(async (showToast = true) => {
@@ -66,11 +62,31 @@ export function useToolbarProjectActions({
         initialName: 'New Project',
       });
       return;
-    } else {
-      await saveCurrentProject({ source: 'manual', label: 'Manual save' });
-      if (showToast) setShowSavedToast(true);
     }
-    closeMenu();
+    setShowSavedToast(false);
+    try {
+      // Request access from the Save gesture, before asynchronous serialization.
+      const handle = projectFileService.getProjectHandle();
+      if (handle?.requestPermission
+        && await handle.requestPermission({ mode: 'readwrite' }) !== 'granted') {
+        reportProjectSaveFailure(handle);
+        window.alert('Project not saved. Allow access to the project folder and try Save again, or use Save As.');
+        return;
+      }
+      const saved = await saveCurrentProject({ source: 'manual', label: 'Manual save' });
+      if (saved) {
+        if (showToast) setShowSavedToast(true);
+      } else {
+        reportProjectSaveFailure(projectFileService.getProjectHandle() ?? projectFileService.getProjectPath());
+        window.alert('Project not saved. Check access to the project folder and available disk space, then try again or use Save As.');
+      }
+    } catch (error) {
+      reportProjectSaveFailure(projectFileService.getProjectHandle() ?? projectFileService.getProjectPath());
+      log.error('Failed to save project', error);
+      window.alert('Project not saved. Your changes are still in this tab. Try Save again or use Save As before closing it.');
+    } finally {
+      closeMenu();
+    }
   }, [closeMenu, openProjectNameDialog, setShowSavedToast]);
 
   const handleSaveAs = useCallback(() => {
@@ -169,61 +185,46 @@ export function useToolbarProjectActions({
     closeMenu();
   }, [closeMenu, setRecentProjects]);
 
-  const handleNameSubmit = useCallback(async () => {
-    if (isRenamingRef.current) return;
-
-    setRenameError(null);
-
-    if (editName.trim()) {
-      const newName = editName.trim();
-      const data = projectFileService.getProjectData();
-
-      if (data && newName !== data.name) {
-        isRenamingRef.current = true;
-        setIsLoading(true);
-        const success = await projectFileService.renameProject(newName);
-        if (success) {
-          setProjectName(newName);
-          setShowSavedToast(true);
-        } else {
-          setEditName(data.name);
-          setRenameError(`Could not rename to "${newName}" \u2014 a folder with that name may already exist.`);
-          setTimeout(() => setRenameError(null), 4000);
-        }
-        setIsLoading(false);
-        isRenamingRef.current = false;
-      }
-    }
-    setIsEditingName(false);
-  }, [
-    editName,
-    isRenamingRef,
-    setEditName,
-    setIsEditingName,
-    setIsLoading,
-    setProjectName,
-    setRenameError,
-    setShowSavedToast,
-  ]);
-
   const handleProjectNameSubmit = useCallback(async (
     mode: ProjectNameDialogMode,
     name: string,
   ): Promise<string | null> => {
     setIsLoading(true);
     try {
+      if (mode === 'rename') {
+        const data = projectFileService.getProjectData();
+        if (!data) {
+          return 'No project is open.';
+        }
+        if (name === data.name) {
+          return null;
+        }
+
+        const renamed = await projectFileService.renameProject(name);
+        if (!renamed) {
+          return `Could not rename to "${name}" \u2014 a folder with that name may already exist.`;
+        }
+
+        setProjectName(name);
+        setShowSavedToast(true);
+        return null;
+      }
+
       if (mode === 'new') {
         const folderCreated = await projectFileService.createProject(name);
         if (!folderCreated) {
           return 'No project folder was selected, or the folder could not be created.';
         }
 
+        // Tracking assets belong to the previous project, including large terrain
+        // meshes. Clear them before media reset/sync can seed the first save.
+        useTrackingStore.getState().reset();
         resetMediaProject(name);
         resetStoryboardProjectState();
         await syncStoresToProject();
         const saved = await projectFileService.saveProject();
         if (!saved) {
-          return 'The project folder was created, but project.json could not be saved.';
+          return 'The project folder was created, but the .msproj package could not be saved.';
         }
       } else {
         const created = await createNewProject(name);
@@ -264,6 +265,16 @@ export function useToolbarProjectActions({
     openProjectNameDialog,
   ]);
 
+  const handleRename = useCallback(() => {
+    if (!projectFileService.isProjectOpen()) return;
+
+    closeMenu();
+    openProjectNameDialog({
+      mode: 'rename',
+      initialName: projectFileService.getProjectData()?.name || projectName,
+    });
+  }, [closeMenu, openProjectNameDialog, projectName]);
+
   const handleRestorePermission = useCallback(async () => {
     setIsLoading(true);
     setProjectLoadProgress({
@@ -274,6 +285,42 @@ export function useToolbarProjectActions({
     });
     const success = await projectFileService.requestPendingPermission();
     if (success) {
+      const sourceHandle = projectFileService.getProjectHandle();
+      if (sourceHandle) {
+        let copiedFileCount = 0;
+        try {
+          setProjectLoadProgress({
+            phase: 'opening',
+            percent: 12,
+            message: 'Preparing automatic Android restore',
+            blocking: true,
+          });
+          const mirrorHandle = await prepareAndroidProjectAutoRestore(sourceHandle, () => {
+            copiedFileCount += 1;
+            if (copiedFileCount === 1 || copiedFileCount % 25 === 0) {
+              setProjectLoadProgress({
+                phase: 'opening',
+                percent: Math.min(85, 12 + copiedFileCount),
+                message: `Preparing automatic Android restore (${copiedFileCount} files)`,
+                blocking: true,
+              });
+            }
+          });
+          if (mirrorHandle) {
+            const alreadyUsingMirror = await sourceHandle.isSameEntry(mirrorHandle);
+            const mirrorLoaded = alreadyUsingMirror
+              || await projectFileService.loadProject(mirrorHandle);
+            if (mirrorLoaded) {
+              markAndroidProjectAutoRestoreReady(mirrorHandle);
+            } else {
+              log.warn('Android project mirror could not be opened; keeping the original project open');
+            }
+          }
+        } catch (error) {
+          log.warn('Could not prepare Android project auto-restore; keeping the original project open', error);
+        }
+      }
+
       await loadProjectToStores();
       const data = projectFileService.getProjectData();
       if (data) {
@@ -296,11 +343,11 @@ export function useToolbarProjectActions({
 
   return {
     handleClearRecentProjects,
-    handleNameSubmit,
     handleNew,
     handleOpen,
     handleOpenRecent,
     handleProjectNameSubmit,
+    handleRename,
     handleRestorePermission,
     handleSave,
     handleSaveAs,

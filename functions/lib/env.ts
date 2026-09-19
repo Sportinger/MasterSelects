@@ -69,6 +69,16 @@ export interface Env {
   KV: AppKVNamespace;
   MEDIA: AppR2Bucket;
   MASTERSELECTS_PUBLIC_URL?: string;
+  MS_SOCIAL_AGENT_TOKEN?: string;
+  MS_SOCIAL_BLUESKY_APP_PASSWORD?: string;
+  MS_SOCIAL_FACEBOOK_PAGE_ACCESS_TOKEN?: string;
+  MS_SOCIAL_INSTAGRAM_ACCESS_TOKEN?: string;
+  MS_SOCIAL_LINKEDIN_ACCESS_TOKEN?: string;
+  MS_SOCIAL_THREADS_ACCESS_TOKEN?: string;
+  MS_SOCIAL_TIKTOK_ACCESS_TOKEN?: string;
+  MS_SOCIAL_YOUTUBE_CLIENT_ID?: string;
+  MS_SOCIAL_YOUTUBE_CLIENT_SECRET?: string;
+  MS_SOCIAL_YOUTUBE_REFRESH_TOKEN?: string;
   OPENAI_API_KEY?: string;
   RESEND_API_KEY?: string;
   SESSION_SECRET?: string;
@@ -86,6 +96,8 @@ export interface Env {
   TELEGRAM_DEV_CHAT_ID?: string;
   TELEGRAM_DEV_USER_IDS?: string;
   TELEGRAM_WEBHOOK_SECRET?: string;
+  TWITCH_CLIENT_ID?: string;
+  TWITCH_CLIENT_SECRET?: string;
   VISITOR_NOTIFY_SECRET?: string;
 }
 
@@ -95,6 +107,7 @@ export interface AppUser {
 }
 
 export interface AppContextData {
+  guestUser?: AppUser | null;
   requestId?: string;
   user?: AppUser | null;
 }

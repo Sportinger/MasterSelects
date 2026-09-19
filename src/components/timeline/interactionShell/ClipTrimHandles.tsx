@@ -1,4 +1,7 @@
-import type { MouseEvent as ReactMouseEvent } from 'react';
+import type {
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from 'react';
 import { getTrimHandleArrowDirections } from '../utils/trimHandleDirections';
 import type {
   ClipInteractionShellCommandContext,
@@ -50,6 +53,11 @@ export function ClipTrimHandles({ context, commands }: ClipTrimHandlesProps) {
             style={toShellHandleStyle(rect, context.geometry.clip)}
             onMouseDown={(event: ReactMouseEvent<HTMLElement>) => {
               if (event.button !== 0) return;
+              event.stopPropagation();
+              commands?.onTrimStart?.(event, context, edge);
+            }}
+            onPointerDown={(event: ReactPointerEvent<HTMLElement>) => {
+              if (event.pointerType === 'mouse' || event.button !== 0) return;
               event.stopPropagation();
               commands?.onTrimStart?.(event, context, edge);
             }}

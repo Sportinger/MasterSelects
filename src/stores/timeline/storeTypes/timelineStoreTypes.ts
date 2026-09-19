@@ -1,6 +1,7 @@
 import type { AudioEditActions, StemSeparationActions } from './audioActionTypes';
 import type { ClipboardActions, ClipboardState } from './clipboardTypes';
 import type { ClipActions } from './clipActionTypes';
+import type { FlockClipActions } from './flockClipActionTypes';
 import type { MaskActions } from './maskActionTypes';
 import type {
   PlaybackActions,
@@ -31,6 +32,7 @@ export interface TimelineStore extends
   ClipboardState,
   TrackActions,
   ClipActions,
+  FlockClipActions,
   PlaybackActions,
   TimelineToolActions,
   TimelineEditOperationActions,

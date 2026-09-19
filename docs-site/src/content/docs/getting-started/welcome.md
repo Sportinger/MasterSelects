@@ -23,5 +23,5 @@ still lack.
   [GPU engine](/features/gpu-engine/) to
   [Motion Design](/features/motion-design/) and the
   [Audio workstation](/features/audio-workstation/).
-- The project is open source on
-  [GitHub](https://github.com/Sportinger/MasterSelects).
+- Return to the [MasterSelects editor](https://www.masterselects.com) whenever
+  you are ready to put a workflow into practice.

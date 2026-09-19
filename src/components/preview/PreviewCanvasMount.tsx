@@ -11,12 +11,14 @@ import type { PreviewQuality } from '../../stores/settingsStore';
 import type { SceneCameraConfig, SceneViewport } from '../../engine/scene/types';
 import { MaskOverlay } from './MaskOverlay';
 import { FaceAnalysisOverlay } from './FaceAnalysisOverlay';
+import { PreciseFaceOverlay } from './PreciseFaceOverlay';
 import { PreviewBottomControls } from './PreviewBottomControls';
 import { SAM2Overlay } from './SAM2Overlay';
 import { SceneObjectOverlay } from './SceneObjectOverlay';
 import { SourceMonitor } from './SourceMonitor';
 import { StatsOverlay } from './StatsOverlay';
 import { TextPreviewEditor } from './TextPreviewEditor';
+import { CaptionWordPreviewEditor } from './CaptionWordPreviewEditor';
 import {
   PreviewEditHints,
   PreviewPlaybackWaiter,
@@ -24,10 +26,16 @@ import {
 } from './PreviewStatusOverlays';
 import { StoryboardAnimaticPreviewOverlay } from './storyboard/StoryboardAnimaticPreviewOverlay';
 import { MotionPathOverlay, type MotionPathOverlayProps } from './MotionPathOverlay';
+import { PreviewEngineFailureNotice } from './PreviewEngineFailureNotice';
 import {
   MotionNullViewportOverlay,
   type MotionNullViewportOverlayProps,
 } from './MotionNullViewportOverlay';
+import { useTouchMouseBridge } from './useTouchMouseBridge';
+import { NativeLiveInputPreview } from './NativeLiveInputPreview';
+import { TrackingPreviewOverlay } from './tracking/TrackingPreviewOverlay';
+import { usePreview3DMediaDrop } from './usePreview3DMediaDrop';
+import { FlockGuidanceOverlay } from './flock/FlockGuidanceOverlay';
 
 interface PreviewCanvasMountProps {
   activeSharedSceneOverlayContent: boolean;
@@ -48,7 +56,6 @@ interface PreviewCanvasMountProps {
   editCameraOrthoHint: string | null;
   editMode: boolean;
   effectiveResolution: SceneViewport;
-  effectiveSceneNavFpsMode: boolean;
   engineInitError: string | null;
   engineInitFailed: boolean;
   exportPreviewCanvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -88,15 +95,15 @@ interface PreviewCanvasMountProps {
   setPropertyValue: (clipId: string, property: ReturnType<typeof createTextBoundsNumericProperty>, value: number) => void;
   setPreviewQuality: (quality: PreviewQuality) => void;
   setQualityOpen: (open: boolean) => void;
-  setSceneGizmoToolbarTarget: (target: HTMLDivElement | null) => void;
   setTextTyping: (typing: boolean) => void;
   showPlaybackWaiter: boolean;
+  showBottomControls: boolean;
+  sceneObjectOverlayEnabled: boolean;
   showSceneObjectOverlay: boolean;
   showTransparencyGrid: boolean;
   sourceMonitorActive: boolean;
   sourceMonitorFile: MediaFile | null;
   sourceMonitorPlaybackRequestId: number;
-  statsExpanded: boolean;
   textClipEditMode: boolean;
   textPreviewEditorEnabled: boolean;
   textTypingActive: boolean;
@@ -108,16 +115,14 @@ interface PreviewCanvasMountProps {
   viewTransform: React.CSSProperties;
   viewZoom: number;
   worldGridPlane: 'xy' | 'yz' | 'xz';
-  onToggleStats: () => void;
+  onOpenStats: () => void;
 }
 
 function PreviewStatsOverlay({
-  expanded,
-  onToggle,
+  onOpen,
   resolution,
 }: {
-  expanded: boolean;
-  onToggle: () => void;
+  onOpen: () => void;
   resolution: SceneViewport;
 }) {
   const engineStats = useEngineStore((state) => state.engineStats);
@@ -125,8 +130,8 @@ function PreviewStatsOverlay({
     <StatsOverlay
       stats={engineStats}
       resolution={resolution}
-      expanded={expanded}
-      onToggle={onToggle}
+      expanded={false}
+      onToggle={onOpen}
     />
   );
 }
@@ -150,7 +155,6 @@ export function PreviewCanvasMount({
   editCameraOrthoHint,
   editMode,
   effectiveResolution,
-  effectiveSceneNavFpsMode,
   engineInitError,
   engineInitFailed,
   exportPreviewCanvasRef,
@@ -190,15 +194,15 @@ export function PreviewCanvasMount({
   setPropertyValue,
   setPreviewQuality,
   setQualityOpen,
-  setSceneGizmoToolbarTarget,
   setTextTyping,
   showPlaybackWaiter,
+  showBottomControls,
+  sceneObjectOverlayEnabled,
   showSceneObjectOverlay,
   showTransparencyGrid,
   sourceMonitorActive,
   sourceMonitorFile,
   sourceMonitorPlaybackRequestId,
-  statsExpanded,
   textClipEditMode,
   textPreviewEditorEnabled,
   textTypingActive,
@@ -210,8 +214,16 @@ export function PreviewCanvasMount({
   viewTransform,
   viewZoom,
   worldGridPlane,
-  onToggleStats,
+  onOpenStats,
 }: PreviewCanvasMountProps) {
+  const layerEditTouchBridge = useTouchMouseBridge<HTMLCanvasElement>();
+  const preview3DMediaDrop = usePreview3DMediaDrop({
+    canvasWrapperRef,
+    enabled: isEditableSource
+      && !isExporting
+      && !sourceMonitorActive
+      && liveFeedbackCompositionId !== null,
+  });
   return (
     <>
       {sourceMonitorActive && sourceMonitorFile && (
@@ -223,33 +235,25 @@ export function PreviewCanvasMount({
       )}
 
       <div style={{ display: sourceMonitorActive ? 'none' : 'contents' }}>
-        <div className="preview-top-right-overlays">
-          <div
-            ref={setSceneGizmoToolbarTarget}
-            className="preview-scene-gizmo-toolbar-slot"
-          />
-          <PreviewStatsOverlay
-            resolution={effectiveResolution}
-            expanded={statsExpanded}
-            onToggle={onToggleStats}
-          />
-        </div>
+        {sceneObjectOverlayEnabled && (
+          <div className="preview-top-right-overlays">
+            <PreviewStatsOverlay
+              resolution={effectiveResolution}
+              onOpen={onOpenStats}
+            />
+          </div>
+        )}
 
         <div
           ref={canvasWrapperRef}
-          className={`preview-canvas-wrapper ${showTransparencyGrid ? 'show-transparency-grid' : ''}`}
+          className={`preview-canvas-wrapper ${showTransparencyGrid ? 'show-transparency-grid' : ''}${preview3DMediaDrop.dropActive ? ' preview-media-drop-active' : ''}`}
           style={viewTransform}
+          onDragLeave={preview3DMediaDrop.handleDragLeave}
+          onDragOver={preview3DMediaDrop.handleDragOver}
+          onDrop={preview3DMediaDrop.handleDrop}
         >
           {engineInitFailed ? (
-            <div className="loading">
-              <p style={{ color: '#ff6b6b', fontWeight: 'bold', marginBottom: 8 }}>WebGPU Initialization Failed</p>
-              <p style={{ fontSize: '0.85em', opacity: 0.8, maxWidth: 400, textAlign: 'center', lineHeight: 1.5 }}>
-                {engineInitError || 'Unknown error'}
-              </p>
-              <p style={{ fontSize: '0.75em', opacity: 0.5, marginTop: 12 }}>
-                {'Try: chrome://flags \u2192 #enable-unsafe-webgpu \u2192 Enabled'}
-              </p>
-            </div>
+            <PreviewEngineFailureNotice error={engineInitError} />
           ) : !isEngineReady ? (
             <div className="loading">
               <div className="loading-spinner" />
@@ -271,6 +275,21 @@ export function PreviewCanvasMount({
                   height: canvasSize.height,
                 }}
               />
+              <NativeLiveInputPreview
+                canvasSize={canvasSize}
+                clips={clips}
+                enabled={isEditableSource
+                  && !isExporting
+                  && !sourceMonitorActive
+                  && !editMode
+                  && !layerTransformMode
+                  && !maskPanelActive
+                  && maskEditMode === 'none'
+                  && !sam2Active
+                  && !showTransparencyGrid
+                  && liveFeedbackCompositionId !== null}
+                tracks={tracks}
+              />
               <StoryboardAnimaticPreviewOverlay
                 displayedCompositionId={displayedCompId}
                 width={effectiveResolution.width}
@@ -278,6 +297,7 @@ export function PreviewCanvasMount({
                 displayWidth={canvasSize.width}
                 displayHeight={canvasSize.height}
               />
+              {!isExporting && !sourceMonitorActive && <TrackingPreviewOverlay displayedCompId={displayedCompId} width={canvasSize.width} height={canvasSize.height} resolution={effectiveResolution}/>}
               {isExporting && exportPreviewFrame && (
                 <canvas
                   ref={exportPreviewCanvasRef}
@@ -305,6 +325,8 @@ export function PreviewCanvasMount({
                   canvasHeight={effectiveResolution.height}
                 />
               )}
+              {isEditableSource && !isExporting && <PreciseFaceOverlay canvasWidth={effectiveResolution.width} canvasHeight={effectiveResolution.height}
+                displayWidth={canvasSize.width} displayHeight={canvasSize.height} />}
               {isEditableSource && selectedClip?.analysis?.faceAnalysis && (
                 <FaceAnalysisOverlay
                   canvasWidth={effectiveResolution.width}
@@ -380,11 +402,14 @@ export function PreviewCanvasMount({
             width={containerSize.width || 100}
             height={containerSize.height || 100}
             className="preview-overlay-fullscreen"
+            {...layerEditTouchBridge}
             onMouseDown={handleOverlayMouseDown}
             onMouseMove={handleOverlayMouseMove}
             onMouseUp={handleOverlayMouseUp}
             onMouseLeave={handleOverlayMouseUp}
-            onDoubleClick={textClipEditMode ? () => setTextTyping(true) : undefined}
+            onDoubleClick={textClipEditMode && !selectedClip?.captionProperties
+              ? () => setTextTyping(true)
+              : undefined}
             style={{
               position: 'absolute',
               top: 0,
@@ -396,6 +421,19 @@ export function PreviewCanvasMount({
                 : getCursorForHandle(hoverHandle),
               pointerEvents: 'auto',
             }}
+          />
+        )}
+
+        {isEngineReady && isEditableSource && !isExporting && !sourceMonitorActive
+          && !sceneNavEnabled && !maskPanelActive && !textPreviewEditorEnabled && (
+          <CaptionWordPreviewEditor
+            canvasInContainer={canvasInContainer}
+            canvasSize={canvasSize}
+            canvasWrapperRef={canvasWrapperRef}
+            effectiveResolution={effectiveResolution}
+            enabled
+            overlayRef={overlayRef}
+            viewZoom={viewZoom}
           />
         )}
 
@@ -421,6 +459,30 @@ export function PreviewCanvasMount({
           </div>
         )}
 
+        {isEngineReady && isEditableSource && !isExporting && !sourceMonitorActive
+          && selectedClip?.source?.type === 'flock' && (
+          <div
+            className="preview-flock-guidance-overlay-host"
+            style={{
+              ...viewTransform,
+              position: 'absolute',
+              inset: 0,
+              zIndex: 18,
+              pointerEvents: 'none',
+            }}
+          >
+            <FlockGuidanceOverlay
+              clip={selectedClip}
+              canvasSize={canvasSize}
+              viewport={effectiveResolution}
+              compositionId={displayedCompId}
+              sceneNavClipId={sceneNavClipId}
+              previewCameraOverride={previewCameraOverride}
+              enabled={!maskPanelActive && !sam2Active && !textPreviewEditorEnabled}
+            />
+          </div>
+        )}
+
         {isEngineReady && motionPathOverlayProps.visible && (
           <div
             className="preview-motion-path-overlay-host"
@@ -442,7 +504,6 @@ export function PreviewCanvasMount({
 
         <PreviewEditHints
           editCameraOrthoHint={editCameraOrthoHint}
-          effectiveSceneNavFpsMode={effectiveSceneNavFpsMode}
           isEditableSource={isEditableSource}
           layerTransformMode={layerTransformMode}
           maskNavigationMode={maskNavigationMode}
@@ -451,15 +512,18 @@ export function PreviewCanvasMount({
           textTypingActive={textTypingActive}
         />
 
-        <PreviewBottomControls
-          showTransparencyGrid={showTransparencyGrid}
-          onToggleTransparency={toggleTransparency}
-          previewQuality={previewQuality}
-          setPreviewQuality={setPreviewQuality}
-          qualityOpen={qualityOpen}
-          setQualityOpen={setQualityOpen}
-          qualityDropdownRef={qualityDropdownRef}
-        />
+        {showBottomControls && sceneObjectOverlayEnabled && (
+          <PreviewBottomControls
+            showTransparencyGrid={showTransparencyGrid}
+            onToggleTransparency={toggleTransparency}
+            previewQuality={previewQuality}
+            setPreviewQuality={setPreviewQuality}
+            qualityOpen={qualityOpen}
+            setQualityOpen={setQualityOpen}
+            qualityDropdownRef={qualityDropdownRef}
+          />
+        )}
+
       </div>
     </>
   );

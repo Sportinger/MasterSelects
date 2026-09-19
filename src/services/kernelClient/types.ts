@@ -39,6 +39,14 @@ export interface KernelDecisionPrompt {
   allowFreeform?: boolean;
 }
 
+export interface KernelUserInputRequest {
+  allowFreeform: boolean;
+  allowMultiple: boolean;
+  id: string;
+  options: Array<{ description: string; id: string; title: string }>;
+  question: string;
+}
+
 export interface KernelRunResponse {
   [key: string]: unknown;
 }

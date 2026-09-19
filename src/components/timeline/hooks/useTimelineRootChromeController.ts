@@ -1,22 +1,19 @@
-import { useCallback, type ComponentProps } from 'react';
+import type { ComponentProps } from 'react';
 
 import { MAX_ZOOM, MIN_ZOOM } from '../../../stores/timeline/constants';
 import { TimelineNavigatorChrome } from '../components/TimelineNavigatorChrome';
 import { TimelineRootShell } from '../components/TimelineRootShell';
-import { TimelineSlotGridChrome } from '../components/TimelineSlotGridChrome';
-import { animateSlotGrid } from '../slotGridAnimation';
 import { useTimelineSourceMonitorDismiss } from './useTimelineSourceMonitorDismiss';
 
 type RootShellProps = ComponentProps<typeof TimelineRootShell>;
-type SlotGridChromeProps = ComponentProps<typeof TimelineSlotGridChrome>;
 type NavigatorChromeProps = ComponentProps<typeof TimelineNavigatorChrome>;
 
 interface UseTimelineRootChromeControllerParams extends Omit<RootShellProps, 'children' | 'onMouseDownCapture'> {
   duration: NavigatorChromeProps['duration'];
   onScrollChange: NavigatorChromeProps['onScrollChange'];
+  onToggleSlotGrid: () => void;
   onZoomChange: NavigatorChromeProps['onZoomChange'];
   scrollX: NavigatorChromeProps['scrollX'];
-  slotGridProgress: SlotGridChromeProps['slotGridProgress'];
   timelineBodyRef: NavigatorChromeProps['timelineBodyRef'];
   zoom: NavigatorChromeProps['zoom'];
 }
@@ -30,21 +27,19 @@ export function useTimelineRootChromeController({
   effectiveAudioLayerAdvancedMode,
   isHeaderWidthResizing,
   onScrollChange,
+  onToggleSlotGrid,
   onZoomChange,
   openCompositionCount,
   scrollX,
-  slotGridProgress,
   splitDragSmoothing,
   splitDragVideoHeight,
   timelineBodyRef,
   trackFocusMode,
   trackHeaderWidth,
+  trackScaleGestureActive,
   zoom,
 }: UseTimelineRootChromeControllerParams) {
   const handleTimelineSourceMonitorDismiss = useTimelineSourceMonitorDismiss();
-  const handleToggleSlotGrid = useCallback(() => {
-    animateSlotGrid(slotGridProgress < 0.5 ? 1 : 0);
-  }, [slotGridProgress]);
 
   const rootShellProps: Omit<RootShellProps, 'children'> = {
     activeTrackResizeId,
@@ -59,11 +54,7 @@ export function useTimelineRootChromeController({
     splitDragVideoHeight,
     trackFocusMode,
     trackHeaderWidth,
-  };
-
-  const slotGridChromeProps: SlotGridChromeProps = {
-    onToggleSlotGrid: handleToggleSlotGrid,
-    slotGridProgress,
+    trackScaleGestureActive,
   };
 
   const navigatorChromeProps: NavigatorChromeProps = {
@@ -71,7 +62,7 @@ export function useTimelineRootChromeController({
     scrollX,
     zoom,
     timelineBodyRef,
-    slotGridProgress,
+    slotGridProgress: 0,
     minZoom: MIN_ZOOM,
     maxZoom: MAX_ZOOM,
     onScrollChange,
@@ -79,9 +70,8 @@ export function useTimelineRootChromeController({
   };
 
   return {
-    handleToggleSlotGrid,
+    handleToggleSlotGrid: onToggleSlotGrid,
     navigatorChromeProps,
     rootShellProps,
-    slotGridChromeProps,
   };
 }

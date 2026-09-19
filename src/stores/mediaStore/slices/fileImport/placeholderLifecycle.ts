@@ -205,6 +205,31 @@ export function startVideoProxyGenerationIfNeeded(get: () => MediaState, id: str
   });
 }
 
+function startMediaFileThumbnailGenerationIfNeeded(get: () => MediaState, id: string): void {
+  const mediaFile = get().files.find((file) => file.id === id);
+  if (
+    !mediaFile
+    || mediaFile.thumbnailUrl
+    || (mediaFile.type !== 'image' && mediaFile.type !== 'video')
+  ) {
+    return;
+  }
+
+  // A new task lets Safari dismiss the native Photos picker and paint the
+  // usable media item before a potentially slow video seek/thumbnail timeout.
+  setTimeout(() => {
+    const latestState = get() as MediaState & {
+      ensureFileThumbnail?: (mediaFileId: string) => Promise<boolean>;
+    };
+    const latestFile = latestState.files.find((file) => file.id === id);
+    if (!latestFile || latestFile.thumbnailUrl || latestFile.isImporting) return;
+
+    void latestState.ensureFileThumbnail?.(id).catch((error) => {
+      log.warn('Background thumbnail generation failed', { mediaFileId: id, error });
+    });
+  }, 0);
+}
+
 export function finalizeImportedMediaFile(
   set: MediaSliceSet,
   get: () => MediaState,
@@ -213,6 +238,7 @@ export function finalizeImportedMediaFile(
 ): void {
   set((state) => finalizePlaceholder(state, id, result));
   const mediaFile = get().files.find((file) => file.id === id) ?? result;
+  startMediaFileThumbnailGenerationIfNeeded(get, id);
   startMediaFileWaveformGeneration(
     mediaFile,
     (mediaFileId, updates) => updateMediaFileWaveform(set, mediaFileId, updates),

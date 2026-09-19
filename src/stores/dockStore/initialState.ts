@@ -14,6 +14,9 @@ export type DockStoreInitialState = Pick<
   | 'savedLayouts'
   | 'defaultSavedLayoutId'
   | 'activeSavedLayoutId'
+  | 'overLayoutBaseId'
+  | 'mediumLayoutOverride'
+  | 'mobileLayoutOverride'
 >;
 
 export function createDockStoreInitialState(): DockStoreInitialState {
@@ -27,5 +30,8 @@ export function createDockStoreInitialState(): DockStoreInitialState {
     savedLayouts: getFactoryDockLayouts(),
     defaultSavedLayoutId: FACTORY_VIDEO_EDIT_LAYOUT_ID,
     activeSavedLayoutId: FACTORY_VIDEO_EDIT_LAYOUT_ID,
+    overLayoutBaseId: null,
+    mediumLayoutOverride: null,
+    mobileLayoutOverride: null,
   };
 }

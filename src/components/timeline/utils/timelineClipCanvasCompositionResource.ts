@@ -1,6 +1,7 @@
 import { getThumbnailBitmap } from '../../../services/timeline/thumbnailBitmapCache';
 import { thumbnailCacheService } from '../../../services/thumbnailCacheService';
 import type { TimelineClipCanvasWorkerPreparedClipResources } from './timelineClipCanvasWorkerModel';
+import { getTimelineClipCanvasVisualPreviewHeight } from './timelineClipCanvasVisualLayout';
 
 export const TIMELINE_CLIP_CANVAS_COMPOSITION_SEGMENT_MAX_COUNT = 128;
 export const TIMELINE_CLIP_CANVAS_COMPOSITION_BOUNDARY_MAX_COUNT = 512;
@@ -166,7 +167,8 @@ function createTimelineClipCanvasWorkerCompositionSegmentThumbnailStripResource(
     return undefined;
   }
   const bitmapWidth = Math.max(1, Math.min(input.maxBitmapWidth, Math.round(clipWidth)));
-  const bitmapHeight = Math.max(1, Math.min(input.maxBitmapHeight, Math.round(Math.max(1, height - 2))));
+  const previewHeight = getTimelineClipCanvasVisualPreviewHeight(Math.max(1, height - 2));
+  const bitmapHeight = Math.max(1, Math.min(input.maxBitmapHeight, Math.round(previewHeight)));
   const canvas = new OffscreenCanvas(bitmapWidth, bitmapHeight);
   const ctx = canvas.getContext('2d');
   if (!ctx) return undefined;
@@ -216,7 +218,7 @@ function createTimelineClipCanvasWorkerCompositionSegmentThumbnailStripResource(
     bitmap: canvas.transferToImageBitmap(),
     x: 0,
     width: clipWidth,
-    height: Math.max(1, height - 2),
+    height: previewHeight,
     drawCount,
   };
 }

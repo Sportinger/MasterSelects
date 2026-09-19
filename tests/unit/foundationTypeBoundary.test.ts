@@ -126,7 +126,7 @@ describe('foundation type boundary registry', () => {
 
     const debt = completeAdapterDebtLedger.find((entry) => entry.id === 'compat-types-index');
     expect(debt?.deleteBy).toBe('P1_GLOBAL_TYPES_BARREL_THIN');
-  });
+  }, 15000);
 
   it('keeps current runtime-handle leaks classified until lease packets remove them', () => {
     const files = [

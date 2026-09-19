@@ -1,0 +1,167 @@
+@layer features {
+  @container (max-width: 380px) {
+    .resolve-inspector-section {
+      --resolve-inspector-row-height: 22px;
+      --resolve-inspector-label-width: 78px;
+      --resolve-inspector-label-control-gap: 8px;
+      --resolve-inspector-control-action-gap: 8px;
+      --resolve-inspector-action-width: 44px;
+    }
+
+    .resolve-inspector-row {
+      grid-template-columns:
+        var(--resolve-inspector-label-width)
+        var(--resolve-inspector-label-control-gap)
+        minmax(0, 1fr)
+        var(--resolve-inspector-control-action-gap)
+        var(--resolve-inspector-action-width);
+    }
+
+    .resolve-inspector-values--pair {
+      grid-template-columns: minmax(48px, 1fr) 24px minmax(48px, 1fr);
+    }
+
+    .resolve-inspector-slider-value {
+      grid-template-columns: minmax(24px, 1fr) 48px;
+      gap: 4px;
+    }
+
+    .resolve-inspector-field .draggable-number,
+    .resolve-inspector-field .draggable-number-input,
+    .resolve-inspector-field-static,
+    .resolve-inspector-field-static output,
+    .resolve-inspector-icon-button,
+    .resolve-inspector-row-actions .keyframe-toggle,
+    .resolve-inspector-header-actions .keyframe-toggle {
+      height: 20px;
+      font-size: 11px;
+      line-height: 14px;
+    }
+
+    .resolve-inspector-speed-value {
+      grid-template-columns: 42px 18px;
+    }
+  }
+
+  @container (max-width: 300px) {
+    .resolve-inspector-section {
+      --resolve-inspector-label-width: 60px;
+      --resolve-inspector-label-control-gap: 6px;
+      --resolve-inspector-control-action-gap: 5px;
+      --resolve-inspector-action-width: 42px;
+    }
+
+    .resolve-inspector-section-content {
+      padding-inline: 6px;
+    }
+
+    .resolve-inspector-row {
+      min-height: 41px;
+      grid-template-columns: minmax(0, 1fr) var(--resolve-inspector-action-width);
+      grid-template-rows: 18px auto;
+      row-gap: 2px;
+    }
+
+    .resolve-inspector-row-label {
+      grid-column: 1;
+      grid-row: 1;
+      text-align: left;
+    }
+
+    .resolve-inspector-row-control {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      grid-column: 1 / -1;
+      grid-row: 2;
+      justify-self: start;
+    }
+
+    .resolve-inspector-row-control > *,
+    .resolve-inspector-values,
+    .resolve-inspector-slider-value {
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .resolve-inspector-row-control > .inspector-select {
+      width: 50%;
+      max-width: 50%;
+    }
+
+    .resolve-inspector-row-actions {
+      grid-column: 2;
+      grid-row: 1;
+      justify-self: end;
+    }
+
+    .resolve-inspector-values--pair {
+      grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr);
+    }
+
+    .resolve-inspector-values--pair > .resolve-inspector-field,
+    .resolve-inspector-values--pair > .resolve-inspector-field-static {
+      width: 100%;
+    }
+
+    .resolve-inspector-values--pair > .resolve-inspector-link-button,
+    .resolve-inspector-values--pair > :nth-child(2) {
+      justify-self: center;
+    }
+
+    .resolve-inspector-values--single {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .resolve-inspector-slider-value {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+    }
+
+    .resolve-inspector-slider-value input[type="range"],
+    .resolve-inspector-slider-value .handle-only-range {
+      display: none;
+    }
+
+    .resolve-inspector-slider-value > .resolve-inspector-field,
+    .resolve-inspector-slider-value > .resolve-inspector-field-static {
+      width: 100%;
+    }
+
+    .resolve-inspector-speed-value {
+      grid-template-columns: minmax(0, 1fr) 18px;
+      justify-content: stretch;
+    }
+
+    .resolve-camera-navigation-speed {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+    }
+
+    .resolve-camera-navigation-speed input[type="range"] {
+      display: none;
+    }
+
+    .resolve-camera-navigation-speed output {
+      text-align: left;
+    }
+
+    .resolve-inspector-pending {
+      margin-left: 0;
+    }
+  }
+
+  @container (max-width: 210px) {
+    .resolve-inspector-section-content {
+      padding-inline: 5px;
+    }
+
+    .resolve-inspector-values--triple {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .resolve-inspector-values--triple > :last-child {
+      grid-column: 1 / -1;
+    }
+  }
+}

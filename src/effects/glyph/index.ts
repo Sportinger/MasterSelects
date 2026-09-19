@@ -1,0 +1,20 @@
+import { createGlyphEffect } from './glyphEffectFactory';
+
+export const ascii = createGlyphEffect({ id: 'ascii', name: 'ASCII', entryPoint: 'asciiFragment' });
+export const asciiGhost = createGlyphEffect({ id: 'ascii-ghost', name: 'ASCII Ghost', entryPoint: 'asciiGhostFragment', animated: true, feedback: true });
+export const ditherText = createGlyphEffect({ id: 'dither-text', name: 'Dither Text', entryPoint: 'ditherTextFragment', animated: true, defaultCellSize: 10 });
+export const wordMosaic = createGlyphEffect({ id: 'word-mosaic', name: 'Word Mosaic', entryPoint: 'wordMosaicFragment', defaultCellSize: 22, defaultRamp: 'detailed' });
+export const matrix = createGlyphEffect({ id: 'matrix', name: 'Matrix Rain', entryPoint: 'matrixFragment', animated: true, defaultRamp: 'symbols' });
+export const pixelCode = createGlyphEffect({ id: 'pixel-code', name: 'Pixel Code', entryPoint: 'pixelCodeFragment', defaultRamp: 'binary', defaultCellSize: 10 });
+export const numberField = createGlyphEffect({ id: 'number-field', name: 'Number Field', entryPoint: 'numberFieldFragment', defaultRamp: 'numeric' });
+export const gridGlyph = createGlyphEffect({ id: 'grid-glyph', name: 'Grid Glyph', entryPoint: 'gridGlyphFragment' });
+export const capsuleCloud = createGlyphEffect({ id: 'capsule-cloud', name: 'Tag Pills', entryPoint: 'capsuleCloudFragment', animated: true, defaultCellSize: 28, defaultRamp: 'detailed' });
+export const inscribe = createGlyphEffect({ id: 'inscribe', name: 'Inscribe', entryPoint: 'inscribeFragment', defaultRamp: 'symbols' });
+export const dataHatch = createGlyphEffect({ id: 'data-hatch', name: 'Data Hatching', entryPoint: 'dataHatchFragment', animated: true, defaultRamp: 'binary' });
+export const glyphMatrix = createGlyphEffect({ id: 'glyph-matrix', name: 'Glyph Matrix', entryPoint: 'glyphMatrixFragment', animated: true, defaultRamp: 'detailed' });
+export const symbolMatrix = createGlyphEffect({ id: 'symbol-matrix', name: 'Symbol Matrix', entryPoint: 'symbolMatrixFragment', animated: true, defaultRamp: 'symbols' });
+export const retroMatrix = createGlyphEffect({ id: 'retro-matrix', name: 'Retro Matrix', entryPoint: 'retroMatrixFragment', animated: true, defaultRamp: 'numeric' });
+export const pixelDither = createGlyphEffect({ id: 'pixel-dither', name: 'Pixel Dither Glow', entryPoint: 'pixelDitherFragment', animated: true, defaultCellSize: 9 });
+export const brandGenerator = createGlyphEffect({ id: 'brand-generator', name: 'Brand Generator', entryPoint: 'brandGeneratorFragment', defaultCellSize: 24, defaultRamp: 'blocks' });
+export const uiCollage = createGlyphEffect({ id: 'ui-collage', name: 'Creative UI Collage', entryPoint: 'uiCollageFragment', animated: true, defaultCellSize: 18, defaultRamp: 'binary' });
+export const stitchPoster = createGlyphEffect({ id: 'stitch-poster', name: 'Stitch Poster', entryPoint: 'stitchPosterFragment', defaultCellSize: 12, defaultRamp: 'symbols' });

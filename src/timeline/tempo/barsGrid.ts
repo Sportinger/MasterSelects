@@ -175,11 +175,7 @@ export function createBarsGridPlan(input: BarsGridPlanInput): BarsGridPlan {
  */
 export function nearestBarTime(tempoMap: TempoMap, time: number): number {
   // A bar can be no longer than the slowest beat times the widest meter.
-  const widestNumerator = tempoMap.events.reduce(
-    (widest, event) => Math.max(widest, event.numerator),
-    1,
-  );
-  const window = longestBeatSeconds(tempoMap) * widestNumerator;
+  const window = longestBarSeconds(tempoMap);
   const lines = iterateBarBeatLines(
     tempoMap,
     Math.max(0, time - window),
@@ -197,6 +193,25 @@ export function nearestBarTime(tempoMap: TempoMap, time: number): number {
     }
   }
   return best ?? Math.max(0, time);
+}
+
+// The longest bar anywhere in the map — the slowest beat times the widest meter.
+function longestBarSeconds(tempoMap: TempoMap): number {
+  const widestNumerator = tempoMap.events.reduce(
+    (widest, event) => Math.max(widest, event.numerator),
+    1,
+  );
+  return longestBeatSeconds(tempoMap) * widestNumerator;
+}
+
+/**
+ * Half-width of a snap search window guaranteed to contain a line on BOTH sides
+ * of any time, for every subdivision — including the coarsest one ('bar', where
+ * consecutive lines are a whole bar apart and the time can sit anywhere inside
+ * one). Two bars at the slowest tempo and widest meter covers that worst case.
+ */
+export function barsGridSnapRadiusSeconds(tempoMap: TempoMap): number {
+  return longestBarSeconds(tempoMap) * 2;
 }
 
 export interface BarsGridSnapTimesInput {

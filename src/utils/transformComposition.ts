@@ -11,10 +11,11 @@ import type { ClipTransform } from '../types';
  * - Position is an absolute offset applied AFTER scale
  * - So child position should NOT be multiplied by parent scale
  *
- * - Position: Parent position + rotated child position
+ * - Position: Parent position + rotated child position, including the parent's
+ *   uniform Scale All value so children follow the same group-scale motion
  * - Scale: Child scale is multiplied by parent scale
  * - Rotation: Child rotation is added to parent rotation
- * - Opacity: Child opacity is multiplied by parent opacity
+ * - Opacity: Child opacity stays local and is never inherited
  */
 export function composeTransforms(
   parent: ClipTransform,
@@ -23,26 +24,34 @@ export function composeTransforms(
   // Convert parent Z rotation to radians for position rotation
   const parentRotZ = (parent.rotation.z * Math.PI) / 180;
 
-  // Rotate child position by parent's Z rotation
-  // Note: We DON'T multiply by parent scale because in our shader,
-  // scale is applied to UV space, not position space
-  const rotatedX = child.position.x * Math.cos(parentRotZ) - child.position.y * Math.sin(parentRotZ);
-  const rotatedY = child.position.x * Math.sin(parentRotZ) + child.position.y * Math.cos(parentRotZ);
+  // Uniform Scale All represents hierarchy/group scale. Apply it to the child
+  // offset before rotation so the child follows the same motion around the
+  // parent anchor. Independent X/Y scale remains local UV deformation; using
+  // it here would make parenting depend on media/source aspect corrections.
+  const parentUniformScale = parent.scale.all ?? 1;
+  const scaledChildX = child.position.x * parentUniformScale;
+  const scaledChildY = child.position.y * parentUniformScale;
+  const rotatedX = scaledChildX * Math.cos(parentRotZ) - scaledChildY * Math.sin(parentRotZ);
+  const rotatedY = scaledChildX * Math.sin(parentRotZ) + scaledChildY * Math.cos(parentRotZ);
 
   return {
-    // Multiply opacities
-    opacity: parent.opacity * child.opacity,
+    // Opacity is intentionally clip-local. Pick-whip parenting controls only
+    // spatial motion; fading a parent must not hide or fade its children.
+    opacity: child.opacity,
 
     // Child's blend mode takes precedence
     blendMode: child.blendMode,
 
     // Position: Parent position + rotated child position
-    // No scale multiplication - shader handles scale separately in UV space
+    // Scale All affects hierarchy offsets; source-specific X/Y scale does not.
     position: {
       x: parent.position.x + rotatedX,
       y: parent.position.y + rotatedY,
       z: parent.position.z + child.position.z,
     },
+
+    // The pivot remains in the child's local geometry space.
+    anchor: child.anchor ? { ...child.anchor } : { x: 0, y: 0, z: 0 },
 
     // Scale: Multiply parent and child scales
     scale: {

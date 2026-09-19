@@ -1,7 +1,22 @@
 import { create } from 'zustand';
 import { cloudApi, type AuthProvider, type BillingPlanId, type BillingSummaryResponse, type CloudMeResponse } from '../services/cloudApi';
+import {
+  classifyProductAnalyticsFailure,
+  productAnalytics,
+  type ProductAnalyticsCheckoutFailureStage,
+} from '../services/productAnalytics';
+import { navigateToTrustedUrl, requireTrustedNavigationUrl } from '../services/security/trustedNavigation';
 
 export type AccountDialogKind = 'auth' | 'pricing' | 'account' | null;
+
+export interface CheckoutLegalConsent {
+  immediatePerformanceRequested: boolean;
+  locale: string;
+  termsAccepted: boolean;
+  termsVersion: string;
+  withdrawalPolicyRead: boolean;
+  withdrawalVersion: string;
+}
 
 export interface AccountState {
   applyHostedCreditBalance: (creditBalance: number) => void;
@@ -25,12 +40,16 @@ export interface AccountState {
   devLogin: (plan?: string) => Promise<void>;
   login: (input: { email: string; provider: AuthProvider; redirectTo?: string }) => Promise<void>;
   logout: () => Promise<void>;
-  startCheckout: (planId: BillingPlanId | string) => Promise<void>;
+  startCheckout: (planId: BillingPlanId | string, legalConsent?: CheckoutLegalConsent) => Promise<void>;
   openBillingPortal: () => Promise<void>;
 }
 
 function pickCheckoutPlanId(planId: BillingPlanId | string): BillingPlanId | string {
   return planId || 'pro';
+}
+
+export function hasHostedAiSession(session: CloudMeResponse['session'] | null | undefined): boolean {
+  return session?.authenticated === true || session?.guest === true;
 }
 
 /* ── Dev-login mock data (used when backend is not running) ── */
@@ -79,7 +98,8 @@ export const useAccountStore = create<AccountState>((set, get) => ({
   user: null,
   loadAccountState: async () => {
     try {
-      const [me, billingSummary] = await Promise.all([cloudApi.auth.me(), cloudApi.billing.summary()]);
+      const me = await cloudApi.auth.me();
+      const billingSummary = await cloudApi.billing.summary();
       set({
         billingSummary,
         creditBalance: billingSummary.creditBalance ?? me.creditBalance ?? 0,
@@ -110,7 +130,10 @@ export const useAccountStore = create<AccountState>((set, get) => ({
   },
   openAuthDialog: () => set({ dialog: 'auth', error: null, notice: null }),
   openAccountDialog: () => set({ dialog: 'account', error: null, notice: null }),
-  openPricingDialog: () => set({ dialog: 'pricing', error: null, notice: null }),
+  openPricingDialog: () => {
+    productAnalytics.track('pricing_viewed');
+    set({ dialog: 'pricing', error: null, notice: null });
+  },
   closeDialog: () => set({ dialog: null, notice: null }),
   devLogin: async (plan) => {
     const planId = plan ?? 'studio';
@@ -134,16 +157,16 @@ export const useAccountStore = create<AccountState>((set, get) => ({
         redirectTo: input.redirectTo ?? `${window.location.pathname}${window.location.search}`,
       });
       if (response.authorizationUrl) {
-        window.location.assign(response.authorizationUrl);
+        navigateToTrustedUrl(response.authorizationUrl, 'sign-in');
         return;
       }
 
-      if (response.verificationUrl) {
-        if (response.delivery === 'debug_link') {
-          window.location.assign(response.verificationUrl);
-          return;
-        }
+      if (response.verificationUrl && response.delivery === 'debug_link') {
+        navigateToTrustedUrl(response.verificationUrl, 'magic-link verification');
+        return;
+      }
 
+      if (response.nextStep === 'check_email' || response.delivery === 'email_sent') {
         set({
           notice: response.message || 'Magic link sent. Check your inbox to finish sign-in.',
         });
@@ -168,38 +191,42 @@ export const useAccountStore = create<AccountState>((set, get) => ({
 
     try {
       await cloudApi.auth.logout();
-      set({
-        billingSummary: null,
-        creditBalance: 0,
-        creditMeterReference: 0,
-        dialog: null,
-        entitlements: {},
-        hostedAIEnabled: false,
-        notice: null,
-        session: null,
-        user: null,
-      });
+      await get().loadAccountState();
+      set({ dialog: null, notice: null });
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Logout failed' });
     } finally {
       set({ isLoading: false });
     }
   },
-  startCheckout: async (planId) => {
+  startCheckout: async (planId, legalConsent) => {
     set({ isLoading: true, error: null });
+    const analyticsPlanId = String(pickCheckoutPlanId(planId));
+    let failureStage: ProductAnalyticsCheckoutFailureStage = 'session_create';
+    productAnalytics.track('checkout_started', { plan: analyticsPlanId });
 
     try {
       const response = await cloudApi.billing.checkout({
+        legalConsent,
         planId: pickCheckoutPlanId(planId),
         successUrl: `${window.location.origin}/?billing=success&plan=${encodeURIComponent(String(planId))}`,
       });
 
-      if (response.checkoutUrl) {
-        window.location.assign(response.checkoutUrl);
-      } else {
+      failureStage = 'response_validation';
+      if (!response.checkoutUrl) {
         throw new Error('Checkout session did not return a URL');
       }
+      const checkoutUrl = requireTrustedNavigationUrl(response.checkoutUrl, 'checkout');
+      productAnalytics.track('checkout_redirected', { plan: analyticsPlanId });
+      void productAnalytics.flush({ keepalive: true });
+      failureStage = 'redirect';
+      navigateToTrustedUrl(checkoutUrl, 'checkout');
     } catch (error) {
+      productAnalytics.track('checkout_failed', {
+        failure_code: classifyProductAnalyticsFailure(error),
+        failure_stage: failureStage,
+        plan: analyticsPlanId,
+      });
       set({ error: error instanceof Error ? error.message : 'Checkout failed' });
     } finally {
       set({ isLoading: false });
@@ -216,7 +243,7 @@ export const useAccountStore = create<AccountState>((set, get) => ({
       }
 
       const response = await cloudApi.billing.portal({ returnUrl: window.location.origin });
-      window.location.assign(response.portalUrl);
+      navigateToTrustedUrl(response.portalUrl, 'billing portal');
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Billing portal failed' });
     } finally {

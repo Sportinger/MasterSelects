@@ -1,5 +1,5 @@
 export const FILLER_LEXICONS = {
-  de: ['äh', 'ähm', 'hm', 'mhm', 'öh', 'öhm'],
+  de: ['ä', 'ää', 'äh', 'ähh', 'ähm', 'ähmm', 'ah', 'ahm', 'ehm', 'hm', 'hmm', 'mhm', 'öh', 'öhm'],
   en: ['uh', 'um', 'uhm', 'er', 'erm', 'mm'],
 } as const;
 

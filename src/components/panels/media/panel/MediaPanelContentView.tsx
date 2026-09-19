@@ -38,7 +38,12 @@ export function MediaPanelContentView({
   renderBoard,
 }: MediaPanelContentViewProps) {
   return (
-    <div className={`media-panel-content media-panel-content-${viewMode}`} ref={contentRef}>
+    <div
+      className={`media-panel-content media-panel-content-${viewMode}`}
+      data-dock-resize-touch-priority="true"
+      data-dock-tab-swipe-ignore={viewMode === 'classic' ? 'true' : undefined}
+      ref={contentRef}
+    >
       {totalItems === 0 ? (
         <MediaNoMediaEmptyState onContextMenu={onContextMenu} />
       ) : isMediaSearchActive && mediaSearchResultCount === 0 ? (

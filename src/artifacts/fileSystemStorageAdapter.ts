@@ -1,6 +1,9 @@
 import { Logger } from '../services/logger';
 import { FileStorageService, fileStorageService } from '../services/project/core/FileStorageService';
-import { PROJECT_FOLDERS } from '../services/project/core/constants';
+import {
+  getFsaProjectFolderPath,
+  getFsaProjectPackageSession,
+} from '../services/project/core/projectPackage';
 import {
   ARTIFACT_BINARY_FILE_NAME,
   ARTIFACT_HASH_ALGORITHM,
@@ -46,6 +49,18 @@ export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter 
   }
 
   async writeArtifact(manifest: ArtifactManifest, blob: Blob): Promise<void> {
+    const packageSession = getFsaProjectPackageSession(this.projectHandle);
+    if (packageSession) {
+      const entryBase = this.getArtifactEntryBase(manifest.hash);
+      const saved = await packageSession.writeEntries([
+        { folder: 'CACHE_ARTIFACTS', fileName: `${entryBase}/${ARTIFACT_BINARY_FILE_NAME}`, content: blob },
+        { folder: 'CACHE_ARTIFACTS', fileName: `${entryBase}/${ARTIFACT_MANIFEST_FILE_NAME}`, content: JSON.stringify(manifest, null, 2) },
+      ]);
+      if (!saved) throw new Error(`Unable to save packaged artifact ${manifest.artifactId}`);
+      await this.index?.saveArtifactManifest(manifest);
+      return;
+    }
+
     const directory = await this.getArtifactDirectory(manifest.hash, true);
     if (!directory) {
       throw new Error(`Unable to create artifact directory for ${manifest.artifactId}`);
@@ -57,6 +72,18 @@ export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter 
   }
 
   async saveArtifactManifest(manifest: ArtifactManifest): Promise<void> {
+    const packageSession = getFsaProjectPackageSession(this.projectHandle);
+    if (packageSession) {
+      const saved = await packageSession.writeEntry(
+        'CACHE_ARTIFACTS',
+        `${this.getArtifactEntryBase(manifest.hash)}/${ARTIFACT_MANIFEST_FILE_NAME}`,
+        JSON.stringify(manifest, null, 2),
+      );
+      if (!saved) throw new Error(`Unable to save packaged artifact manifest ${manifest.artifactId}`);
+      await this.index?.saveArtifactManifest(manifest);
+      return;
+    }
+
     const directory = await this.getArtifactDirectory(manifest.hash, true);
     if (!directory) {
       throw new Error(`Unable to create artifact directory for ${manifest.artifactId}`);
@@ -101,7 +128,13 @@ export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter 
       return;
     }
 
-    try {
+    const packageSession = getFsaProjectPackageSession(this.projectHandle);
+    if (packageSession) {
+      await packageSession.deleteEntry(
+        'CACHE_ARTIFACTS',
+        `${this.getArtifactEntryBase(manifest.hash)}/${ARTIFACT_MANIFEST_FILE_NAME}`,
+      );
+    } else try {
       const directory = await this.getArtifactDirectory(manifest.hash, false);
       await directory?.removeEntry(ARTIFACT_MANIFEST_FILE_NAME);
     } catch {
@@ -112,6 +145,16 @@ export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter 
   }
 
   async readArtifactBlob(manifest: ArtifactManifest): Promise<Blob | null> {
+    const packageSession = getFsaProjectPackageSession(this.projectHandle);
+    if (packageSession) {
+      const bytes = packageSession.readEntry(
+        'CACHE_ARTIFACTS',
+        `${this.getArtifactEntryBase(manifest.hash)}/${ARTIFACT_BINARY_FILE_NAME}`,
+      );
+      if (!bytes) return null;
+      return new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer]);
+    }
+
     try {
       const directory = await this.getArtifactDirectory(manifest.hash, false);
       if (!directory) {
@@ -130,10 +173,19 @@ export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter 
   }
 
   async deleteArtifactBlob(manifest: ArtifactManifest): Promise<boolean> {
+    const packageSession = getFsaProjectPackageSession(this.projectHandle);
+    if (packageSession) {
+      return packageSession.deleteEntry(
+        'CACHE_ARTIFACTS',
+        this.getArtifactEntryBase(manifest.hash),
+        true,
+      );
+    }
+
     try {
       const shardDirectory = await this.fileStorage.navigateToFolder(
         this.projectHandle,
-        `${PROJECT_FOLDERS.CACHE_ARTIFACTS}/${ARTIFACT_HASH_ALGORITHM}/${manifest.hash.slice(0, 2)}`,
+        `${getFsaProjectFolderPath(this.projectHandle, 'CACHE_ARTIFACTS')}/${ARTIFACT_HASH_ALGORITHM}/${manifest.hash.slice(0, 2)}`,
         false,
       );
       if (!shardDirectory) {
@@ -154,7 +206,7 @@ export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter 
   ): Promise<FileSystemDirectoryHandle | null> {
     return this.fileStorage.navigateToFolder(
       this.projectHandle,
-      `${PROJECT_FOLDERS.CACHE_ARTIFACTS}/${ARTIFACT_HASH_ALGORITHM}/${hash.slice(0, 2)}/${hash}`,
+      `${getFsaProjectFolderPath(this.projectHandle, 'CACHE_ARTIFACTS')}/${ARTIFACT_HASH_ALGORITHM}/${hash.slice(0, 2)}/${hash}`,
       create,
     );
   }
@@ -182,9 +234,26 @@ export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter 
   }
 
   private async scanManifests(): Promise<ArtifactManifest[]> {
+    const packageSession = getFsaProjectPackageSession(this.projectHandle);
+    if (packageSession) {
+      const manifests: ArtifactManifest[] = [];
+      for (const path of packageSession.listEntryPaths('CACHE_ARTIFACTS')) {
+        if (!path.endsWith(`/${ARTIFACT_MANIFEST_FILE_NAME}`)) continue;
+        const bytes = packageSession.readEntry('CACHE_ARTIFACTS', path);
+        if (!bytes) continue;
+        try {
+          const parsed = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+          if (isArtifactManifest(parsed)) manifests.push(parsed);
+        } catch {
+          // Ignore corrupt individual manifests; package validation remains intact.
+        }
+      }
+      return manifests;
+    }
+
     const root = await this.fileStorage.navigateToFolder(
       this.projectHandle,
-      `${PROJECT_FOLDERS.CACHE_ARTIFACTS}/${ARTIFACT_HASH_ALGORITHM}`,
+      `${getFsaProjectFolderPath(this.projectHandle, 'CACHE_ARTIFACTS')}/${ARTIFACT_HASH_ALGORITHM}`,
       false,
     );
     if (!root) {
@@ -210,5 +279,9 @@ export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter 
     }
 
     return manifests;
+  }
+
+  private getArtifactEntryBase(hash: string): string {
+    return `${ARTIFACT_HASH_ALGORITHM}/${hash.slice(0, 2)}/${hash}`;
   }
 }

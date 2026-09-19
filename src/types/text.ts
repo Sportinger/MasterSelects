@@ -28,6 +28,7 @@ export interface TextClipProperties {
   boxY?: number;
   boxWidth?: number;
   boxHeight?: number;
+  wrapMode?: 'word' | 'none';    // Area text: word-wrap by default; none preserves only explicit line breaks
   textBounds?: TextBoundsPath;    // AE-style editable paragraph bounds/path
 
   // Stroke (outline)

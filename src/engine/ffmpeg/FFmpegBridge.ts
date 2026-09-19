@@ -22,11 +22,30 @@ interface FFmpegCore {
     readdir: (path: string) => string[];
     mkdir: (path: string) => void;
   };
-  callMain: (args: string[]) => number;
+  exec?: (...args: string[]) => number;
+  callMain?: (args: string[]) => number;
   setLogger: (logger: (log: { type: string; message: string }) => void) => void;
   setProgress: (handler: (progress: { progress: number; time: number }) => void) => void;
   reset: () => void;
   ret: number;
+  /** Live Uint8Array view over the wasm linear memory; replaced by Emscripten on growth. */
+  HEAPU8?: Uint8Array;
+}
+
+/**
+ * Snapshot of the wasm heap state. `bytes` is a live view; callers must not
+ * cache it across FFmpeg runs because memory growth replaces the buffer.
+ */
+export interface FFmpegHeapState {
+  bytes: Uint8Array;
+  /** Increments after load and after every executed FFmpeg command. */
+  epoch: number;
+}
+
+export interface FFmpegVirtualCommandInput {
+  inputFiles: Record<string, Uint8Array>;
+  args: string[];
+  outputPaths: string[];
 }
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
@@ -41,6 +60,8 @@ export class FFmpegBridge {
   private cancelled = false;
   private totalFrames = 0;
   private startTime = 0;
+  private heapEpoch = 0;
+  private heapListeners = new Set<(epoch: number) => void>();
 
   /**
    * Check if FFmpeg WASM is supported in this browser
@@ -111,8 +132,18 @@ export class FFmpegBridge {
         throw new Error('createFFmpegCore not found after script load');
       }
 
-      log.debug('Fetching ffmpeg-core.wasm...');
-      const wasmBinary = await fetch(`${baseURL}/ffmpeg-core.wasm`).then(r => r.arrayBuffer());
+      log.debug('Fetching compressed ffmpeg-core.wasm...');
+      const compressedWasm = await fetch(`${baseURL}/ffmpeg-core.wasm.gz`).then(r => r.arrayBuffer());
+      const compressedBytes = new Uint8Array(compressedWasm);
+      if (compressedBytes[0] !== 0x1f || compressedBytes[1] !== 0x8b) {
+        throw new Error('FFmpeg core asset was not served as gzip data.');
+      }
+      if (typeof DecompressionStream === 'undefined') {
+        throw new Error('This browser cannot decompress the FFmpeg core.');
+      }
+      const wasmBinary = await new Response(
+        new Blob([compressedWasm]).stream().pipeThrough(new DecompressionStream('gzip')),
+      ).arrayBuffer();
 
       log.debug('Initializing FFmpeg core...');
       const core = await createFFmpegCore({
@@ -130,6 +161,12 @@ export class FFmpegBridge {
           }
         },
       }) as FFmpegCore;
+
+      core.setLogger?.(({ type, message }) => {
+        if (!message.startsWith('Aborted')) {
+          this.handleLog(type === 'stderr' ? 'warning' : 'info', message);
+        }
+      });
 
       // Set up progress handler
       if (core.setProgress) {
@@ -157,6 +194,7 @@ export class FFmpegBridge {
       (window as unknown as Record<string, unknown>).ffmpegCore = core;
 
       this.ffmpeg = core;
+      this.bumpHeapEpoch();
 
       const loadTime = ((performance.now() - startTime) / 1000).toFixed(2);
       log.info(`Loaded in ${loadTime}s`);
@@ -197,6 +235,47 @@ export class FFmpegBridge {
         this.onProgress(progress);
       }
     }
+  }
+
+  private execute(args: string[]): number {
+    if (!this.ffmpeg) throw new Error('FFmpeg not loaded');
+    try {
+      if (typeof this.ffmpeg.exec === 'function') return this.ffmpeg.exec(...args);
+      if (typeof this.ffmpeg.callMain === 'function') return this.ffmpeg.callMain(args);
+      throw new Error('Loaded FFmpeg core has no executable entry point.');
+    } finally {
+      this.bumpHeapEpoch();
+    }
+  }
+
+  private bumpHeapEpoch(): void {
+    this.heapEpoch += 1;
+    for (const listener of this.heapListeners) {
+      try {
+        listener(this.heapEpoch);
+      } catch (error) {
+        log.warn('Heap listener failed', error);
+      }
+    }
+  }
+
+  /**
+   * Read access to the wasm linear memory of the loaded core. The returned
+   * view is live: freed allocations from previous commands stay in place
+   * until reused, which is exactly what the Memory Leak effect visualizes.
+   */
+  getHeapState(): FFmpegHeapState | null {
+    const heap = this.ffmpeg?.HEAPU8;
+    if (!heap || heap.byteLength === 0) return null;
+    return { bytes: heap, epoch: this.heapEpoch };
+  }
+
+  /** Subscribe to heap epoch changes (load + every executed command). */
+  subscribeHeap(listener: (epoch: number) => void): () => void {
+    this.heapListeners.add(listener);
+    return () => {
+      this.heapListeners.delete(listener);
+    };
   }
 
   /**
@@ -280,7 +359,7 @@ export class FFmpegBridge {
       // Execute FFmpeg (callMain is synchronous but may take a while)
       log.info('Starting FFmpeg encode...');
       const encodeStart = performance.now();
-      const exitCode = this.ffmpeg.callMain(args);
+      const exitCode = this.execute(args);
       const encodeTime = ((performance.now() - encodeStart) / 1000).toFixed(2);
       log.info(`FFmpeg finished in ${encodeTime}s with exit code ${exitCode}`);
 
@@ -345,6 +424,43 @@ export class FFmpegBridge {
     return [...this.logs];
   }
 
+  /** Run a bounded FFmpeg command against files in its in-memory filesystem. */
+  async runVirtualCommand(input: FFmpegVirtualCommandInput): Promise<Record<string, Uint8Array>> {
+    if (!this.ffmpeg) await this.load();
+    if (!this.ffmpeg) throw new Error('FFmpeg not loaded');
+    for (const pathName of [...Object.keys(input.inputFiles), ...input.outputPaths]) {
+      if (!pathName.startsWith('/input/') && !pathName.startsWith('/output/')) {
+        throw new Error(`FFmpeg virtual path must stay under /input or /output: ${pathName}`);
+      }
+    }
+
+    this.logs = [];
+    this.cleanup();
+    const fs = this.ffmpeg.FS;
+    try {
+      try { fs.mkdir('/input'); } catch { /* exists */ }
+      try { fs.mkdir('/output'); } catch { /* exists */ }
+      for (const [pathName, bytes] of Object.entries(input.inputFiles)) {
+        fs.writeFile(pathName, bytes);
+      }
+      this.ffmpeg.reset?.();
+      const exitCode = this.execute(['-nostdin', '-y', '-loglevel', 'warning', ...input.args]);
+      if (exitCode !== 0) {
+        const detail = this.logs.slice(-8).map(entry => entry.message).join('\n');
+        throw new Error(`FFmpeg exited with code ${exitCode}${detail ? `:\n${detail}` : ''}`);
+      }
+
+      const outputs: Record<string, Uint8Array> = {};
+      for (const pathName of input.outputPaths) {
+        const source = fs.readFile(pathName);
+        outputs[pathName] = new Uint8Array(source);
+      }
+      return outputs;
+    } finally {
+      this.cleanup();
+    }
+  }
+
   /**
    * Extract audio from a video file
    * Returns audio as AAC in M4A container for fast loading
@@ -399,7 +515,7 @@ export class FFmpegBridge {
       }
 
       // Execute FFmpeg
-      const exitCode = this.ffmpeg.callMain(args);
+      const exitCode = this.execute(args);
 
       onProgress?.(90);
 

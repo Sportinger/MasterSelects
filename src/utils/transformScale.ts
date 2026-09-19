@@ -13,11 +13,12 @@ export function getScaleAll(scale: Partial<ClipScale> | undefined): number {
 export function getEffectiveScale(scale: Partial<ClipScale> | undefined): { x: number; y: number; z?: number } {
   const all = getScaleAll(scale);
   const scaleZ = scale?.z;
+  const hasUniform3DScale = scale?.all !== undefined;
 
   return {
     x: finiteNumber(scale?.x, 1) * all,
     y: finiteNumber(scale?.y, 1) * all,
-    ...(scaleZ !== undefined ? { z: finiteNumber(scaleZ, 1) * all } : {}),
+    ...(scaleZ !== undefined || hasUniform3DScale ? { z: finiteNumber(scaleZ, 1) * all } : {}),
   };
 }
 

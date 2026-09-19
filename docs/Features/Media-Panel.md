@@ -52,6 +52,8 @@ Other files are routed through the universal Signal IR importer. Signal assets c
 #### Import Button
 Click the **Import** button in the panel header. Uses the File System Access API when available (Chrome/Edge) for native file picker with persistent handles, or falls back to a standard file input.
 
+On touch-first devices, including Android and iPadOS/iOS, the visible Import control is bound directly to the native file input so the browser keeps the required user activation and opens it with one tap. Its media-only filter offers the system photo/video library instead of forcing the Files browser. MasterSelects receives only the photos or videos the user explicitly selects; the browser never gets unrestricted device-file access.
+
 #### Add Dropdown
 Click the **+ Add** button for creating new items:
 - **Composition** - New composition (uses active comp's output resolution)
@@ -78,9 +80,13 @@ Click the **+ Add** button for creating new items:
 
 #### Premiere Pro Projects
 
-Dropping or selecting a `.prproj` creates one import folder and converts every Premiere sequence into a MasterSelects composition. The importer preserves video/audio track layout, cuts, trims, clip speed, nested composition references, and static Motion/Opacity values. Video tracks are reversed into MasterSelects' top-to-bottom compositing order.
+Dropping or selecting a `.prproj` parses the project incrementally in a worker, then opens a sequence chooser before timeline data is created. The selected Premiere sequences become MasterSelects compositions inside one import folder. The importer preserves video/audio track layout, cuts, trims, clip speed, nested composition references, and static Motion/Opacity values. Video tracks are reversed into MasterSelects' top-to-bottom compositing order.
 
 Media already present in the current MasterSelects project is reused by normalized path and filename. Sources that cannot be identified uniquely are added as missing media with their Premiere path and flow through the normal Relink dialog.
+
+Premiere-attached media remains a single Media Panel item with durable alternate source descriptions. If an original such as BRAW is offline but its attached ProRes `.mov` proxy is available, **Auto** can activate that linked proxy without pretending the original has been relinked. The timeline keeps the original composition-space dimensions while decoding the lower-resolution proxy, so Premiere's proxy scaling is reproduced automatically.
+
+Use **Media Source** in a video's context menu to choose **Auto**, **Original**, or a specific **Linked Proxy**. Linked file handles are restored with the project, and the normal Relink scan can satisfy original and linked filenames independently. While an external linked proxy is active, MasterSelects does not generate another JPEG/WAV proxy from it. ProRes proxy thumbnails use the TurboRes decoder and the persistent thumbnail cache is reused across refreshes.
 
 ### Import Pipeline
 
@@ -92,7 +98,7 @@ Media imports use a two-phase approach:
    - Gaussian-splat stats extraction (container, file size, per-file splat count, and sequence totals)
    - Thumbnail generation (for video and image files)
    - File hash calculation (for deduplication and proxy matching)
-   - Copy to project RAW folder when `copyMediaToProject` is enabled, or when the import is forced
+   - Copy to project RAW folder when `copyMediaToProject` is enabled, or when the import is forced; the setting is disabled by default
    - Existing proxy detection (by file hash)
 
 **Deduplication:** Files with matching name + size are automatically skipped.
@@ -175,7 +181,7 @@ Image and video-capable media items show a cursor-following preview tooltip only
 - Video board nodes request missing thumbnails lazily like images, use a middle-frame thumbnail as the poster frame, and skim while hovered: horizontal mouse position maps to video time with a full-height white scrub indicator line like editor thumbnail scrubbing instead of always starting playback at 0:00; the board also loads a capped set of visible video nodes as poster fallbacks, including in the zoomed-out overview canvas mode, so missing or black cached thumbnails do not leave the board blank
 - Board zoom supports deep inspection up to 6400%; from 250% zoom upward, board UI text, badges, and metadata overlays counter-scale so they stop growing while media content keeps magnifying
 - At 400% zoom and higher, the image node closest to the viewport center is promoted from its thumbnail to the original source URL; other nodes stay on thumbnails so high-resolution files are lazy-loaded one at a time
-- During deep board zoom, the focused node's existing name, metadata, and duration overlays stay visible and slide inward when their normal positions would run beyond the Media Panel edges; the collapsed Chat/Generate/Downloads launcher is hidden so it does not cover the inspected media
+- During deep board zoom, the focused node's existing name, metadata, and duration overlays stay visible and slide inward when their normal positions would run beyond the Media Panel edges; the collapsed Chat/Generate/Studio/Downloads launcher is hidden so it does not cover the inspected media
 - Board order, folder group offsets, and viewport are saved into the project UI state, with `localStorage` as the live-session fallback
 - Drag files or folders from the OS onto a group to import directly into that folder
 - OS file drops on the Board canvas place the imported top-level files at the drop point instead of waiting for auto-pack placement
@@ -187,8 +193,11 @@ Image and video-capable media items show a cursor-following preview tooltip only
 - The **Generate** board action expands the Media Panel's bottom-right AI generator tray; generated results still import through the normal Media Store path
 
 ### AI Generator Tray
-- A compact **Generate** pill is available at the bottom right of the Media Panel without changing the current Classic, Icons, or Board view
+- A compact four-action launcher is available at the bottom right of the Media Panel without changing the current Classic, Icons, or Board view: **Chat**, **Generate**, **Studio**, and **Downloads**
 - Expanding the pill opens only the compact FlashBoard prompt composer: prompt field, model controls, ordered reference media cards, multi-shot controls, and the generate button
+- **Studio** opens the additional docked [AI Studio](./AI-Studio.md); it does not replace or change the compact **Generate** flow
+- Chat mode has exactly two prompt paths, `Auto` and `Story`. Auto defaults to resumable `Codex Direct` in development and production, with hosted `Fast` as the other visible model choice; Story uses the same Chat button to start or reopen the docked preproduction workflow
+- The Story run is not duplicated inside Media: Media retains the single prompt input and chat history, while direction, treatment, sources, master looks, keyframes, progress, and review stay in Story
 - Image, video, and audio files can be referenced from Classic, Icons, or Board view by right-clicking and choosing **Reference in AI Prompt**; the same menu changes to **Unreference from AI Prompt** when all selected media are already linked
 - Dragging a media-panel image, video, or audio item onto the expanded prompt composer appends it to the ordered reference strip without moving it between folders
 - Queued and running generations appear above the prompt as compact preview cards with output type, status, elapsed timer, prompt, provider metadata, progress when available, and dismiss controls for failed/canceled jobs
@@ -251,16 +260,29 @@ Deleting imported media files from the Media Panel performs a project-wide clean
 
 ### Creating Compositions
 1. Add dropdown -> Composition
-2. Created with settings from `settingsStore.outputResolution`
-3. Default duration: 60 seconds, frame rate: 30 fps
-4. Starts with two Video tracks and one Audio track
+2. The Composition Settings dialog opens before an empty composition is created.
+3. Width, height, frame rate, and duration can be confirmed or customized.
+4. Starts with two Video tracks and one Audio track.
+
+Creating a composition from a media file is the exception: it uses the exact
+source dimensions and timing immediately, so no redundant settings dialog is
+shown.
 
 ### Composition Settings Dialog
 Edit via right-click -> Composition Settings:
-- Width and height
-- Frame rate
-- Duration
-- Resizing adjusts clip transforms to maintain pixel positions
+- Width and height are free numeric values with a link toggle for changing both
+  dimensions proportionally.
+- The shared landscape/portrait control swaps the dimensions without replacing
+  the chosen resolution preset.
+- Resolution presets cover 720p, 1080p, 1440p, and 4K; custom dimensions remain
+  editable directly.
+- Frame rate uses common presets plus a `Custom` numeric option.
+- Duration is freely editable in seconds.
+- The dialog uses the same soft liquid-glass IOR treatment as the mobile layer controls, including subtle background refraction.
+- Editing the active composition updates the preview crop live. Existing layers
+  keep their visual size while normalized positions and position keyframes are
+  adjusted to preserve their pixel offsets. Cancel restores the original
+  composition settings and transforms.
 
 The active composition's `frameRate` is the playback/timeline source of truth:
 timeline ruler labels, dynamic preview target FPS diagnostics, and the Media
@@ -290,11 +312,14 @@ getOpenCompositions()                // List open tabs
 ### Nested Compositions
 - Drag composition to timeline to create a nested comp clip
 - Double-click composition clip to navigate into it
+- Double-clicking a composition item outside its name opens that composition in the Timeline, even when no composition is currently open. Double-clicking the name itself remains the explicit rename gesture and does not open a preview or context menu.
+- Hovering a composition item can show a correctly aspect-fitted frame preview without changing the active Timeline composition.
 - Playhead position syncs between parent and nested compositions
 - Changes in nested comp reflect in parent timeline
 
 ### Source Monitor
 - Double-click a video or image file to open it in the source monitor
+- Double-clicking a completed AI Studio generation tile opens its imported media through the same Source Monitor path.
 - Image source monitor sessions include a `CROP` button. Applying a crop imports a new image beside the source, prefixed as `CROP <original name>`; in Board view the new node is placed beside the original node.
 - Locked-aspect image crop resizing keeps the opposite corner anchored while dragging a corner handle.
 - Sets `sourceMonitorFileId` in the store
@@ -374,7 +399,7 @@ Click the label dot in the list view to open the color picker. When multiple ite
 
 ## Context Menu
 
-Right-click on items or empty space for context options.
+Right-click on items or empty space for context options. On touch devices, either long-press or double-tap opens the menu above the finger when viewport space permits. The first tap on a menu action is accepted immediately, and a press anywhere outside the menu closes it. Safari keeps these gestures active after project hydration and a page refresh without requiring a layout switch first.
 
 ### Always Available
 - Import Media...
@@ -398,6 +423,7 @@ Right-click on items or empty space for context options.
 ### Video Files (single selection)
 - **Extract First Frame** / **Extract Last Frame** imports a PNG still from the selected source video into the same Media Panel folder and selects it after import
 - **Regenerate** submenu: Proxy / Stop Proxy Generation (X%), Scene Cuts, Thumbnails, and (when audio is available) WAV Audio Proxy, Waveform, and Spectral
+- **Media Source** submenu: Auto / Original / attached Linked Source or Linked Proxy, plus the global **Use MS Proxies** toggle
 - **Show in Explorer** submenu:
   - Raw (downloads file if no native path)
   - Proxy (disabled if no proxy)
@@ -520,8 +546,12 @@ interface MediaFile {
 
 ### Process
 1. Select media in panel
-2. Drag to timeline
+2. Drag to timeline with a mouse, or briefly hold and drag with touch
 3. Drop on appropriate track
+
+Touch drags use the same internal external-drop bridge as desktop and guided drags. Track validation, non-overlap placement, linked video/audio creation, new-track zones, and the timeline drop preview therefore stay on the existing deterministic placement path instead of maintaining a separate mobile clip-creation path. The drag starts only after a deliberate 14 px movement, so small finger jitter remains available to the long-press context menu. A normal vertical panel scroll that starts before the short hold threshold cancels the touch drag, and list rows keep native vertical scrolling without exposing metadata columns during the hold. Classic-list touches are also excluded from dock panel-tab swiping, so a diagonal or edge-started list scroll is not cancelled by panel navigation.
+
+Holding `Shift` while dragging a compatible Media Panel source over an existing clip switches the hover preview to source replacement. Dropping replaces only the clip source and keeps its timing, transforms, effects, masks, and keyframes. The same replacement path is available from the Source section in the Transform tab by dropping a compatible source there.
 
 ### Drag Types
 | Item Type | Drag Payload Kind | Data Transfer Key |
@@ -600,6 +630,8 @@ Files are reloaded in priority order:
 
 On project load and in the Relink dialog, missing files are matched case-insensitively by expected filenames. Recursive scans preserve relative subfolder paths and all duplicate basenames; path suffixes disambiguate matches such as `Folder A/1.mp4` versus `Folder B/1.mp4`. A basename-only collision stays unresolved for manual selection instead of silently linking the wrong file. Sequence assets match their frame filenames (`.glb`, `.ply`, `.splat`) instead of the media-panel display name.
 
+Premiere-linked sources participate in the same scan. Relinking an attached proxy stores it separately from the unavailable original, and source selection can switch between them without changing timeline clip identity or creating duplicate media items.
+
 ### Double-Click Reload
 Double-clicking a file that has lost access triggers a single-file reload attempt with permission request.
 
@@ -665,3 +697,5 @@ Run tests: `npx vitest run`
 ---
 
 *Source: `src/components/panels/MediaPanel.tsx`, `src/components/panels/media/`, `src/stores/mediaStore/index.ts`, `src/stores/mediaStore/slices/`*
+
+Repeated import requests while the native file picker is open are ignored. Only the original request receives the selected files; cancellation and errors release the picker guard for the next request.

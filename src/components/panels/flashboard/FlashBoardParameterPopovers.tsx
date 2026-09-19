@@ -135,7 +135,7 @@ export function FlashBoardParameterPopovers({
               <em>{durationRange.min}s–{durationRange.max}s</em>
             </label>
           ) : (
-            <div className="fb-popover-pills">
+            <div className="fb-popover-pills fb-duration-option-grid">
               {durationOptions.map((option) => renderPopoverOption(option, () => {
                 onDurationChange(option.value);
                 onClosePopover('duration');

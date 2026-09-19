@@ -17,13 +17,35 @@ import {
 
 const log = Logger.create('ClipAnalysisState');
 
-interface ClipAnalysisStateUpdate {
+export interface ClipAnalysisStateUpdate {
   status?: AnalysisStatus;
   progress?: number;
   analysis?: ClipAnalysis | null;
   faceStatus?: AnalysisStatus;
   faceProgress?: number;
   faceMessage?: string | null;
+}
+
+function applyAnalysisUpdate<T extends {
+  analysis?: ClipAnalysis;
+  analysisProgress?: number;
+  analysisStatus?: AnalysisStatus;
+  faceAnalysisMessage?: string;
+  faceAnalysisProgress?: number;
+  faceAnalysisStatus?: AnalysisStatus;
+}>(value: T, data: ClipAnalysisStateUpdate): T {
+  const next = {
+    ...value,
+    analysisStatus: data.status ?? value.analysisStatus,
+    analysisProgress: data.progress ?? value.analysisProgress,
+    faceAnalysisStatus: data.faceStatus ?? value.faceAnalysisStatus,
+    faceAnalysisProgress: data.faceProgress ?? value.faceAnalysisProgress,
+    faceAnalysisMessage: data.faceMessage === null
+      ? undefined
+      : data.faceMessage ?? value.faceAnalysisMessage,
+  };
+  if ('analysis' in data) next.analysis = data.analysis ?? undefined;
+  return next;
 }
 
 export function createStaleAnalysisRecoveryUpdate(
@@ -69,41 +91,40 @@ export function updateClipAnalysis(
 ): TimelineClip | undefined {
   const clips = readTimelineAnalysisClips();
   const originalClip = clips.find(clip => clip.id === clipId);
-  const updatedClips = applySharedClipAnalysisState(clips, clipId, (clip) => {
-    const next = {
-      ...clip,
-      analysisStatus: data.status ?? clip.analysisStatus,
-      analysisProgress: data.progress ?? clip.analysisProgress,
-      faceAnalysisStatus: data.faceStatus ?? clip.faceAnalysisStatus,
-      faceAnalysisProgress: data.faceProgress ?? clip.faceAnalysisProgress,
-      faceAnalysisMessage: data.faceMessage === null
-        ? undefined
-        : data.faceMessage ?? clip.faceAnalysisMessage,
-    };
-    if ('analysis' in data) next.analysis = data.analysis ?? undefined;
-    return next;
-  });
+  const updatedClips = applySharedClipAnalysisState(
+    clips,
+    clipId,
+    clip => applyAnalysisUpdate(clip, data),
+  );
 
   updateTimelineAnalysisClips(() => updatedClips);
   const mediaFileId = originalClip?.source?.mediaFileId || originalClip?.mediaFileId;
   if (mediaFileId) {
     updateTimelineAnalysisMediaFiles(files => files.map(file => {
       if (file.id !== mediaFileId) return file;
-      const next = {
-        ...file,
-        analysisStatus: data.status ?? file.analysisStatus,
-        analysisProgress: data.progress ?? file.analysisProgress,
-        faceAnalysisStatus: data.faceStatus ?? file.faceAnalysisStatus,
-        faceAnalysisProgress: data.faceProgress ?? file.faceAnalysisProgress,
-        faceAnalysisMessage: data.faceMessage === null
-          ? undefined
-          : data.faceMessage ?? file.faceAnalysisMessage,
-      };
-      if ('analysis' in data) next.analysis = data.analysis ?? undefined;
-      return next;
+      return applyAnalysisUpdate(file, data);
     }));
   }
   return originalClip;
+}
+
+/** Update a source-owned analysis even when it has no timeline occurrence. */
+export function updateMediaFileAnalysis(
+  mediaFileId: string,
+  data: ClipAnalysisStateUpdate,
+): void {
+  updateTimelineAnalysisMediaFiles(files => files.map(file => (
+    file.id === mediaFileId ? applyAnalysisUpdate(file, data) : file
+  )));
+  const clips = readTimelineAnalysisClips();
+  const hasTimelineOccurrence = clips.some(clip => (
+    (clip.source?.mediaFileId || clip.mediaFileId) === mediaFileId
+  ));
+  if (!hasTimelineOccurrence) return;
+  updateTimelineAnalysisClips(currentClips => currentClips.map(clip => {
+    const clipMediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
+    return clipMediaFileId === mediaFileId ? applyAnalysisUpdate(clip, data) : clip;
+  }));
 }
 
 function calculateCoverage(ranges: [number, number][], totalDuration: number): number {

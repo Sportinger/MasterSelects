@@ -15,6 +15,11 @@ export const bridgeTokenFileIsExplicit = Boolean(configuredTokenFile)
 export const tokenFilePath = configuredTokenFile
   ? path.resolve(devBridgeRoot, configuredTokenFile)
   : path.resolve(devBridgeRoot, '.ai-bridge-token')
+// Sibling of the token file: records the origin the dev server actually
+// listens on, so bridge clients do not have to guess http vs https. LAN
+// mode serves TLS, plain dev does not, and the MCP config is shared across
+// agents - it cannot hardcode either.
+export const bridgeUrlFilePath = path.join(path.dirname(tokenFilePath), '.ai-bridge-url')
 export const allowedFileRoots = buildAllowedFileRoots()
 
 type AllowedPathKind = 'file' | 'directory'

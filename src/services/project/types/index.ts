@@ -6,6 +6,7 @@ export type {
   ProjectSignalAssetItemState,
   ProjectSignalState,
   ProjectMIDIState,
+  ProjectMediaSourceRoot,
 } from './project.types';
 
 export type { ProjectMediaFile } from './media.types';

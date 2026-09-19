@@ -4,6 +4,7 @@ import type { RenderSource } from '../../src/types/renderTarget';
 type MockTimelineState = {
   playheadPosition: number;
   clips: unknown[];
+  tracks: Array<{ id: string; type: 'video' | 'audio' }>;
 };
 
 type MockMediaState = {
@@ -25,6 +26,7 @@ const hoisted = vi.hoisted(() => ({
   timelineState: {
     playheadPosition: 0,
     clips: [],
+    tracks: [],
   } as MockTimelineState,
   mediaState: {
     activeCompositionId: null,
@@ -131,6 +133,7 @@ describe('renderScheduler playback timing', () => {
     hoisted.timelineState = {
       playheadPosition: 0,
       clips: [],
+      tracks: [],
     };
     hoisted.mediaState = {
       activeCompositionId: 'comp-1',
@@ -171,6 +174,7 @@ describe('renderScheduler playback timing', () => {
   it('uses the high-frequency internal playhead for nested comp previews during playback', () => {
     hoisted.timelineState = {
       playheadPosition: 7,
+      tracks: [{ id: 'video-1', type: 'video' }],
       clips: [
         {
           id: 'nested-clip',
@@ -197,11 +201,52 @@ describe('renderScheduler playback timing', () => {
     });
   });
 
+  it('uses the visual nested occurrence when a linked audio wrapper references the same composition', () => {
+    hoisted.timelineState = {
+      playheadPosition: 7,
+      tracks: [
+        { id: 'video-1', type: 'video' },
+        { id: 'audio-1', type: 'audio' },
+      ],
+      clips: [{
+        id: 'nested-video',
+        trackId: 'video-1',
+        isComposition: true,
+        compositionId: 'comp-2',
+        startTime: 5,
+        duration: 10,
+        inPoint: 2,
+        outPoint: 12,
+        source: { type: 'image' },
+      }, {
+        id: 'nested-audio',
+        trackId: 'audio-1',
+        isComposition: true,
+        compositionId: 'comp-2',
+        startTime: 5,
+        duration: 10,
+        inPoint: 2,
+        outPoint: 12,
+        source: { type: 'audio' },
+      }],
+    };
+
+    playheadState.position = 8;
+    playheadState.isUsingInternalPosition = true;
+
+    (renderScheduler as unknown as RenderSchedulerTestAccess).registeredTargets.add('preview-comp-2');
+    renderScheduler.forceRender();
+
+    expect(hoisted.evaluateAtTime).toHaveBeenCalledWith('comp-2', 5);
+  });
+
   it('copies the exact nested wrapper occurrence into an independent preview', () => {
     hoisted.timelineState = {
       playheadPosition: 7,
+      tracks: [{ id: 'video-1', type: 'video' }],
       clips: [{
         id: 'nested-clip',
+        trackId: 'video-1',
         isComposition: true,
         compositionId: 'comp-2',
         startTime: 5,
@@ -240,8 +285,10 @@ describe('renderScheduler playback timing', () => {
   it('disables nested texture copy when the composition occurrence is ambiguous', () => {
     hoisted.timelineState = {
       playheadPosition: 7,
+      tracks: [{ id: 'video-1', type: 'video' }],
       clips: [{
         id: 'nested-clip-a',
+        trackId: 'video-1',
         isComposition: true,
         compositionId: 'comp-2',
         startTime: 5,
@@ -250,6 +297,7 @@ describe('renderScheduler playback timing', () => {
         outPoint: 10,
       }, {
         id: 'nested-clip-b',
+        trackId: 'video-1',
         isComposition: true,
         compositionId: 'comp-2',
         startTime: 6,

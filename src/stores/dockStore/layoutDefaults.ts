@@ -1,10 +1,16 @@
 import type { DockDragState, DockLayout, PreviewPanelData, SavedDockLayout, SavedDockTimelineLayout } from '../../types/dock';
+import type { ThemeMode } from '../settings/settingsOptions';
 import {
   FACTORY_3D_EDIT_LAYOUT_ID,
   FACTORY_AUDIO_EDIT_LAYOUT_ID,
+  FACTORY_COLOR_LAYOUT_ID,
+  FACTORY_MOBILE_LAYOUT_ID,
+  FACTORY_VERTICAL_MOBILE_LAYOUT_ID,
   FACTORY_START_LAYOUT_ID,
   FACTORY_VIDEO_EDIT_LAYOUT_ID,
 } from './panelRegistry';
+import { MEDIUM_SAVED_DOCK_LAYOUT } from './mediumLayoutDefaults';
+import { LIVE_SAVED_DOCK_LAYOUT } from './liveLayoutDefaults';
 
 export const FACTORY_3D_EDIT_PREVIEW_DEFAULTS: Record<string, Pick<PreviewPanelData, 'initialEditMode' | 'initialEditCameraView'>> = {
   '3d-preview-front': { initialEditMode: true, initialEditCameraView: 'front' },
@@ -32,6 +38,7 @@ export const DEFAULT_LAYOUT: DockLayout = {
             id: 'left-group',
             panels: [
               { id: 'media', type: 'media', title: 'Media' },
+              { id: 'ai-studio', type: 'ai-studio', title: 'AI Studio' },
               { id: 'transitions', type: 'transitions', title: 'Transitions' },
             ],
             activeIndex: 0,
@@ -56,7 +63,7 @@ export const DEFAULT_LAYOUT: DockLayout = {
                 panels: [
                   { id: 'clip-properties', type: 'clip-properties', title: 'Properties' },
                   { id: 'export', type: 'export', title: 'Export' },
-                  { id: 'history', type: 'history', title: 'History' },
+                  { id: 'color-controls', type: 'color-controls', title: 'Coloring' },
                 ],
                 activeIndex: 1,
               },
@@ -75,8 +82,197 @@ export const DEFAULT_LAYOUT: DockLayout = {
   floatingPanels: [],
   panelZoom: {
     'clip-properties': 1,
+    'color-controls': 1,
     export: 1,
-    history: 1,
+    'ai-studio': 1,
+  },
+};
+
+// Resolve Video keeps media full-height on the left and preserves the authored
+// inspector width at native 100% panel scale.
+export const RESOLVE_VIDEO_EDIT_LAYOUT: DockLayout = {
+  root: {
+    kind: 'split',
+    id: 'resolve-video-root-split',
+    direction: 'horizontal',
+    ratio: 0.335889,
+    children: [
+      {
+        kind: 'tab-group',
+        id: 'left-group',
+        panels: [
+          { id: 'media', type: 'media', title: 'Media' },
+          { id: 'ai-studio', type: 'ai-studio', title: 'AI Studio' },
+          { id: 'transitions', type: 'transitions', title: 'Transitions' },
+        ],
+        activeIndex: 0,
+      },
+      {
+        kind: 'split',
+        id: 'resolve-video-main-split',
+        direction: 'vertical',
+        ratio: 0.568499,
+        children: [
+          {
+            kind: 'split',
+            id: 'center-right-split',
+            direction: 'horizontal',
+            ratio: 0.56,
+            children: [
+              {
+                kind: 'tab-group',
+                id: 'preview-group',
+                panels: [{ id: 'preview', type: 'preview', title: 'Preview' }],
+                activeIndex: 0,
+              },
+              {
+                kind: 'tab-group',
+                id: 'right-group',
+                panels: [
+                  { id: 'clip-properties', type: 'clip-properties', title: 'Properties' },
+                  { id: 'color-controls', type: 'color-controls', title: 'Coloring' },
+                  { id: 'export', type: 'export', title: 'Export' },
+                ],
+                activeIndex: 0,
+              },
+            ],
+          },
+          {
+            kind: 'tab-group',
+            id: 'timeline-group',
+            panels: [{ id: 'timeline', type: 'timeline', title: 'Timeline' }],
+            activeIndex: 0,
+          },
+        ],
+      },
+    ],
+  },
+  floatingPanels: [],
+  panelZoom: { 'clip-properties': 1, 'color-controls': 1, export: 1, 'ai-studio': 1 },
+};
+
+export function getVideoEditLayoutForTheme(theme: ThemeMode): DockLayout {
+  return theme === 'resolve' ? RESOLVE_VIDEO_EDIT_LAYOUT : DEFAULT_LAYOUT;
+}
+
+// Touch-first editing layout: large full-width preview, compact supporting
+// panels in the middle, and a full-width timeline anchored at the bottom.
+export const MOBILE_LAYOUT: DockLayout = {
+  root: {
+    kind: 'split',
+    id: 'mobile-root-split',
+    direction: 'vertical',
+    ratio: 0.36,
+    children: [
+      {
+        kind: 'tab-group',
+        id: 'preview-group',
+        panels: [{ id: 'preview', type: 'preview', title: 'Preview' }],
+        activeIndex: 0,
+      },
+      {
+        kind: 'split',
+        id: 'mobile-lower-split',
+        direction: 'vertical',
+        ratio: 0.49,
+        children: [
+          {
+            kind: 'split',
+            id: 'mobile-tools-split',
+            direction: 'horizontal',
+            ratio: 0.44,
+            children: [
+              {
+                kind: 'tab-group',
+                id: 'left-group',
+                panels: [
+                  { id: 'media', type: 'media', title: 'Media' },
+                  { id: 'ai-studio', type: 'ai-studio', title: 'AI Studio' },
+                  { id: 'transitions', type: 'transitions', title: 'Transitions' },
+                ],
+                activeIndex: 0,
+              },
+              {
+                kind: 'tab-group',
+                id: 'right-group',
+                panels: [
+                  { id: 'clip-properties', type: 'clip-properties', title: 'Properties' },
+                  { id: 'export', type: 'export', title: 'Export' },
+                  { id: 'color-controls', type: 'color-controls', title: 'Coloring' },
+                ],
+                activeIndex: 1,
+              },
+            ],
+          },
+          {
+            kind: 'tab-group',
+            id: 'timeline-group',
+            panels: [{ id: 'timeline', type: 'timeline', title: 'Timeline' }],
+            activeIndex: 0,
+          },
+        ],
+      },
+    ],
+  },
+  floatingPanels: [],
+  panelZoom: {
+    'clip-properties': 1,
+    'color-controls': 1,
+    export: 1,
+    'ai-studio': 1,
+  },
+};
+
+// Portrait-composition mobile layout: Preview and the complete compact tool
+// tab set share the upper row; Timeline stays full-width at the bottom.
+export const VERTICAL_MOBILE_LAYOUT: DockLayout = {
+  root: {
+    kind: 'split',
+    id: 'mobile-v-root-split',
+    direction: 'vertical',
+    ratio: 0.62,
+    children: [
+      {
+        kind: 'split',
+        id: 'mobile-v-top-split',
+        direction: 'horizontal',
+        ratio: 0.42,
+        children: [
+          {
+            kind: 'tab-group',
+            id: 'mobile-v-preview-group',
+            panels: [{ id: 'preview', type: 'preview', title: 'Preview' }],
+            activeIndex: 0,
+          },
+          {
+            kind: 'tab-group',
+            id: 'mobile-v-tools-group',
+            panels: [
+              { id: 'media', type: 'media', title: 'Media' },
+              { id: 'ai-studio', type: 'ai-studio', title: 'AI Studio' },
+              { id: 'transitions', type: 'transitions', title: 'Transitions' },
+              { id: 'clip-properties', type: 'clip-properties', title: 'Properties' },
+              { id: 'export', type: 'export', title: 'Export' },
+              { id: 'color-controls', type: 'color-controls', title: 'Coloring' },
+            ],
+            activeIndex: 0,
+          },
+        ],
+      },
+      {
+        kind: 'tab-group',
+        id: 'mobile-v-timeline-group',
+        panels: [{ id: 'timeline', type: 'timeline', title: 'Timeline' }],
+        activeIndex: 0,
+      },
+    ],
+  },
+  floatingPanels: [],
+  panelZoom: {
+    'clip-properties': 1,
+    'color-controls': 1,
+    export: 1,
+    'ai-studio': 1,
   },
 };
 
@@ -104,6 +300,8 @@ const AUDIO_EDIT_LAYOUT: DockLayout = {
             id: 'left-group',
             panels: [
               { id: 'media', type: 'media', title: 'Media' },
+              { id: 'discover', type: 'discover', title: 'Discover' },
+              { id: 'transitions', type: 'transitions', title: 'Transitions' },
             ],
             activeIndex: 0,
           },
@@ -126,9 +324,10 @@ const AUDIO_EDIT_LAYOUT: DockLayout = {
                 id: 'right-group',
                 panels: [
                   { id: 'clip-properties', type: 'clip-properties', title: 'Properties' },
-                  { id: 'history', type: 'history', title: 'History' },
+                  { id: 'export', type: 'export', title: 'Export' },
+                  { id: 'ai-studio', type: 'ai-studio', title: 'AI Studio' },
                 ],
-                activeIndex: 0,
+                activeIndex: 1,
               },
             ],
           },
@@ -139,7 +338,8 @@ const AUDIO_EDIT_LAYOUT: DockLayout = {
   floatingPanels: [],
   panelZoom: {
     'clip-properties': 1,
-    history: 1,
+    export: 1,
+    discover: 1,
     'audio-mixer': 1,
   },
 };
@@ -222,7 +422,11 @@ const THREE_D_EDIT_LAYOUT: DockLayout = {
           {
             kind: 'tab-group',
             id: 'left-group',
-            panels: [{ id: 'media', type: 'media', title: 'Media' }],
+            panels: [
+              { id: 'media', type: 'media', title: 'Media' },
+              { id: 'discover', type: 'discover', title: 'Discover' },
+              { id: 'transitions', type: 'transitions', title: 'Transitions' },
+            ],
             activeIndex: 0,
           },
           {
@@ -231,9 +435,9 @@ const THREE_D_EDIT_LAYOUT: DockLayout = {
             panels: [
               { id: 'clip-properties', type: 'clip-properties', title: 'Properties' },
               { id: 'export', type: 'export', title: 'Export' },
-              { id: 'history', type: 'history', title: 'History' },
+              { id: 'ai-studio', type: 'ai-studio', title: 'AI Studio' },
             ],
-            activeIndex: 0,
+            activeIndex: 1,
           },
         ],
       },
@@ -243,7 +447,99 @@ const THREE_D_EDIT_LAYOUT: DockLayout = {
   panelZoom: {
     'clip-properties': 1,
     export: 1,
-    history: 1,
+    discover: 1,
+  },
+};
+
+const COLOR_LAYOUT: DockLayout = {
+  root: {
+    kind: 'split',
+    id: 'color-root-split',
+    direction: 'vertical',
+    ratio: 0.5,
+    children: [
+      {
+        kind: 'split',
+        id: 'color-viewer-nodes-split',
+        direction: 'horizontal',
+        ratio: 0.62,
+        children: [
+          {
+            kind: 'tab-group',
+            id: 'color-preview-group',
+            panels: [{
+              id: 'color-preview',
+              type: 'preview',
+              title: 'Preview',
+              data: { source: { type: 'activeComp' }, showTransport: true },
+            }],
+            activeIndex: 0,
+          },
+          {
+            kind: 'tab-group',
+            id: 'color-nodes-group',
+            panels: [{ id: 'color-nodes', type: 'color-nodes', title: 'Nodes' }],
+            activeIndex: 0,
+          },
+        ],
+      },
+      {
+        kind: 'split',
+        id: 'color-lower-split',
+        direction: 'vertical',
+        ratio: 0.28,
+        children: [
+          {
+            kind: 'split',
+            id: 'color-navigation-split',
+            direction: 'vertical',
+            ratio: 0.55,
+            children: [
+              {
+                kind: 'tab-group',
+                id: 'color-clips-group',
+                panels: [{ id: 'color-clips', type: 'color-clips', title: 'Clips' }],
+                activeIndex: 0,
+              },
+              {
+                kind: 'tab-group',
+                id: 'color-timeline-group',
+                panels: [{ id: 'color-timeline', type: 'color-timeline', title: 'Mini Timeline' }],
+                activeIndex: 0,
+              },
+            ],
+          },
+          {
+            kind: 'split',
+            id: 'color-tools-split',
+            direction: 'horizontal',
+            ratio: 0.5,
+            children: [
+              {
+                kind: 'tab-group',
+                id: 'color-controls-group',
+                panels: [{ id: 'color-controls', type: 'color-controls', title: 'Color Controls' }],
+                activeIndex: 0,
+              },
+              {
+                kind: 'tab-group',
+                id: 'color-analysis-group',
+                panels: [
+                  { id: 'color-scopes', type: 'color-scopes', title: 'Scopes' },
+                  { id: 'color-keyframes', type: 'color-keyframes', title: 'Keyframes' },
+                ],
+                activeIndex: 0,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  floatingPanels: [],
+  panelZoom: {
+    'color-controls': 1,
+    'color-scopes': 1,
   },
 };
 
@@ -251,7 +547,7 @@ const START_LAYOUT: DockLayout = {
   root: {
     kind: 'tab-group',
     id: 'start-group',
-    panels: [{ id: 'start', type: 'start', title: 'Start' }],
+    panels: [{ id: 'start', type: 'start', title: 'Chat' }],
     activeIndex: 0,
   },
   floatingPanels: [],
@@ -323,27 +619,48 @@ const AUDIO_EDIT_TIMELINE_LAYOUT: SavedDockTimelineLayout = {
 export const FACTORY_SAVED_DOCK_LAYOUTS: SavedDockLayout[] = [
   {
     id: FACTORY_VIDEO_EDIT_LAYOUT_ID,
-    name: 'VIDEO EDIT',
+    name: 'Video',
     layout: DEFAULT_LAYOUT,
     timeline: VIDEO_EDIT_TIMELINE_LAYOUT,
     createdAt: 0,
-    updatedAt: 4,
+    updatedAt: 5,
+    favorite: true,
+    factory: true,
+  },
+  MEDIUM_SAVED_DOCK_LAYOUT,
+  {
+    id: FACTORY_MOBILE_LAYOUT_ID,
+    name: 'Mobile',
+    layout: MOBILE_LAYOUT,
+    timeline: VIDEO_EDIT_TIMELINE_LAYOUT,
+    createdAt: 0,
+    updatedAt: 5,
+    favorite: true,
+    factory: true,
+  },
+  {
+    id: FACTORY_VERTICAL_MOBILE_LAYOUT_ID,
+    name: 'Mobile',
+    layout: VERTICAL_MOBILE_LAYOUT,
+    timeline: VIDEO_EDIT_TIMELINE_LAYOUT,
+    createdAt: 0,
+    updatedAt: 5,
     favorite: true,
     factory: true,
   },
   {
     id: FACTORY_AUDIO_EDIT_LAYOUT_ID,
-    name: 'AUDIO EDIT',
+    name: 'Audio',
     layout: AUDIO_EDIT_LAYOUT,
     timeline: AUDIO_EDIT_TIMELINE_LAYOUT,
     createdAt: 0,
-    updatedAt: 3,
+    updatedAt: 5,
     favorite: true,
     factory: true,
   },
   {
     id: FACTORY_3D_EDIT_LAYOUT_ID,
-    name: '3D EDIT',
+    name: '3D',
     layout: THREE_D_EDIT_LAYOUT,
     timeline: VIDEO_EDIT_TIMELINE_LAYOUT,
     createdAt: 0,
@@ -352,8 +669,19 @@ export const FACTORY_SAVED_DOCK_LAYOUTS: SavedDockLayout[] = [
     factory: true,
   },
   {
+    id: FACTORY_COLOR_LAYOUT_ID,
+    name: 'Color',
+    layout: COLOR_LAYOUT,
+    timeline: VIDEO_EDIT_TIMELINE_LAYOUT,
+    createdAt: 0,
+    updatedAt: 3,
+    favorite: true,
+    factory: true,
+  },
+  LIVE_SAVED_DOCK_LAYOUT,
+  {
     id: FACTORY_START_LAYOUT_ID,
-    name: 'START',
+    name: 'Chat',
     layout: START_LAYOUT,
     createdAt: 0,
     updatedAt: 1,
@@ -370,4 +698,5 @@ export const DEFAULT_DRAG_STATE: DockDragState = {
   dropTarget: null,
   dragOffset: { x: 0, y: 0 },
   currentPos: { x: 0, y: 0 },
+  lastDropCommitted: false,
 };

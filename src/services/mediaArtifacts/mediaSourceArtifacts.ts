@@ -80,14 +80,19 @@ export function projectMediaSourceArtifactsOntoClip(
 ): TimelineClip {
   const isVisualSource = clip.source?.type === 'video'
     || (!clip.source?.type && clip.file.type.startsWith('video/'));
-  const hasTranscript = Boolean(projection.transcript?.length);
+  const hasTranscript = Boolean(projection.transcript?.length)
+    || (projection.transcriptStatus !== undefined && projection.transcriptStatus !== 'none');
   const hasAnalysis = isVisualSource && Boolean(projection.analysis);
   const hasScenes = isVisualSource && Boolean(projection.sceneDescriptions?.length);
   if (!hasTranscript && !hasAnalysis && !hasScenes) return clip;
   return {
     ...clip,
     ...(hasTranscript
-      ? { transcript: projection.transcript, transcriptStatus: projection.transcriptStatus ?? 'ready' as const }
+      ? {
+          transcript: projection.transcript ?? [],
+          transcriptProgress: projection.transcriptStatus === 'ready' ? 100 : clip.transcriptProgress,
+          transcriptStatus: projection.transcriptStatus ?? 'ready' as const,
+        }
       : {}),
     ...(hasAnalysis
       ? {
@@ -127,6 +132,7 @@ async function runHydration(mediaFileId: string): Promise<MediaFile | undefined>
   ]);
 
   const transcriptWords = storedTranscript?.words as TranscriptWord[] | undefined;
+  const hasStoredTranscript = Array.isArray(storedTranscript?.words);
   const transcriptRanges = storedTranscript?.transcribedRanges;
   const restoredAnalysis = storedAnalysis
     ? restoreCachedClipAnalysis(storedAnalysis)
@@ -137,21 +143,21 @@ async function runHydration(mediaFileId: string): Promise<MediaFile | undefined>
   });
   const sceneDescriptions = storedScenes as SceneSegment[] | null;
 
-  if (transcriptWords?.length || restoredAnalysis || sceneDescriptions?.length) {
+  if (hasStoredTranscript || restoredAnalysis || sceneDescriptions?.length) {
     useMediaStore.setState(state => ({
       files: state.files.map(file => file.id === mediaFileId
         ? {
             ...file,
-            ...(transcriptWords?.length
+            ...(hasStoredTranscript
               ? {
-                  transcript: transcriptWords,
+                  transcript: transcriptWords ?? [],
                   transcriptStatus: 'ready' as const,
                   transcriptArtifact: storedTranscript?.artifact as MediaFile['transcriptArtifact'],
                   transcribedRanges: transcriptRanges,
                   transcriptCoverage: calculateCoverage(
                     transcriptRanges?.length
                       ? transcriptRanges
-                      : transcriptWords.map(word => [word.start, word.end] as [number, number]),
+                      : (transcriptWords ?? []).map(word => [word.start, word.end] as [number, number]),
                     file.duration,
                   ),
                 }
@@ -210,16 +216,17 @@ export async function hydrateAndProjectMediaSourceArtifacts(mediaFileId: string)
   const projection = getMediaSourceArtifactProjection(mediaFileId);
   if (
     !projection.transcript?.length
+    && (projection.transcriptStatus === undefined || projection.transcriptStatus === 'none')
     && !projection.analysis
     && !projection.sceneDescriptions?.length
   ) {
     return;
   }
-  const { useTimelineStore } = await import('../../stores/timeline');
-  useTimelineStore.setState(state => ({
-    clips: state.clips.map(clip => {
+  const { updateDerivedTimelineClips } = await import('../../stores/timeline/revisionMiddleware');
+  updateDerivedTimelineClips(clips => (
+    clips.map(clip => {
       if (getClipMediaFileId(clip) !== mediaFileId) return clip;
       return projectMediaSourceArtifactsOntoClip(clip, projection);
-    }),
-  }));
+    })
+  ));
 }

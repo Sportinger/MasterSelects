@@ -172,23 +172,28 @@ export function SceneAxisGizmoLayers({
 interface SceneObjectHandlesProps {
   objects: DisplaySceneObject[];
   selectedClipId: string | null;
+  orbitTargetClipId: string | null;
   mode: SceneGizmoMode;
   onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>, object: PreviewSceneObject) => void;
   onDoubleClick: (event: ReactMouseEvent<HTMLButtonElement>, object: PreviewSceneObject) => void;
+  onContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, object: PreviewSceneObject) => void;
 }
 
 export function SceneObjectHandles({
   objects,
   selectedClipId,
+  orbitTargetClipId,
   mode,
   onPointerDown,
   onDoubleClick,
+  onContextMenu,
 }: SceneObjectHandlesProps) {
   return (
     <>
       {objects.map((object) => {
         if (!object.screen.visible) return null;
         const selected = object.clipId === selectedClipId;
+        const orbitTarget = object.clipId === orbitTargetClipId;
         if (object.kind === 'camera' && !selected) return null;
         const centerDraggable = selected && (mode === 'move' || mode === 'scale');
         const label = centerDraggable ? getCenterHandleLabel(mode) : object.name;
@@ -196,7 +201,7 @@ export function SceneObjectHandles({
           <button
             key={object.clipId}
             type="button"
-            className={`preview-scene-object-handle kind-${object.kind} ${selected ? `selected gizmo-center mode-${mode}` : ''} ${centerDraggable ? 'center-draggable' : ''}`}
+            className={`preview-scene-object-handle kind-${object.kind} ${selected ? `selected gizmo-center mode-${mode}` : ''} ${centerDraggable ? 'center-draggable' : ''} ${orbitTarget ? 'orbit-target' : ''}`}
             style={{
               left: selected ? object.screen.x : object.displayX,
               top: selected ? object.screen.y : object.displayY,
@@ -205,6 +210,7 @@ export function SceneObjectHandles({
             aria-label={label}
             onPointerDown={(event) => onPointerDown(event, object)}
             onDoubleClick={(event) => onDoubleClick(event, object)}
+            onContextMenu={(event) => onContextMenu(event, object)}
           >
             <span>{getObjectBadge(object.kind)}</span>
           </button>

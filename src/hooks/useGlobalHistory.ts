@@ -1,3 +1,5 @@
+import { createCompositionHistorySignature, createTimelineClipsHistorySignature, createTimelineMasksHistorySignature, createMediaFilesHistorySignature } from './historyContentSignatures';
+export { createCompositionHistorySignature, createTimelineClipsHistorySignature, createMediaFilesHistorySignature } from './historyContentSignatures';
 // Global history hook - initializes undo/redo system and keyboard shortcuts
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -18,8 +20,6 @@ import type {
   FlashBoardJobState,
   FlashBoardPromptHistoryEntry,
 } from '../stores/flashboardStore';
-import type { Composition, MediaFile } from '../stores/mediaStore/types';
-import type { TimelineClip } from '../types';
 import type { DockLayout, DockNode, DockPanel, FloatingPanel } from '../types/dock';
 import { getShortcutRegistry } from '../services/shortcutRegistry';
 import { claimShortcut } from '../services/shortcutFocusPolicy';
@@ -36,6 +36,9 @@ import {
   isHistoryDisabledForDebug,
 } from '../stores/historyStore';
 import { Logger } from '../services/logger';
+import { useHistoryDoubleTap, type TouchHistoryOperation } from './useHistoryDoubleTap';
+import { isProjectStoreSyncInProgress } from '../services/project/projectStoreSyncGuard';
+import { useTrackingStore } from '../stores/trackingStore';
 
 const log = Logger.create('History');
 const DEFAULT_HISTORY_CAPTURE_DELAY_MS = 150;
@@ -45,6 +48,7 @@ function isHistoryCaptureSuppressed(): boolean {
   const historyState = useHistoryStore.getState();
   return (
     isHistoryDisabledForDebug() ||
+    isProjectStoreSyncInProgress() ||
     historyState.isApplying ||
     historyState.batchId !== null
   );
@@ -118,149 +122,6 @@ function normalizeFlashBoardPromptHistoryForHistory(promptHistory: FlashBoardPro
   }));
 }
 
-function normalizeCompositionTimelineForHistory(timelineData: Composition['timelineData']) {
-  if (!timelineData) return null;
-
-  const {
-    playheadPosition: _playheadPosition,
-    zoom: _zoom,
-    scrollX: _scrollX,
-    ...undoableTimelineData
-  } = timelineData;
-
-  return undoableTimelineData;
-}
-
-function normalizeCompositionForHistory(
-  composition: Composition,
-  activeCompositionId: string | null
-) {
-  const { timelineData, ...undoableComposition } = composition;
-
-  return {
-    ...undoableComposition,
-    timelineData: composition.id === activeCompositionId
-      ? null
-      : normalizeCompositionTimelineForHistory(timelineData),
-  };
-}
-
-export function createCompositionHistorySignature(
-  compositions: Composition[],
-  activeCompositionId: string | null
-): string {
-  return JSON.stringify(
-    compositions.map((composition) => normalizeCompositionForHistory(composition, activeCompositionId))
-  );
-}
-
-const CLIP_HISTORY_SIGNATURE_SKIP_KEYS = new Set([
-  'file',
-  'mediaElement',
-  'videoElement',
-  'audioElement',
-  'waveform',
-  'waveformChannels',
-  'waveformGenerating',
-  'waveformProgress',
-  'audioAnalysisJob',
-  'sourceAnalysisRefs',
-  'processedAnalysisRefs',
-  'mixdownBuffer',
-  'thumbnailUrl',
-  'proxyVideoUrl',
-]);
-
-const MEDIA_FILE_HISTORY_SIGNATURE_SKIP_KEYS = new Set([
-  'file',
-  'url',
-  'importProgress',
-  'thumbnailUrl',
-  'proxyVideoUrl',
-  'proxyProgress',
-  'audioProxyProgress',
-  'sceneCutProgress',
-  'transcriptFusionProgress',
-  'waveform',
-  'waveformChannels',
-  'waveformProgress',
-  'waveformStatus',
-  'audioAnalysisRefs',
-]);
-
-function isHistorySignatureBinaryPayload(value: unknown): boolean {
-  if (!value || typeof value !== 'object') return false;
-  if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return true;
-  if (typeof AudioBuffer !== 'undefined' && value instanceof AudioBuffer) return true;
-  return false;
-}
-
-function isHistorySignatureDomPayload(value: unknown): boolean {
-  if (!value || typeof value !== 'object') return false;
-  if (typeof Element !== 'undefined' && value instanceof Element) return true;
-  if (typeof HTMLMediaElement !== 'undefined' && value instanceof HTMLMediaElement) return true;
-  if (typeof File !== 'undefined' && value instanceof File) return true;
-  return false;
-}
-
-function normalizeValueForHistorySignature(
-  value: unknown,
-  skipKeys: Set<string>,
-  seen = new WeakSet<object>(),
-): unknown {
-  if (value === null) return null;
-  if (typeof value === 'string' || typeof value === 'boolean') return value;
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  if (typeof value !== 'object') return null;
-  if (isHistorySignatureBinaryPayload(value) || isHistorySignatureDomPayload(value)) return null;
-
-  if (seen.has(value)) return '[Circular]';
-  seen.add(value);
-
-  if (Array.isArray(value)) {
-    return value.map(item => normalizeValueForHistorySignature(item, skipKeys, seen));
-  }
-
-  const proto = Object.getPrototypeOf(value);
-  if (proto && proto !== Object.prototype) return null;
-
-  const normalized: Record<string, unknown> = {};
-  for (const key of Object.keys(value).sort()) {
-    if (skipKeys.has(key)) continue;
-    const nested = normalizeValueForHistorySignature(
-      (value as Record<string, unknown>)[key],
-      skipKeys,
-      seen,
-    );
-    if (nested !== undefined) {
-      normalized[key] = nested;
-    }
-  }
-
-  return normalized;
-}
-
-export function createTimelineClipsHistorySignature(clips: TimelineClip[]): string {
-  return JSON.stringify(
-    clips.map(clip => normalizeValueForHistorySignature(clip, CLIP_HISTORY_SIGNATURE_SKIP_KEYS))
-  );
-}
-
-function createTimelineMasksHistorySignature(clips: TimelineClip[]): string {
-  return JSON.stringify(
-    clips.map(clip => ({
-      id: clip.id,
-      masks: normalizeValueForHistorySignature(clip.masks ?? [], CLIP_HISTORY_SIGNATURE_SKIP_KEYS),
-    }))
-  );
-}
-
-export function createMediaFilesHistorySignature(files: MediaFile[]): string {
-  return JSON.stringify(
-    files.map(file => normalizeValueForHistorySignature(file, MEDIA_FILE_HISTORY_SIGNATURE_SKIP_KEYS))
-  );
-}
-
 function normalizeDockPanelForHistory(panel: DockPanel) {
   return {
     id: panel.id,
@@ -324,6 +185,15 @@ export function useGlobalHistory() {
     });
   }, []);
 
+  const applyHistoryOperation = useCallback((operation: TouchHistoryOperation) => {
+    const result = operation === 'undo' ? undo() : redo();
+    if (result && result.operation !== 'restore-branch') {
+      showHistoryNotice({ operation: result.operation, label: result.label });
+    }
+  }, [showHistoryNotice]);
+
+  useHistoryDoubleTap(applyHistoryOperation);
+
   // Initialize store references
   useEffect(() => {
     if (initialized.current) return;
@@ -345,11 +215,26 @@ export function useGlobalHistory() {
       },
       flashboard: {
         getState: useFlashBoardStore.getState,
-        setState: useFlashBoardStore.setState,
+        setState: (patch) => {
+          useFlashBoardStore.setState((state) => ({
+            ...patch,
+            aiWorkspaces: patch.composer
+              ? state.aiWorkspaces.map((workspace) => (
+                  workspace.id === state.activeAIWorkspaceId
+                    ? { ...workspace, composer: patch.composer!, updatedAt: Date.now() }
+                    : workspace
+                ))
+              : state.aiWorkspaces,
+          }));
+        },
       },
       storyboard: {
         getState: getStoryboardProjectSnapshot,
         setState: hydrateStoryboardProjectState,
+      },
+      tracking: {
+        getState: useTrackingStore.getState,
+        setState: useTrackingStore.setState,
       },
       export: {
         getState: useExportStore.getState,
@@ -542,6 +427,15 @@ export function useGlobalHistory() {
       { equalityFn: shallowEqual, fireImmediately: false }
     );
 
+    const unsubTracking = useTrackingStore.subscribe(
+      (state) => state.assets,
+      (assets, previousAssets) => {
+        if (isHistoryCaptureSuppressed() || assets === previousAssets) return;
+        debouncedCapture('Modify tracking asset');
+      },
+      { fireImmediately: false },
+    );
+
     // Subscribe to dock changes
     const unsubDock = useDockStore.subscribe(
       (state) => state.layout,
@@ -638,6 +532,7 @@ export function useGlobalHistory() {
       }
       unsubTimeline();
       unsubMedia();
+      unsubTracking();
       unsubDock();
       unsubFlashBoard();
       unsubStoryboard();
@@ -652,26 +547,20 @@ export function useGlobalHistory() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (registry.matches('history.undo', e)) {
         if (!claimShortcut(e, 'history.undo')) return;
-        const result = undo();
-        if (result && result.operation !== 'restore-branch') {
-          showHistoryNotice({ operation: result.operation, label: result.label });
-        }
+        applyHistoryOperation('undo');
         return;
       }
 
       if (registry.matches('history.redo', e)) {
         if (!claimShortcut(e, 'history.redo')) return;
-        const result = redo();
-        if (result && result.operation !== 'restore-branch') {
-          showHistoryNotice({ operation: result.operation, label: result.label });
-        }
+        applyHistoryOperation('redo');
         return;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showHistoryNotice]);
+  }, [applyHistoryOperation]);
 
   return {
     undo,

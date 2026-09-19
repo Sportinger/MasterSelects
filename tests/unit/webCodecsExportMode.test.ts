@@ -94,6 +94,7 @@ describe('WebCodecsExportMode decoder recovery', () => {
     const mode = new WebCodecsExportMode(player);
 
     await mode.prepareForSequentialExport(0);
+    recreateExportDecoder.mockClear();
 
     const decoderThatWillClose = currentDecoder;
     decoderThatWillClose.decode = vi.fn(() => {
@@ -183,6 +184,89 @@ describe('WebCodecsExportMode decoder recovery', () => {
     expect(currentFrame?.timestamp).toBe(0);
   });
 
+  it('waits for a delayed Android hardware-decoder startup frame after the queue drains', async () => {
+    const samples = createSamples(300);
+    let currentFrame: VideoFrame | null = null;
+    let firstChunkTimestamp: number | null = null;
+    let delayedOutputScheduled = false;
+    const decoder = createDecoder(() => undefined);
+    decoder.decode = vi.fn((chunk: MockEncodedVideoChunk) => {
+      firstChunkTimestamp ??= chunk.timestamp;
+      if (delayedOutputScheduled) return;
+      delayedOutputScheduled = true;
+      setTimeout(() => {
+        mode.handleDecoderOutput({
+          timestamp: firstChunkTimestamp ?? 0,
+          close: vi.fn(),
+        } as unknown as VideoFrame);
+      }, 500);
+    });
+    const player: ExportModePlayer = {
+      getDecoder: () => decoder as unknown as VideoDecoder,
+      getSamples: () => samples,
+      getSampleIndex: () => 0,
+      setSampleIndex: vi.fn(),
+      getVideoTrackTimescale: () => 30,
+      getCodecConfig: () => ({ codec: 'hvc1.test' }),
+      getFrameRate: () => 30,
+      getCurrentFrame: () => currentFrame,
+      setCurrentFrame: frame => {
+        currentFrame = frame;
+      },
+      isSimpleMode: () => false,
+      seekAsync: vi.fn(),
+    };
+    const mode = new WebCodecsExportMode(player);
+
+    await expect(mode.prepareForSequentialExport(0)).resolves.toBeUndefined();
+
+    expect(decoder.decode).toHaveBeenCalledTimes(32);
+    expect(currentFrame?.timestamp).toBe(0);
+  });
+
+  it('uses a fresh decoder instead of resetting the Android HEVC preview decoder', async () => {
+    const samples = createSamples(300);
+    let currentFrame: VideoFrame | null = null;
+    const previewDecoder = createDecoder(() => undefined);
+    let currentDecoder = previewDecoder;
+    const freshDecoder = createDecoder(timestamp => {
+      mode.handleDecoderOutput({
+        timestamp,
+        close: vi.fn(),
+      } as unknown as VideoFrame);
+    });
+    const recreateExportDecoder = vi.fn(() => {
+      currentDecoder = freshDecoder;
+      return freshDecoder as unknown as VideoDecoder;
+    });
+    const player: ExportModePlayer = {
+      getDecoder: () => currentDecoder as unknown as VideoDecoder,
+      getSamples: () => samples,
+      getSampleIndex: () => 0,
+      setSampleIndex: vi.fn(),
+      getVideoTrackTimescale: () => 30,
+      getCodecConfig: () => ({ codec: 'hvc1.test' }),
+      getFrameRate: () => 30,
+      getCurrentFrame: () => currentFrame,
+      setCurrentFrame: frame => {
+        currentFrame = frame;
+      },
+      isSimpleMode: () => false,
+      seekAsync: vi.fn(),
+      recreateExportDecoder,
+    };
+    const mode = new WebCodecsExportMode(player);
+
+    await expect(mode.prepareForSequentialExport(0)).resolves.toBeUndefined();
+
+    expect(recreateExportDecoder).toHaveBeenCalledOnce();
+    expect(previewDecoder.reset).not.toHaveBeenCalled();
+    expect(previewDecoder.decode).not.toHaveBeenCalled();
+    expect(freshDecoder.reset).not.toHaveBeenCalled();
+    expect(freshDecoder.decode).toHaveBeenCalled();
+    expect(currentFrame?.timestamp).toBe(0);
+  });
+
   it('restarts at a nearby keyframe and discards distant preroll on a large forward jump', async () => {
     const samples = createSamples(900, 300);
     let currentFrame: VideoFrame | null = null;
@@ -230,6 +314,45 @@ describe('WebCodecsExportMode decoder recovery', () => {
       return close.mock.calls.length > 0;
     }).length).toBeGreaterThan(140);
     expect(currentFrame?.timestamp).toBeCloseTo(15_000_000, -3);
+  });
+
+  it('restarts at a keyframe when a forward cut exceeds the rolling decode window', async () => {
+    const samples = createSamples(300, 30);
+    let currentFrame: VideoFrame | null = null;
+    const decoder = createDecoder(timestamp => {
+      mode.handleDecoderOutput({
+        timestamp,
+        close: vi.fn(),
+      } as unknown as VideoFrame);
+    });
+    const player: ExportModePlayer = {
+      getDecoder: () => decoder as unknown as VideoDecoder,
+      getSamples: () => samples,
+      getSampleIndex: () => 0,
+      setSampleIndex: vi.fn(),
+      getVideoTrackTimescale: () => 30,
+      getCodecConfig: () => ({ codec: 'avc1.test' }),
+      getFrameRate: () => 30,
+      getCurrentFrame: () => currentFrame,
+      setCurrentFrame: frame => {
+        currentFrame = frame;
+      },
+      isSimpleMode: () => false,
+      seekAsync: vi.fn(),
+    };
+    const mode = new WebCodecsExportMode(player);
+
+    await mode.prepareForSequentialExport(0);
+    decoder.decode.mockClear();
+    decoder.reset.mockClear();
+
+    // This 36-sample gap is smaller than the former fixed 48-sample threshold,
+    // but much larger than the four-sample rolling decode window.
+    await mode.seekDuringExport(40 / 30);
+
+    expect(decoder.reset).toHaveBeenCalledOnce();
+    expect(decoder.decode).toHaveBeenCalledTimes(14);
+    expect(currentFrame?.timestamp).toBeCloseTo((40 * 1_000_000) / 30, -3);
   });
 
   it('uses the selected sample CTS when a VFR gap exceeds the frame tolerance', async () => {

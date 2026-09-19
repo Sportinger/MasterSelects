@@ -1,1 +1,10 @@
 fixtures/playwright-reference-project/media/** filter=lfs diff=lfs merge=lfs -text
+.githooks/* text eol=lf
+scripts/run-motion-design-md2-evidence.mjs text eol=lf
+tests/playwright/campaigns/windows-inventory.v1.json -text
+tests/playwright/campaigns/windows-inventory.v2.json -text
+tests/windows-quality/fixtures/pages-artifact-v1.original.mjs -text
+scripts/windows-quality/playwright-directory-qualification.json -text
+scripts/windows-quality/campaign.mjs text eol=lf
+scripts/windows-quality/baseline-corpus.json -text
+scripts/windows-quality/baseline-corpus.git-v2.json -text

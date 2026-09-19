@@ -477,6 +477,11 @@ function Get-VisitTimeText {
 function Get-VisitRefererHost {
   param($Visit)
 
+  $referrerHost = [string](Get-VisitPropertyValue -Visit $Visit -Name 'referrerHost')
+  if (-not [string]::IsNullOrWhiteSpace($referrerHost)) {
+    return $referrerHost
+  }
+
   $referer = [string](Get-VisitPropertyValue -Visit $Visit -Name 'referer')
   if ([string]::IsNullOrWhiteSpace($referer)) {
     return ''
@@ -503,11 +508,13 @@ function Get-VisitGroupKey {
     $bucket = [math]::Floor(([double][long]$ts) / 300000)
   }
 
-  return 'fallback:{0}|{1}|{2}|{3}|{4}' -f (
+  return 'fallback:{0}|{1}|{2}|{3}|{4}|{5}|{6}' -f (
     (Get-VisitCountryCode -Visit $Visit),
     [string](Get-VisitPropertyValue -Visit $Visit -Name 'city'),
     (Get-VisitRefererHost -Visit $Visit),
     [string](Get-VisitPropertyValue -Visit $Visit -Name 'ua'),
+    [string](Get-VisitPropertyValue -Visit $Visit -Name 'browser'),
+    [string](Get-VisitPropertyValue -Visit $Visit -Name 'device'),
     $bucket
   )
 }
@@ -515,14 +522,17 @@ function Get-VisitGroupKey {
 function New-VisitFingerprint {
   param($Visit)
 
-  return '{0}|{1}|{2}|{3}|{4}|{5}|{6}' -f (
+  return '{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}|{8}|{9}' -f (
     [long](Get-VisitPropertyValue -Visit $Visit -Name 'ts'),
     (Get-VisitPath -Visit $Visit),
     [string](Get-VisitPropertyValue -Visit $Visit -Name 'visitorId'),
     [string](Get-VisitPropertyValue -Visit $Visit -Name 'country'),
     [string](Get-VisitPropertyValue -Visit $Visit -Name 'city'),
     [string](Get-VisitPropertyValue -Visit $Visit -Name 'ua'),
-    [string](Get-VisitPropertyValue -Visit $Visit -Name 'referer')
+    [string](Get-VisitPropertyValue -Visit $Visit -Name 'referer'),
+    [string](Get-VisitPropertyValue -Visit $Visit -Name 'browser'),
+    [string](Get-VisitPropertyValue -Visit $Visit -Name 'device'),
+    [string](Get-VisitPropertyValue -Visit $Visit -Name 'os')
   )
 }
 
@@ -578,6 +588,15 @@ function Get-VisitTooltip {
   $ua = [string](Get-VisitPropertyValue -Visit $Visit -Name 'ua')
   if (-not [string]::IsNullOrWhiteSpace($ua)) {
     $lines += ('UA: {0}' -f (Get-TrimmedText -Value $ua -MaxLength 180))
+  } else {
+    $clientParts = @(
+      [string](Get-VisitPropertyValue -Visit $Visit -Name 'browser'),
+      [string](Get-VisitPropertyValue -Visit $Visit -Name 'device'),
+      [string](Get-VisitPropertyValue -Visit $Visit -Name 'os')
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    if ($clientParts.Count -gt 0) {
+      $lines += ('Client: {0}' -f ($clientParts -join ' / '))
+    }
   }
 
   return ($lines -join [Environment]::NewLine)

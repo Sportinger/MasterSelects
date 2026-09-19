@@ -51,12 +51,6 @@ export const plannedTransitions: readonly TransitionDefinition[] = [
     description: 'Planned luminance-driven two-participant fade',
   }),
   plannedTransition({
-    id: 'datamosh',
-    name: 'Datamosh',
-    category: 'glitch',
-    description: 'Planned frame-history and motion-vector glitch transition',
-  }),
-  plannedTransition({
     id: 'signal-tear',
     name: 'Signal Tear',
     category: 'glitch',

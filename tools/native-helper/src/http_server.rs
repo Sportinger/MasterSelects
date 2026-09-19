@@ -145,16 +145,24 @@ async fn handle_rejection(
 
 /// GET /startup-token â€” returns the auth token for localhost clients to discover
 async fn get_startup_token(state: Arc<AppState>) -> Result<impl warp::Reply, warp::Rejection> {
+    let common = serde_json::json!({
+        "ok": true,
+        "version": env!("CARGO_PKG_VERSION"),
+        "media_search": true,
+        "ytdlp_available": crate::download::find_ytdlp().is_some(),
+    });
     match &state.auth_token {
-        Some(token) => Ok(warp::reply::json(&serde_json::json!({
-            "ok": true,
-            "token": token,
-        }))),
-        None => Ok(warp::reply::json(&serde_json::json!({
-            "ok": true,
-            "token": null,
-            "auth_disabled": true,
-        }))),
+        Some(token) => {
+            let mut response = common;
+            response["token"] = serde_json::json!(token);
+            Ok(warp::reply::json(&response))
+        }
+        None => {
+            let mut response = common;
+            response["token"] = serde_json::Value::Null;
+            response["auth_disabled"] = serde_json::Value::Bool(true);
+            Ok(warp::reply::json(&response))
+        }
     }
 }
 

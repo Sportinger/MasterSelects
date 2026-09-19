@@ -21,6 +21,18 @@ function PointerFocusHarness() {
 }
 
 describe('shortcut focus policy', () => {
+  it('preserves Tab navigation between focused controls', () => {
+    const button = document.createElement('button');
+    document.body.append(button);
+    button.focus();
+    for (const shiftKey of [false, true]) {
+      const event = new KeyboardEvent('keydown', { key: 'Tab', shiftKey, cancelable: true });
+      expect(claimShortcut(event, 'playback.playPause')).toBe(false);
+      expect(event.defaultPrevented).toBe(false);
+    }
+    button.remove();
+  });
+
   it('defers Space to a deliberately focused button', () => {
     const onClick = vi.fn();
     const button = document.createElement('button');

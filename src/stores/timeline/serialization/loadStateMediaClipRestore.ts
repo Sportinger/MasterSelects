@@ -1,9 +1,5 @@
 import type { SerializableClip, TimelineClip, TimelineStore } from '../types';
-import * as facePersistence from '../../../services/faceAnalysis/faceAnalysisPersistence';
-import { clonePersistedClipAudioState } from '../../../services/audio/clipAudioStatePersistence';
 import { Logger } from '../../../services/logger';
-import { cloneClipNodeGraph } from '../../../services/nodeGraph';
-import { normalizeTransitionInstanceParams } from '../../../transitions';
 import { projectFileService } from '../../../services/projectFileService';
 import { mediaNeedsRelink } from '../../../services/project/relinkMedia';
 import {
@@ -24,13 +20,16 @@ import {
   applyManagedRestoredSpatialSource,
   createManagedRestoredImageUrl,
   isRestoredSpatialSourceType,
-  restorePersistedClipVideoState,
 } from '../nestedRestore';
 import { startRestoredVectorRuntimeRestore } from '../vectorRuntimeRestore';
-import { recoverPersistedTranscriptStatus } from '../../../services/transcription/persistedTranscriptStatus';
 import {
   hydrateAndProjectMediaSourceArtifacts,
 } from '../../../services/mediaArtifacts/mediaSourceArtifacts';
+import { bindRuntimeToClip } from '../../../services/mediaRuntime/clipBindings';
+import {
+  createInitialRestoredMediaSource,
+  createRestoredMediaClip,
+} from './loadStateMediaClipData';
 
 const log = Logger.create('Timeline');
 type MediaStoreState = ReturnType<typeof useMediaStore.getState>;
@@ -42,120 +41,6 @@ type PatchRestoredClip = (
 ) => void;
 
 export type RestoreLoadStateMediaClipResult = 'handled' | 'stale';
-
-function createInitialRestoredMediaSource(
-  serializedClip: SerializableClip,
-  mediaFile: MediaFile,
-): TimelineClip['source'] {
-  if (serializedClip.sourceType === 'gaussian-splat') {
-    const gaussianSplatSource = createDataOnlyRestoredGaussianSplatSource(
-      serializedClip,
-      serializedClip.duration,
-      mediaFile,
-    );
-    if (gaussianSplatSource) {
-      return gaussianSplatSource;
-    }
-  }
-
-  const restoredModelSource = serializedClip.sourceType === 'model'
-    ? createDataOnlyRestoredModelSource(serializedClip, serializedClip.duration, mediaFile)
-    : null;
-
-  return {
-    type: serializedClip.sourceType,
-    mediaFileId: serializedClip.mediaFileId,
-    naturalDuration: serializedClip.naturalDuration,
-    vectorAnimationSettings: serializedClip.vectorAnimationSettings,
-    threeDEffectorsEnabled: serializedClip.threeDEffectorsEnabled ?? true,
-    modelSequence: restoredModelSource?.modelSequence,
-    modelPrimitiveIndex: restoredModelSource?.modelPrimitiveIndex,
-    modelMaterialSettings: restoredModelSource?.modelMaterialSettings,
-  };
-}
-
-function createRestoredMediaClip(params: {
-  file: File;
-  initialSource: TimelineClip['source'];
-  mediaFile: MediaFile;
-  needsReload: boolean;
-  serializedClip: SerializableClip;
-}): TimelineClip {
-  const { file, initialSource, mediaFile, needsReload, serializedClip } = params;
-  const analysis = facePersistence.sanitizePersistedFaceAnalysis(serializedClip.analysis)
-    ?? mediaFile.analysis;
-  const faceAnalysisStatus = facePersistence.normalizePersistedFaceStatus(
-    serializedClip.faceAnalysisStatus ?? mediaFile.faceAnalysisStatus,
-    analysis,
-  );
-  const transcript = serializedClip.transcript?.length
-    ? serializedClip.transcript
-    : mediaFile.transcript;
-  return {
-    id: serializedClip.id,
-    trackId: serializedClip.trackId,
-    name: serializedClip.name || mediaFile.name || 'Untitled',
-    file,
-    signalAssetId: serializedClip.signalAssetId,
-    signalRefId: serializedClip.signalRefId,
-    signalRenderAdapterId: serializedClip.signalRenderAdapterId,
-    startTime: serializedClip.startTime,
-    duration: serializedClip.duration,
-    inPoint: serializedClip.inPoint,
-    outPoint: serializedClip.outPoint,
-    source: initialSource,
-    mediaFileId: serializedClip.mediaFileId,
-    needsReload,
-    thumbnails: serializedClip.thumbnails,
-    linkedClipId: serializedClip.linkedClipId,
-    linkedGroupId: serializedClip.linkedGroupId,
-    editableHook: serializedClip.editableHook ? { ...serializedClip.editableHook } : undefined,
-    parentClipId: serializedClip.parentClipId,
-    videoState: restorePersistedClipVideoState(serializedClip),
-    audioState: clonePersistedClipAudioState(serializedClip.audioState),
-    waveform: serializedClip.waveform,
-    waveformChannels: serializedClip.waveformChannels,
-    transform: serializedClip.transform,
-    sourceRect: serializedClip.sourceRect ? { ...serializedClip.sourceRect } : undefined,
-    transitionRender: serializedClip.transitionRender ? structuredClone(serializedClip.transitionRender) : undefined,
-    effects: serializedClip.effects || [],
-    transitionIn: serializedClip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionIn)) : undefined,
-    transitionOut: serializedClip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionOut)) : undefined,
-    transitionSourceMap: serializedClip.transitionSourceMap ? structuredClone(serializedClip.transitionSourceMap) : undefined,
-    transitionRecipeBlendWindows: serializedClip.transitionRecipeBlendWindows ? structuredClone(serializedClip.transitionRecipeBlendWindows) : undefined,
-    colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
-    nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
-    isLoading: !needsReload,
-    masks: serializedClip.masks,
-    transcript,
-    transcriptStatus: recoverPersistedTranscriptStatus(
-      serializedClip.transcriptStatus ?? mediaFile.transcriptStatus,
-      transcript,
-    ),
-    analysis,
-    analysisStatus: serializedClip.analysisStatus ?? mediaFile.analysisStatus ?? 'none',
-    analysisProgress: mediaFile.analysisProgress,
-    faceAnalysisStatus,
-    faceAnalysisProgress: mediaFile.faceAnalysisProgress,
-    faceAnalysisMessage: faceAnalysisStatus === 'error'
-      ? serializedClip.faceAnalysisMessage ?? mediaFile.faceAnalysisMessage
-      : undefined,
-    sceneDescriptions: serializedClip.sceneDescriptions?.length
-      ? serializedClip.sceneDescriptions
-      : mediaFile.sceneDescriptions,
-    sceneDescriptionStatus: serializedClip.sceneDescriptionStatus
-      ?? mediaFile.sceneDescriptionStatus,
-    sceneDescriptionProgress: mediaFile.sceneDescriptionProgress,
-    sceneDescriptionMessage: mediaFile.sceneDescriptionMessage,
-    reversed: serializedClip.reversed,
-    speed: serializedClip.speed,
-    preservesPitch: serializedClip.preservesPitch,
-    followsLinkedVideoSpeed: serializedClip.followsLinkedVideoSpeed,
-    freeRun: serializedClip.freeRun,
-    is3D: serializedClip.is3D,
-    meshType: serializedClip.meshType,
-  };
-}
 
 function loadCachedProjectMediaArtifacts(params: {
   clip: TimelineClip;
@@ -286,8 +171,24 @@ export async function restoreLoadStateMediaClip(params: {
   }
 
   const file = mediaFile.file || new File([], mediaFile.name || 'pending', { type: 'video/mp4' });
-  const initialSource = createInitialRestoredMediaSource(serializedClip, mediaFile);
-  const clip = createRestoredMediaClip({ file, initialSource, mediaFile, needsReload, serializedClip });
+  const initialSource = createInitialRestoredMediaSource(serializedClip, mediaFile, {
+    createGaussianSplat: createDataOnlyRestoredGaussianSplatSource,
+    createModel: createDataOnlyRestoredModelSource,
+  });
+  const restoredClip = createRestoredMediaClip({
+    file,
+    initialSource,
+    mediaFile,
+    needsReload,
+    serializedClip,
+  });
+  const clip = needsReload
+    ? restoredClip
+    : bindRuntimeToClip(restoredClip, {
+        file: mediaFile.file,
+        mediaFileId: mediaFile.id,
+        filePath: mediaFile.absolutePath ?? mediaFile.filePath,
+      });
   pushRestoredClip(clip);
   loadCachedProjectMediaArtifacts({ clip, serializedClip });
 
@@ -310,16 +211,19 @@ export async function restoreLoadStateMediaClip(params: {
 
   const nativeVideoAbsolutePath = mediaFile.absolutePath;
   if (type === 'video' && !loadFile && nativeVideoAbsolutePath && projectFileService.activeBackend === 'native') {
-    patchRestoredClip(clip.id, (currentClip) => ({
-      ...currentClip,
-      ...createLoadStateNativeVideoPathRestorePatch({
-        absolutePath: nativeVideoAbsolutePath,
-        clipDuration: clip.duration,
-        mediaDuration: mediaFile.duration,
+    patchRestoredClip(clip.id, (currentClip) => bindRuntimeToClip({
+        ...currentClip,
+        ...createLoadStateNativeVideoPathRestorePatch({
+          absolutePath: nativeVideoAbsolutePath,
+          clipDuration: clip.duration,
+          mediaDuration: mediaFile.duration,
+          mediaFileId: mediaFile.id,
+          naturalDuration: serializedClip.naturalDuration,
+        }),
+      }, {
         mediaFileId: mediaFile.id,
-        naturalDuration: serializedClip.naturalDuration,
-      }),
-    }));
+        filePath: nativeVideoAbsolutePath,
+      }));
     restoreSourceThumbnails(serializedClip.mediaFileId);
     return 'handled';
   }
@@ -337,19 +241,23 @@ export async function restoreLoadStateMediaClip(params: {
   }
 
   if (deferMediaElementRestore && (type === 'video' || type === 'audio')) {
-    patchRestoredClip(clip.id, (currentClip) => ({
-      ...currentClip,
-      ...createLoadStateDeferredMediaRestorePatch({
-        absolutePath: mediaFile.absolutePath,
-        clipDuration: clip.duration,
-        fallbackFile: currentClip.file,
-        loadFile,
-        mediaDuration: mediaFile.duration,
+    patchRestoredClip(clip.id, (currentClip) => bindRuntimeToClip({
+        ...currentClip,
+        ...createLoadStateDeferredMediaRestorePatch({
+          absolutePath: mediaFile.absolutePath,
+          clipDuration: clip.duration,
+          fallbackFile: currentClip.file,
+          loadFile,
+          mediaDuration: mediaFile.duration,
+          mediaFileId: mediaFile.id,
+          naturalDuration: serializedClip.naturalDuration,
+          sourceType: type,
+        }),
+      }, {
+        file: loadFile ?? mediaFile.file,
         mediaFileId: mediaFile.id,
-        naturalDuration: serializedClip.naturalDuration,
-        sourceType: type,
-      }),
-    }));
+        filePath: mediaFile.absolutePath ?? mediaFile.filePath,
+      }));
     if (type === 'video') {
       restoreSourceThumbnails(serializedClip.mediaFileId);
     }

@@ -3,6 +3,7 @@ import type { Keyframe } from '../../types/keyframes';
 import type { ClipMask } from '../../types/masks';
 import type { SerializableClip, TimelineClip } from '../../types/timeline';
 import type { ClipTransform } from '../../types/timelineCore';
+import { appendSurfaceEffects, type SurfaceClip } from '../planarTracking/surfaceEffects';
 import {
   isValidTransitionSourceMap,
   resolveTransitionSourceMapTime,
@@ -17,7 +18,13 @@ import {
 export type TransitionMappedAnimationClip = Pick<
   TimelineClip | SerializableClip,
   'transform' | 'effects' | 'masks' | 'transitionSourceMap'
->;
+> & Partial<SurfaceClip>;
+
+function addSurfaces(effects: Effect[], clip: TransitionMappedAnimationClip, time: number, keys?: readonly Keyframe[]): Effect[] {
+  return clip.planarTracks?.length && clip.inPoint !== undefined && clip.outPoint !== undefined
+    ? appendSurfaceEffects(effects, clip as SurfaceClip, time, keys)
+    : effects;
+}
 
 export interface TransitionMappedAnimation {
   transform: ClipTransform;
@@ -42,7 +49,7 @@ function evaluateSingleDomain(
       keyframes,
       compositionLocalTime,
     )),
-    effects: cloneEffects(evaluateCompositionClipEffects(clip.effects, keyframes, compositionLocalTime)),
+    effects: addSurfaces(cloneEffects(evaluateCompositionClipEffects(clip.effects, keyframes, compositionLocalTime)), clip, compositionLocalTime, keyframes),
     masks: evaluateCompositionClipMasks(clip.masks, keyframes, compositionLocalTime),
     animationTime: compositionLocalTime,
   };
@@ -85,6 +92,11 @@ function composeTransforms(
       x: original.position.x + generated.position.x - parentBase.position.x,
       y: original.position.y + generated.position.y - parentBase.position.y,
       z: original.position.z + generated.position.z - parentBase.position.z,
+    },
+    anchor: {
+      x: (original.anchor?.x ?? 0) + (generated.anchor?.x ?? 0) - (parentBase.anchor?.x ?? 0),
+      y: (original.anchor?.y ?? 0) + (generated.anchor?.y ?? 0) - (parentBase.anchor?.y ?? 0),
+      z: (original.anchor?.z ?? 0) + (generated.anchor?.z ?? 0) - (parentBase.anchor?.z ?? 0),
     },
     scale: {
       ...(scaleAll === undefined ? {} : { all: scaleAll }),
@@ -179,14 +191,14 @@ export function evaluateTransitionMappedAnimation(
 
   return {
     transform: composeTransforms(originalTransform, generatedTransform, parentAnimation.baseTransform),
-    effects: evaluateEffectsByDomain(
+    effects: addSurfaces(evaluateEffectsByDomain(
       clip.effects,
       parentAnimation.sourceEffectIds.length,
       parentAnimation.keyframes,
       animationTime,
       keyframes,
       compositionLocalTime,
-    ),
+    ), clip, compositionLocalTime, keyframes),
     masks: evaluateMasksByDomain(
       clip.masks,
       parentAnimation.sourceMaskIds.length,

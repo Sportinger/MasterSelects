@@ -25,19 +25,25 @@ import {
   createRuntimeMetadata,
   createRuntimeSourceMetadata,
   createRuntimeTextSignal,
-  createRuntimeTime,
   createSerializableGraph,
   type AINodeRuntimeInputValue,
 } from './aiNodeRuntimeGraphSignals';
 import {
-  resolveCurrentTextProperties,
-  runGeneratedNode,
+  applyAINodeSandboxTextResult,
+  createAINodeSandboxNodeRequest,
 } from './aiNodeRuntimeGeneratedNode';
+import {
+  disposeAINodeSandbox,
+  runAINodeSandbox,
+} from './aiNodeSandboxClient';
+import type {
+  AINodeSandboxCode,
+  AINodeSandboxNodeRequest,
+} from './aiNodeSandboxProtocol';
 import {
   getConnectedRunnableCustomNodes,
   getNodeProcessPixelBudget,
   isPixelSortNode,
-  sortPixelsTexture,
 } from './aiNodeRuntimeRunnableNodes';
 
 export { sortPixelsTexture } from './aiNodeRuntimeRunnableNodes';
@@ -56,17 +62,33 @@ export interface AINodeRuntimeTexture {
 }
 
 interface RuntimeCacheEntry {
+  cacheKey: string;
   clipId: string;
   canvas: HTMLCanvasElement;
   sourceCanvas: HTMLCanvasElement;
   resourceIds: readonly [string, string];
   byteSize: number;
   lastSignature?: string;
+  pendingSignature?: string;
+  disabledCodeSignature?: string;
+  queuedWork?: AINodeRuntimeWork;
 }
 
 type AINodeParamResolver = (nodeId: string) => Record<string, ClipCustomNodeParamValue>;
 
+interface AINodeRuntimeWork {
+  signature: string;
+  codeSignature: string;
+  codes: AINodeSandboxCode[];
+  nodes: AINodeSandboxNodeRequest[];
+  texture: AINodeRuntimeTexture;
+  clip: TimelineClip;
+  source: LayerSource;
+  layerId: string;
+}
+
 const runtimeCache = new Map<string, RuntimeCacheEntry>();
+const pendingRuntimeJobs = new Set<Promise<void>>();
 let runtimeCacheBytes = 0;
 
 export function hasRunnableAINodes(clip: TimelineClip): boolean {
@@ -286,6 +308,7 @@ function releaseRuntimeCanvas(canvas: HTMLCanvasElement): void {
 }
 
 function releaseRuntimeCacheEntry(entry: RuntimeCacheEntry): void {
+  disposeAINodeSandbox(entry.cacheKey);
   runtimeCacheBytes -= entry.byteSize;
   for (const resourceId of entry.resourceIds) {
     timelineRuntimeCoordinator.releaseResource(resourceId);
@@ -411,6 +434,7 @@ function ensureCacheEntry(
   }
 
   const entry = {
+    cacheKey: key,
     clipId: clip.id,
     canvas: document.createElement('canvas'),
     sourceCanvas: document.createElement('canvas'),
@@ -460,15 +484,17 @@ function createSourceContentSignature(source: LayerSource): string {
   ].join(':');
 }
 
-function processTexture(
+function createSandboxWork(
   definitions: ClipCustomNodeDefinition[],
   clip: TimelineClip,
   source: LayerSource,
   texture: AINodeRuntimeTexture,
   clipLocalTime: number,
   resolveParams: AINodeParamResolver,
+  signature: string,
+  layerId: string,
   audioOptions: AINodeRuntimeAudioOptions = {},
-): AINodeRuntimeTexture {
+): AINodeRuntimeWork {
   const graph = buildClipNodeGraph(clip, audioOptions.track, {
     linkedClip: audioOptions.linkedClip,
     linkedTrack: audioOptions.linkedTrack,
@@ -482,35 +508,26 @@ function processTexture(
     runtimeAudioInput.track,
     audioOptions.masterAudioState,
   );
+  const codes: AINodeSandboxCode[] = [];
+  const nodes: AINodeSandboxNodeRequest[] = [];
 
-  return definitions.reduce((current, definition) => {
+  for (const definition of definitions) {
     const params = resolveParams(definition.id);
-    if (isPixelSortNode(definition)) {
-      return sortPixelsTexture(current);
-    }
-    const currentText = resolveCurrentTextProperties(clip.textProperties, current);
-    const currentDimensions = { width: current.width, height: current.height };
+    const currentText = clip.textProperties;
+    const currentDimensions = { width: texture.width, height: texture.height };
     const textSignal = createRuntimeTextSignal(currentText, currentDimensions);
     const metadata = {
-      ...(current.metadata ?? {}),
+      ...(texture.metadata ?? {}),
       ...createRuntimeMetadata(clip, source, currentText, currentDimensions, audioSignal),
     };
-    const timeSignal = createRuntimeTime({
-      clipId: clip.id,
+    const timeSignal = {
+      currentTime: clipLocalTime,
       clipLocalTime,
+      seconds: clipLocalTime,
       mediaTime: source.mediaTime,
-      params,
-      metadata,
-      clip: clipSignal,
-      source: sourceSignal,
-      graph: graphSignal,
-      node: { id: definition.id, label: definition.label },
-      signals: {},
-      audio: audioSignal,
-      text: textSignal,
-    });
+    };
     const baseSignals: Record<string, AINodeRuntimeInputValue> = {
-      texture: current,
+      texture,
       time: timeSignal,
       params,
       metadata,
@@ -532,8 +549,7 @@ function processTexture(
       ...baseSignals,
       connectedInputs,
     };
-
-    return runGeneratedNode(definition, current, {
+    const prepared = createAINodeSandboxNodeRequest(definition, texture, {
       clipId: clip.id,
       clipLocalTime,
       mediaTime: source.mediaTime,
@@ -552,8 +568,79 @@ function processTexture(
       audio: audioSignal,
       signals,
       text: textSignal,
-    }, connectedInputs);
-  }, texture);
+    }, connectedInputs, isPixelSortNode(definition));
+    if (!prepared) continue;
+    if (prepared.code) codes.push(prepared.code);
+    nodes.push(prepared.request);
+  }
+
+  return {
+    signature,
+    codeSignature: codes.map((node) => `${node.id}:${node.code}`).join('\u0000'),
+    codes,
+    nodes,
+    texture,
+    clip,
+    source,
+    layerId,
+  };
+}
+
+function writeTextureToRuntimeCanvas(
+  entry: RuntimeCacheEntry,
+  texture: AINodeRuntimeTexture,
+): boolean {
+  entry.canvas.width = texture.width;
+  entry.canvas.height = texture.height;
+  const outputContext = entry.canvas.getContext('2d');
+  if (!outputContext) return false;
+  const outputImageData = outputContext.createImageData(texture.width, texture.height);
+  outputImageData.data.set(texture.data);
+  outputContext.putImageData(outputImageData, 0, 0);
+  markDynamicCanvasUpdated(entry.canvas, 'ai-node');
+  return true;
+}
+
+function startSandboxWork(entry: RuntimeCacheEntry, work: AINodeRuntimeWork): void {
+  entry.pendingSignature = work.signature;
+  const job = runAINodeSandbox(entry.cacheKey, work.codes, {
+    texture: work.texture,
+    nodes: work.nodes,
+  }).then((sandboxOutput) => {
+    if (runtimeCache.get(entry.cacheKey) !== entry) return;
+    if (entry.queuedWork && entry.queuedWork.signature !== work.signature) return;
+    const output = applyAINodeSandboxTextResult(sandboxOutput, work.clip.textProperties);
+    if (!updateRuntimeCacheEntryResources(entry, entry.cacheKey, work.clip, work.source, work.layerId, {
+      width: output.width,
+      height: output.height,
+    })) return;
+    if (!writeTextureToRuntimeCanvas(entry, output)) {
+      releaseRuntimeCacheEntryByKey(entry.cacheKey);
+      return;
+    }
+    entry.disabledCodeSignature = undefined;
+    entry.lastSignature = work.signature;
+  }).catch((error) => {
+    if (runtimeCache.get(entry.cacheKey) === entry) {
+      entry.disabledCodeSignature = work.codeSignature;
+      entry.lastSignature = work.signature;
+      log.warn('Generated AI node sandbox failed; passing source through', error);
+    }
+  }).finally(() => {
+    pendingRuntimeJobs.delete(job);
+    if (runtimeCache.get(entry.cacheKey) !== entry) return;
+    entry.pendingSignature = undefined;
+    const queued = entry.queuedWork;
+    entry.queuedWork = undefined;
+    if (queued && queued.signature !== entry.lastSignature) startSandboxWork(entry, queued);
+  });
+  pendingRuntimeJobs.add(job);
+}
+
+export async function waitForAINodeRuntimeIdle(): Promise<void> {
+  while (pendingRuntimeJobs.size > 0) {
+    await Promise.allSettled([...pendingRuntimeJobs]);
+  }
 }
 
 export function renderClipAINodesToCanvas(
@@ -607,6 +694,9 @@ export function renderClipAINodesToCanvas(
   if (entry.lastSignature === signature) {
     return entry.canvas;
   }
+  if (entry.pendingSignature === signature) {
+    return entry.canvas;
+  }
 
   entry.sourceCanvas.width = processSize.width;
   entry.sourceCanvas.height = processSize.height;
@@ -619,39 +709,44 @@ export function renderClipAINodesToCanvas(
   try {
     context.drawImage(canvasSource, 0, 0, processSize.width, processSize.height);
     const imageData = context.getImageData(0, 0, processSize.width, processSize.height);
-    const output = processTexture(
+    const texture: AINodeRuntimeTexture = {
+      data: imageData.data,
+      width: imageData.width,
+      height: imageData.height,
+    };
+    const work = createSandboxWork(
       runnableNodes,
       clip,
       source,
-      {
-        data: imageData.data,
-        width: imageData.width,
-        height: imageData.height,
-      },
+      texture,
       clipLocalTime,
       resolveParams,
+      signature,
+      layerId,
       audioOptions,
     );
 
-    if (!updateRuntimeCacheEntryResources(entry, cacheKey, clip, source, layerId, {
-      width: output.width,
-      height: output.height,
-    })) {
-      return null;
+    if (entry.canvas.width === 0 || entry.canvas.height === 0) {
+      if (!writeTextureToRuntimeCanvas(entry, texture)) {
+        releaseRuntimeCacheEntryByKey(cacheKey);
+        return null;
+      }
+    }
+    if (work.nodes.length === 0) {
+      entry.lastSignature = signature;
+      return entry.canvas;
+    }
+    if (entry.disabledCodeSignature === work.codeSignature) {
+      if (!writeTextureToRuntimeCanvas(entry, texture)) {
+        releaseRuntimeCacheEntryByKey(cacheKey);
+        return null;
+      }
+      entry.lastSignature = signature;
+      return entry.canvas;
     }
 
-    entry.canvas.width = output.width;
-    entry.canvas.height = output.height;
-    const outputContext = entry.canvas.getContext('2d');
-    if (!outputContext) {
-      releaseRuntimeCacheEntryByKey(cacheKey);
-      return null;
-    }
-    const outputImageData = outputContext.createImageData(output.width, output.height);
-    outputImageData.data.set(output.data);
-    outputContext.putImageData(outputImageData, 0, 0);
-    markDynamicCanvasUpdated(entry.canvas, 'ai-node');
-    entry.lastSignature = signature;
+    if (!entry.pendingSignature) startSandboxWork(entry, work);
+    else if (entry.pendingSignature !== signature) entry.queuedWork = work;
     enforceAINodeRuntimeCacheLimits(cacheKey);
     return entry.canvas;
   } catch (error) {

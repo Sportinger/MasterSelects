@@ -72,6 +72,18 @@ Direct MCP calls to a published editor tool use the `chat` surface by default. T
 
 `dryRun: true` resolves the target session, reads the selected tool schema and policy, and does not execute the tool. It does not invoke a model or validate the tool arguments. Direct `devBridge` calls require `confirm: true` when policy marks the tool as mutating, sensitive, or local-file access.
 
+### Full-App Debugging
+
+The development surface includes three UI/API inspection helpers:
+
+| Tool | Purpose |
+|---|---|
+| `captureAppScreenshot` | Capture the connected app viewport or full scrolling document as a bounded PNG; browser chrome and operating-system UI are excluded |
+| `clickAppControl` | Click one visible control by accessible text or a specific CSS selector, then wait for UI work to settle |
+| `probeSameOriginRequest` | Make a credentialed same-origin `/api/` request in the selected tab and return bounded, redacted status/error data |
+
+Always select and pass an explicit `sessionId` when several tabs are connected. These helpers are restricted to `devBridge`, console, and internal callers. Screenshot and same-origin data are treated as sensitive bridge access, so direct calls must include the confirmation required by the resolved policy. Durable traces omit embedded image data and redact secret-like response fields.
+
 ## HTTP API
 
 All routes are under `/api/agent-control` and require the same bridge token accepted by `/api/ai-tools`.

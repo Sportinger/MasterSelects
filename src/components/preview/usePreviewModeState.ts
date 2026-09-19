@@ -12,6 +12,19 @@ export function shouldResetPreviewEditMode(isEditableSource: boolean, preserveWi
   return !isEditableSource && !preserveWithoutSource;
 }
 
+export function shouldShowSceneObjectOverlay(
+  sceneObjectOverlayEnabled: boolean,
+  activeSharedSceneOverlayContent: boolean,
+  isEditableSource: boolean,
+  isPlaying: boolean,
+  editMode: boolean,
+): boolean {
+  return sceneObjectOverlayEnabled
+    && activeSharedSceneOverlayContent
+    && isEditableSource
+    && (!isPlaying || editMode);
+}
+
 interface UsePreviewModeStateOptions {
   activeCameraClipAtPlayhead: TimelineClip | null;
   clips: TimelineClip[];
@@ -30,7 +43,6 @@ interface UsePreviewModeStateOptions {
   preserveEditModeWithoutSource?: boolean;
   sceneNavClipId: string | null;
   sceneObjectOverlayEnabled: boolean;
-  sceneNavFpsMode: boolean;
   selectedClipId: string | null;
   selectedLayerId: string | null;
   selectLayer: (id: string) => void;
@@ -73,6 +85,7 @@ function isSharedSceneOverlayClip(clip: TimelineClip): boolean {
     sourceType === 'model' ||
     sourceType === 'gaussian-splat' ||
     sourceType === 'splat-effector' ||
+    sourceType === 'flock' ||
     Boolean(clip.is3D && sourceType !== 'audio')
   );
 }
@@ -123,7 +136,6 @@ export function usePreviewModeState({
   preserveEditModeWithoutSource = false,
   sceneNavClipId,
   sceneObjectOverlayEnabled,
-  sceneNavFpsMode,
   selectedClipId,
   selectedLayerId,
   selectLayer,
@@ -174,23 +186,29 @@ export function usePreviewModeState({
   const maskTabActive = isEditableSource && maskPanelActive;
   const maskNavigationMode = layerEditMode && maskTabActive;
   const textClipEditMode = Boolean(layerEditMode && !maskTabActive && selectedClip?.textProperties && selectedTextLayer);
-  const textTypingActive = textClipEditMode && textTyping;
+  const textTypingActive = textClipEditMode && textTyping && !selectedClip?.captionProperties;
   const layerTransformMode = layerEditMode && !maskNavigationMode && (!textClipEditMode || !textTypingActive);
   const freeCanvasNavigationMode = layerTransformMode || maskNavigationMode || textClipEditMode;
-  const effectiveSceneNavFpsMode = sceneNavFpsMode && !editCameraModeActive;
   const activeEditCameraOrthoFrame =
     editCameraOrthoMode &&
     editCameraOrthoFrame?.clipId === editCameraClip.id &&
     editCameraOrthoFrame.mode === editCameraOrthoMode
       ? editCameraOrthoFrame
       : null;
-  const showSceneObjectOverlay = sceneObjectOverlayEnabled && activeSharedSceneOverlayContent && isEditableSource && !isPlaying;
+  const showSceneObjectOverlay = shouldShowSceneObjectOverlay(
+    sceneObjectOverlayEnabled,
+    activeSharedSceneOverlayContent,
+    isEditableSource,
+    isPlaying,
+    editMode,
+  );
   const textPreviewEditorEnabled = Boolean(
     isEditableSource &&
     !sourceMonitorActive &&
     !isPlaying &&
     textClipEditMode &&
     textTypingActive &&
+    !selectedClip?.captionProperties &&
     !sceneNavEnabled &&
     selectedClip?.textProperties &&
     selectedTextLayer,
@@ -238,7 +256,6 @@ export function usePreviewModeState({
   return {
     activeEditCameraOrthoFrame,
     activeSharedSceneOverlayContent,
-    effectiveSceneNavFpsMode,
     freeCanvasNavigationMode,
     layerTransformMode,
     maskNavigationMode,

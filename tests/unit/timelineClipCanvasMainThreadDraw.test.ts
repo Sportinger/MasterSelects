@@ -4,6 +4,8 @@ import { resolveTimelineClipCanvasPaintVisuals } from '../../src/components/time
 import { getTimelineClipCanvasThumbnailMediaFileId } from '../../src/components/timeline/utils/timelineClipCanvasThumbnailPreparation';
 import { createTimelineClipCanvasWorkerPaintClipInput } from '../../src/components/timeline/utils/timelineClipCanvasWorkerPaintClip';
 import { createTimelineClipCanvasChromeOverlays } from '../../src/components/timeline/utils/timelineClipCanvasChromeOverlays';
+import { getTimelineClipCanvasPassiveDecorationBadges } from '../../src/components/timeline/utils/timelineClipCanvasPassiveDecorations';
+import { TIMELINE_MISSING_MEDIA_FILL } from '../../src/components/timeline/utils/timelineClipCanvasAppearance';
 import type { TimelinePaintSourceClip } from '../../src/timeline';
 
 function createContext(): CanvasRenderingContext2D {
@@ -46,6 +48,43 @@ describe('timeline clip canvas main-thread draw', () => {
     } as TimelinePaintSourceClip & { solidColor: string };
 
     expect(createTimelineClipCanvasWorkerPaintClipInput(clip).bodyFill).toBe('#e2d0b0');
+  });
+
+  it('uses the audio track identity even when stale source metadata says video', () => {
+    const clip: TimelinePaintSourceClip = {
+      ...createClip(),
+      trackType: 'audio',
+      mediaFileId: 'shared-video-media',
+      source: { type: 'video', mediaFileId: 'shared-video-media' },
+      thumbnails: ['cached-video-thumbnail'],
+    };
+
+    expect(getTimelineClipCanvasThumbnailMediaFileId(clip)).toBeNull();
+    expect(resolveTimelineClipCanvasPaintVisuals(clip).thumbnail).toBe(false);
+
+    const [overlay] = createTimelineClipCanvasChromeOverlays({
+      chromeScrollX: 0,
+      chromeViewportWidth: 100,
+      clips: [clip],
+      geometryProps: { trackId: 'track-1' },
+      mediaFileStatusById: new Map(),
+      minLabelWidthPx: 1,
+      timeToPixel: (time) => time * 10,
+    });
+    expect(overlay).toMatchObject({ iconType: 'audio', showIcon: false });
+  });
+
+  it('marks missing media with an offline badge and missing-media body fill', () => {
+    const clip = { ...createClip(), needsReload: true };
+    const workerClip = createTimelineClipCanvasWorkerPaintClipInput(clip);
+
+    expect(workerClip).toMatchObject({
+      missingMedia: true,
+      bodyFill: TIMELINE_MISSING_MEDIA_FILL,
+    });
+    expect(getTimelineClipCanvasPassiveDecorationBadges(clip)).toContainEqual(expect.objectContaining({
+      label: 'OFFLINE',
+    }));
   });
 
   it('keeps a type pictogram model for clips without thumbnails', () => {

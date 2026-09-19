@@ -2,46 +2,41 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   clearHostedAgentReloadSnapshot,
-  readHostedAgentReloadSnapshot,
-  saveHostedAgentReloadSnapshot,
-  type HostedAgentK1TurnRequest,
+  readHostedAgentFastV2ReloadSnapshot,
+  saveHostedAgentFastV2ReloadSnapshot,
+  HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST,
+  HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION,
+  type HostedAgentFastV2StartRequest,
 } from '../../src/services/kernelClient/hostedAgent';
 import { normalizeFlashBoardChatMessage } from '../../src/services/project/flashBoardChatProjectCodec';
 
 const ASSISTANT_MESSAGE_ID = 'assistant-reload-test';
 
-function turnRequest(): HostedAgentK1TurnRequest {
+function turnRequest(): HostedAgentFastV2StartRequest {
   return {
-    clientCapabilities: {
-      maximumInlineResultCharacters: 1_000_000,
-      supportsImageResultRefs: false,
-      supportsNarrationDeltas: false,
-      toolNames: ['getTimelineState'],
-    },
     clientInstanceId: 'page_reload_test',
-    historyFormatVersion: 'history-v1',
-    maximumOutputTokens: 4_096,
-    maxTurnSpendCredits: 50,
-    model: 'gpt-5-6-terra',
-    modelPrompt: 'Inspect the timeline.',
-    playbookPrompt: 'Inspect the timeline.',
-    promptVersion: 'prompt-v1',
-    providerInput: {
-      input: [{ content: 'Inspect the timeline.', role: 'user' }],
-      protocol: 'openai-responses',
-      store: false,
-      tools: [],
+    compactSnapshot: {
+      payload: { clips: [], tracks: [] },
+      schemaVersion: 1,
+      stateFingerprint: `sha256:${'a'.repeat(64)}`,
+      timelineRevision: 3,
     },
+    editorBuildId: 'masterselects:reload-test',
+    executionContractDigest: HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST,
+    executionContractVersion: HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION,
+    protocolVersion: 'fast-agent-v2',
     request: 'Inspect the timeline.',
-    routePreference: 'auto',
     runSource: 'ui',
-    systemPrompt: 'Use editor tools.',
-    toolExecutionMode: 'normal',
-    toolSchemaVersion: 'tools-v1',
     turnId: 'flashboard-chat-turn:assistant-reload-test',
     visualReferences: [],
   };
 }
+
+const timelineCheckpoint = {
+  operationCheckpoint: null,
+  timelineRevision: 3,
+  timelineStateCanonical: '[[]]',
+};
 
 afterEach(() => {
   clearHostedAgentReloadSnapshot(ASSISTANT_MESSAGE_ID);
@@ -49,14 +44,14 @@ afterEach(() => {
 
 describe('hosted-agent reload resume', () => {
   it('keeps a persisted pending bubble reconnectable while its tab snapshot exists', () => {
-    saveHostedAgentReloadSnapshot({
+    saveHostedAgentFastV2ReloadSnapshot({
       assistantMessageId: ASSISTANT_MESSAGE_ID,
-      completedBatches: [],
       cursor: '1',
       request: turnRequest(),
+      ...timelineCheckpoint,
     });
 
-    expect(readHostedAgentReloadSnapshot(ASSISTANT_MESSAGE_ID)).toMatchObject({
+    expect(readHostedAgentFastV2ReloadSnapshot(ASSISTANT_MESSAGE_ID)).toMatchObject({
       assistantMessageId: ASSISTANT_MESSAGE_ID,
       cursor: '1',
     });
@@ -73,11 +68,11 @@ describe('hosted-agent reload resume', () => {
   });
 
   it('keeps already streamed text visible while reconnecting a hosted turn', () => {
-    saveHostedAgentReloadSnapshot({
+    saveHostedAgentFastV2ReloadSnapshot({
       assistantMessageId: ASSISTANT_MESSAGE_ID,
-      completedBatches: [],
       cursor: '2',
       request: turnRequest(),
+      ...timelineCheckpoint,
     });
 
     expect(normalizeFlashBoardChatMessage({

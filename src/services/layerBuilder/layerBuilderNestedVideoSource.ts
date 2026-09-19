@@ -10,6 +10,17 @@ import type { FrameContext } from './types';
 import type { NestedPreviewContinuationResolver } from './nestedPreviewContinuity';
 import { getNestedPreviewSourceKey } from './nestedPreviewContinuity';
 
+export function getNestedVideoLayerSourceKey(
+  trackKey: string,
+  continuityKey: string,
+  nestedClipId: string,
+): string {
+  const sourceKey = getNestedPreviewSourceKey(trackKey, continuityKey);
+  return nestedClipId.startsWith('transition-comp:') && nestedClipId.endsWith(':datamosh')
+    ? `${sourceKey}:datamosh`
+    : sourceKey;
+}
+
 export function buildNestedVideoSourceLayer(params: {
   baseLayer: Omit<Layer, 'source'>;
   nestedClip: TimelineClip;
@@ -25,7 +36,11 @@ export function buildNestedVideoSourceLayer(params: {
   if (!hasLayerBuilderRenderableVideoSource(nestedClip.source, nestedClip, mediaFile)) {
     return undefined;
   }
-  const sourceKey = getNestedPreviewSourceKey(params.trackKey, params.continuityKey);
+  const sourceKey = getNestedVideoLayerSourceKey(
+    params.trackKey,
+    params.continuityKey,
+    nestedClip.id,
+  );
   const videoBaseLayer = { ...baseLayer, sourceClipId: sourceKey };
 
   if (ctx.proxyEnabled && mediaFile?.proxyFps) {

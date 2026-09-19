@@ -18,6 +18,7 @@ import { Logger } from '../../../services/logger';
 import { useEngineStore } from '../../../stores/engineStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineClip } from '../../../types/timeline';
+import { calculateSourcePixelScale } from '../../../utils/sourcePixelScale';
 import type { RenderDeps } from '../RenderDispatcher';
 import type { DispatcherDebugSnapshotFacet, RenderDispatcherDebugSnapshot } from './dispatcherDebugSnapshot';
 import type { GaussianSequenceFacet, GaussianSplatSceneLoadRequest } from './gaussianSequenceFacet';
@@ -118,9 +119,22 @@ export class SharedScene3DProcessor {
     device: GPUDevice,
     width: number,
     height: number,
+    referenceWidthOrCameraOverride: number | SceneCameraConfig | null = width,
+    referenceHeightOrTargetId: number | string = height,
     cameraOverride?: SceneCameraConfig | null,
     targetId?: string,
   ): void {
+    const hasReferenceSize = typeof referenceWidthOrCameraOverride === 'number';
+    const referenceWidth = hasReferenceSize ? referenceWidthOrCameraOverride : width;
+    const referenceHeight = hasReferenceSize && typeof referenceHeightOrTargetId === 'number'
+      ? referenceHeightOrTargetId
+      : height;
+    const resolvedCameraOverride = hasReferenceSize
+      ? cameraOverride
+      : referenceWidthOrCameraOverride;
+    const resolvedTargetId = hasReferenceSize
+      ? targetId
+      : typeof referenceHeightOrTargetId === 'string' ? referenceHeightOrTargetId : undefined;
     const indices3D: number[] = [];
     for (let i = 0; i < layerData.length; i++) {
       const source = layerData[i].layer.source;
@@ -164,11 +178,14 @@ export class SharedScene3DProcessor {
       includeLayer: (data) => includedLayers.has(data),
     });
 
-    const camera = resolveRenderableSharedSceneCamera(
-      { width, height },
-      this.options.getEffectiveTimelineTime(),
-      cameraOverride ? { previewCameraOverride: cameraOverride } : undefined,
-    );
+    const camera = {
+      ...resolveRenderableSharedSceneCamera(
+        { width, height },
+        this.options.getEffectiveTimelineTime(),
+        resolvedCameraOverride ? { previewCameraOverride: resolvedCameraOverride } : undefined,
+      ),
+      referenceSize: { width: referenceWidth, height: referenceHeight },
+    };
     const activeSplatEffectors = this.options.collectActiveSplatEffectors(width, height);
     const renderLayers3D = layers3D.map((layer) => {
       if (layer.kind !== 'splat' || layer.gaussianSplatIsSequence !== true) {
@@ -199,17 +216,18 @@ export class SharedScene3DProcessor {
     const nativeRenderer = getGaussianSplatGpuRenderer();
     const timelineState = useTimelineStore.getState();
     const engineState = useEngineStore.getState();
-    const effectivePreviewCameraOverride = cameraOverride === undefined
+    const effectivePreviewCameraOverride = resolvedCameraOverride === undefined
       ? engineState.previewCameraOverride
-      : cameraOverride;
+      : resolvedCameraOverride;
     const isDraggingPlayhead = timelineState.isDraggingPlayhead;
     const primarySelectedClipId = timelineState.primarySelectedClipId && timelineState.selectedClipIds.has(timelineState.primarySelectedClipId)
       ? timelineState.primarySelectedClipId
       : timelineState.selectedClipIds.values().next().value as string | undefined;
     const sceneGizmoVisible = engineState.sceneGizmoVisible !== false;
+    const sceneOverlayActive = (engineState.activeSceneOverlayOwners?.size ?? 0) > 0;
     const sceneGizmoClipId = sceneGizmoVisible
       ? engineState.sceneGizmoClipIdOverride ?? (
-          cameraOverride !== undefined
+          resolvedCameraOverride !== undefined
             ? primarySelectedClipId ?? null
             : effectivePreviewCameraOverride ? null : primarySelectedClipId ?? null
         )
@@ -217,6 +235,11 @@ export class SharedScene3DProcessor {
     const sceneGizmoClip = sceneGizmoClipId
       ? timelineState.clips.find((clip) => clip.id === sceneGizmoClipId) ?? null
       : null;
+    const sceneGizmoUsesActiveViewCamera =
+      resolvedCameraOverride === undefined &&
+      !effectivePreviewCameraOverride &&
+      sceneGizmoClip?.source?.type === 'camera' &&
+      sceneGizmoClipId === engineState.sceneNavClipId;
     const sceneGizmoCameraTransform = sceneGizmoClip?.source?.type === 'camera'
       ? buildCameraGizmoTransform(
           sceneGizmoClip,
@@ -232,8 +255,9 @@ export class SharedScene3DProcessor {
       ? renderLayers3D.some((layer) => layer.clipId === sceneGizmoClipId)
       : false;
     const sceneGizmo: SceneGizmoRenderOptions | null = sceneGizmoClipId &&
+      !sceneGizmoUsesActiveViewCamera &&
       timelineState.isExporting !== true &&
-      timelineState.isPlaying !== true &&
+      (timelineState.isPlaying !== true || sceneOverlayActive) &&
       (sceneGizmoHasRenderableLayer || sceneGizmoCameraTransform)
       ? {
           clipId: sceneGizmoClipId,
@@ -291,6 +315,7 @@ export class SharedScene3DProcessor {
       ? sequenceTargetSceneKey
       : undefined;
 
+    const sceneTargetKey = resolvedTargetId ?? 'main';
     let textureView = renderer.renderScene(
       device,
       renderLayers3D,
@@ -299,10 +324,16 @@ export class SharedScene3DProcessor {
       isRealtimePlayback,
       sceneGizmo,
       d.maskTextureManager,
-      targetId ?? 'main',
+      sceneTargetKey,
+      d.effectsPipeline && d.sampler
+        ? { effectsPipeline: d.effectsPipeline, sampler: d.sampler }
+        : undefined,
     );
+    const gizmoTextureView = sceneGizmo
+      ? renderer.getGizmoOverlayView?.(sceneTargetKey) ?? null
+      : null;
     const hasSplatSequence = nativeSplatLayers.some((layer) => layer.gaussianSplatIsSequence === true);
-    if (textureView && hasSplatSequence && !targetId) {
+    if (textureView && hasSplatSequence && !resolvedTargetId) {
       this.options.gaussianSequenceFacet.setLastSharedFrame({
         textureView,
         sceneKey: sequenceRenderedSceneKey ?? sequenceTargetSceneKey ?? '',
@@ -313,7 +344,7 @@ export class SharedScene3DProcessor {
     if (!textureView) {
       const lastSharedSplatSequenceFrame = this.options.gaussianSequenceFacet.getLastSharedFrame();
       const canHoldLastSplatSequenceFrame =
-        !targetId &&
+        !resolvedTargetId &&
         hasSplatSequence &&
         lastSharedSplatSequenceFrame !== null &&
         lastSharedSplatSequenceFrame.width === width &&
@@ -368,6 +399,30 @@ export class SharedScene3DProcessor {
     const insertIdx = indices3D[0];
     const firstLayer = layerData[indices3D[0]].layer;
     const isSingle3D = indices3D.length === 1;
+    const firstLayerEffects = firstLayer.effects ?? [];
+    const appliedLayerSpaceEffectIds = new Set(
+      d.effectsPipeline && d.sampler
+        ? renderLayers3D[0]?.layerSpaceEffects?.map((effect) => effect.id) ?? []
+        : [],
+    );
+    const syntheticEffects = isSingle3D
+      ? renderLayers3D[0]?.kind === 'voxel'
+        ? firstLayerEffects.filter((effect) => !(
+            effect.enabled
+            && (effect.type === 'voxel-relief' || appliedLayerSpaceEffectIds.has(effect.id))
+          ))
+        : firstLayerEffects.filter((effect) => !(
+            effect.enabled && (appliedLayerSpaceEffectIds.has(effect.id)
+              || (renderLayers3D[0]?.kind === 'face-cables' && effect.type === 'face-cables'))
+          ))
+      : [];
+    const sceneTexturePixelScale = calculateSourcePixelScale(
+      width,
+      height,
+      referenceWidth,
+      referenceHeight,
+    );
+    const sceneTextureCompensation = 1 / Math.max(sceneTexturePixelScale, 0.000001);
     const syntheticLayer: Layer = {
       id: '__scene_3d__',
       name: '3D Scene',
@@ -375,10 +430,13 @@ export class SharedScene3DProcessor {
       opacity: isSingle3D ? firstLayer.opacity : 1,
       blendMode: isSingle3D ? firstLayer.blendMode : 'normal',
       source: { type: 'image' },
-      effects: isSingle3D ? firstLayer.effects : [],
+      effects: syntheticEffects,
       colorCorrection: isSingle3D ? firstLayer.colorCorrection : undefined,
       position: { x: 0, y: 0, z: 0 },
-      scale: { x: 1, y: 1 },
+      // The native scene is already rasterized for this viewport. Compensate
+      // the compositor's source-pixel scale so it remains a fullscreen scene
+      // instead of being aspect-fit a second time in 3D editor panes.
+      scale: { x: sceneTextureCompensation, y: sceneTextureCompensation },
       rotation: { x: 0, y: 0, z: 0 },
     };
 
@@ -395,5 +453,26 @@ export class SharedScene3DProcessor {
       layerData.splice(indices3D[i], 1);
     }
     layerData.splice(insertIdx, 0, syntheticData);
+    if (gizmoTextureView) {
+      layerData.push({
+        layer: {
+          id: '__scene_gizmo__',
+          name: 'Scene Gizmo',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal',
+          source: { type: 'image' },
+          effects: [],
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: sceneTextureCompensation, y: sceneTextureCompensation },
+          rotation: { x: 0, y: 0, z: 0 },
+        },
+        isVideo: false,
+        externalTexture: null,
+        textureView: gizmoTextureView,
+        sourceWidth: width,
+        sourceHeight: height,
+      });
+    }
   }
 }

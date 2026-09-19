@@ -2,29 +2,27 @@ import { useEffect, useRef, useSyncExternalStore } from 'react';
 
 import { liveInputRuntime } from '../../../services/mediaRuntime/liveInputRuntime';
 
-const MAX_PREVIEW_WIDTH = 320;
-const MAX_PREVIEW_HEIGHT = 180;
-const MIN_FRAME_INTERVAL_MS = 250;
-
 interface LiveInputPreviewCanvasProps {
   className?: string;
-  frameIntervalMs?: number;
   liveInputId: string;
+  presentationRole?: 'media-panel' | 'composition-preview';
 }
 
 const subscribeToLiveInputs = (listener: () => void) => liveInputRuntime.subscribe(listener);
 const getLiveInputRevision = () => liveInputRuntime.getRevision();
 
 /**
- * Paints low-rate, low-resolution snapshots from the runtime's existing video.
- * This deliberately creates neither another MediaStream nor another video decoder.
+ * Presents the existing capture stream in a visible native video element.
+ * Sharing the MediaStream does not reacquire the camera, and unlike an
+ * offscreen canvas timer it keeps iPad Safari delivering frames at the
+ * camera's native cadence while the timeline is idle.
  */
 export function LiveInputPreviewCanvas({
   className,
-  frameIntervalMs = 1000,
   liveInputId,
+  presentationRole = 'media-panel',
 }: LiveInputPreviewCanvasProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const previewRef = useRef<HTMLVideoElement | null>(null);
   const revision = useSyncExternalStore(
     subscribeToLiveInputs,
     getLiveInputRevision,
@@ -32,73 +30,59 @@ export function LiveInputPreviewCanvas({
   );
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return undefined;
-    canvas.width = 1;
-    canvas.height = 1;
+    const preview = previewRef.current;
+    const source = liveInputRuntime.getVideoElement(liveInputId);
+    const stream = source?.srcObject ?? null;
+    if (!preview || !stream) return undefined;
 
-    const video = liveInputRuntime.getVideoElement(liveInputId);
-    if (!video) return undefined;
-
-    const context = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
-    if (!context) return undefined;
-    context.imageSmoothingQuality = 'low';
-
-    const intervalMs = Math.max(MIN_FRAME_INTERVAL_MS, frameIntervalMs);
-    let timerId: number | null = null;
-    let visible = true;
-    let stopped = false;
-
-    const clearTimer = () => {
-      if (timerId === null) return;
-      window.clearTimeout(timerId);
-      timerId = null;
-    };
-
-    const draw = () => {
-      clearTimer();
-      if (stopped || !visible) return;
-
-      if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
-        const scale = Math.min(
-          1,
-          MAX_PREVIEW_WIDTH / video.videoWidth,
-          MAX_PREVIEW_HEIGHT / video.videoHeight,
-        );
-        const width = Math.max(1, Math.round(video.videoWidth * scale));
-        const height = Math.max(1, Math.round(video.videoHeight * scale));
-        if (canvas.width !== width) canvas.width = width;
-        if (canvas.height !== height) canvas.height = height;
-        try {
-          context.drawImage(video, 0, 0, width, height);
-        } catch {
-          // A capture can end between the readiness check and the draw call.
-        }
+    preview.srcObject = stream;
+    const play = () => {
+      if (document.visibilityState === 'visible') {
+        void preview.play().catch(() => undefined);
       }
-
-      timerId = window.setTimeout(draw, intervalMs);
     };
-
-    const handleLoadedData = () => draw();
-    video.addEventListener('loadeddata', handleLoadedData);
-
-    const observer = typeof IntersectionObserver === 'undefined'
-      ? null
-      : new IntersectionObserver(([entry]) => {
-          visible = entry?.isIntersecting ?? false;
-          if (visible) draw();
-          else clearTimer();
-        });
-    observer?.observe(canvas);
-    draw();
+    play();
+    const unregisterPresentationVideo = liveInputRuntime.registerPresentationVideo(
+      liveInputId,
+      preview,
+    );
+    let orientationRefreshTimer: number | null = null;
+    const refreshAfterOrientationChange = () => {
+      if (orientationRefreshTimer !== null) window.clearTimeout(orientationRefreshTimer);
+      orientationRefreshTimer = window.setTimeout(() => {
+        orientationRefreshTimer = null;
+        liveInputRuntime.refreshPresentationVideo(liveInputId, preview);
+      }, 180);
+    };
+    const screenOrientation = window.screen.orientation;
+    window.addEventListener('pageshow', play);
+    window.addEventListener('orientationchange', refreshAfterOrientationChange);
+    screenOrientation?.addEventListener?.('change', refreshAfterOrientationChange);
+    document.addEventListener('visibilitychange', play);
 
     return () => {
-      stopped = true;
-      clearTimer();
-      observer?.disconnect();
-      video.removeEventListener('loadeddata', handleLoadedData);
+      if (orientationRefreshTimer !== null) window.clearTimeout(orientationRefreshTimer);
+      window.removeEventListener('pageshow', play);
+      window.removeEventListener('orientationchange', refreshAfterOrientationChange);
+      screenOrientation?.removeEventListener?.('change', refreshAfterOrientationChange);
+      document.removeEventListener('visibilitychange', play);
+      unregisterPresentationVideo();
+      preview.pause();
+      preview.srcObject = null;
     };
-  }, [frameIntervalMs, liveInputId, revision]);
+  }, [liveInputId, revision]);
 
-  return <canvas ref={canvasRef} className={className} aria-hidden="true" />;
+  return (
+    <video
+      ref={previewRef}
+      className={className}
+      autoPlay
+      muted
+      playsInline
+      disablePictureInPicture
+      draggable={false}
+      data-live-input-presentation-role={presentationRole}
+      aria-hidden="true"
+    />
+  );
 }

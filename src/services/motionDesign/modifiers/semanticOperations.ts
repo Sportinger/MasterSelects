@@ -6,6 +6,7 @@ import {
   type MotionModifier,
   type MotionModifierDiagnostic,
   type MotionModifierStackContractV1,
+  type MotionModifierTarget,
 } from './contracts';
 
 export type MotionModifierSemanticOperation =
@@ -53,9 +54,14 @@ export function planMotionModifierSemanticOperation(currentValue: MotionModifier
     } else if (operation.type === 'update') {
       const index = base.modifiers.findIndex((modifier) => modifier.id === operation.modifierId); if (index < 0) throw new Error(`Modifier not found: ${operation.modifierId}`);
       const existing = base.modifiers[index]; const fields = operation.fields ?? {}; validateFields(existing.kind, fields);
-      const updated: any = { ...existing, ...(operation.enabled === undefined ? {} : { enabled: operation.enabled }), ...fields };
+      const updated = {
+        ...existing,
+        ...(operation.enabled === undefined ? {} : { enabled: operation.enabled }),
+        ...fields,
+      } as MotionModifier & Record<string, unknown>;
       if (existing.kind === 'field' && ('centerX' in fields || 'centerY' in fields)) { updated.center = { x: fields.centerX ?? existing.center.x, y: fields.centerY ?? existing.center.y }; delete updated.centerX; delete updated.centerY; }
-      if (operation.target) { const targetIndex = existing.targets.findIndex((target) => target.path === operation.target!.path); updated.targets = targetIndex < 0 ? [...existing.targets, operation.target] : existing.targets.map((target, i) => i === targetIndex ? operation.target : target); }
+      const operationTarget = operation.target;
+      if (operationTarget) { const normalizedTarget = operationTarget as MotionModifierTarget; const targetIndex = existing.targets.findIndex((target) => target.path === normalizedTarget.path); updated.targets = targetIndex < 0 ? [...existing.targets, normalizedTarget] : existing.targets.map((target, i) => i === targetIndex ? normalizedTarget : target); }
       candidate = { ...base, modifiers: reindex(base.modifiers.map((modifier, i) => i === index ? updated : modifier)) };
     } else if (operation.type === 'remove') {
       if (!base.modifiers.some((modifier) => modifier.id === operation.modifierId)) throw new Error(`Modifier not found: ${operation.modifierId}`);

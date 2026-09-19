@@ -4,37 +4,16 @@ import { createPortal } from 'react-dom';
 import { useDockStore } from '../../stores/dockStore';
 import type { BrowserWindowPanel } from '../../types/dock';
 import { DockPanelContent } from './DockPanelContent';
+import {
+  buildDetachedPanelWindowFeatures,
+  getDetachedPanelWindowBounds,
+  resolveDetachedPanelInitialBounds,
+} from './detachedPanelWindowGeometry';
+import { rememberDetachedPanelForRefresh } from './detachedPanelRefreshState';
 
 interface DetachedPanelWindowProps {
   windowPanel: BrowserWindowPanel;
-}
-
-function getDefaultPopupSize(): { width: number; height: number } {
-  return {
-    width: Math.min(1120, Math.max(760, Math.round(window.screen.availWidth * 0.56))),
-    height: Math.min(880, Math.max(540, Math.round(window.screen.availHeight * 0.72))),
-  };
-}
-
-function getPopupFeatures(savedBounds?: Pick<BrowserWindowPanel, 'position' | 'size'>): string {
-  const screenWithOffset = window.screen as Screen & { availLeft?: number; availTop?: number };
-  const fallbackSize = getDefaultPopupSize();
-  const width = savedBounds?.size ? Math.max(320, Math.round(savedBounds.size.width)) : fallbackSize.width;
-  const height = savedBounds?.size ? Math.max(240, Math.round(savedBounds.size.height)) : fallbackSize.height;
-  const fallbackLeft = Number(screenWithOffset.availLeft ?? 0) + Math.round((window.screen.availWidth - width) / 2);
-  const fallbackTop = Number(screenWithOffset.availTop ?? 0) + Math.round((window.screen.availHeight - height) / 2);
-  const left = savedBounds?.position ? Math.round(savedBounds.position.left) : fallbackLeft;
-  const top = savedBounds?.position ? Math.round(savedBounds.position.top) : fallbackTop;
-
-  return [
-    'popup=yes',
-    'resizable=yes',
-    'scrollbars=no',
-    `width=${width}`,
-    `height=${height}`,
-    `left=${left}`,
-    `top=${top}`,
-  ].join(',');
+  restoreReady?: boolean;
 }
 
 function syncTheme(targetDocument: Document): void {
@@ -79,28 +58,25 @@ function createWindowDocument(popup: Window, title: string): HTMLElement | null 
   return popup.document.getElementById('detached-panel-window-root');
 }
 
-function getWindowBounds(popup: Window): { width: number; height: number; left: number; top: number } | null {
-  if (popup.closed) return null;
-  const legacyWindow = popup as Window & { screenLeft?: number; screenTop?: number };
-  const width = Math.round(popup.outerWidth || popup.innerWidth || 0);
-  const height = Math.round(popup.outerHeight || popup.innerHeight || 0);
-  const left = Math.round(popup.screenX || legacyWindow.screenLeft || 0);
-  const top = Math.round(popup.screenY || legacyWindow.screenTop || 0);
-  if (width <= 0 || height <= 0) return null;
-  return { width, height, left, top };
+function detachWindowOpener(popup: Window): void {
+  popup.opener = null;
 }
 
-export function DetachedPanelWindow({ windowPanel }: DetachedPanelWindowProps) {
+export function DetachedPanelWindow({
+  windowPanel,
+  restoreReady = true,
+}: DetachedPanelWindowProps) {
   const dockBrowserWindowPanel = useDockStore((state) => state.dockBrowserWindowPanel);
   const updateBrowserWindowPanelSize = useDockStore((state) => state.updateBrowserWindowPanelSize);
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+  const [openBlocked, setOpenBlocked] = useState(false);
+  const [popupAttempt, setPopupAttempt] = useState(0);
+  const [popupWindow, setPopupWindow] = useState<Window | null>(null);
   const popupRef = useRef<Window | null>(null);
   const closingFromAppRef = useRef(false);
-  const mainUnloadingRef = useRef(false);
-  const initialBoundsRef = useRef<Pick<BrowserWindowPanel, 'position' | 'size'>>({
-    position: windowPanel.position,
-    size: windowPanel.size,
-  });
+  const windowPanelRef = useRef(windowPanel);
+  windowPanelRef.current = windowPanel;
+  const initialBoundsRef = useRef(resolveDetachedPanelInitialBounds(windowPanel, document));
   const lastBoundsRef = useRef<Pick<BrowserWindowPanel, 'position' | 'size'>>({
     position: windowPanel.position,
     size: windowPanel.size,
@@ -112,34 +88,48 @@ export function DetachedPanelWindow({ windowPanel }: DetachedPanelWindowProps) {
     popupRef.current?.close();
   }, [dockBrowserWindowPanel, windowPanel.id]);
 
+  const requestPopup = useCallback(() => window.open(
+    '',
+    `masterselects_panel_${windowPanel.id}`,
+    buildDetachedPanelWindowFeatures(initialBoundsRef.current, window),
+  ), [windowPanel.id]);
+
+  const retryPopupFromUserGesture = useCallback(() => {
+    const popup = requestPopup();
+    if (!popup) {
+      setOpenBlocked(true);
+      return;
+    }
+    popupRef.current = popup;
+    setOpenBlocked(false);
+    setPopupAttempt((attempt) => attempt + 1);
+  }, [requestPopup]);
+
   useEffect(() => {
     closingFromAppRef.current = false;
-    mainUnloadingRef.current = false;
 
-    const popup = window.open('', `masterselects_panel_${windowPanel.id}`, getPopupFeatures(initialBoundsRef.current));
+    const requestedPopup = popupRef.current;
+    const popup = requestedPopup && !requestedPopup.closed
+      ? requestedPopup
+      : requestPopup();
     if (!popup) {
-      dockBrowserWindowPanel(windowPanel.id);
+      // A restored window is opened after project hydration, outside the
+      // original user gesture. Chrome may block that attempt. Keep the
+      // persisted detached state intact so a later retry can restore it.
+      setOpenBlocked(true);
       return undefined;
     }
 
-    popup.opener = null;
+    setOpenBlocked(false);
+    detachWindowOpener(popup);
     popupRef.current = popup;
-    const root = createWindowDocument(popup, `${windowPanel.panel.title} - MasterSelects`);
-    const portalRootTimer = window.setTimeout(() => setPortalRoot(root), 0);
-    popup.focus();
+    setPopupWindow(popup);
 
-    const handlePopupUnload = () => {
-      if (!closingFromAppRef.current) {
-        closingFromAppRef.current = true;
-        dockBrowserWindowPanel(windowPanel.id);
-      }
-    };
     const handleMainUnload = () => {
-      const bounds = getWindowBounds(popup);
+      const bounds = getDetachedPanelWindowBounds(popup);
+      rememberDetachedPanelForRefresh(windowPanelRef.current, bounds, window.sessionStorage);
       if (bounds) updateBrowserWindowPanelSize(windowPanel.id, bounds);
-      mainUnloadingRef.current = true;
       closingFromAppRef.current = true;
-      popup.removeEventListener('beforeunload', handlePopupUnload);
       popup.close();
     };
 
@@ -160,7 +150,6 @@ export function DetachedPanelWindow({ windowPanel }: DetachedPanelWindowProps) {
       attributeFilter: ['class', 'style'],
     });
 
-    popup.addEventListener('beforeunload', handlePopupUnload);
     window.addEventListener('beforeunload', handleMainUnload);
     const closedPoll = window.setInterval(() => {
       if (popup.closed && !closingFromAppRef.current) {
@@ -169,7 +158,7 @@ export function DetachedPanelWindow({ windowPanel }: DetachedPanelWindowProps) {
       }
     }, 500);
     const sizePoll = window.setInterval(() => {
-      const bounds = getWindowBounds(popup);
+      const bounds = getDetachedPanelWindowBounds(popup);
       if (!bounds) return;
       const previousSize = lastBoundsRef.current.size;
       const previousPosition = lastBoundsRef.current.position;
@@ -191,20 +180,68 @@ export function DetachedPanelWindow({ windowPanel }: DetachedPanelWindowProps) {
 
     return () => {
       closingFromAppRef.current = true;
-      window.clearTimeout(portalRootTimer);
       styleObserver.disconnect();
       themeObserver.disconnect();
       window.clearInterval(closedPoll);
       window.clearInterval(sizePoll);
       window.removeEventListener('beforeunload', handleMainUnload);
-      popup.removeEventListener('beforeunload', handlePopupUnload);
-      const bounds = getWindowBounds(popup);
+      const bounds = getDetachedPanelWindowBounds(popup);
       if (bounds) updateBrowserWindowPanelSize(windowPanel.id, bounds);
       popupRef.current = null;
     };
-  }, [dockBrowserWindowPanel, updateBrowserWindowPanelSize, windowPanel.id, windowPanel.panel.title]);
+  }, [
+    dockBrowserWindowPanel,
+    popupAttempt,
+    requestPopup,
+    updateBrowserWindowPanelSize,
+    windowPanel.id,
+    windowPanel.panel.title,
+  ]);
+
+  useEffect(() => {
+    if (!restoreReady || !popupWindow || popupWindow.closed) return undefined;
+
+    const root = createWindowDocument(
+      popupWindow,
+      `${windowPanel.panel.title} - MasterSelects`,
+    );
+    const portalRootTimer = window.setTimeout(() => setPortalRoot(root), 0);
+    popupWindow.focus();
+
+    return () => {
+      window.clearTimeout(portalRootTimer);
+    };
+  }, [popupWindow, restoreReady, windowPanel.panel.title]);
 
   if (!portalRoot) {
+    if (openBlocked) {
+      return (
+        <div
+          role="status"
+          style={{
+            position: 'fixed',
+            zIndex: 100000,
+            top: 72,
+            right: 18,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            maxWidth: 360,
+            padding: '10px 12px',
+            border: '1px solid var(--border-color, #3f4752)',
+            borderRadius: 8,
+            background: 'var(--panel-bg, #20242a)',
+            color: 'var(--text-primary, #f3f5f7)',
+            boxShadow: '0 12px 32px rgb(0 0 0 / 45%)',
+          }}
+        >
+          <span>{windowPanel.panel.title} window was blocked by the browser.</span>
+          <button type="button" onClick={retryPopupFromUserGesture}>
+            Restore {windowPanel.panel.title} window
+          </button>
+        </div>
+      );
+    }
     return null;
   }
 
@@ -224,7 +261,19 @@ export function DetachedPanelWindow({ windowPanel }: DetachedPanelWindowProps) {
         </button>
       </header>
       <main className="detached-panel-window-content">
-        <DockPanelContent panel={windowPanel.panel} />
+        <div
+          data-detached-panel-content-host
+          style={{
+            flex: '1 1 0',
+            width: '100%',
+            height: '100%',
+            minWidth: 0,
+            minHeight: 0,
+            overflow: 'hidden',
+          }}
+        >
+          <DockPanelContent panel={windowPanel.panel} />
+        </div>
       </main>
     </div>,
     portalRoot

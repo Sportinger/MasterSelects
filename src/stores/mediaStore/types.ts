@@ -23,6 +23,7 @@ import type { LightClipSettings } from '../../types/light';
 import type { VectorAnimationMetadata, VectorAnimationProvider } from '../../types/vectorAnimation';
 import type { ShapePrimitive } from '../../types/motionDesign';
 import type { LiveInputSource } from '../../types/liveInput';
+import type { SourceAnnotation } from '../../types/sourceAnnotation';
 import type {
   SceneCutAnalysis,
   SceneCutAnalysisStatus,
@@ -35,6 +36,14 @@ import type {
   SignalMetadata,
   SignalOperatorDescriptor,
 } from '../../signals';
+import type {
+  ExternalMediaOrigin,
+  LinkedMediaSource,
+  MediaSourceSelection,
+  MediaVideoTrackMetadata,
+} from '../../types/mediaMetadata';
+import type { RemoteColorGradeState } from '../../types/colorGradeOwnership';
+import type { TrackingAsset } from '../../types/trackingAsset';
 
 // Media item types
 export type ImportedMediaType =
@@ -56,7 +65,8 @@ export type MediaType =
   | 'camera'
   | 'light'
   | 'splat-effector'
-  | 'signal';
+  | 'signal'
+  | 'tracking';
 
 // Proxy status for video files
 export type ProxyStatus = 'none' | 'generating' | 'ready' | 'error';
@@ -106,7 +116,7 @@ export interface MediaItem {
 }
 
 // Imported file
-export interface MediaFile extends MediaItem {
+export interface MediaFile extends MediaItem, MediaVideoTrackMetadata {
   type: ImportedMediaType;
   file?: File;
   url: string;
@@ -131,6 +141,7 @@ export interface MediaFile extends MediaItem {
   waveformProgress?: number;
   fileHash?: string;
   thumbnailUrl?: string;
+  remoteColorGrade?: RemoteColorGradeState;
   splatCount?: number;
   totalSplatCount?: number;
   splatFrameCount?: number;
@@ -173,10 +184,16 @@ export interface MediaFile extends MediaItem {
   filePath?: string;
   absolutePath?: string;
   projectPath?: string;
+  sourceRootId?: string;
+  sourceRelativePath?: string;
+  linkedSources?: LinkedMediaSource[];
+  sourceSelection?: MediaSourceSelection;
+  externalOrigin?: ExternalMediaOrigin;
   // Import loading state
   isImporting?: boolean;
   vectorAnimation?: VectorAnimationMetadata;
   liveInput?: LiveInputSource;
+  sourceAnnotations?: SourceAnnotation[];
 }
 
 // Text item (for Media Panel - can be dragged to timeline)
@@ -316,6 +333,7 @@ export interface Composition extends MediaItem {
   camera?: CompositionCamera;
   transitionComp?: TransitionCompositionLink;
   captionComp?: import('../../types/caption').CaptionCompositionLink;
+  annotations?: SourceAnnotation[];
 }
 
 // Folder for organization
@@ -365,7 +383,8 @@ export type ProjectItem =
   | SplatEffectorItem
   | MathSceneItem
   | MotionShapeItem
-  | SignalAssetItem;
+  | SignalAssetItem
+  | TrackingAsset;
 
 // Slice creator type for mediaStore
 export type MediaSliceCreator<T> = (

@@ -6,6 +6,7 @@ import { useDraggableDialog } from './settings/useDraggableDialog';
 import { AppearanceSettings } from './settings/AppearanceSettings';
 import { AudioSettings } from './settings/AudioSettings';
 import { GeneralSettings } from './settings/GeneralSettings';
+import { ImportSettings } from './settings/ImportSettings';
 import { MidiSettings } from './settings/MidiSettings';
 import { TranscriptionSettings } from './settings/TranscriptionSettings';
 import { IntegrationCredentialsSettings } from './settings/IntegrationCredentialsSettings';
@@ -25,6 +26,7 @@ interface CategoryConfig {
 
 const categories: CategoryConfig[] = [
   { id: 'general', label: 'General', icon: '\u2699' },
+  { id: 'import', label: 'Import', icon: '\uD83D\uDCC1' },
   { id: 'midi', label: 'MIDI', icon: '\u266B' },
   { id: 'shortcuts', label: 'Shortcuts', icon: '\u2328' },
   { id: 'appearance', label: 'Appearance', icon: '\uD83C\uDFA8' },
@@ -52,6 +54,7 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
   const renderCategoryContent = () => {
     switch (activeCategory) {
       case 'general': return <GeneralSettings />;
+      case 'import': return <ImportSettings />;
       case 'midi': return <MidiSettings />;
       case 'shortcuts': return <ShortcutsSettings />;
       case 'appearance': return <AppearanceSettings />;

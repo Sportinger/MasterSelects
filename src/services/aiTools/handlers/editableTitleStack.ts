@@ -32,6 +32,7 @@ const TITLE_TEXT_STYLE_KEYS = new Set([
   'verticalAlign',
   'lineHeight',
   'letterSpacing',
+  'wrapMode',
   'strokeEnabled',
   'strokeColor',
   'strokeWidth',

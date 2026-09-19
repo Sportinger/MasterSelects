@@ -1,6 +1,7 @@
 import { createCaptionTextProperties, cloneDefaultCaptionProperties } from '../../services/captions/captionDefaults';
 import { renderCaptionTextClipFrame } from '../../services/captions/captionTextRuntime';
 import { getCaptionSourceCandidates } from '../../services/captions/captionRuntime';
+import { createTextBoundsFromRect, resolveTextBoxRect } from '../../services/textLayout';
 import { layerBuilder } from '../../services/layerBuilder';
 import { renderHostPort } from '../../services/render/renderHostPort';
 import {
@@ -49,6 +50,39 @@ function mergeCaptionProperties(
     ...patch,
     background: patch.background ? { ...current.background, ...patch.background } : current.background,
     highlight: patch.highlight ? { ...current.highlight, ...patch.highlight } : current.highlight,
+  };
+}
+
+function resizeCaptionTextBoxForLines(
+  text: TextClipProperties,
+  maxLines: number,
+  resolution: { width: number; height: number },
+): TextClipProperties {
+  const currentBox = resolveTextBoxRect(text, resolution.width, resolution.height);
+  const boxHeight = Math.max(
+    text.fontSize * text.lineHeight * Math.max(1, maxLines) + text.fontSize * 0.7,
+    resolution.height * 0.14,
+  );
+  const box = {
+    x: currentBox.x,
+    y: currentBox.y + (currentBox.height - boxHeight) / 2,
+    width: currentBox.width,
+    height: boxHeight,
+  };
+  return {
+    ...text,
+    boxEnabled: true,
+    boxX: box.x,
+    boxY: box.y,
+    boxWidth: box.width,
+    boxHeight: box.height,
+    textBounds: createTextBoundsFromRect(
+      box,
+      resolution.width,
+      resolution.height,
+      text.textBounds?.id,
+      { clampToCanvas: false },
+    ),
   };
 }
 
@@ -219,9 +253,18 @@ export const createCaptionClipSlice: SliceCreator<CaptionClipActions> = (set, ge
       });
       return;
     }
+    const captionProperties = mergeCaptionProperties(clip.captionProperties, patch);
+    const textProperties = patch.maxLines === undefined
+      ? clip.textProperties
+      : resizeCaptionTextBoxForLines(
+          clip.textProperties,
+          captionProperties.maxLines,
+          getActiveCompositionResolution(),
+        );
     const nextClip = {
       ...clip,
-      captionProperties: mergeCaptionProperties(clip.captionProperties, patch),
+      captionProperties,
+      textProperties,
     };
     const nextClips = state.clips.map(candidate => candidate.id === clipId ? nextClip : candidate);
     set({ clips: nextClips });

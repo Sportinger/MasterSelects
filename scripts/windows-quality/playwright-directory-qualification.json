@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "task": "AQ-048",
+  "planRevision": "AQ-R3",
+  "status": "candidate requiring independent controller review",
+  "playwrightVersion": "1.62.1",
+  "campaignSha256": "2a6ca04b8eb5a34db493e771be3b92edda4664267476cc0f5da9cc29ae28fe23",
+  "algorithmSha256": "70db3269a48ed20c505c0b52d104f6049b4ce3aac1cf83d56789652bd082a37a",
+  "runtimeInputs": [
+    {
+      "path": "node_modules/@playwright/test/package.json",
+      "sha256": "be51f784a5742a1aa075e0173f5f04f189a791cc30c40e3bb18be584f696764e"
+    },
+    {
+      "path": "node_modules/@playwright/test/cli.js",
+      "sha256": "79e23e6a249176295b8490567daa7717448a75866d6ea6f6b296ff3d23305c69"
+    },
+    {
+      "path": "node_modules/@playwright/test/index.js",
+      "sha256": "499da5dd8585212108a1443793de31ebc061ca7db02343f107955f261180cdfc"
+    },
+    {
+      "path": "node_modules/playwright/package.json",
+      "sha256": "ca170ec143a88ed3043ac953eb3b2377b2b97304104f4e1e23316684ce2c35af"
+    },
+    {
+      "path": "node_modules/playwright/test.js",
+      "sha256": "b97fa53a6ab864f51c9c48b5e4647d0acae45ba2948c5d78e38bfeb56755d974"
+    },
+    {
+      "path": "node_modules/playwright/lib/index.js",
+      "sha256": "cb793062d359fd495f10e0916523f52c76a47fd0b6c4195451dabcd48638e862"
+    },
+    {
+      "path": "node_modules/playwright/lib/common/index.js",
+      "sha256": "8f2588ccdb7ce2d245fdbe3222ba67817293799dff1ba2e58303f0d558b6526f"
+    },
+    {
+      "path": "node_modules/playwright/lib/worker/workerProcessEntry.js",
+      "sha256": "cc8274565200e5f5aeecc80aef9518526ff82a32c36e2a2b06e445c238cebcc6"
+    },
+    {
+      "path": "node_modules/playwright/lib/runner/index.js",
+      "sha256": "6dcf135a144b0f243848128bb68e0a25898b8ad764a34326f36ab45d9a9e1685"
+    },
+    {
+      "path": "node_modules/playwright/lib/loader/loaderProcessEntry.js",
+      "sha256": "45681332f4178770c204b33e5b8dcbba940baf3bc6fc86506bab24027cb513f3"
+    },
+    {
+      "path": "node_modules/playwright/lib/transform/babelBundle.js",
+      "sha256": "01511e45db7646e2a12890de8d7866caa0754c8799db6407a6345236f4bed0c4"
+    },
+    {
+      "path": "node_modules/playwright/lib/transform/esmLoader.js",
+      "sha256": "f4e708ea08083676777a7699c82417d16fa08113f197fbc070ccffb9e8db2beb"
+    },
+    {
+      "path": "node_modules/playwright-core/package.json",
+      "sha256": "07c47543631fef9508760365dee9fbe958c562093ec8d122543949ed231f233f"
+    },
+    {
+      "path": "node_modules/playwright-core/lib/coreBundle.js",
+      "sha256": "9393fa79e1c67c74edc26b610d65a4f7ed73d345a762465cc88340a33a2454ac"
+    }
+  ],
+  "structure": {
+    "testDir": "tests/playwright/beta",
+    "project": "windows-beta",
+    "projectId": "windows-beta",
+    "retries": 0,
+    "repeatEach": 1,
+    "titlePath": "[file basename, exact top-level title]",
+    "browserOwningCases": [
+      "beta-1",
+      "beta-7",
+      "beta-8"
+    ]
+  },
+  "citations": [
+    "playwright.beta.config.ts:5-25: guarded output root, testDir, project, retries, webServer and teardown",
+    "tests/playwright/beta/cleanup.spec.ts:9-48: beta-1 owns profile and browser.json; beta-2 owns no Chrome profile",
+    "tests/playwright/beta/edit-mask-export.spec.ts:19-21: top-level false/true loop produces beta-7/8 titles",
+    "tests/playwright/beta/windowsFixture.ts:54-66: profile/workspace and testInfo.outputPath(browser.json)",
+    "tests/playwright/beta/readiness.spec.ts and temporalOracle.spec.ts: plain Node oracle/readiness cases",
+    "node_modules/playwright/lib/worker/workerProcessEntry.js:72,900-914: exact outputDir algorithm",
+    "node_modules/playwright-core/lib/coreBundle.js:8037-8048: sanitizer and SHA1 middle shortening",
+    "node_modules/playwright/lib/common/index.js:603-616: unique project IDs; sole project keeps its name"
+  ]
+}

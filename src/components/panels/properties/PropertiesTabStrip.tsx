@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import './PropertiesTabStrip.css';
 
 const OVERFLOW_EPSILON_PX = 1;
 const HOVER_ADVANCE_INTERVAL_MS = 500;
@@ -175,7 +176,10 @@ export function PropertiesTabStrip({ children }: PropertiesTabStripProps) {
   }, [children, updateOverflow]);
 
   return (
-    <div className="properties-tabs-shell">
+    <div className="properties-tabs-shell" onPointerUp={event => {
+      const target = event.target;
+      if (target instanceof Element) (target.closest('button') as HTMLButtonElement | null)?.blur();
+    }}>
       <button
         aria-hidden={!overflow.left}
         aria-label="Show previous property tab"

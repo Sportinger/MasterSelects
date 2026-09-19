@@ -7,11 +7,11 @@ import type { CampaignStep } from './tutorialCampaigns';
 import { ClippyMascot } from './tutorial/ClippyMascot';
 
 const WELCOME_BUTTONS = [
-  { id: 'premiere', label: 'Premiere Pro', logo: '/logo-premiere.svg' },
-  { id: 'davinci', label: 'DaVinci Resolve', logo: '/logo-davinci.svg' },
-  { id: 'finalcut', label: 'Final Cut Pro', logo: '/logo-finalcut.png' },
-  { id: 'aftereffects', label: 'After Effects', logo: '/logo-aftereffects.svg' },
-  { id: 'beginner', label: 'Beginner', logo: null },
+  { id: 'premiere', label: 'Premiere Pro' },
+  { id: 'davinci', label: 'DaVinci Resolve' },
+  { id: 'finalcut', label: 'Final Cut Pro' },
+  { id: 'aftereffects', label: 'After Effects' },
+  { id: 'beginner', label: 'Beginner' },
 ] as const;
 
 // Legacy step types (kept for part 1/2 backward compat)
@@ -385,13 +385,6 @@ export function TutorialOverlay({ onClose, onSkip, part = 1, campaignSteps, camp
                       className="tutorial-welcome-btn"
                       onClick={() => handleWelcomeSelect(btn.id)}
                     >
-                      <div className="tutorial-welcome-icon">
-                        {btn.logo ? (
-                          <img src={btn.logo} alt={btn.label} draggable={false} />
-                        ) : (
-                          <span className="tutorial-welcome-icon--beginner">★</span>
-                        )}
-                      </div>
                       <div className="tutorial-welcome-label">{btn.label}</div>
                     </button>
                   ))}

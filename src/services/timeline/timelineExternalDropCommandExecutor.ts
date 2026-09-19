@@ -57,6 +57,7 @@ export interface TimelineExternalDropCommandExecutionParams {
   isAudioOnlyMediaFile: (mediaFile: MediaFile, file?: File) => boolean;
   isVideoTrack: boolean;
   mediaFilePolicy: TimelineExternalDropMediaFilePolicy;
+  resolveAddClipOptions?: (mediaFile: MediaFile) => AddClipOptions | Promise<AddClipOptions | undefined> | undefined;
   resolveLinkedVideoTrackId?: (startTime: number, duration?: number) => string | undefined;
   resolveStartTime: (duration?: number) => number;
   trackId: string;
@@ -139,6 +140,7 @@ async function executeMediaFileDropCommand(
   }
   const placementTrackId = linkedVideoTrackId ?? params.trackId;
   const mediaTypeOverride = getTimelineDropMediaTypeOverride(mediaFile);
+  const addClipOptions = await params.resolveAddClipOptions?.(mediaFile);
   if (routesLinkedVideoFromAudioTrack) {
     params.actions.addClip(
       placementTrackId,
@@ -147,7 +149,17 @@ async function executeMediaFileDropCommand(
       mediaFile.duration,
       mediaFileId,
       mediaTypeOverride,
-      { linkedAudioTrackId: params.trackId },
+      { ...addClipOptions, linkedAudioTrackId: params.trackId },
+    );
+  } else if (addClipOptions) {
+    params.actions.addClip(
+      placementTrackId,
+      file,
+      startTime,
+      mediaFile.duration,
+      mediaFileId,
+      mediaTypeOverride,
+      addClipOptions,
     );
   } else {
     params.actions.addClip(

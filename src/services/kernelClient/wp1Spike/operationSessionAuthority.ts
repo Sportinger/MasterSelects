@@ -13,7 +13,9 @@ import {
   type PublicOperationIdV1,
 } from './publicOperationContracts';
 
-const MAXIMUM_SESSION_LIFETIME_MS = 5 * 60 * 1_000;
+// Mirrors the kernel-owned WP1 operation-session contract. The browser still
+// requires a live, exactly bound session and validates every plan event.
+const MAXIMUM_SESSION_LIFETIME_MS = 2 * 60 * 60 * 1_000;
 const MAXIMUM_CLOCK_SKEW_MS = 5_000;
 const BOUND_IDENTIFIER = /^[A-Za-z0-9:_-]+$/;
 const ACCEPTED_PLAN_CONSTRUCTOR_TOKEN = Symbol('accepted-kernel-operation-plan');

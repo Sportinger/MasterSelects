@@ -43,6 +43,21 @@ describe('ProjectNameDialog', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('presents the existing project name in rename mode', () => {
+    render(
+      <ProjectNameDialog
+        mode="rename"
+        initialName="Current Project"
+        onClose={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(null)}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Rename project' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Project name' })).toHaveValue('Current Project');
+    expect(screen.getByRole('button', { name: /Rename/i })).toBeInTheDocument();
+  });
+
   it('reports invalid filesystem characters without submitting', () => {
     const onSubmit = vi.fn().mockResolvedValue(null);
     render(

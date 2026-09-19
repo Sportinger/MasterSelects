@@ -25,7 +25,7 @@
   position: relative;
   max-width: 100%;
   padding: 9px 11px 9px 13px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid var(--veil-border-subtle);
   border-radius: 10px 10px 10px 4px;
   background: color-mix(in srgb, var(--bg-elevated, #252536) 82%, rgba(0, 0, 0, 0.34));
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
@@ -47,7 +47,7 @@
 }
 
 .fb-kernel-card.is-verified {
-  --fb-kernel-accent: #4ec98a;
+  --fb-kernel-accent: var(--success-light);
 }
 
 .fb-kernel-card.is-declined {
@@ -87,7 +87,7 @@
 .fb-kernel-card-mode {
   padding: 0 5px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--veil-2);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -150,9 +150,9 @@
 .fb-kernel-card-action {
   min-height: 22px;
   padding: 0 9px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--veil-border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--veil-1);
   color: var(--text-secondary, #bbb);
   font: inherit;
   font-size: 10px;
@@ -180,7 +180,7 @@
   min-height: 22px;
   margin-left: auto;
   padding: 0 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--veil-border-subtle);
   border-radius: 5px;
   background: rgba(0, 0, 0, 0.24);
   color: var(--text-muted, #888);
@@ -198,7 +198,7 @@
 .fb-kernel-card-details {
   margin-top: 9px;
   padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--veil-border-subtle);
   display: flex;
   flex-direction: column;
   gap: 9px;
@@ -299,7 +299,7 @@
 
 .fb-kernel-card-checks li.is-pass::before {
   content: '✓';
-  color: #4ec98a;
+  color: var(--success-light);
 }
 
 .fb-kernel-card-checks li.is-fail::before {
@@ -348,7 +348,7 @@
 .fb-kernel-progress-count {
   padding: 0 5px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--veil-2);
   color: var(--text-muted, #888);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 10px;

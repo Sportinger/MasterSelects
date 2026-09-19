@@ -14,6 +14,7 @@ import {
   runFlashBoardProviderJob,
   type FlashBoardProviderAsset,
 } from './FlashBoardProviderRunners';
+import { reportAiGenerationLifecycle } from '../diagnostics/diagnosticReporter';
 
 const log = Logger.create('FlashBoardJob');
 export const FLASHBOARD_CANCEL_REQUESTED_ERROR =
@@ -59,7 +60,7 @@ interface RunningJob {
   abortController: AbortController;
 }
 
-type JobUpdateCallback = (recordId: string, update: {
+export type FlashBoardJobUpdateCallback = (recordId: string, update: {
   status: 'queued' | 'processing' | 'completed' | 'failed' | 'canceled';
   remoteTaskId?: string;
   progress?: number;
@@ -77,10 +78,24 @@ class FlashBoardJobService {
   private queue: QueueEntry[] = [];
   private running: RunningJob[] = [];
   private maxConcurrent = 100;
-  private onUpdate: JobUpdateCallback | null = null;
+  private onUpdate: FlashBoardJobUpdateCallback | null = null;
+  private updateListeners = new Set<FlashBoardJobUpdateCallback>();
 
-  setUpdateCallback(cb: JobUpdateCallback | null): void {
+  setUpdateCallback(cb: FlashBoardJobUpdateCallback | null): void {
     this.onUpdate = cb;
+  }
+
+  subscribeUpdates(cb: FlashBoardJobUpdateCallback): () => void {
+    this.updateListeners.add(cb);
+    return () => this.updateListeners.delete(cb);
+  }
+
+  private emitUpdate(
+    recordId: string,
+    update: Parameters<FlashBoardJobUpdateCallback>[1],
+  ): void {
+    this.onUpdate?.(recordId, update);
+    for (const listener of this.updateListeners) listener(recordId, update);
   }
 
   submit(input: SubmitGenerationJobInput): SubmitGenerationJobResult | null {
@@ -100,7 +115,7 @@ class FlashBoardJobService {
       abortController: new AbortController(),
     };
     this.queue.push(entry);
-    this.onUpdate?.(input.recordId, { status: 'queued' });
+    this.emitUpdate(input.recordId, { status: 'queued' });
     this.processQueue();
     return null;
   }
@@ -109,7 +124,7 @@ class FlashBoardJobService {
     const queueIdx = this.queue.findIndex(e => e.recordId === recordId);
     if (queueIdx >= 0) {
       this.queue.splice(queueIdx, 1);
-      this.onUpdate?.(recordId, { status: 'canceled' });
+      this.emitUpdate(recordId, { status: 'canceled' });
       return {
         billingMayContinue: false,
         disposition: 'canceled-before-submission',
@@ -120,11 +135,12 @@ class FlashBoardJobService {
     if (running) {
       running.abortController.abort();
       this.running = this.running.filter(r => r.recordId !== recordId);
-      this.onUpdate?.(recordId, {
+      this.emitUpdate(recordId, {
         status: 'processing',
         error: FLASHBOARD_CANCEL_REQUESTED_ERROR,
         ...(running.remoteTaskId ? { remoteTaskId: running.remoteTaskId } : {}),
       });
+      reportAiGenerationLifecycle(running.remoteTaskId, 'provider_result', 'cancelled');
       this.processQueue();
       return {
         billingMayContinue: true,
@@ -165,7 +181,8 @@ class FlashBoardJobService {
       service: request.service,
       abortController,
     });
-    this.onUpdate?.(input.recordId, { status: 'processing', remoteTaskId: input.remoteTaskId });
+    reportAiGenerationLifecycle(input.remoteTaskId, 'provider_processing', 'started');
+    this.emitUpdate(input.recordId, { status: 'processing', remoteTaskId: input.remoteTaskId });
     void this.resumeJob({
       recordId: input.recordId,
       request,
@@ -287,6 +304,7 @@ class FlashBoardJobService {
     }
 
     return {
+      duration: mediaFile.duration,
       id: mediaFile.id,
       mediaType: mediaFile.type,
       source,
@@ -314,27 +332,36 @@ class FlashBoardJobService {
           this.running = this.running.map((job) => (
             job.recordId === recordId ? { ...job, remoteTaskId } : job
           ));
-          this.onUpdate?.(recordId, {
+          this.emitUpdate(recordId, {
             status: 'processing',
             remoteTaskId,
           });
+          reportAiGenerationLifecycle(remoteTaskId, 'provider_processing', 'started');
         },
         onProcessing: (update) => {
-          this.onUpdate?.(recordId, update);
+          this.emitUpdate(recordId, update);
         },
         resolveReferenceImage: (mediaFileId) => this.resolveReferenceImage(mediaFileId),
         resolveHostedReferenceMedia: (mediaFileId) => this.resolveHostedReferenceMedia(mediaFileId),
       });
       this.running = this.running.filter(r => r.recordId !== recordId);
       if (result) {
-        this.onUpdate?.(recordId, result);
+        reportAiGenerationLifecycle(
+          result.remoteTaskId,
+          'provider_result',
+          result.status === 'completed' ? 'succeeded' : 'failed',
+          result.error,
+        );
+        this.emitUpdate(recordId, result);
       }
     } catch (err: unknown) {
+      const remoteTaskId = this.running.find((job) => job.recordId === recordId)?.remoteTaskId;
       this.running = this.running.filter(r => r.recordId !== recordId);
       if (!abortController.signal.aborted) {
         const message = err instanceof Error ? err.message : 'Unknown error';
         log.error(`Job failed for record ${recordId}:`, message);
-        this.onUpdate?.(recordId, { status: 'failed', error: message });
+        reportAiGenerationLifecycle(remoteTaskId, 'provider_result', 'failed', err);
+        this.emitUpdate(recordId, { status: 'failed', error: message });
       }
     }
 
@@ -356,19 +383,26 @@ class FlashBoardJobService {
         remoteTaskId,
         abortController,
         onProcessing: (update) => {
-          this.onUpdate?.(recordId, update);
+          this.emitUpdate(recordId, update);
         },
       });
       this.running = this.running.filter(r => r.recordId !== recordId);
       if (result) {
-        this.onUpdate?.(recordId, result);
+        reportAiGenerationLifecycle(
+          result.remoteTaskId ?? remoteTaskId,
+          'provider_result',
+          result.status === 'completed' ? 'succeeded' : 'failed',
+          result.error,
+        );
+        this.emitUpdate(recordId, result);
       }
     } catch (err: unknown) {
       this.running = this.running.filter(r => r.recordId !== recordId);
       if (abortController.signal.aborted) return;
       const message = err instanceof Error ? err.message : 'Unknown error';
       log.error(`Job resume failed for record ${recordId}:`, message);
-      this.onUpdate?.(recordId, { status: 'failed', error: message, remoteTaskId });
+      reportAiGenerationLifecycle(remoteTaskId, 'provider_result', 'failed', err);
+      this.emitUpdate(recordId, { status: 'failed', error: message, remoteTaskId });
     }
 
     this.processQueue();

@@ -1,6 +1,7 @@
 // Project Lifecycle — create, open, close, auto-sync
 
 import { Logger } from '../logger';
+import { preserveUnsavedProjectOnChunkFailure } from '../../runtime/chunkReloadGuard';
 import { useMediaStore, type MediaFile, type Composition, type MediaFolder } from '../../stores/mediaStore';
 import type { MediaState } from '../../stores/mediaStore/types';
 import { useTimelineStore } from '../../stores/timeline';
@@ -18,26 +19,43 @@ import {
 import { useExportStore } from '../../stores/exportStore';
 import { useMIDIStore } from '../../stores/midiStore';
 import { projectFileService } from '../projectFileService';
-import { isProjectStoreSyncInProgress, syncStoresToProject, saveCurrentProject } from './projectSave';
+import {
+  isProjectStoreDirtyMarkSuppressed,
+  syncStoresToProject,
+} from './projectSave';
 import { loadProjectToStores } from './projectLoad';
 import { persistFlashBoardChatJournal } from './flashBoardChatProjectJournal';
 import {
   resetStoryboardProjectState,
   useStoryboardStore,
 } from '../../stores/storyboardStore';
+import { useSeedancePreproductionStore } from '../../stores/seedancePreproductionStore';
+import { useTrackingStore } from '../../stores/trackingStore';
+import {
+  bucketRuntime,
+  classifyProductAnalyticsFailure,
+  productAnalytics,
+  type ProductAnalyticsFailureCode,
+  type ProductAnalyticsProjectFailureStage,
+} from '../productAnalytics';
 
 const log = Logger.create('ProjectSync');
 
-// Debounced continuous save — saves 1s after the last change
-let continuousSaveTimer: ReturnType<typeof setTimeout> | null = null;
-let isContinuousSaving = false;
-let scheduledContinuousSaveDelayMs: number | null = null;
-let queuedContinuousSaveDelayMs: number | null = null;
 let autoSyncDisposers: Array<() => void> = [];
-let beforeUnloadHandler: (() => void) | null = null;
+let beforeUnloadHandler: ((event: BeforeUnloadEvent) => void) | null = null;
+let hasProjectlessEdits = Boolean(import.meta.hot?.data?.hasProjectlessEdits);
 
-const DEFAULT_CONTINUOUS_SAVE_DELAY_MS = 1000;
-const SMOKE_CONTINUOUS_SAVE_RETRY_DELAY_MS = 500;
+function hasUnsavedWorkspace(): boolean {
+  if (projectFileService.isProjectOpen()) {
+    hasProjectlessEdits = false;
+    return projectFileService.hasUnsavedChanges();
+  }
+  return hasProjectlessEdits
+    || projectFileService.hasUnsavedChanges()
+    || useMediaStore.getState().files.length > 0
+    || useTimelineStore.getState().clips.length > 0
+    || getFlashBoardChatMessages().length > 0;
+}
 
 type TimelineCanvasSmokeGlobal = typeof globalThis & {
   __TIMELINE_CANVAS_SMOKE_ACTIVE__?: boolean;
@@ -72,6 +90,18 @@ function isPersistedMediaFileEqual(a: MediaFile, b: MediaFile): boolean {
     && a.height === b.height
     && a.fps === b.fps
     && a.codec === b.codec
+    && a.videoCodecId === b.videoCodecId
+    && a.codedWidth === b.codedWidth
+    && a.codedHeight === b.codedHeight
+    && a.rotation === b.rotation
+    && a.pixelAspectRatio?.numerator === b.pixelAspectRatio?.numerator
+    && a.pixelAspectRatio?.denominator === b.pixelAspectRatio?.denominator
+    && a.videoColorSpace?.primaries === b.videoColorSpace?.primaries
+    && a.videoColorSpace?.transfer === b.videoColorSpace?.transfer
+    && a.videoColorSpace?.matrix === b.videoColorSpace?.matrix
+    && a.videoColorSpace?.fullRange === b.videoColorSpace?.fullRange
+    && a.hasHighDynamicRange === b.hasHighDynamicRange
+    && a.canBeTransparent === b.canBeTransparent
     && a.audioCodec === b.audioCodec
     && a.container === b.container
     && a.bitrate === b.bitrate
@@ -131,176 +161,232 @@ function registerAutoSyncDisposer(disposer: unknown): void {
   }
 }
 
-function clearScheduledContinuousSave(): void {
-  if (continuousSaveTimer) {
-    clearTimeout(continuousSaveTimer);
-    continuousSaveTimer = null;
-  }
-  scheduledContinuousSaveDelayMs = null;
-}
-
-function queueContinuousSave(delayMs: number): void {
-  queuedContinuousSaveDelayMs = queuedContinuousSaveDelayMs === null
-    ? delayMs
-    : Math.min(queuedContinuousSaveDelayMs, delayMs);
-}
-
-function scheduleContinuousSave(delayMs: number = DEFAULT_CONTINUOUS_SAVE_DELAY_MS): void {
-  if (isContinuousSaving) {
-    queueContinuousSave(delayMs);
-    return;
-  }
-
-  if (
-    continuousSaveTimer &&
-    scheduledContinuousSaveDelayMs !== null &&
-    scheduledContinuousSaveDelayMs <= delayMs
-  ) {
-    return;
-  }
-
-  clearScheduledContinuousSave();
-  scheduledContinuousSaveDelayMs = delayMs;
-  continuousSaveTimer = setTimeout(() => {
-    void executeContinuousSave();
-  }, delayMs);
-}
-
-async function executeContinuousSave(): Promise<void> {
-  clearScheduledContinuousSave();
-  if (isContinuousSaving) {
-    queueContinuousSave(0);
-    return;
-  }
-  if (!projectFileService.isProjectOpen()) {
-    log.debug('Continuous save skipped — no project open');
-    return;
-  }
-  if (isTimelineCanvasSmokeActive()) {
-    log.debug('Continuous save delayed during timeline canvas smoke');
-    scheduleContinuousSave(SMOKE_CONTINUOUS_SAVE_RETRY_DELAY_MS);
-    return;
-  }
-
-  isContinuousSaving = true;
-  try {
-    const saved = await saveCurrentProject();
-    if (saved) {
-      log.info('Continuous save completed');
-    } else {
-      log.warn('Continuous save did not complete');
-    }
-  } catch (err) {
-    log.error('Continuous save failed:', err);
-  } finally {
-    isContinuousSaving = false;
-    if (queuedContinuousSaveDelayMs !== null) {
-      const nextDelay = queuedContinuousSaveDelayMs;
-      queuedContinuousSaveDelayMs = null;
-      scheduleContinuousSave(nextDelay);
-    }
-  }
-}
-
-/**
- * Flush pending continuous save immediately (used on beforeunload).
- * Calls syncStoresToProject synchronously so project data is up-to-date,
- * then fires off saveProject (may or may not complete before page unload).
- */
-function flushContinuousSave(): void {
-  if (!projectFileService.isProjectOpen()) return;
-  if (isTimelineCanvasSmokeActive()) {
-    log.warn('Continuous save flush skipped during timeline canvas smoke');
-    return;
-  }
-  if (isProjectStoreSyncInProgress()) {
-    log.warn('Continuous save flush skipped while project stores are being synchronized');
-    return;
-  }
-
-  clearScheduledContinuousSave();
-
-  // Sync stores to project data (mostly synchronous work)
-  void syncStoresToProject();
-  // Fire off disk write — may or may not complete before unload
-  void projectFileService.saveProject();
-  log.info('Continuous save flushed on beforeunload');
-}
-
-function triggerContinuousSaveIfEnabled(options?: { immediate?: boolean; delayMs?: number }): void {
-  const { saveMode } = useSettingsStore.getState();
-  if (saveMode === 'continuous') {
-    if (options?.immediate) {
-      void executeContinuousSave();
-      return;
-    }
-    scheduleContinuousSave(options?.delayMs ?? DEFAULT_CONTINUOUS_SAVE_DELAY_MS);
-  }
+function trackProjectActionFailure(
+  action: 'create' | 'open' | 'save',
+  startedAt: number,
+  reason: 'cancelled' | 'storage_error' | 'unknown',
+  failureCode: ProductAnalyticsFailureCode,
+  failureStage: ProductAnalyticsProjectFailureStage,
+): void {
+  productAnalytics.track('project_action_failed', {
+    action,
+    backend: projectFileService.activeBackend,
+    failure_code: failureCode,
+    failure_stage: failureStage,
+    reason,
+    runtime_bucket: bucketRuntime(Date.now() - startedAt),
+  });
 }
 
 /**
  * Create a new project
  */
 export async function createNewProject(name: string): Promise<boolean> {
-  // Create project folder on filesystem first
-  const success = await projectFileService.createProject(name);
-  if (!success) return false;
+  const startedAt = Date.now();
+  let failureStage: ProductAnalyticsProjectFailureStage = 'create';
+  try {
+    // Create project folder on filesystem first
+    const success = await projectFileService.createProject(name);
+    if (!success) {
+      trackProjectActionFailure('create', startedAt, 'cancelled', 'cancelled', 'selection');
+      return false;
+    }
 
-  // Now sync current store state into the newly created project
-  // This overwrites the empty initial project data with actual user edits
-  await syncStoresToProject();
-  return projectFileService.saveProject();
+    // Now sync current store state into the newly created project
+    // This overwrites the empty initial project data with actual user edits
+    failureStage = 'sync';
+    await syncStoresToProject();
+    failureStage = 'save';
+    const saved = await projectFileService.saveProject();
+    if (saved) {
+      productAnalytics.track('project_created', {
+        backend: projectFileService.activeBackend,
+        runtime_bucket: bucketRuntime(Date.now() - startedAt),
+      });
+    } else {
+      trackProjectActionFailure('save', startedAt, 'storage_error', 'storage_unavailable', 'save');
+    }
+    return saved;
+  } catch (error) {
+    trackProjectActionFailure(
+      failureStage === 'save' ? 'save' : 'create',
+      startedAt,
+      failureStage === 'save' ? 'storage_error' : 'unknown',
+      classifyProductAnalyticsFailure(error),
+      failureStage,
+    );
+    throw error;
+  }
+}
+
+export type BlankProjectCreationResult = 'created' | 'not-created' | 'save-failed';
+
+/**
+ * Create a named, empty project after the user has chosen its local parent folder.
+ * The current editor state is only cleared after the project folder exists, so
+ * cancelling the system folder picker leaves the current project untouched.
+ */
+export async function createBlankProject(name: string): Promise<BlankProjectCreationResult> {
+  const startedAt = Date.now();
+  let failureStage: ProductAnalyticsProjectFailureStage = 'create';
+  try {
+    const folderCreated = await projectFileService.createProject(name);
+    if (!folderCreated) {
+      trackProjectActionFailure('create', startedAt, 'cancelled', 'cancelled', 'selection');
+      return 'not-created';
+    }
+
+    resetFlashBoardActiveGenerationState();
+    resetStoryboardProjectState();
+    useSeedancePreproductionStore.getState().reset();
+    useExportStore.getState().reset();
+    useTrackingStore.getState().reset();
+    useMediaStore.getState().newProject();
+    useMediaStore.getState().setProjectName(name);
+
+    failureStage = 'sync';
+    await syncStoresToProject();
+    failureStage = 'save';
+    const saved = await projectFileService.saveProject();
+    if (saved) {
+      productAnalytics.track('project_created', {
+        backend: projectFileService.activeBackend,
+        runtime_bucket: bucketRuntime(Date.now() - startedAt),
+      });
+    } else {
+      trackProjectActionFailure('save', startedAt, 'storage_error', 'storage_unavailable', 'save');
+    }
+    return saved ? 'created' : 'save-failed';
+  } catch (error) {
+    trackProjectActionFailure(
+      failureStage === 'save' ? 'save' : 'create',
+      startedAt,
+      failureStage === 'save' ? 'storage_error' : 'unknown',
+      classifyProductAnalyticsFailure(error),
+      failureStage,
+    );
+    throw error;
+  }
 }
 
 /**
  * Open an existing project
  */
 export async function openExistingProject(): Promise<boolean> {
-  const success = await projectFileService.openProject();
-  if (!success) return false;
+  const startedAt = Date.now();
+  let failureStage: ProductAnalyticsProjectFailureStage = 'selection';
+  try {
+    const success = await projectFileService.openProject();
+    if (!success) {
+      trackProjectActionFailure('open', startedAt, 'cancelled', 'cancelled', 'selection');
+      return false;
+    }
 
-  // Load project data to stores
-  await loadProjectToStores();
+    // Load project data to stores
+    failureStage = 'load';
+    await loadProjectToStores();
 
-  return true;
+    productAnalytics.track('project_opened', {
+      backend: projectFileService.activeBackend,
+      runtime_bucket: bucketRuntime(Date.now() - startedAt),
+      source: 'picker',
+    });
+
+    return true;
+  } catch (error) {
+    trackProjectActionFailure(
+      'open',
+      startedAt,
+      failureStage === 'load' ? 'storage_error' : 'unknown',
+      classifyProductAnalyticsFailure(error),
+      failureStage,
+    );
+    throw error;
+  }
+}
+
+/**
+ * Open a project by name from browser storage. WebKit offers no folder
+ * picker, so the app lists the stored projects and opens the chosen one.
+ */
+export async function openStoredProject(name: string): Promise<boolean> {
+  const startedAt = Date.now();
+  try {
+    const success = await projectFileService.openStoredProject(name);
+    if (!success) {
+      trackProjectActionFailure('open', startedAt, 'storage_error', 'storage_unavailable', 'load');
+      return false;
+    }
+
+    await loadProjectToStores();
+
+    productAnalytics.track('project_opened', {
+      backend: projectFileService.activeBackend,
+      runtime_bucket: bucketRuntime(Date.now() - startedAt),
+      source: 'browser_storage',
+    });
+
+    return true;
+  } catch (error) {
+    trackProjectActionFailure(
+      'open',
+      startedAt,
+      'storage_error',
+      classifyProductAnalyticsFailure(error),
+      'load',
+    );
+    throw error;
+  }
 }
 
 /**
  * Close current project
  */
 export function closeCurrentProject(): void {
+  productAnalytics.track('project_closed', {
+    backend: projectFileService.activeBackend,
+  });
   projectFileService.closeProject();
   resetFlashBoardActiveGenerationState();
   resetStoryboardProjectState();
+  useSeedancePreproductionStore.getState().reset();
   useExportStore.getState().reset();
+  useTrackingStore.getState().reset();
   useMediaStore.getState().newProject();
+  hasProjectlessEdits = false;
 }
 
 /**
  * Mark project as dirty when stores change.
- * In continuous save mode, also triggers a debounced save to disk.
+ * Disk writes belong exclusively to explicit Save and the configured interval.
  */
 export function setupAutoSync(): void {
   teardownAutoSync();
+  registerAutoSyncDisposer(preserveUnsavedProjectOnChunkFailure(hasUnsavedWorkspace));
   restoreFlashBoardActiveGenerationRecordsFromRecovery();
 
-  const markProjectDirtyAndMaybeSave = (options?: { immediate?: boolean; delayMs?: number }) => {
-    if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
-      if (isTimelineCanvasSmokeActive()) {
-        log.debug('Project dirty mark skipped during timeline canvas smoke');
-        return;
-      }
-      projectFileService.markDirty();
-      triggerContinuousSaveIfEnabled(options);
+  const markProjectDirty = () => {
+    if (isProjectStoreDirtyMarkSuppressed()) {
+      return;
     }
+    if (isTimelineCanvasSmokeActive()) {
+      log.debug('Project dirty mark skipped during timeline canvas smoke');
+      return;
+    }
+    if (!projectFileService.isProjectOpen()) {
+      // Keep unsaved store edits safe even before a project file exists.
+      // Repeated setup and HMR must not forget this navigation veto.
+      hasProjectlessEdits = true;
+      return;
+    }
+    hasProjectlessEdits = false;
+    projectFileService.markDirty();
   };
 
   // Subscribe to store changes and mark project dirty
   registerAutoSyncDisposer(useMediaStore.subscribe(
     selectMediaAutoSyncState,
-    () => {
-      markProjectDirtyAndMaybeSave();
-    },
+    () => markProjectDirty(),
     { equalityFn: isMediaAutoSyncSelectionEqual },
   ));
 
@@ -315,20 +401,25 @@ export function setupAutoSync(): void {
       state.durationLocked,
     ] as const,
     () => {
-      markProjectDirtyAndMaybeSave();
+      markProjectDirty();
     },
     { equalityFn: shallowTupleEqual },
+  ));
+
+  registerAutoSyncDisposer(useTrackingStore.subscribe(
+    (state) => state.assets,
+    () => markProjectDirty(),
   ));
 
   registerAutoSyncDisposer(useTimelineStore.subscribe(
     (state) => state.clipKeyframes,
     () => {
-      markProjectDirtyAndMaybeSave({ immediate: true });
+      markProjectDirty();
     }
   ));
 
   const handleMIDIProjectStateChange = () => {
-    markProjectDirtyAndMaybeSave();
+    markProjectDirty();
   };
 
   registerAutoSyncDisposer(useMIDIStore.subscribe((state) => state.isEnabled, handleMIDIProjectStateChange));
@@ -337,16 +428,16 @@ export function setupAutoSync(): void {
   registerAutoSyncDisposer(useMIDIStore.subscribe((state) => state.parameterBindings, handleMIDIProjectStateChange));
 
   registerAutoSyncDisposer(subscribeFlashBoardActiveGenerationRecords(() => {
-    markProjectDirtyAndMaybeSave();
+    markProjectDirty();
   }));
   registerAutoSyncDisposer(subscribeFlashBoardComposerState(() => {
-    markProjectDirtyAndMaybeSave();
+    markProjectDirty();
   }));
   registerAutoSyncDisposer(subscribeFlashBoardPromptHistory(() => {
-    markProjectDirtyAndMaybeSave();
+    markProjectDirty();
   }));
   registerAutoSyncDisposer(subscribeFlashBoardChatMessages(() => {
-    markProjectDirtyAndMaybeSave();
+    markProjectDirty();
     void persistFlashBoardChatJournal(getFlashBoardChatMessages());
   }));
   registerAutoSyncDisposer(useStoryboardStore.subscribe((state, previous) => {
@@ -362,14 +453,24 @@ export function setupAutoSync(): void {
       || state.decisions !== previous.decisions
       || state.templates !== previous.templates
     ) {
-      markProjectDirtyAndMaybeSave();
+      markProjectDirty();
+    }
+  }));
+  registerAutoSyncDisposer(useSeedancePreproductionStore.subscribe((state, previous) => {
+    if (
+      state.activeRunId !== previous.activeRunId
+      || state.documents !== previous.documents
+      || state.runs !== previous.runs
+      || state.sourceBundle !== previous.sourceBundle
+    ) {
+      markProjectDirty();
     }
   }));
 
   registerAutoSyncDisposer(useExportStore.subscribe(
     (state) => [state.settings, state.presets, state.selectedPresetId, state.batch] as const,
     () => {
-      markProjectDirtyAndMaybeSave();
+      markProjectDirty();
     },
     { equalityFn: shallowTupleEqual },
   ));
@@ -379,15 +480,15 @@ export function setupAutoSync(): void {
   registerAutoSyncDisposer(useDockStore.subscribe((state) => {
     if (state.layout !== prevDockLayout) {
       prevDockLayout = state.layout;
-      markProjectDirtyAndMaybeSave();
+      markProjectDirty();
     }
   }));
 
-  // In continuous mode, flush pending save on page unload
-  beforeUnloadHandler = () => {
-    const { saveMode } = useSettingsStore.getState();
-    if (saveMode === 'continuous') {
-      flushContinuousSave();
+  // Do not start an unreliable write during navigation; retain the unsaved warning.
+  beforeUnloadHandler = event => {
+    if (hasUnsavedWorkspace()) {
+      event.preventDefault();
+      event.returnValue = '';
     }
   };
   window.addEventListener('beforeunload', beforeUnloadHandler);
@@ -396,8 +497,6 @@ export function setupAutoSync(): void {
 }
 
 export function teardownAutoSync(): void {
-  clearScheduledContinuousSave();
-  queuedContinuousSaveDelayMs = null;
 
   for (const dispose of autoSyncDisposers) {
     dispose();
@@ -411,7 +510,8 @@ export function teardownAutoSync(): void {
 }
 
 if (import.meta.hot) {
-  import.meta.hot.dispose(() => {
+  import.meta.hot.dispose((data) => {
+    data.hasProjectlessEdits = hasProjectlessEdits;
     teardownAutoSync();
   });
 }

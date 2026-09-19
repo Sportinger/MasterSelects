@@ -143,9 +143,55 @@ export async function handleSearchYouTube(args: Record<string, unknown>): Promis
     return { success: false, error: 'query is required' };
   }
 
-  const youtubeApiKey = useSettingsStore.getState().youtubeApiKey;
+  const settings = useSettingsStore.getState();
+  let nativeHelperError: Error | null = null;
+
+  try {
+    NativeHelperClient.configure({ port: settings.nativeHelperPort });
+    const helperConnected = NativeHelperClient.isConnected()
+      || (settings.turboModeEnabled && await NativeHelperClient.connect());
+    if (helperConnected) {
+      const startupCapability = NativeHelperClient.supportsMediaSearch();
+      const supportsSearch = startupCapability
+        ?? ((await NativeHelperClient.getInfo(15000)).media_search === true);
+      if (supportsSearch) {
+        const helperResults = await NativeHelperClient.searchVideos(query, maxResults);
+        const videos = helperResults.map((video) => ({
+          ...video,
+          publishedAt: '',
+          duration: formatDuration(video.durationSeconds),
+          viewCount: video.viewCount === undefined ? undefined : formatViews(video.viewCount),
+        }));
+
+        useYouTubeStore.getState().addVideos(videos);
+        useYouTubeStore.getState().setLastQuery(query);
+        log.info(`Native Helper YouTube search: "${query}" returned ${videos.length} results`);
+
+        return {
+          success: true,
+          data: {
+            query,
+            resultCount: videos.length,
+            source: 'native-helper',
+            videos,
+          },
+        };
+      }
+      nativeHelperError = new Error('The connected Native Helper does not support media search yet.');
+    }
+  } catch (error) {
+    nativeHelperError = error instanceof Error ? error : new Error('Native Helper search failed');
+    log.warn('Native Helper search unavailable; checking YouTube API fallback', nativeHelperError);
+  }
+
+  const youtubeApiKey = settings.youtubeApiKey;
   if (!youtubeApiKey) {
-    return { success: false, error: 'YouTube API key not configured. Please set it in Settings > API Keys.' };
+    return {
+      success: false,
+      error: nativeHelperError
+        ? `Native Helper search failed: ${nativeHelperError.message}`
+        : 'Native Helper is not connected and no YouTube API key is configured.',
+    };
   }
 
   try {

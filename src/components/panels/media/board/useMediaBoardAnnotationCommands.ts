@@ -2,6 +2,7 @@ import { useCallback, type MouseEvent as ReactMouseEvent } from 'react';
 
 import { focusMediaBoardAnnotationText } from './annotationDom';
 import type { MediaBoardAnnotation } from './annotations';
+import { isSyntheticTouchContextMenuEvent } from '../../../../hooks/useTouchContextMenu';
 
 type MediaBoardAnnotationCommandPatch = Partial<Pick<MediaBoardAnnotation, 'editing'>>;
 
@@ -9,6 +10,7 @@ interface MediaBoardAnnotationContextMenu {
   x: number;
   y: number;
   annotationId: string;
+  preferAbove?: boolean;
 }
 
 export interface UseMediaBoardAnnotationCommandsOptions {
@@ -43,7 +45,12 @@ export function useMediaBoardAnnotationCommands({
     event.stopPropagation();
     setSelection([]);
     setSelectedMediaBoardAnnotationId(annotation.id);
-    setAnnotationContextMenu({ x: event.clientX, y: event.clientY, annotationId: annotation.id });
+    setAnnotationContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      ...(isSyntheticTouchContextMenuEvent(event.nativeEvent) ? { preferAbove: true } : {}),
+      annotationId: annotation.id,
+    });
   }, [
     consumeSuppressedMediaBoardContextMenu,
     setAnnotationContextMenu,

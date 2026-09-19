@@ -13,7 +13,8 @@ import type {
 } from '../types/clipMetadata';
 import { projectFileService } from './project/ProjectFileService';
 import { useSettingsStore } from '../stores/settingsStore';
-import { useAccountStore } from '../stores/accountStore';
+import type { TranscriptionProvider } from '../stores/settingsStore';
+import { hasHostedAiSession, useAccountStore } from '../stores/accountStore';
 import {
   audioBufferToWav,
   extractAudioBuffer,
@@ -44,6 +45,7 @@ import {
   cancelTranscriptionRun,
   commitTranscriptionRunCheckpoint,
   finishTranscriptionRun,
+  getActiveTranscriptionRunClipId,
   hasActiveTranscriptionRun,
   isActiveTranscriptionRun,
   isTranscriptionAbort,
@@ -55,6 +57,8 @@ import {
   findTimelineAnalysisMediaFile,
   readTimelineAnalysisClips,
 } from './timeline/timelineRuntimeCoordinator';
+import { hydrateAndProjectMediaSourceArtifacts } from './mediaArtifacts/mediaSourceArtifacts';
+import type { TimelineClip } from '../types/timeline';
 
 const log = Logger.create('ClipTranscriber');
 const WAV_HEADER_BYTES = 44;
@@ -79,7 +83,111 @@ function boundedPercent(completed: number, total: number): number {
 }
 
 export const SIGNED_OUT_HOSTED_TRANSCRIPTION_MESSAGE =
-  'Sign in to use hosted transcription, or explicitly select Local Whisper. Personal provider API keys are not supported.';
+  'Free hosted transcription is unavailable. Choose a plan or explicitly select Local Whisper.';
+
+export interface TranscriptionOptions {
+  continueMode?: boolean;
+  provider?: TranscriptionProvider;
+}
+
+type TranscriptionTarget =
+  | { kind: 'clip'; id: string }
+  | { kind: 'media'; id: string };
+
+export type MediaTranscriptionQueueStatus =
+  | 'already-queued'
+  | 'already-running'
+  | 'queued'
+  | 'started';
+
+interface QueuedMediaTranscription {
+  language: string;
+  mediaFileId: string;
+  options: TranscriptionOptions;
+}
+
+const queuedMediaTranscriptions: QueuedMediaTranscription[] = [];
+let queuedMediaRunnerActive = false;
+
+function scheduleQueuedMediaTranscription(): void {
+  if (
+    queuedMediaRunnerActive
+    || hasActiveTranscriptionRun()
+    || queuedMediaTranscriptions.length === 0
+  ) return;
+  const request = queuedMediaTranscriptions.shift();
+  if (!request) return;
+  queuedMediaRunnerActive = true;
+  void transcribeTarget(
+    { kind: 'media', id: request.mediaFileId },
+    request.language,
+    request.options,
+  ).catch((error) => {
+    log.error('Queued source transcription failed before the run could publish status', error);
+  }).finally(() => {
+    queuedMediaRunnerActive = false;
+    scheduleQueuedMediaTranscription();
+  });
+}
+
+/**
+ * Serialize automatic source transcription requests. This keeps the public
+ * action atomic while allowing one kernel batch to schedule multiple sources.
+ */
+export function queueMediaFileTranscription(
+  mediaFileId: string,
+  language: string = 'auto',
+  options: TranscriptionOptions = {},
+): MediaTranscriptionQueueStatus {
+  const targetClipId = `media-source:${mediaFileId}`;
+  if (getActiveTranscriptionRunClipId() === targetClipId) return 'already-running';
+  if (queuedMediaTranscriptions.some((request) => request.mediaFileId === mediaFileId)) {
+    return 'already-queued';
+  }
+  const startsImmediately = !queuedMediaRunnerActive && !hasActiveTranscriptionRun();
+  queuedMediaTranscriptions.push({
+    language,
+    mediaFileId,
+    options: { ...options, provider: options.provider ?? 'hybrid' },
+  });
+  scheduleQueuedMediaTranscription();
+  return startsImmediately ? 'started' : 'queued';
+}
+
+async function probeMediaDuration(file: File): Promise<number> {
+  const element = document.createElement(file.type.startsWith('video/') ? 'video' : 'audio');
+  const url = URL.createObjectURL(file);
+  try {
+    element.preload = 'metadata';
+    element.src = url;
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        element.removeEventListener('loadedmetadata', onLoaded);
+        element.removeEventListener('error', onError);
+      };
+      const onLoaded = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = () => {
+        cleanup();
+        reject(new Error(`Could not read media duration for ${file.name}.`));
+      };
+      element.addEventListener('loadedmetadata', onLoaded, { once: true });
+      element.addEventListener('error', onError, { once: true });
+      element.load();
+    });
+    return Number.isFinite(element.duration) ? element.duration : 0;
+  } finally {
+    element.removeAttribute('src');
+    try {
+      element.load();
+    } catch {
+      // Detached media cleanup can fail in some browsers.
+    }
+    URL.revokeObjectURL(url);
+  }
+}
 
 async function transcribeHybridProvider(
   provider: TranscriptProviderId,
@@ -190,18 +298,75 @@ async function transcribeHybridRange(options: {
 export async function transcribeClip(
   clipId: string,
   language: string = 'auto',
-  options?: { continueMode?: boolean },
+  options?: TranscriptionOptions,
+): Promise<void> {
+  return transcribeTarget({ kind: 'clip', id: clipId }, language, options);
+}
+
+/** Transcribe an imported source without requiring it to be placed on a timeline. */
+export async function transcribeMediaFile(
+  mediaFileId: string,
+  language: string = 'auto',
+  options?: TranscriptionOptions,
+): Promise<void> {
+  return transcribeTarget(
+    { kind: 'media', id: mediaFileId },
+    language,
+    { ...options, provider: options?.provider ?? 'hybrid' },
+  );
+}
+
+async function transcribeTarget(
+  target: TranscriptionTarget,
+  language: string,
+  options?: TranscriptionOptions,
 ): Promise<void> {
   if (hasActiveTranscriptionRun()) {
     log.warn('Already transcribing');
     return;
   }
 
+  if (target.kind === 'media') {
+    await hydrateAndProjectMediaSourceArtifacts(target.id);
+  }
   const clips = readTimelineAnalysisClips();
-  const clip = clips.find(c => c.id === clipId);
+  let mediaFile = target.kind === 'media'
+    ? findTimelineAnalysisMediaFile(target.id)
+    : undefined;
+  let clip = target.kind === 'clip'
+    ? clips.find(c => c.id === target.id)
+    : undefined;
+
+  if (target.kind === 'media' && mediaFile?.file) {
+    const duration = mediaFile.duration && mediaFile.duration > 0
+      ? mediaFile.duration
+      : await probeMediaDuration(mediaFile.file);
+    if (!(duration > 0)) {
+      throw new Error(`Source duration is unavailable for media item: ${target.id}.`);
+    }
+    clip = {
+      id: `media-source:${mediaFile.id}`,
+      trackId: '',
+      name: mediaFile.name,
+      file: mediaFile.file,
+      startTime: 0,
+      duration,
+      inPoint: 0,
+      outPoint: duration,
+      source: null,
+      mediaFileId: mediaFile.id,
+      transcript: mediaFile.transcript,
+      transcriptStatus: mediaFile.transcriptStatus,
+      transcriptProgress: mediaFile.transcriptStatus === 'ready' ? 100 : 0,
+      transform: {} as TimelineClip['transform'],
+      effects: [],
+    } as TimelineClip;
+  }
+
+  const clipId = clip?.id ?? target.id;
 
   if (!clip || !clip.file) {
-    log.warn('Clip not found or has no file', { clipId });
+    log.warn('Transcription target not found or has no file', { target });
     return;
   }
 
@@ -210,8 +375,9 @@ export async function transcribeClip(
     return;
   }
 
-  const { transcriptionProvider } = useSettingsStore.getState();
-  const useHostedTranscription = Boolean(useAccountStore.getState().session?.authenticated);
+  const transcriptionProvider = options?.provider
+    ?? useSettingsStore.getState().transcriptionProvider;
+  const useHostedTranscription = hasHostedAiSession(useAccountStore.getState().session);
   const useHybridTranscription = transcriptionProvider === 'hybrid';
   const hostedProvider = transcriptionProvider === 'deepgram' ? 'deepgram' : 'openai';
   const effectiveProvider = useHybridTranscription
@@ -220,7 +386,7 @@ export async function transcribeClip(
       ? hostedProvider
       : transcriptionProvider;
   if (!useHostedTranscription && effectiveProvider !== 'local') {
-    log.warn('Blocked signed-out hosted transcription; sign-in is required', {
+    log.warn('Blocked hosted transcription because free AI access is unavailable', {
       provider: effectiveProvider,
     });
     updateClipTranscript(clipId, {
@@ -228,6 +394,13 @@ export async function transcribeClip(
       progress: 0,
       message: SIGNED_OUT_HOSTED_TRANSCRIPTION_MESSAGE,
     });
+    if (target.kind === 'media') {
+      useMediaStore.setState(state => ({
+        files: state.files.map(file => file.id === target.id
+          ? { ...file, transcriptStatus: 'error' as const }
+          : file),
+      }));
+    }
     return;
   }
 
@@ -238,7 +411,7 @@ export async function transcribeClip(
   const existingTranscript = resolveClipTranscriptWords(clip)
     ?? (linkedClip ? resolveClipTranscriptWords(linkedClip) : undefined);
   const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
-  const mediaFile = mediaFileId
+  mediaFile = mediaFileId
     ? findTimelineAnalysisMediaFile(mediaFileId)
     : undefined;
   const existingFusionArtifact = mediaFile?.transcriptArtifact;
@@ -280,8 +453,20 @@ export async function transcribeClip(
       : undefined,
   });
   const { signal } = run.controller;
-  const publishClipUpdate = (data: Parameters<typeof updateClipTranscript>[1]): void =>
+  const publishClipUpdate = (data: Parameters<typeof updateClipTranscript>[1]): void => {
     publishTranscriptionRunUpdate(run, data);
+    if (target.kind !== 'media' || !mediaFileId || !isActiveTranscriptionRun(run)) return;
+    const hasWords = Object.prototype.hasOwnProperty.call(data, 'words');
+    useMediaStore.setState(state => ({
+      files: state.files.map(file => file.id === mediaFileId
+        ? {
+            ...file,
+            transcriptStatus: data.status ?? file.transcriptStatus,
+            transcript: hasWords ? data.words : file.transcript,
+          }
+        : file),
+    }));
+  };
   const publishProviderUpdate: typeof updateClipTranscript = (_targetClipId, data) =>
     publishClipUpdate(data);
 
@@ -605,6 +790,14 @@ export async function transcribeClip(
       ? mergeTranscriptWords(existingTranscript, allNewWords)
       : allNewWords;
     if (useHybridTranscription) {
+      // Decoder duration can be a few milliseconds shorter than container
+      // duration. Completed providers must nevertheless end at 100%.
+      for (const provider of ['deepgram', 'openai'] as const) {
+        if (!providerHadError[provider]) {
+          providerCompletedDuration[provider] = totalDuration;
+          providerCompletedChunks[provider] = hybridTotalChunks;
+        }
+      }
       publishHybridProgress({
         currentWords: finalWords,
         mergeProgress: 35,
@@ -686,6 +879,7 @@ export async function transcribeClip(
     });
   } finally {
     finishTranscriptionRun(run);
+    scheduleQueuedMediaTranscription();
   }
 }
 

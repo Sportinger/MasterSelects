@@ -6,6 +6,9 @@ import {
   KLING_3_PROVIDER_ID,
   RUNWAY_ASPECT_RATIOS,
   RUNWAY_VIDEO_PROVIDER_ID,
+  SEEDANCE_2_5_ASPECT_RATIOS,
+  SEEDANCE_2_5_DURATIONS,
+  SEEDANCE_2_5_PROVIDER_ID,
   SEEDANCE_2_ASPECT_RATIOS,
   SEEDANCE_2_DURATIONS,
   SEEDANCE_2_FAST_PROVIDER_ID,
@@ -23,6 +26,17 @@ const KIEAI_PROVIDERS: VideoProvider[] = [
     supportedModes: KLING_3_MODES,
     supportedDurations: KLING_3_DURATIONS,
     supportedAspectRatios: KLING_3_ASPECT_RATIOS,
+    supportsImageToVideo: true,
+    supportsTextToVideo: true,
+  },
+  {
+    id: SEEDANCE_2_5_PROVIDER_ID,
+    name: 'Seedance 2.5',
+    description: 'Long-form multimodal video generation via Kie.ai',
+    versions: ['2.5'],
+    supportedModes: ['480p', '720p'],
+    supportedDurations: SEEDANCE_2_5_DURATIONS,
+    supportedAspectRatios: SEEDANCE_2_5_ASPECT_RATIOS,
     supportsImageToVideo: true,
     supportsTextToVideo: true,
   },
@@ -91,10 +105,11 @@ interface KieAiCreditRate {
 
 export interface KieAiCostOptions {
   hasVideoInput?: boolean;
+  videoInputDuration?: number;
 }
 
 // Kie.ai pricing in vendor CREDITS per second
-// Source: Kie.ai public pricing API, checked 2026-05-28
+// Source: Kie.ai public model pricing, checked 2026-08-07
 // std no-audio (720p): 14 credits/s ($0.07/s)
 // std audio (720p):    20 credits/s ($0.10/s)
 // pro no-audio (1080p): 18 credits/s ($0.09/s)
@@ -114,6 +129,10 @@ const KIEAI_CREDITS_PER_SECOND: Record<string, Record<string, KieAiCreditRate>> 
   [SEEDANCE_2_FAST_PROVIDER_ID]: {
     '480p': { normal: 15.5, videoInput: 9 },
     '720p': { normal: 33, videoInput: 20 },
+  },
+  [SEEDANCE_2_5_PROVIDER_ID]: {
+    '480p': { normal: 28, videoInput: 17 },
+    '720p': { normal: 63, videoInput: 38 },
   },
 };
 
@@ -136,10 +155,14 @@ export function calculateKieAiCost(
   if (!providerRates) return duration * 14;
   const modeRates = providerRates[mode];
   if (!modeRates) return duration * 14;
-  const ratePerSecond = options.hasVideoInput && modeRates.videoInput != null
-    ? modeRates.videoInput
+  const hasPricedVideoInput = options.hasVideoInput && modeRates.videoInput != null;
+  const ratePerSecond = hasPricedVideoInput
+    ? modeRates.videoInput ?? modeRates.normal
     : sound && modeRates.audio != null
       ? modeRates.audio
       : modeRates.normal;
-  return duration * ratePerSecond;
+  const billedDuration = hasPricedVideoInput
+    ? duration + Math.max(0, options.videoInputDuration ?? 0)
+    : duration;
+  return billedDuration * ratePerSecond;
 }

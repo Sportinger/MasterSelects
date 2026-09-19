@@ -2,19 +2,21 @@ import type {
   Composition,
   MediaFile,
   MediaFolder,
-  MeshPrimitiveType,
   ProjectItem,
   SolidItem,
 } from '../../../../stores/mediaStore';
-import type { ShapePrimitive } from '../../../../types/motionDesign';
 import type { VideoFrameExtractionPosition } from '../videoFrameExtraction';
 import { MediaAddItemsMenu } from '../import/MediaAddItemsMenu';
 import { handleSubmenuHover, handleSubmenuLeave } from '../submenuPosition';
 import { MediaContextExplorerSubmenu } from './MediaContextExplorerSubmenu';
 import { MediaContextMoveFolderSubmenu } from './MediaContextMoveFolderSubmenu';
 import { MediaContextRegenerateSubmenu } from './MediaContextRegenerateSubmenu';
+import { MediaContextSourceSubmenu } from './MediaContextSourceSubmenu';
 import { canDownloadMediaFileInBrowser } from './useMediaContextExplorerHandlers';
 import { flashBoardMediaBridge } from '../../../../services/flashboard/FlashBoardMediaBridge';
+import type { MediaImportAnchor } from '../panel/types';
+import type { TrackingAsset } from '../../../../types/trackingAsset';
+import type { TrackingAssetAction } from '../../../../services/planarTracking/trackingAssetActions';
 
 export interface MediaContextActionsMenuProps {
   showBoardAnnotationAction: boolean;
@@ -30,6 +32,7 @@ export interface MediaContextActionsMenuProps {
   composition: Composition | null;
   solidItem: SolidItem | null;
   mediaFile: MediaFile | null;
+  trackingAsset: TrackingAsset | null;
   canRegenerateMediaArtifacts: boolean;
   isVideoFile: boolean;
   isImageFile: boolean;
@@ -44,14 +47,14 @@ export interface MediaContextActionsMenuProps {
   proxyFolderName: string | null | undefined;
   onNewBoardAnnotation: () => void;
   onClose: () => void;
-  onImport: () => void;
+  onImport: (anchor?: MediaImportAnchor) => void;
   onPaste: () => void;
   onToggleAiPromptReferences: (mediaFileIds: string[]) => void;
   onCopyPrompt: (prompt: string) => void;
   onStartRename: (itemId: string, itemName: string) => void;
   onMoveToFolder: (ids: readonly string[], folderId: string | null) => void;
   onOpenCompositionSettings: (composition: Composition) => void;
-  onCreateCompositionFromMedia: (mediaFile: MediaFile) => Promise<void>;
+  onCreateCompositionFromItem: (item: MediaFile | Composition) => Promise<void>;
   onOpenImageCrop: (mediaFile: MediaFile) => void;
   onOpenSolidSettings: (solidItem: SolidItem) => void;
   onCancelProxyGeneration: (mediaFileId: string) => void;
@@ -64,6 +67,8 @@ export interface MediaContextActionsMenuProps {
   onRegenerateAudioProxy: (mediaFile: MediaFile, force: boolean) => void;
   onRegenerateWaveform: (mediaFile: MediaFile) => void;
   onRegenerateSpectrogram: (mediaFile: MediaFile) => void;
+  onTranscribeMedia: (mediaFile: MediaFile) => void;
+  onAnalyzeMedia: (mediaFile: MediaFile) => void;
   onExtractVideoFrame: (mediaFile: MediaFile, position: VideoFrameExtractionPosition) => Promise<void>;
   onDownloadMediaFile: (mediaFile: MediaFile) => Promise<void>;
   onShowRawInExplorer: (mediaFile: MediaFile) => Promise<void>;
@@ -72,21 +77,11 @@ export interface MediaContextActionsMenuProps {
   onCopy: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onTrackingAssetAction: (action: TrackingAssetAction, asset: TrackingAsset) => void;
   onNewComposition: () => void;
   onNewFolder: () => void;
-  onNewText: () => void;
-  onNewSolid: () => void;
   onNewLiveInput: () => void;
-  onNewMesh: (meshType: MeshPrimitiveType) => void;
-  onNewText3D: () => void;
-  onNewCamera: () => void;
-  onNewLight: () => void;
-  onNewSplatEffector: () => void;
   onImportGaussianSplat: () => void;
-  onNewMathScene: () => void;
-  onNewMotionShape: (shapeType: ShapePrimitive) => void;
-  onNewMotionNull: () => void;
-  onNewMotionAdjustment: () => void;
 }
 
 export function MediaContextActionsMenu({
@@ -103,6 +98,7 @@ export function MediaContextActionsMenu({
   composition,
   solidItem,
   mediaFile,
+  trackingAsset,
   canRegenerateMediaArtifacts,
   isVideoFile,
   isImageFile,
@@ -124,7 +120,7 @@ export function MediaContextActionsMenu({
   onStartRename,
   onMoveToFolder,
   onOpenCompositionSettings,
-  onCreateCompositionFromMedia,
+  onCreateCompositionFromItem,
   onOpenImageCrop,
   onOpenSolidSettings,
   onCancelProxyGeneration,
@@ -134,6 +130,8 @@ export function MediaContextActionsMenu({
   onRegenerateAudioProxy,
   onRegenerateWaveform,
   onRegenerateSpectrogram,
+  onTranscribeMedia,
+  onAnalyzeMedia,
   onExtractVideoFrame,
   onDownloadMediaFile,
   onShowRawInExplorer,
@@ -142,24 +140,19 @@ export function MediaContextActionsMenu({
   onCopy,
   onDuplicate,
   onDelete,
+  onTrackingAssetAction,
   onNewComposition,
   onNewFolder,
-  onNewText,
-  onNewSolid,
   onNewLiveInput,
-  onNewMesh,
-  onNewText3D,
-  onNewCamera,
-  onNewLight,
-  onNewSplatEffector,
   onImportGaussianSplat,
-  onNewMathScene,
-  onNewMotionShape,
-  onNewMotionNull,
-  onNewMotionAdjustment,
 }: MediaContextActionsMenuProps) {
   const generationPrompt = mediaFile ? (flashBoardMediaBridge.getMetadata(mediaFile.id)?.prompt.trim() ?? '') : '';
   const canCopyGenerationPrompt = !multiSelect && generationPrompt.length > 0;
+  const canCreateCompositionFromSelection = Boolean(
+    composition
+    || (mediaFile?.liveInput && mediaFile.liveInput.kind !== 'composition-feedback')
+    || ((isVideoFile || isImageFile) && mediaFile?.file),
+  );
 
   return (
     <>
@@ -181,23 +174,15 @@ export function MediaContextActionsMenu({
             onImport={onImport}
             onNewComposition={onNewComposition}
             onNewFolder={onNewFolder}
-            onNewText={onNewText}
-            onNewSolid={onNewSolid}
             onNewLiveInput={onNewLiveInput}
-            onNewMesh={onNewMesh}
-            onNewText3D={onNewText3D}
-            onNewCamera={onNewCamera}
-            onNewLight={onNewLight}
-            onNewSplatEffector={onNewSplatEffector}
             onImportGaussianSplat={onImportGaussianSplat}
-            onNewMathScene={onNewMathScene}
-            onNewMotionShape={onNewMotionShape}
-            onNewMotionNull={onNewMotionNull}
-            onNewMotionAdjustment={onNewMotionAdjustment}
           />
         </div>
       </div>
-      <div className="context-menu-item" onClick={onImport}>
+      <div className="context-menu-item" onClick={(event) => {
+        onImport({ x: event.clientX, y: event.clientY });
+        onClose();
+      }}>
         Import Media...
       </div>
       {hasClipboard && (
@@ -219,14 +204,16 @@ export function MediaContextActionsMenu({
             </div>
           )}
 
-          <div
-            className={`context-menu-item ${!canCopyGenerationPrompt ? 'disabled' : ''}`}
-            onClick={() => {
-              if (canCopyGenerationPrompt) onCopyPrompt(generationPrompt);
-            }}
-          >
-            Copy Prompt
-          </div>
+          {!trackingAsset && (
+            <div
+              className={`context-menu-item ${!canCopyGenerationPrompt ? 'disabled' : ''}`}
+              onClick={() => {
+                if (canCopyGenerationPrompt) onCopyPrompt(generationPrompt);
+              }}
+            >
+              Copy Prompt
+            </div>
+          )}
 
           {!multiSelect && selectedItem && (
             <div className="context-menu-item" onClick={() => onStartRename(selectedItem.id, selectedItem.name)}>
@@ -246,10 +233,24 @@ export function MediaContextActionsMenu({
             </div>
           )}
 
-          {!multiSelect && (isVideoFile || isImageFile) && mediaFile?.file && (
-            <div className="context-menu-item" onClick={() => { void onCreateCompositionFromMedia(mediaFile); }}>
+          {!multiSelect && canCreateCompositionFromSelection && (
+            <div className="context-menu-item" onClick={() => { void onCreateCompositionFromItem(composition ?? mediaFile!); }}>
               Create Comp
             </div>
+          )}
+
+          {!multiSelect && trackingAsset && (
+            <>
+              <div className="context-menu-item" onClick={() => onTrackingAssetAction('open', trackingAsset)}>
+                Open Tracking
+              </div>
+              <div className="context-menu-item" onClick={() => onTrackingAssetAction('use', trackingAsset)}>
+                Use Track
+              </div>
+              <div className="context-menu-item" onClick={() => onTrackingAssetAction('scene-3d', trackingAsset)}>
+                Add to 3D Scene
+              </div>
+            </>
           )}
 
           {!multiSelect && isVideoFile && mediaFile && (
@@ -283,6 +284,10 @@ export function MediaContextActionsMenu({
             </div>
           )}
 
+          {!multiSelect && isVideoFile && mediaFile && Boolean(mediaFile.linkedSources?.length) && (
+            <MediaContextSourceSubmenu mediaFile={mediaFile} onClose={onClose} />
+          )}
+
           {!multiSelect && canRegenerateMediaArtifacts && mediaFile && (
             <MediaContextRegenerateSubmenu
               mediaFile={mediaFile}
@@ -303,6 +308,8 @@ export function MediaContextActionsMenu({
               onRegenerateAudioProxy={onRegenerateAudioProxy}
               onRegenerateWaveform={onRegenerateWaveform}
               onRegenerateSpectrogram={onRegenerateSpectrogram}
+              onTranscribeMedia={onTranscribeMedia}
+              onAnalyzeMedia={onAnalyzeMedia}
               onClose={onClose}
             />
           )}
@@ -328,13 +335,17 @@ export function MediaContextActionsMenu({
           )}
 
           <div className="context-menu-separator" />
-          <div className="context-menu-item" onClick={onCopy}>
-            Copy{multiSelect ? ` (${selectedCount} items)` : ''}
-          </div>
-          <div className="context-menu-item" onClick={onDuplicate}>
-            Duplicate{multiSelect ? ` (${selectedCount} items)` : ''}
-          </div>
-          <div className="context-menu-separator" />
+          {(!trackingAsset || multiSelect) && (
+            <>
+              <div className="context-menu-item" onClick={onCopy}>
+                Copy{multiSelect ? ` (${selectedCount} items)` : ''}
+              </div>
+              <div className="context-menu-item" onClick={onDuplicate}>
+                Duplicate{multiSelect ? ` (${selectedCount} items)` : ''}
+              </div>
+              <div className="context-menu-separator" />
+            </>
+          )}
           <div className="context-menu-item danger" onClick={onDelete}>
             Delete{multiSelect ? ` (${selectedCount} items)` : ''}
           </div>

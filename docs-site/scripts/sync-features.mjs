@@ -10,6 +10,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -18,11 +19,41 @@ const featuresDir = path.join(repoRoot, 'docs', 'Features');
 const outDir = path.join(here, '..', 'src', 'content', 'docs', 'features');
 const overviewOut = path.join(here, '..', 'src', 'content', 'docs', 'getting-started', 'overview.md');
 const assetsOut = path.join(here, '..', 'public', 'assets');
+const astroCacheDir = path.join(here, '..', '.astro');
+const featurePath = 'docs/Features';
+const sourceRefFlag = process.argv.indexOf('--source-ref');
+const sourceRef = sourceRefFlag >= 0 ? process.argv[sourceRefFlag + 1] : undefined;
 
-const GITHUB_BLOB = 'https://github.com/Sportinger/MasterSelects/blob/master';
+if (sourceRefFlag >= 0 && !sourceRef) {
+  throw new Error('--source-ref requires a Git ref, for example HEAD.');
+}
 
-const sourceFiles = fs.readdirSync(featuresDir).filter((name) => name.endsWith('.md'));
+function gitOutput(args, options = {}) {
+  return execFileSync('git', args, {
+    cwd: repoRoot,
+    maxBuffer: 64 * 1024 * 1024,
+    ...options,
+  });
+}
+
+function listGitFiles(ref) {
+  return gitOutput(['ls-tree', '-r', '--name-only', ref, '--', featurePath], { encoding: 'utf8' })
+    .split(/\r?\n/u)
+    .filter(Boolean);
+}
+
+const gitFiles = sourceRef ? listGitFiles(sourceRef) : [];
+const sourceFiles = sourceRef
+  ? gitFiles
+      .filter((name) => path.posix.dirname(name) === featurePath && name.endsWith('.md'))
+      .map((name) => path.posix.basename(name))
+  : fs.readdirSync(featuresDir).filter((name) => name.endsWith('.md'));
 const slugByFile = new Map(sourceFiles.map((name) => [name, name.replace(/\.md$/, '').toLowerCase()]));
+
+function readSourceFile(relativePath, encoding = 'utf8') {
+  if (!sourceRef) return fs.readFileSync(path.join(featuresDir, relativePath), encoding);
+  return gitOutput(['show', `${sourceRef}:${path.posix.join(featurePath, relativePath)}`], { encoding });
+}
 
 function convert(markdown, { title }) {
   let body = markdown;
@@ -33,7 +64,7 @@ function convert(markdown, { title }) {
   const pageTitle = title ?? h1?.[1] ?? 'Untitled';
   if (h1) body = body.replace(h1[0], '').replace(/^\s*\n/, '');
 
-  body = body.replace(/\]\(([^)\s]+)\)/g, (full, target) => {
+  body = body.replace(/(!?)\[([^\]]+)\]\(([^)\s]+)\)/g, (full, imagePrefix, label, target) => {
     if (/^(https?:|mailto:|#)/.test(target)) return full;
     const [rawPath, anchor = ''] = target.split('#');
     const suffix = anchor ? `#${anchor}` : '';
@@ -41,30 +72,31 @@ function convert(markdown, { title }) {
     // Feature-to-feature links become site routes.
     const fileName = path.posix.basename(clean);
     if (slugByFile.has(fileName) && !clean.includes('/')) {
-      return `](/features/${slugByFile.get(fileName)}/${suffix})`;
+      return `${imagePrefix}[${label}](/features/${slugByFile.get(fileName)}/${suffix})`;
     }
     if (fileName === 'README.md' && (clean === 'README.md' || clean === './README.md')) {
-      return `](/getting-started/overview/${suffix})`;
+      return `${imagePrefix}[${label}](/getting-started/overview/${suffix})`;
     }
     // Shared images move into the site's public/ folder.
     if (clean.startsWith('assets/')) {
-      return `](/${clean}${suffix})`;
+      return `${imagePrefix}[${label}](/${clean}${suffix})`;
     }
-    // Anything that leaves docs/Features points at the repository.
-    const resolved = path.posix.normalize(path.posix.join('docs/Features', clean));
-    return `](${GITHUB_BLOB}/${resolved}${suffix})`;
+    // Repository-internal destinations are not public documentation routes.
+    // Keep their readable labels without linking to the frozen public repo.
+    return label;
   });
 
   const safeTitle = pageTitle.replace(/"/g, '\\"');
   return `---\ntitle: "${safeTitle}"\n---\n\n${body}`;
 }
 
+fs.rmSync(astroCacheDir, { recursive: true, force: true });
 fs.rmSync(outDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
 
 let converted = 0;
 for (const name of sourceFiles) {
-  const markdown = fs.readFileSync(path.join(featuresDir, name), 'utf-8');
+  const markdown = readSourceFile(name, 'utf8');
   if (name === 'README.md') {
     fs.mkdirSync(path.dirname(overviewOut), { recursive: true });
     fs.writeFileSync(overviewOut, convert(markdown, { title: 'Overview' }));
@@ -76,9 +108,21 @@ for (const name of sourceFiles) {
 }
 
 const assetsSrc = path.join(featuresDir, 'assets');
-if (fs.existsSync(assetsSrc)) {
+const gitAssetFiles = gitFiles.filter((name) => name.startsWith(`${featurePath}/assets/`));
+const hasAssets = sourceRef ? gitAssetFiles.length > 0 : fs.existsSync(assetsSrc);
+if (hasAssets) {
   fs.rmSync(assetsOut, { recursive: true, force: true });
-  fs.cpSync(assetsSrc, assetsOut, { recursive: true });
+  if (sourceRef) {
+    for (const assetPath of gitAssetFiles) {
+      const relativePath = assetPath.slice(`${featurePath}/`.length);
+      const destination = path.join(here, '..', 'public', relativePath);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.writeFileSync(destination, gitOutput(['show', `${sourceRef}:${assetPath}`]));
+    }
+  } else {
+    fs.cpSync(assetsSrc, assetsOut, { recursive: true });
+  }
 }
 
-console.log(`Converted ${converted} feature pages + overview; assets ${fs.existsSync(assetsSrc) ? 'copied' : 'not found'}.`);
+const sourceLabel = sourceRef ? `Git ref ${sourceRef}` : 'working tree';
+console.log(`Converted ${converted} feature pages + overview from ${sourceLabel}; assets ${hasAssets ? 'copied' : 'not found'}.`);

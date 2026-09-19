@@ -14,8 +14,8 @@ describe('selectionSlice', () => {
     store = createTestTimelineStore({ clips: [clip1, clip2, clip3, clip4] });
   });
 
-  // ─── Helper to create a store with curve editor open on a track ──────
-  function createStoreWithCurveEditor(trackId: string = 'video-1') {
+  // Helper for a store with a focused global Graph property.
+  function createStoreWithGraphFocus(trackId: string = 'video-1') {
     const clip1 = createMockClip({ id: 'clip-1', trackId: 'video-1' });
     const clip2 = createMockClip({ id: 'clip-2', trackId: 'video-1', startTime: 5 });
     const clip3 = createMockClip({ id: 'clip-3', trackId: 'video-1', startTime: 10, linkedClipId: 'clip-4' });
@@ -253,158 +253,37 @@ describe('selectionSlice', () => {
     expect(state.primarySelectedClipId).toBeNull();
   });
 
-  // ─── Curve editor blocking behavior ──────────────────────────────────
+  // Global Graph selection remains independent from focused curve properties.
 
-  it('selectClip(null): blocked when curve editor is open on selected clip', () => {
-    const s = createStoreWithCurveEditor('video-1');
-    // clip-1 is selected and is on video-1 which has curve editor open
-    s.getState().selectClip(null);
-    const state = s.getState();
-    // Selection should NOT be cleared
-    expect(state.selectedClipIds.size).toBe(1);
-    expect(state.selectedClipIds.has('clip-1')).toBe(true);
-  });
+  it('selectClip: focused Graph property does not block selecting another clip', () => {
+    const s = createStoreWithGraphFocus();
 
-  it('selectClip: normal click on different clip blocked when curve editor is open', () => {
-    const s = createStoreWithCurveEditor('video-1');
-    // clip-1 is selected, curve editor open on video-1
-    // Clicking clip-2 (not currently selected) should be blocked
     s.getState().selectClip('clip-2');
-    const state = s.getState();
-    expect(state.selectedClipIds.has('clip-1')).toBe(true);
-    expect(state.selectedClipIds.has('clip-2')).toBe(false);
+
+    expect(s.getState().selectedClipIds).toEqual(new Set(['clip-2']));
+    expect(s.getState().primarySelectedClipId).toBe('clip-2');
   });
 
-  it('selectClip: normal click on already-selected clip allowed when curve editor is open', () => {
-    const s = createStoreWithCurveEditor('video-1');
-    // Clicking clip-1 (already selected) should NOT be blocked
-    s.getState().selectClip('clip-1');
-    const state = s.getState();
-    expect(state.selectedClipIds.has('clip-1')).toBe(true);
-    expect(state.primarySelectedClipId).toBe('clip-1');
-  });
+  it('focused Graph property does not block toggling or removing clips', () => {
+    const s = createStoreWithGraphFocus();
 
-  it('selectClip with addToSelection: toggle off blocked when clip has curve editor open', () => {
-    const s = createStoreWithCurveEditor('video-1');
-    // clip-1 is selected and has curve editor open on its track
-    // Trying to toggle it off should be blocked
     s.getState().selectClip('clip-1', true);
-    const state = s.getState();
-    expect(state.selectedClipIds.has('clip-1')).toBe(true);
-  });
+    expect(s.getState().selectedClipIds).toEqual(new Set());
 
-  it('selectClip with addToSelection: toggle on allowed when curve editor is open', () => {
-    const s = createStoreWithCurveEditor('video-1');
-    // Adding clip-2 via shift+click should work (it is adding, not removing)
-    s.getState().selectClip('clip-2', true);
-    const state = s.getState();
-    expect(state.selectedClipIds.has('clip-1')).toBe(true);
-    expect(state.selectedClipIds.has('clip-2')).toBe(true);
-  });
-
-  it('selectClips: blocked when would deselect clip with curve editor open', () => {
-    const s = createStoreWithCurveEditor('video-1');
-    // clip-1 is selected, try to replace selection with clip-2 only
-    s.getState().selectClips(['clip-2']);
-    const state = s.getState();
-    // Should be blocked because clip-1 would be deselected
-    expect(state.selectedClipIds.has('clip-1')).toBe(true);
-    expect(state.selectedClipIds.has('clip-2')).toBe(false);
-  });
-
-  it('selectClips: allowed when all currently selected clips remain in new selection', () => {
-    const s = createStoreWithCurveEditor('video-1');
-    // clip-1 is selected, select clip-1 AND clip-2 (clip-1 stays)
     s.getState().selectClips(['clip-1', 'clip-2']);
-    const state = s.getState();
-    expect(state.selectedClipIds.size).toBe(2);
-    expect(state.selectedClipIds.has('clip-1')).toBe(true);
-    expect(state.selectedClipIds.has('clip-2')).toBe(true);
-  });
-
-  it('removeClipFromSelection: blocked when clip has curve editor open', () => {
-    const s = createStoreWithCurveEditor('video-1');
     s.getState().removeClipFromSelection('clip-1');
-    const state = s.getState();
-    // Should be blocked
-    expect(state.selectedClipIds.has('clip-1')).toBe(true);
+    expect(s.getState().selectedClipIds).toEqual(new Set(['clip-2']));
   });
 
-  it('removeClipFromSelection: allowed for clip on track without curve editor', () => {
-    // Open curve editor on video-1 but select clips on both tracks
-    const clip1 = createMockClip({ id: 'clip-1', trackId: 'video-1' });
-    const clip4 = createMockClip({ id: 'clip-4', trackId: 'audio-1', startTime: 10 });
-    const curveProps = new Map<string, Set<AnimatableProperty>>();
-    curveProps.set('video-1', new Set(['opacity' as AnimatableProperty]));
-    const s = createTestTimelineStore({
-      clips: [clip1, clip4],
-      expandedCurveProperties: curveProps,
-      selectedClipIds: new Set(['clip-1', 'clip-4']),
-      primarySelectedClipId: 'clip-1',
-    });
+  it('focused Graph property does not block replacing or clearing clip selection', () => {
+    const s = createStoreWithGraphFocus();
 
-    // Removing clip-4 (on audio-1, no curve editor) should work
-    s.getState().removeClipFromSelection('clip-4');
-    const state = s.getState();
-    expect(state.selectedClipIds.has('clip-4')).toBe(false);
-    expect(state.selectedClipIds.has('clip-1')).toBe(true);
-  });
-
-  it('clearClipSelection: blocked when curve editor is open on selected clip', () => {
-    const s = createStoreWithCurveEditor('video-1');
-    s.getState().clearClipSelection();
-    const state = s.getState();
-    // Should be blocked
-    expect(state.selectedClipIds.size).toBe(1);
-    expect(state.selectedClipIds.has('clip-1')).toBe(true);
-  });
-
-  it('clearClipSelection: allowed when curve editor is on a track with no selected clips', () => {
-    const clip1 = createMockClip({ id: 'clip-1', trackId: 'video-1' });
-    const clip4 = createMockClip({ id: 'clip-4', trackId: 'audio-1', startTime: 10 });
-    const curveProps = new Map<string, Set<AnimatableProperty>>();
-    // Curve editor on audio-1
-    curveProps.set('audio-1', new Set(['opacity' as AnimatableProperty]));
-    const s = createTestTimelineStore({
-      clips: [clip1, clip4],
-      expandedCurveProperties: curveProps,
-      // Only clip-1 (on video-1) is selected, curve editor is on audio-1
-      selectedClipIds: new Set(['clip-1']),
-      primarySelectedClipId: 'clip-1',
-    });
+    s.getState().selectClips(['clip-2', 'clip-3']);
+    expect(s.getState().selectedClipIds).toEqual(new Set(['clip-2', 'clip-3']));
 
     s.getState().clearClipSelection();
-    const state = s.getState();
-    // Should be allowed since no selected clip is on the track with the curve editor
-    expect(state.selectedClipIds.size).toBe(0);
-    expect(state.primarySelectedClipId).toBeNull();
-  });
-
-  it('curve editor: no blocking when expandedCurveProperties is empty', () => {
-    // Default store has no curve properties - all operations should work normally
-    store.getState().selectClip('clip-1');
-    store.getState().selectClip(null);
-    expect(store.getState().selectedClipIds.size).toBe(0);
-
-    store.getState().selectClips(['clip-1', 'clip-2']);
-    store.getState().selectClips(['clip-3']);
-    expect(store.getState().selectedClipIds.has('clip-3')).toBe(true);
-  });
-
-  it('curve editor: empty set in expandedCurveProperties does not block', () => {
-    const clip1 = createMockClip({ id: 'clip-1', trackId: 'video-1' });
-    const curveProps = new Map<string, Set<AnimatableProperty>>();
-    // Track has entry but empty set of properties
-    curveProps.set('video-1', new Set());
-    const s = createTestTimelineStore({
-      clips: [clip1],
-      expandedCurveProperties: curveProps,
-      selectedClipIds: new Set(['clip-1']),
-      primarySelectedClipId: 'clip-1',
-    });
-
-    s.getState().selectClip(null);
-    expect(s.getState().selectedClipIds.size).toBe(0);
+    expect(s.getState().selectedClipIds).toEqual(new Set());
+    expect(s.getState().primarySelectedClipId).toBeNull();
   });
 
   // ─── Keyframe selection ────────────────────────────────────────────────

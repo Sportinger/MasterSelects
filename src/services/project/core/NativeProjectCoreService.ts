@@ -3,16 +3,38 @@
 // instead of FileSystemDirectoryHandle. Enables project persistence in Firefox.
 
 import { Logger } from '../../logger';
+import { projectSaveStatus, trackProjectSave } from '../projectSaveStatus';
 import { NativeHelperClient } from '../../nativeHelper/NativeHelperClient';
-import { PROJECT_FOLDER_PATHS, MAX_BACKUPS } from './constants';
+import { PROJECT_FOLDERS, MAX_BACKUPS, type ProjectFolderKey } from './constants';
 import { shouldPreferAutosave, shouldSkipEmptyProjectSave } from './autosaveRecovery';
 import { addRecentNativeProject, removeRecentNativeProject } from '../recentProjects';
 import { createDefaultRulerLaneState } from '../../../timeline/tempo/rulerDefaults';
+import {
+  getTabNativeLastProjectPathKey,
+  LEGACY_NATIVE_LAST_PROJECT_PATH_KEY,
+} from '../tabProjectPersistence';
 import type { ProjectFile, ProjectMediaFile, ProjectComposition, ProjectFolder } from '../types';
+import {
+  getNativeProjectPackageSession,
+  getNativeProjectFolderPath,
+  getProjectPackageFileName,
+  getProjectMediaFolderName,
+  isPackagedProjectFolder,
+  isProjectPackageFileName,
+  moveNativeProjectPackageSession,
+  ProjectPackageSession,
+  registerNativeProjectPackageSession,
+  unregisterNativeProjectPackageSession,
+} from './projectPackage';
+import {
+  importLegacyNativePackageEntries,
+  readNativeProjectPackage,
+  writeNativeProjectPackage,
+} from './nativeProjectPackagePersistence';
+import { recordProjectDirtyMark } from '../projectDirtyDiagnostics';
 
 const log = Logger.create('NativeProjectCore');
 
-const LAST_PROJECT_KEY = 'ms-native-last-project-path';
 const PROJECT_FILE_NAME = 'project.json';
 const PROJECT_AUTOSAVE_FILE_NAME = 'project.autosave.json';
 
@@ -54,6 +76,7 @@ export class NativeProjectCoreService {
   }
 
   markDirty(): void {
+    recordProjectDirtyMark('native-core', this.isProjectOpen(), this.isDirty);
     this.isDirty = true;
     this.dirtyRevision += 1;
   }
@@ -131,11 +154,6 @@ export class NativeProjectCoreService {
         return false;
       }
 
-      // Create subfolder structure
-      for (const folderPath of PROJECT_FOLDER_PATHS) {
-        await this.client.createDir(this.joinPath(projectPath, folderPath));
-      }
-
       const mainCompId = `comp-${Date.now()}`;
 
       const initialProject: ProjectFile = {
@@ -174,13 +192,16 @@ export class NativeProjectCoreService {
         expandedFolderIds: [],
       };
 
-      // Write project.json
-      const jsonPath = this.joinPath(projectPath, 'project.json');
-      if (!await this.client.writeFile(jsonPath, JSON.stringify(initialProject, null, 2))) {
-        log.error('Failed to write project.json');
+      const packageSession = ProjectPackageSession.create(initialProject);
+      this.configurePackageSession(projectPath, packageSession);
+      await this.createProjectFolders(projectPath);
+      if (!await writeNativeProjectPackage(this.client, projectPath, packageSession, initialProject)) {
+        unregisterNativeProjectPackageSession(projectPath);
+        log.error('Failed to write .msproj package');
         return false;
       }
 
+      projectSaveStatus.reset(projectPath);
       this.projectPath = projectPath;
       this.projectData = initialProject;
       this.isDirty = false;
@@ -199,7 +220,8 @@ export class NativeProjectCoreService {
   async loadProject(projectPath: string): Promise<boolean> {
     try {
       await this.client.grantPath(projectPath);
-      const projectData = await this.readLatestProjectData(projectPath);
+      const loadedPackage = await readNativeProjectPackage(this.client, projectPath);
+      const projectData = loadedPackage?.projectData ?? await this.readLatestProjectData(projectPath);
 
       if (!projectData) {
         log.error('Cannot read project data at', projectPath);
@@ -211,11 +233,24 @@ export class NativeProjectCoreService {
         return false;
       }
 
-      // Ensure folder structure exists
-      for (const folderPath of PROJECT_FOLDER_PATHS) {
-        await this.client.createDir(this.joinPath(projectPath, folderPath));
+      if (loadedPackage) {
+        this.configurePackageSession(projectPath, loadedPackage.session);
+      } else {
+        const migrationSession = ProjectPackageSession.create(projectData);
+        migrationSession.setMediaFolderName(PROJECT_FOLDERS.RAW);
+        await importLegacyNativePackageEntries(this.client, projectPath, migrationSession);
+        try {
+          if (await writeNativeProjectPackage(this.client, projectPath, migrationSession, projectData)) {
+            this.configurePackageSession(projectPath, migrationSession);
+            log.info(`Migrated legacy project to ${migrationSession.getPackageFileName()}; original files were preserved`);
+          }
+        } catch (migrationError) {
+          log.warn('Could not migrate legacy project to .msproj; continuing in legacy mode', migrationError);
+        }
       }
+      await this.createProjectFolders(projectPath);
 
+      projectSaveStatus.reset(projectPath);
       this.projectPath = projectPath;
       this.projectData = projectData;
       this.isDirty = false;
@@ -233,10 +268,13 @@ export class NativeProjectCoreService {
   }
 
   async saveProject(): Promise<boolean> {
-    const queuedSave = this.saveQueue.then(
-      () => this.performSaveProject(),
-      () => this.performSaveProject(),
-    );
+    const session = this.projectPath ? getNativeProjectPackageSession(this.projectPath) : null;
+    if (session?.isBatchingWrites) await session.waitForWriteBatch();
+    const runSave = async () => {
+      while (session?.isBatchingWrites) await session.waitForWriteBatch();
+      return trackProjectSave(this.projectPath, () => this.performSaveProject());
+    };
+    const queuedSave = this.saveQueue.then(runSave, runSave);
     this.saveQueue = queuedSave.then(() => undefined, () => undefined);
     return queuedSave;
   }
@@ -249,20 +287,25 @@ export class NativeProjectCoreService {
 
     try {
       const savedRevision = this.dirtyRevision;
-      const autosaveData = await this.readProjectFile(this.projectPath, PROJECT_AUTOSAVE_FILE_NAME);
+      const packageSession = getNativeProjectPackageSession(this.projectPath);
+      const autosaveData = packageSession
+        ? null
+        : await this.readProjectFile(this.projectPath, PROJECT_AUTOSAVE_FILE_NAME);
       if (shouldSkipEmptyProjectSave(this.projectData, autosaveData)) {
         log.warn('Skipped empty project save because project.autosave.json contains recoverable project data');
-        if (this.dirtyRevision === savedRevision) {
-          this.isDirty = false;
-        }
-        return true;
+        // Recovery protection is not a successful write. Keep edits unsaved.
+        return false;
       }
 
       this.projectData.updatedAt = new Date().toISOString();
-      const jsonPath = this.joinPath(this.projectPath, PROJECT_FILE_NAME);
-
-      if (!await this.client.writeFile(jsonPath, JSON.stringify(this.projectData, null, 2))) {
-        log.error('Failed to write project.json');
+      const saved = packageSession
+        ? await writeNativeProjectPackage(this.client, this.projectPath, packageSession, this.projectData)
+        : await this.client.writeFile(
+          this.joinPath(this.projectPath, PROJECT_FILE_NAME),
+          JSON.stringify(this.projectData, null, 2),
+        );
+      if (!saved) {
+        log.error(`Failed to write ${packageSession ? '.msproj package' : 'project.json'}`);
         return false;
       }
 
@@ -279,6 +322,8 @@ export class NativeProjectCoreService {
   }
 
   closeProject(): void {
+    projectSaveStatus.reset(this.projectPath);
+    if (this.projectPath) unregisterNativeProjectPackageSession(this.projectPath);
     this.projectPath = null;
     this.projectData = null;
     this.isDirty = false;
@@ -296,8 +341,9 @@ export class NativeProjectCoreService {
     }
 
     try {
-      const jsonPath = this.joinPath(this.projectPath, 'project.json');
-      const content = await this.client.readFileText(jsonPath);
+      const packageSession = getNativeProjectPackageSession(this.projectPath);
+      const projectFileName = packageSession?.getPackageFileName() ?? PROJECT_FILE_NAME;
+      const content = await this.client.getDownloadedFile(this.joinPath(this.projectPath, projectFileName));
       if (!content) return false;
 
       const now = new Date();
@@ -305,10 +351,14 @@ export class NativeProjectCoreService {
         .replace(/[:.]/g, '-')
         .replace('T', '_')
         .slice(0, 19);
-      const backupFileName = `project_${timestamp}.json`;
-      const backupPath = this.joinPath(this.projectPath, 'Backups', backupFileName);
+      const backupFileName = `project_${timestamp}${packageSession ? '.msproj' : '.json'}`;
+      const backupPath = this.joinPath(
+        this.projectPath,
+        getNativeProjectFolderPath(this.projectPath, 'BACKUPS'),
+        backupFileName,
+      );
 
-      if (!await this.client.writeFile(backupPath, content)) {
+      if (!await this.client.writeFileBinary(backupPath, content)) {
         return false;
       }
 
@@ -326,11 +376,11 @@ export class NativeProjectCoreService {
     if (!this.projectPath) return;
 
     try {
-      const backupsDir = this.joinPath(this.projectPath, 'Backups');
+      const backupsDir = this.joinPath(this.projectPath, getNativeProjectFolderPath(this.projectPath, 'BACKUPS'));
       const entries = await this.client.listDir(backupsDir);
 
       const backups = entries
-        .filter(e => e.kind === 'file' && e.name.startsWith('project_') && e.name.endsWith('.json'))
+        .filter(e => e.kind === 'file' && e.name.startsWith('project_') && (e.name.endsWith('.json') || e.name.endsWith('.msproj')))
         .sort((a, b) => b.modified - a.modified);
 
       if (backups.length > MAX_BACKUPS) {
@@ -369,6 +419,8 @@ export class NativeProjectCoreService {
     try {
       // Get parent directory
       const oldPath = this.projectPath;
+      const existingPackageSession = getNativeProjectPackageSession(oldPath);
+      const oldMediaFolderName = existingPackageSession?.getMediaFolderName() ?? null;
       const parts = this.projectPath.replace(/\\/g, '/').split('/');
       parts.pop(); // Remove current folder name
       const parentPath = parts.join('/');
@@ -377,9 +429,7 @@ export class NativeProjectCoreService {
       // Check if destination already exists
       const { exists } = await this.client.exists(newPath);
       if (exists) {
-        // Check if it has a project.json
-        const { exists: hasProject } = await this.client.exists(this.joinPath(newPath, 'project.json'));
-        if (hasProject) {
+        if (await this.pathContainsProject(newPath)) {
           log.error(`Folder "${trimmedName}" already contains a project`);
           return false;
         }
@@ -389,22 +439,33 @@ export class NativeProjectCoreService {
 
       // Rename the folder
       if (!await this.client.rename(this.projectPath, newPath)) {
-        // Rename failed — just update display name in project.json
+        // Rename failed — update the package display name in place.
         log.info(`Cannot rename folder, updating display name only to "${trimmedName}"`);
         this.projectData.name = trimmedName;
         this.projectData.updatedAt = new Date().toISOString();
-        await this.saveProject();
+        await this.renamePackageAndSave(this.projectPath, trimmedName);
         await addRecentNativeProject(this.projectPath, this.projectData);
         return true;
       }
 
       this.projectPath = newPath;
+      const movedPackageSession = moveNativeProjectPackageSession(oldPath, newPath);
+      if (movedPackageSession) {
+        if (oldMediaFolderName && oldMediaFolderName !== PROJECT_FOLDERS.RAW) {
+          const nextMediaFolderName = getProjectMediaFolderName(trimmedName);
+          const mediaRenamed = oldMediaFolderName === nextMediaFolderName
+            || await this.client.rename(
+              this.joinPath(newPath, oldMediaFolderName),
+              this.joinPath(newPath, nextMediaFolderName),
+            );
+          if (mediaRenamed) movedPackageSession.setMediaFolderName(nextMediaFolderName);
+        }
+        this.configurePackageSession(newPath, movedPackageSession);
+      }
       this.projectData.name = trimmedName;
       this.projectData.updatedAt = new Date().toISOString();
 
-      // Write updated project.json to new location
-      const jsonPath = this.joinPath(newPath, 'project.json');
-      await this.client.writeFile(jsonPath, JSON.stringify(this.projectData, null, 2));
+      await this.renamePackageAndSave(newPath, trimmedName);
 
       this.storeLastProject(newPath);
       await removeRecentNativeProject(oldPath);
@@ -424,7 +485,9 @@ export class NativeProjectCoreService {
   // ============================================
 
   async restoreLastProject(): Promise<boolean> {
-    const lastPath = localStorage.getItem(LAST_PROJECT_KEY);
+    const tabProjectKey = getTabNativeLastProjectPathKey();
+    const tabPath = sessionStorage.getItem(tabProjectKey);
+    const lastPath = tabPath ?? localStorage.getItem(LEGACY_NATIVE_LAST_PROJECT_PATH_KEY);
     if (!lastPath) return false;
 
     if (!this.client.isConnected()) {
@@ -437,7 +500,8 @@ export class NativeProjectCoreService {
       const { exists, kind } = await this.client.exists(lastPath);
       if (!exists || kind !== 'directory') {
         log.info('Last project folder no longer exists');
-        localStorage.removeItem(LAST_PROJECT_KEY);
+        sessionStorage.removeItem(tabProjectKey);
+        if (tabPath === null) localStorage.removeItem(LEGACY_NATIVE_LAST_PROJECT_PATH_KEY);
         return false;
       }
 
@@ -482,7 +546,8 @@ export class NativeProjectCoreService {
 
   private storeLastProject(path: string): void {
     try {
-      localStorage.setItem(LAST_PROJECT_KEY, path);
+      sessionStorage.setItem(getTabNativeLastProjectPathKey(), path);
+      localStorage.setItem(LEGACY_NATIVE_LAST_PROJECT_PATH_KEY, path);
     } catch (e) {
       log.warn('Failed to store last project path:', e);
     }
@@ -512,6 +577,52 @@ export class NativeProjectCoreService {
     return projectData;
   }
 
+  private configurePackageSession(projectPath: string, session: ProjectPackageSession): void {
+    registerNativeProjectPackageSession(projectPath, session);
+    // Sidecars join the next manual/timed project snapshot; importing is not a Save action.
+    session.setPersistCallback(async () => { this.markDirty(); return true; });
+  }
+
+  private async createProjectFolders(projectPath: string): Promise<void> {
+    const hasPackage = getNativeProjectPackageSession(projectPath) !== null;
+    const createdPaths = new Set<string>();
+    for (const folderKey of Object.keys(PROJECT_FOLDERS) as ProjectFolderKey[]) {
+      if (hasPackage && isPackagedProjectFolder(folderKey)) continue;
+      const folderPath = getNativeProjectFolderPath(projectPath, folderKey);
+      if (createdPaths.has(folderPath)) continue;
+      await this.client.createDir(this.joinPath(projectPath, folderPath));
+      createdPaths.add(folderPath);
+    }
+  }
+
+  private async renamePackageAndSave(projectPath: string, projectName: string): Promise<boolean> {
+    const session = getNativeProjectPackageSession(projectPath);
+    if (!session || !this.projectData) {
+      return this.projectData
+        ? this.client.writeFile(
+          this.joinPath(projectPath, PROJECT_FILE_NAME),
+          JSON.stringify(this.projectData, null, 2),
+        )
+        : false;
+    }
+
+    const previousFileName = session.getPackageFileName();
+    session.setPackageFileName(getProjectPackageFileName(projectName));
+    const saved = await writeNativeProjectPackage(this.client, projectPath, session, this.projectData);
+    if (saved && previousFileName !== session.getPackageFileName()) {
+      const previousPath = this.joinPath(projectPath, previousFileName);
+      const { exists } = await this.client.exists(previousPath);
+      if (exists) await this.client.deleteFile(previousPath);
+    }
+    return saved;
+  }
+
+  private async pathContainsProject(projectPath: string): Promise<boolean> {
+    const entries = await this.client.listDir(projectPath);
+    return entries.some((entry) => entry.kind === 'file'
+      && (entry.name === PROJECT_FILE_NAME || isProjectPackageFileName(entry.name)));
+  }
+
   // ============================================
   // PROJECT LISTING (for project picker UI)
   // ============================================
@@ -533,14 +644,11 @@ export class NativeProjectCoreService {
       for (const entry of entries) {
         if (entry.kind !== 'directory') continue;
 
-        // Check if this directory has a project.json
-        const projectJsonPath = this.joinPath(projectRoot, entry.name, 'project.json');
-        const { exists } = await this.client.exists(projectJsonPath);
-
-        if (exists) {
+        const projectPath = this.joinPath(projectRoot, entry.name);
+        if (await this.pathContainsProject(projectPath)) {
           projects.push({
             name: entry.name,
-            path: this.joinPath(projectRoot, entry.name),
+            path: projectPath,
             modified: entry.modified,
           });
         }

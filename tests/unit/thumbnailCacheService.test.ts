@@ -561,6 +561,45 @@ describe('thumbnailCacheService', () => {
     expect(thumbnailCacheService.getCount(mediaFileId)).toBe(1);
   });
 
+  it('generates timeline thumbnails from an exact frame provider without HTML video', async () => {
+    const service = thumbnailCacheService as unknown as ThumbnailCacheServiceTestAccess;
+    const mediaFileId = `media-provider-thumbs-${Date.now()}`;
+    const drawImage = vi.fn();
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ drawImage })),
+      toBlob: vi.fn((callback: BlobCallback) => callback(new Blob(['thumb'], { type: 'image/jpeg' }))),
+    } as unknown as HTMLCanvasElement;
+    const originalCreateElement = document.createElement.bind(document);
+    const createElement = vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => (
+      tagName === 'canvas' ? canvas : originalCreateElement(tagName)
+    ));
+    vi.spyOn(service, 'loadFromDB').mockResolvedValue(false);
+    vi.spyOn(projectDB, 'saveSourceThumbnailsBatch').mockResolvedValue(undefined);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:provider-thumb');
+    const frame = {} as VideoFrame;
+    const provider = {
+      backend: 'turbores' as const,
+      seekExact: vi.fn(async () => undefined),
+      getCurrentFrame: vi.fn(() => frame),
+    };
+
+    await thumbnailCacheService.generateForFrameProvider(
+      mediaFileId,
+      provider as never,
+      2,
+      'hash-provider',
+    );
+
+    expect(provider.seekExact).toHaveBeenNthCalledWith(1, 0);
+    expect(provider.seekExact).toHaveBeenNthCalledWith(2, 1);
+    expect(drawImage).toHaveBeenCalledTimes(2);
+    expect(thumbnailCacheService.getStatus(mediaFileId)).toBe('ready');
+    expect(thumbnailCacheService.getCount(mediaFileId)).toBe(2);
+    expect(createElement.mock.calls.some(([tag]) => tag === 'video')).toBe(false);
+  });
+
   it('returns false before frame work when thumbnail generation canvas admission is over budget', async () => {
     const thumbnailPolicy = TIMELINE_RUNTIME_POLICY_DESCRIPTORS.find((policy) => policy.id === 'thumbnail');
     const maxImageBitmaps = thumbnailPolicy?.defaultBudget.maxImageBitmaps ?? 256;

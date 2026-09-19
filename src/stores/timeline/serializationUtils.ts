@@ -2,7 +2,7 @@
 // Extracted from index.ts for maintainability
 
 import type { Keyframe } from '../../types/keyframes';
-import type { CompositionTimelineData, TimelineClip, TimelineTrack } from '../../types/timeline';
+import type { CompositionTimelineData, TimelineTrack } from '../../types/timeline';
 import type { SliceCreator } from './storeTypes/timelineStoreTypes';
 import type { TimelineUtils } from './storeTypes/utilityActionTypes';
 import { DEFAULT_TRACKS } from './constants';
@@ -18,6 +18,7 @@ import { resetVolatileVideoBakeRegionStatuses } from './videoBakeSlice';
 import { releaseAllLazyTimelineMediaElements } from '../../services/timeline/lazyMediaElements';
 import { releaseAllLazyTimelineImageElements } from '../../services/timeline/lazyImageElements';
 import { releaseLegacyTimelineClipSourceRuntimes } from '../../services/timeline/timelineClipSourceRuntimeCleanup';
+import { releaseClipTreeRuntimeBindings } from '../../services/mediaRuntime/clipBindings';
 import { scheduleCompositionAudioMixdownWarmup } from '../../services/timeline/compositionAudioMixdownWarmup';
 import { blobUrlManager } from './helpers/blobUrlManager';
 import { createSerializableTimelineState } from './serialization/serializableTimelineState';
@@ -26,6 +27,7 @@ import { restoreLoadStateCompositionClip } from './serialization/loadStateCompos
 import { restoreLoadStateMediaClip } from './serialization/loadStateMediaClipRestore';
 import { restoreLoadStateLinkedSpeedState } from './serialization/loadStateLinkedSpeedRestore';
 import { restoreLoadStateSourceThumbnails } from './serialization/loadStateSourceThumbnailRestore';
+import { createLoadStateRestoreBuffer } from './serialization/loadStateRestoreBuffer';
 import { migrateRestoredCaptionClips } from './serialization/loadStateCaptionClipRestore';
 import { createDefaultRulerLaneState, normalizeRulerLaneState } from '../../timeline/tempo/rulerDefaults';
 import { CLEARED_TIMELINE_EDIT_PREVIEWS } from './serialization/transientTimelineState';
@@ -159,32 +161,11 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       mediaFileId,
       mediaStore.files.find(file => file.id === mediaFileId)?.fileHash,
     );
-    const restoredClipBuffer: TimelineClip[] = [];
-    const flushRestoredClipBuffer = () => {
-      if (restoredClipBuffer.length === 0) {
-        return;
-      }
-      const nextClips = restoredClipBuffer.splice(0);
-      set(state => ({
-        clips: [...state.clips, ...nextClips],
-      }));
-    };
-    const pushRestoredClip = (clip: TimelineClip) => {
-      restoredClipBuffer.push(clip);
-      if (restoredClipBuffer.length >= 128) {
-        flushRestoredClipBuffer();
-      }
-    };
-    const patchRestoredClip = (clipId: string, updater: (clip: TimelineClip) => TimelineClip) => {
-      const bufferedIndex = restoredClipBuffer.findIndex((candidate) => candidate.id === clipId);
-      if (bufferedIndex >= 0) {
-        restoredClipBuffer[bufferedIndex] = updater(restoredClipBuffer[bufferedIndex]);
-        return;
-      }
-      set(state => ({
-        clips: state.clips.map(c => c.id === clipId ? updater(c) : c),
-      }));
-    };
+    const restoreBuffer = createLoadStateRestoreBuffer(set);
+    const flushRestoredClipBuffer = restoreBuffer.flush;
+    const patchRestoredClip = restoreBuffer.patch;
+    const pushRestoredClip = restoreBuffer.push;
+    const pushRestoredNestedKeyframes = restoreBuffer.pushNestedKeyframes;
     const scheduleRestoredCompositionAudioWarmup = () => {
       scheduleCompositionAudioMixdownWarmup({
         deps: {
@@ -217,6 +198,8 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         set,
         pushRestoredClip,
         flushRestoredClipBuffer,
+        patchRestoredClip,
+        pushRestoredNestedKeyframes,
         isCurrentTimelineSession,
         wakePreviewAfterRestore,
         restoreSourceThumbnails,
@@ -330,6 +313,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       recurseNestedClips: true,
       revokeObjectUrls: true,
     });
+    clips.forEach(releaseClipTreeRuntimeBindings);
     renderHostPort.clearCaches();
     layerBuilder.getVideoSyncManager().reset();
   },

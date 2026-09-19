@@ -78,6 +78,10 @@ export interface MergeNestedClipKeyframesParams {
   isCurrentTimelineSession?: () => boolean;
 }
 
+export interface PublishNestedClipKeyframesParams extends MergeNestedClipKeyframesParams {
+  deferNestedKeyframeMerge?: (keyframes: ReadonlyMap<string, Keyframe[]>) => void;
+}
+
 function collectLoadedNestedClipIds(compClip: TimelineClip | undefined): Set<string> {
   const clipIds = new Set<string>();
 
@@ -129,5 +133,12 @@ export function mergeNestedClipKeyframes(params: MergeNestedClipKeyframesParams)
     nestedKeyframeClipCount: nestedKeyframes.size,
     totalKeyframeClipCount: mergedKeyframes.size,
   });
+  return true;
+}
+
+export function publishNestedClipKeyframes(params: PublishNestedClipKeyframesParams): boolean {
+  if (!params.deferNestedKeyframeMerge) return mergeNestedClipKeyframes(params);
+  if (params.isCurrentTimelineSession && !params.isCurrentTimelineSession()) return false;
+  params.deferNestedKeyframeMerge(params.nestedKeyframes);
   return true;
 }

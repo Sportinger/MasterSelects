@@ -4,7 +4,9 @@ import type { TimelineClip } from '../../types/timeline';
 import type { ClipTransform } from '../../types/timelineCore';
 import { getEffectiveScale } from '../../utils/transformScale';
 import {
+  ensureRuntimeFrameProvider,
   getRuntimeFrameProvider,
+  isProviderBackedRuntimeSource,
   updateRuntimePlaybackTime,
 } from '../mediaRuntime/runtimePlayback';
 
@@ -33,19 +35,23 @@ export function buildBackgroundClipLayer(
     },
   };
 
-  if (clip.source?.videoElement) {
-    updateRuntimePlaybackTime(clip.source, clipTime, 'background');
+  const source = clip.source;
+  if (source?.videoElement || isProviderBackedRuntimeSource(source)) {
+    updateRuntimePlaybackTime(source, clipTime, 'background');
     const runtimeProvider =
-      getRuntimeFrameProvider(clip.source, 'background') ??
-      clip.source.webCodecsPlayer;
+      getRuntimeFrameProvider(source, 'background') ??
+      source?.webCodecsPlayer;
+    if (!runtimeProvider && isProviderBackedRuntimeSource(source)) {
+      void ensureRuntimeFrameProvider(source, 'background', clipTime);
+    }
     return {
       ...baseLayer,
       source: {
         type: 'video',
-        videoElement: clip.source.videoElement,
+        videoElement: source?.videoElement,
         webCodecsPlayer: runtimeProvider ?? undefined,
-        runtimeSourceId: clip.source.runtimeSourceId,
-        runtimeSessionKey: clip.source.runtimeSessionKey,
+        runtimeSourceId: source?.runtimeSourceId,
+        runtimeSessionKey: source?.runtimeSessionKey,
       },
     } as Layer;
   }

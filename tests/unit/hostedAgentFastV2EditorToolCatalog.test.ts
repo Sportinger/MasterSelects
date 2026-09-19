@@ -33,6 +33,9 @@ describe('Fast V2 editor tool catalog', () => {
       'updateCaptionProperties',
       'updateMotionProperties',
       'addKeyframe',
+      'getMediaPreviewFrames',
+      'getMediaTranscript',
+      'getTimelineTranscript',
       'splitClip',
     ]));
     expect(names).not.toEqual(expect.arrayContaining([
@@ -45,6 +48,14 @@ describe('Fast V2 editor tool catalog', () => {
     ]));
     expect(catalog).not.toHaveProperty('categories');
     expect(JSON.stringify(catalog)).not.toContain('quickPaths');
+    expect(catalog.tools.find((tool) => tool.name === 'addKeyframe')?.parameters)
+      .toEqual(expect.objectContaining({
+        properties: expect.objectContaining({
+          value: expect.objectContaining({
+            description: expect.stringContaining('final source-scale multiplier'),
+          }),
+        }),
+      }));
   });
 
   it('accepts a large round of atomic editor calls up to the shared cap', () => {

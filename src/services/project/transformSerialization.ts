@@ -5,6 +5,7 @@ const DEFAULT_CLIP_TRANSFORM: ClipTransform = {
   opacity: 1,
   blendMode: 'normal',
   position: { x: 0, y: 0, z: 0 },
+  anchor: { x: 0, y: 0, z: 0 },
   scale: { x: 1, y: 1 },
   rotation: { x: 0, y: 0, z: 0 },
 };
@@ -30,6 +31,7 @@ type ClipTransformLike = Partial<ClipTransform> & {
 
 export function toProjectTransform(transform: ClipTransformLike | undefined): ProjectTransform {
   const position = transform?.position;
+  const anchor = transform?.anchor;
   const scale = transform?.scale;
   const rotation = typeof transform?.rotation === 'object' ? transform.rotation : undefined;
   const rotationZ = typeof transform?.rotation === 'number'
@@ -50,8 +52,9 @@ export function toProjectTransform(transform: ClipTransformLike | undefined): Pr
     rotation: finiteNumber(rotationZ, DEFAULT_CLIP_TRANSFORM.rotation.z),
     rotationX: finiteNumber(rotation?.x ?? transform?.rotationX, DEFAULT_CLIP_TRANSFORM.rotation.x),
     rotationY: finiteNumber(rotation?.y ?? transform?.rotationY, DEFAULT_CLIP_TRANSFORM.rotation.y),
-    anchorX: 0.5,
-    anchorY: 0.5,
+    anchorX: 0.5 + finiteNumber(anchor?.x, 0),
+    anchorY: 0.5 + finiteNumber(anchor?.y, 0),
+    anchorZ: finiteNumber(anchor?.z, 0),
     opacity: finiteNumber(transform?.opacity, DEFAULT_CLIP_TRANSFORM.opacity),
     blendMode: (transform?.blendMode as BlendMode | undefined) ?? DEFAULT_CLIP_TRANSFORM.blendMode,
   };
@@ -60,6 +63,7 @@ export function toProjectTransform(transform: ClipTransformLike | undefined): Pr
 export function fromProjectTransform(transform: ProjectTransform | ClipTransformLike | undefined): ClipTransform {
   const normalizedTransform = transform as ClipTransformLike | undefined;
   const position = normalizedTransform?.position;
+  const projectTransform = transform as ProjectTransform | undefined;
   const scale = normalizedTransform?.scale;
   const rotation = typeof normalizedTransform?.rotation === 'object' ? normalizedTransform.rotation : undefined;
   const rotationZ = typeof normalizedTransform?.rotation === 'number'
@@ -74,6 +78,11 @@ export function fromProjectTransform(transform: ProjectTransform | ClipTransform
       x: finiteNumber(position?.x ?? normalizedTransform?.x, DEFAULT_CLIP_TRANSFORM.position.x),
       y: finiteNumber(position?.y ?? normalizedTransform?.y, DEFAULT_CLIP_TRANSFORM.position.y),
       z: finiteNumber(position?.z ?? normalizedTransform?.z, DEFAULT_CLIP_TRANSFORM.position.z),
+    },
+    anchor: {
+      x: finiteNumber(normalizedTransform?.anchor?.x, finiteNumber(projectTransform?.anchorX, 0.5) - 0.5),
+      y: finiteNumber(normalizedTransform?.anchor?.y, finiteNumber(projectTransform?.anchorY, 0.5) - 0.5),
+      z: finiteNumber(normalizedTransform?.anchor?.z, finiteNumber(projectTransform?.anchorZ, 0)),
     },
     scale: {
       ...(scale?.all !== undefined || normalizedTransform?.scaleAll !== undefined

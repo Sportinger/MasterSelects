@@ -291,6 +291,43 @@
   outline: none;
 }
 
+.timeline-tool-flyout.timeline-tool-flyout-glass-bubble {
+  width: min(286px, calc(100vw - 16px));
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 22% 10%, rgba(255, 255, 255, 0.2), transparent 42%),
+    linear-gradient(145deg, rgba(42, 48, 60, 0.78), rgba(12, 16, 24, 0.72));
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.52),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(24px) saturate(1.35);
+  -webkit-backdrop-filter: blur(24px) saturate(1.35);
+}
+
+.timeline-tool-flyout-glass-bubble .timeline-tool-flyout-item {
+  min-height: 40px;
+  border-radius: 10px;
+}
+
+.timeline-mobile-layout .timeline-ruler-control-strip .timeline-edit-tools-items {
+  gap: 6px;
+}
+
+.timeline-mobile-layout .timeline-ruler-control-strip .timeline-tool-palette {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.timeline-mobile-layout .timeline-ruler-control-strip .timeline-tool-button {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
 .timeline-tool-flyout-item {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr) auto;

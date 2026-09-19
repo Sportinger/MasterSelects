@@ -2,6 +2,7 @@
 
 import type { FileImportResult, MediaFile, MediaSliceCreator } from '../types';
 import type { MediaFileStemInfo } from '../../../types/audio';
+import type { ExternalMediaOrigin } from '../../../types/mediaMetadata';
 import { createBatchFileImportActions } from './fileImport/batchImportActions';
 import { createGaussianImportActions } from './fileImport/gaussianImportActions';
 import { createSingleFileImportActions } from './fileImport/singleFileImportActions';
@@ -23,6 +24,7 @@ export interface ImportFileOptions {
   forceCopyToProject?: boolean;
   projectFileName?: string;
   stemInfo?: MediaFileStemInfo;
+  externalOrigin?: ExternalMediaOrigin;
 }
 
 export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set, get) => ({

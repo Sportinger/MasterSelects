@@ -1,0 +1,16 @@
+@layer components {
+  .toolbar-save-status {
+    display: inline-flex; align-items: center; gap: 5px; flex-shrink: 1; min-width: 0;
+    padding: 3px 6px; border: 0; border-radius: 3px; background: transparent;
+    color: var(--text-secondary); font-size: 10px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .toolbar-save-status:focus { outline: none; }
+  .toolbar-save-status:focus-visible { outline: 2px solid var(--accent-color, #8ab4f8); outline-offset: 1px; }
+  .toolbar-save-status:hover { background: var(--bg-hover); }
+  .toolbar-save-status[data-phase="failed"] { color: #ff8d8d; }
+  .toolbar-save-status[data-phase="unsaved"] { color: #e7c276; }
+  .toolbar-save-status:disabled { cursor: progress; }
+  .toolbar-save-status-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+  .toolbar-save-status span[role="status"] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}

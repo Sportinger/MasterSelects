@@ -30,6 +30,7 @@ MasterSelects supports per-clip vector masks with preview-overlay editing, selec
 `ClipMask` includes:
 
 - `id` and `name`
+- optional semantic `purpose` (`crop` for the Resolve cropping mask)
 - `vertices`
 - `closed`
 - `opacity` (persisted, not rendered or exposed in the active panel)
@@ -58,6 +59,14 @@ The properties panel exposes three creation flows:
 - Rectangle mask
 - Ellipse mask
 - Pen mask
+
+Resolve-style Cropping in the Video inspector is a fourth, semantic entry
+point into the same mask engine. The first crop edit creates one closed
+rectangle mask with `purpose: 'crop'`, `mode: 'intersect'`, and a hidden
+preview outline. Left/right/top/bottom rebuild its normalized rectangle;
+softness maps to mask feather. The crop mask stays last in compositing order,
+survives project save/load, and remains a normal render mask rather than a
+separate clipping implementation.
 
 Rectangle and ellipse masks can be drawn directly on the preview by dragging.
 Pen mode adds points by clicking in the preview.
@@ -92,9 +101,9 @@ The preview overlay is implemented in `src/components/preview/MaskOverlay.tsx`.
 - Holding Shift while dragging an edge snaps that edge horizontal or vertical, whichever is closer.
 - Holding Ctrl/Cmd while dragging an edge aligns the adjacent edges to their neighboring vertices. Shift and Ctrl/Cmd can be combined for constrained linear edge movement.
 - Clicking an edge with the pen tool inserts a new vertex.
-- Dragging a single vertex on a closed four-point mask preserves the existing edge angles by moving the adjacent vertices with it.
-- Holding Ctrl/Cmd while dragging a vertex moves it freely.
-- Holding Ctrl/Cmd+Shift while dragging a vertex moves it freely on only the dominant X or Y axis.
+- Dragging a vertex moves only that vertex, including on rectangle and ellipse masks.
+- Holding Ctrl/Cmd while dragging a vertex performs a global shape adjustment around the mask center. Ellipses keep their smooth ellipse geometry, straight four-point rectangles preserve their rectangular geometry, and arbitrary paths scale as a whole.
+- Holding Ctrl/Cmd+Shift constrains that global adjustment to the dominant X or Y axis.
 - Dragging a selected vertex with multiple vertices selected moves the selected vertices together.
 - Clicking a vertex selects it and keeps it selected until the selection changes.
 - Arrow keys nudge selected vertices. Shift increases the step; Alt uses a fine step.
@@ -103,6 +112,7 @@ The preview overlay is implemented in `src/components/preview/MaskOverlay.tsx`.
 - Shift while placing a pen handle constrains the handle angle.
 - Alt while placing a pen handle creates a one-sided handle.
 - Double-clicking a vertex cycles its handle mode.
+- Double-clicking inside the active mask reveals a gray dashed transform outline. Dragging one of its corner handles scales the complete Mask Path, including bezier handles; holding Shift preserves the current aspect ratio.
 - `B` cycles selected vertices between corner, linked handles, and split handles.
 - `Delete` removes selected vertices.
 - `Escape` exits drawing or editing modes.
@@ -147,7 +157,7 @@ The underlying `mask.{maskId}.position.x` and `mask.{maskId}.position.y` propert
 Copying a mask copies every `mask.{maskId}.*` keyframe. Pasting creates a new mask id and remaps all pasted mask keyframes to that id.
 Deleting a mask removes every keyframe and recording flag for that mask id.
 
-Editing a vertex, handle, edge, or keyboard-nudging selected vertices records a new path keyframe when the path stopwatch is active or path keyframes already exist.
+Editing a vertex, handle, edge, transform-outline bounds, or keyboard-nudging selected vertices records a new path keyframe when the path stopwatch is active or path keyframes already exist.
 This matches the After Effects-style workflow where the mask path is one animatable property instead of one property per vertex.
 Static mask changes are also picked up by the global undo history. Mask-only changes use a 1 second idle debounce so slider and drag updates do not flood the history stack.
 
@@ -192,6 +202,7 @@ Relevant files:
 - `src/components/panels/properties/MasksTab.tsx`
 - `src/components/preview/MaskOverlay.tsx`
 - `src/components/preview/useMaskVertexDrag.ts`
+- `src/components/preview/useMaskBoundsResize.ts`
 - `src/components/preview/useMaskDrag.ts`
 - `src/components/preview/useMaskEdgeDrag.ts`
 - `src/components/preview/useMaskShapeDraw.ts`
@@ -208,3 +219,4 @@ Relevant files:
 
 - Mask path interpolation across topology changes is a best-effort Bezier-segment morph; a one-vertex source collapses added vertices to its anchor.
 - Mask mode is applied while generating the combined CPU mask texture.
+

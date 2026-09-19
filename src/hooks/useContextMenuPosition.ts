@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 interface Position {
   x: number;
   y: number;
+  preferAbove?: boolean;
 }
 
 /**
@@ -19,6 +20,7 @@ export function useContextMenuPosition(
   const [adjustedPosition, setAdjustedPosition] = useState<Position | null>(initialPosition);
   const initialX = initialPosition?.x;
   const initialY = initialPosition?.y;
+  const preferAbove = initialPosition?.preferAbove === true;
 
   useEffect(() => {
     // Wait for next frame so the menu is rendered and we can measure it
@@ -42,6 +44,10 @@ export function useContextMenuPosition(
       const viewportHeight = window.innerHeight;
       const padding = 8; // Minimum distance from edge
 
+      if (preferAbove) {
+        y = Math.max(padding, initialY - rect.height - 16);
+      }
+
       // Adjust horizontal position if menu goes off right edge
       if (x + rect.width > viewportWidth - padding) {
         x = Math.max(padding, viewportWidth - rect.width - padding);
@@ -56,7 +62,7 @@ export function useContextMenuPosition(
     });
 
     return () => cancelAnimationFrame(rafId);
-  }, [initialX, initialY]);
+  }, [initialX, initialY, preferAbove]);
 
   return { menuRef, adjustedPosition };
 }

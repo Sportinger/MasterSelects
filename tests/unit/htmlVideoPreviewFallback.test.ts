@@ -47,4 +47,44 @@ describe('getCopiedHtmlVideoPreviewFrame', () => {
     )).toBe(copiedFrame);
     expect(scrubbingCache.captureVideoFrame).toHaveBeenCalledWith(video, 'clip-a');
   });
+
+  it('copies paused Android Chrome frames before WebGPU presentation', () => {
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: {
+        userAgent: 'Mozilla/5.0 (Linux; Android 16; Pixel 10 Pro) AppleWebKit/537.36 Chrome/140.0.0.0 Mobile Safari/537.36',
+        userAgentData: { platform: 'Android' },
+      },
+    });
+
+    const copiedFrame = {
+      view: {} as GPUTextureView,
+      width: 1920,
+      height: 1080,
+      mediaTime: 1.25,
+    };
+    const scrubbingCache = {
+      getLastFrameNearTime: vi.fn()
+        .mockReturnValueOnce(null)
+        .mockReturnValueOnce(copiedFrame),
+      captureVideoFrame: vi.fn(() => true),
+    };
+    const video = {
+      readyState: 4,
+      videoWidth: 1920,
+      videoHeight: 1080,
+      currentTime: 1.25,
+      paused: true,
+      seeking: false,
+    } as HTMLVideoElement;
+
+    expect(getCopiedHtmlVideoPreviewFrame(
+      video,
+      scrubbingCache as never,
+      1.25,
+      'clip-a',
+      'clip-a',
+    )).toBe(copiedFrame);
+    expect(scrubbingCache.captureVideoFrame).toHaveBeenCalledWith(video, 'clip-a');
+  });
 });

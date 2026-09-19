@@ -1,4 +1,4 @@
-import type { Command, VideoInfo } from './protocol';
+import type { Command, NativeVideoSearchResult, VideoInfo } from './protocol';
 import type {
   NativeHelperCommandHost,
   ProgressLikeResponse,
@@ -46,6 +46,24 @@ export async function listFormats(
       resolve(null);
     });
   });
+}
+
+export async function searchVideos(
+  host: NativeHelperCommandHost,
+  query: string,
+  maxResults = 12,
+): Promise<NativeVideoSearchResult[]> {
+  const id = host.nextId();
+  const response = await host.send({
+    cmd: 'search_videos',
+    id,
+    query,
+    max_results: Math.min(Math.max(maxResults, 1), 20),
+  }, 45000);
+  if (!response.ok) {
+    throw new Error(getErrorMessage(response, 'Native Helper search failed'));
+  }
+  return okField<NativeVideoSearchResult[]>(response, 'results') ?? [];
 }
 
 export async function downloadYouTube(

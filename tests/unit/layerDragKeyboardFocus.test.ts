@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { shouldDeferLayerNudgeToFocusedControl } from '../../src/components/preview/useLayerDrag';
+import { shouldDeferLayerNudgeToFocusedControl } from '../../src/components/preview/layerDragKeyboardFocus';
 
 afterEach(() => {
   document.body.replaceChildren();

@@ -6,6 +6,7 @@ import {
   resolveTimelineClipCanvasPaintVisuals,
   type TimelineClipCanvasPaintVisuals,
 } from './timelineClipCanvasPaintVisualContributors';
+import { resolveTimelineClipCanvasBodyFill } from './timelineClipCanvasAppearance';
 
 export interface TimelineClipCanvasWorkerPaintClipInput {
   id: string;
@@ -17,14 +18,9 @@ export interface TimelineClipCanvasWorkerPaintClipInput {
   hasCompositionSegmentThumbnails: boolean;
   visuals: TimelineClipCanvasPaintVisuals;
   bodyFill?: string;
+  missingMedia: boolean;
   dataSourceType?: string | null;
   storyboardProperties?: StoryboardClipProperties;
-}
-
-function getTimelineClipCanvasWorkerClipBodyFill(clip: TimelinePaintSourceClip): string | undefined {
-  if (clip.source?.type !== 'solid') return undefined;
-  return (clip as TimelinePaintSourceClip & { solidColor?: string }).solidColor ??
-    (clip.source as { color?: string }).color;
 }
 
 export function createTimelineClipCanvasWorkerPaintClipInput(
@@ -40,7 +36,8 @@ export function createTimelineClipCanvasWorkerPaintClipInput(
     isAudio,
     hasCompositionSegmentThumbnails: !isAudio && Boolean(clip.clipSegments?.length),
     visuals: resolveTimelineClipCanvasPaintVisuals(clip),
-    bodyFill: getTimelineClipCanvasWorkerClipBodyFill(clip),
+    bodyFill: resolveTimelineClipCanvasBodyFill(clip),
+    missingMedia: clip.needsReload === true,
     dataSourceType: clip.source?.type,
     storyboardProperties: cloneStoryboardClipProperties(clip.storyboardProperties),
   };

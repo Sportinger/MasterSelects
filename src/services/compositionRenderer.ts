@@ -8,6 +8,7 @@ import type {
 } from '../types';
 import type { Layer } from '../types/layers';
 import type { Keyframe } from '../types/keyframes';
+import { MAX_NESTING_DEPTH } from '../stores/timeline/constants';
 
 const log = Logger.create('CompositionRenderer');
 import { useMediaStore } from '../stores/mediaStore';
@@ -51,10 +52,13 @@ import type {
   EvaluatedLayer,
 } from './compositionRender/sourceTypes';
 import { buildCompositionTransitionLayersForTrack } from './compositionRender/transitionEvaluation';
+import { liveInputRuntime } from './mediaRuntime/liveInputRuntime';
 export type { EvaluatedLayer } from './compositionRender/sourceTypes';
 
 export interface EvaluateCompositionOptions {
   playbackOptions?: BackgroundVideoPlaybackOptions;
+  /** Internal recursion guard for serialized composition references. */
+  evaluationStack?: readonly string[];
 }
 
 function pauseInactiveCompositionVideos(
@@ -181,6 +185,30 @@ class CompositionRendererService {
       log.debug(`Processing clip ${clip.id}: sourceType=${sourceType}, mediaFileId=${mediaFileId || 'NONE'}, isActive=${isActiveComp}`);
 
       if (isActiveComp && timelineClip.source) {
+        const liveInputId = timelineClip.source.liveInputId;
+        if (sourceType === 'video' && liveInputId) {
+          // Live media items intentionally have no File/Blob. Resolve their
+          // active runtime surfaces before the regular file-backed path so a
+          // later composition rebuild cannot discard a still-running stream.
+          const fallbackVideo = liveInputRuntime.getVideoElement(liveInputId, true);
+          const presentationVideo = liveInputRuntime.getPresentationVideoElement(liveInputId)
+            ?? fallbackVideo;
+          if (presentationVideo) {
+            const presentation = liveInputRuntime.getVideoPresentation(liveInputId);
+            sources.clipSources.set(clip.id, {
+              clipId: clip.id,
+              type: 'video',
+              videoElement: presentationVideo,
+              canvasElement: liveInputRuntime.getPresentationCanvas(liveInputId) ?? undefined,
+              isLiveInput: true,
+              intrinsicWidth: presentation?.width,
+              intrinsicHeight: presentation?.height,
+              naturalDuration: clip.duration,
+            });
+            continue;
+          }
+        }
+
         if (
           sourceType === 'video' &&
           (timelineClip.source.videoElement ||
@@ -301,7 +329,14 @@ class CompositionRendererService {
 
         // Handle text clips from serialized data (non-active composition)
         if (sourceType === 'text' && serializableClip.textProperties) {
-          const textCanvas = textRenderer.render(serializableClip.textProperties);
+          // Every prepared text clip needs its own backing canvas. Rendering
+          // without a target uses TextRenderer's shared scratch canvas, so the
+          // next text clip overwrites the previous one in independent previews.
+          const textCanvas = textRenderer.createCanvas(
+            Math.max(1, Math.round(composition.width)),
+            Math.max(1, Math.round(composition.height)),
+          );
+          textRenderer.render(serializableClip.textProperties, textCanvas);
           if (textCanvas) {
             const entry: CompositionClipSourceEntry = {
               clipId: clip.id,
@@ -456,6 +491,19 @@ class CompositionRendererService {
    * Evaluate a composition at a specific time - returns layers ready for rendering
    */
   evaluateAtTime(compositionId: string, time: number, options?: EvaluateCompositionOptions): EvaluatedLayer[] {
+    const evaluationStack = options?.evaluationStack ?? [];
+    if (
+      evaluationStack.includes(compositionId)
+      || evaluationStack.length >= MAX_NESTING_DEPTH
+    ) {
+      log.debug('evaluateAtTime: cyclic or over-depth composition reference skipped', {
+        compositionId,
+        evaluationStack,
+      });
+      return [];
+    }
+    const nextEvaluationStack = [...evaluationStack, compositionId];
+
     const sources = this.compositionSources.get(compositionId);
     if (!sources?.isReady) {
       // Log at debug level — this is a normal transient state during loading, not an error
@@ -512,14 +560,17 @@ class CompositionRendererService {
     const videoTracks = tracks.filter((t: TimelineTrack) => t.type === 'video');
     log.debug(`evaluateAtTime: ${videoTracks.length} video tracks, clipSources: ${sources.clipSources.size}`);
 
-    // Build layers from bottom to top (reverse track order)
+    // Render consumers reverse this list before compositing, matching the live
+    // LayerBuilder contract. Keep composition layers in timeline order: top to
+    // bottom. Returning bottom-first makes the lowest solid track cover every
+    // text/image track in independent previews and thumbnails.
     const layers: EvaluatedLayer[] = [];
     const activeVideoSourceClipIds = new Set<string>();
     const getVectorAnimationSettings = (clipId: string, localTime: number) =>
       useTimelineStore.getState().getInterpolatedVectorAnimationSettings(clipId, localTime);
     const getClipKeyframes = (clipId: string) => activeClipKeyframes?.get(clipId);
 
-    for (let trackIndex = videoTracks.length - 1; trackIndex >= 0; trackIndex--) {
+    for (let trackIndex = 0; trackIndex < videoTracks.length; trackIndex++) {
       const track = videoTracks[trackIndex];
       if (!track.visible) continue;
 
@@ -542,7 +593,10 @@ class CompositionRendererService {
         isCompositionReady: (transitionCompositionId) => this.isReady(transitionCompositionId),
         prepareComposition: (transitionCompositionId) => { void this.prepareComposition(transitionCompositionId); },
         evaluateCompositionAtTime: (transitionCompositionId, transitionCompositionTime, transitionOptions) =>
-          this.evaluateAtTime(transitionCompositionId, transitionCompositionTime, transitionOptions) as Layer[],
+          this.evaluateAtTime(transitionCompositionId, transitionCompositionTime, {
+            ...transitionOptions,
+            evaluationStack: nextEvaluationStack,
+          }) as Layer[],
       });
       if (transitionLayers) {
         layers.push(...transitionLayers);
@@ -583,7 +637,10 @@ class CompositionRendererService {
           isCompositionReady: (transitionCompositionId) => this.isReady(transitionCompositionId),
           prepareComposition: (transitionCompositionId) => { void this.prepareComposition(transitionCompositionId); },
           evaluateCompositionAtTime: (transitionCompositionId, transitionCompositionTime, transitionOptions) =>
-            this.evaluateAtTime(transitionCompositionId, transitionCompositionTime, transitionOptions) as Layer[],
+            this.evaluateAtTime(transitionCompositionId, transitionCompositionTime, {
+              ...transitionOptions,
+              evaluationStack: nextEvaluationStack,
+            }) as Layer[],
         });
         if (nestedLayer) {
           layers.push(nestedLayer);

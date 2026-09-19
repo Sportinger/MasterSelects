@@ -4,12 +4,18 @@ import {
   createTimelineSourceWaveformGenerationRequest,
   resetTimelineSourceWaveformWarmupForTest,
   scheduleVisibleTimelineSourceWaveformGeneration,
+  setTimelineSourceWaveformWarmupPlaybackSuppressed,
   warmTimelineSourceWaveformGeneration,
+  type TimelineSourceWaveformClipRef,
   type TimelineSourceWaveformWarmupDeps,
 } from '../../src/services/timeline/timelineSourceWaveformWarmup';
+import type { GenerateClipAudioAnalysisOptions } from '../../src/stores/timeline/types';
 
 function createDeps(overrides: Partial<ReturnType<TimelineSourceWaveformWarmupDeps['getState']>> = {}): TimelineSourceWaveformWarmupDeps {
-  const generateWaveformForClip = vi.fn<(clipId: string) => Promise<void>>()
+  const generateWaveformForClip = vi.fn<(
+    clipId: string,
+    options?: GenerateClipAudioAnalysisOptions,
+  ) => Promise<void>>()
     .mockResolvedValue(undefined);
 
   return {
@@ -74,6 +80,14 @@ describe('timeline source waveform warmup', () => {
           waveformGenerating: true,
         },
         {
+          id: 'offline-audio',
+          name: 'Offline',
+          startTime: 1,
+          duration: 2,
+          needsReload: true,
+          source: { type: 'audio', mediaFileId: 'audio-offline' },
+        },
+        {
           id: 'video',
           name: 'Video',
           startTime: 1,
@@ -110,13 +124,33 @@ describe('timeline source waveform warmup', () => {
     expect(deps.getState().generateWaveformForClip).not.toHaveBeenCalled();
   });
 
+  it('blocks generation from the beginning of playback startup', async () => {
+    const request = createTimelineSourceWaveformGenerationRequest({
+      id: 'clip-a',
+      name: 'Audio A',
+      source: { type: 'audio', mediaFileId: 'media-a' },
+    });
+    const deps = createDeps();
+    setTimelineSourceWaveformWarmupPlaybackSuppressed(true);
+
+    await expect(warmTimelineSourceWaveformGeneration(request!, { deps }))
+      .resolves.toEqual({ clipId: 'clip-a', status: 'blocked' });
+    expect(deps.getState().generateWaveformForClip).not.toHaveBeenCalled();
+  });
+
   it('coalesces overlapping source waveform generation requests', async () => {
     let resolveGeneration: (() => void) | undefined;
-    const generateWaveformForClip = vi.fn<(clipId: string) => Promise<void>>()
+    const clips: TimelineSourceWaveformClipRef[] = [{
+      id: 'clip-a', source: { type: 'audio', mediaFileId: 'media-a' },
+    }];
+    const generateWaveformForClip = vi.fn<(
+      clipId: string,
+      options?: GenerateClipAudioAnalysisOptions,
+    ) => Promise<void>>()
       .mockReturnValue(new Promise<void>((resolve) => {
         resolveGeneration = resolve;
       }));
-    const deps = createDeps({ generateWaveformForClip });
+    const deps = createDeps({ generateWaveformForClip, clips });
     const request = createTimelineSourceWaveformGenerationRequest({
       id: 'clip-a',
       name: 'Audio A',
@@ -127,10 +161,51 @@ describe('timeline source waveform warmup', () => {
     const second = warmTimelineSourceWaveformGeneration(request!, { deps });
 
     expect(generateWaveformForClip).toHaveBeenCalledTimes(1);
+    expect(generateWaveformForClip).toHaveBeenCalledWith('clip-a', { derivedOnly: true });
+    clips[0].waveform = [0.2, 0.6];
     resolveGeneration?.();
 
     await expect(first).resolves.toEqual({ clipId: 'clip-a', status: 'generated' });
     await expect(second).resolves.toEqual({ clipId: 'clip-a', status: 'generated' });
+  });
+
+  it('does not report success or continuously retry when analysis produces no waveform', async () => {
+    vi.useFakeTimers();
+    const deps = createDeps();
+    const request = createTimelineSourceWaveformGenerationRequest(deps.getState().clips[0])!;
+    await expect(warmTimelineSourceWaveformGeneration(request, { deps }))
+      .resolves.toMatchObject({ status: 'failed' });
+    for (let index = 0; index < 20; index += 1) {
+      await expect(warmTimelineSourceWaveformGeneration(request, { deps }))
+        .resolves.toMatchObject({ status: 'blocked' });
+    }
+    expect(deps.getState().generateWaveformForClip).toHaveBeenCalledTimes(1);
+  });
+
+  it('caps failed retries and permits another attempt when the source is relinked', async () => {
+    vi.useFakeTimers();
+    const clips: TimelineSourceWaveformClipRef[] = [{
+      id: 'clip-a', source: { type: 'audio', mediaFileId: 'media-a' },
+      file: new File(['broken'], 'clip.wav', { lastModified: 1 }),
+    }];
+    const generateWaveformForClip = vi.fn().mockRejectedValue(new Error('decode failed'));
+    const deps = createDeps({ clips, generateWaveformForClip });
+    const request = createTimelineSourceWaveformGenerationRequest(clips[0])!;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(warmTimelineSourceWaveformGeneration(request, { deps }))
+        .resolves.toMatchObject({ status: 'failed' });
+      vi.advanceTimersByTime(60_000);
+    }
+    await expect(warmTimelineSourceWaveformGeneration(request, { deps }))
+      .resolves.toMatchObject({ status: 'blocked' });
+    expect(generateWaveformForClip).toHaveBeenCalledTimes(3);
+
+    // A fresh File can have identical metadata after permission/relink recovery.
+    clips[0].file = new File(['fixed!'], 'clip.wav', { lastModified: 1 });
+    generateWaveformForClip.mockImplementation(async () => { clips[0].waveform = [0.1, 0.5]; });
+    await expect(warmTimelineSourceWaveformGeneration(request, { deps }))
+      .resolves.toMatchObject({ status: 'generated' });
+    expect(generateWaveformForClip).toHaveBeenCalledTimes(4);
   });
 
   it('can cancel scheduled visible waveform generation before work starts', () => {

@@ -86,6 +86,13 @@ export function generateMathSceneClipId(): string {
 }
 
 /**
+ * Generate a unique ID for flock clips.
+ */
+export function generateFlockClipId(): string {
+  return generateClipId('clip-flock');
+}
+
+/**
  * Generate a unique ID for motion design clips.
  */
 export function generateMotionClipId(kind: 'shape' | 'null' | 'adjustment' | 'group' = 'shape'): string {

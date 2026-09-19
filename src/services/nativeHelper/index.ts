@@ -18,6 +18,7 @@ export type {
   AudioSettings,
   Command,
   Response,
+  NativeVideoSearchResult,
   VideoInfo,
   FormatInfo,
   FormatRecommendation,

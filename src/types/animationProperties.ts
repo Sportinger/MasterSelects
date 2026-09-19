@@ -5,6 +5,7 @@ import type {
 } from './vectorAnimation';
 import type { MotionProperty } from './motionDesign';
 import type { LightProperty } from './light';
+import type { FlockProperty } from './flock';
 
 // Keyframe animation types
 export type EasingType = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'bezier';
@@ -21,6 +22,7 @@ export type TransformProperty =
   | 'opacity'
   | 'speed'
   | 'position.x' | 'position.y' | 'position.z'
+  | 'anchor.x' | 'anchor.y' | 'anchor.z'
   | 'scale.all' | 'scale.x' | 'scale.y' | 'scale.z'
   | 'rotation.x' | 'rotation.y' | 'rotation.z';
 
@@ -41,7 +43,7 @@ export type ColorProperty = `color.${string}.${string}.${string}`;
 // - mask.{maskId}.path stores the whole bezier path as one keyframe value
 // - mask.{maskId}.position.x/y and edge values remain numeric keyframes
 export type MaskPathProperty = `mask.${string}.path`;
-export type MaskNumericPropertyName = 'position.x' | 'position.y' | 'feather' | 'featherQuality';
+export type MaskNumericPropertyName = 'position.x' | 'position.y' | 'rotation' | 'feather' | 'featherQuality';
 export type MaskNumericProperty = `mask.${string}.${MaskNumericPropertyName}`;
 export type MaskEdgeFeatherProperty = `mask.${string}.edge.${string}.feather`;
 export type MaskProperty = MaskPathProperty | MaskNumericProperty | MaskEdgeFeatherProperty;
@@ -60,7 +62,7 @@ export type TextBoundsProperty = TextBoundsPathProperty | TextBoundsNumericPrope
 export type TransitionRenderProperty = 'transitionRender.progress';
 
 // Combined animatable property type
-export type AnimatableProperty = TransformProperty | CameraProperty | LightProperty | EffectProperty | NodeGraphParamProperty | ColorProperty | MaskProperty | TextBoundsProperty | TransitionRenderProperty | VectorAnimationInputProperty | VectorAnimationStateProperty | VectorAnimationDataBindingPropertyPath | MotionProperty;
+export type AnimatableProperty = TransformProperty | CameraProperty | LightProperty | EffectProperty | NodeGraphParamProperty | ColorProperty | MaskProperty | TextBoundsProperty | TransitionRenderProperty | VectorAnimationInputProperty | VectorAnimationStateProperty | VectorAnimationDataBindingPropertyPath | MotionProperty | FlockProperty;
 
 export function isCameraProperty(property: string): property is CameraProperty {
   return /^camera\.(fov|near|far|resolutionWidth|resolutionHeight)$/.test(property);
@@ -127,7 +129,7 @@ export function isMaskPathProperty(property: string): property is MaskPathProper
 }
 
 export function isMaskNumericProperty(property: string): property is MaskNumericProperty {
-  return /^mask\.[^.]+\.(position\.(x|y)|feather|featherQuality)$/.test(property);
+  return /^mask\.[^.]+\.(position\.(x|y)|rotation|feather|featherQuality)$/.test(property);
 }
 
 export function isMaskEdgeFeatherProperty(property: string): property is MaskEdgeFeatherProperty {
@@ -148,6 +150,7 @@ export function parseMaskProperty(property: string): ParsedMaskProperty | null {
     maskProperty === 'path' ||
     maskProperty === 'position.x' ||
     maskProperty === 'position.y' ||
+    maskProperty === 'rotation' ||
     maskProperty === 'feather' ||
     maskProperty === 'featherQuality'
   ) {

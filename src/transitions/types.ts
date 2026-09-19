@@ -281,13 +281,15 @@ export type TransitionMaskPrimitive =
       pattern: TransitionPatternMask;
     };
 
-export type TransitionParamType = 'number' | 'boolean' | 'select' | 'color';
+export type TransitionParamType = 'number' | 'boolean' | 'select' | 'color' | 'string';
 export type TransitionParamValue = string | number | boolean;
 
 export interface TransitionParamDefinition {
   type: TransitionParamType;
   label: string;
   defaultValue: TransitionParamValue;
+  /** Internal values participate in serialization but are not rendered as controls. */
+  hidden?: boolean;
   min?: number;
   max?: number;
   step?: number;
@@ -439,6 +441,9 @@ export interface TransitionDefinition {
 
   /** Default duration in seconds */
   defaultDuration: number;
+
+  /** Preferred placement relative to the clip junction; centered when omitted. */
+  defaultPlacement?: 'center' | 'end-at-cut' | 'start-at-cut';
 
   /** Minimum duration in seconds */
   minDuration: number;

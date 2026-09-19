@@ -51,6 +51,11 @@ export interface TimelineState {
   // Musical division the bars grid draws and snaps to (issue #299). View state:
   // persisted per user in localStorage, never in the project.
   timelineGridSubdivision: import('../../../timeline/tempo/barsGrid').TimelineGridSubdivision;
+  // The piano roll's OWN snap toggle and division — a key editor quantizes finer
+  // than the arrangement grid, so the two are deliberately independent. Same
+  // per-user localStorage view state, never project content.
+  pianoRollSnapEnabled: boolean;
+  pianoRollGridSubdivision: import('../../../timeline/tempo/barsGrid').TimelineGridSubdivision;
   // Metronome (issue #299). View state: per-user localStorage, never project
   // content, exactly like snappingEnabled.
   metronomeEnabled: boolean;
@@ -113,6 +118,7 @@ export interface TimelineState {
   activeMaskId: string | null;
   selectedVertexIds: Set<string>;
   selectedMaskEdgeId: string | null;
+  maskFeatherPreviewEnabled: boolean;
   maskFeatherPreview: { maskId: string; edgeId: string | null; changedAt: number } | null;
   maskDrawStart: { x: number; y: number } | null;
   maskDragging: boolean;

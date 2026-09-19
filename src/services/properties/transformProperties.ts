@@ -7,8 +7,9 @@ import type {
 } from '../../types/propertyRegistry';
 import type { PropertyRegistry } from './PropertyRegistry';
 
-type TransformPatch = Omit<Partial<TimelineClip['transform']>, 'position' | 'scale' | 'rotation'> & {
+type TransformPatch = Omit<Partial<TimelineClip['transform']>, 'position' | 'anchor' | 'scale' | 'rotation'> & {
   position?: Partial<TimelineClip['transform']['position']>;
+  anchor?: Partial<NonNullable<TimelineClip['transform']['anchor']>>;
   scale?: Partial<TimelineClip['transform']['scale']>;
   rotation?: Partial<TimelineClip['transform']['rotation']>;
 };
@@ -23,6 +24,7 @@ function updateTransform(
       ...clip.transform,
       ...patch,
       position: patch.position ? { ...clip.transform.position, ...patch.position } : clip.transform.position,
+      anchor: patch.anchor ? { ...(clip.transform.anchor ?? { x: 0, y: 0, z: 0 }), ...patch.anchor } : clip.transform.anchor,
       scale: patch.scale ? { ...clip.transform.scale, ...patch.scale } : clip.transform.scale,
       rotation: patch.rotation ? { ...clip.transform.rotation, ...patch.rotation } : clip.transform.rotation,
     },
@@ -111,6 +113,30 @@ export function registerTransformProperties(registry: PropertyRegistry): void {
         axis: 'z',
         codec: 'transform-position',
       },
+    ),
+    createTransformDescriptor(
+      'anchor.x',
+      'Anchor X',
+      0,
+      (clip) => clip.transform.anchor?.x ?? 0,
+      (clip, value) => updateTransform(clip, { anchor: { x: value } }),
+      { step: 0.01, aliases: ['pivot x', 'origin x'] },
+    ),
+    createTransformDescriptor(
+      'anchor.y',
+      'Anchor Y',
+      0,
+      (clip) => clip.transform.anchor?.y ?? 0,
+      (clip, value) => updateTransform(clip, { anchor: { y: value } }),
+      { step: 0.01, aliases: ['pivot y', 'origin y'] },
+    ),
+    createTransformDescriptor(
+      'anchor.z',
+      'Anchor Z',
+      0,
+      (clip) => clip.transform.anchor?.z ?? 0,
+      (clip, value) => updateTransform(clip, { anchor: { z: value } }),
+      { step: 0.01, aliases: ['pivot z', 'origin z'] },
     ),
     createTransformDescriptor(
       'scale.all',

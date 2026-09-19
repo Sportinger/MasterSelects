@@ -21,6 +21,7 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
   const activeMaskId = useTimelineStore(state => state.activeMaskId);
   const selectedVertexIds = useTimelineStore(state => state.selectedVertexIds);
   const selectedMaskEdgeId = useTimelineStore(state => state.selectedMaskEdgeId);
+  const maskFeatherPreviewEnabled = useTimelineStore(state => state.maskFeatherPreviewEnabled !== false);
   const maskEditMode = useTimelineStore(state => state.maskEditMode);
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
   const selectedClip = useTimelineStore(state => state.clips.find(clip => clip.id === clipId));
@@ -39,6 +40,7 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
     closeMask,
     selectVertices,
     setVertexHandleMode,
+    setMaskFeatherPreviewEnabled,
     showMaskFeatherPreview,
     setPropertyValue,
   } = useTimelineStore.getState();
@@ -159,6 +161,8 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
           selectedMaskEdgeId={selectedMaskEdgeId}
           selectedVertexDisplayCount={selectedVertexIds.size}
           selectedVertexCount={selectedVertices.length}
+          maskFeatherPreviewEnabled={maskFeatherPreviewEnabled}
+          setMaskFeatherPreviewEnabled={setMaskFeatherPreviewEnabled}
           showMaskFeatherPreview={showMaskFeatherPreview}
           setPropertyValue={setPropertyValue}
           updateMask={updateMask}

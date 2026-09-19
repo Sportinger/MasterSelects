@@ -9,7 +9,6 @@ import { tryBuildNestedCompositionPassthroughLayer } from './layerBuilderNestedC
 import type { LayerBuilderProxyFrames } from './layerBuilderProxyFrames';
 import type { TransformCache } from './TransformCache';
 import type { ClipTimeInfo, FrameContext } from './types';
-
 export type BuildNestedCompLayerParams = {
   clip: TimelineClip;
   layerIndex: number;
@@ -87,6 +86,7 @@ export function buildLayerBuilderNestedCompositionLayer(input: BuildNestedCompLa
     effects,
     colorCorrection,
     position: transform.position,
+    anchor: transform.anchor,
     scale: transform.scale,
     rotation: transform.rotation,
     ...(mappedAnimation?.masks?.some(mask => mask.enabled !== false)

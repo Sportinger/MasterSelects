@@ -90,6 +90,7 @@ class BasicDecodeSession implements DecodeSession {
   frameProvider: RuntimeFrameProvider | null = null;
   currentFrameTimestamp: number | null = null;
   ownsFrameProvider = false;
+  private providerDispose: (() => void) | null = null;
 
   constructor(params: {
     key: string;
@@ -114,13 +115,34 @@ class BasicDecodeSession implements DecodeSession {
     this.lastAccessedAt = Date.now();
   }
 
+  setFrameProvider(
+    provider: RuntimeFrameProvider | null,
+    options?: { ownsProvider?: boolean; onDispose?: () => void },
+  ): void {
+    if (this.frameProvider !== provider) {
+      if (this.ownsFrameProvider) {
+        this.frameProvider?.destroy?.();
+      }
+      this.providerDispose?.();
+    }
+    this.frameProvider = provider;
+    this.ownsFrameProvider = options?.ownsProvider ?? false;
+    this.providerDispose = provider ? options?.onDispose ?? null : null;
+    if (!provider) {
+      this.currentFrameTimestamp = null;
+      this.ownsFrameProvider = false;
+    }
+  }
+
   dispose(): void {
     if (this.ownsFrameProvider) {
       this.frameProvider?.destroy?.();
     }
+    this.providerDispose?.();
     this.frameProvider = null;
     this.currentFrameTimestamp = null;
     this.ownsFrameProvider = false;
+    this.providerDispose = null;
   }
 }
 
@@ -184,21 +206,14 @@ class BasicMediaSourceRuntime implements MediaSourceRuntime {
     provider: RuntimeFrameProvider | null,
     options?: {
       ownsProvider?: boolean;
+      onDispose?: () => void;
     }
   ): DecodeSession | null {
     const session = this.sessions.get(key);
     if (!session) {
       return null;
     }
-    if (session.ownsFrameProvider && session.frameProvider && session.frameProvider !== provider) {
-      session.frameProvider.destroy?.();
-    }
-    session.frameProvider = provider;
-    session.ownsFrameProvider = options?.ownsProvider ?? false;
-    if (!provider) {
-      session.currentFrameTimestamp = null;
-      session.ownsFrameProvider = false;
-    }
+    session.setFrameProvider(provider, options);
     session.touch();
     return session;
   }
@@ -538,6 +553,7 @@ class DefaultMediaRuntimeRegistry implements MediaRuntimeRegistry {
     provider: RuntimeFrameProvider | null,
     options?: {
       ownsProvider?: boolean;
+      onDispose?: () => void;
     }
   ): DecodeSession | null {
     return this.runtimes.get(sourceId)?.setSessionFrameProvider(sessionKey, provider, options) ?? null;

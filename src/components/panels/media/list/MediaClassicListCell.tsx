@@ -2,10 +2,12 @@ import type { MouseEvent } from 'react';
 
 import type { MediaFile, ProjectItem } from '../../../../stores/mediaStore';
 import { FileTypeIcon } from '../FileTypeIcon';
+import { MediaReconnectButton } from '../MediaReconnectButton';
 import { getItemImportProgress, getItemWaveformProgress } from '../itemTypeGuards';
 import { getLabelHex } from '../labelColors';
 import { getClassicMediaColumnText } from './classicListPlanning';
 import type { MediaClassicBadgeTarget, MediaClassicColumnId } from './types';
+import { getTrackingAssetCoverageLabel, getTrackingAssetStateLabel } from '../trackingAssetPresentation';
 
 const LONG_DASH = '\u2014';
 
@@ -17,6 +19,7 @@ export interface MediaClassicListCellProps {
   isExpanded: boolean;
   isRenaming: boolean;
   isSelected: boolean;
+  needsRelink: boolean;
   mediaFile: MediaFile | null;
   nameColumnWidth: number;
   renameValue: string;
@@ -79,6 +82,12 @@ function MediaClassicStatusBadges({
       {importProgress === null && waveformProgress === null && Boolean(mediaFile?.waveform?.length || mediaFile?.audioAnalysisRefs?.waveformPyramidId) && (
         <span className="media-item-waveform-badge" title="Waveform ready">W</span>
       )}
+      {'type' in item && item.type === 'tracking' ? (
+        <span
+          className="tracking-asset-badge"
+          title={[getTrackingAssetStateLabel(item), getTrackingAssetCoverageLabel(item)].filter(Boolean).join('\n')}
+        >Track</span>
+      ) : null}
       {mediaFile?.audioProxyStatus === 'ready' && (
         <span className="media-item-audio-proxy-badge" title="WAV audio proxy ready">A</span>
       )}
@@ -168,6 +177,7 @@ export function MediaClassicListCell({
   isExpanded,
   isRenaming,
   isSelected,
+  needsRelink,
   mediaFile,
   nameColumnWidth,
   renameValue,
@@ -186,7 +196,7 @@ export function MediaClassicListCell({
 
   switch (colId) {
     case 'label': {
-      const hex = getLabelHex(item.labelColor);
+      const hex = getLabelHex('labelColor' in item ? item.labelColor : undefined);
       return (
         <div
           className="media-col media-col-label"
@@ -267,6 +277,9 @@ export function MediaClassicListCell({
             isProxyFrameCountComplete={isProxyFrameCountComplete}
             longDashTitles
           />
+          {needsRelink && mediaFile ? (
+            <MediaReconnectButton mediaFileId={mediaFile.id} />
+          ) : null}
         </div>
       );
     case 'badges':

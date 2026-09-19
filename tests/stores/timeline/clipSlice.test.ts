@@ -1,12 +1,20 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createTestTimelineStore } from '../../helpers/storeFactory';
-import { createMockClip, createMockTrack, createMockTransform, resetIdCounter } from '../../helpers/mockData';
+import {
+  createMockClip,
+  createMockKeyframe,
+  createMockTrack,
+  createMockTransform,
+  resetIdCounter,
+} from '../../helpers/mockData';
 import { clipAudioAnalysisJobService } from '../../../src/services/audio/ClipAudioAnalysisJobService';
 import { normalizeAudioEqParams } from '../../../src/engine/audio';
 import { useMediaStore } from '../../../src/stores/mediaStore';
 import { createNestedContentHash } from '../../../src/stores/timeline/clip/addCompClip';
 import { blobUrlManager } from '../../../src/stores/timeline/helpers/blobUrlManager';
 import { audioSync } from '../../../src/services/audioSync';
+import { createEffectProperty, type AnimatableProperty } from '../../../src/types/animationProperties';
+import { releaseClipSourceRuntime } from '../../../src/services/mediaRuntime/clipBindings';
 
 describe('clipSlice', () => {
   let store: ReturnType<typeof createTestTimelineStore>;
@@ -982,6 +990,38 @@ describe('clipSlice', () => {
       expect(moved.trackId).toBe('video-2');
     });
 
+    it('moves audio to a new track instead of trimming an occupied clip', () => {
+      const movingAudio = createMockClip({
+        id: 'audio-moving',
+        trackId: 'audio-1',
+        startTime: 10,
+        duration: 2,
+        source: { type: 'audio', naturalDuration: 2 },
+      });
+      const occupiedAudio = createMockClip({
+        id: 'audio-occupied',
+        trackId: 'audio-1',
+        startTime: 0,
+        duration: 10,
+        source: { type: 'audio', naturalDuration: 10 },
+      });
+      store = createTestTimelineStore({
+        clips: [movingAudio, occupiedAudio],
+        snappingEnabled: false,
+        zoom: 100,
+      });
+
+      store.getState().moveClip(movingAudio.id, 4);
+      const state = store.getState();
+      const moved = state.clips.find(clip => clip.id === movingAudio.id)!;
+      const occupied = state.clips.find(clip => clip.id === occupiedAudio.id)!;
+
+      expect(state.tracks.filter(track => track.type === 'audio')).toHaveLength(2);
+      expect(moved).toMatchObject({ startTime: 4 });
+      expect(moved.trackId).not.toBe('audio-1');
+      expect(occupied).toMatchObject({ startTime: 0, duration: 10, trackId: 'audio-1' });
+    });
+
     it('prevents moving video clip to audio track', () => {
       const clip = createMockClip({
         id: 'clip-1',
@@ -1399,6 +1439,53 @@ describe('clipSlice', () => {
       updated = store.getState().clips.find(c => c.id === 'clip-1')!;
       expect(updated.audioState?.effectStack?.map(effect => effect.id)).toEqual(['hp']);
     });
+
+    it('removes registry audio effect keyframes and graph state with the effect', () => {
+      const removedProperty = createEffectProperty('lim', 'ceilingDb') as AnimatableProperty;
+      const retainedProperty = createEffectProperty('hp', 'frequencyHz') as AnimatableProperty;
+      const opacityProperty = 'opacity' as AnimatableProperty;
+      const clip = createMockClip({
+        id: 'clip-1',
+        trackId: 'audio-1',
+        source: { type: 'audio', naturalDuration: 5, mediaFileId: 'audio-file' },
+        audioState: {
+          effectStack: [
+            { id: 'lim', descriptorId: 'audio-limiter', enabled: true, params: { ceilingDb: -1 } },
+            { id: 'hp', descriptorId: 'audio-high-pass', enabled: true, params: { frequencyHz: 120 } },
+          ],
+        },
+      });
+      store = createTestTimelineStore({
+        clips: [clip],
+        tracks: [createMockTrack({ id: 'audio-1', type: 'audio' })],
+        clipKeyframes: new Map([['clip-1', [
+          createMockKeyframe({ id: 'kf-lim', clipId: 'clip-1', property: removedProperty, value: -1 }),
+          createMockKeyframe({ id: 'kf-hp', clipId: 'clip-1', property: retainedProperty, value: 120 }),
+          createMockKeyframe({ id: 'kf-opacity', clipId: 'clip-1', property: opacityProperty, value: 1 }),
+        ]]]),
+        keyframeRecordingEnabled: new Set([
+          `clip-1:${removedProperty}`,
+          `clip-1:${retainedProperty}`,
+        ]),
+        selectedKeyframeIds: new Set(['kf-lim', 'kf-hp']),
+        expandedCurveProperties: new Map([
+          ['audio-1', new Set([removedProperty, retainedProperty, opacityProperty])],
+        ]),
+      });
+      store.getState().ensureClipNodeGraph('clip-1');
+      expect(store.getState().clips[0].nodeGraph?.nodes.some(node => node.id === 'audio-effect-lim')).toBe(true);
+
+      store.getState().removeClipAudioEffectInstance('clip-1', 'lim');
+
+      const state = store.getState();
+      expect(state.clips[0].audioState?.effectStack?.map(effect => effect.id)).toEqual(['hp']);
+      expect(state.clipKeyframes.get('clip-1')?.map(keyframe => keyframe.id)).toEqual(['kf-hp', 'kf-opacity']);
+      expect(state.keyframeRecordingEnabled).toEqual(new Set([`clip-1:${retainedProperty}`]));
+      expect(state.selectedKeyframeIds).toEqual(new Set(['kf-hp']));
+      expect(state.expandedCurveProperties.get('audio-1')).toEqual(new Set([retainedProperty, opacityProperty]));
+      expect(state.clips[0].nodeGraph?.nodes.some(node => node.id === 'audio-effect-lim')).toBe(false);
+      expect(state.clips[0].nodeGraph?.nodes.some(node => node.id === 'audio-effect-hp')).toBe(true);
+    });
   });
 
   describe('removeClipEffect', () => {
@@ -1418,6 +1505,164 @@ describe('clipSlice', () => {
 
       expect(updated.effects.length).toBe(1);
       expect(updated.effects[0].id).toBe('fx-2');
+    });
+
+    it('removes only the deleted effect keyframes from automation and graphs', () => {
+      const removedProperty = createEffectProperty('fx-1', 'radius') as AnimatableProperty;
+      const retainedProperty = createEffectProperty('fx-2', 'amount') as AnimatableProperty;
+      const opacityProperty = 'opacity' as AnimatableProperty;
+      const clip = createMockClip({
+        id: 'clip-1',
+        trackId: 'video-1',
+        effects: [
+          { id: 'fx-1', name: 'blur', type: 'blur', enabled: true, params: { radius: 5 } },
+          { id: 'fx-2', name: 'invert', type: 'invert', enabled: true, params: { amount: 1 } },
+        ],
+      });
+      store = createTestTimelineStore({
+        clips: [clip],
+        tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+        clipKeyframes: new Map([['clip-1', [
+          createMockKeyframe({ id: 'kf-fx-1', clipId: 'clip-1', property: removedProperty, value: 5 }),
+          createMockKeyframe({ id: 'kf-fx-2', clipId: 'clip-1', property: retainedProperty, value: 1 }),
+          createMockKeyframe({ id: 'kf-opacity', clipId: 'clip-1', property: opacityProperty, value: 1 }),
+        ]]]),
+        keyframeRecordingEnabled: new Set([
+          `clip-1:${removedProperty}`,
+          `clip-1:${retainedProperty}`,
+        ]),
+        selectedKeyframeIds: new Set(['kf-fx-1', 'kf-fx-2']),
+        expandedCurveProperties: new Map([
+          ['video-1', new Set([removedProperty, retainedProperty, opacityProperty])],
+        ]),
+      });
+      store.getState().ensureClipNodeGraph('clip-1');
+      expect(store.getState().clips[0].nodeGraph?.nodes.some(node => node.id === 'effect-fx-1')).toBe(true);
+
+      store.getState().removeClipEffect('clip-1', 'fx-1');
+
+      const state = store.getState();
+      expect(state.clips[0].effects.map(effect => effect.id)).toEqual(['fx-2']);
+      expect(state.clipKeyframes.get('clip-1')?.map(keyframe => keyframe.id)).toEqual(['kf-fx-2', 'kf-opacity']);
+      expect(state.keyframeRecordingEnabled).toEqual(new Set([`clip-1:${retainedProperty}`]));
+      expect(state.selectedKeyframeIds).toEqual(new Set(['kf-fx-2']));
+      expect(state.expandedCurveProperties.get('video-1')).toEqual(new Set([retainedProperty, opacityProperty]));
+      expect(state.clips[0].nodeGraph?.nodes.some(node => node.id === 'effect-fx-1')).toBe(false);
+      expect(state.clips[0].nodeGraph?.nodes.some(node => node.id === 'effect-fx-2')).toBe(true);
+    });
+  });
+
+  describe('replaceClipSource', () => {
+    it('replaces linked video and audio media while preserving clip edits and keyframes', () => {
+      const originalMediaState = useMediaStore.getState();
+      const newMediaFile = {
+        id: 'media-new',
+        name: 'replacement.mp4',
+        type: 'video' as const,
+        parentId: null,
+        createdAt: 1,
+        url: 'blob:replacement',
+        file: new File(['replacement'], 'replacement.mp4', { type: 'video/mp4' }),
+        duration: 12,
+        width: 1920,
+        height: 1080,
+        hasAudio: true,
+        waveform: [0, 0.5, 1],
+        waveformChannels: [[0, 0.5, 1]],
+        audioAnalysisRefs: { waveformPyramidId: 'waveform-new' },
+      };
+      vi.mocked(useMediaStore.getState).mockReturnValue({
+        ...originalMediaState,
+        files: [...originalMediaState.files, newMediaFile],
+      });
+
+      const videoTransform = createMockTransform({
+        opacity: 0.75,
+        position: { x: 0.25, y: -0.5, z: 0 },
+      });
+      const videoClip = createMockClip({
+        id: 'video-clip',
+        trackId: 'video-1',
+        file: new File(['old'], 'old.mp4', { type: 'video/mp4' }),
+        mediaFileId: 'media-old',
+        source: { type: 'video', naturalDuration: 20, mediaFileId: 'media-old' },
+        linkedClipId: 'audio-clip',
+        duration: 4,
+        inPoint: 3,
+        outPoint: 7,
+        transform: videoTransform,
+        effects: [{ id: 'fx-1', name: 'blur', type: 'blur', enabled: true, params: { radius: 8 } }],
+        analysis: { frames: [] },
+        analysisStatus: 'ready',
+      });
+      const audioClip = createMockClip({
+        id: 'audio-clip',
+        trackId: 'audio-1',
+        file: videoClip.file,
+        mediaFileId: 'media-old',
+        source: { type: 'audio', naturalDuration: 20, mediaFileId: 'media-old' },
+        linkedClipId: 'video-clip',
+        duration: 4,
+        inPoint: 3,
+        outPoint: 7,
+        audioState: {
+          effectStack: [
+            { id: 'audio-fx', descriptorId: 'audio-compressor', enabled: true, params: { ratio: 3 } },
+          ],
+          sourceAnalysisRefs: { waveformPyramidId: 'waveform-old' },
+          processedAnalysisRefs: { waveformPyramidId: 'processed-old' },
+        },
+      });
+      const videoKeyframe = createMockKeyframe({ id: 'kf-video', clipId: 'video-clip', property: 'opacity' as AnimatableProperty });
+      const audioKeyframe = createMockKeyframe({
+        id: 'kf-audio',
+        clipId: 'audio-clip',
+        property: createEffectProperty('audio-fx', 'ratio') as AnimatableProperty,
+      });
+      store = createTestTimelineStore({
+        clips: [videoClip, audioClip],
+        clipKeyframes: new Map([
+          ['video-clip', [videoKeyframe]],
+          ['audio-clip', [audioKeyframe]],
+        ]),
+      });
+
+      try {
+        expect(store.getState().replaceClipSource('video-clip', 'media-new')).toBe(true);
+
+        const state = store.getState();
+        const replacedVideo = state.clips.find(clip => clip.id === 'video-clip')!;
+        const replacedAudio = state.clips.find(clip => clip.id === 'audio-clip')!;
+        expect(replacedVideo.source).toMatchObject({
+          type: 'video',
+          mediaFileId: 'media-new',
+          naturalDuration: 12,
+        });
+        expect(replacedVideo).toMatchObject({
+          id: 'video-clip',
+          duration: 4,
+          inPoint: 3,
+          outPoint: 7,
+          transform: videoTransform,
+          effects: videoClip.effects,
+        });
+        expect(replacedVideo.analysis).toBeUndefined();
+        expect(replacedAudio.source).toMatchObject({
+          type: 'audio',
+          mediaFileId: 'media-new',
+          naturalDuration: 12,
+        });
+        expect(replacedAudio).toMatchObject({ duration: 4, inPoint: 3, outPoint: 7 });
+        expect(replacedAudio.audioState?.effectStack).toEqual(audioClip.audioState?.effectStack);
+        expect(replacedAudio.audioState?.sourceAnalysisRefs).toEqual({ waveformPyramidId: 'waveform-new' });
+        expect(replacedAudio.audioState?.processedAnalysisRefs).toBeUndefined();
+        expect(replacedAudio.waveform).toEqual([0, 0.5, 1]);
+        expect(state.clipKeyframes.get('video-clip')).toEqual([videoKeyframe]);
+        expect(state.clipKeyframes.get('audio-clip')).toEqual([audioKeyframe]);
+      } finally {
+        store.getState().clips.forEach(releaseClipSourceRuntime);
+        vi.mocked(useMediaStore.getState).mockReturnValue(originalMediaState);
+      }
     });
   });
 
@@ -1837,7 +2082,7 @@ describe('clipSlice', () => {
       expect(untouched.outPoint).toBe(10);
     });
 
-    it('allows trimming to a very small duration', () => {
+    it('clamps a very small trim to one frame', () => {
       const clip = createMockClip({ id: 'clip-1', startTime: 0, duration: 10, inPoint: 0, outPoint: 10 });
       store = createTestTimelineStore({ clips: [clip] });
 
@@ -1845,8 +2090,8 @@ describe('clipSlice', () => {
       const trimmed = store.getState().clips.find(c => c.id === 'clip-1')!;
 
       expect(trimmed.inPoint).toBe(4.99);
-      expect(trimmed.outPoint).toBe(5.01);
-      expect(trimmed.duration).toBeCloseTo(0.02, 5);
+      expect(trimmed.outPoint).toBeCloseTo(4.99 + (1 / 30), 10);
+      expect(trimmed.duration).toBeCloseTo(1 / 30, 10);
     });
   });
 

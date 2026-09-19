@@ -1,3 +1,5 @@
+import { LegalContactMethods, LegalPostalAddress } from './LegalContactDetails';
+
 // =====================================================
 // 日本語
 // =====================================================
@@ -6,13 +8,13 @@ export function ImprintJA() {
   return (
     <div className="legal-text">
       <h3>運営者情報（ドイツ電気通信メディア法 § 5 TMG に基づく）</h3>
-      <p>Roman Kuskowski<br />[住所は後日追記]</p>
+      <p><LegalPostalAddress /></p>
       <h3>連絡先</h3>
-      <p>メール: admin@masterselects.com</p>
+      <p><LegalContactMethods emailLabel="メール" phoneLabel="電話" /></p>
       <h3>著作権</h3>
       <p>
-        MasterSelects はオープンソースソフトウェアです。{' '}
-        <a href="https://github.com/Sportinger/MasterSelects" target="_blank" rel="noopener noreferrer">GitHub</a> で公開されています。
+        MasterSelects エディターは GNU AGPL-3.0-only ライセンスで提供されます。Copyright © 2026 Jan Roman Kuskowski。
+        第三者コンポーネントにはそれぞれのライセンスが適用されます。
       </p>
     </div>
   );
@@ -26,12 +28,12 @@ export function PrivacyJA() {
         <strong>MasterSelects は主にローカルアプリケーションです。</strong>すべてのビデオ、画像、音声ファイルはお使いのデバイス上でのみ処理されます。メディアファイルがコンピュータから外部に送信されることはありません。
       </p>
       <h3>2. データ管理者</h3>
-      <p>Roman Kuskowski<br />メール: admin@masterselects.com</p>
+      <p><LegalPostalAddress /><br /><LegalContactMethods emailLabel="メール" phoneLabel="電話" /></p>
       <h3>3. ホスティング</h3>
       <p><strong>Cloudflare, Inc.</strong>（米国）でホスティング。EU-US データプライバシーフレームワーク認定済み。</p>
       <p>
-        さらに、本サイトのページが開かれた際、技術的な運用監視と内部向けライブ通知のために、サーバー側で訪問イベントを一時的に処理します。これには、リクエストされたパス、時刻、Cloudflare の地理データから得られる国と都市、リファラー、短縮された
-        User-Agent、ならびに IP アドレスと秘密のソルトから生成される仮名化された訪問者 ID が含まれる場合があります。この内部ログに IP アドレスそのものは保存しません。保存期間は通常およそ 1 時間です。法的根拠は GDPR 第 6 条第 1 項
+        さらに、本サイトのページが開かれた際、技術的な運用監視と内部向けライブ通知のために、サーバー側で訪問イベントを処理します。これには、リクエストされたパス、時刻、Cloudflare の地理データから得られる国、ブラウザー・OS・端末の大まかな分類、
+        リファラーのドメイン、ならびに IP アドレスから秘密鍵 HMAC で生成され毎日変わる仮名化された訪問者 ID が含まれる場合があります。都市、完全な User-Agent、完全なリファラー URL、IP アドレスそのものは保存せず、この ID で日をまたいだ訪問を関連付けることはできません。訪問イベントは 180 日後に自動削除されます。法的根拠は GDPR 第 6 条第 1 項
         f 号（安全な運用、不正利用の検知、現在のサイト活動の把握に関する正当な利益）です。
       </p>
       <h3>4. 決済</h3>
@@ -65,10 +67,6 @@ export function ContactJA() {
         <div className="legal-contact-row">
           <span className="legal-contact-label">メール</span>
           <a href="mailto:admin@masterselects.com">admin@masterselects.com</a>
-        </div>
-        <div className="legal-contact-row">
-          <span className="legal-contact-label">GitHub</span>
-          <a href="https://github.com/Sportinger/MasterSelects" target="_blank" rel="noopener noreferrer">Sportinger/MasterSelects</a>
         </div>
       </div>
     </div>

@@ -3,7 +3,8 @@
 import { Logger } from '../../services/logger';
 import { useTimelineStore } from '../../stores/timeline';
 import type { Composition, MediaFile } from '../../stores/mediaStore/types';
-import type { Layer } from '../../types';
+import type { Layer } from '../../types/layers';
+import type { TimelineClip } from '../../types/timeline';
 import {
   createTransitionSourceClip,
   DEFAULT_TRANSITION_PLACEMENT,
@@ -31,6 +32,7 @@ import {
   reportExportParallelDecodeResources,
   reportExportRunJob,
 } from '../../services/timeline/exportRuntimeReporting';
+import { readTimelineRuntimeState } from '../../services/timeline/timelineRuntimeCoordinator';
 
 const log = Logger.create('ExportHelpers');
 
@@ -66,6 +68,7 @@ export class FFmpegFrameRenderer {
   private lastRuntimeReportMs = Number.NEGATIVE_INFINITY;
   private mediaFiles: MediaFile[] = [];
   private mediaCompositions: Composition[] = [];
+  private isolatedVideoCanvases = new Map<HTMLVideoElement, HTMLCanvasElement>();
 
   constructor(options: FFmpegFrameRendererOptions) {
     this.options = options;
@@ -102,7 +105,7 @@ export class FFmpegFrameRenderer {
       this.reportPreparedRuntimeResources(true);
       await prepareTransitionCompositionsForExport();
 
-      const { tracks } = useTimelineStore.getState();
+      const { tracks } = readTimelineRuntimeState(useTimelineStore);
       initializeLayerBuilder(tracks);
       layerBuilderStarted = true;
       await preload3DAssetsForExport({
@@ -177,6 +180,36 @@ export class FFmpegFrameRenderer {
     );
   }
 
+  /** Render one source clip without applying an attached transition composition. */
+  async buildClipLayersAtTime(clipId: string, time: number): Promise<Layer[]> {
+    this.ensureReady();
+    this.throwIfCancelled();
+
+    const clip = readTimelineRuntimeState(useTimelineStore).clips.find(candidate => candidate.id === clipId);
+    if (!clip) throw new Error(`Cannot render missing datamosh source clip: ${clipId}`);
+    const ctx = this.createFrameContext(time, clip);
+    await seekAllClipsToTime(
+      ctx,
+      this.clipStates,
+      this.parallelDecoder,
+      this.useParallelDecode,
+    );
+    await waitForAllVideosReady(
+      ctx,
+      this.clipStates,
+      this.parallelDecoder,
+      this.useParallelDecode,
+    );
+    this.throwIfCancelled();
+    const layers = buildExportLayersAtTime(
+      ctx,
+      this.clipStates,
+      this.parallelDecoder,
+      this.useParallelDecode,
+    );
+    return this.stageIsolatedHtmlVideoLayers(layers);
+  }
+
   cleanup(): void {
     if (this.cleanedUp) {
       return;
@@ -190,22 +223,83 @@ export class FFmpegFrameRenderer {
     this.useParallelDecode = false;
     this.mediaFiles = [];
     this.mediaCompositions = [];
+    this.isolatedVideoCanvases.clear();
     this.initialized = false;
     this.cleanedUp = true;
 
     log.info('Cleaned up FFmpeg frame renderer');
   }
 
-  private createFrameContext(time: number): FrameContext {
-    const state = useTimelineStore.getState();
+  /**
+   * A detached, paused HTMLVideoElement can expose a newly sought frame to
+   * Canvas2D before Chromium's WebGPU external-texture import is stable. The
+   * latter can sample a single source column across the output, producing the
+   * familiar horizontal-band artifact. Isolated source renders (currently
+   * used by the datamosh baker) stage that exact decoded frame through a
+   * dynamic canvas so every render consumes stable RGBA pixels.
+   */
+  private stageIsolatedHtmlVideoLayers(layers: Layer[]): Layer[] {
+    return layers.map((layer) => {
+      const source = layer.source;
+      if (!source) return layer;
+
+      let nextSource = source;
+      if (
+        source.type === 'video' &&
+        source.videoElement &&
+        !source.videoFrame &&
+        !source.canvasElement
+      ) {
+        const video = source.videoElement;
+        const width = video.videoWidth;
+        const height = video.videoHeight;
+        if (video.readyState < 2 || width <= 0 || height <= 0) {
+          throw new Error(`Cannot stage isolated video frame for "${layer.name}".`);
+        }
+
+        let canvas = this.isolatedVideoCanvases.get(video);
+        if (!canvas) {
+          canvas = document.createElement('canvas');
+          canvas.dataset.masterselectsDynamic = 'true';
+          this.isolatedVideoCanvases.set(video, canvas);
+        }
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+        }
+        const context = canvas.getContext('2d', { alpha: false });
+        if (!context) {
+          throw new Error(`Cannot create isolated video staging canvas for "${layer.name}".`);
+        }
+        context.drawImage(video, 0, 0, width, height);
+        nextSource = { ...source, canvasElement: canvas };
+      }
+
+      const nestedLayers = nextSource.nestedComposition?.layers;
+      if (nestedLayers?.length) {
+        nextSource = {
+          ...nextSource,
+          nestedComposition: {
+            ...nextSource.nestedComposition!,
+            layers: this.stageIsolatedHtmlVideoLayers(nestedLayers),
+          },
+        };
+      }
+
+      return nextSource === source ? layer : { ...layer, source: nextSource };
+    });
+  }
+
+  private createFrameContext(time: number, isolatedClip?: TimelineClip): FrameContext {
+    const state = readTimelineRuntimeState(useTimelineStore);
     const getMediaDuration = createTimelineTransitionMediaDurationResolver();
-    const clipsAtTime = state.getClipsAtTime(time);
+    const clipsAtTime = isolatedClip ? [isolatedClip] : state.getClipsAtTime(time);
     const trackMap = new Map(state.tracks.map(track => [track.id, track]));
     const clipsByTrack = new Map(clipsAtTime.map(clip => [clip.trackId, clip]));
     const transitionParticipantsByTrack = new Map<string, ActiveTransitionPlan>();
     const renderClipsById = new Map(clipsAtTime.map(clip => [clip.id, clip]));
 
-    for (const track of state.tracks) {
+    for (const track of isolatedClip ? [] : state.tracks) {
       if (track.type !== 'video') continue;
 
       const transition = findActiveTransitionPlanForTrack({
@@ -233,8 +327,11 @@ export class FFmpegFrameRenderer {
       time,
       fps: this.options.fps,
       frameTolerance: this.frameTolerance,
+      outputWidth: this.options.width,
+      outputHeight: this.options.height,
       clipsAtTime,
-      renderClipsAtTime: Array.from(renderClipsById.values()),
+      renderClipsAtTime: isolatedClip ? [isolatedClip] : Array.from(renderClipsById.values()),
+      compositionClips: state.clips,
       trackMap,
       clipsByTrack,
       transitionParticipantsByTrack,

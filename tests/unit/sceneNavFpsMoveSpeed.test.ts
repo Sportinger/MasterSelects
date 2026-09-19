@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   SCENE_NAV_FPS_MOVE_SPEED_STEPS,
   getSceneNavFpsMoveSpeedStepIndex,
+  resolveSceneNavTouchControlsVisible,
   selectActiveGaussianSplatLoadProgress,
   snapSceneNavFpsMoveSpeed,
   stepSceneNavFpsMoveSpeed,
@@ -42,6 +43,16 @@ describe('scene nav FPS movement speed', () => {
   it('snaps store updates to the speed ladder', () => {
     useEngineStore.getState().setSceneNavFpsMoveSpeed(1.35);
     expect(useEngineStore.getState().sceneNavFpsMoveSpeed).toBe(1.5);
+  });
+
+  it('defaults FPS touch controls off on desktop and on in Mobile layouts', () => {
+    expect(resolveSceneNavTouchControlsVisible(null, false)).toBe(false);
+    expect(resolveSceneNavTouchControlsVisible(null, true)).toBe(true);
+    expect(resolveSceneNavTouchControlsVisible(false, true)).toBe(false);
+    expect(resolveSceneNavTouchControlsVisible(true, false)).toBe(true);
+
+    useEngineStore.getState().setSceneNavTouchControlsOverride(false);
+    expect(useEngineStore.getState().sceneNavTouchControlsOverride).toBe(false);
   });
 
   it('tracks gaussian splat loading progress monotonically until cleared', () => {

@@ -3,6 +3,7 @@ import {
   FileSystemArtifactStorageAdapter,
   ProjectDBArtifactStorageAdapter,
   ProjectDBArtifactManifestIndex,
+  ProjectPackageArtifactStorageAdapter,
   type ArtifactInput,
   type ArtifactManifest,
   type PutArtifactOptions,
@@ -10,6 +11,7 @@ import {
   type StoredArtifact,
 } from '../../../artifacts';
 import { FileStorageService, fileStorageService } from '../core/FileStorageService';
+import type { ProjectPackageSession } from '../core/projectPackage';
 
 export class ArtifactService {
   private readonly fileStorage: FileStorageService;
@@ -30,6 +32,10 @@ export class ArtifactService {
 
   createIndexedDBStore(): ArtifactStore {
     return new ArtifactStore(new ProjectDBArtifactStorageAdapter());
+  }
+
+  createPackageStore(session: ProjectPackageSession): ArtifactStore {
+    return new ArtifactStore(new ProjectPackageArtifactStorageAdapter(session));
   }
 
   async putArtifact(

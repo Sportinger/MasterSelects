@@ -1,3 +1,4 @@
+import { timingSafeEqualStrings } from './constantTime';
 import type { AppUser, Env } from './env';
 
 export const AUTH_STATE_COOKIE_NAME = '__ms_auth_state';
@@ -212,7 +213,7 @@ export async function verifyCookieValue(env: Env, signedValue: string | null | u
 
   const expectedSignature = await createHmacSignature(getSessionSecret(env), value);
 
-  if (signature !== expectedSignature) {
+  if (!timingSafeEqualStrings(signature, expectedSignature)) {
     return null;
   }
 

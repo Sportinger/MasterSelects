@@ -3,6 +3,7 @@ import { Logger } from '../../../services/logger';
 import { useMediaStore } from '../../mediaStore';
 import { shouldSkipWaveform } from '../helpers/waveformHelpers';
 import { updateClipById } from '../helpers/clipStateHelpers';
+import { updateDerivedTimelineClips } from '../revisionMiddleware';
 import {
   SOURCE_WAVEFORM_MAX_PREVIEW_SAMPLES,
   SOURCE_WAVEFORM_PREVIEW_SAMPLES_PER_SECOND,
@@ -37,7 +38,6 @@ export async function loadLinkedAudio(
   mediaFileId: string | undefined,
   waveformsEnabled: boolean,
   updateClip: (id: string, updates: Partial<TimelineClip>) => void,
-  setClips: (updater: (clips: TimelineClip[]) => TimelineClip[]) => void
 ): Promise<void> {
   const cachedWaveform = getCachedMediaWaveform(mediaFileId);
   updateClip(audioClipId, {
@@ -48,7 +48,10 @@ export async function loadLinkedAudio(
 
   const isLargeFile = shouldSkipWaveform(file);
   if (waveformsEnabled && !isLargeFile && !cachedWaveform) {
-    setClips(clips => updateClipById(clips, audioClipId, { waveformGenerating: true, waveformProgress: 0 }));
+    updateDerivedTimelineClips(clips => updateClipById(clips, audioClipId, {
+      waveformGenerating: true,
+      waveformProgress: 0,
+    }));
 
     try {
       const analysis = await generateTimelineWaveformAnalysisForFile(file, {
@@ -57,18 +60,18 @@ export async function loadLinkedAudio(
         samplesPerSecond: SOURCE_WAVEFORM_PREVIEW_SAMPLES_PER_SECOND,
         maxPreviewSamples: SOURCE_WAVEFORM_MAX_PREVIEW_SAMPLES,
         onProgress: (progress, partialWaveform) => {
-          setClips(clips => updateClipById(clips, audioClipId, {
+          updateDerivedTimelineClips(clips => updateClipById(clips, audioClipId, {
             waveformProgress: mapSourceWaveformPreviewProgress(progress),
             waveform: partialWaveform,
           }));
         },
         onPyramidProgress: (progress) => {
-          setClips(clips => updateClipById(clips, audioClipId, {
+          updateDerivedTimelineClips(clips => updateClipById(clips, audioClipId, {
             waveformProgress: mapSourceWaveformPyramidProgress(progress),
           }));
         },
       });
-      setClips(clips => {
+      updateDerivedTimelineClips(clips => {
         const currentClip = clips.find(c => c.id === audioClipId);
         return updateClipById(clips, audioClipId, {
           waveform: analysis.waveform,
@@ -90,7 +93,9 @@ export async function loadLinkedAudio(
       });
     } catch (e) {
       log.warn('Waveform generation failed', e);
-      setClips(clips => updateClipById(clips, audioClipId, { waveformGenerating: false }));
+      updateDerivedTimelineClips(clips => updateClipById(clips, audioClipId, {
+        waveformGenerating: false,
+      }));
     }
   }
 }

@@ -39,9 +39,13 @@ export function tryBuildNestedCompositionPassthroughLayer(input: {
   const activeComposition = ctx.compositionById.get(ctx.activeCompId);
 
   // A simple same-size video nested comp does not need a full-resolution
-  // intermediate render. Keep every visual operation on the regular nested
-  // renderer path so this optimization cannot change the composed result.
+  // intermediate render while paused. During playback the direct layer would
+  // hand a synthetic nested-video owner to the regular HTML collector while
+  // the nested sync coordinator advances the composition clip's own element.
+  // That ownership split can hold the last scrub frame indefinitely, so live
+  // playback stays on the nested renderer's continuity-aware path.
   if (
+    ctx.isPlaying ||
     !nestedLayer?.source ||
     nestedLayer.source.type !== 'video' ||
     nestedLayer.source.nestedComposition ||

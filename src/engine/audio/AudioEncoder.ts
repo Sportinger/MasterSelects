@@ -15,10 +15,43 @@ const log = Logger.create('AudioEncoder');
 
 export type AudioCodec = 'aac' | 'opus';
 
+export const DEFAULT_AUDIO_BITRATE = 192_000;
+
+// Chromium's platform AAC encoder currently accepts these discrete bitrates.
+// Keep the requested bitrate first so browsers with broader AAC support can
+// still honor it, then fall back to the portable Chromium values.
+export const CHROMIUM_AAC_BITRATES = [192_000, 160_000, 128_000, 96_000] as const;
+
+export function getChromiumCompatibleAACBitrate(requestedBitrate: number): number {
+  const requested = Number.isFinite(requestedBitrate) && requestedBitrate > 0
+    ? Math.round(requestedBitrate)
+    : DEFAULT_AUDIO_BITRATE;
+
+  return CHROMIUM_AAC_BITRATES.reduce((closest, candidate) => (
+    Math.abs(candidate - requested) < Math.abs(closest - requested) ? candidate : closest
+  ));
+}
+
+export function getWebCodecsAudioBitrateCandidates(codec: AudioCodec, requestedBitrate: number): number[] {
+  const requested = Number.isFinite(requestedBitrate) && requestedBitrate > 0
+    ? Math.round(requestedBitrate)
+    : DEFAULT_AUDIO_BITRATE;
+
+  if (codec === 'opus') {
+    return [Math.min(requested, 192_000)];
+  }
+
+  return [...new Set([
+    requested,
+    getChromiumCompatibleAACBitrate(requested),
+    ...CHROMIUM_AAC_BITRATES,
+  ])];
+}
+
 export interface AudioEncoderSettings {
   sampleRate: number;      // 44100 or 48000
   numberOfChannels: number; // 1 or 2
-  bitrate: number;         // 128000 - 320000
+  bitrate: number;         // Requested bitrate; the runtime may select a supported fallback
   codec?: AudioCodec;      // 'aac' or 'opus' (auto-detected if not specified)
 }
 
@@ -56,7 +89,7 @@ export class AudioEncoderWrapper {
     this.settings = {
       sampleRate: settings.sampleRate || 48000,
       numberOfChannels: settings.numberOfChannels || 2,
-      bitrate: settings.bitrate || 256000,
+      bitrate: settings.bitrate || DEFAULT_AUDIO_BITRATE,
       codec: settings.codec, // Can be undefined for auto-detect
     };
   }
@@ -72,23 +105,29 @@ export class AudioEncoderWrapper {
   /**
    * Check if AAC encoding is supported
    */
-  static async isAACSupported(): Promise<boolean> {
+  static async isAACSupported(settings: Partial<AudioEncoderSettings> = {}): Promise<boolean> {
     if (!('AudioEncoder' in window)) {
       log.debug('AudioEncoder not in window');
       return false;
     }
 
     try {
-      const config = {
-        codec: 'mp4a.40.2', // AAC-LC
-        sampleRate: 48000,
-        numberOfChannels: 2,
-        bitrate: 256000,
-      };
-      log.debug('Checking AAC support with config:', config);
-      const support = await AudioEncoder.isConfigSupported(config);
-      log.debug('AAC support result:', support);
-      return support.supported === true;
+      for (const bitrate of getWebCodecsAudioBitrateCandidates(
+        'aac',
+        settings.bitrate ?? DEFAULT_AUDIO_BITRATE
+      )) {
+        const config = {
+          codec: 'mp4a.40.2', // AAC-LC
+          sampleRate: settings.sampleRate ?? 48000,
+          numberOfChannels: settings.numberOfChannels ?? 2,
+          bitrate,
+        };
+        log.debug('Checking AAC support with config:', config);
+        const support = await AudioEncoder.isConfigSupported(config);
+        log.debug('AAC support result:', support);
+        if (support.supported === true) return true;
+      }
+      return false;
     } catch (e) {
       log.error('AAC support check error:', e);
       return false;
@@ -98,19 +137,25 @@ export class AudioEncoderWrapper {
   /**
    * Check if Opus encoding is supported
    */
-  static async isOpusSupported(): Promise<boolean> {
+  static async isOpusSupported(settings: Partial<AudioEncoderSettings> = {}): Promise<boolean> {
     if (!('AudioEncoder' in window)) {
       return false;
     }
 
     try {
-      const support = await AudioEncoder.isConfigSupported({
-        codec: 'opus',
-        sampleRate: 48000,
-        numberOfChannels: 2,
-        bitrate: 128000,
-      });
-      return support.supported === true;
+      for (const bitrate of getWebCodecsAudioBitrateCandidates(
+        'opus',
+        settings.bitrate ?? 128_000
+      )) {
+        const support = await AudioEncoder.isConfigSupported({
+          codec: 'opus',
+          sampleRate: settings.sampleRate ?? 48000,
+          numberOfChannels: settings.numberOfChannels ?? 2,
+          bitrate,
+        });
+        if (support.supported === true) return true;
+      }
+      return false;
     } catch {
       return false;
     }
@@ -119,11 +164,11 @@ export class AudioEncoderWrapper {
   /**
    * Detect which codec is supported (prefers AAC, falls back to Opus)
    */
-  static async detectSupportedCodec(): Promise<{ codec: AudioCodec; codecString: string } | null> {
-    if (await AudioEncoderWrapper.isAACSupported()) {
+  static async detectSupportedCodec(settings: Partial<AudioEncoderSettings> = {}): Promise<{ codec: AudioCodec; codecString: string } | null> {
+    if (await AudioEncoderWrapper.isAACSupported(settings)) {
       return { codec: 'aac', codecString: 'mp4a.40.2' };
     }
-    if (await AudioEncoderWrapper.isOpusSupported()) {
+    if (await AudioEncoderWrapper.isOpusSupported(settings)) {
       return { codec: 'opus', codecString: 'opus' };
     }
     return null;
@@ -149,16 +194,16 @@ export class AudioEncoderWrapper {
     let codecToUse: { codec: AudioCodec; codecString: string } | null = null;
 
     if (this.settings.codec === 'aac') {
-      if (await AudioEncoderWrapper.isAACSupported()) {
+      if (await AudioEncoderWrapper.isAACSupported(this.settings)) {
         codecToUse = { codec: 'aac', codecString: 'mp4a.40.2' };
       }
     } else if (this.settings.codec === 'opus') {
-      if (await AudioEncoderWrapper.isOpusSupported()) {
+      if (await AudioEncoderWrapper.isOpusSupported(this.settings)) {
         codecToUse = { codec: 'opus', codecString: 'opus' };
       }
     } else {
       // Auto-detect: prefer AAC, fall back to Opus
-      codecToUse = await AudioEncoderWrapper.detectSupportedCodec();
+      codecToUse = await AudioEncoderWrapper.detectSupportedCodec(this.settings);
     }
 
     if (!codecToUse) {
@@ -169,28 +214,34 @@ export class AudioEncoderWrapper {
     this.activeCodec = codecToUse.codec;
     this.activeCodecString = codecToUse.codecString;
 
-    // Adjust bitrate for Opus (it uses lower bitrates than AAC for same quality)
-    const bitrate = this.activeCodec === 'opus'
-      ? Math.min(this.settings.bitrate, 192000) // Opus max recommended is 192kbps
-      : this.settings.bitrate;
-
-    const config: AudioEncoderConfig = {
-      codec: this.activeCodecString,
-      sampleRate: this.settings.sampleRate,
-      numberOfChannels: this.settings.numberOfChannels,
-      bitrate: bitrate,
-    };
-
+    let config: AudioEncoderConfig | null = null;
     try {
-      const support = await AudioEncoder.isConfigSupported(config);
-      if (!support.supported) {
-        log.error(`${this.activeCodec.toUpperCase()} configuration not supported`);
-        return false;
+      for (const bitrate of getWebCodecsAudioBitrateCandidates(this.activeCodec, this.settings.bitrate)) {
+        const candidate: AudioEncoderConfig = {
+          codec: this.activeCodecString,
+          sampleRate: this.settings.sampleRate,
+          numberOfChannels: this.settings.numberOfChannels,
+          bitrate,
+        };
+        const support = await AudioEncoder.isConfigSupported(candidate);
+        if (support.supported) {
+          config = candidate;
+          break;
+        }
       }
     } catch (e) {
       log.error('Config support check failed:', e);
       return false;
     }
+
+    if (!config) {
+      log.error(`${this.activeCodec.toUpperCase()} configuration not supported`);
+      return false;
+    }
+
+    const bitrate = config.bitrate ?? DEFAULT_AUDIO_BITRATE;
+    this.settings.bitrate = bitrate;
+    this.settings.codec = this.activeCodec;
 
     this.encoder = new AudioEncoder({
       output: (chunk, meta) => this.handleChunk(chunk, meta),
@@ -425,11 +476,11 @@ export class AudioEncoderWrapper {
  */
 export function getRecommendedAudioBitrate(quality: 'low' | 'medium' | 'high' | 'lossless'): number {
   switch (quality) {
-    case 'low': return 128000;
-    case 'medium': return 192000;
-    case 'high': return 256000;
-    case 'lossless': return 320000;
-    default: return 256000;
+    case 'low': return 96_000;
+    case 'medium': return 128_000;
+    case 'high': return DEFAULT_AUDIO_BITRATE;
+    case 'lossless': return DEFAULT_AUDIO_BITRATE;
+    default: return DEFAULT_AUDIO_BITRATE;
   }
 }
 
@@ -442,7 +493,7 @@ export const AUDIO_CODEC_INFO = {
     codec: 'mp4a.40.2',
     container: 'mp4',
     description: 'Advanced Audio Coding - universal compatibility',
-    bitrateRange: { min: 64000, max: 320000 },
+    bitrateRange: { min: 96_000, max: DEFAULT_AUDIO_BITRATE },
     sampleRates: [44100, 48000],
   },
   opus: {

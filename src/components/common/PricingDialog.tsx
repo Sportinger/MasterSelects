@@ -2,6 +2,15 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAccountStore } from '../../stores/accountStore';
 import { BILLING_PLANS as plans, formatBillingPlanLabel } from '../../services/billingPlans';
 import { CLOUD_AI_PRICE_ROWS, CLOUD_EUR_PER_CREDIT, CLOUD_PRICE_BASELINE_PLAN } from '../../services/cloudAiPricing';
+import { TERMS_VERSION, WITHDRAWAL_VERSION } from '../../legal/consumerContractTexts';
+import {
+  CancellationButtonLink,
+  CheckoutLegalConsent,
+  EMPTY_CHECKOUT_CONSENT,
+  isCheckoutConsentComplete,
+  type CheckoutConsentState,
+} from './CheckoutLegalConsent';
+import { detectLegalLang } from './legal/legalLang';
 import './authBillingDialogs.css';
 
 interface PricingDialogProps {
@@ -27,9 +36,12 @@ export function PricingDialog({ onClose }: PricingDialogProps) {
   const [isClosing, setIsClosing] = useState(false);
   const currentPlanId = billingSummary?.subscription?.planId ?? billingSummary?.plan.id ?? 'free';
   const [selectedPlanId, setSelectedPlanId] = useState(currentPlanId);
+  const [legalConsent, setLegalConsent] = useState<CheckoutConsentState>(EMPTY_CHECKOUT_CONSENT);
+  const legalLang = detectLegalLang();
 
   useEffect(() => {
     setSelectedPlanId(currentPlanId);
+    setLegalConsent(EMPTY_CHECKOUT_CONSENT);
   }, [currentPlanId]);
 
   const handleClose = useCallback(() => {
@@ -72,7 +84,11 @@ export function PricingDialog({ onClose }: PricingDialogProps) {
   const isUpgradeSelection = hasManagedSubscription
     && selectedPlan.id !== 'free'
     && selectedPlan.credits > currentPlan.credits;
-  const canSubmitSelection = !isLoading && (!isAuthenticated || !selectedPlanIsCurrent);
+  // A paid plan (new subscription or plan change) is a consumer contract: the
+  // statements in CheckoutLegalConsent must be ticked before Stripe opens.
+  const requiresLegalConsent = isAuthenticated && selectedPlan.id !== 'free' && !selectedPlanIsCurrent;
+  const legalConsentComplete = !requiresLegalConsent || isCheckoutConsentComplete(legalConsent);
+  const canSubmitSelection = !isLoading && (!isAuthenticated || (!selectedPlanIsCurrent && legalConsentComplete));
   const submitLabel = selectedPlanIsCurrent
     ? cancelScheduled
       ? 'Canceled plan'
@@ -94,6 +110,7 @@ export function PricingDialog({ onClose }: PricingDialogProps) {
     }
 
     setSelectedPlanId(planId);
+    if (planId !== selectedPlanId) setLegalConsent(EMPTY_CHECKOUT_CONSENT);
   };
 
   const handleCardKeyDown = (
@@ -116,7 +133,19 @@ export function PricingDialog({ onClose }: PricingDialogProps) {
       return;
     }
 
-    void startCheckout(selectedPlan.id);
+    void startCheckout(
+      selectedPlan.id,
+      requiresLegalConsent
+        ? {
+            immediatePerformanceRequested: legalConsent.immediatePerformanceRequested,
+            locale: legalLang,
+            termsAccepted: legalConsent.termsAccepted,
+            termsVersion: TERMS_VERSION,
+            withdrawalPolicyRead: legalConsent.withdrawalPolicyRead,
+            withdrawalVersion: WITHDRAWAL_VERSION,
+          }
+        : undefined,
+    );
   };
 
   return (
@@ -140,7 +169,11 @@ export function PricingDialog({ onClose }: PricingDialogProps) {
         </div>
 
         <div className="auth-dialog-content pricing-dialog-content">
+          {requiresLegalConsent && (
+            <CheckoutLegalConsent consent={legalConsent} lang={legalLang} onChange={setLegalConsent} />
+          )}
           <div className="pricing-dialog-top-cta">
+            <CancellationButtonLink lang={legalLang} />
             <span className="pricing-dialog-top-selection">
               {formatBillingPlanLabel(selectedPlan.id)} selected
             </span>
@@ -200,7 +233,9 @@ export function PricingDialog({ onClose }: PricingDialogProps) {
 
                   <div className="pricing-plan-credit-panel">
                     <span className="pricing-plan-credit-value">{formatCredits(plan.credits)}</span>
-                    <span className="pricing-plan-credit-label">credits / month</span>
+                    <span className="pricing-plan-credit-label">
+                      {plan.id === 'free' ? 'free welcome credits' : 'credits / month'}
+                    </span>
                   </div>
 
                   <ul className="pricing-plan-feature-list">

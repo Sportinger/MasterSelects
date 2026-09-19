@@ -12,6 +12,13 @@ export interface RunnerImageFormatOption {
   lossless: boolean;
 }
 
+export function forceOpaqueAlpha(pixels: Uint8Array): Uint8Array {
+  for (let index = 3; index < pixels.length; index += 4) {
+    pixels[index] = 255;
+  }
+  return pixels;
+}
+
 export interface ExportRenderSessionRef {
   current: ExportRenderSessionImpl | null;
 }

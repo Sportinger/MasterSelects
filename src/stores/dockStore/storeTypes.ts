@@ -70,6 +70,7 @@ export interface SavedLayoutActions {
     options?: {
       transitionDurationMs?: number;
       transitionStaggerMode?: DockLayoutTransitionStaggerMode;
+      preserveTimelineLayout?: boolean;
     },
   ) => void;
   setDefaultSavedLayout: (layoutId: string | null) => void;
@@ -80,11 +81,18 @@ export interface SavedLayoutActions {
   setLayoutFromProject: (layout: DockLayout) => void;
 }
 
+export interface OverLayoutModeActions {
+  setOverLayoutBaseId: (layoutId: string | null) => void;
+  setMediumLayoutOverride: (enabled: boolean | null) => void;
+  setMobileLayoutOverride: (enabled: boolean | null) => void;
+}
+
 export interface DockStoreState
   extends LayoutMutationActions,
     DragAndPanelStateActions,
     PanelVisibilityActions,
-    SavedLayoutActions {
+    SavedLayoutActions,
+    OverLayoutModeActions {
   layout: DockLayout;
   browserWindowPanels: BrowserWindowPanel[];
   dragState: DockDragState;
@@ -94,6 +102,9 @@ export interface DockStoreState
   savedLayouts: SavedDockLayout[];
   defaultSavedLayoutId: string | null;
   activeSavedLayoutId: string | null;
+  overLayoutBaseId: string | null;
+  mediumLayoutOverride: boolean | null;
+  mobileLayoutOverride: boolean | null;
 }
 
 export type DockSliceCreator<T> = (

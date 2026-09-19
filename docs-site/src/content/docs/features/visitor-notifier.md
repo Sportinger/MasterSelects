@@ -31,12 +31,18 @@ Stored metadata can include:
 
 - timestamp
 - path
-- country / city
-- user agent
-- referer
-- derived `visitorId`
+- country
+- coarse browser, operating-system, and device classes
+- referrer domain (never its path or query)
+- daily rotating pseudonymous `visitorId`
 
-Entries expire after one hour. The admin dashboard also reads `visit2:` metadata for last-hour request, unique-visitor, country, and path summaries.
+The live log never stores the plain IP address, city, complete user agent, or complete referrer URL. Query strings are
+discarded, and dynamic credit-claim paths are reduced to their non-secret route. When
+`VISITOR_NOTIFY_SECRET` is configured, the middleware derives `visitorId` with a secret-key HMAC over the UTC day and
+the request IP. The identifier therefore supports grouping within one day but cannot link visits across days.
+
+Entries expire after 180 days. The aggregate statistics service filters `visit2:` metadata to the most recent hour for
+the live request, daily-scoped visitor, country, and path summaries shown in Fassandra.
 
 ### Visit Feed
 
@@ -71,7 +77,7 @@ Behavior:
 - can play an alert sound
 - shows a custom, clickable toast notification when `ENABLE_BALLOON` is enabled
 - opens the visited site/path from the toast when `OPEN_SITE_ON_BALLOON_CLICK` is enabled
-- provides a grouped, scrollable live log from the tray icon; stable `visitorId` values are the primary grouping key
+- provides a grouped, scrollable live log from the tray icon; daily-scoped `visitorId` values are the primary grouping key
 
 ---
 
@@ -105,5 +111,5 @@ Important values:
 
 ## Related Features
 
-- [Hosted AI Setup](https://github.com/Sportinger/MasterSelects/blob/master/docs/cloudflare-hosted-ai-setup.md)
+- Hosted AI Setup
 - [Security](/features/security/)

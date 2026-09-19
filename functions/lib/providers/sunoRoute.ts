@@ -1,9 +1,10 @@
 import { insertAiAuditEvent } from '../aiAudit';
 import { blocksAiRequest, moderateAiInput } from '../aiModeration';
-import { getCreditLedgerEntryBySource, spendCredits } from '../credits';
+import { getCreditLedgerEntryBySource } from '../credits';
 import { json } from '../db';
 import type { AppContext } from '../env';
 import { completeUsageEvent, createUsageEvent } from '../usage';
+import { runReservedHostedCharge } from './hostedChargeFlow';
 import {
   calculateHostedSunoCost,
   createHostedSunoMusicTask,
@@ -132,142 +133,128 @@ export async function handleHostedSunoMusicRequest(
     userId: hostedContext.user!.id,
   });
 
-  try {
-    const { taskId } = sound
-      ? await createHostedSunoSoundsTask(context.env, params)
-      : await createHostedSunoMusicTask(context.env, params);
-    const charge = await spendCredits(
-      context.env.DB,
-      hostedContext.user!.id,
-      creditsRequired,
-      ledgerSource,
-      idempotencyKey,
-      `Hosted ${sound ? 'Suno sounds' : 'Suno music'} generation`,
-      {
-        customMode: Boolean(params.customMode),
-        instrumental: params.instrumental !== false,
-        model: params.model ?? 'V5_5',
-        provider,
-        requestId,
-        taskId,
-      },
-    );
+  const label = sound ? 'Suno sounds' : 'Suno music';
+  const session = {
+    authenticated: true,
+    email: hostedContext.user!.email,
+    provider: 'cookie_session' as const,
+  };
+  const auditBase = {
+    feature: sound ? 'suno_sounds_generation' : 'suno_music_generation',
+    idempotencyKey,
+    model: params.model ?? 'V5_5',
+    moderation,
+    prompt: params,
+    provider,
+    requestId,
+    userId: hostedContext.user!.id,
+  };
 
-    if (charge.insufficient) {
-      await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
-      context.waitUntil(
-        insertAiAuditEvent(context, {
-          errorMessage: 'insufficient_credits',
-          feature: sound ? 'suno_sounds_generation' : 'suno_music_generation',
-          idempotencyKey,
-          model: params.model ?? 'V5_5',
-          moderation,
-          prompt: params,
-          provider,
-          requestId,
-          status: 'failed',
-          userId: hostedContext.user!.id,
-        }).catch(() => {}),
-      );
-      return json(
-        buildSunoEnvelope({
-          creditBalance: charge.balance,
-          error: createGatewayError(
-            'insufficient_credits',
-            `You need more credits to generate hosted ${sound ? 'Suno sounds' : 'Suno music'}.`,
-            { creditsRequired, provider, requestId },
-          ),
-          next: 'pricing',
-          ok: false,
-          provider,
-          requestId,
-          session: {
-            authenticated: true,
-            email: hostedContext.user!.email,
-            provider: 'cookie_session',
-          },
-          status: 'requires_billing',
-        }),
-        { status: 402 },
-      );
-    }
+  // Credits are reserved before the provider task exists; a failed provider
+  // call releases the reservation (see runReservedHostedCharge).
+  const outcome = await runReservedHostedCharge({
+    createTask: () => (sound
+      ? createHostedSunoSoundsTask(context.env, params)
+      : createHostedSunoMusicTask(context.env, params)),
+    creditsRequired,
+    db: context.env.DB,
+    description: `Hosted ${label} generation`,
+    idempotencyKey,
+    ledgerSource,
+    metadata: {
+      customMode: Boolean(params.customMode),
+      instrumental: params.instrumental !== false,
+      model: params.model ?? 'V5_5',
+      provider,
+      requestId,
+    },
+    taskIdOf: (task) => task.taskId,
+    userId: hostedContext.user!.id,
+  });
 
-    await completeUsageEvent(context.env.DB, idempotencyKey, {
-      ledgerEntryId: charge.entry?.id ?? null,
-      status: 'completed',
-    });
+  if (outcome.status === 'insufficient') {
+    await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
     context.waitUntil(
-      insertAiAuditEvent(context, {
-        creditCost: charge.charged ? creditsRequired : 0,
-        feature: sound ? 'suno_sounds_generation' : 'suno_music_generation',
-        idempotencyKey,
-        model: params.model ?? 'V5_5',
-        moderation,
-        prompt: params,
-        provider,
-        providerTaskId: taskId,
-        requestId,
-        status: 'accepted',
-        userId: hostedContext.user!.id,
-      }).catch(() => {}),
+      insertAiAuditEvent(context, { ...auditBase, errorMessage: 'insufficient_credits', status: 'failed' })
+        .catch(() => {}),
     );
-
     return json(
       buildSunoEnvelope({
-        creditBalance: charge.balance,
-        creditMutationId: charge.entry?.id ?? null,
-        creditsCharged: charge.charged ? creditsRequired : 0,
-        data: {
-          outputType: 'audio',
-          provider,
-          taskId,
-        },
-        ok: true,
+        creditBalance: outcome.charge.balance,
+        error: createGatewayError(
+          'insufficient_credits',
+          `You need more credits to generate hosted ${label}.`,
+          { creditsRequired, provider, requestId },
+        ),
+        next: 'pricing',
+        ok: false,
         provider,
         requestId,
-        session: {
-          authenticated: true,
-          email: hostedContext.user!.email,
-          provider: 'cookie_session',
-        },
-        status: 'accepted',
+        session,
+        status: 'requires_billing',
       }),
+      { status: 402 },
     );
-  } catch (error) {
+  }
+
+  if (outcome.status === 'provider_failed') {
+    const { error } = outcome;
     await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
     context.waitUntil(
       insertAiAuditEvent(context, {
-        errorMessage: error instanceof Error ? error.message : `Hosted ${sound ? 'Suno sounds' : 'Suno music'} generation failed.`,
-        feature: sound ? 'suno_sounds_generation' : 'suno_music_generation',
-        idempotencyKey,
-        model: params.model ?? 'V5_5',
-        moderation,
-        prompt: params,
-        provider,
-        requestId,
+        ...auditBase,
+        errorMessage: error instanceof Error ? error.message : `Hosted ${label} generation failed.`,
         status: 'failed',
-        userId: hostedContext.user!.id,
       }).catch(() => {}),
     );
 
     return json(
       buildSunoEnvelope({
+        creditBalance: outcome.refund?.creditBalance ?? outcome.charge.balance,
         error: createGatewayError(
           'provider_request_failed',
-          error instanceof Error ? error.message : `Hosted ${sound ? 'Suno sounds' : 'Suno music'} generation failed.`,
+          error instanceof Error ? error.message : `Hosted ${label} generation failed.`,
           { requestId },
         ),
         ok: false,
         provider,
         requestId,
-        session: {
-          authenticated: true,
-          email: hostedContext.user!.email,
-          provider: 'cookie_session',
-        },
+        session,
         status: 'error',
       }),
       { status: 502 },
     );
   }
+
+  const { charge, result: { taskId } } = outcome;
+  await completeUsageEvent(context.env.DB, idempotencyKey, {
+    ledgerEntryId: charge.entry?.id ?? null,
+    status: 'completed',
+  });
+  context.waitUntil(
+    insertAiAuditEvent(context, {
+      ...auditBase,
+      creditCost: charge.charged ? creditsRequired : 0,
+      providerTaskId: taskId,
+      status: 'accepted',
+    }).catch(() => {}),
+  );
+
+  return json(
+    buildSunoEnvelope({
+      creditBalance: charge.balance,
+      creditMutationId: charge.entry?.id ?? null,
+      creditsCharged: charge.charged ? creditsRequired : 0,
+      data: {
+        outputType: 'audio',
+        provider,
+        taskId,
+      },
+      ok: true,
+      provider,
+      requestId,
+      session,
+      status: 'accepted',
+    }),
+  );
 }

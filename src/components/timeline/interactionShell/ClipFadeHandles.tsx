@@ -6,6 +6,8 @@ import type {
   ClipInteractionShellRect,
 } from './types';
 import { FadeCurve } from '../components/FadeCurve';
+import { computeTrimTiming } from '../utils/clipTrimTiming';
+import { retimeKeyframesForEdgeTrim } from '../../../utils/keyframeTrimAnchoring';
 
 const FADE_EDGES = ['left', 'right'] as const satisfies readonly ClipInteractionShellEdge[];
 
@@ -17,10 +19,38 @@ interface ClipFadeHandlesProps {
 export function ClipFadeHandles({ context, commands }: ClipFadeHandlesProps) {
   const fade = context.activeModules.fade;
   if (!fade?.enabled) return null;
+  const trim = context.activeModules.trim?.state;
+  const trimTiming = trim?.clipId === context.clip.id
+    ? computeTrimTiming(context.clip, trim.edge, {
+        startTime: trim.originalStartTime,
+        duration: trim.originalDuration,
+        inPoint: trim.originalInPoint,
+        outPoint: trim.originalOutPoint,
+      }, trim.appliedDelta)
+    : null;
+  const previewKeyframes = trimTiming && trim
+    ? retimeKeyframesForEdgeTrim(
+        fade.curveKeyframes,
+        {
+          startTime: trim.originalStartTime,
+          duration: trim.originalDuration,
+          inPoint: trim.originalInPoint,
+          outPoint: trim.originalOutPoint,
+        },
+        {
+          startTime: trimTiming.newStartTime,
+          duration: trimTiming.newDuration,
+          inPoint: trimTiming.newInPoint,
+          outPoint: trimTiming.newOutPoint,
+        },
+        { treatAllAsOpacity: !fade.isAudioClip },
+      )
+    : fade.curveKeyframes;
+  const previewDuration = trimTiming?.newDuration ?? fade.clipDuration;
 
   return (
     <>
-      {fade.curveKeyframes.length >= 2 && (
+      {previewKeyframes.length >= 2 && (
         <div
           className={`fade-curve-container ${fade.isAudioClip ? 'audio-automation-curve-container' : ''}`}
           data-shell-fade-curve="true"
@@ -28,8 +58,8 @@ export function ClipFadeHandles({ context, commands }: ClipFadeHandlesProps) {
         >
           <FadeCurve
             key={fade.curveKey}
-            keyframes={fade.curveKeyframes}
-            clipDuration={fade.clipDuration}
+            keyframes={previewKeyframes}
+            clipDuration={previewDuration}
             width={context.geometry.clip.width}
             height={context.geometry.clip.height}
           />

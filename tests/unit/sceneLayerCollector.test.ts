@@ -1,10 +1,28 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LayerRenderData } from '../../src/engine/core/types';
-import {
-  collectScene3DLayers,
-} from '../../src/engine/scene/SceneLayerCollector';
+import { collectScene3DLayers } from '../../src/engine/scene/SceneLayerCollector';
+import { isMobileAppleWebKit } from '../../src/utils/mobileAppleWebKit';
 
 describe('SceneLayerCollector', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('detects iPad WebKit including desktop-class iPad user agents', () => {
+    const ipadSafari = {
+      userAgent: 'Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15',
+      platform: 'MacIntel',
+      maxTouchPoints: 5,
+    };
+
+    expect(isMobileAppleWebKit(ipadSafari)).toBe(true);
+    expect(isMobileAppleWebKit({
+      userAgent: 'Mozilla/5.0 Chrome/140.0.0.0 Safari/537.36',
+      platform: 'Win32',
+      maxTouchPoints: 10,
+    })).toBe(false);
+  });
+
   it('collects shared-scene layers with world matrices and native scene payloads', () => {
     const textCanvas = document.createElement('canvas');
     const layerData: LayerRenderData[] = [
@@ -19,8 +37,24 @@ describe('SceneLayerCollector', () => {
           source: {
             type: 'image',
             textCanvas,
+            mediaTime: 4.25,
           },
-          effects: [],
+          effects: [
+            {
+              id: 'analog-fx',
+              name: 'Analog Signal Lab',
+              type: 'analog-signal-lab',
+              enabled: true,
+              params: {},
+            },
+            {
+              id: 'grain-fx',
+              name: 'Grain',
+              type: 'grain',
+              enabled: true,
+              params: {},
+            },
+          ],
           position: { x: 1, y: 2, z: 3 },
           scale: { x: 1.5, y: 2 },
           rotation: { x: Math.PI / 4, y: 0, z: Math.PI / 2 },
@@ -145,6 +179,8 @@ describe('SceneLayerCollector', () => {
     expect(collected[0]).toMatchObject({
       kind: 'plane',
       canvas: textCanvas,
+      mediaTime: 4.25,
+      layerSpaceEffects: [{ id: 'analog-fx', type: 'analog-signal-lab' }],
     });
     expect(collected[3]).toMatchObject({
       kind: 'splat',
@@ -251,5 +287,113 @@ describe('SceneLayerCollector', () => {
       videoElement,
       videoFrame,
     });
+  });
+
+  it('uses oriented dimensions while sampling a 3D live input directly from video', () => {
+    const presentationVideo = document.createElement('video');
+    const presentationCanvas = document.createElement('canvas');
+    presentationCanvas.width = 1920;
+    presentationCanvas.height = 1080;
+    const layerData: LayerRenderData[] = [{
+      layer: {
+        id: 'live-video-plane',
+        name: 'Live Camera',
+        sourceClipId: 'clip-live',
+        visible: true,
+        opacity: 1,
+        blendMode: 'normal',
+        source: {
+          type: 'video',
+          videoElement: presentationVideo,
+          canvasElement: presentationCanvas,
+          intrinsicWidth: 1080,
+          intrinsicHeight: 1920,
+          isLiveInput: true,
+        },
+        effects: [],
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+        is3D: true,
+      },
+      isVideo: false,
+      externalTexture: null,
+      textureView: null,
+      sourceWidth: presentationCanvas.width,
+      sourceHeight: presentationCanvas.height,
+    }];
+
+    const [collected] = collectScene3DLayers(layerData, {
+      width: 1080,
+      height: 1920,
+    });
+
+    expect(collected).toMatchObject({
+      kind: 'plane',
+      alphaMode: 'opaque',
+      castsDepth: true,
+      videoElement: presentationVideo,
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+    });
+    expect(collected?.kind === 'plane' ? collected.canvas : null).toBeUndefined();
+  });
+
+  it('keeps iPad live-input voxel sampling on the staged presentation canvas', () => {
+    vi.stubGlobal('navigator', {
+      userAgent: 'Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15',
+      platform: 'MacIntel',
+      maxTouchPoints: 5,
+    });
+    const presentationVideo = document.createElement('video');
+    const presentationCanvas = document.createElement('canvas');
+    presentationCanvas.width = 1920;
+    presentationCanvas.height = 1080;
+    const layerData: LayerRenderData[] = [{
+      layer: {
+        id: 'live-voxel',
+        name: 'Live Camera Voxel',
+        sourceClipId: 'clip-live',
+        visible: true,
+        opacity: 1,
+        blendMode: 'normal',
+        source: {
+          type: 'video',
+          videoElement: presentationVideo,
+          canvasElement: presentationCanvas,
+          isLiveInput: true,
+        },
+        effects: [{
+          id: 'voxel-fx',
+          name: 'Voxel Relief',
+          type: 'voxel-relief',
+          enabled: true,
+          params: {},
+        }],
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+        is3D: true,
+      },
+      isVideo: false,
+      externalTexture: null,
+      textureView: null,
+      sourceWidth: presentationCanvas.width,
+      sourceHeight: presentationCanvas.height,
+    }];
+
+    const [collected] = collectScene3DLayers(layerData, {
+      width: 1920,
+      height: 1080,
+    });
+
+    expect(collected).toMatchObject({
+      kind: 'voxel',
+      canvas: presentationCanvas,
+      preciseVideoSampling: false,
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+    });
+    expect(collected?.kind === 'voxel' ? collected.videoElement : null).toBeUndefined();
   });
 });

@@ -1,0 +1,310 @@
+@layer overlays {
+.editor-project-backdrop {
+  align-items: center;
+  animation: editor-project-backdrop-in 200ms ease-out both;
+  background: transparent;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: clamp(1rem, 4vw, 3rem);
+  position: fixed;
+  z-index: 10001;
+}
+
+.editor-project-backdrop.is-closing {
+  animation: editor-project-backdrop-out 200ms ease-in both;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.editor-project-dialog {
+  -webkit-backdrop-filter: blur(20px);
+  animation: editor-project-dialog-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 11px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.2);
+  color: #f2f2f2;
+  max-height: calc(100vh - 2rem);
+  max-width: 850px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.editor-project-backdrop.is-closing .editor-project-dialog {
+  animation: editor-project-dialog-out 200ms ease-in both;
+  transform: translateY(6px) scale(0.985);
+}
+
+@keyframes editor-project-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes editor-project-backdrop-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes editor-project-dialog-in {
+  from { transform: translateY(8px) scale(0.985); }
+  to { transform: translateY(0) scale(1); }
+}
+
+@keyframes editor-project-dialog-out {
+  from { transform: translateY(0) scale(1); }
+  to { transform: translateY(6px) scale(0.985); }
+}
+
+.editor-project-body {
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  padding: clamp(0.9rem, 2vw, 1.25rem);
+  scrollbar-color: #444 transparent;
+  scrollbar-width: thin;
+}
+
+.editor-project-intro {
+  margin: 0 0 1rem;
+}
+
+.editor-project-intro h1 {
+  font-size: clamp(1.7rem, 4vw, 2.7rem);
+  letter-spacing: -0.045em;
+  line-height: 1;
+  margin: 0;
+}
+
+.editor-project-grid {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.editor-project-box {
+  align-items: center;
+  background: #181818;
+  border: 1px solid #383838;
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 76px;
+  padding: 0.75rem;
+  text-align: left;
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.editor-project-box.is-new,
+.editor-project-box.is-existing {
+  background: #141414;
+  border-color: #333;
+}
+
+.editor-project-box.is-new:hover:not(:disabled),
+.editor-project-box.is-existing:hover:not(:disabled) {
+  background: #1d1d1d;
+}
+
+.editor-project-box:hover:not(:disabled) {
+  background: #202020;
+  border-color: #5c5c5c;
+  transform: translateY(-1px);
+}
+
+.editor-project-box:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.editor-project-box:focus-visible,
+.editor-project-name-form button:focus-visible,
+.editor-project-name-form input:focus-visible {
+  outline: 2px solid #999;
+  outline-offset: 2px;
+}
+
+.editor-project-box-index {
+  color: #777;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.editor-project-box-icon {
+  align-items: center;
+  border: 1px solid #484848;
+  border-radius: 6px;
+  color: #ccc;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.editor-project-box-icon svg {
+  height: 1rem;
+  width: 1rem;
+}
+
+.editor-project-box-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.editor-project-box-copy strong {
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-project-box-copy small {
+  color: #8a8a8a;
+  font-size: 0.64rem;
+  margin-top: 0.14rem;
+}
+
+.editor-project-box > svg {
+  color: #777;
+  height: 0.9rem;
+  width: 0.9rem;
+}
+
+.editor-project-empty {
+  align-items: center;
+  border: 1px dashed #3a3a3a;
+  border-radius: 8px;
+  color: #777;
+  display: flex;
+  font-size: 0.72rem;
+  min-height: 76px;
+  padding: 0.75rem;
+}
+
+.editor-project-name-form {
+  background: #181818;
+  border: 1px solid #3b3b3b;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.editor-project-name-heading {
+  margin-bottom: 0.85rem;
+}
+
+.editor-project-name-heading strong {
+  font-size: 0.9rem;
+}
+
+.editor-project-name-form label {
+  color: #8a8a8a;
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.38rem;
+  text-transform: uppercase;
+}
+
+.editor-project-name-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.editor-project-name-row input {
+  background: #101010;
+  border: 1px solid #3b3b3b;
+  border-radius: 6px;
+  color: #f2f2f2;
+  flex: 1;
+  font: inherit;
+  font-size: 0.82rem;
+  min-width: 0;
+  padding: 0.7rem 0.8rem;
+}
+
+.editor-project-submit {
+  align-items: center;
+  background: #ececec;
+  border: 0;
+  border-radius: 6px;
+  color: #151515;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.7rem;
+  font-weight: 800;
+  gap: 0.35rem;
+  padding: 0 0.9rem;
+}
+
+.editor-project-submit svg {
+  height: 0.85rem;
+  width: 0.85rem;
+}
+
+.editor-project-submit:disabled {
+  cursor: wait;
+  opacity: 0.45;
+}
+
+.editor-project-cancel {
+  background: transparent;
+  border: 0;
+  color: #8a8a8a;
+  cursor: pointer;
+  font-size: 0.67rem;
+  margin-top: 0.65rem;
+  padding: 0;
+}
+
+.editor-project-error {
+  background: #291b19;
+  border: 1px solid #603d36;
+  border-radius: 6px;
+  color: #dda18f;
+  font-size: 0.7rem;
+  margin: 0.65rem 0 0;
+  padding: 0.6rem 0.7rem;
+}
+
+@media (max-width: 720px) {
+  .editor-project-backdrop {
+    align-items: flex-start;
+    padding: 1rem;
+  }
+
+  .editor-project-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .editor-project-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .editor-project-name-row {
+    flex-direction: column;
+  }
+
+  .editor-project-submit {
+    justify-content: center;
+    min-height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-project-backdrop,
+  .editor-project-dialog {
+    animation: none;
+  }
+
+  .editor-project-box {
+    transition: none;
+  }
+}
+}

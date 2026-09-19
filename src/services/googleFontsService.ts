@@ -4,6 +4,7 @@
  */
 
 import { Logger } from './logger';
+import { isCssGenericFontFamily } from './fontFamily';
 
 const log = Logger.create('GoogleFontsService');
 
@@ -86,6 +87,7 @@ class GoogleFontsService {
    * This is more reliable than FontFace API for Google Fonts
    */
   async loadFont(family: string, weight: number = 400): Promise<void> {
+    if (isCssGenericFontFamily(family)) return;
     if (!POPULAR_FONTS.some((font) => font.family === family)) return;
 
     const key = `${family}-${weight}`;
@@ -118,11 +120,21 @@ class GoogleFontsService {
     const cssKey = `${family}:wght@${weight}`;
 
     if (!this.cssLoaded.has(cssKey)) {
-      // Create link element to load the font CSS
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@${weight}&display=swap`;
-      document.head.appendChild(link);
+      // FontFaceSet.load() can resolve immediately with a fallback when the
+      // @font-face rule has not arrived yet. Wait for the stylesheet first so
+      // restored Text and Caption canvases never render their initial frame in
+      // the fallback font.
+      await new Promise<void>((resolve, reject) => {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@${weight}&display=swap`;
+        link.addEventListener('load', () => resolve(), { once: true });
+        link.addEventListener('error', () => {
+          link.remove();
+          reject(new Error(`Font stylesheet failed to load for ${family} ${weight}`));
+        }, { once: true });
+        document.head.appendChild(link);
+      });
       this.cssLoaded.add(cssKey);
     }
 

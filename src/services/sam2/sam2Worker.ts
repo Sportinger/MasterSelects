@@ -7,6 +7,37 @@
 import * as ort from 'onnxruntime-web';
 import type { SAM2WorkerRequest, SAM2WorkerResponse, SAM2Point, SAM2Box } from './types';
 
+const SAM2_ORT_WASM_GZIP_URL = '__SAM2_ORT_WASM_GZIP_URL__';
+let ortWasmBinaryPromise: Promise<void> | null = null;
+
+async function ensureOrtWasmBinary(): Promise<void> {
+  if (ort.env.wasm.wasmBinary) {
+    return;
+  }
+
+  ortWasmBinaryPromise ??= (async () => {
+    if (typeof DecompressionStream === 'undefined') {
+      throw new Error('This browser cannot decompress the SAM2 runtime.');
+    }
+
+    const response = await fetch(SAM2_ORT_WASM_GZIP_URL);
+    if (!response.ok) {
+      throw new Error(`Failed to load the SAM2 runtime (${response.status}).`);
+    }
+    if (!response.body) {
+      throw new Error('The SAM2 runtime response did not include a body.');
+    }
+
+    const decompressedStream = response.body.pipeThrough(new DecompressionStream('gzip'));
+    ort.env.wasm.wasmBinary = await new Response(decompressedStream).arrayBuffer();
+  })().catch((error) => {
+    ortWasmBinaryPromise = null;
+    throw error;
+  });
+
+  await ortWasmBinaryPromise;
+}
+
 // ONNX sessions
 let encoderSession: ort.InferenceSession | null = null;
 let decoderSession: ort.InferenceSession | null = null;
@@ -32,6 +63,8 @@ function post(msg: SAM2WorkerResponse, transfer?: Transferable[]) {
 async function loadModel(encoderBuffer: ArrayBuffer, decoderBuffer: ArrayBuffer) {
   try {
     post({ type: 'progress', stage: 'Loading encoder...', progress: 0 });
+
+    await ensureOrtWasmBinary();
 
     // Configure ONNX Runtime for WebGPU with WASM fallback
     const executionProviders: ort.InferenceSession.ExecutionProviderConfig[] = [];

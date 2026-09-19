@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useHistoryStore } from '../../stores/historyStore';
+import { createHistoryEntries } from '../../stores/historyStore/historyNavigation';
 import type { HistoryListEntry } from '../../types/history';
 import './HistoryPanel.css';
 
@@ -213,7 +214,12 @@ function UndoIcon() { return <svg width="13" height="13" viewBox="0 0 24 24" fil
 function RedoIcon() { return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></svg>; }
 
 export function HistoryPanel() {
-  const historyState = useHistoryStore(useShallow((state) => ({ nodes: state.nodes, activeNodeId: state.activeNodeId, eventLog: state.eventLog })));
+  const historyState = useHistoryStore(useShallow((state) => ({
+    nodes: state.nodes,
+    activeNodeId: state.activeNodeId,
+    eventLog: state.eventLog,
+    lastVisitedChildByNodeId: state.lastVisitedChildByNodeId,
+  })));
   const undo = useHistoryStore((state) => state.undo);
   const redo = useHistoryStore((state) => state.redo);
   const canUndo = useHistoryStore((state) => state.canUndo);
@@ -241,7 +247,12 @@ export function HistoryPanel() {
     event.preventDefault(); targets[nextIndex]?.focus(); targets[nextIndex]?.scrollIntoView({ block: 'nearest' });
   }, []);
 
-  const entries = useMemo(() => useHistoryStore.getState().getHistoryEntries(), [historyState.nodes, historyState.activeNodeId, historyState.eventLog]);
+  const entries = useMemo(() => createHistoryEntries(
+    historyState.nodes,
+    historyState.activeNodeId,
+    historyState.lastVisitedChildByNodeId,
+    historyState.eventLog,
+  ), [historyState]);
   const graphEntries = useMemo(() => createGraphEntries(entries, historyState.nodes, historyState.activeNodeId), [entries, historyState.nodes, historyState.activeNodeId]);
   const graphRows = useMemo(() => createGraphRows(graphEntries), [graphEntries]);
   const groups = useMemo(() => createHistoryGroups(graphRows), [graphRows]);

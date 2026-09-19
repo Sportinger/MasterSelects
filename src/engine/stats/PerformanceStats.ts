@@ -8,6 +8,7 @@ export class PerformanceStats {
   private frameCount = 0;
   private fps = 0;
   private fpsUpdateTime = 0;
+  private playbackRunStartedAt: number | undefined;
 
   // Detailed stats
   private detailedStats: DetailedStats = {
@@ -64,6 +65,19 @@ export class PerformanceStats {
     this.targetFps = Number.isFinite(targetFps) && targetFps > 0
       ? Math.max(1, Math.round(targetFps))
       : 60;
+  }
+
+  beginPlaybackRun(): void {
+    const now = performance.now();
+    this.playbackRunStartedAt = now;
+    this.frameCount = 0;
+    this.fps = 0;
+    this.fpsUpdateTime = now;
+    this.detailedStats.rafGap = 0;
+    this.detailedStats.lastRafTime = 0;
+    this.detailedStats.dropsLastSecond = 0;
+    this.detailedStats.dropsThisSecond = 0;
+    this.detailedStats.lastDropReason = 'none';
   }
 
   recordRafGap(gap: number, isScrubbing = false): void {
@@ -148,6 +162,7 @@ export class PerformanceStats {
 
     return {
       fps: displayFps,
+      playbackRunStartedAt: this.playbackRunStartedAt,
       frameTime: avgFrameTime,
       gpuMemory: 0,
       timing: {

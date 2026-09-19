@@ -25,6 +25,10 @@ export function TimelinePlayheadOverlay({
       aria-label="Timeline playhead"
       style={inlineStyle}
       onMouseDown={onMouseDown}
+      onPointerDown={(event) => {
+        if (event.pointerType === 'mouse' || event.button !== 0) return;
+        onMouseDown(event);
+      }}
     >
       <div className="playhead-head" />
       <div className="playhead-line" />

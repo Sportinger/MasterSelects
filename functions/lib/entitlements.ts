@@ -42,7 +42,7 @@ export const BILLING_PLANS: Record<BillingPlanId, BillingPlanDefinition> = {
   free: {
     id: 'free',
     label: 'Free',
-    monthlyCredits: 25,
+    monthlyCredits: 0,
     featured: false,
     entitlementKeys: ['hosted_ai_chat'],
   },

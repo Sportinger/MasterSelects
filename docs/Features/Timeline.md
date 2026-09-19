@@ -6,6 +6,16 @@ The Timeline is the core editing interface for multi-track editing. It now cover
 
 ---
 
+## Large compositions
+
+Track rows mount within the vertical viewport with overscan, while stable interaction callbacks and selective header subscriptions avoid rebuilding unrelated rows during scrubbing. Property selection and video warmup queries reuse indexed timeline data. Large native HUDs remain ordinary editable clips and nested compositions.
+
+Dense keyframe rows share an immutable per-clip segment index: drawing rotation-path badges no longer filters and sorts the full solve for every diamond. Selection, outgoing rotation modes and the last keyframe's incoming easing target keep their existing behavior. Individual keyframe elements still have a mount/paint cost when all are visible.
+
+Generated graphics without audio do not allocate silent composition mixdowns or media decoders. Generated-canvas, motion and mask resources have explicit cleanup and bounded reuse. These changes reduce idle work and memory pressure; decoding and compositing many simultaneously visible layers still have a real cost.
+
+Restore batching, nested-keyframe publication, tracking-metadata cloning, and track interaction helpers have separate owners. The restore buffer keeps 128-clip batches and supports updates both before and after a batch is published. Terrain connectors resolve their animated stroke through the shared layer binding path for both top-level and nested compositions.
+
 ## Track Types
 
 ### Video Tracks
@@ -37,6 +47,15 @@ getTrackChildren()  // Query child tracks
 - Track height clamps to 20-600 px.
 - Curve editors clamp to 80-600 px.
 - Expanded track height depends on the selected clip, visible property rows, and open curve editors.
+- Drag a track's bottom border to resize that track. The handle straddles the
+  border in both the header and the lane, and works with mouse, pen, and touch;
+  its grab area widens from 8 px to 14 px on coarse pointers.
+- Shift + wheel over a track header resizes that one track; Alt + wheel scales
+  every track of the same type together.
+- On touch, a one-finger vertical drag anywhere else in the track-header column
+  scales the whole section. That gesture explicitly ignores pointers that start
+  on a resize handle, so the two never fire at once — the handle is a deliberate
+  target and owns its pointer.
 
 ### Track and Clip Colors
 - Clip titles and passive status badges render as a lightweight DOM chrome
@@ -102,6 +121,11 @@ getTrackChildren()  // Query child tracks
 - Created through the timeline text slice.
 - Supports typography, stroke, shadow, and path text.
 
+### Extending layers without a source end
+- Drag either timeline edge to extend text, still images, solids, motion layers, cameras, lights, MIDI, storyboards, generated scenes, Gaussian avatars, splat effectors, or static models and Gaussian splats beyond their initial duration.
+- The extended duration stays in place after release and subsequent edits, aligned to the composition frame grid. The initial duration is only a starting length for these sources.
+- Lottie and Rive clips can extend when looping is enabled. Recorded video/audio, non-looping vector animations, and model or splat frame sequences retain their source-duration limits.
+
 ### Vector Animation
 - Lottie is imported from `.lottie` packages or Lottie JSON files from the Media Panel.
 - Rive is imported from `.riv` files and rendered through the Rive WASM canvas runtime.
@@ -134,6 +158,7 @@ getTrackChildren()  // Query child tracks
 
 ### Camera and Splat Effector
 - Camera clips and splat-effector clips are first-class clip types in the store and copy/paste flow.
+- Camera clips use a compact `3D` plus video-camera badge in both DOM and canvas timeline rendering.
 - Camera/native-gaussian clips expose camera-oriented property labels in the keyframe UI.
 - New and reset camera clips start at Z = 1 so their eye is outside the scene origin.
 
@@ -146,8 +171,8 @@ getTrackChildren()  // Query child tracks
 
 | Action | Current Behavior |
 |--------|------------------|
-| Move | Drag a clip or a multi-selection. |
-| Trim | Drag clip edges. |
+| Move | Drag a clip or a multi-selection with a mouse, or hold briefly and drag with touch. |
+| Trim | Drag clip edges with a mouse or touch. Coarse pointers receive enlarged edge hit targets. |
 | Cut tool | `C` toggles Blade mode through the timeline tool palette; click clips to split them. |
 | Split at playhead | `Shift+C` in MasterSelects, preset-specific alternatives elsewhere. |
 | Split all at playhead | Available in the Cut flyout; runs through the shared timeline edit operation kernel. |
@@ -159,12 +184,12 @@ getTrackChildren()  // Query child tracks
 | Delete all gaps | Available from the empty timeline right-click menu; closes all gaps on unlocked visible tracks as one undoable operation. |
 | Fit comp to window | Available from the zoom controls and empty timeline right-click menu. |
 | Right-drag empty space or clips | Scrubs the playhead without opening the timeline context menu; context menus open only for a single right-click. |
-| Edge playhead drag | Left-drag the ruler or playhead head against either visible lane edge to auto-scroll proportionally; persistent snapping plus the `Shift` temporary-enable and `Alt` bypass modifiers remain active. Snapping to a clip end lands on its last visible composition frame instead of the exclusive time immediately after it. |
+| Edge playhead drag | Left-drag or touch-drag the ruler or playhead head against either visible lane edge to auto-scroll proportionally; persistent snapping plus the `Shift` temporary-enable and `Alt` bypass modifiers remain active. Snapping to a clip end lands on its last visible composition frame instead of the exclusive time immediately after it. |
 | Sync via Audio | Clip context menu action for selections with at least two audible clips; aligns selected audio/video pairs by waveform correlation and writes one manual linked group. |
 | Lift range | Available in the Cut flyout after drawing a Range Selection; removes the range and leaves a gap. |
 | Extract range | Available in the Cut flyout after drawing a Range Selection; removes the range and ripples following clips left. |
-| Copy | `Ctrl+C` copies selected keyframes first, otherwise selected clips. |
-| Paste | `Ctrl+V` pastes keyframes if the clipboard has them, otherwise pastes clips. |
+| Copy | `Ctrl+C` copies selected keyframes first, otherwise selected clips. Clip right-click exposes the same clip-copy command. |
+| Paste | `Ctrl+V` pastes keyframes if the clipboard has them, otherwise pastes clips. Empty-space right-click exposes Paste at the clicked time and layer. |
 | Delete | `Delete` / `Backspace` removes selected keyframes first, then clips. |
 | Reverse | Available from the clip context menu and via clip state. |
 | Create Subcomposition | Clip context menu action that moves the selected timeline clips into a new composition and inserts that composition back into the current timeline. |
@@ -172,11 +197,17 @@ getTrackChildren()  // Query child tracks
 
 - Linked clip partners use the same live drag geometry as the directly dragged clip, so linked audio/video and manual linked-group peers stay visually in sync while moving.
 - Dragging a multi-selection across video or audio tracks moves every selected clip in that track family by the same track-index delta, preserving relative layer spacing in the live preview and committed edit. Cross-family partners such as linked audio stay on their corresponding audio tracks.
+- Two-finger pinch zooms the timeline around the moving gesture midpoint and preserves the time under that midpoint while the fingers move.
+- A stationary touch opens the same context menu as a right-click; movement, a second touch, or pointer cancellation aborts the long-press gesture.
+- Audio drops never commit an overlap on the target audio layer: placement advances to a free interval and can open a new compatible layer when the existing layers cannot accept the clip.
+- Creating a composition from an existing composition wraps it as a nested composition while inheriting the source composition's resolution, frame rate, and duration.
 
 ### Copy and Paste
 - Copying clips includes linked audio automatically when the video clip is selected.
+- Right-clicking a clip provides Copy; right-clicking empty timeline space provides Paste when the timeline clipboard contains clips.
 - Copy/paste preserves vector animation clip type and vector animation settings.
 - Copy/paste preserves motion shape definitions.
+- Copy/paste preserves composition clips as visual nested-composition sources; linked composition-audio wrappers remain audio-only and are never prepared as visual waveform layers.
 - Copying keyframes stores them relative to the earliest copied keyframe.
 - Pasting keyframes targets the selected clip when exactly one clip is selected; otherwise it falls back to the original clip from the clipboard data.
 - When timeline clips or keyframes are selected, timeline clipboard shortcuts take precedence over Media Panel clipboard shortcuts.
@@ -273,7 +304,8 @@ getTrackChildren()  // Query child tracks
 
 ### Nested Compositions
 - Composition clips can be nested to a depth of 8.
-- Composition changes propagate into nested render data.
+- Composition changes propagate into nested render data immediately, including layer additions/removals and source-type conversions while the child timeline remains active.
+- Pinned parent and child previews share nested frame timing in both navigation directions; parent playback drives the child preview through the visual composition wrapper rather than its linked audio companion.
 - Selected clips can be converted into a new nested composition from the clip context menu.
 - Composition switches trigger clip entrance/exit animations in the timeline UI.
 - Vector animation clips inside nested comps render through the same canvas path used in the primary timeline and export flow.
@@ -294,6 +326,15 @@ getTrackChildren()  // Query child tracks
 ### Pick Whip Parenting
 - Clips and tracks support parent-child relationships.
 - Parent-child links are rendered as overlays with the pick-whip interaction.
+- A child inherits the parent's position, rotation, and scale as one composed 2D
+  transform. Uniform parent scale affects both the child's own scale and its
+  offset from the parent, so linked animation stays identical across differing
+  source aspect ratios.
+- Opacity remains local to each clip and is never inherited through the
+  pick-whip relationship.
+- During playback and scrubbing, an active parented video layer holds its last
+  owner-matched frame while its decoder seeks, preventing a temporary black
+  layer without filling genuine timeline gaps.
 
 ---
 
@@ -345,6 +386,7 @@ The toolbar and wheel gestures drive playback and navigation:
 - `Ctrl+Shift+Scroll` or `Cmd+Shift+Scroll` toggles slot-grid view.
 - The toolbar also exposes a dedicated slot-grid toggle button that flips between timeline bars and the 12x4 grid icon.
 - The Navigation/Marking tool flyout exposes Marker, In Point, and Out Point commands for the current playhead position.
+- During playback, the playhead position is applied as a direct compositor transform on every animation frame. Its triangular head and theme-defined line shadow remain visible instead of being clipped to the two-pixel line box.
 
 The timeline navigator below the tracks provides the same scroll and zoom control in a dedicated bar. Releasing its scroll thumb or zoom handles never falls through to the track's click-to-jump action.
 
@@ -357,6 +399,9 @@ The timeline navigator below the tracks provides the same scroll and zoom contro
 - Composition video bake regions render a compressed preview proxy through the export pipeline and use it as a single layer during editor preview playback. Clip-scoped video bake regions use the transient RAM preview path.
 - Video bake proxy artifacts are runtime-only; project persistence keeps the region marks and resets volatile bake status after reload or timeline cache invalidation.
 - Proxy caching keeps proxy frame ranges warm in the background.
+- Clips whose source must be reloaded keep their normal body rendering and add
+  the shared missing-media tint and border, so the reload state remains visible
+  in both the main-thread canvas and projected timeline data.
 - Export progress is shown directly on the timeline.
 - Slot-grid view is animated through the same `slotGridProgress` state that drives the timeline/grid transition.
 - When `useWarmSlotDecks` is enabled, slot-grid tiles can show deck warmup badges (`C`, `Wi`, `Wa`, `H`, `F`, `D`) that reflect reusable background playback state.
@@ -422,7 +467,7 @@ Core timeline components live in `src/components/timeline/`:
 - `SlotGrid.tsx` and `MiniTimeline.tsx` handle slot-grid mode.
 - `PickWhip.tsx`, `ParentChildLink.tsx`, and `PhysicsCable.tsx` handle parenting visuals.
 
-The main hooks are `useClipDrag`, `useClipTrim`, `useClipFade`, `useTimelineKeyboard`, `useTimelineZoom`, `useExternalDrop`, `useTransitionDrop`, `usePickWhipDrag`, `useMarqueeSelection`, `usePlayheadDrag`, `usePlayheadSnap`, `useMarkerDrag`, `usePlaybackLoop`, `useLayerSync`, and `useAutoFeatures`.
+The main hooks are `useClipDrag`, `useClipTrim`, `useClipFade`, `useTimelineKeyboard`, `useTimelineZoom`, `useExternalDrop`, `useTransitionDrop`, `usePickWhipDrag`, `useMarqueeSelection`, `usePlayheadDrag`, `usePlayheadSnap`, `useMarkerDrag`, `usePlaybackLoop`, `useLayerSync`, and `useAutoFeatures`. `EditorPlaybackRuntimeHost` mounts the shared playback loop at the editor-shell level so changing dock layouts does not unmount the composition clock.
 
 ---
 

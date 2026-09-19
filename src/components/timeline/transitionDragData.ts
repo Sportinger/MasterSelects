@@ -1,6 +1,13 @@
 import type { TransitionParamValue } from '../../transitions';
 
 export const TRANSITION_MIME_TYPE = 'application/x-transition-type';
+export const TRANSITION_TOUCH_DRAG_BRIDGE_EVENT = 'masterselects:transition-touch-drag-bridge';
+
+export interface TransitionTouchDragBridgeEventDetail {
+  phase: 'move' | 'drop' | 'cancel';
+  clientX: number;
+  clientY: number;
+}
 
 export interface TransitionDropData {
   type: string;
@@ -16,6 +23,13 @@ export function setActiveTransitionDragData(data: TransitionDropData | null): vo
 
 export function getActiveTransitionDragData(): TransitionDropData | null {
   return activeTransitionDragData;
+}
+
+export function dispatchTransitionTouchDragBridgeEvent(
+  detail: TransitionTouchDragBridgeEventDetail,
+): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(TRANSITION_TOUCH_DRAG_BRIDGE_EVENT, { detail }));
 }
 
 export function serializeTransitionDropData(data: TransitionDropData): string {

@@ -58,6 +58,7 @@ describe('timeline clip canvas worker model', () => {
       requestId: 42,
       clips: [{
         id: 'clip-1',
+        missingMedia: false,
         paintPacket: {
           schemaVersion: 1,
           clipId: 'clip-1',

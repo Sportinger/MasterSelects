@@ -7,9 +7,11 @@ import {
   showTimelinePlacementCommandPreview,
 } from '../../../services/timelinePlacementCommands';
 import { useMediaStore } from '../../../stores/mediaStore';
+import { useDockStore } from '../../../stores/dockStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineToolGroupId, TimelineToolId } from '../../../stores/timeline/types';
 import type { TimelinePlacementMode } from '../../../stores/timeline/editOperations/types';
+import { isMobileLayoutId } from '../../dock/mobileLayoutOrientation';
 import { TimelineToolButton } from './TimelineToolButton';
 import { TimelineToolFlyout } from './TimelineToolFlyout';
 import { runTimelineToolCommand } from './timelineToolCommands';
@@ -59,6 +61,8 @@ function isPlacementCommandToolId(toolId: TimelineToolId): toolId is TimelinePla
 
 export function TimelineToolPalette() {
   const [ownerId] = useState(createToolFlyoutOwnerId);
+  const activeDockLayoutId = useDockStore(state => state.activeSavedLayoutId);
+  const isMobileTimelineLayout = isMobileLayoutId(activeDockLayoutId);
   const {
     activeTimelineToolId,
     lastTimelineToolByGroup,
@@ -106,16 +110,21 @@ export function TimelineToolPalette() {
     ? TIMELINE_TOOL_GROUPS.find((group) => group.id === openTimelineToolGroupId) ?? null
     : null;
   const openGroupTools = useMemo(
-    () => openGroup?.tools.map((toolId) => {
-      const definition = TIMELINE_TOOL_DEFINITION_BY_ID[toolId];
-      if (definition.availability !== 'requires-source') return definition;
-      if (!hasPlacementSource) return definition;
-      return {
-        ...definition,
-        availability: 'enabled' as const,
-      };
-    }) ?? [],
-    [hasPlacementSource, openGroup],
+    () => {
+      const toolIds = isMobileTimelineLayout
+        ? TIMELINE_TOOL_GROUPS.flatMap(group => group.tools)
+        : openGroup?.tools ?? [];
+      return toolIds.map((toolId) => {
+        const definition = TIMELINE_TOOL_DEFINITION_BY_ID[toolId];
+        if (definition.availability !== 'requires-source') return definition;
+        if (!hasPlacementSource) return definition;
+        return {
+          ...definition,
+          availability: 'enabled' as const,
+        };
+      });
+    },
+    [hasPlacementSource, isMobileTimelineLayout, openGroup],
   );
 
   const closeFlyout = useCallback(() => {
@@ -148,6 +157,10 @@ export function TimelineToolPalette() {
     }
     toolButtonRefs.current.delete(groupId);
   }, []);
+
+  const registerMobileToolButton = useCallback((button: HTMLButtonElement | null) => {
+    TIMELINE_TOOL_GROUPS.forEach((group) => registerToolButton(group.id, button));
+  }, [registerToolButton]);
 
   useEffect(() => {
     const handleFlyoutOwnerChange = (event: Event) => {
@@ -249,9 +262,45 @@ export function TimelineToolPalette() {
     showTimelinePlacementCommandPreview(tool.id);
   }, []);
 
+  const activeToolDefinition = TIMELINE_TOOL_DEFINITION_BY_ID[activeTimelineToolId]
+    ?? TIMELINE_TOOL_DEFINITION_BY_ID.select;
+  const activeToolGroup = TIMELINE_TOOL_GROUPS.find(group => group.tools.includes(activeTimelineToolId))
+    ?? TIMELINE_TOOL_GROUPS[0];
+  const MobileToolIcon = activeToolDefinition.icon;
+  const mobileMenuOpen = isMobileTimelineLayout && ownsFlyout && openGroup !== null;
+
   return (
     <div className="timeline-tool-palette" role="toolbar" aria-label="Timeline tools">
-      {TIMELINE_TOOL_GROUPS.map((group) => {
+      {isMobileTimelineLayout ? (
+        <button
+          ref={registerMobileToolButton}
+          type="button"
+          className={`timeline-tool-button timeline-mobile-tool-menu-trigger active${mobileMenuOpen ? ' open' : ''}`}
+          aria-label="All timeline tools"
+          aria-haspopup="menu"
+          aria-expanded={mobileMenuOpen}
+          data-guided-button={`timeline-tool-group:${activeToolGroup.id}`}
+          data-guided-target={`button:timeline-tool-group:${activeToolGroup.id}`}
+          title={`Timeline tools: ${activeToolDefinition.label}`}
+          onMouseDown={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            if (mobileMenuOpen) {
+              closeFlyout();
+              return;
+            }
+            openFlyout(activeToolGroup.id, event.currentTarget);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== 'ArrowDown') return;
+            event.preventDefault();
+            if (!mobileMenuOpen) openFlyout(activeToolGroup.id, event.currentTarget);
+          }}
+        >
+          <MobileToolIcon className="timeline-tool-button-icon" size={18} stroke={2.2} aria-hidden="true" />
+          <span className="timeline-tool-button-chevron" aria-hidden="true" />
+        </button>
+      ) : TIMELINE_TOOL_GROUPS.map((group) => {
         const lastToolId = lastTimelineToolByGroup[group.id] ?? group.defaultToolId;
         const displayTool = TIMELINE_TOOL_DEFINITION_BY_ID[lastToolId] ?? TIMELINE_TOOL_DEFINITION_BY_ID[group.defaultToolId];
         const groupShortcut = group.shortcutActionId ? shortcutRegistry.getLabel(group.shortcutActionId) : '';
@@ -270,7 +319,7 @@ export function TimelineToolPalette() {
             icon={displayTool.icon}
             onActivate={activateTimelineToolGroup}
             onOpen={openFlyout}
-          onRegister={registerToolButton}
+            onRegister={registerToolButton}
           />
         );
       })}
@@ -281,6 +330,7 @@ export function TimelineToolPalette() {
           tools={openGroupTools}
           initialHighlightedToolId={guidedHighlightedToolId}
           armPressDrag={armPressDrag}
+          glassBubble={isMobileTimelineLayout}
           isExporting={isExporting}
           onSelect={selectTool}
           onPreview={previewTool}

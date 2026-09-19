@@ -6,6 +6,7 @@
 // source resolution, and proxy video parsing live in src/services/proxyFrame/**.
 
 import { Logger } from './logger';
+import { installAudioGestureUnlock } from './audio/audioGestureUnlock';
 import {
   mediaRuntimeObjectUrlLeaseOwner,
   toObjectUrlRuntimeSourceId,
@@ -901,17 +902,8 @@ class ProxyFrameCache {
 // Singleton instance
 export const proxyFrameCache = new ProxyFrameCache();
 
-// Global user interaction listener to unlock AudioContext as early as possible.
-// Chrome requires a user gesture to start/resume AudioContext.
-// This fires on the FIRST interaction with the page (any click, key, touch).
+// Initial user-gesture unlock is optional and must not break unsupported browsers.
 if (typeof document !== 'undefined') {
-  const unlockAudio = () => {
-    proxyFrameCache.ensureAudioContextResumed();
-    document.removeEventListener('mousedown', unlockAudio);
-    document.removeEventListener('keydown', unlockAudio);
-    document.removeEventListener('touchstart', unlockAudio);
-  };
-  document.addEventListener('mousedown', unlockAudio, { capture: true });
-  document.addEventListener('keydown', unlockAudio, { capture: true });
-  document.addEventListener('touchstart', unlockAudio, { capture: true });
+  const disposeUnlock = installAudioGestureUnlock(() => proxyFrameCache.ensureAudioContextResumed());
+  import.meta.hot?.dispose(disposeUnlock);
 }

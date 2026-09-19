@@ -16,27 +16,13 @@ struct VertexOutput {
 
 @vertex
 fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-  var positions = array<vec2f, 6>(
-    vec2f(-1.0, -1.0),
-    vec2f(1.0, -1.0),
-    vec2f(-1.0, 1.0),
-    vec2f(-1.0, 1.0),
-    vec2f(1.0, -1.0),
-    vec2f(1.0, 1.0)
-  );
-
-  var uvs = array<vec2f, 6>(
-    vec2f(0.0, 1.0),
-    vec2f(1.0, 1.0),
-    vec2f(0.0, 0.0),
-    vec2f(0.0, 0.0),
-    vec2f(1.0, 1.0),
-    vec2f(1.0, 0.0)
-  );
-
+  // One oversized triangle avoids a diagonal primitive boundary. Some Android
+  // PowerVR WebGPU drivers can drop the second triangle of a fullscreen quad.
+  let x = f32((vertexIndex << 1u) & 2u);
+  let y = f32(vertexIndex & 2u);
   var output: VertexOutput;
-  output.position = vec4f(positions[vertexIndex], 0.0, 1.0);
-  output.uv = uvs[vertexIndex];
+  output.position = vec4f(x * 2.0 - 1.0, y * 2.0 - 1.0, 0.0, 1.0);
+  output.uv = vec2f(x, 1.0 - y);
   return output;
 }
 

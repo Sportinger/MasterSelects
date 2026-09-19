@@ -544,22 +544,31 @@ describe('historyStore', () => {
     ]);
   });
 
-  it('project persistence: serializes and hydrates visible history metadata', () => {
+  it('project persistence: keeps snapshots session-local and seeds a fresh load baseline', () => {
     mocks.setTimelineState({ zoom: 10 });
     getHistoryStateView().captureSnapshot('zoom 10');
     mocks.setTimelineState({ zoom: 20 });
     getHistoryStateView().captureSnapshot('zoom 20');
 
     const persisted = serializeHistoryStateForProject();
+    expect(persisted).toMatchObject({
+      schemaVersion: 2,
+      nodes: [],
+      activeNodeId: null,
+      lastVisitedChildByNodeId: {},
+    });
+
     getHistoryStateView().clearHistory();
     mocks.setTimelineState({ zoom: 999 });
 
     hydrateHistoryStateFromProject(persisted);
-    expect(getHistoryStateView().getHistoryEntries().map((entry) => entry.label))
-      .toEqual(['zoom 10', 'zoom 20']);
+    expect(getHistoryStateView().canUndo()).toBe(false);
 
-    expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo', label: 'zoom 20' });
-    expect(mocks.timeline.getState().zoom).toBe(10);
+    mocks.setTimelineState({ zoom: 1000 });
+    getHistoryStateView().captureSnapshot('first edit after load');
+    expect(getHistoryStateView().canUndo()).toBe(true);
+    expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo', label: 'first edit after load' });
+    expect(mocks.timeline.getState().zoom).toBe(999);
   });
 
   it('project persistence: strips browser-only media payloads from snapshots', () => {

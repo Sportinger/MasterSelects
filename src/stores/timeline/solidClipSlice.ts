@@ -17,7 +17,7 @@ import {
 const log = Logger.create('SolidClipSlice');
 
 export const createSolidClipSlice: SliceCreator<SolidClipActions> = (set, get) => ({
-  addSolidClip: (trackId, startTime, color = '#ffffff', duration = 5, skipMediaItem = false) => {
+  addSolidClip: (trackId, startTime, color = '#ffffff', duration = 5, skipMediaItem = true) => {
     const { clips, tracks, updateDuration, invalidateCache } = get();
     const track = tracks.find(t => t.id === trackId);
 

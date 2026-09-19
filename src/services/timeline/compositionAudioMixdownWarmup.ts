@@ -1,4 +1,5 @@
 import type { TimelineClip } from '../../types';
+import { isSilentGeneratedComposition } from './generatedCompositionAudio';
 import { Logger } from '../logger';
 import {
   getCompositionAudioMixdownKey,
@@ -79,7 +80,8 @@ function isCompositionAudioWarmupCandidate(
     !clip.isComposition ||
     !clip.compositionId ||
     clip.mixdownBuffer ||
-    clip.mixdownGenerating
+    clip.mixdownGenerating ||
+    isSilentGeneratedComposition(clip)
   ) {
     return false;
   }

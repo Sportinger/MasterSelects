@@ -56,6 +56,42 @@ function createSettings(): ExportSettings {
 }
 
 describe('VideoEncoderWrapper export backpressure', () => {
+  it.each(['rgba', 'zero-copy'] as const)('holds no codec during preparation and starts on the first %s frame', async (mode) => {
+    vi.stubGlobal('VideoEncoder', MockVideoEncoder);
+    vi.stubGlobal('VideoFrame', MockVideoFrame);
+    const wrapper = new VideoEncoderWrapper(createSettings());
+    await expect(wrapper.init({ deferVideoEncoder: true })).resolves.toBe(true);
+    expect(MockVideoEncoder.isConfigSupported).toHaveBeenCalled();
+    expect(MockVideoEncoder.instances).toHaveLength(0);
+    if (mode === 'rgba') await wrapper.encodeFrame(new Uint8ClampedArray(16), 0);
+    else await wrapper.encodeVideoFrame({} as VideoFrame, 0);
+    expect(MockVideoEncoder.instances).toHaveLength(1);
+    expect(MockVideoEncoder.instances[0].encode).toHaveBeenCalledOnce();
+    wrapper.cancel();
+  });
+
+  it('cancels deferred preparation without allocating a codec afterward', async () => {
+    vi.stubGlobal('VideoEncoder', MockVideoEncoder);
+    const wrapper = new VideoEncoderWrapper(createSettings());
+    await wrapper.init({ deferVideoEncoder: true });
+    wrapper.cancel();
+    await expect(wrapper.encodeVideoFrame({} as VideoFrame, 0)).rejects.toThrow('closed');
+    expect(MockVideoEncoder.instances).toHaveLength(0);
+  });
+
+  it('does not resume initialization after cancellation during a support check', async () => {
+    vi.stubGlobal('VideoEncoder', MockVideoEncoder);
+    let resolve!: (result: { supported: boolean; config: VideoEncoderConfig }) => void;
+    MockVideoEncoder.isConfigSupported.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    const wrapper = new VideoEncoderWrapper(createSettings());
+    const pending = wrapper.init({ deferVideoEncoder: true });
+    await Promise.resolve();
+    wrapper.cancel();
+    resolve({ supported: true, config: {} as VideoEncoderConfig });
+    await expect(pending).resolves.toBe(false);
+    expect(MockVideoEncoder.instances).toHaveLength(0);
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     MockVideoEncoder.instances = [];
@@ -120,6 +156,33 @@ describe('VideoEncoderWrapper export backpressure', () => {
 
     expect(encoder.flush).toHaveBeenCalledOnce();
     expect(encoder.encode).toHaveBeenCalledTimes(25);
+
+    wrapper.cancel();
+  });
+
+  it('drains each iPadOS zero-copy frame before the GPU canvas is reused', async () => {
+    vi.stubGlobal('VideoEncoder', MockVideoEncoder);
+    vi.stubGlobal('VideoFrame', MockVideoFrame);
+    vi.stubGlobal('navigator', {
+      userAgent: 'Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15',
+      platform: 'MacIntel',
+      maxTouchPoints: 5,
+    });
+    Object.defineProperty(window, 'VideoEncoder', {
+      configurable: true,
+      value: MockVideoEncoder,
+    });
+
+    const wrapper = new VideoEncoderWrapper(createSettings());
+    await expect(wrapper.init()).resolves.toBe(true);
+
+    const gpuFrame = { close: vi.fn() } as unknown as VideoFrame;
+    await wrapper.encodeVideoFrame(gpuFrame, 0);
+
+    const encoder = MockVideoEncoder.instances[0];
+    expect(encoder.encode).toHaveBeenCalledWith(gpuFrame, { keyFrame: true });
+    expect(encoder.flush).toHaveBeenCalledOnce();
+    expect(encoder.encodeQueueSize).toBe(0);
 
     wrapper.cancel();
   });

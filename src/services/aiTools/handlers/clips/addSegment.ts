@@ -13,6 +13,7 @@ import { clearProcessedAudioAnalysisRefs } from '../../../../stores/timeline/hel
 import { createAudioEditOperationId } from '../../../../stores/timeline/audioEdit/audioEditHelpers';
 import {
   createAutomaticCutDeClickOperation,
+  DEFAULT_AUTOMATIC_DE_CLICK_FADE_SECONDS,
   MAX_AUTOMATIC_DE_CLICK_FADE_SECONDS,
 } from '../../../audio/automaticCutDeClick';
 
@@ -52,7 +53,15 @@ export async function handleAddClipSegment(
   const deClickFadeSeconds = typeof args.deClickFadeSeconds === 'number'
     && Number.isFinite(args.deClickFadeSeconds)
     ? Math.max(0, Math.min(MAX_AUTOMATIC_DE_CLICK_FADE_SECONDS, args.deClickFadeSeconds))
-    : 0;
+    : DEFAULT_AUTOMATIC_DE_CLICK_FADE_SECONDS;
+  const visualScaleMode = args.visualScaleMode === 'fit'
+    || args.visualScaleMode === 'fill'
+    || args.visualScaleMode === 'original'
+    ? args.visualScaleMode
+    : undefined;
+  if (args.visualScaleMode !== undefined && visualScaleMode === undefined) {
+    return { success: false, error: 'visualScaleMode must be fit, fill, or original' };
+  }
 
   if (inPoint >= outPoint) {
     return { success: false, error: 'inPoint must be less than outPoint' };
@@ -101,7 +110,15 @@ export async function handleAddClipSegment(
   const mutationSnapshot = captureMutationEntitySnapshot('clip', timelineStore.clips);
 
   // Add the clip (this creates video + linked audio for video files)
-  await timelineStore.addClip(trackId, mediaFile.file, startTime, duration, mediaFileId);
+  await timelineStore.addClip(
+    trackId,
+    mediaFile.file,
+    startTime,
+    duration,
+    mediaFileId,
+    undefined,
+    visualScaleMode ? { visualScaleMode } : undefined,
+  );
 
   // Find newly created clips
   const clipsAfter = useTimelineStore.getState().clips;
@@ -183,6 +200,7 @@ export async function handleAddClipSegment(
     data: {
       clipCount: createdClips.length,
       deClickFadesApplied,
+      visualScaleMode: visualScaleMode ?? 'original',
       clips: createdClips.map(c => ({
         id: c.id,
         trackId: c.trackId,
@@ -191,6 +209,7 @@ export async function handleAddClipSegment(
         inPoint: c.inPoint,
         outPoint: c.outPoint,
         linkedClipId: c.linkedClipId,
+        scale: c.transform.scale,
       })),
       ...describeMutationEntities(
         mutationSnapshot,

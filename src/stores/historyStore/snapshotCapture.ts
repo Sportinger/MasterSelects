@@ -17,6 +17,7 @@ import {
   cloneTrackForHistory,
   deepClone,
 } from './snapshotCloning';
+import { cloneTrackingAssets } from '../trackingStore';
 
 function cloneClipWithoutSourceArtifacts(clip: TimelineClip): TimelineClip {
   const {
@@ -166,6 +167,15 @@ function createStoryboardSnapshot(refs: HistoryStoreRefs): StateSnapshot['storyb
   return storyboard ? deepClone(storyboard) : undefined;
 }
 
+function createTrackingSnapshot(refs: HistoryStoreRefs): StateSnapshot['tracking'] {
+  const tracking = refs.getTrackingState?.();
+  if (!tracking) return undefined;
+  return {
+    assets: cloneTrackingAssets(tracking.assets),
+    selectedAssetId: tracking.selectedAssetId,
+  };
+}
+
 export function createHistorySnapshot(
   label: string,
   refs: HistoryStoreRefs,
@@ -185,6 +195,7 @@ export function createHistorySnapshot(
     dock: createDockSnapshot(refs),
     flashboard: createFlashBoardSnapshot(refs),
     storyboard: createStoryboardSnapshot(refs),
+    tracking: createTrackingSnapshot(refs),
     export: createExportSnapshot(refs),
   };
 }

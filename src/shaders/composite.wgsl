@@ -6,28 +6,13 @@ struct VertexOutput {
 
 @vertex
 fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-  // Fullscreen triangle positions
-  var positions = array<vec2f, 6>(
-    vec2f(-1.0, -1.0),
-    vec2f(1.0, -1.0),
-    vec2f(-1.0, 1.0),
-    vec2f(-1.0, 1.0),
-    vec2f(1.0, -1.0),
-    vec2f(1.0, 1.0)
-  );
-
-  var uvs = array<vec2f, 6>(
-    vec2f(0.0, 1.0),
-    vec2f(1.0, 1.0),
-    vec2f(0.0, 0.0),
-    vec2f(0.0, 0.0),
-    vec2f(1.0, 1.0),
-    vec2f(1.0, 0.0)
-  );
-
+  // One oversized triangle avoids a diagonal primitive boundary. Some Android
+  // PowerVR WebGPU drivers can drop the second triangle of a fullscreen quad.
+  let x = f32((vertexIndex << 1u) & 2u);
+  let y = f32(vertexIndex & 2u);
   var output: VertexOutput;
-  output.position = vec4f(positions[vertexIndex], 0.0, 1.0);
-  output.uv = uvs[vertexIndex];
+  output.position = vec4f(x * 2.0 - 1.0, y * 2.0 - 1.0, 0.0, 1.0);
+  output.uv = vec2f(x, 1.0 - y);
   return output;
 }
 
@@ -63,6 +48,8 @@ struct LayerUniforms {
   sourceRectWidth: f32,
   sourceRectHeight: f32,
   videoRotation: u32,
+  anchorX: f32,
+  anchorY: f32,
 };
 
 @group(0) @binding(0) var texSampler: sampler;
@@ -773,7 +760,8 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     uv.x = uv.x / aspectRatio;
   }
 
-  uv = uv + vec2f(0.5);
+  // The source-space anchor is the point placed at the layer position.
+  uv = uv + vec2f(layer.anchorX, layer.anchorY) + vec2f(0.5);
 
   // Clamp UV to valid range for sampling
   let clampedUV = clamp(uv, vec2f(0.0), vec2f(1.0));

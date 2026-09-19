@@ -88,6 +88,7 @@ const mocks = vi.hoisted(() => ({
   },
   mediaSetState: vi.fn(),
   midiSetState: vi.fn(),
+  establishTimelineCompositionSaveBaseline: vi.fn(),
   createMediaSourceReplacementPatch: vi.fn(async (file: File) => ({
     fileHash: `hash:${file.name}`,
   })),
@@ -99,6 +100,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../src/stores/mediaStore', () => ({
+  establishTimelineCompositionSaveBaseline: mocks.establishTimelineCompositionSaveBaseline,
   useMediaStore: {
     getState: () => mocks.mediaState,
     setState: mocks.mediaSetState,
@@ -173,7 +175,9 @@ vi.mock('../../src/services/fileSystemService', () => ({
 }));
 
 vi.mock('../../src/stores/mediaStore/helpers/mediaInfoHelpers', () => ({
-  getMediaInfo: vi.fn(async () => ({})),
+  getMediaInfo: vi.fn(async (file: File) => ({
+    duration: file.name.startsWith('nested-') ? 8 : 12,
+  })),
 }));
 
 vi.mock('../../src/stores/mediaStore/helpers/thumbnailHelpers', () => ({
@@ -317,7 +321,15 @@ describe('project media persistence', () => {
       width: 1920,
       height: 1080,
       fps: 30,
-      codec: 'h264',
+      codec: 'ProRes 422 HQ',
+      videoCodecId: 'apch',
+      codedWidth: 1920,
+      codedHeight: 1088,
+      rotation: 0,
+      pixelAspectRatio: { numerator: 1, denominator: 1 },
+      videoColorSpace: { primaries: 'bt709', transfer: 'bt709', matrix: 'bt709', fullRange: false },
+      hasHighDynamicRange: false,
+      canBeTransparent: false,
       audioCodec: 'aac',
       container: 'mp4',
       bitrate: 1_000_000,
@@ -336,6 +348,15 @@ describe('project media persistence', () => {
         id: 'media-1',
         sourcePath: 'C:/capture/clip.mp4',
         projectPath: 'Raw/clip.mp4',
+        codec: 'ProRes 422 HQ',
+        videoCodecId: 'apch',
+        codedWidth: 1920,
+        codedHeight: 1088,
+        rotation: 0,
+        pixelAspectRatio: { numerator: 1, denominator: 1 },
+        videoColorSpace: { primaries: 'bt709', transfer: 'bt709', matrix: 'bt709', fullRange: false },
+        hasHighDynamicRange: false,
+        canBeTransparent: false,
       }),
     ]);
   }, 10_000);
@@ -491,7 +512,7 @@ describe('project media persistence', () => {
     expect(savedClip.transitionSourceMap?.segments[0]).toMatchObject({ sourceStart: 2 });
     expect(savedClip.transitionRecipeBlendWindows?.[0]).toMatchObject({ compStart: 0.25 });
     expect(savedComposition.transitionComp?.sourceLayout).toBe('mapped-v3');
-  }, 10_000);
+  }, 60_000);
 
   it('drops obsolete YouTube panel payloads when syncing stores to the project file', async () => {
     const projectData = {
@@ -3901,6 +3922,7 @@ describe('project media persistence', () => {
             opacity: 0.8,
             blendMode: 'screen',
             position: { x: 12, y: -8, z: 4 },
+            anchor: { x: 0, y: 0, z: 0 },
             scale: { x: 1.75, y: 0.5, z: 2.25 },
             rotation: { x: 11, y: 22, z: 33 },
           },

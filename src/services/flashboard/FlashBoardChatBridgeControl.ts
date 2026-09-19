@@ -1,8 +1,10 @@
 import { runFlashBoardBridgeChatTurn } from './FlashBoardChatBridgeRunner';
-import type { FlashBoardChatModelClass } from './FlashBoardChatTypes';
+import type { FlashBoardChatAgentMode, FlashBoardChatModelClass } from './FlashBoardChatTypes';
 
 export interface FlashBoardBridgeChatRequest {
+  preproductionRunId?: string;
   prompt: string;
+  requestedAgentMode?: Extract<FlashBoardChatAgentMode, 'logic'>;
   requestedModelClass?: FlashBoardChatModelClass;
 }
 
@@ -20,6 +22,11 @@ export interface FlashBoardBridgeChatModelClassResult {
   success: boolean;
 }
 
+export interface FlashBoardBridgeChatResetResult {
+  error?: string;
+  success: boolean;
+}
+
 type FlashBoardBridgeChatHandler = (
   request: FlashBoardBridgeChatRequest,
 ) => Promise<FlashBoardBridgeChatResult>;
@@ -28,8 +35,11 @@ type FlashBoardBridgeChatModelClassHandler = (
   modelClass: FlashBoardChatModelClass,
 ) => Promise<FlashBoardBridgeChatModelClassResult>;
 
+type FlashBoardBridgeChatResetHandler = () => Promise<FlashBoardBridgeChatResetResult>;
+
 let activeHandler: FlashBoardBridgeChatHandler | null = null;
 let activeModelClassHandler: FlashBoardBridgeChatModelClassHandler | null = null;
+let activeResetHandler: FlashBoardBridgeChatResetHandler | null = null;
 let activeFallbackAbortController: AbortController | null = null;
 let visibleModelClass: FlashBoardChatModelClass | null = null;
 
@@ -80,6 +90,31 @@ export function registerFlashBoardBridgeChatModelClassHandler(
   };
 }
 
+export function registerFlashBoardBridgeChatResetHandler(
+  handler: FlashBoardBridgeChatResetHandler,
+): () => void {
+  activeResetHandler = handler;
+  return () => {
+    if (activeResetHandler === handler) {
+      activeResetHandler = null;
+    }
+  };
+}
+
+export async function resetFlashBoardBridgeChat(): Promise<FlashBoardBridgeChatResetResult> {
+  const deadline = Date.now() + BRIDGE_CHAT_CONTROL_MOUNT_TIMEOUT_MS;
+  while (!activeResetHandler && Date.now() < deadline) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+  }
+  if (!activeResetHandler) {
+    return {
+      error: 'The visible FlashBoard chat controls are not mounted in this browser session.',
+      success: false,
+    };
+  }
+  return activeResetHandler();
+}
+
 export async function setFlashBoardBridgeChatModelClass(
   modelClass: FlashBoardChatModelClass,
 ): Promise<FlashBoardBridgeChatModelClassResult> {
@@ -110,6 +145,12 @@ export async function sendFlashBoardBridgeChatMessage(
   if (activeHandler) {
     return activeHandler({
       prompt,
+      ...(request.preproductionRunId === undefined
+        ? {}
+        : { preproductionRunId: request.preproductionRunId }),
+      ...(request.requestedAgentMode === undefined
+        ? {}
+        : { requestedAgentMode: request.requestedAgentMode }),
       ...(request.requestedModelClass === undefined
         ? {}
         : { requestedModelClass: request.requestedModelClass }),
@@ -130,7 +171,13 @@ export async function sendFlashBoardBridgeChatMessage(
     const result = await runFlashBoardBridgeChatTurn({
       decisionPolicy: 'automatic',
       persistToChat: true,
+      ...(request.preproductionRunId === undefined
+        ? {}
+        : { preproductionRunId: request.preproductionRunId }),
       prompt,
+      ...(request.requestedAgentMode === undefined
+        ? {}
+        : { requestedAgentMode: request.requestedAgentMode }),
       requestedModelClass: request.requestedModelClass ?? 'fast',
       runSource: 'bridge',
       signal: abortController.signal,

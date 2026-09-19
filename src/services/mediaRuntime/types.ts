@@ -57,7 +57,10 @@ export interface FrameRequest {
 
 export type RuntimeFrame = VideoFrame | ImageBitmap | null;
 
+export type RuntimeFrameProviderBackend = 'webcodecs' | 'worker-webcodecs' | 'turbores' | 'hap';
+
 export interface RuntimeFrameProvider {
+  readonly backend?: RuntimeFrameProviderBackend;
   currentTime: number;
   isPlaying: boolean;
   isFullMode(): boolean;
@@ -98,6 +101,9 @@ export interface RuntimeFrameProvider {
   } | null;
   advanceToTime?(timeSeconds: number): void;
   advanceReverseToTime?(timeSeconds: number): void;
+  /** Resolve only after the exact requested frame is ready for deterministic export/tools. */
+  seekExact?(timeSeconds: number): Promise<void>;
+  getSourceRotationDegrees?(): 0 | 90 | 180 | 270;
   seek(timeSeconds: number): void;
   scrubSeek?(timeSeconds: number): void;
   fastSeek?(timeSeconds: number): void;
@@ -148,6 +154,7 @@ export interface MediaSourceRuntime {
     provider: RuntimeFrameProvider | null,
     options?: {
       ownsProvider?: boolean;
+      onDispose?: () => void;
     }
   ): DecodeSession | null;
   getSessionFrameProvider(key: string): RuntimeFrameProvider | null;
@@ -181,6 +188,7 @@ export interface MediaRuntimeRegistry {
     provider: RuntimeFrameProvider | null,
     options?: {
       ownsProvider?: boolean;
+      onDispose?: () => void;
     }
   ): DecodeSession | null;
   updateSessionTime(sourceId: string, sessionKey: string, time: number): DecodeSession | null;

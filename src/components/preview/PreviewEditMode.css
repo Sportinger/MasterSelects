@@ -151,6 +151,36 @@
   z-index: 18;
 }
 
+.preview-caption-word-editor-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 24;
+  pointer-events: none;
+}
+
+.preview-caption-word-editor {
+  position: absolute;
+  box-sizing: border-box;
+  min-width: 24px;
+  margin: 0;
+  padding: 0 4px;
+  background: rgba(8, 11, 16, 0.88);
+  border: 0;
+  border-radius: 3px;
+  outline: 2px solid #ff3b6b;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.55);
+  text-align: center;
+  pointer-events: auto;
+}
+
+.preview-caption-word-editor:focus {
+  outline-color: #ff5c85;
+}
+
+.preview-caption-word-editor.invalid {
+  outline-color: #ffb020;
+}
+
 .preview-scene-object-overlay {
   position: absolute;
   left: 50%;
@@ -186,6 +216,11 @@
 .preview-scene-object-handle.selected {
   border-color: #ffffff;
   background: #2563eb;
+}
+
+.preview-scene-object-handle.orbit-target {
+  outline: 2px solid #facc15;
+  outline-offset: 3px;
 }
 
 .preview-scene-object-handle.kind-effector {
@@ -489,10 +524,13 @@
   display: flex;
   gap: 3px;
   padding: 3px;
-  background: rgba(8, 11, 16, 0.82);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 5px;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.36);
+  height: 24px;
+  box-sizing: border-box;
+  background: var(--preview-overlay-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: none;
+  backdrop-filter: blur(4px);
   pointer-events: auto;
 }
 
@@ -502,7 +540,7 @@
 
 .preview-scene-gizmo-toolbar button {
   min-width: 44px;
-  height: 22px;
+  height: 16px;
   padding: 0 7px;
   color: var(--text-secondary);
   background: transparent;
@@ -516,5 +554,56 @@
 .preview-scene-gizmo-toolbar button.active {
   color: #ffffff;
   background: rgba(255, 255, 255, 0.15);
+}
+
+.preview-scene-object-context-menu {
+  position: fixed;
+  z-index: 10000;
+  min-width: 150px;
+  padding: 4px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(8px);
+}
+
+.preview-scene-object-context-menu-title {
+  max-width: 220px;
+  padding: 4px 8px 6px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-scene-object-context-menu button {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+}
+
+.preview-scene-object-context-menu button:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.preview-scene-object-context-menu button:focus {
+  outline: none;
+}
+
+.preview-scene-object-context-menu button:focus-visible {
+  outline: 1px solid #60a5fa;
+  outline-offset: -1px;
 }
 }

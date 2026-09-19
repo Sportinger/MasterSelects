@@ -13,6 +13,7 @@ export type KernelProgressStage =
   | 'reading-timeline'
   | 'reading-transcript'
   | 'reading-audio'
+  | 'inspecting'
   | 'preparing-evidence'
   | 'compiling'
   | 'preparing'
@@ -38,6 +39,7 @@ const STAGE_LABELS: Record<KernelProgressStage, string> = {
   'reading-timeline': 'Reading timeline',
   'reading-transcript': 'Reading transcript',
   'reading-audio': 'Analysing audio',
+  inspecting: 'Inspecting project',
   'preparing-evidence': 'Preparing footage',
   compiling: 'Planning the edit',
   preparing: 'Preparing composition',
@@ -56,6 +58,7 @@ export const KERNEL_PROGRESS_ORDER: KernelProgressStage[] = [
   'reading-timeline',
   'reading-transcript',
   'reading-audio',
+  'inspecting',
   'preparing-evidence',
   'compiling',
   'preparing',

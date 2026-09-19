@@ -1,0 +1,106 @@
+@layer features {
+.camera-solve-workspace {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  container-type: inline-size;
+}
+
+.camera-solve-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 42px;
+  padding: 5px 8px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+.camera-solve-header > div { min-width: 0; }
+.camera-solve-header strong, .camera-solve-header span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.camera-solve-header strong { font-size: 11px; }
+.camera-solve-header span { color: var(--text-muted); font-size: 10px; }
+.camera-solve-header .btn { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+
+.camera-solve-settings {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  padding: 3px 8px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, var(--bg-secondary));
+}
+
+.camera-solve-settings label { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; color: var(--text-secondary); font-size: 10px; }
+.camera-solve-settings select { height: 22px; padding: 0 22px 0 6px; border: 1px solid var(--border-color); border-radius: 2px; color: var(--text-primary); font-size: 10px; background: var(--bg-secondary); }
+.camera-solve-settings > span { min-width: 0; overflow: hidden; color: var(--text-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+
+.camera-solve-body { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; overflow: hidden; }
+.camera-solve-sidebar { width: 174px; flex: 0 0 174px; overflow-y: auto; border-right: 1px solid var(--border-color); background: color-mix(in srgb, var(--bg-tertiary) 70%, var(--bg-secondary)); }
+.camera-solve-source { padding: 10px 8px; border-bottom: 1px solid var(--border-color); }
+.camera-solve-source span, .camera-solve-source strong, .camera-solve-source small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.camera-solve-source span, .camera-solve-source small { color: var(--text-muted); font-size: 10px; }
+.camera-solve-source strong { margin: 3px 0; font-size: 11px; }
+
+.camera-solve-flow { padding: 6px; }
+.camera-solve-flow > div { display: flex; align-items: center; gap: 8px; padding: 7px 6px; border-radius: 4px; color: var(--text-muted); }
+.camera-solve-flow > div > span { display: inline-flex; align-items: center; justify-content: center; width: 19px; height: 19px; flex: 0 0 19px; border: 1px solid var(--border-strong); border-radius: 50%; font-size: 10px; }
+.camera-solve-flow p { min-width: 0; margin: 0; }
+.camera-solve-flow strong, .camera-solve-flow small { display: block; font-size: 10px; line-height: 14px; }
+.camera-solve-flow strong { color: var(--text-secondary); font-size: 11px; }
+.camera-solve-flow > div.active { background: var(--bg-hover); }
+.camera-solve-flow > div.active > span { color: var(--accent); border-color: var(--accent); }
+.camera-solve-flow > div.ready > span { color: var(--success-light); border-color: var(--success); background: var(--success-dim); }
+
+.camera-solve-stage { flex: 1 1 auto; min-width: 0; min-height: 0; padding: 8px; overflow-x: hidden; overflow-y: auto; scrollbar-gutter: stable; }
+.camera-solve-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100%; padding: 20px; color: var(--text-secondary); text-align: center; }
+.camera-solve-empty svg { margin-bottom: 12px; opacity: 0.4; }
+.camera-solve-empty strong { color: var(--text-primary); font-size: 13px; }
+.camera-solve-empty span { margin: 5px 0 14px; color: var(--text-muted); font-size: 11px; }
+
+.camera-solve-result { border-color: color-mix(in srgb, var(--success) 50%, var(--border-color)); }
+.camera-solve-result .scan-section-heading svg { color: var(--success-light); }
+.camera-solve-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; padding: 8px; }
+.camera-solve-summary span { padding: 6px; border-radius: 3px; color: var(--text-muted); font-size: 9px; text-align: center; background: color-mix(in srgb, var(--bg-primary) 65%, transparent); }
+.camera-solve-summary strong { display: block; color: var(--text-primary); font-size: 11px; }
+
+.camera-solve-output-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.camera-solve-output { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 0; padding: 10px; }
+.camera-solve-output > svg { color: var(--accent); }
+.camera-solve-output > div { min-height: 42px; }
+.camera-solve-output > div strong, .camera-solve-output > div span { display: block; }
+.camera-solve-output > div strong { font-size: 11px; }
+.camera-solve-output > div span { margin-top: 3px; color: var(--text-muted); font-size: 10px; line-height: 14px; }
+.camera-solve-output > .btn { width: 100%; margin-top: auto; }
+.camera-solve-strength { display: grid; grid-template-columns: auto minmax(50px, 1fr) 32px; align-items: center; gap: 7px; width: 100%; color: var(--text-muted); font-size: 10px; }
+.camera-solve-strength input { min-width: 0; accent-color: var(--accent); }
+.camera-solve-strength strong { color: var(--text-secondary); text-align: right; }
+
+.camera-solve-splat-link { display: block; width: 100%; margin-top: 8px; padding: 7px; border: 1px dashed var(--border-strong); border-radius: 4px; color: var(--text-secondary); font-size: 10px; background: transparent; cursor: pointer; }
+.camera-solve-splat-link:hover { color: var(--accent); border-color: var(--accent); background: var(--bg-hover); }
+.camera-solve-footer { min-height: 24px; padding: 5px 8px; flex: 0 0 auto; overflow: hidden; border-top: 1px solid var(--border-color); color: var(--text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; background: var(--bg-tertiary); }
+
+@container (max-width: 520px) {
+  .camera-solve-sidebar { display: none; }
+  .camera-solve-settings > span { display: none; }
+}
+
+@container (max-width: 390px) {
+  .camera-solve-header span { display: none; }
+  .camera-solve-settings { gap: 4px; }
+  .camera-solve-settings label > span { display: none; }
+  .camera-solve-output-grid { grid-template-columns: 1fr; }
+}
+}

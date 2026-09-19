@@ -41,6 +41,8 @@ type Process3DLayers = (
   device: GPUDevice,
   width: number,
   height: number,
+  referenceWidth: number,
+  referenceHeight: number,
   cameraOverride?: SceneCameraConfig | null,
   targetId?: string,
 ) => void;
@@ -78,7 +80,9 @@ export class TargetPreviewRenderer {
     current?.pongTexture.destroy();
     current?.effectTexture.destroy();
     current?.effectTexture2.destroy();
-    const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
+    // Feedback effects copy their rendered output into the next frame's history.
+    const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+      | GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC;
     const pingTexture = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage });
     const pongTexture = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage });
     const effectTexture = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage });
@@ -134,6 +138,17 @@ export class TargetPreviewRenderer {
     const maxTextureSize = device.limits.maxTextureDimension2D;
     const width = Math.max(1, Math.min(maxTextureSize, Math.round(viewportOverride?.width ?? baseResolution.width)));
     const height = Math.max(1, Math.min(maxTextureSize, Math.round(viewportOverride?.height ?? baseResolution.height)));
+    const mediaState = useMediaStore.getState();
+    const compositionId = frameContext?.compositionId ?? mediaState.activeCompositionId;
+    const composition = compositionId
+      ? mediaState.compositions.find((candidate) => candidate.id === compositionId)
+      : undefined;
+    // Layer scales are defined against COMPOSITION pixels even in editor
+    // viewports: keeping the panel size as reference inflated sourcePixelScale
+    // by comp/panel (e.g. ~4.8x in a 400px panel), blowing 3D footprints far
+    // past the editor camera. camera.viewport stays the panel size.
+    const referenceWidth = composition?.width ?? width;
+    const referenceHeight = composition?.height ?? height;
     const usesLocalBuffers = Boolean(viewportOverride);
     if (!usesLocalBuffers) this.releaseTargetBuffers(canvasId);
     const localBuffers = usesLocalBuffers
@@ -143,7 +158,16 @@ export class TargetPreviewRenderer {
     const indPongView = localBuffers?.pongView ?? d.renderTargetManager?.getIndependentPongView();
     if (!indPingView || !indPongView) return;
 
-    this.process3DLayers(layerData, device, width, height, viewportOverride?.cameraOverride, canvasId);
+    this.process3DLayers(
+      layerData,
+      device,
+      width,
+      height,
+      referenceWidth,
+      referenceHeight,
+      viewportOverride?.cameraOverride,
+      canvasId,
+    );
 
     const showGrid = target?.showTransparencyGrid ?? false;
 
@@ -207,7 +231,7 @@ export class TargetPreviewRenderer {
       data.sourceHeight = size.height;
     }
 
-    if (viewportOverride && d.nestedCompRenderer) {
+    if (d.nestedCompRenderer) {
       for (let i = layerData.length - 1; i >= 0; i--) {
         const data = layerData[i];
         const nested = data.layer.source?.nestedComposition;
@@ -262,6 +286,8 @@ export class TargetPreviewRenderer {
         pongView: indPongView,
         outputWidth: width,
         outputHeight: height,
+        referenceWidth,
+        referenceHeight,
         skipEffects: false,
         effectTempTexture,
         effectTempView,
@@ -297,8 +323,8 @@ export class TargetPreviewRenderer {
       const sourcePixelScale = calculateSourcePixelScale(
         data.sourceWidth,
         data.sourceHeight,
-        width,
-        height,
+        referenceWidth,
+        referenceHeight,
       );
       const maskLookupId = layer.maskClipId || layer.id;
       const maskManager = d.maskTextureManager!;
@@ -334,7 +360,7 @@ export class TargetPreviewRenderer {
       });
       compositePass.setPipeline(pipeline);
       compositePass.setBindGroup(0, bindGroup);
-      compositePass.draw(6);
+      compositePass.draw(3);
       compositePass.end();
 
       [readView, writeView] = [writeView, readView];

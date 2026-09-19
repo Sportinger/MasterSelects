@@ -7,6 +7,9 @@ export const SEEDANCE_2_PROVIDER_ID = 'bytedance/seedance-2';
 export const SEEDANCE_2_FAST_PROVIDER_ID = 'bytedance/seedance-2-fast';
 export const SEEDANCE_2_ASPECT_RATIOS = ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'];
 export const SEEDANCE_2_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+export const SEEDANCE_2_5_PROVIDER_ID = 'bytedance/seedance-2-5';
+export const SEEDANCE_2_5_ASPECT_RATIOS = [...SEEDANCE_2_ASPECT_RATIOS, 'adaptive'];
+export const SEEDANCE_2_5_DURATIONS = Array.from({ length: 27 }, (_, index) => index + 4);
 
 export const FLUX_KONTEXT_PRO_PROVIDER_ID = 'flux-kontext-pro';
 export const FLUX_KONTEXT_MAX_PROVIDER_ID = 'flux-kontext-max';

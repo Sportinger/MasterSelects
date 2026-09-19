@@ -3,6 +3,7 @@ import {
   createTransitionSourceClip,
   DEFAULT_TRANSITION_PLACEMENT,
   planTransition,
+  type ActiveTransitionPlan,
 } from '../../stores/timeline/editOperations/transitionPlanner';
 import type { FrameContext } from './types';
 import {
@@ -31,6 +32,39 @@ export function getVisibleVideoTrackTransitionClipsInWindow(
   windowEnd: number,
 ): TimelineClip[] {
   const clipsById = new Map<string, TimelineClip>();
+
+  for (const { outgoingClip, incomingClip, plan } of getVisibleVideoTrackTransitionPlansInWindow(
+    ctx,
+    windowStart,
+    windowEnd,
+  )) {
+    const sampleTime = Math.max(
+      plan.bodyStart,
+      Math.min(
+        ctx.playheadPosition < plan.bodyStart ? plan.bodyStart : ctx.playheadPosition,
+        plan.bodyEnd - 1 / 120,
+      ),
+    );
+
+    clipsById.set(
+      outgoingClip.id,
+      createTransitionSourceClip(outgoingClip, plan.outgoing, sampleTime),
+    );
+    clipsById.set(
+      incomingClip.id,
+      createTransitionSourceClip(incomingClip, plan.incoming, sampleTime),
+    );
+  }
+
+  return [...clipsById.values()];
+}
+
+export function getVisibleVideoTrackTransitionPlansInWindow(
+  ctx: FrameContext,
+  windowStart: number,
+  windowEnd: number,
+): ActiveTransitionPlan[] {
+  const transitions: ActiveTransitionPlan[] = [];
   const sampleWindowStart = Math.min(windowStart, windowEnd);
   const sampleWindowEnd = Math.max(windowStart, windowEnd);
   const getMediaDuration = (mediaFileId: string) => ctx.mediaFileById.get(mediaFileId)?.duration;
@@ -58,23 +92,8 @@ export function getVisibleVideoTrackTransitionClipsInWindow(
     if (!plan) continue;
     if (plan.bodyEnd <= sampleWindowStart || plan.bodyStart > sampleWindowEnd) continue;
 
-    const sampleTime = Math.max(
-      plan.bodyStart,
-      Math.min(
-        ctx.playheadPosition < plan.bodyStart ? plan.bodyStart : ctx.playheadPosition,
-        plan.bodyEnd - 1 / 120,
-      ),
-    );
-
-    clipsById.set(
-      outgoingClip.id,
-      createTransitionSourceClip(outgoingClip, plan.outgoing, sampleTime),
-    );
-    clipsById.set(
-      incomingClip.id,
-      createTransitionSourceClip(incomingClip, plan.incoming, sampleTime),
-    );
+    transitions.push({ outgoingClip, incomingClip, plan });
   }
 
-  return [...clipsById.values()];
+  return transitions;
 }

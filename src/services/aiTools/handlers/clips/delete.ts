@@ -1,14 +1,10 @@
 import { useTimelineStore } from '../../../../stores/timeline';
-import type { ClipAudioEditOperation } from '../../../../types';
-import { clearProcessedAudioAnalysisRefs } from '../../../../stores/timeline/helpers/audioAnalysisStateHelpers';
-import { createAudioEditOperationId } from '../../../../stores/timeline/audioEdit/audioEditHelpers';
+import { applyAutomaticAudioFades } from '../../../audio/applyAutomaticCutDeClick';
 import {
   collectAutomaticAudioFadeTargets,
   collectLinkedDeletionIds,
-  createAutomaticCutDeClickOperation,
+  DEFAULT_AUTOMATIC_DE_CLICK_FADE_SECONDS,
   MAX_AUTOMATIC_DE_CLICK_FADE_SECONDS,
-  type AutomaticAudioFadeEdge,
-  type AutomaticAudioFadeTarget,
 } from '../../../audio/automaticCutDeClick';
 import type { ToolResult } from '../../types.ts';
 import { isAIExecutionActive } from '../../executionState';
@@ -21,51 +17,16 @@ import { getClipColor } from './runtime';
 
 const TIMELINE_EPSILON = 1e-6;
 
-function applyAutomaticAudioFades(
-  targets: readonly AutomaticAudioFadeTarget[],
-  requestedDuration: number,
-): number {
-  if (targets.length === 0 || requestedDuration <= 0) return 0;
-  const targetByClipId = new Map<string, AutomaticAudioFadeEdge[]>();
-  for (const target of targets) {
-    const edges = targetByClipId.get(target.clipId) ?? [];
-    edges.push(target.edge);
-    targetByClipId.set(target.clipId, edges);
-  }
-  let applied = 0;
-  useTimelineStore.setState((state) => ({
-    clips: state.clips.map((clip) => {
-      const edges = targetByClipId.get(clip.id);
-      if (!edges) return clip;
-      const operations = edges
-        .map((edge) => createAutomaticCutDeClickOperation(
-          clip,
-          edge,
-          requestedDuration,
-          { createdAt: Date.now(), id: createAudioEditOperationId() },
-        ))
-        .filter((operation): operation is ClipAudioEditOperation => operation !== null);
-      if (operations.length === 0) return clip;
-      applied += operations.length;
-      return clearProcessedAudioAnalysisRefs({
-        ...clip,
-        audioState: {
-          ...(clip.audioState ?? {}),
-          editStack: [...(clip.audioState?.editStack ?? []), ...operations],
-        },
-      });
-    }),
-  }));
-  if (applied > 0) useTimelineStore.getState().invalidateCache();
-  return applied;
-}
-
 export async function handleDeleteClip(
   args: Record<string, unknown>,
   timelineStore: TimelineStore
 ): Promise<ToolResult> {
   const clipId = args.clipId as string;
   const withLinked = (args.withLinked as boolean | undefined) ?? true;
+  const requestedDeClickFadeSeconds = typeof args.deClickFadeSeconds === 'number'
+    && Number.isFinite(args.deClickFadeSeconds)
+    ? Math.max(0, Math.min(MAX_AUTOMATIC_DE_CLICK_FADE_SECONDS, args.deClickFadeSeconds))
+    : DEFAULT_AUTOMATIC_DE_CLICK_FADE_SECONDS;
   const clip = timelineStore.clips.find(c => c.id === clipId);
   if (!clip) {
     return { success: false, error: `Clip not found: ${clipId}` };
@@ -74,6 +35,10 @@ export async function handleDeleteClip(
     'clip',
     useTimelineStore.getState().clips,
   );
+  const deletionIds = collectLinkedDeletionIds(timelineStore.clips, [clipId], withLinked);
+  const audioFadeTargets = requestedDeClickFadeSeconds > 0
+    ? collectAutomaticAudioFadeTargets(timelineStore.clips, deletionIds)
+    : [];
 
   // Visual feedback: delete ghost before removing
   if (isAIExecutionActive()) {
@@ -111,11 +76,18 @@ export async function handleDeleteClip(
     };
   }
 
+  const deClickFadesApplied = applyAutomaticAudioFades(
+    audioFadeTargets,
+    requestedDeClickFadeSeconds,
+  );
+
   return {
     success: true,
     data: {
       deletedClipId: clipId,
       clipName: clip.name,
+      deClickFadeSeconds: requestedDeClickFadeSeconds,
+      deClickFadesApplied,
       withLinked,
       ...describeMutationEntities(
         mutationSnapshot,
@@ -134,7 +106,7 @@ export async function handleDeleteClips(
   const requestedDeClickFadeSeconds = typeof args.deClickFadeSeconds === 'number'
     && Number.isFinite(args.deClickFadeSeconds)
     ? Math.max(0, Math.min(MAX_AUTOMATIC_DE_CLICK_FADE_SECONDS, args.deClickFadeSeconds))
-    : 0;
+    : DEFAULT_AUTOMATIC_DE_CLICK_FADE_SECONDS;
   const currentClips = useTimelineStore.getState().clips;
   const mutationSnapshot = captureMutationEntitySnapshot('clip', currentClips);
   const deleted = clipIds.filter((clipId) => currentClips.some((clip) => clip.id === clipId));
@@ -221,6 +193,10 @@ export async function handleCutRangesFromClip(
   const clipId = args.clipId as string;
   const ranges = args.ranges as Array<{ timelineStart: number; timelineEnd: number }>;
   const ripple = args.ripple === true;
+  const requestedDeClickFadeSeconds = typeof args.deClickFadeSeconds === 'number'
+    && Number.isFinite(args.deClickFadeSeconds)
+    ? Math.max(0, Math.min(MAX_AUTOMATIC_DE_CLICK_FADE_SECONDS, args.deClickFadeSeconds))
+    : DEFAULT_AUTOMATIC_DE_CLICK_FADE_SECONDS;
 
   // Get initial clip info
   const initialClip = timelineStore.clips.find(c => c.id === clipId);
@@ -243,6 +219,7 @@ export async function handleCutRangesFromClip(
 
   const trackId = initialClip.trackId;
   const results: Array<{ range: { start: number; end: number }; status: string }> = [];
+  let deClickFadesApplied = 0;
   const targetClipIds = [initialClip.id, initialClip.linkedClipId]
     .filter((id): id is string => id !== undefined);
   const mutationSnapshot = captureMutationEntitySnapshot(
@@ -337,6 +314,15 @@ export async function handleCutRangesFromClip(
       );
 
       if (clipToDelete) {
+        const clipsBeforeDeletion = useTimelineStore.getState().clips;
+        const deletionIds = collectLinkedDeletionIds(
+          clipsBeforeDeletion,
+          [clipToDelete.id],
+          true,
+        );
+        const audioFadeTargets = requestedDeClickFadeSeconds > 0
+          ? collectAutomaticAudioFadeTargets(clipsBeforeDeletion, deletionIds)
+          : [];
         const deleteResult = timelineStore.applyTimelineEditOperation({
           id: `ai-cut-range-delete:${clipToDelete.id}`,
           type: ripple ? 'ripple-delete-selection' : 'delete-clips',
@@ -352,6 +338,12 @@ export async function handleCutRangesFromClip(
             ? 'removed'
             : `error - ${deleteResult.warnings.map((warning) => warning.message).join(' ')}`,
         });
+        if (deleteResult.success) {
+          deClickFadesApplied += applyAutomaticAudioFades(
+            audioFadeTargets,
+            requestedDeClickFadeSeconds,
+          );
+        }
       } else {
         results.push({ range: { start: timelineStart, end: timelineEnd }, status: 'error - could not find section to delete' });
       }
@@ -367,6 +359,8 @@ export async function handleCutRangesFromClip(
     ...(!success ? { error: `Removed ${removedCount} of ${sortedRanges.length} requested ranges.` } : {}),
     data: {
       originalClipId: clipId,
+      deClickFadeSeconds: requestedDeClickFadeSeconds,
+      deClickFadesApplied,
       ripple,
       rangesProcessed: ranges.length,
       rangesRemoved: removedCount,

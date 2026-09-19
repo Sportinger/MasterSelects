@@ -23,6 +23,8 @@ import {
   createStaleAnalysisRecoveryUpdate,
   propagateAnalysisToMediaFile,
   updateClipAnalysis,
+  updateMediaFileAnalysis,
+  type ClipAnalysisStateUpdate,
 } from './clipAnalysis/clipAnalysisState';
 import {
   mergeTargetedAnalysisFrames,
@@ -40,11 +42,13 @@ import {
 } from './faceAnalysis/faceAnalysisPersistence';
 import { hydrateAndProjectMediaSourceArtifacts } from './mediaArtifacts/mediaSourceArtifacts';
 import { FACE_ANALYSIS_MODEL_VERSION } from './faceAnalysis/modelCatalog';
+import { findTimelineAnalysisMediaFile } from './timeline/timelineRuntimeCoordinator';
 import type {
   ClipAnalysis,
   FaceAnalysisBackend,
   FrameAnalysisData,
 } from '../types/clipMetadata';
+import type { TimelineClip } from '../types/timeline';
 
 export { clearClipAnalysis } from './clipAnalysis/clipAnalysisState';
 
@@ -73,6 +77,10 @@ export interface ClipAnalysisOptions {
   /** Optional independent YuNet/SFace cadence for a mixed visual pass. */
   faceSampleIntervalMs?: number;
 }
+
+type AnalysisTarget =
+  | { kind: 'clip'; id: string }
+  | { kind: 'media'; id: string };
 
 
 /**
@@ -198,22 +206,76 @@ function findGaps(
  * When continueMode is true, only analyzes uncovered gaps.
  */
 export async function analyzeClip(clipId: string, options: ClipAnalysisOptions = {}): Promise<void> {
+  return analyzeTarget({ kind: 'clip', id: clipId }, options);
+}
+
+/** Analyze an imported video source without requiring a timeline occurrence. */
+export async function analyzeMediaFile(
+  mediaFileId: string,
+  options: ClipAnalysisOptions = {},
+): Promise<void> {
+  return analyzeTarget({ kind: 'media', id: mediaFileId }, options);
+}
+
+async function analyzeTarget(
+  analysisTarget: AnalysisTarget,
+  options: ClipAnalysisOptions,
+): Promise<void> {
   // Prevent concurrent analysis
   if (isAnalyzing) {
     log.warn('Already analyzing');
     throw new Error(`Another clip analysis is already running (${currentClipId ?? 'unknown clip'}).`);
   }
 
-  const initialClip = useTimelineStore.getState().clips.find(c => c.id === clipId);
-  const mediaFileId = initialClip?.source?.mediaFileId || initialClip?.mediaFileId;
+  const initialClip = analysisTarget.kind === 'clip'
+    ? useTimelineStore.getState().clips.find(c => c.id === analysisTarget.id)
+    : undefined;
+  const mediaFileId = analysisTarget.kind === 'media'
+    ? analysisTarget.id
+    : initialClip?.source?.mediaFileId || initialClip?.mediaFileId;
   if (mediaFileId) {
     await hydrateAndProjectMediaSourceArtifacts(mediaFileId);
   }
-  const clip = useTimelineStore.getState().clips.find(c => c.id === clipId);
+  const mediaFile = mediaFileId
+    ? findTimelineAnalysisMediaFile(mediaFileId)
+    : undefined;
+  let clip = analysisTarget.kind === 'clip'
+    ? useTimelineStore.getState().clips.find(c => c.id === analysisTarget.id)
+    : undefined;
+  if (analysisTarget.kind === 'media' && mediaFile?.file && (mediaFile.duration ?? 0) > 0) {
+    clip = {
+      id: `media-source:${mediaFile.id}`,
+      trackId: '',
+      name: mediaFile.name,
+      file: mediaFile.file,
+      startTime: 0,
+      duration: mediaFile.duration!,
+      inPoint: 0,
+      outPoint: mediaFile.duration!,
+      source: null,
+      mediaFileId: mediaFile.id,
+      analysis: mediaFile.analysis,
+      analysisStatus: mediaFile.analysisStatus,
+      analysisProgress: mediaFile.analysisProgress,
+      faceAnalysisStatus: mediaFile.faceAnalysisStatus,
+      faceAnalysisProgress: mediaFile.faceAnalysisProgress,
+      faceAnalysisMessage: mediaFile.faceAnalysisMessage,
+      transform: {} as TimelineClip['transform'],
+      effects: [],
+    } as TimelineClip;
+  }
+  const clipId = clip?.id ?? analysisTarget.id;
+  const publishAnalysisUpdate = (data: ClipAnalysisStateUpdate): void => {
+    if (analysisTarget.kind === 'media' && mediaFileId) {
+      updateMediaFileAnalysis(mediaFileId, data);
+    } else {
+      updateClipAnalysis(clipId, data);
+    }
+  };
 
   if (!clip || !clip.file) {
-    log.warn('Clip not found or has no file', { clipId });
-    throw new Error(`Clip not found or source file is unavailable: ${clipId}.`);
+    log.warn('Analysis target not found, has no file, or has no duration', { analysisTarget });
+    throw new Error(`Video source is unavailable or has no duration: ${analysisTarget.id}.`);
   }
 
   // Only analyze video files - check MIME type or file extension as fallback
@@ -235,12 +297,12 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
   // Set analyzing state
   isAnalyzing = true;
   shouldCancel = false;
-  currentClipId = clipId;
+  currentClipId = analysisTarget.id;
   const abortController = new AbortController();
   analysisAbortController = abortController;
 
   // Update status to analyzing
-  updateClipAnalysis(clipId, {
+  publishAnalysisUpdate({
     status: analyzeMetrics ? 'analyzing' : undefined,
     progress: analyzeMetrics ? 0 : undefined,
     faceStatus: analyzeFaces ? 'analyzing' : undefined,
@@ -327,7 +389,7 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
         };
         const mergedFacesReady = hasCompatibleFaceAnalysis(mergedAnalysis);
 
-        updateClipAnalysis(clipId, {
+        publishAnalysisUpdate({
           status: 'ready',
           progress: 100,
           faceStatus: mergedFacesReady ? 'ready' : undefined,
@@ -375,7 +437,7 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
       backend = await faceRuntime.prepare({
         signal: abortController.signal,
         onProgress: ({ progress, message }) => {
-          updateClipAnalysis(clipId, {
+          publishAnalysisUpdate({
             faceStatus: 'analyzing',
             faceProgress: Math.round(progress * 10),
             faceMessage: message,
@@ -386,7 +448,9 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
       identityTracker = new FaceIdentityTracker(createFaceIdentityPrefix(identityScope));
     }
     const getLatestAnalysis = () => (
-      useTimelineStore.getState().clips.find(candidate => candidate.id === clipId)?.analysis
+      analysisTarget.kind === 'media' && mediaFileId
+        ? findTimelineAnalysisMediaFile(mediaFileId)?.analysis
+        : useTimelineStore.getState().clips.find(candidate => candidate.id === clipId)?.analysis
     );
     const summarizeMergedFaces = (frames: readonly FrameAnalysisData[]) => {
       if (!analyzeFaces) {
@@ -487,7 +551,7 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
       for (const scheduledSample of rangeSamples) {
         if (shouldCancel) {
           log.info('Analysis cancelled');
-          updateClipAnalysis(clipId, {
+          publishAnalysisUpdate({
             status: analyzeMetrics ? (hadReadyMetrics ? 'ready' : 'none') : undefined,
             progress: analyzeMetrics ? (hadReadyMetrics ? 100 : 0) : undefined,
             faceStatus: analyzeFaces ? (hadReadyFaces ? 'ready' : 'none') : undefined,
@@ -600,7 +664,7 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
               : latestAnalysis?.sampleInterval ?? clip.analysis?.sampleInterval ?? SAMPLE_INTERVAL_MS,
             faceAnalysis: summarizeMergedFaces(allSoFar),
           };
-          updateClipAnalysis(clipId, {
+          publishAnalysisUpdate({
             progress: analyzeMetrics ? progress : undefined,
             faceProgress: analyzeFaces ? 10 + Math.round(progress * 0.9) : undefined,
             faceMessage: analyzeFaces
@@ -647,7 +711,7 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
 
     if (shouldCancel) {
       log.info('Analysis cancelled');
-      updateClipAnalysis(clipId, {
+      publishAnalysisUpdate({
         status: analyzeMetrics ? (hadReadyMetrics ? 'ready' : 'none') : undefined,
         progress: analyzeMetrics ? (hadReadyMetrics ? 100 : 0) : undefined,
         faceStatus: analyzeFaces ? (hadReadyFaces ? 'ready' : 'none') : undefined,
@@ -674,7 +738,7 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
       faceAnalysis: summarizeMergedFaces(finalFrames),
     };
 
-    updateClipAnalysis(clipId, {
+    publishAnalysisUpdate({
       status: analyzeMetrics ? 'ready' : undefined,
       progress: analyzeMetrics ? 100 : undefined,
       faceStatus: analyzeFaces ? 'ready' : undefined,
@@ -692,9 +756,8 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
     log.info(`Done: ${finalFrames.length} frames analyzed`);
 
   } catch (error) {
-    log.error('Analysis failed', error);
     if (shouldCancel) {
-      updateClipAnalysis(clipId, {
+      publishAnalysisUpdate({
         status: analyzeMetrics ? (hadReadyMetrics ? 'ready' : 'none') : undefined,
         progress: analyzeMetrics ? (hadReadyMetrics ? 100 : 0) : undefined,
         faceStatus: analyzeFaces ? (hadReadyFaces ? 'ready' : 'none') : undefined,
@@ -704,8 +767,9 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
       });
       triggerTimelineSave();
     } else {
+      log.error('Analysis failed', error);
       const message = error instanceof Error ? error.message : String(error);
-      updateClipAnalysis(clipId, {
+      publishAnalysisUpdate({
         status: analyzeMetrics ? 'error' : undefined,
         progress: analyzeMetrics ? 0 : undefined,
         faceStatus: analyzeFaces ? 'error' : undefined,

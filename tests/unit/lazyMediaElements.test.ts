@@ -296,6 +296,52 @@ describe('lazy timeline media elements', () => {
     expect(stats.policies.interactive.resources[0].tags).toContain('primary-lazy-media');
   });
 
+  it('reuses desired-clip scans for one frame context and invalidates changed query inputs', () => {
+    const videoTrack = makeTrack('video', 'track-v1');
+    const audioTrack = makeTrack('audio', 'track-a1');
+    const imageClip = makeImageClip('clip-image', videoTrack, 'media-image');
+    const ctx = makeContext({
+      clips: [imageClip],
+      tracks: [videoTrack, audioTrack],
+      mediaFiles: [
+        { id: 'media-image', name: imageClip.name, type: 'image', url: 'blob:image', duration: 4 },
+      ],
+    });
+    let firstClipArrayIterations = 0;
+    ctx.clips = new Proxy(ctx.clips, {
+      get(target, property, receiver) {
+        if (property === Symbol.iterator) firstClipArrayIterations += 1;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    hydrateTimelineMediaWindow(ctx);
+    hydrateTimelineMediaWindow(ctx);
+    expect(firstClipArrayIterations).toBe(2);
+
+    ctx.playheadPosition = 1;
+    hydrateTimelineMediaWindow(ctx);
+    expect(firstClipArrayIterations).toBe(4);
+
+    ctx.visibleVideoTrackIds.clear();
+    hydrateTimelineMediaWindow(ctx);
+    expect(firstClipArrayIterations).toBe(5);
+
+    ctx.unmutedAudioTrackIds.clear();
+    hydrateTimelineMediaWindow(ctx);
+    expect(firstClipArrayIterations).toBe(6);
+
+    let replacementClipArrayIterations = 0;
+    ctx.clips = new Proxy([imageClip], {
+      get(target, property, receiver) {
+        if (property === Symbol.iterator) replacementClipArrayIterations += 1;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    hydrateTimelineMediaWindow(ctx);
+    expect(replacementClipArrayIterations).toBe(2);
+  });
+
   it('keeps imported WebM duration when lazy metadata reports a short fragment', () => {
     const videoTrack = makeTrack('video', 'track-v1');
     const videoClip = makeClip('clip-v1', videoTrack, 'video', 'media-v1');
@@ -318,6 +364,79 @@ describe('lazy timeline media elements', () => {
     expect(videoClip.source?.naturalDuration).toBe(24.585);
     expect(videoClip.duration).toBe(24.585);
     expect(videoClip.outPoint).toBe(24.585);
+  });
+
+  it('gives a re-created clip its own lazy video element after a shallow source copy', () => {
+    const videoTrack = makeTrack('video', 'track-v1');
+    const originalClip = makeClip('clip-v1', videoTrack, 'video', 'media-v1');
+    const mediaFiles = [
+      { id: 'media-v1', name: originalClip.name, type: 'video', url: 'blob:video', duration: 4 },
+    ];
+    const originalCtx = makeContext({
+      clips: [originalClip],
+      tracks: [videoTrack],
+      mediaFiles,
+      now: 1000,
+    });
+
+    hydrateTimelineMediaWindow(originalCtx);
+    const originalElement = getLazyTimelineVideoElementForClip(originalClip);
+    expect(originalElement).toBeInstanceOf(HTMLVideoElement);
+
+    const recreatedClip: TimelineClip = {
+      ...originalClip,
+      id: 'clip-v2',
+      source: { ...originalClip.source },
+    };
+    const recreatedCtx = makeContext({
+      clips: [recreatedClip],
+      tracks: [videoTrack],
+      mediaFiles,
+      now: 1100,
+    });
+
+    hydrateTimelineMediaWindow(recreatedCtx);
+
+    const recreatedElement = getLazyTimelineVideoElementForClip(recreatedClip);
+    expect(recreatedElement).toBeInstanceOf(HTMLVideoElement);
+    expect(recreatedElement).not.toBe(originalElement);
+    expect(recreatedClip.source?.videoElement).toBe(recreatedElement);
+    expect(getLazyTimelineMediaElementCount()).toBe(2);
+
+    recreatedCtx.now = 2901;
+    hydrateTimelineMediaWindow(recreatedCtx);
+
+    expect(getLazyTimelineMediaElementCount()).toBe(1);
+    expect(getLazyTimelineVideoElementForClip(recreatedClip)).toBe(recreatedElement);
+    expect(recreatedClip.source?.videoElement).toBe(recreatedElement);
+  });
+
+  it('reattaches one lazy decoder to regenerated runtime clips with the same stable id', () => {
+    const videoTrack = makeTrack('video', 'track-v1');
+    const firstClip = makeClip('stable-transition-clip', videoTrack, 'video', 'media-v1');
+    const mediaFiles = [
+      { id: 'media-v1', name: firstClip.name, type: 'video', url: 'blob:video', duration: 4 },
+    ];
+    const createElement = vi.spyOn(document, 'createElement');
+
+    hydrateTimelineMediaWindow(makeContext({
+      clips: [firstClip],
+      tracks: [videoTrack],
+      mediaFiles,
+      now: 1000,
+    }));
+    const firstElement = firstClip.source?.videoElement;
+
+    const regeneratedClip = makeClip('stable-transition-clip', videoTrack, 'video', 'media-v1');
+    hydrateTimelineMediaWindow(makeContext({
+      clips: [regeneratedClip],
+      tracks: [videoTrack],
+      mediaFiles,
+      now: 1016,
+    }));
+
+    expect(regeneratedClip.source?.videoElement).toBe(firstElement);
+    expect(createElement.mock.calls.filter(([tagName]) => tagName === 'video')).toHaveLength(1);
   });
 
   it('hydrates HTML video in worker GPU-only mode when WebCodecs playback is disabled', () => {

@@ -6,7 +6,7 @@ import {
   type MediaContextActionsMenuProps,
 } from '../../src/components/panels/media/context/MediaContextActionsMenu';
 import { flashBoardMediaBridge } from '../../src/services/flashboard/FlashBoardMediaBridge';
-import type { MediaFile } from '../../src/stores/mediaStore';
+import type { Composition, MediaFile } from '../../src/stores/mediaStore';
 
 const mediaFile = {
   id: 'media-generated',
@@ -51,6 +51,7 @@ function createProps(overrides: Partial<MediaContextActionsMenuProps> = {}): Med
     onStartRename: noop,
     onMoveToFolder: noop,
     onOpenCompositionSettings: noop,
+    onCreateCompositionFromItem: noop,
     onOpenImageCrop: noop,
     onOpenSolidSettings: noop,
     onCancelProxyGeneration: noop,
@@ -113,5 +114,56 @@ describe('MediaContextActionsMenu', () => {
     expect(disabledItem).toHaveClass('disabled');
     fireEvent.click(disabledItem);
     expect(onCopyPrompt).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers Create Comp for an existing composition and passes it through', () => {
+    const composition: Composition = {
+      id: 'comp-source',
+      name: 'Nested Scene',
+      type: 'composition',
+      parentId: null,
+      createdAt: 1,
+      width: 2048,
+      height: 858,
+      frameRate: 48,
+      duration: 12,
+      backgroundColor: '#123456',
+    };
+    const onCreateCompositionFromItem = vi.fn(async () => undefined);
+
+    render(<MediaContextActionsMenu {...createProps({
+      selectedItem: composition,
+      selectedIds: [composition.id],
+      composition,
+      mediaFile: null,
+      isVideoFile: false,
+      onCreateCompositionFromItem,
+    })} />);
+
+    fireEvent.click(screen.getByText('Create Comp'));
+
+    expect(onCreateCompositionFromItem).toHaveBeenCalledWith(composition);
+  });
+
+  it('offers Create Comp for a camera live input', () => {
+    const liveCamera = {
+      ...mediaFile,
+      id: 'live-camera',
+      name: 'iPad Camera',
+      liveInput: { kind: 'video-device' as const, deviceId: 'camera-1' },
+    };
+    const onCreateCompositionFromItem = vi.fn(async () => undefined);
+
+    render(<MediaContextActionsMenu {...createProps({
+      selectedItem: liveCamera,
+      selectedIds: [liveCamera.id],
+      mediaFile: liveCamera,
+      isVideoFile: false,
+      onCreateCompositionFromItem,
+    })} />);
+
+    fireEvent.click(screen.getByText('Create Comp'));
+
+    expect(onCreateCompositionFromItem).toHaveBeenCalledWith(liveCamera);
   });
 });

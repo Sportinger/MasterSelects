@@ -1,3 +1,4 @@
+import { isAutomaticCutFade } from './automaticCutDeClick';
 import type {
   ClipAudioEditOperation,
   ClipAudioRegionGainPreview,
@@ -125,9 +126,11 @@ export function getClipAudioEditPreviewVolumeMultiplier(
   clip: TimelineClip,
   sourceTime: number,
   regionGainPreview?: ClipAudioRegionGainPreview | null,
+  scheduledCutFades = false,
 ): number {
   let multiplier = 1;
   for (const operation of clip.audioState?.editStack ?? []) {
+    if (scheduledCutFades && isAutomaticCutFade(operation)) continue;
     if (doesRegionGainPreviewMatchOperation(regionGainPreview, operation)) continue;
     multiplier *= getAudioEditOperationPreviewVolumeMultiplier(operation, sourceTime);
     if (multiplier <= 0) return 0;

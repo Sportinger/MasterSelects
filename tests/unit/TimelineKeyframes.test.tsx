@@ -92,6 +92,21 @@ describe('TimelineKeyframes', () => {
     };
   }
 
+  it('opens a dense camera rotation row without rescanning the solve for each diamond', () => {
+    let propertyReads = 0;
+    const clip = createMockClip({ id: 'camera', trackId: 'video-1', duration: 50,
+      source: { type: 'camera' } as TimelineKeyframesProps['clips'][0]['source'] });
+    const properties: AnimatableProperty[] = ['position.x', 'position.y', 'position.z', 'rotation.x', 'rotation.y', 'rotation.z'];
+    const keys = Array.from({ length: 9000 }, (_, i) => ({
+      ...createMockKeyframe({ id: `camera-${i}`, clipId: clip.id, time: Math.floor(i / 6) / 30 }),
+      get property() { propertyReads++; return properties[i % 6]; },
+    }));
+    const { container } = renderKeyframes({ clip, keyframes: keys, property: 'rotation.x' });
+    expect(container.querySelectorAll('.keyframe-diamond')).toHaveLength(0);
+    expect(container.querySelector('canvas')).toHaveAttribute('data-marker-count', '1500');
+    expect(propertyReads).toBeLessThan(keys.length * 12);
+  });
+
   it('applies last-keyframe easing changes to the visible incoming segment', () => {
     const { container, onUpdateKeyframe, leftKeyframe } = renderKeyframes();
     const diamonds = container.querySelectorAll('.keyframe-diamond');
@@ -170,6 +185,43 @@ describe('TimelineKeyframes', () => {
     diamonds.forEach((diamond) => {
       expect(diamond).toHaveClass('row-highlighted');
     });
+  });
+
+  it('uses the cheap visual mode for dense keyframe rows', () => {
+    const denseKeyframes = Array.from({ length: 120 }, (_, index) => createMockKeyframe({
+      id: `kf-dense-${index}`,
+      clipId: 'clip-1',
+      property: 'opacity',
+      time: index / 24,
+      value: index / 120,
+      easing: 'linear',
+    }));
+    const { container } = renderKeyframes({ keyframes: denseKeyframes });
+    const diamonds = container.querySelectorAll('.keyframe-diamond');
+
+    expect(diamonds).toHaveLength(0);
+    expect(container.querySelector('canvas')).toHaveAttribute('data-marker-count', '120');
+    diamonds.forEach((diamond) => {
+      expect(diamond).toHaveClass('dense-row');
+    });
+  });
+
+  it('hit-tests original dense canvas keys for context actions and graph opening', () => {
+    const keys = Array.from({ length: 120 }, (_, index) => createMockKeyframe({
+      id: `dense-${index}`, clipId: 'clip-1', property: 'opacity', time: index / 24, value: index / 120,
+    }));
+    const { container, onDeleteKeyframes, onToggleCurveExpanded, onMoveKeyframe } = renderKeyframes({ keyframes: keys });
+    const canvas = container.querySelector('canvas')!;
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 1024, height: 20 } as DOMRect);
+    fireEvent.contextMenu(canvas, { clientX: 50, clientY: 10 });
+    fireEvent.click(screen.getByText('Delete Keyframe'));
+    expect(onDeleteKeyframes).toHaveBeenCalledWith(['dense-60']);
+    fireEvent.doubleClick(canvas, { clientX: 50, clientY: 10, button: 0 });
+    expect(onToggleCurveExpanded).toHaveBeenCalledWith('video-1', 'opacity');
+    fireEvent.mouseDown(canvas, { clientX: 50, clientY: 10, button: 0 });
+    fireEvent.mouseMove(window, { clientX: 70, clientY: 10 });
+    fireEvent.mouseUp(window);
+    expect(onMoveKeyframe).toHaveBeenCalledWith('dense-60', 3.5);
   });
 
   it('reports keyframe hover so the matching property row can highlight', () => {

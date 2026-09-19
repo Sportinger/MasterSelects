@@ -2,19 +2,18 @@
 
 import { CONTAINER_MAP, MEDIA_INFO_TIMEOUT } from '../constants';
 import { Logger } from '../../../services/logger';
+import type { MediaVideoTrackMetadata } from '../../../types/mediaMetadata';
+import {
+  isIsobmffFileName,
+  readIsobmffMetadata,
+  type IsobmffMediaMetadata,
+} from '../../../services/mediaMetadata/isobmffMetadata';
+import { getProResCodecLabel } from '../../../services/mediaRuntime/prores/turboResCodecIdentity';
+import { getHapCodecLabel } from '../../../services/hap/hapCodecIdentity';
 
 const log = Logger.create('MediaInfo');
 
-// Lazy-load mediabunny only when needed (tree-shaking friendly)
-let _mediabunny: typeof import('mediabunny') | null = null;
-async function getMediaBunny() {
-  if (!_mediabunny) {
-    _mediabunny = await import('mediabunny');
-  }
-  return _mediabunny;
-}
-
-export interface MediaInfo {
+export interface MediaInfo extends MediaVideoTrackMetadata {
   width?: number;
   height?: number;
   duration?: number;
@@ -77,7 +76,7 @@ export function getCodecFromExtension(fileName: string): string | undefined {
 /**
  * Parse codec string to friendly name.
  */
-function parseCodecName(codec: string): string {
+export function parseCodecName(codec: string): string {
   // H.264/AVC
   if (codec.startsWith('avc1') || codec.startsWith('avc3')) return 'H.264';
   // H.265/HEVC
@@ -88,13 +87,12 @@ function parseCodecName(codec: string): string {
   if (codec.startsWith('vp08') || codec === 'vp8') return 'VP8';
   // AV1
   if (codec.startsWith('av01')) return 'AV1';
-  // ProRes
-  if (codec.startsWith('apch')) return 'ProRes 422 HQ';
-  if (codec.startsWith('apcn')) return 'ProRes 422';
-  if (codec.startsWith('apcs')) return 'ProRes 422 LT';
-  if (codec.startsWith('apco')) return 'ProRes 422 Proxy';
-  if (codec.startsWith('ap4h')) return 'ProRes 4444';
-  if (codec.startsWith('ap4x')) return 'ProRes 4444 XQ';
+  // ProRes, including an explicit label for unsupported ProRes RAW.
+  const proResLabel = getProResCodecLabel(codec);
+  if (proResLabel) return proResLabel;
+  // HAP family (decoded by the browser-local HAP provider).
+  const hapLabel = getHapCodecLabel(codec);
+  if (hapLabel) return hapLabel;
   // DNxHD/DNxHR
   if (codec.startsWith('AVdn')) return 'DNxHD';
   // Audio codecs
@@ -106,72 +104,133 @@ function parseCodecName(codec: string): string {
   return codec;
 }
 
-/**
- * Extract detailed media info using MediaBunny (for MP4/MOV/M4V files).
- */
-async function getMP4Info(file: File): Promise<Partial<MediaInfo>> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cleanup: { input: any } = { input: null };
-  try {
-    const mb = await getMediaBunny();
+function mapIsobmffMediaInfo(
+  file: File,
+  container: string,
+  metadata: IsobmffMediaMetadata,
+): MediaInfo {
+  const videoCodec = metadata.videoCodecParameter ?? metadata.videoCodecId;
+  const audioCodec = metadata.audioCodecParameter ?? metadata.audioCodecId;
+  return {
+    width: metadata.width,
+    height: metadata.height,
+    duration: metadata.duration,
+    fps: metadata.fps ?? parseFpsFromFilename(file.name),
+    codec: videoCodec ? parseCodecName(videoCodec) : getCodecFromExtension(file.name),
+    audioCodec: audioCodec ? parseCodecName(audioCodec) : undefined,
+    container,
+    fileSize: file.size,
+    bitrate: metadata.bitrate,
+    hasAudio: metadata.hasAudio,
+    videoCodecId: metadata.videoCodecId,
+    codedWidth: metadata.codedWidth,
+    codedHeight: metadata.codedHeight,
+    rotation: metadata.rotation,
+    pixelAspectRatio: metadata.pixelAspectRatio,
+    videoColorSpace: metadata.videoColorSpace,
+    hasHighDynamicRange: metadata.hasHighDynamicRange,
+    canBeTransparent: metadata.canBeTransparent,
+  };
+}
 
-    const result = await Promise.race([
-      (async () => {
-        const input = new mb.Input({
-          formats: [mb.MP4, mb.QTFF],
-          source: new mb.BlobSource(file),
-        });
-        cleanup.input = input;
-
-        const videoTracks = await input.getVideoTracks();
-        const audioTracks = await input.getAudioTracks();
-        const videoTrack = videoTracks[0] ?? null;
-        const audioTrack = audioTracks[0] ?? null;
-
-        // Get codec parameter strings (e.g. 'avc1.64001f', 'mp4a.40.2')
-        const videoCodecStr = videoTrack ? await videoTrack.getCodecParameterString() : null;
-        const audioCodecStr = audioTrack ? await audioTrack.getCodecParameterString() : null;
-
-        // Compute duration and bitrate
-        const duration = await input.computeDuration();
-        const bitrate = file.size > 0 && duration > 0
-          ? Math.round((file.size * 8) / duration)
-          : undefined;
-
-        // Compute FPS from packet stats (only scan first ~200 packets for speed)
-        let fps: number | undefined;
-        if (videoTrack) {
-          try {
-            const stats = await videoTrack.computePacketStats(200);
-            if (stats.averagePacketRate > 0) {
-              fps = Math.round(stats.averagePacketRate * 100) / 100;
-            }
-          } catch {
-            // FPS computation can fail for very short clips
-          }
-        }
-
-        return {
-          codec: videoCodecStr ? parseCodecName(videoCodecStr) : undefined,
-          audioCodec: audioCodecStr ? parseCodecName(audioCodecStr) : undefined,
-          hasAudio: audioTracks.length > 0,
-          bitrate,
-          fps,
-        } as Partial<MediaInfo>;
-      })(),
-      new Promise<Partial<MediaInfo>>((resolve) => setTimeout(() => {
-        log.debug('MediaBunny timeout', { file: file.name });
-        resolve({});
-      }, 5000)),
-    ]);
-
-    return result;
-  } catch (error) {
-    log.debug('MediaBunny error', { file: file.name, error });
-    return {};
-  } finally {
-    try { cleanup.input?.dispose(); } catch { /* ignore */ }
+function mergeDefinedMediaInfo(base: MediaInfo, preferred: MediaInfo): MediaInfo {
+  const merged = { ...base };
+  for (const [key, value] of Object.entries(preferred)) {
+    if (value !== undefined) {
+      (merged as Record<string, unknown>)[key] = value;
+    }
   }
+  return merged;
+}
+
+interface VideoElementMetadataProbe {
+  promise: Promise<MediaInfo>;
+  cancel(): void;
+}
+
+function startVideoElementMetadataProbe(
+  file: File,
+  container: string,
+  fileSize: number,
+): VideoElementMetadataProbe {
+  const video = document.createElement('video');
+  const url = URL.createObjectURL(file);
+  let settled = false;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  let finish: (info: MediaInfo) => void = () => undefined;
+
+  const promise = new Promise<MediaInfo>((resolve) => {
+    finish = (info) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+      video.onloadedmetadata = null;
+      video.onerror = null;
+      URL.revokeObjectURL(url);
+      resolve(info);
+    };
+
+    timeoutId = setTimeout(() => {
+      log.debug('HTML video metadata timeout', { file: file.name });
+      finish({ container, fileSize });
+    }, MEDIA_INFO_TIMEOUT);
+
+    video.onloadedmetadata = () => {
+      const duration = Number.isFinite(video.duration) && video.duration > 0
+        ? video.duration
+        : undefined;
+      finish({
+        width: video.videoWidth || undefined,
+        height: video.videoHeight || undefined,
+        duration,
+        fps: parseFpsFromFilename(file.name),
+        container,
+        fileSize,
+        bitrate: duration && fileSize > 0
+          ? Math.round((fileSize * 8) / duration)
+          : undefined,
+      });
+    };
+    video.onerror = () => finish({ container, fileSize });
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    video.src = url;
+    video.load();
+  });
+
+  return {
+    promise,
+    cancel: () => finish({ container, fileSize }),
+  };
+}
+
+async function getVideoMediaInfo(file: File, container: string): Promise<MediaInfo> {
+  const fileSize = file.size;
+  const htmlProbe = startVideoElementMetadataProbe(file, container, fileSize);
+
+  if (isIsobmffFileName(file.name)) {
+    const containerMetadata = await readIsobmffMetadata(file);
+    if (containerMetadata) {
+      const containerInfo = mapIsobmffMediaInfo(file, container, containerMetadata);
+      const isAuthoritative = Boolean(
+        containerInfo.videoCodecId
+        || containerInfo.duration
+        || (containerInfo.width && containerInfo.height),
+      );
+      if (isAuthoritative) {
+        htmlProbe.cancel();
+        return containerInfo;
+      }
+      const htmlInfo = await htmlProbe.promise;
+      return mergeDefinedMediaInfo(htmlInfo, containerInfo);
+    }
+  }
+
+  const htmlInfo = await htmlProbe.promise;
+  htmlInfo.codec ??= getCodecFromExtension(file.name);
+  htmlInfo.hasAudio = await checkHasAudioQuick(file);
+  return htmlInfo;
 }
 
 /**
@@ -183,10 +242,9 @@ export async function getMediaInfo(
 ): Promise<MediaInfo> {
   const container = getContainerFormat(file.name);
   const fileSize = file.size;
-  const ext = file.name.split('.').pop()?.toLowerCase();
-
-  // For MP4/MOV/M4V, use MediaBunny for accurate codec detection
-  const useMP4Box = type === 'video' && ['mp4', 'mov', 'm4v', 'mp4v', '3gp'].includes(ext || '');
+  if (type === 'video') {
+    return getVideoMediaInfo(file, container);
+  }
 
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
@@ -211,53 +269,6 @@ export async function getMediaInfo(
         resolve({ container, fileSize });
         cleanup(url);
       };
-    } else if (type === 'video') {
-      const video = document.createElement('video');
-      const url = URL.createObjectURL(file);
-      video.src = url;
-      video.muted = true;
-      video.playsInline = true;
-
-      video.onloadedmetadata = async () => {
-        const duration = video.duration;
-        const basicInfo: MediaInfo = {
-          width: video.videoWidth,
-          height: video.videoHeight,
-          duration,
-          fps: parseFpsFromFilename(file.name),
-          container,
-          fileSize,
-          bitrate: fileSize > 0 && duration > 0 ? Math.round((fileSize * 8) / duration) : undefined,
-        };
-
-        // Get detailed info from MediaBunny
-        if (useMP4Box) {
-          try {
-            const mp4Info = await getMP4Info(file);
-            Object.assign(basicInfo, {
-              codec: mp4Info.codec || getCodecFromExtension(file.name),
-              audioCodec: mp4Info.audioCodec,
-              hasAudio: mp4Info.hasAudio,
-              fps: mp4Info.fps || basicInfo.fps,
-            });
-          } catch (e) {
-            log.debug('MediaBunny failed, using fallback', { file: file.name });
-            basicInfo.codec = getCodecFromExtension(file.name);
-          }
-        } else {
-          basicInfo.codec = getCodecFromExtension(file.name);
-          // For non-MP4, check audio using Web Audio API
-          basicInfo.hasAudio = await checkHasAudioQuick(file);
-        }
-
-        resolve(basicInfo);
-        cleanup(url);
-      };
-      video.onerror = () => {
-        resolve({ container, fileSize, codec: getCodecFromExtension(file.name) });
-        cleanup(url);
-      };
-      video.load();
     } else if (type === 'audio') {
       const audio = document.createElement('audio');
       const url = URL.createObjectURL(file);

@@ -181,7 +181,7 @@ export function isCoveredByRange(
   return startTime <= candidate.startTime && endTime >= candidateEndTime;
 }
 
-function findAlternativeTrack(
+export function findAlternativeTrack(
   input: ResolveClipMoveRequestInput,
   clip: TimelineClip,
   requestedTrackId: string,
@@ -256,15 +256,16 @@ export function resolveLeadMove(
   let finalTrackId = targetTrackId;
   let resistance = createResistance(resistanceResult, snapping.resolvedStartTime);
   const fallbackTrack = createFallbackTrackResolution();
+  const requestedTrack = input.tracks.find(track => track.id === targetTrackId);
+  const shouldRerouteOccupiedTrack = targetTrackId !== clip.trackId || requestedTrack?.type === 'audio';
 
-  if (resistanceResult?.noFreeSpace && targetTrackId !== clip.trackId) {
+  if (resistanceResult?.noFreeSpace && shouldRerouteOccupiedTrack) {
     const alternative = findAlternativeTrack(input, clip, targetTrackId, snapping.resolvedStartTime, excludeClipIds);
     if (alternative) {
       finalTrackId = alternative.track.id;
       finalStartTime = Math.max(0, alternative.result.startTime);
       resistance = createResistance(alternative.result, snapping.resolvedStartTime);
     } else {
-      const requestedTrack = input.tracks.find(track => track.id === targetTrackId);
       const fallbackTrackType = requestedTrack?.type === 'audio' ? 'audio' : 'video';
       fallbackTrack.createFallbackTrack = true;
       fallbackTrack.requestedNewTrackType = fallbackTrackType;

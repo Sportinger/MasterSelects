@@ -81,6 +81,13 @@ async function persistJournalFile(
   target: CapturedProjectTarget,
   journal: FlashBoardChatJournalFile,
 ): Promise<boolean> {
+  // Save timestamps are not chat edits. An unchanged journal must not force
+  // another complete package write before the actual project save.
+  const previous = parseJournal(
+    await readTargetFile(target, FLASHBOARD_CHAT_JOURNAL_FILE_NAME),
+    target.projectCreatedAt,
+  );
+  if (previous && JSON.stringify(previous.messages) === JSON.stringify(journal.messages)) return true;
   const content = JSON.stringify(journal, null, 2);
   if (await writeTargetFile(target, FLASHBOARD_CHAT_JOURNAL_FILE_NAME, content)) {
     return true;

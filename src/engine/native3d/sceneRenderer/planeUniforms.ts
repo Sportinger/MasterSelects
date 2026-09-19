@@ -25,7 +25,11 @@ export function buildPlaneUniformData(
 }
 
 export function buildPlaneMvp(layer: ScenePlaneLayer, camera: SceneCamera): Float32Array {
-  const planeScale = createPlaneScaleMatrix(layer, camera.viewport);
+  const planeScale = createPlaneScaleMatrix(
+    layer,
+    camera.viewport,
+    camera.referenceSize ?? camera.viewport,
+  );
   const modelMatrix = multiplyMat4(layer.worldMatrix, planeScale);
   const viewProjection = multiplyMat4(camera.projectionMatrix, camera.viewMatrix);
   return multiplyMat4(viewProjection, modelMatrix);
@@ -34,14 +38,15 @@ export function buildPlaneMvp(layer: ScenePlaneLayer, camera: SceneCamera): Floa
 function createPlaneScaleMatrix(
   layer: ScenePlaneLayer,
   viewport: { width: number; height: number },
+  referenceSize: { width: number; height: number },
 ): Float32Array {
   const outputAspect = viewport.width / Math.max(viewport.height, 1);
   const sourceAspect = layer.sourceWidth / Math.max(layer.sourceHeight, 1);
   const sourcePixelScale = calculateSourcePixelScale(
     layer.sourceWidth,
     layer.sourceHeight,
-    viewport.width,
-    viewport.height,
+    referenceSize.width,
+    referenceSize.height,
   );
   let planeWidth: number;
   let planeHeight: number;

@@ -559,11 +559,21 @@ describe('clip context menu model', () => {
 
   it('executes clipboard commands through injected action callbacks', () => {
     const actions = {
+      copyClips: vi.fn(),
       copyClipEffects: vi.fn(),
       pasteClipEffects: vi.fn(),
       copyClipColor: vi.fn(),
       pasteClipColor: vi.fn(),
     };
+
+    expect(executeClipContextMenuClipboardCommand({
+      command: 'copy-clips',
+      clipId: 'clip-video',
+      targetClipIds: ['clip-video', 'clip-b'],
+      canExecute: true,
+      actions,
+    })).toBe(true);
+    expect(actions.copyClips).toHaveBeenCalledTimes(1);
 
     expect(executeClipContextMenuClipboardCommand({
       command: 'copy-effects',
@@ -715,6 +725,7 @@ describe('clip context menu model', () => {
       removeClip: vi.fn(),
     };
     const clipboardActions = {
+      copyClips: vi.fn(),
       copyClipEffects: vi.fn(),
       pasteClipEffects: vi.fn(),
       copyClipColor: vi.fn(),

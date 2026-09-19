@@ -266,7 +266,7 @@ function describeMediaFile(file: MediaFile): Record<string, unknown> {
       analysisAvailable: file.audioAnalysisRefs !== undefined,
       artifactRefs: audioArtifactRefs(file),
       codec: boundedString(file.audioCodec, 120),
-      hasAudio: file.hasAudio === true || file.type === 'audio',
+      hasAudio: file.hasAudio === true || file.type === 'audio' || Boolean(file.audioCodec),
       stemsAvailable: file.stemInfo !== undefined,
       waveformStatus: file.waveformStatus ?? 'idle',
     },

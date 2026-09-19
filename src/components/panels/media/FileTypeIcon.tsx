@@ -6,10 +6,10 @@ import {
   IconArrowsShuffle,
   IconBlur,
   IconBulb,
-  IconCamera,
   IconCircleDashed,
   IconCube,
   IconFile,
+  IconFish,
   IconFocusCentered,
   IconMath,
   IconMovie,
@@ -22,6 +22,7 @@ import {
   IconSubtitles,
   IconTypography,
   IconVector,
+  IconVideo,
   IconWaveSine,
 } from '@tabler/icons-react';
 import React, { memo } from 'react';
@@ -44,7 +45,7 @@ const OUTLINE_FILE_TYPE_ICONS = {
   storyboard: IconStack,
   solid: IconSquare,
   model: IconCube,
-  camera: IconCamera,
+  camera: IconVideo,
   light: IconBulb,
   'gaussian-avatar': IconSparkles,
   'gaussian-splat': IconBlur,
@@ -55,6 +56,7 @@ const OUTLINE_FILE_TYPE_ICONS = {
   'motion-null': IconCircleDashed,
   'motion-adjustment': IconAdjustmentsHorizontal,
   midi: IconPiano,
+  flock: IconFish,
   lottie: IconVector,
   rive: IconVector,
   composition: IconStack,
@@ -245,6 +247,16 @@ export const FileTypeIcon = memo(({ type, large, outline, size }: FileTypeIconPr
           <path d="M4 8h2.2l1.1-2.5 1.6 5 1.1-2.5H12" stroke="#c8ffff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
           <circle cx="4" cy="8" r="0.8" fill="#9df0f0"/>
           <circle cx="12" cy="8" r="0.8" fill="#9df0f0"/>
+        </svg>
+      );
+    case 'tracking':
+      return (
+        <svg style={style} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#285b61" stroke="#75d4d6" strokeWidth="0.7"/>
+          <path d="M3.5 8h9M8 3.5v9" stroke="#a7f2ee" strokeWidth="0.7" opacity="0.65"/>
+          <path d="M4.4 5.1 11.2 4l.4 6.6-6.5.4-.7-5.9Z" stroke="#d5fffb" strokeWidth="0.9"/>
+          <circle cx="4.4" cy="5.1" r="1" fill="#8ee6e2"/>
+          <circle cx="11.6" cy="10.6" r="1" fill="#8ee6e2"/>
         </svg>
       );
     case 'gaussian-avatar':
@@ -484,6 +496,17 @@ const LargeIcon = memo(({ type, style }: { type?: string; style: React.CSSProper
           <circle cx="10" cy="24" r="2.4" fill="#9df0f0"/>
           <circle cx="38" cy="24" r="2.4" fill="#9df0f0"/>
           <path d="M14 14h20M14 34h20" stroke="#78cfcf" strokeWidth="1" opacity="0.45" strokeLinecap="round"/>
+        </svg>
+      );
+    case 'tracking':
+      return (
+        <svg style={style} viewBox="0 0 48 48" fill="none">
+          <rect x="4" y="8" width="40" height="32" rx="3" fill="#234f54"/>
+          <rect x="4" y="8" width="40" height="32" rx="3" stroke="#75d4d6" strokeWidth="1"/>
+          <path d="M9 24h30M24 11v26" stroke="#75d4d6" strokeWidth="1.2" opacity="0.5"/>
+          <path d="m13 16 22-3 1.5 21L15 35l-2-19Z" stroke="#d5fffb" strokeWidth="2"/>
+          <circle cx="13" cy="16" r="3" fill="#8ee6e2"/>
+          <circle cx="36.5" cy="34" r="3" fill="#8ee6e2"/>
         </svg>
       );
     case 'gaussian-avatar':

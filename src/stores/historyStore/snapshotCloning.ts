@@ -1,4 +1,5 @@
 import { clonePersistedClipAudioState } from '../../services/audio/clipAudioStatePersistence';
+import { isRetainedTerrainMesh } from '../../services/planarTracking/immutableTerrainMesh';
 import type {
   ClipAudioState,
   MasterAudioState,
@@ -10,6 +11,7 @@ import type { StateSnapshot } from './historyStoreTypes';
 
 export function deepClone<T>(obj: T, seen?: WeakSet<object>): T {
   if (obj === null || typeof obj !== 'object') return obj;
+  if (isRetainedTerrainMesh(obj)) return obj;
   if (obj instanceof Date) return new Date(obj.getTime()) as T;
   if (isBinaryPayload(obj)) return undefined as T;
 

@@ -2,11 +2,13 @@ import { FrameExporter } from '../../../engine/export';
 import type { ContainerFormat, VideoCodec } from '../../../engine/export';
 import {
   DNXHR_PROFILES,
+  HAP_FORMATS,
   PRORES_PROFILES,
 } from '../../../engine/ffmpeg';
 import type {
   DnxhrProfile,
   FFmpegContainer,
+  HapFormat,
   ProResProfile,
 } from '../../../engine/ffmpeg';
 import { getGifPaletteModeLabel } from '../../../engine/gif/gifOptions';
@@ -89,6 +91,17 @@ export function ExportAdvancedVideoSection({
           <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
             {display.currentCodecLabel}
           </span>
+        ) : mode.encoder === 'hap' ? (
+          <select
+            value={video.hapFormat}
+            onChange={(e) => actions.setHapFormat(e.target.value as HapFormat)}
+          >
+            {HAP_FORMATS.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name} - {f.description}
+              </option>
+            ))}
+          </select>
         ) : (mode.encoder === 'webcodecs' || mode.encoder === 'htmlvideo') ? (
           <select
             value={video.videoCodec}
@@ -152,7 +165,6 @@ export function ExportAdvancedVideoSection({
         </div>
       )}
 
-      {/* HAP codec removed - requires snappy which doesn't build with ASYNCIFY */}
 
       {/* Resolution */}
       <div className="control-row">

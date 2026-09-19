@@ -7,6 +7,7 @@ export function applyAddClipOptions(clip: TimelineClip, options?: AddClipOptions
   return {
     ...clip,
     ...(options.name ? { name: options.name } : {}),
+    ...(options.is3D !== undefined ? { is3D: options.is3D } : {}),
     ...(options.signalAssetId ? { signalAssetId: options.signalAssetId } : {}),
     ...(options.signalRefId ? { signalRefId: options.signalRefId } : {}),
     ...(options.signalRenderAdapterId ? { signalRenderAdapterId: options.signalRenderAdapterId } : {}),

@@ -18,7 +18,7 @@ interface TimelineOverlaysProps {
   outPoint: number | null;
   duration: number;
   markerDrag: { type: 'in' | 'out' } | null;
-  onMarkerMouseDown: (e: React.MouseEvent, type: 'in' | 'out') => void;
+  onMarkerPointerDown: (e: React.PointerEvent<HTMLElement>, type: 'in' | 'out') => void;
   onMarkerContextMenu?: (e: React.MouseEvent, type: 'in' | 'out') => void;
   switchMotionClass?: string;
   renderMode?: 'all' | 'trackOverlays' | 'rangeMarkers';
@@ -53,7 +53,7 @@ export function TimelineOverlays({
   outPoint,
   duration,
   markerDrag,
-  onMarkerMouseDown,
+  onMarkerPointerDown,
   onMarkerContextMenu,
   switchMotionClass = '',
   renderMode = 'all',
@@ -201,7 +201,7 @@ export function TimelineOverlays({
         >
           <div
             className="marker-flag"
-            onMouseDown={(e) => onMarkerMouseDown(e, 'in')}
+            onPointerDown={(e) => onMarkerPointerDown(e, 'in')}
           >
             <IconFlag3Filled className="timeline-flag-icon in-flag" aria-hidden="true" />
           </div>
@@ -222,7 +222,7 @@ export function TimelineOverlays({
         >
           <div
             className="marker-flag"
-            onMouseDown={(e) => onMarkerMouseDown(e, 'out')}
+            onPointerDown={(e) => onMarkerPointerDown(e, 'out')}
           >
             <IconFlag3Filled className="timeline-flag-icon out-flag" aria-hidden="true" />
           </div>

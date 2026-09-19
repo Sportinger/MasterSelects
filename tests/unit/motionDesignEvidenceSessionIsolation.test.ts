@@ -43,7 +43,7 @@ describe('Motion Design evidence startup isolation', () => {
   it.each([
     'http://localhost:5173/',
     'http://motion-md0-c4e8d2f7.localhost:5173/?motionDesignEvidenceSession=wrong123',
-  ])('keeps normal restore and hydration behavior for %s', async (url) => {
+  ])('restores the project when the landing experience is disabled for %s', async (url) => {
     const restoreLastProject = vi.fn(async () => true);
     const loadProjectToStores = vi.fn(async () => {});
 
@@ -56,12 +56,25 @@ describe('Motion Design evidence startup isolation', () => {
     expect(loadProjectToStores).toHaveBeenCalledOnce();
   });
 
-  it('does not hydrate stores when normal project restore finds nothing', async () => {
+  it('restores and hydrates the last project on an editor refresh', async () => {
+    const restoreLastProject = vi.fn(async () => true);
+    const loadProjectToStores = vi.fn(async () => {});
+
+    await expect(runToolbarProjectBootRestore({
+      url: 'http://localhost:5173/editor',
+      restoreLastProject,
+      loadProjectToStores,
+    })).resolves.toBe('restored');
+    expect(restoreLastProject).toHaveBeenCalledOnce();
+    expect(loadProjectToStores).toHaveBeenCalledOnce();
+  });
+
+  it('does not hydrate stores when editor project restore finds nothing', async () => {
     const restoreLastProject = vi.fn(async () => false);
     const loadProjectToStores = vi.fn(async () => {});
 
     await expect(runToolbarProjectBootRestore({
-      url: 'http://localhost:5173/',
+      url: 'http://localhost:5173/editor',
       restoreLastProject,
       loadProjectToStores,
     })).resolves.toBe('not-restored');

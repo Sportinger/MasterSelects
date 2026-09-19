@@ -1,7 +1,11 @@
 import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import { resolveEditableHookLayerMetadata } from '../../aiTools/editableHookIdentity';
-import { effectiveWordTiming } from '../../transcription/effectiveWordTiming';
 import { APP_VERSION } from '../../../version';
+import {
+  TIMELINE_SPEECH_SNAPSHOT_MAX_SEGMENTS,
+  TIMELINE_SPEECH_SNAPSHOT_MAX_TEXT_CHARACTERS,
+} from '../../transcription/timelineSpeechContract';
+import { buildTimelineSpeechProjection } from '../../transcription/timelineSpeechProjection';
 import { sanitizeHostedAgentFastV2SemanticJson } from './fastV2SemanticTimelineState';
 import { buildHostedAgentFastV2EditorToolCatalog } from './fastV2EditorToolCatalog';
 import {
@@ -10,8 +14,10 @@ import {
 import {
   HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST,
   HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION,
+  HOSTED_AGENT_FAST_V2_MAX_TIMELINE_TRANSCRIPT_WORDS,
   HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION,
   parseHostedAgentFastV2StartRequest,
+  type HostedAgentFastV2RequestedAgentMode,
   type HostedAgentFastV2ExecutionProfile,
   type HostedAgentFastV2RequestedExecutionMode,
   type HostedAgentFastV2RequestedModelClass,
@@ -21,9 +27,6 @@ import {
 } from './fastV2StartContract';
 
 const MAX_LABEL_CHARACTERS = 500;
-const MAX_TRANSCRIPT_TEXT_CHARACTERS = 500;
-const MAX_TRANSCRIPT_WORDS_PER_CLIP = 3_000;
-const MAX_TRANSCRIPT_WORDS_PER_SNAPSHOT = 3_500;
 
 export interface HostedAgentFastV2TimelineSnapshotInput {
   clips: readonly TimelineClip[];
@@ -41,7 +44,9 @@ export interface BuildHostedAgentFastV2BrowserRequestInput {
   clientInstanceId: string;
   conversationRef?: string;
   executionProfile?: HostedAgentFastV2ExecutionProfile;
+  preproductionRunId?: string;
   request: string;
+  requestedAgentMode?: HostedAgentFastV2RequestedAgentMode;
   requestedExecutionMode?: HostedAgentFastV2RequestedExecutionMode;
   requestedModelClass?: HostedAgentFastV2RequestedModelClass;
   runSource: HostedAgentFastV2RunSource;
@@ -57,24 +62,6 @@ function finiteOrNull(value: number | null): number | null {
 function boundedLabel(value: string): string {
   if (/^\s*data:/i.test(value)) return '[redacted-data-label]';
   return value.slice(0, MAX_LABEL_CHARACTERS);
-}
-
-function boundedTranscriptText(value: string): string {
-  if (/^\s*data:/i.test(value)) return '[redacted-data-transcript-word]';
-  return value.slice(0, MAX_TRANSCRIPT_TEXT_CHARACTERS);
-}
-
-function roundedTimelineTime(value: number): number {
-  const rounded = Math.round(value * 1_000_000) / 1_000_000;
-  return Object.is(rounded, -0) ? 0 : rounded;
-}
-
-function sourceTimeToTimelineTime(clip: TimelineClip, sourceTime: number): number {
-  const sourceSpan = Math.max(0.000001, clip.outPoint - clip.inPoint);
-  const sourceRatio = Math.min(1, Math.max(0, (sourceTime - clip.inPoint) / sourceSpan));
-  const reversed = clip.reversed === true || (clip.speed ?? 1) < 0;
-  const timelineRatio = reversed ? 1 - sourceRatio : sourceRatio;
-  return roundedTimelineTime(clip.startTime + timelineRatio * clip.duration);
 }
 
 function compactEditableHook(
@@ -140,47 +127,6 @@ function compactEditableHook(
   return undefined;
 }
 
-function compactClipTranscript(
-  clip: TimelineClip,
-  maximumWords: number,
-): {
-  timebase: 'timeline-seconds';
-  totalWords: number;
-  truncated: boolean;
-  words: Array<{ text: string; timelineEnd: number; timelineStart: number }>;
-} | undefined {
-  if (!clip.transcript?.length || maximumWords <= 0) return undefined;
-  const matchingWords = clip.transcript.flatMap((word) => {
-    const { start, end } = effectiveWordTiming(word);
-    const text = typeof word.text === 'string' ? boundedTranscriptText(word.text.trim()) : '';
-    if (
-      !Number.isFinite(start)
-      || !Number.isFinite(end)
-      || end <= start
-      || end < clip.inPoint
-      || start > clip.outPoint
-      || text.length === 0
-    ) {
-      return [];
-    }
-    const timelineA = sourceTimeToTimelineTime(clip, Math.max(clip.inPoint, start));
-    const timelineB = sourceTimeToTimelineTime(clip, Math.min(clip.outPoint, end));
-    return [{
-      text,
-      timelineEnd: Math.max(timelineA, timelineB),
-      timelineStart: Math.min(timelineA, timelineB),
-    }];
-  });
-  if (matchingWords.length === 0) return undefined;
-  const words = matchingWords.slice(0, maximumWords);
-  return {
-    timebase: 'timeline-seconds',
-    totalWords: matchingWords.length,
-    truncated: words.length < matchingWords.length,
-    words,
-  };
-}
-
 function compactTimelinePayload(input: HostedAgentFastV2TimelineSnapshotInput) {
   const semanticTimelineState = sanitizeHostedAgentFastV2SemanticJson(input.semanticTimelineState);
   const activeComposition = semanticTimelineState.activeComposition;
@@ -195,40 +141,36 @@ function compactTimelinePayload(input: HostedAgentFastV2TimelineSnapshotInput) {
       }
     : undefined;
   const hookMetadata = resolveEditableHookLayerMetadata(input.clips, input.tracks);
-  const tracksById = new Map(input.tracks.map((track) => [track.id, track]));
-  const clipsById = new Map(input.clips.map((clip) => [clip.id, clip]));
-  const transcriptByClipId = new Map<
+  const timelineSpeech = buildTimelineSpeechProjection({
+    clips: input.clips,
+    maximumWords: HOSTED_AGENT_FAST_V2_MAX_TIMELINE_TRANSCRIPT_WORDS,
+    tracks: input.tracks,
+  });
+  const transcriptWordsByClipId = new Map<
     string,
-    NonNullable<ReturnType<typeof compactClipTranscript>>
+    Array<{ text: string; timelineEnd: number; timelineStart: number }>
   >();
-  let remainingTranscriptWords = MAX_TRANSCRIPT_WORDS_PER_SNAPSHOT;
-  const transcriptCandidates = [...input.clips]
-    .filter((clip) => {
-      if (!clip.transcript?.length) return false;
-      const track = tracksById.get(clip.trackId);
-      const linkedTrack = clip.linkedClipId === undefined
-        ? undefined
-        : tracksById.get(clipsById.get(clip.linkedClipId)?.trackId ?? '');
-      // A linked video/audio pair shares one source transcript. Put it on the
-      // video clip so the model has one unambiguous edit target and withLinked
-      // can preserve the partner without duplicating every word in the payload.
-      return track?.type !== 'audio' || linkedTrack?.type !== 'video';
-    })
-    .sort((left, right) => (
-      Number(input.selectedClipIds.has(right.id)) - Number(input.selectedClipIds.has(left.id))
-      || left.startTime - right.startTime
-      || left.id.localeCompare(right.id)
-    ));
-  for (const clip of transcriptCandidates) {
-    if (remainingTranscriptWords <= 0) break;
-    const transcript = compactClipTranscript(
-      clip,
-      Math.min(MAX_TRANSCRIPT_WORDS_PER_CLIP, remainingTranscriptWords),
-    );
-    if (!transcript) continue;
-    transcriptByClipId.set(clip.id, transcript);
-    remainingTranscriptWords -= transcript.words.length;
+  for (const word of timelineSpeech.words) {
+    const words = transcriptWordsByClipId.get(word.clipId) ?? [];
+    words.push({
+      text: word.text,
+      timelineEnd: word.timelineEnd,
+      timelineStart: word.timelineStart,
+    });
+    transcriptWordsByClipId.set(word.clipId, words);
   }
+  const transcriptByClipId = new Map([...transcriptWordsByClipId].map(([clipId, words]) => {
+    const counts = timelineSpeech.clipWordCounts.get(clipId);
+    const totalWords = counts?.totalWords ?? words.length;
+    return [clipId, {
+      timebase: 'timeline-seconds' as const,
+      totalWords,
+      truncated: words.length < totalWords,
+      words,
+    }] as const;
+  }));
+  const speechSegments = timelineSpeech.segments.slice(0, TIMELINE_SPEECH_SNAPSHOT_MAX_SEGMENTS);
+  const speechText = timelineSpeech.text.slice(0, TIMELINE_SPEECH_SNAPSHOT_MAX_TEXT_CHARACTERS);
 
   return {
     clips: input.clips.map((clip) => {
@@ -254,6 +196,23 @@ function compactTimelinePayload(input: HostedAgentFastV2TimelineSnapshotInput) {
     playheadPosition: input.playheadPosition,
     selectedClipIds: [...input.selectedClipIds].sort(),
     semanticTimelineState,
+    timelineSpeech: {
+      schemaVersion: 1,
+      audibleClipCount: timelineSpeech.audibleClipCount,
+      excluded: timelineSpeech.excluded,
+      overlappingWordCount: timelineSpeech.overlappingWordCount,
+      projectedWordCount: timelineSpeech.words.length,
+      range: timelineSpeech.range,
+      segments: speechSegments,
+      segmentsTruncated: speechSegments.length < timelineSpeech.segments.length,
+      sourceClipCount: timelineSpeech.sourceClipCount,
+      text: speechText,
+      textTruncated: speechText.length < timelineSpeech.text.length,
+      timebase: timelineSpeech.timebase,
+      timelineRevision: input.timelineRevision,
+      totalWords: timelineSpeech.totalWords,
+      truncated: timelineSpeech.truncated,
+    },
     tracks: input.tracks.map((track) => ({
       id: track.id,
       locked: track.locked === true,
@@ -298,8 +257,14 @@ export async function buildHostedAgentFastV2BrowserRequest(
     ...(input.executionProfile === undefined
       ? {}
       : { executionProfile: input.executionProfile }),
+    ...(input.preproductionRunId === undefined
+      ? {}
+      : { preproductionRunId: input.preproductionRunId }),
     protocolVersion: HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION,
     request: input.request,
+    ...(input.requestedAgentMode === undefined
+      ? {}
+      : { requestedAgentMode: input.requestedAgentMode }),
     ...(input.requestedExecutionMode === undefined
       ? {}
       : { requestedExecutionMode: input.requestedExecutionMode }),

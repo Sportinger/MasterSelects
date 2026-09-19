@@ -46,9 +46,13 @@ export function buildSceneWorldMatrix(transform: SceneWorldTransform): Float32Ar
   matrix[9] = -b * c * sz;
   matrix[10] = a * c * sz;
   matrix[11] = 0;
-  matrix[12] = transform.position.x;
-  matrix[13] = transform.position.y;
-  matrix[14] = transform.position.z;
+  const anchor = transform.anchor ?? { x: 0, y: 0, z: 0 };
+  matrix[12] = transform.position.x
+    - matrix[0] * anchor.x - matrix[4] * anchor.y - matrix[8] * anchor.z;
+  matrix[13] = transform.position.y
+    - matrix[1] * anchor.x - matrix[5] * anchor.y - matrix[9] * anchor.z;
+  matrix[14] = transform.position.z
+    - matrix[2] * anchor.x - matrix[6] * anchor.y - matrix[10] * anchor.z;
   matrix[15] = 1;
   return matrix;
 }

@@ -1,0 +1,155 @@
+@layer features {
+  .inspector-section {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: visible;
+    border-top: 1px solid var(--separator-color);
+    border-bottom: 1px solid var(--separator-color);
+    background: var(--surface-panel, var(--bg-secondary));
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  .inspector-section-header {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    height: 34px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 7px 0 6px;
+    background: var(--surface-panel, var(--bg-secondary));
+  }
+
+  .inspector-disclosure {
+    display: inline-flex;
+    min-width: 0;
+    height: 100%;
+    flex: 1;
+    align-items: center;
+    gap: 3px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    font-weight: 400;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .inspector-disclosure:disabled,
+  .inspector-status-control:disabled {
+    cursor: default;
+  }
+
+  .inspector-disclosure > svg {
+    width: 10px;
+    height: 10px;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: var(--text-muted);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.25;
+    transition: transform var(--transition-fast);
+  }
+
+  .inspector-section:not(.is-open) .inspector-disclosure > svg {
+    transform: rotate(-90deg);
+  }
+
+  .inspector-status-spacer {
+    width: 20px;
+    height: 11px;
+    flex: 0 0 20px;
+  }
+
+  .inspector-status-control {
+    position: absolute;
+    top: 11px;
+    left: 19px;
+    box-sizing: border-box;
+    width: 20px;
+    height: 11px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: #17171a;
+    box-shadow: inset 0 0 0 1px #101012, 0 1px 1px rgba(0, 0, 0, 0.45);
+    cursor: pointer;
+  }
+
+  .inspector-status-control::after {
+    position: absolute;
+    top: 2px;
+    left: 10px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--timeline-playhead);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+    content: '';
+  }
+
+  .inspector-status-control.is-inactive::after {
+    left: 2px;
+    background: var(--text-disabled);
+  }
+
+  .inspector-section.is-disabled .inspector-section-content,
+  .inspector-section.is-disabled .inspector-header-actions {
+    opacity: 0.45;
+    pointer-events: none;
+  }
+
+  .inspector-section.is-disabled .inspector-disclosure {
+    color: var(--text-disabled);
+  }
+
+  .inspector-section-content {
+    min-width: 0;
+    padding: 4px 7px 6px;
+  }
+
+  .inspector-row {
+    box-sizing: border-box;
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 26px;
+    align-items: center;
+  }
+
+  .inspector-row-label {
+    min-width: 0;
+    grid-column: 1;
+    overflow: hidden;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .inspector-row-control {
+    min-width: 0;
+    grid-column: 3;
+  }
+
+  .inspector-row-actions {
+    min-width: 0;
+    grid-column: 5;
+  }
+
+  .inspector-row.is-disabled {
+    opacity: 0.55;
+  }
+}

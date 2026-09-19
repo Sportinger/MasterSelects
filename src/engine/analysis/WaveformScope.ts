@@ -9,6 +9,10 @@ struct Params {
   outH: u32,
   srcW: u32,
   srcH: u32,
+  mode: u32,
+  sampleStride: u32,
+  _pad0: u32,
+  _pad1: u32,
 }
 
 @group(0) @binding(0) var inputTex: texture_2d<f32>;
@@ -20,12 +24,13 @@ struct Params {
 
 @compute @workgroup_size(16, 16)
 fn main(@builtin(global_invocation_id) gid: vec3u) {
-  if (gid.x >= params.srcW || gid.y >= params.srcH) { return; }
+  let sourcePos = vec2u(gid.x, gid.y * params.sampleStride);
+  if (sourcePos.x >= params.srcW || sourcePos.y >= params.srcH) { return; }
 
-  let pixel = textureLoad(inputTex, vec2i(gid.xy), 0);
+  let pixel = textureLoad(inputTex, vec2i(sourcePos), 0);
 
   // Sub-pixel X: distribute weight across 2 adjacent columns (scale 256)
-  let fxPos = f32(gid.x) * f32(params.outW) / f32(params.srcW);
+  let fxPos = f32(sourcePos.x) * f32(params.outW) / f32(params.srcW);
   let x0 = u32(fxPos);
   let x1 = min(x0 + 1u, params.outW - 1u);
   let frac = fxPos - f32(x0);
@@ -35,56 +40,72 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let hm1 = f32(params.outH - 1u);
   let maxY = i32(params.outH - 1u);
 
-  // Gaussian vertical spread kernel — 5 rows for smooth DaVinci-style traces
-  let gK = array<f32, 5>(0.06, 0.24, 0.40, 0.24, 0.06);
+  // Strong nine-row blur with a soft core and broad phosphor-like falloff.
+  let gK = array<f32, 9>(0.04, 0.07, 0.11, 0.16, 0.24, 0.16, 0.11, 0.07, 0.04);
 
   // ── Red ──
-  let ryC = i32(hm1 - clamp(pixel.r, 0.0, 1.0) * hm1);
-  for (var d: i32 = -2; d <= 2; d += 1) {
-    let y = u32(clamp(ryC + d, 0, maxY));
-    let yw = gK[u32(d + 2)];
-    let idx = y * params.outW;
-    let wA = u32(f32(w0) * yw);
-    let wB = u32(f32(w1) * yw);
-    if (wA > 0u) { atomicAdd(&accumR[idx + x0], wA); }
-    if (wB > 0u) { atomicAdd(&accumR[idx + x1], wB); }
+  if (params.mode == 0u || params.mode == 1u || params.mode == 5u) {
+    let ryC = i32(hm1 - clamp(pixel.r, 0.0, 1.0) * hm1);
+    for (var d: i32 = -4; d <= 4; d += 1) {
+      let sampleY = ryC + d;
+      if (sampleY < 0 || sampleY > maxY) { continue; }
+      let y = u32(sampleY);
+      let yw = gK[u32(d + 4)];
+      let idx = y * params.outW;
+      let wA = u32(f32(w0) * yw);
+      let wB = u32(f32(w1) * yw);
+      if (wA > 0u) { atomicAdd(&accumR[idx + x0], wA); }
+      if (wB > 0u) { atomicAdd(&accumR[idx + x1], wB); }
+    }
   }
 
   // ── Green ──
-  let gyC = i32(hm1 - clamp(pixel.g, 0.0, 1.0) * hm1);
-  for (var d: i32 = -2; d <= 2; d += 1) {
-    let y = u32(clamp(gyC + d, 0, maxY));
-    let yw = gK[u32(d + 2)];
-    let idx = y * params.outW;
-    let wA = u32(f32(w0) * yw);
-    let wB = u32(f32(w1) * yw);
-    if (wA > 0u) { atomicAdd(&accumG[idx + x0], wA); }
-    if (wB > 0u) { atomicAdd(&accumG[idx + x1], wB); }
+  if (params.mode == 0u || params.mode == 2u || params.mode == 5u) {
+    let gyC = i32(hm1 - clamp(pixel.g, 0.0, 1.0) * hm1);
+    for (var d: i32 = -4; d <= 4; d += 1) {
+      let sampleY = gyC + d;
+      if (sampleY < 0 || sampleY > maxY) { continue; }
+      let y = u32(sampleY);
+      let yw = gK[u32(d + 4)];
+      let idx = y * params.outW;
+      let wA = u32(f32(w0) * yw);
+      let wB = u32(f32(w1) * yw);
+      if (wA > 0u) { atomicAdd(&accumG[idx + x0], wA); }
+      if (wB > 0u) { atomicAdd(&accumG[idx + x1], wB); }
+    }
   }
 
   // ── Blue ──
-  let byC = i32(hm1 - clamp(pixel.b, 0.0, 1.0) * hm1);
-  for (var d: i32 = -2; d <= 2; d += 1) {
-    let y = u32(clamp(byC + d, 0, maxY));
-    let yw = gK[u32(d + 2)];
-    let idx = y * params.outW;
-    let wA = u32(f32(w0) * yw);
-    let wB = u32(f32(w1) * yw);
-    if (wA > 0u) { atomicAdd(&accumB[idx + x0], wA); }
-    if (wB > 0u) { atomicAdd(&accumB[idx + x1], wB); }
+  if (params.mode == 0u || params.mode == 3u || params.mode == 5u) {
+    let byC = i32(hm1 - clamp(pixel.b, 0.0, 1.0) * hm1);
+    for (var d: i32 = -4; d <= 4; d += 1) {
+      let sampleY = byC + d;
+      if (sampleY < 0 || sampleY > maxY) { continue; }
+      let y = u32(sampleY);
+      let yw = gK[u32(d + 4)];
+      let idx = y * params.outW;
+      let wA = u32(f32(w0) * yw);
+      let wB = u32(f32(w1) * yw);
+      if (wA > 0u) { atomicAdd(&accumB[idx + x0], wA); }
+      if (wB > 0u) { atomicAdd(&accumB[idx + x1], wB); }
+    }
   }
 
   // ── Luma (BT.709) ──
-  let luma = 0.2126 * clamp(pixel.r, 0.0, 1.0) + 0.7152 * clamp(pixel.g, 0.0, 1.0) + 0.0722 * clamp(pixel.b, 0.0, 1.0);
-  let lyC = i32(hm1 - luma * hm1);
-  for (var d: i32 = -2; d <= 2; d += 1) {
-    let y = u32(clamp(lyC + d, 0, maxY));
-    let yw = gK[u32(d + 2)];
-    let idx = y * params.outW;
-    let wA = u32(f32(w0) * yw);
-    let wB = u32(f32(w1) * yw);
-    if (wA > 0u) { atomicAdd(&accumL[idx + x0], wA); }
-    if (wB > 0u) { atomicAdd(&accumL[idx + x1], wB); }
+  if (params.mode == 4u) {
+    let luma = 0.2126 * clamp(pixel.r, 0.0, 1.0) + 0.7152 * clamp(pixel.g, 0.0, 1.0) + 0.0722 * clamp(pixel.b, 0.0, 1.0);
+    let lyC = i32(hm1 - luma * hm1);
+    for (var d: i32 = -4; d <= 4; d += 1) {
+      let sampleY = lyC + d;
+      if (sampleY < 0 || sampleY > maxY) { continue; }
+      let y = u32(sampleY);
+      let yw = gK[u32(d + 4)];
+      let idx = y * params.outW;
+      let wA = u32(f32(w0) * yw);
+      let wB = u32(f32(w1) * yw);
+      if (wA > 0u) { atomicAdd(&accumL[idx + x0], wA); }
+      if (wB > 0u) { atomicAdd(&accumL[idx + x1], wB); }
+    }
   }
 }
 `;
@@ -152,11 +173,17 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
   let h = u32(params.outH);
   let iw = i32(w);
   let ih = i32(h);
-  let mode = params.mode;
+  var mode = params.mode;
+  var waveformUv = uv;
+  if (mode == 5u) {
+    let paradePosition = min(uv.x * 3.0, 2.999999);
+    mode = u32(paradePosition) + 1u;
+    waveformUv.x = fract(paradePosition);
+  }
 
   // Floating-point grid position for bilinear sampling
-  let fx = uv.x * params.outW - 0.5;
-  let fy = uv.y * params.outH - 0.5;
+  let fx = waveformUv.x * params.outW - 0.5;
+  let fy = waveformUv.y * params.outH - 0.5;
 
   // Center value (bilinear — sharp trace)
   let rCenter = sampleAccum(&accumR, fx, fy, w, h);
@@ -182,16 +209,26 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
   let rv = params.refValue;
   let s = params.intensity;
 
-  // Tone-map: main trace (sharp) + subtle bloom halo
-  let rT = pow(clamp(sqrt(rCenter) / rv, 0.0, 1.0), 0.75) * s;
-  let gT = pow(clamp(sqrt(gCenter) / rv, 0.0, 1.0), 0.75) * s;
-  let bT = pow(clamp(sqrt(bCenter) / rv, 0.0, 1.0), 0.75) * s;
-  let lT = pow(clamp(sqrt(lCenter) / rv, 0.0, 1.0), 0.75) * s;
+  // Preserve the unclipped density for a gradual white-hot phosphor core.
+  let rDensity = sqrt(rCenter) / rv;
+  let gDensity = sqrt(gCenter) / rv;
+  let bDensity = sqrt(bCenter) / rv;
+  let lDensity = sqrt(lCenter) / rv;
+  let rBloomDensity = sqrt(rBloom) / rv;
+  let gBloomDensity = sqrt(gBloom) / rv;
+  let bBloomDensity = sqrt(bBloom) / rv;
+  let lBloomDensity = sqrt(lBloom) / rv;
 
-  let rG = pow(clamp(sqrt(rBloom) / rv, 0.0, 1.0), 0.65) * 0.12;
-  let gG = pow(clamp(sqrt(gBloom) / rv, 0.0, 1.0), 0.65) * 0.12;
-  let bG = pow(clamp(sqrt(bBloom) / rv, 0.0, 1.0), 0.65) * 0.12;
-  let lG = pow(clamp(sqrt(lBloom) / rv, 0.0, 1.0), 0.65) * 0.12;
+  // Tone-map: crisp colored trace with a quieter, smoothly fading halo.
+  let rT = pow(clamp(rDensity, 0.0, 1.0), 0.92) * s * 0.72;
+  let gT = pow(clamp(gDensity, 0.0, 1.0), 0.92) * s * 0.72;
+  let bT = pow(clamp(bDensity, 0.0, 1.0), 0.92) * s * 0.72;
+  let lT = pow(clamp(lDensity, 0.0, 1.0), 0.92) * s * 0.72;
+
+  let rG = pow(clamp(rBloomDensity, 0.0, 1.0), 0.85) * 0.35;
+  let gG = pow(clamp(gBloomDensity, 0.0, 1.0), 0.85) * 0.35;
+  let bG = pow(clamp(bBloomDensity, 0.0, 1.0), 0.85) * 0.35;
+  let lG = pow(clamp(lBloomDensity, 0.0, 1.0), 0.85) * 0.35;
 
   // Additive phosphor composite based on mode
   var color: vec3f;
@@ -201,27 +238,30 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
   } else if (mode == 1u) {
     // Red only
     let v = clamp(rT + rG, 0.0, 1.0);
-    color = vec3f(v, v * 0.15, v * 0.15);
+    let hot = smoothstep(0.55, 1.10, rDensity) * 0.86;
+    color = mix(vec3f(v, v * 0.15, v * 0.15), vec3f(v), hot);
   } else if (mode == 2u) {
     // Green only
     let v = clamp(gT + gG, 0.0, 1.0);
-    color = vec3f(v * 0.15, v, v * 0.15);
+    let hot = smoothstep(0.55, 1.10, gDensity) * 0.86;
+    color = mix(vec3f(v * 0.15, v, v * 0.15), vec3f(v), hot);
   } else if (mode == 3u) {
     // Blue only
     let v = clamp(bT + bG, 0.0, 1.0);
-    color = vec3f(v * 0.15, v * 0.15, v);
+    let hot = smoothstep(0.55, 1.10, bDensity) * 0.86;
+    color = mix(vec3f(v * 0.15, v * 0.15, v), vec3f(v), hot);
   } else {
     // Luma: white trace
     let v = clamp(lT + lG, 0.0, 1.0);
     color = vec3f(v);
   }
 
-  // Grid: every 10 IRE (10% of height)
+  // Resolve-style yellow reference grid: every 10 IRE (10% of height)
   let gridY = fract(uv.y * 10.0);
   let dGrid = min(gridY, 1.0 - gridY) * params.outH * 0.5;
   if (dGrid < 0.8) {
-    let a = 0.15 * (1.0 - dGrid / 0.8);
-    color = max(color, vec3f(0.55, 0.45, 0.12) * a);
+    let a = 1.0 - dGrid / 0.8;
+    color = max(color, vec3f(0.32, 0.27, 0.02) * a);
   }
 
   return vec4f(color, 1.0);
@@ -244,6 +284,16 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
 
 export const OUT_W = 1024;
 export const OUT_H = 512;
+const TARGET_SOURCE_SAMPLES = 1_000_000;
+const MAX_SAMPLE_STRIDE = 4;
+
+export function getWaveformSampleStride(srcW: number, srcH: number): number {
+  const sourcePixels = Math.max(1, srcW) * Math.max(1, srcH);
+  return Math.min(
+    MAX_SAMPLE_STRIDE,
+    Math.max(1, Math.ceil(Math.sqrt(sourcePixels / TARGET_SOURCE_SAMPLES))),
+  );
+}
 
 export class WaveformScope {
   private device: GPUDevice;
@@ -277,7 +327,7 @@ export class WaveformScope {
     this.accumG = d.createBuffer({ size: bufSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
     this.accumB = d.createBuffer({ size: bufSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
     this.accumL = d.createBuffer({ size: bufSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    this.computeParams = d.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.computeParams = d.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.renderParams = d.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
     this.computeBGL = d.createBindGroupLayout({
@@ -335,9 +385,14 @@ export class WaveformScope {
     const d = this.device;
     const srcW = sourceTexture.width;
     const srcH = sourceTexture.height;
+    const sampleStride = getWaveformSampleStride(srcW, srcH);
 
-    d.queue.writeBuffer(this.computeParams, 0, new Uint32Array([OUT_W, OUT_H, srcW, srcH]));
-    const refValue = Math.sqrt(srcH / OUT_H) * 40.0;
+    d.queue.writeBuffer(
+      this.computeParams,
+      0,
+      new Uint32Array([OUT_W, OUT_H, srcW, srcH, mode, sampleStride, 0, 0]),
+    );
+    const refValue = Math.sqrt(srcH / OUT_H) * 40.0 / Math.sqrt(sampleStride);
     const paramsData = new ArrayBuffer(32);
     new Float32Array(paramsData, 0, 4).set([OUT_W, OUT_H, refValue, 0.9]);
     new Uint32Array(paramsData, 16, 4).set([mode, 0, 0, 0]);
@@ -406,7 +461,10 @@ export class WaveformScope {
     const cp = encoder.beginComputePass();
     cp.setPipeline(this.computePipeline);
     cp.setBindGroup(0, computeBG);
-    cp.dispatchWorkgroups(Math.ceil(srcW / 16), Math.ceil(srcH / 16));
+    cp.dispatchWorkgroups(
+      Math.ceil(srcW / 16),
+      Math.ceil(srcH / (16 * sampleStride)),
+    );
     cp.end();
 
     // Render pass

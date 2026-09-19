@@ -2,6 +2,8 @@ import type { ClipMask } from '../../types/masks';
 import type { ClipTransform } from '../../types/timelineCore';
 import type { Keyframe } from '../../types/keyframes';
 import type { Effect } from '../../types/effects';
+import { bindCableRenderTime } from '../faceCables/cableRenderTime';
+import { appendSurfaceEffects, type SurfaceClip } from '../planarTracking/surfaceEffects';
 import { createMaskEdgeFeatherProperty, createMaskPathProperty, parseMaskProperty } from '../../types/animationProperties';
 import {
   getLegacyEffectKeyframeBaseValue,
@@ -31,14 +33,19 @@ export function evaluateCompositionClipEffects(
   effects: Effect[] | undefined,
   keyframes: readonly Keyframe[] | undefined,
   localTime: number,
+  surfaceClip?: SurfaceClip,
 ): Effect[] {
-  if (!effects?.length || !keyframes?.length) return effects ?? [];
+  const withSurfaces = (result: Effect[]) => {
+    const timed = bindCableRenderTime(result, localTime);
+    return surfaceClip ? appendSurfaceEffects(timed, surfaceClip, localTime, keyframes) : timed;
+  };
+  if (!effects?.length || !keyframes?.length) return withSurfaces(effects ?? []);
 
   const effectKeyframes = keyframes.filter((keyframe) => keyframe.property.startsWith('effect.'));
-  if (effectKeyframes.length === 0) return effects;
+  if (effectKeyframes.length === 0) return withSurfaces(effects);
 
   const interpolationKeyframes = [...keyframes];
-  return effects.map((effect) => {
+  return withSurfaces(effects.map((effect) => {
     let params = { ...effect.params };
     const paramNames = new Set<string>();
 
@@ -68,7 +75,7 @@ export function evaluateCompositionClipEffects(
     });
 
     return { ...effect, params };
-  });
+  }));
 }
 
 export function evaluateCompositionClipMasks(
@@ -84,6 +91,7 @@ export function evaluateCompositionClipMasks(
     const nextMask = structuredClone(mask);
     const positionXProperty = `mask.${mask.id}.position.x` as Keyframe['property'];
     const positionYProperty = `mask.${mask.id}.position.y` as Keyframe['property'];
+    const rotationProperty = `mask.${mask.id}.rotation` as Keyframe['property'];
     const featherProperty = `mask.${mask.id}.feather` as Keyframe['property'];
     const featherQualityProperty = `mask.${mask.id}.featherQuality` as Keyframe['property'];
 
@@ -92,6 +100,9 @@ export function evaluateCompositionClipMasks(
     }
     if (maskKeyframes.some((keyframe) => keyframe.property === positionYProperty)) {
       nextMask.position.y = interpolateKeyframes(maskKeyframes, positionYProperty, localTime, mask.position.y);
+    }
+    if (maskKeyframes.some((keyframe) => keyframe.property === rotationProperty)) {
+      nextMask.rotation = interpolateKeyframes(maskKeyframes, rotationProperty, localTime, mask.rotation ?? 0);
     }
     if (maskKeyframes.some((keyframe) => keyframe.property === featherProperty)) {
       nextMask.feather = Math.max(0, interpolateKeyframes(maskKeyframes, featherProperty, localTime, mask.feather));

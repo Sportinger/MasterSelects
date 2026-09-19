@@ -1,0 +1,122 @@
+@layer features {
+.color-keyframes-panel {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid #0b0c0f;
+  background: #202126;
+}
+
+.color-keyframes-ruler,
+.color-keyframes-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 150px minmax(0, 1fr);
+}
+
+.color-keyframes-ruler {
+  height: 30px;
+  min-height: 30px;
+  border-bottom: 1px solid #0d0e11;
+  background: #1d1e23;
+}
+
+.color-keyframes-ruler > span {
+  border-right: 1px solid #0d0e11;
+}
+
+.color-keyframes-ruler > div,
+.color-keyframes-lane {
+  position: relative;
+  min-width: 0;
+  background-image: linear-gradient(90deg, transparent calc(33.333% - 1px), #3a3c43 33.333%);
+  background-size: 33.333% 100%;
+}
+
+.color-keyframes-ruler label {
+  position: absolute;
+  top: 8px;
+  color: #81858e;
+  font-family: monospace;
+  font-size: 9px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.color-keyframes-ruler label:first-child {
+  transform: translateX(4px);
+}
+
+.color-keyframes-ruler label:last-child {
+  transform: translateX(calc(-100% - 4px));
+}
+
+.color-keyframes-rows {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.color-keyframes-row {
+  height: 34px;
+  border-bottom: 1px solid #111216;
+}
+
+.color-keyframes-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  overflow: hidden;
+  border-right: 1px solid #0d0e11;
+  color: #adb0b7;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.color-keyframes-label i {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: #f0f1f3;
+  box-shadow: 16px 0 0 -1px #7b7e86;
+}
+
+.color-keyframes-row.master .color-keyframes-label {
+  justify-content: center;
+  background: #292b31;
+  color: #f0f1f3;
+}
+
+.color-keyframes-row.master .color-keyframes-lane {
+  background-color: #858b96;
+  background-image: linear-gradient(90deg, transparent calc(33.333% - 1px), #a8adb5 33.333%);
+}
+
+.color-keyframes-lane b {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border: 1px solid #17181c;
+  background: #d6d8dc;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.color-keyframes-playhead {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ef5a4d;
+  box-shadow: 0 0 0 1px rgb(26 15 15 / 55%);
+}
+}

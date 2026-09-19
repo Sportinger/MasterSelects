@@ -93,6 +93,10 @@ export function TimelineHeaderMixerMainControls({
           <span className="audio-track-pan-value" aria-hidden="true">{trackPanLabel}</span>
         </div>
       )}
+      <span className="resolve-audio-format" aria-hidden="true">
+        {(track.audioState?.effectStack?.length ?? 0) > 0 && <span className="resolve-audio-fx-mark">fx</span>}
+        <span>2.0</span>
+      </span>
       {isMidiTrack && (
         <div
           className="midi-instrument-row"

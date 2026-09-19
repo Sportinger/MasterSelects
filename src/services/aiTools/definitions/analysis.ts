@@ -352,13 +352,13 @@ export const analysisToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'startClipTranscription',
-      description: 'Start speech-to-text transcription for a clip. Transcription runs in the background. Check clip details later to see results.',
+      description: 'Start speech-to-text transcription for one existing timeline clip. Transcription runs in the background and only one clip can be transcribed at a time. Poll getClipTranscript until transcriptStatus is ready or error before starting another clip.',
       parameters: {
         type: 'object',
         properties: {
           clipId: {
             type: 'string',
-            description: 'The ID of the clip to transcribe',
+            description: 'An existing timeline clip ID, never a media item/mediaFileId',
           },
         },
         required: ['clipId'],

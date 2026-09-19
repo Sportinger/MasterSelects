@@ -1,5 +1,6 @@
 import { Logger } from '../../../services/logger';
 import { vfPipelineMonitor } from '../../../services/vfPipelineMonitor';
+import { shouldStageHtmlVideoFrame } from '../videoFrameCopyPolicy';
 
 const log = Logger.create('ScrubbingCache');
 
@@ -25,6 +26,11 @@ export class LastFrameCache {
 
   captureVideoFrame(video: HTMLVideoElement, ownerId?: string): boolean {
     if (video.videoWidth === 0 || video.videoHeight === 0) return false;
+
+    // Android Chromium can report a successful copy from a paused decoder
+    // surface while writing only black pixels. Preserve the last known-good
+    // playback frame; the async bitmap/WebCodecs still-frame paths replace it.
+    if (shouldStageHtmlVideoFrame(video)) return false;
 
     const width = video.videoWidth;
     const height = video.videoHeight;

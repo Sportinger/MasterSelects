@@ -14,7 +14,9 @@ function sameInstrument(a: unknown, b: unknown): boolean {
   const aArr = Array.isArray(a), bArr = Array.isArray(b);
   if (aArr || bArr) return aArr && bArr && a.length === b.length && a.every((v, i) => sameInstrument(v, b[i]));
   const ak = Object.keys(a as object), bk = Object.keys(b as object);
-  return ak.length === bk.length && ak.every((k) => sameInstrument((a as any)[k], (b as any)[k]));
+  const aRecord = a as Record<string, unknown>;
+  const bRecord = b as Record<string, unknown>;
+  return ak.length === bk.length && ak.every((k) => sameInstrument(aRecord[k], bRecord[k]));
 }
 
 describe('SIMPLE_SYNTH_PRESETS', () => {

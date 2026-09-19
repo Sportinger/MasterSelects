@@ -1,7 +1,9 @@
 import { useCallback, useMemo } from 'react';
 import type { TimelineAuxiliaryLayerProps } from '../components/TimelineAuxiliaryLayer';
+import { trackTimelineEdit } from '../../../services/productAnalytics';
 import { createSubcompositionFromSelection } from '../../../services/timelineSubcomposition';
 import { useTimelineStore } from '../../../stores/timeline';
+import { parseFlockLayerTarget, type TimelineAddLayerTarget } from '../utils/timelineEmptyContextMenu';
 
 type TimelineContextMenuProps = TimelineAuxiliaryLayerProps['timelineContextMenuProps'];
 type EmptyContextMenuProps = TimelineAuxiliaryLayerProps['emptyContextMenuProps'];
@@ -90,6 +92,83 @@ export function useTimelineAuxiliaryLayerProps({
     void addCaptionClip(trackId, time);
   }, [addCaptionClip]);
 
+  const handleAddTimelineLayer = useCallback<
+    NonNullable<EmptyContextMenuProps['onAddTimelineLayer']>
+  >((time, trackId, target: TimelineAddLayerTarget) => {
+    const timeline = useTimelineStore.getState();
+    const selectCreatedClip = (clipId: string | null) => {
+      if (clipId) useTimelineStore.getState().selectClip(clipId);
+    };
+
+    const flockPresetId = parseFlockLayerTarget(target);
+    if (flockPresetId) {
+      selectCreatedClip(timeline.addFlockClip(trackId, time, { presetId: flockPresetId }));
+      return;
+    }
+
+    switch (target) {
+      case 'text':
+        void timeline.addTextClip(trackId, time, undefined, true).then((clipId) => {
+          selectCreatedClip(clipId);
+          if (clipId) trackTimelineEdit('Add text');
+        });
+        return;
+      case 'solid':
+        selectCreatedClip(timeline.addSolidClip(trackId, time, undefined, undefined, true));
+        return;
+      case 'mesh-cube':
+        selectCreatedClip(timeline.addMeshClip(trackId, time, 'cube', undefined, true));
+        return;
+      case 'mesh-sphere':
+        selectCreatedClip(timeline.addMeshClip(trackId, time, 'sphere', undefined, true));
+        return;
+      case 'mesh-plane':
+        selectCreatedClip(timeline.addMeshClip(trackId, time, 'plane', undefined, true));
+        return;
+      case 'mesh-cylinder':
+        selectCreatedClip(timeline.addMeshClip(trackId, time, 'cylinder', undefined, true));
+        return;
+      case 'mesh-torus':
+        selectCreatedClip(timeline.addMeshClip(trackId, time, 'torus', undefined, true));
+        return;
+      case 'mesh-cone':
+        selectCreatedClip(timeline.addMeshClip(trackId, time, 'cone', undefined, true));
+        return;
+      case 'text-3d':
+        selectCreatedClip(timeline.addMeshClip(trackId, time, 'text3d', undefined, true));
+        return;
+      case 'camera':
+        selectCreatedClip(timeline.addCameraClip(trackId, time, undefined, true));
+        return;
+      case 'light':
+        selectCreatedClip(timeline.addLightClip(trackId, time, undefined, true));
+        return;
+      case 'splat-effector':
+        selectCreatedClip(timeline.addSplatEffectorClip(trackId, time, undefined, true));
+        return;
+      case 'motion-null':
+        selectCreatedClip(timeline.addMotionNullClip(trackId, time, 5, 'Motion Null'));
+        return;
+      case 'motion-adjustment':
+        selectCreatedClip(timeline.addMotionAdjustmentClip(trackId, time));
+        return;
+      case 'motion-rectangle':
+        selectCreatedClip(timeline.addMotionShapeClip(trackId, time, { primitive: 'rectangle' }));
+        return;
+      case 'motion-ellipse':
+        selectCreatedClip(timeline.addMotionShapeClip(trackId, time, { primitive: 'ellipse' }));
+        return;
+      case 'motion-polygon':
+        selectCreatedClip(timeline.addMotionShapeClip(trackId, time, { primitive: 'polygon' }));
+        return;
+      case 'motion-star':
+        selectCreatedClip(timeline.addMotionShapeClip(trackId, time, { primitive: 'star' }));
+        return;
+      case 'math-scene':
+        selectCreatedClip(timeline.addMathSceneClip(trackId, time, undefined, true));
+    }
+  }, []);
+
   const handleCloseTrackContextMenu = useCallback(() => {
     setTrackContextMenu(null);
   }, [setTrackContextMenu]);
@@ -116,6 +195,7 @@ export function useTimelineAuxiliaryLayerProps({
       onFitCompToWindow: handleFitToWindow,
       onAddStoryboardScene: handleAddStoryboardScene,
       onAddCaptionClip: handleAddCaptionClip,
+      onAddTimelineLayer: handleAddTimelineLayer,
     },
     inOutContextMenuProps: {
       menu: inOutContextMenu,
@@ -155,6 +235,7 @@ export function useTimelineAuxiliaryLayerProps({
     handleEraseAllGaps,
     handleAddCaptionClip,
     handleAddStoryboardScene,
+    handleAddTimelineLayer,
     handleEraseGap,
     handleEraseLayerGaps,
     handleFitToWindow,

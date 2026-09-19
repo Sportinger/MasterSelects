@@ -1,25 +1,9 @@
-// Shared canvas platform gates.
-//
-// On Linux with open-source Mesa drivers (RADV/radeonsi/NVK/llvmpipe),
-// GPU-backed canvases and worker-driven OffscreenCanvas surfaces can report
-// success while compositing blank pixels. Keep these decisions centralized so
-// canvas/GPU work uses the same Linux fallback policy.
-//
-// Full reference: docs/Features/Linux-Mesa-GPU.md.
-let cachedSoftwareCanvasPreference: boolean | null = null;
-
+// Canvas rendering is GPU-only on every platform. Keep this gate centralized
+// so callers cannot silently reintroduce platform- or boot-history fallbacks.
 export function prefersSoftwareTimelineCanvas(): boolean {
-  if (cachedSoftwareCanvasPreference !== null) return cachedSoftwareCanvasPreference;
-  if (typeof navigator === 'undefined') {
-    cachedSoftwareCanvasPreference = false;
-    return cachedSoftwareCanvasPreference;
-  }
-  const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
-  const platform = nav.userAgentData?.platform || navigator.platform || navigator.userAgent || '';
-  cachedSoftwareCanvasPreference = /linux/i.test(platform) && !/android/i.test(navigator.userAgent || '');
-  return cachedSoftwareCanvasPreference;
+  return false;
 }
 
 export function resetCanvasPlatformPreferenceForTests(): void {
-  cachedSoftwareCanvasPreference = null;
+  // Kept for consumers that reset platform policy between tests.
 }

@@ -18,6 +18,8 @@ import {
 import { createTransitionNestedCompositionLayer } from '../../../services/layerBuilder/transitionNestedCompositionLayer';
 import type { ExportClipStateLike } from './contracts';
 import { buildNestedBaseLayer, getClipKeyframes } from './baseLayers';
+import { buildFlockLayerSource } from '../../../services/layerBuilder/layerBuilderFlockLayers';
+import { nestedFlockSourceTime } from '../../../services/flock/time/flockTimeMapper';
 import {
   buildGaussianSplatSource,
   buildLightSource,
@@ -31,6 +33,7 @@ import { buildTextLikeLayer, isTextLikeClipSource } from './textLayers';
 import { buildNestedVideoLayer } from './videoLayers';
 import { getMappedClipSourceTime } from './timing';
 import { buildMotionAdjustmentLayerFromBase } from '../../../services/layerBuilder/layerBuilderMotionAdjustment';
+import { bindTerrainLayer } from '../../../services/planarTracking/terrainLayerBindings';
 
 export interface ExportNestedMediaState {
   mediaFiles: MediaFile[];
@@ -319,7 +322,7 @@ export function buildNestedLayersForExport(
       },
     );
     if (nestedLayer) {
-      layers.push(nestedLayer);
+      layers.push(bindTerrainLayer(nestedLayer, nestedClip, clip.nestedClips, nestedTime));
     }
   }
 
@@ -429,6 +432,11 @@ function buildNestedLayerForExport(
 
   if (nestedClip.source?.type === 'motion-null') {
     return null;
+  }
+
+  if (nestedClip.source?.type === 'flock') {
+    const source = buildFlockLayerSource(nestedClip, nestedFlockSourceTime(nestedClip, nestedClipLocalTime), getClipKeyframes(nestedClip), 'export');
+    return source ? { ...baseLayer, source, is3D: true } : null;
   }
 
   if (nestedClip.source?.type === 'model') {

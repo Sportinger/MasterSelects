@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { liveInputRuntime } from '../../../../services/mediaRuntime/liveInputRuntime';
-import type { ProjectItem } from '../../../../stores/mediaStore';
+import type { Composition, MediaFile, ProjectItem } from '../../../../stores/mediaStore';
+import type { TimelineClip } from '../../../../types/timeline';
+import { CompositionHoverPreview } from '../CompositionHoverPreview';
 import { LiveInputPreviewCanvas } from '../LiveInputPreviewCanvas';
 import { isImportedMediaFileItem } from '../itemTypeGuards';
 
@@ -12,6 +14,7 @@ const TOOLTIP_HEIGHT = 170;
 const VIEWPORT_PADDING = 8;
 
 interface MediaPanelPreviewTooltipState {
+  composition: Composition | null;
   isVideo: boolean;
   itemId: string;
   left: number;
@@ -23,7 +26,10 @@ interface MediaPanelPreviewTooltipState {
 }
 
 interface UseMediaPanelPreviewTooltipInput {
+  activeCompositionId?: string | null;
+  activeTimelineClips?: readonly TimelineClip[];
   itemsById: Map<string, ProjectItem>;
+  mediaFiles?: readonly MediaFile[];
 }
 
 export function getMediaPanelPreviewSource(item: ProjectItem | undefined): string | null {
@@ -62,8 +68,12 @@ export function getMediaPanelPreviewTooltipPosition(
 }
 
 export function useMediaPanelPreviewTooltip({
+  activeCompositionId,
+  activeTimelineClips = [],
   itemsById,
+  mediaFiles = [],
 }: UseMediaPanelPreviewTooltipInput): {
+  dismissItemPreview: (itemId: string) => void;
   element: ReactNode;
   handleMouseLeave: () => void;
   handleMouseMove: (event: MouseEvent<HTMLDivElement>) => void;
@@ -72,6 +82,7 @@ export function useMediaPanelPreviewTooltip({
   const showTimerRef = useRef<number | null>(null);
   const hideTimerRef = useRef<number | null>(null);
   const pendingRef = useRef<MediaPanelPreviewTooltipState | null>(null);
+  const suppressedItemIdRef = useRef<string | null>(null);
 
   const clearShowTimer = useCallback(() => {
     if (showTimerRef.current !== null) {
@@ -129,17 +140,26 @@ export function useMediaPanelPreviewTooltip({
 
     const itemNode = event.target.closest<HTMLElement>('[data-item-id]');
     const item = itemNode?.dataset.itemId ? itemsById.get(itemNode.dataset.itemId) : undefined;
+    if (item?.id === suppressedItemIdRef.current) {
+      hide();
+      return;
+    }
+    suppressedItemIdRef.current = null;
+    const composition = item && 'type' in item && item.type === 'composition'
+      ? item as Composition
+      : null;
     const src = getMediaPanelPreviewSource(item);
     const candidateLiveInputId = getMediaPanelLivePreviewId(item);
     const liveInputId = candidateLiveInputId && liveInputRuntime.getVideoElement(candidateLiveInputId)
       ? candidateLiveInputId
       : null;
-    if (!item || (!src && !liveInputId)) {
+    if (!item || (!src && !liveInputId && !composition)) {
       hide();
       return;
     }
 
     const next = {
+      composition,
       isVideo: isImportedMediaFileItem(item) && item.type === 'video',
       itemId: item.id,
       liveInputId,
@@ -157,22 +177,42 @@ export function useMediaPanelPreviewTooltip({
     scheduleShow(next);
   }, [hide, itemsById, scheduleShow, showImmediately, tooltip]);
 
+  const dismissItemPreview = useCallback((itemId: string) => {
+    suppressedItemIdRef.current = itemId;
+    clearShowTimer();
+    clearHideTimer();
+    pendingRef.current = null;
+    setTooltip(null);
+  }, [clearHideTimer, clearShowTimer]);
+
+  const handleMouseLeave = useCallback(() => {
+    suppressedItemIdRef.current = null;
+    hide();
+  }, [hide]);
+
   useEffect(() => () => {
     clearShowTimer();
     clearHideTimer();
   }, [clearHideTimer, clearShowTimer]);
 
   return {
+    dismissItemPreview,
     element: tooltip ? (
       <div
         aria-hidden="true"
         className={`media-panel-preview-tooltip ${tooltip.visible ? 'visible' : ''}`}
         style={{ left: tooltip.left, top: tooltip.top }}
       >
-        {tooltip.liveInputId ? (
+        {tooltip.composition ? (
+          <CompositionHoverPreview
+            activeCompositionId={activeCompositionId}
+            activeTimelineClips={activeTimelineClips}
+            composition={tooltip.composition}
+            mediaFiles={mediaFiles}
+          />
+        ) : tooltip.liveInputId ? (
           <LiveInputPreviewCanvas
             className="media-panel-live-preview"
-            frameIntervalMs={250}
             liveInputId={tooltip.liveInputId}
           />
         ) : tooltip.isVideo ? (
@@ -190,7 +230,7 @@ export function useMediaPanelPreviewTooltip({
         )}
       </div>
     ) : null,
-    handleMouseLeave: hide,
+    handleMouseLeave,
     handleMouseMove,
   };
 }

@@ -284,10 +284,10 @@ export function ExportSettingsForm({
                 value={audioBitrate}
                 onChange={(e) => setAudioBitrate(Number(e.target.value))}
               >
-                <option value={128000}>128 kbps (Good)</option>
-                <option value={192000}>192 kbps (Better)</option>
-                <option value={256000}>256 kbps (High Quality)</option>
-                <option value={320000}>320 kbps (Maximum)</option>
+                <option value={96000}>96 kbps</option>
+                <option value={128000}>128 kbps</option>
+                <option value={160000}>160 kbps</option>
+                <option value={192000}>192 kbps (High)</option>
               </select>
             </div>
 

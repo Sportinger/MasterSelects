@@ -48,6 +48,7 @@ function buildLayer2dSource(params: BuildLayer2dSourceParams): Layer {
     effects,
     colorCorrection,
     position: transform.position,
+    anchor: transform.anchor,
     scale: transform.scale,
     rotation: transform.rotation,
   }, params.clip, params.localTime);

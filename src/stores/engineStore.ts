@@ -4,12 +4,17 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import type { EngineStats } from '../types';
-import type { SceneCameraConfig, SceneGizmoAxis, SceneGizmoMode } from '../engine/scene/types';
+import type { SceneCameraConfig, SceneGizmoAxis, SceneGizmoMode, SceneVector3 } from '../engine/scene/types';
 
 export interface SceneCameraLiveOverride {
   position?: Partial<{ x: number; y: number; z: number }>;
   scale?: Partial<{ all: number; x: number; y: number; z: number }>;
   rotation?: Partial<{ x: number; y: number; z: number }>;
+}
+
+export interface SceneNavigationOrbitTarget {
+  clipId: string;
+  pivot: SceneVector3;
 }
 
 export type GaussianSplatLoadPhase =
@@ -49,12 +54,18 @@ interface EngineState {
   gpuInfo: { vendor: string; device: string; description: string } | null;
   linuxVulkanWarning: boolean;
   sceneNavClipId: string | null;
+  // Effect-camera orbit mode: preview drags drive the named effect instance's
+  // camera params (see EffectCameraInteraction). Ephemeral, clip-scoped.
+  effectOrbitTarget: { clipId: string; effectId: string } | null;
+  sceneNavOrbitTarget: SceneNavigationOrbitTarget | null;
   sceneNavFpsMode: boolean;
+  sceneNavTouchControlsOverride: boolean | null;
   sceneNavFpsMoveSpeed: number;
   sceneNavNoKeyframes: boolean;
   sceneCameraLiveOverrides: Record<string, SceneCameraLiveOverride>;
   previewCameraOverride: SceneCameraConfig | null;
   sceneGizmoVisible: boolean;
+  activeSceneOverlayOwners: ReadonlySet<string>;
   sceneGizmoMode: SceneGizmoMode;
   sceneGizmoHoveredAxis: SceneGizmoAxis | null;
   sceneGizmoClipIdOverride: string | null;
@@ -68,7 +79,10 @@ interface EngineState {
   setLinuxVulkanWarning: (show: boolean) => void;
   dismissLinuxVulkanWarning: () => void;
   setSceneNavClipId: (clipId: string | null) => void;
+  setEffectOrbitTarget: (target: { clipId: string; effectId: string } | null) => void;
+  setSceneNavOrbitTarget: (target: SceneNavigationOrbitTarget | null) => void;
   setSceneNavFpsMode: (enabled: boolean) => void;
+  setSceneNavTouchControlsOverride: (visible: boolean | null) => void;
   setSceneNavFpsMoveSpeed: (speed: number) => void;
   setSceneNavNoKeyframes: (enabled: boolean) => void;
   setSceneCameraLiveOverride: (clipId: string, override: SceneCameraLiveOverride) => void;
@@ -76,6 +90,7 @@ interface EngineState {
   clearSceneCameraLiveOverrides: () => void;
   setPreviewCameraOverride: (camera: SceneCameraConfig | null) => void;
   setSceneGizmoVisible: (visible: boolean) => void;
+  setSceneOverlayActive: (ownerId: string, active: boolean) => void;
   setSceneGizmoMode: (mode: SceneGizmoMode) => void;
   setSceneGizmoHoveredAxis: (axis: SceneGizmoAxis | null) => void;
   setSceneGizmoClipIdOverride: (clipId: string | null) => void;
@@ -137,6 +152,13 @@ export function selectSceneNavFpsMode(
   return state.sceneNavFpsMode ?? false;
 }
 
+export function resolveSceneNavTouchControlsVisible(
+  override: boolean | null | undefined,
+  mobileLayoutActive: boolean,
+): boolean {
+  return override ?? mobileLayoutActive;
+}
+
 export function selectSceneNavFpsMoveSpeed(
   state: Pick<EngineState, 'sceneNavFpsMoveSpeed'>,
 ): number {
@@ -172,12 +194,16 @@ export const useEngineStore = create<EngineState>()(
     gpuInfo: null,
     linuxVulkanWarning: false,
     sceneNavClipId: null,
+    effectOrbitTarget: null,
+    sceneNavOrbitTarget: null,
     sceneNavFpsMode: false,
+    sceneNavTouchControlsOverride: null,
     sceneNavFpsMoveSpeed: 1,
     sceneNavNoKeyframes: false,
     sceneCameraLiveOverrides: {},
     previewCameraOverride: null,
     sceneGizmoVisible: true,
+    activeSceneOverlayOwners: new Set<string>(),
     sceneGizmoMode: 'move',
     sceneGizmoHoveredAxis: null,
     sceneGizmoClipIdOverride: null,
@@ -226,11 +252,23 @@ export const useEngineStore = create<EngineState>()(
     },
 
     setSceneNavClipId: (clipId: string | null) => {
-      set({ sceneNavClipId: clipId });
+      set({ sceneNavClipId: clipId, sceneNavOrbitTarget: null });
+    },
+
+    setEffectOrbitTarget: (target: { clipId: string; effectId: string } | null) => {
+      set({ effectOrbitTarget: target });
+    },
+
+    setSceneNavOrbitTarget: (target: SceneNavigationOrbitTarget | null) => {
+      set({ sceneNavOrbitTarget: target });
     },
 
     setSceneNavFpsMode: (enabled: boolean) => {
       set({ sceneNavFpsMode: enabled });
+    },
+
+    setSceneNavTouchControlsOverride: (visible: boolean | null) => {
+      set({ sceneNavTouchControlsOverride: visible });
     },
 
     setSceneNavFpsMoveSpeed: (speed: number) => {
@@ -290,6 +328,18 @@ export const useEngineStore = create<EngineState>()(
       set({
         sceneGizmoVisible: visible,
         ...(!visible ? { sceneGizmoHoveredAxis: null } : {}),
+      });
+    },
+
+    setSceneOverlayActive: (ownerId: string, active: boolean) => {
+      set((state) => {
+        const activeSceneOverlayOwners = new Set(state.activeSceneOverlayOwners);
+        if (active) {
+          activeSceneOverlayOwners.add(ownerId);
+        } else {
+          activeSceneOverlayOwners.delete(ownerId);
+        }
+        return { activeSceneOverlayOwners };
       });
     },
 

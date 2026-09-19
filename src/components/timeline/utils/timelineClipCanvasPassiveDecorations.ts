@@ -38,6 +38,7 @@ export interface TimelineClipCanvasAnalysisFrameInput {
 
 export interface TimelineClipCanvasPassiveDecorationClipInput extends TimelineClipCanvasAudioClipInput {
   duration: number;
+  needsReload?: boolean;
   inPoint?: number;
   outPoint?: number;
   reversed?: boolean;
@@ -74,6 +75,14 @@ export function getTimelineClipCanvasPassiveDecorationBadges(
     badges.push({ label: 'ERR', fill: 'rgba(239, 68, 68, 0.92)' });
   } else if (clip.isPendingDownload) {
     badges.push({ label: 'DL', fill: 'rgba(59, 130, 246, 0.88)' });
+  }
+
+  if (clip.needsReload) {
+    badges.push({
+      label: 'OFFLINE',
+      fill: 'rgba(127, 29, 29, 0.94)',
+      stroke: 'rgba(248, 113, 113, 0.92)',
+    });
   }
 
   if (mediaStatus?.proxyStatus === 'generating') {
@@ -149,6 +158,7 @@ export function hasTimelineClipCanvasPassiveDecorations(
   mediaStatus?: TimelineClipCanvasMediaStatus,
 ): boolean {
   return Boolean(
+    clip.needsReload ||
     clip.isPendingDownload ||
     clip.downloadError ||
     clip.linkedGroupId ||

@@ -1,10 +1,15 @@
-import { fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { TimelineHeader } from '../../src/components/timeline/TimelineHeader';
+import { useTimelineStore } from '../../src/stores/timeline';
 import type { ClipTransform, TimelineClip, TimelineTrack } from '../../src/types';
 
+vi.mock('../../src/services/audioRoutingManager', () => ({
+  audioRoutingManager: { disposeRoute: vi.fn() },
+}));
+
 describe('TimelineHeader camera look controls', () => {
-  it('edits the track name instead of expanding when the name is clicked', () => {
+  it('edits the track name instead of expanding when the name is double-clicked', () => {
     const track = {
       id: 'video-1',
       name: 'Video 1',
@@ -58,7 +63,7 @@ describe('TimelineHeader camera look controls', () => {
 
     expect(container.querySelector('.track-name')?.textContent).toBe('Video 1');
 
-    fireEvent.click(container.querySelector('.track-name') as HTMLElement);
+    fireEvent.doubleClick(container.querySelector('.track-name') as HTMLElement);
 
     expect(onToggleExpand).not.toHaveBeenCalled();
     expect(container.querySelector('.track-name-input')).not.toBeNull();
@@ -141,6 +146,69 @@ describe('TimelineHeader camera look controls', () => {
     expect(setPropertyValue).not.toHaveBeenCalled();
     expect(addKeyframe).toHaveBeenCalledWith('camera-clip', 'rotation.y', 10);
     expect(addKeyframe).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates derived property labels from the live playhead subscription', () => {
+    const previousPlayheadPosition = useTimelineStore.getState().playheadPosition;
+    useTimelineStore.setState({ playheadPosition: 0 });
+    const clip = {
+      id: 'clip-live-property',
+      trackId: 'video-live-property',
+      startTime: 0,
+      duration: 5,
+      transform: {
+        opacity: 0,
+        blendMode: 'normal',
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+      },
+    } as TimelineClip;
+    const keyframes = [
+      { id: 'opacity-live', clipId: clip.id, property: 'opacity' as const, time: 0, value: 0, easing: 'linear' },
+    ];
+    const getInterpolatedTransform = vi.fn((_clipId: string, clipLocalTime: number) => ({
+      ...clip.transform,
+      opacity: clipLocalTime,
+    }) as ClipTransform);
+
+    const { unmount } = render(
+      <TimelineHeader
+        track={{ id: clip.trackId, name: 'Video Live', type: 'video', height: 48, visible: true } as TimelineTrack}
+        tracks={[]}
+        isDimmed={false}
+        isExpanded
+        baseHeight={48}
+        dynamicHeight={66}
+        hasKeyframes
+        propertySelection={{ clip, keyframes }}
+        onToggleExpand={vi.fn()}
+        onToggleSolo={vi.fn()}
+        onToggleMuted={vi.fn()}
+        onToggleVisible={vi.fn()}
+        onRenameTrack={vi.fn()}
+        onContextMenu={vi.fn()}
+        onWheel={vi.fn()}
+        getClipKeyframes={() => keyframes}
+        getInterpolatedTransform={getInterpolatedTransform}
+        getInterpolatedEffects={() => []}
+        addKeyframe={vi.fn()}
+        setPlayheadPosition={vi.fn()}
+        setPropertyValue={vi.fn()}
+        expandedCurveProperties={new Map()}
+        onToggleCurveExpanded={vi.fn()}
+        onSetTrackParent={vi.fn()}
+        onTrackPickWhipDragStart={vi.fn()}
+        onTrackPickWhipDragEnd={vi.fn()}
+      />,
+    );
+
+    expect(getInterpolatedTransform).toHaveBeenLastCalledWith(clip.id, 0);
+    act(() => useTimelineStore.setState({ playheadPosition: 1 }));
+    expect(getInterpolatedTransform).toHaveBeenLastCalledWith(clip.id, 1);
+
+    unmount();
+    useTimelineStore.setState({ playheadPosition: previousPlayheadPosition });
   });
 
   it('reports property row hover for matching keyframe row highlights', () => {

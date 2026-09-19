@@ -55,9 +55,29 @@ describe('CreditBurnMeter', () => {
     expect(button).toHaveAttribute('data-credit-level', 'normal');
     expect(container.querySelector('.credit-burn-track')).toBeInTheDocument();
     expect(container.querySelector('.credit-burn-fill')).toHaveStyle({ transform: 'scaleX(0.5)' });
-    expect(button).toHaveTextContent('CREDITS');
-    expect(button).toHaveTextContent('RUN —');
+    expect(container.querySelector('.credit-burn-status-default')).toHaveTextContent('user');
+    expect(container.querySelector('.credit-burn-status-account')).not.toBeInTheDocument();
+    expect(button).toHaveTextContent('100');
+    expect(button).not.toHaveTextContent('RUN');
 
+    fireEvent.click(button);
+    expect(useAccountStore.getState().dialog).toBe('account');
+  });
+
+  it('keeps signed-out credits compact and opens Account', () => {
+    useAccountStore.setState({
+      creditBalance: 400,
+      creditMeterReference: 400,
+      session: { authenticated: false, guest: true },
+      user: null,
+    });
+
+    render(<CreditBurnMeter />);
+    const button = screen.getByRole('button', { name: /400 credits available.*open account/i });
+
+    expect(button).toHaveTextContent('400');
+    expect(button).toHaveTextContent('Free');
+    expect(button).not.toHaveTextContent('Sign in');
     fireEvent.click(button);
     expect(useAccountStore.getState().dialog).toBe('account');
   });
@@ -68,8 +88,8 @@ describe('CreditBurnMeter', () => {
     act(() => {
       beginCreditActivity({ feature: 'AI agent', id: 'turn-1', targetId: 'missing-anchor' });
     });
-    expect(screen.getByRole('button')).toHaveTextContent('AI ACTIVE');
-    expect(screen.getByRole('button')).toHaveTextContent('RUN −0');
+    expect(screen.getByRole('button', { name: /100 credits available.*0 credits used/i }))
+      .toBeInTheDocument();
 
     await act(async () => {
       applyConfirmedCreditUpdate({
@@ -84,7 +104,7 @@ describe('CreditBurnMeter', () => {
     });
 
     expect(screen.getByRole('button', { name: /90 credits available.*10 credits used/i }))
-      .toHaveTextContent('RUN −10');
+      .toBeInTheDocument();
     expect(screen.getByRole('button')).toHaveClass('is-debit');
     expect(container.querySelector('.credit-drain-layer')).toBeInTheDocument();
     expect(container.querySelectorAll('.credit-drain-particle')).toHaveLength(7);
@@ -96,12 +116,12 @@ describe('CreditBurnMeter', () => {
     act(() => {
       useCreditActivityStore.getState().endActivity('turn-1', 'completed');
     });
-    expect(screen.getByRole('button')).toHaveTextContent('LAST −10');
+    expect(useCreditActivityStore.getState().terminalSummary?.credits).toBe(10);
 
     await act(async () => {
       vi.advanceTimersByTime(1_500);
     });
-    expect(screen.getByRole('button')).toHaveTextContent('RUN —');
+    expect(useCreditActivityStore.getState().terminalSummary).toBeNull();
   });
 
   it('aggregates overlapping activity totals without changing the account truth', async () => {
@@ -127,8 +147,8 @@ describe('CreditBurnMeter', () => {
       });
     });
 
-    expect(screen.getByRole('button')).toHaveTextContent('2 ACTIVE');
-    expect(screen.getByRole('button')).toHaveTextContent('RUN −8');
+    expect(screen.getByRole('button', { name: /92 credits available.*8 credits used by 2 active/i }))
+      .toBeInTheDocument();
     expect(useAccountStore.getState().creditBalance).toBe(92);
   });
 
@@ -169,7 +189,7 @@ describe('CreditBurnMeter', () => {
 
     expect(screen.getByRole('button')).toHaveClass('is-grant');
     expect(screen.getByRole('button')).toHaveAttribute('data-credit-level', 'normal');
-    expect(screen.getByRole('button')).toHaveTextContent('+20');
+    expect(screen.getByRole('button', { name: /29 credits available/i })).toBeInTheDocument();
     expect(container.querySelector('.credit-drain-layer')).not.toBeInTheDocument();
   });
 });

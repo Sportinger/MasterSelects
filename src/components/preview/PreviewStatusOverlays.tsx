@@ -11,7 +11,6 @@ interface PreviewSplatProgressOverlayProps {
 
 interface PreviewEditHintsProps {
   editCameraOrthoHint: string | null;
-  effectiveSceneNavFpsMode: boolean;
   isEditableSource: boolean;
   layerTransformMode: boolean;
   maskNavigationMode: boolean;
@@ -110,7 +109,6 @@ export function PreviewSplatProgressOverlay({
 
 export function PreviewEditHints({
   editCameraOrthoHint,
-  effectiveSceneNavFpsMode,
   isEditableSource,
   layerTransformMode,
   maskNavigationMode,
@@ -147,9 +145,7 @@ export function PreviewEditHints({
       )}
       {sceneNavEnabled && (
         <div className="preview-edit-hint">
-          {effectiveSceneNavFpsMode
-            ? 'Editor View: 1 Front | 2 Side | 3 Top | 4 Perspective | click preview, hold LMB to look, WASD/QE move, MMB/RMB/Shift+LMB pan, wheel dolly'
-            : 'Editor View: 1 Front | 2 Side | 3 Top | 4 Perspective | WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel dolly'}
+          Editor View: 1 Front | 2 Side | 3 Top | 4 Perspective | WASD move, Q/E up-down, LMB orbit, RMB look, MMB/Shift+LMB pan, wheel dolly
         </div>
       )}
     </>

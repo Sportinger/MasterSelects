@@ -58,7 +58,11 @@ export async function convertProjectMediaToStore(
         fps: pm.frameRate,
         hasAudio: false,
         labelColor: pm.labelColor as LabelColor | undefined,
+        remoteColorGrade: pm.remoteColorGrade
+          ? structuredClone(pm.remoteColorGrade)
+          : undefined,
         liveInput: structuredClone(pm.liveInput),
+        sourceAnnotations: pm.sourceAnnotations?.map((annotation) => ({ ...annotation })),
       });
       options.onProgress?.(files.length, total, pm.name);
       continue;
@@ -181,6 +185,14 @@ export async function convertProjectMediaToStore(
       height: pm.height,
       fps: pm.frameRate,
       codec: pm.codec ?? runtimeSources.gaussianSplatSequence?.codec,
+      videoCodecId: pm.videoCodecId,
+      codedWidth: pm.codedWidth,
+      codedHeight: pm.codedHeight,
+      rotation: pm.rotation,
+      pixelAspectRatio: pm.pixelAspectRatio ? { ...pm.pixelAspectRatio } : undefined,
+      videoColorSpace: pm.videoColorSpace ? { ...pm.videoColorSpace } : undefined,
+      hasHighDynamicRange: pm.hasHighDynamicRange,
+      canBeTransparent: pm.canBeTransparent,
       audioCodec: pm.audioCodec,
       container: pm.container ?? (runtimeSources.gaussianSplatSequence?.container ? runtimeSources.gaussianSplatSequence.container + ' Seq' : undefined),
       bitrate: pm.bitrate,
@@ -215,6 +227,11 @@ export async function convertProjectMediaToStore(
       filePath: pm.sourcePath,
       absolutePath: runtimeSources.representativeAbsolutePath,
       projectPath: runtimeSources.representativeProjectPath,
+      sourceRootId: pm.sourceRootId,
+      sourceRelativePath: pm.sourceRelativePath,
+      linkedSources: pm.linkedSources?.map((source) => ({ ...source })),
+      sourceSelection: pm.sourceSelection ? { ...pm.sourceSelection } : undefined,
+      externalOrigin: pm.externalOrigin ? structuredClone(pm.externalOrigin) : undefined,
       fileHash: pm.fileHash,
       audioAnalysisRefs: pm.audioAnalysisRefs ? structuredClone(pm.audioAnalysisRefs) : undefined,
       stemInfo: pm.stemInfo ? structuredClone(pm.stemInfo) : undefined,
@@ -224,6 +241,9 @@ export async function convertProjectMediaToStore(
       waveformProgress: pm.waveform?.length ? 100 : undefined,
       vectorAnimation: pm.vectorAnimation,
       labelColor: pm.labelColor as LabelColor | undefined,
+      remoteColorGrade: pm.remoteColorGrade
+        ? structuredClone(pm.remoteColorGrade)
+        : undefined,
       transcriptStatus,
       transcript,
       transcriptArtifact,
@@ -238,6 +258,7 @@ export async function convertProjectMediaToStore(
       sceneDescriptions,
       sceneDescriptionStatus: sceneDescriptions?.length ? 'ready' : undefined,
       sceneDescriptionProgress: sceneDescriptions?.length ? 100 : undefined,
+      sourceAnnotations: pm.sourceAnnotations?.map((annotation) => ({ ...annotation })),
     });
 
     options.onProgress?.(files.length, total, pm.name);

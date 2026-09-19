@@ -4,6 +4,7 @@ import type {
 import type { TextClipProperties } from '../../types/text';
 import type { TimelineClip, TimelineTrack } from '../../types/timeline';
 import { markDynamicCanvasUpdated } from '../canvasVersion';
+import { googleFontsService } from '../googleFontsService';
 import { createTextLayoutSnapshot, type TextBoxRect } from '../textLayout';
 import { textRenderer } from '../textRenderer';
 import {
@@ -23,9 +24,27 @@ export interface CaptionTextFrameRuntime {
   canvas: HTMLCanvasElement | null;
 }
 
+export interface CaptionWordEditSnapshot {
+  sourceClipId: string;
+  sourceTime: number;
+  textProperties: TextClipProperties;
+  words: Array<{
+    id: string;
+    displayText: string;
+    active: boolean;
+    rects: TextBoxRect[];
+  }>;
+}
+
+interface CaptionWordEditRuntimeState {
+  document: CaptionTextDocument;
+  frame: CaptionFrameModel;
+  props: TextClipProperties;
+}
+
 const highlightCanvasByTarget = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
-const scaleCanvasByTarget = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
 const renderSignatureByCanvas = new WeakMap<HTMLCanvasElement, string>();
+const wordEditStateByCanvas = new WeakMap<HTMLCanvasElement, CaptionWordEditRuntimeState>();
 
 function punctuationAttachesToPrevious(text: string): boolean {
   return /^[,.;:!?%)\]}]/.test(text);
@@ -44,24 +63,52 @@ function buildTextDocument(tokens: readonly CaptionFrameToken[]): CaptionTextDoc
   return { text, ranges };
 }
 
+function selectCaptionDocumentPage(
+  canvas: HTMLCanvasElement,
+  props: TextClipProperties,
+  frame: CaptionFrameModel | null,
+  document: CaptionTextDocument,
+  maxLines: number,
+): CaptionTextDocument {
+  if (!frame || document.ranges.length === 0 || !props.boxEnabled) return document;
+  const context = canvas.getContext('2d');
+  if (!context) return document;
+  const lineLimit = Math.max(1, Math.round(maxLines));
+  const layout = createTextLayoutSnapshot(
+    context,
+    { ...props, text: document.text },
+    canvas.width,
+    canvas.height,
+  );
+  if (layout.lines.length <= lineLimit) return document;
+
+  const pageByToken = new Map<CaptionFrameToken, number>();
+  for (const range of document.ranges) {
+    const firstCharacter = layout.characters.find(character =>
+      character.index >= range.start && character.index < range.end
+    );
+    const lineIndex = firstCharacter?.lineIndex
+      ?? layout.lines.find(line => range.start >= line.start && range.start < line.end)?.index
+      ?? 0;
+    pageByToken.set(range.token, Math.floor(lineIndex / lineLimit));
+  }
+
+  const referenceRange = document.ranges.find(range => range.token.active)
+    ?? document.ranges.findLast(range => range.token.start <= frame.sourceTime)
+    ?? document.ranges[0];
+  const activePage = pageByToken.get(referenceRange.token) ?? 0;
+  return buildTextDocument(
+    document.ranges
+      .filter(range => pageByToken.get(range.token) === activePage)
+      .map(range => range.token),
+  );
+}
+
 function getHighlightCanvas(target: HTMLCanvasElement): HTMLCanvasElement {
   let canvas = highlightCanvasByTarget.get(target);
   if (!canvas) {
     canvas = document.createElement('canvas');
     highlightCanvasByTarget.set(target, canvas);
-  }
-  if (canvas.width !== target.width || canvas.height !== target.height) {
-    canvas.width = target.width;
-    canvas.height = target.height;
-  }
-  return canvas;
-}
-
-function getScaleCanvas(target: HTMLCanvasElement): HTMLCanvasElement {
-  let canvas = scaleCanvasByTarget.get(target);
-  if (!canvas) {
-    canvas = document.createElement('canvas');
-    scaleCanvasByTarget.set(target, canvas);
   }
   if (canvas.width !== target.width || canvas.height !== target.height) {
     canvas.width = target.width;
@@ -202,131 +249,322 @@ export function getCaptionWordPulseSpacing(wordWidth: number, scale: number): {
   };
 }
 
-function renderWordScalePulse(
-  canvas: HTMLCanvasElement,
-  props: TextClipProperties,
+type CaptionLayout = ReturnType<typeof createTextLayoutSnapshot>;
+type CaptionLayoutCharacter = CaptionLayout['characters'][number];
+
+interface CaptionWordFragment {
+  token: CaptionFrameToken;
+  lineIndex: number;
+  characters: CaptionLayoutCharacter[];
+  rect: TextBoxRect;
+}
+
+interface CaptionWordFragmentPlacement {
+  fragment: CaptionWordFragment;
+  translateX: number;
+  translateY: number;
+  scale: number;
+  scaleCenterX: number;
+  scaleCenterY: number;
+}
+
+function createCaptionWordFragments(
+  layout: CaptionLayout,
   document: CaptionTextDocument,
+): CaptionWordFragment[] {
+  return document.ranges.flatMap(range => {
+    const charactersByLine = new Map<number, CaptionLayoutCharacter[]>();
+    for (const character of layout.characters) {
+      if (character.index < range.start || character.index >= range.end) continue;
+      const current = charactersByLine.get(character.lineIndex) ?? [];
+      current.push(character);
+      charactersByLine.set(character.lineIndex, current);
+    }
+
+    return [...charactersByLine.entries()].map(([lineIndex, characters]) => {
+      const left = Math.min(...characters.map(character => character.left));
+      const right = Math.max(...characters.map(character => character.right));
+      const top = Math.min(...characters.map(character => character.top));
+      const bottom = Math.max(...characters.map(character => character.bottom));
+      return {
+        token: range.token,
+        lineIndex,
+        characters,
+        rect: { x: left, y: top, width: right - left, height: bottom - top },
+      };
+    });
+  });
+}
+
+export function getCaptionWordEditSnapshot(
+  canvas: HTMLCanvasElement,
+): CaptionWordEditSnapshot | null {
+  const state = wordEditStateByCanvas.get(canvas);
+  const context = canvas.getContext('2d');
+  if (!state || !context) return null;
+
+  const layout = createTextLayoutSnapshot(
+    context,
+    state.props,
+    canvas.width,
+    canvas.height,
+  );
+  const rectsByWordId = new Map<string, TextBoxRect[]>();
+  for (const fragment of createCaptionWordFragments(layout, state.document)) {
+    const rects = rectsByWordId.get(fragment.token.id) ?? [];
+    rects.push(fragment.rect);
+    rectsByWordId.set(fragment.token.id, rects);
+  }
+
+  return {
+    sourceClipId: state.frame.sourceClipId,
+    sourceTime: state.frame.sourceTime,
+    textProperties: state.props,
+    words: state.document.ranges.flatMap(({ token }) => {
+      const rects = rectsByWordId.get(token.id);
+      return rects?.length
+        ? [{
+            id: token.id,
+            displayText: token.text,
+            active: token.active,
+            rects,
+          }]
+        : [];
+    }),
+  };
+}
+
+function withCaptionFragmentTransform(
+  context: CanvasRenderingContext2D,
+  placement: CaptionWordFragmentPlacement,
+  paint: () => void,
+): void {
+  context.save();
+  context.translate(placement.translateX, placement.translateY);
+  if (placement.scale !== 1) {
+    context.translate(placement.scaleCenterX, placement.scaleCenterY);
+    context.scale(placement.scale, placement.scale);
+    context.translate(-placement.scaleCenterX, -placement.scaleCenterY);
+  }
+  paint();
+  context.restore();
+}
+
+function paintCaptionFragmentRun(
+  context: CanvasRenderingContext2D,
+  fragment: CaptionWordFragment,
+  props: TextClipProperties,
+  method: 'fillText' | 'strokeText',
+): void {
+  if (fragment.characters.length === 0) return;
+  if (props.letterSpacing !== 0) {
+    for (const character of fragment.characters) {
+      context[method](character.char, character.left, character.baselineY);
+    }
+    return;
+  }
+  context[method](
+    fragment.characters.map(character => character.char).join(''),
+    fragment.characters[0].left,
+    fragment.characters[0].baselineY,
+  );
+}
+
+function paintCaptionHighlightBackground(
+  context: CanvasRenderingContext2D,
+  placement: CaptionWordFragmentPlacement,
+  props: TextClipProperties,
+  captionProperties: CaptionClipProperties,
+  lineCount: number,
+): void {
+  const { fragment } = placement;
+  if (!fragment.token.highlighted || captionProperties.highlight.style !== 'background') return;
+  const paddingX = props.fontSize * 0.12;
+  const paddingY = lineCount > 1 ? 0 : props.fontSize * 0.08;
+  withCaptionFragmentTransform(context, placement, () => {
+    context.save();
+    context.globalAlpha = captionProperties.highlight.backgroundOpacity;
+    context.fillStyle = captionProperties.highlight.backgroundColor;
+    roundedRect(context, {
+      x: fragment.rect.x - paddingX,
+      y: fragment.rect.y - paddingY,
+      width: fragment.rect.width + paddingX * 2,
+      height: Math.max(1, fragment.rect.height + paddingY * 2),
+    }, props.fontSize * 0.12);
+    context.fill();
+    context.restore();
+  });
+}
+
+function paintCaptionFragmentShadow(
+  context: CanvasRenderingContext2D,
+  placement: CaptionWordFragmentPlacement,
+  props: TextClipProperties,
+): void {
+  if (!props.shadowEnabled) return;
+  withCaptionFragmentTransform(context, placement, () => {
+    context.save();
+    context.shadowColor = props.shadowColor;
+    context.shadowBlur = props.shadowBlur;
+    context.shadowOffsetX = props.shadowOffsetX;
+    context.shadowOffsetY = props.shadowOffsetY;
+    context.fillStyle = props.shadowColor;
+    paintCaptionFragmentRun(context, placement.fragment, props, 'fillText');
+    context.restore();
+  });
+}
+
+function paintCaptionFragmentStroke(
+  context: CanvasRenderingContext2D,
+  placement: CaptionWordFragmentPlacement,
+  props: TextClipProperties,
+): void {
+  if (!props.strokeEnabled || props.strokeWidth <= 0) return;
+  withCaptionFragmentTransform(context, placement, () => {
+    context.strokeStyle = props.strokeColor;
+    context.lineWidth = props.strokeWidth * 2;
+    context.lineJoin = 'round';
+    context.lineCap = 'round';
+    paintCaptionFragmentRun(context, placement.fragment, props, 'strokeText');
+  });
+}
+
+function paintCaptionFragmentFill(
+  context: CanvasRenderingContext2D,
+  placement: CaptionWordFragmentPlacement,
+  props: TextClipProperties,
   captionProperties: CaptionClipProperties,
 ): void {
-  const scaleEnabled = captionProperties.highlight.scaleEnabled ?? false;
-  if (!captionProperties.highlight.enabled || !scaleEnabled) return;
-  const activeRange = document.ranges.find(range => range.token.active);
-  if (!activeRange) return;
-  const scale = getCaptionWordPulseScale(
-    activeRange.token.progress,
-    captionProperties.highlight.scale ?? 1.18,
-  );
-  if (scale <= 1.001) return;
+  const highlightedText = placement.fragment.token.highlighted
+    && captionProperties.highlight.style === 'text';
+  withCaptionFragmentTransform(context, placement, () => {
+    context.fillStyle = highlightedText
+      ? captionProperties.highlight.textColor
+      : props.color;
+    paintCaptionFragmentRun(context, placement.fragment, props, 'fillText');
+  });
+}
 
-  const context = canvas.getContext('2d');
-  if (!context) return;
-  const layout = createTextLayoutSnapshot(context, props, canvas.width, canvas.height);
-  const scratch = getScaleCanvas(canvas);
-  const scratchContext = scratch.getContext('2d');
-  if (!scratchContext) return;
-  scratchContext.clearRect(0, 0, scratch.width, scratch.height);
-  scratchContext.drawImage(canvas, 0, 0);
+function paintCaptionFragmentUnderline(
+  context: CanvasRenderingContext2D,
+  placement: CaptionWordFragmentPlacement,
+  props: TextClipProperties,
+  captionProperties: CaptionClipProperties,
+): void {
+  const { fragment } = placement;
+  if (!fragment.token.highlighted || captionProperties.highlight.style !== 'underline') return;
+  withCaptionFragmentTransform(context, placement, () => {
+    const y = fragment.rect.y + fragment.rect.height - Math.max(2, props.fontSize * 0.05);
+    context.save();
+    context.strokeStyle = captionProperties.highlight.underlineColor;
+    context.lineWidth = captionProperties.highlight.underlineWidth;
+    context.lineCap = 'round';
+    context.beginPath();
+    context.moveTo(fragment.rect.x, y);
+    context.lineTo(fragment.rect.x + fragment.rect.width, y);
+    context.stroke();
+    context.restore();
+  });
+}
 
-  const effectPadding = Math.max(
+function getCaptionPulseEffectPadding(
+  props: TextClipProperties,
+  captionProperties: CaptionClipProperties,
+): number {
+  return Math.max(
     props.fontSize * (captionProperties.highlight.style === 'background' ? 0.18 : 0.08),
     props.strokeEnabled ? props.strokeWidth * 2 : 0,
     props.shadowEnabled
       ? props.shadowBlur + Math.abs(props.shadowOffsetX) + Math.abs(props.shadowOffsetY)
       : 0,
   );
-  const activeCharacters = layout.characters.filter(character =>
-    character.index >= activeRange.start && character.index < activeRange.end
-  );
-  const activeLineIndex = activeCharacters[0]?.lineIndex;
-  const activeRect = collectRangeRects(layout, activeRange.start, activeRange.end)[0];
-  if (activeLineIndex === undefined || !activeRect) return;
+}
 
-  const lineFrames = layout.lines.flatMap(line => {
-    const characters = layout.characters.filter(character => character.lineIndex === line.index);
-    if (characters.length === 0) return [];
-    const y = Math.max(0, Math.floor(Math.min(...characters.map(character => character.top))));
-    const bottom = Math.min(canvas.height, Math.ceil(Math.max(...characters.map(character => character.bottom))));
-    const x = Math.max(0, Math.floor(line.left - effectPadding));
-    const right = Math.min(canvas.width, Math.ceil(line.right + effectPadding));
-    return [{ index: line.index, x, y, width: right - x, height: bottom - y }];
+function renderWordScalePulse(
+  canvas: HTMLCanvasElement,
+  props: TextClipProperties,
+  document: CaptionTextDocument,
+  captionProperties: CaptionClipProperties,
+): boolean {
+  const scaleEnabled = captionProperties.highlight.scaleEnabled ?? false;
+  if (!captionProperties.highlight.enabled || !scaleEnabled || props.pathEnabled) return false;
+  const activeRange = document.ranges.find(range => range.token.active);
+  if (!activeRange) return false;
+  const scale = getCaptionWordPulseScale(
+    activeRange.token.progress,
+    captionProperties.highlight.scale ?? 1.18,
+  );
+  if (scale <= 1.001) return false;
+
+  const context = canvas.getContext('2d');
+  if (!context) return false;
+  const layout = createTextLayoutSnapshot(context, props, canvas.width, canvas.height);
+  const fragments = createCaptionWordFragments(layout, document)
+    .filter(fragment => fragment.lineIndex < Math.max(1, captionProperties.maxLines));
+  const activeFragments = fragments.filter(fragment => fragment.token === activeRange.token);
+  const activeLineIndexes = new Set(activeFragments.map(fragment => fragment.lineIndex));
+  if (activeFragments.length !== 1 || activeLineIndexes.size !== 1) return false;
+  const activeFragment = activeFragments[0];
+  const activeRect = activeFragment.rect;
+  const activeLineIndex = activeFragment.lineIndex;
+  const effectPadding = getCaptionPulseEffectPadding(props, captionProperties);
+  const horizontalSpacing = getCaptionWordPulseSpacing(
+    activeRect.width + effectPadding * 2,
+    scale,
+  );
+  const verticalSpacing = getCaptionWordPulseSpacing(
+    activeRect.height + effectPadding * 2,
+    scale,
+  );
+  const activeCenterX = activeRect.x + activeRect.width / 2;
+  const activeCenterY = activeRect.y + activeRect.height / 2;
+  const placements = fragments.map<CaptionWordFragmentPlacement>(fragment => {
+    const isActive = fragment === activeFragment;
+    let translateX = 0;
+    let translateY = 0;
+    if (fragment.lineIndex < activeLineIndex) {
+      translateY = verticalSpacing.previousWordsShift;
+    } else if (fragment.lineIndex > activeLineIndex) {
+      translateY = verticalSpacing.followingWordsShift;
+    } else if (!isActive && fragment.rect.x < activeRect.x) {
+      translateX = horizontalSpacing.previousWordsShift;
+    } else if (!isActive) {
+      translateX = horizontalSpacing.followingWordsShift;
+    }
+    return {
+      fragment,
+      translateX,
+      translateY,
+      scale: isActive ? scale : 1,
+      scaleCenterX: activeCenterX,
+      scaleCenterY: activeCenterY,
+    };
   });
-  const activeLine = lineFrames.find(line => line.index === activeLineIndex);
-  if (!activeLine || activeLine.width <= 0 || activeLine.height <= 0) return;
 
-  const activeX = Math.max(activeLine.x, Math.floor(activeRect.x - effectPadding));
-  const activeRight = Math.min(
-    activeLine.x + activeLine.width,
-    Math.ceil(activeRect.x + activeRect.width + effectPadding),
-  );
-  const activeWidth = activeRight - activeX;
-  if (activeWidth <= 0) return;
-  const horizontalSpacing = getCaptionWordPulseSpacing(activeWidth, scale);
-  const verticalSpacing = getCaptionWordPulseSpacing(activeLine.height, scale);
-  const activeCenterX = activeX + activeWidth / 2;
-  const activeCenterY = activeLine.y + activeLine.height / 2;
-
+  void googleFontsService.loadFont(props.fontFamily, props.fontWeight);
   context.clearRect(0, 0, canvas.width, canvas.height);
-  for (const line of lineFrames) {
-    if (line.index !== activeLineIndex) {
-      const shiftY = line.index < activeLineIndex
-        ? verticalSpacing.previousWordsShift
-        : verticalSpacing.followingWordsShift;
-      context.drawImage(
-        scratch,
-        line.x,
-        line.y,
-        line.width,
-        line.height,
-        line.x,
-        line.y + shiftY,
-        line.width,
-        line.height,
-      );
-      continue;
-    }
-
-    const previousWordsWidth = Math.max(0, activeX - line.x);
-    if (previousWordsWidth > 0) {
-      context.drawImage(
-        scratch,
-        line.x,
-        line.y,
-        previousWordsWidth,
-        line.height,
-        line.x + horizontalSpacing.previousWordsShift,
-        line.y,
-        previousWordsWidth,
-        line.height,
-      );
-    }
-    context.drawImage(
-      scratch,
-      activeX,
-      line.y,
-      activeWidth,
-      line.height,
-      activeCenterX - horizontalSpacing.activeWidth / 2,
-      activeCenterY - line.height * scale / 2,
-      horizontalSpacing.activeWidth,
-      line.height * scale,
-    );
-    const followingWordsX = activeRight;
-    const followingWordsWidth = Math.max(0, line.x + line.width - followingWordsX);
-    if (followingWordsWidth > 0) {
-      context.drawImage(
-        scratch,
-        followingWordsX,
-        line.y,
-        followingWordsWidth,
-        line.height,
-        followingWordsX + horizontalSpacing.followingWordsShift,
-        line.y,
-        followingWordsWidth,
-        line.height,
-      );
-    }
+  const fontStyle = props.fontStyle === 'italic' ? 'italic' : 'normal';
+  context.font = `${fontStyle} ${props.fontWeight} ${props.fontSize}px "${props.fontFamily}"`;
+  context.textAlign = 'left';
+  context.textBaseline = 'alphabetic';
+  context.globalAlpha = 1;
+  context.shadowColor = 'transparent';
+  context.shadowBlur = 0;
+  context.shadowOffsetX = 0;
+  context.shadowOffsetY = 0;
+  for (const placement of placements) {
+    paintCaptionHighlightBackground(context, placement, props, captionProperties, layout.lines.length);
+  }
+  for (const placement of placements) paintCaptionFragmentShadow(context, placement, props);
+  for (const placement of placements) paintCaptionFragmentStroke(context, placement, props);
+  for (const placement of placements) {
+    paintCaptionFragmentFill(context, placement, props, captionProperties);
+  }
+  for (const placement of placements) {
+    paintCaptionFragmentUnderline(context, placement, props, captionProperties);
   }
   markDynamicCanvasUpdated(canvas, 'caption-word-scale');
+  return true;
 }
 
 function renderCaptionBackground(
@@ -352,8 +590,13 @@ function renderCaptionBackground(
   const activeRect = activeRange
     ? collectRangeRects(layout, activeRange.start, activeRange.end)[0]
     : undefined;
-  const horizontalExpansion = activeRect ? activeRect.width * (scale - 1) / 2 : 0;
-  const verticalExpansion = activeRect ? activeRect.height * (scale - 1) / 2 : 0;
+  const effectPadding = getCaptionPulseEffectPadding(props, captionProperties);
+  const horizontalExpansion = activeRect
+    ? (activeRect.width + effectPadding * 2) * (scale - 1) / 2
+    : 0;
+  const verticalExpansion = activeRect
+    ? (activeRect.height + effectPadding * 2) * (scale - 1) / 2
+    : 0;
   const rect = {
     x: bounds.x - captionProperties.background.paddingX - horizontalExpansion,
     y: bounds.y - captionProperties.background.paddingY - verticalExpansion,
@@ -379,8 +622,20 @@ function renderFrame(
   const baseProperties = textPropertiesOverride ?? clip.textProperties;
   const captionProperties = clip.captionProperties;
   if (!canvas || !baseProperties || !captionProperties) return null;
-  const document = buildTextDocument(frame?.tokens ?? []);
+  const fullDocument = buildTextDocument(frame?.tokens ?? []);
+  const document = selectCaptionDocumentPage(
+    canvas,
+    baseProperties,
+    frame,
+    fullDocument,
+    captionProperties.maxLines,
+  );
   const props: TextClipProperties = { ...baseProperties, text: document.text };
+  if (frame) {
+    wordEditStateByCanvas.set(canvas, { document, frame, props });
+  } else {
+    wordEditStateByCanvas.delete(canvas);
+  }
   const signature = JSON.stringify({
     text: document.text,
     highlighted: document.ranges.filter(range => range.token.highlighted).map(range => range.token.id),
@@ -392,9 +647,11 @@ function renderFrame(
     highlight: captionProperties.highlight,
   });
   if (renderSignatureByCanvas.get(canvas) === signature) return canvas;
-  textRenderer.render(props, canvas);
-  renderHighlight(canvas, props, document, captionProperties);
-  renderWordScalePulse(canvas, props, document, captionProperties);
+  const pulseRendered = renderWordScalePulse(canvas, props, document, captionProperties);
+  if (!pulseRendered) {
+    textRenderer.render(props, canvas);
+    renderHighlight(canvas, props, document, captionProperties);
+  }
   renderCaptionBackground(canvas, props, document, captionProperties);
   renderSignatureByCanvas.set(canvas, signature);
   return canvas;

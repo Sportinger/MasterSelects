@@ -1,30 +1,11 @@
+import { browserTabId } from '../../../browserTabIdentity';
+
 export type BrowserHot = NonNullable<ImportMeta['hot']>;
 
-const AI_BRIDGE_TAB_ID_SESSION_KEY = 'masterselects.aiBridgeTabId';
 const AI_BRIDGE_PRESENCE_INTERVAL_MS = 3000;
+const AI_BRIDGE_INITIAL_CONNECTION_GRACE_MS = 500;
 
-function createBridgeTabId(): string {
-  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID()
-    : `tab-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function getStableBridgeTabId(): string {
-  if (typeof window === 'undefined' || typeof window.sessionStorage === 'undefined') {
-    return createBridgeTabId();
-  }
-  try {
-    const existing = window.sessionStorage.getItem(AI_BRIDGE_TAB_ID_SESSION_KEY);
-    if (existing) return existing;
-    const next = createBridgeTabId();
-    window.sessionStorage.setItem(AI_BRIDGE_TAB_ID_SESSION_KEY, next);
-    return next;
-  } catch {
-    return createBridgeTabId();
-  }
-}
-
-export const tabId = getStableBridgeTabId();
+export const tabId = browserTabId;
 
 export function getTabPriorityDelayMs(isTargetedRequest = false): number {
   if (typeof document === 'undefined') return 0;
@@ -43,7 +24,10 @@ export function registerBridgePresence(
   getSessionDetails?: () => Record<string, unknown>,
 ): () => void {
   let presenceIntervalId: number | null = null;
+  let initialConnectionTimeoutId: number | null = null;
+  let connectionState: 'unknown' | 'connected' | 'disconnected' = 'unknown';
   const sendPresence = () => {
+    if (connectionState !== 'connected') return;
     let session: Record<string, unknown> | undefined;
     try {
       session = getSessionDetails?.();
@@ -60,22 +44,49 @@ export function registerBridgePresence(
     });
   };
 
-  sendPresence();
+  const handleConnect = () => {
+    connectionState = 'connected';
+    sendPresence();
+  };
+  const handleDisconnect = () => {
+    connectionState = 'disconnected';
+  };
+
+  hot.on('vite:ws:connect', handleConnect);
+  hot.on('vite:ws:disconnect', handleDisconnect);
+
   const disposeBridgeResources = createDisposable();
   if (typeof window !== 'undefined') {
     window.addEventListener('focus', sendPresence);
     window.addEventListener('blur', sendPresence);
     document.addEventListener('visibilitychange', sendPresence);
     presenceIntervalId = window.setInterval(sendPresence, AI_BRIDGE_PRESENCE_INTERVAL_MS);
+    initialConnectionTimeoutId = window.setTimeout(() => {
+      if (connectionState !== 'unknown') return;
+      void fetch('/@vite/client', { cache: 'no-store', method: 'HEAD' })
+        .then((response) => {
+          if (connectionState !== 'unknown') return;
+          if (response.ok) handleConnect();
+          else connectionState = 'disconnected';
+        })
+        .catch(() => {
+          if (connectionState === 'unknown') connectionState = 'disconnected';
+        });
+    }, AI_BRIDGE_INITIAL_CONNECTION_GRACE_MS);
   }
 
   hot.dispose(() => {
+    hot.off('vite:ws:connect', handleConnect);
+    hot.off('vite:ws:disconnect', handleDisconnect);
     if (typeof window !== 'undefined') {
       window.removeEventListener('focus', sendPresence);
       window.removeEventListener('blur', sendPresence);
       document.removeEventListener('visibilitychange', sendPresence);
       if (presenceIntervalId !== null) {
         window.clearInterval(presenceIntervalId);
+      }
+      if (initialConnectionTimeoutId !== null) {
+        window.clearTimeout(initialConnectionTimeoutId);
       }
     }
     disposeBridgeResources();

@@ -32,8 +32,19 @@ export async function openRecentProject(context: RecentProjectOpeningContext, id
     return nativeCore ? nativeCore.loadProject(recentProject.path) : false;
   }
 
+  if (recentProject.backend === 'opfs') {
+    return recentProject.path
+      ? context.coreService.openStoredProject(recentProject.path)
+      : false;
+  }
+
   if (!context.isFsaAvailable || !recentProject.handleKey) {
-    return false;
+    // WebKit may have legacy FSA-shaped metadata even though it could not
+    // clone the OPFS directory handle into IndexedDB. The folder name is
+    // enough to re-derive the project from the origin-private root.
+    return !context.isFsaAvailable
+      ? context.coreService.openStoredProject(recentProject.name)
+      : false;
   }
 
   let storedHandle: FileSystemHandle | null = null;

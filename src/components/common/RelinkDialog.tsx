@@ -1,7 +1,7 @@
 // RelinkDialog - Dialog to relink missing media files
 // Shows list of missing files, allows searching folders, updates status
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef, type ChangeEvent } from 'react';
 import './WelcomeOverlay.css';
 import './RelinkDialog.css';
 import { Logger } from '../../services/logger';
@@ -11,14 +11,22 @@ import { useMediaStore, type MediaFile } from '../../stores/mediaStore';
 import { projectFileService } from '../../services/projectFileService';
 import {
   applyRelinkMatch,
+  createRelinkCandidateMapFromFiles,
   createRelinkCandidateMapFromHandles,
   findRelinkMatch,
   mediaNeedsRelink,
-  setRelinkHandlePath,
+  setRelinkHandleSource,
   type RelinkCandidate,
   type RelinkCandidateMap,
   type RelinkMatch,
 } from '../../services/project/relinkMedia';
+import {
+  getProjectMediaSourceRootStates,
+  registerProjectMediaSourceRoot,
+  registerProjectMediaSourceRootDescriptor,
+  requestProjectMediaSourceRootAccess,
+  type ProjectMediaSourceRootState,
+} from '../../services/project/mediaSourceRoots';
 
 interface RelinkDialogProps {
   onClose: () => void;
@@ -42,12 +50,51 @@ type RelinkPickerWindow = Window & typeof globalThis & {
   showOpenFilePicker: (options?: object) => Promise<FileSystemFileHandle[]>;
 };
 
+const IMAGE_FILE_PATTERN = /\.(?:avif|bmp|gif|heic|heif|jpe?g|png|tiff?|webp)$/i;
+const VIDEO_FILE_PATTERN = /\.(?:3gp|avi|m4v|mkv|mov|mp4|mpe?g|webm|wmv)$/i;
+
+function getNativeMediaAccept(statuses: FileStatus[]): string {
+  const accepts = new Set<string>();
+  for (const status of statuses) {
+    const name = status.filePath ?? status.name;
+    if (IMAGE_FILE_PATTERN.test(name)) accepts.add('image/*');
+    if (VIDEO_FILE_PATTERN.test(name)) accepts.add('video/*');
+  }
+  return [...accepts].join(',');
+}
+
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
 
 function getMissingFiles(files: MediaFile[]): MediaFile[] {
   return files.filter(mediaNeedsRelink);
+}
+
+async function collectSourceRootFiles(
+  dirHandle: FileSystemDirectoryHandle,
+  sourceRootId: string,
+): Promise<Map<string, FileSystemFileHandle>> {
+  const foundFiles = new Map<string, FileSystemFileHandle>();
+
+  const scanDirectory = async (dir: FileSystemDirectoryHandle, parentPath = ''): Promise<void> => {
+    try {
+      for await (const entry of (dir as IterableDirectoryHandle).values()) {
+        const relativePath = parentPath ? `${parentPath}/${entry.name}` : entry.name;
+        if (entry.kind === 'file') {
+          setRelinkHandleSource(entry, sourceRootId, relativePath);
+          foundFiles.set(relativePath.toLowerCase(), entry);
+        } else if (entry.kind === 'directory') {
+          await scanDirectory(entry, relativePath);
+        }
+      }
+    } catch (error) {
+      log.warn('Error scanning source directory', { sourceRootId, error });
+    }
+  };
+
+  await scanDirectory(dirHandle);
+  return foundFiles;
 }
 
 function matchStatuses(
@@ -83,6 +130,19 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
   const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchedFolders, setSearchedFolders] = useState<string[]>([]);
+  const [folderSelectionError, setFolderSelectionError] = useState<string>('');
+  const [sourceRoots, setSourceRoots] = useState<ProjectMediaSourceRootState[]>([]);
+  const nativeFileInputRef = useRef<HTMLInputElement>(null);
+  const nativeFolderInputRef = useRef<HTMLInputElement>(null);
+  const nativePhotoInputRef = useRef<HTMLInputElement>(null);
+  const pendingNativeStatusIdRef = useRef<string | null>(null);
+  const pendingNativeSourceRootIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    // Safari exposes folder upload through the long-established
+    // webkitdirectory input attribute instead of showDirectoryPicker().
+    nativeFolderInputRef.current?.setAttribute('webkitdirectory', '');
+  }, []);
 
   // Initialize file statuses and auto-scan Raw folder
   useEffect(() => {
@@ -128,6 +188,18 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
           }
         }
 
+        const roots = await getProjectMediaSourceRootStates();
+        if (cancelled) return;
+        setSourceRoots(roots);
+        for (const root of roots) {
+          if (root.permission !== 'granted' || !root.handle) continue;
+          const sourceFiles = await collectSourceRootFiles(root.handle, root.id);
+          const candidates = await createRelinkCandidateMapFromHandles(sourceFiles.values());
+          if (candidates.size === 0) continue;
+          updatedStatuses = matchStatuses(updatedStatuses, missingFiles, candidates);
+          searched.push(root.name);
+        }
+
         if (cancelled) return;
         setFileStatuses(updatedStatuses);
         if (searched.length > 0) {
@@ -143,37 +215,49 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
   }, [files]);
 
   // Scan a folder for missing files
-  const scanFolder = useCallback(async (dirHandle: FileSystemDirectoryHandle) => {
+  const scanFolder = useCallback(async (
+    dirHandle: FileSystemDirectoryHandle,
+    preferredRootId?: string,
+  ) => {
     setIsSearching(true);
+    try {
+      const root = await registerProjectMediaSourceRoot(dirHandle, preferredRootId);
+      const foundFiles = await collectSourceRootFiles(dirHandle, root.id);
+      log.debug(`Found ${foundFiles.size} files in ${dirHandle.name}`);
 
-    // Collect all files from directory recursively
-    const foundFiles = new Map<string, FileSystemFileHandle>();
-
-    const scanDirectory = async (dir: FileSystemDirectoryHandle, parentPath = '') => {
-      try {
-        for await (const entry of (dir as IterableDirectoryHandle).values()) {
-          const relativePath = parentPath ? `${parentPath}/${entry.name}` : entry.name;
-          if (entry.kind === 'file') {
-            setRelinkHandlePath(entry, relativePath);
-            foundFiles.set(relativePath.toLowerCase(), entry);
-          } else if (entry.kind === 'directory') {
-            await scanDirectory(entry, relativePath);
-          }
-        }
-      } catch (e) {
-        log.warn('Error scanning directory', e);
-      }
-    };
-
-    await scanDirectory(dirHandle);
-    log.debug(`Found ${foundFiles.size} files in ${dirHandle.name}`);
-
-    const candidates = await createRelinkCandidateMapFromHandles(foundFiles.values());
-    setFileStatuses(prev => matchStatuses(prev, files, candidates));
-
-    setSearchedFolders(prev => [...prev, dirHandle.name]);
-    setIsSearching(false);
+      const candidates = await createRelinkCandidateMapFromHandles(foundFiles.values());
+      setFileStatuses(prev => matchStatuses(prev, files, candidates));
+      setSearchedFolders(prev => [...new Set([...prev, dirHandle.name])]);
+      setSourceRoots(await getProjectMediaSourceRootStates());
+    } finally {
+      setIsSearching(false);
+    }
   }, [files]);
+
+  const handleReconnectSourceRoot = useCallback(async (root: ProjectMediaSourceRootState) => {
+    let handle = await requestProjectMediaSourceRootAccess(root);
+    if (!handle) {
+      if (typeof (window as RelinkPickerWindow).showDirectoryPicker !== 'function') {
+        const input = nativeFolderInputRef.current;
+        if (!input) return;
+        pendingNativeSourceRootIdRef.current = root.id;
+        setFolderSelectionError('');
+        input.value = '';
+        input.click();
+        return;
+      }
+      try {
+        handle = await (window as RelinkPickerWindow).showDirectoryPicker({
+          mode: 'read',
+          startIn: 'videos',
+        });
+      } catch (error) {
+        if (!isAbortError(error)) log.error('Source folder reconnect error', error);
+        return;
+      }
+    }
+    await scanFolder(handle, root.id);
+  }, [scanFolder]);
 
   // Handle browse button
   const handleBrowse = useCallback(async () => {
@@ -198,7 +282,12 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
 
     try {
       if (typeof (window as RelinkPickerWindow).showDirectoryPicker !== 'function') {
-        log.warn('Directory picker is not available in this browser');
+        const input = nativeFolderInputRef.current;
+        if (!input) return;
+        pendingNativeSourceRootIdRef.current = null;
+        setFolderSelectionError('');
+        input.value = '';
+        input.click();
         return;
       }
 
@@ -222,6 +311,17 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
     // Check how many files are still missing
     const missingFiles = fileStatuses.filter(s => s.status === 'missing');
     const allowMultiple = missingFiles.length > 1;
+
+    if (typeof (window as RelinkPickerWindow).showOpenFilePicker !== 'function') {
+      const input = nativeFileInputRef.current;
+      if (!input) return;
+      pendingNativeStatusIdRef.current = fileStatus.id;
+      input.multiple = allowMultiple;
+      input.accept = getNativeMediaAccept(allowMultiple ? missingFiles : [fileStatus]);
+      input.value = '';
+      input.click();
+      return;
+    }
 
     try {
       const handles = await (window as RelinkPickerWindow).showOpenFilePicker({
@@ -271,25 +371,119 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
     }
   }, [fileStatuses, files, scanFolder]);
 
+  const handleNativeFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(event.currentTarget.files ?? []);
+    const statusId = pendingNativeStatusIdRef.current;
+    pendingNativeStatusIdRef.current = null;
+    event.currentTarget.value = '';
+    if (selectedFiles.length === 0) return;
+
+    const candidates = createRelinkCandidateMapFromFiles(selectedFiles);
+    const directCandidate = statusId && selectedFiles.length === 1
+      ? [...candidates.values()][0]?.[0]
+      : undefined;
+    setFileStatuses((previous) => matchStatuses(
+      previous,
+      files,
+      candidates,
+      statusId && directCandidate ? { statusId, candidate: directCandidate } : undefined,
+    ));
+    log.debug(`User selected ${selectedFiles.length} file(s) through native input`);
+  }, [files]);
+
+  const handlePickPhotos = useCallback(() => {
+    const input = nativePhotoInputRef.current;
+    if (!input) return;
+    const missingFiles = fileStatuses.filter((status) => status.status === 'missing');
+    pendingNativeStatusIdRef.current = missingFiles.length === 1 ? missingFiles[0]!.id : null;
+    input.value = '';
+    input.click();
+  }, [fileStatuses]);
+
+  const handleNativeFolderChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(event.currentTarget.files ?? []);
+    const preferredRootId = pendingNativeSourceRootIdRef.current ?? undefined;
+    pendingNativeSourceRootIdRef.current = null;
+    event.currentTarget.value = '';
+    if (selectedFiles.length === 0) return;
+
+    const relativePath = selectedFiles[0]?.webkitRelativePath;
+    const folderName = relativePath?.split('/').filter(Boolean)[0];
+    if (!folderName) {
+      log.warn('Folder selection did not expose relative paths');
+      setFolderSelectionError('This selection did not include folder paths. On iPhone or iPad, use iOS/iPadOS 18.4 or newer and select the folder in Files.');
+      return;
+    }
+
+    setFolderSelectionError('');
+    const root = registerProjectMediaSourceRootDescriptor(folderName, preferredRootId);
+    const candidates = createRelinkCandidateMapFromFiles(selectedFiles, root);
+    setFileStatuses((previous) => matchStatuses(previous, files, candidates));
+
+    setSearchedFolders((previous) => [...previous, folderName]);
+    void getProjectMediaSourceRootStates().then(setSourceRoots);
+    log.debug(`Scanned ${selectedFiles.length} file(s) through Safari folder input`);
+  }, [files]);
+
   // Apply all found files
   const handleApply = useCallback(async () => {
+    const rejected = new Set<string>();
+    const appliedIds = new Set<string>();
+    const errors: string[] = [];
     for (const status of fileStatuses) {
       if (status.status === 'found' && status.match) {
-        const applied = await applyRelinkMatch(status.id, status.match);
-        if (applied) {
+        try {
+          const applied = await applyRelinkMatch(status.id, status.match);
+          if (!applied) throw new Error(`Could not reconnect “${status.name}”. Choose its original media file.`);
+          appliedIds.add(status.id);
           log.info(`Applied: ${status.name}`);
+        } catch (error) {
+          rejected.add(status.id);
+          errors.push(error instanceof Error ? error.message : `Could not reconnect “${status.name}”.`);
         }
       }
     }
 
+    if (rejected.size > 0) {
+      setFileStatuses(previous => previous.filter(status => !appliedIds.has(status.id)).map(status => rejected.has(status.id)
+        ? { ...status, status: 'missing', match: undefined }
+        : status));
+      setFolderSelectionError(errors.join(' '));
+      return;
+    }
     onClose();
   }, [fileStatuses, onClose]);
 
   const missingCount = fileStatuses.filter(s => s.status === 'missing').length;
   const foundCount = fileStatuses.filter(s => s.status === 'found').length;
+  const usesSafariFileFallback = typeof (window as RelinkPickerWindow).showOpenFilePicker !== 'function';
+  const usesSafariFolderFallback = projectFileService.activeBackend !== 'native'
+    && typeof (window as RelinkPickerWindow).showDirectoryPicker !== 'function';
 
   return (
     <div className="welcome-overlay-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <input
+        ref={nativeFileInputRef}
+        type="file"
+        multiple
+        style={{ position: 'fixed', width: 1, height: 1, opacity: 0, pointerEvents: 'none', left: -10000, top: 0 }}
+        onChange={handleNativeFileChange}
+      />
+      <input
+        ref={nativeFolderInputRef}
+        type="file"
+        multiple
+        style={{ position: 'fixed', width: 1, height: 1, opacity: 0, pointerEvents: 'none', left: -10000, top: 0 }}
+        onChange={handleNativeFolderChange}
+      />
+      <input
+        ref={nativePhotoInputRef}
+        type="file"
+        accept="image/*,video/*"
+        multiple
+        style={{ position: 'fixed', width: 1, height: 1, opacity: 0, pointerEvents: 'none', left: -10000, top: 0 }}
+        onChange={handleNativeFileChange}
+      />
       <div className="welcome-overlay relink-dialog">
         <h2 className="relink-title">Relink Media</h2>
         <p className="relink-subtitle">
@@ -328,16 +522,53 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
             Searched: {searchedFolders.join(', ')}
           </div>
         )}
+        {folderSelectionError && (
+          <div className="relink-folder-error" role="alert">{folderSelectionError}</div>
+        )}
+
+        {sourceRoots.length > 0 && missingCount > 0 && (
+          <div className="relink-known-sources">
+            <span className="relink-known-sources-label">Project source folders</span>
+            <div className="relink-known-source-list">
+              {sourceRoots.map((root) => (
+                <button
+                  key={root.id}
+                  className="relink-btn relink-btn-secondary relink-source-root-btn"
+                  onClick={() => void handleReconnectSourceRoot(root)}
+                  onPointerUp={(event) => event.currentTarget.blur()}
+                  disabled={isSearching}
+                  type="button"
+                >
+                  Reconnect {root.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="relink-actions">
-          <button
-            className="relink-btn relink-btn-secondary"
-            onClick={handleBrowse}
-            disabled={isSearching}
-          >
-            {isSearching ? 'Searching...' : 'Search Folder...'}
-          </button>
+          <div className="relink-source-actions">
+            {usesSafariFileFallback && (
+              <button
+                className="relink-btn relink-btn-secondary"
+                onClick={handlePickPhotos}
+                disabled={missingCount === 0}
+              >
+                Photos / Videos...
+              </button>
+            )}
+            <button
+              className="relink-btn relink-btn-secondary"
+              onClick={handleBrowse}
+              disabled={isSearching}
+              title={usesSafariFolderFallback
+                ? 'This opens the iPad Files app. The Photos library is available through Photos / Videos.'
+                : undefined}
+            >
+              {isSearching ? 'Searching...' : usesSafariFolderFallback ? 'Files / Folder...' : 'Search Folder...'}
+            </button>
+          </div>
           <div className="relink-actions-right">
             <button className="relink-btn" onClick={onClose}>
               Cancel

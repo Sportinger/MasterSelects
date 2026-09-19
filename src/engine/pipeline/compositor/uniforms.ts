@@ -1,8 +1,9 @@
 import { BLEND_MODE_MAP } from '../../core/types';
 import type { Layer } from '../../core/types';
+import type { VideoRotationDegrees } from '../../webcodecs/videoTrackOrientation';
 
-export const COMPOSITOR_UNIFORM_SIZE = 120;
-export const COMPOSITOR_UNIFORM_FLOAT_COUNT = 30;
+export const COMPOSITOR_UNIFORM_SIZE = 128;
+export const COMPOSITOR_UNIFORM_FLOAT_COUNT = 32;
 export const COMPOSITOR_U32_INDICES: readonly number[] = [1, 10, 11, 16, 21, 22, 29]; // blendMode, mask flags, inlineInvert, transitionType, source rotation
 
 export interface InlineEffectParams {
@@ -77,6 +78,7 @@ export function writeLayerUniformData(
   uniformDataU32: Uint32Array,
   inlineEffects?: InlineEffectParams,
   sourcePixelScale = 1,
+  videoRotationOverride?: VideoRotationDegrees,
 ): void {
   // Get rotation values (layer.rotation can be number or {x,y,z} object)
   let rotX = 0, rotY = 0, rotZ = 0;
@@ -123,7 +125,9 @@ export function writeLayerUniformData(
   uniformData[26] = layer.sourceRect?.y ?? 0;
   uniformData[27] = layer.sourceRect?.width ?? 1;
   uniformData[28] = layer.sourceRect?.height ?? 1;
-  uniformDataU32[29] = (layer.source?.videoRotation ?? 0) / 90;
+  uniformDataU32[29] = (videoRotationOverride ?? layer.source?.videoRotation ?? 0) / 90;
+  uniformData[30] = layer.anchor?.x ?? 0;
+  uniformData[31] = layer.anchor?.y ?? 0;
 }
 
 export function shouldUpdateLayerUniforms(

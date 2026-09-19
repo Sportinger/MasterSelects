@@ -179,7 +179,9 @@ html[data-dock-resize-hover-axis='xy'] * {
   touch-action: none;
 }
 
-/* Large invisible target; the handle itself still occupies only 2px in layout. */
+/* A compact invisible target keeps the 2px divider easy to grab without
+   covering nearby tabs and buttons. Touch gets the wider intent-based target
+   from dockResizeSession. */
 .dock-resize-handle::before {
   content: '';
   position: absolute;
@@ -193,16 +195,16 @@ html[data-dock-resize-hover-axis='xy'] * {
   position: absolute;
   background: var(--border-color);
   opacity: 1;
-  transition: background 0.15s, opacity 660ms ease;
+  transition: background 0.15s, opacity 160ms ease;
 }
 
 .dock-container.layout-switch-start-surface .dock-resize-handle::after {
   opacity: 0;
-  transition: opacity 1000ms ease;
+  transition: opacity 160ms ease;
 }
 
 .dock-container.layout-switch-divider-fade-in .dock-resize-handle::after {
-  animation: dockDividerFadeIn 660ms ease both;
+  animation: dockDividerFadeIn 160ms ease both;
 }
 
 @keyframes dockDividerFadeIn {
@@ -224,7 +226,7 @@ html[data-dock-resize-hover-axis='xy'] * {
   top: 0;
   bottom: 0;
   left: 50%;
-  width: 24px;
+  width: 8px;
   transform: translateX(-50%);
 }
 
@@ -241,11 +243,10 @@ html[data-dock-resize-hover-axis='xy'] * {
 }
 
 .dock-resize-handle.vertical::before {
-  top: 50%;
   right: 0;
+  bottom: 0;
   left: 0;
-  height: 24px;
-  transform: translateY(-50%);
+  height: 8px;
 }
 
 .dock-resize-handle.vertical::after {
@@ -253,6 +254,11 @@ html[data-dock-resize-hover-axis='xy'] * {
   right: 0;
   top: 0;
   height: 2px;
+}
+
+.dock-resize-handle.locked {
+  cursor: default;
+  pointer-events: none;
 }
 
 /* Geometry anchors for guided explanations of two-axis corner resizing. */
@@ -324,7 +330,7 @@ html[data-dock-resize-hover-axis='xy'] * {
   background: transparent;
 }
 
-.dock-tab-pane[data-active-panel-type='start'] > .dock-tab-bar {
+.dock-tab-pane[data-active-panel-type='start'] > .dock-pane-preview-box > .dock-tab-bar {
   display: none;
 }
 
@@ -346,6 +352,29 @@ html[data-dock-resize-hover-axis='xy'] * {
   display: none; /* Chrome/Safari - hide scrollbar but keep functionality */
 }
 
+/* V Mobile keeps its complete requested tool order visible at once. Tabs may
+   compress and truncate their label, but never create page or tab-strip pan. */
+.dock-tab-pane[data-group-id='mobile-v-tools-group'] .dock-tab-bar {
+  overflow-x: hidden;
+}
+
+.dock-tab-pane[data-group-id='mobile-v-tools-group'] .dock-tab {
+  flex: 1 1 0;
+  justify-content: center;
+  min-width: 0;
+  padding-inline: 6px;
+}
+
+.dock-tab-pane[data-group-id='mobile-v-tools-group'] .dock-tab-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dock-tab-pane[data-group-id='mobile-v-tools-group'] .dock-tab-add {
+  flex: 0 0 27px;
+}
+
 .dock-tab-bar.middle-dragging {
   cursor: grabbing;
   user-select: none;
@@ -364,7 +393,8 @@ html[data-dock-resize-hover-axis='xy'] * {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 6px;
+  padding: 0 12px;
+  min-width: 44px;
   height: 26px;
   background: transparent;
   border-right: 1px solid var(--border-color);
@@ -435,6 +465,16 @@ html[data-dock-resize-hover-axis='xy'] * {
   color: var(--text-primary);
 }
 
+.dock-tab[data-guided-panel-tab='clip-properties'] {
+  background: color-mix(in srgb, var(--tab-active-bg) 90%, white);
+  color: var(--text-primary);
+}
+
+.dock-tab[data-guided-panel-tab='clip-properties']:hover,
+.dock-tab[data-guided-panel-tab='clip-properties'].active {
+  background: color-mix(in srgb, var(--tab-active-bg) 84%, white);
+}
+
 .dock-tab.shortcut-hover {
   transform: translateY(-1px) scale(1.02);
   box-shadow: inset 0 0 0 1px rgba(45, 140, 235, 0.32);
@@ -499,13 +539,26 @@ html[data-dock-resize-hover-axis='xy'] * {
   font-weight: 500;
 }
 
+.dock-tab-bar.has-add-panel .dock-tab {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.dock-tab-bar.has-add-panel .dock-tab-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .dock-tab-close {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
-  margin-left: 6px;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 100%;
+  margin-left: 14px;
+  margin-right: -12px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -556,9 +609,10 @@ html[data-dock-resize-hover-axis='xy'] * {
 
 .dock-tab-add-menu {
   position: fixed;
-  min-width: 180px;
+  min-width: min(180px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
   max-height: min(430px, calc(100vh - 32px));
-  overflow-y: auto;
+  overflow: visible;
   padding: 4px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -592,6 +646,45 @@ html[data-dock-resize-hover-axis='xy'] * {
   color: var(--accent);
 }
 
+.dock-tab-add-menu-submenu-trigger {
+  position: relative;
+}
+
+.dock-tab-add-submenu {
+  position: absolute;
+  z-index: 1;
+  top: -5px;
+  left: calc(100% - 1px);
+  min-width: 190px;
+  max-height: min(430px, calc(100vh - 32px));
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  display: none;
+}
+
+.dock-tab-add-menu--cascade-left .dock-tab-add-submenu {
+  right: calc(100% - 1px);
+  left: auto;
+}
+
+.dock-tab-add-menu--fold-left .dock-tab-add-submenu {
+  right: 0;
+  left: auto;
+}
+
+.dock-tab-add-menu--fold-right .dock-tab-add-submenu {
+  right: auto;
+  left: 0;
+}
+
+.dock-tab-add-menu-submenu-trigger:hover > .dock-tab-add-submenu,
+.dock-tab-add-menu-submenu-trigger:focus-within > .dock-tab-add-submenu {
+  display: block;
+}
+
 .dock-tab-context-menu {
   position: fixed;
   min-width: 180px;
@@ -620,8 +713,7 @@ html[data-dock-resize-hover-axis='xy'] * {
   cursor: pointer;
 }
 
-.dock-tab-context-menu-item:hover,
-.dock-tab-context-menu-item--submenu:hover {
+.dock-tab-context-menu-item:hover {
   background: var(--bg-hover);
 }
 
@@ -638,7 +730,7 @@ html[data-dock-resize-hover-axis='xy'] * {
   color: var(--accent);
 }
 
-.dock-tab-context-menu-item--submenu {
+.dock-tab-context-menu-submenu-trigger {
   position: relative;
 }
 
@@ -651,8 +743,8 @@ html[data-dock-resize-hover-axis='xy'] * {
 .dock-tab-context-submenu {
   position: absolute;
   top: -4px;
-  left: calc(100% + 4px);
-  min-width: 210px;
+  left: calc(100% - 1px);
+  min-width: 190px;
   max-height: min(430px, calc(100vh - 32px));
   overflow-y: auto;
   padding: 4px;
@@ -662,8 +754,35 @@ html[data-dock-resize-hover-axis='xy'] * {
   display: none;
 }
 
-.dock-tab-context-menu-item--submenu:hover .dock-tab-context-submenu,
-.dock-tab-context-menu-item--submenu:focus-within .dock-tab-context-submenu {
+.dock-tab-context-submenu--categories {
+  min-width: 160px;
+  overflow: visible;
+}
+
+.dock-tab-context-submenu--panels {
+  top: -5px;
+  min-width: 190px;
+}
+
+.dock-tab-context-menu--cascade-left .dock-tab-context-submenu {
+  right: calc(100% - 1px);
+  left: auto;
+}
+
+.dock-tab-context-menu--fold-left
+  > .dock-tab-context-menu-submenu-trigger
+  > .dock-tab-context-submenu--categories {
+  right: calc(100% - 1px);
+  left: auto;
+}
+
+.dock-tab-context-menu--fold-right .dock-tab-context-submenu--panels {
+  right: calc(100% - 11px);
+  left: auto;
+}
+
+.dock-tab-context-menu-submenu-trigger:hover > .dock-tab-context-submenu,
+.dock-tab-context-menu-submenu-trigger:focus-within > .dock-tab-context-submenu {
   display: block;
 }
 
@@ -720,6 +839,48 @@ html[data-dock-resize-hover-axis='xy'] * {
   overflow: auto;
   transform-origin: top left;
   font-size: calc(1em * var(--panel-zoom, 1));
+}
+
+.dock-panel-content[data-tab-swipe-claimed='true'] .dock-panel-content-inner {
+  pointer-events: none;
+}
+
+@keyframes dock-panel-tab-swipe-exit-left {
+  from { opacity: 1; transform: translate3d(0, 0, 0); }
+  to { opacity: 0.35; transform: translate3d(-72px, 0, 0); }
+}
+
+@keyframes dock-panel-tab-swipe-exit-right {
+  from { opacity: 1; transform: translate3d(0, 0, 0); }
+  to { opacity: 0.35; transform: translate3d(72px, 0, 0); }
+}
+
+@keyframes dock-panel-tab-swipe-enter-left {
+  from { opacity: 0.35; transform: translate3d(-72px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes dock-panel-tab-swipe-enter-right {
+  from { opacity: 0.35; transform: translate3d(72px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+.dock-panel-tab-swipe-exit-left {
+  animation: dock-panel-tab-swipe-exit-left 175ms cubic-bezier(0.7, 0, 0.84, 0) forwards;
+  pointer-events: none;
+}
+
+.dock-panel-tab-swipe-exit-right {
+  animation: dock-panel-tab-swipe-exit-right 175ms cubic-bezier(0.7, 0, 0.84, 0) forwards;
+  pointer-events: none;
+}
+
+.dock-panel-tab-swipe-enter-left {
+  animation: dock-panel-tab-swipe-enter-left 300ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.dock-panel-tab-swipe-enter-right {
+  animation: dock-panel-tab-swipe-enter-right 300ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .dock-panel-content-inner--media,
@@ -1150,4 +1311,105 @@ html[data-dock-resize-hover-axis='xy'] * {
   height: 100%;
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+/* Touch drag: keep the browser from panning/selecting while a tab is held */
+.dock-tab,
+.dock-tab-handle {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.floating-panel-header,
+.floating-panel-title-tab,
+.floating-panel-resize {
+  touch-action: none;
+}
+
+/* Goo (metaball) drag overlay */
+.dock-goo-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9998;
+  pointer-events: none;
+}
+
+.dock-goo-label {
+  position: fixed;
+  left: 0;
+  top: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-primary);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 9999;
+  will-change: transform;
+}
+
+/* While the goo renders the zones, hide the rectangular overlay fills; the
+   precise tab-slot indicators stay visible. */
+.dock-container.goo-active .dock-drop-overlay::before,
+.dock-container.goo-active .dock-root-drop-overlay::before {
+  display: none;
+}
+
+/* Drop preview: the pane's inner box slides aside while a zone is hovered so
+   the future layout is visible live. The pane element itself never moves —
+   its untransformed hit box is what the drag hit-testing samples. */
+.dock-pane-preview-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  transition: transform 260ms cubic-bezier(0.3, 1.25, 0.35, 1), opacity 200ms ease;
+}
+
+.dock-tab-pane[data-drop-preview] {
+  overflow: hidden;
+}
+
+.dock-tab-pane[data-drop-preview='left'] > .dock-pane-preview-box {
+  transform: translateX(50%);
+}
+
+.dock-tab-pane[data-drop-preview='right'] > .dock-pane-preview-box {
+  transform: translateX(-50%);
+}
+
+.dock-tab-pane[data-drop-preview='top'] > .dock-pane-preview-box {
+  transform: translateY(50%);
+}
+
+.dock-tab-pane[data-drop-preview='bottom'] > .dock-pane-preview-box {
+  transform: translateY(-50%);
+}
+
+.dock-tab-pane[data-drop-preview='center'] > .dock-pane-preview-box {
+  transform: scale(0.965);
+  opacity: 0.75;
+}
+
+.dock-root {
+  transition: transform 260ms cubic-bezier(0.3, 1.25, 0.35, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock-panel-tab-swipe-exit-left,
+  .dock-panel-tab-swipe-exit-right,
+  .dock-panel-tab-swipe-enter-left,
+  .dock-panel-tab-swipe-enter-right {
+    animation: none;
+  }
+
+  .dock-pane-preview-box,
+  .dock-root {
+    transition: none;
+  }
 }

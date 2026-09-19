@@ -9,6 +9,7 @@ dist-ssr
 
 # Logs
 logs
+.dev-agent-logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -29,6 +30,8 @@ playwright-report/
 playwright-built-report/
 test-results/
 blob-report/
+# Generated local audits, browser traces, test exports and temporary workspaces
+/output/
 !src/components/properties/storyboard/coverage/
 !src/components/properties/storyboard/coverage/**
 !src/services/storyboard/coverage/
@@ -56,6 +59,7 @@ tmp
 temp
 *.tmp
 tmp_*.png
+.tmp-splat/
 
 # FFmpeg WASM build outputs (build artifacts, not the final WASM)
 ffmpeg-wasm-build/build/
@@ -65,10 +69,9 @@ ffmpeg-wasm-build/build.log
 # Terminal state (Claude Code)
 .terminal_*
 
-# Local agent instructions
-AGENTS.md
+# Agent instructions must stay tracked in the private repository
 !AGENTS.md
-CLAUDE.md
+!CLAUDE.md
 
 # Test videos (large files - keep out of git)
 public/test-videos/
@@ -91,6 +94,9 @@ tools/native-helper/ffmpeg/
 .browser-logs.json
 .wrangler/
 .codex-usage/
+.codex-temp/
+.codex-tmp/
+.codex-remote-attachments/
 
 # AI Bridge session token (generated per dev session)
 .ai-bridge-token
@@ -105,8 +111,7 @@ tools/native-helper/icon.ico
 Wonder/
 _fremd/
 
-# Private planning docs (proprietary kernel/orchestration design — never publish
-# to the public MIT repo; lives in docs/private/, future home: private repo)
+# Private planning docs (proprietary kernel/orchestration design — never publish)
 docs/private/
 
 # Python virtual environments
@@ -156,3 +161,7 @@ public/instruments/gm/**/*.json
 # Internal planning documents stay local (public repo publishes features/evidence, not plans)
 docs/plans/
 docs/completed/plans/
+
+# Local TLS certificates for LAN device testing (private keys - never commit)
+.certs/
+.ai-bridge-url

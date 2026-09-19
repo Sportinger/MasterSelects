@@ -119,6 +119,32 @@ snapping entirely.
 Both snap paths are covered: `getSnappedPosition` (clip drags) and
 `resolveTimelineClipPointerTime` (tool-driven interactions).
 
+The division is chosen in the ruler-header **Rulers** dropdown: expand the
+**Bars + Beats** row with the `+` button on its right edge to reveal Bar, Beat,
+1/8, 1/16, 1/8 triplet and 1/16 triplet. The list is collapsed on every open.
+
+### Piano-roll snapping
+
+The piano roll has its **own** snap toggle and division, deliberately separate
+from the timeline's — a key editor is normally quantized far finer (default
+1/16) than the arrangement grid you drag clips on. Both are per-user
+localStorage view state (`pianoRollSnapEnabled`, `pianoRollGridSubdivision`),
+never project content.
+
+Unlike the timeline's pixel-threshold magnet, snapping here is a **quantizer**:
+with the toggle on, the dragged edge always lands on the nearest line, because
+"1/16" in a key editor means notes sit on 1/16 boundaries. It applies to drawing,
+moving, group-moving (only the anchor snaps — the rest keep their offsets, so a
+phrase is never collapsed onto the grid) and resizing. A plain click makes a note
+exactly one grid unit long. Modifiers match the timeline: **Alt** bypasses
+snapping, **Shift** temporarily enables it while the toggle is off.
+
+Candidates come from `collectBarsGridSnapTimes`, the same generator the grid
+draws from, so the "you can only snap to a line you can see" rule holds here too:
+when the zoom thins the fine lines away, snapping degrades to the coarser tier
+still on screen rather than jumping to an invisible line. The content-time ↔
+absolute-time round trip lives in `components/pianoRoll/pianoRollSnap.ts`.
+
 ---
 
 ## Metronome
@@ -183,6 +209,8 @@ ids, clamped values. Writing onto an occupied bar replaces the event there.
 | Editing invariants + musical re-anchoring | `src/timeline/tempo/tempoEdits.ts` |
 | Content remap (MIDI follows tempo) | `src/timeline/tempo/tempoRemap.ts` |
 | Grid geometry + snap candidates | `src/timeline/tempo/barsGrid.ts` |
+| Piano-roll snapping (content↔absolute) | `src/components/pianoRoll/pianoRollSnap.ts` |
+| Piano-roll snap/division controls | `src/components/pianoRoll/PianoRollSnapControls.tsx` |
 | Store actions (history-aware) | `src/stores/timeline/tempoSlice.ts` |
 | Tempo lane UI | `src/components/timeline/components/TempoRulerLane.tsx` |
 | Body grid canvas | `src/components/timeline/components/TimelineTrackGridCanvas.tsx` |

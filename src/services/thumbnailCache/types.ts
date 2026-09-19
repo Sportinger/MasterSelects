@@ -1,5 +1,7 @@
 export type ThumbnailStatus = 'none' | 'generating' | 'ready' | 'error';
 
+export const SOURCE_THUMBNAIL_GENERATION_VERSION = 2;
+
 export type ThumbnailCacheEventType =
   | 'status'
   | 'frames-loaded'
@@ -35,6 +37,7 @@ export type ThumbnailCacheNotify = (
 export interface SourceThumbnailFrame {
   secondIndex: number;
   blob: Blob;
+  generationVersion?: number;
 }
 
 export interface StoredSourceThumbnailFrame extends SourceThumbnailFrame {

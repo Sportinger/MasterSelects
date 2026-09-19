@@ -139,7 +139,15 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
     set({ selectedVertexIds: new Set(), selectedMaskEdgeId: null });
   },
 
+  setMaskFeatherPreviewEnabled: (enabled) => {
+    set({
+      maskFeatherPreviewEnabled: enabled,
+      ...(!enabled ? { maskFeatherPreview: null } : {}),
+    });
+  },
+
   showMaskFeatherPreview: (maskId, edgeId = null) => {
+    if (get().maskFeatherPreviewEnabled === false) return;
     set({ maskFeatherPreview: { maskId, edgeId, changedAt: performance.now() } });
   },
 
@@ -154,6 +162,7 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
     const newMask: ClipMask = {
       id: maskId,
       name: maskData?.name || `Mask ${maskCount}`,
+      purpose: maskData?.purpose,
       vertices: maskData?.vertices || [],
       closed: maskData?.closed ?? false,
       opacity: maskData?.opacity ?? 1,
@@ -163,17 +172,26 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
       mode: maskData?.mode ?? 'add',
       expanded: maskData?.expanded ?? true,
       position: maskData?.position ?? { x: 0, y: 0 },
+      rotation: maskData?.rotation ?? 0,
       enabled: maskData?.enabled ?? true,
       visible: maskData?.visible ?? true,
       outlineColor: maskData?.outlineColor ?? DEFAULT_MASK_OUTLINE_COLORS[(maskCount - 1) % DEFAULT_MASK_OUTLINE_COLORS.length],
     };
 
     set({
-      clips: clips.map(c =>
-        c.id === clipId
-          ? { ...c, masks: [...(c.masks || []), newMask] }
-          : c
-      ),
+      clips: clips.map(c => {
+        if (c.id !== clipId) return c;
+        const masks = c.masks || [];
+        const cropIndex = newMask.purpose === 'crop'
+          ? -1
+          : masks.findIndex(mask => mask.purpose === 'crop');
+        return {
+          ...c,
+          masks: cropIndex >= 0
+            ? masks.toSpliced(cropIndex, 0, newMask)
+            : [...masks, newMask],
+        };
+      }),
     });
 
     invalidateCache();
@@ -271,10 +289,14 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
     const masks = [...clip.masks];
     const [removed] = masks.splice(fromIndex, 1);
     masks.splice(toIndex, 0, removed);
+    const orderedMasks = [
+      ...masks.filter(mask => mask.purpose !== 'crop'),
+      ...masks.filter(mask => mask.purpose === 'crop'),
+    ];
 
     set({
       clips: clips.map(c =>
-        c.id === clipId ? { ...c, masks } : c
+        c.id === clipId ? { ...c, masks: orderedMasks } : c
       ),
     });
 

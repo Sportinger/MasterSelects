@@ -198,17 +198,26 @@ export interface ColorCorrectionActions {
   updateColorCorrection: (clipId: string, updater: (current: ColorCorrectionState) => ColorCorrectionState) => void;
   setColorCorrectionEnabled: (clipId: string, enabled: boolean) => void;
   setColorViewMode: (clipId: string, viewMode: ColorViewMode) => void;
+  setColorNodeDisplayMode: (clipId: string, mode: NonNullable<ColorCorrectionState['ui']['nodeDisplayMode']>) => void;
   setColorWorkspaceViewport: (clipId: string, viewport: NonNullable<ColorCorrectionState['ui']['workspaceViewport']>) => void;
+  initializeColorNodeGraphLayout: (clipId: string, width: number, height: number, force?: boolean) => void;
   selectColorNode: (clipId: string, nodeId: string | undefined) => void;
   addColorNode: (clipId: string, type?: ColorNodeType) => string;
   removeColorNode: (clipId: string, nodeId: string) => void;
   moveColorNode: (clipId: string, nodeId: string, position: { x: number; y: number }) => void;
-  connectColorNodes: (clipId: string, fromNodeId: string, toNodeId: string) => void;
+  connectColorNodes: (
+    clipId: string,
+    fromNodeId: string,
+    toNodeId: string,
+    fromPort?: string,
+    toPort?: string,
+  ) => void;
   removeColorEdge: (clipId: string, edgeId: string) => void;
   updateColorNodeParam: (clipId: string, versionId: string, nodeId: string, paramName: string, value: ColorParamValue) => void;
   setColorNodeEnabled: (clipId: string, nodeId: string, enabled: boolean) => void;
   renameColorNode: (clipId: string, nodeId: string, name: string) => void;
   resetColorNode: (clipId: string, nodeId: string) => void;
+  resetColorNodeStackLayers: (clipId: string) => void;
   resetColorCorrection: (clipId: string) => void;
   duplicateColorVersion: (clipId: string) => string;
   deleteColorVersion: (clipId: string, versionId: string) => void;
@@ -230,15 +239,18 @@ export interface DownloadClipActions {
   setDownloadError: (clipId: string, error: string) => void;
 }
 
-export type ClipTransformUpdate = Omit<Partial<ClipTransform>, 'position' | 'scale' | 'rotation'> & {
+export type ClipTransformUpdate = Omit<Partial<ClipTransform>, 'position' | 'anchor' | 'scale' | 'rotation'> & {
   position?: Partial<ClipTransform['position']>;
+  anchor?: Partial<NonNullable<ClipTransform['anchor']>>;
   scale?: Partial<ClipTransform['scale']>;
   rotation?: Partial<ClipTransform['rotation']>;
 };
 
 export interface AddClipOptions {
   name?: string;
+  is3D?: boolean;
   linkedAudioTrackId?: string;
+  visualScaleMode?: 'fit' | 'fill' | 'stretch' | 'original';
   signalAssetId?: string;
   signalRefId?: string;
   signalRenderAdapterId?: string;
@@ -262,6 +274,8 @@ export interface CoreClipActions extends ClipSpeedActions {
     options?: AddClipOptions,
   ) => Promise<string | undefined>;
   addCompClip: (trackId: string, composition: Composition, startTime: number) => Promise<void>;
+  replaceClipSource: (clipId: string, mediaFileId: string) => boolean;
+  replaceClipSourceWithComposition: (clipId: string, compositionId: string) => Promise<boolean>;
   updateClip: (id: string, updates: Partial<TimelineClip>) => void;
   removeClip: (id: string) => void;
   moveClip: (id: string, newStartTime: number, newTrackId?: string, skipLinked?: boolean, skipGroup?: boolean, skipTrim?: boolean, excludeClipIds?: string[]) => void;

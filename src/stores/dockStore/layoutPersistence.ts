@@ -6,18 +6,32 @@ import type {
   FloatingPanel,
   PanelType,
   SavedDockLayout,
+  ScopeDisplayMode,
 } from '../../types/dock';
-import { DEFAULT_LAYOUT, FACTORY_3D_EDIT_PREVIEW_DEFAULTS, FACTORY_SAVED_DOCK_LAYOUTS } from './layoutDefaults';
+import {
+  DEFAULT_LAYOUT,
+  FACTORY_3D_EDIT_PREVIEW_DEFAULTS,
+  FACTORY_SAVED_DOCK_LAYOUTS,
+  MOBILE_LAYOUT,
+  VERTICAL_MOBILE_LAYOUT,
+} from './layoutDefaults';
 import { cleanupSavedTimelineLayout } from './timelineLayoutPersistence';
 import {
   CAN_EDIT_FACTORY_DOCK_LAYOUTS,
   FACTORY_3D_EDIT_LAYOUT_ID,
+  FACTORY_AUDIO_EDIT_LAYOUT_ID,
+  FACTORY_COLOR_LAYOUT_ID,
+  FACTORY_LIVE_LAYOUT_ID,
+  FACTORY_MOBILE_LAYOUT_ID,
+  FACTORY_MEDIUM_EDIT_LAYOUT_ID,
+  FACTORY_VERTICAL_MOBILE_LAYOUT_ID,
   FACTORY_VIDEO_EDIT_LAYOUT_ID,
   FACTORY_DOCK_LAYOUT_IDS,
   FACTORY_DOCK_LAYOUT_NAMES,
   FACTORY_DOCK_LAYOUT_NAME_TO_ID,
   VALID_PANEL_TYPES,
 } from './panelRegistry';
+import { LIVE_LAYOUT } from './liveLayoutDefaults';
 import { findTabGroupById } from './layoutTree';
 
 interface NormalizedDockPanel {
@@ -32,9 +46,15 @@ interface NormalizedBrowserWindowPanel {
   browserWindowPanel: BrowserWindowPanel;
 }
 
+const LEGACY_SCOPE_MODES: Partial<Record<PanelType, ScopeDisplayMode>> = {
+  'scope-waveform': 'waveform',
+  'scope-histogram': 'histogram',
+  'scope-vectorscope': 'vectorscope',
+};
 
 function normalizeDockPanel(panel: DockPanel): NormalizedDockPanel | null {
-  const normalizedType = panel.type;
+  const legacyScopeMode = LEGACY_SCOPE_MODES[panel.type];
+  const normalizedType = legacyScopeMode ? 'color-scopes' : panel.type;
   if (!VALID_PANEL_TYPES.has(normalizedType)) {
     return null;
   }
@@ -43,6 +63,12 @@ function normalizeDockPanel(panel: DockPanel): NormalizedDockPanel | null {
     panel: {
       ...panel,
       type: normalizedType,
+      ...(legacyScopeMode
+        ? {
+            title: 'Scopes',
+            data: { ...panel.data, scopeMode: legacyScopeMode },
+          }
+        : {}),
     },
   };
 }
@@ -95,15 +121,31 @@ function normalizeBrowserWindowPanel(windowPanel: BrowserWindowPanel): Normalize
 // Normalize legacy aliases and filter out invalid panel types from a layout node
 function filterInvalidPanels(node: DockNode): DockNode | null {
   if (node.kind === 'tab-group') {
-    const validPanels = node.panels
-      .map(normalizeDockPanel)
-      .filter((panel): panel is NormalizedDockPanel => panel !== null)
-      .map((candidate) => candidate.panel);
+    const normalizedPanels = node.panels.flatMap((panel, originalIndex) => {
+      const normalized = normalizeDockPanel(panel);
+      return normalized ? [{ ...normalized, originalIndex }] : [];
+    });
+    const activePanel = normalizedPanels.find(candidate => candidate.originalIndex === node.activeIndex);
+    const preferredScopesPanel = activePanel?.panel.type === 'color-scopes'
+      ? activePanel.panel
+      : normalizedPanels.find(candidate => candidate.panel.type === 'color-scopes')?.panel;
+    const validPanels = normalizedPanels.flatMap((candidate) => {
+      if (candidate.panel.type !== 'color-scopes') return [candidate.panel];
+      return candidate.panel.id === preferredScopesPanel?.id ? [candidate.panel] : [];
+    });
     if (validPanels.length === 0) return null;
+    const restoredActiveIndex = activePanel
+      ? validPanels.findIndex(panel => (
+          panel.id === activePanel.panel.id
+          || (panel.type === 'color-scopes' && activePanel.panel.type === 'color-scopes')
+        ))
+      : -1;
     return {
       ...node,
       panels: validPanels,
-      activeIndex: Math.min(node.activeIndex, validPanels.length - 1),
+      activeIndex: restoredActiveIndex >= 0
+        ? restoredActiveIndex
+        : Math.min(node.activeIndex, validPanels.length - 1),
     };
   } else {
     const [left, right] = node.children;
@@ -246,15 +288,31 @@ export function mergeFactoryDockLayouts(savedLayouts: SavedDockLayout[]): SavedD
     if (factoryId) {
       factoryFavoriteOverrides.set(factoryId, savedLayout.favorite === true);
       if (CAN_EDIT_FACTORY_DOCK_LAYOUTS) {
+        const factoryDefault = FACTORY_SAVED_DOCK_LAYOUTS.find(
+          (candidate) => candidate.id === factoryId,
+        );
         devOverrides.set(factoryId, {
           ...savedLayout,
           id: factoryId,
           name: FACTORY_DOCK_LAYOUT_NAMES.get(factoryId) ?? savedLayout.name,
+          updatedAt: factoryDefault?.updatedAt ?? savedLayout.updatedAt,
           layout: factoryId === FACTORY_VIDEO_EDIT_LAYOUT_ID
             ? DEFAULT_LAYOUT
-            : factoryId === FACTORY_3D_EDIT_LAYOUT_ID
-              ? applyFactory3DEditPreviewDefaults(savedLayout.layout)
-              : savedLayout.layout,
+            : factoryId === FACTORY_MOBILE_LAYOUT_ID
+              ? MOBILE_LAYOUT
+              : factoryId === FACTORY_VERTICAL_MOBILE_LAYOUT_ID
+                ? VERTICAL_MOBILE_LAYOUT
+                : factoryId === FACTORY_MEDIUM_EDIT_LAYOUT_ID
+                  ? factoryDefault?.layout ?? savedLayout.layout
+                : factoryId === FACTORY_AUDIO_EDIT_LAYOUT_ID
+                  ? factoryDefault?.layout ?? savedLayout.layout
+                  : factoryId === FACTORY_COLOR_LAYOUT_ID
+                    ? factoryDefault?.layout ?? savedLayout.layout
+                    : factoryId === FACTORY_3D_EDIT_LAYOUT_ID
+                      ? applyFactory3DEditPreviewDefaults(factoryDefault?.layout ?? savedLayout.layout)
+                      : factoryId === FACTORY_LIVE_LAYOUT_ID
+                        ? LIVE_LAYOUT
+                        : savedLayout.layout,
           factory: true,
           favorite: savedLayout.favorite === true,
         });
@@ -344,9 +402,10 @@ function isLegacyFactoryDefaultLayout(layout: DockLayout): boolean {
 }
 
 export function cleanupRestoredCurrentLayout(layout: DockLayout): DockLayout {
+  if (isLegacyFactoryDefaultLayout(layout)) {
+    return cloneDockLayout(DEFAULT_LAYOUT);
+  }
   const cleanedLayout = cleanupPersistedLayout(layout);
-  return isLegacyFactoryDefaultLayout(cleanedLayout)
-    ? cloneDockLayout(DEFAULT_LAYOUT)
-    : cleanedLayout;
+  return cleanedLayout;
 }
 

@@ -21,12 +21,10 @@ interface MultiPreviewPanelProps {
 }
 
 function MultiPreviewStatsOverlay({
-  expanded,
-  onToggle,
+  onOpen,
   resolution,
 }: {
-  expanded: boolean;
-  onToggle: () => void;
+  onOpen: () => void;
   resolution: { width: number; height: number };
 }) {
   const engineStats = useEngineStore((state) => state.engineStats);
@@ -34,8 +32,8 @@ function MultiPreviewStatsOverlay({
     <StatsOverlay
       stats={engineStats}
       resolution={resolution}
-      expanded={expanded}
-      onToggle={onToggle}
+      expanded={false}
+      onToggle={onOpen}
     />
   );
 }
@@ -45,9 +43,9 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
   const visibleCompositions = useMemo(() => compositions.filter(isUserVisibleComposition), [compositions]);
   const { previewQuality, setPreviewQuality } = useSettingsStore();
   const updatePanelData = useDockStore((s) => s.updatePanelData);
+  const activateStatsPanel = useDockStore((s) => s.activatePanelType);
   const outputResolution = useSettingsStore((s) => s.outputResolution);
 
-  const [statsExpanded, setStatsExpanded] = useState(false);
   const [qualityOpen, setQualityOpen] = useState(false);
   const [sourceOpen, setSourceOpen] = useState(false);
   const sourceDropdownRef = useRef<HTMLDivElement>(null);
@@ -246,8 +244,7 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
       {/* Single stats overlay over the whole panel */}
       <MultiPreviewStatsOverlay
         resolution={outputResolution}
-        expanded={statsExpanded}
-        onToggle={() => setStatsExpanded(!statsExpanded)}
+        onOpen={() => activateStatsPanel('stats')}
       />
     </div>
   );

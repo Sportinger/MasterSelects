@@ -1,3 +1,5 @@
+import { LegalContactMethods, LegalPostalAddress } from './LegalContactDetails';
+
 // =====================================================
 // ENGLISH
 // =====================================================
@@ -6,17 +8,15 @@ export function ImprintEN() {
   return (
     <div className="legal-text">
       <h3>Information according to § 5 DDG (German Digital Services Act)</h3>
-      <p>Roman Kuskowski</p>
+      <p><LegalPostalAddress /></p>
 
       <h3>Contact</h3>
-      <p>Email: admin@masterselects.com</p>
+      <p><LegalContactMethods emailLabel="Email" phoneLabel="Phone" /></p>
 
       <h4>Copyright</h4>
       <p>
-        MasterSelects is open source software, published on GitHub at{' '}
-        <a href="https://github.com/Sportinger/MasterSelects" target="_blank" rel="noopener noreferrer">
-          github.com/Sportinger/MasterSelects
-        </a>.
+        The MasterSelects editor is licensed under GNU AGPL-3.0-only. Copyright © 2026 Jan Roman Kuskowski.
+        Third-party components remain subject to their respective licenses.
       </p>
     </div>
   );
@@ -28,12 +28,13 @@ export function PrivacyEN() {
       <h3>1. Privacy at a Glance</h3>
       <p>
         <strong>MasterSelects works locally by default.</strong> Projects and media are processed in your browser.
-        Apart from the technically necessary delivery of the website, data leaves your device only when you invoke a
-        feature clearly identified as a cloud, download, login, payment, or provider feature.
+        Apart from the technically necessary delivery of the website and the privacy-controlled product analytics
+        described below, data leaves your device only when you invoke a feature clearly identified as a cloud,
+        download, login, payment, or provider feature.
       </p>
 
       <h3>2. Data Controller</h3>
-      <p>Roman Kuskowski<br />Email: admin@masterselects.com</p>
+      <p><LegalPostalAddress /><br /><LegalContactMethods emailLabel="Email" phoneLabel="Phone" /></p>
 
       <h3>3. Hosting and Website Requests</h3>
       <p>
@@ -43,18 +44,32 @@ export function PrivacyEN() {
         erased under the contracted and configured retention rules once no longer needed for operations or security.
       </p>
       <p>
-        For operational monitoring and abuse detection, we additionally store the path, timestamp, Cloudflare country
-        and city, referrer, shortened user agent, and a pseudonymous identifier derived from the IP address and a secret
-        salt. We do not store the plain IP in this live log. These events are automatically deleted after about one hour.
-        Legal basis: Art. 6(1)(f) GDPR.
+        For operational monitoring and abuse detection, we additionally store the path, timestamp, Cloudflare country,
+        coarse browser, operating-system and device classes, the referrer domain, and a daily rotating pseudonymous
+        visitor identifier produced from the IP address with a secret-key HMAC. The city, full user agent, full referrer
+        URL, and plain IP are not stored in this live log, and the identifier cannot be linked across days. Events are
+        automatically deleted after 180 days. Legal basis: Art. 6(1)(f) GDPR.
       </p>
 
-      <h3>4. Accounts, Login, Email, and Payments</h3>
+      <h3>4. Product Analytics</h3>
+      <p>
+        We process a fixed, first-party allowlist of coarse product events such as app opening, setup and tutorial
+        progress, completed imports, edit categories, playback, opened panels, checkout state, and export outcomes.
+        Signed-in events may be linked to the internal account ID; anonymous events use an ephemeral in-memory session
+        ID. We do not collect filenames, paths, project or timeline content, media, prompts, chat or transcript text,
+        raw errors, or a persistent analytics device identifier. No analytics cookie is used. Product events are
+        automatically erased after 180 days. Legal basis: Art. 6(1)(f) GDPR (improving usability, reliability, and
+        product activation). You can object at any time under Settings &gt; General &gt; Privacy; Do Not Track and Global
+        Privacy Control signals are also honored.
+      </p>
+
+      <h3>5. Accounts, Login, Email, and Payments</h3>
       <ul>
         <li><strong>Account data:</strong> Email, display name, credit balance, and usage history; Art. 6(1)(b) GDPR.</li>
         <li><strong>Google login:</strong> If selected, we receive the identity/contact data released by Google; Art. 6(1)(b) GDPR.</li>
         <li><strong>Transactional email:</strong> <strong>Resend</strong> processes recipient address and message content for login/account messages; Art. 6(1)(b) GDPR.</li>
         <li><strong>Payments:</strong> <strong>Stripe, Inc.</strong> processes payment and billing data. We do not store complete card or bank details; Art. 6(1)(b) and (c) GDPR.</li>
+        <li><strong>Contract records:</strong> For paid contracts we log the time and version of the accepted Terms and Withdrawal Policy and the request for immediate performance, send the contract confirmation by email, and store notices submitted through the forms at /withdrawal and /cancel with name, email address, contract reference, and time of receipt; Art. 6(1)(b) and (c) GDPR, retained for the statutory evidence and limitation periods.</li>
       </ul>
       <p>
         Login states expire after ten minutes and sessions after 30 days. Accounts and non-statutory usage data are
@@ -62,7 +77,7 @@ export function PrivacyEN() {
         Invoices and accounting records are generally retained for eight years (§ 147 AO, § 14b UStG).
       </p>
 
-      <h3>5. Cloud and AI Features</h3>
+      <h3>6. Cloud and AI Features</h3>
       <p>
         When you start a cloud or AI feature, the selected prompts, messages, media, references, and technical metadata
         are sent to the relevant provider. Depending on the feature, recipients include <strong>OpenAI</strong>,
@@ -75,10 +90,12 @@ export function PrivacyEN() {
         Hosted AI chat may store prompts, responses, tool calls, moderation results, token counts, credit cost, duration,
         status, errors, and a pseudonymous IP hash for account history, billing, support, and abuse prevention. Content is
         erased when no longer needed for those purposes or after a valid erasure request, without affecting statutory
-        billing records.
+        billing records. Anonymous welcome-credit abuse protection also stores secret-key HMACs derived from the
+        connecting IP and browser user-agent, plus an IP-only network HMAC; the plain IP and user-agent are not stored in
+        the claim table.
       </p>
 
-      <h3>6. Local Storage and External Resources</h3>
+      <h3>7. Local Storage and External Resources</h3>
       <p>
         Projects, settings, the optional encrypted YouTube Data API credential, and media references are stored in
         Local Storage, IndexedDB, or OPFS and can be erased through browser data controls. If you explicitly select a Google font or download an
@@ -87,21 +104,21 @@ export function PrivacyEN() {
         demo video is served by MasterSelects and makes no YouTube connection.
       </p>
 
-      <h3>7. Cookies and Device Storage</h3>
+      <h3>8. Cookies and Device Storage</h3>
       <p>
-        We use no analytics or marketing cookies. Necessary cookies protect login states (up to ten minutes) and
-        sessions (up to 30 days). Only after you actively check the free-credit offer does a necessary cookie bind the
+        We use no analytics or marketing cookies. Necessary cookies protect login states (up to ten minutes), account
+        sessions, and guest hosted-AI sessions (up to 30 days). Only after you actively check the free-credit offer does a necessary cookie bind the
         requested offer to that browser for up to one hour. Server-side visit monitoring stores nothing on the device.
       </p>
 
-      <h3>8. International Transfers</h3>
+      <h3>9. International Transfers</h3>
       <p>
         Some providers process data outside the European Economic Area. Transfers take place only under an Art. 45 GDPR
         adequacy decision or Art. 46 GDPR safeguards, particularly Standard Contractual Clauses. Information and copies
         of relevant safeguards can be requested at admin@masterselects.com.
       </p>
 
-      <h3>9. Your Rights</h3>
+      <h3>10. Your Rights</h3>
       <p>You have the right to:</p>
       <ul>
         <li><strong>Access</strong> (Art. 15 GDPR) — What data we store about you</li>
@@ -115,15 +132,15 @@ export function PrivacyEN() {
       <p>To exercise your rights, email <strong>admin@masterselects.com</strong>.</p>
       <p>You have the right to lodge a complaint with a data protection supervisory authority.</p>
 
-      <h3>10. Required Data</h3>
+      <h3>11. Required Data</h3>
       <p>
         The local editor can be used without an account. Account, payment, and cloud-credit data is contractually
         required for the relevant feature; without it, that feature cannot be provided.
       </p>
 
-      <h3>11. Changes</h3>
+      <h3>12. Changes</h3>
       <p>The current version is always available at <a href="/privacy">/privacy</a>.</p>
-      <p className="legal-meta">Last updated: July 17, 2026</p>
+      <p className="legal-meta">Last updated: August 16, 2026</p>
     </div>
   );
 }
@@ -138,19 +155,11 @@ export function ContactEN() {
           <span className="legal-contact-label">Email</span>
           <a href="mailto:admin@masterselects.com">admin@masterselects.com</a>
         </div>
-        <div className="legal-contact-row">
-          <span className="legal-contact-label">GitHub</span>
-          <a href="https://github.com/Sportinger/MasterSelects" target="_blank" rel="noopener noreferrer">Sportinger/MasterSelects</a>
-        </div>
-        <div className="legal-contact-row">
-          <span className="legal-contact-label">Issues</span>
-          <a href="https://github.com/Sportinger/MasterSelects/issues" target="_blank" rel="noopener noreferrer">Bug Reports & Feature Requests</a>
-        </div>
       </div>
       <h3>Privacy Requests</h3>
       <p>For data access, deletion, or other GDPR rights, email <a href="mailto:admin@masterselects.com">admin@masterselects.com</a> with subject "Privacy Request".</p>
       <h3>Bug Reports</h3>
-      <p>Please report technical issues via <a href="https://github.com/Sportinger/MasterSelects/issues" target="_blank" rel="noopener noreferrer">GitHub Issues</a> so other users can benefit from the solution.</p>
+      <p>Please report technical issues to <a href="mailto:admin@masterselects.com">admin@masterselects.com</a>.</p>
     </div>
   );
 }

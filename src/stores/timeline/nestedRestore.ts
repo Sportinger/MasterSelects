@@ -1,3 +1,6 @@
+import { clonePlanarTracks } from '../../services/planarTracking/clonePlanarTracks';
+import { cloneTerrainAnchorConnector, cloneTerrainAttachment, cloneTerrainScreenAnchor } from '../../types/terrainAttachment';
+import { cloneTrackingBinding } from '../../types/trackingBinding';
 import type { TimelineClip } from './types';
 import type { SerializableClip } from '../../types';
 import { clonePersistedClipAudioState } from '../../services/audio/clipAudioStatePersistence';
@@ -10,6 +13,7 @@ import { cloneClipNodeGraph } from '../../services/nodeGraph';
 import { normalizeTransitionInstanceParams } from '../../transitions';
 import { normalizeMotionLayerDefinitionForLoad } from '../../services/motionDesign/contracts/replicatorTimelineAdapter';
 import { serializeVideoBakeRegion } from './videoBakeSlice';
+import { normalizeRestoredFlockDefinition } from './serialization/flockDefinitionRestore';
 import { blobUrlManager } from './helpers/blobUrlManager';
 import type { RestoredRuntimePatch } from './vectorRuntimeRestore';
 import {
@@ -86,6 +90,11 @@ function createRestoredNestedClipCommon(
     sourceRect: serializedClip.sourceRect ? { ...serializedClip.sourceRect } : undefined,
     transitionRender: serializedClip.transitionRender ? structuredClone(serializedClip.transitionRender) : undefined,
     effects: serializedClip.effects || [],
+    planarTracks: clonePlanarTracks(serializedClip.planarTracks),
+    trackingBinding: cloneTrackingBinding(serializedClip.trackingBinding),
+    terrainAttachment: cloneTerrainAttachment(serializedClip.terrainAttachment),
+    terrainScreenAnchor: cloneTerrainScreenAnchor(serializedClip.terrainScreenAnchor),
+    terrainAnchorConnector: cloneTerrainAnchorConnector(serializedClip.terrainAnchorConnector),
     transitionIn: serializedClip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionIn)) : undefined,
     transitionOut: serializedClip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionOut)) : undefined,
     transitionSourceMap: serializedClip.transitionSourceMap ? structuredClone(serializedClip.transitionSourceMap) : undefined,
@@ -220,6 +229,35 @@ export function createRestoredMotionClip(
     motion: serializedClip.motion
       ? normalizeMotionLayerDefinitionForLoad(serializedClip.motion)
       : undefined,
+  };
+}
+
+/** Flock clips are data-only: the definition is restored, runtime GPU state is rebuilt on demand. */
+export function createRestoredFlockClip(
+  serializedClip: SerializableClip,
+  clipId: string,
+): TimelineClip | null {
+  if (serializedClip.sourceType !== 'flock' || !serializedClip.flock) {
+    return null;
+  }
+  const flock = normalizeRestoredFlockDefinition(serializedClip.flock);
+  if (!flock) return null;
+
+  return {
+    ...createRestoredNestedClipCommon(serializedClip, {
+      clipId,
+      name: serializedClip.name || 'Flock',
+      file: new File([JSON.stringify({ kind: 'flock', presetId: flock.presetId })], 'flock.json', { type: 'application/json' }),
+      source: {
+        type: 'flock',
+        mediaFileId: serializedClip.mediaFileId || undefined,
+        naturalDuration: serializedClip.naturalDuration ?? serializedClip.duration,
+      },
+      isLoading: false,
+      needsReload: false,
+    }),
+    flock,
+    is3D: true,
   };
 }
 

@@ -185,7 +185,8 @@ function createRenderTexture(
       GPUTextureUsage.RENDER_ATTACHMENT
       | GPUTextureUsage.TEXTURE_BINDING
       | GPUTextureUsage.COPY_SRC
-      | GPUTextureUsage.COPY_DST,
+      | GPUTextureUsage.COPY_DST
+      | GPUTextureUsage.STORAGE_BINDING,
   });
   transientResources.push(texture);
   return texture;
@@ -280,7 +281,7 @@ function compositeLayer(
   try {
     pass.setPipeline(pipeline);
     pass.setBindGroup(0, bindGroup);
-    pass.draw(6);
+    pass.draw(3);
     pass.end();
     ended = true;
   } finally {

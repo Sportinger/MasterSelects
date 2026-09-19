@@ -3,6 +3,7 @@ import { RelinkDialog } from '../../../common/RelinkDialog';
 import type { LabelColor } from '../../../../stores/mediaStore/types';
 import type { MediaFile, MediaFolder, ProjectItem } from '../../../../stores/mediaStore';
 import { CompositionSettingsDialog } from '../CompositionSettingsDialog';
+import type { CompositionSettingsValues } from '../CompositionSettingsDialog';
 import { SolidSettingsDialog } from '../SolidSettingsDialog';
 import { LabelColorPicker } from '../LabelColorPicker';
 import {
@@ -26,13 +27,18 @@ import { MediaGenerationTrayMount } from './MediaGenerationTrayMount';
 import type { MediaDeleteConfirmationRequest } from './useMediaPanelRenameDeleteCommands';
 import type { MediaPanelViewMode } from './types';
 
-export interface MediaPanelCompositionSettingsDialogState {
-  compositionId: string;
-  width: number;
-  height: number;
-  frameRate: number;
-  duration: number;
-}
+export type MediaPanelCompositionSettingsDialogState = CompositionSettingsValues & (
+  | {
+      kind: 'edit';
+      compositionId: string;
+      originalSettings: CompositionSettingsValues;
+    }
+  | {
+      kind: 'create';
+      parentId: string | null;
+      boardPosition?: { x: number; y: number };
+    }
+);
 
 interface MediaPanelOverlayMountsProps {
   floatingTexts: readonly MediaFloatingFeedbackItem[];
@@ -60,8 +66,9 @@ interface MediaPanelOverlayMountsProps {
   setDeleteConfirmation: Dispatch<SetStateAction<MediaDeleteConfirmationRequest | null>>;
   confirmMediaDelete: () => Promise<void>;
   settingsDialog: MediaPanelCompositionSettingsDialogState | null;
-  setSettingsDialog: Dispatch<SetStateAction<MediaPanelCompositionSettingsDialogState | null>>;
+  changeCompositionSettings: (settings: CompositionSettingsValues) => void;
   saveCompositionSettings: () => void;
+  cancelCompositionSettings: () => void;
   solidSettingsDialog: {
     solidItemId: string;
     width: number;
@@ -110,8 +117,9 @@ export function MediaPanelOverlayMounts({
   setDeleteConfirmation,
   confirmMediaDelete,
   settingsDialog,
-  setSettingsDialog,
+  changeCompositionSettings,
   saveCompositionSettings,
+  cancelCompositionSettings,
   solidSettingsDialog,
   setSolidSettingsDialog,
   updateSolidItem,
@@ -184,9 +192,10 @@ export function MediaPanelOverlayMounts({
       {settingsDialog && (
         <CompositionSettingsDialog
           settings={settingsDialog}
-          onSettingsChange={setSettingsDialog}
+          isCreating={settingsDialog.kind === 'create'}
+          onSettingsChange={changeCompositionSettings}
           onSave={saveCompositionSettings}
-          onCancel={() => setSettingsDialog(null)}
+          onCancel={cancelCompositionSettings}
         />
       )}
 

@@ -189,6 +189,15 @@ export function ExportWorkflowSection({
             <span>Intermediates, archival codecs, and NLE-friendly containers.</span>
           </button>
         )}
+        <button
+          type="button"
+          className={`export-method-card${encoder === 'hap' ? ' is-active' : ''}`}
+          onClick={() => onSetEncoder('hap')}
+        >
+          <span className="export-method-chip">GPU</span>
+          <strong>HAP</strong>
+          <span>GPU texture codec for VJ and media servers, encoded on WebGPU.</span>
+        </button>
       </div>
       <div className="control-row export-legacy-control">
         <label>Method</label>
@@ -207,6 +216,7 @@ export function ExportWorkflowSection({
               FFmpeg (CPU){!isFFmpegMultiThreaded ? ' - ST' : ''}
             </option>
           )}
+          <option value="hap">HAP (GPU)</option>
         </select>
       </div>
 

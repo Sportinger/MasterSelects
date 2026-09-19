@@ -59,6 +59,12 @@ export function resolveRuntimeLayerBuilderVideoSource(params: {
   const runtimeProviderHasFrame =
     reversePresentationProvider?.hasFrame?.() === true ||
     Boolean(reversePresentationProvider?.getCurrentFrame());
+  const forceTurboResRuntimeFrame =
+    !!reversePresentationProvider &&
+    'backend' in reversePresentationProvider &&
+    (reversePresentationProvider.backend === 'turbores'
+      || reversePresentationProvider.backend === 'hap') &&
+    reversePresentationProvider.isFullMode();
   const presentReverseRuntimeFrame = reverseWorkerRuntimeSource
     ? shouldPresentReverseRuntimeProvider({
         provider: reversePresentationProvider,
@@ -70,6 +76,7 @@ export function resolveRuntimeLayerBuilderVideoSource(params: {
     !flags.disableHtmlPreviewFallback &&
     isInteractivePreview &&
     !!htmlVideoElement &&
+    !forceTurboResRuntimeFrame &&
     (!flags.useFullWebCodecsPlayback || !clip.source?.webCodecsPlayer?.isFullMode?.());
   const playingVisualProvider =
     runtimeProvider?.isFullMode()
@@ -104,7 +111,12 @@ export function resolveRuntimeLayerBuilderVideoSource(params: {
       webCodecsPlayer: presentedVisualProvider,
       runtimeSourceId: preferHtmlScrubPreview ? undefined : presentedRuntimeSourceId,
       runtimeSessionKey: preferHtmlScrubPreview ? undefined : presentedRuntimeSessionKey,
-      ...(reverseWorkerRuntimeSource && presentReverseRuntimeFrame && !preferHtmlScrubPreview && runtimeProviderHasFrame
+      ...(forceTurboResRuntimeFrame || (
+        reverseWorkerRuntimeSource &&
+        presentReverseRuntimeFrame &&
+        !preferHtmlScrubPreview &&
+        runtimeProviderHasFrame
+      )
         ? { forceRuntimeFramePreview: true }
         : {}),
     },

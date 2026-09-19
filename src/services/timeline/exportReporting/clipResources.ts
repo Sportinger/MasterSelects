@@ -166,13 +166,18 @@ export function releaseReservedExportFrameProvider(
 }
 
 function reportExportFrameProvider(runId: string, state: ExportClipState): void {
-  const player = state.webCodecsPlayer;
+  const player = state.frameProvider ?? state.webCodecsPlayer;
   const runtimeSource = state.runtimeSource;
   if (!player) {
     return;
   }
 
   const status: RuntimeHealthStatus = player.isFullMode() ? 'ok' : 'warning';
+  const providerKind = 'backend' in player && player.backend === 'turbores'
+    ? 'turbores'
+    : 'backend' in player && player.backend === 'hap'
+      ? 'hap'
+      : 'webcodecs';
   const resource = createExportFrameProviderResource({
     runId,
     clip: {
@@ -186,6 +191,13 @@ function reportExportFrameProvider(runId: string, state: ExportClipState): void 
           mediaFileId: runtimeSource.mediaFileId,
         }
       : undefined,
+    providerKind,
+    label: providerKind === 'turbores'
+      ? 'Export TurboRes frame provider'
+      : providerKind === 'hap'
+        ? 'Export HAP frame provider'
+        : 'Export WebCodecs frame provider',
+    tags: ['export', 'clip-state', providerKind],
   });
   retainExportResource({
     ...resource,
@@ -193,7 +205,7 @@ function reportExportFrameProvider(runId: string, state: ExportClipState): void 
       status,
       provider: {
         providerId: getRunResourceId(runId, `clip:${state.clipId}:frame-provider`),
-        providerKind: 'webcodecs',
+        providerKind,
         status,
         isReady: player.isFullMode(),
         isPlaying: player.isPlaying,

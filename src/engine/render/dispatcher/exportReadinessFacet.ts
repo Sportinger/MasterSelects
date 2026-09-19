@@ -13,6 +13,7 @@ import type { ModelSequenceData } from '../../../types/mediaSequences';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { buildSharedSplatRuntimeRequest } from '../../scene/runtime/SharedSplatRuntimeUtils';
 import type { GaussianSplatSceneLoadRequest } from './gaussianSequenceFacet';
+import type { FlockLayerSourceData } from '../../../services/flock/flockLayerSource';
 
 const MAX_EXPORT_LAYER_NESTING_DEPTH = 8;
 
@@ -21,6 +22,8 @@ interface ExportReadinessHost {
   ensureSceneRendererInitialized: (width: number, height: number) => Promise<boolean>;
   preloadSceneModelAsset: (url: string, fileName: string, modelSequence?: ModelSequenceData) => Promise<boolean>;
   ensureGaussianSplatSceneLoaded: (request: GaussianSplatSceneLoadRequest) => Promise<boolean>;
+  /** Advances pinned flock export sessions; rejects invalid graphs or unsupported hosts. */
+  ensureFlockLayersReady?: (layers: FlockLayerSourceData[]) => Promise<void>;
 }
 
 export class ExportReadinessFacet {
@@ -159,6 +162,16 @@ export class ExportReadinessFacet {
         this.exportReadyModelUrls.add(assetKey);
       }),
     ];
+
+    const flockLayers = visibleLayers
+      .map((layer) => (layer.source?.type === 'flock' ? layer.source.flock : undefined))
+      .filter((flock): flock is FlockLayerSourceData => !!flock);
+    if (flockLayers.length > 0) {
+      if (!this.host.ensureFlockLayersReady) {
+        throw new Error('Export cannot render flock clips: the flock runtime is not available on this render host');
+      }
+      await this.host.ensureFlockLayersReady(flockLayers);
+    }
 
     if (readinessChecks.length === 0) {
       return;

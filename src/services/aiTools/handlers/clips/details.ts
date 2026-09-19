@@ -108,6 +108,11 @@ export async function handleGetClipDetails(
         : null,
       isComposition: clip.isComposition === true,
       compositionId: clip.compositionId ?? null,
+      terrainAttachment: clip.terrainAttachment ?? null,
+      terrainScreenAnchor: clip.terrainScreenAnchor ?? null,
+      terrainAnchorConnector: clip.terrainAnchorConnector ?? null,
+      trackingBinding: clip.trackingBinding ?? null,
+      cameraSettings: clip.source?.cameraSettings ?? null,
       nested: clip.isComposition
         ? {
             clipCount: clip.nestedClips?.length ?? 0,

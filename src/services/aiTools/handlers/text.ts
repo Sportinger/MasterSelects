@@ -37,6 +37,7 @@ const TEXT_PROPERTY_KEYS = [
   'boxY',
   'boxWidth',
   'boxHeight',
+  'wrapMode',
   'strokeEnabled',
   'strokeColor',
   'strokeWidth',
@@ -110,7 +111,7 @@ export async function handleCreateTextClip(
 
   const mutationSnapshot = captureMutationEntitySnapshot('clip', timelineStore.clips);
   const { addTextClip } = useTimelineStore.getState();
-  const clipId = await addTextClip(track.id, startTime, duration);
+  const clipId = await addTextClip(track.id, startTime, duration, true);
   if (!clipId) {
     return failure('The editor could not create the text clip');
   }
@@ -464,6 +465,7 @@ function validateTextPropertyInputs(
     ['fontStyle', ['normal', 'italic']],
     ['textAlign', ['left', 'center', 'right']],
     ['verticalAlign', ['top', 'middle', 'bottom']],
+    ['wrapMode', ['word', 'none']],
   ];
   for (const [key, values] of enumChecks) {
     if (args[key] !== undefined && (typeof args[key] !== 'string' || !values.includes(args[key]))) {

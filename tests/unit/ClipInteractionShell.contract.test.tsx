@@ -347,6 +347,16 @@ describe('ClipInteractionShell contract', () => {
     expect(onTrimStart).toHaveBeenCalledTimes(1);
     expect(onTrimStart.mock.calls[0][1].clip.id).toBe('clip-a');
     expect(onTrimStart.mock.calls[0][2]).toBe('right');
+
+    fireEvent.pointerDown(left as HTMLElement, {
+      button: 0,
+      pointerId: 7,
+      pointerType: 'touch',
+    });
+
+    expect(onTrimStart).toHaveBeenCalledTimes(2);
+    expect(onTrimStart.mock.calls[1][1].clip.id).toBe('clip-a');
+    expect(onTrimStart.mock.calls[1][2]).toBe('left');
   });
 
   it('renders active fade handles and dispatches fade commands with edge context', () => {
@@ -469,6 +479,144 @@ describe('ClipInteractionShell contract', () => {
     expect(onMoveKeyframeGroup.mock.calls[2][1]).toBeCloseTo(2);
     expect(onMoveKeyframeGroup.mock.calls[2][2].clip.id).toBe('clip-a');
     expect(onMoveKeyframeGroup.mock.calls[2][3]).toBe('commit');
+  });
+
+  it('keeps keyframe ticks timeline-anchored during a live left trim', () => {
+    const props = createShellProps({
+      geometry: {
+        ...createShellProps().geometry,
+        clip: rect({ x: 80, y: 8, width: 120 }),
+      },
+      mountState: {
+        clipId: 'clip-a',
+        shouldMount: true,
+        reasons: ['trim', 'selected-keyframes'],
+        isTrimming: true,
+        hasVisibleKeyframes: true,
+      },
+      activeModules: {
+        trim: {
+          slot: 'trim',
+          enabled: true,
+          state: {
+            clipId: 'clip-a',
+            edge: 'left',
+            originalStartTime: 1,
+            originalDuration: 4,
+            originalInPoint: 0,
+            originalOutPoint: 4,
+            startX: 0,
+            currentX: 40,
+            altKey: false,
+            snapIndicatorTime: null,
+            isSnapping: false,
+            appliedDelta: 1,
+          },
+          activeEdges: ['left'],
+        },
+        keyframe: {
+          slot: 'keyframe',
+          enabled: true,
+          keyframes: [{
+            id: 'kf-a',
+            clipId: 'clip-a',
+            time: 2,
+            property: 'opacity',
+            value: 0.5,
+            easing: 'linear',
+          }],
+          keyframeGroups: [{ time: 2, keyframeIds: ['kf-a'], properties: ['opacity'] }],
+          selectedKeyframeIds: ['kf-a'],
+        },
+      },
+    });
+
+    const { container } = render(<ClipInteractionShell {...props} />);
+
+    expect(container.querySelector<HTMLElement>('.keyframe-tick')?.style.left).toBe('33.33333333333333%');
+  });
+
+  it('keeps opacity edge pairs attached to both clip edges during a live trim', () => {
+    const keyframes = [0, 1, 4, 6, 8].map((time, index) => ({
+      id: `opacity-${index}`,
+      clipId: 'clip-a',
+      time,
+      property: 'opacity' as const,
+      value: index % 2,
+      easing: 'linear' as const,
+    }));
+    const props = createShellProps({
+      clip: {
+        ...createShellProps().clip,
+        duration: 8,
+        outPoint: 8,
+      },
+      mountState: {
+        clipId: 'clip-a',
+        shouldMount: true,
+        reasons: ['trim', 'selected-keyframes'],
+        isTrimming: true,
+        hasVisibleKeyframes: true,
+      },
+      activeModules: {
+        trim: {
+          slot: 'trim',
+          enabled: true,
+          state: {
+            clipId: 'clip-a',
+            edge: 'left',
+            originalStartTime: 1,
+            originalDuration: 8,
+            originalInPoint: 0,
+            originalOutPoint: 8,
+            startX: 0,
+            currentX: 40,
+            altKey: false,
+            snapIndicatorTime: null,
+            isSnapping: false,
+            appliedDelta: 2,
+          },
+          activeEdges: ['left'],
+        },
+        keyframe: {
+          slot: 'keyframe',
+          enabled: true,
+          keyframes,
+          keyframeGroups: keyframes.map((keyframe) => ({
+            time: keyframe.time,
+            keyframeIds: [keyframe.id],
+            properties: ['opacity'],
+          })),
+          selectedKeyframeIds: [],
+        },
+        fade: {
+          slot: 'fade',
+          enabled: true,
+          state: null,
+          activeEdges: [],
+          fadeInDuration: 1,
+          fadeOutDuration: 2,
+          curveKeyframes: keyframes,
+          curveKey: 'trim-opacity-preview',
+          clipDuration: 8,
+          isAudioClip: false,
+        },
+      },
+    });
+
+    const { container } = render(<ClipInteractionShell {...props} />);
+    const positions = Array.from(container.querySelectorAll<HTMLElement>('.keyframe-tick'))
+      .map((tick) => Number.parseFloat(tick.style.left));
+
+    expect(positions).toHaveLength(5);
+    [0, 100 / 6, 200 / 6, 400 / 6, 100].forEach((expected, index) => {
+      expect(positions[index]).toBeCloseTo(expected, 6);
+    });
+    const curvePointXs = Array.from(container.querySelectorAll<SVGCircleElement>('.fade-curve-svg circle'))
+      .map((point) => Number.parseFloat(point.getAttribute('cx') ?? 'NaN'));
+    [0, 160 / 6, 320 / 6, 640 / 6, 160].forEach((expected, index) => {
+      expect(curvePointXs[index]).toBeCloseTo(expected, 6);
+    });
   });
 
   it('renders active audio-region visuals through the shell module', () => {

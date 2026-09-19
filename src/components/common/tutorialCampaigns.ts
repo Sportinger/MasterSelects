@@ -489,23 +489,9 @@ const videoScopes: TutorialCampaign = {
   steps: [
     {
       panelGroupId: 'right-group',
-      panelType: 'scope-histogram',
-      title: 'Histogram',
-      description: 'The histogram shows the distribution of brightness values. Use it to check exposure and avoid clipping.',
-      tooltipPosition: 'left',
-    },
-    {
-      panelGroupId: 'right-group',
-      panelType: 'scope-vectorscope',
-      title: 'Vectorscope',
-      description: 'The vectorscope shows color saturation and hue. Useful for skin tone correction and color matching.',
-      tooltipPosition: 'left',
-    },
-    {
-      panelGroupId: 'right-group',
-      panelType: 'scope-waveform',
-      title: 'Waveform Monitor',
-      description: 'The waveform shows luminance levels from left to right. Ensure highlights stay below 100% and shadows above 0%.',
+      panelType: 'color-scopes',
+      title: 'Scopes',
+      description: 'Switch between Parade, Waveform, Vectorscope, and Histogram in one panel to inspect exposure, channel balance, hue, and saturation.',
       tooltipPosition: 'left',
     },
   ],

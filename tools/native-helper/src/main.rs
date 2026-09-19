@@ -18,6 +18,7 @@ mod http_server;
 mod matanyone;
 mod muscriptor;
 mod protocol;
+mod rtmp;
 mod server;
 mod session;
 #[cfg(windows)]
@@ -124,20 +125,7 @@ fn build_config(args: &Args) -> server::ServerConfig {
         .allowed_origins
         .as_ref()
         .map(|s| s.split(',').map(|s| s.trim().to_string()).collect())
-        .unwrap_or_else(|| {
-            vec![
-                "https://masterselects.app".to_string(),
-                "https://masterselects.com".to_string(),
-                "https://www.masterselects.com".to_string(),
-                "https://app.masterselects.com".to_string(),
-                "http://localhost:5173".to_string(),
-                "http://localhost:3000".to_string(),
-                "http://127.0.0.1:5173".to_string(),
-                "http://127.0.0.1:3000".to_string(),
-                "https://masterselects.pages.dev".to_string(),
-                "https://staging.masterselects.pages.dev".to_string(),
-            ]
-        });
+        .unwrap_or_else(default_allowed_origins);
 
     let auth_token = if args.no_auth {
         warn!(
@@ -155,6 +143,25 @@ fn build_config(args: &Args) -> server::ServerConfig {
         allowed_origins,
         auth_token,
     }
+}
+
+fn default_allowed_origins() -> Vec<String> {
+    vec![
+        "https://masterselects.app".to_string(),
+        "https://masterselects.com".to_string(),
+        "https://www.masterselects.com".to_string(),
+        "https://app.masterselects.com".to_string(),
+        "http://localhost:5173".to_string(),
+        "http://localhost:3000".to_string(),
+        "http://127.0.0.1:5173".to_string(),
+        "http://127.0.0.1:3000".to_string(),
+        "https://localhost:5173".to_string(),
+        "https://localhost:3000".to_string(),
+        "https://127.0.0.1:5173".to_string(),
+        "https://127.0.0.1:3000".to_string(),
+        "https://masterselects.pages.dev".to_string(),
+        "https://staging.masterselects.pages.dev".to_string(),
+    ]
 }
 
 /// Write the auth token to a temp file with restrictive permissions
@@ -295,4 +302,21 @@ fn run_with_tray(config: server::ServerConfig, _args: &Args) {
 
     // Wait for the server thread to finish
     let _ = server_thread.join();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::default_allowed_origins;
+
+    #[test]
+    fn secure_local_dev_origins_can_read_the_startup_token() {
+        let origins = default_allowed_origins();
+
+        assert!(origins
+            .iter()
+            .any(|origin| origin == "https://localhost:5173"));
+        assert!(origins
+            .iter()
+            .any(|origin| origin == "https://127.0.0.1:5173"));
+    }
 }

@@ -5,6 +5,7 @@ import type { EffectDefinition, EffectParam } from '../../effects/types';
 import { getAllEffects, getEffect } from '../../effects';
 import type { PropertyDescriptor, PropertyValueType } from '../../types/propertyRegistry';
 import type { PropertyRegistry } from './PropertyRegistry';
+import { faceCableDescriptors } from './faceCableProperties';
 
 function mapEffectParamType(param: EffectParam): PropertyValueType {
   if (param.type === 'boolean') return 'boolean';
@@ -64,6 +65,8 @@ export function getEffectDescriptorForPath(path: string, clip?: TimelineClip): P
   const [, effectId, paramName] = parts;
   const effect = clip.effects.find((candidate) => candidate.id === effectId);
   if (!effect) return undefined;
+  const cable = faceCableDescriptors(effect).find(d => d.path === path);
+  if (cable) return cable;
 
   const effectDefinition = getEffect(effect.type);
   const param = effectDefinition?.params[paramName];
@@ -77,15 +80,16 @@ export function getEffectDescriptorsForClip(clip: TimelineClip): PropertyDescrip
     const effectDefinition = getEffect(effect.type);
     if (!effectDefinition) return [];
 
-    return Object.entries(effectDefinition.params).map(([paramName, param]) =>
-      createEffectDescriptor(effectDefinition, effect, paramName, param)
-    );
+    return [...faceCableDescriptors(effect), ...Object.entries(effectDefinition.params)
+      .filter(([name, param]) => !param.hidden || effect.type === 'face-cables' && name.startsWith('globalWind'))
+      .map(([paramName, param]) => createEffectDescriptor(effectDefinition, effect, paramName, param))];
   });
 }
 
 export function registerEffectTemplates(registry: PropertyRegistry): void {
   getAllEffects().forEach((effectDefinition) => {
     Object.entries(effectDefinition.params).forEach(([paramName, param]) => {
+      if (param.hidden) return;
       registry.register(createEffectDescriptor(effectDefinition, undefined, paramName, param));
     });
   });

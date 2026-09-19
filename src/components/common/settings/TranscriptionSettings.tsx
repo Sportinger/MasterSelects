@@ -1,5 +1,5 @@
 import { useSettingsStore, type TranscriptionProvider } from '../../../stores/settingsStore';
-import { useAccountStore } from '../../../stores/accountStore';
+import { hasHostedAiSession, useAccountStore } from '../../../stores/accountStore';
 
 const providers: { id: TranscriptionProvider; label: string; description: string }[] = [
   { id: 'local', label: 'Local Whisper Base', description: 'Private browser transcription, no API key needed. Slower than cloud.' },
@@ -14,7 +14,7 @@ const providers: { id: TranscriptionProvider; label: string; description: string
 
 export function TranscriptionSettings() {
   const { transcriptionProvider, setTranscriptionProvider } = useSettingsStore();
-  const isSignedIn = useAccountStore((state) => Boolean(state.session?.authenticated));
+  const isSignedIn = useAccountStore((state) => hasHostedAiSession(state.session));
   const activeProvider = !isSignedIn
     ? 'local'
     : ['openai', 'deepgram', 'hybrid'].includes(transcriptionProvider)
@@ -35,7 +35,7 @@ export function TranscriptionSettings() {
               || provider.id === 'hybrid';
             const disabled = !isSignedIn && hostedProvider;
             const description = isSignedIn && hostedProvider
-              ? 'Uses MasterSelects credits for signed-in accounts.'
+              ? 'Uses your MasterSelects credits.'
               : provider.description;
 
             return (
@@ -68,8 +68,8 @@ export function TranscriptionSettings() {
         </div>
         <p className="settings-hint">
           {isSignedIn
-            ? 'Signed-in accounts can use OpenAI, Deepgram, or automatic Best Quality transcription through MasterSelects credits. Timeline clip menus show the active provider before transcription starts.'
-            : 'Sign in to use hosted transcription with MasterSelects credits, or select Local Whisper to run on this device.'}
+            ? 'OpenAI, Deepgram, and automatic Best Quality transcription use MasterSelects credits. Timeline clip menus show the active provider before transcription starts.'
+            : 'Choose a plan for hosted transcription, or select Local Whisper to run on this device.'}
         </p>
       </div>
     </div>

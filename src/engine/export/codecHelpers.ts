@@ -76,10 +76,11 @@ export function getFallbackCodec(container: ContainerFormat): VideoCodec {
 // ============ PRESETS ============
 
 export const RESOLUTION_PRESETS: ResolutionPreset[] = [
-  { label: '4K (3840x2160)', width: 3840, height: 2160 },
-  { label: '1080p (1920x1080)', width: 1920, height: 1080 },
-  { label: '720p (1280x720)', width: 1280, height: 720 },
-  { label: '480p (854x480)', width: 854, height: 480 },
+  { label: '4K · 2160p', width: 3840, height: 2160 },
+  { label: '2K · 1440p', width: 2560, height: 1440 },
+  { label: 'FHD · 1080p', width: 1920, height: 1080 },
+  { label: 'HD Ready · 720p', width: 1280, height: 720 },
+  { label: '480p', width: 854, height: 480 },
 ];
 
 export const FRAME_RATE_PRESETS: FrameRatePreset[] = [

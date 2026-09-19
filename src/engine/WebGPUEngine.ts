@@ -2,7 +2,7 @@
 // Orchestrates: PerformanceStats, RenderTargetManager, OutputWindowManager,
 //               RenderLoop, LayerCollector, Compositor, NestedCompRenderer
 
-import type { ModelSequenceData } from '../types';
+import type { ModelSequenceData } from '../types/mediaSequences';
 import type { Layer, EngineStats } from './core/types';
 // OutputWindow type no longer needed — state lives in renderTargetStore
 import { WebGPUContext, type GPUPowerPreference } from './core/WebGPUContext';
@@ -10,11 +10,12 @@ import { CacheManager } from './managers/CacheManager';
 import { ExportCanvasManager } from './managers/ExportCanvasManager';
 import { VideoFrameManager } from './video/VideoFrameManager';
 import { useSettingsStore } from '../stores/settingsStore';
-import { useRenderTargetStore } from '../stores/renderTargetStore';
 import { Logger } from '../services/logger';
+import { releaseGlyphAtlasesForDevice } from '../effects/_shared/glyphAtlas';
 import { buildDebugInfrastructureState, type DebugInfrastructureState } from './engineCore/debugInfrastructureState';
 import { wireContextRecovery } from './engineCore/contextRecoveryWiring';
 import * as engineResources from './engineCore/engineResources';
+import { retainHmrSingleton } from './engineCore/hmrSingleton';
 import { createEngineRenderDispatcher } from './engineCore/renderDispatcherFactory';
 import * as outputWindows from './engineCore/outputWindowController';
 import * as outputPresenter from './engineCore/outputPresenter';
@@ -24,7 +25,7 @@ import type { GaussianSplatSceneLoadRequest } from './render/dispatcher/gaussian
 const log = Logger.create('WebGPUEngine');
 
 import { PerformanceStats } from './stats/PerformanceStats';
-import type { RenderLoop } from './render/RenderLoop';
+import type { RenderLoop, RenderLoopCallbacks } from './render/RenderLoop';
 import type { LayerCollector } from './render/LayerCollector';
 import type { RenderDispatcher, RenderDispatcherDebugSnapshot } from './render/RenderDispatcher';
 import type { TextureManager } from './texture/TextureManager';
@@ -74,7 +75,7 @@ export class WebGPUEngine {
     wireContextRecovery(this.context, {
       setRecovering: (recovering) => { this.isRecoveringFromDeviceLoss = recovering; },
       handleDeviceLost: () => this.handleDeviceLost(),
-      handleDeviceRestored: () => { this.handleDeviceRestored(); },
+      handleDeviceRestored: () => this.handleDeviceRestored(),
     });
   }
 
@@ -88,6 +89,10 @@ export class WebGPUEngine {
     await this.createResources();
     log.info('Engine initialized');
     return true;
+  }
+
+  getInitializationFailure() {
+    return this.context.getInitializationFailure();
   }
 
   private getRenderLoopHooks(): engineResources.EngineRenderLoopHooks {
@@ -134,6 +139,7 @@ export class WebGPUEngine {
   // === DEVICE RECOVERY ===
 
   private handleDeviceLost(): void {
+    releaseGlyphAtlasesForDevice(this.context.getDevice());
     this.renderLoop?.stop();
     this.renderDispatcher?.clearExportReadinessCache();
     this.pixelReadback.destroy();
@@ -141,7 +147,7 @@ export class WebGPUEngine {
     // Clear GPU resources
     this.res?.renderTargetManager.clearAll();
     this.previewContext = null;
-    this.targetCanvases.clear();
+    // Retain canvas registrations so recovery can configure every output again.
     this.cacheManager.handleDeviceLost();
 
     // Clear managers
@@ -158,19 +164,10 @@ export class WebGPUEngine {
     log.info('Recovery complete');
   }
 
-  /** Reconfigure main preview + all target canvases after device restore/reinit */
   private reconfigureCanvasesAfterRestore(): void {
-    if (this.mainPreviewCanvas) {
-      this.previewContext = this.context.configureCanvas(this.mainPreviewCanvas);
-    }
-    for (const [id, entry] of this.targetCanvases) {
-      const ctx = this.context.configureCanvas(entry.canvas);
-      if (ctx) {
-        this.targetCanvases.set(id, { canvas: entry.canvas, context: ctx });
-        // Also update the store's context reference
-        useRenderTargetStore.getState().setTargetCanvas(id, entry.canvas, ctx);
-      }
-    }
+    this.previewContext = outputPresenter.restoreOutputCanvases(
+      canvas => this.context.configureCanvas(canvas), this.mainPreviewCanvas, this.targetCanvases,
+    );
   }
 
   // === CANVAS MANAGEMENT (Unified) ===
@@ -291,8 +288,14 @@ export class WebGPUEngine {
   }
 
   setIsPlaying(playing: boolean): void {
+    const startingPlayback = playing && !this._isPlaying;
     this._isPlaying = playing;
-    if (playing) this.hasEverPlayed = true;
+    if (playing) {
+      this.hasEverPlayed = true;
+      if (startingPlayback) {
+        this.performanceStats.beginPlaybackRun();
+      }
+    }
     this.renderLoop?.setIsPlaying(playing);
   }
 
@@ -463,7 +466,7 @@ export class WebGPUEngine {
     return this.renderLoop?.updatePlayheadTracking(playhead) ?? false;
   }
 
-  start(renderCallback: () => void): void {
+  start(renderCallback: RenderLoopCallbacks['onRender']): void {
     if (!this.performanceStats) return;
 
     this.renderLoop = engineResources.startEngineRenderLoop({
@@ -538,8 +541,8 @@ export class WebGPUEngine {
     return this.res?.nestedCompRenderer.hasTexture(compositionId) ?? false;
   }
 
-  cacheActiveCompOutput(compositionId: string): void {
-    outputPresenter.cacheActiveCompOutput(this.presenterDeps, compositionId);
+  cacheActiveCompOutput(compositionId: string, timelineTimeSeconds?: number): void {
+    outputPresenter.cacheActiveCompOutput(this.presenterDeps, compositionId, timelineTimeSeconds);
   }
 
   copyMainOutputToPreview(canvasId: string): boolean {
@@ -606,6 +609,10 @@ export class WebGPUEngine {
     return this.context.getDevice();
   }
 
+  getAdapter(): GPUAdapter | null {
+    return this.context.getAdapter();
+  }
+
   getLastRenderedTexture(): GPUTexture | null {
     return outputPresenter.getLastRenderedTexture(this.presenterDeps);
   }
@@ -664,15 +671,11 @@ export class WebGPUEngine {
     return true;
   }
 
-  // === PIXEL READBACK ===
-
   async readPixels(): Promise<Uint8ClampedArray | null> {
     const device = this.context.getDevice();
     if (!device || !this.res) return null;
     return this.pixelReadback.readPixels(device, this.res.renderTargetManager, this.res.compositor);
   }
-
-  // === CLEANUP ===
 
   destroy(): void {
     this.stop();
@@ -686,29 +689,12 @@ export class WebGPUEngine {
   }
 }
 
-// === HMR SINGLETON ===
-
-let engineInstance: WebGPUEngine;
-
-const hot = typeof import.meta !== 'undefined'
-  ? (import.meta as { hot?: { data: Record<string, unknown> } }).hot
-  : undefined;
-
 const hmrLog = Logger.create('WebGPU-HMR');
-
-if (hot) {
-  const existing = hot.data.engine as WebGPUEngine | undefined;
-  if (existing) {
-    hmrLog.debug('Reusing engine from HMR');
-    existing.clearVideoCache();
-    engineInstance = existing;
-  } else {
-    hmrLog.debug('Creating new engine');
-    engineInstance = new WebGPUEngine();
-    hot.data.engine = engineInstance;
-  }
-} else {
-  engineInstance = new WebGPUEngine();
-}
-
-export const engine = engineInstance;
+export const engine = retainHmrSingleton({
+  hot: import.meta.hot,
+  key: 'engine',
+  create: () => new WebGPUEngine(),
+  reuse: (existing) => existing.clearVideoCache(),
+  onCreate: () => hmrLog.debug('Creating new engine'),
+  onReuse: () => hmrLog.debug('Reusing engine from HMR'),
+});

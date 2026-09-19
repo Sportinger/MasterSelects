@@ -9,7 +9,7 @@ import { Logger } from '../../services/logger';
 const log = Logger.create('SplatEffectorClipSlice');
 
 export const createSplatEffectorClipSlice: SliceCreator<SplatEffectorClipActions> = (set, get) => ({
-  addSplatEffectorClip: (trackId, startTime, duration = 10, skipMediaItem = false) => {
+  addSplatEffectorClip: (trackId, startTime, duration = 10, skipMediaItem = true) => {
     const { clips, tracks, updateDuration, invalidateCache } = get();
     const track = tracks.find((t) => t.id === trackId);
 

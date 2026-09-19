@@ -1,7 +1,7 @@
 import { MediaAddItemsMenu, type MediaAddItemsMenuProps } from '../import/MediaAddItemsMenu';
 import { MediaPanelSearch } from './MediaPanelSearch';
 import { MediaViewModeControls } from './MediaViewModeControls';
-import type { MediaPanelViewMode } from './types';
+import type { MediaImportAnchor, MediaPanelViewMode } from './types';
 
 type MediaPanelAddItemHandlers = Omit<MediaAddItemsMenuProps, 'variant' | 'onClose' | 'onImport'>;
 
@@ -16,7 +16,8 @@ export interface MediaPanelHeaderProps extends MediaPanelAddItemHandlers {
   onOpenRelinkDialog: () => void;
   viewMode: MediaPanelViewMode;
   onViewModeChange: (mode: MediaPanelViewMode) => void;
-  onImport: () => void;
+  onImport: (anchor?: MediaImportAnchor) => void;
+  importInputId: string;
   addDropdownOpen: boolean;
   onAddDropdownOpenChange: (open: boolean) => void;
 }
@@ -33,23 +34,13 @@ export function MediaPanelHeader({
   viewMode,
   onViewModeChange,
   onImport,
+  importInputId,
   addDropdownOpen,
   onAddDropdownOpenChange,
   onNewComposition,
   onNewFolder,
-  onNewText,
-  onNewSolid,
   onNewLiveInput,
-  onNewMesh,
-  onNewText3D,
-  onNewCamera,
-  onNewLight,
-  onNewSplatEffector,
   onImportGaussianSplat,
-  onNewMathScene,
-  onNewMotionShape,
-  onNewMotionNull,
-  onNewMotionAdjustment,
 }: MediaPanelHeaderProps) {
   const countLabel = isSearchActive
     ? `${searchResultCount} of ${totalItems} items`
@@ -76,7 +67,13 @@ export function MediaPanelHeader({
           viewMode={viewMode}
           onViewModeChange={onViewModeChange}
         />
-        <button className="btn btn-sm media-panel-import-button" onClick={onImport} title="Import Media">
+        <button
+          aria-controls={importInputId}
+          className="btn btn-sm media-panel-import-button"
+          onClick={(event) => onImport({ x: event.clientX, y: event.clientY })}
+          title="Import Media"
+          type="button"
+        >
           Import
         </button>
         <div className="add-dropdown-container">
@@ -95,19 +92,8 @@ export function MediaPanelHeader({
                 onImport={onImport}
                 onNewComposition={onNewComposition}
                 onNewFolder={onNewFolder}
-                onNewText={onNewText}
-                onNewSolid={onNewSolid}
                 onNewLiveInput={onNewLiveInput}
-                onNewMesh={onNewMesh}
-                onNewText3D={onNewText3D}
-                onNewCamera={onNewCamera}
-                onNewLight={onNewLight}
-                onNewSplatEffector={onNewSplatEffector}
                 onImportGaussianSplat={onImportGaussianSplat}
-                onNewMathScene={onNewMathScene}
-                onNewMotionShape={onNewMotionShape}
-                onNewMotionNull={onNewMotionNull}
-                onNewMotionAdjustment={onNewMotionAdjustment}
               />
             </div>
           )}

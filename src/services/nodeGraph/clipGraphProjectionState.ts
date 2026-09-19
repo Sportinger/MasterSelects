@@ -23,6 +23,10 @@ import type {
 } from './types';
 
 function getNodeBacking(node: NodeGraphNode): ClipNodeGraphBacking {
+  if (node.binding && node.binding.kind !== 'color-node' && node.binding.kind !== 'flock-node') {
+    return node.binding;
+  }
+
   switch (node.id) {
     case 'source':
       return { kind: 'clip-source' };
@@ -73,10 +77,12 @@ function cloneCustomNodeAIAuthoring(ai: ClipCustomNodeAIAuthoring): ClipCustomNo
         .reverse()
         .map((message) => message.kind === 'code' ? extractAINodeGeneratedCode(message.content) : null)
         .find((code): code is string => !!code);
+  const safeAuthoring = { ...ai };
+  delete safeAuthoring.generatedCode;
 
   return {
-    ...ai,
-    ...(generatedCode ? { generatedCode } : {}),
+    ...safeAuthoring,
+    ...(generatedCode !== undefined ? { generatedCode } : {}),
     conversation: ai.conversation?.map((message) => ({ ...message })),
   };
 }

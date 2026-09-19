@@ -1,6 +1,7 @@
 import type { MediaSliceCreator } from '../../types';
 import type { Composition } from '../../types';
 import { useSettingsStore } from '../../../settingsStore';
+import { useTimelineStore } from '../../../timeline';
 import { generateId } from '../../helpers/importPipeline';
 import type { CompositionActions } from '../compositionSlice';
 import {
@@ -139,9 +140,16 @@ export const createCompositionCrudActions: MediaSliceCreator<Pick<
   },
 
   removeComposition: (id: string) => {
+    const stateBeforeRemoval = get();
+    const removedIds = collectTransitionCompositionDescendantIds(
+      stateBeforeRemoval.compositions,
+      id,
+    );
+    removedIds.add(id);
+    const removesActiveComposition = stateBeforeRemoval.activeCompositionId !== null
+      && removedIds.has(stateBeforeRemoval.activeCompositionId);
+
     set((state) => {
-      const removedIds = collectTransitionCompositionDescendantIds(state.compositions, id);
-      removedIds.add(id);
       const newAssignments = { ...state.slotAssignments };
       const newSlotClipSettings = { ...state.slotClipSettings };
       for (const removedId of removedIds) {
@@ -160,6 +168,13 @@ export const createCompositionCrudActions: MediaSliceCreator<Pick<
         selectedSlotCompositionId: state.selectedSlotCompositionId && removedIds.has(state.selectedSlotCompositionId) ? null : state.selectedSlotCompositionId,
       };
     });
+
+    if (removesActiveComposition) {
+      // Removing the active composition also removes its live timeline. Leaving
+      // those clips mounted would let later editor or AI actions mutate an
+      // orphaned composition that no longer exists in the media library.
+      useTimelineStore.getState().clearTimeline();
+    }
   },
 
   updateComposition: (id: string, updates: Partial<Composition>) => {

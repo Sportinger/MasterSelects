@@ -23,9 +23,9 @@ Text clips are rasterized to a Canvas2D surface, uploaded as a GPU texture, and 
 `src/components/panels/TextTab.tsx` exposes:
 
 - Multi-line text input
-- Font family selection
-- Font weight selection with auto-adjustment to valid weights for the chosen font
-- Font style
+- Compact font family selection
+- Font-weight preview pills with all standard slots visible; unavailable weights are dark and disabled
+- Normal/italic style preview pills
 - Font size
 - Line height
 - Letter spacing
@@ -38,6 +38,9 @@ Text clips are rasterized to a Canvas2D surface, uploaded as a GPU texture, and 
 
 Text content updates are debounced briefly so typing stays responsive.
 Font changes trigger async font loading through `googleFontsService`.
+The ordinary Text tab shares the same compact typography controls as Dynamic
+Captions without exposing any caption-specific source, timing, line, or word-
+highlight settings.
 Area-text bounds can be keyframed from the Area Text section.
 
 ## Preview Editing

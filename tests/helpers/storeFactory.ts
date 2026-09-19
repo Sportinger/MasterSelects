@@ -30,6 +30,7 @@ import { createClipSlice } from '../../src/stores/timeline/clipSlice';
 import { createTextClipSlice } from '../../src/stores/timeline/textClipSlice';
 import { createSolidClipSlice } from '../../src/stores/timeline/solidClipSlice';
 import { createMotionClipSlice } from '../../src/stores/timeline/motionClipSlice';
+import { createFlockClipSlice } from '../../src/stores/timeline/flockClipSlice';
 import { createClipEffectSlice } from '../../src/stores/timeline/clipEffectSlice';
 import { createColorCorrectionSlice } from '../../src/stores/timeline/colorCorrectionSlice';
 import { createLinkedGroupSlice } from '../../src/stores/timeline/linkedGroupSlice';
@@ -156,6 +157,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
     const textClipActions = createTextClipSlice(set, get);
     const solidClipActions = createSolidClipSlice(set, get);
     const motionClipActions = createMotionClipSlice(set, get);
+    const flockClipActions = createFlockClipSlice(set, get);
     const clipEffectActions = createClipEffectSlice(set, get);
     const colorCorrectionActions = createColorCorrectionSlice(set, get);
     const linkedGroupActions = createLinkedGroupSlice(set, get);
@@ -421,6 +423,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
       ...textClipActions,
       ...solidClipActions,
       ...motionClipActions,
+      ...flockClipActions,
       ...clipEffectActions,
       ...colorCorrectionActions,
       ...linkedGroupActions,

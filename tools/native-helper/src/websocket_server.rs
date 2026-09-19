@@ -15,6 +15,7 @@ use crate::download;
 use crate::matanyone;
 use crate::muscriptor;
 use crate::protocol::{error_codes, Command, Response};
+use crate::rtmp::RelayHandle;
 use crate::session::{AppState, Session};
 
 #[allow(clippy::result_large_err)] // tungstenite's callback fixes this result type.
@@ -30,12 +31,7 @@ pub(super) async fn handle_connection(
         tokio_tungstenite::accept_hdr_async(stream, |request: &http::Request<()>, response| {
             if let Some(origin) = request.headers().get("Origin") {
                 let origin_str = origin.to_str().unwrap_or("");
-                let allowed = origin_str.starts_with("http://localhost")
-                    || origin_str.starts_with("http://127.0.0.1")
-                    || origin_str.starts_with("https://localhost")
-                    || origin_str.starts_with("https://127.0.0.1")
-                    || crate::http_server::is_cloudflare_pages_origin(origin_str)
-                    || allowed_origins.iter().any(|o| o == origin_str);
+                let allowed = is_allowed_origin(origin_str, &allowed_origins);
                 if !allowed {
                     warn!(
                         "Rejected WebSocket connection from disallowed origin: {}",
@@ -62,9 +58,12 @@ fn get_command_id(cmd: &Command) -> &str {
         Command::Auth { id, .. }
         | Command::Info { id }
         | Command::Ping { id }
+        | Command::RtmpStart { id, .. }
+        | Command::RtmpStop { id }
         | Command::DownloadYoutube { id, .. }
         | Command::Download { id, .. }
         | Command::ListFormats { id, .. }
+        | Command::SearchVideos { id, .. }
         | Command::GetFile { id, .. }
         | Command::Locate { id, .. }
         | Command::WriteFile { id, .. }
@@ -102,6 +101,8 @@ async fn handle_websocket(
     let (write, mut read) = ws.split();
     let write = Arc::new(tokio::sync::Mutex::new(write));
     let mut session = Session::new(state.clone());
+    let mut relay: Option<RelayHandle> = None;
+    let mut dropped_binary_without_relay = 0_u64;
 
     // Track authentication state for this connection.
     // If no auth token is configured, all connections are pre-authenticated.
@@ -115,6 +116,12 @@ async fn handle_websocket(
                 break;
             }
         };
+
+        if relay.as_ref().is_some_and(RelayHandle::is_finished) {
+            if let Some(finished) = relay.take() {
+                finished.stop().await;
+            }
+        }
 
         match msg {
             Message::Text(text) => {
@@ -183,6 +190,14 @@ async fn handle_websocket(
                     // Auth is handled above in the auth gate
                     Command::Auth { .. } => unreachable!(),
 
+                    command @ (Command::RtmpStart { .. } | Command::RtmpStop { .. }) => {
+                        let response =
+                            crate::rtmp::dispatch(command, &mut relay, write.clone()).await;
+                        let json = serde_json::to_string(&response)?;
+                        let mut w = write.lock().await;
+                        w.send(Message::Text(json)).await?;
+                    }
+
                     Command::DownloadYoutube {
                         id,
                         url,
@@ -209,6 +224,18 @@ async fn handle_websocket(
                     }
                     Command::ListFormats { id, url } => {
                         let response = download::handle_list_formats(&id, &url).await;
+                        let json = serde_json::to_string(&response)?;
+                        let mut w = write.lock().await;
+                        w.send(Message::Text(json)).await?;
+                    }
+                    Command::SearchVideos {
+                        id,
+                        query,
+                        max_results,
+                    } => {
+                        let response =
+                            download::handle_search_videos(&id, &query, max_results.unwrap_or(12))
+                                .await;
                         let json = serde_json::to_string(&response)?;
                         let mut w = write.lock().await;
                         w.send(Message::Text(json)).await?;
@@ -624,13 +651,106 @@ async fn handle_websocket(
                 info!("Client {} disconnected", addr);
                 break;
             }
-            Message::Binary(_) => {
-                warn!("Received unexpected binary data from {}", addr);
+            Message::Binary(data) => {
+                if let Some(active) = relay.as_ref() {
+                    if let Err(message) = active.send_binary(&data) {
+                        debug!(reason = message, "Dropped invalid RTMP media frame");
+                    }
+                } else {
+                    dropped_binary_without_relay += 1;
+                    if dropped_binary_without_relay % 100 == 0 {
+                        debug!(
+                            count = dropped_binary_without_relay,
+                            "Dropped binary frames without an active RTMP relay"
+                        );
+                    }
+                }
             }
             Message::Frame(_) => {}
         }
     }
 
+    if let Some(active) = relay.take() {
+        active.stop().await;
+    }
+
     info!("Connection closed: {}", addr);
     Ok(())
+}
+
+/// Browsers send `Origin` as `scheme://host[:port]` - lowercase, no path, no
+/// trailing slash - so a trusted origin has to equal a configured entry.
+/// Prefix matching (`starts_with("https://localhost")`) would have let
+/// `https://localhost.attacker.com` through.
+fn normalize_origin(origin: &str) -> String {
+    origin.trim().trim_end_matches('/').to_ascii_lowercase()
+}
+
+/// Exact-match origin check against the same allowlist the HTTP server's CORS
+/// layer uses, plus the Cloudflare Pages preview pattern.
+pub(crate) fn is_allowed_origin(origin: &str, allowed_origins: &[String]) -> bool {
+    let normalized = normalize_origin(origin);
+    if normalized.is_empty() {
+        return false;
+    }
+    allowed_origins
+        .iter()
+        .any(|allowed| normalize_origin(allowed) == normalized)
+        || crate::http_server::is_cloudflare_pages_origin(&normalized)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_allowed_origin;
+
+    fn allowlist() -> Vec<String> {
+        vec![
+            "http://localhost:5173".to_string(),
+            "https://localhost:5173".to_string(),
+            "http://127.0.0.1:5173".to_string(),
+            "https://www.masterselects.com".to_string(),
+        ]
+    }
+
+    #[test]
+    fn accepts_exact_allowlisted_origins() {
+        let origins = allowlist();
+        for origin in [
+            "http://localhost:5173",
+            "https://localhost:5173",
+            "http://127.0.0.1:5173",
+            "https://www.masterselects.com",
+            "HTTPS://WWW.MASTERSELECTS.COM",
+            "https://www.masterselects.com/",
+        ] {
+            assert!(is_allowed_origin(origin, &origins), "{origin} should be allowed");
+        }
+    }
+
+    #[test]
+    fn rejects_prefix_lookalikes_and_unlisted_ports() {
+        let origins = allowlist();
+        for origin in [
+            "https://localhost.attacker.com",
+            "http://localhost:5173.attacker.com",
+            "http://127.0.0.1.attacker.com",
+            "https://www.masterselects.com.attacker.com",
+            "http://localhost",
+            "http://localhost:4173",
+            "https://attacker.com/https://localhost:5173",
+            "null",
+            "",
+        ] {
+            assert!(!is_allowed_origin(origin, &origins), "{origin} must be rejected");
+        }
+    }
+
+    #[test]
+    fn accepts_cloudflare_pages_previews_only_over_https() {
+        let origins = allowlist();
+        assert!(is_allowed_origin("https://masterselects.pages.dev", &origins));
+        assert!(is_allowed_origin("https://abc123.masterselects.pages.dev", &origins));
+        assert!(!is_allowed_origin("http://abc123.masterselects.pages.dev", &origins));
+        assert!(!is_allowed_origin("https://masterselects.pages.dev.attacker.com", &origins));
+    }
 }

@@ -3,6 +3,7 @@ import type {
   ExportBasicsAudioState,
   ExportBasicsDisplayState,
   ExportBasicsModeState,
+  ExportBasicsOptionState,
   ExportBasicsVideoState,
 } from './exportBasicsTypes';
 
@@ -11,6 +12,7 @@ interface ExportAdvancedAudioSectionProps {
   display: ExportBasicsDisplayState;
   video: ExportBasicsVideoState;
   audio: ExportBasicsAudioState;
+  options: ExportBasicsOptionState;
   actions: ExportBasicsActions;
 }
 
@@ -19,6 +21,7 @@ export function ExportAdvancedAudioSection({
   display,
   video,
   audio,
+  options,
   actions,
 }: ExportAdvancedAudioSectionProps) {
   return (
@@ -71,10 +74,9 @@ export function ExportAdvancedAudioSection({
                 value={audio.audioBitrate}
                 onChange={(e) => actions.setAudioBitrate(Number(e.target.value))}
               >
-                <option value={128000}>128 kbps</option>
-                <option value={192000}>192 kbps</option>
-                <option value={256000}>256 kbps (High)</option>
-                <option value={320000}>320 kbps (Max)</option>
+                {options.audioBitratePresets.map((preset) => (
+                  <option key={preset.value} value={preset.value}>{preset.label}</option>
+                ))}
               </select>
             )}
           </div>

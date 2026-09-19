@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -10,6 +10,7 @@ import {
   useEditableDraggableNumberSettingsRevision,
 } from './EditableDraggableNumberSettings';
 import { resolvePointerLockDragDeltaX } from './pointerLockDragDelta';
+import { useEditableDraggableNumberTouch } from './useEditableDraggableNumberTouch';
 
 interface PopoverPlacement {
   top: number;
@@ -17,6 +18,8 @@ interface PopoverPlacement {
   transformOrigin: string;
   visibility: 'hidden' | 'visible';
 }
+
+const TOUCH_DRAG_MULTIPLIER = 3;
 
 export interface EditableDraggableNumberProps {
   value: number;
@@ -30,8 +33,10 @@ export interface EditableDraggableNumberProps {
   persistenceKey?: string;
   ariaLabel?: string;
   disabled?: boolean;
+  touchDragAxis?: 'auto' | 'horizontal' | 'vertical';
   onDragStart?: () => void;
   onDragEnd?: () => void;
+  onCommit?: (method: 'drag' | 'reset' | 'type') => void;
 }
 
 function clampValue(value: number, min?: number, max?: number): number {
@@ -96,8 +101,10 @@ export function EditableDraggableNumber({
   persistenceKey,
   ariaLabel,
   disabled = false,
+  touchDragAxis = 'auto',
   onDragStart,
   onDragEnd,
+  onCommit,
 }: EditableDraggableNumberProps) {
   const spanRef = useRef<HTMLSpanElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -143,13 +150,10 @@ export function EditableDraggableNumber({
     return parts.join(', ');
   }, [disabled, effectiveDefaultValue]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isEditing) return;
-    const rafId = window.requestAnimationFrame(() => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    });
-    return () => window.cancelAnimationFrame(rafId);
+    inputRef.current?.focus();
+    inputRef.current?.select();
   }, [isEditing]);
 
   const syncBoundsDraft = useCallback(() => {
@@ -269,8 +273,60 @@ export function EditableDraggableNumber({
     setIsEditing(true);
   }, [decimals, disabled, value]);
 
+  const handleResetToDefault = useCallback(() => {
+    if (effectiveDefaultValue === undefined) return;
+    const nextValue = clampValue(effectiveDefaultValue, effectiveMin, effectiveMax);
+    onChange(nextValue);
+    if (nextValue !== value) onCommit?.('reset');
+    setDraftValue(formatEditableValue(nextValue, decimals));
+    setDraftDefaultValue(formatEditableValue(nextValue, decimals));
+    setIsEditing(false);
+    setShowBoundsPopover(false);
+  }, [decimals, effectiveDefaultValue, effectiveMax, effectiveMin, onChange, onCommit, value]);
+
+  const resolveTouchDraggedValue = useCallback((initialValue: number, signedDistance: number) => {
+    const perPixelStep = getPerPixelStep(
+      initialValue,
+      sensitivity,
+      decimals,
+      effectiveMin,
+      effectiveMax,
+    );
+    return roundValue(
+      clampValue(
+        initialValue + signedDistance * TOUCH_DRAG_MULTIPLIER * perPixelStep,
+        effectiveMin,
+        effectiveMax,
+      ),
+      decimals,
+    );
+  }, [decimals, effectiveMax, effectiveMin, sensitivity]);
+
+  const {
+    feedbackElementRef,
+    touchFeedback,
+    handleTouchPointerDown,
+    shouldSuppressMouse,
+  } = useEditableDraggableNumberTouch({
+    value,
+    disabled,
+    interactionBlocked: isEditing || showBoundsPopover,
+    onChange,
+    onDragStart,
+    onDragEnd: () => {
+      onDragEnd?.();
+      onCommit?.('drag');
+    },
+    onSingleTap: beginEditing,
+    onDoubleTap: handleResetToDefault,
+    onLongPress: openBoundsPopover,
+    resolveDraggedValue: resolveTouchDraggedValue,
+    touchDragAxis,
+  });
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (disabled) return;
+    if (shouldSuppressMouse()) return;
     if (isEditing) return;
     if (e.button === 1) {
       e.preventDefault();
@@ -371,6 +427,7 @@ export function EditableDraggableNumber({
       window.removeEventListener('mouseup', handleMouseUp);
       if (dragStarted.current) {
         onDragEnd?.();
+        onCommit?.('drag');
       }
       dragStarted.current = false;
       pointerLockRequested.current = false;
@@ -388,10 +445,12 @@ export function EditableDraggableNumber({
     effectiveMin,
     onChange,
     onDragEnd,
+    onCommit,
     onDragStart,
     openBoundsPopover,
     readDragDeltaX,
     sensitivity,
+    shouldSuppressMouse,
     showBoundsPopover,
     isEditing,
     value,
@@ -448,15 +507,6 @@ export function EditableDraggableNumber({
     }
   }, [decimals, defaultValue, max, min, persistenceKey]);
 
-  const handleResetToDefault = useCallback(() => {
-    if (effectiveDefaultValue === undefined) return;
-    const nextValue = clampValue(effectiveDefaultValue, effectiveMin, effectiveMax);
-    onChange(nextValue);
-    setDraftValue(formatEditableValue(nextValue, decimals));
-    setDraftDefaultValue(formatEditableValue(nextValue, decimals));
-    setShowBoundsPopover(false);
-  }, [decimals, effectiveDefaultValue, effectiveMax, effectiveMin, onChange]);
-
   const cancelEditing = useCallback(() => {
     setDraftValue(formatEditableValue(value, decimals));
     setIsEditing(false);
@@ -474,9 +524,10 @@ export function EditableDraggableNumber({
       decimals,
     );
     onChange(nextValue);
+    if (nextValue !== value) onCommit?.('type');
     setDraftValue(formatEditableValue(nextValue, decimals));
     setIsEditing(false);
-  }, [cancelEditing, decimals, draftValue, effectiveMax, effectiveMin, onChange]);
+  }, [cancelEditing, decimals, draftValue, effectiveMax, effectiveMin, onChange, onCommit, value]);
 
   const popover = showBoundsPopover && !disabled && typeof document !== 'undefined'
     ? createPortal(
@@ -538,6 +589,34 @@ export function EditableDraggableNumber({
       )
     : null;
 
+  const touchValueBubble = touchFeedback && !disabled && typeof document !== 'undefined'
+    ? createPortal(
+        <output
+          ref={feedbackElementRef}
+          className={`draggable-number-touch-feedback is-${touchFeedback.placement}`}
+          data-axis={touchFeedback.axis ?? 'pending'}
+          data-speed={touchFeedback.speed}
+          style={{ left: touchFeedback.left, top: touchFeedback.top }}
+          aria-live="polite"
+        >
+          <span className={`draggable-number-touch-axis is-${touchFeedback.axis ?? 'pending'}`} aria-hidden="true">
+            {touchFeedback.axis === 'horizontal'
+              ? '↔'
+              : touchFeedback.axis === 'vertical'
+                ? '↕'
+                : '↔ ↕'}
+          </span>
+          {touchFeedback.speed !== 'normal' && (
+            <span className={`draggable-number-touch-speed is-${touchFeedback.speed}`} aria-hidden="true">
+              {touchFeedback.speed === 'fast' ? '×10' : '×0.1'}
+            </span>
+          )}
+          <span>{touchFeedback.value.toFixed(decimals)}{suffix}</span>
+        </output>,
+        document.body,
+      )
+    : null;
+
   return (
     <span
       ref={rootRef}
@@ -573,6 +652,11 @@ export function EditableDraggableNumber({
           className={`draggable-number ${disabled ? 'draggable-number-disabled' : ''}`}
           aria-label={ariaLabel}
           aria-disabled={disabled}
+          aria-valuemax={effectiveMax}
+          aria-valuemin={effectiveMin}
+          aria-valuenow={value}
+          role="slider"
+          onPointerDown={handleTouchPointerDown}
           onMouseDown={handleMouseDown}
           onAuxClick={(e) => {
             if (e.button === 1) {
@@ -584,6 +668,7 @@ export function EditableDraggableNumber({
             if (disabled) return;
             e.preventDefault();
             e.stopPropagation();
+            if (shouldSuppressMouse()) return;
             beginEditing();
           }}
           onContextMenu={(e) => {
@@ -599,6 +684,7 @@ export function EditableDraggableNumber({
       )}
 
       {popover}
+      {touchValueBubble}
     </span>
   );
 }

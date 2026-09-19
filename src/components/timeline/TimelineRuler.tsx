@@ -6,8 +6,18 @@
 // frames) use createLinearLaneTicks; the bars lane projects time through the
 // TempoMap via createBarsLaneTicks. No frame<->time crossfade — each lane's
 // format is fixed and only tick density adapts to zoom.
+//
+// Annotation bars, their drag/trim/keyboard interactions, and the reader popover
+// live in hooks/useRulerAnnotations + components/RulerAnnotation*.
 
-import { memo, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import {
+  memo,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import type { RulerLane } from '../../types';
 import type { TimelineRulerProps } from './types';
 import {
@@ -19,6 +29,14 @@ import {
 } from './utils/timelineGrid';
 import { createDefaultRulerLanes, createDefaultTempoMap } from '../../timeline/tempo/rulerDefaults';
 import { TempoRulerLane } from './components/TempoRulerLane';
+import { RulerAnnotationBars } from './components/RulerAnnotationBars';
+import { RulerAnnotationPortals } from './components/RulerAnnotationPortals';
+import { useRulerAnnotations } from './hooks/useRulerAnnotations';
+import {
+  TimelineRulerActionMenu,
+  type TimelineRulerActionMenuState,
+} from './TimelineRulerActionMenu';
+import './TimelineAnnotations.css';
 
 const RULER_VIEWPORT_FALLBACK_PX = 1600;
 const RULER_VIEWPORT_MIN_PX = 1600;
@@ -26,6 +44,7 @@ const RULER_RENDER_OVERSCAN_PX = 512;
 // A press that moves less than this is a click (selects the lane); more is a
 // scrub drag (handled by the ruler's mousedown, never selects).
 const LANE_CLICK_SELECT_THRESHOLD_PX = 4;
+const DEFAULT_ANNOTATION_FRAME_RATE = 30;
 
 function getResizeObserverInlineSize(entry: ResizeObserverEntry): number {
   const borderBox = entry.borderBoxSize;
@@ -43,6 +62,9 @@ function TimelineRulerComponent({
   onSelectLane,
   scrollX,
   onRulerMouseDown,
+  onSetInPoint,
+  onSetOutPoint,
+  onAddMarker,
   formatTime,
   cacheRanges = [],
   videoBakeRegions = [],
@@ -51,6 +73,7 @@ function TimelineRulerComponent({
   const rulerRef = useRef<HTMLDivElement | null>(null);
   const laneClickStartXRef = useRef<number | null>(null);
   const [measuredViewportWidth, setMeasuredViewportWidth] = useState(RULER_VIEWPORT_FALLBACK_PX);
+  const [actionMenu, setActionMenu] = useState<TimelineRulerActionMenuState | null>(null);
 
   useLayoutEffect(() => {
     const viewportElement = rulerRef.current?.parentElement;
@@ -95,6 +118,17 @@ function TimelineRulerComponent({
     duration,
     (scrollX + viewportWidth + RULER_RENDER_OVERSCAN_PX) / Math.max(zoom, 0.001),
   );
+
+  const annotations = useRulerAnnotations({
+    actionMenu,
+    duration,
+    frameRate: frameRate ?? DEFAULT_ANNOTATION_FRAME_RATE,
+    rulerRef,
+    setActionMenu,
+    visibleEndTime,
+    visibleStartTime,
+    zoom,
+  });
 
   const visibleCacheRanges = cacheRanges
     .map((range) => {
@@ -164,6 +198,18 @@ function TimelineRulerComponent({
       aria-label="Timeline ruler"
       style={{ width, transform: `translateX(-${alignedScrollX}px)` }}
       onMouseDown={onRulerMouseDown}
+      onPointerDown={(event: ReactPointerEvent<HTMLDivElement>) => {
+        if (event.pointerType === 'mouse' || event.button !== 0) return;
+        onRulerMouseDown(event);
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        annotations.clearContextAnnotation();
+        const rect = event.currentTarget.getBoundingClientRect();
+        const time = Math.max(0, Math.min(duration, (event.clientX - rect.left) / Math.max(zoom, 0.001)));
+        setActionMenu({ time, x: event.clientX, y: event.clientY });
+      }}
     >
       {effectiveLanes.map((lane) => {
         // The active highlight only matters when choosing among >1 lanes.
@@ -222,6 +268,18 @@ function TimelineRulerComponent({
           </div>
         );
       })}
+      <RulerAnnotationBars
+        annotations={annotations.visibleAnnotations}
+        draggingAnnotationId={annotations.draggingAnnotationId}
+        formatTime={formatTime}
+        onBeginDrag={annotations.beginAnnotationDrag}
+        onContextMenu={annotations.openAnnotationContextMenu}
+        onDragEnd={annotations.endAnnotationDrag}
+        onDragMove={annotations.updateAnnotationDrag}
+        onNudge={annotations.nudgeAnnotation}
+        onOpen={annotations.openExpandedAnnotation}
+        timeToPixel={timeToPixel}
+      />
       {visibleVideoBakeRegions.map((region) => (
         <div
           key={region.key}
@@ -244,6 +302,30 @@ function TimelineRulerComponent({
           title={`${range.type === 'proxy' ? 'Proxy' : 'Cache'}: ${formatTime(range.start)} - ${formatTime(range.end)}`}
         />
       ))}
+      <TimelineRulerActionMenu
+        formatTime={formatTime}
+        menu={actionMenu}
+        onAddAnnotation={annotations.addCompositionAnnotation}
+        onAddMarker={onAddMarker}
+        onClose={annotations.closeActionMenu}
+        onConvertAnnotationToClip={annotations.contextAnnotation && annotations.contextAnnotation.scope !== 'clip'
+          ? annotations.linkContextAnnotationToClip
+          : undefined}
+        onConvertAnnotationToComposition={annotations.contextAnnotation?.scope === 'clip'
+          ? annotations.convertContextAnnotationToComposition
+          : undefined}
+        onSetInPoint={onSetInPoint}
+        onSetOutPoint={onSetOutPoint}
+      />
+      <RulerAnnotationPortals
+        clipLinkTooltipRef={annotations.clipLinkTooltipRef}
+        expandedAnnotation={annotations.expandedAnnotation}
+        expandedAnnotationData={annotations.expandedAnnotationData}
+        expandedAnnotationRef={annotations.expandedAnnotationRef}
+        formatTime={formatTime}
+        onCloseExpanded={annotations.closeExpandedAnnotation}
+        pendingClipLink={annotations.pendingClipLink}
+      />
     </div>
   );
 }

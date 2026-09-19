@@ -6,6 +6,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import type { ClipMask, MaskVertex } from '../../types/masks';
 import type { TimelineClip } from '../../types/timeline';
 import { inferMaskVertexHandleMode } from '../../utils/maskVertexHandles';
+import { getMaskGeometryCenter } from '../../utils/maskTransform';
 import {
   applyMaskVertexUpdates,
   clearMaskPathDragPreview,
@@ -47,12 +48,162 @@ function lineIntersection(
   };
 }
 
+const ELLIPSE_GEOMETRY_EPSILON = 0.0001;
+
+function vectorLength(point: { x: number; y: number }): number {
+  return Math.hypot(point.x, point.y);
+}
+
+function isStraightCornerQuad(mask: ClipMask): boolean {
+  return mask.vertices.every(vertex => (
+    vectorLength(vertex.handleIn) < ELLIPSE_GEOMETRY_EPSILON
+    && vectorLength(vertex.handleOut) < ELLIPSE_GEOMETRY_EPSILON
+  ));
+}
+
+function getEllipseHandleScale(mask: ClipMask): number | null {
+  if (!mask.closed || mask.vertices.length !== 4) return null;
+
+  const [first, second, third, fourth] = mask.vertices;
+  if (!first || !second || !third || !fourth) return null;
+
+  const centerA = {
+    x: (first.x + third.x) / 2,
+    y: (first.y + third.y) / 2,
+  };
+  const centerB = {
+    x: (second.x + fourth.x) / 2,
+    y: (second.y + fourth.y) / 2,
+  };
+  const geometryScale = Math.max(
+    vectorLength({ x: first.x - third.x, y: first.y - third.y }),
+    vectorLength({ x: second.x - fourth.x, y: second.y - fourth.y }),
+    1,
+  );
+  if (vectorLength({ x: centerA.x - centerB.x, y: centerA.y - centerB.y }) > ELLIPSE_GEOMETRY_EPSILON * geometryScale) {
+    return null;
+  }
+
+  const center = {
+    x: (centerA.x + centerB.x) / 2,
+    y: (centerA.y + centerB.y) / 2,
+  };
+  const radialPoints = mask.vertices.map(vertex => ({
+    x: vertex.x - center.x,
+    y: vertex.y - center.y,
+  }));
+  const firstAxis = radialPoints[0];
+  const secondAxis = radialPoints[1];
+  if (!firstAxis || !secondAxis) return null;
+  if (Math.abs(firstAxis.x * secondAxis.y - firstAxis.y * secondAxis.x) < ELLIPSE_GEOMETRY_EPSILON) {
+    return null;
+  }
+
+  const handleScales: number[] = [];
+  for (let index = 0; index < mask.vertices.length; index += 1) {
+    const vertex = mask.vertices[index];
+    const previousRadial = radialPoints[(index + 3) % 4];
+    const nextRadial = radialPoints[(index + 1) % 4];
+    if (!vertex || !previousRadial || !nextRadial) return null;
+
+    const mirrorError = vectorLength({
+      x: vertex.handleIn.x + vertex.handleOut.x,
+      y: vertex.handleIn.y + vertex.handleOut.y,
+    });
+    const handleLength = Math.max(vectorLength(vertex.handleIn), vectorLength(vertex.handleOut));
+    if (handleLength < ELLIPSE_GEOMETRY_EPSILON || mirrorError > handleLength * 0.02) return null;
+
+    for (const [handle, radial] of [
+      [vertex.handleIn, previousRadial],
+      [vertex.handleOut, nextRadial],
+    ] as const) {
+      const radialLengthSquared = radial.x * radial.x + radial.y * radial.y;
+      if (radialLengthSquared < ELLIPSE_GEOMETRY_EPSILON ** 2) return null;
+      const scale = (handle.x * radial.x + handle.y * radial.y) / radialLengthSquared;
+      if (scale <= 0.05 || scale >= 2) return null;
+      const residual = vectorLength({
+        x: handle.x - radial.x * scale,
+        y: handle.y - radial.y * scale,
+      });
+      if (residual > Math.max(handleLength, ELLIPSE_GEOMETRY_EPSILON) * 0.02) return null;
+      handleScales.push(scale);
+    }
+  }
+
+  const averageScale = handleScales.reduce((sum, scale) => sum + scale, 0) / handleScales.length;
+  if (handleScales.some(scale => Math.abs(scale - averageScale) > 0.02)) return null;
+  return averageScale;
+}
+
+export function buildEllipseResizeVertexUpdates(
+  mask: ClipMask,
+  vertexId: string,
+  target: { x: number; y: number },
+): Array<{ id: string; updates: Partial<MaskVertex> }> | null {
+  const handleScale = getEllipseHandleScale(mask);
+  if (handleScale === null) return null;
+
+  const index = mask.vertices.findIndex(vertex => vertex.id === vertexId);
+  if (index < 0) return null;
+  const oppositeIndex = (index + 2) % 4;
+  const opposite = mask.vertices[oppositeIndex];
+  const first = mask.vertices[0];
+  const third = mask.vertices[2];
+  if (!opposite || !first || !third) return null;
+
+  const previousCenter = {
+    x: (first.x + third.x) / 2,
+    y: (first.y + third.y) / 2,
+  };
+  const nextCenter = {
+    x: (target.x + opposite.x) / 2,
+    y: (target.y + opposite.y) / 2,
+  };
+  const radialPoints = mask.vertices.map(vertex => ({
+    x: vertex.x - previousCenter.x,
+    y: vertex.y - previousCenter.y,
+  }));
+  const resizedAxis = {
+    x: target.x - nextCenter.x,
+    y: target.y - nextCenter.y,
+  };
+  radialPoints[index] = resizedAxis;
+  radialPoints[oppositeIndex] = { x: -resizedAxis.x, y: -resizedAxis.y };
+
+  const nextVertices = mask.vertices.map((vertex, vertexIndex) => ({
+    ...vertex,
+    x: nextCenter.x + radialPoints[vertexIndex]!.x,
+    y: nextCenter.y + radialPoints[vertexIndex]!.y,
+  }));
+
+  return nextVertices.map((vertex, vertexIndex) => {
+    const previousRadial = radialPoints[(vertexIndex + 3) % 4]!;
+    const nextRadial = radialPoints[(vertexIndex + 1) % 4]!;
+    return {
+      id: vertex.id,
+      updates: {
+        x: vertex.x,
+        y: vertex.y,
+        handleIn: {
+          x: previousRadial.x * handleScale,
+          y: previousRadial.y * handleScale,
+        },
+        handleOut: {
+          x: nextRadial.x * handleScale,
+          y: nextRadial.y * handleScale,
+        },
+        handleMode: 'mirrored',
+      },
+    };
+  });
+}
+
 export function buildAngleLockedQuadVertexUpdates(
   mask: ClipMask,
   vertexId: string,
   target: { x: number; y: number },
 ): Array<{ id: string; updates: Partial<MaskVertex> }> | null {
-  if (!mask.closed || mask.vertices.length !== 4) return null;
+  if (!mask.closed || mask.vertices.length !== 4 || !isStraightCornerQuad(mask)) return null;
   const index = mask.vertices.findIndex(vertex => vertex.id === vertexId);
   if (index < 0) return null;
 
@@ -81,6 +232,50 @@ export function buildAngleLockedQuadVertexUpdates(
     { id: previous.id, updates: previousPoint },
     { id: next.id, updates: nextPoint },
   ];
+}
+
+export function buildGlobalMaskScaleVertexUpdates(
+  mask: ClipMask,
+  vertexId: string,
+  target: { x: number; y: number },
+): Array<{ id: string; updates: Partial<MaskVertex> }> | null {
+  const draggedVertex = mask.vertices.find(vertex => vertex.id === vertexId);
+  if (!draggedVertex || mask.vertices.length < 2) return null;
+
+  const center = getMaskGeometryCenter(mask.vertices);
+  const startVector = {
+    x: draggedVertex.x - center.x,
+    y: draggedVertex.y - center.y,
+  };
+  const targetVector = {
+    x: target.x - center.x,
+    y: target.y - center.y,
+  };
+  const startLengthSquared = startVector.x * startVector.x + startVector.y * startVector.y;
+  if (startLengthSquared < 0.0000001) return null;
+
+  const scale = (targetVector.x * startVector.x + targetVector.y * startVector.y) / startLengthSquared;
+  return mask.vertices.map(vertex => ({
+    id: vertex.id,
+    updates: {
+      x: center.x + (vertex.x - center.x) * scale,
+      y: center.y + (vertex.y - center.y) * scale,
+      handleIn: {
+        x: vertex.handleIn.x * scale,
+        y: vertex.handleIn.y * scale,
+      },
+      handleOut: {
+        x: vertex.handleOut.x * scale,
+        y: vertex.handleOut.y * scale,
+      },
+    },
+  }));
+}
+
+export function shouldResizeMaskShape(
+  event: Pick<MouseEvent, 'ctrlKey' | 'metaKey'>,
+): boolean {
+  return event.ctrlKey || event.metaKey;
 }
 
 export function useMaskVertexDrag(
@@ -258,8 +453,8 @@ export function useMaskVertexDrag(
       dragState.current.lastShiftState = isShiftPressed;
 
       if (dragState.current.handleType === 'vertex') {
-        const freeMove = moveEvent.ctrlKey || moveEvent.metaKey;
-        if (isShiftPressed && !freeMove) {
+        const resizeShape = shouldResizeMaskShape(moveEvent);
+        if (isShiftPressed && !resizeShape) {
           const shiftDx = (moveEvent.clientX - dragState.current.shiftStartX) * scaleX;
           const normalizedShiftDx = shiftDx / canvasWidth;
           const scaleFactor = 1 + normalizedShiftDx * 5;
@@ -287,7 +482,7 @@ export function useMaskVertexDrag(
           const normalizedDy = localPoint
             ? localPoint.y - dragState.current.startLocalY
             : ((moveEvent.clientY - dragState.current.startY) * scaleY) / canvasHeight;
-          const axisLocked = freeMove && moveEvent.shiftKey
+          const axisLocked = resizeShape && moveEvent.shiftKey
             ? Math.abs(normalizedDx) >= Math.abs(normalizedDy)
               ? { dx: normalizedDx, dy: 0 }
               : { dx: 0, dy: normalizedDy }
@@ -297,8 +492,10 @@ export function useMaskVertexDrag(
             x: dragState.current.startVertexX + axisLocked.dx,
             y: dragState.current.startVertexY + axisLocked.dy,
           };
-          const lockedUpdates = !freeMove && dragState.current.startVertices.length === 1
-            ? buildAngleLockedQuadVertexUpdates(activeMask, dragState.current.vertexId, target)
+          const lockedUpdates = resizeShape && dragState.current.startVertices.length === 1
+            ? buildEllipseResizeVertexUpdates(activeMask, dragState.current.vertexId, target)
+              ?? buildAngleLockedQuadVertexUpdates(activeMask, dragState.current.vertexId, target)
+              ?? buildGlobalMaskScaleVertexUpdates(activeMask, dragState.current.vertexId, target)
             : null;
           const vertexUpdates = lockedUpdates ?? dragState.current.startVertices.map(startVertex => ({
             id: startVertex.id,

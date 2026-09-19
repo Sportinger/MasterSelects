@@ -183,7 +183,7 @@ export class OutputPipeline {
 
     renderPass.setPipeline(this.outputPipeline);
     renderPass.setBindGroup(0, bindGroup);
-    renderPass.draw(6);
+    renderPass.draw(3);
     renderPass.end();
   }
 

@@ -4,6 +4,7 @@ import type {
   NodeGraphNode,
   NodeGraphPort,
 } from '../../../../services/nodeGraph';
+import { getFlockPortType, getNodeGraphPortCompatibilityKey } from '../../../../services/nodeGraph';
 
 export const DEFAULT_VIEWPORT = { zoom: 0.88, panX: 36, panY: 28 };
 export const MIN_ZOOM = 0.18;
@@ -40,6 +41,18 @@ export interface PortReference {
   portId: string;
   direction: NodeGraphPort['direction'];
   type: NodeGraphPort['type'];
+  /** Ports connect only when these keys match (flock ports use their semantic type). */
+  compatibilityKey: string;
+}
+
+export function createPortReference(nodeId: string, port: NodeGraphPort): PortReference {
+  return {
+    nodeId,
+    portId: port.id,
+    direction: port.direction,
+    type: port.type,
+    compatibilityKey: getNodeGraphPortCompatibilityKey(port),
+  };
 }
 
 export interface NodeBadge {
@@ -105,8 +118,26 @@ export function getAudioAnalysisBadges(node: NodeGraphNode): NodeBadge[] {
   return badges;
 }
 
+export function getFlockNodeBadges(node: NodeGraphNode): NodeBadge[] {
+  if (node.binding?.kind !== 'flock-node') return [];
+  const errors = getNodeParamNumber(node, 'flockErrors');
+  const warnings = getNodeParamNumber(node, 'flockWarnings');
+  const badges: NodeBadge[] = [];
+  if (errors > 0) {
+    badges.push({ label: `${errors} error${errors === 1 ? '' : 's'}`, tone: 'empty', title: 'See the inspector for details' });
+  }
+  if (warnings > 0) {
+    badges.push({ label: `${warnings} warning${warnings === 1 ? '' : 's'}`, tone: 'partial', title: 'See the inspector for details' });
+  }
+  return badges;
+}
+
+export function getNodeBadges(node: NodeGraphNode): NodeBadge[] {
+  return [...getAudioAnalysisBadges(node), ...getFlockNodeBadges(node)];
+}
+
 export function getNodePortStartY(node: NodeGraphNode): number {
-  return getAudioAnalysisBadges(node).length > 0 ? BADGED_PORT_START_Y : PORT_START_Y;
+  return getNodeBadges(node).length > 0 ? BADGED_PORT_START_Y : PORT_START_Y;
 }
 
 export function getNodeHeight(node: NodeGraphNode): number {
@@ -160,20 +191,39 @@ export function getEdgePath(edge: NodeGraphEdge, nodesById: Map<string, NodeGrap
 }
 
 export function getPortTitle(port: NodeGraphPort): string {
-  return `${port.label} (${port.type})`;
+  const flockType = getFlockPortType(port);
+  const detail = flockType
+    ? `${flockType}${port.metadata?.required ? ', required' : ''}${port.metadata?.repeated ? ', accepts many' : ''}`
+    : port.type;
+  return `${port.label} (${detail})`;
 }
 
 export function isNodeBypassable(node: NodeGraphNode): boolean {
-  return node.kind === 'effect' || node.kind === 'custom';
+  if (node.binding?.kind === 'flock-node') {
+    return node.params?.bypassable === true;
+  }
+  return node.kind === 'effect' ||
+    node.kind === 'custom' ||
+    (node.binding?.kind === 'color-node' &&
+      node.binding.nodeType !== 'input' &&
+      node.binding.nodeType !== 'output');
 }
 
 export function isNodeBypassed(node: NodeGraphNode): boolean {
+  if (node.binding?.kind === 'flock-node') {
+    return node.params?.bypassed === true;
+  }
+
   if (node.kind === 'effect') {
     return node.params?.enabled === false;
   }
 
   if (node.kind === 'custom') {
     return node.params?.bypassed === true;
+  }
+
+  if (node.binding?.kind === 'color-node') {
+    return node.params?.enabled === false;
   }
 
   return false;

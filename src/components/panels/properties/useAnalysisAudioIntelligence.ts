@@ -83,19 +83,17 @@ export function useAnalysisAudioIntelligence(clipId: string) {
 
   useEffect(() => {
     let cancelled = false;
-    if (!clipState.hasAudio) {
+    queueMicrotask(() => {
+      if (cancelled) return;
       setArtifacts([]);
       setLanes(undefined);
       setMarkers([]);
       setPauses([]);
       setEnergyCurve(undefined);
+    });
+    if (!clipState.hasAudio) {
       return () => { cancelled = true; };
     }
-    setArtifacts([]);
-    setLanes(undefined);
-    setMarkers([]);
-    setPauses([]);
-    setEnergyCurve(undefined);
     const ids = [clipState.loudnessEnvelopeId, clipState.voiceActivityId,
       clipState.transcriptTimingId, clipState.speechMarkersId, clipState.prosodyContourId,
       clipState.roomToneProfileId].filter((id): id is string => Boolean(id));
@@ -177,13 +175,15 @@ export function useAnalysisAudioIntelligence(clipId: string) {
     ? 'none'
     : presentCount === FEATURES.length ? 'ready' : 'partial';
   const running = clipState.job?.kind === 'audio-intelligence';
+  const generate = clipState.generate;
+  const cancelJob = clipState.cancelJob;
   const run = useCallback(
-    () => clipState.generate(clipId, { force: status !== 'none' }),
-    [clipId, clipState.generate, status],
+    () => generate(clipId, { force: status !== 'none' }),
+    [clipId, generate, status],
   );
   const cancel = useCallback(
-    () => clipState.cancelJob(clipId),
-    [clipId, clipState.cancelJob],
+    () => cancelJob(clipId),
+    [cancelJob, clipId],
   );
 
   return {

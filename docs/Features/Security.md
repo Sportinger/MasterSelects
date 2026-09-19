@@ -37,7 +37,7 @@ The main trust boundaries are:
 
 External services are contacted only when their feature is used, including hosted AI, cloud transcription or generation, Google Fonts, Google's optional YouTube Data API integration, and model downloads. The demo video is served by MasterSelects and does not connect to YouTube.
 
-German and English legal pages are available at `/impressum`, `/datenschutz`, `/imprint`, and `/privacy`. The website free-credit offer is requested only after the user activates it. Its browser-binding cookie expires with the offer, up to one hour.
+The directly addressable legal pages at `/impressum`, `/datenschutz`, `/imprint`, and `/privacy` render in all eight supported UI languages. Imprint and privacy content share centrally maintained postal, email, and telephone contact details so every localized version stays consistent. The website free-credit offer is requested only after the user activates it. Its browser-binding cookie expires with the offer, up to one hour.
 
 Hosted AI requests go through Cloudflare Functions, require an authenticated session and credits, and use server-managed provider credentials. The current chat UI exposes the Kie-hosted model catalog.
 
@@ -46,6 +46,19 @@ Credit-claim links contain high-entropy codes, while D1 stores only their SHA-25
 ---
 
 ## Secret Handling
+
+Hosted request hardening includes same-origin checks for state-changing browser
+requests, browser-bound OAuth state, constant-time credential comparisons, scoped
+KV rate budgets, and stricter validation of kernel proxy paths and request sizes.
+Credit reservations use an atomic D1 balance check/debit before provider calls;
+failed provider submissions refund that reservation, and webhook processing is
+idempotent. KV rate counters remain best-effort because KV is eventually consistent.
+
+Responses include baseline security headers and a report-only content policy with
+a bounded CSP report endpoint. Native Helper WebSocket origins use the configured
+exact allowlist and validated HTTPS Pages previews rather than host-prefix matching.
+Diagnostic redaction covers additional provider token formats. Targeted regression
+tests cover these boundaries without invoking production providers or transactions.
 
 ### Storage
 
@@ -184,3 +197,5 @@ If you discover a security vulnerability:
 ---
 
 *Source: `src/services/security/redact.ts`, `src/services/logger.ts`, `src/services/youtubeCredentialManager.ts`, `src/components/common/settings/IntegrationCredentialsSettings.tsx`, `tools/devBridge/auth.ts`, `tools/devBridge/vitePlugin.ts`, `tools/devBridge/localFileEndpoints.ts`, `tools/native-helper/src/main.rs`, `tools/native-helper/src/server.rs`, `tools/native-helper/src/http_server.rs`, `tools/native-helper/src/websocket_server.rs`, `functions/api/ai/chat.ts`, `functions/api/ai/chat-history.ts`, `functions/lib/chatLog.ts`, `functions/lib/creditClaims.ts`, `functions/lib/websiteFreeCreditOffer.ts`*
+
+CSP diagnostics label report-only observations separately from enforced blocking. Reports with unknown disposition are described as reported violations. Raw records remain available for security inspection; report-only observations do not count as product runtime failures.

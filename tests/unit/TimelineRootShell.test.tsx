@@ -22,6 +22,7 @@ function renderTimelineRoot(
       splitDragVideoHeight={null}
       trackFocusMode="balanced"
       trackHeaderWidth={220}
+      trackScaleGestureActive={false}
     >
       <button onMouseDown={childMouseDown}>Timeline child</button>
     </TimelineRootShell>,

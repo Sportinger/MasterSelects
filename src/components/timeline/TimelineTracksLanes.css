@@ -25,6 +25,18 @@
   position: relative;
 }
 
+/* Keep one-finger timeline panning under editor control on the empty section
+   background too. iPad Safari otherwise cancels the pointer stream shortly
+   after the drag starts; clip rows already carry the same protection. */
+.timeline-track-stack,
+.timeline-track-section,
+.timeline-section-viewport,
+.timeline-section-content-row,
+.timeline-section-tracks,
+.track-lanes-scroll {
+  touch-action: none;
+}
+
 .timeline-video-bake-region-layer {
   position: absolute;
   inset: 0 auto auto 0;
@@ -163,12 +175,21 @@
   transition: height 220ms cubic-bezier(0.22, 1, 0.36, 1), background 160ms ease, border-color 160ms ease;
 }
 
+/* The clip row owns horizontal clip gestures. Without this, iPad Safari may
+   cancel the Pointer Event stream in favor of page/panel panning. */
+.track-clip-row {
+  touch-action: none;
+}
+
 .timeline-container.is-track-resizing .track-header,
 .timeline-container.is-track-resizing .track-lane {
   transition: background 160ms ease, border-color 160ms ease;
 }
 
 .track-resize-handle {
+  /* Straddles the track's bottom border (4px into each side), the standard
+     resize-handle geometry. The video/audio split and header-width dividers are
+     separate controls with their own hit areas. */
   position: absolute;
   left: 0;
   right: 0;
@@ -198,6 +219,19 @@
   height: 2px;
   background: color-mix(in srgb, var(--accent-timeline) 78%, transparent);
   box-shadow: 0 0 8px color-mix(in srgb, var(--accent-timeline) 70%, transparent);
+}
+
+/* A finger cannot reliably hit an 8px strip: widen the grab area on coarse
+   pointers. The visible 1px line stays where it is — only the hit area grows. */
+@media (pointer: coarse) {
+  .track-resize-handle {
+    bottom: -7px;
+    height: 14px;
+  }
+
+  .track-resize-handle::after {
+    top: 6px;
+  }
 }
 
 .track-lane::before {

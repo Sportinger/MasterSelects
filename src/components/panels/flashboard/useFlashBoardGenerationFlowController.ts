@@ -42,6 +42,7 @@ interface UseFlashBoardGenerationFlowControllerInput {
   normalizedMultiPrompt: FlashBoardMultiShotPrompt[];
   originalPrompt?: string | null;
   outputFormat: string;
+  returnLastFrame: boolean;
   providerId: string;
   selectedEntry?: CatalogEntry;
   service: CatalogEntry['service'];
@@ -65,10 +66,12 @@ interface UseFlashBoardGenerationFlowControllerInput {
   supportsAudio: boolean;
   updateComposer: (patch: Partial<FlashBoardComposerState>) => void;
   version: string;
+  videoOutputFormat: 'mov' | 'mp4';
   visibleCatalog: CatalogEntry[];
   voiceId: string;
   voiceName: string;
   voiceSettings: FlashBoardVoiceSettings;
+  webSearch: boolean;
 }
 
 export function useFlashBoardGenerationFlowController({
@@ -93,6 +96,7 @@ export function useFlashBoardGenerationFlowController({
   normalizedMultiPrompt,
   originalPrompt,
   outputFormat,
+  returnLastFrame,
   providerId,
   selectedEntry,
   service,
@@ -116,10 +120,12 @@ export function useFlashBoardGenerationFlowController({
   supportsAudio,
   updateComposer,
   version,
+  videoOutputFormat,
   visibleCatalog,
   voiceId,
   voiceName,
   voiceSettings,
+  webSearch,
 }: UseFlashBoardGenerationFlowControllerInput) {
   useEffect(() => {
     if (!selectedEntry) {
@@ -350,6 +356,7 @@ export function useFlashBoardGenerationFlowController({
       normalizedMultiPrompt,
       originalPrompt,
       outputFormat,
+      returnLastFrame,
       providerId,
       selectedEntry,
       service,
@@ -364,9 +371,11 @@ export function useFlashBoardGenerationFlowController({
       sunoVocalGender,
       sunoWeirdnessConstraint,
       version,
+      videoOutputFormat,
       voiceId,
       voiceName,
       voiceSettings,
+      webSearch,
     }));
   }, [
     aspectRatio,
@@ -385,6 +394,7 @@ export function useFlashBoardGenerationFlowController({
     normalizedMultiPrompt,
     originalPrompt,
     outputFormat,
+    returnLastFrame,
     providerId,
     selectedEntry,
     service,
@@ -398,9 +408,11 @@ export function useFlashBoardGenerationFlowController({
     sunoVocalGender,
     sunoWeirdnessConstraint,
     version,
+    videoOutputFormat,
     voiceId,
     voiceName,
     voiceSettings,
+    webSearch,
   ]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {

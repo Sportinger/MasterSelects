@@ -1,0 +1,58 @@
+.split-compare-toggle {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 18;
+  border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  backdrop-filter: blur(5px);
+}
+
+.split-compare-toggle[aria-pressed='true'] {
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
+.split-compare-handle {
+  position: absolute;
+  inset-block: 0;
+  z-index: 17;
+  width: 24px;
+  transform: translateX(-12px);
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.split-compare-handle::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.48), 0 0 8px rgba(0, 0, 0, 0.6);
+}
+
+.split-compare-handle::after {
+  content: '\2194';
+  position: absolute;
+  left: 1px;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  color: #111;
+  background: rgba(255, 255, 255, 0.95);
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 700;
+}

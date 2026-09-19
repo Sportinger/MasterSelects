@@ -3,6 +3,7 @@ import {
   DEV_CHAT_MAX_MESSAGE_LENGTH,
   devChatExpiresAt,
 } from '../../lib/devChat';
+import { timingSafeEqualStrings } from '../../lib/constantTime';
 import { json, methodNotAllowed, parseJson } from '../../lib/db';
 import type { AppContext, AppRouteHandler, Env } from '../../lib/env';
 
@@ -99,7 +100,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   }
 
   const suppliedSecret = context.request.headers.get('X-Telegram-Bot-Api-Secret-Token');
-  if (!suppliedSecret || suppliedSecret !== expectedSecret) {
+  if (!suppliedSecret || !timingSafeEqualStrings(suppliedSecret, expectedSecret)) {
     return json(
       {
         error: 'invalid_webhook_secret',

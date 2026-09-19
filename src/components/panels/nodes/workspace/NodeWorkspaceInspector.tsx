@@ -5,8 +5,14 @@ import { useTimelineStore } from '../../../../stores/timeline';
 import type { GenerateClipAudioAnalysisOptions, TimelineClip } from '../../../../stores/timeline/types';
 import type { NodeGraphNode, NodeGraphPort } from '../../../../services/nodeGraph';
 import { CustomNodeParameters } from './CustomNodeParameters';
-import { EffectNodeParameters, TransformNodeParameters } from './NodeWorkspaceParamEditors';
+import {
+  ColorNodeParameters,
+  EffectNodeParameters,
+  TransformNodeParameters,
+} from './NodeWorkspaceParamEditors';
 import { formatParamValue } from './nodeWorkspaceUtils';
+import { FlockNodeInspector } from '../flock/FlockNodeInspector';
+import type { FlockGraphActions } from '../flock/useFlockGraphActions';
 
 type AudioAnalysisArtifactKind =
   | 'waveform-pyramid'
@@ -197,6 +203,8 @@ export function NodeInspector({
   onSelectNode,
   onOpenProperties,
   onStartResizeInspector,
+  showClipActions = true,
+  flockActions,
 }: {
   node: NodeGraphNode | null;
   clip: TimelineClip | null;
@@ -204,10 +212,14 @@ export function NodeInspector({
   onSelectNode: (nodeId: string) => void;
   onOpenProperties: () => void;
   onStartResizeInspector: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  showClipActions?: boolean;
+  /** Present in the Flock view: flock nodes edit the clip's canonical FlockDefinition. */
+  flockActions?: FlockGraphActions;
 }) {
   const params = Object.entries(node?.params ?? {});
   const canEditTransform = !!clip && node?.id === 'transform';
   const canEditEffect = !!clip && node?.id.startsWith('effect-');
+  const canEditColor = !!clip && node?.binding?.kind === 'color-node';
   const canEditCustom = !!clip && node?.kind === 'custom';
   const generateWaveformForClip = useTimelineStore((state) => state.generateWaveformForClip);
   const generateProcessedWaveformForClip = useTimelineStore((state) => state.generateProcessedWaveformForClip);
@@ -269,6 +281,17 @@ export function NodeInspector({
     );
   }
 
+  if (clip && flockActions && node.binding?.kind === 'flock-node') {
+    return (
+      <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
+        <FlockNodeInspector clip={clip} node={node} actions={flockActions} onSelectNode={onSelectNode} />
+        <button type="button" className="node-workspace-primary-action" onClick={onOpenProperties}>
+          Open Properties
+        </button>
+      </NodeInspectorShell>
+    );
+  }
+
   if (canEditCustom) {
     return (
       <NodeInspectorShell ai width={inspectorWidth} onStartResize={onStartResizeInspector}>
@@ -325,6 +348,8 @@ export function NodeInspector({
           <TransformNodeParameters clip={clip} />
         ) : canEditEffect && nodeTargetClip ? (
           <EffectNodeParameters clip={nodeTargetClip} node={node} />
+        ) : canEditColor ? (
+          <ColorNodeParameters clip={clip} node={node} />
         ) : params.length > 0 ? (
           <div className="node-workspace-param-list">
             {params.map(([key, value]) => (
@@ -339,7 +364,7 @@ export function NodeInspector({
         )}
       </div>
 
-      {clip && <ClipNodeActions clip={clip} onSelectNode={onSelectNode} />}
+      {clip && showClipActions && <ClipNodeActions clip={clip} onSelectNode={onSelectNode} />}
 
       <button type="button" className="node-workspace-primary-action" onClick={onOpenProperties}>
         Open Properties

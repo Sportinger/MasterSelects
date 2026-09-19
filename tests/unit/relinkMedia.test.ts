@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MediaFile } from '../../src/stores/mediaStore';
 import {
+  createRelinkCandidateMapFromFiles,
   findRelinkMatch,
   getRelinkExpectedFileNames,
   type RelinkCandidate,
@@ -19,6 +20,48 @@ function candidateMap(...names: string[]): RelinkCandidateMap {
 }
 
 describe('relink media matching', () => {
+  it('creates relink candidates from Safari file-input selections', () => {
+    const first = new File(['a'], 'Clip A.mov', { type: 'video/quicktime' });
+    const second = new File(['b'], 'Clip B.mov', { type: 'video/quicktime' });
+    Object.defineProperty(first, 'webkitRelativePath', {
+      configurable: true,
+      value: 'Rushes/Day 1/Clip A.mov',
+    });
+
+    const candidates = createRelinkCandidateMapFromFiles([first, second]);
+
+    expect(candidates.get('clip a.mov')).toEqual([{
+      name: 'Clip A.mov',
+      file: first,
+      relativePath: 'Rushes/Day 1/Clip A.mov',
+    }]);
+    expect(candidates.get('clip b.mov')).toEqual([{
+      name: 'Clip B.mov',
+      file: second,
+      relativePath: undefined,
+    }]);
+  });
+
+  it('keeps iPhone and iPad folder paths relative to the selected source root', () => {
+    const file = new File(['a'], 'Clip A.mov', { type: 'video/quicktime' });
+    Object.defineProperty(file, 'webkitRelativePath', {
+      configurable: true,
+      value: 'Rushes/Day 1/Clip A.mov',
+    });
+
+    const candidates = createRelinkCandidateMapFromFiles([file], {
+      id: 'source-root:ios',
+      name: 'Rushes',
+    });
+
+    expect(candidates.get('clip a.mov')).toEqual([{
+      name: 'Clip A.mov',
+      file,
+      relativePath: 'Day 1/Clip A.mov',
+      sourceRootId: 'source-root:ios',
+    }]);
+  });
+
   it('matches gaussian splat sequences by frame names instead of display name', () => {
     const mediaFile = {
       id: 'media-splat-seq',
@@ -107,6 +150,33 @@ describe('relink media matching', () => {
     } as MediaFile;
 
     expect(findRelinkMatch(mediaFile, candidateMap('clip-b.mp4'))).toBeNull();
+  });
+
+  it('matches an attached Premiere proxy without replacing the original identity', () => {
+    const mediaFile = {
+      id: 'media-braw',
+      name: 'A006_08111727_C002.braw',
+      type: 'video',
+      parentId: null,
+      createdAt: 1,
+      url: '',
+      filePath: '/Volumes/MAIN3/A006_08111727_C002.braw',
+      linkedSources: [{
+        id: 'premiere-proxy',
+        name: 'A006_08111727_C002_Proxy.mov',
+        sourcePath: '/Volumes/MONTAGE/Proxies/A006_08111727_C002_Proxy.mov',
+        role: 'proxy',
+        origin: 'premiere',
+      }],
+    } as MediaFile;
+    const proxy = candidate('A006_08111727_C002_Proxy.mov');
+
+    expect(findRelinkMatch(mediaFile, candidateMap(proxy.name))).toEqual({
+      kind: 'linked-source',
+      sourceId: 'premiere-proxy',
+      candidate: expect.objectContaining({ name: proxy.name }),
+    });
+    expect(mediaFile.name).toBe('A006_08111727_C002.braw');
   });
 
   it('uses matching parent folders when recursive scans contain duplicate names', () => {

@@ -181,9 +181,18 @@ class RenderSchedulerService {
       if (cached !== undefined) return cached;
     }
 
-    const mainClips = useTimelineStore.getState().clips;
-    const nestedClips = mainClips.filter(
-      c => c.isComposition && c.compositionId === compositionId,
+    const timelineState = useTimelineStore.getState();
+    const trackTypeById = new Map(
+      timelineState.tracks.map((track) => [track.id, track.type]),
+    );
+    const nestedClips = timelineState.clips.filter(
+      c => c.isComposition
+        && c.compositionId === compositionId
+        // A nested composition can also create a linked audio wrapper. That
+        // companion belongs to the same occurrence, but it is not a visual
+        // render source and must not make the video occurrence ambiguous.
+        && c.source?.type !== 'audio'
+        && trackTypeById.get(c.trackId) !== 'audio',
     );
     const nestedClip = nestedClips.length === 1 ? nestedClips[0] : undefined;
 

@@ -7,6 +7,7 @@ import { flashPreviewCanvas } from '../aiFeedback';
 import { ensureRenderForDiagnostics } from './renderOnce';
 import {
   captureStableRenderHostFrame,
+  captureRenderHostFrame,
   type PreviewCaptureMode,
 } from '../previewCapture';
 
@@ -21,6 +22,20 @@ export async function handleCaptureFrame(
   const settleMs = typeof args.settleMs === 'number' && Number.isFinite(args.settleMs)
     ? Math.max(0, Math.min(1_500, Math.round(args.settleMs)))
     : 120;
+
+  // A DOM screenshot without a seek is a snapshot of the already presented
+  // canvas. Re-rendering and PNG-encoding it repeatedly can stall a heavy
+  // nested composition; it also defeats this diagnostic fallback's purpose.
+  if (mode === 'dom' && time === undefined) {
+    const capture = await captureRenderHostFrame('dom');
+    if (!capture.success) return capture;
+    return { success: true, data: {
+      capturedAt: timelineStore.playheadPosition, width: capture.width, height: capture.height,
+      mode: capture.mode, requestedMode: mode, canvasSource: capture.canvasSource,
+      renderDiagnostics: { requested: false, waitedMs: 0 },
+      stabilization: { attempts: 1, stable: false, waitedMs: 0 }, dataUrl: capture.dataUrl,
+    } };
+  }
 
   // If time specified, move playhead there first
   if (time !== undefined) {

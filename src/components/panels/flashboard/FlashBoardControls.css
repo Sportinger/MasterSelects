@@ -307,9 +307,9 @@
   gap: 3px;
   min-width: 0;
   padding: 4px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--veil-border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--veil-2);
   color: var(--text-secondary, #bbb);
   font-size: 11px;
   cursor: pointer;
@@ -325,7 +325,7 @@
 }
 
 .fb-pill:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--veil-3);
   color: var(--text-primary);
 }
 
@@ -471,9 +471,9 @@
   height: 26px;
   max-width: 160px;
   padding: 4px 9px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--veil-border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--veil-2);
   color: var(--text-primary);
   font-size: 11px;
   outline: none;
@@ -488,9 +488,9 @@
   align-items: center;
   gap: 5px;
   padding: 4px 9px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--veil-border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--veil-2);
   color: var(--text-secondary);
   font-size: 11px;
   line-height: 1;
@@ -504,7 +504,7 @@
   max-width: 520px;
   max-height: min(46vh, 360px);
   padding: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--veil-border-subtle);
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.18);
   overflow-y: auto;
@@ -512,9 +512,9 @@
 }
 
 .fb-audio-section {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--veil-border-subtle);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--veil-1);
   overflow: hidden;
 }
 
@@ -623,9 +623,9 @@
   align-items: center;
   gap: 6px;
   padding: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--veil-border-subtle);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--veil-1);
 }
 
 .fb-voice-item.active {
@@ -662,7 +662,7 @@
 
 .fb-voice-empty {
   padding: 8px;
-  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border: 1px dashed var(--veil-border);
   border-radius: 6px;
   text-align: center;
 }
@@ -677,9 +677,9 @@
 .fb-audio-language input:not([type]) {
   width: 72px;
   padding: 4px 6px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--veil-border);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--veil-2);
   color: var(--text-primary);
 }
 

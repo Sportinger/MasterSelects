@@ -1,0 +1,57 @@
+export type PropertiesTab =
+  | 'storyboard'
+  | 'transform'
+  | 'color'
+  | 'effects'
+  | 'tracking'
+  | 'audio-edits'
+  | 'masks'
+  | 'transcript'
+  | 'analysis'
+  | 'hook'
+  | 'text'
+  | 'captions'
+  | '3d-text'
+  | 'model-3d'
+  | 'math'
+  | 'flock'
+  | 'motion'
+  | 'adjustment'
+  | 'blendshapes'
+  | 'gaussian-splat'
+  | 'camera'
+  | 'light'
+  | 'splat-effector'
+  | 'lottie'
+  | 'live'
+  | 'slot-clip'
+  | 'transition'
+  | 'track-controls'
+  | 'track-effects'
+  | 'track-sends'
+  | 'track-instrument'
+  | 'master-controls'
+  | 'master-effects';
+
+export interface ClipPropertiesPresentation {
+  isStoryboardClip: boolean;
+  isAudioClip: boolean;
+  isCameraClip: boolean;
+  isMathSceneClip: boolean;
+  isFlockClip: boolean;
+  isMotionAdjustmentClip: boolean;
+  isMotionShapeClip: boolean;
+  isEditableHookClip: boolean;
+  isCaptionClip: boolean;
+  isTextClip: boolean;
+  is3DTextClip: boolean;
+  isLiveInputClip: boolean;
+  isVectorAnimationClip: boolean;
+  vectorAnimationTabLabel: string;
+  isModelClip: boolean;
+  isGaussianAvatar: boolean;
+  isGaussianSplat: boolean;
+  isLightClip: boolean;
+  isSplatEffectorClip: boolean;
+  isSolidClip: boolean;
+}

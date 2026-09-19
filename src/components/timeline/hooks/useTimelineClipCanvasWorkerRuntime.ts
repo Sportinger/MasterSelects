@@ -30,6 +30,7 @@ interface TimelineClipCanvasWorkerRuntimeInput {
   selectedClipIds: ReadonlySet<string>;
   hoveredClipId?: string | null;
   trackColor: string;
+  selectionBorderColor: string;
   waveformsEnabled?: boolean;
   audioDisplayMode?: TimelineAudioDisplayMode;
   workerEligibility: TimelineClipCanvasWorkerEligibility;
@@ -67,6 +68,7 @@ export function useTimelineClipCanvasWorkerRuntime(
     selectedClipIds,
     hoveredClipId,
     trackColor,
+    selectionBorderColor,
     waveformsEnabled,
     audioDisplayMode,
     workerEligibility,
@@ -303,6 +305,7 @@ export function useTimelineClipCanvasWorkerRuntime(
       selectedClipIds,
       hoveredClipId,
       trackColor,
+      selectionBorderColor,
       waveformsEnabled,
       audioDisplayMode,
       preparedResourcesByClipId,
@@ -339,7 +342,7 @@ export function useTimelineClipCanvasWorkerRuntime(
     return () => {
       cancelAnimationFrame(postHandle);
     };
-  }, [activeTrimClipId, audioDisplayMode, canvasOffsetX, canvasRef, cssWidth, hasClipTrim, hasPassiveDecorations, height, hoveredClipId, passiveDecorationClipIds, postPendingWorkerDraw, selectedClipIds, timeToPixel, trackColor, trackId, waveformsEnabled, workerMode, workerPaintClips, workerPreparedResourcesByClipId, workerThumbnailPreparation]);
+  }, [activeTrimClipId, audioDisplayMode, canvasOffsetX, canvasRef, cssWidth, hasClipTrim, hasPassiveDecorations, height, hoveredClipId, passiveDecorationClipIds, postPendingWorkerDraw, selectedClipIds, selectionBorderColor, timeToPixel, trackColor, trackId, waveformsEnabled, workerMode, workerPaintClips, workerPreparedResourcesByClipId, workerThumbnailPreparation]);
 
   return {
     workerMode,

@@ -1,14 +1,34 @@
+import {
+  areRuntimeColorCurvesNeutral,
+  getRuntimeColorCurves,
+  type RuntimeColorCurves,
+} from './colorCurves';
+
 export type ColorViewMode = 'nodes' | 'list';
 
-export type ColorNodeType = 'input' | 'primary' | 'wheels' | 'output';
+export type ColorGradeNodeType = 'primary' | 'wheels';
+
+export type ColorStructureNodeType =
+  | 'parallel-mixer'
+  | 'layer-mixer'
+  | 'key-mixer'
+  | 'splitter'
+  | 'combiner'
+  | 'source'
+  | 'alpha-output';
+
+export type ColorNodeType = 'input' | ColorGradeNodeType | ColorStructureNodeType | 'output';
 
 export type ColorParamValue = number | boolean | string;
 
 export const MAX_RUNTIME_PRIMARY_NODES = 8;
+export const COLOR_FIXED_ANCHOR_SPACING = 36;
 
 export interface ColorCorrectionUiState {
   viewMode: ColorViewMode;
   selectedNodeId?: string;
+  nodeDisplayMode?: 'thumbnail' | 'label';
+  nodeLayoutVersion?: 2;
   workspaceViewport?: {
     x: number;
     y: number;
@@ -91,6 +111,7 @@ export interface RuntimeColorGrade {
   nodeIds: string[];
   primary: RuntimePrimaryColorParams;
   primaryNodes: RuntimePrimaryColorParams[];
+  curvesByNode?: RuntimeColorCurves[];
   diagnostics: string[];
 }
 
@@ -168,10 +189,10 @@ export const WHEEL_COLOR_PARAM_DEFS: ColorParamDefinition[] = [
   { key: 'gammaG', section: 'Wheels', label: 'Gamma G', min: 0.1, max: 4, step: 0.01, defaultValue: 1, decimals: 2 },
   { key: 'gammaB', section: 'Wheels', label: 'Gamma B', min: 0.1, max: 4, step: 0.01, defaultValue: 1, decimals: 2 },
   { key: 'gammaY', section: 'Wheels', label: 'Gamma Y', min: 0.1, max: 4, step: 0.01, defaultValue: 1, decimals: 2 },
-  { key: 'gainR', section: 'Wheels', label: 'Gain R', min: 0, max: 4, step: 0.01, defaultValue: 1, decimals: 2 },
-  { key: 'gainG', section: 'Wheels', label: 'Gain G', min: 0, max: 4, step: 0.01, defaultValue: 1, decimals: 2 },
-  { key: 'gainB', section: 'Wheels', label: 'Gain B', min: 0, max: 4, step: 0.01, defaultValue: 1, decimals: 2 },
-  { key: 'gainY', section: 'Wheels', label: 'Gain Y', min: 0, max: 4, step: 0.01, defaultValue: 1, decimals: 2 },
+  { key: 'gainR', section: 'Wheels', label: 'Gain R', min: 0, max: 8, step: 0.01, defaultValue: 1, decimals: 2 },
+  { key: 'gainG', section: 'Wheels', label: 'Gain G', min: 0, max: 8, step: 0.01, defaultValue: 1, decimals: 2 },
+  { key: 'gainB', section: 'Wheels', label: 'Gain B', min: 0, max: 8, step: 0.01, defaultValue: 1, decimals: 2 },
+  { key: 'gainY', section: 'Wheels', label: 'Gain Y', min: 0, max: 8, step: 0.01, defaultValue: 1, decimals: 2 },
   { key: 'offsetR', section: 'Wheels', label: 'Offset R', min: -1, max: 1, step: 0.001, defaultValue: 0, decimals: 3 },
   { key: 'offsetG', section: 'Wheels', label: 'Offset G', min: -1, max: 1, step: 0.001, defaultValue: 0, decimals: 3 },
   { key: 'offsetB', section: 'Wheels', label: 'Offset B', min: -1, max: 1, step: 0.001, defaultValue: 0, decimals: 3 },
@@ -193,7 +214,7 @@ export function createColorNodeId(prefix: string = 'node'): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-export function createPrimaryColorNode(id = 'node_primary', name = 'Primary'): ColorNode {
+export function createPrimaryColorNode(id = 'node_primary', name = 'Corrector'): ColorNode {
   return {
     id,
     type: 'primary',
@@ -219,7 +240,37 @@ export function createColorNode(type: ColorNodeType, id?: string, name?: string)
   if (type === 'wheels') {
     return createWheelsColorNode(id, name ?? 'Wheels');
   }
-  return createPrimaryColorNode(id, name ?? 'Primary');
+  if (type === 'primary') {
+    return createPrimaryColorNode(id, name ?? 'Corrector');
+  }
+
+  const labels: Record<ColorStructureNodeType | 'input' | 'output', string> = {
+    input: 'Input',
+    output: 'Output',
+    'parallel-mixer': 'Parallel Mixer',
+    'layer-mixer': 'Layer Mixer',
+    'key-mixer': 'Key Mixer',
+    splitter: 'Splitter',
+    combiner: 'Combiner',
+    source: 'Source',
+    'alpha-output': 'Alpha Output',
+  };
+  return {
+    id: id ?? createColorNodeId('color'),
+    type,
+    name: name ?? labels[type],
+    enabled: true,
+    params: {},
+    position: { x: 280, y: 160 },
+  };
+}
+
+export function isColorGradeNode(node: ColorNode): boolean {
+  return node.type === 'primary' || node.type === 'wheels';
+}
+
+export function isFixedColorAnchorNode(node: ColorNode): boolean {
+  return node.type === 'input' || node.type === 'output';
 }
 
 export function createDefaultColorCorrectionState(): ColorCorrectionState {
@@ -258,6 +309,7 @@ export function createDefaultColorCorrectionState(): ColorCorrectionState {
     ui: {
       viewMode: 'list',
       selectedNodeId: primaryNode.id,
+      nodeDisplayMode: 'thumbnail',
       workspaceViewport: { x: 0, y: 0, zoom: 1 },
     },
   };
@@ -282,6 +334,8 @@ export function ensureColorCorrectionState(state?: ColorCorrectionState): ColorC
   next.ui = {
     viewMode: next.ui?.viewMode ?? 'list',
     selectedNodeId: next.ui?.selectedNodeId,
+    nodeDisplayMode: next.ui?.nodeDisplayMode ?? 'thumbnail',
+    nodeLayoutVersion: next.ui?.nodeLayoutVersion,
     workspaceViewport: next.ui?.workspaceViewport ?? { x: 0, y: 0, zoom: 1 },
   };
 
@@ -297,7 +351,7 @@ export function getColorNode(state: ColorCorrectionState, nodeId: string): Color
 }
 
 export function getEditableColorNodes(state: ColorCorrectionState): ColorNode[] {
-  return getActiveColorVersion(state)?.nodes.filter(node => node.type !== 'input' && node.type !== 'output') ?? [];
+  return getActiveColorVersion(state)?.nodes.filter(isColorGradeNode) ?? [];
 }
 
 export function createColorProperty(versionId: string, nodeId: string, paramName: string): `color.${string}.${string}.${string}` {
@@ -410,52 +464,57 @@ function getOrderedRuntimeNodes(version: ColorGradeVersion, diagnostics: string[
 
   if (!inputNode || !outputNode) {
     diagnostics.push('Color graph is missing an input or output node; using saved node order.');
-    return version.nodes.filter(node => node.type !== 'input' && node.type !== 'output');
+    return version.nodes.filter(isColorGradeNode);
   }
 
-  const outgoing = new Map<string, ColorEdge[]>();
+  const incoming = new Map<string, ColorEdge[]>();
   for (const edge of version.edges) {
-    const edges = outgoing.get(edge.fromNodeId) ?? [];
-    edges.push(edge);
-    outgoing.set(edge.fromNodeId, edges);
+    if (edge.fromPort.startsWith('key-') || edge.toPort.startsWith('key-')) continue;
+    incoming.set(edge.toNodeId, [...(incoming.get(edge.toNodeId) ?? []), edge]);
   }
 
   const orderedNodes: ColorNode[] = [];
-  const visited = new Set<string>([inputNode.id]);
-  let currentNodeId = inputNode.id;
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+  let cycleDetected = false;
+  let parallelRouting = false;
 
-  for (let guard = 0; guard < version.nodes.length + 1; guard++) {
-    const edges = (outgoing.get(currentNodeId) ?? [])
-      .filter(edge => byId.has(edge.toNodeId));
-    if (edges.length > 1) {
-      diagnostics.push('Parallel color graph branches are preserved in state but not yet compiled; using the first serial branch.');
+  const visit = (nodeId: string) => {
+    if (visited.has(nodeId) || cycleDetected) return;
+    if (visiting.has(nodeId)) {
+      cycleDetected = true;
+      return;
     }
+    visiting.add(nodeId);
+    const inputEdges = (incoming.get(nodeId) ?? [])
+      .filter(edge => byId.has(edge.fromNodeId))
+      .toSorted((left, right) => {
+        const leftNode = byId.get(left.fromNodeId)!;
+        const rightNode = byId.get(right.fromNodeId)!;
+        return leftNode.position.y - rightNode.position.y
+          || leftNode.position.x - rightNode.position.x
+          || leftNode.id.localeCompare(rightNode.id);
+      });
+    if (inputEdges.length > 1) parallelRouting = true;
+    inputEdges.forEach(edge => visit(edge.fromNodeId));
+    visiting.delete(nodeId);
+    visited.add(nodeId);
+    const node = byId.get(nodeId);
+    if (node && node.id !== inputNode.id && node.id !== outputNode.id) orderedNodes.push(node);
+  };
 
-    const nextEdge = edges[0];
-    if (!nextEdge) {
-      diagnostics.push('Color graph has an open serial chain; using saved node order.');
-      return version.nodes.filter(node => node.type !== 'input' && node.type !== 'output');
-    }
-
-    const nextNode = byId.get(nextEdge.toNodeId);
-    if (!nextNode) {
-      break;
-    }
-    if (nextNode.id === outputNode.id || nextNode.type === 'output') {
-      return orderedNodes;
-    }
-    if (visited.has(nextNode.id)) {
-      diagnostics.push('Color graph contains a cycle; using saved node order.');
-      return version.nodes.filter(node => node.type !== 'input' && node.type !== 'output');
-    }
-
-    orderedNodes.push(nextNode);
-    visited.add(nextNode.id);
-    currentNodeId = nextNode.id;
+  visit(outputNode.id);
+  if (cycleDetected) {
+    diagnostics.push('Color graph contains a cycle; using saved grade order.');
+    return version.nodes.filter(isColorGradeNode);
   }
-
-  diagnostics.push('Color graph traversal exceeded node count; using saved node order.');
-  return version.nodes.filter(node => node.type !== 'input' && node.type !== 'output');
+  if (parallelRouting) {
+    diagnostics.push('Parallel color routing is flattened deterministically for the current realtime color pipeline.');
+  }
+  if (!visited.has(inputNode.id)) {
+    diagnostics.push('Color graph output is not connected to the primary input source.');
+  }
+  return orderedNodes;
 }
 
 export function compileRuntimeColorGrade(state?: ColorCorrectionState): RuntimeColorGrade | undefined {
@@ -471,14 +530,14 @@ export function compileRuntimeColorGrade(state?: ColorCorrectionState): RuntimeC
   const diagnostics: string[] = [];
   const nodeIds: string[] = [];
   const primaryNodes: RuntimePrimaryColorParams[] = [];
+  const curvesByNode: RuntimeColorCurves[] = [];
   const orderedNodes = getOrderedRuntimeNodes(version, diagnostics);
 
   for (const node of orderedNodes) {
     if (!node.enabled) {
       continue;
     }
-    if (node.type !== 'primary' && node.type !== 'wheels') {
-      diagnostics.push(`Unsupported color node type "${node.type}" skipped.`);
+    if (!isColorGradeNode(node)) {
       continue;
     }
     if (primaryNodes.length >= MAX_RUNTIME_PRIMARY_NODES) {
@@ -487,11 +546,13 @@ export function compileRuntimeColorGrade(state?: ColorCorrectionState): RuntimeC
     }
 
     const params = getPrimaryRuntimeParams(node);
-    if (isNeutralPrimaryParams(params)) {
+    const curves = getRuntimeColorCurves(node.params);
+    if (isNeutralPrimaryParams(params) && areRuntimeColorCurvesNeutral(curves)) {
       continue;
     }
 
     primaryNodes.push(params);
+    curvesByNode.push(curves);
     nodeIds.push(node.id);
   }
 
@@ -505,6 +566,7 @@ export function compileRuntimeColorGrade(state?: ColorCorrectionState): RuntimeC
     enabled: state.enabled,
     nodeIds,
     primaryNodes,
+    curvesByNode,
   });
 
   return {
@@ -513,6 +575,7 @@ export function compileRuntimeColorGrade(state?: ColorCorrectionState): RuntimeC
     nodeIds,
     primary,
     primaryNodes,
+    curvesByNode,
     diagnostics,
   };
 }

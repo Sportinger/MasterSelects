@@ -1,5 +1,33 @@
 [
   {
+    "date": "2026-09-12",
+    "type": "improve",
+    "title": "MasterSelects 3.1.3",
+    "description": "Tracking workflow release: reusable Media-panel tracking assets attach ordinary clips to planar surfaces and reconstructed terrain, with preview editing, geometry inspection and editable 3D scene creation. Hiking HUDs use native text, shapes and timeline clips. Large timelines, nested composition audio, rendering caches and mesh persistence use less repeated work and memory; autosave is manual or interval-based, and color wheels gain grouped keyframe controls.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-08-24",
+    "type": "improve",
+    "title": "MasterSelects 3.1.2",
+    "description": "Workflow expansion release: Resolve-style color workspaces, grading context actions, scopes, playback, export color and effects controls are refined; dedicated medium and global mobile layouts improve editing across screen sizes; the video properties inspector, panel navigation and 3D indicators are stabilized; and live-production tooling plus browser-based WebGPU Gaussian splat training broaden the editor's production surface.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-08-21",
+    "type": "improve",
+    "title": "MasterSelects 3.1.1",
+    "description": "Resolve interface release: a modular Resolve theme and functional Transform/video inspector add durable section bypasses; timeline track and clip chrome, waveforms, thumbnails, looks, nested transforms, keyframes, and serialization are refined; stored-handle media reconnect and native import flows are clearer; AI Studio model defaults and Seedance 2.5 frame requests are hardened; and landing-to-export product analytics gain a complete funnel.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-08-19",
+    "type": "improve",
+    "title": "MasterSelects 3.1.0",
+    "description": "Major workflow release: Media Discovery adds open-media and meme catalogs with Native Helper format selection and downloads; direct Codex/Logic conversations and AI Studio workspaces gain persistent session handling; product analytics and import failure classification are expanded; project media hydration and download flows are hardened; and mobile editing gains reliable dock dividers, uninterrupted Media-list scrolling, touch context menus above the finger, and improved Timeline composition-tab controls.",
+    "section": "Release"
+  },
+  {
     "date": "2026-08-02",
     "type": "improve",
     "title": "MasterSelects 2.4.5",

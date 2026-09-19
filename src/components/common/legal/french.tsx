@@ -1,3 +1,5 @@
+import { LegalContactMethods, LegalPostalAddress } from './LegalContactDetails';
+
 // =====================================================
 // FRANÇAIS
 // =====================================================
@@ -6,11 +8,11 @@ export function ImprintFR() {
   return (
     <div className="legal-text">
       <h3>Informations conformément au § 5 TMG (loi allemande sur les télémédias)</h3>
-      <p>Roman Kuskowski<br />[Adresse à compléter]</p>
+      <p><LegalPostalAddress /></p>
       <h3>Contact</h3>
-      <p>Email : admin@masterselects.com</p>
+      <p><LegalContactMethods emailLabel="Email" phoneLabel="Téléphone" /></p>
       <h3>Responsable du contenu selon § 55 al. 2 RStV</h3>
-      <p>Roman Kuskowski<br />[Adresse à compléter]</p>
+      <p><LegalPostalAddress /></p>
       <h3>Règlement des litiges en ligne (UE)</h3>
       <p>
         La Commission européenne met à disposition une plateforme de règlement en ligne des litiges :{' '}
@@ -18,8 +20,8 @@ export function ImprintFR() {
       </p>
       <h3>Droit d'auteur</h3>
       <p>
-        MasterSelects est un logiciel open source, publié sur{' '}
-        <a href="https://github.com/Sportinger/MasterSelects" target="_blank" rel="noopener noreferrer">GitHub</a>.
+        L'éditeur MasterSelects est sous licence GNU AGPL-3.0-only. Copyright © 2026 Jan Roman Kuskowski.
+        Les composants tiers restent soumis à leurs licences respectives.
       </p>
     </div>
   );
@@ -34,7 +36,7 @@ export function PrivacyFR() {
         sont traités exclusivement sur votre appareil. Vos fichiers média ne quittent jamais votre ordinateur.
       </p>
       <h3>2. Responsable du traitement</h3>
-      <p>Roman Kuskowski<br />Email : admin@masterselects.com</p>
+      <p><LegalPostalAddress /><br /><LegalContactMethods emailLabel="Email" phoneLabel="Téléphone" /></p>
       <h3>3. Hébergement</h3>
       <p>
         Ce site est hébergé par <strong>Cloudflare, Inc.</strong> (USA), certifié EU-US Data Privacy Framework.
@@ -44,10 +46,12 @@ export function PrivacyFR() {
         En outre, nous traitons temporairement des &eacute;v&eacute;nements de visite c&ocirc;t&eacute; serveur pour la
         surveillance technique de l&apos;exploitation et pour des notifications internes en direct lorsqu&apos;une page
         de ce site est ouverte. Ces donn&eacute;es peuvent inclure le chemin demand&eacute;, l&apos;horodatage, le pays
-        et la ville d&eacute;duits des donn&eacute;es g&eacute;ographiques de Cloudflare, le referer, un agent utilisateur
-        raccourci ainsi qu&apos;un identifiant visiteur pseudonymis&eacute; g&eacute;n&eacute;r&eacute; &agrave; partir de
-        l&apos;adresse IP et d&apos;un sel secret. Nous ne conservons pas l&apos;adresse IP en clair dans ce journal
-        interne. La dur&eacute;e de conservation est g&eacute;n&eacute;ralement d&apos;environ une heure. Base juridique :
+        d&eacute;duit des donn&eacute;es g&eacute;ographiques de Cloudflare, des cat&eacute;gories g&eacute;n&eacute;rales de navigateur,
+        syst&egrave;me d&apos;exploitation et appareil, le domaine du referer, ainsi qu&apos;un identifiant visiteur
+        pseudonymis&eacute; renouvel&eacute; chaque jour et produit par HMAC &agrave; partir de l&apos;adresse IP et d&apos;une cl&eacute;
+        secr&egrave;te. La ville, l&apos;agent utilisateur complet, l&apos;URL compl&egrave;te du referer et l&apos;adresse IP en clair
+        ne sont pas conserv&eacute;s; l&apos;identifiant ne permet pas de relier les visites entre diff&eacute;rents jours. Les
+        &eacute;v&eacute;nements sont automatiquement supprim&eacute;s apr&egrave;s 180 jours. Base juridique :
         art. 6(1)(f) RGPD (int&eacute;r&ecirc;t l&eacute;gitime &agrave; la s&eacute;curit&eacute; du service, &agrave; la
         d&eacute;tection des abus et &agrave; la connaissance de l&apos;activit&eacute; actuelle du site).
       </p>
@@ -71,7 +75,16 @@ export function PrivacyFR() {
         Uniquement des cookies techniques nécessaires. Pas de cookies de suivi ou marketing. La surveillance de visite
         décrite ci-dessus ne stocke pas d&apos;information sur votre terminal à cette fin.
       </p>
-      <p className="legal-meta">Dernière mise à jour : mai 2026</p>
+      <p>
+        <strong>Analyse produit :</strong> nous traitons une liste fixe d&apos;événements généraux (ouverture,
+        tutoriel, importation, catégories de montage, lecture, paiement et exportation). Les événements connectés
+        peuvent être liés à l&apos;identifiant interne du compte; les événements anonymes utilisent uniquement un
+        identifiant de session temporaire en mémoire. Aucun nom de fichier, contenu de projet ou média, prompt, texte
+        de chat/transcription, erreur brute, cookie analytique ou identifiant permanent d&apos;appareil n&apos;est collecté.
+        Les événements sont supprimés après 180 jours. Vous pouvez vous y opposer dans Paramètres &gt; Général &gt;
+        Confidentialité; Do Not Track et Global Privacy Control sont respectés.
+      </p>
+      <p className="legal-meta">Dernière mise à jour : 16 août 2026</p>
     </div>
   );
 }
@@ -85,10 +98,6 @@ export function ContactFR() {
         <div className="legal-contact-row">
           <span className="legal-contact-label">Email</span>
           <a href="mailto:admin@masterselects.com">admin@masterselects.com</a>
-        </div>
-        <div className="legal-contact-row">
-          <span className="legal-contact-label">GitHub</span>
-          <a href="https://github.com/Sportinger/MasterSelects" target="_blank" rel="noopener noreferrer">Sportinger/MasterSelects</a>
         </div>
       </div>
       <h3>Demandes de confidentialité</h3>

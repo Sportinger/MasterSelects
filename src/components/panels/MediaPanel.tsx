@@ -1,6 +1,6 @@
 // Media Panel - Project browser like After Effects
 
-import { useCallback, useRef, useState, useEffect, useLayoutEffect } from 'react';
+import { useCallback, useMemo, useRef, useState, useEffect, useLayoutEffect, type MouseEvent as ReactMouseEvent } from 'react';
 import './MediaPanel.css';
 import './media/MediaPanelWoodTheme.css';
 import type { MediaContextSolidSettingsDialogState } from './media/context/useMediaContextLocalHandlers';
@@ -11,21 +11,26 @@ import { MediaPanelOverlayMounts } from './media/panel/MediaPanelOverlayMounts';
 import { useMediaPanelCommandBindings } from './media/panel/useMediaPanelCommandBindings';
 import { useMediaPanelCompositionSettings } from './media/panel/useMediaPanelCompositionSettings';
 import { useMediaPanelContextMenuState } from './media/panel/useMediaPanelContextMenuState';
+import { getNativeMediaInputAccept } from './media/panel/useMediaPanelAddImportCommands';
 import { useMediaPanelDragDropMarquee, type MediaPanelMarquee } from './media/panel/useMediaPanelDragDropMarquee';
 import { useMediaPanelItemRenderers } from './media/panel/useMediaPanelItemRenderers';
-import { useMediaPanelProjectItems } from './media/panel/useMediaPanelProjectItems';
+import {
+  getTimelineOwnedMediaItemIds,
+  useMediaPanelProjectItems,
+} from './media/panel/useMediaPanelProjectItems';
 import { useMediaPanelRelinkStatus } from './media/panel/useMediaPanelRelinkStatus';
 import { useMediaPanelRenameDeleteCommands } from './media/panel/useMediaPanelRenameDeleteCommands';
 import { useMediaPanelShellState, loadMediaPanelViewMode } from './media/panel/useMediaPanelShellState';
 import { useMediaPanelSourceReveal } from './media/panel/useMediaPanelSourceReveal';
 import { useMediaPanelStoreBindings } from './media/panel/useMediaPanelStoreBindings';
+import { useMediaPanelTrackingAssets } from './media/panel/useMediaPanelTrackingAssets';
 import { useMediaBoardAnnotationState } from './media/board/useMediaBoardAnnotationState';
 import { useMediaBoardController } from './media/board/useMediaBoardController';
 import { useMediaPanelPreviewTooltip } from './media/panel/useMediaPanelPreviewTooltip';
 import { LiveInputDialog } from './media/LiveInputDialog';
 import { requestMediaBoardPlacement } from './media/board/placementRequests';
 
-import { useMediaStore } from '../../stores/mediaStore';
+import { useMediaStore, type ProjectItem } from '../../stores/mediaStore';
 import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
 import { useTimelineStore } from '../../stores/timeline';
@@ -61,6 +66,11 @@ export function MediaPanel() {
     refreshFileUrls,
     ensureFileThumbnail,
   } = useMediaPanelStoreBindings();
+  const timelineClips = useTimelineStore(state => state.clips);
+  const timelineOwnedMediaItemIds = useMemo(
+    () => getTimelineOwnedMediaItemIds(timelineClips ?? []),
+    [timelineClips],
+  );
   const composerReferenceMediaFileIds = useFlashBoardStore(state => state.composer.referenceMediaFileIds);
   const updateFlashBoardComposer = useFlashBoardStore(state => state.updateComposer);
   const woodThemeEnabled = useSettingsStore(state => state.mediaPanelWoodThemeEnabled);
@@ -128,6 +138,15 @@ export function MediaPanel() {
     setLabelColor,
     importGaussianSplat,
   } = useMediaStore.getState();
+  const {
+    trackingAssets,
+    moveProjectItemsToFolder,
+    selectTrackingAssetForProjectItem,
+    requestTrackingAssetAction,
+    renameTrackingAsset,
+    removeTrackingAsset,
+    moveTrackingAsset,
+  } = useMediaPanelTrackingAssets(moveToFolder);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const itemListRef = useRef<HTMLDivElement>(null);
@@ -247,13 +266,17 @@ export function MediaPanel() {
     mathSceneItems,
     motionShapeItems,
     signalAssets,
+    trackingAssets,
     renameFile,
     renameSignalAsset,
+    renameTrackingAsset,
     renameFolder,
     updateComposition,
     getMediaFileUsages,
     deleteMediaFilesEverywhere,
     removeSignalAsset,
+    removeTrackingAsset,
+    moveTrackingAsset,
     removeComposition,
     removeFolder,
     removeTextItem,
@@ -280,53 +303,13 @@ export function MediaPanel() {
   }, []);
   const getTimelineState = useCallback(() => useTimelineStore.getState(), []);
   const getTimelineSlotGridProgress = useCallback(() => getTimelineState().slotGridProgress, [getTimelineState]);
-  const handleNewMotionNull = useCallback(() => {
-    const timeline = getTimelineState();
-    const selectedClip = timeline.clips.find((clip) => timeline.selectedClipIds.has(clip.id));
-    const selectedTrack = selectedClip
-      ? timeline.tracks.find((track) => track.id === selectedClip.trackId)
-      : undefined;
-    const targetTrackId = selectedTrack?.type === 'video' && selectedTrack.locked !== true
-      ? selectedTrack.id
-      : timeline.tracks.find((track) => (
-          track.type === 'video' && track.locked !== true && track.visible !== false
-        ))?.id ?? timeline.addTrack('video');
-    const current = getTimelineState();
-    const clipId = current.addMotionNullClip(
-      targetTrackId,
-      current.playheadPosition,
-      5,
-      'Motion Null',
-    );
-    if (clipId) current.selectClip(clipId);
-    closeContextMenu();
-  }, [closeContextMenu, getTimelineState]);
-  const handleNewMotionAdjustment = useCallback(() => {
-    const timeline = getTimelineState();
-    const selectedClip = timeline.clips.find((clip) => timeline.selectedClipIds.has(clip.id));
-    const selectedTrack = selectedClip
-      ? timeline.tracks.find((track) => track.id === selectedClip.trackId)
-      : undefined;
-    const targetTrackId = selectedTrack?.type === 'video' && selectedTrack.locked !== true
-      ? selectedTrack.id
-      : timeline.tracks.find((track) => (
-          track.type === 'video' && track.locked !== true && track.visible !== false
-        ))?.id ?? timeline.addTrack('video');
-    const current = getTimelineState();
-    const clipId = current.addMotionAdjustmentClip(
-      targetTrackId,
-      current.playheadPosition,
-      5,
-    );
-    if (clipId) current.selectClip(clipId);
-    closeContextMenu();
-  }, [closeContextMenu, getTimelineState]);
   const {
     handleExternalDropImport,
     handleDragOver,
     handleDragLeave,
     handleMarqueeMouseDown,
     handleDragStart,
+    handleTouchTimelineDragPointerDown,
     handleDragEnd,
     handleFolderDragOver,
     handleFolderDragLeave,
@@ -339,7 +322,7 @@ export function MediaPanel() {
     selectedIds,
     activeCompositionId,
     setSelection,
-    moveToFolder,
+    moveToFolder: moveProjectItemsToFolder,
     createFolder,
     importFiles,
     importFilesWithHandles,
@@ -352,33 +335,41 @@ export function MediaPanel() {
   });
 
   const {
+    settingsDialog,
+    changeCompositionSettings,
+    openCompositionSettings,
+    openNewCompositionSettings,
+    saveCompositionSettings,
+    cancelCompositionSettings,
+  } = useMediaPanelCompositionSettings({
+    activeCompositionId,
+    closeContextMenu,
+    createComposition,
+    openCompositionTab,
+    updateComposition,
+  });
+
+  const {
     handleImport,
     handleFileChange,
     handleNewComposition,
     handleNewFolder,
-    handleNewText,
-    handleNewText3D,
-    handleNewSolid,
-    handleNewMesh,
-    handleNewCamera,
-    handleNewLight,
-    handleNewSplatEffector,
-    handleNewMathScene,
-    handleNewMotionShape,
     handleImportGaussianSplat,
     mediaPanelRootRef,
     floatingTexts,
     handleMediaPanelMouseMove,
     handleItemClick,
-    handleItemDoubleClick,
+    handleItemDoubleClick: executeItemDoubleClick,
     handleContextMenu,
     handleToggleAiPromptReferences,
     handleCopyPrompt,
-    handleCreateCompositionFromMedia,
+    handleCreateCompositionFromItem,
     handleRegenerateMediaThumbnails,
     handleRegenerateMediaAudioProxy,
     handleRegenerateMediaWaveform,
     handleRegenerateMediaSpectrogram,
+    handleTranscribeMedia,
+    handleAnalyzeMedia,
     handleCopySelected,
     handleDuplicateSelected,
     handlePasteItems,
@@ -408,11 +399,12 @@ export function MediaPanel() {
     importFilesWithHandles,
     importFilesWithPicker,
     createComposition,
+    openNewCompositionSettings,
     updateComposition,
     createFolder,
     showInExplorer,
     pickProxyFolder,
-    moveToFolder,
+    moveToFolder: moveProjectItemsToFolder,
     openSourceMonitorCrop,
     setSelection,
     addToSelection,
@@ -449,16 +441,20 @@ export function MediaPanel() {
     handleDelete,
   });
 
-  const {
-    settingsDialog,
-    setSettingsDialog,
-    openCompositionSettings,
-    saveCompositionSettings,
-  } = useMediaPanelCompositionSettings({
-    activeCompositionId,
-    closeContextMenu,
-    updateComposition,
-  });
+  const handleProjectItemClick = useCallback((id: string, event: ReactMouseEvent) => {
+    selectTrackingAssetForProjectItem(id, event.ctrlKey || event.metaKey || event.shiftKey);
+    handleItemClick(id, event);
+  }, [handleItemClick, selectTrackingAssetForProjectItem]);
+
+  const handleProjectItemContextMenu = useCallback((
+    event: ReactMouseEvent,
+    id?: string,
+    parentId?: string | null,
+    boardPosition?: { x: number; y: number },
+  ) => {
+    if (id) selectTrackingAssetForProjectItem(id, selectedIds.includes(id));
+    handleContextMenu(event, id, parentId, boardPosition);
+  }, [handleContextMenu, selectTrackingAssetForProjectItem, selectedIds]);
 
   const {
     allProjectItems,
@@ -488,13 +484,35 @@ export function MediaPanel() {
     mathSceneItems,
     motionShapeItems,
     signalAssets,
+    trackingAssets,
     expandedFolderIds,
     mediaSearchQuery,
     gridFolderId,
     classicListViewport,
+    hiddenProjectItemIds: timelineOwnedMediaItemIds,
     sortItems,
   });
-  const mediaPreviewTooltip = useMediaPanelPreviewTooltip({ itemsById: allProjectItemsById });
+  const mediaPreviewTooltip = useMediaPanelPreviewTooltip({ activeCompositionId, activeTimelineClips: timelineClips, itemsById: allProjectItemsById, mediaFiles: files });
+  const handleItemDoubleClick = useCallback((item: ProjectItem, renameFromName = false) => {
+    if (renameTimerRef.current !== null) {
+      window.clearTimeout(renameTimerRef.current);
+      renameTimerRef.current = null;
+    }
+    if ('type' in item && item.type === 'composition') {
+      closeContextMenu();
+      mediaPreviewTooltip.dismissItemPreview(item.id);
+    }
+    if ('type' in item && item.type === 'tracking') {
+      closeContextMenu();
+      requestTrackingAssetAction('open', item);
+      return;
+    }
+    if (renameFromName) {
+      startRename(item.id, item.name);
+      return;
+    }
+    void executeItemDoubleClick(item);
+  }, [closeContextMenu, executeItemDoubleClick, mediaPreviewTooltip, renameTimerRef, requestTrackingAssetAction, startRename]);
 
   const {
     renderClassicRow,
@@ -518,13 +536,14 @@ export function MediaPanel() {
     handleNameClick,
     handleBadgeClick,
     handleDragStart,
+    handleTouchTimelineDragPointerDown,
     handleDragEnd,
     handleFolderDragOver,
     handleFolderDragLeave,
     handleFolderDrop,
-    handleItemClick,
+    handleItemClick: handleProjectItemClick,
     handleItemDoubleClick,
-    handleContextMenu,
+    handleContextMenu: handleProjectItemContextMenu,
     getItemsForParent,
     refreshFileUrls,
   });
@@ -539,9 +558,9 @@ export function MediaPanel() {
     ensureFileThumbnail,
     finishRename,
     folders,
-    handleContextMenu,
+    handleContextMenu: handleProjectItemContextMenu,
     handleExternalDropImport,
-    handleItemClick,
+    handleItemClick: handleProjectItemClick,
     handleItemDoubleClick,
     getSlotGridProgress: getTimelineSlotGridProgress,
     internalDragId,
@@ -550,7 +569,7 @@ export function MediaPanel() {
     mediaBoardItems,
     mediaSearchResultCount,
     mediaSearchVisibleItemIds,
-    moveToFolder,
+    moveToFolder: moveProjectItemsToFolder,
     refreshFileUrls,
     reloadMediaBoardAnnotations,
     renameValue,
@@ -632,7 +651,6 @@ export function MediaPanel() {
       onDragLeave={handleDragLeave}
       onMouseMove={(event) => { handleMediaPanelMouseMove(event); mediaPreviewTooltip.handleMouseMove(event); }}
       onMouseLeave={mediaPreviewTooltip.handleMouseLeave}
-      onClick={() => { if (contextMenu) closeContextMenu(); }}
     >
       <MediaPanelHeader
         query={mediaSearchQuery}
@@ -646,29 +664,20 @@ export function MediaPanel() {
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
         onImport={handleImport}
+        importInputId="media-panel-import-input"
         addDropdownOpen={addDropdownOpen}
         onAddDropdownOpenChange={setAddDropdownOpen}
         onNewComposition={handleNewComposition}
         onNewFolder={handleNewFolder}
-        onNewText={handleNewText}
-        onNewSolid={handleNewSolid}
         onNewLiveInput={handleNewLiveInput}
-        onNewMesh={handleNewMesh}
-        onNewText3D={handleNewText3D}
-        onNewCamera={handleNewCamera}
-        onNewLight={handleNewLight}
-        onNewSplatEffector={handleNewSplatEffector}
         onImportGaussianSplat={handleImportGaussianSplat}
-        onNewMathScene={handleNewMathScene}
-        onNewMotionShape={handleNewMotionShape}
-        onNewMotionNull={handleNewMotionNull}
-        onNewMotionAdjustment={handleNewMotionAdjustment}
       />
       <input
+        id="media-panel-import-input"
         ref={fileInputRef}
         type="file"
-        multiple
-        style={{ display: 'none' }}
+        multiple accept={getNativeMediaInputAccept()}
+        style={{ position: 'fixed', width: 1, height: 1, opacity: 0, pointerEvents: 'none', left: -10000, top: 0 }}
         onChange={handleFileChange}
       />
 
@@ -750,7 +759,7 @@ export function MediaPanel() {
           onStartRename: startRename,
           onMoveToFolder: mediaContextLocalHandlers.onMoveToFolder,
           onOpenCompositionSettings: openCompositionSettings,
-          onCreateCompositionFromMedia: handleCreateCompositionFromMedia,
+          onCreateCompositionFromItem: handleCreateCompositionFromItem,
           onOpenImageCrop: mediaContextLocalHandlers.onOpenImageCrop,
           onOpenSolidSettings: mediaContextLocalHandlers.onOpenSolidSettings,
           onCancelProxyGeneration: cancelProxyGeneration,
@@ -760,6 +769,8 @@ export function MediaPanel() {
           onRegenerateAudioProxy: handleRegenerateMediaAudioProxy,
           onRegenerateWaveform: handleRegenerateMediaWaveform,
           onRegenerateSpectrogram: handleRegenerateMediaSpectrogram,
+          onTranscribeMedia: handleTranscribeMedia,
+          onAnalyzeMedia: handleAnalyzeMedia,
           onExtractVideoFrame: mediaContextFrameExtractionHandlers.onExtractVideoFrame,
           onDownloadMediaFile: mediaContextExplorerHandlers.onDownloadMediaFile,
           onShowRawInExplorer: mediaContextExplorerHandlers.onShowRawInExplorer,
@@ -768,29 +779,23 @@ export function MediaPanel() {
           onCopy: handleCopySelected,
           onDuplicate: handleDuplicateSelected,
           onDelete: handleDelete,
+          onTrackingAssetAction: (action, asset) => {
+            requestTrackingAssetAction(action, asset);
+            closeContextMenu();
+          },
           onNewComposition: handleNewComposition,
           onNewFolder: handleNewFolder,
-          onNewText: handleNewText,
-          onNewSolid: handleNewSolid,
           onNewLiveInput: handleNewLiveInput,
-          onNewMesh: handleNewMesh,
-          onNewText3D: handleNewText3D,
-          onNewCamera: handleNewCamera,
-          onNewLight: handleNewLight,
-          onNewSplatEffector: handleNewSplatEffector,
           onImportGaussianSplat: handleImportGaussianSplat,
-          onNewMathScene: handleNewMathScene,
-          onNewMotionShape: handleNewMotionShape,
-          onNewMotionNull: handleNewMotionNull,
-          onNewMotionAdjustment: handleNewMotionAdjustment,
         }}
         deleteConfirmation={deleteConfirmation}
         deleteConfirmationBusy={deleteConfirmationBusy}
         setDeleteConfirmation={setDeleteConfirmation}
         confirmMediaDelete={confirmMediaDelete}
         settingsDialog={settingsDialog}
-        setSettingsDialog={setSettingsDialog}
+        changeCompositionSettings={changeCompositionSettings}
         saveCompositionSettings={saveCompositionSettings}
+        cancelCompositionSettings={cancelCompositionSettings}
         solidSettingsDialog={solidSettingsDialog}
         setSolidSettingsDialog={setSolidSettingsDialog}
         updateSolidItem={updateSolidItem}

@@ -39,6 +39,11 @@ function buildNestedBaseTransform(nestedClip: TimelineClip): ClipTransform {
       y: nestedClip.transform?.position?.y ?? DEFAULT_TRANSFORM.position.y,
       z: nestedClip.transform?.position?.z ?? DEFAULT_TRANSFORM.position.z,
     },
+    anchor: {
+      x: nestedClip.transform?.anchor?.x ?? DEFAULT_TRANSFORM.anchor?.x ?? 0,
+      y: nestedClip.transform?.anchor?.y ?? DEFAULT_TRANSFORM.anchor?.y ?? 0,
+      z: nestedClip.transform?.anchor?.z ?? DEFAULT_TRANSFORM.anchor?.z ?? 0,
+    },
     scale: {
       ...(nestedClip.transform?.scale?.all !== undefined ? { all: nestedClip.transform.scale.all } : {}),
       x: nestedClip.transform?.scale?.x ?? DEFAULT_TRANSFORM.scale.x,
@@ -75,6 +80,11 @@ function buildNestedLayerBase(
       x: transform.position?.x || 0,
       y: transform.position?.y || 0,
       z: transform.position?.z || 0,
+    },
+    anchor: {
+      x: transform.anchor?.x ?? 0,
+      y: transform.anchor?.y ?? 0,
+      z: transform.anchor?.z ?? 0,
     },
     scale: getEffectiveScale(transform.scale),
     rotation: {
@@ -125,6 +135,7 @@ export function buildLayerSyncNestedLayers({
       nestedClip.effects,
       keyframes,
       nestedLocalTime,
+      nestedClip,
     );
     const baseLayer = buildNestedLayerBase(nestedClip, transform, effects, clipTime);
     const transitionRender = evaluateTransitionRenderState(

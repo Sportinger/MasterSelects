@@ -6,6 +6,7 @@ import {
   type GlobalCurveApplyTimelineEditOperation,
 } from '../../src/components/timeline/GlobalCurveEditor';
 import {
+  scaleCurveGraphModelRanges,
   TimelineGlobalCurveSurface,
   type TimelineGraphTarget,
 } from '../../src/components/timeline/TimelineGlobalCurveSurface';
@@ -13,10 +14,18 @@ import { buildCurveGraphModel } from '../../src/components/timeline/utils/curveG
 import { propertyRegistry } from '../../src/services/properties';
 import type { Keyframe } from '../../src/types/keyframes';
 import type { TimelineClip } from '../../src/types/timeline';
+import type { TimelineClipDragPreview } from '../../src/stores/timeline/types';
+import type { ClipTrimState } from '../../src/components/timeline/types';
 import { createMockClip } from '../helpers/mockData';
 
 function makeClip(): TimelineClip {
-  return createMockClip({ id: 'graph-clip', name: 'Graph Clip', startTime: 5, duration: 5 });
+  return createMockClip({
+    id: 'graph-clip',
+    name: 'Graph Clip',
+    startTime: 5,
+    duration: 5,
+    source: { type: 'video', naturalDuration: 10 },
+  });
 }
 
 function makeKeyframe(
@@ -62,15 +71,26 @@ function createApplyOperationMock() {
   }));
 }
 
-function TimelineGlobalCurveSurfaceHarness() {
+function TimelineGlobalCurveSurfaceHarness({
+  clipDragPreview = null,
+  clipTrim = null,
+  onFitSeries,
+}: {
+  clipDragPreview?: TimelineClipDragPreview | null;
+  clipTrim?: ClipTrimState | null;
+  onFitSeries?: (timeBounds: { startTime: number; endTime: number }) => void;
+} = {}) {
   const clip = React.useMemo(() => makeClip(), []);
   const [preferredTarget, setPreferredTarget] = React.useState<TimelineGraphTarget>({
     clipId: clip.id,
     property: 'opacity',
   });
   const clipKeyframes = React.useMemo(() => new Map([[clip.id, [
+    makeKeyframe('opacity-start', 'opacity', 0, 0),
     makeKeyframe('opacity-a', 'opacity', 1, 0.2),
     makeKeyframe('opacity-b', 'opacity', 3, 0.8),
+    makeKeyframe('opacity-tail', 'opacity', 4, 1),
+    makeKeyframe('opacity-end', 'opacity', 5, 0),
     makeKeyframe('rotation-a', 'rotation.z', 2, 30),
     makeKeyframe('rotation-b', 'rotation.z', 4, 90),
   ]]]), [clip.id]);
@@ -80,9 +100,12 @@ function TimelineGlobalCurveSurfaceHarness() {
       activeComposition={null}
       applyTimelineEditOperation={createApplyOperationMock()}
       clipKeyframes={clipKeyframes}
+      clipDragPreview={clipDragPreview}
+      clipTrim={clipTrim}
       clips={[clip]}
       height={260}
       onActiveSeriesChange={setPreferredTarget}
+      onFitSeries={onFitSeries}
       onSelectKeyframe={vi.fn()}
       pixelToTime={(pixel) => pixel / 100}
       preferredTarget={preferredTarget}
@@ -97,6 +120,30 @@ function TimelineGlobalCurveSurfaceHarness() {
 }
 
 describe('GlobalCurveEditor', () => {
+  it('keeps a recognizable graph grid and mode label when no curves are available', () => {
+    const emptyModel = buildCurveGraphModel({
+      propertyTargets: [],
+      clips: [],
+      clipKeyframes: new Map(),
+      selectedKeyframeIds: new Set(),
+    });
+    const { container } = render(
+      <GlobalCurveEditor
+        model={emptyModel}
+        width={1_000}
+        height={240}
+        timeToPixel={(time) => time * 100}
+        pixelToTime={(pixel) => pixel / 100}
+        onSelectKeyframe={vi.fn()}
+        applyTimelineEditOperation={createApplyOperationMock()}
+      />,
+    );
+
+    expect(screen.getByRole('img', { name: 'Global property curve editor' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Graph mode');
+    expect(container.querySelectorAll('.global-curve-editor-empty-grid line')).toHaveLength(17);
+  });
+
   it('can render without the compact legend when an external parameter list owns series controls', () => {
     render(
       <GlobalCurveEditor
@@ -133,6 +180,119 @@ describe('GlobalCurveEditor', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Show all curves' }));
     expect(container.querySelectorAll('.global-curve-editor-series')).toHaveLength(2);
+  });
+
+  it('scales curve height with Shift+wheel only from the dark parameter sidebar', () => {
+    const { container } = render(<TimelineGlobalCurveSurfaceHarness />);
+    const sidebar = screen.getByRole('complementary', { name: 'Graph parameters' });
+    const point = () => Number(container.querySelector<SVGCircleElement>(
+      '.global-curve-editor-keyframe[data-keyframe-id="opacity-a"]',
+    )?.getAttribute('cy'));
+    const initialY = point();
+
+    fireEvent.wheel(sidebar, { deltaY: -100 });
+    expect(sidebar).toHaveAttribute('data-vertical-zoom', '1.000');
+    expect(point()).toBe(initialY);
+
+    fireEvent.wheel(sidebar, { deltaY: -100, shiftKey: true });
+    expect(sidebar).toHaveAttribute('data-vertical-zoom', '1.150');
+    expect(point()).not.toBe(initialY);
+  });
+
+  it('scales every visible series range around its own center', () => {
+    const model = createModel();
+    const scaled = scaleCurveGraphModelRanges(model, 2);
+
+    scaled.series.forEach((series, index) => {
+      const original = model.series[index];
+      expect(series.range.max - series.range.min).toBeCloseTo(
+        (original.range.max - original.range.min) / 2,
+      );
+      expect((series.range.max + series.range.min) / 2).toBeCloseTo(
+        (original.range.max + original.range.min) / 2,
+      );
+    });
+  });
+
+  it('keeps parameter order stable, dims inactive curves, and changes the value grid', () => {
+    const { container } = render(<TimelineGlobalCurveSurfaceHarness />);
+    const tabLabels = () => screen.getAllByRole('tab').map(tab => tab.textContent);
+    const seriesIds = () => [...container.querySelectorAll<SVGGElement>(
+      '.global-curve-editor-series',
+    )].map(series => series.dataset.seriesId);
+    const gridLabels = () => [...container.querySelectorAll('.curve-editor-value-label')]
+      .map(label => label.textContent);
+    const initialTabLabels = tabLabels();
+    const initialSeriesIds = seriesIds();
+    const initialGridLabels = gridLabels();
+
+    fireEvent.click(screen.getByRole('tab', { name: /Rotation/ }));
+
+    expect(tabLabels()).toEqual(initialTabLabels);
+    expect(seriesIds()).toEqual(initialSeriesIds);
+    expect(container.querySelector('.global-curve-editor-svg'))
+      .toHaveAttribute('data-active-series-id', 'graph-clip::rotation.z');
+    expect(container.querySelector('[data-series-id="graph-clip::opacity"]'))
+      .toHaveAttribute('data-rendered-color', 'var(--text-muted)');
+    expect(container.querySelector('[data-series-id="graph-clip::rotation.z"]'))
+      .toHaveAttribute('data-rendered-color', '#22d3ee');
+    expect(gridLabels()).not.toEqual(initialGridLabels);
+    expect(gridLabels().some(label => label?.includes('°'))).toBe(true);
+  });
+
+  it('frames all keyframes of a double-clicked parameter and resets curve height', () => {
+    const onFitSeries = vi.fn();
+    render(<TimelineGlobalCurveSurfaceHarness onFitSeries={onFitSeries} />);
+    const sidebar = screen.getByRole('complementary', { name: 'Graph parameters' });
+    fireEvent.wheel(sidebar, { deltaY: -100, shiftKey: true });
+    expect(sidebar).toHaveAttribute('data-vertical-zoom', '1.150');
+
+    fireEvent.doubleClick(screen.getByRole('tab', { name: /Rotation/ }));
+
+    expect(sidebar).toHaveAttribute('data-vertical-zoom', '1.000');
+    expect(onFitSeries).toHaveBeenCalledWith({ startTime: 7, endTime: 9 });
+  });
+
+  it('moves graph keyframes with the live clip drag preview', () => {
+    const { container, rerender } = render(<TimelineGlobalCurveSurfaceHarness />);
+    const getOpacityPointX = () => Number(container.querySelector<SVGCircleElement>(
+      '.global-curve-editor-keyframe[data-keyframe-id="opacity-a"]',
+    )?.getAttribute('cx'));
+
+    expect(getOpacityPointX()).toBe(600);
+
+    rerender(<TimelineGlobalCurveSurfaceHarness clipDragPreview={{
+      patches: { 'graph-clip': { startTime: 8 } },
+    }} />);
+
+    expect(getOpacityPointX()).toBe(900);
+  });
+
+  it('moves both opacity edge pairs with the live clip trim preview', () => {
+    const { container, rerender } = render(<TimelineGlobalCurveSurfaceHarness />);
+    const pointX = (id: string) => Number(container.querySelector<SVGCircleElement>(
+      `.global-curve-editor-keyframe[data-keyframe-id="${id}"]`,
+    )?.getAttribute('cx'));
+    const trimBase = {
+      clipId: 'graph-clip',
+      originalStartTime: 5,
+      originalDuration: 5,
+      originalInPoint: 0,
+      originalOutPoint: 5,
+      startX: 0,
+      currentX: 100,
+      altKey: false,
+      snapIndicatorTime: null,
+      isSnapping: false,
+      appliedDelta: 1,
+    } as const;
+
+    expect([pointX('opacity-start'), pointX('opacity-a'), pointX('opacity-b')]).toEqual([500, 600, 800]);
+    rerender(<TimelineGlobalCurveSurfaceHarness clipTrim={{ ...trimBase, edge: 'left' }} />);
+    expect([pointX('opacity-start'), pointX('opacity-a'), pointX('opacity-b')]).toEqual([600, 700, 800]);
+
+    rerender(<TimelineGlobalCurveSurfaceHarness clipTrim={{ ...trimBase, edge: 'right' }} />);
+    expect([pointX('opacity-tail'), pointX('opacity-end')]).toEqual([1000, 1100]);
   });
 
   it('renders bounded multi-series curves, canonical selection, and the active-series grid', () => {
@@ -315,6 +475,37 @@ describe('GlobalCurveEditor', () => {
       type: 'keyframe-transaction-commit',
       transactionId: begin.transactionId,
     });
+  });
+
+  it('caps a dragged Bezier handle before it can reverse segment time', () => {
+    const applyTimelineEditOperation = createApplyOperationMock();
+    const { container } = render(
+      <GlobalCurveEditor
+        model={createModel()}
+        width={1_000}
+        height={240}
+        timeToPixel={(time) => time * 100}
+        pixelToTime={(pixel) => pixel / 100}
+        onSelectKeyframe={vi.fn()}
+        applyTimelineEditOperation={applyTimelineEditOperation}
+      />,
+    );
+    const handle = container.querySelector<SVGCircleElement>(
+      '[data-keyframe-id="opacity-a"][data-handle="out"]',
+    );
+
+    fireEvent.mouseDown(handle!, { button: 0, clientX: 667, clientY: 148 });
+    fireEvent.mouseMove(window, { clientX: 950, clientY: 131 });
+
+    const update = applyTimelineEditOperation.mock.calls[1][0];
+    if (update.type !== 'keyframe-transaction-update') throw new Error('Expected update');
+    expect(update.operations[0]).toMatchObject({
+      type: 'keyframe-update-bezier-handle',
+      handle: 'out',
+      position: { x: expect.closeTo(4 / 3, 6) },
+    });
+
+    fireEvent.mouseUp(window);
   });
 
   it.each([

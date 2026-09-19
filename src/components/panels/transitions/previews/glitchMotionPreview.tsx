@@ -243,6 +243,47 @@ export const renderGlitchMotionPreview: TransitionPreviewRenderer = ({
     );
   }
 
+  if (type === 'datamosh') {
+    return (
+      <PreviewSvg type={type} className="tp-glitch-motion">
+        <defs>
+          <clipPath id={clipId}>
+            <rect {...FRAME} />
+          </clipPath>
+          <linearGradient id={effectId} x1="4" y1="5" x2="76" y2="35" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor={PREVIEW_BLUE} stopOpacity="0.9" />
+            <stop offset="1" stopColor={PREVIEW_DARK} />
+          </linearGradient>
+        </defs>
+        <g clipPath={`url(#${clipId})`}>
+          <rect {...FRAME} fill={PREVIEW_CORAL} opacity="0.88" />
+          <path d="M4 31 23 16l11 8 10-11 32 18v4H4Z" fill={PREVIEW_DARK} opacity="0.26" />
+          <g className="tp-gm-datamosh-source tp-gm-animated">
+            <rect {...FRAME} fill={`url(#${effectId})`} />
+            <circle cx="22" cy="14" r="4" fill={PREVIEW_WHITE} opacity="0.45" />
+            <path d="M4 31 23 16l11 8 10-11 32 18v4H4Z" fill={PREVIEW_DARK} opacity="0.3" />
+          </g>
+          <g className="tp-gm-datamosh-vectors tp-gm-animated" fill={PREVIEW_BLUE} opacity="0.82">
+            <rect x="7" y="8" width="26" height="5" rx="1" />
+            <rect x="20" y="15" width="42" height="4" rx="1" opacity="0.76" />
+            <rect x="9" y="21" width="55" height="6" rx="1" opacity="0.65" />
+            <rect x="31" y="29" width="42" height="4" rx="1" opacity="0.52" />
+          </g>
+          <path
+            className="tp-gm-datamosh-trace tp-gm-animated"
+            d="M9 11h34m-25 7h48M7 27h51m-19 5h34"
+            fill="none"
+            stroke={PREVIEW_WHITE}
+            strokeWidth="0.8"
+            strokeLinecap="round"
+            opacity="0.56"
+          />
+        </g>
+        {renderFrameChrome()}
+      </PreviewSvg>
+    );
+  }
+
   if (type === 'directional-blur') {
     return (
       <PreviewSvg type={type} className="tp-glitch-motion">

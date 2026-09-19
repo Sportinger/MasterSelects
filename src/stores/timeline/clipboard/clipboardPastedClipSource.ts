@@ -17,6 +17,7 @@ const SYNC_RESTORED_SOURCE_TYPES = new Set([
   'light',
   'splat-effector',
   'storyboard',
+  'flock',
 ]);
 
 export function canPasteLiveInputInComposition(
@@ -64,6 +65,12 @@ export function createPastedClipSource(
   clipData: ClipboardClipData,
   text3DProperties: TimelineClip['text3DProperties'],
 ): TimelineClip['source'] {
+  if (clipData.isComposition) {
+    return {
+      type: clipData.trackType === 'audio' ? 'audio' : 'video',
+      naturalDuration: clipData.naturalDuration ?? clipData.duration,
+    };
+  }
   if (clipData.liveInputId) {
     return {
       type: 'video',
@@ -137,6 +144,13 @@ export function createPastedClipSource(
       naturalDuration: clipData.naturalDuration ?? clipData.duration,
       textCanvas: createTimelineTransitionOverlayCanvasRuntime({ overlay: clipData.transitionOverlay }),
       transitionOverlay: structuredClone(clipData.transitionOverlay),
+    };
+  }
+  if (clipData.sourceType === 'flock' && clipData.flock) {
+    return {
+      type: 'flock',
+      mediaFileId: clipData.mediaFileId,
+      naturalDuration: clipData.naturalDuration ?? clipData.duration,
     };
   }
   if (isMotionClip(clipData) && clipData.motion) {

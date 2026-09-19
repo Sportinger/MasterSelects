@@ -55,6 +55,26 @@
   transition: background 0.1s ease, box-shadow 0.1s ease, filter 120ms ease, transform 0.1s ease;
 }
 
+/* Dense solve/mocap rows can contain hundreds of diamonds. Per-element filters,
+   shadows and transitions force a large paint/compositing cost during playback. */
+.keyframe-diamond.dense-row {
+  box-shadow: none;
+  filter: none;
+  transition: none;
+}
+
+.keyframe-diamond.dense-row.row-highlighted {
+  background: var(--warning-light);
+  box-shadow: none;
+  filter: none;
+}
+
+.keyframe-diamond.dense-row.selected,
+.keyframe-diamond.dense-row.dragging,
+.keyframe-diamond.dense-row:hover {
+  filter: none;
+}
+
 /* Keyframe easing type visual styles */
 /* Linear: Diamond shape (default) */
 .keyframe-diamond.easing-linear {

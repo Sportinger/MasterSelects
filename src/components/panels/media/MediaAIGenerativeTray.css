@@ -12,7 +12,8 @@
   right: 12px;
   bottom: 12px;
   z-index: 95;
-  display: flex;
+  /* Legacy FlashBoard launch pills stay mounted until their code is removed. */
+  display: none;
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
@@ -258,7 +259,7 @@
   padding: 34px 0 26px;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.34) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .media-ai-tray-expanded .fb-bubble.has-references .fb-reference-strip.is-loose {
@@ -382,7 +383,7 @@
 
 .media-ai-tray-expanded .fb-bubble.has-references .fb-reference-strip::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.32);
+  background: var(--scrollbar-thumb);
 }
 
 @media (max-width: 720px) {
@@ -451,7 +452,7 @@
 }
 
 .media-download-status-pill.ready {
-  border-color: color-mix(in srgb, #62d98b 42%, rgba(255, 255, 255, 0.12));
+  border-color: color-mix(in srgb, var(--success-light) 42%, var(--veil-border));
   color: #8fe2aa;
 }
 
@@ -652,7 +653,7 @@
 }
 
 .media-ai-generation-card.completed {
-  border-color: color-mix(in srgb, #62d98b 42%, var(--border-color));
+  border-color: color-mix(in srgb, var(--success-light) 42%, var(--border-color));
 }
 
 .media-ai-generation-card.download.processing {
@@ -670,10 +671,10 @@
 
 .media-ai-generation-card.can-locate:hover,
 .media-ai-generation-card.can-locate:focus-visible {
-  border-color: color-mix(in srgb, #62d98b 62%, var(--border-color));
+  border-color: color-mix(in srgb, var(--success-light) 62%, var(--border-color));
   box-shadow:
     0 8px 22px rgba(0, 0, 0, 0.36),
-    0 0 0 1px color-mix(in srgb, #62d98b 26%, transparent);
+    0 0 0 1px color-mix(in srgb, var(--success-light) 26%, transparent);
   outline: none;
   transform: translateY(-1px);
 }
@@ -703,7 +704,7 @@
   align-self: start;
   min-height: 42px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--veil-border-subtle);
   border-radius: 6px;
   background:
     linear-gradient(135deg, rgba(74, 144, 226, 0.25), rgba(255, 255, 255, 0.04)),
@@ -711,12 +712,12 @@
 }
 
 .media-ai-generation-preview.has-thumbnail {
-  border-color: color-mix(in srgb, #62d98b 38%, rgba(255, 255, 255, 0.08));
+  border-color: color-mix(in srgb, var(--success-light) 38%, var(--veil-border-subtle));
   background: var(--bg-primary);
 }
 
 .media-ai-generation-card.queued .media-ai-generation-preview {
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--veil-border-subtle);
   background:
     linear-gradient(135deg, rgba(160, 166, 175, 0.14), rgba(255, 255, 255, 0.035)),
     var(--bg-primary);
@@ -773,8 +774,8 @@
 }
 
 .media-ai-generation-card.completed .media-ai-generation-time-generation {
-  color: #62d98b;
-  text-shadow: 0 0 18px color-mix(in srgb, #62d98b 28%, transparent);
+  color: var(--success-light);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--success-light) 28%, transparent);
 }
 
 @keyframes media-ai-generation-pulse {
@@ -784,19 +785,19 @@
 
 @keyframes media-ai-generation-target-pulse {
   0% {
-    outline: 1px solid color-mix(in srgb, #62d98b 0%, transparent);
-    box-shadow: 0 0 0 0 color-mix(in srgb, #62d98b 0%, transparent);
+    outline: 1px solid color-mix(in srgb, var(--success-light) 0%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--success-light) 0%, transparent);
   }
 
   36% {
-    outline: 1px solid color-mix(in srgb, #62d98b 76%, transparent);
+    outline: 1px solid color-mix(in srgb, var(--success-light) 76%, transparent);
     box-shadow:
-      0 0 0 2px color-mix(in srgb, #62d98b 38%, transparent),
-      0 0 20px color-mix(in srgb, #62d98b 35%, transparent);
+      0 0 0 2px color-mix(in srgb, var(--success-light) 38%, transparent),
+      0 0 20px color-mix(in srgb, var(--success-light) 35%, transparent);
   }
 
   100% {
-    outline: 1px solid color-mix(in srgb, #62d98b 0%, transparent);
+    outline: 1px solid color-mix(in srgb, var(--success-light) 0%, transparent);
     box-shadow: 0 0 0 8px transparent;
   }
 }
@@ -823,7 +824,7 @@
   gap: 7px;
   min-width: 0;
   padding: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--veil-border-subtle);
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.18);
 }
@@ -881,7 +882,7 @@
 }
 
 .media-ai-generation-track-heading span.completed {
-  color: #62d98b;
+  color: var(--success-light);
 }
 
 .media-ai-generation-track audio {
@@ -897,7 +898,7 @@
 
 .media-ai-generation-track-locate {
   padding: 4px 6px;
-  border: 1px solid color-mix(in srgb, #62d98b 36%, var(--border-color));
+  border: 1px solid color-mix(in srgb, var(--success-light) 36%, var(--border-color));
   border-radius: 999px;
   background: rgba(98, 217, 139, 0.08);
   color: #8be9aa;
@@ -932,7 +933,7 @@
 }
 
 .media-ai-generation-status.completed {
-  color: #62d98b;
+  color: var(--success-light);
 }
 
 .media-ai-generation-status.failed {
@@ -1008,7 +1009,7 @@
   margin-top: 7px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--veil-3);
 }
 
 .media-ai-generation-progress span {
@@ -1031,7 +1032,7 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--veil-3);
   color: var(--text-secondary);
   font-size: 15px;
   line-height: 1;
@@ -1040,7 +1041,7 @@
 }
 
 .media-ai-generation-dismiss:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--veil-4);
   color: var(--text-primary);
 }
 
@@ -1049,7 +1050,7 @@
 }
 
 .media-ai-generation-cancel {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--veil-3);
 }
 
 .media-ai-generation-cancel:hover {

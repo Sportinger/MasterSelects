@@ -12,13 +12,24 @@ export interface RelinkCandidate {
   handle?: FileSystemFileHandle;
   absolutePath?: string;
   relativePath?: string;
+  sourceRootId?: string;
 }
 
 export type RelinkCandidateMap = Map<string, RelinkCandidate[]>;
 
+export interface RelinkFileSourceRoot {
+  id: string;
+  name: string;
+}
+
 export type RelinkMatch =
   | {
       kind: 'single';
+      candidate: RelinkCandidate;
+    }
+  | {
+      kind: 'linked-source';
+      sourceId: string;
       candidate: RelinkCandidate;
     }
   | {
@@ -42,11 +53,24 @@ function getRelinkHandlePath(handle: FileSystemFileHandle | undefined): string |
   return (handle as (FileSystemFileHandle & { __relinkPath?: string }) | undefined)?.__relinkPath;
 }
 
+function getRelinkHandleSourceRootId(handle: FileSystemFileHandle | undefined): string | undefined {
+  return (handle as (FileSystemFileHandle & { __sourceRootId?: string }) | undefined)?.__sourceRootId;
+}
+
 export function setRelinkHandlePath(handle: FileSystemFileHandle, path: string): void {
   (handle as FileSystemFileHandle & { __relinkPath?: string }).__relinkPath = normalizePath(path)
     .split('/')
     .filter((segment) => segment && segment !== '.' && segment !== '..')
     .join('/');
+}
+
+export function setRelinkHandleSource(
+  handle: FileSystemFileHandle,
+  sourceRootId: string,
+  path: string,
+): void {
+  setRelinkHandlePath(handle, path);
+  (handle as FileSystemFileHandle & { __sourceRootId?: string }).__sourceRootId = sourceRootId;
 }
 
 function getBaseName(value: string | undefined): string | undefined {
@@ -159,7 +183,9 @@ export function getRelinkExpectedFileNames(mediaFile: MediaFile): string[] {
     mediaFile.filePath,
     mediaFile.absolutePath,
     mediaFile.projectPath,
+    mediaFile.sourceRelativePath,
     mediaFile.file?.name,
+    ...((mediaFile.linkedSources ?? []).flatMap((source) => [source.name, source.sourcePath])),
   ]).map((value) => getBaseName(value) ?? value);
 }
 
@@ -169,6 +195,7 @@ function getSingleExpectedValues(mediaFile: MediaFile): string[] {
     mediaFile.filePath,
     mediaFile.absolutePath,
     mediaFile.projectPath,
+    mediaFile.sourceRelativePath,
     mediaFile.file?.name,
   ]);
 }
@@ -207,9 +234,16 @@ export function findRelinkMatch(
   }
 
   const matched = findCandidate(getSingleExpectedValues(mediaFile), candidates)
-    ?? options?.directCandidate;
+  if (matched) return { kind: 'single', candidate: matched };
 
-  return matched ? { kind: 'single', candidate: matched } : null;
+  for (const source of mediaFile.linkedSources ?? []) {
+    const linkedCandidate = findCandidate(uniqueValues([source.name, source.sourcePath]), candidates);
+    if (linkedCandidate) {
+      return { kind: 'linked-source', sourceId: source.id, candidate: linkedCandidate };
+    }
+  }
+
+  return options?.directCandidate ? { kind: 'single', candidate: options.directCandidate } : null;
 }
 
 export async function createRelinkCandidateMapFromHandles(
@@ -223,6 +257,37 @@ export async function createRelinkCandidateMapFromHandles(
       handle,
       absolutePath: getNativeHandlePath(handle),
       relativePath: getRelinkHandlePath(handle),
+      sourceRootId: getRelinkHandleSourceRootId(handle),
+    };
+    const key = candidate.name.toLowerCase();
+    candidates.set(key, [...(candidates.get(key) ?? []), candidate]);
+  }
+
+  return candidates;
+}
+
+function getSourceRelativePath(file: File, sourceRoot?: RelinkFileSourceRoot): string | undefined {
+  const path = file.webkitRelativePath || undefined;
+  if (!path || !sourceRoot) return path;
+  const segments = normalizePath(path).split('/').filter(Boolean);
+  if (segments[0]?.toLocaleLowerCase() === sourceRoot.name.toLocaleLowerCase()) {
+    segments.shift();
+  }
+  return segments.join('/') || file.name;
+}
+
+export function createRelinkCandidateMapFromFiles(
+  files: Iterable<File>,
+  sourceRoot?: RelinkFileSourceRoot,
+): RelinkCandidateMap {
+  const candidates: RelinkCandidateMap = new Map();
+
+  for (const file of files) {
+    const candidate: RelinkCandidate = {
+      name: file.name,
+      file,
+      relativePath: getSourceRelativePath(file, sourceRoot),
+      ...(sourceRoot ? { sourceRootId: sourceRoot.id } : {}),
     };
     const key = candidate.name.toLowerCase();
     candidates.set(key, [...(candidates.get(key) ?? []), candidate]);

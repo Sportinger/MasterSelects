@@ -87,6 +87,10 @@ export class LayerCollector {
 
     const staticLayerData = collectStaticLayerData(layer, deps);
     if (staticLayerData !== undefined) {
+      if (staticLayerData && source.isLiveInput) {
+        this.currentDecoder = 'HTMLVideo';
+        this.hasVideo = true;
+      }
       return staticLayerData;
     }
 

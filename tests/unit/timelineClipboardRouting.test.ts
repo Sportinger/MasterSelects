@@ -5,7 +5,7 @@ import {
   getMediaCompositionSettings,
   useMediaPanelSelectionCommands,
 } from '../../src/components/panels/media/panel/useMediaPanelSelectionCommands';
-import type { MediaFile } from '../../src/stores/mediaStore';
+import type { Composition, MediaFile } from '../../src/stores/mediaStore';
 import { createMockClip, createMockKeyframe } from '../helpers/mockData';
 
 describe('timeline clipboard routing', () => {
@@ -310,6 +310,109 @@ describe('timeline clipboard routing', () => {
     });
   });
 
+  it('creates a composition containing a camera live input without a backing file', async () => {
+    const composition: Composition = {
+      id: 'comp-live-camera',
+      name: 'iPad Camera Comp',
+      type: 'composition',
+      parentId: null,
+      createdAt: 1,
+      width: 1920,
+      height: 1080,
+      frameRate: 30,
+      duration: 60,
+      backgroundColor: '#000000',
+      timelineData: {
+        tracks: DEFAULT_TRACKS,
+        clips: [],
+        playheadPosition: 0,
+        duration: 60,
+        durationLocked: true,
+        zoom: 50,
+        scrollX: 0,
+        inPoint: null,
+        outPoint: null,
+        loopPlayback: false,
+      },
+    };
+    const liveCamera: MediaFile = {
+      id: 'live-camera',
+      name: 'iPad Camera',
+      type: 'video',
+      parentId: null,
+      createdAt: 1,
+      url: '',
+      duration: 60,
+      width: 1920,
+      height: 1080,
+      fps: 30,
+      hasAudio: false,
+      liveInput: { kind: 'video-device', deviceId: 'camera-1' },
+    };
+    const createComposition = vi.fn(() => composition);
+    const updateComposition = vi.fn();
+    const closeContextMenu = vi.fn();
+    const openCompositionTab = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() => useMediaPanelSelectionCommands({
+      addToSelection: vi.fn(),
+      closeContextMenu,
+      contextMenu: null,
+      createComposition,
+      copyMediaItems: vi.fn(),
+      createFolder: vi.fn(),
+      duplicateMediaItems: vi.fn(),
+      ensureFileThumbnail: vi.fn(),
+      folders: [],
+      generateAudioProxy: vi.fn(),
+      generateMediaSpectrogram: vi.fn(),
+      generateMediaWaveform: vi.fn(),
+      getActiveParentId: () => null,
+      getAiReferenceMediaFileIds: () => [],
+      handleDelete: vi.fn(),
+      importFiles: vi.fn(),
+      importFilesWithHandles: vi.fn(),
+      openCompositionTab,
+      pasteMediaItems: vi.fn(() => []),
+      reloadFile: vi.fn(),
+      removeFromSelection: vi.fn(),
+      selectedIds: [liveCamera.id],
+      setContextMenu: vi.fn(),
+      setGenerativeTrayExpanded: vi.fn(),
+      setGridFolderId: vi.fn(),
+      setSelectedMediaBoardAnnotationId: vi.fn(),
+      setSelection: vi.fn(),
+      setSourceMonitorFile: vi.fn(),
+      toggleFolderExpanded: vi.fn(),
+      updateAiReferenceMediaFileIds: vi.fn(),
+      updateComposition,
+      viewMode: 'classic',
+      hasMediaClipboard: () => false,
+    }));
+
+    await act(async () => {
+      await result.current.handleCreateCompositionFromItem(liveCamera);
+    });
+
+    expect(createComposition).toHaveBeenCalledWith('iPad Camera Comp', expect.objectContaining({
+      duration: 60,
+      frameRate: 30,
+      height: 1080,
+      width: 1920,
+    }));
+    expect(openCompositionTab).toHaveBeenCalledWith(composition.id, { skipAnimation: true });
+    expect(useTimelineStore.getState().clips[0]).toMatchObject({
+      mediaFileId: liveCamera.id,
+      source: { liveInputId: liveCamera.id },
+      trackId: DEFAULT_TRACKS.find((track) => track.type === 'video')!.id,
+    });
+    expect(updateComposition).toHaveBeenCalledWith(composition.id, expect.objectContaining({
+      timelineData: expect.objectContaining({
+        clips: [expect.objectContaining({ liveInputId: liveCamera.id })],
+      }),
+    }));
+    expect(closeContextMenu).toHaveBeenCalled();
+  });
+
   it('waits for the composition switch before adding media to a new comp', async () => {
     let finishCompositionSwitch!: () => void;
     const switchPromise = new Promise<void>((resolve) => {
@@ -408,7 +511,7 @@ describe('timeline clipboard routing', () => {
 
     let createPromise!: Promise<void>;
     await act(async () => {
-      createPromise = result.current.handleCreateCompositionFromMedia(mediaFile);
+      createPromise = result.current.handleCreateCompositionFromItem(mediaFile);
       await Promise.resolve();
     });
 
@@ -433,6 +536,120 @@ describe('timeline clipboard routing', () => {
       'comp-long-video',
       expect.objectContaining({ duration: 4321.23356 }),
     );
+    expect(closeContextMenu).toHaveBeenCalled();
+  });
+
+  it('wraps a composition with matching resolution and frame rate', async () => {
+    const sourceComposition: Composition = {
+      id: 'comp-nested-source',
+      name: 'Nested Scene',
+      type: 'composition',
+      parentId: 'folder-source',
+      createdAt: 1,
+      width: 2048,
+      height: 858,
+      frameRate: 48,
+      duration: 12,
+      backgroundColor: '#123456',
+      timelineData: {
+        tracks: DEFAULT_TRACKS,
+        clips: [],
+        playheadPosition: 0,
+        duration: 12,
+        durationLocked: true,
+        zoom: 50,
+        scrollX: 0,
+        inPoint: null,
+        outPoint: null,
+        loopPlayback: false,
+      },
+    };
+    const wrapperComposition: Composition = {
+      ...sourceComposition,
+      id: 'comp-wrapper',
+      name: 'Nested Scene Comp',
+      parentId: 'folder-target',
+      timelineData: {
+        ...sourceComposition.timelineData!,
+        clips: [],
+      },
+    };
+    const createComposition = vi.fn(() => wrapperComposition);
+    const openCompositionTab = vi.fn(async () => undefined);
+    const updateComposition = vi.fn();
+    const closeContextMenu = vi.fn();
+    const timelineState = useTimelineStore.getState();
+    const addCompClip = vi.spyOn(timelineState, 'addCompClip').mockResolvedValue(undefined);
+    const addClip = vi.spyOn(timelineState, 'addClip').mockResolvedValue('clip-media');
+    vi.spyOn(timelineState, 'setDuration').mockImplementation(() => undefined);
+    vi.spyOn(timelineState, 'getSerializableState').mockReturnValue({
+      ...wrapperComposition.timelineData!,
+      clips: [{
+        ...createMockClip({
+          id: 'clip-wrapper-child',
+          isComposition: true,
+          compositionId: sourceComposition.id,
+        }),
+      }],
+    });
+
+    const { result } = renderHook(() => useMediaPanelSelectionCommands({
+      addToSelection: vi.fn(),
+      closeContextMenu,
+      contextMenu: null,
+      createComposition,
+      copyMediaItems: vi.fn(),
+      createFolder: vi.fn(),
+      duplicateMediaItems: vi.fn(),
+      ensureFileThumbnail: vi.fn(),
+      folders: [],
+      generateAudioProxy: vi.fn(),
+      generateMediaSpectrogram: vi.fn(),
+      generateMediaWaveform: vi.fn(),
+      getActiveParentId: () => 'folder-target',
+      getAiReferenceMediaFileIds: () => [],
+      handleDelete: vi.fn(),
+      importFiles: vi.fn(),
+      importFilesWithHandles: vi.fn(),
+      openCompositionTab,
+      pasteMediaItems: vi.fn(() => []),
+      reloadFile: vi.fn(),
+      removeFromSelection: vi.fn(),
+      selectedIds: [sourceComposition.id],
+      setContextMenu: vi.fn(),
+      setGenerativeTrayExpanded: vi.fn(),
+      setGridFolderId: vi.fn(),
+      setSelectedMediaBoardAnnotationId: vi.fn(),
+      setSelection: vi.fn(),
+      setSourceMonitorFile: vi.fn(),
+      toggleFolderExpanded: vi.fn(),
+      updateAiReferenceMediaFileIds: vi.fn(),
+      updateComposition,
+      viewMode: 'classic',
+      hasMediaClipboard: () => false,
+    }));
+
+    await act(async () => {
+      await result.current.handleCreateCompositionFromItem(sourceComposition);
+    });
+
+    expect(createComposition).toHaveBeenCalledWith('Nested Scene Comp', {
+      width: 2048,
+      height: 858,
+      frameRate: 48,
+      duration: 12,
+      backgroundColor: '#123456',
+      parentId: 'folder-target',
+    });
+    expect(openCompositionTab).toHaveBeenCalledWith(wrapperComposition.id, { skipAnimation: true });
+    expect(addCompClip).toHaveBeenCalledWith(expect.any(String), sourceComposition, 0);
+    expect(addClip).not.toHaveBeenCalled();
+    expect(updateComposition).toHaveBeenCalledWith(wrapperComposition.id, expect.objectContaining({
+      duration: 12,
+      timelineData: expect.objectContaining({
+        clips: [expect.objectContaining({ compositionId: sourceComposition.id })],
+      }),
+    }));
     expect(closeContextMenu).toHaveBeenCalled();
   });
 });

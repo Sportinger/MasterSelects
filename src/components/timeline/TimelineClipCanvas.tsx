@@ -8,13 +8,14 @@ import { memo, useMemo, useReducer, useRef } from 'react';
 import type { TimelineAudioDisplayMode, TimelineClipDragPreview } from '../../stores/timeline/types';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
+import { useSettingsStore } from '../../stores/settingsStore';
 import {
   TIMELINE_CLIP_CANVAS_LOD_BAR_PX,
   TIMELINE_CLIP_CANVAS_LOD_LABEL_PX,
 } from './timelineRenderConstants';
 import type { ClipDragState, ClipTrimState } from './types';
 import type { TimelinePaintSourceClip } from '../../timeline';
-import { FileTypeIcon } from '../panels/media/FileTypeIcon';
+import { TimelineClipCanvasChromeLayer } from './components/TimelineClipCanvasChromeLayer';
 import { useTimelineClipCanvasAudioWarmups } from './hooks/useTimelineClipCanvasAudioWarmups';
 import { useTimelineClipCanvasMainThreadDraw } from './hooks/useTimelineClipCanvasMainThreadDraw';
 import { useTimelineClipCanvasThumbnailWarmups } from './hooks/useTimelineClipCanvasThumbnailWarmups';
@@ -110,6 +111,9 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     clipTrim,
   } = props;
   const clipBodyColor = trackColor === 'transparent' ? NEUTRAL_CLIP_COLOR : trackColor;
+  const selectionBorderColor = useSettingsStore((state) => state.theme === 'resolve')
+    ? '#ef4b3f'
+    : '#ffffff';
   const showFaceRanges = useTimelineStore((state) => state.showFaceRanges);
   const mediaFilesState = useMediaStore((state) => state.files);
   const mediaFiles = useMemo(
@@ -298,6 +302,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     selectedClipIds,
     hoveredClipId,
     trackColor: clipBodyColor,
+    selectionBorderColor,
     waveformsEnabled,
     audioDisplayMode,
     workerEligibility,
@@ -326,6 +331,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     selectedClipIds,
     hoveredClipId,
     trackColor: clipBodyColor,
+    selectionBorderColor,
     scrollX,
     scrollBucket,
     viewportWidth,
@@ -360,68 +366,12 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
         style={{ position: 'absolute', left: canvasOffsetX, top: 0, pointerEvents: 'none' }}
         aria-hidden="true"
       />
-      <div
-        className="timeline-clip-chrome-layer"
-        style={{
-          transform: `translateX(${chromeScrollX}px)`,
-          width: chromeViewportWidth,
-        }}
-        aria-hidden="true"
-      >
-        {chromeOverlays.map((overlay) => {
-          const iconSize = Math.max(0, Math.min(
-            height - 10,
-            overlay.width - 8,
-            overlay.width - overlay.badgeReserve * 2 - 8,
-          ));
-          const showIcon = overlay.showIcon && iconSize >= 4;
-          return (
-            <div
-              key={overlay.id}
-              className="timeline-clip-chrome"
-              style={{
-                left: overlay.left,
-                top: 1,
-                width: overlay.width,
-                height: Math.max(1, height - 2),
-              }}
-            >
-              {showIcon && (
-                <span className="timeline-clip-type-icon" data-clip-type={overlay.iconType ?? 'file'}>
-                  <FileTypeIcon type={overlay.iconType} outline size={iconSize} />
-                </span>
-              )}
-              {overlay.label && (
-                <span
-                  className="timeline-clip-chrome-title"
-                  style={{
-                    right: Math.max(
-                      overlay.badgeReserve + 8,
-                      showIcon ? overlay.width / 2 + iconSize / 2 + 4 : 6,
-                    ),
-                  }}
-                >
-                  {overlay.label}
-                </span>
-              )}
-              {overlay.badges.map((badge, index) => (
-                <span
-                  key={`${badge.label}:${index}`}
-                  className="timeline-clip-chrome-badge"
-                  style={{
-                    right: badge.right,
-                    width: badge.width,
-                    backgroundColor: badge.fill,
-                    borderColor: badge.stroke ?? 'transparent',
-                  }}
-                >
-                  {badge.label}
-                </span>
-              ))}
-            </div>
-          );
-        })}
-      </div>
+      <TimelineClipCanvasChromeLayer
+        chromeOverlays={chromeOverlays}
+        chromeScrollX={chromeScrollX}
+        chromeViewportWidth={chromeViewportWidth}
+        height={height}
+      />
     </>
   );
 }

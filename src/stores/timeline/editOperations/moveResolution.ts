@@ -19,6 +19,7 @@ import {
   createOverlapResolution,
   createResistance,
   doTimeRangesOverlap,
+  findAlternativeTrack,
   findLinkedClip,
   isCoveredByRange,
   isTrackLocked,
@@ -318,10 +319,47 @@ function createResolvedMove(
       draft.clip.duration,
       excludeClipIds,
     );
-  const resolvedStartTime = Math.max(0, followerResistanceResult?.startTime ?? rawResolvedStartTime);
-  const resistance = draft.isLeadClip
+  let finalResolvedTrackId = resolvedTrackId;
+  let resolvedStartTime = Math.max(0, followerResistanceResult?.startTime ?? rawResolvedStartTime);
+  let resistance = draft.isLeadClip
     ? lead.resistance
     : createResistance(followerResistanceResult, rawResolvedStartTime);
+  let followerFallbackTrack = createFallbackTrackResolution();
+
+  if (!draft.isLeadClip && followerResistanceResult?.noFreeSpace) {
+    const alternative = findAlternativeTrack(
+      input,
+      draft.clip,
+      resolvedTrackId,
+      rawResolvedStartTime,
+      excludeClipIds,
+    );
+    if (alternative) {
+      finalResolvedTrackId = alternative.track.id;
+      resolvedStartTime = Math.max(0, alternative.result.startTime);
+      resistance = createResistance(alternative.result, rawResolvedStartTime);
+    } else {
+      const requestedTrack = input.tracks.find(track => track.id === resolvedTrackId);
+      const fallbackTrackType = requestedTrack?.type === 'audio' || draft.clip.source?.type === 'audio'
+        ? 'audio'
+        : 'video';
+      const provisionalTrackId = createFallbackTrackProvisionalId(fallbackTrackType);
+      followerFallbackTrack = {
+        createFallbackTrack: true,
+        requestedNewTrackType: fallbackTrackType,
+        fallbackTrackType,
+        provisionalTrackId,
+        reason: 'missing-compatible-track',
+      };
+      finalResolvedTrackId = provisionalTrackId;
+      resolvedStartTime = Math.max(0, rawResolvedStartTime);
+      resistance = {
+        mode: 'new-track-zone',
+        applied: true,
+        forcingOverlap: false,
+      };
+    }
+  }
 
   return {
     clipId: draft.clip.id,
@@ -330,12 +368,12 @@ function createResolvedMove(
     requestedStartTime: draft.requestedStartTime,
     requestedTrackId: draft.requestedTrackId,
     resolvedStartTime,
-    resolvedTrackId,
+    resolvedTrackId: finalResolvedTrackId,
     timelineDelta: resolvedStartTime - draft.clip.startTime,
     isLeadClip: draft.isLeadClip,
     snapping: draft.isLeadClip ? lead.snapping : createNoSnap(draft.requestedStartTime),
     resistance,
-    fallbackTrack: draft.isLeadClip ? lead.fallbackTrack : createFallbackTrackResolution(),
+    fallbackTrack: draft.isLeadClip ? lead.fallbackTrack : followerFallbackTrack,
     overlap: draft.isLeadClip ? lead.overlap : createOverlapResolution(resistance.forcingOverlap === true),
     linked: draft.linked,
     linkedGroup: draft.linkedGroup,

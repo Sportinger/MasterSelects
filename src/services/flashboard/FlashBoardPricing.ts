@@ -51,14 +51,15 @@ export interface FlashBoardPricingInput {
   service: PricingService;
   text?: string;
   hasVideoInput?: boolean;
+  videoInputDuration?: number;
 }
 
-function normalizeVideoDuration(value: number | undefined, min = 3): number {
+function normalizeVideoDuration(value: number | undefined, min = 3, max = 15): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return Math.max(min, 5);
   }
 
-  return Math.max(min, Math.min(15, Math.floor(value)));
+  return Math.max(min, Math.min(max, Math.floor(value)));
 }
 
 function normalizeMode(value: string | undefined): string {
@@ -139,9 +140,14 @@ function buildHostedElevenLabsEstimate(input: FlashBoardPricingInput): FlashBoar
 }
 
 function calculateHostedSeedanceAmount(input: FlashBoardPricingInput): number {
-  const duration = normalizeVideoDuration(input.duration, 4);
+  const duration = normalizeVideoDuration(
+    input.duration,
+    4,
+    input.providerId === 'bytedance/seedance-2-5' ? 30 : 15,
+  );
   const kieCredits = calculateKieAiCost(input.providerId, input.mode ?? '720p', duration, false, {
     hasVideoInput: input.hasVideoInput,
+    videoInputDuration: input.videoInputDuration,
   });
   return Math.ceil(kieCredits * HOSTED_KIE_CREDIT_MULTIPLIER);
 }
@@ -222,11 +228,13 @@ export function getCatalogEntryPriceEstimate(
   return getFlashBoardPriceEstimate({
     duration: entry.durations.includes(overrides.duration ?? -1) ? overrides.duration : entry.durations[0],
     generateAudio: overrides.generateAudio ?? false,
+    hasVideoInput: overrides.hasVideoInput,
     imageSize: entry.imageSizes?.includes(overrides.imageSize ?? '') ? overrides.imageSize : entry.imageSizes?.[0],
     mode: entry.modes.includes(overrides.mode ?? '') ? overrides.mode : entry.modes[0],
     multiShots: overrides.multiShots ?? false,
     outputType: overrides.outputType ?? entry.outputType,
     providerId: entry.providerId,
     service: entry.service,
+    videoInputDuration: overrides.videoInputDuration,
   });
 }

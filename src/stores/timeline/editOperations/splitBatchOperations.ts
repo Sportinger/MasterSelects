@@ -9,6 +9,7 @@ import {
   clearMotionParentsPreservingWorld,
   type MotionParentWorldPreservationContext,
 } from './motionParentWorldPreservation';
+import { copyFlockKeyframesToClipParts } from './flockClipKeyframes';
 
 const SPLIT_EPSILON = 0.001;
 
@@ -52,6 +53,7 @@ export function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
       ? { storyboardProperties: cloneStoryboardClipProperties(clip.storyboardProperties) }
       : {}),
     ...(clip.motion ? { motion: structuredClone(clip.motion) } : {}),
+    ...(clip.flock ? { flock: structuredClone(clip.flock) } : {}),
   };
 }
 
@@ -389,6 +391,14 @@ export function applySplitAtTimesOperation(
     transitionRemappedClips,
     parentReplacements,
   );
+  const keyframeSource = nextClipKeyframes ?? parentPreservation?.clipKeyframes;
+  if (clip.source?.type === 'flock' && keyframeSource) {
+    nextClipKeyframes = copyFlockKeyframesToClipParts(
+      keyframeSource,
+      clip.id,
+      newParts.map((part) => part.id),
+    ) ?? nextClipKeyframes;
+  }
 
   return {
     clips: finalClips,

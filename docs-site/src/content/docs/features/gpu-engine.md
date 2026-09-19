@@ -48,6 +48,38 @@ The engine supports:
 - Preview canvases and output windows are reconfigured after device restore.
 - HMR reuses the engine singleton when possible.
 
+### Initialization Failures And Device Recovery
+
+Startup distinguishes missing WebGPU, an unavailable adapter, adapter/device
+request timeouts, and renderer-resource failures. The preview displays the
+specific failure instead of describing every failure as incompatible hardware.
+A timed-out request can still be pending inside the browser, so recovery does
+not queue additional requests behind it. Late GPU devices are destroyed.
+
+After unexpected device loss, the context drops the lost device after cache
+cleanup and makes up to three recovery attempts for settled failures. Recovery
+waits for asynchronous renderer resources before making the preview ready.
+Timeouts and unsupported runtimes terminate with a visible error rather than
+an indefinite loading state. Destroy/reinitialize invalidates older recovery
+work, and retained output canvases are rebound to the replacement device.
+
+Targeted coverage: `webgpuContext.test.ts`, `contextRecoveryWiring.test.ts`,
+and `outputCanvasRecovery.test.ts` under `tests/unit/`.
+
+### Boot Health And GPU Hazard Recovery
+
+Risky GPU startup records a release-scoped boot attempt in `bootHealth.ts`.
+Three interrupted attempts inside 24 hours activate a GPU hazard for that
+release and route canvas policy through the existing software fallback. An
+attempt becomes healthy only after the active render mode proves a readable
+frame; worker submission alone is not treated as pixel proof.
+
+Device loss records the same hazard signal. The visible warning offers a
+manual **Retry GPU** action that clears the safety state and reloads the app.
+Clean `pagehide` completion and a three-second settled startup prevent normal
+reloads from being counted as crashes. Runtime owners and the engine singleton
+remain HMR-safe.
+
 ---
 
 ## Texture Paths
@@ -57,6 +89,7 @@ The engine supports:
 - `HTMLVideoElement` is imported as an external texture when the browser supports it.
 - `VideoFrame` can also be imported as an external texture.
 - Firefox preview uses copied textures instead of external video import because imported frames can intermittently go black.
+- Android Chromium copies HTML-video preview frames into persistent GPU textures during playback, pause, and seeking because its external video textures can otherwise present intermittent black frames.
 
 ### Images And Canvas
 
@@ -127,6 +160,7 @@ This is why preview can stay stable during seeks while a fresh frame is pending.
 ### OutputPipeline
 
 - The output pipeline uses separate uniform buffers for transparency grid off/on and stacked-alpha export.
+- Full-frame output and compositor passes draw one oversized triangle, avoiding a diagonal seam or missing half-frame when a mobile WebGPU driver drops one primitive from a two-triangle quad.
 - `renderToCanvas()` catches canvas-context loss and simply skips that target for the frame.
 - Bind-group caches are separate per output mode.
 

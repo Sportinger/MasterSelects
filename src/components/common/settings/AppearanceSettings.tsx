@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useSettingsStore, type ThemeMode } from '../../../stores/settingsStore';
 import {
   MAX_INTERFACE_TEXT_SCALE,
@@ -15,6 +16,16 @@ const themeOptions: { id: ThemeMode; label: string; bg: string; bar: string; acc
   { id: 'custom',   label: 'Custom',   bg: 'linear-gradient(135deg, hsl(210,30%,12%) 0%, hsl(210,30%,22%) 100%)', bar: 'hsl(210,30%,8%)', accent: 'hsl(210,70%,55%)' },
 ];
 
+const resolveThemeOption = {
+  id: 'resolve',
+  label: 'Resolve',
+  bg: '#202126',
+  bar: '#17181a',
+  accent: '#2996cc',
+} satisfies { id: ThemeMode; label: string; bg: string; bar: string; accent: string };
+
+const RESOLVE_CHEAT_SEQUENCE = ['Digit1', 'Digit2', 'Digit3', 'Digit4'] as const;
+
 /** Convert hue to a CSS color for the preview swatch */
 function hueToPreviewBg(hue: number, brightness: number): string {
   const isLight = brightness > 50;
@@ -25,6 +36,8 @@ function hueToPreviewBg(hue: number, brightness: number): string {
 export function AppearanceSettings() {
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
+  const resolveThemeUnlocked = useSettingsStore((s) => s.resolveThemeUnlocked);
+  const unlockResolveTheme = useSettingsStore((s) => s.unlockResolveTheme);
   const customHue = useSettingsStore((s) => s.customHue);
   const customBrightness = useSettingsStore((s) => s.customBrightness);
   const setCustomHue = useSettingsStore((s) => s.setCustomHue);
@@ -33,12 +46,47 @@ export function AppearanceSettings() {
   const setAudioMixerWoodThemeEnabled = useSettingsStore((s) => s.setAudioMixerWoodThemeEnabled);
   const mediaPanelWoodThemeEnabled = useSettingsStore((s) => s.mediaPanelWoodThemeEnabled);
   const setMediaPanelWoodThemeEnabled = useSettingsStore((s) => s.setMediaPanelWoodThemeEnabled);
+  const touchGooEnabled = useSettingsStore((s) => s.touchGooEnabled);
+  const setTouchGooEnabled = useSettingsStore((s) => s.setTouchGooEnabled);
   const interfaceTextScale = useUiSettingsStore((s) => s.interfaceTextScale);
   const setInterfaceTextScale = useUiSettingsStore((s) => s.setInterfaceTextScale);
   const interfaceFontFamily = useUiSettingsStore((s) => s.interfaceFontFamily);
   const setInterfaceFontFamily = useUiSettingsStore((s) => s.setInterfaceFontFamily);
   const highReadabilityMode = useUiSettingsStore((s) => s.highReadabilityMode);
   const setHighReadabilityMode = useUiSettingsStore((s) => s.setHighReadabilityMode);
+  const resolveCheatIndexRef = useRef(0);
+
+  useEffect(() => {
+    if (resolveThemeUnlocked) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      if (!event.shiftKey) {
+        resolveCheatIndexRef.current = 0;
+        return;
+      }
+
+      const expectedCode = RESOLVE_CHEAT_SEQUENCE[resolveCheatIndexRef.current];
+      if (event.code === expectedCode) {
+        event.preventDefault();
+        resolveCheatIndexRef.current += 1;
+        if (resolveCheatIndexRef.current === RESOLVE_CHEAT_SEQUENCE.length) {
+          resolveCheatIndexRef.current = 0;
+          unlockResolveTheme();
+        }
+        return;
+      }
+
+      resolveCheatIndexRef.current = event.code === RESOLVE_CHEAT_SEQUENCE[0] ? 1 : 0;
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [resolveThemeUnlocked, unlockResolveTheme]);
+
+  const visibleThemeOptions = resolveThemeUnlocked
+    ? [themeOptions[0], resolveThemeOption, ...themeOptions.slice(1)]
+    : themeOptions;
 
   return (
     <div className="settings-category-content">
@@ -118,9 +166,22 @@ export function AppearanceSettings() {
       </div>
 
       <div className="settings-group">
+        <div className="settings-group-title">Touch</div>
+        <label className="settings-row">
+          <span className="settings-label">Goo touch feedback</span>
+          <input
+            type="checkbox"
+            checked={touchGooEnabled}
+            onChange={(event) => setTouchGooEnabled(event.target.checked)}
+            className="settings-checkbox"
+          />
+        </label>
+      </div>
+
+      <div className="settings-group">
         <div className="settings-group-title">Theme</div>
         <div className="theme-selector">
-          {themeOptions.map((opt) => {
+          {visibleThemeOptions.map((opt) => {
             const isCustomCard = opt.id === 'custom';
             const bg = isCustomCard ? hueToPreviewBg(customHue, customBrightness) : opt.bg;
             const bar = isCustomCard ? `hsl(${customHue},15%,${customBrightness > 50 ? 78 : 8}%)` : opt.bar;

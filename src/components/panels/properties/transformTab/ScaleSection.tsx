@@ -55,47 +55,84 @@ export function ScaleSection({
       <div className="control-row transform-param-row">
         <span className="keyframe-toggle-placeholder" />
         <label className="prop-label">Scale</label>
-        <div className="multi-value-row">
-          <LabeledValue
-            label="All"
-            value={scaleValues.scaleAllPct}
-            onChange={onScaleAllChange}
-            defaultValue={100}
-            decimals={1}
-            suffix="%"
-            min={1}
-            sensitivity={1}
-            onDragStart={onBatchStart}
-            onDragEnd={onBatchEnd}
-            keyframeToggle={<KeyframeToggle clipId={clipId} property="scale.all" value={scaleValues.scaleAll} />}
-            midiTarget={createMidiTarget('scale.all', 'Scale All', scaleValues.scaleAll, 0.01, 4)}
-          />
-          <LabeledValue
-            label="X"
-            value={scaleValues.scaleXPct}
-            onChange={onScaleXChange}
-            defaultValue={100}
-            decimals={1}
-            suffix="%"
-            sensitivity={1}
-            onDragStart={onBatchStart}
-            onDragEnd={onBatchEnd}
-            keyframeToggle={<KeyframeToggle clipId={clipId} property="scale.x" value={transform.scale.x} />}
-            midiTarget={createMidiTarget('scale.x', 'Scale X', transform.scale.x, -4, 4)}
-          />
-          <LabeledValue
-            label="Y"
-            value={scaleValues.scaleYPct}
-            onChange={onScaleYChange}
-            defaultValue={100}
-            decimals={1}
-            suffix="%"
-            sensitivity={1}
-            onDragStart={onBatchStart}
-            onDragEnd={onBatchEnd}
-            keyframeToggle={<KeyframeToggle clipId={clipId} property="scale.y" value={transform.scale.y} />}
-            midiTarget={createMidiTarget('scale.y', 'Scale Y', transform.scale.y, -4, 4)}
-          />
+        <div className="multi-value-row scale-multi-value-row">
+          <div className="scale-value-with-action">
+            <LabeledValue
+              label="All"
+              value={scaleValues.scaleAllPct}
+              onChange={onScaleAllChange}
+              defaultValue={100}
+              decimals={1}
+              suffix="%"
+              min={1}
+              sensitivity={1}
+              onDragStart={onBatchStart}
+              onDragEnd={onBatchEnd}
+              keyframeToggle={<KeyframeToggle clipId={clipId} property="scale.all" value={scaleValues.scaleAll} />}
+              midiTarget={createMidiTarget('scale.all', 'Scale All', scaleValues.scaleAll, 0.01, 4)}
+            />
+            {onFitToFrame && (
+              <button
+                type="button"
+                className="scale-fit-button"
+                onClick={onFitToFrame}
+                aria-label="Fit source to composition"
+                title="Fit source to composition"
+              >
+                Fit
+              </button>
+            )}
+          </div>
+          <div className="scale-value-with-action">
+            <LabeledValue
+              label="X"
+              value={scaleValues.scaleXPct}
+              onChange={onScaleXChange}
+              defaultValue={100}
+              decimals={1}
+              suffix="%"
+              sensitivity={1}
+              onDragStart={onBatchStart}
+              onDragEnd={onBatchEnd}
+              keyframeToggle={<KeyframeToggle clipId={clipId} property="scale.x" value={transform.scale.x} />}
+              midiTarget={createMidiTarget('scale.x', 'Scale X', transform.scale.x, -4, 4)}
+            />
+            <button
+              type="button"
+              className={`scale-flip-button${transform.scale.x < 0 ? ' is-active' : ''}`}
+              onClick={onFlipX}
+              aria-label="Flip horizontal"
+              aria-pressed={transform.scale.x < 0}
+              title="Flip horizontal (Scale X)"
+            >
+              <ScaleFlipIcon axis="x" />
+            </button>
+          </div>
+          <div className="scale-value-with-action">
+            <LabeledValue
+              label="Y"
+              value={scaleValues.scaleYPct}
+              onChange={onScaleYChange}
+              defaultValue={100}
+              decimals={1}
+              suffix="%"
+              sensitivity={1}
+              onDragStart={onBatchStart}
+              onDragEnd={onBatchEnd}
+              keyframeToggle={<KeyframeToggle clipId={clipId} property="scale.y" value={transform.scale.y} />}
+              midiTarget={createMidiTarget('scale.y', 'Scale Y', transform.scale.y, -4, 4)}
+            />
+            <button
+              type="button"
+              className={`scale-flip-button${transform.scale.y < 0 ? ' is-active' : ''}`}
+              onClick={onFlipY}
+              aria-label="Flip vertical"
+              aria-pressed={transform.scale.y < 0}
+              title="Flip vertical (Scale Y)"
+            >
+              <ScaleFlipIcon axis="y" />
+            </button>
+          </div>
           {supportsScaleZ && (
             <LabeledValue
               label="Z"
@@ -112,39 +149,6 @@ export function ScaleSection({
               midiTarget={createMidiTarget('scale.z', 'Scale Z', transform.scale.z ?? 1, 0.01, 4)}
             />
           )}
-          <div className="scale-flip-controls" role="group" aria-label="Scale actions">
-            {onFitToFrame && (
-              <button
-                type="button"
-                className="scale-fit-button"
-                onClick={onFitToFrame}
-                aria-label="Fit source to composition"
-                title="Fit source to composition"
-              >
-                Fit
-              </button>
-            )}
-            <button
-              type="button"
-              className={`scale-flip-button${transform.scale.x < 0 ? ' is-active' : ''}`}
-              onClick={onFlipX}
-              aria-label="Flip horizontal"
-              aria-pressed={transform.scale.x < 0}
-              title="Flip horizontal (Scale X)"
-            >
-              <ScaleFlipIcon axis="x" />
-            </button>
-            <button
-              type="button"
-              className={`scale-flip-button${transform.scale.y < 0 ? ' is-active' : ''}`}
-              onClick={onFlipY}
-              aria-label="Flip vertical"
-              aria-pressed={transform.scale.y < 0}
-              title="Flip vertical (Scale Y)"
-            >
-              <ScaleFlipIcon axis="y" />
-            </button>
-          </div>
         </div>
       </div>
     </div>

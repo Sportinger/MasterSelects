@@ -5,6 +5,7 @@ import type {
   SolidItem,
 } from '../../../../stores/mediaStore';
 import { isImportedMediaFileItem } from '../itemTypeGuards';
+import type { TrackingAsset } from '../../../../types/trackingAsset';
 
 interface GetMediaContextSelectedItemStateInput {
   itemId?: string;
@@ -16,6 +17,7 @@ export interface MediaContextSelectedItemState {
   mediaFile: MediaFile | null;
   composition: Composition | null;
   solidItem: SolidItem | null;
+  trackingAsset: TrackingAsset | null;
 }
 
 function isCompositionItem(item: ProjectItem | null): item is Composition {
@@ -24,6 +26,10 @@ function isCompositionItem(item: ProjectItem | null): item is Composition {
 
 function isSolidItem(item: ProjectItem | null): item is SolidItem {
   return Boolean(item && 'type' in item && item.type === 'solid');
+}
+
+function isTrackingAsset(item: ProjectItem | null): item is TrackingAsset {
+  return Boolean(item && 'type' in item && item.type === 'tracking');
 }
 
 export function getMediaContextSelectedItemState({
@@ -37,5 +43,6 @@ export function getMediaContextSelectedItemState({
     mediaFile: selectedItem && isImportedMediaFileItem(selectedItem) ? selectedItem : null,
     composition: isCompositionItem(selectedItem) ? selectedItem : null,
     solidItem: isSolidItem(selectedItem) ? selectedItem : null,
+    trackingAsset: isTrackingAsset(selectedItem) ? selectedItem : null,
   };
 }

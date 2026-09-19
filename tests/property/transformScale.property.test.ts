@@ -58,7 +58,9 @@ describe('transformScale property invariants', () => {
           const expected = {
             x: fallbackNumber(scale.x, 1) * all,
             y: fallbackNumber(scale.y, 1) * all,
-            ...(scale.z !== undefined ? { z: fallbackNumber(scale.z, 1) * all } : {}),
+            ...(scale.z !== undefined || scale.all !== undefined
+              ? { z: fallbackNumber(scale.z, 1) * all }
+              : {}),
           };
 
           expect(effective).toEqual(expected);
@@ -106,7 +108,7 @@ describe('transformScale property invariants', () => {
   it('treats uniform scale as equivalent x and y axis scale when axes are omitted', () => {
     fc.assert(
       fc.property(finiteScale, (all) => {
-        expect(getEffectiveScale({ all })).toEqual({ x: all, y: all });
+        expect(getEffectiveScale({ all })).toEqual({ x: all, y: all, z: all });
         expect(getEffectiveCameraScale({ all })).toEqual({ x: all, y: all });
       }),
       propertyConfig,

@@ -13,7 +13,6 @@ import { layerPlaybackManager } from '../../services/layerPlaybackManager';
 import { slotDeckManager } from '../../services/slotDeckManager';
 import { getSlotGridLabel } from '../../services/midi/midiMappingSummary';
 import { flags } from '../../engine/featureFlags';
-import { animateSlotGrid } from './slotGridAnimation';
 import { MiniTimeline } from './MiniTimeline';
 import { SlotGridDeckBadge } from './components/SlotGridDeckBadge';
 import { SlotGridTimeOverlay } from './components/SlotGridTimeOverlay';
@@ -23,6 +22,12 @@ import './SlotGrid.css';
 
 interface SlotGridProps {
   opacity: number;
+  onShowTimeline?: () => void;
+  /**
+   * Standalone panel hosting (dockable Slot Grid panel): slot-mode playback
+   * semantics apply regardless of the timeline's morph progress.
+   */
+  standalone?: boolean;
 }
 
 const SLOT_SIZE = 100; // fixed slot size in px
@@ -32,8 +37,37 @@ const TOTAL_SLOTS = GRID_COLS * GRID_ROWS;
 const LABEL_WIDTH = 40;
 const EMPTY_SLOT_DECK_STATES: Record<number, SlotDeckState> = {};
 
-export function SlotGrid({ opacity }: SlotGridProps) {
+// The timeline overlay and the dockable Slot Grid panel can be mounted at the
+// same time, but layer-playback sync must run exactly once. The first mounted
+// instance owns the sync; on transfer the next owner seeds from the last
+// synced state so already-playing layers are not restarted.
+const slotGridSyncInstances: symbol[] = [];
+const slotGridSyncListeners = new Set<() => void>();
+let lastKnownDesiredLayerSlots: Record<number, string> | null = null;
+
+function useIsSlotGridSyncOwner(): boolean {
+  const idRef = useRef<symbol | null>(null);
+  idRef.current ??= Symbol('slot-grid-sync');
+  const [isOwner, setIsOwner] = useState(false);
+  useEffect(() => {
+    const id = idRef.current!;
+    const update = () => setIsOwner(slotGridSyncInstances[0] === id);
+    slotGridSyncListeners.add(update);
+    slotGridSyncInstances.push(id);
+    slotGridSyncListeners.forEach(listener => listener());
+    return () => {
+      slotGridSyncListeners.delete(update);
+      const index = slotGridSyncInstances.indexOf(id);
+      if (index >= 0) slotGridSyncInstances.splice(index, 1);
+      slotGridSyncListeners.forEach(listener => listener());
+    };
+  }, []);
+  return isOwner;
+}
+
+export function SlotGrid({ opacity, onShowTimeline, standalone = false }: SlotGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const isSyncOwner = useIsSlotGridSyncOwner();
 
   const slotGridProgress = useTimelineStore(state => state.slotGridProgress);
   const activeCompositionId = useMediaStore(state => state.activeCompositionId);
@@ -124,8 +158,15 @@ export function SlotGrid({ opacity }: SlotGridProps) {
   // This handles: slot assignment changes, AND editor comp switches (which change which layers
   // are "background" vs "editor-managed" even if activeLayerSlots didn't change)
   useEffect(() => {
+    if (!isSyncOwner) return;
     const { compositions } = useMediaStore.getState();
-    const slotModeActive = slotGridProgress > 0.5;
+    const slotModeActive = standalone || slotGridProgress > 0.5;
+
+    // A fresh owner taking over from a previous instance seeds from the last
+    // synced state instead of replaying every activation from scratch.
+    if (lastKnownDesiredLayerSlots && Object.keys(prevDesiredRef.current).length === 0) {
+      prevDesiredRef.current = lastKnownDesiredLayerSlots;
+    }
 
     const desired: Record<number, string> = {};
     for (const [key, compId] of Object.entries(activeLayerSlots)) {
@@ -162,7 +203,8 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     }
 
     prevDesiredRef.current = desired;
-  }, [activeLayerSlots, activeCompositionId, slotAssignments, slotGridProgress]);
+    lastKnownDesiredLayerSlots = desired;
+  }, [activeLayerSlots, activeCompositionId, slotAssignments, slotGridProgress, isSyncOwner, standalone]);
 
   // Dismiss context menu on click-outside
   useEffect(() => {
@@ -180,10 +222,7 @@ export function SlotGrid({ opacity }: SlotGridProps) {
     const handleWheel = (e: WheelEvent) => {
       if (e.ctrlKey && e.shiftKey) {
         e.preventDefault();
-        if (e.deltaY > 0) {
-          // Zoom out → show grid (always allowed)
-          animateSlotGrid(1);
-        } else {
+        if (e.deltaY < 0) {
           // Zoom in → back to timeline, only if hovering a filled slot
           const target = e.target as HTMLElement;
           const slotEl = target.closest('.slot-grid-item:not(.empty)');
@@ -192,7 +231,7 @@ export function SlotGrid({ opacity }: SlotGridProps) {
           if (compId) {
             useMediaStore.getState().openCompositionTab(compId, { skipAnimation: true });
           }
-          animateSlotGrid(0);
+          onShowTimeline?.();
         }
       } else {
         // Stop propagation so timeline's wheel handler doesn't preventDefault
@@ -203,7 +242,7 @@ export function SlotGrid({ opacity }: SlotGridProps) {
 
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
-  }, []);
+  }, [onShowTimeline]);
 
   const openSlotInEditor = useCallback((compId: string) => {
     const mediaState = useMediaStore.getState();

@@ -1,11 +1,17 @@
 export {
   buildClipNodeGraph,
+  buildClipColorNodeGraph,
+  buildClipNodeGraphDocument,
   addClipCustomNodeDefinition,
   cloneClipNodeGraph,
   connectClipNodeGraphPorts,
   createClipAICustomNodeDefinition,
   createClipNodeGraphState,
   disconnectClipNodeGraphEdge,
+  clipSupportsColorGraph,
+  getClipColorGraphId,
+  getNodeGraphDocumentGraph,
+  getNodeGraphView,
   hideClipBuiltInNode,
   removeClipCustomNodeDefinition,
   reconcileClipNodeGraphState,
@@ -16,11 +22,19 @@ export {
 } from './clipGraphProjection';
 export type { ClipNodeGraphBuildOptions } from './clipGraphProjection';
 export {
+  buildClipFlockNodeGraph,
+  clipSupportsFlockGraph,
+  getClipFlockGraphId,
+  getFlockPortType,
+  getNodeGraphPortCompatibilityKey,
+} from './clipGraphProjection';
+export {
   clearAINodeRuntimeCache,
   clearAINodeRuntimeCacheForClip,
   hasRunnableAINodes,
   renderClipAINodesToCanvas,
   sortPixelsTexture,
+  waitForAINodeRuntimeIdle,
 } from './aiNodeRuntime';
 export {
   buildAINodeAuthoringContext,
@@ -31,6 +45,9 @@ export {
   mergeAINodeParamDefaults,
   stripAINodeCodeFence,
 } from './aiNodeDefinition';
+export {
+  validateAINodeGeneratedCode,
+} from './aiNodeCodeValidation';
 export type {
   ClipNodeGraph,
   ClipNodeGraphBacking,
@@ -48,9 +65,12 @@ export type {
   ClipNodeGraphForcedBuiltIn,
   NodeGraph,
   NodeGraphConnectionRequest,
+  NodeGraphDocument,
+  NodeGraphDomain,
   NodeGraphEdge,
   NodeGraphLayout,
   NodeGraphNode,
+  NodeGraphNodeBinding,
   NodeGraphNodeKind,
   NodeGraphOwner,
   NodeGraphPort,
@@ -58,4 +78,6 @@ export type {
   NodeGraphPortMetadata,
   NodeGraphRuntimeKind,
   NodeGraphSignalType,
+  NodeGraphView,
+  NodeGraphViewTheme,
 } from './types';

@@ -80,15 +80,13 @@ import {
   getZoomGlyphClass,
   isDirectionOption,
 } from './transitionChoiceMetadata';
+import { DatamoshBakeSection } from './DatamoshBakeSection';
+import { TransitionControlsSections } from './TransitionControlsSections';
 
 interface TransitionTabProps {
   clip: TimelineClip;
   edge: 'in' | 'out';
   transitionId: string;
-}
-
-function formatSeconds(value: number): string {
-  return `${value.toFixed(2)}s`;
 }
 
 function isAudioClip(clip: TimelineClip | null): boolean {
@@ -115,12 +113,9 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
     return allTransitions;
   }, [clip, linkedClip]);
   const availableTransitionOptionGroups = useMemo(
-    () => getTransitionSelectOptionGroups(availableTransitions),
-    [availableTransitions]
+    () => getTransitionSelectOptionGroups(availableTransitions), [availableTransitions]
   );
-  const activeEditPreview = transitionEditPreview?.transitionId === transition?.id
-    ? transitionEditPreview
-    : null;
+  const activeEditPreview = transitionEditPreview?.transitionId === transition?.id ? transitionEditPreview : null;
   const displayDuration = activeEditPreview?.duration ?? transition?.duration ?? 0;
   const displayOffset = activeEditPreview?.offset ?? transition?.offset ?? 0;
 
@@ -241,7 +236,15 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
     }
   }, [applyTimelineEditOperation, clearPropertiesSelection, clip.id, edge, transition, transitionId]);
 
-  if (!transition || transition.id !== transitionId || !definition || !linkedClip || !plan) {
+  if (
+    !transition
+    || transition.id !== transitionId
+    || !definition
+    || !linkedClip
+    || !outgoingClip
+    || !incomingClip
+    || !plan
+  ) {
     return (
       <div className="panel-empty">
         <p>Select an active transition to edit its parameters.</p>
@@ -278,6 +281,7 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
     : '#000000';
   const params = definition.params
     ? Object.entries(definition.params)
+      .filter(([, param]) => param.hidden !== true)
       .filter(([paramId]) => !(isAudioOnlyTransition && paramId === 'includeAudio'))
       .filter(([paramId]) => !handledParamIds.has(paramId))
     : [];
@@ -308,7 +312,9 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
         </div>
         <div className="control-row">
           <span className="prop-label">Edge</span>
-          <span className="transition-static-value">Centered on cut</span>
+          <span className="transition-static-value">
+            {definition.defaultPlacement === 'start-at-cut' ? 'After cut' : 'Centered on cut'}
+          </span>
         </div>
         <div className="control-row">
           <span className="prop-label">Policy</span>
@@ -661,99 +667,29 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
         </section>
       ) : null}
 
-      <section className="properties-section">
-        <h4>Timing</h4>
-        <div className="control-row transition-duration-row">
-          <label className="prop-label" htmlFor="transition-duration-input">Duration</label>
-          <input
-            id="transition-duration-input"
-            type="number"
-            min={definition.minDuration}
-            step={0.05}
-            value={Number(duration.toFixed(3))}
-            onChange={(event) => updateDuration(Number(event.currentTarget.value))}
-          />
-          <span className="transition-static-value">{formatSeconds(plan.bodyStart)} - {formatSeconds(plan.bodyEnd)}</span>
-        </div>
-      </section>
+      {transition.type === 'datamosh' ? (
+        <DatamoshBakeSection
+          transition={transition}
+          outgoingClip={outgoingClip}
+          incomingClip={incomingClip}
+          ownerClipId={clip.id}
+          edge={edge}
+          duration={duration}
+        />
+      ) : null}
 
-      <section className="properties-section">
-        <h4>Source Handles</h4>
-        <div className="control-row">
-          <span className="prop-label">Real</span>
-          <span className="transition-static-value">{formatSeconds(realHandleDuration)}</span>
-        </div>
-        <div className="control-row">
-          <span className="prop-label">Hold</span>
-          <span className={holdDuration > 0 ? 'transition-hold-value' : 'transition-static-value'}>
-            {formatSeconds(holdDuration)}
-          </span>
-        </div>
-      </section>
-
-      <section className="properties-section">
-        <h4>Parameters</h4>
-        {params.length === 0 ? (
-          <div className="transition-static-value">No additional parameters</div>
-        ) : params.map(([paramId, param]) => {
-          const value = getTransitionParamValue(transition, definition, paramId);
-          if (param.type === 'boolean') {
-            return (
-              <label className="control-row transition-param-row transition-checkbox-row" key={paramId}>
-                <span className="prop-label">{param.label}</span>
-                <input
-                  type="checkbox"
-                  checked={value === true}
-                  onChange={(event) => updateParam(paramId, event.currentTarget.checked)}
-                />
-              </label>
-            );
-          }
-          if (param.type === 'number') {
-            return (
-              <div className="control-row transition-param-row" key={paramId}>
-                <label className="prop-label" htmlFor={`transition-param-${paramId}`}>{param.label}</label>
-                <input
-                  id={`transition-param-${paramId}`}
-                  type="number"
-                  min={param.min}
-                  max={param.max}
-                  step={param.step ?? 0.01}
-                  value={typeof value === 'number' ? value : Number(param.defaultValue)}
-                  onChange={(event) => updateParam(paramId, Number(event.currentTarget.value))}
-                />
-              </div>
-            );
-          }
-          if (param.type === 'select') {
-            return (
-              <div className="control-row transition-param-row" key={paramId}>
-                <label className="prop-label" htmlFor={`transition-param-${paramId}`}>{param.label}</label>
-                <select
-                  id={`transition-param-${paramId}`}
-                  value={String(value ?? param.defaultValue)}
-                  onChange={(event) => updateParam(paramId, event.currentTarget.value)}
-                >
-                  {(param.options ?? []).map(option => (
-                    <option key={String(option.value)} value={String(option.value)}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-            );
-          }
-          return (
-            <div className="control-row transition-param-row" key={paramId}>
-              <label className="prop-label" htmlFor={`transition-param-${paramId}`}>{param.label}</label>
-              <input
-                id={`transition-param-${paramId}`}
-                type={param.type === 'color' ? 'color' : 'text'}
-                value={String(value ?? param.defaultValue)}
-                onChange={(event) => updateParam(paramId, event.currentTarget.value)}
-              />
-            </div>
-          );
-        })}
-      </section>
+      <TransitionControlsSections
+        definition={definition}
+        transition={transition}
+        duration={duration}
+        bodyStart={plan.bodyStart}
+        bodyEnd={plan.bodyEnd}
+        realHandleDuration={realHandleDuration}
+        holdDuration={holdDuration}
+        params={params}
+        onUpdateDuration={updateDuration}
+        onUpdateParam={updateParam}
+      />
 
       <button className="transition-remove-button" type="button" onClick={removeTransition}>
         Remove Transition

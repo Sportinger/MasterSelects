@@ -87,6 +87,12 @@ export const clipToolDefinitions: ToolDefinition[] = [
             type: 'boolean',
             description: 'Also apply to linked audio/video clip (default: true). Set false to delete only this clip.',
           },
+          deClickFadeSeconds: {
+            type: 'number',
+            minimum: 0,
+            maximum: 0.02,
+            description: 'Automatic audio fade on newly exposed cut edges (default: 0.012 seconds; set 0 to disable)',
+          },
         },
         required: ['clipId'],
       },
@@ -108,6 +114,12 @@ export const clipToolDefinitions: ToolDefinition[] = [
           withLinked: {
             type: 'boolean',
             description: 'Also apply to linked audio/video clips (default: true). Set false to delete only the specified clips.',
+          },
+          deClickFadeSeconds: {
+            type: 'number',
+            minimum: 0,
+            maximum: 0.02,
+            description: 'Automatic audio fade on newly exposed cut edges (default: 0.012 seconds; set 0 to disable)',
           },
         },
         required: ['clipIds'],
@@ -195,6 +207,12 @@ export const clipToolDefinitions: ToolDefinition[] = [
           ripple: {
             type: 'boolean',
             description: 'Close each removed timeline gap by shifting later clips on the affected video/audio tracks (default: false).',
+          },
+          deClickFadeSeconds: {
+            type: 'number',
+            minimum: 0,
+            maximum: 0.02,
+            description: 'Automatic audio fade on every newly exposed cut edge (default: 0.012 seconds; set 0 to disable)',
           },
         },
         required: ['clipId', 'ranges'],
@@ -340,7 +358,12 @@ export const clipToolDefinitions: ToolDefinition[] = [
             type: 'number',
             minimum: 0,
             maximum: 0.02,
-            description: 'Optional automatic audio fade duration on both inserted segment edges (0-0.02 seconds)',
+            description: 'Automatic audio fade duration on both inserted segment edges (default: 0.012 seconds; set 0 to disable)',
+          },
+          visualScaleMode: {
+            type: 'string',
+            enum: ['fit', 'fill', 'original'],
+            description: 'Visual placement mode: fit keeps the whole source visible, fill covers the composition and may crop, original keeps native pixel size. Ignored for audio-only media.',
           },
         },
         required: ['mediaFileId', 'trackId', 'startTime', 'inPoint', 'outPoint'],

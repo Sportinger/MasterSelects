@@ -1,4 +1,11 @@
-import { buildClipNodeGraphView } from './clipGraphProjectionBuildView';
+import {
+  buildClipColorNodeGraph,
+  buildClipNodeGraphDocument,
+  clipSupportsColorGraph,
+  getClipColorGraphId,
+  getNodeGraphDocumentGraph,
+  getNodeGraphView,
+} from './clipGraphDocument';
 export {
   addClipCustomNodeDefinition,
   createClipAICustomNodeDefinition,
@@ -8,7 +15,6 @@ export {
   updateClipCustomNodeDefinition,
 } from './clipGraphProjectionCustomNodes';
 import type { TimelineClip, TimelineTrack } from './clipGraphProjectionDomain';
-import { applyClipNodeGraphState } from './clipGraphProjectionState';
 export type { ClipNodeGraphBuildOptions } from './clipGraphProjectionShared';
 import type { ClipNodeGraphBuildOptions } from './clipGraphProjectionShared';
 export {
@@ -21,11 +27,27 @@ export {
   updateClipNodeGraphLayout,
 } from './clipGraphProjectionState';
 import type { NodeGraph } from './types';
+export {
+  buildClipFlockNodeGraph,
+  clipSupportsFlockGraph,
+  getClipFlockGraphId,
+  getFlockPortType,
+  getNodeGraphPortCompatibilityKey,
+} from './clipGraphFlockProjection';
+
+export {
+  buildClipColorNodeGraph,
+  buildClipNodeGraphDocument,
+  clipSupportsColorGraph,
+  getClipColorGraphId,
+  getNodeGraphDocumentGraph,
+  getNodeGraphView,
+};
 
 export function buildClipNodeGraph(
   clip: TimelineClip,
   track?: TimelineTrack,
   options: ClipNodeGraphBuildOptions = {},
 ): NodeGraph {
-  return applyClipNodeGraphState(buildClipNodeGraphView(clip, track, options), clip.nodeGraph);
+  return getNodeGraphView(buildClipNodeGraphDocument(clip, track, options), 'general');
 }

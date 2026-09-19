@@ -31,8 +31,9 @@ import {
   startRestoredVectorRuntimeRestore,
   type RestoredRuntimePatch,
 } from './vectorRuntimeRestore';
-import { collectNestedClipKeyframes, mergeNestedClipKeyframes } from './nestedComposition/nestedCompositionKeyframes';
+import { collectNestedClipKeyframes, publishNestedClipKeyframes } from './nestedComposition/nestedCompositionKeyframes';
 import { appendNestedTextClip } from './nestedComposition/nestedCompositionTextClip';
+import { pushRestoredNestedFlockClip } from './nestedComposition/nestedFlockRestore';
 import { Logger } from '../../services/logger';
 import { sanitizeTimelineParentRestoreTree } from '../../services/motionDesign/structure/timelineParentRestoreAdapter';
 
@@ -172,6 +173,8 @@ export interface LoadNestedClipsParams {
   isCurrentTimelineSession?: () => boolean;
   applySpatialFieldsWhenSourceMissing?: boolean;
   restoreHooks?: NestedCompositionRestoreHooks;
+  /** Initial-load batching hook. Callers must publish these keyframes before exposing the clips. */
+  deferNestedKeyframeMerge?: (keyframes: ReadonlyMap<string, Keyframe[]>) => void;
   /** Composition IDs above `composition` in the current nesting chain. */
   compositionPath?: readonly string[];
 }
@@ -311,6 +314,8 @@ async function loadSubNestedClips(
       }));
       continue;
     }
+
+    if (pushRestoredNestedFlockClip(result, sc, parentClipId)) continue;
 
     if (sc.sourceType === 'math-scene' && sc.mathScene) {
       const clipId = generateNestedClipId(parentClipId, sc.id);
@@ -475,6 +480,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
     isCurrentTimelineSession,
     applySpatialFieldsWhenSourceMissing = true,
     restoreHooks,
+    deferNestedKeyframeMerge,
     compositionPath: paramsCompositionPath,
   } = params;
 
@@ -580,6 +586,8 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
       });
       continue;
     }
+
+    if (pushRestoredNestedFlockClip(nestedClips, serializedClip, compClipId)) continue;
 
     if (serializedClip.sourceType === 'math-scene' && serializedClip.mathScene) {
       const nestedClipId = generateNestedClipId(compClipId, serializedClip.id);
@@ -739,22 +747,14 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
     nestedClipsWithRemappedParents,
   );
 
-  if (!mergeNestedClipKeyframes({
+  if (!publishNestedClipKeyframes({
     compClipId,
     nestedKeyframes,
     get,
     set,
     isCurrentTimelineSession,
-  })) {
-    return sanitizedNestedClips;
-  }
-
-  if (nestedKeyframes.size > 0) {
-    log.debug('Loaded nested clip keyframes', {
-      compClipId,
-      nestedKeyframeClipCount: nestedKeyframes.size,
-    });
-  }
+    deferNestedKeyframeMerge,
+  })) return sanitizedNestedClips;
 
   return sanitizedNestedClips;
 }

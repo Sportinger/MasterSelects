@@ -1,0 +1,98 @@
+@layer features {
+
+.stream-chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: var(--font-md);
+}
+
+.stream-chat-header {
+  display: grid;
+  flex: none;
+  gap: var(--sp-2);
+}
+
+.stream-chat-header h2 {
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: var(--font-semibold);
+}
+
+.stream-chat-controls {
+  display: grid;
+  grid-template-columns: minmax(86px, 0.7fr) minmax(120px, 1.3fr);
+  gap: var(--sp-2);
+  width: 100%;
+}
+
+.stream-chat-controls label {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.stream-chat-controls label > span {
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+
+.stream-chat-controls select,
+.stream-chat-controls input {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  outline: none;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: var(--font-md);
+}
+
+.stream-chat-controls select:focus,
+.stream-chat-controls input:focus {
+  border-color: var(--accent);
+}
+
+.stream-chat-frame {
+  display: block;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: var(--bg-primary);
+}
+
+.stream-chat-empty {
+  display: grid;
+  flex: 1;
+  place-content: center;
+  gap: var(--sp-1);
+  min-height: 0;
+  padding: var(--sp-4);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.stream-chat-empty p {
+  margin: 0;
+}
+
+.stream-chat-empty span {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+@media (max-width: 320px) {
+  .stream-chat-controls {
+    grid-template-columns: 1fr;
+  }
+}
+
+}

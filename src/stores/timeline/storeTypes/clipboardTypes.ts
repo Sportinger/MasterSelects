@@ -23,6 +23,11 @@ import type { MeshPrimitiveType, SceneCameraSettings } from '../../mediaStore/ty
 import type { MotionParentTransform2D } from '../../../services/motionDesign/structure/contracts';
 
 export interface ClipboardClipData {
+  planarTracks?: import('../../../types/planarTracking').PlanarTrack[];
+  terrainAttachment?: import('../../../types/terrainAttachment').TerrainAttachment;
+  terrainScreenAnchor?: import('../../../types/terrainAttachment').TerrainScreenAnchor;
+  terrainAnchorConnector?: import('../../../types/terrainAttachment').TerrainAnchorConnector;
+  trackingBinding?: import('../../../types/trackingBinding').TrackingBinding;
   id: string;
   trackId: string;
   trackType: 'video' | 'audio' | 'midi';
@@ -61,6 +66,7 @@ export interface ClipboardClipData {
   storyboardProperties?: StoryboardClipProperties;
   transitionOverlay?: TransitionOverlayClipDefinition;
   mathScene?: MathSceneDefinition;
+  flock?: import('../../../types/flock').FlockDefinition;
   motion?: MotionLayerDefinition;
   vectorAnimationSettings?: VectorAnimationClipSettings;
   cameraSettings?: SceneCameraSettings;

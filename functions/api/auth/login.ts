@@ -7,8 +7,20 @@ import {
   isLocalDevelopmentRequest,
 } from '../../lib/auth';
 import { sendMagicLinkEmail } from '../../lib/authProviders';
-import { json, methodNotAllowed, parseJson } from '../../lib/db';
+import { hasSameOriginHeader, json, methodNotAllowed, parseJson } from '../../lib/db';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
+import {
+  buildRateLimitKey,
+  consumeRateLimit,
+  getClientIp,
+  rateLimitedResponse,
+  type RateLimitPolicy,
+} from '../../lib/rateLimit';
+
+/** Login bootstraps one client address may start per window. */
+export const LOGIN_IP_RATE_LIMIT: RateLimitPolicy = { limit: 15, windowSeconds: 15 * 60 };
+/** Magic-link emails one address may request per window. */
+export const LOGIN_EMAIL_RATE_LIMIT: RateLimitPolicy = { limit: 5, windowSeconds: 15 * 60 };
 
 interface LoginBody {
   email?: string;
@@ -29,6 +41,30 @@ function normalizeProvider(provider?: string): 'google' | 'magic_link' {
 export const onRequest: AppRouteHandler = async (context: AppContext): Promise<Response> => {
   if (context.request.method !== 'POST') {
     return methodNotAllowed(['POST']);
+  }
+
+  // Login starts a credential flow (a magic-link email or an OAuth state), so
+  // only first-party pages may trigger it: the Origin header is mandatory.
+  if (!hasSameOriginHeader(context.request)) {
+    return json(
+      {
+        error: 'forbidden_origin',
+        message: 'Sign-in requests must be sent from the MasterSelects site.',
+      },
+      { status: 403 },
+    );
+  }
+
+  const clientIp = getClientIp(context.request);
+  if (clientIp) {
+    const ipBudget = await consumeRateLimit(
+      context.env.KV,
+      await buildRateLimitKey('auth-login:ip', clientIp, context.env.SESSION_SECRET),
+      LOGIN_IP_RATE_LIMIT,
+    );
+    if (!ipBudget.allowed) {
+      return rateLimitedResponse(ipBudget);
+    }
   }
 
   const body = await parseJson<LoginBody>(context.request);
@@ -54,6 +90,17 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       },
       { status: 422 },
     );
+  }
+
+  if (provider === 'magic_link') {
+    const emailBudget = await consumeRateLimit(
+      context.env.KV,
+      await buildRateLimitKey('auth-login:email', email, context.env.SESSION_SECRET),
+      LOGIN_EMAIL_RATE_LIMIT,
+    );
+    if (!emailBudget.allowed) {
+      return rateLimitedResponse(emailBudget);
+    }
   }
 
   const state = await createLoginState(context.env, context.request, {
@@ -125,25 +172,36 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       );
     }
 
+    const debugLink = message.includes('Development debug link');
+
+    // The signed callback URL is the credential itself. It only ever leaves
+    // the server inside the email; the loopback development fallback is the
+    // sole case where the caller may receive it directly.
     return json(
       {
-        delivery: message.includes('Development debug link') ? 'debug_link' : 'email_sent',
+        delivery: debugLink ? 'debug_link' : 'email_sent',
         expiresAt: state.expiresAt,
         nextStep: 'check_email',
         ok: true,
         provider,
         redirectTo: state.redirectTo,
         state: state.stateId,
-        verificationUrl,
+        ...(debugLink ? { verificationUrl } : {}),
         message,
       },
       { headers, status: 202 },
     );
   } catch (error) {
+    console.error(
+      '[auth] magic-link delivery failed',
+      context.data.requestId,
+      error instanceof Error ? error.message : error,
+    );
     return json(
       {
         error: 'magic_link_send_failed',
-        message: error instanceof Error ? error.message : 'Magic-link email delivery failed.',
+        message: 'The sign-in email could not be sent. Please try again in a moment.',
+        requestId: context.data.requestId ?? null,
       },
       { headers, status: 502 },
     );

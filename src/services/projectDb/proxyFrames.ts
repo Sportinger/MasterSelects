@@ -1,5 +1,5 @@
 import { STORES } from './stores';
-import { requestResult, requestSuccess } from './transactions';
+import { requestResult, requestSuccess, transactionSuccess } from './transactions';
 import type { StoredProxyFrame } from './types';
 
 // Save a single proxy frame
@@ -20,8 +20,7 @@ export async function saveProxyFramesBatch(db: IDBDatabase, frames: StoredProxyF
       store.put(frame);
     }
 
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
+    void transactionSuccess(transaction).then(resolve, reject);
   });
 }
 
@@ -90,8 +89,7 @@ export async function deleteProxyFrames(db: IDBDatabase, mediaFileId: string): P
       }
     };
 
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
+    void transactionSuccess(transaction).then(resolve, reject);
   });
 }
 

@@ -1,24 +1,23 @@
 // TimelineHeader component - Track headers (left side)
-
 import { memo, type CSSProperties, useEffect, useRef, useState } from 'react';
-import type { TimelineHeaderProps } from './types';
 import { useTimelineStore } from '../../stores/timeline';
 import {
   TimelineHeaderAudioSummaryMeter,
-  TimelineHeaderMixerControls,
   TimelineHeaderMixerMainControls,
   TimelineHeaderMixerTypeBadge,
 } from './components/TimelineHeaderAudioControls';
+import { TimelineHeaderActions } from './components/TimelineHeaderActions';
 import { TimelineHeaderPropertyLabels } from './components/TimelineHeaderPropertyLabels';
-import { TrackHeaderIcon } from './components/TimelineHeaderTrackIcons';
 import {
   formatAudioTrackPan,
   formatAudioTrackVolumeDb,
   getAudioTrackHeaderDensity,
 } from './utils/audioTrackHeaderDensity';
-import { getTimelineTrackColor, TIMELINE_TRACK_COLOR_HIDDEN } from './trackColor';
 import { useTimelineHeaderAudioPopoverState } from './hooks/useTimelineHeaderAudioPopoverState';
+import { useTimelineHeaderResolvePresentation } from './hooks/useTimelineHeaderResolvePresentation';
 import { useTrackReorderDrag, trackReorderSection } from './hooks/useTrackReorderDrag';
+import { useTimelineOverLayout } from './hooks/useTimelineOverLayout';
+import { resolveTimelineHeaderPropertySelection, type TimelineHeaderComponentProps } from './utils/timelineHeaderPropertySelection';
 
 function TimelineHeaderComponent({
   track,
@@ -31,6 +30,7 @@ function TimelineHeaderComponent({
   selectedClipIds,
   clips,
   playheadPosition,
+  propertySelection,
   onToggleExpand,
   onToggleSolo,
   onToggleLocked,
@@ -53,10 +53,11 @@ function TimelineHeaderComponent({
   onKeyframeRowHover,
   audioLayerAdvancedMode = true,
   showCollapsedAudioSummaryMeter = false,
-}: TimelineHeaderProps) {
+}: TimelineHeaderComponentProps) {
   const { onReorderPointerDown } = useTrackReorderDrag(track);
-  const trackClips = clips.filter((c) => c.trackId === track.id);
-  const selectedTrackClip = trackClips.find((c) => selectedClipIds.has(c.id));
+  const { selectedTrackClip, propertyClipKeyframes, playheadPositionOverride } = resolveTimelineHeaderPropertySelection(
+    track.id, propertySelection, clips, selectedClipIds, clipKeyframes, playheadPosition,
+  );
   const effectiveMuted = track.audioState?.muted ?? track.muted;
   const effectiveSolo = track.audioState?.solo ?? track.solo;
   const trackRecordArm = track.audioState?.recordArm === true;
@@ -87,7 +88,11 @@ function TimelineHeaderComponent({
     .filter((timelineTrack) => timelineTrack.type === track.type)
     .findIndex((timelineTrack) => timelineTrack.id === track.id);
   const showTimelineTrackColor = audioLayerAdvancedMode !== false;
-  const trackColor = showTimelineTrackColor ? getTimelineTrackColor(track, trackTypeIndex) : TIMELINE_TRACK_COLOR_HIDDEN;
+  const targetTrackId = useTimelineStore(state => state.targetTrackIdByType[track.type]);
+  const { isResolvePrimaryTargetFallback, resolveTrackCode, trackColor } =
+    useTimelineHeaderResolvePresentation({
+      showTimelineTrackColor, targetTrackId, track, tracks, trackTypeIndex,
+    });
   const isMidiDefaultTint = isMidiTrack && (!track.labelColor || track.labelColor === 'none');
   const trackHeaderStyle = {
     height: dynamicHeight,
@@ -101,7 +106,6 @@ function TimelineHeaderComponent({
     '--audio-strip-control-scale'?: string;
     '--audio-strip-fader-scale'?: string;
   };
-  const targetTrackId = useTimelineStore(state => state.targetTrackIdByType[track.type]);
   const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
   const setTargetTrack = useTimelineStore(state => state.setTargetTrack);
   const isTargeted = targetTrackId === track.id;
@@ -109,7 +113,11 @@ function TimelineHeaderComponent({
   const audioPopoverState = useTimelineHeaderAudioPopoverState();
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(track.name);
+  const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { isMediumMobileTimelineLayout, isMobileTimelineLayout } = useTimelineOverLayout();
+  const useMobileActionBubble = isMobileTimelineLayout && !isMediumMobileTimelineLayout;
+  const showMobileSecondRow = useMobileActionBubble && baseHeight >= 48;
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -118,14 +126,20 @@ function TimelineHeaderComponent({
     }
   }, [isEditing]);
 
+  useEffect(() => {
+    if (!showMobileSecondRow) setMobileActionsOpen(false);
+  }, [showMobileSecondRow]);
+
+  // Collapsing the bubble (Escape, outside tap) must not strand an audio
+  // FX/sends popover open inside the hidden inert drawer.
+  const closeAudioPopovers = audioPopoverState.closeAudioPopovers;
+  useEffect(() => {
+    if (!mobileActionsOpen) closeAudioPopovers();
+  }, [mobileActionsOpen, closeAudioPopovers]);
+
   const startNameEdit = () => {
     setEditValue(track.name);
     setIsEditing(true);
-  };
-
-  const handleNameClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    startNameEdit();
   };
 
   const handleNameDoubleClick = (e: React.MouseEvent) => {
@@ -180,7 +194,13 @@ function TimelineHeaderComponent({
       } ${
         isTargeted ? 'targeted' : ''
       } ${
+        isResolvePrimaryTargetFallback ? 'resolve-primary-target' : ''
+      } ${
         isPropertiesSelected ? 'properties-selected' : ''
+      } ${
+        mobileActionsOpen ? 'mobile-actions-open' : ''
+      } ${
+        showMobileSecondRow ? 'mobile-second-row' : ''
       }`}
       style={trackHeaderStyle}
       data-dock-layout-child-anim-id={`timeline-track-header:${track.id}`}
@@ -204,6 +224,7 @@ function TimelineHeaderComponent({
         </div>
         {showAudioSummaryMeter && <TimelineHeaderAudioSummaryMeter />}
         <div className="track-header-main">
+          <span className="resolve-track-index" aria-hidden="true">{resolveTrackCode}</span>
           {isMixerTrack && <TimelineHeaderMixerTypeBadge isMidiTrack={isMidiTrack} />}
           {(track.type === 'video' || isMixerTrack) && (
             <span
@@ -241,9 +262,8 @@ function TimelineHeaderComponent({
           ) : (
             <span
               className="track-name"
-              onClick={handleNameClick}
               onDoubleClick={handleNameDoubleClick}
-              title="Click to rename"
+              title="Double-click to rename"
             >
               {track.name}
             </span>
@@ -259,49 +279,29 @@ function TimelineHeaderComponent({
             />
           )}
         </div>
-        {isMixerTrack ? (
-          <TimelineHeaderMixerControls
-            effectiveMuted={effectiveMuted}
-            effectiveSolo={effectiveSolo}
-            onToggleLocked={onToggleLocked}
-            onToggleMuted={onToggleMuted}
-            onToggleSolo={onToggleSolo}
-            popoverState={audioPopoverState}
-            showAdvancedAudioControls={showAdvancedAudioControls}
-            showAudioSummaryMeter={showAudioSummaryMeter}
-            showAudioTrackVolumeFader={showAudioTrackVolumeFader}
-            track={track}
-            trackInputMonitor={trackInputMonitor}
-            trackRecordArm={trackRecordArm}
-            trackVolumeDb={trackVolumeDb}
-            trackVolumeLabel={trackVolumeLabel}
-            trackVolumeUnit={trackVolumeUnit}
-          />
-        ) : (
-          <div className="track-controls">
-            <button
-              className={`btn-icon ${effectiveSolo ? 'solo-active' : ''}`}
-              onClick={(e) => { e.stopPropagation(); onToggleSolo(); }}
-              title={effectiveSolo ? 'Solo On' : 'Solo Off'}
-            >
-              S
-            </button>
-            <button
-              className={`btn-icon ${!track.visible ? 'hidden' : ''}`}
-              onClick={(e) => { e.stopPropagation(); onToggleVisible(); }}
-              title={track.visible ? 'Hide' : 'Show'}
-            >
-              <TrackHeaderIcon name={track.visible ? 'eye' : 'eyeOff'} />
-            </button>
-            <button
-              className={`btn-icon ${track.locked ? 'locked-active' : ''}`}
-              onClick={(e) => { e.stopPropagation(); onToggleLocked?.(); }}
-              title={track.locked ? 'Unlock Track' : 'Lock Track'}
-            >
-              <TrackHeaderIcon name={track.locked ? 'lock' : 'unlock'} />
-            </button>
-          </div>
-        )}
+        <TimelineHeaderActions
+          effectiveMuted={effectiveMuted}
+          effectiveSolo={effectiveSolo}
+          isMixerTrack={isMixerTrack}
+          isMobileTimelineLayout={useMobileActionBubble}
+          mobileActionsOpen={mobileActionsOpen}
+          onMobileActionsOpenChange={setMobileActionsOpen}
+          onToggleLocked={onToggleLocked}
+          onToggleMuted={onToggleMuted}
+          onToggleSolo={onToggleSolo}
+          onToggleVisible={onToggleVisible}
+          popoverState={audioPopoverState}
+          showAdvancedAudioControls={showAdvancedAudioControls}
+          showAudioSummaryMeter={showAudioSummaryMeter}
+          showAudioTrackVolumeFader={showAudioTrackVolumeFader}
+          showMobileSecondRow={showMobileSecondRow}
+          track={track}
+          trackInputMonitor={trackInputMonitor}
+          trackRecordArm={trackRecordArm}
+          trackVolumeDb={trackVolumeDb}
+          trackVolumeLabel={trackVolumeLabel}
+          trackVolumeUnit={trackVolumeUnit}
+        />
         {onResizeStart && (
           <div
             className={`track-resize-handle ${isResizeActive ? 'active' : ''}`}
@@ -312,13 +312,13 @@ function TimelineHeaderComponent({
           />
         )}
       </div>
-      {(track.type === 'video' || isMixerTrack) && isExpanded && (
+      {(track.type === 'video' || isMixerTrack) && isExpanded && selectedTrackClip && (propertyClipKeyframes.get(selectedTrackClip.id)?.length ?? 0) > 0 && (
         <TimelineHeaderPropertyLabels
           trackId={track.id}
-          selectedClip={selectedTrackClip || null}
+          selectedClip={selectedTrackClip}
           isAudioTrack={isAudioTrack}
-          clipKeyframes={clipKeyframes}
-          playheadPosition={playheadPosition}
+          clipKeyframes={propertyClipKeyframes}
+          playheadPosition={playheadPositionOverride}
           getInterpolatedTransform={getInterpolatedTransform}
           getInterpolatedEffects={getInterpolatedEffects}
           addKeyframe={addKeyframe}

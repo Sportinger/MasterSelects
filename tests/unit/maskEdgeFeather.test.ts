@@ -63,6 +63,7 @@ describe('mask edge feather', () => {
       keyframeRecordingEnabled: new Set(),
       selectedVertexIds: new Set(),
       selectedMaskEdgeId: null,
+      maskFeatherPreviewEnabled: true,
       maskFeatherPreview: null,
     });
   });
@@ -99,6 +100,20 @@ describe('mask edge feather', () => {
 
     useTimelineStore.getState().setMaskEdgeFeather('clip-a', 'mask-a', edgeId, 0);
     expect(useTimelineStore.getState().clips[0].masks?.[0].edgeFeathers).toBeUndefined();
+  });
+
+  it('keeps the red feather guide on by default and suppresses previews when disabled', () => {
+    expect(initialTimelineState.maskFeatherPreviewEnabled).toBe(true);
+
+    useTimelineStore.getState().showMaskFeatherPreview('mask-a');
+    expect(useTimelineStore.getState().maskFeatherPreview?.maskId).toBe('mask-a');
+
+    useTimelineStore.getState().setMaskFeatherPreviewEnabled(false);
+    expect(useTimelineStore.getState().maskFeatherPreviewEnabled).toBe(false);
+    expect(useTimelineStore.getState().maskFeatherPreview).toBeNull();
+
+    useTimelineStore.getState().showMaskFeatherPreview('mask-a');
+    expect(useTimelineStore.getState().maskFeatherPreview).toBeNull();
   });
 
   it('interpolates edge feather keyframes', () => {

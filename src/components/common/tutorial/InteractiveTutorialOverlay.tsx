@@ -31,6 +31,7 @@ import {
   createTimelineTutorialSandbox,
   type TimelineTutorialSandbox,
 } from './timelineTutorialSandbox';
+import { productAnalytics } from '../../../services/productAnalytics';
 
 interface InteractiveTutorialOverlayProps {
   campaign: InteractiveCampaign;
@@ -57,7 +58,33 @@ export function InteractiveTutorialOverlay({
   const chapterFinishingRef = useRef(false);
   const sessionResultPromiseRef = useRef<Promise<GuidedSessionResult> | null>(null);
   const timelineSandboxRef = useRef<TimelineTutorialSandbox | null>(null);
+  const analyticsFinalizedRef = useRef(false);
+  const stepIndexRef = useRef(0);
   const stepCount = campaign.steps.length;
+
+  const finalizeTutorialAnalytics = useCallback((
+    outcome: 'tutorial_cancelled' | 'tutorial_completed' | 'tutorial_skipped',
+    currentStepIndex: number,
+  ) => {
+    if (analyticsFinalizedRef.current) return;
+    analyticsFinalizedRef.current = true;
+    productAnalytics.track(outcome, {
+      step_count: stepCount,
+      step_index: currentStepIndex + 1,
+      tutorial_id: campaign.id,
+    });
+  }, [campaign.id, stepCount]);
+
+  useEffect(() => {
+    productAnalytics.track('tutorial_started', {
+      step_count: stepCount,
+      tutorial_id: campaign.id,
+    });
+  }, [campaign.id, stepCount]);
+
+  useEffect(() => {
+    stepIndexRef.current = stepIndex;
+  }, [stepIndex]);
 
   useEffect(() => {
     if (campaign.id !== TIMELINE_BASICS_TUTORIAL_ID) return;
@@ -74,6 +101,7 @@ export function InteractiveTutorialOverlay({
   const finishChapter = useCallback(() => {
     if (chapterFinishingRef.current) return;
     chapterFinishingRef.current = true;
+    finalizeTutorialAnalytics('tutorial_completed', stepCount - 1);
 
     const runtime = getGuidedActionRuntime();
     const sessionResult = sessionResultPromiseRef.current;
@@ -88,7 +116,7 @@ export function InteractiveTutorialOverlay({
     } else {
       window.setTimeout(onClose, 0);
     }
-  }, [onClose]);
+  }, [finalizeTutorialAnalytics, onClose, stepCount]);
 
   const goForward = useCallback(() => {
     if (stepIndex >= stepCount - 1) {
@@ -138,13 +166,16 @@ export function InteractiveTutorialOverlay({
       if (disposed || chapterFinishingRef.current) return;
       switch (result.status) {
         case 'completed':
+          finalizeTutorialAnalytics('tutorial_completed', stepCount - 1);
           onClose();
           return;
         case 'skipped':
+          finalizeTutorialAnalytics('tutorial_skipped', stepIndexRef.current);
           onSkip();
           return;
         case 'cancelled':
         case 'failed':
+          finalizeTutorialAnalytics('tutorial_cancelled', stepIndexRef.current);
           onCancel();
           return;
       }
@@ -158,11 +189,18 @@ export function InteractiveTutorialOverlay({
       disposed = true;
       runtime.cancelSession(sessionId, 'Interactive tutorial closed');
     };
-  }, [campaign, onCancel, onClose, onSkip, stepCount]);
+  }, [campaign, finalizeTutorialAnalytics, onCancel, onClose, onSkip, stepCount]);
 
   useEffect(() => {
     const step = campaign.steps[stepIndex];
     if (!step) return;
+
+    productAnalytics.track('tutorial_step_viewed', {
+      step_count: stepCount,
+      step_id: step.id,
+      step_index: stepIndex + 1,
+      tutorial_id: campaign.id,
+    });
 
     const sessionId = sessionIdRef.current;
     const store = useGuidedActionStore.getState();

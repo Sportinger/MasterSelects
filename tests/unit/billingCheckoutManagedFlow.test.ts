@@ -1,13 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { onRequest } from '../../functions/api/billing/checkout';
+import { TERMS_VERSION, WITHDRAWAL_VERSION } from '../../functions/lib/consumerContract';
 import type { AppContext, Env } from '../../functions/lib/env';
+
+const consentInserts: unknown[][] = [];
 
 function makeDb(currentPlanId = 'pro'): Env['DB'] {
   return {
     batch: vi.fn(),
     exec: vi.fn(),
     prepare: vi.fn((query: string) => ({
-      bind: vi.fn(() => ({
+      bind: vi.fn((...values: unknown[]) => ({
         first: vi.fn(async () => {
           if (query.includes('FROM stripe_customers')) {
             return { stripe_customer_id: 'cus_123' };
@@ -23,10 +26,23 @@ function makeDb(currentPlanId = 'pro'): Env['DB'] {
 
           return null;
         }),
+        run: vi.fn(async () => {
+          if (query.includes('INSERT INTO billing_legal_consents')) consentInserts.push(values);
+          return {};
+        }),
       })),
     })),
   } as unknown as Env['DB'];
 }
+
+const VALID_LEGAL_CONSENT = {
+  immediatePerformanceRequested: true,
+  locale: 'de',
+  termsAccepted: true,
+  termsVersion: TERMS_VERSION,
+  withdrawalPolicyRead: true,
+  withdrawalVersion: WITHDRAWAL_VERSION,
+};
 
 function makeEnv(db: Env['DB']): Env {
   return {
@@ -40,7 +56,7 @@ function makeEnv(db: Env['DB']): Env {
   };
 }
 
-function makeContext(planId: string, env: Env): AppContext {
+function makeContext(planId: string, env: Env, legalConsent: unknown = VALID_LEGAL_CONSENT): AppContext {
   return {
     data: {
       requestId: 'req_test',
@@ -55,6 +71,7 @@ function makeContext(planId: string, env: Env): AppContext {
     request: new Request('https://www.masterselects.com/api/billing/checkout', {
       body: JSON.stringify({
         cancelUrl: 'https://www.masterselects.com/?billing=cancel',
+        legalConsent,
         planId,
         successUrl: `https://www.masterselects.com/?billing=success&plan=${encodeURIComponent(planId)}`,
       }),
@@ -72,6 +89,36 @@ describe('billing checkout managed subscription flows', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    consentInserts.length = 0;
+  });
+
+  it('refuses a paid plan change without the consumer consent statements', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await onRequest(makeContext('pro', makeEnv(makeDb('starter')), null));
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ error: 'legal_consent_required' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses consent given for an outdated terms version', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+
+    const response = await onRequest(makeContext('pro', makeEnv(makeDb('starter')), {
+      ...VALID_LEGAL_CONSENT,
+      termsVersion: '2000-01-01',
+    }));
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ error: 'legal_consent_outdated' });
+  });
+
+  it('does not require consent to cancel to free', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ id: 'bps_free', url: 'https://billing.stripe.test/free' }), { status: 200 })));
+
+    const response = await onRequest(makeContext('free', makeEnv(makeDb()), null));
+    expect(response.status).toBe(200);
+    expect(consentInserts).toEqual([]);
   });
 
   it('opens the Stripe cancel flow when downgrading to free', async () => {
@@ -147,6 +194,9 @@ describe('billing checkout managed subscription flows', () => {
 
     expect(payload.destination).toBe('portal');
     expect(payload.planId).toBe('starter');
+    expect(consentInserts).toHaveLength(1);
+    expect(consentInserts[0]).toContain('bps_downgrade');
+    expect(consentInserts[0]).toContain(TERMS_VERSION);
     expect(payload.priceId).toBe('price_starter');
 
     const requestInit = fetchMock.mock.calls[1]?.[1] as RequestInit;

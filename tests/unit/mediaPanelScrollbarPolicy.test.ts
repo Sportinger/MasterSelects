@@ -12,6 +12,8 @@ describe('media panel async-update scrollbar policy', () => {
     const css = readWorkspaceFile('src/components/panels/MediaPanel.css');
 
     expect(css).toMatch(/\.media-panel-table-wrapper\s*\{[\s\S]*?overflow-x:\s*auto;/);
+    expect(css).toMatch(/\.media-panel-table-wrapper\s*\{[\s\S]*?overscroll-behavior:\s*none;/);
+    expect(css).toMatch(/\.media-grid-wrapper\s*\{[\s\S]*?overscroll-behavior:\s*none;/);
     expect(css).toMatch(
       /\.media-panel-table-wrapper::-webkit-scrollbar:horizontal\s*\{[\s\S]*?height:\s*0;/,
     );

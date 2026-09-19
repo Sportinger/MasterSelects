@@ -2,12 +2,13 @@ import type { TimelineActionBindings } from './useTimelineActionController';
 import type { useTimelineHelpers } from './useTimelineHelpers';
 import type { useTimelineRootStoreState } from './useTimelineRootStoreState';
 import type { useTimelineTrackStackController } from './useTimelineTrackStackController';
-import { TimelineGlobalCurveSurface } from '../TimelineGlobalCurveSurface';
+import { CurvesPanel } from '../../panels/curves/CurvesPanel';
 import { useTimelineCurveMode } from './useTimelineCurveMode';
 import { useTimelineGraphController } from './useTimelineGraphController';
+import type { ClipTrimState } from '../types';
 
 interface TimelineGraphHostControllerInput {
-  rootState: ReturnType<typeof useTimelineRootStoreState>;
+  rootState: ReturnType<typeof useTimelineRootStoreState> & { clipTrim: ClipTrimState | null };
   timelineActions: TimelineActionBindings;
   timelineHelpers: ReturnType<typeof useTimelineHelpers>;
   timelineTrackStack: ReturnType<typeof useTimelineTrackStackController>;
@@ -40,26 +41,20 @@ export function useTimelineGraphHostController({
   });
 
   const globalCurveEditor = timelineCurveMode === 'graph' ? (
-    <TimelineGlobalCurveSurface
-      activeComposition={rootState.activeComposition}
-      applyTimelineEditOperation={timelineActions.applyTimelineEditOperation}
-      clipKeyframes={rootState.clipKeyframes}
-      clips={rootState.clips}
+    <CurvesPanel
+      variant="timeline"
+      clipTrim={rootState.clipTrim}
       height={Math.max(
         180,
         timelineTrackStack.videoSectionHeight + timelineTrackStack.audioSectionHeight - 100,
       )}
       onActiveSeriesChange={focusTimelineGraphSeries}
       onClose={closeTimelineGraph}
-      onSelectKeyframe={timelineActions.selectKeyframe}
+      onScrollChange={timelineActions.setScrollX}
+      onZoomChange={timelineActions.setZoom}
       pixelToTime={timelineHelpers.pixelToTime}
       preferredTarget={preferredTimelineGraphTarget}
-      primaryClipId={rootState.propertiesSelection?.kind === 'clip'
-        ? rootState.propertiesSelection.clipId
-        : null}
       scrollX={rootState.scrollX}
-      selectedClipIds={rootState.selectedClipIds}
-      selectedKeyframeIds={rootState.selectedKeyframeIds}
       timeToPixel={timelineHelpers.timeToPixel}
       trackHeaderWidth={rootState.trackHeaderWidth}
       width={timelineTrackStack.timelineViewportWidth}

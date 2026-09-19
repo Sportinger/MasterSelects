@@ -153,6 +153,7 @@ async function scanSourceSceneCuts(
       analyzeSceneCuts: true,
       sceneCutsOnly: true,
       onSceneCutProgress: updateProgress,
+      videoCodecId: mediaFile.videoCodecId,
     },
   );
 }

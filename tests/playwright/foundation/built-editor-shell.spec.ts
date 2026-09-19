@@ -4,6 +4,10 @@ test('production build boots and exposes transport/export surfaces @built-smoke'
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.addInitScript(() => {
+    // Use real browser storage for this portable shell check. The Windows beta
+    // journey separately verifies native folder selection and permissions.
+    Reflect.deleteProperty(window, 'showDirectoryPicker');
+    Reflect.deleteProperty(window, 'showSaveFilePicker');
     window.localStorage.setItem('masterselects-settings', JSON.stringify({
       state: {
         hasSeenTutorial: true,
@@ -18,16 +22,18 @@ test('production build boots and exposes transport/export surfaces @built-smoke'
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('.app--editor-layout')).toBeVisible();
 
-  const startEditing = page.getByRole('button', { name: /^Start editing\b/i });
-  await expect(startEditing).toBeVisible();
-  await startEditing.click();
-  await expect(startEditing).toBeHidden();
+  const projectDialog = page.getByRole('dialog', { name: 'Choose project' });
+  await projectDialog.getByRole('button', { name: 'New project Empty timeline' }).click();
+  await projectDialog.getByRole('textbox', { name: 'Project name' }).fill('Built smoke');
+  await projectDialog.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(projectDialog).toBeHidden();
 
-  await expect(page.getByRole('region', { name: 'Preview' })).toBeVisible();
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Stop', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+  const preview = page.getByRole('region', { name: 'Preview' });
+  await expect(preview).toBeVisible();
+  await preview.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect(preview.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+  await preview.getByRole('button', { name: 'Stop', exact: true }).click();
+  await expect(preview.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
 
   await page.getByRole('tab', { name: 'Export', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Export' })).toBeVisible();

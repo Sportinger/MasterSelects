@@ -30,7 +30,9 @@ export function useTimelineCompositionSwitchState({
   const compositionSwitchDirection = useTimelineStore(s => s.compositionSwitchDirection);
   const compositionSwitchSourceTracks = useTimelineStore(s => s.compositionSwitchSourceTracks);
   const compositionSwitchTargetTracks = useTimelineStore(s => s.compositionSwitchTargetTracks);
-  const isCompositionTrackMorphing = clipAnimationPhase !== 'idle' && compositionSwitchTargetTracks !== null;
+  const isCompositionTrackMorphing = clipAnimationPhase !== 'idle'
+    && compositionSwitchSourceTracks !== null
+    && compositionSwitchTargetTracks !== null;
 
   const isTrackExpandedFromState = useCallback(
     (trackId: string) => expandedTracks.has(trackId),
@@ -48,11 +50,11 @@ export function useTimelineCompositionSwitchState({
   const timelineViewTracks = useMemo(
     () => isCompositionTrackMorphing
       ? buildCompositionSwitchTracks(
-          compositionSwitchSourceTracks ?? tracks,
+          tracks,
           compositionSwitchTargetTracks
         )
       : tracks,
-    [compositionSwitchSourceTracks, compositionSwitchTargetTracks, isCompositionTrackMorphing, tracks]
+    [compositionSwitchTargetTracks, isCompositionTrackMorphing, tracks]
   );
 
   return {

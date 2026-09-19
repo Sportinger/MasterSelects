@@ -117,6 +117,8 @@ export interface RenderResourceDimensions {
 
 export type RuntimeProviderKind =
   | 'webcodecs'
+  | 'turbores'
+  | 'hap'
   | 'html-video'
   | 'html-audio'
   | 'native-decoder'
@@ -224,7 +226,7 @@ interface RenderResourceDescriptorBase {
 export interface VideoFrameProviderResourceDescriptor extends RenderResourceDescriptorBase {
   kind: 'video-frame-provider';
   providerId: string;
-  providerKind: 'webcodecs' | 'runtime-frame-provider';
+  providerKind: 'webcodecs' | 'turbores' | 'hap' | 'runtime-frame-provider';
   canSeek?: boolean;
   canProvideStaleFrame?: boolean;
   frameFormat?: 'video-frame' | 'image-bitmap' | 'canvas-image-source' | 'unknown';
@@ -293,6 +295,7 @@ export interface MotionDataResourceDescriptor extends RenderResourceDescriptorBa
   payloadKind:
     | 'motion-layer'
     | 'math-scene'
+    | 'flock'
     | 'vector-animation'
     | 'midi'
     | 'node-graph'

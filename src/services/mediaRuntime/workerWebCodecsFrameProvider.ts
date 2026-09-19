@@ -45,6 +45,7 @@ function closeBitmap(bitmap: ImageBitmap | null): void {
 }
 
 export class WorkerWebCodecsFrameProvider implements RuntimeFrameProvider {
+  readonly backend = 'worker-webcodecs' as const;
   currentTime = 0;
   isPlaying = false;
 

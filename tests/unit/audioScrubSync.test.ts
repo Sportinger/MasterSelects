@@ -22,6 +22,7 @@ import type { AudioMeterSnapshot, ClipAudioStemLayer, TimelineClip } from '../..
 import type { RenderResourceDescriptor } from '../../src/services/timeline/runtimeCoordinatorTypes';
 import { createMockClip } from '../helpers/mockData';
 import { clearMasterAudio, playheadState } from '../../src/services/layerBuilder/PlayheadState';
+import { AudioTrackStemBufferMixerManager } from '../../src/services/layerBuilder/audioTrackStemBufferMixers';
 
 const compositionAudioMixerMocks = vi.hoisted(() => ({
   mixdownComposition: vi.fn(),
@@ -320,6 +321,101 @@ describe('scrub audio sync', () => {
 
     expect(state.masterSet).toBe(false);
     expect(playheadState.masterAudioElement).not.toBe(element);
+  });
+
+  it('does not restart exhausted HTML audio or elect it as the master clock', () => {
+    const handler = new AudioSyncHandler();
+    const clip = makeClip({ inPoint: 5, outPoint: 10, endTime: 12 });
+    const element = {
+      muted: false,
+      volume: 1,
+      playbackRate: 1,
+      currentTime: 10,
+      readyState: 4,
+      paused: false,
+      play: vi.fn().mockResolvedValue(undefined),
+      pause: vi.fn(),
+    } as unknown as HTMLAudioElement;
+    const state: AudioSyncState = {
+      audioPlayingCount: 0,
+      maxAudioDrift: 0,
+      hasAudioError: false,
+      masterSet: false,
+    };
+
+    playheadState.hasMasterAudio = true;
+    playheadState.masterAudioElement = element;
+    handler.syncAudioElement(
+      {
+        element,
+        clip,
+        clipTime: clip.outPoint,
+        absSpeed: 1,
+        isMuted: false,
+        canBeMaster: true,
+        type: 'audioTrack',
+      },
+      makeFrameContext({
+        clips: [clip],
+        clipsAtTime: [clip],
+        isDraggingPlayhead: false,
+        isPlaying: true,
+      }),
+      state,
+    );
+
+    expect(element.pause).toHaveBeenCalledOnce();
+    expect(element.play).not.toHaveBeenCalled();
+    expect(state.masterSet).toBe(false);
+    expect(playheadState.hasMasterAudio).toBe(false);
+  });
+
+  it('does not restart an exhausted Web Audio buffer mixer session', () => {
+    const markRuntimeActive = vi.fn();
+    const manager = new AudioTrackStemBufferMixerManager({
+      getClipSourceMediaFileId: () => 'media-1',
+      markRuntimeActive,
+      stemLayerBuffers: {} as AudioTrackStemLayerBufferCache,
+    });
+    const clip = makeClip({ inPoint: 5, outPoint: 10, endTime: 12 });
+
+    const sourceCount = manager.syncSource({
+      clip,
+      mediaFileId: 'media-1',
+      buffer: {} as AudioBuffer,
+      routeSettings: {
+        volume: 1,
+        eqGains: new Array(10).fill(0),
+        processors: [],
+        muted: false,
+        pan: 0,
+        master: {
+          volume: 1,
+          eqGains: new Array(10).fill(0),
+          processors: [],
+        },
+      },
+      timeInfo: {
+        clipLocalTime: 5,
+        sourceTime: 5,
+        clipTime: clip.outPoint,
+        visualClipLocalTime: 5,
+        visualSourceTime: 5,
+        visualClipTime: clip.outPoint,
+        isHold: false,
+        sourceRate: 1,
+        speed: 1,
+        absSpeed: 1,
+      },
+      effectiveVolume: 1,
+      sourceGain: 1,
+      trackMuted: false,
+      meterTrackId: 'track-1',
+      canBeMaster: true,
+    });
+
+    expect(sourceCount).toBe(0);
+    expect(markRuntimeActive).not.toHaveBeenCalled();
   });
 
   it('applies clip volume during fallback scrub playback instead of a fixed default', () => {

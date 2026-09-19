@@ -1,4 +1,6 @@
-import type { BlendMode, Layer, TimelineClip } from '../../types';
+import type { BlendMode } from '../../types/blendMode';
+import type { Layer } from '../../types/layers';
+import type { TimelineClip } from '../../types/timeline';
 import { canUseSharedPreviewRuntimeSession } from '../mediaRuntime/runtimePlayback';
 import { resolveTransitionRecipeBlendMode } from '../timeline/transitionRecipeBlendWindows';
 import { evaluateTransitionRenderState } from '../../utils/transitionRenderInterpolation';
@@ -17,7 +19,8 @@ import type { TransformCache } from './TransformCache';
 import type { FrameContext } from './types';
 import { getNestedClipKeyframes } from './layerBuilderNestedLayers';
 import { evaluateParentedClipTransform } from './parentTransformEvaluation';
-
+import { decorateLayerBuilderVideoEffects } from './layerBuilderVideoEffects';
+import { applyMappedProxyLayer } from './layerBuilderMappedProxyLayer';
 type BuildVideoLayerParams = {
   clip: TimelineClip;
   layerIndex: number;
@@ -25,26 +28,24 @@ type BuildVideoLayerParams = {
   transformCache: TransformCache;
   opacityOverride?: number;
 };
-
 type BuildNativeDecoderLayerParams = BuildVideoLayerParams & {
   nativeDecoder: NativeDecoder;
 };
-
 type BuildTimelineVideoLayerParams = BuildVideoLayerParams & {
   proxyFrames: LayerBuilderProxyFrames;
   previewContinuationResolver?: {
     getPreviewContinuationVideoElement(clip: TimelineClip, clipTime: number): HTMLVideoElement | null;
   };
 };
-
 export function buildLayerBuilderNativeDecoderLayer(params: BuildNativeDecoderLayerParams): Layer {
   const { clip, nativeDecoder, layerIndex, ctx, transformCache, opacityOverride } = params;
   const timeInfo = getClipTimeInfo(ctx, clip);
   const mediaFile = getMediaFileForClip(ctx, clip);
+  const activeComposition = ctx.compositionById.get(ctx.activeCompId);
   const sourceMetadata = getLayerSourceMetadata(clip, mediaFile, {
     width: nativeDecoder.width,
     height: nativeDecoder.height,
-  });
+  }, activeComposition);
   const transform = transformCache.getTransform(
     `${ctx.activeCompId}_${layerIndex}`,
     ctx.getInterpolatedTransform(clip.id, timeInfo.visualClipLocalTime),
@@ -63,9 +64,15 @@ export function buildLayerBuilderNativeDecoderLayer(params: BuildNativeDecoderLa
       targetMediaTime: timeInfo.visualClipTime,
       ...sourceMetadata,
     },
-    effects: ctx.getInterpolatedEffects(clip.id, timeInfo.visualClipLocalTime),
+    effects: decorateLayerBuilderVideoEffects(
+      clip,
+      timeInfo.visualClipLocalTime,
+      timeInfo.visualClipTime,
+      ctx.getInterpolatedEffects(clip.id, timeInfo.visualClipLocalTime),
+    ),
     colorCorrection: ctx.getInterpolatedColorCorrection(clip.id, timeInfo.visualClipLocalTime),
     position: transform.position,
+    anchor: transform.anchor,
     scale: transform.scale,
     rotation: transform.rotation,
   };
@@ -94,6 +101,7 @@ export function buildLayerBuilderVideoLayer(params: BuildTimelineVideoLayerParam
   if (mappedEvaluation && !mappedEvaluation.ok) return null;
   const mappedAnimation = mappedEvaluation?.mappedAnimation;
   const mediaFile = getMediaFileForClip(ctx, clip);
+  const activeComposition = ctx.compositionById.get(ctx.activeCompId);
   const videoSource = resolveLayerBuilderVideoSource({
     clip,
     ctx,
@@ -107,7 +115,12 @@ export function buildLayerBuilderVideoLayer(params: BuildTimelineVideoLayerParam
   });
   if (!videoSource) return null;
 
-  const sourceMetadata = getLayerSourceMetadata(clip, mediaFile, videoSource.intrinsicSize);
+  const sourceMetadata = getLayerSourceMetadata(
+    clip,
+    mediaFile,
+    videoSource.intrinsicSize,
+    activeComposition,
+  );
   const useProxyLayer =
     ctx.proxyEnabled &&
     mediaFile?.proxyFps &&
@@ -132,40 +145,21 @@ export function buildLayerBuilderVideoLayer(params: BuildTimelineVideoLayerParam
         sourceMetadata: getLayerSourceMetadata(clip, mediaFile, {
           width: proxyFrame.image.naturalWidth || proxyFrame.image.width,
           height: proxyFrame.image.naturalHeight || proxyFrame.image.height,
-        }),
+        }, activeComposition),
         timing: proxyFrame,
       }), clip, visualClipLocalTime, ctx.getClipKeyframes?.(clip.id));
       if (!mappedEvaluation || !mappedAnimation) return proxyLayer;
-
-      const mappedTransform = transformCache.getTransform(
-        `${ctx.activeCompId}_${layerIndex}`,
-        mappedEvaluation.transform,
-      );
-      proxyLayer.opacity = getFinalOpacity(mappedTransform.opacity, opacityOverride);
-      proxyLayer.blendMode = resolveTransitionRecipeBlendMode(
-        clip.transitionRecipeBlendWindows,
-        clip.startTime + visualClipLocalTime,
-        mappedTransform.blendMode as BlendMode,
-      );
-      proxyLayer.effects = mappedAnimation.effects;
-      proxyLayer.position = mappedTransform.position;
-      proxyLayer.scale = mappedTransform.scale;
-      proxyLayer.rotation = mappedTransform.rotation;
-      delete proxyLayer.maskClipId;
-      delete proxyLayer.maskInvert;
-      delete proxyLayer.masks;
-      if (mappedAnimation.masks?.some(mask => mask.enabled !== false)) {
-        proxyLayer.maskClipId = clip.id;
-        proxyLayer.maskInvert = false;
-        proxyLayer.masks = mappedAnimation.masks;
-      }
-      const proxyTransitionRender = evaluateTransitionRenderState(
-        clip.transitionRender,
-        ctx.getClipKeyframes?.(clip.id),
-        visualClipLocalTime,
-      );
-      if (proxyTransitionRender) proxyLayer.transitionRender = proxyTransitionRender;
-      return proxyLayer;
+      return applyMappedProxyLayer({
+        layer: proxyLayer,
+        clip,
+        layerIndex,
+        localTime: visualClipLocalTime,
+        opacityOverride,
+        transform: mappedEvaluation.transform,
+        animation: mappedAnimation,
+        transformCache,
+        ctx,
+      });
     }
   }
 
@@ -197,9 +191,15 @@ export function buildLayerBuilderVideoLayer(params: BuildTimelineVideoLayerParam
       ...videoSource.source,
       ...sourceMetadata,
     },
-    effects: mappedAnimation?.effects ?? ctx.getInterpolatedEffects(clip.id, visualClipLocalTime),
+    effects: decorateLayerBuilderVideoEffects(
+      clip,
+      visualClipLocalTime,
+      visualClipTime,
+      mappedAnimation?.effects ?? ctx.getInterpolatedEffects(clip.id, visualClipLocalTime),
+    ),
     colorCorrection: ctx.getInterpolatedColorCorrection(clip.id, visualClipLocalTime),
     position: transform.position,
+    anchor: transform.anchor,
     scale: transform.scale,
     rotation: transform.rotation,
     ...(transitionRender ? { transitionRender } : {}),

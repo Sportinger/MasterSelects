@@ -24,7 +24,9 @@ export type ExportSummaryTarget =
   | 'audio-section'
   | 'audio-format'
   | 'audio-quality'
-  | 'audio-processing';
+  | 'audio-processing'
+  | 'range-section'
+  | 'batch-section';
 
 export type ExportSummaryBadge = {
   label: string;
@@ -153,7 +155,7 @@ export function buildSummaryBadges(args: ExportSummaryStateArgs): ExportSummaryB
       { label: `${args.actualFps} fps`, target: 'video-fps' as const },
       ...(args.isGifMode
         ? [{ label: `${input.gifColors} colors`, target: 'gif-palette' as const }]
-        : input.encoder === 'ffmpeg'
+        : input.encoder === 'ffmpeg' || input.encoder === 'hap'
           ? (args.showFFmpegQualityControl
               ? [{ label: `MJPEG Q${input.ffmpegQuality}`, target: 'video-rate' as const }]
               : [])

@@ -1,6 +1,8 @@
+import { decodeProjectPackage, ProjectPackageSession, registerFsaProjectPackageSession } from '../../src/services/project/core/projectPackage';
 import { describe, expect, it, vi } from 'vitest';
 import { ProjectCoreService } from '../../src/services/project/core/ProjectCoreService';
 import type { ProjectFile } from '../../src/services/project/types';
+import { projectSaveStatus } from '../../src/services/project/projectSaveStatus';
 
 type TestProjectCoreService = ProjectCoreService & {
   projectHandle: FileSystemDirectoryHandle;
@@ -41,7 +43,92 @@ function createService(createWritable: FileSystemFileHandle['createWritable']): 
 }
 
 describe('ProjectCoreService save queue', () => {
-  it('serializes concurrent project.json writes', async () => {
+  it('retains a staged chat journal through denied saves and writes it on recovery', async () => {
+    const chunks: Uint8Array[] = [];
+    const write = vi.fn(async (bytes: ArrayBuffer) => { chunks.push(new Uint8Array(bytes)); });
+    const createWritable = vi.fn()
+      .mockRejectedValueOnce(new DOMException('Denied', 'NotAllowedError'))
+      .mockRejectedValueOnce(new DOMException('Denied', 'NotAllowedError'))
+      .mockResolvedValue({ write, close: vi.fn(async () => undefined) });
+    const service = createService(createWritable) as TestProjectCoreService;
+    const session = ProjectPackageSession.create(service.projectData);
+    (service as unknown as { configurePackageSession: (h: FileSystemDirectoryHandle, s: ProjectPackageSession) => void }).configurePackageSession(service.projectHandle, session);
+    const journal = JSON.stringify({ messages: [{ role: 'user', text: 'Keep this chat' }] });
+    expect(await session.writeEntry('AI_CHAT', 'history.json', journal)).toBe(true);
+    expect(createWritable).not.toHaveBeenCalled();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(await service.saveProject()).toBe(false);
+      expect(service.hasUnsavedChanges()).toBe(true);
+      expect(projectSaveStatus.read(service.projectHandle).failed).toBe(true);
+      expect(new TextDecoder().decode(session.readEntry('AI_CHAT', 'history.json')!)).toBe(journal);
+    }
+    expect(await service.saveProject()).toBe(true);
+    expect(service.hasUnsavedChanges()).toBe(false);
+    expect(projectSaveStatus.read(service.projectHandle).failed).toBe(false);
+    const bytes = new Uint8Array(chunks.reduce((size, chunk) => size + chunk.byteLength, 0));
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    const archive = await decodeProjectPackage(bytes);
+    expect(new TextDecoder().decode(archive.entries.get('AI/Chat/history.json'))).toBe(journal);
+  });
+
+  it('stages imported artifacts as unsaved until an explicit project save', async () => {
+    const createWritable = vi.fn(async () => ({ write: vi.fn(async () => undefined), close: vi.fn(async () => undefined) }) as unknown as FileSystemWritableFileStream);
+    const service = createService(createWritable) as TestProjectCoreService;
+    const session = ProjectPackageSession.create(service.projectData);
+    (service as unknown as { configurePackageSession: (h: FileSystemDirectoryHandle, s: ProjectPackageSession) => void }).configurePackageSession(service.projectHandle, session);
+    await session.batchWrites(async () => {
+      await session.writeEntry('ANALYSIS', 'audio.json', '{"ready":true}');
+    });
+    expect(service.hasUnsavedChanges()).toBe(true);
+    expect(createWritable).not.toHaveBeenCalled();
+    expect(await service.saveProject()).toBe(true);
+    expect(createWritable).toHaveBeenCalledTimes(1);
+    expect(service.hasUnsavedChanges()).toBe(false);
+  });
+
+  it('holds manual saves during import and coalesces with the artifact flush', async () => {
+    const createWritable = vi.fn(async () => ({ write: vi.fn(async () => undefined), close: vi.fn(async () => undefined) }) as unknown as FileSystemWritableFileStream);
+    const service = createService(createWritable) as TestProjectCoreService;
+    const session = ProjectPackageSession.create(service.projectData);
+    registerFsaProjectPackageSession(service.projectHandle, session);
+    session.setPersistCallback(() => service.saveProject());
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const importing = session.batchWrites(async () => {
+      await session.writeEntry('ANALYSIS', 'audio.json', '{}');
+      await gate;
+    });
+    const manual = service.saveProject();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(createWritable).not.toHaveBeenCalled();
+    expect(projectSaveStatus.read(service.projectHandle).saving).toBe(false);
+    release();
+    await importing;
+    expect(await manual).toBe(true);
+    expect(createWritable).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not report a recovery-protected skipped write as saved', async () => {
+    const createWritable = vi.fn();
+    const service = createService(createWritable) as TestProjectCoreService;
+    const autosave = { ...createProjectData(), folders: [{ id: 'recoverable', name: 'Shots', parentId: null }] };
+    service.projectHandle = {
+      getFileHandle: vi.fn(async () => ({
+        getFile: async () => ({ text: async () => JSON.stringify(autosave) }),
+        createWritable,
+      })),
+    } as unknown as FileSystemDirectoryHandle;
+    service.markDirty();
+    expect(await service.saveProject()).toBe(false);
+    expect(service.hasUnsavedChanges()).toBe(true);
+    expect(createWritable).not.toHaveBeenCalled();
+    expect(projectSaveStatus.read(service.projectHandle)).toEqual({
+      saving: false, failed: true, lastSuccessfulSave: null,
+    });
+  });
+
+  it('coalesces concurrent project.json writes', async () => {
     let activeWriters = 0;
     let maxActiveWriters = 0;
 
@@ -72,7 +159,29 @@ describe('ProjectCoreService save queue', () => {
     expect(firstSaved).toBe(true);
     expect(secondSaved).toBe(true);
     expect(maxActiveWriters).toBe(1);
+    expect(createWritable).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains one follow-up save for edits arriving during an active write', async () => {
+    let followUps: Promise<boolean>[] = [];
+    const writes: string[] = [];
+    const createWritable = vi.fn(async () => ({
+      write: vi.fn(async (content: string) => {
+        writes.push(content);
+        if (writes.length === 1) {
+          (service as TestProjectCoreService).projectData.name = 'New edit';
+          service.markDirty();
+          followUps = [service.saveProject(), service.saveProject()];
+        }
+      }),
+      close: vi.fn(async () => undefined),
+    } as unknown as FileSystemWritableFileStream));
+    const service = createService(createWritable);
+    expect(await service.saveProject()).toBe(true);
+    expect(await Promise.all(followUps)).toEqual([true, true]);
     expect(createWritable).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(writes[1]).name).toBe('New edit');
+    expect(service.hasUnsavedChanges()).toBe(false);
   });
 
   it('keeps the project dirty when a change lands during an active save', async () => {

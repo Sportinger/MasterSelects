@@ -1,3 +1,4 @@
+import { withProjectArtifactWriteBatch } from '../project/projectArtifactWriteBatch';
 import { blobToArrayBuffer, sha256ArrayBuffer } from '../../artifacts';
 import { projectFileService } from '../projectFileService';
 import { artifactService } from '../project/domains/ArtifactService';
@@ -96,8 +97,11 @@ function describeSourceWaveformChannelLayout(channelCount: number): AudioChannel
 
 export function createCurrentAudioArtifactStore(): AudioArtifactStore {
   const projectHandle = getProjectHandle();
+  const packageSession = projectFileService.getProjectPackageSession();
   return new AudioArtifactStore(
-    projectHandle
+    packageSession
+      ? artifactService.createPackageStore(packageSession)
+      : projectHandle
       ? artifactService.createStore(projectHandle)
       : artifactService.createIndexedDBStore(),
   );
@@ -444,7 +448,7 @@ export async function generateTimelineWaveformAnalysisForFile(
     },
   };
 
-  nextJob.promise = generateTimelineWaveformAnalysisForFileUncached(file, wrappedOptions)
+  nextJob.promise = withProjectArtifactWriteBatch(() => generateTimelineWaveformAnalysisForFileUncached(file, wrappedOptions))
     .finally(() => {
       activeTimelineWaveformAnalysisJobs.delete(jobKey);
       nextJob.listeners.clear();
@@ -519,26 +523,42 @@ async function generateTimelineWaveformAnalysisForFileUncached(
     const arrayBuffer = await file.arrayBuffer();
     throwIfAborted(options.signal);
 
-    const audioBuffer = await decodeService.decodeAudioBuffer(
-      {
-        kind: 'array-buffer',
-        arrayBuffer,
-        name: file.name,
-        mimeType: file.type || undefined,
-      },
-      {
-        mediaFileId: options.mediaFileId ?? `file:${file.name}:${file.size}:${file.lastModified}`,
-        sourceFingerprint: `file:${file.name}:${file.size}:${file.lastModified}`,
-        clipAudioStateHash: options.clipAudioStateHash,
-        signal: options.signal,
-        metadata: {
-          source: 'timeline-waveform-pyramid',
-          sourceFileName: file.name,
-          sourceFileSize: file.size,
-          sourceLastModified: file.lastModified,
+    let audioBuffer: AudioBuffer;
+    try {
+      audioBuffer = await decodeService.decodeAudioBuffer(
+        {
+          kind: 'array-buffer',
+          arrayBuffer,
+          name: file.name,
+          mimeType: file.type || undefined,
         },
-      },
-    );
+        {
+          mediaFileId: options.mediaFileId ?? `file:${file.name}:${file.size}:${file.lastModified}`,
+          sourceFingerprint: `file:${file.name}:${file.size}:${file.lastModified}`,
+          clipAudioStateHash: options.clipAudioStateHash,
+          signal: options.signal,
+          metadata: {
+            source: 'timeline-waveform-pyramid',
+            sourceFileName: file.name,
+            sourceFileSize: file.size,
+            sourceLastModified: file.lastModified,
+          },
+        },
+      );
+    } catch (decodeError) {
+      const { readIsobmffMetadata } = await import('../mediaMetadata/isobmffMetadata');
+      const { MediaAudioRangeReader } = await import('../../engine/audio/exportPipeline/MediaAudioRangeReader');
+      const duration = (await readIsobmffMetadata(file))?.duration;
+      if (!duration || duration <= 0) throw decodeError;
+      const reader = new MediaAudioRangeReader(file);
+      try {
+        audioBuffer = await reader.read(0, duration);
+      } catch {
+        throw decodeError;
+      } finally {
+        reader.dispose();
+      }
+    }
     throwIfAborted(options.signal);
     return await generateTimelineWaveformAnalysisFromBuffer(file, arrayBuffer, audioBuffer, options);
   } finally {

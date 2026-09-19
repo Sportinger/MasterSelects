@@ -61,10 +61,12 @@ export function resolveCaptionSourceWords(
   clips: readonly TimelineClip[],
 ): TranscriptWord[] | undefined {
   const directWords = resolveClipTranscriptWords(clip);
-  if (directWords?.length) return directWords;
+  if (directWords?.length) return filterWordsToClipSourceWindow(directWords, clip);
   const linkedClip = getLinkedClip(clip, clips);
   const linkedWords = linkedClip ? resolveClipTranscriptWords(linkedClip) : undefined;
-  return linkedWords?.length ? linkedWords : undefined;
+  return linkedWords?.length
+    ? filterWordsToClipSourceWindow(linkedWords, clip)
+    : undefined;
 }
 
 function linkedPairKey(clip: TimelineClip, clips: readonly TimelineClip[]): string {
@@ -133,6 +135,23 @@ function compareSourceRank(
   return left.clip.id.localeCompare(right.clip.id);
 }
 
+export function resolveTranscriptSourceAtTime(input: {
+  clips: readonly TimelineClip[];
+  sourceClipId?: string | null;
+  timelineTime: number;
+  tracks: readonly TimelineTrack[];
+}): CaptionSourceCandidate | null {
+  const candidates = getCaptionSourceCandidates(input.clips);
+  if (input.sourceClipId) {
+    const requested = candidates.find(candidate => candidate.clip.id === input.sourceClipId);
+    if (requested) return isClipActiveAt(requested.clip, input.timelineTime) ? requested : null;
+  }
+
+  return candidates
+    .filter(candidate => isClipActiveAt(candidate.clip, input.timelineTime))
+    .sort((left, right) => compareSourceRank(left, right, input.tracks))[0] ?? null;
+}
+
 export function resolveCaptionSourceAtTime(input: {
   captionClip: TimelineClip;
   clips: readonly TimelineClip[];
@@ -140,19 +159,12 @@ export function resolveCaptionSourceAtTime(input: {
   timelineTime: number;
 }): CaptionSourceCandidate | null {
   const { captionClip, clips, tracks, timelineTime } = input;
-  const candidates = getCaptionSourceCandidates(clips, captionClip.id);
-  const requestedSourceId = captionClip.captionProperties?.sourceClipId;
-
-  if (requestedSourceId) {
-    const requested = candidates.find(candidate => candidate.clip.id === requestedSourceId);
-    if (requested) {
-      return isClipActiveAt(requested.clip, timelineTime) ? requested : null;
-    }
-  }
-
-  return candidates
-    .filter(candidate => isClipActiveAt(candidate.clip, timelineTime))
-    .sort((left, right) => compareSourceRank(left, right, tracks))[0] ?? null;
+  return resolveTranscriptSourceAtTime({
+    clips: clips.filter(clip => clip.id !== captionClip.id),
+    sourceClipId: captionClip.captionProperties?.sourceClipId,
+    timelineTime,
+    tracks,
+  });
 }
 
 export function defaultCaptionSourceTime(
@@ -181,6 +193,41 @@ function getWordStart(word: TranscriptWord): number {
 
 function getWordEnd(word: TranscriptWord): number {
   return word.alignedEnd ?? word.end;
+}
+
+function filterWordsToClipSourceWindow(
+  words: readonly TranscriptWord[],
+  clip: Pick<TimelineClip, 'inPoint' | 'outPoint'>,
+): TranscriptWord[] {
+  const sourceStart = Math.min(clip.inPoint, clip.outPoint);
+  const sourceEnd = Math.max(clip.inPoint, clip.outPoint);
+  return words.filter(word =>
+    getWordStart(word) + CAPTION_TIME_EPSILON >= sourceStart
+    && getWordStart(word) < sourceEnd
+  );
+}
+
+function filterWordsToCaptionTimelineWindow(input: {
+  captionClip: TimelineClip;
+  sourceClip: TimelineClip;
+  words: readonly TranscriptWord[];
+  resolveSourceTime: CaptionSourceTimeResolver;
+}): TranscriptWord[] {
+  const timelineStart = Math.max(input.captionClip.startTime, input.sourceClip.startTime);
+  const timelineEnd = Math.min(
+    input.captionClip.startTime + input.captionClip.duration,
+    input.sourceClip.startTime + input.sourceClip.duration,
+  );
+  if (timelineEnd <= timelineStart) return [];
+
+  const boundaryA = input.resolveSourceTime(input.sourceClip, timelineStart);
+  const boundaryB = input.resolveSourceTime(input.sourceClip, timelineEnd);
+  const sourceStart = Math.min(boundaryA, boundaryB);
+  const sourceEnd = Math.max(boundaryA, boundaryB);
+  return input.words.filter(word =>
+    getWordStart(word) + CAPTION_TIME_EPSILON >= sourceStart
+    && getWordStart(word) < sourceEnd
+  );
 }
 
 export function groupCaptionWords(
@@ -259,12 +306,19 @@ export function createCaptionFrameModel(input: {
   const source = resolveCaptionSourceAtTime(input);
   if (!source) return null;
 
-  const sourceTime = (input.resolveSourceTime ?? defaultCaptionSourceTime)(
+  const resolveSourceTime = input.resolveSourceTime ?? defaultCaptionSourceTime;
+  const sourceTime = resolveSourceTime(
     source.clip,
     input.timelineTime,
   );
+  const visibleWords = filterWordsToCaptionTimelineWindow({
+    captionClip: input.captionClip,
+    sourceClip: source.clip,
+    words: source.words,
+    resolveSourceTime,
+  });
   const group = findCaptionGroup(
-    groupCaptionWords(source.words, properties),
+    groupCaptionWords(visibleWords, properties),
     sourceTime,
     properties.holdAfter,
   );

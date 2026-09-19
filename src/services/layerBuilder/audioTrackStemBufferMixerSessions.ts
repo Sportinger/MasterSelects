@@ -1,3 +1,5 @@
+import type { TimelineClip } from '../../types/timeline';
+import { scheduleAutomaticCutFades } from '../audio/automaticCutFadePlayback';
 import { clearMasterAudio, playheadState } from './PlayheadState';
 import {
   clampStemBufferMixerGain,
@@ -20,6 +22,7 @@ export {
 
 type CreateStemBufferMixerSessionParams = {
   clipId: string;
+  clip?: TimelineClip;
   context: AudioContext;
   key: string;
   layers: StemBufferMixerLayer[];
@@ -51,6 +54,7 @@ export function stopStemBufferMixerSession(session: StemBufferMixerSession): voi
   }
   for (const gain of session.gains.values()) disconnectAudioNode(gain);
   disconnectAudioNode(session.masterGain);
+  disconnectAudioNode(session.cutGain);
   disconnectAudioNode(session.analyser);
   disconnectAudioNode(session.stereoSplitter);
   disconnectAudioNode(session.leftAnalyser);
@@ -61,7 +65,14 @@ export function createStemBufferMixerSession(
   params: CreateStemBufferMixerSessionParams,
 ): StemBufferMixerSession | null {
   const { clipId, context, key, layers, buffers, startAt, startOffset, masterVolume, meterTrackId } = params;
+  const playableLayers = layers.filter(layer => {
+    const buffer = buffers.get(layer.id);
+    return buffer && Math.max(0, startOffset) < Math.min(buffer.duration, params.clip?.outPoint ?? buffer.duration);
+  });
+  if (playableLayers.length === 0) return null;
   const masterGain = context.createGain();
+  const cutGain = context.createGain();
+  if (params.clip) scheduleAutomaticCutFades(cutGain.gain, params.clip, startOffset, startAt, 1, true);
   const analyser = context.createAnalyser();
   const stereoSplitter = context.createChannelSplitter(2);
   const leftAnalyser = context.createAnalyser();
@@ -70,6 +81,7 @@ export function createStemBufferMixerSession(
   leftAnalyser.fftSize = analyser.fftSize;
   rightAnalyser.fftSize = analyser.fftSize;
   masterGain.gain.value = clampStemBufferMixerGain(masterVolume);
+  cutGain.connect(analyser);
   analyser.connect(masterGain);
   analyser.connect(stereoSplitter);
   stereoSplitter.connect(leftAnalyser, 0);
@@ -78,7 +90,7 @@ export function createStemBufferMixerSession(
 
   const gains = new Map<string, GainNode>();
   const sources: AudioBufferSourceNode[] = [];
-  for (const layer of layers) {
+  for (const layer of playableLayers) {
     const buffer = buffers.get(layer.id);
     if (!buffer) continue;
     const source = context.createBufferSource();
@@ -87,8 +99,15 @@ export function createStemBufferMixerSession(
     source.buffer = buffer;
     source.playbackRate.value = 1;
     source.connect(gain);
-    gain.connect(analyser);
-    source.start(startAt, Math.min(startOffset, Math.max(0, buffer.duration - 0.02)));
+    gain.connect(cutGain);
+    const offset = Math.max(0, startOffset);
+    const end = Math.min(buffer.duration, params.clip?.outPoint ?? buffer.duration);
+    if (offset >= end) {
+      disconnectAudioNode(source);
+      disconnectAudioNode(gain);
+      continue;
+    }
+    source.start(startAt, offset, end - offset);
     gains.set(layer.id, gain);
     sources.push(source);
   }
@@ -102,6 +121,7 @@ export function createStemBufferMixerSession(
     clipId,
     context,
     masterGain,
+    cutGain,
     analyser,
     stereoSplitter,
     leftAnalyser,

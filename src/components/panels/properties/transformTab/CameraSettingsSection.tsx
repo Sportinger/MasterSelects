@@ -4,9 +4,16 @@ import {
   MIN_CAMERA_FOV_DEGREES,
   fovToFullFrameFocalLengthMm,
 } from '../../../../utils/cameraLens';
+import {
+  ResolveInspectorIconButton,
+  ResolveInspectorRow,
+  ResolveInspectorSection,
+  ResolveResetIcon,
+} from '../resolveInspector/ResolveInspectorPrimitives';
 import { KeyframeToggle } from '../shared';
 import { LabeledValue } from './ValueControls';
 import type { CameraValueContext, CreateMidiTarget } from './transformTabTypes';
+import { HandleOnlyRange } from './HandleOnlyRange';
 
 interface CameraSettingsSectionProps {
   camera: CameraValueContext;
@@ -18,8 +25,7 @@ interface CameraSettingsSectionProps {
   onCameraFocalLengthChange: (value: number) => void;
   onCameraFovChange: (value: number) => void;
   onCameraNearChange: (value: number) => void;
-  onCameraResolutionHeightChange: (value: number) => void;
-  onCameraResolutionWidthChange: (value: number) => void;
+  onResetLens: () => void;
 }
 
 export function CameraSettingsSection({
@@ -32,143 +38,127 @@ export function CameraSettingsSection({
   onCameraFocalLengthChange,
   onCameraFovChange,
   onCameraNearChange,
-  onCameraResolutionHeightChange,
-  onCameraResolutionWidthChange,
+  onResetLens,
 }: CameraSettingsSectionProps) {
   return (
-    <div className="properties-section">
-      <div className="control-row transform-param-row">
-        <span className="keyframe-toggle-placeholder" />
-        <label className="prop-label">Lens</label>
-        <div className="multi-value-row">
+    <div className="resolve-camera-settings-sections">
+      <ResolveInspectorSection
+        headerActions={(
+          <ResolveInspectorIconButton
+            ariaLabel="Reset lens"
+            className="resolve-inspector-reset-button"
+            onClick={onResetLens}
+            title="Reset lens to default and delete FOV keyframes"
+          >
+            <ResolveResetIcon />
+          </ResolveInspectorIconButton>
+        )}
+        indicator="none"
+        title="Lens"
+      >
+        <ResolveInspectorRow
+          actions={<KeyframeToggle clipId={clipId} property="camera.fov" value={camera.settings.fov} />}
+          label="Field of View"
+        >
+          <div className="resolve-inspector-slider-value">
+            <HandleOnlyRange
+              aria-label="Field of View slider"
+              max={MAX_CAMERA_FOV_DEGREES}
+              min={MIN_CAMERA_FOV_DEGREES}
+              onChange={onCameraFovChange}
+              onDragEnd={onBatchEnd}
+              onDragStart={onBatchStart}
+              step={0.1}
+              value={camera.settings.fov}
+            />
+            <LabeledValue
+              ariaLabel="Field of View"
+              className="resolve-inspector-field resolve-inspector-field--plain"
+              decimals={1}
+              defaultValue={DEFAULT_SCENE_CAMERA_SETTINGS.fov}
+              label=""
+              max={MAX_CAMERA_FOV_DEGREES}
+              midiTarget={createMidiTarget(
+                'camera.fov',
+                'Camera FOV',
+                camera.settings.fov,
+                MIN_CAMERA_FOV_DEGREES,
+                MAX_CAMERA_FOV_DEGREES,
+              )}
+              min={MIN_CAMERA_FOV_DEGREES}
+              onChange={onCameraFovChange}
+              onDragEnd={onBatchEnd}
+              onDragStart={onBatchStart}
+              sensitivity={0.5}
+              suffix="deg"
+              value={camera.settings.fov}
+            />
+          </div>
+        </ResolveInspectorRow>
+        <ResolveInspectorRow
+          actions={<KeyframeToggle clipId={clipId} property="camera.fov" value={camera.settings.fov} />}
+          label="Focal Length"
+        >
           <LabeledValue
-            label="FOV"
-            value={camera.settings.fov}
-            onChange={onCameraFovChange}
-            defaultValue={DEFAULT_SCENE_CAMERA_SETTINGS.fov}
-            decimals={1}
-            suffix="deg"
-            min={MIN_CAMERA_FOV_DEGREES}
-            max={MAX_CAMERA_FOV_DEGREES}
-            sensitivity={0.5}
-            onDragStart={onBatchStart}
-            onDragEnd={onBatchEnd}
-            keyframeToggle={<KeyframeToggle clipId={clipId} property="camera.fov" value={camera.settings.fov} />}
-            midiTarget={createMidiTarget(
-              'camera.fov',
-              'Camera FOV',
-              camera.settings.fov,
-              MIN_CAMERA_FOV_DEGREES,
-              MAX_CAMERA_FOV_DEGREES,
-            )}
-          />
-          <LabeledValue
-            label="mm"
-            value={camera.focalLengthMm}
-            onChange={onCameraFocalLengthChange}
+            ariaLabel="Focal Length"
+            className="resolve-inspector-field resolve-inspector-field--plain"
             defaultValue={fovToFullFrameFocalLengthMm(DEFAULT_SCENE_CAMERA_SETTINGS.fov)}
             decimals={1}
-            suffix="mm"
-            min={camera.minFocalLengthMm}
+            label=""
             max={camera.maxFocalLengthMm}
-            sensitivity={0.5}
-            onDragStart={onBatchStart}
+            min={camera.minFocalLengthMm}
+            onChange={onCameraFocalLengthChange}
             onDragEnd={onBatchEnd}
+            onDragStart={onBatchStart}
+            sensitivity={0.5}
+            suffix="mm"
+            value={camera.focalLengthMm}
           />
-        </div>
-      </div>
-      <div className="control-row transform-param-row">
-        <span className="keyframe-toggle-placeholder" />
-        <label className="prop-label">Planes</label>
-        <div className="multi-value-row">
+        </ResolveInspectorRow>
+      </ResolveInspectorSection>
+
+      <ResolveInspectorSection defaultOpen={false} indicator="none" title="Clipping Planes">
+        <ResolveInspectorRow
+          actions={<KeyframeToggle clipId={clipId} property="camera.near" value={camera.settings.near} />}
+          label="Near"
+        >
           <LabeledValue
-            label="Near"
-            value={camera.settings.near}
-            onChange={onCameraNearChange}
+            ariaLabel="Near Clipping Plane"
+            className="resolve-inspector-field resolve-inspector-field--plain"
             defaultValue={DEFAULT_SCENE_CAMERA_SETTINGS.near}
             decimals={3}
-            min={0.001}
             max={100}
-            sensitivity={0.05}
-            onDragStart={onBatchStart}
-            onDragEnd={onBatchEnd}
-            keyframeToggle={<KeyframeToggle clipId={clipId} property="camera.near" value={camera.settings.near} />}
+            label=""
             midiTarget={createMidiTarget('camera.near', 'Camera Near', camera.settings.near, 0.001, 100)}
+            min={0.001}
+            onChange={onCameraNearChange}
+            onDragEnd={onBatchEnd}
+            onDragStart={onBatchStart}
+            sensitivity={0.05}
+            value={camera.settings.near}
           />
+        </ResolveInspectorRow>
+        <ResolveInspectorRow
+          actions={<KeyframeToggle clipId={clipId} property="camera.far" value={camera.settings.far} />}
+          label="Far"
+        >
           <LabeledValue
-            label="Far"
-            value={camera.settings.far}
-            onChange={onCameraFarChange}
+            ariaLabel="Far Clipping Plane"
+            className="resolve-inspector-field resolve-inspector-field--plain"
             defaultValue={DEFAULT_SCENE_CAMERA_SETTINGS.far}
             decimals={1}
-            min={1}
+            label=""
             max={100000}
-            sensitivity={10}
-            onDragStart={onBatchStart}
-            onDragEnd={onBatchEnd}
-            keyframeToggle={<KeyframeToggle clipId={clipId} property="camera.far" value={camera.settings.far} />}
             midiTarget={createMidiTarget('camera.far', 'Camera Far', camera.settings.far, 1, 100000)}
-          />
-        </div>
-      </div>
-      <div className="control-row transform-param-row">
-        <span className="keyframe-toggle-placeholder" />
-        <label className="prop-label">Res</label>
-        <div className="multi-value-row">
-          <LabeledValue
-            label="X"
-            value={camera.resolutionWidth}
-            onChange={onCameraResolutionWidthChange}
-            defaultValue={DEFAULT_SCENE_CAMERA_SETTINGS.resolutionWidth ?? 1920}
-            decimals={0}
             min={1}
-            max={32768}
-            sensitivity={16}
-            onDragStart={onBatchStart}
+            onChange={onCameraFarChange}
             onDragEnd={onBatchEnd}
-            keyframeToggle={
-              <KeyframeToggle
-                clipId={clipId}
-                property="camera.resolutionWidth"
-                value={camera.resolutionWidth}
-              />
-            }
-            midiTarget={createMidiTarget(
-              'camera.resolutionWidth',
-              'Camera Res X',
-              camera.resolutionWidth,
-              1,
-              32768,
-            )}
-          />
-          <LabeledValue
-            label="Y"
-            value={camera.resolutionHeight}
-            onChange={onCameraResolutionHeightChange}
-            defaultValue={DEFAULT_SCENE_CAMERA_SETTINGS.resolutionHeight ?? 1080}
-            decimals={0}
-            min={1}
-            max={32768}
-            sensitivity={16}
             onDragStart={onBatchStart}
-            onDragEnd={onBatchEnd}
-            keyframeToggle={
-              <KeyframeToggle
-                clipId={clipId}
-                property="camera.resolutionHeight"
-                value={camera.resolutionHeight}
-              />
-            }
-            midiTarget={createMidiTarget(
-              'camera.resolutionHeight',
-              'Camera Res Y',
-              camera.resolutionHeight,
-              1,
-              32768,
-            )}
+            sensitivity={10}
+            value={camera.settings.far}
           />
-        </div>
-      </div>
+        </ResolveInspectorRow>
+      </ResolveInspectorSection>
     </div>
   );
 }

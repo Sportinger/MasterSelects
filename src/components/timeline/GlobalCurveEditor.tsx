@@ -32,6 +32,9 @@ import {
   type CurveGraphModel,
   type CurveGraphSeries,
 } from './utils/curveGraphModel';
+import { buildRenderedCurveHandles } from './utils/globalCurveEditorHandles';
+import { GlobalCurveEditorEmptyState } from './GlobalCurveEditorEmptyState';
+import { clampBezierHandleTimeOffset } from '../../utils/keyframeInterpolation';
 
 const GLOBAL_CURVE_PADDING = { top: 44, right: 12, bottom: 22, left: 12 } as const;
 const GLOBAL_CURVE_COMPACT_PADDING = { top: 16, right: 12, bottom: 22, left: 12 } as const;
@@ -343,7 +346,8 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
     if (!dragState || !transactionRef.current) return;
     const pointer = getClampedSvgPoint(clientX, clientY);
     const series = model.series.find((candidate) => candidate.id === dragState.seriesId);
-    const keyframe = series?.keyframes.find((candidate) => candidate.id === dragState.keyframeId);
+    const keyframeIndex = series?.keyframes.findIndex((candidate) => candidate.id === dragState.keyframeId) ?? -1;
+    const keyframe = keyframeIndex >= 0 ? series?.keyframes[keyframeIndex] : undefined;
     if (!pointer || !series || !keyframe) {
       cancelActiveTransaction('missing-target');
       return;
@@ -413,10 +417,16 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
       curvePadding,
     );
     const isIn = dragState.handle === 'in';
+    const requestedHandleTime = handleCompositionTime - keyframe.compositionTime;
+    const constrainedHandleTime = isIn
+      ? keyframeIndex > 0
+        ? clampBezierHandleTimeOffset(series.keyframes[keyframeIndex - 1].keyframe, keyframe.keyframe, 'in', requestedHandleTime)
+        : Math.min(0, requestedHandleTime)
+      : keyframeIndex < series.keyframes.length - 1
+        ? clampBezierHandleTimeOffset(keyframe.keyframe, series.keyframes[keyframeIndex + 1].keyframe, 'out', requestedHandleTime)
+        : Math.max(0, requestedHandleTime);
     const position: BezierHandle = {
-      x: isIn
-        ? Math.min(0, handleCompositionTime - keyframe.compositionTime)
-        : Math.max(0, handleCompositionTime - keyframe.compositionTime),
+      x: constrainedHandleTime,
       y: shiftKey
         ? 0
         : curveAuthoringDeltaToStorage(
@@ -491,9 +501,11 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
 
   if (model.series.length === 0) {
     return (
-      <div className="global-curve-editor empty" style={{ width, height }}>
-        {emptyMessage}
-      </div>
+      <GlobalCurveEditorEmptyState
+        emptyMessage={emptyMessage}
+        height={height}
+        width={width}
+      />
     );
   }
 
@@ -519,6 +531,7 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
       <svg
         ref={svgRef}
         className="curve-editor-svg global-curve-editor-svg"
+        data-active-series-id={activeSeries?.id ?? ''}
         width={width}
         height={height}
         role="img"
@@ -539,6 +552,8 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
         })}
 
         {model.series.map((series) => {
+          const isActive = series.id === activeSeries?.id;
+          const renderedColor = isActive ? series.color : 'var(--text-muted)';
           const valueToY = (value: number) => curveValueToY(
             value,
             series.range,
@@ -578,8 +593,9 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
           return (
             <g
               key={series.id}
-              className={`global-curve-editor-series${series.id === activeSeries?.id ? ' active' : ''}`}
+              className={`global-curve-editor-series${isActive ? ' active' : ''}`}
               data-series-id={series.id}
+              data-rendered-color={renderedColor}
               onMouseDown={() => activateSeries(series.id)}
             >
               {authoringKeyframes.map((keyframe, index) => {
@@ -594,7 +610,7 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
                       valueToY,
                     )}
                     className="curve-editor-curve global-curve-editor-curve"
-                    style={{ stroke: series.color }}
+                    style={{ stroke: renderedColor }}
                   />
                 );
               })}
@@ -606,7 +622,7 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
                 const previous = series.keyframes[index - 1];
                 const next = series.keyframes[index + 1];
                 const handles = selected
-                  ? buildRenderedHandles(series, point, previous, next, valueToY, timeToPixel)
+                  ? buildRenderedCurveHandles(series, point, previous, next, valueToY, timeToPixel)
                   : [];
                 return (
                   <g key={`${series.id}:point:${point.id}`}>
@@ -618,6 +634,7 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
                           x2={handle.x}
                           y2={handle.y}
                           className="curve-editor-handle-line"
+                          style={isActive ? undefined : { stroke: renderedColor }}
                         />
                         <circle
                           cx={handle.x}
@@ -626,6 +643,7 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
                           className="curve-editor-handle"
                           data-keyframe-id={point.id}
                           data-handle={handle.handle}
+                          style={isActive ? undefined : { fill: renderedColor }}
                           onMouseDown={(event) => handleBezierMouseDown(
                             event,
                             series,
@@ -640,7 +658,7 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
                       cy={y}
                       r={5}
                       className={`curve-editor-keyframe global-curve-editor-keyframe${selected ? ' selected' : ''}`}
-                      style={{ fill: selected ? undefined : series.color }}
+                      style={{ fill: isActive && selected ? undefined : renderedColor }}
                       data-keyframe-id={point.id}
                       data-series-id={series.id}
                       onMouseDown={(event) => handleKeyframeMouseDown(event, series, point)}
@@ -673,56 +691,5 @@ function collectSelectedVisibleTargets(
   ));
 }
 
-interface RenderedHandle {
-  handle: 'in' | 'out';
-  x: number;
-  y: number;
-}
-
-function buildRenderedHandles(
-  series: CurveGraphSeries,
-  point: CurveGraphKeyframe,
-  previous: CurveGraphKeyframe | undefined,
-  next: CurveGraphKeyframe | undefined,
-  valueToY: (value: number) => number,
-  timeToPixel: (time: number) => number,
-): RenderedHandle[] {
-  const handles: RenderedHandle[] = [];
-  if (previous) {
-    const storagePosition = point.handleIn ?? {
-      x: -(point.localTime - previous.localTime) / 3,
-      y: -(point.storageValue - previous.storageValue) / 3,
-    };
-    handles.push({
-      handle: 'in',
-      x: timeToPixel(point.compositionTime + storagePosition.x),
-      y: valueToY(
-        point.authoringValue + curveStorageDeltaToAuthoring(
-          series.descriptor,
-          storagePosition.y,
-          series.authoringContext,
-        ),
-      ),
-    });
-  }
-  if (next) {
-    const storagePosition = point.handleOut ?? {
-      x: (next.localTime - point.localTime) / 3,
-      y: (next.storageValue - point.storageValue) / 3,
-    };
-    handles.push({
-      handle: 'out',
-      x: timeToPixel(point.compositionTime + storagePosition.x),
-      y: valueToY(
-        point.authoringValue + curveStorageDeltaToAuthoring(
-          series.descriptor,
-          storagePosition.y,
-          series.authoringContext,
-        ),
-      ),
-    });
-  }
-  return handles;
-}
 
 export default GlobalCurveEditor;

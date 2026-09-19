@@ -56,6 +56,8 @@ export function signalKindsForTimelineSourceType(type: TimelineSourceType): Sign
       return ['scene', 'curve', 'texture', 'metadata'];
     case 'motion-shape':
       return ['vector', 'texture', 'metadata'];
+    case 'flock':
+      return ['point-cloud', 'curve', 'scene', 'metadata'];
     case 'motion-null':
     case 'motion-adjustment':
       return ['metadata'];

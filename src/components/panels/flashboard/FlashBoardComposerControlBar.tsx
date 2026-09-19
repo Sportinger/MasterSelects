@@ -1,9 +1,7 @@
 import type { ComponentProps, CSSProperties } from 'react';
 import { FlashBoardActionStack } from './FlashBoardActionStack';
-import {
-  FLASHBOARD_CHAT_MODEL_CLASS_OPTION_COUNT,
-  FlashBoardChatControls,
-} from './FlashBoardChatControls';
+import { FlashBoardChatControls } from './FlashBoardChatControls';
+import { FLASHBOARD_CHAT_AGENT_OPTION_COUNT } from './flashBoardChatAgentOptions';
 import { FlashBoardElevenLabsSettingsPopovers } from './FlashBoardElevenLabsSettingsPopovers';
 import { FlashBoardElevenLabsVoicePopover } from './FlashBoardElevenLabsVoicePopover';
 import { FlashBoardGenerationControls } from './FlashBoardGenerationControls';
@@ -53,6 +51,7 @@ function getInlineSubmenuStyle(
       break;
     case parameterPopovers.activePopover === 'duration':
       optionCount = parameterPopovers.durationRange ? 2 : parameterPopovers.durationOptions.length;
+      columnCount = parameterPopovers.durationRange ? 2 : 4;
       if (parameterPopovers.durationRange) extraHeight = 34;
       break;
     case parameterPopovers.activePopover === 'imageSize':
@@ -64,12 +63,9 @@ function getInlineSubmenuStyle(
     case sunoPopovers.activePopover === 'sunoModel':
       optionCount = sunoPopovers.modelOptions.length;
       break;
-    case chatControls.renderedPopover === 'chatProvider':
-      optionCount = chatControls.chatProviderOptions.length;
-      break;
     case chatControls.renderedPopover === 'chatModelClass':
-      optionCount = FLASHBOARD_CHAT_MODEL_CLASS_OPTION_COUNT;
-      columnCount = FLASHBOARD_CHAT_MODEL_CLASS_OPTION_COUNT;
+      optionCount = FLASHBOARD_CHAT_AGENT_OPTION_COUNT;
+      columnCount = FLASHBOARD_CHAT_AGENT_OPTION_COUNT;
       break;
   }
 

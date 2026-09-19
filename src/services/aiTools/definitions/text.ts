@@ -39,6 +39,7 @@ const textPropertySchema: Record<string, unknown> = {
   lineHeight: { type: 'number', description: 'Line-height multiplier (0.5-3).' },
   letterSpacing: { type: 'number', description: 'Letter spacing in pixels (-10 to 50).' },
   boxEnabled: { type: 'boolean', description: 'Enable area text wrapping and clipping inside the text field.' },
+  wrapMode: { type: 'string', enum: ['word', 'none'], description: 'Area-text wrapping mode. none disables automatic wrapping but preserves explicit newline characters.' },
   boxX: { type: 'number', description: 'Text-field left edge in composition pixels (-100000 to 100000).' },
   boxY: { type: 'number', description: 'Text-field top edge in composition pixels (-100000 to 100000).' },
   boxWidth: { type: 'number', description: 'Text-field width in composition pixels (24-100000).' },
@@ -159,7 +160,7 @@ export const textToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'manageEditableHook',
-      description: 'Create or update one durable editable hook overlay. All geometry, padding, radii, and font sizes are composition pixels. A hook is 1-4 editable text rows with native Motion backplates, a stable hookId, preset layout, shared styling, and optional per-row colors. Prefer this over assembling hook layers manually.',
+      description: 'Create or update one durable editable hook overlay as a named subcomposition. The parent timeline receives one visual composition clip; 1-4 editable text rows, native Motion backplates, stable hookId metadata, and optional entrance/hold/exit keyframes live inside it. All geometry, padding, radii, motion distances, and font sizes are composition pixels. Hook rows are always centered and never auto-wrap. Presets have zero visible gap; set placement.gap only for an explicitly requested gap. Prefer this over assembling hook layers manually.',
       parameters: {
         type: 'object',
         properties: {
@@ -197,7 +198,7 @@ export const textToolDefinitions: ToolDefinition[] = [
               fontSize: { type: 'number', description: 'Font size in composition pixels (8-500).' },
               fontWeight: { type: 'number' },
               textColor: { type: 'string' },
-              textAlign: { type: 'string', enum: ['left', 'center', 'right'] },
+              textAlign: { type: 'string', enum: ['center'], description: 'Hooks are always centered.' },
               backgroundColor: { type: 'string' },
               backgroundOpacity: { type: 'number' },
               cornerRadius: { type: 'number', description: 'Backplate corner radius in pixels.' },
@@ -208,7 +209,7 @@ export const textToolDefinitions: ToolDefinition[] = [
           },
           placement: {
             type: 'object',
-            description: 'Optional composition-pixel placement. x/y are the text box top-left; width, rowHeight, and gap are pixels.',
+            description: 'Optional composition-pixel placement. x/y are the text box top-left; width, rowHeight, and gap are pixels. Omitted gap defaults to 0.',
             properties: {
               x: { type: 'number' },
               y: { type: 'number' },
@@ -217,6 +218,34 @@ export const textToolDefinitions: ToolDefinition[] = [
               gap: { type: 'number' },
             },
             required: [],
+          },
+          motion: {
+            type: 'object',
+            description: 'Optional native keyframe program for create. Requires entrance and exit phases and preserves at least 0.5 seconds of readable hold time.',
+            properties: {
+              entrance: {
+                type: 'object',
+                properties: {
+                  direction: { type: 'string', enum: ['from-left', 'from-right', 'from-top', 'from-bottom', 'fade'] },
+                  duration: { type: 'number', description: 'Entrance duration in seconds.' },
+                  distance: { type: 'number', description: 'Optional travel in composition pixels; defaults to the composition width or height.' },
+                  overshoot: { type: 'number', description: 'Optional settle overshoot in composition pixels.' },
+                  easing: { type: 'string', enum: ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'bezier'] },
+                },
+                required: ['direction', 'duration'],
+              },
+              exit: {
+                type: 'object',
+                properties: {
+                  direction: { type: 'string', enum: ['to-left', 'to-right', 'to-top', 'to-bottom', 'fade'] },
+                  duration: { type: 'number', description: 'Exit duration in seconds.' },
+                  distance: { type: 'number', description: 'Optional travel in composition pixels; defaults to the composition width or height.' },
+                  easing: { type: 'string', enum: ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'bezier'] },
+                },
+                required: ['direction', 'duration'],
+              },
+            },
+            required: ['entrance', 'exit'],
           },
         },
         required: ['action', 'hookId'],
@@ -227,7 +256,7 @@ export const textToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'refineEditableHook',
-      description: 'Refine only the indexed text rows and native backplates belonging to an existing durable hookId. All coordinates, sizes, radii, stroke widths, offsets, and font sizes are composition pixels. Prefer manageEditableHook for the first build and this tool for visual iteration.',
+      description: 'Refine only the indexed text rows and native backplates inside the named subcomposition belonging to an existing durable hookId. The parent composition clip and all untouched rows remain intact. All coordinates, sizes, radii, stroke widths, offsets, and font sizes are composition pixels. Prefer manageEditableHook for the first build and this tool for visual iteration.',
       parameters: {
         type: 'object',
         properties: {
@@ -241,8 +270,8 @@ export const textToolDefinitions: ToolDefinition[] = [
                 fontFamily: { type: 'string' }, fontSize: { type: 'number', description: 'Font size in composition pixels (8-500).' },
                 fontStyle: { type: 'string', enum: ['normal', 'italic'] },
                 fontWeight: { type: 'number' }, letterSpacing: { type: 'number', description: 'Letter spacing in pixels.' },
-                lineHeight: { type: 'number' }, textAlign: { type: 'string', enum: ['left', 'center', 'right'] },
-                textColor: { type: 'string' }, verticalAlign: { type: 'string', enum: ['top', 'middle', 'bottom'] },
+                lineHeight: { type: 'number' }, textAlign: { type: 'string', enum: ['center'] },
+                textColor: { type: 'string' }, verticalAlign: { type: 'string', enum: ['middle'] },
                 strokeEnabled: { type: 'boolean' }, strokeColor: { type: 'string' }, strokeWidth: { type: 'number', description: 'Text outline width in pixels.' },
                 shadowEnabled: { type: 'boolean' }, shadowColor: { type: 'string' },
                 shadowOffsetX: { type: 'number', description: 'Horizontal shadow offset in pixels.' }, shadowOffsetY: { type: 'number', description: 'Vertical shadow offset in pixels.' }, shadowBlur: { type: 'number', description: 'Shadow blur radius in pixels.' },

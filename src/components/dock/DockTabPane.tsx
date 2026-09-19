@@ -7,16 +7,19 @@ import type { DockPanel, DockTabGroup } from '../../types/dock';
 import { useDockStore } from '../../stores/dockStore';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { selectIsSlotGridPanelActive, useSlotGridPanelStore } from '../../stores/slotGridPanelStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { DockDropOverlays } from './tabPane/DockDropOverlays';
+import { DockTabDoubleTouchTracker } from './tabPane/DockTabDoubleTouchTracker';
 import { DockTabMenus } from './tabPane/DockTabMenus';
 import { DockTabStrip } from './tabPane/DockTabStrip';
 import { PanelContentHost } from './tabPane/PanelContentHost';
 import { pluralize } from './tabPane/layoutMath';
 import { useCompositionTabReorder } from './tabPane/useCompositionTabReorder';
-import { useDockPaneDropTarget } from './tabPane/useDockPaneDropTarget';
+import { useDockPaneHover } from './tabPane/useDockPaneHover';
 import { useDockTabHoldDrag } from './tabPane/useDockTabHoldDrag';
 import { useTabBarScrollZoom } from './tabPane/useTabBarScrollZoom';
+import { useDockPanelTabSwipe } from './tabPane/useDockPanelTabSwipe';
 import { useTabPaneMenus } from './tabPane/useTabPaneMenus';
 
 interface DockTabPaneProps {
@@ -26,11 +29,13 @@ interface DockTabPaneProps {
 export function DockTabPane({ group }: DockTabPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const tabBarRef = useRef<HTMLDivElement>(null);
+  const suppressNextTabClickRef = useRef(false);
+  const doubleTouchTrackerRef = useRef<DockTabDoubleTouchTracker | null>(null);
+  doubleTouchTrackerRef.current ??= new DockTabDoubleTouchTracker();
 
   const {
     setActiveTab,
     startDrag,
-    updateDrag,
     dragState,
     setPanelZoom,
     layout,
@@ -49,7 +54,6 @@ export function DockTabPane({ group }: DockTabPaneProps) {
   } = useDockStore(useShallow(s => ({
     setActiveTab: s.setActiveTab,
     startDrag: s.startDrag,
-    updateDrag: s.updateDrag,
     dragState: s.dragState,
     setPanelZoom: s.setPanelZoom,
     layout: s.layout,
@@ -92,11 +96,16 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     propertiesSelection: s.propertiesSelection,
   })));
   const audioMixerWoodThemeEnabled = useSettingsStore(state => state.audioMixerWoodThemeEnabled);
+  const slotGridPanelActive = useSlotGridPanelStore(selectIsSlotGridPanelActive);
 
   const activePanel = group.panels[group.activeIndex];
   const isAudioMixerWoodPane = activePanel?.type === 'audio-mixer' && audioMixerWoodThemeEnabled;
   const isDropTarget = dragState.dropTarget?.scope !== 'root-edge' && dragState.dropTarget?.groupId === group.id;
   const dropPosition = isDropTarget ? dragState.dropTarget?.position : undefined;
+  // Slides the pane's inner box aside while a zone is hovered so the user
+  // sees the post-drop layout. Never transform the pane element itself: its
+  // untransformed hit box is what the drag hit-testing samples.
+  const dropPreviewPosition = isDropTarget && dropPosition ? dropPosition : undefined;
   const showTabSlotOverlay = isDropTarget && dropPosition === 'center' && dragState.dropTarget?.tabInsertIndex !== undefined;
   const showCenterDropOverlay = isDropTarget && dropPosition === 'center';
   const panelZoom = activePanel ? (layout.panelZoom?.[activePanel.id] ?? 1.0) : 1.0;
@@ -135,12 +144,12 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     return selectedClipName ? `CLIP ${selectedClipName}` : null;
   }, [clips, propertiesSelection, selectedClipName, tracks]);
   const selectedSlotName = useMemo(() => {
-    if (slotGridProgress <= 0.5 || !selectedSlotCompositionId) {
+    if (!slotGridPanelActive || !selectedSlotCompositionId) {
       return null;
     }
 
     return compositions.find((comp) => comp.id === selectedSlotCompositionId)?.name || null;
-  }, [compositions, selectedSlotCompositionId, slotGridProgress]);
+  }, [compositions, selectedSlotCompositionId, slotGridPanelActive]);
   const audioMixerTabStats = useMemo(() => {
     const audioTracks = tracks.filter((track) => track.type === 'audio');
     const activeSends = audioTracks.reduce((count, track) => (
@@ -199,36 +208,92 @@ export function DockTabPane({ group }: DockTabPaneProps) {
       });
     }
   }, [activeCompositionId, activePanel, group.id, hasTimelinePanel, setHoveredTabTarget, timelinePanel]);
-  const paneDropTarget = useDockPaneDropTarget({
-    containerRef,
-    tabBarRef,
-    group,
+  const paneHover = useDockPaneHover({
     dragState,
-    updateDrag,
     clearHoveredTabTarget,
     handlePaneMouseEnter,
   });
 
   const handleTabClick = useCallback((index: number) => {
+    if (suppressNextTabClickRef.current) {
+      suppressNextTabClickRef.current = false;
+      return;
+    }
     setActiveTab(group.id, index);
     if (groupContainsMaximizedPanel) {
       setMaximizedPanel(group.panels[index]?.id ?? null);
     }
   }, [group.id, group.panels, groupContainsMaximizedPanel, setActiveTab, setMaximizedPanel]);
+  const panelTabSwipe = useDockPanelTabSwipe({
+    activeIndex: group.activeIndex,
+    panelCount: group.panels.length,
+    onSelect: handleTabClick,
+  });
 
-  const handleTabMouseDown = useCallback((event: React.MouseEvent, panel: DockPanel, index: number) => {
-    if (event.button !== 0) return;
-    setActiveTab(group.id, index);
-    holdDrag.startHold(panel.id, panel, event.target as HTMLElement, event.clientX, event.clientY);
+  const handleTabPointerDown = useCallback((event: React.PointerEvent, panel: DockPanel, index: number) => {
+    suppressNextTabClickRef.current = false;
+    doubleTouchTrackerRef.current?.pointerDown({
+      button: event.button,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      isPrimary: event.isPrimary,
+      panelId: panel.id,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+    });
+    holdDrag.notePointerDown(event.pointerType);
+    if (event.button !== 0 || !event.isPrimary) return;
+    // A coarse pointer is selected by the eventual click. Deferring this lets
+    // a long-press open/drag the tab without activating an inactive panel.
+    if (event.pointerType === 'mouse') {
+      setActiveTab(group.id, index);
+    }
+    holdDrag.startHold(panel.id, panel, event.currentTarget as HTMLElement, {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+    });
   }, [group.id, holdDrag, setActiveTab]);
 
-  const handleTabContextMenu = useCallback((event: React.MouseEvent, panel: DockPanel, index: number) => {
-    setActiveTab(group.id, index);
-    if (groupContainsMaximizedPanel) {
-      setMaximizedPanel(panel.id);
+  const handleTabContextMenu = useCallback((event: React.MouseEvent, panel: DockPanel, _index: number) => {
+    suppressNextTabClickRef.current = true;
+    if (holdDrag.isTouchPointerDown()) {
+      event.preventDefault();
+      return;
     }
     menus.openTabContextMenu(event, panel);
-  }, [group.id, groupContainsMaximizedPanel, menus, setActiveTab, setMaximizedPanel]);
+  }, [holdDrag, menus]);
+
+  const handleTabPointerUp = useCallback((event: React.PointerEvent, panel: DockPanel, _index: number) => {
+    holdDrag.cancelHoldIfHolding();
+    const isDoubleTouch = doubleTouchTrackerRef.current?.pointerUp({
+      button: event.button,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      isPrimary: event.isPrimary,
+      panelId: panel.id,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+    });
+    if (holdDrag.holdProgress === 'ready' || dragState.isDragging) {
+      suppressNextTabClickRef.current = true;
+      return;
+    }
+    if (!isDoubleTouch) return;
+
+    suppressNextTabClickRef.current = true;
+    menus.openTabContextMenu(event, panel);
+  }, [
+    dragState.isDragging,
+    holdDrag,
+    menus,
+  ]);
+
+  const handleTabPointerCancel = useCallback((event: React.PointerEvent) => {
+    doubleTouchTrackerRef.current?.cancel(event.pointerId);
+    holdDrag.cancelHoldIfHolding();
+  }, [holdDrag]);
 
   const handlePanelTabMouseEnter = useCallback((panel: DockPanel) => {
     setHoveredTabTarget({
@@ -239,9 +304,8 @@ export function DockTabPane({ group }: DockTabPaneProps) {
   }, [group.id, setHoveredTabTarget]);
 
   const handlePanelTabMouseLeave = useCallback((panelId: string) => {
-    holdDrag.cancelHoldIfHolding();
     clearHoveredTabTarget(panelId);
-  }, [clearHoveredTabTarget, holdDrag]);
+  }, [clearHoveredTabTarget]);
 
   const handleCompositionTabMouseEnter = useCallback((compositionId: string) => {
     if (!timelinePanel) return;
@@ -259,6 +323,10 @@ export function DockTabPane({ group }: DockTabPaneProps) {
   }, [clearHoveredTabTarget, timelinePanel]);
 
   const handleTabBarContextMenu = useCallback((event: React.MouseEvent) => {
+    if (holdDrag.isTouchPointerDown() && holdDrag.holdProgress !== 'idle') {
+      event.preventDefault();
+      return;
+    }
     if (!hasTimelinePanel || !timelinePanel) return;
 
     const target = event.target as HTMLElement | null;
@@ -279,16 +347,37 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     group.panels,
     groupContainsMaximizedPanel,
     hasTimelinePanel,
+    holdDrag,
     menus,
     setActiveTab,
     setMaximizedPanel,
     timelinePanel,
   ]);
 
-  const handleTimelineHandleMouseDown = useCallback((event: React.MouseEvent) => {
-    if (event.button !== 0 || !timelinePanel) return;
-    holdDrag.startHold('timeline-handle', timelinePanel, event.target as HTMLElement, event.clientX, event.clientY);
+  const handleTimelineHandlePointerDown = useCallback((event: React.PointerEvent) => {
+    holdDrag.notePointerDown(event.pointerType);
+    if (event.button !== 0 || !event.isPrimary || !timelinePanel) return;
+    holdDrag.startHold('timeline-handle', timelinePanel, event.currentTarget as HTMLElement, {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+    });
   }, [holdDrag, timelinePanel]);
+
+  // The ⋮⋮ reposition handle also carries the panel context menu (hide,
+  // detach, replace, …) because the timeline group's tabs belong to the
+  // compositions and offer no panel tab to right-click.
+  const handleTimelineHandleContextMenu = useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!timelinePanel) return;
+    const timelinePanelIndex = group.panels.findIndex((panel) => panel.id === timelinePanel.id);
+    if (timelinePanelIndex >= 0) {
+      setActiveTab(group.id, timelinePanelIndex);
+    }
+    menus.openTabContextMenu(event, timelinePanel);
+  }, [group.id, group.panels, menus, setActiveTab, timelinePanel]);
 
   const handleCompositionClick = useCallback((compositionId: string) => {
     setActiveComposition(compositionId);
@@ -307,58 +396,74 @@ export function DockTabPane({ group }: DockTabPaneProps) {
       data-group-id={group.id}
       data-guided-target={`pane:${group.id}`}
       data-active-panel-type={activePanel?.type}
+      data-drop-preview={dropPreviewPosition}
       data-dock-layout-anim-id={layoutAnimationId}
       data-dock-layout-anim-title={activePanel?.title ?? group.id}
       onMouseEnter={handlePaneMouseEnter}
-      onMouseMove={paneDropTarget.handleMouseMove}
-      onMouseLeave={paneDropTarget.handleMouseLeave}
+      onMouseMove={paneHover.handleMouseMove}
+      onMouseLeave={paneHover.handleMouseLeave}
     >
-      <DockTabStrip
-        group={group}
-        tabBarRef={tabBarRef}
-        isMiddleDragging={tabBarInteractions.isMiddleDragging}
-        groupContainsMaximizedPanel={groupContainsMaximizedPanel}
-        hasTimelinePanel={hasTimelinePanel}
-        timelinePanel={timelinePanel}
-        openCompositions={openCompositions}
-        slotGridProgress={slotGridProgress}
-        holdingTabId={holdDrag.holdingTabId}
-        holdProgress={holdDrag.holdProgress}
-        draggedCompIndex={compositionTabs.draggedCompIndex}
-        dropTargetIndex={compositionTabs.dropTargetIndex}
-        activeCompositionId={activeCompositionId}
-        hoveredTabTarget={hoveredTabTarget}
-        hoveredPanelId={hoveredPanelId}
-        maximizedPanelId={maximizedPanelId}
-        dragState={dragState}
-        selectedSlotName={selectedSlotName}
-        selectedPropertiesName={selectedPropertiesName}
-        audioMixerTabStats={audioMixerTabStats}
-        addMenuOpen={menus.addMenu !== null}
-        onTabBarMouseDown={tabBarInteractions.handleTabBarMouseDown}
-        onTabBarContextMenu={handleTabBarContextMenu}
-        onTimelineHandleMouseDown={handleTimelineHandleMouseDown}
-        onTimelineHandleMouseUp={holdDrag.cancelHoldIfHolding}
-        onTimelineHandleMouseLeave={holdDrag.cancelHoldIfHolding}
-        onCompositionClick={handleCompositionClick}
-        onCompositionClose={handleCompositionClose}
-        onCompositionTabMouseEnter={handleCompositionTabMouseEnter}
-        onCompositionTabMouseLeave={handleCompositionTabMouseLeave}
-        compositionTabHandlers={{
-          onDragStart: compositionTabs.handleCompDragStart,
-          onDragOver: compositionTabs.handleCompDragOver,
-          onDragLeave: compositionTabs.handleCompDragLeave,
-          onDrop: compositionTabs.handleCompDrop,
-          onDragEnd: compositionTabs.handleCompDragEnd,
-        }}
-        onTabClick={handleTabClick}
-        onTabMouseDown={handleTabMouseDown}
-        onTabContextMenu={handleTabContextMenu}
-        onTabMouseUp={holdDrag.cancelHoldIfHolding}
-        onPanelTabMouseEnter={handlePanelTabMouseEnter}
-        onPanelTabMouseLeave={handlePanelTabMouseLeave}
-        onAddButtonClick={menus.handleAddButtonClick}
-      />
+      <div className="dock-pane-preview-box">
+        <DockTabStrip
+          group={group}
+          tabBarRef={tabBarRef}
+          isMiddleDragging={tabBarInteractions.isMiddleDragging}
+          groupContainsMaximizedPanel={groupContainsMaximizedPanel}
+          hasTimelinePanel={hasTimelinePanel}
+          timelinePanel={timelinePanel}
+          openCompositions={openCompositions}
+          slotGridProgress={slotGridProgress}
+          holdingTabId={holdDrag.holdingTabId}
+          holdProgress={holdDrag.holdProgress}
+          draggedCompIndex={compositionTabs.draggedCompIndex}
+          dropTargetIndex={compositionTabs.dropTargetIndex}
+          activeCompositionId={activeCompositionId}
+          hoveredTabTarget={hoveredTabTarget}
+          hoveredPanelId={hoveredPanelId}
+          maximizedPanelId={maximizedPanelId}
+          dragState={dragState}
+          selectedSlotName={selectedSlotName}
+          selectedPropertiesName={selectedPropertiesName}
+          audioMixerTabStats={audioMixerTabStats}
+          addMenuOpen={menus.addMenu !== null}
+          onTabBarMouseDown={tabBarInteractions.handleTabBarMouseDown}
+          onTabBarContextMenu={handleTabBarContextMenu}
+          onTimelineHandlePointerDown={handleTimelineHandlePointerDown}
+          onTimelineHandleContextMenu={handleTimelineHandleContextMenu}
+          onTimelineHandlePointerUp={holdDrag.cancelHoldIfHolding}
+          onTimelineHandlePointerLeave={holdDrag.cancelHoldIfHolding}
+          onCompositionClick={handleCompositionClick}
+          onCompositionClose={handleCompositionClose}
+          onCompositionTabMouseEnter={handleCompositionTabMouseEnter}
+          onCompositionTabMouseLeave={handleCompositionTabMouseLeave}
+          compositionTabHandlers={{
+            onDragStart: compositionTabs.handleCompDragStart,
+            onDragOver: compositionTabs.handleCompDragOver,
+            onDragLeave: compositionTabs.handleCompDragLeave,
+            onDrop: compositionTabs.handleCompDrop,
+            onDragEnd: compositionTabs.handleCompDragEnd,
+          }}
+          onTabClick={handleTabClick}
+          onTabPointerDown={handleTabPointerDown}
+          onTabContextMenu={handleTabContextMenu}
+          onTabPointerUp={handleTabPointerUp}
+          onTabPointerLeave={handleTabPointerCancel}
+          onTabPointerCancel={handleTabPointerCancel}
+          onPanelTabMouseEnter={handlePanelTabMouseEnter}
+          onPanelTabMouseLeave={handlePanelTabMouseLeave}
+          onAddButtonClick={menus.handleAddButtonClick}
+        />
+
+        <PanelContentHost
+          activePanel={activePanel}
+          panelZoom={panelZoom}
+          isActivePanelMaximized={isActivePanelMaximized}
+          onPaneMouseEnter={handlePaneMouseEnter}
+          tabSwipeHandlers={panelTabSwipe.handlers}
+          tabSwipeMotionClass={panelTabSwipe.motionClass}
+          suppressTabSwipeContentInteractions={panelTabSwipe.suppressContentInteractions}
+        />
+      </div>
 
       <DockTabMenus
         addMenuRef={menus.addMenuRef}
@@ -371,13 +476,6 @@ export function DockTabPane({ group }: DockTabPaneProps) {
         onFloatContextPanel={menus.handleFloatContextPanel}
         onDetachContextPanelToWindow={menus.handleDetachContextPanelToWindow}
         onChangeContextPanelType={menus.handleChangeContextPanelType}
-      />
-
-      <PanelContentHost
-        activePanel={activePanel}
-        panelZoom={panelZoom}
-        isActivePanelMaximized={isActivePanelMaximized}
-        onPaneMouseEnter={handlePaneMouseEnter}
       />
 
       <DockDropOverlays

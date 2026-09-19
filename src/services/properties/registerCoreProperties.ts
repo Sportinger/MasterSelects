@@ -15,6 +15,7 @@ import { getColorDescriptorForPath, getColorDescriptorsForClip } from './colorPr
 import { getMaskDescriptorForPath, getMaskDescriptorsForClip } from './maskProperties';
 import { getVectorDescriptorForPath, getVectorDescriptorsForClip } from './vectorAnimationProperties';
 import { getMotionDescriptorForPath, getMotionDescriptorsForClip } from './motionDesignProperties';
+import { getFlockDescriptorForPath, getFlockDescriptorsForClip } from './flockProperties';
 
 export function registerCoreProperties(registry: PropertyRegistry = propertyRegistry): PropertyRegistry {
   registerTransformProperties(registry);
@@ -31,5 +32,7 @@ export function registerCoreProperties(registry: PropertyRegistry = propertyRegi
   registry.registerProvider('vector-animation', getVectorDescriptorsForClip);
   registry.registerResolver('motion-design', getMotionDescriptorForPath);
   registry.registerProvider('motion-design', getMotionDescriptorsForClip);
+  registry.registerResolver('flock', getFlockDescriptorForPath);
+  registry.registerProvider('flock', getFlockDescriptorsForClip);
   return registry;
 }

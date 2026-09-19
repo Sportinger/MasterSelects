@@ -13,7 +13,12 @@
 
 import { Logger } from '../../services/logger';
 import { AudioExtractor, audioExtractor } from './AudioExtractor';
-import { AudioEncoderWrapper, type EncodedAudioResult } from './AudioEncoder';
+import {
+  AudioEncoderWrapper,
+  DEFAULT_AUDIO_BITRATE,
+  type AudioCodec,
+  type EncodedAudioResult,
+} from './AudioEncoder';
 import { AudioMixer, type AudioTrackData } from './AudioMixer';
 import { renderAudioGraph } from './AudioGraphRenderer';
 import type { AudioGraphRenderPlan } from './AudioGraphTypes';
@@ -60,8 +65,9 @@ const log = Logger.create('AudioExportPipeline');
 
 export interface AudioExportSettings {
   sampleRate: number;       // 44100 or 48000
-  bitrate: number;          // 128000 - 320000
+  bitrate: number;          // Requested bitrate; WebCodecs may select a supported fallback
   normalize: boolean;       // Peak normalize output
+  codec?: AudioCodec;       // Pin to the muxer's container-compatible codec when provided
 }
 
 export interface AudioExportProgress {
@@ -92,8 +98,9 @@ export class AudioExportPipeline {
   constructor(settings?: Partial<AudioExportSettings>, runtimeOptions?: AudioExportRuntimeOptions) {
     this.settings = {
       sampleRate: settings?.sampleRate ?? 48000,
-      bitrate: settings?.bitrate ?? 256000,
+      bitrate: settings?.bitrate ?? DEFAULT_AUDIO_BITRATE,
       normalize: settings?.normalize ?? false,
+      codec: settings?.codec,
     };
     this.exportRunId = runtimeOptions?.exportRunId;
 

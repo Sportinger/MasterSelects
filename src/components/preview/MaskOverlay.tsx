@@ -36,7 +36,15 @@ import { useMaskVertexDrag } from './useMaskVertexDrag';
 import { useMaskDrag } from './useMaskDrag';
 import { useMaskEdgeDrag } from './useMaskEdgeDrag';
 import { useMaskShapeDraw } from './useMaskShapeDraw';
+import { useMaskRotationDrag } from './useMaskRotationDrag';
+import { useMaskBoundsResize } from './useMaskBoundsResize';
 import { applyMaskEditPreview } from '../../stores/timeline/maskEditPreview';
+import {
+  getMaskRotationCenter,
+  inverseTransformMaskPoint,
+  transformMaskPoint,
+} from '../../utils/maskTransform';
+import { buildProjectedMaskBounds } from './maskOverlay/maskBoundsGeometry';
 
 interface MaskOverlayProps {
   canvasWidth: number;
@@ -72,6 +80,7 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
   const suppressNextSvgClickRef = useRef(false);
   const [hoveredVertexId, setHoveredVertexId] = useState<string | null>(null);
   const [hoveredEdgeKey, setHoveredEdgeKey] = useState<string | null>(null);
+  const [maskBoundsTransformActive, setMaskBoundsTransformActive] = useState(false);
   const [penInsertPreview, setPenInsertPreview] = useState<PenEdgeInsertPreview | null>(null);
   const [featherPreviewState, setFeatherPreviewState] = useState<FeatherPreviewState>({
     lastSource: null,
@@ -88,6 +97,7 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
     activeMaskId,
     selectedVertexIds,
     selectedMaskEdgeId,
+    maskFeatherPreviewEnabled,
     maskFeatherPreview,
     maskEditPreview,
     setMaskEditMode,
@@ -154,6 +164,10 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
     () => getProjectionParams(projectionLayer, canvasWidth, canvasHeight),
     [canvasHeight, canvasWidth, projectionLayer],
   );
+  const maskSourceSize = useMemo(() => ({
+    width: projectionParams?.sourceWidth ?? canvasWidth,
+    height: projectionParams?.sourceHeight ?? canvasHeight,
+  }), [canvasHeight, canvasWidth, projectionParams?.sourceHeight, projectionParams?.sourceWidth]);
   const projectMaskPoint = useCallback((point: { x: number; y: number }) => {
     if (!projectionParams) {
       return { x: point.x * canvasWidth, y: point.y * canvasHeight };
@@ -194,6 +208,11 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
     } as MouseEvent;
     return getNormalizedPoint(syntheticPoint);
   }, [getNormalizedPoint]);
+  const clientToMaskPoint = useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
+    const point = clientToLocalPoint(clientX, clientY);
+    if (!point || !activeMask) return point;
+    return inverseTransformMaskPoint(activeMask, point, maskSourceSize);
+  }, [activeMask, clientToLocalPoint, maskSourceSize]);
 
   useEffect(() => {
     if (!maskFeatherPreview) {
@@ -245,11 +264,13 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
     canvasHeight,
     selectedClip,
     activeMask,
-    clientToLocalPoint,
+    clientToMaskPoint,
     suppressNextSvgClick,
   );
   const { handleMaskDragStart } = useMaskDrag(svgRef, canvasWidth, canvasHeight, selectedClip, activeMask, clientToLocalPoint);
-  const { handleEdgeMouseDown } = useMaskEdgeDrag(svgRef, canvasWidth, canvasHeight, selectedClip, activeMask, clientToLocalPoint);
+  const { handleEdgeMouseDown } = useMaskEdgeDrag(svgRef, canvasWidth, canvasHeight, selectedClip, activeMask, clientToMaskPoint);
+  const { handleRotationMouseDown } = useMaskRotationDrag(selectedClip, activeMask, clientToLocalPoint, maskSourceSize);
+  const { handleBoundsResizeMouseDown } = useMaskBoundsResize(selectedClip, activeMask, clientToMaskPoint);
   const { shapeDrawState, justFinishedDrawing: justFinishedDrawingRef, handleShapeMouseDown, handleShapeMouseMove, handleShapeMouseUp } =
     useMaskShapeDraw(svgRef, selectedClip, maskEditMode, clientToLocalPoint);
 
@@ -273,21 +294,35 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
   });
 
   const canvasVertices = useMemo(
-    () => buildCanvasMaskVertices(activeMask, projectMaskPoint),
-    [activeMask, projectMaskPoint],
+    () => buildCanvasMaskVertices(activeMask, projectMaskPoint, maskSourceSize),
+    [activeMask, maskSourceSize, projectMaskPoint],
   );
   const pathData = useMemo(() => {
     if (!activeMask) return '';
-    return buildProjectedMaskPath(activeMask, projectMaskPoint);
-  }, [activeMask, projectMaskPoint]);
+    return buildProjectedMaskPath(activeMask, projectMaskPoint, maskSourceSize);
+  }, [activeMask, maskSourceSize, projectMaskPoint]);
   const visibleMaskPaths = useMemo(
-    () => buildVisibleMaskPaths(selectedClipMasks, projectMaskPoint),
-    [projectMaskPoint, selectedClipMasks],
+    () => buildVisibleMaskPaths(selectedClipMasks, projectMaskPoint, maskSourceSize),
+    [maskSourceSize, projectMaskPoint, selectedClipMasks],
   );
   const edgeSegments = useMemo(
-    () => buildMaskEdgeSegments(activeMask, projectMaskPoint),
-    [activeMask, projectMaskPoint],
+    () => buildMaskEdgeSegments(activeMask, projectMaskPoint, maskSourceSize),
+    [activeMask, maskSourceSize, projectMaskPoint],
   );
+  const rotationGuide = useMemo(() => {
+    if (!activeMask || activeMask.vertices.length < 2) return null;
+    const minY = Math.min(...activeMask.vertices.map(vertex => vertex.y));
+    const maxX = Math.max(...activeMask.vertices.map(vertex => vertex.x));
+    return {
+      center: projectMaskPoint(getMaskRotationCenter(activeMask)),
+      anchor: projectMaskPoint(transformMaskPoint(activeMask, { x: maxX, y: minY }, maskSourceSize)),
+    };
+  }, [activeMask, maskSourceSize, projectMaskPoint]);
+  const maskTransformBounds = useMemo(() => (
+    maskBoundsTransformActive && activeMask
+      ? buildProjectedMaskBounds(activeMask, projectMaskPoint, maskSourceSize)
+      : null
+  ), [activeMask, maskBoundsTransformActive, maskSourceSize, projectMaskPoint]);
 
   const updatePenInsertPreview = useCallback((e: MouseEvent | React.MouseEvent) => {
     if (maskEditMode !== 'drawingPen' || !activeMask || !activeMask.visible) {
@@ -310,8 +345,9 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
       12,
       projectMaskPoint,
       canvasPoint ?? undefined,
+      maskSourceSize,
     ));
-  }, [activeMask, canvasHeight, canvasWidth, getCanvasPoint, getNormalizedPoint, maskEditMode, projectMaskPoint]);
+  }, [activeMask, canvasHeight, canvasWidth, getCanvasPoint, getNormalizedPoint, maskEditMode, maskSourceSize, projectMaskPoint]);
 
   const setSelectedVertexHandleMode = useCallback((mode: MaskVertexHandleMode) => {
     if (!selectedClip || !activeMask || selectedVertexIds.size === 0) return;
@@ -355,6 +391,18 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
     setVertexHandleMode(selectedClip.id, activeMask.id, [vertexId], nextMode);
     endBatch();
   }, [activeMask, selectedClip, selectVertex, setVertexHandleMode]);
+
+  const handleMaskDoubleClick = useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!activeMask || maskEditMode !== 'editing') return;
+    deselectAllVertices();
+    setMaskBoundsTransformActive(true);
+  }, [activeMask, deselectAllVertices, maskEditMode]);
+
+  useEffect(() => {
+    setMaskBoundsTransformActive(false);
+  }, [activeMask?.id, maskEditMode, selectedClip?.id]);
 
   const nudgeSelectedVertices = useCallback((dxPixels: number, dyPixels: number) => {
     if (!selectedClip || !activeMask || selectedVertexIds.size === 0) return;
@@ -439,6 +487,7 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
         handleOut: { x: 0, y: 0 },
       });
     } else if (maskEditMode === 'editing' && activeMask) {
+      setMaskBoundsTransformActive(false);
       deselectAllVertices();
     }
   }, [selectedClip, activeMask, maskEditMode, addVertex, deselectAllVertices, getNormalizedPoint, justFinishedDrawingRef]);
@@ -524,7 +573,10 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
       }
 
       if (e.key === 'Escape') {
-        if (shapeDrawState.isDrawing) {
+        if (maskBoundsTransformActive) {
+          e.preventDefault();
+          setMaskBoundsTransformActive(false);
+        } else if (shapeDrawState.isDrawing) {
           handleShapeMouseUp();
         } else if (maskEditMode === 'drawing' || maskEditMode === 'drawingRect' ||
                    maskEditMode === 'drawingEllipse' || maskEditMode === 'drawingPen') {
@@ -552,6 +604,7 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
     cycleSelectedVertexHandleMode,
     handleShapeMouseUp,
     maskEditMode,
+    maskBoundsTransformActive,
     nudgeSelectedVertices,
     selectedClip,
     selectedVertexIds,
@@ -587,7 +640,9 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
       activeMask={activeMask}
       selectedVertexIds={selectedVertexIds}
       selectedMaskEdgeId={selectedMaskEdgeId}
-      featherPreview={featherPreviewOverlay?.maskId === activeMask?.id ? featherPreviewOverlay : null}
+      featherPreview={maskFeatherPreviewEnabled !== false && featherPreviewOverlay?.maskId === activeMask?.id
+        ? featherPreviewOverlay
+        : null}
       hoveredVertexId={hoveredVertexId}
       hoveredEdgeKey={hoveredEdgeKey}
       penInsertPreview={penInsertPreview}
@@ -596,6 +651,8 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
       visibleMaskPaths={visibleMaskPaths}
       edgeSegments={edgeSegments}
       canvasVertices={canvasVertices}
+      rotationGuide={rotationGuide}
+      maskTransformBounds={maskTransformBounds}
       onSvgClick={handleSvgClick}
       onPenMouseDown={handlePenMouseDown}
       onShapeMouseDown={handleShapeMouseDown}
@@ -606,9 +663,12 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
       onShapeMouseUp={handleShapeMouseUp}
       onClearPenInsertPreview={() => setPenInsertPreview(null)}
       onMaskDragStart={handleMaskDragStart}
+      onMaskDoubleClick={handleMaskDoubleClick}
+      onBoundsResizeMouseDown={handleBoundsResizeMouseDown}
       onEdgeMouseDown={handleEdgeMouseDown}
       onVertexMouseDown={handleVertexMouseDown}
       onVertexDoubleClick={handleVertexDoubleClick}
+      onRotationMouseDown={handleRotationMouseDown}
       onFirstVertexClose={handleFirstVertexClose}
       onHoveredEdgeChange={setHoveredEdgeKey}
       onHoveredVertexChange={setHoveredVertexId}

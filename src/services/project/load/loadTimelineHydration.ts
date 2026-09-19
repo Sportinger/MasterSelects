@@ -1,3 +1,6 @@
+import { clonePlanarTracks } from '../../planarTracking/clonePlanarTracks';
+import { cloneTerrainAnchorConnector, cloneTerrainAttachment, cloneTerrainScreenAnchor } from '../../../types/terrainAttachment';
+import { cloneTrackingBinding } from '../../../types/trackingBinding';
 import { Logger } from '../../logger';
 import { useMediaStore, type Composition } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
@@ -26,6 +29,7 @@ import type {
 } from '../../../types';
 import { calcRangeCoverage } from './loadMediaCacheHydration';
 import { recoverPersistedTranscriptStatus } from '../../transcription/persistedTranscriptStatus';
+import { quantizeFrameLockedClipTimings, quantizeTimeToFrame } from '../../../utils/timelineFrameQuantization';
 import {
   normalizePersistedFaceStatus,
   sanitizePersistedFaceAnalysis,
@@ -181,9 +185,13 @@ function resolveProjectCompositionDuration(
     const clipEnd = clip.startTime + clip.duration;
     return Number.isFinite(clipEnd) ? Math.max(maximum, clipEnd) : maximum;
   }, 0);
-  const savedDuration = Number.isFinite(composition.duration)
+  const rawSavedDuration = Number.isFinite(composition.duration)
     ? Math.max(minimumDuration, composition.duration)
     : Math.max(minimumDuration, maxClipEnd);
+  const savedDuration = Math.max(
+    minimumDuration,
+    quantizeTimeToFrame(rawSavedDuration, composition.frameRate),
+  );
 
   if (typeof composition.durationLocked === 'boolean') {
     return {
@@ -217,7 +225,9 @@ export function convertProjectCompositionToStore(
 ): Composition[] {
   return projectComps.map((pc) => {
     const viewState = compositionViewState?.[pc.id];
-    const { duration, durationLocked } = resolveProjectCompositionDuration(pc);
+    const normalizedClips = quantizeFrameLockedClipTimings(pc.clips, pc.frameRate);
+    const normalizedComposition = { ...pc, clips: normalizedClips };
+    const { duration, durationLocked } = resolveProjectCompositionDuration(normalizedComposition);
     const timelineData: CompositionTimelineData = {
       tracks: pc.tracks.map((t) => ({
         id: t.id,
@@ -232,7 +242,7 @@ export function convertProjectCompositionToStore(
         audioState: t.audioState ? structuredClone(t.audioState) : undefined,
         midiInstrument: t.midiInstrument ? structuredClone(t.midiInstrument) : undefined,
       })),
-      clips: pc.clips.map((c) => {
+      clips: normalizedClips.map((c) => {
         const analysis = sanitizePersistedFaceAnalysis(c.analysis as ClipAnalysis | undefined);
         const faceAnalysisStatus = normalizePersistedFaceStatus(
           c.faceAnalysisStatus as AnalysisStatus | undefined,
@@ -277,6 +287,11 @@ export function convertProjectCompositionToStore(
         transform: fromProjectTransform(c.transform),
         sourceRect: c.sourceRect ? structuredClone(c.sourceRect) : undefined,
         transitionRender: c.transitionRender ? structuredClone(c.transitionRender) : undefined,
+        planarTracks: clonePlanarTracks(c.planarTracks),
+        trackingBinding: cloneTrackingBinding(c.trackingBinding),
+        terrainAttachment: cloneTerrainAttachment(c.terrainAttachment),
+        terrainScreenAnchor: cloneTerrainScreenAnchor(c.terrainScreenAnchor),
+        terrainAnchorConnector: cloneTerrainAnchorConnector(c.terrainAnchorConnector),
         effects: c.effects.map((effect): Effect => ({
           id: effect.id,
           name: effect.name,
@@ -291,10 +306,15 @@ export function convertProjectCompositionToStore(
         transitionSourceMap: c.transitionSourceMap ? structuredClone(c.transitionSourceMap) : undefined,
         transitionRecipeBlendWindows: c.transitionRecipeBlendWindows ? structuredClone(c.transitionRecipeBlendWindows) : undefined,
         colorCorrection: c.colorCorrection ? structuredClone(c.colorCorrection) : undefined,
+        colorGradeMode: c.colorGradeMode,
+        localColorCorrection: c.localColorCorrection
+          ? structuredClone(c.localColorCorrection)
+          : undefined,
         nodeGraph: cloneClipNodeGraph(c.nodeGraph),
         masks: c.masks.map((mask): ClipMask => ({
           id: mask.id,
           name: mask.name,
+          purpose: mask.purpose,
           mode: mask.mode,
           inverted: mask.inverted,
           opacity: mask.opacity,
@@ -307,6 +327,7 @@ export function convertProjectCompositionToStore(
           closed: mask.closed,
           expanded: false,
           position: mask.position,
+          rotation: mask.rotation ?? 0,
           vertices: mask.vertices.map((vertex, index) => ({
             id: mask.id + '-v-' + index,
             x: vertex.x,
@@ -364,6 +385,7 @@ export function convertProjectCompositionToStore(
         storyboardProperties: cloneStoryboardClipProperties(c.storyboardProperties),
         transitionOverlay: c.transitionOverlay ? structuredClone(c.transitionOverlay) : undefined,
         mathScene: c.mathScene ? structuredClone(c.mathScene) : undefined,
+        flock: c.flock ? structuredClone(c.flock) : undefined,
         motion: c.motion ? normalizeMotionLayerDefinitionForLoad(c.motion) : undefined,
         vectorAnimationSettings: c.vectorAnimationSettings,
         is3D: c.is3D,
@@ -421,6 +443,7 @@ export function convertProjectCompositionToStore(
       backgroundColor: pc.backgroundColor,
       transitionComp: pc.transitionComp ? structuredClone(pc.transitionComp) : undefined,
       captionComp: pc.captionComp ? structuredClone(pc.captionComp) : undefined,
+      annotations: pc.annotations ? structuredClone(pc.annotations) : undefined,
       timelineData,
     };
   });

@@ -1,9 +1,10 @@
 import { getUserBillingSnapshot } from '../../lib/billing';
 import { insertAiAuditEvent } from '../../lib/aiAudit';
 import { blocksAiRequest, moderateAiInput } from '../../lib/aiModeration';
-import { getCreditLedgerEntryBySource, refundCreditsForFailedTask, spendCredits } from '../../lib/credits';
-import { getCurrentUser, json, methodNotAllowed, parseJson } from '../../lib/db';
+import { getCreditLedgerEntryBySource, refundCreditsForFailedTask } from '../../lib/credits';
+import { getAiUser, isGuestAiUser, json, methodNotAllowed, parseJson } from '../../lib/db';
 import { rejectByokCredentials } from '../../lib/noByok';
+import { runReservedHostedCharge, settleReservedHostedCharge } from '../../lib/providers/hostedChargeFlow';
 import {
   buildHostedElevenLabsCapabilities,
   calculateHostedElevenLabsCredits,
@@ -43,7 +44,8 @@ interface HostedAudioRouteBody {
 
 interface HostedAiContext {
   billing: Awaited<ReturnType<typeof getUserBillingSnapshot>> | null;
-  user: ReturnType<typeof getCurrentUser>;
+  guest: boolean;
+  user: ReturnType<typeof getAiUser>;
 }
 
 function buildRouteEnvelope<TData>(
@@ -52,20 +54,25 @@ function buildRouteEnvelope<TData>(
     provider?: string;
   },
 ): HostedGatewayEnvelope<TData> {
+  const session = input.session?.email?.endsWith('@guest.masterselects.invalid')
+    ? { authenticated: false, email: null, guest: true, provider: 'guest' }
+    : input.session;
   return createHostedGatewayEnvelope({
     ...input,
     kind: 'ai.audio',
     mode: 'hosted',
     provider: input.provider ?? 'elevenlabs',
     requestId: input.requestId,
+    session,
   });
 }
 
 function resolveHostedContext(context: AppContext): HostedAiContext {
-  const user = getCurrentUser(context);
+  const user = getAiUser(context);
 
   return {
     billing: null,
+    guest: isGuestAiUser(context),
     user,
   };
 }
@@ -76,12 +83,14 @@ async function loadHostedContext(context: AppContext): Promise<HostedAiContext> 
   if (!user) {
     return {
       billing: null,
+      guest: false,
       user: null,
     };
   }
 
   return {
-    billing: await getUserBillingSnapshot(context.env.DB, user.id),
+    billing: await getUserBillingSnapshot(context.env.DB, user.id, { guest: isGuestAiUser(context) }),
+    guest: isGuestAiUser(context),
     user,
   };
 }
@@ -536,141 +545,90 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     userId: hostedContext.user!.id,
   });
 
-  try {
-    const speech = await createHostedElevenLabsSpeech(context.env, speechParams);
-    const providerCredits = speech.providerCharacterCost ?? estimatedCost.providerCredits;
-    const actualCreditsRequired = calculateHostedElevenLabsCredits(providerCredits);
-    const charge = await spendCredits(
-      context.env.DB,
-      hostedContext.user!.id,
-      actualCreditsRequired,
-      ledgerSource,
-      idempotencyKey,
-      'Hosted ElevenLabs speech generation',
-      {
-        actualProviderCredits: providerCredits,
-        estimatedProviderCredits: estimatedCost.providerCredits,
-        modelId: speechParams.modelId,
-        outputFormat: speech.outputFormat,
-        providerRequestId: speech.providerRequestId,
-        requestId,
-        size: speech.size,
-        textCharacters: estimatedCost.textCharacters,
-        voiceId: speechParams.voiceId,
-      },
-    );
+  const speechSession = {
+    authenticated: true,
+    email: hostedContext.user!.email,
+    provider: 'cookie_session' as const,
+  };
+  const speechAudit = {
+    feature: 'hosted_ai_audio',
+    idempotencyKey,
+    model: speechParams.modelId,
+    moderation,
+    prompt: {
+      modelId: speechParams.modelId,
+      text: speechParams.text,
+      voiceId: speechParams.voiceId,
+    },
+    provider: 'elevenlabs',
+    requestId,
+    userId: hostedContext.user!.id,
+  };
 
-    if (charge.insufficient) {
-      await completeUsageEvent(context.env.DB, idempotencyKey, {
-        creditCost: actualCreditsRequired,
-        status: 'failed',
-      });
-      context.waitUntil(
-        insertAiAuditEvent(context, {
-          errorMessage: 'insufficient_credits',
-          feature: 'hosted_ai_audio',
-          idempotencyKey,
-          model: speechParams.modelId,
-          moderation,
-          prompt: {
-            modelId: speechParams.modelId,
-            text: speechParams.text,
-            voiceId: speechParams.voiceId,
-          },
-          provider: 'elevenlabs',
-          requestId,
-          status: 'failed',
-          userId: hostedContext.user!.id,
-        }).catch(() => {}),
-      );
-      return json(
-        buildRouteEnvelope({
-          creditBalance: charge.balance,
-          error: createGatewayError(
-            'insufficient_credits',
-            'You need more credits to generate hosted ElevenLabs speech.',
-            {
-              creditsRequired: actualCreditsRequired,
-              providerCredits,
-              requestId,
-              textCharacters: estimatedCost.textCharacters,
-            },
-          ),
-          next: 'pricing',
-          ok: false,
-          requestId,
-          session: {
-            authenticated: true,
-            email: hostedContext.user!.email,
-            provider: 'cookie_session',
-          },
-          status: 'requires_billing',
-        }),
-        { status: 402 },
-      );
-    }
+  // The estimate is reserved before ElevenLabs is called and settled against
+  // the provider's character count afterwards (never above the estimate); a
+  // failed provider call releases the reservation.
+  const outcome = await runReservedHostedCharge({
+    createTask: () => createHostedElevenLabsSpeech(context.env, speechParams),
+    creditsRequired: estimatedCost.creditsRequired,
+    db: context.env.DB,
+    description: 'Hosted ElevenLabs speech generation',
+    idempotencyKey,
+    ledgerSource,
+    metadata: {
+      estimatedProviderCredits: estimatedCost.providerCredits,
+      modelId: speechParams.modelId,
+      outputFormat: speechParams.outputFormat,
+      requestId,
+      textCharacters: estimatedCost.textCharacters,
+      voiceId: speechParams.voiceId,
+    },
+    userId: hostedContext.user!.id,
+  });
 
-    await completeUsageEvent(context.env.DB, idempotencyKey, {
-      creditCost: actualCreditsRequired,
-      ledgerEntryId: charge.entry?.id ?? null,
-      status: 'completed',
-    });
+  if (outcome.status === 'insufficient') {
+    await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
     context.waitUntil(
-      insertAiAuditEvent(context, {
-        creditCost: charge.charged ? actualCreditsRequired : 0,
-        feature: 'hosted_ai_audio',
-        idempotencyKey,
-        model: speechParams.modelId,
-        moderation,
-        prompt: {
-          modelId: speechParams.modelId,
-          text: speechParams.text,
-          voiceId: speechParams.voiceId,
-        },
-        provider: 'elevenlabs',
-        requestId,
-        status: 'completed',
-        userId: hostedContext.user!.id,
-      }).catch(() => {}),
+      insertAiAuditEvent(context, { ...speechAudit, errorMessage: 'insufficient_credits', status: 'failed' })
+        .catch(() => {}),
     );
+    return json(
+      buildRouteEnvelope({
+        creditBalance: outcome.charge.balance,
+        error: createGatewayError(
+          'insufficient_credits',
+          'You need more credits to generate hosted ElevenLabs speech.',
+          {
+            creditsRequired: estimatedCost.creditsRequired,
+            providerCredits: estimatedCost.providerCredits,
+            requestId,
+            textCharacters: estimatedCost.textCharacters,
+          },
+        ),
+        next: 'pricing',
+        ok: false,
+        requestId,
+        session: speechSession,
+        status: 'requires_billing',
+      }),
+      { status: 402 },
+    );
+  }
 
-    return new Response(speech.audio, {
-      headers: {
-        'Content-Type': speech.mimeType,
-        'X-ElevenLabs-Character-Count': String(providerCredits),
-        'X-ElevenLabs-Request-Id': speech.providerRequestId ?? '',
-        'X-MasterSelects-Credit-Balance': String(charge.balance),
-        'X-MasterSelects-Credit-Mutation-Id': charge.entry?.id ?? '',
-        'X-MasterSelects-Credits-Charged': String(charge.charged ? actualCreditsRequired : 0),
-        'X-MasterSelects-Credits-Estimated': String(estimatedCost.creditsRequired),
-        'X-MasterSelects-Output-Format': speech.outputFormat,
-        'X-MasterSelects-Request-Id': requestId,
-      },
-      status: 200,
-    });
-  } catch (error) {
+  if (outcome.status === 'provider_failed') {
+    const { error } = outcome;
     await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
     context.waitUntil(
       insertAiAuditEvent(context, {
+        ...speechAudit,
         errorMessage: error instanceof Error ? error.message : 'Hosted ElevenLabs speech generation failed.',
-        feature: 'hosted_ai_audio',
-        idempotencyKey,
-        model: speechParams.modelId,
-        moderation,
-        prompt: {
-          modelId: speechParams.modelId,
-          text: speechParams.text,
-          voiceId: speechParams.voiceId,
-        },
-        provider: 'elevenlabs',
-        requestId,
         status: 'failed',
-        userId: hostedContext.user!.id,
       }).catch(() => {}),
     );
 
     return json(
       buildRouteEnvelope({
+        creditBalance: outcome.refund?.creditBalance ?? outcome.charge.balance,
         error: createGatewayError(
           'provider_request_failed',
           error instanceof Error ? error.message : 'Hosted ElevenLabs speech generation failed.',
@@ -678,14 +636,52 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         ),
         ok: false,
         requestId,
-        session: {
-          authenticated: true,
-          email: hostedContext.user!.email,
-          provider: 'cookie_session',
-        },
+        session: speechSession,
         status: 'error',
       }),
       { status: 502 },
     );
   }
+
+  const { charge, result: speech } = outcome;
+  const providerCredits = speech.providerCharacterCost ?? estimatedCost.providerCredits;
+  const settlement = await settleReservedHostedCharge({
+    actualCredits: calculateHostedElevenLabsCredits(providerCredits),
+    charge,
+    db: context.env.DB,
+    idempotencyKey,
+    ledgerSource,
+    metadata: {
+      actualProviderCredits: providerCredits,
+      providerRequestId: speech.providerRequestId,
+      requestId,
+      size: speech.size,
+    },
+    userId: hostedContext.user!.id,
+  });
+
+  await completeUsageEvent(context.env.DB, idempotencyKey, {
+    creditCost: settlement.creditsCharged,
+    ledgerEntryId: settlement.ledgerEntryId,
+    status: 'completed',
+  });
+  context.waitUntil(
+    insertAiAuditEvent(context, { ...speechAudit, creditCost: settlement.creditsCharged, status: 'completed' })
+      .catch(() => {}),
+  );
+
+  return new Response(speech.audio, {
+    headers: {
+      'Content-Type': speech.mimeType,
+      'X-ElevenLabs-Character-Count': String(providerCredits),
+      'X-ElevenLabs-Request-Id': speech.providerRequestId ?? '',
+      'X-MasterSelects-Credit-Balance': String(settlement.balance),
+      'X-MasterSelects-Credit-Mutation-Id': settlement.ledgerEntryId ?? '',
+      'X-MasterSelects-Credits-Charged': String(settlement.creditsCharged),
+      'X-MasterSelects-Credits-Estimated': String(estimatedCost.creditsRequired),
+      'X-MasterSelects-Output-Format': speech.outputFormat,
+      'X-MasterSelects-Request-Id': requestId,
+    },
+    status: 200,
+  });
 };

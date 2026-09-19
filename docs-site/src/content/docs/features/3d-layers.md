@@ -26,6 +26,9 @@ MasterSelects authorable 3D content resolves through one shared scene contract.
 ```text
 [2D layers] --------------------------------> Existing WebGPU compositor
         |
+        +--> [3D video/image plane source]
+                   -> layer-space Analog Signal Lab (when enabled)
+                   -> textured scene plane
         +--> [3D planes / meshes / text / models / splats / cameras]
                    -> Scene layer collection
                    -> Shared scene camera resolution
@@ -42,6 +45,14 @@ Prepared splat runtime metadata, native splat rasterization, preview, nested com
 
 - Any video or image clip can be toggled to 3D from the Transform panel.
 - 3D layers become textured planes in the common 3D scene.
+- Visual Media Panel files can be dragged directly onto an editable composition Preview with mouse or touch. The drop creates a new top video track at the playhead, fits video/image sources to the composition, marks the new clip as 3D, and selects it. Audio-only files are not accepted by the 3D Preview drop target.
+- Live-input planes preserve the current camera/display aspect ratio and update their geometry after a device-orientation change. Their texture is sampled directly from the browser's native presentation video at camera cadence rather than from a periodically copied canvas.
+- `Analog Signal Lab` is rendered into a dedicated per-plane source texture
+  before the world transform. Its noise, ghosts, VHS errors, and CRT pattern
+  therefore remain attached to the plane under perspective. The consumed
+  effect is removed from the synthetic scene layer so it is not applied a
+  second time in screen space. Other unsupported post-scene effects retain
+  their existing behavior.
 - During export, 3D video planes sample the per-frame `VideoFrame` produced by the export decoder instead of relying on the preview `HTMLVideoElement`, so animated video planes advance correctly in fast and precise exports.
 - While scrubbing, 3D video planes keep their last uploaded texture if the browser video element is briefly between decoded frames, avoiding full shared-scene flicker.
 - Turning 3D off resets the 3D-specific transform state back to 2D defaults.
@@ -108,6 +119,8 @@ Camera clips expose camera settings inside the Transform tab:
 - Far plane
 - Resolution X/Y for the camera gate aspect
 - Position X/Y/Z as camera placement controls that stay independent from lens FOV/mm
+
+The Timeline identifies scene-camera clips with a compact `3D` plus video-camera badge. Entering the factory 3D layout reuses the empty top video layer when possible and otherwise creates a new top layer so the automatic scene camera never overlaps footage.
 
 The Transform tab becomes scene-navigation controls for the active camera clip. In FPS mode, the preview accepts WASD/QE navigation plus uncapped mouse look. Free scene navigation belongs to camera clips.
 Lens controls change the projection/FOV without rewriting camera position fields. Camera Position X/Y/Z is the real camera eye position in world space. The camera Edit view draws the timeline-camera frame from FOV/mm and Resolution X/Y, so the front frame grows for wider lenses, shrinks for tele lenses, and follows the configured gate aspect. The preview wheel in Scene Nav moves that camera position along the current view direction and does not edit `camera.fov` or the full-frame-equivalent mm field.

@@ -1,6 +1,7 @@
 import type { ClipAudioEditOperation, TimelineClip } from '../../types';
 
 export const MAX_AUTOMATIC_DE_CLICK_FADE_SECONDS = 0.02;
+export const DEFAULT_AUTOMATIC_DE_CLICK_FADE_SECONDS = 0.012;
 
 const AUDIO_JUNCTION_EPSILON = 0.001;
 const AUDIO_FILE_EXTENSIONS = new Set([
@@ -12,6 +13,21 @@ export type AutomaticAudioFadeEdge = 'in' | 'out';
 export interface AutomaticAudioFadeTarget {
   clipId: string;
   edge: AutomaticAudioFadeEdge;
+}
+
+function hasAutomaticCutDeClickAtEdge(
+  clip: TimelineClip,
+  edge: AutomaticAudioFadeEdge,
+): boolean {
+  const clipEdge = edge === 'in' ? clip.startTime : clip.startTime + clip.duration;
+  const parameter = edge === 'in' ? 'timelineStart' : 'timelineEnd';
+  return clip.audioState?.editStack?.some((operation) => (
+    operation.enabled
+    && operation.type === 'gain'
+    && operation.params.label === 'Automatic cut de-click'
+    && typeof operation.params[parameter] === 'number'
+    && Math.abs(operation.params[parameter] - clipEdge) <= AUDIO_JUNCTION_EPSILON
+  )) === true;
 }
 
 function isAudioClip(clip: TimelineClip): boolean {
@@ -55,6 +71,35 @@ export function collectAutomaticAudioFadeTargets(
     ));
     if (previous) targets.set(`${previous.id}:out`, { clipId: previous.id, edge: 'out' });
     if (next) targets.set(`${next.id}:in`, { clipId: next.id, edge: 'in' });
+  }
+  return [...targets.values()];
+}
+
+export function collectMissingAudioJunctionFadeTargets(
+  clips: readonly TimelineClip[],
+): AutomaticAudioFadeTarget[] {
+  const targets = new Map<string, AutomaticAudioFadeTarget>();
+  const audioTrackIds = new Set(
+    clips.filter(isAudioClip).map((clip) => clip.trackId),
+  );
+  for (const trackId of audioTrackIds) {
+    const trackClips = clips
+      .filter((clip) => clip.trackId === trackId && isAudioClip(clip))
+      .toSorted((left, right) => left.startTime - right.startTime || left.id.localeCompare(right.id));
+    for (let index = 1; index < trackClips.length; index += 1) {
+      const previous = trackClips[index - 1];
+      const next = trackClips[index];
+      if (
+        Math.abs(previous.startTime + previous.duration - next.startTime)
+        > AUDIO_JUNCTION_EPSILON
+      ) continue;
+      if (!hasAutomaticCutDeClickAtEdge(previous, 'out')) {
+        targets.set(`${previous.id}:out`, { clipId: previous.id, edge: 'out' });
+      }
+      if (!hasAutomaticCutDeClickAtEdge(next, 'in')) {
+        targets.set(`${next.id}:in`, { clipId: next.id, edge: 'in' });
+      }
+    }
   }
   return [...targets.values()];
 }
@@ -107,3 +152,9 @@ export function createAutomaticCutDeClickOperation(
     createdAt: identity.createdAt,
   };
 }
+
+export function isAutomaticCutFade(operation: ClipAudioEditOperation): boolean {
+  return operation.enabled !== false && operation.type === 'gain'
+    && operation.params.label === 'Automatic cut de-click' && !!operation.timeRange;
+}
+

@@ -9,8 +9,34 @@
 
 html, body, #root {
   width: 100%;
+  max-width: 100%;
   height: 100%;
-  overflow: auto;
+  overflow: hidden;
+}
+
+/* Touch input: the document itself must never pan or rubber-band. The editor
+   fills the viewport, so document-level scrolling is only the browser fighting
+   the app. Keyed to pointer type, not screen width - an iPad is desktop-sized
+   but coarse-pointered, and those are separate axes.
+   pan-x/pan-y leaves panel scrolling intact but deliberately excludes native
+   pinch zoom. Surfaces that own pinch (timeline, preview) handle it in-app. */
+@media (pointer: coarse) {
+  html, body {
+    position: fixed;
+    overflow: hidden;
+    overscroll-behavior: none;
+    /* 100% collapses with the dynamic URL bar on iOS; dvh tracks it. */
+    height: 100dvh;
+  }
+
+  #root {
+    height: 100dvh;
+    overflow: hidden;
+    touch-action: pan-x pan-y;
+    /* Long-press has to be free to become a context menu instead of the
+       system text-selection callout. */
+    -webkit-touch-callout: none;
+  }
 }
 
 body {
@@ -53,6 +79,21 @@ body {
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 /* Allow text selection in inputs */

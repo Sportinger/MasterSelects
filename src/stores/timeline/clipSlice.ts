@@ -5,22 +5,15 @@
 import type { Keyframe } from '../../types/keyframes';
 import type { TimelineClip, TimelineTrack } from '../../types/timeline';
 import type { CoreClipActions, SliceCreator } from './types';
-import { DEFAULT_TRANSFORM } from './constants';
 import { Logger } from '../../services/logger';
 import { cloneClipNodeGraph } from '../../services/nodeGraph';
 import { getPlayheadPosition } from '../../services/layerBuilder/PlayheadState';
-import { captureSnapshot } from '../historyStore';
 import { getTimelineDurationForSourceWindow } from '../../utils/clipPlaybackTiming';
-import {
-  applyTimelineMotionStructurePlan,
-  planTimelineMotionParentMutation,
-} from '../../services/motionDesign/contracts/timelineStructureAdapter';
+import { quantizeClipStartTime, quantizeFrameLockedClipTiming } from '../../utils/timelineFrameQuantization';
+import { getActiveCompositionFrameRate } from './editOperations/activeCompositionFrameRate';
+import { normalizeTimelinePropertyValue } from './keyframes/keyframePropertyValue';
 
 const log = Logger.create('ClipSlice');
-
-function isPlaneClip(clip: TimelineClip): boolean {
-  return clip.source?.type === 'video' || clip.source?.type === 'image';
-}
 
 function isVisualClipSourceType(sourceType: string | undefined): boolean {
   return sourceType === 'video' ||
@@ -39,6 +32,7 @@ function isVisualClipSourceType(sourceType: string | undefined): boolean {
     sourceType === 'motion-null' ||
     sourceType === 'motion-adjustment' ||
     sourceType === 'storyboard' ||
+    sourceType === 'flock' ||
     isVectorAnimationSourceType(sourceType);
 }
 
@@ -63,6 +57,7 @@ function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
       ...(clip.captionProperties ? { captionProperties: structuredClone(clip.captionProperties) } : {}),
       ...(clip.captionLayerBinding ? { captionLayerBinding: structuredClone(clip.captionLayerBinding) } : {}),
     ...(clip.motion ? { motion: structuredClone(clip.motion) } : {}),
+    ...(clip.flock ? { flock: structuredClone(clip.flock) } : {}),
     ...(clip.transitionIn ? { transitionIn: structuredClone(clip.transitionIn) } : {}),
     ...(clip.transitionOut ? { transitionOut: structuredClone(clip.transitionOut) } : {}),
   };
@@ -70,6 +65,8 @@ function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
 
 // Import extracted modules
 import { applyAddClipAction } from './clip/addClipAction';
+import { replaceClipSourceAction } from './clip/replaceClipSourceAction';
+import { replaceClipSourceWithCompositionAction } from './clip/replaceClipSourceWithCompositionAction';
 import {
   applyAddCompClipAction,
   refreshCompClipNestedDataAction,
@@ -88,6 +85,7 @@ import {
   generateFrequencyPhaseForClipAction,
 } from './clip/clipRhythmFrequencyAnalysisActions';
 import { generateAudioIntelligenceForClipAction } from './clip/clipAudioIntelligenceActions';
+import { setClipParentAction, toggleClip3DAction } from './clip/clipMotionParentActions';
 import {
   setClipPreservesPitchAction,
   setClipSpeedAction,
@@ -110,6 +108,7 @@ import {
   remapTransitionLinksForSplitReplacements,
 } from './editOperations/splitBatchOperations';
 import { applyDeleteClipsOperation } from './editOperations/deleteOperations';
+import { copyFlockKeyframesToClipParts } from './editOperations/flockClipKeyframes';
 import { clearMotionParentsPreservingWorld } from './editOperations/motionParentWorldPreservation';
 import { cloneStoryboardPropertiesForSplit } from '../../services/storyboard/core';
 import {
@@ -124,6 +123,10 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   addClip: (...args) => applyAddClipAction({ set, get }, ...args),
 
   addCompClip: (...args) => applyAddCompClipAction({ set, get }, ...args),
+
+  replaceClipSource: (...args) => replaceClipSourceAction({ set, get }, ...args),
+
+  replaceClipSourceWithComposition: (...args) => replaceClipSourceWithCompositionAction({ set, get }, ...args),
 
   removeClip: (id) => {
     const {
@@ -197,6 +200,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     const { clips, tracks, updateDuration, getSnappedPosition, getPositionWithResistance, trimOverlappingClips, invalidateCache } = get();
     const movingClip = clips.find(c => c.id === id);
     if (!movingClip) return;
+    const frameRate = getActiveCompositionFrameRate();
 
     const targetTrackId = newTrackId ?? movingClip.trackId;
     if (isTrackLocked(tracks, movingClip.trackId) || isTrackLocked(tracks, targetTrackId)) {
@@ -226,16 +230,20 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       }
     }
 
-    const { startTime: snappedTime } = getSnappedPosition(id, newStartTime, targetTrackId);
+    const requestedStartTime = quantizeClipStartTime(movingClip, newStartTime, frameRate);
+    const { startTime: snappedPosition } = getSnappedPosition(id, requestedStartTime, targetTrackId);
+    const snappedTime = quantizeClipStartTime(movingClip, snappedPosition, frameRate);
     const resistanceResult = getPositionWithResistance(id, snappedTime, targetTrackId, movingClip.duration, undefined, excludeClipIds);
-    let finalStartTime = resistanceResult.startTime;
+    let finalStartTime = quantizeClipStartTime(movingClip, resistanceResult.startTime, frameRate);
     let forcingOverlap = resistanceResult.forcingOverlap;
     const { noFreeSpace } = resistanceResult;
 
-    // If no free space on target track (cross-track move), find alternative track or create new one
+    // If a target lane cannot accept the clip, find an alternative or create a
+    // new one. This also applies to same-track audio moves: audio never eats an
+    // existing clip on drop.
     let actualTrackId = targetTrackId;
-    if (noFreeSpace && targetTrackId !== movingClip.trackId) {
-      const targetTrack = tracks.find(t => t.id === targetTrackId);
+    const targetTrack = tracks.find(t => t.id === targetTrackId);
+    if (noFreeSpace && (targetTrackId !== movingClip.trackId || targetTrack?.type === 'audio')) {
       if (targetTrack) {
         const altTracks = tracks.filter(t =>
           t.type === targetTrack.type && t.id !== targetTrackId && t.id !== movingClip.trackId && !t.locked
@@ -245,7 +253,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
           const altResult = getPositionWithResistance(id, snappedTime, alt.id, movingClip.duration, undefined, excludeClipIds);
           if (!altResult.noFreeSpace) {
             actualTrackId = alt.id;
-            finalStartTime = altResult.startTime;
+            finalStartTime = quantizeClipStartTime(movingClip, altResult.startTime, frameRate);
             forcingOverlap = altResult.forcingOverlap;
             found = true;
             break;
@@ -263,11 +271,40 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     const timeDelta = finalStartTime - movingClip.startTime;
 
     let linkedFinalTime = linkedClip ? linkedClip.startTime + timeDelta : 0;
+    let linkedFinalTrackId = linkedClip?.trackId;
     let linkedForcingOverlap = false;
     if (linkedClip && !skipLinked) {
       const linkedResult = getPositionWithResistance(linkedClip.id, linkedClip.startTime + timeDelta, linkedClip.trackId, linkedClip.duration, undefined, excludeClipIds);
-      linkedFinalTime = linkedResult.startTime;
+      linkedFinalTime = quantizeClipStartTime(linkedClip, linkedResult.startTime, frameRate);
       linkedForcingOverlap = linkedResult.forcingOverlap;
+      const linkedTrack = get().tracks.find(track => track.id === linkedClip.trackId);
+      if (linkedResult.noFreeSpace && linkedTrack?.type === 'audio') {
+        const alternativeTracks = get().tracks.filter(track =>
+          track.type === 'audio' && track.id !== linkedClip.trackId && !track.locked
+        );
+        let foundAlternative = false;
+        for (const alternativeTrack of alternativeTracks) {
+          const alternativeResult = getPositionWithResistance(
+            linkedClip.id,
+            linkedClip.startTime + timeDelta,
+            alternativeTrack.id,
+            linkedClip.duration,
+            undefined,
+            excludeClipIds,
+          );
+          if (alternativeResult.noFreeSpace) continue;
+          linkedFinalTrackId = alternativeTrack.id;
+          linkedFinalTime = quantizeClipStartTime(linkedClip, alternativeResult.startTime, frameRate);
+          linkedForcingOverlap = alternativeResult.forcingOverlap;
+          foundAlternative = true;
+          break;
+        }
+        if (!foundAlternative) {
+          linkedFinalTrackId = get().addTrack('audio');
+          linkedFinalTime = Math.max(0, linkedClip.startTime + timeDelta);
+          linkedForcingOverlap = false;
+        }
+      }
     }
 
     const previousClips = clips;
@@ -275,11 +312,11 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       clips: clips.map(c => {
         if (c.id === id) return { ...c, startTime: Math.max(0, finalStartTime), trackId: actualTrackId };
         if (!skipLinked && (c.id === movingClip.linkedClipId || c.linkedClipId === id)) {
-          return { ...c, startTime: Math.max(0, linkedFinalTime) };
+          return { ...c, startTime: Math.max(0, linkedFinalTime), trackId: linkedFinalTrackId ?? c.trackId };
         }
         if (!skipGroup && groupClips.some(gc => gc.id === c.id)) {
           const groupResult = getPositionWithResistance(c.id, c.startTime + timeDelta, c.trackId, c.duration);
-          return { ...c, startTime: Math.max(0, groupResult.startTime) };
+          return { ...c, startTime: quantizeClipStartTime(c, groupResult.startTime, frameRate) };
         }
         return c;
       }),
@@ -287,7 +324,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
     if (forcingOverlap && !skipTrim) trimOverlappingClips(id, finalStartTime, actualTrackId, movingClip.duration, excludeClipIds);
     if (linkedForcingOverlap && linkedClip && !skipLinked && !skipTrim) {
-      trimOverlappingClips(linkedClip.id, linkedFinalTime, linkedClip.trackId, linkedClip.duration, excludeClipIds);
+      trimOverlappingClips(linkedClip.id, linkedFinalTime, linkedFinalTrackId ?? linkedClip.trackId, linkedClip.duration, excludeClipIds);
     }
     ensureTransitionCompositionsForChangedClips(set, get, [
       id,
@@ -308,12 +345,12 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     setClipsAndCleanupTransitionComps(set, clips, {
       clips: clips.map(c => {
         if (c.id !== id) return c;
-        return clearProcessedAudioAnalysisRefs({
+        return quantizeFrameLockedClipTiming(clearProcessedAudioAnalysisRefs({
           ...c,
           inPoint,
           outPoint,
           duration: getTimelineDurationForSourceWindow(c, inPoint, outPoint),
-        });
+        }), getActiveCompositionFrameRate());
       }),
     });
     ensureTransitionCompositionsForChangedClips(set, get, [id], clips);
@@ -543,9 +580,13 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         ? [clip.linkedClipId, linkedFirstClip.id, linkedSecondClip.id]
         : []),
     ];
+    const flockPartKeyframes = clip.source?.type === 'flock'
+      ? copyFlockKeyframesToClipParts(preservedClipKeyframes ?? clipKeyframes, clip.id, [firstClip.id, secondClip.id])
+      : null;
+    const nextClipKeyframes = flockPartKeyframes ?? preservedClipKeyframes;
     setClipsAndCleanupTransitionComps(set, clips, {
       clips: remappedClips,
-      ...(preservedClipKeyframes ? { clipKeyframes: preservedClipKeyframes } : {}),
+      ...(nextClipKeyframes ? { clipKeyframes: nextClipKeyframes } : {}),
       selectedClipIds: new Set([secondClip.id]),
     });
     ensureTransitionCompositionsForChangedClips(set, get, changedClipIds, clips);
@@ -602,6 +643,12 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       log.warn('Cannot update clip transform on locked track', { id });
       return;
     }
+    const normalizedTransform = transform.opacity === undefined
+      ? transform
+      : {
+          ...transform,
+          opacity: normalizeTimelinePropertyValue('opacity', transform.opacity),
+        };
     set({
       clips: clips.map(c => {
         if (c.id !== id) return c;
@@ -609,10 +656,11 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
           ...c,
           transform: {
             ...c.transform,
-            ...transform,
-            position: transform.position ? { ...c.transform.position, ...transform.position } : c.transform.position,
-            scale: transform.scale ? { ...c.transform.scale, ...transform.scale } : c.transform.scale,
-            rotation: transform.rotation ? { ...c.transform.rotation, ...transform.rotation } : c.transform.rotation,
+            ...normalizedTransform,
+            position: normalizedTransform.position ? { ...c.transform.position, ...normalizedTransform.position } : c.transform.position,
+            anchor: normalizedTransform.anchor ? { ...(c.transform.anchor ?? { x: 0, y: 0, z: 0 }), ...normalizedTransform.anchor } : c.transform.anchor,
+            scale: normalizedTransform.scale ? { ...c.transform.scale, ...normalizedTransform.scale } : c.transform.scale,
+            rotation: normalizedTransform.rotation ? { ...c.transform.rotation, ...normalizedTransform.rotation } : c.transform.rotation,
           },
         };
       }),
@@ -636,55 +684,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
   // ========== PARENTING (PICK WHIP) ==========
 
-  setClipParent: (clipId: string, parentClipId: string | null) => {
-    const {
-      clips,
-      tracks,
-      clipKeyframes,
-      playheadPosition,
-      invalidateCache,
-    } = get();
-    if (isClipOnLockedTrack(clips, tracks, clipId)) {
-      log.warn('Cannot parent clip on locked track', { clipId });
-      return;
-    }
-    const compositionId = clips.find((candidate) => candidate.id === clipId)?.compositionId
-      ?? 'timeline:active';
-    const result = planTimelineMotionParentMutation({
-      compositionId,
-      clips,
-      clipKeyframes,
-      timelineTime: getPlayheadPosition(playheadPosition),
-      childClipId: clipId,
-      ...(parentClipId ? { parentClipId } : {}),
-    });
-    if (!result.ok) {
-      log.warn('Cannot apply Motion parent relationship', {
-        clipId,
-        parentClipId: parentClipId ?? 'none',
-        failures: result.failures.map((failure) => failure.code),
-      });
-      return;
-    }
-    const applied = applyTimelineMotionStructurePlan({
-      compositionId,
-      clips,
-      clipKeyframes,
-      plan: result.plan,
-    });
-    if (!applied.ok) {
-      log.warn('Motion parent plan failed during atomic application', {
-        clipId,
-        message: applied.message,
-      });
-      return;
-    }
-
-    captureSnapshot(result.plan.history.label);
-    set({ clips: applied.clips, clipKeyframes: applied.clipKeyframes });
-    invalidateCache();
-    log.debug('Set clip parent', { clipId, parentClipId: parentClipId || 'none' });
-  },
+  setClipParent: (...args) => setClipParentAction({ set, get }, ...args),
 
   getClipChildren: (clipId: string) => {
     return get().clips.filter(c => c.parentClipId === clipId);
@@ -698,75 +698,5 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
   refreshCompClipNestedData: (sourceCompositionId) => refreshCompClipNestedDataAction({ set, get }, sourceCompositionId),
 
-  toggle3D: (clipId: string) => {
-    const { clips, tracks, invalidateCache } = get();
-    const clip = clips.find(c => c.id === clipId);
-    if (!clip) return;
-    if (isClipOnLockedTrack(clips, tracks, clipId)) {
-      log.warn('Cannot toggle 3D on locked track', { clipId });
-      return;
-    }
-    if (clip.source?.type === 'gaussian-splat') {
-      return;
-    }
-
-    const nowIs3D = !clip.is3D;
-    const parent = clip.parentClipId
-      ? clips.find((candidate) => candidate.id === clip.parentClipId)
-      : undefined;
-    const children = clips.filter((candidate) => candidate.parentClipId === clip.id);
-    const linkedClips = [...(parent ? [parent] : []), ...children];
-    const wouldKeepSupportedParentSpace = linkedClips.every((linkedClip) => (
-      nowIs3D === false && linkedClip.is3D !== true
-    ));
-    if (linkedClips.length > 0 && !wouldKeepSupportedParentSpace) {
-      log.warn('Cannot toggle 3D while it would invalidate motion parenting', {
-        clipId,
-        parentClipId: clip.parentClipId,
-        childClipIds: children.map((child) => child.id),
-        requestedSpace: nowIs3D ? '3d' : '2d',
-      });
-      return;
-    }
-
-    set({
-      clips: clips.map(c => {
-        if (c.id !== clipId) return c;
-        if (nowIs3D) {
-          if (isPlaneClip(c)) {
-            const t = c.transform || DEFAULT_TRANSFORM;
-            const currentZ = t.position?.z ?? DEFAULT_TRANSFORM.position.z;
-            return {
-              ...c,
-              is3D: true,
-              transform: {
-                ...t,
-                position: {
-                  ...(t.position || DEFAULT_TRANSFORM.position),
-                  z: currentZ,
-                },
-                rotation: { ...(t.rotation || DEFAULT_TRANSFORM.rotation) },
-                scale: { ...(t.scale || DEFAULT_TRANSFORM.scale) },
-              },
-            };
-          }
-          // Turning on 3D for existing scene-native clips keeps existing values.
-          return { ...c, is3D: true };
-        }
-        // Turning off 3D — reset 3D-specific values to 0
-        const t = c.transform || DEFAULT_TRANSFORM;
-        return {
-          ...c,
-          is3D: false,
-          transform: {
-            ...t,
-            position: { ...(t.position || { x: 0, y: 0, z: 0 }), z: 0 },
-            rotation: { ...(t.rotation || { x: 0, y: 0, z: 0 }), x: 0, y: 0 },
-            scale: { x: t.scale?.x ?? 1, y: t.scale?.y ?? 1 },
-          },
-        };
-      }),
-    });
-    invalidateCache();
-  },
+  toggle3D: (clipId) => toggleClip3DAction({ set, get }, clipId),
 });

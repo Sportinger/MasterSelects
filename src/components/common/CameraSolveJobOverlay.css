@@ -1,0 +1,87 @@
+@layer overlays {
+.camera-solve-job-overlay {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: calc(var(--z-overlay) + 2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(330px, calc(100vw - 32px));
+  min-height: 58px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  box-shadow: var(--shadow-lg);
+}
+
+.camera-solve-job-icon {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.camera-solve-job-content {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.camera-solve-job-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--font-sm);
+}
+
+.camera-solve-job-heading span,
+.camera-solve-job-detail {
+  color: var(--text-secondary);
+}
+
+.camera-solve-job-progress {
+  height: 3px;
+  margin: 6px 0 5px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--bg-input);
+}
+
+.camera-solve-job-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 160ms linear;
+}
+
+.camera-solve-job-detail {
+  display: block;
+  overflow: hidden;
+  font-size: var(--font-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.camera-solve-job-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  background: var(--bg-input);
+  cursor: pointer;
+}
+
+.camera-solve-job-cancel:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+}

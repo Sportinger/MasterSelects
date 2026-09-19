@@ -1,13 +1,24 @@
 import { listAdminCreditClaims, type AdminCreditClaim } from './adminCreditClaims';
 import { getCloudflareAdminSnapshot, type CloudflareAdminSnapshot } from './cloudflareAdmin';
 import type { AppContext } from './env';
+import {
+  getProductAnalyticsAdminSnapshot,
+  type ProductAnalyticsAdminSnapshot,
+} from './productAnalyticsAdmin';
+import {
+  getDiagnosticsAdminSnapshot,
+  type DiagnosticsAdminSnapshot,
+} from './diagnosticsAdmin';
 
 interface SummaryRow {
   active_paid_customers: number;
   active_users_30d: number;
   active_users_7d: number;
+  guest_users: number;
+  new_registered_users_7d: number;
   new_users_30d: number;
   new_users_7d: number;
+  registered_users: number;
   total_users: number;
   trialing_customers: number;
 }
@@ -52,11 +63,13 @@ interface DailyRow {
 export interface AdminDashboardSnapshot {
   claims: AdminCreditClaim[];
   cloudflare: CloudflareAdminSnapshot;
+  diagnostics: DiagnosticsAdminSnapshot;
   generatedAt: string;
   growth: {
     aiRequests: Array<{ count: number; day: string }>;
     signups: Array<{ count: number; day: string }>;
   };
+  productAnalytics: ProductAnalyticsAdminSnapshot;
   recentUsers: Array<{
     balance: number;
     createdAt: string;
@@ -80,6 +93,8 @@ export interface AdminDashboardSnapshot {
     estimatedMrrEur: number;
     expiredCreditLinks: number;
     failedAiRequests7d: number;
+    guestUsers: number;
+    newRegisteredUsers7d: number;
     newUsers30d: number;
     newUsers7d: number;
     openCreditAmount: number;
@@ -87,6 +102,7 @@ export interface AdminDashboardSnapshot {
     outstandingCredits: number;
     requests24h: number;
     requests7d: number;
+    registeredUsers: number;
     revokedCreditLinks: number;
     totalUsers: number;
     trialingCustomers: number;
@@ -122,12 +138,26 @@ export async function getAdminDashboardSnapshot(context: AppContext): Promise<Ad
     requestResult,
     claims,
     cloudflare,
+    productAnalytics,
+    diagnostics,
   ] = await Promise.all([
     db.prepare(
       `SELECT
          (SELECT COUNT(*) FROM users) AS total_users,
+         (SELECT COUNT(*) FROM guest_accounts) AS guest_users,
+         (SELECT COUNT(*)
+          FROM users u
+          WHERE EXISTS (
+            SELECT 1 FROM auth_identities a WHERE a.user_id = u.id
+          )) AS registered_users,
          (SELECT COUNT(*) FROM users WHERE created_at >= datetime('now', '-7 days')) AS new_users_7d,
          (SELECT COUNT(*) FROM users WHERE created_at >= datetime('now', '-30 days')) AS new_users_30d,
+         (SELECT COUNT(*)
+          FROM users u
+          WHERE u.created_at >= datetime('now', '-7 days')
+            AND EXISTS (
+              SELECT 1 FROM auth_identities a WHERE a.user_id = u.id
+            )) AS new_registered_users_7d,
          (SELECT COUNT(*) FROM users WHERE last_login_at >= datetime('now', '-7 days')) AS active_users_7d,
          (SELECT COUNT(*) FROM users WHERE last_login_at >= datetime('now', '-30 days')) AS active_users_30d,
          (SELECT COUNT(DISTINCT user_id) FROM subscriptions
@@ -202,9 +232,12 @@ export async function getAdminDashboardSnapshot(context: AppContext): Promise<Ad
     ).all<DailyRow>(),
     listAdminCreditClaims(db, context.request, context.env),
     getCloudflareAdminSnapshot(context.env),
+    getProductAnalyticsAdminSnapshot(db),
+    getDiagnosticsAdminSnapshot(db),
   ]);
 
   const totalUsers = asNumber(summary?.total_users);
+  const registeredUsers = asNumber(summary?.registered_users);
   const activePaidCustomers = asNumber(summary?.active_paid_customers);
   const openClaims = claims.filter((claim) => claim.status === 'available');
   const subscriptions = subscriptionResult.results.map((row) => ({
@@ -216,11 +249,13 @@ export async function getAdminDashboardSnapshot(context: AppContext): Promise<Ad
   return {
     claims,
     cloudflare,
+    diagnostics,
     generatedAt: new Date().toISOString(),
     growth: {
       aiRequests: requestResult.results.map((row) => ({ count: asNumber(row.count), day: row.day })),
       signups: signupResult.results.map((row) => ({ count: asNumber(row.count), day: row.day })),
     },
+    productAnalytics,
     recentUsers: recentUserResult.results.map((row) => ({
       balance: asNumber(row.balance),
       createdAt: row.created_at,
@@ -238,12 +273,14 @@ export async function getAdminDashboardSnapshot(context: AppContext): Promise<Ad
       activeUsers30d: asNumber(summary?.active_users_30d),
       activeUsers7d: asNumber(summary?.active_users_7d),
       claimedCreditLinks: claims.filter((claim) => claim.status === 'claimed').length,
-      conversionRate: totalUsers > 0 ? activePaidCustomers / totalUsers : 0,
+      conversionRate: registeredUsers > 0 ? activePaidCustomers / registeredUsers : 0,
       creditsGranted30d: asNumber(credits?.credits_granted_30d),
       creditsSpent30d: asNumber(credits?.credits_spent_30d),
       estimatedMrrEur: estimateMrr(subscriptionResult.results),
       expiredCreditLinks: claims.filter((claim) => claim.status === 'expired').length,
       failedAiRequests7d: asNumber(usage?.failed_7d),
+      guestUsers: asNumber(summary?.guest_users),
+      newRegisteredUsers7d: asNumber(summary?.new_registered_users_7d),
       newUsers30d: asNumber(summary?.new_users_30d),
       newUsers7d: asNumber(summary?.new_users_7d),
       openCreditAmount: openClaims.reduce((sum, claim) => sum + claim.amount, 0),
@@ -251,6 +288,7 @@ export async function getAdminDashboardSnapshot(context: AppContext): Promise<Ad
       outstandingCredits: asNumber(credits?.outstanding_credits),
       requests24h: asNumber(usage?.requests_24h),
       requests7d: asNumber(usage?.requests_7d),
+      registeredUsers,
       revokedCreditLinks: claims.filter((claim) => claim.status === 'revoked').length,
       totalUsers,
       trialingCustomers: asNumber(summary?.trialing_customers),

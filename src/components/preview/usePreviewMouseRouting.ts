@@ -3,13 +3,14 @@ import type React from 'react';
 
 import { renderHostPort } from '../../services/render/renderHostPort';
 import type { SceneVector3 } from '../../engine/scene/types';
+import { useEngineStore } from '../../stores/engineStore';
 import type { TimelineClip } from '../../types/timeline';
 import type { ClipTransform } from '../../types/timelineCore';
 import {
   addSceneVectors,
   cloneSceneVector,
   getEditCameraOrthoBasis,
-  getSceneBoundsCenter,
+  resolveSceneNavigationOrbit,
   scaleSceneVector,
   type EditCameraOrthoViewMode,
 } from './previewSceneCameraMath';
@@ -54,9 +55,9 @@ interface UsePreviewMouseRoutingOptions {
     mode: EditCameraOrthoViewMode;
   }>;
   editCameraOrthoViewActive: boolean;
-  effectiveSceneNavFpsMode: boolean;
+  effectOrbitActive: boolean;
+  beginEffectOrbitDrag: (event: React.MouseEvent, mode: 'orbit' | 'pan') => void;
   endGaussianWheelBatch: () => void;
-  freeCanvasNavigationMode: boolean;
   gaussianFpsLookStart: MutableRefObject<{ clipId: string | null; x: number; y: number }>;
   gaussianOrbitStart: MutableRefObject<{
     clipId: string | null;
@@ -72,6 +73,9 @@ interface UsePreviewMouseRoutingOptions {
     pivotY: number;
     pivotZ: number;
     radius: number;
+    localOffsetX?: number;
+    localOffsetY?: number;
+    localOffsetZ?: number;
   }>;
   gaussianPanStart: MutableRefObject<{ clipId: string | null; x: number; y: number; panX: number; panY: number; panZ: number }>;
   getFreshSceneNavTransform: (clip: TimelineClip | null) => ClipTransform | null;
@@ -96,6 +100,7 @@ interface UsePreviewMouseRoutingOptions {
   stopGaussianFpsLook: (exitPointerLock?: boolean) => void;
   stopGaussianKeyboardMovement: () => void;
   viewPan: PreviewPoint;
+  viewNavigationEnabled: boolean;
 }
 
 interface PreviewMouseRoutingHandlers {
@@ -112,9 +117,9 @@ export function usePreviewMouseRouting({
   editCameraOrthoMode,
   editCameraOrthoPanStart: editCameraOrthoPanStartRef,
   editCameraOrthoViewActive,
-  effectiveSceneNavFpsMode,
+  effectOrbitActive,
+  beginEffectOrbitDrag,
   endGaussianWheelBatch,
-  freeCanvasNavigationMode,
   gaussianFpsLookStart: gaussianFpsLookStartRef,
   gaussianOrbitStart: gaussianOrbitStartRef,
   gaussianPanStart: gaussianPanStartRef,
@@ -140,6 +145,7 @@ export function usePreviewMouseRouting({
   stopGaussianFpsLook,
   stopGaussianKeyboardMovement,
   viewPan,
+  viewNavigationEnabled,
 }: UsePreviewMouseRoutingOptions): PreviewMouseRoutingHandlers {
   const panFrameRef = useRef<number | null>(null);
   const pendingPanRef = useRef<PreviewPoint | null>(null);
@@ -230,6 +236,7 @@ export function usePreviewMouseRouting({
       if (event.button === 0) {
         if (event.shiftKey) {
           event.preventDefault();
+          useEngineStore.getState().setSceneNavOrbitTarget(null);
           endGaussianWheelBatch();
           startSceneNavHistoryBatch('Scene pan');
           gaussianPanStartRef.current = {
@@ -245,42 +252,42 @@ export function usePreviewMouseRouting({
         }
         event.preventDefault();
         endGaussianWheelBatch();
-        if (effectiveSceneNavFpsMode) {
-          startSceneNavHistoryBatch('Scene look');
-          gaussianFpsLookStartRef.current = { clipId: navigationSceneNavClip.id, x: event.clientX, y: event.clientY };
-          getSceneNavPointerLockTarget()?.requestPointerLock?.();
-          setIsGaussianFpsLooking(true);
-        } else {
-          startSceneNavHistoryBatch('Scene orbit');
-          const solveSettings = getSceneNavSolveSettings(navigationSceneNavClip);
-          const pivot = getSceneBoundsCenter(solveSettings?.sceneBounds);
-          const radius = Math.hypot(
-            freshTransform.position.x - pivot.x,
-            freshTransform.position.y - pivot.y,
-            freshTransform.position.z - pivot.z,
-          );
-          gaussianOrbitStartRef.current = {
-            clipId: navigationSceneNavClip.id,
-            x: event.clientX,
-            y: event.clientY,
-            pitch: freshTransform.rotation.x,
-            yaw: freshTransform.rotation.y,
-            roll: freshTransform.rotation.z,
-            startPosX: freshTransform.position.x,
-            startPosY: freshTransform.position.y,
-            startPosZ: freshTransform.position.z,
-            pivotX: pivot.x,
-            pivotY: pivot.y,
-            pivotZ: pivot.z,
-            radius,
-          };
-          setIsGaussianOrbiting(true);
-        }
+        const solveSettings = getSceneNavSolveSettings(navigationSceneNavClip);
+        if (!solveSettings) return;
+        startSceneNavHistoryBatch('Scene orbit');
+        const orbitTarget = useEngineStore.getState().sceneNavOrbitTarget;
+        const { pivot, radius, localOffset } = resolveSceneNavigationOrbit(
+          freshTransform,
+          solveSettings.settings,
+          { width: canvasSize.width, height: canvasSize.height },
+          solveSettings.sceneBounds,
+          orbitTarget?.pivot,
+        );
+        gaussianOrbitStartRef.current = {
+          clipId: navigationSceneNavClip.id,
+          x: event.clientX,
+          y: event.clientY,
+          pitch: freshTransform.rotation.x,
+          yaw: freshTransform.rotation.y,
+          roll: freshTransform.rotation.z,
+          startPosX: freshTransform.position.x,
+          startPosY: freshTransform.position.y,
+          startPosZ: freshTransform.position.z,
+          pivotX: pivot.x,
+          pivotY: pivot.y,
+          pivotZ: pivot.z,
+          radius,
+          localOffsetX: localOffset.x,
+          localOffsetY: localOffset.y,
+          localOffsetZ: localOffset.z,
+        };
+        setIsGaussianOrbiting(true);
         return;
       }
 
-      if (event.button === 1 || event.button === 2) {
+      if (event.button === 1) {
         event.preventDefault();
+        useEngineStore.getState().setSceneNavOrbitTarget(null);
         endGaussianWheelBatch();
         startSceneNavHistoryBatch('Scene pan');
         gaussianPanStartRef.current = {
@@ -294,9 +301,29 @@ export function usePreviewMouseRouting({
         setIsGaussianPanning(true);
         return;
       }
+
+      if (event.button === 2) {
+        event.preventDefault();
+        endGaussianWheelBatch();
+        startSceneNavHistoryBatch('Scene look');
+        gaussianFpsLookStartRef.current = {
+          clipId: navigationSceneNavClip.id,
+          x: event.clientX,
+          y: event.clientY,
+        };
+        getSceneNavPointerLockTarget()?.requestPointerLock?.();
+        setIsGaussianFpsLooking(true);
+        return;
+      }
     }
 
-    if (!freeCanvasNavigationMode) return;
+    if (effectOrbitActive && event.button === 0 && isCanvasInteractionTarget(event.target)) {
+      event.preventDefault();
+      beginEffectOrbitDrag(event, event.shiftKey ? 'pan' : 'orbit');
+      return;
+    }
+
+    if (!viewNavigationEnabled || !isCanvasInteractionTarget(event.target)) return;
 
     if (event.button === 1 || (event.button === 0 && event.altKey)) {
       event.preventDefault();
@@ -305,13 +332,15 @@ export function usePreviewMouseRouting({
     }
   }, [
     activeEditCameraOrthoFrame,
+    beginEffectOrbitDrag,
+    canvasSize.height,
+    canvasSize.width,
     containerRef,
     editCameraOrthoMode,
     editCameraOrthoPanStartRef,
     editCameraOrthoViewActive,
-    effectiveSceneNavFpsMode,
+    effectOrbitActive,
     endGaussianWheelBatch,
-    freeCanvasNavigationMode,
     gaussianFpsLookStartRef,
     gaussianOrbitStartRef,
     gaussianPanStartRef,
@@ -333,6 +362,7 @@ export function usePreviewMouseRouting({
     stopGaussianKeyboardMovement,
     viewPan.x,
     viewPan.y,
+    viewNavigationEnabled,
   ]);
 
   const handleMouseMove = useCallback((event: React.MouseEvent) => {

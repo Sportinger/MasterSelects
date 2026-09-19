@@ -43,6 +43,7 @@ export type MixdownProgressCallback = (progress: MixdownProgress) => void;
 
 class CompositionAudioMixerService {
   private audioContext: AudioContext | null = null;
+  private emptyMixdownBuffer: AudioBuffer | null = null;
   private blobUrls: Set<string> = new Set();
 
   private getAudioContext(): AudioContext {
@@ -96,7 +97,7 @@ class CompositionAudioMixerService {
     if (audioTracks.length === 0) {
       log.debug(`No audio tracks in composition ${composition.name}`);
       return {
-        buffer: this.createSilentBuffer(composition.duration || 10),
+        buffer: this.getEmptyMixdownBuffer(),
         waveform: [],
         duration: composition.duration || 10,
         hasAudio: false,
@@ -110,7 +111,7 @@ class CompositionAudioMixerService {
     if (audioClips.length === 0) {
       log.debug(`No audio clips in composition ${composition.name}`);
       return {
-        buffer: this.createSilentBuffer(composition.duration || 10),
+        buffer: this.getEmptyMixdownBuffer(),
         waveform: [],
         duration: composition.duration || 10,
         hasAudio: false,
@@ -231,7 +232,7 @@ class CompositionAudioMixerService {
     if (trackDataList.length === 0) {
       log.info(`No audio could be extracted from composition ${composition.name}`);
       return {
-        buffer: this.createSilentBuffer(duration),
+        buffer: this.getEmptyMixdownBuffer(),
         waveform: [],
         duration,
         hasAudio: false,
@@ -303,6 +304,7 @@ class CompositionAudioMixerService {
       this.audioContext.close();
     }
     this.audioContext = null;
+    this.emptyMixdownBuffer = null;
     log.info('CompositionAudioMixer disposed');
   }
 
@@ -333,13 +335,12 @@ class CompositionAudioMixerService {
   }
 
   /**
-   * Create a silent buffer of specified duration
+   * No-audio results retain their duration as metadata, not millions of silent samples.
+   * Callers gate playback on hasAudio; a shared one-frame buffer preserves the result shape.
    */
-  private createSilentBuffer(duration: number): AudioBuffer {
-    const ctx = this.getAudioContext();
-    const sampleRate = 48000;
-    const length = Math.ceil(duration * sampleRate);
-    return ctx.createBuffer(2, length, sampleRate);
+  private getEmptyMixdownBuffer(): AudioBuffer {
+    this.emptyMixdownBuffer ??= this.getAudioContext().createBuffer(2, 1, 48000);
+    return this.emptyMixdownBuffer;
   }
 
   /**

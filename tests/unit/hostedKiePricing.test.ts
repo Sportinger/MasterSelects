@@ -317,6 +317,22 @@ describe('hosted Kie.ai pricing', () => {
     })?.compactLabel).toBe('1980 cr');
   });
 
+  it('charges hosted Seedance 2.5 by output plus reference-video duration', () => {
+    expect(calculateHostedSeedanceCost('bytedance/seedance-2-5', '480p', 10)).toBe(1680);
+    expect(calculateHostedSeedanceCost('bytedance/seedance-2-5', '720p', 10)).toBe(3780);
+    expect(calculateHostedSeedanceCost('bytedance/seedance-2-5', '720p', 10, true, 8)).toBe(4104);
+
+    expect(getFlashBoardPriceEstimate({
+      duration: 10,
+      hasVideoInput: true,
+      mode: '720p',
+      outputType: 'video',
+      providerId: 'bytedance/seedance-2-5',
+      service: 'cloud',
+      videoInputDuration: 8,
+    })?.compactLabel).toBe('4104 cr');
+  });
+
   it('sends hosted Seedance start and end images as exact frame fields', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({
@@ -377,8 +393,94 @@ describe('hosted Kie.ai pricing', () => {
         source: 'data:audio/wav;base64,UklGRg==',
       }],
       sound: true,
-    })).rejects.toThrow('Seedance multimodal references are temporarily disabled');
+    })).rejects.toThrow('Seedance 2.0 multimodal references are temporarily disabled');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sends every Seedance 2.5 multimodal option through the Kie task contract', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
+      code: 200,
+      data: { taskId: 'seedance_25_task_1' },
+      msg: 'success',
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(createHostedSeedanceTask({
+      KIEAI_API_KEY: 'kie_test_key',
+    } as Partial<Env> as Env, {
+      aspectRatio: 'adaptive',
+      duration: 30,
+      mode: '720p',
+      outputFormat: 'mov',
+      prompt: 'Reference @Image1, @Video1, and @Audio1 for a coherent scene.',
+      provider: 'bytedance/seedance-2-5',
+      referenceMedia: [
+        {
+          mediaType: 'image',
+          source: 'https://cdn.example.com/reference.png',
+        },
+        {
+          duration: 12,
+          mediaType: 'video',
+          source: 'https://cdn.example.com/reference.mp4',
+        },
+        {
+          duration: 8,
+          mediaType: 'audio',
+          source: 'https://cdn.example.com/reference.mp3',
+        },
+      ],
+      returnLastFrame: true,
+      sound: true,
+      webSearch: true,
+    })).resolves.toEqual({ taskId: 'seedance_25_task_1' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      input: {
+        aspect_ratio: 'adaptive',
+        duration: 30,
+        generate_audio: true,
+        nsfw_checker: true,
+        output_format: 'mov',
+        prompt: 'Reference @Image1, @Video1, and @Audio1 for a coherent scene.',
+        reference_audio_urls: ['https://cdn.example.com/reference.mp3'],
+        reference_image_urls: ['https://cdn.example.com/reference.png'],
+        reference_video_urls: ['https://cdn.example.com/reference.mp4'],
+        resolution: '720p',
+        return_last_frame: true,
+        web_search: true,
+      },
+      model: 'bytedance/seedance-2-5',
+    });
+  });
+
+  it('forces adaptive aspect ratio for Seedance 2.5 exact-frame tasks', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
+      code: 200,
+      data: { taskId: 'seedance_25_exact_frame_task' },
+      msg: 'success',
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(createHostedSeedanceTask({
+      KIEAI_API_KEY: 'kie_test_key',
+    } as Partial<Env> as Env, {
+      aspectRatio: '16:9',
+      duration: 8,
+      mode: '720p',
+      prompt: 'The subject turns toward the camera.',
+      provider: 'bytedance/seedance-2-5',
+      startImageUrl: 'https://cdn.example.com/start.png',
+    })).resolves.toEqual({ taskId: 'seedance_25_exact_frame_task' });
+
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+      input: {
+        aspect_ratio: 'adaptive',
+        first_frame_url: 'https://cdn.example.com/start.png',
+      },
+      model: 'bytedance/seedance-2-5',
+    });
   });
 
   it('routes hosted Flux Kontext image generation through Kie.ai special endpoints', async () => {

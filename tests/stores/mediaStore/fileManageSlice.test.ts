@@ -47,6 +47,7 @@ import { createCompositionSlice, type CompositionActions } from '../../../src/st
 import { useMediaStore } from '../../../src/stores/mediaStore';
 import { projectFileService } from '../../../src/services/projectFileService';
 import { projectDB } from '../../../src/services/projectDB';
+import * as mediaInfoHelpers from '../../../src/stores/mediaStore/helpers/mediaInfoHelpers';
 import { thumbnailCacheService } from '../../../src/services/thumbnailCacheService';
 import { useTimelineStore } from '../../../src/stores/timeline';
 import { blobUrlManager } from '../../../src/stores/timeline/helpers/blobUrlManager';
@@ -423,7 +424,7 @@ describe('MediaStore - File Management', () => {
       ]);
     });
 
-    it('deletes media files, removes their clips from saved compositions, and clears project artifacts', async () => {
+    it('removes media from the project without deleting any project-folder files', async () => {
       mockProjectArtifactCleanup();
       const file = makeMediaFile({
         id: 'f1',
@@ -464,11 +465,7 @@ describe('MediaStore - File Management', () => {
       expect(nextComp2.timelineData?.clips).toHaveLength(1);
       expect(nextComp2.timelineData?.clips[0].id).toBe('clip-survivor');
       expect(nextComp2.timelineData?.clips[0].linkedClipId).toBeUndefined();
-      expect(projectFileService.deleteMediaFileArtifacts).toHaveBeenCalledWith(expect.objectContaining({
-        mediaId: 'f1',
-        projectPath: 'Raw/clip.mp4',
-        fileHash: 'hash-1',
-      }));
+      expect(projectFileService.deleteMediaFileArtifacts).not.toHaveBeenCalled();
       expect(projectDB.deleteMediaFile).toHaveBeenCalledWith('f1');
       expect(projectDB.deleteProxyFrames).toHaveBeenCalledWith('hash-1');
     });
@@ -1260,11 +1257,13 @@ describe('MediaStore - File Management', () => {
 
     it('reloadFile stores the new hash and clears stale clip audio analysis refs', async () => {
       const replacementFile = new File(['replacement'], 'clip.mp4', { type: 'video/mp4' });
+      vi.spyOn(mediaInfoHelpers, 'getMediaInfo').mockResolvedValue({ duration: 10, width: 1920, height: 1080 });
       const sourceFile = makeMediaFile({
         id: 'media-reload',
         name: 'clip.mp4',
         file: undefined,
         projectPath: 'Raw/clip.mp4',
+        fileSize: replacementFile.size,
         fileHash: 'hash-old',
         thumbnailUrl: 'blob:http://localhost/old-thumb',
         audioAnalysisRefs: {
@@ -1345,6 +1344,9 @@ describe('MediaStore - File Management', () => {
         type: 'video',
         naturalDuration: 9,
         mediaFileId: 'media-reload',
+        filePath: undefined,
+        runtimeSourceId: 'media:media-reload',
+        runtimeSessionKey: 'interactive:clip-reload',
       });
       expect((updatedClip?.source as { videoElement?: HTMLVideoElement } | undefined)?.videoElement).toBeUndefined();
       expect(generateForSourceUrl).toHaveBeenCalledWith(
@@ -1404,6 +1406,9 @@ describe('MediaStore - File Management', () => {
         type: 'audio',
         naturalDuration: 13,
         mediaFileId: 'media-audio-reload',
+        filePath: undefined,
+        runtimeSourceId: 'media:media-audio-reload',
+        runtimeSessionKey: 'interactive:clip-audio-reload',
       });
       expect((updatedClip?.source as { audioElement?: HTMLAudioElement } | undefined)?.audioElement).toBeUndefined();
     });

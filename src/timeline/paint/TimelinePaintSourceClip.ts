@@ -37,6 +37,7 @@ export interface TimelinePaintSourceClip {
   reversed?: boolean;
   linkedClipId?: string;
   linkedGroupId?: string;
+  needsReload?: boolean;
   isPendingDownload?: boolean;
   downloadProgress?: number;
   downloadError?: string;

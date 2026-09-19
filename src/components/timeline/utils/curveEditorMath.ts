@@ -5,7 +5,7 @@ import {
   type EasingType,
 } from '../../../types/animationProperties';
 import type { Keyframe } from '../../../types/keyframes';
-import { PRESET_BEZIER } from '../../../utils/keyframeInterpolation';
+import { PRESET_BEZIER, resolveBezierSegmentHandles } from '../../../utils/keyframeInterpolation';
 import {
   parseVectorAnimationInputProperty,
   parseVectorAnimationStateProperty,
@@ -180,14 +180,10 @@ export function generateBezierPath(
   const x2 = timeToX(nextKf.time);
   const y2 = valueToY(nextKf.value);
 
-  const timeDelta = nextKf.time - prevKf.time;
-  const valueDelta = nextKf.value - prevKf.value;
-
   let cp1x: number, cp1y: number, cp2x: number, cp2y: number;
 
   if (prevKf.easing === 'bezier' || prevKf.handleOut || nextKf.handleIn) {
-    const handleOut = prevKf.handleOut || { x: timeDelta / 3, y: valueDelta / 3 };
-    const handleIn = nextKf.handleIn || { x: -timeDelta / 3, y: -valueDelta / 3 };
+    const { handleOut, handleIn } = resolveBezierSegmentHandles(prevKf, nextKf);
 
     cp1x = timeToX(prevKf.time + handleOut.x);
     cp1y = valueToY(prevKf.value + handleOut.y);

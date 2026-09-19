@@ -685,9 +685,10 @@ export function planMotionNullViewportDrag(
   );
   const cosine = Math.cos(inverseParentRadians);
   const sine = Math.sin(inverseParentRadians);
+  const parentUniformScale = controller.parentWorldTransform?.scale.all ?? 1;
   const localDelta = {
-    x: worldDelta.x * cosine - worldDelta.y * sine,
-    y: worldDelta.x * sine + worldDelta.y * cosine,
+    x: (worldDelta.x * cosine - worldDelta.y * sine) / parentUniformScale,
+    y: (worldDelta.x * sine + worldDelta.y * cosine) / parentUniformScale,
   };
   const nextWorld = {
     x: controller.worldTransform.position.x + worldDelta.x,

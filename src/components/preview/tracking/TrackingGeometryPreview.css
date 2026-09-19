@@ -1,0 +1,62 @@
+.tracking-geometry-preview {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: linear-gradient(180deg, #15191f 0%, #0c0f13 100%);
+  color: #d9e1ea;
+  outline: none;
+  touch-action: none;
+  user-select: none;
+}
+
+.tracking-geometry-preview:focus-visible {
+  border-color: #65a9ff;
+  box-shadow: 0 0 0 2px rgba(76, 148, 236, 0.34);
+}
+
+.tracking-geometry-preview canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.tracking-geometry-preview__status {
+  position: absolute;
+  left: 8px;
+  bottom: 7px;
+  max-width: calc(100% - 54px);
+  color: rgba(226, 234, 244, 0.72);
+  font-size: 10px;
+  line-height: 1.25;
+  pointer-events: none;
+}
+
+.tracking-geometry-preview__reset {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  min-width: 30px;
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  background: rgba(14, 18, 23, 0.82);
+  color: rgba(235, 241, 248, 0.88);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.tracking-geometry-preview__reset:hover {
+  background: rgba(42, 52, 64, 0.9);
+}
+
+.tracking-geometry-preview__reset:focus {
+  outline: none;
+}
+
+.tracking-geometry-preview__reset:focus-visible {
+  border-color: #65a9ff;
+  box-shadow: 0 0 0 2px rgba(76, 148, 236, 0.4);
+}

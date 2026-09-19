@@ -63,17 +63,36 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     );
   }
 
-  if (pendingState.provider === 'google' && !code) {
-    return json(
-      {
-        error: 'missing_code',
-        message: 'OAuth callbacks must include an authorization code.',
-      },
-      { status: 400 },
-    );
+  if (pendingState.provider === 'google') {
+    // The OAuth redirect lands in the browser that started the login, so the
+    // state cookie must be present and name exactly the state Google echoes
+    // back. Without this binding an attacker could finish their own Google
+    // login inside the victim's browser (login CSRF). Magic links may be
+    // opened on another device and therefore stay cookie-less above.
+    if (!cookieState || !stateId || cookieState.stateId !== stateId) {
+      return json(
+        {
+          error: 'state_mismatch',
+          message: 'The Google sign-in must be completed in the browser that started it.',
+        },
+        { status: 400 },
+      );
+    }
+
+    if (!code) {
+      return json(
+        {
+          error: 'missing_code',
+          message: 'OAuth callbacks must include an authorization code.',
+        },
+        { status: 400 },
+      );
+    }
   }
 
-  let providerUserId = url.searchParams.get('sub') ?? url.searchParams.get('provider_user_id') ?? token ?? pendingState.email;
+  // Set by the provider branches below from verified material only; query
+  // parameters never influence the identity that gets a session.
+  let providerUserId = pendingState.email;
   let authEmail = pendingState.email;
   let avatarUrl: string | null | undefined;
   let displayName: string | null | undefined;
@@ -86,10 +105,16 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       avatarUrl = profile.avatarUrl;
       displayName = profile.displayName;
     } catch (error) {
+      console.error(
+        '[auth] Google OAuth exchange failed',
+        context.data.requestId,
+        error instanceof Error ? error.message : error,
+      );
       return json(
         {
           error: 'provider_exchange_failed',
-          message: error instanceof Error ? error.message : 'Google OAuth exchange failed.',
+          message: 'Google sign-in could not be completed. Please try again.',
+          requestId: context.data.requestId ?? null,
         },
         { status: 502 },
       );

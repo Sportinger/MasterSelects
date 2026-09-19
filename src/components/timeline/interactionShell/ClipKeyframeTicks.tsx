@@ -1,6 +1,9 @@
 import { useCallback } from 'react';
 import { ClipKeyframeTicks as ClipKeyframeTickList } from '../components/ClipKeyframeTicks';
 import { useClipKeyframeTickDrag } from '../hooks/useClipKeyframeTickDrag';
+import { retimeKeyframesForEdgeTrim } from '../../../utils/keyframeTrimAnchoring';
+import { computeTrimTiming } from '../utils/clipTrimTiming';
+import { getClipShellKeyframeGroups } from '../utils/timelineTrackInteractionShellState';
 import type { ClipInteractionShellCommandContext, ClipInteractionShellCommands } from './types';
 
 interface ClipKeyframeTicksProps {
@@ -12,7 +15,36 @@ const formatShellKeyframeTime = (seconds: number): string => `${seconds.toFixed(
 
 export function ClipKeyframeTicks({ context, commands }: ClipKeyframeTicksProps) {
   const keyframe = context.activeModules.keyframe;
-  const displayDuration = Math.max(0.001, context.clip.duration);
+  const trim = context.activeModules.trim?.state;
+  const trimTiming = trim?.clipId === context.clip.id
+    ? computeTrimTiming(context.clip, trim.edge, {
+        startTime: trim.originalStartTime,
+        duration: trim.originalDuration,
+        inPoint: trim.originalInPoint,
+        outPoint: trim.originalOutPoint,
+      }, trim.appliedDelta)
+    : null;
+  const displayDuration = Math.max(0.001, trimTiming?.newDuration ?? context.clip.duration);
+  const previewKeyframes = trimTiming && trim
+    ? retimeKeyframesForEdgeTrim(
+        keyframe?.keyframes ?? [],
+        {
+          startTime: trim.originalStartTime,
+          duration: trim.originalDuration,
+          inPoint: trim.originalInPoint,
+          outPoint: trim.originalOutPoint,
+        },
+        {
+          startTime: trimTiming.newStartTime,
+          duration: trimTiming.newDuration,
+          inPoint: trimTiming.newInPoint,
+          outPoint: trimTiming.newOutPoint,
+        },
+      )
+    : null;
+  const keyframeGroups = previewKeyframes
+    ? getClipShellKeyframeGroups(previewKeyframes)
+    : keyframe?.keyframeGroups ?? [];
 
   const onBeginKeyframeGroupMove = useCallback((keyframeIds: string[], startTime: number) => {
     commands?.onMoveKeyframeGroup?.(keyframeIds, startTime, context, 'begin');
@@ -30,7 +62,7 @@ export function ClipKeyframeTicks({ context, commands }: ClipKeyframeTicksProps)
     keyframeGroupDrag,
     handleKeyframeTickMouseDown,
   } = useClipKeyframeTickDrag({
-    keyframeTickGroups: keyframe?.keyframeGroups ?? [],
+    keyframeTickGroups: keyframeGroups,
     displayDuration,
     width: context.geometry.clip.width,
     onMoveKeyframeGroup,
@@ -42,7 +74,7 @@ export function ClipKeyframeTicks({ context, commands }: ClipKeyframeTicksProps)
 
   return (
     <ClipKeyframeTickList
-      groups={keyframe.keyframeGroups}
+      groups={keyframeGroups}
       displayDuration={displayDuration}
       draggingKeyframeIds={keyframeGroupDrag?.keyframeIds}
       isTrackLocked={context.track.locked === true}

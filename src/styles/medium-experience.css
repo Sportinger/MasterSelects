@@ -1,0 +1,78 @@
+.app--medium-experience {
+  background: #111214;
+}
+
+.app--medium-experience > .toolbar {
+  min-height: 38px;
+  padding-inline: 10px;
+  background: #171819;
+  border-bottom-color: #292b2e;
+}
+
+.app--medium-experience .dock-container {
+  background: #111214;
+}
+
+.app--medium-experience .dock-tab-pane {
+  background: #171819;
+}
+
+.app--medium-experience .dock-tab-bar {
+  min-height: 34px;
+  align-items: center;
+  background: #171819;
+  border-bottom-color: #292b2e;
+}
+
+.app--medium-experience .dock-tab {
+  height: 34px;
+  padding-inline: 12px;
+  border-right: 0;
+  background: transparent;
+  color: #85888d;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.app--medium-experience .dock-tab.active {
+  background: transparent;
+  color: #e4e5e7;
+}
+
+.app--medium-experience .dock-tab-handle,
+.app--medium-experience .dock-tab-add,
+.app--medium-experience .dock-tab-close {
+  display: none;
+}
+
+.app--medium-experience .dock-resize-handle::after {
+  background: #292b2e;
+}
+
+.app--medium-experience .dock-panel-content {
+  background: #171819;
+}
+
+.app--medium-experience .ai-studio-subtabs {
+  display: none;
+}
+
+.app--medium-experience
+  .dock-tab-pane[data-group-id='medium-preview-group']
+  .dock-panel-content {
+  background: #131416;
+}
+
+.app--medium-experience
+  .dock-tab-pane[data-group-id='medium-timeline-group']
+  .dock-tab-bar {
+  min-height: 30px;
+}
+
+.app--medium-experience
+  .dock-tab-pane[data-group-id='medium-timeline-group']
+  .dock-tab {
+  height: 30px;
+}

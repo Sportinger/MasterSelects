@@ -3,6 +3,12 @@ import type { TimelineClip } from '../../../stores/timeline/types';
 import type { Layer } from '../../../types/layers';
 import type { ParallelDecodeManager } from '../../ParallelDecodeManager';
 import type { BaseLayerPropsLike, ExportClipStateLike } from './contracts';
+import {
+  getLiveInputExportCanvas,
+  getLiveInputExportPresentation,
+  isLiveInputClip,
+  requireLiveInputExportVideo,
+} from '../liveInputExport';
 
 const log = Logger.create('ExportLayerBuilder');
 const FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER = 3;
@@ -20,6 +26,26 @@ export function buildVideoLayer(
   useParallelDecode: boolean,
   sourceMediaTime?: number,
 ): Layer | null {
+  if (isLiveInputClip(clip)) {
+    const video = requireLiveInputExportVideo(clip);
+    const canvas = getLiveInputExportCanvas(clip);
+    const presentation = getLiveInputExportPresentation(clip);
+    return {
+      ...baseLayerProps,
+      source: {
+        type: 'video',
+        videoElement: video,
+        isLiveInput: true,
+        canvasElement: canvas ?? undefined,
+        ...(presentation ? {
+          intrinsicWidth: presentation.width,
+          intrinsicHeight: presentation.height,
+          videoRotation: presentation.rotation,
+        } : {}),
+      },
+    };
+  }
+
   const clipState = clipStates.get(clip.id);
   const video = clipState?.preciseVideoElement ?? clip.source?.videoElement ?? null;
 
@@ -52,8 +78,9 @@ export function buildVideoLayer(
     throw new Error(`FAST export failed: clip "${clip.name}" is not registered in the parallel decoder.`);
   }
 
-  if (clipState?.isSequential && clipState.webCodecsPlayer) {
-    const videoFrame = clipState.webCodecsPlayer.getCurrentFrame();
+  const frameProvider = clipState?.frameProvider ?? clipState?.webCodecsPlayer;
+  if (frameProvider) {
+    const videoFrame = frameProvider.getCurrentFrame();
     if (videoFrame) {
       return {
         ...baseLayerProps,
@@ -61,13 +88,13 @@ export function buildVideoLayer(
           type: 'video',
           ...(video ? { videoElement: video } : {}),
           videoFrame,
-          videoRotation: clipState.webCodecsPlayer.getSourceRotationDegrees?.() ?? 0,
-          webCodecsPlayer: clipState.webCodecsPlayer,
+          videoRotation: frameProvider.getSourceRotationDegrees?.() ?? 0,
+          webCodecsPlayer: frameProvider,
           mediaTime: sourceMediaTime,
         },
       };
     }
-    throw new Error(`FAST export failed: sequential decode frame not available for clip "${clip.name}" at ${time.toFixed(3)}s.`);
+    throw new Error(`Export frame provider produced no frame for clip "${clip.name}" at ${time.toFixed(3)}s.`);
   }
 
   if (!video) {
@@ -104,6 +131,26 @@ export function buildNestedVideoLayer(
   useParallelDecode: boolean,
   sourceMediaTime?: number,
 ): Layer | null {
+  if (isLiveInputClip(nestedClip)) {
+    const video = requireLiveInputExportVideo(nestedClip);
+    const canvas = getLiveInputExportCanvas(nestedClip);
+    const presentation = getLiveInputExportPresentation(nestedClip);
+    return {
+      ...baseLayer,
+      source: {
+        type: 'video',
+        videoElement: video,
+        isLiveInput: true,
+        canvasElement: canvas ?? undefined,
+        ...(presentation ? {
+          intrinsicWidth: presentation.width,
+          intrinsicHeight: presentation.height,
+          videoRotation: presentation.rotation,
+        } : {}),
+      },
+    };
+  }
+
   const sourceClipId = getExportSourceClipId(nestedClip);
   const nestedClipState = clipStates.get(sourceClipId);
   if (useParallelDecode) {
@@ -135,8 +182,9 @@ export function buildNestedVideoLayer(
     throw new Error(`FAST export failed: nested clip "${nestedClip.name}" is not registered in the parallel decoder.`);
   }
 
-  if (nestedClipState?.isSequential && nestedClipState.webCodecsPlayer) {
-    const videoFrame = nestedClipState.webCodecsPlayer.getCurrentFrame();
+  const nestedFrameProvider = nestedClipState?.frameProvider ?? nestedClipState?.webCodecsPlayer;
+  if (nestedFrameProvider) {
+    const videoFrame = nestedFrameProvider.getCurrentFrame();
     if (videoFrame) {
       return {
         ...baseLayer,
@@ -144,13 +192,13 @@ export function buildNestedVideoLayer(
           type: 'video',
           ...(exportVideo ? { videoElement: exportVideo } : {}),
           videoFrame,
-          videoRotation: nestedClipState.webCodecsPlayer.getSourceRotationDegrees?.() ?? 0,
-          webCodecsPlayer: nestedClipState.webCodecsPlayer,
+          videoRotation: nestedFrameProvider.getSourceRotationDegrees?.() ?? 0,
+          webCodecsPlayer: nestedFrameProvider,
           mediaTime: sourceMediaTime,
         },
       };
     }
-    throw new Error(`FAST export failed: sequential decode frame not available for nested clip "${nestedClip.name}" at ${mainTimelineTime.toFixed(3)}s.`);
+    throw new Error(`Export frame provider produced no frame for nested clip "${nestedClip.name}" at ${mainTimelineTime.toFixed(3)}s.`);
   }
 
   if (exportVideo && exportVideo.readyState >= 2) {

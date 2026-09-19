@@ -7,10 +7,23 @@ import {
   type CreditClaimRow,
   type CreditClaimStatus,
 } from './creditClaims';
+import { readRunChanges } from './d1Result';
 import type { AppD1Database, Env } from './env';
 
 const TOKEN_ENCRYPTION_CONTEXT = 'masterselects:admin-credit-link:v1:';
 const encoder = new TextEncoder();
+
+/**
+ * Validation and state errors whose message is written for the admin UI and
+ * safe to return verbatim. Every other failure (configuration, crypto, D1)
+ * stays server-side and reaches the caller as a fixed message.
+ */
+export class AdminCreditClaimInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AdminCreditClaimInputError';
+  }
+}
 
 interface AdminCreditClaimRow extends CreditClaimRow {
   token_ciphertext: string | null;
@@ -151,18 +164,18 @@ function normalizeCreateInput(input: CreateAdminCreditClaimInput): {
 } {
   const amount = Number(input.amount);
   if (!isValidClaimAmount(amount)) {
-    throw new Error('Credits must be a whole number between 1 and 1,000,000.');
+    throw new AdminCreditClaimInputError('Credits must be a whole number between 1 and 1,000,000.');
   }
 
   const unlocked = input.unlocked === true;
   const expectedEmail = unlocked ? '' : normalizeClaimEmail(input.expectedEmail);
   if (!unlocked && !isValidClaimEmail(expectedEmail)) {
-    throw new Error('Enter a valid recipient email or allow any account.');
+    throw new AdminCreditClaimInputError('Enter a valid recipient email or allow any account.');
   }
 
   const expiresDays = Number(input.expiresDays ?? 30);
   if (!Number.isInteger(expiresDays) || expiresDays < 0 || expiresDays > 3650) {
-    throw new Error('Expiry must be between 0 and 3650 days.');
+    throw new AdminCreditClaimInputError('Expiry must be between 0 and 3650 days.');
   }
 
   return {
@@ -174,14 +187,6 @@ function normalizeCreateInput(input: CreateAdminCreditClaimInput): {
       : new Date(Date.now() + expiresDays * 24 * 60 * 60 * 1000).toISOString(),
     title: cleanText(input.title, 120) || 'MasterSelects credit reward',
   };
-}
-
-function runChanges(result: unknown): number | null {
-  if (!result || typeof result !== 'object') return null;
-  const direct = (result as { changes?: unknown }).changes;
-  if (typeof direct === 'number') return direct;
-  const nested = (result as { meta?: { changes?: unknown } }).meta?.changes;
-  return typeof nested === 'number' ? nested : null;
 }
 
 export async function createAdminCreditClaim(
@@ -304,9 +309,9 @@ export async function rotateAdminCreditClaimLink(
     .bind(claimId)
     .first<AdminCreditClaimRow>();
 
-  if (!row) throw new Error('Credit link not found.');
+  if (!row) throw new AdminCreditClaimInputError('Credit link not found.');
   if (getCreditClaimStatus(row) !== 'available') {
-    throw new Error('Only open credit links can be renewed.');
+    throw new AdminCreditClaimInputError('Only open credit links can be renewed.');
   }
 
   const token = generateAdminCreditClaimToken();
@@ -323,9 +328,9 @@ export async function rotateAdminCreditClaimLink(
     .bind(tokenHash, encrypted.ciphertext, encrypted.iv, row.id, new Date().toISOString())
     .run();
 
-  const changes = runChanges(result);
+  const changes = readRunChanges(result);
   if (changes !== null && changes < 1) {
-    throw new Error('The credit link changed while it was being renewed. Refresh and try again.');
+    throw new AdminCreditClaimInputError('The credit link changed while it was being renewed. Refresh and try again.');
   }
 
   return {

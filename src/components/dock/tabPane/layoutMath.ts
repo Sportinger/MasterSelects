@@ -63,15 +63,12 @@ export const getTimelineTabBarStyle = (
 
 export const getDynamicTabTitle = ({
   panel,
-  selectedSlotName,
-  selectedPropertiesName,
   audioMixerTabStats,
 }: DynamicTabTitleInput): { tabTitle: string; tabTooltip: string } => {
-  if (panel.type === 'clip-properties' && (selectedSlotName || selectedPropertiesName)) {
-    const label = selectedSlotName || selectedPropertiesName || panel.title;
+  if (panel.type === 'clip-properties') {
     return {
-      tabTitle: truncateText(label, 18),
-      tabTooltip: label,
+      tabTitle: 'Properties',
+      tabTooltip: 'Properties',
     };
   }
 
@@ -101,6 +98,45 @@ export const clampMenuPosition = (
     x: Math.max(8, Math.min(clientX, maxMenuX)),
     y: Math.max(8, Math.min(clientY, maxMenuY)),
   };
+};
+
+export type PanelMenuCascadeMode =
+  | 'cascade-right'
+  | 'cascade-left'
+  | 'fold-left'
+  | 'fold-right';
+
+export const getPanelMenuCascadeMode = (
+  contextMenuX: number,
+  viewportWidth: number,
+): PanelMenuCascadeMode => {
+  const edgeGutter = 8;
+  const contextMenuWidth = 180;
+  const categoryMenuWidth = 160;
+  const panelMenuWidth = 190;
+  const nestedMenuWidth = categoryMenuWidth + panelMenuWidth;
+  const spaceRight = viewportWidth - contextMenuX - contextMenuWidth - edgeGutter;
+  const spaceLeft = contextMenuX - edgeGutter;
+
+  if (spaceRight >= nestedMenuWidth) return 'cascade-right';
+  if (spaceLeft >= nestedMenuWidth) return 'cascade-left';
+  if (spaceLeft >= categoryMenuWidth) return 'fold-left';
+  return 'fold-right';
+};
+
+export const getAddPanelSubmenuMode = (
+  menuX: number,
+  viewportWidth: number,
+): PanelMenuCascadeMode => {
+  const edgeGutter = 8;
+  const menuWidth = 180;
+  const submenuWidth = 190;
+  const spaceRight = viewportWidth - menuX - menuWidth - edgeGutter;
+  const spaceLeft = menuX - edgeGutter;
+
+  if (spaceRight >= submenuWidth) return 'cascade-right';
+  if (spaceLeft >= submenuWidth) return 'cascade-left';
+  return spaceLeft >= spaceRight ? 'fold-left' : 'fold-right';
 };
 
 export const sortAddMenuPanelTypes = (

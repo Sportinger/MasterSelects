@@ -103,7 +103,7 @@ describe('credit claims', () => {
   });
 
   it('hashes claim codes with the claim-specific context', async () => {
-    const token = 'abc123_ABC-xyz'.repeat(3);
+    const token = 'abc123_ABC-xyz'.repeat(3); // gitleaks:allow -- synthetic claim fixture
     const first = await hashCreditClaimToken(token);
     const second = await hashCreditClaimToken(` ${token} `);
 

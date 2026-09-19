@@ -9,6 +9,7 @@ vi.mock('../../src/stores/historyStore', () => historyMocks);
 
 import {
   registerDockResizeHandle,
+  registerDockResizeProxyHandle,
   startDockResize,
   type DockResizeAxis,
   type DockResizePointer,
@@ -21,7 +22,8 @@ function makePointerEvent(
     clientY,
     buttons,
     pointerId = 1,
-  }: DockResizePointer & { buttons: number; pointerId?: number },
+    pointerType = 'mouse',
+  }: DockResizePointer & { buttons: number; pointerId?: number; pointerType?: string },
 ): PointerEvent {
   const event = new MouseEvent(type, {
     bubbles: true,
@@ -33,7 +35,7 @@ function makePointerEvent(
   Object.defineProperties(event, {
     isPrimary: { value: true },
     pointerId: { value: pointerId },
-    pointerType: { value: 'mouse' },
+    pointerType: { value: pointerType },
   });
   return event;
 }
@@ -201,5 +203,375 @@ describe('dock resize session', () => {
     expect(xCallbacks.onStart).toHaveBeenCalledOnce();
     expect(yCallbacks.onStart).not.toHaveBeenCalled();
     expect(document.documentElement.getAttribute('data-dock-resize-axis')).toBe('x');
+  });
+
+  it('passes a proxy divider drag to its target without an initial position jump', () => {
+    const targetCallbacks = registerHandle('target-y', 'y', makeHandleElement({
+      left: 0,
+      right: 300,
+      top: 100,
+      bottom: 102,
+    }));
+    unregisterHandles.push(registerDockResizeProxyHandle({
+      id: 'fixed-panels-y',
+      axis: 'y',
+      element: makeHandleElement({
+        left: 0,
+        right: 300,
+        top: 300,
+        bottom: 302,
+      }),
+      proxyTargetId: 'target-y',
+    }));
+
+    expect(startDockResize(makePointerEvent('pointerdown', {
+      clientX: 150,
+      clientY: 301,
+      buttons: 1,
+    }), 'fixed-panels-y')).toBe(true);
+    expect(targetCallbacks.onStart).toHaveBeenCalledWith({ clientX: 150, clientY: 101 });
+
+    window.dispatchEvent(makePointerEvent('pointermove', {
+      clientX: 150,
+      clientY: 321,
+      buttons: 1,
+    }));
+    expect(targetCallbacks.onMove).toHaveBeenCalledWith({ clientX: 150, clientY: 121 });
+
+    window.dispatchEvent(makePointerEvent('pointerup', {
+      clientX: 150,
+      clientY: 331,
+      buttons: 0,
+    }));
+    expect(targetCallbacks.onEnd).toHaveBeenCalledWith({ clientX: 150, clientY: 131 });
+  });
+
+  it('keeps global pointer observers informed during an active resize', () => {
+    registerHandle('observer-x', 'x', makeHandleElement({
+      left: 100,
+      right: 102,
+      top: 0,
+      bottom: 200,
+    }));
+
+    expect(startDockResize(makePointerEvent('pointerdown', {
+      clientX: 101,
+      clientY: 80,
+      buttons: 1,
+      pointerType: 'touch',
+    }), 'observer-x')).toBe(true);
+
+    const moveObserver = vi.fn();
+    const upObserver = vi.fn();
+    window.addEventListener('pointermove', moveObserver, true);
+    window.addEventListener('pointerup', upObserver, true);
+
+    try {
+      window.dispatchEvent(makePointerEvent('pointermove', {
+        clientX: 120,
+        clientY: 80,
+        buttons: 1,
+        pointerType: 'touch',
+      }));
+      window.dispatchEvent(makePointerEvent('pointerup', {
+        clientX: 120,
+        clientY: 80,
+        buttons: 0,
+        pointerType: 'touch',
+      }));
+
+      expect(moveObserver).toHaveBeenCalledOnce();
+      expect(upObserver).toHaveBeenCalledOnce();
+    } finally {
+      window.removeEventListener('pointermove', moveObserver, true);
+      window.removeEventListener('pointerup', upObserver, true);
+    }
+  });
+
+  it.each(['lostpointercapture', 'blur', 'pagehide'])(
+    'releases a stuck touch resize on %s',
+    (terminalEvent) => {
+      const callbacks = registerHandle('terminal-touch-x', 'x', makeHandleElement({
+        left: 100,
+        right: 102,
+        top: 0,
+        bottom: 200,
+      }));
+
+      expect(startDockResize(makePointerEvent('pointerdown', {
+        clientX: 101,
+        clientY: 80,
+        buttons: 1,
+        pointerId: 17,
+        pointerType: 'touch',
+      }), 'terminal-touch-x')).toBe(true);
+
+      if (terminalEvent === 'lostpointercapture') {
+        window.dispatchEvent(makePointerEvent(terminalEvent, {
+          clientX: 101,
+          clientY: 80,
+          buttons: 0,
+          pointerId: 17,
+          pointerType: 'touch',
+        }));
+      } else {
+        window.dispatchEvent(new Event(terminalEvent));
+      }
+
+      expect(callbacks.onEnd).toHaveBeenCalledWith({ clientX: 101, clientY: 80 });
+      expect(document.documentElement.hasAttribute('data-dock-resize-axis')).toBe(false);
+      expect(document.body.style.userSelect).toBe('');
+      expect(historyMocks.endBatch).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('starts a touch resize from the finger-sized area after directed movement', () => {
+    const callbacks = registerHandle('touch-x', 'x', makeHandleElement({
+      left: 100,
+      right: 102,
+      top: 0,
+      bottom: 200,
+    }));
+
+    document.body.dispatchEvent(makePointerEvent('pointerdown', {
+      clientX: 124,
+      clientY: 80,
+      buttons: 1,
+      pointerType: 'touch',
+    }));
+
+    expect(callbacks.onStart).not.toHaveBeenCalled();
+
+    window.dispatchEvent(makePointerEvent('pointermove', {
+      clientX: 131,
+      clientY: 81,
+      buttons: 1,
+      pointerType: 'touch',
+    }));
+
+    expect(callbacks.onStart).toHaveBeenCalledWith({ clientX: 124, clientY: 80 });
+    expect(document.documentElement.getAttribute('data-dock-resize-axis')).toBe('x');
+  });
+
+  it('expands a horizontal divider touch target above and below the line', () => {
+    const callbacks = registerHandle('touch-y-two-sided', 'y', makeHandleElement({
+      left: 0,
+      right: 300,
+      top: 100,
+      bottom: 102,
+    }));
+
+    document.body.dispatchEvent(makePointerEvent('pointerdown', {
+      clientX: 150,
+      clientY: 124,
+      buttons: 1,
+      pointerId: 11,
+      pointerType: 'touch',
+    }));
+    window.dispatchEvent(makePointerEvent('pointermove', {
+      clientX: 150,
+      clientY: 132,
+      buttons: 1,
+      pointerId: 11,
+      pointerType: 'touch',
+    }));
+    window.dispatchEvent(makePointerEvent('pointerup', {
+      clientX: 150,
+      clientY: 140,
+      buttons: 0,
+      pointerId: 11,
+      pointerType: 'touch',
+    }));
+
+    expect(callbacks.onStart).toHaveBeenCalledWith({ clientX: 150, clientY: 124 });
+    callbacks.onStart.mockClear();
+
+    document.body.dispatchEvent(makePointerEvent('pointerdown', {
+      clientX: 150,
+      clientY: 78,
+      buttons: 1,
+      pointerId: 12,
+      pointerType: 'touch',
+    }));
+    window.dispatchEvent(makePointerEvent('pointermove', {
+      clientX: 150,
+      clientY: 70,
+      buttons: 1,
+      pointerId: 12,
+      pointerType: 'touch',
+    }));
+
+    expect(callbacks.onStart).toHaveBeenCalledWith({ clientX: 150, clientY: 78 });
+    expect(document.documentElement.getAttribute('data-dock-resize-axis')).toBe('y');
+  });
+
+  it('keeps a button tap intact but promotes a directed divider drag', () => {
+    const callbacks = registerHandle('touch-y-button-gap', 'y', makeHandleElement({
+      left: 0,
+      right: 300,
+      top: 100,
+      bottom: 102,
+    }));
+    const button = document.createElement('button');
+    document.body.appendChild(button);
+
+    button.dispatchEvent(makePointerEvent('pointerdown', {
+      clientX: 150,
+      clientY: 118,
+      buttons: 1,
+      pointerType: 'touch',
+    }));
+
+    expect(callbacks.onStart).not.toHaveBeenCalled();
+    expect(historyMocks.startBatch).not.toHaveBeenCalled();
+
+    window.dispatchEvent(makePointerEvent('pointermove', {
+      clientX: 150,
+      clientY: 130,
+      buttons: 1,
+      pointerType: 'touch',
+    }));
+
+    expect(callbacks.onStart).toHaveBeenCalledWith({ clientX: 150, clientY: 118 });
+    expect(historyMocks.startBatch).toHaveBeenCalledOnce();
+  });
+
+  it('starts immediately from the physical divider even over an underlying button', () => {
+    const handle = makeHandleElement({
+      left: 0,
+      right: 300,
+      top: 100,
+      bottom: 102,
+    });
+    const callbacks = registerHandle('touch-y-under-button', 'y', handle);
+    const button = document.createElement('button');
+    document.body.appendChild(button);
+    const elementsFromPoint = document.elementsFromPoint;
+    document.elementsFromPoint = vi.fn(() => [handle, button]);
+
+    try {
+      const pointerDown = makePointerEvent('pointerdown', {
+        clientX: 150,
+        clientY: 101,
+        buttons: 1,
+        pointerType: 'touch',
+      });
+      handle.dispatchEvent(pointerDown);
+
+      expect(startDockResize(pointerDown, 'touch-y-under-button')).toBe(true);
+      expect(callbacks.onStart).toHaveBeenCalledWith({ clientX: 150, clientY: 101 });
+      expect(historyMocks.startBatch).toHaveBeenCalledOnce();
+    } finally {
+      document.elementsFromPoint = elementsFromPoint;
+    }
+  });
+
+  it('leaves a touch tap beside the divider available to the underlying pane', () => {
+    const callbacks = registerHandle('touch-tap-x', 'x', makeHandleElement({
+      left: 100,
+      right: 102,
+      top: 0,
+      bottom: 200,
+    }));
+
+    document.body.dispatchEvent(makePointerEvent('pointerdown', {
+      clientX: 124,
+      clientY: 80,
+      buttons: 1,
+      pointerType: 'touch',
+    }));
+    window.dispatchEvent(makePointerEvent('pointerup', {
+      clientX: 124,
+      clientY: 80,
+      buttons: 0,
+      pointerType: 'touch',
+    }));
+
+    expect(callbacks.onStart).not.toHaveBeenCalled();
+    expect(historyMocks.startBatch).not.toHaveBeenCalled();
+  });
+
+  it('keeps a cross-axis control gesture out of the expanded touch area', () => {
+    const callbacks = registerHandle('touch-control-x', 'x', makeHandleElement({
+      left: 100,
+      right: 102,
+      top: 0,
+      bottom: 200,
+    }));
+    const button = document.createElement('button');
+    document.body.appendChild(button);
+
+    button.dispatchEvent(makePointerEvent('pointerdown', {
+      clientX: 124,
+      clientY: 80,
+      buttons: 1,
+      pointerType: 'touch',
+    }));
+    window.dispatchEvent(makePointerEvent('pointermove', {
+      clientX: 124,
+      clientY: 101,
+      buttons: 1,
+      pointerType: 'touch',
+    }));
+
+    expect(callbacks.onStart).not.toHaveBeenCalled();
+  });
+
+  it('promotes a directed resize from a soft-priority media surface', () => {
+    const callbacks = registerHandle('touch-media-soft-y', 'y', makeHandleElement({
+      left: 0,
+      right: 300,
+      top: 100,
+      bottom: 102,
+    }));
+    const mediaContent = document.createElement('div');
+    mediaContent.dataset.dockResizeTouchPriority = 'soft';
+    document.body.appendChild(mediaContent);
+
+    mediaContent.dispatchEvent(makePointerEvent('pointerdown', {
+      clientX: 150,
+      clientY: 124,
+      buttons: 1,
+      pointerType: 'touch',
+    }));
+
+    expect(callbacks.onStart).not.toHaveBeenCalled();
+
+    window.dispatchEvent(makePointerEvent('pointermove', {
+      clientX: 150,
+      clientY: 132,
+      buttons: 1,
+      pointerType: 'touch',
+    }));
+
+    expect(callbacks.onStart).toHaveBeenCalledWith({ clientX: 150, clientY: 124 });
+  });
+
+  it('does not let an expanded divider target steal a media content swipe', () => {
+    const callbacks = registerHandle('touch-media-y', 'y', makeHandleElement({
+      left: 0,
+      right: 300,
+      top: 100,
+      bottom: 102,
+    }));
+    const mediaContent = document.createElement('div');
+    mediaContent.dataset.dockResizeTouchPriority = 'true';
+    document.body.appendChild(mediaContent);
+
+    mediaContent.dispatchEvent(makePointerEvent('pointerdown', {
+      clientX: 150,
+      clientY: 124,
+      buttons: 1,
+      pointerType: 'touch',
+    }));
+    window.dispatchEvent(makePointerEvent('pointermove', {
+      clientX: 150,
+      clientY: 145,
+      buttons: 1,
+      pointerType: 'touch',
+    }));
+
+    expect(callbacks.onStart).not.toHaveBeenCalled();
+    expect(historyMocks.startBatch).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
+import { useMediaStore } from '../../../stores/mediaStore';
 import { startBatch, endBatch } from '../../../stores/historyStore';
+import { getClipMediaFileId } from '../../../services/mediaArtifacts/mediaSourceArtifacts';
 import {
   MAX_RUNTIME_PRIMARY_NODES,
   PRIMARY_COLOR_PARAM_DEFS,
@@ -10,6 +12,7 @@ import {
   getActiveColorVersion,
   getEditableColorNodes,
   type ColorNode,
+  type ColorNodeType,
   type ColorViewMode,
 } from '../../../types/colorCorrection';
 import type { AnimatableProperty } from '../../../types/animationProperties';
@@ -24,43 +27,67 @@ import { ColorToolbar } from './ColorToolbar';
 import { ColorVersionRow } from './ColorVersionRow';
 import { PrimaryColorControls } from './PrimaryColorControls';
 import { WheelColorControls } from './WheelColorControls';
+import { useColorGraphCanvasInteraction } from './useColorGraphCanvasInteraction';
+import { useColorGraphNodeDrag } from './useColorGraphNodeDrag';
+import { useInitialColorGraphLayout } from './useInitialColorGraphLayout';
+import { useResponsiveColorGraphAnchors } from './useResponsiveColorGraphAnchors';
 import {
-  GRAPH_NODE_HEIGHT,
-  GRAPH_NODE_WIDTH,
+  getColorGraphBounds,
+  getColorGraphFitViewport,
+  getColorGraphOriginalSizeViewport,
+} from './colorGraphViewport';
+import {
+  getColorGraphPortY,
+  getColorGraphPortX,
   getControlSections,
   getWheelParamDef,
   getWheelPoint,
+  getWheelPuckPosition,
   getWheelValuesFromPoint,
   type WheelControlConfig,
 } from './colorEditorMath';
-import type { ColorEditorNode, ConnectionDragState } from './colorEditorTypes';
+import type { ColorEditorNode, ColorEditorPort, ConnectionDragState } from './colorEditorTypes';
+import { trackEditorControlCommitted } from '../../../services/productAnalytics';
+import {
+  buildClipNodeGraphDocument,
+  getNodeGraphView,
+} from '../../../services/nodeGraph';
 import './colorTab.css';
 
 interface ColorEditorProps {
   clipId: string;
   workspace?: boolean;
+  surface?: 'full' | 'nodes' | 'controls';
+  controlSet?: 'auto' | 'primary' | 'wheels';
   onExitWorkspace?: (viewMode: ColorViewMode) => void;
 }
 
 function isEditableNode(node: ColorNode | undefined): node is ColorNode {
-  return !!node && node.type !== 'input' && node.type !== 'output';
+  return !!node && (node.type === 'primary' || node.type === 'wheels');
 }
 
 const PRIMARY_CONTROL_SECTIONS = getControlSections(PRIMARY_COLOR_PARAM_DEFS);
 
-export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: ColorEditorProps) {
+export function ColorEditor({
+  clipId,
+  workspace = false,
+  surface = 'full',
+  controlSet = 'auto',
+  onExitWorkspace,
+}: ColorEditorProps) {
   const graphCanvasRef = useRef<HTMLDivElement>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [connectionDrag, setConnectionDrag] = useState<ConnectionDragState | null>(null);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
-  const [isPanning, setIsPanning] = useState(false);
   const rangeSettingsRevision = useEditableDraggableNumberSettingsRevision();
   const clip = useTimelineStore(state => state.clips.find(c => c.id === clipId));
+  const mediaFiles = useMediaStore(state => state.files);
   const clipKeyframes = useTimelineStore(state => state.clipKeyframes);
   const {
     ensureColorCorrection,
     setColorCorrectionEnabled,
     setColorViewMode,
+    setColorNodeDisplayMode,
     selectColorNode,
     addColorNode,
     removeColorNode,
@@ -70,8 +97,10 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
     deleteColorVersion,
     setColorNodeEnabled,
     setColorWorkspaceViewport,
+    initializeColorNodeGraphLayout,
     renameColorNode,
     resetColorNode,
+    resetColorNodeStackLayers,
     resetColorCorrection,
     duplicateColorVersion,
     setActiveColorVersion,
@@ -101,18 +130,75 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [clipId, removeColorEdge, selectedEdgeId]);
 
+  const colorState = ensureColorCorrectionState(clip?.colorCorrection);
+  const activeColorVersion = getActiveColorVersion(colorState);
+  const workspaceViewport = colorState.ui.workspaceViewport ?? { x: 0, y: 0, zoom: 1 };
+  const {
+    clearMarqueeSelection,
+    isPanning,
+    marquee,
+    marqueeSelectedNodeIds,
+    scrollCanvas,
+    startCanvasInteraction,
+  } = useColorGraphCanvasInteraction({
+    canvasRef: graphCanvasRef,
+    getNodes: () => graphNodes,
+    selectionScope: clipId,
+    viewport: workspaceViewport,
+    workspace,
+    onViewportChange: viewport => setColorWorkspaceViewport(clipId, viewport),
+    onPrimaryNodeSelect: nodeId => {
+      setSelectedEdgeId(null);
+      selectColorNode(clipId, nodeId);
+    },
+  });
+  useInitialColorGraphLayout({
+    canvasRef: graphCanvasRef, clipId,
+    enabled: Boolean(clip && workspace && surface !== 'controls'),
+    initialize: initializeColorNodeGraphLayout,
+    setViewport: setColorWorkspaceViewport,
+  });
+  useResponsiveColorGraphAnchors({
+    canvasRef: graphCanvasRef,
+    clipId,
+    enabled: Boolean(clip && workspace && surface !== 'controls'),
+    nodes: activeColorVersion?.nodes ?? [],
+    viewport: workspaceViewport,
+    moveNode: moveColorNode,
+  });
+  const startNodeDrag = useColorGraphNodeDrag({
+    canvasRef: graphCanvasRef,
+    getNodes: () => graphNodes,
+    getEdges: () => graphEdges,
+    zoom: workspace ? workspaceViewport.zoom : 1,
+    onDragStart: nodeId => {
+      setSelectedEdgeId(null);
+      clearMarqueeSelection();
+      selectColorNode(clipId, nodeId);
+      startBatch('Move color node');
+    },
+    onDragEnd: (nodeId, position) => {
+      if (position) moveColorNode(clipId, nodeId, position);
+      endBatch();
+    },
+  });
+
   if (!clip) {
     return <div className="panel-empty"><p>Select a clip for color correction</p></div>;
   }
 
-  const colorState = ensureColorCorrectionState(clip.colorCorrection);
-  const activeVersion = getActiveColorVersion(colorState)!;
+  const activeVersion = activeColorVersion!;
+  const colorGraph = getNodeGraphView(buildClipNodeGraphDocument(clip), 'color');
+  const clipMediaId = getClipMediaFileId(clip);
+  const thumbnailUrl = clip.thumbnails?.[0]
+    ?? (clipMediaId ? mediaFiles.find(file => file.id === clipMediaId)?.thumbnailUrl : undefined);
   const editableNodes = getEditableColorNodes(colorState);
   const selectedNode =
     activeVersion.nodes.find(node => node.id === colorState.ui.selectedNodeId) ??
     editableNodes[0];
-  const renderedViewMode: ColorViewMode = workspace ? 'nodes' : colorState.ui.viewMode;
-  const workspaceViewport = colorState.ui.workspaceViewport ?? { x: 0, y: 0, zoom: 1 };
+  const renderedViewMode: ColorViewMode = workspace || surface === 'nodes'
+    ? 'nodes'
+    : colorState.ui.viewMode;
   const clipColorKeyframes = clipKeyframes.get(clipId) || [];
   const clipLocalTime = Math.max(0, Math.min(clip.duration, playheadPosition - clip.startTime));
   const selectedNodeHasKeyframes = selectedNode
@@ -206,6 +292,15 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
     setParam(nodeId, config.bKey, getWheelParamDef(WHEEL_COLOR_PARAM_DEFS, config.bKey).defaultValue);
     setParam(nodeId, config.yKey, getWheelParamDef(WHEEL_COLOR_PARAM_DEFS, config.yKey).defaultValue);
     handleBatchEnd();
+    trackEditorControlCommitted({
+      area: 'color',
+      controlId: `${config.id}.wheel`,
+      controlKind: 'button',
+      inputMethod: 'reset',
+      interaction: 'reset',
+      itemId: config.id,
+      itemKind: 'property',
+    });
   };
 
   const applyWheelPadPoint = (
@@ -222,19 +317,47 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
   const startWheelDrag = (
     event: React.PointerEvent<HTMLDivElement>,
     node: ColorEditorNode,
-    config: WheelControlConfig
+    config: WheelControlConfig,
+    sensitivity = 1,
   ) => {
     if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
 
     const pad = event.currentTarget;
+    const startClientX = event.clientX;
+    const startClientY = event.clientY;
+    const padRect = pad.getBoundingClientRect();
+    const padRadius = Math.max(1, Math.min(padRect.width, padRect.height) / 2);
+    const rDef = getWheelParamDef(WHEEL_COLOR_PARAM_DEFS, config.rKey);
+    const startPoint = getWheelPuckPosition(config, {
+      r: getAnimatedParamValue(node, config.rKey, rDef.defaultValue),
+      g: getAnimatedParamValue(node, config.gKey, getWheelParamDef(WHEEL_COLOR_PARAM_DEFS, config.gKey).defaultValue),
+      b: getAnimatedParamValue(node, config.bKey, getWheelParamDef(WHEEL_COLOR_PARAM_DEFS, config.bKey).defaultValue),
+    }, rDef.defaultValue);
     handleBatchStart();
-    applyWheelPadPoint(node.id, config, pad, event.clientX, event.clientY);
+    if (sensitivity >= 1) {
+      applyWheelPadPoint(node.id, config, pad, event.clientX, event.clientY);
+    }
 
     let finished = false;
     const handleMove = (moveEvent: PointerEvent) => {
-      applyWheelPadPoint(node.id, config, pad, moveEvent.clientX, moveEvent.clientY);
+      if (sensitivity >= 1) {
+        applyWheelPadPoint(node.id, config, pad, moveEvent.clientX, moveEvent.clientY);
+        return;
+      }
+      let x = startPoint.x + (moveEvent.clientX - startClientX) / padRadius * sensitivity;
+      let y = startPoint.y - (moveEvent.clientY - startClientY) / padRadius * sensitivity;
+      const radius = Math.hypot(x, y);
+      if (radius > 1) {
+        x /= radius;
+        y /= radius;
+      }
+      setWheelChannelValues(
+        node.id,
+        config,
+        getWheelValuesFromPoint(config, WHEEL_COLOR_PARAM_DEFS, x, y),
+      );
     };
     const finish = () => {
       if (finished) return;
@@ -243,6 +366,15 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
       window.removeEventListener('pointerup', finish);
       window.removeEventListener('pointercancel', finish);
       handleBatchEnd();
+      trackEditorControlCommitted({
+        area: 'color',
+        controlId: `${config.id}.wheel`,
+        controlKind: 'drag',
+        inputMethod: 'drag',
+        interaction: 'change',
+        itemId: config.id,
+        itemKind: 'property',
+      });
     };
 
     window.addEventListener('pointermove', handleMove);
@@ -266,44 +398,12 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
     };
   };
 
-  const startCanvasPan = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!workspace || event.button !== 0) return;
-
-    const target = event.target as Element | null;
-    if (target?.closest('.color-graph-node,.color-graph-edge-hit,.color-graph-port,button,input')) {
-      return;
-    }
-
-    event.preventDefault();
-    setSelectedEdgeId(null);
-    setIsPanning(true);
-
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const startViewport = workspaceViewport;
-
-    const handleMove = (moveEvent: PointerEvent) => {
-      setColorWorkspaceViewport(clipId, {
-        ...startViewport,
-        x: Math.round(startViewport.x + moveEvent.clientX - startX),
-        y: Math.round(startViewport.y + moveEvent.clientY - startY),
-      });
-    };
-
-    const finish = () => {
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', finish);
-      window.removeEventListener('pointercancel', finish);
-      setIsPanning(false);
-    };
-
-    window.addEventListener('pointermove', handleMove);
-    window.addEventListener('pointerup', finish);
-    window.addEventListener('pointercancel', finish);
-  };
-
-  const startConnectionDrag = (event: React.PointerEvent<HTMLButtonElement>, node: ColorEditorNode) => {
-    if (event.button !== 0 || node.type === 'output') return;
+  const startConnectionDrag = (
+    event: React.PointerEvent<HTMLButtonElement>,
+    node: ColorEditorNode,
+    port: ColorEditorPort,
+  ) => {
+    if (event.button !== 0 || !node.outputs?.length) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -311,18 +411,36 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
     startBatch('Rewire color connection');
 
     const start = {
-      x: node.position.x + GRAPH_NODE_WIDTH,
-      y: node.position.y + GRAPH_NODE_HEIGHT / 2,
+      x: getColorGraphPortX(node, 'output', workspace ? workspaceViewport.zoom : 1),
+      y: getColorGraphPortY(node, 'output', port.id, workspace ? workspaceViewport.zoom : 1),
     };
     setConnectionDrag({
       fromNodeId: node.id,
+      fromPortId: port.id,
+      type: port.type,
       start,
       current: toGraphPoint(event),
     });
 
+    const resolveValidTarget = (pointerEvent: PointerEvent) => {
+      const target = document
+        .elementFromPoint(pointerEvent.clientX, pointerEvent.clientY)
+        ?.closest('[data-color-port-direction="input"]') as HTMLElement | null;
+      const nodeId = target?.dataset.colorNodeId;
+      const portId = target?.dataset.colorPortId;
+      const portType = target?.dataset.colorPortType;
+      return nodeId && portId && portType === port.type && nodeId !== node.id
+        ? { nodeId, portId }
+        : undefined;
+    };
+
     const handleMove = (moveEvent: PointerEvent) => {
       setConnectionDrag(current => current
-        ? { ...current, current: toGraphPoint(moveEvent) }
+        ? {
+            ...current,
+            current: toGraphPoint(moveEvent),
+            validTarget: resolveValidTarget(moveEvent),
+          }
         : current
       );
     };
@@ -332,12 +450,9 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
       window.removeEventListener('pointerup', finish);
       window.removeEventListener('pointercancel', finish);
 
-      const target = document
-        .elementFromPoint(upEvent.clientX, upEvent.clientY)
-        ?.closest('[data-color-port="in"]') as HTMLElement | null;
-      const toNodeId = target?.dataset.colorNodeId;
-      if (toNodeId && toNodeId !== node.id) {
-        connectColorNodes(clipId, node.id, toNodeId);
+      const target = resolveValidTarget(upEvent);
+      if (target) {
+        connectColorNodes(clipId, node.id, target.nodeId, port.id, target.portId);
       }
 
       setConnectionDrag(null);
@@ -349,43 +464,60 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
     window.addEventListener('pointercancel', finish);
   };
 
-  const startNodeDrag = (event: React.PointerEvent<HTMLDivElement>, node: ColorEditorNode) => {
-    if ((event.target as HTMLElement).closest('button,input,.color-graph-port')) return;
-    if (event.button !== 0) return;
-
-    event.preventDefault();
-    setSelectedEdgeId(null);
-    selectColorNode(clipId, node.id);
-    startBatch('Move color node');
-
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const startPosition = node.position;
-    const zoom = workspace ? workspaceViewport.zoom : 1;
-
-    const handleMove = (moveEvent: PointerEvent) => {
-      const x = Math.max(0, Math.round(startPosition.x + (moveEvent.clientX - startX) / zoom));
-      const y = Math.max(0, Math.round(startPosition.y + (moveEvent.clientY - startY) / zoom));
-      moveColorNode(clipId, node.id, { x, y });
-    };
-
-    const finish = () => {
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', finish);
-      window.removeEventListener('pointercancel', finish);
-      endBatch();
-    };
-
-    window.addEventListener('pointermove', handleMove);
-    window.addEventListener('pointerup', finish);
-    window.addEventListener('pointercancel', finish);
+  const graphNodes: ColorEditorNode[] = colorGraph.nodes.map((node) => ({
+    id: node.id,
+    type: node.binding?.kind === 'color-node' ? node.binding.nodeType : node.kind,
+    name: node.label,
+    enabled: node.params?.enabled !== false,
+    params: node.params ?? {},
+    position: node.layout,
+    inputs: node.inputs.map(port => ({ id: port.id, label: port.label, type: port.type })),
+    outputs: node.outputs.map(port => ({ id: port.id, label: port.label, type: port.type })),
+  }));
+  const graphEdges = colorGraph.edges;
+  const updateWorkspaceZoom = (nextZoom: number) => {
+    setColorWorkspaceViewport(clipId, {
+      ...workspaceViewport,
+      zoom: Math.max(0.25, Math.min(2, Number(nextZoom.toFixed(2)))),
+    });
   };
-
-  const graphNodes = activeVersion.nodes;
-  const selectedEdge = activeVersion.edges.find(edge => edge.id === selectedEdgeId);
+  const zoomGraphToWindow = () => {
+    const canvasRect = graphCanvasRef.current?.getBoundingClientRect();
+    if (!canvasRect || graphNodes.length === 0) return;
+    const bounds = getColorGraphBounds(graphNodes);
+    if (!bounds) return;
+    setColorWorkspaceViewport(
+      clipId,
+      getColorGraphFitViewport(bounds, canvasRect.width, canvasRect.height),
+    );
+  };
+  const showGraphAtOriginalSize = () => {
+    setColorWorkspaceViewport(
+      clipId,
+      getColorGraphOriginalSizeViewport(workspaceViewport),
+    );
+  };
+  const resetNodePositions = () => {
+    const canvasRect = graphCanvasRef.current?.getBoundingClientRect();
+    if (!canvasRect || canvasRect.width <= 0 || canvasRect.height <= 0) return;
+    initializeColorNodeGraphLayout(clipId, canvasRect.width, canvasRect.height, true);
+    setColorWorkspaceViewport(clipId, workspaceViewport);
+  };
+  const addGraphNode = (type: ColorNodeType) => {
+    clearMarqueeSelection();
+    setSelectedEdgeId(null);
+    addColorNode(clipId, type);
+  };
+  const selectedEdge = graphEdges.find(edge => edge.id === selectedEdgeId);
+  const showGraphSurface = surface !== 'controls';
+  const showControlSurface = surface !== 'nodes';
+  const showEditorChrome = surface === 'full';
+  const useWheelControls = controlSet === 'wheels'
+    || (controlSet === 'auto' && selectedNode?.type === 'wheels');
   const editorClassName = [
     'color-editor',
     workspace ? 'color-editor-workspace' : 'color-editor-compact',
+    `color-editor-surface-${surface}`,
     workspace && inspectorCollapsed ? 'color-inspector-collapsed' : '',
   ].filter(Boolean).join(' ');
   const renderInspectorToggle = (collapsed: boolean) => (
@@ -402,56 +534,86 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
 
   return (
     <div className={editorClassName}>
-      <ColorToolbar
-        renderedViewMode={renderedViewMode}
-        enabled={colorState.enabled}
-        addNodeDisabled={addNodeDisabled}
-        selectedEdgeId={selectedEdge?.id ?? null}
-        maxRuntimePrimaryNodes={MAX_RUNTIME_PRIMARY_NODES}
-        onSwitchViewMode={switchViewMode}
-        onToggleEnabled={() => setColorCorrectionEnabled(clipId, !colorState.enabled)}
-        onSetAllKeyframes={handleSetAllColorKeyframes}
-        onAddPrimary={() => addColorNode(clipId, 'primary')}
-        onAddWheels={() => addColorNode(clipId, 'wheels')}
-        onReset={() => resetColorCorrection(clipId)}
-        onDisconnectSelectedEdge={() => {
-          if (!selectedEdge) return;
-          removeColorEdge(clipId, selectedEdge.id);
-          setSelectedEdgeId(null);
-        }}
-      />
+      {showEditorChrome && (
+        <>
+          <ColorToolbar
+            renderedViewMode={renderedViewMode}
+            enabled={colorState.enabled}
+            addNodeDisabled={addNodeDisabled}
+            selectedEdgeId={selectedEdge?.id ?? null}
+            maxRuntimePrimaryNodes={MAX_RUNTIME_PRIMARY_NODES}
+            onSwitchViewMode={switchViewMode}
+            onToggleEnabled={() => setColorCorrectionEnabled(clipId, !colorState.enabled)}
+            onSetAllKeyframes={handleSetAllColorKeyframes}
+            onAddPrimary={() => addColorNode(clipId, 'primary')}
+            onAddWheels={() => addColorNode(clipId, 'wheels')}
+            onReset={() => resetColorCorrection(clipId)}
+            onDisconnectSelectedEdge={() => {
+              if (!selectedEdge) return;
+              removeColorEdge(clipId, selectedEdge.id);
+              setSelectedEdgeId(null);
+            }}
+          />
 
-      <ColorVersionRow
-        versions={colorState.versions}
-        activeVersionId={colorState.activeVersionId}
-        onSelectVersion={(versionId) => setActiveColorVersion(clipId, versionId)}
-        onDeleteVersion={(versionId) => deleteColorVersion(clipId, versionId)}
-        onDuplicateVersion={() => duplicateColorVersion(clipId)}
-      />
+          <ColorVersionRow
+            versions={colorState.versions}
+            activeVersionId={colorState.activeVersionId}
+            onSelectVersion={(versionId) => setActiveColorVersion(clipId, versionId)}
+            onDeleteVersion={(versionId) => deleteColorVersion(clipId, versionId)}
+            onDuplicateVersion={() => duplicateColorVersion(clipId)}
+          />
+        </>
+      )}
 
       <div className="color-main">
-        <div className="color-view">
+        {showGraphSurface && <div className="color-view">
           {renderedViewMode === 'nodes' ? (
             <ColorGraphView
               canvasRef={graphCanvasRef}
               nodes={graphNodes}
-              edges={activeVersion.edges}
+              edges={graphEdges}
               workspace={workspace}
               isPanning={isPanning}
               selectedNodeId={selectedNode?.id}
+              selectedNodeIds={marqueeSelectedNodeIds}
               selectedEdgeId={selectedEdgeId}
               connectionDrag={connectionDrag}
+              marquee={marquee}
               viewport={workspaceViewport}
-              onCanvasPointerDown={startCanvasPan}
+              thumbnailUrl={thumbnailUrl}
+              nodeDisplayMode={colorState.ui.nodeDisplayMode ?? 'thumbnail'}
+              addNodeDisabled={addNodeDisabled}
+              onCanvasPointerDown={startCanvasInteraction}
+              onCanvasWheel={scrollCanvas}
               onCanvasClick={() => setSelectedEdgeId(null)}
+              onResetAll={() => resetColorCorrection(clipId)}
+              onResetNodeStackLayers={() => resetColorNodeStackLayers(clipId)}
+              onAddNode={addGraphNode}
+              onZoomIn={() => updateWorkspaceZoom(workspaceViewport.zoom * 1.2)}
+              onZoomOut={() => updateWorkspaceZoom(workspaceViewport.zoom / 1.2)}
+              onZoomToWindow={zoomGraphToWindow}
+              onOriginalSize={showGraphAtOriginalSize}
+              onToggleDisplayMode={() => setColorNodeDisplayMode(
+                clipId,
+                colorState.ui.nodeDisplayMode === 'label' ? 'thumbnail' : 'label',
+              )}
+              onResetNodePositions={resetNodePositions}
+              onNodeRemove={(nodeId) => {
+                clearMarqueeSelection();
+                removeColorNode(clipId, nodeId);
+              }}
               onNodePointerDown={startNodeDrag}
               onNodeSelect={(nodeId) => {
                 setSelectedEdgeId(null);
+                clearMarqueeSelection();
                 selectColorNode(clipId, nodeId);
               }}
               onNodeEnabledChange={(nodeId, enabled) => setColorNodeEnabled(clipId, nodeId, enabled)}
               onConnectionStart={startConnectionDrag}
-              onEdgeSelect={(edgeId) => setSelectedEdgeId(edgeId)}
+              onEdgeSelect={(edgeId) => {
+                clearMarqueeSelection();
+                setSelectedEdgeId(edgeId);
+              }}
               onEdgeRemove={(edgeId) => {
                 removeColorEdge(clipId, edgeId);
                 setSelectedEdgeId(null);
@@ -468,9 +630,9 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
               onRemoveNode={(nodeId) => removeColorNode(clipId, nodeId)}
             />
           )}
-        </div>
+        </div>}
 
-        <div className="color-inspector">
+        {showControlSurface && <div className="color-inspector">
           {workspace && inspectorCollapsed ? (
             renderInspectorToggle(true)
           ) : isEditableNode(selectedNode) ? (
@@ -495,12 +657,13 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
                 </div>
               </div>
 
-              {selectedNode.type === 'wheels'
+              {useWheelControls
                 ? (
                   <WheelColorControls
                     clipId={clipId}
                     node={selectedNode}
                     wheelParamDefs={WHEEL_COLOR_PARAM_DEFS}
+                    resolveLayout={surface === 'controls'}
                     createProperty={createProperty}
                     getParamValue={getAnimatedParamValue}
                     setParam={setParam}
@@ -535,7 +698,7 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
               <div className="panel-empty"><p>Select a grade node</p></div>
             </>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   );

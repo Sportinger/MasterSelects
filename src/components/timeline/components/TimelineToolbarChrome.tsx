@@ -4,9 +4,11 @@ import type {
   MouseEvent,
   RefObject,
 } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { TimelineControls } from '../TimelineControls';
 import type { TimelineControlsProps } from '../types';
 import { useLegacyTransitionCompositionUpgrade } from '../hooks/useLegacyTransitionCompositionUpgrade';
+import { useTimelineOverLayout } from '../hooks/useTimelineOverLayout';
 import type { TimelineCurveMode } from '../../../stores/timeline/viewPreferences';
 
 interface TimelineToolbarChromeProps {
@@ -33,6 +35,109 @@ interface TimelineToolbarChromeProps {
   timelineCurveMode: TimelineCurveMode;
 }
 
+interface TimelineCurveModeButtonProps {
+  onToggle: () => void;
+  timelineCurveMode: TimelineCurveMode;
+}
+
+function TimelineCurveModeButton({
+  onToggle,
+  timelineCurveMode,
+}: TimelineCurveModeButtonProps) {
+  return (
+    <button
+      aria-label="Toggle Timeline and Graph view"
+      aria-pressed={timelineCurveMode === 'graph'}
+      className={`timeline-curve-mode-toggle${timelineCurveMode === 'graph' ? ' active' : ''}`}
+      data-guided-target="button:timeline-graph-toggle"
+      type="button"
+      onClick={onToggle}
+      title="Toggle Timeline / Graph view (G)"
+    >
+      <span>{timelineCurveMode === 'graph' ? 'Graph' : 'Timeline'}</span>
+      <kbd>G</kbd>
+    </button>
+  );
+}
+
+interface TimelineToolbarOverflowMenuProps extends TimelineCurveModeButtonProps {
+  timelineControlsProps: Omit<TimelineControlsProps, 'variant'>;
+  upgradeLegacyTransitionComposition: (() => void) | null;
+}
+
+function TimelineToolbarOverflowMenu({
+  onToggle,
+  timelineControlsProps,
+  timelineCurveMode,
+  upgradeLegacyTransitionComposition,
+}: TimelineToolbarOverflowMenuProps) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div className="timeline-toolbar-overflow" ref={containerRef}>
+      <button
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-label="More timeline controls"
+        className={`timeline-toolbar-overflow-toggle${open ? ' active' : ''}`}
+        type="button"
+        onClick={() => setOpen(current => !current)}
+        title="More timeline controls"
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+          <circle cx="5" cy="12" r="1.7" />
+          <circle cx="12" cy="12" r="1.7" />
+          <circle cx="19" cy="12" r="1.7" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          aria-label="More timeline controls"
+          className="timeline-toolbar-overflow-menu"
+          role="dialog"
+        >
+          <TimelineControls variant="utility" {...timelineControlsProps} />
+          <div className="timeline-toolbar-overflow-divider" />
+          <div className="timeline-toolbar-overflow-actions">
+            <TimelineControls variant="zoom" {...timelineControlsProps} />
+            <TimelineCurveModeButton
+              onToggle={onToggle}
+              timelineCurveMode={timelineCurveMode}
+            />
+            {upgradeLegacyTransitionComposition && (
+              <button
+                className="timeline-ruler-duration timeline-toolbar-upgrade-sources"
+                type="button"
+                onClick={() => void upgradeLegacyTransitionComposition()}
+                title="Upgrade this transition to mapped sources"
+              >
+                Upgrade sources
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TimelineToolbarChrome({
   duration,
   formatTime,
@@ -57,6 +162,7 @@ export function TimelineToolbarChrome({
   timelineCurveMode,
 }: TimelineToolbarChromeProps) {
   const upgradeLegacyTransitionComposition = useLegacyTransitionCompositionUpgrade();
+  const { isMediumMobileTimelineLayout } = useTimelineOverLayout();
   const toolbarStyle = slotGridProgress > 0 ? {
     height: `${Math.round((1 - slotGridProgress) * 36)}px`,
     opacity: 1 - slotGridProgress,
@@ -66,6 +172,9 @@ export function TimelineToolbarChrome({
   return (
     <div className="toolbar-slide-wrapper" style={toolbarStyle}>
       <div className="timeline-timebar">
+        {isMediumMobileTimelineLayout && (
+          <TimelineControls variant="main" {...timelineControlsProps} />
+        )}
         <div
           className={`timeline-ruler-timecode ${timelineTimeDisplayMode === 'frames' ? 'frames' : 'time'}`}
           data-guided-target="timeline-timecode"
@@ -123,21 +232,13 @@ export function TimelineToolbarChrome({
         <TimelineControls variant="transport" {...timelineControlsProps} />
         <TimelineControls variant="utility" {...timelineControlsProps} />
         <TimelineControls variant="zoom" {...timelineControlsProps} />
-        <button
-          aria-label="Toggle Timeline and Graph view"
-          aria-pressed={timelineCurveMode === 'graph'}
-          className={`timeline-curve-mode-toggle${timelineCurveMode === 'graph' ? ' active' : ''}`}
-          data-guided-target="button:timeline-graph-toggle"
-          type="button"
-          onClick={onToggleTimelineCurveMode}
-          title="Toggle Timeline / Graph view (G)"
-        >
-          <span>{timelineCurveMode === 'graph' ? 'Graph' : 'Timeline'}</span>
-          <kbd>G</kbd>
-        </button>
+        <TimelineCurveModeButton
+          onToggle={onToggleTimelineCurveMode}
+          timelineCurveMode={timelineCurveMode}
+        />
         {upgradeLegacyTransitionComposition && (
           <button
-            className="timeline-ruler-duration"
+            className="timeline-ruler-duration timeline-toolbar-upgrade-sources"
             type="button"
             onClick={() => void upgradeLegacyTransitionComposition()}
             title="Upgrade this transition to mapped sources"
@@ -145,6 +246,12 @@ export function TimelineToolbarChrome({
             Upgrade sources
           </button>
         )}
+        <TimelineToolbarOverflowMenu
+          onToggle={onToggleTimelineCurveMode}
+          timelineControlsProps={timelineControlsProps}
+          timelineCurveMode={timelineCurveMode}
+          upgradeLegacyTransitionComposition={upgradeLegacyTransitionComposition}
+        />
       </div>
     </div>
   );

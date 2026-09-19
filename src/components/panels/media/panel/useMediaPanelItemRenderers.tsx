@@ -14,6 +14,7 @@ import {
 } from '../list/classicListPlanning';
 import { MediaGridItem } from '../grid/MediaGridItem';
 import { MediaClassicListRow, type MediaClassicListRowProps } from '../list/MediaClassicListRow';
+import { getTrackingAssetCoverageLabel, getTrackingAssetStateLabel } from '../trackingAssetPresentation';
 
 interface UseMediaPanelItemRenderersInput {
   columnOrder: MediaClassicListRowProps['columnOrder'];
@@ -33,12 +34,13 @@ interface UseMediaPanelItemRenderersInput {
   handleNameClick: MediaClassicListRowProps['onNameClick'];
   handleBadgeClick: MediaClassicListRowProps['onBadgeClick'];
   handleDragStart: MediaClassicListRowProps['onDragStart'];
+  handleTouchTimelineDragPointerDown: MediaClassicListRowProps['onTouchTimelineDragPointerDown'];
   handleDragEnd: MediaClassicListRowProps['onDragEnd'];
   handleFolderDragOver: MediaClassicListRowProps['onFolderDragOver'];
   handleFolderDragLeave: MediaClassicListRowProps['onFolderDragLeave'];
   handleFolderDrop: MediaClassicListRowProps['onFolderDrop'];
   handleItemClick: (id: string, event: Parameters<MediaClassicListRowProps['onClick']>[0]) => void;
-  handleItemDoubleClick: (item: ProjectItem) => void;
+  handleItemDoubleClick: (item: ProjectItem, renameFromName?: boolean) => void;
   handleContextMenu: MediaClassicListRowProps['onContextMenu'];
   getItemsForParent: (parentId: string | null) => readonly ProjectItem[];
   refreshFileUrls: (mediaFileId: string) => Promise<unknown>;
@@ -62,6 +64,7 @@ export function useMediaPanelItemRenderers({
   handleNameClick,
   handleBadgeClick,
   handleDragStart,
+  handleTouchTimelineDragPointerDown,
   handleDragEnd,
   handleFolderDragOver,
   handleFolderDragLeave,
@@ -101,6 +104,7 @@ export function useMediaPanelItemRenderers({
         onNameClick={handleNameClick}
         onBadgeClick={handleBadgeClick}
         onDragStart={handleDragStart}
+        onTouchTimelineDragPointerDown={handleTouchTimelineDragPointerDown}
         onDragEnd={handleDragEnd}
         onFolderDragOver={handleFolderDragOver}
         onFolderDragLeave={handleFolderDragLeave}
@@ -137,6 +141,11 @@ export function useMediaPanelItemRenderers({
       if (item.fileSize) parts.push(formatFileSize(item.fileSize));
       const warningCount = item.diagnostics?.filter((diagnostic) => diagnostic.severity !== 'info').length ?? 0;
       if (warningCount > 0) parts.push(`${warningCount} warning${warningCount !== 1 ? 's' : ''}`);
+    } else if ('type' in item && item.type === 'tracking') {
+      parts.push(getTrackingAssetStateLabel(item));
+      const coverageLabel = getTrackingAssetCoverageLabel(item);
+      if (coverageLabel) parts.push(coverageLabel);
+      parts.push(item.sourceVideoClipId ? 'Linked to source clip' : 'Project tracking asset');
     } else if ('type' in item) {
       const mediaFile = item as MediaFile;
       if (mediaFile.type === 'gaussian-splat') {
@@ -173,6 +182,7 @@ export function useMediaPanelItemRenderers({
         buildTooltip={buildGridTooltip}
         onRefreshFileUrls={(mediaFileId) => { void refreshFileUrls(mediaFileId); }}
         onDragStart={handleDragStart}
+        onTouchTimelineDragPointerDown={handleTouchTimelineDragPointerDown}
         onDragEnd={handleDragEnd}
         onFolderDragOver={handleFolderDragOver}
         onFolderDragLeave={handleFolderDragLeave}

@@ -100,6 +100,13 @@ function allowKernelOperation(policy: ToolPolicyEntry): ToolPolicyEntry {
   };
 }
 
+function kernelOperationOnly(policy: ToolPolicyEntry): ToolPolicyEntry {
+  return {
+    ...policy,
+    allowedCallers: ['kernel'],
+  };
+}
+
 function localFileAccess(): ToolPolicyEntry {
   return {
     readOnly: false,
@@ -125,6 +132,7 @@ function devBridgeFixture(): ToolPolicyEntry {
 const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   // ── READ-ONLY (low risk) ──────────────────────────────────────────────
   ['getTimelineState', allowKernelOperation(readOnly())],
+  ['getTimelineTranscript', allowKernelOperation(readOnly())],
   ['getTimelineRangeSelection', readOnly()],
   ['verifyTimelineInvariants', {
     ...readOnly(),
@@ -133,6 +141,8 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['getClipDetails', readOnly()],
   ['getClipsInTimeRange', readOnly()],
   ['getMediaItems', readOnly()],
+  ['getMediaPreviewFrames', allowKernelOperation(readOnly())],
+  ['getMediaTranscript', readOnly()],
   ['getTimelineAnalysis', readOnly()],
   ['getClipAnalysis', readOnly()],
   ['getClipFaceAnalysis', readOnly()],
@@ -153,6 +163,9 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['captureFrame', readOnly()],
   ['getCutPreviewQuad', readOnly()],
   ['getFramesAtTimes', allowKernelOperation(readOnly())],
+  ['inspectMediaGenerationModel', kernelOperationOnly(readOnly())],
+  ['previewMediaGeneration', kernelOperationOnly(readOnly())],
+  ['getMediaGenerationStatus', kernelOperationOnly(readOnly())],
   ['runPixelParticleDisintegrateQa', {
     ...bridgeTelemetry(),
     readOnly: false,
@@ -189,6 +202,38 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
 
   // ── SENSITIVE (read-only but debug data) ──────────────────────────────
   ['getStats', bridgeTelemetry()],
+  ['profileAppInteraction', {
+    ...bridgeTelemetry(),
+    readOnly: false,
+    riskLevel: 'medium',
+    requiresConfirmation: true,
+    allowedCallers: ['devBridge', 'console', 'internal'],
+  }],
+  ['clickAppControl', {
+    ...bridgeTelemetry(),
+    readOnly: false,
+    riskLevel: 'medium',
+    requiresConfirmation: true,
+    allowedCallers: ['devBridge', 'console', 'internal'],
+  }],
+  ['fillAppControl', {
+    ...bridgeTelemetry(),
+    readOnly: false,
+    riskLevel: 'medium',
+    requiresConfirmation: true,
+    allowedCallers: ['devBridge', 'console', 'internal'],
+  }],
+  ['probeSameOriginRequest', {
+    ...bridgeTelemetry(),
+    readOnly: false,
+    riskLevel: 'medium',
+    requiresConfirmation: true,
+    allowedCallers: ['devBridge', 'console', 'internal'],
+  }],
+  ['captureAppScreenshot', {
+    ...bridgeTelemetry(),
+    allowedCallers: ['devBridge', 'console', 'internal'],
+  }],
   ['getCaptureState', bridgeTelemetry()],
   ['getAudioDiagnostics', bridgeTelemetry()],
   ['getStatsHistory', bridgeTelemetry()],
@@ -490,6 +535,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['cutRangesFromClip', mutatingHigh()],
   ['executeBatch', mutatingHigh()],
   ['downloadAndImportVideo', mutatingHigh()],
+  ['startMediaGeneration', kernelOperationOnly(mutatingHigh())],
 
   // ── MUTATING MEDIUM ───────────────────────────────────────────────────
   ['splitClip', mutatingMedium()],
@@ -528,6 +574,22 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['configureMotionReplicator', mutatingMedium()],
   ['editMotionModifier', mutatingMedium()],
   ['setMotionExpression', mutatingMedium()],
+  // Flock clips
+  ['listFlockOperators', readOnly()],
+  ['getFlockClip', readOnly()],
+  ['createFlockClip', mutatingMedium()],
+  ['applyFlockPreset', mutatingMedium()],
+  ['addFlockNode', mutatingMedium()],
+  ['updateFlockNode', mutatingMedium()],
+  ['removeFlockNodes', mutatingMedium()],
+  ['connectFlockPorts', mutatingMedium()],
+  ['disconnectFlockEdge', mutatingMedium()],
+  ['exposeFlockParam', mutatingLow()],
+  ['unexposeFlockParam', mutatingLow()],
+  ['scheduleFlockPrecompute', mutatingLow()],
+  ['cancelFlockPrecompute', mutatingLow()],
+  // Bounded particle dumps are opt-in diagnostics, never a provider-facing chat surface.
+  ['sampleFlockParticles', { ...readOnly(), allowedCallers: ['devBridge', 'console', 'internal'] }],
   ['setClipSpeed', mutatingMedium()],
   ['addTransition', mutatingMedium()],
   ['removeTransition', mutatingMedium()],
@@ -569,6 +631,8 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['moveClipFaceAppearance', mutatingLow()],
   ['assignClipFaceReviewCandidate', mutatingLow()],
   ['startClipTranscription', mutatingLow()],
+  ['startMediaAnalysis', mutatingLow()],
+  ['startMediaTranscription', mutatingLow()],
   ['repairClipTranscript', mutatingLow()],
   ['startClipAudioIntelligence', mutatingLow()],
   ['searchYouTube', mutatingLow()],

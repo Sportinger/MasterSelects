@@ -4,11 +4,14 @@ import type {
   KernelDecisionPrompt,
 } from '../storyboard/contracts';
 import type {
+  HostedAgentFastV2AgentMode,
   HostedAgentFastV2ExecutionProfile,
   HostedAgentFastV2RequestedModelClass,
 } from '../kernelClient/hostedAgent/fastV2StartContract';
 
-export type FlashBoardChatProvider = 'kernel' | 'kie';
+/** Legacy persisted id for the single public Intelligence/Normal Path entry. */
+export type FlashBoardChatProvider = 'kie';
+export type FlashBoardChatAgentMode = HostedAgentFastV2AgentMode | 'direct';
 export type FlashBoardChatExecutionProfile = HostedAgentFastV2ExecutionProfile;
 export type FlashBoardChatModelClass = HostedAgentFastV2RequestedModelClass;
 export type FlashBoardKieChatProtocol = 'claude-messages' | 'openai-responses';
@@ -88,14 +91,20 @@ export interface FlashBoardChatVisualReference {
 export interface FlashBoardChatRequest {
   /** Internal run binding used to correlate provider activity with the chat audit. */
   activityRunId?: string;
+  /** Direct path from the isolated Codex app-server to browser editor tools. */
+  agentPath?: 'normal' | 'direct-codex';
   activeDecision?: KernelActiveDecision;
+  /** Opaque browser conversation binding; the kernel owns native provider state. */
+  conversationRef?: string;
   hostedAvailable?: boolean;
   idempotencyKey?: string;
   intent?: ChatIntent;
   decisionPolicy?: DecisionPolicy;
-  /** Explicit hosted execution profile; omitted callers retain the Fast default. */
+  /** Internal wire profile; Normal Path is the only public execution profile. */
   executionProfile?: FlashBoardChatExecutionProfile;
-  /** Server-owned Fast V2 speed profile; never a raw provider or model name. */
+  /** Semantic server agent mode; omitted means the standard kernel route. */
+  requestedAgentMode?: Extract<FlashBoardChatAgentMode, 'logic'>;
+  /** Server-owned Normal Path speed class; never a raw provider or model name. */
   requestedModelClass?: FlashBoardChatModelClass;
   model: string;
   onActivityEvent?: (event: AgentActivityEvent) => void;
@@ -106,6 +115,8 @@ export interface FlashBoardChatRequest {
   onKernelReport?: (report: import('../kernelClient/runReport').KernelRunReport) => void;
   /** Durable directing decision returned without implicit mutation. */
   onKernelDecision?: (decision: KernelDecisionPrompt) => void;
+  /** A bounded question produced by the hosted agent without an editor mutation. */
+  onKernelInputRequest?: (request: import('../kernelClient/types').KernelUserInputRequest) => void;
   /** Explicit user gate for a bound destructive kernel operation plan. */
   onKernelOperationConfirmation?: (
     request: Readonly<import('../kernelClient/wp1Spike/operationRoundTrip').KernelOperationConfirmationRequestV1>,
@@ -117,6 +128,8 @@ export interface FlashBoardChatRequest {
   onRunCompleted?: (run: import('./FlashBoardChatRunAudit').FlashBoardChatRunRecord) => void;
   openAiReasoningEffort?: FlashBoardOpenAiReasoningEffort;
   playbookPrompt?: string;
+  /** Opaque kernel-owned selected-plan binding for a direct editor handoff. */
+  preproductionRunId?: string;
   prompt: string;
   provider: FlashBoardChatProvider;
   /** Pending assistant bubble that may reconnect to a hosted turn after reload. */

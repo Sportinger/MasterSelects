@@ -1,6 +1,9 @@
 import { useMemo } from 'react';
-import type { NodeGraph } from '../../../services/nodeGraph';
-import { buildClipNodeGraph } from '../../../services/nodeGraph/clipGraphProjection';
+import type { NodeGraph, NodeGraphDocument, NodeGraphView, NodeGraphViewTheme } from '../../../services/nodeGraph';
+import {
+  buildClipNodeGraphDocument,
+  getNodeGraphView,
+} from '../../../services/nodeGraph/clipGraphProjection';
 import {
   createNodeGraphOwnerClip,
   resolveLinkedClipNodeGraphContext,
@@ -18,11 +21,14 @@ export interface NodeGraphClipSubject {
   selectedClip: TimelineClip;
   linkedClip: TimelineClip | null;
   graph: NodeGraph;
+  document: NodeGraphDocument;
+  view: NodeGraphView;
+  availableViews: NodeGraphView[];
 }
 
 export type NodeGraphSubject = NodeGraphClipSubject;
 
-export function useNodeGraphSubject(): NodeGraphSubject | null {
+export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): NodeGraphSubject | null {
   const clips = useTimelineStore((state) => state.clips);
   const tracks = useTimelineStore((state) => state.tracks);
   const selectedClipIds = useTimelineStore((state) => state.selectedClipIds);
@@ -43,10 +49,12 @@ export function useNodeGraphSubject(): NodeGraphSubject | null {
     }
 
     const graphClip = createNodeGraphOwnerClip(graphContext);
-    const graph = buildClipNodeGraph(graphClip, graphContext.ownerTrack ?? undefined, {
+    const document = buildClipNodeGraphDocument(graphClip, graphContext.ownerTrack ?? undefined, {
       linkedClip: graphContext.linkedClip,
       linkedTrack: graphContext.linkedTrack,
     });
+    const graph = getNodeGraphView(document, theme);
+    const view = document.views.find((candidate) => candidate.theme === theme) ?? document.views[0];
     const linkedSubtitle = graphContext.linkedClip && graphContext.linkedTrack
       ? ` + ${graphContext.linkedTrack.name} / ${graphContext.linkedTrack.type}`
       : '';
@@ -63,6 +71,9 @@ export function useNodeGraphSubject(): NodeGraphSubject | null {
       selectedClip: graphContext.selectedClip,
       linkedClip: graphContext.linkedClip,
       graph,
+      document,
+      view,
+      availableViews: document.views,
     };
-  }, [graphContext]);
+  }, [graphContext, theme]);
 }

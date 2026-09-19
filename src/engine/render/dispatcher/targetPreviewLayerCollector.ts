@@ -9,6 +9,7 @@ import {
   shouldGuardPausedHtmlTargetFrames,
 } from '../layerCollector/htmlVideoPausedFrameGuard';
 import type { RenderDeps } from '../RenderDispatcher';
+import { collectCanvasElementLayer } from '../layerCollector/staticSourceCollectors';
 
 const MAX_DRAG_FALLBACK_DRIFT_SECONDS = 0.35;
 const MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS = 0.35;
@@ -33,6 +34,18 @@ export class TargetPreviewLayerCollector {
     for (let i = layers.length - 1; i >= 0; i--) {
       const layer = layers[i];
       if (!layer?.visible || !layer.source || layer.opacity === 0) continue;
+
+      if (layer.source.canvasElement && d.textureManager) {
+        const canvasLayer = collectCanvasElementLayer(
+          layer,
+          layer.source.canvasElement,
+          d.textureManager,
+        );
+        if (canvasLayer) {
+          layerData.push(canvasLayer);
+          continue;
+        }
+      }
 
       if (layer.source.videoElement) {
         const video = layer.source.videoElement;

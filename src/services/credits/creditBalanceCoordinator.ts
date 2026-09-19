@@ -1,4 +1,4 @@
-import { useAccountStore } from '../../stores/accountStore';
+import { hasHostedAiSession, useAccountStore } from '../../stores/accountStore';
 import {
   activeCreditActivityCount,
   useCreditActivityStore,
@@ -105,7 +105,7 @@ export function applyConfirmedCreditUpdate(update: ConfirmedCreditUpdate): boole
 
   const account = useAccountStore.getState();
   const previousBalance = finiteCredits(account.creditBalance);
-  const canAnimate = account.isInitialized && Boolean(account.session?.authenticated);
+  const canAnimate = account.isInitialized && hasHostedAiSession(account.session);
   const nextBalance = update.kind === 'debit' && canAnimate
     ? Math.min(previousBalance, balance)
     : balance;

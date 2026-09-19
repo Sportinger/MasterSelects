@@ -2,6 +2,11 @@ import { Logger } from '../../logger';
 import { NativeHelperClient } from '../../nativeHelper/NativeHelperClient';
 import { PROJECT_FOLDERS } from '../core/constants';
 import {
+  getNativeProjectFolderPath,
+  getNativeProjectFolderReadCandidates,
+  getNativeProjectPackageSession,
+} from '../core/projectPackage';
+import {
   addFileNameSuffix,
   buildRawTargetPath,
   getRawRelativePath,
@@ -36,6 +41,7 @@ interface NativeAnalysisFile {
 export function joinProjectPath(...parts: string[]): string {
   return parts
     .map((part) => part.replace(/\\/g, '/').replace(/\/+$/, ''))
+    .filter(Boolean)
     .join('/');
 }
 
@@ -58,7 +64,10 @@ function timestampFromFrame(frame: unknown): number {
 }
 
 async function readNativeAnalysisFile(projectPath: string, mediaId: string): Promise<NativeAnalysisFile | null> {
-  const buffer = await NativeHelperClient.getDownloadedFile(nativeAnalysisPath(projectPath, mediaId));
+  const packageBytes = getNativeProjectPackageSession(projectPath)?.readEntry('ANALYSIS', `${mediaId}.json`);
+  const buffer = packageBytes
+    ? packageBytes.buffer.slice(packageBytes.byteOffset, packageBytes.byteOffset + packageBytes.byteLength) as ArrayBuffer
+    : await NativeHelperClient.getDownloadedFile(nativeAnalysisPath(projectPath, mediaId));
   if (!buffer) return null;
   try {
     const parsed = JSON.parse(new TextDecoder().decode(buffer)) as NativeAnalysisFile;
@@ -69,6 +78,10 @@ async function readNativeAnalysisFile(projectPath: string, mediaId: string): Pro
 }
 
 async function writeNativeAnalysisFile(projectPath: string, mediaId: string, analysis: NativeAnalysisFile): Promise<boolean> {
+  const packageSession = getNativeProjectPackageSession(projectPath);
+  if (packageSession) {
+    return packageSession.writeEntry('ANALYSIS', `${mediaId}.json`, JSON.stringify(analysis, null, 2));
+  }
   const folderPath = joinProjectPath(projectPath, PROJECT_FOLDERS.ANALYSIS);
   await NativeHelperClient.createDir(folderPath);
   return NativeHelperClient.writeFileBinary(
@@ -183,6 +196,8 @@ export async function deleteSceneDescriptionsNative(
   if (!analysis?.sceneDescriptions) return true;
   delete analysis.sceneDescriptions;
   if (Object.keys(analysis.analyses).length === 0) {
+    const packageSession = getNativeProjectPackageSession(projectPath);
+    if (packageSession) return packageSession.deleteEntry('ANALYSIS', `${mediaId}.json`);
     return NativeHelperClient.deleteFile(nativeAnalysisPath(projectPath, mediaId));
   }
   analysis.schemaVersion = 3;
@@ -200,6 +215,8 @@ export async function deleteAnalysisRangeNative(
   if (!analysis) return true;
   delete analysis.analyses[nativeAnalysisRangeKey(inPoint, outPoint)];
   if (Object.keys(analysis.analyses).length === 0) {
+    const packageSession = getNativeProjectPackageSession(projectPath);
+    if (packageSession) return packageSession.deleteEntry('ANALYSIS', `${mediaId}.json`);
     return NativeHelperClient.deleteFile(nativeAnalysisPath(projectPath, mediaId));
   }
   return writeNativeAnalysisFile(projectPath, mediaId, analysis);
@@ -286,7 +303,7 @@ export async function copyToRawFolderNative(
     return null;
   }
 
-  const rawFolderPath = joinProjectPath(projectPath, PROJECT_FOLDERS.RAW);
+  const rawFolderPath = joinProjectPath(projectPath, getNativeProjectFolderPath(projectPath, 'RAW'));
   const target = buildRawTargetPath(fileName, file.name);
   const targetFolderPath = target.folderPath
     ? joinProjectPath(rawFolderPath, target.folderPath)
@@ -341,18 +358,17 @@ export async function getFileFromRawNative(
     return null;
   }
 
-  const fullPath = joinProjectPath(projectPath, target.relativePath);
-  const fileBuffer = await NativeHelperClient.getDownloadedFile(fullPath);
-
-  if (!fileBuffer) {
-    return null;
+  for (const rawFolder of getNativeProjectFolderReadCandidates(projectPath, 'RAW')) {
+    const fullPath = joinProjectPath(projectPath, rawFolder, target.folderPath, target.fileName);
+    const fileBuffer = await NativeHelperClient.getDownloadedFile(fullPath);
+    if (!fileBuffer) continue;
+    return {
+      file: new File([fileBuffer], target.fileName, {
+        type: getMimeTypeFromFileName(target.fileName),
+      }),
+    };
   }
-
-  return {
-    file: new File([fileBuffer], target.fileName, {
-      type: getMimeTypeFromFileName(target.fileName),
-    }),
-  };
+  return null;
 }
 
 export async function deleteRawFileNative(
@@ -368,8 +384,12 @@ export async function deleteRawFileNative(
     return false;
   }
 
-  const fullPath = joinProjectPath(projectPath, target.relativePath);
-  return NativeHelperClient.deleteFile(fullPath);
+  for (const rawFolder of getNativeProjectFolderReadCandidates(projectPath, 'RAW')) {
+    const fullPath = joinProjectPath(projectPath, rawFolder, target.folderPath, target.fileName);
+    const { exists } = await NativeHelperClient.exists(fullPath);
+    if (exists) return NativeHelperClient.deleteFile(fullPath);
+  }
+  return false;
 }
 
 export function resolveRawFilePathNative(
@@ -385,7 +405,12 @@ export function resolveRawFilePathNative(
     return null;
   }
 
-  return joinProjectPath(projectPath, target.relativePath);
+  return joinProjectPath(
+    projectPath,
+    getNativeProjectFolderPath(projectPath, 'RAW'),
+    target.folderPath,
+    target.fileName,
+  );
 }
 
 function createNativeFileHandle(fullPath: string, name: string): FileSystemFileHandle {
@@ -407,7 +432,7 @@ function createNativeFileHandle(fullPath: string, name: string): FileSystemFileH
     isSameEntry: async (other: FileSystemHandle) => other === handle,
     queryPermission: async () => 'granted' as PermissionState,
     requestPermission: async () => 'granted' as PermissionState,
-  } as FileSystemFileHandle & { __nativePath?: string };
+  } as unknown as FileSystemFileHandle & { __nativePath?: string };
 
   handle.__nativePath = fullPath;
   return handle;
@@ -474,7 +499,7 @@ export async function saveProxyAudioNative(
     return false;
   }
 
-  const folderPath = joinProjectPath(projectPath, PROJECT_FOLDERS.AUDIO_PROXIES);
+  const folderPath = joinProjectPath(projectPath, getNativeProjectFolderPath(projectPath, 'AUDIO_PROXIES'));
   await NativeHelperClient.createDir(folderPath);
   return NativeHelperClient.writeFileBinary(
     joinProjectPath(folderPath, getAudioProxyFileName(mediaId)),
@@ -488,11 +513,12 @@ export async function getProxyAudioNative(
 ): Promise<File | null> {
   if (!projectPath) return null;
   const fileName = getAudioProxyFileName(mediaId);
-  const fullPath = joinProjectPath(projectPath, PROJECT_FOLDERS.AUDIO_PROXIES, fileName);
-  const buffer = await NativeHelperClient.getDownloadedFile(fullPath);
-  return buffer
-    ? new File([buffer], fileName, { type: 'audio/wav' })
-    : null;
+  for (const folder of getNativeProjectFolderReadCandidates(projectPath, 'AUDIO_PROXIES')) {
+    const fullPath = joinProjectPath(projectPath, folder, fileName);
+    const buffer = await NativeHelperClient.getDownloadedFile(fullPath);
+    if (buffer) return new File([buffer], fileName, { type: 'audio/wav' });
+  }
+  return null;
 }
 
 export async function hasProxyAudioNative(
@@ -500,7 +526,10 @@ export async function hasProxyAudioNative(
   mediaId: string,
 ): Promise<boolean> {
   if (!projectPath) return false;
-  const fullPath = joinProjectPath(projectPath, PROJECT_FOLDERS.AUDIO_PROXIES, getAudioProxyFileName(mediaId));
-  const result = await NativeHelperClient.exists(fullPath);
-  return result.exists && result.kind === 'file';
+  for (const folder of getNativeProjectFolderReadCandidates(projectPath, 'AUDIO_PROXIES')) {
+    const fullPath = joinProjectPath(projectPath, folder, getAudioProxyFileName(mediaId));
+    const result = await NativeHelperClient.exists(fullPath);
+    if (result.exists && result.kind === 'file') return true;
+  }
+  return false;
 }

@@ -2,31 +2,20 @@ import type { LayerSource } from '../../types/layers';
 import type { TimelineClip } from '../../types/timeline';
 import type { MediaFile } from '../../stores/mediaStore/types';
 import { flags } from '../../engine/featureFlags';
-import {
-  canUseSharedPreviewRuntimeSession,
-  getPreviewRuntimeSource,
-  getRuntimeFrameProvider,
-  getScrubRuntimeSource,
-} from '../mediaRuntime/runtimePlayback';
+import { canUseSharedPreviewRuntimeSession, getPreviewRuntimeSource, getRuntimeFrameProvider,
+  getScrubRuntimeSource, isProviderBackedRuntimeSource } from '../mediaRuntime/runtimePlayback';
 import type { RuntimeFrameProvider } from '../mediaRuntime/types';
 import { getLazyTimelineVideoElementForClip } from '../timeline/lazyMediaElements';
 import { selectPausedWebCodecsProvider } from './videoSyncWebCodecsPolicy';
 import type { FrameContext } from './types';
-import {
-  hasWorkerGpuLayerVideoSource,
-  isWorkerGpuOnlyRenderHost,
-  resolveWorkerGpuLayerVideoSource,
-} from './layerBuilderWorkerGpuVideoSources';
+import { hasWorkerGpuLayerVideoSource, isWorkerGpuOnlyRenderHost,
+  resolveWorkerGpuLayerVideoSource } from './layerBuilderWorkerGpuVideoSources';
 import { resolveRuntimeLayerBuilderVideoSource } from './layerBuilderRuntimeVideoSources';
 import { liveInputRuntime } from '../mediaRuntime/liveInputRuntime';
 import { clipTreeNeedsLiveVideoElement } from '../timeline/liveInputClipTree';
-
 export interface LayerBuilderVideoSourceResolution {
   source: LayerSource;
-  intrinsicSize?: {
-    width?: number;
-    height?: number;
-  };
+  intrinsicSize?: { width?: number; height?: number };
 }
 
 function getLayerBuilderVideoElement(clip: TimelineClip, markRendered = false): HTMLVideoElement | null {
@@ -35,9 +24,7 @@ function getLayerBuilderVideoElement(clip: TimelineClip, markRendered = false): 
     clip.source?.videoElement ??
     null;
 }
-
 export function resetLayerBuilderReverseRuntimePresentationForTests(): void {}
-
 export interface LayerBuilderVideoSourceDebugInfo {
   hasVideoElement: boolean;
   videoReadyState: number | null;
@@ -59,7 +46,9 @@ export function hasLayerBuilderRenderableVideoSource(
   }
   return !!(
     (clip ? getLayerBuilderVideoElement(clip) : source?.videoElement) ||
-    source?.webCodecsPlayer?.isFullMode?.()
+    source?.webCodecsPlayer?.isFullMode?.() ||
+    getRuntimeFrameProvider(source)?.isFullMode?.() ||
+    isProviderBackedRuntimeSource(source)
   );
 }
 
@@ -153,7 +142,18 @@ export function resolveLayerBuilderVideoSource(params: {
   if (isLiveInput && resolution?.source.videoElement) {
     // A MediaStream has its own monotonic clock and must never be sought to the
     // timeline time. Let the collector use the element's current frame time.
+    resolution.source.isLiveInput = true;
     resolution.source.mediaTime = undefined;
+    resolution.source.canvasElement = liveInputRuntime.getPresentationCanvas(clip.source?.liveInputId) ?? undefined;
+    resolution.source.videoElement = liveInputRuntime.getPresentationVideoElement(clip.source?.liveInputId) ?? resolution.source.videoElement;
+    const presentation = liveInputRuntime.getVideoPresentation(clip.source?.liveInputId);
+    if (presentation) {
+      resolution.source.videoRotation = presentation.rotation;
+      resolution.intrinsicSize = {
+        width: presentation.width,
+        height: presentation.height,
+      };
+    }
   }
   return resolution;
 }

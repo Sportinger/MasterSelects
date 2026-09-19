@@ -1,8 +1,13 @@
+import { withProjectArtifactWriteBatch } from '../project/projectArtifactWriteBatch';
 import type { MediaFile, ProxyStatus } from '../../stores/mediaStore/types';
 import { encodeAudioBufferToWavBlob } from '../../engine/audio/AudioFileEncoder';
 import { projectFileService } from '../projectFileService';
 import { Logger } from '../logger';
 import { AudioDecodeServiceError, getSharedAudioDecodeService } from './AudioDecodeService';
+import { decideTurboResCodec } from '../mediaRuntime/prores/turboResCodecIdentity';
+import { isHapCodecId } from '../hap/hapCodecIdentity';
+import { MediaAudioRangeReader } from '../../engine/audio/exportPipeline/MediaAudioRangeReader';
+import { readIsobmffMetadata } from '../mediaMetadata/isobmffMetadata';
 
 const log = Logger.create('AudioProxy');
 
@@ -81,7 +86,7 @@ export async function ensureAudioProxyForMediaFile(
     return;
   }
 
-  const job = (async () => {
+  const job = withProjectArtifactWriteBatch(async () => {
     callbacks.onUpdate?.({ status: 'generating', progress: 2, storageKey });
 
     if (projectFileService.isProjectOpen() && !callbacks.force) {
@@ -108,18 +113,32 @@ export async function ensureAudioProxyForMediaFile(
     let audioBuffer: AudioBuffer;
     try {
       callbacks.onUpdate?.({ status: 'generating', progress: 35, storageKey });
-      audioBuffer = await getSharedAudioDecodeService().decodeAudioBuffer(
-        { kind: 'file', file: sourceFile },
-        {
-          mediaFileId: mediaFile.id,
-          sourceFingerprint: storageKey,
-          metadata: {
-            source: 'audio-proxy',
-            sourceFileName: sourceFile.name,
-            sourceFileSize: sourceFile.size,
+      const proResDecision = decideTurboResCodec(mediaFile.videoCodecId, true);
+      if (proResDecision.kind === 'turbores' || isHapCodecId(mediaFile.videoCodecId)) {
+        const duration = mediaFile.duration ?? (await readIsobmffMetadata(sourceFile))?.duration;
+        if (!duration || duration <= 0) {
+          throw new Error('Provider-codec audio proxy could not determine source duration');
+        }
+        const reader = new MediaAudioRangeReader(sourceFile);
+        try {
+          audioBuffer = await reader.read(0, duration);
+        } finally {
+          reader.dispose();
+        }
+      } else {
+        audioBuffer = await getSharedAudioDecodeService().decodeAudioBuffer(
+          { kind: 'file', file: sourceFile },
+          {
+            mediaFileId: mediaFile.id,
+            sourceFingerprint: storageKey,
+            metadata: {
+              source: 'audio-proxy',
+              sourceFileName: sourceFile.name,
+              sourceFileSize: sourceFile.size,
+            },
           },
-        },
-      );
+        );
+      }
     } catch (error) {
       if (mediaFile.type === 'video' && isDecodeMissingAudio(error)) {
         callbacks.onUpdate?.({ status: 'none', progress: 0, storageKey });
@@ -166,7 +185,7 @@ export async function ensureAudioProxyForMediaFile(
       storageKey,
       url: URL.createObjectURL(wavBlob),
     });
-  })();
+  });
 
   activeJobs.set(mediaFile.id, job);
   try {

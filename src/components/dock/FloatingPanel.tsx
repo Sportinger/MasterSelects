@@ -24,6 +24,7 @@ export function FloatingPanel({ floating }: FloatingPanelProps) {
   const [isResizing, setIsResizing] = useState(false);
   const dragOffset = useRef({ x: 0, y: 0 });
   const resizeStart = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const activePointerId = useRef<number | null>(null);
   const defaultDockTarget = useMemo(() => {
     const group = findFirstTabGroup(layout.root);
     if (!group) return null;
@@ -35,12 +36,13 @@ export function FloatingPanel({ floating }: FloatingPanelProps) {
   }, [layout.root]);
 
   // Handle drag
-  const handleHeaderMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
+  const handleHeaderPointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0 || !e.isPrimary) return;
     e.preventDefault();
     startBatch('Move floating panel');
     bringToFront(floating.id);
     setIsDragging(true);
+    activePointerId.current = e.pointerId;
     dragOffset.current = {
       x: e.clientX - floating.position.x,
       y: e.clientY - floating.position.y,
@@ -48,13 +50,14 @@ export function FloatingPanel({ floating }: FloatingPanelProps) {
   }, [floating.id, floating.position, bringToFront]);
 
   // Handle resize
-  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
+  const handleResizePointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0 || !e.isPrimary) return;
     e.preventDefault();
     e.stopPropagation();
     startBatch('Resize floating panel');
     bringToFront(floating.id);
     setIsResizing(true);
+    activePointerId.current = e.pointerId;
     resizeStart.current = {
       x: e.clientX,
       y: e.clientY,
@@ -63,8 +66,8 @@ export function FloatingPanel({ floating }: FloatingPanelProps) {
     };
   }, [floating.id, floating.size, bringToFront]);
 
-  const handleFloatingTabMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
+  const handleFloatingTabPointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0 || !e.isPrimary) return;
     e.preventDefault();
     e.stopPropagation();
     bringToFront(floating.id);
@@ -87,7 +90,8 @@ export function FloatingPanel({ floating }: FloatingPanelProps) {
   useEffect(() => {
     if (!isDragging && !isResizing) return;
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const handlePointerMove = (e: PointerEvent) => {
+      if (activePointerId.current !== null && e.pointerId !== activePointerId.current) return;
       if (isDragging) {
         const x = Math.max(0, Math.min(window.innerWidth - 100, e.clientX - dragOffset.current.x));
         const y = Math.max(0, Math.min(window.innerHeight - 50, e.clientY - dragOffset.current.y));
@@ -102,18 +106,22 @@ export function FloatingPanel({ floating }: FloatingPanelProps) {
       }
     };
 
-    const handleMouseUp = () => {
+    const handlePointerEnd = (e: PointerEvent) => {
+      if (activePointerId.current !== null && e.pointerId !== activePointerId.current) return;
+      activePointerId.current = null;
       setIsDragging(false);
       setIsResizing(false);
       endBatch();
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerEnd);
+    window.addEventListener('pointercancel', handlePointerEnd);
 
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerEnd);
+      window.removeEventListener('pointercancel', handlePointerEnd);
       endBatch();
     };
   }, [isDragging, isResizing, floating.id, updateFloatingPosition, updateFloatingSize]);
@@ -138,12 +146,12 @@ export function FloatingPanel({ floating }: FloatingPanelProps) {
       }}
       onClick={handleClick}
     >
-      <div className="floating-panel-header" onMouseDown={handleHeaderMouseDown}>
+      <div className="floating-panel-header" onPointerDown={handleHeaderPointerDown}>
         <span className="floating-panel-drag-handle">⋮⋮</span>
         <button
           className="floating-panel-title-tab"
           type="button"
-          onMouseDown={handleFloatingTabMouseDown}
+          onPointerDown={handleFloatingTabPointerDown}
           title="Drag into a dock area to dock this panel"
         >
           {floating.panel.title}
@@ -151,7 +159,7 @@ export function FloatingPanel({ floating }: FloatingPanelProps) {
         <button
           className="floating-panel-dock-button"
           type="button"
-          onMouseDown={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={handleDockClick}
           disabled={!defaultDockTarget}
           title="Dock panel back into the main layout"
@@ -162,7 +170,7 @@ export function FloatingPanel({ floating }: FloatingPanelProps) {
       <div className="floating-panel-content">
         <DockPanelContent panel={floating.panel} />
       </div>
-      <div className="floating-panel-resize" onMouseDown={handleResizeMouseDown} />
+      <div className="floating-panel-resize" onPointerDown={handleResizePointerDown} />
     </div>
   );
 }

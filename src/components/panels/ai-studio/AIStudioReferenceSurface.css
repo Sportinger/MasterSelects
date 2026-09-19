@@ -1,0 +1,226 @@
+.ai-studio-reference-surface {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  container-type: inline-size;
+}
+
+.ai-studio-reference-surface::after {
+  position: absolute;
+  inset: 5px;
+  z-index: 80;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  content: '';
+  pointer-events: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.ai-studio-reference-surface.is-reference-drag-over::after {
+  border-color: color-mix(in srgb, var(--accent) 72%, transparent);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.ai-studio-reference-surface > .ai-studio-stage {
+  flex: 1 1 auto;
+}
+
+.ai-studio-reference-dock {
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  width: calc(100cqi - 24px);
+  max-width: calc(100cqi - 24px);
+  transform: translateX(-50%);
+}
+
+.ai-studio-reference-dock.is-active {
+  filter: drop-shadow(0 0 12px color-mix(in srgb, var(--accent) 24%, transparent));
+}
+
+.ai-studio-reference-empty {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 34px;
+  padding: 5px 11px 5px 6px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 52%, var(--border-color));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+  box-shadow: 0 10px 28px -14px rgba(0, 0, 0, 0.88);
+  color: var(--text-muted);
+  font-size: 9px;
+  backdrop-filter: blur(16px) saturate(128%);
+}
+
+.ai-studio-reference-empty > span {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px dashed color-mix(in srgb, var(--accent) 46%, var(--border-color));
+  border-radius: 7px;
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.ai-studio-reference-dock .fb-reference-strip {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap-reverse;
+  justify-content: center;
+  gap: 6px;
+  max-width: none;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 7px 7px;
+  overflow: visible;
+}
+
+.ai-studio-reference-dock .fb-reference-strip.is-loose {
+  overflow: visible;
+}
+
+.ai-studio-reference-dock .fb-reference-slot-grid {
+  display: contents;
+}
+
+.ai-studio-reference-dock .fb-reference-card,
+.ai-studio-reference-dock .fb-reference-slot-grid .fb-reference-card.fb-reference-slot {
+  flex: 0 0 68px;
+  width: 68px;
+  height: 50px;
+  border-radius: 11px;
+  background-color: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
+  aspect-ratio: auto;
+  backdrop-filter: blur(14px) saturate(126%);
+  transform:
+    translateY(calc(var(--fb-reference-focus) * -2px))
+    scale(calc(1 + var(--fb-reference-focus) * 0.08));
+}
+
+.ai-studio-reference-dock .fb-reference-card.fb-reference-slot {
+  flex-basis: 50px;
+  width: 50px;
+  background: color-mix(in srgb, var(--fb-reference-role-color) 8%, var(--bg-tertiary));
+  opacity: 0.64;
+  transform: none;
+}
+
+.ai-studio-reference-dock .fb-reference-card.fb-reference-slot.is-active {
+  background: color-mix(in srgb, var(--fb-reference-role-color) 19%, var(--bg-tertiary));
+  opacity: 1;
+}
+
+.ai-studio-reference-dock .fb-reference-preview,
+.ai-studio-reference-dock .fb-reference-card.fb-reference-slot::before {
+  border-radius: 10px;
+}
+
+.ai-studio-reference-dock .fb-reference-slot-label {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.ai-studio-reference-dock .fb-reference-number {
+  top: 4px;
+  left: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  font-size: 8px;
+}
+
+.ai-studio-reference-dock .fb-reference-remove {
+  top: 4px;
+  right: 4px;
+  width: 16px;
+  height: 16px;
+  font-size: 11px;
+}
+
+.ai-studio-reference-dock .fb-reference-name {
+  padding: 13px 5px 3px;
+  border-radius: 0 0 10px 10px;
+  font-size: 8px;
+}
+
+.ai-studio-reference-dock .fb-reference-role-actions {
+  right: 3px;
+  bottom: 15px;
+  left: 3px;
+  gap: 2px;
+}
+
+.ai-studio-reference-dock .fb-reference-role-button {
+  min-width: 19px;
+  height: 15px;
+  padding: 0 3px;
+  font-size: 7px;
+}
+
+.ai-studio-reference-dock .fb-reference-card:hover .fb-reference-preview,
+.ai-studio-reference-dock .fb-reference-card:focus-within .fb-reference-preview {
+  z-index: 3;
+  overflow: visible;
+  box-shadow: none;
+}
+
+.ai-studio-reference-dock .fb-reference-card:not(.fb-reference-slot):hover .fb-reference-preview img,
+.ai-studio-reference-dock .fb-reference-card:not(.fb-reference-slot):hover .fb-reference-preview video,
+.ai-studio-reference-dock .fb-reference-card:not(.fb-reference-slot):focus-within .fb-reference-preview img,
+.ai-studio-reference-dock .fb-reference-card:not(.fb-reference-slot):focus-within .fb-reference-preview video {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: auto;
+  height: auto;
+  max-width: min(240px, calc(100cqi - 36px));
+  max-height: min(220px, 42vh);
+  border: 1px solid color-mix(in srgb, var(--fb-reference-role-color) 72%, white);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--bg-primary) 94%, black);
+  box-shadow: 0 18px 38px -12px rgba(0, 0, 0, 0.92);
+  object-fit: contain;
+  transform: translateX(-50%);
+}
+
+@container (max-width: 520px) {
+  .ai-studio-reference-dock {
+    max-width: calc(100% - 12px);
+  }
+
+  .ai-studio-reference-dock .fb-reference-card,
+  .ai-studio-reference-dock .fb-reference-slot-grid .fb-reference-card.fb-reference-slot {
+    flex-basis: 58px;
+    width: 58px;
+  }
+
+  .ai-studio-reference-dock .fb-reference-card.fb-reference-slot {
+    flex-basis: 46px;
+    width: 46px;
+  }
+}
+
+@container (min-width: 900px) {
+  .ai-studio-prompt-capsule {
+    position: relative;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-studio-reference-surface::after,
+  .ai-studio-reference-dock {
+    transition: none;
+  }
+}

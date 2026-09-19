@@ -5,6 +5,7 @@ import type {
   FileMetadata,
   SystemInfo,
   EncodeOutput,
+  NativeVideoSearchResult,
   VideoInfo,
   DirEntry,
   MatAnyoneStatusResponse,
@@ -54,6 +55,7 @@ class NativeHelperClientImpl {
   private statusListeners = new Set<(status: ConnectionStatus) => void>();
   private reconnectTimer: number | null = null;
   private wasEverConnected = false;
+  private mediaSearchCapability: boolean | null = null;
   private readonly commandHost: NativeHelperCommandHost = {
     nextId: () => this.nextId(),
     isConnected: () => this.isConnected(),
@@ -169,6 +171,9 @@ class NativeHelperClientImpl {
 
           // Refresh the token on every new socket. Helper restarts generate a
           // new startup token, so a cached token from the previous process is stale.
+          this.config.token = '';
+          this.mediaSearchCapability = null;
+          let authDisabled = false;
           try {
             const httpPort = this.config.port + 1;
             const resp = await this.fetchWithTimeout(
@@ -181,15 +186,21 @@ class NativeHelperClientImpl {
               if (typeof data.token === 'string' && data.token.length > 0) {
                 this.config.token = data.token;
                 log.info('Auth token discovered from startup endpoint');
+              } else if (data.auth_disabled === true) {
+                authDisabled = true;
+              }
+              if (typeof data.media_search === 'boolean') {
+                this.mediaSearchCapability = data.media_search;
               }
             }
           } catch {
             log.debug('Could not discover auth token from startup endpoint');
           }
 
-          // Authenticate with token
+          // Authenticate with the freshly discovered token. A WebSocket that
+          // opened but could not complete auth must never appear connected.
+          let authenticated = authDisabled;
           if (this.config.token) {
-            let authenticated = false;
             try {
               const authResp = await this.send({ cmd: 'auth', id: this.nextId(), token: this.config.token });
               authenticated = okField<boolean>(authResp, 'authenticated') === true;
@@ -197,20 +208,21 @@ class NativeHelperClientImpl {
               log.warn('Auth failed');
             }
 
-            if (!authenticated) {
-              log.warn('Auth response did not confirm authentication');
-              if (this.ws === ws) {
-                this.ws = null;
-              }
-              try {
-                ws.close();
-              } catch {
-                // Ignore close errors while unwinding a failed auth attempt.
-              }
-              this.setStatus('disconnected');
-              finish(false);
-              return;
+          }
+
+          if (!authenticated) {
+            log.warn('Native helper authentication could not be completed');
+            if (this.ws === ws) {
+              this.ws = null;
             }
+            try {
+              ws.close();
+            } catch {
+              // Ignore close errors while unwinding a failed auth attempt.
+            }
+            this.setStatus('disconnected');
+            finish(false);
+            return;
           }
 
           this.setStatus('connected');
@@ -274,6 +286,11 @@ class NativeHelperClientImpl {
 
   isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+
+  supportsMediaSearch(): boolean | null {
+    return this.mediaSearchCapability;
   }
 
 
@@ -350,6 +367,10 @@ class NativeHelperClientImpl {
 
   async listFormats(url: string): Promise<VideoInfo | null> {
     return downloadCommands.listFormats(this.commandHost, url);
+  }
+
+  async searchVideos(query: string, maxResults = 12): Promise<NativeVideoSearchResult[]> {
+    return downloadCommands.searchVideos(this.commandHost, query, maxResults);
   }
 
 

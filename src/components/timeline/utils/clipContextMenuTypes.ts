@@ -103,6 +103,7 @@ export type ClipContextMenuAudioClipIdResolver = (
 ) => string | null;
 
 export interface ClipContextMenuClipboardActions {
+  copyClips: () => void;
   copyClipEffects: (clipId: string) => void;
   pasteClipEffects: (targetClipIds?: string[]) => void;
   copyClipColor: (clipId: string) => void;
@@ -194,6 +195,7 @@ export type ClipContextMenuCommandDescriptor =
     };
 
 export type ClipContextMenuClipboardCommand =
+  | 'copy-clips'
   | 'copy-effects'
   | 'paste-effects'
   | 'copy-color'

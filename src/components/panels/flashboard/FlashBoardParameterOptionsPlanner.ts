@@ -35,6 +35,7 @@ interface BuildFlashBoardParameterOptionsInput {
   duration: number;
   effectiveGenerateAudio: boolean;
   hasVideoReferenceInput: boolean;
+  referenceVideoDuration?: number;
   imageSize: string;
   mode: string;
   multiShots: boolean;
@@ -58,6 +59,7 @@ function buildPriceMeta({
   duration,
   effectiveGenerateAudio,
   hasVideoReferenceInput,
+  referenceVideoDuration,
   imageSize,
   mode,
   multiShots,
@@ -68,6 +70,7 @@ function buildPriceMeta({
   duration: number;
   effectiveGenerateAudio: boolean;
   hasVideoReferenceInput: boolean;
+  referenceVideoDuration?: number;
   imageSize: string;
   mode: string;
   multiShots: boolean;
@@ -85,6 +88,7 @@ function buildPriceMeta({
     generateAudio: effectiveGenerateAudio,
     multiShots,
     hasVideoInput: hasVideoReferenceInput,
+    videoInputDuration: referenceVideoDuration,
   })?.compactLabel;
 }
 
@@ -118,6 +122,7 @@ export function buildFlashBoardParameterOptions({
   duration,
   effectiveGenerateAudio,
   hasVideoReferenceInput,
+  referenceVideoDuration,
   imageSize,
   mode,
   multiShots,
@@ -150,6 +155,7 @@ export function buildFlashBoardParameterOptions({
           duration: optionDuration,
           effectiveGenerateAudio,
           hasVideoReferenceInput,
+          referenceVideoDuration,
           imageSize,
           mode,
           multiShots,
@@ -168,6 +174,7 @@ export function buildFlashBoardParameterOptions({
           duration,
           effectiveGenerateAudio,
           hasVideoReferenceInput,
+          referenceVideoDuration,
           imageSize: optionImageSize,
           mode,
           multiShots,
@@ -186,6 +193,7 @@ export function buildFlashBoardParameterOptions({
           duration,
           effectiveGenerateAudio,
           hasVideoReferenceInput,
+          referenceVideoDuration,
           imageSize,
           mode: optionMode,
           multiShots,

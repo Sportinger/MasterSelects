@@ -21,6 +21,7 @@ import {
 import { normalizeFlashBoardChatMessages } from '../flashBoardChatProjectCodec';
 import { readFlashBoardChatJournal } from '../flashBoardChatProjectJournal';
 import type {
+  FlashBoardAIWorkspace,
   FlashBoardGenerationRequest,
   FlashBoardGenerationMetadata,
   FlashBoardChatMessage,
@@ -34,6 +35,7 @@ import type {
   FlashBoardService,
 } from '../../../stores/flashboardStore/types';
 import type {
+  ProjectFlashBoardAIWorkspace,
   ProjectFlashBoardComposerModelSettings,
   ProjectFlashBoardComposerState,
   ProjectFlashBoardGenerationMetadata,
@@ -237,6 +239,7 @@ function normalizeFlashBoardGenerationMetadata(
 
   return {
     ...metadata,
+    workspaceId: typeof metadata.workspaceId === 'string' ? metadata.workspaceId : undefined,
     service,
     providerId: normalizeFlashBoardProviderId(legacyService, metadata.providerId),
     version: legacyService === 'kieai' ? 'latest' : metadata.version,
@@ -263,6 +266,7 @@ function normalizeFlashBoardGenerationRecord(
   return {
     id: record.id,
     kind: 'generation',
+    workspaceId: typeof record.workspaceId === 'string' ? record.workspaceId : undefined,
     createdAt: new Date(record.createdAt).getTime(),
     updatedAt: new Date(record.updatedAt).getTime(),
     request: normalizeFlashBoardRequest(record.request),
@@ -276,12 +280,63 @@ function normalizeFlashBoardGenerationRecord(
   };
 }
 
+function normalizeFlashBoardAIWorkspace(
+  workspace: ProjectFlashBoardAIWorkspace,
+): FlashBoardAIWorkspace | null {
+  if (
+    typeof workspace.id !== 'string'
+    || !workspace.id.trim()
+    || typeof workspace.title !== 'string'
+    || !['generation', 'chat', 'download'].includes(workspace.kind)
+  ) {
+    return null;
+  }
+  const createdAt = new Date(workspace.createdAt).getTime();
+  const updatedAt = new Date(workspace.updatedAt).getTime();
+  return {
+    id: workspace.id,
+    title: workspace.title.trim().slice(0, 60) || 'AI Workspace',
+    kind: workspace.kind,
+    createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
+    updatedAt: Number.isFinite(updatedAt) ? updatedAt : Date.now(),
+    chatConversationRef: typeof workspace.chatConversationRef === 'string'
+      && /^[A-Za-z0-9:_-]{1,200}$/.test(workspace.chatConversationRef)
+      ? workspace.chatConversationRef
+      : crypto.randomUUID(),
+    composer: normalizeFlashBoardComposer(workspace.composer),
+    chatMessages: normalizeFlashBoardChatMessages(workspace.chatMessages),
+  };
+}
+
+function normalizeFlashBoardAIWorkspaces(
+  workspaces: ProjectFlashBoardState['workspaces'],
+): FlashBoardAIWorkspace[] {
+  return Array.isArray(workspaces)
+    ? workspaces
+        .map(normalizeFlashBoardAIWorkspace)
+        .filter((workspace): workspace is FlashBoardAIWorkspace => workspace !== null)
+    : [];
+}
+
 function hydrateFlashBoardGenerationRecordsFromProject(
   data: ProjectFlashBoardState,
   journalMessages: FlashBoardChatMessage[] | null,
   projectCreatedAt: string,
 ): void {
   const projectRecords = data.generationRecords.map(normalizeFlashBoardGenerationRecord);
+  let workspaces = normalizeFlashBoardAIWorkspaces(data.workspaces);
+  if (journalMessages && workspaces.length > 0) {
+    const journalWorkspaceId = workspaces.some((workspace) => workspace.id === data.activeWorkspaceId)
+      ? data.activeWorkspaceId
+      : workspaces.find((workspace) => workspace.kind === 'chat')?.id;
+    if (journalWorkspaceId) {
+      workspaces = workspaces.map((workspace) => (
+        workspace.id === journalWorkspaceId
+          ? { ...workspace, chatMessages: journalMessages }
+          : workspace
+      ));
+    }
+  }
   hydrateFlashBoardActiveGenerationRecords(
     mergeFlashBoardVideoJobRecovery(
       projectRecords,
@@ -290,6 +345,8 @@ function hydrateFlashBoardGenerationRecordsFromProject(
     normalizeFlashBoardComposer(data.composer),
     normalizeFlashBoardPromptHistory(data.promptHistory),
     journalMessages ?? normalizeFlashBoardChatMessages(data.chatMessages),
+    workspaces,
+    data.activeWorkspaceId,
   );
 }
 

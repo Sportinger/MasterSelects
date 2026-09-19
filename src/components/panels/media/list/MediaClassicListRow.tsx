@@ -1,4 +1,4 @@
-import type { DragEvent, MouseEvent } from 'react';
+import type { DragEvent, MouseEvent, PointerEvent } from 'react';
 
 import type { MediaFile, ProjectItem } from '../../../../stores/mediaStore';
 import { isImportedMediaFileItem } from '../itemTypeGuards';
@@ -25,12 +25,13 @@ export interface MediaClassicListRowProps {
   onNameClick: (event: MouseEvent, itemId: string, currentName: string) => void;
   onBadgeClick: (mediaFileId: string, target: MediaClassicBadgeTarget) => void;
   onDragStart: (event: DragEvent<HTMLDivElement>, item: ProjectItem) => void;
+  onTouchTimelineDragPointerDown: (event: PointerEvent<HTMLDivElement>, item: ProjectItem) => void;
   onDragEnd: (event: DragEvent<HTMLDivElement>) => void;
   onFolderDragOver: (event: DragEvent<HTMLDivElement>, folderId: string) => void;
   onFolderDragLeave: (event: DragEvent<HTMLDivElement>) => void;
   onFolderDrop: (event: DragEvent<HTMLDivElement>, folderId: string) => void;
   onClick: (event: MouseEvent<HTMLDivElement>, itemId: string) => void;
-  onDoubleClick: (item: ProjectItem) => void;
+  onDoubleClick: (item: ProjectItem, renameFromName?: boolean) => void;
   onContextMenu: (event: MouseEvent<HTMLDivElement>, itemId: string) => void;
   getProjectItemIconType: (item: ProjectItem | undefined) => string | undefined;
   getGaussianSplatResolutionLabel: (item: ProjectItem) => string | null;
@@ -62,6 +63,7 @@ export function MediaClassicListRow({
   onNameClick,
   onBadgeClick,
   onDragStart,
+  onTouchTimelineDragPointerDown,
   onDragEnd,
   onFolderDragOver,
   onFolderDragLeave,
@@ -81,6 +83,7 @@ export function MediaClassicListRow({
   const isFolder = 'isExpanded' in item;
   const isMediaFile = isImportedMediaFileItem(item);
   const mediaFile = isMediaFile ? item : null;
+  const isTrackingAsset = !isFolder && 'type' in item && item.type === 'tracking';
   const importing = isMediaFile && Boolean(item.isImporting);
 
   return (
@@ -90,12 +93,16 @@ export function MediaClassicListRow({
         className={`media-item ${selected ? 'selected' : ''} ${isFolder ? 'folder' : ''} ${needsRelink ? 'no-file' : ''} ${importing ? 'importing' : ''} ${dragTarget ? 'drag-target' : ''} ${beingDragged ? 'dragging' : ''}`}
         draggable={!importing}
         onDragStart={(event) => onDragStart(event, item)}
+        onPointerDown={isTrackingAsset ? undefined : (event) => onTouchTimelineDragPointerDown(event, item)}
         onDragEnd={onDragEnd}
         onDragOver={isFolder ? (event) => onFolderDragOver(event, item.id) : undefined}
         onDragLeave={isFolder ? onFolderDragLeave : undefined}
         onDrop={isFolder ? (event) => onFolderDrop(event, item.id) : undefined}
         onClick={(event) => onClick(event, item.id)}
-        onDoubleClick={() => onDoubleClick(item)}
+        onDoubleClick={(event) => onDoubleClick(
+          item,
+          event.target instanceof Element && Boolean(event.target.closest('.media-item-name')),
+        )}
         onContextMenu={(event) => onContextMenu(event, item.id)}
       >
         {columnOrder.map((colId) => (
@@ -108,6 +115,7 @@ export function MediaClassicListRow({
             isExpanded={expanded}
             isRenaming={renaming}
             isSelected={selected}
+            needsRelink={needsRelink}
             mediaFile={mediaFile}
             nameColumnWidth={nameColumnWidth}
             renameValue={renameValue}

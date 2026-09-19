@@ -7,6 +7,7 @@ import {
 import type { SceneVector3 } from '../../engine/scene/types';
 import type { TimelineClip } from '../../types/timeline';
 import type { ClipTransform } from '../../types/timelineCore';
+import { resolveSceneOrbitPosition } from './previewSceneCameraMath';
 
 interface PreviewSize {
   width: number;
@@ -35,6 +36,9 @@ interface OrbitStart {
   pivotY: number;
   pivotZ: number;
   radius: number;
+  localOffsetX?: number;
+  localOffsetY?: number;
+  localOffsetZ?: number;
 }
 
 interface PanStart {
@@ -65,7 +69,6 @@ interface SceneNavSolveSettings {
 interface UsePreviewSceneNavigationPointerEffectsOptions {
   applyNavigationCameraValues: (clip: TimelineClip, values: SceneNavCameraValues) => void;
   effectiveResolution: PreviewSize;
-  effectiveSceneNavFpsMode: boolean;
   endSceneNavHistoryBatch: () => void;
   gaussianFpsLookStart: MutableRefObject<FpsLookStart>;
   gaussianOrbitStart: MutableRefObject<OrbitStart>;
@@ -86,6 +89,19 @@ interface UsePreviewSceneNavigationPointerEffectsOptions {
 
 const CAMERA_NAV_FPS_LOOK_SPEED = 0.18;
 
+export function resolveSceneNavigationLookRotation(
+  rotation: { x: number; y: number },
+  deltaX: number,
+  deltaY: number,
+): { pitch: number; yaw: number } {
+  return {
+    pitch: rotation.x + deltaY * CAMERA_NAV_FPS_LOOK_SPEED,
+    // Positive camera yaw points the view to the left in the scene-camera
+    // basis, so a rightward FPS-look drag must reduce the stored yaw value.
+    yaw: rotation.y - deltaX * CAMERA_NAV_FPS_LOOK_SPEED,
+  };
+}
+
 function addSceneVectors(a: SceneVector3, b: SceneVector3): SceneVector3 {
   return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
 }
@@ -97,7 +113,6 @@ function scaleSceneVector(vector: SceneVector3, scale: number): SceneVector3 {
 export function usePreviewSceneNavigationPointerEffects({
   applyNavigationCameraValues,
   effectiveResolution,
-  effectiveSceneNavFpsMode,
   endSceneNavHistoryBatch,
   gaussianFpsLookStart,
   gaussianOrbitStart: gaussianOrbitStartRef,
@@ -143,29 +158,6 @@ export function usePreviewSceneNavigationPointerEffects({
   ]);
 
   useEffect(() => {
-    if (effectiveSceneNavFpsMode) {
-      if (isGaussianOrbiting) {
-        gaussianOrbitStartRef.current.clipId = null;
-        setIsGaussianOrbiting(false);
-        endSceneNavHistoryBatch();
-      }
-      return;
-    }
-
-    if (isGaussianFpsLooking) {
-      stopGaussianFpsLook();
-    }
-  }, [
-    effectiveSceneNavFpsMode,
-    endSceneNavHistoryBatch,
-    gaussianOrbitStartRef,
-    isGaussianFpsLooking,
-    isGaussianOrbiting,
-    setIsGaussianOrbiting,
-    stopGaussianFpsLook,
-  ]);
-
-  useEffect(() => {
     if (!isGaussianOrbiting) return;
 
     const handleWindowMouseMove = (event: MouseEvent) => {
@@ -183,6 +175,9 @@ export function usePreviewSceneNavigationPointerEffects({
         pivotY,
         pivotZ,
         radius,
+        localOffsetX,
+        localOffsetY,
+        localOffsetZ,
       } = gaussianOrbitStartRef.current;
       if (!clipId) return;
       if (!navigationSceneNavClip || navigationSceneNavClip.id !== clipId) return;
@@ -205,11 +200,23 @@ export function usePreviewSceneNavigationPointerEffects({
           { width: effectiveResolution.width, height: effectiveResolution.height },
           solveSettings.sceneBounds,
         );
-        nextPosition = {
-          x: pivotX - frame.forward.x * radius,
-          y: pivotY - frame.forward.y * radius,
-          z: pivotZ - frame.forward.z * radius,
-        };
+        if (
+          localOffsetX !== undefined &&
+          localOffsetY !== undefined &&
+          localOffsetZ !== undefined
+        ) {
+          nextPosition = resolveSceneOrbitPosition(
+            frame,
+            { x: pivotX, y: pivotY, z: pivotZ },
+            { x: localOffsetX, y: localOffsetY, z: localOffsetZ },
+          );
+        } else {
+          nextPosition = {
+            x: pivotX - frame.forward.x * radius,
+            y: pivotY - frame.forward.y * radius,
+            z: pivotZ - frame.forward.z * radius,
+          };
+        }
       }
 
       applyNavigationCameraValues(navigationSceneNavClip, {
@@ -269,8 +276,11 @@ export function usePreviewSceneNavigationPointerEffects({
 
       if (deltaX === 0 && deltaY === 0) return;
 
-      const nextPitch = freshTransform.rotation.x + deltaY * CAMERA_NAV_FPS_LOOK_SPEED;
-      const nextYaw = freshTransform.rotation.y - deltaX * CAMERA_NAV_FPS_LOOK_SPEED;
+      const { pitch: nextPitch, yaw: nextYaw } = resolveSceneNavigationLookRotation(
+        freshTransform.rotation,
+        deltaX,
+        deltaY,
+      );
       const nextTranslation = resolveOrbitCameraTranslationForFixedEye(
         freshTransform,
         {

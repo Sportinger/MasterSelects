@@ -10,9 +10,14 @@ import {
 import { resolveFlashBoardJobStartedAt } from '../../services/flashboard/FlashBoardJobTiming';
 import { projectFileService } from '../../services/projectFileService';
 import { useFlashBoardStore } from './index';
-import { createDefaultFlashBoardComposer } from './defaults';
+import {
+  createDefaultFlashBoardAIWorkspace,
+  createDefaultFlashBoardComposer,
+  createFlashBoardAIWorkspace,
+} from './defaults';
 import type {
   FlashBoardActiveGenerationRecord,
+  FlashBoardAIWorkspace,
   FlashBoardChatMessage,
   FlashBoardComposerState,
   FlashBoardGenerationRequest,
@@ -59,6 +64,7 @@ function areActiveGenerationRecordsEqual(
     return leftRecord.id === rightRecord.id
       && leftRecord.createdAt === rightRecord.createdAt
       && leftRecord.updatedAt === rightRecord.updatedAt
+      && leftRecord.workspaceId === rightRecord.workspaceId
       && leftRecord.request === rightRecord.request
       && leftRecord.job === rightRecord.job
       && leftRecord.outputs === rightRecord.outputs
@@ -196,6 +202,14 @@ export function getFlashBoardPromptHistory(): FlashBoardPromptHistoryEntry[] {
 
 export function getFlashBoardChatMessages(): FlashBoardChatMessage[] {
   return getFlashBoardState().chatMessages;
+}
+
+export function getFlashBoardAIWorkspaces(): FlashBoardAIWorkspace[] {
+  return getFlashBoardState().aiWorkspaces;
+}
+
+export function getActiveFlashBoardAIWorkspaceId(): string {
+  return getFlashBoardState().activeAIWorkspaceId;
 }
 
 export function subscribeFlashBoardChatMessages(
@@ -346,12 +360,15 @@ export function ensureFlashBoardActiveGenerationBoard(): void {
 }
 
 export function resetFlashBoardActiveGenerationState(): void {
+  const workspace = createDefaultFlashBoardAIWorkspace();
   useFlashBoardStore.setState({
     activeGenerationRecords: [],
     selectedActiveGenerationRecordIds: [],
-    composer: createDefaultFlashBoardComposer(),
+    composer: workspace.composer,
     promptHistory: [],
     chatMessages: [],
+    aiWorkspaces: [workspace],
+    activeAIWorkspaceId: workspace.id,
     hoveredComposerReference: null,
   });
 }
@@ -361,13 +378,27 @@ export function hydrateFlashBoardActiveGenerationRecords(
   composer: FlashBoardComposerState = createDefaultFlashBoardComposer(),
   promptHistory: FlashBoardPromptHistoryEntry[] = [],
   chatMessages: FlashBoardChatMessage[] = [],
+  workspaces?: FlashBoardAIWorkspace[],
+  activeWorkspaceId?: string,
 ): void {
+  const hydratedWorkspaces = workspaces?.length
+    ? workspaces
+    : [createFlashBoardAIWorkspace({
+        kind: 'chat',
+        title: 'Chat',
+        composer,
+        chatMessages,
+      })];
+  const activeWorkspace = hydratedWorkspaces.find((workspace) => workspace.id === activeWorkspaceId)
+    ?? hydratedWorkspaces[0];
   useFlashBoardStore.setState({
     activeGenerationRecords: records,
     selectedActiveGenerationRecordIds: [],
-    composer,
+    composer: activeWorkspace.composer,
     promptHistory,
-    chatMessages,
+    chatMessages: activeWorkspace.chatMessages,
+    aiWorkspaces: hydratedWorkspaces,
+    activeAIWorkspaceId: activeWorkspace.id,
     hoveredComposerReference: null,
   });
   persistCurrentFlashBoardVideoJobs();
@@ -412,6 +443,7 @@ export function restoreFlashBoardActiveGenerationRecordsFromRecovery(
 
 export function prepareFlashBoardActiveGenerationRequest(
   request: FlashBoardGenerationRequest,
+  options?: { workspaceId?: string },
 ): FlashBoardActiveGenerationRecord {
   if (request.idempotencyKey) {
     const existing = getFlashBoardActiveGenerationRecordByRequestKey(request.idempotencyKey);
@@ -429,6 +461,7 @@ export function prepareFlashBoardActiveGenerationRequest(
   const record: FlashBoardActiveGenerationRecord = {
     id: recordId,
     kind: 'generation',
+    workspaceId: options?.workspaceId ?? getFlashBoardState().activeAIWorkspaceId,
     createdAt: now,
     updatedAt: now,
     request: durableRequest,

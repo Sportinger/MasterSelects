@@ -1,0 +1,24 @@
+.stats-panel {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg-primary);
+}
+
+.stats-panel .preview-stats-expanded {
+  position: static;
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  padding: var(--sp-3);
+  border-radius: 0;
+  background: transparent;
+  cursor: default;
+  backdrop-filter: none;
+}
+
+.stats-panel .preview-stats-expanded:hover {
+  background: transparent;
+}

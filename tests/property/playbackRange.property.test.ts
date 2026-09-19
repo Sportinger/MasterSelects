@@ -1,6 +1,9 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { resolvePlaybackStartPosition } from '../../src/stores/timeline/playbackRange';
+import {
+  resolvePlaybackRange,
+  resolvePlaybackStartPosition,
+} from '../../src/stores/timeline/playbackRange';
 
 const fcOptions = {
   numRuns: 200,
@@ -69,6 +72,7 @@ describe('playback range properties', () => {
         const range = resolvedRange(inPoint, outPoint, duration);
         const clampedPlayhead = Math.max(0, Math.min(sanitize(playhead, range.start), safeDuration(duration)));
         fc.pre(inPoint !== null || outPoint !== null);
+        fc.pre(range.end > range.start);
         fc.pre(clampedPlayhead < range.start || clampedPlayhead >= range.end);
 
         expect(resolvePlaybackStartPosition(playhead, inPoint, outPoint, duration, 1)).toBe(range.start);
@@ -83,11 +87,21 @@ describe('playback range properties', () => {
         const range = resolvedRange(inPoint, outPoint, duration);
         const clampedPlayhead = Math.max(0, Math.min(sanitize(playhead, range.start), safeDuration(duration)));
         fc.pre(inPoint !== null || outPoint !== null);
+        fc.pre(range.end > range.start);
         fc.pre(clampedPlayhead <= range.start || clampedPlayhead > range.end);
 
         expect(resolvePlaybackStartPosition(playhead, inPoint, outPoint, duration, -1)).toBe(range.end);
       }),
       fcOptions,
     );
+  });
+
+  it('treats a collapsed in/out selection as the full playable timeline', () => {
+    expect(resolvePlaybackRange(2.337, 2.337, 46.28)).toEqual({
+      start: 0,
+      end: 46.28,
+      hasRange: false,
+    });
+    expect(resolvePlaybackStartPosition(2.337, 2.337, 2.337, 46.28, 1)).toBe(2.337);
   });
 });

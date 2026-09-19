@@ -38,6 +38,10 @@ export interface PlaybackActions {
   setTimelineGridSubdivision: (
     subdivision: import('../../../timeline/tempo/barsGrid').TimelineGridSubdivision,
   ) => void;
+  setPianoRollSnapEnabled: (enabled: boolean) => void;
+  setPianoRollGridSubdivision: (
+    subdivision: import('../../../timeline/tempo/barsGrid').TimelineGridSubdivision,
+  ) => void;
   setScrollX: (scrollX: number) => void;
   setInPoint: (time: number | null) => void;
   setOutPoint: (time: number | null) => void;

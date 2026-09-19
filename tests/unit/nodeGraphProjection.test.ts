@@ -1,13 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   addClipCustomNodeDefinition,
   buildAINodeAuthoringContext,
+  buildClipNodeGraphDocument,
   buildClipNodeGraph,
   cloneClipNodeGraph,
   connectClipNodeGraphPorts,
   createClipAICustomNodeDefinition,
   createClipNodeGraphState,
   disconnectClipNodeGraphEdge,
+  getNodeGraphView,
   remapClipNodeGraphEffectIds,
   showClipBuiltInNode,
   updateClipCustomNodeDefinition,
@@ -20,6 +22,15 @@ import {
   primeTimelineFrequencySummaryCache,
   primeTimelinePhaseCorrelationCache,
 } from '../../src/services/audio/timelineFrequencyPhaseCache';
+import { installCanvas2DMock } from '../helpers/mockCanvas2d';
+
+beforeEach(() => {
+  installCanvas2DMock();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function createClip(overrides: Partial<TimelineClip> = {}): TimelineClip {
   return {
@@ -1052,5 +1063,130 @@ describe('buildClipNodeGraph', () => {
     expect(graph.nodes.map((node) => node.id)).toEqual(['source', 'transform', 'color', 'output']);
     expect(withColor.forcedBuiltIns).toEqual(['transform', 'color']);
     expect(cloneClipNodeGraph(withColor)?.forcedBuiltIns).toEqual(['transform', 'color']);
+  });
+});
+
+describe('clip node graph document', () => {
+  it('exposes the active color grade as a subgraph of the general clip graph', () => {
+    const colorCorrection = createDefaultColorCorrectionState();
+    const clip = createClip({ colorCorrection });
+    const document = buildClipNodeGraphDocument(clip, createTrack());
+    const generalGraph = getNodeGraphView(document, 'general');
+    const colorGraph = getNodeGraphView(document, 'color');
+    const colorGroup = generalGraph.nodes.find((node) => node.id === 'color');
+
+    expect(document.rootGraphId).toBe(generalGraph.id);
+    expect(document.views.map((view) => [view.theme, view.graphId])).toEqual([
+      ['general', generalGraph.id],
+      ['color', colorGraph.id],
+    ]);
+    expect(colorGroup).toMatchObject({
+      kind: 'color',
+      runtime: 'builtin',
+      domain: 'color',
+      binding: { kind: 'clip-color-correction' },
+      subgraphId: colorGraph.id,
+    });
+    expect(colorGraph.nodes.map((node) => [node.id, node.binding?.kind, node.kind])).toEqual([
+      ['node_input', 'color-node', 'source'],
+      ['node_primary', 'color-node', 'color'],
+      ['node_output', 'color-node', 'output'],
+    ]);
+    expect(colorGraph.edges.map((edge) => [
+      edge.fromNodeId,
+      edge.fromPortId,
+      edge.toNodeId,
+      edge.toPortId,
+    ])).toEqual([
+      ['node_input', 'out', 'node_primary', 'in'],
+      ['node_primary', 'out', 'node_output', 'in'],
+    ]);
+  });
+
+  it('projects color layout, params, and enabled state from the canonical color nodes', () => {
+    const colorCorrection = createDefaultColorCorrectionState();
+    const primary = colorCorrection.versions[0].nodes.find((node) => node.id === 'node_primary')!;
+    primary.name = 'Hero Grade';
+    primary.enabled = false;
+    primary.position = { x: 480, y: 190 };
+    primary.params.exposure = 1.25;
+
+    const colorGraph = getNodeGraphView(
+      buildClipNodeGraphDocument(createClip({ colorCorrection }), createTrack()),
+      'color',
+    );
+
+    expect(colorGraph.nodes.find((node) => node.id === 'node_primary')).toMatchObject({
+      label: 'Hero Grade',
+      layout: { x: 480, y: 190 },
+      params: {
+        enabled: false,
+        exposure: 1.25,
+        nodeType: 'primary',
+      },
+      binding: {
+        kind: 'color-node',
+        versionId: 'version_main',
+        nodeId: 'node_primary',
+        nodeType: 'primary',
+      },
+    });
+  });
+
+  it('projects image and key ports for Resolve-style color structure nodes', () => {
+    const colorCorrection = createDefaultColorCorrectionState();
+    const version = colorCorrection.versions[0];
+    version.nodes.splice(2, 0, {
+      id: 'node_key_mixer',
+      type: 'key-mixer',
+      name: 'Key Mixer',
+      enabled: true,
+      params: {},
+      position: { x: 280, y: 180 },
+    });
+    version.nodes.push({
+      id: 'node_alpha_output',
+      type: 'alpha-output',
+      name: 'Alpha Output',
+      enabled: true,
+      params: {},
+      position: { x: 520, y: 180 },
+    });
+    version.edges.push({
+      id: 'edge_key_alpha',
+      fromNodeId: 'node_key_mixer',
+      fromPort: 'key-out',
+      toNodeId: 'node_alpha_output',
+      toPort: 'key-in',
+    });
+
+    const colorGraph = getNodeGraphView(
+      buildClipNodeGraphDocument(createClip({ colorCorrection }), createTrack()),
+      'color',
+    );
+    const primary = colorGraph.nodes.find(node => node.id === 'node_primary')!;
+    const keyMixer = colorGraph.nodes.find(node => node.id === 'node_key_mixer')!;
+
+    expect(primary.inputs.map(port => [port.id, port.type])).toEqual([
+      ['in', 'texture'],
+      ['key-in', 'mask'],
+    ]);
+    expect(primary.outputs.map(port => [port.id, port.type])).toEqual([
+      ['out', 'texture'],
+      ['key-out', 'mask'],
+    ]);
+    expect(keyMixer.inputs.map(port => [port.id, port.type])).toEqual([
+      ['key-in', 'mask'],
+      ['key-in-2', 'mask'],
+    ]);
+    expect(colorGraph.edges.find(edge => edge.id === 'edge_key_alpha')?.type).toBe('mask');
+  });
+
+  it('falls back to the general view for clips that do not support color', () => {
+    const clip = createClip({ source: { type: 'audio' } });
+    const document = buildClipNodeGraphDocument(clip, createTrack({ type: 'audio' }));
+
+    expect(document.views.map((view) => view.theme)).toEqual(['general']);
+    expect(getNodeGraphView(document, 'color').id).toBe(document.rootGraphId);
   });
 });

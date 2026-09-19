@@ -1,5 +1,5 @@
-import { getCurrentUser, json, methodNotAllowed } from '../../lib/db';
-import { getCreditMeterReference, getCreditSummary } from '../../lib/credits';
+import { getAiUser, getCurrentUser, isGuestAiUser, json, methodNotAllowed } from '../../lib/db';
+import { ensureWelcomeCredits, getCreditMeterReference, getCreditSummary } from '../../lib/credits';
 import { getBillingPlan, getEntitlementSnapshot, listEntitlements, normalizeBillingPlanId, type BillingPlanId } from '../../lib/entitlements';
 import { getUsageSummary } from '../../lib/usage';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
@@ -156,8 +156,8 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     return methodNotAllowed(['GET']);
   }
 
-  const currentUser = getCurrentUser(context);
-  if (!currentUser) {
+  const billingUser = getAiUser(context);
+  if (!billingUser) {
     const emptySummary: BillingSummaryResponse = {
       creditBalance: 0,
       creditMeterReference: 0,
@@ -185,22 +185,24 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     return json(emptySummary);
   }
 
+  if (!isGuestAiUser(context)) await ensureWelcomeCredits(context.env.DB, billingUser.id);
+
   const [user, stripeCustomerId, subscription, entitlementRows, creditSummary, usageSummary] = await Promise.all([
     getUserProfile(context),
-    getStripeCustomerId(context.env.DB, currentUser.id),
-    getLatestSubscription(context.env.DB, currentUser.id),
-    listEntitlements(context.env.DB, currentUser.id),
-    getCreditSummary(context.env.DB, currentUser.id, 10),
-    getUsageSummary(context.env.DB, currentUser.id, Number(new URL(context.request.url).searchParams.get('windowDays') ?? 30)),
+    isGuestAiUser(context) ? Promise.resolve(null) : getStripeCustomerId(context.env.DB, billingUser.id),
+    isGuestAiUser(context) ? Promise.resolve(null) : getLatestSubscription(context.env.DB, billingUser.id),
+    listEntitlements(context.env.DB, billingUser.id),
+    getCreditSummary(context.env.DB, billingUser.id, 10),
+    getUsageSummary(context.env.DB, billingUser.id, Number(new URL(context.request.url).searchParams.get('windowDays') ?? 30)),
   ]);
 
   const planId = normalizeBillingPlanId(subscription?.plan_id, 'free');
   const snapshot = getEntitlementSnapshot(planId, entitlementRows);
   const subscriptionPlan = getBillingPlan(planId);
-  const creditMeterReference = await getCreditMeterReference(context.env.DB, currentUser.id, {
+  const creditMeterReference = await getCreditMeterReference(context.env.DB, billingUser.id, {
     balance: creditSummary.balance,
     epochStart: subscription?.current_period_start,
-    monthlyCredits: subscriptionPlan.monthlyCredits,
+    monthlyCredits: isGuestAiUser(context) ? 0 : subscriptionPlan.monthlyCredits,
   });
 
   const response: BillingSummaryResponse = {
@@ -211,7 +213,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     plan: {
       id: subscriptionPlan.id,
       label: subscriptionPlan.label,
-      monthlyCredits: subscriptionPlan.monthlyCredits,
+      monthlyCredits: isGuestAiUser(context) ? 0 : subscriptionPlan.monthlyCredits,
     },
     recentCredits: creditSummary.recentEntries.map((entry) => ({
       amount: entry.amount,

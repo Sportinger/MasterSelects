@@ -1,0 +1,113 @@
+.ai-studio-chat {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg-secondary) 94%, var(--bg-tertiary));
+}
+
+.ai-studio-chat-history {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 8px 12px 12px;
+  overflow: hidden;
+}
+
+.ai-studio-chat-history .fb-chat-output {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  padding: 2px 2px 126px;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.ai-studio-chat-history .fb-chat-message {
+  max-width: min(86%, 980px);
+  padding: 10px 13px;
+  border-radius: 15px 15px 15px 5px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+  line-height: 1.45;
+}
+
+.ai-studio-chat-history .fb-chat-message.user {
+  border-radius: 15px 15px 5px 15px;
+}
+
+.ai-studio-chat-history .fb-chat-output-label {
+  font-size: 9px;
+}
+
+.ai-studio-chat-control-bar textarea {
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+.ai-studio-chat-model-menu {
+  left: 0;
+}
+
+.ai-studio-chat-route-choice {
+  position: relative;
+}
+
+.ai-studio-chat-route-choice > button {
+  color: var(--text-secondary);
+}
+
+.ai-studio-chat-route-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 12px);
+  z-index: 70;
+  display: grid;
+  min-width: 92px;
+  padding: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--bg-elevated) 96%, black);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
+}
+
+.ai-studio-chat-route-menu button {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  text-align: left;
+}
+
+.ai-studio-chat-route-menu button:hover,
+.ai-studio-chat-route-menu button.active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+@media (max-width: 640px) {
+  .ai-studio-chat-history {
+    padding: 8px;
+  }
+
+  .ai-studio-chat-history .fb-chat-output {
+    padding-bottom: 122px;
+  }
+
+  .ai-studio-chat-history .fb-chat-message {
+    max-width: 86%;
+  }
+}

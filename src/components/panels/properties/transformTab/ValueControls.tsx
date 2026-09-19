@@ -1,35 +1,42 @@
-import type { ComponentProps, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import { DraggableNumber } from '../shared';
 import { MIDIParameterLabel } from '../MIDIParameterLabel';
+import {
+  LabeledValue as SharedLabeledValue,
+  type LabeledValueProps,
+} from '../LabeledValue';
 import type { MidiParameterTargetView } from './transformTabTypes';
+import { trackEditorControlCommitted } from '../../../../services/productAnalytics';
+
+function trackTransformControl(property: string, method: 'drag' | 'reset' | 'type', suffix?: string) {
+  trackEditorControlCommitted({
+    area: property.startsWith('camera.') ? 'camera' : 'transform',
+    controlId: suffix ? `${property}.${suffix}` : property,
+    controlKind: 'number',
+    inputMethod: method,
+    interaction: method === 'reset' ? 'reset' : 'change',
+    itemId: property,
+    itemKind: 'property',
+  });
+}
 
 export function LabeledValue({
-  label,
-  wip,
   midiTarget,
-  keyframeToggle,
+  onCommit,
+  touchDragAxis = 'horizontal',
   ...props
-}: {
-  label: string;
-  wip?: boolean;
-  midiTarget?: MidiParameterTargetView | null;
-  keyframeToggle?: ReactNode;
-} & ComponentProps<typeof DraggableNumber>) {
+}: LabeledValueProps) {
   return (
-    <div
-      className={`labeled-value ${keyframeToggle ? 'with-keyframe-toggle' : ''}`}
-      data-guided-property={midiTarget?.property}
-      data-guided-clip-id={midiTarget?.clipId}
-      data-guided-target={midiTarget ? `property:${midiTarget.property}` : undefined}
-    >
-      {keyframeToggle}
-      <MIDIParameterLabel as="span" className="labeled-value-label" target={midiTarget}>
-        {label}
-        {wip && <span className="menu-wip-badge">WIP</span>}
-      </MIDIParameterLabel>
-      <DraggableNumber {...props} />
-    </div>
+    <SharedLabeledValue
+      {...props}
+      touchDragAxis={touchDragAxis}
+      midiTarget={midiTarget}
+      onCommit={(method) => {
+        onCommit?.(method);
+        if (midiTarget?.property) trackTransformControl(midiTarget.property, method);
+      }}
+    />
   );
 }
 
@@ -71,8 +78,12 @@ export function RotationValue({
         decimals={0}
         suffix="x"
         sensitivity={4}
+        touchDragAxis="horizontal"
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
+        onCommit={(method) => {
+          if (midiTarget?.property) trackTransformControl(midiTarget.property, method, 'revolutions');
+        }}
       />
       <DraggableNumber
         value={remainder}
@@ -81,8 +92,12 @@ export function RotationValue({
         decimals={1}
         suffix="deg"
         sensitivity={0.5}
+        touchDragAxis="horizontal"
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
+        onCommit={(method) => {
+          if (midiTarget?.property) trackTransformControl(midiTarget.property, method, 'degrees');
+        }}
       />
     </div>
   );

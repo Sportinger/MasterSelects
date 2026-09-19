@@ -1,4 +1,5 @@
 import type { AudioCodec, VideoCodec } from 'mediabunny';
+import { getChromiumCompatibleAACBitrate } from '../../../engine/audio/AudioEncoder';
 import type { ExportSettings } from '../../../stores/exportStore';
 import { BatchSourceExportUnsupportedError } from './batchSourceExportErrors';
 import type { BatchSourceMediaType } from './batchSourceExportTypes';
@@ -186,7 +187,7 @@ export function createBatchSourceExportPlan(input: BatchSourceExportPlanInput): 
       ...common,
       container: 'mp4',
       audioCodec: 'aac',
-      audioBitrate: settings.audioBitrate,
+      audioBitrate: getChromiumCompatibleAACBitrate(settings.audioBitrate),
       filename: replaceBatchSourceOutputExtension(outputName, '.m4a'),
       mimeType: 'audio/mp4',
     };
@@ -213,7 +214,9 @@ export function createBatchSourceExportPlan(input: BatchSourceExportPlanInput): 
     videoBitrate: settings.bitrate,
     includeAudio: settings.includeAudio,
     audioCodec: container === 'mp4' ? 'aac' : 'opus',
-    audioBitrate: settings.audioBitrate,
+    audioBitrate: container === 'mp4'
+      ? getChromiumCompatibleAACBitrate(settings.audioBitrate)
+      : settings.audioBitrate,
     audioSampleRate: settings.audioSampleRate,
   };
 }

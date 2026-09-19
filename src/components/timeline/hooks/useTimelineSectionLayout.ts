@@ -17,6 +17,7 @@ import { isAudioSectionTrackType } from '../utils/trackSection';
 interface UseTimelineSectionLayoutProps {
   timelineViewTracks: TimelineTrackType[];
   trackFocusMode: TimelineTrackFocusMode;
+  activeTrackScaleSection: TrackSectionKind | null;
   timelineSplitRatio: number | null;
   splitDragVideoHeight: number | null;
   videoViewportHeight: number;
@@ -31,6 +32,23 @@ interface UseTimelineSectionLayoutProps {
   getRenderedTrackBaseHeight: (track: TimelineTrackType) => number;
   getExpandedTrackHeight: (trackId: string, baseHeight: number) => number;
   isTrackExpandedForRender: (trackId: string) => boolean;
+}
+
+export function resolveSynchronousTrackScaleVideoHeight(
+  sectionKind: TrackSectionKind,
+  videoContentHeight: number,
+  audioContentHeight: number,
+  availableHeight: number,
+  videoTrackCount: number,
+  audioTrackCount: number,
+): number {
+  const minVideoHeight = videoTrackCount > 0 ? COLLAPSED_TRACK_HEIGHT : 0;
+  const minAudioHeight = audioTrackCount > 0 ? COLLAPSED_TRACK_HEIGHT : 0;
+  const maxVideoHeight = Math.max(minVideoHeight, availableHeight - minAudioHeight);
+  const desiredVideoHeight = sectionKind === 'video'
+    ? videoContentHeight
+    : availableHeight - audioContentHeight;
+  return Math.max(minVideoHeight, Math.min(maxVideoHeight, desiredVideoHeight));
 }
 
 interface TimelineSectionLayout {
@@ -71,6 +89,7 @@ function buildSectionMetrics(
 export function useTimelineSectionLayout({
   timelineViewTracks,
   trackFocusMode,
+  activeTrackScaleSection,
   timelineSplitRatio,
   splitDragVideoHeight,
   videoViewportHeight,
@@ -186,6 +205,17 @@ export function useTimelineSectionLayout({
       const videoHeight = clampSplitDragVideoHeight(splitDragVideoHeight, availableHeight);
       return { videoSectionHeight: videoHeight, audioSectionHeight: Math.max(0, availableHeight - videoHeight) };
     }
+    if (trackFocusMode === 'balanced' && activeTrackScaleSection !== null) {
+      const videoHeight = resolveSynchronousTrackScaleVideoHeight(
+        activeTrackScaleSection,
+        videoContentHeight,
+        audioContentHeight,
+        availableHeight,
+        timelineViewVideoTracks.length,
+        timelineViewAudioTracks.length,
+      );
+      return { videoSectionHeight: videoHeight, audioSectionHeight: Math.max(0, availableHeight - videoHeight) };
+    }
     if (trackFocusMode === 'balanced' && timelineSplitRatio !== null) {
       const ratioVideoHeight = clampSplitDragVideoHeight(availableHeight * timelineSplitRatio, availableHeight);
       const videoHeight = videoContentHeight > 0 ? Math.min(ratioVideoHeight, videoContentHeight) : ratioVideoHeight;
@@ -209,11 +239,14 @@ export function useTimelineSectionLayout({
     const videoHeight = Math.max(minSectionHeight, Math.min(availableHeight - minSectionHeight, proportionalVideoHeight));
     return { videoSectionHeight: videoHeight, audioSectionHeight: Math.max(0, availableHeight - videoHeight) };
   }, [
+    activeTrackScaleSection,
     audioSectionMetrics.contentHeight,
     clampSplitDragVideoHeight,
     splitDragVideoHeight,
     splitViewportHeight,
     timelineSplitRatio,
+    timelineViewAudioTracks.length,
+    timelineViewVideoTracks.length,
     trackFocusMode,
     videoSectionMetrics.contentHeight,
   ]);

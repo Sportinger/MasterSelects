@@ -49,18 +49,13 @@ export function collectNotReadyHtmlVideo(
         : null;
     })()
     : null;
-  const emergencyHoldFrame = isDragging
-    ? (() => {
-      const holdFrame = lastSameClipFrame;
-      return isFrameNearTarget(
-        holdFrame,
-        targetTime,
-        MAX_DRAG_FALLBACK_DRIFT_SECONDS
-      )
-        ? holdFrame
-        : null;
-    })()
-    : dragHoldFrame;
+  // While the pointer is moving, never drop an individual layer merely
+  // because its decoder has not reached the new target yet. In a multilayer
+  // composition that would make only that clip disappear while the remaining
+  // layers continue rendering. Keep the last owner-matched frame until a
+  // fresher cache/live frame replaces it; stale motion is preferable to a
+  // transient black/transparent layer during an in-flight seek.
+  const emergencyHoldFrame = isDragging ? lastSameClipFrame : dragHoldFrame;
   const sameClipHoldFrame =
     (isDragging || isSettling || video.seeking || video.readyState < 2)
       ? isFrameNearTarget(
@@ -149,7 +144,7 @@ export function collectNotReadyHtmlVideo(
     };
   }
   if (deps.isPlaying) {
-    const anyFrame = getPlaybackStallHoldFrame(layer, video, deps, targetTime);
+    const anyFrame = getPlaybackStallHoldFrame(layer, video, deps);
     if (anyFrame) {
       controller.traceScrubPath(layer, 'playback-stall-hold', video, targetTime, deps.scrubbingCache?.getLastPresentedTime(video));
       controller.setDecoder('HTMLVideo(cached)');

@@ -20,7 +20,7 @@ The mapped animation combines the original and generated edits without reinterpr
 
 ## Transition Templates
 
-There are 74 active runtime transitions. The generic compiler materializes 73 of them from their recipes; Light Leak uses its dedicated mapped builder for its outgoing, masked incoming, and light-streak layers.
+There are 75 active runtime transitions. The generic compiler materializes recipe-backed transitions; Light Leak uses its dedicated mapped builder for outgoing, masked incoming, and light-streak layers, while Datamosh can replace its clean incoming-frame fallback with a baked codec artifact.
 
 The generic compiler is `templateVersion` 4; Light Leak is `templateVersion` 3. These are recipe-template revisions, not the `sourceLayout: mapped-v3` format name.
 
@@ -31,6 +31,12 @@ Recipes materialize normal editable layers: opacity, transforms, effects, masks,
 Preview, live runtime, paused-frame sync, mask-texture updates, and export all resolve the same source map and mapped animation. Before a transition has been opened or saved as a composition, preview and export build that same mapped-v3 scene transiently; no project state is created just to render it. Holds stay on their mapped frame; reverse or variable-speed source playback keeps its signed timing. The nested transition composition is the transition rendered by the parent timeline.
 
 Dynamic nested video sources are recollected within a timeline frame instead of reusing a same-time nested texture, so a late decoded source frame updates the mapped composite without a separate transition renderer.
+
+### Datamosh codec bake
+
+Datamosh is a codec-domain transition rather than a shader approximation. Its Properties section renders the outgoing and incoming participants, encodes an MPEG-4 Part 2 stream, removes the junction I-frame, and imports the resulting H.264/MP4 playback artifact into a project-backed `Datamosh` media folder. The transition stores only the imported media ID and bounded bake metadata. Preview, nested composition playback, and export then use that seekable artifact in real time.
+
+Changing transition duration or data rate marks the artifact stale and exposes **Rebake Datamosh**. Until a current artifact exists, the transition fails safely to the incoming frame. Export preparation resolves baked media through the normal runtime registry and does not repeat the destructive codec operation during final delivery.
 
 ## Editing
 

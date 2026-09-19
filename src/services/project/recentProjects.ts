@@ -1,6 +1,7 @@
 import { Logger } from '../logger';
 import { projectDB } from '../projectDB';
 import type { ProjectFile } from './types';
+import { resolveProjectRootMode } from './core/projectRootAccess';
 
 const log = Logger.create('RecentProjects');
 
@@ -10,7 +11,7 @@ const MAX_RECENT_PROJECTS = 12;
 
 export const RECENT_PROJECTS_CHANGED_EVENT = 'masterselects-recent-projects-changed';
 
-export type RecentProjectBackend = 'fsa' | 'native';
+export type RecentProjectBackend = 'fsa' | 'opfs' | 'native';
 
 export interface RecentProjectEntry {
   id: string;
@@ -57,7 +58,7 @@ function isRecentProjectEntry(value: unknown): value is RecentProjectEntry {
     return false;
   }
 
-  if (entry.backend !== 'fsa' && entry.backend !== 'native') {
+  if (entry.backend !== 'fsa' && entry.backend !== 'opfs' && entry.backend !== 'native') {
     return false;
   }
 
@@ -67,6 +68,10 @@ function isRecentProjectEntry(value: unknown): value is RecentProjectEntry {
 
   if (entry.backend === 'fsa') {
     return typeof entry.handleKey === 'string';
+  }
+
+  if (entry.backend === 'opfs') {
+    return typeof entry.path === 'string' && entry.path.length > 0;
   }
 
   return typeof entry.path === 'string' && entry.path.length > 0;
@@ -206,6 +211,22 @@ export async function addRecentFsaProject(
   handle: FileSystemDirectoryHandle,
   projectData: ProjectFile | null,
 ): Promise<void> {
+  if (resolveProjectRootMode() === 'opfs') {
+    const entries = getRecentProjects();
+    const projectName = handle.name || projectData?.name || 'Project';
+    const existing = entries.find((entry) => entry.backend === 'opfs' && entry.path === projectName);
+    const nextEntry: RecentProjectEntry = {
+      id: existing?.id ?? createRecentId(),
+      name: projectData?.name || projectName,
+      backend: 'opfs',
+      path: projectName,
+      updatedAt: projectData?.updatedAt,
+      lastOpenedAt: Date.now(),
+    };
+    await persistEntries(upsertEntry(entries, nextEntry));
+    return;
+  }
+
   const entries = getRecentProjects();
   const existing = await findFsaEntry(entries, handle);
   const id = existing?.id ?? createRecentId();

@@ -10,7 +10,7 @@ import type { ClipDragState, ClipTrimState } from '../types';
 import {
   canLoopExtendTimelineVectorClip,
   getTimelineClipSourceDuration,
-  isInfiniteTimelineSourceType,
+  isInfiniteTimelineClipSource,
 } from './clipSourceTiming';
 import type { TimelineClipCanvasTrimGeometry } from './timelineClipCanvasTrimResource';
 import {
@@ -112,8 +112,7 @@ export function resolveClipGeometry(
       outPoint: originalOutPoint,
     };
     const sourceRate = getClipSourceRate(originalWindow);
-    const sourceType = clip.source?.type;
-    const isInfiniteClip = isInfiniteTimelineSourceType(sourceType);
+    const isInfiniteClip = isInfiniteTimelineClipSource(clip);
     if (clipTrim.edge === 'left') {
       const maxTrim = originalDuration - MIN_CLIP_DURATION;
       const minTrim = isInfiniteClip

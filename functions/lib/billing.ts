@@ -1,4 +1,4 @@
-import { ensureFreePlanCredits, getCreditBalance, getCreditMeterReference } from './credits';
+import { ensureWelcomeCredits, getCreditBalance, getCreditMeterReference } from './credits';
 import {
   getEntitlementSnapshot,
   listEntitlements,
@@ -55,21 +55,20 @@ export async function getCurrentPlanId(db: AppD1Database, userId: string): Promi
 export async function getUserBillingSnapshot(
   db: AppD1Database,
   userId: string,
+  options: { guest?: boolean } = {},
 ): Promise<UserBillingSnapshot> {
   const [planId, entitlementRows] = await Promise.all([
     getCurrentPlanId(db, userId),
     listEntitlements(db, userId),
   ]);
 
-  if (planId === 'free') {
-    await ensureFreePlanCredits(db, userId);
-  }
+  if (!options.guest) await ensureWelcomeCredits(db, userId);
 
   const balance = await getCreditBalance(db, userId);
   const snapshot = getEntitlementSnapshot(planId, entitlementRows);
   const creditMeterReference = await getCreditMeterReference(db, userId, {
     balance,
-    monthlyCredits: snapshot.monthlyCredits,
+    monthlyCredits: options.guest ? 0 : snapshot.monthlyCredits,
   });
 
   return {

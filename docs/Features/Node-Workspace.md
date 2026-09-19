@@ -2,9 +2,11 @@
 
 # Node Workspace
 
-The Node Workspace is a dockable graph view for the currently selected timeline clip. It follows the same primary selection rule as Properties: the last clicked selected clip is used, with a fallback to the first selected clip. Linked video/audio clips resolve to one graph owner: selecting either side opens the visual clip's graph, while the linked audio clip feeds the source node's audio and analysis ports.
+The Node Workspace is a dockable, themed view of the canonical node-graph document for the currently selected timeline clip. It follows the same primary selection rule as Properties: the last clicked selected clip is used, with a fallback to the first selected clip. Linked video/audio clips resolve to one graph owner: selecting either side opens the visual clip's graph, while the linked audio clip feeds the source node's audio and analysis ports.
 
-The graph is derived from existing clip state and shares the normal render model. Node layout state is saved on the owning clip, while node parameters read from the normal clip fields. A plain video clip appears as:
+`NodeGraphDocument` is the common container for every node domain. It owns the clip-level root graph plus available subgraphs and declares named views such as **General** and **Color**. A panel theme chooses how much of that one document to expose; it does not create an unrelated node system. The current implementation projects the existing clip render chain into the General view and the active color-grade version into the Color view. Motion and audio are reserved view themes that can join the same contract later.
+
+The graph is derived from existing clip state and shares the normal render model. Nodes carry explicit domain and backing bindings, so edits route back to the authoritative clip, effect, custom-node, or color-grade state. Node layout state is saved on the owning clip/domain, while node parameters read from the normal clip fields. A plain video clip appears as:
 
 ```text
 Video Source -> Clip Output
@@ -17,6 +19,10 @@ Source -> Transform -> Masks -> Color Graph -> Effects -> Clip Output
 ```
 
 For visual graph owners with audio, audio effects are shown in a separate audio lane and feed the combined `Clip Output` node's audio input. Audio-only graph owners use the main lane. The graph uses one combined `Clip Output` node for linked or audio-capable clips. The canvas uses the Media Panel board interaction model: pan, wheel zoom, node dragging, fit/reset view, compact node cards, typed ports, edges, and an inspector for the selected node.
+
+Flock clips add a **Flock** view (breadcrumb `Clip graph › Flock`, also opened from the Properties **Open Nodes** button). It projects the clip's executable `FlockDefinition` with typed flock ports (spawn, behavior, particles, curves, …), so the canvas only offers connections the flock validator accepts. Edits — add/delete/duplicate/group/ungroup, connect/disconnect (also keyboard-accessible from the inspector), bypass, rename, parameter edits with source-time keyframes, and **Expose** to the Properties panel — go through the timeline store's flock actions with one undo step per action. Group and whole-graph presets are stored in a local preset library. See [Flock Clips](./Flock-Clips.md).
+
+The view tabs edit the same underlying state. General-view node movement and connections write to the clip graph; Color-view movement, bypass, typed texture/key connections, deletion, and Primary/Wheels creation write to `ColorCorrectionState`. Switching views therefore never copies or converts grades.
 
 Right-clicking the canvas opens an Add Node menu. It can add AI Nodes at the clicked graph position, force field-backed built-ins such as Transform, Mask, and Color into the graph, and add existing effect types from an Effect Nodes submenu. Right-clicking a removable node also exposes Delete Node; pressing Delete or Backspace removes the selected Effect or AI node, and removes a forced built-in node when it was only shown by the graph.
 

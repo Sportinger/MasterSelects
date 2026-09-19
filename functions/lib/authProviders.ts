@@ -187,7 +187,7 @@ export async function sendMagicLinkEmail(
           <h2 style="margin:0 0 12px">Sign in to MasterSelects</h2>
           <p style="margin:0 0 16px">Use the secure link below to continue.</p>
           <p style="margin:0 0 20px">
-            <a href="${input.callbackUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:600">
+            <a href="${escapeHtml(input.callbackUrl)}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:600">
               Sign in
             </a>
           </p>

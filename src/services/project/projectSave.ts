@@ -1,3 +1,6 @@
+import { clonePlanarTracks } from '../planarTracking/clonePlanarTracks';
+import { cloneTerrainAnchorConnector, cloneTerrainAttachment, cloneTerrainScreenAnchor } from '../../types/terrainAttachment';
+import { cloneTrackingBinding } from '../../types/trackingBinding';
 // Project Save — sync stores to project file format
 
 import { Logger } from '../logger';
@@ -10,13 +13,20 @@ import { useTimelineStore } from '../../stores/timeline';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import {
+  getActiveFlashBoardAIWorkspaceId,
   getFlashBoardActiveGenerationRecords,
+  getFlashBoardAIWorkspaces,
   getFlashBoardChatMessages,
   getFlashBoardComposerState,
   getFlashBoardPromptHistory,
   type FlashBoardActiveGenerationRecord,
 } from '../../stores/flashboardStore/activeGenerationRecords';
-import type { FlashBoardChatMessage, FlashBoardComposerState, FlashBoardPromptHistoryEntry } from '../../stores/flashboardStore/types';
+import type {
+  FlashBoardAIWorkspace,
+  FlashBoardChatMessage,
+  FlashBoardComposerState,
+  FlashBoardPromptHistoryEntry,
+} from '../../stores/flashboardStore/types';
 import { getExportStoreData, useExportStore } from '../../stores/exportStore';
 import { useMIDIStore } from '../../stores/midiStore';
 import { recordHistoryEvent, serializeHistoryStateForProject } from '../../stores/historyStore';
@@ -30,6 +40,7 @@ import { normalizeTransitionInstanceParams } from '../../transitions';
 import { normalizeMotionLayerDefinition } from '../motionDesign/contracts/replicatorTimelineAdapter';
 import { syncTransitionCompositionTimelineToParent } from '../../stores/mediaStore/slices/composition/transitionCompositionSync';
 import type {
+  ProjectFlashBoardAIWorkspace,
   ProjectFlashBoardComposerState,
   ProjectFlashBoardGenerationMetadata,
   ProjectFlashBoardGenerationRecord,
@@ -56,6 +67,7 @@ import {
 } from './projectMediaSerialization';
 import {
   isProjectStoreSyncInProgress,
+  withProjectStoreDirtyMarkSuppressed,
   withProjectStoreSyncGuard,
 } from './projectStoreSyncGuard';
 import { persistFlashBoardChatJournal } from './flashBoardChatProjectJournal';
@@ -63,6 +75,9 @@ import {
   getStoryboardProjectSnapshot,
   reconcileStoryboardTimelineClips,
 } from '../../stores/storyboardStore';
+import { getSeedancePreproductionProjectState } from '../../stores/seedancePreproductionStore';
+import { useTrackingStore } from '../../stores/trackingStore';
+import { cloneTrackingAssets, ensureLegacyTrackingAssets } from '../planarTracking/trackingAssets';
 import {
   collectLegacyMediaArtifactSeeds,
   persistLegacyMediaArtifactSeeds,
@@ -83,6 +98,7 @@ import type {
 
 const log = Logger.create('ProjectSync');
 export {
+  isProjectStoreDirtyMarkSuppressed,
   isProjectStoreSyncInProgress,
   withProjectStoreSyncGuard,
 } from './projectStoreSyncGuard';
@@ -201,6 +217,11 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       transform: toProjectTransform(c.transform),
       sourceRect: c.sourceRect ? structuredClone(c.sourceRect) : undefined,
       transitionRender: c.transitionRender ? structuredClone(c.transitionRender) : undefined,
+      planarTracks: clonePlanarTracks(c.planarTracks),
+      trackingBinding: cloneTrackingBinding(c.trackingBinding),
+      terrainAttachment: cloneTerrainAttachment(c.terrainAttachment),
+      terrainScreenAnchor: cloneTerrainScreenAnchor(c.terrainScreenAnchor),
+      terrainAnchorConnector: cloneTerrainAnchorConnector(c.terrainAnchorConnector),
       effects: (c.effects || []).map((e) => ({
         id: e.id,
         type: e.type,
@@ -215,10 +236,15 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       transitionSourceMap: c.transitionSourceMap ? structuredClone(c.transitionSourceMap) : undefined,
       transitionRecipeBlendWindows: c.transitionRecipeBlendWindows ? structuredClone(c.transitionRecipeBlendWindows) : undefined,
       colorCorrection: c.colorCorrection ? structuredClone(c.colorCorrection) : undefined,
+      colorGradeMode: c.colorGradeMode,
+      localColorCorrection: c.localColorCorrection
+        ? structuredClone(c.localColorCorrection)
+        : undefined,
       nodeGraph: cloneClipNodeGraph(c.nodeGraph),
       masks: (c.masks || []).map((m) => ({
         id: m.id,
         name: m.name || 'Mask',
+        purpose: m.purpose,
         mode: m.mode || 'add',
         inverted: m.inverted || false,
         opacity: m.opacity ?? 1,
@@ -237,6 +263,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
           handleMode: vertex.handleMode,
         })),
         position: m.position || { x: 0, y: 0 },
+        rotation: m.rotation ?? 0,
       })),
       keyframes: (c.keyframes || []).map((keyframe) => ({
         ...keyframe,
@@ -272,6 +299,8 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
         : undefined,
       // Math scene clip support
       mathScene: c.mathScene ? structuredClone(c.mathScene) : undefined,
+      // Flock clip executable graph (plain JSON; runtime caches live elsewhere)
+      flock: (c.source?.type === 'flock' || c.sourceType === 'flock') && c.flock ? structuredClone(c.flock) : undefined,
       // Motion design clip support
       motion: c.motion ? normalizeMotionLayerDefinition(c.motion) : undefined,
       vectorAnimationSettings: c.source?.vectorAnimationSettings || c.vectorAnimationSettings || undefined,
@@ -310,6 +339,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       labelColor: comp.labelColor && comp.labelColor !== 'none' ? comp.labelColor : undefined,
       transitionComp: comp.transitionComp ? structuredClone(comp.transitionComp) : undefined,
       captionComp: comp.captionComp ? structuredClone(comp.captionComp) : undefined,
+      annotations: comp.annotations ? structuredClone(comp.annotations) : undefined,
       tracks,
       clips,
       videoBakeRegions: timelineData?.videoBakeRegions
@@ -331,6 +361,7 @@ function serializeFlashBoardGenerationRecord(
 ): ProjectFlashBoardGenerationRecord {
   return {
     id: record.id,
+    workspaceId: record.workspaceId,
     createdAt: new Date(record.createdAt).toISOString(),
     updatedAt: new Date(record.updatedAt).toISOString(),
     request: record.request,
@@ -346,6 +377,7 @@ function serializeFlashBoardComposerState(
 ): ProjectFlashBoardComposerState {
   return {
     isOpen: composer.isOpen,
+    draftPrompt: composer.draftPrompt,
     service: composer.service,
     providerId: composer.providerId,
     version: composer.version,
@@ -362,6 +394,9 @@ function serializeFlashBoardComposerState(
     languageOverride: composer.languageOverride,
     languageCode: composer.languageCode,
     outputFormat: composer.outputFormat,
+    videoOutputFormat: composer.videoOutputFormat,
+    webSearch: composer.webSearch,
+    returnLastFrame: composer.returnLastFrame,
     voiceSettings: composer.voiceSettings,
     sunoCustomMode: composer.sunoCustomMode,
     sunoInstrumental: composer.sunoInstrumental,
@@ -376,6 +411,21 @@ function serializeFlashBoardComposerState(
     endMediaFileId: composer.endMediaFileId,
     referenceMediaFileIds: composer.referenceMediaFileIds,
     modelSettingsByKey: composer.modelSettingsByKey,
+  };
+}
+
+function serializeFlashBoardAIWorkspace(
+  workspace: FlashBoardAIWorkspace,
+): ProjectFlashBoardAIWorkspace {
+  return {
+    id: workspace.id,
+    title: workspace.title,
+    kind: workspace.kind,
+    createdAt: new Date(workspace.createdAt).toISOString(),
+    updatedAt: new Date(workspace.updatedAt).toISOString(),
+    chatConversationRef: workspace.chatConversationRef,
+    composer: serializeFlashBoardComposerState(workspace.composer),
+    chatMessages: workspace.chatMessages.map(serializeFlashBoardChatMessage),
   };
 }
 
@@ -395,6 +445,8 @@ function serializeFlashBoardState(
   composer: FlashBoardComposerState,
   promptHistory: FlashBoardPromptHistoryEntry[],
   chatMessages: FlashBoardChatMessage[],
+  workspaces: FlashBoardAIWorkspace[],
+  activeWorkspaceId: string,
 ): ProjectFlashBoardState {
   const generationMetadataByMediaId: Record<string, ProjectFlashBoardGenerationMetadata> = {
     ...flashBoardMediaBridge.serializeMetadata(),
@@ -405,6 +457,11 @@ function serializeFlashBoardState(
       if (!result.mediaFileId || !record.request) continue;
       generationMetadataByMediaId[result.mediaFileId] = {
         mediaFileId: result.mediaFileId,
+        workspaceId: record.workspaceId,
+        generationElapsedMs: Math.max(
+          0,
+          (record.job?.completedAt ?? record.updatedAt) - (record.job?.startedAt ?? record.createdAt),
+        ),
         service: record.request.service,
         providerId: record.request.providerId,
         version: record.request.version,
@@ -444,10 +501,12 @@ function serializeFlashBoardState(
   }
 
   return {
-    version: 1,
+    version: 2,
     composer: serializeFlashBoardComposerState(composer),
     promptHistory: promptHistory.map(serializeFlashBoardPromptHistoryEntry),
     chatMessages: chatMessages.map(serializeFlashBoardChatMessage),
+    workspaces: workspaces.map(serializeFlashBoardAIWorkspace),
+    activeWorkspaceId,
     generationRecords: records.map(serializeFlashBoardGenerationRecord),
     generationMetadataByMediaId,
   };
@@ -501,17 +560,19 @@ export async function syncStoresToProject(): Promise<void> {
     if (mediaState.activeCompositionId) {
       const activeCompositionId = mediaState.activeCompositionId;
       const timelineData = timelineStore.getSerializableState();
-      useMediaStore.setState((state) => ({
-        compositions: syncTransitionCompositionTimelineToParent(
-          state.compositions.map((c) =>
-            c.id === activeCompositionId
-              ? { ...c, duration: timelineData.duration, timelineData }
-              : c
+      withProjectStoreDirtyMarkSuppressed(() => {
+        useMediaStore.setState((state) => ({
+          compositions: syncTransitionCompositionTimelineToParent(
+            state.compositions.map((c) =>
+              c.id === activeCompositionId
+                ? { ...c, duration: timelineData.duration, timelineData }
+                : c
+            ),
+            activeCompositionId,
+            timelineData,
           ),
-          activeCompositionId,
-          timelineData,
-        ),
-      }));
+        }));
+      });
     }
 
     // Get fresh state after update
@@ -530,6 +591,8 @@ export async function syncStoresToProject(): Promise<void> {
       return;
     }
 
+    ensureLegacyTrackingAssets();
+
     // Update project file data
     const projectMedia = convertMediaFiles(freshState.files);
     const projectCompositions = convertCompositions(freshState.compositions);
@@ -539,6 +602,12 @@ export async function syncStoresToProject(): Promise<void> {
 
     // Update active state
     if (projectData) {
+      const trackingAssets = cloneTrackingAssets(useTrackingStore.getState().assets);
+      if (trackingAssets.length > 0) {
+        projectData.trackingAssets = trackingAssets;
+      } else {
+        delete projectData.trackingAssets;
+      }
       projectData.activeCompositionId = freshState.activeCompositionId;
       projectData.openCompositionIds = freshState.openCompositionIds;
       projectData.expandedFolderIds = freshState.expandedFolderIds;
@@ -690,9 +759,14 @@ export async function syncStoresToProject(): Promise<void> {
         getFlashBoardComposerState(),
         getFlashBoardPromptHistory(),
         getFlashBoardChatMessages(),
+        getFlashBoardAIWorkspaces(),
+        getActiveFlashBoardAIWorkspaceId(),
       );
-      reconcileStoryboardTimelineClips(useTimelineStore.getState().clips);
+      withProjectStoreDirtyMarkSuppressed(() => {
+        reconcileStoryboardTimelineClips(useTimelineStore.getState().clips);
+      });
       projectData.storyboard = getStoryboardProjectSnapshot();
+      projectData.seedancePreproduction = getSeedancePreproductionProjectState();
 
       if (!await persistFlashBoardChatJournal(getFlashBoardChatMessages())) {
         log.warn(' Chat journal could not be mirrored to the project folder');
@@ -700,7 +774,7 @@ export async function syncStoresToProject(): Promise<void> {
     }
 
     log.info(' Synced stores to project');
-  });
+  }, { suppressDirtyMarks: false });
 }
 
 /**

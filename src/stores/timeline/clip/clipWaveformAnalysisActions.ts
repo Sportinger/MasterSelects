@@ -10,11 +10,13 @@ import {
 import { clipAudioAnalysisJobService } from '../../../services/audio/ClipAudioAnalysisJobService';
 import { hasTimelineWaveformData } from '../../../utils/audioWaveformPresence';
 import type { GenerateClipAudioAnalysisOptions } from '../types';
+import { updateDerivedTimelineClips } from '../revisionMiddleware';
 import type { ClipActionContext } from './clipActionContext';
 import {
   clearAudioAnalysisJobUpdate,
   createAudioAnalysisJobUpdate,
   isAudioAnalysisCancellation,
+  isUnreadableClipSourceError,
   resolveClipSourceFile,
   updateAudioAnalysisJobProgress,
 } from './clipAudioAnalysisShared';
@@ -34,24 +36,30 @@ export async function generateWaveformForClipAction(
   options: GenerateClipAudioAnalysisOptions = {},
 ): Promise<void> {
   const { get, set } = context;
+  const updateClips = (updater: Parameters<typeof updateDerivedTimelineClips>[0]): void => {
+    if (options.derivedOnly) {
+      updateDerivedTimelineClips(updater);
+      return;
+    }
+    set({ clips: updater(get().clips) });
+  };
   const clip = get().clips.find(c => c.id === clipId);
   if (!clip || clip.waveformGenerating) return;
   if (!options.force && hasTimelineWaveformData(clip)) return;
+  if (options.derivedOnly && clip.isComposition) return;
   const includePyramid = options.previewOnly !== true;
 
-  set({
-    clips: updateClipById(get().clips, clipId, createAudioAnalysisJobUpdate({
+  updateClips(clips => updateClipById(clips, clipId, createAudioAnalysisJobUpdate({
       kind: 'waveform-pyramid',
       label: includePyramid ? 'Waveform' : 'Waveform Preview',
       artifactKinds: includePyramid ? ['waveform-pyramid'] : [],
       processed: false,
-    })),
-  });
+    })));
   log.debug('Starting waveform generation', { clip: clip.name, includePyramid });
 
   try {
     await clipAudioAnalysisJobService.run({ clipId, kind: 'waveform-pyramid' }, async ({ signal }) => {
-      set({ clips: updateAudioAnalysisJobProgress(get().clips, clipId, 1, 'preparing', 'Preparing waveform') });
+      updateClips(clips => updateAudioAnalysisJobProgress(clips, clipId, 1, 'preparing', 'Preparing waveform'));
       let waveform: number[];
       let waveformChannels: number[][] | undefined;
       let audioAnalysisRefs: MediaFileAudioAnalysisRefs | undefined;
@@ -63,14 +71,12 @@ export async function generateWaveformForClipAction(
 
         if (mixdownResult?.hasAudio) {
           waveform = mixdownResult.waveform;
-          set({
-            clips: updateClipById(get().clips, clipId, {
+          updateClips(clips => updateClipById(clips, clipId, {
               mixdownBuffer: mixdownResult.buffer,
               mixdownWaveform: mixdownResult.waveform,
               hasMixdownAudio: true,
               mixdownGenerating: false,
-            }),
-          });
+            }));
         } else if (clip.mixdownBuffer) {
           waveform = generateWaveformFromBuffer(clip.mixdownBuffer, 50);
         } else {
@@ -80,35 +86,36 @@ export async function generateWaveformForClipAction(
         const sourceFile = await resolveClipSourceFile(clip);
         if (!sourceFile) {
           log.warn('No file found for clip', { clipId });
-          set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+          updateClips(clips => updateClipById(clips, clipId, {
+            ...(!options.derivedOnly ? { file: undefined, needsReload: true } : {}),
+            ...clearAudioAnalysisJobUpdate(),
+          }));
           return;
         }
 
-        set({ clips: updateClipById(get().clips, clipId, { file: sourceFile }) });
+        if (!options.derivedOnly) {
+          updateClips(clips => updateClipById(clips, clipId, { file: sourceFile }));
+        }
         const analysis = await generateTimelineWaveformAnalysisForFile(sourceFile, {
           mediaFileId: clip.mediaFileId ?? clip.source?.mediaFileId,
           includePyramid,
           signal,
           onProgress: (progress, partialWaveform) => {
-            set({
-              clips: updateAudioAnalysisJobProgress(
-                updateClipById(get().clips, clipId, { waveform: partialWaveform }),
+            updateClips(clips => updateAudioAnalysisJobProgress(
+                updateClipById(clips, clipId, { waveform: partialWaveform }),
                 clipId,
                 includePyramid ? mapSourceWaveformPreviewProgress(progress) : progress,
                 'analyzing',
-              ),
-            });
+              ));
           },
           onPyramidProgress: (progress) => {
-            set({
-              clips: updateAudioAnalysisJobProgress(
-                get().clips,
+            updateClips(clips => updateAudioAnalysisJobProgress(
+                clips,
                 clipId,
                 mapSourceWaveformPyramidProgress(progress),
                 progress.phase.startsWith('storing') ? 'storing' : 'analyzing',
                 progress.message,
-              ),
-            });
+              ));
           },
         });
         waveform = analysis.waveform;
@@ -118,7 +125,7 @@ export async function generateWaveformForClipAction(
 
       if (signal.aborted) throw signal.reason;
       const currentClip = get().clips.find(c => c.id === clipId);
-      set({ clips: updateClipById(get().clips, clipId, {
+      updateClips(clips => updateClipById(clips, clipId, {
         waveform,
         waveformChannels,
         ...(audioAnalysisRefs
@@ -134,14 +141,22 @@ export async function generateWaveformForClipAction(
           : {}),
         ...clearAudioAnalysisJobUpdate(),
         waveformProgress: 100,
-      }) });
+      }));
     });
   } catch (e) {
     if (isAudioAnalysisCancellation(e)) {
       log.debug('Waveform generation cancelled', { clipId });
+    } else if (isUnreadableClipSourceError(e)) {
+      log.warn('Waveform source became unavailable', { clipId });
     } else {
       log.error('Waveform generation failed', e);
     }
-    set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+    updateClips(clips => updateClipById(clips, clipId, {
+      ...(isUnreadableClipSourceError(e) && !options.derivedOnly
+        ? { file: undefined, needsReload: true } : {}),
+      ...clearAudioAnalysisJobUpdate(),
+    }));
+    // Background callers must distinguish a failed analysis from completion.
+    if (options.derivedOnly && !isAudioAnalysisCancellation(e)) throw e;
   }
 }

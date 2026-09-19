@@ -1,0 +1,69 @@
+.seedance-concept-workshop { background: rgba(255,255,255,.43); border: 1px solid rgba(22,22,22,.08); border-radius: 1.25rem; overflow: hidden; }
+.seedance-concept-workshop > header { align-items: flex-start; display: flex; gap: 1.25rem; justify-content: space-between; padding: clamp(1.15rem,2.2vw,1.75rem); }
+.seedance-concept-workshop > header > div, .seedance-workshop-section-title { display: flex; flex-direction: column; }
+.seedance-concept-workshop > header span, .seedance-workshop-section-title small, .seedance-workshop-draft-copy > small, .seedance-workshop-final-kicker > small { color: var(--landing-teal); font-size: .7rem; font-weight: 780; letter-spacing: .07em; text-transform: uppercase; }
+.seedance-concept-workshop > header h2 { font-size: clamp(1.35rem,2.4vw,1.9rem); letter-spacing: -.025em; margin: .2rem 0 0; }
+.seedance-concept-workshop > header p { color: rgba(22,22,22,.6); font-size: .9rem; line-height: 1.55; margin: .42rem 0 0; max-width: 52rem; }
+.seedance-workshop-status { align-items: flex-end; display: flex; flex: 0 0 auto; flex-direction: column; gap: .6rem; }
+.seedance-workshop-status > strong { background: rgba(14,124,134,.08); border: 1px solid rgba(14,124,134,.14); border-radius: 999px; color: var(--landing-teal); font-size: .74rem; max-width: 24rem; padding: .55rem .75rem; }
+.seedance-workshop-status > button { min-height: 2.5rem; }
+.seedance-workshop-originals, .seedance-workshop-finals { border-top: 1px solid rgba(22,22,22,.07); padding: clamp(1rem,2.2vw,1.75rem); }
+.seedance-workshop-section-title { margin-bottom: 1rem; }
+.seedance-workshop-section-title strong { font-size: 1.08rem; margin-top: .15rem; }
+.seedance-workshop-draft-grid { display: grid; gap: .7rem; }
+.seedance-workshop-draft { align-items: flex-start; background: rgba(255,255,255,.5); border: 1px solid rgba(22,22,22,.08); border-radius: .9rem; display: grid; gap: .75rem; grid-template-columns: 2rem minmax(0,1fr); padding: .75rem; }
+.seedance-workshop-draft > span { color: rgba(14,124,134,.42); font-size: .78rem; font-weight: 780; }
+.seedance-workshop-draft.is-pending { opacity: .55; }
+.seedance-workshop-draft-copy > strong, .seedance-workshop-draft.is-pending strong { display: block; font-size: .88rem; margin-top: .08rem; }
+.seedance-workshop-format { align-self: flex-start; background: rgba(14,124,134,.075); border: 1px solid rgba(14,124,134,.12); border-radius: 999px; color: var(--landing-teal); display: inline-flex; font-size: .68rem; font-weight: 720; line-height: 1.35; margin-top: .45rem; padding: .32rem .55rem; }
+.seedance-workshop-draft-copy > p, .seedance-workshop-draft details p, .seedance-workshop-review > p, .seedance-workshop-final p, .seedance-workshop-final dd { color: rgba(22,22,22,.62); font-size: .7rem; line-height: 1.5; }
+.seedance-workshop-draft-copy > p { margin: .25rem 0 0; }
+.seedance-workshop-draft details { margin-top: .45rem; }
+.seedance-workshop-draft summary { color: var(--landing-teal); cursor: pointer; font-size: .64rem; font-weight: 720; }
+.seedance-workshop-dramaturgy-list { color: rgba(22,22,22,.65); display: grid; font-size: .7rem; gap: .35rem; line-height: 1.5; margin: .55rem 0 0; padding-left: 1.25rem; }
+.seedance-workshop-draft dl { display: grid; gap: .45rem; margin: .6rem 0 0; }
+.seedance-workshop-draft dt { color: rgba(22,22,22,.42); font-size: .58rem; font-weight: 760; text-transform: uppercase; }
+.seedance-workshop-draft dd { margin: .1rem 0 0; }
+.seedance-workshop-review { background: rgba(14,124,134,.035); border: 1px solid rgba(14,124,134,.1); border-radius: .75rem; margin-top: .7rem; padding: .6rem; }
+.seedance-workshop-review > header { align-items: center; display: flex; gap: .5rem; }
+.seedance-workshop-review > header > span { align-items: center; background: rgba(14,124,134,.1); border-radius: 999px; color: var(--landing-teal); display: inline-flex; height: 1.55rem; justify-content: center; width: 1.55rem; }
+.seedance-workshop-review svg { height: .85rem; width: .85rem; }
+.seedance-workshop-review header div { display: flex; flex-direction: column; }
+.seedance-workshop-review header small { color: rgba(22,22,22,.45); font-size: .56rem; text-transform: uppercase; }
+.seedance-workshop-review header strong { font-size: .68rem; text-transform: capitalize; }
+.seedance-workshop-review ul { color: rgba(22,22,22,.58); font-size: .65rem; line-height: 1.45; margin: .4rem 0 0; padding-left: 1rem; }
+.seedance-workshop-final-grid { align-items: start; display: grid; gap: 1.1rem; grid-template-columns: repeat(2,minmax(0,1fr)); }
+.seedance-workshop-final { background: rgba(255,255,255,.72); border: 1px solid rgba(14,124,134,.18); border-radius: 1.15rem; box-shadow: 0 .75rem 2rem rgba(53,49,40,.055); display: flex; flex-direction: column; gap: 1rem; padding: clamp(1.05rem,1.8vw,1.4rem); }
+.seedance-workshop-final-header { display: flex; flex-direction: column; }
+.seedance-workshop-final-kicker { align-items: center; display: flex; gap: .65rem; }
+.seedance-workshop-final .seedance-card-number { color: rgba(14,124,134,.32); font-size: 2rem; font-weight: 820; letter-spacing: -.06em; line-height: 1; }
+.seedance-workshop-final h3 { font-size: clamp(1.3rem,2vw,1.6rem); letter-spacing: -.025em; line-height: 1.12; margin: .5rem 0 0; }
+.seedance-workshop-final p, .seedance-workshop-final dd { color: rgba(22,22,22,.68); font-size: .93rem; line-height: 1.65; }
+.seedance-workshop-final-visual { padding: .05rem 0 .1rem; }
+.seedance-workshop-final-visual h4, .seedance-workshop-final-story h4, .seedance-workshop-final-dramaturgy h4 { color: var(--landing-teal); font-size: .76rem; letter-spacing: .065em; margin: 0; text-transform: uppercase; }
+.seedance-workshop-final-visual p { color: rgba(22,22,22,.9); font-size: 1.04rem; font-weight: 690; line-height: 1.62; margin: .45rem 0 0; }
+.seedance-workshop-final-more { border-top: 1px solid rgba(22,22,22,.09); }
+.seedance-workshop-final-more > summary { align-items: center; color: var(--landing-teal); cursor: pointer; display: flex; flex-wrap: wrap; font-size: .84rem; font-weight: 780; gap: .25rem .65rem; justify-content: space-between; list-style: none; padding: .85rem .1rem .05rem; }
+.seedance-workshop-final-more > summary::-webkit-details-marker { display: none; }
+.seedance-workshop-final-more > summary::after { content: '+'; font-size: 1.25rem; font-weight: 500; line-height: 1; margin-left: auto; }
+.seedance-workshop-final-more[open] > summary::after { content: '−'; }
+.seedance-workshop-final-more > summary small { color: rgba(22,22,22,.46); font-size: .68rem; font-weight: 600; margin-right: auto; }
+.seedance-workshop-final-more-content { display: grid; gap: .75rem; padding-top: .85rem; }
+.seedance-workshop-final-dramaturgy { background: rgba(22,22,22,.035); border: 1px solid rgba(22,22,22,.075); border-radius: .85rem; padding: .95rem 1rem; }
+.seedance-workshop-final-dramaturgy ol { counter-reset: visual-sentence; display: grid; gap: .7rem; list-style: none; margin: .7rem 0 0; padding: 0; }
+.seedance-workshop-final-dramaturgy li { color: rgba(22,22,22,.7); counter-increment: visual-sentence; display: grid; font-size: .92rem; gap: .6rem; grid-template-columns: 1.4rem minmax(0,1fr); line-height: 1.58; }
+.seedance-workshop-final-dramaturgy li::before { color: rgba(14,124,134,.58); content: counter(visual-sentence,decimal-leading-zero); font-size: .66rem; font-weight: 800; letter-spacing: .04em; padding-top: .18rem; }
+.seedance-workshop-final .seedance-workshop-premise { color: rgba(22,22,22,.86); font-size: 1rem; font-weight: 680; line-height: 1.58; margin: .5rem 0 0; }
+.seedance-workshop-final-story { background: linear-gradient(135deg,rgba(14,124,134,.075),rgba(255,255,255,.48)); border: 1px solid rgba(14,124,134,.12); border-radius: .85rem; padding: .9rem 1rem; }
+.seedance-workshop-final-story p { margin: .4rem 0 0; }
+.seedance-workshop-final-details { display: grid; gap: .7rem; margin: 0; }
+.seedance-workshop-final-details > div { --section-accent: 14,124,134; background: rgba(var(--section-accent),.045); border-left: 3px solid rgba(var(--section-accent),.58); border-radius: .25rem .8rem .8rem .25rem; padding: .8rem .9rem .85rem; }
+.seedance-workshop-final-details > .is-production { --section-accent: 223,118,58; }
+.seedance-workshop-final-details > .is-opportunity { --section-accent: 54,132,84; }
+.seedance-workshop-final-details > .is-risk { --section-accent: 181,76,63; }
+.seedance-workshop-final-details > .is-change { --section-accent: 103,91,165; }
+.seedance-workshop-final-details dt { color: rgb(var(--section-accent)); font-size: .72rem; font-weight: 800; letter-spacing: .065em; text-transform: uppercase; }
+.seedance-workshop-final-details dd { margin: .3rem 0 0; }
+.seedance-workshop-final > button { font-size: .9rem; margin-top: auto; min-height: 3rem; }
+@media (max-width: 1050px) { .seedance-workshop-final-grid { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .seedance-concept-workshop > header { flex-direction: column; } .seedance-workshop-status { align-items: flex-start; } .seedance-workshop-status > strong { max-width: none; } .seedance-workshop-final { padding: 1rem; } }

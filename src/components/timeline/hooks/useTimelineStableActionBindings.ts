@@ -67,6 +67,8 @@ export function useTimelineStableActionBindings() {
     removeClip: store.removeClip,
     removeCompositionVideoBakeRegion: store.removeCompositionVideoBakeRegion,
     removeMarker: store.removeMarker,
+    replaceClipSource: store.replaceClipSource,
+    replaceClipSourceWithComposition: store.replaceClipSourceWithComposition,
     rippleDeleteSelection: store.rippleDeleteSelection,
     selectClip: store.selectClip,
     selectClips: store.selectClips,

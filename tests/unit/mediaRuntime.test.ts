@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mediaRuntimeMocks = vi.hoisted(() => ({
   renderHostMode: 'main',
   createWorkerWebCodecsFrameProvider: vi.fn(),
+  createTurboResFrameProvider: vi.fn(),
   requestRender: vi.fn(),
   requestNewFrameRender: vi.fn(),
 }));
@@ -52,6 +53,10 @@ vi.mock('../../src/services/mediaRuntime/workerWebCodecsFrameProvider', () => {
   };
 });
 
+vi.mock('../../src/services/mediaRuntime/prores/TurboResFrameProvider', () => ({
+  createTurboResFrameProvider: mediaRuntimeMocks.createTurboResFrameProvider,
+}));
+
 import { useMediaStore } from '../../src/stores/mediaStore';
 import {
   bindSourceRuntimeToClip,
@@ -72,8 +77,14 @@ import {
 } from '../../src/services/mediaRuntime/runtimePlayback';
 import { WebCodecsPlayer } from '../../src/engine/WebCodecsPlayer';
 import { timelineRuntimeCoordinator } from '../../src/services/timeline/timelineRuntimeCoordinator';
+import { flags } from '../../src/engine/featureFlags';
 import type { TimelineClip } from '../../src/types';
 import type { RuntimeFrameProvider } from '../../src/services/mediaRuntime/types';
+import {
+  hasLayerBuilderRenderableVideoSource,
+  resolveLayerBuilderVideoSource,
+} from '../../src/services/layerBuilder/layerBuilderVideoSources';
+import type { FrameContext } from '../../src/services/layerBuilder/types';
 import {
   createWorkerWebCodecsFrameProvider,
   WorkerWebCodecsFrameProvider,
@@ -202,8 +213,10 @@ describe('media runtime bindings', () => {
     vi.mocked(WebCodecsPlayer).mockReset();
     mediaRuntimeMocks.renderHostMode = 'main';
     mediaRuntimeMocks.createWorkerWebCodecsFrameProvider.mockReset();
+    mediaRuntimeMocks.createTurboResFrameProvider.mockReset();
     mediaRuntimeMocks.requestRender.mockReset();
     mediaRuntimeMocks.requestNewFrameRender.mockReset();
+    flags.turboResProRes = false;
   });
 
   it('uses mediaFileId as the canonical runtime identity', () => {
@@ -890,6 +903,233 @@ describe('media runtime bindings', () => {
         'interactive-scrub:track-1:media:media-scrub-separate'
       )
     ).toBeNull();
+  });
+
+  it('creates a TurboRes provider for an enabled classic ProRes runtime', async () => {
+    const file = new File(['prores'], 'camera.mov', { type: 'video/quicktime', lastModified: 82 });
+    setMediaFiles([{
+      id: 'media-prores-runtime',
+      file,
+      name: 'camera.mov',
+      duration: 9,
+      width: 1920,
+      height: 1080,
+      codedWidth: 1920,
+      codedHeight: 1088,
+      fps: 24,
+      videoCodecId: 'apch',
+    }]);
+    const turboResProvider = {
+      backend: 'turbores' as const,
+      currentTime: 0,
+      isPlaying: false,
+      isFullMode: () => true,
+      isSimpleMode: () => false,
+      getCurrentFrame: () => ({ timestamp: 2_500_000 }) as VideoFrame,
+      hasFrame: () => true,
+      seek: vi.fn(),
+      pause: vi.fn(),
+      destroy: vi.fn(),
+    };
+    const destroyTurboResProvider = turboResProvider.destroy;
+    mediaRuntimeMocks.createTurboResFrameProvider.mockResolvedValue(turboResProvider);
+    flags.turboResProRes = true;
+
+    const source = bindSourceRuntimeToClip({
+      clipId: 'clip-prores-runtime',
+      source: {
+        type: 'video',
+        naturalDuration: 9,
+        mediaFileId: 'media-prores-runtime',
+      },
+      file,
+      mediaFileId: 'media-prores-runtime',
+    });
+
+    const previewSource = getPreviewRuntimeSource(source, 'track-1', true);
+    expect(previewSource?.runtimeSessionKey).toBe(
+      'interactive-track:track-1:media:media-prores-runtime',
+    );
+
+    const provider = await ensureRuntimeFrameProvider(previewSource, 'interactive', 2.5);
+
+    expect(provider).toBe(turboResProvider);
+    expect(mediaRuntimeMocks.createTurboResFrameProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        file,
+        fourCC: 'apch',
+        policy: 'interactive',
+        sourceId:
+          'media:media-prores-runtime:interactive-track:track-1:media:media-prores-runtime',
+      }),
+    );
+    expect(turboResProvider.seek).toHaveBeenCalledWith(2.5);
+    expect(WebCodecsPlayer).not.toHaveBeenCalled();
+
+    const clip = makeClip('clip-prores-runtime', file, source);
+    const layerContext = {
+      clipsAtTime: [clip],
+      isDraggingPlayhead: false,
+      hasClipDragPreview: false,
+      isPlaying: true,
+      playbackSpeed: 1,
+      playheadPosition: 2.5,
+      getInterpolatedSpeed: () => 1,
+      getSourceTimeForClip: () => 2.5,
+    } as unknown as FrameContext;
+    expect(hasLayerBuilderRenderableVideoSource(source, clip)).toBe(true);
+    const layerSource = resolveLayerBuilderVideoSource({
+      clip,
+      ctx: layerContext,
+      targetTime: 2.5,
+      allowSharedPreviewSession: true,
+    });
+    expect(layerSource?.source).toMatchObject({
+      type: 'video',
+      videoElement: undefined,
+      webCodecsPlayer: turboResProvider,
+      runtimeSessionKey: previewSource?.runtimeSessionKey,
+    });
+
+    const providerResource = timelineRuntimeCoordinator
+      .getBridgeStats()
+      .policies.interactive.resources
+      .find((resource) => resource.kind === 'video-frame-provider');
+    expect(providerResource).toMatchObject({
+      providerKind: 'turbores',
+      memoryCost: { heapBytes: expect.any(Number) },
+    });
+
+    releaseClipTreeRuntimeBindings(clip);
+    expect(mediaRuntimeRegistry.getRuntime('media:media-prores-runtime')).toBeNull();
+    expect(
+      timelineRuntimeCoordinator
+        .getBridgeStats()
+        .policies.interactive.resources
+        .filter((resource) => resource.tags?.includes('runtime-playback')),
+    ).toHaveLength(0);
+    expect(destroyTurboResProvider).toHaveBeenCalledOnce();
+  });
+
+  it('destroys a TurboRes provider that finishes loading after its clip runtime was released', async () => {
+    const file = new File(['prores'], 'late-provider.mov', {
+      type: 'video/quicktime',
+      lastModified: 83,
+    });
+    setMediaFiles([{
+      id: 'media-prores-late-provider',
+      file,
+      name: file.name,
+      duration: 9,
+      width: 1920,
+      height: 1080,
+      fps: 24,
+      videoCodecId: 'apch',
+    }]);
+    flags.turboResProRes = true;
+
+    let resolveProvider: ((provider: RuntimeFrameProvider) => void) | undefined;
+    const providerPromise = new Promise<RuntimeFrameProvider>((resolve) => {
+      resolveProvider = resolve;
+    });
+    const destroyProvider = vi.fn();
+    const provider = asRuntimeProvider({
+      backend: 'turbores',
+      currentTime: 0,
+      isPlaying: false,
+      isFullMode: () => true,
+      isSimpleMode: () => false,
+      getCurrentFrame: () => null,
+      seek: vi.fn(),
+      pause: vi.fn(),
+      destroy: destroyProvider,
+    });
+    mediaRuntimeMocks.createTurboResFrameProvider.mockReturnValue(providerPromise);
+
+    const source = bindSourceRuntimeToClip({
+      clipId: 'clip-prores-late-provider',
+      source: {
+        type: 'video',
+        naturalDuration: 9,
+        mediaFileId: 'media-prores-late-provider',
+      },
+      file,
+      mediaFileId: 'media-prores-late-provider',
+    });
+    const previewSource = getPreviewRuntimeSource(source, 'track-1', true);
+    const pendingProvider = ensureRuntimeFrameProvider(previewSource, 'interactive', 2.5);
+
+    releaseClipTreeRuntimeBindings(makeClip('clip-prores-late-provider', file, source));
+    resolveProvider?.(provider);
+
+    await expect(pendingProvider).resolves.toBeNull();
+    expect(destroyProvider).toHaveBeenCalledOnce();
+    expect(mediaRuntimeRegistry.getRuntime('media:media-prores-late-provider')).toBeNull();
+    expect(
+      timelineRuntimeCoordinator
+        .getBridgeStats()
+        .policies.interactive.resources
+        .filter((resource) => resource.tags?.includes('runtime-playback')),
+    ).toHaveLength(0);
+  });
+
+  it('refreshes late FourCC metadata before choosing a provider', async () => {
+    const file = new File(['prores'], 'late-metadata.mov', {
+      type: 'video/quicktime',
+      lastModified: 84,
+    });
+    const mediaFile = {
+      id: 'media-prores-late-metadata',
+      file,
+      name: 'late-metadata.mov',
+      duration: 1,
+      width: 64,
+      height: 64,
+      fps: 2,
+    };
+    setMediaFiles([mediaFile]);
+    flags.turboResProRes = true;
+    const provider = {
+      backend: 'turbores' as const,
+      currentTime: 0,
+      isPlaying: false,
+      isFullMode: () => true,
+      isSimpleMode: () => false,
+      getCurrentFrame: () => null,
+      seek: vi.fn(),
+      destroy: vi.fn(),
+    };
+    mediaRuntimeMocks.createTurboResFrameProvider.mockResolvedValue(provider);
+
+    const source = bindSourceRuntimeToClip({
+      clipId: 'clip-prores-late-metadata',
+      source: {
+        type: 'video',
+        naturalDuration: 1,
+        mediaFileId: mediaFile.id,
+      },
+      file,
+      mediaFileId: mediaFile.id,
+    });
+    expect(mediaRuntimeRegistry.getRuntime(source!.runtimeSourceId!)?.metadata.videoCodecId)
+      .toBeUndefined();
+
+    setMediaFiles([{ ...mediaFile, videoCodecId: 'apch' }]);
+    const previewSource = getPreviewRuntimeSource(source, 'track-1', true);
+    const selectedProvider = await ensureRuntimeFrameProvider(
+      previewSource,
+      'interactive',
+      0,
+    );
+
+    expect(selectedProvider).toBe(provider);
+    expect(mediaRuntimeMocks.createTurboResFrameProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ file, fourCC: 'apch' }),
+    );
+    expect(mediaRuntimeRegistry.getRuntime(source!.runtimeSourceId!)?.metadata.videoCodecId)
+      .toBe('apch');
+    releaseRuntimePlaybackSession(previewSource);
+    releaseRuntimePlaybackSession(source);
   });
 
   it('keeps worker WebCodecs out of dedicated scrub providers even in worker render mode', async () => {

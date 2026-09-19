@@ -2,7 +2,12 @@
 // Provides reusable primitives for all domain services
 
 import { Logger } from '../../logger';
-import { PROJECT_FOLDERS, PROJECT_FOLDER_PATHS, type ProjectFolderKey } from './constants';
+import { PROJECT_FOLDERS, type ProjectFolderKey } from './constants';
+import {
+  getFsaProjectPackageSession,
+  getFsaProjectFolderPath,
+  isPackagedProjectFolder,
+} from './projectPackage';
 
 const log = Logger.create('FileStorage');
 
@@ -40,8 +45,11 @@ export class FileStorageService {
     fileName: string,
     create = false
   ): Promise<FileSystemFileHandle | null> {
+    if (getFsaProjectPackageSession(projectHandle) && isPackagedProjectFolder(subFolder)) {
+      return null;
+    }
     try {
-      const folderPath = PROJECT_FOLDERS[subFolder];
+      const folderPath = getFsaProjectFolderPath(projectHandle, subFolder);
       const folder = await this.navigateToFolder(projectHandle, folderPath, create);
       if (!folder) return null;
       return await folder.getFileHandle(fileName, { create });
@@ -60,6 +68,11 @@ export class FileStorageService {
     fileName: string,
     content: Blob | string
   ): Promise<boolean> {
+    const packageSession = getFsaProjectPackageSession(projectHandle);
+    if (packageSession && isPackagedProjectFolder(subFolder)) {
+      return packageSession.writeEntry(subFolder, fileName, content);
+    }
+
     try {
       const handle = await this.getFileHandle(projectHandle, subFolder, fileName, true);
       if (!handle) return false;
@@ -82,6 +95,14 @@ export class FileStorageService {
     subFolder: ProjectFolderKey,
     fileName: string
   ): Promise<File | null> {
+    const packageSession = getFsaProjectPackageSession(projectHandle);
+    if (packageSession && isPackagedProjectFolder(subFolder)) {
+      const bytes = packageSession.readEntry(subFolder, fileName);
+      if (!bytes) return null;
+      const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+      return new File([buffer], fileName);
+    }
+
     try {
       const handle = await this.getFileHandle(projectHandle, subFolder, fileName);
       if (!handle) return null;
@@ -99,6 +120,10 @@ export class FileStorageService {
     subFolder: ProjectFolderKey,
     fileName: string
   ): Promise<boolean> {
+    const packageSession = getFsaProjectPackageSession(projectHandle);
+    if (packageSession && isPackagedProjectFolder(subFolder)) {
+      return packageSession.hasEntry(subFolder, fileName);
+    }
     const handle = await this.getFileHandle(projectHandle, subFolder, fileName);
     return handle !== null;
   }
@@ -112,8 +137,13 @@ export class FileStorageService {
     entryName: string,
     options?: { recursive?: boolean }
   ): Promise<boolean> {
+    const packageSession = getFsaProjectPackageSession(projectHandle);
+    if (packageSession && isPackagedProjectFolder(subFolder)) {
+      return packageSession.deleteEntry(subFolder, entryName, options?.recursive ?? false);
+    }
+
     try {
-      const folderPath = PROJECT_FOLDERS[subFolder];
+      const folderPath = getFsaProjectFolderPath(projectHandle, subFolder);
       const entryParts = entryName
         .replace(/\\/g, '/')
         .split('/')
@@ -152,8 +182,13 @@ export class FileStorageService {
     projectHandle: FileSystemDirectoryHandle,
     subFolder: ProjectFolderKey
   ): Promise<string[]> {
+    const packageSession = getFsaProjectPackageSession(projectHandle);
+    if (packageSession && isPackagedProjectFolder(subFolder)) {
+      return packageSession.listFiles(subFolder);
+    }
+
     try {
-      const folderPath = PROJECT_FOLDERS[subFolder];
+      const folderPath = getFsaProjectFolderPath(projectHandle, subFolder);
       const folder = await this.navigateToFolder(projectHandle, folderPath, false);
       if (!folder) return [];
 
@@ -173,8 +208,13 @@ export class FileStorageService {
    * Create all project subfolders
    */
   async createProjectFolders(handle: FileSystemDirectoryHandle): Promise<void> {
-    for (const folderPath of PROJECT_FOLDER_PATHS) {
+    const createdPaths = new Set<string>();
+    for (const folderKey of Object.keys(PROJECT_FOLDERS) as ProjectFolderKey[]) {
+      if (getFsaProjectPackageSession(handle) && isPackagedProjectFolder(folderKey)) continue;
+      const folderPath = getFsaProjectFolderPath(handle, folderKey);
+      if (createdPaths.has(folderPath)) continue;
       await this.navigateToFolder(handle, folderPath, true);
+      createdPaths.add(folderPath);
     }
   }
 }

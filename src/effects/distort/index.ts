@@ -7,3 +7,4 @@ export { rgbSplit } from './rgb-split';
 export { twirl } from './twirl';
 export { wave } from './wave';
 export { bulge } from './bulge';
+export { fisheye } from './fisheye';

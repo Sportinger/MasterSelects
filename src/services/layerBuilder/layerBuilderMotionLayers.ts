@@ -26,6 +26,7 @@ export function buildLayerBuilderMotionShapeLayer(params: BuildMotionLayerParams
     ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime),
   );
   const keyframes = useTimelineStore.getState().clipKeyframes.get(clip.id) ?? [];
+  const resolvedMotion = getInterpolatedMotionLayer(clip, keyframes, timeInfo.clipLocalTime) ?? clip.motion;
   const layer: Layer = {
     id: `${ctx.activeCompId}_layer_${layerIndex}_${clip.id}`,
     name: clip.name,
@@ -37,11 +38,12 @@ export function buildLayerBuilderMotionShapeLayer(params: BuildMotionLayerParams
     blendMode: transform.blendMode as BlendMode,
     source: {
       type: 'motion',
-      motion: getInterpolatedMotionLayer(clip, keyframes, timeInfo.clipLocalTime) ?? clip.motion,
+      motion: resolvedMotion,
     },
     effects: ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime),
     colorCorrection: ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipLocalTime),
     position: transform.position,
+    anchor: transform.anchor,
     scale: transform.scale,
     rotation: transform.rotation,
   };

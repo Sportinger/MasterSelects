@@ -194,7 +194,7 @@ function getExternalCompositeRunner(
       });
       compositePass.setPipeline(resources.externalCompositePipeline);
       compositePass.setBindGroup(0, compositeBindGroup);
-      compositePass.draw(6);
+      compositePass.draw(3);
       compositePass.end();
       if (outputTarget && outputBindGroup) {
         const outputPass = encoder.beginRenderPass({
@@ -207,7 +207,7 @@ function getExternalCompositeRunner(
         });
         outputPass.setPipeline(resources.copyPipeline);
         outputPass.setBindGroup(0, outputBindGroup);
-        outputPass.draw(6);
+        outputPass.draw(3);
         outputPass.end();
       } else if (outputCanvasContext && canvasOutputPipeline) {
         canvasOutputPipeline.updateResolution(outputWidth, outputHeight);

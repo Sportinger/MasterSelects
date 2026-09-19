@@ -106,6 +106,10 @@ export function hasActiveTranscriptionRun(): boolean {
   return activeRun !== null;
 }
 
+export function getActiveTranscriptionRunClipId(): string | null {
+  return activeRun?.clipId ?? null;
+}
+
 export function beginTranscriptionRun(input: TranscriptionRunInput): ActiveTranscriptionRun {
   const run = { ...input, controller: new AbortController() };
   activeRun = run;

@@ -119,9 +119,7 @@ export function getCompositionVideoTracks(
 
 export function getPreviewLayerLabel(layerIndex: number, trackName?: string | null): string {
   const trimmedName = trackName?.trim();
-  return trimmedName
-    ? `Layer ${layerIndex + 1} (${trimmedName})`
-    : `Layer ${layerIndex + 1}`;
+  return trimmedName || `Layer ${layerIndex + 1}`;
 }
 
 export function getPreviewSourceLabel(

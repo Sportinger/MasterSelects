@@ -8,8 +8,8 @@ import type {
   TimelineTrack as TimelineTrackType,
 } from '../../../types';
 import type { TimelinePropertiesSelection } from '../../../stores/timeline/types';
-import { applyKeyframeAreaRevealScroll } from '../utils/timelineHostLayout';
-import type { KeyframeAreaRevealSnapshot, TrackSectionKind } from '../utils/timelineHostTypes';
+import { applySelectedTrackRevealScroll } from '../utils/timelineHostLayout';
+import type { SelectedTrackRevealSnapshot, TrackSectionKind } from '../utils/timelineHostTypes';
 
 interface TimelineExternalDragRevealState {
   trackId?: string | null;
@@ -92,14 +92,20 @@ export function useTimelineSectionReveal({
   setAudioScrollY,
   animateSectionScrollTo,
 }: UseTimelineSectionRevealProps): void {
-  const keyframeAreaRevealSnapshotRef = useRef<KeyframeAreaRevealSnapshot | null>(null);
-  const selectedKeyframeAreaRevealSnapshot = useMemo<KeyframeAreaRevealSnapshot | null>(() => {
-    const selectedClip = clips.find(clip => selectedClipIds.has(clip.id));
+  const selectedTrackRevealSnapshotRef = useRef<SelectedTrackRevealSnapshot | null>(null);
+  const hasObservedSelectionRef = useRef(false);
+  const selectedTrackRevealSnapshot = useMemo<SelectedTrackRevealSnapshot | null>(() => {
+    const primarySelectedClipId = propertiesSelection?.kind === 'clip' && selectedClipIds.has(propertiesSelection.clipId)
+      ? propertiesSelection.clipId
+      : selectedClipIds.values().next().value;
+    const selectedClip = primarySelectedClipId
+      ? clips.find(clip => clip.id === primarySelectedClipId)
+      : undefined;
     if (!selectedClip) return null;
     const track = timelineViewTrackMap.get(selectedClip.trackId) ?? trackMap.get(selectedClip.trackId);
     if (!track || (track.type !== 'video' && track.type !== 'audio')) return null;
     const sectionKind: TrackSectionKind = track.type;
-    if (isSectionCollapsed(sectionKind) || !isTrackExpandedForRender(track.id)) return null;
+    if (isSectionCollapsed(sectionKind)) return null;
     const sectionTracks = sectionKind === 'video' ? displayedVideoTracks : displayedAudioTracks;
     const sectionTrackIndex = sectionTracks.findIndex(candidate => candidate.id === track.id);
     if (sectionTrackIndex < 0) return null;
@@ -107,7 +113,7 @@ export function useTimelineSectionReveal({
       .slice(0, sectionTrackIndex)
       .reduce((sum, candidate) => sum + getSectionTrackHeight(candidate, sectionKind), 0);
     const baseHeight = getSectionTrackBaseHeight(track, sectionKind);
-    const trackHeight = getSectionTrackHeight(track, sectionKind);
+    const trackHeight = Math.max(baseHeight, getSectionTrackHeight(track, sectionKind));
     const keyframes = clipKeyframes.get(selectedClip.id) ?? [];
     const curveSignature = Array.from(expandedCurveProperties.get(track.id) ?? new Set<AnimatableProperty>()).sort().join('|');
     return {
@@ -119,8 +125,8 @@ export function useTimelineSectionReveal({
       trackHeight,
       contentHeight: sectionKind === 'video' ? videoSectionContentHeight : audioSectionContentHeight,
       viewportHeight: sectionKind === 'video' ? videoSectionHeight : audioSectionHeight,
-      keyframeAreaTop: trackOffsetTop + baseHeight,
-      keyframeAreaBottom: trackOffsetTop + trackHeight,
+      trackTop: trackOffsetTop,
+      trackBottom: trackOffsetTop + trackHeight,
     };
   }, [
     audioSectionContentHeight,
@@ -134,6 +140,7 @@ export function useTimelineSectionReveal({
     getSectionTrackHeight,
     isSectionCollapsed,
     isTrackExpandedForRender,
+    propertiesSelection,
     selectedClipIds,
     timelineViewTrackMap,
     trackMap,
@@ -142,30 +149,34 @@ export function useTimelineSectionReveal({
   ]);
 
   useLayoutEffect(() => {
-    const previousSnapshot = keyframeAreaRevealSnapshotRef.current;
-    keyframeAreaRevealSnapshotRef.current = selectedKeyframeAreaRevealSnapshot;
-    if (!previousSnapshot || !selectedKeyframeAreaRevealSnapshot) return;
+    const previousSnapshot = selectedTrackRevealSnapshotRef.current;
+    selectedTrackRevealSnapshotRef.current = selectedTrackRevealSnapshot;
+    if (!hasObservedSelectionRef.current) {
+      hasObservedSelectionRef.current = true;
+      return;
+    }
+    if (!selectedTrackRevealSnapshot) return;
     const sameSelection =
-      previousSnapshot.clipId === selectedKeyframeAreaRevealSnapshot.clipId &&
-      previousSnapshot.trackId === selectedKeyframeAreaRevealSnapshot.trackId &&
-      previousSnapshot.sectionKind === selectedKeyframeAreaRevealSnapshot.sectionKind;
-    if (!sameSelection) return;
-    const keyframeWasAdded = selectedKeyframeAreaRevealSnapshot.keyframeCount > previousSnapshot.keyframeCount;
-    const curveWasOpened = previousSnapshot.curveSignature.length === 0 && selectedKeyframeAreaRevealSnapshot.curveSignature.length > 0;
-    const layoutGrew =
-      selectedKeyframeAreaRevealSnapshot.trackHeight > previousSnapshot.trackHeight ||
-      selectedKeyframeAreaRevealSnapshot.contentHeight > previousSnapshot.contentHeight;
-    if (!keyframeWasAdded && !curveWasOpened && !layoutGrew) return;
+      previousSnapshot?.clipId === selectedTrackRevealSnapshot.clipId &&
+      previousSnapshot.trackId === selectedTrackRevealSnapshot.trackId &&
+      previousSnapshot.sectionKind === selectedTrackRevealSnapshot.sectionKind;
+    const keyframeWasAdded = sameSelection && selectedTrackRevealSnapshot.keyframeCount > previousSnapshot.keyframeCount;
+    const curveWasOpened = sameSelection && previousSnapshot.curveSignature.length === 0 && selectedTrackRevealSnapshot.curveSignature.length > 0;
+    const layoutGrew = sameSelection && (
+      selectedTrackRevealSnapshot.trackHeight > previousSnapshot.trackHeight ||
+      selectedTrackRevealSnapshot.contentHeight > previousSnapshot.contentHeight
+    );
+    if (sameSelection && !keyframeWasAdded && !curveWasOpened && !layoutGrew) return;
     const applyReveal = (current: number) => {
-      const next = applyKeyframeAreaRevealScroll(current, selectedKeyframeAreaRevealSnapshot);
+      const next = applySelectedTrackRevealScroll(current, selectedTrackRevealSnapshot);
       return Math.abs(next - current) > 0.5 ? next : current;
     };
-    if (selectedKeyframeAreaRevealSnapshot.sectionKind === 'video') {
+    if (selectedTrackRevealSnapshot.sectionKind === 'video') {
       setVideoScrollY(applyReveal);
     } else {
       setAudioScrollY(applyReveal);
     }
-  }, [selectedKeyframeAreaRevealSnapshot, setAudioScrollY, setVideoScrollY]);
+  }, [selectedTrackRevealSnapshot, setAudioScrollY, setVideoScrollY]);
 
   useEffect(() => {
     if (!externalDrag && !clipDrag) return;

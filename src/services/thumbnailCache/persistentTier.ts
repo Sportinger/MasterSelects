@@ -4,6 +4,7 @@ import type {
   StoredSourceThumbnailFrame,
   ThumbnailCacheLogger,
 } from './types';
+import { SOURCE_THUMBNAIL_GENERATION_VERSION } from './types';
 
 export class ThumbnailPersistentTier {
   private readonly log: ThumbnailCacheLogger;
@@ -15,14 +16,20 @@ export class ThumbnailPersistentTier {
   async loadFrames(mediaFileId: string, fileHash?: string): Promise<SourceThumbnailFrame[] | null> {
     try {
       const frames = await projectDB.getSourceThumbnails(mediaFileId);
-      if (frames.length > 0) {
-        return frames;
+      const currentFrames = frames.filter(
+        (frame) => frame.generationVersion === SOURCE_THUMBNAIL_GENERATION_VERSION,
+      );
+      if (currentFrames.length > 0) {
+        return currentFrames;
       }
 
       if (fileHash) {
         const hashFrames = await projectDB.getSourceThumbnailsByHash(fileHash);
-        if (hashFrames.length > 0) {
-          return hashFrames;
+        const currentHashFrames = hashFrames.filter(
+          (frame) => frame.generationVersion === SOURCE_THUMBNAIL_GENERATION_VERSION,
+        );
+        if (currentHashFrames.length > 0) {
+          return currentHashFrames;
         }
       }
     } catch (error) {

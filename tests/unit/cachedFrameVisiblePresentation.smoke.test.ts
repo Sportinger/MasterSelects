@@ -1,12 +1,17 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RenderOutputRouterAdapter } from '../../src/engine/render/RenderOutputRouterAdapter';
 import { CachedFrameRenderer } from '../../src/engine/render/dispatcher/cachedFrameRenderer';
 import type { RenderDeps } from '../../src/engine/render/RenderDispatcher';
 import type { RenderTargetSnapshot } from '../../src/engine/render/contracts';
 import { captureDomVisibleCanvasProof } from '../../src/services/aiTools/visiblePixelProof';
+import { installCanvas2DMock } from '../helpers/mockCanvas2d';
 
 const originalElementFromPointDescriptor = Object.getOwnPropertyDescriptor(document, 'elementFromPoint');
+
+beforeEach(() => {
+  installCanvas2DMock();
+});
 
 function createVisibleCanvas(id: string): HTMLCanvasElement {
   const canvas = document.createElement('canvas');

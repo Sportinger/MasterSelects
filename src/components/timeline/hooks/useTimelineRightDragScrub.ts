@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type {
   MouseEvent as ReactMouseEvent,
   RefObject,
@@ -171,9 +171,26 @@ export function useTimelineRightDragScrub({
     setPlayheadPosition,
   ]);
 
+  const mouseDownCallbacksRef = useRef({
+    getTimelineTimeFromClientX,
+    handleClipMouseDown,
+    handleTimelineRightDragScrubMouseDown,
+  });
+  useLayoutEffect(() => {
+    mouseDownCallbacksRef.current = {
+      getTimelineTimeFromClientX,
+      handleClipMouseDown,
+      handleTimelineRightDragScrubMouseDown,
+    };
+  }, [getTimelineTimeFromClientX, handleClipMouseDown, handleTimelineRightDragScrubMouseDown]);
+
   const handleEmptyTimelineMouseDown = useCallback((e: ReactMouseEvent, trackId: string, time: number) => {
-    handleTimelineRightDragScrubMouseDown(e, time, { source: 'empty', trackId });
-  }, [handleTimelineRightDragScrubMouseDown]);
+    mouseDownCallbacksRef.current.handleTimelineRightDragScrubMouseDown(
+      e,
+      time,
+      { source: 'empty', trackId },
+    );
+  }, []);
 
   const handleEmptyTimelineContextMenu = useCallback((e: ReactMouseEvent, trackId: string, time: number) => {
     e.preventDefault();
@@ -209,16 +226,17 @@ export function useTimelineRightDragScrub({
   }, [openClipContextMenu]);
 
   const handleTimelineClipMouseDown = useCallback((e: ReactMouseEvent, clipId: string) => {
+    const callbacks = mouseDownCallbacksRef.current;
     if (e.button === 2) {
-      const time = getTimelineTimeFromClientX(e.clientX);
+      const time = callbacks.getTimelineTimeFromClientX(e.clientX);
       if (time !== null) {
-        handleTimelineRightDragScrubMouseDown(e, time, { source: 'clip', clipId });
+        callbacks.handleTimelineRightDragScrubMouseDown(e, time, { source: 'clip', clipId });
       }
       return;
     }
 
-    handleClipMouseDown(e, clipId);
-  }, [getTimelineTimeFromClientX, handleClipMouseDown, handleTimelineRightDragScrubMouseDown]);
+    callbacks.handleClipMouseDown(e, clipId);
+  }, []);
 
   return {
     handleEmptyTimelineMouseDown,

@@ -93,12 +93,12 @@ export const DNXHR_PROFILES = [
   { id: 'dnxhr_444', name: 'DNxHR 444', description: '10-bit 4:4:4 RGB' },
 ] as const;
 
-// HAP format variants (NOT AVAILABLE in ASYNCIFY build - requires snappy)
-// Kept for type compatibility but should not be used
+// HAP format variants. Encoded by the browser-native WebGPU/worker pipeline
+// (src/services/hap + src/engine/hap), not by the FFmpeg WASM build.
 export const HAP_FORMATS = [
-  { id: 'hap', name: 'HAP', description: 'Not available' },
-  { id: 'hap_alpha', name: 'HAP Alpha', description: 'Not available' },
-  { id: 'hap_q', name: 'HAP Q', description: 'Not available' },
+  { id: 'hap', name: 'HAP', description: 'DXT1, opaque, smallest files' },
+  { id: 'hap_alpha', name: 'HAP Alpha', description: 'DXT5 with alpha channel' },
+  { id: 'hap_q', name: 'HAP Q', description: 'Scaled YCoCg, higher color quality' },
 ] as const;
 
 // Container format info

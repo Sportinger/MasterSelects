@@ -15,6 +15,9 @@ import { compositionAudioMixer } from '../../services/compositionAudioMixer';
 import { proxyFrameCache } from '../../services/proxyFrameCache';
 import { audioExtractor } from '../../engine/audio/AudioExtractor';
 import { syncTransitionCompositionTimelineToParent } from './slices/composition/transitionCompositionSync';
+import { initializeRemoteColorGradeCoordinator } from '../../services/colorGrades/remoteColorGradeCoordinator';
+import { createRemoteColorGradeMediaPatch } from '../../services/colorGrades/remoteColorGradeMediaState';
+import { readTimelineRuntimeState } from '../../services/timeline/timelineRuntimeCoordinator';
 
 const log = Logger.create('MediaStore');
 
@@ -42,6 +45,7 @@ type MediaStoreGlobal = typeof globalThis & {
   __masterselectsMediaStoreBeforeUnloadHandler?: () => void;
   __masterselectsTimelineCompositionSaveSignatures?: Map<string, string>;
   __masterselectsTimelineCompositionSaveRefs?: Map<string, TimelineCompositionSaveRefs>;
+  __masterselectsRemoteColorGradeCoordinatorCleanup?: () => void;
   __TIMELINE_CANVAS_SMOKE_ACTIVE__?: boolean;
 };
 
@@ -103,6 +107,25 @@ function createTimelineSaveSignature(timelineData: CompositionTimelineData | und
     ...content
   } = timelineData;
   return JSON.stringify(content);
+}
+
+/**
+ * Treat the fully hydrated active timeline as the starting point for the
+ * timeline-to-composition mirror. Project restoration may normalize legacy
+ * defaults without creating an authored edit.
+ */
+export function establishTimelineCompositionSaveBaseline(): void {
+  const useMediaStore = getMediaStore();
+  if (!useMediaStore) return;
+  const activeCompositionId = useMediaStore.getState().activeCompositionId;
+  if (!activeCompositionId) return;
+
+  const timelineState = useTimelineStore.getState();
+  getTimelineSaveRefs().set(activeCompositionId, createTimelineSaveRefs(timelineState));
+  getTimelineSaveSignatures().set(
+    activeCompositionId,
+    createTimelineSaveSignature(timelineState.getSerializableState()),
+  );
 }
 
 // Lazy getter to avoid circular dependency
@@ -229,6 +252,7 @@ async function initializeStore(): Promise<void> {
     if (activeComp?.timelineData) {
       log.info('Restoring timeline for:', activeComp.name);
       await useTimelineStore.getState().loadState(activeComp.timelineData);
+      establishTimelineCompositionSaveBaseline();
 
       // Sync transcript and analysis status from restored clips to MediaFiles (for badge display)
       syncStatusFromClips(useMediaStore);
@@ -457,6 +481,31 @@ function setupAutoSave(): void {
   }, 30000); // Every 30 seconds
 }
 
+function setupRemoteColorGradeCoordinator(): void {
+  const useMediaStore = getMediaStore();
+  if (!useMediaStore) return;
+  const globalState = globalThis as MediaStoreGlobal;
+  globalState.__masterselectsRemoteColorGradeCoordinatorCleanup?.();
+  globalState.__masterselectsRemoteColorGradeCoordinatorCleanup = initializeRemoteColorGradeCoordinator(
+    {
+      getClips: () => readTimelineRuntimeState(useTimelineStore).clips,
+      setClips: clips => useTimelineStore.setState({ clips }),
+      subscribeClips: listener => useTimelineStore.subscribe(
+        state => state.clips,
+        listener,
+      ),
+      invalidateCache: () => readTimelineRuntimeState(useTimelineStore).invalidateCache(),
+    },
+    {
+      getGrade: mediaFileId => useMediaStore.getState().files
+        .find(file => file.id === mediaFileId)?.remoteColorGrade,
+      commitGrade: (mediaFileId, grade) => useMediaStore.setState(state => (
+        createRemoteColorGradeMediaPatch(state, mediaFileId, grade) ?? {}
+      )),
+    },
+  );
+}
+
 /**
  * Dispose all audio contexts and related resources.
  * Called on page unload to prevent leaked AudioContext instances.
@@ -495,6 +544,7 @@ function setupBeforeUnload(): void {
 // Auto-initialize on app load
 if (typeof window !== 'undefined') {
   setTimeout(() => {
+    setupRemoteColorGradeCoordinator();
     initializeStore();
     setupAutoSave();
     setupBeforeUnload();

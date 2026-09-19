@@ -7,9 +7,14 @@ import { computeTimelineOccupancy } from './timeline/timelineOccupancy';
 
 const log = Logger.create('TimelineSubcomposition');
 
-type CreateSubcompositionResult =
+export type CreateSubcompositionResult =
   | { success: true; compositionId: string; clipId?: string }
   | { success: false; reason: string };
+
+export interface CreateSubcompositionOptions {
+  includeLinkedAudio?: boolean;
+  name?: string;
+}
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -39,6 +44,18 @@ function buildSubcompositionName(existingNames: Set<string>): string {
     name = `Subcomposition ${index}`;
   }
   return name;
+}
+
+function buildRequestedCompositionName(
+  requestedName: string | undefined,
+  existingNames: Set<string>,
+): string {
+  const baseName = requestedName?.trim().slice(0, 200);
+  if (!baseName) return buildSubcompositionName(existingNames);
+  if (!existingNames.has(baseName)) return baseName;
+  let index = 2;
+  while (existingNames.has(`${baseName} ${index}`)) index += 1;
+  return `${baseName} ${index}`;
 }
 
 function normalizeNestedClip(clip: SerializableClip, selectionStart: number, selectedIds: Set<string>): SerializableClip {
@@ -99,11 +116,14 @@ function buildNestedTimelineData(
   };
 }
 
-export async function createSubcompositionFromSelection(anchorClipId: string): Promise<CreateSubcompositionResult> {
+export async function createSubcompositionFromClipIds(
+  clipIds: readonly string[],
+  options: CreateSubcompositionOptions = {},
+): Promise<CreateSubcompositionResult> {
   const timelineStore = useTimelineStore.getState();
   const mediaStore = useMediaStore.getState();
-  const { clips, tracks, selectedClipIds } = timelineStore;
-  const selectedIds = getSelectionClipIds(anchorClipId, selectedClipIds);
+  const { clips, tracks } = timelineStore;
+  const selectedIds = new Set(clipIds);
   const selectedClips = sortClipsForTimeline(
     clips.filter(clip => selectedIds.has(clip.id)),
     tracks,
@@ -135,7 +155,10 @@ export async function createSubcompositionFromSelection(anchorClipId: string): P
     selectionDuration,
   );
 
-  const compName = buildSubcompositionName(new Set(mediaStore.compositions.map(comp => comp.name)));
+  const compName = buildRequestedCompositionName(
+    options.name,
+    new Set(mediaStore.compositions.map(comp => comp.name)),
+  );
   const subcomposition = mediaStore.createComposition(compName, {
     parentId: activeComposition?.parentId ?? null,
     width: activeComposition?.width,
@@ -153,17 +176,41 @@ export async function createSubcompositionFromSelection(anchorClipId: string): P
 
   const selectedIdList = [...selectedIds];
   for (const clipId of selectedIdList) {
-    if (useTimelineStore.getState().clips.some(clip => clip.id === clipId)) {
-      useTimelineStore.getState().removeClip(clipId);
+    const currentTimelineStore = useTimelineStore.getState();
+    if (currentTimelineStore.clips.some(clip => clip.id === clipId)) {
+      currentTimelineStore.removeClip(clipId);
     }
   }
 
-  const beforeIds = new Set(useTimelineStore.getState().clips.map(clip => clip.id));
-  await useTimelineStore.getState().addCompClip(insertionTrackId, subcomposition, selectionStart);
-  const nextTimelineStore = useTimelineStore.getState();
-  const compClip = nextTimelineStore.clips.find(
+  const timelineBeforeInsert = useTimelineStore.getState();
+  const beforeIds = new Set(timelineBeforeInsert.clips.map(clip => clip.id));
+  const beforeTrackIds = new Set(timelineBeforeInsert.tracks.map(track => track.id));
+  await timelineBeforeInsert.addCompClip(insertionTrackId, subcomposition, selectionStart);
+  let nextTimelineStore = useTimelineStore.getState();
+  let compClip = nextTimelineStore.clips.find(
     clip => !beforeIds.has(clip.id) && clip.isComposition && clip.compositionId === subcomposition.id
   );
+  if (compClip && options.includeLinkedAudio === false && compClip.linkedClipId) {
+    const linkedAudio = nextTimelineStore.clips.find((clip) => (
+      clip.id === compClip?.linkedClipId && clip.source?.type === 'audio'
+    ));
+    if (linkedAudio) {
+      nextTimelineStore.updateClip(compClip.id, {
+        linkedClipId: undefined,
+        hasMixdownAudio: false,
+        mixdownGenerating: false,
+      });
+      nextTimelineStore.removeClip(linkedAudio.id);
+      nextTimelineStore = useTimelineStore.getState();
+      if (
+        !beforeTrackIds.has(linkedAudio.trackId)
+        && !nextTimelineStore.clips.some((clip) => clip.trackId === linkedAudio.trackId)
+      ) {
+        nextTimelineStore.removeTrack(linkedAudio.trackId);
+      }
+      compClip = nextTimelineStore.clips.find((clip) => clip.id === compClip?.id);
+    }
+  }
   if (compClip) {
     nextTimelineStore.selectClip(compClip.id);
   }
@@ -185,4 +232,10 @@ export async function createSubcompositionFromSelection(anchorClipId: string): P
   });
 
   return { success: true, compositionId: subcomposition.id, clipId: compClip?.id };
+}
+
+export async function createSubcompositionFromSelection(anchorClipId: string): Promise<CreateSubcompositionResult> {
+  const timelineStore = useTimelineStore.getState();
+  const selectedIds = getSelectionClipIds(anchorClipId, timelineStore.selectedClipIds);
+  return createSubcompositionFromClipIds([...selectedIds]);
 }

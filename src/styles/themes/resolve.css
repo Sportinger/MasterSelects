@@ -1,0 +1,217 @@
+@layer tokens {
+/*
+ * Resolve-inspired editor theme
+ *
+ * The palette flows from primitives to semantic surfaces and finally to
+ * shared component geometry, so a single change here updates every feature
+ * that follows the global theme contract. A thin binding layer at the bottom
+ * covers legacy shared chrome that has not yet adopted those tokens directly.
+ */
+[data-theme="resolve"] {
+  /* Studio-neutral primitives */
+  --resolve-black: #0e0e0e;
+  --resolve-chrome: #17171a;
+  --resolve-ground: #201f24;
+  --resolve-panel: #29282e;
+  --resolve-panel-raised: #302f35;
+  --resolve-control: #222127;
+  --resolve-hover: #353439;
+  --resolve-active: #414045;
+  --resolve-line: #0e0e0e;
+  --resolve-line-soft: #353439;
+  --resolve-line-strong: #505055;
+  --resolve-blue: #2996cc;
+  --resolve-blue-hover: #3aa7dc;
+  --resolve-red: #ed4b4b;
+
+  /* Semantic surfaces */
+  --bg-primary: var(--resolve-ground);
+  --bg-secondary: var(--resolve-panel);
+  --bg-tertiary: var(--resolve-control);
+  --bg-hover: var(--resolve-hover);
+  --bg-active: var(--resolve-active);
+  --bg-elevated: var(--resolve-panel-raised);
+  --bg-input: #1f1f1f;
+  --bg-overlay: rgba(5, 6, 7, 0.82);
+  --bg-overlay-light: rgba(5, 6, 7, 0.52);
+  --bg-canvas: #000000;
+
+  /* Separators and translucent layers */
+  --border-color: var(--resolve-line);
+  --border-subtle: var(--resolve-line-soft);
+  --border-strong: var(--resolve-line-strong);
+  --border-focus: var(--resolve-blue);
+  --veil-1: rgba(255, 255, 255, 0.025);
+  --veil-2: rgba(255, 255, 255, 0.045);
+  --veil-3: rgba(255, 255, 255, 0.07);
+  --veil-4: rgba(255, 255, 255, 0.1);
+  --veil-5: rgba(255, 255, 255, 0.16);
+  --veil-border-subtle: rgba(255, 255, 255, 0.065);
+  --veil-border: rgba(255, 255, 255, 0.1);
+  --veil-border-strong: rgba(255, 255, 255, 0.18);
+
+  /* Type hierarchy */
+  --text-primary: #dedfe1;
+  --text-secondary: #a8aaae;
+  --text-muted: #74767c;
+  --text-disabled: #55575d;
+  --text-inverse: #111214;
+  --text-on-accent: #f7fbfd;
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --leading-tight: 1.15;
+  --leading-normal: 1.3;
+  --leading-relaxed: 1.4;
+  --tracking-tight: -0.005em;
+  --tracking-wide: 0.025em;
+
+  /* Interaction */
+  --accent: var(--resolve-blue);
+  --accent-hover: var(--resolve-blue-hover);
+  --accent-dim: rgba(41, 150, 204, 0.18);
+  --accent-subtle: rgba(41, 150, 204, 0.11);
+  --accent-timeline: #3282ad;
+  --accent-timeline-hover: #4398c4;
+  --timeline-playhead: var(--resolve-red);
+  --timeline-playhead-hover: #ff6666;
+  --danger: var(--resolve-red);
+  --danger-light: #ff6666;
+  --danger-dim: rgba(237, 75, 75, 0.17);
+  --danger-subtle: rgba(237, 75, 75, 0.1);
+  --danger-border: rgba(237, 75, 75, 0.38);
+  --info: var(--resolve-blue-hover);
+  --info-dim: var(--accent-dim);
+
+  /* Compact desktop geometry */
+  --radius-xs: 1px;
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+  --radius-2xl: 8px;
+  --toolbar-height: 30px;
+  --toolbar-bg: var(--resolve-chrome);
+  --toolbar-font-size: var(--font-sm);
+  --tab-height: 27px;
+  --tab-bar-bg: var(--resolve-control);
+  --view-tab-font-size: var(--font-sm);
+  --tab-active-bg: var(--resolve-active);
+  --panel-header-bg: var(--resolve-control);
+  --panel-header-font-size: var(--font-md);
+  --panel-header-weight: var(--font-semibold);
+  --panel-header-padding: var(--sp-2) var(--sp-3);
+  --panel-padding: var(--sp-3);
+  --section-gap: var(--sp-2);
+  --control-height-xs: 19px;
+  --control-height-sm: 23px;
+  --control-height-md: 27px;
+  --input-bg: #1f1f1f;
+  --input-border: var(--resolve-line);
+  --input-border-focus: var(--resolve-blue);
+  --input-radius: var(--radius-sm);
+  --input-padding: var(--sp-1) var(--sp-2);
+  --btn-radius: var(--radius-sm);
+  --btn-padding: var(--sp-1) var(--sp-2-5);
+  --btn-font-size: var(--font-sm);
+  --btn-font-weight: var(--font-medium);
+
+  /* Depth is restrained: Resolve reads mostly through value contrast. */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.42);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.48);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.54);
+  --shadow-xl: 0 12px 36px rgba(0, 0, 0, 0.58);
+  --shadow-dialog: 0 18px 48px rgba(0, 0, 0, 0.64);
+  --focus-ring: 0 0 0 1px var(--resolve-blue);
+  --transition-fast: 80ms ease-out;
+  --transition-normal: 110ms ease-out;
+  --transition-slow: 160ms ease-out;
+
+  /* Editor-specific surfaces */
+  --surface-app: var(--resolve-ground);
+  --surface-panel: var(--resolve-panel);
+  --surface-chrome: var(--resolve-chrome);
+  --surface-control: var(--resolve-control);
+  --surface-control-hover: var(--resolve-hover);
+  --surface-control-active: var(--resolve-active);
+  --separator-color: var(--resolve-line);
+  --separator-size: 1px;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: #45464c;
+  --scrollbar-thumb-hover: #5a5b62;
+  --timeline-grid-video: #292a30;
+  --timeline-grid-audio: #26272c;
+  --preview-pasteboard-bg: #1a1a1a;
+  --preview-viewer-bg: #1a1a1a;
+  --preview-transport-bg: #212126;
+  --preview-transport-border: #090909;
+  --preview-transport-shadow: none;
+  --preview-transport-track: #3e4147;
+  --preview-transport-thumb: #f2f2f2;
+  --preview-transport-icon: #838383;
+  --preview-transport-icon-active: #ffffff;
+  --preview-transport-hover-bg: #29292e;
+  --preview-transport-timecode: #ffffff;
+  --preview-overlay-bg: rgba(16, 17, 19, 0.72);
+  --preview-overlay-bg-hover: rgba(32, 33, 38, 0.9);
+  --chat-user-bg: #303137;
+  --chat-user-border: #44454b;
+
+  /* Compatibility aliases */
+  --accent-primary: var(--accent);
+  --accent-success: var(--success);
+  --accent-danger: var(--danger-light);
+  --warning-color: var(--warning);
+  --accent-color: var(--accent);
+}
+}
+
+/* Resolve-specific bindings for shared legacy chrome. Keeping these here
+   avoids scattering theme checks through feature styles. */
+[data-theme="resolve"] .toolbar {
+  min-height: var(--toolbar-height);
+  border-bottom: var(--separator-size) solid var(--separator-color);
+  background: var(--toolbar-bg);
+}
+
+[data-theme="resolve"] .dock-tab-pane {
+  background: var(--surface-panel);
+}
+
+[data-theme="resolve"] .dock-tab-bar {
+  min-height: var(--tab-height);
+  border-bottom: var(--separator-size) solid var(--separator-color);
+  background: var(--tab-bar-bg);
+}
+
+[data-theme="resolve"] .dock-tab-handle,
+[data-theme="resolve"] .dock-tab,
+[data-theme="resolve"] .dock-tab-add {
+  height: var(--tab-height);
+}
+
+[data-theme="resolve"] .btn {
+  min-height: var(--control-height-sm);
+  padding: var(--btn-padding);
+  border-radius: var(--btn-radius);
+  background: var(--surface-control);
+  font-size: var(--btn-font-size);
+  font-weight: var(--btn-font-weight);
+  transition:
+    background var(--transition-normal),
+    border-color var(--transition-normal),
+    color var(--transition-normal);
+}
+
+[data-theme="resolve"] .view-tabs {
+  background: var(--tab-bar-bg);
+}
+
+[data-theme="resolve"] .tab-btn {
+  font-size: var(--view-tab-font-size);
+  font-weight: var(--font-medium);
+}
+
+[data-theme="resolve"] .properties-panel .resolve-property-tab {
+  font-size: 8px;
+}

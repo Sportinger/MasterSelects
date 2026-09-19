@@ -245,6 +245,14 @@ export function ExportBasicsSection({
                     FFmpeg
                   </button>
                 )}
+                <button
+                  type="button"
+                  className={`export-chip${mode.encoder === 'hap' ? ' is-active' : ''}`}
+                  onClick={() => actions.setEncoder('hap')}
+                  aria-pressed={mode.encoder === 'hap'}
+                >
+                  HAP
+                </button>
               </div>
 
               {mode.encoder === 'ffmpeg' && (

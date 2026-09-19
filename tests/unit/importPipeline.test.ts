@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   getProxyFrameCount: vi.fn(async () => 0),
   getProxyFrameIndices: vi.fn(async () => new Set<number>()),
   isProjectOpen: vi.fn(() => true),
+  requiresProjectLocalMediaCopies: vi.fn(() => false),
+  settingsState: { copyMediaToProject: true },
   prepareLottieAsset: vi.fn(async () => ({
     metadata: {
       provider: 'lottie',
@@ -70,6 +72,7 @@ vi.mock('../../src/services/projectFileService', () => ({
     getProxyFrameCount: mocks.getProxyFrameCount,
     getProxyFrameIndices: mocks.getProxyFrameIndices,
     isProjectOpen: mocks.isProjectOpen,
+    requiresProjectLocalMediaCopies: mocks.requiresProjectLocalMediaCopies,
   },
 }));
 
@@ -83,7 +86,7 @@ vi.mock('../../src/services/vectorAnimation/riveMetadata', () => ({
 
 vi.mock('../../src/stores/settingsStore', () => ({
   useSettingsStore: {
-    getState: () => ({ copyMediaToProject: true }),
+    getState: () => mocks.settingsState,
   },
 }));
 
@@ -103,6 +106,8 @@ describe('processImport', () => {
     mocks.getProxyFrameCount.mockResolvedValue(0);
     mocks.getProxyFrameIndices.mockResolvedValue(new Set());
     mocks.isProjectOpen.mockReturnValue(true);
+    mocks.requiresProjectLocalMediaCopies.mockReturnValue(false);
+    mocks.settingsState.copyMediaToProject = true;
   });
 
   afterEach(() => {
@@ -148,6 +153,72 @@ describe('processImport', () => {
     expect(mocks.handleThumbnailDedup).toHaveBeenCalledWith('hash-123', undefined, 'media-1');
     expect(revokeObjectURLSpy).not.toHaveBeenCalledWith('blob:original');
     expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('copies picker files into browser-private projects even when auto-copy is disabled', async () => {
+    mocks.settingsState.copyMediaToProject = false;
+    mocks.requiresProjectLocalMediaCopies.mockReturnValue(true);
+    const originalFile = new File(['original-bytes'], 'ipad-clip.mov', { type: 'video/quicktime' });
+    const rawCopyFile = new File(['raw-copy-bytes'], 'ipad-clip.mov', { type: 'video/quicktime' });
+    const rawHandle = {
+      name: 'ipad-clip.mov',
+      getFile: vi.fn(async () => rawCopyFile),
+    } as unknown as FileSystemFileHandle;
+    mocks.copyToRawFolder.mockResolvedValue({
+      handle: rawHandle,
+      relativePath: 'Raw/ipad-clip.mov',
+      alreadyExisted: false,
+    });
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:ipad-raw-copy');
+
+    const result = await processImport({ file: originalFile, id: 'media-ipad' });
+
+    expect(mocks.copyToRawFolder).toHaveBeenCalledWith(originalFile, undefined);
+    expect(result.mediaFile.file).toBe(rawCopyFile);
+    expect(result.mediaFile.projectPath).toBe('Raw/ipad-clip.mov');
+  });
+
+  it('keeps source-linked imports when auto-copy is disabled on a persistent picker backend', async () => {
+    mocks.settingsState.copyMediaToProject = false;
+    mocks.requiresProjectLocalMediaCopies.mockReturnValue(false);
+    const file = new File(['desktop-bytes'], 'desktop-clip.mp4', { type: 'video/mp4' });
+    const sourceHandle = {
+      name: file.name,
+      getFile: vi.fn(async () => file),
+    } as unknown as FileSystemFileHandle;
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:desktop-source');
+
+    const result = await processImport({ file, id: 'media-desktop', handle: sourceHandle });
+
+    expect(mocks.copyToRawFolder).not.toHaveBeenCalled();
+    expect(result.mediaFile.file).toBe(file);
+    expect(result.mediaFile.projectPath).toBeUndefined();
+  });
+
+  it('copies transient picker files into a persistent project for refresh restore', async () => {
+    mocks.settingsState.copyMediaToProject = false;
+    mocks.requiresProjectLocalMediaCopies.mockReturnValue(false);
+    const transientFile = new File(['android-bytes'], 'android-photo.jpg', { type: 'image/jpeg' });
+    const rawCopyFile = new File(['android-bytes'], 'android-photo.jpg', { type: 'image/jpeg' });
+    const rawHandle = {
+      name: rawCopyFile.name,
+      getFile: vi.fn(async () => rawCopyFile),
+    } as unknown as FileSystemFileHandle;
+    mocks.classifyMediaType.mockResolvedValue('image');
+    mocks.getMediaInfo.mockResolvedValue({ duration: 5, width: 1920, height: 1080 });
+    mocks.copyToRawFolder.mockResolvedValue({
+      handle: rawHandle,
+      relativePath: 'Raw/android-photo.jpg',
+      alreadyExisted: false,
+    });
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:android-project-copy');
+
+    const result = await processImport({ file: transientFile, id: 'media-android' });
+
+    expect(mocks.copyToRawFolder).toHaveBeenCalledWith(transientFile, undefined);
+    expect(result.mediaFile.file).toBe(rawCopyFile);
+    expect(result.mediaFile.projectPath).toBe('Raw/android-photo.jpg');
+    expect(result.mediaFile.hasFileHandle).toBe(true);
   });
 
   it('stores Lottie metadata without using HTML media probing', async () => {
@@ -214,6 +285,73 @@ describe('processImport', () => {
     expect(result.mediaFile.proxyFrameCount).toBeUndefined();
     expect(result.mediaFile.proxyProgress).toBeUndefined();
     expect(result.mediaFile.proxyFps).toBeUndefined();
+  });
+
+  it('passes authoritative ProRes metadata into thumbnail backend selection', async () => {
+    const file = new File(['prores'], 'camera.mov', { type: 'video/quicktime' });
+    mocks.getMediaInfo.mockResolvedValue({
+      duration: 8,
+      width: 1920,
+      height: 1080,
+      videoCodecId: 'apch',
+    });
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:camera');
+
+    await processImport({ file, id: 'media-prores' });
+
+    expect(mocks.createThumbnail).toHaveBeenCalledWith(file, 'video', {
+      videoCodecId: 'apch',
+      duration: 8,
+    });
+  });
+
+  it('can finish a media import without waiting for thumbnail generation', async () => {
+    const file = new File(['video'], 'ipad-video.mov', { type: 'video/quicktime' });
+
+    const result = await processImport({
+      file,
+      id: 'media-ipad-fast-import',
+      generateThumbnail: false,
+    });
+
+    expect(result.mediaFile.thumbnailUrl).toBeUndefined();
+    expect(mocks.createThumbnail).not.toHaveBeenCalled();
+    expect(mocks.handleThumbnailDedup).not.toHaveBeenCalled();
+  });
+
+  it('preserves serializable container-level video metadata', async () => {
+    mocks.getMediaInfo.mockResolvedValue({
+      duration: 10,
+      width: 1920,
+      height: 1080,
+      codedWidth: 1920,
+      codedHeight: 1088,
+      fps: 23.98,
+      codec: 'ProRes 422 HQ',
+      videoCodecId: 'apch',
+      rotation: 0,
+      pixelAspectRatio: { numerator: 1, denominator: 1 },
+      videoColorSpace: { primaries: 'bt709', transfer: 'bt709', matrix: 'bt709', fullRange: false },
+      hasHighDynamicRange: false,
+      canBeTransparent: false,
+      hasAudio: true,
+    });
+
+    const result = await processImport({
+      file: new File(['mov-bytes'], 'camera.mov', { type: 'video/quicktime' }),
+      id: 'media-prores',
+    });
+
+    expect(result.mediaFile).toMatchObject({
+      codec: 'ProRes 422 HQ',
+      videoCodecId: 'apch',
+      codedWidth: 1920,
+      codedHeight: 1088,
+      rotation: 0,
+      pixelAspectRatio: { numerator: 1, denominator: 1 },
+      hasHighDynamicRange: false,
+      canBeTransparent: false,
+    });
   });
 
   it('marks an existing JPEG proxy sequence as ready during import', async () => {

@@ -10,6 +10,10 @@ import {
 } from '../../src/components/export/batch';
 
 describe('batch source export planning', () => {
+  it('uses AAC-compatible 192 kbps audio defaults', () => {
+    expect(createDefaultExportSettings().audioBitrate).toBe(192_000);
+  });
+
   it('maps application video codec names to MediaBunny codecs', () => {
     expect(mapBatchSourceVideoCodec('h264')).toBe('avc');
     expect(mapBatchSourceVideoCodec('h265')).toBe('hevc');
@@ -61,7 +65,7 @@ describe('batch source export planning', () => {
       videoBitrate: 24_000_000,
       includeAudio: true,
       audioCodec: 'aac',
-      audioBitrate: 320_000,
+      audioBitrate: 192_000,
       audioSampleRate: 44100,
     });
   });

@@ -24,6 +24,8 @@ export function collectNativeDecoderFrame(
     textureView: deps.textureManager.getDynamicTextureView(layer.id) ?? texture.createView(),
     sourceWidth: bitmap.width,
     sourceHeight: bitmap.height,
+    displayedMediaTime: layer.source!.nativeDecoder!.getCurrentFrameNum() / layer.source!.nativeDecoder!.fps,
+    targetMediaTime: layer.source?.mediaTime,
   };
 }
 
@@ -54,5 +56,7 @@ export function collectParallelVideoFrame(
     textureView: null,
     sourceWidth: displaySize.width,
     sourceHeight: displaySize.height,
+    displayedMediaTime: frame.timestamp / 1_000_000,
+    targetMediaTime: layer.source?.targetMediaTime ?? layer.source?.mediaTime,
   };
 }

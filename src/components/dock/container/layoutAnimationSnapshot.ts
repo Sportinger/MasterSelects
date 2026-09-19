@@ -45,7 +45,11 @@ export function captureDockLayoutAnimationSnapshot(
   const elements = container.querySelectorAll<HTMLElement>(DOCK_LAYOUT_ANIMATION_SELECTOR);
 
   elements.forEach((element) => {
-    if (staggerMode === 'sequence' && !element.classList.contains('dock-tab-pane')) {
+    if (
+      staggerMode === 'sequence'
+      && !element.classList.contains('dock-tab-pane')
+      && element.dataset.dockLayoutSequenceSurface !== 'true'
+    ) {
       return;
     }
 

@@ -11,6 +11,7 @@ import { withProjectStoreSyncGuard } from '../projectSave';
 import { createThumbnailMediaObjectUrl } from '../mediaObjectUrlManager';
 import { yieldToBrowser } from './loadProgress';
 import { restoreCachedClipAnalysis } from '../../faceAnalysis/faceAnalysisPersistence';
+import { isIsobmffFileName } from '../../mediaMetadata/isobmffMetadata';
 
 const log = Logger.create('ProjectSync');
 const CACHED_THUMBNAIL_RESTORE_BATCH_SIZE = 48;
@@ -123,7 +124,8 @@ export async function refreshMediaMetadata(
       f.codec === undefined ||
       f.container === undefined ||
       f.fileSize === undefined ||
-      (f.type === 'video' && f.hasAudio === undefined)
+      (f.type === 'video' && f.hasAudio === undefined) ||
+      (f.type === 'video' && isIsobmffFileName(f.name) && f.videoCodecId === undefined)
     )
   );
 
@@ -154,6 +156,14 @@ export async function refreshMediaMetadata(
               ? {
                   ...f,
                   codec: info.codec || f.codec,
+                  videoCodecId: info.videoCodecId ?? f.videoCodecId,
+                  codedWidth: info.codedWidth ?? f.codedWidth,
+                  codedHeight: info.codedHeight ?? f.codedHeight,
+                  rotation: info.rotation ?? f.rotation,
+                  pixelAspectRatio: info.pixelAspectRatio ?? f.pixelAspectRatio,
+                  videoColorSpace: info.videoColorSpace ?? f.videoColorSpace,
+                  hasHighDynamicRange: info.hasHighDynamicRange ?? f.hasHighDynamicRange,
+                  canBeTransparent: info.canBeTransparent ?? f.canBeTransparent,
                   audioCodec: info.audioCodec,
                   container: info.container || f.container,
                   bitrate: info.bitrate || f.bitrate,
@@ -167,6 +177,7 @@ export async function refreshMediaMetadata(
 
         log.debug('Refreshed metadata for: ' + mediaFile.name, {
           codec: info.codec,
+          videoCodecId: info.videoCodecId,
           hasAudio: info.hasAudio,
           bitrate: info.bitrate,
         });

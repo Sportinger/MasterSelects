@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState, type SyntheticEvent } from 'react';
-import { useFlashBoardRuntime } from '../flashboard/useFlashBoardRuntime';
+import { useDockStore } from '../../../stores/dockStore';
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
 import {
   subscribeLandingEntryRequests,
@@ -8,11 +8,9 @@ import {
 } from '../../../marketing/landingEntryRequest';
 import './MediaAIGenerativeTray.css';
 
-// Shared factory so we can both lazy-render and prefetch the (heavy) expanded
-// tray chunk. Module imports are cached, so calling this repeatedly is cheap.
 const importExpandedTray = () => import('./MediaAIGenerativeTrayExpanded');
 const MediaAIGenerativeTrayExpanded = lazy(() =>
-  importExpandedTray().then((m) => ({ default: m.MediaAIGenerativeTrayExpanded }))
+  importExpandedTray().then((module) => ({ default: module.MediaAIGenerativeTrayExpanded })),
 );
 
 type MediaAITrayMode = 'generate' | 'chat' | 'download';
@@ -26,7 +24,7 @@ export function MediaAIGenerativeTray({
   expanded,
   onExpandedChange,
 }: MediaAIGenerativeTrayProps) {
-  const { dismissRefundDialog, refundDialog } = useFlashBoardRuntime({ enableKeyboardDelete: false });
+  const activatePanelType = useDockStore((state) => state.activatePanelType);
   const [trayMode, setTrayMode] = useState<MediaAITrayMode>('generate');
   const [landingRequest, setLandingRequest] = useState<LandingEntryRequest | null>(null);
 
@@ -34,9 +32,12 @@ export function MediaAIGenerativeTray({
     event.stopPropagation();
   }, []);
 
-  // Warm on hover only. Startup stays lazy until the user interacts with AI.
   const prefetchExpanded = useCallback(() => {
     void importExpandedTray();
+  }, []);
+
+  const prefetchStudio = useCallback(() => {
+    void import('../ai-studio/AIStudioPanel');
   }, []);
 
   const openTray = useCallback((mode: MediaAITrayMode) => {
@@ -44,6 +45,11 @@ export function MediaAIGenerativeTray({
     setLandingRequest(null);
     onExpandedChange(true);
   }, [onExpandedChange]);
+
+  const openStudio = useCallback(() => {
+    activatePanelType('ai-studio');
+    onExpandedChange(false);
+  }, [activatePanelType, onExpandedChange]);
 
   const applyLandingRequest = useCallback((request: LandingEntryRequest) => {
     if (request.mode === 'generate' && request.providerId && request.outputType) {
@@ -65,14 +71,19 @@ export function MediaAIGenerativeTray({
 
   useEffect(() => {
     const pendingRequest = takeLandingEntryRequest();
-    if (pendingRequest) {
-      applyLandingRequest(pendingRequest);
-    }
+    let cancelled = false;
+    if (pendingRequest) queueMicrotask(() => {
+      if (!cancelled) applyLandingRequest(pendingRequest);
+    });
 
-    return subscribeLandingEntryRequests((request) => {
+    const unsubscribe = subscribeLandingEntryRequests((request) => {
       takeLandingEntryRequest();
       applyLandingRequest(request);
     });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [applyLandingRequest]);
 
   return (
@@ -106,6 +117,19 @@ export function MediaAIGenerativeTray({
             <span>Generate</span>
           </button>
           <button
+            className="media-ai-tray-launch media-ai-tray-launch-studio"
+            type="button"
+            onClick={openStudio}
+            onMouseEnter={prefetchStudio}
+            title="Open AI Studio"
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+              <rect x="2.2" y="2.2" width="11.6" height="11.6" rx="2.4" />
+              <path d="M5.2 5.4h5.6M5.2 8h3.9M5.2 10.6h5.6" />
+            </svg>
+            <span>Studio</span>
+          </button>
+          <button
             className="media-ai-tray-launch media-ai-tray-launch-download"
             type="button"
             onClick={() => openTray('download')}
@@ -135,41 +159,6 @@ export function MediaAIGenerativeTray({
               onCollapse={() => onExpandedChange(false)}
             />
           </Suspense>
-        </div>
-      )}
-      {refundDialog && (
-        <div
-          className="media-delete-dialog-backdrop media-refund-dialog-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              dismissRefundDialog();
-            }
-          }}
-        >
-          <div
-            className="media-delete-dialog media-refund-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="media-refund-dialog-title"
-          >
-            <div className="media-delete-dialog-kicker">Refund</div>
-            <h3 id="media-refund-dialog-title">WE are sorry!</h3>
-            <p>Here are your credits back.</p>
-            <div className="media-delete-dialog-warning media-refund-dialog-credits">
-              Refunded {refundDialog.credits} credits
-            </div>
-            <div className="media-delete-dialog-actions">
-              <button
-                type="button"
-                className="media-delete-dialog-button refund"
-                onClick={dismissRefundDialog}
-                title={`Job ${refundDialog.jobId}`}
-              >
-                OK
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </>

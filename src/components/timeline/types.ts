@@ -89,6 +89,7 @@ export interface ClipFadeState {
 // In/Out marker drag state
 export interface MarkerDragState {
   type: 'in' | 'out';
+  pointerId: number;
   startX: number;
   originalTime: number;
 }
@@ -110,6 +111,7 @@ export interface ExternalDragState {
   thumbnailUrl?: string;
   newTrackType?: 'video' | 'audio' | null;  // If hovering over "new track" drop zone
   showVideoNewTrackZone?: boolean; // True after dragging upward against the timeline top edge
+  replaceClipId?: string; // Shift-drop target whose source will be replaced
 }
 
 // Context menu state for clip right-click
@@ -160,6 +162,9 @@ export interface TimelineRulerProps {
   onSelectLane?: (laneId: string) => void;
   scrollX: number;
   onRulerMouseDown: (e: React.MouseEvent) => void;
+  onSetInPoint?: (time: number) => void;
+  onSetOutPoint?: (time: number) => void;
+  onAddMarker?: (time: number) => void;
   formatTime: (seconds: number) => string;
   cacheRanges?: TimelineRulerCacheRange[];
   videoBakeRegions?: VideoBakeRegion[];
@@ -299,9 +304,9 @@ export interface TimelineTrackProps {
   onEmptyContextMenu: (e: React.MouseEvent, trackId: string, time: number) => void;
   onTrimStart: (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => void;
   onFadeStart: (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => void;
-  onDrop: (e: React.DragEvent) => void;
-  onDragOver: (e: React.DragEvent) => void;
-  onDragEnter: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent, trackId: string) => void;
+  onDragOver: (e: React.DragEvent, trackId: string) => void;
+  onDragEnter: (e: React.DragEvent, trackId: string) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onResizeStart?: (e: React.PointerEvent, trackId: string) => void;
   isResizeActive?: boolean;

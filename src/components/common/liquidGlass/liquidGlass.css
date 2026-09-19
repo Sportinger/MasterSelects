@@ -1,0 +1,298 @@
+/* Liquid-glass UI primitives.
+ *
+ * `.ms-liquid-glass` turns any container into an Apple-style liquid glass
+ * surface: blurred/saturated backdrop, specular rim ring, oblique sheen and
+ * a deep soft shadow. Works everywhere backdrop-filter does (incl. iOS).
+ * On Chromium a `.ms-liquid-glass-lens` child (see LiquidGlassLens) swaps
+ * the plain blur for an SVG displacement lens that refracts the backdrop
+ * at the rim, like the real iOS material.
+ *
+ * `.ms-liquid-bubble` composes the surface into a tap-to-expand control:
+ * a bright inner glass orb (the trigger) floating in a glass shell that
+ * stretches into an action pill - one element morphing, metaball-style.
+ * LiquidGlassBubble measures the drawer content and publishes
+ * `--lgb-drawer-width/height`, so the spring can genuinely overshoot the
+ * content size while stretching.
+ *
+ * All paint lives on the pseudo/lens layers (z 0-2); interactive content
+ * sits at z 3 so the lens never refracts the surface's own chrome.
+ */
+
+@layer features {
+
+.ms-liquid-glass {
+  --ms-lg-radius: 999px;
+  --ms-lg-blur: 10px;
+  --ms-lg-tint: rgba(20, 22, 27, 0.16);
+  position: relative;
+  border: 0;
+  border-radius: var(--ms-lg-radius);
+  background: none;
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.44),
+    0 4px 12px rgba(0, 0, 0, 0.3);
+  -webkit-backdrop-filter: blur(var(--ms-lg-blur)) saturate(1.7) brightness(1.14);
+  backdrop-filter: blur(var(--ms-lg-blur)) saturate(1.7) brightness(1.14);
+}
+
+/* Refracting mode: the lens child carries the whole backdrop chain so the
+   displacement bends the page behind the glass, not the glass's own layers. */
+.ms-liquid-glass.ms-liquid-glass-refracting {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.ms-liquid-glass-lens {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  -webkit-backdrop-filter: url(#ms-liquid-glass-lens) blur(2.5px) saturate(1.7) brightness(1.16);
+  backdrop-filter: url(#ms-liquid-glass-lens) blur(2.5px) saturate(1.7) brightness(1.16);
+}
+
+/* Tint + sheen: smoked base, a window reflection near the top-left and a
+   faint caustic glow gathering at the bottom-right - above the lens. */
+.ms-liquid-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  background:
+    radial-gradient(130% 88% at 20% 4%, rgba(255, 255, 255, 0.16), transparent 42%),
+    radial-gradient(110% 92% at 84% 100%, rgba(255, 255, 255, 0.08), transparent 38%),
+    linear-gradient(115deg, rgba(255, 255, 255, 0.04), transparent 34%, rgba(0, 0, 0, 0.04) 62%, rgba(255, 255, 255, 0.02)),
+    var(--ms-lg-tint);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.18),
+    inset 0 -10px 16px -13px rgba(255, 255, 255, 0.42);
+  pointer-events: none;
+}
+
+/* Specular rim: environment light wrapping the edge - bright at the top-left
+   and again at the lower-right, dim in between, like a polished glass bead. */
+.ms-liquid-glass::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  padding: 1.25px;
+  background: conic-gradient(
+    from 205deg,
+    rgba(255, 255, 255, 0.62),
+    rgba(255, 255, 255, 0.12) 26%,
+    rgba(255, 255, 255, 0.48) 48%,
+    rgba(255, 255, 255, 0.1) 74%,
+    rgba(255, 255, 255, 0.62)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Expandable bubble: glass orb in a shell that stretches into a pill. */
+
+.ms-liquid-bubble {
+  /* Closed: a small orb in a thin shell. Open: the orb swells and the shell
+     stretches into a large pill around the measured drawer content.
+     Consumers tune --lgb-size-closed/--lgb-size-open; --lgb-size is the
+     state-switched output and must not be overridden directly (a same-layer
+     override would race this rule's own .open switch). */
+  --lgb-size-closed: 28px;
+  --lgb-size-open: 42px;
+  --lgb-size: var(--lgb-size-closed);
+  --lgb-pad: 1px;
+  --lgb-pad-open: 6px;
+  --lgb-gap: 7px;
+  /* Damped spring with one visible overshoot; the bezier is the fallback. */
+  --lgb-spring: cubic-bezier(0.3, 1.28, 0.32, 1);
+  display: inline-flex;
+  align-items: center;
+  padding: var(--lgb-pad);
+  column-gap: 0px;
+  transform-origin: calc(var(--lgb-pad) + var(--lgb-size) / 2) center;
+  transition:
+    column-gap 460ms var(--lgb-spring),
+    padding 460ms var(--lgb-spring);
+}
+
+.ms-liquid-bubble.open {
+  --lgb-size: var(--lgb-size-open);
+}
+
+@supports (transition-timing-function: linear(0, 1)) {
+  .ms-liquid-bubble {
+    --lgb-spring: linear(
+      0, 0.023 3.2%, 0.088 6.8%, 0.19 10.6%, 0.32 14.4%, 0.46 18.4%,
+      0.60 22.6%, 0.73 27%, 0.84 31.6%, 0.925 36.4%, 0.99 41.4%,
+      1.035 46.8%, 1.058 52.6%, 1.062 57%, 1.05 62.4%, 1.031 68.2%,
+      1.014 74.4%, 1.003 81%, 0.998 88%, 0.999 94%, 1
+    );
+  }
+}
+
+.ms-liquid-bubble.open {
+  padding: var(--lgb-pad-open);
+  column-gap: var(--lgb-gap);
+  animation: ms-lgb-pop 620ms ease-out;
+}
+
+/* Surface-tension pulse while the pill stretches out of the orb. */
+@keyframes ms-lgb-pop {
+  0% { transform: scale(1, 1); }
+  18% { transform: scale(1.05, 0.9); }
+  46% { transform: scale(0.985, 1.04); }
+  72% { transform: scale(1.008, 0.99); }
+  100% { transform: scale(1, 1); }
+}
+
+/* The inner orb: a brighter milky glass bead floating in the shell. */
+.ms-liquid-bubble-trigger {
+  position: relative;
+  z-index: 3;
+  display: inline-flex;
+  width: var(--lgb-size);
+  height: var(--lgb-size);
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background:
+    radial-gradient(120% 120% at 28% 18%, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.12) 48%, rgba(255, 255, 255, 0.03) 74%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06));
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.5),
+    inset 0 -2px 6px -1px rgba(255, 255, 255, 0.16),
+    inset 0 0 10px rgba(255, 255, 255, 0.08),
+    0 3px 9px rgba(0, 0, 0, 0.3);
+  color: rgba(255, 255, 255, 0.95);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    width 460ms var(--lgb-spring),
+    height 460ms var(--lgb-spring),
+    background-color 240ms ease,
+    color 240ms ease,
+    transform 160ms ease,
+    box-shadow 240ms ease;
+}
+
+.ms-liquid-bubble-trigger:active {
+  transform: scale(0.92);
+}
+
+.ms-liquid-bubble-trigger:focus-visible {
+  outline: 1.5px solid color-mix(in srgb, var(--accent, #4b9fff) 80%, #fff);
+  outline-offset: 2px;
+}
+
+.ms-liquid-bubble-trigger svg {
+  width: 15px;
+  height: 15px;
+  transition:
+    width 460ms var(--lgb-spring),
+    height 460ms var(--lgb-spring),
+    transform 460ms var(--lgb-spring);
+}
+
+.ms-liquid-bubble.open .ms-liquid-bubble-trigger svg {
+  width: 20px;
+  height: 20px;
+}
+
+.ms-liquid-bubble.open .ms-liquid-bubble-trigger {
+  color: #fff;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.55),
+    inset 0 -2px 6px -1px rgba(255, 255, 255, 0.2),
+    inset 0 0 12px rgba(255, 255, 255, 0.12),
+    0 3px 9px rgba(0, 0, 0, 0.3);
+}
+
+.ms-liquid-bubble.open .ms-liquid-bubble-trigger svg {
+  transform: rotate(90deg);
+}
+
+/* Drawer: sized from the measured content vars so the spring can overshoot
+   the real content width (the glass stretches past the icons and settles). */
+.ms-liquid-bubble-drawer {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  width: 0;
+  height: var(--lgb-size);
+  min-width: 0;
+  align-items: center;
+  visibility: hidden;
+  transition:
+    width 460ms var(--lgb-spring),
+    height 460ms var(--lgb-spring),
+    visibility 0s 240ms;
+}
+
+.ms-liquid-bubble.open .ms-liquid-bubble-drawer {
+  width: var(--lgb-drawer-width, 0px);
+  height: var(--lgb-drawer-height, var(--lgb-size));
+  visibility: visible;
+  transition:
+    width 460ms var(--lgb-spring),
+    height 460ms var(--lgb-spring),
+    visibility 0s;
+}
+
+.ms-liquid-bubble-drawer-inner {
+  display: flex;
+  width: max-content;
+  flex: none;
+  align-items: center;
+  gap: var(--lgb-gap);
+  opacity: 0;
+  transition: opacity 110ms ease;
+}
+
+.ms-liquid-bubble.open .ms-liquid-bubble-drawer-inner {
+  opacity: 1;
+  transition: opacity 200ms ease 40ms;
+}
+
+/* Actions materialize with a staggered pop while the glass stretches. */
+.ms-liquid-bubble-drawer button {
+  opacity: 0;
+  transform: scale(0.4);
+  transition: opacity 90ms ease, transform 90ms ease;
+}
+
+.ms-liquid-bubble.open .ms-liquid-bubble-drawer button {
+  opacity: 1;
+  transform: none;
+  transition: opacity 200ms ease, transform 380ms var(--lgb-spring);
+}
+
+.ms-liquid-bubble.open .ms-liquid-bubble-drawer button:nth-child(1) { transition-delay: 50ms; }
+.ms-liquid-bubble.open .ms-liquid-bubble-drawer button:nth-child(2) { transition-delay: 90ms; }
+.ms-liquid-bubble.open .ms-liquid-bubble-drawer button:nth-child(3) { transition-delay: 130ms; }
+.ms-liquid-bubble.open .ms-liquid-bubble-drawer button:nth-child(4) { transition-delay: 170ms; }
+.ms-liquid-bubble.open .ms-liquid-bubble-drawer button:nth-child(5) { transition-delay: 210ms; }
+.ms-liquid-bubble.open .ms-liquid-bubble-drawer button:nth-child(6) { transition-delay: 250ms; }
+.ms-liquid-bubble.open .ms-liquid-bubble-drawer button:nth-child(7) { transition-delay: 290ms; }
+.ms-liquid-bubble.open .ms-liquid-bubble-drawer button:nth-child(n + 8) { transition-delay: 330ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ms-liquid-bubble,
+  .ms-liquid-bubble * {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+  }
+}
+
+}

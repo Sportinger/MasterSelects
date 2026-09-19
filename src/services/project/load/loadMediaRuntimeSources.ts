@@ -7,6 +7,8 @@ import {
   getProjectRawPathCandidates,
   getStoredProjectFileHandle,
 } from '../mediaSourceResolver';
+import { readProjectMediaSourceFile } from '../mediaSourceRoots';
+import { isRestoredMediaSourceCompatible } from '../mediaSourceValidation';
 import {
   createMediaObjectUrl,
   createPrimaryMediaObjectUrl,
@@ -116,6 +118,14 @@ async function hydrateModelSequence(
       }
     }
 
+    if (hydrateFiles && !frameFile && pm.sourceRootId) {
+      const restoredFrame = await readProjectMediaSourceFile(pm.sourceRootId, frame.sourcePath);
+      if (restoredFrame) {
+        frameFile = restoredFrame.file;
+        modelUrl = createMediaObjectUrl(pm.id, getModelSequenceFrameObjectUrlKey(frameIndex), restoredFrame.file);
+      }
+    }
+
     if (hydrateFiles && !frameFile) {
       const restoredFrame = await restoreSequenceFrameFromHandle(pm.id, frameIndex);
       if (restoredFrame) {
@@ -163,6 +173,14 @@ async function hydrateGaussianSplatSequence(
       }
     }
 
+    if (hydrateFiles && !frameFile && pm.sourceRootId) {
+      const restoredFrame = await readProjectMediaSourceFile(pm.sourceRootId, frame.sourcePath);
+      if (restoredFrame) {
+        frameFile = restoredFrame.file;
+        splatUrl = createMediaObjectUrl(pm.id, getGaussianSplatSequenceFrameObjectUrlKey(frameIndex), restoredFrame.file);
+      }
+    }
+
     if (hydrateFiles && !frameFile) {
       const restoredFrame = await restoreSequenceFrameFromHandle(pm.id, frameIndex);
       if (restoredFrame) {
@@ -202,7 +220,9 @@ export async function hydrateProjectMediaRuntimeSources(
     const storedProjectHandle = await getStoredProjectFileHandle(pm.id);
     if (storedProjectHandle) {
       try {
-        file = await storedProjectHandle.getFile();
+        const candidate = await storedProjectHandle.getFile();
+        if (!await isRestoredMediaSourceCompatible(pm, candidate)) throw new Error('Stored project media does not match');
+        file = candidate;
         handle = storedProjectHandle;
         url = createPrimaryMediaObjectUrl(pm.id, file);
         resolvedProjectPath = resolvedProjectPath || 'Raw/' + storedProjectHandle.name;
@@ -227,6 +247,7 @@ export async function hydrateProjectMediaRuntimeSources(
       try {
         const result = await projectFileService.getFileFromRaw(candidatePath);
         if (!result) continue;
+        if (!await isRestoredMediaSourceCompatible(pm, result.file)) continue;
 
         file = result.file;
         handle = result.handle;
@@ -239,6 +260,20 @@ export async function hydrateProjectMediaRuntimeSources(
       } catch (e) {
         log.warn('Could not access project RAW path for ' + pm.name + ': ' + candidatePath, e);
       }
+    }
+  }
+
+  if (hydrateFiles && !file && pm.sourceRootId) {
+    const restored = await readProjectMediaSourceFile(
+      pm.sourceRootId,
+      pm.sourceRelativePath ?? pm.sourcePath,
+    );
+    if (restored && await isRestoredMediaSourceCompatible(pm, restored.file)) {
+      file = restored.file;
+      handle = restored.handle;
+      url = createPrimaryMediaObjectUrl(pm.id, file);
+      fileSystemService.storeFileHandle(pm.id, handle);
+      log.info('Restored file from media source root:', pm.name);
     }
   }
 
@@ -262,9 +297,12 @@ export async function hydrateProjectMediaRuntimeSources(
       try {
         const permission = await handle.queryPermission({ mode: 'read' });
         if (permission === 'granted') {
-          file = await handle.getFile();
-          url = createPrimaryMediaObjectUrl(pm.id, file);
-          log.info('Restored file from handle:', pm.name);
+          const candidate = await handle.getFile();
+          if (await isRestoredMediaSourceCompatible(pm, candidate)) {
+            file = candidate;
+            url = createPrimaryMediaObjectUrl(pm.id, file);
+            log.info('Restored file from handle:', pm.name);
+          }
         } else {
           log.info('File needs permission:', pm.name);
         }
@@ -274,6 +312,7 @@ export async function hydrateProjectMediaRuntimeSources(
     }
   }
 
+  if (hydrateFiles && !file) handle = undefined;
   const representativeFile = file ?? modelSequence?.frames[0]?.file ?? gaussianSplatSequence?.frames[0]?.file;
   const representativeProjectPath =
     resolvedProjectPath ?? modelSequence?.frames[0]?.projectPath ?? gaussianSplatSequence?.frames[0]?.projectPath;

@@ -2,7 +2,7 @@
 
 [← Back to Index](./README.md)
 
-Model-powered editing with the shared editor tool catalog, managed Kie.ai Cloud chat, multi-provider AI video/image/audio generation, local scene description, transcription, browser-local SAM 2 segmentation, native-helper MatAnyone2 matting, and local MuScriptor music-to-MIDI.
+Model-powered editing through the private hosted-agent kernel and shared public editor tool catalog, plus multi-provider AI video/image/audio generation, local scene description, transcription, browser-local SAM 2 segmentation, native-helper MatAnyone2 matting, and local MuScriptor music-to-MIDI.
 
 ---
 
@@ -24,19 +24,22 @@ Model-powered editing with the shared editor tool catalog, managed Kie.ai Cloud 
 
 ## FlashBoard Chat
 
-> **Kernel-first routing:** when an agent-kernel service is configured
-> (`ms.kernel.url` + `ms.kernel.token`), mechanical editing requests are
-> compiled, simulated, and verified by the kernel and executed locally in
-> one undo group before any provider call happens; everything else falls
-> back to the chat loop described below. See
-> `docs/Features/Kernel-Client.md` for the full flow and fallback matrix.
+> **Two explicit runtimes:** `Codex Direct` is the default in development and
+> production and reaches the isolated Codex app-server through authenticated
+> same-origin relays. `Fast` uses Hosted Agent V2 through the kernel-owned
+> `/api/kernel/normal/*` boundary. In both cases, the browser retains atomic
+> tool validation, policy, confirmation, transactions, undo, and execution.
+> See [Kernel Client](./Kernel-Client.md) for routes and lifecycles.
 
 ### Location
 - Floating FlashBoard composer chat mode
 
 ### Features
 - Interactive chat interface
-- Model menu for Kie.ai hosted chat
+- Development and production default to `Codex Direct`: one resumable Codex thread controls the live editor through the complete approved MasterSelects tool surface
+- The same Direct conversation and active run remain visible when switching between `/chat` and the editor layout
+- Compact Model menu with exactly `Fast` and `Codex Direct`; Direct is the default and Logic is neither shown nor requested by the UI
+- The separate `Story` product workflow remains available from the prompt-path menu
 - Conversation history
 - Clear chat button
 - Auto-scrolling
@@ -46,9 +49,25 @@ Model-powered editing with the shared editor tool catalog, managed Kie.ai Cloud 
 
 | Provider | Runtime | Configuration |
 |---|---|---|
-| `Kie.ai` | MasterSelects hosted chat through the hosted agent kernel | Signed-in account with hosted AI enabled |
+| `MasterSelects Hosted Agent` | Cloudflare edge plus private kernel; the server owns the actual provider/model route | Signed-in account with Hosted Agent V2 enabled |
 
-Hosted Kie.ai chat keeps the provider key on the Cloudflare backend. The browser has no Kie.ai key setting, credential header, or direct provider fallback; unavailable hosted access fails closed with an account or credit prompt.
+Hosted chat keeps all provider and kernel credentials off the browser. The
+browser has no provider-key setting, credential header, or direct provider
+fallback. Production Direct and Fast both require the signed-in session;
+unavailable access fails closed with a visible account, capability, credit, or
+service error.
+
+`Codex Direct` connects through the same-origin `/api/direct-codex/ws` WebSocket
+route. In production Cloudflare validates the Origin and signed-in session,
+binds the authenticated principal, and relays to the private kernel's bounded
+`/kernel/direct-codex/ws` endpoint; that endpoint alone reaches the loopback
+Codex app-server. In `dev:full`, the same public path resolves to the local
+relay. Its opaque thread ID is retained in tab-scoped session storage, so
+subsequent prompts resume the Codex context without resending the visible
+transcript. The active workspace conversation ID binds the `/chat` and
+floating editor projections, while a shared run owner prevents layout unmounts
+from aborting the turn. Explicit Stop/New actions still interrupt or reset the
+session.
 
 Transcription modes are
 `local`, `openai`, `assemblyai`, `deepgram`, and the `hybrid` Deepgram + OpenAI
@@ -56,29 +75,30 @@ fusion path.
 
 FlashBoard Chat includes a `PromptBook` button for provider-specific system prompt overrides, generation prompts, generated media, chat history, and tool-call history. Prompts can be saved into the current project folder under `Prompts/*.prompt.json`, reloaded from the saved prompt list, reset to the built-in prompt, imported from a text/Markdown file, and exported as a `.txt` file. The active override and its `Send current MasterSelects context` setting are mirrored in app settings so the chat can use them immediately. The floating FlashBoard Chat is the primary AI editing surface.
 
-### Available Models
+### Hosted route choices
 
-Kie.ai:
-
-```
-GPT 5.6 Luna, GPT 5.6 Terra, GPT 5.6 Sol
-GPT 5.5, GPT 5.4
-Claude Opus 4.8, Claude Sonnet 5
-Claude Fable 5 (chat only)
-```
-
-Default model: `gpt-5-6-terra`
-
-GPT models use Kie.ai's `/codex/v1/responses` protocol. Opus 4.8 and Sonnet 5 use `/claude/v1/messages` with editor tools. Kie.ai documents Fable 5 as not supporting function calls, so the UI labels it `chat only` and never exposes editor tools to that model.
+The editor does not expose raw provider names, product-model IDs, or the old
+Very Fast/Fast/Slow class selector. Its Model menu contains two choices within
+the Auto path: `Codex Direct`, the default resumable app-server session, and
+`Fast`, which requests the hosted Standard backend through the Normal Path.
+The private kernel may retain Logic as an internal compatibility capability,
+but the product UI neither renders nor requests it. The edge and private kernel
+remain authoritative for availability, authentication, billing policy, and
+the actual backend mapping.
 
 ### Editor Mode
-When enabled:
+For Hosted V2 editor work:
 - Includes timeline context in prompts
-- Uses the exported AI tool catalog from `src/services/aiTools/definitions`
-- The chat UI and dispatcher policy gate tool execution
-- AI can manipulate timeline directly
+- Builds the pinned, versioned atomic editor-tool catalog from
+  `src/services/aiTools/editorToolCatalog`
+- Validates operation plans, revisions, results, and settlement bindings before
+  they reach the shared dispatcher
+- Applies the normal public policy, authorization, confirmation, transaction,
+  and undo rules; the private kernel does not mutate the timeline directly
 
-The model-facing catalog is selected from the exported definition groups and capped at 128 tools for Kie.ai requests. Core timeline and face-analysis tools are placed first before the cap is applied. `openComposition` and `searchVideos` are both mapped through the shared handler registry.
+The Hosted V2 catalog and per-round batch are bounded by the versioned public
+contract. The legacy Kie V1 request builder retains its separate 128-tool cap,
+but that compatibility transport has no private production target.
 
 In development, the same shared tool surface is also exposed in the browser console:
 
@@ -124,11 +144,12 @@ Generation launches from Media so generated results land directly beside importe
 
 | Backend | Where it is used | Notes |
 |---------|------------------|-------|
-| `Kie.ai` | Server-side provider behind hosted FlashBoard media, compact chat, prompt refinement, and AI node authoring | Browser requests enter authenticated MasterSelects Cloud routes; the provider key never enters client settings or storage |
-| `MasterSelects Cloud` | FlashBoard production and hosted development | Hosted credits/account flow; server secrets only. Managed Kie.ai editor chat enters the private kernel through `/api/kernel/hosted-agent/*`; media remains on `/api/ai/video`, while speech, transcription, and music keep their hosted routes. |
+| `Private kernel` | Compact editor chat and deterministic intent compilation | Owns provider/model routing and orchestration. It returns bounded operation plans; it does not mutate browser state directly. |
+| `Kie.ai` | Server-side provider for hosted FlashBoard media and other explicitly managed Cloud generation paths | Browser requests enter authenticated MasterSelects Cloud routes; provider keys never enter client settings or storage. It is not the public owner of editor-agent orchestration. |
+| `MasterSelects Cloud` | FlashBoard production and hosted development | Owns hosted account/credit flow, signed-in `/api/kernel/*` relays, D1 turn lifecycle, service assertions, and server secrets. Media remains on `/api/ai/*`; editor chat uses the single `/api/kernel/normal/*` route family. |
 | `ElevenLabs` | Hosted FlashBoard speech generation | The provider credential stays in the hosted service; browser requests use MasterSelects Cloud credits |
 | `Suno` | FlashBoard music and sound generation | Suno Music and Suno Sounds use the hosted Cloud path from the Media generator tray |
-| `OpenAI` | Hosted moderation and transcription | Generative chat, prompt refinement, and AI node authoring use hosted Kie.ai routes |
+| `OpenAI` | Hosted moderation and transcription; may also be selected privately by the kernel | Public browser code does not own the hosted-agent provider selection or credentials. |
 
 Hosted AI behavior:
 - Hosted AI is server-secret-only. Browser-supplied provider credentials are rejected.
@@ -266,7 +287,7 @@ See [MuScriptor Music-to-MIDI](./MuScriptor.md) for the complete runtime, mappin
 
 ### Tool Registry (parity-gated)
 
-The exported registry holds 176 tool definitions. Hosted chat uses
+The exported registry holds 190 tool definitions. Hosted chat uses
 the policy-eligible definitions, prioritized and capped at 128; the dev bridge
 can additionally reach explicitly registered diagnostics-only tools.
 `tests/unit/aiToolRegistryParity.test.ts` checks coverage; non-chat asymmetries are explicit.
@@ -289,6 +310,7 @@ The exported tool groups are:
 - Stats and debug
 - Node Workspace
 - Motion Design shapes, ordered appearances, gradients, and Grid Replicator
+- Flock clips (GPU swarm simulation graphs)
 
 The chat and bridge code call the shared dispatcher, so the same registry is used in-chat, through the Vite dev bridge, and through the Native Helper bridge. Approval behavior is enforced in the chat UI before execution, while the dispatcher policy is the actual execution gate.
 
@@ -305,6 +327,35 @@ The chat and bridge code call the shared dispatcher, so the same registry is use
   for ordered fills, strokes, and linear/radial gradients.
 - `updateMotionProperties` animates registry-backed shape, appearance, gradient,
   and Grid values; `configureMotionReplicator` owns the bounded Grid shortcut.
+
+### Flock Clip Tools
+
+Atomic operations over a Flock clip's single authoritative `FlockDefinition`
+(the same graph the Properties panel and the Node Workspace Flock view edit).
+All mutating tools run inside the standard AI history batch (one undo step).
+
+- `listFlockOperators` returns typed operator ports and parameter descriptors
+  plus the built-in presets; `getFlockClip` returns a bounded summary (nodes,
+  edges, exposed controls with their keyframe paths, compile diagnostics and
+  runtime status such as state, alive count, step, memory and cache) and never
+  particle arrays.
+- `createFlockClip` and `applyFlockPreset` create or replace a graph from the
+  presets (`free-swarm`, `krill-cloud`, `vortex`, `follow-path`,
+  `technical-network`, `shrimp-pullback`, `violet-filaments`).
+- `addFlockNode` adds one operator and optionally wires it in the same
+  all-or-nothing step; `updateFlockNode`, `removeFlockNodes`,
+  `connectFlockPorts`, `disconnectFlockEdge`, `exposeFlockParam` and
+  `unexposeFlockParam` cover the rest of graph authoring with the same typed
+  port, cycle and parameter validation as the UI.
+- Flock parameters animate with the generic `addKeyframe` tool using
+  `flock.node.<nodeId>.<param>[.x|.y|.z|.r|.g|.b]`. Those keyframes are stored
+  in simulation source time: `time` stays clip-local and is converted, an
+  explicit `sourceTime` targets a source second directly, and `getKeyframes`
+  reports both `time` (source) and `clipLocalTime`.
+- `scheduleFlockPrecompute` / `cancelFlockPrecompute` drive range precompute
+  (poll `getFlockClip` → `runtime.cache.precomputeProgress`).
+- `sampleFlockParticles` is a dev-bridge/console-only diagnostic returning at most
+  256 particles; it is not offered to chat or the kernel catalog.
 
 ### Local File And Batch Workflows
 

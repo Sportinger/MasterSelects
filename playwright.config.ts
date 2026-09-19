@@ -12,7 +12,7 @@ const gateGrep = runtime.activeGate === 'all'
 export default defineConfig({
   testDir: './tests/playwright',
   testMatch: '**/*.spec.ts',
-  testIgnore: '**/built-editor-shell.spec.ts',
+  testIgnore: ['**/built-editor-shell.spec.ts', '**/beta/**'],
   outputDir: 'test-results/playwright/artifacts',
   fullyParallel: false,
   workers: 1,

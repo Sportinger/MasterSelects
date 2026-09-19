@@ -90,6 +90,33 @@ describe('FlashBoard audio catalog contract', () => {
     ).toBe('1200 credits');
   });
 
+  it('exposes the complete hosted Seedance 2.5 generation surface', () => {
+    const entry = getCatalogEntries().find((candidate) => candidate.providerId === 'bytedance/seedance-2-5');
+
+    expect(entry).toMatchObject({
+      aspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'adaptive'],
+      durations: Array.from({ length: 27 }, (_, index) => index + 4),
+      maxReferenceAudio: 10,
+      maxReferenceImages: 30,
+      maxReferenceMedia: 50,
+      maxReferenceVideos: 10,
+      modes: ['480p', '720p'],
+      outputType: 'video',
+      providerId: 'bytedance/seedance-2-5',
+      referenceInputKinds: [
+        'start-frame',
+        'end-frame',
+        'image-reference',
+        'video-reference',
+        'audio-reference',
+      ],
+      service: 'cloud',
+      supportsGenerateAudio: true,
+      supportsImageToVideo: true,
+      supportsTextToVideo: true,
+    });
+  });
+
   it('exposes current hosted image generation and edit models', () => {
     const entries = getCatalogEntries();
     const findImageEntry = (providerId: string) => entries.find((candidate) => (

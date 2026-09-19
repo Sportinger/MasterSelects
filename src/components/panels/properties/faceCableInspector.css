@@ -1,0 +1,55 @@
+@layer features {
+  .face-cable-inspector {
+    min-width: 0;
+    container-type: inline-size;
+    font-size: 12px;
+  }
+  .face-cable-inspector .face-cable-checks {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 11px;
+  }
+  .face-cable-checks label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .face-cable-hint {
+    margin: 6px 0;
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .face-cable-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .face-cable-actions button {
+    padding: 4px 8px;
+    border: 1px solid var(--separator-color);
+    border-radius: 1px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font: inherit;
+    cursor: pointer;
+  }
+  .face-cable-actions button:hover:not(:disabled) { background: var(--surface-control-hover); }
+  .face-cable-actions button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .face-cable-actions button:disabled { opacity: 0.45; cursor: default; }
+  .face-cable-footer { padding: 10px; }
+  .face-cable-footer output { display: block; margin-top: 6px; }
+  .face-cable-inspector :is(button, select, input) {
+    -webkit-tap-highlight-color: transparent;
+  }
+  .face-cable-inspector :is(button, select, input):focus:not(:focus-visible) {
+    outline: none;
+    box-shadow: none;
+  }
+  .face-cable-inspector :is(button, select, input):focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: 2px;
+  }
+}

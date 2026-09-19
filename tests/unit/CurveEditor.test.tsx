@@ -75,7 +75,7 @@ describe('CurveEditor behavior', () => {
     fireEvent.mouseMove(window, { clientX: 500, clientY: -50, buttons: 1 });
 
     expect(onUpdateBezierHandle).toHaveBeenLastCalledWith('kf-left', 'out', expect.objectContaining({
-      x: 2,
+      x: expect.closeTo(4 / 3, 12),
     }), 'update');
 
     fireEvent.mouseMove(window, { clientX: 100, clientY: 50, buttons: 1 });

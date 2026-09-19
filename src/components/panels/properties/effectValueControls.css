@@ -1,0 +1,65 @@
+@layer features {
+  .effects-tab .effect-param-row {
+    min-width: 0;
+  }
+
+  .effects-tab .effect-param-value {
+    flex: 1;
+    width: 100%;
+    grid-template-columns: minmax(72px, 1fr) max-content;
+    column-gap: 8px;
+  }
+
+  .effects-tab .effect-param-value.with-keyframe-toggle {
+    grid-template-columns: 18px minmax(72px, 1fr) max-content;
+    column-gap: 5px;
+  }
+
+  .effects-tab .effect-param-value .labeled-value-label {
+    width: auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .effects-tab .effect-param-value .draggable-number-anchor {
+    justify-self: end;
+  }
+
+  @container (max-width: 240px) {
+    .effects-tab .effect-param-value,
+    .effects-tab .effect-param-value.with-keyframe-toggle {
+      grid-template-columns: 18px minmax(0, 1fr);
+      grid-template-areas:
+        "key label"
+        "value value";
+      row-gap: 2px;
+    }
+
+    .effects-tab .effect-param-value:not(.with-keyframe-toggle) {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas:
+        "label"
+        "value";
+    }
+
+    .effects-tab .effect-param-value > .keyframe-toggle {
+      grid-area: key;
+    }
+
+    .effects-tab .effect-param-value > .labeled-value-label {
+      grid-area: label;
+    }
+
+    .effects-tab .effect-param-value > .draggable-number-anchor {
+      grid-area: value;
+      justify-self: start;
+      margin-left: 22px;
+    }
+
+    .effects-tab .effect-param-value:not(.with-keyframe-toggle) > .draggable-number-anchor {
+      margin-left: 0;
+    }
+  }
+}

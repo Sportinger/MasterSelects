@@ -35,9 +35,22 @@ describe('dock panel configs', () => {
     expect(SCOPE_PANEL_TYPES).not.toContain(panelType);
   });
 
+  it('registers Stats as a stable core panel', () => {
+    const panelType: PanelType = 'stats';
+
+    expect(PANEL_CONFIGS[panelType]).toMatchObject({
+      type: 'stats',
+      title: 'Stats',
+      closable: false,
+    });
+    expect(WIP_PANEL_TYPES).not.toContain(panelType);
+    expect(AI_PANEL_TYPES).not.toContain(panelType);
+    expect(SCOPE_PANEL_TYPES).not.toContain(panelType);
+  });
+
   it('excludes retired dock panel ids from the active panel contract', () => {
     const activePanelTypes = Object.keys(PANEL_CONFIGS);
-    const retiredPanelTypes = ['ai-chat', 'ai-video', 'youtube', 'download', 'multicam'];
+    const retiredPanelTypes = ['ai-chat', 'ai-video', 'youtube', 'download', 'multicam', 'looks'];
 
     retiredPanelTypes.forEach((type) => {
       expect(activePanelTypes).not.toContain(type);
@@ -49,9 +62,24 @@ describe('dock panel configs', () => {
 
   it('keeps layout-only and hidden panels out of panel pickers', () => {
     expect(PANEL_PICKER_HIDDEN_TYPES).toEqual(
-      expect.arrayContaining(['start', 'scene-description']),
+      expect.arrayContaining([
+        'start',
+        'scene-description',
+        'scope-waveform',
+        'scope-histogram',
+        'scope-vectorscope',
+      ]),
     );
     expect(PANEL_CONFIGS.start).toBeDefined();
     expect(PANEL_CONFIGS['scene-description']).toBeDefined();
+  });
+
+  it('exposes one unified scopes panel', () => {
+    expect(SCOPE_PANEL_TYPES).toEqual(['color-scopes']);
+    expect(PANEL_CONFIGS['color-scopes']).toMatchObject({
+      title: 'Scopes',
+      minWidth: 300,
+      minHeight: 220,
+    });
   });
 });

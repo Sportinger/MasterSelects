@@ -32,7 +32,12 @@ export interface BridgeTargetReadiness {
   waitedMs: number
 }
 
+export interface BridgeTransport {
+  tool(name: string, args: BridgeToolArgs, timeoutMs: number, fetchTimeoutMs: number): Promise<BridgeToolResult>
+}
+
 export interface BridgeClientOptions {
+  transport?: BridgeTransport
   baseURL: string
   targetTabId: string
   tokenPath?: string
@@ -90,11 +95,13 @@ export class BridgeClient {
   readonly defaultToolTimeoutMs: number
   readonly targetFreshnessMs: number
 
+  private readonly transport?: BridgeTransport
   private readonly apiURL: URL
   private readonly authCheckURL: URL
   private cachedToken: string | null = null
 
   constructor(options: BridgeClientOptions) {
+    this.transport = options.transport
     const targetTabId = options.targetTabId.trim()
     if (!targetTabId) {
       throw new Error('BridgeClient requires an explicit, non-empty targetTabId')
@@ -121,11 +128,13 @@ export class BridgeClient {
   }
 
   async getStatus(timeoutMs = 5_000): Promise<BridgeStatus> {
+    if (this.transport) throw new Error("Existing transport has no dev bridge status; use existing-ready adoption")
     const raw = await this.fetchJson(this.apiURL, { method: 'GET' }, timeoutMs)
     return parseBridgeStatus(raw)
   }
 
   async authenticate(timeoutMs = 5_000): Promise<void> {
+    if (this.transport) throw new Error("Existing transport does not authenticate a dev bridge")
     const result = await this.authenticatedFetch(
       this.authCheckURL,
       { method: 'GET' },
@@ -191,7 +200,7 @@ export class BridgeClient {
 
     const timeoutMs = positiveInteger(options.timeoutMs, this.defaultToolTimeoutMs)
     const fetchTimeoutMs = positiveInteger(options.fetchTimeoutMs, timeoutMs + 5_000)
-    const result = await this.authenticatedFetch(
+    const result = this.transport ? await this.transport.tool(toolName, args ?? {}, timeoutMs, fetchTimeoutMs) : await this.authenticatedFetch(
       this.apiURL,
       {
         method: 'POST',
@@ -232,6 +241,7 @@ export class BridgeClient {
     args?: TArgs,
     options: BridgeDebugActionOptions = {},
   ): Promise<BridgeToolResult<TData>> {
+    if (this.transport) throw new Error("Existing transport rejects dev debug actions")
     const actionName = action.trim()
     if (!actionName) throw new Error('Bridge debug action name must not be empty')
 

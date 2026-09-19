@@ -52,7 +52,7 @@ export interface MediaBoardViewProps {
   onCanvasDragLeave: (e: React.DragEvent<HTMLDivElement>) => void;
   onCanvasDrop: (e: React.DragEvent<HTMLDivElement>) => void;
   onNodeMouseDown: (e: React.MouseEvent, item: ProjectItem) => void;
-  onItemDoubleClick: (item: ProjectItem) => void;
+  onItemDoubleClick: (item: ProjectItem, renameFromName?: boolean) => void;
   onItemContextMenu: (e: React.MouseEvent, itemId?: string, parentId?: string | null) => void;
   consumeSuppressedContextMenu: () => boolean;
   onGroupDragOver: (e: React.DragEvent) => void;

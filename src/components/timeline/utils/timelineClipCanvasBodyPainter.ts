@@ -3,6 +3,7 @@ import {
   createStoryboardCardRenderPayload,
   paintStoryboardCardMainThread,
 } from '../storyboard';
+import { resolveTimelineClipCanvasBodyFill } from './timelineClipCanvasAppearance';
 
 interface TimelineClipCanvasBodyPaintInput {
   ctx: CanvasRenderingContext2D;
@@ -13,12 +14,6 @@ interface TimelineClipCanvasBodyPaintInput {
   dpr: number;
   fill: string;
   radius?: number;
-}
-
-function getSolidFill(clip: TimelinePaintSourceClip): string | undefined {
-  if (clip.source?.type !== 'solid') return undefined;
-  return (clip as TimelinePaintSourceClip & { solidColor?: string }).solidColor
-    ?? (clip.source as { color?: string }).color;
 }
 
 export function paintTimelineClipCanvasBody({
@@ -42,7 +37,7 @@ export function paintTimelineClipCanvasBody({
   if (radius === undefined) {
     if (card) paintStoryboardCardMainThread(ctx, card);
     else {
-      ctx.fillStyle = getSolidFill(clip) ?? fill;
+      ctx.fillStyle = resolveTimelineClipCanvasBodyFill(clip, fill) ?? fill;
       ctx.fillRect(x, 1, Math.max(1, width), height - 2);
     }
     return;
@@ -50,7 +45,7 @@ export function paintTimelineClipCanvasBody({
 
   ctx.beginPath();
   ctx.roundRect(x, 1, width, height - 2, radius);
-  ctx.fillStyle = getSolidFill(clip) ?? fill;
+  ctx.fillStyle = resolveTimelineClipCanvasBodyFill(clip, fill) ?? fill;
   ctx.fill();
   if (card) paintStoryboardCardMainThread(ctx, card);
 }

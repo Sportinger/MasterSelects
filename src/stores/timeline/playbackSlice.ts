@@ -16,12 +16,16 @@ import { resolvePlaybackStartPosition, resolvePlaybackStopPosition } from './pla
 import { prewarmProxyFramesForTimelinePosition } from '../../services/proxyFramePrewarm';
 import {
   persistAudioLayerAdvancedMode,
-  persistMetronomeEnabled, persistMetronomeMode, persistMetronomeVolume, persistTimelineGridSubdivision, persistTimelineSnappingEnabled,
+  persistMetronomeEnabled, persistMetronomeMode, persistMetronomeVolume, persistPianoRollGridSubdivision,
+  persistPianoRollSnapEnabled, persistTimelineGridSubdivision, persistTimelineSnappingEnabled,
   persistTimelineSplitRatio,
   persistTimelineTrackFocusMode,
   persistTimelineTrackHeaderWidth,
 } from './viewPreferences';
 import { stopTimelineAudioPlayback } from '../../services/audio/timelineAudioPlaybackStopper';
+import { clipAudioAnalysisJobService } from '../../services/audio/ClipAudioAnalysisJobService';
+import { setTimelineWaveformWarmupPlaybackSuppressed } from '../../services/timeline/timelineWaveformPlaybackGate';
+import { trackPlaybackStarted, trackPlaybackStopped } from '../../services/productAnalytics';
 import {
   shouldWarmWorkerGpuForwardPlaybackStart,
   waitForWorkerGpuPlaybackStartFrame,
@@ -29,8 +33,11 @@ import {
 import {
   closeSourceMonitorForTimelinePlayback,
   createPlaybackWarmupState,
+  isPlaybackWarmupVideoSettled,
+  positionPlaybackWarmupVideo,
   preparePlaybackStartWarmup,
   primeReverseWorkerWebCodecsPlaybackForState,
+  waitForPlaybackWarmupVideo,
   waitForPlaybackWarmupFrame,
 } from './playbackWarmup';
 
@@ -111,6 +118,11 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       playheadState.position = playbackStartPosition;
     }
     if (!wasPlaying) {
+      // Visible waveform warmups are background work. Abort them before the
+      // playback warmup so file reads and decoder setup cannot steal the first
+      // seconds from the preview cadence.
+      clipAudioAnalysisJobService.cancelKind('waveform-pyramid');
+      setTimelineWaveformWarmupPlaybackSuppressed(true);
       playheadState.position = playbackStartPosition;
       // Scrub textures and their detached preload videos are useful while
       // seeking, but compete directly with decoder/GPU resources once normal
@@ -133,7 +145,10 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       getInterpolatedSpeed,
     });
 
-    const videosNeedingWarmup = videosToCheck.filter((video) => video.readyState < 2 || video.seeking);
+    for (const entry of videosToCheck) positionPlaybackWarmupVideo(entry);
+    const videosNeedingWarmup = videosToCheck.filter(
+      entry => !isPlaybackWarmupVideoSettled(entry),
+    );
 
     if (videosNeedingWarmup.length > 0) {
       const playbackWarmup = createPlaybackWarmupState({
@@ -144,43 +159,9 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       const { requestId: warmupRequestId } = playbackWarmup;
       set({ playbackWarmup });
 
-      // A settled current frame is enough to start; normal playback buffering
-      // handles subsequent frames without showing a false warmup after scrubs.
-      const waitForReady = async (video: HTMLVideoElement): Promise<void> => {
-        if (video.readyState >= 2 && !video.seeking) return;
-
-        return new Promise((resolve) => {
-          const checkReady = () => {
-            if (video.readyState >= 2 && !video.seeking) {
-              resolve();
-              return;
-            }
-            // Trigger buffering by briefly playing
-            video.play().then(() => {
-              setTimeout(() => {
-                video.pause();
-                if (video.readyState >= 2 && !video.seeking) {
-                  resolve();
-                } else {
-                  // Check again after a short delay
-                  setTimeout(checkReady, 50);
-                }
-              }, 50);
-            }).catch(() => {
-              // If play fails, just wait for canplaythrough
-              video.addEventListener('canplaythrough', () => resolve(), { once: true });
-              setTimeout(resolve, 500); // Timeout fallback
-            });
-          };
-          checkReady();
-        });
-      };
-
-      // Wait for all videos in parallel with a timeout
-      await Promise.race([
-        Promise.all(videosNeedingWarmup.map(waitForReady)),
-        new Promise(resolve => setTimeout(resolve, 1000)) // Max 1 second wait
-      ]);
+      // A settled target frame is enough to start; normal playback buffering
+      // handles subsequent frames without exposing an in-flight nested seek.
+      await Promise.all(videosNeedingWarmup.map(entry => waitForPlaybackWarmupVideo(entry)));
 
       if (get().playbackWarmup?.requestId !== warmupRequestId) {
         return;
@@ -219,10 +200,13 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
     if (!wasPlaying) {
       renderHostPort.setIsPlaying(true);
       renderHostPort.requestNewFrameRender();
+      trackPlaybackStarted(effectivePlaybackSpeed);
     }
   },
 
   pause: () => {
+    trackPlaybackStopped('pause');
+    setTimelineWaveformWarmupPlaybackSuppressed(false);
     stopTimelineAudioPlayback();
     const currentPosition = getPlayheadPosition(get().playheadPosition);
     playheadState.position = currentPosition;
@@ -235,6 +219,8 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
   },
 
   stop: () => {
+    trackPlaybackStopped('stop');
+    setTimelineWaveformWarmupPlaybackSuppressed(false);
     stopTimelineAudioPlayback();
     const { duration, inPoint, scrollX } = get();
     const stopPosition = resolvePlaybackStopPosition(inPoint, duration);
@@ -307,6 +293,16 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
   setTimelineGridSubdivision: (subdivision) => {
     persistTimelineGridSubdivision(subdivision);
     set({ timelineGridSubdivision: subdivision });
+  },
+
+  setPianoRollSnapEnabled: (enabled) => {
+    persistPianoRollSnapEnabled(enabled);
+    set({ pianoRollSnapEnabled: enabled });
+  },
+
+  setPianoRollGridSubdivision: (subdivision) => {
+    persistPianoRollGridSubdivision(subdivision);
+    set({ pianoRollGridSubdivision: subdivision });
   },
 
   setScrollX: (scrollX) => {

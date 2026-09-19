@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 import { useExternalDrop } from './useExternalDrop';
 import { useTimelineCombinedDragHandlers } from './useTimelineCombinedDragHandlers';
 import { useTransitionDrop } from './useTransitionDrop';
+import { useTransitionTouchDropBridge } from './useTransitionTouchDropBridge';
 
 type ExternalDropParams = Parameters<typeof useExternalDrop>[0];
 type CombinedDragHandlersParams = Parameters<typeof useTimelineCombinedDragHandlers>[0];
@@ -28,6 +29,8 @@ export function useTimelineExternalDropController({
   isExporting,
   pixelToTime,
   prepareTimelinePlacementRange,
+  replaceClipSource,
+  replaceClipSourceWithComposition,
   scrollX,
   timelineRef,
   trackMap,
@@ -54,6 +57,8 @@ export function useTimelineExternalDropController({
     activeTimelineToolId,
     pixelToTime,
     prepareTimelinePlacementRange,
+    replaceClipSource,
+    replaceClipSourceWithComposition,
     addTrack,
     addClip,
     addCompClip,
@@ -76,6 +81,17 @@ export function useTimelineExternalDropController({
     handleDragLeave: handleTransitionDragLeave,
     isTransitionDrag,
   } = useTransitionDrop();
+
+  useTransitionTouchDropBridge({
+    isExporting,
+    onTransitionDragLeave: handleTransitionDragLeave,
+    onTransitionDragOver: handleTransitionDragOver,
+    onTransitionDrop: handleTransitionDrop,
+    pixelToTime,
+    scrollX,
+    timelineRef,
+    trackMap,
+  });
 
   const {
     handleCombinedDragOver,

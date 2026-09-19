@@ -13,19 +13,8 @@ function renderMenu(overrides: Partial<MediaAddItemsMenuComponentProps> = {}) {
     onImport: vi.fn(),
     onNewComposition: vi.fn(),
     onNewFolder: vi.fn(),
-    onNewText: vi.fn(),
-    onNewSolid: vi.fn(),
     onNewLiveInput: vi.fn(),
-    onNewMesh: vi.fn(),
-    onNewText3D: vi.fn(),
-    onNewCamera: vi.fn(),
-    onNewLight: vi.fn(),
-    onNewSplatEffector: vi.fn(),
     onImportGaussianSplat: vi.fn(),
-    onNewMathScene: vi.fn(),
-    onNewMotionShape: vi.fn(),
-    onNewMotionNull: vi.fn(),
-    onNewMotionAdjustment: vi.fn(),
     ...overrides,
   };
 
@@ -37,41 +26,34 @@ describe('MediaAddItemsMenu import surface', () => {
   it('delegates Import files to the shared import command', () => {
     const props = renderMenu();
 
-    fireEvent.click(screen.getByText('Import files...'));
+    fireEvent.click(screen.getByText('Import files...'), { clientX: 240, clientY: 180 });
 
     expect(props.onImport).toHaveBeenCalledTimes(1);
+    expect(props.onImport).toHaveBeenCalledWith({ x: 240, y: 180 });
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('exposes all four rendered Motion Shape primitives', () => {
+  it('does not expose timeline-native layers in the Media Panel', () => {
     const props = renderMenu();
 
-    expect(screen.getByText('Rectangle')).toBeInTheDocument();
-    expect(screen.getByText('Ellipse')).toBeInTheDocument();
-    expect(screen.getByText('Polygon')).toBeInTheDocument();
-    expect(screen.getByText('Star')).toBeInTheDocument();
+    expect(screen.queryByText('Text')).not.toBeInTheDocument();
+    expect(screen.queryByText('Solid')).not.toBeInTheDocument();
+    expect(screen.queryByText('Camera')).not.toBeInTheDocument();
+    expect(screen.queryByText('Light')).not.toBeInTheDocument();
+    expect(screen.queryByText('Motion Null')).not.toBeInTheDocument();
+    expect(screen.queryByText('Adjustment Layer')).not.toBeInTheDocument();
+    expect(screen.queryByText('Math Scene')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Star'));
-    expect(props.onNewMotionShape).toHaveBeenCalledWith('star');
+    fireEvent.click(screen.getByText('Live Input...'));
+    expect(props.onNewLiveInput).toHaveBeenCalledTimes(1);
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('creates a Motion Null through the shared add command', () => {
+  it('keeps Gaussian Splat as a source import', () => {
     const props = renderMenu();
 
-    fireEvent.click(screen.getByText('Motion Null'));
-
-    expect(props.onNewMotionNull).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText('Import Gaussian Splat...'));
+    expect(props.onImportGaussianSplat).toHaveBeenCalledTimes(1);
     expect(props.onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('creates an Adjustment Layer through the shared add command', () => {
-    const props = renderMenu();
-
-    fireEvent.click(screen.getByText('Adjustment Layer'));
-
-    expect(props.onNewMotionAdjustment).toHaveBeenCalledTimes(1);
-    expect(props.onClose).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText('Coming soon')).not.toBeInTheDocument();
   });
 });

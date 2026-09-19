@@ -46,7 +46,7 @@ export interface UseMediaBoardGesturesOptions {
   getSlotGridProgress: () => number;
   handleContextMenu: MediaBoardContextMenuHandler;
   handleItemClick: (itemId: string, event: ReactMouseEvent) => void;
-  handleItemDoubleClick: (item: MediaBoardItem) => void | Promise<void>;
+  handleItemDoubleClick: (item: MediaBoardItem, renameFromName?: boolean) => void | Promise<void>;
   mediaBoardItemIds: Set<string>;
   mediaBoardLayout: MediaBoardLayoutResult;
   mediaBoardPlacementsById: Map<string, MediaBoardNodePlacement>;

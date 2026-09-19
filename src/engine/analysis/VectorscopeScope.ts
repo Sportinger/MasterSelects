@@ -90,25 +90,25 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
   // Background
   var color = vec3f(0.04);
 
-  // Graticule: outer circle (100% saturation boundary) + 75% + 25%
+  // Resolve-style yellow graticule: outer circle (100% saturation boundary) + 75% + 25%
   let radiusFull = gratScale * 0.5;
   let radius75 = gratScale * 0.5 * 0.75;
   let radius25 = gratScale * 0.5 * 0.25;
   let lineW = 1.2 / size; // ~1.2px anti-aliased
   let aa = smoothstep(0.0, lineW, abs(d - radiusFull));
-  color = mix(vec3f(0.20), color, aa);
+  color = mix(vec3f(0.34, 0.29, 0.02), color, aa);
   let aa75 = smoothstep(0.0, lineW, abs(d - radius75));
-  color = mix(vec3f(0.14), color, aa75);
+  color = mix(vec3f(0.28, 0.24, 0.02), color, aa75);
   let aa25 = smoothstep(0.0, lineW, abs(d - radius25));
-  color = mix(vec3f(0.10), color, aa25);
+  color = mix(vec3f(0.22, 0.19, 0.015), color, aa25);
 
   // Crosshair (anti-aliased)
   let crossW = 0.8 / size;
   if (d < radiusFull + 0.01) {
     let axH = smoothstep(0.0, crossW, abs(uv.y - center));
     let axV = smoothstep(0.0, crossW, abs(uv.x - center));
-    color = mix(vec3f(0.12), color, axH);
-    color = mix(vec3f(0.12), color, axV);
+    color = mix(vec3f(0.24, 0.20, 0.015), color, axH);
+    color = mix(vec3f(0.24, 0.20, 0.015), color, axV);
   }
 
   // Skin tone line (~123 degrees)
@@ -116,7 +116,7 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
   let skinAngle = radians(123.0);
   let skinAA = smoothstep(0.0, crossW, abs(angle - skinAngle));
   if (d < radiusFull + 0.01 && d > 0.01) {
-    color = mix(vec3f(0.28, 0.20, 0.08), color, skinAA);
+    color = mix(vec3f(0.50, 0.39, 0.04), color, skinAA);
   }
 
   // BT.709 color targets (R, MG, B, CY, G, YL) — placed on 75% ring

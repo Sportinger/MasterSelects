@@ -4,6 +4,7 @@ import type { ModelMaterialSettings } from '../../types/modelMaterial';
 import type { GaussianSplatSettings } from '../gaussian/types';
 import type { MeshPrimitiveType } from '../../stores/mediaStore/types';
 import type { SplatEffectorMode } from '../../types/splatEffector';
+import type { Effect } from '../../types/effects';
 
 export interface SceneVector3 {
   x: number;
@@ -18,13 +19,14 @@ export interface SceneViewport {
 
 export interface SceneWorldTransform {
   position: SceneVector3;
+  anchor?: SceneVector3;
   rotationRadians: SceneVector3;
   rotationDegrees: SceneVector3;
   scale: SceneVector3;
 }
 
 export interface SceneLayerBase {
-  kind: 'splat' | 'plane' | 'primitive' | 'text3d' | 'model' | 'light';
+  kind: 'splat' | 'plane' | 'primitive' | 'text3d' | 'model' | 'light' | 'voxel' | 'flock' | 'face-cables';
   layerId: string;
   clipId: string;
   opacity: number;
@@ -40,6 +42,9 @@ export interface SceneLayerBase {
   receivesDepth?: boolean;
   maskClipId?: string;
   maskInvert?: boolean;
+  /** Effects evaluated on the source texture before its 3D world transform. */
+  layerSpaceEffects?: Effect[];
+  mediaTime?: number;
 }
 
 export interface ScenePlaneLayer extends SceneLayerBase {
@@ -49,6 +54,29 @@ export interface ScenePlaneLayer extends SceneLayerBase {
   preciseVideoSampling?: boolean;
   imageElement?: HTMLImageElement;
   canvas?: HTMLCanvasElement;
+}
+export interface SceneFaceCableLayer extends Omit<ScenePlaneLayer, 'kind'> {
+  kind: 'face-cables';
+  videoRotation?: number;
+  cableParams: Record<string, unknown>;
+}
+
+/**
+ * A clip with an enabled voxel-relief effect promoted to 3D: rendered as a
+ * true instanced block field instead of a flat textured plane. Occupies the
+ * exact footprint the plane would (WORLD_HEIGHT convention), extruding along
+ * local +Z. `voxelParams` carries the clip's interpolated voxel-relief effect
+ * params for the current frame; the effect's virtual-camera params (tilt/yaw/
+ * perspective/distance/center) are ignored here — the scene camera rules.
+ */
+export interface SceneVoxelLayer extends SceneLayerBase {
+  kind: 'voxel';
+  videoElement?: HTMLVideoElement;
+  videoFrame?: VideoFrame;
+  preciseVideoSampling?: boolean;
+  imageElement?: HTMLImageElement;
+  canvas?: HTMLCanvasElement;
+  voxelParams: Record<string, number | boolean | string>;
 }
 
 export interface ScenePrimitiveLayer extends SceneLayerBase {
@@ -93,13 +121,22 @@ export interface SceneLightLayer extends SceneLayerBase {
   lightSettings: LightClipSettings;
 }
 
+/** A flock clip: simulated particles and technical lines drawn by native flock passes. */
+export interface SceneFlockLayer extends SceneLayerBase {
+  kind: 'flock';
+  flock: import('../../services/flock/flockLayerSource').FlockLayerSourceData;
+}
+
 export type SceneLayer3DData =
   | ScenePlaneLayer
+  | SceneVoxelLayer
   | ScenePrimitiveLayer
   | SceneText3DLayer
   | SceneModelLayer
   | SceneLightLayer
-  | SceneSplatLayer;
+  | SceneSplatLayer
+  | SceneFlockLayer
+  | SceneFaceCableLayer;
 
 export interface SceneCameraConfig {
   position: SceneVector3;
@@ -123,6 +160,8 @@ export interface SceneCamera {
   near: number;
   far: number;
   viewport: SceneViewport;
+  /** Composition-space size against which stored plane/voxel scales are defined. */
+  referenceSize?: SceneViewport;
   applyDefaultDistance?: boolean;
   projection: 'perspective' | 'orthographic';
   orthographicScale?: number;

@@ -321,6 +321,7 @@ input[type="checkbox"] {
   min-width: 50px;
   text-align: right;
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  touch-action: none;
 }
 
 .draggable-number-anchor {
@@ -383,11 +384,94 @@ input[type="checkbox"] {
   color: #d7e7fb;
   background: var(--bg-secondary);
   border-color: #2d5a8e;
+  touch-action: auto;
 }
 
 .draggable-number-input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px rgba(45, 140, 235, 0.35);
+}
+
+.draggable-number-touch-feedback {
+  position: fixed;
+  z-index: 10020;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 72px;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 68%, white);
+  border-radius: 8px;
+  background: rgba(13, 18, 26, 0.96);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.46);
+  color: #d7e7fb;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.draggable-number-touch-axis {
+  min-width: 18px;
+  color: color-mix(in srgb, var(--accent) 78%, white);
+  font-family: system-ui, sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
+.draggable-number-touch-axis.is-pending {
+  min-width: 34px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.draggable-number-touch-speed {
+  border-radius: 4px;
+  padding: 2px 4px;
+  color: #08111d;
+  background: color-mix(in srgb, var(--accent) 78%, white);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.draggable-number-touch-speed.is-fine {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-secondary));
+}
+
+.draggable-number-touch-feedback.is-above {
+  transform: translate(-50%, -100%);
+}
+
+.draggable-number-touch-feedback.is-below {
+  transform: translate(-50%, 0);
+}
+
+@media (pointer: coarse) {
+  .draggable-number-anchor {
+    min-height: 38px;
+  }
+
+  .draggable-number,
+  .draggable-number-input {
+    min-width: 64px;
+    min-height: 36px;
+    box-sizing: border-box;
+    padding: 7px 9px;
+    font-size: 13px;
+  }
+
+  .draggable-number-input {
+    font-size: 16px;
+  }
 }
 
 .draggable-number-bounds-popover {

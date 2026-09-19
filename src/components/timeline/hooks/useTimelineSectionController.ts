@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type { AnimatableProperty, Keyframe, TimelineClip as TimelineClipType, TimelineTrack as TimelineTrackType } from '../../../types';
 import type { TimelineAudioDisplayMode, TimelinePropertiesSelection, TimelineTrackFocusMode } from '../../../stores/timeline/types';
 import type { ClipDragState, ExternalDragState } from '../types';
@@ -74,6 +74,35 @@ export function useTimelineSectionController({
   const [splitDragSmoothing, setSplitDragSmoothing] = useState(false);
   const [splitDragPinVideoBottom, setSplitDragPinVideoBottom] = useState(false);
   const [forceVideoBottomScroll, setForceVideoBottomScroll] = useState(false);
+  const [activeTrackScaleSection, setActiveTrackScaleSection] = useState<'video' | 'audio' | null>(null);
+  const trackScaleReleaseTimerRef = useRef<number | null>(null);
+
+  const clearTrackScaleReleaseTimer = useCallback(() => {
+    if (trackScaleReleaseTimerRef.current === null) return;
+    window.clearTimeout(trackScaleReleaseTimerRef.current);
+    trackScaleReleaseTimerRef.current = null;
+  }, []);
+
+  const handleSynchronousTrackScaleStart = useCallback((sectionKind: 'video' | 'audio') => {
+    clearTrackScaleReleaseTimer();
+    setActiveTrackScaleSection(sectionKind);
+  }, [clearTrackScaleReleaseTimer]);
+
+  const handleSynchronousTrackScaleEnd = useCallback(() => {
+    clearTrackScaleReleaseTimer();
+    setActiveTrackScaleSection(null);
+  }, [clearTrackScaleReleaseTimer]);
+
+  const handleSynchronousTrackScaleStep = useCallback((sectionKind: 'video' | 'audio') => {
+    clearTrackScaleReleaseTimer();
+    setActiveTrackScaleSection(sectionKind);
+    trackScaleReleaseTimerRef.current = window.setTimeout(() => {
+      trackScaleReleaseTimerRef.current = null;
+      setActiveTrackScaleSection(null);
+    }, 140);
+  }, [clearTrackScaleReleaseTimer]);
+
+  useEffect(() => () => clearTrackScaleReleaseTimer(), [clearTrackScaleReleaseTimer]);
 
   usePinVideoBottomOnLayoutChange(setForceVideoBottomScroll);
 
@@ -116,6 +145,7 @@ export function useTimelineSectionController({
   } = useTimelineSectionLayout({
     timelineViewTracks,
     trackFocusMode,
+    activeTrackScaleSection,
     timelineSplitRatio,
     splitDragVideoHeight,
     videoViewportHeight,
@@ -131,6 +161,22 @@ export function useTimelineSectionController({
     getExpandedTrackHeight,
     isTrackExpandedForRender,
   });
+
+  useEffect(() => {
+    if (activeTrackScaleSection === null || trackFocusMode !== 'balanced') return;
+    const availableHeight = videoSectionHeight + audioSectionHeight;
+    if (availableHeight <= 0) return;
+    const nextRatio = videoSectionHeight / availableHeight;
+    if (timelineSplitRatio !== null && Math.abs(timelineSplitRatio - nextRatio) < 0.0005) return;
+    setTimelineSplitRatio(nextRatio);
+  }, [
+    activeTrackScaleSection,
+    audioSectionHeight,
+    setTimelineSplitRatio,
+    timelineSplitRatio,
+    trackFocusMode,
+    videoSectionHeight,
+  ]);
 
   const {
     scrollY,
@@ -243,7 +289,7 @@ export function useTimelineSectionController({
     setTrackFocusMode,
   });
 
-  const handleSplitDividerMouseDown = useTimelineSplitDividerDrag({
+  const handleSplitDividerPointerDown = useTimelineSplitDividerDrag({
     scrollWrapperRef,
     trackFocusMode,
     clampSplitDragVideoHeight,
@@ -261,6 +307,7 @@ export function useTimelineSectionController({
 
   return {
     activeTrackResizeId,
+    activeTrackScaleSection,
     audioNewTrackPreviewHeight,
     audioScrollY,
     audioSectionHeight,
@@ -276,7 +323,10 @@ export function useTimelineSectionController({
     getSectionTrackBaseHeight,
     getSectionTrackHeight,
     handleSectionWheel,
-    handleSplitDividerMouseDown,
+    handleSynchronousTrackScaleEnd,
+    handleSynchronousTrackScaleStart,
+    handleSynchronousTrackScaleStep,
+    handleSplitDividerPointerDown,
     handleTrackFocusStep,
     handleTrackResizeStart,
     isAudioSectionCollapsed,

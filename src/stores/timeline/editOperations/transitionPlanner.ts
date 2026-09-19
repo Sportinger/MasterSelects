@@ -90,13 +90,52 @@ export interface FindActiveTransitionPlanInput {
   getMediaDuration?: TransitionSourceDurationResolver;
 }
 
+interface TransitionCandidateIndex {
+  clipsById: ReadonlyMap<string, TimelineClip>;
+  candidatesByTrack: ReadonlyMap<string, readonly TimelineClip[]>;
+}
+
 const EPSILON = 1e-6;
 const HOLD_FRAME_SAMPLE_EPSILON_SECONDS = 1 / 120;
+const transitionCandidateIndexes = new WeakMap<readonly TimelineClip[], TransitionCandidateIndex>();
 
 export type TransitionSourceDurationResolver = (mediaFileId: string) => number | undefined;
 
 function getClipEnd(clip: TimelineClip): number {
   return clip.startTime + clip.duration;
+}
+
+function getTransitionCandidateIndex(clips: readonly TimelineClip[]): TransitionCandidateIndex {
+  const cached = transitionCandidateIndexes.get(clips);
+  if (cached) return cached;
+
+  const clipsById = new Map<string, TimelineClip>();
+  const unsortedCandidatesByTrack = new Map<string, TimelineClip[]>();
+
+  for (const clip of clips) {
+    // Preserve Array.find semantics if malformed input contains duplicate ids.
+    if (!clipsById.has(clip.id)) clipsById.set(clip.id, clip);
+    if (!clip.transitionOut) continue;
+
+    const candidates = unsortedCandidatesByTrack.get(clip.trackId);
+    if (candidates) {
+      candidates.push(clip);
+    } else {
+      unsortedCandidatesByTrack.set(clip.trackId, [clip]);
+    }
+  }
+
+  const candidatesByTrack = new Map<string, readonly TimelineClip[]>();
+  for (const [trackId, candidates] of unsortedCandidatesByTrack) {
+    candidatesByTrack.set(
+      trackId,
+      candidates.toSorted((a, b) => a.startTime - b.startTime),
+    );
+  }
+
+  const index = { clipsById, candidatesByTrack };
+  transitionCandidateIndexes.set(clips, index);
+  return index;
 }
 
 function getLastHoldSourceTime(clip: TimelineClip, sourceEnd = clip.outPoint): number {
@@ -459,7 +498,7 @@ export function planTransition(input: PlanTransitionInput): TransitionPlan | nul
   if (!definition) return null;
   if (!Number.isFinite(input.requestedDuration) || input.requestedDuration <= 0) return null;
 
-  const placement = input.placement ?? DEFAULT_TRANSITION_PLACEMENT;
+  const placement = definition.defaultPlacement ?? input.placement ?? DEFAULT_TRANSITION_PLACEMENT;
   const edgePolicy = input.edgePolicy ?? 'hold';
   const resolvedDuration = Math.max(definition.minDuration, input.requestedDuration);
   const params = normalizeTransitionParamsForDefinition(definition, input.params);
@@ -502,15 +541,15 @@ export function planTransition(input: PlanTransitionInput): TransitionPlan | nul
 export function findActiveTransitionPlanForTrack(
   input: FindActiveTransitionPlanInput,
 ): ActiveTransitionPlan | null {
-  const trackClips = input.clips
-    .filter(clip => clip.trackId === input.trackId && clip.transitionOut)
-    .toSorted((a, b) => a.startTime - b.startTime);
+  const { clipsById, candidatesByTrack } = getTransitionCandidateIndex(input.clips);
+  const trackClips = candidatesByTrack.get(input.trackId);
+  if (!trackClips) return null;
 
   for (const outgoingClip of trackClips) {
     const transition = outgoingClip.transitionOut;
     if (!transition) continue;
 
-    const incomingClip = input.clips.find(clip => clip.id === transition.linkedClipId);
+    const incomingClip = clipsById.get(transition.linkedClipId);
     if (!incomingClip) continue;
 
     const junctionTime = getClipEnd(outgoingClip);

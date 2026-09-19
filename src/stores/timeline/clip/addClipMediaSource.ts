@@ -2,6 +2,8 @@ import { hydrateAndProjectMediaSourceArtifacts } from '../../../services/mediaAr
 
 export type SourceMediaFile = {
   duration?: number;
+  width?: number;
+  height?: number;
   transcript?: import('../../../types').TranscriptWord[];
   transcriptStatus?: string;
   modelSequence?: import('../../../types').ModelSequenceData;
@@ -12,6 +14,11 @@ export type SourceMediaFile = {
   projectPath?: string;
   absolutePath?: string;
   filePath?: string;
+};
+
+export type ActiveCompositionDimensions = {
+  width: number;
+  height: number;
 };
 
 export function getPositiveFiniteDuration(value: number | undefined): number | undefined {
@@ -27,6 +34,17 @@ export async function loadSourceMediaFile(mediaFileId: string | undefined): Prom
   try {
     const { useMediaStore } = await import('../../mediaStore');
     return useMediaStore.getState().files.find((file: { id: string }) => file.id === mediaFileId);
+  } catch {
+    return undefined;
+  }
+}
+
+export async function loadActiveCompositionDimensions(): Promise<ActiveCompositionDimensions | undefined> {
+  try {
+    const { useMediaStore } = await import('../../mediaStore');
+    const composition = useMediaStore.getState().getActiveComposition();
+    if (!composition || composition.width <= 0 || composition.height <= 0) return undefined;
+    return { width: composition.width, height: composition.height };
   } catch {
     return undefined;
   }

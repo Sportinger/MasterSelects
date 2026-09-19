@@ -46,4 +46,20 @@ describe('PerformanceStats', () => {
     expect(idleSnapshot.drops.lastSecond).toBe(0);
     expect(idleSnapshot.drops.reason).toBe('none');
   });
+
+  it('starts playback with a fresh cadence window', () => {
+    const stats = new PerformanceStats();
+    stats.recordRafGap(100);
+
+    stats.beginPlaybackRun();
+
+    const warmupSnapshot = stats.getStats(false);
+    expect(warmupSnapshot.fps).toBe(0);
+    expect(warmupSnapshot.timing.rafGap).toBe(0);
+    expect(warmupSnapshot.drops.lastSecond).toBe(0);
+    expect(warmupSnapshot.playbackRunStartedAt).toEqual(expect.any(Number));
+
+    stats.recordRafGap(33);
+    expect(stats.getStats(false).fps).toBe(30);
+  });
 });

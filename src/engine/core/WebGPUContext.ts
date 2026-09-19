@@ -1,17 +1,26 @@
 // WebGPU device, adapter, and queue initialization
 
 import { Logger } from '../../services/logger';
-import { attachWebGPUDeviceDiagnostics } from '../../services/runtimeDiagnostics';
+import { attachWebGPUDeviceDiagnostics, markExpectedWebGPUDeviceDestruction } from '../../services/runtimeDiagnostics';
+import type { GPUInitializationFailure } from './gpuInitializationFailure';
 
 const log = Logger.create('WebGPUContext');
 
-const ADAPTER_WITH_PREFERENCE_TIMEOUT_MS = 2000;
-const ADAPTER_FALLBACK_TIMEOUT_MS = 5000;
-const DEVICE_WITH_LIMITS_TIMEOUT_MS = 2000;
-const DEVICE_FALLBACK_TIMEOUT_MS = 5000;
+// Cold GPU process startup can exceed two seconds. Keep the original request
+// alive until this deadline; a pending request is not a rejected configuration.
+const GPU_REQUEST_TIMEOUT_MS = 15_000;
+
+class GPURequestTimeoutError extends Error {
+  readonly phase: 'adapter' | 'device';
+  constructor(message: string, phase: 'adapter' | 'device') {
+    super(message);
+    this.phase = phase;
+  }
+}
+class GPUInitializationCancelledError extends Error {}
 
 export type DeviceLostCallback = (reason: string) => void;
-export type DeviceRestoredCallback = () => void;
+export type DeviceRestoredCallback = () => void | Promise<void>;
 export type GPUPowerPreference = 'high-performance' | 'low-power';
 
 interface GPUAdapterInfoLike {
@@ -23,12 +32,18 @@ interface GPUAdapterInfoLike {
 
 type GPUAdapterWithInfo = GPUAdapter & { info?: GPUAdapterInfoLike };
 type GPUDeviceWithAdapterInfo = GPUDevice & { adapterInfo?: GPUAdapterInfoLike };
+type GPURequestAdapterOptionsWithFeatureLevel = GPURequestAdapterOptions & {
+  featureLevel: 'compatibility';
+};
 
 export class WebGPUContext {
   private device: GPUDevice | null = null;
   private adapter: GPUAdapter | null = null;
   private initPromise: Promise<boolean> | null = null;
   private isInitialized = false;
+  private initializationFailure: GPUInitializationFailure | null = null;
+  private recoveryFailedCallbacks = new Set<(failure: GPUInitializationFailure | null) => void>();
+  private initializationGeneration = 0;
   private currentPowerPreference: GPUPowerPreference = 'high-performance';
 
   // Callbacks for device loss/restore events
@@ -64,31 +79,50 @@ export class WebGPUContext {
       return this.initPromise;
     }
 
+    this.initializationFailure = null;
     if (!navigator.gpu) {
+      this.initializationFailure = 'unsupported';
       log.error('WebGPU not supported');
       return false;
     }
 
-    // Create the initialization promise
-    this.initPromise = this.doInitialize();
-    return this.initPromise;
+    const initialization = this.doInitialize();
+    this.initPromise = initialization;
+    try {
+      return await initialization;
+    } finally {
+      // A failed attempt must not permanently hold the initialization lock.
+      if (this.initPromise === initialization) this.initPromise = null;
+    }
   }
 
-  /** Race a promise against a timeout */
-  // NOTE: the timer is not cleared when `promise` wins the race, so the warning
-  // below can fire even after a successful adapter/device request. The log line
-  // is therefore not proof of failure — `engineReady`/`isInitialized` is the
-  // source of truth. See docs/Features/Linux-Mesa-GPU.md (mode 5).
-  private withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T | null> {
-    return Promise.race([
-      promise,
-      new Promise<null>((resolve) => {
-        setTimeout(() => {
-          log.warn(`${label} timed out after ${ms}ms`);
-          resolve(null);
-        }, ms);
-      }),
-    ]);
+  private withTimeout<T>(
+    promise: Promise<T>,
+    label: string,
+    disposeLateResult?: (result: T) => void,
+  ): Promise<T> {
+    const generation = this.initializationGeneration;
+    return new Promise<T>((resolve, reject) => {
+      let expired = false;
+      const timer = setTimeout(() => {
+        expired = true;
+        reject(new GPURequestTimeoutError(`${label} timed out after ${GPU_REQUEST_TIMEOUT_MS}ms`, label.startsWith('requestAdapter') ? 'adapter' : 'device'));
+      }, GPU_REQUEST_TIMEOUT_MS);
+      promise.then(result => {
+        clearTimeout(timer);
+        if (expired || generation !== this.initializationGeneration) {
+          disposeLateResult?.(result);
+          reject(new GPUInitializationCancelledError('GPU initialization was superseded'));
+          return;
+        }
+        resolve(result);
+      }, error => {
+        clearTimeout(timer);
+        reject(generation === this.initializationGeneration
+          ? error
+          : new GPUInitializationCancelledError('GPU initialization was superseded'));
+      });
+    });
   }
 
   private shouldUseLowPowerFallback(): boolean {
@@ -99,16 +133,38 @@ export class WebGPUContext {
     return /linux/i.test(platform) && !/android/i.test(navigator.userAgent || '');
   }
 
+  private isAndroidRuntime(): boolean {
+    const navigatorWithUserAgentData = navigator as Navigator & {
+      userAgentData?: { platform?: string };
+    };
+    const platform = navigatorWithUserAgentData.userAgentData?.platform || navigator.platform || '';
+    return /android/i.test(`${platform} ${navigator.userAgent || ''}`);
+  }
+
   private async doInitialize(): Promise<boolean> {
     try {
-      // Try with power preference first, then fallback without it
-      // Safari on single-GPU Macs can fail with 'high-performance'
-      log.info(`Requesting adapter with powerPreference: ${this.currentPowerPreference}`);
-      this.adapter = await this.withTimeout(
-        navigator.gpu.requestAdapter({ powerPreference: this.currentPowerPreference }),
-        ADAPTER_WITH_PREFERENCE_TIMEOUT_MS,
-        'requestAdapter (with powerPreference)',
-      );
+      const isAndroid = this.isAndroidRuntime();
+
+      if (isAndroid) {
+        // Android devices do not benefit from desktop-style GPU power selection.
+        // More importantly, some Chrome/driver combinations leave a
+        // powerPreference request pending and then serialize every later adapter
+        // request behind it. Ask for the normal adapter first so devices which
+        // previously worked keep their full WebGPU feature level.
+        log.info('Android detected; requesting adapter without powerPreference');
+        this.adapter = await this.withTimeout(
+          navigator.gpu.requestAdapter(),
+          'requestAdapter (Android core)',
+        );
+      } else {
+        // Try with power preference first, then fallback without it.
+        // Safari on single-GPU Macs can fail with 'high-performance'.
+        log.info(`Requesting adapter with powerPreference: ${this.currentPowerPreference}`);
+        this.adapter = await this.withTimeout(
+          navigator.gpu.requestAdapter({ powerPreference: this.currentPowerPreference }),
+          'requestAdapter (with powerPreference)',
+        );
+      }
 
       // Fallback 1: on Linux hybrid-GPU systems, the requested dGPU can be
       // unavailable/wedged while the compositor's display GPU still works.
@@ -116,7 +172,6 @@ export class WebGPUContext {
         log.warn('high-performance adapter unavailable on Linux, trying low-power (integrated/display) GPU...');
         const lowPowerAdapter = await this.withTimeout(
           navigator.gpu.requestAdapter({ powerPreference: 'low-power' }),
-          ADAPTER_WITH_PREFERENCE_TIMEOUT_MS,
           'requestAdapter (low-power fallback)',
         );
         if (lowPowerAdapter) {
@@ -128,17 +183,35 @@ export class WebGPUContext {
         }
       }
 
-      // Fallback 2: try without powerPreference
-      if (!this.adapter) {
+      // Fallback 2: try without powerPreference on desktop browsers.
+      if (!this.adapter && !isAndroid) {
         log.warn('First adapter request failed, retrying without powerPreference...');
         this.adapter = await this.withTimeout(
           navigator.gpu.requestAdapter(),
-          ADAPTER_FALLBACK_TIMEOUT_MS,
           'requestAdapter (no preference)',
         );
       }
 
+      // Chrome's WebGPU compatibility mode can use an OpenGL ES 3.1 backend on
+      // Android hardware where the stricter core/Vulkan adapter is unavailable.
+      // Older Chrome versions ignore the unknown dictionary member, so this is
+      // also a safe final retry there.
+      if (!this.adapter && isAndroid) {
+        log.warn('Android core adapter unavailable, trying WebGPU compatibility mode...');
+        const compatibilityOptions: GPURequestAdapterOptionsWithFeatureLevel = {
+          featureLevel: 'compatibility',
+        };
+        this.adapter = await this.withTimeout(
+          navigator.gpu.requestAdapter(compatibilityOptions),
+          'requestAdapter (Android compatibility)',
+        );
+        if (this.adapter) {
+          log.warn('Using WebGPU compatibility mode on Android');
+        }
+      }
+
       if (!this.adapter) {
+        this.initializationFailure = 'adapter_unavailable';
         log.error('Failed to get GPU adapter (all attempts)');
         return false;
       }
@@ -151,17 +224,19 @@ export class WebGPUContext {
 
       // Request device — try with limits, fallback without
       log.info('Requesting GPU device...');
+      const requiredFeatures = this.buildRequiredFeatures(this.adapter);
       try {
         const requiredLimits = this.buildRequiredLimits(this.adapter);
         this.device = await this.withTimeout(
           this.adapter.requestDevice({
-            requiredFeatures: [],
+            requiredFeatures,
             requiredLimits,
           }),
-          DEVICE_WITH_LIMITS_TIMEOUT_MS,
           'requestDevice (with limits)',
+          device => device.destroy(),
         );
       } catch (e) {
+        if (e instanceof GPURequestTimeoutError || e instanceof GPUInitializationCancelledError) throw e;
         log.warn('Device request with limits failed, retrying without limits...', e);
         this.device = null;
       }
@@ -169,21 +244,44 @@ export class WebGPUContext {
       // Fallback: no required limits
       if (!this.device) {
         log.warn('Retrying device request without requiredLimits...');
+        try {
+          this.device = await this.withTimeout(
+            this.adapter.requestDevice({ requiredFeatures }),
+            'requestDevice (no limits)',
+            device => device.destroy(),
+          );
+        } catch (error) {
+          if (error instanceof GPURequestTimeoutError || error instanceof GPUInitializationCancelledError) throw error;
+          log.warn('Device request without limits failed', error);
+          this.device = null;
+        }
+      }
+
+      // A compatibility-defaulting adapter can advertise the core capability
+      // but still reject it on a particular driver. Keep the final bare-device
+      // fallback so preview remains available with compatibility limits.
+      if (!this.device && requiredFeatures.length > 0) {
+        log.warn('Retrying GPU device without optional core features...');
         this.device = await this.withTimeout(
           this.adapter.requestDevice(),
-          DEVICE_FALLBACK_TIMEOUT_MS,
-          'requestDevice (no limits)',
+          'requestDevice (compatibility limits)',
+          device => device.destroy(),
         );
       }
 
       if (!this.device) {
+        this.initializationFailure = 'device_failed';
         log.error('Failed to create GPU device');
         return false;
       }
       log.info('GPU device created successfully');
       attachWebGPUDeviceDiagnostics(this.device, 'WebGPUContext');
 
+      const initializedDevice = this.device;
+      const generation = this.initializationGeneration;
       this.device.lost.then((info) => {
+        if (this.device !== initializedDevice || generation !== this.initializationGeneration) return;
+        const recoveryGeneration = ++this.initializationGeneration;
         log.error('Device lost', info.message);
         this.isInitialized = false;
 
@@ -196,54 +294,25 @@ export class WebGPUContext {
           }
         }
 
-        // Attempt auto-recovery after a short delay (with retry limit)
+        // Loss listeners need the old device to release their caches. Once they
+        // finish, never expose or reuse that lost device during a retry.
+        this.device = null;
+        this.adapter = null;
+        this.initPromise = null;
         if (info.reason !== 'destroyed') {
-          this.recoveryAttempts++;
-
-          if (this.recoveryAttempts > WebGPUContext.MAX_RECOVERY_ATTEMPTS) {
-            log.error(`Device recovery failed after ${WebGPUContext.MAX_RECOVERY_ATTEMPTS} attempts. Please reload the page.`);
-            this.isRecovering = false;
-            return;
-          }
-
-          // On Linux laptops with dGPU rendering and iGPU display compositing,
-          // unexpected dGPU loss can leave the cross-GPU path unusable. Falling
-          // back once to the integrated/display GPU avoids a recovery loop while
-          // preserving existing behavior on Windows, macOS, and Android.
-          if (
-            this.currentPowerPreference === 'high-performance' &&
-            !this.hasTriedLowPowerFallback &&
-            this.shouldUseLowPowerFallback()
-          ) {
+          if (this.currentPowerPreference === 'high-performance' &&
+              !this.hasTriedLowPowerFallback && this.shouldUseLowPowerFallback()) {
             this.hasTriedLowPowerFallback = true;
             this.currentPowerPreference = 'low-power';
-            this.recoveryAttempts = 1;
-            log.warn('Unexpected device loss on Linux high-performance GPU; switching to low-power GPU and persisting for future loads');
             this.notifyPowerPreferenceFallback('low-power');
           }
-
-          log.info(`Attempting device recovery (attempt ${this.recoveryAttempts}/${WebGPUContext.MAX_RECOVERY_ATTEMPTS})...`);
-          this.initPromise = null;
           this.isRecovering = true;
-          setTimeout(async () => {
-            const success = await this.initialize();
-            if (success) {
-              this.isRecovering = false;
-              this.recoveryAttempts = 0; // Reset on success
-              // Notify listeners that device was restored
-              for (const callback of this.deviceRestoredCallbacks) {
-                try {
-                  callback();
-                } catch (e) {
-                  log.error('Error in device restored callback', e);
-                }
-              }
-            }
-          }, 100);
+          this.recoveryAttempts = 0;
+          void this.recoverDevice(recoveryGeneration);
+        } else {
+          this.finishRecoveryFailure();
         }
       });
-
-      this.isInitialized = true;
 
       // Log detailed GPU adapter info to help debug iGPU vs dGPU selection
       const adapterInfo =
@@ -271,13 +340,67 @@ export class WebGPUContext {
       const preferredFormat = navigator.gpu.getPreferredCanvasFormat();
       log.info(`Preferred canvas format: ${preferredFormat}`);
 
+      this.isInitialized = true;
       log.info('Context initialized successfully');
       return true;
     } catch (error) {
+      if (error instanceof GPUInitializationCancelledError) return false;
+      this.initializationFailure = error instanceof GPURequestTimeoutError
+        ? (error.phase === 'adapter' ? 'adapter_timeout' : 'device_timeout')
+        : 'initialization_failed';
       log.error('Failed to initialize WebGPU', error);
-      this.initPromise = null;
       return false;
     }
+  }
+
+  getInitializationFailure(): GPUInitializationFailure | null {
+    return this.initializationFailure;
+  }
+
+  onRecoveryFailed(callback: (failure: GPUInitializationFailure | null) => void): void {
+    this.recoveryFailedCallbacks.add(callback);
+  }
+
+  private finishRecoveryFailure(): void {
+    this.isRecovering = false;
+    for (const callback of this.recoveryFailedCallbacks) {
+      try { callback(this.initializationFailure); }
+      catch (error) { log.error('Error in recovery failure callback', error); }
+    }
+  }
+
+  private async recoverDevice(generation: number): Promise<void> {
+    while (this.recoveryAttempts < WebGPUContext.MAX_RECOVERY_ATTEMPTS) {
+      await new Promise<void>(resolve => setTimeout(resolve, 100 * (this.recoveryAttempts + 1)));
+      if (generation !== this.initializationGeneration) return;
+      this.recoveryAttempts++;
+      const success = await this.initialize();
+      if (generation !== this.initializationGeneration) return;
+      if (success) {
+        try {
+          for (const callback of this.deviceRestoredCallbacks) {
+            await callback();
+            if (generation !== this.initializationGeneration) return;
+          }
+          if (generation !== this.initializationGeneration) return;
+          this.isRecovering = false;
+          this.recoveryAttempts = 0;
+          return;
+        } catch (error) {
+          if (generation !== this.initializationGeneration) return;
+          this.initializationFailure = 'initialization_failed';
+          log.error('Failed to restore engine resources', error);
+          break;
+        }
+      }
+      // An expired request is still running in the browser GPU process.
+      // Do not queue more requests behind it; report a terminal, actionable error.
+      if (this.initializationFailure === 'adapter_timeout' ||
+          this.initializationFailure === 'device_timeout' ||
+          this.initializationFailure === 'unsupported') break;
+    }
+    log.error('GPU recovery failed', { attempts: this.recoveryAttempts, failure: this.initializationFailure });
+    this.finishRecoveryFailure();
   }
 
   getDevice(): GPUDevice | null {
@@ -294,6 +417,23 @@ export class WebGPUContext {
       maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
       maxBufferSize: adapter.limits.maxBufferSize,
     };
+  }
+
+  private buildRequiredFeatures(adapter: GPUAdapter): GPUFeatureName[] {
+    // Compatibility adapters stay on reduced validation limits unless this
+    // feature is explicitly enabled. Those reduced limits are insufficient for
+    // parts of the editor's effect stack on adapters that can actually expose
+    // the full core profile.
+    const coreFeature = 'core-features-and-limits' as GPUFeatureName;
+    const features: GPUFeatureName[] = [];
+    if (adapter.features?.has(coreFeature)) features.push(coreFeature);
+
+    // Brush can train against the editor's existing device when subgroups are
+    // enabled here. Reusing that device avoids a second adapter/device request,
+    // which is particularly unstable on mobile WebKit GPU processes.
+    const subgroupFeature = 'subgroups' as GPUFeatureName;
+    if (adapter.features?.has(subgroupFeature)) features.push(subgroupFeature);
+    return features;
   }
 
   get initialized(): boolean {
@@ -461,13 +601,16 @@ export class WebGPUContext {
       return true;
     }
 
-    // Destroy current device
+    // Destroy current device and invalidate pending initialization/recovery.
+    this.initializationGeneration++;
+    markExpectedWebGPUDeviceDestruction(this.device);
     this.device?.destroy();
     this.device = null;
     this.adapter = null;
     this.isInitialized = false;
     this.initPromise = null;
     this.hasTriedLowPowerFallback = false;
+    this.isRecovering = false;
     this.recoveryAttempts = 0;
 
     // Store new preference
@@ -478,11 +621,15 @@ export class WebGPUContext {
   }
 
   destroy(): void {
+    this.initializationGeneration++;
+    markExpectedWebGPUDeviceDestruction(this.device);
     this.device?.destroy();
     this.device = null;
     this.adapter = null;
     this.isInitialized = false;
     this.initPromise = null;
+    this.isRecovering = false;
+    this.recoveryFailedCallbacks.clear();
     this.deviceLostCallbacks.clear();
     this.deviceRestoredCallbacks.clear();
     this.powerPreferenceFallbackCallbacks.clear();

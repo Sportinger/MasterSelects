@@ -1,3 +1,4 @@
+import { isAutomaticCutFade } from '../audio/automaticCutDeClick';
 // AudioSyncHandler - Unified audio synchronization for all audio sources
 // Consolidates 4 similar 80-line blocks into one reusable handler
 
@@ -5,7 +6,7 @@ import { Logger } from '../logger';
 import type { AudioMeterSnapshot, TimelineClip } from '../../types';
 import type { FrameContext, AudioSyncState, AudioSyncTarget } from './types';
 import { LAYER_BUILDER_CONSTANTS } from './types';
-import { playheadState, setMasterAudio } from './PlayheadState';
+import { clearMasterAudio, playheadState, setMasterAudio } from './PlayheadState';
 import { audioManager, audioStatusTracker } from '../audioManager';
 import { audioRoutingManager } from '../audioRoutingManager';
 import { runtimeAudioMeterBus } from '../audio/runtimeAudioMeterBus';
@@ -13,6 +14,7 @@ import { runtimeSpectrumTaps } from '../audio/runtimeSpectrumTaps';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
 import { useTimelineStore } from '../../stores/timeline';
 import { createSilentAudioMeterSnapshot } from '../audio/audioMetering';
+import { hasRemainingForwardAudioSource } from './audioSourcePlaybackRange';
 
 const log = Logger.create('AudioSyncHandler');
 const TAIL_METER_POLL_INTERVAL_MS = 50;
@@ -80,6 +82,7 @@ interface TailMeterPoll {
  * AudioSyncHandler - Manages audio synchronization for all audio sources
  */
 export class AudioSyncHandler {
+  private cutFadeClips = new WeakMap<HTMLMediaElement, TimelineClip>();
   // Scrub audio state
   private scrubStates = new WeakMap<HTMLMediaElement, { lastPosition: number; lastTime: number; lastSeenPosition: number }>();
   private scrubAudioTimeouts = new Map<HTMLMediaElement, ReturnType<typeof setTimeout>>();
@@ -121,6 +124,7 @@ export class AudioSyncHandler {
       element.muted = effectivelyMuted;
     }
     if (effectivelyMuted) {
+      audioRoutingManager.syncCutFades(element, null);
       this.cancelTailMeterPolling(meterTrackId);
       this.publishSilentMeterOnce(meterTrackId, ctx.now);
       this.pauseIfPlaying(element);
@@ -131,6 +135,19 @@ export class AudioSyncHandler {
     this.setPitchPreservation(element, clip.preservesPitch !== false);
 
     const shouldPlay = ctx.isPlaying && !effectivelyMuted && !ctx.isDraggingPlayhead && absSpeed > 0.1;
+
+    if (shouldPlay && !hasRemainingForwardAudioSource(clip, clipTime)) {
+      this.cancelTailMeterPolling(meterTrackId);
+      this.pauseIfPlaying(element);
+      if (playheadState.masterAudioElement === element) clearMasterAudio();
+      this.publishSilentMeterOnce(meterTrackId, ctx.now);
+      return;
+    }
+
+    if (!shouldPlay) {
+      this.cutFadeClips.delete(element);
+      audioRoutingManager.syncCutFades(element, null);
+    }
 
     // Handle scrubbing
     if (ctx.isDraggingPlayhead && !effectivelyMuted) {
@@ -265,6 +282,7 @@ export class AudioSyncHandler {
     masterRoute?: AudioSyncTarget['masterRoute'],
     meterTrackId?: string
   ): void {
+    this.cutFadeClips.set(element, clip);
     this.clearScrubAudioTimeout(element);
 
     // Base rate from clip speed. The final rate — including a gentle drift
@@ -279,7 +297,8 @@ export class AudioSyncHandler {
     const needsMeter = Boolean(meterTrackId);
     const hasExistingRoute = audioRoutingManager.hasRoute(element);
 
-    if (hasEQ || hasPan || hasProcessors || hasMasterRoute || volume > 1 || needsMeter || hasExistingRoute) {
+    const hasCutFades = clip.audioState?.editStack?.some(isAutomaticCutFade) === true;
+    if (hasCutFades || hasEQ || hasPan || hasProcessors || hasMasterRoute || volume > 1 || needsMeter || hasExistingRoute) {
       const effectiveEqGains = eqGains ?? EMPTY_EQ_GAINS;
       if (
         hasExistingRoute
@@ -293,7 +312,12 @@ export class AudioSyncHandler {
         // This handles both volume and EQ through the audio graph
         audioRoutingManager
           .applyEffects(element, volume, effectiveEqGains, pan, processors, masterRoute)
-          .then((routed) => this.publishRouteMeterGated(meterTrackId, routed ? element : null));
+          .then((routed) => {
+            this.publishRouteMeterGated(meterTrackId, routed ? element : null);
+            if (routed && !element.paused) {
+              audioRoutingManager.syncCutFades(element, this.cutFadeClips.get(element) ?? null);
+            }
+          });
       }
     } else {
       // Simple volume-only path (no Web Audio overhead)
@@ -319,6 +343,8 @@ export class AudioSyncHandler {
           const timelineState = useTimelineStore.getState();
           if (!timelineState.isPlaying || timelineState.isDraggingPlayhead) {
             element.pause();
+          } else {
+            audioRoutingManager.syncCutFades(element, this.cutFadeClips.get(element) ?? null);
           }
         })
         .catch(err => {
@@ -329,6 +355,8 @@ export class AudioSyncHandler {
           state.hasAudioError = true;
         });
     }
+
+    audioRoutingManager.syncCutFades(element, clip);
 
     // Set as master audio if eligible. The master may still be settling after
     // play(); the playback loop falls back to system time until it is running.

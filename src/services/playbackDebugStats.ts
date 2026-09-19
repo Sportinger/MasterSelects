@@ -16,6 +16,9 @@ import { summarizeFrameCadence } from './playbackDebug/collectors';
 
 export type PlaybackDebugStats = NonNullable<EngineStats['playback']>;
 export type PlaybackPipeline = PlaybackDebugStats['pipeline'];
+export type PlaybackCadenceStats = NonNullable<PlaybackDebugStats['recentCadence']>;
+
+export const EFFECTIVE_PLAYBACK_CADENCE_WINDOW_MS = 1_000;
 
 export interface PlaybackRunStartupStats {
   firstDecodeOutputMs?: number;
@@ -164,6 +167,18 @@ export function buildPlaybackDebugStats(
   params: PlaybackDebugBuildParams,
 ): PlaybackDebugStats {
   return withWorkerGpuOnlyDiagnostics(buildPlaybackDebugStatsBase(params));
+}
+
+export function toPlaybackCadenceStats(playback: PlaybackDebugStats): PlaybackCadenceStats {
+  return {
+    windowMs: playback.windowMs,
+    frameEvents: playback.frameEvents,
+    cadenceFps: playback.cadenceFps,
+    previewFrames: playback.previewFrames,
+    previewUpdates: playback.previewUpdates,
+    previewRenderFps: playback.previewRenderFps,
+    previewUpdateFps: playback.previewUpdateFps,
+  };
 }
 
 export function buildPlaybackRunDiagnostics(

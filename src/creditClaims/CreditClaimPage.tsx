@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent, MouseEvent } from 'react';
 import { IconArrowRight, IconLock, IconMail } from '@tabler/icons-react';
 import { cloudApi, type CreditClaimRedeemResponse, type CreditClaimStatusResponse } from '../services/cloudApi';
+import { navigateToTrustedUrl } from '../services/security/trustedNavigation';
 import './CreditClaimPage.css';
 
 type LoadState = 'error' | 'loading' | 'ready';
@@ -146,12 +147,12 @@ export function CreditClaimPage() {
         });
 
         if (login.authorizationUrl) {
-          window.location.href = login.authorizationUrl;
+          navigateToTrustedUrl(login.authorizationUrl, 'sign-in');
           return;
         }
 
         if (login.verificationUrl && login.delivery === 'debug_link') {
-          window.location.assign(login.verificationUrl);
+          navigateToTrustedUrl(login.verificationUrl, 'magic-link verification');
           return;
         }
 
@@ -167,16 +168,16 @@ export function CreditClaimPage() {
         });
 
         if (login.authorizationUrl) {
-          window.location.href = login.authorizationUrl;
+          navigateToTrustedUrl(login.authorizationUrl, 'sign-in');
           return;
         }
 
-        if (login.verificationUrl) {
-          if (login.delivery === 'debug_link') {
-            window.location.assign(login.verificationUrl);
-            return;
-          }
+        if (login.verificationUrl && login.delivery === 'debug_link') {
+          navigateToTrustedUrl(login.verificationUrl, 'magic-link verification');
+          return;
+        }
 
+        if (login.nextStep === 'check_email' || login.delivery === 'email_sent') {
           setMessage(login.message ?? 'Check your email to verify this credit claim.');
           return;
         }

@@ -1,16 +1,24 @@
 import { getCurrentUser, hasTrustedOrigin, json, methodNotAllowed, parseJson } from '../../lib/db';
 import { getBillingPlan, type BillingPlanId, normalizeBillingPlanId } from '../../lib/entitlements';
 import {
+  buildStripeIdempotencyKey,
   createStripeCheckoutSession,
   createStripePortalSession,
   getStripeConfig,
   getStripePriceId,
   getStripeSubscription,
+  StripeApiError,
 } from '../../lib/stripe';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
+import {
+  recordLegalConsent,
+  validateLegalConsent,
+  type ValidatedLegalConsent,
+} from '../../lib/consumerContractRecords';
 
 interface CheckoutRequestBody {
   cancelUrl?: string;
+  legalConsent?: unknown;
   planId?: string;
   successUrl?: string;
 }
@@ -159,6 +167,31 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     );
   }
 
+  // A new paid contract (first checkout or a plan change) needs the consumer's
+  // explicit consent to the current Terms, the Withdrawal Policy, and immediate
+  // performance before Stripe is involved. Cancelling or opening the portal for
+  // the current plan does not create a contract and needs none.
+  const createsPaidContract = planId !== 'free'
+    && (!activeManagedSubscription || isManagedPlanChange(currentPlanId, planId));
+  let legalConsent: ValidatedLegalConsent | null = null;
+  if (createsPaidContract) {
+    const consentCheck = validateLegalConsent(body.legalConsent);
+    if (!consentCheck.ok) {
+      return json({ error: consentCheck.error, message: consentCheck.message, planId }, { status: 422 });
+    }
+    legalConsent = consentCheck.consent;
+  }
+
+  const recordConsentForSession = async (stripeSessionId: string): Promise<void> => {
+    if (!legalConsent) return;
+    await recordLegalConsent(context.env.DB, {
+      consent: legalConsent,
+      planId,
+      stripeSessionId,
+      userId: user.id,
+    });
+  };
+
   try {
     if (activeManagedSubscription && customerId) {
       const stripeSubscriptionId = getString(latestSubscription?.stripe_subscription_id);
@@ -170,7 +203,9 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
             subscriptionId: stripeSubscriptionId,
             type: 'subscription_cancel',
           },
-          idempotencyKey: context.data.requestId ?? null,
+          idempotencyKey: await buildStripeIdempotencyKey('portal-cancel', [
+            user.id, customerId, stripeSubscriptionId, successUrl, cancelUrl,
+          ]),
           returnUrl: cancelUrl,
         });
 
@@ -202,9 +237,12 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
               subscriptionId: stripeSubscriptionId,
               type: 'subscription_update_confirm',
             },
-            idempotencyKey: context.data.requestId ?? null,
+            idempotencyKey: await buildStripeIdempotencyKey('portal-update', [
+              user.id, customerId, stripeSubscriptionId, subscriptionItemId, priceId, successUrl, cancelUrl,
+            ]),
             returnUrl: cancelUrl,
           });
+          await recordConsentForSession(portal.id);
 
           return json({
             checkoutUrl: portal.url,
@@ -218,7 +256,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
 
       const portal = await createStripePortalSession(stripeConfig, {
         customerId,
-        idempotencyKey: context.data.requestId ?? null,
+        idempotencyKey: await buildStripeIdempotencyKey('portal', [user.id, customerId, origin]),
         returnUrl: origin,
       });
 
@@ -246,7 +284,9 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       clientReferenceId: user.id,
       customerEmail: customerId ? null : user.email,
       customerId,
-      idempotencyKey: context.data.requestId ?? null,
+      idempotencyKey: await buildStripeIdempotencyKey('checkout', [
+        user.id, planId, priceId, customerId, successUrl, cancelUrl,
+      ]),
       metadata: {
         plan_id: planId,
         user_id: user.id,
@@ -258,6 +298,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       },
       successUrl,
     });
+    await recordConsentForSession(session.id);
 
     return json({
       checkoutUrl: session.url,
@@ -267,10 +308,16 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       priceId,
     });
   } catch (error) {
+    console.error(
+      '[billing] checkout failed',
+      context.data.requestId,
+      error instanceof StripeApiError ? `${error.status} ${error.detail}` : error instanceof Error ? error.message : error,
+    );
     return json(
       {
         error: 'stripe_checkout_failed',
-        message: error instanceof Error ? error.message : 'Stripe checkout session creation failed.',
+        message: 'Checkout could not be started. Please try again.',
+        requestId: context.data.requestId ?? null,
       },
       { status: 502 },
     );

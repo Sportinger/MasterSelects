@@ -1,6 +1,7 @@
 // Ping-pong compositing pipeline for layer blending
 
 import type { Layer } from '../core/types';
+import type { VideoRotationDegrees } from '../webcodecs/videoTrackOrientation';
 import { createCompositorPipelineResources } from './compositor/pipelineResources';
 import {
   COMPOSITOR_UNIFORM_SIZE,
@@ -20,6 +21,7 @@ export class CompositorPipeline {
   private externalCompositePipeline: GPURenderPipeline | null = null;
   private copyPipeline: GPURenderPipeline | null = null;
   private externalCopyPipeline: GPURenderPipeline | null = null;
+  private externalCopyPipelines = new Map<VideoRotationDegrees, GPURenderPipeline>();
 
   // Bind group layouts
   private compositeBindGroupLayout: GPUBindGroupLayout | null = null;
@@ -71,6 +73,7 @@ export class CompositorPipeline {
     this.copyPipeline = resources.copyPipeline;
     this.externalCopyBindGroupLayout = resources.externalCopyBindGroupLayout;
     this.externalCopyPipeline = resources.externalCopyPipeline;
+    this.externalCopyPipelines = new Map(resources.externalCopyPipelines);
   }
 
   getCompositePipeline(): GPURenderPipeline | null {
@@ -93,8 +96,8 @@ export class CompositorPipeline {
     return this.copyPipeline;
   }
 
-  getExternalCopyPipeline(): GPURenderPipeline | null {
-    return this.externalCopyPipeline;
+  getExternalCopyPipeline(rotation: VideoRotationDegrees = 0): GPURenderPipeline | null {
+    return this.externalCopyPipelines.get(rotation) ?? this.externalCopyPipeline;
   }
 
   // Create bind group for copying regular texture to temp texture
@@ -149,6 +152,7 @@ export class CompositorPipeline {
     uniformBuffer: GPUBuffer,
     inlineEffects?: InlineEffectParams,
     sourcePixelScale = 1,
+    videoRotationOverride?: VideoRotationDegrees,
   ): void {
     writeLayerUniformData(
       layer,
@@ -159,6 +163,7 @@ export class CompositorPipeline {
       this.uniformDataU32,
       inlineEffects,
       sourcePixelScale,
+      videoRotationOverride,
     );
 
     // Change detection - only write to GPU if values changed

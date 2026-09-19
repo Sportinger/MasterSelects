@@ -123,10 +123,22 @@ export function wrapTextToShapeLines(
   lineHeight: number,
   letterSpacing: number,
   startBaselineY: number,
+  wrapMode: 'word' | 'none' = 'word',
 ): TextShapeLine[] {
   const polyline = boundsToPolyline(bounds, canvasWidth, canvasHeight);
   const lineHeightPx = Math.max(1, fontSize * lineHeight);
   const normalizedText = text.replace(/\r\n?/g, '\n');
+  if (wrapMode === 'none') {
+    let cursor = 0;
+    return normalizedText.split('\n').map((lineText, lineIndex) => {
+      const y = startBaselineY + lineIndex * lineHeightPx;
+      const interval = getLineInterval(polyline, y - fontSize * 0.45, box);
+      const start = cursor;
+      const end = start + lineText.length;
+      cursor = end + 1;
+      return { text: lineText, start, end, y, ...interval };
+    });
+  }
   const lines: TextShapeLine[] = [];
   let lineIndex = 0;
   let paragraphStart = 0;

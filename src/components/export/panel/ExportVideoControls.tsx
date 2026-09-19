@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   GIF_COLOR_PRESETS,
   GIF_DITHER_OPTIONS,
@@ -9,6 +8,7 @@ import {
   getGifDitherLabel,
   getGifPaletteModeLabel,
 } from '../../../engine/gif/gifOptions';
+import { ResolutionOrientationToggle } from '../../common/ResolutionOrientationToggle';
 import { ExportVideoCodecCard } from './ExportVideoCodecCard';
 import type {
   ExportBasicsActions,
@@ -38,7 +38,6 @@ export function ExportVideoControls({
   useInOut,
   actions,
 }: ExportVideoControlsProps) {
-  const [orientationPreviewLocked, setOrientationPreviewLocked] = useState(false);
   const isPortrait = video.actualHeight > video.actualWidth;
   const toggleResolutionOrientation = () => {
     if (video.useCustomResolution) {
@@ -56,24 +55,11 @@ export function ExportVideoControls({
           <div className="export-field-head">
             <span>Resolution</span>
             <div className="export-resolution-value">
-              <button
-                type="button"
-                className={`export-orientation-toggle${orientationPreviewLocked ? ' is-preview-locked' : ''}`}
-                onClick={() => {
-                  toggleResolutionOrientation();
-                  setOrientationPreviewLocked(true);
-                }}
-                onMouseLeave={() => setOrientationPreviewLocked(false)}
-                onBlur={() => setOrientationPreviewLocked(false)}
-                aria-label={`Switch to ${isPortrait ? '16:9 landscape' : '9:16 portrait'}`}
-                title={`Switch to ${isPortrait ? '16:9 landscape' : '9:16 portrait'}`}
-              >
-                <span className={`export-orientation-icon${isPortrait ? ' is-portrait' : ''}`} aria-hidden="true" />
-                <svg className="export-orientation-preview" viewBox="0 0 24 24" aria-hidden="true">
-                  <path className="export-orientation-preview-arc" d="M4 18A14 14 0 0 1 18 4" />
-                  <path className="export-orientation-preview-head" d="M13 4h5v5" />
-                </svg>
-              </button>
+              <ResolutionOrientationToggle
+                width={video.actualWidth}
+                height={video.actualHeight}
+                onToggle={toggleResolutionOrientation}
+              />
               <strong>{video.actualWidth}x{video.actualHeight}</strong>
             </div>
           </div>

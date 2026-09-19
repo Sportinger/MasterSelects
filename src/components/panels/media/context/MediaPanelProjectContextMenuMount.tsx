@@ -21,6 +21,7 @@ type MediaPanelProjectContextActionKey =
   | 'composition'
   | 'solidItem'
   | 'mediaFile'
+  | 'trackingAsset'
   | 'canRegenerateMediaArtifacts'
   | 'isVideoFile'
   | 'isImageFile'
@@ -76,6 +77,7 @@ export function MediaPanelProjectContextMenuMount({
     mediaFile,
     composition,
     solidItem,
+    trackingAsset,
   } = getMediaContextSelectedItemState({
     itemId: contextMenu.itemId,
     items,
@@ -107,6 +109,7 @@ export function MediaPanelProjectContextMenuMount({
         composition={composition}
         solidItem={solidItem}
         mediaFile={mediaFile}
+        trackingAsset={trackingAsset}
         canRegenerateMediaArtifacts={contextActionState.canRegenerateMediaArtifacts}
         isVideoFile={contextActionState.isVideoFile}
         isImageFile={contextActionState.isImageFile}

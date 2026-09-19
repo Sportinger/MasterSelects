@@ -12,3 +12,12 @@ export function hasClipDragIntent(
   return Math.hypot(currentX - startX, currentY - startY)
     >= CLIP_DRAG_INTENT_THRESHOLD_PX;
 }
+
+export function shouldDeselectClipOnPointerRelease(
+  wasSelectedAtPointerDown: boolean,
+  shiftKey: boolean,
+  dragStarted: boolean,
+): boolean {
+  if (dragStarted) return !wasSelectedAtPointerDown;
+  return wasSelectedAtPointerDown && !shiftKey;
+}

@@ -353,7 +353,7 @@ describe('MD6 parent graph contract freeze', () => {
     expect(first.plan.history).toEqual({ mode: 'single-entry', label: 'Set Parent', atomic: true });
   });
 
-  it('matches the established scale-independent-position algebra and its inverse', () => {
+  it('matches uniform hierarchy-scale position algebra and its inverse', () => {
     const parent = createMotionParentContractTransform({
       x: 100,
       y: 50,
@@ -374,11 +374,11 @@ describe('MD6 parent graph contract freeze', () => {
     });
     const world = composeMotionParentTransforms2D(parent, local);
 
-    expect(world.position.x).toBeCloseTo(95);
-    expect(world.position.y).toBeCloseTo(60);
+    expect(world.position.x).toBeCloseTo(90);
+    expect(world.position.y).toBeCloseTo(70);
     expect(world.scale).toEqual({ all: 0.5, x: 6, y: 2 });
     expect(world.rotationZ).toBe(110);
-    expect(world.opacity).toBeCloseTo(0.4);
+    expect(world.opacity).toBeCloseTo(0.8);
     const inverse = deriveMotionParentLocalTransform2D(parent, world);
     expect(inverse.ok).toBe(true);
     if (inverse.ok) expectTransformClose(inverse.transform, local);

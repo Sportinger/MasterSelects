@@ -1,10 +1,10 @@
 [package]
 name = "masterselects-helper"
-version = "0.3.15"
+version = "0.3.17"
 edition = "2021"
 authors = ["MasterSelects Team"]
 description = "Local control, storage, and download helper for MasterSelects"
-license = "MIT"
+license = "AGPL-3.0-only"
 
 [dependencies]
 # Async runtime
@@ -45,6 +45,11 @@ warp = "0.3"
 
 # Native file dialog (folder picker for Firefox)
 rfd = "0.15"
+
+# RTMP publishing for the browser live-stream relay
+rml_rtmp = "0.8"
+bytes = "1"
+url = "2"
 
 [target.'cfg(windows)'.dependencies]
 # Windows-specific APIs for console hiding, message pump, mutex

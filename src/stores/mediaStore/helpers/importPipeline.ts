@@ -19,6 +19,7 @@ import { prepareLottieAsset } from '../../../services/vectorAnimation/lottieMeta
 import { prepareRiveAsset } from '../../../services/vectorAnimation/riveMetadata';
 import { readGaussianSplatFileStats } from './gaussianSplatStats';
 import { createPrimaryMediaObjectUrl } from '../../../services/project/mediaObjectUrlManager';
+import { resolveProjectMediaSourceLocation } from '../../../services/project/mediaSourceRoots';
 
 const log = Logger.create('Import');
 
@@ -30,6 +31,8 @@ export interface ImportParams {
   parentId?: string | null;
   forceCopyToProject?: boolean;
   projectFileName?: string;
+  /** Generate and persist the panel thumbnail before resolving the import. */
+  generateThumbnail?: boolean;
   /** Force a specific media type instead of auto-detecting (e.g. 'gaussian-avatar' for .zip files) */
   typeOverride?: MediaFile['type'];
 }
@@ -51,7 +54,17 @@ export function generateId(): string {
  * Replaces duplicate logic in importFile, importFilesWithPicker, importFilesWithHandles.
  */
 export async function processImport(params: ImportParams): Promise<ImportResult> {
-  const { file, id, handle, absolutePath, parentId, forceCopyToProject, projectFileName, typeOverride } = params;
+  const {
+    file,
+    id,
+    handle,
+    absolutePath,
+    parentId,
+    forceCopyToProject,
+    projectFileName,
+    generateThumbnail = true,
+    typeOverride,
+  } = params;
 
   // Store handle if provided (for original file location)
   if (handle) {
@@ -81,20 +94,26 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
 
   // Get info and thumbnail in parallel (skip for 3D/vector formats - no HTML media metadata)
   const isMediaType = type === 'video' || type === 'audio' || type === 'image';
-  const [info, rawThumbnail] = await Promise.all([
-    isMediaType
-      ? getMediaInfo(file, type as 'video' | 'audio' | 'image')
-      : Promise.resolve(vectorAnimationInfo ?? { duration: 10, fileSize: file.size }),
-    type === 'video' || type === 'image'
-      ? createThumbnail(file, type as 'video' | 'image')
-      : Promise.resolve(undefined),
-  ]);
+  const infoPromise = isMediaType
+    ? getMediaInfo(file, type as 'video' | 'audio' | 'image')
+    : Promise.resolve(vectorAnimationInfo ?? { duration: 10, fileSize: file.size });
+  const thumbnailPromise = generateThumbnail && type === 'video'
+    ? infoPromise.then((metadata) => createThumbnail(file, 'video', {
+        videoCodecId: 'videoCodecId' in metadata ? metadata.videoCodecId : undefined,
+        duration: metadata.duration,
+      }))
+    : generateThumbnail && type === 'image'
+      ? createThumbnail(file, 'image')
+      : Promise.resolve(undefined);
+  const [info, rawThumbnail] = await Promise.all([infoPromise, thumbnailPromise]);
 
   // Calculate hash for deduplication
   const fileHash = await calculateFileHash(file);
 
   // Handle thumbnail deduplication (unified - was 3x duplicate)
-  const thumbnailUrl = await handleThumbnailDedup(fileHash, rawThumbnail, id);
+  const thumbnailUrl = generateThumbnail
+    ? await handleThumbnailDedup(fileHash, rawThumbnail, id)
+    : undefined;
 
   // Check for existing proxy (unified - was 3x duplicate)
   const proxyInfo = await checkExistingProxy(
@@ -105,7 +124,13 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
   );
 
   // Copy to Raw folder if enabled (unified - was 3x duplicate)
-  const copyResult = await copyToRawIfEnabled(file, id, forceCopyToProject === true, projectFileName);
+  const copyResult = await copyToRawIfEnabled(
+    file,
+    id,
+    forceCopyToProject === true,
+    projectFileName,
+    Boolean(handle || absolutePath),
+  );
 
   if (copyResult) {
     // The project-local RAW copy is the canonical media source. Promote it to the
@@ -137,6 +162,7 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
   const gaussianSplatStats = type === 'gaussian-splat'
     ? await readGaussianSplatFileStats(canonicalFile)
     : undefined;
+  const sourceLocation = await resolveProjectMediaSourceLocation(handle);
 
   // Build MediaFile
   const mediaFile: MediaFile = {
@@ -150,9 +176,11 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
     thumbnailUrl,
     fileHash,
     hasFileHandle: !!copyResult || !!handle,
-    filePath: handle?.name || file.name,
+    filePath: sourceLocation?.sourceRelativePath ?? handle?.name ?? file.name,
     absolutePath,
     projectPath: copyResult?.relativePath,
+    sourceRootId: sourceLocation?.sourceRootId,
+    sourceRelativePath: sourceLocation?.sourceRelativePath,
     ...info,
     ...proxyInfo,
     ...gaussianSplatStats,
@@ -219,11 +247,22 @@ async function copyToRawIfEnabled(
   file: File,
   mediaId: string,
   forceCopyToProject = false,
-  projectFileName?: string
+  projectFileName?: string,
+  hasPersistentSourceReference = false,
 ): Promise<{ relativePath: string; handle?: FileSystemFileHandle } | null> {
   const { copyMediaToProject } = useSettingsStore.getState();
+  // A File obtained from an <input> or a drag/drop payload is only valid for
+  // the current page lifetime. Even when the browser supports a persistent
+  // project folder, the source itself is not reloadable unless the import also
+  // supplied a FileSystemFileHandle (or a native absolute path).
+  const requiresProjectLocalCopy =
+    projectFileService.requiresProjectLocalMediaCopies() ||
+    !hasPersistentSourceReference;
 
-  if ((!copyMediaToProject && !forceCopyToProject) || !projectFileService.isProjectOpen()) {
+  if (
+    (!copyMediaToProject && !forceCopyToProject && !requiresProjectLocalCopy)
+    || !projectFileService.isProjectOpen()
+  ) {
     return null;
   }
 

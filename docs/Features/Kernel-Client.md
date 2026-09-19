@@ -1,167 +1,167 @@
-# Kernel Client
+# Kernel Client and Auto
 
-[Back to Index](./README.md)
+## Purpose
 
-The kernel client is the browser-side boundary for the external MasterSelects
-kernel service and the kernel-first route. FlashBoard invokes it when the
-MasterSelectsAI kernel provider is selected; Kie.ai/community chat follows its
-own provider path. The service compiles and verifies the plan; the browser
-remains the only process that executes semantic editor tools and owns timeline
-history.
+FlashBoard exposes the general-purpose prompt path as **Auto**. Its Model menu
+contains exactly `Codex Direct` and `Fast`, with Direct selected by default in
+development and production. Both runtimes use the same browser-owned atomic
+editor-tool catalog and execution boundary.
 
-## Transcript Moment Evidence
+`Fast` maps to the kernel-owned Normal Path. That path can inspect an editor
+snapshot, plan work, call public atomic tools, inspect results or review
+frames, and refine work in later bounded rounds. The private kernel owns its
+provider prompts, orchestration, sequencing, and Standard backend selection.
 
-Story-path compile requests can include browser-built transcript moments.
-Index version `app-transcript-v2` keeps the transcript text and source range
-from v1, groups adjacent transcript spans into short natural phrases, and
-includes the original source timings in `words`. Collection is uncapped and
-pages transcript and speech-marker results in batches of 5,000. Moments can
-also add three optional evidence groups:
+`Codex Direct` instead opens an authenticated same-origin WebSocket relay to
+the isolated Codex app-server. It does not create a Normal Path turn, page
+lease, verifier round, or Logic-mode request. Raw provider names, internal
+Logic capability, and the compatibility Very Fast/Fast/Slow model classes are
+not exposed as editor controls. The only separate product workflow is Story.
 
-- `pauses`: source-time start/end ranges from voice activity or speech markers
-- `emphasis`: text, source start, and score from prosody evidence
-- `markers`: breath, filler, or normalized disfluency point evidence
+The internal protocol constant `fast-agent-v2` and some `fastV2*` source and
+storage names remain compatibility identifiers for existing journals and D1
+rows. They do not describe a second product path.
 
-Each moment declares its honest `analysisSources`. The allowed values are
-`transcript`, `voice-activity`, `speech-markers`, and `prosody`; a source is
-added only when that source contributed evidence to that moment. Transcript is
-always present for emitted moments. Marker pages are read through the semantic
-`getSpeechMarkers` execution path after transcript paging. Separate optional
-silence evidence is collected through `findSilentSections` and sent as
-`silentRanges`.
+## Ownership boundary
 
----
+The public editor owns:
 
-## Production Default
+- the bounded timeline and project snapshot;
+- the flat, digest-pinned atomic tool catalog;
+- tool schemas, local policy, authorization, confirmation, transactions,
+  undo, deterministic execution, and bounded result projection;
+- browser/session binding and the public Cloudflare/D1 relay.
 
-Production builds route kernel traffic through the same-origin Pages proxy
-`/api/kernel/*` by default. Its non-hosted routes forward `health`, `compile`,
-and `runs/:id/complete`; hosted-agent routes are dispatched separately. The
-proxy requires a signed-in app session for the compile and completion POST
-routes and attaches the service bearer token server-side, so browsers never
-hold a kernel credential on this path. The `localStorage` keys below remain
-the explicit override, and `ms.kernel.enabled` = `false` is the kill switch in
-every environment.
+The private kernel owns:
 
-## Local Configuration
+- prompts and provider input;
+- tool categories and progressive discovery;
+- fast-path selection and intent-to-operation compilation;
+- sequencing, retries, result inspection, visual review, and refinement;
+- API-versus-Codex backend selection and provider billing callbacks.
 
-The gateway reads four `localStorage` entries:
+See [ADR-001](../architecture/ADR-001-Fast-V2-Kernel-Owned-Orchestration.md)
+for the binding architectural rule.
 
-| Key | Semantics |
-|---|---|
-| `ms.kernel.url` | Direct external service base URL override. Blank or missing values use the production proxy or bypass the gateway in development. |
-| `ms.kernel.token` | Bearer token for a direct service override. Blank or missing values use the production proxy or bypass the gateway in development. |
-| `ms.kernel.enabled` | Presence-based cutover switch. Only the exact string `false` disables the kernel. |
-| `ms.kernel.fallback` | Local calibration opt-in. Only the exact string `true` lets a declined pre-execution run return `handled: false`; the default is fail-closed. |
+## Public HTTP catalog
 
-In development, URL + token enable direct service access; a development bridge
-token can supply local credentials. In production, no local credentials are
-needed because the same-origin proxy is the default.
+The Cloudflare boundary exposes **14 method/path shapes**. Five are the
+signed-in browser Normal Path, seven are private service callbacks, and two
+are the generic health and Seedance relays.
 
-The direct-service token is read only to authenticate kernel requests.
-Same-origin scripts or browser-profile access can expose `localStorage`, so
-use a scoped token and protect the local profile.
+### Browser and generic routes
 
-## Compile, Execute, Complete
-
-`tryKernelFirst()` implements one kernel transaction:
-
-1. It calls the same `handleGetTimelineState` handler used by the semantic
-   `getTimelineState` tool and sends that compact snapshot with the request to
-   `POST /kernel/compile`.
-2. A compiled response must contain a run ID and validated concrete
-   `resolvedCalls` (`stepId`, `tool`, and object `args`). The browser executes
-   those calls in order through `executeAIToolCalls(..., 'chat')`.
-3. The gateway opens one `beginAgentTransaction` for the task and invokes the
-   semantic executor with nested history suppressed. A successful group is
-   committed as one undo point. Any failed or missing tool result aborts the
-   transaction and rolls the whole group back through `abortAgentTransaction`.
-4. Before committing, it rebuilds the snapshot with the same timeline handler
-   and sends `{ finalSnapshot }` to `POST /kernel/runs/:runId/complete`.
-5. The gateway commits only after a successful `fingerprintAssert.matches`
-   result and succeeded completion status. Completion transport errors,
-   unreadable replies, and verification failures roll the transaction back. A
-   verified run is shown in chat with the short fingerprint plus verified
-   video/audio clip counts and occupied span from the verification report or
-   compile summary.
-
-Direct service endpoints are authenticated with `Authorization: Bearer
-<token>`. The browser never asks the service to mutate editor state directly.
-
-## Routing And Fallback
-
-| Condition | Gateway result | FlashBoard behavior |
+| Route | Authentication | Behavior |
 |---|---|---|
-| Storage unavailable, disabled kernel, or missing development credentials | Not handled | The selected kernel provider reports it as unavailable. |
-| Compile HTTP/network error, malformed response, `aborted`, or `failed` | Handled declined result by default | Show the decline without switching providers. `ms.kernel.fallback` = `true` is the explicit local calibration exception. |
-| Any local tool failure or executor exception | Roll back, then handled declined result by default | Timeline changes are rolled back; no provider is selected automatically. |
-| Completion transport/error response | Roll back, then handled failure | Surface the verification failure; the transaction is not committed. |
-| Fingerprint mismatch | Roll back, then handled failure | Surface the mismatch honestly; the transaction is not committed. |
-| Completion succeeded and fingerprint matches | Handled verified result | Show video/audio counts, occupied span, and short fingerprint in chat. |
+| `GET /api/kernel/health` | Public | Relays private service readiness. |
+| `POST /api/kernel/preproduction/seedance` | Signed-in user | Relays the special Seedance preproduction stage with the authenticated principal. |
+| `GET /api/kernel/normal/capabilities` | Signed-in user | Advertises Standard/Logic availability and the single Normal Path execution profile. |
+| `POST /api/kernel/normal/turns` | Signed-in user | Validates the bounded request, binds it to the user and page in D1, signs the private envelope, and starts or replays the turn. |
+| `GET /api/kernel/normal/turns/:turnId/events` | Owning user and page binding | Relays ordered SSE events and renews the open-page lease. |
+| `POST /api/kernel/normal/turns/:turnId/operation-results` | Owning user and page binding | Validates and relays one deterministic atomic-operation result. |
+| `POST /api/kernel/normal/turns/:turnId/cancel` | Owning user and page binding | Marks the D1 turn terminal first, then best-effort cancels the private run. |
 
-The selected kernel provider fails closed by default. The only pre-execution
-fail-open behavior is the explicit `ms.kernel.fallback` local calibration
-override. Completion happens before commit, so a failed verification does not
-leave a committed kernel edit behind.
+### Private service callbacks
 
-## Isolation Guarantee
+These same-origin Cloudflare routes require the kernel service bearer plus a
+turn-bound assertion. They are not browser APIs.
 
-`src/services/kernelClient/index.ts` and `types.ts` are the transport/type
-boundary. They may import only relative modules resolving inside
-`src/services/kernelClient/` and must not import stores, engines, app feature
-implementations, or external packages.
+| Route | Purpose |
+|---|---|
+| `POST /api/kernel/normal/service/turns/:turnId/rounds/:round/authorize` | Atomically authorize one provider round. |
+| `POST /api/kernel/normal/service/turns/:turnId/rounds/:round/settle` | Settle provider usage for one authorized round. |
+| `POST /api/kernel/normal/service/turns/:turnId/rounds/:round/authorize-replay` | Reconcile a previously recorded authorization. |
+| `POST /api/kernel/normal/service/turns/:turnId/rounds/:round/settle-replay` | Reconcile a previously recorded settlement. |
+| `POST /api/kernel/normal/service/turns/:turnId/complete` | Complete a turn after settled work. |
+| `POST /api/kernel/normal/service/turns/:turnId/complete-replay` | Reconcile an already recorded completion. |
+| `POST /api/kernel/normal/service/turns/:turnId/fail` | Release reservations and fail the turn safely. |
 
-`kernelChatGateway.ts` is deliberately the app-side integration layer: it may
-import the semantic tool executor and the agent transaction API. It contains
-no kernel logic, prompt, rubric, or pack assets.
+There is no public V1 compatibility route. `/api/kernel/compile`,
+`/api/kernel/runs/:runId/complete`, `/api/kernel/hosted-agent/*`, generic tool
+result posting, and deferred operation settlements are removed and return
+`404`.
 
-`tests/unit/kernelClientIsolation.test.ts` keeps the guard honest by applying
-the strict import rules only to `index.ts` and `types.ts`, scanning the named
-transport, gateway, story-verification, and transcript-moment files for
-forbidden private vocabulary, requiring FlashBoard to remain the only gateway
-import site, and freezing the four storage key names.
+### Codex Direct relay
 
-## Hosted-Agent Client
+`GET /api/direct-codex/ws` is a separate WebSocket boundary rather than one of
+the 14 Normal Path method/path shapes. Cloudflare requires an allowed Origin
+and a signed-in session, binds the authenticated user principal, injects the
+server-side kernel credential, and relays to `/kernel/direct-codex/ws`. The
+private relay validates that credential, bounds message and connection counts,
+and is the only component allowed to connect to the loopback Codex app-server.
 
-`src/services/kernelClient/hostedAgent/` contains the public browser-side
-hosted-agent transports, operation bridge, session resume, settlement, and
-Fast V2 protocol adapters. The Pages kernel route dispatches hosted-agent
-requests before the compile/complete allowlist.
-## Troubleshooting
+## Auto lifecycle (internal Normal Path)
 
-Every routing decision and decline reason is logged through the app logger:
-run `Logger.enable('KernelGateway')` in the browser console and repeat the
-prompt. Compile failures, transport errors, and rollback causes all appear
-there with their reason strings. The FlashBoard UI also shows local kernel
-progress and a structured run card for handled runs.
+1. The signed-in browser reads `GET /api/kernel/normal/capabilities`.
+2. It captures one revision-bound semantic snapshot and a digest-pinned flat
+   catalog of allowed atomic tools.
+3. `POST /api/kernel/normal/turns` creates the D1 billing/session binding and
+   forwards a signed envelope to the private kernel.
+4. The Intelligence Module selects the configured Standard backend according
+   to server policy. Internal Logic compatibility remains kernel-owned but is
+   not requested by the editor UI.
+5. The kernel plans the next bounded action. A private fast path may compile
+   directly to explicit public operation-plan steps; otherwise the model can
+   browse categories and select atomic tools.
+6. The editor revalidates every operation, executes it transactionally, and
+   posts the projected result.
+7. The kernel adds results, retryable errors, and captured review grids back to
+   the next provider round. It may inspect, correct, or refine the edit until
+   completion or the iteration/spend bound.
+8. SSE emits narration, operation requests, billing settlement, and the final
+   terminal event. Reload resume is accepted only when the persisted request,
+   cursor, page binding, and canonical timeline checkpoint still match.
 
-If the selected MasterSelectsAI provider is unavailable or declines a run,
-check:
+### Editable motion-graphic fast path
 
-1. In production: the user is signed in (the `/api/kernel/*` proxy rejects
-   anonymous compile and completion POSTs) and `ms.kernel.enabled` is not the
-   exact string `false`.
-2. In development: `ms.kernel.url` and `ms.kernel.token` are both present and
-   nonblank, unless the development bridge provides local credentials.
-3. The configured direct service is reachable (`GET <url>/kernel/health`) and
-   accepts the bearer token; production normally uses `GET /api/kernel/health`.
-4. `/kernel/compile` did not return `aborted`, `failed`, an HTTP failure, or
-   an invalid response (see the gateway log). These conditions are handled
-   declines by default, not an automatic community-provider fallback.
-5. The browser console has no rolled-back semantic tool failure warning.
+For a focused animated lower-third request, Fast can expose the private
+`createEditableMotionGraphic` capability. It accepts semantic content, style,
+placement, entrance, exit, and temporal-review intent, then compiles one bound
+editor plan: hook preflight, native hook commit, and six-frame review capture.
+The public editor receives only the allowed operations and creates text,
+Motion backplates, and keyframes through its normal transaction and undo
+boundary. See [Editable Motion Graphics](./Editable-Motion-Graphics.md).
 
-Operators with service access can additionally watch requests flow through
-the kernel in real time via the service's own login-protected monitor page at
-`<service origin>/kernel/monitor`; its content is outside this repository.
+The current hook preview operation is a revision-bound preflight. A truthful
+shadow-rendered, digest-bound pre-commit preview remains future work; the
+current temporal grid reviews the atomic committed result.
 
-If verification failed, inspect the run ID and completion response. The
-gateway attempts rollback before reporting that failure and does not select a
-second provider automatically.
+Planning is a request mode (`normal`, `plan`, or `read-only`) inside Normal
+Path, not a separate route. `plan` may produce an explicit plan without
+committing a mutation; `read-only` forbids mutation locally.
 
----
+## Failure and security rules
 
-*Source: `src/services/kernelClient/`,
-`src/services/flashboard/FlashBoardChatService.ts`,
-`functions/api/kernel/[[path]].ts`,
-`tests/unit/kernelChatGatewayCutover.test.ts`,
-`tests/unit/kernelClientIsolation.test.ts`*
+- The browser cannot select a raw private provider or model ID. The editor UI
+  exposes only `Codex Direct` and `Fast`; compatibility model-class and Logic
+  fields are not presented as user-facing routes.
+- Production Direct requires an allowed Origin and a signed-in session at the
+  public relay, then a server-injected kernel credential and bounded principal
+  at the private relay. The browser never receives either server credential.
+- Every mutation is checked again by the editor; a kernel assertion never
+  bypasses local tool policy or transaction ownership.
+- D1 cancellation is authoritative before origin notification.
+- A stale revision, state fingerprint, cursor, catalog digest, page lease, or
+  client/session binding fails closed.
+- Provider billing authorization and settlement are idempotent per turn and
+  round.
+- Capability-specific provider tools are included only when the request carries
+  the matching server-validated execution context. General and read-only turns
+  cannot receive a direct-edit capability by catalog accident.
+- Retryable orchestration failures keep the run open while retry budget remains;
+  the root becomes terminal only after the bounded attempts are exhausted.
+- Media bytes stay in the editor unless an explicitly bounded reference is
+  included in the request.
+
+## Development topology
+
+| Component | Default address |
+|---|---|
+| Editor and bridge | `http://localhost:5173` |
+| Private kernel | `http://127.0.0.1:8787` |
+| Local Cloudflare/D1 relay | `http://127.0.0.1:8788` |
+| Codex app-server used by Direct and internal Logic | `ws://127.0.0.1:4500` |
+
+Production Fast uses the same-origin `/api/kernel/*` Cloudflare boundary.
+Production Direct uses `/api/direct-codex/ws`, which relays through the private
+kernel origin configured by `KERNEL_ORIGIN` to the loopback-only app-server.

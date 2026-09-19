@@ -1,6 +1,7 @@
 import type { LayerRenderData } from '../../core/types';
 import { getCopiedHtmlVideoPreviewFrame } from '../htmlVideoPreviewFallback';
 import type { HtmlVideoCollectRequest } from './htmlVideoCollector';
+import { getSurfaceVideoFrameTime } from '../surfaceVideoFrame';
 
 export function collectExportHtmlVideo(
   request: HtmlVideoCollectRequest,
@@ -8,6 +9,8 @@ export function collectExportHtmlVideo(
   targetTime: number
 ): LayerRenderData | null {
   const { layer, video, deps, videoKey, controller } = request;
+  const surfaceFrameLocked = layer.effects.some(effect => effect.surfaceTrack);
+  const frameTime = surfaceFrameLocked ? getSurfaceVideoFrameTime(video) : currentTime;
   const copiedFrame = getCopiedHtmlVideoPreviewFrame(
     video,
     deps.scrubbingCache,
@@ -25,7 +28,7 @@ export function collectExportHtmlVideo(
       textureView: copiedFrame.view,
       sourceWidth: copiedFrame.width,
       sourceHeight: copiedFrame.height,
-      displayedMediaTime: copiedFrame.mediaTime ?? currentTime,
+      displayedMediaTime: surfaceFrameLocked ? frameTime : copiedFrame.mediaTime ?? currentTime,
       targetMediaTime: targetTime,
       previewPath: 'copied-preview',
     };
@@ -46,7 +49,7 @@ export function collectExportHtmlVideo(
     textureView: null,
     sourceWidth: video.videoWidth,
     sourceHeight: video.videoHeight,
-    displayedMediaTime: currentTime,
+    displayedMediaTime: frameTime,
     targetMediaTime: targetTime,
     previewPath: 'live-import',
   };

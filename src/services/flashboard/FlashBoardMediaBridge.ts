@@ -18,6 +18,7 @@ import type { MediaFile } from '../../stores/mediaStore';
 import { setExternalDragPayload, clearExternalDragPayload } from '../../components/timeline/utils/externalDragSession';
 import { recordStoryboardTelemetry } from '../storyboard/telemetry';
 import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/exclusiveMutationLease';
+import { reportAiGenerationLifecycle } from '../diagnostics/diagnosticReporter';
 
 const log = Logger.create('FlashBoardMedia');
 
@@ -38,6 +39,16 @@ function sanitizeForFilename(prompt: string, maxLen = 30): string {
 
 function isFetchNetworkError(error: unknown): boolean {
   return error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message);
+}
+
+function reportRecordLifecycle(
+  recordId: string,
+  stage: 'download' | 'import',
+  outcome: 'succeeded' | 'failed',
+  error?: unknown,
+): void {
+  const taskId = getFlashBoardActiveGenerationRecord(recordId)?.job?.remoteTaskId;
+  reportAiGenerationLifecycle(taskId, stage, outcome, error);
 }
 
 /**
@@ -171,8 +182,13 @@ class FlashBoardMediaBridge {
       return null;
     }
 
+    const completedAt = record.job?.completedAt ?? Date.now();
+    const startedAt = record.job?.startedAt ?? record.createdAt;
+
     return {
       mediaFileId,
+      workspaceId: record.workspaceId,
+      generationElapsedMs: Math.max(0, completedAt - startedAt),
       service: record.request.service,
       providerId: record.request.providerId,
       version: record.request.version,
@@ -193,6 +209,8 @@ class FlashBoardMediaBridge {
       languageOverride: record.request.languageOverride,
       languageCode: record.request.languageCode,
       outputFormat: record.request.outputFormat,
+      webSearch: record.request.webSearch,
+      returnLastFrame: record.request.returnLastFrame,
       voiceSettings: record.request.voiceSettings,
       sunoCustomMode: record.request.sunoCustomMode,
       sunoInstrumental: record.request.sunoInstrumental,
@@ -228,6 +246,7 @@ class FlashBoardMediaBridge {
         return result;
       });
     } catch (error) {
+      reportRecordLifecycle(recordId, 'import', 'failed', error);
       if (outputId) {
         markFlashBoardGenerationOutputImportFailed(
           recordId,
@@ -305,6 +324,7 @@ class FlashBoardMediaBridge {
     }
 
     log.info(`Imported AI ${mediaType}: ${file.name} -> ${mediaFile.id}`);
+    reportRecordLifecycle(recordId, 'import', 'succeeded');
     return result;
   }
 
@@ -327,6 +347,7 @@ class FlashBoardMediaBridge {
         return result;
       });
     } catch (error) {
+      reportRecordLifecycle(recordId, 'import', 'failed', error);
       if (outputId) {
         markFlashBoardGenerationOutputImportFailed(
           recordId,
@@ -355,7 +376,9 @@ class FlashBoardMediaBridge {
 
     // Build a human-readable filename
     const timestamp = Date.now();
-    const ext = mediaType === 'video' ? 'mp4' : mediaType === 'image' ? 'png' : 'mp3';
+    const ext = mediaType === 'video'
+      ? record?.request?.outputFormat === 'mov' ? 'mov' : 'mp4'
+      : mediaType === 'image' ? 'png' : 'mp3';
     const shortPrompt = sanitizeForFilename(prompt, 30);
     const suffix = filenameSuffix ? `_${sanitizeForFilename(filenameSuffix, 24)}` : '';
     const filename = `ai_${shortPrompt}_${timestamp}${suffix}.${ext}`;
@@ -364,9 +387,11 @@ class FlashBoardMediaBridge {
     let file: File;
     try {
       file = await this.downloadAsFile(videoUrl, filename);
+      reportRecordLifecycle(recordId, 'download', 'succeeded');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown download error';
       log.error(`Failed to download media for record ${recordId}: ${message}`);
+      reportRecordLifecycle(recordId, 'download', 'failed', err);
       throw err;
     }
 
@@ -418,6 +443,7 @@ class FlashBoardMediaBridge {
             throw new Error(`Generated output ${index + 1} has no importable media.`);
           }
         } catch (error) {
+          reportRecordLifecycle(recordId, 'import', 'failed', error);
           markFlashBoardGenerationOutputImportFailed(
             recordId,
             outputId,
@@ -624,4 +650,14 @@ class FlashBoardMediaBridge {
   }
 }
 
-export const flashBoardMediaBridge = new FlashBoardMediaBridge();
+let flashBoardMediaBridgeInstance: FlashBoardMediaBridge | undefined;
+
+if (import.meta.hot) {
+  flashBoardMediaBridgeInstance = import.meta.hot.data?.flashBoardMediaBridge as FlashBoardMediaBridge | undefined;
+  import.meta.hot.dispose((data) => {
+    data.flashBoardMediaBridge = flashBoardMediaBridgeInstance;
+  });
+}
+
+export const flashBoardMediaBridge = flashBoardMediaBridgeInstance ?? new FlashBoardMediaBridge();
+flashBoardMediaBridgeInstance = flashBoardMediaBridge;

@@ -1,6 +1,11 @@
 import { isMotionDesignEvidenceSessionUrl } from '../../../services/motionDesign/evidence/motionDesignEvidenceSession';
+import { resolveEntryExperience } from '../../../routing/entryExperience';
 
-export type ToolbarProjectBootRestoreResult = 'evidence-isolated' | 'restored' | 'not-restored';
+export type ToolbarProjectBootRestoreResult =
+  | 'evidence-isolated'
+  | 'selection-deferred'
+  | 'restored'
+  | 'not-restored';
 
 export async function runToolbarProjectBootRestore(input: {
   url: string | URL;
@@ -9,6 +14,11 @@ export async function runToolbarProjectBootRestore(input: {
 }): Promise<ToolbarProjectBootRestoreResult> {
   if (isMotionDesignEvidenceSessionUrl(input.url)) {
     return 'evidence-isolated';
+  }
+
+  const experience = resolveEntryExperience(new URL(input.url));
+  if (experience === 'landing') {
+    return 'selection-deferred';
   }
 
   const restored = await input.restoreLastProject();

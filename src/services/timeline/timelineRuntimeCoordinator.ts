@@ -42,6 +42,23 @@ export function readTimelineAnalysisSelectedMediaIds(): readonly string[] {
   return mediaStore().getState().selectedIds;
 }
 
+/** Imperative state boundary for non-React timeline workflows. */
+export function readTimelineRuntimeState(
+  store: TimelineStoreHook = timelineStore(),
+): ReturnType<TimelineStoreHook['getState']> {
+  return store.getState();
+}
+
+export function readMediaRuntimeState(
+  store: MediaStoreHook = mediaStore(),
+): ReturnType<MediaStoreHook['getState']> {
+  return store.getState();
+}
+
+export function invalidateTimelineRuntimeCache(): void {
+  timelineStore().getState().invalidateCache();
+}
+
 export function subscribeTimelineAnalysisRuntime(listener: () => void): () => void {
   const unsubscribeMedia = mediaStore().subscribe(listener);
   const unsubscribeTimeline = timelineStore().subscribe(listener);

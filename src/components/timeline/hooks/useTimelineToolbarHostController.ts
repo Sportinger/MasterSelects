@@ -64,7 +64,7 @@ export function useTimelineToolbarHostController({
     onToggleCutTool: timelineActions.toggleCutTool,
     onFitToWindow: handleFitToWindow,
     onToggleSlotGrid: handleToggleSlotGrid,
-    slotGridProgress: rootState.slotGridProgress,
+    slotGridProgress: 0,
     formatTime,
     frameRate,
     parseTime,

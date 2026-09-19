@@ -18,6 +18,7 @@ import {
   DEFAULT_SHORTCUT_DISPLAY_SCALE,
   clampGuidedActionReplayBudgetMs,
   clampShortcutDisplayScale,
+  normalizeThemeMode,
 } from './settings/settingsOptions';
 import type {
   AutosaveInterval,
@@ -52,9 +53,11 @@ export {
 } from './settings/settingsOptions';
 
 const log = Logger.create('SettingsStore');
+const SETTINGS_PERSIST_VERSION = 3;
 
 export type SettingsCategoryId =
   | 'general'
+  | 'import'
   | 'midi'
   | 'shortcuts'
   | 'appearance'
@@ -107,10 +110,13 @@ function persistChangelogStateToProject(
 interface SettingsState {
   // Theme
   theme: ThemeMode;
+  resolveThemeUnlocked: boolean;
   customHue: number;        // 0-360 hue for custom theme
   customBrightness: number; // 0-100 brightness (0=dark, 100=light)
   audioMixerWoodThemeEnabled: boolean;
   mediaPanelWoodThemeEnabled: boolean;
+  // Glassy metaball feedback under touch pointers (touch devices only)
+  touchGooEnabled: boolean;
 
   // Optional non-AI integration credential. Never persisted to localStorage.
   youtubeApiKey: string;
@@ -123,7 +129,7 @@ interface SettingsState {
   showTransparencyGrid: boolean;  // Show checkerboard pattern for transparent areas
 
   // Save settings
-  saveMode: SaveMode;  // 'continuous' = save on every change, 'interval' = save on timer
+  saveMode: SaveMode;  // manual or timer; 'continuous' is migrated on load
   autosaveEnabled: boolean;  // legacy — derived from saveMode for compat
   autosaveInterval: AutosaveInterval;  // in minutes (only used in interval mode)
 
@@ -133,11 +139,9 @@ interface SettingsState {
   nativeHelperPort: number;   // WebSocket port (default 9876)
   nativeHelperConnected: boolean;  // Current connection status
 
-  // Mobile/Desktop view
-  forceDesktopMode: boolean;  // Show desktop UI even on mobile devices
-
   // Timeline interaction
   timelineZoomAnchor: TimelineZoomAnchor;  // Where Ctrl/Alt+wheel zoom keeps focus
+  automaticMobileLayoutEnabled: boolean;  // Use H/V Mobile when the editor viewport is compact
 
   // Input display
   showShortcutDisplay: boolean;  // Show pressed keys and mouse clicks in a screen overlay
@@ -198,10 +202,12 @@ interface SettingsState {
 
   // Actions
   setTheme: (theme: ThemeMode) => void;
+  unlockResolveTheme: () => void;
   setCustomHue: (hue: number) => void;
   setCustomBrightness: (brightness: number) => void;
   setAudioMixerWoodThemeEnabled: (enabled: boolean) => void;
   setMediaPanelWoodThemeEnabled: (enabled: boolean) => void;
+  setTouchGooEnabled: (enabled: boolean) => void;
   setYouTubeApiKey: (key: string) => void;
   setTranscriptionProvider: (provider: TranscriptionProvider) => void;
   setPreviewQuality: (quality: PreviewQuality) => void;
@@ -213,8 +219,8 @@ interface SettingsState {
   setNativeDecodeEnabled: (enabled: boolean) => void;
   setNativeHelperPort: (port: number) => void;
   setNativeHelperConnected: (connected: boolean) => void;
-  setForceDesktopMode: (force: boolean) => void;
   setTimelineZoomAnchor: (anchor: TimelineZoomAnchor) => void;
+  setAutomaticMobileLayoutEnabled: (enabled: boolean) => void;
   setShowShortcutDisplay: (show: boolean) => void;
   setShortcutDisplayScale: (scale: number) => void;
   setGpuPowerPreference: (preference: GPUPowerPreference) => void;
@@ -262,23 +268,27 @@ export const useSettingsStore = create<SettingsState>()(
       (set, get) => ({
       // Initial state
       theme: 'dark' as ThemeMode,
+      resolveThemeUnlocked: false,
       customHue: 210,       // Default: blue
       customBrightness: 15, // Default: dark
       audioMixerWoodThemeEnabled: false,
       mediaPanelWoodThemeEnabled: false,
+      touchGooEnabled: false,
       youtubeApiKey: '',
-      transcriptionProvider: 'local',
+      // New projects default to the highest-quality hosted path: Deepgram
+      // supplies exact words/timings and OpenAI supplies speaker separation.
+      transcriptionProvider: 'hybrid',
       previewQuality: 1, // Full quality by default
       showTransparencyGrid: false, // Don't show checkerboard by default
-      saveMode: 'continuous' as SaveMode, // Continuous save by default — every change saved automatically
+      saveMode: 'interval' as SaveMode, // Timed autosave by default; actions only mark changes unsaved
       autosaveEnabled: true, // Legacy compat (interval mode uses this)
       autosaveInterval: 5, // 5 minutes default interval (only used in interval mode)
       turboModeEnabled: true, // Connect to native helper by default (downloads)
       nativeDecodeEnabled: false, // Native FFmpeg decode off by default
       nativeHelperPort: 9876, // Default WebSocket port
       nativeHelperConnected: false, // Not connected initially
-      forceDesktopMode: false, // Use responsive detection by default
       timelineZoomAnchor: 'mouse' as TimelineZoomAnchor, // Zoom toward the mouse pointer by default
+      automaticMobileLayoutEnabled: true,
       showShortcutDisplay: false, // Optional Blender-style input overlay
       shortcutDisplayScale: DEFAULT_SHORTCUT_DISPLAY_SCALE,
       gpuPowerPreference: 'high-performance', // Prefer dGPU by default
@@ -287,7 +297,7 @@ export const useSettingsStore = create<SettingsState>()(
       guidedActionReplayVisualizationMode: 'concise' as GuidedActionReplayVisualizationMode,
       guidedActionReplayBudgetMs: DEFAULT_GUIDED_ACTION_REPLAY_BUDGET_MS,
       guidedActionReplayCompressionMode: 'family' as GuidedActionReplayCompressionMode,
-      copyMediaToProject: true, // Copy imported files to Raw/ folder by default
+      copyMediaToProject: false, // Keep imported files at their original location by default
       hasCompletedSetup: false, // Show welcome overlay on first run
       hasSeenTutorial: false, // Show tutorial on first run
       hasSeenTutorialPart2: false, // Show timeline tutorial after part 1
@@ -296,7 +306,7 @@ export const useSettingsStore = create<SettingsState>()(
       shortcutOverrides: null,
       customPresets: [] as CustomShortcutPreset[],
       completedTutorials: [], // Campaign IDs that have been completed
-      showChangelogOnStartup: true, // Show changelog dialog on every startup
+      showChangelogOnStartup: true, // Legacy project compatibility; no changelog UI is mounted
       lastSeenChangelogVersion: null, // Latest app version whose changelog was acknowledged
       webCodecsEnabled: false, // Default to HTML Video
       pianoRollControllerArea: { ...DEFAULT_PIANO_ROLL_CONTROLLER_AREA },
@@ -309,11 +319,13 @@ export const useSettingsStore = create<SettingsState>()(
       fps: 60,
 
       // Actions
-      setTheme: (theme) => set({ theme }),
+      setTheme: (theme) => set({ theme: normalizeThemeMode(theme, get().resolveThemeUnlocked) }),
+      unlockResolveTheme: () => set({ resolveThemeUnlocked: true }),
       setCustomHue: (hue) => set({ customHue: hue }),
       setCustomBrightness: (brightness) => set({ customBrightness: brightness }),
       setAudioMixerWoodThemeEnabled: (enabled) => set({ audioMixerWoodThemeEnabled: enabled }),
       setMediaPanelWoodThemeEnabled: (enabled) => set({ mediaPanelWoodThemeEnabled: enabled }),
+      setTouchGooEnabled: (enabled) => set({ touchGooEnabled: enabled }),
 
       setYouTubeApiKey: (key) => {
         set({ youtubeApiKey: key });
@@ -335,11 +347,11 @@ export const useSettingsStore = create<SettingsState>()(
       },
 
       setSaveMode: (mode) => {
-        set({ saveMode: mode });
+        set({ saveMode: mode === 'manual' ? 'manual' : 'interval', autosaveEnabled: mode !== 'manual' });
       },
 
       setAutosaveEnabled: (enabled) => {
-        set({ autosaveEnabled: enabled });
+        set({ autosaveEnabled: enabled, saveMode: enabled ? 'interval' : 'manual' });
       },
 
       setAutosaveInterval: (interval) => {
@@ -362,12 +374,12 @@ export const useSettingsStore = create<SettingsState>()(
         set({ nativeHelperConnected: connected });
       },
 
-      setForceDesktopMode: (force) => {
-        set({ forceDesktopMode: force });
-      },
-
       setTimelineZoomAnchor: (anchor) => {
         set({ timelineZoomAnchor: anchor });
+      },
+
+      setAutomaticMobileLayoutEnabled: (enabled) => {
+        set({ automaticMobileLayoutEnabled: enabled });
       },
 
       setShowShortcutDisplay: (show) => {
@@ -539,14 +551,43 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'masterselects-settings',
+      version: SETTINGS_PERSIST_VERSION,
+      migrate: (persistedState, version) => {
+        const persisted = persistedState as SettingsState;
+        const resolveThemeUnlocked = persisted.resolveThemeUnlocked === true;
+        const migrated = {
+          ...persisted,
+          resolveThemeUnlocked,
+          theme: normalizeThemeMode(persisted.theme, resolveThemeUnlocked),
+        };
+        const importDefaultsMigrated = version < 1
+          ? {
+              ...migrated,
+              // Older installs persisted the former opt-out default as `true`.
+              // Reset it once; choices made after this migration stay persistent.
+              copyMediaToProject: false,
+            }
+          : migrated;
+        if (version < 3) {
+          return {
+            ...importDefaultsMigrated,
+            // Touch feedback formerly defaulted to on. Disable that inherited
+            // choice once; explicit choices made afterwards remain persistent.
+            touchGooEnabled: false,
+          };
+        }
+        return importDefaultsMigrated;
+      },
       // Don't persist the YouTube credential in localStorage.
       // Don't persist transient UI state like isSettingsOpen
       partialize: (state) => ({
-        theme: state.theme,
+        theme: normalizeThemeMode(state.theme, state.resolveThemeUnlocked),
+        resolveThemeUnlocked: state.resolveThemeUnlocked,
         customHue: state.customHue,
         customBrightness: state.customBrightness,
         audioMixerWoodThemeEnabled: state.audioMixerWoodThemeEnabled,
         mediaPanelWoodThemeEnabled: state.mediaPanelWoodThemeEnabled,
+        touchGooEnabled: state.touchGooEnabled,
         transcriptionProvider: state.transcriptionProvider,
         previewQuality: state.previewQuality,
         showTransparencyGrid: state.showTransparencyGrid,
@@ -556,8 +597,8 @@ export const useSettingsStore = create<SettingsState>()(
         turboModeEnabled: state.turboModeEnabled,
         nativeDecodeEnabled: state.nativeDecodeEnabled,
         nativeHelperPort: state.nativeHelperPort,
-        forceDesktopMode: state.forceDesktopMode,
         timelineZoomAnchor: state.timelineZoomAnchor,
+        automaticMobileLayoutEnabled: state.automaticMobileLayoutEnabled,
         showShortcutDisplay: state.showShortcutDisplay,
         shortcutDisplayScale: state.shortcutDisplayScale,
         gpuPowerPreference: state.gpuPowerPreference,
@@ -594,6 +635,7 @@ export const useSettingsStore = create<SettingsState>()(
           lemonadeModel?: unknown;
           aiSystemPromptOverrides?: unknown;
           aiSystemPromptSendContext?: unknown;
+          forceDesktopMode?: unknown;
           transcriptionProvider?: TranscriptionProvider | 'assemblyai';
         };
         const {
@@ -606,12 +648,19 @@ export const useSettingsStore = create<SettingsState>()(
           lemonadeModel: _retiredLemonadeModel,
           aiSystemPromptOverrides: _retiredPromptOverrides,
           aiSystemPromptSendContext: _retiredPromptContext,
+          forceDesktopMode: _retiredForceDesktopMode,
           transcriptionProvider: persistedTranscriptionProvider,
           ...supportedPersistedState
         } = persisted;
+        const resolveThemeUnlocked = supportedPersistedState.resolveThemeUnlocked === true;
         return {
           ...currentState,
           ...supportedPersistedState,
+          resolveThemeUnlocked,
+          theme: normalizeThemeMode(
+            supportedPersistedState.theme ?? currentState.theme,
+            resolveThemeUnlocked,
+          ),
           transcriptionProvider: persistedTranscriptionProvider === 'assemblyai'
             ? 'deepgram'
             : persistedTranscriptionProvider ?? currentState.transcriptionProvider,
@@ -619,6 +668,7 @@ export const useSettingsStore = create<SettingsState>()(
       },
       onRehydrateStorage: () => (state) => {
         if (state) {
+          if (state.saveMode === 'continuous') state.saveMode = state.autosaveEnabled ? 'interval' : 'manual';
           // Sync feature flags with persisted setting on app start
           flags.useFullWebCodecsPlayback = state.webCodecsEnabled;
           flags.disableHtmlPreviewFallback = state.webCodecsEnabled;

@@ -1,4 +1,10 @@
-import type { Dispatch, SetStateAction, WheelEvent as ReactWheelEvent } from 'react';
+import {
+  memo,
+  useMemo,
+  type Dispatch,
+  type SetStateAction,
+  type WheelEvent as ReactWheelEvent,
+} from 'react';
 import type { TimelineClip, TimelineTrack } from '../../../types';
 import type { ClipDragNewTrackType } from '../utils/clipDragTrackTargeting';
 import type { TrackSectionKind } from '../utils/timelineHostTypes';
@@ -11,11 +17,14 @@ import type {
 import type { InOutContextMenuState } from '../InOutContextMenu';
 import type { MarkerContextMenuState } from '../MarkerContextMenu';
 import type { TrackContextMenuState } from '../TrackContextMenu';
-import { useTimelineStore } from '../../../stores/timeline';
-import { TimelineHeader } from '../TimelineHeader';
 import { VIDEO_NEW_TRACK_PREVIEW_HEIGHT } from '../utils/timelineHostConstants';
 import { isAudioSectionTrackType } from '../utils/trackSection';
 import { TimelineNewTrackHeaderPreview } from './TimelineNewTrackPreviews';
+import {
+  TimelineSectionHeaderRow,
+  type TimelineSectionHeaderSharedProps,
+} from './TimelineSectionHeaderRow';
+import type { TimelineHeaderPropertySelection } from '../utils/timelineHeaderPropertySelection';
 
 type NullableSetter<T> = Dispatch<SetStateAction<T | null>>;
 
@@ -65,7 +74,11 @@ export interface TimelineSectionHeadersProps {
   trackHasKeyframes: (trackId: string) => boolean;
 }
 
-export function TimelineSectionHeaders({
+type TimelineSectionHeadersContentProps = Omit<TimelineSectionHeadersProps, 'playheadPosition'>;
+
+const EMPTY_PROPERTY_CLIP_KEYFRAMES: TimelineHeaderPropertySelection['keyframes'] = [];
+
+const TimelineSectionHeadersContent = memo(function TimelineSectionHeadersContent({
   activeTrackResizeId,
   addKeyframe,
   anyViewAudioSolo,
@@ -93,7 +106,6 @@ export function TimelineSectionHeaders({
   onTrackPickWhipDragEnd,
   onTrackPickWhipDragStart,
   onTrackResizeStart,
-  playheadPosition,
   sectionCollapsed,
   sectionKind,
   sectionPhaseClass,
@@ -109,7 +121,65 @@ export function TimelineSectionHeaders({
   timelineViewTracks,
   toggleTrackExpanded,
   trackHasKeyframes,
-}: TimelineSectionHeadersProps) {
+}: TimelineSectionHeadersContentProps) {
+  const selectedClipByTrack = useMemo(() => {
+    const selectedByTrack = new Map<string, TimelineClip>();
+    if (sectionCollapsed || isCompositionTrackMorphing || selectedClipIds.size === 0) {
+      return selectedByTrack;
+    }
+
+    for (const clip of clips) {
+      if (selectedClipIds.has(clip.id) && !selectedByTrack.has(clip.trackId)) {
+        selectedByTrack.set(clip.trackId, clip);
+      }
+    }
+    return selectedByTrack;
+  }, [clips, isCompositionTrackMorphing, sectionCollapsed, selectedClipIds]);
+
+  const shared = useMemo<TimelineSectionHeaderSharedProps>(() => ({
+    addKeyframe,
+    audioLayerAdvancedMode,
+    getClipKeyframes,
+    getInterpolatedEffects,
+    getInterpolatedTransform,
+    onKeyframeRowHover,
+    onSetTrackParent,
+    onToggleCurveExpanded,
+    onTrackHeightWheel,
+    onTrackPickWhipDragEnd,
+    onTrackPickWhipDragStart,
+    onTrackResizeStart,
+    setContextMenu,
+    setEmptyContextMenu,
+    setInOutContextMenu,
+    setMarkerContextMenu,
+    setPlayheadPosition,
+    setPropertyValue,
+    setTrackContextMenu,
+    toggleTrackExpanded,
+  }), [
+    addKeyframe,
+    audioLayerAdvancedMode,
+    getClipKeyframes,
+    getInterpolatedEffects,
+    getInterpolatedTransform,
+    onKeyframeRowHover,
+    onSetTrackParent,
+    onToggleCurveExpanded,
+    onTrackHeightWheel,
+    onTrackPickWhipDragEnd,
+    onTrackPickWhipDragStart,
+    onTrackResizeStart,
+    setContextMenu,
+    setEmptyContextMenu,
+    setInOutContextMenu,
+    setMarkerContextMenu,
+    setPlayheadPosition,
+    setPropertyValue,
+    setTrackContextMenu,
+    toggleTrackExpanded,
+  ]);
+
   return (
     <div className={`track-headers ${sectionPhaseClass}`}>
       {isVideoSection && (externalDrag?.showVideoNewTrackZone || clipDragNewTrackType === 'video') && !sectionCollapsed && (
@@ -127,9 +197,13 @@ export function TimelineSectionHeaders({
         const isExpanded = !sectionCollapsed && isTrackExpandedForRender(track.id);
         const baseHeight = getSectionTrackBaseHeight(track, sectionKind);
         const dynamicHeight = getSectionTrackHeight(track, sectionKind);
+        const propertyClip = selectedClipByTrack.get(track.id) ?? null;
+        const propertyClipKeyframes = propertyClip
+          ? clipKeyframes.get(propertyClip.id) ?? EMPTY_PROPERTY_CLIP_KEYFRAMES
+          : EMPTY_PROPERTY_CLIP_KEYFRAMES;
 
         return (
-          <TimelineHeader
+          <TimelineSectionHeaderRow
             key={track.id}
             track={track}
             tracks={timelineViewTracks}
@@ -138,61 +212,13 @@ export function TimelineSectionHeaders({
             baseHeight={baseHeight}
             dynamicHeight={dynamicHeight}
             hasKeyframes={!sectionCollapsed && !isCompositionTrackMorphing && trackHasKeyframes(track.id)}
-            selectedClipIds={selectedClipIds}
-            clips={isCompositionTrackMorphing || sectionCollapsed ? [] : clips}
-            playheadPosition={playheadPosition}
-            onToggleExpand={() => {
-              if (!sectionCollapsed) toggleTrackExpanded(track.id);
-            }}
-            onToggleSolo={() =>
-              useTimelineStore.getState().setTrackSolo(track.id, !(track.audioState?.solo ?? track.solo))
-            }
-            onToggleLocked={() =>
-              useTimelineStore.getState().setTrackLocked(track.id, !track.locked)
-            }
-            onToggleMuted={() =>
-              useTimelineStore.getState().setTrackMuted(track.id, !(track.audioState?.muted ?? track.muted))
-            }
-            onToggleVisible={() =>
-              useTimelineStore.getState().setTrackVisible(track.id, !track.visible)
-            }
-            onRenameTrack={(name) =>
-              useTimelineStore.getState().renameTrack(track.id, name)
-            }
-            onWheel={(event) => onTrackHeightWheel(event, track.id)}
-            onResizeStart={onTrackResizeStart}
             isResizeActive={activeTrackResizeId === track.id}
-            clipKeyframes={clipKeyframes}
-            getClipKeyframes={getClipKeyframes}
-            getInterpolatedTransform={getInterpolatedTransform}
-            getInterpolatedEffects={getInterpolatedEffects}
-            addKeyframe={addKeyframe}
-            setPlayheadPosition={setPlayheadPosition}
-            setPropertyValue={setPropertyValue}
+            canToggleExpand={!sectionCollapsed}
+            propertyClip={propertyClip}
+            propertyClipKeyframes={propertyClipKeyframes}
             expandedCurveProperties={expandedCurveProperties}
-            onToggleCurveExpanded={onToggleCurveExpanded}
             hoveredKeyframeRow={hoveredKeyframeRow}
-            onKeyframeRowHover={onKeyframeRowHover}
-            audioLayerAdvancedMode={audioLayerAdvancedMode}
-            showCollapsedAudioSummaryMeter={false}
-            onSetTrackParent={onSetTrackParent}
-            onTrackPickWhipDragStart={onTrackPickWhipDragStart}
-            onTrackPickWhipDragEnd={onTrackPickWhipDragEnd}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              setContextMenu(null);
-              setEmptyContextMenu(null);
-              setMarkerContextMenu(null);
-              setInOutContextMenu(null);
-              setTrackContextMenu({
-                x: event.clientX,
-                y: event.clientY,
-                trackId: track.id,
-                trackType: track.type as 'video' | 'audio',
-                trackName: track.name,
-              });
-            }}
+            shared={shared}
           />
         );
       })}
@@ -214,4 +240,12 @@ export function TimelineSectionHeaders({
       )}
     </div>
   );
+});
+
+export function TimelineSectionHeaders({
+  playheadPosition,
+  ...stableProps
+}: TimelineSectionHeadersProps) {
+  void playheadPosition;
+  return <TimelineSectionHeadersContent {...stableProps} />;
 }

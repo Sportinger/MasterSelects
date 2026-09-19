@@ -83,6 +83,7 @@ export function getContentAwareSampleTimes(compositionId: string, duration: numb
       c.sourceType === 'text' ||
       c.sourceType === 'solid' ||
       c.sourceType === 'math-scene' ||
+      c.sourceType === 'flock' ||
       isVectorAnimationSourceType(c.sourceType);
     return isOnVideoTrack && isVisualType;
   });

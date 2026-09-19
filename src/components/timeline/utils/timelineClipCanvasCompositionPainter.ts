@@ -8,6 +8,7 @@ interface DrawTimelineClipCanvasCompositionDecorationsProps {
   maxThumbSlots: number;
   minThumbnailWidth: number;
   thumbSlotPx: number;
+  thumbnailHeight: number;
 }
 
 function drawCanvasCompositionOutline(
@@ -114,7 +115,16 @@ export function drawTimelineClipCanvasCompositionDecorations(
   ctx.beginPath();
   ctx.roundRect(x, top, w, h, Math.min(4, h / 4));
   ctx.clip();
-  thumbnailDrawCount += drawTimelineClipCanvasCompositionSegmentThumbnails(ctx, clip, x, top, w, h, requestRedraw, props);
+  thumbnailDrawCount += drawTimelineClipCanvasCompositionSegmentThumbnails(
+    ctx,
+    clip,
+    x,
+    top,
+    w,
+    Math.min(h, props.thumbnailHeight),
+    requestRedraw,
+    props,
+  );
   drawCanvasMixdownWaveform(ctx, clip, geometry, x, top, w, h);
   if ((clip.trackType === 'audio' || clip.source?.type === 'audio') && clip.mixdownGenerating && w >= 72) {
     ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';

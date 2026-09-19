@@ -2,7 +2,8 @@ import { act, renderHook } from '@testing-library/react';
 import { isValidElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { MediaFile, ProjectItem } from '../../src/stores/mediaStore';
+import type { Composition, MediaFile, ProjectItem } from '../../src/stores/mediaStore';
+import { CompositionHoverPreview } from '../../src/components/panels/media/CompositionHoverPreview';
 import {
   getMediaPanelLivePreviewId,
   getMediaPanelPreviewSource,
@@ -37,6 +38,22 @@ function tooltipImageSrc(node: ReactNode): string | null {
 
   const child = (node.props as { children?: ReactNode }).children;
   return isValidElement(child) ? (child.props as { src?: string }).src ?? null : null;
+}
+
+function composition(patch: Partial<Composition> = {}): Composition {
+  return {
+    id: 'comp-preview',
+    name: 'Hover Comp',
+    type: 'composition',
+    parentId: null,
+    createdAt: 1,
+    width: 1080,
+    height: 1920,
+    frameRate: 30,
+    duration: 12,
+    backgroundColor: '#000000',
+    ...patch,
+  };
 }
 
 function tooltipMedia(node: ReactNode): ReactNode {
@@ -109,6 +126,62 @@ describe('media panel preview tooltip', () => {
     act(() => vi.advanceTimersByTime(400));
 
     expect(result.current.element).toBeNull();
+  });
+
+  it('opens the composition preview component after the hover rest', () => {
+    const comp = composition();
+    const host = document.createElement('div');
+    host.dataset.itemId = comp.id;
+    const { result } = renderHook(() => useMediaPanelPreviewTooltip({
+      activeCompositionId: 'other-comp',
+      itemsById: new Map([[comp.id, comp]]),
+    }));
+
+    act(() => result.current.handleMouseMove({
+      buttons: 0,
+      clientX: 20,
+      clientY: 30,
+      target: host,
+    } as Parameters<typeof result.current.handleMouseMove>[0]));
+    act(() => vi.advanceTimersByTime(400));
+
+    const preview = tooltipMedia(result.current.element);
+    expect(isValidElement(preview) && preview.type).toBe(CompositionHoverPreview);
+    expect(isValidElement(preview) && preview.props).toMatchObject({
+      activeCompositionId: 'other-comp',
+      composition: comp,
+    });
+  });
+
+  it('keeps a dismissed composition preview hidden until the pointer leaves its item', () => {
+    const comp = composition();
+    const host = document.createElement('div');
+    host.dataset.itemId = comp.id;
+    const { result } = renderHook(() => useMediaPanelPreviewTooltip({
+      itemsById: new Map([[comp.id, comp]]),
+    }));
+    const move = () => act(() => result.current.handleMouseMove({
+      buttons: 0,
+      clientX: 20,
+      clientY: 30,
+      target: host,
+    } as Parameters<typeof result.current.handleMouseMove>[0]));
+
+    move();
+    act(() => vi.advanceTimersByTime(400));
+    expect(result.current.element).not.toBeNull();
+
+    act(() => result.current.dismissItemPreview(comp.id));
+    expect(result.current.element).toBeNull();
+
+    move();
+    act(() => vi.advanceTimersByTime(400));
+    expect(result.current.element).toBeNull();
+
+    act(() => result.current.handleMouseLeave());
+    move();
+    act(() => vi.advanceTimersByTime(400));
+    expect(result.current.element).not.toBeNull();
   });
 
   it('keeps an open preview alive while scanning across items', () => {

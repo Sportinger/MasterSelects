@@ -1,16 +1,11 @@
-import { tryKernelFirst } from '../kernelClient/kernelChatGateway';
-import { buildFlashBoardChatSystemPrompt } from './FlashBoardChatPrompt';
-import { sendKieChat } from './FlashBoardChatProviderTransport';
+import { sendIntelligenceChat } from './FlashBoardChatProviderTransport';
 import {
   appendFlashBoardChatRunToolCalls,
   beginFlashBoardChatRun,
   completeFlashBoardChatRun,
 } from './FlashBoardChatRunAudit';
-import { findPreconditionResolver } from '../kernelClient/preconditionResolvers';
-import type { KernelRunReport } from '../kernelClient/runReport';
 import type {
   FlashBoardChatRequest,
-  FlashBoardExecutedToolCall,
 } from './FlashBoardChatTypes';
 
 export type { KernelProgressEvent } from '../kernelClient/runProgress';
@@ -19,6 +14,7 @@ export type {
   AgentActivityEvent,
   ChatIntent,
   DecisionPolicy,
+  FlashBoardChatAgentMode,
   FlashBoardChatExecutionProfile,
   FlashBoardChatModelClass,
   FlashBoardExecutedToolCall,
@@ -37,7 +33,6 @@ export {
   DEFAULT_FLASHBOARD_CHAT_MODEL,
   DEFAULT_FLASHBOARD_CHAT_PROVIDER,
   DEFAULT_FLASHBOARD_CHAT_TEMPERATURE,
-  DEFAULT_FLASHBOARD_KERNEL_MODEL,
   DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT,
   FLASHBOARD_CHAT_MODEL_OPTIONS,
   FLASHBOARD_CHAT_PROVIDERS,
@@ -53,81 +48,13 @@ export {
 } from './FlashBoardChatPrompt';
 export type { FlashBoardChatRunRecord } from './FlashBoardChatRunAudit';
 
-/**
- * Projects kernel run steps into the executed-tool-call shape the chat run
- * audit and the Prompt Book already understand.
- */
-function kernelExecutedToolCalls(
-  report: KernelRunReport | undefined,
-): FlashBoardExecutedToolCall[] {
-  if (!report) return [];
-  return report.steps.map((step) => ({
-    modelContent: step.error ?? (step.status === 'ok' ? 'ok' : step.status),
-    result: step.status === 'ok'
-      ? { success: true as const }
-      : { success: false as const, error: step.error ?? 'Step failed.' },
-    toolCall: {
-      id: step.stepId,
-      name: step.tool,
-      arguments: JSON.stringify(step.args ?? {}),
-    },
-  }));
-}
-
 export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest): Promise<string> {
   const prompt = request.prompt.trim();
   if (!prompt) {
     throw new Error('Write a prompt before starting chat.');
   }
 
-  if (request.provider === 'kernel') {
-    request.onPhase?.('kernel');
-    const kernelResult = await tryKernelFirst(request.playbookPrompt ?? prompt, {
-      autoApprove: true,
-      satisfyPrecondition: async (precondition, context) => {
-        const resolver = findPreconditionResolver(precondition.kind);
-        return resolver ? resolver.satisfy(context) : false;
-      },
-      ...(request.intent === undefined ? {} : { intent: request.intent }),
-      ...(request.decisionPolicy === undefined
-        ? {}
-        : { decisionPolicy: request.decisionPolicy }),
-      ...(request.activeDecision === undefined
-        ? {}
-        : { activeDecision: request.activeDecision }),
-      ...(request.idempotencyKey === undefined
-        ? {}
-        : { seed: request.idempotencyKey }),
-      ...(request.onKernelProgress === undefined
-        ? {}
-        : { onProgress: request.onKernelProgress }),
-      ...(request.signal === undefined ? {} : { signal: request.signal }),
-    });
-    if (kernelResult.handled) {
-      if (kernelResult.decision) request.onKernelDecision?.(kernelResult.decision);
-      const kernelRun = beginFlashBoardChatRun({ ...request, prompt });
-      const completed = completeFlashBoardChatRun(kernelRun.runId, {
-        executedToolCalls: kernelExecutedToolCalls(kernelResult.report),
-        response: kernelResult.message,
-      });
-      if (completed) request.onRunCompleted?.(completed);
-      if (kernelResult.report) request.onKernelReport?.(kernelResult.report);
-      return kernelResult.message;
-    }
-
-    throw new Error(
-      'MasterSelectsAI kernel is unavailable. Start the dev kernel or select AI / Local AI.'
-    );
-  }
-
-  request.onPhase?.(
-    request.provider === 'kie' && request.hostedAvailable ? 'kernel' : 'provider',
-  );
-  const systemPrompt = buildFlashBoardChatSystemPrompt({
-    includeContext: true,
-    userPrompt: request.playbookPrompt ?? prompt,
-    visualReferences: request.visualReferences,
-  });
+  request.onPhase?.('kernel');
   const executedToolCalls: Parameters<typeof completeFlashBoardChatRun>[1]['executedToolCalls'] = [];
   const run = beginFlashBoardChatRun({ ...request, prompt });
   const tracedRequest: FlashBoardChatRequest = {
@@ -143,7 +70,7 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
   };
 
   try {
-    const response = await sendKieChat(tracedRequest, systemPrompt);
+    const response = await sendIntelligenceChat(tracedRequest);
     const completed = completeFlashBoardChatRun(run.runId, {
       executedToolCalls,
       response,

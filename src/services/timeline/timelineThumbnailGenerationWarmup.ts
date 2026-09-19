@@ -14,6 +14,10 @@ import {
   clearTimelineWarmupTimers,
   getTimelineWarmupTimerDeps,
 } from './timelineWarmupTimers';
+import { flags } from '../../engine/featureFlags';
+import { selectRuntimeFrameProviderPlan } from '../mediaRuntime/providerSelection';
+import { createTurboResFrameProvider } from '../mediaRuntime/prores/TurboResFrameProvider';
+import { createHapFrameProvider } from '../mediaRuntime/hap/HapFrameProvider';
 
 const DEFAULT_VISIBLE_THUMBNAIL_GENERATION_DELAY_MS = 250;
 const DEFAULT_MAX_CONCURRENT_THUMBNAIL_GENERATIONS = 2;
@@ -40,6 +44,8 @@ export interface TimelineThumbnailGenerationMediaFileRef {
   url?: string;
   duration?: number;
   fileHash?: string;
+  file?: File;
+  videoCodecId?: string;
 }
 
 export interface TimelineThumbnailGenerationState {
@@ -102,9 +108,58 @@ function getDefaultDeps(): TimelineThumbnailGenerationWarmupDeps {
       };
     },
     getStatus: (mediaFileId) => thumbnailCacheService.getStatus(mediaFileId),
-    generateForSourceUrl: (mediaFileId, sourceUrl, duration, fileHash, crossOrigin) => (
-      thumbnailCacheService.generateForSourceUrl(mediaFileId, sourceUrl, duration, fileHash, crossOrigin)
-    ),
+    generateForSourceUrl: async (mediaFileId, sourceUrl, duration, fileHash, crossOrigin) => {
+      const mediaFile = useMediaStore.getState().files.find((file) => file.id === mediaFileId);
+      const providerPlan = selectRuntimeFrameProviderPlan({
+        videoCodecId: mediaFile?.videoCodecId,
+        turboResEnabled: flags.turboResProRes,
+      });
+      if (
+        (providerPlan.backend !== 'turbores' && providerPlan.backend !== 'hap')
+        || !mediaFile?.file
+      ) {
+        await thumbnailCacheService.generateForSourceUrl(
+          mediaFileId,
+          sourceUrl,
+          duration,
+          fileHash,
+          crossOrigin,
+        );
+        return;
+      }
+
+      const provider = providerPlan.backend === 'turbores'
+        ? await createTurboResFrameProvider({
+          sourceId: `timeline-thumbnails:${mediaFileId}`,
+          file: mediaFile.file,
+          fourCC: providerPlan.fourCC,
+          policy: 'background',
+          allowedOutputFormats: ['I420'],
+        })
+        : await createHapFrameProvider({
+          sourceId: `timeline-thumbnails:${mediaFileId}`,
+          file: mediaFile.file,
+          fourCC: providerPlan.fourCC,
+          policy: 'background',
+        });
+      if (!provider) {
+        thumbnailCacheService.reportUnsupported(
+          mediaFileId,
+          'The codec provider could not initialize timeline thumbnail decoding.',
+        );
+        return;
+      }
+      try {
+        await thumbnailCacheService.generateForFrameProvider(
+          mediaFileId,
+          provider,
+          duration,
+          fileHash,
+        );
+      } finally {
+        await provider.destroyAsync();
+      }
+    },
     ...getTimelineWarmupTimerDeps(),
   };
 }

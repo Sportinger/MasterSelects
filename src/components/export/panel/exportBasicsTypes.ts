@@ -3,6 +3,7 @@ import type {
   DnxhrProfile,
   FFmpegContainer,
   FFmpegVideoCodec,
+  HapFormat,
   ProResProfile,
 } from '../../../engine/ffmpeg';
 import type {
@@ -84,6 +85,7 @@ export interface ExportBasicsModeState {
   showRangeInVideo: boolean;
   showRangeInAudio: boolean;
   showFFmpegQualityControl: boolean;
+  supportsNativeAlpha: boolean;
 }
 
 export interface ExportBasicsDisplayState {
@@ -103,6 +105,9 @@ export interface ExportBasicsDisplayState {
 }
 
 export interface ExportBasicsVideoState {
+  compositionMatchingAvailable: boolean;
+  matchCompositionFrameRate: boolean;
+  matchCompositionResolution: boolean;
   width: number;
   height: number;
   customWidth: number;
@@ -125,7 +130,9 @@ export interface ExportBasicsVideoState {
   ffmpegContainer: FFmpegContainer;
   proresProfile: ProResProfile;
   dnxhrProfile: DnxhrProfile;
+  hapFormat: HapFormat;
   ffmpegQuality: number;
+  includeAlpha: boolean;
   stackedAlpha: boolean;
 }
 
@@ -187,10 +194,12 @@ export interface ExportBasicsActions {
   setImageQuality: (quality: number) => void;
   handleQuickResolutionPreset: (value: string) => void;
   handleResolutionChange: (value: string) => void;
+  setMatchCompositionResolution: (enabled: boolean) => void;
   setUseCustomResolution: (enabled: boolean) => void;
   setCustomWidth: (width: number) => void;
   setCustomHeight: (height: number) => void;
   handleQuickFpsPreset: (value: number) => void;
+  setMatchCompositionFrameRate: (enabled: boolean) => void;
   setUseCustomFps: (enabled: boolean) => void;
   setFps: (fps: number) => void;
   setCustomFps: (fps: number) => void;
@@ -202,6 +211,8 @@ export interface ExportBasicsActions {
   setVideoCodec: (codec: VideoCodec) => void;
   setProresProfile: (profile: ProResProfile) => void;
   setDnxhrProfile: (profile: DnxhrProfile) => void;
+  setHapFormat: (format: HapFormat) => void;
+  setIncludeAlpha: (enabled: boolean) => void;
   setStackedAlpha: (enabled: boolean) => void;
   setUseInOut: (enabled: boolean) => void;
   setAudioOnlyFormat: (format: ExportAudioFormat) => void;

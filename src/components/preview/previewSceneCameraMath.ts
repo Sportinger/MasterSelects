@@ -1,4 +1,9 @@
+import {
+  resolveOrbitCameraFrame,
+  type OrbitCameraFrame,
+} from '../../engine/gaussian/core/SplatCameraUtils';
 import type { SceneVector3 } from '../../engine/scene/types';
+import type { ClipTransform } from '../../types/timelineCore';
 
 export const EDIT_CAMERA_ORTHO_MIN_SCALE = 0.05;
 export const EDIT_CAMERA_ORTHO_MAX_SCALE = 10000;
@@ -32,6 +37,58 @@ export function getSceneBoundsCenter(
     x: (bounds.min[0] + bounds.max[0]) * 0.5,
     y: (bounds.min[1] + bounds.max[1]) * 0.5,
     z: (bounds.min[2] + bounds.max[2]) * 0.5,
+  };
+}
+
+export function resolveSceneNavigationOrbit(
+  transform: ClipTransform,
+  settings: {
+    nearPlane: number;
+    farPlane: number;
+    fov: number;
+    minimumDistance: number;
+  },
+  viewport: { width: number; height: number },
+  sceneBounds?: { min: [number, number, number]; max: [number, number, number] },
+  targetPivot?: SceneVector3,
+): { pivot: SceneVector3; radius: number; localOffset: SceneVector3 } {
+  const frame = resolveOrbitCameraFrame(transform, settings, viewport, sceneBounds);
+  const pivot = targetPivot ? cloneSceneVector(targetPivot) : cloneSceneVector(frame.target);
+  const offset = {
+    x: frame.eye.x - pivot.x,
+    y: frame.eye.y - pivot.y,
+    z: frame.eye.z - pivot.z,
+  };
+  const backward = scaleSceneVector(frame.forward, -1);
+  return {
+    pivot,
+    radius: Math.hypot(offset.x, offset.y, offset.z),
+    localOffset: {
+      x: offset.x * frame.right.x + offset.y * frame.right.y + offset.z * frame.right.z,
+      y: offset.x * frame.cameraUp.x + offset.y * frame.cameraUp.y + offset.z * frame.cameraUp.z,
+      z: offset.x * backward.x + offset.y * backward.y + offset.z * backward.z,
+    },
+  };
+}
+
+export function resolveSceneOrbitPosition(
+  frame: Pick<OrbitCameraFrame, 'right' | 'cameraUp' | 'forward'>,
+  pivot: SceneVector3,
+  localOffset: SceneVector3,
+): SceneVector3 {
+  return {
+    x: pivot.x
+      + frame.right.x * localOffset.x
+      + frame.cameraUp.x * localOffset.y
+      - frame.forward.x * localOffset.z,
+    y: pivot.y
+      + frame.right.y * localOffset.x
+      + frame.cameraUp.y * localOffset.y
+      - frame.forward.y * localOffset.z,
+    z: pivot.z
+      + frame.right.z * localOffset.x
+      + frame.cameraUp.z * localOffset.y
+      - frame.forward.z * localOffset.z,
   };
 }
 

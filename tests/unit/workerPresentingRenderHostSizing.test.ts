@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   bitmapSnapshotMaxSizeForPresentation,
+  resolveWorkerTargetResizeSize,
   WORKER_PRESENTING_HIGH_FPS_PLAYBACK_SNAPSHOT_MAX_EDGE,
   WORKER_PRESENTING_PLAYBACK_SNAPSHOT_MAX_EDGE,
   WORKER_PRESENTING_SCRUB_SNAPSHOT_MAX_EDGE,
@@ -22,6 +23,37 @@ function record(width: number, height: number): WorkerRenderTargetSizingRecord {
 }
 
 describe('worker presenting render host sizing', () => {
+  it('uses the active composition size only for previews that follow it', () => {
+    expect(resolveWorkerTargetResizeSize({
+      canvasHeight: 1920,
+      canvasWidth: 1080,
+      followsActiveComposition: true,
+      requestedHeight: 540,
+      requestedWidth: 960,
+    })).toEqual({ x: 960, y: 540 });
+  });
+
+  it('preserves a portrait ratio for an independent preview', () => {
+    expect(resolveWorkerTargetResizeSize({
+      canvasHeight: 1920,
+      canvasWidth: 1080,
+      followsActiveComposition: false,
+      requestedHeight: 540,
+      requestedWidth: 960,
+    })).toEqual({ x: 540, y: 960 });
+  });
+
+  it('uses a panel-sized viewport override without changing its ratio', () => {
+    expect(resolveWorkerTargetResizeSize({
+      canvasHeight: 1080,
+      canvasWidth: 1920,
+      followsActiveComposition: true,
+      requestedHeight: 1920,
+      requestedWidth: 1080,
+      viewportOverride: { width: 420, height: 700 },
+    })).toEqual({ x: 420, y: 700 });
+  });
+
   it('keeps idle snapshots at full target size', () => {
     expect(bitmapSnapshotMaxSizeForPresentation(record(1920, 1080), false, false)).toEqual({
       width: 1920,

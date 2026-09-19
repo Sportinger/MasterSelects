@@ -1,4 +1,4 @@
-import { useAccountStore } from '../../stores/accountStore';
+import { hasHostedAiSession, useAccountStore } from '../../stores/accountStore';
 import { useMediaStore } from '../../stores/mediaStore';
 import {
   useFlashBoardStore,
@@ -20,6 +20,8 @@ import {
 } from './FlashBoardChatService';
 import type {
   AgentActivityEvent,
+  FlashBoardChatAgentMode,
+  FlashBoardChatRequest,
   FlashBoardChatPromptVersion,
   FlashBoardChatProvider,
   FlashBoardChatRunSource,
@@ -31,7 +33,10 @@ import type {
 } from './FlashBoardChatTypes';
 
 export interface FlashBoardBridgeChatTurnInput {
+  agentPath?: FlashBoardChatRequest['agentPath'];
+  conversationRef?: string;
   decisionPolicy?: DecisionPolicy;
+  historyMessages?: FlashBoardChatMessage[];
   idempotencyKey?: string;
   includeHistory?: boolean;
   model?: string;
@@ -42,8 +47,10 @@ export interface FlashBoardBridgeChatTurnInput {
   onPhase?: (phase: 'kernel' | 'provider') => void;
   openAiReasoningEffort?: FlashBoardOpenAiReasoningEffort;
   persistToChat?: boolean;
+  preproductionRunId?: string;
   prompt: string;
   provider?: FlashBoardChatProvider;
+  requestedAgentMode?: Extract<FlashBoardChatAgentMode, 'logic'>;
   requestedModelClass?: FlashBoardChatModelClass;
   referenceMediaFileIds?: string[];
   runSource?: FlashBoardChatRunSource;
@@ -71,43 +78,46 @@ export async function runFlashBoardBridgeChatTurn(
   if (!visiblePrompt) throw new Error('Missing chat prompt.');
 
   const provider = input.provider ?? 'kie';
-  const model = resolveModel(provider, input.model);
+  const model = resolveModel(input.model);
   const messages = input.includeHistory === false
     ? []
-    : useFlashBoardStore.getState().chatMessages;
-  const requestPrompt = buildFlashBoardChatRequestPrompt(messages, visiblePrompt);
+    : input.historyMessages ?? useFlashBoardStore.getState().chatMessages;
+  const requestPrompt = input.conversationRef === undefined
+    ? buildFlashBoardChatRequestPrompt(messages, visiblePrompt)
+    : visiblePrompt;
   const toolCalls: FlashBoardExecutedToolCall[] = [];
   const completedRunRef: { current: FlashBoardChatRunRecord | null } = { current: null };
   const kernelReportRef: { current: KernelRunReport | undefined } = { current: undefined };
+  const inputRequestRef: { current: import('../kernelClient/types').KernelUserInputRequest | undefined } = { current: undefined };
   const persistToChat = input.persistToChat !== false;
   const messageIds = persistToChat
-    ? appendPendingMessages(visiblePrompt, input.idempotencyKey)
+    ? appendPendingMessages(visiblePrompt, input.idempotencyKey, input.conversationRef)
     : null;
 
   try {
-    const hostedAvailable = provider === 'kie'
-      ? resolveHostedAvailability()
-      : false;
-    if (provider === 'kie' && !hostedAvailable) {
-      throw new Error('Sign in and enable hosted credits to use AI chat.');
+    const hostedAvailable = resolveHostedAvailability();
+    if (input.agentPath !== 'direct-codex' && !hostedAvailable) {
+      throw new Error('Free AI credits are unavailable. Choose a plan to continue.');
     }
 
-    const visualReferences = provider === 'kie'
-      ? await prepareFlashBoardChatVisualReferences({
-          composer: input.referenceMediaFileIds === undefined
-            ? useFlashBoardStore.getState().composer
-            : {
-                ...useFlashBoardStore.getState().composer,
-                startMediaFileId: undefined,
-                endMediaFileId: undefined,
-                referenceMediaFileIds: input.referenceMediaFileIds,
-              },
-          mediaFiles: useMediaStore.getState().files,
-        })
-      : [];
+    const visualReferences = await prepareFlashBoardChatVisualReferences({
+      composer: input.referenceMediaFileIds === undefined
+        ? useFlashBoardStore.getState().composer
+        : {
+            ...useFlashBoardStore.getState().composer,
+            startMediaFileId: undefined,
+            endMediaFileId: undefined,
+            referenceMediaFileIds: input.referenceMediaFileIds,
+          },
+      mediaFiles: useMediaStore.getState().files,
+    });
 
     const response = await sendFlashBoardChatMessage({
+      ...(input.agentPath === undefined ? {} : { agentPath: input.agentPath }),
       hostedAvailable,
+      ...(input.conversationRef === undefined
+        ? {}
+        : { conversationRef: input.conversationRef }),
       decisionPolicy: input.decisionPolicy ?? 'automatic',
       idempotencyKey: input.idempotencyKey,
       model,
@@ -140,14 +150,23 @@ export async function runFlashBoardBridgeChatTurn(
       onKernelReport: (report) => {
         kernelReportRef.current = report;
       },
+      onKernelInputRequest: (request) => {
+        inputRequestRef.current = request;
+      },
       ...(input.onPhase === undefined ? {} : { onPhase: input.onPhase }),
       onRunCompleted: (run) => {
         completedRunRef.current = run;
       },
       openAiReasoningEffort: input.openAiReasoningEffort ?? DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT,
       playbookPrompt: visiblePrompt,
+      ...(input.preproductionRunId === undefined
+        ? {}
+        : { preproductionRunId: input.preproductionRunId }),
       prompt: requestPrompt,
       provider,
+      ...(input.requestedAgentMode === undefined
+        ? {}
+        : { requestedAgentMode: input.requestedAgentMode }),
       requestedModelClass: input.requestedModelClass ?? 'fast',
       runSource: input.runSource ?? 'bridge',
       ...(input.signal === undefined ? {} : { signal: input.signal }),
@@ -164,6 +183,7 @@ export async function runFlashBoardBridgeChatTurn(
         toolCalls,
         false,
         kernelReportRef.current,
+        inputRequestRef.current,
       );
     }
     return {
@@ -190,17 +210,7 @@ export async function runFlashBoardBridgeChatTurn(
   }
 }
 
-function resolveModel(
-  provider: FlashBoardChatProvider,
-  requestedModel: string | undefined,
-): string {
-  if (provider === 'kernel') {
-    const model = requestedModel?.trim() || FLASHBOARD_CHAT_MODEL_OPTIONS.kernel[0]?.id;
-    if (!model || !FLASHBOARD_CHAT_MODEL_OPTIONS.kernel.some((candidate) => candidate.id === model)) {
-      throw new Error(`Unsupported MasterSelectsAI model: ${model ?? 'missing'}`);
-    }
-    return model;
-  }
+function resolveModel(requestedModel: string | undefined): string {
   const model = requestedModel?.trim() || DEFAULT_FLASHBOARD_CHAT_MODEL;
   if (!FLASHBOARD_CHAT_MODEL_OPTIONS.kie.some((candidate) => candidate.id === model)) {
     throw new Error(`Unsupported Kie.ai chat model: ${model}`);
@@ -210,12 +220,13 @@ function resolveModel(
 
 function resolveHostedAvailability(): boolean {
   const account = useAccountStore.getState();
-  return account.session?.authenticated === true && account.hostedAIEnabled;
+  return hasHostedAiSession(account.session) && account.hostedAIEnabled;
 }
 
 function appendPendingMessages(
   prompt: string,
   idempotencyKey?: string,
+  conversationRef?: string,
 ): { assistantId: string; userId: string } {
   const createdAt = Date.now();
   const userId = idempotencyKey
@@ -224,19 +235,32 @@ function appendPendingMessages(
   const assistantId = idempotencyKey
     ? `assistant-${idempotencyKey}`
     : createMessageId('assistant');
-  useFlashBoardStore.setState((state) => ({
-    chatMessages: state.chatMessages.some((message) => message.id === assistantId)
-      ? state.chatMessages.map((message): FlashBoardChatMessage => (
+  useFlashBoardStore.getState().setChatMessages((chatMessages) => (
+    chatMessages.some((message) => message.id === assistantId)
+      ? chatMessages.map((message): FlashBoardChatMessage => (
           message.id === assistantId
             ? { ...message, isError: undefined, isPending: true, text: 'Thinking...' }
             : message
         ))
       : [
-          ...state.chatMessages,
-          { createdAt, id: userId, role: 'user', text: prompt },
-          { createdAt, id: assistantId, role: 'assistant', text: 'Thinking...', isPending: true },
-        ],
-  }));
+          ...chatMessages,
+          {
+            ...(conversationRef === undefined ? {} : { conversationRef }),
+            createdAt,
+            id: userId,
+            role: 'user',
+            text: prompt,
+          },
+          {
+            ...(conversationRef === undefined ? {} : { conversationRef }),
+            createdAt,
+            id: assistantId,
+            role: 'assistant',
+            text: 'Thinking...',
+            isPending: true,
+          },
+        ]
+  ));
   return { assistantId, userId };
 }
 
@@ -245,8 +269,8 @@ function appendPendingActivity(
   event: AgentActivityEvent | null,
 ): void {
   if (!event) return;
-  useFlashBoardStore.setState((state) => ({
-    chatMessages: state.chatMessages.map((message): FlashBoardChatMessage => (
+  useFlashBoardStore.getState().setChatMessages((chatMessages) => (
+    chatMessages.map((message): FlashBoardChatMessage => (
       message.id === assistantId && message.isPending
         ? {
             ...message,
@@ -256,21 +280,21 @@ function appendPendingActivity(
             ].slice(-100),
           }
         : message
-    )),
-  }));
+    ))
+  ));
 }
 
 function updatePendingKernelProgress(
   assistantId: string,
   progress: import('../kernelClient/runProgress').KernelProgressEvent,
 ): void {
-  useFlashBoardStore.setState((state) => ({
-    chatMessages: state.chatMessages.map((message): FlashBoardChatMessage => (
+  useFlashBoardStore.getState().setChatMessages((chatMessages) => (
+    chatMessages.map((message): FlashBoardChatMessage => (
       message.id === assistantId && message.isPending
         ? { ...message, kernelProgress: progress, text: progress.label }
         : message
-    )),
-  }));
+    ))
+  ));
 }
 
 function completePendingMessage(
@@ -279,9 +303,10 @@ function completePendingMessage(
   toolCalls: FlashBoardExecutedToolCall[],
   isError = false,
   kernelReport?: KernelRunReport,
+  inputRequest?: import('../kernelClient/types').KernelUserInputRequest,
 ): void {
-  useFlashBoardStore.setState((state) => ({
-    chatMessages: state.chatMessages.map((message): FlashBoardChatMessage => (
+  useFlashBoardStore.getState().setChatMessages((chatMessages) => (
+    chatMessages.map((message): FlashBoardChatMessage => (
       message.id === assistantId
         ? {
             ...message,
@@ -289,12 +314,13 @@ function completePendingMessage(
             isPending: false,
             kernelProgress: undefined,
             kernelReport,
+            inputRequest,
             text: text || 'Empty response.',
             toolCalls,
           }
         : message
-    )),
-  }));
+    ))
+  ));
 }
 
 function createMessageId(role: FlashBoardChatMessage['role']): string {

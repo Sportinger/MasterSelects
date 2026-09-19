@@ -2,16 +2,18 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { withExclusiveHistorySnapshotMutationLease } from './timeline/exclusiveMutationLease';
 import type { ContainerFormat, VideoCodec } from '../engine/export';
+import { getChromiumCompatibleAACBitrate } from '../engine/audio/AudioEncoder';
 import type { AudioOnlyExportFormat } from '../engine/audio/AudioFileEncoder';
 import type {
   DnxhrProfile,
   FFmpegContainer,
   FFmpegVideoCodec,
+  HapFormat,
   ProResProfile,
 } from '../engine/ffmpeg';
 import type { GifDither, GifLoopMode, GifPaletteMode } from '../engine/gif/gifOptions';
 
-export type ExportEncoderType = 'webcodecs' | 'htmlvideo' | 'ffmpeg';
+export type ExportEncoderType = 'webcodecs' | 'htmlvideo' | 'ffmpeg' | 'hap';
 export type ExportVisualMode = 'video' | 'image' | 'gif';
 export type ExportImageFormat = 'png' | 'jpg' | 'webp' | 'bmp';
 export type ExportImageMode = 'frame' | 'sequence';
@@ -39,6 +41,7 @@ export interface ExportSettings {
   ffmpegPreset: string;
   proresProfile: ProResProfile;
   dnxhrProfile: DnxhrProfile;
+  hapFormat: HapFormat;
   ffmpegQuality: number;
   ffmpegBitrate: number;
   ffmpegRateControl: 'crf' | 'cbr' | 'vbr';
@@ -51,6 +54,7 @@ export interface ExportSettings {
   gifTransparency: boolean;
   gifAlphaThreshold: number;
   gifBayerScale: number;
+  includeAlpha: boolean;
   stackedAlpha: boolean;
   includeAudio: boolean;
   audioOnlyFormat: ExportAudioFormat;
@@ -129,13 +133,14 @@ interface ExportStoreState extends ExportStoreData {
   hydrateFromProject: (data?: Partial<ExportStoreData> | null) => void;
 }
 
-const ENCODERS: ExportEncoderType[] = ['webcodecs', 'htmlvideo', 'ffmpeg'];
+const ENCODERS: ExportEncoderType[] = ['webcodecs', 'htmlvideo', 'ffmpeg', 'hap'];
 const VIDEO_CODECS: VideoCodec[] = ['h264', 'h265', 'vp9', 'av1'];
 const WEB_CONTAINERS: ContainerFormat[] = ['mp4', 'webm'];
 const FFMPEG_CONTAINERS: FFmpegContainer[] = ['mov', 'mkv', 'avi', 'mxf', 'gif'];
 const FFMPEG_CODECS: FFmpegVideoCodec[] = ['prores', 'dnxhd', 'ffv1', 'utvideo', 'mjpeg', 'gif'];
 const PRORES_PROFILES: ProResProfile[] = ['proxy', 'lt', 'standard', 'hq', '4444', '4444xq'];
 const DNXHR_PROFILES: DnxhrProfile[] = ['dnxhr_lb', 'dnxhr_sq', 'dnxhr_hq', 'dnxhr_hqx', 'dnxhr_444'];
+const HAP_FORMATS: HapFormat[] = ['hap', 'hap_alpha', 'hap_q'];
 const IMAGE_FORMATS: ExportImageFormat[] = ['png', 'jpg', 'webp', 'bmp'];
 const IMAGE_EXPORT_MODES: ExportImageMode[] = ['frame', 'sequence'];
 const VISUAL_MODES: ExportVisualMode[] = ['video', 'image', 'gif'];
@@ -171,6 +176,7 @@ function createBatchSettings(
         filename: sourceBasename(source.sourceName),
         specialContainer: 'none',
         normalizeAudio: false,
+        includeAlpha: false,
         stackedAlpha: false,
         visualMode: 'video',
         videoEnabled: true,
@@ -183,6 +189,7 @@ function createBatchSettings(
           filename: sourceBasename(source.sourceName),
           specialContainer: 'none',
           normalizeAudio: false,
+          includeAlpha: false,
           stackedAlpha: false,
           visualMode: 'video',
           videoEnabled: false,
@@ -195,6 +202,7 @@ function createBatchSettings(
           filename: sourceBasename(source.sourceName),
           specialContainer: 'none',
           normalizeAudio: false,
+          includeAlpha: false,
           stackedAlpha: false,
           visualMode: 'image',
           videoEnabled: true,
@@ -230,6 +238,7 @@ export function createDefaultExportSettings(): ExportSettings {
     ffmpegPreset: '',
     proresProfile: 'hq',
     dnxhrProfile: 'dnxhr_hq',
+    hapFormat: 'hap',
     ffmpegQuality: 18,
     ffmpegBitrate: 20_000_000,
     ffmpegRateControl: 'crf',
@@ -242,11 +251,12 @@ export function createDefaultExportSettings(): ExportSettings {
     gifTransparency: true,
     gifAlphaThreshold: 128,
     gifBayerScale: 3,
+    includeAlpha: false,
     stackedAlpha: false,
     includeAudio: true,
     audioOnlyFormat: 'wav',
     audioSampleRate: 48000,
-    audioBitrate: 256_000,
+    audioBitrate: 192_000,
     normalizeAudio: false,
     videoEnabled: true,
     visualMode: 'video',
@@ -325,9 +335,22 @@ function sanitizeSettings(input?: Partial<ExportSettings> | null): ExportSetting
   const ffmpegCodec = pickEnumValue(input.ffmpegCodec, FFMPEG_CODECS, defaults.ffmpegCodec);
   const visualMode = pickEnumValue(input.visualMode, VISUAL_MODES, defaults.visualMode);
   const isGifOutput = visualMode === 'gif';
+  const encoder = pickEnumValue(input.encoder, ENCODERS, defaults.encoder);
+  const audioOnlyFormat = pickEnumValue(input.audioOnlyFormat, AUDIO_FORMATS, defaults.audioOnlyFormat);
+  const videoEnabled = typeof input.videoEnabled === 'boolean' ? input.videoEnabled : defaults.videoEnabled;
+  const requestedAudioBitrate = Math.round(pickNumber(
+    input.audioBitrate,
+    defaults.audioBitrate,
+    { min: 64_000, max: 512_000 },
+  ));
+  const usesBrowserAudioEncoder = (videoEnabled && encoder !== 'ffmpeg')
+    || (!videoEnabled && audioOnlyFormat === 'browser');
+  const audioBitrate = usesBrowserAudioEncoder
+    ? getChromiumCompatibleAACBitrate(requestedAudioBitrate)
+    : requestedAudioBitrate;
 
   return {
-    encoder: pickEnumValue(input.encoder, ENCODERS, defaults.encoder),
+    encoder,
     width: Math.round(pickNumber(input.width, defaults.width, { min: 1, max: 7680 })),
     height: Math.round(pickNumber(input.height, defaults.height, { min: 1, max: 4320 })),
     customWidth: Math.round(pickNumber(input.customWidth, defaults.customWidth, { min: 1, max: 7680 })),
@@ -347,6 +370,7 @@ function sanitizeSettings(input?: Partial<ExportSettings> | null): ExportSetting
     ffmpegPreset: typeof input.ffmpegPreset === 'string' ? input.ffmpegPreset : defaults.ffmpegPreset,
     proresProfile: pickEnumValue(input.proresProfile, PRORES_PROFILES, defaults.proresProfile),
     dnxhrProfile: pickEnumValue(input.dnxhrProfile, DNXHR_PROFILES, defaults.dnxhrProfile),
+    hapFormat: pickEnumValue(input.hapFormat, HAP_FORMATS, defaults.hapFormat),
     ffmpegQuality: Math.round(pickNumber(input.ffmpegQuality, defaults.ffmpegQuality, { min: 1, max: 31 })),
     ffmpegBitrate: Math.round(pickNumber(input.ffmpegBitrate, defaults.ffmpegBitrate, { min: 1_000_000, max: 100_000_000 })),
     ffmpegRateControl: pickEnumValue(input.ffmpegRateControl, ['crf', 'cbr', 'vbr'] as const, defaults.ffmpegRateControl),
@@ -359,15 +383,16 @@ function sanitizeSettings(input?: Partial<ExportSettings> | null): ExportSetting
     gifTransparency: typeof input.gifTransparency === 'boolean' ? input.gifTransparency : defaults.gifTransparency,
     gifAlphaThreshold: Math.round(pickNumber(input.gifAlphaThreshold, defaults.gifAlphaThreshold, { min: 0, max: 255 })),
     gifBayerScale: Math.round(pickNumber(input.gifBayerScale, defaults.gifBayerScale, { min: 0, max: 5 })),
+    includeAlpha: typeof input.includeAlpha === 'boolean' ? input.includeAlpha : defaults.includeAlpha,
     stackedAlpha: typeof input.stackedAlpha === 'boolean' ? input.stackedAlpha : defaults.stackedAlpha,
     includeAudio: isGifOutput ? false : typeof input.includeAudio === 'boolean' ? input.includeAudio : defaults.includeAudio,
-    audioOnlyFormat: pickEnumValue(input.audioOnlyFormat, AUDIO_FORMATS, defaults.audioOnlyFormat),
+    audioOnlyFormat,
     audioSampleRate: input.audioSampleRate === 44100 || input.audioSampleRate === 48000
       ? input.audioSampleRate
       : defaults.audioSampleRate,
-    audioBitrate: Math.round(pickNumber(input.audioBitrate, defaults.audioBitrate, { min: 64_000, max: 512_000 })),
+    audioBitrate,
     normalizeAudio: typeof input.normalizeAudio === 'boolean' ? input.normalizeAudio : defaults.normalizeAudio,
-    videoEnabled: typeof input.videoEnabled === 'boolean' ? input.videoEnabled : defaults.videoEnabled,
+    videoEnabled,
     visualMode: isGifOutput ? 'gif' : visualMode,
     imageFormat: pickEnumValue(input.imageFormat, IMAGE_FORMATS, defaults.imageFormat),
     imageExportMode: pickEnumValue(input.imageExportMode, IMAGE_EXPORT_MODES, defaults.imageExportMode),
@@ -436,6 +461,7 @@ function applyBatchSourceInvariants(
     useInOut: false,
     specialContainer: 'none',
     normalizeAudio: false,
+    includeAlpha: false,
     stackedAlpha: false,
     imageExportMode: 'frame',
   };

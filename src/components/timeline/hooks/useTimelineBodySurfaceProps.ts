@@ -33,7 +33,7 @@ interface UseTimelineBodySurfacePropsParams extends Omit<
   getTimelineLineOpacity: MarkerOverlayProps['getTimelineLineOpacity'];
   inLineOpacity: GlobalOverlayProps['inLineOpacity'];
   inOutMarkerContextMenu: GlobalOverlayProps['onMarkerContextMenu'];
-  inOutMarkerMouseDown: GlobalOverlayProps['onMarkerMouseDown'];
+  inOutMarkerPointerDown: GlobalOverlayProps['onMarkerPointerDown'];
   inPoint: GlobalOverlayProps['inPoint'];
   isRamPreviewing: GlobalOverlayProps['isRamPreviewing'];
   isTrackHeaderWidthResizing: RulerHeaderProps['isTrackHeaderWidthResizing'];
@@ -43,9 +43,9 @@ interface UseTimelineBodySurfacePropsParams extends Omit<
   marquee: InteractionOverlayProps['marquee'];
   midiDrawGhost: InteractionOverlayProps['midiDrawGhost'];
   onRulerMouseDown: RulerHeaderProps['onRulerMouseDown'];
-  onSplitDividerMouseDown: SplitDividerProps['onMouseDown'];
+  onSplitDividerPointerDown: SplitDividerProps['onPointerDown'];
   onTimelineMarkerContextMenu: MarkerOverlayProps['onMarkerContextMenu'];
-  onTimelineMarkerMouseDown: MarkerOverlayProps['onMarkerMouseDown'];
+  onTimelineMarkerPointerDown: MarkerOverlayProps['onMarkerPointerDown'];
   onTrackFocusStep: SplitDividerProps['onTrackFocusStep'];
   onTrackHeaderWidthResizeStart: RulerHeaderProps['onTrackHeaderWidthResizeStart'];
   onToggleAudioLayerAdvancedMode: SplitDividerProps['onToggleAudioLayerAdvancedMode'];
@@ -86,7 +86,7 @@ export function useTimelineBodySurfaceProps({
   getTimelineLineOpacity,
   inLineOpacity,
   inOutMarkerContextMenu,
-  inOutMarkerMouseDown,
+  inOutMarkerPointerDown,
   inPoint,
   isExporting,
   isRamPreviewing,
@@ -104,9 +104,9 @@ export function useTimelineBodySurfaceProps({
   onPointerMove,
   onPointerUp,
   onRulerMouseDown,
-  onSplitDividerMouseDown,
+  onSplitDividerPointerDown,
   onTimelineMarkerContextMenu,
-  onTimelineMarkerMouseDown,
+  onTimelineMarkerPointerDown,
   onToggleAudioLayerAdvancedMode,
   onTrackFocusStep,
   onTrackHeaderWidthResizeStart,
@@ -150,7 +150,7 @@ export function useTimelineBodySurfaceProps({
       outPoint,
       duration,
       markerDrag: globalMarkerDrag,
-      onMarkerMouseDown: inOutMarkerMouseDown,
+      onMarkerPointerDown: inOutMarkerPointerDown,
       onMarkerContextMenu: inOutMarkerContextMenu,
       switchMotionClass,
       inLineOpacity,
@@ -182,7 +182,7 @@ export function useTimelineBodySurfaceProps({
       markerCreateDrag,
       markers,
       onMarkerContextMenu: onTimelineMarkerContextMenu,
-      onMarkerMouseDown: onTimelineMarkerMouseDown,
+      onMarkerPointerDown: onTimelineMarkerPointerDown,
       scrollX,
       switchMotionClass,
       timeToPixel,
@@ -226,7 +226,7 @@ export function useTimelineBodySurfaceProps({
     splitDividerProps: {
       audioLayerAdvancedMode,
       isDragging: splitDragVideoHeight !== null,
-      onMouseDown: onSplitDividerMouseDown,
+      onPointerDown: onSplitDividerPointerDown,
       onToggleAudioLayerAdvancedMode,
       onTrackFocusStep,
       trackFocusMode,

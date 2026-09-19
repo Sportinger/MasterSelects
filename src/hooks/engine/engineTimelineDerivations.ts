@@ -24,6 +24,7 @@ export function hasActiveContinuousRenderClip(
   clips: TimelineClip[],
   tracks: TimelineTrack[],
   playhead: number,
+  isLiveInputConnected: (liveInputId: string) => boolean = () => false,
 ): boolean {
   const visibleVideoTrackIds = getVisibleVideoTrackIds(tracks);
   const epsilon = 1e-6;
@@ -32,6 +33,9 @@ export function hasActiveContinuousRenderClip(
     visibleVideoTrackIds.has(clip.trackId) &&
     playhead + epsilon >= clip.startTime &&
     playhead < clip.startTime + clip.duration &&
-    effectStackNeedsContinuousRender(clip.effects)
+    (
+      effectStackNeedsContinuousRender(clip.effects) ||
+      Boolean(clip.source?.liveInputId && isLiveInputConnected(clip.source.liveInputId))
+    )
   );
 }

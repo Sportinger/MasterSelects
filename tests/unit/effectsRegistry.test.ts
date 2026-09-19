@@ -25,14 +25,18 @@ import {
 } from '../../src/effects/types';
 import type { EffectCategory } from '../../src/effects/types';
 
+const allCategories = CATEGORY_INFO.map(({ id }) => id);
+
 // ---- Category registration -------------------------------------------------
 
 describe('Effect category registration', () => {
-  const expectedPopulatedCategories: EffectCategory[] = ['color', 'blur', 'distort', 'stylize', 'keying'];
-  const expectedEmptyCategories: EffectCategory[] = ['generate', 'time', 'transition'];
+  const expectedPopulatedCategories: EffectCategory[] = [
+    'color', 'blur', 'distort', 'stylize', 'generate', 'keying', 'halftone', 'analog',
+    'pixel', 'glyph', 'geometry', 'tracking',
+  ];
+  const expectedEmptyCategories: EffectCategory[] = ['time', 'transition'];
 
-  it('should have all eight categories defined', () => {
-    const allCategories: EffectCategory[] = ['color', 'blur', 'distort', 'stylize', 'generate', 'keying', 'time', 'transition'];
+  it('should have every catalog category defined', () => {
     for (const cat of allCategories) {
       expect(EFFECT_CATEGORIES).toHaveProperty(cat);
       expect(Array.isArray(EFFECT_CATEGORIES[cat])).toBe(true);
@@ -100,7 +104,6 @@ describe('Effect category registration', () => {
   });
 
   it('sum of effects across all categories should equal total registry size', () => {
-    const allCategories: EffectCategory[] = ['color', 'blur', 'distort', 'stylize', 'generate', 'keying', 'time', 'transition'];
     let totalFromCategories = 0;
     for (const cat of allCategories) {
       totalFromCategories += EFFECT_CATEGORIES[cat].length;
@@ -112,8 +115,7 @@ describe('Effect category registration', () => {
 // ---- CATEGORY_INFO metadata ------------------------------------------------
 
 describe('CATEGORY_INFO metadata', () => {
-  it('should have entries for all eight categories', () => {
-    const allCategories: EffectCategory[] = ['color', 'blur', 'distort', 'stylize', 'generate', 'keying', 'time', 'transition'];
+  it('should have entries for every catalog category', () => {
     const infoIds = CATEGORY_INFO.map(c => c.id);
     for (const cat of allCategories) {
       expect(infoIds).toContain(cat);
@@ -156,7 +158,7 @@ describe('Expected effects per category', () => {
   ];
 
   const expectedDistortEffects = [
-    'pixelate', 'kaleidoscope', 'mirror', 'rgb-split', 'twirl', 'wave', 'bulge',
+    'pixelate', 'kaleidoscope', 'mirror', 'rgb-split', 'twirl', 'wave', 'bulge', 'fisheye',
   ];
 
   const expectedStylizeEffects = [
@@ -307,7 +309,7 @@ describe('Effect required properties', () => {
   });
 
   it('every effect category should be a valid EffectCategory', () => {
-    const validCategories: EffectCategory[] = ['color', 'blur', 'distort', 'stylize', 'generate', 'keying', 'time', 'transition'];
+    const validCategories = allCategories;
     for (const effect of getAllEffects()) {
       expect(validCategories).toContain(effect.category);
     }
@@ -364,6 +366,15 @@ describe('No duplicate effect IDs', () => {
     expect(EFFECT_REGISTRY.size).toBe(getAllEffects().length);
   });
 
+  it('keeps render-only primitives addressable without publishing them in the effect catalog', () => {
+    for (const id of ['surface-overlay', 'terrain-overlay']) {
+      expect(getEffect(id), id).toBeDefined();
+      expect(hasEffect(id), id).toBe(true);
+      expect(EFFECT_REGISTRY.has(id), id).toBe(false);
+      expect(EFFECT_CATEGORIES.tracking.some(effect => effect.id === id), id).toBe(false);
+    }
+  });
+
   it('should have unique entry points across all effects', () => {
     const allEffects = getAllEffects().filter(isFullscreenEffectDefinition);
     const entryPoints = allEffects.map(e => e.entryPoint);
@@ -386,7 +397,7 @@ describe('Effect parameter validation', () => {
     for (const effect of getAllEffects()) {
       for (const [, param] of Object.entries(effect.params)) {
         expect(typeof param.type).toBe('string');
-        expect(['number', 'boolean', 'select', 'color', 'point']).toContain(param.type);
+        expect(['number', 'boolean', 'select', 'color', 'point', 'text']).toContain(param.type);
 
         expect(typeof param.label).toBe('string');
         expect(param.label.length).toBeGreaterThan(0);
@@ -878,7 +889,6 @@ describe('packUniforms function', () => {
 
 describe('Cross-validation between EFFECT_CATEGORIES and EFFECT_REGISTRY', () => {
   it('every effect in EFFECT_CATEGORIES should exist in EFFECT_REGISTRY', () => {
-    const allCategories: EffectCategory[] = ['color', 'blur', 'distort', 'stylize', 'generate', 'keying', 'time', 'transition'];
     for (const cat of allCategories) {
       for (const effect of EFFECT_CATEGORIES[cat]) {
         expect(EFFECT_REGISTRY.has(effect.id)).toBe(true);
@@ -951,9 +961,67 @@ describe('Specific effect definitions', () => {
     expect(glow.uniformSize).toBe(32);
   });
 
-  it('voxel-relief uniformSize should be 80 bytes', () => {
+  it('uses the iPad-tuned defaults for Glow and Voxel Relief', () => {
+    const glow = getEffect('glow')!;
     const voxelRelief = getEffect('voxel-relief')!;
-    expect(voxelRelief.uniformSize).toBe(80);
+
+    expect(Object.fromEntries(Object.entries(glow.params).map(([key, value]) => [key, value.default]))).toEqual({
+      amount: 5,
+      threshold: 0.7935,
+      radius: 1,
+      softness: 0.496,
+      rings: 6.85,
+      samplesPerRing: 17.95,
+    });
+    expect(voxelRelief.params).toMatchObject({
+      columns: { default: 107.4 },
+      height: { default: 1.2 },
+      limitToVideo: { default: true },
+      heightContrast: { default: 3 },
+    });
+  });
+
+  it('voxel-relief uniformSize should be 112 bytes', () => {
+    const voxelRelief = getEffect('voxel-relief')!;
+    expect(voxelRelief.uniformSize).toBe(112);
+  });
+
+  it('voxel-relief camera can orbit continuously across both poles', () => {
+    const voxelRelief = getEffect('voxel-relief')!;
+    if (!('cameraInteraction' in voxelRelief)) throw new Error('Expected fullscreen voxel effect');
+    expect(voxelRelief.cameraInteraction).toMatchObject({
+      yawWrap: true,
+      tiltWrap: true,
+    });
+    expect(voxelRelief.params.tilt).toMatchObject({ min: -180, max: 180 });
+  });
+
+  it('voxel-relief keeps source textures upright in its Y-up orbit world', () => {
+    const voxelRelief = getEffect('voxel-relief')!;
+    if (!('shader' in voxelRelief)) throw new Error('Expected fullscreen voxel effect');
+    expect(voxelRelief.shader).toContain('return vec2f(fieldUv.x, 1.0 - fieldUv.y);');
+    expect(voxelRelief.shader).toContain('let uv = voxelSourceUv(clamp(p.xy / fieldSize');
+    expect(voxelRelief.shader).toContain('let uv = voxelSourceUv(center / fieldSize);');
+  });
+
+  it('voxel-relief leaves ray misses transparent instead of drawing a flat source copy', () => {
+    const voxelRelief = getEffect('voxel-relief')!;
+    if (!('shader' in voxelRelief)) throw new Error('Expected fullscreen voxel effect');
+    expect(voxelRelief.shader).toMatch(/if \(hit\.hit < 0\.5\) \{\r?\n\s+\/\/ A ray miss is empty space\./);
+    expect(voxelRelief.shader).not.toContain('fn voxelGapColor');
+  });
+
+  it('voxel-relief can limit its field to the video bounds', () => {
+    const voxelRelief = getEffect('voxel-relief')!;
+    expect(voxelRelief.params.limitToVideo).toMatchObject({
+      default: true,
+      label: 'Limit to Video',
+      type: 'boolean',
+    });
+    if (!('packUniforms' in voxelRelief)) throw new Error('Expected fullscreen voxel effect');
+    expect(voxelRelief.packUniforms({}, 1920, 1080)?.[25]).toBe(1);
+    expect(voxelRelief.packUniforms({ limitToVideo: false }, 1920, 1080)?.[25]).toBe(0);
+    expect(voxelRelief.packUniforms({ limitToVideo: true }, 1920, 1080)?.[25]).toBe(1);
   });
 
   it('levels uniformSize should be 32 bytes', () => {

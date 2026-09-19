@@ -83,14 +83,12 @@ describe('addImageClip', () => {
         naturalDuration: 5,
         mediaFileId: 'media-image',
       },
-      transform: expect.objectContaining({
-        scale: { x: 1, y: 1 },
-      }),
       thumbnails: ['data:image/jpeg;base64,thumb'],
       isLoading: false,
     }));
 
     const updates = updateClip.mock.calls[0]?.[1] as Partial<TimelineClip>;
+    expect(updates).not.toHaveProperty('transform');
     expect(updates.source && 'imageElement' in updates.source).toBe(false);
     expect(importFile).toHaveBeenCalledWith(clip.file);
   });

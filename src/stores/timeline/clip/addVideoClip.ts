@@ -2,7 +2,6 @@
 // Handles video file loading, WebCodecs initialization, thumbnails, and linked audio
 
 import type { TimelineClip } from '../../../types/timeline';
-import { DEFAULT_TRANSFORM } from '../constants';
 import { useMediaStore } from '../../mediaStore';
 import { useSettingsStore } from '../../settingsStore';
 import { NativeDecoder } from '../../../services/nativeHelper';
@@ -20,10 +19,25 @@ import { registerNativeDecoderForTimelineClip } from '../../../services/timeline
 import { loadLinkedAudio } from './videoLinkedAudioLoader';
 import { loadCachedProjectAnalysisForVideo } from './videoCachedAnalysisLoader';
 import { startVideoThumbnailGeneration } from './videoThumbnailLoader';
+import { flags } from '../../../engine/featureFlags';
+import { selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
+import { releaseClipTreeRuntimeBindings } from '../../../services/mediaRuntime/clipBindings';
 export { createVideoClipPlaceholders } from './videoClipPlaceholders';
 export type { AddVideoClipParams, AddVideoClipResult } from './videoClipPlaceholders';
 
 const log = Logger.create('AddVideoClip');
+
+function removeLinkedAudioPlaceholder(
+  clipId: string,
+  setClips: (updater: (clips: TimelineClip[]) => TimelineClip[]) => void,
+): void {
+  setClips((clips) => {
+    const clip = clips.find((candidate) => candidate.id === clipId);
+    if (!clip) return clips;
+    releaseClipTreeRuntimeBindings(clip);
+    return clips.filter((candidate) => candidate.id !== clipId);
+  });
+}
 
 type FileWithPath = File & { path?: string };
 
@@ -125,7 +139,6 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
           mediaFileId,
           filePath,
         },
-        transform: { ...DEFAULT_TRANSFORM },
         isLoading: false,
       });
 
@@ -159,14 +172,13 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
         duration: naturalDuration,
         outPoint: naturalDuration,
         source: { type: 'video', naturalDuration, mediaFileId },
-        transform: { ...DEFAULT_TRANSFORM },
         isLoading: false,
       });
 
       if (linkedAudioClipId) {
         if (importedHasAudio === false) {
           const audioClipIdToRemove = linkedAudioClipId;
-          setClips(clips => clips.filter(c => c.id !== audioClipIdToRemove));
+          removeLinkedAudioPlaceholder(audioClipIdToRemove, setClips);
           linkedAudioClipId = undefined;
         } else {
           updateClip(linkedAudioClipId, {
@@ -208,7 +220,6 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
         duration: naturalDuration,
         outPoint: naturalDuration,
         source: { type: 'video', naturalDuration, mediaFileId },
-        transform: { ...DEFAULT_TRANSFORM },
         isLoading: false,
       });
 
@@ -222,7 +233,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
         if (!mp4Meta.hasAudio && linkedAudioClipId) {
           log.debug('MP4Box: no audio tracks, removing audio clip', { file: file.name });
           const audioClipIdToRemove = linkedAudioClipId;
-          setClips(clips => clips.filter(c => c.id !== audioClipIdToRemove));
+          removeLinkedAudioPlaceholder(audioClipIdToRemove, setClips);
           linkedAudioClipId = undefined;
         }
       } else {
@@ -232,7 +243,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
             log.debug('Video has no audio tracks', { file: file.name });
             if (pendingAudioClipId) {
               log.debug('Removing audio clip for video without audio', { file: file.name });
-              setClips(clips => clips.filter(c => c.id !== pendingAudioClipId));
+              removeLinkedAudioPlaceholder(pendingAudioClipId, setClips);
             }
           }
         });
@@ -259,7 +270,14 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
   // Load audio for linked clip (skip for NativeDecoder - browser can't decode ProRes/DNxHD audio)
   // For browser path, audio clip is already created and will be removed by background detectVideoAudio if no audio
   if (linkedAudioClipId && !nativeDecoder) {
-    loadLinkedAudio(file, linkedAudioClipId, naturalDuration, mediaFileId, waveformsEnabled, updateClip, setClips);
+    loadLinkedAudio(file, linkedAudioClipId, naturalDuration, mediaFileId, waveformsEnabled, updateClip);
+    const providerPlan = selectRuntimeFrameProviderPlan({
+      videoCodecId: importedMedia?.videoCodecId,
+      turboResEnabled: flags.turboResProRes,
+    });
+    if ((providerPlan.backend === 'turbores' || providerPlan.backend === 'hap') && mediaFileId) {
+      void importedMediaStore.generateAudioProxy(mediaFileId);
+    }
   } else if (linkedAudioClipId && nativeDecoder) {
     log.debug('Skipping audio decoding for NativeDecoder file (audio clip kept)', { file: file.name });
     updateClip(linkedAudioClipId, {

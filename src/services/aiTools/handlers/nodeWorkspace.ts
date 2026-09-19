@@ -1,4 +1,4 @@
-import { useAccountStore } from '../../../stores/accountStore';
+import { hasHostedAiSession, useAccountStore } from '../../../stores/accountStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import type {
   ClipCustomNodeConversationKind,
@@ -11,6 +11,7 @@ import type {
 import { cloudAiService } from '../../cloudAiService';
 import {
   buildAINodeAuthoringContext,
+  buildClipFlockNodeGraph,
   buildClipNodeGraph,
   extractAINodeGeneratedCode,
   extractAINodeParameterSchemaFromCode,
@@ -129,7 +130,7 @@ function appendConversationTurn(
 function resolveAINodeAccess(): AINodeGenerationAccess {
   const account = useAccountStore.getState();
 
-  if (account.session?.authenticated && account.hostedAIEnabled) {
+  if (hasHostedAiSession(account.session) && account.hostedAIEnabled) {
     return { kind: 'hosted', label: 'Cloud' };
   }
 
@@ -313,6 +314,7 @@ export async function handleGetNodeWorkspaceDebugState(args: Record<string, unkn
       selected: selectedClipIds.includes(clip.id),
       customNodes,
       graph,
+      ...(clip.source?.type === 'flock' && includeGraph ? { flockGraph: buildClipFlockNodeGraph(clip) } : {}),
     };
   });
 

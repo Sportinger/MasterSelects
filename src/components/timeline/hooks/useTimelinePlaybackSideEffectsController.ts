@@ -1,20 +1,17 @@
 import { useAutoFeatures } from './useAutoFeatures';
 import { useLayerSync } from './useLayerSync';
-import { usePlaybackLoop } from './usePlaybackLoop';
 import { usePlayheadSnap } from './usePlayheadSnap';
 import { useTimelineKeyboard } from './useTimelineKeyboard';
 
 type KeyboardParams = Parameters<typeof useTimelineKeyboard>[0];
 type AutoFeaturesParams = Parameters<typeof useAutoFeatures>[0];
 type LayerSyncParams = Parameters<typeof useLayerSync>[0];
-type PlaybackLoopParams = Parameters<typeof usePlaybackLoop>[0];
 type PlayheadSnapParams = Parameters<typeof usePlayheadSnap>[0];
 
 type UseTimelinePlaybackSideEffectsControllerParams =
   KeyboardParams &
   AutoFeaturesParams &
   LayerSyncParams &
-  PlaybackLoopParams &
   PlayheadSnapParams;
 
 export function useTimelinePlaybackSideEffectsController({
@@ -143,8 +140,6 @@ export function useTimelinePlaybackSideEffectsController({
     isVideoTrackVisible,
     isAudioTrackMuted,
   });
-
-  usePlaybackLoop({ isPlaying });
 
   usePlayheadSnap({
     isDraggingPlayhead,

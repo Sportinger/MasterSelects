@@ -15,7 +15,7 @@ import type {
 import type { MediaFile } from '../../../stores/mediaStore';
 import {
   getSeedanceReferenceValidationError,
-  isSeedance2ProviderId,
+  isSeedanceProviderId,
 } from '../../../services/flashboard/seedanceReferenceRules';
 import type { CatalogEntry } from '../../../services/flashboard/types';
 import { buildFlashBoardReferenceBadges } from './FlashBoardReferenceBadgePlanner';
@@ -24,12 +24,21 @@ import {
   appendReferenceMediaFileIds,
   clampReferenceMediaFileIds,
   isReferenceableMediaType,
+  reorderReferenceMediaFileIds,
 } from './FlashBoardReferenceMediaPlanner';
 import { buildFlashBoardReferenceRolePatch } from './FlashBoardReferenceAssignmentPlanner';
 import { runFlashBoardReferenceTransition } from './FlashBoardReferenceTransition';
 import { useFlashBoardReferenceCommands } from './useFlashBoardReferenceCommands';
 import { useFlashBoardReferenceDrop } from './useFlashBoardReferenceDrop';
 import { useFlashBoardReferenceFocus } from './useFlashBoardReferenceFocus';
+import {
+  buildSeedancePromptReferences,
+  getSeedancePromptReferenceToken,
+  getSeedancePromptReferenceTokens,
+  insertSeedancePromptReferenceTokens,
+  remapSeedancePromptReferenceTokens,
+} from './SeedancePromptReferences';
+import { SEEDANCE_2_5_PROVIDER_ID } from '../../../services/kieAi/config';
 
 type ReferenceControllerEntry = Pick<
   CatalogEntry,
@@ -54,6 +63,9 @@ interface UseFlashBoardReferenceControllerInput {
   isAudioMode: boolean;
   mediaFiles: MediaFile[];
   multiShots: boolean;
+  onPromptChange: (value: string) => void;
+  prompt: string;
+  providerId: string;
   selectedEntry: ReferenceControllerEntry;
   setHoveredComposerReference: (reference: FlashBoardHoveredComposerReference | null) => void;
   updateComposer: (patch: Partial<FlashBoardComposerState>) => void;
@@ -235,11 +247,36 @@ export function useFlashBoardReferenceValidationController({
     )),
     [composer.referenceMediaFileIds, mediaFilesById],
   );
-  const seedanceReferenceModeActive = isSeedance2ProviderId(providerId)
+  const referenceMediaStats = useMemo(() => (composer.referenceMediaFileIds ?? []).reduce((stats, mediaFileId) => {
+    const mediaFile = mediaFilesById.get(mediaFileId);
+    if (mediaFile?.type === 'image') stats.imageCount += 1;
+    if (mediaFile?.type === 'video') {
+      stats.videoCount += 1;
+      stats.videoDuration += mediaFile.duration ?? 0;
+    }
+    if (mediaFile?.type === 'audio') {
+      stats.audioCount += 1;
+      stats.audioDuration += mediaFile.duration ?? 0;
+    }
+    return stats;
+  }, {
+    audioCount: 0,
+    audioDuration: 0,
+    imageCount: 0,
+    videoCount: 0,
+    videoDuration: 0,
+  }), [composer.referenceMediaFileIds, mediaFilesById]);
+  const seedanceReferenceModeActive = isSeedanceProviderId(providerId)
     && (composer.referenceMediaFileIds ?? []).length > 0;
   const seedanceReferenceValidationError = getSeedanceReferenceValidationError({
+    audioReferenceCount: referenceMediaStats.audioCount,
+    audioReferenceDuration: referenceMediaStats.audioDuration,
+    hasExactFrames: Boolean(composer.startMediaFileId || composer.endMediaFileId),
     hasReferenceMedia: (composer.referenceMediaFileIds ?? []).length > 0,
+    imageReferenceCount: referenceMediaStats.imageCount,
     providerId,
+    videoReferenceCount: referenceMediaStats.videoCount,
+    videoReferenceDuration: referenceMediaStats.videoDuration,
   });
 
   return {
@@ -247,6 +284,7 @@ export function useFlashBoardReferenceValidationController({
     hasImageReferenceInput,
     hasVisualReferenceInput: hasSeedanceVisualReferenceInput,
     hasVideoReferenceInput,
+    referenceVideoDuration: referenceMediaStats.videoDuration,
     seedanceReferenceModeActive,
     seedanceReferenceValidationError,
   };
@@ -258,6 +296,9 @@ export function useFlashBoardReferenceController({
   isAudioMode,
   mediaFiles,
   multiShots,
+  onPromptChange,
+  prompt,
+  providerId,
   selectedEntry,
   setHoveredComposerReference,
   updateComposer,
@@ -284,6 +325,28 @@ export function useFlashBoardReferenceController({
     () => clampReferenceMediaFileIds(referenceMediaFileIds, maxReferenceMedia),
     [maxReferenceMedia, referenceMediaFileIds],
   );
+  const seedancePromptReferencesEnabled = providerId === SEEDANCE_2_5_PROVIDER_ID;
+  const seedancePromptReferences = useMemo(() => buildSeedancePromptReferences(
+    effectiveReferenceMediaFileIds,
+    (mediaFileId) => mediaFilesById.get(mediaFileId)?.type,
+  ), [effectiveReferenceMediaFileIds, mediaFilesById]);
+  const seedancePromptReferenceTokens = useMemo(
+    () => getSeedancePromptReferenceTokens(seedancePromptReferences),
+    [seedancePromptReferences],
+  );
+  const previousSeedancePromptReferencesRef = useRef(seedancePromptReferences);
+  useEffect(() => {
+    const previousReferences = previousSeedancePromptReferencesRef.current;
+    previousSeedancePromptReferencesRef.current = seedancePromptReferences;
+    if (!seedancePromptReferencesEnabled) return;
+
+    const remappedPrompt = remapSeedancePromptReferenceTokens(
+      prompt,
+      previousReferences,
+      seedancePromptReferences,
+    );
+    if (remappedPrompt !== prompt) onPromptChange(remappedPrompt);
+  }, [onPromptChange, prompt, seedancePromptReferences, seedancePromptReferencesEnabled]);
   const supportsTimelineReferenceRoles = !isAudioMode && selectedEntry?.supportsImageToVideo === true;
   const supportsEndFrameReference = supportsTimelineReferenceRoles && !multiShots;
 
@@ -294,6 +357,13 @@ export function useFlashBoardReferenceController({
   const updateReferenceMediaFileIds = useCallback((nextReferenceMediaFileIds: string[]) => {
     updateComposer({ referenceMediaFileIds: nextReferenceMediaFileIds });
   }, [updateComposer]);
+  const handleReorderComposerReference = useCallback((draggedId: string, targetId: string) => {
+    const currentIds = getCurrentReferenceMediaFileIds();
+    const reorderedIds = reorderReferenceMediaFileIds(currentIds, draggedId, targetId);
+    if (reorderedIds === currentIds) return;
+
+    runFlashBoardReferenceTransition(() => updateReferenceMediaFileIds(reorderedIds));
+  }, [getCurrentReferenceMediaFileIds, updateReferenceMediaFileIds]);
   const {
     clearReferenceDragOver,
     getReferenceMediaFileIdsFromTransfer,
@@ -312,6 +382,58 @@ export function useFlashBoardReferenceController({
     mediaFilesById,
     updateReferenceMediaFileIds,
   });
+  const handlePromptReferenceDragOver = useCallback((event: ReactDragEvent<HTMLTextAreaElement>) => {
+    if (!seedancePromptReferencesEnabled || !hasReferenceDragType(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'copy';
+  }, [hasReferenceDragType, seedancePromptReferencesEnabled]);
+  const handlePromptReferenceDrop = useCallback((event: ReactDragEvent<HTMLTextAreaElement>) => {
+    if (!seedancePromptReferencesEnabled || !hasReferenceDragType(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    clearReferenceDragOver();
+
+    const droppedIds = getReferenceMediaFileIdsFromTransfer(event.dataTransfer);
+    const nextReferenceMediaFileIds = clampReferenceMediaFileIds(
+      appendReferenceMediaFileIds(getCurrentReferenceMediaFileIds(), droppedIds),
+      maxReferenceMedia,
+    );
+    const nextReferences = buildSeedancePromptReferences(
+      nextReferenceMediaFileIds,
+      (mediaFileId) => mediaFilesById.get(mediaFileId)?.type,
+    );
+    const tokens = droppedIds.flatMap((mediaFileId) => {
+      const token = getSeedancePromptReferenceToken(nextReferences, mediaFileId);
+      return token ? [token] : [];
+    });
+    if (tokens.length === 0) return;
+
+    const textarea = event.currentTarget;
+    const insertion = insertSeedancePromptReferenceTokens(
+      prompt,
+      tokens,
+      textarea.selectionStart ?? prompt.length,
+      textarea.selectionEnd ?? prompt.length,
+    );
+    updateReferenceMediaFileIds(nextReferenceMediaFileIds);
+    onPromptChange(insertion.prompt);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(insertion.caret, insertion.caret);
+    });
+  }, [
+    clearReferenceDragOver,
+    getCurrentReferenceMediaFileIds,
+    getReferenceMediaFileIdsFromTransfer,
+    hasReferenceDragType,
+    maxReferenceMedia,
+    mediaFilesById,
+    onPromptChange,
+    prompt,
+    seedancePromptReferencesEnabled,
+    updateReferenceMediaFileIds,
+  ]);
   const handleReferenceSlotDragOver = useCallback((
     slot: ComposerReferenceSlot,
     event: ReactDragEvent<HTMLDivElement>,
@@ -531,6 +653,8 @@ export function useFlashBoardReferenceController({
     effectiveReferenceMediaFileIds,
     getPromptRefineMediaFile,
     handleComposerReferenceRoleChange,
+    handlePromptReferenceDragOver,
+    handlePromptReferenceDrop,
     handleReferenceDragLeave,
     handleReferenceDragOver,
     handleReferenceDrop,
@@ -540,9 +664,12 @@ export function useFlashBoardReferenceController({
     handleReferenceStripPointerLeave,
     handleReferenceSlotDragOver,
     handleReferenceSlotDrop,
+    handleReorderComposerReference,
     handleRemoveComposerReference,
     isReferenceDragOver,
     maxReferenceMedia,
+    seedancePromptReferencesEnabled,
+    seedancePromptReferenceTokens,
     referenceStripRef,
     showComposerReferences,
     supportsEndFrameReference,

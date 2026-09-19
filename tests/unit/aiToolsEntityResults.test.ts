@@ -78,7 +78,7 @@ describe('AI tool clip entity results', () => {
       .audioBoundaryResolution.appliedCount).toBe(2);
   });
 
-  it('adds six-millisecond de-click fades to exposed linked-audio edges', async () => {
+  it('adds default twelve-millisecond de-click fades to exposed linked-audio edges', async () => {
     const split = await handleSplitClipAtTimes(
       { clipId: 'video-1', times: [3, 7], withLinked: true },
       useTimelineStore.getState(),
@@ -91,7 +91,6 @@ describe('AI tool clip entity results', () => {
       {
         clipIds: [videoIds[1]],
         withLinked: true,
-        deClickFadeSeconds: 0.006,
       },
       useTimelineStore.getState(),
     );
@@ -107,10 +106,10 @@ describe('AI tool clip entity results', () => {
       params: {
         label: 'Automatic cut de-click',
         gainDb: -120,
-        fadeInSeconds: 0.006,
+        fadeInSeconds: 0.012,
         fadeOutSeconds: 0,
       },
-      timeRange: { start: 2.994, end: 3 },
+      timeRange: { start: 2.988, end: 3 },
     });
     expect(audio[1].audioState?.editStack?.at(-1)).toMatchObject({
       type: 'gain',
@@ -118,9 +117,9 @@ describe('AI tool clip entity results', () => {
         label: 'Automatic cut de-click',
         gainDb: -120,
         fadeInSeconds: 0,
-        fadeOutSeconds: 0.006,
+        fadeOutSeconds: 0.012,
       },
-      timeRange: { start: 7, end: 7.006 },
+      timeRange: { start: 7, end: 7.012 },
     });
   });
 
@@ -147,6 +146,7 @@ describe('AI tool clip entity results', () => {
     );
     const data = getEntityResultData(result);
 
+    expect((result.data as { deClickFadesApplied: number }).deClickFadesApplied).toBe(2);
     expect(data.entities.created).toHaveLength(4);
     expect(data.entities.updated).toHaveLength(0);
     expect(data.entities.deleted).toHaveLength(2);

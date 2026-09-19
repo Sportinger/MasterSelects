@@ -7,6 +7,7 @@ import {
 import type { SceneVector3 } from '../../engine/scene/types';
 import type { TimelineClip } from '../../types/timeline';
 import type { ClipTransform } from '../../types/timelineCore';
+import { useEngineStore } from '../../stores/engineStore';
 import { usePreviewSceneNavigationPointerEffects } from './usePreviewSceneNavigationPointerEffects';
 
 type EditCameraViewMode = 'camera' | 'front' | 'side' | 'top';
@@ -39,6 +40,9 @@ interface OrbitStart {
   pivotY: number;
   pivotZ: number;
   radius: number;
+  localOffsetX?: number;
+  localOffsetY?: number;
+  localOffsetZ?: number;
 }
 
 interface PanStart {
@@ -71,7 +75,6 @@ interface UsePreviewSceneNavigationOptions {
   containerRef: RefObject<HTMLDivElement | null>;
   editCameraModeActive: boolean;
   effectiveResolution: PreviewSize;
-  effectiveSceneNavFpsMode: boolean;
   endSceneNavHistoryBatch: () => void;
   finishGaussianKeyboardBatch: () => void;
   gaussianFpsLookStart: MutableRefObject<FpsLookStart>;
@@ -121,6 +124,33 @@ function scaleSceneVector(vector: SceneVector3, scale: number): SceneVector3 {
   return { x: vector.x * scale, y: vector.y * scale, z: vector.z * scale };
 }
 
+interface SceneNavigationMoveBasis {
+  right: SceneVector3;
+  cameraUp: SceneVector3;
+  forward: SceneVector3;
+  distance: number;
+}
+
+export function resolveSceneNavigationKeyboardDelta(
+  frame: SceneNavigationMoveBasis,
+  input: { right: number; up: number; forward: number },
+  deltaSeconds: number,
+  speed: number,
+): SceneVector3 {
+  const inputMagnitude = Math.hypot(input.right, input.up, input.forward);
+  if (inputMagnitude === 0) return { x: 0, y: 0, z: 0 };
+
+  const movementStep = Math.max(0.15, frame.distance * 0.85) * deltaSeconds * speed;
+  const normalizedStep = movementStep / Math.max(1, inputMagnitude);
+  return addSceneVectors(
+    addSceneVectors(
+      scaleSceneVector(frame.right, input.right * normalizedStep),
+      scaleSceneVector(frame.cameraUp, input.up * normalizedStep),
+    ),
+    scaleSceneVector(frame.forward, input.forward * normalizedStep),
+  );
+}
+
 function getEditCameraViewModeFromKey(event: Pick<KeyboardEvent, 'code' | 'key'>): EditCameraViewMode | null {
   if (event.code === 'Digit1' || event.code === 'Numpad1' || event.key === '1') return 'front';
   if (event.code === 'Digit2' || event.code === 'Numpad2' || event.key === '2') return 'side';
@@ -144,7 +174,6 @@ export function usePreviewSceneNavigation({
   containerRef,
   editCameraModeActive,
   effectiveResolution,
-  effectiveSceneNavFpsMode,
   endSceneNavHistoryBatch,
   finishGaussianKeyboardBatch,
   gaussianFpsLookStart,
@@ -226,15 +255,11 @@ export function usePreviewSceneNavigation({
       solveSettings.settings,
       { width: effectiveResolution.width, height: effectiveResolution.height },
     );
-    const keyboardMoveSpeed = effectiveSceneNavFpsMode ? sceneNavFpsMoveSpeed : 1;
-    const panStep = 0.9 * dt * keyboardMoveSpeed;
-    const forwardStep = Math.max(0.15, frame.distance * 0.85) * dt * keyboardMoveSpeed;
-    const positionDelta = addSceneVectors(
-      addSceneVectors(
-        scaleSceneVector(frame.right, rightInput * panStep),
-        scaleSceneVector(frame.cameraUp, upInput * panStep),
-      ),
-      scaleSceneVector(frame.forward, forwardInput * forwardStep),
+    const positionDelta = resolveSceneNavigationKeyboardDelta(
+      frame,
+      { right: rightInput, up: upInput, forward: forwardInput },
+      dt,
+      sceneNavFpsMoveSpeed,
     );
 
     applyNavigationCameraValues(navigationSceneNavClip, {
@@ -249,7 +274,6 @@ export function usePreviewSceneNavigation({
     containerRef,
     effectiveResolution.height,
     effectiveResolution.width,
-    effectiveSceneNavFpsMode,
     finishGaussianKeyboardBatch,
     gaussianKeyboardFrameRef,
     gaussianKeyboardLastTimeRef,
@@ -278,6 +302,7 @@ export function usePreviewSceneNavigation({
     if (!isCameraNavMoveCode(event.code)) return;
 
     event.preventDefault();
+    useEngineStore.getState().setSceneNavOrbitTarget(null);
 
     if (!gaussianKeyboardBatchActiveRef.current) {
       startSceneNavHistoryBatch('Scene move');
@@ -376,7 +401,6 @@ export function usePreviewSceneNavigation({
   usePreviewSceneNavigationPointerEffects({
     applyNavigationCameraValues,
     effectiveResolution,
-    effectiveSceneNavFpsMode,
     endSceneNavHistoryBatch,
     gaussianFpsLookStart,
     gaussianOrbitStart,

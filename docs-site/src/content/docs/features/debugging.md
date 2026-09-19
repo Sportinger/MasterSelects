@@ -168,6 +168,12 @@ The result includes blob size/type, progress samples, settings, engine state bef
 
 If logs show `WebGPU device lost during export` and `getStats` reports `renderLoop.isRunning=false`, `renderDispatcher=null`, or `targetCanvasCount=0`, the browser engine is in a stale device state. Use `reloadApp` or hard-reload the tab before retesting. Windows `powerPreference` warnings and NativeHelper WebSocket failures are not automatically export blockers.
 
+### Full-App Screenshots And UI Probes
+
+For a visual UI failure, select the intended browser session explicitly and call `captureAppScreenshot` on the `devBridge` surface. The default captures the visible app viewport; `fullPage: true` captures the complete scrolling document. Output scaling is reduced automatically when needed to stay within bridge-safe image dimensions. The result is returned as MCP image content and its base64 payload is omitted from durable traces.
+
+Use `clickAppControl` to reproduce a visible button, link, disclosure, or other specific control without switching to a separate browser automation stack. Use `probeSameOriginRequest` to inspect a failing local `/api/` call from the authenticated tab; it returns selected headers and a bounded redacted body instead of exposing cookies or unrestricted URLs. All three tools are development-only and must be called with an explicit target session when multiple tabs are present.
+
 ---
 
 ## Monitoring Surfaces
@@ -204,7 +210,7 @@ Those tools surface:
 
 `purgePlaybackPath` resets the live playback path at the current playhead without a page reload. It clears VideoSync warmups/seeks, retargets active HTMLVideo/WebCodecs providers, resets GPU-ready state, and can resume playback automatically. The health monitor can invoke the same path when `vf_preview_frame` telemetry shows the playhead target moving while the preview frame remains frozen.
 
-When playback start has to wait for active HTML video readiness, `TimelineState.playbackWarmup` is set until the readiness gate finishes or is canceled. A settled current frame (`HAVE_CURRENT_DATA`, not seeking) starts immediately after a hop or scrub; the gate waits only when the target frame itself is unavailable. The main preview renders a small `Preparing playback` overlay only for that pre-start gate, so background VideoSync warmups during normal playback do not look like blocking loading states.
+When playback start has to wait for active HTML video readiness, `TimelineState.playbackWarmup` is set until the readiness gate finishes or is canceled. A settled current frame (`HAVE_CURRENT_DATA`, not seeking) starts immediately after a hop or scrub. A last presented frame within 350 ms of the exact mapped source target is also reusable, so playback can start while the decoder catches up behind the active layer's frame hold. The gate and its small `Preparing playback` overlay remain for genuinely cold targets where no reusable frame exists; background VideoSync warmups during normal playback do not look like blocking loading states.
 
 HTML playback stop keeps a decoded frame within 50 ms of the playhead and aligns the playhead to that presented frame instead of issuing another precision seek. Larger lag still settles exactly; the tolerance prevents rapid play/pause cycles from creating a seek queue that makes later starts cold.
 
@@ -333,6 +339,34 @@ The playback monitors feed the AI bridge stats tools, so `getStats` and `getPlay
 
 ---
 
+## Pinned Windows quality campaigns
+
+Internal campaign tooling in `scripts/windows-quality/` freezes the existing
+eight-case Windows beta corpus, source inputs, reference media and environment
+receipt before execution. Use the adapter README for provisioning and commands.
+A campaign requires an explicit exclusive desktop grant and keeps original reports,
+process records and artifact hashes after failure or interruption. A passing small
+campaign does not establish full editor coverage or authorize a release.
+
+The static feature inventory and its byte-provenance checks live under
+`tests/windows-quality/inventory/`; only immutable inventory JSON descriptions
+belong under `tests/playwright/campaigns/`. Historical CRLF-archive references and
+exact-Git references remain separate. Validate each against its declared source
+bytes, rather than normalizing a changed checkout to make a check pass.
+
+The private execution ledger in `docs/ongoing/Adaptive-Quality-Execution.md` records
+which checks actually ran and which native, deployment and recovery proofs remain
+missing. Internal producer/receiver adapters reside in the separate Social service;
+synthetic adapter reports never substitute for observed editor failures.
+
+Complete Pages artifact checks additionally live in
+`scripts/windows-quality/pages-artifact.mjs` and `qualify-pages-artifact.mjs`.
+They bind frontend, compiled Functions, routes and private configuration inputs,
+reject changes during staging, and require an independently retained seal hash.
+Their package-byte result does not qualify browser behavior, production bindings,
+authenticated API behavior or deployment/recovery. See the adapter README for
+the explicit-path qualification command and filesystem regression controls.
+
 ## Log Entry Structure
 
 Each log entry contains:
@@ -351,3 +385,49 @@ Each log entry contains:
 ---
 
 *Source: `src/services/logger.ts`, `src/services/runtimeDiagnostics.ts`, `src/services/playbackDebugSnapshot.ts`, `src/services/playbackDebugStats.ts`, `src/services/playbackHealthMonitor.ts`, `src/services/wcPipelineMonitor.ts`, `src/services/vfPipelineMonitor.ts`, `src/services/aiTools/bridge.ts`, `src/services/aiTools/handlers/stats.ts`, `tools/devBridge/vitePlugin.ts`*
+
+## Keyframe disclosure timing
+
+Development `POST /api/debug/action` supports `measure-keyframe-disclosure` with an explicit top-level `targetTabId` and `args: { trackId, clipId?, profile? }`. Wait for project loading to finish and keep the editor visible. It optionally selects the clip, toggles the track twice, measures synchronous React commit time and the following two animation frames, and restores selection/disclosure. `paintedMs: null` means the paint deadline expired or the tab became hidden. The result includes selected IDs and diamond counts so empty/unloaded rows cannot be mistaken for a successful dense-row benchmark. Optional CPU sampling covers the initial selection; bridge transport and tool preview capture are excluded from reported times.
+
+
+### Chunk-load recovery diagnostics
+
+A failed dynamic import can request one reload, with a 60-second session cooldown.
+The `vite:preloadError` event must retain its default behavior: cancelling it makes
+Vite resolve the failed import as `undefined`, causing a secondary React lazy-module
+error. Requesting navigation is not proof that navigation completed; an unsaved-project
+warning may cancel it. Preserve the original rejection so diagnostics and callers
+retain the actual module failure.
+
+### Composition video-load failures
+
+`CompositionRenderer` video-load errors include `mediaErrorCode` (1 aborted, 2 network, 3 decode, 4 unsupported source, or null), `readyState`, `networkState`, `fileSize`, and `mimeType`, captured before cleanup resets the media element. These fields distinguish browser-reported failure classes; code 4 alone does not prove an unsupported codec, and a decode failure does not prove a corrupt file. No source URL or raw browser error message is added. Older events without these fields cannot be classified retroactively.
+
+### Cancelled clip analysis
+
+An explicitly cancelled clip/face analysis restores its prior analysis state and does not emit `ClipAnalyzer: Analysis failed` when the pending runtime rejects. The cancellation request remains logged. A runtime failure without a cancellation request still sets the error state and produces the error diagnostic; matching an AbortError name alone does not suppress it.
+
+### Expected WebGPU teardown
+
+Device-loss diagnostics include `expected`. WebGPUContext marks devices immediately before intentional destruction during teardown or a power-preference change. Only a marked device reporting reason `destroyed` is recorded as INFO; unmarked destruction and all other loss reasons remain ERROR. The marker is held weakly in runtime diagnostics state and survives development module reloads. Historical records without the marker cannot establish whether a device was intentionally destroyed.
+
+## Copying-sort startup compatibility
+
+`main.tsx` loads `runtime/arrayCopySorting.ts` immediately after boot diagnostics and before the UI graph. It installs `Array.prototype.toSorted` only when unavailable, preserving native implementations and sorting a fresh dense array rather than mutating application state. This addresses the observed missing-method startup errors in Chrome 109 sessions; it does not supply missing GPU, storage or media APIs. The isolated-browser check removes the native method before navigation and verifies the editor shell renders without a `toSorted` error. Unit coverage includes frozen state, stable equal-key order, sparse arrays, array-like inputs, custom iterators/species and invalid arguments.
+
+## Optional credential storage recovery
+
+YouTube credential database initialization retries one `AbortError` before returning a failure. Security/access errors are not retried, and no credential write is replayed. Persistent open failure remains visible through the settings error log; a later load can try again. This handles transient database initialization, not browser storage denial or damaged ciphertext.
+
+### Protecting edits during chunk recovery
+
+Project auto-sync registers a lightweight veto for automatic chunk-error reloads while an open project is dirty or the workspace contains unsaved work before a project file exists. Projectless store edits survive repeated auto-sync setup and HMR; existing media, timeline clips and chat messages are also checked when no project is open. Hydration/save mirroring does not mark new edits. The boot module queries this without importing editor stores. A veto records `reload_deferred`, leaves the original import rejected, and consumes neither the reload flag nor the cooldown marker. Creating/saving a clean project allows subsequent recovery. Explicit project closure clears the transient edit marker. Teardown removes the guard. Manual navigation uses the same unsaved-work condition. No automatic save is started; this does not fix the failed network request or promise that a failed lazy component can retry without a later reload.
+
+### TFLite initialization severity
+
+The exact standalone `INFO: Created TensorFlow Lite XNNPACK delegate for CPU.` line is retained as INFO even when received on console.error. Original console method metadata remains available. The production reporter uploads ERROR entries, so this informational line no longer counts as a runtime failure. Extra arguments, Error objects and other INFO-prefixed console errors are not downgraded.
+
+### Credential transaction lifetime
+
+YouTube credential reads, writes and deletion wait for their IndexedDB transaction to finish and close the operation connection in a finally block. An aborted transaction is reported as failure even after its individual request succeeded. Encryption keys are read from durable storage for each operation rather than retained after a potentially failed write. First-use key selection uses one readwrite transaction: concurrent callers adopt the key already committed by another caller instead of overwriting it. No real credentials are included in diagnostic payloads.

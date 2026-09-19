@@ -11,7 +11,15 @@
  */
 
 export { AudioExtractor, audioExtractor } from './AudioExtractor';
-export { AudioEncoderWrapper, getRecommendedAudioBitrate, AUDIO_CODEC_INFO } from './AudioEncoder';
+export {
+  AudioEncoderWrapper,
+  AUDIO_CODEC_INFO,
+  CHROMIUM_AAC_BITRATES,
+  DEFAULT_AUDIO_BITRATE,
+  getChromiumCompatibleAACBitrate,
+  getRecommendedAudioBitrate,
+  getWebCodecsAudioBitrateCandidates,
+} from './AudioEncoder';
 export type { AudioEncoderSettings, EncodedAudioResult, AudioEncoderProgressCallback, AudioCodec } from './AudioEncoder';
 export {
   encodeAudioBufferToWavBlob,

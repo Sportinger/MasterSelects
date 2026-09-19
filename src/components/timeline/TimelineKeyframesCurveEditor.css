@@ -149,10 +149,55 @@
 }
 
 .global-curve-editor.empty {
-  display: grid;
-  place-items: center;
   border-top: 1px solid var(--border-color);
+}
+
+.global-curve-editor-empty-grid {
+  stroke: color-mix(in srgb, var(--border-color) 44%, transparent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.global-curve-editor-empty-grid .global-curve-editor-empty-axis {
+  stroke: color-mix(in srgb, var(--text-muted) 48%, transparent);
+}
+
+.global-curve-editor-empty-state {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  min-width: min(320px, calc(100% - 32px));
+  padding: 14px 18px;
+  border: 1px solid color-mix(in srgb, var(--border-focus) 38%, var(--border-color));
+  border-radius: 6px;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  transform: translate(-50%, -50%);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-secondary) 90%, transparent);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 28%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.global-curve-editor-empty-state strong {
+  color: var(--text-primary);
   font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.global-curve-editor-empty-state span {
+  font-size: 11px;
+}
+
+.global-curve-editor-empty-state small {
+  color: var(--text-muted);
+  font-size: 9px;
 }
 
 .global-curve-editor-legend {
@@ -205,7 +250,7 @@
 }
 
 .global-curve-editor-series {
-  opacity: 0.62;
+  opacity: 0.5;
 }
 
 .global-curve-editor-series.active {

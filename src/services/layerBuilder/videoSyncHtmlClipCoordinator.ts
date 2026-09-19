@@ -5,6 +5,7 @@ import { renderHostPort } from '../render/renderHostPort';
 import { playheadState } from './PlayheadState';
 import { scrubSettleState } from '../scrubSettleState';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
+import { isAndroidVideoFrameRuntime } from '../../engine/texture/videoFrameCopyPolicy';
 import type { FrameContext } from './types';
 import { getClipTimeInfo, getMediaFileForClip } from './FrameContext';
 import { syncReverseOrNonstandardPlayback } from './videoSyncHtmlReversePlayback';
@@ -130,7 +131,10 @@ export class VideoSyncHtmlClipCoordinator {
       !isInteractivePreview &&
       this.deps.clipWasPlaying.has(clip.id);
     if (this.deps.warmups.isWarming(video)) {
-      if (isInteractivePreview || justStoppedPlayback) {
+      // A proactive warmup must never own an element after its clip becomes
+      // active. Continuing to wait here suppresses the normal play path until
+      // the watchdog finishes, which presents as a black clip boundary.
+      if (ctx.isPlaying || isInteractivePreview || justStoppedPlayback) {
         this.deps.clearWarmupState(video);
       } else {
         this.deps.maybeRetargetActiveWarmup(clip.id, video, timeInfo.clipTime, ctx.now, {
@@ -324,11 +328,15 @@ export class VideoSyncHtmlClipCoordinator {
       const prevTrack = clip.trackId ? this.deps.getHandoffTrackState(clip.trackId) : undefined;
       const actualVideo = (prevTrack && prevTrack.videoElement !== video)
         ? prevTrack.videoElement : video;
+      const pauseTargetTime = actualVideo.currentTime;
+      const capturedBeforeAndroidPause =
+        isAndroidVideoFrameRuntime() &&
+        !actualVideo.paused &&
+        renderHostPort.captureVideoFrameAtTime(actualVideo, pauseTargetTime, clip.id);
       if (!actualVideo.paused) {
         actualVideo.pause();
         vfPipelineMonitor.record('vf_pause', { clipId: clip.id });
       }
-      const pauseTargetTime = actualVideo.currentTime;
       const effectiveSpeed = timeInfo.absSpeed > 0.01 ? timeInfo.absSpeed : 1;
       const videoClipTime = pauseTargetTime;
       const newPlayheadPos = clip.reversed
@@ -361,7 +369,10 @@ export class VideoSyncHtmlClipCoordinator {
       }
 
       renderHostPort.markVideoFramePresented(actualVideo, pauseTargetTime, clip.id);
-      if (!renderHostPort.captureVideoFrameAtTime(actualVideo, pauseTargetTime, clip.id)) {
+      if (
+        !capturedBeforeAndroidPause &&
+        !renderHostPort.captureVideoFrameAtTime(actualVideo, pauseTargetTime, clip.id)
+      ) {
         renderHostPort.ensureVideoFrameCached(actualVideo, clip.id);
       }
       if ((videoAdvanced || videoLagWithinTolerance) && shouldSnapPlayheadToStopFrame) {

@@ -42,3 +42,18 @@ export function appendReferenceMediaFileIds(currentIds: string[], nextIds: strin
 
   return result;
 }
+
+export function reorderReferenceMediaFileIds(
+  currentIds: string[],
+  draggedId: string,
+  targetId: string,
+): string[] {
+  const draggedIndex = currentIds.indexOf(draggedId);
+  const targetIndex = currentIds.indexOf(targetId);
+  if (draggedId === targetId || draggedIndex < 0 || targetIndex < 0) return currentIds;
+
+  const reorderedIds = [...currentIds];
+  reorderedIds.splice(draggedIndex, 1);
+  reorderedIds.splice(targetIndex, 0, draggedId);
+  return reorderedIds;
+}

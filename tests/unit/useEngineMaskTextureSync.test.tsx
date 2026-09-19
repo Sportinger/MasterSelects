@@ -56,10 +56,24 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   mocks.mediaState.compositions = [];
+  mocks.timelineState.clips = [];
+  mocks.timelineState.getInterpolatedMasks.mockReset();
   mocks.findActiveTransitionPlanForTrack.mockReset();
 });
 
 describe('useEngineMaskTextureSync', () => {
+  it('leaves nested masks to the nested renderer and releases inactive root masks', () => {
+    const mask = { id: 'mask', vertices: [], position: { x: 0, y: 0 }, mode: 'add', enabled: true };
+    mocks.timelineState.clips = [{ id: 'root', startTime: 0, duration: 1,
+      nestedClips: [{ id: 'nested', startTime: 0, duration: 1, masks: [mask] }] }] as never;
+    mocks.timelineState.getInterpolatedMasks.mockReturnValue([mask]);
+    const { result } = renderHook(() => useEngineMaskTextureSync(true));
+    expect(mocks.updateMaskTexture).toHaveBeenCalledTimes(1);
+    expect(mocks.updateMaskTexture).toHaveBeenCalledWith('root', expect.anything());
+    expect(mocks.timelineState.getInterpolatedMasks).not.toHaveBeenCalledWith('nested', expect.anything());
+    act(() => result.current(false, 2));
+    expect(mocks.removeMaskTexture).toHaveBeenCalledWith('root');
+  });
   it('removes a stale transition mask when its v2 map becomes invalid', () => {
     const mask = {
       id: 'source-mask', name: 'Source mask', closed: true, opacity: 1, feather: 0, inverted: false,

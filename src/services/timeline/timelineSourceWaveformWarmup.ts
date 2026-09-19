@@ -1,5 +1,8 @@
 import { useTimelineStore } from '../../stores/timeline';
-import type { TimelineClipDragPreview } from '../../stores/timeline/types';
+import type {
+  GenerateClipAudioAnalysisOptions,
+  TimelineClipDragPreview,
+} from '../../stores/timeline/types';
 import type { ClipAudioState } from '../../types/audio';
 import {
   hasLegacyWaveformSamples,
@@ -9,8 +12,16 @@ import {
   clearTimelineWarmupTimers,
   getTimelineWarmupTimerDeps,
 } from './timelineWarmupTimers';
+import {
+  isTimelineWaveformWarmupPlaybackSuppressed,
+  setTimelineWaveformWarmupPlaybackSuppressed,
+} from './timelineWaveformPlaybackGate';
+import { readTimelineRuntimeState } from './timelineRuntimeCoordinator';
 
 const DEFAULT_WAVEFORM_GENERATION_DELAY_MS = 300;
+const FAILED_GENERATION_RETRY_DELAY_MS = 60_000;
+const MAX_GENERATION_ATTEMPTS = 3;
+const MAX_FAILED_GENERATIONS = 256;
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 
@@ -24,6 +35,7 @@ export interface TimelineSourceWaveformClipRef {
   waveform?: readonly number[];
   waveformChannels?: readonly (readonly number[])[];
   waveformGenerating?: boolean;
+  needsReload?: boolean;
   audioState?: Pick<ClipAudioState, 'processedAnalysisRefs' | 'sourceAnalysisRefs'> | null;
   source?: {
     type?: string | null;
@@ -41,7 +53,10 @@ export interface TimelineSourceWaveformWarmupState {
   clips: readonly TimelineSourceWaveformClipRef[];
   isPlaying?: boolean;
   clipDragPreview?: TimelineClipDragPreview | null;
-  generateWaveformForClip: (clipId: string) => Promise<void>;
+  generateWaveformForClip: (
+    clipId: string,
+    options?: GenerateClipAudioAnalysisOptions,
+  ) => Promise<void>;
 }
 
 export interface TimelineSourceWaveformWarmupDeps {
@@ -68,6 +83,7 @@ export type TimelineSourceWaveformWarmupStatus =
   | 'generated'
   | 'ready'
   | 'blocked'
+  | 'failed'
   | 'skipped';
 
 export interface TimelineSourceWaveformWarmupResult {
@@ -77,11 +93,21 @@ export interface TimelineSourceWaveformWarmupResult {
 
 const scheduledSourceWaveformTimers = new Map<string, TimerHandle>();
 const inFlightSourceWaveformGenerations = new Map<string, Promise<TimelineSourceWaveformWarmupResult>>();
+// Runtime-only: a manual regeneration still bypasses automatic retry limits.
+const failedSourceWaveformGenerations = new Map<string, {
+  sourceKey: string;
+  file: TimelineSourceWaveformClipRef['file'];
+  attempts: number;
+  retryAt: number;
+}>();
+export function setTimelineSourceWaveformWarmupPlaybackSuppressed(suppressed: boolean): void {
+  setTimelineWaveformWarmupPlaybackSuppressed(suppressed);
+}
 
 function getDefaultDeps(): TimelineSourceWaveformWarmupDeps {
   return {
     getState: () => {
-      const state = useTimelineStore.getState();
+      const state = readTimelineRuntimeState(useTimelineStore);
       return {
         clips: state.clips,
         isPlaying: state.isPlaying,
@@ -99,6 +125,7 @@ function isSourceWaveformClip(clip: TimelineSourceWaveformClipRef): boolean {
 
 function canGenerateTimelineSourceWaveform(clip: TimelineSourceWaveformClipRef): boolean {
   return isSourceWaveformClip(clip) &&
+    clip.needsReload !== true &&
     !clip.waveformGenerating &&
     !hasTimelineWaveformData(clip);
 }
@@ -112,6 +139,7 @@ export function createTimelineSourceWaveformGenerationRequest(
   const sourceKey = clip.file
     ? [
         clip.id,
+        clip.mediaFileId ?? clip.source?.mediaFileId ?? '',
         clip.file.name,
         clip.file.size,
         clip.file.lastModified,
@@ -165,7 +193,7 @@ export async function warmTimelineSourceWaveformGeneration(
 ): Promise<TimelineSourceWaveformWarmupResult> {
   const deps = options.deps ?? getDefaultDeps();
   const state = deps.getState();
-  if (state.isPlaying || state.clipDragPreview) {
+  if (isTimelineWaveformWarmupPlaybackSuppressed() || state.isPlaying || state.clipDragPreview) {
     return { clipId: request.clipId, status: 'blocked' };
   }
 
@@ -179,8 +207,36 @@ export async function warmTimelineSourceWaveformGeneration(
   const inFlight = inFlightSourceWaveformGenerations.get(currentRequest.requestKey);
   if (inFlight) return inFlight;
 
-  const generation = state.generateWaveformForClip(currentRequest.clipId)
-    .then(() => ({ clipId: currentRequest.clipId, status: 'generated' as const }))
+  const sourceKey = createTimelineSourceWaveformGenerationRequest(clip)!.requestKey;
+  const previousFailure = failedSourceWaveformGenerations.get(clip.id);
+  const failure = previousFailure?.sourceKey === sourceKey && previousFailure.file === clip.file
+    ? previousFailure : undefined;
+  if (failure && (failure.attempts >= MAX_GENERATION_ATTEMPTS || Date.now() < failure.retryAt)) {
+    return { clipId: clip.id, status: 'blocked' };
+  }
+
+  const recordFailure = (): TimelineSourceWaveformWarmupResult => {
+    failedSourceWaveformGenerations.delete(clip.id);
+    failedSourceWaveformGenerations.set(clip.id, {
+      sourceKey,
+      file: clip.file,
+      attempts: (failure?.attempts ?? 0) + 1,
+      retryAt: Date.now() + FAILED_GENERATION_RETRY_DELAY_MS,
+    });
+    if (failedSourceWaveformGenerations.size > MAX_FAILED_GENERATIONS) {
+      failedSourceWaveformGenerations.delete(failedSourceWaveformGenerations.keys().next().value!);
+    }
+    return { clipId: clip.id, status: 'failed' };
+  };
+
+  const generation = state.generateWaveformForClip(currentRequest.clipId, { derivedOnly: true })
+    .then((): TimelineSourceWaveformWarmupResult => {
+      const latestClip = deps.getState().clips.find(candidate => candidate.id === clip.id);
+      if (!latestClip) return { clipId: clip.id, status: 'skipped' };
+      if (!hasTimelineWaveformData(latestClip)) return recordFailure();
+      failedSourceWaveformGenerations.delete(clip.id);
+      return { clipId: clip.id, status: 'generated' };
+    }, recordFailure)
     .finally(() => {
       inFlightSourceWaveformGenerations.delete(currentRequest.requestKey);
     });
@@ -228,4 +284,6 @@ export function resetTimelineSourceWaveformWarmupForTest(): void {
   clearTimelineWarmupTimers(scheduledSourceWaveformTimers.values());
   scheduledSourceWaveformTimers.clear();
   inFlightSourceWaveformGenerations.clear();
+  failedSourceWaveformGenerations.clear();
+  setTimelineWaveformWarmupPlaybackSuppressed(false);
 }

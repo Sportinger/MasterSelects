@@ -1,14 +1,26 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.unmock('../../src/stores/settingsStore');
+
 import {
   FACTORY_3D_EDIT_LAYOUT_ID,
   FACTORY_AUDIO_EDIT_LAYOUT_ID,
+  FACTORY_COLOR_LAYOUT_ID,
+  FACTORY_LIVE_LAYOUT_ID,
+  FACTORY_MOBILE_LAYOUT_ID,
+  FACTORY_MEDIUM_EDIT_LAYOUT_ID,
+  FACTORY_VERTICAL_MOBILE_LAYOUT_ID,
   FACTORY_START_LAYOUT_ID,
   FACTORY_VIDEO_EDIT_LAYOUT_ID,
   getFactoryDockLayouts,
   useDockStore,
 } from '../../src/stores/dockStore';
+import { resolveMobileLayoutForComposition } from '../../src/components/dock/mobileLayoutOrientation';
+import { mergeFactoryDockLayouts } from '../../src/stores/dockStore/layoutPersistence';
 import { DEFAULT_TRACKS, useTimelineStore } from '../../src/stores/timeline';
+import { useSettingsStore } from '../../src/stores/settingsStore';
 import type { DockLayout, DockNode, DockTabGroup, PanelType } from '../../src/types/dock';
+import { createMockClip } from '../helpers/mockData';
 
 function findTabGroup(node: DockNode, groupId: string): DockTabGroup | null {
   if (node.kind === 'tab-group') {
@@ -24,6 +36,7 @@ function panelTypes(group: DockTabGroup | null): PanelType[] {
 describe('dock store saved layouts', () => {
   beforeEach(() => {
     localStorage.clear();
+    useSettingsStore.setState({ theme: 'dark' });
     useDockStore.setState({
       browserWindowPanels: [],
       savedLayouts: getFactoryDockLayouts(),
@@ -70,9 +83,11 @@ describe('dock store saved layouts', () => {
     const rightGroup = findTabGroup(layout.root, 'right-group');
     const timelineGroup = findTabGroup(layout.root, 'timeline-group');
 
-    expect(panelTypes(leftGroup)).toEqual(['media', 'transitions']);
+    expect(panelTypes(leftGroup)).toEqual(['media', 'ai-studio', 'transitions']);
     expect(panelTypes(previewGroup)).toEqual(['preview']);
-    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'export', 'history']);
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'export', 'color-controls']);
+    expect(leftGroup?.panels[1]?.title).toBe('AI Studio');
+    expect(rightGroup?.panels[2]?.title).toBe('Coloring');
     expect(rightGroup?.activeIndex).toBe(1);
     expect(panelTypes(timelineGroup)).toEqual(['timeline']);
 
@@ -82,6 +97,112 @@ describe('dock store saved layouts', () => {
     expect(timeline.tracks.find((track) => track.type === 'video')?.height).toBe(70);
     expect(timeline.tracks.find((track) => track.type === 'audio')?.height).toBe(48);
     expect(useDockStore.getState().activeSavedLayoutId).toBe(FACTORY_VIDEO_EDIT_LAYOUT_ID);
+  });
+
+  it('uses the focused AI, assets, viewer, and timeline structure for Medium', () => {
+    useDockStore.getState().loadSavedLayout(FACTORY_MEDIUM_EDIT_LAYOUT_ID);
+
+    const state = useDockStore.getState();
+    expect(state.activeSavedLayoutId).toBe(FACTORY_MEDIUM_EDIT_LAYOUT_ID);
+    expect(state.layout.root).toMatchObject({
+      kind: 'split',
+      direction: 'horizontal',
+      ratio: 0.305,
+    });
+    expect(panelTypes(findTabGroup(state.layout.root, 'medium-ai-group'))).toEqual([
+      'ai-studio',
+    ]);
+    expect(panelTypes(findTabGroup(state.layout.root, 'medium-assets-group'))).toEqual([
+      'media',
+      'discover',
+    ]);
+    expect(panelTypes(findTabGroup(state.layout.root, 'medium-preview-group'))).toEqual([
+      'preview',
+    ]);
+    expect(panelTypes(findTabGroup(state.layout.root, 'medium-timeline-group'))).toEqual([
+      'timeline',
+    ]);
+    expect(useTimelineStore.getState().trackHeaderWidth).toBe(164);
+  });
+
+  it('uses the scene-focused monitor, program, analytics, and chat structure for Live', () => {
+    useDockStore.getState().loadSavedLayout(FACTORY_LIVE_LAYOUT_ID);
+
+    const state = useDockStore.getState();
+    expect(state.activeSavedLayoutId).toBe(FACTORY_LIVE_LAYOUT_ID);
+    expect(state.layout.root).toMatchObject({
+      kind: 'split',
+      direction: 'horizontal',
+      ratio: 0.846,
+      children: [
+        {
+          kind: 'split',
+          direction: 'horizontal',
+          ratio: 0.279,
+          children: [
+            {
+              kind: 'split',
+              direction: 'vertical',
+              ratio: 0.24,
+              children: [
+                { kind: 'tab-group' },
+                { kind: 'split', direction: 'vertical', ratio: 0.32 },
+              ],
+            },
+            {
+              kind: 'split',
+              direction: 'vertical',
+              ratio: 0.468,
+              children: [
+                { kind: 'tab-group' },
+                { kind: 'split', direction: 'vertical', ratio: 0.425 },
+              ],
+            },
+          ],
+        },
+        { kind: 'tab-group' },
+      ],
+    });
+
+    const upperPreview = findTabGroup(state.layout.root, 'live-preview-video-2-group');
+    const lowerPreview = findTabGroup(state.layout.root, 'live-preview-video-1-group');
+    const controls = findTabGroup(state.layout.root, 'live-controls-group');
+    const program = findTabGroup(state.layout.root, 'preview-group');
+    const analytics = findTabGroup(state.layout.root, 'live-analytics-group');
+    const scenes = findTabGroup(state.layout.root, 'timeline-group');
+    const chat = findTabGroup(state.layout.root, 'live-chat-group');
+
+    expect(panelTypes(upperPreview)).toEqual(['preview']);
+    expect(upperPreview?.panels[0].data).toMatchObject({
+      source: { type: 'layer-index', compositionId: null, layerIndex: 0 },
+    });
+    expect(panelTypes(lowerPreview)).toEqual(['preview']);
+    expect(lowerPreview?.panels[0].data).toMatchObject({
+      source: { type: 'layer-index', compositionId: null, layerIndex: 1 },
+    });
+    expect(panelTypes(controls)).toEqual(['go-live', 'media', 'clip-properties']);
+    expect(controls?.activeIndex).toBe(2);
+    expect(panelTypes(program)).toEqual(['preview']);
+    expect(program?.panels[0]).toMatchObject({
+      title: 'Program',
+      data: { source: { type: 'activeComp' } },
+    });
+    expect(panelTypes(analytics)).toEqual(['stream-analytics']);
+    expect(panelTypes(scenes)).toEqual(['timeline']);
+    expect(scenes?.panels[0]).toMatchObject({
+      id: 'live-timeline',
+      data: { timelineSurfaceMode: 'slot-grid' },
+    });
+    expect(panelTypes(chat)).toEqual(['stream-chat']);
+  });
+
+  it('opens Stats beside Analytics in the Live layout', () => {
+    useDockStore.getState().loadSavedLayout(FACTORY_LIVE_LAYOUT_ID);
+    useDockStore.getState().activatePanelType('stats');
+
+    const analyticsGroup = findTabGroup(useDockStore.getState().layout.root, 'live-analytics-group');
+    expect(panelTypes(analyticsGroup)).toEqual(['stream-analytics', 'stats']);
+    expect(analyticsGroup?.panels[analyticsGroup.activeIndex]?.type).toBe('stats');
   });
 
   it('activates the history tab when requested from the panels menu', () => {
@@ -110,7 +231,7 @@ describe('dock store saved layouts', () => {
 
     let layout = useDockStore.getState().layout;
     let rightGroup = findTabGroup(layout.root, 'right-group');
-    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'history']);
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'color-controls']);
     expect(layout.floatingPanels).toHaveLength(1);
     expect(layout.floatingPanels[0]).toMatchObject({
       panel: { id: 'export', type: 'export' },
@@ -129,7 +250,7 @@ describe('dock store saved layouts', () => {
     expect(layout.floatingPanels).toEqual([]);
     expect(panelTypes(previewGroup)).toEqual(['preview', 'export']);
     expect(previewGroup?.activeIndex).toBe(1);
-    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'history']);
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'color-controls']);
   });
 
   it('docks a floating panel when its floating tab is dragged onto a drop target', () => {
@@ -166,7 +287,7 @@ describe('dock store saved layouts', () => {
       panel: { id: 'export', type: 'export', title: 'Export' },
       returnGroupId: 'right-group',
     });
-    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'history']);
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'color-controls']);
     expect(layout.floatingPanels).toEqual([]);
     expect(useDockStore.getState().browserWindowPanels).toEqual([windowPanel]);
 
@@ -185,7 +306,7 @@ describe('dock store saved layouts', () => {
     rightGroup = findTabGroup(layout.root, 'right-group');
     expect(panelTypes(previewGroup)).toEqual(['preview', 'export']);
     expect(previewGroup?.activeIndex).toBe(1);
-    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'history']);
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'color-controls']);
     expect(useDockStore.getState().browserWindowPanels).toEqual([]);
   });
 
@@ -211,7 +332,49 @@ describe('dock store saved layouts', () => {
 
     const rightGroup = findTabGroup(useDockStore.getState().layout.root, 'right-group');
     expect(useDockStore.getState().browserWindowPanels).toEqual([windowPanel]);
-    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'history']);
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'color-controls']);
+  });
+
+  it('loads the authored full-height media layout only for Resolve Video', () => {
+    useSettingsStore.setState({ theme: 'resolve' });
+    useDockStore.getState().loadSavedLayout(FACTORY_VIDEO_EDIT_LAYOUT_ID);
+
+    const layout = useDockStore.getState().layout;
+    expect(layout.root).toMatchObject({
+      kind: 'split',
+      direction: 'horizontal',
+      ratio: 0.335889,
+    });
+    expect(panelTypes(findTabGroup(layout.root, 'left-group'))).toEqual([
+      'media',
+      'ai-studio',
+      'transitions',
+    ]);
+    expect(panelTypes(findTabGroup(layout.root, 'right-group'))).toEqual([
+      'clip-properties',
+      'color-controls',
+      'export',
+    ]);
+    expect(findTabGroup(layout.root, 'right-group')?.panels[1]?.title).toBe('Coloring');
+    expect(layout.panelZoom['clip-properties']).toBe(1);
+
+    useSettingsStore.setState({ theme: 'dark' });
+    useDockStore.getState().loadSavedLayout(FACTORY_VIDEO_EDIT_LAYOUT_ID);
+    expect(useDockStore.getState().layout.root).toMatchObject({
+      kind: 'split',
+      direction: 'vertical',
+      ratio: 0.6698039215686274,
+    });
+  });
+
+  it('adds independent Color Controls instances to the same tab group', () => {
+    useDockStore.getState().addPanelTypeToGroup('color-controls', 'right-group');
+    useDockStore.getState().addPanelTypeToGroup('color-controls', 'right-group');
+
+    const rightGroup = findTabGroup(useDockStore.getState().layout.root, 'right-group');
+    const controls = rightGroup?.panels.filter(panel => panel.type === 'color-controls') ?? [];
+    expect(controls).toHaveLength(3);
+    expect(new Set(controls.map(panel => panel.id)).size).toBe(3);
   });
 
   it('does not restore the optional Start layout from a project', () => {
@@ -284,17 +447,17 @@ describe('dock store saved layouts', () => {
     useDockStore.getState().changePanelType('clip-properties', 'audio-mixer');
 
     const rightGroup = findTabGroup(useDockStore.getState().layout.root, 'right-group');
-    expect(panelTypes(rightGroup)).toEqual(['audio-mixer', 'export', 'history']);
+    expect(panelTypes(rightGroup)).toEqual(['audio-mixer', 'export', 'color-controls']);
     expect(rightGroup?.activeIndex).toBe(0);
     expect(useDockStore.getState().isPanelTypeVisible('clip-properties')).toBe(false);
     expect(useDockStore.getState().isPanelTypeVisible('audio-mixer')).toBe(true);
   });
 
   it('changes a dock tab by moving an already visible panel instead of duplicating it', () => {
-    useDockStore.getState().changePanelType('clip-properties', 'history');
+    useDockStore.getState().changePanelType('clip-properties', 'discover');
 
     const rightGroup = findTabGroup(useDockStore.getState().layout.root, 'right-group');
-    expect(panelTypes(rightGroup)).toEqual(['history', 'export']);
+    expect(panelTypes(rightGroup)).toEqual(['discover', 'export', 'color-controls']);
     expect(rightGroup?.activeIndex).toBe(0);
   });
 
@@ -326,9 +489,15 @@ describe('dock store saved layouts', () => {
     expect(mixerProperties.direction).toBe('horizontal');
     expect(mixerProperties.ratio).toBeCloseTo(0.8);
 
-    expect(panelTypes(findTabGroup(bottom.children[0], 'left-group'))).toEqual(['media']);
+    expect(panelTypes(findTabGroup(bottom.children[0], 'left-group'))).toEqual([
+      'media',
+      'discover',
+      'transitions',
+    ]);
     expect(panelTypes(findTabGroup(mixerProperties.children[0], 'audio-mixer-group'))).toEqual(['audio-mixer']);
-    expect(panelTypes(findTabGroup(mixerProperties.children[1], 'right-group'))).toEqual(['clip-properties', 'history']);
+    const rightGroup = findTabGroup(mixerProperties.children[1], 'right-group');
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'export', 'ai-studio']);
+    expect(rightGroup?.activeIndex).toBe(1);
 
     const timeline = useTimelineStore.getState();
     expect(timeline.audioFocusMode).toBe(true);
@@ -351,8 +520,14 @@ describe('dock store saved layouts', () => {
     if (workspace.kind !== 'split' || sidebar.kind !== 'split') return;
 
     expect(panelTypes(findTabGroup(workspace, 'timeline-group'))).toEqual(['timeline']);
-    expect(panelTypes(findTabGroup(sidebar, 'left-group'))).toEqual(['media']);
-    expect(panelTypes(findTabGroup(sidebar, 'right-group'))).toEqual(['clip-properties', 'export', 'history']);
+    expect(panelTypes(findTabGroup(sidebar, 'left-group'))).toEqual([
+      'media',
+      'discover',
+      'transitions',
+    ]);
+    const rightGroup = findTabGroup(sidebar, 'right-group');
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'export', 'ai-studio']);
+    expect(rightGroup?.activeIndex).toBe(1);
 
     const previewPanels = ['front', 'side', 'top', 'perspective'].map((view) => (
       findTabGroup(workspace, `3d-edit-${view}-group`)?.panels[0]
@@ -391,7 +566,59 @@ describe('dock store saved layouts', () => {
     expect(useTimelineStore.getState().playheadPosition).toBe(13);
   });
 
-  it('loads the chat-only Start layout as a single full-size panel', () => {
+  it('creates the automatic 3D camera on a new top layer when the top layer is occupied', () => {
+    const occupiedTrack = useTimelineStore.getState().tracks.find((track) => track.type === 'video')!;
+    const occupiedClip = createMockClip({
+      id: 'existing-video',
+      trackId: occupiedTrack.id,
+      startTime: 0,
+      duration: 8,
+      outPoint: 8,
+    });
+    useTimelineStore.setState({ clips: [occupiedClip], duration: 8 });
+    const videoTrackCountBefore = useTimelineStore.getState().tracks.filter((track) => track.type === 'video').length;
+
+    useDockStore.getState().loadSavedLayout(FACTORY_3D_EDIT_LAYOUT_ID);
+
+    const timeline = useTimelineStore.getState();
+    const camera = timeline.clips.find((clip) => clip.source?.type === 'camera');
+    const videoTracks = timeline.tracks.filter((track) => track.type === 'video');
+    expect(videoTracks).toHaveLength(videoTrackCountBefore + 1);
+    expect(camera).toMatchObject({
+      trackId: videoTracks[0]?.id,
+      startTime: 0,
+      duration: 8,
+    });
+    expect(camera?.trackId).not.toBe(occupiedTrack.id);
+    expect(timeline.clips.filter((clip) => clip.trackId === camera?.trackId)).toEqual([camera]);
+  });
+
+  it('reuses an empty top video layer above occupied lower layers', () => {
+    const lowerTrack = useTimelineStore.getState().tracks.find((track) => track.type === 'video')!;
+    const emptyTopTrackId = useTimelineStore.getState().addTrack('video');
+    useTimelineStore.setState({
+      clips: [createMockClip({
+        id: 'lower-video',
+        trackId: lowerTrack.id,
+        startTime: 0,
+        duration: 6,
+        outPoint: 6,
+      })],
+      duration: 6,
+    });
+    const videoTrackCountBefore = useTimelineStore.getState().tracks.filter((track) => track.type === 'video').length;
+
+    useDockStore.getState().loadSavedLayout(FACTORY_3D_EDIT_LAYOUT_ID);
+
+    const timeline = useTimelineStore.getState();
+    const camera = timeline.clips.find((clip) => clip.source?.type === 'camera');
+    expect(timeline.tracks.filter((track) => track.type === 'video')).toHaveLength(videoTrackCountBefore);
+    expect(camera?.trackId).toBe(emptyTopTrackId);
+    expect(timeline.tracks.findIndex((track) => track.id === camera?.trackId))
+      .toBeLessThan(timeline.tracks.findIndex((track) => track.id === lowerTrack.id));
+  });
+
+  it('loads the Chat layout as a single full-size panel', () => {
     useDockStore.getState().loadSavedLayout(FACTORY_START_LAYOUT_ID);
 
     const state = useDockStore.getState();
@@ -401,46 +628,235 @@ describe('dock store saved layouts', () => {
         kind: 'tab-group',
         id: 'start-group',
         activeIndex: 0,
-        panels: [{ id: 'start', type: 'start', title: 'Start' }],
+        panels: [{ id: 'start', type: 'start', title: 'Chat' }],
       },
       floatingPanels: [],
     });
   });
 
-  it('keeps Start as a factory favorite immediately after 3D Edit', () => {
+  it('loads H Mobile with preview above tools and timeline', () => {
+    useDockStore.getState().loadSavedLayout(FACTORY_MOBILE_LAYOUT_ID);
+
+    const state = useDockStore.getState();
+    expect(state.activeSavedLayoutId).toBe(FACTORY_MOBILE_LAYOUT_ID);
+    expect(state.layout.root.kind).toBe('split');
+    if (state.layout.root.kind !== 'split') return;
+
+    expect(state.layout.root.direction).toBe('vertical');
+    expect(state.layout.root.ratio).toBeCloseTo(0.36);
+    expect(panelTypes(findTabGroup(state.layout.root, 'preview-group'))).toEqual(['preview']);
+    expect(panelTypes(findTabGroup(state.layout.root, 'left-group'))).toEqual([
+      'media',
+      'ai-studio',
+      'transitions',
+    ]);
+    const rightGroup = findTabGroup(state.layout.root, 'right-group');
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'export', 'color-controls']);
+    expect(rightGroup?.panels[2]?.title).toBe('Coloring');
+    expect(rightGroup?.activeIndex).toBe(1);
+    expect(panelTypes(findTabGroup(state.layout.root, 'timeline-group'))).toEqual(['timeline']);
+  });
+
+  it('loads V Mobile with preview left, ordered tools right, and timeline below', () => {
+    const previousRoot = useDockStore.getState().layout.root;
+    const previousTimelineHeightRatio = previousRoot.kind === 'split'
+      ? 1 - previousRoot.ratio
+      : null;
+    useDockStore.getState().loadSavedLayout(FACTORY_VERTICAL_MOBILE_LAYOUT_ID);
+
+    const state = useDockStore.getState();
+    expect(state.activeSavedLayoutId).toBe(FACTORY_VERTICAL_MOBILE_LAYOUT_ID);
+    expect(state.layout.root.kind).toBe('split');
+    if (state.layout.root.kind !== 'split') return;
+
+    expect(state.layout.root.direction).toBe('vertical');
+    expect(1 - state.layout.root.ratio).toBeCloseTo(previousTimelineHeightRatio!);
+    const top = state.layout.root.children[0];
+    expect(top.kind).toBe('split');
+    if (top.kind !== 'split') return;
+    expect(top.direction).toBe('horizontal');
+    expect(top.ratio).toBeCloseTo(0.42);
+    expect(panelTypes(findTabGroup(state.layout.root, 'mobile-v-preview-group'))).toEqual(['preview']);
+    expect(panelTypes(findTabGroup(state.layout.root, 'mobile-v-tools-group'))).toEqual([
+      'media',
+      'ai-studio',
+      'transitions',
+      'clip-properties',
+      'export',
+      'color-controls',
+    ]);
+    expect(findTabGroup(state.layout.root, 'mobile-v-tools-group')?.panels[5]?.title).toBe('Coloring');
+    expect(panelTypes(findTabGroup(state.layout.root, 'mobile-v-timeline-group'))).toEqual(['timeline']);
+  });
+
+  it('chooses the matching Mobile layout only while a Mobile layout is active', () => {
+    expect(resolveMobileLayoutForComposition({
+      activeLayoutId: FACTORY_MOBILE_LAYOUT_ID,
+      compositionWidth: 1080,
+      compositionHeight: 1920,
+    })).toBe(FACTORY_VERTICAL_MOBILE_LAYOUT_ID);
+    expect(resolveMobileLayoutForComposition({
+      activeLayoutId: FACTORY_VERTICAL_MOBILE_LAYOUT_ID,
+      compositionWidth: 1920,
+      compositionHeight: 1080,
+    })).toBe(FACTORY_MOBILE_LAYOUT_ID);
+    expect(resolveMobileLayoutForComposition({
+      activeLayoutId: FACTORY_VIDEO_EDIT_LAYOUT_ID,
+      compositionWidth: 1080,
+      compositionHeight: 1920,
+    })).toBeNull();
+    expect(resolveMobileLayoutForComposition({
+      activeLayoutId: FACTORY_VIDEO_EDIT_LAYOUT_ID,
+      compositionWidth: 1080,
+      compositionHeight: 1920,
+      enterMobileLayout: true,
+    })).toBe(FACTORY_VERTICAL_MOBILE_LAYOUT_ID);
+  });
+
+  it('keeps the Start facade active while project state restores in the background', () => {
+    useDockStore.getState().loadSavedLayout(FACTORY_START_LAYOUT_ID);
+    const videoLayout = getFactoryDockLayouts()
+      .find((savedLayout) => savedLayout.id === FACTORY_VIDEO_EDIT_LAYOUT_ID);
+    expect(videoLayout).toBeDefined();
+
+    useDockStore.getState().setLayoutFromProject(videoLayout!.layout);
+
+    const state = useDockStore.getState();
+    expect(state.activeSavedLayoutId).toBe(FACTORY_START_LAYOUT_ID);
+    expect(panelTypes(findTabGroup(state.layout.root, 'start-group'))).toEqual(['start']);
+  });
+
+  it('keeps the device-managed Mobile layout active while project state restores', () => {
+    useDockStore.getState().loadSavedLayout(FACTORY_MOBILE_LAYOUT_ID);
+    const videoLayout = getFactoryDockLayouts()
+      .find((savedLayout) => savedLayout.id === FACTORY_VIDEO_EDIT_LAYOUT_ID);
+    expect(videoLayout).toBeDefined();
+
+    useDockStore.getState().setLayoutFromProject(videoLayout!.layout);
+
+    const state = useDockStore.getState();
+    expect(state.activeSavedLayoutId).toBe(FACTORY_MOBILE_LAYOUT_ID);
+    expect(panelTypes(findTabGroup(state.layout.root, 'left-group'))).toEqual([
+      'media',
+      'ai-studio',
+      'transitions',
+    ]);
+    expect(panelTypes(findTabGroup(state.layout.root, 'right-group'))).toEqual([
+      'clip-properties',
+      'export',
+      'color-controls',
+    ]);
+  });
+
+  it('keeps Chat as a factory favorite immediately after 3D Edit', () => {
     const savedLayouts = useDockStore.getState().savedLayouts;
     const videoLayout = savedLayouts.find((layout) => layout.id === FACTORY_VIDEO_EDIT_LAYOUT_ID);
     const audioLayout = savedLayouts.find((layout) => layout.id === FACTORY_AUDIO_EDIT_LAYOUT_ID);
+    const mobileLayout = savedLayouts.find((layout) => layout.id === FACTORY_MOBILE_LAYOUT_ID);
+    const mediumLayout = savedLayouts.find((layout) => layout.id === FACTORY_MEDIUM_EDIT_LAYOUT_ID);
+    const verticalMobileLayout = savedLayouts.find((layout) => layout.id === FACTORY_VERTICAL_MOBILE_LAYOUT_ID);
     const threeDLayout = savedLayouts.find((layout) => layout.id === FACTORY_3D_EDIT_LAYOUT_ID);
     const startLayout = savedLayouts.find((layout) => layout.id === FACTORY_START_LAYOUT_ID);
 
     expect(videoLayout).toMatchObject({
-      name: 'VIDEO EDIT',
+      name: 'Video',
       favorite: true,
       factory: true,
     });
     expect(audioLayout).toMatchObject({
-      name: 'AUDIO EDIT',
+      name: 'Audio',
       favorite: true,
       factory: true,
     });
     expect(threeDLayout).toMatchObject({
-      name: '3D EDIT',
+      name: '3D',
+      favorite: true,
+      factory: true,
+    });
+    expect(mediumLayout).toMatchObject({
+      name: 'Medium',
+      favorite: true,
+      factory: true,
+    });
+    expect(mobileLayout).toMatchObject({
+      name: 'Mobile',
+      favorite: true,
+      factory: true,
+    });
+    expect(verticalMobileLayout).toMatchObject({
+      name: 'Mobile',
       favorite: true,
       factory: true,
     });
     expect(startLayout).toMatchObject({
-      name: 'START',
+      name: 'Chat',
       favorite: true,
       factory: true,
     });
     expect(savedLayouts.map((layout) => layout.id)).toEqual([
       FACTORY_VIDEO_EDIT_LAYOUT_ID,
+      FACTORY_MEDIUM_EDIT_LAYOUT_ID,
+      FACTORY_MOBILE_LAYOUT_ID,
+      FACTORY_VERTICAL_MOBILE_LAYOUT_ID,
       FACTORY_AUDIO_EDIT_LAYOUT_ID,
       FACTORY_3D_EDIT_LAYOUT_ID,
+      FACTORY_COLOR_LAYOUT_ID,
+      FACTORY_LIVE_LAYOUT_ID,
       FACTORY_START_LAYOUT_ID,
     ]);
     expect(useDockStore.getState().defaultSavedLayoutId).toBe(FACTORY_VIDEO_EDIT_LAYOUT_ID);
+  });
+
+  it('refreshes Audio, 3D, and Live factory panels when stale dev overrides are restored', () => {
+    const staleLayouts = getFactoryDockLayouts();
+    const audioLayout = staleLayouts.find((layout) => layout.id === FACTORY_AUDIO_EDIT_LAYOUT_ID)!;
+    const audioLeftGroup = findTabGroup(audioLayout.layout.root, 'left-group')!;
+    const audioRightGroup = findTabGroup(audioLayout.layout.root, 'right-group')!;
+    audioLeftGroup.panels = [{ id: 'media', type: 'media', title: 'Media' }];
+    audioRightGroup.panels = [{ id: 'clip-properties', type: 'clip-properties', title: 'Properties' }];
+
+    const threeDLayout = staleLayouts.find((layout) => layout.id === FACTORY_3D_EDIT_LAYOUT_ID)!;
+    const threeDLeftGroup = findTabGroup(threeDLayout.layout.root, 'left-group')!;
+    const threeDRightGroup = findTabGroup(threeDLayout.layout.root, 'right-group')!;
+    threeDLeftGroup.panels = [{ id: 'media', type: 'media', title: 'Media' }];
+    threeDRightGroup.panels = [{ id: 'clip-properties', type: 'clip-properties', title: 'Properties' }];
+
+    const liveLayout = staleLayouts.find((layout) => layout.id === FACTORY_LIVE_LAYOUT_ID)!;
+    const liveControlsGroup = findTabGroup(liveLayout.layout.root, 'live-controls-group')!;
+    liveControlsGroup.panels = [{ id: 'live-go-live', type: 'go-live', title: 'Go Live' }];
+
+    const mergedLayouts = mergeFactoryDockLayouts(staleLayouts);
+    const mergedAudio = mergedLayouts.find((layout) => layout.id === FACTORY_AUDIO_EDIT_LAYOUT_ID)!;
+    const mergedThreeD = mergedLayouts.find((layout) => layout.id === FACTORY_3D_EDIT_LAYOUT_ID)!;
+    const mergedLive = mergedLayouts.find((layout) => layout.id === FACTORY_LIVE_LAYOUT_ID)!;
+
+    expect(mergedAudio.updatedAt).toBe(5);
+    expect(panelTypes(findTabGroup(mergedAudio.layout.root, 'left-group'))).toEqual([
+      'media',
+      'discover',
+      'transitions',
+    ]);
+    expect(panelTypes(findTabGroup(mergedAudio.layout.root, 'right-group'))).toEqual([
+      'clip-properties',
+      'export',
+      'ai-studio',
+    ]);
+    expect(panelTypes(findTabGroup(mergedThreeD.layout.root, 'left-group'))).toEqual([
+      'media',
+      'discover',
+      'transitions',
+    ]);
+    expect(panelTypes(findTabGroup(mergedThreeD.layout.root, 'right-group'))).toEqual([
+      'clip-properties',
+      'export',
+      'ai-studio',
+    ]);
+    expect(mergedLive.updatedAt).toBe(2);
+    expect(panelTypes(findTabGroup(mergedLive.layout.root, 'live-controls-group'))).toEqual([
+      'go-live',
+      'media',
+      'clip-properties',
+    ]);
   });
 
   it('allows built-in layouts to be removed from and restored to favorites', () => {

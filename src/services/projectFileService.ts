@@ -6,6 +6,7 @@ export {
   projectFileService,
   type ProjectFile,
   type ProjectSettings,
+  type ProjectMediaSourceRoot,
   type ProjectMediaFile,
   type ProjectComposition,
   type ProjectTrack,

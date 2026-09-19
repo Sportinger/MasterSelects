@@ -10,6 +10,15 @@
   background: var(--bg-primary);
 }
 
+.source-monitor-external-controls {
+  bottom: 56px;
+  transition: bottom 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.preview-container.transport-collapsed .source-monitor-external-controls {
+  bottom: 0;
+}
+
 .source-monitor-media {
   position: relative;
   flex: 1;
@@ -38,6 +47,24 @@
 
 .source-monitor-video {
   cursor: pointer;
+}
+
+.source-monitor-turbores-canvas {
+  width: auto;
+  height: auto;
+}
+
+.source-monitor-provider-error {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  max-width: min(560px, calc(100% - 32px));
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: #ffd9d9;
+  background: rgba(88, 16, 20, 0.9);
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 
 .source-monitor-audio-element {
@@ -488,6 +515,158 @@
   color: var(--bg-primary);
 }
 
+.source-monitor-toolbar-external {
+  width: 100%;
+  height: 56px;
+  min-height: 0;
+  box-sizing: border-box;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.source-monitor-toolbar-external.source-monitor-toolbar-commands-only {
+  min-height: 0;
+  padding: 0;
+}
+
+.source-monitor-toolbar-external .source-monitor-timeline-strip,
+.source-monitor-toolbar-external .source-monitor-timeline {
+  height: 16px;
+}
+
+.source-monitor-toolbar-external .source-monitor-timeline {
+  grid-template-rows: 16px;
+  align-items: center;
+  padding: 0 14px;
+}
+
+.source-monitor-toolbar-external .source-monitor-ruler {
+  display: none;
+}
+
+.source-monitor-toolbar-external .source-monitor-timeline-track {
+  height: 2px;
+  border: 0;
+  border-radius: 0;
+  background: var(--preview-transport-track, #464850);
+}
+
+.source-monitor-toolbar-external .source-monitor-timeline-range {
+  top: -2px;
+  bottom: -2px;
+}
+
+.source-monitor-toolbar-external .source-monitor-timeline-fill {
+  top: -1px;
+  bottom: -1px;
+}
+
+.source-monitor-toolbar-external .source-monitor-playhead {
+  top: -5px;
+  bottom: -5px;
+}
+
+.source-monitor-toolbar-external .source-monitor-playhead::before {
+  top: 4px;
+}
+
+.source-monitor-toolbar-external .source-monitor-playhead span {
+  top: -2px;
+  left: -3px;
+  width: 7px;
+  height: 7px;
+}
+
+.preview-transport .source-monitor-toolbar-external .source-monitor-mark-handle {
+  position: absolute;
+  display: block;
+  top: -6px;
+  width: 16px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 8px;
+  line-height: 1;
+  transform: translateX(-50%);
+  backdrop-filter: none;
+  transition: none;
+}
+
+.preview-transport .source-monitor-toolbar-external .source-monitor-mark-handle:hover,
+.preview-transport .source-monitor-toolbar-external .source-monitor-mark-handle:focus-visible {
+  border: 0;
+  background: transparent;
+  color: #fff;
+  outline: none;
+}
+
+.source-monitor-toolbar-external .source-monitor-mark-handle::before {
+  top: 5px;
+}
+
+.source-monitor-toolbar-external .source-monitor-mark-handle::after {
+  top: 0;
+  left: 4px;
+  width: 8px;
+  height: 7px;
+}
+
+.source-monitor-toolbar-external .source-monitor-control-row {
+  height: 40px;
+  min-height: 40px;
+  box-sizing: border-box;
+  grid-template-columns: minmax(52px, 1fr) minmax(0, auto) minmax(52px, 1fr);
+  gap: 6px;
+  padding: 0 12px;
+}
+
+.source-monitor-toolbar-external .source-monitor-control-row-commands-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.source-monitor-toolbar-external .source-monitor-center-controls {
+  max-width: 100%;
+  flex-wrap: nowrap;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.source-monitor-toolbar-external .source-monitor-center-controls::-webkit-scrollbar {
+  display: none;
+}
+
+.source-monitor-toolbar-external .source-monitor-transport,
+.source-monitor-toolbar-external .source-monitor-marks,
+.source-monitor-toolbar-external .source-monitor-edit-commands {
+  flex: none;
+  flex-wrap: nowrap;
+}
+
+.preview-transport .source-monitor-toolbar-external button.btn-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--text-inverse);
+}
+
+.preview-transport .source-monitor-toolbar-external button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.source-monitor-toolbar-external .source-monitor-timecode {
+  font-size: 11px;
+}
+
+.source-monitor-toolbar-external .source-monitor-timecode-current {
+  font-size: 12px;
+}
+
 .preview-source-label {
   flex: 1;
   min-width: 0;
@@ -524,6 +703,16 @@
   .source-monitor-center-controls {
     gap: 5px;
     flex-wrap: wrap;
+  }
+
+  .source-monitor-toolbar-external .source-monitor-control-row {
+    grid-template-columns: minmax(44px, 1fr) minmax(0, auto) minmax(44px, 1fr);
+    gap: 4px;
+    padding: 0 8px;
+  }
+
+  .source-monitor-toolbar-external .source-monitor-control-row-commands-only {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 }

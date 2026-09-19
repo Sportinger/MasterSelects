@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  calculateFillToFrameScale,
   calculateFitToFrameScale,
   calculateSourcePixelScale,
+  calculateStretchToFrameScale,
 } from '../../src/utils/sourcePixelScale';
 
 describe('source pixel scale', () => {
@@ -23,8 +25,22 @@ describe('source pixel scale', () => {
     expect(calculateFitToFrameScale(1080, 1920, 1920, 1080)).toBeCloseTo(1080 / 1920);
   });
 
+  it('fills the frame using the covering axis', () => {
+    expect(calculateFillToFrameScale(576, 1024, 1080, 1920)).toBeCloseTo(1.875);
+    expect(calculateFillToFrameScale(1920, 1080, 1080, 1920)).toBeCloseTo(1920 / 1080);
+  });
+
+  it('stretches each source axis independently to the frame', () => {
+    expect(calculateStretchToFrameScale(956, 718, 1920, 1080)).toEqual({
+      x: 1920 / 956,
+      y: 1080 / 718,
+    });
+  });
+
   it('falls back to identity when dimensions are unavailable', () => {
     expect(calculateSourcePixelScale(0, 1080, 1920, 1080)).toBe(1);
     expect(calculateFitToFrameScale(Number.NaN, 1080, 1920, 1080)).toBe(1);
+    expect(calculateFillToFrameScale(1920, 0, 1920, 1080)).toBe(1);
+    expect(calculateStretchToFrameScale(0, 1080, 1920, 1080)).toEqual({ x: 1, y: 1 });
   });
 });

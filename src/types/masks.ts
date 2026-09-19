@@ -15,6 +15,7 @@ export type MaskMode = 'add' | 'subtract' | 'intersect';
 export interface ClipMask {
   id: string;
   name: string;
+  purpose?: 'crop';        // Semantic system mask used by Resolve-style cropping
   vertices: MaskVertex[];
   closed: boolean;        // Is the path closed
   opacity: number;        // 0-1
@@ -25,6 +26,7 @@ export interface ClipMask {
   mode: MaskMode;
   expanded: boolean;      // UI state - expanded in properties panel
   position: { x: number; y: number };  // Offset in normalized coords (0-1)
+  rotation?: number;      // Whole-mask rotation in degrees around its geometry center
   enabled: boolean;       // Whether the mask affects rendering
   visible: boolean;       // Toggle outline visibility
   outlineColor?: string;  // Preview overlay stroke color

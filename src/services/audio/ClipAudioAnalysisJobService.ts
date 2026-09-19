@@ -129,6 +129,14 @@ export class ClipAudioAnalysisJobService {
     return matching.length;
   }
 
+  cancelKind(kind: ClipAudioAnalysisJobKind): number {
+    const matching = [...this.jobs.values()].filter((job) => job.kind === kind);
+    for (const job of matching) {
+      this.cancelJob(job.clipId, job.kind);
+    }
+    return matching.length;
+  }
+
   getSnapshot(): ClipAudioAnalysisJobSnapshot[] {
     return [...this.jobs.values()].map((job) => ({
       key: job.key,

@@ -142,6 +142,7 @@ export type HostedAgentEvent =
       message: string;
       rounds: number;
       creditsCharged: number;
+      inputRequest?: import('../types').KernelUserInputRequest;
     })
   | (HostedAgentEventBase & {
       kind: 'turn-failed' | 'turn-canceled' | 'turn-interrupted';

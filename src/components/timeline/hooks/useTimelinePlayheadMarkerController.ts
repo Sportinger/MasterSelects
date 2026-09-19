@@ -59,7 +59,7 @@ export function useTimelinePlayheadMarkerController({
     markerDrag,
     handleRulerMouseDown,
     handlePlayheadMouseDown,
-    handleMarkerMouseDown,
+    handleMarkerPointerDown,
   } = usePlayheadDrag({
     timelineRef,
     scrollX,
@@ -99,7 +99,7 @@ export function useTimelinePlayheadMarkerController({
   const {
     timelineMarkerDrag,
     markerCreateDrag,
-    handleTimelineMarkerMouseDown,
+    handleTimelineMarkerPointerDown,
   } = useMarkerDrag({
     timelineRef,
     timelineBodyRef,
@@ -117,9 +117,9 @@ export function useTimelinePlayheadMarkerController({
   });
 
   return {
-    handleMarkerMouseDown,
+    handleMarkerPointerDown,
     handlePlayheadMouseDown,
-    handleTimelineMarkerMouseDown,
+    handleTimelineMarkerPointerDown,
     handleTimelineRulerMouseDown,
     markerCreateDrag,
     markerDrag,

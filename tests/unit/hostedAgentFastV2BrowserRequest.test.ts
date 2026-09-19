@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { APP_VERSION } from '../../src/version';
 
 import { buildHostedAgentFastV2BrowserRequest } from '../../src/services/kernelClient/hostedAgent/fastV2BrowserRequest';
+import { HOSTED_AGENT_FAST_V2_MAX_TIMELINE_TRANSCRIPT_WORDS } from '../../src/services/kernelClient/hostedAgent/fastV2StartContract';
 import type { TimelineClip, TimelineTrack } from '../../src/types/timeline';
 
 function clip(overrides: Partial<TimelineClip> = {}): TimelineClip {
@@ -44,7 +46,7 @@ describe('Fast V2 browser request', () => {
     };
     const request = await buildHostedAgentFastV2BrowserRequest({
       clientInstanceId: 'client-1',
-      executionProfile: 'verified',
+      executionProfile: 'fast',
       request: 'Remove the pause from clip-a.',
       requestedExecutionMode: 'normal',
       runSource: 'ui',
@@ -81,8 +83,8 @@ describe('Fast V2 browser request', () => {
         schemaVersion: 1,
         timelineRevision: 7,
       },
-      editorBuildId: 'masterselects:2.4.5',
-      executionProfile: 'verified',
+      editorBuildId: `masterselects:${APP_VERSION}`,
+      executionProfile: 'fast',
       protocolVersion: 'fast-agent-v2',
       requestedExecutionMode: 'normal',
       turnId: 'turn-v2-1',
@@ -167,6 +169,7 @@ describe('Fast V2 browser request', () => {
 
     const payload = request.compactSnapshot.payload as {
       clips: Array<{ id: string; transcript?: Record<string, unknown> }>;
+      timelineSpeech: Record<string, unknown>;
     };
     expect(payload.clips[0]?.transcript).toEqual({
       timebase: 'timeline-seconds',
@@ -178,6 +181,63 @@ describe('Fast V2 browser request', () => {
       ],
     });
     expect(payload.clips[1]?.transcript).toBeUndefined();
+    expect(payload.timelineSpeech).toMatchObject({
+      audibleClipCount: 1,
+      projectedWordCount: 2,
+      schemaVersion: 1,
+      segments: [
+        { clipId: 'clip-a', text: 'Keep', wordCount: 1 },
+        { clipId: 'clip-a', text: 'remove this', wordCount: 1 },
+      ],
+      text: 'Keep remove this',
+      timebase: 'timeline-seconds',
+      timelineRevision: 8,
+      totalWords: 2,
+      truncated: false,
+    });
+  });
+
+  it('no longer truncates a single clip at the former 3,000-word ceiling', async () => {
+    const transcript = Array.from({ length: 3_501 }, (_, index) => ({
+      end: index + 0.75,
+      id: `word-${index}`,
+      start: index,
+      text: `word-${index}`,
+    }));
+    const request = await buildHostedAgentFastV2BrowserRequest({
+      clientInstanceId: 'client-large-transcript',
+      request: 'Inspect the complete current edit transcript.',
+      runSource: 'ui',
+      snapshot: {
+        clips: [clip({
+          duration: transcript.length,
+          inPoint: 0,
+          linkedClipId: undefined,
+          outPoint: transcript.length,
+          startTime: 0,
+          transcript,
+        })],
+        duration: transcript.length,
+        inPoint: null,
+        outPoint: null,
+        playheadPosition: 0,
+        selectedClipIds: new Set(),
+        semanticTimelineState: { schemaVersion: 1 },
+        timelineRevision: 9,
+        tracks: [track()],
+      },
+      turnId: 'turn-large-transcript',
+    });
+
+    const payload = request.compactSnapshot.payload as {
+      clips: Array<{ transcript?: { truncated: boolean; words: unknown[] } }>;
+    };
+    expect(HOSTED_AGENT_FAST_V2_MAX_TIMELINE_TRANSCRIPT_WORDS).toBe(100_000);
+    expect(payload.clips[0]?.transcript).toMatchObject({
+      truncated: false,
+      words: expect.any(Array),
+    });
+    expect(payload.clips[0]?.transcript?.words).toHaveLength(3_501);
   });
 
   it('projects all hook rows when text-side group metadata is lost', async () => {

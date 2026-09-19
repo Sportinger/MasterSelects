@@ -7,6 +7,8 @@ import {
   parseVectorAnimationInputProperty,
   parseVectorAnimationStateProperty,
 } from '../../../types/vectorAnimation';
+import { isFlockProperty } from '../../../types/flock';
+import { getFlockPropertyLabel } from './flockKeyframeDisplay';
 import { getAudioEqPropertyMeta } from './timelineHeaderAudioEqPropertyModel';
 import { getTimelineHeaderColorPropertyMeta } from './timelineHeaderColorPropertyModel';
 import {
@@ -20,6 +22,7 @@ export function getHeaderPropertyLabel(
   clip?: KeyframeTrackClip | null,
   isAudioTrack = false,
 ): string {
+  if (isFlockProperty(prop)) return getFlockPropertyLabel(prop, clip?.flock);
   const maskProperty = parseMaskProperty(prop);
   if (maskProperty) {
     const maskName = clip?.masks?.find(mask => mask.id === maskProperty.maskId)?.name ?? 'Mask';
@@ -27,6 +30,7 @@ export function getHeaderPropertyLabel(
       path: 'Path',
       'position.x': 'X',
       'position.y': 'Y',
+      rotation: 'Rotation',
       feather: 'Feather',
       edgeFeather: 'Edge Feather',
       featherQuality: 'Quality',
@@ -82,6 +86,19 @@ export function getHeaderPropertyLabel(
 
     const parts = prop.split('.');
     const paramName = parts[parts.length - 1];
+    const sharedWindLabels: Record<string, string> = { globalWindStrength: 'Wind strength', globalWindYaw: 'Wind direction', globalWindPitch: 'Wind elevation', globalWindGusts: 'Wind gusts' };
+    if (sharedWindLabels[paramName]) return sharedWindLabels[paramName];
+    const cableParam = /^cable_(.+)_(slack|windZ|windGusts|stiffness|gravity|damping|viscosity|width)$/.exec(paramName);
+    if (cableParam) {
+      let number = '?';
+      try {
+        const effect = clip?.effects?.find(e => e.id === parts[1]);
+        const cables = JSON.parse(String(effect?.params.settings ?? '[]')) as { id: string }[];
+        const index = cables.findIndex(c => c.id === cableParam[1]);
+        if (index >= 0) number = String(index + 1);
+      } catch { /* Fall back to the parameter label for an unavailable effect. */ }
+      return `Cable ${number} ${formatPropertyToken(cableParam[2])}`;
+    }
     const audioLabels: Record<string, string> = {
       volume: 'Volume',
       band31: '31Hz',

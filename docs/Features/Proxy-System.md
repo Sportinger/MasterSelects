@@ -10,6 +10,8 @@ JPEG image proxy generation and playback for smoother scrubbing of large video f
 
 For File System Access projects, image proxies are stored inside the project folder and are used only when proxy mode is enabled.
 
+Imported Premiere projects may also describe an external proxy already attached to an original. This linked proxy is a selectable source for the same media item; it is separate from MasterSelects' generated JPEG proxy system.
+
 ### Current Behavior
 
 - Proxy mode mutes and pauses the original video elements when enabled.
@@ -17,6 +19,7 @@ For File System Access projects, image proxies are stored inside the project fol
 - The editor falls back to the original media when proxy data is missing.
 - Audio proxy files are optional and non-fatal.
 - Video proxy generation also performs scene-cut analysis when the current media has no valid scene-cut result.
+- When an external linked proxy is active, automatic and manual MasterSelects proxy generation skip that media so a proxy is not generated from another proxy.
 
 ---
 
@@ -92,6 +95,15 @@ For File System Access projects, video proxies are stored under `Proxy/{storageK
 - Nearest-frame and held-frame fallbacks smooth scrubbing while requested frames are still loading.
 - Playback can use proxy audio when it exists.
 - Missing proxy frames fall back to the original source media.
+
+### Premiere-Linked Proxies
+
+- **Media Source > Auto** prefers an available original and falls back to an available linked source.
+- **Original** and a named **Linked Proxy** can be selected explicitly.
+- Runtime file handles stay outside persisted project data; durable source descriptions and the selected mode are saved with the media item.
+- A lower-resolution attached proxy retains the original media's logical composition dimensions, matching Premiere's automatic proxy scaling.
+- ProRes linked proxies use TurboRes for preview and thumbnail decoding when the browser cannot decode the `apco`/`apcs`/`apcn`/`apch` sample entry directly.
+- Source thumbnails are versioned in the persistent thumbnail cache and reused after refresh; cache invalidation happens when the user actually changes or relinks a source.
 
 ### Cache Limits
 

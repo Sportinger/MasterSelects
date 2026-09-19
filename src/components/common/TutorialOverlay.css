@@ -245,7 +245,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  min-height: 68px;
   padding: 12px 8px;
   border-radius: 10px;
   border: 1px solid var(--border-color);
@@ -260,38 +261,14 @@
   transform: translateY(-1px);
 }
 
-.tutorial-welcome-icon {
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.tutorial-welcome-icon img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.tutorial-welcome-icon--beginner {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--green-500) 0%, #1A8A4A 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-  color: var(--text-on-accent);
-}
-
 .tutorial-welcome-label {
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  line-height: 1.25;
   color: var(--text-primary);
   text-align: center;
-  white-space: nowrap;
+  text-transform: uppercase;
 }
 
 /* ============================

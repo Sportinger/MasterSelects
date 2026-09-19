@@ -7,6 +7,7 @@ import type {
   TrackAudioState,
 } from '../../../types/audio';
 import type { ColorCorrectionState } from '../../../types/colorCorrection';
+import type { ColorGradeMode } from '../../../types/colorGradeOwnership';
 import type { ClipNodeGraph } from '../../../types/nodeGraph';
 import type { MotionLayerDefinition } from '../../../types/motionDesign';
 import type { LayerSourceRect, TransitionRenderState } from '../../../types/layers';
@@ -19,6 +20,7 @@ import type {
 } from '../../../types/timelineCore';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
 import type { StoryboardClipProperties } from '../../../types/storyboard';
+import type { SourceAnnotation } from '../../../types/sourceAnnotation';
 import type {
   CaptionClipProperties,
   CaptionCompositionLink,
@@ -63,6 +65,11 @@ export interface ProjectTrack {
 }
 
 export interface ProjectClip {
+  planarTracks?: import('../../../types/planarTracking').PlanarTrack[];
+  trackingBinding?: import('../../../types/trackingBinding').TrackingBinding;
+  terrainAttachment?: import('../../../types/terrainAttachment').TerrainAttachment;
+  terrainScreenAnchor?: import('../../../types/terrainAttachment').TerrainScreenAnchor;
+  terrainAnchorConnector?: import('../../../types/terrainAttachment').TerrainAnchorConnector;
   id: string;
   trackId: string;
   name?: string;
@@ -93,6 +100,8 @@ export interface ProjectClip {
   transitionSourceMap?: TransitionSourceMap;
   transitionRecipeBlendWindows?: TransitionRecipeBlendWindow[];
   colorCorrection?: ColorCorrectionState;
+  colorGradeMode?: ColorGradeMode;
+  localColorCorrection?: ColorCorrectionState;
   nodeGraph?: ClipNodeGraph;
 
   // Masks
@@ -125,7 +134,7 @@ export interface ProjectClip {
   parentClipId?: string;
 
   // Additional clip metadata (for restoration)
-  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'light' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'transition-overlay' | 'motion-shape' | 'motion-null' | 'motion-adjustment' | 'storyboard' | 'lottie' | 'rive' | 'midi';
+  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'light' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'transition-overlay' | 'motion-shape' | 'motion-null' | 'motion-adjustment' | 'storyboard' | 'lottie' | 'rive' | 'midi' | 'flock';
   // MIDI clip note data (issue #182); wired into save/load in the persistence phase
   midiData?: MidiClipData;
   // MIDI clip automation (issue #298): the four performed CC lanes as breakpoints
@@ -168,6 +177,7 @@ export interface ProjectClip {
 
   // Math scene clip support
   mathScene?: ProjectMathSceneDefinition;
+  flock?: import('../../../types/flock').FlockDefinition;
 
   // Motion design clip support
   motion?: MotionLayerDefinition;
@@ -202,6 +212,7 @@ export interface ProjectComposition {
   labelColor?: string;
   transitionComp?: TransitionCompositionLink;
   captionComp?: CaptionCompositionLink;
+  annotations?: SourceAnnotation[];
 
   // Tracks and clips
   tracks: ProjectTrack[];

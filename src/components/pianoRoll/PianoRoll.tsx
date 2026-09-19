@@ -9,7 +9,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { type Icon, IconEraser, IconMarquee2, IconPointer } from '@tabler/icons-react';
 import { useTimelineStore } from '../../stores/timeline';
-import { selectTempoMap } from '../../stores/timeline/selectors';
+import {
+  selectPianoRollGridSubdivision, selectPianoRollSnapEnabled, selectTempoMap,
+} from '../../stores/timeline/selectors';
 import { previewMidiNote } from '../../services/audio/midiPlaybackScheduler';
 import {
   claimShortcut,
@@ -18,9 +20,14 @@ import {
 import type { MidiNote } from '../../types/midiClip';
 import { computeGhostNotes } from './ghostNotes';
 import { PianoRollScrollbars, PIANO_ROLL_SCROLLBAR } from './PianoRollScrollbars';
-import { PianoRollRuler, pianoRollRulerHeight, PART_BORDER_COLOR } from './PianoRollRuler';
+import { PianoRollRuler } from './PianoRollRuler';
+import { pianoRollRulerHeight, PART_BORDER_COLOR } from './pianoRollRulerModel';
 import { PianoRollGridLines } from './PianoRollGridLines';
 import { buildPianoRollGrid } from './pianoRollGrid';
+import { PianoRollSnapControls } from './PianoRollSnapControls';
+import {
+  gridStepSeconds, shouldSnap, snapContentTime, snapNoteDuration, type PianoRollSnapContext,
+} from './pianoRollSnap';
 import { clipLocalToContentTime, contentTimeToClipLocal, isNoteStartInWindow, type MidiClipWindow } from '../../services/midi/midiClipTiming';
 import { computeTrimTiming, trimOriginalsFromClip, type TrimOriginals } from '../timeline/utils/clipTrimTiming';
 import { resolvePianoRollToolAction, type PianoRollToolId } from './pianoRollToolShortcuts';
@@ -266,6 +273,12 @@ export function PianoRoll({ clipId }: PianoRollProps) {
     (state) => state.rulerLanes.some((lane) => lane.format === 'tempo'),
   );
   const rulerHeight = pianoRollRulerHeight(showTempoLane ? 3 : 2);
+  // Snap state is the piano roll's OWN (not the timeline's): a key editor is
+  // normally quantized far finer than the arrangement grid. Persisted per user.
+  const snapEnabled = useTimelineStore(selectPianoRollSnapEnabled);
+  const gridSubdivision = useTimelineStore(selectPianoRollGridSubdivision);
+  const setSnapEnabled = useTimelineStore((state) => state.setPianoRollSnapEnabled);
+  const setGridSubdivision = useTimelineStore((state) => state.setPianoRollGridSubdivision);
   const addMidiNote = useTimelineStore((state) => state.addMidiNote);
   const addMidiNotes = useTimelineStore((state) => state.addMidiNotes);
   const updateMidiNote = useTimelineStore((state) => state.updateMidiNote);
@@ -326,9 +339,43 @@ export function PianoRoll({ clipId }: PianoRollProps) {
       pxPerSec,
       visibleStartPx: -marginPx,
       visibleWidthPx: gridWidth,
+      subdivision: gridSubdivision,
       marginSec,
     }),
-    [tempoMap, clipStartTime, clipDuration, pxPerSec, marginPx, gridWidth, marginSec],
+    [tempoMap, clipStartTime, clipDuration, pxPerSec, marginPx, gridWidth, marginSec, gridSubdivision],
+  );
+
+  // Absolute times of the sub-beat lines, shared with the ruler so its Bars lane
+  // shows the same division the grid draws. Memoized on the grid object so the
+  // ruler subtree is not handed a fresh array on unrelated renders.
+  const subdivisionTickTimes = useMemo(
+    () => pianoRollGrid.subLines.map((line) => line.time),
+    [pianoRollGrid],
+  );
+
+  // Snapping reads through a ref, not the effect dep list: the drag listeners are
+  // registered once per drag, but zoom (and therefore which lines exist) can
+  // change mid-drag via Ctrl+wheel. A ref refreshed on every render keeps the
+  // handlers on the current grid without tearing down and re-adding listeners.
+  const snapRef = useRef<{ enabled: boolean; context: PianoRollSnapContext }>({
+    enabled: snapEnabled,
+    context: { tempoMap, clipStartTime, inPoint: effInPoint, pxPerSec, subdivision: gridSubdivision },
+  });
+  useEffect(() => {
+    snapRef.current = {
+      enabled: snapEnabled,
+      context: { tempoMap, clipStartTime, inPoint: effInPoint, pxPerSec, subdivision: gridSubdivision },
+    };
+  }, [snapEnabled, tempoMap, clipStartTime, effInPoint, pxPerSec, gridSubdivision]);
+
+  // Snap a content time for this pointer event, honouring the Alt/Shift
+  // modifiers. Every drag path goes through here so they can never disagree.
+  const snapTime = useCallback(
+    (contentTime: number, event: Pick<MouseEvent, 'altKey' | 'shiftKey'>): number => {
+      const { enabled, context } = snapRef.current;
+      return shouldSnap(enabled, event) ? snapContentTime(context, contentTime) : contentTime;
+    },
+    [],
   );
 
   // Read-only ghosts: notes from other MIDI clips that overlap this clip's
@@ -649,20 +696,29 @@ export function PianoRoll({ clipId }: PianoRollProps) {
       // origin; clamping to inPoint keeps notes inside the visible window (#249).
       const time = Math.max(liveInPoint, clipLocalToContentTime({ inPoint: liveInPoint }, x / pxPerSecRef.current));
 
+      // Snapping quantizes the note EDGE the pointer controls: the start for a
+      // move, the end for a create/resize. `snapNoteDuration` floors a snapped
+      // length at one grid unit so a 2 px twitch cannot make a sliver note.
+      const snapping = shouldSnap(snapRef.current.enabled, e);
       if (drag.kind === 'create') {
-        const next = { pitch: drag.pitch, start: drag.startTime, duration: Math.max(0.02, time - drag.startTime) };
+        const duration = snapping
+          ? snapNoteDuration(snapRef.current.context, drag.startTime, time, 0.02)
+          : Math.max(0.02, time - drag.startTime);
+        const next = { pitch: drag.pitch, start: drag.startTime, duration };
         pendingRef.current = next;
         setPendingNote(next);
         return;
       }
       if (drag.kind === 'move') {
-        const newStart = Math.max(liveInPoint, time - drag.grabOffsetTime);
+        const newStart = Math.max(liveInPoint, snapTime(time - drag.grabOffsetTime, e));
         const newPitch = yToPitch(y, rowHRef.current);
         updateMidiNote(clipId, drag.noteId, { start: newStart, pitch: newPitch }, { captureHistory: false });
         return;
       }
       if (drag.kind === 'resize') {
-        const duration = Math.max(0.02, time - drag.startTime);
+        const duration = snapping
+          ? snapNoteDuration(snapRef.current.context, drag.startTime, time, 0.02)
+          : Math.max(0.02, time - drag.startTime);
         updateMidiNote(clipId, drag.noteId, { duration }, { captureHistory: false });
         return;
       }
@@ -674,7 +730,9 @@ export function PianoRoll({ clipId }: PianoRollProps) {
       if (drag.kind === 'move-group') {
         const anchor = drag.origins.find((o) => o.id === drag.anchorId);
         if (!anchor) return;
-        const newAnchorStart = Math.max(liveInPoint, time - drag.grabOffsetTime);
+        // Only the anchor snaps; every other note keeps its offset from it, so a
+        // group move quantizes without collapsing the phrase onto the grid.
+        const newAnchorStart = Math.max(liveInPoint, snapTime(time - drag.grabOffsetTime, e));
         const deltaTime = newAnchorStart - anchor.start;
         const deltaPitch = yToPitch(y, rowHRef.current) - anchor.pitch;
         for (const o of drag.origins) {
@@ -714,9 +772,12 @@ export function PianoRoll({ clipId }: PianoRollProps) {
       setDragActive(false);
       if (drag?.kind === 'create') {
         const pending = pendingRef.current ?? { pitch: drag.pitch, start: drag.startTime, duration: CLICK_NOTE_DURATION };
-        // A near-zero drag is a plain click → make a short note; an actual drag
-        // keeps its dragged length.
-        const duration = pending.duration <= 0.05 ? CLICK_NOTE_DURATION : pending.duration;
+        // A near-zero drag is a plain click → one grid unit when snapping (so a
+        // clicked note lands on the grid at both ends), else a short fixed note.
+        // An actual drag keeps its dragged length.
+        const { enabled, context } = snapRef.current;
+        const clickDuration = (enabled ? gridStepSeconds(context, pending.start) : null) ?? CLICK_NOTE_DURATION;
+        const duration = pending.duration <= 0.05 ? clickDuration : pending.duration;
         addMidiNote(clipId, { ...pending, duration });
         pendingRef.current = null;
         setPendingNote(null);
@@ -750,7 +811,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
       doc.removeEventListener('mousemove', handleMove);
       doc.removeEventListener('mouseup', handleUp);
     };
-  }, [dragActive, clipId, addMidiNote, updateMidiNote, removeMidiNote, localPoint, noteAtPx]);
+  }, [dragActive, clipId, addMidiNote, updateMidiNote, removeMidiNote, localPoint, noteAtPx, snapTime]);
 
   // --- clipboard + history (#249) --------------------------------------------
   // Copy/cut/paste/duplicate operate on the live selection and the shared
@@ -895,13 +956,20 @@ export function PianoRoll({ clipId }: PianoRollProps) {
     const pitch = yToPitch(y, rowH);
     // Floor at inPoint (the window's left edge), not 0 — see the handleMove note:
     // a left-extended clip has negative inPoint, and that region is valid (#249).
-    const startTime = Math.max(clip.inPoint, clipLocalToContentTime(clip, x / pxPerSec));
+    const startTime = Math.max(
+      clip.inPoint,
+      snapTime(clipLocalToContentTime(clip, x / pxPerSec), e),
+    );
     // Audible feedback for the note being drawn (issue #182, Phase 4) — routed
     // through the track's synth bus so preview respects its volume/pan.
     const track = useTimelineStore.getState().tracks.find((t) => t.id === clip?.trackId);
     previewMidiNote(track?.midiInstrument, pitch, 0.85, clip?.trackId);
     dragRef.current = { kind: 'create', noteId: null, pitch, startTime };
-    pendingRef.current = { pitch, start: startTime, duration: 0.02 };
+    // Start the preview one grid unit long when snapping, so a click that never
+    // moves already shows (and commits) the note length it will get.
+    const { enabled, context } = snapRef.current;
+    const initialDuration = (shouldSnap(enabled, e) ? gridStepSeconds(context, startTime) : null) ?? 0.02;
+    pendingRef.current = { pitch, start: startTime, duration: initialDuration };
     setPendingNote(pendingRef.current);
     setDragActive(true);
     e.preventDefault();
@@ -1039,6 +1107,14 @@ export function PianoRoll({ clipId }: PianoRollProps) {
           <ToolButton active={tool === 'eraser'} title="Eraser — click or swipe to delete notes (2)" onClick={() => selectTool('eraser')} glyph={IconEraser} />
           <ToolButton active={tool === 'select'} title="Select — marquee to select, drag to move, Del to remove (3)" onClick={() => selectTool('select')} glyph={IconMarquee2} />
         </div>
+        {/* Snap toggle + grid division. The division drives the DRAWN grid even
+            with snap off, so the lines stay available to eye notes against. */}
+        <PianoRollSnapControls
+          enabled={snapEnabled}
+          subdivision={gridSubdivision}
+          onToggle={setSnapEnabled}
+          onSubdivisionChange={setGridSubdivision}
+        />
         <span style={{ flex: 1 }} />
         {/* Show/hide the controller-lane (velocity) area; the flag persists. */}
         <button
@@ -1092,6 +1168,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
           >
             <PianoRollRuler
               rulerTicks={pianoRollGrid.rulerTicks}
+              subdivisionTimes={subdivisionTickTimes}
               tempoEvents={showTempoLane ? tempoMap.events : undefined}
               clipStartTime={effStartTime}
               clipDuration={clipDuration}

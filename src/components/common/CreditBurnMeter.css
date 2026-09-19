@@ -3,13 +3,14 @@
   --credit-accent: rgba(89, 179, 255, 0.92);
   --credit-accent-soft: rgba(65, 155, 235, 0.22);
   position: relative;
-  display: grid;
-  grid-template-columns: 62px minmax(48px, 1fr) 66px;
+  display: inline-flex;
   align-items: center;
-  width: 210px;
+  justify-content: center;
+  gap: 8px;
+  width: auto;
   height: 28px;
-  min-width: 210px;
-  padding: 0 10px 2px;
+  min-width: 50px;
+  padding: 0 12px 2px;
   overflow: visible;
   border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 999px;
@@ -51,47 +52,31 @@
   --credit-accent-soft: rgba(255, 24, 61, 0.4);
 }
 
-.credit-burn-meter.is-debit .credit-burn-run {
-  color: rgb(255, 84, 104);
-  text-shadow: 0 0 8px rgba(255, 30, 66, 0.72);
-  animation: credit-run-debit-punch var(--credit-settlement-duration, 720ms) cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
 .credit-burn-meter.is-debit .credit-odometer-column.is-changing {
   color: rgb(255, 92, 110);
   text-shadow: 0 0 7px rgba(255, 28, 64, 0.82);
 }
 
-.credit-burn-status,
-.credit-burn-run {
+.credit-burn-status {
   position: relative;
   z-index: 2;
+  display: inline-flex;
+  min-width: 0;
+  max-width: 96px;
+  align-items: center;
   overflow: hidden;
-  color: rgba(255, 255, 255, 0.47);
+  color: rgba(255, 255, 255, 0.52);
   font-size: 9px;
-  font-weight: 650;
+  font-weight: 680;
   letter-spacing: 0.055em;
   line-height: 1;
-  text-overflow: clip;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
-.credit-burn-status {
-  text-align: left;
-}
-
-.credit-burn-run {
-  color: rgba(255, 255, 255, 0.68);
-  text-align: right;
-}
-
-.credit-burn-run.is-idle {
-  opacity: 0.42;
-}
-
-.credit-burn-run.is-positive {
-  color: rgba(113, 238, 169, 0.96);
+.credit-burn-status-default {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .credit-burn-value {
@@ -99,7 +84,8 @@
   z-index: 2;
   display: flex;
   justify-content: center;
-  min-width: 0;
+  min-width: 2ch;
+  padding: 0 2px;
   color: rgba(255, 255, 255, 0.93);
   font-size: var(--font-sm);
   font-variant-numeric: tabular-nums;
@@ -351,12 +337,6 @@
   100% { border-color: rgba(255, 255, 255, 0.11); box-shadow: 0 0 0 transparent; }
 }
 
-@keyframes credit-run-debit-punch {
-  0% { opacity: 0.58; transform: translateX(-3px) scale(0.82); }
-  28% { opacity: 1; transform: translateX(0) scale(1.14); }
-  100% { opacity: 1; transform: translateX(0) scale(1); }
-}
-
 @keyframes credit-edge-travel {
   0% { opacity: 0; transform: translateX(-28px); }
   26% { opacity: 1; }
@@ -405,18 +385,9 @@
 
 @media (max-width: 1100px) {
   .credit-burn-meter {
-    grid-template-columns: 34px minmax(44px, 1fr) 58px;
-    width: 166px;
-    min-width: 166px;
-  }
-
-  .credit-burn-status {
-    font-size: 0;
-  }
-
-  .credit-burn-status::after {
-    font-size: 9px;
-    content: attr(data-short-status);
+    min-width: 46px;
+    padding-right: 10px;
+    padding-left: 10px;
   }
 }
 

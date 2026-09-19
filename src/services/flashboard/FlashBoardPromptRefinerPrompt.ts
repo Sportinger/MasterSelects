@@ -176,6 +176,18 @@ function getTargetModelGuidance(
     }
 
     if (providerId.includes('seedance')) {
+      if (providerId === 'bytedance/seedance-2-5') {
+        return [
+          'Optimize for ByteDance Seedance 2.5 multimodal video generation.',
+          'Seedance responds best to concise cinematic direction: subject identity, action, scene progression, camera motion, composition, lighting, style, and a clear final state.',
+          'Preserve every explicit @ImageN, @VideoN, and @AudioN token from the user prompt verbatim and connect each token to its intended subject, motion, scene, or sound role.',
+          'Multimodal reference mode and exact IN/OUT frame mode are mutually exclusive. In multimodal mode, use the typed @ reference tokens; in exact-frame mode, describe only the motion and transition between the supplied boundary frames.',
+          'Avoid unsupported parameter names, negative prompts, and unnecessary shot lists.',
+          multiShotGuidance,
+          audioGuidance,
+        ].join('\n');
+      }
+
       return [
         'Optimize for ByteDance Seedance 2.0 video generation.',
         'Seedance responds best to concise cinematic direction: subject identity, action, scene progression, camera motion, composition, lighting, style, and a clear final state.',

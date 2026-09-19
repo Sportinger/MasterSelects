@@ -2,8 +2,10 @@ import React from 'react';
 import type { Composition, MediaFile, ProjectItem, SolidItem, TextItem } from '../../../../stores/mediaStore';
 import { mediaNeedsRelink } from '../../../../services/project/relinkMedia';
 import { FileTypeIcon } from '../FileTypeIcon';
+import { MediaReconnectButton } from '../MediaReconnectButton';
 import { LiveInputPreviewCanvas } from '../LiveInputPreviewCanvas';
 import { MediaWaveformThumb } from '../MediaWaveformThumb';
+import { TrackingAssetActions } from '../TrackingAssetActions';
 import { getItemImportProgress, getItemWaveformProgress, isImportedMediaFileItem } from '../itemTypeGuards';
 import { getLabelHex } from '../labelColors';
 import { getMediaBoardOrderKey, getMediaBoardTypeLabel, isMediaBoardFolder } from './layout';
@@ -24,7 +26,7 @@ export interface MediaBoardNodeProps {
   selectedIdSet: Set<string>;
   mediaSearchVisibleItemIds: Set<string> | null;
   onNodeMouseDown: (e: React.MouseEvent, item: ProjectItem) => void;
-  onItemDoubleClick: (item: ProjectItem) => void;
+  onItemDoubleClick: (item: ProjectItem, renameFromName?: boolean) => void;
   onItemContextMenu: (e: React.MouseEvent, itemId?: string, parentId?: string | null) => void;
   consumeSuppressedContextMenu: () => boolean;
   onRequestThumbnail: (id: string) => void;
@@ -324,7 +326,12 @@ export function MediaBoardNode({
       onMouseMove={handleNodeMouseMove}
       onMouseLeave={handleNodeMouseLeave}
       onMouseDown={(e) => onNodeMouseDown(e, item)}
-      onDoubleClick={() => { onItemDoubleClick(item); }}
+      onDoubleClick={(event) => {
+        onItemDoubleClick(
+          item,
+          event.target instanceof Element && Boolean(event.target.closest('.media-board-node-name')),
+        );
+      }}
       onContextMenu={(e) => {
         if (consumeSuppressedContextMenu()) {
           e.preventDefault();
@@ -426,6 +433,9 @@ export function MediaBoardNode({
             <span>{waveformProgress}%</span>
           </span>
         ) : null}
+        {mediaFile && mediaNeedsRelink(mediaFile) ? (
+          <MediaReconnectButton mediaFileId={mediaFile.id} variant="overlay" />
+        ) : null}
       </div>
       {!isCompactNode ? (
         <div className="media-board-node-body">
@@ -437,6 +447,7 @@ export function MediaBoardNode({
             {resolutionLabel ? <span>{resolutionLabel}</span> : null}
             {boardCodecLabel ? <span>{boardCodecLabel}</span> : null}
           </div>
+          {'type' in item && item.type === 'tracking' ? <TrackingAssetActions asset={item} /> : null}
         </div>
       ) : null}
     </div>

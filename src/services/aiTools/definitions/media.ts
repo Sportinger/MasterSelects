@@ -6,6 +6,82 @@ export const mediaToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'getMediaPreviewFrames',
+      description: 'Capture exactly three representative source frames from one imported video before timeline placement: the opening at about 1 second, the midpoint, and the ending. Returns one labeled image grid plus the exact source times. Use this visual evidence together with the complete transcript before planning a transcript-driven edit.',
+      parameters: {
+        type: 'object',
+        properties: {
+          mediaFileId: {
+            type: 'string',
+            description: 'Exact video media source ID returned by getMediaItems; this is not a timeline clipId.',
+          },
+        },
+        required: ['mediaFileId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getMediaTranscript',
+      description: 'Read the complete word-timed transcript for an imported video or audio source before it is placed on the timeline. Results are paged by word offset. Call startMediaTranscription first when status is not ready, then continue until nextCursor is null.',
+      parameters: {
+        type: 'object',
+        properties: {
+          mediaFileId: {
+            type: 'string',
+            description: 'Exact media source ID returned by getMediaItems; this is not a timeline clipId.',
+          },
+          cursor: {
+            type: 'number',
+            description: 'Zero-based word offset. Omit for the first page.',
+          },
+          limit: {
+            type: 'number',
+            description: 'Maximum words to return, from 1 to 1000 (default: 500).',
+          },
+        },
+        required: ['mediaFileId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'startMediaTranscription',
+      description: 'Start Best Quality speech-to-text directly on one imported video or audio source, including media that is not on the timeline. Uses Deepgram for words/timings and OpenAI for speaker separation. Only one transcription can run at a time; poll getMediaItems until transcriptStatus is ready or error.',
+      parameters: {
+        type: 'object',
+        properties: {
+          mediaFileId: {
+            type: 'string',
+            description: 'Exact media source ID returned by getMediaItems; this is not a timeline clipId.',
+          },
+        },
+        required: ['mediaFileId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'startMediaAnalysis',
+      description: 'Start motion, focus, brightness, YuNet face detection, and SFace identity analysis directly on one imported video source, including media that is not on the timeline. Poll getMediaItems for status and progress.',
+      parameters: {
+        type: 'object',
+        properties: {
+          mediaFileId: {
+            type: 'string',
+            description: 'Exact video media source ID returned by getMediaItems; this is not a timeline clipId.',
+          },
+        },
+        required: ['mediaFileId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'getMediaItems',
       description: 'Get all items in the media panel: files (video, audio, image), compositions, and folders. Useful for understanding project structure.',
       parameters: {

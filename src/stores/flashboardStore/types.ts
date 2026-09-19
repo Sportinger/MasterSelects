@@ -8,6 +8,8 @@ export interface FlashBoardStoreState {
   composer: FlashBoardComposerState;
   promptHistory: FlashBoardPromptHistoryEntry[];
   chatMessages: FlashBoardChatMessage[];
+  aiWorkspaces: FlashBoardAIWorkspace[];
+  activeAIWorkspaceId: string;
   hoveredComposerReference: FlashBoardHoveredComposerReference | null;
 }
 
@@ -17,6 +19,8 @@ export const FLASHBOARD_STORE_STATE_KEYS = [
   'composer',
   'promptHistory',
   'chatMessages',
+  'aiWorkspaces',
+  'activeAIWorkspaceId',
   'hoveredComposerReference',
 ] as const satisfies readonly (keyof FlashBoardStoreState)[];
 
@@ -28,6 +32,8 @@ export const FLASHBOARD_ACTIVE_GENERATION_STATE_KEYS = [
   'composer',
   'promptHistory',
   'chatMessages',
+  'aiWorkspaces',
+  'activeAIWorkspaceId',
   'hoveredComposerReference',
 ] as const satisfies readonly FlashBoardStoreStateKey[];
 
@@ -47,6 +53,7 @@ export type FlashBoardService = 'cloud';
 export type FlashBoardOutputType = 'video' | 'image' | 'audio';
 export type FlashBoardMediaType = 'video' | 'image' | 'audio';
 export type FlashBoardSunoVocalGender = 'm' | 'f';
+export type FlashBoardAIWorkspaceKind = 'generation' | 'chat' | 'download';
 
 export interface FlashBoardVoiceSettings {
   speed?: number;
@@ -97,12 +104,15 @@ export interface FlashBoardChatExecutedToolCall {
 
 export interface FlashBoardChatMessage {
   activityEvents?: AgentActivityEvent[];
+  /** Opaque hosted conversation binding used to project one visible chat. */
+  conversationRef?: string;
   createdAt?: number;
   id: string;
   role: 'user' | 'assistant';
   text: string;
   decisionId?: string;
   editOptions?: FlashBoardChatEditOption[];
+  inputRequest?: import('../../services/kernelClient/types').KernelUserInputRequest;
   isError?: boolean;
   isPending?: boolean;
   /** True while the pending assistant bubble contains live provider output. */
@@ -126,6 +136,7 @@ export interface FlashBoardComposerModelSettings {
 
 export interface FlashBoardComposerState {
   isOpen: boolean;
+  draftPrompt?: string;
   generateAudio: boolean;
   multiShots: boolean;
   multiPrompt: FlashBoardMultiShotPrompt[];
@@ -142,6 +153,9 @@ export interface FlashBoardComposerState {
   languageOverride?: boolean;
   languageCode?: string;
   outputFormat?: string;
+  videoOutputFormat?: 'mov' | 'mp4';
+  webSearch?: boolean;
+  returnLastFrame?: boolean;
   voiceSettings?: FlashBoardVoiceSettings;
   sunoCustomMode?: boolean;
   sunoInstrumental?: boolean;
@@ -158,6 +172,29 @@ export interface FlashBoardComposerState {
   modelSettingsByKey?: Record<string, FlashBoardComposerModelSettings>;
 }
 
+export interface FlashBoardAIWorkspace {
+  id: string;
+  title: string;
+  kind: FlashBoardAIWorkspaceKind;
+  createdAt: number;
+  updatedAt: number;
+  /** Stable opaque binding for one native hosted chat conversation. */
+  chatConversationRef: string;
+  composer: FlashBoardComposerState;
+  chatMessages: FlashBoardChatMessage[];
+}
+
+export interface CreateFlashBoardAIWorkspaceInput {
+  kind: FlashBoardAIWorkspaceKind;
+  title?: string;
+  chatConversationRef?: string;
+  outputType?: FlashBoardOutputType;
+  providerId?: string;
+  draftPrompt?: string;
+  composer?: FlashBoardComposerState;
+  chatMessages?: FlashBoardChatMessage[];
+}
+
 export type FlashBoardComposerReferenceRole = 'start' | 'end' | 'reference';
 
 export interface FlashBoardHoveredComposerReference {
@@ -168,6 +205,7 @@ export interface FlashBoardHoveredComposerReference {
 export interface FlashBoardActiveGenerationRecord {
   id: string;
   kind: 'generation';
+  workspaceId?: string;
   createdAt: number;
   updatedAt: number;
   request?: FlashBoardGenerationRequest;
@@ -213,6 +251,8 @@ export interface FlashBoardGenerationRequest {
   languageOverride?: boolean;
   languageCode?: string;
   outputFormat?: string;
+  webSearch?: boolean;
+  returnLastFrame?: boolean;
   voiceSettings?: FlashBoardVoiceSettings;
   sunoCustomMode?: boolean;
   sunoInstrumental?: boolean;
@@ -255,6 +295,8 @@ export interface FlashBoardResult {
 
 export interface FlashBoardGenerationMetadata {
   mediaFileId: string;
+  workspaceId?: string;
+  generationElapsedMs?: number;
   service?: FlashBoardService;
   providerId: string;
   version: string;
@@ -275,6 +317,8 @@ export interface FlashBoardGenerationMetadata {
   languageOverride?: boolean;
   languageCode?: string;
   outputFormat?: string;
+  webSearch?: boolean;
+  returnLastFrame?: boolean;
   voiceSettings?: FlashBoardVoiceSettings;
   sunoCustomMode?: boolean;
   sunoInstrumental?: boolean;

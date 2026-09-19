@@ -108,7 +108,11 @@ export function animateDockLayoutTransition(container: HTMLElement, snapshot: Do
   const overlay = createDockLayoutTransitionOverlay(container);
 
   nextElements.forEach((element) => {
-    if (snapshot.staggerMode === 'sequence' && !element.classList.contains('dock-tab-pane')) {
+    if (
+      snapshot.staggerMode === 'sequence'
+      && !element.classList.contains('dock-tab-pane')
+      && element.dataset.dockLayoutSequenceSurface !== 'true'
+    ) {
       return;
     }
 

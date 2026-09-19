@@ -4,7 +4,12 @@
 
 import { Logger } from '../../logger';
 import { NativeHelperClient } from '../../nativeHelper/NativeHelperClient';
-import { PROJECT_FOLDERS, PROJECT_FOLDER_PATHS, type ProjectFolderKey } from './constants';
+import { PROJECT_FOLDERS, type ProjectFolderKey } from './constants';
+import {
+  getNativeProjectPackageSession,
+  getNativeProjectFolderPath,
+  isPackagedProjectFolder,
+} from './projectPackage';
 
 const log = Logger.create('NativeFileStorage');
 
@@ -21,7 +26,7 @@ export class NativeFileStorageService {
    * Resolve the full path for a file in a project subfolder
    */
   resolvePath(projectPath: string, subFolder: ProjectFolderKey, fileName: string): string {
-    const folderPath = PROJECT_FOLDERS[subFolder];
+    const folderPath = getNativeProjectFolderPath(projectPath, subFolder);
     return this.joinPath(projectPath, folderPath, fileName);
   }
 
@@ -34,8 +39,13 @@ export class NativeFileStorageService {
     fileName: string,
     content: Blob | string
   ): Promise<boolean> {
+    const packageSession = getNativeProjectPackageSession(projectPath);
+    if (packageSession && isPackagedProjectFolder(subFolder)) {
+      return packageSession.writeEntry(subFolder, fileName, content);
+    }
+
     try {
-      const folderPath = PROJECT_FOLDERS[subFolder];
+      const folderPath = getNativeProjectFolderPath(projectPath, subFolder);
       await this.client.createDir(this.joinPath(projectPath, folderPath));
       const fullPath = this.resolvePath(projectPath, subFolder, fileName);
 
@@ -58,6 +68,12 @@ export class NativeFileStorageService {
     subFolder: ProjectFolderKey,
     fileName: string
   ): Promise<string | null> {
+    const packageSession = getNativeProjectPackageSession(projectPath);
+    if (packageSession && isPackagedProjectFolder(subFolder)) {
+      const bytes = packageSession.readEntry(subFolder, fileName);
+      return bytes ? new TextDecoder().decode(bytes) : null;
+    }
+
     try {
       const fullPath = this.resolvePath(projectPath, subFolder, fileName);
       return await this.client.readFileText(fullPath);
@@ -74,6 +90,14 @@ export class NativeFileStorageService {
     subFolder: ProjectFolderKey,
     fileName: string
   ): Promise<ArrayBuffer | null> {
+    const packageSession = getNativeProjectPackageSession(projectPath);
+    if (packageSession && isPackagedProjectFolder(subFolder)) {
+      const bytes = packageSession.readEntry(subFolder, fileName);
+      return bytes
+        ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+        : null;
+    }
+
     try {
       const fullPath = this.resolvePath(projectPath, subFolder, fileName);
       return await this.client.getDownloadedFile(fullPath);
@@ -90,6 +114,10 @@ export class NativeFileStorageService {
     subFolder: ProjectFolderKey,
     fileName: string
   ): Promise<boolean> {
+    const packageSession = getNativeProjectPackageSession(projectPath);
+    if (packageSession && isPackagedProjectFolder(subFolder)) {
+      return packageSession.hasEntry(subFolder, fileName);
+    }
     const fullPath = this.resolvePath(projectPath, subFolder, fileName);
     const { exists } = await this.client.exists(fullPath);
     return exists;
@@ -104,6 +132,11 @@ export class NativeFileStorageService {
     entryName: string,
     options?: { recursive?: boolean }
   ): Promise<boolean> {
+    const packageSession = getNativeProjectPackageSession(projectPath);
+    if (packageSession && isPackagedProjectFolder(subFolder)) {
+      return packageSession.deleteEntry(subFolder, entryName, options?.recursive ?? false);
+    }
+
     try {
       const fullPath = this.resolvePath(projectPath, subFolder, entryName);
       return await this.client.deleteFile(fullPath, options?.recursive ?? false);
@@ -130,8 +163,13 @@ export class NativeFileStorageService {
     projectPath: string,
     subFolder: ProjectFolderKey
   ): Promise<string[]> {
+    const packageSession = getNativeProjectPackageSession(projectPath);
+    if (packageSession && isPackagedProjectFolder(subFolder)) {
+      return packageSession.listFiles(subFolder);
+    }
+
     try {
-      const folderPath = PROJECT_FOLDERS[subFolder];
+      const folderPath = getNativeProjectFolderPath(projectPath, subFolder);
       const fullPath = this.joinPath(projectPath, folderPath);
       const entries = await this.client.listDir(fullPath);
       return entries
@@ -146,8 +184,13 @@ export class NativeFileStorageService {
    * Create all project subfolders
    */
   async createProjectFolders(projectPath: string): Promise<void> {
-    for (const folderPath of PROJECT_FOLDER_PATHS) {
+    const createdPaths = new Set<string>();
+    for (const folderKey of Object.keys(PROJECT_FOLDERS) as ProjectFolderKey[]) {
+      if (getNativeProjectPackageSession(projectPath) && isPackagedProjectFolder(folderKey)) continue;
+      const folderPath = getNativeProjectFolderPath(projectPath, folderKey);
+      if (createdPaths.has(folderPath)) continue;
       await this.client.createDir(this.joinPath(projectPath, folderPath));
+      createdPaths.add(folderPath);
     }
   }
 

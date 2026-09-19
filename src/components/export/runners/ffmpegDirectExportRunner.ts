@@ -17,6 +17,7 @@ import { FFmpegFrameRenderer } from '../exportHelpers';
 import {
   attachRenderSession,
   disposeRenderSession,
+  forceOpaqueAlpha,
   getReadbackPixels,
   type ExportRenderSessionFactory,
   type ExportRenderSessionRef,
@@ -36,6 +37,7 @@ export interface FfmpegDirectExportRunnerInput {
   audioSampleRate: number;
   audioBitrate: number;
   normalizeAudio: boolean;
+  includeAlpha: boolean;
   ffmpegCodec: FFmpegVideoCodec;
   ffmpegContainer: FFmpegContainer;
   ffmpegQuality: number;
@@ -104,6 +106,9 @@ export async function runFfmpegDirectExport(
       bitrate: undefined,
       proresProfile: !exportAsGif && input.ffmpegCodec === 'prores' ? input.proresProfile : undefined,
       dnxhrProfile: !exportAsGif && input.ffmpegCodec === 'dnxhd' ? input.dnxhrProfile : undefined,
+      pixelFormat: !exportAsGif && input.ffmpegCodec === 'ffv1' && input.includeAlpha
+        ? 'yuva444p10le'
+        : undefined,
       gifColors: input.gifColors,
       gifDither: input.gifDither,
       gifLoop: input.gifLoop,
@@ -186,6 +191,7 @@ export async function runFfmpegDirectExport(
         if (i === 0) log.debug(`Frame 0: Got pixels: ${pixels ? pixels.length : 'null'}`);
         const frameCopy = new Uint8Array(pixels.length);
         frameCopy.set(pixels);
+        if (!input.includeAlpha) forceOpaqueAlpha(frameCopy);
         frames.push(frameCopy);
 
         if (i < 3 || i % 30 === 0) {

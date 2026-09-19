@@ -1,4 +1,8 @@
 export type PublicOperationIdV1 =
+  | 'media.generation.commit.v1'
+  | 'media.generation.model.inspect.v1'
+  | 'media.generation.preview.v1'
+  | 'media.generation.status.v1'
   | 'timeline.editor.catalog.v1'
   | 'timeline.editor.destructive.v1'
   | 'timeline.editor.inspect.v1'
@@ -15,6 +19,7 @@ export type PublicOperationIdV1 =
   | 'timeline.visual.capture-grid.v1';
 
 export type PublicOperationEffectV1 =
+  | 'mediaGeneration'
   | 'mediaDuration'
   | 'segmentation'
   | 'sourceCoverage'
@@ -24,12 +29,16 @@ export type PublicOperationEffectV1 =
 export type PublicEditorToolNameV1 =
   | 'deleteClips'
   | 'executeKernelEditorTool'
+  | 'getMediaGenerationStatus'
   | 'getFramesAtTimes'
   | 'getTimelineState'
   | 'manageEditableHook'
+  | 'inspectMediaGenerationModel'
+  | 'previewMediaGeneration'
   | 'refineEditableHook'
   | 'reorderClips'
-  | 'splitClipAtTimes';
+  | 'splitClipAtTimes'
+  | 'startMediaGeneration';
 
 export type PublicTimelineStateFingerprintV1 = `sha256:${string}`;
 
@@ -54,6 +63,7 @@ export interface PublicTimelineFingerprintInputV1 {
 }
 
 export const PUBLIC_OPERATION_EFFECTS_V1: readonly PublicOperationEffectV1[] = [
+  'mediaGeneration',
   'mediaDuration',
   'segmentation',
   'sourceCoverage',
@@ -127,6 +137,14 @@ export interface PublicOperationSpecV1 {
       | {
           kind: 'bounded-json-v1';
           maximumCharacters: number;
+          sourcePreviewImages?: {
+            exactFrameCount: 3;
+            exactHeight: 240;
+            exactWidth: 1_080;
+            kind: 'source-three-frame-grid-v1';
+            maximumDataUrlCharacters: number;
+            toolName: 'getMediaPreviewFrames';
+          };
         }
       | {
           idMaximumLength: number;
@@ -155,6 +173,126 @@ export interface PublicOperationSpecV1 {
 export const PUBLIC_OPERATION_CONTRACT_V1 = {
   contractVersion: 'ms-editor-operations-v1',
   operations: [
+    {
+      arguments: {
+        additionalProperties: false,
+        fields: {
+          requestJson: {
+            kind: 'bounded-json-string-v1',
+            maximumLength: 100_000,
+            minimumLength: 2,
+            required: true,
+          },
+        },
+        schemaVersion: 1,
+      },
+      confirmation: 'required',
+      dispatcher: {
+        adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1',
+        callerContext: 'kernel',
+        suppressHistory: true,
+        toolName: 'startMediaGeneration',
+      },
+      effects: ['mediaGeneration'],
+      id: 'media.generation.commit.v1',
+      result: {
+        bindable: [],
+        projection: { kind: 'bounded-json-v1', maximumCharacters: 100_000 },
+        schemaVersion: 1,
+      },
+      risk: 'destructive',
+      transaction: 'none',
+    },
+    {
+      arguments: {
+        additionalProperties: false,
+        fields: {
+          requestJson: {
+            kind: 'bounded-json-string-v1',
+            maximumLength: 10_000,
+            minimumLength: 2,
+            required: true,
+          },
+        },
+        schemaVersion: 1,
+      },
+      confirmation: 'inherit',
+      dispatcher: {
+        adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1',
+        callerContext: 'kernel',
+        suppressHistory: true,
+        toolName: 'inspectMediaGenerationModel',
+      },
+      effects: [],
+      id: 'media.generation.model.inspect.v1',
+      result: {
+        bindable: [],
+        projection: { kind: 'bounded-json-v1', maximumCharacters: 100_000 },
+        schemaVersion: 1,
+      },
+      risk: 'read-only',
+      transaction: 'none',
+    },
+    {
+      arguments: {
+        additionalProperties: false,
+        fields: {
+          requestJson: {
+            kind: 'bounded-json-string-v1',
+            maximumLength: 100_000,
+            minimumLength: 2,
+            required: true,
+          },
+        },
+        schemaVersion: 1,
+      },
+      confirmation: 'inherit',
+      dispatcher: {
+        adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1',
+        callerContext: 'kernel',
+        suppressHistory: true,
+        toolName: 'previewMediaGeneration',
+      },
+      effects: [],
+      id: 'media.generation.preview.v1',
+      result: {
+        bindable: [],
+        projection: { kind: 'bounded-json-v1', maximumCharacters: 100_000 },
+        schemaVersion: 1,
+      },
+      risk: 'read-only',
+      transaction: 'none',
+    },
+    {
+      arguments: {
+        additionalProperties: false,
+        fields: {
+          requestJson: {
+            kind: 'bounded-json-string-v1',
+            maximumLength: 10_000,
+            minimumLength: 2,
+            required: true,
+          },
+        },
+        schemaVersion: 1,
+      },
+      confirmation: 'inherit',
+      dispatcher: {
+        adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1',
+        callerContext: 'kernel',
+        suppressHistory: true,
+        toolName: 'getMediaGenerationStatus',
+      },
+      effects: [],
+      id: 'media.generation.status.v1',
+      result: {
+        bindable: [],
+        projection: { kind: 'bounded-json-v1', maximumCharacters: 100_000 },
+        schemaVersion: 1,
+      },
+      risk: 'read-only',
+      transaction: 'none',
+    },
     {
       arguments: {
         additionalProperties: false,
@@ -232,7 +370,18 @@ export const PUBLIC_OPERATION_CONTRACT_V1 = {
       id: 'timeline.editor.inspect.v1',
       result: {
         bindable: [],
-        projection: { kind: 'bounded-json-v1', maximumCharacters: 500_000 },
+        projection: {
+          kind: 'bounded-json-v1',
+          maximumCharacters: 500_000,
+          sourcePreviewImages: {
+            exactFrameCount: 3,
+            exactHeight: 240,
+            exactWidth: 1_080,
+            kind: 'source-three-frame-grid-v1',
+            maximumDataUrlCharacters: 450_000,
+            toolName: 'getMediaPreviewFrames',
+          },
+        },
         schemaVersion: 1,
       },
       risk: 'read-only',
@@ -338,7 +487,7 @@ export const PUBLIC_OPERATION_CONTRACT_V1 = {
       dispatcher: {
         adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1',
         callerContext: 'kernel',
-        suppressHistory: true,
+        suppressHistory: false,
         toolName: 'refineEditableHook',
       },
       effects: ['mediaDuration', 'timelinePlacement'],
@@ -368,7 +517,7 @@ export const PUBLIC_OPERATION_CONTRACT_V1 = {
       dispatcher: {
         adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1',
         callerContext: 'kernel',
-        suppressHistory: true,
+        suppressHistory: false,
         toolName: 'manageEditableHook',
       },
       effects: ['mediaDuration', 'timelinePlacement'],
@@ -637,7 +786,7 @@ export const PUBLIC_OPERATION_CONTRACT_V1 = {
 
 // Recomputed by the WP1 compatibility check from the canonical JSON above.
 export const PUBLIC_OPERATION_CONTRACT_DIGEST_V1 =
-  'sha256:75c941fa67c87e6f14f2933cec13499cbce5b0d5e164c004ec10b002d4c8baaa' as const;
+  'sha256:a174638d1d2fa74ea24a9050797c6ef4072d319b6b668e848f89c4ca2e887e28' as const;
 
 export const PUBLIC_COMPILED_PLAN_EXTENSION_V1 = {
   bindingVersion: 'ms-prior-result-path-v1',
@@ -651,7 +800,7 @@ export const PUBLIC_COMPILED_PLAN_EXTENSION_V1 = {
 } as const;
 
 export const PUBLIC_COMPILED_PLAN_DIGEST_V1 =
-  'sha256:fddab5db3c573719c9e8200bd343a89eca3175d96087d422e9a0d7bb1b6bdfa7' as const;
+  'sha256:50cc6fb579cefc61716714a608b76cc0f35263c470569f7949eda8d35088aa71' as const;
 
 const OPERATION_BY_ID = new Map<PublicOperationIdV1, PublicOperationSpecV1>(
   PUBLIC_OPERATION_CONTRACT_V1.operations.map((operation) => [operation.id, operation]),
@@ -920,6 +1069,192 @@ function sanitizeBoundedEditorResult(
   return output;
 }
 
+function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  return actual.length === expected.length
+    && actual.every((key, index) => key === expected[index]);
+}
+
+interface BoundedSourcePreviewImageData extends Record<string, unknown> {
+  dataUrl: string;
+  duration: number;
+  frameCount: 3;
+  frameTimes: number[];
+  height: 240;
+  mediaFileId: string;
+  mediaName: string;
+  visualReviewKind: 'source-three-frame-v1';
+  width: 1_080;
+}
+
+function validSourcePreviewImageData(
+  value: unknown,
+  maximumDataUrlCharacters: number,
+): value is BoundedSourcePreviewImageData {
+  if (!isRecord(value) || !exactKeys(value, [
+    'dataUrl',
+    'duration',
+    'frameCount',
+    'frameTimes',
+    'height',
+    'mediaFileId',
+    'mediaName',
+    'visualReviewKind',
+    'width',
+  ])) return false;
+  const frameTimes = value.frameTimes;
+  return value.visualReviewKind === 'source-three-frame-v1'
+    && value.frameCount === 3
+    && typeof value.mediaFileId === 'string'
+    && value.mediaFileId.length > 0
+    && value.mediaFileId.length <= 500
+    && typeof value.mediaName === 'string'
+    && value.mediaName.length <= 1_000
+    && typeof value.duration === 'number'
+    && Number.isFinite(value.duration)
+    && value.duration > 0
+    && value.width === 1_080
+    && value.height === 240
+    && Array.isArray(frameTimes)
+    && frameTimes.length === 3
+    && frameTimes.every((time, frameIndex) => (
+      typeof time === 'number'
+      && Number.isFinite(time)
+      && time >= 0
+      && time <= Number(value.duration)
+      && (frameIndex === 0 || time > Number(frameTimes[frameIndex - 1]))
+    ))
+    && typeof value.dataUrl === 'string'
+    && value.dataUrl.length <= maximumDataUrlCharacters
+    && /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(value.dataUrl);
+}
+
+export function validBoundedEditorOperationDataV1(
+  operationId: string,
+  value: unknown,
+): boolean {
+  const spec = getPublicOperationSpecV1(operationId);
+  if (!spec || spec.result.projection.kind !== 'bounded-json-v1') return false;
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    return false;
+  }
+  if (serialized.length > spec.result.projection.maximumCharacters) return false;
+  if (!/(?:^|["'])data:/i.test(serialized)) return true;
+  const sourcePreviewSpec = spec.result.projection.sourcePreviewImages;
+  if (!sourcePreviewSpec || !isRecord(value) || !Array.isArray(value.results)) return false;
+
+  const allowedDataUrlPaths = new Set<string>();
+  for (const [index, entry] of value.results.entries()) {
+    if (!isRecord(entry) || entry.toolName !== sourcePreviewSpec.toolName) continue;
+    const result = isRecord(entry.result) ? entry.result : undefined;
+    if (result?.success !== true || !validSourcePreviewImageData(
+      result.data,
+      sourcePreviewSpec.maximumDataUrlCharacters,
+    )) continue;
+    allowedDataUrlPaths.add(JSON.stringify(['results', index, 'result', 'data', 'dataUrl']));
+  }
+  const walk = (candidate: unknown, path: Array<number | string>, depth = 0): boolean => {
+    if (depth > 24) return false;
+    if (typeof candidate === 'string') {
+      return !/^data:/i.test(candidate) || allowedDataUrlPaths.has(JSON.stringify(path));
+    }
+    if (Array.isArray(candidate)) {
+      return candidate.every((entry, index) => walk(entry, [...path, index], depth + 1));
+    }
+    if (!isRecord(candidate)) return true;
+    return Object.entries(candidate).every(([key, entry]) => (
+      walk(entry, [...path, key], depth + 1)
+    ));
+  };
+  return walk(value, []);
+}
+
+function restoreBoundedSourcePreviewImages(
+  operationId: PublicOperationIdV1,
+  originalData: unknown,
+  sanitizedData: unknown,
+  operationArguments: Readonly<Record<string, unknown>>,
+): { data: unknown; error?: string } {
+  const operationSpec = getPublicOperationSpecV1(operationId);
+  const sourcePreviewSpec = operationSpec?.result.projection.kind === 'bounded-json-v1'
+    ? operationSpec.result.projection.sourcePreviewImages
+    : undefined;
+  if (!sourcePreviewSpec) return { data: sanitizedData };
+  const requestJson = operationArguments.requestJson;
+  if (typeof requestJson !== 'string') return { data: sanitizedData };
+  let batch: unknown;
+  try {
+    batch = JSON.parse(requestJson) as unknown;
+  } catch {
+    return { data: sanitizedData };
+  }
+  if (!isRecord(batch) || !Array.isArray(batch.requests)) return { data: sanitizedData };
+  const previewIndexes = batch.requests.flatMap((request, index) => (
+    isRecord(request) && request.toolName === 'getMediaPreviewFrames' ? [index] : []
+  ));
+  if (previewIndexes.length === 0) return { data: sanitizedData };
+
+  const originalResults = isRecord(originalData) && Array.isArray(originalData.results)
+    ? originalData.results
+    : undefined;
+  const sanitizedResults = isRecord(sanitizedData) && Array.isArray(sanitizedData.results)
+    ? sanitizedData.results
+    : undefined;
+  if (
+    !originalResults
+    || !sanitizedResults
+    || originalResults.length !== batch.requests.length
+    || sanitizedResults.length !== batch.requests.length
+  ) {
+    return { data: sanitizedData, error: 'editor operation returned invalid source visual evidence' };
+  }
+
+  for (const index of previewIndexes) {
+    const request = batch.requests[index];
+    const originalEntry = originalResults[index];
+    const sanitizedEntry = sanitizedResults[index];
+    if (!isRecord(request) || !isRecord(originalEntry) || !isRecord(sanitizedEntry)) {
+      return { data: sanitizedData, error: 'editor operation returned invalid source visual evidence' };
+    }
+    const requestArgs = isRecord(request.args) ? request.args : undefined;
+    const originalResult = isRecord(originalEntry.result) ? originalEntry.result : undefined;
+    const sanitizedResult = isRecord(sanitizedEntry.result) ? sanitizedEntry.result : undefined;
+    if (
+      originalEntry.toolName !== 'getMediaPreviewFrames'
+      || sanitizedEntry.toolName !== 'getMediaPreviewFrames'
+      || !requestArgs
+      || !originalResult
+      || !sanitizedResult
+    ) {
+      return { data: sanitizedData, error: 'editor operation returned invalid source visual evidence' };
+    }
+    if (originalResult.success !== true) continue;
+    const preview = isRecord(originalResult.data) ? originalResult.data : undefined;
+    if (
+      !validSourcePreviewImageData(preview, sourcePreviewSpec.maximumDataUrlCharacters)
+      || preview.mediaFileId !== requestArgs.mediaFileId
+    ) {
+      return { data: sanitizedData, error: 'editor operation returned invalid source visual evidence' };
+    }
+    sanitizedResult.data = {
+      dataUrl: preview.dataUrl,
+      duration: preview.duration,
+      frameCount: 3,
+      frameTimes: [...preview.frameTimes],
+      height: 240,
+      mediaFileId: preview.mediaFileId,
+      mediaName: preview.mediaName,
+      visualReviewKind: 'source-three-frame-v1',
+      width: 1_080,
+    };
+  }
+  return { data: sanitizedData };
+}
+
 export function projectPublicOperationResultV1(
   operationId: PublicOperationIdV1,
   value: unknown,
@@ -939,9 +1274,18 @@ export function projectPublicOperationResultV1(
   if (spec.result.projection.kind === 'bounded-json-v1') {
     if (value.data === undefined) return { success: true };
     const sanitized = sanitizeBoundedEditorResult(value.data);
-    const serialized = JSON.stringify(sanitized);
+    const sourcePreviewProjection = restoreBoundedSourcePreviewImages(
+      operationId,
+      value.data,
+      sanitized,
+      operationArguments,
+    );
+    if (sourcePreviewProjection.error) {
+      return { success: false, error: sourcePreviewProjection.error };
+    }
+    const serialized = JSON.stringify(sourcePreviewProjection.data);
     if (serialized.length <= spec.result.projection.maximumCharacters) {
-      return { success: true, data: sanitized };
+      return { success: true, data: sourcePreviewProjection.data };
     }
     return {
       success: true,

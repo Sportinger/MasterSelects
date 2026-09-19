@@ -71,6 +71,7 @@ describe('transition registry', () => {
       'rgb-split-glitch',
       'mosaic-glitch',
       'scanline-glitch',
+      'datamosh',
       'checker-wipe',
       'random-blocks',
       'paint-splatter',
@@ -162,6 +163,7 @@ describe('transition registry', () => {
       'rgb-split-glitch',
       'mosaic-glitch',
       'scanline-glitch',
+      'datamosh',
     ]);
     expect(getTransitionsByCategory('pattern').map((transition) => transition.id)).toEqual([
       'checker-wipe',
@@ -766,7 +768,6 @@ describe('transition registry', () => {
   it('keeps deferred transition ids out of the stable runtime registry', () => {
     const deferredTransitionIds = [
       'page-peel',
-      'datamosh',
       'smooth-cut',
       'flow',
       'luma-fade',
@@ -784,6 +785,23 @@ describe('transition registry', () => {
       expect(stableTransitionIds).not.toContain(transitionId);
       expect(getRuntimeTransition(transitionId)).toBeUndefined();
     }
+  });
+
+  it('registers codec datamosh as a stable post-cut transition', () => {
+    expect(getRuntimeTransition('datamosh')).toMatchObject({
+      defaultPlacement: 'start-at-cut',
+      defaultDuration: 2,
+      minDuration: 0.2,
+      maxDuration: 8,
+    });
+    expect(getRuntimeTransition('datamosh')?.capability).toBeUndefined();
+    expect(getDefaultTransitionParams(getTransition('datamosh'))).toEqual({
+      bitrateMbps: 2,
+      bakedMediaFileId: '',
+      bakedDuration: 0,
+      bakedBitrateMbps: 0,
+      bakedFormat: '',
+    });
   });
 
   it('normalizes transition params against the definition schema', () => {

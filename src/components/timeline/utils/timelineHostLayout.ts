@@ -8,7 +8,7 @@ import type {
   TimelineTrackFocusMode,
 } from '../../../stores/timeline/types';
 import { isManualLinkedGroupId } from '../../../stores/timeline/helpers/idGenerator';
-import type { ClipDragState } from '../types';
+import type { ClipDragState, ClipTrimState } from '../types';
 import {
   COLLAPSED_TRACK_HEIGHT,
   SPLIT_FOCUS_EDGE_THRESHOLD_PX,
@@ -21,7 +21,7 @@ import {
   TRACK_SCROLL_STEP_DELTA_PX,
 } from './timelineHostConstants';
 import type {
-  KeyframeAreaRevealSnapshot,
+  SelectedTrackRevealSnapshot,
   TrackSectionKind,
 } from './timelineHostTypes';
 
@@ -64,6 +64,19 @@ export function clipDragPreviewAffectsTrack(
   }
 
   return false;
+}
+
+export function clipTrimAffectsTrack(
+  trim: ClipTrimState | null,
+  trackId: string,
+  clipMap: Map<string, TimelineClip>,
+): boolean {
+  if (!trim) return false;
+
+  const trimmedClip = clipMap.get(trim.clipId);
+  if (trimmedClip?.trackId === trackId) return true;
+  if (trim.singleClip === true || trim.includeLinked !== true || !trimmedClip?.linkedClipId) return false;
+  return clipMap.get(trimmedClip.linkedClipId)?.trackId === trackId;
 }
 
 export function isVideoBakeModifierPressed(event: Pick<MouseEvent | ReactMouseEvent, 'ctrlKey' | 'metaKey'>): boolean {
@@ -215,29 +228,43 @@ export function getNormalizedWheelDeltaY(e: ReactWheelEvent, viewportHeight: num
   return e.deltaY;
 }
 
-export function applyKeyframeAreaRevealScroll(
+export function applySelectedTrackRevealScroll(
   currentScrollY: number,
-  snapshot: KeyframeAreaRevealSnapshot,
+  snapshot: SelectedTrackRevealSnapshot,
 ): number {
   const viewportHeight = Math.max(0, snapshot.viewportHeight);
   if (viewportHeight <= 0 || snapshot.contentHeight <= viewportHeight) {
     return 0;
   }
 
-  const padding = 10;
+  const trackTop = Math.max(0, snapshot.trackTop);
+  const trackBottom = Math.min(snapshot.contentHeight, Math.max(trackTop, snapshot.trackBottom));
+  const trackHeight = trackBottom - trackTop;
   const visibleTop = currentScrollY;
   const visibleBottom = currentScrollY + viewportHeight;
-  const targetTop = Math.max(0, snapshot.keyframeAreaTop - padding);
-  const targetBottom = Math.min(snapshot.contentHeight, snapshot.keyframeAreaBottom + padding);
-  let nextScrollY = currentScrollY;
 
-  if (targetBottom > visibleBottom) {
-    nextScrollY = targetBottom - viewportHeight;
+  if (trackTop >= visibleTop && trackBottom <= visibleBottom) {
+    return clampScrollY(currentScrollY, snapshot.contentHeight, viewportHeight);
   }
 
-  if (targetTop < visibleTop && targetBottom - targetTop <= viewportHeight) {
-    nextScrollY = targetTop;
+  if (trackHeight > viewportHeight) {
+    // Video 1 sits directly above the video/audio divider. When an expanded
+    // video track cannot fit, keep its divider-facing bottom visible and let
+    // upper layers scroll away. Audio tracks keep their top edge anchored.
+    const oversizedTarget = snapshot.sectionKind === 'video'
+      ? trackBottom - viewportHeight
+      : trackTop;
+    return clampScrollY(oversizedTarget, snapshot.contentHeight, viewportHeight);
   }
+
+  const padding = Math.min(10, Math.max(0, (viewportHeight - trackHeight) / 2));
+  const targetTop = Math.max(0, trackTop - padding);
+  const targetBottom = Math.min(snapshot.contentHeight, trackBottom + padding);
+  const nextScrollY = targetTop < visibleTop
+    ? targetTop
+    : targetBottom > visibleBottom
+      ? targetBottom - viewportHeight
+      : currentScrollY;
 
   return clampScrollY(nextScrollY, snapshot.contentHeight, viewportHeight);
 }

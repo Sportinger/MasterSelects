@@ -32,6 +32,7 @@ export interface StemBufferMixerSession {
   clipId: string;
   context: AudioContext;
   masterGain: GainNode;
+  cutGain: GainNode;
   analyser: AnalyserNode;
   stereoSplitter: ChannelSplitterNode;
   leftAnalyser: AnalyserNode;

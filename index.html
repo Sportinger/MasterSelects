@@ -3,8 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
     <title>MasterSelects</title>
+    <meta name="app-version" content="__APP_VERSION__" />
 
     <!-- SEO & Social Sharing -->
     <meta name="description" content="Professional browser-based video editor with WebGPU rendering, multicam support, and AI-powered editing tools." />
@@ -204,36 +208,9 @@
 
       <p>This application requires JavaScript and WebGPU (Chrome/Edge 113+).</p>
     </noscript>
-    <script>
-      // Version check - force reload on version change
-      (function() {
-        var CURRENT_VERSION = '__APP_VERSION__'; // Replaced by Vite during build
-        var storedVersion = localStorage.getItem('app_version');
-        if (storedVersion && storedVersion !== CURRENT_VERSION && CURRENT_VERSION !== '__APP_VERSION__') {
-          console.log('[Version] Update detected:', storedVersion, '->', CURRENT_VERSION);
-          localStorage.setItem('app_version', CURRENT_VERSION);
-          // Clear caches and reload
-          if ('caches' in window) {
-            caches.keys().then(function(names) {
-              names.forEach(function(name) { caches.delete(name); });
-            });
-          }
-          window.location.reload(true);
-        } else if (CURRENT_VERSION !== '__APP_VERSION__') {
-          localStorage.setItem('app_version', CURRENT_VERSION);
-        }
-      })();
-
-      // This runs BEFORE any modules load
-      if (window.location.search.includes('reset=true')) {
-        localStorage.clear();
-        sessionStorage.clear();
-        ['webvj-db', 'webvj-projects', 'webvj-apikeys', 'keyval-store', 'MASterSelectsDB', 'multicam-settings'].forEach(function(name) {
-          indexedDB.deleteDatabase(name);
-        });
-        window.location.href = window.location.origin + window.location.pathname;
-      }
-    </script>
+    <!-- Version check + explicit "?reset=true" handling (runs before any module loads).
+         Kept external so the Content-Security-Policy allows it via 'self' instead of a per-release hash. -->
+    <script src="/app-bootstrap.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

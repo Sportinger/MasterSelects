@@ -125,6 +125,96 @@ describe('positioningUtils', () => {
     expect(after).toMatchObject({ startTime: 4, duration: 4 });
   });
 
+  it('snaps an overlapping audio move into nearby free space', () => {
+    const movingAudio = createMockClip({
+      id: 'audio-moving',
+      trackId: 'audio-1',
+      startTime: 8,
+      duration: 2,
+      inPoint: 0,
+      outPoint: 2,
+      source: { type: 'audio', naturalDuration: 2 },
+    });
+    const occupiedAudio = createMockClip({
+      id: 'audio-occupied',
+      trackId: 'audio-1',
+      startTime: 4,
+      duration: 2,
+      inPoint: 0,
+      outPoint: 2,
+      source: { type: 'audio', naturalDuration: 2 },
+    });
+    const store = createTestTimelineStore({ clips: [movingAudio, occupiedAudio] });
+
+    const result = store.getState().getPositionWithResistance(
+      'audio-moving',
+      3.5,
+      'audio-1',
+      2,
+      50,
+    );
+
+    expect(result).toEqual({ startTime: 2, forcingOverlap: false });
+  });
+
+  it('marks an audio lane occupied when the nearest free position is too far away', () => {
+    const movingAudio = createMockClip({
+      id: 'audio-moving',
+      trackId: 'audio-1',
+      startTime: 10,
+      duration: 2,
+      inPoint: 0,
+      outPoint: 2,
+      source: { type: 'audio', naturalDuration: 2 },
+    });
+    const occupiedAudio = createMockClip({
+      id: 'audio-occupied',
+      trackId: 'audio-1',
+      startTime: 0,
+      duration: 10,
+      inPoint: 0,
+      outPoint: 10,
+      source: { type: 'audio', naturalDuration: 10 },
+    });
+    const store = createTestTimelineStore({ clips: [movingAudio, occupiedAudio] });
+
+    const result = store.getState().getPositionWithResistance(
+      'audio-moving',
+      4,
+      'audio-1',
+      2,
+      100,
+    );
+
+    expect(result).toEqual({ startTime: 4, forcingOverlap: false, noFreeSpace: true });
+  });
+
+  it('never trims an existing audio clip through the overlap helper', () => {
+    const placed = createMockClip({
+      id: 'audio-placed',
+      trackId: 'audio-1',
+      startTime: 5,
+      duration: 4,
+      inPoint: 0,
+      outPoint: 4,
+      source: { type: 'audio', naturalDuration: 4 },
+    });
+    const underneath = createMockClip({
+      id: 'audio-underneath',
+      trackId: 'audio-1',
+      startTime: 4,
+      duration: 4,
+      inPoint: 0,
+      outPoint: 4,
+      source: { type: 'audio', naturalDuration: 4 },
+    });
+    const store = createTestTimelineStore({ clips: [placed, underneath] });
+
+    store.getState().trimOverlappingClips('audio-placed', 5, 'audio-1', 4);
+
+    expect(store.getState().clips).toEqual([placed, underneath]);
+  });
+
   it('snaps clip start and end to the playhead', () => {
     const movingVideo = createMockClip({
       id: 'video-moving',

@@ -45,15 +45,19 @@ export function usePlayheadSnap({
   useEffect(() => {
     if (!isDraggingPlayhead) return;
 
+    const interactionDocument = timelineRef.current?.ownerDocument ?? document;
+    const interactionWindow = interactionDocument.defaultView ?? window;
+
     let animationFrameId: number | null = null;
     let lastFrameAt: number | null = null;
     let pointer: { clientX: number; altKey: boolean; shiftKey: boolean } | null = null;
+    let touchPointerId: number | null = null;
 
     const stopAutoScroll = () => {
       pointer = null;
       lastFrameAt = null;
       if (animationFrameId !== null) {
-        cancelAnimationFrame(animationFrameId);
+        interactionWindow.cancelAnimationFrame(animationFrameId);
         animationFrameId = null;
       }
     };
@@ -134,7 +138,7 @@ export function usePlayheadSnap({
         setScrollX(nextScrollX);
         updatePlayhead(pointer!.clientX, pointer!.altKey, pointer!.shiftKey);
       }
-      animationFrameId = requestAnimationFrame(autoScroll);
+      animationFrameId = interactionWindow.requestAnimationFrame(autoScroll);
     };
 
     const handleMouseMove = (e: MouseEvent) => {
@@ -147,8 +151,23 @@ export function usePlayheadSnap({
       if (!getEdgeScroll()) {
         stopAutoScroll();
       } else if (animationFrameId === null) {
-        animationFrameId = requestAnimationFrame(autoScroll);
+        animationFrameId = interactionWindow.requestAnimationFrame(autoScroll);
       }
+    };
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse' || (e.buttons & 1) === 0) return;
+      if (touchPointerId === null) touchPointerId = e.pointerId;
+      if (e.pointerId !== touchPointerId) return;
+
+      pointer = { clientX: e.clientX, altKey: e.altKey, shiftKey: e.shiftKey };
+      updatePlayhead(e.clientX, e.altKey, e.shiftKey);
+      if (!getEdgeScroll()) {
+        stopAutoScroll();
+      } else if (animationFrameId === null) {
+        animationFrameId = interactionWindow.requestAnimationFrame(autoScroll);
+      }
+      e.preventDefault();
     };
 
     const handleMouseUp = () => {
@@ -156,21 +175,32 @@ export function usePlayheadSnap({
       setDraggingPlayhead(false);
     };
 
+    const handlePointerUp = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse') return;
+      if (touchPointerId !== null && e.pointerId !== touchPointerId) return;
+      touchPointerId = null;
+      handleMouseUp();
+    };
+
     const handleDragCancel = () => {
       stopAutoScroll();
       setDraggingPlayhead(false);
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('pointercancel', handleDragCancel);
-    window.addEventListener('blur', handleDragCancel);
+    interactionDocument.addEventListener('mousemove', handleMouseMove);
+    interactionDocument.addEventListener('mouseup', handleMouseUp);
+    interactionDocument.addEventListener('pointermove', handlePointerMove, { passive: false });
+    interactionDocument.addEventListener('pointerup', handlePointerUp);
+    interactionDocument.addEventListener('pointercancel', handleDragCancel);
+    interactionWindow.addEventListener('blur', handleDragCancel);
     return () => {
       stopAutoScroll();
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('pointercancel', handleDragCancel);
-      window.removeEventListener('blur', handleDragCancel);
+      interactionDocument.removeEventListener('mousemove', handleMouseMove);
+      interactionDocument.removeEventListener('mouseup', handleMouseUp);
+      interactionDocument.removeEventListener('pointermove', handlePointerMove);
+      interactionDocument.removeEventListener('pointerup', handlePointerUp);
+      interactionDocument.removeEventListener('pointercancel', handleDragCancel);
+      interactionWindow.removeEventListener('blur', handleDragCancel);
     };
   }, [
     isDraggingPlayhead,

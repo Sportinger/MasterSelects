@@ -1,12 +1,57 @@
 import { useCallback, type ChangeEvent } from 'react';
 import type { MediaPanelContextMenu } from '../context/types';
 import { requestMediaBoardPlacement } from '../board/placementRequests';
-import type { MediaPanelViewMode } from './types';
+import type { MediaImportAnchor, MediaPanelViewMode } from './types';
 import type { MediaFolder, useMediaStore } from '../../../../stores/mediaStore';
 import type { MeshPrimitiveType } from '../../../../stores/mediaStore/types';
 import type { ShapePrimitive } from '../../../../types/motionDesign';
+import { trackEditorControlCommitted } from '../../../../services/productAnalytics';
+import type { NewCompositionSettingsRequest } from './useMediaPanelCompositionSettings';
 
 type MediaStoreState = ReturnType<typeof useMediaStore.getState>;
+
+const DESKTOP_MEDIA_INPUT_ACCEPT = 'video/*,image/*,audio/*,.mp4,.mov,.m4v,.webm,.mkv,.mp3,.wav,.m4a,.jpg,.jpeg,.png,.heic';
+
+function isIPadLikeDevice(): boolean {
+  return typeof navigator !== 'undefined'
+    && navigator.maxTouchPoints > 1
+    && /Macintosh|iPad|iPhone|iPod/i.test(navigator.userAgent);
+}
+
+function isTouchFirstDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const hasTouch = navigator.maxTouchPoints > 0;
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  const hasCoarsePointer = typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(pointer: coarse)').matches;
+  return hasTouch && (isAndroid || hasCoarsePointer || isIPadLikeDevice());
+}
+
+export function getNativeMediaInputAccept(): string {
+  // Mixed audio/extension filters make iPadOS jump straight to Files instead
+  // of offering the system Photo Library picker.
+  return isIPadLikeDevice() ? 'image/*,video/*' : DESKTOP_MEDIA_INPUT_ACCEPT;
+}
+
+export function shouldUseNativeMediaInput(fileSystemSupported: boolean): boolean {
+  if (!fileSystemSupported || typeof navigator === 'undefined') return true;
+  // Mobile browsers may expose partial desktop picker APIs, but a directly
+  // activated native input is the reliable one-tap path on touch-first devices.
+  return isTouchFirstDevice();
+}
+
+export function positionNativeMediaInputAtAnchor(
+  input: HTMLInputElement,
+  anchor: MediaImportAnchor,
+): void {
+  const maxX = Math.max(0, window.innerWidth - 1);
+  const maxY = Math.max(0, window.innerHeight - 1);
+  const x = Math.min(maxX, Math.max(0, anchor.x));
+  const y = Math.min(maxY, Math.max(0, anchor.y));
+  input.style.left = `${x}px`;
+  input.style.top = `${y}px`;
+}
 
 interface UseMediaPanelAddImportCommandsInput {
   fileInputRef: { current: HTMLInputElement | null };
@@ -19,8 +64,7 @@ interface UseMediaPanelAddImportCommandsInput {
   compositionCount: number;
   importFiles: MediaStoreState['importFiles'];
   importFilesWithPicker: MediaStoreState['importFilesWithPicker'];
-  createComposition: MediaStoreState['createComposition'];
-  openCompositionTab: MediaStoreState['openCompositionTab'];
+  openNewCompositionSettings: (request: NewCompositionSettingsRequest) => void;
   createFolder: MediaStoreState['createFolder'];
   createTextItem: MediaStoreState['createTextItem'];
   getOrCreateTextFolder: MediaStoreState['getOrCreateTextFolder'];
@@ -53,8 +97,7 @@ export function useMediaPanelAddImportCommands({
   compositionCount,
   importFiles,
   importFilesWithPicker,
-  createComposition,
-  openCompositionTab,
+  openNewCompositionSettings,
   createFolder,
   createTextItem,
   getOrCreateTextFolder,
@@ -76,7 +119,7 @@ export function useMediaPanelAddImportCommands({
   closeContextMenu,
 }: UseMediaPanelAddImportCommandsInput): {
   getActiveParentId: () => string | null;
-  handleImport: () => Promise<void>;
+  handleImport: (anchor?: MediaImportAnchor) => void;
   handleFileChange: (e: ChangeEvent<HTMLInputElement>) => Promise<void>;
   handleNewComposition: () => void;
   handleNewFolder: () => void;
@@ -102,19 +145,30 @@ export function useMediaPanelAddImportCommands({
     return null;
   }, [contextMenu, viewMode, gridFolderId, selectedIds, folders]);
 
-  const handleImport = useCallback(async () => {
-    if (fileSystemSupported) {
-      await importFilesWithPicker();
-    } else {
-      fileInputRef.current?.click();
+  const handleImport = useCallback((anchor?: MediaImportAnchor) => {
+    if (shouldUseNativeMediaInput(fileSystemSupported)) {
+      const input = fileInputRef.current;
+      if (!input) return;
+      const pickerAnchor = anchor ?? (contextMenu
+        ? { x: contextMenu.x, y: contextMenu.y }
+        : null);
+      if (pickerAnchor) positionNativeMediaInputAtAnchor(input, pickerAnchor);
+      input.value = '';
+      input.accept = getNativeMediaInputAccept();
+      input.click();
+      return;
     }
-  }, [fileInputRef, fileSystemSupported, importFilesWithPicker]);
+    void importFilesWithPicker();
+  }, [contextMenu, fileInputRef, fileSystemSupported, importFilesWithPicker]);
 
   const handleFileChange = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      await importFiles(e.target.files);
-      e.target.value = '';
-    }
+    const input = e.currentTarget;
+    const files = input.files ? Array.from(input.files) : [];
+
+    // Release the native Photos picker synchronously. Import work may continue
+    // for seconds, but Safari no longer needs to retain the selected input.
+    input.value = '';
+    if (files.length > 0) await importFiles(files);
   }, [importFiles]);
 
   const placeCreatedItems = useCallback((itemIds: string[]) => {
@@ -123,11 +177,13 @@ export function useMediaPanelAddImportCommands({
   }, [boardPosition]);
 
   const handleNewComposition = useCallback(() => {
-    const composition = createComposition(`Comp ${compositionCount + 1}`, { parentId: getActiveParentId() });
-    placeCreatedItems([composition.id]);
-    openCompositionTab(composition.id);
+    openNewCompositionSettings({
+      name: `Comp ${compositionCount + 1}`,
+      parentId: getActiveParentId(),
+      ...(boardPosition ? { boardPosition } : {}),
+    });
     closeContextMenu();
-  }, [closeContextMenu, compositionCount, createComposition, getActiveParentId, openCompositionTab, placeCreatedItems]);
+  }, [boardPosition, closeContextMenu, compositionCount, getActiveParentId, openNewCompositionSettings]);
 
   const handleNewFolder = useCallback(() => {
     const folder = createFolder('New Folder', getActiveParentId());
@@ -139,6 +195,15 @@ export function useMediaPanelAddImportCommands({
     const textFolderId = boardPosition ? getActiveParentId() : getOrCreateTextFolder();
     const id = createTextItem(undefined, textFolderId);
     placeCreatedItems([id]);
+    trackEditorControlCommitted({
+      area: 'text',
+      controlId: 'create-text-item',
+      controlKind: 'button',
+      inputMethod: 'click',
+      interaction: 'add',
+      itemId: 'text-item',
+      itemKind: 'other',
+    });
     closeContextMenu();
   }, [boardPosition, closeContextMenu, createTextItem, getActiveParentId, getOrCreateTextFolder, placeCreatedItems]);
 

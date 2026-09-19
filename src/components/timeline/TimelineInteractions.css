@@ -445,6 +445,80 @@
     );
 }
 
+.timeline-clip-replace-preview {
+  border: 2px solid rgba(90, 220, 255, 0.96);
+  background: rgba(17, 79, 111, 0.78);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+    0 0 0 2px rgba(90, 220, 255, 0.24),
+    0 0 20px rgba(48, 190, 255, 0.48);
+  animation: timeline-replace-target-pulse 800ms ease-in-out infinite alternate;
+}
+
+.timeline-clip-replace-preview::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  inset: -30% auto -30% -34px;
+  width: 26px;
+  transform: skewX(-18deg);
+  background: linear-gradient(90deg, transparent, rgba(210, 249, 255, 0.75), transparent);
+  animation: timeline-replace-target-scan 1.05s linear infinite;
+}
+
+.timeline-clip-replace-preview .timeline-clip-preview-thumbnail {
+  opacity: 0.46;
+  filter: saturate(0.8) contrast(1.1) hue-rotate(8deg);
+}
+
+.timeline-clip-replace-preview .clip-content {
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 1px;
+  padding-block: 3px;
+  background: linear-gradient(90deg, rgba(3, 19, 30, 0.9), rgba(3, 19, 30, 0.36) 76%, transparent);
+}
+
+.timeline-clip-replace-kicker,
+.timeline-clip-replace-note {
+  max-width: 100%;
+  overflow: hidden;
+  color: rgba(220, 250, 255, 0.95);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.timeline-clip-replace-note {
+  color: rgba(207, 242, 250, 0.78);
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: none;
+}
+
+@keyframes timeline-replace-target-pulse {
+  from { transform: scaleY(0.95); }
+  to { transform: scaleY(1); }
+}
+
+@keyframes timeline-replace-target-scan {
+  from { left: -34px; }
+  to { left: calc(100% + 34px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline-clip-replace-preview,
+  .timeline-clip-replace-preview::before {
+    animation: none;
+  }
+}
+
 .track-lane.new-track-preview {
   background: rgba(59, 130, 246, 0.1);
   border: 2px dashed rgba(59, 130, 246, 0.5);

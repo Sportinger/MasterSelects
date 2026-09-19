@@ -1,3 +1,5 @@
+import { LegalContactMethods, LegalPostalAddress } from './LegalContactDetails';
+
 // =====================================================
 // PORTUGUÊS
 // =====================================================
@@ -6,13 +8,13 @@ export function ImprintPT() {
   return (
     <div className="legal-text">
       <h3>Informações conforme § 5 TMG (Lei alemã de telemídia)</h3>
-      <p>Roman Kuskowski<br />[Endereço a ser adicionado]</p>
+      <p><LegalPostalAddress /></p>
       <h3>Contato</h3>
-      <p>Email: admin@masterselects.com</p>
+      <p><LegalContactMethods emailLabel="Email" phoneLabel="Telefone" /></p>
       <h3>Direitos autorais</h3>
       <p>
-        MasterSelects é software de código aberto, publicado no{' '}
-        <a href="https://github.com/Sportinger/MasterSelects" target="_blank" rel="noopener noreferrer">GitHub</a>.
+        O editor MasterSelects é licenciado sob GNU AGPL-3.0-only. Copyright © 2026 Jan Roman Kuskowski.
+        Componentes de terceiros permanecem sujeitos às respectivas licenças.
       </p>
     </div>
   );
@@ -27,16 +29,18 @@ export function PrivacyPT() {
         exclusivamente no seu dispositivo. Seus arquivos de mídia nunca saem do seu computador.
       </p>
       <h3>2. Controlador de dados</h3>
-      <p>Roman Kuskowski<br />Email: admin@masterselects.com</p>
+      <p><LegalPostalAddress /><br /><LegalContactMethods emailLabel="Email" phoneLabel="Telefone" /></p>
       <h3>3. Hospedagem</h3>
       <p>Hospedado pela <strong>Cloudflare, Inc.</strong> (EUA), certificada pelo EU-US Data Privacy Framework.</p>
       <p>
         Al&eacute;m disso, processamos temporariamente eventos de visita no servidor para monitoramento t&eacute;cnico
         da opera&ccedil;&atilde;o e para notifica&ccedil;&otilde;es internas em tempo real quando uma p&aacute;gina deste
-        site &eacute; aberta. Esses eventos podem incluir o caminho solicitado, o hor&aacute;rio, pa&iacute;s e cidade
-        derivados dos dados geogr&aacute;ficos da Cloudflare, referer, um user agent abreviado e um identificador
-        pseudonimizado do visitante gerado a partir do endere&ccedil;o IP e de um valor secreto. N&atilde;o armazenamos o
-        IP em texto puro nesse log interno. O prazo de reten&ccedil;&atilde;o normalmente &eacute; de cerca de uma hora.
+        site &eacute; aberta. Esses eventos podem incluir o caminho solicitado, o hor&aacute;rio, o pa&iacute;s derivado dos dados
+        geogr&aacute;ficos da Cloudflare, categorias gerais de navegador, sistema operacional e dispositivo, o dom&iacute;nio
+        do referer e um identificador pseudonimizado do visitante que muda diariamente e &eacute; gerado por HMAC a partir
+        do endere&ccedil;o IP e de uma chave secreta. N&atilde;o armazenamos cidade, user agent completo, URL completa do referer
+        nem IP em texto puro; o identificador n&atilde;o permite vincular visitas entre dias. Os eventos s&atilde;o exclu&iacute;dos
+        automaticamente ap&oacute;s 180 dias.
         Base legal: art. 6(1)(f) do RGPD (interesse leg&iacute;timo na opera&ccedil;&atilde;o segura, detec&ccedil;&atilde;o
         de abuso e conhecimento da atividade atual do site).
       </p>
@@ -59,7 +63,16 @@ export function PrivacyPT() {
         Apenas cookies tecnicamente necessários. Nenhum cookie de rastreamento ou marketing. O monitoramento de
         visitas descrito acima não armazena informações no seu dispositivo para essa finalidade.
       </p>
-      <p className="legal-meta">Última atualização: maio 2026</p>
+      <p>
+        <strong>Análise de produto:</strong> processamos uma lista fixa de eventos gerais (abertura, tutorial,
+        importação, categorias de edição, reprodução, pagamento e exportação). Eventos de usuários conectados podem
+        ser associados ao identificador interno da conta; eventos anônimos usam apenas um identificador temporário de
+        sessão na memória. Não coletamos nomes de arquivos, conteúdo do projeto ou mídia, prompts, texto de
+        chat/transcrição, erros brutos, cookies analíticos ou um identificador persistente do dispositivo. Os eventos
+        são excluídos após 180 dias. Você pode se opor em Configurações &gt; Geral &gt; Privacidade; Do Not Track e Global
+        Privacy Control são respeitados.
+      </p>
+      <p className="legal-meta">Última atualização: 16 de agosto de 2026</p>
     </div>
   );
 }
@@ -72,10 +85,6 @@ export function ContactPT() {
         <div className="legal-contact-row">
           <span className="legal-contact-label">Email</span>
           <a href="mailto:admin@masterselects.com">admin@masterselects.com</a>
-        </div>
-        <div className="legal-contact-row">
-          <span className="legal-contact-label">GitHub</span>
-          <a href="https://github.com/Sportinger/MasterSelects" target="_blank" rel="noopener noreferrer">Sportinger/MasterSelects</a>
         </div>
       </div>
     </div>

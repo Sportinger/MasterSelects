@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
 import { useHasFlashBoardActiveGenerationBoard } from '../../../stores/flashboardStore/activeGenerationRecords';
 import { DEFAULT_FLASHBOARD_MODEL_VERSION } from '../../../stores/flashboardStore/defaults';
+import { useDockStore } from '../../../stores/dockStore';
 import { useMediaStore } from '../../../stores/mediaStore';
 import {
   DEFAULT_SUNO_DURATION,
@@ -9,7 +10,7 @@ import {
   MIN_SUNO_DURATION,
   SUNO_PROVIDER_ID,
 } from '../../../services/sunoContracts';
-import { RUNWAY_VIDEO_PROVIDER_ID } from '../../../services/kieAi/config';
+import { RUNWAY_VIDEO_PROVIDER_ID, SEEDANCE_2_5_PROVIDER_ID } from '../../../services/kieAi/config';
 import type { CatalogEntry } from '../../../services/flashboard/types';
 import { buildFlashBoardGenerationActionState } from './FlashBoardGenerationActionStatePlanner';
 import {
@@ -40,6 +41,11 @@ import {
   useFlashBoardReferenceController,
   useFlashBoardReferenceValidationController,
 } from './useFlashBoardReferenceController';
+import { useSeedanceEditorWorkflow } from '../../story/seedanceEditorWorkflowState';
+import {
+  DEFAULT_SEEDANCE_STORY_PREFERENCES,
+  type SeedanceStoryPreferences,
+} from '../../../services/seedancePreproduction/orchestrationContracts';
 
 type FlashBoardComposerProps = { initialProviderId?: string; initialService?: CatalogEntry['service']; initialVersion?: string; initialMode?: 'generate' | 'chat'; initialChatPrompt?: string; allowedServices?: CatalogEntry['service'][]; serviceScope?: CatalogEntry['service']; };
 
@@ -58,10 +64,11 @@ export function FlashBoardComposer({
   const activeGenerationRecords = useFlashBoardStore((s) => s.activeGenerationRecords);
   const updateComposer = useFlashBoardStore((s) => s.updateComposer);
   const setHoveredComposerReference = useFlashBoardStore((s) => s.setHoveredComposerReference);
+  const activatePanelType = useDockStore((s) => s.activatePanelType);
   const mediaFiles = useMediaStore((s) => s.files);
+  const seedance = useSeedanceEditorWorkflow();
   const {
-    accountSession, canUseHostedPromptRefiner,
-    hasHostedAudioAccess, hasHostedSession,
+    canUseHostedPromptRefiner, hasHostedAudioAccess, hasHostedSession,
     hostedAIEnabled,
     openAuthDialog, openPricingDialog,
   } = useFlashBoardComposerAccessState();
@@ -122,13 +129,11 @@ export function FlashBoardComposer({
   const [copiedPromptBookEntryId, setCopiedPromptBookEntryId] = useState<string | null>(null);
   const copiedPromptBookResetRef = useRef<number | null>(null);
   const {
-    availableChatModelClasses, chatButtonLabel, chatChargeTitle, chatError,
-    chatModelClass, chatModelClassAvailabilityStatus,
-    chatMessages, chatPanelOpen, chatPrompt, chatProvider,
-    chatProviderLabel, chatProviderOptions,
-    copiedChatMessageId, handleChatButtonClick, handleChatModelClassSelect,
+    chatButtonLabel, chatChargeTitle, chatError, chatAgentMode,
+    chatMessages, chatPanelOpen, chatPrompt,
+    copiedChatMessageId, handleChatAgentModeSelect, handleChatButtonClick,
     handleChatInputKeyDown,
-    handleChatMessageDoubleClick, handleChatProviderSelect, handleChatPromptChange,
+    handleChatMessageDoubleClick, handleChatPromptChange,
     handleClearChatHistory, handleClearChatPrompt, isChatting,
     decisionPolicy,
     handleDecisionPolicyChange, handleStoryboardDecisionSubmit,
@@ -150,6 +155,17 @@ export function FlashBoardComposer({
   const [aspectRatio, setAspectRatio] = useState(initialModelSettings?.aspectRatio ?? composer.aspectRatio ?? '16:9');
   const [imageSize, setImageSize] = useState(initialModelSettings?.imageSize ?? composer.imageSize ?? '1K');
   const [generateAudio, setGenerateAudio] = useState(initialGenerateAudio);
+  const [storyPreferences, setStoryPreferences] = useState<SeedanceStoryPreferences>(() => ({
+    ...DEFAULT_SEEDANCE_STORY_PREFERENCES,
+  }));
+  useEffect(() => {
+    if (!seedance.run) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setStoryPreferences(seedance.run!.preferences);
+    });
+    return () => { cancelled = true; };
+  }, [seedance.run]);
   useFlashBoardInitialEntrySync({
     initialEntry,
     initialAspectRatio: initialModelSettings?.aspectRatio ?? composer.aspectRatio,
@@ -195,9 +211,33 @@ export function FlashBoardComposer({
   const isSunoMode = selectedEntry?.providerId === SUNO_PROVIDER_ID || providerId === SUNO_PROVIDER_ID;
   const isElevenLabsMode = isAudioMode && selectedEntry?.providerId === 'cloud-elevenlabs-tts';
   const isHostedAudioMode = isElevenLabsMode && service === 'cloud';
+  const isSeedance25Mode = providerId === SEEDANCE_2_5_PROVIDER_ID;
+  const seedanceSourceMediaFileIds = useMemo(() => {
+    const videoFileIds = new Set(mediaFiles.filter((file) => file.type === 'video').map((file) => file.id));
+    const referencedVideoIds = composer.referenceMediaFileIds.filter((id) => videoFileIds.has(id));
+    return referencedVideoIds.length > 0 ? referencedVideoIds : [...videoFileIds];
+  }, [composer.referenceMediaFileIds, mediaFiles]);
+  const handleSeedanceStart = () => {
+    activatePanelType('story');
+    if (seedance.run) return;
+    void seedance.start(chatPrompt, seedanceSourceMediaFileIds, storyPreferences);
+  };
+  const seedanceStartDisabled = !seedance.run
+    && (!chatPrompt.trim() || seedanceSourceMediaFileIds.length === 0 || isChatting);
+  const seedanceStartTitle = seedance.run
+    ? 'Open the active Story workflow'
+    : seedanceSourceMediaFileIds.length === 0
+      ? 'Add a source video before starting Story'
+      : !chatPrompt.trim()
+        ? 'Describe the film in the chat prompt first'
+        : 'Start Story';
+  const videoOutputFormat = composer.videoOutputFormat ?? 'mp4';
+  const webSearch = composer.webSearch === true;
+  const returnLastFrame = composer.returnLastFrame === true;
   const modeLabel = selectedEntry?.modeLabels?.[mode] ?? mode;
   const {
     hasAudioReferenceInput, hasImageReferenceInput, hasVideoReferenceInput, hasVisualReferenceInput,
+    referenceVideoDuration,
     seedanceReferenceModeActive, seedanceReferenceValidationError,
   } = useFlashBoardReferenceValidationController({
     composer,
@@ -266,6 +306,7 @@ export function FlashBoardComposer({
     multiShots,
     normalizedMultiPrompt,
     promptRefineCallbacksRef,
+    updateComposer,
     version,
   });
   const sunoDurationSupported = isSunoMode && sunoCustomMode && currentSunoModelId === 'V5_5';
@@ -300,6 +341,7 @@ export function FlashBoardComposer({
     duration,
     effectiveGenerateAudio,
     hasVideoReferenceInput,
+    referenceVideoDuration,
     imageSize,
     mode,
     multiShots,
@@ -310,6 +352,7 @@ export function FlashBoardComposer({
     duration,
     effectiveGenerateAudio,
     hasVideoReferenceInput,
+    referenceVideoDuration,
     imageSize,
     mode,
     multiShots,
@@ -324,7 +367,7 @@ export function FlashBoardComposer({
     generateButtonTitle,
     multiShotValidationError,
   } = useMemo(() => buildFlashBoardGenerationActionState({
-    accountAuthenticated: accountSession?.authenticated === true,
+    accountAuthenticated: hasHostedSession,
     duration,
     effectiveGenerateAudio,
     effectivePrompt: isSunoMode && sunoInstrumental ? '' : effectivePrompt,
@@ -333,6 +376,7 @@ export function FlashBoardComposer({
     hasImageReferenceInput,
     hasReferenceMediaInput: hasVisualReferenceInput,
     hasVideoReferenceInput,
+    referenceVideoDuration,
     hostedAIEnabled,
     imageSize,
     isAudioMode,
@@ -358,7 +402,6 @@ export function FlashBoardComposer({
     version,
     voiceId,
   }), [
-    accountSession?.authenticated,
     duration,
     effectiveGenerateAudio,
     effectivePrompt,
@@ -367,6 +410,7 @@ export function FlashBoardComposer({
     hasImageReferenceInput,
     hasVisualReferenceInput,
     hasVideoReferenceInput,
+    referenceVideoDuration,
     hostedAIEnabled,
     imageSize,
     isAudioMode,
@@ -397,6 +441,7 @@ export function FlashBoardComposer({
     duration,
     effectiveGenerateAudio,
     hasVideoReferenceInput,
+    referenceVideoDuration,
     imageSize,
     mode,
     multiShots,
@@ -408,6 +453,7 @@ export function FlashBoardComposer({
     duration,
     effectiveGenerateAudio,
     hasVideoReferenceInput,
+    referenceVideoDuration,
     imageSize,
     mode,
     multiShots,
@@ -422,9 +468,12 @@ export function FlashBoardComposer({
     handleReferenceDragLeave, handleReferenceDragOver, handleReferenceDrop,
     handleReferenceRootDragLeaveCapture, handleReferenceRootDragOverCapture,
     handleReferenceRootDropCapture,
+    handlePromptReferenceDragOver, handlePromptReferenceDrop,
     handleReferenceSlotDragOver, handleReferenceSlotDrop,
-    handleReferenceStripPointerLeave, handleRemoveComposerReference, isReferenceDragOver,
-    maxReferenceMedia, referenceStripRef, showComposerReferences, supportsEndFrameReference,
+    handleReferenceStripPointerLeave, handleRemoveComposerReference, handleReorderComposerReference,
+    isReferenceDragOver,
+    maxReferenceMedia, referenceStripRef, seedancePromptReferencesEnabled,
+    seedancePromptReferenceTokens, showComposerReferences, supportsEndFrameReference,
     supportsTimelineReferenceRoles, updateReferenceCardFocus, activeReferenceSlotKey,
   } = useFlashBoardReferenceController({
     chatPanelOpen,
@@ -432,6 +481,9 @@ export function FlashBoardComposer({
     isAudioMode,
     mediaFiles,
     multiShots,
+    onPromptChange: handlePromptChange,
+    prompt,
+    providerId,
     selectedEntry,
     setHoveredComposerReference,
     updateComposer,
@@ -525,6 +577,7 @@ export function FlashBoardComposer({
     normalizedMultiPrompt,
     originalPrompt: promptBeforeAiRewrite,
     outputFormat,
+    returnLastFrame,
     providerId,
     selectedEntry,
     service,
@@ -548,10 +601,12 @@ export function FlashBoardComposer({
     supportsAudio,
     updateComposer,
     version,
+    videoOutputFormat,
     visibleCatalog,
     voiceId,
     voiceName,
     voiceSettings,
+    webSearch,
   });
 
   useEffect(() => {
@@ -599,6 +654,7 @@ export function FlashBoardComposer({
           supportsTimelineReferenceRoles, onHoverReference: setHoveredComposerReference,
           onPointerLeave: handleReferenceStripPointerLeave, onPointerMove: updateReferenceCardFocus,
           onReferenceRoleChange: handleComposerReferenceRoleChange, onRemoveReference: handleRemoveComposerReference,
+          onReorderReference: handleReorderComposerReference,
           onSlotDragOver: handleReferenceSlotDragOver, onSlotDrop: handleReferenceSlotDrop,
         }}
         promptEditor={{
@@ -622,6 +678,7 @@ export function FlashBoardComposer({
           isAudioMode, isElevenLabsMode,
           isRefiningPrompt, isSunoMode, maxReferenceMedia, multiShots, prompt, promptBeforeAiRewrite,
           promptInputRef, promptRefineTitle, referenceMediaCount: effectiveReferenceMediaFileIds.length,
+          seedancePromptReferencesEnabled, seedancePromptReferenceTokens,
           sunoAudioReferenceActive: hasAudioReferenceInput, sunoAudioWeight,
           sunoCustomMode, sunoInstrumental, sunoNegativeTags, sunoStyle, sunoStyleLimit, sunoStyleWeight,
           sunoWeirdnessConstraint,
@@ -629,6 +686,8 @@ export function FlashBoardComposer({
           onChatInputKeyDown: handleChatInputKeyDown, onChatPromptChange: handleChatPromptChange,
           onClearChatPrompt: handleClearChatPrompt, onClearPrompt: handleClearPrompt,
           onDismissPromptBeforeAiRewrite: handleDismissPromptBeforeAiRewrite,
+          onPromptReferenceDragOver: handlePromptReferenceDragOver,
+          onPromptReferenceDrop: handlePromptReferenceDrop,
           onPromptChange: handlePromptChange, onRefinePrompt: handleRefinePrompt,
           onRestorePromptBeforeAiRewrite: handleRestorePromptBeforeAiRewrite,
           onSunoAudioWeightChange: setSunoAudioWeight, onSunoNegativeTagsChange: handleSunoNegativeTagsChange,
@@ -664,7 +723,7 @@ export function FlashBoardComposer({
           activePopover: popover, aspectRatioLabel: aspectRatio, audioModelButtonLabel,
           audioOutputButtonLabel, durationLabel: `${duration}s`,
           effectiveGenerateAudio, imageSizeLabel: imageSize, isAudioMode, isElevenLabsMode,
-          isSunoMode, modeLabel, modelButtonLabel, multiShots,
+          isSeedance25Mode, isSunoMode, modeLabel, modelButtonLabel, multiShots, returnLastFrame,
           popoverHostClassName, popoverRef,
           selectedEntryHasAspectRatios: Boolean(selectedEntry && selectedEntry.aspectRatios.length > 0),
           selectedEntryHasDurations: sunoDurationSupported
@@ -673,10 +732,15 @@ export function FlashBoardComposer({
           selectedEntryHasMultipleModes: Boolean(selectedEntry && selectedEntry.modes.length > 1),
           sunoModelButtonLabel, sunoVocalGender,
           sunoVocalGenderOptions, sunoVoiceControlsDisabled: !sunoCustomMode || sunoInstrumental, supportsAudio,
-          supportsMultiShot, voiceSettingsChanged, onAudioToggle: handleAudioToggle,
+          supportsMultiShot, videoOutputFormat, voiceSettingsChanged, webSearch, onAudioToggle: handleAudioToggle,
           onMultiShotToggle: handleMultiShotToggle, onOpenPopover: togglePopover,
           onOpenPromptBook: () => openPromptBook('generation'),
+          onReturnLastFrameToggle: () => updateComposer({ returnLastFrame: !returnLastFrame }),
           onSunoVocalGenderChange: handleSunoVocalGenderChange,
+          onVideoOutputFormatToggle: () => updateComposer({
+            videoOutputFormat: videoOutputFormat === 'mp4' ? 'mov' : 'mp4',
+          }),
+          onWebSearchToggle: () => updateComposer({ webSearch: !webSearch }),
         }}
         modelPopover={{
           activeCategoryId: effectiveModelCategory, activePopover: renderedPopover,
@@ -726,18 +790,12 @@ export function FlashBoardComposer({
           onImageSizeChange: setImageSize, onModeChange: setMode,
         }}
         chatControls={{
-          activePopover: popover, availableChatModelClasses, chatError,
-          chatModelClass, chatModelClassAvailabilityStatus, chatPrompt,
-          chatProvider, chatProviderLabel, chatProviderOptions,
+          activePopover: popover, chatAgentMode, chatError, chatPrompt,
           hasChatMessages: chatMessages.length > 0,
           isChatting, popoverHostClassName, popoverRef, renderedPopover,
-          onChatModelClassSelect: handleChatModelClassSelect,
-          onChatProviderSelect: handleChatProviderSelect,
+          onChatAgentModeSelect: handleChatAgentModeSelect,
           onClearChatHistory: handleClearChatHistory, onClosePopover: closePopover,
           onOpenPopover: togglePopover, onOpenPromptBook: () => openPromptBook('chat'),
-          showChatModelClass: Boolean(
-            chatProvider === 'kie' && hasHostedSession && hostedAIEnabled,
-          ),
         }}
         actionStack={{
           canGenerate, chatButtonLabel, chatButtonTitle: chatChargeTitle ?? 'Send chat prompt',
@@ -745,6 +803,11 @@ export function FlashBoardComposer({
           isChatting, decisionPolicy,
           onChatButtonClick: handleChatButtonClick, onGenerate: handleGenerate,
           onDecisionPolicyChange: handleDecisionPolicyChange,
+          onSeedanceStart: handleSeedanceStart,
+          onStoryPreferencesChange: setStoryPreferences,
+          seedanceStartDisabled,
+          seedanceStartTitle,
+          storyPreferences,
         }}
       />
 

@@ -14,6 +14,7 @@ export const createDragAndPanelStateActions: DockSliceCreator<DragAndPanelStateA
         dropTarget: null,
         dragOffset: offset,
         currentPos: initialPos || { x: 0, y: 0 },
+        lastDropCommitted: false,
       },
     });
   },
@@ -30,15 +31,21 @@ export const createDragAndPanelStateActions: DockSliceCreator<DragAndPanelStateA
 
   endDrag: () => {
     const { dragState } = get();
+    if (!dragState.isDragging) return;
+
+    let committed = false;
     if (dragState.isDragging && dragState.draggedPanel && dragState.dropTarget && dragState.sourceFloatingId) {
       get().dockFloatingPanel(dragState.sourceFloatingId, dragState.dropTarget);
+      committed = true;
     } else if (dragState.isDragging && dragState.draggedPanel && dragState.dropTarget && dragState.sourceGroupId) {
       get().movePanel(dragState.draggedPanel.id, dragState.sourceGroupId, dragState.dropTarget);
+      committed = true;
     }
-    set({ dragState: DEFAULT_DRAG_STATE });
+    set({ dragState: { ...DEFAULT_DRAG_STATE, lastDropCommitted: committed } });
   },
 
   cancelDrag: () => {
+    if (!get().dragState.isDragging) return;
     set({ dragState: DEFAULT_DRAG_STATE });
   },
 

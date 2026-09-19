@@ -34,6 +34,8 @@ export interface ArtifactStorageContext {
   proxyStorageService: ProxyStorageService;
   analysisService: AnalysisService;
   transcriptService: TranscriptService;
+  writeFile: (subFolder: string, fileName: string, content: Blob | string) => Promise<boolean>;
+  readFile: (subFolder: string, fileName: string) => Promise<File | null>;
   deleteFile: (subFolder: string, fileName: string) => Promise<boolean>;
   deleteEntry: (subFolder: string, entryName: string, options?: { recursive?: boolean }) => Promise<boolean>;
 }
@@ -294,6 +296,9 @@ export async function hasAnalysis(
   inPoint: number,
   outPoint: number,
 ): Promise<boolean> {
+  if (context.activeBackend === 'native') {
+    return (await getAnalysisNative(context.getNativeProjectPath(), mediaId, inPoint, outPoint)) !== null;
+  }
   const handle = context.getProjectHandle();
   if (!handle) return false;
   return context.analysisService.hasAnalysis(handle, mediaId, inPoint, outPoint);
@@ -387,6 +392,20 @@ export async function saveTranscript(
   transcript: unknown,
   transcribedRanges?: [number, number][],
 ): Promise<boolean> {
+  if (context.activeBackend === 'native') {
+    const incoming: StoredTranscript = Array.isArray(transcript)
+      ? { words: transcript }
+      : { ...(transcript as StoredTranscript) };
+    let resolvedRanges = transcribedRanges;
+    if (resolvedRanges === undefined) {
+      const stored = await getTranscript(context, mediaId);
+      resolvedRanges = stored?.transcribedRanges ?? incoming.transcribedRanges;
+    }
+    const data: StoredTranscript = resolvedRanges === undefined
+      ? incoming
+      : { ...incoming, transcribedRanges: resolvedRanges };
+    return context.writeFile('TRANSCRIPTS', `${mediaId}.json`, JSON.stringify(data, null, 2));
+  }
   const handle = context.getProjectHandle();
   if (!handle) return false;
   return context.transcriptService.saveTranscript(handle, mediaId, transcript, transcribedRanges);
@@ -396,6 +415,16 @@ export async function getTranscript(
   context: ArtifactStorageContext,
   mediaId: string,
 ): Promise<StoredTranscript | null> {
+  if (context.activeBackend === 'native') {
+    const file = await context.readFile('TRANSCRIPTS', `${mediaId}.json`);
+    if (!file) return null;
+    try {
+      const parsed = JSON.parse(await file.text()) as StoredTranscript | unknown[];
+      return Array.isArray(parsed) ? { words: parsed } : parsed;
+    } catch {
+      return null;
+    }
+  }
   const handle = context.getProjectHandle();
   if (!handle) return null;
   return context.transcriptService.getTranscript(handle, mediaId);
@@ -405,6 +434,9 @@ export async function getTranscribedRanges(
   context: ArtifactStorageContext,
   mediaId: string,
 ): Promise<[number, number][]> {
+  if (context.activeBackend === 'native') {
+    return (await getTranscript(context, mediaId))?.transcribedRanges ?? [];
+  }
   const handle = context.getProjectHandle();
   if (!handle) return [];
   return context.transcriptService.getTranscribedRanges(handle, mediaId);

@@ -23,6 +23,8 @@ export interface MediaContextRegenerateSubmenuProps {
   onRegenerateAudioProxy: (mediaFile: MediaFile, force: boolean) => void;
   onRegenerateWaveform: (mediaFile: MediaFile) => void;
   onRegenerateSpectrogram: (mediaFile: MediaFile) => void;
+  onTranscribeMedia: (mediaFile: MediaFile) => void;
+  onAnalyzeMedia: (mediaFile: MediaFile) => void;
   onClose: () => void;
 }
 
@@ -45,6 +47,8 @@ export function MediaContextRegenerateSubmenu({
   onRegenerateAudioProxy,
   onRegenerateWaveform,
   onRegenerateSpectrogram,
+  onTranscribeMedia,
+  onAnalyzeMedia,
   onClose,
 }: MediaContextRegenerateSubmenuProps) {
   return (
@@ -101,6 +105,42 @@ export function MediaContextRegenerateSubmenu({
               onClick={() => onRegenerateThumbnails(mediaFile)}
             >
               Thumbnails{mediaFile.thumbnailUrl ? ' (ready)' : ''}
+            </div>
+          )}
+          {hasAudio && (
+            <div
+              className={`context-menu-item ${!mediaFile.file || mediaFile.transcriptStatus === 'transcribing' ? 'disabled' : ''}`}
+              onClick={() => {
+                if (!mediaFile.file || mediaFile.transcriptStatus === 'transcribing') return;
+                onTranscribeMedia(mediaFile);
+              }}
+            >
+              Transcript (Best Quality)
+              {mediaFile.transcriptStatus === 'transcribing'
+                ? ` (${mediaFile.transcriptFusionProgress?.providerProgress?.deepgram.percent ?? 0}%)`
+                : mediaFile.transcriptStatus === 'ready'
+                  ? ' (ready)'
+                  : mediaFile.transcriptStatus === 'error'
+                    ? ' (error)'
+                    : ''}
+            </div>
+          )}
+          {isVideoFile && (
+            <div
+              className={`context-menu-item ${!mediaFile.file || mediaFile.analysisStatus === 'analyzing' || mediaFile.faceAnalysisStatus === 'analyzing' ? 'disabled' : ''}`}
+              onClick={() => {
+                if (!mediaFile.file || mediaFile.analysisStatus === 'analyzing' || mediaFile.faceAnalysisStatus === 'analyzing') return;
+                onAnalyzeMedia(mediaFile);
+              }}
+            >
+              Video Analysis
+              {mediaFile.analysisStatus === 'analyzing' || mediaFile.faceAnalysisStatus === 'analyzing'
+                ? ` (${Math.round(Math.max(mediaFile.analysisProgress ?? 0, mediaFile.faceAnalysisProgress ?? 0))}%)`
+                : mediaFile.analysisStatus === 'ready'
+                  ? ' (ready)'
+                  : mediaFile.analysisStatus === 'error' || mediaFile.faceAnalysisStatus === 'error'
+                    ? ' (error)'
+                    : ''}
             </div>
           )}
           {hasAudio && (

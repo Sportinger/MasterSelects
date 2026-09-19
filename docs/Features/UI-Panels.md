@@ -2,7 +2,11 @@
 
 [Back to Index](./README.md)
 
-Dockable desktop panel system with an After Effects-style menu bar, unified clip properties, and a separate mobile shell for touch devices.
+Dockable panel system with an After Effects-style menu bar, unified clip properties, and touch interactions on phones and tablets. Every device uses the same editor shell.
+
+The built Playwright smoke check enters through the project chooser, creates a
+project in browser storage, and verifies Preview playback controls and the Export
+panel. Native Windows project-folder selection is covered by the beta journey.
 
 ---
 
@@ -12,6 +16,7 @@ Dockable desktop panel system with an After Effects-style menu bar, unified clip
 - [Panel System](#panel-system)
 - [Available Panels](#available-panels)
 - [Slot Grid](#slot-grid)
+- [Resolve Interface Theme](#resolve-interface-theme)
 - [Properties Panel](#properties-panel)
 - [Dock Layouts](#dock-layouts)
 - [MIDI Control](#midi-control)
@@ -19,7 +24,7 @@ Dockable desktop panel system with an After Effects-style menu bar, unified clip
 - [Settings Dialog](#settings-dialog)
 - [Status Indicator](#status-indicator)
 - [Context Menus](#context-menus)
-- [Mobile UI](#mobile-ui)
+- [Touch Devices](#touch-devices)
 
 ---
 
@@ -33,7 +38,7 @@ Dockable desktop panel system with an After Effects-style menu bar, unified clip
 | **Edit** | Copy, Paste, Settings |
 | **View** | Panels submenu, Layouts submenu |
 | **Output** | New Output Window, Open Output Manager, Active Outputs |
-| **Info** | Where are you coming from?, Tutorials, Quick Tour, Timeline Tour, Changelog, About, Imprint, Privacy Policy, Contact |
+| **Info** | Where are you coming from?, Tutorials, Quick Tour, Timeline Tour, Imprint, Privacy Policy, Contact |
 
 ### Keyboard Shortcuts
 
@@ -57,22 +62,24 @@ Dockable desktop panel system with an After Effects-style menu bar, unified clip
 - **Open Project** opens an existing project folder
 - **Open Recent** shows browser-remembered projects and can clear that recent list
 - **Save / Save As** follow the folder-based project model
+- **Rename Project** opens the shared validated project-name dialog for the active project; the project name is no longer permanently shown in the toolbar
 - **Autosave** exposes enable/disable plus 1, 2, 5, and 10 minute intervals for interval-save mode
 - **Save Mode** itself lives in Settings -> General, and the default branch behavior is continuous save with a short debounce after changes
 - **Clear All Cache and Reload** clears localStorage, IndexedDB, caches, and service workers
 
 ### Info Menu
 
+- **Chat with dev**, **Leave note**, **Write issue**, **Discord**, and **Reddit** are grouped here; the separate Help menu has been removed
+- The Info trigger shows `+1` while a developer-chat reply is unread, and the chat entry shows the bounded unread count
 - **Where are you coming from?** reopens the welcome/onboarding chooser
 - **Tutorials** opens the tutorial campaign picker
 - **Quick Tour** starts the panel introduction campaign
 - **Timeline Tour** starts the timeline deep dive campaign
-- **Changelog** opens the changelog dialog
-- **About** shows app and version information
+- Startup opens directly into the selected editor experience; no update, video, About, or changelog splash is mounted.
 - **Imprint / Privacy Policy** open the directly addressable `/impressum` and `/datenschutz` pages in a new tab
 - **Contact** opens the legal dialog; German and English legal texts can be selected there
 
-The welcome/onboarding chooser can also apply shortcut-preset defaults based on the editor background the user selects.
+The welcome/onboarding chooser applies shortcut-preset defaults based on the editor background the user selects. Program logos are intentionally omitted; the choices use bold uppercase names. Choosing **DaVinci Resolve** changes only the shortcut preset and does not activate an interface theme.
 
 ---
 
@@ -128,6 +135,7 @@ MasterSelects registers 17 dockable editor panel types, plus the Slot Grid overl
 | **Media** | `media` | Media browser, folders, and project items |
 | **Properties** | `clip-properties` | Unified clip inspector |
 | **History** | `history` | Undo/redo history |
+| **Annotations** | `annotations` | Timed notes on the active composition and its source media, mirrored as ruler bars (see [Annotations](./Annotations.md)) |
 | **Audio Mixer** | `audio-mixer` | Track and master audio controls |
 | **Node Workspace** | `node-workspace` | AI-assisted node workspace |
 | **Export** | `export` | Render and export controls |
@@ -228,8 +236,9 @@ MasterSelects registers 17 dockable editor panel types, plus the Slot Grid overl
 
 ### Media Generator Tray
 
-- Compact bottom-right prompt entry point inside the Media Panel
+- Compact bottom-right `Chat` / `Generate` / `Studio` / `Downloads` launcher inside the Media Panel
 - Expanded tray embeds only the compact FlashBoard prompt composer for hosted video, image, ElevenLabs audio, and Suno music flows
+- Studio opens a separate dock panel with parallel, persistent generation tabs and draggable result tiles; the compact Generate tray remains available unchanged
 - Active generation jobs render as compact preview cards above the prompt, including queued/processing state, elapsed timer, progress, prompt, and failed-job dismissal
 - Service and provider selection reflect the active backend through the FlashBoard composer
 - Image, video, and audio media can be attached as ordered prompt references from the Media Panel context menu or by dragging them onto the expanded composer
@@ -287,17 +296,19 @@ MasterSelects registers 17 dockable editor panel types, plus the Slot Grid overl
 
 ### Video Scopes Panels
 
-Three independent GPU-rendered scopes:
+Three independent GPU-rendered scopes plus the Color workspace RGB Parade:
 
 | Panel | Function |
 |-------|----------|
 | **Histogram** | RGB distribution graph with channel modes |
 | **Vectorscope** | Color vector analysis |
 | **Waveform** | Luma/RGB waveform monitor |
+| **RGB Parade** | Resolve-style side-by-side red, green, and blue waveform channels |
 
 - View mode buttons include RGB, R, G, B, and Luma
 - IRE reference remains available
-- The scopes are fully GPU-rendered
+- The scopes are fully GPU-rendered. Waveform analysis computes only the channels required by the selected view and uses adaptive vertical sampling for HD/UHD sources while preserving exact horizontal sampling.
+- An unchanged paused frame is not analyzed repeatedly. Resizing a scope panel invalidates that cache once after the resize settles so the paused scope redraws at its new dimensions.
 
 ---
 
@@ -343,9 +354,44 @@ See [Slot Grid](./Slot-Grid.md) for the current live/deck behavior, slot-clip tr
 
 ---
 
+## Looks Panel
+
+The standalone **Looks** panel is disabled in development and production. It is
+not registered as a dock panel, does not appear in the tab-bar `+` or
+`Change to` menus, and is removed when persisted layouts are restored. Live
+effect thumbnails remain available through the Properties effect catalog.
+
+---
+
+## Resolve Interface Theme
+
+The **Resolve** theme is hidden and disabled by default. Existing persisted
+Resolve selections migrate back to **Dark**. While Settings -> Appearance is
+open, holding `Shift` and pressing `1`, `2`, `3`, `4` in sequence permanently
+unlocks its theme card for that user. Its palette and geometry are derived from
+semantic surface, separator, typography, control, selection, and timeline
+tokens, so shared editor chrome can be tuned from one theme module. The theme
+uses compact neutral panels, restrained one-pixel separators, blue tool
+emphasis, and a separate red timeline playhead token.
+
+The factory **VIDEO EDIT** workspace has a Resolve-only arrangement: Media,
+AI Studio, and Transitions occupy the full-height left column; Preview and the
+right inspector group sit above Timeline. The right group contains Properties,
+Coloring, and Export at native 100% panel scale. Other themes
+continue to load the standard Video layout, so the Resolve geometry never
+leaks into their saved factory state.
+
+The migration is intentionally incremental. The Transform inspector is the
+first complete component family; remaining inspector sections and editor
+workspaces continue to use compatibility mappings until their Resolve-style
+counterparts land. Active implementation scope and acceptance gates are tracked
+in [`docs/ongoing/Resolve-20-UI-Parity.md`](../ongoing/Resolve-20-UI-Parity.md).
+
+---
+
 ## Properties Panel
 
-The unified Properties panel adapts its tabs to the selected clip type, selected audio track/layer, selected master bus, and slot-grid mode. The dock tab already identifies the current clip, track, or master target, so the inner tab labels stay compact and do not repeat that scope. Transcript controls live inside Analysis; linked video/audio companions share the same transcript state, so selecting either side opens the same Analysis workspace.
+The unified Properties panel adapts its tabs to the selected clip type, selected audio track/layer, selected master bus, and slot-grid mode. Its dock tab is always titled **Properties** and uses a slightly lighter tab surface than neighboring panels. Transcript controls live inside Analysis; linked video/audio companions share the same transcript state, so selecting either side opens the same Analysis workspace. Clips that support both layer dimensions expose the 2D/3D switch in the Transform section, while model, Gaussian-splat, light, and effector clips that require 3D show a static `3D` badge instead of a disabled switch. The Source row does not repeat the dimension switch.
 
 Selecting a timeline transition switches the panel to `TRANSITION Parameters`.
 That tab shows the transition type, first-pass centered placement with timeline
@@ -361,10 +407,15 @@ same source-handle edges.
 
 | Tab | Contents |
 |-----|----------|
-| **Transform** | Position, scale, rotation, opacity, blend mode, and speed |
+| **Transform** | Compact Source, Transform, Composite, Speed Change, Cropping, and Stabilization sections with transform, opacity, blend, speed, crop, keyframe, and reset controls |
+| **Color / Image** | Clip-level color correction; remains available in every theme, including the hidden Resolve theme |
 | **Effects** | GPU effects list with parameters |
 | **Masks** | Mask shapes with mode and feather controls |
 | **Analysis** | Shared analysis map, transcript controls, and compact scene blobs with faces, synchronized dialogue, cuts, metrics, quality, and descriptions |
+
+The Resolve inspector keeps the clip-level Color tab, presented as **Image** in
+the Resolve tab design. The dockable Color Controls panel remains available as
+an additional surface and can be placed more than once.
 
 The Analysis workspace uses one source-time model for its collapsible graph and
 segment list. Visual scene boundaries remain unchanged in the graph, while the
@@ -434,6 +485,32 @@ Best Quality shows Deepgram, OpenAI, and Speakers as three compact stages beneat
 one overall progress rail. Cancel aborts local, direct-provider, hosted
 Cloudflare requests and restores the most recently completed
 transcript when re-transcription is stopped.
+
+### Resolve-style Transform Inspector
+
+The compact Video Transform inspector is shared by the standard and Resolve
+themes. It is built from reusable section, disclosure, row, numeric-field,
+linked-pair, icon-button, keyframe, and reset primitives rather than
+component-local visual constants. Its fixed order is Source, Transform,
+Composite, Speed Change, Cropping, and Stabilization. Transform and Composite
+open by default; Speed Change and Cropping start closed; Stabilization remains
+gray and cannot be opened until it has an implementation.
+
+- Zoom X/Y use Resolve multiplier units and can be linked or edited independently.
+- Position retains composition-pixel units for 2D clips and scene units for 3D clips.
+- Rotation Angle, Pitch, and Yaw share compact draggable values and slider controls.
+- Flip X/Y, Fit, per-row reset, whole-section reset, keyframe recording, MIDI
+  targets, and history batching continue through the existing editor actions.
+  A reset restores defaults and removes the affected keyframes. Section-level
+  keyframe and reset actions operate on every property in that section.
+- Anchor Point is visibly disabled until its data-model, renderer, keyframe,
+  and serialization path exists; the UI does not claim a non-functional edit.
+- Cropping exposes left, right, top, bottom, and softness controls. Editing
+  these values creates or updates one hidden semantic intersect mask, so crop
+  preview, export, undo, and project persistence share the existing mask path.
+- Transform, Composite, Speed Change, Cropping, and Stabilization use the shared
+  compact disclosure treatment. Container-based narrow-panel rules keep the
+  rows usable when the Properties panel is made very narrow.
 
 ### Audio Clip Tabs
 
@@ -524,6 +601,10 @@ The built-in `AUDIO EDIT` layout keeps Timeline above Media, Audio Mixer, and Pr
 
 The built-in `3D EDIT` layout keeps four independent Preview panels in a 2x2 grid above the Timeline, with Media and Properties/Export/History on the right. The previews open directly in Edit mode as Front, Side, Top, and Perspective views. Loading the layout keeps the current playhead when it is already covered by a camera clip, jumps to the earliest camera when cameras exist elsewhere in the composition, and creates one composition-length camera only when none exists.
 
+Medium and Mobile are presentation modifiers above the selected named layout rather than separate layout entries (`src/stores/dockStore/overLayoutMode.ts`, `src/components/dock/useOverLayoutSync.ts`). The bottom workspace bar exposes a **Medium** toggle and a **Mobile** toggle beside **Layouts** while continuing to highlight the underlying Video, Audio, 3D, Color, or custom layout. The two modifiers stack: Medium alone applies the Medium editing arrangement (and the `app--medium-experience` styling) over the base workspace, Mobile alone applies the compact phone/tablet arrangement, and Medium plus Mobile applies the Medium-Mobile timeline skin (`src/components/timeline/MediumMobileTimeline.css`) in which the main timeline controls move from the ruler strip into the timebar, the mobile action bubbles are suppressed, and the Preview split uses Medium-specific ratios. Changing the base layout while a modifier is active immediately reapplies the matching arrangement; turning the modifiers off restores the saved panel and timeline arrangement from before they were entered. That pre-modifier snapshot lives in memory only, so after a page reload turning the modifiers off restores the factory arrangement of the base layout instead. Its horizontal/portrait arrangement is selected internally from the active composition aspect. On each entry into either Mobile arrangement, the Preview split is fitted once to the active composition; subsequent divider changes remain under user control until Mobile or the underlying layout is entered again. Detected phones, tablets, and other coarse-pointer devices enter Mobile automatically, but the same toggle can explicitly return them to desktop mode. Browser widths at or below the compact breakpoint follow `Settings -> General -> Automatically use Mobile layout when space is limited` and can likewise be overridden from the workspace bar. In the Video workspace and both internal Mobile factories, AI Studio occupies the left-side position formerly used by Discover, while Coloring occupies the right-side position formerly used by AI Studio.
+
+At toolbar widths of 767 px or less, the row of named layout buttons collapses into one light-gray **Layout** control. Click or touch opens a compact, color-neutral refracted-glass bubble containing every available layout; choosing one loads it and closes the picker. Escape and an outside press also close the menu.
+
 Multi Preview, scopes, and other panels are available from the View menu and can be floated or docked.
 
 ### Layout Persistence
@@ -538,6 +619,7 @@ Multi Preview, scopes, and other panels are available from the View menu and can
 - Loading a saved layout animates panel movement, resizing, and reflow over 500ms
 - A saved layout can be marked as the default layout
 - Loading a layout creates missing tracks for saved slots without deleting extra existing tracks
+- Splitter touch hit areas extend on both sides of the visible divider. A touch directly on the physical divider starts and captures resizing immediately, while the expanded area beside it waits for directed movement so an ordinary nearby tap remains available to the panel.
 
 ### Tab Context Menu
 
@@ -545,9 +627,11 @@ Right-clicking a dock tab opens a tab menu. `Undock` moves that tab into a freel
 resizable floating panel, `Undock to Window` opens it in a separate browser window with a `Dock back`
 control, `Hide` removes that tab, and `Change to` replaces the tab slot with another panel. If the
 target panel is already open elsewhere, it is moved into the clicked slot instead of creating a
-duplicate. The Timeline panel uses composition tabs instead of a normal panel tab; right-click the
-empty part of its tab bar next to the composition tabs to open the Timeline panel menu.
-Closing the active composition tab switches directly to its neighbor without running the normal composition-change animation.
+duplicate. The `Change to` submenu overlaps the parent-menu edge so it stays open while the pointer
+moves between the two surfaces. The Timeline panel uses composition tabs instead of a normal panel tab and intentionally
+does not expose this panel context menu. Each composition tab keeps its full-height close target at
+the far-right edge for reliable mouse and touch input. Closing the active composition tab switches
+directly to its neighbor without running the normal composition-change animation.
 
 ### Layout Actions
 
@@ -559,6 +643,8 @@ Closing the active composition tab switches directly to its neighbor without run
 | Set Current as Default | View -> Layouts |
 | Set Saved Layout as Default | View -> Layouts |
 | Load Default Layout | View -> Layouts |
+| Toggle Medium presentation | Bottom workspace bar, beside Layouts |
+| Toggle Mobile presentation | Bottom workspace bar, beside Layouts |
 
 ---
 
@@ -631,10 +717,10 @@ Edit menu -> Settings
 
 | Category | Contents |
 |----------|----------|
-| **General** | Save mode, autosave interval/enable state, import copy behavior, timeline zoom anchor, shortcut/mouse input display, output defaults, preview quality, GPU preference, AI feature settings, and mobile/desktop view mode |
+| **General** | Save mode, autosave interval/enable state, import copy behavior, timeline zoom anchor, shortcut/mouse input display, output defaults, preview quality, GPU preference, and AI feature settings |
 | **MIDI** | Browser MIDI permission state, transport learning, and device list |
 | **Shortcuts** | Preset selection, overrides, recorder, reset, and custom preset controls |
-| **Appearance** | Theme selection, custom theme controls, interface text scale, interface font, high-readability colors, and studio surface skins |
+| **Appearance** | Dark, Light, Midnight, System, Crazy, and Custom theme selection; hidden persistent Resolve unlock via `Shift` + `1`, `2`, `3`, `4`; custom theme controls, interface text scale, interface font, high-readability colors, and studio surface skins |
 | **Audio** | Browser input/output device selection, latency mode, device API status, output-routing status, and AudioContext diagnostics |
 | **Transcription** | Provider selection and pricing |
 | **Native Helper** | Native helper connection, port, helper-backed flows, and decode settings |
@@ -683,19 +769,9 @@ Initializing WebGPU... during preview initialization
 
 ---
 
-## Mobile UI
+## Touch Devices
 
-MasterSelects detects mobile devices and presents an unsupported-device gate.
-
-### Root Component
-
-`MobileApp.tsx` replaces the desktop dock layout with an unsupported-device gate. Its **Trotzdem Desktop oeffnen** action enables the desktop interface for the current device.
-
-### Components
-
-| Component | Purpose |
-|-----------|---------|
-| `MobileApp` | Unsupported-device gate and desktop-mode action |
+Phones and tablets use the same docked editor shell as desktop browsers; Mobile is a responsive dock layout, not a separate editor implementation. Coarse-pointer devices, narrow browser windows, and portrait compositions can activate it automatically when the default-on setting is enabled. The internal horizontal/portrait choice is intentionally hidden behind the single `MOBILE` toolbar entry. Project hydration preserves the active device-managed Mobile dock tree, including its Properties group, instead of replacing it with a stale saved project layout. Touch-specific input support stays inside the shared timeline and panels: one-tap native media import, direct clip move and trim, ruler/playhead scrubbing, two-finger timeline zoom, long-press context menus positioned above the finger, double-tap Media Panel context menus, responsive Media Panel-to-Timeline dragging after a brief intent window, fast initial swipes reserved for native Classic Media-list scrolling, immediately captured dock splitters when the visible divider is touched, one-finger 3D orbit, and continuous two-finger camera dolly.
 
 ---
 

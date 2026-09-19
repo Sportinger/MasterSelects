@@ -17,6 +17,7 @@ export class TextureManager {
   // Cached canvas textures (created from HTMLCanvasElement - for text clips)
   // Canvas reference changes when text properties change, so caching by reference is safe
   private canvasTextures: Map<HTMLCanvasElement, GPUTexture> = new Map();
+  private canvasTextureSizes: Map<HTMLCanvasElement, { width: number; height: number }> = new Map();
 
   // Cached image texture views
   private cachedImageViews: Map<GPUTexture, GPUTextureView> = new Map();
@@ -87,15 +88,20 @@ export class TextureManager {
     // Check cache first
     const cached = this.canvasTextures.get(canvas);
     if (cached) {
-      if (!isDynamicCanvas(canvas)) {
-        return cached;
-      }
+      const cachedSize = this.canvasTextureSizes.get(canvas);
+      if (cachedSize?.width !== width || cachedSize?.height !== height) {
+        this.removeCanvasTexture(canvas);
+      } else {
+        if (!isDynamicCanvas(canvas)) {
+          return cached;
+        }
 
-      if (this.updateCanvasTexture(canvas)) {
-        return cached;
-      }
+        if (this.updateCanvasTexture(canvas)) {
+          return cached;
+        }
 
-      this.removeCanvasTexture(canvas);
+        this.removeCanvasTexture(canvas);
+      }
     }
 
     try {
@@ -112,6 +118,7 @@ export class TextureManager {
       );
 
       this.canvasTextures.set(canvas, texture);
+      this.canvasTextureSizes.set(canvas, { width, height });
       return texture;
     } catch (e) {
       log.error('Failed to create canvas texture', e);
@@ -246,6 +253,12 @@ export class TextureManager {
         log.debug('Video not ready', { readyState: source.readyState, width: source.videoWidth, height: source.videoHeight });
         return null;
       }
+      // Chromium can report HAVE_ENOUGH_DATA immediately after play() while
+      // the first decoder frame still has no GPU backing resource. Let the
+      // next render tick retry once playback has actually produced a frame.
+      if (!source.paused && source.getVideoPlaybackQuality?.().totalVideoFrames === 0) {
+        return null;
+      }
     } else if (source instanceof VideoFrame) {
       // Guard against closed VideoFrames — passing a closed frame to
       // importExternalTexture crashes the GPU process (STATUS_BREAKPOINT).
@@ -314,6 +327,7 @@ export class TextureManager {
     }
     this.imageTextures.clear();
     this.canvasTextures.clear();
+    this.canvasTextureSizes.clear();
     this.cachedImageViews.clear();
     this.videoFrameTextures.clear();
     this.videoFrameViews.clear();
@@ -340,6 +354,7 @@ export class TextureManager {
     if (texture) {
       texture.destroy();
       this.canvasTextures.delete(canvas);
+      this.canvasTextureSizes.delete(canvas);
       this.cachedImageViews.delete(texture);
     }
   }

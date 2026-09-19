@@ -16,6 +16,7 @@ import { createSolidClipSlice } from './solidClipSlice';
 import { createStoryboardClipSlice } from './storyboardClipSlice';
 import { createMidiClipSlice } from './midiClipSlice';
 import { createMathSceneClipSlice } from './mathSceneClipSlice';
+import { createFlockClipSlice } from './flockClipSlice';
 import { createMotionClipSlice } from './motionClipSlice';
 import { createMeshClipSlice } from './meshClipSlice';
 import { createCameraClipSlice } from './cameraClipSlice';
@@ -53,6 +54,8 @@ import {
   readStoredMetronomeEnabled,
   readStoredMetronomeMode,
   readStoredMetronomeVolume,
+  readStoredPianoRollGridSubdivision,
+  readStoredPianoRollSnapEnabled,
   readStoredTimelineGridSubdivision,
   readStoredTimelineSnappingEnabled,
   readStoredTimelineSplitRatio,
@@ -91,6 +94,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const storyboardClipActions = createStoryboardClipSlice(set, get);
     const midiClipActions = createMidiClipSlice(set, get);
     const mathSceneClipActions = createMathSceneClipSlice(set, get);
+    const flockClipActions = createFlockClipSlice(set, get);
     const motionClipActions = createMotionClipSlice(set, get);
     const meshClipActions = createMeshClipSlice(set, get);
     const cameraClipActions = createCameraClipSlice(set, get);
@@ -197,6 +201,8 @@ export const useTimelineStore = create<TimelineStore>()(
       timelineSplitRatio: readStoredTimelineSplitRatio(null),
       snappingEnabled: readStoredTimelineSnappingEnabled(true),
       timelineGridSubdivision: readStoredTimelineGridSubdivision('beat'),
+      pianoRollSnapEnabled: readStoredPianoRollSnapEnabled(true),
+      pianoRollGridSubdivision: readStoredPianoRollGridSubdivision('1/16'),
       metronomeEnabled: readStoredMetronomeEnabled(false),
       metronomeVolume: readStoredMetronomeVolume(0.6),
       metronomeMode: readStoredMetronomeMode('beats'),
@@ -277,6 +283,7 @@ export const useTimelineStore = create<TimelineStore>()(
       activeMaskId: null as string | null,
       selectedVertexIds: new Set<string>(),
       selectedMaskEdgeId: null as string | null,
+      maskFeatherPreviewEnabled: true,
       maskFeatherPreview: null as { maskId: string; edgeId: string | null; changedAt: number } | null,
       maskDrawStart: null as { x: number; y: number } | null,
       maskDragging: false,
@@ -405,6 +412,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...storyboardClipActions,
       ...midiClipActions,
       ...mathSceneClipActions,
+      ...flockClipActions,
       ...motionClipActions,
       ...meshClipActions,
       ...cameraClipActions,

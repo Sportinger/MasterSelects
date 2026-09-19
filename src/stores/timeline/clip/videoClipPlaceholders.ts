@@ -1,4 +1,5 @@
 import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
+import { projectMediaSourceArtifactsOntoClip } from '../../../services/mediaArtifacts/mediaSourceArtifacts';
 import { DEFAULT_TRANSFORM } from '../constants';
 import { generateLinkedClipIds } from '../helpers/idGenerator';
 
@@ -16,6 +17,68 @@ export interface AddVideoClipResult {
   videoClip: TimelineClip;
   audioClip: TimelineClip | null;
   audioClipId: string | undefined;
+}
+
+export interface LinkedVideoClipPlaceholderParams {
+  audioClipId: string;
+  audioTrackId: string;
+  estimatedDuration: number;
+  file: File;
+  initialVisualTransform: TimelineClip['transform'];
+  mediaFileId?: string;
+  sourceTranscript?: TimelineClip['transcript'];
+  startTime: number;
+  videoClipId: string;
+  videoTrackId: string;
+}
+
+export function createLinkedVideoClipPlaceholders(
+  params: LinkedVideoClipPlaceholderParams,
+): { audioClip: TimelineClip; videoClip: TimelineClip } {
+  const transcript = params.sourceTranscript
+    ? { transcript: params.sourceTranscript, transcriptStatus: 'ready' as const }
+    : {};
+  const videoClip = projectMediaSourceArtifactsOntoClip({
+    id: params.videoClipId,
+    trackId: params.videoTrackId,
+    name: params.file.name,
+    file: params.file,
+    startTime: params.startTime,
+    duration: params.estimatedDuration,
+    inPoint: 0,
+    outPoint: params.estimatedDuration,
+    source: {
+      type: 'video',
+      naturalDuration: params.estimatedDuration,
+      mediaFileId: params.mediaFileId,
+    },
+    linkedClipId: params.audioClipId,
+    transform: params.initialVisualTransform,
+    effects: [],
+    isLoading: true,
+    ...transcript,
+  });
+  const audioClip: TimelineClip = {
+    id: params.audioClipId,
+    trackId: params.audioTrackId,
+    name: `${params.file.name} (Audio)`,
+    file: params.file,
+    startTime: params.startTime,
+    duration: params.estimatedDuration,
+    inPoint: 0,
+    outPoint: params.estimatedDuration,
+    source: {
+      type: 'audio',
+      naturalDuration: params.estimatedDuration,
+      mediaFileId: params.mediaFileId,
+    },
+    linkedClipId: params.videoClipId,
+    transform: { ...DEFAULT_TRANSFORM },
+    effects: [],
+    isLoading: true,
+    ...transcript,
+  };
+  return { audioClip, videoClip };
 }
 
 /**

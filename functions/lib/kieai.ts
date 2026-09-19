@@ -10,6 +10,7 @@ const KIEAI_USD_PER_CREDIT = 0.005;
 const HOSTED_SUNO_VENDOR_CREDITS = 12;
 const SEEDANCE_2_PROVIDER_ID = 'bytedance/seedance-2';
 const SEEDANCE_2_FAST_PROVIDER_ID = 'bytedance/seedance-2-fast';
+const SEEDANCE_2_5_PROVIDER_ID = 'bytedance/seedance-2-5';
 const FLUX_KONTEXT_PRO_PROVIDER_ID = 'flux-kontext-pro';
 const FLUX_KONTEXT_MAX_PROVIDER_ID = 'flux-kontext-max';
 const RECRAFT_REMOVE_BACKGROUND_PROVIDER_ID = 'recraft/remove-background';
@@ -35,6 +36,10 @@ const SEEDANCE_CREDITS_PER_SECOND: Record<string, Record<string, { normal: numbe
     '480p': { normal: 15.5, videoInput: 9 },
     '720p': { normal: 33, videoInput: 20 },
   },
+  [SEEDANCE_2_5_PROVIDER_ID]: {
+    '480p': { normal: 28, videoInput: 17 },
+    '720p': { normal: 63, videoInput: 38 },
+  },
 };
 
 export type HostedVideoTaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
@@ -48,11 +53,14 @@ export interface HostedVideoParams {
   mode?: string;
   multiPrompt?: Array<{ index: number; prompt: string; duration: number }>;
   multiShots?: boolean;
+  outputFormat?: 'mov' | 'mp4';
   prompt: string;
   provider?: string;
   referenceMedia?: HostedReferenceMedia[];
   sound?: boolean;
   startImageUrl?: string;
+  returnLastFrame?: boolean;
+  webSearch?: boolean;
 }
 
 export type HostedReferenceMediaType = 'audio' | 'image' | 'video';
@@ -62,6 +70,7 @@ export interface HostedReferenceMedia {
   label?: string;
   mediaType: HostedReferenceMediaType;
   mimeType?: string;
+  duration?: number;
   source: string;
 }
 
@@ -626,22 +635,28 @@ function parseHostedTaskId(taskId: string): { kind: string | null; taskId: strin
   return { kind, taskId: taskId.slice(separatorIndex + 1) };
 }
 
-function getResultUrl(data: KieAiStatusResponse['data'] | undefined): string | undefined {
-  let resultUrl = data?.resultUrls?.[0];
+function getResultUrls(data: KieAiStatusResponse['data'] | undefined): string[] {
+  let resultUrls = data?.resultUrls;
 
-  if (!resultUrl && data?.resultJson) {
+  if ((!resultUrls || resultUrls.length === 0) && data?.resultJson) {
     try {
       const parsed = JSON.parse(data.resultJson) as {
+        lastFrameUrl?: string;
+        last_frame_url?: string;
         resultUrls?: string[];
         result_urls?: string[];
       };
-      resultUrl = parsed.resultUrls?.[0] ?? parsed.result_urls?.[0];
+      resultUrls = parsed.resultUrls ?? parsed.result_urls;
+      const lastFrameUrl = parsed.lastFrameUrl ?? parsed.last_frame_url;
+      if (lastFrameUrl && !resultUrls?.includes(lastFrameUrl)) {
+        resultUrls = [...(resultUrls ?? []), lastFrameUrl];
+      }
     } catch {
-      resultUrl = undefined;
+      resultUrls = undefined;
     }
   }
 
-  return resultUrl;
+  return (resultUrls ?? []).filter((url): url is string => typeof url === 'string' && url.length > 0);
 }
 
 function asString(value: unknown): string | undefined {
@@ -889,11 +904,18 @@ function addHostedKlingReferenceInput(
   input.kling_elements = elements;
 }
 
-function isSeedanceProvider(provider: string | undefined): provider is typeof SEEDANCE_2_PROVIDER_ID | typeof SEEDANCE_2_FAST_PROVIDER_ID {
-  return provider === SEEDANCE_2_PROVIDER_ID || provider === SEEDANCE_2_FAST_PROVIDER_ID;
+type SeedanceProviderId =
+  | typeof SEEDANCE_2_PROVIDER_ID
+  | typeof SEEDANCE_2_FAST_PROVIDER_ID
+  | typeof SEEDANCE_2_5_PROVIDER_ID;
+
+function isSeedanceProvider(provider: string | undefined): provider is SeedanceProviderId {
+  return provider === SEEDANCE_2_PROVIDER_ID
+    || provider === SEEDANCE_2_FAST_PROVIDER_ID
+    || provider === SEEDANCE_2_5_PROVIDER_ID;
 }
 
-function normalizeSeedanceProvider(provider: string | undefined): typeof SEEDANCE_2_PROVIDER_ID | typeof SEEDANCE_2_FAST_PROVIDER_ID {
+function normalizeSeedanceProvider(provider: string | undefined): SeedanceProviderId {
   return isSeedanceProvider(provider) ? provider : SEEDANCE_2_PROVIDER_ID;
 }
 
@@ -905,15 +927,16 @@ function normalizeSeedanceResolution(
     return '480p';
   }
 
-  if (mode === '1080p' && provider !== SEEDANCE_2_FAST_PROVIDER_ID) {
+  if (mode === '1080p' && provider === SEEDANCE_2_PROVIDER_ID) {
     return '1080p';
   }
 
   return '720p';
 }
 
-function normalizeSeedanceDuration(duration: number): number {
-  return Math.max(4, Math.min(15, Math.floor(duration)));
+function normalizeSeedanceDuration(provider: string | undefined, duration: number): number {
+  const maximum = provider === SEEDANCE_2_5_PROVIDER_ID ? 30 : 15;
+  return Math.max(4, Math.min(maximum, Math.floor(duration)));
 }
 
 export function calculateHostedKlingCost(
@@ -940,12 +963,16 @@ export function calculateHostedSeedanceCost(
   mode: string | undefined,
   duration: number,
   hasVideoInput = false,
+  videoInputDuration = 0,
 ): number {
   const normalizedProvider = normalizeSeedanceProvider(provider);
   const normalizedMode = normalizeSeedanceResolution(normalizedProvider, mode);
-  const durationSeconds = normalizeSeedanceDuration(duration);
+  const durationSeconds = normalizeSeedanceDuration(normalizedProvider, duration);
   const rates = SEEDANCE_CREDITS_PER_SECOND[normalizedProvider]?.[normalizedMode];
-  const vendorCredits = durationSeconds * (hasVideoInput ? rates.videoInput : rates.normal);
+  const billedDuration = hasVideoInput
+    ? durationSeconds + Math.max(0, Math.min(30, videoInputDuration))
+    : durationSeconds;
+  const vendorCredits = billedDuration * (hasVideoInput ? rates.videoInput : rates.normal);
 
   return Math.ceil(vendorCredits * HOSTED_KIE_CREDIT_MULTIPLIER);
 }
@@ -1139,27 +1166,66 @@ export async function createHostedSeedanceTask(
   params: HostedVideoParams,
 ): Promise<{ taskId: string }> {
   const provider = normalizeSeedanceProvider(params.provider);
-  if ((params.referenceMedia ?? []).length > 0) {
+  const references = params.referenceMedia ?? [];
+  if (provider !== SEEDANCE_2_5_PROVIDER_ID && references.length > 0) {
     throw new Error(
-      'Seedance multimodal references are temporarily disabled. Use start and end frames instead.',
+      'Seedance 2.0 multimodal references are temporarily disabled. Use start and end frames instead.',
     );
   }
+  if (provider === SEEDANCE_2_5_PROVIDER_ID && references.length > 0 && (params.startImageUrl || params.endImageUrl)) {
+    throw new Error('Seedance 2.5 exact first/last frames cannot be combined with multimodal references.');
+  }
+
+  const imageReferences = references.filter((reference) => reference.mediaType === 'image');
+  const videoReferences = references.filter((reference) => reference.mediaType === 'video');
+  const audioReferences = references.filter((reference) => reference.mediaType === 'audio');
+  const totalDuration = (items: HostedReferenceMedia[]) => items.reduce((sum, reference) => (
+    sum + Math.max(0, reference.duration ?? 0)
+  ), 0);
+  if (provider === SEEDANCE_2_5_PROVIDER_ID) {
+    if (references.length > 50) throw new Error('Seedance 2.5 accepts at most 50 multimodal references.');
+    if (imageReferences.length > 30) throw new Error('Seedance 2.5 accepts at most 30 reference images.');
+    if (videoReferences.length > 10) throw new Error('Seedance 2.5 accepts at most 10 reference videos.');
+    if (audioReferences.length > 10) throw new Error('Seedance 2.5 accepts at most 10 reference audio files.');
+    if (totalDuration(videoReferences) > 30) throw new Error('Seedance 2.5 reference videos may total at most 30 seconds.');
+    if (totalDuration(audioReferences) > 30) throw new Error('Seedance 2.5 reference audio may total at most 30 seconds.');
+  }
+
   const firstFrameUrl = params.startImageUrl
     ? await uploadImage(env, params.startImageUrl)
     : undefined;
   const lastFrameUrl = params.endImageUrl
     ? await uploadImage(env, params.endImageUrl)
     : undefined;
+  const uploadedReferences = provider === SEEDANCE_2_5_PROVIDER_ID
+    ? await uploadReferenceMediaList(env, references)
+    : [];
 
   const input: Record<string, unknown> = {
-    aspect_ratio: params.aspectRatio ?? '16:9',
-    duration: normalizeSeedanceDuration(params.duration),
+    aspect_ratio: provider === SEEDANCE_2_5_PROVIDER_ID && (firstFrameUrl || lastFrameUrl)
+      ? 'adaptive'
+      : params.aspectRatio ?? '16:9',
+    duration: normalizeSeedanceDuration(provider, params.duration),
     generate_audio: Boolean(params.sound),
     prompt: params.prompt,
     resolution: normalizeSeedanceResolution(provider, params.mode),
-    return_last_frame: false,
-    web_search: false,
+    return_last_frame: provider === SEEDANCE_2_5_PROVIDER_ID && params.returnLastFrame === true,
+    web_search: provider === SEEDANCE_2_5_PROVIDER_ID && params.webSearch === true,
   };
+
+  if (provider === SEEDANCE_2_5_PROVIDER_ID) {
+    input.output_format = params.outputFormat === 'mov' ? 'mov' : 'mp4';
+    input.nsfw_checker = true;
+    const urlsFor = (mediaType: HostedReferenceMediaType) => uploadedReferences
+      .filter((reference) => reference.mediaType === mediaType)
+      .map((reference) => reference.url);
+    const referenceImageUrls = urlsFor('image');
+    const referenceVideoUrls = urlsFor('video');
+    const referenceAudioUrls = urlsFor('audio');
+    if (referenceImageUrls.length > 0) input.reference_image_urls = referenceImageUrls;
+    if (referenceVideoUrls.length > 0) input.reference_video_urls = referenceVideoUrls;
+    if (referenceAudioUrls.length > 0) input.reference_audio_urls = referenceAudioUrls;
+  }
 
   if (firstFrameUrl) {
     input.first_frame_url = firstFrameUrl;
@@ -1176,7 +1242,7 @@ export async function createHostedSeedanceTask(
   const taskId = payload.data?.taskId;
 
   if (payload.code !== 200 || !taskId) {
-    throw new Error(payload.msg ?? 'Failed to create Seedance 2.0 task');
+    throw new Error(payload.msg ?? `Failed to create ${provider === SEEDANCE_2_5_PROVIDER_ID ? 'Seedance 2.5' : 'Seedance 2.0'} task`);
   }
 
   return { taskId };
@@ -1342,8 +1408,12 @@ export async function getHostedKlingTask(
     'GET',
   );
   const status = normalizeTaskStatus(payload.data?.state);
-  const resultUrl = getResultUrl(payload.data);
-  const { imageUrl, videoUrl } = resolveResultType(resultUrl);
+  const resultUrls = getResultUrls(payload.data);
+  const primaryResult = resolveResultType(resultUrls[0]);
+  const imageUrl = primaryResult.videoUrl
+    ? resultUrls.slice(1).find((url) => Boolean(resolveResultType(url).imageUrl))
+    : primaryResult.imageUrl;
+  const videoUrl = primaryResult.videoUrl;
 
   return {
     completedAt: payload.data?.completeTime

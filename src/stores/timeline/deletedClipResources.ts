@@ -7,12 +7,14 @@ import {
   releaseLegacyTimelineClipSourceRuntime,
 } from '../../services/timeline/timelineClipSourceRuntimeCleanup';
 import { blobUrlManager } from './helpers/blobUrlManager';
+import { releaseClipTreeRuntimeBindings } from '../../services/mediaRuntime/clipBindings';
 
 export function cleanupDeletedClipResources(deletedClips: readonly TimelineClip[]): void {
   if (deletedClips.length === 0) return;
   stopTimelineAudioPlayback();
 
   for (const clip of deletedClips) {
+    releaseClipTreeRuntimeBindings(clip);
     releaseLegacyTimelineClipSourceRuntime(clip, {
       cleanupVideoGpu: true,
       disposeAudioRouting: true,

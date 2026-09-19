@@ -46,6 +46,9 @@ export interface TextToVideoParams {
   multiShots?: boolean;
   multiPrompt?: Array<{ index: number; prompt: string; duration: number }>;
   referenceMedia?: GenerationReferenceMedia[];
+  outputFormat?: 'mov' | 'mp4';
+  returnLastFrame?: boolean;
+  webSearch?: boolean;
 }
 
 export interface ImageToVideoParams {
@@ -63,6 +66,9 @@ export interface ImageToVideoParams {
   multiShots?: boolean;
   multiPrompt?: Array<{ index: number; prompt: string; duration: number }>;
   referenceMedia?: GenerationReferenceMedia[];
+  outputFormat?: 'mov' | 'mp4';
+  returnLastFrame?: boolean;
+  webSearch?: boolean;
 }
 
 export interface AccountInfo {
@@ -81,6 +87,7 @@ export interface GenerationReferenceMedia {
   fileName?: string;
   label?: string;
   mimeType?: string;
+  duration?: number;
 }
 
 export interface TextToImageParams {

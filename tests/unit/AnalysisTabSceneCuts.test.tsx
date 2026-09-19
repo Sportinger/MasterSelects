@@ -207,6 +207,14 @@ afterEach(() => {
 });
 
 describe('AnalysisTab scene-cut counter', () => {
+  it('keeps the analysis panel usable when a clip range starts before source zero', () => {
+    prepareStores('ready');
+    render(<AnalysisTab clipId="clip-1" analysis={clipAnalysis} analysisStatus="ready"
+      analysisProgress={100} clipStartTime={0} inPoint={-1} outPoint={8} />);
+    expect(screen.getByRole('button', { name: 'Analysis settings' })).toBeTruthy();
+    expect(cutsPill().title).toContain('4 cuts');
+  });
+
   it('shows the source cut count on the cuts pill', () => {
     prepareStores('ready');
     expect(useTimelineStore.getState().clips[0]?.source?.mediaFileId).toBe('media-1');

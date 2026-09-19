@@ -720,7 +720,7 @@ describe('ExportLayerBuilder', () => {
     expect(layers[0]?.source?.webCodecsPlayer).toBe(clipStates.get('clip-1')?.webCodecsPlayer);
   });
 
-  it('builds sequential Fast export layers from WebCodecs frames without a video element', () => {
+  it('builds export layers from a backend-neutral frame provider without a video element', () => {
     const track = {
       id: 'track-1',
       type: 'video',
@@ -750,11 +750,14 @@ describe('ExportLayerBuilder', () => {
     const clipStates = new Map<string, ExportClipState>([
       ['clip-1', {
         clipId: 'clip-1',
-        webCodecsPlayer: {
+        frameProvider: {
+          backend: 'turbores',
           getCurrentFrame: () => currentFrame,
-        } as unknown as NonNullable<ExportClipState['webCodecsPlayer']>,
+          getSourceRotationDegrees: () => 90,
+        } as unknown as NonNullable<ExportClipState['frameProvider']>,
+        webCodecsPlayer: null,
         lastSampleIndex: 0,
-        isSequential: true,
+        isSequential: false,
       }],
     ]);
 
@@ -784,6 +787,8 @@ describe('ExportLayerBuilder', () => {
     expect(layers).toHaveLength(1);
     expect(layers[0]?.source?.videoFrame).toBe(currentFrame);
     expect(layers[0]?.source?.videoElement).toBeUndefined();
+    expect(layers[0]?.source?.videoRotation).toBe(90);
+    expect(layers[0]?.source?.webCodecsPlayer).toBe(clipStates.get('clip-1')?.frameProvider);
   });
 
   it('uses export lookup tolerance for parallel decoded frames', () => {

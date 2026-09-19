@@ -108,6 +108,17 @@ export function installAgentControlEndpoints(
         req.method === 'POST'
         && pathParts.length === 2
         && pathParts[0] === 'chat'
+        && pathParts[1] === 'new'
+      ) {
+        const body = await readJsonBody(req) as AgentControlCallBody
+        await handleChatReset(res, req, body, dependencies)
+        return
+      }
+
+      if (
+        req.method === 'POST'
+        && pathParts.length === 2
+        && pathParts[0] === 'chat'
         && pathParts[1] === 'model-class'
       ) {
         const body = await readJsonBody(req) as AgentControlCallBody
@@ -140,6 +151,87 @@ export function installAgentControlEndpoints(
       })
     }
   })
+}
+
+async function handleChatReset(
+  res: ServerResponse,
+  req: IncomingMessage,
+  body: AgentControlCallBody,
+  dependencies: AgentControlEndpointDependencies,
+): Promise<void> {
+  const requestedSessionId = readOptionalString(body.sessionId)
+  const resolvedSessionId = resolveSessionId(requestedSessionId, dependencies)
+  if (!resolvedSessionId) {
+    sendJson(res, requestedSessionId ? 404 : 503, {
+      success: false,
+      error: requestedSessionId
+        ? `Unknown or stale bridge session: ${requestedSessionId}`
+        : 'No browser tab connected to the dev bridge.',
+    })
+    return
+  }
+
+  const idempotencyKey = readOptionalString(body.idempotencyKey)
+  if (idempotencyKey) {
+    const existing = dependencies.traceStore.findByIdempotencyKey(idempotencyKey, resolvedSessionId)
+    if (existing) {
+      sendJson(res, 200, {
+        success: existing.status === 'succeeded',
+        callId: existing.callId,
+        data: existing.result,
+        deduplicated: true,
+        sessionId: resolvedSessionId,
+        status: existing.status,
+      })
+      return
+    }
+  }
+
+  const timeoutMs = sanitizeBridgeTimeoutMs(body.timeoutMs, 30000)
+  const trace = dependencies.traceStore.begin({
+    args: {},
+    idempotencyKey: idempotencyKey ?? undefined,
+    sessionId: resolvedSessionId,
+    source: getRequestSource(req),
+    surface: 'chat',
+    tool: 'bridge_new_chat',
+  })
+
+  try {
+    const dispatched = await dependencies.dispatch({
+      operation: 'resetChat',
+      sessionId: resolvedSessionId,
+      timeoutMs,
+      args: {},
+    })
+    const error = readResultError(dispatched.result)
+    const completed = dependencies.traceStore.complete(trace.callId, {
+      error,
+      result: dispatched.result,
+    })
+    sendJson(res, 200, {
+      success: readResultSuccess(dispatched.result),
+      callId: trace.callId,
+      data: dispatched.result,
+      durationMs: completed?.durationMs,
+      error,
+      sessionId: dispatched.sessionId,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const completed = dependencies.traceStore.complete(trace.callId, {
+      error: message,
+      result: { success: false, error: message },
+      status: /timeout/i.test(message) ? 'timeout' : 'failed',
+    })
+    sendJson(res, /not connected|unknown session/i.test(message) ? 404 : 200, {
+      success: false,
+      callId: trace.callId,
+      durationMs: completed?.durationMs,
+      error: message,
+      sessionId: resolvedSessionId,
+    })
+  }
 }
 
 async function handleChatModelClass(

@@ -3,6 +3,7 @@ import type { ClipTransform } from "../../../types/timelineCore";
 import type { ClipMask, MaskVertex } from "../../../types/masks";
 import { getMotionRenderSize } from "../../../engine/motion/MotionTypes";
 import { getEffectiveScale } from "../../../utils/transformScale";
+import { transformMaskPoint, type MaskTransformSize } from '../../../utils/maskTransform';
 import { type LayerUvProjectionParams } from '../editModeOverlayMath';
 import type {
   CanvasMaskVertex,
@@ -105,12 +106,11 @@ export function getProjectionParams(
 export function buildProjectedMaskPath(
   mask: ClipMask,
   projectPoint: ProjectMaskPoint,
+  sourceSize: MaskTransformSize = { width: 1, height: 1 },
 ): string {
   if (mask.vertices.length < 2) return '';
 
-  const posX = mask.position?.x || 0;
-  const posY = mask.position?.y || 0;
-  const pointFor = (point: { x: number; y: number }) => projectPoint({ x: point.x + posX, y: point.y + posY });
+  const pointFor = (point: { x: number; y: number }) => projectPoint(transformMaskPoint(mask, point, sourceSize));
   let d = '';
 
   for (let i = 0; i < mask.vertices.length; i += 1) {
@@ -143,15 +143,23 @@ function getMaskOutlineColor(mask: ClipMask): string {
   return mask.outlineColor || DEFAULT_MASK_OUTLINE_COLOR;
 }
 
-export function buildCanvasMaskVertices(mask: ClipMask | undefined, projectPoint: ProjectMaskPoint): CanvasMaskVertex[] {
+export function buildCanvasMaskVertices(
+  mask: ClipMask | undefined,
+  projectPoint: ProjectMaskPoint,
+  sourceSize: MaskTransformSize = { width: 1, height: 1 },
+): CanvasMaskVertex[] {
   if (!mask) return [];
-  const posX = mask.position?.x || 0;
-  const posY = mask.position?.y || 0;
 
   return mask.vertices.map((vertex) => {
-    const point = projectPoint({ x: vertex.x + posX, y: vertex.y + posY });
-    const handleInPoint = projectPoint({ x: vertex.x + posX + vertex.handleIn.x, y: vertex.y + posY + vertex.handleIn.y });
-    const handleOutPoint = projectPoint({ x: vertex.x + posX + vertex.handleOut.x, y: vertex.y + posY + vertex.handleOut.y });
+    const point = projectPoint(transformMaskPoint(mask, vertex, sourceSize));
+    const handleInPoint = projectPoint(transformMaskPoint(mask, {
+      x: vertex.x + vertex.handleIn.x,
+      y: vertex.y + vertex.handleIn.y,
+    }, sourceSize));
+    const handleOutPoint = projectPoint(transformMaskPoint(mask, {
+      x: vertex.x + vertex.handleOut.x,
+      y: vertex.y + vertex.handleOut.y,
+    }, sourceSize));
 
     return {
       ...vertex,
@@ -171,25 +179,28 @@ export function buildCanvasMaskVertices(mask: ClipMask | undefined, projectPoint
 export function buildVisibleMaskPaths(
   masks: ClipMask[] | undefined,
   projectPoint: ProjectMaskPoint,
+  sourceSize: MaskTransformSize = { width: 1, height: 1 },
 ): VisibleMaskPath[] {
   return (masks || [])
     .filter(mask => mask.visible && mask.vertices.length >= 2)
     .map(mask => ({
       id: mask.id,
-      d: buildProjectedMaskPath(mask, projectPoint),
+      d: buildProjectedMaskPath(mask, projectPoint, sourceSize),
       closed: mask.closed,
       color: getMaskOutlineColor(mask),
     }))
     .filter(path => path.d.length > 0);
 }
 
-export function buildMaskEdgeSegments(mask: ClipMask | undefined, projectPoint: ProjectMaskPoint): MaskEdgeSegment[] {
+export function buildMaskEdgeSegments(
+  mask: ClipMask | undefined,
+  projectPoint: ProjectMaskPoint,
+  sourceSize: MaskTransformSize = { width: 1, height: 1 },
+): MaskEdgeSegment[] {
   if (!mask || !mask.visible || mask.vertices.length < 2) return [];
   const verts = mask.vertices;
-  const posX = mask.position?.x || 0;
-  const posY = mask.position?.y || 0;
   const segments: MaskEdgeSegment[] = [];
-  const pointFor = (point: { x: number; y: number }) => projectPoint({ x: point.x + posX, y: point.y + posY });
+  const pointFor = (point: { x: number; y: number }) => projectPoint(transformMaskPoint(mask, point, sourceSize));
 
   for (let i = 1; i < verts.length; i++) {
     const prev = verts[i - 1];
@@ -272,6 +283,7 @@ export function buildShapePreviewPath(
     mode: 'add',
     expanded: false,
     position: { x: 0, y: 0 },
+    rotation: 0,
     enabled: true,
     visible: true,
   }, projectPoint);

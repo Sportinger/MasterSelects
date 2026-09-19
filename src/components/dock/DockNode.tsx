@@ -11,9 +11,9 @@ interface DockNodeProps {
 
 function DockNodeComponent({ node }: DockNodeProps) {
   if (node.kind === 'split') {
-    return <DockSplitPane split={node} />;
+    return <DockSplitPane key={node.id} split={node} />;
   }
-  return <DockTabPane group={node} />;
+  return <DockTabPane key={node.id} group={node} />;
 }
 
 export const DockNode = memo(DockNodeComponent);

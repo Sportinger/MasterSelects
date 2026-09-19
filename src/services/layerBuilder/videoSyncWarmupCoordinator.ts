@@ -5,6 +5,7 @@ import { scrubSettleState } from '../scrubSettleState';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
 import type { FrameContext } from './types';
 import {
+  canClipOwnVideoSyncMedia,
   getClipSampleTimeNearPlayhead,
   getClipStartTime,
   getWarmupClipTime,
@@ -15,6 +16,8 @@ import {
   getVisibleVideoTrackTransitionClipsInWindow,
 } from './videoSyncTransitionQueries';
 import type { VideoSyncWarmupState } from './videoSyncWarmupState';
+import { preBufferUpcomingNestedCompVideos } from './videoSyncNestedCompWarmup';
+import { warmUpcomingBakedTransitionVideos } from './videoSyncTransitionWarmup';
 
 type VideoFrameCallbackVideo = HTMLVideoElement & { requestVideoFrameCallback: (callback: () => void) => number };
 
@@ -51,6 +54,7 @@ export class VideoSyncWarmupCoordinator {
   private static readonly WARMUP_RETARGET_THRESHOLD_SECONDS = 0.2;
   private static readonly WARMUP_RETARGET_COOLDOWN_MS = 120;
   private static readonly UPCOMING_PREPLAY_LOOKAHEAD_SECONDS = 0.25;
+  private static readonly CLAMPED_PREPLAY_RATE = 0.0625;
 
   private readonly deps: VideoSyncWarmupCoordinatorDeps;
   private lastWarmupRetargetAt: Record<string, number> = {};
@@ -129,8 +133,14 @@ export class VideoSyncWarmupCoordinator {
         if (!video.paused) {
           video.pause();
         }
+        if (video.playbackRate !== 1) {
+          video.playbackRate = 1;
+        }
         this.deps.warmups.deleteUpcomingPreplay(video);
       } else if (isActive) {
+        if (video.playbackRate !== 1) {
+          video.playbackRate = 1;
+        }
         this.deps.warmups.deleteUpcomingPreplay(video);
       }
     }
@@ -159,11 +169,10 @@ export class VideoSyncWarmupCoordinator {
       return;
     }
 
-    const preplayTime = clipStartSourceTime - leadSeconds;
+    const requestedPreplayTime = clipStartSourceTime - leadSeconds;
     const clipFloor = (clip.inPoint ?? 0) + 0.01;
-    if (preplayTime < clipFloor) {
-      return;
-    }
+    const clampedAtClipStart = requestedPreplayTime < clipFloor;
+    const preplayTime = Math.max(clipFloor, requestedPreplayTime);
 
     const safePreplayTime = this.deps.safeSeekTime(video, preplayTime);
     if (Math.abs(video.currentTime - safePreplayTime) > 0.035) {
@@ -175,6 +184,14 @@ export class VideoSyncWarmupCoordinator {
     }
 
     video.muted = true;
+    // Clips starting at source time zero cannot begin `leadSeconds` early.
+    // Keep their already-warmed decoder surface alive at the minimum playback
+    // rate instead; normal active sync restores 1x at the boundary. This avoids
+    // Chromium discarding the paused backing resource while advancing only a
+    // few milliseconds ahead of the timeline.
+    if (clampedAtClipStart && video.playbackRate !== VideoSyncWarmupCoordinator.CLAMPED_PREPLAY_RATE) {
+      video.playbackRate = VideoSyncWarmupCoordinator.CLAMPED_PREPLAY_RATE;
+    }
     this.deps.warmups.setUpcomingPreplay(video, { clipId: clip.id, startTime: clip.startTime });
     video.play()
       .then(() => {
@@ -369,11 +386,14 @@ export class VideoSyncWarmupCoordinator {
       // Ignore if metadata is not fully ready for seeking yet.
     }
 
-    const abortWarmup = (reason: 'timeout' | 'play-failed'): void => {
+    let finishingWarmup = false;
+
+    const abortWarmup = (reason: 'timeout' | 'play-failed' | 'capture-failed'): void => {
       if (!this.deps.warmups.isAttemptCurrent(video, attemptId)) {
         return;
       }
 
+      finishingWarmup = false;
       this.deps.warmups.clearWatchdog(video);
       this.deps.warmups.clearActiveWarmup(video);
       this.deps.warmups.setRetryCooldown(video, performance.now());
@@ -391,17 +411,27 @@ export class VideoSyncWarmupCoordinator {
       }
     };
 
-    const finishWarmup = (fallback = false) => {
-      if (!this.deps.warmups.isAttemptCurrent(video, attemptId)) {
+    const finishWarmup = async (fallback = false): Promise<void> => {
+      if (!this.deps.warmups.isAttemptCurrent(video, attemptId) || finishingWarmup) {
         return;
       }
 
+      finishingWarmup = true;
       this.deps.warmups.clearWatchdog(video);
       const presentedTime = video.currentTime;
-      renderHostPort.markVideoFramePresented(video, presentedTime, clipId);
-      if (!renderHostPort.captureVideoFrameAtTime(video, presentedTime, clipId)) {
-        renderHostPort.ensureVideoFrameCached(video, clipId);
+      let captured = renderHostPort.captureVideoFrameAtTime(video, presentedTime, clipId);
+      if (!captured) {
+        captured = await renderHostPort.preCacheVideoFrame(video, clipId);
       }
+      if (!this.deps.warmups.isAttemptCurrent(video, attemptId)) {
+        return;
+      }
+      if (!captured) {
+        abortWarmup('capture-failed');
+        return;
+      }
+
+      renderHostPort.markVideoFramePresented(video, presentedTime, clipId);
       renderHostPort.cacheFrameAtTime(video, safeTargetTime);
       renderHostPort.markVideoGpuReady(video);
       scrubSettleState.resolve(clipId);
@@ -426,7 +456,7 @@ export class VideoSyncWarmupCoordinator {
       const closeToTarget =
         Math.abs(video.currentTime - safeTargetTime) <= VideoSyncWarmupCoordinator.WARMUP_TIMEOUT_TARGET_EPSILON;
       if (video.readyState >= 2 && closeToTarget) {
-        finishWarmup(true);
+        void finishWarmup(true);
         return;
       }
       abortWarmup('timeout');
@@ -438,11 +468,11 @@ export class VideoSyncWarmupCoordinator {
       }
       if (hasVideoFrameCallback(video)) {
         video.requestVideoFrameCallback(() => {
-          finishWarmup(false);
+          void finishWarmup(false);
         });
       } else {
         setTimeout(() => {
-          finishWarmup(true);
+          void finishWarmup(true);
         }, 100);
       }
     }).catch(() => {
@@ -475,12 +505,10 @@ export class VideoSyncWarmupCoordinator {
 
     for (const clip of ctx.clips) {
       if (!isVisibleVideoTrackClip(ctx, clip)) continue;
+      if (!canClipOwnVideoSyncMedia(clip)) continue;
 
       const clipStart = clip.startTime;
       const clipEnd = clip.startTime + clip.duration;
-      const clipTime = isInteractivePreview
-        ? getClipSampleTimeNearPlayhead(ctx, clip)
-        : getWarmupClipTime(ctx, clip);
       const isCurrentlyActive = clipStart <= ctx.playheadPosition && clipEnd > ctx.playheadPosition;
 
       if (isInteractivePreview) {
@@ -488,6 +516,10 @@ export class VideoSyncWarmupCoordinator {
       } else {
         if (clipStart <= ctx.playheadPosition || clipStart > windowEnd) continue;
       }
+
+      const clipTime = isInteractivePreview
+        ? getClipSampleTimeNearPlayhead(ctx, clip)
+        : getWarmupClipTime(ctx, clip);
 
       if (flags.useFullWebCodecsPlayback) {
         this.deps.prewarmUpcomingWebCodecsClip(ctx, clip, clipTime);
@@ -554,6 +586,19 @@ export class VideoSyncWarmupCoordinator {
         requestRender: false,
       });
     }
+
+    warmUpcomingBakedTransitionVideos({
+      ctx,
+      deps: {
+        ...this.deps,
+        positionWarmedUpcomingVideo: (frameCtx, clip, video, targetTime) => {
+          this.positionWarmedUpcomingVideo(frameCtx, clip, video, targetTime);
+        },
+      },
+      isInteractivePreview,
+      windowEnd,
+      windowStart,
+    });
   }
 
   preBufferUpcomingVideoAudio(ctx: FrameContext): void {
@@ -585,52 +630,7 @@ export class VideoSyncWarmupCoordinator {
   }
 
   preBufferUpcomingNestedCompVideos(ctx: FrameContext): void {
-    if (!ctx.isPlaying || ctx.isDraggingPlayhead) return;
-
-    const lookaheadEnd = ctx.playheadPosition + VideoSyncWarmupCoordinator.LOOKAHEAD_TIME;
-
-    for (const compClip of ctx.clips) {
-      if (!isVisibleVideoTrackClip(ctx, compClip)) continue;
-
-      const clipStart = compClip.startTime;
-      if (
-        !compClip.isComposition ||
-        !compClip.nestedClips ||
-        compClip.nestedClips.length === 0 ||
-        clipStart <= ctx.playheadPosition ||
-        clipStart > lookaheadEnd
-      ) {
-        continue;
-      }
-
-      const compStartTime = compClip.inPoint;
-      for (const nestedClip of compClip.nestedClips) {
-        const video = this.deps.getClipHtmlVideoElement(nestedClip);
-        if (!video) continue;
-
-        const nestedClipEnd = nestedClip.startTime + nestedClip.duration;
-        if (compStartTime < nestedClip.startTime || compStartTime >= nestedClipEnd) {
-          continue;
-        }
-
-        const nestedLocalTime = compStartTime - nestedClip.startTime;
-        const targetTime = nestedClip.reversed
-          ? nestedClip.outPoint - nestedLocalTime
-          : nestedLocalTime + nestedClip.inPoint;
-
-        if (this.deps.warmups.isWarming(video) || video.seeking) {
-          continue;
-        }
-
-        if (video.preload !== 'auto') {
-          video.preload = 'auto';
-        }
-
-        if (Math.abs(video.currentTime - targetTime) > 0.1) {
-          video.currentTime = this.deps.safeSeekTime(video, targetTime);
-        }
-      }
-    }
+    preBufferUpcomingNestedCompVideos(ctx, this.deps, VideoSyncWarmupCoordinator.LOOKAHEAD_TIME);
   }
 
   private isVideoElementActiveAtPlayhead(ctx: FrameContext, video: HTMLVideoElement): boolean {

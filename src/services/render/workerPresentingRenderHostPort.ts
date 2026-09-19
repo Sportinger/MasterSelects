@@ -24,7 +24,11 @@ import {
   recordWorkerFirstTimingCounters,
 } from '../aiTools/workerFirstCounterSources';
 import { Logger } from '../logger';
-import { buildPlaybackDebugStats } from '../playbackDebugStats';
+import {
+  buildPlaybackDebugStats,
+  EFFECTIVE_PLAYBACK_CADENCE_WINDOW_MS,
+  toPlaybackCadenceStats,
+} from '../playbackDebugStats';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
 import { wcPipelineMonitor } from '../wcPipelineMonitor';
 import type { RamPreviewRenderEngine } from '../ramPreviewEngine';
@@ -59,6 +63,7 @@ import {
   createWorkerCanvasContext,
   createWorkerRenderTarget,
   documentVisibilityDiagnostics,
+  resolveWorkerTargetResizeSize,
   waitForWorkerPresentingRetry,
   WORKER_PRESENTING_CACHED_SCRUB_SNAPSHOT_MAX_DRIFT_SECONDS,
   WORKER_PRESENTING_LIVE_SCRUB_SNAPSHOT_MAX_DRIFT_SECONDS,
@@ -262,6 +267,7 @@ class WorkerPresentingRenderHostPortCore {
   private fpsWindowStartedAt = 0;
   private fpsWindowFrames = 0;
   private currentFps = 0;
+  private playbackRunStartedAt: number | undefined;
   private currentTargetFps = WORKER_PRESENTING_TARGET_FPS;
   private fpsWindowTargetFps = WORKER_PRESENTING_TARGET_FPS;
   private lastCadenceRenderAt = 0;
@@ -609,8 +615,11 @@ class WorkerPresentingRenderHostPortCore {
     );
     this.isPlaying = isPlaying;
     if (startingPlayback) {
+      this.playbackRunStartedAt = performance.now();
       this.pendingGpuPauseHoldsByTarget.clear();
       clearWorkerFirstPresentedFrameEvents();
+      wcPipelineMonitor.reset();
+      vfPipelineMonitor.reset();
     } else if (!isPlaying) {
       if (stoppingActiveGpuStream) {
         this.captureGpuPauseHolds();
@@ -684,7 +693,7 @@ class WorkerPresentingRenderHostPortCore {
     return this.cacheLatestWorkerCompositeFrame(time);
   }
 
-  cacheActiveCompOutput(_compositionId: string): void {
+  cacheActiveCompOutput(_compositionId: string, _timelineTimeSeconds?: number): void {
     // Worker-presenting cache ownership is runtime-side; legacy composite cache is intentionally not populated here.
   }
 
@@ -774,8 +783,18 @@ class WorkerPresentingRenderHostPortCore {
   }
 
   setResolution(width: number, height: number): void {
+    const targetStore = useRenderTargetStore.getState();
+    const activeTargetIds = new Set(targetStore.getActiveCompTargets().map((target) => target.id));
     this.targetRecords.forEach((record, targetId) => {
-      const size = { x: width, y: height };
+      const target = targetStore.targets.get(targetId);
+      const size = resolveWorkerTargetResizeSize({
+        canvasHeight: record.canvas.height || record.canvas.clientHeight,
+        canvasWidth: record.canvas.width || record.canvas.clientWidth,
+        followsActiveComposition: activeTargetIds.has(targetId),
+        requestedHeight: height,
+        requestedWidth: width,
+        viewportOverride: target?.viewportOverride,
+      });
       this.targetRecords.set(targetId, {
         ...record,
         target: { ...record.target, size },
@@ -2990,6 +3009,7 @@ class WorkerPresentingRenderHostPortCore {
     this.fpsWindowTargetFps = targetFps;
     this.fpsWindowStartedAt = 0;
     this.fpsWindowFrames = 0;
+    this.currentFps = 0;
     this.dropsLastSecond = 0;
     this.lastCadenceRenderAt = 0;
   }
@@ -3013,10 +3033,20 @@ class WorkerPresentingRenderHostPortCore {
     const playbackWindowMs = WORKER_PRESENTING_PLAYBACK_STATS_WINDOW_MS;
     const playbackNow = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const workerPreviewEvents = getWorkerFirstPresentedFrameEvents(playbackWindowMs, playbackNow);
+    const recentWindowMs = EFFECTIVE_PLAYBACK_CADENCE_WINDOW_MS;
+    const recentPlayback = buildPlaybackDebugStats({
+      decoder,
+      now: playbackNow,
+      windowMs: recentWindowMs,
+      wcTimeline: wcPipelineMonitor.timeline(recentWindowMs),
+      vfTimeline: vfPipelineMonitor.timeline(recentWindowMs),
+      workerPreviewEvents: getWorkerFirstPresentedFrameEvents(recentWindowMs, playbackNow),
+    });
     const isIdle = this.isWorkerIdle();
     const dropsLastSecond = isIdle ? 0 : this.dropsLastSecond;
     return {
       fps: isIdle ? 0 : this.currentFps,
+      playbackRunStartedAt: this.playbackRunStartedAt,
       frameTime: this.lastRenderDurationMs,
       gpuMemory: 0,
       timing: {
@@ -3039,14 +3069,17 @@ class WorkerPresentingRenderHostPortCore {
         drift: 0,
         status: 'silent',
       },
-      playback: buildPlaybackDebugStats({
-        decoder,
-        now: playbackNow,
-        windowMs: playbackWindowMs,
-        wcTimeline: wcPipelineMonitor.timeline(playbackWindowMs),
-        vfTimeline: vfPipelineMonitor.timeline(playbackWindowMs),
-        workerPreviewEvents,
-      }),
+      playback: {
+        ...buildPlaybackDebugStats({
+          decoder,
+          now: playbackNow,
+          windowMs: playbackWindowMs,
+          wcTimeline: wcPipelineMonitor.timeline(playbackWindowMs),
+          vfTimeline: vfPipelineMonitor.timeline(playbackWindowMs),
+          workerPreviewEvents,
+        }),
+        recentCadence: toPlaybackCadenceStats(recentPlayback),
+      },
       isIdle,
     };
   }

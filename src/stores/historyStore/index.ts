@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { Logger } from '../../services/logger';
 import type { HistoryTimelineEvent } from '../../types/history';
-import type { DockStoreSnapshot, ExportStoreSnapshot, FlashBoardStoreSnapshot, HistoryNode, HistoryStoreInitRefs, HistoryStoreRefs, HistoryState, MediaStoreState, StateSnapshot, StoryboardStoreSnapshot, TimelineStoreState } from './historyStoreTypes';
+import type { DockStoreSnapshot, ExportStoreSnapshot, FlashBoardStoreSnapshot, HistoryNode, HistoryStoreInitRefs, HistoryStoreRefs, HistoryState, MediaStoreState, StateSnapshot, StoryboardStoreSnapshot, TimelineStoreState, TrackingStoreSnapshot } from './historyStoreTypes';
 export type { HistoryRestoreResult } from './historyStoreTypes';
 import { createHistoryEntries, getRedoChild } from './historyNavigation';
 import { HISTORY_DEBUG_DISABLE_STORAGE_KEY, isHistoryDisabledForDebug, setHistoryDisabledForDebug } from './historyDebug';
@@ -15,10 +15,11 @@ import { createHistoryProjectHydrationState, serializeHistoryForProject } from '
 import { assertExclusiveTimelineMutationAllowed } from '../timeline/exclusiveMutationLease';
 
 export { HISTORY_DEBUG_DISABLE_STORAGE_KEY, isHistoryDisabledForDebug, setHistoryDisabledForDebug };
-// Snapshot persistence is affordable since the tree rebuild: every state is
-// stored exactly once (no per-branch stack copies), capped in
-// historyProjectState.ts (MAX_PERSISTED_HISTORY_NODES).
-const log = Logger.create('History'); const MAX_HISTORY_EVENT_LOG_SIZE = 500; const PERSIST_HISTORY_SNAPSHOTS = true; const HISTORY_CAPTURE_WARN_MS = 24;
+// Keep undo snapshots in memory only. A snapshot contains the full timeline,
+// media and transcript state, so embedding dozens of them in project.json
+// makes continuous and manual saves progressively slower. The event log still
+// persists, and hydration seeds a fresh undo baseline for the loaded project.
+const log = Logger.create('History'); const MAX_HISTORY_EVENT_LOG_SIZE = 500; const PERSIST_HISTORY_SNAPSHOTS = false; const HISTORY_CAPTURE_WARN_MS = 24;
 let nextBatchId = 1;
 let flushPendingCaptureCallback: (() => void) | null = null; let suppressCapturesCallback: (() => void) | null = null; let afterApplyCallback: (() => void) | null = null;
 export function setHistoryCallbacks(callbacks: { flushPendingCapture: () => void; suppressCaptures: () => void; afterApply?: () => void }) { flushPendingCaptureCallback = callbacks.flushPendingCapture; suppressCapturesCallback = callbacks.suppressCaptures; afterApplyCallback = callbacks.afterApply ?? null; }
@@ -27,9 +28,10 @@ let getMediaState: (() => MediaStoreState) | undefined; let setMediaState: ((s: 
 let getDockState: (() => DockStoreSnapshot) | undefined; let setDockState: ((s: Partial<DockStoreSnapshot>) => void) | undefined;
 let getFlashBoardState: (() => FlashBoardStoreSnapshot) | undefined; let setFlashBoardState: ((s: Partial<FlashBoardStoreSnapshot>) => void) | undefined;
 let getStoryboardState: (() => StoryboardStoreSnapshot) | undefined; let setStoryboardState: ((s: StoryboardStoreSnapshot) => void) | undefined;
+let getTrackingState: (() => TrackingStoreSnapshot) | undefined; let setTrackingState: ((s: Partial<TrackingStoreSnapshot>) => void) | undefined;
 let getExportState: (() => ExportStoreSnapshot) | undefined; let setExportState: ((s: Partial<ExportStoreSnapshot>) => void) | undefined;
-export function initHistoryStoreRefs(stores: HistoryStoreInitRefs) { getTimelineState=stores.timeline.getState; setTimelineState=stores.timeline.setState; getMediaState=stores.media.getState; setMediaState=stores.media.setState; getDockState=stores.dock.getState; setDockState=stores.dock.setState; getFlashBoardState=stores.flashboard?.getState; setFlashBoardState=stores.flashboard?.setState; getStoryboardState=stores.storyboard?.getState; setStoryboardState=stores.storyboard?.setState; getExportState=stores.export?.getState; setExportState=stores.export?.setState; }
-const refs = (): HistoryStoreRefs => ({ getTimelineState,setTimelineState,getMediaState,setMediaState,getDockState,setDockState,getFlashBoardState,setFlashBoardState,getStoryboardState,setStoryboardState,getExportState,setExportState });
+export function initHistoryStoreRefs(stores: HistoryStoreInitRefs) { getTimelineState=stores.timeline.getState; setTimelineState=stores.timeline.setState; getMediaState=stores.media.getState; setMediaState=stores.media.setState; getDockState=stores.dock.getState; setDockState=stores.dock.setState; getFlashBoardState=stores.flashboard?.getState; setFlashBoardState=stores.flashboard?.setState; getStoryboardState=stores.storyboard?.getState; setStoryboardState=stores.storyboard?.setState; getTrackingState=stores.tracking?.getState; setTrackingState=stores.tracking?.setState; getExportState=stores.export?.getState; setExportState=stores.export?.setState; }
+const refs = (): HistoryStoreRefs => ({ getTimelineState,setTimelineState,getMediaState,setMediaState,getDockState,setDockState,getFlashBoardState,setFlashBoardState,getStoryboardState,setStoryboardState,getTrackingState,setTrackingState,getExportState,setExportState });
 const createSnapshot = (label: string, previous?: StateSnapshot | null) => createHistorySnapshot(label, refs(), previous);
 const createInitialHistorySnapshot = () => createInitialHistorySnapshotFromRefs(refs());
 const applySnapshot = (snapshot: StateSnapshot) => applyHistorySnapshot(snapshot, refs(), { afterApply: afterApplyCallback ?? undefined, onTimelineEditStateRestored: d => log.debug('Restored timeline from HistoryTimelineEditState', d) });

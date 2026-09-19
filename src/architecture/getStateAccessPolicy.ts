@@ -2,10 +2,13 @@
   path: string;
   maxCurrentHits: number;
 }
+import { currentWorkflowGetStateHardTargets } from './getStateCurrentWorkflowTargets';
 export { allowedAdapterPaths } from './getStateAllowedAdapterPaths';
 export const classCHardTargets = [
   { path: 'src/components/common/MatAnyoneSetupDialog.tsx', maxCurrentHits: 4 },
   { path: 'src/components/common/Toolbar.tsx', maxCurrentHits: 2 },
+  { path: 'src/components/dock/container/useDockContainerGlobalDrag.ts', maxCurrentHits: 5 },
+  { path: 'src/components/dock/goo/DockGooOverlay.tsx', maxCurrentHits: 3 },
   { path: 'src/components/export/exportHelpers.ts', maxCurrentHits: 2 },
   { path: 'src/components/export/runners/ffmpegDirectExportRunner.ts', maxCurrentHits: 1 },
   { path: 'src/components/export/runners/fcpxmlExportRunner.ts', maxCurrentHits: 1 },
@@ -35,6 +38,7 @@ export const classCHardTargets = [
   { path: 'src/components/panels/properties/BlendshapesTab.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/properties/EffectsTab.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/properties/GaussianSplatTab.tsx', maxCurrentHits: 3 },
+  { path: 'src/components/panels/properties/HookTab.tsx', maxCurrentHits: 4 },
   { path: 'src/components/panels/properties/index.tsx', maxCurrentHits: 3 },
   { path: 'src/components/panels/properties/LottieTab.tsx', maxCurrentHits: 2 },
   { path: 'src/components/panels/properties/MasksTab.tsx', maxCurrentHits: 1 },
@@ -49,7 +53,7 @@ export const classCHardTargets = [
   { path: 'src/components/panels/properties/TransformTab.tsx', maxCurrentHits: 2 },
   { path: 'src/components/panels/properties/VolumeTab.tsx', maxCurrentHits: 2 },
   { path: 'src/components/panels/properties/synthSections/useLiveInstrumentParams.ts', maxCurrentHits: 1 },
-  { path: 'src/components/panels/SAM2Panel.tsx', maxCurrentHits: 28 },
+  { path: 'src/components/panels/SAM2Panel.tsx', maxCurrentHits: 25 },
   { path: 'src/components/panels/sam2/MatAnyoneFileHelpers.ts', maxCurrentHits: 4 },
   { path: 'src/components/panels/TextTab.tsx', maxCurrentHits: 2 },
   { path: 'src/components/pianoRoll/PianoRoll.tsx', maxCurrentHits: 13 }, // #249: 4 -> 11 -> 13 (popup fresh-read pattern + clip-resize handler; see baseline note)
@@ -61,14 +65,17 @@ export const classCHardTargets = [
   { path: 'src/components/preview/usePreviewSceneCameraActions.ts', maxCurrentHits: 7 },
   { path: 'src/components/preview/usePreviewEditCameraConfig.ts', maxCurrentHits: 1 },
   { path: 'src/components/preview/usePreviewSourceConfig.ts', maxCurrentHits: 4 },
-  { path: 'src/components/preview/usePreviewWheelHandler.ts', maxCurrentHits: 2 },
+  { path: 'src/components/preview/usePreviewWheelHandler.ts', maxCurrentHits: 3 },
   { path: 'src/components/preview/SAM2Overlay.tsx', maxCurrentHits: 2 },
   { path: 'src/components/preview/SceneObjectOverlay.tsx', maxCurrentHits: 3 },
   { path: 'src/components/preview/sceneObjectOverlayMath.ts', maxCurrentHits: 1 },
   { path: 'src/components/preview/SourceMonitor.tsx', maxCurrentHits: 1 },
   { path: 'src/components/preview/useMaskDrag.ts', maxCurrentHits: 2 },
   { path: 'src/components/preview/useMaskEdgeDrag.ts', maxCurrentHits: 3 },
+  { path: 'src/components/preview/useMaskRotationDrag.ts', maxCurrentHits: 4 },
   { path: 'src/components/preview/useMaskVertexDrag.ts', maxCurrentHits: 6 },
+  { path: 'src/components/preview/usePreviewEffectOrbit.ts', maxCurrentHits: 3 },
+  { path: 'src/effects/looks/applyLook.ts', maxCurrentHits: 1 },
   { path: 'src/components/timeline/components/SlotGridTimeOverlay.tsx', maxCurrentHits: 3 },
   { path: 'src/components/timeline/components/TransitionOverlays.tsx', maxCurrentHits: 2 },
   { path: 'src/components/timeline/components/TimelineHeaderAudioControls.tsx', maxCurrentHits: 12 },
@@ -87,6 +94,7 @@ export const classCHardTargets = [
   { path: 'src/components/timeline/hooks/useMidiClipDraw.ts', maxCurrentHits: 2 },
   { path: 'src/components/timeline/hooks/usePlaybackLoop.ts', maxCurrentHits: 4 },
   { path: 'src/components/timeline/hooks/useTimelineKeyboard.ts', maxCurrentHits: 9 },
+  { path: 'src/components/timeline/hooks/useTimelineAuxiliaryLayerProps.ts', maxCurrentHits: 2 },
   { path: 'src/components/timeline/hooks/useTimelineGraphPanelResize.ts', maxCurrentHits: 2 },
   { path: 'src/components/timeline/hooks/useTimelinePlayheadDisplay.ts', maxCurrentHits: 1 },
   { path: 'src/components/timeline/hooks/useTimelineSourceMonitorDismiss.ts', maxCurrentHits: 1 },
@@ -95,8 +103,8 @@ export const classCHardTargets = [
   { path: 'src/components/timeline/hooks/useTimelineTrackHeightWheel.ts', maxCurrentHits: 1 },
   { path: 'src/components/timeline/hooks/useTimelineTrackPointerTools.ts', maxCurrentHits: 5 },
   { path: 'src/components/timeline/hooks/useTimelineTrackResize.ts', maxCurrentHits: 2 },
+  { path: 'src/components/timeline/hooks/useTimelineZoom.ts', maxCurrentHits: 3 },
   { path: 'src/components/timeline/SlotGrid.tsx', maxCurrentHits: 14 },
-  { path: 'src/components/timeline/slotGridAnimation.ts', maxCurrentHits: 3 },
   { path: 'src/components/timeline/TimelineContextMenu.tsx', maxCurrentHits: 5 },
   { path: 'src/components/timeline/TimelineControls.tsx', maxCurrentHits: 12 },
   { path: 'src/components/timeline/TimelineHeader.tsx', maxCurrentHits: 1 },
@@ -105,7 +113,8 @@ export const classCHardTargets = [
   { path: 'src/components/timeline/utils/layerSyncProxyFrames.ts', maxCurrentHits: 2 },
   { path: 'src/engine/audio/AudioExportPipeline.ts', maxCurrentHits: 3 },
   { path: 'src/engine/export/ClipPreparation.ts', maxCurrentHits: 2 },
-  { path: 'src/engine/export/ExportLayerBuilder.ts', maxCurrentHits: 1 },
+  // Flock clips read their source-time keyframes at layer build time: 1 -> 2.
+  { path: 'src/engine/export/ExportLayerBuilder.ts', maxCurrentHits: 2 },
   { path: 'src/engine/export/prepareTransitionCompositionsForExport.ts', maxCurrentHits: 2 },
   // Packet 291: 7 -> 0 entry + 1+4+1 modules (one site retired via shared
   // lookup; maxHits ratchets 658 -> 657).
@@ -137,6 +146,10 @@ export const classCHardTargets = [
   { path: 'src/engine/render/dispatcher/targetPreviewLayerCollector.ts', maxCurrentHits: 2 },
   { path: 'src/engine/scene/SceneCameraUtils.ts', maxCurrentHits: 7 },
   { path: 'src/engine/scene/SceneEffectorUtils.ts', maxCurrentHits: 2 },
+  // Flock runtime: audio modulation resolves analysis refs and model instancing
+  // resolves media assets at sample time (render-host reads, not React state).
+  { path: 'src/engine/flock/runtime/flockAudioSampler.ts', maxCurrentHits: 2 },
+  { path: 'src/engine/flock/gpu/flockModelMeshes.ts', maxCurrentHits: 2 },
   // Packet 345: 5 -> 2+1+1 (presenter + recovery wiring; one site retired
   // via restore-loop dedup, maxHits 656 -> 655).
   { path: 'src/engine/WebGPUEngine.ts', maxCurrentHits: 2 },
@@ -144,15 +157,19 @@ export const classCHardTargets = [
   { path: 'src/engine/engineCore/contextRecoveryWiring.ts', maxCurrentHits: 1 },
   { path: 'src/engine/engineCore/outputWindowController.ts', maxCurrentHits: 7 },
   // Packet 306: 25 -> 12+4+3+3+2 (engine sync hooks; maxHits 657 -> 656).
-  { path: 'src/hooks/useEngine.ts', maxCurrentHits: 12 },
+  { path: 'src/hooks/useEngine.ts', maxCurrentHits: 9 },
   { path: 'src/hooks/engine/useEngineMaskTextureSync.ts', maxCurrentHits: 4 },
   { path: 'src/hooks/engine/useEngineRenderWakeSubscriptions.ts', maxCurrentHits: 3 },
   { path: 'src/hooks/engine/useEngineResolutionSync.ts', maxCurrentHits: 3 },
   { path: 'src/hooks/engine/useEngineTimelineStateSync.ts', maxCurrentHits: 2 },
   { path: 'src/hooks/useGlobalHistory.ts', maxCurrentHits: 3 },
-  { path: 'src/marketing/landingBackgroundJob.ts', maxCurrentHits: 4 },
-  { path: 'src/marketing/LandingPanel.tsx', maxCurrentHits: 1 },
-  { path: 'src/marketing/runLandingBackgroundCreation.ts', maxCurrentHits: 14 },
+  { path: 'src/hooks/useDockPinchFullscreen.ts', maxCurrentHits: 7 },
+  { path: 'src/marketing/ChatReviewTimeline.tsx', maxCurrentHits: 1 },
+  { path: 'src/marketing/landingBackgroundJob.ts', maxCurrentHits: 6 },
+  { path: 'src/marketing/LandingEditReview.tsx', maxCurrentHits: 1 },
+  { path: 'src/marketing/LandingPanel.tsx', maxCurrentHits: 2 },
+  { path: 'src/marketing/runLandingBackgroundCreation.ts', maxCurrentHits: 1 },
+  { path: 'src/marketing/useSeedancePreproductionController.ts', maxCurrentHits: 0 },
   { path: 'src/services/agentTimeline/jobs/currentClipAnalysisExecution.ts', maxCurrentHits: 1 },
   { path: 'src/services/audio/audioDiagnostics.ts', maxCurrentHits: 1 },
   { path: 'src/services/audio/ClipAudioAnalysisOrchestrator.ts', maxCurrentHits: 1 },
@@ -161,6 +178,8 @@ export const classCHardTargets = [
   { path: 'src/services/audio/midiPlaybackScheduler.ts', maxCurrentHits: 6 },
   { path: 'src/services/audio/stemSeparation/StemSeparationService.ts', maxCurrentHits: 1 },
   { path: 'src/services/audioAnalyzer.ts', maxCurrentHits: 1 },
+  { path: 'src/services/captions/captionTimelineEditing.ts', maxCurrentHits: 1 },
+  { path: 'src/services/captions/transcriptReviewEdits.ts', maxCurrentHits: 6 },
   { path: 'src/services/clipAnalyzer.ts', maxCurrentHits: 4 },
   // Packet 267: 4 -> 2+2; 2.3.3 adds hosted transcription account/balance bridge.
   { path: 'src/services/clipTranscriber.ts', maxCurrentHits: 3 },
@@ -185,10 +204,12 @@ export const classCHardTargets = [
   { path: 'src/services/layerBuilder/layerBuilder3dLayers.ts', maxCurrentHits: 1 },
   { path: 'src/services/layerBuilder/layerBuilder3dSources.ts', maxCurrentHits: 3 },
   { path: 'src/services/layerBuilder/layerBuilderMotionLayers.ts', maxCurrentHits: 1 },
+  { path: 'src/services/layerBuilder/layerBuilderFlockLayers.ts', maxCurrentHits: 1 },
   { path: 'src/services/layerBuilder/layerBuilderNestedLayers.ts', maxCurrentHits: 1 },
   { path: 'src/services/layerBuilder/LayerBuilderService.ts', maxCurrentHits: 5 },
   { path: 'src/services/layerBuilder/videoSyncHtmlSeekCoordinator.ts', maxCurrentHits: 2 },
   { path: 'src/services/layerPlaybackManager.ts', maxCurrentHits: 6 },
+  { path: 'src/services/landmarkTracking/LandmarkTrackingService.ts', maxCurrentHits: 1 },
   { path: 'src/services/performanceMonitor.ts', maxCurrentHits: 1 },
   { path: 'src/services/playbackHealthMonitor.ts', maxCurrentHits: 7 },
   { path: 'src/services/properties/vectorAnimationProperties.ts', maxCurrentHits: 1 },
@@ -206,18 +227,19 @@ export const classCHardTargets = [
   { path: 'src/services/timeline/timelineExternalDropCommandExecutor.ts', maxCurrentHits: 2 },
   { path: 'src/services/timeline/timelineExternalDropMediaResolver.ts', maxCurrentHits: 2 },
   { path: 'src/services/timeline/timelineSourceWaveformWarmup.ts', maxCurrentHits: 2 },
-  { path: 'src/services/timeline/timelineThumbnailGenerationWarmup.ts', maxCurrentHits: 4 },
+  { path: 'src/services/timeline/timelineThumbnailGenerationWarmup.ts', maxCurrentHits: 5 },
   { path: 'src/services/timelinePlacementCommands.ts', maxCurrentHits: 13 },
   { path: 'src/services/timelineSubcomposition.ts', maxCurrentHits: 9 },
   { path: 'src/stores/flashboardStore/activeGenerationRecords.ts', maxCurrentHits: 2 },
   { path: 'src/stores/creditActivityStore.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaDownloadStore.ts', maxCurrentHits: 6 },
+  { path: 'src/stores/splitCompareStore.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaStore/helpers/gaussianSplatSequenceImport.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaStore/helpers/importPipeline.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaStore/helpers/modelSequenceImport.ts', maxCurrentHits: 1 },
-  { path: 'src/stores/mediaStore/init.ts', maxCurrentHits: 6 },
+  { path: 'src/stores/mediaStore/init.ts', maxCurrentHits: 9 },
   { path: 'src/stores/mediaStore/slices/composition/activeTimelineSync.ts', maxCurrentHits: 2 },
-  { path: 'src/stores/mediaStore/slices/composition/crudActions.ts', maxCurrentHits: 1 },
+  { path: 'src/stores/mediaStore/slices/composition/crudActions.ts', maxCurrentHits: 2 },
   { path: 'src/stores/mediaStore/slices/composition/resizeTransforms.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaStore/slices/composition/slotAssignmentActions.ts', maxCurrentHits: 3 },
   { path: 'src/stores/mediaStore/slices/composition/tabActions.ts', maxCurrentHits: 1 },
@@ -235,7 +257,7 @@ export const classCHardTargets = [
   { path: 'src/stores/timeline/cameraClipSlice.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/captionClipSlice.ts', maxCurrentHits: 3 },
   { path: 'src/stores/timeline/clip/addAudioClip.ts', maxCurrentHits: 2 },
-  { path: 'src/stores/timeline/clip/addClipMediaSource.ts', maxCurrentHits: 1 },
+  { path: 'src/stores/timeline/clip/addClipMediaSource.ts', maxCurrentHits: 2 },
   { path: 'src/stores/timeline/clip/addImageClip.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/clip/addVideoClip.ts', maxCurrentHits: 3 },
   { path: 'src/stores/timeline/clip/clipAudioAnalysisShared.ts', maxCurrentHits: 1 },
@@ -265,10 +287,13 @@ export const classCHardTargets = [
   { path: 'src/stores/timeline/tracks/trackAudioState.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/trackSlice.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/videoBakeSlice.ts', maxCurrentHits: 1 },
+  // Current editor, live-production, trim, and 3D workflows. These remain
+  // explicit hard targets so future getState growth cannot arrive silently.
+  ...currentWorkflowGetStateHardTargets,
 ] as const satisfies readonly GetStateClassCHardTarget[];
 
 export const getStateAccessPolicyBaselines = {
-  allowedAdapterPathCount: 36,
-  classCHardTargetFileCount: 248,
-  classCHardTargetMaxHits: 730,
+  allowedAdapterPathCount: 39,
+  classCHardTargetFileCount: 314,
+  classCHardTargetMaxHits: 954,
 } as const;

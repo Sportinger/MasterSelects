@@ -1,4 +1,6 @@
 import type { Keyframe } from '../../types/keyframes';
+import { cloneTerrainAnchorConnector, cloneTerrainAttachment, cloneTerrainScreenAnchor } from '../../types/terrainAttachment';
+import { cloneTrackingBinding } from '../../types/trackingBinding';
 import type { SerializableClip, TimelineClip } from '../../types/timeline';
 import type { TransitionSourceMap, TransitionSourceMapV2 } from '../../types/timelineCore';
 import type { TransitionSourceDurationResolver } from '../../stores/timeline/editOperations/transitionPlanner';
@@ -38,6 +40,11 @@ export function serializeFallbackClip(clip: TimelineClip): SerializableClip {
     transform: clone(clip.transform),
     sourceRect: clip.sourceRect ? clone(clip.sourceRect) : undefined,
     effects: clone(clip.effects ?? []),
+    planarTracks: clip.planarTracks ? clone(clip.planarTracks) : undefined,
+    trackingBinding: cloneTrackingBinding(clip.trackingBinding),
+    terrainAttachment: cloneTerrainAttachment(clip.terrainAttachment),
+    terrainScreenAnchor: cloneTerrainScreenAnchor(clip.terrainScreenAnchor),
+    terrainAnchorConnector: cloneTerrainAnchorConnector(clip.terrainAnchorConnector),
     keyframes: runtimeKeyframes ? clone(runtimeKeyframes) : undefined,
     colorCorrection: clip.colorCorrection ? clone(clip.colorCorrection) : undefined,
     nodeGraph: clip.nodeGraph ? clone(clip.nodeGraph) : undefined,

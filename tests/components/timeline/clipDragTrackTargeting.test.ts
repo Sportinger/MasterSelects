@@ -6,6 +6,7 @@ import {
   getClipDragNewTrackId,
   getClipDragNewTrackType,
   getClipDragTrackRequirement,
+  resolveClipDragPointerTrackTarget,
   resolveCompatibleClipDragTrackId,
 } from '../../../src/components/timeline/utils/clipDragTrackTargeting';
 import { createMockClip, createMockTrack } from '../../helpers/mockData';
@@ -27,6 +28,37 @@ describe('clipDragTrackTargeting', () => {
     });
 
     expect(resolveCompatibleClipDragTrackId('audio-1', 'video-2', videoClip, tracks)).toBe('video-2');
+  });
+
+  it('clamps a fast overshot video drag to the bottom video track instead of its original track', () => {
+    const videoClip = createMockClip({
+      id: 'video-from-top',
+      trackId: 'video-1',
+      source: { type: 'video', naturalDuration: 5 },
+    });
+
+    expect(resolveClipDragPointerTrackTarget({
+      activeNewTrackType: null,
+      clip: videoClip,
+      currentTrackId: 'video-1',
+      getRenderedTrackHeight: track => track.height,
+      hoveredTrack: tracks[2],
+      originalTrackId: 'video-1',
+      pointerTrack: tracks[2],
+      timelineY: 150,
+      trackChangeAllowed: false,
+      tracks,
+    })).toEqual({ trackId: 'video-2', newTrackType: null });
+  });
+
+  it('clamps an overshot audio drag to the top audio track', () => {
+    const audioClip = createMockClip({
+      id: 'audio-from-bottom',
+      trackId: 'audio-2',
+      source: { type: 'audio', naturalDuration: 5 },
+    });
+
+    expect(resolveCompatibleClipDragTrackId('video-2', 'audio-2', audioClip, tracks)).toBe('audio-1');
   });
 
   it('chooses the nearest compatible video track when the pointer is in audio lanes', () => {

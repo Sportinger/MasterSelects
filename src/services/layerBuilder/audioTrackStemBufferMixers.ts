@@ -1,3 +1,4 @@
+import { automaticCutFadeSignature } from '../audio/automaticCutFadePlayback';
 import type { ClipAudioStemLayer, TimelineClip } from '../../types';
 import type { AudioTrackStemLayerBufferCache } from './audioTrackStemLayerBuffers';
 import {
@@ -19,7 +20,6 @@ import {
 import {
   STEM_MIXER_BUFFER_SET_MAX_BYTES,
   STEM_MIXER_RESTART_DRIFT_SECONDS,
-  STEM_MIXER_START_DELAY_SECONDS,
   STEM_SOURCE_LAYER_ID,
   canUseStemBufferMixer,
   createStemBufferCacheKey,
@@ -29,12 +29,7 @@ import {
   type StemBufferMixerSession,
   type StemBufferMixerSyncOptions,
 } from './audioTrackStemSyncModel';
-
-type AudioTrackStemBufferMixerManagerOptions = {
-  getClipSourceMediaFileId: (clip: TimelineClip) => string | undefined;
-  markRuntimeActive: () => void;
-  stemLayerBuffers: AudioTrackStemLayerBufferCache;
-};
+import { hasRemainingForwardAudioSource } from './audioSourcePlaybackRange';
 
 export { getStemBufferMixerPumpDebugSnapshot };
 
@@ -46,31 +41,26 @@ export class AudioTrackStemBufferMixerManager {
   private markRuntimeActive: () => void;
   private stemLayerBuffers: AudioTrackStemLayerBufferCache;
 
-  constructor(options: AudioTrackStemBufferMixerManagerOptions) {
+  constructor(options: {
+    getClipSourceMediaFileId: (clip: TimelineClip) => string | undefined;
+    markRuntimeActive: () => void;
+    stemLayerBuffers: AudioTrackStemLayerBufferCache;
+  }) {
     this.getClipSourceMediaFileId = options.getClipSourceMediaFileId;
     this.markRuntimeActive = options.markRuntimeActive;
     this.stemLayerBuffers = options.stemLayerBuffers;
   }
 
-  canUseForStemSet(
-    stemSeparation: ClipStemSeparationState | undefined,
-    audibleStemLayers: readonly ClipAudioStemLayer[],
-  ): boolean {
+  canUseForStemSet(stemSeparation: ClipStemSeparationState | undefined, audibleStemLayers: readonly ClipAudioStemLayer[]): boolean {
     if (!stemSeparation || audibleStemLayers.length === 0) return false;
     return estimateStemLayerBytes(stemSeparation, audibleStemLayers.length) <= STEM_MIXER_BUFFER_SET_MAX_BYTES;
   }
 
-  canUseRoute(options: StemBufferMixerSyncOptions): boolean {
-    return canUseStemBufferMixer(options.routeSettings, options.timeInfo.absSpeed) && options.timeInfo.speed > 0;
-  }
+  canUseRoute(options: StemBufferMixerSyncOptions): boolean { return canUseStemBufferMixer(options.routeSettings, options.timeInfo.absSpeed) && options.timeInfo.speed > 0; }
 
-  canUseRouteSettings(options: StemBufferMixerSyncOptions['routeSettings'], absSpeed: number, speed: number): boolean {
-    return canUseStemBufferMixer(options, absSpeed) && speed > 0;
-  }
+  canUseRouteSettings(options: StemBufferMixerSyncOptions['routeSettings'], absSpeed: number, speed: number): boolean { return canUseStemBufferMixer(options, absSpeed) && speed > 0; }
 
-  hasRuntime(): boolean {
-    return this.stemBufferMixers.size > 0 || this.stemBufferMixerContext !== null;
-  }
+  hasRuntime(): boolean { return this.stemBufferMixers.size > 0 || this.stemBufferMixerContext !== null; }
 
   sync(options: StemBufferMixerSyncOptions): number {
     const {
@@ -87,7 +77,11 @@ export class AudioTrackStemBufferMixerManager {
       canBeMaster,
     } = options;
 
-    if (audibleStemLayers.length === 0 || !this.canUseRoute(options)) {
+    if (
+      audibleStemLayers.length === 0 ||
+      !this.canUseRoute(options) ||
+      !hasRemainingForwardAudioSource(clip, timeInfo.clipTime)
+    ) {
       this.stop(clip.id);
       return 0;
     }
@@ -124,6 +118,7 @@ export class AudioTrackStemBufferMixerManager {
     const key = JSON.stringify({
       clipId: clip.id,
       activeSetId: stemSeparation.activeSetId,
+      cutFades: automaticCutFadeSignature(clip),
       layers: layers.map(layer => [layer.id, layer.stemLayer ? createStemBufferCacheKey(layer.stemLayer) : layer.mediaFileId]),
     });
     const context = this.getStemBufferMixerContext();
@@ -160,7 +155,12 @@ export class AudioTrackStemBufferMixerManager {
       meterTrackId,
       canBeMaster,
     } = options;
-    if (trackMuted || effectiveVolume <= 0 || !this.canUseRouteSettings(routeSettings, timeInfo.absSpeed, timeInfo.speed)) {
+    if (
+      trackMuted ||
+      effectiveVolume <= 0 ||
+      !this.canUseRouteSettings(routeSettings, timeInfo.absSpeed, timeInfo.speed) ||
+      !hasRemainingForwardAudioSource(clip, timeInfo.clipTime)
+    ) {
       this.stop(clip.id);
       return 0;
     }
@@ -174,7 +174,7 @@ export class AudioTrackStemBufferMixerManager {
     };
     const layers = [layer];
     const buffers = new Map<string, AudioBuffer>([[STEM_SOURCE_LAYER_ID, buffer]]);
-    const key = JSON.stringify({ clipId: clip.id, source: mediaFileId });
+    const key = JSON.stringify({ clipId: clip.id, source: mediaFileId, cutFades: automaticCutFadeSignature(clip) });
     const context = this.getStemBufferMixerContext();
     if (context.state === 'suspended') void context.resume();
 
@@ -256,10 +256,11 @@ export class AudioTrackStemBufferMixerManager {
     restartDriftSeconds: number | null,
   ): number {
     this.stop(clip.id);
-    const startAt = context.currentTime + STEM_MIXER_START_DELAY_SECONDS;
-    const startOffset = Math.max(0, timeInfo.clipTime + STEM_MIXER_START_DELAY_SECONDS);
+    const startAt = context.currentTime;
+    const startOffset = Math.max(clip.inPoint, timeInfo.clipTime);
     const session = createStemBufferMixerSession({
       clipId: clip.id,
+      clip,
       context,
       key,
       layers,
@@ -295,5 +296,4 @@ export class AudioTrackStemBufferMixerManager {
     }
     return this.stemBufferMixerContext;
   }
-
 }

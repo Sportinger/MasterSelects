@@ -86,4 +86,25 @@ describe('FlashBoard narrated activity persistence', () => {
     }]);
     expect(JSON.stringify(normalized?.activityEvents)).not.toContain('private');
   });
+
+  it('round-trips a bounded hosted-agent input request', () => {
+    const message = serializeFlashBoardChatMessage({
+      id: 'assistant-input',
+      inputRequest: {
+        allowFreeform: false,
+        allowMultiple: false,
+        id: 'input-pacing',
+        options: [
+          { description: 'Tighter cuts.', id: 'fast', title: 'Fast' },
+          { description: 'Longer breaths.', id: 'calm', title: 'Calm' },
+        ],
+        question: 'Which pacing should I use?',
+      },
+      role: 'assistant',
+      text: 'Which pacing should I use?',
+    });
+
+    expect(normalizeFlashBoardChatMessage(message)?.inputRequest)
+      .toEqual(message.inputRequest);
+  });
 });

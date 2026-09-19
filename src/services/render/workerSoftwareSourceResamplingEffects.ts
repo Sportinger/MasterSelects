@@ -12,6 +12,12 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
+function smoothstep(edge0: number, edge1: number, value: number): number {
+  if (edge1 <= edge0) return value >= edge1 ? 1 : 0;
+  const t = clamp01((value - edge0) / (edge1 - edge0));
+  return t * t * (3 - 2 * t);
+}
+
 function sampleRgba(
   data: Uint8ClampedArray,
   width: number,
@@ -280,6 +286,230 @@ function applyBulgeAdjustment(
   return sampleRgba(sourceData, width, height, clamp01(sampleUvX), clamp01(sampleUvY));
 }
 
+type FisheyeAdjustment = NonNullable<
+  WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['fisheyeAdjustments']
+>[number];
+
+type Rgba = readonly [number, number, number, number];
+
+function fisheyeProjectionRadius(
+  theta: number,
+  maxTheta: number,
+  projection: FisheyeAdjustment['projection'],
+): number {
+  switch (projection) {
+    case 'equisolid':
+      return Math.sin(theta * 0.5) / Math.max(Math.sin(maxTheta * 0.5), 0.0001);
+    case 'stereographic':
+      return Math.tan(theta * 0.5) / Math.max(Math.tan(maxTheta * 0.5), 0.0001);
+    case 'orthographic':
+      return Math.sin(theta) / Math.max(Math.sin(maxTheta), 0.0001);
+    default:
+      return theta / Math.max(maxTheta, 0.0001);
+  }
+}
+
+function fisheyeInverseProjectionRadius(
+  radius: number,
+  maxTheta: number,
+  projection: FisheyeAdjustment['projection'],
+): number {
+  switch (projection) {
+    case 'equisolid':
+      return 2 * Math.asin(Math.max(-1, Math.min(1, radius * Math.sin(maxTheta * 0.5))));
+    case 'stereographic':
+      return 2 * Math.atan(radius * Math.tan(maxTheta * 0.5));
+    case 'orthographic':
+      return Math.asin(Math.max(-1, Math.min(1, radius * Math.sin(maxTheta))));
+    default:
+      return radius * maxTheta;
+  }
+}
+
+function fisheyeMappedRadius(radius: number, adjustment: FisheyeAdjustment): number {
+  const maxTheta = Math.max(0.01, Math.min(Math.PI * 0.4861, adjustment.fieldOfView * Math.PI / 360));
+  const rectilinearScale = Math.max(Math.tan(maxTheta), 0.0001);
+  let targetRadius: number;
+  if (adjustment.strength >= 0) {
+    const theta = fisheyeInverseProjectionRadius(radius, maxTheta, adjustment.projection);
+    targetRadius = Math.tan(theta) / rectilinearScale;
+  } else {
+    const theta = Math.atan(radius * rectilinearScale);
+    targetRadius = fisheyeProjectionRadius(theta, maxTheta, adjustment.projection);
+  }
+  const direction = adjustment.strength >= 0 ? 1 : -1;
+  const curveDelta = (radius ** 3 - radius) * 0.35;
+  const tunedRadius = Math.max(0, targetRadius + adjustment.curveBias * direction * curveDelta);
+  return (radius + (tunedRadius - radius) * Math.abs(adjustment.strength)) / adjustment.zoom;
+}
+
+function rotatePoint(x: number, y: number, angle: number): readonly [number, number] {
+  const sine = Math.sin(angle);
+  const cosine = Math.cos(angle);
+  return [x * cosine - y * sine, x * sine + y * cosine];
+}
+
+function fisheyeUvToLens(
+  uvX: number,
+  uvY: number,
+  width: number,
+  height: number,
+  adjustment: FisheyeAdjustment,
+): readonly [number, number] {
+  let deltaX = uvX - adjustment.centerX;
+  let deltaY = uvY - adjustment.centerY;
+  if (adjustment.preserveAspect) deltaX *= width / Math.max(1, height);
+  [deltaX, deltaY] = rotatePoint(deltaX, deltaY, -adjustment.rotation * Math.PI / 180);
+  deltaX *= adjustment.squeeze;
+  const scale = Math.max(adjustment.radius * 0.5, 0.0001);
+  return [deltaX / scale, deltaY / scale];
+}
+
+function fisheyeLensToUv(
+  lensX: number,
+  lensY: number,
+  width: number,
+  height: number,
+  adjustment: FisheyeAdjustment,
+): readonly [number, number] {
+  let deltaX = lensX * Math.max(adjustment.radius * 0.5, 0.0001) / adjustment.squeeze;
+  let deltaY = lensY * Math.max(adjustment.radius * 0.5, 0.0001);
+  [deltaX, deltaY] = rotatePoint(deltaX, deltaY, adjustment.rotation * Math.PI / 180);
+  if (adjustment.preserveAspect) deltaX /= width / Math.max(1, height);
+  return [adjustment.centerX + deltaX, adjustment.centerY + deltaY];
+}
+
+function fisheyeEdgeSample(
+  sourceData: Uint8ClampedArray,
+  width: number,
+  height: number,
+  uvX: number,
+  uvY: number,
+  adjustment: FisheyeAdjustment,
+): Rgba {
+  let sampleX = uvX;
+  let sampleY = uvY;
+  if (adjustment.edgeMode === 'mirror') {
+    sampleX = mirrorEdgeUv(sampleX);
+    sampleY = mirrorEdgeUv(sampleY);
+  } else if (adjustment.edgeMode === 'repeat') {
+    sampleX -= Math.floor(sampleX);
+    sampleY -= Math.floor(sampleY);
+  } else {
+    sampleX = clamp01(sampleX);
+    sampleY = clamp01(sampleY);
+  }
+  const color = sampleRgba(sourceData, width, height, sampleX, sampleY);
+  if (adjustment.edgeMode !== 'transparent') return color;
+
+  const insideDistance = Math.min(uvX, uvY, 1 - uvX, 1 - uvY);
+  const coverage = adjustment.edgeFeather <= 0.00001
+    ? (insideDistance >= 0 ? 1 : 0)
+    : smoothstep(0, adjustment.edgeFeather, insideDistance);
+  return [color[0] * coverage, color[1] * coverage, color[2] * coverage, color[3] * coverage];
+}
+
+function mixRgba(from: Rgba, to: Rgba, amount: number): Rgba {
+  return [
+    from[0] + (to[0] - from[0]) * amount,
+    from[1] + (to[1] - from[1]) * amount,
+    from[2] + (to[2] - from[2]) * amount,
+    from[3] + (to[3] - from[3]) * amount,
+  ];
+}
+
+function renderFisheyeSample(
+  sourceData: Uint8ClampedArray,
+  width: number,
+  height: number,
+  uvX: number,
+  uvY: number,
+  adjustment: FisheyeAdjustment,
+): Rgba {
+  const [lensX, lensY] = fisheyeUvToLens(uvX, uvY, width, height, adjustment);
+  const radius = Math.hypot(lensX, lensY);
+  const safeRadius = Math.max(radius, 0.000001);
+  const directionX = lensX / safeRadius;
+  const directionY = lensY / safeRadius;
+  const mappedRadius = fisheyeMappedRadius(radius, adjustment);
+  const chromaShift = adjustment.chromaticAberration * radius * radius;
+
+  const sampleChannel = (radiusScale: number): Rgba => {
+    const [sampleX, sampleY] = fisheyeLensToUv(
+      directionX * mappedRadius * radiusScale,
+      directionY * mappedRadius * radiusScale,
+      width,
+      height,
+      adjustment,
+    );
+    return fisheyeEdgeSample(sourceData, width, height, sampleX, sampleY, adjustment);
+  };
+
+  let lensColor: Rgba;
+  if (adjustment.chromaticAberration <= 0.000001) {
+    lensColor = sampleChannel(1);
+  } else {
+    const red = sampleChannel(1 + chromaShift);
+    const green = sampleChannel(1);
+    const blue = sampleChannel(1 - chromaShift);
+    lensColor = [red[0], green[1], blue[2], (red[3] + green[3] + blue[3]) / 3];
+  }
+
+  const vignetteMask = smoothstep(Math.max(0, 1 - adjustment.vignetteSoftness), 1, radius);
+  const vignetteGain = 1 - adjustment.vignette * vignetteMask;
+  lensColor = [
+    lensColor[0] * vignetteGain,
+    lensColor[1] * vignetteGain,
+    lensColor[2] * vignetteGain,
+    lensColor[3],
+  ];
+
+  const original = sampleRgba(sourceData, width, height, uvX, uvY);
+  const outside: Rgba = adjustment.outside === 'transparent' ? [0, 0, 0, 0] : original;
+  const coverage = adjustment.feather <= 0.00001
+    ? (radius <= 1 ? 1 : 0)
+    : 1 - smoothstep(Math.max(0, 1 - adjustment.feather), 1, radius);
+  return mixRgba(outside, lensColor, coverage);
+}
+
+const FISHEYE_JITTER: readonly (readonly [number, number])[] = [
+  [-0.375, -0.125], [0.125, -0.375], [0.375, 0.125], [-0.125, 0.375],
+  [-0.4375, 0.3125], [-0.3125, -0.4375], [0.4375, -0.3125], [0.3125, 0.4375],
+];
+
+function applyFisheyeAdjustment(
+  sourceData: Uint8ClampedArray,
+  width: number,
+  height: number,
+  uvX: number,
+  uvY: number,
+  adjustment: FisheyeAdjustment,
+): Rgba {
+  if (adjustment.samples <= 1) {
+    return renderFisheyeSample(sourceData, width, height, uvX, uvY, adjustment);
+  }
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+  let alpha = 0;
+  for (let index = 0; index < adjustment.samples; index += 1) {
+    const jitter = FISHEYE_JITTER[index];
+    const sample = renderFisheyeSample(
+      sourceData,
+      width,
+      height,
+      uvX + jitter[0] / width,
+      uvY + jitter[1] / height,
+      adjustment,
+    );
+    red += sample[0];
+    green += sample[1];
+    blue += sample[2];
+    alpha += sample[3];
+  }
+  return [red / adjustment.samples, green / adjustment.samples, blue / adjustment.samples, alpha / adjustment.samples];
+}
+
 export function hasWorkerSoftwareSourceResamplingEffects(
   pixelEffects: WorkerRenderSoftwarePixelEffects | undefined,
 ): boolean {
@@ -287,6 +517,7 @@ export function hasWorkerSoftwareSourceResamplingEffects(
     || (pixelEffects?.kaleidoscopeAdjustments?.length ?? 0) > 0
     || (pixelEffects?.twirlAdjustments?.length ?? 0) > 0
     || (pixelEffects?.bulgeAdjustments?.length ?? 0) > 0
+    || (pixelEffects?.fisheyeAdjustments?.length ?? 0) > 0
     || (pixelEffects?.motionBlurAdjustments?.length ?? 0) > 0
     || (pixelEffects?.radialBlurAdjustments?.length ?? 0) > 0
     || (pixelEffects?.zoomBlurAdjustments?.length ?? 0) > 0;
@@ -314,6 +545,9 @@ export function applyWorkerSoftwareSourceResamplingEffects(
   }
   for (const adjustment of pixelEffects.bulgeAdjustments ?? []) {
     output = applyBulgeAdjustment(sourceData, width, height, uvX, uvY, adjustment);
+  }
+  for (const adjustment of pixelEffects.fisheyeAdjustments ?? []) {
+    output = applyFisheyeAdjustment(sourceData, width, height, uvX, uvY, adjustment);
   }
   for (const adjustment of pixelEffects.motionBlurAdjustments ?? []) {
     output = applyMotionBlurAdjustment(sourceData, width, height, uvX, uvY, adjustment);

@@ -172,7 +172,7 @@ export function useDockLayoutTransition({
         dividerFadeTimeoutRef.current = window.setTimeout(() => {
           container.classList.remove('layout-switch-divider-fade-in');
           dividerFadeTimeoutRef.current = null;
-        }, 660);
+        }, 160);
       }
       container.classList.remove('layout-switch-start-surface');
       container.classList.remove('layout-switch-to-start');

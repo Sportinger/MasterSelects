@@ -68,6 +68,7 @@ function transport(): HostedAgentFastV2FetchTransport {
 describe('Fast V2 K2 reliability adapter', () => {
   it('translates the V2 reconnectable error into the proven K2 retry path', async () => {
     const v2 = transport();
+    const lifecycle: string[] = [];
     const client = new HostedAgentK2ClientSession({
       clientInstanceId: 'client-v2-adapter',
       lease: {
@@ -84,11 +85,19 @@ describe('Fast V2 K2 reliability adapter', () => {
         throw new Error('unexpected tool batch');
       },
       maximumReconnects: 2,
+      onEvent: (event) => lifecycle.push(`settled:${event.kind}`),
+      onEventStart: (event) => lifecycle.push(`starting:${event.kind}`),
       reconnectDelayMs: 0,
     });
 
     expect(result).toEqual({ cursor: '2', status: 'completed' });
     expect(v2.replayEvents).toHaveBeenCalledTimes(2);
+    expect(lifecycle).toEqual([
+      'starting:session-ready',
+      'settled:session-ready',
+      'starting:turn-complete',
+      'settled:turn-complete',
+    ]);
   });
 
   it('fails locally if a V2 event ever asks for a removed client tool surface', async () => {

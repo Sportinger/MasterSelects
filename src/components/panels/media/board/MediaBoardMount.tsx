@@ -44,7 +44,7 @@ export interface MediaBoardMountProps {
   handleMediaBoardMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
   handleMediaBoardNodeMouseDown: (event: React.MouseEvent, item: ProjectItem) => void;
   handleMediaBoardWheel: (event: React.WheelEvent<HTMLDivElement>) => void;
-  handleItemDoubleClick: (item: ProjectItem) => void | Promise<void>;
+  handleItemDoubleClick: (item: ProjectItem, renameFromName?: boolean) => void | Promise<void>;
   isMediaSearchActive: boolean;
   mediaBoardItemsLength: number;
   mediaBoardMarquee: MediaBoardMarquee | null;
@@ -179,7 +179,7 @@ export function MediaBoardMount({
       onCanvasDragLeave={handleMediaBoardCanvasDragLeave}
       onCanvasDrop={handleMediaBoardDrop}
       onNodeMouseDown={handleMediaBoardNodeMouseDown}
-      onItemDoubleClick={(item) => { void handleItemDoubleClick(item); }}
+      onItemDoubleClick={(item, renameFromName) => { void handleItemDoubleClick(item, renameFromName); }}
       onItemContextMenu={handleContextMenu}
       consumeSuppressedContextMenu={consumeSuppressedMediaBoardContextMenu}
       onGroupDragOver={handleMediaBoardGroupDragOver}

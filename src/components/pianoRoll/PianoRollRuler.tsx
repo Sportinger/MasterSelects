@@ -19,12 +19,9 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
 import type { RulerTick } from '../timeline/utils/timelineGrid';
 import type { TempoEvent } from '../../types/timeline';
+import { PART_BORDER_COLOR } from './pianoRollRulerModel';
 
 const RULER_LANE_H = 30;
-// Lanes plus the 1px separator drawn between each pair.
-export function pianoRollRulerHeight(laneCount: number): number {
-  return RULER_LANE_H * laneCount + (laneCount - 1);
-}
 
 const LANE_SEPARATOR = '#2a2a2a';
 
@@ -43,6 +40,9 @@ const TEMPO_PINNED = '#8b97a8';
 const TEMPO_PINNED_BG = '#242a33';
 const TIME_COLORS = { major: '#4a4a4a', minor: '#2c2c2c', label: '#b8b8b8' };
 const BARS_COLORS = { major: '#54627a', minor: '#313d4d', label: '#d2dae3' };
+// Fainter than a beat tick and only a quarter of the lane tall — present enough
+// to read the division, never loud enough to compete with the bar numbers.
+const BARS_SUB_COLOR = '#242c38';
 
 const LABEL_BASE: CSSProperties = {
   position: 'absolute',
@@ -57,6 +57,11 @@ const LABEL_BASE: CSSProperties = {
 interface PianoRollRulerProps {
   /** Bars + Time ticks (absolute-time `.time`), from `buildPianoRollGrid`. */
   rulerTicks: { bars: RulerTick[]; time: RulerTick[] };
+  /** Sub-beat line times (absolute) for the active grid division, drawn as a
+   *  third, faintest tier in the Bars lane so the ruler shows the division the
+   *  grid below snaps to. `RulerTick` only models major/minor, so these ride
+   *  alongside the ticks instead of inside them. */
+  subdivisionTimes?: number[];
   /** Tempo/meter flags to display above the Bars lane; omit to hide the lane.
    *  Read-only here — editing lives on the timeline's Tempo lane (#299). */
   tempoEvents?: TempoEvent[];
@@ -80,7 +85,6 @@ interface PianoRollRulerProps {
 // resizes the clip; its mousedown stops propagation in the parent so it never
 // also scrubs. A wide invisible hit strip widens the grab tolerance.
 // Shared so the in-grid boundary lines use the exact flag color (#249).
-export const PART_BORDER_COLOR = '#3f7d6f';   // muted teal, like the Cubase part marker
 const TAB_BG = PART_BORDER_COLOR;
 const TAB_TEXT = '#eafff7';
 const HIT_W = 9;
@@ -120,7 +124,9 @@ function ResizeTab({ leftPx, edge, onResizeStart }: {
   );
 }
 
-export function PianoRollRuler({ rulerTicks, tempoEvents, clipStartTime, clipDuration, pxPerSec, marginPx, onResizeStart }: PianoRollRulerProps) {
+export function PianoRollRuler({
+  rulerTicks, subdivisionTimes, tempoEvents, clipStartTime, clipDuration, pxPerSec, marginPx, onResizeStart,
+}: PianoRollRulerProps) {
   const toPixel = (time: number): number => (time - clipStartTime) * pxPerSec + marginPx;
 
   // Read-only mirror of the timeline's tempo lane, so the tempo driving these
@@ -198,6 +204,23 @@ export function PianoRollRuler({ rulerTicks, tempoEvents, clipStartTime, clipDur
     </div>
   );
 
+  const renderSubTicks = (times: number[]) => (
+    <>
+      {times.map((time) => (
+        <div
+          key={`sub-${time.toFixed(4)}`}
+          style={{
+            position: 'absolute',
+            left: toPixel(time),
+            top: '75%',
+            height: '25%',
+            borderLeft: `1px solid ${BARS_SUB_COLOR}`,
+          }}
+        />
+      ))}
+    </>
+  );
+
   const renderLane = (
     key: string,
     ticks: RulerTick[],
@@ -205,6 +228,7 @@ export function PianoRollRuler({ rulerTicks, tempoEvents, clipStartTime, clipDur
     isSecond: boolean,
     bg?: string,
     accentEdge?: string,
+    subTimes?: number[],
   ) => (
     <div
       style={{
@@ -216,6 +240,7 @@ export function PianoRollRuler({ rulerTicks, tempoEvents, clipStartTime, clipDur
         boxShadow: accentEdge ? `inset 2px 0 0 ${accentEdge}` : undefined,
       }}
     >
+      {subTimes && subTimes.length > 0 && renderSubTicks(subTimes)}
       {ticks.map((tick, index) => {
         const major = tick.kind === 'major';
         return (
@@ -244,7 +269,7 @@ export function PianoRollRuler({ rulerTicks, tempoEvents, clipStartTime, clipDur
     <>
       {renderLane('time', rulerTicks.time, TIME_COLORS, false)}
       {tempoEvents && renderTempoLane(tempoEvents)}
-      {renderLane('bars', rulerTicks.bars, BARS_COLORS, true, BARS_BG, BARS_ACCENT)}
+      {renderLane('bars', rulerTicks.bars, BARS_COLORS, true, BARS_BG, BARS_ACCENT, subdivisionTimes)}
       <ResizeTab leftPx={toPixel(clipStartTime)} edge="left" onResizeStart={onResizeStart} />
       <ResizeTab leftPx={toPixel(clipStartTime + clipDuration)} edge="right" onResizeStart={onResizeStart} />
     </>

@@ -17,7 +17,7 @@ interface TimelineGlobalOverlayLayersProps {
   isRamPreviewing: boolean;
   markerDrag: TimelineOverlaysProps['markerDrag'];
   onMarkerContextMenu: NonNullable<TimelineOverlaysProps['onMarkerContextMenu']>;
-  onMarkerMouseDown: TimelineOverlaysProps['onMarkerMouseDown'];
+  onMarkerPointerDown: TimelineOverlaysProps['onMarkerPointerDown'];
   outLineOpacity: number;
   outPoint: number | null;
   playheadPosition: number;
@@ -42,7 +42,7 @@ export function TimelineGlobalOverlayLayers({
   isRamPreviewing,
   markerDrag,
   onMarkerContextMenu,
-  onMarkerMouseDown,
+  onMarkerPointerDown,
   outLineOpacity,
   outPoint,
   playheadPosition,
@@ -60,7 +60,7 @@ export function TimelineGlobalOverlayLayers({
     outPoint,
     duration,
     markerDrag,
-    onMarkerMouseDown,
+    onMarkerPointerDown,
     onMarkerContextMenu,
     switchMotionClass,
     clipDrag,

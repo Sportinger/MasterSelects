@@ -32,6 +32,8 @@ import type {
 import type { ProjectExportStoreData } from './export.types';
 import type { ProjectFlashBoardState } from './flashboard.types';
 import type { StoryboardProjectState } from '../../storyboard/contracts';
+import type { SeedancePreproductionProjectState } from '../../seedancePreproduction/contracts';
+import type { TrackingAsset } from '../../../types/trackingAsset';
 
 export type {
   ProjectMediaBoardGroupOffsets,
@@ -45,6 +47,11 @@ export interface ProjectSettings {
   height: number;
   frameRate: number;
   sampleRate: number;
+}
+
+export interface ProjectMediaSourceRoot {
+  id: string;
+  name: string;
 }
 
 export interface ProjectMIDIState {
@@ -134,6 +141,9 @@ export interface ProjectFile {
   // Compositions (timelines)
   compositions: ProjectComposition[];
 
+  // Reusable source-normalized planar/terrain tracks.
+  trackingAssets?: TrackingAsset[];
+
   // Folders for organization
   folders: ProjectFolder[];
 
@@ -150,8 +160,12 @@ export interface ProjectFile {
     endBehavior: 'loop' | 'hold' | 'clear';
   }>;
 
-  // Media source folders (for relinking after cache clear)
+  // Legacy source-folder labels kept for older project files.
   mediaSourceFolders?: string[];
+
+  // Browser-approved external media roots. The durable relative paths live on
+  // media entries; the corresponding directory handles stay in IndexedDB.
+  mediaSourceRoots?: ProjectMediaSourceRoot[];
 
   // UI state (dock layout, view positions, etc.)
   uiState?: ProjectUIState;
@@ -161,6 +175,9 @@ export interface ProjectFile {
 
   // Normalized storyboard, candidates, decisions, variants, and templates
   storyboard?: StoryboardProjectState;
+
+  // START-layout Seedance preproduction workflow and generated artifact lineage
+  seedancePreproduction?: SeedancePreproductionProjectState;
 
   // Generated media items
   textItems?: ProjectTextItem[];

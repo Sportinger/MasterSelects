@@ -1,6 +1,7 @@
 // Effects Tab - Add and configure visual/audio effects
-import { useState, useMemo, useCallback } from 'react';
+import { Suspense, useState, useMemo, useCallback } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
+import { useEngineStore } from '../../../stores/engineStore';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import {
   createEffectProperty,
@@ -9,17 +10,19 @@ import {
 import type { AudioEffectParamValue } from '../../../types/audio';
 import { isAudioEffect, type EffectType } from '../../../types/effects';
 import { EFFECT_REGISTRY, getDefaultParams, getCategoriesWithEffects } from '../../../effects';
+import { groupEffectParameters } from '../../../effects/parameterGroups';
+import { getExtraControls } from '../../../effects/EffectControls';
+import '../../../effects/effectParameterGroups.css';
 import { addParticleDisintegrateOutroPreset } from '../../../effects/presets/particleDisintegrateOutro';
 import {
   EffectKeyframeToggle,
-  DraggableNumber,
 } from './shared';
-import {
-  getEffectiveEditableDraggableNumberSettings,
-  useEditableDraggableNumberSettingsRevision,
-} from '../../common/EditableDraggableNumberSettings';
+import { LabeledValue } from './LabeledValue';
 import { VolumeTab } from './VolumeTab';
-import { MIDIParameterLabel } from './MIDIParameterLabel';
+import { LandmarkTrackingControls } from './LandmarkTrackingControls';
+import { EffectCatalogPicker } from './EffectCatalogPicker';
+import { trackEditorControlCommitted } from '../../../services/productAnalytics';
+import './effectValueControls.css';
 
 type PrimitiveEffectParamValue = number | boolean | string;
 type PrimitiveEffectParams = Record<string, PrimitiveEffectParamValue>;
@@ -50,6 +53,11 @@ function renderParamControl(
   noMaxLimit?: boolean,
   onDragStart?: () => void,
   onDragEnd?: () => void,
+  onParamCommit?: (
+    paramName: string,
+    controlKind: 'checkbox' | 'number' | 'select',
+    inputMethod: 'click' | 'drag' | 'keyboard' | 'reset' | 'select' | 'type',
+  ) => void,
 ) {
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -70,14 +78,6 @@ function renderParamControl(
       const range = max - min;
       const decimals = paramDef.step && paramDef.step >= 1 ? 0 : paramDef.step && paramDef.step >= 0.1 ? 1 : 2;
       const persistenceKey = `effect.${clipId ?? 'global'}.${effect.id}.${paramName}`;
-      const sliderSettings = getEffectiveEditableDraggableNumberSettings({
-        persistenceKey,
-        min,
-        max: noMaxLimit ? undefined : max,
-        defaultValue: typeof paramDef.default === 'number' ? paramDef.default : undefined,
-      });
-      const sliderMin = sliderSettings.min ?? min;
-      const sliderMax = sliderSettings.max ?? max;
       const midiTarget = clipId ? {
         clipId,
         property: createEffectProperty(effect.id, paramName),
@@ -87,30 +87,24 @@ function renderParamControl(
         max,
       } : null;
       return (
-        <div className="control-row" key={paramName} onContextMenu={handleContextMenu}>
-          {paramDef.animatable && renderKfToggle(value as number)}
-          <MIDIParameterLabel as="label" target={midiTarget}>
-            {paramDef.label}
-          </MIDIParameterLabel>
-          <input
-            type="range"
-            min={sliderMin}
-            max={sliderMax}
-            step={paramDef.step ?? 0.01}
-            value={Math.max(sliderMin, Math.min(sliderMax, value as number))}
-            onChange={(e) => onChange({ ...effect.params, [paramName]: parseFloat(e.target.value) })}
-          />
-          <DraggableNumber
+        <div className="control-row effect-param-row" key={paramName}>
+          <LabeledValue
+            className="effect-param-value"
+            label={paramDef.label}
             value={value as number}
-            onChange={(v) => onChange({ ...effect.params, [paramName]: Math.max(min, v) })}
+            onChange={(v) => onChange({ ...effect.params, [paramName]: v })}
             defaultValue={paramDef.default as number}
             sensitivity={Math.max(0.5, range / 100)}
             decimals={decimals}
             min={min}
             max={noMaxLimit ? undefined : max}
             persistenceKey={persistenceKey}
+            ariaLabel={paramDef.label}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
+            onCommit={(method) => onParamCommit?.(paramName, 'number', method)}
+            keyframeToggle={paramDef.animatable ? renderKfToggle(value as number) : undefined}
+            midiTarget={midiTarget}
           />
         </div>
       );
@@ -123,7 +117,10 @@ function renderParamControl(
             <input
               type="checkbox"
               checked={value as boolean}
-              onChange={(e) => onChange({ ...effect.params, [paramName]: e.target.checked })}
+              onChange={(e) => {
+                onChange({ ...effect.params, [paramName]: e.target.checked });
+                onParamCommit?.(paramName, 'checkbox', 'click');
+              }}
             />
             {paramDef.label}
           </label>
@@ -136,12 +133,32 @@ function renderParamControl(
           <label>{paramDef.label}</label>
           <select
             value={value as string}
-            onChange={(e) => onChange({ ...effect.params, [paramName]: e.target.value })}
+            onChange={(e) => {
+              onChange({ ...effect.params, [paramName]: e.target.value });
+              onParamCommit?.(paramName, 'select', 'select');
+            }}
           >
             {paramDef.options?.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
+        </div>
+      );
+
+    case 'text':
+      return (
+        <div className="control-row" key={paramName} onContextMenu={handleContextMenu}>
+          <label>{paramDef.label}</label>
+          <input
+            type="text"
+            value={value as string}
+            onFocus={onDragStart}
+            onChange={(e) => onChange({ ...effect.params, [paramName]: e.target.value })}
+            onBlur={() => {
+              onDragEnd?.();
+              onParamCommit?.(paramName, 'number', 'type');
+            }}
+          />
         </div>
       );
 
@@ -157,12 +174,16 @@ interface EffectParamsProps {
   clipId?: string;
   onDragStart?: () => void;
   onDragEnd?: () => void;
+  onParamCommit?: (
+    paramName: string,
+    controlKind: 'checkbox' | 'number' | 'select',
+    inputMethod: 'click' | 'drag' | 'keyboard' | 'reset' | 'select' | 'type',
+  ) => void;
 }
 
-function EffectParams({ effect, onChange, clipId, onDragStart, onDragEnd }: EffectParamsProps) {
+function EffectParams({ effect, onChange, clipId, onDragStart, onDragEnd, onParamCommit }: EffectParamsProps) {
   const [qualityExpanded, setQualityExpanded] = useState(false);
-  const rangeSettingsRevision = useEditableDraggableNumberSettingsRevision();
-  void rangeSettingsRevision;
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   const effectDef = EFFECT_REGISTRY.get(effect.type);
   if (!effectDef) {
@@ -175,24 +196,63 @@ function EffectParams({ effect, onChange, clipId, onDragStart, onDragEnd }: Effe
     return <p className="effect-info">No parameters</p>;
   }
 
-  // Separate regular params from quality params
-  const regularParams = Object.entries(effectDef.params).filter(([, def]) => !def.quality);
-  const qualityParams = Object.entries(effectDef.params).filter(([, def]) => def.quality);
+  const parameterGroups = groupEffectParameters(effectDef.params);
+  const ExtraControls = 'extraControls' in effectDef && effectDef.extraControls
+    ? getExtraControls(effectDef.id, effectDef.extraControls)
+    : null;
+  const ungroupedParams = parameterGroups.find((group) => group.id === '__ungrouped__')?.params ?? [];
+  const namedGroups = parameterGroups.filter((group) => !group.quality && group.label);
+  const qualityParams = parameterGroups.find((group) => group.quality)?.params ?? [];
 
   const handleResetQuality = () => {
     const resetParams: PrimitiveEffectParams = { ...effect.params };
     qualityParams.forEach(([name, def]) => {
       resetParams[name] = def.default;
     });
-    onChange(resetParams);
+    onDragStart?.();
+    try {
+      onChange(resetParams);
+    } finally {
+      onDragEnd?.();
+    }
+    onParamCommit?.('quality', 'number', 'reset');
   };
 
   return (
     <>
-      {/* Regular parameters */}
-      {regularParams.map(([paramName, paramDef]) => {
-        const value = effect.params[paramName] ?? paramDef.default;
-        return renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, false, onDragStart, onDragEnd);
+      {ungroupedParams.length > 0 && (
+        <div className="effect-param-section">
+          {ungroupedParams.map(([paramName, paramDef]) => {
+            const value = effect.params[paramName] ?? paramDef.default;
+            return renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, false, onDragStart, onDragEnd, onParamCommit);
+          })}
+        </div>
+      )}
+
+      {namedGroups.map((group) => {
+        const isExpanded = expandedGroups[group.id] ?? group.id !== 'group:camera';
+        return (
+          <div className="effect-quality-section" key={group.id}>
+            <div
+              className="effect-quality-header"
+              onClick={() => setExpandedGroups((current) => ({
+                ...current,
+                [group.id]: !isExpanded,
+              }))}
+            >
+              <span className="effect-quality-toggle">{isExpanded ? '\u25BC' : '\u25B6'}</span>
+              <span className="effect-quality-title">{group.label}</span>
+            </div>
+            {isExpanded && (
+              <div className="effect-quality-params">
+                {group.params.map(([paramName, paramDef]) => {
+                  const value = effect.params[paramName] ?? paramDef.default;
+                  return renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, false, onDragStart, onDragEnd, onParamCommit);
+                })}
+              </div>
+            )}
+          </div>
+        );
       })}
 
       {/* Quality section (collapsible) */}
@@ -216,13 +276,21 @@ function EffectParams({ effect, onChange, clipId, onDragStart, onDragEnd }: Effe
               {qualityParams.map(([paramName, paramDef]) => {
                 const value = effect.params[paramName] ?? paramDef.default;
                 // Quality params have no max limit when dragging
-                return renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, true, onDragStart, onDragEnd);
+                return renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, true, onDragStart, onDragEnd, onParamCommit);
               })}
               <div className="effect-quality-warning">
                 High values may cause slowdowns
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {ExtraControls && (
+        <div className="effect-extra-controls">
+          <Suspense fallback={null}>
+            <ExtraControls effectInstanceId={effect.id} effectId={effect.type} params={effect.params} onChange={onChange} clipId={clipId} />
+          </Suspense>
         </div>
       )}
     </>
@@ -247,12 +315,27 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
   // Reactive data - subscribe to specific values only
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
   const clips = useTimelineStore(state => state.clips);
+  const effectOrbitTarget = useEngineStore(state => state.effectOrbitTarget);
+  const setEffectOrbitTarget = useEngineStore(state => state.setEffectOrbitTarget);
   // Actions from getState() - stable, no subscription needed
   const { addClipEffect, addKeyframe, removeClipEffect, updateClipEffect, setClipEffectEnabled, reorderClipEffect, setPropertyValue, getInterpolatedEffects } = useTimelineStore.getState();
 
   // Drag-and-drop reorder state
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropIdx, setDropIdx] = useState<number | null>(null);
+  const [collapsedEffectIds, setCollapsedEffectIds] = useState<Set<string>>(() => new Set());
+
+  const toggleEffectCollapsed = useCallback((effectId: string) => {
+    setCollapsedEffectIds((current) => {
+      const next = new Set(current);
+      if (next.has(effectId)) {
+        next.delete(effectId);
+      } else {
+        next.add(effectId);
+      }
+      return next;
+    });
+  }, []);
 
   const handleBatchStart = useCallback(() => startBatch('Adjust effect'), []);
   const handleBatchEnd = useCallback(() => endBatch(), []);
@@ -269,6 +352,15 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
         clipDuration: clip.duration,
         addClipEffect,
         addKeyframe,
+      });
+      trackEditorControlCommitted({
+        area: 'effect',
+        controlId: 'particle-disintegrate-out',
+        controlKind: 'button',
+        inputMethod: 'click',
+        interaction: 'add',
+        itemId: 'particle-disintegrate-out',
+        itemKind: 'preset',
       });
     } finally {
       endBatch();
@@ -294,20 +386,29 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
   );
 
   return (
-    <div className="properties-tab-content effects-tab">
+    <div className="properties-tab-content effects-tab transform-tab-compact">
+      {!isAudioClip && clip && <LandmarkTrackingControls clipId={clipId} />}
+      {!isAudioClip && (
+        <EffectCatalogPicker
+          groups={effectCategories}
+          sourceFrameId={`${clipId}:${Math.floor(playheadPosition * 30)}`}
+          onSelect={(effectId) => {
+            addClipEffect(clipId, effectId as EffectType);
+            trackEditorControlCommitted({
+              area: 'effect',
+              controlId: 'effect-catalog',
+              controlKind: 'select',
+              inputMethod: 'select',
+              interaction: 'add',
+              itemId: effectId,
+              itemKind: 'effect',
+            });
+          }}
+        />
+      )}
       <div className="effect-add-row">
         {!isAudioClip && (
           <>
-            <select onChange={(e) => { if (e.target.value) { addClipEffect(clipId, e.target.value as EffectType); e.target.value = ''; } }} defaultValue="">
-              <option value="" disabled>+ Add Effect</option>
-              {effectCategories.map(({ category, effects: catEffects }) => (
-                <optgroup key={category} label={category.charAt(0).toUpperCase() + category.slice(1)}>
-                  {catEffects.map((effect) => (
-                    <option key={effect.id} value={effect.id}>{effect.name}</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
             {!isMotionAdjustmentClip && (
               <button
                 type="button"
@@ -341,8 +442,10 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
               effectDef ? getDefaultParams(effect.type) : {},
             );
             const isEnabled = effect.enabled !== false; // default to true if undefined
+            const isOrbitActive = effectOrbitTarget?.clipId === clipId && effectOrbitTarget.effectId === effect.id;
             const isDragging = dragIdx === idx;
             const isDropTarget = dropIdx === idx;
+            const isCollapsed = collapsedEffectIds.has(effect.id);
             return (
               <div
                 key={effect.id}
@@ -360,6 +463,15 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                     startBatch('Reorder effect');
                     reorderClipEffect(clipId, videoEffects[fromIdx].id, idx);
                     endBatch();
+                    trackEditorControlCommitted({
+                      area: 'effect',
+                      controlId: 'effect-stack-order',
+                      controlKind: 'drag',
+                      inputMethod: 'drag',
+                      interaction: 'reorder',
+                      itemId: videoEffects[fromIdx].type,
+                      itemKind: 'effect',
+                    });
                   }
                   setDragIdx(null);
                   setDropIdx(null);
@@ -378,8 +490,31 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                     }}
                   >&#x2630;</span>
                   <button
+                    type="button"
+                    className="effect-collapse-toggle"
+                    aria-expanded={!isCollapsed}
+                    onClick={() => toggleEffectCollapsed(effect.id)}
+                    title={isCollapsed ? `Expand ${effect.name}` : `Collapse ${effect.name}`}
+                  >
+                    <span className="effect-collapse-chevron" aria-hidden="true">
+                      {isCollapsed ? '\u25B6' : '\u25BC'}
+                    </span>
+                    <span className="effect-name">{effect.name}</span>
+                  </button>
+                  <button
                     className={`effect-bypass-btn ${!isEnabled ? 'bypassed' : ''}`}
-                    onClick={() => setClipEffectEnabled(clipId, effect.id, !isEnabled)}
+                    onClick={() => {
+                      setClipEffectEnabled(clipId, effect.id, !isEnabled);
+                      trackEditorControlCommitted({
+                        area: 'effect',
+                        controlId: 'effect-enabled',
+                        controlKind: 'toggle',
+                        inputMethod: 'click',
+                        interaction: isEnabled ? 'disable' : 'enable',
+                        itemId: effect.type,
+                        itemKind: 'effect',
+                      });
+                    }}
                     title={isEnabled ? 'Bypass effect' : 'Enable effect'}
                   >
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
@@ -391,26 +526,58 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                       {isEnabled && <polyline points="22 4 12 14.01 9 11.01" />}
                     </svg>
                   </button>
-                  <span className="effect-name">{effect.name}</span>
-                  <button className="btn btn-sm btn-danger" onClick={() => removeClipEffect(clipId, effect.id)}>×</button>
+                  {effectDef && 'cameraInteraction' in effectDef && effectDef.cameraInteraction && isEnabled && !clip?.is3D && (
+                    <button
+                      className={`effect-bypass-btn ${isOrbitActive ? '' : 'bypassed'}`}
+                      onClick={() => setEffectOrbitTarget(isOrbitActive ? null : { clipId, effectId: effect.id })}
+                      title="Orbit in Preview: drag/touch = orbit, Shift+drag or two-finger move = pan, wheel/pinch = distance"
+                    >
+                      Orbit
+                    </button>
+                  )}
+                  <button className="btn btn-sm btn-danger" onClick={() => {
+                    removeClipEffect(clipId, effect.id);
+                    trackEditorControlCommitted({
+                      area: 'effect',
+                      controlId: 'effect-remove',
+                      controlKind: 'button',
+                      inputMethod: 'click',
+                      interaction: 'remove',
+                      itemId: effect.type,
+                      itemKind: 'effect',
+                    });
+                  }}>×</button>
                 </div>
-                <div className="effect-params">
-                  <EffectParams
-                    effect={{ ...effect, params: primitiveParams }}
-                    onDragStart={handleBatchStart}
-                    onDragEnd={handleBatchEnd}
-                    onChange={(params) => {
-                      Object.entries(params).forEach(([paramName, value]) => {
-                        if (typeof value === 'number') {
-                          setPropertyValue(clipId, `effect.${effect.id}.${paramName}` as AnimatableProperty, value);
-                        } else {
-                          updateClipEffect(clipId, effect.id, { [paramName]: value });
-                        }
-                      });
-                    }}
-                    clipId={clipId}
-                  />
-                </div>
+                {!isCollapsed && (
+                  <div className="effect-params">
+                    <EffectParams
+                      effect={{ ...effect, params: primitiveParams }}
+                      onDragStart={handleBatchStart}
+                      onDragEnd={handleBatchEnd}
+                      onParamCommit={(paramName, controlKind, inputMethod) => {
+                        trackEditorControlCommitted({
+                          area: 'effect',
+                          controlId: paramName,
+                          controlKind,
+                          inputMethod,
+                          interaction: inputMethod === 'reset' ? 'reset' : 'change',
+                          itemId: effect.type,
+                          itemKind: 'effect',
+                        });
+                      }}
+                      onChange={(params) => {
+                        Object.entries(params).forEach(([paramName, value]) => {
+                          if (typeof value === 'number') {
+                            setPropertyValue(clipId, `effect.${effect.id}.${paramName}` as AnimatableProperty, value);
+                          } else {
+                            updateClipEffect(clipId, effect.id, { [paramName]: value });
+                          }
+                        });
+                      }}
+                      clipId={clipId}
+                    />
+                  </div>
+                )}
               </div>
             );
           })}

@@ -133,7 +133,8 @@ export function resolveTransformPositionUnitMode(
   const locked3D = sourceType === 'model'
     || sourceType === 'gaussian-splat'
     || sourceType === 'splat-effector'
-    || sourceType === 'light';
+    || sourceType === 'light'
+    || sourceType === 'flock';
   return clip.is3D || sourceType === 'camera' || locked3D
     ? 'scene-units'
     : 'composition-pixels';

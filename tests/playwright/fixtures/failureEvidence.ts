@@ -65,10 +65,10 @@ export class FailureEvidenceCollector {
     this.bridge = bridge
   }
 
-  async finish(): Promise<void> {
+  async finish(force = false): Promise<void> {
     this.page.off('console', this.onConsoleMessage)
     this.page.off('pageerror', this.onPageError)
-    if (this.testInfo.status === this.testInfo.expectedStatus) return
+    if (!force && this.testInfo.status === this.testInfo.expectedStatus) return
 
     const redaction = {
       repoRoot: DEFAULT_REPO_ROOT,

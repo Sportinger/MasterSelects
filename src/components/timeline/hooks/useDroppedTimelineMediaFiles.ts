@@ -2,6 +2,8 @@ import { useCallback } from 'react';
 
 import { useMediaStore } from '../../../stores/mediaStore';
 import type { FileImportResult } from '../../../stores/mediaStore/types';
+import type { MediaFile } from '../../../stores/mediaStore';
+import type { AddClipOptions } from '../../../stores/timeline/types';
 import type {
   TimelineExternalDropFilePlacementActions,
   TimelineExternalDropArrangement,
@@ -28,7 +30,11 @@ function chooseTimelineExternalDropArrangement(fileCount: number): TimelineExter
     : 'side-by-side';
 }
 
-export function useDroppedTimelineMediaFiles(actions: DropActions) {
+export function useDroppedTimelineMediaFiles({
+  addTrack,
+  addClip,
+  addSignalAssetClip,
+}: DropActions) {
   const folders = useMediaStore((state) => state.folders);
   const createFolder = useMediaStore((state) => state.createFolder);
   const importFiles = useMediaStore((state) => state.importFiles);
@@ -42,6 +48,7 @@ export function useDroppedTimelineMediaFiles(actions: DropActions) {
     fallbackDuration?: number;
     filePath?: string;
     resolveLinkedVideoTrackId?: (startTime: number, duration?: number) => string | undefined;
+    resolveAddClipOptions?: (mediaFile: MediaFile) => AddClipOptions | Promise<AddClipOptions | undefined> | undefined;
     resolveStartTime?: (desiredStartTime: number, duration?: number) => number;
   }): Promise<boolean> => {
     const {
@@ -52,6 +59,7 @@ export function useDroppedTimelineMediaFiles(actions: DropActions) {
       fallbackDuration,
       filePath,
       resolveLinkedVideoTrackId,
+      resolveAddClipOptions,
       resolveStartTime,
     } = params;
     const records = await collectDroppedMediaFiles(dataTransfer);
@@ -69,7 +77,11 @@ export function useDroppedTimelineMediaFiles(actions: DropActions) {
     });
 
     return placeTimelineExternalDropFiles({
-      actions,
+      actions: {
+        addTrack,
+        addClip,
+        addSignalAssetClip,
+      },
       arrangement,
       records: recordsWithPath,
       importResults,
@@ -79,7 +91,16 @@ export function useDroppedTimelineMediaFiles(actions: DropActions) {
       fallbackDuration,
       filePath,
       resolveLinkedVideoTrackId,
+      resolveAddClipOptions,
       resolveStartTime,
     });
-  }, [actions, createFolder, folders, importFiles, importFilesWithHandles]);
+  }, [
+    addClip,
+    addSignalAssetClip,
+    addTrack,
+    createFolder,
+    folders,
+    importFiles,
+    importFilesWithHandles,
+  ]);
 }

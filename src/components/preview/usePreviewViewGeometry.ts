@@ -15,7 +15,7 @@ interface CanvasRect extends PreviewSize, PreviewPoint {}
 interface UsePreviewViewGeometryOptions {
   canvasSize: PreviewSize;
   containerSize: PreviewSize;
-  freeCanvasNavigationMode: boolean;
+  viewNavigationEnabled: boolean;
   viewPan: PreviewPoint;
   viewZoom: number;
 }
@@ -28,7 +28,7 @@ interface PreviewViewGeometry {
 export function usePreviewViewGeometry({
   canvasSize,
   containerSize,
-  freeCanvasNavigationMode,
+  viewNavigationEnabled,
   viewPan,
   viewZoom,
 }: UsePreviewViewGeometryOptions): PreviewViewGeometry {
@@ -48,12 +48,12 @@ export function usePreviewViewGeometry({
   }, [canvasSize, containerSize, viewPan, viewZoom]);
 
   const viewTransform = useMemo(
-    () => freeCanvasNavigationMode
+    () => viewNavigationEnabled
       ? {
           transform: `scale(${viewZoom}) translate(${viewPan.x / viewZoom}px, ${viewPan.y / viewZoom}px)`,
         }
       : {},
-    [freeCanvasNavigationMode, viewPan.x, viewPan.y, viewZoom],
+    [viewNavigationEnabled, viewPan.x, viewPan.y, viewZoom],
   );
 
   return {

@@ -13,8 +13,54 @@ import {
   UnsupportedAdjustmentEffectError,
 } from '../../services/motionDesign/adjustment/supportedEffects';
 import { calculateSourcePixelScale } from '../../utils/sourcePixelScale';
+import type { SplitCompareSettings } from '../../stores/splitCompareStore';
+import { getVideoFrameEffectSourceRotation } from './externalEffectSourceOrientation';
+import { resolveSurfaceFrameEffects } from '../../services/planarTracking/surfaceEffects';
+import { sampleTerrainCamera } from '../../services/planarTracking/terrainProjection';
+import type { TerrainProjectionDescriptor } from '../../types/terrainAttachment';
+import type { TrackingSourceTransform } from '../../types/terrainAttachment';
+import { TerrainAnchorConnectorPipeline } from './TerrainAnchorConnectorPipeline';
+import { PlanarTrackingProjectionPipeline } from './PlanarTrackingProjectionPipeline';
+import { resolvePlanarTrackingProjection } from '../../services/planarTracking/trackingBindingRender';
+import { IDENTITY_TRACKING_SOURCE_TRANSFORM } from '../../services/planarTracking/trackingSourceTransform';
+import { indexTrackingSourceTransforms } from './trackingSourceFrames';
+import {
+  layerPositionForTerrainScreenAnchor,
+  resolveTerrainScreenAnchors,
+} from './terrainScreenAnchor';
 
 const log = Logger.create('Compositor');
+
+export function resolveTerrainProjection(
+  projection: TerrainProjectionDescriptor | undefined,
+  displayedMediaTimes: ReadonlyMap<string, number>,
+  sourceTransforms?: ReadonlyMap<string, TrackingSourceTransform>,
+): TerrainProjectionDescriptor | null {
+  if (!projection?.attachment.visible) return null;
+  // `targetMediaTime` is an intended seek, which may differ from a held or
+  // still-decoding video frame. Terrain poses are tied to decoded frame PTS.
+  const targetVideoClipId = projection.attachment.targetVideoClipId;
+  const displayedMediaTime = targetVideoClipId
+    ? displayedMediaTimes.get(targetVideoClipId)
+    : projection.sourcePresentedTime;
+  if (displayedMediaTime === undefined) return null;
+  const sourceTransform = targetVideoClipId
+    ? sourceTransforms?.get(targetVideoClipId) ?? (sourceTransforms ? undefined : IDENTITY_TRACKING_SOURCE_TRANSFORM)
+    : IDENTITY_TRACKING_SOURCE_TRANSFORM;
+  if (!sourceTransform) return null;
+  const camera = sampleTerrainCamera(projection.terrain, displayedMediaTime);
+  return camera ? { ...projection, camera, sourceTransform } : null;
+}
+
+export function indexDisplayedMediaTimes(layerData: readonly LayerRenderData[]): ReadonlyMap<string, number> {
+  const times = new Map<string, number>();
+  for (const data of layerData) {
+    if (data.layer.sourceClipId && typeof data.displayedMediaTime === 'number' && Number.isFinite(data.displayedMediaTime)) {
+      times.set(data.layer.sourceClipId, data.displayedMediaTime);
+    }
+  }
+  return times;
+}
 
 export interface CompositorState {
   device: GPUDevice;
@@ -23,12 +69,17 @@ export interface CompositorState {
   pongView: GPUTextureView;
   outputWidth: number;
   outputHeight: number;
+  /** Composition-space resolution against which stored layer scales are defined. */
+  referenceWidth?: number;
+  referenceHeight?: number;
   skipEffects?: boolean;
   // Additional textures for effect pre-processing
   effectTempTexture?: GPUTexture;
   effectTempView?: GPUTextureView;
   effectTempTexture2?: GPUTexture;
   effectTempView2?: GPUTextureView;
+  effectCompareView?: GPUTextureView;
+  splitCompare?: SplitCompareSettings;
   motionTime?: number;
   particleQuality?: 'preview' | 'export';
   /** Isolates GPU caches for repeated nested/render-target occurrences. */
@@ -40,6 +91,8 @@ export class Compositor {
   private effectsPipeline: EffectsPipeline;
   private colorPipeline: ColorPipeline | null;
   private maskTextureManager: MaskTextureManager;
+  private terrainAnchorConnector?: TerrainAnchorConnectorPipeline;
+  private planarTrackingProjection?: PlanarTrackingProjectionPipeline;
   private lastRenderWasPing = false;
 
   constructor(
@@ -54,6 +107,13 @@ export class Compositor {
     this.colorPipeline = colorPipeline;
   }
 
+  destroy(): void {
+    this.terrainAnchorConnector?.destroy();
+    this.terrainAnchorConnector = undefined;
+    this.planarTrackingProjection?.destroy();
+    this.planarTrackingProjection = undefined;
+  }
+
   composite(
     layerData: LayerRenderData[],
     commandEncoder: GPUCommandEncoder,
@@ -62,6 +122,18 @@ export class Compositor {
     let readView = state.pingView;
     let writeView = state.pongView;
     let usePing = true;
+    const displayedMediaTimes = indexDisplayedMediaTimes(layerData);
+    const referenceWidth = state.referenceWidth ?? state.outputWidth;
+    const referenceHeight = state.referenceHeight ?? state.outputHeight;
+    const sourceTransforms = indexTrackingSourceTransforms(layerData, {
+      width: referenceWidth,
+      height: referenceHeight,
+    });
+    const screenAnchors = resolveTerrainScreenAnchors(
+      layerData.map(data=>data.layer),
+      displayedMediaTimes,
+      sourceTransforms,
+    );
 
     // Clear first buffer to transparent
     const clearPass = commandEncoder.beginRenderPass({
@@ -77,7 +149,11 @@ export class Compositor {
     // Composite each layer
     for (let i = 0; i < layerData.length; i++) {
       const data = layerData[i];
-      const layer = data.layer;
+      const sourceLayer = data.layer;
+      const resolvedScreenAnchor = screenAnchors.get(sourceLayer.id);
+      const layer = resolvedScreenAnchor
+        ? layerPositionForTerrainScreenAnchor(sourceLayer, resolvedScreenAnchor)
+        : sourceLayer;
       const isAdjustmentLayer = layer.source?.type === 'motion-adjustment';
       const resourceLayerId = state.resourceNamespace
         ? JSON.stringify([state.resourceNamespace, layer.id])
@@ -86,6 +162,29 @@ export class Compositor {
       // An adjustment layer has no source of its own. During scrub fast-paths,
       // skipping its effects must therefore leave the accumulator untouched.
       if (isAdjustmentLayer && state.skipEffects) {
+        continue;
+      }
+      if ((sourceLayer.terrainScreenAnchor || sourceLayer.trackingScreenAnchor) && !resolvedScreenAnchor) continue;
+      const connector = sourceLayer.terrainAnchorConnector;
+      if (connector) {
+        const anchorLayer = layerData.find(({ layer: candidate }) => (
+          candidate.sourceClipId === connector.anchorClipId
+        ))?.layer;
+        const anchor = anchorLayer
+          ? screenAnchors.get(anchorLayer.id)
+          : null;
+        if (!anchor) continue;
+        const cardPosition = layerPositionForTerrainScreenAnchor(anchorLayer!, anchor).position;
+        this.terrainAnchorConnector ??= new TerrainAnchorConnectorPipeline(state.device);
+        if (!this.terrainAnchorConnector.encode(
+          commandEncoder, connector, state.sampler, readView, writeView,
+          anchor.contact, { x: (cardPosition.x + 1) / 2, y: (cardPosition.y + 1) / 2 },
+          state.outputWidth, state.outputHeight, layer.opacity, resourceLayerId,
+        )) continue;
+        const previous = readView;
+        readView = writeView;
+        writeView = previous;
+        usePing = !usePing;
         continue;
       }
 
@@ -109,21 +208,38 @@ export class Compositor {
         continue;
       }
 
-      const adjustmentEffects = layer.effects;
+      const adjustmentEffects = resolveSurfaceFrameEffects(layer.effects, data.displayedMediaTime);
 
       // Get uniform buffer
       const uniformBuffer = this.compositorPipeline.getOrCreateUniformBuffer(resourceLayerId);
 
       // Calculate aspect ratios
-      const sourceWidth = isAdjustmentLayer ? state.outputWidth : data.sourceWidth;
-      const sourceHeight = isAdjustmentLayer ? state.outputHeight : data.sourceHeight;
+      const intrinsicWidth = layer.source?.intrinsicWidth;
+      const intrinsicHeight = layer.source?.intrinsicHeight;
+      // Canvas-backed sources can resize without rebuilding the durable layer
+      // metadata (notably an iPad live camera after an orientation change).
+      // The collected dimensions describe the texture being composited now;
+      // stale intrinsic metadata would squeeze that texture into the old ratio.
+      const useRenderedSourceDimensions = Boolean(layer.source?.canvasElement);
+      const sourceWidth = isAdjustmentLayer
+        ? referenceWidth
+        : !useRenderedSourceDimensions
+          && typeof intrinsicWidth === 'number' && Number.isFinite(intrinsicWidth) && intrinsicWidth > 0
+          ? intrinsicWidth
+          : data.sourceWidth;
+      const sourceHeight = isAdjustmentLayer
+        ? referenceHeight
+        : !useRenderedSourceDimensions
+          && typeof intrinsicHeight === 'number' && Number.isFinite(intrinsicHeight) && intrinsicHeight > 0
+          ? intrinsicHeight
+          : data.sourceHeight;
       const sourceAspect = sourceWidth / sourceHeight;
       const outputAspect = state.outputWidth / state.outputHeight;
       const sourcePixelScale = calculateSourcePixelScale(
         sourceWidth,
         sourceHeight,
-        state.outputWidth,
-        state.outputHeight,
+        referenceWidth,
+        referenceHeight,
       );
 
       // Get mask texture (single lookup instead of two)
@@ -168,6 +284,37 @@ export class Compositor {
         continue;
       }
 
+      const hasColorCorrection = !isAdjustmentLayer
+        && !!this.colorPipeline
+        && !state.skipEffects
+        && !!layer.colorCorrection?.enabled;
+      const requestedTerrainProjection = !isAdjustmentLayer
+        ? layer.terrainProjection
+        : undefined;
+      const terrainProjection = !isAdjustmentLayer
+        ? resolveTerrainProjection(requestedTerrainProjection, displayedMediaTimes, sourceTransforms)
+        : null;
+      const requestedTrackingProjection = !isAdjustmentLayer
+        ? layer.trackingProjection
+        : undefined;
+      const trackingProjection = !isAdjustmentLayer
+        ? resolvePlanarTrackingProjection(requestedTrackingProjection, displayedMediaTimes, sourceTransforms)
+        : null;
+      // A terrain attachment has no meaningful flat fallback: showing it as a
+      // regular layer would detach it from a held/missing source video frame.
+      if (requestedTerrainProjection && !terrainProjection) continue;
+      if (requestedTrackingProjection && !trackingProjection) continue;
+      const needsSourcePreprocess =
+        (hasColorCorrection ||
+          !!(complexEffects && complexEffects.length > 0) ||
+          !!(renderEffects && renderEffects.length > 0) ||
+          (!!(terrainProjection || trackingProjection) && !!data.externalTexture)) &&
+        !!state.effectTempView &&
+        !!state.effectTempView2;
+      const effectSourceRotation = needsSourcePreprocess
+        ? getVideoFrameEffectSourceRotation(layer)
+        : 0;
+
       // Update uniforms (includes inline effect params)
       this.compositorPipeline.updateLayerUniforms(
         layer,
@@ -177,6 +324,7 @@ export class Compositor {
         uniformBuffer,
         inlineEffects,
         sourcePixelScale,
+        effectSourceRotation === 0 ? undefined : 0,
       );
 
       // Track which ping-pong buffer we're reading from for cache key
@@ -189,23 +337,14 @@ export class Compositor {
       let sourceExternalTexture = isAdjustmentLayer ? null : data.externalTexture;
       let useExternalTexture = !isAdjustmentLayer && data.isVideo && !!data.externalTexture;
 
-      const hasColorCorrection = !isAdjustmentLayer
-        && !!this.colorPipeline
-        && !state.skipEffects
-        && !!layer.colorCorrection?.enabled;
-      const needsSourcePreprocess =
-        (hasColorCorrection ||
-          !!(complexEffects && complexEffects.length > 0) ||
-          !!(renderEffects && renderEffects.length > 0)) &&
-        !!state.effectTempView &&
-        !!state.effectTempView2;
-
       if (needsSourcePreprocess && state.effectTempView && state.effectTempView2) {
         let copied = false;
         let copiedToTempView = false;
 
         if (useExternalTexture && sourceExternalTexture) {
-          const copyPipeline = this.compositorPipeline.getExternalCopyPipeline?.();
+          const copyPipeline = this.compositorPipeline.getExternalCopyPipeline?.(
+            effectSourceRotation,
+          );
           const copyBindGroup = copyPipeline
             ? this.compositorPipeline.createExternalCopyBindGroup?.(
                 state.sampler,
@@ -224,7 +363,7 @@ export class Compositor {
             });
             copyPass.setPipeline(copyPipeline);
             copyPass.setBindGroup(0, copyBindGroup);
-            copyPass.draw(6);
+            copyPass.draw(3);
             copyPass.end();
             copied = true;
             copiedToTempView = true;
@@ -268,7 +407,11 @@ export class Compositor {
                 state.outputWidth,
                 state.outputHeight,
                 state.effectTempTexture,
-                state.effectTempTexture2
+                state.effectTempTexture2,
+                state.effectCompareView && state.splitCompare
+                  ? { outputView: state.effectCompareView, settings: state.splitCompare }
+                  : undefined,
+                state.motionTime ?? layer.source?.mediaTime ?? 0,
               );
               sourceTextureView = effectResult.finalView;
             }
@@ -306,6 +449,63 @@ export class Compositor {
             }
           }
         }
+      }
+
+      if (terrainProjection) {
+        if (!sourceTextureView) {
+          log.warn('Skipping terrain projection without a sampleable source texture', {
+            layerId: layer.id,
+            sourceType: layer.source?.type,
+          });
+          continue;
+        }
+        const projected = this.effectsPipeline.projectTerrainContent(
+          commandEncoder,
+          terrainProjection,
+          state.sampler,
+          sourceTextureView,
+          readView,
+          writeView,
+          state.outputWidth,
+          state.outputHeight,
+          layer.opacity,
+          resourceLayerId,
+        );
+        if (!projected) continue;
+        const previous = readView;
+        readView = writeView;
+        writeView = previous;
+        usePing = !usePing;
+        continue;
+      }
+
+      if (trackingProjection) {
+        if (!sourceTextureView) {
+          log.warn('Skipping planar tracking projection without a sampleable source texture', {
+            layerId: layer.id,
+            sourceType: layer.source?.type,
+          });
+          continue;
+        }
+        this.planarTrackingProjection ??= new PlanarTrackingProjectionPipeline(state.device);
+        const projected = this.planarTrackingProjection.encode(
+          commandEncoder,
+          trackingProjection,
+          state.sampler,
+          sourceTextureView,
+          readView,
+          writeView,
+          state.outputWidth,
+          state.outputHeight,
+          layer.opacity,
+          resourceLayerId,
+        );
+        if (!projected) continue;
+        const previous = readView;
+        readView = writeView;
+        writeView = previous;
+        usePing = !usePing;
+        continue;
       }
 
       let pipeline: GPURenderPipeline;
@@ -369,7 +569,7 @@ export class Compositor {
       });
       compositePass.setPipeline(pipeline);
       compositePass.setBindGroup(0, bindGroup);
-      compositePass.draw(6);
+      compositePass.draw(3);
       compositePass.end();
 
       // Swap buffers

@@ -21,7 +21,7 @@ import { SlicePipeline } from '../pipeline/SlicePipeline';
 import { Compositor } from '../render/Compositor';
 import { LayerCollector } from '../render/LayerCollector';
 import { NestedCompRenderer } from '../render/NestedCompRenderer';
-import { RenderLoop } from '../render/RenderLoop';
+import { RenderLoop, type RenderLoopCallbacks } from '../render/RenderLoop';
 import type { PerformanceStats } from '../stats/PerformanceStats';
 import { MaskTextureManager } from '../texture/MaskTextureManager';
 import { TextureManager } from '../texture/TextureManager';
@@ -66,7 +66,10 @@ export interface EngineResourceFactoryDeps {
   renderLoopHooks: EngineRenderLoopHooks;
 }
 
-export function buildEngineRenderLoop(hooks: EngineRenderLoopHooks, onRender: () => void): RenderLoop {
+export function buildEngineRenderLoop(
+  hooks: EngineRenderLoopHooks,
+  onRender: RenderLoopCallbacks['onRender'],
+): RenderLoop {
   return new RenderLoop(hooks.performanceStats, {
     isRecovering: hooks.isRecovering,
     isExporting: hooks.isExporting,
@@ -103,7 +106,7 @@ export async function createEngineResources(
 
   // Create pipelines
   const compositorPipeline = new CompositorPipeline(device);
-  const effectsPipeline = new EffectsPipeline(device);
+  const effectsPipeline = new EffectsPipeline(device, deps.requestRender);
   const colorPipeline = new ColorPipeline(device);
   const outputPipeline = new OutputPipeline(device);
   const slicePipeline = new SlicePipeline(device);
@@ -182,6 +185,7 @@ export function releaseEngineResourcesOnDeviceLost(res: EngineResourceSet | null
 
 /** First phase of WebGPUEngine.destroy(): renderers/managers, original order. */
 export function destroyEngineRenderers(res: EngineResourceSet | null): void {
+  res?.compositor.destroy();
   res?.outputWindowManager.destroy();
   res?.renderTargetManager.destroy();
   res?.nestedCompRenderer.destroy();
@@ -213,7 +217,7 @@ export function startEngineRenderLoop(
     isPlaying: boolean;
     requestRender: () => void;
   },
-  renderCallback: () => void,
+  renderCallback: RenderLoopCallbacks['onRender'],
 ): RenderLoop {
   const { currentLoop } = args;
   if (currentLoop?.getIsRunning()) {

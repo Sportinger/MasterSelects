@@ -147,4 +147,22 @@ describe('media-scoped source artifact ownership', () => {
 
     expect(projectMediaSourceArtifactsOntoClip(clip, {})).toBe(clip);
   });
+
+  it('projects a completed silent transcript without inventing words', () => {
+    const clip = createMockClip({
+      id: 'runtime-silent',
+      mediaFileId: 'media-1',
+      source: { type: 'audio', mediaFileId: 'media-1' },
+      transcriptStatus: 'transcribing',
+    });
+
+    expect(projectMediaSourceArtifactsOntoClip(clip, {
+      transcript: [],
+      transcriptStatus: 'ready',
+    })).toMatchObject({
+      transcript: [],
+      transcriptProgress: 100,
+      transcriptStatus: 'ready',
+    });
+  });
 });

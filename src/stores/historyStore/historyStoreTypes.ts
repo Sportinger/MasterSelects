@@ -29,6 +29,7 @@ import type {
 import type { ExportStoreData } from '../exportStore';
 import type { HistoryTimelineEditState } from '../timeline/historyTimelineEditState';
 import type { StoryboardProjectState } from '../../services/storyboard/contracts';
+import type { TrackingAsset } from '../../types/trackingAsset';
 
 export interface StateSnapshot {
   timestamp: number;
@@ -74,6 +75,7 @@ export interface StateSnapshot {
     generationMetadataByMediaId: Record<string, FlashBoardGenerationMetadata>;
   };
   storyboard?: StoryboardProjectState;
+  tracking?: TrackingStoreSnapshot;
   export: ExportStoreData;
 }
 
@@ -173,6 +175,10 @@ export interface FlashBoardStoreSnapshot {
 
 export type ExportStoreSnapshot = ExportStoreData;
 export type StoryboardStoreSnapshot = StoryboardProjectState;
+export interface TrackingStoreSnapshot {
+  assets: TrackingAsset[];
+  selectedAssetId: string | null;
+}
 
 export interface HistoryStoreRefs {
   getTimelineState?: () => TimelineStoreState;
@@ -185,6 +191,8 @@ export interface HistoryStoreRefs {
   setFlashBoardState?: (state: Partial<FlashBoardStoreSnapshot>) => void;
   getStoryboardState?: () => StoryboardStoreSnapshot;
   setStoryboardState?: (state: StoryboardStoreSnapshot) => void;
+  getTrackingState?: () => TrackingStoreSnapshot;
+  setTrackingState?: (state: Partial<TrackingStoreSnapshot>) => void;
   getExportState?: () => ExportStoreSnapshot;
   setExportState?: (state: Partial<ExportStoreSnapshot>) => void;
 }
@@ -209,6 +217,10 @@ export interface HistoryStoreInitRefs {
   storyboard?: {
     getState: () => StoryboardStoreSnapshot;
     setState: (state: StoryboardStoreSnapshot) => void;
+  };
+  tracking?: {
+    getState: () => TrackingStoreSnapshot;
+    setState: (state: Partial<TrackingStoreSnapshot>) => void;
   };
   export?: {
     getState: () => ExportStoreSnapshot;

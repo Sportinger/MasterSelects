@@ -7,6 +7,7 @@ import type { BlendMode, ClipTransform, Effect, RuntimeColorGrade, TextBoundsPat
 import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import type { LightClipSettings } from '../../types/light';
 import type { WebCodecsPlayer } from '../WebCodecsPlayer';
+import type { RuntimeFrameProvider } from '../../services/mediaRuntime/types';
 import type { ExportRenderFrameDecorator } from './ExportRenderSessionImpl';
 
 // ============ VIDEO CODECS ============
@@ -30,7 +31,7 @@ export interface ExportSettings {
   // Audio settings
   includeAudio?: boolean;
   audioSampleRate?: 44100 | 48000;
-  audioBitrate?: number;  // 128000 - 320000
+  audioBitrate?: number;  // Requested bitrate; defaults to browser-compatible 192 kbps
   normalizeAudio?: boolean;
   // Export mode
   exportMode?: ExportMode;  // 'fast' = strict WebCodecs, 'precise' = explicit HTMLVideoElement
@@ -60,6 +61,8 @@ export interface ExportProgress {
 
 export interface ExportClipState {
   clipId: string;
+  /** Backend-neutral decoded-frame source used by WebCodecs and TurboRes export. */
+  frameProvider?: RuntimeFrameProvider | null;
   webCodecsPlayer: WebCodecsPlayer | null;
   lastSampleIndex: number;
   isSequential: boolean; // true if using sequential decoding

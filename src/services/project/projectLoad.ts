@@ -1,7 +1,11 @@
 // Project Load - load project file data into stores + background restoration
 
 import { Logger } from '../logger';
-import { useMediaStore, type Composition } from '../../stores/mediaStore';
+import {
+  establishTimelineCompositionSaveBaseline,
+  useMediaStore,
+  type Composition,
+} from '../../stores/mediaStore';
 import { type ProjectFile } from '../projectFileService';
 import { withProjectStoreSyncGuard } from './projectSave';
 import {
@@ -36,7 +40,6 @@ import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVis
 import { liveInputRuntime } from '../mediaRuntime/liveInputRuntime';
 import { collectUsedLiveInputIds } from '../liveInputTimeline';
 import { useTimelineStore } from '../../stores/timeline';
-import { useDockStore } from '../../stores/dockStore';
 import {
   applyLegacyMediaArtifactSeeds,
   collectLegacyMediaArtifactSeeds,
@@ -47,6 +50,10 @@ import {
   hydrateStoryboardProjectState,
   reconcileStoryboardTimelineClips,
 } from '../../stores/storyboardStore';
+import { useSeedancePreproductionStore } from '../../stores/seedancePreproductionStore';
+import { parseSeedancePreproductionProjectState } from '../seedancePreproduction/contracts';
+import { useTrackingStore } from '../../stores/trackingStore';
+import { ensureLegacyTrackingAssets } from '../planarTracking/trackingAssets';
 
 export { setProjectLoadProgress } from './load/loadProgress';
 export { reloadNestedCompositionClips } from './load/loadTimelineHydration';
@@ -116,7 +123,12 @@ export async function loadProjectToStores(): Promise<void> {
       if (!parsedProject) return;
 
       const { projectData, hydrateFiles } = parsedProject;
+      useTrackingStore.getState().hydrateAssets(projectData.trackingAssets ?? []);
+      ensureLegacyTrackingAssets(projectData.compositions);
       hydrateStoryboardProjectState(readStoryboardProjectState(projectData).state);
+      useSeedancePreproductionStore.getState().hydrate(
+        parseSeedancePreproductionProjectState(projectData.seedancePreproduction),
+      );
       backgroundProjectData = projectData;
       backgroundHydrateFiles = hydrateFiles;
       const legacyArtifactSeeds = collectLegacyMediaArtifactSeeds(projectData);
@@ -181,6 +193,7 @@ export async function loadProjectToStores(): Promise<void> {
       const signalState = createSignalHydrationStateForLoad(projectData, validFolderIds);
 
       useMediaStore.setState({
+        currentProjectName: projectData.name,
         files,
         compositions: compositions.length > 0 ? compositions : [createDefaultComposition(projectData)],
         folders,
@@ -219,10 +232,7 @@ export async function loadProjectToStores(): Promise<void> {
           ? [file.id]
           : []
       ));
-      liveInputRuntime.setReconnectRequiredIds(reconnectRequiredIds);
-      if (reconnectRequiredIds.length > 0) {
-        useDockStore.getState().activatePanelType('clip-properties');
-      }
+      liveInputRuntime.setReconnectRequiredIds(reconnectRequiredIds, { showBulkPrompt: true });
 
       setProjectLoadProgress({
         phase: 'ready',
@@ -234,6 +244,8 @@ export async function loadProjectToStores(): Promise<void> {
 
       log.info(' Loaded project to stores:', projectData.name);
     });
+
+    establishTimelineCompositionSaveBaseline();
 
     if (backgroundProjectData) {
       void runPostLoadRestoration(backgroundProjectData, backgroundHydrateFiles);

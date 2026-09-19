@@ -1,3 +1,5 @@
+import type { MediaVideoTrackMetadata } from '../../types/mediaMetadata';
+
 export type MediaRuntimeKind = 'video' | 'audio' | 'image';
 
 export type RuntimeSessionKey = string;
@@ -31,7 +33,7 @@ export type MediaAssetRefOrigin =
   | 'external'
   | 'unknown';
 
-export interface MediaSourceMetadata {
+export interface MediaSourceMetadata extends MediaVideoTrackMetadata {
   duration?: number;
   width?: number;
   height?: number;

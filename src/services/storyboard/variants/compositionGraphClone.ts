@@ -328,6 +328,39 @@ function remapClip(
     ...clone(clip),
     id: mappedClipId,
     trackId: idMap.trackIds[key(compositionId, clip.trackId)] ?? clip.trackId,
+    trackingBinding: clip.trackingBinding
+      ? {
+          ...clone(clip.trackingBinding),
+          targetVideoClipId: clip.trackingBinding.targetVideoClipId
+            ? idMap.clipIds[key(compositionId, clip.trackingBinding.targetVideoClipId)]
+              ?? clip.trackingBinding.targetVideoClipId
+            : undefined,
+        }
+      : undefined,
+    terrainAttachment: clip.terrainAttachment
+      ? {
+          ...clone(clip.terrainAttachment),
+          targetVideoClipId: idMap.clipIds[key(compositionId, clip.terrainAttachment.targetVideoClipId)]
+            ?? clip.terrainAttachment.targetVideoClipId,
+        }
+      : undefined,
+    terrainScreenAnchor: clip.terrainScreenAnchor
+      ? {
+          ...clone(clip.terrainScreenAnchor),
+          attachment: {
+            ...clone(clip.terrainScreenAnchor.attachment),
+            targetVideoClipId: idMap.clipIds[key(compositionId, clip.terrainScreenAnchor.attachment.targetVideoClipId)]
+              ?? clip.terrainScreenAnchor.attachment.targetVideoClipId,
+          },
+        }
+      : undefined,
+    terrainAnchorConnector: clip.terrainAnchorConnector
+      ? {
+          ...clone(clip.terrainAnchorConnector),
+          anchorClipId: idMap.clipIds[key(compositionId, clip.terrainAnchorConnector.anchorClipId)]
+            ?? clip.terrainAnchorConnector.anchorClipId,
+        }
+      : undefined,
     ...(clip.linkedClipId === undefined
       ? {}
       : {

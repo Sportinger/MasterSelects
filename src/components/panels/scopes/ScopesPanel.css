@@ -1,162 +1,509 @@
-/* Scope panel container (used by WaveformPanel, HistogramPanel, VectorscopePanel) */
-.scope-panel {
+.scopes-panel {
+  container-type: size;
   display: flex;
-  flex-direction: column;
   height: 100%;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
   overflow: hidden;
+  background: #050606;
+  color: var(--text-primary);
 }
 
-.scope-panel-content {
-  flex: 1;
-  min-height: 0;
+.scopes-panel-header {
   display: flex;
+  height: 26px;
+  min-height: 26px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px;
+  border-bottom: 1px solid #08090b;
+  background: #212126;
+  box-shadow: inset 0 1px rgb(255 255 255 / 3%);
+  color: #d7d8dc;
+  font-size: 11px;
+}
+
+.scopes-panel-header strong {
+  overflow: hidden;
+  flex: 0 1 auto;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scopes-panel-content {
+  display: flex;
+  min-height: 0;
+  flex: 1;
   align-items: center;
   justify-content: center;
-  padding: 8px;
+  overflow: hidden;
+  padding: 5px;
+  background: #050606;
 }
 
-/* Scope mode toolbar (RGB / R / G / B / Y buttons) */
+.scopes-panel-content > .scope-with-legend,
+.scopes-panel-content > .scope-canvas-container {
+  height: 100%;
+}
+
+.scope-type-selector {
+  position: relative;
+  z-index: 30;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.scope-type-selector-trigger {
+  display: flex;
+  width: 90px;
+  height: 20px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 5px 0 7px;
+  border: 1px solid #555860;
+  border-radius: 2px;
+  background: #17181c;
+  box-shadow: inset 0 1px rgb(255 255 255 / 3%);
+  color: #e7e8eb;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  text-align: left;
+}
+
+.scope-type-selector-trigger:hover,
+.scope-type-selector-trigger:focus-visible,
+.scope-type-selector-trigger[aria-expanded='true'] {
+  border-color: #777a82;
+  background: #1d1e23;
+  outline: none;
+}
+
+.scope-type-selector-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scope-type-selector-trigger svg {
+  width: 8px;
+  flex: 0 0 8px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.scope-type-selector-menu {
+  position: absolute;
+  top: calc(100% + 1px);
+  right: 0;
+  width: 156px;
+  padding: 5px 0;
+  border: 1px solid #0c0d0f;
+  background: #25262b;
+  box-shadow: 0 5px 13px rgb(0 0 0 / 58%), inset 0 1px rgb(255 255 255 / 4%);
+}
+
+.scope-type-selector-menu button {
+  display: block;
+  width: 100%;
+  height: 21px;
+  padding: 0 24px;
+  border: 0;
+  background: transparent;
+  color: #aeb0b6;
+  cursor: default;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.scope-type-selector-menu button:hover,
+.scope-type-selector-menu button:focus-visible {
+  background: #3a3b42;
+  color: #f1f2f4;
+  outline: none;
+}
+
+.scope-type-selector-menu button.active {
+  color: #d8d9dd;
+}
+
+/* RGB / R / G / B / Y controls used by waveform and histogram. */
 .scope-mode-toolbar {
   display: flex;
+  flex-shrink: 0;
   gap: 2px;
   padding: 4px 8px;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-tertiary);
-  flex-shrink: 0;
+}
+
+.scopes-panel-header .scope-mode-toolbar {
+  gap: 1px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .scope-mode-btn {
+  min-width: 28px;
   padding: 3px 8px;
-  font-size: 10px;
-  font-weight: 600;
-  font-family: monospace;
-  color: var(--text-secondary);
-  background: transparent;
   border: 1px solid transparent;
   border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary);
   cursor: pointer;
+  font-family: monospace;
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
   transition: all 0.12s ease;
   user-select: none;
-  min-width: 28px;
-  text-align: center;
+}
+
+.scopes-panel-header .scope-mode-btn {
+  min-width: 22px;
+  padding: 2px 4px;
 }
 
 .scope-mode-btn:hover {
+  background: rgb(255 255 255 / 6%);
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.06);
 }
 
 .scope-mode-btn.active {
-  border-color: rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: rgb(255 255 255 / 15%);
+  background: rgb(255 255 255 / 8%);
 }
 
-/* Color accents for active mode buttons */
 .scope-mode-btn.scope-mode-rgb.active {
+  border-color: rgb(255 255 255 / 25%);
   color: #e0e0e0;
-  border-color: rgba(255, 255, 255, 0.25);
 }
 
 .scope-mode-btn.scope-mode-r.active {
+  border-color: rgb(255 102 102 / 40%);
+  background: rgb(255 80 80 / 12%);
   color: #ff6666;
-  border-color: rgba(255, 102, 102, 0.4);
-  background: rgba(255, 80, 80, 0.12);
 }
 
 .scope-mode-btn.scope-mode-g.active {
+  border-color: rgb(102 204 102 / 40%);
+  background: rgb(80 200 80 / 12%);
   color: #66cc66;
-  border-color: rgba(102, 204, 102, 0.4);
-  background: rgba(80, 200, 80, 0.12);
 }
 
 .scope-mode-btn.scope-mode-b.active {
+  border-color: rgb(102 136 255 / 40%);
+  background: rgb(80 120 255 / 12%);
   color: #6688ff;
-  border-color: rgba(102, 136, 255, 0.4);
-  background: rgba(80, 120, 255, 0.12);
 }
 
 .scope-mode-btn.scope-mode-luma.active {
-  color: #ccccaa;
-  border-color: rgba(204, 204, 170, 0.4);
-  background: rgba(200, 200, 160, 0.12);
+  border-color: rgb(214 180 0 / 45%);
+  background: rgb(207 177 0 / 10%);
+  color: #d6b400;
 }
 
-/* ── Legend layout ── */
-
-/* Container with Y-axis legend on the left */
+/* Shared legend and canvas layout. */
 .scope-with-legend {
+  display: flex;
   width: 100%;
   height: 100%;
-  display: flex;
   align-items: stretch;
 }
 
-/* Variant with both X and Y axis */
 .scope-with-legend.scope-with-legend-xy {
   flex-direction: column;
 }
 
 .scope-with-legend-xy .scope-canvas-area {
-  flex: 1;
-  min-height: 0;
   display: flex;
+  min-height: 0;
+  flex: 1;
   align-items: stretch;
 }
 
-/* Y-axis legend (left side — IRE scale for waveform) */
 .scope-legend-y {
   display: flex;
+  width: 34px;
+  flex-shrink: 0;
   flex-direction: column;
   justify-content: space-between;
   padding: 2px 0;
-  width: 28px;
-  flex-shrink: 0;
   user-select: none;
 }
 
-.scope-legend-y .scope-legend-label {
-  font-size: 9px;
+.scope-legend-y .scope-legend-label,
+.scope-legend-x .scope-legend-label {
+  color: #d6b400;
   font-family: monospace;
-  color: rgba(255, 255, 255, 0.35);
-  text-align: right;
-  padding-right: 5px;
+  font-size: 9px;
   line-height: 1;
 }
 
-/* X-axis legend (bottom — value bins for histogram) */
+.scope-legend-y .scope-legend-label {
+  padding-right: 7px;
+  text-align: right;
+}
+
 .scope-legend-x {
   display: flex;
-  justify-content: space-between;
-  padding: 3px 0 0;
   flex-shrink: 0;
+  justify-content: space-between;
+  padding: 4px 0 0;
+  border-top: 1px solid rgb(207 177 0 / 28%);
   user-select: none;
 }
 
 .scope-legend-x .scope-legend-label {
-  font-size: 9px;
-  font-family: monospace;
-  color: rgba(255, 255, 255, 0.35);
-  text-align: center;
   width: 28px;
-  line-height: 1;
+  text-align: center;
 }
 
-/* Canvas container */
 .scope-canvas-container {
+  position: relative;
+  display: flex;
   width: 100%;
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
   min-width: 0;
   min-height: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
 }
 
 .scope-canvas-container canvas {
   display: block;
 }
 
-/* Vectorscope: canvas stays square via ResizeObserver, container fills panel */
+.scope-waveform-reference-grid,
+.scope-cartesian-reference-grid,
+.scope-vectorscope-reference-grid {
+  position: absolute;
+  pointer-events: none;
+}
+
+.scope-waveform-reference-grid {
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.scope-waveform-reference-grid i {
+  width: 100%;
+  height: 1px;
+  background: rgb(207 177 0 / 40%);
+}
+
+.scope-cartesian-reference-grid {
+  inset: 0;
+}
+
+.scope-cartesian-reference-grid i {
+  position: absolute;
+  display: block;
+  background: rgb(207 177 0 / 34%);
+}
+
+.scope-grid-x-25,
+.scope-grid-x-50,
+.scope-grid-x-75 {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.scope-grid-x-25 { left: 25%; }
+.scope-grid-x-50 { left: 50%; }
+.scope-grid-x-75 { left: 75%; }
+
+.scope-grid-y-25,
+.scope-grid-y-50,
+.scope-grid-y-75 {
+  right: 0;
+  left: 0;
+  height: 1px;
+}
+
+.scope-grid-y-25 { bottom: 25%; }
+.scope-grid-y-50 { bottom: 50%; }
+.scope-grid-y-75 { bottom: 75%; }
+
+.scope-vectorscope-reference-grid {
+  top: 50%;
+  left: 50%;
+  box-sizing: border-box;
+  border: 1px solid rgb(207 177 0 / 48%);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0.92);
+}
+
+.scope-vectorscope-reference-grid i {
+  position: absolute;
+  display: block;
+  box-sizing: border-box;
+}
+
+.scope-vector-ring-75,
+.scope-vector-ring-25 {
+  border: 1px solid rgb(207 177 0 / 42%);
+  border-radius: 50%;
+}
+
+.scope-vector-ring-75 { inset: 12.5%; }
+.scope-vector-ring-25 { inset: 37.5%; }
+
+.scope-vector-axis-x {
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: rgb(207 177 0 / 32%);
+}
+
+.scope-vector-axis-y {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: rgb(207 177 0 / 32%);
+}
+
+/* Resolve-style RGB Parade and shared yellow reference grid. */
+.scope-rgb-parade {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.scope-rgb-parade-plots {
+  display: grid;
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  gap: 3px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 7px 0 7px 48px;
+}
+
+.scope-reference-grid {
+  color: #d6b400;
+  pointer-events: none;
+}
+
+.scope-parade-grid {
+  position: absolute;
+  z-index: 2;
+  inset: 7px 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font: 11px/1 "Segoe UI", Arial, sans-serif;
+}
+
+.scope-parade-grid::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 44px;
+  width: 12px;
+  background-image: linear-gradient(
+    180deg,
+    transparent 0 calc(25% - 1px),
+    rgb(207 177 0 / 40%) calc(25% - 1px) 25%,
+    transparent 25% calc(50% - 1px),
+    rgb(207 177 0 / 40%) calc(50% - 1px) 50%,
+    transparent 50% calc(75% - 1px),
+    rgb(207 177 0 / 40%) calc(75% - 1px) 75%,
+    transparent 75% 100%
+  );
+  background-position: 0 0;
+  background-repeat: repeat-y;
+  background-size: 100% 12.5%;
+  content: '';
+}
+
+.scope-reference-grid-row {
+  display: flex;
+  height: 0;
+  align-items: center;
+}
+
+.scope-reference-grid-row span {
+  width: 44px;
+  flex: 0 0 44px;
+  padding-right: 7px;
+  text-align: right;
+}
+
+.scope-reference-grid-row i {
+  height: 1px;
+  flex: 1;
+  background: rgb(207 177 0 / 40%);
+}
+
+.scope-parade-grid::after {
+  position: absolute;
+  right: 0;
+  bottom: -5px;
+  left: 48px;
+  height: 5px;
+  background: repeating-linear-gradient(90deg, rgb(207 177 0 / 40%) 0 1px, transparent 1px 16px);
+  content: '';
+}
+
+.scope-parade-combined {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  grid-column: 1 / -1;
+  overflow: hidden;
+}
+
+.scope-parade-combined .scope-canvas-container {
+  height: 100%;
+}
+
+.scope-parade-combined::before,
+.scope-parade-combined::after {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #050606;
+  content: '';
+  pointer-events: none;
+  transform: translateX(-1.5px);
+}
+
+.scope-parade-combined::before {
+  left: 33.333%;
+}
+
+.scope-parade-combined::after {
+  left: 66.667%;
+}
+
+@container (max-height: 150px) {
+  .scope-legend-y .scope-legend-label:nth-child(even),
+  .scope-waveform-reference-grid i:nth-child(even),
+  .scope-parade-grid .scope-reference-grid-row:nth-child(even) {
+    display: none;
+  }
+
+  .scope-parade-grid::before {
+    display: none;
+  }
+}

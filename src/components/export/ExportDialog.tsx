@@ -44,7 +44,7 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
   const [stackedAlpha, setStackedAlpha] = useState(false);
   const [includeAudio, setIncludeAudio] = useState(true);
   const [audioSampleRate, setAudioSampleRate] = useState<44100 | 48000>(48000);
-  const [audioBitrate, setAudioBitrate] = useState(256000);
+  const [audioBitrate, setAudioBitrate] = useState(192000);
   const [normalizeAudio, setNormalizeAudio] = useState(false);
 
   const [isExporting, setIsExporting] = useState(false);

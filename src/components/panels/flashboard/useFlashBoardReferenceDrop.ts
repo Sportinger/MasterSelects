@@ -1,7 +1,7 @@
 import { useCallback, useState, type DragEvent } from 'react';
 import { getExternalDragPayload } from '../../timeline/utils/externalDragSession';
 
-const MEDIA_FILE_DRAG_MIME = 'application/x-media-file-id';
+export const MEDIA_FILE_DRAG_MIME = 'application/x-media-file-id';
 const MEDIA_PANEL_ITEM_DRAG_MIME = 'application/x-media-panel-item';
 const SLOT_DROP_HANDLED = Symbol('flashboardSlotDropHandled');
 

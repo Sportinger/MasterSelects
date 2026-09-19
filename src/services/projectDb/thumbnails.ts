@@ -1,5 +1,5 @@
 import { STORES } from './stores';
-import { requestResult, requestSuccess } from './transactions';
+import { requestResult, requestSuccess, transactionSuccess } from './transactions';
 import type { StoredSourceThumbnail, StoredThumbnail } from './types';
 
 // Save thumbnail by file hash
@@ -45,8 +45,7 @@ export async function saveSourceThumbnailsBatch(
       store.put(frame);
     }
 
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
+    void transactionSuccess(transaction).then(resolve, reject);
   });
 }
 
@@ -101,8 +100,7 @@ export async function deleteSourceThumbnails(db: IDBDatabase, mediaFileId: strin
       }
     };
 
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
+    void transactionSuccess(transaction).then(resolve, reject);
   });
 }
 

@@ -59,7 +59,7 @@ describe('buildPianoRollGrid', () => {
     // 11 integer-second lines in [10,20]; 3 are bar starts, 8 are beats.
     expect(grid.barLines).toHaveLength(3);
     expect(grid.beatLines).toHaveLength(8);
-    expect(grid.subLines).toHaveLength(0); // gridResolution defaults to 1
+    expect(grid.subLines).toHaveLength(0); // subdivision defaults to 'beat'
     expect(grid.beatLines.map((l) => l.time)).toEqual([10, 11, 13, 14, 15, 17, 18, 19]);
   });
 
@@ -71,9 +71,9 @@ describe('buildPianoRollGrid', () => {
     expect(grid.beatLines.map((l) => l.pixelX)).toEqual([300, 400, 500]);
   });
 
-  it('interpolates sub-lines when gridResolution > 1', () => {
-    const grid = buildPianoRollGrid({ ...base, gridResolution: 2 });
-    // One sub-line halfway between each adjacent beat pair (10 gaps).
+  it('emits sub-lines for a finer subdivision', () => {
+    const grid = buildPianoRollGrid({ ...base, subdivision: '1/8' });
+    // 4/4 @ 60 BPM: one 1/8 line halfway between each adjacent beat pair.
     expect(grid.subLines).toHaveLength(10);
     const first = grid.subLines[0];
     expect(first.time).toBeCloseTo(10.5);

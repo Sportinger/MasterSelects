@@ -20,6 +20,7 @@ export interface HostedGatewayError {
 export interface HostedGatewaySession {
   authenticated: boolean;
   email?: string | null;
+  guest?: boolean;
   provider?: string | null;
 }
 

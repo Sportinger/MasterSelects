@@ -74,6 +74,18 @@ function createStorage(pointers = new MemoryPointers(), artifacts: AgentTimeline
 }
 
 describe('Agent Timeline artifact storage', () => {
+  it('does not republish an unchanged generation during reload hydration', async () => {
+    const { storage, pointers } = createStorage();
+    const first = await storage.write(write());
+    const second = await storage.write(write());
+    expect(pointers.operations).toEqual(['pointer']);
+    expect(second.pointer).toEqual(first.pointer);
+    const changed = write();
+    changed.shards[0].events[0].confidence = 0.5;
+    await storage.write(changed);
+    expect(pointers.operations).toEqual(['pointer', 'pointer']);
+  });
+
   it('publishes shard and index artifacts before the manifest pointer, then round-trips validated data', async () => {
     const artifactStore = new ArtifactStore(new MemoryArtifactStorageAdapter());
     const pointers = new MemoryPointers();

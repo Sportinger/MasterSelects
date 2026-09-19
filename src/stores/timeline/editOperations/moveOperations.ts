@@ -1,4 +1,6 @@
 import type { TimelineClip, TimelineTrack } from '../../../types';
+import { quantizeClipStartTime } from '../../../utils/timelineFrameQuantization';
+import { getActiveCompositionFrameRate } from './activeCompositionFrameRate';
 import type { MoveClipsOperation, TimelineClipMove, TimelineEditWarning } from './types';
 
 export interface MoveClipsApplyResult {
@@ -19,6 +21,7 @@ function isVisualSourceType(sourceType: string | undefined): boolean {
     sourceType === 'camera' ||
     sourceType === 'light' ||
     sourceType === 'math-scene' ||
+    sourceType === 'flock' ||
     sourceType === 'model' ||
     sourceType === 'gaussian-avatar' ||
     sourceType === 'gaussian-splat';
@@ -62,6 +65,7 @@ export function applyMoveClipsOperation(
 ): MoveClipsApplyResult {
   const warnings: TimelineEditWarning[] = [];
   const moveByClipId = new Map<string, TimelineClipMove>();
+  const frameRate = getActiveCompositionFrameRate();
 
   for (const move of operation.moves) {
     if (!Number.isFinite(move.startTime)) {
@@ -102,7 +106,7 @@ export function applyMoveClipsOperation(
       continue;
     }
 
-    const nextStartTime = Math.max(0, move.startTime);
+    const nextStartTime = quantizeClipStartTime(clip, move.startTime, frameRate);
     if (Math.abs(nextStartTime - clip.startTime) <= 0.0001 && targetTrackId === clip.trackId) continue;
 
     validMoves.set(clip.id, {

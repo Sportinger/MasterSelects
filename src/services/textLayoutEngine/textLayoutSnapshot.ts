@@ -142,6 +142,7 @@ export function createTextLayoutSnapshot(
       props.lineHeight,
       props.letterSpacing,
       topBaseline,
+      props.wrapMode,
     );
     const totalHeight = firstPassLines.length * lineHeightPx;
     let startY: number;
@@ -169,6 +170,7 @@ export function createTextLayoutSnapshot(
       props.lineHeight,
       props.letterSpacing,
       startY,
+      props.wrapMode,
     ).map((line, index) => ({ ...line, index }));
     const characters = createTextLayoutCharacters(
       ctx,

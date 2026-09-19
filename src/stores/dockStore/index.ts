@@ -17,6 +17,7 @@ import { createLayoutMutationActions } from './layoutMutationActions';
 import { createDragAndPanelStateActions } from './dragAndPanelStateActions';
 import { createPanelVisibilityActions } from './panelVisibilityActions';
 import { createSavedLayoutActions } from './savedLayoutActions';
+import { createOverLayoutModeActions } from './overLayoutModeActions';
 import { nodeContainsPanelType } from './layoutTree';
 import {
   DOCK_LAYOUT_TRANSITION_EVENT,
@@ -28,6 +29,11 @@ import { withExclusiveHistorySnapshotMutationLease } from '../timeline/exclusive
 export {
   FACTORY_3D_EDIT_LAYOUT_ID,
   FACTORY_AUDIO_EDIT_LAYOUT_ID,
+  FACTORY_COLOR_LAYOUT_ID,
+  FACTORY_LIVE_LAYOUT_ID,
+  FACTORY_MEDIUM_EDIT_LAYOUT_ID,
+  FACTORY_MOBILE_LAYOUT_ID,
+  FACTORY_VERTICAL_MOBILE_LAYOUT_ID,
   FACTORY_START_LAYOUT_ID,
   FACTORY_VIDEO_EDIT_LAYOUT_ID,
   START_CHAT_EXIT_DURATION_MS,
@@ -45,6 +51,12 @@ export {
   isProtectedFactoryDockLayout,
 } from './layoutPersistence';
 export {
+  getVisibleSubLayoutId,
+  getWorkspaceOverLayout,
+  isWorkspaceOverLayoutId,
+} from './overLayoutMode';
+export type { WorkspaceOverLayout } from './overLayoutMode';
+export {
   DOCK_LAYOUT_TRANSITION_EVENT,
   START_CHROME_TRANSITION_EVENT,
 };
@@ -59,6 +71,7 @@ export const useDockStore = create<DockStoreState>()(
         ...createDragAndPanelStateActions(set, get),
         ...createPanelVisibilityActions(set, get),
         ...createSavedLayoutActions(set, get),
+        ...createOverLayoutModeActions(set, get),
         }),
         {
         name: 'webvj-dock-layout',
@@ -69,6 +82,9 @@ export const useDockStore = create<DockStoreState>()(
           savedLayouts: state.savedLayouts,
           defaultSavedLayoutId: state.defaultSavedLayoutId,
           activeSavedLayoutId: state.activeSavedLayoutId,
+          overLayoutBaseId: state.overLayoutBaseId,
+          mediumLayoutOverride: state.mediumLayoutOverride,
+          mobileLayoutOverride: state.mobileLayoutOverride,
         }),
         merge: (persistedState, currentState) => {
           const persisted = persistedState as Partial<DockStoreState> | undefined;
@@ -99,6 +115,15 @@ export const useDockStore = create<DockStoreState>()(
             ? FACTORY_VIDEO_EDIT_LAYOUT_ID
             : persistedActiveSavedLayoutId
               ?? (persisted?.layout ? null : FACTORY_VIDEO_EDIT_LAYOUT_ID);
+          const overLayoutBaseId = typeof persisted?.overLayoutBaseId === 'string'
+            ? persisted.overLayoutBaseId
+            : null;
+          const mediumLayoutOverride = typeof persisted?.mediumLayoutOverride === 'boolean'
+            ? persisted.mediumLayoutOverride
+            : null;
+          const mobileLayoutOverride = typeof persisted?.mobileLayoutOverride === 'boolean'
+            ? persisted.mobileLayoutOverride
+            : null;
 
           if (persisted?.layout && !persistedLayoutIsStart) {
             // Clean up any invalid panel types from persisted layout
@@ -111,6 +136,9 @@ export const useDockStore = create<DockStoreState>()(
               savedLayouts,
               defaultSavedLayoutId,
               activeSavedLayoutId,
+              overLayoutBaseId,
+              mediumLayoutOverride,
+              mobileLayoutOverride,
             };
           }
           return {
@@ -119,6 +147,9 @@ export const useDockStore = create<DockStoreState>()(
             savedLayouts,
             defaultSavedLayoutId,
             activeSavedLayoutId,
+            overLayoutBaseId,
+            mediumLayoutOverride,
+            mobileLayoutOverride,
           };
         },
         }

@@ -7,6 +7,7 @@ import { isTimelineSnappingActive } from '../utils/timelineSnappingModifiers';
 
 interface TimelineMarkerDragState {
   markerId: string;
+  pointerId: number;
   startX: number;
   originalTime: number;
 }
@@ -39,8 +40,8 @@ interface UseMarkerDragReturn {
   timelineMarkerDrag: TimelineMarkerDragState | null;
   /** Current marker create drag state (drag-to-create) */
   markerCreateDrag: MarkerCreateDragState | null;
-  /** Mouse down handler for existing timeline markers */
-  handleTimelineMarkerMouseDown: (e: React.MouseEvent, markerId: string) => void;
+  /** Pointer down handler for existing timeline markers */
+  handleTimelineMarkerPointerDown: (e: React.PointerEvent<HTMLElement>, markerId: string) => void;
   /** Mouse down handler for the "Add Marker" button drag */
   handleMarkerButtonDragStart: (e: React.MouseEvent) => void;
 }
@@ -75,8 +76,8 @@ export function useMarkerDrag({
   const [markerCreateDrag, setMarkerCreateDrag] = useState<MarkerCreateDragState | null>(null);
 
   // Handle timeline marker drag start
-  const handleTimelineMarkerMouseDown = useCallback((e: React.MouseEvent, markerId: string) => {
-    if (e.button !== 0) {
+  const handleTimelineMarkerPointerDown = useCallback((e: React.PointerEvent<HTMLElement>, markerId: string) => {
+    if (!e.isPrimary || e.button !== 0) {
       return;
     }
 
@@ -85,8 +86,11 @@ export function useMarkerDrag({
     const marker = markers.find(m => m.id === markerId);
     if (!marker) return;
 
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+
     setTimelineMarkerDrag({
       markerId,
+      pointerId: e.pointerId,
       startX: e.clientX,
       originalTime: marker.time,
     });
@@ -107,7 +111,10 @@ export function useMarkerDrag({
   useEffect(() => {
     if (!timelineMarkerDrag) return;
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const interactionDocument = timelineRef.current?.ownerDocument ?? document;
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (e.pointerId !== timelineMarkerDrag.pointerId) return;
       if (!timelineRef.current) return;
 
       const rect = timelineRef.current.getBoundingClientRect();
@@ -140,18 +147,22 @@ export function useMarkerDrag({
       // Clamp to valid range
       time = Math.max(0, Math.min(time, duration));
       moveMarker(timelineMarkerDrag.markerId, time);
+      e.preventDefault();
     };
 
-    const handleMouseUp = () => {
+    const handlePointerEnd = (e: PointerEvent) => {
+      if (e.pointerId !== timelineMarkerDrag.pointerId) return;
       setTimelineMarkerDrag(null);
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    interactionDocument.addEventListener('pointermove', handlePointerMove, { passive: false });
+    interactionDocument.addEventListener('pointerup', handlePointerEnd);
+    interactionDocument.addEventListener('pointercancel', handlePointerEnd);
 
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      interactionDocument.removeEventListener('pointermove', handlePointerMove);
+      interactionDocument.removeEventListener('pointerup', handlePointerEnd);
+      interactionDocument.removeEventListener('pointercancel', handlePointerEnd);
     };
   }, [timelineMarkerDrag, scrollX, snappingEnabled, duration, pixelToTime, getSnapTargetTimes, moveMarker, playheadPosition, inPoint, outPoint, timelineRef]);
 
@@ -239,7 +250,7 @@ export function useMarkerDrag({
   return {
     timelineMarkerDrag,
     markerCreateDrag,
-    handleTimelineMarkerMouseDown,
+    handleTimelineMarkerPointerDown,
     handleMarkerButtonDragStart,
   };
 }

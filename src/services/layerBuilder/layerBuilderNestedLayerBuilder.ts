@@ -30,6 +30,8 @@ import {
   type NestedPreviewContinuationResolver,
 } from './nestedPreviewContinuity';
 import { buildNestedVideoSourceLayer } from './layerBuilderNestedVideoSource';
+import { bindTerrainLayer } from '../planarTracking/terrainLayerBindings';
+import { buildNestedLayerBuilderFlockLayer } from './layerBuilderFlockLayers';
 
 const log = Logger.create('LayerBuilderNestedLayers');
 
@@ -125,6 +127,7 @@ function buildNestedClipLayer(
     return null;
   }
 
+  if (nestedClip.source?.type === 'flock') return buildNestedLayerBuilderFlockLayer(baseLayer, nestedClip, nestedClipLocalTime, keyframes);
   if ((nested3dLayer = buildNestedLayerBuilder3dSourceLayer(baseLayer, nestedClip, nestedClipLocalTime, ctx))) {
     return nested3dLayer;
   }
@@ -180,7 +183,7 @@ export function buildLayerBuilderNestedLayers(params: BuildNestedLayersParams): 
     const nestedLocalTime = clipTime - nestedClip.startTime;
     const nestedLayer = buildNestedClipLayer(nestedClip, nestedLocalTime, params);
     if (nestedLayer) {
-      layers.push(nestedLayer);
+      layers.push(bindTerrainLayer(nestedLayer, nestedClip, clip.nestedClips, clipTime));
     } else {
       log.debug('Failed to build nested layer', {
         clipId: nestedClip.id,

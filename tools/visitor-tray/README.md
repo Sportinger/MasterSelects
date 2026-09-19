@@ -89,7 +89,7 @@ powershell -ExecutionPolicy Bypass -File tools\visitor-tray\Uninstall-DesktopSho
 
 - Right-click the tray icon to open the live log window.
 - The live log shows recent visits in a scrollable list.
-- Repeated hits from the same tracked visitor are grouped into expandable rows when a stable visitor id is available.
+- Repeated hits from the same tracked visitor are grouped into expandable rows when a daily-scoped visitor id is available.
 - Double-click the tray icon still opens MasterSelects in the browser.
 
 On a new visit the app:
@@ -104,4 +104,6 @@ Clicking the balloon opens the latest visited path on the site.
 
 - This tool is Windows-only.
 - It intentionally does not touch `package.json` or the website build.
-- The server now writes new visit events under a `visit2:` KV prefix so recent visits can be read newest-first.
+- The server writes privacy-minimized visit events under a `visit2:` KV prefix so recent visits can be read newest-first.
+- Entries retain path, country, coarse client classes, referrer domain, and an optional daily-scoped pseudonymous visitor
+  id for 180 days. Plain IP addresses, cities, complete user agents, and complete referrer URLs are not retained.

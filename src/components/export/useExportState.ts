@@ -18,6 +18,7 @@ import type {
   FFmpegContainer,
   ProResProfile,
   DnxhrProfile,
+  HapFormat,
 } from '../../engine/ffmpeg';
 import type { Composition } from '../../stores/mediaStore';
 import {
@@ -75,6 +76,7 @@ export function useExportState(
     ffmpegPreset,
     proresProfile,
     dnxhrProfile,
+    hapFormat,
     ffmpegQuality,
     ffmpegBitrate,
     ffmpegRateControl,
@@ -87,6 +89,7 @@ export function useExportState(
     gifTransparency,
     gifAlphaThreshold,
     gifBayerScale,
+    includeAlpha,
     stackedAlpha,
     includeAudio,
     audioOnlyFormat,
@@ -328,6 +331,8 @@ export function useExportState(
     setProresProfile: (value: ProResProfile) => setSettings({ proresProfile: value }),
     dnxhrProfile,
     setDnxhrProfile: (value: DnxhrProfile) => setSettings({ dnxhrProfile: value }),
+    hapFormat,
+    setHapFormat: (value: HapFormat) => setSettings({ hapFormat: value }),
     ffmpegQuality,
     setFfmpegQuality: (value: number) => setSettings({ ffmpegQuality: value }),
     ffmpegBitrate,
@@ -355,6 +360,8 @@ export function useExportState(
     isFFmpegLoading,
     isFFmpegReady,
     ffmpegLoadError,
+    includeAlpha,
+    setIncludeAlpha: (value: boolean) => setSettings({ includeAlpha: value }),
     stackedAlpha,
     setStackedAlpha: (value: boolean) => setSettings({ stackedAlpha: value }),
     includeAudio,

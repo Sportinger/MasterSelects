@@ -106,20 +106,44 @@ describe('MotionAdjustmentTab MD7 authoring', () => {
   it('limits the Effects picker to the renderer-supported adjustment matrix', () => {
     render(<EffectsTab clipId={clipId} effects={[]} />);
 
-    const picker = screen.getByRole('combobox');
-    const values = Array.from((picker as HTMLSelectElement).options)
+    const categoryPicker = screen.getByRole('combobox', { name: 'Effect category' });
+    const categoryValues = Array.from((categoryPicker as HTMLSelectElement).options)
       .map((option) => option.value)
       .filter(Boolean);
-    expect(values).toEqual(expect.arrayContaining([
-      'brightness',
-      'contrast',
-      'saturation',
-      'invert',
-      'gaussian-blur',
-    ]));
-    expect(values).toHaveLength(5);
+    expect(categoryValues).toEqual(['all', 'color', 'blur']);
+    expect(screen.getAllByRole('button', {
+      name: /^(Brightness|Contrast|Saturation|Invert|Gaussian Blur)$/,
+    })).toHaveLength(5);
     expect(screen.queryByRole('button', { name: 'Particle Out' })).not.toBeInTheDocument();
     expect(screen.getByText('Adjustment-safe effects')).toBeInTheDocument();
+  });
+
+  it('collapses and expands applied effects independently', () => {
+    const appliedEffects = [
+      effect('brightness', { amount: 0.2 }),
+      effect('contrast', { amount: 1.1 }),
+    ];
+    act(() => {
+      useTimelineStore.setState((state) => ({
+        clips: state.clips.map((clip) => clip.id === clipId
+          ? { ...clip, effects: appliedEffects }
+          : clip),
+      }));
+    });
+
+    const { container } = render(<EffectsTab clipId={clipId} effects={appliedEffects} />);
+    const brightnessToggle = screen.getByRole('button', { name: 'brightness' });
+
+    expect(brightnessToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(container.querySelectorAll('.effect-params')).toHaveLength(2);
+
+    fireEvent.click(brightnessToggle);
+    expect(brightnessToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(container.querySelectorAll('.effect-params')).toHaveLength(1);
+
+    fireEvent.click(brightnessToggle);
+    expect(brightnessToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(container.querySelectorAll('.effect-params')).toHaveLength(2);
   });
 
   it('routes an adjustment selection to its safe properties surface', async () => {

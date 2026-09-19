@@ -16,6 +16,7 @@ export interface ProjectTransform {
   rotationY: number;
   anchorX: number;
   anchorY: number;
+  anchorZ?: number;
   opacity: number;
   blendMode: string;
 }
@@ -48,6 +49,7 @@ export interface ProjectMaskPathVertex {
 export interface ProjectMask {
   id: string;
   name: string;
+  purpose?: 'crop';
   mode: 'add' | 'subtract' | 'intersect';
   inverted: boolean;
   opacity: number;
@@ -60,6 +62,7 @@ export interface ProjectMask {
   closed: boolean;
   vertices: ProjectMaskVertex[];
   position: { x: number; y: number };
+  rotation?: number;
 }
 
 export interface ProjectMaskPathKeyframeValue {

@@ -18,6 +18,7 @@ import {
   activeProxyGenerations,
   type ProxyJobController,
 } from './proxy/jobRegistry';
+import { isExternalProxySourceActive } from '../../../services/mediaRuntime/linkedMediaSourceRuntime';
 
 const log = Logger.create('Proxy');
 
@@ -143,6 +144,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
       (f) =>
         f.type === 'video' &&
         f.file &&
+        !isExternalProxySourceActive(f) &&
         f.proxyStatus !== 'generating' &&
         f.proxyStatus !== 'error' &&
         f.id !== currentlyGeneratingProxyId &&
@@ -164,6 +166,14 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
     const mediaFile = files.find((f) => f.id === mediaFileId);
     if (!mediaFile || mediaFile.type !== 'video' || !mediaFile.file) {
       log.warn('Invalid media file:', mediaFileId);
+      return;
+    }
+
+    if (isExternalProxySourceActive(mediaFile)) {
+      log.info('Skipping proxy generation for active external proxy source', {
+        id: mediaFile.id,
+        name: mediaFile.name,
+      });
       return;
     }
 
@@ -487,6 +497,15 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
       return;
     }
 
+
+    if (isExternalProxySourceActive(mediaFile)) {
+      log.info('Skipping audio proxy generation for active external proxy source', {
+        id: mediaFile.id,
+        name: mediaFile.name,
+      });
+      return;
+    }
+
     const { ensureAudioProxyForMediaFile, getAudioProxyStorageKey, shouldGenerateAudioProxy } =
       await import('../../../services/audio/AudioProxyService');
 
@@ -595,6 +614,7 @@ async function generateImageProxy(
     {
       analyzeSceneCuts,
       onSceneCutProgress: updateSceneCutProgress,
+      videoCodecId: mediaFile.videoCodecId,
     },
   ).finally(async () => {
     try {

@@ -18,7 +18,33 @@ type KeyframeViewStateActions = Pick<
   | 'setCurveEditorHeight'
 >;
 
-export const createKeyframeViewStateActions: SliceCreator<KeyframeViewStateActions> = (set, get) => ({
+export const createKeyframeViewStateActions: SliceCreator<KeyframeViewStateActions> = (set, get) => {
+  let trackKeyframeMembershipCache: {
+    clips: ReturnType<typeof get>['clips'];
+    clipKeyframes: ReturnType<typeof get>['clipKeyframes'];
+    trackIds: Set<string>;
+  } | null = null;
+
+  const getTrackIdsWithKeyframes = () => {
+    const { clips, clipKeyframes } = get();
+    if (
+      trackKeyframeMembershipCache?.clips === clips &&
+      trackKeyframeMembershipCache.clipKeyframes === clipKeyframes
+    ) {
+      return trackKeyframeMembershipCache.trackIds;
+    }
+
+    const trackIds = new Set<string>();
+    for (const clip of clips) {
+      if ((clipKeyframes.get(clip.id)?.length ?? 0) > 0) {
+        trackIds.add(clip.trackId);
+      }
+    }
+    trackKeyframeMembershipCache = { clips, clipKeyframes, trackIds };
+    return trackIds;
+  };
+
+  return {
   toggleTrackExpanded: (trackId) => {
     const { expandedTracks } = get();
     const newSet = new Set(expandedTracks);
@@ -70,6 +96,9 @@ export const createKeyframeViewStateActions: SliceCreator<KeyframeViewStateActio
     if (!expandedTracks.has(trackId)) {
       return baseHeight;
     }
+    if (selectedClipIds.size === 0) {
+      return baseHeight;
+    }
 
     const trackClips = clips.filter(c => c.trackId === trackId);
     const selectedTrackClips = trackClips.filter(c => selectedClipIds.has(c.id));
@@ -96,12 +125,7 @@ export const createKeyframeViewStateActions: SliceCreator<KeyframeViewStateActio
   },
 
   trackHasKeyframes: (trackId) => {
-    const { clips, clipKeyframes } = get();
-    const trackClips = clips.filter(c => c.trackId === trackId);
-    return trackClips.some(clip => {
-      const kfs = clipKeyframes.get(clip.id);
-      return kfs && kfs.length > 0;
-    });
+    return getTrackIdsWithKeyframes().has(trackId);
   },
 
   toggleCurveExpanded: (trackId, property) => {
@@ -125,4 +149,5 @@ export const createKeyframeViewStateActions: SliceCreator<KeyframeViewStateActio
   setCurveEditorHeight: (height) => {
     set({ curveEditorHeight: Math.round(Math.max(MIN_CURVE_EDITOR_HEIGHT, Math.min(MAX_CURVE_EDITOR_HEIGHT, height))) });
   },
-});
+  };
+};

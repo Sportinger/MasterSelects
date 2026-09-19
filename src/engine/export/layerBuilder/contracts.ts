@@ -11,9 +11,11 @@ import type { ClipTransform } from '../../../types/timelineCore';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
 import type { LightClipSettings } from '../../../types/light';
 import type { WebCodecsPlayer } from '../../WebCodecsPlayer';
+import type { RuntimeFrameProvider } from '../../../services/mediaRuntime/types';
 
 export interface ExportClipStateLike {
   clipId: string;
+  frameProvider?: RuntimeFrameProvider | null;
   webCodecsPlayer: WebCodecsPlayer | null;
   lastSampleIndex: number;
   isSequential: boolean;

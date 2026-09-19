@@ -76,6 +76,7 @@ export function createAudioRouteGraph(
   ctx: AudioContext,
   sourceNode: AudioNode,
 ): AudioRoute {
+  const cutGainNode = ctx.createGain();
   const gainNode = ctx.createGain();
   gainNode.gain.value = 1;
 
@@ -94,6 +95,7 @@ export function createAudioRouteGraph(
 
   return {
     sourceNode,
+    cutGainNode,
     gainNode,
     panNode,
     analyserNode,

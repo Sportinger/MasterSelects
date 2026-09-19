@@ -1,5 +1,4 @@
 // Layer drag logic: move/scale layers in edit mode with document-level listeners + overlay drawing
-
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
 import type { AnimatableProperty, Layer, TimelineClip, TimelineTrack } from '../../types';
@@ -22,25 +21,11 @@ import {
   resolveClipScaleFromLayerScale,
   type LayerTransformDragUpdate,
 } from './layerTransformDragCommit';
+import { shouldDeferLayerNudgeToFocusedControl } from './layerDragKeyboardFocus';
+import { resolveLayerHitCycle, type LayerHitCycleState } from './layerHitCycle';
+import { publishLayerTransformPreview } from './publishLayerTransformPreview';
 
 export { resolveClipScaleFromLayerScale } from './layerTransformDragCommit';
-
-const LAYER_NUDGE_OWNED_CONTROL_SELECTOR = [
-  'button',
-  'input',
-  'select',
-  'textarea',
-  '[contenteditable="true"]',
-  '[role="button"]',
-  '[role="slider"]',
-  '[role="spinbutton"]',
-  '[role="textbox"]',
-].join(',');
-
-/** Focused authoring controls own their arrow keys before viewport layer nudge. */
-export function shouldDeferLayerNudgeToFocusedControl(active: Element | null): boolean {
-  return Boolean(active?.closest(LAYER_NUDGE_OWNED_CONTROL_SELECTOR));
-}
 
 interface UseLayerDragParams {
   editMode: boolean;
@@ -63,7 +48,7 @@ interface UseLayerDragParams {
   ) => void;
   updateLayer: (layerId: string, updates: Partial<Layer>) => void;
   calculateLayerBounds: (layer: Layer, canvasW: number, canvasH: number, forcePos?: { x: number; y: number }) => LayerOverlayBounds;
-  findLayerAtPosition: (containerX: number, containerY: number) => Layer | null;
+  findLayersAtPosition: (containerX: number, containerY: number) => Layer[];
   findHandleAtPosition: (containerX: number, containerY: number, layer: Layer) => string | null;
 }
 
@@ -88,8 +73,7 @@ function findClipForLayer(clips: TimelineClip[], layer: Layer): TimelineClip | u
 }
 
 function isClipOnLockedTrack(clip: TimelineClip | undefined, tracks: TimelineTrack[]): boolean {
-  if (!clip) return false;
-  return tracks.find((track) => track.id === clip.trackId)?.locked === true;
+  return Boolean(clip && tracks.find((track) => track.id === clip.trackId)?.locked === true);
 }
 
 interface MovePositionBasis {
@@ -151,7 +135,7 @@ export function useLayerDrag({
   updateClipTransform,
   updateLayer,
   calculateLayerBounds,
-  findLayerAtPosition,
+  findLayersAtPosition,
   findHandleAtPosition,
 }: UseLayerDragParams) {
   const [isDragging, setIsDragging] = useState(false);
@@ -172,6 +156,7 @@ export function useLayerDrag({
   const pendingDragUpdate = useRef<LayerTransformDragUpdate | null>(null);
   const lastAppliedDragUpdate = useRef<LayerTransformDragUpdate | null>(null);
   const dragUpdateFrame = useRef<number | null>(null);
+  const layerHitCycleRef = useRef<LayerHitCycleState | null>(null);
 
   useEffect(() => {
     layersRef.current = layers;
@@ -221,13 +206,7 @@ export function useLayerDrag({
     const transform = pending.mode === 'move'
       ? { position: pending.position }
       : { scale: resolveClipScaleFromLayerScale(pending.scale, clip.transform.scale) };
-    useTimelineStore.setState({
-      layerTransformPreview: {
-        ownerId: previewOwnerId,
-        clipId: clip.id,
-        transform,
-      },
-    });
+    publishLayerTransformPreview(previewOwnerId, clip.id, transform);
     setDragPreviewRevision((revision) => revision + 1);
   }, [clearOwnedTransformPreview, previewOwnerId, updateLayer]);
 
@@ -467,7 +446,14 @@ export function useLayerDrag({
       }
     }
 
-    const layer = findLayerAtPosition(x, y);
+    const hit = resolveLayerHitCycle({
+      layers: findLayersAtPosition(x, y),
+      point: { x, y },
+      previous: layerHitCycleRef.current,
+      timestamp: performance.now(),
+    });
+    layerHitCycleRef.current = hit.state;
+    const layer = hit.layer;
 
     if (layer) {
       const clip = findClipForLayer(clips, layer);
@@ -508,7 +494,7 @@ export function useLayerDrag({
       selectLayer(null);
       movePositionBasis.current = null;
     }
-  }, [editMode, findLayerAtPosition, findHandleAtPosition, clips, layers, selectedLayerId, selectClip, selectLayer, calculateLayerBounds, canvasSize, clearOwnedTransformPreview, overlayRef]);
+  }, [editMode, findLayersAtPosition, findHandleAtPosition, clips, layers, selectedLayerId, selectClip, selectLayer, calculateLayerBounds, canvasSize, clearOwnedTransformPreview, overlayRef]);
 
   // Handle mouse move on overlay — detect handle hover
   const handleOverlayMouseMove = useCallback((e: React.MouseEvent) => {
@@ -550,6 +536,7 @@ export function useLayerDrag({
 
       const dx = e.clientX - dragStart.current.x;
       const dy = e.clientY - dragStart.current.y;
+      if (Math.hypot(dx, dy) > 5) layerHitCycleRef.current = null;
 
       if (dragMode === 'scale' && dragHandle) {
         const originalScaleX = dragStart.current.layerScaleX;

@@ -1,4 +1,4 @@
-import type { RefObject } from 'react';
+import { Fragment, type RefObject } from 'react';
 
 import type { DockDragState, DockPanel, DockTabGroup, HoveredDockTabTarget } from '../../../types/dock';
 import { WIP_PANEL_TYPES } from '../../../types/dock';
@@ -43,18 +43,21 @@ interface DockTabStripProps {
   addMenuOpen: boolean;
   onTabBarMouseDown: (event: React.MouseEvent) => void;
   onTabBarContextMenu: (event: React.MouseEvent) => void;
-  onTimelineHandleMouseDown: (event: React.MouseEvent) => void;
-  onTimelineHandleMouseUp: () => void;
-  onTimelineHandleMouseLeave: () => void;
+  onTimelineHandlePointerDown: (event: React.PointerEvent) => void;
+  onTimelineHandleContextMenu: (event: React.MouseEvent) => void;
+  onTimelineHandlePointerUp: () => void;
+  onTimelineHandlePointerLeave: () => void;
   onCompositionClick: (compositionId: string) => void;
   onCompositionClose: (compositionId: string, event: React.MouseEvent) => void;
   onCompositionTabMouseEnter: (compositionId: string) => void;
   onCompositionTabMouseLeave: () => void;
   compositionTabHandlers: CompositionTabHandlers;
   onTabClick: (index: number) => void;
-  onTabMouseDown: (event: React.MouseEvent, panel: DockPanel, index: number) => void;
+  onTabPointerDown: (event: React.PointerEvent, panel: DockPanel, index: number) => void;
   onTabContextMenu: (event: React.MouseEvent, panel: DockPanel, index: number) => void;
-  onTabMouseUp: () => void;
+  onTabPointerUp: (event: React.PointerEvent, panel: DockPanel, index: number) => void;
+  onTabPointerLeave: (event: React.PointerEvent) => void;
+  onTabPointerCancel: (event: React.PointerEvent) => void;
   onPanelTabMouseEnter: (panel: DockPanel) => void;
   onPanelTabMouseLeave: (panelId: string) => void;
   onAddButtonClick: (event: React.MouseEvent) => void;
@@ -98,29 +101,45 @@ export function DockTabStrip({
   addMenuOpen,
   onTabBarMouseDown,
   onTabBarContextMenu,
-  onTimelineHandleMouseDown,
-  onTimelineHandleMouseUp,
-  onTimelineHandleMouseLeave,
+  onTimelineHandlePointerDown,
+  onTimelineHandleContextMenu,
+  onTimelineHandlePointerUp,
+  onTimelineHandlePointerLeave,
   onCompositionClick,
   onCompositionClose,
   onCompositionTabMouseEnter,
   onCompositionTabMouseLeave,
   compositionTabHandlers,
   onTabClick,
-  onTabMouseDown,
+  onTabPointerDown,
   onTabContextMenu,
-  onTabMouseUp,
+  onTabPointerUp,
+  onTabPointerLeave,
+  onTabPointerCancel,
   onPanelTabMouseEnter,
   onPanelTabMouseLeave,
   onAddButtonClick,
 }: DockTabStripProps) {
   const showCompositionTabs = hasTimelinePanel && openCompositions.length > 0 && slotGridProgress < 1;
   const handleHoldClasses = getHoldClasses('timeline-handle', holdingTabId, holdProgress);
+  const placeAddButtonAfterActiveTab = group.id === 'mobile-v-tools-group';
+  const addPanelButton = !hasTimelinePanel ? (
+    <button
+      className={`dock-tab-add ${addMenuOpen ? 'is-open' : ''}`}
+      type="button"
+      title="Add panel"
+      aria-label="Add panel"
+      onClick={onAddButtonClick}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      +
+    </button>
+  ) : null;
 
   return (
     <div
       ref={tabBarRef}
-      className={`dock-tab-bar ${isMiddleDragging ? 'middle-dragging' : ''} ${groupContainsMaximizedPanel ? 'is-maximized-bar' : ''}`}
+      className={`dock-tab-bar ${!hasTimelinePanel ? 'has-add-panel' : ''} ${isMiddleDragging ? 'middle-dragging' : ''} ${groupContainsMaximizedPanel ? 'is-maximized-bar' : ''}`}
       role="tablist"
       aria-label="Panel tabs"
       data-guided-target={`pane-tabs:${group.id}`}
@@ -135,9 +154,10 @@ export function DockTabStrip({
             <div
               className={`dock-tab-handle ${handleHoldClasses.isHolding ? 'hold-glow' : ''} ${handleHoldClasses.isReady ? 'hold-ready' : ''} ${handleHoldClasses.isFading ? 'hold-fade' : ''}`}
               title="Hold to reposition panel"
-              onMouseDown={onTimelineHandleMouseDown}
-              onMouseUp={onTimelineHandleMouseUp}
-              onMouseLeave={onTimelineHandleMouseLeave}
+              onPointerDown={onTimelineHandlePointerDown}
+              onContextMenu={onTimelineHandleContextMenu}
+              onPointerUp={onTimelineHandlePointerUp}
+              onPointerLeave={onTimelineHandlePointerLeave}
             >
               &#8942;&#8942;
             </div>
@@ -186,47 +206,40 @@ export function DockTabStrip({
           });
 
           return (
-            <div
-              key={panel.id}
-              className={`dock-tab ${index === group.activeIndex ? 'active' : ''} ${
-                isDragging ? 'dragging' : ''
-              } ${holdClasses.isHolding ? 'hold-glow' : ''} ${holdClasses.isReady ? 'hold-ready' : ''} ${holdClasses.isFading ? 'hold-fade' : ''} ${
-                hoveredPanelId === panel.id ? 'shortcut-hover' : ''
-              } ${maximizedPanelId === panel.id ? 'maximized-target' : ''}`}
-              role="tab"
-              aria-selected={index === group.activeIndex}
-              onClick={() => onTabClick(index)}
-              onMouseDown={(event) => onTabMouseDown(event, panel, index)}
-              onContextMenu={(event) => onTabContextMenu(event, panel, index)}
-              onMouseUp={onTabMouseUp}
-              onMouseEnter={() => onPanelTabMouseEnter(panel)}
-              onMouseLeave={() => onPanelTabMouseLeave(panel.id)}
-              title={tabTooltip}
-              data-guided-panel-tab={panel.type}
-              data-guided-target={`panel-tab:${panel.type}`}
-              data-dock-layout-anim-id={`panel:${panel.id}`}
-              data-dock-layout-anim-title={panel.title}
-            >
-              <span className="dock-tab-title">
-                {tabTitle}
-                {WIP_PANEL_TYPES.includes(panel.type) && <span className="menu-wip-badge">{'\uD83D\uDC1B'}</span>}
-              </span>
-            </div>
+            <Fragment key={panel.id}>
+              <div
+                className={`dock-tab ${index === group.activeIndex ? 'active' : ''} ${
+                  isDragging ? 'dragging' : ''
+                } ${holdClasses.isHolding ? 'hold-glow' : ''} ${holdClasses.isReady ? 'hold-ready' : ''} ${holdClasses.isFading ? 'hold-fade' : ''} ${
+                  hoveredPanelId === panel.id ? 'shortcut-hover' : ''
+                } ${maximizedPanelId === panel.id ? 'maximized-target' : ''}`}
+                role="tab"
+                aria-selected={index === group.activeIndex}
+                onClick={() => onTabClick(index)}
+                onPointerDown={(event) => onTabPointerDown(event, panel, index)}
+                onContextMenu={(event) => onTabContextMenu(event, panel, index)}
+                onPointerUp={(event) => onTabPointerUp(event, panel, index)}
+                onPointerLeave={onTabPointerLeave}
+                onPointerCancel={onTabPointerCancel}
+                onMouseEnter={() => onPanelTabMouseEnter(panel)}
+                onMouseLeave={() => onPanelTabMouseLeave(panel.id)}
+                title={tabTooltip}
+                data-guided-panel-tab={panel.type}
+                data-guided-target={`panel-tab:${panel.type}`}
+                data-dock-layout-anim-id={`panel:${panel.id}`}
+                data-dock-layout-anim-title={panel.title}
+              >
+                <span className="dock-tab-title">
+                  {tabTitle}
+                  {WIP_PANEL_TYPES.includes(panel.type) && <span className="menu-wip-badge">{'\uD83D\uDC1B'}</span>}
+                </span>
+              </div>
+              {placeAddButtonAfterActiveTab && index === group.activeIndex && addPanelButton}
+            </Fragment>
           );
         })
       )}
-      {!hasTimelinePanel && (
-        <button
-          className={`dock-tab-add ${addMenuOpen ? 'is-open' : ''}`}
-          type="button"
-          title="Add panel"
-          aria-label="Add panel"
-          onClick={onAddButtonClick}
-          onMouseDown={(event) => event.stopPropagation()}
-        >
-          +
-        </button>
-      )}
+      {!placeAddButtonAfterActiveTab && addPanelButton}
     </div>
   );
 }

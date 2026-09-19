@@ -574,4 +574,4 @@ export const useMediaStore = create<MediaStoreState>()(
 import './init';
 
 // Export trigger for external use
-export { triggerTimelineSave } from './init';
+export { establishTimelineCompositionSaveBaseline, triggerTimelineSave } from './init';

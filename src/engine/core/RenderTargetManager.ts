@@ -20,8 +20,10 @@ export class RenderTargetManager {
   // Effect pre-processing temp textures (for applying effects to source before compositing)
   private effectTempTexture: GPUTexture | null = null;
   private effectTempTexture2: GPUTexture | null = null;
+  private effectCompareTexture: GPUTexture | null = null;
   private effectTempView: GPUTextureView | null = null;
   private effectTempView2: GPUTextureView | null = null;
+  private effectCompareView: GPUTextureView | null = null;
 
   private outputWidth = 640;
   private outputHeight = 360;
@@ -48,8 +50,10 @@ export class RenderTargetManager {
     this.independentPongView = null;
     this.effectTempTexture = null;
     this.effectTempTexture2 = null;
+    this.effectCompareTexture = null;
     this.effectTempView = null;
     this.effectTempView2 = null;
+    this.effectCompareView = null;
 
     log.info(`Creating ping-pong textures at ${this.outputWidth}x${this.outputHeight}`);
 
@@ -59,14 +63,14 @@ export class RenderTargetManager {
       this.pingTexture = this.device.createTexture({
         size: [this.outputWidth, this.outputHeight],
         format: 'rgba8unorm',
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING,
       });
 
       log.debug('Creating pong texture...');
       this.pongTexture = this.device.createTexture({
         size: [this.outputWidth, this.outputHeight],
         format: 'rgba8unorm',
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING,
       });
 
       // Independent preview ping-pong buffers
@@ -89,10 +93,17 @@ export class RenderTargetManager {
       this.effectTempTexture = this.device.createTexture({
         size: [this.outputWidth, this.outputHeight],
         format: 'rgba8unorm',
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING,
       });
 
       this.effectTempTexture2 = this.device.createTexture({
+        size: [this.outputWidth, this.outputHeight],
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING,
+      });
+
+      this.effectCompareTexture = this.device.createTexture({
+        label: 'effect-split-compare-target',
         size: [this.outputWidth, this.outputHeight],
         format: 'rgba8unorm',
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
@@ -110,6 +121,9 @@ export class RenderTargetManager {
       if (this.effectTempTexture && this.effectTempTexture2) {
         this.effectTempView = this.effectTempTexture.createView();
         this.effectTempView2 = this.effectTempTexture2.createView();
+      }
+      if (this.effectCompareTexture) {
+        this.effectCompareView = this.effectCompareTexture.createView();
       }
 
       log.info('Ping-pong textures created successfully');
@@ -161,6 +175,7 @@ export class RenderTargetManager {
   getEffectTempTexture2(): GPUTexture | null { return this.effectTempTexture2; }
   getEffectTempView(): GPUTextureView | null { return this.effectTempView; }
   getEffectTempView2(): GPUTextureView | null { return this.effectTempView2; }
+  getEffectCompareView(): GPUTextureView | null { return this.effectCompareView; }
 
   clearAll(): void {
     this.pingTexture = null;
@@ -174,8 +189,10 @@ export class RenderTargetManager {
     this.blackTexture = null;
     this.effectTempTexture = null;
     this.effectTempTexture2 = null;
+    this.effectCompareTexture = null;
     this.effectTempView = null;
     this.effectTempView2 = null;
+    this.effectCompareView = null;
   }
 
   destroy(): void {
@@ -186,6 +203,7 @@ export class RenderTargetManager {
     this.blackTexture?.destroy();
     this.effectTempTexture?.destroy();
     this.effectTempTexture2?.destroy();
+    this.effectCompareTexture?.destroy();
     this.clearAll();
   }
 }

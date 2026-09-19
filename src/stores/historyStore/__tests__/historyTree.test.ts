@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useHistoryStore } from '../index';
+import type { HistoryNode, StateSnapshot } from '../historyStoreTypes';
 
 const snapshot = (label: string, timestamp: number) => ({
   label, timestamp, timeline: {}, media: {}, dock: {}, flashboard: {}, export: {},
-}) as any;
-const hydrate = (nodes: Array<{ id: string; parentId: string | null; snapshot: any }>, activeNodeId: string) =>
+}) as StateSnapshot;
+const hydrate = (nodes: HistoryNode[], activeNodeId: string) =>
   useHistoryStore.getState().hydrateFromProject({ schemaVersion: 2, nodes, activeNodeId, lastVisitedChildByNodeId: {}, eventLog: [] });
 
 describe('history snapshot tree', () => {

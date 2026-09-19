@@ -5,6 +5,7 @@ import {
   HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST,
   HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION,
   HOSTED_AGENT_FAST_V2_MAX_START_BYTES,
+  HOSTED_AGENT_FAST_V2_MAX_TIMELINE_TRANSCRIPT_WORDS,
   HOSTED_AGENT_FAST_V2_MAXIMUM_ITERATIONS,
   HostedAgentFastV2ContractError,
   parseHostedAgentFastV2StartRequest,
@@ -41,6 +42,32 @@ function validStartRequest(): Record<string, unknown> {
 }
 
 describe('Fast Agent V2 browser start contract', () => {
+  it('pins the timeline transcript projection to 100,000 words', () => {
+    expect(HOSTED_AGENT_FAST_V2_MAX_TIMELINE_TRANSCRIPT_WORDS).toBe(100_000);
+
+    const accepted = validStartRequest();
+    accepted.compactSnapshot = {
+      ...(accepted.compactSnapshot as Record<string, unknown>),
+      payload: {
+        clips: [{
+          transcript: {
+            words: Array(HOSTED_AGENT_FAST_V2_MAX_TIMELINE_TRANSCRIPT_WORDS).fill(null),
+          },
+        }],
+      },
+    };
+    expect(parseHostedAgentFastV2StartRequest(accepted).compactSnapshot.timelineRevision)
+      .toBe(12);
+
+    const rejected = structuredClone(accepted);
+    const clips = ((rejected.compactSnapshot as Record<string, unknown>)
+      .payload as Record<string, unknown>).clips as Array<Record<string, unknown>>;
+    const transcript = clips[0]!.transcript as Record<string, unknown>;
+    (transcript.words as unknown[]).push(null);
+    expect(() => parseHostedAgentFastV2StartRequest(rejected))
+      .toThrow(HostedAgentFastV2ContractError);
+  });
+
   it('allows enough server-owned rounds for multi-stage editing workflows', () => {
     expect(HOSTED_AGENT_FAST_V2_MAXIMUM_ITERATIONS).toBe(24);
   });
@@ -64,27 +91,55 @@ describe('Fast Agent V2 browser start contract', () => {
     }
   });
 
-  it('preserves an optional explicit profile and resolves only its legacy omission to fast', () => {
+  it('accepts only the semantic Logic agent mode and keeps standard as omission', () => {
+    expect(parseHostedAgentFastV2StartRequest({
+      ...validStartRequest(),
+      requestedAgentMode: 'logic',
+    }).requestedAgentMode).toBe('logic');
+    expect(parseHostedAgentFastV2StartRequest(validStartRequest()).requestedAgentMode)
+      .toBeUndefined();
+
+    for (const requestedAgentMode of ['standard', 'codex', 'openai', '', null]) {
+      expect(() => parseHostedAgentFastV2StartRequest({
+        ...validStartRequest(),
+        requestedAgentMode,
+      })).toThrow(HostedAgentFastV2ContractError);
+    }
+  });
+
+  it('accepts only the Normal Path profile and resolves its legacy omission to fast', () => {
     const legacy = parseHostedAgentFastV2StartRequest(validStartRequest());
     expect(legacy.executionProfile).toBeUndefined();
     expect(resolveHostedAgentFastV2ExecutionProfile(legacy.executionProfile)).toBe('fast');
 
-    for (const executionProfile of ['fast', 'verified'] as const) {
-      const parsed = parseHostedAgentFastV2StartRequest({
-        ...validStartRequest(),
-        executionProfile,
-      });
-      expect(parsed.executionProfile).toBe(executionProfile);
-      expect(resolveHostedAgentFastV2ExecutionProfile(parsed.executionProfile))
-        .toBe(executionProfile);
-    }
+    const parsed = parseHostedAgentFastV2StartRequest({
+      ...validStartRequest(),
+      executionProfile: 'fast',
+    });
+    expect(parsed.executionProfile).toBe('fast');
+    expect(resolveHostedAgentFastV2ExecutionProfile(parsed.executionProfile)).toBe('fast');
 
-    for (const invalid of [null, '', 'quality', false]) {
+    for (const invalid of [null, '', 'quality', 'verified', false]) {
       expect(() => resolveHostedAgentFastV2ExecutionProfile(invalid))
         .toThrow(HostedAgentFastV2ContractError);
       expect(() => parseHostedAgentFastV2StartRequest({
         ...validStartRequest(),
         executionProfile: invalid,
+      })).toThrow(HostedAgentFastV2ContractError);
+    }
+  });
+
+  it('accepts only a bounded Seedance preproduction run binding', () => {
+    const preproductionRunId = 'seedance-preproduction-direct-edit-0001';
+    expect(parseHostedAgentFastV2StartRequest({
+      ...validStartRequest(),
+      preproductionRunId,
+    }).preproductionRunId).toBe(preproductionRunId);
+
+    for (const invalid of ['other-run-1', 'seedance-preproduction-short', '../seedance-run', '']) {
+      expect(() => parseHostedAgentFastV2StartRequest({
+        ...validStartRequest(),
+        preproductionRunId: invalid,
       })).toThrow(HostedAgentFastV2ContractError);
     }
   });
@@ -188,13 +243,12 @@ describe('Fast Agent V2 browser start contract', () => {
       .toHaveLength(2);
 
     const oversized = validStartRequest();
-    oversized.visualReferences = Array.from({ length: 8 }, (_, index) => ({
-      id: `large-reference-${index}`,
-      mediaType: 'image/png',
-      role: 'initial',
-      source: `data:image/png;base64,${String.fromCharCode(65 + index).repeat(1_100_000)}`,
-      transport: 'data-url',
-    }));
+    oversized.compactSnapshot = {
+      ...(oversized.compactSnapshot as Record<string, unknown>),
+      payload: {
+        largeBlocks: Array.from({ length: 504 }, () => 'A'.repeat(100_000)),
+      },
+    };
     expect(new TextEncoder().encode(JSON.stringify(oversized)).byteLength)
       .toBeGreaterThan(HOSTED_AGENT_FAST_V2_MAX_START_BYTES);
     expect(() => parseHostedAgentFastV2StartRequest(oversized))

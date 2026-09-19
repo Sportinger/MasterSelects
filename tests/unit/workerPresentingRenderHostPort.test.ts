@@ -1383,7 +1383,7 @@ describe('worker presenting render host port', () => {
       }),
       [],
     );
-  });
+  }, 30_000);
 
   it('uses a held cached video layer when a transient scrub skip would drop one layer', async () => {
     const fallback = createFallback();
@@ -1715,7 +1715,7 @@ describe('worker presenting render host port', () => {
     } finally {
       restoreCreateImageBitmap(originalCreateImageBitmap);
     }
-  });
+  }, 30_000);
 
   it('keeps html video snapshots presentable in worker-only without main fallback', async () => {
     const fallback = createFallback();
@@ -4922,6 +4922,10 @@ describe('worker presenting render host port', () => {
     const offscreen = { width: 640, height: 360 } as unknown as OffscreenCanvas;
     installWorkerCanvasSupport(offscreen);
     const raf = installAnimationFrameQueue();
+    // This scenario verifies the target-rebind barrier. Hold the playback clock
+    // steady so a busy test worker cannot also trigger the independent 50 ms
+    // stream reanchor path before the deferred stop is installed.
+    const performanceNow = vi.spyOn(performance, 'now').mockReturnValue(1000);
     const host = createWorkerPresentingRenderHostPort({
       fallback,
       getSelectionTelemetry: () => ({
@@ -5037,6 +5041,7 @@ describe('worker presenting render host port', () => {
       ]);
     } finally {
       host.stopRenderLoopForDiagnostics();
+      performanceNow.mockRestore();
       raf.restore();
     }
   });

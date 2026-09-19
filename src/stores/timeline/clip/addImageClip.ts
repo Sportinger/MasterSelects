@@ -68,7 +68,6 @@ export async function loadImageMedia(params: LoadImageMediaParams): Promise<void
 
   updateClip(clip.id, {
     source: { type: 'image', imageUrl, naturalDuration: clip.duration, mediaFileId },
-    transform: { ...DEFAULT_TRANSFORM },
     thumbnails,
     isLoading: false,
   });

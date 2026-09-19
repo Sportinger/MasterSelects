@@ -1,7 +1,5 @@
 import type { MediaSliceCreator } from '../../types';
 import { thumbnailCacheService } from '../../../../services/thumbnailCacheService';
-import { projectFileService } from '../../../../services/projectFileService';
-import { collectAudioAnalysisArtifactIdsFromRefs } from '../../../../services/audio/projectAudioState';
 import {
   collectTimelineAudioCacheRefsFromClips,
   invalidateTimelineMediaCaches,
@@ -96,11 +94,12 @@ export const createFileDeleteActions: MediaSliceCreator<Pick<
 
     const deletedIds = new Set(filesToDelete.map(file => file.id));
     const remainingFiles = get().files.filter(file => !deletedIds.has(file.id));
+    // Removing media from a project must never delete files from disk. This
+    // includes project-local RAW copies and generated project-folder artifacts;
+    // they are intentionally left in place so Media Panel deletion is always
+    // non-destructive outside the project model.
     const artifactFailures: string[] = [];
     for (const file of filesToDelete) {
-      const rawPathIsShared = Boolean(
-        file.projectPath && remainingFiles.some(remaining => remaining.projectPath === file.projectPath)
-      );
       const fileHashIsShared = Boolean(
         file.fileHash && remainingFiles.some(remaining => remaining.fileHash === file.fileHash)
       );
@@ -114,14 +113,6 @@ export const createFileDeleteActions: MediaSliceCreator<Pick<
         explicitAudioRefs: collectTimelineAudioCacheRefsFromClips(cacheClips),
         preserveSharedFileHashArtifacts: fileHashIsShared,
       });
-      const artifactResult = await projectFileService.deleteMediaFileArtifacts({
-        mediaId: file.id,
-        projectPath: rawPathIsShared ? undefined : file.projectPath,
-        fileHash: fileHashIsShared ? undefined : file.fileHash,
-        audioArtifactRefs: collectAudioAnalysisArtifactIdsFromRefs(file.audioAnalysisRefs),
-      });
-
-      artifactFailures.push(...artifactResult.failed);
       await cleanupIndexedDbMediaArtifacts(file, { deleteHashArtifacts: !fileHashIsShared });
       revokeMediaFileUrls(file);
     }

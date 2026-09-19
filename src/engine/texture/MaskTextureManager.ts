@@ -3,6 +3,7 @@
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('MaskTextureManager');
+const MAX_MASK_RASTER_CACHE_BYTES = 64 * 1024 * 1024;
 
 export class MaskTextureManager {
   private device: GPUDevice;
@@ -11,7 +12,12 @@ export class MaskTextureManager {
   private maskTextures: Map<string, GPUTexture> = new Map();
   private maskTextureViews: Map<string, GPUTextureView> = new Map();
   private maskTextureSizes: Map<string, { width: number; height: number }> = new Map();
+  private maskTextureVersions = new Map<string, string>();
+  private maskRasterCache = new Map<string, ImageData>();
+  private maskRasterCacheBytes = 0;
   private externalMaskTextureViews: Map<string, GPUTextureView> = new Map();
+  private frameScopedMaskTextureIds = new Set<string>();
+  private activeFrameScopedMaskTextureIds = new Set<string>();
   private lastMaskDebugLog: number | null = null;
 
   // Fallback mask texture (fully white = no masking)
@@ -87,6 +93,66 @@ export class MaskTextureManager {
     this.maskTextures.delete(layerId);
     this.maskTextureViews.delete(layerId);
     this.maskTextureSizes.delete(layerId);
+    this.maskTextureVersions.delete(layerId);
+    this.frameScopedMaskTextureIds.delete(layerId);
+    this.activeFrameScopedMaskTextureIds.delete(layerId);
+  }
+
+  /** Mark a nested-composition mask as safe to discard once its occurrence leaves a frame. */
+  markFrameScopedMaskTexture(layerId: string): void {
+    this.frameScopedMaskTextureIds.add(layerId);
+  }
+
+  hasMaskTextureVersion(layerId: string, version: string): boolean {
+    return this.maskTextureVersions.get(layerId) === version && this.hasMaskTexture(layerId);
+  }
+
+  setMaskTextureVersion(layerId: string, version: string): void {
+    this.maskTextureVersions.set(layerId, version);
+  }
+
+  /** Reuse CPU mask rasters across occurrence-scoped GPU texture lifetimes. */
+  getOrCreateMaskRaster(
+    version: string,
+    createRaster: () => ImageData | null,
+  ): ImageData | null {
+    const cached = this.maskRasterCache.get(version);
+    if (cached) {
+      // Refresh insertion order for byte-bounded LRU eviction.
+      this.maskRasterCache.delete(version);
+      this.maskRasterCache.set(version, cached);
+      return cached;
+    }
+
+    const raster = createRaster();
+    if (!raster) return null;
+
+    const rasterBytes = raster.data.byteLength;
+    if (rasterBytes > MAX_MASK_RASTER_CACHE_BYTES) return raster;
+
+    while (
+      this.maskRasterCacheBytes + rasterBytes > MAX_MASK_RASTER_CACHE_BYTES &&
+      this.maskRasterCache.size > 0
+    ) {
+      const oldestVersion = this.maskRasterCache.keys().next().value;
+      if (oldestVersion === undefined) break;
+      const oldestRaster = this.maskRasterCache.get(oldestVersion);
+      this.maskRasterCache.delete(oldestVersion);
+      this.maskRasterCacheBytes -= oldestRaster?.data.byteLength ?? 0;
+    }
+
+    this.maskRasterCache.set(version, raster);
+    this.maskRasterCacheBytes += rasterBytes;
+    return raster;
+  }
+
+  /** Release inactive nested masks after the frame using them has been submitted. */
+  cleanupPendingFrameScopedTextures(): void {
+    for (const layerId of Array.from(this.frameScopedMaskTextureIds)) {
+      if (this.activeFrameScopedMaskTextureIds.has(layerId)) continue;
+      this.removeMaskTexture(layerId);
+    }
+    this.activeFrameScopedMaskTextureIds.clear();
   }
 
   // Check if a layer has a mask texture
@@ -106,6 +172,9 @@ export class MaskTextureManager {
 
   // Get mask info in single lookup (avoids double Map access)
   getMaskInfo(layerId: string): { hasMask: boolean; view: GPUTextureView } {
+    if (this.frameScopedMaskTextureIds.has(layerId)) {
+      this.activeFrameScopedMaskTextureIds.add(layerId);
+    }
     const view = this.externalMaskTextureViews.get(layerId) ?? this.maskTextureViews.get(layerId);
     return view
       ? { hasMask: true, view }
@@ -136,7 +205,12 @@ export class MaskTextureManager {
     this.maskTextures.clear();
     this.maskTextureViews.clear();
     this.maskTextureSizes.clear();
+    this.maskTextureVersions.clear();
+    this.maskRasterCache.clear();
+    this.maskRasterCacheBytes = 0;
     this.externalMaskTextureViews.clear();
+    this.frameScopedMaskTextureIds.clear();
+    this.activeFrameScopedMaskTextureIds.clear();
   }
 
   destroy(): void {

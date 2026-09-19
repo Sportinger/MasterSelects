@@ -1,22 +1,184 @@
 # MasterSelects
 
-A browser-based video editor with a multitrack timeline, GPU-accelerated effects, audio tools, and local export.
+A media editor and an agent-friendly foundation for creative tools.
 
-**Try the actively developed version for free at [masterselects.com](https://www.masterselects.com/).**
+Edit video, mix audio, animate graphics, build 3D scenes, and work with live
+visuals. MasterSelects combines these workflows in a browser-based workspace
+with WebGPU rendering and a multitrack timeline.
 
-## Open-source edition
+When your project needs a tool that isn't there yet, you can have a coding agent
+build it into the editor while you work. Try the new effect, panel, or workflow
+in that same project, and refine it around the job in front of you.
 
-This repository contains the frozen open-source edition of MasterSelects (`v2.4.5-mit-final`). It is no longer under active development.
+[Open the editor](https://www.masterselects.com/) ·
+[Documentation](https://www.masterselects.com/docs/) ·
+[Discord](https://discord.com/invite/K8dApzG3XC) ·
+[Report an issue](https://github.com/Sportinger/MasterSelects/issues)
+
+![Face Cables in MasterSelects: face tracking, custom effect controls, and animated timeline keyframes](docs/images/screenshot-face-cables.png)
+
+*Face Cables: a custom face-tracking effect with cable physics, editable controls,
+and timeline keyframes.*
+
+## Why I built this
+
+No Adobe subscription, no patience for cracks, and no template-first online
+editor. I wanted a creative workspace I could make my own.
+
+AI should be able to do the edit, and help build the tool itself, right when you
+need it. A real project gives you a reason to build something and a place to
+try it immediately.
+
+<h3>I want people to contribute the useful things they build. An effect made for
+one person's project can become a tool someone else already has when they need
+it. As those contributions become part of MasterSelects, both people and their
+agents have more to work with, and the next task gets a little easier.</h3>
+
+Meanwhile, I'll keep a refined version available at
+[masterselects.com](https://www.masterselects.com/), reviewing and polishing
+contributions as I bring them together into a cohesive editor.
+
+## Build while you create
+
+Start the editor locally from source, open your project, and work from there:
+
+1. **Find the missing piece.** A task in your project calls for a new effect,
+   control, or workflow.
+2. **Build it with your agent.** Let your coding agent add it to the codebase
+   while you work on the project.
+3. **Use and refine it.** Try it in the same project and adjust it to what the
+   work actually needs.
+4. **Contribute it back.** Share useful additions so the next person, and their
+   agent, can build on them.
+
+See [Run locally](#run-locally) to get started.
+
+## An agent-friendly codebase
+
+The codebase gives coding agents concrete ways to find their bearings, extend
+existing systems, and check their work:
+
+- **A map of the project.** [AGENTS.md](AGENTS.md) documents architecture,
+  conventions, and verification workflows; the [feature docs](docs/Features/README.md)
+  explain how each part of the editor works.
+- **Reusable building blocks.** Registered effect modules, shared inspector
+  controls, typed tool schemas, and store slices give new features existing
+  patterns to build on.
+- **Access to the running editor.** The [local MCP bridge](docs/Features/AI-Bridge-Control.md)
+  lets agents inspect the timeline, operate tools, and examine results while
+  working on the source.
+- **Performance diagnostics.** When playback feels slow or laggy, agents can
+  sample frame timings, inspect main-thread work, decoder state, cache usage,
+  and audio drift, and read playback traces through the bridge. Repeatable
+  playback and scrub probes help reproduce a problem and compare changes.
+  See [playback debugging](docs/Features/Playback-Debugging.md).
+- **9,000+ automated test definitions.** The test suite includes editor behavior,
+  project state, tool policy, and architecture checks. Agents can run relevant
+  tests as they change the code.
+
+## Make the edit
+
+| Workspace | What you can do |
+| --- | --- |
+| **Video** | Edit multiple tracks, nest compositions, work with proxies, sync multicam footage, and import Premiere Pro sequences. |
+| **Color & effects** | Grade with curves and scopes, combine GPU effects and transitions, and animate masks and properties with keyframes. |
+| **Audio** | Edit waveforms and spectrograms, mix tracks with effects and sends, record audio, and separate stems. |
+| **Motion & tracking** | Animate text, shapes, Lottie, and Rive assets; create captions; track faces and surfaces; and attach graphics to tracked motion. |
+| **3D** | Combine footage with models, lights, cameras, and Gaussian splats in a shared scene. |
+| **AI** | Ask the editor to change the timeline, generate media, or use local transcription, segmentation, and depth estimation. |
+
+Arrange the dockable panels for the work at hand. Touch controls support editing
+on phones and tablets, and multiple preview outputs support live and installation
+workflows.
+
+Explore the [feature guide](docs/Features/README.md) for workflows and examples.
+
+## Try it
+
+Open [masterselects.com](https://www.masterselects.com/), import a clip, and drag it
+onto the timeline. Use **Space** to play, **C** to cut, and **Ctrl/Cmd+S** to save.
+See the [keyboard shortcuts](docs/Features/Keyboard-Shortcuts.md) for more.
+
+Use a recent browser with WebGPU support. Chrome or Edge on desktop is a good
+starting point. Available codecs, local file access, and performance depend on
+your browser, operating system, and GPU.
+
+Editing and rendering run locally. Hosted AI and media generation use external
+services and may require credits; local AI features may download models on first
+use. See [AI integration](docs/Features/AI-Integration.md) and
+[security and privacy boundaries](docs/Features/Security.md).
+
+MasterSelects is under active development. Keep backups of important projects.
+When reporting a problem, include your browser, operating system, and steps to
+reproduce it.
+
+## Media in, media out
+
+- **Import:** video, audio, images, Premiere Pro projects, Lottie and Rive
+  animation, OBJ/glTF/GLB models, and Gaussian splats.
+- **Export:** video through WebCodecs or FFmpeg, still frames, audio, and FCPXML
+  for interchange with other editors.
+- **Optional Native Helper:** adds local services such as downloads, additional
+  storage support, and AI sidecars.
+
+Codec support varies by platform; a file extension alone does not guarantee
+decoding. Details: [media import](docs/Features/Media-Panel.md),
+[export](docs/Features/Export.md), and
+[Native Helper setup](tools/native-helper/README.md).
 
 ## Run locally
 
+Install the Node.js version in [`.node-version`](.node-version), then:
+
 ```bash
-npm install
+git clone https://github.com/Sportinger/MasterSelects.git
+cd MasterSelects
+npm ci
 npm run dev
 ```
 
-Requires Chrome or Edge with WebGPU support.
+Open **http://localhost:5173**. This starts the browser editor. Hosted login,
+credits, and AI services are separate from this local setup.
+
+Maintainers with the service configuration and private kernel checkout can use
+`npm run dev:full` for the complete development stack. The private hosted kernel
+is maintained separately and is not included in this repository.
+
+External agents can connect to the running development editor through the local,
+authenticated MCP bridge:
+
+```bash
+npm run mcp
+```
+
+See [AI bridge control](docs/Features/AI-Bridge-Control.md) for setup and access
+boundaries.
+
+## Contribute
+
+An effect or tool you built for your own project could be useful to others.
+Send a focused pull request with a short example of what it does. For a larger
+feature, open an issue first to discuss how it fits the editor. Bug reports,
+reproducible examples, and documentation improvements are welcome too.
+
+The core stack is **React, TypeScript, Zustand, WebGPU, and WebCodecs**. Start with
+`src/components/` for the UI, `src/stores/` for editor state, `src/engine/` for
+rendering and export, and `src/services/` for media and integrations.
+
+Read [AGENTS.md](AGENTS.md) for repository conventions. Keep feature documentation
+alongside behavior changes and run checks relevant to the files you change:
+
+```bash
+npx vitest run tests/unit/<relevant-file>.test.ts
+npm run build
+```
 
 ## License
 
-MIT
+MasterSelects is licensed under the **GNU Affero General Public License v3.0 only
+(AGPL-3.0-only)**. Commercial use is permitted under its terms. Distribution and
+network use of modified versions carry source-sharing obligations; videos and
+other ordinary media you create with the editor do not inherit its license.
+
+See [LICENSE](LICENSE) for the full terms, [LICENSING.md](LICENSING.md) for scope,
+and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for component notices.

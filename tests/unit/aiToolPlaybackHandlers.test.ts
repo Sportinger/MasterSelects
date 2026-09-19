@@ -54,6 +54,7 @@ describe('AI simulatePlayback handler', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     const debugEngine = engine as unknown as {
@@ -132,15 +133,21 @@ describe('AI simulatePlayback handler', () => {
   });
 
   it('samples playback with timers instead of depending on debug-handler RAF cadence', async () => {
+    // Advance the sampling clock deterministically: suite contention must not
+    // turn the requested 100 ms run into one delayed timer callback.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
     vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1));
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
     const store = makePlaybackStore();
 
-    const result = await handleSimulatePlayback({
+    const pending = handleSimulatePlayback({
       durationMs: 100,
       settleMs: 0,
       resetDiagnostics: false,
     }, store as unknown as ReturnType<typeof useTimelineStore.getState>);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    const result = await pending;
 
     expect(result.success).toBe(true);
     const data = result.data as {

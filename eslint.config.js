@@ -9,6 +9,7 @@ export default defineConfig([
   globalIgnores([
     'dist',
     'docs-site/.astro/**',
+    '.codex-tmp/**',
     '.codex-ref/**',
     'public/gaussian-splat/**',
   ]),

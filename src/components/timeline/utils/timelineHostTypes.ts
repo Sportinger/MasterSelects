@@ -15,7 +15,7 @@ export type SectionScrollGestureState = {
   viewportHeight: number;
 };
 
-export type KeyframeAreaRevealSnapshot = {
+export type SelectedTrackRevealSnapshot = {
   clipId: string;
   trackId: string;
   sectionKind: TrackSectionKind;
@@ -24,8 +24,8 @@ export type KeyframeAreaRevealSnapshot = {
   trackHeight: number;
   contentHeight: number;
   viewportHeight: number;
-  keyframeAreaTop: number;
-  keyframeAreaBottom: number;
+  trackTop: number;
+  trackBottom: number;
 };
 
 export type TrackResizeDragState = {

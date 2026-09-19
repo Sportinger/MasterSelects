@@ -30,19 +30,25 @@ function drawCanvasWaveformCenterLine(
   ctx.stroke();
 }
 
-function drawDetailedCanvasWaveform(ctx: CanvasRenderingContext2D, columns: WaveformColumn[], width: number, height: number): void {
+function drawDetailedCanvasWaveform(
+  ctx: CanvasRenderingContext2D,
+  columns: WaveformColumn[],
+  width: number,
+  height: number,
+  resolveStyle = false,
+): void {
   const gradient = ctx.createLinearGradient(0, 0, 0, height);
-  gradient.addColorStop(0, 'rgba(216, 230, 240, 0.10)');
-  gradient.addColorStop(0.5, 'rgba(224, 238, 248, 0.22)');
-  gradient.addColorStop(1, 'rgba(216, 230, 240, 0.10)');
+  gradient.addColorStop(0, resolveStyle ? 'rgba(246, 242, 224, 0.28)' : 'rgba(216, 230, 240, 0.10)');
+  gradient.addColorStop(0.5, resolveStyle ? 'rgba(250, 247, 232, 0.72)' : 'rgba(224, 238, 248, 0.22)');
+  gradient.addColorStop(1, resolveStyle ? 'rgba(246, 242, 224, 0.28)' : 'rgba(216, 230, 240, 0.10)');
   buildCanvasSignedEnvelopePath(ctx, columns, width, height, 0.01, 0.82);
   ctx.fillStyle = gradient;
   ctx.fill();
 
   const rmsGradient = ctx.createLinearGradient(0, 0, 0, height);
-  rmsGradient.addColorStop(0, 'rgba(92, 203, 255, 0.18)');
-  rmsGradient.addColorStop(0.5, 'rgba(178, 230, 255, 0.44)');
-  rmsGradient.addColorStop(1, 'rgba(92, 203, 255, 0.18)');
+  rmsGradient.addColorStop(0, resolveStyle ? 'rgba(238, 244, 224, 0.34)' : 'rgba(92, 203, 255, 0.18)');
+  rmsGradient.addColorStop(0.5, resolveStyle ? 'rgba(250, 248, 235, 0.88)' : 'rgba(178, 230, 255, 0.44)');
+  rmsGradient.addColorStop(1, resolveStyle ? 'rgba(238, 244, 224, 0.34)' : 'rgba(92, 203, 255, 0.18)');
   buildCanvasSmoothEnvelopePath(ctx, columns, width, height, (column) => Math.min(column.rms * 0.84, column.peak * 0.72));
   ctx.fillStyle = rmsGradient;
   ctx.fill();
@@ -51,9 +57,15 @@ function drawDetailedCanvasWaveform(ctx: CanvasRenderingContext2D, columns: Wave
   drawTransientPeakSpikes(ctx, columns.length, (index) => columns[index], width, height);
 }
 
-function drawCompactCanvasWaveform(ctx: CanvasRenderingContext2D, columns: WaveformColumn[], width: number, height: number): void {
+function drawCompactCanvasWaveform(
+  ctx: CanvasRenderingContext2D,
+  columns: WaveformColumn[],
+  width: number,
+  height: number,
+  resolveStyle = false,
+): void {
   buildCanvasSignedEnvelopePath(ctx, columns, width, height, 0.08);
-  ctx.fillStyle = 'rgba(235, 241, 248, 0.62)';
+  ctx.fillStyle = resolveStyle ? 'rgba(250, 248, 235, 0.82)' : 'rgba(235, 241, 248, 0.62)';
   ctx.fill();
   drawCanvasWaveformCenterLine(ctx, width, height, 0.12);
 }
@@ -68,6 +80,7 @@ export function drawTimelineClipCanvasAudioWaveform(
   h: number,
   mode: TimelineAudioDisplayMode,
   pixelsPerSecond: number,
+  resolveStyle = false,
 ): void {
   const channels = clip.waveformChannels?.filter(channel => channel.length > 0);
   const fallback = clip.waveform && clip.waveform.length > 0 ? [clip.waveform] : [];
@@ -78,7 +91,11 @@ export function drawTimelineClipCanvasAudioWaveform(
   ctx.beginPath();
   ctx.roundRect(x, top, w, h, Math.min(4, h / 4));
   ctx.clip();
-  ctx.fillStyle = mode === 'spectral' ? 'rgba(8, 14, 24, 0.44)' : 'rgba(4, 10, 18, 0.22)';
+  ctx.fillStyle = mode === 'spectral'
+    ? 'rgba(8, 14, 24, 0.44)'
+    : resolveStyle
+      ? 'rgba(0, 0, 0, 0.07)'
+      : 'rgba(4, 10, 18, 0.22)';
   ctx.fillRect(x, top, w, h);
 
   if (!hasDrawableWaveform || w < 2) {
@@ -149,9 +166,9 @@ export function drawTimelineClipCanvasAudioWaveform(
     ctx.save();
     ctx.translate(0, laneTop);
     if (mode === 'compact') {
-      drawCompactCanvasWaveform(ctx, normalized, w, laneHeight);
+      drawCompactCanvasWaveform(ctx, normalized, w, laneHeight, resolveStyle);
     } else {
-      drawDetailedCanvasWaveform(ctx, normalized, w, laneHeight);
+      drawDetailedCanvasWaveform(ctx, normalized, w, laneHeight, resolveStyle);
     }
     ctx.restore();
   });

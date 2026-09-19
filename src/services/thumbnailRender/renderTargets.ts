@@ -87,7 +87,10 @@ export class ThumbnailRenderTargets {
     this.effectTempTexture2?.destroy();
 
     const { device } = resources;
-    const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC;
+    const usage = GPUTextureUsage.RENDER_ATTACHMENT
+      | GPUTextureUsage.TEXTURE_BINDING
+      | GPUTextureUsage.COPY_SRC
+      | GPUTextureUsage.STORAGE_BINDING;
 
     this.pingTexture = device.createTexture({
       size: { width, height },

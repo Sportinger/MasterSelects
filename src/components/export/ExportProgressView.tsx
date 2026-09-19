@@ -25,7 +25,7 @@ export function ExportProgressView({
   formatTime,
   onCancel,
 }: ExportProgressViewProps) {
-  const progressPercent = (encoder === 'webcodecs' || encoder === 'htmlvideo')
+  const progressPercent = (encoder === 'webcodecs' || encoder === 'htmlvideo' || encoder === 'hap')
     ? (progress?.percent ?? 0)
     : (ffmpegProgress?.percent ?? 0);
 

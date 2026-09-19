@@ -3,6 +3,7 @@ import * as fc from 'fast-check';
 import type { AnimatableProperty, ClipTransform } from '../../src/types';
 import { createTestTimelineStore } from '../helpers/storeFactory';
 import { createMockClip } from '../helpers/mockData';
+import { normalizeTimelinePropertyValue } from '../../src/stores/timeline/keyframes/keyframePropertyValue';
 
 const propertyOptions = { numRuns: 100, seed: 0x4b465002 };
 const durationValue = fc.double({ min: 0.001, max: 10_000, noNaN: true, noDefaultInfinity: true });
@@ -156,9 +157,10 @@ describe('keyframeSlice properties', () => {
         store.getState().setPropertyValue('clip-1', property, value);
 
         const keyframes = store.getState().clipKeyframes.get('clip-1') ?? [];
+        const expectedValue = normalizeTimelinePropertyValue(property, value);
         expect(keyframes).toHaveLength(1);
         expect(keyframes[0].property).toBe(property);
-        expect(keyframes[0].value).toBe(value);
+        expect(keyframes[0].value).toBe(expectedValue);
         expect(keyframes[0].time).toBeCloseTo(clampTime(playheadPosition, duration));
         expectFiniteKeyframeValues(keyframes.map(keyframe => keyframe.value));
       }),
@@ -176,8 +178,9 @@ describe('keyframeSlice properties', () => {
 
         const keyframes = (store.getState().clipKeyframes.get('clip-1') ?? [])
           .filter(keyframe => keyframe.property === property);
+        const expectedValue = normalizeTimelinePropertyValue(property, nextValue);
         expect(keyframes.length).toBeGreaterThanOrEqual(1);
-        expect(keyframes.some(keyframe => keyframe.value === nextValue)).toBe(true);
+        expect(keyframes.some(keyframe => keyframe.value === expectedValue)).toBe(true);
         expect(keyframes.every(keyframe => keyframe.time >= 0 && keyframe.time <= duration)).toBe(true);
         expectFiniteKeyframeValues(keyframes.map(keyframe => keyframe.value));
       }),
@@ -196,7 +199,9 @@ describe('keyframeSlice properties', () => {
         const remaining = store.getState().clipKeyframes.get('clip-1') ?? [];
         expect(remaining.some(keyframe => keyframe.property === property)).toBe(false);
         const clip = store.getState().clips.find(candidate => candidate.id === 'clip-1')!;
-        expect(getTransformValue(clip.transform, property)).toBe(currentValue);
+        expect(getTransformValue(clip.transform, property)).toBe(
+          normalizeTimelinePropertyValue(property, currentValue),
+        );
         expect(store.getState().isRecording('clip-1', property)).toBe(false);
       }),
       propertyOptions,

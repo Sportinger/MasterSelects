@@ -51,9 +51,12 @@ function artifactStoreAdapter(store: ArtifactStore): AgentTimelineArtifactStore 
  */
 export function createProjectAgentTimelineArtifactStore(): AgentTimelineArtifactStore {
   const projectHandle = projectFileService.getProjectHandle();
-  return artifactStoreAdapter(projectHandle
-    ? artifactService.createStore(projectHandle)
-    : artifactService.createIndexedDBStore());
+  const packageSession = projectFileService.getProjectPackageSession();
+  return artifactStoreAdapter(packageSession
+    ? artifactService.createPackageStore(packageSession)
+    : projectHandle
+      ? artifactService.createStore(projectHandle)
+      : artifactService.createIndexedDBStore());
 }
 
 async function sha256Hex(value: string): Promise<string> {
@@ -133,12 +136,13 @@ export class BrowserManifestPointerStore implements AgentTimelineManifestPointer
  */
 export function createProjectAgentTimelineStorage(): AgentTimelineArtifactStorage {
   const projectHandle = projectFileService.getProjectHandle();
+  const packageSession = projectFileService.getProjectPackageSession();
   const project = projectFileService.getProjectData();
   const projectNamespace = project
     ? `${project.createdAt}:${project.name}`
     : projectFileService.getProjectPath() ?? 'unattached';
   const artifacts = createProjectAgentTimelineArtifactStore();
-  const pointers = projectHandle
+  const pointers = projectHandle || packageSession
     ? new ProjectFileManifestPointerStore()
     : new BrowserManifestPointerStore(globalThis.localStorage, projectNamespace);
   return new AgentTimelineArtifactStorage({ artifacts, pointers });

@@ -294,7 +294,7 @@ export class AudioTrackSyncManager {
 
       const timeInfo = getClipTimeInfo(ctx, clip);
       const routeSettings = getClipAudioRouteSettings(ctx, clip, track, timeInfo.clipLocalTime, timeInfo.clipTime);
-      const editPreviewVolume = getClipAudioEditPreviewVolumeMultiplier(clip, timeInfo.clipTime, regionGainPreview);
+      const editPreviewVolume = getClipAudioEditPreviewVolumeMultiplier(clip, timeInfo.clipTime, regionGainPreview, ctx.isPlaying && !ctx.isDraggingPlayhead);
       const effectiveVolume = routeSettings.volume * editPreviewVolume;
       const trackMuted = !ctx.unmutedAudioTrackIds.has(track.id) || routeSettings.muted || effectiveVolume <= 0.01;
       const stemSeparation = clip.audioState?.stemSeparation;

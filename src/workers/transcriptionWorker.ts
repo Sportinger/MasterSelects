@@ -2,6 +2,7 @@
 // Runs Whisper model in background thread to avoid UI blocking
 
 import { pipeline as transformersPipeline, env } from '@huggingface/transformers';
+import { buildWhisperTaskOptions } from '../services/transcription/whisperTaskOptions';
 
 // Configure environment
 env.allowLocalModels = false;
@@ -151,8 +152,6 @@ async function transcribe(
   const allWords: TranscriptWord[] = [];
   let wordIndex = 0;
 
-  const isEnglishOnly = language === 'en';
-  const isAutoDetect = language === 'auto';
   let failedSegments = 0;
   let lastSegmentError: unknown = null;
 
@@ -175,10 +174,11 @@ async function transcribe(
         condition_on_previous_text: false,
         compression_ratio_threshold: 2.4,
         logprob_threshold: -1.0,
-        // Auto-detect: don't pass language so Whisper detects it
+        // Always transcribe in the spoken language; never translate to English.
+        // Auto-detect: don't pass language so Whisper detects it.
         // English-only model: no language needed
         // Other languages: pass explicitly
-        ...(isEnglishOnly || isAutoDetect ? {} : { language, task: 'transcribe' }),
+        ...buildWhisperTaskOptions(language),
       });
 
       const chunks: TranscriptChunk[] = result.chunks || [];
@@ -266,6 +266,21 @@ async function transcribe(
 // Handle messages from main thread
 self.onmessage = async (event) => {
   const { type, audioData, language, audioDuration } = event.data;
+
+  if (type === 'load') {
+    try {
+      await loadModel(language, (progress, message) => {
+        self.postMessage({ type: 'progress', progress, message });
+      });
+      self.postMessage({ type: 'ready' });
+    } catch (error) {
+      self.postMessage({
+        type: 'error',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+    return;
+  }
 
   if (type === 'transcribe') {
     try {

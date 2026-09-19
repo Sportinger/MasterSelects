@@ -80,8 +80,12 @@ export function CreditBurnMeter() {
     creditBalance,
     creditMeterReference,
     openAccountDialog,
+    statusLabel,
     userId,
   } = useAccountStore(useShallow((state) => ({
+    statusLabel: state.session?.authenticated
+      ? state.user?.displayName || state.user?.email?.split('@')[0] || 'Account'
+      : state.billingSummary?.plan.label || 'Free',
     creditBalance: state.creditBalance,
     creditMeterReference: state.creditMeterReference,
     openAccountDialog: state.openAccountDialog,
@@ -108,24 +112,12 @@ export function CreditBurnMeter() {
     ? Math.max(0, Math.min(1, creditBalance / effectiveReference))
     : 0;
   const level = reserveRatio <= 0.1 ? 'critical' : reserveRatio <= 0.25 ? 'low' : 'normal';
-  const terminalVisible = !isActive && terminalSummary !== null;
-  const shownSpend = isActive ? sessionConfirmedCredits : terminalSummary?.credits ?? 0;
-  const positiveCue = activeSettlement && activeSettlement.kind !== 'debit';
-  const statusLabel = isActive
-    ? activeCount > 1 ? `${activeCount} ACTIVE` : 'AI ACTIVE'
-    : 'CREDITS';
-  const runLabel = positiveCue
-    ? `+${creditFormatter.format(activeSettlement.credits)} ${activeSettlement.kind === 'refund' ? 'REFUND' : 'CREDITS'}`
-    : isActive
-      ? `RUN −${creditFormatter.format(shownSpend)}`
-      : terminalVisible
-        ? `LAST −${creditFormatter.format(shownSpend)}`
-        : 'RUN —';
+  const shownSpend = sessionConfirmedCredits;
   const formattedBalance = creditFormatter.format(creditBalance);
   const ariaLabel = `${formattedBalance} credits available.${isActive
     ? ` ${creditFormatter.format(shownSpend)} credits used by ${activeCount} active AI ${activeCount === 1 ? 'operation' : 'operations'}.`
-    : ''}`;
-  const title = `${formattedBalance} credits available · current refill/high-water level ${creditFormatter.format(effectiveReference)}`;
+    : ''} Open account.`;
+  const title = `${formattedBalance} credits available · Open account`;
 
   useEffect(() => {
     syncCreditRuntimeUser(userId);
@@ -167,11 +159,8 @@ export function CreditBurnMeter() {
         title={title}
         type="button"
       >
-        <span
-          className="credit-burn-status"
-          data-short-status={isActive ? (activeCount > 1 ? `${activeCount}×` : 'AI') : 'CR'}
-        >
-          {statusLabel}
+        <span className="credit-burn-status">
+          <span className="credit-burn-status-default">{statusLabel}</span>
         </span>
         <span className="credit-burn-value">
           <OdometerValue
@@ -181,9 +170,6 @@ export function CreditBurnMeter() {
             value={creditBalance}
           />
           <span className="credit-burn-readable">{formattedBalance}</span>
-        </span>
-        <span className={`credit-burn-run${positiveCue ? ' is-positive' : ''}${!isActive && !terminalVisible && !positiveCue ? ' is-idle' : ''}`}>
-          {runLabel}
         </span>
         <span className="credit-burn-track" aria-hidden="true">
           <span className="credit-burn-fill" style={{ transform: `scaleX(${reserveRatio})` }} />

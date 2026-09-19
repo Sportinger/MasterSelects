@@ -179,7 +179,13 @@ export function loadVideoSource(
     };
     const onError = () => {
       admission.release();
-      log.error(`Failed to load video: ${file.name}`);
+      log.error(`Failed to load video: ${file.name}`, {
+        mediaErrorCode: video.error?.code ?? null,
+        readyState: video.readyState,
+        networkState: video.networkState,
+        fileSize: file.size,
+        mimeType: file.type,
+      });
       cleanupPendingSource();
     };
 

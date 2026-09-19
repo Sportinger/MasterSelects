@@ -1,4 +1,5 @@
 import type { Layer, LayerSource } from '../../types/layers';
+import { transformMaskPoint } from '../../utils/maskTransform';
 import type { JsonObject, MotionAdjustmentMaskContract } from '../motionDesign/adjustment/contracts';
 import { adaptMotionAdjustmentTimelineStack } from '../motionDesign/adjustment/timelineStackAdapter';
 import { planMotionAdjustmentOperations } from '../motionDesign/adjustment/operationPlanner';
@@ -67,6 +68,10 @@ function activeRangeAt(evaluationTime: number): { start: number; end: number } {
 }
 
 function masksFromLayer(layer: Layer): MotionAdjustmentMaskContract[] {
+  const sourceSize = {
+    width: layer.source?.intrinsicWidth || layer.source?.videoElement?.videoWidth || layer.source?.imageElement?.naturalWidth || 1,
+    height: layer.source?.intrinsicHeight || layer.source?.videoElement?.videoHeight || layer.source?.imageElement?.naturalHeight || 1,
+  };
   return (layer.masks ?? [])
     .filter((mask) => mask.enabled !== false && mask.closed)
     .map((mask) => ({
@@ -75,10 +80,7 @@ function masksFromLayer(layer: Layer): MotionAdjustmentMaskContract[] {
       inverted: mask.inverted,
       opacity: mask.opacity,
       feather: mask.feather,
-      points: mask.vertices.map((vertex) => ({
-        x: vertex.x + mask.position.x,
-        y: vertex.y + mask.position.y,
-      })),
+      points: mask.vertices.map(vertex => transformMaskPoint(mask, vertex, sourceSize)),
     }));
 }
 

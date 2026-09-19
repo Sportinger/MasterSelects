@@ -15,6 +15,8 @@ import { initializeFastMode } from './clipPreparation/fastMode';
 import { prepareImageClipsForExport } from './clipPreparation/mediaElements';
 import { initializePreciseMode } from './clipPreparation/preciseMode';
 import { loadClipFileData } from './clipPreparation/sourceResolution';
+import { hasLiveInputClip } from './liveInputExport';
+import { collectBakedTransitionPreparationClips } from './clipPreparation/bakedTransitionClips';
 
 const log = Logger.create('ClipPreparation');
 
@@ -64,6 +66,18 @@ export async function prepareClipsForExport(
     const clipEnd = clip.startTime + clip.duration;
     return clip.startTime < endTime && clipEnd > startTime;
   });
+  const bakedTransitionClips = collectBakedTransitionPreparationClips({
+    clips,
+    tracks,
+    mediaFiles,
+    mediaCompositions,
+    rangeStart: startTime,
+    rangeEnd: endTime,
+  });
+  const preparationVideoClips = [...videoClips, ...bakedTransitionClips];
+  const effectiveExportMode: ExportMode = hasLiveInputClip(videoClips)
+    ? 'precise'
+    : exportMode;
 
   const vectorAnimationClips: TimelineClip[] = [];
   for (const clip of videoClips) {
@@ -104,17 +118,26 @@ export async function prepareClipsForExport(
 
   await prepareImageClipsForExport(videoClips, mediaFiles, clipStates, exportRunId);
 
-  log.info(`Preparing ${videoClips.length} video clips for ${exportMode.toUpperCase()} export...`);
+  if (effectiveExportMode !== exportMode) {
+    log.info('Live Input detected: using real-time PRECISE export');
+  }
+  log.info(`Preparing ${preparationVideoClips.length} video clips for ${effectiveExportMode.toUpperCase()} export...`);
 
-  if (exportMode === 'precise') {
-    const result = await initializePreciseMode(videoClips, clipStates, mediaFiles, startTime, exportRunId);
-    endPrepare();
-    return withMedia(result);
+  if (effectiveExportMode === 'precise') {
+    try {
+      const result = await initializePreciseMode(preparationVideoClips, clipStates, mediaFiles, startTime, exportRunId);
+      endPrepare();
+      return withMedia(result);
+    } catch (error) {
+      cleanupExportMode(clipStates, null);
+      endPrepare();
+      throw error;
+    }
   }
 
   try {
     return withMedia(await initializeFastMode(
-      videoClips,
+      preparationVideoClips,
       mediaFiles,
       startTime,
       endTime,

@@ -9,6 +9,7 @@ import {
   bridgeTokenFileIsExplicit,
   sanitizeBridgeTimeoutMs,
   setCorsHeaders,
+  bridgeUrlFilePath,
   tokenFilePath,
   validateBridgeRequest,
 } from './auth.ts'
@@ -162,7 +163,11 @@ export function createDevBridgePlugin(options: DevBridgePluginOptions = {}): Plu
         }
         try {
           fs.mkdirSync(path.dirname(tokenFilePath), { recursive: true })
-          fs.writeFileSync(tokenFilePath, bridgeToken, 'utf-8')
+          // Owner-only: the token grants full control of the running editor.
+          fs.writeFileSync(tokenFilePath, bridgeToken, { encoding: 'utf-8', mode: 0o600 })
+          try { fs.chmodSync(tokenFilePath, 0o600) } catch { /* best effort; no-op on Windows */ }
+          const protocol = server.config.server.https ? 'https' : 'http'
+          fs.writeFileSync(bridgeUrlFilePath, `${protocol}://localhost:${port ?? 5173}`, 'utf-8')
         } catch { /* best effort */ }
       }
       if (server.httpServer?.listening) {

@@ -218,6 +218,7 @@ export class AudioTrackCrossfadeTransitionSync {
       sourceClip,
       timeInfo.clipTime,
       regionGainPreview,
+      ctx.isPlaying && !ctx.isDraggingPlayhead,
     );
     const effectiveVolume = routeSettings.volume * editPreviewVolume * volumeMultiplier;
     const trackMuted = !ctx.unmutedAudioTrackIds.has(track.id) || routeSettings.muted || effectiveVolume <= 0.01;

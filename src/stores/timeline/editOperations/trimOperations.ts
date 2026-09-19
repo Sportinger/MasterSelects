@@ -18,6 +18,8 @@ import {
   getTimelineDurationForSourceWindow,
   timelineDeltaToSourceDelta,
 } from '../../../utils/clipPlaybackTiming';
+import { quantizeFrameLockedClipTiming } from '../../../utils/timelineFrameQuantization';
+import { getActiveCompositionFrameRate } from './activeCompositionFrameRate';
 
 export const MIN_CLIP_DURATION = 0.04;
 const EPSILON = 0.0001;
@@ -97,6 +99,7 @@ function applyTrimUpdates(
   const warnings: TimelineEditWarning[] = [];
   const validUpdates = new Map<string, ClipTrimUpdate>();
   const changedClipIds = new Set<string>();
+  const frameRate = getActiveCompositionFrameRate();
 
   for (const [clipId, updates] of updatesByClipId) {
     const clip = clips.find((candidate) => candidate.id === clipId);
@@ -142,7 +145,9 @@ function applyTrimUpdates(
   return {
     clips: clips.map((clip) => {
       const updates = validUpdates.get(clip.id);
-      return updates ? updateTrimmedClip(clip, updates) : clip;
+      return updates
+        ? quantizeFrameLockedClipTiming(updateTrimmedClip(clip, updates), frameRate)
+        : clip;
     }),
     changedClipIds: [...changedClipIds],
     warnings,

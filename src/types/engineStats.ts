@@ -28,6 +28,9 @@ export interface WorkerGpuOnlyPlaybackDiagnostics {
 
 export interface EngineStats {
   fps: number;
+  // Monotonic timestamp for the current playback run. Used to distinguish
+  // startup sampling from a sustained low-FPS condition.
+  playbackRunStartedAt?: number;
   frameTime: number;
   gpuMemory: number;
   // Detailed timing (ms)
@@ -77,6 +80,15 @@ export interface EngineStats {
     previewUpdates: number;
     previewRenderFps: number;
     previewUpdateFps: number;
+    recentCadence?: {
+      windowMs: number;
+      frameEvents: number;
+      cadenceFps: number;
+      previewFrames: number;
+      previewUpdates: number;
+      previewRenderFps: number;
+      previewUpdateFps: number;
+    };
     avgPreviewRenderGapMs: number;
     p95PreviewRenderGapMs: number;
     maxPreviewRenderGapMs: number;

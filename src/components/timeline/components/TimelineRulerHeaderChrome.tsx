@@ -8,6 +8,7 @@ import {
   selectRulerLanes,
   selectTempoMap,
 } from '../../../stores/timeline/selectors';
+import { useTimelineOverLayout } from '../hooks/useTimelineOverLayout';
 
 type TimelineRulerProps = ComponentProps<typeof TimelineRuler>;
 
@@ -44,12 +45,16 @@ export function TimelineRulerHeaderChrome({
   videoBakeRegions,
   zoom,
 }: TimelineRulerHeaderChromeProps) {
+  const { isMediumMobileTimelineLayout } = useTimelineOverLayout();
   // Ruler lanes / tempo map are timeline view state; read them here so the ruler
   // stays a pure props component (issue #257).
   const rulerLanes = useTimelineStore(selectRulerLanes);
   const tempoMap = useTimelineStore(selectTempoMap);
   const activeRulerLaneId = useTimelineStore(selectActiveRulerLaneId);
   const setActiveRulerLane = useTimelineStore((state) => state.setActiveRulerLane);
+  const addMarker = useTimelineStore((state) => state.addMarker);
+  const setInPoint = useTimelineStore((state) => state.setInPoint);
+  const setOutPoint = useTimelineStore((state) => state.setOutPoint);
 
   // Header + ruler heights track the lane count so the columns stay aligned.
   const laneCount = Math.max(1, rulerLanes.length);
@@ -62,7 +67,9 @@ export function TimelineRulerHeaderChrome({
       <div className="timeline-header-row" style={rulerHeightStyle}>
         <div className="ruler-header">
           <div className="timeline-ruler-control-strip">
-            <TimelineControls variant="main" {...timelineControlsProps} />
+            {!isMediumMobileTimelineLayout && (
+              <TimelineControls variant="main" {...timelineControlsProps} />
+            )}
           </div>
         </div>
         <div
@@ -79,6 +86,9 @@ export function TimelineRulerHeaderChrome({
             onSelectLane={setActiveRulerLane}
             scrollX={scrollX}
             onRulerMouseDown={onRulerMouseDown}
+            onSetInPoint={setInPoint}
+            onSetOutPoint={setOutPoint}
+            onAddMarker={addMarker}
             formatTime={formatTime}
             cacheRanges={cacheRanges}
             videoBakeRegions={videoBakeRegions}

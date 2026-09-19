@@ -5,6 +5,8 @@ import { MEDIA_CLASSIC_COLUMN_LABELS } from './classicColumnLabels';
 import type { MediaClassicColumnId, MediaClassicDynamicColumnWidths, MediaClassicListRowData } from './types';
 import { isProxyFrameCountComplete } from '../../../../stores/mediaStore/helpers/proxyCompleteness';
 import type { Composition, MediaFile, ProjectItem, SignalAssetItem } from '../../../../stores/mediaStore';
+import type { TrackingAsset } from '../../../../types/trackingAsset';
+import { getTrackingAssetCoverageLabel, getTrackingAssetStateLabel } from '../trackingAssetPresentation';
 
 export const MEDIA_CLASSIC_ROW_HEIGHT = 20;
 export const MEDIA_CLASSIC_OVERSCAN_ROWS = 12;
@@ -80,6 +82,10 @@ function isSignalAssetItem(item: ProjectItem): item is SignalAssetItem {
   return 'type' in item && item.type === 'signal';
 }
 
+function isTrackingAsset(item: ProjectItem): item is TrackingAsset {
+  return 'type' in item && item.type === 'tracking';
+}
+
 function clampMediaStatusBadgeColumnWidth(width: number): number {
   return Math.max(
     MEDIA_STATUS_BADGE_COLUMN_MIN_WIDTH,
@@ -114,6 +120,7 @@ function getMediaStatusBadgeWidths(item: ProjectItem): number[] {
   if (mediaFile?.proxyStatus === 'generating') widths.push(46);
   if (mediaFile?.transcriptStatus === 'ready') widths.push(20);
   if (mediaFile?.analysisStatus === 'ready') widths.push(20);
+  if (isTrackingAsset(item)) widths.push(36);
 
   return widths;
 }
@@ -257,6 +264,7 @@ function getSignalKindLabel(item: SignalAssetItem): string {
 export function getClassicMediaColumnText(item: ProjectItem, colId: Exclude<MediaClassicColumnId, 'name' | 'badges'>): string {
   const mediaFile = isImportedMediaFileItem(item) ? item : null;
   const signalAsset = isSignalAssetItem(item) ? item : null;
+  const trackingAsset = isTrackingAsset(item) ? item : null;
   switch (colId) {
     case 'label':
       return '\u25cf';
@@ -264,35 +272,42 @@ export function getClassicMediaColumnText(item: ProjectItem, colId: Exclude<Medi
       const importProgress = getItemImportProgress(item);
       return importProgress !== null
         ? `Import ${importProgress}%`
+        : trackingAsset
+          ? getTrackingAssetCoverageLabel(trackingAsset) ?? '\u2013'
         : ('duration' in item && item.duration ? formatMediaDuration(item.duration) : '\u2013');
     }
     case 'resolution':
       if (mediaFile?.type === 'audio') return getAudioWaveformColumnLabel(mediaFile);
       if (signalAsset) return getSignalKindLabel(signalAsset);
+      if (trackingAsset) return getTrackingAssetStateLabel(trackingAsset);
       return getGaussianSplatResolutionLabel(item) ??
         ('width' in item && 'height' in item && item.width && item.height ? `${item.width}\u00d7${item.height}` : '\u2013');
     case 'fps':
       if (mediaFile?.type === 'audio') return mediaFile.stemInfo?.label || mediaFile.stemInfo?.kind || 'Audio';
       if (mediaFile?.type === 'image') return 'Still';
       if (signalAsset) return `${signalAsset.artifacts.length} assets`;
+      if (trackingAsset) return `${trackingAsset.track.fps}`;
       return mediaFile?.fps
         ? `${mediaFile.fps}`
         : ('type' in item && item.type === 'composition' ? `${(item as Composition).frameRate}` : '\u2013');
     case 'container':
       if ('type' in item && item.type === 'composition') return 'Comp';
       if (signalAsset) return signalAsset.providerId || 'Signal';
+      if (trackingAsset) return 'Track';
       return getMediaFileContainerLabel(mediaFile) || '\u2013';
     case 'codec':
       if (mediaFile?.type === 'audio') return mediaFile.audioCodec || getMediaFileCodecLabel(mediaFile) || '\u2013';
       if (mediaFile?.type === 'image') return getMediaFileCodecLabel(mediaFile) || 'Raster';
       if ('type' in item && item.type === 'composition') return 'Timeline';
       if (signalAsset) return signalAsset.asset.source.extension || signalAsset.asset.source.mimeType || signalAsset.asset.source.kind;
+      if (trackingAsset) return trackingAsset.track.projection === 'mesh' ? 'Mesh' : 'Planar';
       return getMediaFileCodecLabel(mediaFile) || '\u2013';
     case 'audio':
       return mediaFile?.type === 'audio' ? getAudioProxyColumnLabel(mediaFile) :
         mediaFile?.type === 'image' ? 'Image' :
         'type' in item && item.type === 'composition' ? 'Timeline' :
         signalAsset ? `${signalAsset.diagnostics?.length ?? 0} diag` :
+        trackingAsset ? (trackingAsset.sourceVideoClipId ? 'Linked' : 'Project') :
         mediaFile?.hasAudio === true ? 'Yes' :
         mediaFile?.hasAudio === false ? 'No' : '\u2013';
     case 'bitrate':

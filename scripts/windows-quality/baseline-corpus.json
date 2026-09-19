@@ -1,0 +1,157 @@
+{
+  "sourceHash": "82631b1d2a58cdf33fe8256127adb9053294a9f3",
+  "inputs": [
+    {
+      "path": "tests/playwright/README.md",
+      "sha256": "0f301474b3efa8022dea68a8aae25b49763b7f99353c7d7c85663c5379b627e6"
+    },
+    {
+      "path": "tests/playwright/assertions/consoleAssertions.ts",
+      "sha256": "21cea2f352ab837200543c51877174085349c3c87f5c8a33feecc6ff966c89c0"
+    },
+    {
+      "path": "tests/playwright/assertions/maskFrameAssertions.ts",
+      "sha256": "647a4069fcaa4a5944b02f22da5958e387da4cecb92390f2175a9754227edee7"
+    },
+    {
+      "path": "tests/playwright/assertions/mediaArtifactAssertions.ts",
+      "sha256": "6730f9c7d6beebd0bb75967db0cf9de18dad18a152a5ff3d8dc76904baaab14a"
+    },
+    {
+      "path": "tests/playwright/assertions/videoArtifactFrameAssertions.ts",
+      "sha256": "04935b9cec1ef087f81601b184badcc83143fb37b8b01d175cf7ba26dca165e9"
+    },
+    {
+      "path": "tests/playwright/beta/README.md",
+      "sha256": "257f35e2291edd43303b61d23b572dfc648cae57ea89df1053a611e8e483a80c"
+    },
+    {
+      "path": "tests/playwright/beta/WindowsDesktop.cs",
+      "sha256": "690412abebf012fda92806289c751670c5a30bcb462582af15eb6c087b3aaa36"
+    },
+    {
+      "path": "tests/playwright/beta/cleanup.spec.ts",
+      "sha256": "d3b68762025fd4243c454f01362afff2e64653bedf7ead449c368d7c3350c011"
+    },
+    {
+      "path": "tests/playwright/beta/cleanup.ts",
+      "sha256": "d2ac330e520820a6f24abeb717c22cf9eeea706253315153b356838faf72676b"
+    },
+    {
+      "path": "tests/playwright/beta/cleanupWindowsTest.ps1",
+      "sha256": "ab0627b7be842415622b4eb4d05ec55ad048d78043e13314b19c485a3fd9733d"
+    },
+    {
+      "path": "tests/playwright/beta/edit-mask-export.spec.ts",
+      "sha256": "b07ce8f3fdc4eff8fc0435b6f90630d41f036408bb1b082dc48b444fb0d340dd"
+    },
+    {
+      "path": "tests/playwright/beta/exportPlayback.ts",
+      "sha256": "f61bcfddce62e61c04def6710a3780c575cda3e425cd594ec7f0e5224e17269f"
+    },
+    {
+      "path": "tests/playwright/beta/mediaOracle.ts",
+      "sha256": "cc212969b3f9d9470b54a3779df4149338121acd7a7740e75169ae4a83489c59"
+    },
+    {
+      "path": "tests/playwright/beta/readiness.spec.ts",
+      "sha256": "93e9d7552795ee47d495080372daf046fd81cbdb797805b7a6205056db7110dd"
+    },
+    {
+      "path": "tests/playwright/beta/readiness.ts",
+      "sha256": "9196d1203376bfd9845bb43befe0fea27aba36457086b72dbe903891a35fe2d4"
+    },
+    {
+      "path": "tests/playwright/beta/selectWindowsFolder.ps1",
+      "sha256": "252fcbf296535ba8c676e286cf48b6031a1b25a1b0ad223b215e7ae25416030d"
+    },
+    {
+      "path": "tests/playwright/beta/temporalOracle.spec.ts",
+      "sha256": "4e4add43c41cc7ecf745707257c7b0768727cc4e368973f7a115a5d2bbeca4d1"
+    },
+    {
+      "path": "tests/playwright/beta/temporalOracle.ts",
+      "sha256": "7c19da8f39b4bac4baf8bdba6bae1c1a7f9ac23482b087e0afead11f8f13b43b"
+    },
+    {
+      "path": "tests/playwright/beta/windowsFixture.ts",
+      "sha256": "1b00b7b8ca0b89201ebd1245159ffd15a6e6543cea28437329148767452805b0"
+    },
+    {
+      "path": "tests/playwright/config/moduleGates.ts",
+      "sha256": "91825e5570412148d1b3f1a1385bb7e02ccee984e035c409aea1ba6360079662"
+    },
+    {
+      "path": "tests/playwright/config/runtimeProfile.ts",
+      "sha256": "c1d9ac798c2af6b049beabd85dab3c7268aa2700db0324bf86f4e744716d7998"
+    },
+    {
+      "path": "tests/playwright/drivers/ExportDriver.ts",
+      "sha256": "637ca45fe7465c656cfff6b23cabc4658426400fdd02f7594eaf3803db74ed54"
+    },
+    {
+      "path": "tests/playwright/drivers/MaskDriver.ts",
+      "sha256": "968105f5ed9572db961dc1c6a1f68a0b61217d24dd46862885db6e6c89915abe"
+    },
+    {
+      "path": "tests/playwright/drivers/PreviewDriver.ts",
+      "sha256": "8720f4e54f81bca958ba7d0df387b4e25dfda3cf102266a667d0e28790894721"
+    },
+    {
+      "path": "tests/playwright/drivers/TimelineDriver.ts",
+      "sha256": "9602573ce3719b4768b07fbcecbda88f47f623903c32e8278d49c060c5ebc006"
+    },
+    {
+      "path": "tests/playwright/fixtures/bridgeClient.ts",
+      "sha256": "246d1907d617026252f4444b28656e407d36eb56426527aa355b145bd2a63c22"
+    },
+    {
+      "path": "tests/playwright/fixtures/editorPage.ts",
+      "sha256": "5a3967015e0051b113a471009728270a31550270bc9eba2b63312eef965a8ef9"
+    },
+    {
+      "path": "tests/playwright/fixtures/failureEvidence.ts",
+      "sha256": "f14ffb943d0fe221d750fdaa868dfe2a27651231b21b9bed4f409e6021ee18e0"
+    },
+    {
+      "path": "tests/playwright/fixtures/isolatedProject.ts",
+      "sha256": "6dc5930e0e7f474cb42fee12eabbd8e31bcb0d0cf3a1b3c6826e46e17bad541c"
+    },
+    {
+      "path": "tests/playwright/fixtures/mediaFixture.ts",
+      "sha256": "ab95c81fc88a67e25595ad4ba7fb3a4fdee0141d47f0931107942e70117e4917"
+    },
+    {
+      "path": "tests/playwright/fixtures/referenceProject.ts",
+      "sha256": "efc96593f5a42e02750f8e9460e0b64f79e79adb3da7256ee84de124512587d0"
+    },
+    {
+      "path": "tests/playwright/fixtures/test.ts",
+      "sha256": "44078ad74e214e0543679855cf13bdb661ab20cf23b217483c679187408046c8"
+    },
+    {
+      "path": "tests/playwright/foundation/built-editor-shell.spec.ts",
+      "sha256": "618f7d567b4b5ca1f831f1e342503541a30a094100aecfd768c461225fa82d79"
+    },
+    {
+      "path": "tests/playwright/foundation/golden-smoke.spec.ts",
+      "sha256": "71e34b57fd3458273d9772653bcec0f9a7b874ca8dea6f4492f9c3463fdb4abb"
+    },
+    {
+      "path": "tests/playwright/masks/reference-mask.spec.ts",
+      "sha256": "175fbd0053ef1cbf7cbd63aa588f324fdb80bb83c6f7cf4d100018a23288aa88"
+    },
+    {
+      "path": "tests/playwright/nested-compositions/super-project.spec.ts",
+      "sha256": "ec0442dc2339d9f4c8022e0beae80e5a632fd2112eb87c5bdb4f3b8e874ec25d"
+    },
+    {
+      "path": "tests/playwright/tsconfig.json",
+      "sha256": "d79217e6d231763c4a84fb65bd96e417474c93a27c6a3f68c0d8bd40537f8bd2"
+    },
+    {
+      "path": "playwright.beta.config.ts",
+      "sha256": "536b17f43503c34dd8c7c1c2576ed6ec3e61af55095acb0360bde966b2448b7a"
+    }
+  ]
+}

@@ -29,10 +29,6 @@ vi.mock('../../src/components/timeline/MiniTimeline', () => ({
   MiniTimeline: () => <div data-testid="mini-timeline" />,
 }));
 
-vi.mock('../../src/components/timeline/slotGridAnimation', () => ({
-  animateSlotGrid: vi.fn(),
-}));
-
 vi.mock('../../src/services/slotDeckManager', () => ({
   slotDeckManager: {
     prepareSlot: vi.fn(),

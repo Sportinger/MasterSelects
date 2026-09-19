@@ -214,8 +214,13 @@ function normalizeHostedRefund(value: unknown): HostedAiRefundInfo | undefined {
     : undefined;
 }
 
-function isTransientFetchError(error: unknown): boolean {
-  return error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message);
+function isTransientPollingError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return /failed to fetch|networkerror|load failed|network error while contacting masterselects cloud|request to .+ timed out after \d+ms/i
+    .test(error.message);
 }
 
 function getPollingRetryDelay(pollInterval: number, attempt: number): number {
@@ -271,6 +276,7 @@ function serializeHostedReferenceMedia(
       }
 
       return {
+        duration: reference.duration,
         fileName: reference.fileName,
         label: reference.label,
         mediaType: reference.mediaType,
@@ -318,11 +324,14 @@ export const cloudAiService = {
           mode: params.mode,
           multiPrompt: params.multiPrompt,
           multiShots: params.multiShots,
+          outputFormat: params.outputFormat,
           prompt: params.prompt ?? '',
           provider: params.provider,
           referenceMedia: serializeHostedReferenceMedia(params.referenceMedia),
           sound: params.sound,
           startImageUrl: params.startImageUrl,
+          returnLastFrame: params.returnLastFrame,
+          webSearch: params.webSearch,
         },
       });
       syncHostedCreditBalance(response, { activityId, source: 'hosted:video' });
@@ -348,10 +357,13 @@ export const cloudAiService = {
         mode: params.mode,
         multiPrompt: params.multiPrompt,
         multiShots: params.multiShots,
+        outputFormat: params.outputFormat,
         prompt: params.prompt,
         provider: params.provider,
         referenceMedia: serializeHostedReferenceMedia(params.referenceMedia),
         sound: params.sound,
+        returnLastFrame: params.returnLastFrame,
+        webSearch: params.webSearch,
       },
       });
       syncHostedCreditBalance(response, { activityId, source: 'hosted:video' });
@@ -751,7 +763,7 @@ export const cloudAiService = {
         task = await cloudAiService.getTaskStatus(taskId);
         transientFailures = 0;
       } catch (error) {
-        if (isTransientFetchError(error) && transientFailures < 4) {
+        if (isTransientPollingError(error) && transientFailures < 4) {
           transientFailures += 1;
           await new Promise((resolve) => setTimeout(resolve, getPollingRetryDelay(pollInterval, transientFailures)));
           continue;

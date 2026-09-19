@@ -222,7 +222,7 @@ describe('composeTransforms properties', () => {
     );
   });
 
-  it('parent scale does not change composed child position', () => {
+  it('axis scale does not change position while Scale All stays finite', () => {
     fc.assert(
       fc.property(
         transformArbitrary,
@@ -230,17 +230,23 @@ describe('composeTransforms properties', () => {
         scaleNumber,
         optionalScaleNumber,
         (parent, scaleX, scaleY, scaleAll) => {
-          const scaledParent: ClipTransform = {
+          const axisScaledParent: ClipTransform = {
             ...parent,
-            scale: { ...parent.scale, all: scaleAll, x: scaleX, y: scaleY },
+            scale: { ...parent.scale, x: scaleX, y: scaleY },
+          };
+          const uniformlyScaledParent: ClipTransform = {
+            ...axisScaledParent,
+            scale: { ...axisScaledParent.scale, all: scaleAll },
           };
 
           const result = composeTransforms(parent, identityTransform());
-          const scaledResult = composeTransforms(scaledParent, identityTransform());
+          const axisScaledResult = composeTransforms(axisScaledParent, identityTransform());
+          const uniformlyScaledResult = composeTransforms(uniformlyScaledParent, identityTransform());
 
-          expectClose(scaledResult.position.x, result.position.x);
-          expectClose(scaledResult.position.y, result.position.y);
-          expectClose(scaledResult.position.z, result.position.z);
+          expectClose(axisScaledResult.position.x, result.position.x);
+          expectClose(axisScaledResult.position.y, result.position.y);
+          expectClose(axisScaledResult.position.z, result.position.z);
+          expect(numericFields(uniformlyScaledResult).every(Number.isFinite)).toBe(true);
         }
       ),
       RUN_OPTIONS

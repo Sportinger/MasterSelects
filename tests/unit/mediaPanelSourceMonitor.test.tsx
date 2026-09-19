@@ -3,18 +3,39 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MediaPanel } from '../../src/components/panels/MediaPanel';
 import { useMediaStore } from '../../src/stores/mediaStore';
-import type { MediaFile } from '../../src/stores/mediaStore';
+import type { Composition, MediaFile } from '../../src/stores/mediaStore';
+
+const dockMocks = vi.hoisted(() => ({
+  activatePanelType: vi.fn(),
+}));
 
 vi.mock('../../src/stores/dockStore', () => ({
-  useDockStore: Object.assign(vi.fn(), {
+  useDockStore: Object.assign(vi.fn((selector: (state: unknown) => unknown) => selector({
+    activatePanelType: dockMocks.activatePanelType,
+  })), {
     getState: vi.fn(() => ({
-      activatePanelType: vi.fn(),
+      activatePanelType: dockMocks.activatePanelType,
     })),
   }),
 }));
 
 vi.mock('../../src/stores/timeline', () => ({
-  useTimelineStore: Object.assign(vi.fn(), {
+  useTimelineStore: Object.assign(vi.fn((selector: (state: unknown) => unknown) => selector({
+    setDuration: vi.fn(),
+    slotGridProgress: 0,
+    clips: [],
+    selectClip: vi.fn(),
+    selectedClipIds: new Set<string>(),
+    selectedKeyframeIds: new Set<string>(),
+    clipboardData: null,
+    clipboardKeyframes: null,
+    maskPanelActive: false,
+    clipboardMask: null,
+    addClip: vi.fn(),
+    addCompClip: vi.fn(),
+    getSerializableState: vi.fn(),
+    invalidateCache: vi.fn(),
+  })), {
     getState: vi.fn(() => ({
       setDuration: vi.fn(),
       slotGridProgress: 0,
@@ -49,6 +70,21 @@ function createVideoFile(): MediaFile {
     width: 1920,
     height: 1080,
     codec: 'H.264',
+  };
+}
+
+function createComposition(): Composition {
+  return {
+    id: 'comp-1',
+    name: 'Comp 1',
+    type: 'composition',
+    parentId: null,
+    createdAt: 2,
+    width: 1080,
+    height: 1920,
+    frameRate: 30,
+    duration: 12,
+    backgroundColor: '#000000',
   };
 }
 
@@ -157,6 +193,45 @@ describe('MediaPanel source monitor opening', () => {
     fireEvent.doubleClick(node!, { button: 0, detail: 2 });
 
     expect(mediaState.setSourceMonitorFile).toHaveBeenCalledWith('file-1');
+  });
+
+  it('reopens a composition from the media panel when no composition is active', () => {
+    const composition = createComposition();
+    mediaState.compositions = [composition];
+    mediaState.activeCompositionId = null;
+
+    const { container } = render(<MediaPanel />);
+    const node = container.querySelector(`[data-item-id="${composition.id}"]`);
+
+    expect(node).toBeInstanceOf(HTMLElement);
+    fireEvent.doubleClick(node!, { button: 0, detail: 2 });
+
+    expect(dockMocks.activatePanelType).toHaveBeenCalledWith('timeline');
+    expect(mediaState.openCompositionTab).toHaveBeenCalledWith(composition.id, {
+      skipAnimation: true,
+    });
+  });
+
+  it('renames only from the composition name and opens from the rest of the row', () => {
+    localStorage.setItem('media-panel-view-mode', 'classic');
+    const composition = createComposition();
+    mediaState.compositions = [composition];
+
+    const { container } = render(<MediaPanel />);
+    const row = container.querySelector(`[data-item-id="${composition.id}"] .media-item`);
+    const name = container.querySelector(`[data-item-id="${composition.id}"] .media-item-name`);
+
+    expect(row).toBeInstanceOf(HTMLElement);
+    expect(name).toBeInstanceOf(HTMLElement);
+    fireEvent.doubleClick(name!, { button: 0, detail: 2 });
+
+    expect(container.querySelector('.media-item-rename')).toBeInstanceOf(HTMLInputElement);
+    expect(mediaState.openCompositionTab).not.toHaveBeenCalled();
+
+    fireEvent.doubleClick(row!, { button: 0, detail: 2 });
+    expect(mediaState.openCompositionTab).toHaveBeenCalledWith(composition.id, {
+      skipAnimation: true,
+    });
   });
 
   it('does not mount board assets far outside the viewport', () => {

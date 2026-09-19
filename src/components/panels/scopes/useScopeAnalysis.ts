@@ -4,7 +4,8 @@ import { ScopeRenderer } from '../../../engine/analysis/ScopeRenderer';
 import { renderHostPort } from '../../../services/render/renderHostPort';
 
 export type ScopeTab = 'histogram' | 'vectorscope' | 'waveform';
-export type ScopeViewMode = 'rgb' | 'r' | 'g' | 'b' | 'luma';
+export type ScopeViewMode = 'rgb' | 'r' | 'g' | 'b' | 'luma' | 'parade';
+export type WaveformSizingMode = 'source-aspect' | 'fill';
 
 // Map view mode to numeric value for GPU uniform
 const VIEW_MODE_MAP: Record<ScopeViewMode, number> = {
@@ -13,9 +14,11 @@ const VIEW_MODE_MAP: Record<ScopeViewMode, number> = {
   g: 2,
   b: 3,
   luma: 4,
+  parade: 5,
 };
 
-const INTERVAL = 66; // ~15fps
+const DEFAULT_REFRESH_INTERVAL_MS = 66; // ~15fps
+const RESIZE_REFRESH_DEBOUNCE_MS = 100;
 
 /**
  * GPU-accelerated scope rendering hook.
@@ -25,7 +28,9 @@ export function useGpuScope(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   scopeType: ScopeTab,
   visible: boolean,
-  viewMode: ScopeViewMode = 'rgb'
+  viewMode: ScopeViewMode = 'rgb',
+  waveformSizing: WaveformSizingMode = 'source-aspect',
+  refreshIntervalMs: number = DEFAULT_REFRESH_INTERVAL_MS,
 ) {
   const isEngineReady = useEngineStore((s) => s.isEngineReady);
   const rendererRef = useRef<ScopeRenderer | null>(null);
@@ -33,6 +38,8 @@ export function useGpuScope(
   const rafRef = useRef(0);
   const lastTimeRef = useRef(0);
   const initedRef = useRef(false);
+  const lastAnalyzedRenderTimeRef = useRef<number | null>(null);
+  const resizeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Initialize WebGPU context + renderer
   useEffect(() => {
@@ -74,6 +81,8 @@ export function useGpuScope(
     if (!renderer || !ctx || !canvas) return;
 
     const mode = VIEW_MODE_MAP[viewMode];
+    const renderedAt = renderHostPort.getRenderLoop()?.getLastSuccessfulRenderTime() ?? 0;
+    if (lastAnalyzedRenderTimeRef.current === renderedAt) return;
 
     try {
       const texture = renderHostPort.getLastRenderedTexture();
@@ -91,6 +100,7 @@ export function useGpuScope(
           }).end();
           device.queue.submit([enc.finish()]);
         }
+        lastAnalyzedRenderTimeRef.current = renderedAt;
         return;
       }
 
@@ -101,14 +111,19 @@ export function useGpuScope(
           const cw = parent.clientWidth;
           const ch = parent.clientHeight;
           if (cw > 0 && ch > 0) {
-            const srcAR = texture.width / texture.height;
-            const containerAR = cw / ch;
             const dpr = window.devicePixelRatio || 1;
-            let w: number, h: number;
-            if (containerAR > srcAR) {
-              h = ch; w = ch * srcAR;
-            } else {
-              w = cw; h = cw / srcAR;
+            let w = cw;
+            let h = ch;
+            if (waveformSizing === 'source-aspect') {
+              const srcAR = texture.width / texture.height;
+              const containerAR = cw / ch;
+              if (containerAR > srcAR) {
+                h = ch;
+                w = ch * srcAR;
+              } else {
+                w = cw;
+                h = cw / srcAR;
+              }
             }
             const pw = Math.round(w * dpr);
             const ph = Math.round(h * dpr);
@@ -126,10 +141,49 @@ export function useGpuScope(
       } else {
         renderer.renderVectorscope(texture, ctx);
       }
+      lastAnalyzedRenderTimeRef.current = renderedAt;
     } catch {
       // GPU error — skip frame
     }
-  }, [scopeType, canvasRef, viewMode]);
+  }, [scopeType, canvasRef, viewMode, waveformSizing]);
+
+  useEffect(() => {
+    lastAnalyzedRenderTimeRef.current = null;
+  }, [scopeType, viewMode, waveformSizing]);
+
+  // A paused frame normally stays cached. Invalidate it once after panel
+  // resizing settles so the scope is redrawn at the new canvas dimensions.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const container = canvas?.parentElement;
+    if (!container || typeof ResizeObserver === 'undefined') return;
+
+    let observedWidth = container.clientWidth;
+    let observedHeight = container.clientHeight;
+    const observer = new ResizeObserver((entries) => {
+      const { width, height } = entries[0]?.contentRect ?? container.getBoundingClientRect();
+      if (width === observedWidth && height === observedHeight) return;
+      observedWidth = width;
+      observedHeight = height;
+
+      if (resizeRefreshTimerRef.current !== null) {
+        clearTimeout(resizeRefreshTimerRef.current);
+      }
+      resizeRefreshTimerRef.current = setTimeout(() => {
+        lastAnalyzedRenderTimeRef.current = null;
+        resizeRefreshTimerRef.current = null;
+      }, RESIZE_REFRESH_DEBOUNCE_MS);
+    });
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+      if (resizeRefreshTimerRef.current !== null) {
+        clearTimeout(resizeRefreshTimerRef.current);
+        resizeRefreshTimerRef.current = null;
+      }
+    };
+  }, [canvasRef]);
 
   // RAF render loop
   useEffect(() => {
@@ -139,7 +193,7 @@ export function useGpuScope(
 
     const tick = (time: number) => {
       if (cancelled) return;
-      if (initedRef.current && time - lastTimeRef.current >= INTERVAL) {
+      if (initedRef.current && time - lastTimeRef.current >= refreshIntervalMs) {
         lastTimeRef.current = time;
         render();
       }
@@ -152,7 +206,7 @@ export function useGpuScope(
       cancelled = true;
       cancelAnimationFrame(rafRef.current);
     };
-  }, [isEngineReady, visible, render]);
+  }, [isEngineReady, visible, refreshIntervalMs, render]);
 
   // Cleanup renderer on unmount
   useEffect(() => {

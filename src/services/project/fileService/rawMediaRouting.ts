@@ -2,7 +2,7 @@ import { Logger } from '../../logger';
 import { NativeHelperClient } from '../../nativeHelper/NativeHelperClient';
 import type { NativeProjectCoreService } from '../core/NativeProjectCoreService';
 import type { ProjectCoreService } from '../core/ProjectCoreService';
-import { PROJECT_FOLDERS } from '../core/constants';
+import { getNativeProjectFolderReadCandidates } from '../core/projectPackage';
 import type { RawMediaService } from '../domains/RawMediaService';
 import {
   copyToRawFolderNative,
@@ -102,7 +102,12 @@ export async function scanRawFolder(context: RawMediaRoutingContext): Promise<Ma
   if (context.activeBackend === 'native' && context.nativeCoreService) {
     const projectPath = context.nativeCoreService.getProjectPath();
     if (!projectPath) return new Map();
-    return scanNativeFolder(joinProjectPath(projectPath, PROJECT_FOLDERS.RAW));
+    const files = new Map<string, FileSystemFileHandle>();
+    for (const folder of getNativeProjectFolderReadCandidates(projectPath, 'RAW')) {
+      const scanned = await scanNativeFolder(joinProjectPath(projectPath, folder));
+      for (const [key, handle] of scanned) if (!files.has(key)) files.set(key, handle);
+    }
+    return files;
   }
 
   const handle = context.coreService.getProjectHandle();

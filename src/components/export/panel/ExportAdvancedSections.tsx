@@ -1,5 +1,6 @@
 import { ExportAdvancedAudioSection } from './ExportAdvancedAudioSection';
 import { ExportAdvancedVideoSection } from './ExportAdvancedVideoSection';
+import { GlyphArtifactExportSection } from './GlyphArtifactExportSection';
 import type {
   ExportBasicsActions,
   ExportBasicsAudioState,
@@ -48,8 +49,11 @@ export function ExportAdvancedSections({
         display={display}
         video={video}
         audio={audio}
+        options={options}
         actions={actions}
       />
+
+      <GlyphArtifactExportSection />
     </>
   );
 }

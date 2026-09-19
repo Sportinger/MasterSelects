@@ -1,3 +1,6 @@
+import { clonePlanarTracks } from '../../../services/planarTracking/clonePlanarTracks';
+import { cloneTerrainAnchorConnector, cloneTerrainAttachment, cloneTerrainScreenAnchor } from '../../../types/terrainAttachment';
+import { cloneTrackingBinding } from '../../../types/trackingBinding';
 import { clonePersistedClipAudioState } from '../../../services/audio/clipAudioStatePersistence';
 import { cloneClipNodeGraph } from '../../../services/nodeGraph';
 import { normalizeTransitionInstanceParams } from '../../../transitions';
@@ -9,12 +12,20 @@ export function applyCommonRestoredClipFields(serializedClip: SerializableClip):
   | 'videoState'
   | 'audioState'
   | 'transform'
+  | 'videoInspectorSections'
   | 'effects'
+  | 'planarTracks'
+  | 'trackingBinding'
+  | 'terrainAttachment'
+  | 'terrainScreenAnchor'
+  | 'terrainAnchorConnector'
   | 'transitionIn'
   | 'transitionOut'
   | 'transitionSourceMap'
   | 'transitionRecipeBlendWindows'
   | 'colorCorrection'
+  | 'colorGradeMode'
+  | 'localColorCorrection'
   | 'nodeGraph'
   | 'masks'
   | 'speed'
@@ -29,12 +40,24 @@ export function applyCommonRestoredClipFields(serializedClip: SerializableClip):
     videoState: restorePersistedClipVideoState(serializedClip),
     audioState: clonePersistedClipAudioState(serializedClip.audioState),
     transform: serializedClip.transform,
+    videoInspectorSections: serializedClip.videoInspectorSections
+      ? { ...serializedClip.videoInspectorSections }
+      : undefined,
     effects: serializedClip.effects || [],
+    planarTracks: clonePlanarTracks(serializedClip.planarTracks),
+    trackingBinding: cloneTrackingBinding(serializedClip.trackingBinding),
+    terrainAttachment: cloneTerrainAttachment(serializedClip.terrainAttachment),
+    terrainScreenAnchor: cloneTerrainScreenAnchor(serializedClip.terrainScreenAnchor),
+    terrainAnchorConnector: cloneTerrainAnchorConnector(serializedClip.terrainAnchorConnector),
     transitionIn: serializedClip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionIn)) : undefined,
     transitionOut: serializedClip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionOut)) : undefined,
     transitionSourceMap: serializedClip.transitionSourceMap ? structuredClone(serializedClip.transitionSourceMap) : undefined,
     transitionRecipeBlendWindows: serializedClip.transitionRecipeBlendWindows ? structuredClone(serializedClip.transitionRecipeBlendWindows) : undefined,
     colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+    colorGradeMode: serializedClip.colorGradeMode,
+    localColorCorrection: serializedClip.localColorCorrection
+      ? structuredClone(serializedClip.localColorCorrection)
+      : undefined,
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     masks: serializedClip.masks,
     speed: serializedClip.speed,
@@ -65,6 +88,7 @@ export function createLoadStateLiveInputClip(serializedClip: SerializableClip): 
       mediaFileId: serializedClip.mediaFileId || serializedClip.liveInputId,
       naturalDuration: Number.MAX_SAFE_INTEGER,
     },
+    is3D: serializedClip.is3D,
     ...applyCommonRestoredClipFields(serializedClip),
     isLoading: false,
   };

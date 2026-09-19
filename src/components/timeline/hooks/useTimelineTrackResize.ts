@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
 import { useTimelineStore } from '../../../stores/timeline';
@@ -31,6 +31,8 @@ export function useTimelineTrackResize({
   const trackResizePendingClientYRef = useRef<number | null>(null);
   const [activeTrackResizeId, setActiveTrackResizeId] = useState<string | null>(null);
   const [trackResizePinsVideoBottom, setTrackResizePinsVideoBottom] = useState(false);
+  const videoBottomVisibleRef = useRef(isVideoBottomVisible);
+  useLayoutEffect(() => { videoBottomVisibleRef.current = isVideoBottomVisible; }, [isVideoBottomVisible]);
 
   const handleTrackResizeStart = useCallback((event: ReactPointerEvent, trackId: string) => {
     if (isExporting) return;
@@ -42,7 +44,7 @@ export function useTimelineTrackResize({
     event.preventDefault();
     event.stopPropagation();
 
-    const pinVideoBottom = currentTrack.type === 'video' && isVideoBottomVisible();
+    const pinVideoBottom = currentTrack.type === 'video' && videoBottomVisibleRef.current();
     trackResizeDragRef.current = {
       trackId,
       startY: event.clientY,
@@ -51,7 +53,7 @@ export function useTimelineTrackResize({
     };
     setTrackResizePinsVideoBottom(pinVideoBottom);
     setActiveTrackResizeId(trackId);
-  }, [isExporting, isVideoBottomVisible, trackMap]);
+  }, [isExporting, trackMap]);
 
   useEffect(() => {
     if (!activeTrackResizeId) return undefined;

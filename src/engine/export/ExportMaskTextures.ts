@@ -19,7 +19,7 @@ function getMaskShapeHash(masks: ClipMask[]): string {
       vertex.handleOut.x.toFixed(4),
       vertex.handleOut.y.toFixed(4),
     ].join(',')).join(';')}|` +
-    `${mask.position.x.toFixed(4)},${mask.position.y.toFixed(4)}|` +
+    `${mask.position.x.toFixed(4)},${mask.position.y.toFixed(4)},${(mask.rotation ?? 0).toFixed(3)}|` +
     `${(mask.feather || 0).toFixed(2)}|${mask.featherQuality ?? 50}|` +
     `${Object.entries(mask.edgeFeathers ?? {})
       .toSorted(([a], [b]) => a.localeCompare(b))

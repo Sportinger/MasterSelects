@@ -2,6 +2,7 @@
 
 import { Logger } from '../../logger';
 import { PROJECT_FOLDERS } from '../core/constants';
+import { getFsaProjectFolderPath } from '../core/projectPackage';
 import {
   createEmptyPackIndex,
   getNextPackOrdinal,
@@ -62,6 +63,18 @@ export class ProxyStorageService {
     Map<string, Promise<ProxyPackRuntimeIndex | null>>
   >();
 
+  private async getProjectFolder(
+    projectHandle: FileSystemDirectoryHandle,
+    folder: 'PROXY' | 'AUDIO_PROXIES',
+    create = false,
+  ): Promise<FileSystemDirectoryHandle> {
+    let current = projectHandle;
+    for (const part of getFsaProjectFolderPath(projectHandle, folder).split('/').filter(Boolean)) {
+      current = await current.getDirectoryHandle(part, { create });
+    }
+    return current;
+  }
+
   // ============================================
   // VIDEO PROXY OPERATIONS
   // ============================================
@@ -71,7 +84,7 @@ export class ProxyStorageService {
     mediaId: string,
     create: boolean
   ): Promise<FileSystemDirectoryHandle> {
-    const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY, { create });
+    const proxyFolder = await this.getProjectFolder(projectHandle, 'PROXY', create);
     return proxyFolder.getDirectoryHandle(mediaId, { create });
   }
 
@@ -315,7 +328,7 @@ export class ProxyStorageService {
     mediaId: string
   ): Promise<boolean> {
     try {
-      const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
+      const proxyFolder = await this.getProjectFolder(projectHandle, 'PROXY');
       await proxyFolder.getDirectoryHandle(mediaId);
       return true;
     } catch (e) {
@@ -408,7 +421,7 @@ export class ProxyStorageService {
     blob: Blob
   ): Promise<boolean> {
     try {
-      const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY, { create: true });
+      const proxyFolder = await this.getProjectFolder(projectHandle, 'PROXY', true);
       const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId, { create: true });
 
       const fileHandle = await mediaFolder.getFileHandle(PROXY_VIDEO_FILE_NAME, { create: true });
@@ -432,7 +445,7 @@ export class ProxyStorageService {
     mediaId: string
   ): Promise<File | null> {
     try {
-      const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
+      const proxyFolder = await this.getProjectFolder(projectHandle, 'PROXY');
       const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
       const fileHandle = await mediaFolder.getFileHandle(PROXY_VIDEO_FILE_NAME);
       return await fileHandle.getFile();
@@ -449,7 +462,7 @@ export class ProxyStorageService {
     mediaId: string
   ): Promise<boolean> {
     try {
-      const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
+      const proxyFolder = await this.getProjectFolder(projectHandle, 'PROXY');
       const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
       await mediaFolder.getFileHandle(PROXY_VIDEO_FILE_NAME);
       return true;
@@ -471,7 +484,7 @@ export class ProxyStorageService {
     blob: Blob
   ): Promise<boolean> {
     try {
-      const audioProxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.AUDIO_PROXIES, { create: true });
+      const audioProxyFolder = await this.getProjectFolder(projectHandle, 'AUDIO_PROXIES', true);
       const fileName = getAudioProxyFileName(mediaId);
       const fileHandle = await audioProxyFolder.getFileHandle(fileName, { create: true });
       const writable = await fileHandle.createWritable();
@@ -494,7 +507,7 @@ export class ProxyStorageService {
     mediaId: string
   ): Promise<File | null> {
     try {
-      const audioProxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.AUDIO_PROXIES);
+      const audioProxyFolder = await this.getProjectFolder(projectHandle, 'AUDIO_PROXIES');
       const fileHandle = await audioProxyFolder.getFileHandle(getAudioProxyFileName(mediaId));
       return await fileHandle.getFile();
     } catch (e) {
@@ -502,7 +515,7 @@ export class ProxyStorageService {
     }
 
     try {
-      const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
+      const proxyFolder = await this.getProjectFolder(projectHandle, 'PROXY');
       const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
       const fileHandle = await mediaFolder.getFileHandle('audio.wav');
       return await fileHandle.getFile();
@@ -511,7 +524,7 @@ export class ProxyStorageService {
     }
 
     try {
-      const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
+      const proxyFolder = await this.getProjectFolder(projectHandle, 'PROXY');
       const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
       const fileHandle = await mediaFolder.getFileHandle(LEGACY_AUDIO_PROXY_FILE_NAME);
       return await fileHandle.getFile();
@@ -528,7 +541,7 @@ export class ProxyStorageService {
     mediaId: string
   ): Promise<boolean> {
     try {
-      const audioProxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.AUDIO_PROXIES);
+      const audioProxyFolder = await this.getProjectFolder(projectHandle, 'AUDIO_PROXIES');
       await audioProxyFolder.getFileHandle(getAudioProxyFileName(mediaId));
       return true;
     } catch (e) {
@@ -536,7 +549,7 @@ export class ProxyStorageService {
     }
 
     try {
-      const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
+      const proxyFolder = await this.getProjectFolder(projectHandle, 'PROXY');
       const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
       await mediaFolder.getFileHandle('audio.wav');
       return true;
@@ -545,7 +558,7 @@ export class ProxyStorageService {
     }
 
     try {
-      const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
+      const proxyFolder = await this.getProjectFolder(projectHandle, 'PROXY');
       const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
       await mediaFolder.getFileHandle(LEGACY_AUDIO_PROXY_FILE_NAME);
       return true;
@@ -564,7 +577,7 @@ export class ProxyStorageService {
     let deleted = false;
 
     try {
-      const audioProxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.AUDIO_PROXIES);
+      const audioProxyFolder = await this.getProjectFolder(projectHandle, 'AUDIO_PROXIES');
       await audioProxyFolder.removeEntry(getAudioProxyFileName(mediaId));
       deleted = true;
     } catch {
@@ -572,7 +585,7 @@ export class ProxyStorageService {
     }
 
     try {
-      const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
+      const proxyFolder = await this.getProjectFolder(projectHandle, 'PROXY');
       await proxyFolder.removeEntry(mediaId, { recursive: true });
       deleted = true;
     } catch {

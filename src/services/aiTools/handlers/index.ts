@@ -10,11 +10,18 @@ import {
 import type { ToolResult } from '../types';
 import type { CallerContext } from '../policy';
 import { normalizeToolName } from '../policy';
+import {
+  handleClickAppControl,
+  handleFillAppControl,
+  handleProbeSameOriginRequest,
+  handleProfileAppInteraction,
+} from './appDebug';
 
 // Import handlers by category
 import {
   handleGetTimelineRangeSelection,
   handleGetTimelineState,
+  handleGetTimelineTranscript,
   handleSetPlayhead,
   handleSetInOutPoints,
 } from './timeline';
@@ -67,7 +74,9 @@ import {
 } from './preview';
 
 import {
+  handleGetMediaPreviewFrames,
   handleGetMediaItems,
+  handleGetMediaTranscript,
   handleCreateMediaFolder,
   handleRenameMediaItem,
   handleDeleteMediaItem,
@@ -75,6 +84,8 @@ import {
   handleCreateComposition,
   handleOpenComposition,
   handleSelectMediaItems,
+  handleStartMediaAnalysis,
+  handleStartMediaTranscription,
   handleImportLocalFiles,
   handleListLocalFiles,
 } from './media';
@@ -217,9 +228,22 @@ import {
   handleListTimelineVariantOptions,
   handleMaterializeTimelineVariantOption,
 } from './storyboardVariants';
+import {
+  handleGetMediaGenerationStatus,
+  handleInspectMediaGenerationModel,
+  handlePreviewMediaGeneration,
+  handleStartMediaGeneration,
+} from './mediaGeneration';
 
-const mediaHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useMediaStore.getState>, callerContext?: CallerContext) => Promise<ToolResult>> = {
+const mediaHandlers: Record<string, (
+  args: Record<string, unknown>,
+  store: ReturnType<typeof useMediaStore.getState>,
+  callerContext?: CallerContext,
+  signal?: AbortSignal,
+) => Promise<ToolResult>> = {
+  getMediaPreviewFrames: handleGetMediaPreviewFrames,
   getMediaItems: handleGetMediaItems,
+  getMediaTranscript: handleGetMediaTranscript,
   createMediaFolder: handleCreateMediaFolder,
   renameMediaItem: handleRenameMediaItem,
   deleteMediaItem: handleDeleteMediaItem,
@@ -227,11 +251,21 @@ const mediaHandlers: Record<string, (args: Record<string, unknown>, store: Retur
   createComposition: handleCreateComposition,
   openComposition: handleOpenComposition,
   selectMediaItems: handleSelectMediaItems,
+  startMediaAnalysis: handleStartMediaAnalysis,
+  startMediaTranscription: handleStartMediaTranscription,
   importLocalFiles: handleImportLocalFiles,
 };
 
 // Self-contained handlers (no store dependency, or fetch own stores)
 const selfContainedHandlers: Record<string, (args: Record<string, unknown>, callerContext?: CallerContext) => Promise<ToolResult>> = {
+  profileAppInteraction: handleProfileAppInteraction,
+  clickAppControl: handleClickAppControl,
+  fillAppControl: handleFillAppControl,
+  probeSameOriginRequest: handleProbeSameOriginRequest,
+  inspectMediaGenerationModel: handleInspectMediaGenerationModel,
+  previewMediaGeneration: handlePreviewMediaGeneration,
+  startMediaGeneration: handleStartMediaGeneration,
+  getMediaGenerationStatus: handleGetMediaGenerationStatus,
   createTimelineVariantSet: handleCreateTimelineVariantSet,
   addTimelineVariantOption: handleAddTimelineVariantOption,
   materializeTimelineVariantOption: handleMaterializeTimelineVariantOption,
@@ -526,6 +560,7 @@ export async function executeToolInternal(
   timelineStore: ReturnType<typeof useTimelineStore.getState>,
   mediaStore: ReturnType<typeof useMediaStore.getState>,
   callerContext: CallerContext = 'internal',
+  signal?: AbortSignal,
 ): Promise<ToolResult> {
   // Strip provider namespace prefixes (e.g. OpenAI's `functions.addClipSegment`)
   // so dispatch matches the registered handler name.
@@ -546,7 +581,7 @@ export async function executeToolInternal(
 
   // Check media handlers
   if (toolName in mediaHandlers) {
-    return mediaHandlers[toolName](args, mediaStore, callerContext);
+    return mediaHandlers[toolName](args, mediaStore, callerContext, signal);
   }
 
   // Check self-contained handlers (no store dependency)
@@ -568,6 +603,7 @@ export {
   // Timeline
   handleGetTimelineRangeSelection,
   handleGetTimelineState,
+  handleGetTimelineTranscript,
   handleSetPlayhead,
   handleSetInOutPoints,
   // Clips
@@ -608,7 +644,9 @@ export {
   handleGetCutPreviewQuad,
   handleGetFramesAtTimes,
   // Media
+  handleGetMediaPreviewFrames,
   handleGetMediaItems,
+  handleGetMediaTranscript,
   handleCreateMediaFolder,
   handleRenameMediaItem,
   handleDeleteMediaItem,
@@ -690,4 +728,8 @@ export {
   handleRunTimelineCanvasThumbnailReloadSmoke,
   handleGetNodeWorkspaceDebugState,
   handleSendAINodePrompt,
+  handleInspectMediaGenerationModel,
+  handlePreviewMediaGeneration,
+  handleStartMediaGeneration,
+  handleGetMediaGenerationStatus,
 };

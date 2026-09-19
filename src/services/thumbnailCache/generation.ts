@@ -12,6 +12,8 @@ import type {
   ThumbnailCacheLogger,
   ThumbnailCacheNotify,
 } from './types';
+import { SOURCE_THUMBNAIL_GENERATION_VERSION } from './types';
+import type { RuntimeFrameProvider } from '../mediaRuntime/types';
 
 export interface ThumbnailGeneratorOptions {
   memory: ThumbnailMemoryTier;
@@ -102,6 +104,7 @@ export class ThumbnailGenerator {
             fileHash,
             secondIndex: s,
             blob,
+            generationVersion: SOURCE_THUMBNAIL_GENERATION_VERSION,
           });
 
           if (batch.length >= BATCH_SIZE) {
@@ -141,6 +144,88 @@ export class ThumbnailGenerator {
       } catch {
         // Ignore seek reset failures.
       }
+      return true;
+    } finally {
+      releaseThumbnailRuntimeResource(getThumbnailGenerationCanvasResourceId(mediaFileId));
+    }
+  }
+
+  async generateFrameProviderThumbnails(
+    mediaFileId: string,
+    provider: RuntimeFrameProvider,
+    duration: number,
+    fileHash: string | undefined,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    if (!provider.seekExact) {
+      throw new Error('Thumbnail frame provider does not support exact seeking');
+    }
+    const canvasAdmission = canRetainThumbnailGenerationCanvas(mediaFileId);
+    if (!canvasAdmission.admitted) return false;
+    const canvas = document.createElement('canvas');
+    canvas.width = THUMB_WIDTH;
+    canvas.height = THUMB_HEIGHT;
+    reportThumbnailGenerationCanvas(mediaFileId);
+
+    try {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Could not get canvas 2d context');
+      const totalThumbs = Math.ceil(duration);
+      const sourceCache = this.options.memory.createSourceCache(mediaFileId);
+      const captureErrors: string[] = [];
+      let batch: StoredSourceThumbnailFrame[] = [];
+
+      for (let secondIndex = 0; secondIndex < totalThumbs; secondIndex += 1) {
+        if (signal.aborted) return false;
+        const seekTime = Math.max(0, Math.min(secondIndex, duration - 0.01));
+        try {
+          await provider.seekExact(seekTime);
+          const frame = provider.getCurrentFrame();
+          if (!frame) throw new Error('Frame provider returned no current frame');
+          ctx.drawImage(frame, 0, 0, THUMB_WIDTH, THUMB_HEIGHT);
+          const blob = await new Promise<Blob>((resolve, reject) => {
+            canvas.toBlob(
+              (value) => value ? resolve(value) : reject(new Error('toBlob failed')),
+              'image/jpeg',
+              THUMB_QUALITY,
+            );
+          });
+          this.options.memory.setGeneratedFrame(mediaFileId, sourceCache, secondIndex, blob);
+          this.options.notify(mediaFileId, 'generating', {
+            type: 'frame-ready',
+            secondIndex,
+            secondIndices: [secondIndex],
+            count: 1,
+          });
+          batch.push({
+            id: `${mediaFileId}_${secondIndex.toString().padStart(6, '0')}`,
+            mediaFileId,
+            fileHash,
+            secondIndex,
+            blob,
+            generationVersion: SOURCE_THUMBNAIL_GENERATION_VERSION,
+          });
+          if (batch.length >= BATCH_SIZE) {
+            await this.options.persistent.saveSourceThumbnailsBatch(batch);
+            batch = [];
+          }
+        } catch (error) {
+          if (captureErrors.length < 5) {
+            captureErrors.push(
+              `second ${secondIndex}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        }
+      }
+
+      if (sourceCache.size === 0) {
+        const errorMessage = captureErrors.length
+          ? `No provider thumbnail frames captured (${captureErrors.join('; ')})`
+          : 'No provider thumbnail frames captured';
+        this.options.setLastGenerationError(mediaFileId, errorMessage);
+        return false;
+      }
+      if (batch.length) await this.options.persistent.saveSourceThumbnailsBatch(batch);
       return true;
     } finally {
       releaseThumbnailRuntimeResource(getThumbnailGenerationCanvasResourceId(mediaFileId));

@@ -66,6 +66,7 @@ export function buildLayerBuilderMotionAdjustmentLayer(
     effects: ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime),
     colorCorrection: ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipLocalTime),
     position: transform.position,
+    anchor: transform.anchor,
     scale: transform.scale,
     rotation: transform.rotation,
   };

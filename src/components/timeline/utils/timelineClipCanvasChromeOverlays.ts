@@ -51,6 +51,8 @@ export interface TimelineClipCanvasChromeOverlay {
   width: number;
   badges: readonly TimelineClipCanvasChromeBadge[];
   badgeReserve: number;
+  isAudio: boolean;
+  linked: boolean;
 }
 
 export function getTimelineClipCanvasMediaFileId(clip: TimelinePaintSourceClip): string | null {
@@ -113,7 +115,9 @@ export function createTimelineClipCanvasChromeOverlays(input: {
       clip,
       getTimelineClipCanvasMediaStatus(clip, input.mediaFileStatusById),
     );
-    const iconType = clip.captionProperties || clip.captionLayerBinding?.role === 'input'
+    const iconType = clip.trackType === 'audio'
+      ? 'audio'
+      : clip.captionProperties || clip.captionLayerBinding?.role === 'input'
       ? 'caption'
       : clip.isComposition
         ? 'composition'
@@ -138,6 +142,8 @@ export function createTimelineClipCanvasChromeOverlays(input: {
       width: visibleW,
       badges: createTimelineClipCanvasChromeBadges(passiveBadges),
       badgeReserve: getTimelineClipCanvasPassiveDecorationBadgeReserve(passiveBadges),
+      isAudio: iconType === 'audio',
+      linked: Boolean(clip.linkedClipId || clip.linkedGroupId),
     });
   }
   return overlays;

@@ -212,8 +212,28 @@ export function activate3DEditSceneCamera(): string | null {
     return existing.id;
   }
 
-  const trackId = timeline.tracks.find((track) => track.type === 'video')?.id ?? timeline.addTrack('video');
-  const cameraId = useTimelineStore.getState().addCameraClip(trackId, 0, Math.max(0.001, timeline.duration));
+  const cameraStartTime = 0;
+  const cameraDuration = Math.max(0.001, timeline.duration);
+  const cameraEndTime = cameraStartTime + cameraDuration;
+  const topVideoTrack = timeline.tracks.find((track) => track.type === 'video');
+  const topTrackIsAvailable = Boolean(
+    topVideoTrack
+    && topVideoTrack.locked !== true
+    && topVideoTrack.visible !== false
+    && !timeline.clips.some((clip) => (
+      clip.trackId === topVideoTrack.id
+      && clip.startTime < cameraEndTime
+      && clip.startTime + clip.duration > cameraStartTime
+    )),
+  );
+  const trackId = topTrackIsAvailable && topVideoTrack
+    ? topVideoTrack.id
+    : timeline.addTrack('video');
+  const cameraId = useTimelineStore.getState().addCameraClip(
+    trackId,
+    cameraStartTime,
+    cameraDuration,
+  );
   if (cameraId) useTimelineStore.getState().setPlayheadPosition(0);
   return cameraId;
 }

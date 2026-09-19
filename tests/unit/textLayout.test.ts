@@ -69,6 +69,28 @@ describe('textLayout', () => {
     expect(lines[0].width).toBeLessThan(lines[1].width);
   });
 
+  it('disables automatic wrapping while preserving hard line breaks', () => {
+    const bounds = createTextBoundsFromRect({ x: 0, y: 0, width: 60, height: 40 }, 60, 40);
+    const lines = wrapTextToShapeLines(
+      mockMeasureContext,
+      'one two\nthree',
+      bounds,
+      { x: 0, y: 0, width: 60, height: 40 },
+      60,
+      40,
+      20,
+      1,
+      0,
+      20,
+      'none',
+    );
+
+    expect(lines.map(line => ({ text: line.text, start: line.start, end: line.end, y: line.y }))).toEqual([
+      { text: 'one two', start: 0, end: 7, y: 20 },
+      { text: 'three', start: 8, end: 13, y: 40 },
+    ]);
+  });
+
   it('creates a text layout snapshot with line bounds and source character ranges', () => {
     const snapshot = createTextLayoutSnapshot(
       mockMeasureContext,

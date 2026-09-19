@@ -11,6 +11,7 @@ import {
 import { MAX_NESTING_DEPTH } from '../../stores/timeline/constants';
 import { updateRuntimePlaybackTime } from '../../services/mediaRuntime/runtimePlayback';
 import { getClipSourceWindowTime, getMappedClipSourceTime } from './layerBuilder/timing';
+import { isLiveInputClip } from './liveInputExport';
 
 const log = Logger.create('VideoSeeker');
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
@@ -225,7 +226,15 @@ async function seekSequentialMode(
 
       for (const { clip: nestedClip, sourceTime: nestedClipTime } of nestedTargets) {
         if (nestedClip.source?.type === 'video') {
+          if (isLiveInputClip(nestedClip)) continue;
           const nestedState = clipStates.get(nestedClip.id);
+
+          if (nestedState?.frameProvider?.seekExact) {
+            seekPromises.push(nestedState.frameProvider.seekExact(nestedClipTime).then(() => {
+              updateRuntimePlaybackTime(nestedState.runtimeSource, nestedClipTime, 'export');
+            }));
+            continue;
+          }
 
           if (nestedState?.isSequential && nestedState.webCodecsPlayer) {
             seekPromises.push(nestedState.webCodecsPlayer.seekDuringExport(nestedClipTime).then(() => {
@@ -251,6 +260,7 @@ async function seekSequentialMode(
 
     // Handle regular video clips
     if (clip.source?.type === 'video') {
+      if (isLiveInputClip(clip)) continue;
       const clipLocalTime = time - clip.startTime;
 
       // Calculate clip time (handles speed keyframes and reversed clips)
@@ -265,6 +275,13 @@ async function seekSequentialMode(
       }
 
       const clipState = clipStates.get(clip.id);
+
+      if (clipState?.frameProvider?.seekExact) {
+        seekPromises.push(clipState.frameProvider.seekExact(clipTime).then(() => {
+          updateRuntimePlaybackTime(clipState.runtimeSource, clipTime, 'export');
+        }));
+        continue;
+      }
 
       if (clipState?.isSequential && clipState.webCodecsPlayer) {
         // FAST MODE: WebCodecs sequential decoding

@@ -18,6 +18,51 @@ export const timelineToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'getTimelineTranscript',
+      description: 'Read what is audibly spoken in the current edited timeline, already mapped into timeline time and deduplicated across linked video/audio pairs. The result respects trims, speed/reverse, clip mute, and effective track mute/solo. Use detail=segments for readable sentences or detail=words for exact edit evidence; follow nextCursor until complete.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          startTime: {
+            type: 'number',
+            minimum: 0,
+            description: 'Optional timeline-time range start in seconds.',
+          },
+          endTime: {
+            type: 'number',
+            minimum: 0,
+            description: 'Optional timeline-time range end in seconds.',
+          },
+          cursor: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Word offset inside the matching audible timeline transcript (default 0).',
+          },
+          timelineRevision: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Optional revision guard. Copy timelineRevision from the first page into later calls so pagination fails instead of mixing different edits.',
+          },
+          limit: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 5000,
+            description: 'Maximum words in this page (default 1000, maximum 5000).',
+          },
+          detail: {
+            type: 'string',
+            enum: ['text', 'segments', 'words'],
+            description: 'text returns joined text, segments adds readable sentence/clip blocks, words adds exact word timing and source mappings (default segments).',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'getTimelineRangeSelection',
       description: 'Read the exact painted timeline time range and track scope. Returns null when no range is active.',
       parameters: {

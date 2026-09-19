@@ -8,7 +8,9 @@ import {
   hasRunnableAINodes,
   renderClipAINodesToCanvas,
   sortPixelsTexture,
+  waitForAINodeRuntimeIdle,
 } from '../../src/services/nodeGraph';
+import { setAINodeSandboxTestExecutor } from '../../src/services/nodeGraph/aiNodeSandboxClient';
 import { DEFAULT_TRANSFORM } from '../../src/stores/timeline/constants';
 import type { LayerSource, TimelineClip } from '../../src/types';
 import { timelineRuntimeCoordinator } from '../../src/services/timeline/timelineRuntimeCoordinator';
@@ -23,6 +25,8 @@ import {
   primeTimelineOnsetMapCache,
 } from '../../src/services/audio/timelineBeatOnsetCache';
 import { createMockTrack } from '../helpers/mockData';
+import { installCanvas2DMock } from '../helpers/mockCanvas2d';
+import { runAINodeSandboxTestExecutor } from '../helpers/aiNodeSandboxTestExecutor';
 
 function getInteractivePolicyBudget() {
   const budget = timelineRuntimeCoordinator.getPolicy('interactive')?.defaultBudget;
@@ -94,12 +98,15 @@ function createRetainedInteractiveCanvasResource(index: number): RenderResourceD
 
 describe('AI node runtime', () => {
   beforeEach(() => {
+    installCanvas2DMock();
+    setAINodeSandboxTestExecutor(runAINodeSandboxTestExecutor);
     clearAINodeRuntimeCache();
     timelineRuntimeCoordinator.clearResources();
   });
 
   afterEach(() => {
     clearAINodeRuntimeCache();
+    setAINodeSandboxTestExecutor(null);
     timelineRuntimeCoordinator.clearResources();
     vi.restoreAllMocks();
   });
@@ -276,7 +283,7 @@ describe('AI node runtime', () => {
     )).toBe(true);
   });
 
-  it('injects bounded artifact-only audio analysis context into generated AI nodes', () => {
+  it('injects bounded artifact-only audio analysis context into generated AI nodes', async () => {
     const sourceCanvas = document.createElement('canvas');
     sourceCanvas.width = 7;
     sourceCanvas.height = 1;
@@ -487,6 +494,7 @@ describe('AI node runtime', () => {
       masterAudioState,
     });
     expect(outputCanvas).not.toBeNull();
+    await waitForAINodeRuntimeIdle();
     const outputData = outputCanvas?.getContext('2d')?.getImageData(0, 0, 7, 1).data;
 
     expect(outputData?.[0]).toBe(101);
@@ -511,7 +519,7 @@ describe('AI node runtime', () => {
     expect(outputData?.[26]).toBe(120);
   });
 
-  it('passes connected source audio analysis ports as bounded AI node inputs', () => {
+  it('passes connected source audio analysis ports as bounded AI node inputs', async () => {
     const sourceCanvas = document.createElement('canvas');
     sourceCanvas.width = 3;
     sourceCanvas.height = 1;
@@ -617,6 +625,7 @@ describe('AI node runtime', () => {
       { track },
     );
     expect(outputCanvas).not.toBeNull();
+    await waitForAINodeRuntimeIdle();
     const outputData = outputCanvas?.getContext('2d')?.getImageData(0, 0, 3, 1).data;
 
     expect(outputData?.[0]).toBe(132);
@@ -628,7 +637,7 @@ describe('AI node runtime', () => {
     expect(outputData?.[8]).toBe(138);
   });
 
-  it('feeds linked audio clip analysis into a shared video clip AI graph at runtime', () => {
+  it('feeds linked audio clip analysis into a shared video clip AI graph at runtime', async () => {
     const sourceCanvas = document.createElement('canvas');
     sourceCanvas.width = 4;
     sourceCanvas.height = 1;
@@ -760,6 +769,7 @@ describe('AI node runtime', () => {
       linkedTrack: audioTrack,
     });
     expect(outputCanvas).not.toBeNull();
+    await waitForAINodeRuntimeIdle();
     const outputData = outputCanvas?.getContext('2d')?.getImageData(0, 0, 4, 1).data;
 
     expect(outputData?.[0]).toBe(121);

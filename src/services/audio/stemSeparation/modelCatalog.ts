@@ -2,6 +2,10 @@ import type { StemModelCatalogEntry } from './types';
 
 export const DEFAULT_STEM_MODEL_ID = 'demucs-htdemucs-web';
 
+// Model weights are pinned to an upstream commit SHA (`resolve/<sha>/`), never
+// `resolve/main`: a force-push or account takeover upstream must not be able
+// to swap the bytes we execute. `checksumSha256` is the upstream LFS object
+// hash (Hugging Face `X-Linked-ETag`) of the pinned file.
 export const STEM_MODEL_CATALOG: readonly StemModelCatalogEntry[] = [
   {
     id: DEFAULT_STEM_MODEL_ID,
@@ -14,7 +18,8 @@ export const STEM_MODEL_CATALOG: readonly StemModelCatalogEntry[] = [
     files: [{
       name: 'htdemucs_embedded.onnx',
       sizeBytes: 180_534_758,
-      url: 'https://huggingface.co/timcsy/demucs-web-onnx/resolve/main/htdemucs_embedded.onnx',
+      url: 'https://huggingface.co/timcsy/demucs-web-onnx/resolve/92e33df61cfc9eb820272aaa62d2ef6dcf4d950d/htdemucs_embedded.onnx',
+      checksumSha256: 'e5e425c17683f163a472462eb5f5a4ffcd11c31858d57fbd0833b012d8b88077',
     }],
     supportedBackends: ['webgpu', 'wasm'],
     testedBrowserRuntime: true,
@@ -31,9 +36,10 @@ export const STEM_MODEL_CATALOG: readonly StemModelCatalogEntry[] = [
     inputSampleRate: 44_100,
     outputStemOrder: ['drums', 'bass', 'other', 'vocals'],
     files: [{
-      name: 'htdemucs_fp16.onnx',
-      sizeBytes: 166_000_000,
-      url: 'https://huggingface.co/StemSplitio/htdemucs-onnx/resolve/main/htdemucs_fp16.onnx',
+      name: 'htdemucs_fp16weights.onnx',
+      sizeBytes: 165_612_636,
+      url: 'https://huggingface.co/StemSplitio/htdemucs-onnx/resolve/d54ed9eb60e258ea82131c6ee14578628816456a/htdemucs_fp16weights.onnx',
+      checksumSha256: 'd05c269d0178d2a72ad484b10b11dd370193fc923201c3b27a99f848745db70a',
     }],
     supportedBackends: ['webgpu', 'wasm'],
     testedBrowserRuntime: false,
@@ -51,8 +57,9 @@ export const STEM_MODEL_CATALOG: readonly StemModelCatalogEntry[] = [
     outputStemOrder: ['vocals', 'instrumental'],
     files: [{
       name: 'bs_polarformer_fp16.onnx',
-      sizeBytes: 108_000_000,
-      url: 'https://huggingface.co/bgkb/bs_polarformer/resolve/main/bs_polarformer_fp16.onnx',
+      sizeBytes: 108_325_429,
+      url: 'https://huggingface.co/bgkb/bs_polarformer/resolve/9158719ee2173edd480a735764627526506fe4af/bs_polarformer_fp16.onnx',
+      checksumSha256: '76424289ea586bae4bbdb289383b0269b099416471e2b05068d02aa0b0c01467',
     }],
     supportedBackends: ['webgpu'],
     testedBrowserRuntime: false,

@@ -2,11 +2,20 @@
 
 import { EFFECT_REGISTRY, getEffect } from './index';
 import {
+  isComputeEffectDefinition,
   isFullscreenEffectDefinition,
+  type ComputeEffectDefinition,
   type FullscreenEffectDefinition,
 } from './types';
 import commonShader from './_shared/common.wgsl?raw';
+import { getGlyphAtlas } from './_shared/glyphAtlas';
+import { ByteTextureCache } from './_shared/byteTexture';
 import { Logger } from '../services/logger';
+import { ComputeEffectRuntime } from './ComputeEffectRuntime';
+import { SplitComparePipeline } from './SplitComparePipeline';
+import type { SplitCompareSettings } from '../stores/splitCompareStore';
+import { getLandmarkEffectPoints } from '../services/landmarkTracking/landmarkRuntime';
+import { DenseTerrainPipeline } from './tracking/DenseTerrainPipeline';
 
 const log = Logger.create('EffectsPipeline');
 
@@ -16,6 +25,7 @@ export const INLINE_EFFECT_IDS = new Set(['brightness', 'contrast', 'saturation'
 
 // Effect instance interface (runtime data attached to clips)
 interface EffectInstance {
+  terrainRender?: import('../types/effects').Effect['terrainRender'];
   id: string;
   type: string;
   name: string;
@@ -48,34 +58,51 @@ export class EffectsPipeline {
   private bindGroupLayouts = new Map<string, GPUBindGroupLayout>();
   private shaderModules = new Map<string, GPUShaderModule>();
   private pipelineSignatures = new Map<string, string>();
+  private pendingPipelineSignatures = new Map<string, string>();
+  private failedPipelineSignatures = new Map<string, string>();
   private feedbackStates = new Map<string, FeedbackState>();
+  private landmarkBuffers = new Map<string, GPUBuffer>();
+  private byteTextures: ByteTextureCache;
+  private computeRuntime: ComputeEffectRuntime;
+  private splitComparePipeline: SplitComparePipeline;
+  private readonly onPipelineReady?: () => void;
   private initialized = false;
+  private denseTerrain?: DenseTerrainPipeline;
 
-  constructor(device: GPUDevice) {
+  constructor(device: GPUDevice, onPipelineReady?: () => void) {
     this.device = device;
+    this.onPipelineReady = onPipelineReady;
+    this.computeRuntime = new ComputeEffectRuntime(device);
+    this.splitComparePipeline = new SplitComparePipeline(device);
+    this.byteTextures = new ByteTextureCache(device);
   }
 
   /**
-   * Initialize pipelines for all registered effects
+   * Initialize the effect runtime. Individual effect pipelines are compiled on
+   * first use (or explicit prewarm) so editor startup does not synchronously
+   * compile the entire catalog on mobile GPUs.
    */
   async createPipelines(): Promise<void> {
     if (this.initialized) return;
-
-    for (const [id, effect] of EFFECT_REGISTRY) {
-      // Skip effects handled inline in the composite shader
-      if (INLINE_EFFECT_IDS.has(id) || !isFullscreenEffectDefinition(effect)) continue;
-      this.createEffectPipeline(id, effect);
-    }
-
     this.initialized = true;
-    log.info(`Created ${this.pipelines.size} effect pipelines`);
+    log.info(`Effect runtime ready; ${EFFECT_REGISTRY.size} catalog pipelines will compile lazily`);
   }
 
   /**
    * Create GPU pipeline for a single effect
    */
   private createEffectPipeline(id: string, effect: FullscreenEffectDefinition): void {
+    const signature = this.getPipelineSignature(effect);
+    const useValidationScope = !!this.onPipelineReady
+      && typeof this.device.pushErrorScope === 'function'
+      && typeof this.device.popErrorScope === 'function';
+    let validationScopeOpen = false;
     try {
+      if (useValidationScope) {
+        this.device.pushErrorScope('validation');
+        validationScopeOpen = true;
+      }
+
       // Combine common shader with effect shader
       const shaderCode = `${commonShader}\n${effect.shader}`;
 
@@ -83,8 +110,6 @@ export class EffectsPipeline {
         label: `effect-${id}`,
         code: shaderCode,
       });
-      this.shaderModules.set(id, shaderModule);
-
       // Create bind group layout
       const entries: GPUBindGroupLayoutEntry[] = [
         { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
@@ -107,12 +132,34 @@ export class EffectsPipeline {
         });
       }
 
+      if (effect.glyphAtlas) {
+        entries.push({
+          binding: 4,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: {},
+        });
+      }
+
+      if (effect.byteTexture) {
+        entries.push({
+          binding: 5,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { sampleType: 'uint' },
+        });
+      }
+
+      if (effect.landmarkPoints) {
+        entries.push({
+          binding: 6,
+          visibility: GPUShaderStage.FRAGMENT,
+          buffer: { type: 'read-only-storage' },
+        });
+      }
+
       const bindGroupLayout = this.device.createBindGroupLayout({
         label: `effect-${id}-layout`,
         entries,
       });
-      this.bindGroupLayouts.set(id, bindGroupLayout);
-
       // Create render pipeline
       const pipeline = this.device.createRenderPipeline({
         label: `effect-${id}-pipeline`,
@@ -131,9 +178,45 @@ export class EffectsPipeline {
         primitive: { topology: 'triangle-list' },
       });
 
-      this.pipelines.set(id, pipeline);
-      this.pipelineSignatures.set(id, this.getPipelineSignature(effect));
+      const commitPipeline = () => {
+        this.shaderModules.set(id, shaderModule);
+        this.bindGroupLayouts.set(id, bindGroupLayout);
+        this.pipelines.set(id, pipeline);
+        this.pipelineSignatures.set(id, signature);
+        this.failedPipelineSignatures.delete(id);
+      };
+
+      if (!validationScopeOpen) {
+        commitPipeline();
+        return;
+      }
+
+      this.pendingPipelineSignatures.set(id, signature);
+      validationScopeOpen = false;
+      void this.device.popErrorScope().then((validationError) => {
+        if (this.pendingPipelineSignatures.get(id) !== signature) return;
+        this.pendingPipelineSignatures.delete(id);
+        if (validationError) {
+          this.failedPipelineSignatures.set(id, signature);
+          log.error(`Effect pipeline validation failed: ${id}`, {
+            name: validationError.constructor?.name ?? 'GPUValidationError',
+            message: validationError.message,
+          });
+          return;
+        }
+        commitPipeline();
+        this.onPipelineReady?.();
+      }).catch((error) => {
+        if (this.pendingPipelineSignatures.get(id) !== signature) return;
+        this.pendingPipelineSignatures.delete(id);
+        this.failedPipelineSignatures.set(id, signature);
+        log.error(`Effect pipeline validation failed: ${id}`, error);
+      });
     } catch (error) {
+      if (validationScopeOpen) {
+        void this.device.popErrorScope().catch(() => undefined);
+      }
+      this.failedPipelineSignatures.set(id, signature);
       log.error(`Failed to create pipeline for ${id}`, error);
     }
   }
@@ -143,6 +226,9 @@ export class EffectsPipeline {
       effect.entryPoint,
       effect.uniformSize,
       effect.usesFeedback === true ? 'feedback' : 'no-feedback',
+      effect.glyphAtlas ? 'glyph-atlas' : 'no-glyph-atlas',
+      effect.byteTexture ? 'byte-texture' : 'no-byte-texture',
+      effect.landmarkPoints === true ? 'landmarks' : 'no-landmarks',
       effect.shader,
     ].join('\u0000');
   }
@@ -152,11 +238,19 @@ export class EffectsPipeline {
     if (this.pipelines.has(id) && this.pipelineSignatures.get(id) === signature) {
       return false;
     }
+    if (this.pendingPipelineSignatures.get(id) === signature) {
+      return false;
+    }
+    if (this.failedPipelineSignatures.get(id) === signature) {
+      return false;
+    }
 
     this.pipelines.delete(id);
     this.bindGroupLayouts.delete(id);
     this.shaderModules.delete(id);
     this.pipelineSignatures.delete(id);
+    this.pendingPipelineSignatures.delete(id);
+    this.failedPipelineSignatures.delete(id);
     this.createEffectPipeline(id, effect);
     return this.pipelines.has(id);
   }
@@ -181,12 +275,29 @@ export class EffectsPipeline {
   createEffectUniformData(
     effect: EffectInstance,
     outputWidth: number,
-    outputHeight: number
+    outputHeight: number,
+    timelineTimeSeconds = 0,
   ): Float32Array | null {
     const definition = getEffect(effect.type);
-    if (!isFullscreenEffectDefinition(definition)) return null;
+    if (!isFullscreenEffectDefinition(definition) && !isComputeEffectDefinition(definition)) return null;
 
-    return definition.packUniforms(toPrimitiveEffectParams(effect.params), outputWidth, outputHeight);
+    return definition.packUniforms(
+      toPrimitiveEffectParams(effect.params),
+      outputWidth,
+      outputHeight,
+      timelineTimeSeconds,
+    );
+  }
+
+  /** Compile only the requested effect, used by budgeted thumbnail prewarming. */
+  prewarmEffect(effectType: string): void {
+    if (INLINE_EFFECT_IDS.has(effectType)) return;
+    const effect = getEffect(effectType);
+    if (isFullscreenEffectDefinition(effect)) {
+      this.ensureEffectPipeline(effectType, effect);
+    } else if (isComputeEffectDefinition(effect)) {
+      this.computeRuntime.ensure(effect);
+    }
   }
 
   /**
@@ -197,7 +308,8 @@ export class EffectsPipeline {
     sampler: GPUSampler,
     inputView: GPUTextureView,
     uniformBuffer?: GPUBuffer,
-    feedbackView?: GPUTextureView
+    feedbackView?: GPUTextureView,
+    glyphAtlasView?: GPUTextureView,
   ): GPUBindGroup | null {
     const layout = this.bindGroupLayouts.get(effectType);
     if (!layout) return null;
@@ -213,6 +325,10 @@ export class EffectsPipeline {
 
     if (feedbackView) {
       entries.push({ binding: 3, resource: feedbackView });
+    }
+
+    if (glyphAtlasView) {
+      entries.push({ binding: 4, resource: glyphAtlasView });
     }
 
     return this.device.createBindGroup({
@@ -282,6 +398,30 @@ export class EffectsPipeline {
     return currentOutput === pingView ? pongView : pingView;
   }
 
+  private getLandmarkBuffer(effectId: string): GPUBuffer {
+    let buffer = this.landmarkBuffers.get(effectId);
+    if (!buffer) {
+      buffer = this.device.createBuffer({
+        label: `effect-landmarks-${effectId}`,
+        size: (4 + 64 * 4) * Float32Array.BYTES_PER_ELEMENT,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+      this.landmarkBuffers.set(effectId, buffer);
+    }
+    const points = getLandmarkEffectPoints(effectId).slice(0, 64);
+    const packed = new Float32Array(4 + 64 * 4);
+    packed[0] = points.length;
+    for (let index = 0; index < points.length; index += 1) {
+      const offset = 4 + index * 4;
+      packed[offset] = points[index].x;
+      packed[offset + 1] = points[index].y;
+      packed[offset + 2] = points[index].z;
+      packed[offset + 3] = points[index].visibility ?? 1;
+    }
+    this.device.queue.writeBuffer(buffer, 0, packed);
+    return buffer;
+  }
+
   /**
    * Apply effects to a texture using ping-pong rendering
    */
@@ -296,7 +436,9 @@ export class EffectsPipeline {
     outputWidth: number,
     outputHeight: number,
     pingTexture?: GPUTexture,
-    pongTexture?: GPUTexture
+    pongTexture?: GPUTexture,
+    compare?: { outputView: GPUTextureView; settings: SplitCompareSettings },
+    timelineTimeSeconds = 0,
   ): { finalView: GPUTextureView; swapped: boolean } {
     // Filter out audio effects (handled by AudioRoutingManager) and disabled effects
     const enabledEffects = effects.filter(e => e.enabled && !e.type.startsWith('audio-'));
@@ -309,7 +451,48 @@ export class EffectsPipeline {
     let swapped = false;
 
     for (const effect of enabledEffects) {
+      if(effect.terrainRender){
+        this.denseTerrain??=new DenseTerrainPipeline(this.device);
+        this.denseTerrain.encode(commandEncoder,effect.terrainRender,sampler,effectInput,effectOutput,outputWidth,outputHeight);
+        effectInput=effectOutput;
+        effectOutput=this.getNextOutputView(effectOutput,pingView,pongView);
+        swapped=!swapped;
+        continue;
+      }
       const definition = getEffect(effect.type);
+      if (isComputeEffectDefinition(definition)) {
+        const effectParams = this.createEffectUniformData(
+          effect,
+          outputWidth,
+          outputHeight,
+          timelineTimeSeconds,
+        );
+        let effectUniformBuffer: GPUBuffer | null = null;
+        if (effectParams) {
+          effectUniformBuffer = this.device.createBuffer({
+            size: effectParams.byteLength,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+          });
+          this.device.queue.writeBuffer(effectUniformBuffer, 0, effectParams.buffer);
+        }
+        try {
+          this.computeRuntime.encode({
+            commandEncoder,
+            definition: definition as ComputeEffectDefinition,
+            inputView: effectInput,
+            outputView: effectOutput,
+            uniformBuffer: effectUniformBuffer,
+            width: outputWidth,
+            height: outputHeight,
+          });
+          effectInput = effectOutput;
+          effectOutput = this.getNextOutputView(effectOutput, pingView, pongView);
+          swapped = !swapped;
+        } catch (error) {
+          log.error(`Compute effect failed: ${effect.type}`, error);
+        }
+        continue;
+      }
       const rebuiltPipeline = isFullscreenEffectDefinition(definition)
         ? this.ensureEffectPipeline(effect.type, definition)
         : false;
@@ -317,12 +500,22 @@ export class EffectsPipeline {
       const bindGroupLayout = this.bindGroupLayouts.get(effect.type);
 
       if (!isFullscreenEffectDefinition(definition) || !pipeline || !bindGroupLayout) {
-        log.warn(`No pipeline for effect type: ${effect.type}`);
+        if (
+          !this.pendingPipelineSignatures.has(effect.type)
+          && !this.failedPipelineSignatures.has(effect.type)
+        ) {
+          log.warn(`No pipeline for effect type: ${effect.type}`);
+        }
         continue;
       }
 
       // Create uniform buffer for effect parameters
-      const effectParams = this.createEffectUniformData(effect, outputWidth, outputHeight);
+      const effectParams = this.createEffectUniformData(
+        effect,
+        outputWidth,
+        outputHeight,
+        timelineTimeSeconds,
+      );
       let effectUniformBuffer: GPUBuffer | null = null;
 
       if (effectParams) {
@@ -364,6 +557,26 @@ export class EffectsPipeline {
         entries.push({ binding: 3, resource: feedbackState.view });
       }
 
+      if (definition.glyphAtlas) {
+        const primitiveParams = toPrimitiveEffectParams(effect.params);
+        const atlas = getGlyphAtlas(this.device, definition.glyphAtlas(primitiveParams));
+        entries.push({ binding: 4, resource: atlas.view });
+      }
+
+      if (definition.byteTexture) {
+        const upload = definition.byteTexture(toPrimitiveEffectParams(effect.params), {
+          effectInstanceId: effect.id,
+          width: outputWidth,
+          height: outputHeight,
+          timelineTimeSeconds,
+        });
+        entries.push({ binding: 5, resource: this.byteTextures.getView(effect.id, upload) });
+      }
+
+      if (definition.landmarkPoints) {
+        entries.push({ binding: 6, resource: { buffer: this.getLandmarkBuffer(effect.id) } });
+      }
+
       const effectBindGroup = this.device.createBindGroup({
         layout: bindGroupLayout,
         entries,
@@ -399,22 +612,58 @@ export class EffectsPipeline {
       swapped = !swapped;
     }
 
+    if (compare?.settings.enabled && effectInput !== inputView) {
+      this.splitComparePipeline.encode({
+        commandEncoder,
+        sampler,
+        untreatedView: inputView,
+        effectedView: effectInput,
+        outputView: compare.outputView,
+        settings: compare.settings,
+      });
+      effectInput = compare.outputView;
+    }
+
     // effectInput now contains the final result
     return { finalView: effectInput, swapped };
+  }
+
+  projectTerrainContent(
+    commandEncoder: GPUCommandEncoder,
+    projection: import('../types/terrainAttachment').TerrainProjectionDescriptor,
+    sampler: GPUSampler,
+    contentView: GPUTextureView,
+    backgroundView: GPUTextureView,
+    outputView: GPUTextureView,
+    outputWidth: number,
+    outputHeight: number,
+    opacity: number,
+    resourceKey?: string,
+  ): boolean {
+    this.denseTerrain ??= new DenseTerrainPipeline(this.device);
+    return this.denseTerrain.encodeContentProjection(commandEncoder, projection, sampler, contentView, backgroundView, outputView, outputWidth, outputHeight, opacity, resourceKey);
   }
 
   /**
    * Clean up resources
    */
   destroy(): void {
+    this.denseTerrain?.destroy();this.denseTerrain=undefined;
     for (const state of this.feedbackStates.values()) {
       state.texture.destroy();
     }
     this.feedbackStates.clear();
+    for (const buffer of this.landmarkBuffers.values()) buffer.destroy();
+    this.landmarkBuffers.clear();
+    this.byteTextures.destroy();
     this.pipelines.clear();
     this.bindGroupLayouts.clear();
     this.shaderModules.clear();
     this.pipelineSignatures.clear();
+    this.pendingPipelineSignatures.clear();
+    this.failedPipelineSignatures.clear();
+    this.computeRuntime.clear();
+    this.splitComparePipeline.destroy();
     this.initialized = false;
   }
 

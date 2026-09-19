@@ -56,6 +56,37 @@ interface RenderHostRuntimeState {
   instance: RenderHostPort | null;
 }
 
+export interface RenderReferenceSize {
+  width: number;
+  height: number;
+}
+
+interface RenderReferenceState extends RenderReferenceSize {
+  renderWidth: number;
+  renderHeight: number;
+}
+
+const RENDER_REFERENCE_STATE_KEY = Symbol.for('masterselects.renderReferenceState');
+
+function storeRenderReferenceSize(
+  renderWidth: number,
+  renderHeight: number,
+  reference: RenderReferenceSize | undefined,
+): void {
+  (globalThis as typeof globalThis & { [RENDER_REFERENCE_STATE_KEY]?: RenderReferenceState })[
+    RENDER_REFERENCE_STATE_KEY
+  ] = {
+    renderWidth,
+    renderHeight,
+    width: reference?.width ?? renderWidth,
+    height: reference?.height ?? renderHeight,
+  };
+}
+
+export type RenderHostPortWithReferenceResolution = Omit<RenderHostPort, 'setResolution'> & {
+  setResolution(width: number, height: number, reference?: RenderReferenceSize): void;
+};
+
 function createRenderHostRuntimeState(): RenderHostRuntimeState {
   const state = {
     selectionTelemetry: INITIAL_RENDER_HOST_SELECTION_TELEMETRY,
@@ -247,13 +278,19 @@ export function getRenderHostSelectionTelemetry(): RenderHostSelectionTelemetry 
   return runtimeState.selectionTelemetry;
 }
 
-const renderHostPortProxy = new Proxy({} as RenderHostPort, {
-  get(_target, propertyKey: keyof RenderHostPort) {
+const renderHostPortProxy = new Proxy({} as RenderHostPortWithReferenceResolution, {
+  get(_target, propertyKey: keyof RenderHostPortWithReferenceResolution) {
     if (propertyKey === 'getTelemetry') {
       return () => ({
         ...instance.getTelemetry(),
         selection: runtimeState.selectionTelemetry,
       });
+    }
+    if (propertyKey === 'setResolution') {
+      return (width: number, height: number, reference?: RenderReferenceSize) => {
+        storeRenderReferenceSize(width, height, reference);
+        instance.setResolution(width, height);
+      };
     }
     const value = instance[propertyKey];
     return typeof value === 'function'

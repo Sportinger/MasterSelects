@@ -1,0 +1,613 @@
+import {
+  AI_TOOLS,
+  checkToolAccess,
+  executeAITool,
+  type CallerContext,
+  type ToolDefinition,
+  type ToolResult,
+} from '../aiTools';
+import { emitAgentActivity, safeToolActivityLabel } from './FlashBoardChatActivity';
+import type {
+  FlashBoardChatRequest,
+  FlashBoardExecutedToolCall,
+} from './FlashBoardChatTypes';
+import {
+  adaptDirectCodexToolArguments,
+  DIRECT_CODEX_EDITOR_TOOL_OVERRIDES,
+  DIRECT_CODEX_MEDIA_TOOL_DEFINITIONS,
+} from './FlashBoardDirectCodexMediaTools';
+import {
+  createDirectCodexTurnToolPolicy,
+} from './FlashBoardDirectCodexTurnPolicy';
+import { useMediaStore } from '../../stores/mediaStore';
+import {
+  clearDirectCodexReloadSnapshot,
+  readDirectCodexReloadSnapshot,
+  saveDirectCodexReloadSnapshot,
+} from './FlashBoardDirectCodexReloadResume';
+import {
+  directCodexToolFailure,
+  runDirectCodexToolWithRecovery,
+} from './FlashBoardDirectCodexToolRecovery';
+import {
+  DIRECT_CODEX_MODEL,
+  readStoredDirectCodexThreadId,
+  startOrResumeDirectCodexThread,
+} from './FlashBoardDirectCodexThreadSession';
+
+export { createDirectCodexTurnToolGuard } from './FlashBoardDirectCodexTurnPolicy';
+export { runDirectCodexToolWithRecovery } from './FlashBoardDirectCodexToolRecovery';
+export {
+  buildDirectCodexBaseInstructions,
+  resetDirectCodexSession,
+} from './FlashBoardDirectCodexThreadSession';
+
+const MAX_PROTOCOL_MESSAGE_CHARS = 16 * 1024 * 1024;
+const MAX_TOOL_RESULT_CHARS = 4 * 1024 * 1024;
+
+type RpcId = number | string;
+
+interface RpcMessage {
+  error?: { code?: unknown; message?: unknown };
+  id?: RpcId;
+  method?: string;
+  params?: unknown;
+  result?: unknown;
+}
+
+interface PendingRequest {
+  reject(error: Error): void;
+  resolve(value: unknown): void;
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function directCodexSocketUrl(): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}/api/direct-codex/ws`;
+}
+
+export async function prepareDirectCodexBrowserSession(signal?: AbortSignal): Promise<void> {
+  const response = await fetch('/api/me', {
+    cache: 'no-store',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error('Codex Direct could not prepare the MasterSelects session.');
+  }
+
+  const payload = record(await response.json());
+  const session = record(payload.session);
+  if (session.authenticated !== true && session.guest !== true) {
+    throw new Error('Codex Direct requires an active MasterSelects session.');
+  }
+}
+
+export function buildDirectCodexDynamicTools(
+  tools: readonly ToolDefinition[] = [
+    ...DIRECT_CODEX_EDITOR_TOOL_OVERRIDES,
+    ...AI_TOOLS,
+    ...DIRECT_CODEX_MEDIA_TOOL_DEFINITIONS,
+  ],
+): Array<Record<string, unknown>> {
+  const seen = new Set<string>();
+  const definitions = tools.flatMap((tool) => {
+    const name = tool.function.name;
+    if (seen.has(name)) return [];
+    seen.add(name);
+    return [{
+      deferLoading: true,
+      description: tool.function.description,
+      inputSchema: tool.function.parameters,
+      name,
+      type: 'function',
+    }];
+  });
+  return [{
+    description: 'All MasterSelects browser-editor tools for the current Direct Codex session.',
+    name: 'masterselects_editor',
+    tools: definitions,
+    type: 'namespace',
+  }];
+}
+
+function callerForDirectTool(toolName: string): CallerContext | undefined {
+  const callerPreference: readonly CallerContext[] = ['chat', 'internal', 'kernel', 'devBridge'];
+  return callerPreference.find((caller) => checkToolAccess(toolName, caller, {
+    executionMode: 'normal',
+  }).allowed);
+}
+
+function directToolDefinitionsByName(): Map<string, ToolDefinition> {
+  return new Map(
+    [...AI_TOOLS, ...DIRECT_CODEX_MEDIA_TOOL_DEFINITIONS, ...DIRECT_CODEX_EDITOR_TOOL_OVERRIDES]
+      .map((tool) => [tool.function.name, tool]),
+  );
+}
+
+export function normalizeDirectCodexToolArguments(
+  toolName: string,
+  args: Record<string, unknown>,
+  mediaFiles: readonly { id: string; name: string }[] = useMediaStore.getState().files,
+): Record<string, unknown> {
+  const adapted = adaptDirectCodexToolArguments(toolName, args);
+  if (toolName !== 'getMediaPreviewFrames' && toolName !== 'startMediaTranscription') {
+    return adapted;
+  }
+  const requestedMediaId = typeof adapted.mediaFileId === 'string'
+    ? adapted.mediaFileId.trim()
+    : typeof adapted.mediaItemId === 'string'
+      ? adapted.mediaItemId.trim()
+      : '';
+  if (!requestedMediaId) return adapted;
+  const mediaFile = mediaFiles.find(candidate => (
+    candidate.id === requestedMediaId || candidate.name === requestedMediaId
+  ));
+  if (!mediaFile) return adapted;
+  const normalized = { ...adapted };
+  delete normalized.mediaItemId;
+  return { ...normalized, mediaFileId: mediaFile.id };
+}
+
+function boundedToolResult(result: ToolResult): string {
+  const serialized = JSON.stringify(result, (_key, value) => (
+    typeof value === 'string' && /^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(value)
+      ? '[image attached separately]'
+      : value
+  ));
+  if (serialized.length <= MAX_TOOL_RESULT_CHARS) return serialized;
+  return JSON.stringify({
+    success: false,
+    error: 'The MasterSelects tool result exceeded the Direct Codex transport limit.',
+    data: { originalCharacters: serialized.length },
+  });
+}
+
+function findImageDataUrl(value: unknown, seen = new WeakSet<object>()): string | undefined {
+  if (typeof value === 'string' && /^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(value)) {
+    return value;
+  }
+  if (value === null || typeof value !== 'object') return undefined;
+  if (seen.has(value)) return undefined;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const found = findImageDataUrl(entry, seen);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  for (const entry of Object.values(value as Record<string, unknown>)) {
+    const found = findImageDataUrl(entry, seen);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function directToolContentItems(result: ToolResult): Array<Record<string, unknown>> {
+  const contentItems: Array<Record<string, unknown>> = [{
+    text: boundedToolResult(result),
+    type: 'inputText',
+  }];
+  const imageUrl = findImageDataUrl(result.data);
+  if (imageUrl) contentItems.push({ imageUrl, type: 'inputImage' });
+  return contentItems;
+}
+
+interface DirectNamedResultField {
+  key: string;
+  value: boolean | number | string;
+}
+
+function collectDirectNamedResultFields(
+  value: unknown,
+  fields: Map<string, DirectNamedResultField>,
+): void {
+  if (value === null || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    for (const entry of value) collectDirectNamedResultFields(entry, fields);
+    return;
+  }
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof entry === 'boolean' || typeof entry === 'number' || typeof entry === 'string') {
+      fields.set(key.toLowerCase(), { key, value: entry });
+    } else {
+      collectDirectNamedResultFields(entry, fields);
+    }
+  }
+}
+
+function summarizeDirectToolCounts(toolNames: readonly string[]): string {
+  const counts = new Map<string, number>();
+  for (const name of toolNames) counts.set(name, (counts.get(name) ?? 0) + 1);
+  return [...counts].map(([name, count]) => `${name} ×${count}`).join(', ');
+}
+
+export function buildDirectCodexVerifiedResponse(
+  prompt: string,
+  modelResponse: string,
+  toolCalls: readonly FlashBoardExecutedToolCall[],
+): string {
+  if (toolCalls.length === 0) return modelResponse;
+  if (toolCalls.some(call => !call.result.success)) return modelResponse;
+
+  const availableFields = new Map<string, DirectNamedResultField>();
+  for (const call of toolCalls) {
+    if (call.result.success) collectDirectNamedResultFields(call.result.data, availableFields);
+  }
+  const promptLower = prompt.toLowerCase();
+  const requestedFields = [...availableFields.entries()]
+    .filter(([lowerKey]) => promptLower.includes(lowerKey))
+    .map(([lowerKey, field]) => ({
+      ...field,
+      position: promptLower.indexOf(lowerKey),
+    }))
+    .toSorted((left, right) => left.position - right.position);
+  if (requestedFields.length > 0) {
+    return requestedFields.map(({ key, value }) => `${key}: ${String(value)}`).join('\n');
+  }
+
+  const successfulNames = toolCalls
+    .filter(call => call.result.success)
+    .map(call => call.toolCall.name);
+  const parts: string[] = [];
+  if (successfulNames.length > 0) {
+    parts.push(`Tool-verifiziert ausgeführt: ${summarizeDirectToolCounts(successfulNames)}.`);
+  }
+  return parts.join(' ');
+}
+
+function directTurnInput(request: FlashBoardChatRequest): Array<Record<string, unknown>> {
+  const input: Array<Record<string, unknown>> = [{
+    text: request.prompt,
+    type: 'text',
+  }];
+  for (const reference of request.visualReferences ?? []) {
+    input.push({ detail: 'auto', type: 'image', url: reference.dataUrl });
+  }
+  return input;
+}
+
+function rpcFailure(message: RpcMessage): Error {
+  const error = record(message.error);
+  const detail = typeof error.message === 'string' ? error.message : 'unknown app-server error';
+  return new Error(`Codex Direct failed: ${detail}`);
+}
+
+async function runDirectCodexChat(
+  request: FlashBoardChatRequest,
+  resumeOnly: boolean,
+): Promise<string | null> {
+  request.signal?.throwIfAborted();
+  request.onPhase?.('provider');
+
+  await prepareDirectCodexBrowserSession(request.signal);
+
+  const socket = new WebSocket(directCodexSocketUrl());
+  const pending = new Map<RpcId, PendingRequest>();
+  const toolDefinitions = directToolDefinitionsByName();
+  const turnToolPolicy = createDirectCodexTurnToolPolicy();
+  const handledToolCallIds = new Set<string>();
+  const executedToolCalls: FlashBoardExecutedToolCall[] = [];
+  let toolResponseQueue = Promise.resolve();
+  let nextRequestId = 1;
+  const reloadSnapshot = request.resumeMessageId
+    ? readDirectCodexReloadSnapshot(request.resumeMessageId)
+    : null;
+  let threadId = reloadSnapshot?.threadId
+    ?? readStoredDirectCodexThreadId(request.conversationRef)
+    ?? '';
+  let turnId = resumeOnly ? reloadSnapshot?.turnId ?? '' : '';
+  let finalText = '';
+  let streamedText = '';
+  let completionResolve: (() => void) | undefined;
+  let completionReject: ((error: Error) => void) | undefined;
+  const completion = new Promise<void>((resolve, reject) => {
+    completionResolve = resolve;
+    completionReject = reject;
+  });
+  void completion.catch(() => undefined);
+
+  const fail = (error: Error) => {
+    for (const waiter of pending.values()) waiter.reject(error);
+    pending.clear();
+    completionReject?.(error);
+  };
+  const send = (message: RpcMessage) => {
+    if (socket.readyState !== WebSocket.OPEN) {
+      throw new Error('The Codex Direct connection is not open.');
+    }
+    socket.send(JSON.stringify(message));
+  };
+  const requestRpc = (method: string, params: unknown): Promise<unknown> => {
+    const id = nextRequestId++;
+    return new Promise((resolve, reject) => {
+      pending.set(id, { reject, resolve });
+      send({ id, method, params });
+    });
+  };
+  const respondToTool = async (message: RpcMessage) => {
+    const params = record(message.params);
+    const callId = typeof params.callId === 'string' ? params.callId : '';
+    const requestedThreadId = typeof params.threadId === 'string' ? params.threadId : '';
+    const requestedTurnId = typeof params.turnId === 'string' ? params.turnId : '';
+    const toolName = typeof params.tool === 'string' ? params.tool : '';
+    if (message.id === undefined) return;
+    if (!callId || !toolName) {
+      const result = directCodexToolFailure(
+        toolName || 'editorTool',
+        new Error('Codex sent an incomplete tool request. Do not retry it.'),
+      );
+      send({
+        id: message.id,
+        result: { contentItems: directToolContentItems(result), success: false },
+      });
+      return;
+    }
+    if (requestedThreadId !== threadId || requestedTurnId !== turnId) {
+      const result = directCodexToolFailure(
+        toolName,
+        new Error('This request belongs to an expired Direct turn. Do not retry it.'),
+      );
+      send({
+        id: message.id,
+        result: { contentItems: directToolContentItems(result), success: false },
+      });
+      return;
+    }
+    if (handledToolCallIds.has(callId)) {
+      const result = directCodexToolFailure(
+        toolName,
+        new Error('This duplicate tool request was already handled. Do not retry it.'),
+      );
+      send({
+        id: message.id,
+        result: { contentItems: directToolContentItems(result), success: false },
+      });
+      return;
+    }
+    handledToolCallIds.add(callId);
+    const definition = toolDefinitions.get(toolName);
+    const caller = callerForDirectTool(toolName);
+    if (!definition || !caller) {
+      send({
+        id: message.id,
+        result: {
+          contentItems: [{ text: `MasterSelects tool is unavailable: ${toolName}`, type: 'inputText' }],
+          success: false,
+        },
+      });
+      return;
+    }
+
+    const safeLabel = safeToolActivityLabel(toolName);
+    emitAgentActivity(request, {
+      kind: 'operation',
+      operationId: callId,
+      phase: 'started',
+      safeLabel,
+      toolName,
+    });
+    let args: Record<string, unknown> = {};
+    let result: ToolResult;
+    try {
+      const rawArgs = params.arguments;
+      args = record(typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs);
+      let executionArgs = normalizeDirectCodexToolArguments(toolName, args);
+      if (
+        toolName === 'startMediaGeneration'
+        && request.conversationRef
+        && typeof executionArgs.requestJson === 'string'
+      ) {
+        executionArgs = {
+          ...executionArgs,
+          requestJson: JSON.stringify({
+            ...record(JSON.parse(executionArgs.requestJson)),
+            originConversationRef: request.conversationRef,
+          }),
+        };
+      }
+      const guardedResult = turnToolPolicy.beforeTool(toolName, args);
+      result = guardedResult ?? await runDirectCodexToolWithRecovery(
+        toolName,
+        signal => executeAITool(toolName, executionArgs, caller, {
+          auditProviderToolCallId: callId,
+          executionMode: 'normal',
+          guidedReplay: false,
+          signal,
+        }),
+        request.signal,
+      );
+      if (guardedResult === undefined) {
+        turnToolPolicy.afterTool(toolName, args, result);
+      }
+    } catch (error) {
+      result = directCodexToolFailure(toolName, error);
+    }
+    const executedToolCall: FlashBoardExecutedToolCall = {
+      modelContent: '',
+      result,
+      toolCall: { arguments: JSON.stringify(args), id: callId, name: toolName },
+    };
+    executedToolCalls.push(executedToolCall);
+    request.onExecutedToolCalls?.([executedToolCall]);
+    emitAgentActivity(request, {
+      kind: 'operation',
+      operationId: callId,
+      phase: result.success ? 'completed' : 'failed',
+      safeLabel,
+      toolName,
+    });
+    send({
+      id: message.id,
+      result: {
+        contentItems: directToolContentItems(result),
+        success: result.success,
+      },
+    });
+  };
+
+  socket.addEventListener('message', (event) => {
+    try {
+      if (typeof event.data !== 'string' || event.data.length > MAX_PROTOCOL_MESSAGE_CHARS) {
+        throw new Error('Codex Direct returned an invalid protocol message.');
+      }
+      const message = JSON.parse(event.data) as RpcMessage;
+      if (message.method === 'item/tool/call' && message.id !== undefined) {
+        toolResponseQueue = toolResponseQueue
+          .then(() => respondToTool(message))
+          .catch(error => fail(error instanceof Error ? error : new Error('Codex Direct tool response failed.')));
+        return;
+      }
+      if (message.method !== undefined && message.id !== undefined) {
+        send({
+          error: { code: -32_000, message: 'Unsupported Codex Direct server request.' },
+          id: message.id,
+        });
+        fail(new Error(`Codex Direct requested unsupported authority: ${message.method}.`));
+        return;
+      }
+      if (message.id !== undefined) {
+        const waiter = pending.get(message.id);
+        if (!waiter) return;
+        pending.delete(message.id);
+        if (message.error !== undefined) waiter.reject(rpcFailure(message));
+        else waiter.resolve(message.result);
+        return;
+      }
+
+      const params = record(message.params);
+      if (message.method === 'item/agentMessage/delta') {
+        const delta = typeof params.delta === 'string' ? params.delta : '';
+        if (delta) {
+          streamedText += delta;
+          request.onTextDelta?.(delta);
+        }
+      } else if (message.method === 'item/completed') {
+        const item = record(params.item);
+        if (item.type === 'agentMessage' && typeof item.text === 'string') finalText = item.text;
+      } else if (message.method === 'turn/completed') {
+        const turn = record(params.turn);
+        if (turn.id !== turnId) return;
+        if (turn.status === 'completed') completionResolve?.();
+        else completionReject?.(new Error(`Codex Direct ended with status ${String(turn.status)}.`));
+      } else if (message.method === 'error') {
+        const error = record(params.error);
+        if (params.willRetry === true) return;
+        fail(new Error(
+          typeof error.message === 'string' ? error.message : 'Codex Direct failed.',
+        ));
+      }
+    } catch (error) {
+      fail(error instanceof Error ? error : new Error('Codex Direct failed.'));
+    }
+  });
+  socket.addEventListener('error', () => fail(new Error(
+    'Codex Direct is unavailable. Start MasterSelects with npm run dev:full.',
+  )));
+  socket.addEventListener('close', () => {
+    if (!finalText && !streamedText) fail(new Error('Codex Direct disconnected before completion.'));
+  });
+
+  const opened = new Promise<void>((resolve, reject) => {
+    socket.addEventListener('open', () => resolve(), { once: true });
+    socket.addEventListener('error', () => reject(new Error(
+      'Codex Direct is unavailable. Start MasterSelects with npm run dev:full.',
+    )), { once: true });
+  });
+  const abort = () => {
+    if (threadId && turnId && socket.readyState === WebSocket.OPEN) {
+      try {
+        send({ id: nextRequestId++, method: 'turn/interrupt', params: { threadId, turnId } });
+      } catch {
+        // Closing the isolated channel is the final cancellation boundary.
+      }
+    }
+    socket.close();
+    fail(new DOMException('Codex Direct was cancelled.', 'AbortError'));
+  };
+  if (request.signal?.aborted) abort();
+  else request.signal?.addEventListener('abort', abort, { once: true });
+
+  try {
+    await opened;
+    await requestRpc('initialize', {
+      capabilities: { experimentalApi: true, requestAttestation: false },
+      clientInfo: { name: 'masterselects_direct', title: 'MasterSelects Codex Direct', version: '1' },
+    });
+    send({ method: 'initialized', params: {} });
+    const session = await startOrResumeDirectCodexThread(
+      requestRpc,
+      buildDirectCodexDynamicTools(),
+      request.conversationRef,
+    );
+    threadId = session.threadId;
+    turnId = session.activeTurnId ?? '';
+    if (!turnId && resumeOnly) {
+      if (!session.completedText) return null;
+      if (request.resumeMessageId) clearDirectCodexReloadSnapshot(request.resumeMessageId);
+      return session.completedText;
+    }
+    if (!turnId) {
+      const startedTurn = record(await requestRpc('turn/start', {
+        approvalPolicy: 'never',
+        effort: 'xhigh',
+        input: directTurnInput(request),
+        model: DIRECT_CODEX_MODEL,
+        sandboxPolicy: { networkAccess: false, type: 'readOnly' },
+        serviceTier: 'fast',
+        threadId,
+      }));
+      turnId = String(record(startedTurn.turn).id ?? '');
+      if (!turnId) throw new Error('Codex Direct did not create a turn.');
+    }
+    if (request.resumeMessageId) {
+      saveDirectCodexReloadSnapshot({
+        assistantMessageId: request.resumeMessageId,
+        conversationRef: request.conversationRef?.trim() || 'default',
+        prompt: request.prompt,
+        threadId,
+        turnId,
+      });
+    }
+    await completion;
+    const response = finalText.trim() || streamedText.trim();
+    if (!response) throw new Error('Codex Direct returned no final message.');
+    if (request.resumeMessageId) clearDirectCodexReloadSnapshot(request.resumeMessageId);
+    return buildDirectCodexVerifiedResponse(request.prompt, response, executedToolCalls);
+  } finally {
+    request.signal?.removeEventListener('abort', abort);
+    if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+      socket.close();
+    }
+  }
+}
+
+export async function sendDirectCodexChat(request: FlashBoardChatRequest): Promise<string> {
+  const response = await runDirectCodexChat(request, false);
+  if (response === null) throw new Error('Codex Direct returned no final message.');
+  return response;
+}
+
+export async function resumeDirectCodexChat(input: {
+  assistantMessageId: string;
+  request: FlashBoardChatRequest;
+}): Promise<string | null> {
+  const snapshot = readDirectCodexReloadSnapshot(input.assistantMessageId);
+  if (!snapshot) return null;
+  return runDirectCodexChat({
+    ...input.request,
+    agentPath: 'direct-codex',
+    conversationRef: snapshot.conversationRef === 'default'
+      ? undefined
+      : snapshot.conversationRef,
+    prompt: snapshot.prompt,
+    resumeMessageId: snapshot.assistantMessageId,
+  }, true);
+}

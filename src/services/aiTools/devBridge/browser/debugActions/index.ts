@@ -1,4 +1,8 @@
 import { useTimelineStore } from '../../../../../stores/timeline';
+import { inspectReactRenderCosts } from './reactRenderCosts';
+import { measureRenderPhaseCosts } from './renderPhaseCosts';
+import { measureJsCpuProfile } from './jsCpuProfile';
+import { measureKeyframeDisclosure } from './keyframeDisclosure';
 import { useMediaStore } from '../../../../../stores/mediaStore';
 import { useDockStore } from '../../../../../stores/dockStore';
 import {
@@ -57,6 +61,10 @@ import {
   writeRealClipDragSession,
 } from './realClipDragRecorder';
 import { measureStoreChurn } from './storeChurn';
+import {
+  clearProjectDirtyTraces,
+  readProjectDirtyTraces,
+} from '../../../../project/projectDirtyDiagnostics';
 
 const waitForTransformProbe = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
@@ -338,10 +346,29 @@ export async function runDebugAction(action: string, args: Record<string, unknow
   const mediaState = useMediaStore.getState();
 
   switch (action) {
+    case 'measure-keyframe-disclosure':
+      return measureKeyframeDisclosure(args);
+    case 'inspect-react-render-costs':
+      return inspectReactRenderCosts();
+    case 'measure-render-phase-costs':
+      return measureRenderPhaseCosts(args);
+    case 'measure-js-cpu-profile':
+      return measureJsCpuProfile(args);
     case 'measure-idle-main-thread':
       return measureIdleMainThread(args);
     case 'measure-store-churn':
       return measureStoreChurn(args);
+    case 'get-project-dirty-traces': {
+      const traces = readProjectDirtyTraces();
+      if (args.clear === true) clearProjectDirtyTraces();
+      return {
+        success: true,
+        data: {
+          projectDirty: projectFileService.hasUnsavedChanges(),
+          traces,
+        },
+      };
+    }
     case 'measure-ui-frame-loop':
       return measureUiFrameLoop(args);
     case 'measure-playback-frame-loop':
@@ -594,6 +621,10 @@ export async function runDebugAction(action: string, args: Record<string, unknow
         success: true,
         data: {
           action,
+          memory: summarizePerformanceMemory(),
+          saveStatus: (await import('../../../../project/projectSaveStatus')).projectSaveStatus.read(projectFileService.getProjectHandle() ?? projectFileService.getProjectPath()),
+          packageWrite: (await import('../../../../project/core/projectCorePersistence')).getPackageWriteProgress(),
+          storeSyncInProgress: (await import('../../../../project/projectStoreSyncGuard')).isProjectStoreSyncInProgress(),
           activeBackend: projectFileService.activeBackend,
           isOpen: projectFileService.isProjectOpen(),
           hasUnsavedChanges: projectFileService.hasUnsavedChanges(),

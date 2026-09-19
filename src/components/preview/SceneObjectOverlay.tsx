@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { TimelineClip, TimelineTrack } from '../../types/timeline';
 import type { ClipTransform } from '../../types/timelineCore';
@@ -42,6 +42,10 @@ import { createAxisPlaneDrag } from './sceneOverlay/sceneOverlayDragGeometry';
 import { applyDragTransform } from './sceneOverlay/sceneOverlayDragTransformPlans';
 import { useSceneOverlayGizmoHandlers } from './sceneOverlay/useSceneOverlayGizmoHandlers';
 import { useSceneOverlayKeybindings } from './sceneOverlay/useSceneOverlayKeybindings';
+import {
+  SceneObjectOrbitContextMenu,
+  type SceneObjectOrbitContextMenuState,
+} from './SceneObjectOrbitContextMenu';
 import type {
   ClipTransformPatch,
   DisplayCameraWireframePath,
@@ -119,11 +123,16 @@ export function SceneObjectOverlay({
   toolbarPortalTarget,
   enabled,
 }: SceneObjectOverlayProps) {
+  const overlayOwnerId = useId();
   const [mode, setMode] = useState<SceneGizmoMode>('move');
+  const setSceneOverlayActive = useEngineStore((state) => state.setSceneOverlayActive);
   const setSceneGizmoMode = useEngineStore((state) => state.setSceneGizmoMode);
   const setSceneGizmoHoveredAxis = useEngineStore((state) => state.setSceneGizmoHoveredAxis);
+  const sceneNavOrbitTarget = useEngineStore((state) => state.sceneNavOrbitTarget);
+  const setSceneNavOrbitTarget = useEngineStore((state) => state.setSceneNavOrbitTarget);
   const [hoveredAxis, setHoveredAxis] = useState<SceneGizmoAxis | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
+  const [orbitContextMenu, setOrbitContextMenu] = useState<SceneObjectOrbitContextMenuState | null>(null);
   const [timelineSnapshotTick, setTimelineSnapshotTick] = useState(0);
   const endedDragRef = useRef(false);
   const hoveredAxisRef = useRef<SceneGizmoAxis | null>(null);
@@ -210,10 +219,15 @@ export function SceneObjectOverlay({
   }, [setSceneGizmoHoveredAxis]);
 
   useEffect(() => {
+    if (!enabled) return undefined;
+    setSceneOverlayActive(overlayOwnerId, true);
+    return () => setSceneOverlayActive(overlayOwnerId, false);
+  }, [enabled, overlayOwnerId, setSceneOverlayActive]);
+
+  useEffect(() => {
     if (!enabled) return;
 
     const intervalId = window.setInterval(() => {
-      if (useTimelineStore.getState().isPlaying) return;
       setTimelineSnapshotTick((tick) => (tick + 1) % 1000000);
     }, OVERLAY_REFRESH_MS);
     return () => window.clearInterval(intervalId);
@@ -314,16 +328,62 @@ export function SceneObjectOverlay({
   }, [editCameraClip?.id, editCameraTransform]);
 
   const applyObjectTransform = useCallback((clipId: string, transform: ClipTransformPatch) => {
+    if (clipId === (editCameraClip?.id ?? sceneNavClipId)) {
+      setSceneNavOrbitTarget(null);
+    }
     applySceneObjectTransform(clipId, transform);
-  }, []);
+  }, [editCameraClip?.id, sceneNavClipId, setSceneNavOrbitTarget]);
 
   const resetObjectTransform = useCallback((
     clipId: string,
     modeToReset: SceneGizmoMode,
     transform: ClipTransformPatch,
   ) => {
+    if (clipId === (editCameraClip?.id ?? sceneNavClipId)) {
+      setSceneNavOrbitTarget(null);
+    }
     resetSceneObjectTransform(clipId, modeToReset, transform);
+  }, [editCameraClip?.id, sceneNavClipId, setSceneNavOrbitTarget]);
+
+  const closeOrbitContextMenu = useCallback(() => setOrbitContextMenu(null), []);
+  const handleObjectContextMenu = useCallback((
+    event: ReactMouseEvent<HTMLButtonElement>,
+    object: PreviewSceneObject,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setOrbitContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      clipId: object.clipId,
+      name: object.name,
+    });
   }, []);
+  const handleSetOrbitTarget = useCallback((clipId: string) => {
+    const object = objects.find((candidate) => candidate.clipId === clipId);
+    if (!object) {
+      closeOrbitContextMenu();
+      return;
+    }
+    setSceneNavOrbitTarget({
+      clipId,
+      pivot: { ...object.worldPosition },
+    });
+    closeOrbitContextMenu();
+  }, [closeOrbitContextMenu, objects, setSceneNavOrbitTarget]);
+
+  useEffect(() => {
+    if (!sceneNavOrbitTarget) return;
+    const object = objects.find((candidate) => candidate.clipId === sceneNavOrbitTarget.clipId);
+    if (!object) return;
+    const pivot = object.worldPosition;
+    if (
+      Math.abs(pivot.x - sceneNavOrbitTarget.pivot.x) < 1e-6 &&
+      Math.abs(pivot.y - sceneNavOrbitTarget.pivot.y) < 1e-6 &&
+      Math.abs(pivot.z - sceneNavOrbitTarget.pivot.z) < 1e-6
+    ) return;
+    setSceneNavOrbitTarget({ clipId: object.clipId, pivot: { ...pivot } });
+  }, [objects, sceneNavOrbitTarget, setSceneNavOrbitTarget]);
 
   const endDrag = useCallback(() => {
     if (!dragState) return;
@@ -550,11 +610,21 @@ export function SceneObjectOverlay({
       <SceneObjectHandles
         objects={displayObjects}
         selectedClipId={selectedClipId}
+        orbitTargetClipId={sceneNavOrbitTarget?.clipId ?? null}
         mode={mode}
         onPointerDown={handleCenterPointerDown}
         onDoubleClick={handleCenterDoubleClick}
+        onContextMenu={handleObjectContextMenu}
       />
       {toolbarPortalTarget && toolbar ? createPortal(toolbar, toolbarPortalTarget) : null}
+      {orbitContextMenu ? createPortal(
+        <SceneObjectOrbitContextMenu
+          menu={orbitContextMenu}
+          onClose={closeOrbitContextMenu}
+          onOrbit={handleSetOrbitTarget}
+        />,
+        document.body,
+      ) : null}
     </div>
   );
 }

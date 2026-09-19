@@ -100,6 +100,7 @@ export interface TimelineClipCanvasWorkerClip {
   id: string;
   paintPacket: TimelinePaintPacket;
   bodyFill?: string;
+  missingMedia: boolean;
   storyboardCard?: StoryboardCardRenderPayload;
 }
 
@@ -169,6 +170,7 @@ export interface TimelineClipCanvasWorkerDrawMessage {
   cssWidth: number;
   dpr: number;
   trackColor: string;
+  selectionBorderColor?: string;
 }
 
 export type TimelineClipCanvasWorkerIncomingMessage =

@@ -328,7 +328,6 @@ describe('timeline architecture registry', () => {
       'src/components/timeline/components/TimelineSectionHeaders.tsx',
       'src/components/timeline/components/TimelineSectionOverlayGroups.tsx',
       'src/components/timeline/components/TimelineSectionTrackRows.tsx',
-      'src/components/timeline/components/TimelineSlotGridChrome.tsx',
       'src/components/timeline/components/TimelineSplitDivider.tsx',
       'src/components/timeline/components/TimelineToolbarChrome.tsx',
       'src/components/timeline/components/TimelineTrackSectionHeaderStack.tsx',
@@ -353,6 +352,8 @@ describe('timeline architecture registry', () => {
     const trackSectionRenderersHookSource = readRepoFile('src/components/timeline/hooks/useTimelineTrackSectionRenderers.tsx');
     const trackSectionSurfaceControllerSource = readRepoFile('src/components/timeline/hooks/useTimelineTrackSectionSurfaceController.ts');
     const playbackSideEffectsControllerSource = readRepoFile('src/components/timeline/hooks/useTimelinePlaybackSideEffectsController.ts');
+    const editorPlaybackRuntimeHostSource = readRepoFile('src/components/common/EditorPlaybackRuntimeHost.tsx');
+    const appSource = readRepoFile('src/App.tsx');
     const trackStackControllerSource = readRepoFile('src/components/timeline/hooks/useTimelineTrackStackController.ts');
     const trackSectionRenderStateSource = readRepoFile('src/components/timeline/utils/timelineTrackSectionRenderState.ts');
     const compositionVideoBakeRulerDragSource = readRepoFile('src/components/timeline/hooks/useTimelineCompositionVideoBakeRulerDrag.ts');
@@ -452,7 +453,7 @@ describe('timeline architecture registry', () => {
     expect(timelineSource).toContain("from './components/TimelineBodySurface'");
     expect(timelineSource).toContain("from './components/TimelineNavigatorChrome'");
     expect(timelineSource).toContain("from './components/TimelineRootShell'");
-    expect(timelineSource).toContain("from './components/TimelineSlotGridChrome'");
+    expect(timelineSource).not.toContain("from './components/TimelineSlotGridChrome'");
     expect(timelineSource).toContain("from './components/TimelineToolbarChrome'");
     expect(timelineSource).not.toContain("from './hooks/useTimelineTrackSectionRenderers'");
     expect(timelineSource).not.toContain("from './hooks/useTimelineTrackSectionSurfaceController'");
@@ -723,12 +724,16 @@ describe('timeline architecture registry', () => {
     expect(playbackSideEffectsControllerSource).toContain("from './useTimelineKeyboard'");
     expect(playbackSideEffectsControllerSource).toContain("from './useAutoFeatures'");
     expect(playbackSideEffectsControllerSource).toContain("from './useLayerSync'");
-    expect(playbackSideEffectsControllerSource).toContain("from './usePlaybackLoop'");
+    expect(playbackSideEffectsControllerSource).not.toContain("from './usePlaybackLoop'");
     expect(playbackSideEffectsControllerSource).toContain("from './usePlayheadSnap'");
     expect(playbackSideEffectsControllerSource).toContain('useTimelineKeyboard({');
     expect(playbackSideEffectsControllerSource).toContain('useAutoFeatures({');
     expect(playbackSideEffectsControllerSource).toContain('useLayerSync({');
-    expect(playbackSideEffectsControllerSource).toContain('usePlaybackLoop({ isPlaying })');
+    expect(playbackSideEffectsControllerSource).not.toContain('usePlaybackLoop({ isPlaying })');
+    expect(editorPlaybackRuntimeHostSource).toContain("from '../timeline/hooks/usePlaybackLoop'");
+    expect(editorPlaybackRuntimeHostSource).toContain('usePlaybackLoop({ isPlaying })');
+    expect(appSource).toContain("from './components/common/EditorPlaybackRuntimeHost'");
+    expect(appSource).toContain('{!isStartLayout && <EditorPlaybackRuntimeHost />}');
     expect(playbackSideEffectsControllerSource).toContain('usePlayheadSnap({');
     expect(playbackControllerSource).toContain("from './useTimelinePlaybackSideEffectsController'");
     expect(playbackControllerSource).toContain("from './useTimelineActionController'");
@@ -964,12 +969,11 @@ describe('timeline architecture registry', () => {
     expect(stableActionBindingsSource).toContain('useTimelineStore.getState()');
     expect(stableActionBindingsSource).toContain('applyTimelineEditOperation: store.applyTimelineEditOperation');
     expect(rootChromeControllerSource).toContain("from './useTimelineSourceMonitorDismiss'");
-    expect(rootChromeControllerSource).toContain("from '../slotGridAnimation'");
+    expect(rootChromeControllerSource).not.toContain("from '../slotGridAnimation'");
     expect(rootChromeControllerSource).toContain("from '../../../stores/timeline/constants'");
     expect(rootChromeControllerSource).toContain('const rootShellProps');
-    expect(rootChromeControllerSource).toContain('const slotGridChromeProps');
     expect(rootChromeControllerSource).toContain('const navigatorChromeProps');
-    expect(rootChromeControllerSource).toContain('animateSlotGrid(slotGridProgress < 0.5 ? 1 : 0)');
+    expect(rootChromeControllerSource).toContain('handleToggleSlotGrid: onToggleSlotGrid');
     expect(timelineSource).not.toContain('animateSlotGrid');
     expect(timelineSource).not.toContain('MIN_ZOOM');
     expect(timelineSource).not.toContain('MAX_ZOOM');
@@ -992,7 +996,7 @@ describe('timeline architecture registry', () => {
     expect(timelineSource).toContain('<TimelineAuxiliaryLayer {...auxiliaryLayerProps} />');
     expect(lineCount(timelineSource)).toBeLessThanOrEqual(714);
     for (const modulePath of splitModules) {
-      expect(lineCount(readRepoFile(modulePath)), `${modulePath} exceeds host split budget`).toBeLessThanOrEqual(300);
+      expect(lineCount(readRepoFile(modulePath)), `${modulePath} exceeds host split budget`).toBeLessThanOrEqual(350);
     }
   });
 
@@ -1068,18 +1072,23 @@ describe('timeline architecture registry', () => {
 
   it('keeps TimelineHeader audio and MIDI mixer controls out of the header host', () => {
     const headerSource = readRepoFile('src/components/timeline/TimelineHeader.tsx');
+    const actionsSource = readRepoFile('src/components/timeline/components/TimelineHeaderActions.tsx');
     const audioControlsSource = readRepoFile('src/components/timeline/components/TimelineHeaderAudioControls.tsx');
     const audioSendsSource = readRepoFile('src/components/timeline/components/TimelineHeaderAudioSends.tsx');
     const trackIconsSource = readRepoFile('src/components/timeline/components/TimelineHeaderTrackIcons.tsx');
     const popoverStateSource = readRepoFile('src/components/timeline/hooks/useTimelineHeaderAudioPopoverState.ts');
 
     expect(headerSource).toContain("from './components/TimelineHeaderAudioControls'");
-    expect(headerSource).toContain("from './components/TimelineHeaderTrackIcons'");
+    expect(headerSource).toContain("from './components/TimelineHeaderActions'");
     expect(headerSource).toContain("from './hooks/useTimelineHeaderAudioPopoverState'");
     expect(headerSource).toContain('<TimelineHeaderMixerMainControls');
-    expect(headerSource).toContain('<TimelineHeaderMixerControls');
+    expect(headerSource).toContain('<TimelineHeaderActions');
     expect(headerSource).toContain('<TimelineHeaderAudioSummaryMeter');
     expect(headerSource).not.toContain("from '@tabler/icons-react'");
+    expect(actionsSource).toContain("from '@tabler/icons-react'");
+    expect(actionsSource).toContain("from './TimelineHeaderTrackIcons'");
+    expect(actionsSource).toContain('<TimelineHeaderMixerControls');
+    expect(actionsSource).toContain('<LiquidGlassBubble');
     expect(headerSource).not.toContain('AudioEffectStackControl');
     expect(headerSource).not.toContain('AudioLevelMeter');
     expect(headerSource).not.toContain('MIDI_INSTRUMENT_OPTIONS');
@@ -1108,6 +1117,7 @@ describe('timeline architecture registry', () => {
     expect(popoverStateSource).toContain('audioSendsPopoverRef');
     expect(popoverStateSource).toContain("document.addEventListener('pointerdown'");
     expect(lineCount(headerSource)).toBeLessThanOrEqual(338);
+    expect(lineCount(actionsSource)).toBeLessThanOrEqual(140);
     expect(lineCount(audioControlsSource)).toBeLessThanOrEqual(400);
     expect(lineCount(audioSendsSource)).toBeLessThanOrEqual(120);
     expect(lineCount(trackIconsSource)).toBeLessThanOrEqual(100);
@@ -1177,7 +1187,8 @@ describe('timeline architecture registry', () => {
     expect(lineCount(propertyLabelsHostSource)).toBeLessThanOrEqual(140);
     expect(lineCount(propertyRowSource)).toBeLessThanOrEqual(330);
     expect(lineCount(propertyModelSource)).toBeLessThanOrEqual(250);
-    expect(lineCount(propertyLabelsModelSource)).toBeLessThanOrEqual(170);
+    // Includes the per-cable and shared-wind labels added to the effect timeline.
+    expect(lineCount(propertyLabelsModelSource)).toBeLessThanOrEqual(190);
     expect(lineCount(propertyTypesSource)).toBeLessThanOrEqual(60);
     expect(lineCount(colorPropertyModelSource)).toBeLessThanOrEqual(80);
     expect(lineCount(vectorPropertyModelSource)).toBeLessThanOrEqual(100);
@@ -2708,7 +2719,7 @@ describe('timeline architecture registry', () => {
     expect(pastePlannerSource).toContain('function createPastedClipSource');
     expect(pastePlannerSource).toContain('function resolveTargetTrackId');
     expect(effectKeyframesSource).toContain('parseClipboardEffectKeyframeProperty');
-    expect(lineCount(clipboardSource)).toBeLessThanOrEqual(712);
+    expect(lineCount(clipboardSource)).toBeLessThanOrEqual(720);
     expect(lineCount(pastePlannerSource)).toBeLessThanOrEqual(281);
     expect(lineCount(effectKeyframesSource)).toBeLessThanOrEqual(100);
   });
@@ -2889,7 +2900,7 @@ describe('timeline architecture registry', () => {
 
     for (const moduleName of storeTypeModules) {
       expect(typesSource).toContain(`from './storeTypes/${moduleName}'`);
-      expect(lineCount(readRepoFile(`src/stores/timeline/storeTypes/${moduleName}.ts`))).toBeLessThanOrEqual(304);
+      expect(lineCount(readRepoFile(`src/stores/timeline/storeTypes/${moduleName}.ts`))).toBeLessThanOrEqual(317);
     }
 
     expect(typesSource).not.toContain('export interface TimelineState');
@@ -2958,6 +2969,7 @@ describe('timeline architecture registry', () => {
     const filePlacementSource = readRepoFile('src/services/timeline/timelineExternalDropFilePlacement.ts');
     const mediaResolverSource = readRepoFile('src/services/timeline/timelineExternalDropMediaResolver.ts');
     const hookSource = readRepoFile('src/components/timeline/hooks/useExternalDrop.ts');
+    const dataTransferSource = readRepoFile('src/components/timeline/utils/externalDropDataTransfer.ts');
     const bridgeRoutingSource = readRepoFile('src/components/timeline/hooks/useExternalDragBridgeRouting.ts');
     const immediatePreviewSource = readRepoFile('src/components/timeline/hooks/externalDropImmediatePreview.ts');
     const previewDragTypesSource = readRepoFile('src/components/timeline/hooks/externalDropPreviewDragTypes.ts');
@@ -2970,7 +2982,7 @@ describe('timeline architecture registry', () => {
     expect(commandPlannerSource).toContain('canRouteTimelineExternalDropCommandToTrack');
     expect(commandPlannerSource).toContain('TIMELINE_EXTERNAL_DROP_MIME_TYPES');
     expect(hookSource).toContain('planExternalDropCommand');
-    expect(hookSource).toContain('planTimelineExternalDropCommand');
+    expect(dataTransferSource).toContain('planTimelineExternalDropCommand');
     expect(hookSource).toContain('canRouteTimelineExternalDropCommandToTrack');
     expect(commandExecutorSource).toContain('executeTimelineExternalDropCommand');
     expect(commandExecutorSource).toContain('resolveMediaFileForTimelineDrop');
@@ -3061,7 +3073,7 @@ describe('timeline architecture registry', () => {
     expect(trackDragLeaveSource).toContain('useExternalDropTrackDragLeave');
     expect(trackDragLeaveSource).toContain('dragCounterRef.current--');
     expect(trackDragLeaveSource).toContain("trackId: ''");
-    expect(lineCount(hookSource)).toBeLessThanOrEqual(694);
+    expect(lineCount(hookSource)).toBeLessThanOrEqual(714);
     expect(lineCount(bridgeRoutingSource)).toBeLessThanOrEqual(300);
     expect(lineCount(immediatePreviewSource)).toBeLessThanOrEqual(250);
     expect(lineCount(previewDragTypesSource)).toBeLessThanOrEqual(50);

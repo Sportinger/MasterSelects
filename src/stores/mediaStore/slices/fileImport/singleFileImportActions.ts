@@ -1,6 +1,8 @@
-import type { MediaSliceCreator } from '../../types';
+import { withProjectArtifactWriteBatch } from '../../../../services/project/projectArtifactWriteBatch';
+import type { MediaSliceCreator, MediaState } from '../../types';
 import { generateId, processImport } from '../../helpers/importPipeline';
 import type { FileImportActions, ImportFileOptions } from '../fileImportSlice';
+import type { FileManageActions } from '../fileManageSlice';
 import { commitSignalAsset } from './signalAssetCommit';
 import { resolveImportEntry, runSignalImport } from './importPlanning';
 import {
@@ -11,18 +13,71 @@ import {
 } from './placeholderLifecycle';
 import { fileImportLog as log } from './log';
 
+function importMetadata(options?: ImportFileOptions) {
+  return {
+    ...(options?.stemInfo ? { stemInfo: structuredClone(options.stemInfo) } : {}),
+    ...(options?.externalOrigin ? { externalOrigin: structuredClone(options.externalOrigin) } : {}),
+  };
+}
+
 export const createSingleFileImportActions: MediaSliceCreator<Pick<FileImportActions, 'importFile'>> = (
   set,
   get,
 ) => ({
-  importFile: async (file: File, parentId?: string | null, options?: ImportFileOptions) => {
+  importFile: async (file: File, parentId?: string | null, options?: ImportFileOptions) => withProjectArtifactWriteBatch(async () => {
     const existing = get().files.find((f) =>
       f.name === file.name && f.fileSize === file.size && !f.isImporting
     );
     if (existing) {
+      const sourceIsMissing = !existing.file || existing.file.size <= 0;
+      if (sourceIsMissing) {
+        log.info(`Repairing missing source from re-import: ${file.name} (${file.size} bytes)`);
+        set((state) => ({
+          files: state.files.map((candidate) => (
+            candidate.id === existing.id
+              ? { ...candidate, isImporting: true }
+              : candidate
+          )),
+        }));
+
+        try {
+          const result = await processImport({
+            file,
+            id: existing.id,
+            parentId: existing.parentId,
+            forceCopyToProject: true,
+            typeOverride: existing.type,
+          });
+          const repairedMediaFile = {
+            ...existing,
+            ...result.mediaFile,
+            ...importMetadata(options),
+          };
+          finalizeImportedMediaFile(set, get, existing.id, repairedMediaFile);
+
+          // The complete media store also owns reloadFile, which rebinds any
+          // already-restored timeline clips to the repaired project source.
+          const reloadFile = (get() as MediaState & Partial<FileManageActions>).reloadFile;
+          if (typeof reloadFile === 'function') {
+            await reloadFile(existing.id);
+          }
+
+          return get().files.find((candidate) => candidate.id === existing.id) ?? repairedMediaFile;
+        } catch (error) {
+          set((state) => ({
+            files: state.files.map((candidate) => (
+              candidate.id === existing.id
+                ? { ...candidate, isImporting: false }
+                : candidate
+            )),
+          }));
+          throw error;
+        }
+      }
+
       log.info(`Skipping duplicate: ${file.name} (${file.size} bytes) - already exists as ${existing.id}`);
-      if (options?.stemInfo) {
-        const updatedExisting = { ...existing, stemInfo: options.stemInfo };
+      if (options?.stemInfo || options?.externalOrigin) {
+        const updatedExisting = { ...existing, ...importMetadata(options) };
         set((state) => ({
           files: state.files.map((candidate) => candidate.id === existing.id ? updatedExisting : candidate),
         }));
@@ -71,9 +126,7 @@ export const createSingleFileImportActions: MediaSliceCreator<Pick<FileImportAct
         projectFileName: options?.projectFileName,
         typeOverride: type,
       });
-      const mediaFile = options?.stemInfo
-        ? { ...result.mediaFile, stemInfo: options.stemInfo }
-        : result.mediaFile;
+      const mediaFile = { ...result.mediaFile, ...importMetadata(options) };
       finalizeImportedMediaFile(set, get, id, mediaFile);
       log.info('Complete:', mediaFile.name);
       return mediaFile;
@@ -84,5 +137,5 @@ export const createSingleFileImportActions: MediaSliceCreator<Pick<FileImportAct
       }));
       throw err;
     }
-  },
+  }),
 });

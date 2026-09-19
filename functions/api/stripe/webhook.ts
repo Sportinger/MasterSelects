@@ -1,4 +1,5 @@
 import { json, methodNotAllowed } from '../../lib/db';
+import { readRunChanges } from '../../lib/d1Result';
 import { grantPlanCredits } from '../../lib/credits';
 import {
   getBillingPlan,
@@ -24,6 +25,7 @@ import {
   verifyStripeWebhookSignature,
 } from '../../lib/stripe';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
+import { sendPendingContractConfirmation } from '../../lib/consumerContractRecords';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -474,24 +476,47 @@ export function shouldGrantInvoiceCredits(invoice: StripeInvoiceLike): boolean {
   return billingReason == null;
 }
 
-async function writeWebhookRecord(
+/**
+ * Claims the event before any side effect runs. The unique index on
+ * (provider, event_id) makes this INSERT the dedupe point: a repeated or
+ * concurrent delivery changes zero rows and is acknowledged without being
+ * processed again. Database errors propagate so Stripe retries the delivery
+ * rather than the event being processed twice or silently dropped.
+ */
+async function claimWebhookEvent(
   db: AppContext['env']['DB'],
   event: StripeWebhookEvent,
   payloadHash: string,
-): Promise<void> {
-  try {
-    await db
-      .prepare(
-        `
-          INSERT INTO webhook_events (id, provider, event_id, event_type, payload_hash)
-          VALUES (?, ?, ?, ?, ?)
-        `,
-      )
-      .bind(crypto.randomUUID(), 'stripe', event.id, event.type, payloadHash)
-      .run();
-  } catch {
-    // Idempotency is already protected by the ledger and upsert helpers.
+): Promise<boolean> {
+  const recordId = crypto.randomUUID();
+  const result = await db
+    .prepare(
+      `
+        INSERT OR IGNORE INTO webhook_events (id, provider, event_id, event_type, payload_hash)
+        VALUES (?, ?, ?, ?, ?)
+      `,
+    )
+    .bind(recordId, 'stripe', event.id, event.type, payloadHash)
+    .run();
+
+  const changes = readRunChanges(result);
+  if (changes !== null) {
+    return changes > 0;
   }
+
+  const owner = await db
+    .prepare(`SELECT id FROM webhook_events WHERE provider = 'stripe' AND event_id = ? LIMIT 1`)
+    .bind(event.id)
+    .first<{ id: string }>();
+  return owner?.id === recordId;
+}
+
+/** Gives a claim back when the outcome is retryable, so the redelivery is processed. */
+async function releaseWebhookEvent(db: AppContext['env']['DB'], eventId: string): Promise<void> {
+  await db
+    .prepare(`DELETE FROM webhook_events WHERE provider = 'stripe' AND event_id = ?`)
+    .bind(eventId)
+    .run();
 }
 
 async function lookupPlanIdFromSubscription(
@@ -629,19 +654,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   }
 
   const payloadHash = await hashPayload(payload);
-  const existing = await context.env.DB
-    .prepare(
-      `
-        SELECT id
-        FROM webhook_events
-        WHERE provider = 'stripe' AND event_id = ?
-        LIMIT 1
-      `,
-    )
-    .bind(event.id)
-    .first<{ id: string }>();
-
-  if (existing) {
+  if (!await claimWebhookEvent(context.env.DB, event, payloadHash)) {
     return json({
       duplicate: true,
       eventId: event.id,
@@ -650,12 +663,39 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     });
   }
 
+  let response: Response;
+  try {
+    response = await processStripeEvent(context, event);
+  } catch (error) {
+    await releaseWebhookEvent(context.env.DB, event.id).catch(() => undefined);
+    throw error;
+  }
+  if (response.status >= 500) {
+    // Retryable outcome: release the claim so Stripe's redelivery is processed.
+    await releaseWebhookEvent(context.env.DB, event.id).catch(() => undefined);
+  }
+  return response;
+};
+
+async function processStripeEvent(context: AppContext, event: StripeWebhookEvent): Promise<Response> {
   const eventObject = event.data.object;
   const customerId = getStripeCustomerIdFromObject(eventObject as StripeCheckoutSessionLike | StripeSubscriptionLike | StripeInvoiceLike);
   const userId = await resolveUserId(context.env.DB, eventObject, customerId);
 
   if (event.type === 'checkout.session.completed' && userId) {
     await linkStripeCustomer(context.env.DB, userId, customerId);
+    // Durable contract confirmation (Terms + Withdrawal Policy) for the consent
+    // recorded at checkout. Never fails the webhook: Stripe would retry and the
+    // consent row keeps the email pending until it is sent.
+    try {
+      const customerDetails = isRecord(eventObject.customer_details) ? eventObject.customer_details : {};
+      await sendPendingContractConfirmation(context.env, {
+        customerEmail: getString(customerDetails.email) ?? getString(eventObject.customer_email),
+        stripeSessionId: getString(eventObject.id),
+      });
+    } catch (error) {
+      console.error('[legal] contract confirmation failed', error instanceof Error ? error.message : error);
+    }
   }
 
   if (
@@ -714,8 +754,6 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     }
 
     if (!shouldGrantInvoiceCredits(invoice)) {
-      await writeWebhookRecord(context.env.DB, event, payloadHash);
-
       return json({
         eventId: event.id,
         eventType: event.type,
@@ -746,11 +784,9 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     await grantInvoiceCredits(context.env.DB, userId, invoice, planId);
   }
 
-  await writeWebhookRecord(context.env.DB, event, payloadHash);
-
   return json({
     eventId: event.id,
     eventType: event.type,
     ok: true,
   });
-};
+}

@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
-import { useAccountStore } from '../../../stores/accountStore';
+import { hasHostedAiSession, useAccountStore } from '../../../stores/accountStore';
 import type {
   TranscriptFusionArtifact,
   TranscriptFusionProviderStatus,
@@ -51,7 +51,7 @@ export function TranscriptTab({
   const wordElementsRef = useRef(new Map<number, HTMLButtonElement>());
   const transcriptionProvider = useSettingsStore(state => state.transcriptionProvider);
   const setTranscriptionProvider = useSettingsStore(state => state.setTranscriptionProvider);
-  const isSignedIn = useAccountStore(state => Boolean(state.session?.authenticated));
+  const isSignedIn = useAccountStore(state => hasHostedAiSession(state.session));
   const activeTranscriptionProvider = isSignedIn
     && !['deepgram', 'hybrid'].includes(transcriptionProvider)
     ? 'openai'

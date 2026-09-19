@@ -112,6 +112,8 @@ export interface ClipTransform {
   opacity: number;          // 0-1
   blendMode: BlendMode;
   position: { x: number; y: number; z: number };
+  /** Local-space pivot. Zero is the normalized geometry/source center. */
+  anchor?: { x: number; y: number; z: number };
   scale: { all?: number; x: number; y: number; z?: number };
   rotation: { x: number; y: number; z: number };  // degrees
 }

@@ -7,8 +7,6 @@ export * from './fastV2K2Adapter';
 export * from './fastV2ReloadResume';
 export * from './clientBridge';
 export * from './k2Client';
-export * from './k2FetchTransport';
 export * from './k2Ledger';
-export * from './k3Routing';
 export * from './inlineProviderContent';
 export * from './reloadResume';

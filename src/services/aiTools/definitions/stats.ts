@@ -4,6 +4,106 @@ export const statsToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'profileAppInteraction',
+      description: 'Measure browser frame gaps and long tasks while the connected dev tab is idle or while a visible canvas is panned in a circle with synthetic middle-pointer input. Dev-bridge debugging only.',
+      parameters: {
+        type: 'object',
+        properties: {
+          mode: { type: 'string', enum: ['idle', 'circle-pan'], description: 'Idle baseline or circular middle-pointer pan gesture.' },
+          selector: { type: 'string', description: 'Visible target selector. Required for circle-pan.' },
+          index: { type: 'number', minimum: 0, maximum: 100, description: 'Zero-based target index. Defaults to 0.' },
+          durationMs: { type: 'number', minimum: 500, maximum: 10000, description: 'Measurement duration. Defaults to 5000 ms.' },
+          radiusPx: { type: 'number', minimum: 4, maximum: 500, description: 'Circle radius in CSS pixels. Defaults to 90.' },
+          rotations: { type: 'number', minimum: 0.25, maximum: 20, description: 'Complete rotations during the measurement. Defaults to 5.' },
+        },
+        required: ['mode'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'clickAppControl',
+      description: 'Click one visible MasterSelects UI control in the connected dev tab by accessible text or CSS selector, then wait for the resulting UI work to settle. Dev-bridge debugging only.',
+      parameters: {
+        type: 'object',
+        properties: {
+          text: { type: 'string', description: 'Accessible label or visible text to match. Required unless a specific selector is supplied.' },
+          selector: { type: 'string', description: 'Optional CSS selector. Defaults to visible buttons, links, summaries, and button-like controls.' },
+          match: { type: 'string', enum: ['exact', 'contains'], description: 'Text matching mode. Defaults to exact.' },
+          index: { type: 'number', minimum: 0, maximum: 100, description: 'Zero-based match index when multiple visible controls match. Defaults to 0.' },
+          settleMs: { type: 'number', minimum: 0, maximum: 30000, description: 'Milliseconds to wait after clicking before returning. Defaults to 500.' },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fillAppControl',
+      description: 'Fill one visible MasterSelects input, textarea, or select and dispatch normal input/change events. Dev-bridge debugging only.',
+      parameters: {
+        type: 'object',
+        properties: {
+          value: { type: 'string', description: 'Complete replacement value to enter.' },
+          selector: { type: 'string', description: 'CSS selector for the target input or textarea.' },
+          index: { type: 'number', minimum: 0, maximum: 100, description: 'Zero-based match index. Defaults to 0.' },
+          settleMs: { type: 'number', minimum: 0, maximum: 30000, description: 'Milliseconds to wait after filling. Defaults to 250.' },
+        },
+        required: ['selector', 'value'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'probeSameOriginRequest',
+      description: 'Issue a credentialed same-origin /api/ request from the connected app tab and return status, selected headers, and a bounded redacted response body. Dev-bridge debugging only.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Same-origin path beginning with /api/.' },
+          method: { type: 'string', enum: ['GET', 'HEAD', 'POST'], description: 'HTTP method. Defaults to GET.' },
+          body: { type: 'object', additionalProperties: true, description: 'Optional JSON body for POST requests.' },
+          timeoutMs: { type: 'number', minimum: 0, maximum: 60000, description: 'Request timeout in milliseconds. Defaults to 20000.' },
+        },
+        required: ['path'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'captureAppScreenshot',
+      description: 'Capture the complete connected MasterSelects page as a PNG for dev-bridge debugging. By default captures the current viewport; fullPage includes the entire scrolling document. Browser chrome and operating-system UI are not included.',
+      parameters: {
+        type: 'object',
+        properties: {
+          fullPage: {
+            type: 'boolean',
+            description: 'Capture the entire scrolling document instead of only the current page viewport. Defaults to false.',
+          },
+          scale: {
+            type: 'number',
+            minimum: 0.25,
+            maximum: 2,
+            description: 'Requested PNG pixel scale. Defaults to 1 and may be reduced automatically to stay within bridge-safe image limits.',
+          },
+          settleMs: {
+            type: 'number',
+            minimum: 0,
+            maximum: 5000,
+            description: 'Optional delay before capture so a recent UI interaction can settle. Defaults to 0.',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'getCaptureState',
       description: 'Get the serializable screen-capture session, encoder/muxer pressure, audio levels, and persisted recovery summary.',
       parameters: {

@@ -416,12 +416,10 @@ export function ClipPropertiesPanel() {
     setPropertyValue(selectedClip.id, property, value);
   };
 
-  // Calculate uniform scale (average of X and Y)
-  const uniformScale = (transform.scale.x + transform.scale.y) / 2;
+  const uniformScale = transform.scale.all ?? 1;
 
   const handleUniformScaleChange = (value: number) => {
-    handlePropertyChange('scale.x', value);
-    handlePropertyChange('scale.y', value);
+    handlePropertyChange('scale.all', value);
   };
 
   return (

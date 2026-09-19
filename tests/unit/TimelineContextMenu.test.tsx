@@ -161,6 +161,7 @@ describe('TimelineContextMenu regenerate menu', () => {
     });
 
     expect(screen.getByText('Effects')).toBeTruthy();
+    expect(screen.getByText('Copy')).toBeTruthy();
     expect(screen.getByText('Copy Video Effects')).toBeTruthy();
     expect(screen.getByText('Paste Video Effects')).toBeTruthy();
     expect(screen.getByText('Copy Color')).toBeTruthy();

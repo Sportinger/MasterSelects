@@ -3,16 +3,28 @@ import type {
   SceneLayer3DData,
   ScenePrimitiveLayer,
   SceneVector3,
+  SceneVoxelLayer,
   SceneWorldTransform,
 } from './types';
 import { buildSceneWorldMatrix, getSplatOrientationMatrix, multiplyMat4 } from './SceneTransformUtils';
 import { mergeLightClipSettings } from '../../types/light';
+import { isMobileAppleWebKit } from '../../utils/mobileAppleWebKit';
 
 function getStableSourceDimensions(
   data: LayerRenderData,
   width: number,
   height: number,
 ): { sourceWidth: number; sourceHeight: number } {
+  const liveInputCanvas = data.layer.source?.isLiveInput
+    ? data.layer.source.canvasElement
+    : undefined;
+  if (liveInputCanvas && liveInputCanvas.width > 0 && liveInputCanvas.height > 0) {
+    return {
+      sourceWidth: liveInputCanvas.width,
+      sourceHeight: liveInputCanvas.height,
+    };
+  }
+
   const fallbackWidth =
     typeof data.sourceWidth === 'number' && Number.isFinite(data.sourceWidth) && data.sourceWidth > 0
       ? data.sourceWidth
@@ -62,6 +74,11 @@ function buildWorldTransform(data: LayerRenderData): SceneWorldTransform {
       y: data.layer.position.y,
       z: data.layer.position.z,
     },
+    anchor: {
+      x: data.layer.anchor?.x ?? 0,
+      y: data.layer.anchor?.y ?? 0,
+      z: data.layer.anchor?.z ?? 0,
+    },
     rotationRadians,
     rotationDegrees: {
       x: toDegrees(rotationRadians.x),
@@ -84,6 +101,9 @@ function resolveSceneLayerKind(data: LayerRenderData): SceneLayer3DData['kind'] 
   if (source?.type === 'light') {
     return 'light';
   }
+  if (source?.type === 'flock') {
+    return 'flock';
+  }
   if (source?.type === 'model') {
     if ((source.meshType ?? undefined) === 'text3d' || source.text3DProperties) {
       return 'text3d';
@@ -93,7 +113,14 @@ function resolveSceneLayerKind(data: LayerRenderData): SceneLayer3DData['kind'] 
     }
     return 'model';
   }
+  if (data.layer.effects?.some((effect) => effect.enabled && effect.type === 'voxel-relief')) {
+    return 'voxel';
+  }
   return 'plane';
+}
+
+export function isLayerSpaceSceneEffect(type: string): boolean {
+  return type === 'analog-signal-lab';
 }
 
 function isPrimitiveMeshType(
@@ -141,6 +168,16 @@ export function collectScene3DLayers(
       maskClipId: layer.maskClipId,
       maskInvert: layer.maskInvert,
     };
+    const cableEffect = layer.effects?.find(e => e.enabled && e.type === 'face-cables' && e.params.scene3D && e.params.sceneData);
+    if (cableEffect) {
+      result.push({ ...base, kind: 'face-cables', cableParams: cableEffect.params,
+        videoRotation: source?.videoFrame ? source.videoRotation ?? 0 : 0,
+        videoElement: source?.videoElement ?? undefined, videoFrame: source?.videoFrame ?? undefined,
+        imageElement: source?.imageElement ?? undefined, canvas: source?.textCanvas ?? undefined,
+        preciseVideoSampling: options.preciseVideoSampling || !!source?.videoElement,
+        mediaTime: source?.mediaTime, alphaMode: 'opaque' });
+      continue;
+    }
 
     if (base.kind === 'splat') {
       const orientationMatrix = getSplatOrientationMatrix(
@@ -174,12 +211,57 @@ export function collectScene3DLayers(
       continue;
     }
 
-    if (base.kind === 'plane') {
+    if (base.kind === 'flock') {
+      if (source?.flock) {
+        result.push({ ...base, kind: 'flock', flock: source.flock });
+      }
+      continue;
+    }
+
+    if (base.kind === 'plane' || base.kind === 'voxel') {
+      const liveInputCanvas = source?.isLiveInput && isMobileAppleWebKit()
+        ? source.canvasElement
+        : undefined;
+      const layerSpaceEffects = (layer.effects ?? []).filter((effect) => (
+        effect.enabled && isLayerSpaceSceneEffect(effect.type)
+      ));
+      const voxelEffect = base.kind === 'voxel'
+        ? layer.effects?.find((effect) => effect.enabled && effect.type === 'voxel-relief')
+        : undefined;
+      if (base.kind === 'voxel' && voxelEffect) {
+        result.push({
+          ...base,
+          kind: 'voxel',
+          alphaMode: 'opaque',
+          doubleSided: true,
+          castsDepth: true,
+          receivesDepth: true,
+          // Mobile Safari can keep the visible Media Panel video advancing
+          // while a second hidden video-to-canvas consumer turns black after
+          // an idle period. Reuse the runtime's continuously staged canvas,
+          // just like the regular live-input plane path below.
+          videoElement: liveInputCanvas ? undefined : source?.videoElement ?? undefined,
+          videoFrame: source?.videoFrame ?? undefined,
+          // Always sample video through the 2D-canvas copy: the voxel field
+          // reads per-cell texels in the vertex stage, and the direct
+          // copyExternalImageToTexture path yields black frames while the
+          // interactive preview holds the same <video> element.
+          preciseVideoSampling: !liveInputCanvas && (options.preciseVideoSampling || !!source?.videoElement),
+          imageElement: source?.imageElement ?? undefined,
+          canvas: liveInputCanvas ?? source?.textCanvas ?? undefined,
+          layerSpaceEffects,
+          mediaTime: source?.mediaTime,
+          voxelParams: voxelEffect.params as SceneVoxelLayer['voxelParams'],
+        });
+        continue;
+      }
+
       result.push({
         ...base,
         kind: 'plane',
         alphaMode: source?.videoElement
           || source?.videoFrame
+          || liveInputCanvas
           ? 'opaque'
           : source?.imageElement
             ? 'straight'
@@ -187,13 +269,15 @@ export function collectScene3DLayers(
               ? 'premultiplied'
               : undefined,
         doubleSided: true,
-        castsDepth: !!(source?.videoElement || source?.videoFrame),
+        castsDepth: !!(source?.videoElement || source?.videoFrame || liveInputCanvas),
         receivesDepth: true,
-        videoElement: source?.videoElement ?? undefined,
+        videoElement: liveInputCanvas ? undefined : source?.videoElement ?? undefined,
         videoFrame: source?.videoFrame ?? undefined,
         preciseVideoSampling: options.preciseVideoSampling,
         imageElement: source?.imageElement ?? undefined,
-        canvas: source?.textCanvas ?? undefined,
+        canvas: liveInputCanvas ?? source?.textCanvas ?? undefined,
+        layerSpaceEffects,
+        mediaTime: source?.mediaTime,
       });
       continue;
     }

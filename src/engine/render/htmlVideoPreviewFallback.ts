@@ -1,4 +1,8 @@
 import type { ScrubbingCache } from '../texture/ScrubbingCache';
+import {
+  shouldCopyHtmlVideoPreviewFrame,
+  shouldStageHtmlVideoFrame,
+} from '../texture/videoFrameCopyPolicy';
 
 function isFirefoxBrowser(): boolean {
   return typeof navigator !== 'undefined' && /Firefox\//.test(navigator.userAgent);
@@ -12,7 +16,10 @@ export function getCopiedHtmlVideoPreviewFrame(
   captureOwnerId?: string,
   forceCopy = false
 ): { view: GPUTextureView; width: number; height: number; mediaTime?: number } | null {
-  if ((!isFirefoxBrowser() && !forceCopy) || !scrubbingCache) {
+  if ((!isFirefoxBrowser()
+    && !forceCopy
+    && !shouldStageHtmlVideoFrame(video)
+    && !shouldCopyHtmlVideoPreviewFrame()) || !scrubbingCache) {
     return null;
   }
 

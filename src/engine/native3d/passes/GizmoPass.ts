@@ -105,50 +105,55 @@ export class GizmoPass {
     mode: SceneGizmoMode,
     hoveredAxis: SceneGizmoAxis | null | undefined,
     temporaryBuffers: GPUBuffer[],
+    clearTarget = false,
   ): boolean {
-    if (!layer?.worldTransform || !this.pipeline) {
-      return true;
-    }
-
     const vertices: number[] = [];
-    const viewProjection = multiplyMat4(camera.projectionMatrix, camera.viewMatrix);
-    const origin = layer.worldTransform.position;
-    const basis = resolveAxisBasisFromWorldMatrix(layer.worldMatrix);
-    const worldPerPixel = resolveWorldPerPixel(origin, camera);
+    if (layer?.worldTransform && this.pipeline) {
+      const viewProjection = multiplyMat4(camera.projectionMatrix, camera.viewMatrix);
+      const origin = layer.worldTransform.position;
+      const basis = resolveAxisBasisFromWorldMatrix(layer.worldMatrix);
+      const worldPerPixel = resolveWorldPerPixel(origin, camera);
 
-    if (mode === 'rotate') {
-      this.appendRotationRings(vertices, viewProjection, camera.viewport, origin, basis, worldPerPixel, hoveredAxis ?? null);
-    } else {
-      this.appendAxisHandles(vertices, viewProjection, camera, origin, basis, worldPerPixel, mode, hoveredAxis ?? null);
+      if (mode === 'rotate') {
+        this.appendRotationRings(vertices, viewProjection, camera.viewport, origin, basis, worldPerPixel, hoveredAxis ?? null);
+      } else {
+        this.appendAxisHandles(vertices, viewProjection, camera, origin, basis, worldPerPixel, mode, hoveredAxis ?? null);
+      }
     }
 
-    if (vertices.length === 0) {
+    if (vertices.length === 0 && !clearTarget) {
       return true;
     }
 
     const vertexData = new Float32Array(vertices);
-    const vertexBuffer = device.createBuffer({
-      size: vertexData.byteLength,
-      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-      label: 'native-scene-gizmo-vertex-buffer',
-    });
-    temporaryBuffers.push(vertexBuffer);
-    device.queue.writeBuffer(vertexBuffer, 0, vertexData.buffer, vertexData.byteOffset, vertexData.byteLength);
+    const vertexBuffer = vertices.length > 0
+      ? device.createBuffer({
+          size: vertexData.byteLength,
+          usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+          label: 'native-scene-gizmo-vertex-buffer',
+        })
+      : null;
+    if (vertexBuffer) {
+      temporaryBuffers.push(vertexBuffer);
+      device.queue.writeBuffer(vertexBuffer, 0, vertexData.buffer, vertexData.byteOffset, vertexData.byteLength);
+    }
 
     const renderPass = commandEncoder.beginRenderPass({
       colorAttachments: [
         {
           view: sceneView,
           clearValue: { r: 0, g: 0, b: 0, a: 0 },
-          loadOp: 'load',
+          loadOp: clearTarget ? 'clear' : 'load',
           storeOp: 'store',
         },
       ],
       label: 'native-scene-gizmo-pass',
     });
-    renderPass.setPipeline(this.pipeline);
-    renderPass.setVertexBuffer(0, vertexBuffer);
-    renderPass.draw(vertexData.length / VERTEX_FLOATS);
+    if (this.pipeline && vertexBuffer) {
+      renderPass.setPipeline(this.pipeline);
+      renderPass.setVertexBuffer(0, vertexBuffer);
+      renderPass.draw(vertexData.length / VERTEX_FLOATS);
+    }
     renderPass.end();
     return true;
   }

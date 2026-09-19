@@ -1,6 +1,8 @@
 import { hasThumbnailBitmap } from '../../../services/timeline/thumbnailBitmapCache';
 import { thumbnailCacheService } from '../../../services/thumbnailCacheService';
+import { flockThumbnailService, getFlockThumbnailSourceIdForClip, isFlockThumbnailSourceId } from '../../../services/flock/flockThumbnailService';
 import type { TimelinePaintSourceClip } from '../../../timeline';
+import { isTimelineClipCanvasAudioClip } from './timelineClipCanvasAudio';
 import {
   getTimelineClipCanvasCompositionSegmentThumbnailSlotUrls,
   TIMELINE_CLIP_CANVAS_COMPOSITION_SEGMENT_MAX_COUNT,
@@ -11,6 +13,7 @@ import {
   TIMELINE_CLIP_CANVAS_WORKER_THUMBNAIL_STRIP_MAX_WIDTH,
   type TimelineClipCanvasWorkerThumbnailStripPlan,
 } from './timelineClipCanvasThumbnailResource';
+import { getTimelineClipCanvasVisualPreviewHeight } from './timelineClipCanvasVisualLayout';
 
 export interface TimelineClipCanvasWorkerThumbnailPreparation {
   handledClipIds: ReadonlySet<string>;
@@ -20,6 +23,7 @@ export interface TimelineClipCanvasWorkerThumbnailPreparation {
 }
 
 export function getTimelineClipCanvasThumbnailMediaFileId(clip: TimelinePaintSourceClip): string | null {
+  if (isTimelineClipCanvasAudioClip(clip)) return null;
   if (clip.source?.type !== 'video' && clip.source?.type !== 'image') return null;
   return clip.source?.mediaFileId ?? clip.mediaFileId ?? null;
 }
@@ -48,7 +52,7 @@ export function collectTimelineClipCanvasWorkerThumbnailPreparation(input: {
   const thumbVisibleRight = input.scrollX + input.viewportWidth + input.thumbnailViewportOverscanPx;
   const renderVisibleLeft = input.scrollX - input.renderOverscanPx;
   const renderVisibleRight = input.scrollX + input.viewportWidth + input.renderOverscanPx;
-  const h = Math.max(1, input.height - 2);
+  const h = getTimelineClipCanvasVisualPreviewHeight(Math.max(1, input.height - 2));
 
   for (const clip of input.clips) {
     if (clip.trackType !== 'audio' && clip.source?.type !== 'audio' && clip.clipSegments?.length) {
@@ -87,7 +91,7 @@ export function collectTimelineClipCanvasWorkerThumbnailPreparation(input: {
       }
     }
 
-    const mediaFileId = getTimelineClipCanvasThumbnailMediaFileId(clip);
+    const mediaFileId = getTimelineClipCanvasThumbnailMediaFileId(clip) ?? getFlockThumbnailSourceIdForClip(clip);
     if (!mediaFileId) continue;
     if (clip.isComposition && clip.clipSegments?.length) continue;
 
@@ -123,7 +127,9 @@ export function collectTimelineClipCanvasWorkerThumbnailPreparation(input: {
     const staticThumbnailUrl = clip.source?.type === 'image'
       ? input.mediaThumbnailUrlsById?.get(mediaFileId)
       : undefined;
-    const urls = staticThumbnailUrl
+    const urls = isFlockThumbnailSourceId(mediaFileId)
+      ? flockThumbnailService.getUrlsForRange(clip.id, visibleInPoint, visibleOutPoint, count, clip.reversed)
+      : staticThumbnailUrl
       ? Array.from({ length: count }, () => staticThumbnailUrl)
       : thumbnailCacheService.getThumbnailsForRange(
         mediaFileId,

@@ -20,6 +20,10 @@ import {
   type KernelOperationPlanSettlementV1,
   type KernelOperationSessionAuthorityV1,
 } from './operationSessionAuthority';
+import {
+  createKernelProgressEvent,
+  type KernelProgressReporter,
+} from '../runProgress';
 
 export interface KernelOperationPlanResultV1 {
   batchId: string;
@@ -180,6 +184,7 @@ export class KernelOperationRoundTripV1 {
   private readonly completedResults = new Map<number, KernelOperationPlanResultV1>();
   private readonly completedRequestFingerprints = new Map<number, string>();
   private readonly deps: MechanicalDependenciesV1;
+  private readonly onProgress?: KernelProgressReporter;
   private readonly pending = new Map<number, PendingExecutionV1>();
   private readonly requestConfirmation?: KernelOperationConfirmationHandlerV1;
   private readonly settlementReceipts = new Map<string, {
@@ -191,10 +196,20 @@ export class KernelOperationRoundTripV1 {
     authority: KernelOperationSessionAuthorityV1;
     requestConfirmation?: KernelOperationConfirmationHandlerV1;
     dependencies: MechanicalDependenciesV1;
+    onProgress?: KernelProgressReporter;
   }) {
     this.authority = input.authority;
     this.deps = input.dependencies;
+    this.onProgress = input.onProgress;
     this.requestConfirmation = input.requestConfirmation;
+  }
+
+  get hasPendingExecution(): boolean {
+    return this.pending.size > 0;
+  }
+
+  get nextSequence(): number {
+    return this.authority.expectedSequence;
   }
 
   private async confirmRequiredOperations(
@@ -254,9 +269,21 @@ export class KernelOperationRoundTripV1 {
     const confirmed = await this.confirmRequiredOperations(accepted, signal);
     throwIfAborted(signal);
     const stateRevisionBefore = this.deps.getTimelineRevision();
+    let operationIndex = 0;
     const dependencies: PublicOperationExecutionDependenciesV1 = {
       ...this.deps,
       authorize: createWp1EditorOperationAuthorization(accepted),
+      dispatch: async (operationId, argumentsValue) => {
+        operationIndex += 1;
+        const stage = getPublicOperationSpecV1(operationId)?.risk === 'read-only'
+          ? 'inspecting'
+          : 'executing';
+        this.onProgress?.(createKernelProgressEvent(stage, {
+          current: operationIndex,
+          total: accepted.plan.steps.length,
+        }));
+        return this.deps.dispatch(operationId, argumentsValue);
+      },
     };
     let envelope: KernelOperationPlanResultV1;
     if (!confirmed) {

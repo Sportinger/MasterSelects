@@ -465,6 +465,117 @@ describe('resolved clip move', () => {
     });
   });
 
+  it('reroutes an occupied same-track audio move to a free audio track', () => {
+    const audio = createMockClip({
+      id: 'audio-moving',
+      trackId: 'audio-1',
+      startTime: 0,
+      duration: 4,
+      source: { type: 'audio' },
+    });
+    const audioTracks = [
+      createMockTrack({ id: 'audio-1', type: 'audio' }),
+      createMockTrack({ id: 'audio-2', type: 'audio' }),
+    ];
+
+    const result = resolveClipMoveRequest({
+      id: 'move-audio-to-free-track',
+      clips: [audio],
+      tracks: audioTracks,
+      clipId: audio.id,
+      requestedStartTime: 5,
+      getPositionWithResistance: vi.fn((_clipId, startTime, trackId) => ({
+        startTime,
+        forcingOverlap: false,
+        noFreeSpace: trackId === 'audio-1',
+      })),
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.operation.moves).toEqual([
+      { clipId: audio.id, startTime: 5, trackId: 'audio-2' },
+    ]);
+    expect(result.resolvedMoves[0]?.fallbackTrack.createFallbackTrack).toBe(false);
+  });
+
+  it('creates a new audio track when every existing audio track is occupied', () => {
+    const audio = createMockClip({
+      id: 'audio-moving',
+      trackId: 'audio-1',
+      startTime: 0,
+      duration: 4,
+      source: { type: 'audio' },
+    });
+
+    const result = resolveClipMoveRequest({
+      id: 'move-audio-to-new-track',
+      clips: [audio],
+      tracks: [createMockTrack({ id: 'audio-1', type: 'audio' })],
+      clipId: audio.id,
+      requestedStartTime: 5,
+      getPositionWithResistance: vi.fn(() => ({
+        startTime: 5,
+        forcingOverlap: false,
+        noFreeSpace: true,
+      })),
+    });
+
+    expect(result.resolvedMoves[0]?.fallbackTrack).toEqual({
+      createFallbackTrack: true,
+      requestedNewTrackType: 'audio',
+      fallbackTrackType: 'audio',
+      provisionalTrackId: '__resolved_move_new_audio_track__',
+      reason: 'missing-compatible-track',
+    });
+    expect(result.operation.moves).toEqual([
+      { clipId: audio.id, startTime: 5, trackId: '__resolved_move_new_audio_track__' },
+    ]);
+  });
+
+  it('keeps linked audio in sync by placing it on a new track instead of overlapping', () => {
+    const video = createMockClip({
+      id: 'video-moving',
+      trackId: 'video-1',
+      startTime: 0,
+      duration: 4,
+      linkedClipId: 'audio-linked',
+      source: { type: 'video' },
+    });
+    const audio = createMockClip({
+      id: 'audio-linked',
+      trackId: 'audio-1',
+      startTime: 0,
+      duration: 4,
+      linkedClipId: video.id,
+      source: { type: 'audio' },
+    });
+
+    const result = resolveClipMoveRequest({
+      id: 'move-linked-audio-to-new-track',
+      clips: [video, audio],
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+      clipId: video.id,
+      requestedStartTime: 5,
+      getPositionWithResistance: vi.fn((clipId, startTime) => ({
+        startTime,
+        forcingOverlap: false,
+        noFreeSpace: clipId === audio.id,
+      })),
+    });
+
+    expect(result.operation.moves).toEqual([
+      { clipId: video.id, startTime: 5, trackId: 'video-1' },
+      { clipId: audio.id, startTime: 5, trackId: '__resolved_move_new_audio_track__' },
+    ]);
+    expect(result.resolvedMoves.find(move => move.clipId === audio.id)?.fallbackTrack).toMatchObject({
+      createFallbackTrack: true,
+      fallbackTrackType: 'audio',
+    });
+  });
+
   it('reports explicit new-track-zone intent without a concrete target track', () => {
     const video = createMockClip({
       id: 'video-1',

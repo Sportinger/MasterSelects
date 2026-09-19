@@ -4,6 +4,7 @@ import { getNativeSceneRenderer } from '../../native3d/NativeSceneRenderer';
 import { resolveRenderableSharedSceneCamera } from '../../scene/SceneCameraUtils';
 import { collectActiveSceneSplatEffectors } from '../../scene/SceneEffectorUtils';
 import { collectScene3DLayers } from '../../scene/SceneLayerCollector';
+import type { EffectsPipeline } from '../../../effects/EffectsPipeline';
 import type { MaskTextureManager } from '../../texture/MaskTextureManager';
 import { useTimelineStore } from '../../../stores/timeline';
 
@@ -23,6 +24,8 @@ interface Process3DLayersForNestedParams {
   compositionId?: string;
   sceneClips?: TimelineClip[];
   sceneTracks?: TimelineTrack[];
+  effectsPipeline?: EffectsPipeline;
+  sampler?: GPUSampler;
 }
 
 export function process3DLayersForNestedScene(params: Process3DLayersForNestedParams): void {
@@ -37,6 +40,8 @@ export function process3DLayersForNestedScene(params: Process3DLayersForNestedPa
     compositionId,
     sceneClips,
     sceneTracks,
+    effectsPipeline,
+    sampler,
   } = params;
 
   const indices3D: number[] = [];
@@ -109,6 +114,8 @@ export function process3DLayersForNestedScene(params: Process3DLayersForNestedPa
     isRealtimePlayback,
     null,
     maskTextureManager,
+    'main',
+    effectsPipeline && sampler ? { effectsPipeline, sampler } : undefined,
   );
   if (!textureView) {
     for (let i = indices3D.length - 1; i >= 0; i--) layerData.splice(indices3D[i], 1);
@@ -118,6 +125,11 @@ export function process3DLayersForNestedScene(params: Process3DLayersForNestedPa
   const insertIdx = indices3D[0];
   const firstLayer = layerData[indices3D[0]].layer;
   const isSingle = indices3D.length === 1;
+  const appliedLayerSpaceEffectIds = new Set(
+    effectsPipeline && sampler
+      ? layers3D[0]?.layerSpaceEffects?.map((effect) => effect.id) ?? []
+      : [],
+  );
   const syntheticLayer: Layer = {
     id: '__scene_3d_nested__',
     name: '3D Scene (Nested)',
@@ -125,7 +137,12 @@ export function process3DLayersForNestedScene(params: Process3DLayersForNestedPa
     opacity: isSingle ? firstLayer.opacity : 1,
     blendMode: isSingle ? firstLayer.blendMode : 'normal',
     source: { type: 'image' },
-    effects: isSingle ? firstLayer.effects : [],
+    effects: isSingle
+      ? (firstLayer.effects ?? []).filter((effect) => !(
+          effect.enabled && (appliedLayerSpaceEffectIds.has(effect.id)
+            || (layers3D[0]?.kind === 'face-cables' && effect.type === 'face-cables'))
+        ))
+      : [],
     colorCorrection: isSingle ? firstLayer.colorCorrection : undefined,
     position: { x: 0, y: 0, z: 0 },
     scale: { x: 1, y: 1 },

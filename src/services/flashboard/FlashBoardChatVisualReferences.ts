@@ -1,6 +1,7 @@
 import type { FlashBoardComposerState } from '../../stores/flashboardStore';
 import type { MediaFile } from '../../stores/mediaStore';
 import type { FlashBoardChatVisualReference } from './FlashBoardChatTypes';
+import { isFlashBoardGuidedMode } from './FlashBoardGuidedMode';
 
 /**
  * The start-turn route accepts 1.5 MB and each source is represented both in
@@ -156,6 +157,10 @@ export async function prepareFlashBoardChatVisualReferences(input: {
   mediaFiles: MediaFile[];
   signal?: AbortSignal;
 }): Promise<FlashBoardChatVisualReference[]> {
+  // Guided is pinned to DeepSeek, whose chat-completions boundary is text and
+  // tool based. The agent can still inspect frames through editor tools; an
+  // inline image here would trigger the kernel's OpenAI vision fallback.
+  if (isFlashBoardGuidedMode()) return [];
   const images = collectFlashBoardChatReferenceImages(input.composer, input.mediaFiles);
   if (images.length === 0) return [];
   if (images.length > FLASHBOARD_CHAT_MAX_VISUAL_REFERENCES) {

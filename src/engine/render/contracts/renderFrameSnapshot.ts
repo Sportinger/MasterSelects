@@ -130,6 +130,7 @@ export interface RenderTimelineClipSnapshot {
   readonly textProperties?: TextClipProperties;
   readonly text3DProperties?: Text3DProperties;
   readonly motion?: MotionLayerDefinition;
+  readonly flock?: import('../../../types/flock').FlockDefinition;
   /** Embedded animation payload used by nested composition clips. */
   readonly keyframes?: readonly Keyframe[];
   readonly transitionIn?: TimelineTransition;

@@ -8,6 +8,7 @@ import {
 } from '../types/light';
 import { clampCameraFov } from './cameraLens';
 import { normalizeEasingType } from './easing';
+import { keyframesForProperty } from './keyframePropertyIndex';
 
 // Preset easing functions (for non-bezier easing types)
 export const easingFunctions: Record<Exclude<EasingType, 'bezier'>, (t: number) => number> = {
@@ -31,6 +32,67 @@ export interface KeyframeInterpolationOptions {
 
 export interface ClipTransformInterpolationOptions {
   rotationMode?: 'linear' | 'shortest';
+}
+
+type BezierSegmentKeyframe = Pick<Keyframe, 'time' | 'value' | 'handleIn' | 'handleOut'>;
+
+export interface ResolvedBezierSegmentHandles {
+  handleOut: BezierHandle;
+  handleIn: BezierHandle;
+}
+
+const clampBezierControlTime = (value: number, duration: number): number => (
+  Math.max(0, Math.min(duration, value))
+);
+
+/**
+ * Resolves missing handles and guarantees a forward-only time axis. Legacy
+ * projects may contain control points outside or crossing inside a segment;
+ * projecting a crossed pair onto their midpoint keeps rendering and playback
+ * deterministic without mutating the stored project during readback.
+ */
+export function resolveBezierSegmentHandles(
+  prevKey: BezierSegmentKeyframe,
+  nextKey: BezierSegmentKeyframe,
+): ResolvedBezierSegmentHandles {
+  const duration = Math.max(0, nextKey.time - prevKey.time);
+  const valueDelta = nextKey.value - prevKey.value;
+  const sourceOut = prevKey.handleOut ?? { x: duration / 3, y: valueDelta / 3 };
+  const sourceIn = nextKey.handleIn ?? { x: -duration / 3, y: -valueDelta / 3 };
+  let outControlTime = clampBezierControlTime(sourceOut.x, duration);
+  let inControlTime = clampBezierControlTime(duration + sourceIn.x, duration);
+
+  if (outControlTime > inControlTime) {
+    const midpoint = (outControlTime + inControlTime) / 2;
+    outControlTime = midpoint;
+    inControlTime = midpoint;
+  }
+
+  return {
+    handleOut: { x: outControlTime, y: sourceOut.y },
+    handleIn: { x: inControlTime - duration, y: sourceIn.y },
+  };
+}
+
+/** Caps the actively dragged handle against the effective opposing handle. */
+export function clampBezierHandleTimeOffset(
+  prevKey: BezierSegmentKeyframe,
+  nextKey: BezierSegmentKeyframe,
+  handle: 'in' | 'out',
+  requestedOffset: number,
+): number {
+  const duration = Math.max(0, nextKey.time - prevKey.time);
+  const valueDelta = nextKey.value - prevKey.value;
+  if (handle === 'out') {
+    const opposing = nextKey.handleIn ?? { x: -duration / 3, y: -valueDelta / 3 };
+    const maximum = clampBezierControlTime(duration + opposing.x, duration);
+    return Math.max(0, Math.min(maximum, requestedOffset));
+  }
+
+  const opposing = prevKey.handleOut ?? { x: duration / 3, y: valueDelta / 3 };
+  const minimum = clampBezierControlTime(opposing.x, duration);
+  const requestedControlTime = duration + requestedOffset;
+  return Math.max(minimum, Math.min(duration, requestedControlTime)) - duration;
 }
 
 export function getShortestAngleDeltaDegrees(from: number, to: number): number {
@@ -138,9 +200,7 @@ export function interpolateBezier(
   // If no time difference, return target value
   if (timeDelta <= 0) return nextKey.value;
 
-  // Default handles if not specified (equivalent to linear)
-  const handleOut = prevKey.handleOut || { x: timeDelta / 3, y: valueDelta / 3 };
-  const handleIn = nextKey.handleIn || { x: -timeDelta / 3, y: -valueDelta / 3 };
+  const { handleOut, handleIn } = resolveBezierSegmentHandles(prevKey, nextKey);
 
   // Convert relative handles to normalized 0-1 control points
   // handleOut.x is seconds from prevKey, convert to 0-1 range
@@ -207,10 +267,7 @@ export function interpolateKeyframes(
   defaultValue: number,
   options?: KeyframeInterpolationOptions
 ): number {
-  // Filter keyframes for this property and sort by time
-  const propKeyframes = keyframes
-    .filter(k => k.property === property)
-    .sort((a, b) => a.time - b.time);
+  const propKeyframes = keyframesForProperty(keyframes, property);
 
   // No keyframes - return default
   if (propKeyframes.length === 0) return defaultValue;
@@ -225,17 +282,13 @@ export function interpolateKeyframes(
   const lastKeyframe = propKeyframes[propKeyframes.length - 1];
   if (time >= lastKeyframe.time) return lastKeyframe.value;
 
-  // Find surrounding keyframes
-  let prevKey = propKeyframes[0];
-  let nextKey = propKeyframes[1];
-
-  for (let i = 1; i < propKeyframes.length; i++) {
-    if (propKeyframes[i].time >= time) {
-      prevKey = propKeyframes[i - 1];
-      nextKey = propKeyframes[i];
-      break;
-    }
+  // Lower bound preserves the first equal timestamp and outgoing segment semantics.
+  let lo = 1, hi = propKeyframes.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (propKeyframes[mid].time < time) lo = mid + 1; else hi = mid;
   }
+  const prevKey = propKeyframes[lo - 1], nextKey = propKeyframes[lo];
 
   // Calculate interpolation factor (0 to 1)
   const range = nextKey.time - prevKey.time;
@@ -279,6 +332,11 @@ export function getInterpolatedClipTransform(
       x: interpolateKeyframes(keyframes, 'position.x', time, baseTransform.position.x),
       y: interpolateKeyframes(keyframes, 'position.y', time, baseTransform.position.y),
       z: interpolateKeyframes(keyframes, 'position.z', time, baseTransform.position.z),
+    },
+    anchor: {
+      x: interpolateKeyframes(keyframes, 'anchor.x', time, baseTransform.anchor?.x ?? 0),
+      y: interpolateKeyframes(keyframes, 'anchor.y', time, baseTransform.anchor?.y ?? 0),
+      z: interpolateKeyframes(keyframes, 'anchor.z', time, baseTransform.anchor?.z ?? 0),
     },
     scale: {
       ...(baseTransform.scale.all !== undefined || keyframes.some(k => k.property === 'scale.all')

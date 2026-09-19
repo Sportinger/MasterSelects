@@ -5,16 +5,21 @@
 // to the main timeline at the same musical position. This pure adapter is the
 // bridge. It generates ruler ticks and gridlines over the clip's ABSOLUTE-time
 // window `[clipStartTime, clipStartTime + clipDuration]` using the very same pure
-// generators the timeline uses (`iterateBarBeatLines`, `createBarsLaneTicks`,
+// generators the timeline uses (`createBarsGridPlan`, `createBarsLaneTicks`,
 // `createLinearLaneTicks`), then maps each absolute time back to a clip-local
 // pixel with `(time - clipStartTime) * pxPerSec`. The labels match the timeline
 // by construction; an independent piano-roll zoom only changes spacing.
 //
-// Pure (time-domain only, no runtime handles). gridResolution future-proofs for a
-// later 1/8 / 1/16 / triplet control without reworking callers (today: 1 = beats).
+// Pure (time-domain only, no runtime handles). The bar/beat/sub line TIMES come
+// from `createBarsGridPlan` — the same generator the main timeline's body grid
+// uses — so a subdivision means the identical thing on both surfaces and both
+// thin at the same zoom levels. This adapter only maps those times to pixels.
 
 import type { TempoMap } from '../../types/timeline';
-import { iterateBarBeatLines } from '../../timeline/tempo/TempoMap';
+import {
+  createBarsGridPlan,
+  type TimelineGridSubdivision,
+} from '../../timeline/tempo/barsGrid';
 import {
   createBarsLaneTicks,
   createLinearLaneTicks,
@@ -36,7 +41,8 @@ export interface PianoRollGrid {
   barLines: GridLine[];
   /** Beat lines (non-bar-start) — medium tier. */
   beatLines: GridLine[];
-  /** Sub-beat lines from `gridResolution > 1` — faint tier (empty when === 1). */
+  /** Sub-beat lines for the chosen subdivision — faint tier (empty for
+   *  'bar'/'beat', and whenever the zoom is too tight to draw them). */
   subLines: GridLine[];
   /** Ruler ticks, with ABSOLUTE-time `.time`; convert with `(time - clipStartTime) * pxPerSec`. */
   rulerTicks: { bars: RulerTick[]; time: RulerTick[] };
@@ -54,8 +60,8 @@ export interface BuildPianoRollGridInput {
   visibleStartPx: number;
   /** Width of the visible pixel window in pixels. */
   visibleWidthPx: number;
-  /** Lines per beat: 1 = beats (default), 2 = 1/8, 4 = 1/16, 3 = triplets, … */
-  gridResolution?: number;
+  /** Musical division the grid draws and snaps to. Defaults to 'beat'. */
+  subdivision?: TimelineGridSubdivision;
   /**
    * Seconds of "outside the clip" margin shown on each side (#249 clip-resize).
    * When > 0, bars/beats/ticks are generated `marginSec` beyond each window edge
@@ -80,11 +86,10 @@ export function buildPianoRollGrid({
   pxPerSec,
   visibleStartPx,
   visibleWidthPx,
-  gridResolution = 1,
+  subdivision = 'beat',
   marginSec = 0,
 }: BuildPianoRollGridInput): PianoRollGrid {
   const safePxPerSec = sanitizePositive(pxPerSec, 1);
-  const safeResolution = Math.max(1, Math.floor(sanitizePositive(gridResolution, 1)));
   const safeMargin = Math.max(0, marginSec);
 
   // Absolute end of the clip window — the duration the timeline generators clamp
@@ -109,27 +114,20 @@ export function buildPianoRollGrid({
   const subLines: GridLine[] = [];
 
   if (toAbs >= fromAbs) {
-    // Bar/beat lines never exist before absolute time 0.
-    const lines = iterateBarBeatLines(tempoMap, Math.max(0, fromAbs), toAbs);
-    for (const line of lines) {
-      const gridLine: GridLine = { pixelX: toPixel(line.time), time: line.time };
-      if (line.isBarStart) barLines.push(gridLine);
-      else beatLines.push(gridLine);
-    }
-
-    // Sub-beat lines: linearly interpolate between consecutive beats. Uniform
-    // within a tempo segment — exact for the constant 4/4@60 map and well-defined
-    // per-segment later. Empty when gridResolution === 1.
-    if (safeResolution > 1) {
-      for (let i = 0; i < lines.length - 1; i += 1) {
-        const a = lines[i].time;
-        const b = lines[i + 1].time;
-        for (let step = 1; step < safeResolution; step += 1) {
-          const time = a + ((b - a) * step) / safeResolution;
-          subLines.push({ pixelX: toPixel(time), time });
-        }
-      }
-    }
+    // Bar/beat/sub lines never exist before absolute time 0 (the plan clamps
+    // there itself). Sub-beat lines step per tempo segment, so they stay correct
+    // across a tempo or meter change instead of drifting off a global interval.
+    const plan = createBarsGridPlan({
+      tempoMap,
+      zoom: safePxPerSec,
+      startTime: fromAbs,
+      endTime: toAbs,
+      subdivision,
+    });
+    const toLine = (time: number): GridLine => ({ pixelX: toPixel(time), time });
+    for (const time of plan.barTimes) barLines.push(toLine(time));
+    for (const time of plan.beatTimes) beatLines.push(toLine(time));
+    for (const time of plan.subdivisionTimes) subLines.push(toLine(time));
   }
 
   const rulerTicks = {

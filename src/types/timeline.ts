@@ -5,6 +5,7 @@ import type {
   TrackAudioState,
 } from './audio';
 import type { ColorCorrectionState } from './colorCorrection';
+import type { ColorGradeMode } from './colorGradeOwnership';
 import type {
   AnalysisStatus,
   ClipAnalysis,
@@ -102,7 +103,25 @@ export interface EditableHookLayerMetadata {
   rowIndex: number;
 }
 
+export type VideoInspectorSectionKey =
+  | 'transform'
+  | 'cropping'
+  | 'dynamicZoom'
+  | 'composite'
+  | 'speedChange'
+  | 'stabilization'
+  | 'lensCorrection';
+
+/** Durable bypass state for the Resolve-style video inspector sections. */
+export type ClipVideoInspectorSections = Partial<Record<VideoInspectorSectionKey, boolean>>;
+
 export interface TimelineClip {
+  planarTracks?: import('./planarTracking').PlanarTrack[];
+  trackingBinding?: import('./trackingBinding').TrackingBinding;
+  /** Projects this otherwise ordinary editable layer onto a solved terrain track. */
+  terrainAttachment?: import('./terrainAttachment').TerrainAttachment;
+  terrainScreenAnchor?: import('./terrainAttachment').TerrainScreenAnchor;
+  terrainAnchorConnector?: import('./terrainAttachment').TerrainAnchorConnector;
   id: string;
   trackId: string;
   name: string;
@@ -114,6 +133,8 @@ export interface TimelineClip {
   source: TimelineClipSource | null;
   mathScene?: MathSceneDefinition;
   motion?: MotionLayerDefinition;
+  /** Flock clip executable graph (source.type === 'flock'). Plain JSON only. */
+  flock?: import('./flock').FlockDefinition;
   thumbnails?: string[];  // Array of data URLs for filmstrip preview
   mediaFileId?: string;   // Reference to MediaFile for audio/proxy lookup (top-level for YouTube downloads)
   signalAssetId?: string; // Source SignalAsset for renderer-adapter materialized clips
@@ -131,10 +152,13 @@ export interface TimelineClip {
   waveformGenerating?: boolean;  // True while waveform is being generated
   waveformProgress?: number;     // 0-100 progress of waveform generation
   transform: ClipTransform;  // Visual transform properties
+  videoInspectorSections?: ClipVideoInspectorSections;
   sourceRect?: LayerSourceRect;
   transitionRender?: TransitionRenderState;
   effects: Effect[];      // Effects applied to this clip
   colorCorrection?: ColorCorrectionState;  // Professional node/list color correction state
+  colorGradeMode?: ColorGradeMode; // Local clip grade or source-owned remote grade
+  localColorCorrection?: ColorCorrectionState; // Preserved local grade while remote mode is active
   nodeGraph?: ClipNodeGraph; // Field-backed node graph UI state for this clip
   isLoading?: boolean;    // True while media is being loaded
   needsReload?: boolean;  // True if file handle needs re-authorization after page refresh
@@ -243,6 +267,11 @@ export interface TimelineState {
 
 // Serializable clip data for storage (without DOM elements)
 export interface SerializableClip {
+  planarTracks?: import('./planarTracking').PlanarTrack[];
+  trackingBinding?: import('./trackingBinding').TrackingBinding;
+  terrainAttachment?: import('./terrainAttachment').TerrainAttachment;
+  terrainScreenAnchor?: import('./terrainAttachment').TerrainScreenAnchor;
+  terrainAnchorConnector?: import('./terrainAttachment').TerrainAnchorConnector;
   id: string;
   trackId: string;
   name: string;
@@ -267,10 +296,13 @@ export interface SerializableClip {
   waveform?: number[];
   waveformChannels?: number[][];
   transform: ClipTransform;
+  videoInspectorSections?: ClipVideoInspectorSections;
   sourceRect?: LayerSourceRect;
   transitionRender?: TransitionRenderState;
   effects: Effect[];         // Effects applied to this clip
   colorCorrection?: ColorCorrectionState;
+  colorGradeMode?: ColorGradeMode;
+  localColorCorrection?: ColorCorrectionState;
   nodeGraph?: ClipNodeGraph; // Field-backed node graph UI state
   keyframes?: Keyframe[];    // Animation keyframes for this clip
   // Nested composition support
@@ -312,6 +344,7 @@ export interface SerializableClip {
   vectorAnimationSettings?: VectorAnimationClipSettings;
   mathScene?: MathSceneDefinition;
   motion?: MotionLayerDefinition;
+  flock?: import('./flock').FlockDefinition;
   // Transition support
   transitionIn?: TimelineTransition;
   transitionOut?: TimelineTransition;

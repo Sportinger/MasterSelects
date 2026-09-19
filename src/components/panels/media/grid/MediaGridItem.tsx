@@ -1,10 +1,13 @@
-import type { DragEvent, MouseEvent } from 'react';
+import type { DragEvent, MouseEvent, PointerEvent } from 'react';
 
 import type { Composition, MediaFile, ProjectItem } from '../../../../stores/mediaStore';
+import { mediaNeedsRelink } from '../../../../services/project/relinkMedia';
 import { FileTypeIcon } from '../FileTypeIcon';
+import { MediaReconnectButton } from '../MediaReconnectButton';
 import { getItemImportProgress, getItemWaveformProgress, isImportedMediaFileItem } from '../itemTypeGuards';
 import { MediaGridVideoThumb } from '../MediaGridVideoThumb';
 import { MediaWaveformThumb } from '../MediaWaveformThumb';
+import { TrackingAssetActions } from '../TrackingAssetActions';
 import { formatMediaDuration } from './format';
 
 export interface MediaGridItemProps {
@@ -16,12 +19,13 @@ export interface MediaGridItemProps {
   buildTooltip: (item: ProjectItem, isFolder: boolean, isComposition: boolean) => string;
   onRefreshFileUrls: (mediaFileId: string) => void;
   onDragStart: (event: DragEvent<HTMLDivElement>, item: ProjectItem) => void;
+  onTouchTimelineDragPointerDown: (event: PointerEvent<HTMLDivElement>, item: ProjectItem) => void;
   onDragEnd: (event: DragEvent<HTMLDivElement>) => void;
   onFolderDragOver: (event: DragEvent<HTMLDivElement>, folderId: string) => void;
   onFolderDragLeave: (event: DragEvent<HTMLDivElement>) => void;
   onFolderDrop: (event: DragEvent<HTMLDivElement>, folderId: string) => void;
   onClick: (event: MouseEvent<HTMLDivElement>, itemId: string) => void;
-  onDoubleClick: (item: ProjectItem) => void;
+  onDoubleClick: (item: ProjectItem, renameFromName?: boolean) => void;
   onContextMenu: (event: MouseEvent<HTMLDivElement>, itemId: string) => void;
 }
 
@@ -34,6 +38,7 @@ export function MediaGridItem({
   buildTooltip,
   onRefreshFileUrls,
   onDragStart,
+  onTouchTimelineDragPointerDown,
   onDragEnd,
   onFolderDragOver,
   onFolderDragLeave,
@@ -46,9 +51,11 @@ export function MediaGridItem({
   const isMediaFile = isImportedMediaFileItem(item);
   const mediaFile = isMediaFile ? item : null;
   const isComposition = !isFolder && 'type' in item && item.type === 'composition';
+  const isTrackingAsset = !isFolder && 'type' in item && item.type === 'tracking';
   const composition = isComposition ? (item as Composition) : null;
   const thumbUrl = mediaFile?.thumbnailUrl;
   const importing = Boolean(mediaFile?.isImporting);
+  const needsRelink = Boolean(mediaFile && mediaNeedsRelink(mediaFile));
   const importProgress = getItemImportProgress(item);
   const waveformProgress = getItemWaveformProgress(item);
   const duration = mediaFile?.duration || composition?.duration || ('duration' in item ? item.duration : undefined);
@@ -57,15 +64,19 @@ export function MediaGridItem({
     <div key={item.id} data-item-id={item.id}>
       <div
         data-media-panel-anim-id={item.id}
-        className={`media-grid-item ${selected ? 'selected' : ''} ${isFolder ? 'folder' : ''} ${dragTarget ? 'drag-target' : ''} ${importing ? 'importing' : ''}`}
+        className={`media-grid-item ${selected ? 'selected' : ''} ${isFolder ? 'folder' : ''} ${needsRelink ? 'no-file' : ''} ${dragTarget ? 'drag-target' : ''} ${importing ? 'importing' : ''}`}
         draggable={!importing}
         onDragStart={(event) => onDragStart(event, item)}
+        onPointerDown={isTrackingAsset ? undefined : (event) => onTouchTimelineDragPointerDown(event, item)}
         onDragEnd={onDragEnd}
         onDragOver={isFolder ? (event) => onFolderDragOver(event, item.id) : undefined}
         onDragLeave={isFolder ? onFolderDragLeave : undefined}
         onDrop={isFolder ? (event) => onFolderDrop(event, item.id) : undefined}
         onClick={(event) => onClick(event, item.id)}
-        onDoubleClick={() => onDoubleClick(item)}
+        onDoubleClick={(event) => onDoubleClick(
+          item,
+          event.target instanceof Element && Boolean(event.target.closest('.media-grid-name')),
+        )}
         onContextMenu={(event) => onContextMenu(event, item.id)}
         title={buildTooltip(item, isFolder, isComposition)}
       >
@@ -105,6 +116,10 @@ export function MediaGridItem({
               <span>{waveformProgress}%</span>
             </span>
           )}
+          {needsRelink && mediaFile ? (
+            <MediaReconnectButton mediaFileId={mediaFile.id} variant="overlay" />
+          ) : null}
+          {isTrackingAsset ? <TrackingAssetActions asset={item} /> : null}
         </div>
         <div
           className="media-grid-name"

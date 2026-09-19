@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type {
   Dispatch,
-  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
   SetStateAction,
 } from 'react';
 
@@ -46,7 +46,7 @@ export function useTimelineSplitDividerDrag({
   setSplitDragSmoothing,
   setSplitDragPinVideoBottom,
   setForceVideoBottomScroll,
-}: UseTimelineSplitDividerDragProps): (event: ReactMouseEvent) => void {
+}: UseTimelineSplitDividerDragProps): (event: ReactPointerEvent) => void {
   const splitDragAnchorVideoBottomRef = useRef(false);
   const splitDragStartedInAudioFocusRef = useRef(false);
   const splitDragStartedInVideoFocusRef = useRef(false);
@@ -54,6 +54,7 @@ export function useTimelineSplitDividerDrag({
   const splitDragSmoothingTimerRef = useRef<number | null>(null);
   const splitDragFrameRef = useRef<number | null>(null);
   const splitDragPendingClientYRef = useRef<number | null>(null);
+  const splitDragCleanupRef = useRef<(() => void) | null>(null);
 
   const clearSmoothingTimer = useCallback(() => {
     if (splitDragSmoothingTimerRef.current !== null) {
@@ -157,6 +158,8 @@ export function useTimelineSplitDividerDrag({
   }, [applySplitDragPosition]);
 
   useEffect(() => () => {
+    splitDragCleanupRef.current?.();
+    splitDragCleanupRef.current = null;
     if (splitDragFrameRef.current !== null) {
       window.cancelAnimationFrame(splitDragFrameRef.current);
       splitDragFrameRef.current = null;
@@ -164,10 +167,15 @@ export function useTimelineSplitDividerDrag({
     clearSmoothingTimer();
   }, [clearSmoothingTimer]);
 
-  return useCallback((event: ReactMouseEvent) => {
-    if (event.button !== 0) return;
+  return useCallback((event: ReactPointerEvent) => {
+    if (event.button !== 0 || !event.isPrimary) return;
     event.preventDefault();
     event.stopPropagation();
+    splitDragCleanupRef.current?.();
+    const activePointerId = event.pointerId;
+    const captureTarget = event.currentTarget as HTMLElement;
+    let lastClientY = event.clientY;
+    let finished = false;
 
     splitDragStartedInAudioFocusRef.current = trackFocusMode === 'audio';
     splitDragStartedInVideoFocusRef.current = trackFocusMode === 'video';
@@ -181,18 +189,43 @@ export function useTimelineSplitDividerDrag({
     splitDragAnchorVideoBottomRef.current = isVideoBottomVisible() || splitDragStartedInVideoFocusRef.current;
     applySplitDragPosition(event.clientY);
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      moveEvent.preventDefault();
-      scheduleSplitDragPosition(moveEvent.clientY);
-    };
+    function cleanupPointerSession() {
+      document.removeEventListener('pointermove', handlePointerMove, true);
+      document.removeEventListener('pointerup', handlePointerUp, true);
+      document.removeEventListener('pointercancel', handlePointerCancel, true);
+      document.removeEventListener('lostpointercapture', handleLostPointerCapture, true);
+      document.removeEventListener('visibilitychange', handleVisibilityChange, true);
+      window.removeEventListener('blur', handleWindowAbort, true);
+      window.removeEventListener('pagehide', handleWindowAbort, true);
+      try {
+        if (captureTarget.hasPointerCapture(activePointerId)) {
+          captureTarget.releasePointerCapture(activePointerId);
+        }
+      } catch {
+        // Window-level terminal listeners still close the drag on Safari.
+      }
+      if (splitDragCleanupRef.current === cleanupPointerSession) {
+        splitDragCleanupRef.current = null;
+      }
+    }
 
-    const handleMouseUp = (upEvent: MouseEvent) => {
+    function handlePointerMove(moveEvent: PointerEvent) {
+      if (moveEvent.pointerId !== activePointerId) return;
+      moveEvent.preventDefault();
+      lastClientY = moveEvent.clientY;
+      scheduleSplitDragPosition(moveEvent.clientY);
+    }
+
+    function finishPointerSession(clientY: number) {
+      if (finished) return;
+      finished = true;
+      cleanupPointerSession();
       if (splitDragFrameRef.current !== null) {
         window.cancelAnimationFrame(splitDragFrameRef.current);
         splitDragFrameRef.current = null;
       }
       splitDragPendingClientYRef.current = null;
-      applySplitDragPosition(upEvent.clientY);
+      applySplitDragPosition(clientY);
       const wrapper = scrollWrapperRef.current;
       let shouldSnapBalancedReleaseToVideoBottom = false;
       let releaseSnapVideoHeight = 0;
@@ -205,7 +238,7 @@ export function useTimelineSplitDividerDrag({
         const rect = wrapper.getBoundingClientRect();
         releaseAvailableHeight = Math.max(0, rect.height - SPLIT_DIVIDER_HEIGHT);
         if (releaseAvailableHeight > 0) {
-          const rawVideoHeight = upEvent.clientY - rect.top;
+          const rawVideoHeight = clientY - rect.top;
           const clampedRawVideoHeight = clampSplitDragVideoHeight(rawVideoHeight, releaseAvailableHeight);
           const releaseMode = getTrackFocusModeForSplitPosition(clampedRawVideoHeight, releaseAvailableHeight);
           const canShowAllVideoTracks =
@@ -237,12 +270,45 @@ export function useTimelineSplitDividerDrag({
         setSplitDragSmoothing(false);
         setSplitDragVideoHeight(null);
       }
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
+    }
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    function handlePointerUp(upEvent: PointerEvent) {
+      if (upEvent.pointerId !== activePointerId) return;
+      lastClientY = upEvent.clientY;
+      finishPointerSession(lastClientY);
+    }
+
+    function handlePointerCancel(cancelEvent: PointerEvent) {
+      if (cancelEvent.pointerId !== activePointerId) return;
+      finishPointerSession(lastClientY);
+    }
+
+    function handleLostPointerCapture(lostEvent: PointerEvent) {
+      if (lostEvent.pointerId !== activePointerId) return;
+      finishPointerSession(lastClientY);
+    }
+
+    function handleWindowAbort() {
+      finishPointerSession(lastClientY);
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState !== 'visible') finishPointerSession(lastClientY);
+    }
+
+    splitDragCleanupRef.current = cleanupPointerSession;
+    document.addEventListener('pointermove', handlePointerMove, { capture: true, passive: false });
+    document.addEventListener('pointerup', handlePointerUp, true);
+    document.addEventListener('pointercancel', handlePointerCancel, true);
+    document.addEventListener('lostpointercapture', handleLostPointerCapture, true);
+    document.addEventListener('visibilitychange', handleVisibilityChange, true);
+    window.addEventListener('blur', handleWindowAbort, true);
+    window.addEventListener('pagehide', handleWindowAbort, true);
+    try {
+      captureTarget.setPointerCapture(activePointerId);
+    } catch {
+      // The capture-phase document listeners are the fallback on older Safari.
+    }
   }, [
     applySplitDragPosition,
     clampSplitDragVideoHeight,

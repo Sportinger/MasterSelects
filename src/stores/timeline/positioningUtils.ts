@@ -2,7 +2,11 @@
 // Extracted from index.ts for maintainability
 
 import type { SliceCreator, TimelineClip, TimelineUtils } from './types';
-import { SNAP_THRESHOLD_SECONDS, TIMELINE_GRID_SNAP_THRESHOLD_PX } from './constants';
+import {
+  AUDIO_OVERLAP_FREE_SPACE_JUMP_PIXELS,
+  SNAP_THRESHOLD_SECONDS,
+  TIMELINE_GRID_SNAP_THRESHOLD_PX,
+} from './constants';
 import { collectBarsGridSnapTimes } from '../../timeline/tempo/barsGrid';
 import { getTrackOverlapPolicy } from './helpers/overlapPolicy';
 
@@ -10,6 +14,45 @@ type PositioningUtils = Pick<
   TimelineUtils,
   'getSnappedPosition' | 'findNonOverlappingPosition' | 'getPositionWithResistance' | 'trimOverlappingClips'
 >;
+
+function timeRangesOverlap(
+  startA: number,
+  durationA: number,
+  startB: number,
+  durationB: number,
+): boolean {
+  return startA + durationA > startB && startA < startB + durationB;
+}
+
+function findClosestFreeStartTime(
+  clips: readonly TimelineClip[],
+  desiredStartTime: number,
+  duration: number,
+): number | null {
+  const candidates = new Set<number>([0]);
+  for (const clip of clips) {
+    candidates.add(clip.startTime - duration);
+    candidates.add(clip.startTime + clip.duration);
+  }
+
+  let closestStartTime: number | null = null;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  for (const candidate of candidates) {
+    if (candidate < 0) continue;
+    if (clips.some(clip => timeRangesOverlap(candidate, duration, clip.startTime, clip.duration))) {
+      continue;
+    }
+    const distance = Math.abs(candidate - desiredStartTime);
+    if (
+      distance < closestDistance ||
+      (distance === closestDistance && (closestStartTime === null || candidate < closestStartTime))
+    ) {
+      closestStartTime = candidate;
+      closestDistance = distance;
+    }
+  }
+  return closestStartTime;
+}
 
 export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get) => ({
   getSnappedPosition: (clipId: string, desiredStartTime: number, _trackId: string) => {
@@ -180,15 +223,16 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
   // Apply magnetic resistance at clip edges during drag
   // Returns position with resistance applied, and whether user has "broken through" to force overlap
   // Uses PIXEL-based resistance so it works regardless of clip duration
-  getPositionWithResistance: (clipId: string, desiredStartTime: number, trackId: string, duration: number, _zoom?: number, excludeClipIds?: string[]) => {
-    const { clips, tracks } = get();
+  getPositionWithResistance: (clipId: string, desiredStartTime: number, trackId: string, duration: number, zoom?: number, excludeClipIds?: string[]) => {
+    const { clips, tracks, zoom: storeZoom } = get();
     const movingClip = clips.find(c => c.id === clipId);
     const excludeSet = new Set(excludeClipIds || []);
     const isTrackChange = movingClip ? movingClip.trackId !== trackId : false;
+    const overlapPolicy = getTrackOverlapPolicy(tracks.find(t => t.id === trackId));
 
     // Stack tracks (e.g. MIDI) let clips coexist: overlap is legal, never trimmed
     // and never bounced to another track. Drop the clip exactly where requested.
-    if (getTrackOverlapPolicy(tracks.find(t => t.id === trackId)) === 'stack') {
+    if (overlapPolicy === 'stack') {
       return { startTime: Math.max(0, desiredStartTime), forcingOverlap: false };
     }
 
@@ -217,38 +261,19 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
       return { startTime: Math.max(0, desiredStartTime), forcingOverlap: false };
     }
 
-    // Cross-track moves: never allow overlap, find closest free position
-    if (isTrackChange) {
-      // Generate candidate positions at edges of every clip on the track (+ timeline start)
-      const candidates: number[] = [0];
-      for (const c of otherClips) {
-        candidates.push(c.startTime - duration); // right before clip
-        candidates.push(c.startTime + c.duration); // right after clip
-      }
-
-      let bestPos: number | null = null;
-      let bestDist = Infinity;
-      for (const pos of candidates) {
-        if (pos < 0) continue;
-        const posEnd = pos + duration;
-        const posOverlaps = otherClips.some(c => {
-          const cEnd = c.startTime + c.duration;
-          return !(posEnd <= c.startTime || pos >= cEnd);
-        });
-        if (!posOverlaps) {
-          const dist = Math.abs(pos - desiredStartTime);
-          if (dist < bestDist) {
-            bestDist = dist;
-            bestPos = pos;
-          }
+    // Cross-track moves and audio moves never overwrite existing clips. Audio
+    // may snap into nearby free space; if that would cause a large visual jump,
+    // report the lane as occupied so the caller can choose another/new track.
+    if (isTrackChange || overlapPolicy === 'avoid') {
+      const closestFreeStartTime = findClosestFreeStartTime(otherClips, desiredStartTime, duration);
+      if (closestFreeStartTime !== null) {
+        const jumpPixels = Math.abs(closestFreeStartTime - desiredStartTime) * (zoom ?? storeZoom);
+        if (overlapPolicy !== 'avoid' || jumpPixels <= AUDIO_OVERLAP_FREE_SPACE_JUMP_PIXELS) {
+          return { startTime: closestFreeStartTime, forcingOverlap: false };
         }
       }
 
-      if (bestPos !== null) {
-        return { startTime: bestPos, forcingOverlap: false };
-      }
-
-      // No valid position found — track is fully packed
+      // No suitably close free position — let the caller use another/new track.
       return { startTime: Math.max(0, desiredStartTime), forcingOverlap: false, noFreeSpace: true };
     }
 
@@ -260,8 +285,9 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
   trimOverlappingClips: (clipId: string, startTime: number, trackId: string, duration: number, excludeClipIds?: string[]) => {
     const { clips, tracks, invalidateCache } = get();
 
-    // Stack tracks (e.g. MIDI) never eat overlapping clips — they cohabitate.
-    if (getTrackOverlapPolicy(tracks.find(t => t.id === trackId)) === 'stack') return;
+    // Only trim-policy tracks eat overlapping clips. Audio avoids overlap and
+    // MIDI stacks it, so neither may be destructively modified here.
+    if (getTrackOverlapPolicy(tracks.find(t => t.id === trackId)) !== 'trim') return;
 
     const movingClip = clips.find(c => c.id === clipId);
     const excludeSet = new Set(excludeClipIds || []);

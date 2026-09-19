@@ -12,6 +12,26 @@ import { createAudioDynamicsViewModel } from './audioDynamicsView';
 import { FlexEqualizerControl } from './FlexEqualizerControl';
 import { getAudioEqAllNumericKeyframeEntries } from './audioEqKeyframes';
 import type { RuntimeAnalyzerScope } from './useThrottledRuntimeAnalyzer';
+import { endBatch, startBatch } from '../../../stores/historyStore';
+import { trackEditorControlCommitted } from '../../../services/productAnalytics';
+
+function trackAudioEffectControl(
+  descriptorId: string,
+  controlId: string,
+  controlKind: 'button' | 'checkbox' | 'number' | 'select',
+  inputMethod: 'click' | 'drag' | 'reset' | 'select' | 'type',
+  interaction: 'add' | 'change' | 'disable' | 'enable' | 'remove' | 'reorder' | 'reset',
+) {
+  trackEditorControlCommitted({
+    area: 'audio',
+    controlId,
+    controlKind,
+    inputMethod,
+    interaction,
+    itemId: descriptorId,
+    itemKind: 'audio_effect',
+  });
+}
 
 export interface AudioEffectStackControlProps {
   title?: string;
@@ -118,7 +138,9 @@ export function AudioEffectStackControl({
           className="audio-effect-add-select"
           defaultValue=""
           onChange={(e) => {
-            onAddEffect(e.target.value);
+            const descriptorId = e.target.value;
+            onAddEffect(descriptorId);
+            trackAudioEffectControl(descriptorId, 'effect-stack-add', 'select', 'select', 'add');
             e.target.value = '';
           }}
         >
@@ -156,7 +178,10 @@ export function AudioEffectStackControl({
                     <button
                       type="button"
                       className="btn btn-sm"
-                      onClick={() => onReorderEffect(effect.id, index - 1)}
+                      onClick={() => {
+                        onReorderEffect(effect.id, index - 1);
+                        trackAudioEffectControl(descriptor.id, 'effect-stack-order', 'button', 'click', 'reorder');
+                      }}
                       disabled={index === 0}
                       title="Move effect earlier"
                     >
@@ -173,7 +198,10 @@ export function AudioEffectStackControl({
                     <button
                       type="button"
                       className="btn btn-sm"
-                      onClick={() => onReorderEffect(effect.id, index + 1)}
+                      onClick={() => {
+                        onReorderEffect(effect.id, index + 1);
+                        trackAudioEffectControl(descriptor.id, 'effect-stack-order', 'button', 'click', 'reorder');
+                      }}
                       disabled={index >= effects.length - 1}
                       title="Move effect later"
                     >
@@ -182,14 +210,20 @@ export function AudioEffectStackControl({
                     <button
                       type="button"
                       className="btn btn-sm"
-                      onClick={() => onSetEffectEnabled(effect.id, !enabled)}
+                      onClick={() => {
+                        onSetEffectEnabled(effect.id, !enabled);
+                        trackAudioEffectControl(descriptor.id, 'effect-enabled', 'button', 'click', enabled ? 'disable' : 'enable');
+                      }}
                     >
                       {enabled ? 'Bypass' : 'Enable'}
                     </button>
                     <button
                       type="button"
                       className="btn btn-sm btn-danger"
-                      onClick={() => onRemoveEffect(effect.id)}
+                      onClick={() => {
+                        onRemoveEffect(effect.id);
+                        trackAudioEffectControl(descriptor.id, 'effect-remove', 'button', 'click', 'remove');
+                      }}
                     >
                       Remove
                     </button>
@@ -252,7 +286,10 @@ export function AudioEffectStackControl({
                             <input
                               type="checkbox"
                               checked={Boolean(currentValue)}
-                              onChange={(e) => onUpdateEffect(effect, paramName, e.target.checked)}
+                              onChange={(e) => {
+                                onUpdateEffect(effect, paramName, e.target.checked);
+                                trackAudioEffectControl(descriptor.id, paramName, 'checkbox', 'click', 'change');
+                              }}
                             />
                           </label>
                         );
@@ -263,7 +300,10 @@ export function AudioEffectStackControl({
                             <span>{formatParamLabel(paramName)}</span>
                             <select
                               value={typeof currentValue === 'string' ? currentValue : param.default}
-                              onChange={(e) => onUpdateEffect(effect, paramName, e.target.value)}
+                              onChange={(e) => {
+                                onUpdateEffect(effect, paramName, e.target.value);
+                                trackAudioEffectControl(descriptor.id, paramName, 'select', 'select', 'change');
+                              }}
                             >
                               {param.options.map(option => (
                                 <option key={option} value={option}>{formatParamLabel(option)}</option>
@@ -296,6 +336,15 @@ export function AudioEffectStackControl({
                                 decimals={meta.decimals}
                                 suffix={meta.suffix}
                                 sensitivity={meta.sensitivity}
+                                onDragStart={() => startBatch('Adjust audio effect')}
+                                onDragEnd={() => endBatch()}
+                                onCommit={(method) => trackAudioEffectControl(
+                                  descriptor.id,
+                                  paramName,
+                                  'number',
+                                  method,
+                                  method === 'reset' ? 'reset' : 'change',
+                                )}
                               />
                             </div>
                           </div>
@@ -307,7 +356,12 @@ export function AudioEffectStackControl({
                           <input
                             type="text"
                             value={String(currentValue)}
+                            onFocus={() => startBatch('Adjust audio effect')}
                             onChange={(e) => onUpdateEffect(effect, paramName, e.target.value)}
+                            onBlur={() => {
+                              endBatch();
+                              trackAudioEffectControl(descriptor.id, paramName, 'number', 'type', 'change');
+                            }}
                           />
                         </label>
                       );

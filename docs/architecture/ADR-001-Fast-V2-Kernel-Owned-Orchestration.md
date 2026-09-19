@@ -1,8 +1,10 @@
-# ADR-001: Fast V2 Orchestration Is Kernel-Owned
+# ADR-001: Normal Path Orchestration Is Kernel-Owned
 
 - Status: Accepted
 - Date: 2026-08-02
 - Applies to: `MasterSelects` and `masterselects-kernel`
+- Renamed: 2026-08-06. The accepted ownership boundary is unchanged; the
+  product route formerly called Fast V2 is now the single Normal Path.
 
 ## Decision
 
@@ -72,4 +74,4 @@ for new architecture.
 ## Related implementation plan
 
 See
-[Fast V2 Progressive Editor Tools Plan](../ongoing/Fast-V2-Progressive-Editor-Tools-Plan.md).
+[Normal Path Progressive Editor Tools Plan](../ongoing/Normal-Path-Progressive-Editor-Tools-Plan.md).

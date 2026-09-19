@@ -28,6 +28,7 @@ import type {
   StatusListener,
   ThumbnailStatus,
 } from './thumbnailCache/types';
+import type { RuntimeFrameProvider } from './mediaRuntime/types';
 
 export type {
   StatusListener,
@@ -299,6 +300,81 @@ class ThumbnailCacheService {
     } finally {
       releaseThumbnailRuntimeResource(generationJobId);
     }
+  }
+
+  async generateForFrameProvider(
+    mediaFileId: string,
+    provider: RuntimeFrameProvider,
+    duration: number,
+    fileHash?: string,
+  ): Promise<void> {
+    const currentStatus = this.getStatus(mediaFileId);
+    if (currentStatus === 'generating' || currentStatus === 'ready') return;
+
+    const generationJobId = getThumbnailGenerationJobId(mediaFileId);
+    const sourceUrl = `runtime:${provider.backend ?? 'frame-provider'}:${mediaFileId}`;
+    const generationAdmission = canRetainThumbnailJob({
+      jobId: generationJobId,
+      jobKind: 'thumbnail-generation',
+      mediaFileId,
+      fileHash,
+      sourceUrl,
+    });
+    if (!generationAdmission.admitted) return;
+    reportThumbnailJob({
+      jobId: generationJobId,
+      jobKind: 'thumbnail-generation',
+      mediaFileId,
+      fileHash,
+      sourceUrl,
+    });
+    this.lastGenerationErrors.delete(mediaFileId);
+
+    try {
+      this.durations.set(mediaFileId, duration);
+      this.events.notify(mediaFileId, 'generating');
+      const sourceVersion = this.requestQueue.getSourceVersion(mediaFileId);
+      if (await this.loadFromDB(mediaFileId, fileHash, sourceVersion)) {
+        if (this.requestQueue.isSourceVersionCurrent(mediaFileId, sourceVersion)) {
+          this.events.notify(mediaFileId, 'ready');
+        }
+        return;
+      }
+
+      const abortController = new AbortController();
+      this.abortControllers.set(mediaFileId, abortController);
+      try {
+        const generated = await this.generator.generateFrameProviderThumbnails(
+          mediaFileId,
+          provider,
+          duration,
+          fileHash,
+          abortController.signal,
+        );
+        if (generated && !abortController.signal.aborted) {
+          this.events.notify(mediaFileId, 'ready');
+        } else if (!abortController.signal.aborted) {
+          this.events.notify(mediaFileId, 'error');
+        }
+      } catch (error) {
+        if (!abortController.signal.aborted) {
+          this.lastGenerationErrors.set(
+            mediaFileId,
+            error instanceof Error ? error.message : String(error),
+          );
+          this.events.notify(mediaFileId, 'error');
+        }
+      } finally {
+        this.abortControllers.delete(mediaFileId);
+      }
+    } finally {
+      releaseThumbnailRuntimeResource(generationJobId);
+    }
+  }
+
+  reportUnsupported(mediaFileId: string, reason: string): void {
+    this.lastGenerationErrors.set(mediaFileId, reason);
+    this.events.notify(mediaFileId, 'error');
   }
 
   /** Abort in-progress generation */

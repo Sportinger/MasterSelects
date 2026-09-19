@@ -165,6 +165,28 @@ describe('TimelineTrack empty lane right mouse behavior', () => {
     expect(onEmptyMouseDown).not.toHaveBeenCalled();
   });
 
+  it('routes a primary touch pointer on a canvas-rendered clip to the clip drag handler', () => {
+    const onClipMouseDown = vi.fn();
+    const onEmptyMouseDown = vi.fn();
+    const { row } = renderTimelineTrack({
+      clips: [createClip()],
+      onClipMouseDown,
+      onEmptyMouseDown,
+    });
+
+    fireEvent.pointerDown(row, {
+      button: 0,
+      clientX: 45,
+      clientY: 24,
+      pointerId: 7,
+      pointerType: 'touch',
+    });
+
+    expect(onClipMouseDown).toHaveBeenCalledTimes(1);
+    expect(onClipMouseDown.mock.calls[0][1]).toBe('clip-video');
+    expect(onEmptyMouseDown).not.toHaveBeenCalled();
+  });
+
   it('dispatches blade clicks on canvas-rendered clips through the typed split operation', () => {
     const onClipMouseDown = vi.fn();
     const applyTimelineEditOperation = vi.fn(() => ({ success: true, warnings: [] }));

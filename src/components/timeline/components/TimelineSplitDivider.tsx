@@ -1,10 +1,10 @@
-import type { MouseEventHandler } from 'react';
+import type { PointerEventHandler } from 'react';
 import type { TimelineTrackFocusMode } from '../../../stores/timeline/types';
 
 interface TimelineSplitDividerProps {
   audioLayerAdvancedMode: boolean;
   isDragging: boolean;
-  onMouseDown: MouseEventHandler<HTMLDivElement>;
+  onPointerDown: PointerEventHandler<HTMLDivElement>;
   onTrackFocusStep: (direction: 'up' | 'down') => void;
   onToggleAudioLayerAdvancedMode: () => void;
   trackFocusMode: TimelineTrackFocusMode;
@@ -13,7 +13,7 @@ interface TimelineSplitDividerProps {
 export function TimelineSplitDivider({
   audioLayerAdvancedMode,
   isDragging,
-  onMouseDown,
+  onPointerDown,
   onTrackFocusStep,
   onToggleAudioLayerAdvancedMode,
   trackFocusMode,
@@ -25,7 +25,7 @@ export function TimelineSplitDivider({
     >
       <div
         className="timeline-split-divider-hitbox"
-        onMouseDown={onMouseDown}
+        onPointerDown={onPointerDown}
         role="separator"
         aria-orientation="horizontal"
         aria-label="Resize video and audio track sections"
@@ -35,7 +35,7 @@ export function TimelineSplitDivider({
           type="button"
           className="timeline-split-button"
           onClick={() => onTrackFocusStep('up')}
-          onMouseDown={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
           disabled={trackFocusMode === 'audio'}
           title={trackFocusMode === 'audio' ? 'Already in audio focus' : 'Move track focus up'}
         >
@@ -47,7 +47,7 @@ export function TimelineSplitDivider({
           type="button"
           className="timeline-split-button"
           onClick={() => onTrackFocusStep('down')}
-          onMouseDown={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
           disabled={trackFocusMode === 'video'}
           title={trackFocusMode === 'video' ? 'Already in video focus' : 'Move track focus down'}
         >
@@ -62,7 +62,7 @@ export function TimelineSplitDivider({
             event.stopPropagation();
             onToggleAudioLayerAdvancedMode();
           }}
-          onMouseDown={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
           aria-pressed={audioLayerAdvancedMode}
           title={audioLayerAdvancedMode ? 'Hide advanced audio layer controls' : 'Show advanced audio layer controls'}
         >

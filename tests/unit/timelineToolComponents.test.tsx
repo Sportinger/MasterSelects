@@ -64,6 +64,32 @@ describe('timeline tool components', () => {
     expect(onParentMouseDown).not.toHaveBeenCalled();
   });
 
+  it('does not activate a root tool when a drag that started elsewhere ends over it', () => {
+    const onActivate = vi.fn();
+
+    render(
+      <div data-testid="outside-drag-origin">
+        <TimelineToolButton
+          groupId="selection"
+          label="Selection"
+          title="Selection tools"
+          active={false}
+          open={false}
+          icon={TestIcon}
+          onActivate={onActivate}
+          onOpen={vi.fn()}
+        />
+      </div>,
+    );
+
+    const dragOrigin = screen.getByTestId('outside-drag-origin');
+    const button = screen.getByRole('button', { name: 'Selection' });
+    fireEvent.pointerDown(dragOrigin, { button: 0, pointerId: 7 });
+    fireEvent.pointerUp(button, { button: 0, pointerId: 7 });
+
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
   it('opens the flyout on long press or right-click, and activates on release back on the button', () => {
     vi.useFakeTimers();
     const onActivate = vi.fn();

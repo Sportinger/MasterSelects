@@ -13,9 +13,24 @@
 }
 
 .fb-bubble-reference-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   line-height: 1.35;
   color: var(--text-muted);
+}
+
+.fb-prompt-reference-token {
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent, #7c4dff) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent, #7c4dff) 14%, transparent);
+  color: color-mix(in srgb, var(--accent, #7c4dff) 74%, white);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .fb-reference-card {
@@ -29,7 +44,7 @@
   overflow: visible;
   border: 1px solid var(--fb-reference-role-color);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--veil-1);
   aspect-ratio: 1;
   box-shadow:
     0 0 calc(6px + var(--fb-reference-focus) * 10px) var(--fb-reference-role-glow),
@@ -45,6 +60,22 @@
 
 .fb-reference-card:not(.fb-reference-slot) {
   animation: fb-reference-card-in 190ms cubic-bezier(0.16, 1, 0.28, 1) both;
+}
+
+.fb-reference-badge[draggable='true'] {
+  cursor: grab;
+}
+
+.fb-reference-badge.is-dragging {
+  cursor: grabbing;
+  opacity: 0.42;
+}
+
+.fb-reference-badge.is-reorder-target {
+  border-color: color-mix(in srgb, var(--fb-reference-role-color) 72%, white);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--fb-reference-role-color) 58%, transparent),
+    0 0 28px var(--fb-reference-role-glow);
 }
 
 html.fb-reference-view-transition::view-transition-group(*) {
@@ -104,7 +135,9 @@ html.fb-reference-view-transition::view-transition-group(*) {
 .fb-reference-slot-grid {
   --fb-reference-slot-size: 92px;
   display: grid;
-  flex: 0 0 auto;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
   grid-auto-flow: column;
   grid-auto-columns: var(--fb-reference-slot-size);
   grid-template-rows: repeat(2, var(--fb-reference-slot-size));
@@ -271,7 +304,7 @@ html.fb-reference-view-transition::view-transition-group(*) {
 }
 
 .fb-reference-remove:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: var(--veil-5);
 }
 
 .fb-reference-role-actions {
@@ -300,10 +333,10 @@ html.fb-reference-view-transition::view-transition-group(*) {
   height: 18px;
   min-width: 22px;
   padding: 0 5px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid var(--veil-border-strong);
   border-radius: 999px;
   background: rgba(16, 16, 18, 0.82);
-  color: rgba(255, 255, 255, 0.76);
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 8px;
   font-weight: 800;

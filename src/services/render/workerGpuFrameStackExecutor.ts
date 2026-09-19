@@ -339,7 +339,8 @@ function createRenderTexture(
       GPUTextureUsage.RENDER_ATTACHMENT
       | GPUTextureUsage.TEXTURE_BINDING
       | GPUTextureUsage.COPY_SRC
-      | GPUTextureUsage.COPY_DST,
+      | GPUTextureUsage.COPY_DST
+      | GPUTextureUsage.STORAGE_BINDING,
   });
   registerTransientResource(ledger, texture);
   return texture;

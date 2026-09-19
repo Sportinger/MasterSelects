@@ -12,13 +12,14 @@ import {
   createMotionParentGraphSnapshot,
   planMotionParentRemap,
 } from '../../../services/motionDesign/structure/parentGraphPlanner';
+import { clonePastedTimelineTrackingMetadata } from '../trackingMetadataClone';
+import { createPastedFlockCopy, remapPastedClipKeyframes } from './clipboardFlockPaste';
 
 export interface PastedClipboardClipsPlan {
   idMapping: Map<string, string>;
   newClips: TimelineClip[];
   newKeyframes: Map<string, Keyframe[]>;
 }
-
 export interface CreatePastedClipboardClipsPlanInput {
   clipboardData: readonly ClipboardClipData[];
   playheadPosition: number;
@@ -30,7 +31,6 @@ export interface CreatePastedClipboardClipsPlanInput {
   onMissingTrack?: (clipData: ClipboardClipData) => void;
   destinationCompositionId?: string;
 }
-
 export function createPastedClipboardClipsPlan(
   input: CreatePastedClipboardClipsPlanInput,
 ): PastedClipboardClipsPlan {
@@ -62,6 +62,7 @@ export function createPastedClipboardClipsPlan(
     });
     const text3DProperties = clipData.text3DProperties ? { ...clipData.text3DProperties } : undefined;
     const requiresAsyncMediaLoad = clipRequiresAsyncMediaLoad(clipData);
+    const flockCopy = createPastedFlockCopy(clipData);
 
     newClips.push({
       id: newId,
@@ -84,6 +85,7 @@ export function createPastedClipboardClipsPlan(
         rotation: { ...clipData.transform.rotation },
       },
       effects,
+      ...clonePastedTimelineTrackingMetadata(clipData, idMapping),
       colorCorrection: clipData.colorCorrection ? structuredClone(clipData.colorCorrection) : undefined,
       nodeGraph: remapClipNodeGraphEffectIds(clipData.nodeGraph, effectIdMap),
       masks: clipData.masks?.map(m => ({
@@ -124,6 +126,7 @@ export function createPastedClipboardClipsPlan(
       storyboardProperties: cloneStoryboardClipProperties(clipData.storyboardProperties),
       transitionOverlay: clipData.transitionOverlay ? structuredClone(clipData.transitionOverlay) : undefined,
       mathScene: clipData.mathScene ? structuredClone(clipData.mathScene) : undefined,
+      flock: flockCopy?.definition,
       motion: clipData.motion ? normalizeMotionLayerDefinition(clipData.motion) : undefined,
       thumbnails: clipData.thumbnails ? [...clipData.thumbnails] : undefined,
       waveform: clipData.waveform ? [...clipData.waveform] : undefined,
@@ -145,13 +148,8 @@ export function createPastedClipboardClipsPlan(
     });
     pastedSourceIds.add(clipData.id);
 
-    if (clipData.keyframes && clipData.keyframes.length > 0) {
-      newKeyframes.set(newId, clipData.keyframes.map(kf => ({
-        ...kf,
-        id: `kf_${timestamp}_${createSuffix()}`,
-        clipId: newId,
-      })));
-    }
+    const pastedKeyframes = remapPastedClipKeyframes(clipData.keyframes, newId, () => `kf_${timestamp}_${createSuffix()}`, flockCopy);
+    if (pastedKeyframes) newKeyframes.set(newId, pastedKeyframes);
   }
 
   applyClipboardMotionParentRemap({

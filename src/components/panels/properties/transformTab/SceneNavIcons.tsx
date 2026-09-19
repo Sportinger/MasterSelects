@@ -22,13 +22,18 @@ export function FpsModeIcon() {
   );
 }
 
-export function NoKeyframesIcon() {
+export function NoKeyframesIcon({ crossedOut = false }: { crossedOut?: boolean }) {
   return (
     <svg className="scene-nav-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
       <path d="M6.4 2.8 10.2 6.6 6.4 10.4 2.6 6.6 6.4 2.8Z" />
-      <path d="M2.4 13.6 13.6 2.4" />
-      <path d="M11.2 10.8h3.2" />
-      <path d="M12.8 9.2v3.2" />
+      {crossedOut ? (
+        <path className="scene-nav-keyframe-strike" d="M2.4 13.6 13.6 2.4" />
+      ) : (
+        <>
+          <path d="M11.2 10.8h3.2" />
+          <path d="M12.8 9.2v3.2" />
+        </>
+      )}
     </svg>
   );
 }

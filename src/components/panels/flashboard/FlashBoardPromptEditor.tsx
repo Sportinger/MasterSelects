@@ -1,4 +1,4 @@
-import type { KeyboardEvent, RefObject } from 'react';
+import type { DragEvent, KeyboardEvent, RefObject } from 'react';
 import { FlashBoardElevenLabsVoicePanel } from './FlashBoardElevenLabsVoicePanel';
 import { FlashBoardSunoTuningPanel } from './FlashBoardSunoTuningPanel';
 
@@ -34,6 +34,8 @@ interface FlashBoardPromptEditorProps {
   promptInputRef: RefObject<HTMLTextAreaElement | null>;
   promptRefineTitle: string;
   referenceMediaCount: number;
+  seedancePromptReferencesEnabled: boolean;
+  seedancePromptReferenceTokens: string[];
   sunoNegativeTags: string;
   sunoCustomMode: boolean;
   sunoInstrumental: boolean;
@@ -50,6 +52,8 @@ interface FlashBoardPromptEditorProps {
   onClearPrompt: () => void;
   onDismissPromptBeforeAiRewrite: () => void;
   onPromptChange: (value: string) => void;
+  onPromptReferenceDragOver: (event: DragEvent<HTMLTextAreaElement>) => void;
+  onPromptReferenceDrop: (event: DragEvent<HTMLTextAreaElement>) => void;
   onRefinePrompt: () => void | Promise<void>;
   onRestorePromptBeforeAiRewrite: () => void;
   onSunoNegativeTagsChange: (value: string) => void;
@@ -79,6 +83,8 @@ export function FlashBoardPromptEditor({
   promptInputRef,
   promptRefineTitle,
   referenceMediaCount,
+  seedancePromptReferencesEnabled,
+  seedancePromptReferenceTokens,
   sunoNegativeTags,
   sunoCustomMode,
   sunoInstrumental,
@@ -95,6 +101,8 @@ export function FlashBoardPromptEditor({
   onClearPrompt,
   onDismissPromptBeforeAiRewrite,
   onPromptChange,
+  onPromptReferenceDragOver,
+  onPromptReferenceDrop,
   onRefinePrompt,
   onRestorePromptBeforeAiRewrite,
   onSunoNegativeTagsChange,
@@ -302,6 +310,8 @@ export function FlashBoardPromptEditor({
               onBlur={(event) => resizePromptOnFocusChange(event.currentTarget)}
               onInput={(event) => onAutosizeInput(event.currentTarget)}
               onChange={(event) => onPromptChange(event.target.value)}
+              onDragOver={seedancePromptReferencesEnabled ? onPromptReferenceDragOver : undefined}
+              onDrop={seedancePromptReferencesEnabled ? onPromptReferenceDrop : undefined}
               placeholder={
                 isAudioMode
                   ? 'Text to speak...'
@@ -357,8 +367,22 @@ export function FlashBoardPromptEditor({
 
       {referenceMediaCount > 0 && (
         <div className="fb-bubble-reference-hint">
-          Use REF 1, REF 2, ... in the prompt. {referenceMediaCount}
-          {typeof maxReferenceMedia === 'number' ? `/${maxReferenceMedia}` : ''} linked.
+          {seedancePromptReferencesEnabled ? (
+            <>
+              <span>Drop media into the prompt to insert</span>
+              {seedancePromptReferenceTokens.map((token) => (
+                <span className="fb-prompt-reference-token" key={token}>{token}</span>
+              ))}
+              <span>
+                {referenceMediaCount}{typeof maxReferenceMedia === 'number' ? `/${maxReferenceMedia}` : ''} linked.
+              </span>
+            </>
+          ) : (
+            <>
+              Use REF 1, REF 2, ... in the prompt. {referenceMediaCount}
+              {typeof maxReferenceMedia === 'number' ? `/${maxReferenceMedia}` : ''} linked.
+            </>
+          )}
         </div>
       )}
     </div>

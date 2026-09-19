@@ -194,6 +194,7 @@ export const createKeyframeAssetInterpolationActions: SliceCreator<KeyframeAsset
 
       const positionXProperty = `mask.${mask.id}.position.x` as AnimatableProperty;
       const positionYProperty = `mask.${mask.id}.position.y` as AnimatableProperty;
+      const rotationProperty = `mask.${mask.id}.rotation` as AnimatableProperty;
       const featherProperty = `mask.${mask.id}.feather` as AnimatableProperty;
       const featherQualityProperty = `mask.${mask.id}.featherQuality` as AnimatableProperty;
 
@@ -202,6 +203,9 @@ export const createKeyframeAssetInterpolationActions: SliceCreator<KeyframeAsset
       }
       if (maskKeyframes.some(keyframe => keyframe.property === positionYProperty)) {
         nextMask.position.y = interpolateKeyframes(maskKeyframes, positionYProperty, clipLocalTime, mask.position.y);
+      }
+      if (maskKeyframes.some(keyframe => keyframe.property === rotationProperty)) {
+        nextMask.rotation = interpolateKeyframes(maskKeyframes, rotationProperty, clipLocalTime, mask.rotation ?? 0);
       }
       if (maskKeyframes.some(keyframe => keyframe.property === featherProperty)) {
         nextMask.feather = Math.max(0, interpolateKeyframes(maskKeyframes, featherProperty, clipLocalTime, mask.feather));

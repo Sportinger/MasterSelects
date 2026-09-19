@@ -11,6 +11,7 @@ import { cloneDefaultCaptionProperties } from '../../src/services/captions/capti
 import type { HistoryRuntimeRehydrationAdapter } from '../../src/stores/timeline/historyTimelineContracts';
 import { createDefaultMotionLayerDefinition } from '../../src/types/motionDesign';
 import { createLegacyReplicatorContractFixture } from '../../src/services/motionDesign/replicator/contractFixtures';
+import { DEFAULT_TEXT_3D_PROPERTIES } from '../../src/stores/timeline/constants';
 
 function makeTransform(): TimelineClip['transform'] {
   return {
@@ -209,6 +210,150 @@ describe('HistoryTimelineEditState contracts', () => {
     expect(keys.has('mixdownBuffer')).toBe(false);
     expect(keys.has('nestedClips')).toBe(false);
     expect(keys.has('nestedTracks')).toBe(false);
+  });
+
+  it('keeps scene cameras online while restoring historical camera settings', () => {
+    const camera = makeRuntimeClip();
+    delete camera.mediaFileId;
+    camera.source = {
+      type: 'camera',
+      naturalDuration: Number.MAX_SAFE_INTEGER,
+      cameraSettings: { fov: 52, near: 0.1, far: 2000 },
+      runtimeSourceId: 'camera-runtime',
+      runtimeSessionKey: 'interactive:camera-runtime',
+    };
+    const history = createHistoryTimelineEditState({
+      id: 'camera-history',
+      label: 'Adjust camera',
+      timestamp: 1,
+      tracks: [makeTrack()],
+      clips: [camera],
+      selectedClipIds: [camera.id],
+      zoom: 50,
+      scrollX: 0,
+    });
+
+    camera.source.cameraSettings = { fov: 80, near: 0.5, far: 500 };
+    const restored = createHistoryTimelineRestoreState(history, { clips: [camera] });
+    const restoredCamera = restored.state.clips[0];
+
+    expect(history.timeline.clips[0].runtimeRef.kind).toBe('generated');
+    expect(restoredCamera.needsReload).toBe(false);
+    expect(restoredCamera.source?.cameraSettings).toEqual({ fov: 52, near: 0.1, far: 2000 });
+    expect(restoredCamera.source?.runtimeSourceId).toBe('camera-runtime');
+    expect(restored.diagnostics.reusedRuntimeClipIds).toContain(camera.id);
+  });
+
+  it('restores 3D text as self-contained content without marking it offline', () => {
+    const text3D = makeRuntimeClip();
+    delete text3D.mediaFileId;
+    text3D.name = '3D Text';
+    text3D.meshType = 'text3d';
+    text3D.text3DProperties = { ...DEFAULT_TEXT_3D_PROPERTIES, text: 'Undo survives' };
+    text3D.source = {
+      type: 'model',
+      meshType: 'text3d',
+      text3DProperties: text3D.text3DProperties,
+      threeDEffectorsEnabled: false,
+      naturalDuration: 3600,
+    };
+    const history = createHistoryTimelineEditState({
+      id: 'text3d-history',
+      label: 'Edit 3D text',
+      timestamp: 2,
+      tracks: [makeTrack()],
+      clips: [text3D],
+      selectedClipIds: [text3D.id],
+      zoom: 50,
+      scrollX: 0,
+    });
+
+    const restored = createHistoryTimelineRestoreState(history);
+    const restoredText = restored.state.clips[0];
+
+    expect(history.timeline.clips[0].runtimeRef.kind).toBe('generated');
+    expect(restoredText.needsReload).toBe(false);
+    expect(restoredText.source).toMatchObject({
+      type: 'model',
+      meshType: 'text3d',
+      threeDEffectorsEnabled: false,
+      text3DProperties: { text: 'Undo survives' },
+    });
+    expect(restored.diagnostics.deferredRuntimeClipIds).not.toContain(text3D.id);
+  });
+
+  it('reuses legacy live-camera runtime identity even without a media-file ID', () => {
+    const liveCamera = makeRuntimeClip();
+    const videoElement = { tagName: 'VIDEO' } as HTMLVideoElement;
+    delete liveCamera.mediaFileId;
+    liveCamera.source = {
+      type: 'video',
+      liveInputId: 'live-camera-1',
+      videoElement,
+      naturalDuration: Number.MAX_SAFE_INTEGER,
+    };
+    const history = createHistoryTimelineEditState({
+      id: 'live-camera-history',
+      label: 'Move live camera',
+      timestamp: 3,
+      tracks: [makeTrack()],
+      clips: [liveCamera],
+      selectedClipIds: [liveCamera.id],
+      zoom: 50,
+      scrollX: 0,
+    });
+
+    const restored = createHistoryTimelineRestoreState(history, { clips: [liveCamera] });
+    const restoredLiveCamera = restored.state.clips[0];
+
+    expect(history.timeline.clips[0].runtimeRef).toMatchObject({
+      kind: 'media-file',
+      liveInputId: 'live-camera-1',
+      mediaFileId: 'live-camera-1',
+    });
+    expect(restoredLiveCamera.needsReload).not.toBe(true);
+    expect(restoredLiveCamera.source?.videoElement).toBe(videoElement);
+    expect(restored.diagnostics.reusedRuntimeClipIds).toContain(liveCamera.id);
+  });
+
+  it('heals old camera and 3D-text history entries classified as missing media', () => {
+    const camera = makeRuntimeClip();
+    delete camera.mediaFileId;
+    camera.source = {
+      type: 'camera',
+      cameraSettings: { fov: 60, near: 0.1, far: 1000 },
+      naturalDuration: Number.MAX_SAFE_INTEGER,
+    };
+    const text3D = makeRuntimeClip();
+    delete text3D.mediaFileId;
+    text3D.id = 'text3d-legacy';
+    text3D.meshType = 'text3d';
+    text3D.text3DProperties = { ...DEFAULT_TEXT_3D_PROPERTIES };
+    text3D.source = {
+      type: 'model',
+      meshType: 'text3d',
+      text3DProperties: text3D.text3DProperties,
+      naturalDuration: 3600,
+    };
+    const history = createHistoryTimelineEditState({
+      id: 'legacy-generated-history',
+      label: 'Legacy generated clips',
+      timestamp: 4,
+      tracks: [makeTrack()],
+      clips: [camera, text3D],
+      selectedClipIds: [],
+      zoom: 50,
+      scrollX: 0,
+    });
+    history.timeline.clips.forEach((clip) => {
+      clip.runtimeRef.kind = 'missing-media';
+      clip.runtimeRef.needsReload = true;
+    });
+
+    const restored = createHistoryTimelineRestoreState(history, { clips: [camera, text3D] });
+
+    expect(restored.state.clips.map((clip) => clip.needsReload)).toEqual([false, false]);
+    expect(restored.diagnostics.reusedRuntimeClipIds).toEqual([camera.id, text3D.id]);
   });
 
   it('restores composition duration and preserves it for legacy entries that omit the fields', () => {

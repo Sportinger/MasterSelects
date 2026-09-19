@@ -5,6 +5,10 @@ import { projectFileService } from '../../../services/projectFileService';
 import { projectDB } from '../../../services/projectDB';
 import { Logger } from '../../../services/logger';
 import { createThumbnailMediaObjectUrl } from '../../../services/project/mediaObjectUrlManager';
+import { flags } from '../../../engine/featureFlags';
+import { selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
+import { decodeTurboResOneFrame } from '../../../services/mediaRuntime/prores/turboResOneFrame';
+import { decodeHapOneFrame } from '../../../services/mediaRuntime/hap/hapOneFrame';
 
 const log = Logger.create('Thumbnail');
 
@@ -18,7 +22,8 @@ const isBlobUrl = (value?: string): value is string => typeof value === 'string'
  */
 export async function createThumbnail(
   file: File,
-  type: 'video' | 'image'
+  type: 'video' | 'image',
+  videoMetadata?: { videoCodecId?: string; duration?: number },
 ): Promise<string | undefined> {
   return new Promise((resolve) => {
     if (type === 'image') {
@@ -27,6 +32,35 @@ export async function createThumbnail(
     }
 
     if (type === 'video') {
+      const providerPlan = selectRuntimeFrameProviderPlan({
+        videoCodecId: videoMetadata?.videoCodecId,
+        turboResEnabled: flags.turboResProRes,
+      });
+      if (providerPlan.backend === 'turbores' || providerPlan.backend === 'hap') {
+        const targetTime = getVideoThumbnailTargetTime(videoMetadata?.duration ?? 0);
+        const oneFramePromise = providerPlan.backend === 'turbores'
+          ? decodeTurboResOneFrame(file, providerPlan.fourCC, targetTime, {
+            providerOptions: { allowedOutputFormats: ['I420'] },
+          })
+          : decodeHapOneFrame(file, providerPlan.fourCC, targetTime);
+        void oneFramePromise
+          .then(async (frame) => {
+            try {
+              return await drawThumbnailFromSource(
+                frame,
+                frame.displayWidth || frame.codedWidth,
+                frame.displayHeight || frame.codedHeight,
+              );
+            } finally {
+              frame.close();
+            }
+          })
+          .then(resolve, (error) => {
+            log.warn('Provider video thumbnail failed', { file: file.name, error });
+            resolve(undefined);
+          });
+        return;
+      }
       void createVideoThumbnail(file).then(resolve);
     } else {
       resolve(undefined);

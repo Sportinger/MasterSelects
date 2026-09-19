@@ -1,5 +1,12 @@
 import compositeShader from '../../../shaders/composite.wgsl?raw';
-import { COPY_SHADER, EXTERNAL_COPY_SHADER } from './copyShaders';
+import {
+  COPY_SHADER,
+  EXTERNAL_COPY_90_SHADER,
+  EXTERNAL_COPY_180_SHADER,
+  EXTERNAL_COPY_270_SHADER,
+  EXTERNAL_COPY_SHADER,
+} from './copyShaders';
+import type { VideoRotationDegrees } from '../../webcodecs/videoTrackOrientation';
 import { EXTERNAL_COMPOSITE_SHADER } from './externalCompositeShader';
 
 export interface CompositorPipelineResources {
@@ -7,6 +14,7 @@ export interface CompositorPipelineResources {
   externalCompositePipeline: GPURenderPipeline;
   copyPipeline: GPURenderPipeline;
   externalCopyPipeline: GPURenderPipeline;
+  externalCopyPipelines: ReadonlyMap<VideoRotationDegrees, GPURenderPipeline>;
   compositeBindGroupLayout: GPUBindGroupLayout;
   externalCompositeBindGroupLayout: GPUBindGroupLayout;
   copyBindGroupLayout: GPUBindGroupLayout;
@@ -113,11 +121,38 @@ export function createCompositorPipelineResources(device: GPUDevice): Compositor
     primitive: { topology: 'triangle-list' },
   });
 
+  const createRotatedExternalCopyPipeline = (code: string): GPURenderPipeline => {
+    const module = device.createShaderModule({ code });
+    return device.createRenderPipeline({
+      layout: device.createPipelineLayout({
+        bindGroupLayouts: [externalCopyBindGroupLayout],
+      }),
+      vertex: {
+        module,
+        entryPoint: 'vertexMain',
+      },
+      fragment: {
+        module,
+        entryPoint: 'fragmentMain',
+        targets: [{ format: 'rgba8unorm' }],
+      },
+      primitive: { topology: 'triangle-list' },
+    });
+  };
+
+  const externalCopyPipelines = new Map<VideoRotationDegrees, GPURenderPipeline>([
+    [0, externalCopyPipeline],
+    [90, createRotatedExternalCopyPipeline(EXTERNAL_COPY_90_SHADER)],
+    [180, createRotatedExternalCopyPipeline(EXTERNAL_COPY_180_SHADER)],
+    [270, createRotatedExternalCopyPipeline(EXTERNAL_COPY_270_SHADER)],
+  ]);
+
   return {
     compositePipeline,
     externalCompositePipeline,
     copyPipeline,
     externalCopyPipeline,
+    externalCopyPipelines,
     compositeBindGroupLayout,
     externalCompositeBindGroupLayout,
     copyBindGroupLayout,

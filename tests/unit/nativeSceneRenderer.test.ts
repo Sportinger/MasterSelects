@@ -18,6 +18,8 @@ type NativeSceneRendererTestAccess = NativeSceneRenderer & {
   sceneTargets: Map<string, {
     texture: GPUTexture;
     view: GPUTextureView;
+    gizmoTexture: GPUTexture;
+    gizmoView: GPUTextureView;
     depthTexture: GPUTexture;
     depthView: GPUTextureView;
   }>;
@@ -349,6 +351,31 @@ describe('NativeSceneRenderer shared depth contract', () => {
     renderer.pruneSceneTargets(new Set(['main']));
     expect(panelTexture?.destroy).toHaveBeenCalledOnce();
     expect(targets.has('panel-a')).toBe(false);
+  });
+
+  it('renders the scene gizmo into a transparent overlay texture', async () => {
+    const renderer = await createInitializedRenderer();
+    const { device, renderPasses } = createFakeDevice();
+    const layer = makePrimitiveLayer('gizmo-cube', 'cube', 1);
+
+    const sceneView = renderer.renderScene(
+      device,
+      [layer],
+      makeCamera(),
+      [],
+      false,
+      { clipId: layer.clipId, mode: 'move' },
+    );
+    const targets = (renderer as NativeSceneRendererTestAccess).sceneTargets.get('main');
+    const gizmoPass = renderPasses.find((entry) => entry.descriptor.label === 'native-scene-gizmo-pass');
+
+    expect(sceneView).toBe(targets?.view);
+    expect(renderer.getGizmoOverlayView()).toBe(targets?.gizmoView);
+    expect(gizmoPass?.descriptor.colorAttachments[0]).toMatchObject({
+      view: targets?.gizmoView,
+      loadOp: 'clear',
+    });
+    expect(gizmoPass?.descriptor.colorAttachments[0]?.view).not.toBe(sceneView);
   });
 
   it('clears one shared depth target and routes all native splat layers through it', async () => {

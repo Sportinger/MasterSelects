@@ -1,6 +1,5 @@
-import type { TimelineClip, TimelineTrack } from '../../../types';
+import type { TimelineTrack } from '../../../types';
 import type { AddClipOptions } from '../types';
-import { DEFAULT_TRANSFORM } from '../constants';
 import { Logger } from '../../../services/logger';
 import { classifyMediaType } from '../helpers/mediaTypeHelpers';
 import { loadVideoMedia } from './addVideoClip';
@@ -18,6 +17,7 @@ import type { ClipActionContext } from './clipActionContext';
 import {
   getPositiveFiniteDuration,
   hasVisualMediaType,
+  loadActiveCompositionDimensions,
   loadSourceMediaFile,
   queueMediaSourceArtifactProjection,
 } from './addClipMediaSource';
@@ -26,7 +26,10 @@ import {
   resolveUnlockedPlacementTrackId,
 } from './unlockedPlacementTrack';
 import { resolveLinkedAudioTrackId } from './linkedAudioPlacement';
-import { projectMediaSourceArtifactsOntoClip } from '../../../services/mediaArtifacts/mediaSourceArtifacts';
+import { createLinkedVideoClipPlaceholders } from './videoClipPlaceholders';
+import { resolveInitialVisualTransform } from './initialVisualTransform';
+import { bindRuntimeToClip } from '../../../services/mediaRuntime/clipBindings';
+import { createClipRuntimeUpdateActions } from './clipRuntimeUpdateActions';
 const log = Logger.create('ClipAddAction');
 export async function applyAddClipAction(
   context: ClipActionContext,
@@ -69,14 +72,16 @@ export async function applyAddClipAction(
     return undefined;
   }
 
-  const updateClip = (id: string, updates: Partial<TimelineClip>) => {
-    set({ clips: get().clips.map(c => c.id === id ? { ...c, ...updates } : c) });
-    get().updateDuration();
-  };
-  const setClips = (updater: (clips: TimelineClip[]) => TimelineClip[]) => {
-    set({ clips: updater(get().clips) });
-  };
+  const { setClips, updateClip } = createClipRuntimeUpdateActions(context);
   const sourceMediaFile = await loadSourceMediaFile(mediaFileId);
+  const activeCompositionDimensions = options?.visualScaleMode && hasVisualMediaType(mediaType)
+    ? await loadActiveCompositionDimensions()
+    : undefined;
+  const initialVisualTransform = resolveInitialVisualTransform(
+    options,
+    sourceMediaFile,
+    activeCompositionDimensions,
+  );
   const authoritativeNaturalDuration = getPositiveFiniteDuration(options?.source?.naturalDuration)
     ?? getPositiveFiniteDuration(sourceMediaFile?.duration);
   const sourceTranscript = sourceMediaFile?.transcriptStatus === 'ready' && sourceMediaFile.transcript?.length
@@ -119,43 +124,25 @@ export async function applyAddClipAction(
         audioTrackId = newTrackId;
       }
 
-      const videoClip = projectMediaSourceArtifactsOntoClip({
-        id: clipId,
-        trackId,
-        name: file.name,
+      const { audioClip, videoClip } = createLinkedVideoClipPlaceholders({
+        audioClipId: audioId,
+        audioTrackId,
+        estimatedDuration,
         file,
+        initialVisualTransform,
+        mediaFileId,
+        sourceTranscript,
         startTime,
-        duration: estimatedDuration,
-        inPoint: 0,
-        outPoint: estimatedDuration,
-        source: { type: 'video', naturalDuration: estimatedDuration, mediaFileId },
-        linkedClipId: audioId,
-        transform: { ...DEFAULT_TRANSFORM },
-        effects: [],
-        isLoading: true,
-        ...(sourceTranscript ? { transcript: sourceTranscript, transcriptStatus: 'ready' as const } : {}),
+        videoClipId: clipId,
+        videoTrackId: trackId,
       });
-
-      const audioClip: TimelineClip = {
-        id: audioId,
-        trackId: audioTrackId,
-        name: `${file.name} (Audio)`,
-        file,
-        startTime,
-        duration: estimatedDuration,
-        inPoint: 0,
-        outPoint: estimatedDuration,
-        source: { type: 'audio', naturalDuration: estimatedDuration, mediaFileId },
-        linkedClipId: clipId,
-        transform: { ...DEFAULT_TRANSFORM },
-        effects: [],
-        isLoading: true,
-        ...(sourceTranscript ? { transcript: sourceTranscript, transcriptStatus: 'ready' as const } : {}),
-      };
+      const configuredVideoClip = applyAddClipOptions(videoClip, options);
+      const runtimeVideoClip = bindRuntimeToClip(configuredVideoClip, { file, mediaFileId });
+      const runtimeAudioClip = bindRuntimeToClip(audioClip, { file, mediaFileId });
 
       finalAudioClipId = audioId;
       return {
-        clips: [...state.clips, applyAddClipOptions(videoClip, options), audioClip],
+        clips: [...state.clips, runtimeVideoClip, runtimeAudioClip],
         tracks: newTracks,
       };
     });
@@ -230,7 +217,10 @@ export async function applyAddClipAction(
   }
 
   if (mediaType === 'image') {
-    const clip = applyAddClipOptions(createImageClipPlaceholder({ trackId, file, startTime, estimatedDuration, mediaFileId }), options);
+    const clip = applyAddClipOptions({
+      ...createImageClipPlaceholder({ trackId, file, startTime, estimatedDuration, mediaFileId }),
+      transform: initialVisualTransform,
+    }, options);
     set({ clips: [...clips, clip] });
     updateDuration();
     await loadImageMedia({ clip, updateClip });

@@ -117,6 +117,13 @@ export interface ListFormatsCommand {
   url: string;
 }
 
+export interface SearchVideosCommand {
+  cmd: 'search_videos';
+  id: string;
+  query: string;
+  max_results?: number;
+}
+
 export interface DownloadCommand {
   cmd: 'download';
   id: string;
@@ -157,6 +164,16 @@ export interface VideoInfo {
   platform?: string;
   recommendations: FormatRecommendation[];
   allFormats: FormatInfo[];
+}
+
+export interface NativeVideoSearchResult {
+  id: string;
+  title: string;
+  thumbnail: string;
+  channelTitle: string;
+  durationSeconds: number;
+  viewCount?: number;
+  url: string;
 }
 
 export interface GetFileCommand {
@@ -346,6 +363,7 @@ export type Command =
   | PingCommand
   | DownloadYouTubeCommand
   | ListFormatsCommand
+  | SearchVideosCommand
   | DownloadCommand
   | GetFileCommand
   | LocateCommand
@@ -452,6 +470,8 @@ export interface SystemInfo {
   project_root?: string;
   /** True if native helper supports file system commands (write_file, create_dir, etc.) */
   fs_commands?: boolean;
+  /** True if native helper supports local yt-dlp media search. */
+  media_search?: boolean;
 }
 
 // Frame header (16 bytes)

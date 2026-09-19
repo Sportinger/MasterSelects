@@ -3,6 +3,7 @@
 
 import {
   isFullscreenEffectDefinition,
+  isComputeEffectDefinition,
   isParticleRenderEffectDefinition,
   type EffectDefinition,
   type EffectCategory,
@@ -22,9 +23,20 @@ import * as generateEffects from './generate';
 import * as keyingEffects from './keying';
 import * as timeEffects from './time';
 import * as transitionEffects from './transition';
+import * as halftoneEffects from './halftone';
+import * as analogEffects from './analog';
+import * as pixelEffects from './pixel';
+import * as glyphEffects from './glyph';
+import * as geometryEffects from './geometry';
+import * as trackingEffects from './tracking';
 
 // Main effect registry
 export const EFFECT_REGISTRY = new Map<string, EffectDefinition>();
+
+// Render-only primitives remain addressable by the runtime without becoming
+// public catalog entries. Keeping them separate preserves the registry/category
+// invariant used by effect pickers, AI tools, and project property discovery.
+const INTERNAL_EFFECT_REGISTRY = new Map<string, EffectDefinition>();
 
 // Effects organized by category
 export const EFFECT_CATEGORIES: Record<EffectCategory, EffectDefinition[]> = {
@@ -36,6 +48,12 @@ export const EFFECT_CATEGORIES: Record<EffectCategory, EffectDefinition[]> = {
   keying: [],
   time: [],
   transition: [],
+  halftone: [],
+  analog: [],
+  pixel: [],
+  glyph: [],
+  geometry: [],
+  tracking: [],
 };
 
 /**
@@ -44,6 +62,10 @@ export const EFFECT_CATEGORIES: Record<EffectCategory, EffectDefinition[]> = {
 function registerEffects(effects: Record<string, unknown>) {
   Object.values(effects).forEach(effect => {
     if (isEffectDefinition(effect)) {
+      if ('internal' in effect && effect.internal) {
+        INTERNAL_EFFECT_REGISTRY.set(effect.id, effect);
+        return;
+      }
       EFFECT_REGISTRY.set(effect.id, effect);
       EFFECT_CATEGORIES[effect.category]?.push(effect);
     }
@@ -62,13 +84,16 @@ function isEffectDefinition(obj: unknown): obj is EffectDefinition {
     'category' in obj &&
     'params' in obj
   ) {
-    return isFullscreenEffectDefinitionCandidate(obj) || isParticleRenderEffectDefinition(obj as EffectDefinition);
+    return isFullscreenEffectDefinitionCandidate(obj)
+      || isParticleRenderEffectDefinition(obj as EffectDefinition)
+      || isComputeEffectDefinition(obj as EffectDefinition);
   }
   return false;
 }
 
 function isFullscreenEffectDefinitionCandidate(obj: object): obj is FullscreenEffectDefinition {
   return (
+    (!('pipelineKind' in obj) || obj.pipelineKind === 'fullscreen') &&
     'shader' in obj &&
     'entryPoint' in obj &&
     'params' in obj &&
@@ -85,6 +110,12 @@ registerEffects(generateEffects);
 registerEffects(keyingEffects);
 registerEffects(timeEffects);
 registerEffects(transitionEffects);
+registerEffects(halftoneEffects);
+registerEffects(analogEffects);
+registerEffects(pixelEffects);
+registerEffects(glyphEffects);
+registerEffects(geometryEffects);
+registerEffects(trackingEffects);
 
 // ==================== Helper Functions ====================
 
@@ -92,14 +123,14 @@ registerEffects(transitionEffects);
  * Get an effect definition by ID
  */
 export function getEffect(id: string): EffectDefinition | undefined {
-  return EFFECT_REGISTRY.get(id);
+  return EFFECT_REGISTRY.get(id) ?? INTERNAL_EFFECT_REGISTRY.get(id);
 }
 
 /**
  * Get default parameters for an effect
  */
 export function getDefaultParams(id: string): Record<string, number | boolean | string> {
-  const effect = EFFECT_REGISTRY.get(id);
+  const effect = getEffect(id);
   if (!effect) return {};
 
   const defaults: Record<string, number | boolean | string> = {};
@@ -139,7 +170,7 @@ export function getCategoriesWithEffects(): { category: EffectCategory; effects:
  * Check if an effect type exists
  */
 export function hasEffect(id: string): boolean {
-  return EFFECT_REGISTRY.has(id);
+  return EFFECT_REGISTRY.has(id) || INTERNAL_EFFECT_REGISTRY.has(id);
 }
 
 /**
@@ -152,7 +183,7 @@ export function effectStackNeedsContinuousRender(
 
   return effects.some(effect =>
     effect.enabled !== false &&
-    EFFECT_REGISTRY.get(effect.type)?.requiresContinuousRender === true
+    getEffect(effect.type)?.requiresContinuousRender === true
   );
 }
 
@@ -160,7 +191,7 @@ export function effectStackNeedsContinuousRender(
  * Get effect config for pipeline creation (compatibility layer)
  */
 export function getEffectConfig(id: string): { entryPoint: string; needsUniform: boolean; uniformSize: number } | undefined {
-  const effect = EFFECT_REGISTRY.get(id);
+  const effect = getEffect(id);
   if (!isFullscreenEffectDefinition(effect)) return undefined;
 
   return {
@@ -172,5 +203,7 @@ export function getEffectConfig(id: string): { entryPoint: string; needsUniform:
 
 // Log registered effects in development
 if (import.meta.env.DEV) {
-  log.info(`Registered ${EFFECT_REGISTRY.size} effects: ${Array.from(EFFECT_REGISTRY.keys()).join(', ')}`);
+  log.info(
+    `Registered ${EFFECT_REGISTRY.size} catalog effects and ${INTERNAL_EFFECT_REGISTRY.size} render primitives: ${Array.from(EFFECT_REGISTRY.keys()).join(', ')}`
+  );
 }

@@ -1,5 +1,10 @@
 import { getCurrentUser, hasTrustedOrigin, json, methodNotAllowed, parseJson } from '../../lib/db';
-import { createStripePortalSession, getStripeConfig } from '../../lib/stripe';
+import {
+  buildStripeIdempotencyKey,
+  createStripePortalSession,
+  getStripeConfig,
+  StripeApiError,
+} from '../../lib/stripe';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
 
 interface PortalRequestBody {
@@ -93,7 +98,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   try {
     const session = await createStripePortalSession(stripeConfig, {
       customerId,
-      idempotencyKey: context.data.requestId ?? null,
+      idempotencyKey: await buildStripeIdempotencyKey('portal', [user.id, customerId, returnUrl]),
       returnUrl,
     });
 
@@ -102,10 +107,16 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       portalUrl: session.url,
     });
   } catch (error) {
+    console.error(
+      '[billing] portal session failed',
+      context.data.requestId,
+      error instanceof StripeApiError ? `${error.status} ${error.detail}` : error instanceof Error ? error.message : error,
+    );
     return json(
       {
         error: 'stripe_portal_failed',
-        message: error instanceof Error ? error.message : 'Stripe billing portal creation failed.',
+        message: 'The billing portal could not be opened. Please try again.',
+        requestId: context.data.requestId ?? null,
       },
       { status: 502 },
     );

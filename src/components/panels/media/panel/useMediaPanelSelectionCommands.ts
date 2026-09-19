@@ -2,14 +2,18 @@ import { useCallback, useEffect, useRef, useState, type Dispatch, type MouseEven
 import { Logger } from '../../../../services/logger';
 import { mediaNeedsRelink } from '../../../../services/project/relinkMedia';
 import { thumbnailCacheService } from '../../../../services/thumbnailCacheService';
-import type { MediaFile, ProjectItem, useMediaStore } from '../../../../stores/mediaStore';
+import type { Composition, MediaFile, ProjectItem, useMediaStore } from '../../../../stores/mediaStore';
 import type { MediaPanelContextMenu } from '../context/types';
 import { collectDroppedMediaFiles, importDroppedMediaFiles } from '../dropImport';
 import type { MediaPanelViewMode } from './types';
 import { DEFAULT_TRACKS, useTimelineStore } from '../../../../stores/timeline';
+import { useDockStore } from '../../../../stores/dockStore';
+import { isDockResizeActive } from '../../../dock/dockResizeDomState';
 import { DEFAULT_COMPOSITION } from '../../../../stores/mediaStore/constants';
 import { requestMediaBoardPlacement } from '../board/placementRequests';
 import { liveInputRuntime } from '../../../../services/mediaRuntime/liveInputRuntime';
+import { placeLiveInputOnTimeline } from '../../../../services/mediaRuntime/liveInputTimelineAdapter';
+import { isSyntheticTouchContextMenuEvent } from '../../../../hooks/useTouchContextMenu';
 
 const log = Logger.create('MediaPanel');
 
@@ -260,11 +264,13 @@ export function useMediaPanelSelectionCommands({
   ) => void;
   handleToggleAiPromptReferences: (mediaFileIds: string[]) => void;
   handleCopyPrompt: (prompt: string) => void;
-  handleCreateCompositionFromMedia: (mediaFile: MediaFile) => Promise<void>;
+  handleCreateCompositionFromItem: (item: MediaFile | Composition) => Promise<void>;
   handleRegenerateMediaThumbnails: (mediaFile: MediaFile) => void;
   handleRegenerateMediaAudioProxy: (mediaFile: MediaFile, force: boolean) => void;
   handleRegenerateMediaWaveform: (mediaFile: MediaFile) => void;
   handleRegenerateMediaSpectrogram: (mediaFile: MediaFile) => void;
+  handleTranscribeMedia: (mediaFile: MediaFile) => void;
+  handleAnalyzeMedia: (mediaFile: MediaFile) => void;
   handleCopySelected: () => void;
   handleDuplicateSelected: () => void;
   handlePasteItems: () => void;
@@ -288,9 +294,11 @@ export function useMediaPanelSelectionCommands({
   const hasTimelineSelection = (timelineClipboardRouting & 1) !== 0;
   const timelineOwnsPaste = (timelineClipboardRouting & 2) !== 0;
   const addTimelineClip = useTimelineStore((state) => state.addClip);
+  const addTimelineCompClip = useTimelineStore((state) => state.addCompClip);
   const setTimelineDuration = useTimelineStore((state) => state.setDuration);
   const getSerializableTimelineState = useTimelineStore((state) => state.getSerializableState);
   const invalidateTimelineCache = useTimelineStore((state) => state.invalidateCache);
+  const activatePanelType = useDockStore((state) => state.activatePanelType);
 
   const showFloatingText = useCallback((text: string) => {
     const { x, y } = lastPointerRef.current;
@@ -328,7 +336,8 @@ export function useMediaPanelSelectionCommands({
         toggleFolderExpanded(item.id);
       }
     } else if (item.type === 'composition') {
-      openCompositionTab(item.id);
+      activatePanelType('timeline');
+      await openCompositionTab(item.id, { skipAnimation: true });
     } else if ('liveInput' in item && item.liveInput) {
       try {
         await liveInputRuntime.connect(item.id, item.liveInput);
@@ -344,7 +353,7 @@ export function useMediaPanelSelectionCommands({
         log.info('File reloaded successfully');
       }
     }
-  }, [invalidateTimelineCache, openCompositionTab, reloadFile, setGridFolderId, setSourceMonitorFile, toggleFolderExpanded, viewMode]);
+  }, [activatePanelType, invalidateTimelineCache, openCompositionTab, reloadFile, setGridFolderId, setSourceMonitorFile, toggleFolderExpanded, viewMode]);
 
   const handleContextMenu = useCallback((
     e: ReactMouseEvent,
@@ -353,6 +362,7 @@ export function useMediaPanelSelectionCommands({
     boardPosition?: { x: number; y: number },
   ) => {
     e.preventDefault();
+    if (isDockResizeActive()) return;
     if (itemId && !selectedIds.includes(itemId)) {
       if (e.ctrlKey || e.metaKey) {
         addToSelection(itemId);
@@ -363,7 +373,14 @@ export function useMediaPanelSelectionCommands({
     if (itemId) {
       setSelectedMediaBoardAnnotationId(null);
     }
-    setContextMenu({ x: e.clientX, y: e.clientY, itemId, parentId, boardPosition });
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      ...(isSyntheticTouchContextMenuEvent(e.nativeEvent) ? { preferAbove: true } : {}),
+      itemId,
+      parentId,
+      boardPosition,
+    });
   }, [addToSelection, selectedIds, setContextMenu, setSelectedMediaBoardAnnotationId, setSelection]);
 
   const handleToggleAiPromptReferences = useCallback((mediaFileIds: string[]) => {
@@ -394,12 +411,30 @@ export function useMediaPanelSelectionCommands({
     });
   }, [closeContextMenu, showFloatingText]);
 
-  const handleCreateCompositionFromMedia = useCallback(async (mediaFile: MediaFile) => {
-    if (!mediaFile.file || (mediaFile.type !== 'video' && mediaFile.type !== 'image')) return;
+  const handleCreateCompositionFromItem = useCallback(async (item: MediaFile | Composition) => {
+    const isNestedComposition = item.type === 'composition';
+    const mediaItem = isNestedComposition ? null : item;
+    const mediaSourceFile = mediaItem?.file;
+    const isSupportedLiveInput = Boolean(
+      mediaItem?.liveInput && mediaItem.liveInput.kind !== 'composition-feedback',
+    );
+    if (
+      !isNestedComposition
+      && !isSupportedLiveInput
+      && (!mediaSourceFile || (mediaItem?.type !== 'video' && mediaItem?.type !== 'image'))
+    ) return;
 
-    const settings = getMediaCompositionSettings(mediaFile);
-    const composition = createComposition(`${cleanCompositionBaseName(mediaFile.name)} Comp`, {
+    const settings = isNestedComposition
+      ? {
+          duration: Math.max(0.001, item.timelineData?.duration ?? item.duration),
+          frameRate: item.frameRate,
+          height: item.height,
+          width: item.width,
+        }
+      : getMediaCompositionSettings(mediaItem!);
+    const composition = createComposition(`${cleanCompositionBaseName(item.name)} Comp`, {
       ...settings,
+      backgroundColor: isNestedComposition ? item.backgroundColor : undefined,
       parentId: getActiveParentId(),
     });
     if (contextMenu?.boardPosition) {
@@ -412,7 +447,20 @@ export function useMediaPanelSelectionCommands({
     const trackId = tracks.find((track) => track.type === 'video' && !track.locked)?.id;
     if (!trackId) return;
 
-    await addTimelineClip(trackId, mediaFile.file, 0, settings.duration, mediaFile.id, mediaFile.type);
+    if (isNestedComposition) {
+      await addTimelineCompClip(trackId, item, 0);
+    } else if (isSupportedLiveInput && mediaItem) {
+      const clipId = placeLiveInputOnTimeline({
+        item: mediaItem,
+        trackId,
+        startTime: 0,
+        duration: settings.duration,
+      });
+      if (!clipId) return;
+    } else {
+      if (!mediaSourceFile) return;
+      await addTimelineClip(trackId, mediaSourceFile, 0, settings.duration, mediaItem!.id, mediaItem!.type);
+    }
     setTimelineDuration(settings.duration);
     updateComposition(composition.id, {
       duration: settings.duration,
@@ -422,6 +470,7 @@ export function useMediaPanelSelectionCommands({
     closeContextMenu();
   }, [
     addTimelineClip,
+    addTimelineCompClip,
     closeContextMenu,
     contextMenu,
     createComposition,
@@ -461,6 +510,32 @@ export function useMediaPanelSelectionCommands({
     void generateMediaSpectrogram(mediaFile.id, { force: true });
     closeContextMenu();
   }, [closeContextMenu, generateMediaSpectrogram]);
+
+  const handleTranscribeMedia = useCallback((mediaFile: MediaFile) => {
+    void import('../../../../services/clipTranscriber')
+      .then(({ transcribeMediaFile }) => transcribeMediaFile(
+        mediaFile.id,
+        'auto',
+        { provider: 'hybrid' },
+      ))
+      .catch(error => log.warn('Failed to transcribe media source', {
+        id: mediaFile.id,
+        name: mediaFile.name,
+        error,
+      }));
+    closeContextMenu();
+  }, [closeContextMenu]);
+
+  const handleAnalyzeMedia = useCallback((mediaFile: MediaFile) => {
+    void import('../../../../services/clipAnalyzer')
+      .then(({ analyzeMediaFile }) => analyzeMediaFile(mediaFile.id))
+      .catch(error => log.warn('Failed to analyze media source', {
+        id: mediaFile.id,
+        name: mediaFile.name,
+        error,
+      }));
+    closeContextMenu();
+  }, [closeContextMenu]);
 
   const handleCopySelected = useCallback(() => {
     if (selectedIds.length > 0) {
@@ -629,11 +704,13 @@ export function useMediaPanelSelectionCommands({
     handleContextMenu,
     handleToggleAiPromptReferences,
     handleCopyPrompt,
-    handleCreateCompositionFromMedia,
+    handleCreateCompositionFromItem,
     handleRegenerateMediaThumbnails,
     handleRegenerateMediaAudioProxy,
     handleRegenerateMediaWaveform,
     handleRegenerateMediaSpectrogram,
+    handleTranscribeMedia,
+    handleAnalyzeMedia,
     handleCopySelected,
     handleDuplicateSelected,
     handlePasteItems,

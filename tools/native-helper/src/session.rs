@@ -281,8 +281,11 @@ impl Session {
 
             // Download and streaming MatAnyone2 commands are handled in server.rs with WsSender
             Command::DownloadYoutube { id, .. }
+            | Command::RtmpStart { id, .. }
+            | Command::RtmpStop { id }
             | Command::Download { id, .. }
             | Command::ListFormats { id, .. }
+            | Command::SearchVideos { id, .. }
             | Command::MatAnyoneSetup { id, .. }
             | Command::MatAnyoneDownloadModel { id, .. }
             | Command::MatAnyoneStart { id, .. }
@@ -349,6 +352,7 @@ impl Session {
             download_dir: utils::get_download_dir().to_string_lossy().to_string(),
             project_root: utils::get_project_root().to_string_lossy().to_string(),
             fs_commands: true,
+            media_search: true,
             matanyone_available,
             matanyone_status,
         };

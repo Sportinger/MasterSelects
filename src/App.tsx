@@ -1,30 +1,24 @@
 // WebVJ Mixer - Main Application
 
-// Changelog visibility controlled by Vite define:
-// npm run dev          → hidden (default)
-// npm run dev:changelog → shown
-// npm run build        → always shown
-declare const __SHOW_CHANGELOG__: boolean;
-const SHOW_CHANGELOG = typeof __SHOW_CHANGELOG__ !== 'undefined' ? __SHOW_CHANGELOG__ : true;
-
-import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
+import { useState, useCallback, useEffect, useLayoutEffect, useRef, lazy, Suspense } from 'react';
 import { flushSync } from 'react-dom';
 import { Toolbar } from './components/common/Toolbar';
+import { WorkspaceBar } from './components/common/WorkspaceBar';
 import { DockContainer } from './components/dock';
-import { AccountDialog } from './components/common/AccountDialog';
-import { AuthDialog } from './components/common/AuthDialog';
-import { BillingSuccessCelebration } from './components/common/BillingSuccessCelebration';
-import { WelcomeOverlay } from './components/common/WelcomeOverlay';
-import { WhatsNewDialog } from './components/common/WhatsNewDialog';
-import { SplashScreen } from './components/common/SplashScreen';
+import { useOverLayoutSync } from './components/dock/useOverLayoutSync';
+import { TouchGooLayer } from './components/common/touchGoo/TouchGooLayer';
 import { IndexedDBErrorDialog } from './components/common/IndexedDBErrorDialog';
 import { LinuxVulkanWarning } from './components/common/LinuxVulkanWarning';
 import { ProjectLoadProgressOverlay } from './components/common/ProjectLoadProgressOverlay';
-import { PricingDialog } from './components/common/PricingDialog';
 import { HistoryActionToast } from './components/common/HistoryActionToast';
+import { CameraSolveJobOverlay } from './components/common/CameraSolveJobOverlay';
 import { ShortcutDisplayOverlay } from './components/common/ShortcutDisplayOverlay';
 import { MuscriptorDialogHost } from './components/common/MuscriptorDialogHost';
+import { SourceFitDialogHost } from './components/common/SourceFitDialog';
 import { GuidedActionOverlay } from './components/guidedActions/GuidedActionOverlay';
+import { FlashBoardRuntimeHost } from './components/panels/flashboard/FlashBoardRuntimeHost';
+import { EditorPlaybackRuntimeHost } from './components/common/EditorPlaybackRuntimeHost';
+import { ColorWorkspaceTopBar } from './components/panels/color-workspace/ColorWorkspaceTopBar';
 import { TutorialOverlay } from './components/common/TutorialOverlay';
 import { TutorialCampaignDialog } from './components/common/TutorialCampaignDialog';
 import { InteractiveTutorialOverlay } from './components/common/tutorial/InteractiveTutorialOverlay';
@@ -37,21 +31,26 @@ import {
 } from './components/common/tutorial/interactiveCampaigns';
 import { getCampaignById } from './components/common/tutorialCampaigns';
 import type { CampaignStep } from './components/common/tutorialCampaigns';
-import { MobileApp } from './components/mobile';
 import { useTheme } from './hooks/useTheme';
 import { useGlobalSelectWheel } from './hooks/useGlobalSelectWheel';
 import { useBackNavigationGuard } from './hooks/useBackNavigationGuard';
 import { usePageZoom } from './hooks/usePageZoom';
 import { useGlobalHistory } from './hooks/useGlobalHistory';
 import { useClipPanelSync } from './hooks/useClipPanelSync';
-import { useIsMobile, useForceMobile } from './hooks/useIsMobile';
 import { useMIDIRuntime } from './hooks/useMIDIRuntime';
 import { useLiveInputFeedbackCoordinator } from './hooks/useLiveInputFeedbackCoordinator';
 import { usePointerFocusHandoff } from './hooks/usePointerFocusHandoff';
-import { useAccountStore } from './stores/accountStore';
+import { useTrackingAssetActions } from './components/panels/properties/surfaceTracking/useTrackingAssetActions';
+import {
+  isSyntheticTouchContextMenuEvent,
+  useEditorTouchGestures,
+} from './hooks/useEditorTouchGestures';
 import { useSettingsStore } from './stores/settingsStore';
 import { useUiSettingsStore } from './stores/uiSettingsStore';
+import { useFlashBoardStore } from './stores/flashboardStore';
 import {
+  FACTORY_COLOR_LAYOUT_ID,
+  FACTORY_MEDIUM_EDIT_LAYOUT_ID,
   FACTORY_START_LAYOUT_ID,
   START_CHROME_EXIT_DELAY_MS,
   START_CHROME_TRANSITION_DURATION_MS,
@@ -59,12 +58,19 @@ import {
   START_LAYOUT_REVEAL_DURATION_MS,
   useDockStore,
 } from './stores/dockStore';
+import {
+  resolveInitialDockLayoutId,
+  type EditorEntryExperience,
+} from './routing/entryDockLayout';
+import { installEditorEntryHistoryLayoutSync } from './routing/editorEntryHistory';
 import { nodeContainsPanelType } from './stores/dockStore/layoutTree';
 import { projectDB } from './services/projectDB';
 import { projectFileService } from './services/projectFileService';
+import { EditorProjectSelectionOverlay } from './components/common/EditorProjectSelectionOverlay';
+import { shouldShowEditorProjectSelection } from './routing/editorProjectSelectionState';
 import { audioRoutingManager } from './services/audioRoutingManager';
-import { APP_VERSION, shouldAutoShowChangelog } from './version';
 import './styles/app-shell.css';
+import './styles/medium-experience.css';
 import './styles/shared-controls.css';
 
 // Dev test pages - lazy loaded to avoid bloating main bundle
@@ -79,18 +85,19 @@ const KeyframeCurveVisualQa = lazy(() =>
   import('./test/KeyframeCurveVisualQa').then(m => ({ default: m.KeyframeCurveVisualQa }))
 );
 
-function App() {
+interface AppProps {
+  initialExperience?: EditorEntryExperience;
+}
+
+function App({ initialExperience = 'editor' }: AppProps) {
   // Check for test mode via URL param
   const urlParams = new URLSearchParams(window.location.search);
   const testMode = urlParams.get('test');
-  const [redeemCode, setRedeemCode] = useState(() => urlParams.get('redeem')?.trim() ?? '');
 
   // === ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS ===
+  useTrackingAssetActions();
 
-  // Mobile detection
-  const isMobile = useIsMobile();
-  const forceMobile = useForceMobile();
-  const forceDesktopMode = useSettingsStore((s) => s.forceDesktopMode);
+  const loadSavedLayout = useDockStore((s) => s.loadSavedLayout);
   const isStartLayout = useDockStore((s) => (
     s.activeSavedLayoutId === FACTORY_START_LAYOUT_ID
     || nodeContainsPanelType(s.layout.root, 'start')
@@ -98,6 +105,19 @@ function App() {
   const [toolbarTransition, setToolbarTransition] = useState<'entering' | 'exiting' | null>(null);
   const [showStartTransitionBackground, setShowStartTransitionBackground] = useState(false);
   const toolbarChromeState = toolbarTransition ?? (isStartLayout ? 'hidden' : 'visible');
+
+  useLayoutEffect(() => {
+    const initialLayoutId = resolveInitialDockLayoutId(initialExperience);
+    if (!initialLayoutId) return;
+
+    loadSavedLayout(initialLayoutId, {
+      transitionDurationMs: 0,
+    });
+  }, [initialExperience, loadSavedLayout]);
+
+  useEffect(() => {
+    return installEditorEntryHistoryLayoutSync(loadSavedLayout);
+  }, [loadSavedLayout]);
 
   useEffect(() => {
     let timeoutId: number | null = null;
@@ -162,11 +182,14 @@ function App() {
   // Trap browser back/swipe so it never leaves the app (#200)
   useBackNavigationGuard();
 
-  // Overall UI zoom slider + block browser Ctrl+wheel page zoom (#209)
+  // Page zoom is disabled; pinch is reserved for editor-owned gestures.
   usePageZoom();
 
   // Release stale control focus when pointer interaction moves back to an editor surface.
   usePointerFocusHandoff();
+
+  // Long-press is the touch equivalent of the editor's right-click menus.
+  useEditorTouchGestures();
 
   // Initialize global undo/redo system
   const { historyNotice, clearHistoryNotice } = useGlobalHistory();
@@ -180,6 +203,11 @@ function App() {
   // Keep composition-feedback streams aligned with mounted preview canvases.
   useLiveInputFeedbackCoordinator();
 
+  // Keep Medium/Mobile above the selected editing workspace and align the two
+  // Mobile dock trees with the active composition aspect ratio. The Chat start
+  // surface is separate and must not be replaced while used as the landing preview.
+  useOverLayoutSync(initialExperience !== 'chat');
+
   const audioOutputDeviceId = useUiSettingsStore((s) => s.audioOutputDeviceId);
   const audioLatencyHint = useUiSettingsStore((s) => s.audioLatencyHint);
 
@@ -190,6 +218,7 @@ function App() {
 
   useEffect(() => {
     const preventBrowserContextMenu = (event: MouseEvent) => {
+      if (isSyntheticTouchContextMenuEvent(event)) return;
       event.preventDefault();
     };
 
@@ -199,11 +228,45 @@ function App() {
     };
   }, []);
 
-  // Check if there's a stored project in IndexedDB (the only allowed browser storage)
+  // Check project state in IndexedDB (the only allowed browser storage).
   const [isChecking, setIsChecking] = useState(true);
-  const [hasStoredProject, setHasStoredProject] = useState(false);
-  const [manuallyDismissed, setManuallyDismissed] = useState(false);
+  const [isProjectOpen, setIsProjectOpen] = useState(() => projectFileService.isProjectOpen());
+  const [isProjectPermissionPending, setIsProjectPermissionPending] = useState(() => (
+    projectFileService.needsPermission()
+  ));
+  const isColorLayout = useDockStore((s) => s.activeSavedLayoutId === FACTORY_COLOR_LAYOUT_ID);
+  const isMediumOverLayout = useDockStore((s) => (
+    s.mediumLayoutOverride === true
+    || (
+      s.mediumLayoutOverride === null
+      && s.activeSavedLayoutId === FACTORY_MEDIUM_EDIT_LAYOUT_ID
+    )
+  ));
+  const [isProjectBootPending, setIsProjectBootPending] = useState(() => (
+    initialExperience !== 'chat'
+  ));
   const [startupOverlaysReady, setStartupOverlaysReady] = useState(() => !isStartLayout);
+
+  const handleProjectBootResolved = useCallback((projectOpen: boolean) => {
+    if (initialExperience === 'medium') {
+      const mediumLayoutId = resolveInitialDockLayoutId(initialExperience);
+      if (mediumLayoutId) {
+        loadSavedLayout(mediumLayoutId, { transitionDurationMs: 0 });
+      }
+      const flashBoardState = useFlashBoardStore.getState();
+      const primaryChat = flashBoardState.aiWorkspaces.find(
+        (workspace) => workspace.kind === 'chat',
+      );
+      if (primaryChat) {
+        flashBoardState.activateAIWorkspace(primaryChat.id);
+      } else {
+        flashBoardState.createAIWorkspace({ kind: 'chat', title: 'Chat' });
+      }
+    }
+    setIsProjectOpen(projectOpen);
+    setIsProjectPermissionPending(projectFileService.needsPermission());
+    setIsProjectBootPending(false);
+  }, [initialExperience, loadSavedLayout]);
 
   useEffect(() => {
     if (isStartLayout) {
@@ -220,13 +283,6 @@ function App() {
     return () => window.clearTimeout(timeoutId);
   }, [isStartLayout]);
 
-  // Splash screen state - shown on startup with video + notices
-  const [showSplash, setShowSplash] = useState(false);
-  // Changelog dialog state - full changelog with calendar + all changes
-  const [showChangelog, setShowChangelog] = useState(false);
-  const showChangelogOnStartup = useSettingsStore((s) => s.showChangelogOnStartup);
-  const lastSeenChangelogVersion = useSettingsStore((s) => s.lastSeenChangelogVersion);
-
   // Tutorial completion state
   const hasSeenTutorial = useSettingsStore((s) => s.hasSeenTutorial);
   const setHasSeenTutorial = useSettingsStore((s) => s.setHasSeenTutorial);
@@ -236,6 +292,7 @@ function App() {
   const [showCampaignDialog, setShowCampaignDialog] = useState(false);
   const [showTutorialSetup, setShowTutorialSetup] = useState(false);
   const [activeCampaign, setActiveCampaign] = useState<{ id: string; title: string; steps: CampaignStep[]; interactive?: boolean } | null>(null);
+  const startupTutorialScheduledRef = useRef(false);
   const completeTutorial = useSettingsStore((s) => s.completeTutorial);
 
   // IndexedDB error dialog state
@@ -246,69 +303,6 @@ function App() {
   useEffect(() => {
     void loadIntegrationCredentials();
   }, [loadIntegrationCredentials]);
-
-  const accountDialog = useAccountStore((s) => s.dialog);
-  const accountCreditBalance = useAccountStore((s) => s.creditBalance);
-  const closeAccountDialog = useAccountStore((s) => s.closeDialog);
-  const isAccountInitialized = useAccountStore((s) => s.isInitialized);
-  const loadAccountState = useAccountStore((s) => s.loadAccountState);
-  const openAccountDialog = useAccountStore((s) => s.openAccountDialog);
-  const [billingSuccessCelebration, setBillingSuccessCelebration] = useState<{
-    planId: string | null;
-    token: number;
-  } | null>(null);
-  const closeBillingSuccessCelebration = useCallback(() => {
-    setBillingSuccessCelebration(null);
-  }, []);
-  useEffect(() => {
-    void loadAccountState();
-  }, [loadAccountState]);
-
-  useEffect(() => {
-    if (!isAccountInitialized) {
-      return;
-    }
-
-    const currentUrl = new URL(window.location.href);
-    const authStatus = currentUrl.searchParams.get('auth');
-    const billingStatus = currentUrl.searchParams.get('billing');
-    const billingPlanId = currentUrl.searchParams.get('plan');
-    const showBillingSuccessPreview = currentUrl.searchParams.get('showBillingSuccess') === '1';
-
-    if (authStatus !== 'success' && billingStatus !== 'success' && !showBillingSuccessPreview) {
-      return;
-    }
-
-    const finalize = async () => {
-      await loadAccountState();
-      if (!showBillingSuccessPreview) {
-        openAccountDialog();
-      }
-      if (billingStatus === 'success' || showBillingSuccessPreview) {
-        setBillingSuccessCelebration({
-          planId: billingPlanId,
-          token: Date.now(),
-        });
-      }
-
-      currentUrl.searchParams.delete('auth');
-      currentUrl.searchParams.delete('billing');
-      currentUrl.searchParams.delete('plan');
-      currentUrl.searchParams.delete('showBillingSuccess');
-      window.history.replaceState({}, document.title, `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`);
-    };
-
-    void finalize();
-  }, [isAccountInitialized, loadAccountState, openAccountDialog]);
-
-  const clearRedeemCode = useCallback(() => {
-    const currentUrl = new URL(window.location.href);
-    currentUrl.searchParams.delete('offer');
-    currentUrl.searchParams.delete('offerPreview');
-    currentUrl.searchParams.delete('redeem');
-    window.history.replaceState({}, document.title, `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`);
-    setRedeemCode('');
-  }, []);
 
   // Check for stored project on mount, then poll for changes
   // This handles the case where Toolbar's restore fails and clears handles
@@ -322,10 +316,10 @@ function App() {
       }
 
       try {
-        // Check both: IndexedDB handle exists AND project is actually open
-        const hasHandle = await projectDB.hasLastProject();
+        await projectDB.hasLastProject();
         const isOpen = projectFileService.isProjectOpen();
-        setHasStoredProject(hasHandle || isOpen);
+        setIsProjectOpen(isOpen);
+        setIsProjectPermissionPending(projectFileService.needsPermission());
       } catch {
         // If hasLastProject fails, IndexedDB is corrupted
         if (projectDB.hasInitFailed()) {
@@ -347,9 +341,9 @@ function App() {
       }
 
       try {
-        const hasHandle = await projectDB.hasLastProject();
+        await projectDB.hasLastProject();
         const isOpen = projectFileService.isProjectOpen();
-        setHasStoredProject(hasHandle || isOpen);
+        setIsProjectOpen(isOpen);
       } catch {
         if (projectDB.hasInitFailed()) {
           setShowIndexedDBError(true);
@@ -359,30 +353,6 @@ function App() {
 
     return () => clearInterval(interval);
   }, []);
-
-  // Show welcome if no stored project and not manually dismissed this session
-  // Don't show while checking to avoid flash
-  const showWelcome = startupOverlaysReady
-    && !isStartLayout
-    && !isChecking
-    && !hasStoredProject
-    && !manuallyDismissed;
-  const shouldShowChangelogOnStartup = SHOW_CHANGELOG
-    && shouldAutoShowChangelog(showChangelogOnStartup, lastSeenChangelogVersion, APP_VERSION);
-  // Show Splash screen after initial check (when no welcome overlay)
-  // This effect intentionally sets state based on derived conditions
-  useEffect(() => {
-    if (!startupOverlaysReady || isStartLayout) return;
-    if (!shouldShowChangelogOnStartup) return;
-    if (isChecking) return;
-
-    // If welcome is showing, don't show splash yet
-    if (showWelcome) return;
-
-    // Show splash screen - this is intentional state sync, not a cascading render
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setShowSplash(true);
-  }, [isChecking, isStartLayout, showWelcome, shouldShowChangelogOnStartup, startupOverlaysReady]);
 
   const activateTutorialCampaign = useCallback((campaignId: string) => {
     const campaign = getCampaignById(campaignId);
@@ -403,6 +373,35 @@ function App() {
     setShowTutorialSetup(true);
   }, []);
 
+  useEffect(() => {
+    if (startupTutorialScheduledRef.current || hasSeenTutorial) return;
+    if (initialExperience !== 'editor') return;
+    if (!startupOverlaysReady || isStartLayout || isChecking) return;
+    if (
+      isProjectBootPending
+      || isProjectPermissionPending
+      || shouldShowEditorProjectSelection(
+        initialExperience,
+        isProjectOpen,
+        isProjectPermissionPending,
+      )
+    ) return;
+
+    startupTutorialScheduledRef.current = true;
+    const timeoutId = window.setTimeout(startTutorialSequence, 200);
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    hasSeenTutorial,
+    initialExperience,
+    isChecking,
+    isProjectBootPending,
+    isProjectOpen,
+    isProjectPermissionPending,
+    isStartLayout,
+    startTutorialSequence,
+    startupOverlaysReady,
+  ]);
+
   const handleTutorialSetupComplete = useCallback(() => {
     setShowTutorialSetup(false);
     activateTutorialCampaign(STARTUP_GUIDED_TUTORIAL_ID);
@@ -413,37 +412,6 @@ function App() {
     setHasSeenTutorial(true);
     setHasSeenTutorialPart2(true);
   }, [setHasSeenTutorial, setHasSeenTutorialPart2]);
-
-  const handleWelcomeComplete = useCallback(() => {
-    setManuallyDismissed(true);
-    setHasStoredProject(true); // Project was just created
-    // After welcome, show splash screen with small delay for animation
-    if (shouldShowChangelogOnStartup) {
-      setTimeout(() => setShowSplash(true), 300);
-    } else if (!hasSeenTutorial) {
-      // No splash → start tutorial directly
-      setTimeout(startTutorialSequence, 200);
-    }
-  }, [hasSeenTutorial, shouldShowChangelogOnStartup, startTutorialSequence]);
-
-  const handleSplashClose = useCallback(() => {
-    setShowSplash(false);
-    if (!hasSeenTutorial) {
-      setTimeout(startTutorialSequence, 200);
-    }
-  }, [hasSeenTutorial, startTutorialSequence]);
-
-  const handleSplashOpenChangelog = useCallback(() => {
-    setShowSplash(false);
-    setShowChangelog(true);
-  }, []);
-
-  const handleChangelogClose = useCallback(() => {
-    setShowChangelog(false);
-    if (!hasSeenTutorial) {
-      setTimeout(startTutorialSequence, 200);
-    }
-  }, [hasSeenTutorial, startTutorialSequence]);
 
   // Campaign tutorial handlers
   const handleStartCampaign = useCallback((campaignId: string) => {
@@ -537,12 +505,6 @@ function App() {
     );
   }
 
-  // Show mobile UI unless user explicitly requested desktop mode
-  const showMobileUI = !isStartLayout && (isMobile || forceMobile) && !forceDesktopMode;
-  if (showMobileUI) {
-    return <MobileApp />;
-  }
-
   const activeInteractiveCampaign = activeCampaign?.interactive
     ? INTERACTIVE_CAMPAIGNS.find((campaign) => campaign.id === activeCampaign.id) ?? null
     : null;
@@ -552,6 +514,8 @@ function App() {
       className={[
         'app',
         isStartLayout ? 'app--start-layout' : 'app--editor-layout',
+        initialExperience === 'chat' ? 'app--chat-experience' : null,
+        !isStartLayout && isMediumOverLayout ? 'app--medium-experience' : null,
         `app--toolbar-${toolbarChromeState}`,
       ].filter(Boolean).join(' ')}
     >
@@ -559,24 +523,33 @@ function App() {
       {showStartTransitionBackground && (
         <div className="app-start-transition-background" aria-hidden="true" />
       )}
-      <Toolbar onOpenChangelog={() => setShowChangelog(true)} onOpenSplash={() => setShowSplash(true)} />
-      <DockContainer />
+      <Toolbar
+        onProjectBootResolved={handleProjectBootResolved}
+      />
+      <FlashBoardRuntimeHost />
+      {!isStartLayout && <EditorPlaybackRuntimeHost />}
+      {isColorLayout && <ColorWorkspaceTopBar />}
+      <DockContainer detachedWindowsReady={!isProjectBootPending} />
+      <WorkspaceBar />
+      <TouchGooLayer />
+      {!isProjectBootPending && shouldShowEditorProjectSelection(
+        initialExperience,
+        isProjectOpen,
+        isProjectPermissionPending,
+      ) && (
+        <EditorProjectSelectionOverlay
+          onProjectSelected={() => setIsProjectOpen(true)}
+        />
+      )}
       {!isStartLayout && (
         <>
           <GuidedActionOverlay />
           <ShortcutDisplayOverlay />
           <ProjectLoadProgressOverlay />
+          <CameraSolveJobOverlay />
           <MuscriptorDialogHost />
+          <SourceFitDialogHost />
           <HistoryActionToast notice={historyNotice} onDone={clearHistoryNotice} />
-          {showWelcome && (
-            <WelcomeOverlay onComplete={handleWelcomeComplete} noFadeOnClose />
-          )}
-          {showSplash && startupOverlaysReady && (
-            <SplashScreen onClose={handleSplashClose} onOpenChangelog={handleSplashOpenChangelog} />
-          )}
-          {showChangelog && (
-            <WhatsNewDialog onClose={handleChangelogClose} />
-          )}
           {showIndexedDBError && (
             <IndexedDBErrorDialog onClose={handleIndexedDBErrorClose} />
           )}
@@ -609,23 +582,6 @@ function App() {
               campaignTitle={activeCampaign.title}
             />
           ) : null}
-          {accountDialog === 'auth' && <AuthDialog onClose={closeAccountDialog} />}
-          {accountDialog === 'pricing' && <PricingDialog onClose={closeAccountDialog} />}
-          {accountDialog === 'account' && (
-            <AccountDialog
-              initialRedeemCode={redeemCode}
-              onClose={closeAccountDialog}
-              onRedeemed={clearRedeemCode}
-            />
-          )}
-          {billingSuccessCelebration && (
-            <BillingSuccessCelebration
-              creditBalance={accountCreditBalance}
-              onClose={closeBillingSuccessCelebration}
-              planId={billingSuccessCelebration.planId}
-              key={billingSuccessCelebration.token}
-            />
-          )}
         </>
       )}
     </div>

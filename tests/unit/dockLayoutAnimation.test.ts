@@ -101,4 +101,28 @@ describe('dock layout animation', () => {
     expect([...snapshot.items.keys()]).toEqual(['panel:media']);
   });
 
+  it('captures an explicit nested Timeline surface for the Start-to-editor morph', () => {
+    const container = document.createElement('div');
+    const startPane = document.createElement('div');
+    const reviewTimeline = document.createElement('div');
+    startPane.className = 'dock-tab-pane';
+    startPane.dataset.dockLayoutAnimId = 'panel:start';
+    reviewTimeline.dataset.dockLayoutAnimId = 'panel:timeline';
+    reviewTimeline.dataset.dockLayoutSequenceSurface = 'true';
+    startPane.append(reviewTimeline);
+    container.append(startPane);
+
+    vi.spyOn(startPane, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 900, 700));
+    vi.spyOn(reviewTimeline, 'getBoundingClientRect').mockReturnValue(new DOMRect(80, 300, 740, 150));
+
+    const snapshot = captureDockLayoutAnimationSnapshot(container, 400, 'sequence', 'from-start');
+
+    expect([...snapshot.items.keys()]).toEqual(['panel:start', 'panel:timeline']);
+    expect(snapshot.items.get('panel:timeline')).toMatchObject({
+      clone: undefined,
+      liveElement: reviewTimeline,
+      rect: { left: 80, top: 300, width: 740, height: 150 },
+    });
+  });
+
 });

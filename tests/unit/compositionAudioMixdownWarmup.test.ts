@@ -1,4 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+vi.mock('../../src/services/timeline/compositionAudioMixdownCache', () => ({
+  getCompositionAudioMixdownKey: (clip: TimelineClip) => clip.compositionId
+    ? `${clip.compositionId}:${clip.nestedContentHash ?? 'unknown-content'}` : null,
+  requestCompositionAudioMixdown: vi.fn(),
+}));
 import {
   collectCompositionAudioMixdownWarmupRequests,
   resetCompositionAudioMixdownWarmupForTest,
@@ -46,6 +51,14 @@ function clip(overrides: Partial<TimelineClip> = {}): TimelineClip {
 }
 
 describe('compositionAudioMixdownWarmup', () => {
+  it('does not schedule audio jobs for thousands of restored graphics compositions', () => {
+    const shape = clip({ isComposition: false, source: { type: 'motion-shape' } });
+    const graphics = clip({ source: { type: 'video' }, nestedClips: [shape], isLoading: false });
+    const clips = Array.from({ length: 1500 }, (_, index) => ({ ...graphics, id: `graphics-${index}` }));
+    expect(collectCompositionAudioMixdownWarmupRequests({ timelineSessionId: 1, clips })).toEqual([]);
+    const changed = { ...graphics, nestedClips: [clip({ isComposition: false, source: { type: 'audio' } })] };
+    expect(collectCompositionAudioMixdownWarmupRequests({ timelineSessionId: 1, clips: [changed] })).toHaveLength(1);
+  });
   afterEach(() => {
     resetCompositionAudioMixdownWarmupForTest();
     vi.useRealTimers();

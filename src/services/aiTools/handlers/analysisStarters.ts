@@ -100,16 +100,43 @@ export async function handleStartClipTranscription(
   // Visual feedback: select clip and open transcript tab
   selectClipAndOpenTab(clipId, 'transcript');
 
-  // Import and start transcription (runs in background)
+  // Import and start transcription (runs in background). The transcription
+  // runtime intentionally owns one global run, so surface that constraint to
+  // callers instead of reporting a second, silently ignored run as started.
+  const {
+    getActiveTranscriptionRunClipId,
+    hasActiveTranscriptionRun,
+  } = await import('../../transcription/transcriptionRunController');
+  if (hasActiveTranscriptionRun()) {
+    const activeClipId = getActiveTranscriptionRunClipId();
+    if (activeClipId === clipId) {
+      return {
+        success: true,
+        data: {
+          clipId,
+          clipName: clip.name,
+          status: 'already-running',
+          message: 'Transcription is already running for this clip. Poll getClipTranscript until transcriptStatus is ready or error.',
+        },
+      };
+    }
+    return {
+      success: false,
+      error: `Another clip transcription is already running${activeClipId ? ` for ${activeClipId}` : ''}. Poll that clip until transcriptStatus is ready or error, then retry ${clipId}. Only one clip transcription can run at a time.`,
+    };
+  }
+
   const { transcribeClip } = await import('../../clipTranscriber');
-  transcribeClip(clipId, 'auto'); // Don't await - runs in background
+  void transcribeClip(clipId, 'auto', { provider: 'hybrid' }); // Best Quality; runs in background
 
   return {
     success: true,
     data: {
       clipId,
       clipName: clip.name,
-      message: 'Transcription started. Check clip details later for results.',
+      status: 'started',
+      provider: 'best-quality',
+      message: 'Best Quality transcription started (Deepgram words/timings + OpenAI speaker separation). Poll getClipTranscript until transcriptStatus is ready or error before starting another transcription.',
     },
   };
 }

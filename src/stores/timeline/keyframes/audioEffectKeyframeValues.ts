@@ -59,6 +59,9 @@ export function getLegacyEffectKeyframeBaseValue(
 ): number | undefined {
   if (!paramName.includes('.')) {
     const value = effect.params[paramName];
+    // Cable defaults live in settings; explicit timeline keys supply the animated value.
+    if (effect.type === 'face-cables' && /^cable_.+_(slack|windZ|windGusts|stiffness|gravity|damping|viscosity|width)$/.test(paramName)
+      && value === undefined) return 0;
     return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
   }
 

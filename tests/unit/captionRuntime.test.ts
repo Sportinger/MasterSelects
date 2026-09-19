@@ -205,7 +205,7 @@ describe('caption runtime', () => {
       clips: [caption, source],
       tracks,
       timelineTime: 1.1,
-      resolveSourceTime: () => 1.1,
+      resolveSourceTime: (_clip, timelineTime) => timelineTime,
     });
 
     expect(model?.tokens.map(token => token.text)).toEqual([
@@ -231,6 +231,82 @@ describe('caption runtime', () => {
     expect(model?.cueTime).toBe(1.1);
     expect(model?.cueProgress).toBeCloseTo(1.1 / 1.9);
     expect(model?.tokens[2].progress).toBeCloseTo(0.25);
+  });
+
+  it('does not carry grouped words across a trimmed source boundary', () => {
+    const caption = clip({
+      id: 'caption',
+      trackId: 'captions',
+      type: 'text',
+      caption: true,
+      duration: 1,
+    });
+    caption.captionProperties = {
+      ...caption.captionProperties!,
+      sourceClipId: 'trimmed-source',
+      wordsPerCaption: 5,
+    };
+    const source = clip({
+      id: 'trimmed-source',
+      trackId: 'video-top',
+      transcript: words('word', 5).map((word, index) => (
+        index === 1 ? { ...word, end: 1.2 } : word
+      )),
+      duration: 1,
+      inPoint: 1,
+      outPoint: 2,
+    });
+
+    const model = createCaptionFrameModel({
+      captionClip: caption,
+      clips: [caption, source],
+      tracks,
+      timelineTime: 0.1,
+    });
+
+    expect(model?.tokens.map(token => token.id)).toEqual([
+      'word-2',
+      'word-3',
+    ]);
+    expect(model?.cueStart).toBe(1);
+    expect(model?.cueEnd).toBe(1.9);
+  });
+
+  it('starts a new word group at the caption clip boundary', () => {
+    const caption = clip({
+      id: 'caption',
+      trackId: 'captions',
+      type: 'text',
+      caption: true,
+      startTime: 1,
+      duration: 1,
+    });
+    caption.captionProperties = {
+      ...caption.captionProperties!,
+      sourceClipId: 'source',
+      wordsPerCaption: 5,
+    };
+    const source = clip({
+      id: 'source',
+      trackId: 'video-top',
+      transcript: words('word', 5),
+      duration: 3,
+      outPoint: 3,
+    });
+
+    const model = createCaptionFrameModel({
+      captionClip: caption,
+      clips: [caption, source],
+      tracks,
+      timelineTime: 1.1,
+    });
+
+    expect(model?.tokens.map(token => token.id)).toEqual([
+      'word-2',
+      'word-3',
+    ]);
+    expect(model?.cueStart).toBe(1);
+    expect(model?.cueEnd).toBe(1.9);
   });
 
   it('maps trimmed, sped-up and reversed timeline positions into source time', () => {

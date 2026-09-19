@@ -1,7 +1,10 @@
 // Raw folder operations and media import service
 
 import { Logger } from '../../logger';
-import { PROJECT_FOLDERS } from '../core/constants';
+import {
+  getFsaProjectFolderPath,
+  getFsaProjectFolderReadCandidates,
+} from '../core/projectPackage';
 import {
   addFileNameSuffix,
   buildRawTargetPath,
@@ -61,7 +64,12 @@ export class RawMediaService {
     fileName?: string
   ): Promise<{ handle: FileSystemFileHandle; relativePath: string; alreadyExisted: boolean } | null> {
     try {
-      const rawFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.RAW, { create: true });
+      const rawFolder = await this.fileStorage.navigateToFolder(
+        projectHandle,
+        getFsaProjectFolderPath(projectHandle, 'RAW'),
+        true,
+      );
+      if (!rawFolder) return null;
       const target = buildRawTargetPath(fileName, file.name);
       const targetFolder = await this.getRawTargetFolder(rawFolder, target.folderPath, true);
       if (!targetFolder) {
@@ -116,16 +124,20 @@ export class RawMediaService {
         return null;
       }
 
-      const rawFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.RAW);
-      const targetFolder = await this.getRawTargetFolder(rawFolder, target.folderPath, false);
-      if (!targetFolder) {
-        return null;
+      for (const folderPath of getFsaProjectFolderReadCandidates(projectHandle, 'RAW')) {
+        const rawFolder = await this.fileStorage.navigateToFolder(projectHandle, folderPath, false);
+        if (!rawFolder) continue;
+        const targetFolder = await this.getRawTargetFolder(rawFolder, target.folderPath, false);
+        if (!targetFolder) continue;
+        try {
+          const fileHandle = await targetFolder.getFileHandle(target.fileName);
+          const file = await fileHandle.getFile();
+          return { file, handle: fileHandle };
+        } catch {
+          // Try the legacy Raw folder after the package media folder.
+        }
       }
-
-      const fileHandle = await targetFolder.getFileHandle(target.fileName);
-      const file = await fileHandle.getFile();
-
-      return { file, handle: fileHandle };
+      return null;
     } catch (e) {
       return null;
     }
@@ -144,14 +156,19 @@ export class RawMediaService {
         return false;
       }
 
-      const rawFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.RAW);
-      const targetFolder = await this.getRawTargetFolder(rawFolder, target.folderPath, false);
-      if (!targetFolder) {
-        return false;
+      for (const folderPath of getFsaProjectFolderReadCandidates(projectHandle, 'RAW')) {
+        const rawFolder = await this.fileStorage.navigateToFolder(projectHandle, folderPath, false);
+        if (!rawFolder) continue;
+        const targetFolder = await this.getRawTargetFolder(rawFolder, target.folderPath, false);
+        if (!targetFolder) continue;
+        try {
+          await targetFolder.removeEntry(target.fileName);
+          return true;
+        } catch {
+          // Try the next compatible media location.
+        }
       }
-
-      await targetFolder.removeEntry(target.fileName);
-      return true;
+      return false;
     } catch {
       return false;
     }
@@ -165,15 +182,20 @@ export class RawMediaService {
     fileName: string
   ): Promise<boolean> {
     try {
-      const rawFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.RAW);
       const target = buildRawTargetPath(fileName, fileName);
-      const targetFolder = await this.getRawTargetFolder(rawFolder, target.folderPath, false);
-      if (!targetFolder) {
-        return false;
+      for (const folderPath of getFsaProjectFolderReadCandidates(projectHandle, 'RAW')) {
+        const rawFolder = await this.fileStorage.navigateToFolder(projectHandle, folderPath, false);
+        if (!rawFolder) continue;
+        const targetFolder = await this.getRawTargetFolder(rawFolder, target.folderPath, false);
+        if (!targetFolder) continue;
+        try {
+          await targetFolder.getFileHandle(target.fileName, { create: false });
+          return true;
+        } catch {
+          // Try the next compatible media location.
+        }
       }
-
-      await targetFolder.getFileHandle(target.fileName, { create: false });
-      return true;
+      return false;
     } catch {
       return false;
     }
@@ -189,8 +211,6 @@ export class RawMediaService {
     const foundFiles = new Map<string, FileSystemFileHandle>();
 
     try {
-      const rawFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.RAW);
-
       const scanDirectory = async (directory: FileSystemDirectoryHandle, parentPath = ''): Promise<void> => {
         for await (const entry of (directory as IterableDirectoryHandle).values()) {
           const relativePath = parentPath ? `${parentPath}/${entry.name}` : entry.name;
@@ -203,7 +223,10 @@ export class RawMediaService {
         }
       };
 
-      await scanDirectory(rawFolder);
+      for (const folderPath of getFsaProjectFolderReadCandidates(projectHandle, 'RAW')) {
+        const rawFolder = await this.fileStorage.navigateToFolder(projectHandle, folderPath, false);
+        if (rawFolder) await scanDirectory(rawFolder);
+      }
     } catch {
       // Raw folder doesn't exist or can't be read
     }
@@ -343,9 +366,9 @@ export class RawMediaService {
   }
 
   /** Get the expected folder path for a platform download */
-  static getDownloadFolderPath(platform: string): string {
+  static getDownloadFolderPath(projectHandle: FileSystemDirectoryHandle, platform: string): string {
     const subfolder = RawMediaService.PLATFORM_FOLDERS[platform] || 'Other';
-    return `Downloads/${subfolder}`;
+    return `${getFsaProjectFolderPath(projectHandle, 'DOWNLOADS')}/${subfolder}`;
   }
 
   /**
@@ -357,7 +380,7 @@ export class RawMediaService {
     platform: string
   ): Promise<boolean> {
     try {
-      const folderPath = RawMediaService.getDownloadFolderPath(platform);
+      const folderPath = RawMediaService.getDownloadFolderPath(projectHandle, platform);
       const folder = await this.fileStorage.navigateToFolder(projectHandle, folderPath, false);
       if (!folder) return false;
       return (await RawMediaService.getExistingDownloadFileHandle(folder, title)) !== null;
@@ -375,12 +398,15 @@ export class RawMediaService {
     platform: string
   ): Promise<File | null> {
     try {
-      const folderPath = RawMediaService.getDownloadFolderPath(platform);
-      const folder = await this.fileStorage.navigateToFolder(projectHandle, folderPath, false);
-      if (!folder) return null;
-      const fileHandle = await RawMediaService.getExistingDownloadFileHandle(folder, title);
-      if (!fileHandle) return null;
-      return await fileHandle.getFile();
+      const candidates = getFsaProjectFolderReadCandidates(projectHandle, 'DOWNLOADS')
+        .map((base) => `${base}/${RawMediaService.PLATFORM_FOLDERS[platform] || 'Other'}`);
+      for (const folderPath of candidates) {
+        const folder = await this.fileStorage.navigateToFolder(projectHandle, folderPath, false);
+        if (!folder) continue;
+        const fileHandle = await RawMediaService.getExistingDownloadFileHandle(folder, title);
+        if (fileHandle) return await fileHandle.getFile();
+      }
+      return null;
     } catch {
       return null;
     }
@@ -402,7 +428,7 @@ export class RawMediaService {
 
       // Determine subfolder from platform
       const subfolder = RawMediaService.PLATFORM_FOLDERS[platform] || 'Other';
-      const folderPath = `Downloads/${subfolder}`;
+      const folderPath = `${getFsaProjectFolderPath(projectHandle, 'DOWNLOADS')}/${subfolder}`;
 
       // Navigate to (and create) the nested folder
       const folder = await this.fileStorage.navigateToFolder(projectHandle, folderPath, true);

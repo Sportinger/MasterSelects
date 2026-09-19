@@ -1,5 +1,8 @@
 import { afterEach, describe, it, expect } from 'vitest';
-import { MediaBunnyMuxerAdapter } from '../../src/engine/export/MediaBunnyMuxerAdapter';
+import {
+  MediaBunnyMuxerAdapter,
+  toMediaBunnyVideoCodec,
+} from '../../src/engine/export/MediaBunnyMuxerAdapter';
 
 /**
  * Tests for the MediaBunny MuxerAdapter interface contract.
@@ -87,6 +90,10 @@ describe('MediaBunny Codec Mapping', () => {
 
     it('maps vp9 to vp9', () => {
       expect(mapVideoCodecToMediaBunny('vp9')).toBe('vp9');
+    });
+
+    it('maps the datamosh-only VP8 codec to MediaBunny VP8', () => {
+      expect(toMediaBunnyVideoCodec('vp8')).toBe('vp8');
     });
 
     it('maps av1 to av1', () => {

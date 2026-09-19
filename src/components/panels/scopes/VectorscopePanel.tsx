@@ -1,12 +1,5 @@
-import { VectorscopeScope } from './VectorscopeScope';
-import './ScopesPanel.css';
+import { ScopesPanel } from './ScopesPanel';
 
 export function VectorscopePanel() {
-  return (
-    <div className="scope-panel">
-      <div className="scope-panel-content">
-        <VectorscopeScope />
-      </div>
-    </div>
-  );
+  return <ScopesPanel initialMode="vectorscope" />;
 }

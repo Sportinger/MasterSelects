@@ -14,6 +14,7 @@ import {
 } from '../../../services/audio/DerivedWaveformPyramidService';
 import { clipAudioAnalysisJobService } from '../../../services/audio/ClipAudioAnalysisJobService';
 import type { GenerateClipAudioAnalysisOptions } from '../types';
+import { updateDerivedTimelineClips } from '../revisionMiddleware';
 import type { ClipActionContext } from './clipActionContext';
 import {
   clearAudioAnalysisJobUpdate,
@@ -31,6 +32,13 @@ export async function generateProcessedWaveformForClipAction(
   options: GenerateClipAudioAnalysisOptions = {},
 ): Promise<void> {
   const { get, set } = context;
+  const updateClips = (updater: Parameters<typeof updateDerivedTimelineClips>[0]): void => {
+    if (options.derivedOnly) {
+      updateDerivedTimelineClips(updater);
+      return;
+    }
+    set({ clips: updater(get().clips) });
+  };
   const { clips, clipKeyframes } = get();
   const clip = clips.find(c => c.id === clipId);
   if (!clip || clip.waveformGenerating) return;
@@ -42,22 +50,20 @@ export async function generateProcessedWaveformForClipAction(
   const sourceWaveformPyramidId = clip.audioState?.sourceAnalysisRefs?.waveformPyramidId;
   if (options.derivedOnly && (!canDeriveProcessedWaveform || !sourceWaveformPyramidId)) return;
 
-  set({
-    clips: updateClipById(get().clips, clipId, createAudioAnalysisJobUpdate({
+  updateClips(clips => updateClipById(clips, clipId, createAudioAnalysisJobUpdate({
       kind: 'processed-waveform-pyramid',
       label: 'Processed Waveform',
       artifactKinds: ['processed-waveform-pyramid'],
       processed: true,
-    })),
-  });
+    })));
   log.debug('Starting processed waveform generation', { clip: clip.name });
 
   try {
     await clipAudioAnalysisJobService.run({ clipId, kind: 'processed-waveform-pyramid' }, async ({ signal }) => {
-      set({ clips: updateAudioAnalysisJobProgress(get().clips, clipId, 1, 'preparing', 'Preparing processed waveform') });
+      updateClips(clips => updateAudioAnalysisJobProgress(clips, clipId, 1, 'preparing', 'Preparing processed waveform'));
 
       if (sourceWaveformPyramidId && canDeriveProcessedWaveform) {
-        set({ clips: updateAudioAnalysisJobProgress(get().clips, clipId, 5, 'preparing', 'Loading source waveform pyramid') });
+        updateClips(clips => updateAudioAnalysisJobProgress(clips, clipId, 5, 'preparing', 'Loading source waveform pyramid'));
         const loadedSource = await loadTimelineWaveformPyramidArtifact(sourceWaveformPyramidId);
         if (signal.aborted) throw signal.reason;
 
@@ -72,7 +78,7 @@ export async function generateProcessedWaveformForClipAction(
             signal,
             onProgress: (progress) => {
               const phase = progress.phase === 'deriving' ? 'analyzing' : progress.phase;
-              set({ clips: updateAudioAnalysisJobProgress(get().clips, clipId, progress.percent, phase, progress.message) });
+              updateClips(clips => updateAudioAnalysisJobProgress(clips, clipId, progress.percent, phase, progress.message));
             },
           });
 
@@ -80,12 +86,11 @@ export async function generateProcessedWaveformForClipAction(
           if (!currentClip) return;
           if (createProcessedClipAudioStateHash(currentClip, { keyframes }) !== result.clipAudioStateHash) {
             log.debug('Discarding stale derived processed waveform result', { clipId });
-            set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+            updateClips(clips => updateClipById(clips, clipId, clearAudioAnalysisJobUpdate()));
             return;
           }
 
-          set({
-            clips: updateClipById(get().clips, clipId, {
+          updateClips(clips => updateClipById(clips, clipId, {
               ...(currentClip.waveform?.length ? {} : { waveform: result.waveform }),
               audioState: {
                 ...(currentClip.audioState ?? {}),
@@ -96,15 +101,14 @@ export async function generateProcessedWaveformForClipAction(
               },
               ...clearAudioAnalysisJobUpdate(),
               waveformProgress: 100,
-            }),
-          });
+            }));
           log.debug('Derived processed waveform complete', { clip: clip.name, artifactId: result.artifact.id });
           return;
         }
       }
 
       if (options.derivedOnly) {
-        set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+        updateClips(clips => updateClipById(clips, clipId, clearAudioAnalysisJobUpdate()));
         return;
       }
 
@@ -134,7 +138,7 @@ export async function generateProcessedWaveformForClipAction(
         const sourceFile = await resolveClipSourceFile(clip);
         if (sourceFile) {
           mediaFileId = mediaFileId ?? `file:${sourceFile.name}:${sourceFile.size}:${sourceFile.lastModified}`;
-          set({ clips: updateClipById(get().clips, clipId, { file: sourceFile }) });
+          updateClips(clips => updateClipById(clips, clipId, { file: sourceFile }));
           sourceFingerprint = await createFileAudioSourceFingerprint(sourceFile);
           if (signal.aborted) throw signal.reason;
           sourceBuffer = await audioExtractor.extractAudio(sourceFile, mediaFileId);
@@ -142,7 +146,7 @@ export async function generateProcessedWaveformForClipAction(
       }
 
       if (!sourceBuffer) {
-        set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+        updateClips(clips => updateClipById(clips, clipId, clearAudioAnalysisJobUpdate()));
         return;
       }
 
@@ -155,19 +159,18 @@ export async function generateProcessedWaveformForClipAction(
         keyframes,
         signal,
         onProgress: (progress) => {
-          set({ clips: updateAudioAnalysisJobProgress(get().clips, clipId, progress.percent, progress.phase === 'waveform' ? 'analyzing' : 'rendering-processed-audio', progress.message) });
+          updateClips(clips => updateAudioAnalysisJobProgress(clips, clipId, progress.percent, progress.phase === 'waveform' ? 'analyzing' : 'rendering-processed-audio', progress.message));
         },
       });
 
       const currentClip = get().clips.find(c => c.id === clipId);
       if (!currentClip) return;
       if (createProcessedClipAudioStateHash(currentClip, { keyframes }) !== result.clipAudioStateHash) {
-        set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+        updateClips(clips => updateClipById(clips, clipId, clearAudioAnalysisJobUpdate()));
         return;
       }
 
-      set({
-        clips: updateClipById(get().clips, clipId, {
+      updateClips(clips => updateClipById(clips, clipId, {
           ...(currentClip.waveform?.length ? {} : { waveform: result.waveform }),
           audioState: {
             ...(currentClip.audioState ?? {}),
@@ -178,8 +181,7 @@ export async function generateProcessedWaveformForClipAction(
           },
           ...clearAudioAnalysisJobUpdate(),
           waveformProgress: 100,
-        }),
-      });
+        }));
     });
   } catch (e) {
     if (isAudioAnalysisCancellation(e)) {
@@ -187,6 +189,6 @@ export async function generateProcessedWaveformForClipAction(
     } else {
       log.error('Processed waveform generation failed', e);
     }
-    set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+    updateClips(clips => updateClipById(clips, clipId, clearAudioAnalysisJobUpdate()));
   }
 }

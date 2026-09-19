@@ -3,6 +3,9 @@ import type { LiveInputSource } from '../../../types/liveInput';
 
 interface LiveInputDialogProps {
   activeComposition: { id: string; name: string } | null;
+  initialSource?: LiveInputSource;
+  submitLabel?: string;
+  title?: string;
   onCreate: (source: LiveInputSource) => Promise<void>;
   onCancel: () => void;
 }
@@ -18,10 +21,19 @@ const fieldStyle = {
   color: '#fff',
 } as const;
 
-export function LiveInputDialog({ activeComposition, onCreate, onCancel }: LiveInputDialogProps) {
-  const [kind, setKind] = useState<SourceKind>('display');
+export function LiveInputDialog({
+  activeComposition,
+  initialSource,
+  submitLabel = 'Create',
+  title = 'New Live Input',
+  onCreate,
+  onCancel,
+}: LiveInputDialogProps) {
+  const [kind, setKind] = useState<SourceKind>(initialSource?.kind ?? 'display');
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [deviceId, setDeviceId] = useState('');
+  const [deviceId, setDeviceId] = useState(
+    initialSource?.kind === 'video-device' ? initialSource.deviceId ?? '' : '',
+  );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
 
@@ -71,7 +83,7 @@ export function LiveInputDialog({ activeComposition, onCreate, onCancel }: LiveI
         onClick={(event) => event.stopPropagation()}
         style={{ width: 380, maxWidth: 'calc(100vw - 32px)', padding: 20, borderRadius: 6, border: '1px solid #444', background: '#1e1e1e', boxShadow: '0 12px 36px rgba(0,0,0,.55)' }}
       >
-        <h3 id="live-input-title" style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 500 }}>New Live Input</h3>
+        <h3 id="live-input-title" style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 500 }}>{title}</h3>
         <label style={{ display: 'block', marginBottom: 6, fontSize: 11, color: '#aaa' }} htmlFor="live-input-kind">Source</label>
         <select id="live-input-kind" value={kind} onChange={(event) => setKind(event.target.value as SourceKind)} style={fieldStyle}>
           <option value="display">Screen, window, or browser tab</option>
@@ -84,6 +96,13 @@ export function LiveInputDialog({ activeComposition, onCreate, onCancel }: LiveI
             <label style={{ display: 'block', margin: '14px 0 6px', fontSize: 11, color: '#aaa' }} htmlFor="live-input-device">Device</label>
             <select id="live-input-device" value={deviceId} onChange={(event) => setDeviceId(event.target.value)} style={fieldStyle}>
               <option value="">Default video device</option>
+              {deviceId && !devices.some((device) => device.deviceId === deviceId) && (
+                <option value={deviceId}>
+                  {initialSource?.kind === 'video-device' && initialSource.deviceLabel
+                    ? `${initialSource.deviceLabel} (saved)`
+                    : 'Saved video device'}
+                </option>
+              )}
               {devices.map((device, index) => (
                 <option key={device.deviceId} value={device.deviceId}>
                   {device.label || `Video device ${index + 1}`}
@@ -104,7 +123,7 @@ export function LiveInputDialog({ activeComposition, onCreate, onCancel }: LiveI
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
           <button type="button" disabled={pending} onClick={onCancel} style={{ padding: '6px 14px', color: '#fff', background: '#2a2a2a', border: '1px solid #444', borderRadius: 4 }}>Cancel</button>
           <button type="button" disabled={pending || (kind === 'composition-feedback' && !activeComposition)} onClick={() => { void submit(); }} style={{ padding: '6px 14px', color: '#fff', background: '#4a90e2', border: 0, borderRadius: 4 }}>
-            {pending ? 'Connecting...' : 'Create'}
+            {pending ? 'Connecting...' : submitLabel}
           </button>
         </div>
       </div>

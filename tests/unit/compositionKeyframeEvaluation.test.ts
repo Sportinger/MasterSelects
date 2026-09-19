@@ -4,6 +4,8 @@ import type { Keyframe } from '../../src/types/keyframes';
 import { evaluateCompositionClipEffects } from '../../src/services/compositionRender/keyframeEvaluation';
 import { createMockClip } from '../helpers/mockData';
 import { createTestTimelineStore } from '../helpers/storeFactory';
+import { cableFrameLayout, defaultFaceCable, encodeCableBake } from '../../src/services/faceCables/cableData';
+import { packFaceCableUniforms } from '../../src/effects/tracking/faceCableUniforms';
 
 function effectKeyframe(
   property: Keyframe['property'],
@@ -24,6 +26,32 @@ function evaluateDirectEffects(effects: Effect[], keyframes: Keyframe[], time: n
 }
 
 describe('evaluateCompositionClipEffects', () => {
+  it('renders the correct baked cable frame in direct/export and nested evaluation without live tracking', () => {
+    const cables = [{ ...defaultFaceCable(), segments: 4 }];
+    const layout = cableFrameLayout(3, cables), data = new Float32Array(layout.stride * 3);
+    for (let frame = 0; frame < 3; frame++) {
+      const base = frame * layout.stride;
+      data[base] = 1; data[base + 1] = 0.005;
+      for (let i = 0; i <= 4; i++) data.set([0.2 + frame * 0.1, 0.2 + i * 0.1, 1], base + 2 + i * 3);
+    }
+    const effect: Effect = { id: 'cables', type: 'face-cables', name: 'Face Cables', enabled: true,
+      params: { bakedData: encodeCableBake({ version: 3, fps: 30, frames: 3, duration: 0.1, cables, data }) } };
+    for (const keys of [[], [effectKeyframe('rotation.z', 0, 0)], [effectKeyframe('effect.cables.globalWindStrength', 0, 5)]]) {
+      for (const time of [2 / 30, 0, 1 / 30]) {
+        const direct = evaluateDirectEffects([effect], keys, time);
+        const nested = evaluateCompositionClipEffects([effect], keys, time);
+        expect(nested).toEqual(direct);
+        for (const evaluated of [direct, nested]) {
+          expect(evaluated[0].params.cableTime).toBe(time);
+          const uniforms = packFaceCableUniforms(evaluated[0].params as Record<string, number | string | boolean>, 1000, 1000);
+          expect(uniforms[2]).toBe(1);
+          expect(uniforms[4 + 6]).toBe(1);
+          expect(uniforms[4 + 12]).toBeCloseTo((0.2 + Math.round(time * 30) * 0.1) * 1000, 3);
+        }
+      }
+    }
+    expect(effect.params.cableTime).toBeUndefined();
+  });
   const effects: Effect[] = [{
     id: 'brightness',
     name: 'Brightness',

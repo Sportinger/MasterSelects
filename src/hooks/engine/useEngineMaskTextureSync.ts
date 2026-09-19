@@ -69,7 +69,7 @@ function getMaskShapeHash(masks: ClipMask[]): string {
       v.handleOut.x.toFixed(4),
       v.handleOut.y.toFixed(4),
     ].join(',')).join(';')}|` +
-    `${m.position.x.toFixed(4)},${m.position.y.toFixed(4)}|` +
+    `${m.position.x.toFixed(4)},${m.position.y.toFixed(4)},${(m.rotation ?? 0).toFixed(3)}|` +
     `${(m.feather || 0).toFixed(2)}|${m.featherQuality ?? 50}|` +
     `${Object.entries(m.edgeFeathers ?? {})
       .toSorted(([a], [b]) => a.localeCompare(b))
@@ -195,7 +195,9 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
     );
 
     let changed = false;
+    const activeMaskClipIds = new Set<string>();
     for (const clip of clipsAtTime) {
+      activeMaskClipIds.add(clip.id);
       const clipLocalTime = effectivePlayheadPosition - clip.startTime;
       const masks = applyMaskEditPreview(
         clip.id,
@@ -204,20 +206,9 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
       );
       changed = processClipMask({ id: clip.id, masks }, maskDimensions, renderOptions) || changed;
 
-      if (clip.nestedClips && clip.nestedClips.length > 0) {
-        const clipTime = clipLocalTime;
-        for (const nestedClip of clip.nestedClips) {
-          if (clipTime >= nestedClip.startTime && clipTime < nestedClip.startTime + nestedClip.duration) {
-            const nestedClipLocalTime = clipTime - nestedClip.startTime;
-            const nestedMasks = applyMaskEditPreview(
-              nestedClip.id,
-              getInterpolatedMasks(nestedClip.id, nestedClipLocalTime),
-              maskEditPreview,
-            );
-            changed = processClipMask({ id: nestedClip.id, masks: nestedMasks }, maskDimensions, renderOptions) || changed;
-          }
-        }
-      }
+      // NestedCompRenderer evaluates and uploads nested masks at their own
+      // composition dimensions with occurrence-specific resource IDs. Uploading
+      // them here as well creates unused full-output-size textures per occurrence.
     }
 
     for (const track of tracks) {
@@ -249,12 +240,20 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
 
       for (const clip of composition.timelineData.clips) {
         if (compositionTime < clip.startTime || compositionTime >= clip.startTime + clip.duration) continue;
+        activeMaskClipIds.add(clip.id);
         const localTime = compositionTime - clip.startTime;
         const masks = clip.transitionSourceMap?.version === 2
           ? evaluateTransitionMappedAnimation(clip, clip.keyframes, localTime)?.masks
           : evaluateCompositionClipMasks(clip.masks, clip.keyframes, localTime);
         changed = processClipMask({ id: clip.id, masks }, maskDimensions, renderOptions) || changed;
       }
+    }
+
+    for (const clipId of maskVersionRef.current.keys()) {
+      if (activeMaskClipIds.has(clipId)) continue;
+      maskVersionRef.current.delete(clipId);
+      renderHostPort.removeMaskTexture(clipId);
+      changed = true;
     }
 
     if (changed) {
@@ -290,6 +289,9 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
     const unsubscribeComp = useMediaStore.subscribe(
       (state) => state.activeCompositionId,
       () => {
+        for (const clipId of maskVersionRef.current.keys()) {
+          renderHostPort.removeMaskTexture(clipId);
+        }
         maskVersionRef.current.clear();
         updateMaskTextures();
       }

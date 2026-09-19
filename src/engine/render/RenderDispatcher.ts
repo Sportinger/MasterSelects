@@ -1,7 +1,7 @@
 // RenderDispatcher â€” extracted render methods from WebGPUEngine
 // Handles: render(), renderEmptyFrame(), renderToPreviewCanvas(), renderCachedFrame()
 
-import type { Layer, LayerRenderData } from '../core/types';
+import type { Layer } from '../core/types';
 import type { ModelSequenceData } from '../../types/mediaSequences';
 import type { TextureManager } from '../texture/TextureManager';
 import type { MaskTextureManager } from '../texture/MaskTextureManager';
@@ -21,14 +21,15 @@ import type { PerformanceStats } from '../stats/PerformanceStats';
 import type { RenderLoop } from './RenderLoop';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
+import { getSplitCompareSettings } from '../../stores/splitCompareStore';
 import { reportRenderTime } from '../../services/performanceMonitor';
 import { Logger } from '../../services/logger';
 import { scrubSettleState } from '../../services/scrubSettleState';
 import { exportGpuPhaseDiagnostics } from '../../services/export/exportGpuPhaseDiagnostics';
 import { flags } from '../featureFlags';
 import type { NativeSceneRenderer } from '../native3d/NativeSceneRenderer';
+import type { EffectsPipeline } from '../../effects/EffectsPipeline';
 import { collectActiveSceneSplatEffectors } from '../scene/SceneEffectorUtils';
-import type { SceneCameraConfig, SceneSplatEffectorRuntimeData } from '../scene/types';
 import { resolveSharedSplatSceneKey } from '../scene/runtime/SharedSplatRuntimeUtils';
 import type { MotionRenderer } from '../motion/MotionRenderer';
 import { applyMotionRenderPlacement } from '../motion/MotionTypes';
@@ -53,6 +54,8 @@ import { GaussianSequenceFacet, type GaussianSplatSceneLoadRequest } from './dis
 import { GaussianSplatSceneLoader } from './dispatcher/gaussianSplatSceneLoader';
 import { SharedScene3DProcessor } from './dispatcher/sharedScene3DProcessor';
 import { TargetPreviewRenderer } from './dispatcher/targetPreviewRenderer';
+import { renderHeldCompositeFrame } from './dispatcher/heldCompositeRenderer';
+import { resolveRenderReferenceSize } from './renderReferenceSize';
 
 export type { RenderDispatcherDebugSnapshot } from './dispatcher/dispatcherDebugSnapshot';
 
@@ -86,6 +89,7 @@ export interface RenderDeps {
   previewContext: GPUCanvasContext | null;
   targetCanvases: Map<string, { canvas: HTMLCanvasElement; context: GPUCanvasContext }>;
   compositorPipeline: CompositorPipeline | null;
+  effectsPipeline: EffectsPipeline | null;
   outputPipeline: OutputPipeline | null;
   slicePipeline: SlicePipeline | null;
   textureManager: TextureManager | null;
@@ -143,6 +147,7 @@ export class RenderDispatcher {
   private readonly emptyFrameRenderer: EmptyFrameRenderer;
   private readonly targetPreviewRenderer: TargetPreviewRenderer;
   private lastCompositeView: GPUTextureView | null = null;
+  private lastPreviewTimelineTimeSeconds: number | null = null;
   private renderTimeOverride: number | null = null;
 
   constructor(deps: RenderDeps, outputRouter?: RenderOutputRouter) {
@@ -179,9 +184,15 @@ export class RenderDispatcher {
           ? this.preloadSceneModelAsset(url, fileName, modelSequence)
           : this.preloadSceneModelAsset(url, fileName),
       ensureGaussianSplatSceneLoaded: (request) => this.ensureGaussianSplatSceneLoaded(request),
+      ensureFlockLayersReady: async (layers) => {
+        const device = this.deps.getDevice();
+        if (!device) throw new Error('Export cannot render flock clips without a GPU device');
+        const { getFlockSimulationRegistry } = await import('../flock/runtime/FlockSimulationRegistry');
+        await getFlockSimulationRegistry().prepareForExport(device, layers);
+      },
     });
     this.gaussianSequenceFacet = new GaussianSequenceFacet({
-      resolveSceneKey: (clipId, runtimeKey) => this.getNativeGaussianSplatSceneKey(clipId, runtimeKey),
+      resolveSceneKey: (clipId, runtimeKey) => resolveSharedSplatSceneKey({ clipId, runtimeKey }),
       isSplatLoading: (sceneKey) => this.splatSceneLoader.isLoading(sceneKey),
       ensureSceneLoaded: (request) => this.ensureGaussianSplatSceneLoaded(request),
     });
@@ -191,8 +202,12 @@ export class RenderDispatcher {
       gaussianSequenceFacet: this.gaussianSequenceFacet,
       getLastRenderDebugSnapshot: () => this.lastRenderDebugSnapshot,
       getEffectiveTimelineTime: () => this.getEffectiveTimelineTime(),
-      collectActiveSplatEffectors: (width, height) => this.collectActiveSplatEffectors(width, height),
-      getNativeGaussianSplatSceneKey: (clipId, runtimeKey) => this.getNativeGaussianSplatSceneKey(clipId, runtimeKey),
+      collectActiveSplatEffectors: (width, height) => collectActiveSceneSplatEffectors(
+        width,
+        height,
+        this.getEffectiveTimelineTime(),
+      ),
+      getNativeGaussianSplatSceneKey: (clipId, runtimeKey) => resolveSharedSplatSceneKey({ clipId, runtimeKey }),
       isSplatLoading: (sceneKey) => this.splatSceneLoader.isLoading(sceneKey),
       ensureGaussianSplatSceneLoaded: (request) => this.ensureGaussianSplatSceneLoaded(request),
     });
@@ -204,9 +219,27 @@ export class RenderDispatcher {
     this.targetPreviewRenderer = new TargetPreviewRenderer(
       this.deps,
       recordMainPreviewFrame,
-      (layerData, device, width, height, cameraOverride, targetId) => {
+      (
+        layerData,
+        device,
+        width,
+        height,
+        referenceWidth,
+        referenceHeight,
+        cameraOverride,
+        targetId,
+      ) => {
         if (flags.use3DLayers) {
-          this.process3DLayers(layerData, device, width, height, cameraOverride, targetId);
+          this.sharedScene3DProcessor.process3DLayers(
+            layerData,
+            device,
+            width,
+            height,
+            referenceWidth,
+            referenceHeight,
+            cameraOverride,
+            targetId,
+          );
         }
       },
       () => this.getEffectiveTimelineTime(),
@@ -227,24 +260,6 @@ export class RenderDispatcher {
 
   private getTimelineState() {
     return useTimelineStore.getState();
-  }
-
-  private getNativeGaussianSplatSceneKey(
-    clipId: string,
-    runtimeKey?: string,
-  ): string {
-    return resolveSharedSplatSceneKey({
-      clipId,
-      runtimeKey,
-    });
-  }
-
-  private collectActiveSplatEffectors(width: number, height: number): SceneSplatEffectorRuntimeData[] {
-    return collectActiveSceneSplatEffectors(
-      width,
-      height,
-      this.getEffectiveTimelineTime(),
-    );
   }
 
   async ensureGaussianSplatSceneLoaded(options: GaussianSplatSceneLoadRequest): Promise<boolean> {
@@ -310,9 +325,21 @@ export class RenderDispatcher {
     const { width, height } = d.renderTargetManager.getResolution();
     const skipEffects = false;
     const isExporting = d.exportCanvasManager.getIsExporting();
+    const mediaState = useMediaStore.getState();
+    const exportComposition = isExporting
+      ? mediaState.compositions.find((composition) => composition.id === frameContext?.compositionId)
+      : undefined;
+    const referenceSize = resolveRenderReferenceSize(
+      width,
+      height,
+      isExporting,
+      exportComposition
+        ? { width: exportComposition.width, height: exportComposition.height }
+        : undefined,
+    );
     const frameTimelineTime = frameContext?.timelineTimeSeconds
       ?? this.getEffectiveTimelineTime();
-    const timelineState = useTimelineStore.getState();
+    const timelineState = this.getTimelineState();
     const isPlaying =
       (d.renderLoop?.getIsPlaying() ?? false) &&
       timelineState.isPlaying;
@@ -377,10 +404,22 @@ export class RenderDispatcher {
           this.lastRenderHadContent,
           previewFallback.targetTimeMs,
         );
+      const hasContinuousTimelineTime =
+        this.lastPreviewTimelineTimeSeconds === null ||
+        Math.abs(frameTimelineTime - this.lastPreviewTimelineTimeSeconds) < 0.25;
+      const canHoldPlayingEmptyFrame =
+        isPlaying &&
+        this.lastRenderHadContent &&
+        hasContinuousTimelineTime &&
+        (this.lastPreviewTimelineTimeSeconds !== null ||
+          this.telemetry.shouldHoldLastFrameOnEmptyPlayback(
+            this.lastRenderHadContent,
+            previewFallback.targetTimeMs,
+          ));
       const shouldHoldEmptyFrame =
         hasVisibleInputLayer &&
         (
-          (isPlaying && this.telemetry.shouldHoldLastFrameOnEmptyPlayback(this.lastRenderHadContent, previewFallback.targetTimeMs)) ||
+          canHoldPlayingEmptyFrame ||
           canHoldEmptyScrubFrame ||
           canHoldPausedEmptyFrame
         );
@@ -407,11 +446,13 @@ export class RenderDispatcher {
             displayedTimeMs: lastPreviewDisplayedTimeMs,
           }
         );
+        this.lastPreviewTimelineTimeSeconds = frameTimelineTime;
         d.performanceStats.setLayerCount(0);
         return;
       }
       this.lastRenderHadContent = false;
       this.lastCompositeView = null;
+      this.lastPreviewTimelineTimeSeconds = null;
       this.renderEmptyFrame(device);
       d.nestedCompRenderer?.cleanupPendingTextures();
       this.recordMainPreviewFrame('empty', undefined, previewFallback);
@@ -419,10 +460,18 @@ export class RenderDispatcher {
       return;
     }
     this.lastRenderHadContent = true;
+    this.lastPreviewTimelineTimeSeconds = frameTimelineTime;
 
     // === Shared 3D Scene Pass ===
     if (flags.use3DLayers) {
-      this.process3DLayers(layerData, device, width, height);
+      this.sharedScene3DProcessor.process3DLayers(
+        layerData,
+        device,
+        width,
+        height,
+        referenceSize.width,
+        referenceSize.height,
+      );
     }
     debugSnapshot.after3DLayerData = layerData.length;
 
@@ -437,7 +486,7 @@ export class RenderDispatcher {
       ? createMotionFrameRuntimeAdmission({
           consumer: isExporting ? 'export' : 'preview',
           compositionId: frameContext?.compositionId
-            ?? useMediaStore.getState().activeCompositionId
+            ?? mediaState.activeCompositionId
             ?? 'timeline:active',
           timelineTimeSeconds: frameTimelineTime,
           layers: motionFrameLayers,
@@ -545,12 +594,16 @@ export class RenderDispatcher {
     const effectTempView = d.renderTargetManager.getEffectTempView() ?? undefined;
     const effectTempTexture2 = d.renderTargetManager.getEffectTempTexture2() ?? undefined;
     const effectTempView2 = d.renderTargetManager.getEffectTempView2() ?? undefined;
+    const effectCompareView = d.renderTargetManager.getEffectCompareView() ?? undefined;
 
     const commandEncoder = device.createCommandEncoder();
     const result = d.compositor.composite(layerData, commandEncoder, {
       device, sampler: d.sampler, pingView, pongView, outputWidth: width, outputHeight: height,
+      referenceWidth: referenceSize.width, referenceHeight: referenceSize.height,
       skipEffects,
       effectTempTexture, effectTempView, effectTempTexture2, effectTempView2,
+      effectCompareView,
+      splitCompare: isExporting ? undefined : getSplitCompareSettings(),
       motionTime: frameTimelineTime,
       particleQuality: isExporting ? 'export' : 'preview',
     });
@@ -661,45 +714,17 @@ export class RenderDispatcher {
     reportRenderTime(totalTime);
   }
 
-  /**
-   * Process 3D layers through the shared scene renderer and replace them
-   * with a single synthetic LayerRenderData entry.
-   */
-  private process3DLayers(
-    layerData: LayerRenderData[],
-    device: GPUDevice,
-    width: number,
-    height: number,
-    cameraOverride?: SceneCameraConfig | null,
-    targetId?: string,
-  ): void {
-    this.sharedScene3DProcessor.process3DLayers(layerData, device, width, height, cameraOverride, targetId);
-  }
-
   private renderHeldCompositeFrame(device: GPUDevice): boolean {
     const d = this.deps;
-    if (!this.lastCompositeView || !d.sampler || d.exportCanvasManager.shouldSkipPreviewOutput()) {
-      return false;
-    }
-
-    const commandEncoder = device.createCommandEncoder();
-    const outputSnapshot = this.outputRouter.captureSnapshot();
-    this.outputRouter.routeCompositeFrame({
-      commandEncoder,
+    const rendered = renderHeldCompositeFrame({
+      device,
       sourceView: this.lastCompositeView,
       sampler: d.sampler,
-      snapshot: outputSnapshot,
-      targetIds: outputSnapshot.activeCompositionTargetIds,
+      outputRouter: this.outputRouter,
+      skipOutput: d.exportCanvasManager.shouldSkipPreviewOutput(),
     });
-
-    try {
-      device.queue.submit([commandEncoder.finish()]);
-      return true;
-    } catch (e) {
-      log.warn('Failed to render held composite frame', e);
-      this.lastCompositeView = null;
-      return false;
-    }
+    if (!rendered) this.lastCompositeView = null;
+    return rendered;
   }
 
   getGaussianSplatSceneBounds(clipId: string): { min: [number, number, number]; max: [number, number, number] } | undefined {

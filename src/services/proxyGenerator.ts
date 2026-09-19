@@ -29,6 +29,9 @@ import {
 import { ProxySceneCutAnalyzer } from './sceneCutDetection/proxySceneCutAnalyzer';
 import { getSceneCutCompletenessError } from './sceneCutDetection/sceneCutDetector';
 import type { SceneCutAnalysis } from '../types/sceneCutAnalysis';
+import { flags } from '../engine/featureFlags';
+import { selectRuntimeFrameProviderPlan } from './mediaRuntime/providerSelection';
+import { generateTurboResProxy } from './proxyGeneration/turboResProxyStrategy';
 
 const log = Logger.create('ProxyGenerator');
 
@@ -41,6 +44,7 @@ export interface ProxyGenerationOptions {
   analyzeSceneCuts?: boolean;
   sceneCutsOnly?: boolean;
   onSceneCutProgress?: (progress: number) => void;
+  videoCodecId?: string;
 }
 
 class ProxyGeneratorWebCodecs {
@@ -96,6 +100,26 @@ class ProxyGeneratorWebCodecs {
     sceneCutAnalysis?: SceneCutAnalysis;
     sceneCutError?: string;
   } | null> {
+    const providerPlan = selectRuntimeFrameProviderPlan({
+      videoCodecId: options.videoCodecId,
+      turboResEnabled: flags.turboResProRes,
+    });
+    if (providerPlan.backend === 'unsupported') {
+      throw new Error('Proxy and scene-cut generation do not support ProRes RAW.');
+    }
+    if (providerPlan.backend === 'turbores' || providerPlan.backend === 'hap') {
+      return generateTurboResProxy({
+        file,
+        mediaFileId: _mediaFileId,
+        fourCC: providerPlan.fourCC,
+        backend: providerPlan.backend,
+        onProgress,
+        checkCancelled,
+        saveFrame,
+        existingFrameIndices,
+        options,
+      });
+    }
     this.resetGenerationState(file, onProgress, checkCancelled, saveFrame, options);
     let resumeFrameIndices = existingFrameIndices;
 

@@ -2,11 +2,68 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createTransitionSourceClip,
+  findActiveTransitionPlanForTrack,
   planTransition,
 } from '../../src/stores/timeline/editOperations/transitionPlanner';
 import { createMockClip } from '../helpers/mockData';
 
+function createTransitionPair(overrides: {
+  trackId?: string;
+  startTime?: number;
+  duration?: number;
+} = {}) {
+  const trackId = overrides.trackId ?? 'track-1';
+  const startTime = overrides.startTime ?? 0;
+  const duration = overrides.duration ?? 10;
+  const outgoingClip = createMockClip({
+    id: 'outgoing',
+    trackId,
+    startTime,
+    duration,
+    transitionOut: {
+      id: 'transition-1',
+      type: 'crossfade',
+      duration: 2,
+      linkedClipId: 'incoming',
+    },
+  });
+  const incomingClip = createMockClip({
+    id: 'incoming',
+    trackId,
+    startTime: startTime + duration,
+    duration: 8,
+    transitionIn: {
+      id: 'transition-1',
+      type: 'crossfade',
+      duration: 2,
+      linkedClipId: 'outgoing',
+    },
+  });
+  return { outgoingClip, incomingClip };
+}
+
 describe('transitionPlanner', () => {
+  it('places codec datamosh after the cut for its full mosh duration', () => {
+    const outgoingClip = createMockClip({ id: 'outgoing', startTime: 0, duration: 10 });
+    const incomingClip = createMockClip({ id: 'incoming', startTime: 10, duration: 8 });
+
+    const plan = planTransition({
+      outgoingClip,
+      incomingClip,
+      transitionType: 'datamosh',
+      requestedDuration: 2,
+      placement: 'center',
+      junctionTime: 10,
+    });
+
+    expect(plan).toMatchObject({
+      placement: 'start-at-cut',
+      bodyStart: 10,
+      bodyEnd: 12,
+      resolvedDuration: 2,
+    });
+  });
+
   it('plans first-pass end-at-cut as a virtual handle-based transition', () => {
     const outgoingClip = createMockClip({
       id: 'outgoing',
@@ -292,5 +349,111 @@ describe('transitionPlanner', () => {
       edgePolicy: 'hold',
       junctionTime: 10,
     })).toBeNull();
+  });
+
+  it('invalidates transition candidates when clips are added or removed', () => {
+    const { outgoingClip, incomingClip } = createTransitionPair();
+    const withoutTransition = [incomingClip];
+
+    expect(findActiveTransitionPlanForTrack({
+      clips: withoutTransition,
+      trackId: 'track-1',
+      time: 9.5,
+    })).toBeNull();
+
+    const withTransition = [...withoutTransition, outgoingClip];
+    expect(findActiveTransitionPlanForTrack({
+      clips: withTransition,
+      trackId: 'track-1',
+      time: 9.5,
+    })?.outgoingClip.id).toBe('outgoing');
+
+    const removedTransition = withTransition.filter(clip => clip.id !== 'outgoing');
+    expect(findActiveTransitionPlanForTrack({
+      clips: removedTransition,
+      trackId: 'track-1',
+      time: 9.5,
+    })).toBeNull();
+  });
+
+  it('invalidates sorted candidates after a clip timing move', () => {
+    const initial = createTransitionPair();
+    const initialClips = [initial.outgoingClip, initial.incomingClip];
+
+    expect(findActiveTransitionPlanForTrack({
+      clips: initialClips,
+      trackId: 'track-1',
+      time: 9.5,
+    })?.outgoingClip.id).toBe('outgoing');
+
+    const moved = createTransitionPair({ startTime: 20 });
+    const movedClips = [moved.incomingClip, moved.outgoingClip];
+    expect(findActiveTransitionPlanForTrack({
+      clips: movedClips,
+      trackId: 'track-1',
+      time: 9.5,
+    })).toBeNull();
+    expect(findActiveTransitionPlanForTrack({
+      clips: movedClips,
+      trackId: 'track-1',
+      time: 29.5,
+    })?.outgoingClip.id).toBe('outgoing');
+  });
+
+  it('uses an edited clip duration after clip-array replacement', () => {
+    const initial = createTransitionPair();
+    const initialClips = [initial.outgoingClip, initial.incomingClip];
+
+    expect(findActiveTransitionPlanForTrack({
+      clips: initialClips,
+      trackId: 'track-1',
+      time: 9.5,
+    })?.plan.junctionTime).toBe(10);
+
+    const shortened = createTransitionPair({ duration: 6 });
+    const shortenedClips = [shortened.outgoingClip, shortened.incomingClip];
+    expect(findActiveTransitionPlanForTrack({
+      clips: shortenedClips,
+      trackId: 'track-1',
+      time: 9.5,
+    })).toBeNull();
+    expect(findActiveTransitionPlanForTrack({
+      clips: shortenedClips,
+      trackId: 'track-1',
+      time: 5.5,
+    })?.plan.junctionTime).toBe(6);
+  });
+
+  it('indexes a 1682-clip no-transition timeline only once per clip-array identity', () => {
+    let transitionReads = 0;
+    const clips = Array.from({ length: 1682 }, (_, index) => new Proxy(
+      createMockClip({
+        id: `clip-${index}`,
+        trackId: `track-${index}`,
+        startTime: index,
+      }),
+      {
+        get(target, property, receiver) {
+          if (property === 'transitionOut') transitionReads += 1;
+          return Reflect.get(target, property, receiver);
+        },
+      },
+    ));
+
+    expect(findActiveTransitionPlanForTrack({
+      clips,
+      trackId: 'track-0',
+      time: 0,
+    })).toBeNull();
+    expect(transitionReads).toBe(1682);
+
+    for (let index = 0; index < 500; index += 1) {
+      expect(findActiveTransitionPlanForTrack({
+        clips,
+        trackId: `track-${index}`,
+        time: index,
+      })).toBeNull();
+    }
+    expect(transitionReads).toBe(1682);
   });
 });

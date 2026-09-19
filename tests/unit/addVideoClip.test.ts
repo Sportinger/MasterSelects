@@ -51,6 +51,9 @@ import {
   loadAudioMedia,
 } from '../../src/stores/timeline/clip/addAudioClip';
 import { loadVideoMedia } from '../../src/stores/timeline/clip/addVideoClip';
+import { flags } from '../../src/engine/featureFlags';
+import { bindRuntimeToClip } from '../../src/services/mediaRuntime/clipBindings';
+import { mediaRuntimeRegistry } from '../../src/services/mediaRuntime/registry';
 
 function createFile(name: string, type: string): File {
   return new File(['media'], name, { type });
@@ -74,6 +77,7 @@ function createTimelineClip(id: string, duration: number): TimelineClip {
 describe('direct video/audio add runtime sources', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mediaRuntimeRegistry.clear();
     vi.mocked(useMediaStore.getState).mockReturnValue({
       files: [],
       getFileByName: vi.fn(() => true),
@@ -81,6 +85,79 @@ describe('direct video/audio add runtime sources', () => {
     } as unknown as ReturnType<typeof useMediaStore.getState>);
     webCodecsHelperMocks.waitForVideoMetadata.mockResolvedValue(undefined);
     mp4MetadataMocks.getMP4MetadataFast.mockResolvedValue({ duration: 12, hasAudio: true });
+    flags.turboResProRes = false;
+  });
+
+  it('starts an independent audio proxy for an enabled ProRes clip with audio', async () => {
+    flags.turboResProRes = true;
+    const generateAudioProxy = vi.fn(async () => undefined);
+    vi.mocked(useMediaStore.getState).mockReturnValue({
+      files: [{
+        id: 'media-prores',
+        name: 'camera.mov',
+        duration: 6,
+        hasAudio: true,
+        videoCodecId: 'apch',
+      }],
+      getFileByName: vi.fn(() => true),
+      importFile: vi.fn(),
+      generateAudioProxy,
+    } as unknown as ReturnType<typeof useMediaStore.getState>);
+
+    await loadVideoMedia({
+      clipId: 'video-prores',
+      audioClipId: 'audio-prores',
+      file: createFile('camera.mov', 'video/quicktime'),
+      mediaFileId: 'media-prores',
+      authoritativeNaturalDuration: 6,
+      thumbnailsEnabled: false,
+      waveformsEnabled: false,
+      updateClip: vi.fn(),
+      setClips: vi.fn(),
+    });
+
+    expect(generateAudioProxy).toHaveBeenCalledWith('media-prores');
+    flags.turboResProRes = false;
+  });
+
+  it('releases the runtime owner when a no-audio linked placeholder is removed', async () => {
+    const file = createFile('silent-prores.mov', 'video/quicktime');
+    vi.mocked(useMediaStore.getState).mockReturnValue({
+      files: [{
+        id: 'media-silent-prores',
+        file,
+        name: file.name,
+        duration: 1,
+        hasAudio: false,
+        videoCodecId: 'apch',
+      }],
+      getFileByName: vi.fn(() => true),
+      importFile: vi.fn(),
+      generateAudioProxy: vi.fn(),
+    } as unknown as ReturnType<typeof useMediaStore.getState>);
+
+    let clips = [bindRuntimeToClip(
+      createTimelineClip('audio-placeholder', 1),
+      { file, mediaFileId: 'media-silent-prores' },
+    )];
+    expect(mediaRuntimeRegistry.getRuntime('media:media-silent-prores')?.ownerCount()).toBe(1);
+
+    await loadVideoMedia({
+      clipId: 'video-silent-prores',
+      audioClipId: 'audio-placeholder',
+      file,
+      mediaFileId: 'media-silent-prores',
+      authoritativeNaturalDuration: 1,
+      thumbnailsEnabled: false,
+      waveformsEnabled: false,
+      updateClip: vi.fn(),
+      setClips: (updater) => {
+        clips = updater(clips);
+      },
+    });
+
+    expect(clips).toHaveLength(0);
+    expect(mediaRuntimeRegistry.getRuntime('media:media-silent-prores')).toBeNull();
   });
 
   it('loads browser video metadata without persisting video/audio elements on linked clips', async () => {
@@ -116,7 +193,7 @@ describe('direct video/audio add runtime sources', () => {
     expect(videoPatch.source).toEqual({ type: 'video', naturalDuration: 12, mediaFileId: 'media-video' });
     expect(videoPatch.source).not.toHaveProperty('videoElement');
     expect(videoPatch.source).not.toHaveProperty('webCodecsPlayer');
-    expect(videoPatch.transform).toEqual(expect.objectContaining({ scale: { x: 1, y: 1 } }));
+    expect(videoPatch).not.toHaveProperty('transform');
     expect(videoPatch.isLoading).toBe(false);
     expect(audioPatch.source).toEqual({ type: 'audio', naturalDuration: 12, mediaFileId: 'media-video' });
     expect(audioPatch.source).not.toHaveProperty('audioElement');

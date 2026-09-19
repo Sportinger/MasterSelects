@@ -37,6 +37,7 @@ interface FileMenuProps extends ToolbarMenuController {
   onNew: () => void;
   onOpen: () => void;
   onOpenRecent: (projectId: string) => void;
+  onRename: () => void;
   onSave: () => void;
   onSaveAs: () => void;
 }
@@ -53,6 +54,7 @@ export function FileMenu({
   onNew,
   onOpen,
   onOpenRecent,
+  onRename,
   onSave,
   onSaveAs,
   openMenu,
@@ -126,6 +128,9 @@ export function FileMenu({
           <button className="menu-option" onClick={onSaveAs} disabled={isLoading}>
             <span>Save As...</span>
             <span className="shortcut">{shortcutLabels.saveAs}</span>
+          </button>
+          <button className="menu-option" onClick={onRename} disabled={isLoading || !isProjectOpen}>
+            <span>Rename Project...</span>
           </button>
           {isProjectOpen && (
             <>

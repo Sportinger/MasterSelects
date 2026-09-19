@@ -22,6 +22,8 @@ import {
   restoreDeferredMediaCacheState,
 } from './loadMediaCacheHydration';
 import { reloadNestedCompositionClips } from './loadTimelineHydration';
+import { restoreSelectedMediaSource } from '../linkedMediaSources';
+import { isRestoredMediaSourceCompatible } from '../mediaSourceValidation';
 
 const log = Logger.create('ProjectSync');
 const EAGER_METADATA_RESTORE_MEDIA_LIMIT = 120;
@@ -119,8 +121,14 @@ export async function runPostLoadRestoration(projectData: ProjectFile, hydrateFi
 async function autoRelinkFromRawFolder(): Promise<void> {
   if (!projectFileService.isProjectOpen()) return;
 
-  const mediaState = useMediaStore.getState();
-  const missingFiles = mediaState.files.filter(f => !f.liveInput && !f.file && !f.url);
+  const linkedSourceFiles = useMediaStore.getState().files.filter(
+    (file) => !file.liveInput && !file.file && !file.url && file.linkedSources?.length,
+  );
+  for (const file of linkedSourceFiles) {
+    await restoreSelectedMediaSource(file.id);
+  }
+
+  const missingFiles = useMediaStore.getState().files.filter(f => !f.liveInput && !f.file && !f.url);
   if (missingFiles.length === 0) {
     log.info(' No missing files to relink');
     return;
@@ -158,7 +166,16 @@ async function autoRelinkFromRawFolder(): Promise<void> {
     const match = findRelinkMatch(file, candidateMap);
     if (!match) continue;
 
-    const applied = await applyRelinkMatch(file.id, match, { generateThumbnails: false });
+    // Folder matching only identifies a candidate. Auto-relink must preserve identity.
+    if (match.kind === 'single') {
+      const candidateFile = match.candidate.file ?? await match.candidate.handle?.getFile().catch(() => undefined);
+      if (!candidateFile || !await isRestoredMediaSourceCompatible(file, candidateFile)) continue;
+      match.candidate = { ...match.candidate, file: candidateFile };
+    }
+    const applied = await applyRelinkMatch(file.id, match, { generateThumbnails: false }).catch(error => {
+      log.warn('Auto-relink candidate rejected', { name: file.name, error });
+      return false;
+    });
     if (applied) {
       relinkedByProjectScan.add(file.id);
       relinkedCount++;
@@ -181,6 +198,7 @@ async function autoRelinkFromRawFolder(): Promise<void> {
 
         if (permission === 'granted') {
           const fileObj = await fileHandle.getFile();
+          if (!await isRestoredMediaSourceCompatible(file, fileObj)) continue;
           const url = createPrimaryMediaObjectUrl(file.id, fileObj);
           const sourceReplacementPatch = await createMediaSourceReplacementPatch(fileObj);
 

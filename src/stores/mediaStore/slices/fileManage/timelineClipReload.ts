@@ -16,10 +16,11 @@ import {
   createSourceReplacementClipAudioPatch,
   invalidateMediaSourceReplacementCaches,
 } from './sourceReplacementCache';
+import { bindRuntimeToClip } from '../../../../services/mediaRuntime/clipBindings';
 
 /**
  * Update timeline clips with reloaded file.
- * Writes data-only clip sources for video/audio; runtime hydration happens lazily.
+ * Rebinds video/audio clip sources to the replacement file runtime.
  * Exported for use by projectSync auto-relink.
  */
 export type UpdateTimelineClipsOptions = {
@@ -65,38 +66,56 @@ export async function updateTimelineClips(
   };
 
   for (const clip of clips) {
-    const sourceType = clip.source?.type;
+    const trackType = timelineStore.tracks.find((track) => track.id === clip.trackId)?.type;
+    const sourceType = trackType === 'audio' ? 'audio' : clip.source?.type;
 
     if (sourceType === 'video') {
       const naturalDuration = clip.source?.naturalDuration || mediaFile?.duration || clip.duration;
       const sourceUrl = getSharedFileUrl();
-      timelineStore.updateClip(clip.id, {
+      const updates = {
         ...createSourceReplacementClipAudioPatch(clip),
         file,
         needsReload: false,
         isLoading: false,
         source: {
-          type: 'video',
+          type: 'video' as const,
           naturalDuration,
           mediaFileId,
         },
-      });
+      };
+      const runtimeClip = bindRuntimeToClip({ ...clip, ...updates }, { file, mediaFileId });
+      timelineStore.updateClip(clip.id, { ...updates, source: runtimeClip.source });
       if (generateThumbnails) {
         void thumbnailCacheService.generateForSourceUrl(mediaFileId, sourceUrl, naturalDuration, fileHash);
       }
     } else if (sourceType === 'audio') {
       const naturalDuration = clip.source?.naturalDuration || mediaFile?.duration || clip.duration;
-      timelineStore.updateClip(clip.id, {
+      if (mediaFile?.type === 'video' && mediaFile.hasAudio === false) {
+        timelineStore.updateClip(clip.id, {
+          file: undefined,
+          needsReload: true,
+          isLoading: false,
+          source: {
+            type: 'audio',
+            naturalDuration,
+            mediaFileId,
+          },
+        });
+        continue;
+      }
+      const updates = {
         ...createSourceReplacementClipAudioPatch(clip),
         file,
         needsReload: false,
         isLoading: false,
         source: {
-          type: 'audio',
+          type: 'audio' as const,
           naturalDuration,
           mediaFileId,
         },
-      });
+      };
+      const runtimeClip = bindRuntimeToClip({ ...clip, ...updates }, { file, mediaFileId });
+      timelineStore.updateClip(clip.id, { ...updates, source: runtimeClip.source });
     } else if (sourceType === 'image') {
       const imageUrl = getSharedFileUrl();
       const naturalDuration = clip.source?.naturalDuration || mediaFile?.duration || clip.duration;

@@ -24,4 +24,5 @@ declare module '*.wgsl' {
 }
 
 declare const __DEV_BRIDGE_TOKEN__: string;
+declare const __APP_BUILD_ID__: string;
 declare const __DEV_ALLOWED_FILE_ROOTS__: string[];

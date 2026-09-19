@@ -59,7 +59,7 @@ describe('PropertyRegistry', () => {
     const updated = registry.writeValue<number>(clip, 'scale.all', 2);
 
     expect(updated.transform.scale).toEqual({ x: 1, y: 1, all: 2 });
-    expect(getEffectiveScale(updated.transform.scale)).toEqual({ x: 2, y: 2 });
+    expect(getEffectiveScale(updated.transform.scale)).toEqual({ x: 2, y: 2, z: 2 });
   });
 
   it('searches registered labels and aliases', () => {

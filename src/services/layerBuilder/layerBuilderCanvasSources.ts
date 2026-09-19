@@ -3,7 +3,7 @@ import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import { mathSceneRenderer } from '../mathScene/MathSceneRenderer';
 import { renderCaptionTextClipFrame } from '../captions/captionTextRuntime';
 import { vectorAnimationRuntimeManager } from '../vectorAnimation/VectorAnimationRuntimeManager';
-import { getClipTimeInfo } from './FrameContext';
+import { getClipSourceTimeAtTimelineTime, getClipTimeInfo } from './FrameContext';
 import { buildLayerBuilderTextLayer, buildNestedTextSourceLayer } from './layerBuilder2dSources';
 import type { TransformCache } from './TransformCache';
 import type { FrameContext } from './types';
@@ -46,7 +46,8 @@ export function syncLayerBuilderCanvasRuntimeSources(ctx: FrameContext): void {
       clips: ctx.clips,
       tracks: ctx.tracks,
       timelineTime: ctx.playheadPosition,
-      resolveSourceTime: sourceClip => getClipTimeInfo(ctx, sourceClip).clipTime,
+      resolveSourceTime: (sourceClip, timelineTime) =>
+        getClipSourceTimeAtTimelineTime(ctx, sourceClip, timelineTime),
       textPropertiesOverride: hasBoundsKeyframes && interpolatedTextBounds
         ? { ...clip.textProperties, boxEnabled: true, textBounds: interpolatedTextBounds }
         : undefined,

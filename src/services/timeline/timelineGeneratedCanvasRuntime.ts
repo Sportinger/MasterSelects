@@ -16,6 +16,11 @@ export interface TimelineTextCanvasRuntime {
 
 const DEFAULT_CANVAS_WIDTH = 1920;
 const DEFAULT_CANVAS_HEIGHT = 1080;
+const sharedImmutableTextCanvases = new WeakSet<HTMLCanvasElement>();
+
+export function markTimelineTextCanvasRuntimeShared(canvas: HTMLCanvasElement): void {
+  sharedImmutableTextCanvases.add(canvas);
+}
 
 function resolveCanvasDimensions(dimensions?: TimelineGeneratedCanvasDimensions): Required<TimelineGeneratedCanvasDimensions> {
   return {
@@ -112,6 +117,7 @@ export function renderTimelineTextCanvasRuntime(params: {
 }): HTMLCanvasElement {
   const { width, height } = resolveCanvasDimensions(params.dimensions);
   const canvas = params.currentCanvas &&
+    !sharedImmutableTextCanvases.has(params.currentCanvas) &&
     params.currentCanvas.width === width &&
     params.currentCanvas.height === height
     ? params.currentCanvas

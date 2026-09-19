@@ -1,0 +1,3 @@
+# Corpus references are byte-pinned, including the historical archive reference.
+baseline-corpus.json -text
+baseline-corpus.git-v2.json -text

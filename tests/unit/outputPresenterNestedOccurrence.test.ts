@@ -1,10 +1,45 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  cacheActiveCompOutput,
   copyNestedCompTextureToPreview,
   type OutputPresenterDeps,
 } from '../../src/engine/engineCore/outputPresenter';
 
 describe('outputPresenter nested occurrence copy', () => {
+  it.each([
+    { finalIsPing: true, expectedSource: 'ping' },
+    { finalIsPing: false, expectedSource: 'pong' },
+  ])('caches the completed $expectedSource accumulator rather than the previous intermediate', ({
+    finalIsPing,
+    expectedSource,
+  }) => {
+    const pingTexture = { id: 'ping' } as unknown as GPUTexture;
+    const pongTexture = { id: 'pong' } as unknown as GPUTexture;
+    const cacheOutput = vi.fn();
+    const resources = {
+      compositor: { getLastRenderWasPing: vi.fn(() => finalIsPing) },
+      renderTargetManager: {
+        getPingTexture: vi.fn(() => pingTexture),
+        getPongTexture: vi.fn(() => pongTexture),
+        getResolution: vi.fn(() => ({ width: 1920, height: 1080 })),
+      },
+      nestedCompRenderer: { cacheActiveCompOutput: cacheOutput },
+    };
+    const deps = {
+      getResources: () => resources,
+    } as unknown as OutputPresenterDeps;
+
+    cacheActiveCompOutput(deps, 'active-comp', 2.5);
+
+    expect(cacheOutput).toHaveBeenCalledWith(
+      'active-comp',
+      expectedSource === 'ping' ? pingTexture : pongTexture,
+      1920,
+      1080,
+      2.5,
+    );
+  });
+
   it('forwards the exact occurrence key to the texture lookup', () => {
     const view = { label: 'nested-occurrence-view' } as unknown as GPUTextureView;
     const getTexture = vi.fn(() => ({ view }));

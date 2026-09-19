@@ -23,6 +23,9 @@ import {
 import { buildTextLikeLayer, isTextLikeClipSource } from './layerBuilder/textLayers';
 import { buildVideoLayer } from './layerBuilder/videoLayers';
 import { buildMotionAdjustmentLayerFromBase } from '../../services/layerBuilder/layerBuilderMotionAdjustment';
+import { bindTerrainLayer } from '../../services/planarTracking/terrainLayerBindings';
+import { buildFlockLayerSource, flockSourceTimeFromClipTime } from '../../services/layerBuilder/layerBuilderFlockLayers';
+import { useTimelineStore } from '../../stores/timeline';
 
 const log = Logger.create('ExportLayerBuilder');
 const IDENTITY_EPSILON = 0.000001;
@@ -257,6 +260,12 @@ function buildExportLayerForClip(
       is3D: true,
     };
   }
+  // Handle flock clips (pinned export simulation session)
+  if (clip.source?.type === 'flock') {
+    const sourceTime = flockSourceTimeFromClipTime(clip, getClipSourceWindowTime(clip, clipLocalTime, ctx));
+    const source = buildFlockLayerSource(clip, sourceTime, useTimelineStore.getState().clipKeyframes.get(clip.id), 'export');
+    return source ? { ...baseLayerProps, source, effects: [], is3D: true } : null;
+  }
   // Handle Gaussian Splat clips (native WebGPU)
   if (clip.source?.type === 'gaussian-splat') {
     return {
@@ -357,7 +366,12 @@ export function buildLayersAtTime(
       parallelDecoder,
       useParallelDecode,
     );
-    if (layer) layers.push(layer);
+    if (layer) layers.push(bindTerrainLayer(
+      layer,
+      clip,
+      ctx.compositionClips ?? ctx.renderClipsAtTime ?? ctx.clipsAtTime,
+      ctx.time,
+    ));
   }
 
   return layers;

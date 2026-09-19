@@ -15,6 +15,11 @@ import { ProxyStorageService, type ProxyFrameScanProgressCallback, type ProxyFra
 import { RawMediaService } from './domains/RawMediaService';
 import { PROJECT_FOLDERS } from './core/constants';
 import {
+  getFsaProjectPackageSession,
+  getNativeProjectPackageSession,
+  type ProjectPackageSession,
+} from './core/projectPackage';
+import {
   clearRecentProjects,
   getRecentProjects,
   removeRecentProject,
@@ -45,6 +50,7 @@ import {
   normalizeNativePath,
   pickNativeFolder,
 } from './fileService/nativeBackend';
+import { isAndroidAutoRestoreProjectHandle } from './androidProjectAutoRestore';
 
 export type {
   DeleteMediaFileArtifactsOptions,
@@ -111,6 +117,8 @@ class ProjectFileService {
       proxyStorageService: this.proxyStorageService,
       analysisService: this.analysisService,
       transcriptService: this.transcriptService,
+      writeFile: (subFolder, fileName, content) => this.writeFile(subFolder as keyof typeof PROJECT_FOLDERS, fileName, content),
+      readFile: (subFolder, fileName) => this.readFile(subFolder as keyof typeof PROJECT_FOLDERS, fileName),
       deleteFile: (subFolder, fileName) => this.deleteFile(subFolder as keyof typeof PROJECT_FOLDERS, fileName),
       deleteEntry: (subFolder, entryName, options) => this.deleteEntry(subFolder as keyof typeof PROJECT_FOLDERS, entryName, options),
     };
@@ -142,20 +150,28 @@ class ProjectFileService {
   }
 
   private async ensureNativeBackendReady(): Promise<NativeProjectCoreService | null> {
+    // ensureNativeBackend() pins the backend before the helper is proven
+    // reachable, so an unreachable helper would otherwise leave every later
+    // call routed to a dead backend.
+    const previousBackend = this._activeBackend;
     const nativeCore = this.ensureNativeBackend();
+    const abandonNativeBackend = (): null => {
+      this._activeBackend = previousBackend;
+      return null;
+    };
 
     if (!NativeHelperClient.isConnected()) {
       const connected = await NativeHelperClient.connect();
       if (!connected) {
         log.warn('Native Helper backend requested but helper is not connected');
-        return null;
+        return abandonNativeBackend();
       }
     }
 
     const hasFsCommands = await NativeHelperClient.hasFsCommands();
     if (!hasFsCommands) {
       log.error('Native Helper does not support project file-system commands');
-      return null;
+      return abandonNativeBackend();
     }
 
     return nativeCore;
@@ -168,6 +184,20 @@ class ProjectFileService {
   /** Get the currently active backend */
   get activeBackend(): ProjectBackend {
     return this._activeBackend;
+  }
+
+  /**
+   * Browser-private projects (OPFS) cannot retain a user-picked File across
+   * reloads. Imports and manual relinks therefore have to promote the bytes
+   * into the project's Raw folder even when the global copy setting is off.
+   */
+  requiresProjectLocalMediaCopies(): boolean {
+    return this._activeBackend === 'fsa'
+      && (
+        !this.isFsaAvailable
+        || isAndroidAutoRestoreProjectHandle(this.coreService.getProjectHandle())
+      )
+      && this.coreService.isProjectOpen();
   }
 
   /** Check if FSA (File System Access API) is available */
@@ -213,7 +243,8 @@ class ProjectFileService {
 
   isSupported(): boolean {
     if (this._activeBackend === 'native' || !this.isFsaAvailable) {
-      return this.nativeCoreService?.isSupported() ?? false;
+      // Browser storage still counts: WebKit has no picker but does have OPFS.
+      return (this.nativeCoreService?.isSupported() ?? false) || this.coreService.isSupported();
     }
     return this.coreService.isSupported();
   }
@@ -236,6 +267,15 @@ class ProjectFileService {
 
   getProjectData(): ProjectFile | null {
     return this.core.getProjectData();
+  }
+
+  getProjectPackageSession(): ProjectPackageSession | null {
+    if (this._activeBackend === 'native') {
+      const path = this.nativeCoreService?.getProjectPath();
+      return path ? getNativeProjectPackageSession(path) : null;
+    }
+    const handle = this.coreService.getProjectHandle();
+    return handle ? getFsaProjectPackageSession(handle) : null;
   }
 
   isProjectOpen(): boolean {
@@ -265,16 +305,17 @@ class ProjectFileService {
   async createProject(name: string): Promise<boolean> {
     if (this._activeBackend === 'native' || !this.isFsaAvailable) {
       const nativeCore = await this.ensureNativeBackendReady();
-      if (!nativeCore) return false;
+      if (nativeCore) {
+        const projectRoot = await NativeHelperClient.getProjectRoot();
+        const parentPath = await pickNativeFolder(
+          'Choose where to save your project',
+          projectRoot,
+        );
 
-      const projectRoot = await NativeHelperClient.getProjectRoot();
-      const parentPath = await pickNativeFolder(
-        'Choose where to save your project',
-        projectRoot,
-      );
-
-      if (!parentPath) return false;
-      return nativeCore.createProjectAtPath(parentPath, name);
+        if (!parentPath) return false;
+        return nativeCore.createProjectAtPath(parentPath, name);
+      }
+      // No helper: fall through to browser storage instead of failing.
     }
 
     return this.core.createProject(name);
@@ -353,10 +394,19 @@ class ProjectFileService {
   async restoreLastProject(): Promise<boolean> {
     if (this._activeBackend === 'native' || !this.isFsaAvailable) {
       const nativeCore = await this.ensureNativeBackendReady();
-      return nativeCore ? nativeCore.restoreLastProject() : false;
+      if (nativeCore) return nativeCore.restoreLastProject();
     }
 
     return this.core.restoreLastProject();
+  }
+
+  /** Project names available in browser storage (OPFS); empty on picker backends. */
+  async listStoredProjects(): Promise<string[]> {
+    return this.coreService.listStoredProjects();
+  }
+
+  async openStoredProject(name: string): Promise<boolean> {
+    return this.coreService.openStoredProject(name);
   }
 
   updateProjectData(updates: Partial<ProjectFile>): void {

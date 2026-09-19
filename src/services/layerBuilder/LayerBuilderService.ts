@@ -1,5 +1,4 @@
-// LayerBuilderService - Main orchestrator for layer building
-// Delegates video sync to VideoSyncManager and audio sync to AudioTrackSyncManager
+// LayerBuilderService orchestrates layer building and delegates audio/video synchronization.
 import type { TimelineClip, Layer, VideoBakeRegion } from '../../types';
 import type { FrameContext } from './types';
 import { createFrameContext, getMediaFileForClip, isVideoTrackVisible } from './FrameContext';
@@ -13,6 +12,7 @@ import { Logger } from '../logger';
 import type { RuntimeFrameProvider } from '../mediaRuntime/types';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
+import { isSlotGridPanelActive } from '../../stores/slotGridPanelStore';
 import { videoBakeProxyCache } from '../videoBakeProxyCache';
 import { hydrateTimelineMediaWindow } from '../timeline/lazyMediaElements';
 import { getNativeDecoderForTimelineClip } from '../timeline/nativeDecoderRuntimeRegistry';
@@ -43,6 +43,7 @@ import {
   withLayerBuilderMaskProperties,
 } from './layerBuilderLayerPostProcessing';
 import { buildLayerBuilderMotionShapeLayer } from './layerBuilderMotionLayers';
+import { buildLayerBuilderFlockLayer } from './layerBuilderFlockLayers';
 import { buildLayerBuilderMotionAdjustmentLayer } from './layerBuilderMotionAdjustment';
 import { buildLayerBuilderNestedCompLayer } from './layerBuilderNestedLayerBuilder';
 import {
@@ -52,7 +53,7 @@ import {
 } from '../../stores/timeline/editOperations/transitionPlanner';
 import { ensureTransitionCompositionsForActiveTimeline } from '../../stores/timeline/editOperations/transitionCompositionMaintenance';
 import { buildLayerBuilderTransitionCompositionLayer } from './layerBuilderTransitionComposition';
-
+import { bindTerrainLayer } from '../planarTracking/terrainLayerBindings';
 const log = Logger.create('LayerBuilder');
 /**
  * LayerBuilderService - Builds render layers from timeline state
@@ -130,7 +131,7 @@ export class LayerBuilderService {
     hydrateTimelineMediaWindow(ctx);
     syncLayerBuilderCanvasRuntimeSources(ctx);
     const { activeLayerSlots = {}, activeCompositionId } = useMediaStore.getState();
-    const slotGridActive = useTimelineStore.getState().slotGridProgress > 0.5;
+    const slotGridActive = isSlotGridPanelActive();
     const hasActiveLayerSlots = Object.keys(activeLayerSlots).length > 0;
     const activeCompIsInProgram = activeCompositionId != null &&
       Object.values(activeLayerSlots).some((compositionId) => compositionId === activeCompositionId);
@@ -468,38 +469,21 @@ export class LayerBuilderService {
     else if (clip.source?.type === 'splat-effector') {
       layer = null;
     }
-    // Light clip (non-rendering scene light)
+    // Shared-scene 3D sources: light, model, flock simulation, native Gaussian splat
     else if (clip.source?.type === 'light') {
-      layer = buildLayerBuilderLightLayer({
-        clip,
-        layerIndex,
-        ctx,
-        transformCache: this.transformCache,
-        opacityOverride,
-      });
+      layer = buildLayerBuilderLightLayer({ clip, layerIndex, ctx, transformCache: this.transformCache, opacityOverride });
     }
-    // 3D Model clip
     else if (clip.source?.type === 'model') {
-      layer = buildLayerBuilderModelLayer({
-        clip,
-        layerIndex,
-        ctx,
-        transformCache: this.transformCache,
-        opacityOverride,
-      });
+      layer = buildLayerBuilderModelLayer({ clip, layerIndex, ctx, transformCache: this.transformCache, opacityOverride });
     }
-    // Gaussian Splat clip (native WebGPU path)
+    else if (clip.source?.type === 'flock') {
+      layer = buildLayerBuilderFlockLayer({ clip, layerIndex, ctx, transformCache: this.transformCache, opacityOverride });
+    }
     else if (clip.source?.type === 'gaussian-splat') {
-      layer = buildLayerBuilderGaussianSplatLayer({
-        clip,
-        layerIndex,
-        ctx,
-        transformCache: this.transformCache,
-        opacityOverride,
-      });
+      layer = buildLayerBuilderGaussianSplatLayer({ clip, layerIndex, ctx, transformCache: this.transformCache, opacityOverride });
     }
 
-    if (layer?.source && layer.source.type !== 'motion-adjustment') {
+    if (layer?.source && layer.source.type !== 'motion-adjustment' && layer.source.type !== 'flock') {
       layer = applyLayerBuilderAINodesToLayer(clip, layer, ctx);
     }
 
@@ -508,7 +492,7 @@ export class LayerBuilderService {
       layer.is3D = true;
     }
 
-    return layer;
+    return layer ? bindTerrainLayer(layer, clip, ctx.clips, ctx.playheadPosition) : null;
   }
 
   getVideoSyncManager(): VideoSyncManager {

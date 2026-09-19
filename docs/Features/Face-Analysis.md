@@ -207,3 +207,5 @@ matching.
   and
   [FaceRecognizerSF](https://github.com/opencv/opencv/blob/4.x/modules/objdetect/src/face_recognize.cpp)
   implementations.
+
+Analysis keeps the panel available when a clip has a negative source in-point. Such a range is unavailable for analysis estimates and scoped execution; valid full-source analysis remains accessible.

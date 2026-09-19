@@ -2,7 +2,7 @@ import type { TimelineClip } from '../../../types';
 import {
   canLoopExtendTimelineVectorClip,
   getTimelineClipSourceDuration,
-  isInfiniteTimelineSourceType,
+  isInfiniteTimelineClipSource,
 } from './clipSourceTiming';
 
 const MIN_CLIP_DURATION = 0.04;
@@ -22,7 +22,7 @@ export function getTrimHandleArrowDirections(
   const canShorten = clip.duration > MIN_CLIP_DURATION + EPSILON;
 
   if (edge === 'left') {
-    const canExtendLeft = isInfiniteTimelineSourceType(clip.source?.type)
+    const canExtendLeft = isInfiniteTimelineClipSource(clip)
       ? clip.startTime > EPSILON
       : clip.startTime > EPSILON && clip.inPoint > EPSILON;
 
@@ -34,7 +34,7 @@ export function getTrimHandleArrowDirections(
 
   const sourceDuration = getTimelineClipSourceDuration(clip);
   const canExtendRight =
-    isInfiniteTimelineSourceType(clip.source?.type) ||
+    isInfiniteTimelineClipSource(clip) ||
     canLoopExtendTimelineVectorClip(clip) ||
     sourceDuration - clip.outPoint > EPSILON;
 

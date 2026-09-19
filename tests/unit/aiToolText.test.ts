@@ -8,11 +8,16 @@ import {
   handleSetTextBox,
   handleUpdateTextProperties,
 } from '../../src/services/aiTools/handlers/text';
+import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 
 const initialTimelineState = useTimelineStore.getState();
 
 function resetTimeline(): void {
+  useMediaStore.setState({
+    folders: [],
+    textItems: [],
+  });
   useTimelineStore.setState({
     ...initialTimelineState,
     clips: [],
@@ -136,6 +141,9 @@ describe('AI text authoring tools', () => {
     expect(data.textBox).toEqual({ x: 220, y: 300, width: 1480, height: 420 });
     expect(clip.trackId).toBe('video-1');
     expect(clip.source?.type).toBe('text');
+    expect(clip.mediaFileId).toBeUndefined();
+    expect(clip.source?.mediaFileId).toBeUndefined();
+    expect(useMediaStore.getState().textItems).toHaveLength(0);
     expect(clip.textProperties).toMatchObject({
       text: 'MASTER\nSELECTS',
       fontFamily: 'Inter',

@@ -279,4 +279,37 @@ describe('cloudAiService billing sync', () => {
       videoUrl: '/api/ai/video?taskId=task_123&download=1',
     });
   });
+
+  it('keeps polling when the hosted task status request times out', async () => {
+    videoStatusMock
+      .mockRejectedValueOnce(new Error(
+        'Request to https://www.masterselects.com/api/ai/video?taskId=task_android timed out after 10000ms.',
+      ))
+      .mockRejectedValueOnce(new Error(
+        'Network error while contacting MasterSelects Cloud (https://www.masterselects.com/api/ai/video?taskId=task_android). Check the connection and try again.',
+      ))
+      .mockResolvedValueOnce({
+        creditBalance: 151,
+        data: {
+          id: 'task_android',
+          imageUrl: 'https://cdn.example.com/image.png',
+          status: 'completed',
+        },
+        kind: 'ai.video',
+        mode: 'hosted',
+        ok: true,
+        provider: 'cloud-kie',
+        requestId: 'req_android_status',
+        status: 'completed',
+      });
+
+    const task = await cloudAiService.pollTaskUntilComplete('task_android', undefined, 0, 1000);
+
+    expect(videoStatusMock).toHaveBeenCalledTimes(3);
+    expect(task).toMatchObject({
+      id: 'task_android',
+      imageUrl: '/api/ai/video?taskId=task_android&download=1',
+      status: 'completed',
+    });
+  });
 });

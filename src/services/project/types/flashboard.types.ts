@@ -59,12 +59,14 @@ export interface ProjectFlashBoardChatExecutedToolCall {
 export interface ProjectFlashBoardChatMessage {
   /** Validated and field-whitelisted before it reaches the chat activity UI. */
   activityEvents?: unknown[];
+  conversationRef?: string;
   createdAt?: string;
   id: string;
   role: 'user' | 'assistant';
   text: string;
   decisionId?: string;
   editOptions?: ProjectFlashBoardChatEditOption[];
+  inputRequest?: import('../../kernelClient/types').KernelUserInputRequest;
   isError?: boolean;
   isPending?: boolean;
   isStreaming?: boolean;
@@ -85,6 +87,7 @@ export interface ProjectFlashBoardComposerModelSettings {
 
 export interface ProjectFlashBoardComposerState {
   isOpen?: boolean;
+  draftPrompt?: string;
   service?: ProjectFlashBoardService;
   providerId?: string;
   version?: string;
@@ -101,6 +104,9 @@ export interface ProjectFlashBoardComposerState {
   languageOverride?: boolean;
   languageCode?: string;
   outputFormat?: string;
+  videoOutputFormat?: 'mov' | 'mp4';
+  webSearch?: boolean;
+  returnLastFrame?: boolean;
   voiceSettings?: ProjectFlashBoardVoiceSettings;
   sunoCustomMode?: boolean;
   sunoInstrumental?: boolean;
@@ -187,6 +193,8 @@ export interface ProjectFlashBoardGenerationOutput {
 
 export interface ProjectFlashBoardGenerationMetadata {
   mediaFileId: string;
+  workspaceId?: string;
+  generationElapsedMs?: number;
   service?: ProjectFlashBoardService;
   providerId: string;
   version: string;
@@ -225,6 +233,7 @@ export interface ProjectFlashBoardGenerationMetadata {
 
 export interface ProjectFlashBoardGenerationRecord {
   id: string;
+  workspaceId?: string;
   createdAt: string;
   updatedAt: string;
   request?: ProjectFlashBoardGenerationRequest;
@@ -234,11 +243,24 @@ export interface ProjectFlashBoardGenerationRecord {
   results?: ProjectFlashBoardResult[];
 }
 
+export interface ProjectFlashBoardAIWorkspace {
+  id: string;
+  title: string;
+  kind: 'generation' | 'chat' | 'download';
+  createdAt: string;
+  updatedAt: string;
+  chatConversationRef?: string;
+  composer: ProjectFlashBoardComposerState;
+  chatMessages: ProjectFlashBoardChatMessage[];
+}
+
 export interface ProjectFlashBoardState {
-  version: 1;
+  version: 1 | 2;
   composer?: ProjectFlashBoardComposerState;
   promptHistory?: ProjectFlashBoardPromptHistoryEntry[];
   chatMessages?: ProjectFlashBoardChatMessage[];
+  workspaces?: ProjectFlashBoardAIWorkspace[];
+  activeWorkspaceId?: string;
   generationRecords: ProjectFlashBoardGenerationRecord[];
   generationMetadataByMediaId: Record<string, ProjectFlashBoardGenerationMetadata>;
 }

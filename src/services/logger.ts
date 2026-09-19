@@ -86,6 +86,8 @@ const LEVEL_ICONS: Record<LogLevel, string> = {
 const logBuffer: LogEntry[] = [];
 const registeredModules = new Set<string>();
 let syncLogsToServer: (() => void) | null = null;
+let diagnosticErrorSink: ((entry: LogEntry) => void) | null = null;
+let consoleWriteDepth = 0;
 let logRevision = 0;
 let lastSyncedLogRevision = 0;
 
@@ -191,22 +193,27 @@ class ModuleLogger {
       args.push(entry.data);
     }
 
-    switch (level) {
-      case 'DEBUG':
-        console.debug(...args);
-        break;
-      case 'INFO':
-        console.info(...args);
-        break;
-      case 'WARN':
-        console.warn(...args);
-        break;
-      case 'ERROR':
-        console.error(...args);
-        if (entry.stack) {
-          console.error(entry.stack);
-        }
-        break;
+    consoleWriteDepth += 1;
+    try {
+      switch (level) {
+        case 'DEBUG':
+          console.debug(...args);
+          break;
+        case 'INFO':
+          console.info(...args);
+          break;
+        case 'WARN':
+          console.warn(...args);
+          break;
+        case 'ERROR':
+          console.error(...args);
+          if (entry.stack) {
+            console.error(entry.stack);
+          }
+          break;
+      }
+    } finally {
+      consoleWriteDepth -= 1;
     }
   }
 
@@ -274,7 +281,27 @@ class ModuleLogger {
     if (logBuffer.length > config.bufferSize) {
       logBuffer.shift();
     }
+    if (entry.level === 'ERROR') {
+      try {
+        diagnosticErrorSink?.(entry);
+      } catch {
+        // A diagnostic observer must never interfere with product logging.
+      }
+    }
   }
+}
+
+export function setLoggerDiagnosticErrorSink(sink: ((entry: LogEntry) => void) | null): void {
+  diagnosticErrorSink = sink;
+}
+
+/**
+ * True while the Logger itself is writing to the console. Console capture
+ * uses this to avoid reporting the same failure twice (once as a Logger
+ * error with module context, once as a bare console.error).
+ */
+export function isLoggerWritingToConsole(): boolean {
+  return consoleWriteDepth > 0;
 }
 
 // ============================================================================
@@ -443,10 +470,15 @@ export const Logger = {
 
 if (typeof window !== 'undefined') {
   (window as unknown as Record<string, unknown>).Logger = Logger;
+}
 
-  // ============================================================================
-  // Browser Log Bridge - Auto-sync logs to dev server for AI agent access
-  // ============================================================================
+// ============================================================================
+// Browser Log Bridge - Auto-sync logs to the Vite dev server for AI agent access
+// Development only: production has no /api/logs route (every WARN/ERROR used
+// to fire a 405 beacon there). Production failures reach the server through
+// the diagnostics reporter instead.
+// ============================================================================
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
   let syncInterval: number | null = null;
 
   // Log data is already redacted at entry creation time (in createEntry()),

@@ -9,6 +9,7 @@ import {
 } from '../../../../importers';
 import type { SignalArtifact } from '../../../../signals';
 import { generateId } from '../../helpers/importPipeline';
+import { detectMediaType } from '../../../timeline/helpers/mediaTypeHelpers';
 import {
   createSignalAssetItem,
   remapSignalAssetArtifacts,
@@ -41,8 +42,24 @@ export async function resolveImportEntry(
     absolutePath?: string;
   } = {},
 ): Promise<ResolvedImportEntry> {
-  const plan = await universalImportOrchestrator.planImport(file);
   const id = options.id ?? generateId();
+  const knownMediaType = detectMediaType(file);
+
+  // Photos-backed files on iPadOS can be lazy. Reading even the first bytes
+  // may wait for Photos/iCloud to materialize the asset, so route formats the
+  // editor already recognizes without probing their contents first.
+  if (knownMediaType !== 'unknown') {
+    return {
+      file,
+      handle: options.handle,
+      absolutePath: options.absolutePath,
+      id,
+      route: 'legacy-media',
+      type: knownMediaType,
+    };
+  }
+
+  const plan = await universalImportOrchestrator.planImport(file);
 
   if (plan.route === 'legacy-media') {
     return {
@@ -73,8 +90,15 @@ async function persistSignalImportArtifacts(
       getProjectHandle?: () => FileSystemDirectoryHandle | null;
     }
   ).getProjectHandle?.() ?? null;
+  const packageSession = (
+    projectFileService as typeof projectFileService & {
+      getProjectPackageSession?: () => ReturnType<typeof projectFileService.getProjectPackageSession>;
+    }
+  ).getProjectPackageSession?.() ?? null;
 
-  const store = projectHandle
+  const store = packageSession
+    ? artifactService.createPackageStore(packageSession)
+    : projectHandle
     ? artifactService.createStore(projectHandle)
     : artifactService.createIndexedDBStore();
   const artifactsByOriginalId = new Map<string, SignalArtifact>();
@@ -92,7 +116,7 @@ async function persistSignalImportArtifacts(
       artifactsByOriginalId.set(payload.artifactId, stored.manifest);
     }
   } catch (error) {
-    const target = projectHandle ? 'project cache' : 'IndexedDB';
+    const target = packageSession ? '.msproj package' : projectHandle ? 'project cache' : 'IndexedDB';
     log.warn(`Signal artifact persistence to ${target} failed; keeping transient memory artifact refs.`, error);
     return {
       asset: result.asset,

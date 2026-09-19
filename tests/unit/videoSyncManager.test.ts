@@ -989,9 +989,13 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
       isDecodePending: () => true,
     };
 
-    manager.wcSeeks.setLastPreciseSeekAt('clip:scrub', performance.now() - 20);
-
-    manager.syncPausedWebCodecsProvider(provider, 'clip:scrub', 34.4, true, false);
+    const nowSpy = vi.spyOn(performance, 'now').mockReturnValue(1_000);
+    try {
+      manager.wcSeeks.setLastPreciseSeekAt('clip:scrub', 980);
+      manager.syncPausedWebCodecsProvider(provider, 'clip:scrub', 34.4, true, false);
+    } finally {
+      nowSpy.mockRestore();
+    }
 
     expect(provider.scrubSeek).not.toHaveBeenCalled();
     expect(provider.fastSeek).not.toHaveBeenCalled();
@@ -1344,6 +1348,46 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     expect(result?.source.videoElement).toBeTruthy();
   });
 
+  it('forces TurboRes frames during scrubbing even when the global WebCodecs preview flag is disabled', () => {
+    flags.useFullWebCodecsPlayback = false;
+
+    const provider = {
+      backend: 'turbores' as const,
+      currentTime: 1.5,
+      getCurrentFrame: vi.fn(() => ({})),
+      hasFrame: vi.fn(() => true),
+      isFullMode: vi.fn(() => true),
+      pause: vi.fn(),
+      seek: vi.fn(),
+    };
+    const { clip, ctx } = createLazyVideoClip('clip-turbores-preview', {
+      currentTime: 1.5,
+      muted: false,
+      paused: true,
+      seeking: false,
+      readyState: 4,
+      played: { length: 1 } as TimeRanges,
+      pause: vi.fn() as HTMLVideoElement['pause'],
+      play: vi.fn(() => Promise.resolve()) as HTMLVideoElement['play'],
+      playbackRate: 1,
+    }, {
+      runtimeSourceId: 'media:turbores-preview',
+      runtimeSessionKey: 'interactive:clip-turbores-preview',
+      webCodecsPlayer: provider,
+    });
+    ctx.isDraggingPlayhead = true;
+
+    const result = resolveLayerBuilderVideoSource({
+      clip,
+      ctx,
+      targetTime: 1.5,
+      allowSharedPreviewSession: true,
+    });
+
+    expect(result?.source.webCodecsPlayer).toBe(provider);
+    expect(result?.source.forceRuntimeFramePreview).toBe(true);
+  });
+
   it('does not route normal forward playback through worker WebCodecs before a provider is attached', () => {
     const manager = createManager();
     const syncFullWebCodecs = vi.spyOn(manager, 'syncFullWebCodecs').mockImplementation(() => {});
@@ -1669,6 +1713,50 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
       expect(testEngine.markVideoFramePresented).toHaveBeenCalledWith(video, 1.47, clip.id);
     } finally {
       useTimelineStore.setState({ playheadPosition: previousPlayheadPosition });
+    }
+  });
+
+  it('captures the running Android HTML frame before pausing its decoder surface', () => {
+    flags.useFullWebCodecsPlayback = false;
+    const originalNavigator = globalThis.navigator;
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { userAgent: 'Mozilla/5.0 (Linux; Android 16; Pixel 10 Pro) Mobile' },
+    });
+    testEngine.captureVideoFrameAtTime.mockReturnValue(true);
+
+    const manager = createManager();
+    mockRenderHostMode('main');
+    const { clip, ctx, video } = createLazyVideoClip('clip-android-stop', {
+      currentTime: 1.5,
+      paused: false,
+      seeking: false,
+      readyState: 4,
+      duration: 10,
+      played: { length: 1 } as TimeRanges,
+      pause: vi.fn() as HTMLVideoElement['pause'],
+      play: vi.fn(() => Promise.resolve()) as HTMLVideoElement['play'],
+      playbackRate: 1,
+      src: 'blob:clip-android-stop',
+    });
+
+    try {
+      ctx.isPlaying = true;
+      ctx.getSourceTimeForClip = () => 1.5;
+      manager.syncClipVideo(clip, ctx);
+      testEngine.captureVideoFrameAtTime.mockClear();
+
+      manager.syncClipVideo(clip, { ...ctx, isPlaying: false } as FrameContext);
+
+      expect(testEngine.captureVideoFrameAtTime).toHaveBeenCalledWith(video, 1.5, clip.id);
+      expect(vi.mocked(video.pause)).toHaveBeenCalled();
+      expect(testEngine.captureVideoFrameAtTime.mock.invocationCallOrder[0])
+        .toBeLessThan(vi.mocked(video.pause).mock.invocationCallOrder[0]);
+    } finally {
+      Object.defineProperty(globalThis, 'navigator', {
+        configurable: true,
+        value: originalNavigator,
+      });
     }
   });
 
@@ -2036,6 +2124,51 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     expect(video.play).not.toHaveBeenCalled();
   });
 
+  it('keeps a source-zero upcoming clip alive at low rate until its active boundary', () => {
+    flags.useFullWebCodecsPlayback = false;
+
+    const manager = createManager();
+    const play = vi.fn(() => Promise.resolve());
+    const { clip, ctx, video } = createLazyVideoClip('clip-source-zero-preplay', {
+      currentTime: 0,
+      duration: 10,
+      muted: true,
+      paused: true,
+      seeking: false,
+      readyState: 4,
+      played: { length: 1 } as TimeRanges,
+      pause: vi.fn() as HTMLVideoElement['pause'],
+      play: play as HTMLVideoElement['play'],
+      playbackRate: 1,
+      preload: 'auto',
+      src: 'blob:clip-source-zero-preplay',
+      currentSrc: 'blob:clip-source-zero-preplay',
+    });
+    clip.startTime = 2;
+    ctx.isPlaying = true;
+    ctx.playheadPosition = 1.8;
+    ctx.clipsAtTime = [];
+    ctx.getSourceTimeForClip = (_clipId: string, localTime: number) => localTime;
+    manager.warmups.beginAttempt(video, clip.id, 0);
+    manager.warmups.completeAttempt(video);
+
+    manager.warmupUpcomingClips(ctx);
+
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(video.currentTime).toBe(0);
+    expect(video.playbackRate).toBe(0.0625);
+    expect(manager.warmups.hasUpcomingPreplay(video)).toBe(true);
+
+    setVideoState(video, { paused: false });
+    ctx.playheadPosition = 2.01;
+    ctx.clipsAtTime = [clip];
+    ctx.getSourceTimeForClip = () => 0.01;
+    manager.syncClipVideo(clip, ctx);
+
+    expect(video.playbackRate).toBe(1);
+    expect(play).toHaveBeenCalledTimes(1);
+  });
+
   it('aborts a stuck targeted warmup when no frame arrives', async () => {
     vi.useFakeTimers();
 
@@ -2083,6 +2216,60 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     expect(manager.isVideoWarmingUp(video)).toBe(false);
     expect(testEngine.markVideoGpuReady).toHaveBeenCalledWith(video);
     expect(testEngine.cacheFrameAtTime).toHaveBeenCalledWith(video, 1);
+  });
+
+  it('does not mark a warmup GPU-ready when neither capture path produced a frame', async () => {
+    vi.useFakeTimers();
+    testEngine.preCacheVideoFrame.mockResolvedValueOnce(false);
+
+    const manager = createManager();
+    const video = {
+      currentTime: 1,
+      readyState: 4,
+      preload: 'metadata',
+      muted: false,
+      play: vi.fn().mockResolvedValue(undefined),
+      pause: vi.fn(),
+      requestVideoFrameCallback: vi.fn(() => 1),
+    };
+
+    manager.startTargetedWarmup('clip-warm', video, 1);
+    await vi.runAllTicks();
+    await vi.advanceTimersByTimeAsync(950);
+
+    expect(manager.isVideoWarmingUp(video)).toBe(false);
+    expect(testEngine.markVideoGpuReady).not.toHaveBeenCalled();
+    expect(video.pause).toHaveBeenCalled();
+  });
+
+  it('hands an active HTML clip from proactive warmup to normal playback immediately', () => {
+    flags.useFullWebCodecsPlayback = false;
+
+    const manager = createManager();
+    const { clip, ctx, video } = createLazyVideoClip('clip-active-warmup', {
+      currentTime: 0,
+      duration: 10,
+      muted: true,
+      paused: true,
+      seeking: false,
+      readyState: 4,
+      played: { length: 1 } as TimeRanges,
+      pause: vi.fn() as HTMLVideoElement['pause'],
+      play: vi.fn(() => Promise.resolve()) as HTMLVideoElement['play'],
+      playbackRate: 1,
+      preload: 'auto',
+      src: 'blob:clip-active-warmup',
+      currentSrc: 'blob:clip-active-warmup',
+    });
+    ctx.isPlaying = true;
+    ctx.playheadPosition = 0.1;
+    ctx.getSourceTimeForClip = () => 0.1;
+    manager.warmups.beginAttempt(video, clip.id, 0);
+
+    manager.syncClipVideo(clip, ctx);
+
+    expect(manager.isVideoWarmingUp(video)).toBe(false);
+    expect(video.play).toHaveBeenCalledTimes(1);
   });
 
   it('clears in-flight HTML seek state before starting a targeted warmup', async () => {

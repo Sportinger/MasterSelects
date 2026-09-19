@@ -12,6 +12,7 @@ import {
 import { collectDroppedMediaFiles, importDroppedMediaFiles } from '../dropImport';
 import { isImportedMediaFileItem } from '../itemTypeGuards';
 import { planBatchExportMediaDragIds } from './batchExportMediaDrag';
+import { useMediaPanelTouchTimelineDrag } from './useMediaPanelTouchTimelineDrag';
 
 const log = Logger.create('MediaPanel');
 
@@ -86,6 +87,12 @@ export function useMediaPanelDragDropMarquee({
   const marqueeRef = useRef<{ startX: number; startY: number; initialSelection: string[] } | null>(null);
   const nativeDragGuardsRef = useRef<(() => void) | null>(null);
   const externalOverGuardsRef = useRef<(() => void) | null>(null);
+  const handleTouchTimelineDragPointerDown = useMediaPanelTouchTimelineDrag({
+    activeCompositionId,
+    renameTimerRef,
+    setInternalDragId,
+    getSlotGridProgress,
+  });
 
   const removeExternalOverGuards = useCallback(() => {
     externalOverGuardsRef.current?.();
@@ -354,7 +361,7 @@ export function useMediaPanelDragDropMarquee({
     setInternalDragId(item.id);
     installNativeDragGuards();
 
-    if (isFolder) {
+    if (isFolder || ('type' in item && item.type === 'tracking')) {
       e.dataTransfer.effectAllowed = 'move';
       if (e.currentTarget instanceof HTMLElement) {
         e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
@@ -475,6 +482,7 @@ export function useMediaPanelDragDropMarquee({
     handleDragLeave,
     handleMarqueeMouseDown,
     handleDragStart,
+    handleTouchTimelineDragPointerDown,
     handleDragEnd,
     handleFolderDragOver,
     handleFolderDragLeave,

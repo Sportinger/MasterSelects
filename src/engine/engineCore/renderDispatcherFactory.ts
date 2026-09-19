@@ -32,6 +32,7 @@ export function createEngineRenderDispatcher(deps: EngineRenderDispatcherFactory
     previewContext: { get: deps.getPreviewContext },
     targetCanvases: { get: deps.getTargetCanvases },
     compositorPipeline: { get: () => res()?.compositorPipeline ?? null },
+    effectsPipeline: { get: () => res()?.effectsPipeline ?? null },
     outputPipeline: { get: () => res()?.outputPipeline ?? null },
     slicePipeline: { get: () => res()?.slicePipeline ?? null },
     textureManager: { get: () => res()?.textureManager ?? null },

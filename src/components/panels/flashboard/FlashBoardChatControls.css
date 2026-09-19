@@ -3,7 +3,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 9px 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--veil-border-subtle);
   background: color-mix(in srgb, var(--bg-elevated, #252536) 86%, black);
 }
 
@@ -55,9 +55,9 @@
   height: 24px;
   padding: 0 10px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--veil-border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.055);
+  background: var(--veil-2);
   color: var(--text-secondary, #bbb);
   cursor: pointer;
   font-size: 11px;
@@ -68,14 +68,14 @@
 }
 
 .fb-chat-option:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent, #4aa3ff) 34%, rgba(255, 255, 255, 0.12));
-  background: rgba(255, 255, 255, 0.09);
+  border-color: color-mix(in srgb, var(--accent, #4aa3ff) 34%, var(--veil-border));
+  background: var(--veil-3);
   color: var(--text-primary, #fff);
 }
 
 .fb-chat-option.active {
-  border-color: color-mix(in srgb, var(--accent, #4aa3ff) 58%, rgba(255, 255, 255, 0.18));
-  background: color-mix(in srgb, var(--accent, #4aa3ff) 22%, rgba(255, 255, 255, 0.08));
+  border-color: color-mix(in srgb, var(--accent, #4aa3ff) 58%, var(--veil-border-strong));
+  background: color-mix(in srgb, var(--accent, #4aa3ff) 22%, var(--veil-3));
   color: var(--text-primary, #fff);
 }
 
@@ -96,7 +96,7 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--veil-3);
   color: var(--text-secondary, #bbb);
   cursor: pointer;
   font-size: 15px;
@@ -104,7 +104,7 @@
 }
 
 .fb-chat-panel-close:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--veil-4);
   color: var(--text-primary, #fff);
 }
 
@@ -148,7 +148,7 @@
 }
 
 .fb-chat-status.online {
-  color: #62d98b;
+  color: var(--success-light);
 }
 
 .fb-chat-status.offline {
@@ -171,7 +171,7 @@
   padding: 2px 2px 3px;
   scrollbar-width: thin;
   scrollbar-gutter: stable;
-  scrollbar-color: rgba(255, 255, 255, 0.32) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
   color: var(--text-secondary, #bbb);
   font-size: 11px;
   line-height: 1.35;
@@ -191,7 +191,7 @@
   gap: 6px;
   margin: 0 4px 0 0;
   padding: 5px 8px;
-  border: 1px solid color-mix(in srgb, var(--accent, #4aa3ff) 34%, rgba(255, 255, 255, 0.12));
+  border: 1px solid color-mix(in srgb, var(--accent, #4aa3ff) 34%, var(--veil-border));
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-elevated, #252536) 94%, black);
   box-shadow: 0 5px 14px rgba(0, 0, 0, 0.34);
@@ -231,13 +231,13 @@
 
 .fb-chat-output::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.28);
+  background: var(--scrollbar-thumb);
 }
 
 .fb-chat-message {
   max-width: calc(100% - 34px);
   padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid var(--veil-border-subtle);
   border-radius: 10px 10px 10px 4px;
   background: color-mix(in srgb, var(--bg-elevated, #252536) 82%, rgba(0, 0, 0, 0.34));
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
@@ -250,7 +250,7 @@
 
 .fb-chat-message.user {
   align-self: flex-end;
-  border-color: color-mix(in srgb, var(--accent, #4aa3ff) 34%, rgba(255, 255, 255, 0.08));
+  border-color: color-mix(in srgb, var(--accent, #4aa3ff) 34%, var(--veil-border-subtle));
   border-radius: 10px 10px 4px 10px;
   background: color-mix(in srgb, var(--accent, #4aa3ff) 16%, var(--bg-elevated, #252536));
   color: var(--text-primary, #f5f5f5);
@@ -322,7 +322,7 @@
 .fb-chat-activity-log {
   margin-top: 8px;
   padding-top: 7px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--veil-border-subtle);
 }
 
 .fb-chat-activity-title,
@@ -347,7 +347,7 @@
   padding: 0 4px;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--veil-2);
   font-variant-numeric: tabular-nums;
 }
 
@@ -384,9 +384,9 @@
   margin-right: 2px;
   margin-left: 2px;
   padding: 7px 9px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--veil-border-subtle);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--veil-1);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -401,7 +401,7 @@
 }
 
 .fb-chat-message.is-error.has-cloud-actions {
-  border-color: color-mix(in srgb, var(--accent, #4aa3ff) 34%, rgba(255, 255, 255, 0.1));
+  border-color: color-mix(in srgb, var(--accent, #4aa3ff) 34%, var(--veil-border-subtle));
   background: color-mix(in srgb, var(--accent, #4aa3ff) 12%, var(--bg-elevated, #252536));
   color: #c9e4ff;
 }
@@ -421,9 +421,9 @@
 .fb-chat-error-actions button {
   min-height: 25px;
   padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--accent, #4aa3ff) 42%, rgba(255, 255, 255, 0.1));
+  border: 1px solid color-mix(in srgb, var(--accent, #4aa3ff) 42%, var(--veil-border-subtle));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent, #4aa3ff) 16%, rgba(255, 255, 255, 0.04));
+  background: color-mix(in srgb, var(--accent, #4aa3ff) 16%, var(--veil-1));
   color: #d7edff;
   font-size: 11px;
   font-weight: 700;
@@ -432,7 +432,7 @@
 
 .fb-chat-error-actions button:hover {
   border-color: color-mix(in srgb, var(--accent, #4aa3ff) 68%, white);
-  background: color-mix(in srgb, var(--accent, #4aa3ff) 26%, rgba(255, 255, 255, 0.04));
+  background: color-mix(in srgb, var(--accent, #4aa3ff) 26%, var(--veil-1));
   color: #ffffff;
 }
 
@@ -446,9 +446,9 @@
 .fb-chat-option-actions button {
   min-height: 24px;
   padding: 0 9px;
-  border: 1px solid color-mix(in srgb, var(--accent, #4aa3ff) 42%, rgba(255, 255, 255, 0.1));
+  border: 1px solid color-mix(in srgb, var(--accent, #4aa3ff) 42%, var(--veil-border-subtle));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent, #4aa3ff) 16%, rgba(255, 255, 255, 0.04));
+  background: color-mix(in srgb, var(--accent, #4aa3ff) 16%, var(--veil-1));
   color: color-mix(in srgb, var(--accent, #4aa3ff) 32%, var(--text-primary, #fff));
   font-size: 11px;
   font-weight: 700;
@@ -457,7 +457,7 @@
 
 .fb-chat-option-actions button:hover {
   border-color: color-mix(in srgb, var(--accent, #4aa3ff) 68%, white);
-  background: color-mix(in srgb, var(--accent, #4aa3ff) 26%, rgba(255, 255, 255, 0.04));
+  background: color-mix(in srgb, var(--accent, #4aa3ff) 26%, var(--veil-1));
   color: #ffffff;
 }
 
@@ -469,7 +469,7 @@
   width: fit-content;
   max-width: 100%;
   padding: 6px 8px;
-  border: 1px solid color-mix(in srgb, var(--accent, #4aa3ff) 30%, rgba(255, 255, 255, 0.08));
+  border: 1px solid color-mix(in srgb, var(--accent, #4aa3ff) 30%, var(--veil-border-subtle));
   border-radius: 12px;
   background: color-mix(in srgb, var(--accent, #4aa3ff) 11%, rgba(20, 20, 24, 0.94));
   color: #c9e4ff;
@@ -485,9 +485,9 @@
 .fb-cloud-warning-actions button {
   min-height: 24px;
   padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--accent, #4aa3ff) 42%, rgba(255, 255, 255, 0.1));
+  border: 1px solid color-mix(in srgb, var(--accent, #4aa3ff) 42%, var(--veil-border-subtle));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent, #4aa3ff) 16%, rgba(255, 255, 255, 0.04));
+  background: color-mix(in srgb, var(--accent, #4aa3ff) 16%, var(--veil-1));
   color: #d7edff;
   font-size: 10px;
   font-weight: 700;
@@ -496,7 +496,7 @@
 
 .fb-cloud-warning-actions button:hover {
   border-color: color-mix(in srgb, var(--accent, #4aa3ff) 68%, white);
-  background: color-mix(in srgb, var(--accent, #4aa3ff) 26%, rgba(255, 255, 255, 0.04));
+  background: color-mix(in srgb, var(--accent, #4aa3ff) 26%, var(--veil-1));
   color: #ffffff;
 }
 
@@ -538,19 +538,192 @@
 .fb-chat-split-button {
   display: inline-flex;
   align-items: stretch;
-  justify-content: flex-end;
-  max-width: 100%;
+  width: 136px;
+  max-width: min(100%, 136px);
   height: 32px;
-  border-radius: 18px;
+  position: relative;
+  overflow: visible;
+  border: 1px solid color-mix(in srgb, var(--accent, #4aa3ff) 54%, rgba(255, 255, 255, 0.54));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elevated, #252536) 90%, black);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.fb-story-preferences {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: min(318px, calc(100vw - 44px));
+  box-sizing: border-box;
+  gap: 6px 7px;
+  transform-origin: right bottom;
+}
+
+.fb-story-preferences.is-entering {
+  animation: fb-story-preferences-in 210ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.fb-story-preferences.is-exiting {
+  pointer-events: none;
+  animation: fb-story-preferences-out 180ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@keyframes fb-story-preferences-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes fb-story-preferences-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(5px) scale(0.98); }
+}
+
+.fb-story-preference-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  min-width: 0;
+}
+
+.fb-story-preferences.is-entering .fb-story-preference-row {
+  animation: fb-story-preference-pill-in 190ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.fb-story-preferences.is-entering .fb-story-preference-row:nth-child(2) { animation-delay: 24ms; }
+.fb-story-preferences.is-entering .fb-story-preference-row:nth-child(3) { animation-delay: 48ms; }
+.fb-story-preferences.is-entering .fb-story-preference-row:nth-child(4) { animation-delay: 72ms; }
+
+.fb-story-preferences.is-exiting .fb-story-preference-row {
+  animation: fb-story-preference-pill-out 145ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.fb-story-preferences.is-exiting .fb-story-preference-row:nth-child(1) { animation-delay: 36ms; }
+.fb-story-preferences.is-exiting .fb-story-preference-row:nth-child(2) { animation-delay: 24ms; }
+.fb-story-preferences.is-exiting .fb-story-preference-row:nth-child(3) { animation-delay: 12ms; }
+
+@keyframes fb-story-preference-pill-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.94); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes fb-story-preference-pill-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(3px) scale(0.95); }
+}
+
+.fb-story-preference-row > span {
+  padding-left: 6px;
+  color: var(--text-secondary, #bbb);
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.fb-story-preference-row > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--veil-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elevated, #252536) 92%, black);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.24);
+}
+
+.fb-story-preference-row button {
+  height: 23px;
+  min-width: 0;
+  padding: 0 2px;
+  border: 0;
+  border-left: 1px solid var(--veil-border-subtle);
+  background: transparent;
+  color: var(--text-muted, #888);
+  cursor: pointer;
+  font: inherit;
+  font-size: 8px;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.fb-story-preference-row button:first-child {
+  border-left: 0;
+}
+
+.fb-story-preference-row button:hover,
+.fb-story-preference-row button.active {
+  background: color-mix(in srgb, var(--accent, #4aa3ff) 19%, var(--veil-2));
+  color: var(--text-primary, #f5f5f5);
+}
+
+.fb-story-preference-row button.active {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent, #4aa3ff) 55%, transparent);
+}
+
+.fb-story-preference-row button[data-value='enabled'].active {
+  background: color-mix(in srgb, #35b867 32%, var(--veil-2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #52d580 68%, transparent);
+  color: #dfffea;
+}
+
+.fb-story-preference-row button[data-value='disabled'].active {
+  background: color-mix(in srgb, #df4f55 30%, var(--veil-2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #f06a70 70%, transparent);
+  color: #ffe5e6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-story-preferences.is-entering,
+  .fb-story-preferences.is-exiting,
+  .fb-story-preferences.is-entering .fb-story-preference-row,
+  .fb-story-preferences.is-exiting .fb-story-preference-row {
+    animation-duration: 1ms;
+  }
+}
+
+.fb-chat-split-button:focus-within,
+.fb-chat-split-button:has(.fb-chat-route-choice:hover),
+.fb-chat-split-button:has(.fb-generate:hover:not(:disabled)) {
+  border-color: var(--accent, #4aa3ff);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.42);
+}
+
+.fb-chat-route-choice,
+.fb-chat-split-button .fb-generate {
+  flex: 1 1 50%;
+  width: 50%;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary, #bbb);
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.fb-chat-route-choice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  border-right: 1px solid var(--veil-border-strong);
+  border-radius: 999px 0 0 999px;
+}
+
+.fb-chat-route-choice:hover:has(.fb-chat-decision-policy:not(:disabled)),
+.fb-chat-split-button .fb-generate:hover:not(:disabled) {
+  background: var(--bg-hover, #30303c);
+  color: var(--text-primary, #f5f5f5);
 }
 
 .fb-chat-split-button .fb-generate {
-  height: 32px;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 9px;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
-  border-left: 0;
+  border-top-right-radius: 999px;
+  border-bottom-right-radius: 999px;
   box-shadow: none;
+  font-size: 10px;
+  font-weight: 800;
 }
 
 .fb-chat-split-button .fb-generate:hover:not(:disabled) {
@@ -567,7 +740,7 @@
   height: 32px;
   padding: 0 8px;
   border: 1px solid color-mix(in srgb, var(--accent, #4aa3ff) 62%, rgba(255, 255, 255, 0.86));
-  border-right-color: rgba(255, 255, 255, 0.2);
+  border-right-color: var(--veil-border-strong);
   border-radius: 0;
   background: color-mix(in srgb, var(--bg-elevated, #252536) 88%, black);
   color: var(--text-secondary, #bbb);
@@ -588,7 +761,7 @@
 
 .fb-chat-plan-three-toggle.active {
   border-color: #43a047;
-  border-right-color: rgba(255, 255, 255, 0.22);
+  border-right-color: var(--veil-border-strong);
   background: #2e7d32;
   color: #fff;
 }
@@ -602,10 +775,9 @@
   opacity: 0.72;
 }
 
-.fb-chat-intent-toggle,
-.fb-chat-decision-policy {
+.fb-chat-intent-toggle {
   height: 32px;
-  border: 1px solid color-mix(in srgb, var(--accent, #4aa3ff) 44%, rgba(255, 255, 255, 0.22));
+  border: 1px solid color-mix(in srgb, var(--accent, #4aa3ff) 44%, var(--veil-border-strong));
   border-right: 0;
   background: color-mix(in srgb, var(--bg-elevated, #252536) 88%, black);
   color: var(--text-secondary, #bbb);
@@ -628,10 +800,81 @@
 }
 
 .fb-chat-decision-policy {
-  max-width: 78px;
-  padding: 0 4px;
-  border-radius: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  height: 100%;
+  padding: 0 9px 0 10px;
+  border: 0;
+  outline: 0;
+  border-radius: 999px 0 0 999px;
+  background: transparent;
+  color: inherit;
   cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.fb-chat-decision-policy:focus,
+.fb-chat-decision-policy:focus-visible,
+.fb-chat-split-button .fb-generate:focus,
+.fb-chat-split-button .fb-generate:focus-visible {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+.fb-chat-route-chevron {
+  flex: 0 0 auto;
+  pointer-events: none;
+  color: currentColor;
+  transition: transform 0.14s ease;
+}
+
+.fb-chat-decision-policy[aria-expanded='true'] .fb-chat-route-chevron {
+  transform: rotate(180deg);
+}
+
+.fb-chat-route-menu {
+  position: absolute;
+  z-index: 260;
+  left: 0;
+  bottom: calc(100% + 7px);
+  display: grid;
+  width: 82px;
+  padding: 4px;
+  border: 1px solid var(--veil-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-elevated, #252536) 94%, black);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.46);
+}
+
+.fb-chat-route-menu button {
+  height: 27px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary, #bbb);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  text-align: left;
+}
+
+.fb-chat-route-menu button:hover,
+.fb-chat-route-menu button.active {
+  background: color-mix(in srgb, var(--accent, #4aa3ff) 20%, var(--veil-2));
+  color: var(--text-primary, #f5f5f5);
+}
+
+.fb-chat-route-menu button.active {
+  box-shadow: inset 2px 0 0 var(--accent, #4aa3ff);
 }
 
 .fb-chat-intent-toggle:disabled,
@@ -647,14 +890,19 @@
     0 0 0 1px color-mix(in srgb, var(--accent, #4aa3ff) 20%, transparent);
 }
 
+.fb-chat-split-button .fb-chat-button.active {
+  border: 0;
+  box-shadow: none;
+}
+
 .fb-chat-clear-pill {
   color: var(--text-secondary, #bbb);
 }
 
 .fb-chat-cost-pill {
   cursor: default;
-  border-color: color-mix(in srgb, var(--accent, #4aa3ff) 46%, rgba(255, 255, 255, 0.12));
-  background: color-mix(in srgb, var(--accent, #4aa3ff) 16%, rgba(255, 255, 255, 0.06));
+  border-color: color-mix(in srgb, var(--accent, #4aa3ff) 46%, var(--veil-border));
+  background: color-mix(in srgb, var(--accent, #4aa3ff) 16%, var(--veil-2));
   color: color-mix(in srgb, var(--accent, #4aa3ff) 34%, var(--text-primary, #fff));
 }
 

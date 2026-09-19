@@ -16,7 +16,7 @@ export const glow: EffectDefinition = {
     amount: {
       type: 'number',
       label: 'Amount',
-      default: 1,
+      default: 5,
       min: 0,
       max: 5,
       step: 0.1,
@@ -25,7 +25,7 @@ export const glow: EffectDefinition = {
     threshold: {
       type: 'number',
       label: 'Threshold',
-      default: 0.6,
+      default: 0.7935,
       min: 0,
       max: 1,
       step: 0.01,
@@ -34,7 +34,7 @@ export const glow: EffectDefinition = {
     radius: {
       type: 'number',
       label: 'Radius',
-      default: 20,
+      default: 1,
       min: 1,
       max: 100,
       step: 1,
@@ -43,7 +43,7 @@ export const glow: EffectDefinition = {
     softness: {
       type: 'number',
       label: 'Softness',
-      default: 0.5,
+      default: 0.496,
       min: 0.1,
       max: 1,
       step: 0.05,
@@ -52,7 +52,7 @@ export const glow: EffectDefinition = {
     rings: {
       type: 'number',
       label: 'Rings',
-      default: 4,
+      default: 6.85,
       min: 1,
       max: 32,
       step: 1,
@@ -62,7 +62,7 @@ export const glow: EffectDefinition = {
     samplesPerRing: {
       type: 'number',
       label: 'Samples/Ring',
-      default: 16,
+      default: 17.95,
       min: 4,
       max: 64,
       step: 1,
@@ -73,14 +73,14 @@ export const glow: EffectDefinition = {
 
   packUniforms: (params, width, height) => {
     return new Float32Array([
-      params.amount as number ?? 1,
-      params.threshold as number ?? 0.6,
-      params.radius as number ?? 20,
-      params.softness as number ?? 0.5,
+      params.amount as number ?? 5,
+      params.threshold as number ?? 0.7935,
+      params.radius as number ?? 1,
+      params.softness as number ?? 0.496,
       width,
       height,
-      params.rings as number ?? 4,
-      params.samplesPerRing as number ?? 16,
+      params.rings as number ?? 6.85,
+      params.samplesPerRing as number ?? 17.95,
     ]);
   },
 };

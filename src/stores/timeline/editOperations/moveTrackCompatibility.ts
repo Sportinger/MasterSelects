@@ -20,6 +20,7 @@ const VISUAL_SOURCE_TYPES = new Set([
   'motion-null',
   'motion-adjustment',
   'storyboard',
+  'flock',
 ]);
 
 function getTrackRequirement(clip: TimelineClip): TimelineTrack['type'] | null {

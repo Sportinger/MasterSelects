@@ -39,7 +39,7 @@ export interface UseMediaBoardControllerOptions {
   handleContextMenu: MediaBoardContextMenuHandler;
   handleExternalDropImport: (dataTransfer: DataTransfer, folderId: string | null) => Promise<string[]>;
   handleItemClick: (itemId: string, event: React.MouseEvent) => void;
-  handleItemDoubleClick: (item: ProjectItem) => void | Promise<void>;
+  handleItemDoubleClick: (item: ProjectItem, renameFromName?: boolean) => void | Promise<void>;
   getSlotGridProgress: () => number;
   internalDragId: string | null;
   isMediaSearchActive: boolean;

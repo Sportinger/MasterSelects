@@ -39,6 +39,7 @@ import { dipToColor } from './dipToColor';
 import { dipToBlack } from './dipToBlack';
 import { dipToWhite } from './dipToWhite';
 import { directionalBlur } from './directionalBlur';
+import { datamosh } from './datamosh';
 import { cardSpin } from './cardSpin';
 import { filmRoll } from './filmRoll';
 import { filmBurn } from './filmBurn';
@@ -97,6 +98,7 @@ import { zoomOut } from './zoomOut';
 import { zigZagBlocks } from './zigZagBlocks';
 
 export * from './groups';
+export { DATAMOSH_BAKE_FORMAT } from './datamosh';
 
 // Main transition registry
 export const TRANSITION_REGISTRY = new Map<TransitionType, TransitionDefinition>();
@@ -175,6 +177,7 @@ registerTransition(crtCollapse);
 registerTransition(rgbSplitGlitch);
 registerTransition(mosaicGlitch);
 registerTransition(scanlineGlitch);
+registerTransition(datamosh);
 registerTransition(checkerWipe);
 registerTransition(randomBlocks);
 registerTransition(paintSplatter);

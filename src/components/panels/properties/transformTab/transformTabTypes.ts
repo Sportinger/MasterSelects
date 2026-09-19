@@ -9,6 +9,7 @@ export interface TransformTabTransform {
   opacity: number;
   blendMode: string;
   position: TransformVector3;
+  anchor?: TransformVector3;
   scale: TransformScale;
   rotation: TransformVector3;
 }

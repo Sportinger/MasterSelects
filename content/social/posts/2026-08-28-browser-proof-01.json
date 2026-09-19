@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "example-draft",
+  "campaign": "",
+  "pillar": "",
+  "goal": "",
+  "status": "draft",
+  "publishAt": null,
+  "sourceBacklogId": null,
+  "needsFromFounder": [],
+  "assets": [],
+  "variants": {}
+}

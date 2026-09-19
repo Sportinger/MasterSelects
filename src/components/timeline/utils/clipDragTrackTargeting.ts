@@ -25,6 +25,7 @@ const VISUAL_SOURCE_TYPES = new Set([
   'motion-null',
   'motion-adjustment',
   'storyboard',
+  'flock',
 ]);
 
 export function getClipDragTrackRequirement(
@@ -123,6 +124,81 @@ export function getClipDragNewTrackType(
   return null;
 }
 
+interface ResolveClipDragPointerTrackTargetInput {
+  activeNewTrackType: ClipDragNewTrackType | null;
+  clip: TimelineClip | undefined;
+  currentTrackId: string;
+  getRenderedTrackHeight: (track: TimelineTrack) => number;
+  hoveredTrack: TimelineTrack | undefined;
+  originalTrackId: string;
+  pointerTrack: TimelineTrack | undefined;
+  timelineY: number;
+  trackChangeAllowed: boolean;
+  tracks: TimelineTrack[];
+}
+
+export function resolveClipDragPointerTrackTarget({
+  activeNewTrackType,
+  clip,
+  currentTrackId,
+  getRenderedTrackHeight,
+  hoveredTrack,
+  originalTrackId,
+  pointerTrack,
+  timelineY,
+  trackChangeAllowed,
+  tracks,
+}: ResolveClipDragPointerTrackTargetInput): {
+  trackId: string;
+  newTrackType: ClipDragNewTrackType | null;
+} {
+  const requirement = getClipDragTrackRequirement(clip, tracks);
+  let trackId = resolveCompatibleClipDragTrackId(currentTrackId, originalTrackId, clip, tracks);
+  const newTrackType = trackChangeAllowed && !hoveredTrack
+    ? getClipDragNewTrackType(
+        tracks,
+        timelineY,
+        getRenderedTrackHeight,
+        requirement,
+        24,
+        activeNewTrackType,
+      )
+    : null;
+
+  if (newTrackType) {
+    return { trackId: getClipDragNewTrackId(newTrackType), newTrackType };
+  }
+
+  if (
+    hoveredTrack
+    && (trackChangeAllowed || hoveredTrack.id === originalTrackId)
+    && isClipDragTrackCompatible(hoveredTrack, requirement)
+  ) {
+    trackId = hoveredTrack.id;
+  } else if (
+    !hoveredTrack
+    && pointerTrack
+    && (trackChangeAllowed || pointerTrack.id === originalTrackId)
+    && isClipDragTrackCompatible(pointerTrack, requirement)
+  ) {
+    trackId = pointerTrack.id;
+  }
+
+  const pointerTrackId = pointerTrack?.id;
+  const pointerTrackType = pointerTrack?.type;
+  if (pointerTrackId && pointerTrack && !isClipDragTrackCompatible(pointerTrack, requirement)) {
+    const crossedTrackTypeBoundary = requirement !== null && pointerTrackType !== requirement;
+    const nearestCompatibleTrackId = crossedTrackTypeBoundary
+      ? resolveCompatibleClipDragTrackId(pointerTrackId, originalTrackId, clip, tracks)
+      : trackChangeAllowed
+        ? findNearestCompatibleClipDragTrackId(tracks, timelineY, getRenderedTrackHeight, requirement)
+        : null;
+    if (nearestCompatibleTrackId) trackId = nearestCompatibleTrackId;
+  }
+
+  return { trackId, newTrackType: null };
+}
+
 export function resolveCompatibleClipDragTrackId(
   trackId: string,
   originalTrackId: string,
@@ -130,9 +206,24 @@ export function resolveCompatibleClipDragTrackId(
   tracks: TimelineTrack[],
 ): string {
   const requirement = getClipDragTrackRequirement(clip, tracks);
+  const currentTrackIndex = tracks.findIndex(track => track.id === trackId);
   const currentTrack = tracks.find(track => track.id === trackId);
   if (isClipDragTrackCompatible(currentTrack, requirement)) {
     return currentTrack.id;
+  }
+
+  if (currentTrackIndex >= 0) {
+    let nearestTrackId: string | null = null;
+    let nearestTrackDistance = Infinity;
+    tracks.forEach((track, index) => {
+      if (!isClipDragTrackCompatible(track, requirement)) return;
+      const distance = Math.abs(index - currentTrackIndex);
+      if (distance < nearestTrackDistance) {
+        nearestTrackId = track.id;
+        nearestTrackDistance = distance;
+      }
+    });
+    if (nearestTrackId) return nearestTrackId;
   }
 
   const originalTrack = tracks.find(track => track.id === originalTrackId);

@@ -20,6 +20,7 @@ import {
   groupTransitionPanelItems,
   sectionTransitionPanelItems,
 } from './transitions/transitionPanelItems';
+import { useTransitionTouchTimelineDrag } from './transitions/useTransitionTouchTimelineDrag';
 import './TransitionsPanel.css';
 
 interface TransitionItemProps {
@@ -45,17 +46,23 @@ function TransitionItem({
 }: TransitionItemProps) {
   const dragStartedRef = useRef(false);
   const isPlanned = capability === 'planned';
+  const dragData = useMemo(() => ({
+    type: transition.id,
+    duration,
+    params: getDefaultTransitionParams(transition),
+  }), [duration, transition]);
+  const handleTouchPointerDown = useTransitionTouchTimelineDrag({
+    data: dragData,
+    disabled: isPlanned,
+    dragStartedRef,
+    label,
+  });
   const handleDragStart = useCallback((e: DragEvent<HTMLDivElement>) => {
     if (isPlanned) {
       e.preventDefault();
       return;
     }
     dragStartedRef.current = true;
-    const dragData = {
-      type: transition.id,
-      duration,
-      params: getDefaultTransitionParams(transition),
-    };
     setActiveTransitionDragData(dragData);
     e.dataTransfer.setData(TRANSITION_MIME_TYPE, serializeTransitionDropData(dragData));
     e.dataTransfer.effectAllowed = 'copy';
@@ -100,7 +107,7 @@ function TransitionItem({
     document.body.appendChild(dragEl);
     e.dataTransfer.setDragImage(dragEl, 42, 20);
     setTimeout(() => dragEl.remove(), 0);
-  }, [isPlanned, label, transition, duration]);
+  }, [dragData, isPlanned, label]);
 
   const handleDragEnd = useCallback(() => {
     setActiveTransitionDragData(null);
@@ -120,6 +127,7 @@ function TransitionItem({
       draggable={!isPlanned}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onPointerDown={handleTouchPointerDown}
       onClick={handleClick}
       className={[
         'transition-item',

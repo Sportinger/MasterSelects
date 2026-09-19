@@ -1,6 +1,6 @@
 import { clearCookie, loadSessionFromRequest, readCookie, SESSION_COOKIE_NAME } from '../lib/auth';
 import { getUserBillingSnapshot } from '../lib/billing';
-import { json, methodNotAllowed } from '../lib/db';
+import { getAiUser, isGuestAiUser, json, methodNotAllowed } from '../lib/db';
 import type { AppContext, AppRouteHandler } from '../lib/env';
 
 interface UserProfileRow {
@@ -28,8 +28,32 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
 
   const responseInit = headers.has('Set-Cookie') ? { headers } : undefined;
   const currentUser = context.data.user;
+  const aiUser = getAiUser(context);
 
   if (!session || !currentUser) {
+    if (aiUser && isGuestAiUser(context)) {
+      const billing = await getUserBillingSnapshot(context.env.DB, aiUser.id, { guest: true });
+      return json(
+        {
+          billing: {
+            klingGenerationEnabled: billing.klingGenerationEnabled,
+            label: 'Free',
+            monthlyCredits: 0,
+          },
+          creditBalance: billing.balance,
+          creditMeterReference: Math.max(400, billing.creditMeterReference),
+          entitlements: billing.entitlements,
+          hostedAIEnabled: billing.hostedAIEnabled,
+          plan: 'free',
+          session: {
+            authenticated: false,
+            guest: true,
+          },
+          user: null,
+        },
+        responseInit,
+      );
+    }
     return json(
       {
         billing: {
@@ -44,6 +68,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         plan: 'free',
         session: {
           authenticated: false,
+          guest: false,
         },
         user: null,
       },

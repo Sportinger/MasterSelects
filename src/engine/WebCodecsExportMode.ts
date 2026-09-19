@@ -13,6 +13,8 @@ import {
   findBufferedFrameIndex as findBufferedCtsIndex,
 } from './webCodecsExport/exportSamplePlanning';
 
+import { ExportDecoderPump } from './webCodecsExport/exportDecoderPump';
+
 const log = Logger.create('WebCodecsExportMode');
 
 /**
@@ -47,6 +49,13 @@ export class WebCodecsExportMode {
   // use hardware decode without deadlocking.
   private static readonly TARGET_LOOKAHEAD_SAMPLES = 4;
   private static readonly INITIAL_FRAME_SEARCH_SAMPLES = 32;
+  // Chromium on Android can report decodeQueueSize=0 for a 4K HEVC hardware
+  // decoder before its first VideoFrame callback reaches JavaScript. The
+  // normal rolling-window wait exits early once the queue looks stable, so
+  // allow one bounded startup-only grace period after all initial samples have
+  // been submitted. This keeps FAST export on WebCodecs without weakening the
+  // steady-state backpressure policy.
+  private static readonly INITIAL_FRAME_OUTPUT_WAIT_MS = 4000;
   private static readonly RECOVERY_FRAME_SEARCH_SAMPLES = 32;
   private static readonly DECODE_LOOKAHEAD_SAMPLES = 4;
   private static readonly KEEP_FRAMES_BEHIND = 1;
@@ -54,18 +63,8 @@ export class WebCodecsExportMode {
   // finishes before the export catches the buffer edge (otherwise the export
   // briefly freezes at every decode-window boundary).
   private static readonly WARM_AHEAD_THRESHOLD_SAMPLES = 2;
-  // Timeline cuts may jump minutes forward inside one source. Beyond two
-  // normal lookahead windows, restart at the target keyframe instead of
-  // decoding every intermediate sample.
-  private static readonly MAX_SEQUENTIAL_FORWARD_GAP_SAMPLES = 48;
-  // Max pending decodes before applying backpressure. Software decoders can throw
-  // a generic "Decoding error" (EncodingError) when fed far ahead, which closes
-  // the decoder and forces a slow keyframe restart — pacing the feed avoids that.
-  // Kept well above the old unbounded feed (whole window at once) but high enough
-  // that the decode-ahead stays comfortably in front of the export.
-  private static readonly MAX_DECODE_QUEUE = 2;
-
   private player: ExportModePlayer;
+  private decoderPump: ExportDecoderPump;
 
   // Export mode state
   private isActive = false;
@@ -79,38 +78,13 @@ export class WebCodecsExportMode {
 
   constructor(player: ExportModePlayer) {
     this.player = player;
-  }
-
-  private getConfiguredDecoderOrThrow(context: string): VideoDecoder {
-    const decoder = this.player.getDecoder();
-    if (!decoder) {
-      throw new Error(`FAST export decoder missing during ${context}`);
-    }
-    if (decoder.state === 'closed') {
-      throw new Error(`FAST export decoder closed during ${context}`);
-    }
-    return decoder;
-  }
-
-  private isRecoverableDecoderFailure(error: unknown): boolean {
-    if ((this.player.getDecoder()?.state ?? 'closed') === 'closed') {
-      return true;
-    }
-
-    const record = typeof error === 'object' && error !== null
-      ? error as { name?: unknown; message?: unknown }
-      : null;
-    const name = typeof record?.name === 'string' ? record.name : '';
-    const message = typeof record?.message === 'string'
-      ? record.message.toLowerCase()
-      : String(error).toLowerCase();
-
-    return name === 'FastExportDecoderClosedError'
-      || name === 'InvalidStateError'
-      || name === 'EncodingError'
-      || message.includes('decoder closed')
-      || message.includes('closed codec')
-      || message.includes('decoding error');
+    this.decoderPump = new ExportDecoderPump(player, {
+      sampleTimestampUs: sample => this.getNormalizedSampleTimestampUs(sample),
+      onSamplesSubmitted: endIndex => (this.decodeCursorIndex = Math.max(this.decodeCursorIndex, endIndex)),
+      waitForBufferedTarget: (target, timeout) => this.waitForBufferedTarget(target, timeout),
+      refreshBufferedFrameIndex: () => this.refreshBufferedFrameIndex(),
+      getBufferedFrameCount: () => this.exportFrameBuffer.size,
+    });
   }
 
   private getFrameToleranceUs(multiplier = 1.5): number {
@@ -129,19 +103,25 @@ export class WebCodecsExportMode {
   private async decodeWindowDiscardingDistantPreroll(
     startIndex: number,
     endIndexExclusive: number,
-    targetCtsUs: number
+    targetCtsUs: number,
+    awaitTargetOutput = true,
   ): Promise<void> {
     const previousDiscardBoundary = this.discardOutputBeforeCtsUs;
     this.discardOutputBeforeCtsUs = this.getRetainedHistoryStartCtsUs(targetCtsUs);
     try {
-      await this.decodeSampleWindow(startIndex, endIndexExclusive, targetCtsUs);
+      await this.decoderPump.decodeSampleWindow(
+        startIndex,
+        endIndexExclusive,
+        targetCtsUs,
+        awaitTargetOutput,
+      );
     } finally {
       this.discardOutputBeforeCtsUs = previousDiscardBoundary;
     }
   }
 
   private refreshBufferedFrameIndex(): void {
-    this.exportFramesCts = Array.from(this.exportFrameBuffer.keys()).sort((a, b) => a - b);
+    this.exportFramesCts = Array.from(this.exportFrameBuffer.keys()).toSorted((a, b) => a - b);
   }
 
   private findBufferedFrameIndex(targetCtsUs: number, toleranceUs = this.getFrameToleranceUs()): number {
@@ -151,7 +131,8 @@ export class WebCodecsExportMode {
   private async waitForBufferedTarget(
     targetCtsUs: number,
     timeoutMs: number,
-    toleranceUs = this.getFrameToleranceUs(2.5)
+    toleranceUs = this.getFrameToleranceUs(2.5),
+    allowIdleExit = true
   ): Promise<void> {
     const startTime = performance.now();
     let previousBufferSize = this.exportFrameBuffer.size;
@@ -163,7 +144,7 @@ export class WebCodecsExportMode {
         return;
       }
 
-      const decoder = this.getConfiguredDecoderOrThrow('waitForBufferedTarget');
+      const decoder = this.decoderPump.getConfiguredDecoderOrThrow('waitForBufferedTarget');
       const bufferSize = this.exportFrameBuffer.size;
       const queueSize = decoder.decodeQueueSize;
 
@@ -172,12 +153,26 @@ export class WebCodecsExportMode {
         stablePolls = 0;
       } else {
         stablePolls += 1;
-        if (stablePolls >= 4) {
+        if (allowIdleExit && stablePolls >= 4) {
           break;
         }
       }
 
       await new Promise(resolve => setTimeout(resolve, 10));
+    }
+
+    this.refreshBufferedFrameIndex();
+  }
+
+  private async waitForFirstBufferedFrame(timeoutMs: number): Promise<void> {
+    const startTime = performance.now();
+
+    while (
+      this.exportFrameBuffer.size === 0 &&
+      performance.now() - startTime < timeoutMs
+    ) {
+      this.decoderPump.getConfiguredDecoderOrThrow('waitForFirstBufferedFrame');
+      await new Promise(resolve => setTimeout(resolve, 20));
     }
 
     this.refreshBufferedFrameIndex();
@@ -190,110 +185,6 @@ export class WebCodecsExportMode {
     }
     try { currentFrame.close(); } catch {}
     this.player.setCurrentFrame(null);
-  }
-
-  private async reconfigureDecoderForExport(context: string): Promise<void> {
-    let decoder = this.player.getDecoder();
-    // Recover from a decoder that errored out (closed) mid-export by recreating
-    // it, instead of throwing — one bad warmup decode shouldn't kill the export.
-    if (!decoder || decoder.state === 'closed') {
-      decoder = this.player.recreateExportDecoder?.() ?? null;
-      if (!decoder || decoder.state === 'closed') {
-        throw new Error(`FAST export decoder unavailable during ${context}`);
-      }
-      log.warn(`Recreated FAST export decoder after it closed (${context})`);
-    }
-
-    const codecConfig = this.player.getCodecConfig();
-    if (!codecConfig) {
-      throw new Error(`FAST export codec config missing during ${context}`);
-    }
-
-    decoder.reset();
-    decoder.configure({
-      ...codecConfig,
-      hardwareAcceleration: 'prefer-hardware',
-    });
-  }
-
-  private async decodeSampleWindow(
-    startIndex: number,
-    endIndexExclusive: number,
-    targetCtsUs: number
-  ): Promise<void> {
-    const samples = this.player.getSamples();
-    if (startIndex >= endIndexExclusive || startIndex >= samples.length) {
-      return;
-    }
-
-    const decoder = this.getConfiguredDecoderOrThrow(`decodeSampleWindow ${startIndex}-${endIndexExclusive}`);
-
-    for (let i = startIndex; i < endIndexExclusive; i++) {
-      // Backpressure: wait for the decode queue to drain before queuing more, so
-      // a software decoder isn't overwhelmed (the main cause of mid-export
-      // "Decoding error" closes and the periodic 1fps keyframe restarts).
-      let backpressureGuard = 0;
-      while (decoder.decodeQueueSize >= WebCodecsExportMode.MAX_DECODE_QUEUE && backpressureGuard < 500) {
-        if (decoder.state === 'closed') {
-          throw new Error(`FAST export decoder closed during decodeSampleWindow ${startIndex}-${endIndexExclusive}`);
-        }
-        await new Promise(resolve => setTimeout(resolve, 2));
-        backpressureGuard++;
-      }
-
-      const sample = samples[i];
-      const chunk = new EncodedVideoChunk({
-        type: sample.is_sync ? 'key' : 'delta',
-        timestamp: this.getNormalizedSampleTimestampUs(sample),
-        duration: (sample.duration * 1_000_000) / sample.timescale,
-        data: sample.data,
-      });
-
-      try {
-        decoder.decode(chunk);
-      } catch (e) {
-        const errorRecord = typeof e === 'object' && e !== null
-          ? e as { name?: unknown; message?: unknown }
-          : null;
-        const message = typeof errorRecord?.message === 'string'
-          ? errorRecord.message
-          : String(e);
-        const errorName = typeof errorRecord?.name === 'string' ? errorRecord.name : '';
-        if (
-          decoder.state === 'closed' ||
-          errorName === 'InvalidStateError' ||
-          errorName === 'EncodingError'
-        ) {
-          const decoderError = new Error(
-            `FAST export decoder closed while decoding sample ${i}: ${message}`
-          );
-          decoderError.name = 'FastExportDecoderClosedError';
-          throw decoderError;
-        }
-        if (message.includes('key frame')) {
-          throw new Error(`FAST export lost keyframe context near sample ${i}`);
-        }
-        throw e instanceof Error
-          ? e
-          : new Error(`FAST export decode failed at sample ${i}: ${message}`);
-      }
-    }
-
-    this.decodeCursorIndex = Math.max(this.decodeCursorIndex, endIndexExclusive);
-    this.player.setSampleIndex(this.decodeCursorIndex);
-
-    // Flushing mid-stream can cut a GOP and trigger a decoder failure.
-    // Only drain with flush when we truly reached the end of the source.
-    if (endIndexExclusive >= samples.length) {
-      await this.waitForDecoderFlush(Math.max(4000, (endIndexExclusive - startIndex) * 10));
-    } else {
-      await this.waitForBufferedTarget(
-        targetCtsUs,
-        Math.max(1200, (endIndexExclusive - startIndex) * 12)
-      );
-    }
-
-    this.refreshBufferedFrameIndex();
   }
 
   private async warmBufferAroundSample(targetSampleIndex: number): Promise<void> {
@@ -311,7 +202,13 @@ export class WebCodecsExportMode {
       )
     );
 
-    await this.decodeSampleWindow(
+    log.debug('FAST decode window', {
+      targetSampleIndex, decodeCursorIndex: this.decodeCursorIndex, endIndexExclusive,
+      bufferedFrames: this.exportFrameBuffer.size,
+      targetCtsUs: this.getNormalizedSampleTimestampUs(targetSample),
+    });
+
+    await this.decoderPump.decodeSampleWindow(
       this.decodeCursorIndex,
       endIndexExclusive,
       this.getNormalizedSampleTimestampUs(targetSample)
@@ -368,7 +265,7 @@ export class WebCodecsExportMode {
     this.exportCurrentIndex = 0;
 
     const keyframeIndex = findKeyframeBefore(samples, targetSampleIndex);
-    await this.reconfigureDecoderForExport('restartFromKeyframe');
+    await this.decoderPump.reconfigureDecoderForExport('restartFromKeyframe');
     this.decodeCursorIndex = keyframeIndex;
     this.player.setSampleIndex(keyframeIndex);
 
@@ -393,7 +290,7 @@ export class WebCodecsExportMode {
       targetSampleIndex + WebCodecsExportMode.RECOVERY_FRAME_SEARCH_SAMPLES
     );
     while (
-      this.findBufferedFrameIndex(targetCtsUs, this.getFrameToleranceUs()) < 0 &&
+      this.findBufferedFrameIndex(targetCtsUs, 1) < 0 &&
       endIndexExclusive < recoverySearchEnd
     ) {
       const nextEndIndexExclusive = Math.min(
@@ -503,7 +400,7 @@ export class WebCodecsExportMode {
     );
     const startCtsUs = this.getNormalizedSampleTimestampUs(startSample);
 
-    await this.reconfigureDecoderForExport('prepareForSequentialExport');
+    await this.decoderPump.reconfigureDecoderForExport('prepareForSequentialExport', true);
     this.decodeCursorIndex = keyframeIndex;
     this.player.setSampleIndex(keyframeIndex);
 
@@ -515,14 +412,17 @@ export class WebCodecsExportMode {
     await this.decodeWindowDiscardingDistantPreroll(
       keyframeIndex,
       decodeEnd,
-      startCtsUs
+      startCtsUs,
+      false,
     );
     endDecode();
 
     // Some H.264/H.265 streams reorder more than four frames before emitting
-    // the first presentation frame. Grow the initial window in small chunks so
-    // FAST export does not fail merely because the decoder is still holding its
-    // startup frames. The cap keeps a genuinely broken decoder bounded.
+    // the first presentation frame. Grow the initial window in small chunks
+    // without pausing after each chunk: Android hardware decoders can report an
+    // empty queue while withholding their first callback, and per-chunk idle
+    // waits made the submitted sample count depend on event-loop contention.
+    // The cap keeps a genuinely broken decoder bounded.
     const initialSearchEnd = Math.min(
       allSamples.length,
       startSampleIndex + WebCodecsExportMode.INITIAL_FRAME_SEARCH_SAMPLES
@@ -533,8 +433,20 @@ export class WebCodecsExportMode {
         decodeEnd + WebCodecsExportMode.DECODE_LOOKAHEAD_SAMPLES
       );
       log.debug(`Initial frame still pending; extending decode window to sample ${nextDecodeEnd}`);
-      await this.decodeWindowDiscardingDistantPreroll(decodeEnd, nextDecodeEnd, startCtsUs);
+      await this.decodeWindowDiscardingDistantPreroll(
+        decodeEnd,
+        nextDecodeEnd,
+        startCtsUs,
+        false,
+      );
       decodeEnd = nextDecodeEnd;
+    }
+
+    if (this.exportFramesCts.length === 0) {
+      log.debug('Initial samples submitted; waiting for the first decoder output');
+      await this.waitForFirstBufferedFrame(
+        WebCodecsExportMode.INITIAL_FRAME_OUTPUT_WAIT_MS
+      );
     }
 
     const startFrameIndex = this.findBufferedFrameIndex(
@@ -561,65 +473,6 @@ export class WebCodecsExportMode {
       `Ready: ${this.exportFrameBuffer.size} frames buffered, CTS range: ${this.exportFramesCts[0]?.toFixed(0)} - ${this.exportFramesCts[this.exportFramesCts.length - 1]?.toFixed(0)}`
     );
     endPrepare();
-  }
-
-  /**
-   * Wait for decoder to flush with timeout fallback.
-   * Only safe to use when we actually reached the end of the source.
-   */
-  private async waitForDecoderFlush(timeoutMs: number): Promise<void> {
-    const decoder = this.getConfiguredDecoderOrThrow('waitForDecoderFlush');
-
-    const startTime = performance.now();
-    const startBufferSize = this.exportFrameBuffer.size;
-    let flushError: unknown = null;
-
-    const flushPromise = decoder.flush().catch(e => {
-      flushError = e;
-      log.warn(`Flush error: ${e}`);
-    });
-
-    const timeoutPromise = new Promise<void>((resolve) => {
-      setTimeout(resolve, timeoutMs);
-    });
-
-    await Promise.race([flushPromise, timeoutPromise]);
-
-    const decoderAfter = this.player.getDecoder();
-    if (!decoderAfter || decoderAfter.state === 'closed') {
-      throw new Error('FAST export decoder closed during flush');
-    }
-
-    if (decoderAfter.decodeQueueSize > 0) {
-      log.warn(`Flush timeout, waiting for queue (${decoderAfter.decodeQueueSize} remaining)...`);
-      let waitCount = 0;
-      while (
-        this.player.getDecoder() &&
-        this.player.getDecoder()!.state !== 'closed' &&
-        this.player.getDecoder()!.decodeQueueSize > 0 &&
-        waitCount < 100
-      ) {
-        await new Promise(r => setTimeout(r, 20));
-        waitCount++;
-      }
-    }
-
-    const decoderFinal = this.player.getDecoder();
-    if (!decoderFinal || decoderFinal.state === 'closed') {
-      throw new Error('FAST export decoder closed during queue drain');
-    }
-
-    if (flushError) {
-      throw flushError instanceof Error
-        ? flushError
-        : new Error(`FAST export flush failed: ${String(flushError)}`);
-    }
-
-    const elapsed = performance.now() - startTime;
-    const framesOutput = this.exportFrameBuffer.size - startBufferSize;
-    log.debug(
-      `Flush complete: ${framesOutput} frames output in ${elapsed.toFixed(0)}ms, buffer now ${this.exportFrameBuffer.size}`
-    );
   }
 
   /**
@@ -675,7 +528,9 @@ export class WebCodecsExportMode {
       ? this.getNormalizedSampleTimestampUs(targetSample)
       : requestedTargetCts;
 
-    let bestIndex = this.findBufferedFrameIndex(targetCts, this.getFrameToleranceUs());
+    // CTS is already resolved to the desired source sample. Permit only integer
+    // microsecond rounding, never a neighboring frame that happens to be ready.
+    let bestIndex = this.findBufferedFrameIndex(targetCts, 1);
     if (bestIndex >= 0 && bestIndex < this.exportFramesCts.length) {
       const cts = this.exportFramesCts[bestIndex];
       const foundFrame = this.exportFrameBuffer.get(cts);
@@ -712,7 +567,7 @@ export class WebCodecsExportMode {
 
     if (this.pendingWarmBuffer) {
       await this.pendingWarmBuffer;
-      bestIndex = this.findBufferedFrameIndex(targetCts, this.getFrameToleranceUs(3));
+      bestIndex = this.findBufferedFrameIndex(targetCts, 1);
       if (bestIndex >= 0 && bestIndex < this.exportFramesCts.length) {
         const cts = this.exportFramesCts[bestIndex];
         this.player.setCurrentFrame(this.exportFrameBuffer.get(cts) || null);
@@ -725,19 +580,20 @@ export class WebCodecsExportMode {
     // A closed decoder must restart from a keyframe (which recreates it) — decoding
     // more samples on a dead decoder would just keep throwing.
     const decoderClosed = (this.player.getDecoder()?.state ?? 'closed') === 'closed';
-    const largeForwardJump =
-      targetSampleIndex >
-      this.decodeCursorIndex + WebCodecsExportMode.MAX_SEQUENTIAL_FORWARD_GAP_SAMPLES;
+    // Any jump over unsubmitted samples can retain enough skipped outputs to
+    // exhaust a small hardware surface pool. Restart and discard preroll even
+    // for short cuts; ordinary sequential requests do not skip the cursor.
+    const forwardSourceJump = targetSampleIndex > this.decodeCursorIndex;
     try {
       if (
         decoderClosed ||
         targetCts < minCtsInBuffer ||
         targetSampleIndex < this.decodeCursorIndex - WebCodecsExportMode.KEEP_FRAMES_BEHIND ||
-        largeForwardJump
+        forwardSourceJump
       ) {
         const reason = decoderClosed
           ? 'decoder closed — recovering'
-          : largeForwardJump
+          : forwardSourceJump
             ? `forward source jump of ${targetSampleIndex - this.decodeCursorIndex} samples`
             : 'backward source jump';
         log.info(`Restarting FAST decode window around ${timeSeconds.toFixed(3)}s (${reason})`);
@@ -750,8 +606,11 @@ export class WebCodecsExportMode {
         }
         await this.warmBufferAroundSample(targetSampleIndex);
       }
+      // The browser can reclaim a decoder after submission while its exact
+      // output is still pending. Keep that wait inside the same bounded recovery.
+      await this.waitForBufferedTarget(targetCts, 1200, 1, false);
     } catch (error) {
-      if (!this.isRecoverableDecoderFailure(error)) {
+      if (!this.decoderPump.isRecoverableDecoderFailure(error)) {
         throw error;
       }
       log.warn(
@@ -759,9 +618,10 @@ export class WebCodecsExportMode {
         error
       );
       await this.restartFromKeyframe(targetSampleIndex);
+      await this.waitForBufferedTarget(targetCts, 1200, 1, false);
     }
 
-    bestIndex = this.findBufferedFrameIndex(targetCts, this.getFrameToleranceUs(3));
+    bestIndex = this.findBufferedFrameIndex(targetCts, 1);
     if (bestIndex >= 0 && bestIndex < this.exportFramesCts.length) {
       const cts = this.exportFramesCts[bestIndex];
       this.player.setCurrentFrame(this.exportFrameBuffer.get(cts) || null);
@@ -770,16 +630,13 @@ export class WebCodecsExportMode {
       return;
     }
 
-    if (this.exportFramesCts.length > 0) {
-      bestIndex = findClosestFrameIndex(this.exportFramesCts, targetCts);
-      const fallbackCts = this.exportFramesCts[Math.max(0, bestIndex)];
-      this.player.setCurrentFrame(this.exportFrameBuffer.get(fallbackCts) || null);
-      this.exportCurrentIndex = Math.max(0, bestIndex);
-      log.warn(`Using fallback frame at CTS ${fallbackCts.toFixed(0)} for target ${targetCts.toFixed(0)}`);
-      return;
-    }
-
-    log.error(`No frames in buffer for seek to ${timeSeconds.toFixed(3)}s`);
+    log.error(`Exact frame unavailable for seek to ${timeSeconds.toFixed(3)}s`, {
+      targetSampleIndex, decodeCursorIndex: this.decodeCursorIndex,
+      bufferedFrames: this.exportFrameBuffer.size,
+      bufferedRange: [this.exportFramesCts[0], this.exportFramesCts.at(-1)],
+      decoderState: this.player.getDecoder()?.state,
+      decodeQueueSize: this.player.getDecoder()?.decodeQueueSize,
+    });
     throw new Error(`FAST export could not decode frame at ${timeSeconds.toFixed(3)}s`);
   }
 

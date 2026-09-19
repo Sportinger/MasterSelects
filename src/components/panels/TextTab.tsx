@@ -3,14 +3,24 @@
  * Inspired by After Effects / professional NLE text panels
  */
 
-import { createContext, useState, useCallback, useContext, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { createTextBoundsPathProperty } from '../../types/animationProperties';
 import type { Keyframe } from '../../types/keyframes';
 import type { TextClipProperties } from '../../types/text';
 import { useTimelineStore } from '../../stores/timeline';
+import { DEFAULT_TEXT_PROPERTIES } from '../../stores/timeline/constants';
 import { googleFontsService, POPULAR_FONTS } from '../../services/googleFontsService';
-import { resolvePointerLockDragDeltaX } from '../common/pointerLockDragDelta';
 import { LabeledValue } from './properties/transformTab/ValueControls';
+import {
+  PROPERTY_VALUE_RESET_TITLE,
+  resetPropertyValueOnContextMenu,
+} from './properties/propertyValueReset';
+import { ALL_FONT_WEIGHTS, getFontWeightLabel } from './properties/fontWeightOptions';
+import { InspectorSelect } from '../inspector/InspectorSelect';
+import {
+  ResolveInspectorRow,
+  ResolveInspectorSection,
+} from './properties/resolveInspector/ResolveInspectorPrimitives';
 import {
   createTextBoundsFromRect,
   getTextBoundsPathValue,
@@ -19,9 +29,8 @@ import {
 } from '../../services/textLayout';
 
 const EMPTY_KEYFRAMES: Keyframe[] = [];
-const SharedTextNumberControlContext = createContext(false);
 
-function getCompactNumberLabel(title: string): string {
+function getTextValueLabel(title: string): string {
   const labels: Record<string, string> = {
     'Font Size': 'Size',
     'Line Height': 'Line',
@@ -38,200 +47,35 @@ function getCompactNumberLabel(title: string): string {
   return labels[title] ?? title;
 }
 
-// Compact draggable number with icon label
-interface CompactNumberProps {
+interface TextValueProps {
   value: number;
   onChange: (value: number) => void;
   min?: number;
   max?: number;
   step?: number;
   unit?: string;
-  icon: React.ReactNode;
   title: string;
   defaultValue?: number;
 }
 
-interface CompactNumberDragState {
-  startValue: number;
-  lastClientX: number;
-  accumulatedDelta: number;
-  pointerLockRequested: boolean;
-  pointerLockActive: boolean;
-  pointerLockHandoffPending: boolean;
-  element: HTMLElement;
-}
-
-function CompactNumber({ value, onChange, min = 0, max = 999, step = 1, unit = 'px', icon, title, defaultValue }: CompactNumberProps) {
-  const useSharedControl = useContext(SharedTextNumberControlContext);
-  const dragStateRef = useRef<CompactNumberDragState | null>(null);
-
-  const readDragDeltaX = useCallback((event: MouseEvent) => {
-    const state = dragStateRef.current;
-    if (!state) return 0;
-
-    const isPointerLocked = state.pointerLockActive || document.pointerLockElement === state.element;
-    const result = resolvePointerLockDragDeltaX({
-      clientX: event.clientX,
-      lastClientX: state.lastClientX,
-      movementX: event.movementX,
-      pointerLockRequested: state.pointerLockRequested,
-      pointerLockActive: isPointerLocked,
-      pointerLockHandoffPending: state.pointerLockHandoffPending,
-    });
-    state.lastClientX = result.nextClientX;
-    if (result.pointerLockHandoffConsumed) {
-      state.pointerLockHandoffPending = false;
-    }
-    return result.deltaX;
-  }, []);
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    if ((e.target as HTMLElement).tagName === 'INPUT') return;
-    e.preventDefault();
-    const element = e.currentTarget as HTMLElement;
-    dragStateRef.current = {
-      startValue: value,
-      lastClientX: e.clientX,
-      accumulatedDelta: 0,
-      pointerLockRequested: false,
-      pointerLockActive: false,
-      pointerLockHandoffPending: false,
-      element,
-    };
-
-    const handlePointerLockChange = () => {
-      const state = dragStateRef.current;
-      if (state) {
-        state.pointerLockActive = document.pointerLockElement === state.element;
-      }
-    };
-
-    document.addEventListener('pointerlockchange', handlePointerLockChange);
-
-    if (element.requestPointerLock) {
-      dragStateRef.current.pointerLockRequested = true;
-      dragStateRef.current.pointerLockHandoffPending = true;
-      try {
-        const result = element.requestPointerLock();
-        if (result && typeof result.then === 'function') {
-          void result.then(
-            () => {
-              const state = dragStateRef.current;
-              if (state) state.pointerLockActive = document.pointerLockElement === state.element;
-            },
-            () => {
-              const state = dragStateRef.current;
-              if (state) {
-                state.pointerLockRequested = false;
-                state.pointerLockActive = false;
-                state.pointerLockHandoffPending = false;
-              }
-            },
-          );
-        }
-      } catch {
-        dragStateRef.current.pointerLockRequested = false;
-        dragStateRef.current.pointerLockActive = false;
-        dragStateRef.current.pointerLockHandoffPending = false;
-      }
-    }
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const state = dragStateRef.current;
-      if (!state) return;
-      if ((moveEvent.buttons & 1) !== 1) {
-        handleMouseUp();
-        return;
-      }
-
-      state.accumulatedDelta += readDragDeltaX(moveEvent);
-      const sensitivity = step < 1 ? 0.5 : (step >= 10 ? 5 : 1);
-      const newValue = state.startValue + Math.round(state.accumulatedDelta / sensitivity) * step;
-      onChange(Math.max(min, Math.min(max, newValue)));
-    };
-
-    const handleMouseUp = () => {
-      const state = dragStateRef.current;
-      if (state && document.pointerLockElement === state.element) {
-        document.exitPointerLock?.();
-      }
-      document.removeEventListener('pointerlockchange', handlePointerLockChange);
-      dragStateRef.current = null;
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, [value, readDragDeltaX, onChange, min, max, step]);
-
-  if (useSharedControl) {
-    return (
-      <LabeledValue
-        label={getCompactNumberLabel(title)}
-        value={value}
-        onChange={onChange}
-        min={min}
-        max={max}
-        decimals={step < 1 ? 1 : 0}
-        suffix={unit}
-        defaultValue={defaultValue}
-      />
-    );
-  }
-
+function TextValue({ value, onChange, min = 0, max = 999, step = 1, unit = 'px', title, defaultValue }: TextValueProps) {
   return (
-    <div className="tt-compact-num" title={title} onMouseDown={handleMouseDown}>
-      <span className="tt-num-icon">{icon}</span>
-      <input
-        type="number"
-        value={step < 1 ? value.toFixed(1) : value}
-        onChange={(e) => onChange(Math.max(min, Math.min(max, parseFloat(e.target.value) || min)))}
-        min={min}
-        max={max}
-        step={step}
-      />
-      <span className="tt-num-unit">{unit}</span>
-    </div>
+    <LabeledValue
+      ariaLabel={title}
+      className="resolve-inspector-field"
+      label={getTextValueLabel(title)}
+      value={value}
+      onChange={onChange}
+      min={min}
+      max={max}
+      decimals={step < 1 ? 1 : 0}
+      suffix={unit}
+      defaultValue={defaultValue}
+    />
   );
 }
 
 // SVG Icons as inline components
-const IconFontSize = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-    <text x="0" y="12" fontSize="11" fontWeight="bold" fontFamily="Arial">T</text>
-    <text x="7" y="12" fontSize="8" fontWeight="bold" fontFamily="Arial">T</text>
-  </svg>
-);
-
-const IconLineHeight = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-    <path d="M2 1h10M2 13h10M7 3v8M5 5l2-2 2 2M5 9l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-  </svg>
-);
-
-const IconLetterSpacing = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-    <text x="1" y="10" fontSize="9" fontWeight="bold" fontFamily="Arial">V</text>
-    <text x="7" y="10" fontSize="9" fontWeight="bold" fontFamily="Arial">A</text>
-  </svg>
-);
-
-const IconBoxSize = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" strokeWidth="1.3" fill="none">
-    <rect x="2" y="2" width="10" height="10" rx="1" />
-    <path d="M4 5h6M4 7h5M4 9h4" />
-  </svg>
-);
-
-const IconBoxPosition = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" strokeWidth="1.3" fill="none">
-    <path d="M7 1v12M1 7h12" />
-    <rect x="4" y="4" width="6" height="6" rx="1" />
-  </svg>
-);
-
 const IconStraightenBounds = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" strokeWidth="1.3" fill="none">
     <path d="M2 3h10v8H2z" />
@@ -348,6 +192,8 @@ interface TextTabProps {
   liveText?: boolean;
   hideContent?: boolean;
   compact?: boolean;
+  resetDefaults?: Partial<TextClipProperties>;
+  selectionPills?: boolean;
 }
 
 export function TextTab({
@@ -357,6 +203,8 @@ export function TextTab({
   liveText = false,
   hideContent = false,
   compact = false,
+  resetDefaults,
+  selectionPills = false,
 }: TextTabProps) {
   const { updateTextProperties } = useTimelineStore();
   const [localText, setLocalText] = useState(textProperties.text);
@@ -382,6 +230,11 @@ export function TextTab({
     googleFontsService.loadFont(textProperties.fontFamily, textProperties.fontWeight);
   }, [textProperties.fontFamily, textProperties.fontWeight]);
 
+  useEffect(() => {
+    if (!selectionPills) return;
+    void googleFontsService.preloadFont(textProperties.fontFamily);
+  }, [selectionPills, textProperties.fontFamily]);
+
   const handleTextChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setLocalText(e.target.value);
   }, []);
@@ -397,6 +250,14 @@ export function TextTab({
   const availableWeights = googleFontsService.getAvailableWeights(textProperties.fontFamily);
   const canvasWidth = Math.max(1, Math.round(canvasSize.width));
   const canvasHeight = Math.max(1, Math.round(canvasSize.height));
+  const defaultProperties = useMemo<TextClipProperties>(() => ({
+    ...DEFAULT_TEXT_PROPERTIES,
+    boxX: 0,
+    boxY: 0,
+    boxWidth: canvasWidth,
+    boxHeight: canvasHeight,
+    ...resetDefaults,
+  }), [canvasHeight, canvasWidth, resetDefaults]);
   const textBox = resolveTextBoxRect(textProperties, canvasWidth, canvasHeight);
   const boxEnabled = textProperties.boxEnabled === true;
 
@@ -445,297 +306,217 @@ export function TextTab({
     useTimelineStore.getState().recordTextBoundsPathKeyframe(clipId);
   }, [canvasHeight, canvasWidth, clipId, textProperties, updateTextProperties]);
 
+  const changeFontFamily = (newFamily: string) => {
+    const weights = googleFontsService.getAvailableWeights(newFamily);
+    if (!weights.includes(textProperties.fontWeight)) {
+      const nearest = weights.reduce((previous, current) => (
+        Math.abs(current - textProperties.fontWeight) < Math.abs(previous - textProperties.fontWeight)
+          ? current
+          : previous
+      ));
+      updateTextProperties(clipId, { fontFamily: newFamily, fontWeight: nearest });
+      return;
+    }
+    updateProp('fontFamily', newFamily);
+  };
+
+  const colorControl = (
+    value: string,
+    fallback: string,
+    label: string,
+    onChange: (value: string) => void,
+  ) => (
+    <div className="tt-inspector-color-row">
+      <input
+        aria-label={`${label} picker`}
+        className="tt-color-swatch"
+        onChange={event => onChange(event.target.value)}
+        onContextMenu={event => resetPropertyValueOnContextMenu(event, () => onChange(fallback))}
+        title={`${label} — ${PROPERTY_VALUE_RESET_TITLE}`}
+        type="color"
+        value={value.startsWith('#') ? value : fallback}
+      />
+      <input
+        aria-label={label}
+        className="tt-color-hex"
+        onChange={event => onChange(event.target.value)}
+        onContextMenu={event => resetPropertyValueOnContextMenu(event, () => onChange(fallback))}
+        title={PROPERTY_VALUE_RESET_TITLE}
+        type="text"
+        value={value}
+      />
+    </div>
+  );
+
   return (
-    <SharedTextNumberControlContext.Provider value={compact}>
-      <div className={`tt ${compact ? 'tt--compact' : ''}`}>
+    <div className={`tt tt--inspector transform-tab-compact${compact ? ' tt--compact' : ''}`}>
       {!hideContent && (
-        <div className="tt-section">
-          <textarea
-            className="tt-textarea"
-            value={liveText ? 'Live from transcript' : localText}
-            onChange={handleTextChange}
-            placeholder={liveText ? undefined : 'Enter text...'}
-            aria-label={liveText ? 'Caption text is supplied live from the transcript' : 'Text content'}
-            disabled={liveText}
-            rows={2}
-          />
-        </div>
+        <ResolveInspectorSection indicator="none" title="Content">
+          <ResolveInspectorRow label="Text">
+            <textarea
+              aria-label={liveText ? 'Caption text is supplied live from the transcript' : 'Text content'}
+              className="tt-textarea"
+              disabled={liveText}
+              onChange={handleTextChange}
+              placeholder={liveText ? undefined : 'Enter text...'}
+              rows={2}
+              value={liveText ? 'Live from transcript' : localText}
+            />
+          </ResolveInspectorRow>
+        </ResolveInspectorSection>
       )}
 
-      {/* Font */}
-      <div className="tt-section">
-        <div className="tt-section-header">Text</div>
-        <select
-          className="tt-select-full"
-          value={textProperties.fontFamily}
-          onChange={(e) => {
-            const newFamily = e.target.value;
-            const weights = googleFontsService.getAvailableWeights(newFamily);
-            // Auto-adjust weight to nearest available for the new font
-            if (!weights.includes(textProperties.fontWeight)) {
-              const nearest = weights.reduce((prev, curr) =>
-                Math.abs(curr - textProperties.fontWeight) < Math.abs(prev - textProperties.fontWeight) ? curr : prev
-              );
-              updateTextProperties(clipId, { fontFamily: newFamily, fontWeight: nearest });
-            } else {
-              updateProp('fontFamily', newFamily);
-            }
-          }}
-          style={{ fontFamily: textProperties.fontFamily }}
-        >
-          {POPULAR_FONTS.map(font => (
-            <option key={font.family} value={font.family} style={{ fontFamily: font.family }}>
-              {font.family}
-            </option>
-          ))}
-        </select>
-
-        <div className="tt-row-2col">
-          <select
-            className="tt-select-full"
-            value={textProperties.fontWeight}
-            onChange={(e) => updateProp('fontWeight', parseInt(e.target.value))}
-          >
-            {availableWeights.map(w => (
-              <option key={w} value={w}>{
-                w === 100 ? 'Thin' :
-                w === 200 ? 'Extra Light' :
-                w === 300 ? 'Light' :
-                w === 400 ? 'Regular' :
-                w === 500 ? 'Medium' :
-                w === 600 ? 'Semi Bold' :
-                w === 700 ? 'Bold' :
-                w === 800 ? 'Extra Bold' :
-                w === 900 ? 'Black' : `${w}`
-              }</option>
-            ))}
-          </select>
-          <select
-            className="tt-select-full"
-            value={textProperties.fontStyle}
-            onChange={(e) => updateProp('fontStyle', e.target.value as 'normal' | 'italic')}
-          >
-            <option value="normal">Normal</option>
-            <option value="italic">Italic</option>
-          </select>
-        </div>
-
-        {/* Size + Line Height */}
-        <div className="tt-row-2col">
-          <CompactNumber
-            icon={<IconFontSize />}
-            title="Font Size"
-            value={textProperties.fontSize}
-            onChange={(v) => updateProp('fontSize', v)}
-            min={8}
-            max={500}
-            unit="px"
-            defaultValue={64}
+      <ResolveInspectorSection indicator="none" title="Text">
+        <ResolveInspectorRow label="Font">
+          <InspectorSelect
+            ariaLabel="Font family"
+            onChange={changeFontFamily}
+            onReset={() => updateTextProperties(clipId, {
+              fontFamily: defaultProperties.fontFamily,
+              fontWeight: defaultProperties.fontWeight,
+            })}
+            options={POPULAR_FONTS.map(font => ({
+              label: font.family,
+              style: { fontFamily: font.family },
+              value: font.family,
+            }))}
+            value={textProperties.fontFamily}
           />
-          <CompactNumber
-            icon={<IconLineHeight />}
-            title="Line Height"
-            value={textProperties.lineHeight}
-            onChange={(v) => updateProp('lineHeight', v)}
-            min={0.5}
-            max={3}
-            step={0.1}
-            unit=""
-            defaultValue={1.12}
-          />
-        </div>
-
-        {/* Letter Spacing */}
-        <div className="tt-row-2col">
-          <CompactNumber
-            icon={<IconLetterSpacing />}
-            title="Letter Spacing"
-            value={textProperties.letterSpacing}
-            onChange={(v) => updateProp('letterSpacing', v)}
-            min={-10}
-            max={50}
-            unit="px"
-            defaultValue={0}
-          />
-          <div className="tt-compact-num" style={{ visibility: 'hidden' }} />
-        </div>
-
-        {/* Fill + Stroke inline */}
-        <div className="tt-color-row">
-          <input
-            type="color"
-            className="tt-color-swatch"
-            value={textProperties.color.startsWith('#') ? textProperties.color : '#ffffff'}
-            onChange={(e) => updateProp('color', e.target.value)}
-            title="Fill Color"
-          />
-          <span className="tt-color-label">Fill</span>
-          <input
-            type="text"
-            className="tt-color-hex"
-            value={textProperties.color}
-            onChange={(e) => updateProp('color', e.target.value)}
-          />
-        </div>
-
-        <div className="tt-color-row">
-          <label className="tt-toggle">
-            <input
-              type="checkbox"
-              checked={textProperties.strokeEnabled}
-              onChange={(e) => updateProp('strokeEnabled', e.target.checked)}
+        </ResolveInspectorRow>
+        <ResolveInspectorRow label="Style">
+          <div className="tt-inspector-select-pair">
+            <InspectorSelect
+              ariaLabel="Font weight"
+              onChange={value => updateProp('fontWeight', Number(value))}
+              onReset={() => updateProp('fontWeight', defaultProperties.fontWeight)}
+              options={ALL_FONT_WEIGHTS.map(weight => ({
+                disabled: !availableWeights.includes(weight),
+                label: getFontWeightLabel(weight),
+                style: {
+                  fontFamily: textProperties.fontFamily,
+                  fontStyle: 'normal',
+                  fontWeight: weight,
+                },
+                title: availableWeights.includes(weight)
+                  ? undefined
+                  : `Not available for ${textProperties.fontFamily}`,
+                value: String(weight),
+              }))}
+              value={String(textProperties.fontWeight)}
             />
-            <span className="tt-toggle-box" />
-          </label>
-          <input
-            type="color"
-            className="tt-color-swatch"
-            value={textProperties.strokeColor.startsWith('#') ? textProperties.strokeColor : '#000000'}
-            onChange={(e) => updateProp('strokeColor', e.target.value)}
-            title="Stroke Color"
-            disabled={!textProperties.strokeEnabled}
-          />
-          <span className="tt-color-label">Stroke</span>
-          {textProperties.strokeEnabled && (
-            <CompactNumber
-              icon={<></>}
-              title="Stroke Width"
-              value={textProperties.strokeWidth}
-              onChange={(v) => updateProp('strokeWidth', v)}
-              min={0.5}
-              max={20}
-              step={0.5}
-              unit="px"
-              defaultValue={4}
+            <InspectorSelect
+              ariaLabel="Font style"
+              onChange={value => updateProp('fontStyle', value as TextClipProperties['fontStyle'])}
+              onReset={() => updateProp('fontStyle', defaultProperties.fontStyle)}
+              options={[
+                { label: 'Normal', style: { fontFamily: textProperties.fontFamily, fontStyle: 'normal', fontWeight: textProperties.fontWeight }, value: 'normal' },
+                { label: 'Italic', style: { fontFamily: textProperties.fontFamily, fontStyle: 'italic', fontWeight: textProperties.fontWeight }, value: 'italic' },
+              ]}
+              value={textProperties.fontStyle}
             />
-          )}
-        </div>
-      </div>
+          </div>
+        </ResolveInspectorRow>
+        <ResolveInspectorRow label="Metrics">
+          <div className="resolve-inspector-values resolve-inspector-values--pair">
+            <TextValue title="Font Size" value={textProperties.fontSize} onChange={value => updateProp('fontSize', value)} min={8} max={500} defaultValue={defaultProperties.fontSize} />
+            <span aria-hidden="true" />
+            <TextValue title="Line Height" value={textProperties.lineHeight} onChange={value => updateProp('lineHeight', value)} min={0.5} max={3} step={0.1} unit="" defaultValue={defaultProperties.lineHeight} />
+          </div>
+        </ResolveInspectorRow>
+        <ResolveInspectorRow label="Tracking">
+          <div className="tt-inspector-single-value">
+            <TextValue title="Letter Spacing" value={textProperties.letterSpacing} onChange={value => updateProp('letterSpacing', value)} min={-10} max={50} defaultValue={defaultProperties.letterSpacing} />
+          </div>
+        </ResolveInspectorRow>
 
-      {/* Alignment */}
-      <div className="tt-section">
-        <div className="tt-section-header">Paragraph</div>
-        <div className="tt-align-row">
-          <button className={textProperties.textAlign === 'left' ? 'active' : ''} onClick={() => updateProp('textAlign', 'left')} title="Left"><IconAlignLeft /></button>
-          <button className={textProperties.textAlign === 'center' ? 'active' : ''} onClick={() => updateProp('textAlign', 'center')} title="Center"><IconAlignCenter /></button>
-          <button className={textProperties.textAlign === 'right' ? 'active' : ''} onClick={() => updateProp('textAlign', 'right')} title="Right"><IconAlignRight /></button>
-          <div className="tt-align-sep" />
-          <button className={textProperties.verticalAlign === 'top' ? 'active' : ''} onClick={() => updateProp('verticalAlign', 'top')} title="Top"><IconAlignTop /></button>
-          <button className={textProperties.verticalAlign === 'middle' ? 'active' : ''} onClick={() => updateProp('verticalAlign', 'middle')} title="Middle"><IconAlignMiddle /></button>
-          <button className={textProperties.verticalAlign === 'bottom' ? 'active' : ''} onClick={() => updateProp('verticalAlign', 'bottom')} title="Bottom"><IconAlignBottom /></button>
-        </div>
-      </div>
+        <ResolveInspectorRow label="Fill">
+          {colorControl(textProperties.color, defaultProperties.color, 'Fill color', value => updateProp('color', value))}
+        </ResolveInspectorRow>
+      </ResolveInspectorSection>
 
-      {/* Area Text */}
-      <div className="tt-section">
-        <div className="tt-section-header">
-          {boxEnabled && (
-            <TextBoundsPathKeyframeToggle
-              clipId={clipId}
-              textProperties={textProperties}
-              canvasSize={{ width: canvasWidth, height: canvasHeight }}
-            />
-          )}
-          <label className="tt-toggle-header">
-            <input
-              type="checkbox"
-              checked={boxEnabled}
-              onChange={(e) => updateTextBoxEnabled(e.target.checked)}
-            />
-            Area Text
-          </label>
-        </div>
-        {boxEnabled && (
-          <>
-            <div className="tt-row-2col">
-              <CompactNumber
-                icon={<IconBoxPosition />}
-                title="Box X"
-                value={Math.round(textBox.x)}
-                onChange={(v) => updateTextBoxRect({ x: Math.round(v) })}
-                min={-100000}
-                max={100000}
-                unit="px"
-              />
-              <CompactNumber
-                icon={<IconBoxPosition />}
-                title="Box Y"
-                value={Math.round(textBox.y)}
-                onChange={(v) => updateTextBoxRect({ y: Math.round(v) })}
-                min={-100000}
-                max={100000}
-                unit="px"
-              />
-            </div>
-            <div className="tt-row-2col">
-              <CompactNumber
-                icon={<IconBoxSize />}
-                title="Box Width"
-                value={Math.round(textBox.width)}
-                onChange={(v) => updateTextBoxRect({ width: Math.round(v) })}
-                min={24}
-                max={100000}
-                unit="px"
-              />
-              <CompactNumber
-                icon={<IconBoxSize />}
-                title="Box Height"
-                value={Math.round(textBox.height)}
-                onChange={(v) => updateTextBoxRect({ height: Math.round(v) })}
-                min={24}
-                max={100000}
-                unit="px"
-              />
-            </div>
-            <button
-              type="button"
-              className="tt-small-action"
-              title="Make text bounds rectangular"
-              onClick={straightenTextBounds}
-            >
-              <IconStraightenBounds />
-              <span>Rectangular Bounds</span>
-            </button>
-          </>
-        )}
-      </div>
+      <ResolveInspectorSection
+        defaultOpen={textProperties.strokeEnabled}
+        enabled={textProperties.strokeEnabled}
+        onEnabledChange={enabled => updateProp('strokeEnabled', enabled)}
+        title="Stroke"
+      >
+        <ResolveInspectorRow label="Color">
+          {colorControl(textProperties.strokeColor, defaultProperties.strokeColor, 'Stroke color', value => updateProp('strokeColor', value))}
+        </ResolveInspectorRow>
+        <ResolveInspectorRow label="Width">
+          <div className="tt-inspector-single-value">
+            <TextValue title="Stroke Width" value={textProperties.strokeWidth} onChange={value => updateProp('strokeWidth', value)} min={0.5} max={20} step={0.5} defaultValue={defaultProperties.strokeWidth} />
+          </div>
+        </ResolveInspectorRow>
+      </ResolveInspectorSection>
 
-      {/* Shadow */}
-      <div className="tt-section">
-        <div className="tt-section-header">
-          <label className="tt-toggle-header">
-            <input
-              type="checkbox"
-              checked={textProperties.shadowEnabled}
-              onChange={(e) => updateProp('shadowEnabled', e.target.checked)}
-            />
-            Shadow
-          </label>
-        </div>
-        {textProperties.shadowEnabled && (
-          <>
-            <div className="tt-color-row">
-              <input
-                type="color"
-                className="tt-color-swatch"
-                value={textProperties.shadowColor.startsWith('#') ? textProperties.shadowColor : '#000000'}
-                onChange={(e) => updateProp('shadowColor', e.target.value)}
-                title="Shadow Color"
-              />
-              <span className="tt-color-label">Color</span>
-            </div>
-            <div className="tt-row-2col">
-              <CompactNumber icon={<span style={{ fontSize: 9 }}>X</span>} title="Shadow Offset X" value={textProperties.shadowOffsetX} onChange={(v) => updateProp('shadowOffsetX', v)} min={-50} max={50} unit="px" defaultValue={0} />
-              <CompactNumber icon={<span style={{ fontSize: 9 }}>Y</span>} title="Shadow Offset Y" value={textProperties.shadowOffsetY} onChange={(v) => updateProp('shadowOffsetY', v)} min={-50} max={50} unit="px" defaultValue={0} />
-            </div>
-            <div className="tt-row-2col">
-              <CompactNumber icon={<span style={{ fontSize: 9 }}>B</span>} title="Shadow Blur" value={textProperties.shadowBlur} onChange={(v) => updateProp('shadowBlur', v)} min={0} max={50} unit="px" defaultValue={0} />
-              <div className="tt-compact-num" style={{ visibility: 'hidden' }} />
-            </div>
-          </>
-        )}
-      </div>
-      </div>
-    </SharedTextNumberControlContext.Provider>
+      <ResolveInspectorSection indicator="none" title="Paragraph">
+        <ResolveInspectorRow label="Align">
+          <div className="tt-align-row">
+            <button aria-label="Align left" className={textProperties.textAlign === 'left' ? 'active' : ''} onClick={() => updateProp('textAlign', 'left')} onContextMenu={event => resetPropertyValueOnContextMenu(event, () => updateProp('textAlign', defaultProperties.textAlign))} title={`Left — ${PROPERTY_VALUE_RESET_TITLE}`} type="button"><IconAlignLeft /></button>
+            <button aria-label="Align center" className={textProperties.textAlign === 'center' ? 'active' : ''} onClick={() => updateProp('textAlign', 'center')} onContextMenu={event => resetPropertyValueOnContextMenu(event, () => updateProp('textAlign', defaultProperties.textAlign))} title={`Center — ${PROPERTY_VALUE_RESET_TITLE}`} type="button"><IconAlignCenter /></button>
+            <button aria-label="Align right" className={textProperties.textAlign === 'right' ? 'active' : ''} onClick={() => updateProp('textAlign', 'right')} onContextMenu={event => resetPropertyValueOnContextMenu(event, () => updateProp('textAlign', defaultProperties.textAlign))} title={`Right — ${PROPERTY_VALUE_RESET_TITLE}`} type="button"><IconAlignRight /></button>
+            <div className="tt-align-sep" />
+            <button aria-label="Align top" className={textProperties.verticalAlign === 'top' ? 'active' : ''} onClick={() => updateProp('verticalAlign', 'top')} onContextMenu={event => resetPropertyValueOnContextMenu(event, () => updateProp('verticalAlign', defaultProperties.verticalAlign))} title={`Top — ${PROPERTY_VALUE_RESET_TITLE}`} type="button"><IconAlignTop /></button>
+            <button aria-label="Align middle" className={textProperties.verticalAlign === 'middle' ? 'active' : ''} onClick={() => updateProp('verticalAlign', 'middle')} onContextMenu={event => resetPropertyValueOnContextMenu(event, () => updateProp('verticalAlign', defaultProperties.verticalAlign))} title={`Middle — ${PROPERTY_VALUE_RESET_TITLE}`} type="button"><IconAlignMiddle /></button>
+            <button aria-label="Align bottom" className={textProperties.verticalAlign === 'bottom' ? 'active' : ''} onClick={() => updateProp('verticalAlign', 'bottom')} onContextMenu={event => resetPropertyValueOnContextMenu(event, () => updateProp('verticalAlign', defaultProperties.verticalAlign))} title={`Bottom — ${PROPERTY_VALUE_RESET_TITLE}`} type="button"><IconAlignBottom /></button>
+          </div>
+        </ResolveInspectorRow>
+      </ResolveInspectorSection>
+
+      <ResolveInspectorSection
+        defaultOpen={boxEnabled}
+        enabled={boxEnabled}
+        headerActions={boxEnabled ? (
+          <TextBoundsPathKeyframeToggle clipId={clipId} textProperties={textProperties} canvasSize={{ width: canvasWidth, height: canvasHeight }} />
+        ) : undefined}
+        onEnabledChange={updateTextBoxEnabled}
+        title="Area Text"
+      >
+        <ResolveInspectorRow label="Position">
+          <div className="resolve-inspector-values resolve-inspector-values--pair">
+            <TextValue title="Box X" value={Math.round(textBox.x)} onChange={value => updateTextBoxRect({ x: Math.round(value) })} min={-100000} max={100000} defaultValue={defaultProperties.boxX} />
+            <span aria-hidden="true" />
+            <TextValue title="Box Y" value={Math.round(textBox.y)} onChange={value => updateTextBoxRect({ y: Math.round(value) })} min={-100000} max={100000} defaultValue={defaultProperties.boxY} />
+          </div>
+        </ResolveInspectorRow>
+        <ResolveInspectorRow label="Size">
+          <div className="resolve-inspector-values resolve-inspector-values--pair">
+            <TextValue title="Box Width" value={Math.round(textBox.width)} onChange={value => updateTextBoxRect({ width: Math.round(value) })} min={24} max={100000} defaultValue={defaultProperties.boxWidth} />
+            <span aria-hidden="true" />
+            <TextValue title="Box Height" value={Math.round(textBox.height)} onChange={value => updateTextBoxRect({ height: Math.round(value) })} min={24} max={100000} defaultValue={defaultProperties.boxHeight} />
+          </div>
+        </ResolveInspectorRow>
+        <ResolveInspectorRow label="Bounds">
+          <button className="tt-small-action" onClick={straightenTextBounds} title="Make text bounds rectangular" type="button">
+            <IconStraightenBounds />
+            <span>Rectangular</span>
+          </button>
+        </ResolveInspectorRow>
+      </ResolveInspectorSection>
+
+      <ResolveInspectorSection
+        defaultOpen={textProperties.shadowEnabled}
+        enabled={textProperties.shadowEnabled}
+        onEnabledChange={enabled => updateProp('shadowEnabled', enabled)}
+        title="Shadow"
+      >
+        <ResolveInspectorRow label="Color">
+          {colorControl(textProperties.shadowColor, defaultProperties.shadowColor, 'Shadow color', value => updateProp('shadowColor', value))}
+        </ResolveInspectorRow>
+        <ResolveInspectorRow label="Offset">
+          <div className="resolve-inspector-values resolve-inspector-values--pair">
+            <TextValue title="Shadow Offset X" value={textProperties.shadowOffsetX} onChange={value => updateProp('shadowOffsetX', value)} min={-50} max={50} defaultValue={defaultProperties.shadowOffsetX} />
+            <span aria-hidden="true" />
+            <TextValue title="Shadow Offset Y" value={textProperties.shadowOffsetY} onChange={value => updateProp('shadowOffsetY', value)} min={-50} max={50} defaultValue={defaultProperties.shadowOffsetY} />
+          </div>
+        </ResolveInspectorRow>
+        <ResolveInspectorRow label="Blur">
+          <div className="tt-inspector-single-value">
+            <TextValue title="Shadow Blur" value={textProperties.shadowBlur} onChange={value => updateProp('shadowBlur', value)} min={0} max={50} defaultValue={defaultProperties.shadowBlur} />
+          </div>
+        </ResolveInspectorRow>
+      </ResolveInspectorSection>
+    </div>
   );
 }

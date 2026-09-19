@@ -8,6 +8,7 @@ import * as artifactStores from './projectDb/artifacts';
 import * as coreStores from './projectDb/coreStores';
 import * as handleStores from './projectDb/handles';
 import * as proxyFrameStores from './projectDb/proxyFrames';
+import { openDatabase } from './projectDb/openDatabase';
 import { STORES } from './projectDb/stores';
 import * as thumbnailStores from './projectDb/thumbnails';
 import type {
@@ -33,6 +34,8 @@ export type {
 
 const log = Logger.create('ProjectDB');
 
+const INIT_RETRY_COOLDOWN_MS = 5_000;
+
 const DB_NAME = 'MASterSelectsDB';
 const DB_VERSION = 8; // Upgraded for content-addressed artifact manifests and blobs
 
@@ -40,6 +43,8 @@ class ProjectDatabase {
   private db: IDBDatabase | null = null;
   private initPromise: Promise<IDBDatabase> | null = null;
   private initFailed = false;
+  private initError: unknown = null;
+  private retryInitAfter = 0;
 
   // Check if IndexedDB is available
   isAvailable(): boolean {
@@ -49,7 +54,8 @@ class ProjectDatabase {
   // Reset the init failure flag to allow retry
   resetInitFailure(): void {
     this.initFailed = false;
-    this.initPromise = null;
+    this.initError = null;
+    this.retryInitAfter = 0;
     log.info('IndexedDB init failure flag reset - will retry on next access');
   }
 
@@ -61,118 +67,137 @@ class ProjectDatabase {
   // Initialize the database
   async init(): Promise<IDBDatabase> {
     if (this.db) return this.db;
-    if (this.initFailed) throw new Error('IndexedDB previously failed to initialize');
     if (this.initPromise) return this.initPromise;
+    if (this.initFailed && Date.now() < this.retryInitAfter) throw this.initError;
 
-    this.initPromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-      request.onerror = () => {
-        log.error('Failed to open IndexedDB', request.error);
+    this.initPromise = this.openDatabase()
+      .catch((error: unknown) => {
+        // WebKit can abort an open while resuming storage. Retry only that
+        // transient failure, once, before surfacing it to all shared callers.
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return this.openDatabase();
+        }
+        throw error;
+      })
+      .catch((error: unknown) => {
         this.initFailed = true;
-        this.initPromise = null; // Allow retry on next call
-        reject(request.error);
-      };
-
-      request.onsuccess = () => {
-        this.db = request.result;
-        this.initFailed = false;
-        log.info('Database opened successfully');
-        resolve(this.db);
-      };
-
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-
-        // Create media files store
-        if (!db.objectStoreNames.contains(STORES.MEDIA_FILES)) {
-          const mediaStore = db.createObjectStore(STORES.MEDIA_FILES, { keyPath: 'id' });
-          mediaStore.createIndex('name', 'name', { unique: false });
-          mediaStore.createIndex('type', 'type', { unique: false });
-        }
-
-        // Create projects store
-        if (!db.objectStoreNames.contains(STORES.PROJECTS)) {
-          const projectStore = db.createObjectStore(STORES.PROJECTS, { keyPath: 'id' });
-          projectStore.createIndex('name', 'name', { unique: false });
-          projectStore.createIndex('updatedAt', 'updatedAt', { unique: false });
-        }
-
-        // Create proxy frames store (new in v2)
-        if (!db.objectStoreNames.contains(STORES.PROXY_FRAMES)) {
-          const proxyStore = db.createObjectStore(STORES.PROXY_FRAMES, { keyPath: 'id' });
-          proxyStore.createIndex('mediaFileId', 'mediaFileId', { unique: false });
-          proxyStore.createIndex('frameIndex', 'frameIndex', { unique: false });
-          proxyStore.createIndex('fileHash', 'fileHash', { unique: false });
-        } else if (event.oldVersion < 5) {
-          // Add fileHash index for proxy deduplication (v5)
-          const proxyStore = (event.target as IDBOpenDBRequest).transaction!.objectStore(STORES.PROXY_FRAMES);
-          if (!proxyStore.indexNames.contains('fileHash')) {
-            proxyStore.createIndex('fileHash', 'fileHash', { unique: false });
-          }
-        }
-
-        // Create file system handles store (new in v3)
-        if (!db.objectStoreNames.contains(STORES.FS_HANDLES)) {
-          db.createObjectStore(STORES.FS_HANDLES, { keyPath: 'key' });
-        }
-
-        // Create analysis cache store (new in v4)
-        if (!db.objectStoreNames.contains(STORES.ANALYSIS_CACHE)) {
-          db.createObjectStore(STORES.ANALYSIS_CACHE, { keyPath: 'mediaFileId' });
-        }
-
-        // Create thumbnails store for deduplication (new in v5)
-        if (!db.objectStoreNames.contains(STORES.THUMBNAILS)) {
-          db.createObjectStore(STORES.THUMBNAILS, { keyPath: 'fileHash' });
-        }
-
-        // Create source thumbnails store (new in v6)
-        if (!db.objectStoreNames.contains(STORES.SOURCE_THUMBNAILS)) {
-          const srcThumbStore = db.createObjectStore(STORES.SOURCE_THUMBNAILS, { keyPath: 'id' });
-          srcThumbStore.createIndex('mediaFileId', 'mediaFileId', { unique: false });
-          srcThumbStore.createIndex('fileHash', 'fileHash', { unique: false });
-        }
-
-        // Create artifact manifest index (new in v7)
-        if (!db.objectStoreNames.contains(STORES.ARTIFACTS)) {
-          const artifactStore = db.createObjectStore(STORES.ARTIFACTS, { keyPath: 'artifactId' });
-          artifactStore.createIndex('hash', 'hash', { unique: false });
-          artifactStore.createIndex('sourceRefs', 'sourceRefs', { unique: false, multiEntry: true });
-          artifactStore.createIndex('updatedAt', 'updatedAt', { unique: false });
-        } else if (event.oldVersion < 7) {
-          const artifactStore = (event.target as IDBOpenDBRequest).transaction!.objectStore(STORES.ARTIFACTS);
-          if (!artifactStore.indexNames.contains('hash')) {
-            artifactStore.createIndex('hash', 'hash', { unique: false });
-          }
-          if (!artifactStore.indexNames.contains('sourceRefs')) {
-            artifactStore.createIndex('sourceRefs', 'sourceRefs', { unique: false, multiEntry: true });
-          }
-          if (!artifactStore.indexNames.contains('updatedAt')) {
-            artifactStore.createIndex('updatedAt', 'updatedAt', { unique: false });
-          }
-        }
-
-        // Create artifact byte store (new in v8)
-        if (!db.objectStoreNames.contains(STORES.ARTIFACT_BLOBS)) {
-          const artifactBlobStore = db.createObjectStore(STORES.ARTIFACT_BLOBS, { keyPath: 'hash' });
-          artifactBlobStore.createIndex('artifactId', 'artifactId', { unique: false });
-          artifactBlobStore.createIndex('updatedAt', 'updatedAt', { unique: false });
-        } else if (event.oldVersion < 8) {
-          const artifactBlobStore = (event.target as IDBOpenDBRequest).transaction!.objectStore(STORES.ARTIFACT_BLOBS);
-          if (!artifactBlobStore.indexNames.contains('artifactId')) {
-            artifactBlobStore.createIndex('artifactId', 'artifactId', { unique: false });
-          }
-          if (!artifactBlobStore.indexNames.contains('updatedAt')) {
-            artifactBlobStore.createIndex('updatedAt', 'updatedAt', { unique: false });
-          }
-        }
-
-        log.info('Database schema created/upgraded');
-      };
-    });
-
+        this.initError = error;
+        this.retryInitAfter = Date.now() + INIT_RETRY_COOLDOWN_MS;
+        log.error('Failed to open IndexedDB', error);
+        throw error;
+      })
+      .finally(() => { this.initPromise = null; });
     return this.initPromise;
+  }
+
+  private openDatabase(): Promise<IDBDatabase> {
+    return openDatabase(DB_NAME, DB_VERSION, (db, event, transaction) => {
+      // Create media files store
+      if (!db.objectStoreNames.contains(STORES.MEDIA_FILES)) {
+        const mediaStore = db.createObjectStore(STORES.MEDIA_FILES, { keyPath: 'id' });
+        mediaStore.createIndex('name', 'name', { unique: false });
+        mediaStore.createIndex('type', 'type', { unique: false });
+      }
+
+      // Create projects store
+      if (!db.objectStoreNames.contains(STORES.PROJECTS)) {
+        const projectStore = db.createObjectStore(STORES.PROJECTS, { keyPath: 'id' });
+        projectStore.createIndex('name', 'name', { unique: false });
+        projectStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+      }
+
+      // Create proxy frames store (new in v2)
+      if (!db.objectStoreNames.contains(STORES.PROXY_FRAMES)) {
+        const proxyStore = db.createObjectStore(STORES.PROXY_FRAMES, { keyPath: 'id' });
+        proxyStore.createIndex('mediaFileId', 'mediaFileId', { unique: false });
+        proxyStore.createIndex('frameIndex', 'frameIndex', { unique: false });
+        proxyStore.createIndex('fileHash', 'fileHash', { unique: false });
+      } else if (event.oldVersion < 5) {
+        // Add fileHash index for proxy deduplication (v5)
+        const proxyStore = transaction.objectStore(STORES.PROXY_FRAMES);
+        if (!proxyStore.indexNames.contains('fileHash')) {
+          proxyStore.createIndex('fileHash', 'fileHash', { unique: false });
+        }
+      }
+
+      // Create file system handles store (new in v3)
+      if (!db.objectStoreNames.contains(STORES.FS_HANDLES)) {
+        db.createObjectStore(STORES.FS_HANDLES, { keyPath: 'key' });
+      }
+
+      // Create analysis cache store (new in v4)
+      if (!db.objectStoreNames.contains(STORES.ANALYSIS_CACHE)) {
+        db.createObjectStore(STORES.ANALYSIS_CACHE, { keyPath: 'mediaFileId' });
+      }
+
+      // Create thumbnails store for deduplication (new in v5)
+      if (!db.objectStoreNames.contains(STORES.THUMBNAILS)) {
+        db.createObjectStore(STORES.THUMBNAILS, { keyPath: 'fileHash' });
+      }
+
+      // Create source thumbnails store (new in v6)
+      if (!db.objectStoreNames.contains(STORES.SOURCE_THUMBNAILS)) {
+        const srcThumbStore = db.createObjectStore(STORES.SOURCE_THUMBNAILS, { keyPath: 'id' });
+        srcThumbStore.createIndex('mediaFileId', 'mediaFileId', { unique: false });
+        srcThumbStore.createIndex('fileHash', 'fileHash', { unique: false });
+      }
+
+      // Create artifact manifest index (new in v7)
+      if (!db.objectStoreNames.contains(STORES.ARTIFACTS)) {
+        const artifactStore = db.createObjectStore(STORES.ARTIFACTS, { keyPath: 'artifactId' });
+        artifactStore.createIndex('hash', 'hash', { unique: false });
+        artifactStore.createIndex('sourceRefs', 'sourceRefs', { unique: false, multiEntry: true });
+        artifactStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+      } else if (event.oldVersion < 7) {
+        const artifactStore = transaction.objectStore(STORES.ARTIFACTS);
+        if (!artifactStore.indexNames.contains('hash')) {
+          artifactStore.createIndex('hash', 'hash', { unique: false });
+        }
+        if (!artifactStore.indexNames.contains('sourceRefs')) {
+          artifactStore.createIndex('sourceRefs', 'sourceRefs', { unique: false, multiEntry: true });
+        }
+        if (!artifactStore.indexNames.contains('updatedAt')) {
+          artifactStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+        }
+      }
+
+      // Create artifact byte store (new in v8)
+      if (!db.objectStoreNames.contains(STORES.ARTIFACT_BLOBS)) {
+        const artifactBlobStore = db.createObjectStore(STORES.ARTIFACT_BLOBS, { keyPath: 'hash' });
+        artifactBlobStore.createIndex('artifactId', 'artifactId', { unique: false });
+        artifactBlobStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+      } else if (event.oldVersion < 8) {
+        const artifactBlobStore = transaction.objectStore(STORES.ARTIFACT_BLOBS);
+        if (!artifactBlobStore.indexNames.contains('artifactId')) {
+          artifactBlobStore.createIndex('artifactId', 'artifactId', { unique: false });
+        }
+        if (!artifactBlobStore.indexNames.contains('updatedAt')) {
+          artifactBlobStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+        }
+      }
+
+      log.info('Database schema created/upgraded');
+    }).then(db => {
+      this.db = db;
+      const invalidate = () => {
+        if (this.db !== db) return;
+        this.db = null;
+        this.initPromise = null;
+        this.initFailed = false;
+      };
+      // WebKit may close storage connections when suspending a page. Never
+      // return that stale connection to a later project operation.
+      db.addEventListener('close', invalidate);
+      db.addEventListener('versionchange', () => {
+        db.close();
+        invalidate();
+      });
+      this.initFailed = false;
+      this.initError = null;
+      this.retryInitAfter = 0;
+      log.info('Database opened successfully');
+      return db;
+    });
   }
 
   // ============ Media Files ============

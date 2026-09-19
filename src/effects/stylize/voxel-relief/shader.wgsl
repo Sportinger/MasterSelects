@@ -21,6 +21,14 @@ struct VoxelReliefParams {
   lightElevation: f32,
   floorBrightness: f32,
   edgeDarkness: f32,
+  distance: f32,
+  centerX: f32,
+  centerY: f32,
+  roll: f32,
+  lightFollow: f32,
+  limitToVideo: f32,
+  pad1: f32,
+  pad2: f32,
 };
 
 struct VoxelCell {
@@ -63,6 +71,12 @@ struct VoxelScreenCell {
 fn voxelFieldSize() -> vec2f {
   let aspect = max(params.width / max(params.height, 1.0), 0.1);
   return vec2f(aspect, 1.0);
+}
+
+fn voxelSourceUv(fieldUv: vec2f) -> vec2f {
+  // The orbit camera uses a conventional +Y-up world, while source textures
+  // use +V-down image coordinates. Keep the image upright on the voxel plane.
+  return vec2f(fieldUv.x, 1.0 - fieldUv.y);
 }
 
 fn voxelCellSize(fieldSize: vec2f) -> f32 {
@@ -133,7 +147,8 @@ fn voxelScreenRelief(uv: vec2f) -> vec4f {
   let edgeDistance = max(abs(cell.local.x - 0.5), abs(cell.local.y - 0.5)) * 2.0;
   let gridLine = smoothstep(1.0 - bevel, 1.0, edgeDistance);
 
-  let lightAzimuth = voxelRadians(params.lightAngle);
+  let effectiveLightAngle = params.lightAngle + select(0.0, params.yaw, params.lightFollow > 0.5);
+  let lightAzimuth = voxelRadians(effectiveLightAngle);
   let lightElevation = voxelRadians(clamp(params.lightElevation, 1.0, 89.0));
   let lightDir = normalize(vec3f(
     cos(lightAzimuth) * cos(lightElevation),
@@ -197,14 +212,8 @@ fn voxelScreenPixelColor(uv: vec2f) -> vec4f {
   return vec4f(source.rgb * edgeShade * clamp(params.floorBrightness, 0.0, 1.0), source.a);
 }
 
-fn voxelGapColor(uv: vec2f) -> vec4f {
-  let source = textureSampleLevel(inputTex, texSampler, clamp(uv, vec2f(0.0), vec2f(1.0)), 0.0);
-  let gapLight = clamp(params.floorBrightness, 0.0, 1.0) * 0.32;
-  return vec4f(source.rgb * gapLight, source.a);
-}
-
 fn voxelFloorCell(fieldSize: vec2f, p: vec3f) -> VoxelCell {
-  let uv = clamp(p.xy / fieldSize, vec2f(0.0), vec2f(1.0));
+  let uv = voxelSourceUv(clamp(p.xy / fieldSize, vec2f(0.0), vec2f(1.0)));
   var cell: VoxelCell;
   cell.center = fieldSize * 0.5;
   cell.halfSize = vec3f(fieldSize * 0.5, 0.018);
@@ -216,7 +225,7 @@ fn voxelFloorCell(fieldSize: vec2f, p: vec3f) -> VoxelCell {
 
 fn voxelCellFromIndex(index: vec2f, fieldSize: vec2f, cellSize: f32) -> VoxelCell {
   let center = (index + vec2f(0.5)) * cellSize;
-  let uv = center / fieldSize;
+  let uv = voxelSourceUv(center / fieldSize);
   let source = textureSampleLevel(inputTex, texSampler, clamp(uv, vec2f(0.0), vec2f(1.0)), 0.0);
   let brightness = pow(clamp(luminance(source.rgb), 0.0, 1.0), max(params.heightContrast, 0.001));
   let height = max(params.baseHeight, 0.0) * source.a + brightness * max(params.heightScale, 0.0) * source.a;
@@ -231,6 +240,11 @@ fn voxelCellFromIndex(index: vec2f, fieldSize: vec2f, cellSize: f32) -> VoxelCel
   return cell;
 }
 
+fn voxelCellIsInsideVideo(index: vec2f, fieldSize: vec2f, cellSize: f32) -> bool {
+  let center = (index + vec2f(0.5)) * cellSize;
+  return center.x >= 0.0 && center.y >= 0.0 && center.x < fieldSize.x && center.y < fieldSize.y;
+}
+
 fn voxelMap(p: vec3f) -> VoxelMapSample {
   let fieldSize = voxelFieldSize();
   let cellSize = voxelCellSize(fieldSize);
@@ -243,13 +257,25 @@ fn voxelMap(p: vec3f) -> VoxelMapSample {
   for (var offsetY = -1; offsetY <= 1; offsetY = offsetY + 1) {
     for (var offsetX = -1; offsetX <= 1; offsetX = offsetX + 1) {
       let index = baseIndex + vec2f(f32(offsetX), f32(offsetY));
-      let cell = voxelCellFromIndex(index, fieldSize, cellSize);
-      let boxCenter = vec3f(cell.center, cell.height * 0.5);
-      let dist = voxelSdBox(p - boxCenter, cell.halfSize);
-      if (dist < best.dist) {
-        best.dist = dist;
-        best.cell = cell;
+      if (params.limitToVideo < 0.5 || voxelCellIsInsideVideo(index, fieldSize, cellSize)) {
+        let cell = voxelCellFromIndex(index, fieldSize, cellSize);
+        let boxCenter = vec3f(cell.center, cell.height * 0.5);
+        let dist = voxelSdBox(p - boxCenter, cell.halfSize);
+        if (dist < best.dist) {
+          best.dist = dist;
+          best.cell = cell;
+        }
       }
+    }
+  }
+
+  if (params.limitToVideo > 0.5) {
+    let floorCell = voxelFloorCell(fieldSize, p);
+    let floorCenter = vec3f(floorCell.center, -floorCell.halfSize.z);
+    let floorDist = voxelSdBox(p - floorCenter, floorCell.halfSize);
+    if (floorDist < best.dist) {
+      best.dist = floorDist;
+      best.cell = floorCell;
     }
   }
 
@@ -258,25 +284,34 @@ fn voxelMap(p: vec3f) -> VoxelMapSample {
 
 fn voxelCameraRay(uv: vec2f) -> VoxelRay {
   let fieldSize = voxelFieldSize();
-  let focusPoint = vec3f(fieldSize.x * 0.5, 0.5, 0.0);
-  let viewAngle = voxelRadians(90.0 - clamp(params.tilt, 20.0, 88.0));
+  let focusPoint = vec3f(
+    fieldSize.x * clamp(params.centerX, 0.0, 1.0),
+    clamp(params.centerY, 0.0, 1.0),
+    0.0
+  );
+  // Treat the source as an upright XY image with relief extruding along +Z.
+  // Tilt 90 is face-on. Converting it to the same pitch convention as the
+  // native 3D camera preserves existing effect poses while making both
+  // orbit controllers use the same upright camera frame.
+  let pitch = voxelRadians(params.tilt - 90.0);
   let yaw = voxelRadians(params.yaw);
   let perspective = clamp(params.perspective, 0.15, 1.6);
   let fov = voxelRadians(mix(12.0, 42.0, (perspective - 0.15) / 1.45));
   let focal = 1.0 / tan(fov * 0.5);
-  let distance = max(0.9, focal * 0.5 + max(params.heightScale + params.baseHeight, 0.0) * 0.7);
-  let lateral = tan(viewAngle) * distance;
-
-  let eyeOffset = vec3f(
-    sin(yaw) * lateral,
-    -cos(yaw) * lateral,
-    distance
-  );
-  let eye = focusPoint + eyeOffset;
-  let forward = normalize(focusPoint - eye);
-  let worldUp = vec3f(0.0, -1.0, 0.0);
-  let right = normalize(cross(forward, worldUp));
-  let up = normalize(cross(right, forward));
+  let radius = max(0.9, focal * 0.5 + max(params.heightScale + params.baseHeight, 0.0) * 0.7) *
+    clamp(params.distance, 0.15, 8.0);
+  let cosPitch = cos(pitch);
+  let sinPitch = sin(pitch);
+  let eyeDir = vec3f(sin(yaw) * cosPitch, sinPitch, cos(yaw) * cosPitch);
+  let eye = focusPoint + eyeDir * radius;
+  let forward = -eyeDir;
+  // Match the native 3D camera basis: right remains level and up stays
+  // upright while crossing either pole.
+  let baseRight = vec3f(cos(yaw), 0.0, -sin(yaw));
+  let baseUp = vec3f(-sin(yaw) * sinPitch, cosPitch, -cos(yaw) * sinPitch);
+  let roll = voxelRadians(params.roll);
+  let right = baseRight * cos(roll) + baseUp * sin(roll);
+  let up = baseUp * cos(roll) - baseRight * sin(roll);
 
   let screenAspect = max(params.width / max(params.height, 1.0), 0.1);
   let screen = vec2f((uv.x * 2.0 - 1.0) * screenAspect, 1.0 - uv.y * 2.0);
@@ -288,6 +323,28 @@ fn voxelCameraRay(uv: vec2f) -> VoxelRay {
   return ray;
 }
 
+fn voxelSafeRayComponent(value: f32) -> f32 {
+  let signedEpsilon = select(-0.000001, 0.000001, value >= 0.0);
+  return select(signedEpsilon, value, abs(value) >= 0.000001);
+}
+
+fn voxelRayBoxInterval(ray: VoxelRay, boundsMin: vec3f, boundsMax: vec3f) -> vec2f {
+  let safeDirection = vec3f(
+    voxelSafeRayComponent(ray.direction.x),
+    voxelSafeRayComponent(ray.direction.y),
+    voxelSafeRayComponent(ray.direction.z)
+  );
+  let inverseDirection = vec3f(1.0) / safeDirection;
+  let first = (boundsMin - ray.origin) * inverseDirection;
+  let second = (boundsMax - ray.origin) * inverseDirection;
+  let nearPlane = min(first, second);
+  let farPlane = max(first, second);
+  return vec2f(
+    max(nearPlane.x, max(nearPlane.y, nearPlane.z)),
+    min(farPlane.x, min(farPlane.y, farPlane.z))
+  );
+}
+
 fn voxelTrace(ray: VoxelRay) -> VoxelHit {
   var hit: VoxelHit;
   hit.hit = 0.0;
@@ -296,30 +353,92 @@ fn voxelTrace(ray: VoxelRay) -> VoxelHit {
   hit.sample.dist = 1.0e6;
   hit.sample.cell = voxelEmptyCell();
 
-  let maxSteps = i32(clamp(params.maxSteps, 16.0, 144.0));
-  let maxDistance = 8.0;
-  var travel = 0.0;
+  let traversalBudget = i32(clamp(params.maxSteps * 4.0, 96.0, 576.0));
+  let topZ = max(params.baseHeight + params.heightScale, 0.001);
+  let fieldSize = voxelFieldSize();
+  let cellSize = voxelCellSize(fieldSize);
+  let boundCenter = vec3f(fieldSize * 0.5, topZ * 0.5);
+  let boundRadius = length(vec3f(fieldSize * 0.5, topZ * 0.5)) + 0.1;
+  var sceneMin = vec3f(boundCenter.xy - vec2f(boundRadius), 0.0);
+  var sceneMax = vec3f(boundCenter.xy + vec2f(boundRadius), topZ);
+  if (params.limitToVideo > 0.5) {
+    sceneMin = vec3f(0.0, 0.0, 0.0);
+    sceneMax = vec3f(fieldSize, topZ);
+  }
 
-  for (var stepIndex = 0; stepIndex < 144; stepIndex = stepIndex + 1) {
-    if (stepIndex >= maxSteps) {
-      break;
+  let sceneInterval = voxelRayBoxInterval(ray, sceneMin, sceneMax);
+  if (sceneInterval.x <= sceneInterval.y && sceneInterval.y >= 0.0) {
+    var travel = max(sceneInterval.x, 0.0);
+    let sceneExit = sceneInterval.y;
+    let startPosition = ray.origin + ray.direction * (travel + 0.00001);
+    var cellIndex = vec2i(floor(startPosition.xy / cellSize));
+    let stepDirection = vec2i(
+      select(-1, 1, ray.direction.x >= 0.0),
+      select(-1, 1, ray.direction.y >= 0.0)
+    );
+    let safeDirection = vec2f(
+      voxelSafeRayComponent(ray.direction.x),
+      voxelSafeRayComponent(ray.direction.y)
+    );
+    let nextBoundary = vec2f(
+      f32(cellIndex.x + select(0, 1, stepDirection.x > 0)) * cellSize,
+      f32(cellIndex.y + select(0, 1, stepDirection.y > 0)) * cellSize
+    );
+    var nextCrossing = (nextBoundary - ray.origin.xy) / safeDirection;
+    let crossingDelta = vec2f(cellSize) / abs(safeDirection);
+
+    // Traverse grid cells front-to-back and intersect every visible prism
+    // exactly. The previous sphere tracer could overestimate distance when a
+    // tall cell sat outside its 3x3 neighborhood, skipping that column and
+    // producing dashed side profiles.
+    for (var traversalIndex = 0; traversalIndex < 576; traversalIndex = traversalIndex + 1) {
+      if (traversalIndex >= traversalBudget || travel > sceneExit) {
+        break;
+      }
+
+      let index = vec2f(f32(cellIndex.x), f32(cellIndex.y));
+      let nextTravel = min(sceneExit, min(nextCrossing.x, nextCrossing.y));
+      if (params.limitToVideo < 0.5 || voxelCellIsInsideVideo(index, fieldSize, cellSize)) {
+        let cell = voxelCellFromIndex(index, fieldSize, cellSize);
+        let boxCenter = vec3f(cell.center, cell.height * 0.5);
+        let cellInterval = voxelRayBoxInterval(ray, boxCenter - cell.halfSize, boxCenter + cell.halfSize);
+        let cellTravel = max(cellInterval.x, travel);
+        if (cellInterval.x <= cellInterval.y && cellInterval.y >= travel && cellTravel <= nextTravel + 0.00002) {
+          hit.hit = 1.0;
+          hit.position = ray.origin + ray.direction * cellTravel;
+          hit.travel = cellTravel;
+          hit.sample.dist = 0.0;
+          hit.sample.cell = cell;
+          break;
+        }
+      }
+
+      let crossX = nextCrossing.x;
+      let crossY = nextCrossing.y;
+      if (crossX <= crossY + 0.000001) {
+        cellIndex.x += stepDirection.x;
+        nextCrossing.x += crossingDelta.x;
+      }
+      if (crossY <= crossX + 0.000001) {
+        cellIndex.y += stepDirection.y;
+        nextCrossing.y += crossingDelta.y;
+      }
+      travel = nextTravel + 0.000001;
     }
+  }
 
-    let position = ray.origin + ray.direction * travel;
-    let sample = voxelMap(position);
-    let epsilon = 0.0008 + travel * 0.00035;
-
-    if (sample.dist < epsilon) {
+  if (params.limitToVideo > 0.5) {
+    let floorCenter = vec3f(fieldSize * 0.5, -0.018);
+    let floorHalfSize = vec3f(fieldSize * 0.5, 0.018);
+    let floorInterval = voxelRayBoxInterval(ray, floorCenter - floorHalfSize, floorCenter + floorHalfSize);
+    let floorTravel = max(floorInterval.x, 0.0);
+    if (floorInterval.x <= floorInterval.y && floorInterval.y >= 0.0 && (hit.hit < 0.5 || floorTravel < hit.travel)) {
+      let floorPosition = ray.origin + ray.direction * floorTravel;
       hit.hit = 1.0;
-      hit.position = position;
-      hit.travel = travel;
-      hit.sample = sample;
-      break;
-    }
-
-    travel += clamp(sample.dist * 0.82, 0.002, 0.085);
-    if (travel > maxDistance || position.z < -0.15) {
-      break;
+      hit.position = floorPosition;
+      hit.travel = floorTravel;
+      hit.sample.dist = 0.0;
+      hit.sample.cell = voxelFloorCell(fieldSize, floorPosition);
     }
   }
 
@@ -336,8 +455,8 @@ fn voxelFaceNormal(hit: VoxelHit) -> vec3f {
   let halfSize = max(cell.halfSize, vec3f(0.0001));
   let faceDistance = abs(abs(local) - halfSize);
 
-  if (faceDistance.z <= faceDistance.x && faceDistance.z <= faceDistance.y && local.z > 0.0) {
-    return vec3f(0.0, 0.0, 1.0);
+  if (faceDistance.z <= faceDistance.x && faceDistance.z <= faceDistance.y) {
+    return vec3f(0.0, 0.0, select(-1.0, 1.0, local.z >= 0.0));
   }
 
   if (faceDistance.x < faceDistance.y) {
@@ -347,14 +466,17 @@ fn voxelFaceNormal(hit: VoxelHit) -> vec3f {
   return vec3f(0.0, select(-1.0, 1.0, local.y >= 0.0), 0.0);
 }
 
-fn voxelShade(hit: VoxelHit, ray: VoxelRay, fallbackUv: vec2f) -> vec4f {
+fn voxelShade(hit: VoxelHit, ray: VoxelRay) -> vec4f {
   if (hit.hit < 0.5) {
-    return voxelGapColor(fallbackUv);
+    // A ray miss is empty space. Re-sampling the source here creates a flat,
+    // dim duplicate behind the relief that becomes obvious in profile views.
+    return vec4f(0.0);
   }
 
   let normal = voxelFaceNormal(hit);
   let source = hit.sample.cell.color;
-  let lightAzimuth = voxelRadians(params.lightAngle);
+  let effectiveLightAngle = params.lightAngle + select(0.0, params.yaw, params.lightFollow > 0.5);
+  let lightAzimuth = voxelRadians(effectiveLightAngle);
   let lightElevation = voxelRadians(clamp(params.lightElevation, 1.0, 89.0));
   let lightDir = normalize(vec3f(
     cos(lightAzimuth) * cos(lightElevation),
@@ -385,11 +507,22 @@ fn voxelShade(hit: VoxelHit, ray: VoxelRay, fallbackUv: vec2f) -> vec4f {
   return vec4f(shaded, source.a);
 }
 
+fn voxelRenderSample(uv: vec2f) -> vec4f {
+  let ray = voxelCameraRay(uv);
+  return voxelShade(voxelTrace(ray), ray);
+}
+
 @fragment
 fn voxelReliefFragment(input: VertexOutput) -> @location(0) vec4f {
-  let ray = voxelCameraRay(input.uv);
-  let hit = voxelTrace(ray);
-  let relief = voxelShade(hit, ray, input.uv);
+  // A stable 2x2 sub-pixel pattern suppresses the high-frequency grid moire
+  // and smooths thin column silhouettes without relying on temporal blur.
+  let pixelSize = vec2f(1.0 / max(params.width, 1.0), 1.0 / max(params.height, 1.0));
+  let relief = (
+    voxelRenderSample(input.uv + pixelSize * vec2f(-0.25, -0.25)) +
+    voxelRenderSample(input.uv + pixelSize * vec2f(0.25, -0.25)) +
+    voxelRenderSample(input.uv + pixelSize * vec2f(-0.25, 0.25)) +
+    voxelRenderSample(input.uv + pixelSize * vec2f(0.25, 0.25))
+  ) * 0.25;
   let previous = textureSampleLevel(feedbackTex, texSampler, input.uv, 0.0);
   let smoothing = select(clamp(params.temporalBlend, 0.0, 0.94), 0.0, params.reset > 0.5);
   let rgb = mix(relief.rgb, previous.rgb, smoothing);

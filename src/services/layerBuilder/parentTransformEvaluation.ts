@@ -2,6 +2,7 @@ import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import type { ClipTransform, Keyframe, TimelineClip } from '../../types';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
 import { composeTransforms } from '../../utils/transformComposition';
+import { applyVideoInspectorTransformBypass } from '../videoInspector/sectionBypass';
 import {
   evaluateTransitionMappedAnimation,
   type TransitionMappedAnimation,
@@ -50,6 +51,11 @@ function buildBaseTransform(clip: TimelineClip): ClipTransform {
       x: clip.transform?.position?.x ?? DEFAULT_TRANSFORM.position.x,
       y: clip.transform?.position?.y ?? DEFAULT_TRANSFORM.position.y,
       z: clip.transform?.position?.z ?? DEFAULT_TRANSFORM.position.z,
+    },
+    anchor: {
+      x: clip.transform?.anchor?.x ?? DEFAULT_TRANSFORM.anchor?.x ?? 0,
+      y: clip.transform?.anchor?.y ?? DEFAULT_TRANSFORM.anchor?.y ?? 0,
+      z: clip.transform?.anchor?.z ?? DEFAULT_TRANSFORM.anchor?.z ?? 0,
     },
     scale: {
       ...(clip.transform?.scale?.all !== undefined ? { all: clip.transform.scale.all } : {}),
@@ -117,11 +123,12 @@ export function evaluateParentedClipTransform(
     }
 
     const baseTransform = buildBaseTransform(clip);
-    const ownTransform = mappedAnimation?.transform ?? (keyframes.length > 0
+    const interpolatedTransform = mappedAnimation?.transform ?? (keyframes.length > 0
       ? getInterpolatedClipTransform(keyframes, localTime, baseTransform, {
           rotationMode: clip.source?.type === 'camera' ? 'shortest' : 'linear',
         })
       : baseTransform);
+    const ownTransform = applyVideoInspectorTransformBypass(clip, interpolatedTransform);
 
     if (clip.id === input.clip.id) {
       targetOwnTransform = ownTransform;

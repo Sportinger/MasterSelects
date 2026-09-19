@@ -36,8 +36,10 @@ export interface Layer {
   effects: Effect[];
   colorCorrection?: RuntimeColorGrade;
   position: { x: number; y: number; z: number };
+  anchor?: { x: number; y: number; z: number };
   scale: { x: number; y: number; z?: number };
-  rotation: number | { x: number; y: number; z: number };  // Single value (z only) or full 3D rotation
+  /** Render-space rotation in radians. A number represents Z-only rotation. */
+  rotation: number | { x: number; y: number; z: number };
   is3D?: boolean;  // When true, layer participates in the shared 3D scene
   wireframe?: boolean;  // Debug: show as wireframe
   // Mask properties (passed from timeline clip masks for GPU processing)
@@ -48,6 +50,21 @@ export interface Layer {
   masks?: ClipMask[]; // Optional nested/serialized masks for mask texture generation.
   sourceRect?: LayerSourceRect;  // Normalized source UV rect; defaults to full source.
   transitionRender?: TransitionRenderState;
+  /** Runtime-only resolved terrain data for projecting this layer's native texture. */
+  terrainProjection?: import('./terrainAttachment').TerrainProjectionDescriptor;
+  /** Runtime-only terrain data for positioning native screen-facing content. */
+  terrainScreenAnchor?: {
+    anchor: import('./terrainAttachment').TerrainScreenAnchor;
+    terrain: import('./terrainTracking').TerrainReconstruction;
+    sourcePresentedTime?: number;
+    sourceTransform?: import('./terrainAttachment').TrackingSourceTransform;
+  };
+  /** Runtime-only planar content projection from a reusable tracking asset. */
+  trackingProjection?: import('./terrainAttachment').PlanarTrackingProjectionDescriptor;
+  /** Runtime-only screen-facing position from a reusable tracking asset. */
+  trackingScreenAnchor?: import('./terrainAttachment').TrackingScreenAnchorDescriptor;
+  /** Runtime-only endpoint binding for a generic screen-space connector. */
+  terrainAnchorConnector?: import('./terrainAttachment').TerrainAnchorConnector;
 }
 
 export type TransitionRenderState =
@@ -98,7 +115,9 @@ export type TransitionRenderState =
     };
 
 export interface LayerSource {
-  type: 'video' | 'image' | 'camera' | 'light' | 'color' | 'text' | 'solid' | 'model' | 'gaussian-avatar' | 'gaussian-splat' | 'motion' | 'motion-adjustment';
+  type: 'video' | 'image' | 'camera' | 'light' | 'color' | 'text' | 'solid' | 'model' | 'gaussian-avatar' | 'gaussian-splat' | 'motion' | 'motion-adjustment' | 'flock';
+  /** Runtime-only flock payload (compiled program, source time, keyframes). */
+  flock?: import('../services/flock/flockLayerSource').FlockLayerSourceData;
   modelUrl?: string;  // Blob URL to 3D model file (OBJ/glTF/GLB)
   modelFileName?: string;
   modelSequence?: ModelSequenceData;
@@ -109,6 +128,10 @@ export interface LayerSource {
   meshType?: import('../stores/mediaStore/types').MeshPrimitiveType;  // Primitive mesh type (cube, sphere, etc.)
   file?: File;
   videoElement?: HTMLVideoElement;
+  /** Runtime-only marker for sources that must be sampled at wall-clock speed during export. */
+  isLiveInput?: boolean;
+  /** Runtime-only browser-oriented staging surface for live video inputs. */
+  canvasElement?: HTMLCanvasElement;
   mediaTime?: number;
   targetMediaTime?: number;
   previewPath?: string;

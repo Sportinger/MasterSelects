@@ -4,7 +4,9 @@
  */
 
 import type { TextClipProperties } from '../types';
+import { setCanvasContentBounds } from './canvasContentBounds';
 import { markDynamicCanvasUpdated } from './canvasVersion';
+import { isCssGenericFontFamily } from './fontFamily';
 import { googleFontsService } from './googleFontsService';
 import {
   isAreaTextEnabled,
@@ -15,11 +17,26 @@ import {
   wrapTextToShapeLines,
 } from './textLayout';
 
+function getCanvasFontFamily(fontFamily: string): string {
+  const family = fontFamily.trim();
+  if (isCssGenericFontFamily(family)) return family.toLowerCase();
+  return `"${family.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+}
+
+interface TextPixelBounds {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
 class TextRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private width: number;
   private height: number;
+  private renderedBounds: TextPixelBounds | null = null;
+  private capturesBounds = false;
 
   constructor(width: number = 1920, height: number = 1080) {
     this.width = width;
@@ -54,6 +71,9 @@ class TextRenderer {
 
     this.width = renderWidth;
     this.height = renderHeight;
+    // Path glyphs are drawn in a changing local transform. Keep their existing
+    // full-canvas mapping until transformed bounds can be represented exactly.
+    this.beginBoundsCapture(!props.pathEnabled);
 
     try {
       // Clear canvas with transparent background
@@ -61,12 +81,15 @@ class TextRenderer {
 
       // Set font properties
       const fontStyle = props.fontStyle === 'italic' ? 'italic' : 'normal';
-      ctx.font = `${fontStyle} ${props.fontWeight} ${props.fontSize}px "${props.fontFamily}"`;
+      ctx.font = `${fontStyle} ${props.fontWeight} ${props.fontSize}px ${getCanvasFontFamily(props.fontFamily)}`;
       ctx.textAlign = props.textAlign;
       ctx.textBaseline = 'alphabetic';
 
       // Ensure font is loaded
-      if (!googleFontsService.isFontLoaded(props.fontFamily, props.fontWeight)) {
+      if (
+        !isCssGenericFontFamily(props.fontFamily) &&
+        !googleFontsService.isFontLoaded(props.fontFamily, props.fontWeight)
+      ) {
         // Load font in background - re-render will happen on property change
         googleFontsService.loadFont(props.fontFamily, props.fontWeight);
       }
@@ -75,6 +98,22 @@ class TextRenderer {
         this.renderTextOnPath(ctx, props);
       } else {
         this.renderNormalText(ctx, props);
+      }
+      const bounds = this.renderedBounds;
+      if (this.capturesBounds && bounds) {
+        const margin = 2;
+        const left = Math.max(0, bounds.left - margin);
+        const top = Math.max(0, bounds.top - margin);
+        const right = Math.min(this.width, bounds.right + margin);
+        const bottom = Math.min(this.height, bounds.bottom + margin);
+        setCanvasContentBounds(canvas, right > left && bottom > top ? {
+          x: left / this.width,
+          y: top / this.height,
+          width: (right - left) / this.width,
+          height: (bottom - top) / this.height,
+        } : undefined);
+      } else {
+        setCanvasContentBounds(canvas, undefined);
       }
       markDynamicCanvasUpdated(canvas, 'text');
     } finally {
@@ -160,6 +199,7 @@ class TextRenderer {
       props.lineHeight,
       props.letterSpacing,
       topBaseline,
+      props.wrapMode,
     );
     const totalHeight = firstPassLines.length * lineHeightPx;
 
@@ -189,6 +229,7 @@ class TextRenderer {
       props.lineHeight,
       props.letterSpacing,
       startY,
+      props.wrapMode,
     );
 
     ctx.save();
@@ -228,6 +269,8 @@ class TextRenderer {
     y: number,
     props: TextClipProperties
   ): void {
+    this.includeLineBounds(ctx, text, x, y, props);
+
     // Reset shadow state
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
@@ -258,6 +301,64 @@ class TextRenderer {
     // Draw fill
     ctx.fillStyle = props.color;
     ctx.fillText(text, x, y);
+  }
+
+  private includeLineBounds(
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    x: number,
+    y: number,
+    props: TextClipProperties,
+  ): void {
+    if (!this.capturesBounds || text.length === 0) return;
+    const metrics = ctx.measureText(text);
+    const width = Number.isFinite(metrics.width) ? metrics.width : 0;
+    const fallbackLeft = ctx.textAlign === 'center' ? width / 2 : ctx.textAlign === 'right' ? width : 0;
+    const fallbackRight = width - fallbackLeft;
+    const metricLeft = Number.isFinite(metrics.actualBoundingBoxLeft)
+      ? metrics.actualBoundingBoxLeft
+      : fallbackLeft;
+    const metricRight = Number.isFinite(metrics.actualBoundingBoxRight)
+      ? metrics.actualBoundingBoxRight
+      : fallbackRight;
+    const ascent = Number.isFinite(metrics.actualBoundingBoxAscent)
+      ? metrics.actualBoundingBoxAscent
+      : props.fontSize * 0.8;
+    const descent = Number.isFinite(metrics.actualBoundingBoxDescent)
+      ? metrics.actualBoundingBoxDescent
+      : props.fontSize * 0.2;
+    const stroke = props.strokeEnabled ? Math.max(0, props.strokeWidth) : 0;
+    const base = {
+      left: x - metricLeft - stroke,
+      top: y - ascent - stroke,
+      right: x + metricRight + stroke,
+      bottom: y + descent + stroke,
+    };
+    this.includeBounds(base);
+    if (props.shadowEnabled) {
+      const blur = Math.max(0, props.shadowBlur) * 2;
+      this.includeBounds({
+        left: base.left + props.shadowOffsetX - blur,
+        top: base.top + props.shadowOffsetY - blur,
+        right: base.right + props.shadowOffsetX + blur,
+        bottom: base.bottom + props.shadowOffsetY + blur,
+      });
+    }
+  }
+
+  private includeBounds(bounds: TextPixelBounds): void {
+    const current = this.renderedBounds;
+    this.renderedBounds = current ? {
+      left: Math.min(current.left, bounds.left),
+      top: Math.min(current.top, bounds.top),
+      right: Math.max(current.right, bounds.right),
+      bottom: Math.max(current.bottom, bounds.bottom),
+    } : bounds;
+  }
+
+  private beginBoundsCapture(enabled: boolean): void {
+    this.renderedBounds = null;
+    this.capturesBounds = enabled;
   }
 
   /**

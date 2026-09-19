@@ -4,8 +4,10 @@ import type { AudioCodec } from '../../engine/audio';
 import {
   CONTAINER_FORMATS,
   getCodecInfo,
+  HAP_FORMATS,
   type FFmpegContainer,
   type FFmpegVideoCodec,
+  type HapFormat,
 } from '../../engine/ffmpeg';
 import {
   estimateGifSize,
@@ -74,6 +76,7 @@ export interface ExportSettingsStateInput {
   rateControl: 'vbr' | 'cbr';
   ffmpegCodec: FFmpegVideoCodec;
   ffmpegContainer: FFmpegContainer;
+  hapFormat: HapFormat;
   ffmpegQuality: number;
   ffmpegBitrate: number;
   ffmpegRateControl: 'crf' | 'cbr' | 'vbr';
@@ -136,6 +139,8 @@ export function buildExportSettingsState(input: ExportSettingsStateInput) {
   const ffmpegCodecInfo = getCodecInfo(input.visualMode === 'gif' ? 'gif' : input.ffmpegCodec);
   const showFFmpegQualityControl = input.visualMode !== 'gif' && input.ffmpegCodec === 'mjpeg';
   const isWebCodecsEncoder = input.encoder === 'webcodecs' || input.encoder === 'htmlvideo';
+  const isHapEncoder = input.encoder === 'hap';
+  const selectedHapFormat = HAP_FORMATS.find(({ id }) => id === input.hapFormat) ?? HAP_FORMATS[0];
   const isXmlMode = input.specialContainer === 'xml';
   const isImageMode = !isXmlMode && input.videoEnabled && input.visualMode === 'image';
   const isImageSequenceMode = isImageMode && input.imageExportMode === 'sequence';
@@ -146,25 +151,40 @@ export function buildExportSettingsState(input: ExportSettingsStateInput) {
   const isGifMode = !isXmlMode && input.videoEnabled && input.visualMode === 'gif';
   const isVideoMode = !isXmlMode && input.videoEnabled && (input.visualMode === 'video' || isGifMode);
   const isAudioOnlyMode = !isXmlMode && !input.videoEnabled;
-  const currentContainerId = isXmlMode ? 'fcpxml' : isGifMode ? 'gif' : (isWebCodecsEncoder ? input.containerFormat : input.ffmpegContainer);
+  const currentContainerId = isXmlMode
+    ? 'fcpxml'
+    : isGifMode
+      ? 'gif'
+      : isHapEncoder
+        ? 'mov'
+        : (isWebCodecsEncoder ? input.containerFormat : input.ffmpegContainer);
   const currentContainerLabel = isXmlMode
     ? 'FCPXML'
     : isGifMode
       ? 'Animated GIF'
-      : isWebCodecsEncoder
-        ? FrameExporter.getContainerFormats().find(({ id }) => id === input.containerFormat)?.label ?? input.containerFormat.toUpperCase()
-        : CONTAINER_FORMATS.find(({ id }) => id === input.ffmpegContainer)?.name ?? input.ffmpegContainer.toUpperCase();
+      : isHapEncoder
+        ? 'QuickTime (.mov)'
+        : isWebCodecsEncoder
+          ? FrameExporter.getContainerFormats().find(({ id }) => id === input.containerFormat)?.label ?? input.containerFormat.toUpperCase()
+          : CONTAINER_FORMATS.find(({ id }) => id === input.ffmpegContainer)?.name ?? input.ffmpegContainer.toUpperCase();
   const currentCodecLabel = isGifMode
     ? (input.encoder === 'ffmpeg' ? 'FFmpeg GIF' : 'Browser GIF')
-    : isWebCodecsEncoder
-      ? FrameExporter.getVideoCodecs(input.containerFormat).find(({ id }) => id === input.videoCodec)?.label ?? input.videoCodec.toUpperCase()
-      : ffmpegCodecInfo?.name ?? input.ffmpegCodec.toUpperCase();
+    : isHapEncoder
+      ? selectedHapFormat.name
+      : isWebCodecsEncoder
+        ? FrameExporter.getVideoCodecs(input.containerFormat).find(({ id }) => id === input.videoCodec)?.label ?? input.videoCodec.toUpperCase()
+        : ffmpegCodecInfo?.name ?? input.ffmpegCodec.toUpperCase();
   const methodMeta = getMethodMeta(isGifMode, input.encoder, input.isFFmpegMultiThreaded);
   const ffmpegAudioCodecLabel = getFfmpegAudioCodecLabel(isGifMode, input.ffmpegContainer);
   const effectiveIncludeAudio = (isVideoMode || isXmlMode) && input.includeAudio && !isGifMode;
   const selectedImageFormat = IMAGE_FORMATS.find(({ id }) => id === input.imageFormat) ?? IMAGE_FORMATS[0];
   const browserAudioExtension = input.audioCodec === 'opus' ? 'ogg' : 'aac';
   const browserAudioCodecLabel = input.audioCodec?.toUpperCase() ?? 'AAC';
+  const browserVideoAudioCodecLabel = input.containerFormat === 'webm'
+    ? 'OPUS'
+    : input.audioCodec === 'opus'
+      ? 'OPUS (fallback)'
+      : 'AAC';
   const audioOnlyExtension = input.audioOnlyFormat === 'wav'
     ? 'wav'
     : input.audioOnlyFormat === 'mp3'
@@ -176,14 +196,19 @@ export function buildExportSettingsState(input: ExportSettingsStateInput) {
       ? 'MP3'
       : browserAudioCodecLabel;
   const audioOnlyUsesWebCodecs = isAudioOnlyMode && input.audioOnlyFormat === 'browser';
+  const usesBrowserAudioEncoder = (isVideoMode && isWebCodecsEncoder) || audioOnlyUsesWebCodecs;
   const browserAudioUnavailable = isWebCodecsEncoder
     && !input.isAudioSupported
     && !(isAudioOnlyMode && (input.audioOnlyFormat === 'wav' || input.audioOnlyFormat === 'mp3'));
-  const currentAudioCodecLabel = isVideoMode && input.encoder === 'ffmpeg'
-    ? ffmpegAudioCodecLabel
-    : isAudioOnlyMode
-      ? audioOnlyCodecLabel
-      : browserAudioCodecLabel;
+  const currentAudioCodecLabel = isVideoMode && isHapEncoder
+    ? 'PCM'
+    : isVideoMode && input.encoder === 'ffmpeg'
+      ? ffmpegAudioCodecLabel
+      : isVideoMode && isWebCodecsEncoder
+        ? browserVideoAudioCodecLabel
+      : isAudioOnlyMode
+        ? audioOnlyCodecLabel
+        : browserAudioCodecLabel;
   const outputHeight = input.stackedAlpha && isVideoMode && !isGifMode ? actualHeight * 2 : actualHeight;
   const frameCount = isImageSequenceMode
     ? imageSequenceFrameCount
@@ -230,9 +255,11 @@ export function buildExportSettingsState(input: ExportSettingsStateInput) {
   const showRangeInVideo = isVideoMode;
   const showRangeInAudio = isAudioOnlyMode && input.includeAudio;
   const gifContainerFormat = CONTAINER_FORMATS.find(({ id }) => id === 'gif');
-  const videoContainerFormats = isWebCodecsEncoder && gifContainerFormat
-    ? [...FrameExporter.getContainerFormats(), gifContainerFormat]
-    : CONTAINER_FORMATS;
+  const videoContainerFormats = isHapEncoder
+    ? CONTAINER_FORMATS.filter(({ id }) => id === 'mov')
+    : isWebCodecsEncoder && gifContainerFormat
+      ? [...FrameExporter.getContainerFormats(), gifContainerFormat]
+      : CONTAINER_FORMATS;
   const selectedPreset = input.presets.find((preset) => preset.id === input.selectedPresetId) ?? null;
 
   return {
@@ -273,7 +300,7 @@ export function buildExportSettingsState(input: ExportSettingsStateInput) {
     exportModeLabel,
     exportDisabled,
     primaryExportLabel: 'Export',
-    usesBrowserProgress: isImageSequenceMode || input.encoder === 'webcodecs' || input.encoder === 'htmlvideo',
+    usesBrowserProgress: isImageSequenceMode || input.encoder === 'webcodecs' || input.encoder === 'htmlvideo' || isHapEncoder,
     summaryBadges: buildSummaryBadges({
       input,
       isXmlMode,
@@ -312,12 +339,19 @@ export function buildExportSettingsState(input: ExportSettingsStateInput) {
       { value: 48000 as const, label: '48 kHz' },
       { value: 44100 as const, label: '44.1 kHz' },
     ] as const,
-    audioBitratePresets: [
-      { value: 128000, label: '128 kbps' },
-      { value: 192000, label: '192 kbps' },
-      { value: 256000, label: '256 kbps' },
-      { value: 320000, label: '320 kbps' },
-    ] as const,
+    audioBitratePresets: usesBrowserAudioEncoder
+      ? [
+          { value: 96_000, label: '96 kbps' },
+          { value: 128_000, label: '128 kbps' },
+          { value: 160_000, label: '160 kbps' },
+          { value: 192_000, label: '192 kbps' },
+        ] as const
+      : [
+          { value: 128_000, label: '128 kbps' },
+          { value: 192_000, label: '192 kbps' },
+          { value: 256_000, label: '256 kbps' },
+          { value: 320_000, label: '320 kbps' },
+        ] as const,
     selectedPreset,
     selectedPresetName: selectedPreset?.name ?? '',
   };
@@ -341,6 +375,13 @@ function estimateOutputSize(
     estimatedBitrate = input.audioOnlyFormat === 'wav'
       ? input.audioSampleRate * 2 * 16
       : input.audioBitrate;
+  } else if (input.encoder === 'hap') {
+    // BC1 = 0.5 byte/px, BC3 = 1 byte/px, Snappy typically removes ~35%.
+    const pixels = input.useCustomResolution
+      ? input.customWidth * input.customHeight
+      : input.width * input.height;
+    const bytesPerFrame = pixels * (input.hapFormat === 'hap' ? 0.5 : 1) * 0.65;
+    estimatedBitrate = bytesPerFrame * 8 * actualFps;
   } else if (input.encoder === 'webcodecs' || input.encoder === 'htmlvideo') {
     estimatedBitrate = input.bitrate;
   } else if (input.ffmpegRateControl === 'crf') {
@@ -397,6 +438,14 @@ function getMethodMeta(
       title: 'HTMLVideo Precise',
       badge: 'Precise',
       description: 'Explicit HTMLVideo seeking for difficult timing cases.',
+    };
+  }
+
+  if (encoder === 'hap') {
+    return {
+      title: 'HAP GPU',
+      badge: 'GPU',
+      description: 'GPU texture codec for VJ and media servers, encoded in-browser on WebGPU.',
     };
   }
 

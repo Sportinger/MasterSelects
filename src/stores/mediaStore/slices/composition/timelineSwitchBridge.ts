@@ -116,6 +116,13 @@ async function finishCompositionSwitch(
     const newComp = freshCompositions.find((c) => c.id === newId);
     await timelineStore.loadState(newComp?.timelineData);
 
+    // The composition may already have been prepared while it was inactive,
+    // in which case its source cache points at serialized text/solid canvases.
+    // Rebind it after loadState so every parent preview evaluates the active
+    // composition against the live timeline runtimes immediately.
+    compositionRenderer.invalidateComposition(newId);
+    await compositionRenderer.prepareComposition(newId);
+
     if (playFromStart) {
       timelineStore.setPlayheadPosition(playStartTime);
       resetPlaybackClockForCompositionStart(playStartTime);

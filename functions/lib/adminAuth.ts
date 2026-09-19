@@ -4,6 +4,7 @@ import {
   readCookie,
   serializeCookie,
 } from './auth';
+import { timingSafeEqualBytes, timingSafeEqualStrings } from './constantTime';
 import type { AppContext, Env } from './env';
 
 export const ADMIN_SESSION_COOKIE = '__ms_admin_session';
@@ -11,6 +12,9 @@ export const ADMIN_SESSION_TTL_SECONDS = 8 * 60 * 60;
 const ADMIN_LOGIN_WINDOW_SECONDS = 15 * 60;
 const ADMIN_LOGIN_LOCK_SECONDS = 30 * 60;
 const ADMIN_LOGIN_MAX_FAILURES = 5;
+/** Failures across all addresses before the console locks for everyone. */
+export const ADMIN_LOGIN_GLOBAL_MAX_FAILURES = 50;
+const ADMIN_LOGIN_GLOBAL_KEY = 'admin:login:global-failures';
 const PASSWORD_HASH_PREFIX = 'pbkdf2-sha256';
 const encoder = new TextEncoder();
 
@@ -111,6 +115,10 @@ export async function verifyAdminPassword(env: Env, password: unknown): Promise<
 
   const [algorithm, iterationsText, saltText, expectedText] = adminPasswordHash(env).split('$');
   const iterations = Number(iterationsText);
+  // The iteration count comes from the stored hash and is deliberately not
+  // held to a minimum here: the production hash lives only in Cloudflare
+  // secrets and can not be inspected from this repository, so a floor could
+  // lock the operator out. Raise the work factor by rotating the secret.
   if (
     algorithm !== PASSWORD_HASH_PREFIX
     || !Number.isInteger(iterations)
@@ -141,12 +149,7 @@ export async function verifyAdminPassword(env: Env, password: unknown): Promise<
       expected.byteLength * 8,
     );
 
-    let difference = 0;
-    const actual = new Uint8Array(derived);
-    for (let index = 0; index < expected.length; index += 1) {
-      difference |= actual[index]! ^ expected[index]!;
-    }
-    return difference === 0;
+    return timingSafeEqualBytes(new Uint8Array(derived), expected);
   } catch {
     return false;
   }
@@ -222,13 +225,7 @@ export async function requireAdminSession(context: AppContext): Promise<AdminSes
 }
 
 export function hasValidAdminCsrf(request: Request, session: AdminSession): boolean {
-  const supplied = request.headers.get('x-masterselects-admin-csrf') ?? '';
-  if (supplied.length !== session.csrfToken.length) return false;
-  let difference = 0;
-  for (let index = 0; index < supplied.length; index += 1) {
-    difference |= supplied.charCodeAt(index) ^ session.csrfToken.charCodeAt(index);
-  }
-  return difference === 0;
+  return timingSafeEqualStrings(request.headers.get('x-masterselects-admin-csrf') ?? '', session.csrfToken);
 }
 
 async function adminLoginRateKey(request: Request, env: Env): Promise<string> {
@@ -242,26 +239,52 @@ async function adminLoginRateKey(request: Request, env: Env): Promise<string> {
   return `admin:login:${encodeBase64Url(digest).slice(0, 32)}`;
 }
 
-export async function getAdminLoginRetryAfter(request: Request, env: Env, now = Date.now()): Promise<number> {
-  const record = await env.KV.get<AdminLoginRateRecord>(await adminLoginRateKey(request, env), { type: 'json' });
+function lockedSecondsRemaining(record: AdminLoginRateRecord | null, now: number): number {
   if (!record?.lockedUntil || record.lockedUntil <= now) return 0;
   return Math.max(1, Math.ceil((record.lockedUntil - now) / 1000));
 }
 
-export async function recordAdminLoginFailure(request: Request, env: Env, now = Date.now()): Promise<number> {
-  const key = await adminLoginRateKey(request, env);
+export async function getAdminLoginRetryAfter(request: Request, env: Env, now = Date.now()): Promise<number> {
+  const [perAddress, global] = await Promise.all([
+    env.KV.get<AdminLoginRateRecord>(await adminLoginRateKey(request, env), { type: 'json' }),
+    env.KV.get<AdminLoginRateRecord>(ADMIN_LOGIN_GLOBAL_KEY, { type: 'json' }),
+  ]);
+  return Math.max(lockedSecondsRemaining(perAddress, now), lockedSecondsRemaining(global, now));
+}
+
+async function recordFailure(
+  env: Env,
+  key: string,
+  maxFailures: number,
+  now: number,
+): Promise<AdminLoginRateRecord> {
   const current = await env.KV.get<AdminLoginRateRecord>(key, { type: 'json' });
   const withinWindow = Boolean(current && now - current.windowStartedAt < ADMIN_LOGIN_WINDOW_SECONDS * 1000);
   const failures = (withinWindow ? current?.failures ?? 0 : 0) + 1;
   const record: AdminLoginRateRecord = {
     failures,
     windowStartedAt: withinWindow ? current!.windowStartedAt : now,
-    ...(failures >= ADMIN_LOGIN_MAX_FAILURES ? { lockedUntil: now + ADMIN_LOGIN_LOCK_SECONDS * 1000 } : {}),
+    ...(failures >= maxFailures ? { lockedUntil: now + ADMIN_LOGIN_LOCK_SECONDS * 1000 } : {}),
   };
   await env.KV.put(key, JSON.stringify(record), { expirationTtl: ADMIN_LOGIN_LOCK_SECONDS });
-  return record.lockedUntil ? ADMIN_LOGIN_LOCK_SECONDS : 0;
+  return record;
 }
 
+/**
+ * Counts a failed password attempt twice: per client address, which stops a
+ * single client, and globally, which stops a distributed guess spread over
+ * many addresses. A global lock also holds out the legitimate operator for
+ * the lock window; that is the accepted trade-off for a single-admin console.
+ */
+export async function recordAdminLoginFailure(request: Request, env: Env, now = Date.now()): Promise<number> {
+  const [perAddress, global] = await Promise.all([
+    recordFailure(env, await adminLoginRateKey(request, env), ADMIN_LOGIN_MAX_FAILURES, now),
+    recordFailure(env, ADMIN_LOGIN_GLOBAL_KEY, ADMIN_LOGIN_GLOBAL_MAX_FAILURES, now),
+  ]);
+  return perAddress.lockedUntil || global.lockedUntil ? ADMIN_LOGIN_LOCK_SECONDS : 0;
+}
+
+/** A successful login clears the address record only; the global counter ages out. */
 export async function clearAdminLoginFailures(request: Request, env: Env): Promise<void> {
   await env.KV.delete(await adminLoginRateKey(request, env));
 }

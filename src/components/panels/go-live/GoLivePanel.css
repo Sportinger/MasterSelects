@@ -1,0 +1,289 @@
+.go-live-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: var(--font-md);
+}
+
+.go-live-header {
+  flex: none;
+  gap: var(--sp-3);
+}
+
+.go-live-header h2 {
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: var(--font-semibold);
+}
+
+.go-live-header p {
+  margin: var(--sp-0-5) 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}
+
+.go-live-phase {
+  padding: var(--sp-0-5) var(--sp-1-5);
+  border-radius: var(--radius-sm);
+  background: var(--bg-active);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  text-transform: capitalize;
+}
+
+.go-live-phase-live {
+  background: var(--danger-dim);
+  color: var(--danger-light);
+}
+
+.go-live-phase-starting,
+.go-live-phase-stopping {
+  background: var(--accent-dim);
+  color: var(--accent-hover);
+}
+
+.go-live-phase-error {
+  background: var(--danger-dim);
+  color: var(--danger-light);
+}
+
+.go-live-section,
+.go-live-controls {
+  display: grid;
+  flex: none;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
+  border: 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.go-live-section legend {
+  padding: var(--sp-2) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  font-weight: var(--font-semibold);
+}
+
+.go-live-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+
+.go-live-field {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.go-live-field > span:first-child,
+.go-live-meter > span:first-child {
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+
+.go-live-field input,
+.go-live-field select {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  outline: none;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: var(--font-md);
+}
+
+.go-live-field input:focus,
+.go-live-field select:focus {
+  border-color: var(--accent);
+}
+
+.go-live-secret-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.go-live-secret-control input {
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+
+.go-live-secret-control button,
+.go-live-error button {
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border-color);
+  border-left: 0;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--font-xs);
+}
+
+.go-live-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}
+
+.go-live-hint-warning {
+  color: var(--warning-light);
+}
+
+.go-live-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+}
+
+.go-live-toggles label,
+.go-live-record-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.go-live-panel input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+
+.go-live-section :disabled,
+.go-live-controls :disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.go-live-meters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+
+.go-live-meter {
+  display: grid;
+  gap: var(--sp-1);
+}
+
+.go-live-meter-track {
+  height: 5px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--bg-primary);
+}
+
+.go-live-meter-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--success);
+  transition: width 100ms linear;
+}
+
+.go-live-controls {
+  border-bottom: 0;
+}
+
+.go-live-stats {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+}
+
+.go-live-stats > div {
+  display: grid;
+  gap: var(--sp-0-5);
+  padding: var(--sp-1-5) var(--sp-2);
+  border-right: 1px solid var(--border-color);
+}
+
+.go-live-stats small {
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}
+
+.go-live-stats strong {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+}
+
+.go-live-rec-badge {
+  position: absolute;
+  top: var(--sp-1);
+  right: var(--sp-1);
+  padding: 1px var(--sp-1);
+  border-radius: var(--radius-sm);
+  background: var(--danger);
+  color: var(--text-on-accent);
+  font-size: 9px;
+  font-weight: var(--font-bold);
+}
+
+.go-live-primary {
+  justify-self: stretch;
+  min-height: 34px;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-weight: var(--font-semibold);
+}
+
+.go-live-primary-end {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+
+.go-live-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: var(--sp-1);
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: go-live-spin 700ms linear infinite;
+  vertical-align: -2px;
+}
+
+.go-live-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--danger-border);
+  background: var(--danger-subtle);
+  color: var(--danger-light);
+  font-size: var(--font-sm);
+}
+
+.go-live-error button {
+  height: 26px;
+  flex: none;
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-md);
+}
+
+@keyframes go-live-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 420px) {
+  .go-live-grid,
+  .go-live-meters {
+    grid-template-columns: 1fr;
+  }
+}

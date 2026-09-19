@@ -7,8 +7,21 @@ interface ClippyMascotProps {
 
 let hasPlayedIntro = false;
 
+function needsTransparentImageFallback(): boolean {
+  if (typeof navigator === 'undefined') return false;
+
+  const userAgent = navigator.userAgent;
+  const isAppleMobile = /iPad|iPhone|iPod/i.test(userAgent);
+  const isDesktopModeIPad = /Macintosh/i.test(userAgent) && navigator.maxTouchPoints > 1;
+
+  // WebKit can decode the VP9 WebM files without reporting an error while
+  // discarding their alpha plane. The transparent WebP avoids the opaque
+  // video rectangle on iPadOS (including its desktop browser mode).
+  return isAppleMobile || isDesktopModeIPad;
+}
+
 export function ClippyMascot({ isClosing }: ClippyMascotProps) {
-  const [useWebP, setUseWebP] = useState(false);
+  const [useWebP, setUseWebP] = useState(needsTransparentImageFallback);
   const [phase, setPhase] = useState<'intro' | 'loop' | 'outro'>(() => (
     hasPlayedIntro ? 'loop' : 'intro'
   ));

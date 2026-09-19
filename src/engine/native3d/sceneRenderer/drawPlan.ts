@@ -24,9 +24,12 @@ export function canRenderNativeScene(
   splatLayers: SceneSplatLayer[],
   lightLayers: SceneLightLayer[],
 ): boolean {
+  const voxelLayerCount = layers.filter((layer) => layer.kind === 'voxel').length;
+  const flockLayerCount = layers.filter((layer) => layer.kind === 'flock').length;
+  const cableLayerCount = layers.filter((layer) => layer.kind === 'face-cables').length;
   return (
     layers.length > 0 &&
-    layers.length === planeLayers.length + nativeMeshLayers.length + splatLayers.length + lightLayers.length
+    layers.length === planeLayers.length + nativeMeshLayers.length + splatLayers.length + lightLayers.length + voxelLayerCount + flockLayerCount + cableLayerCount
   );
 }
 

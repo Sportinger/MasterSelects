@@ -1,3 +1,5 @@
+import { LegalContactMethods, LegalPostalAddress } from './LegalContactDetails';
+
 // =====================================================
 // 中文
 // =====================================================
@@ -6,13 +8,13 @@ export function ImprintZH() {
   return (
     <div className="legal-text">
       <h3>运营者信息（根据德国电信媒体法 § 5 TMG）</h3>
-      <p>Roman Kuskowski<br />[地址待补充]</p>
+      <p><LegalPostalAddress /></p>
       <h3>联系方式</h3>
-      <p>电子邮件: admin@masterselects.com</p>
+      <p><LegalContactMethods emailLabel="电子邮件" phoneLabel="电话" /></p>
       <h3>版权</h3>
       <p>
-        MasterSelects 是开源软件，发布在{' '}
-        <a href="https://github.com/Sportinger/MasterSelects" target="_blank" rel="noopener noreferrer">GitHub</a>。
+        MasterSelects 编辑器采用 GNU AGPL-3.0-only 许可证。Copyright © 2026 Jan Roman Kuskowski。
+        第三方组件仍受各自许可证约束。
       </p>
     </div>
   );
@@ -26,12 +28,12 @@ export function PrivacyZH() {
         <strong>MasterSelects 主要是一个本地应用程序。</strong>所有视频、图片和音频文件仅在您的设备上处理。您的媒体文件永远不会离开您的计算机。
       </p>
       <h3>2. 数据控制者</h3>
-      <p>Roman Kuskowski<br />电子邮件: admin@masterselects.com</p>
+      <p><LegalPostalAddress /><br /><LegalContactMethods emailLabel="电子邮件" phoneLabel="电话" /></p>
       <h3>3. 托管</h3>
       <p>由 <strong>Cloudflare, Inc.</strong>（美国）托管，已获 EU-US 数据隐私框架认证。</p>
       <p>
-        此外，当您打开本网站页面时，我们会临时在服务器端处理访问事件，用于技术运行监控和内部实时提醒。这些事件可能包括访问路径、时间戳、基于 Cloudflare 地理数据得出的国家和城市、referer、缩短后的 user agent，以及基于 IP 地址和秘密盐值
-        生成的匿名化访客标识。我们不会在该内部日志中保存明文 IP 地址。此类访问事件通常仅保存约一小时。法律依据为 GDPR 第 6 条第 1 款 (f) 项，即我们对安全运行、滥用检测以及了解当前网站活动所具有的正当利益。
+        此外，当您打开本网站页面时，我们会在服务器端处理访问事件，用于技术运行监控和内部实时提醒。这些事件可能包括访问路径、时间戳、基于 Cloudflare 地理数据得出的国家、粗略的浏览器、操作系统和设备类别、referer 域名，以及通过秘密密钥 HMAC
+        从 IP 地址生成且每日轮换的假名化访客标识。我们不会保存城市、完整 user agent、完整 referer URL 或明文 IP 地址，且该标识无法用于跨日关联访问。访问事件将在 180 天后自动删除。法律依据为 GDPR 第 6 条第 1 款 (f) 项，即我们对安全运行、滥用检测以及了解网站活动所具有的正当利益。
       </p>
       <h3>4. 支付</h3>
       <p>由 <strong>Stripe, Inc.</strong> 处理支付。我们不存储信用卡信息。</p>
@@ -64,10 +66,6 @@ export function ContactZH() {
         <div className="legal-contact-row">
           <span className="legal-contact-label">电子邮件</span>
           <a href="mailto:admin@masterselects.com">admin@masterselects.com</a>
-        </div>
-        <div className="legal-contact-row">
-          <span className="legal-contact-label">GitHub</span>
-          <a href="https://github.com/Sportinger/MasterSelects" target="_blank" rel="noopener noreferrer">Sportinger/MasterSelects</a>
         </div>
       </div>
     </div>

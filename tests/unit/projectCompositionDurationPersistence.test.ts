@@ -71,13 +71,14 @@ function projectComposition(
 }
 
 describe('project composition duration persistence', () => {
-  it('restores an explicitly locked video-length composition exactly', () => {
+  it('restores an explicitly locked video-length composition on its frame grid', () => {
     const [composition] = convertProjectCompositionToStore([
       projectComposition(4321.23356, 4321.23356, true),
     ]);
 
-    expect(composition.duration).toBe(4321.23356);
-    expect(composition.timelineData?.duration).toBe(4321.23356);
+    expect(composition.duration).toBe(4321.24);
+    expect(composition.timelineData?.duration).toBe(4321.24);
+    expect(composition.timelineData?.clips[0].duration).toBe(4321.2);
     expect(composition.timelineData?.durationLocked).toBe(true);
   });
 
@@ -86,8 +87,8 @@ describe('project composition duration persistence', () => {
       projectComposition(60, 4321.23356),
     ]);
 
-    expect(composition.duration).toBe(4321.23356);
-    expect(composition.timelineData?.duration).toBe(4321.23356);
+    expect(composition.duration).toBe(4321.2);
+    expect(composition.timelineData?.duration).toBe(4321.2);
     expect(composition.timelineData?.durationLocked).toBe(true);
   });
 

@@ -1,8 +1,11 @@
 import { MAX_RUNTIME_PRIMARY_NODES, type RuntimeColorGrade } from '../../types';
+import { COLOR_CURVE_CHANNELS, COLOR_CURVE_SAMPLE_COUNT } from '../../types/colorCurves';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('ColorPipeline');
-const COLOR_NODE_VEC4_ROWS = 8;
+const PRIMARY_COLOR_VEC4_ROWS = 8;
+const COLOR_CURVE_VEC4_ROWS = COLOR_CURVE_SAMPLE_COUNT / 4;
+const COLOR_NODE_VEC4_ROWS = PRIMARY_COLOR_VEC4_ROWS + COLOR_CURVE_CHANNELS.length * COLOR_CURVE_VEC4_ROWS;
 const COLOR_UNIFORM_FLOATS = 4 + MAX_RUNTIME_PRIMARY_NODES * COLOR_NODE_VEC4_ROWS * 4;
 
 const COLOR_SHADER = `
@@ -64,8 +67,18 @@ fn hueRotate(rgb: vec3f, degrees: f32) -> vec3f {
   );
 }
 
+fn sampleColorCurve(nodeIndex: u32, curveIndex: u32, inputValue: f32) -> f32 {
+  let scaled = clamp(inputValue, 0.0, 1.0) * ${COLOR_CURVE_SAMPLE_COUNT - 1}.0;
+  let lowerIndex = u32(floor(scaled));
+  let upperIndex = min(lowerIndex + 1u, ${COLOR_CURVE_SAMPLE_COUNT - 1}u);
+  let curveBase = nodeIndex * ${COLOR_NODE_VEC4_ROWS}u + ${PRIMARY_COLOR_VEC4_ROWS}u + curveIndex * ${COLOR_CURVE_VEC4_ROWS}u;
+  let lowerValue = color.data[curveBase + lowerIndex / 4u][lowerIndex % 4u];
+  let upperValue = color.data[curveBase + upperIndex / 4u][upperIndex % 4u];
+  return mix(lowerValue, upperValue, fract(scaled));
+}
+
 fn applyPrimary(rgbIn: vec3f, nodeIndex: u32) -> vec3f {
-  let baseIndex = nodeIndex * 8u;
+  let baseIndex = nodeIndex * ${COLOR_NODE_VEC4_ROWS}u;
   let p0 = color.data[baseIndex + 0u];
   let p1 = color.data[baseIndex + 1u];
   let p2 = color.data[baseIndex + 2u];
@@ -108,7 +121,11 @@ fn applyPrimary(rgbIn: vec3f, nodeIndex: u32) -> vec3f {
   let highlightMask = clamp(toneY * 2.0 - 1.0, 0.0, 1.0);
   rgb += vec3f(shadows * 0.35 * shadowMask + highlights * 0.35 * highlightMask);
 
-  rgb = pow(max(rgb, vec3f(0.0)), vec3f(1.0) / max(gammaRgb, vec3f(0.001)));
+  // Resolve-style midtone gamma keeps black pinned at zero while lifting the
+  // complete tonal range continuously, including values close to black.
+  let gammaInput = max(rgb, vec3f(0.0));
+  let gammaPower = vec3f(1.0) / max(gammaRgb, vec3f(0.001));
+  rgb = pow(gammaInput, gammaPower);
   rgb *= gainRgb;
   rgb = (rgb - vec3f(pivot)) * contrast + vec3f(pivot);
 
@@ -121,6 +138,16 @@ fn applyPrimary(rgbIn: vec3f, nodeIndex: u32) -> vec3f {
 
   rgb = hueRotate(rgb, hue);
   rgb += vec3f(temperature * 0.08, tint * 0.05, -temperature * 0.08);
+  rgb = vec3f(
+    sampleColorCurve(nodeIndex, 0u, rgb.r),
+    sampleColorCurve(nodeIndex, 0u, rgb.g),
+    sampleColorCurve(nodeIndex, 0u, rgb.b)
+  );
+  rgb = vec3f(
+    sampleColorCurve(nodeIndex, 1u, rgb.r),
+    sampleColorCurve(nodeIndex, 2u, rgb.g),
+    sampleColorCurve(nodeIndex, 3u, rgb.b)
+  );
   return rgb;
 }
 
@@ -235,6 +262,20 @@ export class ColorPipeline {
       uniforms[offset + 29] = params.offsetG;
       uniforms[offset + 30] = params.offsetB;
       uniforms[offset + 31] = params.offsetY;
+
+      const curves = grade.curvesByNode?.[index];
+      COLOR_CURVE_CHANNELS.forEach((channel, channelIndex) => {
+        const samples = curves?.[channel];
+        for (let sampleIndex = 0; sampleIndex < COLOR_CURVE_SAMPLE_COUNT; sampleIndex += 1) {
+          const neutralValue = sampleIndex / (COLOR_CURVE_SAMPLE_COUNT - 1);
+          uniforms[
+            offset
+            + PRIMARY_COLOR_VEC4_ROWS * 4
+            + channelIndex * COLOR_CURVE_SAMPLE_COUNT
+            + sampleIndex
+          ] = samples?.[sampleIndex] ?? neutralValue;
+        }
+      });
     });
     this.device.queue.writeBuffer(uniformBuffer, 0, uniforms);
 

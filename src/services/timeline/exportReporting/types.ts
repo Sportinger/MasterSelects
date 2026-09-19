@@ -86,7 +86,7 @@ export interface ExportFrameProviderAdmissionReport {
   };
   width?: number;
   height?: number;
-  providerKind?: 'webcodecs' | 'runtime-frame-provider';
+  providerKind?: 'webcodecs' | 'turbores' | 'hap' | 'runtime-frame-provider';
   frameFormat?: 'video-frame' | 'image-bitmap' | 'canvas-image-source' | 'unknown';
   label?: string;
   tags?: readonly string[];

@@ -19,6 +19,42 @@ export interface WorkerRenderTargetSizingRecord {
   readonly target: RenderCommandTarget;
 }
 
+interface WorkerTargetResizeInput {
+  readonly canvasHeight: number;
+  readonly canvasWidth: number;
+  readonly followsActiveComposition: boolean;
+  readonly requestedHeight: number;
+  readonly requestedWidth: number;
+  readonly viewportOverride?: { readonly height: number; readonly width: number } | null;
+}
+
+/** Keeps independently routed previews from inheriting the active comp's aspect ratio. */
+export function resolveWorkerTargetResizeSize({
+  canvasHeight,
+  canvasWidth,
+  followsActiveComposition,
+  requestedHeight,
+  requestedWidth,
+  viewportOverride,
+}: WorkerTargetResizeInput): { readonly x: number; readonly y: number } {
+  const requested = {
+    x: Math.max(1, Math.round(requestedWidth)),
+    y: Math.max(1, Math.round(requestedHeight)),
+  };
+  if (followsActiveComposition && !viewportOverride) return requested;
+
+  const sourceWidth = Math.max(1, viewportOverride?.width ?? canvasWidth);
+  const sourceHeight = Math.max(1, viewportOverride?.height ?? canvasHeight);
+  const requestedMaxEdge = Math.max(requested.x, requested.y);
+  const sourceMaxEdge = Math.max(sourceWidth, sourceHeight);
+  const scale = Math.min(1, requestedMaxEdge / sourceMaxEdge);
+
+  return {
+    x: Math.max(1, Math.round(sourceWidth * scale)),
+    y: Math.max(1, Math.round(sourceHeight * scale)),
+  };
+}
+
 export function createWorkerCanvasContext(targetId: string, canvas: HTMLCanvasElement): GPUCanvasContext {
   return {
     __workerRenderHostContext: true,

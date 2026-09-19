@@ -3,31 +3,38 @@ import type {
   RenderSourceComposition,
   RenderSourceLayerIndex,
 } from './renderTarget';
+import type { AnimatableProperty } from './animationProperties';
 
 // Dock system type definitions
 
 // Panel types that can be docked
 // Note: Effects, Transcript, Analysis are now integrated into Properties panel
-export type PanelType = 'start' | 'preview' | 'multi-preview' | 'timeline' | 'clip-properties' | 'history' | 'audio-mixer' | 'node-workspace' | 'media' | 'export' | 'midi-mapping' | 'capture' | 'ai-segment' | 'scene-description' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
+export type PanelType = 'start' | 'preview' | 'multi-preview' | 'timeline' | 'curves' | 'clip-properties' | 'history' | 'annotations' | 'stats' | 'audio-mixer' | 'node-workspace' | 'color-nodes' | 'color-controls' | 'color-clips' | 'color-timeline' | 'color-scopes' | 'color-keyframes' | 'media' | '3d-scan' | 'discover' | 'ai-studio' | 'export' | 'midi-mapping' | 'capture' | 'go-live' | 'slot-grid' | 'stream-chat' | 'stream-analytics' | 'story' | 'ai-segment' | 'scene-description' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
 export type DockLayoutTransitionStaggerMode = 'puzzle' | 'sequence';
 export type DockLayoutStartTransitionDirection = 'to-start' | 'from-start';
 
-// Scope panel types for filtering in View menu
-export const SCOPE_PANEL_TYPES: PanelType[] = ['scope-waveform', 'scope-histogram', 'scope-vectorscope'];
+// The unified scopes surface shown in panel pickers and the View menu.
+export const SCOPE_PANEL_TYPES: PanelType[] = ['color-scopes'];
 
 // WIP panel types — shown grayed out with bug icon in View menu
 export const WIP_PANEL_TYPES: PanelType[] = [];
 
 // Panel types that may exist more than once at the same time. These spawn a fresh,
 // independent instance (unique id) from the tab-bar "+" instead of focusing the
-// existing one. Timeline is intentionally excluded (single instance).
-export const MULTI_INSTANCE_PANEL_TYPES: PanelType[] = ['preview'];
+// existing one. Only one shared Timeline/Slot host owns Timeline mode at a time.
+export const MULTI_INSTANCE_PANEL_TYPES: PanelType[] = ['preview', 'color-controls', 'curves', 'slot-grid'];
 
 // AI panel types for View menu grouping
-export const AI_PANEL_TYPES: PanelType[] = ['ai-segment', 'scene-description'];
+export const AI_PANEL_TYPES: PanelType[] = ['ai-studio', 'story', 'ai-segment', 'scene-description'];
 
 // Registered for saved-layout compatibility, but intentionally absent from panel pickers.
-export const PANEL_PICKER_HIDDEN_TYPES: PanelType[] = ['start', 'scene-description'];
+export const PANEL_PICKER_HIDDEN_TYPES: PanelType[] = [
+  'start',
+  'scene-description',
+  'scope-waveform',
+  'scope-histogram',
+  'scope-vectorscope',
+];
 
 export type PreviewPanelSource =
   | RenderSourceActiveComp
@@ -41,6 +48,8 @@ export interface PreviewPanelData {
   showTransparencyGrid?: boolean; // per-tab transparency grid toggle (default false)
   initialEditMode?: boolean;
   initialEditCameraView?: 'camera' | 'front' | 'side' | 'top';
+  /** @deprecated Dock previews now expose the unified, collapsible transport. */
+  showTransport?: boolean;
 }
 
 export interface MultiPreviewSlotData {
@@ -53,7 +62,29 @@ export interface MultiPreviewPanelData {
   showTransparencyGrid: boolean;
 }
 
-export type PanelData = PreviewPanelData | MultiPreviewPanelData;
+export type ScopeDisplayMode = 'parade' | 'waveform' | 'vectorscope' | 'histogram';
+
+export interface ScopesPanelData {
+  scopeMode?: ScopeDisplayMode;
+}
+
+export interface CurvesPanelData {
+  curvePreferredTarget?: {
+    clipId: string;
+    property: AnimatableProperty;
+  } | null;
+  curveTimeView?: {
+    scrollX: number;
+    zoom: number;
+  };
+  curveViewedClipId?: string | null;
+}
+
+export interface TimelinePanelData {
+  timelineSurfaceMode?: 'timeline' | 'slot-grid';
+}
+
+export type PanelData = PreviewPanelData | MultiPreviewPanelData | ScopesPanelData | CurvesPanelData | TimelinePanelData;
 
 // A panel instance
 export interface DockPanel {
@@ -171,6 +202,9 @@ export interface DockDragState {
   dropTarget: DropTarget | null;
   dragOffset: { x: number; y: number };
   currentPos: { x: number; y: number };
+  // True right after a drag that actually docked somewhere; distinguishes
+  // drop from cancel for end-of-drag animations.
+  lastDropCommitted: boolean;
 }
 
 // Panel metadata for configuration
@@ -180,13 +214,15 @@ export interface PanelConfig {
   icon?: string;
   minWidth?: number;
   minHeight?: number;
+  fixedWidth?: number;
+  fixedHeight?: number;
   closable?: boolean;
 }
 
 export const PANEL_CONFIGS: Record<PanelType, PanelConfig> = {
   start: {
     type: 'start',
-    title: 'Start',
+    title: 'Chat',
     minWidth: 320,
     minHeight: 240,
     closable: false,
@@ -212,10 +248,17 @@ export const PANEL_CONFIGS: Record<PanelType, PanelConfig> = {
     minHeight: 150,
     closable: false,
   },
+  curves: {
+    type: 'curves',
+    title: 'Curves',
+    minWidth: 360,
+    minHeight: 220,
+    closable: false,
+  },
   'clip-properties': {
     type: 'clip-properties',
     title: 'Properties',
-    minWidth: 200,
+    minWidth: 160,
     minHeight: 150,
     closable: false,
   },
@@ -224,6 +267,13 @@ export const PANEL_CONFIGS: Record<PanelType, PanelConfig> = {
     title: 'History',
     minWidth: 240,
     minHeight: 180,
+    closable: false,
+  },
+  stats: {
+    type: 'stats',
+    title: 'Stats',
+    minWidth: 260,
+    minHeight: 220,
     closable: false,
   },
   'audio-mixer': {
@@ -247,6 +297,82 @@ export const PANEL_CONFIGS: Record<PanelType, PanelConfig> = {
     minHeight: 200,
     closable: false,
   },
+  '3d-scan': {
+    type: '3d-scan',
+    title: '3D Scan',
+    icon: 'Scan',
+    minWidth: 320,
+    minHeight: 260,
+    closable: false,
+  },
+  'color-nodes': {
+    type: 'color-nodes',
+    title: 'Nodes',
+    minWidth: 300,
+    minHeight: 180,
+    closable: false,
+  },
+  'color-controls': {
+    type: 'color-controls',
+    title: 'Color Controls',
+    minWidth: 168,
+    minHeight: 1,
+    closable: false,
+  },
+  'color-clips': {
+    type: 'color-clips',
+    title: 'Clips',
+    minWidth: 300,
+    minHeight: 134,
+    fixedHeight: 134,
+    closable: false,
+  },
+  'color-timeline': {
+    type: 'color-timeline',
+    title: 'Mini Timeline',
+    minWidth: 300,
+    minHeight: 80,
+    fixedHeight: 80,
+    closable: false,
+  },
+  'color-scopes': {
+    type: 'color-scopes',
+    title: 'Scopes',
+    minWidth: 300,
+    minHeight: 220,
+    closable: false,
+  },
+  'color-keyframes': {
+    type: 'color-keyframes',
+    title: 'Keyframes',
+    minWidth: 300,
+    minHeight: 180,
+    closable: false,
+  },
+  discover: {
+    type: 'discover',
+    title: 'Discover',
+    icon: 'WorldSearch',
+    minWidth: 360,
+    minHeight: 280,
+    closable: false,
+  },
+  'annotations': {
+    type: 'annotations',
+    title: 'Annotations',
+    icon: 'MessageSquare',
+    minWidth: 300,
+    minHeight: 260,
+    closable: false,
+  },
+  'ai-studio': {
+    type: 'ai-studio',
+    title: 'AI Studio',
+    icon: 'Sparkles',
+    minWidth: 360,
+    minHeight: 280,
+    closable: false,
+  },
   export: {
     type: 'export',
     title: 'Export',
@@ -266,6 +392,42 @@ export const PANEL_CONFIGS: Record<PanelType, PanelConfig> = {
     title: 'Capture',
     minWidth: 320,
     minHeight: 420,
+    closable: false,
+  },
+  'go-live': {
+    type: 'go-live',
+    title: 'Go Live',
+    icon: 'Broadcast',
+    minWidth: 320,
+    minHeight: 200,
+    closable: false,
+  },
+  'slot-grid': {
+    type: 'slot-grid',
+    title: 'Slot Grid',
+    minWidth: 320,
+    minHeight: 180,
+    closable: false,
+  },
+  'stream-chat': {
+    type: 'stream-chat',
+    title: 'Stream Chat',
+    minWidth: 240,
+    minHeight: 280,
+    closable: false,
+  },
+  'stream-analytics': {
+    type: 'stream-analytics',
+    title: 'Stream Analytics',
+    minWidth: 280,
+    minHeight: 240,
+    closable: false,
+  },
+  story: {
+    type: 'story',
+    title: 'Story',
+    minWidth: 320,
+    minHeight: 240,
     closable: false,
   },
   transitions: {

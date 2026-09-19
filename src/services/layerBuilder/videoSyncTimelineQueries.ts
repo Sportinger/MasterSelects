@@ -1,5 +1,6 @@
 import type { TimelineClip } from '../../types';
 import type { FrameContext } from './types';
+export { canClipOwnVideoSyncMedia } from './videoSyncMediaAdmission';
 
 export function isVisibleVideoTrackClip(ctx: FrameContext, clip: TimelineClip): boolean {
   if (!clip.trackId) return false;

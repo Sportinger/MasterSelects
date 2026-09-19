@@ -1,13 +1,18 @@
 import { engine } from '../../engine/WebGPUEngine';
+import { describeGPUInitializationFailure, type GPUInitializationFailure } from '../../engine/core/gpuInitializationFailure';
 import { useEngineStore } from '../../stores/engineStore';
 import { useRenderTargetStore } from '../../stores/renderTargetStore';
 import type { EngineStats, Layer } from '../../types';
 import type { WorkerFirstCacheRuntimeSnapshot } from '../../engine/texture/ScrubbingCache';
+import type { EngineResourceSet } from '../../engine/engineCore/engineResources';
 import { framePhaseMonitor } from '../framePhaseMonitor';
 import { playheadState } from '../layerBuilder/PlayheadState';
 import { Logger } from '../logger';
+import { vfPipelineMonitor } from '../vfPipelineMonitor';
+import { wcPipelineMonitor } from '../wcPipelineMonitor';
 import type { RamPreviewRenderEngine } from '../ramPreviewEngine';
 import type { RenderHostSelectionTelemetry } from './renderHostSelection';
+import { measureRenderPhaseCostsForResources } from './renderPhaseCostProbe';
 import type {
   RenderCaptureCanvas,
   RenderFrameCallback,
@@ -79,10 +84,15 @@ function selectBestCaptureCanvas(candidates: RenderCaptureCanvas[]): RenderCaptu
 }
 
 type PlaybackDebugStatsReader = (
-  decoder: EngineStats['decoder']
+  decoder: EngineStats['decoder'],
+  windowMs?: number,
 ) => NonNullable<EngineStats['playback']>;
+type RecentPlaybackCadenceStatsReader = (
+  decoder: EngineStats['decoder'],
+) => NonNullable<NonNullable<EngineStats['playback']>['recentCadence']>;
 
 let playbackDebugStatsReader: PlaybackDebugStatsReader | null = null;
+let recentPlaybackCadenceStatsReader: RecentPlaybackCadenceStatsReader | null = null;
 let playbackDebugStatsReaderLoad: Promise<void> | null = null;
 
 function loadPlaybackDebugStatsReader(): void {
@@ -93,6 +103,7 @@ function loadPlaybackDebugStatsReader(): void {
   playbackDebugStatsReaderLoad = import('../playbackDebugSnapshot')
     .then((module) => {
       playbackDebugStatsReader = module.getPlaybackDebugStats as PlaybackDebugStatsReader;
+      recentPlaybackCadenceStatsReader = module.getRecentPlaybackCadenceStats;
     })
     .catch((error) => {
       playbackDebugStatsReaderLoad = null;
@@ -108,10 +119,17 @@ function readPlaybackDebugStats(decoder: EngineStats['decoder']): EngineStats['p
   return undefined;
 }
 
+function readRecentPlaybackCadenceStats(
+  decoder: EngineStats['decoder'],
+): NonNullable<NonNullable<EngineStats['playback']>['recentCadence']> | undefined {
+  return recentPlaybackCadenceStatsReader?.(decoder);
+}
+
 export class MainFallbackRenderHostPort implements RenderHostPort {
   private statsAndWatchdogInterval: ReturnType<typeof setInterval> | null = null;
   private renderFrameCallbacks: RenderFrameCallback[] = [];
   private initializePromise: Promise<boolean> | null = null;
+  private isPlaying = false;
   private readonly getSelectionTelemetry: () => RenderHostSelectionTelemetry;
   private readonly ramPreviewRenderEngine: RamPreviewRenderEngine = {
     render: (layers, frameContext) => this.render(layers, frameContext),
@@ -137,8 +155,14 @@ export class MainFallbackRenderHostPort implements RenderHostPort {
     if (this.initializePromise) {
       return this.initializePromise;
     }
-    this.initializePromise = this.initializeEngine();
-    return this.initializePromise;
+    const pending = this.initializeEngine();
+    this.initializePromise = pending;
+    void pending.then(success => {
+      if (!success && this.initializePromise === pending) this.initializePromise = null;
+    }, () => {
+      if (this.initializePromise === pending) this.initializePromise = null;
+    });
+    return pending;
   }
 
   startRenderLoop(renderFrame: RenderFrameCallback): void {
@@ -178,7 +202,10 @@ export class MainFallbackRenderHostPort implements RenderHostPort {
         try {
           const playbackStats = readPlaybackDebugStats(stats.decoder);
           if (playbackStats) {
-            statsUpdate.playback = playbackStats;
+            statsUpdate.playback = {
+              ...playbackStats,
+              recentCadence: readRecentPlaybackCadenceStats(stats.decoder),
+            };
           }
         } catch (_e) {
           // Keep base engine stats flowing even if optional debug collectors fail.
@@ -220,10 +247,19 @@ export class MainFallbackRenderHostPort implements RenderHostPort {
   }
 
   private async initializeEngine(): Promise<boolean> {
-    const success = await engine.initialize();
+    let success = false;
+    let failure: GPUInitializationFailure | null = null;
+    try {
+      success = await engine.initialize();
+      failure = engine.getInitializationFailure();
+    } catch (error) {
+      failure = 'initialization_failed';
+      log.error('Failed to initialize renderer resources', error);
+    }
     const engineStore = useEngineStore.getState();
     engineStore.setEngineReady(success);
     if (success) {
+      engineStore.setEngineInitFailed(false);
       engineStore.setGpuInfo(engine.getGPUInfo());
       const isLinux = navigator.platform.toLowerCase().includes('linux');
       if (isLinux) {
@@ -232,14 +268,9 @@ export class MainFallbackRenderHostPort implements RenderHostPort {
       return true;
     }
 
-    const hasGPU = typeof navigator.gpu !== 'undefined';
-    const error = !hasGPU
-      ? 'WebGPU is not available in this browser. Please use Chrome 113+ or Edge 113+.'
-      : 'No compatible GPU adapter found. Your GPU may not support WebGPU. '
-        + 'Try enabling hardware acceleration in browser settings, '
-        + 'or switch to a GPU with Vulkan/D3D12 support.';
+    const error = describeGPUInitializationFailure(failure);
     engineStore.setEngineInitFailed(true, error);
-    log.error('Engine initialization failed', { hasGPU, error });
+    log.error('Engine initialization failed', { failure, error });
     return false;
   }
 
@@ -252,6 +283,12 @@ export class MainFallbackRenderHostPort implements RenderHostPort {
   }
 
   setIsPlaying(isPlaying: boolean): void {
+    const startingPlayback = isPlaying && !this.isPlaying;
+    this.isPlaying = isPlaying;
+    if (startingPlayback) {
+      wcPipelineMonitor.reset();
+      vfPipelineMonitor.reset();
+    }
     engine.setIsPlaying(isPlaying);
   }
 
@@ -286,8 +323,12 @@ export class MainFallbackRenderHostPort implements RenderHostPort {
     return engine.cacheCompositeFrame(time);
   }
 
-  cacheActiveCompOutput(compositionId: string): void {
-    engine.cacheActiveCompOutput(compositionId);
+  cacheActiveCompOutput(compositionId: string, timelineTimeSeconds?: number): void {
+    if (timelineTimeSeconds === undefined) {
+      engine.cacheActiveCompOutput(compositionId);
+      return;
+    }
+    engine.cacheActiveCompOutput(compositionId, timelineTimeSeconds);
   }
 
   getIsExporting(): boolean {
@@ -464,6 +505,11 @@ export class MainFallbackRenderHostPort implements RenderHostPort {
 
   getRenderDispatcherDebugSnapshot(): ReturnType<typeof engine.getRenderDispatcherDebugSnapshot> {
     return engine.getRenderDispatcherDebugSnapshot();
+  }
+
+  measureRenderPhaseCosts(durationMs: number) {
+    const resources = (engine as unknown as { res: EngineResourceSet | null }).res;
+    return measureRenderPhaseCostsForResources(resources, durationMs);
   }
 
   cleanupVideo(video: HTMLVideoElement): void {

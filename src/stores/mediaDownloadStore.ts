@@ -5,6 +5,7 @@ import { downloadVideo, isDownloadAvailable, type DownloadProgress } from '../se
 import { useMediaStore, type MediaFile } from './mediaStore';
 import { requireMediaFileImportResult } from './mediaStore/helpers/importResult';
 import { useYouTubeStore } from './youtubeStore';
+import type { ExternalMediaOrigin, ExternalMediaProvider } from '../types/mediaMetadata';
 
 export type MediaDownloadJobStatus = 'queued' | 'processing' | 'completed' | 'failed' | 'canceled';
 
@@ -36,7 +37,7 @@ export interface MediaDownloadRequest {
   formatLabel?: string;
 }
 
-interface ResolvedDownloadMetadata {
+export interface ResolvedDownloadMetadata {
   url: string;
   downloadKey: string;
   title: string;
@@ -69,6 +70,19 @@ const PLATFORM_FOLDER_LABELS: Record<string, string> = {
   twitch: 'Twitch',
   dailymotion: 'Dailymotion',
   generic: 'Other',
+};
+
+const PLATFORM_ORIGIN_PROVIDERS: Record<string, ExternalMediaProvider> = {
+  youtube: 'youtube',
+  tiktok: 'tiktok',
+  instagram: 'instagram',
+  twitter: 'x',
+  facebook: 'facebook',
+  reddit: 'reddit',
+  vimeo: 'vimeo',
+  twitch: 'twitch',
+  dailymotion: 'dailymotion',
+  generic: 'web-download',
 };
 
 export function parseDownloadUrls(input: string): string[] {
@@ -222,11 +236,27 @@ function getOrCreateDownloadFolder(platform: string): string {
   return platformFolder.id;
 }
 
-async function importDownloadedFile(file: File, platform: string): Promise<MediaFile> {
-  const folderId = getOrCreateDownloadFolder(platform);
+export function externalOriginForDownload(metadata: ResolvedDownloadMetadata): ExternalMediaOrigin {
+  return {
+    provider: PLATFORM_ORIGIN_PROVIDERS[metadata.platform] ?? 'web-download',
+    providerLabel: PLATFORM_FOLDER_LABELS[metadata.platform] ?? 'Web download',
+    assetId: metadata.downloadKey,
+    sourcePageUrl: metadata.url,
+    originalUrl: metadata.url,
+    creator: metadata.channel || undefined,
+    licenseName: 'Rights not verified',
+    rightsStatus: 'rights-unverified',
+    rightsNote: 'Imported from a user-selected URL through the local Native Helper. Verify reuse rights before publishing.',
+    retrievedAt: new Date().toISOString(),
+  };
+}
+
+async function importDownloadedFile(file: File, metadata: ResolvedDownloadMetadata): Promise<MediaFile> {
+  const folderId = getOrCreateDownloadFolder(metadata.platform);
   return requireMediaFileImportResult(
     await useMediaStore.getState().importFile(file, folderId, {
       forceCopyToProject: true,
+      externalOrigin: externalOriginForDownload(metadata),
     }),
     'Media download import',
   );
@@ -322,7 +352,7 @@ async function runDownloadJob(jobId: string): Promise<void> {
       );
     }
 
-    const mediaFile = await importDownloadedFile(file, metadata.platform);
+    const mediaFile = await importDownloadedFile(file, metadata);
     updateJob(jobId, {
       status: 'completed',
       completedAt: Date.now(),

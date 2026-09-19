@@ -2,6 +2,7 @@ import {
   analysisToolDefinitions,
   clipToolDefinitions,
   effectToolDefinitions,
+  flockToolDefinitions,
   keyframeToolDefinitions,
   maskToolDefinitions,
   mediaToolDefinitions,
@@ -61,6 +62,7 @@ const CANDIDATE_EDITOR_TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   ...transitionToolDefinitions,
   ...maskToolDefinitions,
   ...storyboardToolDefinitions,
+  ...flockToolDefinitions,
 ];
 
 export const ATOMIC_EDITOR_TOOL_DEFINITIONS: readonly ToolDefinition[] =

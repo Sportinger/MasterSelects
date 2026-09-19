@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createTimelineEmptyContextMenuModel,
   executeTimelineEmptyContextMenuCommand,
+  parseFlockLayerTarget,
 } from '../../src/components/timeline/utils/timelineEmptyContextMenu';
+import { FLOCK_PRESETS } from '../../src/services/flock/presets/flockPresets';
 
 describe('timeline empty context menu model', () => {
   it('builds gap and view command descriptors with timeline coordinates', () => {
@@ -10,6 +12,14 @@ describe('timeline empty context menu model', () => {
       time: 12.5,
       trackId: 'track-a',
     });
+
+    expect(model.clipboardCommands).toEqual([{
+      key: 'paste-clips',
+      label: 'Paste',
+      kind: 'paste-clips',
+      enabled: false,
+      payload: { time: 12.5, trackId: 'track-a' },
+    }]);
 
     expect(model.gapCommands).toEqual([
       {
@@ -64,6 +74,25 @@ describe('timeline empty context menu model', () => {
     expect(onFitCompToWindow).toHaveBeenCalledTimes(1);
   });
 
+  it('pastes clips at the clicked timeline position when clipboard data is available', () => {
+    const onPasteClips = vi.fn();
+    const model = createTimelineEmptyContextMenuModel({
+      time: 8.75,
+      trackId: 'track-video',
+      trackType: 'video',
+      canPasteClips: true,
+    });
+
+    expect(executeTimelineEmptyContextMenuCommand(model.clipboardCommands[0], {
+      onPasteClips,
+      onEraseGap: vi.fn(),
+      onEraseLayerGaps: vi.fn(),
+      onEraseAllGaps: vi.fn(),
+      onFitCompToWindow: vi.fn(),
+    })).toBe(true);
+    expect(onPasteClips).toHaveBeenCalledWith(8.75, 'track-video');
+  });
+
   it('offers and executes caption creation on video tracks', () => {
     const onAddCaptionClip = vi.fn();
     const model = createTimelineEmptyContextMenuModel({
@@ -84,5 +113,70 @@ describe('timeline empty context menu model', () => {
       onFitCompToWindow: vi.fn(),
     })).toBe(true);
     expect(onAddCaptionClip).toHaveBeenCalledWith(7.25, 'video-track');
+  });
+
+  it('offers timeline-native layer creation only on video tracks', () => {
+    const videoModel = createTimelineEmptyContextMenuModel({
+      time: 4.5,
+      trackId: 'video-track',
+      trackType: 'video',
+    });
+    const audioModel = createTimelineEmptyContextMenuModel({
+      time: 4.5,
+      trackId: 'audio-track',
+      trackType: 'audio',
+    });
+
+    expect(videoModel.layerCommands.map(command => command.label)).toEqual(expect.arrayContaining([
+      'Text',
+      'Solid',
+      '3D Text',
+      'Camera',
+      'Light',
+      '3D Effector',
+      'Motion Null',
+      'Adjustment Layer',
+      'Rectangle',
+      'Math Scene',
+    ]));
+    expect(audioModel.layerCommands).toEqual([]);
+  });
+
+  it('offers every flock preset in the generators group', () => {
+    const model = createTimelineEmptyContextMenuModel({
+      time: 3,
+      trackId: 'video-track',
+      trackType: 'video',
+    });
+    const generators = model.layerCommands.filter(command => command.group === 'generators');
+
+    expect(generators.map(command => command.label)).toEqual(
+      FLOCK_PRESETS.map(preset => `Flock: ${preset.label}`),
+    );
+    expect(generators.map(command => parseFlockLayerTarget(command.payload!.layerTarget!))).toEqual(
+      FLOCK_PRESETS.map(preset => preset.id),
+    );
+    expect(parseFlockLayerTarget('math-scene')).toBeNull();
+  });
+
+  it('executes a timeline-native layer command with clicked coordinates', () => {
+    const onAddTimelineLayer = vi.fn();
+    const model = createTimelineEmptyContextMenuModel({
+      time: 9.75,
+      trackId: 'video-track',
+      trackType: 'video',
+    });
+    const cameraCommand = model.layerCommands.find(
+      command => command.payload?.layerTarget === 'camera',
+    );
+
+    expect(executeTimelineEmptyContextMenuCommand(cameraCommand!, {
+      onAddTimelineLayer,
+      onEraseGap: vi.fn(),
+      onEraseLayerGaps: vi.fn(),
+      onEraseAllGaps: vi.fn(),
+      onFitCompToWindow: vi.fn(),
+    })).toBe(true);
+    expect(onAddTimelineLayer).toHaveBeenCalledWith(9.75, 'video-track', 'camera');
   });
 });

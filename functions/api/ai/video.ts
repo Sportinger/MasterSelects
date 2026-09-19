@@ -1,9 +1,10 @@
 import { getUserBillingSnapshot } from '../../lib/billing';
 import { insertAiAuditEvent } from '../../lib/aiAudit';
 import { blocksAiRequest, moderateAiInput } from '../../lib/aiModeration';
-import { getCreditLedgerEntryBySource, refundCreditsForFailedTask, spendCredits } from '../../lib/credits';
-import { getCurrentUser, json, methodNotAllowed, parseJson } from '../../lib/db';
+import { getCreditLedgerEntryBySource, refundCreditsForFailedTask } from '../../lib/credits';
+import { getAiUser, isGuestAiUser, json, methodNotAllowed, parseJson } from '../../lib/db';
 import { rejectByokCredentials } from '../../lib/noByok';
+import { runReservedHostedCharge } from '../../lib/providers/hostedChargeFlow';
 import {
   buildHostedKlingCapabilities,
   calculateHostedImageCost,
@@ -42,7 +43,8 @@ interface HostedVideoRouteBody {
 
 interface HostedAiContext {
   billing: Awaited<ReturnType<typeof getUserBillingSnapshot>> | null;
-  user: ReturnType<typeof getCurrentUser>;
+  guest: boolean;
+  user: ReturnType<typeof getAiUser>;
 }
 
 interface HostedGenerationConfig {
@@ -116,20 +118,25 @@ function buildRouteEnvelope<TData>(
     provider?: string;
   },
 ): HostedGatewayEnvelope<TData> {
+  const session = input.session?.email?.endsWith('@guest.masterselects.invalid')
+    ? { authenticated: false, email: null, guest: true, provider: 'guest' }
+    : input.session;
   return createHostedGatewayEnvelope({
     ...input,
     kind: 'ai.video',
     mode: 'hosted',
     provider: input.provider ?? 'kling-3.0',
     requestId: input.requestId,
+    session,
   });
 }
 
 function resolveHostedContext(context: AppContext): HostedAiContext {
-  const user = getCurrentUser(context);
+  const user = getAiUser(context);
 
   return {
     billing: null,
+    guest: isGuestAiUser(context),
     user,
   };
 }
@@ -140,12 +147,14 @@ async function loadHostedContext(context: AppContext): Promise<HostedAiContext> 
   if (!user) {
     return {
       billing: null,
+      guest: false,
       user: null,
     };
   }
 
   return {
-    billing: await getUserBillingSnapshot(context.env.DB, user.id),
+    billing: await getUserBillingSnapshot(context.env.DB, user.id, { guest: isGuestAiUser(context) }),
+    guest: isGuestAiUser(context),
     user,
   };
 }
@@ -350,6 +359,12 @@ function parseHostedGeneration(body: HostedVideoRouteBody, requestId: string): H
   const seedanceParams = normalizeHostedSeedanceParams(paramsInput);
   if (seedanceParams?.provider) {
     const hasVideoInput = seedanceParams.referenceMedia?.some((reference) => reference.mediaType === 'video') === true;
+    const videoInputDuration = seedanceParams.referenceMedia
+      ?.filter((reference) => reference.mediaType === 'video')
+      .reduce((sum, reference) => sum + Math.max(0, reference.duration ?? 0), 0) ?? 0;
+    const seedanceDescription = seedanceParams.provider === 'bytedance/seedance-2-5'
+      ? 'Seedance 2.5'
+      : seedanceParams.provider === 'bytedance/seedance-2-fast' ? 'Seedance 2.0 Fast' : 'Seedance 2.0';
 
     return {
       creditsRequired: calculateHostedSeedanceCost(
@@ -357,8 +372,9 @@ function parseHostedGeneration(body: HostedVideoRouteBody, requestId: string): H
         seedanceParams.mode,
         seedanceParams.duration,
         hasVideoInput,
+        videoInputDuration,
       ),
-      description: `Hosted ${seedanceParams.provider === 'bytedance/seedance-2-fast' ? 'Seedance 2.0 Fast' : 'Seedance 2.0'} generation`,
+      description: `Hosted ${seedanceDescription} generation`,
       feature: 'seedance_generation',
       ledgerSource: `hosted:${seedanceParams.provider}`,
       model: seedanceParams.provider,
@@ -372,6 +388,7 @@ function parseHostedGeneration(body: HostedVideoRouteBody, requestId: string): H
         hasEndImage: Boolean(seedanceParams.endImageUrl),
         hasStartImage: Boolean(seedanceParams.startImageUrl),
         hasVideoInput,
+        videoInputDuration,
         mode: seedanceParams.mode,
         referenceAudioCount: seedanceParams.referenceMedia?.filter((reference) => reference.mediaType === 'audio').length ?? 0,
         referenceImageCount: seedanceParams.referenceMedia?.filter((reference) => reference.mediaType === 'image').length ?? 0,
@@ -750,125 +767,85 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     userId: hostedContext.user.id,
   });
 
-  try {
-    const { taskId } = generation.outputType === 'image'
-      ? await createHostedImageTask(context.env, generation.params as HostedImageParams)
-      : generation.provider === 'bytedance/seedance-2' || generation.provider === 'bytedance/seedance-2-fast'
-        ? await createHostedSeedanceTask(context.env, generation.params as HostedVideoParams)
-        : await createHostedKlingTask(context.env, generation.params as HostedVideoParams);
-    const charge = await spendCredits(
-      context.env.DB,
-      hostedContext.user.id,
-      creditsRequired,
-      generation.ledgerSource,
-      idempotencyKey,
-      generation.description,
-      {
-        ...generation.usageMetadata,
-        outputType: generation.outputType,
-        provider: generation.provider,
-        requestId,
-        taskId,
-      },
-    );
+  const session = {
+    authenticated: true,
+    email: hostedContext.user.email,
+    provider: 'cookie_session' as const,
+  };
+  const auditBase = {
+    feature: generation.feature,
+    idempotencyKey,
+    model: generation.model,
+    moderation,
+    prompt: generation.params,
+    provider: generation.provider,
+    requestId,
+    userId: hostedContext.user.id,
+  };
 
-    if (charge.insufficient) {
-      await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
-      context.waitUntil(
-        insertAiAuditEvent(context, {
-          errorMessage: 'insufficient_credits',
-          feature: generation.feature,
-          idempotencyKey,
-          model: generation.model,
-          moderation,
-          prompt: generation.params,
-          provider: generation.provider,
-          requestId,
-          status: 'failed',
-          userId: hostedContext.user.id,
-        }).catch(() => {}),
-      );
-      return json(
-        buildRouteEnvelope({
-          creditBalance: charge.balance,
-          error: createGatewayError(
-            'insufficient_credits',
-            'You need more credits to create this hosted generation.',
-            { creditsRequired, outputType: generation.outputType, requestId },
-          ),
-          next: 'pricing',
-          ok: false,
-          requestId,
-          session: {
-            authenticated: true,
-            email: hostedContext.user.email,
-            provider: 'cookie_session',
-          },
-          status: 'requires_billing',
-        }),
-        { status: 402 },
-      );
-    }
+  // Credits are reserved before the provider task exists; a failed provider
+  // call releases the reservation (see runReservedHostedCharge).
+  const outcome = await runReservedHostedCharge({
+    createTask: () => (generation.outputType === 'image'
+      ? createHostedImageTask(context.env, generation.params as HostedImageParams)
+      : generation.provider === 'bytedance/seedance-2'
+        || generation.provider === 'bytedance/seedance-2-fast'
+        || generation.provider === 'bytedance/seedance-2-5'
+        ? createHostedSeedanceTask(context.env, generation.params as HostedVideoParams)
+        : createHostedKlingTask(context.env, generation.params as HostedVideoParams)),
+    creditsRequired,
+    db: context.env.DB,
+    description: generation.description,
+    idempotencyKey,
+    ledgerSource: generation.ledgerSource,
+    metadata: {
+      ...generation.usageMetadata,
+      outputType: generation.outputType,
+      provider: generation.provider,
+      requestId,
+    },
+    taskIdOf: (task) => task.taskId,
+    userId: hostedContext.user.id,
+  });
 
-    await completeUsageEvent(context.env.DB, idempotencyKey, {
-      ledgerEntryId: charge.entry?.id ?? null,
-      status: 'completed',
-    });
+  if (outcome.status === 'insufficient') {
+    await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
     context.waitUntil(
-      insertAiAuditEvent(context, {
-        creditCost: charge.charged ? creditsRequired : 0,
-        feature: generation.feature,
-        idempotencyKey,
-        model: generation.model,
-        moderation,
-        prompt: generation.params,
-        provider: generation.provider,
-        providerTaskId: taskId,
-        requestId,
-        status: 'accepted',
-        userId: hostedContext.user.id,
-      }).catch(() => {}),
+      insertAiAuditEvent(context, { ...auditBase, errorMessage: 'insufficient_credits', status: 'failed' })
+        .catch(() => {}),
     );
-
     return json(
       buildRouteEnvelope({
-        creditBalance: charge.balance,
-        creditMutationId: charge.entry?.id ?? null,
-        creditsCharged: charge.charged ? creditsRequired : 0,
-        data: {
-          outputType: generation.outputType,
-          provider: generation.provider,
-          taskId,
-        },
-        ok: true,
+        creditBalance: outcome.charge.balance,
+        error: createGatewayError(
+          'insufficient_credits',
+          'You need more credits to create this hosted generation.',
+          { creditsRequired, outputType: generation.outputType, requestId },
+        ),
+        next: 'pricing',
+        ok: false,
         requestId,
-        session: {
-          authenticated: true,
-          email: hostedContext.user.email,
-          provider: 'cookie_session',
-        },
-        status: 'accepted',
+        session,
+        status: 'requires_billing',
       }),
+      { status: 402 },
     );
-  } catch (error) {
+  }
+
+  if (outcome.status === 'provider_failed') {
+    const { error } = outcome;
     await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
     context.waitUntil(
       insertAiAuditEvent(context, {
+        ...auditBase,
         errorMessage: error instanceof Error ? error.message : 'Hosted AI generation failed.',
-        feature: generation.feature,
-        idempotencyKey,
-        model: generation.model,
-        moderation,
-        prompt: generation.params,
-        provider: generation.provider,
-        requestId,
         status: 'failed',
-        userId: hostedContext.user.id,
       }).catch(() => {}),
     );
 
     return json(
       buildRouteEnvelope({
+        creditBalance: outcome.refund?.creditBalance ?? outcome.charge.balance,
         error: createGatewayError(
           'provider_request_failed',
           error instanceof Error ? error.message : 'Hosted AI generation failed.',
@@ -876,14 +853,41 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         ),
         ok: false,
         requestId,
-        session: {
-          authenticated: true,
-          email: hostedContext.user.email,
-          provider: 'cookie_session',
-        },
+        session,
         status: 'error',
       }),
       { status: 502 },
     );
   }
+
+  const { charge, result: { taskId } } = outcome;
+  await completeUsageEvent(context.env.DB, idempotencyKey, {
+    ledgerEntryId: charge.entry?.id ?? null,
+    status: 'completed',
+  });
+  context.waitUntil(
+    insertAiAuditEvent(context, {
+      ...auditBase,
+      creditCost: charge.charged ? creditsRequired : 0,
+      providerTaskId: taskId,
+      status: 'accepted',
+    }).catch(() => {}),
+  );
+
+  return json(
+    buildRouteEnvelope({
+      creditBalance: charge.balance,
+      creditMutationId: charge.entry?.id ?? null,
+      creditsCharged: charge.charged ? creditsRequired : 0,
+      data: {
+        outputType: generation.outputType,
+        provider: generation.provider,
+        taskId,
+      },
+      ok: true,
+      requestId,
+      session,
+      status: 'accepted',
+    }),
+  );
 };

@@ -93,10 +93,12 @@ export function useTimelinePlayheadDisplay({
         playhead.dataset.liveBaseLeft = String(baseLeft);
         playhead.style.left = `${baseLeft}px`;
       }
-      playhead.style.setProperty(
-        '--timeline-switch-base-x',
-        `${left - baseLeft + PLAYHEAD_CENTER_OFFSET_PX}px`
-      );
+      const transformX = left - baseLeft + PLAYHEAD_CENTER_OFFSET_PX;
+      playhead.style.setProperty('--timeline-switch-base-x', `${transformX}px`);
+      // Keep the custom property for timeline-switch animations, but apply the
+      // live transform inline as well. Some Chromium compositing paths keep the
+      // CSS-variable-backed transform at its fallback value during playback.
+      playhead.style.transform = `translate3d(${transformX}px, 0, 0)`;
       rafId = requestAnimationFrame(updateLivePlayhead);
     };
 

@@ -120,7 +120,11 @@ export async function refreshCompClipNestedDataAction(
     })),
   });
 
-  const compClips = clips.filter(c => c.isComposition && c.compositionId === sourceCompositionId);
+  const compClips = clips.filter(c =>
+    c.isComposition &&
+    c.compositionId === sourceCompositionId &&
+    c.source?.type !== 'audio'
+  );
   if (compClips.length === 0) {
     log.info('No comp clips found referencing this composition');
     return;
@@ -169,6 +173,8 @@ export async function refreshCompClipNestedDataAction(
               nestedTracks,
               nestedContentHash: newContentHash,
               nestedClipBoundaries,
+              isLoading: false,
+              needsReload: false,
               ...(contentHashChanged
                 ? {
                     mixdownAudio: undefined,

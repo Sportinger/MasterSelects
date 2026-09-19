@@ -23,6 +23,10 @@ import type {
   TextItem,
 } from '../../../../stores/mediaStore';
 import { isUserVisibleComposition } from '../../../../stores/mediaStore/compositionVisibility';
+import type { TimelineClip } from '../../../../types/timeline';
+import type { TrackingAsset } from '../../../../types/trackingAsset';
+
+const EMPTY_HIDDEN_PROJECT_ITEM_IDS: ReadonlySet<string> = new Set();
 
 interface MediaSearchToken {
   value: string;
@@ -42,10 +46,12 @@ interface MediaPanelProjectItemsInput {
   mathSceneItems: MathSceneItem[];
   motionShapeItems: MotionShapeItem[];
   signalAssets: SignalAssetItem[];
+  trackingAssets: TrackingAsset[];
   expandedFolderIds: string[];
   mediaSearchQuery: string;
   gridFolderId: string | null;
   classicListViewport: { scrollTop: number; height: number };
+  hiddenProjectItemIds?: ReadonlySet<string>;
   sortItems: (items: ProjectItem[]) => ProjectItem[];
 }
 
@@ -68,6 +74,28 @@ export interface MediaPanelProjectItemsState {
 
 function isSignalAssetItem(item: ProjectItem): item is SignalAssetItem {
   return 'type' in item && item.type === 'signal';
+}
+
+/**
+ * Older timeline-native clip creators also emitted a one-off Media Panel item
+ * and linked it back to the clip. Reusable items deliberately created in the
+ * Media Panel are placed without that back-link, so the linked ids are safe to
+ * suppress from the project browser while keeping old projects readable.
+ */
+export function getTimelineOwnedMediaItemIds(clips: readonly TimelineClip[]): Set<string> {
+  const ids = new Set<string>();
+  for (const clip of clips) {
+    const sourceType = clip.source?.type;
+    const isTimelineNative = sourceType === 'text'
+      || sourceType === 'solid'
+      || sourceType === 'camera'
+      || sourceType === 'splat-effector'
+      || (sourceType === 'model' && Boolean(clip.meshType ?? clip.source?.meshType));
+    if (!isTimelineNative) continue;
+    const mediaItemId = clip.mediaFileId ?? clip.source?.mediaFileId;
+    if (mediaItemId) ids.add(mediaItemId);
+  }
+  return ids;
 }
 
 function escapeRegExp(value: string): string {
@@ -156,6 +184,7 @@ function buildMediaPanelProjectListItems({
   mathSceneItems,
   motionShapeItems,
   signalAssets,
+  trackingAssets,
   files,
 }: Pick<MediaPanelProjectItemsInput,
   | 'folders'
@@ -169,6 +198,7 @@ function buildMediaPanelProjectListItems({
   | 'mathSceneItems'
   | 'motionShapeItems'
   | 'signalAssets'
+  | 'trackingAssets'
   | 'files'
 >): ProjectItem[] {
   return [
@@ -183,6 +213,7 @@ function buildMediaPanelProjectListItems({
     ...mathSceneItems,
     ...motionShapeItems,
     ...signalAssets,
+    ...trackingAssets,
     ...files,
   ];
 }
@@ -222,10 +253,12 @@ export function useMediaPanelProjectItems({
   mathSceneItems,
   motionShapeItems,
   signalAssets,
+  trackingAssets,
   expandedFolderIds,
   mediaSearchQuery,
   gridFolderId,
   classicListViewport,
+  hiddenProjectItemIds = EMPTY_HIDDEN_PROJECT_ITEM_IDS,
   sortItems,
 }: MediaPanelProjectItemsInput): MediaPanelProjectItemsState {
   const allProjectItems = useMemo<ProjectItem[]>(() => ([
@@ -241,7 +274,8 @@ export function useMediaPanelProjectItems({
     ...mathSceneItems,
     ...motionShapeItems,
     ...signalAssets,
-  ]), [files, compositions, folders, textItems, solidItems, meshItems, cameraItems, lightItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets]);
+    ...trackingAssets,
+  ].filter((item) => !hiddenProjectItemIds.has(item.id))), [files, compositions, folders, textItems, solidItems, meshItems, cameraItems, lightItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets, trackingAssets, hiddenProjectItemIds]);
 
   const projectListItems = useMemo<ProjectItem[]>(() => buildMediaPanelProjectListItems({
     folders,
@@ -255,8 +289,9 @@ export function useMediaPanelProjectItems({
     mathSceneItems,
     motionShapeItems,
     signalAssets,
+    trackingAssets,
     files,
-  }), [folders, compositions, textItems, solidItems, meshItems, cameraItems, lightItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets, files]);
+  }).filter((item) => !hiddenProjectItemIds.has(item.id)), [folders, compositions, textItems, solidItems, meshItems, cameraItems, lightItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets, trackingAssets, files, hiddenProjectItemIds]);
 
   const allProjectItemsById = useMemo(() => new Map(allProjectItems.map((item) => [item.id, item])), [allProjectItems]);
   const totalItems = allProjectItems.length;

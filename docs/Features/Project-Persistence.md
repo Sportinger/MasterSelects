@@ -2,7 +2,7 @@
 
 [← Back to Index](./README.md)
 
-Local project folder storage with continuous save by default, optional interval autosave, backups, and media relinking. Supports two backends: **File System Access API** (when the browser exposes it) and the **Native Helper** (when FSA is unavailable and the helper is connected).
+Local project folder storage with manual saving and interval autosave (five minutes by default), backups, and media relinking. Supports two backends: **File System Access API** (when the browser exposes it) and the **Native Helper** (when FSA is unavailable and the helper is connected).
 
 ---
 
@@ -13,6 +13,7 @@ Local project folder storage with continuous save by default, optional interval 
 - [Recent Projects](#recent-projects)
 - [Project Folder Structure](#project-folder-structure)
 - [Auto-Save](#auto-save)
+- [Save Status](#save-status)
 - [Backup System](#backup-system)
 - [Media Relinking](#media-relinking)
 - [What Gets Saved](#what-gets-saved)
@@ -34,7 +35,7 @@ On first launch or when no project is open, the Welcome Overlay appears:
 | Browser | Behavior |
 |---------|----------|
 | Google Chrome | Recommended experience; full FSA support when the platform exposes it |
-| Firefox | Shows the friendly Chrome recommendation; uses the **Native Helper** for file-system access because FSA is unavailable |
+| Firefox | Uses the **Native Helper** for file-system access because FSA is unavailable; the welcome screen does not show browser recommendations |
 | Safari | Shows the friendly Chrome recommendation; runtime support is available only on some systems |
 | Edge / Chromium / Opera / Brave / other | Shows the friendly Chrome recommendation; FSA and helper availability are detected at runtime |
 
@@ -186,6 +187,7 @@ Universal Signal IR imports persist metadata in `project.json` under `signals`. 
 
 ### Auto-Copy to Raw Folder
 When importing media files (controlled by `copyMediaToProject` setting):
+- Automatic copying is **disabled by default**; imports keep using their selected source location unless the user enables the setting
 - Files are **copied** to the project's `Raw/` folder
 - Numbered `.glb`, `.ply`, and `.splat` sequences are copied whenever a project is open, even when global auto-copy is off, so sequence frames survive reloads and project moves
 - Sequence frames are stored under `Raw/<sequence-name>/` with their original frame filenames
@@ -216,19 +218,21 @@ When opening a project with missing media files:
 ### How Auto-Save Works
 There are two save modes:
 
-1. **Continuous save** (default): `projectLifecycle.ts` subscribes to the media, timeline, FlashBoard, dock, and download-related stores, marks the project dirty, and writes the project after a short debounce. Keyframe changes flush more aggressively.
-2. **Interval save**: `Toolbar.tsx` can still run a timer-based autosave loop. In this mode, the timer creates a backup first and then saves the project.
+1. **Interval save** (default): save changed projects at the configured interval, five minutes by default. The timer defers while imports or editing gestures are active.
+2. **Manual save**: only an explicit Save command writes the project. Individual edits update the unsaved status without triggering a save.
 
-Project JSON writes are serialized so continuous save, interval save, manual save, and page-unload flushes do not open overlapping writers for the same file. If Chromium's File System Access API cannot create the temporary swap file for `project.json`, the current state is written to `project.autosave.json`; project load prefers that file when it is newer than `project.json`.
+Legacy continuous-save preferences migrate to interval or manual mode. Loading an unchanged project does not start a save. Project writes are serialized; edits made during a write remain dirty until included in a later successful save.
+
+Large terrain geometry and linked artifacts are persisted separately and reused when unchanged. A save still writes the project metadata snapshot; it does not rewrite every mesh or audio artifact for a small keyframe edit. Restore and history snapshots share retained geometry rather than cloning the full mesh for each clip.
 
 ### Autosave Configuration
-Access via **Settings -> General** for save mode, plus **File -> Autosave** for the interval controls:
+Access **Settings -> General**, or **File -> Autosave** for timer controls:
 
 | Setting | Options | Default |
 |---------|---------|---------|
-| Save Mode | `continuous`, `interval` | **continuous** |
-| Enable Autosave | On/Off | **On** |
-| Interval | 1, 2, 5, 10 minutes | 5 min (interval mode only) |
+| Save Mode | Manual, Interval | Interval |
+| Enable Autosave | On/Off | On |
+| Interval | 1, 2, 5, 10 minutes | 5 min |
 
 Settings persist in `settingsStore` (localStorage).
 
@@ -249,9 +253,15 @@ The `setupAutoSync()` function (in `projectLifecycle.ts`) subscribes to store ch
 - Syncs all store state to project data, then writes `project.json`
 
 ### On Page Unload
-In continuous-save mode, `beforeunload` flushes the pending store sync and kicks off a final best-effort project write. The disk write may not complete before the page closes.
+Unsaved edits retain the browser leave-page warning. Save explicitly before closing when you want to retain them; unloading does not reintroduce continuous saving.
 
 ---
+
+## Save Status
+
+The toolbar shows an uncreated project, unsaved changes, an active write, a failed save, or the last successful save time for the current session. Failures remain visible until a successful retry; clicking the status invokes Save. Newly edited state remains unsaved even when an earlier in-flight write succeeds.
+
+Status is runtime-only and scoped to the FSA handle or native project path, not persisted in project data. Manual FSA saves request read/write permission directly from the user gesture before serialization. Failed writes and recovery-protected skipped writes do not show a success toast or advance the saved timestamp. Recovery protection leaves the recoverable autosave untouched.
 
 ## Backup System
 
@@ -297,6 +307,12 @@ When opening a project, the app automatically:
 6. Also checks stored IndexedDB handles for files not found in the project folder
 7. Regenerates missing object URLs for files that were restored successfully and rebuilds previews when the underlying `File` object is still available
 
+Imported files also persist a privacy-safe source reference in `project.json`: a generated source-root ID plus the file's relative path inside that root. The browser's directory handle itself remains in IndexedDB because browser security does not allow serializing an absolute filesystem path or a live handle into JSON. If browser storage was cleared, the relink dialog or **Preferences > Import > Connect source folder** lets the user choose that root again; all matching media are then reconnected recursively from their stored relative paths.
+
+- Chromium desktop and Android use a persistent File System Access directory handle when available.
+- Safari on iPhone and iPad uses the folder-upload fallback (`webkitdirectory`) and reconnects the current session from the selected directory tree.
+- No absolute local path is written to the project file.
+
 Manual relink uses the same filename matching for normal media and sequence frames. For renamed single files, selecting one file directly assigns it to the clicked missing item.
 
 ### Relink Button
@@ -341,6 +357,10 @@ interface ProjectFile {
 
   slotAssignments?: Record<string, number>;
   mediaSourceFolders?: string[];
+  mediaSourceRoots?: Array<{
+    id: string;
+    name: string;
+  }>;
   signals?: ProjectSignalState;
   audio?: ProjectAudioState;
   uiState?: ProjectUIState;
@@ -352,6 +372,7 @@ interface ProjectFile {
 ### Per Composition
 - All tracks and clips
 - Timeline markers and per-marker MIDI bindings
+- Composition annotations (`annotations`: timed notes, optionally linked to a clip; media files carry their own `sourceAnnotations`, see [Annotations](./Annotations.md))
 - Clip positions and durations
 - Trim points (inPoint/outPoint)
 - Transform properties (position, independent `scaleAll`/axis scale, rotation, anchor, opacity, blend mode)
@@ -369,7 +390,7 @@ interface ProjectFile {
 - Scene description data
 
 ### Media Metadata
-- File paths (relative to source folder)
+- Source-root ID and file path relative to that source folder
 - Duration, dimensions, FPS
 - Codec, audio codec, container info
 - Bitrate and file size
@@ -386,7 +407,7 @@ interface ProjectFile {
 - Transcript language preference
 - Global MIDI state: enabled flag, transport bindings (`Play / Pause`, `Stop`), parameter mappings, mapping ranges, invert flags, and damping flags
 - View toggles: thumbnails, waveforms, proxy, transcript markers
-- Changelog preferences (`showChangelogOnStartup`, `lastSeenChangelogVersion`)
+- Legacy changelog preference fields (`showChangelogOnStartup`, `lastSeenChangelogVersion`) remain readable for project compatibility but no longer drive any UI.
 - Export panel state: live export settings, named export presets, and the selected preset
 - Media-panel view mode and board viewport/layout state
 - Serialized undo/redo history
@@ -428,7 +449,9 @@ Temporary camera `NO KF` live offsets are intentionally not saved. They only aff
 - Keeps the dialog open with the entered name when folder selection or project creation fails
 - Shows the unsaved-work warning inside the dialog instead of a browser-native confirmation
 - Opens folder picker (FSA) or OS folder picker (Native Helper)
-- Creates project subfolder with `project.json` and all required subfolders
+- Creates a project subfolder with its `.msproj` package and required companion folders
+- Clears the previous project's tracking assets and selection before resetting media and writing the first blank-project snapshot. Large terrain reconstructions are not copied into the new project.
+- Cancelling folder selection leaves the current tracking data intact; Save and Save As preserve it as part of the current edit.
 
 ### Save Project
 - `Ctrl+S` saves to project folder
@@ -455,13 +478,15 @@ Temporary camera `NO KF` live offsets are intentionally not saved. They only aff
 - The flyout includes "Clear Recent Projects" for clearing the browser-side list
 
 ### Rename Project
-- Double-click the project name in the toolbar
+- File menu -> Rename Project
+- Reuses the in-app project-name dialog used by New Project and Save As
 - Validates name (no special characters `<>:"/\|?*`)
 - If parent folder handle has write permission, renames the folder on disk
 - Otherwise, updates only the display name in `project.json`
 
 ### Restore Last Project
 On app load, attempts to restore the last opened project:
+- Restores the saved project name into editor state, including the Color workspace header and bridge session metadata. Opening another project replaces the previous name.
 - **FSA**: Retrieves `lastProject` handle from IndexedDB, checks permission
 - **Native**: Activates the helper backend, reconnects to the helper with a bounded timeout, grants the stored project path to the helper, then reads path from `localStorage` key `ms-native-last-project-path`
 - If permission is needed, shows a "Grant Access" prompt
@@ -623,3 +648,64 @@ Run tests: `npx vitest run`
 ---
 
 *Source: `src/services/project/`, `src/services/projectDB.ts`, `src/services/fileSystemService.ts`, `src/stores/mediaStore/init.ts`, `src/components/common/Toolbar.tsx`, `src/components/common/WelcomeOverlay.tsx`*
+
+## Dense terrain and save responsiveness
+
+Continuous saving waits for pointer/native drag gestures to finish and for a 1.5-second quiet period. Further edits reset that delay. Explicit saves remain available; pending writes are serialized and redundant queued requests are coalesced without dropping edits made during an active write.
+
+Dense terrain meshes are immutable and shared across serialization, clipboard, and undo snapshots. History comparisons use runtime geometry identity rather than stringifying every coordinate. FSA projects store compressed meshes once under `<Project> Media/Geometry/terrain/`, and `manifest.json` declares `terrainStorage: linked-media-v1`. The media folder must travel with the project. New geometry is fully written before publishing references; legacy inline and package-embedded meshes still load. The Native Helper can read linked geometry and emits embedded geometry when writing a package.
+
+Ordinary saves reuse these files, serialize compact project metadata, and batch ZIP output into 1 MiB FSA writes. Identical artifact sidecars, already-published analysis pointers, and unchanged chat journals do not trigger timestamp-only package rewrites. Failed sidecar writes remain retryable. For packaged projects, journal updates stage entries in memory and mark the project dirty; a successful journal update alone does not mean a disk save. Manual or timed project saves write the package, and failed saves retain the dirty state and staged journal for retry. Legacy folder journals write their separate files directly.
+
+### IndexedDB write acknowledgement and connection recovery
+
+Browser database writes are acknowledged only after their transaction commits. A transaction aborted after a successful request still rejects the save, including aborts without an error object. Batch cache and artifact writes use the same completion handling. Closed or version-changing database connections are discarded and reopened on the next access; this does not grant revoked filesystem permissions or recover storage removed by the browser.
+
+Project creation treats remembering the selected parent folder in IndexedDB as optional. If that cache is unavailable, it still writes the project to the selected filesystem folder; reopening through remembered locations may require selecting the folder again. Actual project-file write failures still fail creation.
+
+
+### Database-open recovery
+
+Project database initialization shares a single attempt among concurrent callers.
+An AbortError receives one immediate retry. If opening still fails, the original
+error is retained and new accesses are throttled for five seconds; a later access
+can reopen storage without reloading the editor. Synchronous browser denial is
+reported through the same failure state. No database is deleted during recovery.
+The storage-error dialog does not assume corruption or recommend clearing site
+data, which may contain browser-stored projects. It asks users to protect their
+work before refreshing.
+
+
+Database-open callbacks validate the browser's database result and upgrade
+transaction. A missing result or migration exception rejects initialization
+explicitly, aborts any partial upgrade and closes a late connection. Project
+storage and the YouTube credential database share this open lifecycle while
+retaining their separate schemas. Errors include the affected database name;
+this prevents a global callback crash or an indefinitely pending caller, but
+cannot restore storage that the browser itself refuses to provide.
+
+
+### Package file acquisition recovery
+
+Before streaming a `.msproj` archive, stale file-state errors and swap-file
+creation aborts receive up to three writable-acquisition attempts, with 150/300ms
+backoff and a newly requested file handle each time. Permission, quota and other
+errors fail immediately. Once streaming starts, any failure aborts the writable
+without automatically replaying the write. Save diagnostics record the failing
+phase to distinguish opening, artifact persistence, streaming and closing.
+
+
+### Read-only browser file-storage capability
+
+Opening the browser's private filesystem does not prove that it can save
+projects. Before creating a project in OPFS, the editor checks for the
+FileSystemFileHandle writable-stream API. If it is missing, creation stops
+before directory/file creation and the project chooser explains that the
+browser needs updating. Existing project discovery remains available. The package writer also guards
+legacy migration before any sidecar or package file is created. Native
+Helper creation still follows its separate backend. This is a capability
+check, not an in-place writer fallback that would weaken atomic save behavior.
+
+### Browser project-list access failures
+
+Opening the browser-stored project list distinguishes an empty root from denied access or failed directory enumeration. Access/listing failures reach the chooser error state instead of claiming that no projects exist; the user can retry after storage access is restored. Cancelling a system folder picker remains a cancellation. This does not bypass browser storage restrictions or recover files the browser has removed.
