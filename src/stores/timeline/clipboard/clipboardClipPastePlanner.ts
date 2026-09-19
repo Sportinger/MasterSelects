@@ -14,6 +14,7 @@ import {
 } from '../../../services/motionDesign/structure/parentGraphPlanner';
 import { clonePastedTimelineTrackingMetadata } from '../trackingMetadataClone';
 import { createPastedFlockCopy, remapPastedClipKeyframes } from './clipboardFlockPaste';
+import { createPastedClipAudioState } from './clipboardAudioState';
 
 export interface PastedClipboardClipsPlan {
   idMapping: Map<string, string>;
@@ -58,11 +59,12 @@ export function createPastedClipboardClipsPlan(
     const effects = clipData.effects.map(e => {
       const nextEffectId = `effect-${timestamp}-${createSuffix()}`;
       effectIdMap.set(e.id, nextEffectId);
-      return { ...e, id: nextEffectId, params: { ...e.params } };
+      return { ...e, id: nextEffectId, params: structuredClone(e.params) };
     });
     const text3DProperties = clipData.text3DProperties ? { ...clipData.text3DProperties } : undefined;
     const requiresAsyncMediaLoad = clipRequiresAsyncMediaLoad(clipData);
     const flockCopy = createPastedFlockCopy(clipData);
+    const audioState = createPastedClipAudioState(clipData, effectIdMap, () => `audio-${timestamp}-${createSuffix()}`, timeOffset);
 
     newClips.push({
       id: newId,
@@ -131,7 +133,7 @@ export function createPastedClipboardClipsPlan(
       thumbnails: clipData.thumbnails ? [...clipData.thumbnails] : undefined,
       waveform: clipData.waveform ? [...clipData.waveform] : undefined,
       waveformChannels: clipData.waveformChannels?.map(channel => [...channel]),
-      audioState: createPastedClipAudioState(clipData),
+      audioState,
       analysis: clipData.analysis,
       analysisStatus: clipData.analysisStatus,
       analysisProgress: clipData.analysisProgress,
@@ -148,7 +150,7 @@ export function createPastedClipboardClipsPlan(
     });
     pastedSourceIds.add(clipData.id);
 
-    const pastedKeyframes = remapPastedClipKeyframes(clipData.keyframes, newId, () => `kf_${timestamp}_${createSuffix()}`, flockCopy);
+    const pastedKeyframes = remapPastedClipKeyframes(clipData.keyframes, newId, () => `kf_${timestamp}_${createSuffix()}`, flockCopy, effectIdMap);
     if (pastedKeyframes) newKeyframes.set(newId, pastedKeyframes);
   }
 
@@ -263,16 +265,4 @@ function createPastedClipSource(
   text3DProperties: TimelineClip['text3DProperties'],
 ): TimelineClip['source'] {
   return createPastedClipSourceImpl(clipData, text3DProperties);
-}
-
-function createPastedClipAudioState(clipData: ClipboardClipData): TimelineClip['audioState'] {
-  if (!clipData.audioAnalysisRefs) return undefined;
-  return {
-    sourceAnalysisRefs: clipData.audioAnalysisRefs.sourceAnalysisRefs
-      ? structuredClone(clipData.audioAnalysisRefs.sourceAnalysisRefs)
-      : undefined,
-    processedAnalysisRefs: clipData.audioAnalysisRefs.processedAnalysisRefs
-      ? structuredClone(clipData.audioAnalysisRefs.processedAnalysisRefs)
-      : undefined,
-  };
 }

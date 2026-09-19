@@ -4,9 +4,26 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { ACTION_META, PRESET_LIST, PRESETS } from '../../../services/shortcutPresets';
-import { getShortcutRegistry } from '../../../services/shortcutRegistry';
+import { comboToLabel, getShortcutRegistry } from '../../../services/shortcutRegistry';
 import type { ShortcutPresetId, ShortcutCategory, ShortcutMap, KeyCombo, ShortcutActionId } from '../../../services/shortcutTypes';
 import { ShortcutRecorder } from './ShortcutRecorder';
+import './ShortcutsSettings.css';
+
+function normalizeBindingSearch(value: string): string {
+  return value.toLowerCase()
+    .replace(/⌘/g, 'ctrl+')
+    .replace(/\b(command|control|cmd|meta)\b/g, 'ctrl')
+    .replace(/⌥/g, 'alt+')
+    .replace(/\boption\b/g, 'alt')
+    .replace(/⇧/g, 'shift+')
+    .replace(/→|\barrowright\b/g, 'right')
+    .replace(/←|\barrowleft\b/g, 'left')
+    .replace(/↑|\barrowup\b/g, 'up')
+    .replace(/↓|\barrowdown\b/g, 'down')
+    .trim()
+    .replace(/\s*\+\s*/g, '+')
+    .replace(/\s+/g, '+');
+}
 
 const CATEGORIES_ORDER: ShortcutCategory[] = [
   'Playback',
@@ -17,6 +34,7 @@ const CATEGORIES_ORDER: ShortcutCategory[] = [
   'Preview',
   'Project',
   'History',
+  'Masking',
 ];
 
 export function ShortcutsSettings() {
@@ -49,13 +67,25 @@ export function ShortcutsSettings() {
 
   // Group actions by category, filtered by search
   const groupedActions = useMemo(() => {
-    const lowerSearch = search.toLowerCase();
+    const lowerSearch = search.trim().toLowerCase();
+    const bindingSearch = normalizeBindingSearch(search);
     const filtered = ACTION_META.filter((meta) => {
-      if (!search) return true;
+      if (!lowerSearch) return true;
       return (
         meta.label.toLowerCase().includes(lowerSearch) ||
         meta.id.toLowerCase().includes(lowerSearch) ||
-        meta.category.toLowerCase().includes(lowerSearch)
+        meta.category.toLowerCase().includes(lowerSearch) ||
+        (effectiveMap[meta.id] || []).some((combo) => {
+          const namedBinding = [
+            combo.ctrl ? 'Ctrl' : '', combo.alt ? 'Alt' : '', combo.shift ? 'Shift' : '',
+            combo.key || combo.code || '',
+          ].filter(Boolean).join('+');
+          return [comboToLabel(combo), namedBinding].some((label) => {
+            const binding = normalizeBindingSearch(label);
+            return bindingSearch.length > 1 && bindingSearch.includes('+')
+              ? binding === bindingSearch : binding.includes(bindingSearch);
+          });
+        })
       );
     });
 
@@ -67,7 +97,7 @@ export function ShortcutsSettings() {
       }
     }
     return groups;
-  }, [search]);
+  }, [search, effectiveMap]);
 
   const handlePresetChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     setActiveShortcutPreset(e.target.value as ShortcutPresetId);
@@ -111,7 +141,7 @@ export function ShortcutsSettings() {
   }, [effectiveMap, registry]);
 
   return (
-    <div className="settings-category-content">
+    <div className="settings-category-content shortcut-settings">
       <h2>Keyboard Shortcuts</h2>
 
       {/* Preset Selection */}

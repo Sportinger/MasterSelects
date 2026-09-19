@@ -207,6 +207,8 @@ npm run docs:screenshots -- --id=keyframes-bezier-curve-editor
 - `Ctrl+C` with keyframes selected copies only the keyframes.
 - `Ctrl+V` pastes keyframes relative to the current playhead.
 - Keyframes are normalized on copy so pasted timing stays relative to the first copied keyframe.
+- Pasting replaces existing keys within each pasted property's time range, including keys at the same time. Keys outside that range and other properties stay intact; repeated paste does not create duplicates.
+- Copying whole clips preserves audio edits and effect automation, retargets curves to the copied effects, and gives each copy independent Bezier handles.
 - If the clipboard does not contain keyframes, paste falls back to the clip clipboard flow.
 - Removing an effect also removes every `effect.{effectId}.*` keyframe owned by that effect, so deleted effect curves disappear from Graph mode immediately.
 

@@ -17,6 +17,7 @@ import { createPastedClipboardClipsPlan } from './clipboard/clipboardClipPastePl
 import { createClipboardKeyframes, planPastedKeyframes } from './clipboard/clipboardKeyframeTransfer';
 import { filterPasteableClipboardData } from './clipboard/clipboardPastedClipSource';
 import { createClipboardClipAnalysisMetadata } from './clipboard/clipboardClipAnalysisMetadata';
+import { clearProcessedAudioAnalysisRefsForKeyframeTargets } from './keyframes/audioEffectKeyframeValues';
 import { cloneTimelineTrackingMetadata } from './trackingMetadataClone';
 import { useMediaStore } from '../mediaStore';
 import { toMotionParentTransform2D } from '../../services/motionDesign/contracts/timelineStructureAdapter';
@@ -140,16 +141,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         thumbnails: clip.thumbnails ? [...clip.thumbnails] : undefined,
         waveform: clip.waveform ? [...clip.waveform] : undefined,
         waveformChannels: clip.waveformChannels?.map(channel => [...channel]),
-        audioAnalysisRefs: clip.audioState
-          ? {
-              sourceAnalysisRefs: clip.audioState.sourceAnalysisRefs
-                ? structuredClone(clip.audioState.sourceAnalysisRefs)
-                : undefined,
-              processedAnalysisRefs: clip.audioState.processedAnalysisRefs
-                ? structuredClone(clip.audioState.processedAnalysisRefs)
-                : undefined,
-            }
-          : undefined,
+        audioState: clip.audioState ? structuredClone(clip.audioState) : undefined,
         ...createClipboardClipAnalysisMetadata(clip),
         isComposition: clip.isComposition,
         compositionId: clip.compositionId,
@@ -409,7 +401,13 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
     });
     const newMap = new Map(clipKeyframes);
     newMap.set(targetClipId, keyframes);
-    set({ clipKeyframes: newMap });
+    const retainedIds = new Set([...newMap.values()].flatMap(keys => keys.map(key => key.id)));
+    set({
+      clipKeyframes: newMap,
+      selectedKeyframeIds: new Set([...get().selectedKeyframeIds].filter(id => retainedIds.has(id))),
+      clips: clearProcessedAudioAnalysisRefsForKeyframeTargets(clips,
+        pasted > 0 ? clipboardKeyframes.map(key => ({ clipId: targetClipId, property: key.property })) : []),
+    });
     invalidateCache();
     log.info('Pasted keyframes', { count: pasted, skipped, targetClipId });
   },

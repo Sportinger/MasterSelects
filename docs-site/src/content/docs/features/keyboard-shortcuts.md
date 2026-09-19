@@ -6,6 +6,10 @@ title: "Keyboard Shortcuts"
 
 Current shortcut bindings are routed through `shortcutRegistry`, so presets and per-action overrides update live from Settings.
 
+Settings search matches action names, categories (including Masking), and current
+key bindings. Search for `Ctrl+S`, `Cmd+S`, `Space`, or `ArrowRight`; changing a
+preset or a custom binding updates the search results immediately.
+
 ---
 
 ## Presets

@@ -98,6 +98,29 @@ describe('timeline clipboard routing', () => {
     expect(useTimelineStore.getState().clipboardData).toBeNull();
   });
 
+  it('drops replaced keyframe selections and invalidates processed audio after paste', () => {
+    const clip = createMockClip({
+      id: 'audio', trackId: 'audio-1', source: { type: 'audio' },
+      audioState: {
+        effectStack: [{ id: 'pan', descriptorId: 'audio-pan', enabled: true, params: { pan: 0 } }],
+        processedAnalysisRefs: { processedWaveformPyramidId: 'old-waveform' },
+      },
+    });
+    const old = createMockKeyframe({ id: 'old', clipId: clip.id, property: 'effect.pan.pan', time: 1, value: 0 });
+    const retained = createMockKeyframe({ id: 'retained', clipId: clip.id, time: 1 });
+    useTimelineStore.setState({
+      clips: [clip], selectedClipIds: new Set([clip.id]), playheadPosition: 1,
+      selectedKeyframeIds: new Set([old.id, retained.id]),
+      clipKeyframes: new Map([[clip.id, [old, retained]]]),
+      clipboardKeyframes: [{ ...old, time: 0, value: 0.75 }],
+    });
+    useTimelineStore.getState().pasteKeyframes();
+    expect(useTimelineStore.getState().selectedKeyframeIds).toEqual(new Set([retained.id]));
+    expect(useTimelineStore.getState().clips[0].audioState?.processedAnalysisRefs).toBeUndefined();
+    expect(useTimelineStore.getState().clipKeyframes.get(clip.id)?.filter(key => key.property === 'effect.pan.pan'))
+      .toMatchObject([{ value: 0.75, time: 1 }]);
+  });
+
   it('pastes copied clips into another timeline after the selection is cleared', async () => {
     const clip = createMockClip({
       id: 'clip-1',

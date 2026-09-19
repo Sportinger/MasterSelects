@@ -80,6 +80,7 @@ export interface ClipboardClipData {
   waveform?: number[];
   waveformChannels?: number[][];
   audioAnalysisRefs?: Pick<ClipAudioState, 'processedAnalysisRefs' | 'sourceAnalysisRefs'>;
+  audioState?: ClipAudioState;
   analysis?: ClipAnalysis;
   analysisStatus?: TimelineClip['analysisStatus'];
   analysisProgress?: number;

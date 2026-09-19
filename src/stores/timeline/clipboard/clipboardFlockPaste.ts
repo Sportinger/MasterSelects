@@ -2,6 +2,8 @@ import type { FlockDefinition } from '../../../types/flock';
 import type { ClipboardClipData, Keyframe } from '../types';
 import { remapFlockDefinitionIds } from '../../../services/flock/mutations/flockGraphMutations';
 import { remapFlockKeyframeProperty } from '../editOperations/flockClipKeyframes';
+import { createEffectProperty } from '../../../types/animationProperties';
+import { parseClipboardEffectKeyframeProperty } from './clipboardEffectKeyframes';
 
 export interface PastedFlockCopy {
   definition: FlockDefinition;
@@ -13,18 +15,21 @@ export function createPastedFlockCopy(clipData: Pick<ClipboardClipData, 'flock'>
   return clipData.flock ? remapFlockDefinitionIds(clipData.flock) : null;
 }
 
-/** Copied clip keyframes with fresh ids; flock properties follow the remapped node ids. */
+/** Fresh keyframe identities and independent curves referencing the pasted clip's effects/nodes. */
 export function remapPastedClipKeyframes(
   keyframes: readonly Keyframe[] | undefined,
   clipId: string,
   createId: () => string,
   flockCopy: PastedFlockCopy | null,
+  effectIdMap: ReadonlyMap<string, string> = new Map(),
 ): Keyframe[] | null {
   if (!keyframes || keyframes.length === 0) return null;
-  return keyframes.map((keyframe) => ({
-    ...keyframe,
-    id: createId(),
-    clipId,
-    property: flockCopy ? remapFlockKeyframeProperty(keyframe.property, flockCopy.nodeIdMap) : keyframe.property,
-  }));
+  return keyframes.map((keyframe) => {
+    const effect = parseClipboardEffectKeyframeProperty(keyframe.property);
+    const effectId = effect && effectIdMap.get(effect.effectId);
+    const property = effectId && effect
+      ? createEffectProperty(effectId, effect.paramName)
+      : flockCopy ? remapFlockKeyframeProperty(keyframe.property, flockCopy.nodeIdMap) : keyframe.property;
+    return { ...structuredClone(keyframe), id: createId(), clipId, property };
+  });
 }

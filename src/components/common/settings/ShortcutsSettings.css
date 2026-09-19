@@ -1,0 +1,16 @@
+.shortcut-settings :is(button, select) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.shortcut-settings :is(button, select):focus:not(:focus-visible) {
+  outline: none;
+}
+
+.shortcut-settings .settings-select:focus:not(:focus-visible) {
+  border-color: var(--border-color);
+}
+
+.shortcut-settings :is(button, select):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
