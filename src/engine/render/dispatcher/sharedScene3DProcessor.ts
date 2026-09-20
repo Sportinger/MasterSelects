@@ -1,4 +1,5 @@
 import { sceneCompositeStyle } from '../../scene/sceneEffectRouting';
+import { nodePreviewTextureTap } from '../../../services/nodePreview/NodePreviewTextureTap';
 import type { Layer, LayerRenderData } from '../../core/types';
 import { getGaussianSplatGpuRenderer } from '../../gaussian/core/GaussianSplatGpuRenderer';
 import { resolveOrbitCameraFrame } from '../../gaussian/core/SplatCameraUtils';
@@ -398,6 +399,11 @@ export class SharedScene3DProcessor {
     }
 
     const insertIdx = indices3D[0];
+    if (d.sampler && renderLayers3D.some(layer => nodePreviewTextureTap.has(`scene:${layer.clipId}`))) {
+      const encoder = device.createCommandEncoder({ label: 'node-preview-scene' });
+      for (const layer of renderLayers3D) nodePreviewTextureTap.capture(`scene:${layer.clipId}`, device, encoder, d.sampler, textureView, width, height);
+      device.queue.submit([encoder.finish()]);
+    }
     const compositeStyle = sceneCompositeStyle(layerData, renderLayers3D, !!(d.effectsPipeline && d.sampler));
     const sceneTexturePixelScale = calculateSourcePixelScale(
       width,

@@ -1,0 +1,10 @@
+.node-viewer-toggle { border: 0; border-radius: 3px; padding: 0 3px; background: transparent; color: var(--text-secondary); font-size: 12px; cursor: pointer; }
+.node-viewer-toggle.active { color: var(--accent-color, #79b8fa); }
+.node-viewer-toggle:hover { background: var(--bg-hover); }
+.node-preview-controls { position: absolute; height: 16px; display: flex; align-items: center; }
+.node-preview-controls select { width: 100%; border: 0; border-radius: 2px; background: var(--bg-primary, #111); color: var(--text-secondary); font: 9px system-ui; cursor: pointer; padding: 0 3px; }
+.node-preview-controls span { color: var(--text-secondary); font: 9px system-ui; padding-left: 4px; }
+.node-viewer-toggle, .node-preview-controls select, .node-workspace-toolbar-button { -webkit-tap-highlight-color: transparent; }
+.node-viewer-toggle:focus:not(:focus-visible), .node-preview-controls select:focus:not(:focus-visible), .node-workspace-toolbar-button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.node-viewer-toggle:focus-visible, .node-preview-controls select:focus-visible, .node-workspace-toolbar-button:focus-visible { outline: 2px solid var(--accent-color, #79b8fa); outline-offset: 2px; }
+.node-workspace-toolbar-button[aria-pressed="true"] { color: var(--accent-color, #79b8fa); }

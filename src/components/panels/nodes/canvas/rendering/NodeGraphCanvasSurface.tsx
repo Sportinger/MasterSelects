@@ -5,6 +5,7 @@ import type { Viewport } from '../canvasGeometry';
 import { buildCanvasScene } from './buildCanvasScene';
 import { canvasPixelRatio, createNodeCanvasRuntime } from './nodeCanvasRuntime';
 import type { CanvasTheme } from './nodeCanvasTypes';
+import { NodePreviewController } from '../../previews/NodePreviewController';
 import './NodeGraphCanvasSurface.css';
 
 type SceneOptions = Parameters<typeof buildCanvasScene>[0];
@@ -13,6 +14,7 @@ type Props = Omit<SceneOptions, 'clips' | 'keyframes' | 'sourceTime'> & { viewpo
 export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ viewport, onReady, ...options }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const runtime = useRef<ReturnType<typeof createNodeCanvasRuntime> | null>(null);
+  const previewRuntime = useRef<NodePreviewController | null>(null);
   const clips = useTimelineStore(state => state.clips);
   const keyframes = useTimelineStore(state => state.clipKeyframes);
   const sourceTime = useTimelineStore(state => state.getSourceTimeForClip);
@@ -21,6 +23,7 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
     hoveredEdgeId, hoveredPort, draft, clips, keyframes, sourceTime, canBypass }),
   [graph, nodes, plugs, selection, selectedNodeId, selectedEdgeId, hoveredEdgeId, hoveredPort, draft, clips, keyframes, sourceTime, canBypass]);
   const sceneRef = useRef(scene); sceneRef.current = scene;
+  const previewSource = useRef({ clipId: graph.owner.id, nodes, selectedNodeId, expanded: graph.expandedNodes }); previewSource.current = { clipId: graph.owner.id, nodes, selectedNodeId, expanded: graph.expandedNodes };
   const viewportRef = useRef(viewport); viewportRef.current = viewport;
   const refreshRef = useRef<() => void>(() => {});
   const viewRef = useRef<() => void>(() => {});
@@ -28,13 +31,16 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const renderer = createNodeCanvasRuntime(host, onReady); runtime.current = renderer;
+    const renderer = createNodeCanvasRuntime(host, ready => { onReady(ready); previewRuntime.current?.reset(); }); runtime.current = renderer;
+    const previews = new NodePreviewController(renderer, host); previewRuntime.current = previews;
+    previews.scene(previewSource.current.clipId, previewSource.current.nodes, previewSource.current.selectedNodeId, previewSource.current.expanded);
     const motion = matchMedia('(prefers-reduced-motion: reduce)');
     let visible = true, fade: ReturnType<typeof setTimeout> | undefined, frame: number | undefined;
     let lastPosition = useTimelineStore.getState().playheadPosition, scrubUntil = 0;
     const transport = () => {
       frame = undefined;
       const state = useTimelineStore.getState(), sourceTimes: Record<string, number> = {};
+      previews.visibility(visible && !document.hidden);
       if (visible && !document.hidden) for (const node of sceneRef.current.nodes) {
         const curve = node.curve;
         if (!curve?.sourceTime || curve.clipId in sourceTimes) continue;
@@ -50,7 +56,8 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
     let size = { width: host.clientWidth, height: host.clientHeight };
     let theme: CanvasTheme;
     const view = () => {
-      renderer.update({ type: 'view', view: { ...viewportRef.current, ...size, ratio: canvasPixelRatio(size.width, size.height, devicePixelRatio) }, theme });
+      const measured = { ...viewportRef.current, ...size, ratio: canvasPixelRatio(size.width, size.height, devicePixelRatio) };
+      renderer.update({ type: 'view', view: measured, theme }); previews.viewport(measured);
     };
     const measure = () => {
       const width = host.clientWidth, height = host.clientHeight;
@@ -85,10 +92,11 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
       unsubscribe(); resize?.disconnect(); intersection?.disconnect(); themeObserver.disconnect(); clearTimeout(fade);
       if (frame !== undefined) cancelAnimationFrame(frame);
       document.removeEventListener('visibilitychange', queueTransport); motion.removeEventListener('change', queueTransport);
-      window.removeEventListener('resize', measure); renderer.dispose(); runtime.current = null;
+      window.removeEventListener('resize', measure); previews.dispose(); previewRuntime.current = null; renderer.dispose(); runtime.current = null;
     };
   }, [onReady]);
   useLayoutEffect(() => { runtime.current?.update({ type: 'scene', scene }); refreshRef.current(); }, [scene]);
+  useLayoutEffect(() => { previewRuntime.current?.scene(graph.owner.id, nodes, selectedNodeId, graph.expandedNodes); }, [graph.owner.id, nodes, selectedNodeId, graph.expandedNodes]);
   useLayoutEffect(() => { viewRef.current(); }, [viewport]);
   return <div ref={hostRef} className="node-graph-canvas-surface" aria-hidden="true" />;
 });

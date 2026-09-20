@@ -25,6 +25,49 @@ zoom range remains 18–240%; horizontal-only scrolling does not change zoom.
 Dragging, **Fit**, **Focus** and **Reset** interrupt any pending zoom animation.
 Reduced-motion preferences keep the same continuous zoom without smoothing.
 
+## Inline previews
+
+Previews are enabled by default. The small viewer button on each card toggles that
+node; **Previews** in the toolbar temporarily hides all enabled viewers. Output
+selectors switch the viewed port. Preferences are saved on the owning clip and
+survive project/history round trips. Portrait, landscape and square images retain
+their aspect ratio. Placement resolves collisions using the complete card size,
+including the preview; this also applies when adding nodes to existing graphs.
+Expanding or folding nested groups reserves each complete frame and moves sibling
+groups together with their contents, keeping headers and unrelated cards apart.
+
+Source images borrow the current decoded frame. Color input, individual correctors,
+color output, effects, masks and clip output tap the render pipeline. Neutral and
+bypassed correctors display their passed-through image. The native scene supplies
+its shared rendered result. Saved tracking, calibrated depth, face/depth/cable
+geometry and animation curves have data viewers; scene nodes show UVs, texture,
+material tint/opacity, local/world geometry, and camera/light values. Geometry
+previews are wireframes, not additional scene renders. Missing data is identified
+explicitly: opening a viewer never runs analysis or rebakes. Raw inference depth
+is not retained by existing bakes, and the realtime color graph does not evaluate
+its structural key ports; these ports report unavailable output.
+
+A third viewport-sized OffscreenCanvas layer draws previews without per-frame
+React updates. A shared atlas has a 32 MiB ceiling and packs 128, 512 or 2048
+thumbnails depending on zoom. Images are closed after rasterization. One scheduler
+limits work to two concurrent producers, 2 million thumbnail pixels/second and a
+2 ms synchronous dispatch budget. GPU copies share one same-device atlas, without
+full-resolution readback or per-node canvases. Compressed geometry is sampled in
+one additional lazy worker. Both worker delivery and data jobs have watchdogs.
+
+Only visible viewers request work. Hidden panels/tabs, collapsed contents and
+export pause requests. Tiny viewers below 32 screen pixels retain their last
+image; larger viewers refresh at up to 12 Hz (5 Hz at overview zoom, 3 Hz in the
+software fallback). Paused unchanged outputs reuse cached pixels. Continuous
+playback accepts bounded asynchronous latency; edits and seeks discard obsolete
+results. Pan reuses existing atlas pixels. These are bounded preview costs;
+expensive processing in the editor's main render path still affects frame time.
+
+The isolated `/tests/browser/node-previews-probe.html` page exercises color stages,
+portrait aspect ratio, toggles and large graphs without modifying an editor project.
+Append `?software` to exercise main-thread canvas fallback. Unit regressions cover
+scheduling/fairness, resource cleanup, atlas limits, stage geometry and placement.
+
 ## Connection flow
 
 While playing or moving the timeline playhead, cables show two evenly spaced

@@ -516,12 +516,13 @@ describe('Compositor scrub fast path', () => {
     });
 
     expect(updateLayerUniforms.mock.calls[0][5]).toEqual({
-      brightness: 0.4,
+      brightness: 0,
       contrast: 1,
       saturation: 1,
       invert: false,
     });
     expect(applyEffects).toHaveBeenCalledTimes(1);
+    expect(applyEffects.mock.calls[0][1]).toEqual(makeLayerData()[0].layer.effects);
   });
 });
 

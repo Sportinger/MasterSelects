@@ -8,6 +8,7 @@ export function sceneCompositeStyle(data: LayerRenderData[], scene: SceneLayer3D
   const owner = visual && data.find(entry => entry.layer.id === visual.layerId)?.layer;
   const applied = new Set(sourceEffectsApplied ? visual?.layerSpaceEffects?.map(effect => effect.id) : []);
   return {
+    sourceClipId: owner?.sourceClipId,
     opacity: owner?.opacity ?? 1,
     blendMode: owner?.blendMode ?? 'normal' as const,
     colorCorrection: owner?.colorCorrection,

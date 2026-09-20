@@ -7,6 +7,7 @@ import type {
 import { getNodeGraphPortCompatibilityKey } from '../../../../services/nodeGraph';
 import { describePortText } from '../../../../services/nodeGraph/nodePortPresentation';
 import { formatsOverlap } from '../../../../services/operators/portContracts';
+import { previewExtraHeight } from '../previews/previewGeometry';
 
 export const DEFAULT_VIEWPORT = { zoom: 0.88, panX: 36, panY: 28 };
 export const MIN_ZOOM = 0.18;
@@ -162,7 +163,7 @@ export function getNodePortStartY(node: NodeGraphNode): number {
 
 export function getNodeHeight(node: NodeGraphNode): number {
   const portRows = Math.max(node.inputs.length, node.outputs.length, 1);
-  return Math.max(NODE_MIN_HEIGHT, getNodePortStartY(node) + (portRows * PORT_ROW_HEIGHT) + 16);
+  return Math.max(NODE_MIN_HEIGHT, getNodePortStartY(node) + (portRows * PORT_ROW_HEIGHT) + 16) + previewExtraHeight(node);
 }
 
 export function getGraphBounds(graph: NodeGraph): NodeBounds {

@@ -3,6 +3,7 @@ import type { NodeGraphNode, NodeGraphPort } from '../../../../services/nodeGrap
 import { NodeGraphPortView } from './NodeGraphPortView';
 import { KeyframeNodeCardPreview } from '../keyframes/KeyframeNodeCurve';
 import { NodeAnimationBadge } from '../keyframes/NodeAnimationBadge';
+import { NodePreviewOutput, NodeViewerButton } from '../previews/NodePreviewControls';
 import { requestNodeAnimation } from '../../../../services/nodeGraph/nodeWorkspaceNavigation';
 import type { ConnectionDraft } from './canvasGeometry';
 import {
@@ -34,6 +35,8 @@ interface NodeGraphNodeCardProps {
   ) => void;
   onDisconnectPortEdges: (node: NodeGraphNode, port: NodeGraphPort) => void;
   onToggleNodeBypass?: (nodeId: string) => void;
+  onTogglePreview?: (nodeId: string) => void;
+  onPreviewOutput?: (nodeId: string, portId: string) => void;
 }
 
 function getNodeHeaderLabel(node: NodeGraphNode): string {
@@ -54,6 +57,8 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
   onStartConnectionDrag,
   onDisconnectPortEdges,
   onToggleNodeBypass,
+  onTogglePreview,
+  onPreviewOutput,
 }: NodeGraphNodeCardProps) {
   const [keyboardFocused, setKeyboardFocused] = useState(false);
   const nodeHeight = getNodeHeight(node);
@@ -128,6 +133,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
             </button>
           )}
           <span>{node.runtime}</span>
+          {onTogglePreview && <NodeViewerButton node={node} onToggle={onTogglePreview} />}
         </div>
       </div>
       <div className="node-workspace-node-title" title={node.label}>{node.label}</div>
@@ -161,6 +167,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
           )}
         </div>
       )}
+      {onPreviewOutput && <NodePreviewOutput node={node} onOutput={onPreviewOutput} />}
       <div className="node-workspace-node-ports" style={{ top: getNodePortStartY(node) }}>
         <div className="node-workspace-port-column">
           {node.inputs.length > 0 && <span className="node-workspace-port-direction">IN</span>}

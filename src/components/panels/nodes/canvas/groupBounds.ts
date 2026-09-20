@@ -1,19 +1,23 @@
 import type { NodeGraph, NodeGraphNode } from '../../../../types/nodeGraph';
 import { getGraphBounds, getNodeHeight, NODE_WIDTH, type NodeBounds } from './canvasGeometry';
 
+export function encloseNodeGroup(members: NodeGraphNode[], children: NodeBounds[]): NodeBounds {
+  return {
+    left: Math.min(...members.map(n => n.layout.x - 22), ...children.map(b => b.left - 16)),
+    top: Math.min(...members.map(n => n.layout.y - 48), ...children.map(b => b.top - 38)),
+    right: Math.max(...members.map(n => n.layout.x + NODE_WIDTH + 22), ...children.map(b => b.right + 16)),
+    bottom: Math.max(...members.map(n => n.layout.y + getNodeHeight(n) + 22), ...children.map(b => b.bottom + 16)),
+  };
+}
+
 export function nodeGroupBounds(graph: NodeGraph, nodes: NodeGraphNode[]): Map<string, NodeBounds> {
   const bounds = new Map<string, NodeBounds>();
   const measure = (id: string): NodeBounds | undefined => {
     if (bounds.has(id)) return bounds.get(id);
     const group = graph.groups?.find(g => g.id === id), members = nodes.filter(n => group?.nodeIds.includes(n.id));
-    if (!members.length) return;
     const children = group?.collapsed ? [] : (graph.groups ?? []).filter(g => g.parentId === id).map(g => measure(g.id)).filter((b): b is NodeBounds => !!b);
-    const value = {
-      left: Math.min(...members.map(n => n.layout.x - 22), ...children.map(b => b.left - 16)),
-      top: Math.min(...members.map(n => n.layout.y - 48), ...children.map(b => b.top - 38)),
-      right: Math.max(...members.map(n => n.layout.x + NODE_WIDTH + 22), ...children.map(b => b.right + 16)),
-      bottom: Math.max(...members.map(n => n.layout.y + getNodeHeight(n) + 22), ...children.map(b => b.bottom + 16)),
-    };
+    if (!members.length && !children.length) return;
+    const value = encloseNodeGroup(members, children);
     bounds.set(id, value); return value;
   };
   graph.groups?.forEach(g => measure(g.id)); return bounds;

@@ -1,4 +1,5 @@
 import type { AnimatableProperty, Keyframe } from '../../../../../types';
+import type { PreviewFrame } from '../../../../../services/nodePreview/previewTypes';
 
 // Only drawing data crosses the worker boundary, never graph params or media handles.
 export interface Point { x: number; y: number }
@@ -17,6 +18,8 @@ export interface CanvasNode extends Rect {
   color: string; selected: boolean; bypassed: boolean; bypassable: boolean;
   badges: Array<{ label: string; tone: string }>; ports: CanvasPort[];
   curve?: CanvasCurve;
+  viewerEnabled?: boolean;
+  preview?: Rect & { key: string; label: string };
 }
 export interface CanvasCable {
   baked?: boolean;
@@ -28,7 +31,8 @@ export interface CanvasGroup extends Rect { label: string; color: string; collap
 export interface CanvasScene { nodes: CanvasNode[]; cables: CanvasCable[]; groups: CanvasGroup[]; plugs: CanvasPlug[] }
 export interface CanvasTransport { playhead: number; playing: boolean; active: boolean; visible: boolean; reducedMotion: boolean; sourceTimes: Record<string, number>; playbackSpeed?: number; timestamp?: number }
 export type CanvasMessage =
-  | { type: 'init'; base: OffscreenCanvas; overlay: OffscreenCanvas }
+  | { type: 'init'; base: OffscreenCanvas; overlay: OffscreenCanvas; previews?: OffscreenCanvas }
+  | { type: 'previews'; frames: PreviewFrame[]; batchId: number }
   | { type: 'scene'; scene: CanvasScene }
   | { type: 'view'; view: CanvasView; theme: CanvasTheme }
   | { type: 'transport'; transport: CanvasTransport };

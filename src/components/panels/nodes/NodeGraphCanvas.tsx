@@ -1,4 +1,7 @@
 import { NodeGraphGroups } from './canvas/NodeGraphGroups';
+import { useNodePreviewPreferences } from './previews/useNodePreviewPreferences';
+import { nodePreviewKey, previewOutput } from '../../../services/nodePreview/previewTypes';
+import { spacePreviewGroups } from './canvas/spacePreviewGroups';
 import { NodeGraphCanvasSurface } from './canvas/rendering/NodeGraphCanvasSurface';
 import { annotatedGraphBounds, nodeGroupBounds } from './canvas/groupBounds';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -72,7 +75,7 @@ interface NodeDragGesture {
 }
 
 export function NodeGraphCanvas({
-  graph,
+  graph: sourceGraph,
   selectedNodeId,
   selectedNodeIds,
   onSelectNode,
@@ -91,6 +94,14 @@ export function NodeGraphCanvas({
   onToggleGroup,
   layoutScaleX = 1,
 }: NodeGraphCanvasProps) {
+  const { preferences, toggleGlobal, toggleNode, selectOutput, aspectRatio } = useNodePreviewPreferences(sourceGraph.owner.id);
+  const graph = useMemo(() => ({ ...sourceGraph, nodes: sourceGraph.nodes.map(node => {
+    const preference = preferences.nodes[node.id];
+    const port = previewOutput(node, preference?.portId);
+    const imageRatio = port?.type === 'texture' || port?.type === 'mask' || port?.metadata?.semanticKind === 'operator:landmarks';
+    return { ...node, preview: { enabled: preferences.enabled && (preference?.enabled ?? true), requested: preference?.enabled ?? true,
+      portId: preference?.portId, key: nodePreviewKey(sourceGraph.owner.id, node, preference?.portId), aspectRatio: imageRatio ? aspectRatio : 16 / 9 } };
+  }) }), [sourceGraph, preferences, aspectRatio]);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const panGestureRef = useRef<PanGesture | null>(null);
   const nodeDragGestureRef = useRef<NodeDragGesture | null>(null);
@@ -104,15 +115,15 @@ export function NodeGraphCanvas({
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const multiSelection = useMemo(() => new Set(selectedNodeIds ?? []), [selectedNodeIds]);
 
+  const spacedNodes = useMemo(() => (
+    spacePreviewGroups({ ...graph, nodes: graph.nodes.map(node => layoutScaleX === 1 ? node : ({ ...node, layout: { x: node.layout.x * layoutScaleX, y: node.layout.y } })) })
+  ), [graph.nodes, graph.groups, layoutScaleX]);
   const displayNodes = useMemo(() => (
-    graph.nodes.map((node) => !draftLayouts[node.id] && layoutScaleX === 1 ? node : ({
+    spacedNodes.map((node) => !draftLayouts[node.id] ? node : ({
       ...node,
-      layout: draftLayouts[node.id] ?? {
-        x: node.layout.x * layoutScaleX,
-        y: node.layout.y,
-      },
+      layout: draftLayouts[node.id],
     }))
-  ), [draftLayouts, graph.nodes, layoutScaleX]);
+  ), [draftLayouts, spacedNodes]);
   const nodesById = useMemo(() => new Map(displayNodes.map((node) => [node.id, node])), [displayNodes]);
   const nodesByIdRef = useRef(nodesById);
   nodesByIdRef.current = nodesById;
@@ -375,6 +386,8 @@ export function NodeGraphCanvas({
           </span>
         </div>
         <div className="node-workspace-toolbar-actions">
+          <button type="button" className="node-workspace-toolbar-button" aria-pressed={preferences.enabled}
+            title="Show or hide enabled node previews" onClick={event => { toggleGlobal(); if (event.detail > 0) event.currentTarget.blur(); }}>Previews</button>
           {selectedEdge && !selectedEdge.readOnly && (
             <button type="button" className="node-workspace-toolbar-button" onClick={disconnectSelectedEdge}>
               Disconnect
@@ -495,6 +508,8 @@ export function NodeGraphCanvas({
               onStartConnectionDrag={startConnectionDrag}
               onDisconnectPortEdges={disconnectPortEdges}
               onToggleNodeBypass={onToggleNodeBypass}
+              onTogglePreview={toggleNode}
+              onPreviewOutput={selectOutput}
             />
           ))}
         </div>

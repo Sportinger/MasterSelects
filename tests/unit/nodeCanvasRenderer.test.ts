@@ -85,7 +85,7 @@ describe('worker delivery and failure recovery', () => {
     });
     Object.defineProperty(HTMLCanvasElement.prototype, 'transferControlToOffscreen', { configurable: true, value: vi.fn(() => ({})) });
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (this: HTMLCanvasElement) {
-      return { canvas: this } as CanvasRenderingContext2D;
+      return { canvas: this, setTransform: vi.fn(), clearRect: vi.fn() } as unknown as CanvasRenderingContext2D;
     });
     const runtime = createNodeCanvasRuntime(host, ready);
     runtime.update({ type: 'scene', scene }); runtime.update({ type: 'view', view, theme });

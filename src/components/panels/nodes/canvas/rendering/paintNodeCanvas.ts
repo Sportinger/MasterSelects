@@ -76,8 +76,9 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
     ctx.fillStyle = node.color; ctx.fillRect(0, 0, node.width, 3);
     ctx.strokeStyle = theme.border; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 27); ctx.lineTo(node.width, 27); ctx.stroke();
     text(ctx, node.kind.toUpperCase(), 8, 19, 95, theme.muted);
-    text(ctx, node.runtime, node.width - 8, 19, 50, theme.muted, 9, 400, 'right');
-    if (node.bypassable) text(ctx, 'Byp', node.width - 64, 19, 25, node.bypassed ? theme.accent : theme.muted, 9);
+    text(ctx, node.runtime, node.width - 28, 19, 50, theme.muted, 9, 400, 'right');
+    text(ctx, '◉', node.width - 9, 19, 14, node.viewerEnabled ? theme.accent : theme.muted, 12, 400, 'right');
+    if (node.bypassable) text(ctx, 'Byp', node.width - 84, 19, 25, node.bypassed ? theme.accent : theme.muted, 9);
     text(ctx, node.label, 10, 46, node.width - 20, theme.text, 13, 600);
     text(ctx, node.description, 10, 63, node.width - 20, theme.muted, 10);
     let badgeX = 10;

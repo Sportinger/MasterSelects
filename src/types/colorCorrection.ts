@@ -456,7 +456,7 @@ function combinePrimaryRuntimeParams(primaryNodes: RuntimePrimaryColorParams[]):
   return primary;
 }
 
-function getOrderedRuntimeNodes(version: ColorGradeVersion, diagnostics: string[]): ColorNode[] {
+export function getOrderedRuntimeNodes(version: ColorGradeVersion, diagnostics: string[] = []): ColorNode[] {
   const byId = new Map(version.nodes.map(node => [node.id, node]));
   const inputNode = version.nodes.find(node => node.type === 'input');
   const outputNode = version.nodes.find(node => node.id === version.outputNodeId)

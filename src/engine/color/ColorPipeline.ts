@@ -1,6 +1,7 @@
 import { MAX_RUNTIME_PRIMARY_NODES, type RuntimeColorGrade } from '../../types';
 import { COLOR_CURVE_CHANNELS, COLOR_CURVE_SAMPLE_COUNT } from '../../types/colorCurves';
 import { Logger } from '../../services/logger';
+import { nodePreviewTextureTap } from '../../services/nodePreview/NodePreviewTextureTap';
 
 const log = Logger.create('ColorPipeline');
 const PRIMARY_COLOR_VEC4_ROWS = 8;
@@ -218,7 +219,9 @@ export class ColorPipeline {
     sampler: GPUSampler,
     inputView: GPUTextureView,
     outputView: GPUTextureView,
-    layerKey: string
+    layerKey: string,
+    previewStage?: string,
+    previewSize?: { width: number; height: number },
   ): { finalView: GPUTextureView; applied: boolean } {
     if (!grade?.enabled || !this.pipeline || !this.bindGroupLayout) {
       return { finalView: inputView, applied: false };
@@ -289,6 +292,12 @@ export class ColorPipeline {
       ],
     });
 
+    if (previewStage && previewSize) {
+      nodePreviewTextureTap.draw(previewStage, this.device, commandEncoder, previewSize.width, previewSize.height, pass => {
+        pass.setPipeline(this.pipeline!); pass.setBindGroup(0, bindGroup); pass.draw(6);
+      });
+      return { finalView: inputView, applied: false };
+    }
     const pass = commandEncoder.beginRenderPass({
       colorAttachments: [{
         view: outputView,
@@ -302,6 +311,19 @@ export class ColorPipeline {
     pass.end();
 
     return { finalView: outputView, applied: true };
+  }
+
+  previewGradeOutputs(clipId: string, commandEncoder: GPUCommandEncoder, grade: RuntimeColorGrade | undefined,
+    sampler: GPUSampler, inputView: GPUTextureView, size: { width: number; height: number }) {
+    for (const { stage, request } of nodePreviewTextureTap.matching(`color-node:${clipId}:`)) {
+      const indices = grade?.enabled ? grade.nodeIds.flatMap((id, index) => request.colorNodeIds?.includes(id) ? [index] : []) : [];
+      if (!grade || !indices.length) {
+        nodePreviewTextureTap.capture(stage, this.device, commandEncoder, sampler, inputView, size.width, size.height);
+        continue;
+      }
+      const partial = { ...grade, primaryNodes: indices.map(index => grade.primaryNodes[index]), curvesByNode: grade.curvesByNode && indices.map(index => grade.curvesByNode![index]) };
+      this.applyGrade(commandEncoder, partial, sampler, inputView, inputView, stage, stage, size);
+    }
   }
 
   destroy(): void {

@@ -32,7 +32,8 @@ function isParticleRenderEffect(effect: Effect): boolean {
 
 export function splitLayerEffects(
   effects: Effect[] | undefined,
-  skipEffects = false
+  skipEffects = false,
+  separateInlineEffects = false,
 ): LayerEffectStack {
   const inlineEffects: InlineEffectParams = {
     brightness: 0,
@@ -47,7 +48,7 @@ export function splitLayerEffects(
 
   // A multi-effect chain must execute in stack order. Folding color operations into
   // the final compositor would move them past blur/distortion and merge duplicates.
-  const preserveOrder = effects.filter(effect => effect.enabled && !effect.type.startsWith('audio-')).length > 1;
+  const preserveOrder = separateInlineEffects || effects.filter(effect => effect.enabled && !effect.type.startsWith('audio-')).length > 1;
   const hasRenderEffect = effects.some((effect) => (
     effect.enabled &&
     !effect.type.startsWith('audio-') &&

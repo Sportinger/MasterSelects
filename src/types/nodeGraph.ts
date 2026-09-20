@@ -143,6 +143,8 @@ export interface NodeGraphLayout {
 }
 
 export interface NodeGraphNode {
+  /** Projected viewer presentation; preferences are stored on the owning clip. */
+  preview?: { enabled: boolean; requested: boolean; portId?: string; key: string; aspectRatio?: number };
   id: string;
   kind: NodeGraphNodeKind;
   runtime: NodeGraphRuntimeKind;
@@ -282,6 +284,7 @@ export type ClipNodeGraphForcedBuiltIn = 'transform' | 'mask' | 'color';
 
 export interface ClipNodeGraph {
   version: 1;
+  previews?: { enabled: boolean; nodes: Record<string, { enabled: boolean; portId?: string }> };
   stabilization?: import('./faceStabilization').ClipStabilizationGraph;
   keyframeNodes?: import('./keyframeNode').KeyframeNodeDefinition[];
   scene?: import('./operatorGraph').SceneOperatorGraph;

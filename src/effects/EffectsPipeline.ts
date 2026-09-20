@@ -16,6 +16,7 @@ import { SplitComparePipeline } from './SplitComparePipeline';
 import type { SplitCompareSettings } from '../stores/splitCompareStore';
 import { getLandmarkEffectPoints } from '../services/landmarkTracking/landmarkRuntime';
 import { DenseTerrainPipeline } from './tracking/DenseTerrainPipeline';
+import { nodePreviewTextureTap } from '../services/nodePreview/NodePreviewTextureTap';
 
 const log = Logger.create('EffectsPipeline');
 
@@ -457,6 +458,7 @@ export class EffectsPipeline {
         effectInput=effectOutput;
         effectOutput=this.getNextOutputView(effectOutput,pingView,pongView);
         swapped=!swapped;
+        nodePreviewTextureTap.capture(`effect:${effect.id}`, this.device, commandEncoder, sampler, effectInput, outputWidth, outputHeight);
         continue;
       }
       const definition = getEffect(effect.type);
@@ -488,6 +490,7 @@ export class EffectsPipeline {
           effectInput = effectOutput;
           effectOutput = this.getNextOutputView(effectOutput, pingView, pongView);
           swapped = !swapped;
+          nodePreviewTextureTap.capture(`effect:${effect.id}`, this.device, commandEncoder, sampler, effectInput, outputWidth, outputHeight);
         } catch (error) {
           log.error(`Compute effect failed: ${effect.type}`, error);
         }
@@ -610,6 +613,7 @@ export class EffectsPipeline {
       effectInput = effectOutput;
       effectOutput = this.getNextOutputView(effectOutput, pingView, pongView);
       swapped = !swapped;
+      nodePreviewTextureTap.capture(`effect:${effect.id}`, this.device, commandEncoder, sampler, effectInput, outputWidth, outputHeight);
     }
 
     if (compare?.settings.enabled && effectInput !== inputView) {

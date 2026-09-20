@@ -24,6 +24,7 @@ import { PlanarTrackingProjectionPipeline } from './PlanarTrackingProjectionPipe
 import { resolvePlanarTrackingProjection } from '../../services/planarTracking/trackingBindingRender';
 import { IDENTITY_TRACKING_SOURCE_TRANSFORM } from '../../services/planarTracking/trackingSourceTransform';
 import { indexTrackingSourceTransforms } from './trackingSourceFrames';
+import { nodePreviewTextureTap } from '../../services/nodePreview/NodePreviewTextureTap';
 import {
   layerPositionForTerrainScreenAnchor,
   resolveTerrainScreenAnchors,
@@ -247,6 +248,7 @@ export class Compositor {
       const maskInfo = this.maskTextureManager.getMaskInfo(maskLookupId);
       const hasMask = maskInfo.hasMask;
       const maskTextureView = maskInfo.view;
+      if (layer.sourceClipId) nodePreviewTextureTap.capture(`mask:${layer.sourceClipId}`, state.device, commandEncoder, state.sampler, maskTextureView, sourceWidth, sourceHeight);
 
       this.maskTextureManager.logMaskState(maskLookupId, hasMask);
 
@@ -255,7 +257,7 @@ export class Compositor {
         complexEffects,
         renderEffects,
         unsupportedAfterRenderEffect,
-      } = splitLayerEffects(adjustmentEffects, state.skipEffects);
+      } = splitLayerEffects(adjustmentEffects, state.skipEffects, adjustmentEffects.some(effect => nodePreviewTextureTap.has(`effect:${effect.id}`)));
       if (unsupportedAfterRenderEffect?.length) {
         log.warn('Ignoring effects after terminal render effect', {
           layerId: layer.id,
@@ -288,6 +290,8 @@ export class Compositor {
         && !!this.colorPipeline
         && !state.skipEffects
         && !!layer.colorCorrection?.enabled;
+      const colorPreview = !!layer.sourceClipId && (nodePreviewTextureTap.has(`color-input:${layer.sourceClipId}`)
+        || nodePreviewTextureTap.has(`color:${layer.sourceClipId}`) || nodePreviewTextureTap.matching(`color-node:${layer.sourceClipId}:`).length > 0);
       const requestedTerrainProjection = !isAdjustmentLayer
         ? layer.terrainProjection
         : undefined;
@@ -305,7 +309,7 @@ export class Compositor {
       if (requestedTerrainProjection && !terrainProjection) continue;
       if (requestedTrackingProjection && !trackingProjection) continue;
       const needsSourcePreprocess =
-        (hasColorCorrection ||
+        (hasColorCorrection || colorPreview ||
           !!(complexEffects && complexEffects.length > 0) ||
           !!(renderEffects && renderEffects.length > 0) ||
           (!!(terrainProjection || trackingProjection) && !!data.externalTexture)) &&
@@ -380,6 +384,10 @@ export class Compositor {
             useExternalTexture = false;
             sourceExternalTexture = null;
 
+            if (layer.sourceClipId && colorPreview) {
+              nodePreviewTextureTap.capture(`color-input:${layer.sourceClipId}`, state.device, commandEncoder, state.sampler, sourceTextureView, sourceWidth, sourceHeight);
+              this.colorPipeline?.previewGradeOutputs(layer.sourceClipId, commandEncoder, layer.colorCorrection, state.sampler, sourceTextureView, { width: sourceWidth, height: sourceHeight });
+            }
             if (hasColorCorrection) {
               const colorResult = this.colorPipeline!.applyGrade(
                 commandEncoder,
@@ -387,10 +395,13 @@ export class Compositor {
                 state.sampler,
                 sourceTextureView,
                 state.effectTempView2,
-                resourceLayerId
+                resourceLayerId,
+                undefined,
+                { width: state.outputWidth, height: state.outputHeight },
               );
               sourceTextureView = colorResult.finalView;
             }
+            if (layer.sourceClipId) nodePreviewTextureTap.capture(`color:${layer.sourceClipId}`, state.device, commandEncoder, state.sampler, sourceTextureView, sourceWidth, sourceHeight);
 
             if (complexEffects && complexEffects.length > 0) {
               const effectOutput = sourceTextureView === state.effectTempView
@@ -571,6 +582,13 @@ export class Compositor {
       compositePass.setBindGroup(0, bindGroup);
       compositePass.draw(3);
       compositePass.end();
+      if (layer.sourceClipId) nodePreviewTextureTap.draw(`output:${layer.sourceClipId}`, state.device, commandEncoder, state.outputWidth, state.outputHeight, pass => {
+        const empty = nodePreviewTextureTap.transparentView(state.device);
+        const previewBind = useExternalTexture && sourceExternalTexture
+          ? this.compositorPipeline.createExternalCompositeBindGroup(state.sampler, empty, sourceExternalTexture, uniformBuffer, maskTextureView)
+          : this.compositorPipeline.createCompositeBindGroup(state.sampler, empty, sourceTextureView!, uniformBuffer, maskTextureView);
+        pass.setPipeline(pipeline); pass.setBindGroup(0, previewBind); pass.draw(3);
+      });
 
       // Swap buffers
       const temp = readView;

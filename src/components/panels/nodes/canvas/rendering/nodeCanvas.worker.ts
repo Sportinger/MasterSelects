@@ -26,8 +26,10 @@ self.onmessage = (event: MessageEvent<CanvasMessage>) => {
     if (message.type === 'init') {
       const base = message.base.getContext('2d'), overlay = message.overlay.getContext('2d');
       if (!base || !overlay) throw new Error('Canvas 2D unavailable');
-      painter = new NodeCanvasPainter(base, overlay);
+      const preview = message.previews?.getContext('2d') ?? undefined;
+      painter = new NodeCanvasPainter(base, overlay, preview, () => new OffscreenCanvas(1, 1).getContext('2d'));
     } else painter?.update(message);
+    if (message.type === 'previews') self.postMessage({ type: 'previews-ready', batchId: message.batchId, previewCount: painter?.previewCount });
     // Pointer edits must not wait behind the 30 Hz decorative animation timer.
     if (message.type === 'scene' || message.type === 'view') { clearTimeout(timer); timer = undefined; }
     if (timer === undefined) timer = setTimeout(frame, 0);

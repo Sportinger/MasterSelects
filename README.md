@@ -104,6 +104,11 @@ During playback and timeline scrubbing, light pulses and direction arrows show
 the flow from output to input. They fade when the timeline rests.
 Graph panning reuses unchanged nodes and cables; playback avoids repeated dock
 layout writes, tab measurements and effect evaluation for sibling parameter rows.
+Inline node previews start enabled, can be toggled individually or together, and
+preserve image aspect ratios. A shared worker canvas caches visible thumbnails;
+preview-aware placement keeps cards and expanded group frames apart. Image/color stages, saved
+tracking/geometry, material swatches, camera/light values and scene output have
+viewers without starting extra decoders or analysis jobs.
 
 Media imports report processing and save failures. Failed audio-proxy writes can
 be retried; project packages follow the configured save policy.
