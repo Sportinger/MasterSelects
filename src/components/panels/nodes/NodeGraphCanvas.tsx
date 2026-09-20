@@ -2,7 +2,7 @@ import { NodeGraphGroups } from './canvas/NodeGraphGroups';
 import { NodeGraphCanvasSurface } from './canvas/rendering/NodeGraphCanvasSurface';
 import { annotatedGraphBounds, nodeGroupBounds } from './canvas/groupBounds';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, PointerEvent as ReactPointerEvent, WheelEvent } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import type {
   NodeGraph,
   NodeGraphConnectionRequest,
@@ -12,7 +12,8 @@ import type {
 } from '../../../services/nodeGraph';
 import { NodeGraphEdges } from './canvas/NodeGraphEdges';
 import { NodeGraphNodeCard } from './canvas/NodeGraphNodeCard';
-import type { NodeGraphPoint, Viewport } from './canvas/canvasGeometry';
+import type { NodeGraphPoint } from './canvas/canvasGeometry';
+import { useNodeGraphViewport } from './canvas/useNodeGraphViewport';
 import { useNodeConnectionDrag } from './canvas/useNodeConnectionDrag';
 import { getConnectionPlugs } from './canvas/connectionPlugs';
 import { NodeGraphPlugs } from './canvas/NodeGraphPlugs';
@@ -94,7 +95,7 @@ export function NodeGraphCanvas({
   const panGestureRef = useRef<PanGesture | null>(null);
   const nodeDragGestureRef = useRef<NodeDragGesture | null>(null);
   const suppressNextClickRef = useRef(false);
-  const [viewport, setViewport] = useState<Viewport>(DEFAULT_VIEWPORT);
+  const { viewport, setViewport } = useNodeGraphViewport(canvasRef);
   const [isPanning, setIsPanning] = useState(false);
   const [canvasRendered, setCanvasRendered] = useState(false);
   const [draftLayouts, setDraftLayouts] = useState<Record<string, NodeGraphLayout>>({});
@@ -148,7 +149,7 @@ export function NodeGraphCanvas({
       panX: FIT_MARGIN - (bounds.left * nextZoom),
       panY: FIT_MARGIN - (bounds.top * nextZoom),
     });
-  }, []);
+  }, [setViewport]);
   const fitGraph = useCallback(() => fitBounds(graphBounds), [fitBounds, graphBounds]);
   const focusGroup = useCallback((id: string) => {
     const members = new Set(graph.groups?.find(g => g.id === id)?.nodeIds);
@@ -174,7 +175,7 @@ export function NodeGraphCanvas({
 
   const resetView = useCallback(() => {
     setViewport(DEFAULT_VIEWPORT);
-  }, []);
+  }, [setViewport]);
 
   const getGraphPointFromClient = useCallback((clientX: number, clientY: number): NodeGraphPoint => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -192,27 +193,6 @@ export function NodeGraphCanvas({
     graphId: graph.id, canvasRef, nodesById, getGraphPoint: getGraphPointFromClient,
     onConnectPorts, onReconnectPorts, onDisconnectEdge,
   });
-
-  const handleWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const pointerX = event.clientX - rect.left;
-    const pointerY = event.clientY - rect.top;
-    const boardX = (pointerX - viewport.panX) / viewport.zoom;
-    const boardY = (pointerY - viewport.panY) / viewport.zoom;
-    const direction = event.deltaY > 0 ? -1 : 1;
-    const zoomFactor = direction > 0 ? 1.08 : 1 / 1.08;
-    const nextZoom = clamp(viewport.zoom * zoomFactor, MIN_ZOOM, MAX_ZOOM);
-
-    setViewport({
-      zoom: nextZoom,
-      panX: pointerX - (boardX * nextZoom),
-      panY: pointerY - (boardY * nextZoom),
-    });
-  }, [viewport]);
 
   const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) {
@@ -250,7 +230,7 @@ export function NodeGraphCanvas({
       panX: gesture.panX + (event.clientX - gesture.clientX),
       panY: gesture.panY + (event.clientY - gesture.clientY),
     }));
-  }, [moveConnectionDrag]);
+  }, [moveConnectionDrag, setViewport]);
 
   const finishPanGesture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     const gesture = panGestureRef.current;
@@ -410,7 +390,6 @@ export function NodeGraphCanvas({
         className={`node-workspace-canvas${canvasRendered ? ' canvas-rendered' : ''}`}
         tabIndex={0}
         {...portHoverEvents}
-        onWheel={handleWheel}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={(event) => {

@@ -14,6 +14,17 @@ presentation, never rendering or a saved bake.
 bindings route each edit to its existing owner; the UI does not maintain a second
 copy of effect parameters, Flock definitions, color grades or 3D settings.
 
+## Canvas navigation
+
+Mouse-wheel and trackpad scrolling zoom smoothly around the pointer. Zoom is
+continuous and exponential: the scroll distance determines the proportional
+change, including fine trackpad movements. Pixel, line and page wheel input are
+normalized, and short frame-based smoothing softens mouse-wheel notches. The
+zoom range remains 18–240%; horizontal-only scrolling does not change zoom.
+
+Dragging, **Fit**, **Focus** and **Reset** interrupt any pending zoom animation.
+Reduced-motion preferences keep the same continuous zoom without smoothing.
+
 ## Connection flow
 
 While playing or moving the timeline playhead, cables show two evenly spaced
