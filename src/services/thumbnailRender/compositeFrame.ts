@@ -203,7 +203,9 @@ function applyComplexEffectsIfNeeded(
       width,
       height,
       target.effectTempTexture,
-      target.effectTempTexture2
+      target.effectTempTexture2,
+      undefined,
+      0, // Thumbnails have no composition clock; time-based graphs are deterministic at frame zero.
     );
 
     textureView = effectResult.finalView;

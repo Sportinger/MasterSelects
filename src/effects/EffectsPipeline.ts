@@ -123,7 +123,7 @@ export class EffectsPipeline {
   ): Float32Array | null {
     const registered = getEffect(effect.type);
     const definition = resolvedDefinition ?? (isImageGraphEffectType(effect.type) && isFullscreenEffectDefinition(registered)
-      ? imageGraphDefinition(effect, registered)
+      ? imageGraphDefinition(effect, registered, timelineTimeSeconds)
       : registered);
     if (!isFullscreenEffectDefinition(definition) && !isComputeEffectDefinition(definition)) return null;
 
@@ -304,6 +304,7 @@ export class EffectsPipeline {
         source: { kind: 'texture', view: effectInput },
         width: outputWidth,
         height: outputHeight,
+        timelineTimeSeconds,
       });
       if (effect.type === 'voxel-relief') nodeScalarSampleTap.capture(`voxel-effect:${effect.id}`, this.device, commandEncoder, sampler, effectInput);
       if(effect.terrainRender){
@@ -317,7 +318,7 @@ export class EffectsPipeline {
       }
       const registered = getEffect(effect.type);
       const definition = imageGraphEffect && isFullscreenEffectDefinition(registered)
-        ? imageGraphDefinition(effect, registered) : registered;
+        ? imageGraphDefinition(effect, registered, timelineTimeSeconds) : registered;
       if (isComputeEffectDefinition(definition)) {
         if (definition.computeMode === 'analog-signal' && effect.operatorGraph?.incomplete) continue;
         const effectParams = definition.computeMode === 'analog-signal' ? null : this.createEffectUniformData(effect, outputWidth, outputHeight, timelineTimeSeconds);

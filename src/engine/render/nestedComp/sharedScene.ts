@@ -116,7 +116,7 @@ export function process3DLayersForNestedScene(params: Process3DLayersForNestedPa
     null,
     maskTextureManager,
     'main',
-    effectsPipeline && sampler ? { effectsPipeline, sampler } : undefined,
+    effectsPipeline && sampler ? { effectsPipeline, sampler, timelineTimeSeconds: currentTime ?? 0 } : undefined,
   );
   if (!textureView) {
     for (let i = indices3D.length - 1; i >= 0; i--) layerData.splice(indices3D[i], 1);

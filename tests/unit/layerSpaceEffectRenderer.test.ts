@@ -51,6 +51,7 @@ describe('LayerSpaceEffectRenderer', () => {
         commandEncoder: {} as GPUCommandEncoder,
         effectsPipeline: effectsPipeline as never,
         sampler: {} as GPUSampler,
+        timelineTimeSeconds: 2.25,
         layers: [layer],
         targetKey: 'main',
         resolveSource: () => ({ view: sourceView, width: 640, height: 360 }),
@@ -61,7 +62,7 @@ describe('LayerSpaceEffectRenderer', () => {
       expect(effectsPipeline.applyEffects.mock.calls[0]?.[3]).toBe(sourceView);
       expect(effectsPipeline.applyEffects.mock.calls[0]?.[7]).toBe(640);
       expect(effectsPipeline.applyEffects.mock.calls[0]?.[8]).toBe(360);
-      expect(effectsPipeline.applyEffects.mock.calls[0]?.[12]).toBe(7.5);
+      expect(effectsPipeline.applyEffects.mock.calls[0]?.[12]).toBe(2.25);
       expect(result.get('plane-1')).toEqual(expect.objectContaining({
         label: expect.stringContaining('pong-view'),
       }));
@@ -71,6 +72,7 @@ describe('LayerSpaceEffectRenderer', () => {
         commandEncoder: {} as GPUCommandEncoder,
         effectsPipeline: effectsPipeline as never,
         sampler: {} as GPUSampler,
+        timelineTimeSeconds: 2.25,
         layers: [],
         targetKey: 'main',
         resolveSource: () => null,

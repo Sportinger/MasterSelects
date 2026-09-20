@@ -3,7 +3,7 @@ import { effectOperatorGraph, effectOperatorParams } from '../operators/effectGr
 import { compileImageOperatorPreview } from '../operators/imageOperatorGraph';
 import { nodePreviewTextureTap } from './NodePreviewTextureTap';
 import { imageOperatorPreviewPrefix, parseImageOperatorPreviewStage } from './imageOperatorPreviewStages';
-import { packImageOperatorParameters } from '../operators/imageOperatorParameters';
+import { packImageOperatorRuntimeUniforms } from '../operators/imageOperatorRuntimeUniforms';
 
 export type ImageOperatorPreviewSource =
   | { kind: 'texture'; view: GPUTextureView }
@@ -17,6 +17,8 @@ export interface CaptureImageOperatorPreviewsOptions {
   source: ImageOperatorPreviewSource;
   width: number;
   height: number;
+  /** Composition-local render clock. Callers without a render context are deterministic at zero. */
+  timelineTimeSeconds?: number;
 }
 
 interface DevicePipelines { device: GPUDevice; pipelines: Map<string, GPURenderPipeline> }
@@ -35,13 +37,13 @@ struct ImagePreviewVertex { @builtin(position) position: vec4f, @location(0) uv:
   return result;
 }`;
 
-function pipelineFor(device: GPUDevice, key: string, wgsl: string, source: ImageOperatorPreviewSource, needsUv: boolean, hasValues: boolean): GPURenderPipeline {
+function pipelineFor(device: GPUDevice, key: string, wgsl: string, source: ImageOperatorPreviewSource, needsUv: boolean, needsTime: boolean, hasValues: boolean): GPURenderPipeline {
   if (cache?.device !== device) {
     cache = { device, pipelines: new Map() };
     const owner = cache;
     void device.lost.then(() => { if (cache === owner) cache = undefined; });
   }
-  const cacheKey = `${source.kind}:${needsUv ? 'uv' : 'pixel'}:${hasValues ? 'values' : 'literal'}:${key}`;
+  const cacheKey = `${source.kind}:${needsUv ? 'uv' : 'pixel'}:${needsTime ? 'time' : 'static'}:${hasValues ? 'values' : 'literal'}:${key}`;
   const existing = cache.pipelines.get(cacheKey); if (existing) return existing;
   const textureDeclaration = source.kind === 'external'
     ? '@group(0) @binding(1) var imagePreviewSource: texture_external;'
@@ -49,12 +51,21 @@ function pipelineFor(device: GPUDevice, key: string, wgsl: string, source: Image
   const sample = source.kind === 'external'
     ? 'textureSampleBaseClampToEdge(imagePreviewSource, imagePreviewSampler, input.uv)'
     : 'textureSample(imagePreviewSource, imagePreviewSampler, input.uv)';
+  const runtimeDeclaration = hasValues && needsTime
+    ? `struct ImagePreviewRuntime { imageParameters: ImageOperatorParameters, timelineTimeSeconds: f32, _pad0: f32, _pad1: f32, _pad2: f32, };
+@group(0) @binding(2) var<uniform> imagePreviewRuntime: ImagePreviewRuntime;`
+    : hasValues
+      ? '@group(0) @binding(2) var<uniform> imageParameters: ImageOperatorParameters;'
+      : needsTime
+        ? `struct ImagePreviewRuntime { timelineTimeSeconds: f32, _pad0: f32, _pad1: f32, _pad2: f32, };
+@group(0) @binding(2) var<uniform> imagePreviewRuntime: ImagePreviewRuntime;`
+        : '';
   const module = device.createShaderModule({ label: 'image-operator-node-preview', code: `${wgsl}\n${fullscreenVertex}\n
 @group(0) @binding(0) var imagePreviewSampler: sampler;
 ${textureDeclaration}
-${hasValues ? '@group(0) @binding(2) var<uniform> imageParameters: ImageOperatorParameters;' : ''}
+${runtimeDeclaration}
 @fragment fn imagePreviewFragment(input: ImagePreviewVertex) -> @location(0) vec4f {
-  return evaluateImageGraph(${sample}${needsUv ? ', input.uv' : ''}${hasValues ? ', imageParameters' : ''});
+  return evaluateImageGraph(${sample}${needsUv ? ', input.uv' : ''}${needsTime ? ', imagePreviewRuntime.timelineTimeSeconds' : ''}${hasValues ? `, ${needsTime ? 'imagePreviewRuntime.imageParameters' : 'imageParameters'}` : ''});
 }` });
   const pipeline = device.createRenderPipeline({ label: 'image-operator-node-preview', layout: 'auto', vertex: { module, entryPoint: 'imagePreviewVertex' },
     fragment: { module, entryPoint: 'imagePreviewFragment', targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } });
@@ -73,14 +84,15 @@ export function captureImageOperatorPreviews(options: CaptureImageOperatorPrevie
     const target = parseImageOperatorPreviewStage(stage); if (!target) continue;
     try {
       const plan = compileImageOperatorPreview(graph, effectOperatorParams(options.effect), target);
-      const pipeline = pipelineFor(options.device, plan.key, plan.wgsl, options.source, plan.capabilities.includes('uv'), plan.values.length > 0);
+      const needsTime = plan.capabilities.includes('time');
+      const pipeline = pipelineFor(options.device, plan.key, plan.wgsl, options.source, plan.capabilities.includes('uv'), needsTime, plan.values.length > 0);
       nodePreviewTextureTap.draw(stage, options.device, options.encoder, options.width, options.height, pass => {
         const resource = options.source.kind === 'external' ? options.source.texture : options.source.view;
         const entries: GPUBindGroupEntry[] = [
           { binding: 0, resource: options.sampler }, { binding: 1, resource },
         ];
-        if (plan.values.length) {
-          const packed = packImageOperatorParameters(plan.values);
+        const packed = packImageOperatorRuntimeUniforms(plan, options.timelineTimeSeconds ?? 0);
+        if (packed) {
           const buffer = options.device.createBuffer({ size: packed.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
           options.device.queue.writeBuffer(buffer, 0, packed);
           entries.push({ binding: 2, resource: { buffer } });

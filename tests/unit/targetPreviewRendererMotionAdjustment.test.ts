@@ -111,10 +111,11 @@ describe('TargetPreviewRenderer motion-adjustment parity', () => {
       motionRenderer: null,
     } as unknown as RenderDeps;
     const recordFrame = vi.fn();
+    const process3DLayers = vi.fn();
     const renderer = new TargetPreviewRenderer(
       deps,
       recordFrame,
-      vi.fn(),
+      process3DLayers,
       () => 3.25,
       () => false,
     );
@@ -132,6 +133,7 @@ describe('TargetPreviewRenderer motion-adjustment parity', () => {
     ]);
 
     expect(composite).toHaveBeenCalledOnce();
+    expect(process3DLayers.mock.calls[0]?.[8]).toBe(3.25);
     expect(composite.mock.calls[0]?.[0].map((entry) => entry.layer.id)).toEqual([
       'bottom',
       'adjustment',

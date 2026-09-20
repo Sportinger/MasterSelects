@@ -125,6 +125,7 @@ export class SharedScene3DProcessor {
     referenceHeightOrTargetId: number | string = height,
     cameraOverride?: SceneCameraConfig | null,
     targetId?: string,
+    timelineTimeSeconds = 0,
   ): void {
     const hasReferenceSize = typeof referenceWidthOrCameraOverride === 'number';
     const referenceWidth = hasReferenceSize ? referenceWidthOrCameraOverride : width;
@@ -328,7 +329,7 @@ export class SharedScene3DProcessor {
       d.maskTextureManager,
       sceneTargetKey,
       d.effectsPipeline && d.sampler
-        ? { effectsPipeline: d.effectsPipeline, sampler: d.sampler }
+        ? { effectsPipeline: d.effectsPipeline, sampler: d.sampler, timelineTimeSeconds }
         : undefined,
     );
     const gizmoTextureView = sceneGizmo

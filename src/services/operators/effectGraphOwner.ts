@@ -18,7 +18,7 @@ import { createDefaultPointwiseEffectGraph, type EditablePointwiseEffectType } f
 import { createDefaultContextualEffectGraph, type EditableContextualEffectType } from './contextualEffectGraphs';
 
 const LOCAL_IMAGE_EFFECTS = new Set(['invert', 'brightness', 'contrast', 'saturation', 'exposure', 'levels', 'hue-shift', 'temperature', 'vibrance', 'threshold', 'posterize']);
-const CONTEXTUAL_IMAGE_EFFECTS = new Set(['vignette']);
+const CONTEXTUAL_IMAGE_EFFECTS = new Set(['vignette', 'scanlines', 'grain']);
 export function isLocalImageEffectType(type: string): type is 'invert' | EditableColorEffectType | EditablePointwiseEffectType { return LOCAL_IMAGE_EFFECTS.has(type); }
 export function isImageGraphEffectType(type: string): type is 'invert' | EditableColorEffectType | EditablePointwiseEffectType | EditableContextualEffectType {
   return isLocalImageEffectType(type) || CONTEXTUAL_IMAGE_EFFECTS.has(type);
@@ -44,7 +44,8 @@ export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGra
   if (isImageGraphEffectType(effectType)) {
     const fallback = effectType === 'invert' ? createDefaultInvertImageGraph
       : effectType === 'threshold' || effectType === 'posterize' ? () => createDefaultPointwiseEffectGraph(effectType)
-        : effectType === 'vignette' ? () => createDefaultContextualEffectGraph(effectType)
+        : effectType === 'vignette' || effectType === 'scanlines' || effectType === 'grain'
+          ? () => createDefaultContextualEffectGraph(effectType)
         : () => createDefaultColorEffectGraph(effectType);
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
     const graph = migrateImageOperatorGraph(saved);
@@ -78,6 +79,7 @@ export function migratePersistedEffectOperatorGraph(effect: Effect): Effect {
   if (!versionedGraph.incomplete) validateEffectOwnerGraph(effect, versionedGraph, effect.params);
   const params = { ...effect.params };
   delete params[EFFECT_GRAPH_PARAM];
+  if (effect.type === 'grain' && params.seed === undefined) params.seed = 0;
   return { ...effect, params, operatorGraph: structuredClone(versionedGraph) };
 }
 export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: EffectOperatorGraph, params: Record<string, unknown>) {

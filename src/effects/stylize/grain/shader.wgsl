@@ -5,6 +5,10 @@ struct GrainParams {
   size: f32,
   speed: f32,
   time: f32,
+  seed: f32,
+  _pad0: f32,
+  _pad1: f32,
+  _pad2: f32,
 };
 
 @group(0) @binding(0) var texSampler: sampler;
@@ -14,7 +18,7 @@ struct GrainParams {
 // Simplex-like noise
 fn grainNoise(uv: vec2f, t: f32) -> f32 {
   let seed = uv + vec2f(t * 0.1, t * 0.07);
-  return fract(sin(dot(seed, vec2f(12.9898, 78.233))) * 43758.5453);
+  return fract(sin(dot(seed, vec2f(12.9898, 78.233)) + params.seed) * 43758.5453);
 }
 
 @fragment

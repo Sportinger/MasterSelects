@@ -228,6 +228,7 @@ export class RenderDispatcher {
         referenceHeight,
         cameraOverride,
         targetId,
+        timelineTimeSeconds,
       ) => {
         if (flags.use3DLayers) {
           this.sharedScene3DProcessor.process3DLayers(
@@ -239,6 +240,7 @@ export class RenderDispatcher {
             referenceHeight,
             cameraOverride,
             targetId,
+            timelineTimeSeconds,
           );
         }
       },
@@ -471,6 +473,9 @@ export class RenderDispatcher {
         height,
         referenceSize.width,
         referenceSize.height,
+        undefined,
+        undefined,
+        frameTimelineTime,
       );
     }
     debugSnapshot.after3DLayerData = layerData.length;

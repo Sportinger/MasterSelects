@@ -88,6 +88,19 @@ describe('worker GPU image operator program', () => {
     expect(style.vignetteSize).toBe(0.5);
   });
 
+  it.each([
+    ['scanlines', { density: 9, opacity: 0.8, speed: 2 }, 'scanlineOpacity', 0],
+    ['grain', { amount: 0.4, size: 2, speed: 3, seed: 17 }, 'grainAmount', 0],
+  ] as const)('leaves contextual %s to the authoritative worker compositor', (type, params, legacyField, identity) => {
+    const layer = { opacity: 1, blendMode: 'normal', effects: [
+      { id: type, name: type, type, enabled: true, params },
+    ] } as unknown as Layer;
+    const style = resolveWorkerGpuVideoPresentationLayerStyle(layer);
+    expect(style.operatorProgram).toBeUndefined();
+    expect(style.complexEffectCount).toBe(1);
+    expect(style[legacyField]).toBe(identity);
+  });
+
   it('preserves the compiled edited graph as a serializable layer style', () => {
     const style = resolveWorkerGpuVideoPresentationLayerStyle(layerWithEditedInvert());
     const defaults = resolveWorkerGpuVideoPresentationLayerStyle({ opacity: 1, blendMode: 'normal', effects: [

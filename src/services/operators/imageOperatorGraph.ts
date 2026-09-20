@@ -6,11 +6,11 @@ import { imageFract, imageHsvToRgb, imageRgbToHsv } from './imageColorSemantics'
 import { IMAGE_OPERATOR_PARAMETER_CAPACITY, IMAGE_OPERATOR_PARAMETER_VEC4_COUNT } from './imageOperatorParameters';
 
 export type ImagePlanValue = 'image' | 'rgb' | 'alpha' | 'scalar' | 'boolean' | 'vec2' | 'vec3' | 'vec4';
-export type ImageOperatorCapability = 'uv';
-export interface ImageOperatorEvaluationContext { uv?: [number, number] }
+export type ImageOperatorCapability = 'uv' | 'time';
+export interface ImageOperatorEvaluationContext { uv?: [number, number]; timelineTimeSeconds?: number }
 export interface ImagePlanInstruction {
   nodeId: string;
-  operation: 'input' | 'uv' | 'constant' | 'parameter' | 'subtract' | 'add-scalar' | 'multiply-scalar' | 'divide-ieee-scalar' | 'reciprocal-scalar' | 'exp2-scalar' | 'fract-scalar' | 'max-scalar' | 'smoothstep-scalar' | 'mix-scalar' | 'greater-scalar' | 'select-scalar' | 'subtract-vec2' | 'multiply-vec2' | 'length-vec2' | 'scalar-to-vec2' | 'subtract-rgb' | 'add-rgb' | 'multiply-rgb' | 'divide-ieee-rgb' | 'max-rgb' | 'power-rgb' | 'floor-rgb' | 'clamp-rgb' | 'mix-rgb' | 'mix-components-rgb' | 'reduce-min-rgb' | 'reduce-max-rgb' | 'luminance-rec601' | 'luminance-rec709' | 'scalar-to-rgb' | 'rgb-to-vec3' | 'vec3-to-rgb' | 'rgb-to-hsv' | 'hsv-to-rgb' | 'split-rgb' | 'split-alpha' | 'combine' | 'image-to-vec4' | 'vec4-to-image' | 'split-component' | 'combine-vector';
+  operation: 'input' | 'uv' | 'time' | 'constant' | 'parameter' | 'subtract' | 'add-scalar' | 'multiply-scalar' | 'divide-ieee-scalar' | 'reciprocal-scalar' | 'exp2-scalar' | 'fract-scalar' | 'max-scalar' | 'smoothstep-scalar' | 'mix-scalar' | 'greater-scalar' | 'select-scalar' | 'add-vec2' | 'subtract-vec2' | 'multiply-vec2' | 'dot-vec2' | 'length-vec2' | 'sin-scalar' | 'scalar-to-vec2' | 'subtract-rgb' | 'add-rgb' | 'multiply-rgb' | 'divide-ieee-rgb' | 'max-rgb' | 'power-rgb' | 'floor-rgb' | 'clamp-rgb' | 'mix-rgb' | 'mix-components-rgb' | 'reduce-min-rgb' | 'reduce-max-rgb' | 'luminance-rec601' | 'luminance-rec709' | 'scalar-to-rgb' | 'rgb-to-vec3' | 'vec3-to-rgb' | 'rgb-to-hsv' | 'hsv-to-rgb' | 'split-rgb' | 'split-alpha' | 'combine' | 'image-to-vec4' | 'vec4-to-image' | 'split-component' | 'combine-vector';
   type: ImagePlanValue;
   inputs: number[];
   value?: number;
@@ -157,6 +157,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     switch (current.operator) {
       case 'image.frame': register = emit({ nodeId: current.id, operation: 'input', type: 'image', inputs: [] }); break;
       case 'image.normalized-uv': register = emit({ nodeId: current.id, operation: 'uv', type: 'vec2', inputs: [] }); break;
+      case 'image.timeline-time': register = emit({ nodeId: current.id, operation: 'time', type: 'scalar', inputs: [] }); break;
       case 'values.number': {
         const binding = current.bindings.value;
         const raw = typeof binding === 'string' ? params[binding] : undefined;
@@ -206,15 +207,22 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
           inputs: [a, visitSource(current, 'b'), visitSource(current, 't')] });
         break;
       }
-      case 'math.subtract.vec2': case 'math.multiply.vec2': {
+      case 'math.add.vec2': case 'math.subtract.vec2': case 'math.multiply.vec2': {
         const a = visitSource(current, 'a');
         register = current.bypassed ? a : emit({ nodeId: current.id,
-          operation: current.operator === 'math.subtract.vec2' ? 'subtract-vec2' : 'multiply-vec2', type: 'vec2',
+          operation: current.operator === 'math.add.vec2' ? 'add-vec2' : current.operator === 'math.subtract.vec2' ? 'subtract-vec2' : 'multiply-vec2', type: 'vec2',
           inputs: [a, visitSource(current, 'b')] });
         break;
       }
+      case 'vector.dot.vec2': register = emit({ nodeId: current.id, operation: 'dot-vec2', type: 'scalar',
+        inputs: [visitSource(current, 'a'), visitSource(current, 'b')] }); break;
       case 'vector.length.vec2': register = emit({ nodeId: current.id, operation: 'length-vec2', type: 'scalar',
         inputs: [visitSource(current, 'value')] }); break;
+      case 'math.sin.scalar': {
+        const value = visitSource(current, 'value');
+        register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'sin-scalar', type: 'scalar', inputs: [value] });
+        break;
+      }
       case 'convert.scalar-to-vec2': register = emit({ nodeId: current.id, operation: 'scalar-to-vec2', type: 'vec2',
         inputs: [visitSource(current, 'value')] }); break;
       case 'compare.greater.scalar': register = emit({ nodeId: current.id, operation: 'greater-scalar', type: 'boolean',
@@ -305,7 +313,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
   const output = visit(selected.node, selected.output);
   const expressions = instructions.map((item, index) => {
     const args = item.inputs.map(input => `v${input}`);
-    const expression = item.operation === 'input' ? 'pixel' : item.operation === 'uv' ? 'inputUv' : item.operation === 'constant' ? f32(item.value ?? 0)
+    const expression = item.operation === 'input' ? 'pixel' : item.operation === 'uv' ? 'inputUv' : item.operation === 'time' ? 'timelineTimeSeconds' : item.operation === 'constant' ? f32(item.value ?? 0)
       : item.operation === 'parameter' ? parameterExpression(item.value ?? 0)
       : item.operation === 'subtract' ? `${args[0]} - ${args[1]}` : item.operation === 'split-rgb' ? `${args[0]}.rgb`
       : item.operation === 'add-scalar' ? `${args[0]} + ${args[1]}` : item.operation === 'multiply-scalar' ? `${args[0]} * ${args[1]}`
@@ -314,8 +322,9 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       : item.operation === 'max-scalar' ? `max(${args[0]}, ${args[1]})` : item.operation === 'greater-scalar' ? `${args[0]} > ${args[1]}`
       : item.operation === 'smoothstep-scalar' ? `smoothstep(${args[0]}, ${args[1]}, ${args[2]})`
       : item.operation === 'mix-scalar' ? `mix(${args[0]}, ${args[1]}, ${args[2]})`
-      : item.operation === 'subtract-vec2' ? `${args[0]} - ${args[1]}` : item.operation === 'multiply-vec2' ? `${args[0]} * ${args[1]}`
-      : item.operation === 'length-vec2' ? `length(${args[0]})` : item.operation === 'scalar-to-vec2' ? `vec2f(${args[0]})`
+      : item.operation === 'add-vec2' ? `${args[0]} + ${args[1]}` : item.operation === 'subtract-vec2' ? `${args[0]} - ${args[1]}` : item.operation === 'multiply-vec2' ? `${args[0]} * ${args[1]}`
+      : item.operation === 'dot-vec2' ? `dot(${args[0]}, ${args[1]})` : item.operation === 'length-vec2' ? `length(${args[0]})`
+      : item.operation === 'sin-scalar' ? `sin(${args[0]})` : item.operation === 'scalar-to-vec2' ? `vec2f(${args[0]})`
       : item.operation === 'select-scalar' ? `select(${args[0]}, ${args[1]}, ${args[2]})`
       : item.operation === 'split-alpha' ? `${args[0]}.a` : item.operation === 'subtract-rgb' ? `${args[0]} - ${args[1]}`
       : item.operation === 'add-rgb' ? `${args[0]} + ${args[1]}` : item.operation === 'multiply-rgb' ? `${args[0]} * ${args[1]}`
@@ -337,7 +346,9 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     return `  let v${index}: ${type} = ${expression};`;
   });
   const outputType = instructions[output].type;
-  const capabilities: readonly ImageOperatorCapability[] = instructions.some(item => item.operation === 'uv') ? ['uv'] : [];
+  const capabilities: ImageOperatorCapability[] = [];
+  if (instructions.some(item => item.operation === 'uv')) capabilities.push('uv');
+  if (instructions.some(item => item.operation === 'time')) capabilities.push('time');
   const canonical = JSON.stringify({ capabilities, instructions: instructions.map(({ nodeId: _nodeId, ...instruction }) => instruction), output, outputType });
   const returned = outputType === 'image' || outputType === 'vec4' ? `v${output}` : outputType === 'rgb' || outputType === 'vec3' ? `vec4f(v${output}, 1.0)`
     : outputType === 'vec2' ? `vec4f(v${output}, 0.0, 1.0)`
@@ -345,6 +356,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     : outputType === 'alpha' || outputType === 'scalar' ? `vec4f(v${output}, v${output}, v${output}, 1.0)` : `v${output}`;
   const parameters = ['inputColor: vec4f'];
   if (capabilities.includes('uv')) parameters.push('inputUv: vec2f');
+  if (capabilities.includes('time')) parameters.push('timelineTimeSeconds: f32');
   if (parameterValues.length) parameters.push('imageParameters: ImageOperatorParameters');
   return { fusion: 'inline', capabilities, instructions, output, values: parameterValues, key: `image-v1-${hash(canonical)}`,
     wgsl: [IMAGE_COLOR_WGSL, ...(parameterValues.length ? [IMAGE_PARAMETER_WGSL] : []),
@@ -361,11 +373,15 @@ export function compileImageOperatorPreview(graph: EffectOperatorGraph, params: 
 
 export function evaluateImageOperatorPlan(plan: ImageOperatorPlan, pixel: [number, number, number, number], context: ImageOperatorEvaluationContext = {}): [number, number, number, number] {
   if (plan.capabilities.includes('uv') && !context.uv) throw new Error('Image operator plan requires normalized UV context.');
+  if (plan.capabilities.includes('time') && (typeof context.timelineTimeSeconds !== 'number' || !Number.isFinite(context.timelineTimeSeconds))) {
+    throw new Error('Image operator plan requires finite timeline time context.');
+  }
   const values: Array<number | boolean | number[]> = [];
   for (const item of plan.instructions) {
     const args = item.inputs.map(input => values[input]);
     if (item.operation === 'input') values.push(pixel);
     else if (item.operation === 'uv') values.push(context.uv!);
+    else if (item.operation === 'time') values.push(context.timelineTimeSeconds!);
     else if (item.operation === 'constant') values.push(item.value ?? 0);
     else if (item.operation === 'parameter') values.push(plan.values[item.value ?? 0]);
     else if (item.operation === 'subtract') values.push(evaluateScalarOperation('subtract', args[0] as number, args[1] as number));
@@ -381,9 +397,12 @@ export function evaluateImageOperatorPlan(plan: ImageOperatorPlan, pixel: [numbe
       values.push(t * t * (3 - 2 * t));
     }
     else if (item.operation === 'mix-scalar') values.push((args[0] as number) * (1 - (args[2] as number)) + (args[1] as number) * (args[2] as number));
+    else if (item.operation === 'add-vec2') values.push((args[0] as number[]).map((value, index) => evaluateScalarOperation('add', value, (args[1] as number[])[index])));
     else if (item.operation === 'subtract-vec2') values.push((args[0] as number[]).map((value, index) => evaluateScalarOperation('subtract', value, (args[1] as number[])[index])));
     else if (item.operation === 'multiply-vec2') values.push((args[0] as number[]).map((value, index) => evaluateScalarOperation('multiply', value, (args[1] as number[])[index])));
+    else if (item.operation === 'dot-vec2') values.push((args[0] as number[])[0] * (args[1] as number[])[0] + (args[0] as number[])[1] * (args[1] as number[])[1]);
     else if (item.operation === 'length-vec2') values.push(Math.hypot(...args[0] as number[]));
+    else if (item.operation === 'sin-scalar') values.push(Math.sin(args[0] as number));
     else if (item.operation === 'scalar-to-vec2') values.push([args[0] as number, args[0] as number]);
     else if (item.operation === 'greater-scalar') values.push((args[0] as number) > (args[1] as number));
     else if (item.operation === 'select-scalar') values.push((args[2] as boolean) ? args[1] as number : args[0] as number);

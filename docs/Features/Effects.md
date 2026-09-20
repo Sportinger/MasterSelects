@@ -151,6 +151,12 @@ fullscreen path; ordinary pixel-only graphs keep their inline optimization.
 Animated graph parameters update GPU uniform values while reusing the compiled
 pipeline; changing graph wiring or a structural node constant recompiles it.
 
+Scanlines and Film Grain also expose executable UV/time/math graphs. They use
+composition timeline time for reproducible preview, seeking and export, replacing
+their former wall-clock animation even for legacy graph-less effects. Grain adds
+an explicit Seed control with default `0`; existing controls keep their original
+ranges and defaults. Both preserve source alpha and use one fullscreen pass.
+
 ### Analog Signal Lab
 
 `Analog Signal Lab` is a dedicated six-pass compute effect rather than a

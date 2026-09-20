@@ -78,6 +78,8 @@ describe('image graph lifecycle parity', () => {
       { type: 'threshold', parameter: 'level', from: 0.2, to: 0.8, expected: 0.5 },
       { type: 'posterize', parameter: 'levels', from: 2, to: 10, expected: 6 },
       { type: 'vignette', parameter: 'amount', from: 0, to: 1, expected: 0.5 },
+      { type: 'scanlines', parameter: 'opacity', from: 0.1, to: 0.7, expected: 0.4 },
+      { type: 'grain', parameter: 'amount', from: 0.05, to: 0.25, expected: 0.15 },
     ] as const;
     for (const item of cases) {
       const id = `${item.type}-lifecycle`, clipId = `${item.type}-clip`;
@@ -99,8 +101,9 @@ describe('image graph lifecycle parity', () => {
       const previewParams = effectOperatorParams(preview), exportParams = effectOperatorParams(exported);
       expect(previewParams[item.parameter]).toBeCloseTo(item.expected);
       expect(exportParams[item.parameter]).toBeCloseTo(item.expected);
-      const previewPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(preview), previewParams), pixel, { uv: [0.9, 0.5] });
-      const exportPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(exported), exportParams), pixel, { uv: [0.9, 0.5] });
+      const context = { uv: [0.9, 0.5] as [number, number], timelineTimeSeconds: 1 };
+      const previewPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(preview), previewParams), pixel, context);
+      const exportPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(exported), exportParams), pixel, context);
       expect(previewPixel).toEqual(exportPixel);
       expect(exportPixel[3]).toBe(pixel[3]);
       const endpointPlans = [0, 2].map(time => {
@@ -111,6 +114,19 @@ describe('image graph lifecycle parity', () => {
       expect(endpointPlans[0].wgsl).toBe(endpointPlans[1].wgsl);
       expect(endpointPlans[0].values).not.toEqual(endpointPlans[1].values);
     }
+  });
+
+  it.each(['scanlines', 'grain'] as const)('repeats and seeks %s from explicit composition time', type => {
+    const effect: Effect = { id: `${type}-time`, type, name: type, enabled: true,
+      params: type === 'scanlines' ? { density: 5, opacity: 0.6, speed: 2, seed: 0 }
+        : { amount: 0.25, size: 1.2, speed: 2, seed: 0 } };
+    const plan = compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect));
+    const atOne = evaluateImageOperatorPlan(plan, pixel, { uv: [0.37, 0.61], timelineTimeSeconds: 1 });
+    const repeated = evaluateImageOperatorPlan(plan, pixel, { uv: [0.37, 0.61], timelineTimeSeconds: 1 });
+    const sought = evaluateImageOperatorPlan(plan, pixel, { uv: [0.37, 0.61], timelineTimeSeconds: 2.25 });
+    expect(repeated).toEqual(atOne);
+    expect(sought).not.toEqual(atOne);
+    expect(plan.key).toBe(compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect)).key);
   });
 
   it('restores graph constants through undo/redo and canonical save/load without runtime payloads', async () => {

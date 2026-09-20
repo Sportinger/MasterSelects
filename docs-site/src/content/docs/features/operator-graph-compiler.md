@@ -45,3 +45,23 @@ Exposure, Levels, Hue Shift, Temperature and Vibrance use that owner as well. Th
 Threshold and Posterize are canonical pointwise graphs too. Threshold computes Rec.709 luminance and uses a strict greater-than comparison, so a value equal to the level remains black. Posterize evaluates `floor(rgb * max(levels, 2)) / (max(levels, 2) - 1)` without a final clamp; consequently white can remain above `1.0` until the render target conversion. Both retain source alpha and their original parameter bindings.
 
 Vignette is a canonical contextual image graph. Its normalized fragment-coordinate source is distinct from texture-transform UV: the graph centers and aspect-scales that coordinate, computes the legacy smooth edge factor, and multiplies only RGB while preserving alpha. Its Amount, Size, Softness and Roundness bindings retain the original schemas and keyframes. Because the graph requires fragment context, Vignette remains on the existing fullscreen effect path rather than the pixel-only inline stack.
+
+Scanlines and Grain extend this contextual path with explicit composition timeline
+time. Time is a runtime context input, not a saved parameter or shader literal;
+seeking back to the same time reproduces the same result without rebuilding a
+pipeline. Nested compositions use their own composition clock. Node previews
+receive the same clock as the render they inspect.
+Static thumbnails without composition context use explicit time `0`.
+
+Their graphs reuse scalar/vector math, normalized UV, Rec.709 luminance and RGB
+composition. The added reusable operations are timeline time, scalar sine, Vec2
+addition and Vec2 dot product. Grain exposes its hash as ordinary math nodes,
+including an explicit Seed parameter (default `0`); it is not a noise black box.
+Both preserve alpha and remain one fullscreen pass. Existing parameter IDs,
+bounds and defaults remain unchanged.
+
+This intentionally replaces the previous wall-clock animation of these two
+effects with deterministic timeline animation, including legacy effects loaded
+without a graph. A paused frame no longer changes with elapsed wall time. Seed
+`0` retains the original Grain formula when evaluated at the same supplied time;
+the old browser-clock epoch cannot be reproduced during export or project reload.

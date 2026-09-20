@@ -45,6 +45,7 @@ type Process3DLayers = (
   referenceHeight: number,
   cameraOverride?: SceneCameraConfig | null,
   targetId?: string,
+  timelineTimeSeconds?: number,
 ) => void;
 
 export class TargetPreviewRenderer {
@@ -158,6 +159,7 @@ export class TargetPreviewRenderer {
     const indPongView = localBuffers?.pongView ?? d.renderTargetManager?.getIndependentPongView();
     if (!indPingView || !indPongView) return;
 
+    const targetTimelineTime = frameContext?.timelineTimeSeconds ?? this.getEffectiveTimelineTime();
     this.process3DLayers(
       layerData,
       device,
@@ -167,6 +169,7 @@ export class TargetPreviewRenderer {
       referenceHeight,
       viewportOverride?.cameraOverride,
       canvasId,
+      targetTimelineTime,
     );
 
     const showGrid = target?.showTransparencyGrid ?? false;
@@ -198,8 +201,7 @@ export class TargetPreviewRenderer {
           compositionId: frameContext?.compositionId
             ?? useMediaStore.getState().activeCompositionId
             ?? 'timeline:active',
-          timelineTimeSeconds: frameContext?.timelineTimeSeconds
-            ?? this.getEffectiveTimelineTime(),
+          timelineTimeSeconds: targetTimelineTime,
           layers: motionFrameLayers,
           deviceMaxInstances: getMotionDeviceMaxInstances(device),
           ...getMotionDeviceTextureLimits(device),

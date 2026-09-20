@@ -17,6 +17,7 @@ interface EffectTarget {
 export interface LayerSpaceEffectContext {
   effectsPipeline: EffectsPipeline;
   sampler: GPUSampler;
+  timelineTimeSeconds: number;
 }
 
 interface SourceTexture {
@@ -68,7 +69,7 @@ export class LayerSpaceEffectRenderer {
         target.ping,
         target.pong,
         undefined,
-        layer.mediaTime ?? 0,
+        options.timelineTimeSeconds,
       );
       views.set(layer.layerId, result.finalView);
     }

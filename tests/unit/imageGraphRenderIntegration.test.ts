@@ -18,6 +18,7 @@ import { createOperatorCompositePipeline } from '../../src/engine/pipeline/compo
 import { createDefaultPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
 import { createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
 import { vignette } from '../../src/effects/stylize/vignette';
+import { scanlines } from '../../src/effects/stylize/scanlines';
 
 const colorDefinitions = { brightness, contrast, saturation, exposure, levels,
   'hue-shift': hueShift, temperature, vibrance } as const;
@@ -76,6 +77,17 @@ describe('image graph render integration', () => {
     expect(splitLayerEffects([instance]).complexEffects).toEqual([instance]);
     const definition = imageGraphDefinition(instance, vignette as FullscreenEffectDefinition);
     expect(definition.shader).toContain('evaluateImageGraph(textureSample(inputTex, texSampler, input.uv), input.uv, imageParameters)');
+  });
+
+  it('packs composition time after the shared parameter block without specializing the shader key', () => {
+    const instance = { id: 'scanlines-time', type: 'scanlines', name: 'Scanlines', enabled: true, params: {} };
+    const atTwo = imageGraphDefinition(instance, scanlines as FullscreenEffectDefinition, 2);
+    const atThree = imageGraphDefinition(instance, scanlines as FullscreenEffectDefinition, 3);
+    expect(atTwo.id).toBe(atThree.id);
+    expect(atTwo.uniformSize).toBe(272);
+    expect(atTwo.packUniforms({}, 1920, 1080)?.[64]).toBe(2);
+    expect(atThree.packUniforms({}, 1920, 1080)?.[64]).toBe(3);
+    expect(atTwo.shader).toContain('input.uv, imageGraphRuntime.timelineTimeSeconds, imageGraphRuntime.imageParameters');
   });
 
   it('routes an edited formerly-local graph with UV capability through a fullscreen pass', () => {

@@ -527,7 +527,8 @@ export class Compositor {
           ? { kind: 'external' as const, texture: sourceExternalTexture }
           : sourceTextureView ? { kind: 'texture' as const, view: sourceTextureView } : undefined;
         if (effect && source) captureImageOperatorPreviews({ effect, source, device: state.device,
-          encoder: commandEncoder, sampler: state.sampler, width: sourceWidth, height: sourceHeight });
+          encoder: commandEncoder, sampler: state.sampler, width: sourceWidth, height: sourceHeight,
+          timelineTimeSeconds: state.motionTime ?? 0 });
       }
       let pipeline: GPURenderPipeline;
       let bindGroup: GPUBindGroup;

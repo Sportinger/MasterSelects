@@ -10,7 +10,7 @@ export const grain: EffectDefinition = {
 
   shader,
   entryPoint: 'grainFragment',
-  uniformSize: 16,
+  uniformSize: 32,
 
   params: {
     amount: {
@@ -40,16 +40,26 @@ export const grain: EffectDefinition = {
       step: 0.1,
       animatable: false,
     },
+    seed: {
+      type: 'number',
+      label: 'Seed',
+      default: 0,
+      min: 0,
+      max: 65535,
+      step: 1,
+      animatable: false,
+    },
   },
 
-  packUniforms: (params) => {
-    // Use current time for animation
-    const time = performance.now() / 1000;
+  packUniforms: (params, _width, _height, timelineTimeSeconds = 0) => {
+    const time = Number.isFinite(timelineTimeSeconds) ? timelineTimeSeconds : 0;
     return new Float32Array([
       params.amount as number ?? 0.1,
       params.size as number ?? 1,
       params.speed as number ?? 1,
       time,
+      params.seed as number ?? 0,
+      0, 0, 0,
     ]);
   },
 };
