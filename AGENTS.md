@@ -76,7 +76,13 @@ implementation choices, or mandatory user testing.
    change. For behavior changes, use targeted tests and the running editor
    where useful. Reuse one existing test tab and run scenarios sequentially;
    open another only when isolation is technically necessary, explaining why
-   before opening it. Never alter the user's project to create a test fixture.
+   before opening it. The running local editor at `https://localhost:5173/editor`
+   is explicitly authorized by the user as a test project. Test product behavior
+   directly there: agents may create, modify, and remove test clips, effects,
+   graphs, keyframes, and other project data as needed, without asking again.
+   Prefer this editor for live interaction checks; isolated probes may supplement
+   it for exact GPU/pixel measurements. This authorization applies to the local
+   test project, not other projects, original media files, or production data.
    Inspect results and fix failures without handing routine QA back to the user.
 3. **Match verification to risk.**
    - Documentation/instruction-only edits: inspect the diff and links; no
