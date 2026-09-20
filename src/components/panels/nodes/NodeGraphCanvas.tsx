@@ -1,4 +1,5 @@
 import { NodeGraphGroups } from './canvas/NodeGraphGroups';
+import { NodeGraphCanvasSurface } from './canvas/rendering/NodeGraphCanvasSurface';
 import { annotatedGraphBounds, nodeGroupBounds } from './canvas/groupBounds';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent, WheelEvent } from 'react';
@@ -95,6 +96,7 @@ export function NodeGraphCanvas({
   const suppressNextClickRef = useRef(false);
   const [viewport, setViewport] = useState<Viewport>(DEFAULT_VIEWPORT);
   const [isPanning, setIsPanning] = useState(false);
+  const [canvasRendered, setCanvasRendered] = useState(false);
   const [draftLayouts, setDraftLayouts] = useState<Record<string, NodeGraphLayout>>({});
   const draftLayoutsRef = useRef(draftLayouts);
   draftLayoutsRef.current = draftLayouts;
@@ -405,7 +407,7 @@ export function NodeGraphCanvas({
 
       <div
         ref={canvasRef}
-        className="node-workspace-canvas"
+        className={`node-workspace-canvas${canvasRendered ? ' canvas-rendered' : ''}`}
         tabIndex={0}
         {...portHoverEvents}
         onWheel={handleWheel}
@@ -470,6 +472,9 @@ export function NodeGraphCanvas({
           onOpenAddMenu?.({ x: event.clientX, y: event.clientY, layout, nodeId: targetNodeId });
         }}
       >
+        <NodeGraphCanvasSurface graph={graph} nodes={displayNodes} plugs={plugs} viewport={viewport}
+          selectedNodeId={selectedNodeId} selection={multiSelection} selectedEdgeId={selectedEdgeId}
+          hoveredEdgeId={hoveredEdgeId} hoveredPort={hoveredPort} draft={connectionDraft} canBypass={!!onToggleNodeBypass} onReady={setCanvasRendered} />
         <div
           className="node-workspace-canvas-inner"
           style={{
@@ -478,6 +483,8 @@ export function NodeGraphCanvas({
         >
           <NodeGraphGroups graph={graph} nodes={displayNodes} onToggle={toggleGroup} onFocus={focusGroup} />
           <NodeGraphEdges
+            canvasRendered={canvasRendered}
+            zoom={viewport.zoom}
             graphBounds={graphBounds}
             edges={graph.edges}
             plugs={plugs}
@@ -497,6 +504,7 @@ export function NodeGraphCanvas({
             <NodeGraphNodeCard
               key={node.id}
               node={node}
+              canvasRendered={canvasRendered}
               selectedNodeId={selectedNodeId}
               isInSelection={multiSelection.has(node.id)}
               connectionDraft={connectionDraft}

@@ -1,0 +1,18 @@
+.node-graph-canvas-surface { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.node-graph-canvas-surface canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* DOM remains the interaction/accessibility surface; only its paint is replaced. */
+.node-workspace-canvas.canvas-rendered .node-workspace-node,
+.node-workspace-canvas.canvas-rendered .node-workspace-group { opacity: 0; box-shadow: none; }
+.node-workspace-canvas.canvas-rendered .node-workspace-node:focus-visible,
+.node-workspace-canvas.canvas-rendered .node-workspace-node:has(:focus-visible),
+.node-workspace-canvas.canvas-rendered .node-workspace-group:has(:focus-visible) { opacity: 1; }
+.node-workspace-canvas.canvas-rendered .node-workspace-edge,
+.node-workspace-canvas.canvas-rendered .node-workspace-edge-flow,
+.node-workspace-canvas.canvas-rendered .node-workspace-plug-visual,
+.node-workspace-canvas.canvas-rendered .node-workspace-draft-plug,
+.node-workspace-canvas.canvas-rendered .node-workspace-port-preview,
+.node-workspace-canvas.canvas-rendered .node-workspace-plug-ghost { visibility: hidden; animation: none; filter: none; }
+.node-workspace-canvas.canvas-rendered .node-workspace-plug:focus-visible .node-workspace-plug-visual { visibility: visible; }
+.node-workspace-canvas.canvas-rendered .node-workspace-node { -webkit-tap-highlight-color: transparent; }
+.node-workspace-canvas.canvas-rendered .node-workspace-node:focus:not(:focus-visible) { outline: none; }
+.node-workspace-canvas.canvas-rendered .node-workspace-node:focus-visible { outline: 2px solid var(--accent-color, #79b8fa); outline-offset: 2px; }

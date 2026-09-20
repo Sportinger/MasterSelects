@@ -16,21 +16,42 @@ copy of effect parameters, Flock definitions, color grades or 3D settings.
 
 ## Connection flow
 
-While playing or moving the timeline playhead, cables show light pulses in their
-signal color and a direction arrow from output to input. Backward scrubbing and
-reverse playback keep that same data-flow direction. The overlay fades out after
-scrubbing settles or playback pauses; holding the playhead still does not keep it
-running. Disconnected cables and connection drafts have no flow overlay.
+While playing or moving the timeline playhead, cables show two evenly spaced
+signal points from output to input. Their speed follows playback speed and the
+measured scrub speed: slow drags move them slowly, fast drags speed them up.
+Static arrows keep the direction readable while paused.
+Backward scrubbing and reverse playback keep that same data-flow direction.
+Motion stops after scrubbing settles or playback pauses; holding the playhead
+still does not keep it running. Disconnected cables and connection drafts have
+no moving signal.
 
-Reduced-motion preferences replace the moving pulses with static direction arrows
-during activity. Hidden tabs pause the overlay. This visualizes graph direction,
+Reduced-motion preferences disable the moving signal points. Hidden tabs and
+offscreen graph panels pause the overlay. This visualizes graph direction,
 not measured execution, cache misses or rebaking; saved/baked dependencies can
 still carry a signal. It does not change node state, rendering or export.
 
-The overlay uses CSS animation and transport activity subscriptions without
-per-frame React updates. Panning reuses unchanged node cards, groups, cables and
-plugs. Repeated pointer movement within one dock pane does not publish another
-layout update or write the persisted layout.
+Nodes, groups, cables, plugs and animation curves are drawn on two viewport-sized
+Canvas 2D layers. Supported browsers transfer these to an OffscreenCanvas worker.
+The static layer changes only after graph/view changes; a separate animation
+layer updates at 30 Hz without per-frame React renders. Pointer changes reach the
+worker immediately and do not wait behind the decorative animation timer.
+Offscreen geometry is culled and backing stores are bounded to 4096 pixels per
+dimension and 8 million pixels per layer. Canvas dimensions never follow the
+full graph bounds.
+
+The original DOM retains hit targets, tooltips and keyboard navigation. A focused
+node exposes its keyboard focus styling; the inspector stays a regular DOM UI.
+Worker startup/runtime failure replaces the transferred canvases with a main-thread
+software renderer; if Canvas 2D is unavailable, the DOM graph remains usable.
+Panning reuses unchanged node cards and connection controls. Repeated pointer
+movement within one dock pane does not publish another layout update or write
+the persisted layout. This separates graph drawing from the editor's main thread;
+expensive video/effect rendering can still delay mouse event delivery.
+
+For development profiling, `measure-node-graph-interaction` on the authenticated
+debug bridge performs a bounded pan and restores the viewport. It reports main-thread
+frame gaps alongside worker drawing time, so a smooth worker is not mistaken for
+smooth mouse handling. It does not edit nodes or timeline data.
 
 ## Keyframe nodes
 

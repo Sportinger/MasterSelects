@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 
 interface UseTimelinePlaybackAutoScrollProps {
@@ -24,10 +24,23 @@ export function useTimelinePlaybackAutoScroll({
   timelineRef,
   zoom,
 }: UseTimelinePlaybackAutoScrollProps) {
+  const widthRef = useRef(0);
+  useEffect(() => {
+    const element = timelineRef.current;
+    if (!element) return;
+    const measure = () => { widthRef.current = element.clientWidth; };
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(element);
+    window.addEventListener('resize', measure);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
+  }, [timelineRef]);
   useEffect(() => {
     if (!isPlaying || isDraggingPlayhead) return;
 
-    const viewportWidth = timelineRef.current?.clientWidth;
+    // Reading layout after each playhead update forces all pending UI work to
+    // finish synchronously. The viewport changes on resize, not on playback.
+    const viewportWidth = widthRef.current;
     if (!viewportWidth || viewportWidth <= 0) return;
 
     const endPadding = 100;

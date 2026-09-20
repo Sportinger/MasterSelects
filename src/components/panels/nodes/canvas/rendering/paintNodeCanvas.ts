@@ -1,0 +1,146 @@
+import { interpolateKeyframes } from '../../../../../utils/keyframeInterpolation';
+import { cablePoint, signalPosition } from './cableGeometry';
+import type { CanvasCable, CanvasCurve, CanvasScene, CanvasTheme, CanvasTransport, CanvasView, Rect } from './nodeCanvasTypes';
+
+export type DrawContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+export function inView(rect: Rect, view: CanvasView, margin = 30): boolean {
+  return (rect.x + rect.width) * view.zoom + view.panX >= -margin && rect.x * view.zoom + view.panX <= view.width + margin
+    && (rect.y + rect.height) * view.zoom + view.panY >= -margin && rect.y * view.zoom + view.panY <= view.height + margin;
+}
+function cableVisible(cable: CanvasCable, view: CanvasView): boolean {
+  const h = Math.max(72, Math.abs(cable.to.x - cable.from.x) * 0.42);
+  const left = Math.min(cable.from.x, cable.to.x - h), right = Math.max(cable.from.x + h, cable.to.x);
+  return inView({ x: left, y: Math.min(cable.from.y, cable.to.y), width: right - left, height: Math.abs(cable.to.y - cable.from.y) }, view);
+}
+function begin(ctx: DrawContext, view: CanvasView) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.setTransform(view.ratio * view.zoom, 0, 0, view.ratio * view.zoom, view.ratio * view.panX, view.ratio * view.panY);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.textBaseline = 'alphabetic';
+}
+function box(ctx: DrawContext, x: number, y: number, width: number, height: number, radius = 4) {
+  ctx.beginPath(); ctx.roundRect(x, y, width, height, radius);
+}
+function text(ctx: DrawContext, value: string, x: number, y: number, max: number, color: string, size = 10, weight = 400, align: CanvasTextAlign = 'left') {
+  ctx.font = `${weight} ${size}px system-ui, sans-serif`; ctx.textAlign = align; ctx.fillStyle = color;
+  let label = value;
+  if (ctx.measureText(label).width > max) {
+    while (label.length && ctx.measureText(label + '…').width > max) label = label.slice(0, -1);
+    label += '…';
+  }
+  ctx.fillText(label, x, y);
+}
+function drawCable(ctx: DrawContext, cable: CanvasCable, zoom: number) {
+  const { from, to } = cable, h = Math.max(72, Math.abs(to.x - from.x) * 0.42);
+  ctx.strokeStyle = cable.color; ctx.globalAlpha = cable.highlighted ? 1 : 0.55;
+  ctx.lineWidth = (cable.highlighted ? 2 : 1.25) / zoom;
+  ctx.setLineDash(cable.draft ? [5 / zoom, 4 / zoom] : []);
+  ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.bezierCurveTo(from.x + h, from.y, to.x - h, to.y, to.x, to.y); ctx.stroke(); ctx.setLineDash([]);
+  const middle = cablePoint(from, to, 0.5), angle = Math.atan2(to.y - from.y, to.x - from.x - h);
+  ctx.save(); ctx.translate(middle.x, middle.y); ctx.rotate(angle); ctx.lineWidth = 1.3 / zoom;
+  ctx.beginPath(); ctx.moveTo(-3 / zoom, -3 / zoom); ctx.lineTo(0, 0); ctx.lineTo(-3 / zoom, 3 / zoom); ctx.stroke(); ctx.restore(); ctx.globalAlpha = 1;
+}
+function curveShape(curve: CanvasCurve) {
+  return curve.compactBadge ? { x: curve.x + 5, y: curve.y + 23, width: 108, height: 22 }
+    : { x: curve.x + 4, y: curve.y + 22, width: curve.width - 8, height: 36 };
+}
+function drawCurve(ctx: DrawContext, curve: CanvasCurve, theme: CanvasTheme) {
+  if (curve.compactBadge) {
+    ctx.fillStyle = theme.background; box(ctx, curve.x, curve.y, curve.width, curve.height); ctx.fill();
+    text(ctx, '◇ Animation', curve.x + 5, curve.y + 13, 100, '#ac95e5', 9);
+    text(ctx, `${curve.channels} curves`, curve.x + curve.width - 5, curve.y + 13, 60, theme.muted, 9, 400, 'right');
+  } else text(ctx, `${curve.keys.length} keys · ${curve.sourceTime ? 'source' : 'clip'} time`, curve.x + curve.width, curve.y + 12, 110, theme.muted, 8, 400, 'right');
+  const r = curveShape(curve);
+  ctx.strokeStyle = theme.border; ctx.lineWidth = 0.5;
+  for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(r.x, r.y + i * r.height / 2); ctx.lineTo(r.x + r.width, r.y + i * r.height / 2); ctx.stroke(); }
+  ctx.beginPath(); curve.points.forEach((value, i) => { const x = r.x + i / (curve.points.length - 1) * r.width, y = r.y + (1 - value) * r.height; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+  ctx.strokeStyle = '#b698ee'; ctx.lineWidth = 1.5; ctx.stroke();
+}
+
+/** Static painting occurs only after edits, hover, selection, pan or resize. */
+export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView, theme: CanvasTheme) {
+  begin(ctx, view);
+  for (const group of scene.groups) {
+    if (!inView(group, view)) continue;
+    ctx.fillStyle = theme.background; ctx.strokeStyle = group.color; ctx.lineWidth = 1;
+    box(ctx, group.x, group.y, group.width, group.height, 10); ctx.fill(); ctx.globalAlpha = 0.10; ctx.fillStyle = group.color; ctx.fill(); ctx.globalAlpha = 0.6; ctx.stroke();
+    ctx.globalAlpha = 0.25; ctx.fillRect(group.x, group.y, group.width, 34); ctx.globalAlpha = 1;
+    text(ctx, `${group.collapsed ? '▸' : '▾'} ${group.label}`, group.x + 13, group.y + 21, Math.max(50, group.width - 170), theme.text, 11, 600);
+    text(ctx, `${group.count}     Focus`, group.x + group.width - 12, group.y + 21, 150, theme.muted, 10, 400, 'right');
+  }
+  for (const cable of scene.cables) if (cableVisible(cable, view)) drawCable(ctx, cable, view.zoom);
+  for (const node of scene.nodes) {
+    if (!inView(node, view)) continue;
+    ctx.save(); ctx.translate(node.x, node.y); ctx.globalAlpha = node.bypassed ? 0.72 : 1;
+    box(ctx, 0, 0, node.width, node.height, 6); ctx.fillStyle = theme.card; ctx.fill(); ctx.strokeStyle = node.selected ? theme.accent : theme.border;
+    ctx.lineWidth = node.selected ? 2 : 1; ctx.stroke(); ctx.clip();
+    ctx.fillStyle = node.color; ctx.fillRect(0, 0, node.width, 3);
+    ctx.strokeStyle = theme.border; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 27); ctx.lineTo(node.width, 27); ctx.stroke();
+    text(ctx, node.kind.toUpperCase(), 8, 19, 95, theme.muted);
+    text(ctx, node.runtime, node.width - 8, 19, 50, theme.muted, 9, 400, 'right');
+    if (node.bypassable) text(ctx, 'Byp', node.width - 64, 19, 25, node.bypassed ? theme.accent : theme.muted, 9);
+    text(ctx, node.label, 10, 46, node.width - 20, theme.text, 13, 600);
+    text(ctx, node.description, 10, 63, node.width - 20, theme.muted, 10);
+    let badgeX = 10;
+    for (const badge of node.badges) {
+      const color = badge.tone === 'ready' ? '#75d6b0' : badge.tone === 'empty' ? '#e79687' : '#dbbe75';
+      ctx.font = '9px system-ui'; const width = ctx.measureText(badge.label).width + 10;
+      box(ctx, badgeX, 83, width, 16); ctx.strokeStyle = color; ctx.lineWidth = 0.6; ctx.stroke(); text(ctx, badge.label, badgeX + 5, 94, width - 8, color, 9); badgeX += width + 4;
+    }
+    if (node.curve) drawCurve(ctx, node.curve, theme);
+    for (const port of node.ports) {
+      ctx.fillStyle = port.color; ctx.beginPath(); ctx.arc(port.x, port.y, 3.5, 0, Math.PI * 2); ctx.fill();
+      const x = port.x + (port.input ? 9 : -9), align = port.input ? 'left' : 'right';
+      text(ctx, port.label, x, port.y + 1, 65, theme.text, 9, 500, align);
+      text(ctx, port.type, x, port.y + 12, 65, port.color, 8, 400, align);
+    }
+    ctx.restore();
+  }
+  // Long fan-out stubs first, so their backing stroke cannot cover shorter grips.
+  for (const plug of scene.plugs.toReversed()) {
+    if (!inView({ x: Math.min(plug.tip.x, plug.center.x) - 8, y: plug.center.y - 8, width: Math.abs(plug.tip.x - plug.center.x) + 16, height: 16 }, view)) continue;
+    ctx.save(); ctx.translate(plug.center.x, plug.center.y); ctx.scale(plug.input ? -1 : 1, 1); ctx.globalAlpha = plug.ghost ? 0.5 : 1;
+    const offset = Math.abs(plug.tip.x - plug.center.x);
+    ctx.beginPath(); ctx.arc(0, 0, 6, -Math.PI / 2, Math.PI / 2); ctx.moveTo(6, 0); ctx.lineTo(offset, 0);
+    ctx.strokeStyle = theme.background; ctx.lineWidth = 5; ctx.stroke(); ctx.strokeStyle = plug.color; ctx.lineWidth = 2; ctx.stroke();
+    box(ctx, offset - 5, -3, 10, 6, 2); ctx.fillStyle = plug.highlighted ? plug.color : theme.background; ctx.fill(); ctx.lineWidth = 1; ctx.stroke(); ctx.restore();
+  }
+}
+
+export interface CurveActivity { playhead: number; values: number[]; until: number }
+export function paintOverlay(ctx: DrawContext, scene: CanvasScene, view: CanvasView, theme: CanvasTheme, transport: CanvasTransport, now: number, activity: Map<string, CurveActivity>, flowSeconds = 0) {
+  begin(ctx, view);
+  if (!transport.visible) return;
+  if (transport.active && !transport.reducedMotion) scene.cables.forEach((cable, i) => {
+    if (cable.draft || !cableVisible(cable, view)) return;
+    const duration = Math.max(1300, Math.min(3600, cable.length * view.zoom / 140 * 1000));
+    for (let point = 0; point < 2; point++) {
+      const p = signalPosition(cable, (flowSeconds * 1000 / duration + i * 0.61803398875 + point / 2) % 1);
+      ctx.fillStyle = cable.color; ctx.beginPath(); ctx.arc(p.x, p.y, 1.8 / view.zoom, 0, Math.PI * 2); ctx.fill();
+    }
+  });
+  for (const node of scene.nodes) {
+    const curve = node.curve;
+    if (!curve || !inView(node, view)) continue;
+    const local = Math.max(0, Math.min(curve.duration, transport.playhead - curve.start));
+    const time = curve.sourceTime ? transport.sourceTimes[curve.clipId] ?? local : local;
+    const value = interpolateKeyframes(curve.keys, curve.property, time, curve.value);
+    const r = curveShape(curve), x = r.x + local / Math.max(0.001, curve.duration) * r.width;
+    ctx.save(); ctx.translate(node.x, node.y); ctx.globalAlpha = node.bypassed ? 0.72 : 1;
+    if (curve.compactBadge) {
+      let previous = activity.get(node.id);
+      if (!previous || previous.playhead !== transport.playhead) {
+        const values = curve.activityKeys.map(channel => interpolateKeyframes(channel.keys, channel.property,
+          channel.sourceTime ? transport.sourceTimes[curve.clipId] ?? local : local, 0));
+        const changed = previous && values.some((v, i) => Math.abs(v - previous!.values[i]) > 1e-6);
+        previous = { playhead: transport.playhead, values, until: changed ? now + 180 : previous?.until ?? 0 };
+        activity.set(node.id, previous);
+      }
+      if (transport.active && now < previous.until) {
+        box(ctx, curve.x, curve.y, curve.width, curve.height); ctx.strokeStyle = '#ae90dc'; ctx.lineWidth = 1.5; ctx.stroke();
+      }
+    }
+    ctx.strokeStyle = theme.accent; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, r.y - 3); ctx.lineTo(x, r.y + r.height + 3); ctx.stroke();
+    text(ctx, String(Number(value.toFixed(3))), curve.compactBadge ? curve.x + curve.width - 5 : curve.x, curve.y + (curve.compactBadge ? 39 : 13),
+      curve.compactBadge ? 42 : 55, '#ac95e5', curve.compactBadge ? 11 : 15, 600, curve.compactBadge ? 'right' : 'left'); ctx.restore();
+  }
+}

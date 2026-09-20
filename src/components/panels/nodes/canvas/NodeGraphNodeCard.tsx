@@ -1,8 +1,9 @@
-import { memo, type PointerEvent as ReactPointerEvent } from 'react';
+import { memo, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { NodeGraphNode, NodeGraphPort } from '../../../../services/nodeGraph';
 import { NodeGraphPortView } from './NodeGraphPortView';
 import { KeyframeNodeCardPreview } from '../keyframes/KeyframeNodeCurve';
 import { NodeAnimationBadge } from '../keyframes/NodeAnimationBadge';
+import { requestNodeAnimation } from '../../../../services/nodeGraph/nodeWorkspaceNavigation';
 import type { ConnectionDraft } from './canvasGeometry';
 import {
   clamp,
@@ -18,6 +19,7 @@ import {
 
 interface NodeGraphNodeCardProps {
   node: NodeGraphNode;
+  canvasRendered?: boolean;
   selectedNodeId: string | null;
   isInSelection?: boolean;
   connectionDraft: ConnectionDraft | null;
@@ -41,6 +43,7 @@ function getNodeHeaderLabel(node: NodeGraphNode): string {
 
 export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
   node,
+  canvasRendered = false,
   selectedNodeId,
   isInSelection = false,
   connectionDraft,
@@ -52,6 +55,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
   onDisconnectPortEdges,
   onToggleNodeBypass,
 }: NodeGraphNodeCardProps) {
+  const [keyboardFocused, setKeyboardFocused] = useState(false);
   const nodeHeight = getNodeHeight(node);
   const isSelected = node.id === selectedNodeId || isInSelection;
   const isBypassable = isNodeBypassable(node);
@@ -75,6 +79,10 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
         isBypassed ? 'bypassed' : '',
       ].filter(Boolean).join(' ')}
       data-node-id={node.id}
+      onFocusCapture={event => setKeyboardFocused(event.target.matches(':focus-visible'))}
+      onBlurCapture={event => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setKeyboardFocused(false);
+      }}
       style={{
         left: node.layout.x,
         top: node.layout.y,
@@ -125,8 +133,15 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
       <div className="node-workspace-node-description" title={node.description}>
         {node.description ?? 'Built-in processing node'}
       </div>
-      {node.binding?.kind === 'keyframe-node' && <KeyframeNodeCardPreview node={node} />}
-      {!!node.animation?.channels.length && <NodeAnimationBadge node={node} top={getNodePortStartY(node) - 78} />}
+      {node.binding?.kind === 'keyframe-node' && (!canvasRendered || keyboardFocused) && <KeyframeNodeCardPreview node={node} />}
+      {!!node.animation?.channels.length && (canvasRendered
+        ? <button type="button" className="node-animation-badge" style={{ top: getNodePortStartY(node) - 78 }}
+            aria-label={`Edit animation for ${node.label}, ${node.animation.channels.length} curves`}
+            onPointerDown={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}
+            onClick={event => { event.stopPropagation(); requestNodeAnimation(node.animation!.clipId, node.id); if (event.detail > 0) event.currentTarget.blur(); }}>
+            <span>◇ Animation · {node.animation.channels.length} curves</span>
+          </button>
+        : <NodeAnimationBadge node={node} top={getNodePortStartY(node) - 78} />)}
       {nodeBadges.length > 0 && (
         <div className="node-workspace-node-badges">
           {nodeBadges.map((badge) => (

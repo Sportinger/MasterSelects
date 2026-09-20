@@ -22,10 +22,16 @@ export function inspectReactRenderCosts() {
   const totals = new Map<string, { name: string; count: number; selfMs: number; maxMs: number }>();
   const changedTrackProps = new Map<string, number>();
   const changedTrackRowProps = new Map<string, number>();
+  const changedKeyframeProps = new Map<string, number>();
   const visit = (fiber: Fiber) => {
     const type = fiber.type;
     const name = typeof type === 'string' ? type : type?.displayName ?? type?.name;
     if (name && typeof type !== 'string') {
+      if (name === 'TimelineKeyframesComponent' && fiber.alternate?.memoizedProps) {
+        for (const [key, value] of Object.entries(fiber.memoizedProps ?? {})) {
+          if (!Object.is(value, fiber.alternate.memoizedProps[key])) changedKeyframeProps.set(key, (changedKeyframeProps.get(key) ?? 0) + 1);
+        }
+      }
       if (name === 'TimelineTrackComponent' && fiber.alternate?.memoizedProps) {
         for (const [key, value] of Object.entries(fiber.memoizedProps ?? {})) {
           if (!Object.is(value, fiber.alternate.memoizedProps[key])) {
@@ -54,6 +60,7 @@ export function inspectReactRenderCosts() {
   return { success: true, data: {
     note: 'Latest development self render costs, not a timed CPU profile',
     changedTrackProps: Object.fromEntries(changedTrackProps),
+    changedKeyframeProps: Object.fromEntries(changedKeyframeProps),
     changedTrackRowProps: Object.fromEntries(changedTrackRowProps),
     entries: [...totals.values()].toSorted((a, b) => b.selfMs - a.selfMs).slice(0, 25),
   } };

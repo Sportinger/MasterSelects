@@ -5,8 +5,10 @@ import { useTimelineStore } from '../../../../stores/timeline';
 const SCRUB_SETTLE_MS = 180;
 
 /** Presentation activity only: this does not measure node execution or alter the graph. */
-export function useNodeFlowActivity() {
-  const ref = useRef<SVGSVGElement>(null);
+export function useNodeFlowActivity<T extends SVGSVGElement | HTMLDivElement = SVGSVGElement>(onActivity?: (active: boolean) => void) {
+  const ref = useRef<T>(null);
+  const activityRef = useRef(onActivity);
+  activityRef.current = onActivity;
 
   useEffect(() => {
     const svg = ref.current;
@@ -19,7 +21,10 @@ export function useNodeFlowActivity() {
     const setActive = (active: boolean) => {
       // No React renders or per-frame attribute writes while the timeline runs.
       const value = String(active && !document.hidden);
-      if (svg.dataset.flowActive !== value) svg.dataset.flowActive = value;
+      if (svg.dataset.flowActive !== value) {
+        svg.dataset.flowActive = value;
+        activityRef.current?.(value === 'true');
+      }
     };
     const onVisibilityChange = () => {
       clearSettle();

@@ -346,6 +346,8 @@ export async function runDebugAction(action: string, args: Record<string, unknow
   const mediaState = useMediaStore.getState();
 
   switch (action) {
+    case 'measure-node-graph-interaction':
+      return measureNodeGraphInteraction(args);
     case 'measure-keyframe-disclosure':
       return measureKeyframeDisclosure(args);
     case 'inspect-react-render-costs':
@@ -838,3 +840,4 @@ export async function runDebugAction(action: string, args: Record<string, unknow
       return { success: false, error: `Unknown debug action: ${action}` };
   }
 }
+import { measureNodeGraphInteraction } from './nodeGraphInteraction';

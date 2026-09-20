@@ -5,6 +5,7 @@ import type { ConnectionDraft, NodeBounds } from './canvasGeometry';
 import { getConnectionArrowTransform, getConnectionPath, getPortCenter } from './canvasGeometry';
 import type { ConnectionPlug } from './connectionPlugs';
 import { useNodeFlowActivity } from './useNodeFlowActivity';
+import { NodeGraphFlowSignals } from './NodeGraphFlowSignals';
 import './NodeGraphFlow.css';
 
 interface NodeGraphEdgesProps {
@@ -18,6 +19,8 @@ interface NodeGraphEdgesProps {
   onSelectEdge: (edgeId: string) => void;
   onClearSelectedEdge: () => void;
   onDisconnectEdge?: (edgeId: string) => void;
+  zoom: number;
+  canvasRendered?: boolean;
 }
 
 export const NodeGraphEdges = memo(function NodeGraphEdges({
@@ -31,6 +34,8 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
   onSelectEdge,
   onClearSelectedEdge,
   onDisconnectEdge,
+  zoom,
+  canvasRendered = false,
 }: NodeGraphEdgesProps) {
   const flowRef = useNodeFlowActivity();
   const endpoints = new Map<string, { input?: ConnectionPlug; output?: ConnectionPlug }>();
@@ -106,7 +111,6 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
               d={path}
             />
             <g className="node-workspace-edge-flow">
-              <path className="node-workspace-flow-pulse" d={path} />
               <path className="node-workspace-flow-arrow" d="M -4 -4 L 0 0 L -4 4"
                 transform={getConnectionArrowTransform(pair.output.tip, pair.input.tip)} />
             </g>
@@ -114,6 +118,8 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
         );
       })}
     </svg>
+    {!canvasRendered && <NodeGraphFlowSignals plugs={plugs} zoom={zoom}
+      hiddenEdgeId={connectionDraft?.moved ? connectionDraft.reconnectEdgeId : undefined} />}
     {draftPath && connectionDraft && <svg className="node-workspace-edges node-workspace-edge-drag-layer" width="1" height="1" aria-hidden="true"
       style={{ '--port-color': draftPort ? describeNodePort(draftPort).color : undefined } as CSSProperties}>
         <path
