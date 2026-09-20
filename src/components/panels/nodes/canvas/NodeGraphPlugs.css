@@ -1,0 +1,35 @@
+.node-workspace-plugs { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 6; }
+.node-workspace-plug { color: var(--port-color); cursor: grab; outline: none; -webkit-tap-highlight-color: transparent; touch-action: none; }
+.node-workspace-plug:active { cursor: grabbing; }
+.node-workspace-plug-backing, .node-workspace-plug-shape { fill: none; stroke-linecap: round; pointer-events: none; }
+.node-workspace-plug-backing { stroke: var(--bg-secondary, #202020); stroke-width: 5; }
+.node-workspace-plug-shape { stroke: currentColor; stroke-width: 2; }
+.node-workspace-plug-grip { fill: var(--bg-secondary, #202020); stroke: currentColor; stroke-width: 2; pointer-events: none; }
+.node-workspace-plug-hit { fill: transparent; stroke: transparent; pointer-events: all; }
+.node-workspace-plug-collar-hit { fill: none; stroke: transparent; stroke-width: 6; pointer-events: stroke; }
+.node-workspace-plug:hover .node-workspace-plug-grip, .node-workspace-plug.port-hovered .node-workspace-plug-grip, .node-workspace-plug.edge-hovered .node-workspace-plug-grip, .node-workspace-plug.selected .node-workspace-plug-grip { fill: currentColor; }
+.node-workspace-plug:focus-visible .node-workspace-plug-hit { stroke: var(--port-color); stroke-width: 2; }
+.node-workspace-canvas { touch-action: none; }
+.node-workspace-edge-drag-layer { left: 0; top: 0; z-index: 7; }
+.node-workspace-plug-visual { pointer-events: none; transform-box: view-box; transition: transform 180ms cubic-bezier(.2,.8,.2,1), opacity 150ms ease; animation: node-plug-attach 220ms cubic-bezier(.2,.8,.2,1); }
+.node-workspace-plug-grip { transition: fill 120ms ease; }
+.node-workspace-plug.unplugging .node-workspace-plug-visual,
+.node-workspace-plug-preview:not(.revealed) .node-workspace-plug-visual { opacity: 0; transform: translateX(var(--plug-offset)); }
+.node-workspace-plug-preview .node-workspace-plug-visual { animation: none; }
+.node-workspace-plug.unplugging .node-workspace-plug-hit,
+.node-workspace-plug.unplugging .node-workspace-plug-collar-hit,
+.node-workspace-plug-preview:not(.revealed) .node-workspace-plug-hit,
+.node-workspace-plug-preview:not(.revealed) .node-workspace-plug-collar-hit { pointer-events: none; }
+.node-workspace-draft-plug { color: var(--port-color); pointer-events: none; }
+.node-workspace-plug-ghost { color: var(--port-color); opacity: .55; pointer-events: none; }
+.node-workspace-plug-ghost .node-workspace-plug-grip { fill: currentColor; }
+.node-workspace-edge.port-typed { transition: stroke-width 160ms ease, filter 160ms ease; filter: drop-shadow(0 0 0 transparent); }
+.node-workspace-edge.port-typed.hovered { stroke-width: 3; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--port-color) 55%, transparent)); }
+@keyframes node-plug-attach {
+  from { opacity: 0; transform: translateX(var(--plug-offset)); }
+  70% { opacity: 1; transform: translateX(calc(var(--plug-offset) * -.15)); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .node-workspace-plug-visual, .node-workspace-plug-grip, .node-workspace-edge.port-typed { transition: none; animation: none; }
+}

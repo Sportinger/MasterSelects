@@ -97,6 +97,10 @@ outputs support live and installation workflows.
 
 Explore the [feature guide](docs/Features/README.md) for workflows and examples.
 
+Node cables have visible semicircular plugs, animated attachment, and docked ghost
+previews over compatible sockets while dragging. Drag either end to reconnect,
+or release on empty canvas to unplug editable links.
+
 Media imports report processing and save failures. Failed audio-proxy writes can
 be retried; project packages follow the configured save policy.
 Switching compositions keeps cached proxy audio available. Reopening split nested

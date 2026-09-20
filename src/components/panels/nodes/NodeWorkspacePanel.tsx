@@ -9,6 +9,7 @@ import { useDockStore } from '../../../stores/dockStore';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import { NodeGraphCanvas, type NodeGraphMove } from './NodeGraphCanvas';
+import { reconnectNodePorts } from './canvas/reconnectNodePorts';
 import { NodeContextMenu } from './workspace/NodeContextMenu';
 import { NodeInspector } from './workspace/NodeWorkspaceInspector';
 import {
@@ -54,11 +55,11 @@ interface NodeDomainAdapter {
 }
 
 function batched(label: string, run: () => void): void {
-  startBatch(label);
+  const batch = startBatch(label);
   try {
     run();
   } finally {
-    endBatch();
+    if (batch.opened) endBatch();
   }
 }
 
@@ -462,6 +463,10 @@ export function NodeWorkspacePanel() {
           onMoveNodes={moves => batched('Move nodes', () => moves.forEach(move => unified.moveNode(move.nodeId, move.layout)))}
           onConnectPorts={unified.connectPorts}
           onDisconnectEdge={unified.disconnectEdge}
+          onReconnectPorts={(edgeId, connection) => batched('Reconnect node link', () => reconnectNodePorts(
+            subject.graph, edgeId, connection, () => useTimelineStore.getState().clips,
+            unified.connectPorts, unified.disconnectEdge,
+          ))}
           onDeleteNode={unified.deleteNode}
           onDeleteNodes={ids => batched('Delete nodes', () => ids.forEach(unified.deleteNode))}
           onDuplicateSelection={flockSelection.length === selectedNodeIds.length ? () => selectFlockNodes(flockActions.duplicate(flockSelection)) : undefined}

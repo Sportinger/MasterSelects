@@ -47,11 +47,11 @@ export interface FlockGraphActions {
 }
 
 function batched<T>(label: string, run: () => T): T {
-  startBatch(label);
+  const batch = startBatch(label);
   try {
     return run();
   } finally {
-    endBatch();
+    if (batch.opened) endBatch();
   }
 }
 

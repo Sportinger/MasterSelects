@@ -11,15 +11,16 @@ import type {
 } from '../../../services/nodeGraph';
 import { NodeGraphEdges } from './canvas/NodeGraphEdges';
 import { NodeGraphNodeCard } from './canvas/NodeGraphNodeCard';
-import type { ConnectionDraft, NodeGraphPoint, PortReference, Viewport } from './canvas/canvasGeometry';
+import type { NodeGraphPoint, Viewport } from './canvas/canvasGeometry';
+import { useNodeConnectionDrag } from './canvas/useNodeConnectionDrag';
+import { getConnectionPlugs } from './canvas/connectionPlugs';
+import { NodeGraphPlugs } from './canvas/NodeGraphPlugs';
+import { useNodePortHover } from './canvas/useNodePortHover';
 import {
   clamp,
-  canConnectPortReferences,
-  createPortReference,
   DEFAULT_VIEWPORT,
   FIT_MARGIN,
   getGraphBounds,
-  getPortCenter,
   MAX_ZOOM,
   MIN_ZOOM,
 } from './canvas/canvasGeometry';
@@ -40,6 +41,7 @@ interface NodeGraphCanvasProps {
   onMoveNodes?: (moves: NodeGraphMove[]) => void;
   onConnectPorts?: (connection: NodeGraphConnectionRequest) => void;
   onDisconnectEdge?: (edgeId: string) => void;
+  onReconnectPorts?: (edgeId: string, connection: NodeGraphConnectionRequest) => void;
   onDeleteNode?: (nodeId: string) => void;
   onDeleteNodes?: (nodeIds: string[]) => void;
   onDuplicateSelection?: () => void;
@@ -77,6 +79,7 @@ export function NodeGraphCanvas({
   onMoveNodes,
   onConnectPorts,
   onDisconnectEdge,
+  onReconnectPorts,
   onDeleteNode,
   onDeleteNodes,
   onDuplicateSelection,
@@ -93,7 +96,6 @@ export function NodeGraphCanvas({
   const [viewport, setViewport] = useState<Viewport>(DEFAULT_VIEWPORT);
   const [isPanning, setIsPanning] = useState(false);
   const [draftLayouts, setDraftLayouts] = useState<Record<string, NodeGraphLayout>>({});
-  const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const multiSelection = useMemo(() => new Set(selectedNodeIds ?? []), [selectedNodeIds]);
 
@@ -107,7 +109,16 @@ export function NodeGraphCanvas({
     }))
   ), [draftLayouts, graph.nodes, layoutScaleX]);
   const nodesById = useMemo(() => new Map(displayNodes.map((node) => [node.id, node])), [displayNodes]);
-  const graphBounds = useMemo(() => annotatedGraphBounds(graph, displayNodes), [displayNodes, graph]);
+  const plugs = useMemo(() => getConnectionPlugs(graph.edges, nodesById), [graph.edges, nodesById]);
+  const { hoveredPort, hoveredEdgeId, portHoverEvents } = useNodePortHover(nodesById);
+  const graphBounds = useMemo(() => {
+    const bounds = annotatedGraphBounds(graph, displayNodes);
+    for (const { tip } of plugs) {
+      bounds.left = Math.min(bounds.left, tip.x - 10);
+      bounds.right = Math.max(bounds.right, tip.x + 10);
+    }
+    return bounds;
+  }, [displayNodes, graph, plugs]);
   const selectedEdge = useMemo(() => (
     selectedEdgeId ? graph.edges.find((edge) => edge.id === selectedEdgeId) ?? null : null
   ), [graph.edges, selectedEdgeId]);
@@ -159,23 +170,10 @@ export function NodeGraphCanvas({
     };
   }, [viewport.panX, viewport.panY, viewport.zoom]);
 
-  const getPortReferenceFromElement = useCallback((element: Element | null): PortReference | null => {
-    const portElement = element?.closest('.node-workspace-port') as HTMLElement | null;
-    if (!portElement) {
-      return null;
-    }
-
-    const nodeId = portElement.dataset.nodeId;
-    const portId = portElement.dataset.portId;
-    const direction = portElement.dataset.direction;
-    if (!nodeId || !portId || (direction !== 'input' && direction !== 'output')) {
-      return null;
-    }
-
-    const node = nodesById.get(nodeId);
-    const port = (direction === 'input' ? node?.inputs : node?.outputs)?.find((candidate) => candidate.id === portId);
-    return port ? createPortReference(nodeId, port) : null;
-  }, [nodesById]);
+  const { connectionDraft, startConnectionDrag, startPlugDrag, moveConnectionDrag, finishConnectionDrag, cancelConnectionDrag } = useNodeConnectionDrag({
+    graphId: graph.id, canvasRef, nodesById, getGraphPoint: getGraphPointFromClient,
+    onConnectPorts, onReconnectPorts, onDisconnectEdge,
+  });
 
   const handleWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -224,15 +222,7 @@ export function NodeGraphCanvas({
   }, [viewport.panX, viewport.panY]);
 
   const handlePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (connectionDraft?.pointerId === event.pointerId) {
-      const end = getGraphPointFromClient(event.clientX, event.clientY);
-      setConnectionDraft((current) => (
-        current && current.pointerId === event.pointerId
-          ? { ...current, end }
-          : current
-      ));
-      return;
-    }
+    if (moveConnectionDrag(event)) return;
 
     const gesture = panGestureRef.current;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
@@ -242,7 +232,7 @@ export function NodeGraphCanvas({
       panX: gesture.panX + (event.clientX - gesture.clientX),
       panY: gesture.panY + (event.clientY - gesture.clientY),
     }));
-  }, [connectionDraft?.pointerId, getGraphPointFromClient]);
+  }, [moveConnectionDrag]);
 
   const finishPanGesture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     const gesture = panGestureRef.current;
@@ -252,58 +242,6 @@ export function NodeGraphCanvas({
     setIsPanning(false);
     event.currentTarget.releasePointerCapture(event.pointerId);
   }, []);
-
-  const finishConnectionDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>): boolean => {
-    const draft = connectionDraft;
-    if (!draft || draft.pointerId !== event.pointerId) {
-      return false;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const portReference = typeof document === 'undefined'
-      ? null
-      : getPortReferenceFromElement(document.elementFromPoint(event.clientX, event.clientY));
-
-    if (
-      portReference &&
-      canConnectPortReferences(portReference, draft)
-    ) {
-      const connection = draft.direction === 'output'
-        ? {
-            fromNodeId: draft.nodeId,
-            fromPortId: draft.portId,
-            toNodeId: portReference.nodeId,
-            toPortId: portReference.portId,
-          }
-        : {
-            fromNodeId: portReference.nodeId,
-            fromPortId: portReference.portId,
-            toNodeId: draft.nodeId,
-            toPortId: draft.portId,
-          };
-      onConnectPorts?.(connection);
-    }
-
-    setConnectionDraft(null);
-    if (canvasRef.current?.hasPointerCapture(event.pointerId)) {
-      canvasRef.current.releasePointerCapture(event.pointerId);
-    }
-    return true;
-  }, [connectionDraft, getPortReferenceFromElement, onConnectPorts]);
-
-  const cancelConnectionDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>): boolean => {
-    if (!connectionDraft || connectionDraft.pointerId !== event.pointerId) {
-      return false;
-    }
-
-    setConnectionDraft(null);
-    if (canvasRef.current?.hasPointerCapture(event.pointerId)) {
-      canvasRef.current.releasePointerCapture(event.pointerId);
-    }
-    return true;
-  }, [connectionDraft]);
 
   const startNodeDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>, node: NodeGraphNode) => {
     event.stopPropagation();
@@ -394,27 +332,6 @@ export function NodeGraphCanvas({
     onSelectNode(nodeId);
   }, [onSelectNode]);
 
-  const startConnectionDrag = useCallback((
-    event: ReactPointerEvent<HTMLDivElement>,
-    node: NodeGraphNode,
-    port: NodeGraphPort,
-  ) => {
-    if (!onConnectPorts || event.button !== 0) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    setConnectionDraft({
-      pointerId: event.pointerId,
-      ...createPortReference(node.id, port),
-      start: getPortCenter(node, port.id, port.direction),
-      end: getGraphPointFromClient(event.clientX, event.clientY),
-    });
-    canvasRef.current?.setPointerCapture(event.pointerId);
-  }, [getGraphPointFromClient, onConnectPorts]);
-
   const disconnectPortEdges = useCallback((node: NodeGraphNode, port: NodeGraphPort) => {
     if (!onDisconnectEdge) {
       return;
@@ -474,6 +391,7 @@ export function NodeGraphCanvas({
         ref={canvasRef}
         className="node-workspace-canvas"
         tabIndex={0}
+        {...portHoverEvents}
         onWheel={handleWheel}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -482,6 +400,7 @@ export function NodeGraphCanvas({
             finishPanGesture(event);
           }
         }}
+        onLostPointerCapture={cancelConnectionDrag}
         onPointerCancel={(event) => {
           if (!cancelConnectionDrag(event)) {
             finishPanGesture(event);
@@ -545,14 +464,19 @@ export function NodeGraphCanvas({
           <NodeGraphEdges
             graphBounds={graphBounds}
             edges={graph.edges}
+            plugs={plugs}
             nodesById={nodesById}
             selectedEdgeId={selectedEdgeId}
+            hoveredEdgeId={hoveredEdgeId}
             connectionDraft={connectionDraft}
             onSelectEdge={setSelectedEdgeId}
             onClearSelectedEdge={() => setSelectedEdgeId(null)}
             onDisconnectEdge={onDisconnectEdge}
           />
 
+          <NodeGraphPlugs plugs={plugs} nodes={displayNodes} draft={connectionDraft} selectedEdgeId={selectedEdgeId}
+            hoveredPort={hoveredPort} hoveredEdgeId={hoveredEdgeId} onStartConnectionDrag={startConnectionDrag}
+            onSelectEdge={setSelectedEdgeId} onStartDrag={startPlugDrag} onDisconnectEdge={onDisconnectEdge} />
           {displayNodes.map((node) => (
             <NodeGraphNodeCard
               key={node.id}

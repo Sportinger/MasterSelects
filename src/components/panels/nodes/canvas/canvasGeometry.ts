@@ -16,8 +16,8 @@ export const NODE_MIN_HEIGHT = 126;
 export const PORT_ROW_HEIGHT = 32;
 export const PORT_START_Y = 100;
 export const BADGED_PORT_START_Y = 130;
-export const PORT_DOT_CENTER_X = 12;
-export const PORT_DOT_CENTER_Y = 7;
+export const PORT_DOT_CENTER_X = 12.5;
+export const PORT_DOT_CENTER_Y = 9.5;
 export const FIT_MARGIN = 42;
 
 export interface Viewport {
@@ -73,6 +73,10 @@ export interface ConnectionDraft extends PortReference {
   pointerId: number;
   start: NodeGraphPoint;
   end: NodeGraphPoint;
+  originClient?: NodeGraphPoint;
+  moved?: boolean;
+  reconnectEdgeId?: string;
+  target?: PortReference;
 }
 
 export function clamp(value: number, min: number, max: number): number {

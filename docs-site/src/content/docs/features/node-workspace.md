@@ -110,6 +110,28 @@ bypass to skip an effect.
 
 Effect and AI nodes include a compact bypass toggle in the node header. Effect bypass writes through to the existing effect enabled flag; AI node bypass is stored on the custom node and prevents that generated runtime from processing the preview signal.
 
+Cable ends have colored semicircular **plugs** around their sockets, with grips
+outside the node card. They remain visible above cards, including collapsed groups;
+multiple links on a port have separate grips. Hover or keyboard-focus a free port
+to preview its plug, which can also start a new connection. Existing grips highlight
+on port hover. Plugs slide in and out on attachment and detachment, respecting the
+system's reduced-motion preference.
+
+Hovering an individual grip or its wire softly highlights only that cable and its
+two plugs, making fan-out links easy to distinguish. The highlight fades out on leave.
+
+While holding a cable over a compatible socket, a translucent docked plug previews
+the connection and the draft wire snaps to it. Moving away or over an incompatible
+port returns the plug to the pointer. The preview does not change the graph until
+the cable is released.
+
+Drag either end of an existing cable to a compatible port to reconnect it. Releasing
+on empty canvas disconnects that cable; clicking without dragging does not.
+Dropping back on the original socket keeps the link, while Escape, interrupted
+pointer gestures and incompatible targets restore it. Required or locked links
+retain their existing domain restrictions. Keyboard-focus a connected plug and
+press Delete/Backspace to remove its cable; Enter/Space selects the link.
+
 The Transform node writes through to the clip model. Its inspector edits opacity, position, scale, rotation, speed, blend mode, and reverse state through the same timeline store actions used by the Properties panel, so preview, export, history, and project persistence continue to see one clip model.
 
 Effect nodes also expose write-through inspector controls. Numeric effect params use the keyframe-aware property path, while boolean/select params use the normal effect update action. The graph edits the same effect stack consumed by the existing renderer.
