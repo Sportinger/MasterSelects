@@ -28,6 +28,13 @@ describe('DockTabMenus', () => {
     );
 
     const categoryMenu = screen.getByRole('menu', { name: 'Change panel category' });
+    const nodesItem = within(categoryMenu).getAllByRole('menuitem')[0];
+    expect(nodesItem).toHaveTextContent('Nodes');
+    expect(nodesItem).not.toHaveAttribute('aria-haspopup');
+    fireEvent.click(nodesItem);
+    expect(onChangeContextPanelType).toHaveBeenCalledWith('node-workspace');
+    onChangeContextPanelType.mockClear();
+    expect(within(screen.getByRole('menu', { name: 'Color panels' })).getByRole('menuitem', { name: 'Color Nodes' })).toBeInTheDocument();
     expect(within(categoryMenu).getByRole('menuitem', { name: 'Editing' })).toHaveClass('is-current');
     expect(within(categoryMenu).getByRole('menuitem', { name: 'Color' })).toBeInTheDocument();
     expect(within(categoryMenu).getByRole('menuitem', { name: 'Live' })).toBeInTheDocument();
@@ -79,7 +86,7 @@ describe('DockTabMenus', () => {
         contextMenuRef={createRef<HTMLDivElement>()}
         addMenu={{ x: 172, y: 20 }}
         tabContextMenu={null}
-        getVisiblePanelTypes={() => ['media']}
+        getVisiblePanelTypes={() => ['node-workspace', 'media']}
         onAddPanelType={onAddPanelType}
         onHideContextPanel={vi.fn()}
         onFloatContextPanel={vi.fn()}
@@ -89,6 +96,13 @@ describe('DockTabMenus', () => {
     );
 
     const categoryMenu = screen.getByRole('menu', { name: 'Add panel category' });
+    const nodesItem = within(categoryMenu).getAllByRole('menuitem')[0];
+    expect(nodesItem).toHaveTextContent('Nodes');
+    expect(nodesItem).toHaveAttribute('title', 'Nodes (focus existing)');
+    expect(nodesItem).not.toHaveAttribute('aria-haspopup');
+    fireEvent.click(nodesItem);
+    expect(onAddPanelType).toHaveBeenCalledWith('node-workspace');
+    onAddPanelType.mockClear();
     expect(categoryMenu).toHaveClass('dock-tab-add-menu--fold-left');
     expect(within(categoryMenu).getByRole('menuitem', { name: 'Editing' })).toBeInTheDocument();
     expect(within(categoryMenu).getByRole('menuitem', { name: 'Live' })).toBeInTheDocument();

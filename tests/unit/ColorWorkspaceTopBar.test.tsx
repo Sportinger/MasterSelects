@@ -60,7 +60,7 @@ describe('ColorWorkspaceTopBar', () => {
   it.each([
     ['Clips', 'color-clips'],
     ['Mini Timeline', 'color-timeline'],
-    ['Node Graph', 'color-nodes'],
+    ['Color Nodes', 'color-nodes'],
   ] as const)('toggles %s off and restores it at the Color workspace', (label, panelType) => {
     render(<ColorWorkspaceTopBar />);
     const button = screen.getByRole('button', { name: label });

@@ -3,9 +3,11 @@ import type { PanelType } from '../../../types/dock';
 export interface PanelMenuGroup {
   label: string;
   types: readonly PanelType[];
+  direct?: boolean;
 }
 
 const PANEL_MENU_GROUP_DEFINITIONS: readonly PanelMenuGroup[] = [
+  { label: 'Nodes', types: ['node-workspace'], direct: true },
   {
     label: 'Editing',
     types: [
@@ -42,7 +44,7 @@ const PANEL_MENU_GROUP_DEFINITIONS: readonly PanelMenuGroup[] = [
   },
   {
     label: 'AI',
-    types: ['node-workspace', 'discover', 'ai-studio', 'story', 'ai-segment'],
+    types: ['discover', 'ai-studio', 'story', 'ai-segment'],
   },
   {
     label: '3D',

@@ -9,6 +9,7 @@ import {
 } from '../../../types/dock';
 
 const VIEW_CORE_PANEL_TYPE_ORDER: PanelType[] = [
+  'node-workspace',
   'preview',
   'multi-preview',
   'timeline',
@@ -18,7 +19,6 @@ const VIEW_CORE_PANEL_TYPE_ORDER: PanelType[] = [
   'annotations',
   'stats',
   'audio-mixer',
-  'node-workspace',
   'color-nodes',
   'color-controls',
   'color-clips',

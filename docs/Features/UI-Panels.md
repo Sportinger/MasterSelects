@@ -623,6 +623,14 @@ Multi Preview, scopes, and other panels are available from the View menu and can
 
 ### Tab Context Menu
 
+**Nodes** is the first direct entry in both the add-panel menu and **Change to**,
+and the first panel under **View → Panels**. **Color → Color Nodes** opens the
+specialized grading graph: it edits the same color state as the Color controls.
+Restored layouts rename the old generic Color-panel title to **Color Nodes**;
+custom tab names are preserved.
+The Nodes canvas keeps its grid visible while panning, so spatial orientation
+does not disappear during a drag.
+
 Right-clicking a dock tab opens a tab menu. `Undock` moves that tab into a freely movable and
 resizable floating panel, `Undock to Window` opens it in a separate browser window with a `Dock back`
 control, `Hide` removes that tab, and `Change to` replaces the tab slot with another panel. If the

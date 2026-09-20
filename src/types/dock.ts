@@ -307,7 +307,7 @@ export const PANEL_CONFIGS: Record<PanelType, PanelConfig> = {
   },
   'color-nodes': {
     type: 'color-nodes',
-    title: 'Nodes',
+    title: 'Color Nodes',
     minWidth: 300,
     minHeight: 180,
     closable: false,

@@ -279,7 +279,7 @@ export function ColorClipContextMenu({
 
       <div className="color-clip-context-menu-separator" role="separator" />
 
-      <MenuItem onSelect={() => runAndClose(onOpenNodeGraph)}>Display Node Graph</MenuItem>
+      <MenuItem onSelect={() => runAndClose(onOpenNodeGraph)}>Display Color Nodes</MenuItem>
       <MenuItem onSelect={() => runAndClose(onViewClipDetails)}>View Clip Details</MenuItem>
       <MenuItem disabled={!canFindMedia} onSelect={() => runAndClose(onFindInMedia)}>Find in Media</MenuItem>
 

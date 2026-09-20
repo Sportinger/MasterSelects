@@ -82,10 +82,6 @@
     0 0;
 }
 
-.node-workspace-board.board-interacting {
-  background: var(--bg-primary);
-}
-
 .node-workspace-toolbar {
   display: flex;
   align-items: center;

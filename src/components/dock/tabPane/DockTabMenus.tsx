@@ -68,6 +68,17 @@ export function DockTabMenus({
           {(() => {
             const visibleTypes = new Set(getVisiblePanelTypes());
             return ADD_PANEL_GROUPS.map((group) => {
+              if (group.direct) {
+                const type = group.types[0];
+                const isVisible = visibleTypes.has(type);
+                return <button key={type} type="button" role="menuitem"
+                  className={`dock-tab-add-menu-item ${isVisible ? 'is-current' : ''}`}
+                  title={isVisible ? `${group.label} (focus existing)` : `Add ${group.label}`}
+                  onClick={event => { if (event.detail > 0) event.currentTarget.blur(); onAddPanelType(type); }}>
+                  <span>{group.label}</span>
+                  {isVisible && <span className="dock-tab-context-menu-hint">open</span>}
+                </button>;
+              }
               return (
                 <div
                   key={group.label}
@@ -153,6 +164,14 @@ export function DockTabMenus({
             >
               {CHANGE_TO_PANEL_GROUPS.map((group) => {
                 const containsCurrentType = group.types.includes(tabContextMenu.panel.type);
+                if (group.direct) {
+                  const type = group.types[0];
+                  return <button key={type} type="button" role="menuitem" disabled={containsCurrentType}
+                    className={`dock-tab-context-menu-item ${containsCurrentType ? 'is-current' : ''}`}
+                    onClick={event => { if (event.detail > 0) event.currentTarget.blur(); onChangeContextPanelType(type); }}>
+                    <span>{group.label}</span>
+                  </button>;
+                }
                 return (
                   <div
                     key={group.label}

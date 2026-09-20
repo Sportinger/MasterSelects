@@ -43,7 +43,7 @@ function ColorWorkspaceTopBarButton({
       aria-pressed={disabled ? undefined : active}
       disabled={disabled}
       title={disabled ? `${label} (coming soon)` : label}
-      onClick={onClick}
+      onClick={event => { if (event.detail > 0) event.currentTarget.blur(); onClick?.(); }}
     >
       <ButtonIcon aria-hidden="true" stroke={1.45} />
     </button>
@@ -123,7 +123,7 @@ export function ColorWorkspaceTopBar() {
         <ColorWorkspaceTopBarButton
           active={isVisible('color-nodes')}
           icon={IconHierarchy3}
-          label="Node Graph"
+          label="Color Nodes"
           onClick={() => togglePanel('color-nodes')}
         />
         <ColorWorkspaceTopBarButton

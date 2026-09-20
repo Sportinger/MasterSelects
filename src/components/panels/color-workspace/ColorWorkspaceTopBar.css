@@ -52,6 +52,7 @@
   background: transparent;
   color: #747880;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
   transition: color 100ms ease;
 }
 
@@ -88,6 +89,8 @@
   color: #4b4e55;
   cursor: not-allowed;
 }
+
+.color-workspace-top-bar-button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
 
 .color-workspace-top-bar-project {
   align-self: center;

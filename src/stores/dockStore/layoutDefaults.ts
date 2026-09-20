@@ -478,7 +478,7 @@ const COLOR_LAYOUT: DockLayout = {
           {
             kind: 'tab-group',
             id: 'color-nodes-group',
-            panels: [{ id: 'color-nodes', type: 'color-nodes', title: 'Nodes' }],
+            panels: [{ id: 'color-nodes', type: 'color-nodes', title: 'Color Nodes' }],
             activeIndex: 0,
           },
         ],

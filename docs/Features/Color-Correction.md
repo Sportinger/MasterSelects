@@ -69,12 +69,12 @@ surface. Both routes edit the same `ColorCorrectionState`.
 
 ### Two Editing Surfaces
 
-The Properties Color tab remains available in general editing layouts. The factory **Color** workspace reuses the existing Preview, node editor, grading controls, scopes, and keyframe modules in separate dock panels rather than duplicating them in one monolithic component.
+The Properties Color tab remains available in general editing layouts. The factory **Color** workspace reuses the existing Preview, node editor, grading controls, scopes, and keyframe modules in separate dock panels rather than duplicating them in one monolithic component. Its **Color Nodes** panel (also under **Color → Color Nodes** in the panel menu) is another interface to the same `ColorCorrectionState`, including the existing grade versions and keyframes. The general **Nodes** editor is a separate direct entry at the top of the panel menu.
 
 The Color workspace is available from the bottom workspace bar and contains:
 
 - a DaVinci-inspired icon-only panel bar directly below the main toolbar, using the same chrome color as the bottom workspace bar and showing the project name in the center;
-- panel toggles for Media, Clips, Mini Timeline, Nodes, and Properties, with Properties opening directly on Effects; LUTs and Export are visible disabled placeholders, while Gallery and Lightbox are intentionally omitted;
+- panel toggles for Media, Clips, Mini Timeline, Color Nodes, and Properties, with Properties opening directly on Effects; LUTs and Export are visible disabled placeholders, while Gallery and Lightbox are intentionally omitted;
 - an upper row where Media, Preview, Nodes, and Properties share the available width, with Preview always retained and no more than three panels visible at once; opening a fourth automatically closes another optional panel;
 - a compact Clips strip with codec/file-type labels, red selection, a rainbow number badge only when the active grade is non-neutral, and a source-aware right-click menu;
 - a Mini Timeline with ruler scrubbing, a draggable Resolve-style playhead, compact clip bars, and no clip names or thumbnails;

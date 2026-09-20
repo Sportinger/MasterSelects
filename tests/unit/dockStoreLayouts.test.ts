@@ -16,7 +16,7 @@ import {
   useDockStore,
 } from '../../src/stores/dockStore';
 import { resolveMobileLayoutForComposition } from '../../src/components/dock/mobileLayoutOrientation';
-import { mergeFactoryDockLayouts } from '../../src/stores/dockStore/layoutPersistence';
+import { cleanupPersistedLayout, mergeFactoryDockLayouts } from '../../src/stores/dockStore/layoutPersistence';
 import { DEFAULT_TRACKS, useTimelineStore } from '../../src/stores/timeline';
 import { useSettingsStore } from '../../src/stores/settingsStore';
 import type { DockLayout, DockNode, DockTabGroup, PanelType } from '../../src/types/dock';
@@ -34,6 +34,20 @@ function panelTypes(group: DockTabGroup | null): PanelType[] {
 }
 
 describe('dock store saved layouts', () => {
+  it('renames legacy Color Nodes tabs without changing custom titles or the general Nodes panel', () => {
+    const layout: DockLayout = { root: { kind: 'tab-group', id: 'nodes', activeIndex: 1, panels: [
+      { id: 'general', type: 'node-workspace', title: 'Nodes' },
+      { id: 'color', type: 'color-nodes', title: 'Nodes' },
+      { id: 'custom', type: 'color-nodes', title: 'My grade' },
+    ] }, floatingPanels: [] };
+    const restored = cleanupPersistedLayout(layout);
+    expect(restored.root).toMatchObject({ activeIndex: 1, panels: [
+      { id: 'general', type: 'node-workspace', title: 'Nodes' },
+      { id: 'color', type: 'color-nodes', title: 'Color Nodes' },
+      { id: 'custom', type: 'color-nodes', title: 'My grade' },
+    ] });
+  });
+
   beforeEach(() => {
     localStorage.clear();
     useSettingsStore.setState({ theme: 'dark' });

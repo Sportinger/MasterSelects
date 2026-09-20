@@ -642,6 +642,11 @@ html[data-dock-resize-hover-axis='xy'] * {
   background: var(--bg-hover);
 }
 
+.dock-tab-add-menu-item,
+.dock-tab-context-menu-item { -webkit-tap-highlight-color: transparent; }
+.dock-tab-add-menu-item:focus:not(:focus-visible),
+.dock-tab-context-menu-item:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+
 .dock-tab-add-menu-item.is-current {
   color: var(--accent);
 }

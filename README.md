@@ -85,7 +85,7 @@ existing systems, and check their work:
 | --- | --- |
 | **Video** | Edit multiple tracks, nest compositions, work with proxies, sync multicam footage, and import Premiere Pro sequences. |
 | **Nodes** | One clip canvas with nested groups, executable texture/material/geometry nodes, detailed face/depth processing, synchronized effect controls and a searchable catalog. An OffscreenCanvas worker draws the graph and directional signal animation on separate cached layers. Compact animation areas show existing keyframes directly on their target nodes; extract a keyframe node to share a curve, with its cables revealed on selection. Typed ports show accepted formats; Video Source exposes reusable tracking and saved depth alongside audio analysis. |
-| **Color & effects** | Grade with curves and scopes, combine GPU effects and transitions, and animate masks and properties with keyframes. |
+| **Color & effects** | Grade through Color Nodes or the synchronized Color controls, inspect curves and scopes, combine GPU effects and transitions, and animate masks and properties with keyframes. |
 | **Audio** | Edit waveforms and spectrograms, mix tracks with effects and sends, record audio, and separate stems. |
 | **Motion & tracking** | Animate text, shapes, Lottie, and Rive assets; create captions; track faces and surfaces; bypass baked face/lip stabilization without deleting keyframes; and attach graphics to tracked motion. |
 | **3D** | Combine footage with models, lights, cameras, and Gaussian splats in a shared scene. |

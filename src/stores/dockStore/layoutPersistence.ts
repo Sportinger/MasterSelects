@@ -63,6 +63,7 @@ function normalizeDockPanel(panel: DockPanel): NormalizedDockPanel | null {
     panel: {
       ...panel,
       type: normalizedType,
+      ...(panel.type === 'color-nodes' && panel.title === 'Nodes' ? { title: 'Color Nodes' } : {}),
       ...(legacyScopeMode
         ? {
             title: 'Scopes',

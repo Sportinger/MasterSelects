@@ -64,7 +64,7 @@ describe('ColorClipContextMenu', () => {
 
     expect(screen.getByRole('menu', { name: 'Color clip actions for Interview A' })).toBeInTheDocument();
     expect(screen.getByText('Local Versions')).toBeInTheDocument();
-    expect(screen.getByText('Display Node Graph')).toBeInTheDocument();
+    expect(screen.getByText('Display Color Nodes')).toBeInTheDocument();
     expect(screen.getByText('View Clip Details')).toBeInTheDocument();
     expect(screen.getByText('Find in Media')).toBeInTheDocument();
     expect(screen.getByText('Stop Proxy Generation (42%)')).toBeInTheDocument();
