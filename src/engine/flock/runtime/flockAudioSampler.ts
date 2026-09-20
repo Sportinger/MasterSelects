@@ -37,7 +37,7 @@ function normalizeDb(value: number): number {
   return Math.max(0, Math.min(1, (value + 60) / 60));
 }
 
-export function createFlockAudioSampler(flockClipId: string): FlockAudioSampler {
+export function createFlockAudioSampler(flockClipId: string, options: { loadMissing?: boolean } = {}): FlockAudioSampler {
   return (audioClipId, sourceTime, smoothingSeconds) => {
     const clips = useTimelineStore.getState().clips;
     const audioClip = clips.find((clip) => clip.id === audioClipId);
@@ -49,7 +49,7 @@ export function createFlockAudioSampler(flockClipId: string): FlockAudioSampler 
     if (!refId) return null;
     const envelope = getCachedTimelineLoudnessEnvelope(refId);
     if (!envelope) {
-      if (!pendingLoads.has(refId)) {
+      if (options.loadMissing !== false && !pendingLoads.has(refId)) {
         pendingLoads.add(refId);
         void loadTimelineLoudnessEnvelope(refId).then((loaded) => {
           if (loaded) {

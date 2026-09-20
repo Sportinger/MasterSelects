@@ -1,4 +1,25 @@
 @layer features {
+  .resolve-inspector-row--extra-action {
+    --resolve-inspector-action-width: 67px;
+  }
+
+  .resolve-inspector-row--extra-action > .resolve-inspector-row-actions {
+    grid-template-columns: repeat(3, 18px);
+  }
+
+  .resolve-inspector-row--extra-action > .resolve-inspector-row-actions > :first-child {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .resolve-inspector-row--extra-action > .resolve-inspector-row-actions > .keyframe-toggle {
+    grid-column: 2;
+  }
+
+  .resolve-inspector-row--extra-action > .resolve-inspector-row-actions > .resolve-inspector-reset-button {
+    grid-column: 3;
+  }
+
   .resolve-inspector-section {
     --resolve-inspector-row-height: 26px;
     --resolve-inspector-label-width: 100px;

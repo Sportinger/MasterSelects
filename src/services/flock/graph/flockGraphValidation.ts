@@ -1,3 +1,5 @@
+import { checkGraphConnection, graphHasCycle, wouldCreateGraphCycle } from '../../nodeGraph/graphConnections';
+import { flockConnectionGraph, flockConnectionEdge } from './flockConnectionGraph';
 import {
   FLOCK_DEFINITION_VERSION,
   type FlockDefinition,
@@ -13,7 +15,6 @@ import {
   FLOCK_OUTPUT_OPERATOR_ID,
   FLOCK_SIMULATION_OPERATOR_ID,
   getFlockOperator,
-  resolveFlockNodePorts,
 } from '../operators/flockOperatorRegistry';
 import { FLOCK_MAX_CAPACITY } from '../operators/populationSimulationOperators';
 import { expandFlockGroups } from './flockGroupExpansion';
@@ -65,13 +66,6 @@ export function validateFlockParamValue(
   }
 }
 
-function findPorts(definition: FlockDefinition, nodes: FlockNode[], ref: FlockPortRef) {
-  const node = nodes.find((candidate) => candidate.id === ref.nodeId);
-  if (!node) return null;
-  const ports = resolveFlockNodePorts(node, definition);
-  return ports ? { node, ports } : null;
-}
-
 /** Edge-level checks shared by validation and interactive connection. */
 export function checkFlockConnection(
   definition: FlockDefinition,
@@ -81,44 +75,11 @@ export function checkFlockConnection(
   edges: FlockEdge[] = definition.edges,
   ignoreEdgeId?: string,
 ): FlockConnectionCheck {
-  if (from.nodeId === to.nodeId) {
-    return { ok: false, code: 'self-link', message: 'A node cannot connect to itself.' };
-  }
-  const source = findPorts(definition, nodes, from);
-  const target = findPorts(definition, nodes, to);
-  if (!source || !target) {
-    return { ok: false, code: 'missing-node', message: 'Connection endpoint node does not exist.' };
-  }
-  const outPort = source.ports.outputs.find((candidate) => candidate.id === from.port);
-  const inPort = target.ports.inputs.find((candidate) => candidate.id === to.port);
-  if (!outPort || !inPort) {
-    return { ok: false, code: 'missing-port', message: `Port ${!outPort ? from.port : to.port} does not exist.` };
-  }
-  if (outPort.type !== inPort.type) {
-    return {
-      ok: false,
-      code: 'type-mismatch',
-      message: `Cannot connect ${outPort.type} output to ${inPort.type} input.`,
-    };
-  }
-  const relevantEdges = edges.filter((edge) => edge.id !== ignoreEdgeId);
-  if (relevantEdges.some((edge) => (
-    edge.from.nodeId === from.nodeId && edge.from.port === from.port
-    && edge.to.nodeId === to.nodeId && edge.to.port === to.port
-  ))) {
-    return { ok: false, code: 'duplicate-edge', message: 'These ports are already connected.' };
-  }
-  if (wouldCreateCycle(relevantEdges, from.nodeId, to.nodeId)) {
-    return {
-      ok: false,
-      code: 'cycle',
-      message: 'This connection would create a cycle. Temporal feedback belongs to the Simulation node.',
-    };
-  }
-  const occupying = inPort.repeated
-    ? undefined
-    : relevantEdges.find((edge) => edge.to.nodeId === to.nodeId && edge.to.port === to.port);
-  return occupying ? { ok: true, replacesEdgeId: occupying.id } : { ok: true };
+  const check = checkGraphConnection(flockConnectionGraph(definition, nodes, edges), {
+    fromNodeId: from.nodeId, fromPortId: from.port, toNodeId: to.nodeId, toPortId: to.port,
+  }, ignoreEdgeId);
+  return !check.ok && check.code === 'cycle'
+    ? { ...check, message: `${check.message} Temporal feedback belongs to the Simulation node.` } : check;
 }
 
 export function isParticipatingFlockNode(node: FlockNode, edges: readonly FlockEdge[]): boolean {
@@ -126,22 +87,7 @@ export function isParticipatingFlockNode(node: FlockNode, edges: readonly FlockE
 }
 
 export function wouldCreateCycle(edges: FlockEdge[], fromNodeId: string, toNodeId: string): boolean {
-  const adjacency = new Map<string, string[]>();
-  for (const edge of edges) {
-    const list = adjacency.get(edge.from.nodeId) ?? [];
-    list.push(edge.to.nodeId);
-    adjacency.set(edge.from.nodeId, list);
-  }
-  const stack = [toNodeId];
-  const seen = new Set<string>();
-  while (stack.length > 0) {
-    const current = stack.pop()!;
-    if (current === fromNodeId) return true;
-    if (seen.has(current)) continue;
-    seen.add(current);
-    stack.push(...(adjacency.get(current) ?? []));
-  }
-  return false;
+  return wouldCreateGraphCycle(edges.map(flockConnectionEdge), fromNodeId, toNodeId);
 }
 
 function validateLevel(
@@ -209,29 +155,9 @@ function validateLevel(
       });
     }
   }
-  if (hasCycle(nodes, edges)) {
+  if (graphHasCycle(nodes, edges.map(flockConnectionEdge))) {
     diagnostics.push({ code: 'cycle', severity: 'error', message: `${scope}The graph contains a cycle.` });
   }
-}
-
-function hasCycle(nodes: FlockNode[], edges: FlockEdge[]): boolean {
-  const indegree = new Map(nodes.map((node) => [node.id, 0]));
-  for (const edge of edges) {
-    if (indegree.has(edge.to.nodeId)) indegree.set(edge.to.nodeId, (indegree.get(edge.to.nodeId) ?? 0) + 1);
-  }
-  const queue = [...indegree.entries()].filter(([, degree]) => degree === 0).map(([id]) => id);
-  let visited = 0;
-  while (queue.length > 0) {
-    const id = queue.shift()!;
-    visited += 1;
-    for (const edge of edges) {
-      if (edge.from.nodeId !== id || !indegree.has(edge.to.nodeId)) continue;
-      const next = (indegree.get(edge.to.nodeId) ?? 0) - 1;
-      indegree.set(edge.to.nodeId, next);
-      if (next === 0) queue.push(edge.to.nodeId);
-    }
-  }
-  return visited < nodes.length;
 }
 
 /** Full structural validation. Invalid drafts stay saved; compile/export refuse them. */

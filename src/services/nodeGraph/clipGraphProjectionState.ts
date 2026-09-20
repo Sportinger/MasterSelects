@@ -242,10 +242,11 @@ export function connectClipNodeGraphPorts(
     return state;
   }
 
+  const repeated = graph.nodes.find(node => node.id === nextEdge.toNodeId)?.inputs.find(port => port.id === nextEdge.toPortId)?.metadata?.repeated;
   const edges = graph.edges
     .filter((candidate) => (
       candidate.id !== nextEdge.id &&
-      !(candidate.toNodeId === nextEdge.toNodeId && candidate.toPortId === nextEdge.toPortId)
+      (repeated || !(candidate.toNodeId === nextEdge.toNodeId && candidate.toPortId === nextEdge.toPortId))
     ))
     .map(cloneEdge);
 

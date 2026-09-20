@@ -4,7 +4,6 @@ interface ColorToolbarProps {
   renderedViewMode: 'list' | 'nodes';
   enabled: boolean;
   addNodeDisabled: boolean;
-  selectedEdgeId: string | null;
   maxRuntimePrimaryNodes: number;
   onSwitchViewMode: (viewMode: 'list' | 'nodes') => void;
   onToggleEnabled: () => void;
@@ -12,14 +11,12 @@ interface ColorToolbarProps {
   onAddPrimary: () => void;
   onAddWheels: () => void;
   onReset: () => void;
-  onDisconnectSelectedEdge: () => void;
 }
 
 export function ColorToolbar({
   renderedViewMode,
   enabled,
   addNodeDisabled,
-  selectedEdgeId,
   maxRuntimePrimaryNodes,
   onSwitchViewMode,
   onToggleEnabled,
@@ -27,7 +24,6 @@ export function ColorToolbar({
   onAddPrimary,
   onAddWheels,
   onReset,
-  onDisconnectSelectedEdge,
 }: ColorToolbarProps) {
   const addDisabledTitle = `Realtime graph limit is ${maxRuntimePrimaryNodes} color nodes`;
 
@@ -90,11 +86,7 @@ export function ColorToolbar({
         Add Wheels
       </button>
       <button type="button" onClick={onReset}>Reset</button>
-      {selectedEdgeId && (
-        <button type="button" onClick={onDisconnectSelectedEdge}>
-          Disconnect
-        </button>
-      )}
+
     </div>
   );
 }

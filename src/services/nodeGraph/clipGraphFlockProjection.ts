@@ -1,3 +1,5 @@
+import { projectFlockPort } from '../flock/graph/flockConnectionGraph';
+export { getNodeGraphPortCompatibilityKey } from './graphConnections';
 import type {
   FlockDefinition,
   FlockNode,
@@ -7,14 +9,12 @@ import type {
 import { compileFlockDefinitionCached } from '../flock/compiler/flockCompiler';
 import {
   FLOCK_GROUP_OPERATOR_ID,
-  FLOCK_PORT_SIGNAL_KIND,
   getFlockOperator,
   resolveFlockNodePorts,
 } from '../flock/operators/flockOperatorRegistry';
 import {
   FLOCK_CATEGORY_LABELS,
   type FlockOperatorCategory,
-  type FlockPortDescriptor,
 } from '../flock/operators/flockOperatorTypes';
 import type { TimelineClip } from './clipGraphProjectionDomain';
 import type {
@@ -24,8 +24,6 @@ import type {
   NodeGraphNode,
   NodeGraphNodeKind,
   NodeGraphPort,
-  NodeGraphPortDirection,
-  NodeGraphSignalType,
 } from './types';
 
 /**
@@ -66,29 +64,6 @@ export function getFlockPortType(port: Pick<NodeGraphPort, 'metadata'>): FlockPo
   return typeof semantic === 'string' && semantic.startsWith(FLOCK_PORT_SEMANTIC_PREFIX)
     ? semantic.slice(FLOCK_PORT_SEMANTIC_PREFIX.length) as FlockPortType
     : null;
-}
-
-/**
- * Canvas connection key: flock ports connect only to the identical flock port
- * type (spawn != behavior even though both map to the generic metadata kind).
- */
-export function getNodeGraphPortCompatibilityKey(port: Pick<NodeGraphPort, 'type' | 'metadata'>): string {
-  const flockType = getFlockPortType(port);
-  return flockType ? `${FLOCK_PORT_SEMANTIC_PREFIX}${flockType}` : port.metadata?.semanticKind?.startsWith('operator:') ? port.metadata.semanticKind : port.type;
-}
-
-function toNodeGraphPort(descriptor: FlockPortDescriptor, direction: NodeGraphPortDirection): NodeGraphPort {
-  return {
-    id: descriptor.id,
-    label: descriptor.label,
-    type: FLOCK_PORT_SIGNAL_KIND[descriptor.type] as NodeGraphSignalType,
-    direction,
-    metadata: {
-      semanticKind: flockPortSemanticKind(descriptor.type),
-      ...(descriptor.required ? { required: true } : {}),
-      ...(descriptor.repeated ? { repeated: true } : {}),
-    },
-  };
 }
 
 /** Display params: vec3 values flatten to `param.x/.y/.z`; canonical values stay in the definition. */
@@ -149,8 +124,8 @@ function buildFlockGraphNode(
     runtime: isGroup ? 'subgraph' : 'wgsl',
     label,
     description,
-    inputs: (ports?.inputs ?? []).map((port) => toNodeGraphPort(port, 'input')),
-    outputs: (ports?.outputs ?? []).map((port) => toNodeGraphPort(port, 'output')),
+    inputs: (ports?.inputs ?? []).map((port) => projectFlockPort(port, 'input')),
+    outputs: (ports?.outputs ?? []).map((port) => projectFlockPort(port, 'output')),
     params: {
       ...flattenFlockParams(node.params),
       operator: node.operator,

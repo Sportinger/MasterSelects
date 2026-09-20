@@ -1,4 +1,5 @@
-import { operatorPortsCompatible } from './portContracts';
+import { checkGraphConnection, graphHasCycle } from '../nodeGraph/graphConnections';
+import { operatorConnectionGraph } from './operatorConnectionGraph';
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorBinding, OperatorEdge, OperatorValue } from '../../types/operatorGraph';
 import type { Keyframe } from '../../types/keyframes';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
@@ -20,25 +21,17 @@ export function validateEffectGraph(graph: EffectOperatorGraph): string[] {
   for (const n of graph.nodes) {
     if (typeof n.id !== 'string' || !/^[\w-]+$/.test(n.id) || !getEffectOperator(n.operator) || !n.bindings || !Object.values(n.bindings).every(validBinding)) errors.push(`Invalid node: ${n.id}.`);
   }
-  for (const e of graph.edges) {
-    const from = getEffectOperator(nodes.get(e.from)?.operator ?? ''), to = getEffectOperator(nodes.get(e.to)?.operator ?? '');
-    const output = from?.outputs.find(p => p.id === e.output), input = to?.inputs.find(p => p.id === e.input);
-    const key = `${e.to}:${e.input}`;
-    if (typeof e.id !== 'string' || edgeIds.has(e.id) || e.from === e.to || !output || !input || !operatorPortsCompatible(output, input) || (!input.repeated && occupied.has(key))) errors.push(`Invalid connection: ${e.id}.`);
-    occupied.add(key); edgeIds.add(e.id);
+  const connections = operatorConnectionGraph(graph);
+  for (let index = 0; index < connections.edges.length; index++) {
+    const edge = connections.edges[index];
+    const check = checkGraphConnection({ ...connections, edges: connections.edges.slice(0, index) }, edge);
+    if (typeof edge.id !== 'string' || edgeIds.has(edge.id) || !check.ok || check.replacesEdgeId) errors.push(`Invalid connection: ${edge.id}.`);
+    occupied.add(`${edge.toNodeId}:${edge.toPortId}`); edgeIds.add(edge.id);
   }
   for (const n of graph.nodes) for (const p of getEffectOperator(n.operator)?.inputs ?? []) {
     if (p.required && !occupied.has(`${n.id}:${p.id}`)) errors.push(`${getEffectOperator(n.operator)!.label}: connect ${p.label}.`);
   }
-  const done = new Set<string>(), visiting = new Set<string>();
-  const visit = (id: string): boolean => {
-    if (visiting.has(id)) return false;
-    if (done.has(id)) return true;
-    visiting.add(id);
-    for (const edge of graph.edges.filter(e => e.to === id)) if (!visit(edge.from)) return false;
-    visiting.delete(id); done.add(id); return true;
-  };
-  for (const n of graph.nodes) if (!visit(n.id)) { errors.push('Cycles are not supported.'); break; }
+  if (graphHasCycle(connections.nodes, connections.edges)) errors.push('Cycles are not supported.');
   if (graph.nodes.filter(n => n.operator === (graph.domain === 'scene' ? 'scene.render' : 'scene.output')).length !== 1) errors.push('The graph needs one clip output.');
   if (graph.groups) {
     if (!Array.isArray(graph.groups) || graph.groups.length > 32) return [...errors, 'Invalid groups.'];

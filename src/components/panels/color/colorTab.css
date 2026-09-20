@@ -587,3 +587,12 @@
   width: max-content;
   min-width: 0;
 }
+
+/* The focused Color view uses the shared worker canvas and inspector theme. */
+.color-shared-node-view { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 280px; height: 100%; position: relative; }
+.color-shared-node-actions { display: flex; padding: 4px 8px; border-bottom: 1px solid var(--border-color); }
+.color-shared-node-actions .inspector-select { max-width: 240px; }
+
+.color-shared-node-view button { -webkit-tap-highlight-color: transparent; }
+.color-shared-node-view button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.color-shared-node-view button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

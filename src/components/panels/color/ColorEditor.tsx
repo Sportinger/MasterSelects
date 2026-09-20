@@ -1,8 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
-import { useMediaStore } from '../../../stores/mediaStore';
 import { startBatch, endBatch } from '../../../stores/historyStore';
-import { getClipMediaFileId } from '../../../services/mediaArtifacts/mediaSourceArtifacts';
 import {
   MAX_RUNTIME_PRIMARY_NODES,
   PRIMARY_COLOR_PARAM_DEFS,
@@ -12,7 +10,6 @@ import {
   getActiveColorVersion,
   getEditableColorNodes,
   type ColorNode,
-  type ColorNodeType,
   type ColorViewMode,
 } from '../../../types/colorCorrection';
 import type { AnimatableProperty } from '../../../types/animationProperties';
@@ -20,25 +17,14 @@ import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
 import {
   useEditableDraggableNumberSettingsRevision,
 } from '../../common/EditableDraggableNumberSettings';
-import { ColorGraphView } from './ColorGraphView';
+import { ColorNodeCanvas } from './ColorNodeCanvas';
 import { InspectorToggleIcon } from './ColorEditorIcons';
 import { ColorNodeList } from './ColorNodeList';
 import { ColorToolbar } from './ColorToolbar';
 import { ColorVersionRow } from './ColorVersionRow';
 import { PrimaryColorControls } from './PrimaryColorControls';
 import { WheelColorControls } from './WheelColorControls';
-import { useColorGraphCanvasInteraction } from './useColorGraphCanvasInteraction';
-import { useColorGraphNodeDrag } from './useColorGraphNodeDrag';
-import { useInitialColorGraphLayout } from './useInitialColorGraphLayout';
-import { useResponsiveColorGraphAnchors } from './useResponsiveColorGraphAnchors';
 import {
-  getColorGraphBounds,
-  getColorGraphFitViewport,
-  getColorGraphOriginalSizeViewport,
-} from './colorGraphViewport';
-import {
-  getColorGraphPortY,
-  getColorGraphPortX,
   getControlSections,
   getWheelParamDef,
   getWheelPoint,
@@ -46,12 +32,8 @@ import {
   getWheelValuesFromPoint,
   type WheelControlConfig,
 } from './colorEditorMath';
-import type { ColorEditorNode, ColorEditorPort, ConnectionDragState } from './colorEditorTypes';
+import type { ColorEditorNode } from './colorEditorTypes';
 import { trackEditorControlCommitted } from '../../../services/productAnalytics';
-import {
-  buildClipNodeGraphDocument,
-  getNodeGraphView,
-} from '../../../services/nodeGraph';
 import './colorTab.css';
 
 interface ColorEditorProps {
@@ -75,32 +57,21 @@ export function ColorEditor({
   controlSet = 'auto',
   onExitWorkspace,
 }: ColorEditorProps) {
-  const graphCanvasRef = useRef<HTMLDivElement>(null);
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const [connectionDrag, setConnectionDrag] = useState<ConnectionDragState | null>(null);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   const rangeSettingsRevision = useEditableDraggableNumberSettingsRevision();
   const clip = useTimelineStore(state => state.clips.find(c => c.id === clipId));
-  const mediaFiles = useMediaStore(state => state.files);
   const clipKeyframes = useTimelineStore(state => state.clipKeyframes);
   const {
     ensureColorCorrection,
     setColorCorrectionEnabled,
     setColorViewMode,
-    setColorNodeDisplayMode,
     selectColorNode,
     addColorNode,
     removeColorNode,
-    moveColorNode,
-    connectColorNodes,
-    removeColorEdge,
     deleteColorVersion,
     setColorNodeEnabled,
-    setColorWorkspaceViewport,
-    initializeColorNodeGraphLayout,
     renameColorNode,
     resetColorNode,
-    resetColorNodeStackLayers,
     resetColorCorrection,
     duplicateColorVersion,
     setActiveColorVersion,
@@ -116,82 +87,13 @@ export function ColorEditor({
     ensureColorCorrection(clipId);
   }, [clipId, ensureColorCorrection]);
 
-  useEffect(() => {
-    if (!selectedEdgeId) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Delete' && event.key !== 'Backspace') return;
-      event.preventDefault();
-      removeColorEdge(clipId, selectedEdgeId);
-      setSelectedEdgeId(null);
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [clipId, removeColorEdge, selectedEdgeId]);
-
   const colorState = ensureColorCorrectionState(clip?.colorCorrection);
   const activeColorVersion = getActiveColorVersion(colorState);
-  const workspaceViewport = colorState.ui.workspaceViewport ?? { x: 0, y: 0, zoom: 1 };
-  const {
-    clearMarqueeSelection,
-    isPanning,
-    marquee,
-    marqueeSelectedNodeIds,
-    scrollCanvas,
-    startCanvasInteraction,
-  } = useColorGraphCanvasInteraction({
-    canvasRef: graphCanvasRef,
-    getNodes: () => graphNodes,
-    selectionScope: clipId,
-    viewport: workspaceViewport,
-    workspace,
-    onViewportChange: viewport => setColorWorkspaceViewport(clipId, viewport),
-    onPrimaryNodeSelect: nodeId => {
-      setSelectedEdgeId(null);
-      selectColorNode(clipId, nodeId);
-    },
-  });
-  useInitialColorGraphLayout({
-    canvasRef: graphCanvasRef, clipId,
-    enabled: Boolean(clip && workspace && surface !== 'controls'),
-    initialize: initializeColorNodeGraphLayout,
-    setViewport: setColorWorkspaceViewport,
-  });
-  useResponsiveColorGraphAnchors({
-    canvasRef: graphCanvasRef,
-    clipId,
-    enabled: Boolean(clip && workspace && surface !== 'controls'),
-    nodes: activeColorVersion?.nodes ?? [],
-    viewport: workspaceViewport,
-    moveNode: moveColorNode,
-  });
-  const startNodeDrag = useColorGraphNodeDrag({
-    canvasRef: graphCanvasRef,
-    getNodes: () => graphNodes,
-    getEdges: () => graphEdges,
-    zoom: workspace ? workspaceViewport.zoom : 1,
-    onDragStart: nodeId => {
-      setSelectedEdgeId(null);
-      clearMarqueeSelection();
-      selectColorNode(clipId, nodeId);
-      startBatch('Move color node');
-    },
-    onDragEnd: (nodeId, position) => {
-      if (position) moveColorNode(clipId, nodeId, position);
-      endBatch();
-    },
-  });
-
   if (!clip) {
     return <div className="panel-empty"><p>Select a clip for color correction</p></div>;
   }
 
   const activeVersion = activeColorVersion!;
-  const colorGraph = getNodeGraphView(buildClipNodeGraphDocument(clip), 'color');
-  const clipMediaId = getClipMediaFileId(clip);
-  const thumbnailUrl = clip.thumbnails?.[0]
-    ?? (clipMediaId ? mediaFiles.find(file => file.id === clipMediaId)?.thumbnailUrl : undefined);
   const editableNodes = getEditableColorNodes(colorState);
   const selectedNode =
     activeVersion.nodes.find(node => node.id === colorState.ui.selectedNodeId) ??
@@ -384,131 +286,6 @@ export function ColorEditor({
 
   const addNodeDisabled = editableNodes.length >= MAX_RUNTIME_PRIMARY_NODES;
 
-  const toGraphPoint = (event: PointerEvent | React.PointerEvent) => {
-    const rect = graphCanvasRef.current?.getBoundingClientRect();
-    if (!rect) {
-      return { x: 0, y: 0 };
-    }
-    const zoom = workspace ? workspaceViewport.zoom : 1;
-    const viewportX = workspace ? workspaceViewport.x : 0;
-    const viewportY = workspace ? workspaceViewport.y : 0;
-    return {
-      x: Math.round((event.clientX - rect.left - viewportX) / zoom),
-      y: Math.round((event.clientY - rect.top - viewportY) / zoom),
-    };
-  };
-
-  const startConnectionDrag = (
-    event: React.PointerEvent<HTMLButtonElement>,
-    node: ColorEditorNode,
-    port: ColorEditorPort,
-  ) => {
-    if (event.button !== 0 || !node.outputs?.length) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    setSelectedEdgeId(null);
-    startBatch('Rewire color connection');
-
-    const start = {
-      x: getColorGraphPortX(node, 'output', workspace ? workspaceViewport.zoom : 1),
-      y: getColorGraphPortY(node, 'output', port.id, workspace ? workspaceViewport.zoom : 1),
-    };
-    setConnectionDrag({
-      fromNodeId: node.id,
-      fromPortId: port.id,
-      type: port.type,
-      start,
-      current: toGraphPoint(event),
-    });
-
-    const resolveValidTarget = (pointerEvent: PointerEvent) => {
-      const target = document
-        .elementFromPoint(pointerEvent.clientX, pointerEvent.clientY)
-        ?.closest('[data-color-port-direction="input"]') as HTMLElement | null;
-      const nodeId = target?.dataset.colorNodeId;
-      const portId = target?.dataset.colorPortId;
-      const portType = target?.dataset.colorPortType;
-      return nodeId && portId && portType === port.type && nodeId !== node.id
-        ? { nodeId, portId }
-        : undefined;
-    };
-
-    const handleMove = (moveEvent: PointerEvent) => {
-      setConnectionDrag(current => current
-        ? {
-            ...current,
-            current: toGraphPoint(moveEvent),
-            validTarget: resolveValidTarget(moveEvent),
-          }
-        : current
-      );
-    };
-
-    const finish = (upEvent: PointerEvent) => {
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', finish);
-      window.removeEventListener('pointercancel', finish);
-
-      const target = resolveValidTarget(upEvent);
-      if (target) {
-        connectColorNodes(clipId, node.id, target.nodeId, port.id, target.portId);
-      }
-
-      setConnectionDrag(null);
-      endBatch();
-    };
-
-    window.addEventListener('pointermove', handleMove);
-    window.addEventListener('pointerup', finish);
-    window.addEventListener('pointercancel', finish);
-  };
-
-  const graphNodes: ColorEditorNode[] = colorGraph.nodes.map((node) => ({
-    id: node.id,
-    type: node.binding?.kind === 'color-node' ? node.binding.nodeType : node.kind,
-    name: node.label,
-    enabled: node.params?.enabled !== false,
-    params: node.params ?? {},
-    position: node.layout,
-    inputs: node.inputs.map(port => ({ id: port.id, label: port.label, type: port.type })),
-    outputs: node.outputs.map(port => ({ id: port.id, label: port.label, type: port.type })),
-  }));
-  const graphEdges = colorGraph.edges;
-  const updateWorkspaceZoom = (nextZoom: number) => {
-    setColorWorkspaceViewport(clipId, {
-      ...workspaceViewport,
-      zoom: Math.max(0.25, Math.min(2, Number(nextZoom.toFixed(2)))),
-    });
-  };
-  const zoomGraphToWindow = () => {
-    const canvasRect = graphCanvasRef.current?.getBoundingClientRect();
-    if (!canvasRect || graphNodes.length === 0) return;
-    const bounds = getColorGraphBounds(graphNodes);
-    if (!bounds) return;
-    setColorWorkspaceViewport(
-      clipId,
-      getColorGraphFitViewport(bounds, canvasRect.width, canvasRect.height),
-    );
-  };
-  const showGraphAtOriginalSize = () => {
-    setColorWorkspaceViewport(
-      clipId,
-      getColorGraphOriginalSizeViewport(workspaceViewport),
-    );
-  };
-  const resetNodePositions = () => {
-    const canvasRect = graphCanvasRef.current?.getBoundingClientRect();
-    if (!canvasRect || canvasRect.width <= 0 || canvasRect.height <= 0) return;
-    initializeColorNodeGraphLayout(clipId, canvasRect.width, canvasRect.height, true);
-    setColorWorkspaceViewport(clipId, workspaceViewport);
-  };
-  const addGraphNode = (type: ColorNodeType) => {
-    clearMarqueeSelection();
-    setSelectedEdgeId(null);
-    addColorNode(clipId, type);
-  };
-  const selectedEdge = graphEdges.find(edge => edge.id === selectedEdgeId);
   const showGraphSurface = surface !== 'controls';
   const showControlSurface = surface !== 'nodes';
   const showEditorChrome = surface === 'full';
@@ -540,7 +317,6 @@ export function ColorEditor({
             renderedViewMode={renderedViewMode}
             enabled={colorState.enabled}
             addNodeDisabled={addNodeDisabled}
-            selectedEdgeId={selectedEdge?.id ?? null}
             maxRuntimePrimaryNodes={MAX_RUNTIME_PRIMARY_NODES}
             onSwitchViewMode={switchViewMode}
             onToggleEnabled={() => setColorCorrectionEnabled(clipId, !colorState.enabled)}
@@ -548,11 +324,6 @@ export function ColorEditor({
             onAddPrimary={() => addColorNode(clipId, 'primary')}
             onAddWheels={() => addColorNode(clipId, 'wheels')}
             onReset={() => resetColorCorrection(clipId)}
-            onDisconnectSelectedEdge={() => {
-              if (!selectedEdge) return;
-              removeColorEdge(clipId, selectedEdge.id);
-              setSelectedEdgeId(null);
-            }}
           />
 
           <ColorVersionRow
@@ -568,57 +339,8 @@ export function ColorEditor({
       <div className="color-main">
         {showGraphSurface && <div className="color-view">
           {renderedViewMode === 'nodes' ? (
-            <ColorGraphView
-              canvasRef={graphCanvasRef}
-              nodes={graphNodes}
-              edges={graphEdges}
-              workspace={workspace}
-              isPanning={isPanning}
-              selectedNodeId={selectedNode?.id}
-              selectedNodeIds={marqueeSelectedNodeIds}
-              selectedEdgeId={selectedEdgeId}
-              connectionDrag={connectionDrag}
-              marquee={marquee}
-              viewport={workspaceViewport}
-              thumbnailUrl={thumbnailUrl}
-              nodeDisplayMode={colorState.ui.nodeDisplayMode ?? 'thumbnail'}
-              addNodeDisabled={addNodeDisabled}
-              onCanvasPointerDown={startCanvasInteraction}
-              onCanvasWheel={scrollCanvas}
-              onCanvasClick={() => setSelectedEdgeId(null)}
-              onResetAll={() => resetColorCorrection(clipId)}
-              onResetNodeStackLayers={() => resetColorNodeStackLayers(clipId)}
-              onAddNode={addGraphNode}
-              onZoomIn={() => updateWorkspaceZoom(workspaceViewport.zoom * 1.2)}
-              onZoomOut={() => updateWorkspaceZoom(workspaceViewport.zoom / 1.2)}
-              onZoomToWindow={zoomGraphToWindow}
-              onOriginalSize={showGraphAtOriginalSize}
-              onToggleDisplayMode={() => setColorNodeDisplayMode(
-                clipId,
-                colorState.ui.nodeDisplayMode === 'label' ? 'thumbnail' : 'label',
-              )}
-              onResetNodePositions={resetNodePositions}
-              onNodeRemove={(nodeId) => {
-                clearMarqueeSelection();
-                removeColorNode(clipId, nodeId);
-              }}
-              onNodePointerDown={startNodeDrag}
-              onNodeSelect={(nodeId) => {
-                setSelectedEdgeId(null);
-                clearMarqueeSelection();
-                selectColorNode(clipId, nodeId);
-              }}
-              onNodeEnabledChange={(nodeId, enabled) => setColorNodeEnabled(clipId, nodeId, enabled)}
-              onConnectionStart={startConnectionDrag}
-              onEdgeSelect={(edgeId) => {
-                clearMarqueeSelection();
-                setSelectedEdgeId(edgeId);
-              }}
-              onEdgeRemove={(edgeId) => {
-                removeColorEdge(clipId, edgeId);
-                setSelectedEdgeId(null);
-              }}
-            />
+            <ColorNodeCanvas clip={clip} selectedNodeId={selectedNode?.id} addNodeDisabled={addNodeDisabled}
+              onSelectNode={nodeId => selectColorNode(clipId, nodeId)} />
           ) : (
             <ColorNodeList
               nodes={editableNodes}

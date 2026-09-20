@@ -11,6 +11,14 @@ The ordinary Properties panel shows promoted graph parameters; **Open Nodes**
 shows the very same graph as the green **Flock** group on the unified clip canvas. Both surfaces
 edit one definition (`clip.flock`) and one set of keyframes.
 
+Flock follows the shared Nodes interaction model: typed cables, previews, nested
+groups and the compact property inspector. Reset uses each parameter's default;
+animated numeric controls edit the existing keyframe owner. The link icon exposes
+or removes a control in Properties. Connections can also be edited through the
+inspector, including repeated behavior inputs. Previews read existing particle
+samples and evaluated parameters without starting another simulation; scene
+images are labeled as the shared Flock scene.
+
 Plan and acceptance criteria: [`docs/ongoing/Flocking-Clips-And-Node-Graphs-Plan.md`](../ongoing/Flocking-Clips-And-Node-Graphs-Plan.md).
 
 ---

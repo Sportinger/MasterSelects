@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { NodePreviewScheduler } from '../../src/services/nodePreview/NodePreviewScheduler';
-import { nodePreviewKey, type PreviewFrame, type PreviewRequest } from '../../src/services/nodePreview/previewTypes';
+import { nodePreviewKey, nodePreviewPreferenceKey, type PreviewFrame, type PreviewRequest } from '../../src/services/nodePreview/previewTypes';
 import { cloneClipNodeGraph } from '../../src/services/nodeGraph/clipGraphProjectionState';
 import type { NodeGraphNode } from '../../src/types/nodeGraph';
 
@@ -62,5 +62,12 @@ describe('node preview work budgets', () => {
     expect(clone.previews).toEqual(graph.previews);
     clone.previews!.nodes.source.enabled = false;
     expect(graph.previews.nodes.source.enabled).toBe(true);
+  });
+  it('shares viewer preferences across focused and unified views, with separate color versions', () => {
+    const color = { ...node, id: 'grade', binding: { kind: 'color-node' as const, nodeId: 'grade', versionId: 'v1', nodeType: 'primary' as const } };
+    const canonical = nodePreviewPreferenceKey('clip', color);
+    expect(canonical).toBe('clip-graph:clip:color:v1/grade');
+    expect(nodePreviewPreferenceKey('clip', { ...color, id: canonical })).toBe(canonical);
+    expect(nodePreviewPreferenceKey('clip', { ...color, binding: { ...color.binding, versionId: 'v2' } })).not.toBe(canonical);
   });
 });

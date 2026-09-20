@@ -14,6 +14,18 @@ presentation, never rendering or a saved bake.
 bindings route each edit to its existing owner; the UI does not maintain a second
 copy of effect parameters, Flock definitions, color grades or 3D settings.
 
+The focused **Color Nodes** view uses this same canvas, including navigation,
+cable reconnection, selection and previews. Color edits in either view use one
+mutation owner. Flock, Color, Face Cables, Scene and manual clip links share port
+compatibility, format, input replacement and cycle checks. Flock's repeated inputs
+still accept multiple sources. Domain compilers and saved version-1 definitions
+remain intact; existing projects need no format migration.
+
+Flock node parameters use the shared compact inspector, with collapsible sections,
+numeric fields, sliders at suitable widths, reset and supported keyframe actions.
+The link icon exposes a control to Properties. The Connections section offers a
+keyboard-accessible alternative to cable dragging.
+
 ## Canvas navigation
 
 Mouse-wheel and trackpad scrolling zoom smoothly around the pointer. Zoom is
@@ -33,6 +45,13 @@ selectors switch the viewed port. Preferences are saved on the owning clip and
 survive project/history round trips. Portrait, landscape and square images retain
 their aspect ratio. Placement resolves collisions using the complete card size,
 including the preview; this also applies when adding nodes to existing graphs.
+
+Color viewer choices follow the saved node between Color and Nodes and remain
+separate for each color version. Flock viewers show evaluated parameters, scalar
+values or a bounded sample of already simulated particles. Old particle samples
+are marked stale. Scene previews show the shared rendered Flock scene, not an
+independent render of each branch. Opening a viewer never advances the simulation
+or starts missing audio analysis; unavailable outputs are identified explicitly.
 Expanding or folding nested groups reserves each complete frame and moves sibling
 groups together with their contents, keeping headers and unrelated cards apart.
 

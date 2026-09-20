@@ -4,9 +4,8 @@ import type {
   NodeGraphNode,
   NodeGraphPort,
 } from '../../../../services/nodeGraph';
-import { getNodeGraphPortCompatibilityKey } from '../../../../services/nodeGraph';
+import { getNodeGraphPortCompatibilityKey, formatsOverlap } from '../../../../services/nodeGraph/graphConnections';
 import { describePortText } from '../../../../services/nodeGraph/nodePortPresentation';
-import { formatsOverlap } from '../../../../services/operators/portContracts';
 import { previewExtraHeight } from '../previews/previewGeometry';
 
 export const DEFAULT_VIEWPORT = { zoom: 0.88, panX: 36, panY: 28 };

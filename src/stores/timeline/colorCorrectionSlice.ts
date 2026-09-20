@@ -1,3 +1,5 @@
+import { checkGraphConnection } from '../../services/nodeGraph/graphConnections';
+import { colorNodePorts, colorPortSignal } from '../../services/nodeGraph/colorGraphPorts';
 import {
   COLOR_FIXED_ANCHOR_SPACING,
   cloneColorCorrectionState,
@@ -16,35 +18,6 @@ import {
 } from '../../types/colorCorrection';
 import type { ColorCorrectionActions, Keyframe, SliceCreator } from './types';
 import { updateClipColorCorrectionWithRemoteSync } from '../../types/colorGradeOwnership';
-
-function wouldCreateCycle(
-  edges: { fromNodeId: string; toNodeId: string }[],
-  fromNodeId: string,
-  toNodeId: string
-): boolean {
-  const outgoing = new Map<string, string[]>();
-  for (const edge of edges) {
-    const targets = outgoing.get(edge.fromNodeId) ?? [];
-    targets.push(edge.toNodeId);
-    outgoing.set(edge.fromNodeId, targets);
-  }
-
-  const stack = [toNodeId];
-  const visited = new Set<string>();
-  while (stack.length > 0) {
-    const nodeId = stack.pop()!;
-    if (nodeId === fromNodeId) return true;
-    if (visited.has(nodeId)) continue;
-    visited.add(nodeId);
-    stack.push(...(outgoing.get(nodeId) ?? []));
-  }
-
-  return false;
-}
-
-function colorPortSignal(portId: string): 'texture' | 'mask' {
-  return portId.startsWith('key-') ? 'mask' : 'texture';
-}
 
 function updateClipColorState(
   state: ColorCorrectionState | undefined,
@@ -337,31 +310,13 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
       const activeVersion = getActiveColorVersion(current);
       if (!activeVersion || fromNodeId === toNodeId) return current;
 
-      const fromNode = activeVersion.nodes.find(node => node.id === fromNodeId);
-      const toNode = activeVersion.nodes.find(node => node.id === toNodeId);
-      if (
-        !fromNode
-        || !toNode
-        || fromNode.type === 'output'
-        || fromNode.type === 'alpha-output'
-        || toNode.type === 'input'
-        || toNode.type === 'source'
-        || colorPortSignal(fromPort) !== colorPortSignal(toPort)
-      ) {
-        return current;
-      }
-
-      const nextEdges = activeVersion.edges.filter(edge =>
-        !(edge.toNodeId === toNodeId && edge.toPort === toPort)
-      );
-
-      const candidateEdges = [
-        ...nextEdges,
-        { fromNodeId, toNodeId },
-      ];
-      if (wouldCreateCycle(candidateEdges, fromNodeId, toNodeId)) {
-        return current;
-      }
+      const graph = {
+        nodes: activeVersion.nodes.map(node => ({ id: node.id, ...colorNodePorts(node) })),
+        edges: activeVersion.edges.map(edge => ({ ...edge, fromPortId: edge.fromPort, toPortId: edge.toPort })),
+      };
+      const check = checkGraphConnection(graph, { fromNodeId, fromPortId: fromPort, toNodeId, toPortId: toPort });
+      if (!check.ok) return current;
+      const nextEdges = activeVersion.edges.filter(edge => edge.id !== check.replacesEdgeId);
 
       return {
         ...current,

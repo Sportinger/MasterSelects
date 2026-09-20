@@ -8,6 +8,7 @@ import type {
   NodeGraphPortMetadata,
   NodeGraphSignalType,
 } from './types';
+import { checkGraphConnection } from './graphConnections';
 
 export function outputPort(
   id: string,
@@ -70,13 +71,11 @@ function getNodePort(
 }
 
 export function createValidatedManualEdge(
-  graph: Pick<NodeGraph, 'nodes'>,
+  graph: Pick<NodeGraph, 'nodes'> & Partial<Pick<NodeGraph, 'edges'>>,
   connection: NodeGraphConnectionRequest,
 ): NodeGraphEdge | null {
-  if (connection.fromNodeId === connection.toNodeId) {
-    return null;
-  }
-
+  const check = checkGraphConnection({ nodes: graph.nodes, edges: graph.edges ?? [] }, connection);
+  if (!check.ok) return null;
   const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
   const fromNode = nodesById.get(connection.fromNodeId);
   const toNode = nodesById.get(connection.toNodeId);
@@ -96,13 +95,14 @@ export function validateManualEdges(graph: Pick<NodeGraph, 'nodes'>, manualEdges
   const edgeIds = new Set<string>();
 
   for (const candidate of manualEdges) {
-    const nextEdge = createValidatedManualEdge(graph, candidate);
+    const nextEdge = createValidatedManualEdge({ ...graph, edges: nextEdges }, candidate);
     if (!nextEdge || edgeIds.has(nextEdge.id)) {
       continue;
     }
 
     const inputKey = `${nextEdge.toNodeId}:${nextEdge.toPortId}`;
-    if (connectedInputs.has(inputKey)) {
+    const input = graph.nodes.find(node => node.id === nextEdge.toNodeId)?.inputs.find(port => port.id === nextEdge.toPortId);
+    if (!input?.metadata?.repeated && connectedInputs.has(inputKey)) {
       continue;
     }
 

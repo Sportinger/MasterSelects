@@ -1,0 +1,21 @@
+.node-workspace-flock-params,
+.node-graph-port-connections {
+  container-type: inline-size;
+  min-width: 0;
+  width: 100%;
+}
+
+.node-workspace-flock-params .resolve-inspector-row-control > .inspector-select,
+.node-graph-port-connections .resolve-inspector-row-control > .inspector-select {
+  width: 100%;
+  max-width: 100%;
+}
+
+.node-workspace-flock-params .node-workspace-flock-expose {
+  width: 18px;
+  padding: 0;
+}
+
+.node-workspace-flock-params .node-workspace-flock-expose.is-active {
+  color: var(--accent-color, #79b8fa);
+}

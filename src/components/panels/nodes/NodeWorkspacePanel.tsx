@@ -84,11 +84,6 @@ export function NodeWorkspacePanel() {
   const addClipAICustomNode = useTimelineStore((state) => state.addClipAICustomNode);
   const ensureColorCorrection = useTimelineStore((state) => state.ensureColorCorrection);
   const addColorNode = useTimelineStore((state) => state.addColorNode);
-  const removeColorNode = useTimelineStore((state) => state.removeColorNode);
-  const moveColorNode = useTimelineStore((state) => state.moveColorNode);
-  const connectColorNodes = useTimelineStore((state) => state.connectColorNodes);
-  const removeColorEdge = useTimelineStore((state) => state.removeColorEdge);
-  const setColorNodeEnabled = useTimelineStore((state) => state.setColorNodeEnabled);
   const selectClip = useTimelineStore((state) => state.selectClip);
   const flockActions = useFlockGraphActions(subject?.clip.source?.type === 'flock' ? subject.clip : null);
   const effectCategories = useMemo(() => getCategoriesWithEffects(), []);
@@ -256,63 +251,6 @@ export function NodeWorkspacePanel() {
     if (!subject) return null;
     const clipId = subject.id;
 
-    if (activeTheme === 'flock') {
-      return {
-        moveNode: flockActions.moveNode,
-        moveNodes: flockActions.moveNodes,
-        connectPorts: (connection) => {
-          flockActions.connect(connection);
-        },
-        disconnectEdge: flockActions.disconnect,
-        deleteNode: (nodeId) => {
-          if (flockActions.deleteNodes([nodeId])) selectFallbackAfterDelete([nodeId]);
-        },
-        deleteNodes: (nodeIds) => {
-          if (flockActions.deleteNodes(nodeIds)) selectFallbackAfterDelete(nodeIds);
-        },
-        toggleBypass: flockActions.toggleBypass,
-        duplicateSelection: () => {
-          const ids = flockActions.duplicate(selectedNodeIds);
-          if (ids.length > 0) selectNodes(ids);
-        },
-        groupSelection: () => {
-          const groupNodeId = flockActions.group(selectedNodeIds, 'Group');
-          if (groupNodeId) selectNode(groupNodeId);
-        },
-        supportsAddMenu: true,
-        supportsMultiSelection: true,
-        layoutScaleX: 1,
-      };
-    }
-
-    if (activeTheme === 'color') {
-      return {
-        moveNode: (nodeId, layout) => moveColorNode(clipId, nodeId, layout),
-        connectPorts: (connection) => batched('Connect node ports', () => connectColorNodes(
-          clipId,
-          connection.fromNodeId,
-          connection.toNodeId,
-          connection.fromPortId,
-          connection.toPortId,
-        )),
-        disconnectEdge: (edgeId) => batched('Disconnect node link', () => removeColorEdge(clipId, edgeId)),
-        deleteNode: (nodeId) => {
-          const node = subject.graph.nodes.find((candidate) => candidate.id === nodeId);
-          const binding = node?.binding?.kind === 'color-node' ? node.binding : null;
-          if (!binding || binding.nodeType === 'input' || binding.nodeType === 'output') return;
-          batched('Delete node', () => removeColorNode(clipId, nodeId));
-          selectFallbackAfterDelete([nodeId]);
-        },
-        toggleBypass: (nodeId) => {
-          const node = subject.graph.nodes.find((candidate) => candidate.id === nodeId);
-          if (node?.binding?.kind !== 'color-node') return;
-          batched('Toggle node bypass', () => setColorNodeEnabled(clipId, nodeId, node.params?.enabled === false));
-        },
-        supportsAddMenu: false,
-        supportsMultiSelection: false,
-        layoutScaleX: 1.75,
-      };
-    }
 
     return {
       moveNode: (nodeId, layout) => moveClipNodeGraphNode(clipId, nodeId, layout),
@@ -343,20 +281,15 @@ export function NodeWorkspacePanel() {
   }, [
     activeTheme,
     connectClipNodeGraphPorts,
-    connectColorNodes,
     disconnectClipNodeGraphEdge,
     flockActions,
     moveClipNodeGraphNode,
-    moveColorNode,
     removeClipNodeGraphNode,
-    removeColorEdge,
-    removeColorNode,
     selectFallbackAfterDelete,
     selectNode,
     selectNodes,
     selectedNodeIds,
     setClipEffectEnabled,
-    setColorNodeEnabled,
     subject,
     updateClipAICustomNode,
   ]);

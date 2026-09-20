@@ -110,6 +110,11 @@ preview-aware placement keeps cards and expanded group frames apart. Image/color
 tracking/geometry, material swatches, camera/light values and scene output have
 viewers without starting extra decoders or analysis jobs.
 
+Color Nodes uses the same canvas as Nodes. Flock uses the shared compact
+inspector and adds evaluated-parameter and existing-particle previews. Common
+connection checks cover Color, Flock, Face Cables, Scene and manual clip links;
+saved definitions and specialized rendering/simulation stay compatible.
+
 Media imports report processing and save failures. Failed audio-proxy writes can
 be retried; project packages follow the configured save policy.
 Switching compositions keeps cached proxy audio available. Reopening split nested

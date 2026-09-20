@@ -10,6 +10,12 @@ selected node's inspector or the appropriate domain's Add menu.
 
 ## Ownership and reuse
 
+All graph editors use the shared node canvas and connection contract. Domain
+registries remain responsible for executable operators and parameter schemas;
+adapters map existing saved definitions to the common ports and endpoints. Shared
+validation checks signal semantics, supported formats, single versus repeated
+inputs, recorded dependencies and cycles before a connection is changed.
+
 [`listNodeCatalog`](../../src/services/operators/operatorCatalog.ts) combines:
 
 | Registry | Owner and scope |

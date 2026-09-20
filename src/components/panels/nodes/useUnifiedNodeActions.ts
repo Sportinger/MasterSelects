@@ -1,3 +1,4 @@
+import { createColorNodeActions } from '../../../services/nodeGraph/colorNodeActions';
 import { readTimelineRuntimeState } from '../../../services/timeline/timelineRuntimeCoordinator';
 import { useState } from 'react';
 import type { NodeGraph, NodeGraphConnectionRequest, NodeGraphLayout, NodeGraphNode } from '../../../types/nodeGraph';
@@ -65,13 +66,7 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
     if (binding?.kind === 'effect-operator') return createEffectGraphActions(clip.id, binding.effectId);
     if (binding?.kind === 'flock-node') return { moveNode: flock.moveNode, connectPorts: flock.connect,
       disconnectEdge: flock.disconnect, deleteNode: id => { flock.deleteNodes([id]); }, toggleBypass: flock.toggleBypass };
-    if (binding?.kind === 'color-node') {
-      const s = readTimelineRuntimeState(useTimelineStore);
-      return { moveNode: (id, layout) => s.moveColorNode(clip.id, id, layout),
-        connectPorts: c => s.connectColorNodes(clip.id, c.fromNodeId, c.toNodeId, c.fromPortId, c.toPortId),
-        disconnectEdge: id => s.removeColorEdge(clip.id, id), deleteNode: id => s.removeColorNode(clip.id, id),
-        toggleBypass: id => s.setColorNodeEnabled(clip.id, id, node.params?.enabled === false) };
-    }
+    if (binding?.kind === 'color-node') return createColorNodeActions(clip.id);
     return base;
   };
   const route = (id: string, action: (actions: BaseActions, node: NodeGraphNode) => void) => safely(() => {

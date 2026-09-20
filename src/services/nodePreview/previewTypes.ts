@@ -41,6 +41,14 @@ export function previewOutput(node: NodeGraphNode, portId?: string): NodeGraphPo
   return node.outputs.find(port => port.id === portId) ?? node.outputs[0] ?? node.inputs.find(port => port.id === portId) ?? node.inputs[0];
 }
 
+/** Viewer choices follow the saved node across focused and unified views. */
+export function nodePreviewPreferenceKey(clipId: string, node: NodeGraphNode): string {
+  const binding = node.binding;
+  if (binding?.kind === 'color-node') return `clip-graph:${clipId}:color:${binding.versionId}/${binding.nodeId}`;
+  if (binding?.kind === 'flock-node') return `clip-graph:${clipId}:flock/${binding.nodeId}`;
+  return node.id;
+}
+
 /** Identical source viewers share a single snapshot and worker resource. */
 export function nodePreviewKey(clipId: string, node: NodeGraphNode, portId?: string): string {
   const port = previewOutput(node, portId), binding = node.binding;

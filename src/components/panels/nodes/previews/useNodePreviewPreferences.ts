@@ -19,8 +19,10 @@ export function useNodePreviewPreferences(clipId: string) {
     state.updateClip(clipId, { nodeGraph: { ...clip.nodeGraph, version: 1, nodes: clip.nodeGraph?.nodes ?? [], previews: edit(clip.nodeGraph?.previews ?? EMPTY) } });
   }, [clipId]);
   const toggleGlobal = useCallback(() => change(current => ({ ...current, enabled: !current.enabled })), [change]);
-  const toggleNode = useCallback((id: string) => change(current => ({ ...current,
-    nodes: { ...current.nodes, [id]: { ...current.nodes[id], enabled: !(current.nodes[id]?.enabled ?? true) } } })), [change]);
+  const toggleNode = useCallback((id: string, legacyId?: string) => change(current => {
+    const previous = current.nodes[id] ?? (legacyId ? current.nodes[legacyId] : undefined);
+    return { ...current, nodes: { ...current.nodes, [id]: { ...previous, enabled: !(previous?.enabled ?? true) } } };
+  }), [change]);
   const selectOutput = useCallback((id: string, portId: string) => change(current => ({ ...current,
     nodes: { ...current.nodes, [id]: { enabled: true, portId } } })), [change]);
   return { preferences, toggleGlobal, toggleNode, selectOutput, aspectRatio: width / height };

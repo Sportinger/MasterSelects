@@ -1,3 +1,4 @@
+import { ResolveInspectorSection } from '../../properties/resolveInspector/ResolveInspectorPrimitives';
 import type { FlockDefinition, FlockNode } from '../../../../types/flock';
 import { FLOCK_GROUP_OPERATOR_ID, getFlockOperator } from '../../../../services/flock/operators/flockOperatorRegistry';
 import type { FlockParamDescriptor } from '../../../../services/flock/operators/flockOperatorTypes';
@@ -7,6 +8,7 @@ import { useTimelineStore } from '../../../../stores/timeline';
 import type { TimelineClip } from '../../../../stores/timeline/types';
 import { FlockParamRow } from './FlockParamRow';
 import type { FlockGraphActions } from './useFlockGraphActions';
+import './FlockNodeInspector.css';
 
 interface ParamEntry {
   nodeId: string;
@@ -85,21 +87,21 @@ export function FlockNodeParameters({
   );
 
   return (
-    <div className="node-workspace-flock-params">
+    <div className="node-workspace-flock-params" onPointerUp={event => {
+      if (event.target instanceof Element) event.target.closest<HTMLElement>('button,select,input[type="checkbox"]')?.blur();
+    }}>
       {sections.map((section) => {
         const basic = section.entries.filter((entry) => !entry.descriptor.advanced);
         const advanced = section.entries.filter((entry) => entry.descriptor.advanced);
         return (
-          <div key={section.id} className="node-workspace-flock-param-section">
-            {section.title && <div className="node-workspace-flock-param-section-title">{section.title}</div>}
+          <ResolveInspectorSection key={section.id} title={section.title ?? operator?.label ?? 'Parameters'}>
             {basic.map(renderEntry)}
             {advanced.length > 0 && (
-              <details className="node-workspace-flock-advanced">
-                <summary>Advanced ({advanced.length})</summary>
+              <ResolveInspectorSection title={`Advanced (${advanced.length})`} defaultOpen={false}>
                 {advanced.map(renderEntry)}
-              </details>
+              </ResolveInspectorSection>
             )}
-          </div>
+          </ResolveInspectorSection>
         );
       })}
     </div>

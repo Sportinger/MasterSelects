@@ -1,29 +1,9 @@
+import type { SignalKind, SignalRuntimeKind, SignalGraphEdge } from '../signals/types';
 import type { TimelineSourceType } from './index';
 import type { ColorNodeType } from './colorCorrection';
 import type { NodePortContract } from './nodePortContract';
 
-export type NodeGraphSignalType =
-  | 'texture'
-  | 'audio'
-  | 'geometry'
-  | 'point-cloud'
-  | 'mesh'
-  | 'table'
-  | 'document'
-  | 'vector'
-  | 'curve'
-  | 'mask'
-  | 'text'
-  | 'metadata'
-  | 'event'
-  | 'time'
-  | 'scene'
-  | 'timeline'
-  | 'render-target'
-  | 'binary'
-  | 'number'
-  | 'boolean'
-  | 'string';
+export type NodeGraphSignalType = SignalKind;
 
 export type NodeGraphPortDirection = 'input' | 'output';
 
@@ -87,14 +67,7 @@ export type NodeGraphNodeKind =
   | 'custom'
   | 'output';
 
-export type NodeGraphRuntimeKind =
-  | 'builtin'
-  | 'typescript'
-  | 'wgsl'
-  | 'worker'
-  | 'wasm'
-  | 'native'
-  | 'subgraph';
+export type NodeGraphRuntimeKind = SignalRuntimeKind;
 
 export type NodeGraphDomain =
   | 'clip'
@@ -177,12 +150,7 @@ export interface NodeGraphEdge {
   type: NodeGraphSignalType;
 }
 
-export interface NodeGraphConnectionRequest {
-  fromNodeId: string;
-  fromPortId: string;
-  toNodeId: string;
-  toPortId: string;
-}
+export type NodeGraphConnectionRequest = Pick<SignalGraphEdge, 'fromNodeId' | 'fromPortId' | 'toNodeId' | 'toPortId'>;
 
 export interface NodeGraphOwner {
   kind: 'clip';

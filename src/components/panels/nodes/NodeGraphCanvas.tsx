@@ -1,6 +1,6 @@
 import { NodeGraphGroups } from './canvas/NodeGraphGroups';
 import { useNodePreviewPreferences } from './previews/useNodePreviewPreferences';
-import { nodePreviewKey, previewOutput } from '../../../services/nodePreview/previewTypes';
+import { nodePreviewKey, nodePreviewPreferenceKey, previewOutput } from '../../../services/nodePreview/previewTypes';
 import { spacePreviewGroups } from './canvas/spacePreviewGroups';
 import { NodeGraphCanvasSurface } from './canvas/rendering/NodeGraphCanvasSurface';
 import { annotatedGraphBounds, nodeGroupBounds } from './canvas/groupBounds';
@@ -96,7 +96,7 @@ export function NodeGraphCanvas({
 }: NodeGraphCanvasProps) {
   const { preferences, toggleGlobal, toggleNode, selectOutput, aspectRatio } = useNodePreviewPreferences(sourceGraph.owner.id);
   const graph = useMemo(() => ({ ...sourceGraph, nodes: sourceGraph.nodes.map(node => {
-    const preference = preferences.nodes[node.id];
+    const preference = preferences.nodes[nodePreviewPreferenceKey(sourceGraph.owner.id, node)] ?? preferences.nodes[node.id];
     const port = previewOutput(node, preference?.portId);
     const imageRatio = port?.type === 'texture' || port?.type === 'mask' || port?.metadata?.semanticKind === 'operator:landmarks';
     return { ...node, preview: { enabled: preferences.enabled && (preference?.enabled ?? true), requested: preference?.enabled ?? true,
@@ -508,8 +508,8 @@ export function NodeGraphCanvas({
               onStartConnectionDrag={startConnectionDrag}
               onDisconnectPortEdges={disconnectPortEdges}
               onToggleNodeBypass={onToggleNodeBypass}
-              onTogglePreview={toggleNode}
-              onPreviewOutput={selectOutput}
+              onTogglePreview={() => toggleNode(nodePreviewPreferenceKey(sourceGraph.owner.id, node), node.id)}
+              onPreviewOutput={(_id, portId) => selectOutput(nodePreviewPreferenceKey(sourceGraph.owner.id, node), portId)}
             />
           ))}
         </div>

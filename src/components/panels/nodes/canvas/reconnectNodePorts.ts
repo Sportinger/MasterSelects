@@ -1,8 +1,6 @@
 import type { NodeGraph, NodeGraphConnectionRequest } from '../../../../types/nodeGraph';
-
-export function sameConnection(a: NodeGraphConnectionRequest, b: NodeGraphConnectionRequest): boolean {
-  return a.fromNodeId === b.fromNodeId && a.fromPortId === b.fromPortId && a.toNodeId === b.toNodeId && a.toPortId === b.toPortId;
-}
+import { sameConnection } from '../../../../services/nodeGraph/graphConnections';
+export { sameConnection } from '../../../../services/nodeGraph/graphConnections';
 
 /** Domain adapters report rejected edits in their own UI. Only unplug the old
  * cable after a successful canonical mutation (or an already connected target). */

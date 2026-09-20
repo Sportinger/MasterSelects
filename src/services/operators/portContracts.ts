@@ -1,3 +1,5 @@
+import { formatsOverlap } from '../nodeGraph/graphConnections';
+export { formatsOverlap } from '../nodeGraph/graphConnections';
 import type { NodePortContract } from '../../types/nodePortContract';
 import type { OperatorPort, OperatorSignal } from '../../types/operatorGraph';
 
@@ -43,9 +45,6 @@ export const OPERATOR_SIGNAL_CONTRACTS: Record<OperatorSignal, NodePortContract>
 
 export function getOperatorPortContract(port: OperatorPort): NodePortContract {
   return { ...OPERATOR_SIGNAL_CONTRACTS[port.type], ...port.contract };
-}
-export function formatsOverlap(a?: readonly string[], b?: readonly string[]): boolean {
-  return !a?.length || !b?.length || a.some(format => b.includes(format));
 }
 export function operatorPortsCompatible(output: OperatorPort, input: OperatorPort): boolean {
   return output.type === input.type && formatsOverlap(getOperatorPortContract(output).formats, getOperatorPortContract(input).formats);

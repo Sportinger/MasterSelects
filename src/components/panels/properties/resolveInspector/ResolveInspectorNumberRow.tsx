@@ -9,6 +9,7 @@ import './ResolveInspectorNarrow.css';
 interface ResolveInspectorNumberRowProps {
   label: string;
   keyframeToggle?: ReactNode;
+  actions?: ReactNode;
   ariaLabel?: string;
   value: number;
   defaultValue: number;
@@ -25,7 +26,7 @@ interface ResolveInspectorNumberRowProps {
 /** Transform-style slider, editable field and reset action for effect inspectors. */
 export function ResolveInspectorNumberRow({
   label, ariaLabel = label, value, defaultValue, min, max, step, disabled = false,
-  persistenceKey, onChange, keyframeToggle, hardMin = -Infinity, hardMax = Infinity,
+  persistenceKey, onChange, keyframeToggle, actions, hardMin = -Infinity, hardMax = Infinity,
 }: ResolveInspectorNumberRowProps) {
   useEditableDraggableNumberSettingsRevision(persistenceKey);
   const range = getEffectiveEditableDraggableNumberSettings({ persistenceKey, min, max, defaultValue });
@@ -34,7 +35,8 @@ export function ResolveInspectorNumberRow({
   const change = (next: number) => {
     if (Number.isFinite(next)) onChange(Math.max(hardMin, Math.min(hardMax, next)));
   };
-  return <ResolveInspectorRow label={label} disabled={disabled} actions={<>
+  return <ResolveInspectorRow label={label} disabled={disabled} className={actions ? 'resolve-inspector-row--extra-action' : undefined} actions={<>
+    {actions}
     {keyframeToggle}
     <ResolveInspectorIconButton ariaLabel={`Reset ${label}`} className="resolve-inspector-reset-button"
       disabled={disabled} onClick={() => change(range.defaultValue ?? defaultValue)}><ResolveResetIcon /></ResolveInspectorIconButton>
