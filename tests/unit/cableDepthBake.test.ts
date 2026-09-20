@@ -3,6 +3,7 @@ import { bakeFaceCables } from '../../src/services/faceCables/bakeFaceCables';
 import { decodeCableScene, encodeCableScene } from '../../src/services/faceCables/cableSceneData';
 import { defaultFaceCable } from '../../src/services/faceCables/cableData';
 import { DEFAULT_TRANSFORM } from '../../src/stores/timeline/constants';
+import { defaultCableOperatorGraph } from '../../src/services/faceCables/cableOperatorGraph';
 
 const env = vi.hoisted(() => ({ timeline: {} as any, media: {} as any, series: {} as any,
   read: vi.fn(), close: vi.fn(), update: vi.fn(), startBatch: vi.fn(() => ({ opened: true })), endBatch: vi.fn() }));
@@ -28,6 +29,24 @@ beforeEach(() => {
 });
 const bake = (signal = new AbortController().signal) => bakeFaceCables('clip', 'effect', [defaultFaceCable()], signal, vi.fn());
 describe('scene depth bake transaction', () => {
+  it('executes connected source artifacts without depth inference and preserves saved calibration', async () => {
+    env.timeline.clips[0].effects[0].params.sceneDepthStrength = 1.4;
+    await bake();
+    env.timeline.clips[0] = { ...env.timeline.clips[0], ...env.update.mock.calls[0][1] };
+    const graph = defaultCableOperatorGraph();
+    graph.nodes.push({ id: 'cached-face', operator: 'source.face-landmarks', bindings: {} }, { id: 'cached-depth', operator: 'source.saved-depth', bindings: {} });
+    graph.edges = graph.edges.map(e => e.to === 'smoothing' ? { ...e, from: 'cached-face' } : e.to === 'depth-mesh' ? { ...e, from: 'cached-depth' } : e);
+    const params = env.timeline.clips[0].effects[0].params;
+    params.operatorGraph = JSON.stringify(graph); params.sceneDepthStrength = 0.5;
+    env.read.mockClear(); env.update.mockClear();
+    await bake();
+    expect(env.read).not.toHaveBeenCalled(); expect(env.update).toHaveBeenCalledOnce();
+    const saved = decodeCableScene(env.update.mock.calls[0][1].effects[0].params.sceneData)!;
+    expect(JSON.parse(saved.depthBinding!).strength).toBe(1.4);
+    env.timeline.clips[0].inPoint = 0.01; env.update.mockClear();
+    await expect(bake()).rejects.toThrow(/changed|no longer matches/);
+    expect(env.update).not.toHaveBeenCalled(); expect(env.read).not.toHaveBeenCalled();
+  });
   it('commits a complete portable hybrid scene in one history batch and closes its decoder', async () => {
     env.timeline.clips[0].effects[0].params.surfaceSubdivisions = 2;
     env.timeline.clips[0].effects[0].params.surfaceBlendWidth = 0.12;

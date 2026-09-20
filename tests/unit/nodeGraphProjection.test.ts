@@ -99,6 +99,7 @@ describe('buildClipNodeGraph', () => {
       'texture',
       'time',
       'metadata',
+      'face-landmarks',
       'audio',
       'waveform',
       'spectrum',

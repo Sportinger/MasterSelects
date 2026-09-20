@@ -13,6 +13,7 @@ export function usePreciseFaceTrack(clipId: string) {
   const sourceId = clip?.source?.mediaFileId ?? clip?.mediaFileId ?? clipId;
   useEffect(() => {
     let active = true;
+    if (!clip) return;
     if (landmarkRuntime.getSeries(key)?.sourceId === sourceId) return;
     void (async () => {
       const cached = await loadLandmarkSidecar(key);

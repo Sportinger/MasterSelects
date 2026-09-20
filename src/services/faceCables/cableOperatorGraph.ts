@@ -1,5 +1,6 @@
 import type { EffectOperatorGraph, BoundOperatorNode } from '../../types/operatorGraph';
 import { migrateCableGraph } from './cableGraphMigration';
+import { cableGraphLandmarks } from './cableGraphLandmarks';
 import type { Keyframe } from '../../types/keyframes';
 import { EFFECT_GRAPH_PARAM, graphInputNodes, operatorEnabled, readEffectGraph, sampleOperatorParameter, evaluateGraphForces, type OperatorParameters } from '../operators/effectGraph';
 
@@ -66,26 +67,27 @@ export function compileCableOperatorGraph(params: OperatorParameters) {
   const simulation = expectInput(render, 'curves', 'simulation.rope');
   const anchors = expectInput(simulation, 'anchors', 'tracking.anchors');
   const landmarkSource = graphInputNodes(graph, anchors.id, 'landmarks')[0];
-  const smoothing = landmarkSource?.operator === 'tracking.smooth' ? landmarkSource : undefined;
-  const tracking = smoothing ? expectInput(smoothing, 'landmarks', 'tracking.face') : expectInput(anchors, 'landmarks', 'tracking.face');
-  const source = expectInput(tracking, 'image', 'media.source');
+  const landmarks = cableGraphLandmarks(graph, landmarkSource, params);
+  const matchingLandmarks = (node: BoundOperatorNode) => cableGraphLandmarks(graph, graphInputNodes(graph, node.id, 'landmarks')[0], params).signature === landmarks.signature;
   const surface = graphInputNodes(graph, render.id, 'surface')[0];
   if (surface && surface.operator !== 'geometry.merge-surface') throw new Error('Connect Stitch Surfaces to Cable rendering.');
   const faceMesh = surface && graphInputNodes(graph, surface.id, 'primary')[0];
   const depthMesh = surface && graphInputNodes(graph, surface.id, 'background')[0];
-  if (faceMesh && (faceMesh.operator !== 'geometry.face' || expectInput(faceMesh, 'landmarks', landmarkSource.operator).id !== landmarkSource.id)) throw new Error('The primary mesh must use the same tracked landmarks as the anchors.');
+  if (faceMesh && (faceMesh.operator !== 'geometry.face' || !matchingLandmarks(faceMesh))) throw new Error('The primary mesh must use the same tracked landmarks as the anchors.');
   if (depthMesh && depthMesh.operator !== 'geometry.depth') throw new Error('Connect Depth to mesh as the background surface.');
-  const calibration = depthMesh && graphInputNodes(graph, depthMesh.id, 'depth')[0];
+  const depthInput = depthMesh && graphInputNodes(graph, depthMesh.id, 'depth')[0];
+  const useSavedDepth = depthInput?.operator === 'source.saved-depth';
+  const calibration = useSavedDepth ? undefined : depthInput;
   if (calibration && calibration.operator !== 'depth.calibrate') throw new Error('Calibrate depth before creating its mesh.');
-  const depth = calibration && graphInputNodes(graph, calibration.id, 'depth')[0];
-  if (depth && (depth.operator !== 'depth.estimate' || expectInput(depth, 'image', 'media.source').id !== source.id)) throw new Error('Depth and tracking must use the same source.');
+  const depth = useSavedDepth ? depthInput : calibration && graphInputNodes(graph, calibration.id, 'depth')[0];
+  if (depth && !useSavedDepth && (depth.operator !== 'depth.estimate' || expectInput(depth, 'image', 'media.source').id !== landmarks.sourceId)) throw new Error('Depth and tracking must use the same source.');
   const reference = calibration && graphInputNodes(graph, calibration.id, 'reference')[0];
-  if (reference && (reference.operator !== 'geometry.face' || expectInput(reference, 'landmarks', landmarkSource.operator).id !== landmarkSource.id)) throw new Error('Calibration requires matching reference geometry.');
+  if (reference && (reference.operator !== 'geometry.face' || !matchingLandmarks(reference))) throw new Error('Calibration requires matching reference geometry.');
   const contacts = graphInputNodes(graph, simulation.id, 'colliders').filter(n => operatorEnabled(n, params));
   const contactInputs = contacts.map(n => {
     if (n.operator !== 'collision.mesh') throw new Error('Connect Mesh collision to the simulation.');
     const geometry = graphInputNodes(graph, n.id, 'geometry')[0];
-    if (geometry?.operator === 'geometry.face' && expectInput(geometry, 'landmarks', landmarkSource.operator).id === landmarkSource.id) return 'face';
+    if (geometry?.operator === 'geometry.face' && matchingLandmarks(geometry)) return 'face';
     if (geometry?.id === surface?.id) return 'surface';
     throw new Error('Collision must use the same mesh as rendering.');
   });
@@ -98,12 +100,12 @@ export function compileCableOperatorGraph(params: OperatorParameters) {
     || !Number.isFinite(surfacePlan.subdivisions) || surfacePlan.subdivisions < 0 || surfacePlan.subdivisions > 5) throw new Error('Invalid surface merge parameters.');
   const renderValue = (id: string) => sampleOperatorParameter(render, id, params, '', [], 0);
   const effective: OperatorParameters = { ...params, scene3D: Boolean(renderValue('scene3D')), faceShadows: Boolean(renderValue('shadows')),
-    trackingSmoothing: smoothing ? Number(sampleOperatorParameter(smoothing, 'strength', params, '', [], 0)) : 0,
+    trackingSmoothing: landmarks.strength,
     sceneDepth: Boolean(depth && operatorEnabled(depth, params)),
     sceneDepthStrength: calibration ? Number(sampleOperatorParameter(calibration, 'strength', params, '', [], 0)) : 1,
     faceCollision: contactInputs.includes('face') || (contactInputs.includes('surface') && surfacePlan.face && Boolean(depth && operatorEnabled(depth, params))),
     depthReferenceFace: Boolean(reference),
     sceneDepthCollision: contactInputs.includes('surface'),
   };
-  return { graph, params: effective, surfacePlan, forces: (effectId: string, keys: Keyframe[], time: number) => evaluateGraphForces(graph, simulation.id, params, effectId, keys, time) };
+  return { graph, params: effective, surfacePlan, useSavedDepth: useSavedDepth && Boolean(effective.sceneDepth), forces: (effectId: string, keys: Keyframe[], time: number) => evaluateGraphForces(graph, simulation.id, params, effectId, keys, time) };
 }

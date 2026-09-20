@@ -33,6 +33,15 @@ needs a compatible executor adapter.
 
 ## Face and depth processing
 
+`source.face-landmarks` and `source.saved-depth` are executable references to
+existing source artifacts. The canvas exposes them as Video Source outputs;
+connecting one creates a clip/effect-local reference inside the receiving graph.
+Landmarks retain normalized XYZ; saved scene depth is already calibrated and
+connects to `geometry.depth`, bypassing estimation and calibration. No payload is
+copied into the reference. Saved depth keeps its original calibration and must pass
+the bake's source/timing/pose/mapping checks. It currently belongs to its owning
+cable effect; copying that effect keeps the reference local to the copied bake.
+
 ```text
 media.source → tracking.face → tracking.smooth → tracking.anchors → simulation.rope
                                      └───────→ geometry.face ─────────────────┐

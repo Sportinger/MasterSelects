@@ -71,6 +71,25 @@ Stitch Surfaces accepts a face mesh at Primary and a depth mesh at Background.
 The catalog includes these contracts and supports searching their format names.
 Formats here describe intermediate data, not encoded media-file extensions.
 
+Video/image Source also exposes **Face landmarks** and each Face Cables effect's
+**Saved scene depth**, alongside the existing audio-analysis outputs. Tooltips mark
+saved, missing or stale data. Precise tracking is restored from its existing local
+sidecar when the workspace opens. Connect landmarks to smoothing, anchors or a
+compatible face-mesh input; connect calibrated saved depth directly to Depth to
+mesh. The references persist in the executable effect graph without copying the
+tracking series or depth payload. Wires still originate at Source when nested or
+effect groups are collapsed, and can be disconnected/reconnected there. The
+inspector's Connections dropdown also offers compatible Video Source artifacts;
+missing or stale entries are disabled.
+
+A connected saved-depth reference makes Bake cables reuse that depth without
+model inference. Its original calibration is retained; source, timing, tracked pose
+and mapping checks reject stale data before replacing the previous bake. At present
+saved scene depth can feed consumers inside its owning cable effect; its calibrated
+coordinates are not a general interchangeable depth asset across effects. A missing
+tracking cache requires precise tracking again. Raw depth-video media files and
+general pose/hand-tracking series are not yet Source artifact outputs.
+
 A gold **3D Scene** group exposes an executable surface graph for video/image
 planes and baked Face Cables:
 

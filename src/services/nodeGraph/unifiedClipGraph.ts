@@ -3,6 +3,7 @@ import type { NodeGraph, NodeGraphDocument, NodeGraphNode } from '../../types/no
 import type { TimelineClip } from '../../types';
 import { buildEffectOperatorGraph } from './effectGraphProjection';
 import { foldOperatorGroups } from './nestedOperatorGroups';
+import { collapsedArtifactLinks, projectSourceArtifactLinks } from './sourceArtifactProjection';
 
 /** A single canvas projection of every domain. Grouping changes presentation, never processing. */
 export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: TimelineClip, clips: TimelineClip[] = []): NodeGraph {
@@ -24,7 +25,9 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
       color: groupId === 'scene3d' ? '#d7a262' : groupId === 'flock' ? '#7ea65b' : groupId === 'color' ? '#ba8bd6' : '#55a6c4', collapsed, nodeIds: [] as string[], proxyId: rootNode.id };
     groups.push(group);
     if (collapsed) {
-      nodes.push({ ...rootNode, runtime: 'subgraph', label: group.label, groupId, groupOffset: offset, layout: offset });
+      const proxy: NodeGraphNode = { ...rootNode, runtime: 'subgraph', label: group.label, groupId, groupOffset: offset, layout: offset };
+      nodes.push(proxy);
+      if (effect?.type === 'face-cables') edges.push(...collapsedArtifactLinks(inner, proxy, effect.id));
       group.nodeIds.push(rootNode.id); cursor = Math.max(cursor + 320, offset.x + 320); expansion = cursor - rootNode.layout.x - 280; continue;
     }
     const idFor = (id: string) => `${inner.id}/${id}`;
@@ -59,5 +62,5 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     cursor = Math.max(cursor + 280, ...innerNodes.map(n => n.layout.x + 330));
     expansion = cursor - rootNode.layout.x - 280;
   }
-  return foldOperatorGroups({ ...root, nodes, edges, groups }, clip.nodeGraph);
+  return foldOperatorGroups(projectSourceArtifactLinks({ ...root, nodes, edges, groups }), clip.nodeGraph);
 }

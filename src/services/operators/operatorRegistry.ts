@@ -2,6 +2,7 @@ import type { OperatorDefinition, OperatorPort, OperatorParameter, OperatorSigna
 import { WIND_OPERATOR } from './wind';
 import { SCENE_OPERATORS } from './sceneOperators';
 import { SURFACE_OPERATORS } from './surfaceOperators';
+import { SOURCE_ARTIFACT_OPERATORS } from './sourceArtifactOperators';
 
 const port = (id: string, type: OperatorSignal, required = false): OperatorPort => ({ id, label: id[0].toUpperCase() + id.slice(1), type, required });
 const number = (id: string, label: string, value: number, min: number, max: number): OperatorParameter =>
@@ -13,6 +14,7 @@ const stage = (id: string, label: string, inputs: OperatorPort[], outputs: Opera
 export const EFFECT_OPERATORS: readonly OperatorDefinition[] = [
   ...SCENE_OPERATORS,
   ...SURFACE_OPERATORS,
+  ...SOURCE_ARTIFACT_OPERATORS,
   WIND_OPERATOR,
   { ...stage('forces.gravity', 'Gravity', [], [port('force', 'force')], [number('strength', 'Strength', 1, -30, 30)]), addable: true, bypass: 'mute' },
   { ...stage('forces.drag', 'Drag', [], [port('drag', 'drag')], [number('amount', 'Damping', 0.4, 0, 20)]), addable: true, bypass: 'mute' },

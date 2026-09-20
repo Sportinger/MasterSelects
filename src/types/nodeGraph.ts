@@ -41,6 +41,8 @@ export type NodeGraphAudioSemanticKind =
   | 'audio-metadata';
 
 export interface NodeGraphPortMetadata {
+  sourceArtifact?: { kind: 'face-landmarks' | 'scene-depth'; effectId?: string };
+  artifactTarget?: { effectId: string; nodeId: string; portId: string };
   contract?: NodePortContract;
   groupEndpoint?: { nodeId: string; portId: string };
   semanticKind?: NodeGraphAudioSemanticKind | string;

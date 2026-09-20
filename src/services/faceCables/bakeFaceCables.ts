@@ -1,4 +1,5 @@
 import { compileCableOperatorGraph } from './cableOperatorGraph';
+import { cableSavedDepth } from './cableSavedDepth';
 import { sampleCableConfig } from './cableAnimation';
 import { createCableSceneBake } from './cableSceneBake';
 import { createCableShadowReceiver, writeCableShadows } from './cableShadows';
@@ -20,7 +21,6 @@ import { cableFrameLayout, FACE_CABLE_ANCHORS, MAX_CABLE_FLOATS, MAX_FACE_CABLES
 import type { Keyframe } from '../../types/keyframes';
 import { cableDepthGrid, calibratedCableDepth, calibrateCableDepth, type CableDepthCalibration } from './cableSceneDepth';
 import { openCableDepthReader } from './cableDepthReader';
-import { decodeCableScene } from './cableSceneData';
 import { createCableDepthContact } from './cableDepthContact';
 
 function neighborKeys(groups: Keyframe[][], time: number): Keyframe[] {
@@ -51,7 +51,7 @@ export async function bakeFaceCables(clipId: string, effectId: string, configs: 
   const source = { width: file?.width ?? clip.source?.videoElement?.videoWidth ?? 0, height: file?.height ?? clip.source?.videoElement?.videoHeight ?? 0 };
   if (!source.width || !source.height) throw new Error('Source dimensions are unavailable.');
   const operatorPlan = compileCableOperatorGraph(clip.effects.find(e => e.id === effectId)?.params ?? {});
-  const effectParams = operatorPlan.params;
+  const { params: effectParams, saved: savedDepth } = cableSavedDepth(operatorPlan.params, operatorPlan.useSavedDepth, reuseDepth);
   const version = effectParams.faceShadows && !effectParams.scene3D ? 4 : 3;
   const layout = cableFrameLayout(version, configs);
   const fps = comp.frameRate, frames = Math.ceil(clip.duration * fps) + 1;
@@ -71,8 +71,6 @@ export async function bakeFaceCables(clipId: string, effectId: string, configs: 
     transform: clip.transform, transformKeys: sorted, speedKeys, speedSection: clip.videoInspectorSections?.speedChange,
     transitionSourceMap: clip.transitionSourceMap, transitionSourceTimeOverride: clip.transitionSourceTimeOverride,
     strength: Number(effectParams.sceneDepthStrength) || 1, referenceFace: effectParams.depthReferenceFace }) : undefined;
-  const savedDepth = reuseDepth ? decodeCableScene(effectParams.sceneData) : null;
-  if (reuseDepth && (!depthGrid || !savedDepth?.depthGrid)) throw new Error('Bake scene depth first before reusing it for physics.');
   const sceneBake = effectParams.scene3D ? createCableSceneBake(configs, fps, frames, clip.duration, aspect, depthGrid, depthBinding, operatorPlan.surfacePlan) : undefined;
   type Pose = { mapping: ReturnType<typeof trackingPreviewTransform>; transform: typeof clip.transform; anchors: (null | [CablePoint, CablePoint])[]; facePoints?: CablePoint[] };
   const poses: Pose[] = [];

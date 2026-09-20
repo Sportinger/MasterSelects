@@ -1,4 +1,5 @@
 import { getAudioEffect, hasAudioEffect } from '../../engine/audio/AudioEffectRegistry';
+import { sourceArtifactPorts } from './sourceArtifactPorts';
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import { ensureColorCorrectionState, getActiveColorVersion } from '../../types/colorCorrection';
 import {
@@ -124,6 +125,7 @@ export function createSourceNode(
   ));
   outputs.push(outputPort('time', 'time', 'time'));
   outputs.push(outputPort('metadata', 'metadata', 'metadata'));
+  outputs.push(...sourceArtifactPorts(clip, options.faceTrackingAvailable));
 
   if (audioClip && primaryOutput !== 'audio') {
     outputs.push(outputPort('audio', 'audio', 'audio', {

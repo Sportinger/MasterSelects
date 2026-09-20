@@ -7,6 +7,7 @@ export function NodePortDetails({ port, compact = false }: { port: Pick<NodeGrap
     <strong>{input ? 'In' : 'Out'} · {info.typeLabel}</strong>
     <div className="node-port-compact-formats">{info.formatLabels.join('; ')}</div>
     {input && <div className="node-port-detail-footer">{port.metadata?.required ? 'Required' : 'Optional'} · {port.metadata?.repeated ? 'Multiple connections' : '1 connection'}</div>}
+    {!input && port.metadata?.sourceArtifact && <div className="node-port-detail-footer">{port.metadata.stale ? 'Stale · rebake required' : port.metadata.available ? 'Saved data' : 'Not available yet'}</div>}
   </>;
   return <>
     <strong>{input ? 'Input' : 'Output'} · {port.label}</strong>

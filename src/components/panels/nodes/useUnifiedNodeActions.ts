@@ -7,6 +7,7 @@ import { createClipNodeGraphState } from '../../../services/nodeGraph';
 import { createEffectGraphActions, editEffectGraph } from '../../../services/operators/effectGraphEditing';
 import { createSceneGraphActions, editSceneGraph } from '../../../services/operators/sceneGraphEditing';
 import { groupOperators } from '../../../services/operators/operatorGroups';
+import { connectSourceArtifact } from '../../../services/operators/sourceArtifactConnections';
 import type { FlockGraphActions } from './flock/useFlockGraphActions';
 
 interface BaseActions {
@@ -77,6 +78,16 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
     toggleBypass: (id: string) => route(id, (actions, node) => actions.toggleBypass(localId(node))),
     deleteNode: (id: string) => route(id, (actions, node) => actions.deleteNode(localId(node))),
     connectPorts: (c: NodeGraphConnectionRequest) => safely(() => {
+      const artifact = graph?.nodes.find(n => n.id === c.fromNodeId)?.outputs.find(p => p.id === c.fromPortId)?.metadata?.sourceArtifact;
+      if (artifact && clip) {
+        const visible = graph?.nodes.find(n => n.id === c.toNodeId), port = visible?.inputs.find(p => p.id === c.toPortId);
+        const endpoint = port?.metadata?.groupEndpoint;
+        const node = endpoint ? graph?.expandedNodes?.find(n => n.id === endpoint.nodeId) : visible;
+        const target = port?.metadata?.artifactTarget ?? (node?.binding?.kind === 'effect-operator'
+          ? { effectId: node.binding.effectId, nodeId: node.binding.nodeId, portId: endpoint?.portId ?? c.toPortId } : undefined);
+        if (!target) throw new Error('Connect this artifact to a compatible Face Cables input.');
+        connectSourceArtifact(clip.id, artifact, target); return;
+      }
       const resolve = (id: string, port: string, direction: 'input' | 'output') => {
         const node = graph?.nodes.find(n => n.id === id), endpoint = (direction === 'input' ? node?.inputs : node?.outputs)?.find(p => p.id === port)?.metadata?.groupEndpoint;
         return endpoint ?? { nodeId: id, portId: port };
@@ -106,6 +117,8 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
     disconnectEdge: (id: string) => safely(() => {
       const edge = graph?.edges.find(e => e.id === id); let node = graph?.nodes.find(n => n.id === edge?.toNodeId);
       if (!edge || !node) return;
+      const artifactTarget = node.inputs.find(p => p.id === edge.toPortId)?.metadata?.artifactTarget;
+      if (artifactTarget && clip) { createEffectGraphActions(clip.id, artifactTarget.effectId).disconnectEdge(id.slice(id.lastIndexOf('/') + 1)); return; }
       const endpoint = node.inputs.find(p => p.id === edge.toPortId)?.metadata?.groupEndpoint;
       if (endpoint) node = graph?.expandedNodes?.find(n => n.id === endpoint.nodeId) ?? node;
       if (edge.toPortId.startsWith('group-') || edge.fromPortId.startsWith('group-')) throw new Error('Reconnect the Clip input/output ports to reorder effects, or bypass an effect to skip it.');

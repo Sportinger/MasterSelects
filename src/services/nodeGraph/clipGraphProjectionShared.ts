@@ -8,6 +8,7 @@ export const AUDIO_ANALYSIS_LANE_Y = 416;
 export interface ClipNodeGraphBuildOptions {
   linkedClip?: TimelineClip | null;
   linkedTrack?: TimelineTrack | null;
+  faceTrackingAvailable?: boolean;
 }
 
 export interface NodeGraphChainHead {

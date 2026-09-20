@@ -1,4 +1,5 @@
 import { buildUnifiedClipGraph } from '../../../services/nodeGraph/unifiedClipGraph';
+import { usePreciseFaceTrack } from '../../../services/landmarkTracking/usePreciseFaceTrack';
 import { useMemo } from 'react';
 import type { NodeGraph, NodeGraphDocument, NodeGraphView, NodeGraphViewTheme } from '../../../services/nodeGraph';
 import {
@@ -43,6 +44,7 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): Node
     () => resolveLinkedClipNodeGraphContext(clips, tracks, selectedClipId),
     [clips, tracks, selectedClipId],
   );
+  const faceTracking = usePreciseFaceTrack(graphContext?.ownerClip.id ?? '');
 
   return useMemo(() => {
     if (!graphContext) {
@@ -53,6 +55,7 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): Node
     const document = buildClipNodeGraphDocument(graphClip, graphContext.ownerTrack ?? undefined, {
       linkedClip: graphContext.linkedClip,
       linkedTrack: graphContext.linkedTrack,
+      faceTrackingAvailable: faceTracking.ready,
     });
     const graph = theme === 'general' ? buildUnifiedClipGraph(document, graphClip, clips) : getNodeGraphView(document, theme);
     const view = document.views.find((candidate) => candidate.theme === theme) ?? document.views[0];
@@ -76,5 +79,5 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): Node
       view,
       availableViews: document.views,
     };
-  }, [graphContext, theme, clips]);
+  }, [graphContext, theme, clips, faceTracking.ready]);
 }
