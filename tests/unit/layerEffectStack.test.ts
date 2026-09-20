@@ -27,7 +27,7 @@ describe('splitLayerEffects', () => {
     expect(result.complexEffects).toBeUndefined();
   });
 
-  it('separates inline and complex effects while ignoring disabled and audio effects', () => {
+  it('preserves stack order while ignoring disabled and audio effects', () => {
     const result = splitLayerEffects([
       {
         id: 'fx-brightness',
@@ -74,12 +74,15 @@ describe('splitLayerEffects', () => {
     ] as Effect[]);
 
     expect(result.inlineEffects).toEqual({
-      brightness: 0.25,
-      contrast: 1.4,
+      brightness: 0,
+      contrast: 1,
       saturation: 1,
-      invert: true,
+      invert: false,
     });
     expect(result.complexEffects).toEqual([
+      expect.objectContaining({ id: 'fx-brightness' }),
+      expect.objectContaining({ id: 'fx-contrast' }),
+      expect.objectContaining({ id: 'fx-invert' }),
       expect.objectContaining({ id: 'fx-blur', type: 'gaussian-blur' }),
     ]);
   });

@@ -1,3 +1,4 @@
+import { WIND_OPERATOR } from '../../operators/wind';
 import type { FlockOperatorDescriptor } from './flockOperatorTypes';
 import { enumParam, integerParam, numberParam, port, vecParam } from './flockParamBuilders';
 
@@ -95,17 +96,19 @@ export const BEHAVIOR_OPERATORS: FlockOperatorDescriptor[] = [
   },
   {
     id: 'flock.wind',
+    sharedOperator: WIND_OPERATOR.id,
     version: 1,
-    label: 'Wind',
+    label: WIND_OPERATOR.label,
     category: 'behavior',
-    description: 'Directional force with optional gusts.',
+    description: WIND_OPERATOR.description,
     phase: 'step',
     inputs: [selectionInput, port('strength', 'Strength', 'scalar', { drivesParam: 'strength' })],
     outputs: behaviorOutput,
     params: [
-      vecParam('direction', 'Direction', [1, 0, 0], 'behavior'),
-      numberParam('strength', 'Strength', 10, 'behavior'),
-      numberParam('gust', 'Gust', 0.3, 'behavior', { min: 0, max: 1, step: 0.01 }),
+      ...WIND_OPERATOR.parameters.map(param => param.type === 'vector'
+        ? vecParam(param.id, param.label, [1, 0, 0], 'behavior')
+        : numberParam(param.id, param.label, param.id === 'strength' ? 10 : 0.3, 'behavior',
+          { min: param.min, ...(param.id === 'gust' ? { max: param.max } : {}), step: param.step })),
     ],
     bypass: { kind: 'mute' },
   },

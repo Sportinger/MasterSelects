@@ -74,7 +74,7 @@ export function getFlockPortType(port: Pick<NodeGraphPort, 'metadata'>): FlockPo
  */
 export function getNodeGraphPortCompatibilityKey(port: Pick<NodeGraphPort, 'type' | 'metadata'>): string {
   const flockType = getFlockPortType(port);
-  return flockType ? `${FLOCK_PORT_SEMANTIC_PREFIX}${flockType}` : port.type;
+  return flockType ? `${FLOCK_PORT_SEMANTIC_PREFIX}${flockType}` : port.metadata?.semanticKind?.startsWith('operator:') ? port.metadata.semanticKind : port.type;
 }
 
 function toNodeGraphPort(descriptor: FlockPortDescriptor, direction: NodeGraphPortDirection): NodeGraphPort {
@@ -144,6 +144,7 @@ function buildFlockGraphNode(
 
   return {
     id: node.id,
+    operatorId: operator?.sharedOperator ?? node.operator,
     kind: KIND_BY_CATEGORY[category],
     runtime: isGroup ? 'subgraph' : 'wgsl',
     label,

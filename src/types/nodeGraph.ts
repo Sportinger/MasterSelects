@@ -96,9 +96,13 @@ export type NodeGraphDomain =
   | 'custom'
   | 'flock';
 
-export type NodeGraphViewTheme = 'general' | 'color' | 'motion' | 'audio' | 'flock';
+export type NodeGraphViewTheme = 'general' | 'color' | 'motion' | 'audio' | 'flock' | `effect:${string}`;
+
+export type SceneNodeRole = 'geometry' | 'material' | 'transform' | 'render' | 'depth' | 'camera' | 'light' | 'splat-effector';
 
 export type NodeGraphNodeBinding =
+  | { kind: 'scene-node'; clipId: string; nodeId: string; role: SceneNodeRole; effectId?: string }
+  | { kind: 'effect-operator'; effectId: string; nodeId: string; operator: string }
   | { kind: 'clip-source' }
   | { kind: 'clip-transform' }
   | { kind: 'clip-mask-stack' }
@@ -140,6 +144,9 @@ export interface NodeGraphNode {
   domain?: NodeGraphDomain;
   binding?: NodeGraphNodeBinding;
   subgraphId?: string;
+  operatorId?: string;
+  groupId?: string;
+  groupOffset?: NodeGraphLayout;
 }
 
 export interface NodeGraphEdge {
@@ -170,6 +177,7 @@ export interface NodeGraph {
   nodes: NodeGraphNode[];
   edges: NodeGraphEdge[];
   domain?: NodeGraphDomain;
+  groups?: Array<{ id: string; label: string; color: string; collapsed: boolean; nodeIds: string[]; proxyId: string }>;
 }
 
 export interface NodeGraphView {
@@ -187,7 +195,7 @@ export interface NodeGraphDocument {
   views: NodeGraphView[];
 }
 
-export type ClipNodeGraphBacking = Exclude<NodeGraphNodeBinding, { kind: 'color-node' } | { kind: 'flock-node' }>;
+export type ClipNodeGraphBacking = Exclude<NodeGraphNodeBinding, { kind: 'color-node' } | { kind: 'flock-node' } | { kind: 'effect-operator' } | { kind: 'scene-node' }>;
 
 export interface ClipNodeGraphNodeState {
   id: string;
@@ -260,4 +268,5 @@ export interface ClipNodeGraph {
   forcedBuiltIns?: ClipNodeGraphForcedBuiltIn[];
   manualEdges?: NodeGraphEdge[];
   updatedAt?: number;
+  groups?: Record<string, { collapsed?: boolean; position?: NodeGraphLayout; nodeLayouts?: Record<string, NodeGraphLayout> }>;
 }

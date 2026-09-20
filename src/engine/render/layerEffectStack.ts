@@ -45,6 +45,9 @@ export function splitLayerEffects(
     return { inlineEffects };
   }
 
+  // A multi-effect chain must execute in stack order. Folding color operations into
+  // the final compositor would move them past blur/distortion and merge duplicates.
+  const preserveOrder = effects.filter(effect => effect.enabled && !effect.type.startsWith('audio-')).length > 1;
   const hasRenderEffect = effects.some((effect) => (
     effect.enabled &&
     !effect.type.startsWith('audio-') &&
@@ -71,7 +74,7 @@ export function splitLayerEffects(
       continue;
     }
 
-    if (hasRenderEffect) {
+    if (hasRenderEffect || preserveOrder) {
       complexEffects.push(effect);
       continue;
     }

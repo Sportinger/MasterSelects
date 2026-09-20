@@ -1,3 +1,8 @@
+import { EffectOrderControls } from './EffectOrderControls';
+import { SceneNodeParameters } from './SceneNodeParameters';
+import { FlockTab } from '../../properties/flock/FlockTab';
+import { OperatorParameters, AddOperatorControl } from './OperatorParameters';
+import { FaceCableControls } from '../../properties/FaceCableControls';
 import { useCallback, useMemo, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { getCategoriesWithEffects } from '../../../../effects';
 import { startBatch, endBatch } from '../../../../stores/historyStore';
@@ -220,7 +225,7 @@ export function NodeInspector({
   const canEditTransform = !!clip && node?.id === 'transform';
   const canEditEffect = !!clip && node?.id.startsWith('effect-');
   const canEditColor = !!clip && node?.binding?.kind === 'color-node';
-  const canEditCustom = !!clip && node?.kind === 'custom';
+  const canEditCustom = !!clip && node?.binding?.kind === 'clip-custom-node';
   const generateWaveformForClip = useTimelineStore((state) => state.generateWaveformForClip);
   const generateProcessedWaveformForClip = useTimelineStore((state) => state.generateProcessedWaveformForClip);
   const generateSpectrogramForClip = useTimelineStore((state) => state.generateSpectrogramForClip);
@@ -281,10 +286,32 @@ export function NodeInspector({
     );
   }
 
+  if (clip && node.binding?.kind === 'scene-node') {
+    return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}><SceneNodeParameters node={node} owner={clip} /></NodeInspectorShell>;
+  }
+  if (clip && node.binding?.kind === 'effect-operator') {
+    const binding = node.binding;
+    return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
+      <EffectOrderControls clip={clip} effectId={binding.effectId} />
+      <OperatorParameters clip={clip} effectId={binding.effectId} nodeId={binding.nodeId} />
+      {['simulation.rope', 'tracking.anchors', 'render.cables'].includes(binding.operator) && <FaceCableControls clipId={clip.id} effectId={binding.effectId} scope={binding.operator === 'tracking.anchors' ? 'anchors' : binding.operator === 'render.cables' ? 'render' : 'simulation'} />}
+      <AddOperatorControl clipId={clip.id} effectId={binding.effectId} onAdded={id => onSelectNode(`${node.id.slice(0, node.id.lastIndexOf('/') + 1)}${id}`)} />
+    </NodeInspectorShell>;
+  }
+  if (clip?.flock && node.binding?.kind === 'clip-source' && node.groupId === 'flock') {
+    return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}><FlockTab clipId={clip.id} /></NodeInspectorShell>;
+  }
+  const faceEffectId = node.binding?.kind === 'clip-effect' ? node.binding.effectId : undefined;
+  if (clip && faceEffectId && clip.effects.find(e => e.id === faceEffectId)?.type === 'face-cables') {
+    return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
+      <EffectOrderControls clip={clip} effectId={faceEffectId} />
+      <FaceCableControls clipId={clip.id} effectId={faceEffectId} />
+    </NodeInspectorShell>;
+  }
   if (clip && flockActions && node.binding?.kind === 'flock-node') {
     return (
       <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
-        <FlockNodeInspector clip={clip} node={node} actions={flockActions} onSelectNode={onSelectNode} />
+        <FlockNodeInspector clip={clip} node={{ ...node, id: node.binding.nodeId }} actions={flockActions} onSelectNode={id => onSelectNode(`${node.id.slice(0, node.id.lastIndexOf('/') + 1)}${id}`)} />
         <button type="button" className="node-workspace-primary-action" onClick={onOpenProperties}>
           Open Properties
         </button>
@@ -302,6 +329,7 @@ export function NodeInspector({
 
   return (
     <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
+      {clip && node.binding?.kind === 'clip-effect' && <EffectOrderControls clip={clip} effectId={node.binding.effectId} />}
       <div className="node-workspace-inspector-header">
         <span>{node.kind}</span>
         <h3>{node.label}</h3>
@@ -349,7 +377,7 @@ export function NodeInspector({
         ) : canEditEffect && nodeTargetClip ? (
           <EffectNodeParameters clip={nodeTargetClip} node={node} />
         ) : canEditColor ? (
-          <ColorNodeParameters clip={clip} node={node} />
+          <ColorNodeParameters clip={clip} node={{ ...node, id: node.binding?.kind === 'color-node' ? node.binding.nodeId : node.id }} />
         ) : params.length > 0 ? (
           <div className="node-workspace-param-list">
             {params.map(([key, value]) => (

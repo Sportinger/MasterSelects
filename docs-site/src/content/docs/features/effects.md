@@ -610,8 +610,11 @@ The approximate face receives shadows without casting scan-triangle self-shadows
 eye and mouth openings are capped with the captured video. The inspector can add
 normal scene light and camera clips directly, with a camera matched to the bake.
 Panel diameter controls bounded shadow filtering rather than a physical area-light
-integral. Environment-map illumination and other video effects are not sampled by
-this receiver pass. Physics edits still need Bake; camera/light movement is live.
+integral. Environment-map illumination is not sampled by this receiver pass.
+Image effects before Face Cables process the source texture. Effects after it
+process the rendered image when this is the only visible 3D object; adding lights
+does not suppress those effects. Use a nested composition for post effects on a
+scene with several visible 3D objects. Physics edits still need Bake; camera/light movement is live.
 
 The Face Cables inspector uses the same collapsible sections and aligned rows as Transform, grouped into Connections, Physics, Wind and Appearance. Numeric rows combine a handle-only slider, bordered editable field and reset button through reusable `ResolveInspectorNumberRow`. Section disclosure and sliders support keyboard navigation; pointer activation clears transient focus.
 
@@ -620,6 +623,16 @@ controls as Transform: horizontal drag, double-click to type, right-click reset,
 and middle-click range preferences. Segment counts snap to whole numbers.
 The initial Z-wind slider range is -30 to +30 and can be customized; positive strength pushes toward the camera.
 
+
+### Face Cables nodes
+
+**Open clip nodes** shows the effect as a colored group on the common clip canvas.
+Collapse it to one effect node or expand tracking, depth, collision, force,
+simulation and rendering operators. Node parameters and the effect form share
+canonical settings and keyframes. Added Wind/Gravity/Drag nodes feed the solver;
+Value/Oscillator nodes can drive wind strength. Layout, group state and graph
+connections are saved in project data; existing bakes remain intact until a new
+bake succeeds. See [Node Workspace](/features/node-workspace/).
 
 ### Face Cables live frame preview
 

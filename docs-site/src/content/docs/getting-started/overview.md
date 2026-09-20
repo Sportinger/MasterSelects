@@ -18,7 +18,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | **WebGPU Rendering** | Shared render path for main preview, independent targets, output windows, and export |
 | **Timeline Editing** | Multi-track editing, nested compositions, markers, transitions, shortcuts, and keyframes |
 | **Editable Motion Graphics** | FlashBoard can compile animated lower thirds into native text, Motion shapes, and keyframes with temporal review and one-step undo |
-| **Node Workspace** | Dockable selected-clip processing graph derived from live timeline state |
+| **Node Workspace** | One clip canvas with collapsible Color, Flock, Face Cables and 3D groups |
 | **AI Control** | Private hosted-agent kernel with a public atomic-tool execution boundary, plus authenticated bridge and MCP access for external agents |
 | **AI Generation Workspaces** | The compact Media generator remains available, while AI Studio adds parallel tabs, Media-drop references, local prompt dictation, fitted result tiles, Source Monitor opening, and timeline drag-out |
 | **3D Layers** | Shared-scene 3D layers, camera clips, Gaussian splats, splat effectors, and local browser training |
@@ -51,7 +51,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | [Keyframes](/features/keyframes/) | Animated properties, effect params, masks, fades, easing, and visibility rules |
 | [Preview](/features/preview/) | Main preview, source monitor, output windows, RAM preview, and target routing |
 | [UI Panels](/features/ui-panels/) | Dock layout, panel catalog, properties tabs, shared touch support, and workspace surfaces |
-| [Node Workspace](/features/node-workspace/) | Selected-clip graph view, Media Board canvas behavior, and current render boundary |
+| [Node Workspace](/features/node-workspace/) | Unified clip nodes, reusable operators, effect-order synchronization, 3D dependencies and execution boundaries |
 | [Keyboard Shortcuts](/features/keyboard-shortcuts/) | Current shortcut registry, playback controls, and preset behavior |
 
 ### Rendering And Media

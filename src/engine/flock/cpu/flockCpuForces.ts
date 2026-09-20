@@ -1,3 +1,4 @@
+import { windForce } from '../../../services/operators/wind';
 import {
   FLOCK_PARTICLE_STRIDE,
   P_AGE,
@@ -164,10 +165,8 @@ export function accumulateFieldForces(
         acc[2] -= vz * f[0];
         break;
       case 6: {
-        const gust = 1 + f[1] * (valueNoise1(f[2] * 0.5 + rnd * 10, 7) * 2 - 1);
-        acc[0] += op.v0[0] * f[0] * gust;
-        acc[1] += op.v0[1] * f[0] * gust;
-        acc[2] += op.v0[2] * f[0] * gust;
+        const force = windForce(op.v0, f[0], f[1], valueNoise1(f[2] * 0.5 + rnd * 10, 7) * 2 - 1, true);
+        acc[0] += force[0]; acc[1] += force[1]; acc[2] += force[2];
         break;
       }
       case 7: {

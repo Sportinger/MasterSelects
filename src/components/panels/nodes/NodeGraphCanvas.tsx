@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { NodeGraphGroups } from './canvas/NodeGraphGroups';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent, WheelEvent } from 'react';
 import type {
   NodeGraph,
@@ -43,6 +44,7 @@ interface NodeGraphCanvasProps {
   onGroupSelection?: () => void;
   onToggleNodeBypass?: (nodeId: string) => void;
   onOpenAddMenu?: (position: { x: number; y: number; layout: NodeGraphLayout; nodeId?: string | null }) => void;
+  onToggleGroup?: (id: string) => void;
   layoutScaleX?: number;
 }
 
@@ -79,6 +81,7 @@ export function NodeGraphCanvas({
   onGroupSelection,
   onToggleNodeBypass,
   onOpenAddMenu,
+  onToggleGroup,
   layoutScaleX = 1,
 }: NodeGraphCanvasProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -112,21 +115,28 @@ export function NodeGraphCanvas({
     '--node-workspace-grid-y': `${viewport.panY % 32}px`,
   }) as CSSProperties, [viewport.panX, viewport.panY]);
 
-  const fitGraph = useCallback(() => {
+  const fitBounds = useCallback((bounds: typeof graphBounds) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const width = Math.max(1, canvas.clientWidth - (FIT_MARGIN * 2));
     const height = Math.max(1, canvas.clientHeight - (FIT_MARGIN * 2));
-    const boundsWidth = Math.max(1, graphBounds.right - graphBounds.left);
-    const boundsHeight = Math.max(1, graphBounds.bottom - graphBounds.top);
+    const boundsWidth = Math.max(1, bounds.right - bounds.left);
+    const boundsHeight = Math.max(1, bounds.bottom - bounds.top);
     const nextZoom = clamp(Math.min(width / boundsWidth, height / boundsHeight), MIN_ZOOM, MAX_ZOOM);
     setViewport({
       zoom: nextZoom,
-      panX: FIT_MARGIN - (graphBounds.left * nextZoom),
-      panY: FIT_MARGIN - (graphBounds.top * nextZoom),
+      panX: FIT_MARGIN - (bounds.left * nextZoom),
+      panY: FIT_MARGIN - ((bounds.top - 48) * nextZoom),
     });
-  }, [graphBounds]);
+  }, []);
+  const fitGraph = useCallback(() => fitBounds(graphBounds), [fitBounds, graphBounds]);
+  const focusGroup = (id: string) => fitBounds(getGraphBounds({ ...graph, nodes: displayNodes.filter(n => n.groupId === id) }));
+
+  const fittedGraph = useRef<string | null>(null);
+  useEffect(() => {
+    if (fittedGraph.current !== graph.id) { fittedGraph.current = graph.id; fitGraph(); }
+  }, [graph.id, fitGraph]);
 
   const resetView = useCallback(() => {
     setViewport(DEFAULT_VIEWPORT);
@@ -528,6 +538,7 @@ export function NodeGraphCanvas({
             transform: `translate(${viewport.panX}px, ${viewport.panY}px) scale(${viewport.zoom})`,
           }}
         >
+          <NodeGraphGroups graph={graph} nodes={displayNodes} onToggle={id => { fittedGraph.current = null; onToggleGroup?.(id); }} onFocus={focusGroup} />
           <NodeGraphEdges
             graphBounds={graphBounds}
             edges={graph.edges}

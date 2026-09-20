@@ -1,9 +1,11 @@
+import { WIND_FORCE_WGSL } from '../../../services/operators/wind';
 import { FLOCK_WGSL_MATH, FLOCK_WGSL_STRUCTS, flockSelectionWgsl } from './flockWgslShared';
 
 /** Spatial index: identity keys, bitonic sort, per-cell ranges. */
 export const FLOCK_GRID_WGSL = /* wgsl */ `
 ${FLOCK_WGSL_STRUCTS}
 ${FLOCK_WGSL_MATH}
+${WIND_FORCE_WGSL}
 
 struct SortParams { k: u32, j: u32, count: u32, pad0: u32, };
 
@@ -81,6 +83,7 @@ fn cellRanges(@builtin(global_invocation_id) gid: vec3u) {
 export const FLOCK_SIMULATE_WGSL = /* wgsl */ `
 ${FLOCK_WGSL_STRUCTS}
 ${FLOCK_WGSL_MATH}
+${WIND_FORCE_WGSL}
 
 const COHESION_GAIN: f32 = 0.6;
 const ALIGNMENT_GAIN: f32 = 0.9;
@@ -245,8 +248,7 @@ fn fieldForces(sim: SimParams, p: Particle, mask: u32) -> vec3f {
     } else if (kind == 5u) {
       acc -= p.vel * op.f0;
     } else if (kind == 6u) {
-      let gust = 1.0 + op.f1 * (valueNoise1(op.f2 * 0.5 + p.rnd * 10.0, 7u) * 2.0 - 1.0);
-      acc += op.v0 * op.f0 * gust;
+      acc += sharedWindForce(op.v0, op.f0, op.f1, valueNoise1(op.f2 * 0.5 + p.rnd * 10.0, 7u) * 2.0 - 1.0);
     } else if (kind == 7u) {
       let speed = length(p.vel);
       if (speed < 1e-5) { continue; }
@@ -562,6 +564,7 @@ fn trailWrite(@builtin(global_invocation_id) gid: vec3u) {
 export const FLOCK_LINKS_WGSL = /* wgsl */ `
 ${FLOCK_WGSL_STRUCTS}
 ${FLOCK_WGSL_MATH}
+${WIND_FORCE_WGSL}
 
 struct LinkParams {
   radius: f32, fraction: f32, cellSize: f32, pad0: f32,

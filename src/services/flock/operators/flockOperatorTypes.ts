@@ -69,6 +69,7 @@ export type FlockBypassContract =
   | { kind: 'none' };
 
 export interface FlockOperatorDescriptor {
+  sharedOperator?: string;
   id: string;
   version: number;
   label: string;

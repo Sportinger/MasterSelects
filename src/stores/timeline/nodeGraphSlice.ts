@@ -1,3 +1,4 @@
+import { applyVisualEffectOrder, effectOrderForConnection } from '../../services/nodeGraph/clipEffectChain';
 import type { NodeGraph, NodeGraphLayout, NodeGraphPort, NodeGraphSignalType, TimelineClip } from '../../types';
 import { renderHostPort } from '../../services/render/renderHostPort';
 import {
@@ -400,6 +401,14 @@ export const createNodeGraphSlice: SliceCreator<NodeGraphActions> = (set, get) =
     const context = resolveGraphActionContext(state, clipId);
     if (!context) return;
 
+    const effectOrder = effectOrderForConnection(context.clip, connection, context.track, context.options);
+    if (effectOrder) {
+      const nextClip = applyVisualEffectOrder(context.clip, effectOrder);
+      const nodeGraph = reconcileClipNodeGraphState(nextClip, context.track, context.clip.nodeGraph, context.options);
+      set({ clips: clips.map(c => c.id === context.clipId ? { ...c, effects: nextClip.effects, nodeGraph } : c) });
+      invalidateCacheAndRequestRender(get());
+      return;
+    }
     const nodeGraph = connectClipNodeGraphPorts(context.clip, connection, context.track, context.options);
     set({
       clips: setClipNodeGraph(clips, context.clipId, nodeGraph),

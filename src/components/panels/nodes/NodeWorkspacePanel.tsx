@@ -1,3 +1,5 @@
+import { getEffectOperator } from '../../../services/operators/operatorRegistry';
+import { useUnifiedNodeActions } from './useUnifiedNodeActions';
 import { useCallback, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { getCategoriesWithEffects } from '../../../effects';
 import type { NodeGraphConnectionRequest, NodeGraphLayout, NodeGraphViewTheme } from '../../../services/nodeGraph';
@@ -107,7 +109,8 @@ export function NodeWorkspacePanel() {
 
   const selectedNode = useMemo(() => {
     if (!subject) return null;
-    return subject.graph.nodes.find((node) => node.id === selectedNodeId) ?? subject.graph.nodes[0] ?? null;
+    const group = subject.graph.groups?.find(g => g.proxyId === selectedNodeId);
+    return subject.graph.nodes.find(node => node.id === selectedNodeId) ?? subject.graph.nodes.find(node => node.id === group?.nodeIds[0]) ?? subject.graph.nodes[0] ?? null;
   }, [selectedNodeId, subject]);
   const contextMenuNode = useMemo(() => {
     if (!subject || !contextMenu?.nodeId) return null;
@@ -145,7 +148,7 @@ export function NodeWorkspacePanel() {
     if (request.clipId !== subject?.selectedClip.id && request.clipId !== subject?.id) {
       selectClip(request.clipId);
     }
-    setViewTheme(request.theme);
+    setViewTheme('general');
     setContextMenu(null);
   }, [selectClip, subject?.id, subject?.selectedClip.id]);
   useNodeWorkspaceViewRequests(handleViewRequest);
@@ -342,10 +345,9 @@ export function NodeWorkspacePanel() {
     updateClipAICustomNode,
   ]);
 
-  const deleteContextNode = useCallback((nodeId: string) => {
-    adapter?.deleteNode(nodeId);
-    closeContextMenu();
-  }, [adapter, closeContextMenu]);
+  const unified = useUnifiedNodeActions(subject?.clip, subject?.graph, adapter, flockActions);
+
+  const deleteContextNode = (nodeId: string) => { unified.deleteNode(nodeId); closeContextMenu(); };
 
   const switchTheme = useCallback((theme: NodeGraphViewTheme) => {
     if (!subject) return;
@@ -357,7 +359,7 @@ export function NodeWorkspacePanel() {
   }, [closeContextMenu, ensureColorCorrection, subject]);
 
   const addColorGraphNode = useCallback((type: 'primary' | 'wheels') => {
-    if (!subject || activeTheme !== 'color') return;
+    if (!subject) return;
     batched(`Add ${type} color node`, () => {
       addColorNode(subject.id, type);
     });
@@ -374,6 +376,17 @@ export function NodeWorkspacePanel() {
     );
   }
 
+  const flockSelection = selectedNodeIds.flatMap(id => {
+    const binding = subject.graph.nodes.find(n => n.id === id)?.binding;
+    return binding?.kind === 'flock-node' ? [binding.nodeId] : [];
+  });
+  const selectFlockNodes = (ids: string[]) => selectNodes(ids.flatMap(id => subject.graph.nodes.filter(n => n.binding?.kind === 'flock-node' && n.binding.nodeId === id).map(n => n.id)));
+  const flockContext = contextMenuNode?.binding?.kind === 'flock-node';
+  const flockMenu = Boolean(subject.clip.flock && (flockContext || (!contextMenu?.nodeId && selectedNode?.groupId === 'flock')));
+  const operatorContext = contextMenuNode?.binding?.kind === 'effect-operator' ? contextMenuNode.binding : null;
+  const canDeleteContext = operatorContext ? operatorContext.nodeId !== 'wind' && Boolean(getEffectOperator(operatorContext.operator)?.addable)
+    : contextMenuNode?.binding?.kind === 'color-node' ? !['input', 'output'].includes(contextMenuNode.binding.nodeType)
+    : canDeleteNodeFromClip(subject.clip, contextMenuNode);
   const viewLabel = activeTheme === 'color' ? 'Color subgraph' : subject.view.label;
 
   return (
@@ -381,7 +394,7 @@ export function NodeWorkspacePanel() {
       <div className="node-workspace-main">
         <div className="node-workspace-view-bar">
           <div className="node-workspace-view-tabs" role="tablist" aria-label="Node graph theme">
-            {subject.availableViews.map((view) => (
+            {subject.availableViews.filter(view => view.theme === 'general').map((view) => (
               <button
                 key={view.id}
                 type="button"
@@ -417,37 +430,39 @@ export function NodeWorkspacePanel() {
               </>
             )}
           </nav>
-          {activeTheme === 'color' && (
+          {selectedNode?.groupId === 'color' && (
             <div className="node-workspace-view-actions">
               <button type="button" onClick={() => addColorGraphNode('primary')}>+ Primary</button>
               <button type="button" onClick={() => addColorGraphNode('wheels')}>+ Wheels</button>
             </div>
           )}
         </div>
-        {activeTheme === 'flock' && (
+        {subject.clip.flock && (
           <FlockGraphStatusBar
             clip={subject.clip}
             message={flockActions.message}
             onDismissMessage={flockActions.clearMessage}
           />
         )}
+        {unified.message && <div className="node-workspace-graph-message" role="status">{unified.message}<button type="button" onClick={unified.clearMessage}>Dismiss</button></div>}
         <NodeGraphCanvas
           key={subject.graph.id}
           graph={subject.graph}
           selectedNodeId={selectedNode?.id ?? null}
-          selectedNodeIds={adapter.supportsMultiSelection && selectedNodeIds.length > 1 ? selectedNodeIds : undefined}
+          selectedNodeIds={selectedNodeIds.length > 1 ? selectedNodeIds : undefined}
           onSelectNode={selectNode}
-          onToggleNodeSelection={adapter.supportsMultiSelection ? toggleNodeSelection : undefined}
-          onMoveNode={adapter.moveNode}
-          onMoveNodes={adapter.moveNodes}
-          onConnectPorts={adapter.connectPorts}
-          onDisconnectEdge={adapter.disconnectEdge}
-          onDeleteNode={adapter.deleteNode}
-          onDeleteNodes={adapter.deleteNodes}
-          onDuplicateSelection={adapter.duplicateSelection}
-          onGroupSelection={adapter.groupSelection}
-          onToggleNodeBypass={adapter.toggleBypass}
+          onToggleNodeSelection={toggleNodeSelection}
+          onMoveNode={unified.moveNode}
+          onMoveNodes={moves => batched('Move nodes', () => moves.forEach(move => unified.moveNode(move.nodeId, move.layout)))}
+          onConnectPorts={unified.connectPorts}
+          onDisconnectEdge={unified.disconnectEdge}
+          onDeleteNode={unified.deleteNode}
+          onDeleteNodes={ids => batched('Delete nodes', () => ids.forEach(unified.deleteNode))}
+          onDuplicateSelection={flockSelection.length === selectedNodeIds.length ? () => selectFlockNodes(flockActions.duplicate(flockSelection)) : undefined}
+          onGroupSelection={flockSelection.length === selectedNodeIds.length ? () => { const id = flockActions.group(flockSelection, 'Group'); if (id) selectFlockNodes([id]); } : undefined}
+          onToggleNodeBypass={unified.toggleBypass}
           onOpenAddMenu={adapter.supportsAddMenu ? setContextMenu : undefined}
+          onToggleGroup={id => { unified.toggleGroup(id); const group = subject.graph.groups?.find(g => g.id === id); if (group) selectNode(group.proxyId); }}
           layoutScaleX={adapter.layoutScaleX}
         />
       </div>
@@ -459,14 +474,14 @@ export function NodeWorkspacePanel() {
         onOpenProperties={openProperties}
         onStartResizeInspector={startInspectorResize}
         showClipActions={activeTheme === 'general'}
-        flockActions={activeTheme === 'flock' ? flockActions : undefined}
+        flockActions={subject.clip.flock ? flockActions : undefined}
       />
-      {contextMenu && activeTheme === 'general' && (
+      {contextMenu && !flockMenu && (
         <NodeContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
           targetNode={contextMenuNode}
-          canDeleteTarget={canDeleteNodeFromClip(subject.clip, contextMenuNode)}
+          canDeleteTarget={canDeleteContext}
           canAddVisualBuiltIns={subject.clip.source?.type !== 'audio'}
           effectCategories={effectCategories}
           onClose={closeContextMenu}
@@ -480,16 +495,16 @@ export function NodeWorkspacePanel() {
           onAddEffect={addEffectNode}
         />
       )}
-      {contextMenu && activeTheme === 'flock' && subject.clip.flock && (
+      {contextMenu && flockMenu && subject.clip.flock && (
         <FlockNodeContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          layout={contextMenu.layout}
+          layout={{ x: contextMenu.layout.x - (contextMenuNode?.groupOffset?.x ?? selectedNode?.groupOffset?.x ?? 0), y: contextMenu.layout.y - (contextMenuNode?.groupOffset?.y ?? selectedNode?.groupOffset?.y ?? 0) }}
           definition={subject.clip.flock}
-          targetNode={contextMenuNode}
-          selectedNodeIds={contextMenuNode && !selectedNodeIds.includes(contextMenuNode.id) ? [contextMenuNode.id] : selectedNodeIds}
+          targetNode={flockContext ? { ...contextMenuNode!, id: (contextMenuNode!.binding as { nodeId: string }).nodeId } : null}
+          selectedNodeIds={flockContext && !selectedNodeIds.includes(contextMenuNode!.id) ? [(contextMenuNode!.binding as { nodeId: string }).nodeId] : flockSelection}
           actions={flockActions}
-          onSelectNodes={selectNodes}
+          onSelectNodes={selectFlockNodes}
           onClose={closeContextMenu}
         />
       )}

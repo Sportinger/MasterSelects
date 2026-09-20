@@ -8,7 +8,7 @@ GPU, draws into the shared 3D scene (real depth against models, planes and
 splats), and is exported through the same scene path as preview.
 
 The ordinary Properties panel shows promoted graph parameters; **Open Nodes**
-shows the very same graph in the Node Workspace **Flock** view. Both surfaces
+shows the very same graph as the green **Flock** group on the unified clip canvas. Both surfaces
 edit one definition (`clip.flock`) and one set of keyframes.
 
 Plan and acceptance criteria: [`docs/ongoing/Flocking-Clips-And-Node-Graphs-Plan.md`](../ongoing/Flocking-Clips-And-Node-Graphs-Plan.md).
@@ -23,8 +23,8 @@ Plan and acceptance criteria: [`docs/ongoing/Flocking-Clips-And-Node-Graphs-Plan
    exposed controls grouped as Population / Behavior / Guidance / Appearance /
    Lines, *Time & Quality* (step rate, warm-up, loop, precompute, cache, host
    capability, live runtime status) and graph diagnostics.
-3. **Open Nodes** activates the Node Workspace and switches it to the clip's
-   Flock view (breadcrumb `Clip graph › Flock`). Add nodes from the right-click
+3. **Open Nodes** activates the Node Workspace and shows the clip's Flock
+   group alongside its other nodes. Add nodes from the right-click
    menu, connect typed ports, bypass, duplicate (Ctrl+D), group (Ctrl+G), rename,
    expose any parameter to the Properties panel, save group or whole-graph
    presets, and apply presets to other clips.
@@ -245,5 +245,9 @@ have not been measured yet.
 | CPU reference solver, GPU sessions, shaders, renderer, registry | `src/engine/flock/` |
 | Scene integration | `src/engine/native3d/passes/FlockPass.ts` |
 | Properties tab | `src/components/panels/properties/flock/` |
-| Node Workspace Flock view | `src/components/panels/nodes/flock/`, `src/services/nodeGraph/clipGraphFlockProjection.ts` |
+| Node Workspace Flock group | `src/components/panels/nodes/flock/`, `src/services/nodeGraph/clipGraphFlockProjection.ts` |
 | Tests | `tests/unit/flock*.test.ts`, `tests/unit/FlockTab.test.tsx` |
+
+The Wind operator shares its directional-force contract and CPU/WGSL calculation
+with Face Cables. Existing Flock defaults and deterministic gust modulation are
+retained. See [Node Workspace](./Node-Workspace.md) for the common canvas.

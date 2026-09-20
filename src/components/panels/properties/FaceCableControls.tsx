@@ -1,3 +1,7 @@
+import { editEffectGraph } from '../../../services/operators/effectGraphEditing';
+import { AdditionalOperatorControls } from '../nodes/workspace/OperatorParameters';
+import { requestNodeWorkspaceView } from '../../../services/nodeGraph/nodeWorkspaceNavigation';
+import { useDockStore } from '../../../stores/dockStore';
 import { useFaceCableAnimation } from './useFaceCableAnimation';
 import { FaceCableEnvironmentControls } from './FaceCableEnvironmentControls';
 import { FaceCableLightControls } from './FaceCableLightControls';
@@ -21,7 +25,7 @@ function readConfigs(value: unknown): FaceCableConfig[] {
 export default function FaceCableEffectControls(props: EffectControlProps) {
   return props.clipId && props.effectInstanceId ? <FaceCableControls key={`${props.clipId}:${props.effectInstanceId}`} clipId={props.clipId} effectId={props.effectInstanceId} /> : <span>Select a timeline clip to configure face cables.</span>;
 }
-export function FaceCableControls({ clipId, effectId }: { clipId: string; effectId: string }) {
+export function FaceCableControls({ clipId, effectId, scope = 'all' }: { clipId: string; effectId: string; scope?: 'all' | 'simulation' | 'anchors' | 'render' }) {
   const tracking = usePreciseFaceTrack(clipId);
   const disabled = !tracking.ready || tracking.summary?.status === "tracking" || tracking.summary?.status === "loading";
   const settings = useTimelineStore(state => state.clips.find(c => c.id === clipId)?.effects.find(e => e.id === effectId)?.params.settings);
@@ -37,10 +41,16 @@ export function FaceCableControls({ clipId, effectId }: { clipId: string; effect
   const [busy, setBusy] = useState(false), [progress, setProgress] = useState(0), [message, setMessage] = useState('');
   const previewStatus = useCablePreview(clipId, effectId, configs, dirty && previewEnabled && !busy && !disabled);
   const controller = useRef<AbortController | null>(null);
-  useEffect(() => { const restored = readConfigs(settings); setConfigs(restored); setSelected(index => Math.min(index, restored.length - 1)); setDirty(false); }, [settings]);
+  useEffect(() => { const restored = readConfigs(settings); setConfigs(restored); setSelected(index => Math.min(index, restored.length - 1)); }, [settings]);
   useEffect(() => () => controller.current?.abort(), []);
   const cable = configs[Math.min(selected, configs.length - 1)];
-  const edit = (patch: Partial<FaceCableConfig>) => { setDirty(true); setConfigs(list => list.map((c, i) => i === selected ? { ...c, ...patch } : c)); setMessage('Settings changed — bake to apply.'); };
+  const saveConfigs = (next: FaceCableConfig[]) => {
+    try { editEffectGraph(clipId, effectId, 'Edit cable settings', (_, params) => { params.settings = JSON.stringify(next); }); }
+    catch (error) { setMessage(String(error)); return; }
+    setDirty(true); setConfigs(next);
+    setMessage('Settings changed - bake to apply.');
+  };
+  const edit = (patch: Partial<FaceCableConfig>) => saveConfigs(configs.map((c, i) => i === selected ? { ...c, ...patch } : c));
   const animation = useFaceCableAnimation(clipId, effectId, cable, () => setDirty(true), edit, busy);
   const bake = async (reuseDepth = false) => {
     const abort = new AbortController(); controller.current = abort; setBusy(true); setProgress(0); setMessage('Simulating cables…');
@@ -67,7 +77,10 @@ export function FaceCableControls({ clipId, effectId }: { clipId: string; effect
   return <div className="face-cable-inspector" onPointerUp={event => {
     if (event.target instanceof Element) event.target.closest<HTMLElement>('button, select, input[type="checkbox"], input[type="color"]')?.blur();
   }}>
-    <ResolveInspectorSection title="Connections">
+    {scope === 'all' && <button type="button" className="node-workspace-primary-action" onClick={() => {
+      requestNodeWorkspaceView(clipId, 'general'); useDockStore.getState().activatePanelType('node-workspace');
+    }}>Open clip nodes</button>}
+    {(scope === 'all' || scope === 'anchors') && <ResolveInspectorSection title="Connections">
       <div className="face-cable-actions" role="group" aria-label="Choose cable">
         {configs.map((config, index) => <button key={config.id} type="button" disabled={busy}
           aria-pressed={index === selected} onClick={() => setSelected(index)}>
@@ -94,19 +107,22 @@ export function FaceCableControls({ clipId, effectId }: { clipId: string; effect
       </ResolveInspectorRow>
       <p className="face-cable-hint">Right / left means your own right / left. Ear area uses an approximate face-edge point. Unlocked ends move freely.</p>
       <div className="face-cable-actions">
-        <button type="button" disabled={busy || configs.length >= MAX_FACE_CABLES} onClick={() => { setDirty(true); setConfigs([...configs, defaultFaceCable()]); setSelected(configs.length); }}>Add cable</button>
+        <button type="button" disabled={busy || configs.length >= MAX_FACE_CABLES} onClick={() => { setDirty(true); saveConfigs([...configs, defaultFaceCable()]); setSelected(configs.length); }}>Add cable</button>
         <button type="button" disabled={busy || configs.length >= MAX_FACE_CABLES} onClick={() => {
           setDirty(true);
-          setConfigs([...configs, { ...defaultFaceCable(), fromCableId: cable.id, to: 'rightEar', color: cable.color, width: cable.width, renderStyle: cable.renderStyle }]);
+          saveConfigs([...configs, { ...defaultFaceCable(), fromCableId: cable.id, to: 'rightEar', color: cable.color, width: cable.width, renderStyle: cable.renderStyle }]);
           setSelected(configs.length);
         }}>Branch to right ear</button>
         {hasBranches && <span className="face-cable-hint">Remove or reconnect child cables before removing this cable.</span>}
-        <button type="button" disabled={busy || configs.length <= 1 || hasBranches} onClick={() => { setDirty(true); setConfigs(configs.filter((_, i) => i !== selected)); setSelected(0); }}>Remove cable</button>
+        <button type="button" disabled={busy || configs.length <= 1 || hasBranches} onClick={() => { setDirty(true); saveConfigs(configs.filter((_, i) => i !== selected)); setSelected(0); }}>Remove cable</button>
       </div>
-    </ResolveInspectorSection>
-    <FaceCableEnvironmentControls clipId={clipId} effectId={effectId} busy={busy} onChange={() => setDirty(true)} />
-    <FaceCableLightControls clipId={clipId} effectId={effectId} busy={busy} onChange={() => setDirty(true)} />
-    <ResolveInspectorSection title="Physics">
+    </ResolveInspectorSection>}
+    {scope === 'all' && <>
+      <FaceCableEnvironmentControls clipId={clipId} effectId={effectId} busy={busy} onChange={() => setDirty(true)} />
+      <AdditionalOperatorControls clipId={clipId} effectId={effectId} />
+      <FaceCableLightControls clipId={clipId} effectId={effectId} busy={busy} onChange={() => setDirty(true)} />
+    </>}
+    {(scope === 'all' || scope === 'simulation') && <><ResolveInspectorSection title="Physics">
       {numberRow('segments', 'Segments', 4, 96, 1)}
       {numberRow('slack', 'Length factor', 1.05, 3, 0.05)}
       {numberRow('stiffness', 'Stiffness', 0, 1, 0.05)}
@@ -119,7 +135,8 @@ export function FaceCableControls({ clipId, effectId }: { clipId: string; effect
       {numberRow('windGusts', 'Gusts', 0, 1, 0.05)}
       <p className="face-cable-hint">Positive: toward camera. Negative: away. Zero: off.</p>
     </ResolveInspectorSection>
-    <ResolveInspectorSection title="Appearance">
+    </>}
+    {(scope === 'all' || scope === 'render') && <ResolveInspectorSection title="Appearance">
       <ResolveInspectorRow label="Style">
         <InspectorSelect ariaLabel="Cable appearance" value={cable.renderStyle ?? 'shaded'} disabled={busy}
           onChange={value => edit({ renderStyle: value })}
@@ -128,7 +145,7 @@ export function FaceCableControls({ clipId, effectId }: { clipId: string; effect
       {numberRow('width', 'Thickness', 1, 20, 0.5)}
       <ResolveInspectorRow label="Color"><input aria-label="Cable color" type="color" value={cable.color} disabled={busy} onChange={event => edit({ color: event.target.value })} /></ResolveInspectorRow>
       <ResolveInspectorRow label="Attachments"><label className="face-cable-checks"><input type="checkbox" checked={cable.showAnchors ?? true} disabled={busy} onChange={event => edit({ showAnchors: event.target.checked })} />Show rings</label></ResolveInspectorRow>
-    </ResolveInspectorSection>
+    </ResolveInspectorSection>}
     <div className="face-cable-footer">
       <label className="face-cable-checks"><input type="checkbox" checked={previewEnabled} onChange={event => setPreviewEnabled(event.target.checked)} />Live frame preview</label>
       {previewStatus && <p role="status" className="face-cable-hint">{previewStatus}</p>}

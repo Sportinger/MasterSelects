@@ -308,7 +308,7 @@ export class NativeSceneRenderer {
           ...layerSpaceEffects,
           device,
           commandEncoder,
-          layers: [...planeLayers, ...voxelLayers],
+          layers: [...planeLayers, ...voxelLayers, ...cableLayers.map(layer => ({ ...layer, kind: 'plane' as const }))],
           targetKey,
           resolveSource: (layer) => {
             const view = this.planePass.resolveTextureView(device, layer);
@@ -365,7 +365,7 @@ export class NativeSceneRenderer {
       return null;
     }
     if (!this.faceCablePass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, cableLayers, lightLayers, camera, targetKey,
-      layer => this.planePass.resolveTextureView(device, layer), temporaryBuffers)) return null;
+      layer => effectedTextureViews.get(layer.layerId) ?? this.planePass.resolveTextureView(device, layer), temporaryBuffers)) return null;
 
     const readyVoxels = voxelLayers.flatMap((layer) => {
       const textureView = effectedTextureViews.get(layer.layerId) ?? this.planePass.resolveTextureView(device, layer);

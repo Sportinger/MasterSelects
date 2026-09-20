@@ -1,3 +1,4 @@
+import { sceneCompositeStyle } from '../../scene/sceneEffectRouting';
 import type { Layer, LayerRenderData } from '../../core/types';
 import { getGaussianSplatGpuRenderer } from '../../gaussian/core/GaussianSplatGpuRenderer';
 import { resolveOrbitCameraFrame } from '../../gaussian/core/SplatCameraUtils';
@@ -397,25 +398,7 @@ export class SharedScene3DProcessor {
     }
 
     const insertIdx = indices3D[0];
-    const firstLayer = layerData[indices3D[0]].layer;
-    const isSingle3D = indices3D.length === 1;
-    const firstLayerEffects = firstLayer.effects ?? [];
-    const appliedLayerSpaceEffectIds = new Set(
-      d.effectsPipeline && d.sampler
-        ? renderLayers3D[0]?.layerSpaceEffects?.map((effect) => effect.id) ?? []
-        : [],
-    );
-    const syntheticEffects = isSingle3D
-      ? renderLayers3D[0]?.kind === 'voxel'
-        ? firstLayerEffects.filter((effect) => !(
-            effect.enabled
-            && (effect.type === 'voxel-relief' || appliedLayerSpaceEffectIds.has(effect.id))
-          ))
-        : firstLayerEffects.filter((effect) => !(
-            effect.enabled && (appliedLayerSpaceEffectIds.has(effect.id)
-              || (renderLayers3D[0]?.kind === 'face-cables' && effect.type === 'face-cables'))
-          ))
-      : [];
+    const compositeStyle = sceneCompositeStyle(layerData, renderLayers3D, !!(d.effectsPipeline && d.sampler));
     const sceneTexturePixelScale = calculateSourcePixelScale(
       width,
       height,
@@ -427,11 +410,8 @@ export class SharedScene3DProcessor {
       id: '__scene_3d__',
       name: '3D Scene',
       visible: true,
-      opacity: isSingle3D ? firstLayer.opacity : 1,
-      blendMode: isSingle3D ? firstLayer.blendMode : 'normal',
+      ...compositeStyle,
       source: { type: 'image' },
-      effects: syntheticEffects,
-      colorCorrection: isSingle3D ? firstLayer.colorCorrection : undefined,
       position: { x: 0, y: 0, z: 0 },
       // The native scene is already rasterized for this viewport. Compensate
       // the compositor's source-pixel scale so it remains a fullscreen scene

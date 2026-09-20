@@ -1,3 +1,4 @@
+import { synchronizeEffectChain } from './clipEffectChain';
 import { extractAINodeGeneratedCode } from './aiNodeDefinition';
 import { buildClipNodeGraphView } from './clipGraphProjectionBuildView';
 import type { TimelineClip, TimelineTrack } from './clipGraphProjectionDomain';
@@ -23,7 +24,7 @@ import type {
 } from './types';
 
 function getNodeBacking(node: NodeGraphNode): ClipNodeGraphBacking {
-  if (node.binding && node.binding.kind !== 'color-node' && node.binding.kind !== 'flock-node') {
+  if (node.binding && node.binding.kind !== 'color-node' && node.binding.kind !== 'flock-node' && node.binding.kind !== 'effect-operator' && node.binding.kind !== 'scene-node') {
     return node.binding;
   }
 
@@ -124,7 +125,7 @@ export function applyClipNodeGraphState(graph: NodeGraph, state?: ClipNodeGraph)
 
   return {
     ...graphWithLayouts,
-    edges: validateManualEdges(graphWithLayouts, state.manualEdges),
+    edges: validateManualEdges(graphWithLayouts, synchronizeEffectChain(graphWithLayouts, state.manualEdges)),
   };
 }
 
@@ -136,12 +137,13 @@ function buildProjectedClipNodeGraphState(
   const graph = buildClipNodeGraphView(clip, track, options);
   const manualEdges = clip.nodeGraph?.manualEdges === undefined
     ? undefined
-    : validateManualEdges(graph, clip.nodeGraph.manualEdges);
+    : validateManualEdges(graph, synchronizeEffectChain(graph, clip.nodeGraph.manualEdges));
 
   return {
     version: 1,
     nodes: graph.nodes.map(createNodeState),
     customNodes: cloneCustomNodeDefinitions(clip.nodeGraph?.customNodes),
+    groups: clip.nodeGraph?.groups ? structuredClone(clip.nodeGraph.groups) : undefined,
     forcedBuiltIns: clip.nodeGraph?.forcedBuiltIns ? [...clip.nodeGraph.forcedBuiltIns] : undefined,
     ...(manualEdges !== undefined ? { manualEdges } : {}),
   };
@@ -169,7 +171,7 @@ export function reconcileClipNodeGraphState(
   }, track, options);
   const manualEdges = existingState.manualEdges === undefined
     ? undefined
-    : validateManualEdges(graphForValidation, existingState.manualEdges);
+    : validateManualEdges(graphForValidation, synchronizeEffectChain(graphForValidation, existingState.manualEdges));
 
   return {
     version: 1,
@@ -180,6 +182,7 @@ export function reconcileClipNodeGraphState(
     customNodes: cloneCustomNodeDefinitions(existingState.customNodes),
     forcedBuiltIns: existingState.forcedBuiltIns ? [...existingState.forcedBuiltIns] : undefined,
     ...(manualEdges !== undefined ? { manualEdges } : {}),
+    groups: existingState.groups ? structuredClone(existingState.groups) : undefined,
     updatedAt: existingState.updatedAt,
   };
 }
@@ -283,6 +286,7 @@ export function cloneClipNodeGraph(graph?: ClipNodeGraph): ClipNodeGraph | undef
     customNodes: cloneCustomNodeDefinitions(graph.customNodes),
     forcedBuiltIns: graph.forcedBuiltIns ? [...graph.forcedBuiltIns] : undefined,
     manualEdges: cloneManualEdges(graph.manualEdges),
+    groups: graph.groups ? structuredClone(graph.groups) : undefined,
     updatedAt: graph.updatedAt,
   };
 }
@@ -332,6 +336,7 @@ export function remapClipNodeGraphEffectIds(
         backing: { kind: 'clip-effect', effectId: nextEffectId },
       };
     }),
+    groups: cloned.groups ? Object.fromEntries(Object.entries(cloned.groups).map(([id, state]) => [id.startsWith('effect:') ? `effect:${effectIdMap.get(id.slice(7)) ?? id.slice(7)}` : id, state])) : undefined,
     manualEdges: cloned.manualEdges?.map((candidate) => remapManualEdgeEffectIds(candidate, effectIdMap)),
     updatedAt: Date.now(),
   };

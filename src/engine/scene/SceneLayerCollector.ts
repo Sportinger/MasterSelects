@@ -171,6 +171,8 @@ export function collectScene3DLayers(
     const cableEffect = layer.effects?.find(e => e.enabled && e.type === 'face-cables' && e.params.scene3D && e.params.sceneData);
     if (cableEffect) {
       result.push({ ...base, kind: 'face-cables', cableParams: cableEffect.params,
+        layerSpaceEffects: (layer.effects ?? []).filter((effect, index) => effect.enabled && effect !== cableEffect
+          && (index < layer.effects!.indexOf(cableEffect) || isLayerSpaceSceneEffect(effect.type))),
         videoRotation: source?.videoFrame ? source.videoRotation ?? 0 : 0,
         videoElement: source?.videoElement ?? undefined, videoFrame: source?.videoFrame ?? undefined,
         imageElement: source?.imageElement ?? undefined, canvas: source?.textCanvas ?? undefined,

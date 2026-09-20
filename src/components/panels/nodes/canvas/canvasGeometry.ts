@@ -199,6 +199,8 @@ export function getPortTitle(port: NodeGraphPort): string {
 }
 
 export function isNodeBypassable(node: NodeGraphNode): boolean {
+  if (node.binding?.kind === 'scene-node') return false;
+  if (node.binding?.kind === 'effect-operator') return node.params?.bypassable === true;
   if (node.binding?.kind === 'flock-node') {
     return node.params?.bypassable === true;
   }

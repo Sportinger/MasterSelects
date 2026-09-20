@@ -1,3 +1,4 @@
+import { buildUnifiedClipGraph } from '../../../services/nodeGraph/unifiedClipGraph';
 import { useMemo } from 'react';
 import type { NodeGraph, NodeGraphDocument, NodeGraphView, NodeGraphViewTheme } from '../../../services/nodeGraph';
 import {
@@ -53,7 +54,7 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): Node
       linkedClip: graphContext.linkedClip,
       linkedTrack: graphContext.linkedTrack,
     });
-    const graph = getNodeGraphView(document, theme);
+    const graph = theme === 'general' ? buildUnifiedClipGraph(document, graphClip, clips) : getNodeGraphView(document, theme);
     const view = document.views.find((candidate) => candidate.theme === theme) ?? document.views[0];
     const linkedSubtitle = graphContext.linkedClip && graphContext.linkedTrack
       ? ` + ${graphContext.linkedTrack.name} / ${graphContext.linkedTrack.type}`
@@ -75,5 +76,5 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): Node
       view,
       availableViews: document.views,
     };
-  }, [graphContext, theme]);
+  }, [graphContext, theme, clips]);
 }

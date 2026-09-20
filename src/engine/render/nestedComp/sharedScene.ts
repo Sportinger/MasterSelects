@@ -1,3 +1,4 @@
+import { sceneCompositeStyle } from '../../scene/sceneEffectRouting';
 import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import type { Layer, LayerRenderData } from '../../core/types';
 import { getNativeSceneRenderer } from '../../native3d/NativeSceneRenderer';
@@ -123,27 +124,12 @@ export function process3DLayersForNestedScene(params: Process3DLayersForNestedPa
   }
 
   const insertIdx = indices3D[0];
-  const firstLayer = layerData[indices3D[0]].layer;
-  const isSingle = indices3D.length === 1;
-  const appliedLayerSpaceEffectIds = new Set(
-    effectsPipeline && sampler
-      ? layers3D[0]?.layerSpaceEffects?.map((effect) => effect.id) ?? []
-      : [],
-  );
   const syntheticLayer: Layer = {
     id: '__scene_3d_nested__',
     name: '3D Scene (Nested)',
     visible: true,
-    opacity: isSingle ? firstLayer.opacity : 1,
-    blendMode: isSingle ? firstLayer.blendMode : 'normal',
+    ...sceneCompositeStyle(layerData, layers3D, !!(effectsPipeline && sampler)),
     source: { type: 'image' },
-    effects: isSingle
-      ? (firstLayer.effects ?? []).filter((effect) => !(
-          effect.enabled && (appliedLayerSpaceEffectIds.has(effect.id)
-            || (layers3D[0]?.kind === 'face-cables' && effect.type === 'face-cables'))
-        ))
-      : [],
-    colorCorrection: isSingle ? firstLayer.colorCorrection : undefined,
     position: { x: 0, y: 0, z: 0 },
     scale: { x: 1, y: 1 },
     rotation: { x: 0, y: 0, z: 0 },

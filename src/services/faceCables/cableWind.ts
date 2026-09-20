@@ -1,7 +1,7 @@
+import { directionFromAngles, periodicWindModulation, windForce } from '../operators/wind';
 import { createEffectProperty } from '../../types/animationProperties';
 import type { Keyframe } from '../../types/keyframes';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
-import { cableWindAtTime } from './cableDepth';
 
 export const SHARED_WIND_FIELDS = {
   globalWindStrength: { label: 'Strength', default: 5, min: 0, max: 30 },
@@ -21,7 +21,7 @@ export function sharedWindValues(params: Record<string, unknown>, effectId: stri
 export function sharedCableWind(params: Record<string, unknown>, effectId: string, keys: Keyframe[], time: number) {
   if (!params.sharedWind) return null;
   const v = sharedWindValues(params, effectId, keys, time);
-  const force = cableWindAtTime(Math.max(0, v.globalWindStrength), Math.max(0, Math.min(1, v.globalWindGusts)), time);
-  const yaw = v.globalWindYaw * Math.PI / 180, pitch = Math.max(-90, Math.min(90, v.globalWindPitch)) * Math.PI / 180;
-  return { windX: force * Math.sin(yaw) * Math.cos(pitch), windY: -force * Math.sin(pitch), windZ: force * Math.cos(yaw) * Math.cos(pitch) };
+  const force = windForce(directionFromAngles(v.globalWindYaw, Math.max(-90, Math.min(90, v.globalWindPitch))),
+    Math.max(0, v.globalWindStrength), Math.max(0, Math.min(1, v.globalWindGusts)), periodicWindModulation(time));
+  return { windX: force[0], windY: -force[1], windZ: force[2] };
 }

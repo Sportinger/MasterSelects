@@ -1,7 +1,7 @@
+import { compileCableOperatorGraph } from './cableOperatorGraph';
 import { sampleCableConfig } from './cableAnimation';
 import { createCableSceneBake } from './cableSceneBake';
 import { createCableShadowReceiver, writeCableShadows } from './cableShadows';
-import { sharedCableWind } from './cableWind';
 import { cableFacePoints, createFaceContact } from './cableFaceSurface';
 import { cableSimulationOrder, cableMidpoint } from './cableConnections';
 import { useTimelineStore } from '../../stores/timeline';
@@ -50,7 +50,8 @@ export async function bakeFaceCables(clipId: string, effectId: string, configs: 
   const file = media.files.find(f => f.id === sourceId);
   const source = { width: file?.width ?? clip.source?.videoElement?.videoWidth ?? 0, height: file?.height ?? clip.source?.videoElement?.videoHeight ?? 0 };
   if (!source.width || !source.height) throw new Error('Source dimensions are unavailable.');
-  const effectParams = clip.effects.find(e => e.id === effectId)?.params ?? {};
+  const operatorPlan = compileCableOperatorGraph(clip.effects.find(e => e.id === effectId)?.params ?? {});
+  const effectParams = operatorPlan.params;
   const version = effectParams.faceShadows && !effectParams.scene3D ? 4 : 3;
   const layout = cableFrameLayout(version, configs);
   const fps = comp.frameRate, frames = Math.ceil(clip.duration * fps) + 1;
@@ -145,9 +146,13 @@ export async function bakeFaceCables(clipId: string, effectId: string, configs: 
           ? [cableMidpoint(parentState), anchors[1]] : null;
       }
       if (!anchors) { states[cable] = null; previousAnchors[cable] = null; continue; }
-      const physics = (time: number) => ({ ...config,
-        ...(sharedCableWind(effectParams, effectId, cableKeys, Math.max(0, time)) ?? { windZ: cableWindAtTime(config.windZ ?? 0, config.windGusts ?? 0, Math.max(0, time)) }),
-        contact, radius: config.width / 2160 });
+      const physics = (time: number) => {
+        const fields = operatorPlan.forces(effectId, cableKeys, Math.max(0, time));
+        return { ...config, damping: config.damping + fields.damping,
+          windX: fields.force[0], windY: -fields.force[1],
+          windZ: fields.force[2] + (fields.replacesCableWind ? 0 : cableWindAtTime(config.windZ ?? 0, config.windGusts ?? 0, Math.max(0, time))),
+          contact, radius: config.width / 2160 };
+      };
       const [a, b] = anchors, lastAnchors = previousAnchors[cable];
       previousAnchors[cable] = anchors;
       if (config.fromCableId && !lengths[cable]) lengths[cable] = Math.hypot(a.x - b.x, a.y - b.y, (a.z ?? 0) - (b.z ?? 0));
@@ -155,12 +160,12 @@ export async function bakeFaceCables(clipId: string, effectId: string, configs: 
       if (states[cable]) states[cable]!.length = lengths[cable] * config.slack;
       if (!states[cable] || jumped) {
         states[cable] = createCable(a, b, lengths[cable] * config.slack, config.segments ?? 24);
-        for (let warm = 0; warm < (config.lockFrom !== false && config.lockTo !== false ? 120 : 0); warm++) stepCable(states[cable]!, a, b, 1 / 120, config.gravity, config.damping, physics(frame / fps));
+        for (let warm = 0; warm < (config.lockFrom !== false && config.lockTo !== false ? 120 : 0); warm++) stepCable(states[cable]!, a, b, 1 / 120, config.gravity, physics(frame / fps).damping, physics(frame / fps));
       } else {
         for (let step = 1; step <= substeps; step++) {
           const t = step / substeps;
           const mix = (now: CablePoint, old: CablePoint) => ({ x: old.x + (now.x - old.x) * t, y: old.y + (now.y - old.y) * t, z: (old.z ?? 0) + ((now.z ?? 0) - (old.z ?? 0)) * t });
-          stepCable(states[cable]!, mix(a, lastAnchors?.[0] ?? a), mix(b, lastAnchors?.[1] ?? b), dt, config.gravity, config.damping, physics((frame - 1 + t) / fps));
+          stepCable(states[cable]!, mix(a, lastAnchors?.[0] ?? a), mix(b, lastAnchors?.[1] ?? b), dt, config.gravity, physics((frame - 1 + t) / fps).damping, physics((frame - 1 + t) / fps));
         }
       }
       const offset = frame * layout.stride + layout.offsets[cable];

@@ -1,6 +1,6 @@
+import { compileCableOperatorGraph } from './cableOperatorGraph';
 import { sampleCableConfig } from './cableAnimation';
 import { createCableShadowReceiver, writeCableShadows } from './cableShadows';
-import { sharedCableWind } from './cableWind';
 import { cableFacePoints, createFaceContact } from './cableFaceSurface';
 import { cableSimulationOrder, cableMidpoint } from './cableConnections';
 import type { CableState } from './cablePhysics';
@@ -34,7 +34,8 @@ export function previewFaceCables(clipId: string, configs: FaceCableConfig[], ti
   if (keys.some(k => ['rotation.x', 'rotation.y', 'position.z'].includes(k.property))) throw new Error('Animated 3D transforms are not supported.');
   const mapping = trackingPreviewTransform(getInterpolatedClipTransform(keys, time, clip.transform, { stabilizationEnabled: clip.videoInspectorSections?.stabilization }), source, comp);
   const face = samplePreciseFace(series, surfaceSourceTime(clip, time, keys.filter(k => k.property === 'speed')))?.faces[0];
-  const params = clip.effects.find(e => e.id === effectId)?.params ?? {};
+  const operatorPlan = compileCableOperatorGraph(clip.effects.find(e => e.id === effectId)?.params ?? {});
+  const params = operatorPlan.params;
   const version = params.faceShadows ? 4 : 3;
   const aspect = comp.width / comp.height, layout = cableFrameLayout(version, configs);
   const facePoints = (params.faceCollision || params.faceShadows) && face?.length ? cableFacePoints(face, mapping, aspect) : undefined;
@@ -55,8 +56,10 @@ export function previewFaceCables(clipId: string, configs: FaceCableConfig[], ti
     if (config.fromCableId && !parent) return;
     const a: import('./cablePhysics').CablePoint = parent ? cableMidpoint(parent) : anchor(config.from), b = anchor(config.to);
     const state = createCable(a, b, Math.hypot(a.x - b.x, a.y - b.y, (a.z ?? 0) - ('z' in b ? Number(b.z) : 0)) * config.slack, config.segments ?? 24);
-    const physics = { ...config, ...(sharedCableWind(params, effectId, keys, time) ?? { windZ: cableWindAtTime(config.windZ ?? 0, config.windGusts ?? 0, time) }), contact, radius: config.width / 2160 };
-    for (let i = 0; i < 120; i++) stepCable(state, a, b, 1 / 120, config.gravity, config.damping, physics);
+    const fields = operatorPlan.forces(effectId, keys, time);
+    const physics = { ...config, windX: fields.force[0], windY: -fields.force[1],
+      windZ: fields.force[2] + (fields.replacesCableWind ? 0 : cableWindAtTime(config.windZ ?? 0, config.windGusts ?? 0, time)), contact, radius: config.width / 2160 };
+    for (let i = 0; i < 120; i++) stepCable(state, a, b, 1 / 120, config.gravity, config.damping + fields.damping, physics);
     const projected = state.points.map(point => projectCableDepth(point, aspect));
     if (projected.some(p => !p)) return;
     states.set(config.id, state);

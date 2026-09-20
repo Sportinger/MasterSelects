@@ -2,9 +2,17 @@
 
 # Node Workspace
 
-The Node Workspace is a dockable, themed view of the canonical node-graph document for the currently selected timeline clip. It follows the same primary selection rule as Properties: the last clicked selected clip is used, with a fallback to the first selected clip. Linked video/audio clips resolve to one graph owner: selecting either side opens the visual clip's graph, while the linked audio clip feeds the source node's audio and analysis ports.
+The Node Workspace is a dockable, unified view of the canonical node-graph document for the currently selected timeline clip. It follows the same primary selection rule as Properties: the last clicked selected clip is used, with a fallback to the first selected clip. Linked video/audio clips resolve to one graph owner: selecting either side opens the visual clip's graph, while the linked audio clip feeds the source node's audio and analysis ports.
 
-`NodeGraphDocument` is the common container for every node domain. It owns the clip-level root graph plus available subgraphs and declares named views such as **General** and **Color**. A panel theme chooses how much of that one document to expose; it does not create an unrelated node system. The current implementation projects the existing clip render chain into the General view and the active color-grade version into the Color view. Motion and audio are reserved view themes that can join the same contract later.
+Selecting a clip shows **all its nodes on one canvas**. Color, Flock, Face Cables and
+3D Scene appear as colored groups. The group header collapses a group to one node
+or expands its contents; **Focus** fits that group. Collapse state and layout are
+saved with the clip and restored when reopening the project. Collapse affects only
+presentation, never rendering or a saved bake.
+
+`NodeGraphDocument` retains the domain graphs behind this common canvas. Explicit
+bindings route each edit to its existing owner; the UI does not maintain a second
+copy of effect parameters, Flock definitions, color grades or 3D settings.
 
 The graph is derived from existing clip state and shares the normal render model. Nodes carry explicit domain and backing bindings, so edits route back to the authoritative clip, effect, custom-node, or color-grade state. Node layout state is saved on the owning clip/domain, while node parameters read from the normal clip fields. A plain video clip appears as:
 
@@ -20,13 +28,38 @@ Source -> Transform -> Masks -> Color Graph -> Effects -> Clip Output
 
 For visual graph owners with audio, audio effects are shown in a separate audio lane and feed the combined `Clip Output` node's audio input. Audio-only graph owners use the main lane. The graph uses one combined `Clip Output` node for linked or audio-capable clips. The canvas uses the Media Panel board interaction model: pan, wheel zoom, node dragging, fit/reset view, compact node cards, typed ports, edges, and an inspector for the selected node.
 
-Flock clips add a **Flock** view (breadcrumb `Clip graph › Flock`, also opened from the Properties **Open Nodes** button). It projects the clip's executable `FlockDefinition` with typed flock ports (spawn, behavior, particles, curves, …), so the canvas only offers connections the flock validator accepts. Edits — add/delete/duplicate/group/ungroup, connect/disconnect (also keyboard-accessible from the inspector), bypass, rename, parameter edits with source-time keyframes, and **Expose** to the Properties panel — go through the timeline store's flock actions with one undo step per action. Group and whole-graph presets are stored in a local preset library. See [Flock Clips](./Flock-Clips.md).
+Flock's executable definition appears inside the green Flock group. Typed ports,
+add/delete/duplicate/group/ungroup, bypass, exposed parameters, keyframes and the
+preset library still use the existing Flock actions. Right-click a Flock node (or
+the canvas with a Flock node selected) for its operator menu. Color nodes edit the
+active grade directly; select a Color node to add Primary/Wheels nodes.
 
-The view tabs edit the same underlying state. General-view node movement and connections write to the clip graph; Color-view movement, bypass, typed texture/key connections, deletion, and Primary/Wheels creation write to `ColorCorrectionState`. Switching views therefore never copies or converts grades.
+Face Cables is a cyan group containing source, face tracking, anchors, depth,
+hybrid surface, collisions, wind, rope simulation, rendering and transform nodes.
+The shared operator registry defines typed ports and parameter bindings. Wind uses
+the same directional-force operation in cable physics and Flock's CPU/GPU solvers.
+Additional Wind, Gravity, Drag, Value and Oscillator nodes can be added from the
+node inspector. Connect values to Wind strength, and forces/drag to simulation.
+Invalid types, cycles and missing required inputs are rejected before committing.
+The standard effect form exposes the same settings and keyframes; physics/depth
+changes still require Bake or Rebake physics. Existing baked data is retained.
+
+A gold **3D Scene** group shows geometry, material/surface, world transform,
+saved cable depth, scene rendering and overlapping camera/light/effector clip
+references. Inspectors edit the original clip fields, including complete XYZ
+transforms and camera lens settings. Scene dependency links reflect the existing
+renderer and timeline; arbitrary rewiring of that fixed scene pipeline is not
+supported. Camera/light references follow their clips' time ranges and visibility.
 
 Right-clicking the canvas opens an Add Node menu. It can add AI Nodes at the clicked graph position, force field-backed built-ins such as Transform, Mask, and Color into the graph, and add existing effect types from an Effect Nodes submenu. Right-clicking a removable node also exposes Delete Node; pressing Delete or Backspace removes the selected Effect or AI node, and removes a forced built-in node when it was only shown by the graph.
 
-Links can be edited directly on the board. Drag from any port to a compatible opposite port to connect it; selecting a link and pressing Disconnect/Delete, or right-clicking the link or port, removes the connection. Once a clip has manual links, those links are stored on the clip graph and replace the auto-generated chain until the user rewires it.
+Links can be edited directly on the board. Drag from any port to a compatible opposite port to connect it; selecting a link and pressing Disconnect/Delete, or right-clicking the link or port, removes the connection. The visual effect chain always follows the canonical effect stack, including after
+adding/removing effects in Properties. Connecting effect A's output to effect B's
+input inserts A directly before B and reconnects the remaining chain. The node
+inspector also provides **Move effect earlier/later** controls. Properties reorder
+and node reorder update the same array and renderer. Saved custom-node sidechains
+remain independent. Required processing-chain links cannot be left dangling; use
+bypass to skip an effect.
 
 Effect and AI nodes include a compact bypass toggle in the node header. Effect bypass writes through to the existing effect enabled flag; AI node bypass is stored on the custom node and prevents that generated runtime from processing the preview signal.
 
@@ -45,3 +78,20 @@ During preview rendering, ready AI Nodes receive the same bounded audio context 
 AI Node authoring sends a compact context package with each AI request: the selected clip, source-specific text details when present, a timeline overview, all projected graph nodes and links, the current node's direct connections, saved plan, generated-code state, exposed params, and hidden node memory. The inspector uses a single Send action and renders the full node chat, including user prompts and AI replies. The authoring agent decides from the prompt whether to chat/plan or call the virtual `activate_code` tool with deterministic `defineNode(...)` code for activation. Generated numeric parameters appear in the Parameters section with the same stopwatch keyframe controls used by the rest of the timeline; color parameters are keyframed through RGB channels, while boolean, select, and string parameters are static controls. The runtime resolves exposed parameters through the timeline keyframe interpolator and passes them into `context.params` for each preview render. Clearing active code clears the exposed parameter schema and removes the node's parameter keyframes.
 
 The graph projection is deterministic. Runtime preview uses the existing layer builder; the export layer builder excludes the AI custom-node runtime. The AI tool registry also exposes `getNodeWorkspaceDebugState` and `sendAINodePrompt` for graph inspection and AI-node authoring. Graph editing writes through to the owning clip fields so Properties, timeline state, history, preview, and export remain one system.
+
+## 3D effects and execution boundary
+
+With one visible 3D object plus any number of lights, image effects after the 3D
+render remain active. Lights no longer suppress the object's effect stack. For
+Face Cables, effects before the geometry effect process its source texture;
+effects after it process the rendered scene. Preview and nested/export rendering
+share this routing. Multiple visible 3D objects share a depth-tested render target;
+use a nested composition for scene-wide post effects so one object's effect does
+not change unrelated objects. Multi-effect image stacks execute in order, including
+repeated brightness/contrast operations.
+
+The canvas combines domain runtimes; it is not an unrestricted cross-domain shader
+compiler. Reusable force/value connections execute in the cable graph, Flock keeps
+its typed compiler, Color keeps its grade compiler, and scene dependencies remain
+field-backed. New agent tools should use these validated mutations rather than UI
+coordinates or a separate copy of the graph.

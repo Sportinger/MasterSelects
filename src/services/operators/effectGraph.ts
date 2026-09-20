@@ -1,0 +1,107 @@
+import type { BoundOperatorNode, EffectOperatorGraph, OperatorBinding, OperatorEdge, OperatorValue } from '../../types/operatorGraph';
+import type { Keyframe } from '../../types/keyframes';
+import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
+import { getEffectOperator } from './operatorRegistry';
+import { directionFromAngles, periodicWindModulation, windForce } from './wind';
+
+export const EFFECT_GRAPH_PARAM = 'operatorGraph';
+export type OperatorParameters = Record<string, unknown>;
+
+export function validateEffectGraph(graph: EffectOperatorGraph): string[] {
+  if (graph?.version !== 1 || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges) || !graph.layout
+    || graph.nodes.length > 64 || graph.edges.length > 256) return ['Invalid operator graph.'];
+  if (graph.nodes.some(n => !n || typeof n !== 'object') || graph.edges.some(e => !e || typeof e !== 'object')) return ['Invalid graph entries.'];
+  if (Object.values(graph.layout).some(p => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y))) return ['Invalid node position.'];
+  const errors: string[] = [], nodes = new Map(graph.nodes.map(n => [n.id, n]));
+  if (nodes.size !== graph.nodes.length) errors.push('Duplicate node ID.');
+  const occupied = new Set<string>(), edgeIds = new Set<string>();
+  const validBinding = (b: OperatorBinding) => typeof b === 'string' || (Array.isArray(b) ? b.length === 3 && b.every(v => typeof v === 'string') : b && typeof b.yaw === 'string' && typeof b.pitch === 'string');
+  for (const n of graph.nodes) {
+    if (typeof n.id !== 'string' || !/^[\w-]+$/.test(n.id) || !getEffectOperator(n.operator) || !n.bindings || !Object.values(n.bindings).every(validBinding)) errors.push(`Invalid node: ${n.id}.`);
+  }
+  for (const e of graph.edges) {
+    const from = getEffectOperator(nodes.get(e.from)?.operator ?? ''), to = getEffectOperator(nodes.get(e.to)?.operator ?? '');
+    const output = from?.outputs.find(p => p.id === e.output), input = to?.inputs.find(p => p.id === e.input);
+    const key = `${e.to}:${e.input}`;
+    if (typeof e.id !== 'string' || edgeIds.has(e.id) || e.from === e.to || !output || !input || output.type !== input.type || (!input.repeated && occupied.has(key))) errors.push(`Invalid connection: ${e.id}.`);
+    occupied.add(key); edgeIds.add(e.id);
+  }
+  for (const n of graph.nodes) for (const p of getEffectOperator(n.operator)?.inputs ?? []) {
+    if (p.required && !occupied.has(`${n.id}:${p.id}`)) errors.push(`${getEffectOperator(n.operator)!.label}: connect ${p.label}.`);
+  }
+  const done = new Set<string>(), visiting = new Set<string>();
+  const visit = (id: string): boolean => {
+    if (visiting.has(id)) return false;
+    if (done.has(id)) return true;
+    visiting.add(id);
+    for (const edge of graph.edges.filter(e => e.to === id)) if (!visit(edge.from)) return false;
+    visiting.delete(id); done.add(id); return true;
+  };
+  for (const n of graph.nodes) if (!visit(n.id)) { errors.push('Cycles are not supported.'); break; }
+  if (graph.nodes.filter(n => n.operator === 'scene.output').length !== 1) errors.push('The graph needs one clip output.');
+  return errors;
+}
+
+/** Missing graph means an older project. A malformed saved graph must never silently revert. */
+export function readEffectGraph(value: unknown, fallback: () => EffectOperatorGraph): EffectOperatorGraph {
+  if (value === undefined || value === '') return fallback();
+  if (typeof value !== 'string' || value.length > 500_000) throw new Error('Invalid saved operator graph.');
+  let graph: EffectOperatorGraph;
+  try { graph = JSON.parse(value); } catch { throw new Error('Invalid saved operator graph.'); }
+  const errors = validateEffectGraph(graph);
+  if (errors.length) throw new Error(errors[0]);
+  return graph;
+}
+
+export function operatorEnabled(node: BoundOperatorNode, params: OperatorParameters): boolean {
+  return !node.bypassed && (node.enabled ? Boolean(params[node.enabled] ?? node.enabledDefault ?? true) : true);
+}
+
+export function sampleOperatorParameter(node: BoundOperatorNode, parameter: string, params: OperatorParameters, effectId: string, keys: Keyframe[], time: number): OperatorValue {
+  const spec = getEffectOperator(node.operator)?.parameters.find(p => p.id === parameter);
+  const sample = (key: string, fallback: OperatorValue): OperatorValue => {
+    const value = params[key] ?? fallback;
+    return typeof value === 'number'
+      ? interpolateKeyframes(keys, `effect.${effectId}.${key}` as Keyframe['property'], time, value)
+      : value as OperatorValue;
+  };
+  const binding = node.bindings[parameter], fallback = spec?.default ?? 0;
+  if (!binding) return fallback;
+  if (typeof binding === 'string') return sample(binding, fallback);
+  if (Array.isArray(binding)) return binding.map((key, i) => Number(sample(key, Array.isArray(fallback) ? fallback[i] : 0))) as [number, number, number];
+  return directionFromAngles(Number(sample(binding.yaw, 0)), Number(sample(binding.pitch, 0)));
+}
+
+export function graphInputNodes(graph: EffectOperatorGraph, id: string, input: string) {
+  return graph.edges.filter(e => e.to === id && e.input === input).map(e => graph.nodes.find(n => n.id === e.from)!);
+}
+
+/** Stateless values/fields can be shared by multiple consumers; solvers own their temporal state. */
+export function evaluateGraphForces(graph: EffectOperatorGraph, simulation: string, params: OperatorParameters, effectId: string, keys: Keyframe[], time: number) {
+  const scalar = (node: BoundOperatorNode): number => {
+    const value = (name: string) => Number(sampleOperatorParameter(node, name, params, effectId, keys, time));
+    return node.operator === 'values.oscillator' ? value('offset') + value('amplitude') * Math.sin(time * Math.PI * 2 * value('frequency')) : value('value');
+  };
+  const force = [0, 0, 0], windNodes: string[] = [];
+  for (const node of graphInputNodes(graph, simulation, 'forces')) {
+    if (!operatorEnabled(node, params)) continue;
+    const value = (name: string) => sampleOperatorParameter(node, name, params, effectId, keys, time);
+    if (node.operator === 'forces.gravity') { force[1] -= Number(value('strength')); continue; }
+    if (node.operator !== 'forces.wind') continue;
+    windNodes.push(node.id);
+    const input = graphInputNodes(graph, node.id, 'strength')[0];
+    const vector = windForce(value('direction') as number[], input && operatorEnabled(input, params) ? scalar(input) : Number(value('strength')), Number(value('gust')), periodicWindModulation(time));
+    vector.forEach((v, i) => { force[i] += v; });
+  }
+  const damping = graphInputNodes(graph, simulation, 'drag').reduce((sum, node) => sum + (operatorEnabled(node, params) ? Number(sampleOperatorParameter(node, 'amount', params, effectId, keys, time)) : 0), 0);
+  return { force, damping, replacesCableWind: windNodes.length > 0 };
+}
+
+export function connectEffectGraph(graph: EffectOperatorGraph, edge: OperatorEdge): EffectOperatorGraph {
+  const input = getEffectOperator(graph.nodes.find(n => n.id === edge.to)?.operator ?? '')?.inputs.find(p => p.id === edge.input);
+  const edges = graph.edges.filter(e => e.id !== edge.id && (input?.repeated || e.to !== edge.to || e.input !== edge.input));
+  const next = { ...graph, edges: [...edges, edge] };
+  const errors = validateEffectGraph(next);
+  if (errors.length) throw new Error(errors[0]);
+  return next;
+}

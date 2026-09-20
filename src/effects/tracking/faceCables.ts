@@ -7,6 +7,7 @@ export const faceCables: EffectDefinition = {
   id: 'face-cables', name: 'Face Cables', category: 'tracking', shader,
   entryPoint: 'faceCablesFragment', uniformSize: CABLE_UNIFORM_SIZE,
   params: {
+    operatorGraph: { type: 'text', label: 'Operator graph', default: '', hidden: true, animatable: false },
     scene3D: { type: 'boolean', label: 'Native 3D scene', default: false, hidden: true, animatable: false },
     sceneDepth: { type: 'boolean', label: 'Scene depth', default: false, hidden: true, animatable: false },
     sceneDepthCollision: { type: 'boolean', label: 'Scene depth collision', default: true, hidden: true, animatable: false },

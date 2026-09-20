@@ -1868,3 +1868,7 @@
     display: none;
   }
 }
+
+.node-workspace-panel button, .node-workspace-panel select { -webkit-tap-highlight-color: transparent; }
+.node-workspace-panel button:focus:not(:focus-visible), .node-workspace-panel select:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.node-workspace-panel button:focus-visible, .node-workspace-panel select:focus-visible { outline: 2px solid var(--accent-primary, #4a9eff); outline-offset: 2px; }
