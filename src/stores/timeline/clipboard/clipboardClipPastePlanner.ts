@@ -1,5 +1,8 @@
 import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import { remapClipNodeGraphEffectIds } from '../../../services/nodeGraph';
+import { remapKeyframeNodeProperties } from '../../../services/nodeGraph/keyframeNodeRemapping';
+import { remapFlockKeyframeProperty } from '../editOperations/flockClipKeyframes';
+import { parseMaskProperty, createMaskEdgeFeatherProperty } from '../../../types/animationProperties';
 import type { ClipboardClipData, Keyframe } from '../types';
 import { cloneStoryboardClipProperties } from '../../../services/storyboard/core';
 import {
@@ -65,6 +68,26 @@ export function createPastedClipboardClipsPlan(
     const requiresAsyncMediaLoad = clipRequiresAsyncMediaLoad(clipData);
     const flockCopy = createPastedFlockCopy(clipData);
     const audioState = createPastedClipAudioState(clipData, effectIdMap, () => `audio-${timestamp}-${createSuffix()}`, timeOffset);
+    const maskIdMap = new Map<string, string>();
+    const masks = clipData.masks?.map(mask => {
+      const id = `mask-${timestamp}-${createSuffix()}`;
+      maskIdMap.set(mask.id, id);
+      return { ...mask, id, vertices: mask.vertices.map(vertex => {
+        const vertexId = `vertex-${timestamp}-${createSuffix()}`;
+        maskIdMap.set(vertex.id, vertexId);
+        return { ...vertex, id: vertexId };
+      }) };
+    });
+    const remapProperty = (property: string) => {
+      const mask = parseMaskProperty(property);
+      if (mask) {
+        const id = maskIdMap.get(mask.maskId) ?? mask.maskId;
+        property = mask.property === 'edgeFeather'
+          ? createMaskEdgeFeatherProperty(id, mask.edgeId.split('->').map(vertex => maskIdMap.get(vertex) ?? vertex).join('->'))
+          : `mask.${id}.${mask.property}`;
+      }
+      return flockCopy ? remapFlockKeyframeProperty(property as Keyframe['property'], flockCopy.nodeIdMap) : property;
+    };
 
     newClips.push({
       id: newId,
@@ -89,12 +112,8 @@ export function createPastedClipboardClipsPlan(
       effects,
       ...clonePastedTimelineTrackingMetadata(clipData, idMapping),
       colorCorrection: clipData.colorCorrection ? structuredClone(clipData.colorCorrection) : undefined,
-      nodeGraph: remapClipNodeGraphEffectIds(clipData.nodeGraph, effectIdMap),
-      masks: clipData.masks?.map(m => ({
-        ...m,
-        id: `mask-${timestamp}-${createSuffix()}`,
-        vertices: m.vertices.map(v => ({ ...v, id: `vertex-${timestamp}-${createSuffix()}` })),
-      })),
+      nodeGraph: remapKeyframeNodeProperties(remapClipNodeGraphEffectIds(clipData.nodeGraph, effectIdMap), remapProperty),
+      masks,
       linkedClipId: clipData.linkedClipId ? idMapping.get(clipData.linkedClipId) : undefined,
       parentClipId: undefined,
       reversed: clipData.reversed,
@@ -151,7 +170,7 @@ export function createPastedClipboardClipsPlan(
     pastedSourceIds.add(clipData.id);
 
     const pastedKeyframes = remapPastedClipKeyframes(clipData.keyframes, newId, () => `kf_${timestamp}_${createSuffix()}`, flockCopy, effectIdMap);
-    if (pastedKeyframes) newKeyframes.set(newId, pastedKeyframes);
+    if (pastedKeyframes) newKeyframes.set(newId, pastedKeyframes.map(key => ({ ...key, property: remapProperty(key.property) as Keyframe['property'] })));
   }
 
   applyClipboardMotionParentRemap({

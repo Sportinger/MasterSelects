@@ -12,6 +12,8 @@ export function NodeContextMenu({
   onClose,
   onDeleteNode,
   onAddAI,
+  onAddKeyframes,
+  canAddKeyframes,
   onAddBuiltIn,
   onAddEffect,
 }: {
@@ -24,6 +26,8 @@ export function NodeContextMenu({
   onClose: () => void;
   onDeleteNode: () => void;
   onAddAI: () => void;
+  onAddKeyframes: () => void;
+  canAddKeyframes: boolean;
   onAddBuiltIn: (node: 'transform' | 'mask' | 'color') => void;
   onAddEffect: (effectType: string) => void;
 }) {
@@ -51,6 +55,7 @@ export function NodeContextMenu({
           </>
         )}
         <button type="button" onClick={onAddAI}>AI Node</button>
+        <button type="button" disabled={!canAddKeyframes} onClick={onAddKeyframes}>Keyframe Node</button>
         <button type="button" disabled={!canAddVisualBuiltIns} onClick={() => onAddBuiltIn('transform')}>Transform</button>
         <button type="button" disabled={!canAddVisualBuiltIns} onClick={() => onAddBuiltIn('mask')}>Mask</button>
         <button type="button" disabled={!canAddVisualBuiltIns} onClick={() => onAddBuiltIn('color')}>Color</button>

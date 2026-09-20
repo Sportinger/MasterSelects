@@ -3,6 +3,7 @@ import type { StateCreator, StoreApi } from 'zustand';
 import type { TimelineClip } from '../../types/timeline';
 import type { TimelineStore } from './types';
 import { assertExclusiveTimelineMutationAllowed } from './exclusiveMutationLease';
+import { synchronizeKeyframeNodes } from '../../services/nodeGraph/keyframeNodeSynchronization';
 
 const WATCHED_TIMELINE_KEYS = [
   'clips',
@@ -184,7 +185,7 @@ export const withTimelineRevision = (
     }
 
     const patch = typeof update === 'function' ? update(currentState) : update;
-    const revisedPatch = applyRevision(currentState, patch, replace);
+    const revisedPatch = applyRevision(currentState, synchronizeKeyframeNodes(currentState, patch), replace);
 
     if (replace) {
       set(revisedPatch as TimelineStore, true);

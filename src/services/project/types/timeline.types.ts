@@ -73,6 +73,10 @@ export interface ProjectMaskPathKeyframeValue {
 export type ProjectRotationInterpolationMode = 'shortest' | 'continuous';
 
 export interface ProjectKeyframe {
+  handleIn?: { x: number; y: number };
+  handleOut?: { x: number; y: number };
+  hold?: boolean;
+  animationSource?: import('../../../types/keyframes').Keyframe['animationSource'];
   id: string;
   property: string;
   time: number;

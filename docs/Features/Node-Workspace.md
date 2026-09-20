@@ -14,6 +14,46 @@ presentation, never rendering or a saved bake.
 bindings route each edit to its existing owner; the UI does not maintain a second
 copy of effect parameters, Flock definitions, color grades or 3D settings.
 
+## Keyframe nodes
+
+Use **+ Keyframes** or **right-click → Keyframe Node**, then select a parameter
+under **Add channel** in the inspector. Existing timeline keys are adopted;
+an unanimated parameter starts with its current value at the playhead. Search
+filters the clip's supported numeric and boolean parameters, including numeric
+vector/color components and reusable Face Cables operator parameters.
+
+Each node can contain multiple independent channels. **Link parameter** makes
+another parameter follow one channel; editing either timeline lane writes back
+to the shared source curve. Direct links require matching ranges, units and time
+bases. **Scale + offset** explicitly maps differing continuous ranges. Linking
+replaces existing target animation, as indicated on the button. Speed uses its
+own channel to preserve audio-follow and retiming rules. Discrete state channels
+use hold keys and cannot share continuous curves.
+
+The card displays the first channel's current value and curve with a moving
+playhead. The inspector exposes every channel, key time/value, easing or Hold,
+and **Show timeline keys**. Graph mode remains available for Bezier handles.
+Time is clip-local except Flock simulation parameters, which retain source time.
+Face Cables simulation changes still require baking for playback and export.
+
+Disconnecting a parameter or removing the node keeps its animation as ordinary
+timeline keys. Deleting a source owner also preserves surviving target curves.
+Bindings and layouts participate in project persistence, copy/paste and history.
+
+Implementation: `clip.nodeGraph.keyframeNodes` stores channel bindings and layout.
+Source curves live in the existing `clipKeyframes` map. The timeline revision
+middleware materializes mapped targets at edit time, so playback, scrubbing,
+baking and export consume ordinary keyframes. `animationSource` identifies
+derived keys for inverse edits; no playback mutation or second curve store is
+needed. `getKeyframes` exposes bindings to the existing AI tools, and
+`addKeyframe`/`removeKeyframe` update the shared animation. Node creation and
+linking are currently UI actions; there is no additional AI creation tool.
+
+This is a visualization of parameter animation, not an execution profiler:
+moving curve cursors do not claim that a cached or baked node is recomputing.
+
+## Graph projection
+
 The graph is derived from existing clip state and shares the normal render model. Nodes carry explicit domain and backing bindings, so edits route back to the authoritative clip, effect, custom-node, or color-grade state. Node layout state is saved on the owning clip/domain, while node parameters read from the normal clip fields. A plain video clip appears as:
 
 ```text

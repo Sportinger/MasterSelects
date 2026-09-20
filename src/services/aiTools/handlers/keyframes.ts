@@ -81,6 +81,7 @@ export async function handleGetKeyframes(
     data: {
       clipId,
       clipStartTime: clip.startTime,
+      animationNodes: clip.nodeGraph?.keyframeNodes?.map(node => ({ id: node.id, label: node.label, channels: node.channels })),
       keyframes: keyframes.map(kf => ({
         id: kf.id,
         property: kf.property,
@@ -94,6 +95,8 @@ export async function handleGetKeyframes(
             }
           : {}),
         easing: normalizeEasingType(kf.easing, 'linear'),
+        ...(kf.hold ? { hold: true } : {}),
+        ...(kf.animationSource ? { animationSource: kf.animationSource } : {}),
         rotationInterpolation: kf.rotationInterpolation,
       })),
     },

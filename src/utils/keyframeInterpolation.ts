@@ -290,6 +290,7 @@ export function interpolateKeyframes(
     if (propKeyframes[mid].time < time) lo = mid + 1; else hi = mid;
   }
   const prevKey = propKeyframes[lo - 1], nextKey = propKeyframes[lo];
+  if (prevKey.hold) return time < nextKey.time ? prevKey.value : nextKey.value;
 
   // Calculate interpolation factor (0 to 1)
   const range = nextKey.time - prevKey.time;

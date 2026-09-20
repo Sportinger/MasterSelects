@@ -1,0 +1,92 @@
+import type { AnimatableProperty } from '../../types';
+import type { KeyframeNodeDefinition } from '../../types/keyframeNode';
+import type { NodeGraphLayout } from '../../types/nodeGraph';
+import { useTimelineStore } from '../../stores/timeline';
+import { startBatch, endBatch } from '../../stores/historyStore';
+import { createClipNodeGraphState } from './clipGraphProjectionState';
+import { keyframeNodeParameters, validateKeyframeNodeTarget } from './keyframeNodeParameters';
+import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
+import { clipLocalToKeyframeTime } from '../flock/time/flockKeyframeTime';
+import { renderHostPort } from '../render/renderHostPort';
+
+function edit(clipId: string, label: string, apply: (nodes: KeyframeNodeDefinition[]) => void) {
+  const state = useTimelineStore.getState(), clip = state.clips.find(c => c.id === clipId);
+  if (!clip) throw new Error('Clip not found.');
+  if (state.isExporting || state.tracks.find(t => t.id === clip.trackId)?.locked) throw new Error('The clip is locked or exporting.');
+  const model = clip.nodeGraph ?? createClipNodeGraphState(clip);
+  const nodes = structuredClone(model.keyframeNodes ?? []);
+  apply(nodes);
+  const batch = startBatch(label);
+  try {
+    const transformAnimated = nodes.some(node => node.channels.some(channel =>
+      [channel.property, ...channel.targets.map(target => target.property)].some(property => /^(opacity$|speed$|position\.|anchor\.|scale\.|rotation\.)/.test(property))));
+    state.updateClip(clipId, { nodeGraph: { ...model, keyframeNodes: nodes,
+      forcedBuiltIns: transformAnimated ? [...new Set([...(model.forcedBuiltIns ?? []), 'transform' as const])] : model.forcedBuiltIns,
+    } });
+    state.invalidateCache();
+    renderHostPort.requestRender();
+  } finally { if (batch.opened) endBatch(); }
+}
+
+export function addKeyframeNode(clipId: string, layout: NodeGraphLayout = { x: 0, y: -220 }): string {
+  const id = `keyframes-${crypto.randomUUID()}`;
+  edit(clipId, 'Add keyframe node', nodes => nodes.push({ id, label: 'Keyframes', layout, channels: [] }));
+  return id;
+}
+
+export function changeKeyframeNode(clipId: string, nodeId: string, patch: Partial<Pick<KeyframeNodeDefinition, 'label' | 'layout'>>) {
+  edit(clipId, 'Edit keyframe node', nodes => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) throw new Error('Keyframe node not found.');
+    Object.assign(node, patch);
+  });
+}
+
+export function removeKeyframeNode(clipId: string, nodeId: string) {
+  edit(clipId, 'Remove keyframe node', nodes => { const index = nodes.findIndex(n => n.id === nodeId); if (index >= 0) nodes.splice(index, 1); });
+}
+
+export function connectKeyframeNode(clipId: string, nodeId: string, property: AnimatableProperty, channelId?: string,
+  mapping?: { scale: number; offset: number }) {
+  const state = useTimelineStore.getState(), clip = state.clips.find(c => c.id === clipId);
+  if (!clip) throw new Error('Clip not found.');
+  const parameters = keyframeNodeParameters(clip), target = parameters.find(p => p.property === property);
+  if (!target) throw new Error('This parameter does not support timeline keyframes.');
+  if (mapping && (!Number.isFinite(mapping.scale) || mapping.scale === 0 || !Number.isFinite(mapping.offset))) throw new Error('Mapping requires a finite nonzero scale and a finite offset.');
+  const batch = startBatch('Connect keyframe node');
+  try {
+    edit(clipId, 'Connect keyframe node', nodes => {
+      const node = nodes.find(n => n.id === nodeId);
+      if (!node) throw new Error('Keyframe node not found.');
+      const occupied = nodes.flatMap(n => n.channels).some(c => c.property === property || c.targets.some(t => t.property === property));
+      if (occupied) throw new Error('This parameter already belongs to a keyframe node. Disconnect it first.');
+      if (channelId) {
+        const channel = node.channels.find(c => c.id === channelId), source = channel && parameters.find(p => p.property === channel.property);
+        if (!channel || !source) throw new Error('Source parameter not found.');
+        validateKeyframeNodeTarget(source, target, Boolean(mapping));
+        channel.targets.push({ property, scale: mapping?.scale ?? 1, offset: mapping?.offset ?? 0 });
+      } else node.channels.push({ id: crypto.randomUUID(), property, targets: [] });
+    });
+    if (!channelId && !state.hasKeyframes(clipId, property)) {
+      const time = Math.max(0, Math.min(clip.duration, state.playheadPosition - clip.startTime));
+      const value = interpolateKeyframes(state.clipKeyframes.get(clipId) ?? [], property,
+        clipLocalToKeyframeTime(clip, property, time, state.getSourceTimeForClip), target.value);
+      state.addKeyframe(clipId, property, value, time);
+    }
+    if (!channelId && target.discrete) {
+      for (const key of useTimelineStore.getState().clipKeyframes.get(clipId) ?? []) {
+        if (key.property === property && !key.hold) state.updateKeyframe(key.id, { hold: true });
+      }
+    }
+  } finally { if (batch.opened) endBatch(); }
+}
+
+export function disconnectKeyframeNode(clipId: string, nodeId: string, property: string) {
+  edit(clipId, 'Disconnect keyframe parameter', nodes => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    node.channels = node.channels.filter(channel => channel.property !== property).map(channel => ({
+      ...channel, targets: channel.targets.filter(target => target.property !== property),
+    }));
+  });
+}

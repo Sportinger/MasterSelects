@@ -2,6 +2,7 @@ import { normalizeEasingType } from '../../../utils/easing';
 import { resolveBezierSegmentHandles } from '../../../utils/keyframeInterpolation';
 
 export interface FadeCurveKeyframe {
+  hold?: boolean;
   id?: string;
   time: number;
   value: number;
@@ -70,6 +71,12 @@ export function buildFadeCurveGeometry({
     const x2 = timeToX(next.time);
     const y2 = valueToY(next.value);
     const duration = next.time - current.time;
+    if (current.hold) {
+      const corner = { x: x2, y: y1 }, end = { x: x2, y: y2 };
+      segments.push({ cp1: { x: x1, y: y1 }, cp2: corner, end: corner }, { cp1: corner, cp2: end, end });
+      points.push(corner, end);
+      continue;
+    }
 
     let cp1x: number;
     let cp1y: number;

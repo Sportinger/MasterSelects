@@ -84,7 +84,7 @@ existing systems, and check their work:
 | Workspace | What you can do |
 | --- | --- |
 | **Video** | Edit multiple tracks, nest compositions, work with proxies, sync multicam footage, and import Premiere Pro sequences. |
-| **Nodes** | One clip canvas with nested groups, executable texture/material/geometry nodes, detailed face/depth processing, synchronized effect controls and a searchable catalog. Typed ports show accepted formats; Video Source exposes reusable tracking and saved depth alongside audio analysis. |
+| **Nodes** | One clip canvas with nested groups, executable texture/material/geometry nodes, detailed face/depth processing, synchronized effect controls and a searchable catalog. Keyframe nodes show live curves and share timeline animation across compatible parameters. Typed ports show accepted formats; Video Source exposes reusable tracking and saved depth alongside audio analysis. |
 | **Color & effects** | Grade with curves and scopes, combine GPU effects and transitions, and animate masks and properties with keyframes. |
 | **Audio** | Edit waveforms and spectrograms, mix tracks with effects and sends, record audio, and separate stems. |
 | **Motion & tracking** | Animate text, shapes, Lottie, and Rive assets; create captions; track faces and surfaces; bypass baked face/lip stabilization without deleting keyframes; and attach graphics to tracked motion. |

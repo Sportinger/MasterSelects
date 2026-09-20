@@ -24,6 +24,7 @@ import { useFlockGraphActions } from './flock/useFlockGraphActions';
 import { FlockNodeContextMenu } from './flock/FlockNodeContextMenu';
 import { FlockGraphStatusBar } from './flock/FlockGraphStatusBar';
 import './NodeWorkspacePanel.css';
+import { addKeyframeNode } from '../../../services/nodeGraph/keyframeNodeActions';
 
 interface NodeWorkspaceContextMenuState {
   x: number;
@@ -67,6 +68,7 @@ export function NodeWorkspacePanel() {
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [viewTheme, setViewTheme] = useState<NodeGraphViewTheme>('general');
   const subject = useNodeGraphSubject(viewTheme);
+  const keyframesLocked = useTimelineStore(state => state.isExporting || Boolean(state.tracks.find(t => t.id === subject?.clip.trackId)?.locked));
   const panelRef = useRef<HTMLDivElement | null>(null);
   const moveClipNodeGraphNode = useTimelineStore((state) => state.moveClipNodeGraphNode);
   const showClipNodeGraphBuiltIn = useTimelineStore((state) => state.showClipNodeGraphBuiltIn);
@@ -437,6 +439,11 @@ export function NodeWorkspacePanel() {
           </nav>
           <button type="button" className="node-workspace-breadcrumb-link node-catalog-toggle" aria-pressed={catalogOpen}
             onClick={event => { if (event.detail > 0) event.currentTarget.blur(); setCatalogOpen(open => !open); }}>Catalog</button>
+          <button type="button" disabled={keyframesLocked} className="node-workspace-breadcrumb-link" onClick={event => {
+            if (event.detail > 0) event.currentTarget.blur();
+            setCatalogOpen(false);
+            if (!keyframesLocked) selectNode(addKeyframeNode(subject.id, { x: selectedNode?.layout.x ?? 0, y: (selectedNode?.layout.y ?? 0) - 270 }));
+          }}>+ Keyframes</button>
           {selectedNode?.groupId === 'color' && (
             <div className="node-workspace-view-actions">
               <button type="button" onClick={() => addColorGraphNode('primary')}>+ Primary</button>
@@ -503,6 +510,8 @@ export function NodeWorkspacePanel() {
             }
           }}
           onAddAI={addAICustomNode}
+          canAddKeyframes={!keyframesLocked}
+          onAddKeyframes={() => { if (!keyframesLocked) selectNode(addKeyframeNode(subject.id, contextMenu.layout)); closeContextMenu(); }}
           onAddBuiltIn={addBuiltInNode}
           onAddEffect={addEffectNode}
         />

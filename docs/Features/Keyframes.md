@@ -4,6 +4,17 @@
 
 The keyframe system animates clip properties over time using per-clip keyframe maps, Graph mode, and Bezier handles. It supports transform properties, speed, numeric effect parameters, color, masks, text bounds, camera and light settings, custom-node parameters, vector-animation state/input properties, and numeric motion-shape properties.
 
+The [Node Workspace](./Node-Workspace.md#keyframe-nodes) also exposes these curves
+through **Keyframe Nodes**. A node adopts an existing property curve and can link
+compatible parameters, with explicit scale/offset mapping where needed. Timeline,
+node-inspector and AI keyframe edits update the same animation. The node shows a
+live value and moving curve cursor during playback. Removing its bindings leaves
+ordinary editable keys behind.
+
+`Keyframe.hold` keeps a value until the next key. The node inspector uses this for
+discrete boolean channels and offers Hold for continuous channels. Timeline curve
+paths, speed integration, project save/load and keyframe clipboard preserve it.
+
 ---
 
 ## Animatable Properties

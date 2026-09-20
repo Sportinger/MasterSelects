@@ -21,6 +21,7 @@ export function keyframeSnapshot(clipKeyframes: Map<string, Keyframe[]>): Map<st
       value: keyframe.value,
       pathValue: keyframe.pathValue,
       easing: keyframe.easing,
+      hold: keyframe.hold,
       handleIn: keyframe.handleIn,
       handleOut: keyframe.handleOut,
       rotationInterpolation: keyframe.rotationInterpolation,

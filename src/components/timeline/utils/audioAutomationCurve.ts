@@ -13,6 +13,7 @@ export interface ResolveAudioVolumeAutomationCurveInput {
 }
 
 export interface AudioAutomationCurveKeyframe {
+  hold?: boolean;
   id: string;
   time: number;
   value: number;
@@ -72,6 +73,7 @@ export function resolveAudioVolumeAutomationCurveKeyframes({
         time: keyframe.time,
         value: normalizeGainForCurve(keyframe.value),
         easing: keyframe.easing,
+        hold: keyframe.hold,
         handleIn: keyframe.handleIn,
         handleOut: keyframe.handleOut,
       };

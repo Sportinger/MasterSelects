@@ -41,6 +41,7 @@ export type NodeGraphAudioSemanticKind =
   | 'audio-metadata';
 
 export interface NodeGraphPortMetadata {
+  animationProperty?: string;
   sourceArtifact?: { kind: 'face-landmarks' | 'scene-depth'; effectId?: string };
   artifactTarget?: { effectId: string; nodeId: string; portId: string };
   contract?: NodePortContract;
@@ -106,6 +107,7 @@ export type NodeGraphViewTheme = 'general' | 'color' | 'motion' | 'audio' | 'flo
 export type SceneNodeRole = 'geometry' | 'material' | 'transform' | 'render' | 'depth' | 'camera' | 'light' | 'splat-effector';
 
 export type NodeGraphNodeBinding =
+  | { kind: 'keyframe-node'; nodeId: string }
   | { kind: 'scene-operator'; nodeId: string; operator: string }
   | { kind: 'operator-group'; groupId: string; effectId?: string }
   | { kind: 'scene-node'; clipId: string; nodeId: string; role: SceneNodeRole; effectId?: string }
@@ -272,6 +274,7 @@ export type ClipNodeGraphForcedBuiltIn = 'transform' | 'mask' | 'color';
 
 export interface ClipNodeGraph {
   version: 1;
+  keyframeNodes?: import('./keyframeNode').KeyframeNodeDefinition[];
   scene?: import('./operatorGraph').SceneOperatorGraph;
   nodes: ClipNodeGraphNodeState[];
   customNodes?: ClipCustomNodeDefinition[];

@@ -94,6 +94,7 @@ export interface ClipboardClipData {
 }
 
 export interface ClipboardKeyframeData {
+  hold?: boolean;
   clipId: string;
   property: import('../../../types').AnimatableProperty;
   time: number;

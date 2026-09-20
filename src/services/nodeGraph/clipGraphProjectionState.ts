@@ -143,6 +143,7 @@ function buildProjectedClipNodeGraphState(
     version: 1,
     nodes: graph.nodes.map(createNodeState),
     customNodes: cloneCustomNodeDefinitions(clip.nodeGraph?.customNodes),
+    keyframeNodes: clip.nodeGraph?.keyframeNodes ? structuredClone(clip.nodeGraph.keyframeNodes) : undefined,
     groups: clip.nodeGraph?.groups ? structuredClone(clip.nodeGraph.groups) : undefined,
     scene: clip.nodeGraph?.scene ? structuredClone(clip.nodeGraph.scene) : undefined,
     forcedBuiltIns: clip.nodeGraph?.forcedBuiltIns ? [...clip.nodeGraph.forcedBuiltIns] : undefined,
@@ -181,6 +182,7 @@ export function reconcileClipNodeGraphState(
       layout: cloneLayout(existingNodesById.get(node.id)?.layout ?? node.layout),
     })),
     customNodes: cloneCustomNodeDefinitions(existingState.customNodes),
+    keyframeNodes: existingState.keyframeNodes ? structuredClone(existingState.keyframeNodes) : undefined,
     forcedBuiltIns: existingState.forcedBuiltIns ? [...existingState.forcedBuiltIns] : undefined,
     ...(manualEdges !== undefined ? { manualEdges } : {}),
     groups: existingState.groups ? structuredClone(existingState.groups) : undefined,
@@ -286,6 +288,7 @@ export function cloneClipNodeGraph(graph?: ClipNodeGraph): ClipNodeGraph | undef
       layout: cloneLayout(node.layout),
     })),
     customNodes: cloneCustomNodeDefinitions(graph.customNodes),
+    keyframeNodes: graph.keyframeNodes ? structuredClone(graph.keyframeNodes) : undefined,
     forcedBuiltIns: graph.forcedBuiltIns ? [...graph.forcedBuiltIns] : undefined,
     manualEdges: cloneManualEdges(graph.manualEdges),
     groups: graph.groups ? structuredClone(graph.groups) : undefined,
@@ -323,6 +326,11 @@ export function remapClipNodeGraphEffectIds(
 
   return {
     ...cloned,
+    keyframeNodes: cloned.keyframeNodes?.map(node => ({ ...node, channels: node.channels.map(channel => {
+      const remap = (path: typeof channel.property) => path.replace(/^effect\.([^.]+)\./,
+        (_, id: string) => `effect.${effectIdMap.get(id) ?? id}.`) as typeof path;
+      return { ...channel, property: remap(channel.property), targets: channel.targets.map(target => ({ ...target, property: remap(target.property) })) };
+    }) })),
     nodes: cloned.nodes.map((node) => {
       if (node.backing.kind !== 'clip-effect') {
         return node;

@@ -4,6 +4,7 @@ import type { TimelineClip } from '../../types';
 import { buildEffectOperatorGraph } from './effectGraphProjection';
 import { foldOperatorGroups } from './nestedOperatorGroups';
 import { collapsedArtifactLinks, projectSourceArtifactLinks } from './sourceArtifactProjection';
+import { projectKeyframeNodes } from './keyframeNodeProjection';
 
 /** A single canvas projection of every domain. Grouping changes presentation, never processing. */
 export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: TimelineClip, clips: TimelineClip[] = []): NodeGraph {
@@ -62,5 +63,5 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     cursor = Math.max(cursor + 280, ...innerNodes.map(n => n.layout.x + 330));
     expansion = cursor - rootNode.layout.x - 280;
   }
-  return foldOperatorGroups(projectSourceArtifactLinks({ ...root, nodes, edges, groups }), clip.nodeGraph);
+  return foldOperatorGroups(projectKeyframeNodes(projectSourceArtifactLinks({ ...root, nodes, edges, groups }), clip), clip.nodeGraph);
 }

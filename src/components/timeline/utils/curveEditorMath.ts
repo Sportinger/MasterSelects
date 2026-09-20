@@ -175,6 +175,7 @@ export function generateBezierPath(
   timeToX: (time: number) => number,
   valueToY: (value: number) => number,
 ): string {
+  if (prevKf.hold) return generateStepPath(prevKf, nextKf, timeToX, valueToY);
   const x1 = timeToX(prevKf.time);
   const y1 = valueToY(prevKf.value);
   const x2 = timeToX(nextKf.time);

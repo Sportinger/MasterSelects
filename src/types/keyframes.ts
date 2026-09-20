@@ -7,6 +7,9 @@ import type {
 import type { MaskPathKeyframeValue } from './masks';
 
 export interface Keyframe {
+  /** Materialized linked output; its source curve remains authoritative. */
+  animationSource?: { nodeId: string; channelId: string; keyframeId: string };
+  hold?: boolean;
   id: string;
   clipId: string;
   time: number;           // Time relative to clip start (seconds)

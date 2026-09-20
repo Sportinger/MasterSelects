@@ -9,6 +9,9 @@ import { createSceneGraphActions, editSceneGraph } from '../../../services/opera
 import { groupOperators } from '../../../services/operators/operatorGroups';
 import { connectSourceArtifact } from '../../../services/operators/sourceArtifactConnections';
 import type { FlockGraphActions } from './flock/useFlockGraphActions';
+import { changeKeyframeNode, connectKeyframeNode, disconnectKeyframeNode, removeKeyframeNode } from '../../../services/nodeGraph/keyframeNodeActions';
+import { keyframeEdgeId } from '../../../services/nodeGraph/keyframeNodeProjection';
+import type { AnimatableProperty } from '../../../types';
 
 interface BaseActions {
   moveNode: (id: string, layout: NodeGraphLayout) => void;
@@ -24,6 +27,11 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
   const bindingActions = (node: NodeGraphNode): BaseActions | null => {
     if (!clip) return null;
     const binding = node.binding;
+    if (binding?.kind === 'keyframe-node') return {
+      moveNode: (id, layout) => changeKeyframeNode(clip.id, id, { layout }),
+      deleteNode: id => removeKeyframeNode(clip.id, id),
+      connectPorts: () => {}, disconnectEdge: () => {}, toggleBypass: () => {},
+    };
     if (binding?.kind === 'scene-operator') return createSceneGraphActions(clip.id);
     if (binding?.kind === 'scene-node') return {
       moveNode: (id, layout) => {
@@ -96,6 +104,12 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
       c = { fromNodeId: a.nodeId, fromPortId: a.portId, toNodeId: b.nodeId, toPortId: b.portId };
       const from = (graph?.expandedNodes ?? graph?.nodes)?.find(n => n.id === c.fromNodeId), to = (graph?.expandedNodes ?? graph?.nodes)?.find(n => n.id === c.toNodeId);
       if (!from || !to) return;
+      if (from.binding?.kind === 'keyframe-node') {
+        const property = to.inputs.find(p => p.id === c.toPortId)?.metadata?.animationProperty;
+        if (!property || !clip) throw new Error('Connect the curve to an animation parameter.');
+        connectKeyframeNode(clip.id, from.binding.nodeId, property as AnimatableProperty, c.fromPortId);
+        return;
+      }
       const boundary = (node: NodeGraphNode, port: string) => !node.groupId || !node.id.includes('/') || port.startsWith('group-');
       if (boundary(from, c.fromPortId) && boundary(to, c.toPortId)) {
         if (from.groupId === 'scene3d' || to.groupId === 'scene3d') {
@@ -115,6 +129,11 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
       bindingActions(to)?.connectPorts({ ...c, fromNodeId: localId(from), toNodeId: localId(to) });
     }),
     disconnectEdge: (id: string) => safely(() => {
+      for (const animation of clip?.nodeGraph?.keyframeNodes ?? []) for (const channel of animation.channels) {
+        for (const property of [channel.property, ...channel.targets.map(t => t.property)]) {
+          if (id === keyframeEdgeId(animation.id, property)) { disconnectKeyframeNode(clip!.id, animation.id, property); return; }
+        }
+      }
       const edge = graph?.edges.find(e => e.id === id); let node = graph?.nodes.find(n => n.id === edge?.toNodeId);
       if (!edge || !node) return;
       const artifactTarget = node.inputs.find(p => p.id === edge.toPortId)?.metadata?.artifactTarget;

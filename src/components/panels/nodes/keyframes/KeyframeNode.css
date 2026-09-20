@@ -1,0 +1,20 @@
+.keyframe-node-curve { margin: 6px 12px; color: var(--text-primary, #ddd); }
+.keyframe-node-inspector { container-type: inline-size; min-width: 0; width: 100%; }
+.keyframe-node-inspector .resolve-inspector-row-control > .inspector-select { width: 100%; max-width: 100%; }
+.keyframe-node-value { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 11px; }
+.keyframe-node-value strong { font-size: 15px; font-variant-numeric: tabular-nums; color: var(--accent-color, #79b8fa); }
+.keyframe-node-value span { color: var(--text-secondary, #999); font-size: 10px; }
+.keyframe-node-curve svg { width: 100%; height: 70px; overflow: visible; }
+.keyframe-node-grid { stroke: var(--border-color, #333); stroke-width: 0.5; fill: none; }
+.keyframe-node-path { stroke: #bda1ed; stroke-width: 1.6; fill: none; }
+.keyframe-node-playhead { stroke: var(--accent-color, #79b8fa); stroke-width: 1; }
+.keyframe-node-curve.compact { position: absolute; inset: 82px 0 auto; }
+.keyframe-node-curve.compact svg { height: 48px; }
+.keyframe-node-card-empty { position: absolute; top: 115px; left: 12px; color: var(--text-secondary, #999); font-size: 11px; }
+.keyframe-node-inspector .keyframe-node-hint { margin: 8px 12px; color: var(--text-secondary, #999); font-size: 11px; line-height: 1.45; }
+.keyframe-node-inspector .keyframe-node-link { display: flex; gap: 6px; align-items: center; margin: 6px 12px; font-size: 11px; }
+.keyframe-node-link span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.keyframe-node-inspector .keyframe-node-name { width: 100%; min-width: 0; background: var(--bg-primary, #181818); color: inherit; border: 1px solid var(--border-color, #444); padding: 4px 6px; }
+.keyframe-node-inspector button, .keyframe-node-inspector input { -webkit-tap-highlight-color: transparent; }
+.keyframe-node-inspector button:focus:not(:focus-visible), .keyframe-node-inspector input:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.keyframe-node-inspector button:focus-visible, .keyframe-node-inspector input:focus-visible { outline: 1px solid var(--accent-color, #79b8fa); outline-offset: 2px; }

@@ -154,6 +154,13 @@ export function NodeGraphCanvas({
     if (fittedGraph.current !== graph.id) { fittedGraph.current = graph.id; fitGraph(); }
   }, [graph.id, fitGraph]);
 
+  const knownNodes = useRef(new Set(graph.nodes.map(node => node.id)));
+  useEffect(() => {
+    const selected = graph.nodes.find(node => node.id === selectedNodeId);
+    if (selected?.binding?.kind === 'keyframe-node' && !knownNodes.current.has(selected.id)) fitGraph();
+    knownNodes.current = new Set(graph.nodes.map(node => node.id));
+  }, [graph.nodes, selectedNodeId, fitGraph]);
+
   const resetView = useCallback(() => {
     setViewport(DEFAULT_VIEWPORT);
   }, []);

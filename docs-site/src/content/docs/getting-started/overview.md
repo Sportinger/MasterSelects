@@ -48,7 +48,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | [Annotations](/features/annotations/) | Timed notes on compositions and source media: Annotations panel, ruler bars with drag/trim/keyboard nudge, clip linking, reader popover, project persistence |
 | [Consumer Contract](/features/consumer-contract/) | Checkout consent (Terms, Withdrawal Policy, immediate performance), contract confirmation email, online withdrawal form, and the §312k cancellation button |
 | [Slot Grid](/features/slot-grid/) | 12x4 live grid overlay, slot clip trimming, layer triggering, and deck warmup behavior |
-| [Keyframes](/features/keyframes/) | Animated properties, effect params, masks, fades, easing, and visibility rules |
+| [Keyframes](/features/keyframes/) | Animated properties, shared keyframe nodes, effect params, masks, fades, easing, and visibility rules |
 | [Preview](/features/preview/) | Main preview, source monitor, output windows, RAM preview, and target routing |
 | [UI Panels](/features/ui-panels/) | Dock layout, panel catalog, properties tabs, shared touch support, and workspace surfaces |
 | [Node Workspace](/features/node-workspace/) | Unified clip nodes, reusable operators, effect-order synchronization, 3D dependencies and execution boundaries |

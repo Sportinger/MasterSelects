@@ -1,4 +1,5 @@
 import { EffectOrderControls } from './EffectOrderControls';
+import { KeyframeNodeInspector } from '../keyframes/KeyframeNodeInspector';
 import { describeNodePort, describePortText } from '../../../../services/nodeGraph/nodePortPresentation';
 import { SceneOperatorParameters } from './SceneOperatorParameters';
 import { OperatorGroupParameters } from './OperatorGroupParameters';
@@ -291,6 +292,11 @@ export function NodeInspector({
 
   if (clip && node.binding?.kind === 'scene-node') {
     return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}><SceneNodeParameters node={node} owner={clip} /></NodeInspectorShell>;
+  }
+  if (clip && node.binding?.kind === 'keyframe-node') {
+    return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
+      <KeyframeNodeInspector key={node.id} clip={clip} nodeId={node.binding.nodeId} />
+    </NodeInspectorShell>;
   }
   if (clip && node.binding?.kind === 'scene-operator') {
     return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>

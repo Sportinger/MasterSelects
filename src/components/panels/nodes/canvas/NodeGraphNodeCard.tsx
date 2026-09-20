@@ -1,6 +1,7 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { NodeGraphNode, NodeGraphPort } from '../../../../services/nodeGraph';
 import { NodeGraphPortView } from './NodeGraphPortView';
+import { KeyframeNodeCardPreview } from '../keyframes/KeyframeNodeCurve';
 import type { ConnectionDraft } from './canvasGeometry';
 import {
   clamp,
@@ -123,6 +124,7 @@ export function NodeGraphNodeCard({
       <div className="node-workspace-node-description" title={node.description}>
         {node.description ?? 'Built-in processing node'}
       </div>
+      {node.binding?.kind === 'keyframe-node' && <KeyframeNodeCardPreview node={node} />}
       {nodeBadges.length > 0 && (
         <div className="node-workspace-node-badges">
           {nodeBadges.map((badge) => (

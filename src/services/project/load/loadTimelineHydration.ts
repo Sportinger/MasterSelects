@@ -6,6 +6,7 @@ import { useMediaStore, type Composition } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineClip } from '../../../stores/timeline/types';
 import { cloneClipNodeGraph } from '../../nodeGraph';
+import { remapKeyframeNodeProperties } from '../../nodeGraph/keyframeNodeRemapping';
 import { cloneStoryboardClipProperties } from '../../storyboard/core';
 import { normalizeTransitionInstanceParams } from '../../../transitions';
 import { normalizeMotionLayerDefinitionForLoad } from '../../motionDesign/contracts/replicatorTimelineAdapter';
@@ -321,7 +322,7 @@ export function convertProjectCompositionToStore(
         localColorCorrection: c.localColorCorrection
           ? structuredClone(c.localColorCorrection)
           : undefined,
-        nodeGraph: cloneClipNodeGraph(c.nodeGraph),
+        nodeGraph: remapKeyframeNodeProperties(cloneClipNodeGraph(c.nodeGraph), property => hydrateMaskKeyframeProperty(property, c.masks)),
         masks: c.masks.map((mask): ClipMask => ({
           id: mask.id,
           name: mask.name,
@@ -349,6 +350,8 @@ export function convertProjectCompositionToStore(
           })),
         })),
         keyframes: (c.keyframes || []).map((keyframe): Keyframe => ({
+          hold: keyframe.hold,
+          animationSource: keyframe.animationSource,
           id: keyframe.id,
           clipId: c.id,
           property: hydrateMaskKeyframeProperty(keyframe.property, c.masks) as Keyframe['property'],
@@ -366,12 +369,12 @@ export function convertProjectCompositionToStore(
             : undefined,
           easing: keyframe.easing as Keyframe['easing'],
           rotationInterpolation: keyframe.rotationInterpolation as Keyframe['rotationInterpolation'],
-          handleIn: keyframe.bezierHandles
+          handleIn: keyframe.handleIn ?? (keyframe.bezierHandles
             ? { x: keyframe.bezierHandles.x1, y: keyframe.bezierHandles.y1 }
-            : undefined,
-          handleOut: keyframe.bezierHandles
+            : undefined),
+          handleOut: keyframe.handleOut ?? (keyframe.bezierHandles
             ? { x: keyframe.bezierHandles.x2, y: keyframe.bezierHandles.y2 }
-            : undefined,
+            : undefined),
         })),
         volume: c.volume,
         audioEnabled: c.audioEnabled,

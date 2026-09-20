@@ -117,7 +117,8 @@ function integrateSpeedCurve(
     const dt = t1 - t0;
 
     const speed0 = getSpeedAtTime(keyframes, t0, defaultSpeed);
-    const speed1 = getSpeedAtTime(keyframes, t1, defaultSpeed);
+    const segment = speedKeyframes.findLast(key => key.time <= t0);
+    const speed1 = segment?.hold ? speed0 : getSpeedAtTime(keyframes, t1, defaultSpeed);
 
     // Trapezoidal rule: area = (y0 + y1) / 2 * width
     integral += (speed0 + speed1) / 2 * dt;
