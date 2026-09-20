@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { faceCableDescriptors } from '../../src/services/properties/faceCableProperties';
 import { defaultFaceCable } from '../../src/services/faceCables/cableData';
 import type { TimelineClip } from '../../src/types/timeline';
@@ -22,4 +22,22 @@ describe('invalid cable settings', () => {
     expect(faceCableDescriptors({ type: 'face-cables', params: { settings: '{' } } as Effect)).toEqual([]);
     expect(faceCableDescriptors({ type: 'face-cables', params: { settings: '[{}]' } } as Effect)).toEqual([]);
   });
+});
+
+it('decodes shared settings once and invalidates when settings change', () => {
+  const cable = { ...defaultFaceCable(), id: 'cached' };
+  const effect: Effect = { id: 'fx', type: 'face-cables', name: 'Face Cables', enabled: true, params: { settings: JSON.stringify([cable]) } };
+  const clip = { effects: [effect] } as TimelineClip;
+  const parse = vi.spyOn(JSON, 'parse');
+  try {
+    const descriptors = faceCableDescriptors(effect);
+    for (const descriptor of descriptors) descriptor.read!(clip, descriptor.path);
+    expect(parse).toHaveBeenCalledTimes(1);
+    effect.params = { settings: JSON.stringify([{ ...cable, slack: 3 }]) };
+    const slack = descriptors.find(d => d.path.endsWith('_slack'))!;
+    expect(slack.read!(clip, slack.path)).toBe(3);
+    expect(parse).toHaveBeenCalledTimes(2);
+    effect.params = {};
+    expect(faceCableDescriptors(effect)).toEqual([]);
+  } finally { parse.mockRestore(); }
 });

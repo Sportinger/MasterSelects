@@ -1,9 +1,11 @@
 import type { NodeGraphEdge, NodeGraphNode } from '../../../../services/nodeGraph';
-import type { CSSProperties } from 'react';
+import { memo, type CSSProperties } from 'react';
 import { describeNodePort } from '../../../../services/nodeGraph/nodePortPresentation';
 import type { ConnectionDraft, NodeBounds } from './canvasGeometry';
-import { getConnectionPath, getPortCenter } from './canvasGeometry';
+import { getConnectionArrowTransform, getConnectionPath, getPortCenter } from './canvasGeometry';
 import type { ConnectionPlug } from './connectionPlugs';
+import { useNodeFlowActivity } from './useNodeFlowActivity';
+import './NodeGraphFlow.css';
 
 interface NodeGraphEdgesProps {
   graphBounds: NodeBounds;
@@ -18,7 +20,7 @@ interface NodeGraphEdgesProps {
   onDisconnectEdge?: (edgeId: string) => void;
 }
 
-export function NodeGraphEdges({
+export const NodeGraphEdges = memo(function NodeGraphEdges({
   graphBounds,
   edges,
   plugs,
@@ -30,6 +32,7 @@ export function NodeGraphEdges({
   onClearSelectedEdge,
   onDisconnectEdge,
 }: NodeGraphEdgesProps) {
+  const flowRef = useNodeFlowActivity();
   const endpoints = new Map<string, { input?: ConnectionPlug; output?: ConnectionPlug }>();
   for (const plug of plugs) {
     const pair = endpoints.get(plug.edge.id) ?? {};
@@ -59,6 +62,7 @@ export function NodeGraphEdges({
     : null;
   return <>
     <svg
+      ref={flowRef}
       className="node-workspace-edges"
       style={{
         left: svgLeft,
@@ -79,6 +83,7 @@ export function NodeGraphEdges({
             key={edge.id}
             className="node-workspace-edge-group"
             data-edge-id={edge.id}
+            style={{ '--port-color': port ? describeNodePort(port).color : undefined } as CSSProperties}
             onClick={(event) => {
               event.stopPropagation();
               onSelectEdge(edge.id);
@@ -99,8 +104,12 @@ export function NodeGraphEdges({
                 edge.id === hoveredEdgeId ? 'hovered' : '',
               ].filter(Boolean).join(' ')}
               d={path}
-              style={{ '--port-color': port ? describeNodePort(port).color : undefined } as CSSProperties}
             />
+            <g className="node-workspace-edge-flow">
+              <path className="node-workspace-flow-pulse" d={path} />
+              <path className="node-workspace-flow-arrow" d="M -4 -4 L 0 0 L -4 4"
+                transform={getConnectionArrowTransform(pair.output.tip, pair.input.tip)} />
+            </g>
           </g>
         );
       })}
@@ -118,4 +127,4 @@ export function NodeGraphEdges({
         </g>}
     </svg>}
   </>;
-}
+});

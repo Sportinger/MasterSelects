@@ -100,6 +100,10 @@ Explore the [feature guide](docs/Features/README.md) for workflows and examples.
 Node cables have visible semicircular plugs, animated attachment, and docked ghost
 previews over compatible sockets while dragging. Drag either end to reconnect,
 or release on empty canvas to unplug editable links.
+During playback and timeline scrubbing, light pulses and direction arrows show
+the flow from output to input. They fade when the timeline rests.
+Graph panning reuses unchanged nodes and cables; playback avoids repeated dock
+layout writes, tab measurements and effect evaluation for sibling parameter rows.
 
 Media imports report processing and save failures. Failed audio-proxy writes can
 be retried; project packages follow the configured save policy.

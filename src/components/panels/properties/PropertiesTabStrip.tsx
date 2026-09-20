@@ -168,12 +168,22 @@ export function PropertiesTabStrip({ children }: PropertiesTabStripProps) {
 
     updateOverflow();
 
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(updateOverflow);
-    observer.observe(scroller);
-    getTabButtons(scroller).forEach(tab => observer.observe(tab));
-    return () => observer.disconnect();
-  }, [children, updateOverflow]);
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateOverflow);
+    const observeTabs = () => {
+      resizeObserver?.disconnect();
+      resizeObserver?.observe(scroller);
+      getTabButtons(scroller).forEach(tab => resizeObserver?.observe(tab));
+    };
+    observeTabs();
+    // Playback recreates React children without changing the tabs. Measuring in
+    // every commit forced layout for the entire editor; observe actual changes.
+    const mutationObserver = new MutationObserver(records => {
+      if (records.some(record => record.type === 'childList')) observeTabs();
+      updateOverflow();
+    });
+    mutationObserver.observe(scroller, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    return () => { resizeObserver?.disconnect(); mutationObserver.disconnect(); };
+  }, [updateOverflow]);
 
   return (
     <div className="properties-tabs-shell" onPointerUp={event => {

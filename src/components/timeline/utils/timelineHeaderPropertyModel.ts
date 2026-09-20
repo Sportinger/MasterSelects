@@ -30,6 +30,14 @@ import { formatAudioAutomationGain } from './audioAutomationValue';
 export { getHeaderPropertyLabel, sortTimelineHeaderProperties } from './timelineHeaderPropertyLabels';
 export { type HeaderKeyframe, type KeyframeTrackClip, shouldHide3DOnlyProperties, usesCameraPropertyModel } from './timelineHeaderPropertyTypes';
 
+type InterpolatedHeaderEffects = Array<{ id: string; type: string; name: string; params: Record<string, unknown> }>;
+type HeaderEffectReader = (clipId: string, clipLocalTime: number) => InterpolatedHeaderEffects;
+// All expanded effect rows read the same clip/time. Keep only that clip's latest
+// result instead of interpolating its entire effect stack separately per row.
+const headerEffectFrames = new WeakMap<KeyframeTrackClip, {
+  time: number; clipId: string; keys: HeaderKeyframe[]; read: HeaderEffectReader; effects: InterpolatedHeaderEffects;
+}>();
+
 export function getMaskPathValue(mask: ClipMask): NonNullable<Keyframe['pathValue']> {
   return {
     closed: mask.closed,
@@ -136,7 +144,14 @@ export function getHeaderPropertyCurrentValue({
 }): number {
   if (!isWithinClip) return 0;
   if (prop.startsWith('effect.')) {
-    return getValueFromEffects(getInterpolatedEffects(clipId, clipLocalTime), prop);
+    let frame = headerEffectFrames.get(clip);
+    if (!frame || frame.time !== clipLocalTime || frame.clipId !== clipId
+      || frame.keys !== keyframes || frame.read !== getInterpolatedEffects) {
+      frame = { time: clipLocalTime, clipId, keys: keyframes, read: getInterpolatedEffects,
+        effects: getInterpolatedEffects(clipId, clipLocalTime) };
+      headerEffectFrames.set(clip, frame);
+    }
+    return getValueFromEffects(frame.effects, prop);
   }
 
   const colorValue = getTimelineHeaderColorPropertyValue(clip, prop, keyframes, clipLocalTime);

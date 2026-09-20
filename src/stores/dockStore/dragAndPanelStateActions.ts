@@ -50,15 +50,19 @@ export const createDragAndPanelStateActions: DockSliceCreator<DragAndPanelStateA
   },
 
   setHoveredTabTarget: (target) => {
+    const current = get().hoveredTabTarget;
+    if (current === target || (current && target
+      && current.kind === target.kind
+      && current.panelId === target.panelId
+      && current.groupId === target.groupId
+      && current.compositionId === target.compositionId)) return;
     set({ hoveredTabTarget: target });
   },
 
   clearHoveredTabTarget: (panelId) => {
-    set((state) => {
-      if (!state.hoveredTabTarget) return {};
-      if (panelId && state.hoveredTabTarget.panelId !== panelId) return {};
-      return { hoveredTabTarget: null };
-    });
+    const current = get().hoveredTabTarget;
+    if (!current || (panelId && current.panelId !== panelId)) return;
+    set({ hoveredTabTarget: null });
   },
 
   setMaximizedPanel: (panelId) => {

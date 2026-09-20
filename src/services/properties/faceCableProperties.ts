@@ -3,11 +3,19 @@ import type { PropertyDescriptor } from '../../types/propertyRegistry';
 import { CABLE_ANIMATED_PARAMETERS, cableProperty } from '../faceCables/cableAnimation';
 import { isFaceCableConfig, type FaceCableConfig } from '../faceCables/cableData';
 
+const configCache = new WeakMap<Effect, { settings: unknown; cables: FaceCableConfig[] }>();
 function configs(effect: Effect): FaceCableConfig[] {
+  const settings = effect.params.settings;
+  const cached = configCache.get(effect);
+  if (cached && cached.settings === settings) return cached.cables;
+  let cables: FaceCableConfig[] = [];
   try {
-    const value = JSON.parse(String(effect.params.settings ?? '[]'));
-    return Array.isArray(value) ? value.filter(isFaceCableConfig) : [];
-  } catch { return []; }
+    const value = JSON.parse(String(settings ?? '[]'));
+    cables = Array.isArray(value) ? value.filter(isFaceCableConfig) : [];
+  } catch { /* Invalid settings expose no cable properties. */ }
+  // Each cable exposes many properties; decode shared settings once per effect.
+  configCache.set(effect, { settings, cables });
+  return cables;
 }
 /** Dynamic cable IDs are first-class properties, discoverable by timeline and atomic authoring tools. */
 export function faceCableDescriptors(effect: Effect): PropertyDescriptor[] {

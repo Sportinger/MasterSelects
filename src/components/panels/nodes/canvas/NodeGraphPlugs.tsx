@@ -1,4 +1,4 @@
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
+import { memo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { describeNodePort } from '../../../../services/nodeGraph/nodePortPresentation';
 import type { NodeGraphNode, NodeGraphPort } from '../../../../types/nodeGraph';
 import { getPortCenter, type ConnectionDraft } from './canvasGeometry';
@@ -19,7 +19,7 @@ interface Props {
   onDisconnectEdge?: (id: string) => void;
 }
 
-export function NodeGraphPlugs({ plugs, nodes, draft, hoveredPort, hoveredEdgeId, selectedEdgeId, onSelectEdge, onStartDrag, onStartConnectionDrag, onDisconnectEdge }: Props) {
+export const NodeGraphPlugs = memo(function NodeGraphPlugs({ plugs, nodes, draft, hoveredPort, hoveredEdgeId, selectedEdgeId, onSelectEdge, onStartDrag, onStartConnectionDrag, onDisconnectEdge }: Props) {
   const occupied = new Set(plugs.map(p => JSON.stringify([p.node.id, p.port.id, p.port.direction])));
   const previews = nodes.flatMap(node => [...node.inputs, ...node.outputs]
     .filter(port => !occupied.has(JSON.stringify([node.id, port.id, port.direction])))
@@ -97,4 +97,4 @@ export function NodeGraphPlugs({ plugs, nodes, draft, hoveredPort, hoveredEdgeId
       </g>
     </g>}
   </svg>;
-}
+});

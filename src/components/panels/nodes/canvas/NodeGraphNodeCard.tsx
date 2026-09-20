@@ -1,4 +1,4 @@
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import { memo, type PointerEvent as ReactPointerEvent } from 'react';
 import type { NodeGraphNode, NodeGraphPort } from '../../../../services/nodeGraph';
 import { NodeGraphPortView } from './NodeGraphPortView';
 import { KeyframeNodeCardPreview } from '../keyframes/KeyframeNodeCurve';
@@ -38,7 +38,7 @@ function getNodeHeaderLabel(node: NodeGraphNode): string {
   return typeof categoryLabel === 'string' ? categoryLabel : node.kind;
 }
 
-export function NodeGraphNodeCard({
+export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
   node,
   selectedNodeId,
   isInSelection = false,
@@ -155,4 +155,4 @@ export function NodeGraphNodeCard({
       </div>
     </div>
   );
-}
+});

@@ -96,11 +96,13 @@ export function NodeGraphCanvas({
   const [viewport, setViewport] = useState<Viewport>(DEFAULT_VIEWPORT);
   const [isPanning, setIsPanning] = useState(false);
   const [draftLayouts, setDraftLayouts] = useState<Record<string, NodeGraphLayout>>({});
+  const draftLayoutsRef = useRef(draftLayouts);
+  draftLayoutsRef.current = draftLayouts;
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const multiSelection = useMemo(() => new Set(selectedNodeIds ?? []), [selectedNodeIds]);
 
   const displayNodes = useMemo(() => (
-    graph.nodes.map((node) => ({
+    graph.nodes.map((node) => !draftLayouts[node.id] && layoutScaleX === 1 ? node : ({
       ...node,
       layout: draftLayouts[node.id] ?? {
         x: node.layout.x * layoutScaleX,
@@ -109,6 +111,8 @@ export function NodeGraphCanvas({
     }))
   ), [draftLayouts, graph.nodes, layoutScaleX]);
   const nodesById = useMemo(() => new Map(displayNodes.map((node) => [node.id, node])), [displayNodes]);
+  const nodesByIdRef = useRef(nodesById);
+  nodesByIdRef.current = nodesById;
   const plugs = useMemo(() => getConnectionPlugs(graph.edges, nodesById), [graph.edges, nodesById]);
   const { hoveredPort, hoveredEdgeId, portHoverEvents } = useNodePortHover(nodesById);
   const graphBounds = useMemo(() => {
@@ -144,12 +148,17 @@ export function NodeGraphCanvas({
     });
   }, []);
   const fitGraph = useCallback(() => fitBounds(graphBounds), [fitBounds, graphBounds]);
-  const focusGroup = (id: string) => {
+  const focusGroup = useCallback((id: string) => {
     const members = new Set(graph.groups?.find(g => g.id === id)?.nodeIds);
     fitBounds(nodeGroupBounds(graph, displayNodes).get(id) ?? getGraphBounds({ ...graph, nodes: displayNodes.filter(n => members.has(n.id)) }));
-  };
+  }, [graph, displayNodes, fitBounds]);
 
   const fittedGraph = useRef<string | null>(null);
+  const toggleGroup = useCallback((id: string) => {
+    fittedGraph.current = null;
+    onToggleGroup?.(id);
+  }, [onToggleGroup]);
+  const clearSelectedEdge = useCallback(() => setSelectedEdgeId(null), []);
   useEffect(() => {
     if (fittedGraph.current !== graph.id) { fittedGraph.current = graph.id; fitGraph(); }
   }, [graph.id, fitGraph]);
@@ -274,13 +283,13 @@ export function NodeGraphCanvas({
       clientX: event.clientX,
       clientY: event.clientY,
       members: memberIds.flatMap((memberId) => {
-        const member = nodesById.get(memberId);
+        const member = nodesByIdRef.current.get(memberId);
         return member ? [{ nodeId: memberId, startX: member.layout.x, startY: member.layout.y }] : [];
       }),
       moved: false,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
-  }, [multiSelection, nodesById, onSelectNode, onToggleNodeSelection]);
+  }, [multiSelection, onSelectNode, onToggleNodeSelection]);
 
   const handleNodePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     const gesture = nodeDragGestureRef.current;
@@ -308,7 +317,7 @@ export function NodeGraphCanvas({
 
     const moves = gesture.moved
       ? gesture.members.flatMap((member) => {
-          const finalLayout = draftLayouts[member.nodeId];
+          const finalLayout = draftLayoutsRef.current[member.nodeId];
           return finalLayout
             ? [{ nodeId: member.nodeId, layout: { x: Math.round(finalLayout.x / layoutScaleX), y: finalLayout.y } }]
             : [];
@@ -329,7 +338,7 @@ export function NodeGraphCanvas({
       return next;
     });
     event.currentTarget.releasePointerCapture(event.pointerId);
-  }, [draftLayouts, layoutScaleX, onMoveNode, onMoveNodes]);
+  }, [layoutScaleX, onMoveNode, onMoveNodes]);
 
   const handleNodeClick = useCallback((nodeId: string) => {
     if (suppressNextClickRef.current) {
@@ -467,7 +476,7 @@ export function NodeGraphCanvas({
             transform: `translate(${viewport.panX}px, ${viewport.panY}px) scale(${viewport.zoom})`,
           }}
         >
-          <NodeGraphGroups graph={graph} nodes={displayNodes} onToggle={id => { fittedGraph.current = null; onToggleGroup?.(id); }} onFocus={focusGroup} />
+          <NodeGraphGroups graph={graph} nodes={displayNodes} onToggle={toggleGroup} onFocus={focusGroup} />
           <NodeGraphEdges
             graphBounds={graphBounds}
             edges={graph.edges}
@@ -477,7 +486,7 @@ export function NodeGraphCanvas({
             hoveredEdgeId={hoveredEdgeId}
             connectionDraft={connectionDraft}
             onSelectEdge={setSelectedEdgeId}
-            onClearSelectedEdge={() => setSelectedEdgeId(null)}
+            onClearSelectedEdge={clearSelectedEdge}
             onDisconnectEdge={onDisconnectEdge}
           />
 

@@ -1,9 +1,9 @@
 import './NodeGraphGroups.css';
-import type { CSSProperties } from 'react';
+import { memo, type CSSProperties } from 'react';
 import type { NodeGraph, NodeGraphNode } from '../../../../types/nodeGraph';
 import { nodeGroupBounds } from './groupBounds';
 
-export function NodeGraphGroups({ graph, nodes, onToggle, onFocus }: {
+export const NodeGraphGroups = memo(function NodeGraphGroups({ graph, nodes, onToggle, onFocus }: {
   graph: NodeGraph; nodes: NodeGraphNode[]; onToggle?: (id: string) => void; onFocus?: (id: string) => void;
 }) {
   const bounds = nodeGroupBounds(graph, nodes);
@@ -27,4 +27,4 @@ export function NodeGraphGroups({ graph, nodes, onToggle, onFocus }: {
       </div>
     </section>;
   })}</>;
-}
+});

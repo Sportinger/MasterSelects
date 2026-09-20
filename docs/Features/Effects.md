@@ -612,6 +612,12 @@ Relative monocular depth is a 2.5D estimate: large view changes can reveal stret
 textures and missing unseen surfaces. It does not reconstruct the back of the head.
 Cable/face geometry shares scene depth with other objects;
 shadow maps currently contain cable casters only, not unrelated meshes or splats.
+Playback builds cable rings into preallocated typed buffers and samples each
+spline center once. Depth stitching evaluates the winning boundary correction
+once per vertex. These changes preserve baked positions, topology and shading;
+they do not reduce subdivisions or simulation quality. Expanded timeline rows
+share effect interpolation for the same clip/time, and cable property readers
+reuse decoded settings until those settings change.
 The approximate face receives shadows without casting scan-triangle self-shadows;
 eye and mouth openings are capped with the captured video. The inspector can add
 normal scene light and camera clips directly, with a camera matched to the bake.

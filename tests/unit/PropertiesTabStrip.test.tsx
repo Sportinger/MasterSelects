@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { PropertiesTabStrip } from '../../src/components/panels/properties/PropertiesTabStrip';
 
@@ -10,6 +10,27 @@ function setDimension(element: Element, name: string, value: number) {
 }
 
 describe('PropertiesTabStrip', () => {
+  it('measures actual tab changes without forcing layout on every playback render', async () => {
+    const tabs = (active: string) => <PropertiesTabStrip>
+      <button className={`tab-btn ${active === 'Transform' ? 'active' : ''}`}>Transform</button>
+      <button className={`tab-btn ${active === 'Effects' ? 'active' : ''}`}>Effects</button>
+    </PropertiesTabStrip>;
+    const { rerender } = render(tabs('Transform'));
+    const scroller = screen.getByText('Transform').parentElement!;
+    const readWidth = vi.fn(() => 100);
+    Object.defineProperty(scroller, 'clientWidth', { configurable: true, get: readWidth });
+    setDimension(scroller, 'scrollWidth', 200);
+    for (const [index, tab] of Array.from(scroller.children).entries()) {
+      setDimension(tab, 'offsetLeft', index * 100);
+      setDimension(tab, 'offsetWidth', 100);
+    }
+    await act(async () => { rerender(tabs('Transform')); });
+    expect(readWidth).not.toHaveBeenCalled();
+    await act(async () => { rerender(tabs('Effects')); });
+    await waitFor(() => expect(screen.getByTitle('Next tab')).toHaveClass('properties-tabs-nav--active-hidden'));
+    expect(readWidth).toHaveBeenCalled();
+  });
+
   it('shows only useful direction controls and advances by one hidden tab', () => {
     const { rerender } = render(
       <PropertiesTabStrip>

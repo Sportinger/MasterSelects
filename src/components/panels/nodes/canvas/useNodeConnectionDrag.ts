@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import type { NodeGraphConnectionRequest, NodeGraphNode, NodeGraphPort } from '../../../../types/nodeGraph';
 import { canConnectPortReferences, createPortReference, getPortCenter, type ConnectionDraft, type NodeGraphPoint } from './canvasGeometry';
 import type { ConnectionPlug } from './connectionPlugs';
@@ -93,5 +93,17 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, getGraphP
     if (currentDraft.current?.pointerId !== event.pointerId) return false;
     cancel(); return true;
   };
-  return { connectionDraft, startConnectionDrag, startPlugDrag, moveConnectionDrag, finishConnectionDrag, cancelConnectionDrag };
+  // Stable event entry points let cards/plugs skip renders during viewport motion,
+  // while the gesture always reads the latest ports, callbacks and coordinates.
+  const handlers = { startConnectionDrag, startPlugDrag, moveConnectionDrag, finishConnectionDrag, cancelConnectionDrag };
+  const handlersRef = useRef(handlers);
+  handlersRef.current = handlers;
+  const stableHandlers = useMemo(() => ({
+    startConnectionDrag: (...args: Parameters<typeof startConnectionDrag>) => handlersRef.current.startConnectionDrag(...args),
+    startPlugDrag: (...args: Parameters<typeof startPlugDrag>) => handlersRef.current.startPlugDrag(...args),
+    moveConnectionDrag: (...args: Parameters<typeof moveConnectionDrag>) => handlersRef.current.moveConnectionDrag(...args),
+    finishConnectionDrag: (...args: Parameters<typeof finishConnectionDrag>) => handlersRef.current.finishConnectionDrag(...args),
+    cancelConnectionDrag: (...args: Parameters<typeof cancelConnectionDrag>) => handlersRef.current.cancelConnectionDrag(...args),
+  }), []);
+  return { connectionDraft, ...stableHandlers };
 }

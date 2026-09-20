@@ -14,6 +14,24 @@ presentation, never rendering or a saved bake.
 bindings route each edit to its existing owner; the UI does not maintain a second
 copy of effect parameters, Flock definitions, color grades or 3D settings.
 
+## Connection flow
+
+While playing or moving the timeline playhead, cables show light pulses in their
+signal color and a direction arrow from output to input. Backward scrubbing and
+reverse playback keep that same data-flow direction. The overlay fades out after
+scrubbing settles or playback pauses; holding the playhead still does not keep it
+running. Disconnected cables and connection drafts have no flow overlay.
+
+Reduced-motion preferences replace the moving pulses with static direction arrows
+during activity. Hidden tabs pause the overlay. This visualizes graph direction,
+not measured execution, cache misses or rebaking; saved/baked dependencies can
+still carry a signal. It does not change node state, rendering or export.
+
+The overlay uses CSS animation and transport activity subscriptions without
+per-frame React updates. Panning reuses unchanged node cards, groups, cables and
+plugs. Repeated pointer movement within one dock pane does not publish another
+layout update or write the persisted layout.
+
 ## Keyframe nodes
 
 Use **+ Keyframes** or **right-click → Keyframe Node**, then select a parameter

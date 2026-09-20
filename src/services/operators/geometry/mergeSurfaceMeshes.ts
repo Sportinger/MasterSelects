@@ -12,15 +12,23 @@ export function mergeSurfaceMeshes(primary: SurfaceMesh, background: DepthMesh, 
   const face = (primary.outline ?? []).map(i => primary.vertices[i]);
   const blendedSurface = (uv: number[]) => {
     const p = surface(uv); let distance = Infinity, correction = [0, 0, 0];
-    face.forEach((a, i) => {
+    let closest = -1, closestT = 0;
+    for (let i = 0; i < face.length; i++) {
+      const a = face[i];
       const b = face[(i + 1) % face.length], dx = b.uv[0] - a.uv[0], dy = b.uv[1] - a.uv[1];
       const t = Math.max(0, Math.min(1, ((uv[0] - a.uv[0]) * dx + (uv[1] - a.uv[1]) * dy) / Math.max(1e-12, dx * dx + dy * dy)));
-      const edgeUv = a.uv.map((x, j) => x + (b.uv[j] - x) * t), d = Math.hypot(uv[0] - edgeUv[0], uv[1] - edgeUv[1]);
-      if (d >= distance) return;
-      distance = d;
+      const d = Math.hypot(uv[0] - (a.uv[0] + dx * t), uv[1] - (a.uv[1] + dy * t));
+      if (d >= distance) continue;
+      distance = d; closest = i; closestT = t;
+    }
+    // Only the nearest boundary contributes. Avoid reconstructing depth and
+    // allocating vectors for every candidate edge at every subdivided vertex.
+    if (closest !== -1) {
+      const a = face[closest], b = face[(closest + 1) % face.length], t = closestT;
+      const edgeUv = [a.uv[0] + (b.uv[0] - a.uv[0]) * t, a.uv[1] + (b.uv[1] - a.uv[1]) * t];
       const estimated = surface(edgeUv);
       correction = a.position.map((x, j) => x + (b.position[j] - x) * t - estimated[j]);
-    });
+    }
     const weight = Math.max(0, 1 - distance / Math.max(1e-6, blendWidth)), smooth = weight * weight * (3 - 2 * weight);
     return p.map((x, j) => x + correction[j] * smooth);
   };
@@ -49,7 +57,7 @@ export function mergeSurfaceMeshes(primary: SurfaceMesh, background: DepthMesh, 
       midpoints.set(edge, index); return index;
     };
     for (let i = 0; i < indices.length; i += 3) {
-      const [a, b, c] = indices.slice(i, i + 3), ab = midpoint(a, b), bc = midpoint(b, c), ca = midpoint(c, a);
+      const a = indices[i], b = indices[i + 1], c = indices[i + 2], ab = midpoint(a, b), bc = midpoint(b, c), ca = midpoint(c, a);
       next.push(a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca);
     }
     indices = next; boundary = nextBoundary;

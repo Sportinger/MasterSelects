@@ -1,0 +1,43 @@
+.node-workspace-edge-flow {
+  color: var(--port-color, #97a9be);
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+  pointer-events: none;
+}
+
+.node-workspace-edges[data-flow-active='true'] .node-workspace-edge-flow {
+  opacity: 1;
+  transition-duration: 90ms;
+}
+
+.node-workspace-flow-pulse,
+.node-workspace-flow-arrow {
+  fill: none;
+  stroke: color-mix(in srgb, currentColor 45%, white);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.node-workspace-flow-pulse {
+  stroke-width: 3;
+  stroke-dasharray: 12 72;
+  animation: node-workspace-signal-flow 850ms linear infinite paused;
+}
+
+.node-workspace-edges[data-flow-active='true'] .node-workspace-flow-pulse {
+  animation-play-state: running;
+}
+
+.node-workspace-flow-arrow {
+  stroke-width: 2;
+}
+
+@keyframes node-workspace-signal-flow {
+  to { stroke-dashoffset: -84; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-workspace-edge-flow { transition: none; }
+  .node-workspace-flow-pulse { animation: none; display: none; }
+}
