@@ -150,7 +150,7 @@ export function getNodeBadges(node: NodeGraphNode): NodeBadge[] {
 
 export function getNodePortStartY(node: NodeGraphNode): number {
   if (node.binding?.kind === 'keyframe-node') return 175;
-  return getNodeBadges(node).length > 0 ? BADGED_PORT_START_Y : PORT_START_Y;
+  return (getNodeBadges(node).length > 0 ? BADGED_PORT_START_Y : PORT_START_Y) + (node.animation?.channels.length ? 64 : 0);
 }
 
 export function getNodeHeight(node: NodeGraphNode): number {

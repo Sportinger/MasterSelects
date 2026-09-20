@@ -34,6 +34,23 @@ layout update or write the persisted layout.
 
 ## Keyframe nodes
 
+Independent animation appears directly on its owning node in a compact
+**Animation · N curves** area. Twelve cable-slack curves therefore occupy one
+area on **Cable simulation**, while Wind and Transform show their own curves.
+Existing projects and previously saved independent keyframe nodes use this
+presentation automatically, without moving or changing their keys.
+
+The area previews its first curve and follows the playhead. Changes to any of
+its parameter values briefly highlight it. Click the area to open the animation
+inspector, select a curve, and edit its keys. **Back to parameters** restores the
+normal node inspector. Collapsed groups retain an animation area for their
+contained nodes. **Extract as keyframe node** makes the chosen channel a separate
+node while preserving its keys; extraction and removal support undo/redo.
+
+Shared or explicitly extracted nodes remain visible on the canvas. Their
+animation cables and target sockets appear when the animation node or a receiving
+node is selected. Ordinary processing connections remain visible throughout.
+
 Use **+ Keyframes** or **right-click → Keyframe Node**, then select a parameter
 under **Add channel** in the inspector. Existing timeline keys are adopted;
 an unanimated parameter starts with its current value at the playhead. Search
@@ -55,10 +72,13 @@ Time is clip-local except Flock simulation parameters, which retain source time.
 Face Cables simulation changes still require baking for playback and export.
 
 Disconnecting a parameter or removing the node keeps its animation as ordinary
-timeline keys. Deleting a source owner also preserves surviving target curves.
+timeline keys, shown again at its parameter owner. Deleting a source owner also preserves surviving target curves.
 Bindings and layouts participate in project persistence, copy/paste and history.
 
-Implementation: `clip.nodeGraph.keyframeNodes` stores channel bindings and layout.
+Implementation: `clip.nodeGraph.keyframeNodes` stores channel bindings, layout and
+optional `presentation` (`inline` or explicitly extracted `node`). Shared channels
+remain separate regardless of presentation. The graph projection groups inline
+channels by actual parameter owner and never creates a second keyframe store.
 Source curves live in the existing `clipKeyframes` map. The timeline revision
 middleware materializes mapped targets at edit time, so playback, scrubbing,
 baking and export consume ordinary keyframes. `animationSource` identifies

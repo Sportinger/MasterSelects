@@ -1,0 +1,20 @@
+.node-animation-badge {
+  position: absolute; left: 12px; right: 12px; height: 50px;
+  display: flex; flex-direction: column; gap: 3px; padding: 5px 7px;
+  color: var(--text-primary, #ddd); background: var(--bg-secondary, #202020);
+  border: 1px solid var(--border-color, #444); border-radius: 4px;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: border-color 140ms, background-color 140ms;
+}
+.node-animation-badge:hover { border-color: var(--accent-color, #79b8fa); }
+.node-animation-badge[data-changing="true"] { border-color: #ae90dc; background-color: #302938; }
+.node-animation-badge:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.node-animation-badge:focus-visible { outline: 2px solid var(--accent-color, #79b8fa); outline-offset: 2px; }
+.node-animation-badge-title { display: flex; justify-content: space-between; gap: 4px; width: 100%; font-size: 10px; white-space: nowrap; }
+.node-animation-badge-title > span:last-child { color: var(--text-secondary, #999); }
+.node-animation-badge-preview { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 0; }
+.node-animation-badge-preview svg { min-width: 0; flex: 1; height: 22px; overflow: visible; }
+.node-animation-badge-preview path { stroke: #bda1ed; stroke-width: 1.3; fill: none; }
+.node-animation-badge-preview line { stroke: var(--accent-color, #79b8fa); stroke-width: 1; }
+.node-animation-badge-preview strong { max-width: 54px; overflow: hidden; font-size: 11px; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .node-animation-badge { transition: none; } }

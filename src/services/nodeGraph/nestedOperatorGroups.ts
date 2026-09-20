@@ -25,6 +25,9 @@ export function foldOperatorGroups(graph: NodeGraph, state?: ClipNodeGraph): Nod
       groupId: members[0].groupId, binding: { kind: 'operator-group', groupId: g.id,
         ...(effectOwner ? { effectId: effectOwner } : {}) },
       layout: { x: Math.min(...members.map(n => n.layout.x)), y: Math.min(...members.map(n => n.layout.y)) } };
+    const animated = members.filter(node => node.animation);
+    if (animated.length) proxy.animation = { clipId: animated[0].animation!.clipId,
+      channels: animated.flatMap(node => node.animation!.channels) };
     const expose = (node: NodeGraphNode, port: NodeGraphPort) => {
       const list = port.direction === 'input' ? proxy.inputs : proxy.outputs;
       const id = `${node.id}:${port.id}`;

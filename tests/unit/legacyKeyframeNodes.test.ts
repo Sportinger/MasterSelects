@@ -34,10 +34,9 @@ describe('existing project keyframe nodes', () => {
     const clip = current(), before = structuredClone(keys());
     const projected = resolved();
     const graph = buildUnifiedClipGraph(buildClipNodeGraphDocument(projected), projected);
-    const node = graph.nodes.find(n => n.binding?.kind === 'keyframe-node')!;
-    expect(node.label).toBe('Keyframes · Transform');
-    expect(node.outputs).toHaveLength(1);
-    expect(graph.edges.find(e => e.fromNodeId === node.id)).toMatchObject({ toNodeId: 'transform', toPortId: 'animation:scale.x' });
+    expect(graph.nodes.some(n => n.binding?.kind === 'keyframe-node')).toBe(false);
+    expect(graph.nodes.find(n => n.id === 'transform')?.animation?.channels).toMatchObject([{ property: 'scale.x' }]);
+    expect(graph.edges.some(edge => edge.id.startsWith('animation:'))).toBe(false);
     expect(current()).toBe(clip);
     expect(clip.nodeGraph).toBeUndefined();
     expect(keys()).toEqual(before);
@@ -65,18 +64,17 @@ describe('existing project keyframe nodes', () => {
       params: { settings: JSON.stringify([cable]) } }] };
     const projected = withLegacyKeyframeNodes(clip, [createMockKeyframe({ clipId: clip.id, property, value: 1.6 })]);
     const graph = buildUnifiedClipGraph(buildClipNodeGraphDocument(projected), projected);
-    const node = graph.nodes.find(n => n.binding?.kind === 'keyframe-node')!;
-    const edge = graph.edges.find(e => e.fromNodeId === node.id)!;
-    expect(node.outputs[0].metadata?.animationProperty).toBe(property);
-    expect(graph.nodes.find(n => n.id === edge.toNodeId)?.binding).toMatchObject({ kind: 'effect-operator', operator: 'simulation.rope' });
+    const node = graph.nodes.find(n => n.animation?.channels.some(channel => channel.property === property))!;
+    expect(node.binding).toMatchObject({ kind: 'effect-operator', operator: 'simulation.rope' });
+    expect(node.inputs.some(port => port.metadata?.animationProperty)).toBe(false);
   });
 
-  it('preserves existing graph layout and explicit node lists, including intentional deletion', () => {
+  it('preserves existing graph layout and bindings, exposing unbound animation inline', () => {
     const graph = { version: 1 as const, nodes: [], groups: { flock: { collapsed: true } } };
     const projected = withLegacyKeyframeNodes({ ...current(), nodeGraph: graph }, keys());
     expect(projected.nodeGraph!.groups).toBe(graph.groups);
     const removed = { ...current(), nodeGraph: { ...graph, keyframeNodes: [] } };
-    expect(withLegacyKeyframeNodes(removed, keys())).toBe(removed);
+    expect(withLegacyKeyframeNodes(removed, keys()).nodeGraph!.keyframeNodes).toHaveLength(1);
     expect(withLegacyKeyframeNodes(projected, keys())).toBe(projected);
     expect(withLegacyKeyframeNodes(current(), [])).toBe(current());
   });
@@ -91,11 +89,13 @@ describe('existing project keyframe nodes', () => {
     expect(keys().find(key => key.property === 'scale.y' && key.time === 5)).toMatchObject({ value: 4, handleIn: { x: -1, y: 0.5 } });
   });
 
-  it('keeps removed automatic nodes removed while retaining keys, including history restoration', () => {
+  it('reattaches removed nodes to their parameter without erasing animation, including history restoration', () => {
     const snapshot = createHistorySnapshot('Legacy animation', { getTimelineState: state });
     const node = resolved().nodeGraph!.keyframeNodes![0], before = keys();
     removeKeyframeNode('legacy', node.id);
-    expect(resolved().nodeGraph!.keyframeNodes).toEqual([]);
+    expect(current().nodeGraph!.keyframeNodes).toEqual([]);
+    const projected = resolved();
+    expect(buildUnifiedClipGraph(buildClipNodeGraphDocument(projected), projected).nodes.some(n => n.binding?.kind === 'keyframe-node')).toBe(false);
     expect(keys()).toBe(before);
     applyHistorySnapshot(snapshot, { getTimelineState: state, setTimelineState: patch => useTimelineStore.setState(patch as Partial<ReturnType<typeof state>>) });
     expect(resolved().nodeGraph!.keyframeNodes![0].id).toBe(node.id);

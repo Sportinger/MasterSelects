@@ -4,19 +4,20 @@
 
 The keyframe system animates clip properties over time using per-clip keyframe maps, Graph mode, and Bezier handles. It supports transform properties, speed, numeric effect parameters, color, masks, text bounds, camera and light settings, custom-node parameters, vector-animation state/input properties, and numeric motion-shape properties.
 
-The [Node Workspace](./Node-Workspace.md#keyframe-nodes) also exposes these curves
-through **Keyframe Nodes**. A node adopts an existing property curve and can link
-compatible parameters, with explicit scale/offset mapping where needed. Timeline,
-node-inspector and AI keyframe edits update the same animation. The node shows a
-live value and moving curve cursor during playback. Removing its bindings leaves
-ordinary editable keys behind.
+The [Node Workspace](./Node-Workspace.md#keyframe-nodes) shows independent curves
+in a compact **Animation** area on their parameter's owning node. Existing
+projects appear this way automatically, including previously saved independent
+keyframe nodes. The area shows a curve count, mini curve, current value and time
+cursor; value changes briefly highlight it. Click it to choose and edit a curve
+in the inspector, or **Extract as keyframe node** to share it with other parameters.
 
-Existing projects without saved keyframe-node bindings automatically show their
-supported animated parameters as nodes, grouped by parameter section. Opening
-the graph does not modify the original keys or project data. The first node
-edit saves its layout and bindings; removing a node keeps its timeline animation
-and prevents it from being recreated automatically. Existing explicit bindings
-remain unchanged. The AI's `getKeyframes` result also includes these automatic nodes.
+Explicitly extracted and shared **Keyframe Nodes** remain separate. Their cables
+appear when selecting the animation node or a receiving node. Compatible
+parameters can share values, with explicit scale/offset mapping where needed.
+Removing a separate node preserves its animation and shows it at the owning
+parameter again. Opening the graph changes neither project data nor keyframes.
+Timeline, node-inspector and AI edits still update the same curves; the AI's
+`getKeyframes` result includes their bindings.
 
 `Keyframe.hold` keeps a value until the next key. The node inspector uses this for
 discrete boolean channels and offers Hold for continuous channels. Timeline curve

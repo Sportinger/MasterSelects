@@ -14,4 +14,6 @@ export interface KeyframeNodeDefinition {
   label: string;
   layout: NodeGraphLayout;
   channels: KeyframeNodeChannel[];
+  /** Independent curves attach to their parameter owner unless explicitly extracted. */
+  presentation?: 'inline' | 'node';
 }

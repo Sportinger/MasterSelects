@@ -10,6 +10,8 @@ export interface NodeWorkspaceViewRequest {
   clipId: string;
   theme: NodeGraphViewTheme;
   nonce: number;
+  nodeId?: string;
+  animation?: boolean;
 }
 
 interface NodeWorkspaceNavigationState {
@@ -37,4 +39,9 @@ export const useNodeWorkspaceNavigation = create<NodeWorkspaceNavigationState>((
 export function requestNodeWorkspaceView(clipId: string, theme: NodeGraphViewTheme): void {
   nonce += 1;
   useNodeWorkspaceNavigation.setState({ request: { clipId, theme, nonce } });
+}
+
+export function requestNodeAnimation(clipId: string, nodeId: string, animation = true): void {
+  nonce += 1;
+  useNodeWorkspaceNavigation.setState({ request: { clipId, theme: 'general', nodeId, animation, nonce } });
 }

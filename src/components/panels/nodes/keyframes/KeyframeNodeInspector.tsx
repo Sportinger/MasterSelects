@@ -28,7 +28,8 @@ export function KeyframeNodeInspector({ clip, nodeId }: { clip: TimelineClip; no
     try { action(); setMessage(''); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
     finally { if (batch.opened) endBatch(); }
   };
-  const occupied = new Set(clip.nodeGraph?.keyframeNodes?.flatMap(n => n.channels.flatMap(c => [c.property, ...c.targets.map(t => t.property)])));
+  const occupied = new Set(clip.nodeGraph?.keyframeNodes?.filter(n => n.id === node.id || n.presentation === 'node'
+    || n.channels.some(c => c.targets.length > 0)).flatMap(n => n.channels.flatMap(c => [c.property, ...c.targets.map(t => t.property)])));
   const available = parameters.filter(p => !occupied.has(p.property) && `${p.group} ${p.label} ${p.property}`.toLowerCase().includes(filter.toLowerCase()));
   return <div className="keyframe-node-inspector" onClick={event => {
     if (event.detail > 0 && event.target instanceof Element && !event.target.closest('.inspector-select')) event.target.closest<HTMLButtonElement>('button')?.blur();
@@ -42,7 +43,7 @@ export function KeyframeNodeInspector({ clip, nodeId }: { clip: TimelineClip; no
         options={[{ value: '', label: 'Choose parameter…' }, ...available.map(p => ({ value: p.property, label: `${p.group} / ${p.label}` }))]}
         onChange={property => { if (property) safely('Add animation channel', () => connectKeyframeNode(clip.id, node.id, property as AnimatableProperty)); }} /></ResolveInspectorRow>
     </ResolveInspectorSection>
-    {node.channels.map(channel => <ChannelEditor key={channel.id} clip={clip} node={node} channelId={channel.id} keys={keys}
+    {node.channels.map(channel => <KeyframeChannelEditor key={channel.id} clip={clip} node={node} channelId={channel.id} keys={keys}
       parameters={parameters} available={available} locked={locked} safely={safely} />)}
     {message && <p className="keyframe-node-hint" role="alert">{message}</p>}
     <button type="button" className="node-workspace-secondary-action" disabled={locked}
@@ -50,10 +51,11 @@ export function KeyframeNodeInspector({ clip, nodeId }: { clip: TimelineClip; no
   </div>;
 }
 
-function ChannelEditor({ clip, node, channelId, keys, parameters, available, locked, safely }: {
+export function KeyframeChannelEditor({ clip, node, channelId, keys, parameters, available, locked, safely, embedded = false }: {
   clip: TimelineClip; node: KeyframeNodeDefinition; channelId: string; keys: Keyframe[];
   parameters: KeyframeNodeParameter[]; available: KeyframeNodeParameter[]; locked: boolean;
   safely: (label: string, action: () => void) => void;
+  embedded?: boolean;
 }) {
   const [selectedId, setSelectedId] = useState('');
   const [target, setTarget] = useState('');
@@ -84,7 +86,7 @@ function ChannelEditor({ clip, node, channelId, keys, parameters, available, loc
     if (!state.isTrackExpanded(clip.trackId)) state.toggleTrackExpanded(clip.trackId);
     if (!state.isCurveExpanded(clip.trackId, channel.property)) state.toggleCurveExpanded(clip.trackId, channel.property);
   };
-  return <ResolveInspectorSection title={parameter?.label ?? channel.property} indicator="none" headerActions={
+  return <ResolveInspectorSection title={parameter?.label ?? channel.property} indicator="none" headerActions={!embedded &&
     <ResolveInspectorIconButton ariaLabel={`Disconnect ${parameter?.label ?? channel.property}`} disabled={locked}
       title="Disconnect this channel; keep its animation" onClick={() => safely('Disconnect animation', () => disconnectKeyframeNode(clip.id, node.id, channel.property))}>×</ResolveInspectorIconButton>
   }>
@@ -114,7 +116,7 @@ function ChannelEditor({ clip, node, channelId, keys, parameters, available, loc
       </div>
     </>}
     <button type="button" className="node-workspace-secondary-action" onClick={openCurve}>Show timeline keys</button>
-    {channel.targets.map(link => <div className="keyframe-node-link" key={link.property}>
+    {!embedded && <>{channel.targets.map(link => <div className="keyframe-node-link" key={link.property}>
       <span>{parameters.find(p => p.property === link.property)?.label ?? link.property}{link.scale !== 1 || link.offset !== 0 ? ` · ×${link.scale} + ${link.offset}` : ''}</span>
       <ResolveInspectorIconButton ariaLabel={`Unlink ${link.property}`} disabled={locked} onClick={() => safely('Unlink animation', () => disconnectKeyframeNode(clip.id, node.id, link.property))}>×</ResolveInspectorIconButton>
     </div>)}
@@ -130,6 +132,6 @@ function ChannelEditor({ clip, node, channelId, keys, parameters, available, loc
       <button type="button" className="node-workspace-secondary-action" disabled={locked} onClick={() => safely('Link animation parameter', () => {
         connectKeyframeNode(clip.id, node.id, target as AnimatableProperty, channel.id, mapped ? { scale, offset } : undefined); setTarget('');
       })}>{keys.some(k => k.property === target) ? 'Link curve · replace target animation' : 'Link curve'}</button>
-    </>}
+    </>}</>}
   </ResolveInspectorSection>;
 }

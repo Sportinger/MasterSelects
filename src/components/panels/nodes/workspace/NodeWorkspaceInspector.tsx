@@ -1,5 +1,6 @@
 import { EffectOrderControls } from './EffectOrderControls';
 import { KeyframeNodeInspector } from '../keyframes/KeyframeNodeInspector';
+import { NodeAnimationInspector } from '../keyframes/NodeAnimationInspector';
 import { describeNodePort, describePortText } from '../../../../services/nodeGraph/nodePortPresentation';
 import { SceneOperatorParameters } from './SceneOperatorParameters';
 import { OperatorGroupParameters } from './OperatorGroupParameters';
@@ -213,6 +214,8 @@ export function NodeInspector({
   onOpenProperties,
   onStartResizeInspector,
   showClipActions = true,
+  showAnimation = false,
+  onShowParameters,
   flockActions,
 }: {
   node: NodeGraphNode | null;
@@ -222,6 +225,8 @@ export function NodeInspector({
   onOpenProperties: () => void;
   onStartResizeInspector: (event: ReactMouseEvent<HTMLDivElement>) => void;
   showClipActions?: boolean;
+  showAnimation?: boolean;
+  onShowParameters?: () => void;
   /** Present in the Flock view: flock nodes edit the clip's canonical FlockDefinition. */
   flockActions?: FlockGraphActions;
 }) {
@@ -290,6 +295,11 @@ export function NodeInspector({
     );
   }
 
+  if (clip && showAnimation && node.animation?.channels.length) {
+    return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
+      <NodeAnimationInspector key={node.id} clip={clip} node={node} onShowParameters={onShowParameters} />
+    </NodeInspectorShell>;
+  }
   if (clip && node.binding?.kind === 'scene-node') {
     return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}><SceneNodeParameters node={node} owner={clip} /></NodeInspectorShell>;
   }

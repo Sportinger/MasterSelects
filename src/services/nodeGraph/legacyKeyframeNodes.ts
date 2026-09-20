@@ -3,14 +3,17 @@ import type { KeyframeNodeDefinition } from '../../types/keyframeNode';
 import { keyframeNodeParameters } from './keyframeNodeParameters';
 
 /**
- * Old projects have timeline curves but no node bindings. Expose those curves
- * without changing project data just by opening the graph. The first node edit
- * persists the definitions; an explicit empty list keeps removed nodes removed.
+ * Expose unbound timeline curves, including old projects, without changing data
+ * just by opening the graph. Independent animation stays attached to its owner;
+ * an explicit node edit persists the definitions and their presentation.
  */
 export function withLegacyKeyframeNodes(clip: TimelineClip, keys: readonly Keyframe[]): TimelineClip {
-  if (clip.nodeGraph?.keyframeNodes !== undefined || !keys.length) return clip;
+  if (!keys.length) return clip;
+  const existing = clip.nodeGraph?.keyframeNodes ?? [];
+  const claimed = new Set(existing.flatMap(node => node.channels.flatMap(channel =>
+    [channel.property, ...channel.targets.map(target => target.property)])));
   const animated = new Set(keys.map(key => key.property));
-  const parameters = keyframeNodeParameters(clip).filter(parameter => animated.has(parameter.property));
+  const parameters = keyframeNodeParameters(clip).filter(parameter => animated.has(parameter.property) && !claimed.has(parameter.property));
   if (!parameters.length) return clip;
 
   const groups = new Map<string, KeyframeNodeDefinition>();
@@ -21,7 +24,9 @@ export function withLegacyKeyframeNodes(clip: TimelineClip, keys: readonly Keyfr
     const group = `${['effect', 'mask', 'node', 'flock', 'color'].includes(parts[0]) ? owner : ''}/${parameter.group}`;
     let node = groups.get(group);
     if (!node) {
-      node = { id: `keyframes-existing:${encodeURIComponent(group)}`, label: `Keyframes · ${parameter.group}`,
+      let id = `keyframes-existing:${encodeURIComponent(group)}`;
+      while (existing.some(candidate => candidate.id === id)) id += '~';
+      node = { id, label: `Keyframes · ${parameter.group}`, presentation: 'inline',
         layout: { x: groups.size * 280, y: 0 }, channels: [] };
       groups.set(group, node);
     }
@@ -34,7 +39,7 @@ export function withLegacyKeyframeNodes(clip: TimelineClip, keys: readonly Keyfr
   }));
   const transformAnimated = parameters.some(parameter => /^(opacity$|speed$|position\.|anchor\.|scale\.|rotation\.)/.test(parameter.property));
   const model = clip.nodeGraph ?? { version: 1 as const, nodes: [] };
-  return { ...clip, nodeGraph: { ...model, keyframeNodes,
+  return { ...clip, nodeGraph: { ...model, keyframeNodes: [...existing, ...keyframeNodes],
     forcedBuiltIns: transformAnimated ? [...new Set([...(model.forcedBuiltIns ?? []), 'transform' as const])] : model.forcedBuiltIns,
   } };
 }

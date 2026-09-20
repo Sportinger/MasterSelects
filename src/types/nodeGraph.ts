@@ -156,6 +156,10 @@ export interface NodeGraphNode {
   operatorId?: string;
   groupId?: string;
   groupOffset?: NodeGraphLayout;
+  animation?: {
+    clipId: string;
+    channels: Array<{ nodeId: string; channelId: string; property: import('./animationProperties').AnimatableProperty }>;
+  };
 }
 
 export interface NodeGraphEdge {

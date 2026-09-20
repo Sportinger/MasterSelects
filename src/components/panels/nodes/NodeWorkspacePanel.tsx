@@ -25,6 +25,7 @@ import { FlockNodeContextMenu } from './flock/FlockNodeContextMenu';
 import { FlockGraphStatusBar } from './flock/FlockGraphStatusBar';
 import './NodeWorkspacePanel.css';
 import { addKeyframeNode } from '../../../services/nodeGraph/keyframeNodeActions';
+import { focusKeyframeConnections } from '../../../services/nodeGraph/keyframeNodeProjection';
 
 interface NodeWorkspaceContextMenuState {
   x: number;
@@ -66,6 +67,7 @@ function batched(label: string, run: () => void): void {
 
 export function NodeWorkspacePanel() {
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const [animationInspector, setAnimationInspector] = useState(false);
   const [viewTheme, setViewTheme] = useState<NodeGraphViewTheme>('general');
   const subject = useNodeGraphSubject(viewTheme);
   const keyframesLocked = useTimelineStore(state => state.isExporting || Boolean(state.tracks.find(t => t.id === subject?.clip.trackId)?.locked));
@@ -123,10 +125,12 @@ export function NodeWorkspacePanel() {
   }, [contextMenu?.nodeId, subject]);
 
   const selectNode = useCallback((nodeId: string) => {
+    setAnimationInspector(false);
     setSelection({ graphId, nodeId, nodeIds: [] });
   }, [graphId]);
 
   const selectNodes = useCallback((nodeIds: string[]) => {
+    setAnimationInspector(false);
     setSelection({
       graphId,
       nodeId: nodeIds[nodeIds.length - 1] ?? null,
@@ -135,6 +139,7 @@ export function NodeWorkspacePanel() {
   }, [graphId]);
 
   const toggleNodeSelection = useCallback((nodeId: string) => {
+    setAnimationInspector(false);
     const next = selectedNodeIds.includes(nodeId)
       ? selectedNodeIds.filter((candidate) => candidate !== nodeId)
       : [...selectedNodeIds, nodeId];
@@ -155,7 +160,12 @@ export function NodeWorkspacePanel() {
     }
     setViewTheme('general');
     setContextMenu(null);
-  }, [selectClip, subject?.id, subject?.selectedClip.id]);
+    if (request.nodeId) {
+      setCatalogOpen(false);
+      setAnimationInspector(request.animation === true);
+      setSelection({ graphId, nodeId: request.nodeId, nodeIds: [] });
+    }
+  }, [selectClip, subject?.id, subject?.selectedClip.id, graphId]);
   useNodeWorkspaceViewRequests(handleViewRequest);
 
   const startInspectorResize = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
@@ -351,6 +361,7 @@ export function NodeWorkspacePanel() {
   ]);
 
   const unified = useUnifiedNodeActions(subject?.clip, subject?.graph, adapter, flockActions);
+  const displayGraph = useMemo(() => subject && focusKeyframeConnections(subject.graph, selectedNodeIds), [subject, selectedNodeIds]);
 
   const deleteContextNode = (nodeId: string) => { unified.deleteNode(nodeId); closeContextMenu(); };
 
@@ -461,7 +472,7 @@ export function NodeWorkspacePanel() {
         {unified.message && <div className="node-workspace-graph-message" role="status">{unified.message}<button type="button" onClick={unified.clearMessage}>Dismiss</button></div>}
         <NodeGraphCanvas
           key={subject.graph.id}
-          graph={subject.graph}
+          graph={displayGraph!}
           selectedNodeId={selectedNode?.id ?? null}
           selectedNodeIds={selectedNodeIds.length > 1 ? selectedNodeIds : undefined}
           onSelectNode={selectNode}
@@ -487,6 +498,8 @@ export function NodeWorkspacePanel() {
       </div>
       {catalogOpen ? <NodeCatalog width={inspectorWidth} /> : <NodeInspector
         node={selectedNode}
+        showAnimation={animationInspector && isCurrentGraphSelection}
+        onShowParameters={() => setAnimationInspector(false)}
         clip={subject.clip}
         inspectorWidth={inspectorWidth}
         onSelectNode={selectNode}

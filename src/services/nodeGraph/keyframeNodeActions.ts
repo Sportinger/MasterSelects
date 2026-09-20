@@ -32,16 +32,29 @@ function edit(clipId: string, label: string, apply: (nodes: KeyframeNodeDefiniti
 
 export function addKeyframeNode(clipId: string, layout: NodeGraphLayout = { x: 0, y: -220 }): string {
   const id = `keyframes-${crypto.randomUUID()}`;
-  edit(clipId, 'Add keyframe node', nodes => nodes.push({ id, label: 'Keyframes', layout, channels: [] }));
+  edit(clipId, 'Add keyframe node', nodes => nodes.push({ id, label: 'Keyframes', layout, channels: [], presentation: 'node' }));
   return id;
 }
 
-export function changeKeyframeNode(clipId: string, nodeId: string, patch: Partial<Pick<KeyframeNodeDefinition, 'label' | 'layout'>>) {
+export function changeKeyframeNode(clipId: string, nodeId: string, patch: Partial<Pick<KeyframeNodeDefinition, 'label' | 'layout' | 'presentation'>>) {
   edit(clipId, 'Edit keyframe node', nodes => {
     const node = nodes.find(n => n.id === nodeId);
     if (!node) throw new Error('Keyframe node not found.');
     Object.assign(node, patch);
   });
+}
+
+export function extractKeyframeChannel(clipId: string, nodeId: string, channelId: string, layout: NodeGraphLayout): string {
+  const id = `keyframes-${crypto.randomUUID()}`;
+  edit(clipId, 'Extract animation node', nodes => {
+    const node = nodes.find(candidate => candidate.id === nodeId);
+    const channel = node?.channels.find(candidate => candidate.id === channelId);
+    if (!node || !channel) throw new Error('Animation channel not found.');
+    node.channels = node.channels.filter(candidate => candidate !== channel);
+    if (!node.channels.length) nodes.splice(nodes.indexOf(node), 1);
+    nodes.push({ id, label: 'Keyframes', layout, presentation: 'node', channels: [channel] });
+  });
+  return id;
 }
 
 export function removeKeyframeNode(clipId: string, nodeId: string) {
@@ -60,8 +73,14 @@ export function connectKeyframeNode(clipId: string, nodeId: string, property: An
     edit(clipId, 'Connect keyframe node', nodes => {
       const node = nodes.find(n => n.id === nodeId);
       if (!node) throw new Error('Keyframe node not found.');
-      const occupied = nodes.flatMap(n => n.channels).some(c => c.property === property || c.targets.some(t => t.property === property));
-      if (occupied) throw new Error('This parameter already belongs to a keyframe node. Disconnect it first.');
+      const occupiedNode = nodes.find(n => n.channels.some(c => c.property === property || c.targets.some(t => t.property === property)));
+      if (occupiedNode) {
+        const movable = occupiedNode.id !== node.id && occupiedNode.presentation !== 'node'
+          && occupiedNode.channels.every(c => c.targets.length === 0);
+        if (!movable) throw new Error('This parameter already belongs to a keyframe node. Disconnect it first.');
+        occupiedNode.channels = occupiedNode.channels.filter(c => c.property !== property);
+        if (!occupiedNode.channels.length) nodes.splice(nodes.indexOf(occupiedNode), 1);
+      }
       if (channelId) {
         const channel = node.channels.find(c => c.id === channelId), source = channel && parameters.find(p => p.property === channel.property);
         if (!channel || !source) throw new Error('Source parameter not found.');

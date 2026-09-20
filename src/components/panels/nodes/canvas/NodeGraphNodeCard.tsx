@@ -2,6 +2,7 @@ import { memo, type PointerEvent as ReactPointerEvent } from 'react';
 import type { NodeGraphNode, NodeGraphPort } from '../../../../services/nodeGraph';
 import { NodeGraphPortView } from './NodeGraphPortView';
 import { KeyframeNodeCardPreview } from '../keyframes/KeyframeNodeCurve';
+import { NodeAnimationBadge } from '../keyframes/NodeAnimationBadge';
 import type { ConnectionDraft } from './canvasGeometry';
 import {
   clamp,
@@ -125,6 +126,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
         {node.description ?? 'Built-in processing node'}
       </div>
       {node.binding?.kind === 'keyframe-node' && <KeyframeNodeCardPreview node={node} />}
+      {!!node.animation?.channels.length && <NodeAnimationBadge node={node} top={getNodePortStartY(node) - 78} />}
       {nodeBadges.length > 0 && (
         <div className="node-workspace-node-badges">
           {nodeBadges.map((badge) => (
