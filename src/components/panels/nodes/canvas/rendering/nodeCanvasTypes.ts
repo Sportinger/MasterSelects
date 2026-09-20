@@ -35,5 +35,5 @@ export type CanvasMessage =
   | { type: 'init'; base: OffscreenCanvas; overlay: OffscreenCanvas; previews?: OffscreenCanvas }
   | { type: 'previews'; frames: PreviewFrame[]; batchId: number }
   | { type: 'scene'; scene: CanvasScene }
-  | { type: 'view'; view: CanvasView; theme: CanvasTheme }
+  | { type: 'view'; view: CanvasView; theme: CanvasTheme; revision?: number }
   | { type: 'transport'; transport: CanvasTransport };

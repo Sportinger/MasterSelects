@@ -11,6 +11,7 @@ export class NodeCanvasPainter {
   private transport: CanvasTransport = { playhead: 0, playing: false, active: false, visible: true, reducedMotion: false, sourceTimes: {} };
   private baseDirty = true;
   private overlayDirty = true;
+  private renderedViewRevision: number | undefined;
   private curveActivity = new Map<string, CurveActivity>();
   private flowClock = new NodeFlowClock();
   private base: DrawContext;
@@ -31,6 +32,7 @@ export class NodeCanvasPainter {
     }
     if (message.type === 'view') {
       this.view = message.view; this.theme = message.theme; this.baseDirty = true;
+      this.renderedViewRevision = message.revision;
       this.previews?.resolution(message.view.zoom, message.view.ratio);
       this.previews?.invalidate();
       const width = Math.max(1, Math.round(message.view.width * message.view.ratio)), height = Math.max(1, Math.round(message.view.height * message.view.ratio));
@@ -46,6 +48,7 @@ export class NodeCanvasPainter {
     this.overlayDirty = true;
   }
   get animated() { return this.transport.visible && this.transport.active && !this.transport.reducedMotion; }
+  get viewRevision() { return this.renderedViewRevision; }
   get previewCount() { return this.previews?.size ?? 0; }
   draw(now: number): boolean {
     if (!this.scene || !this.view || !this.theme) return false;

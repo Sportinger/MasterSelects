@@ -1,5 +1,5 @@
 import { readTimelineRuntimeState } from '../../../../../services/timeline/timelineRuntimeCoordinator';
-import { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from 'react';
 import { useTimelineStore } from '../../../../../stores/timeline';
 import { clipLocalToKeyframeTime } from '../../../../../services/flock/time/flockKeyframeTime';
 import type { Viewport } from '../canvasGeometry';
@@ -10,10 +10,14 @@ import { NodePreviewController } from '../../previews/NodePreviewController';
 import './NodeGraphCanvasSurface.css';
 
 type SceneOptions = Parameters<typeof buildCanvasScene>[0];
-type Props = Omit<SceneOptions, 'clips' | 'keyframes' | 'sourceTime'> & { viewport: Viewport; onReady: (ready: boolean) => void };
+type Props = Omit<SceneOptions, 'clips' | 'keyframes' | 'sourceTime'> & {
+  viewport: Viewport;
+  surfaceRef: RefObject<HTMLDivElement | null>;
+  onReady: (ready: boolean) => void;
+  onViewRendered: (viewport: Viewport) => void;
+};
 
-export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ viewport, onReady, ...options }: Props) {
-  const hostRef = useRef<HTMLDivElement>(null);
+export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ viewport, surfaceRef, onReady, onViewRendered, ...options }: Props) {
   const runtime = useRef<ReturnType<typeof createNodeCanvasRuntime> | null>(null);
   const previewRuntime = useRef<NodePreviewController | null>(null);
   const clips = useTimelineStore(state => state.clips);
@@ -30,9 +34,15 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
   const viewRef = useRef<() => void>(() => {});
 
   useEffect(() => {
-    const host = hostRef.current;
+    const host = surfaceRef.current;
     if (!host) return;
-    const renderer = createNodeCanvasRuntime(host, ready => { onReady(ready); previewRuntime.current?.reset(); }); runtime.current = renderer;
+    let latestViewRevision = 0;
+    const renderedViews = new Map<number, Viewport>();
+    const renderer = createNodeCanvasRuntime(host, ready => { onReady(ready); previewRuntime.current?.reset(); }, revision => {
+      const rendered = renderedViews.get(revision);
+      for (const key of renderedViews.keys()) if (key <= revision) renderedViews.delete(key);
+      if (rendered && revision === latestViewRevision) onViewRendered(rendered);
+    }); runtime.current = renderer;
     const previews = new NodePreviewController(renderer, host); previewRuntime.current = previews;
     previews.scene(previewSource.current.clipId, previewSource.current.nodes, previewSource.current.selectedNodeId, previewSource.current.expanded);
     const motion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -58,7 +68,9 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
     let theme: CanvasTheme;
     const view = () => {
       const measured = { ...viewportRef.current, ...size, ratio: canvasPixelRatio(size.width, size.height, devicePixelRatio) };
-      renderer.update({ type: 'view', view: measured, theme }); previews.viewport(measured);
+      const revision = ++latestViewRevision;
+      renderedViews.set(revision, measured);
+      renderer.update({ type: 'view', view: measured, theme, revision }); previews.viewport(measured);
     };
     const measure = () => {
       const width = host.clientWidth, height = host.clientHeight;
@@ -95,9 +107,9 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
       document.removeEventListener('visibilitychange', queueTransport); motion.removeEventListener('change', queueTransport);
       window.removeEventListener('resize', measure); previews.dispose(); previewRuntime.current = null; renderer.dispose(); runtime.current = null;
     };
-  }, [onReady]);
+  }, [onReady, onViewRendered, surfaceRef]);
   useLayoutEffect(() => { runtime.current?.update({ type: 'scene', scene }); refreshRef.current(); }, [scene]);
   useLayoutEffect(() => { previewRuntime.current?.scene(graph.owner.id, nodes, selectedNodeId, graph.expandedNodes); }, [graph.owner.id, nodes, selectedNodeId, graph.expandedNodes]);
   useLayoutEffect(() => { viewRef.current(); }, [viewport]);
-  return <div ref={hostRef} className="node-graph-canvas-surface" aria-hidden="true" />;
+  return <div ref={surfaceRef} className="node-graph-canvas-surface" aria-hidden="true" />;
 });

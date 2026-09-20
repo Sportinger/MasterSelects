@@ -4,6 +4,7 @@ import type { CanvasMessage } from './nodeCanvasTypes';
 let painter: NodeCanvasPainter | undefined;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let ready = false;
+let reportedViewRevision: number | undefined;
 let frames = 0, paintMs = 0, maxPaintMs = 0, reportAt = performance.now();
 const frame = () => {
   timer = undefined;
@@ -12,6 +13,10 @@ const frame = () => {
     if (painter?.draw(start)) {
       const cost = performance.now() - start; frames++; paintMs += cost; maxPaintMs = Math.max(maxPaintMs, cost);
       if (!ready) { ready = true; self.postMessage({ type: 'ready' }); }
+      if (painter.viewRevision !== undefined && painter.viewRevision !== reportedViewRevision) {
+        reportedViewRevision = painter.viewRevision;
+        self.postMessage({ type: 'view-ready', revision: reportedViewRevision });
+      }
       if (import.meta.env.DEV && start - reportAt >= 1000) {
         self.postMessage({ type: 'stats', fps: frames * 1000 / (start - reportAt), paintMs: paintMs / frames, maxPaintMs });
         frames = 0; paintMs = 0; maxPaintMs = 0; reportAt = start;

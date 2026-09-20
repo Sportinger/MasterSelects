@@ -5,7 +5,7 @@ import { releasePreviewFrame, type PreviewFrame } from '../../../../../services/
 
 type Update = Exclude<CanvasMessage, { type: 'init' } | { type: 'previews' }>;
 /** A failed transferred canvas must be replaced, not reused for the software path. */
-export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: boolean) => void) {
+export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: boolean) => void, onViewReady: (revision: number) => void = () => {}) {
   let disposed = false, worker: Worker | undefined, painter: NodeCanvasPainter | undefined;
   let frame: number | undefined, watchdog: ReturnType<typeof setTimeout> | undefined;
   let base!: HTMLCanvasElement, overlay!: HTMLCanvasElement, previews!: HTMLCanvasElement;
@@ -13,6 +13,7 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
   let previewBatch = 0, previewInFlight = false;
   let previewWatchdog: ReturnType<typeof setTimeout> | undefined;
   let ready = false, lastDraw = -Infinity;
+  let reportedViewRevision: number | undefined;
   const latest = new Map<Update['type'], Update>(), pending = new Map<Update['type'], Update>();
   const createSurfaces = () => {
     base = document.createElement('canvas'); overlay = document.createElement('canvas');
@@ -46,7 +47,13 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
         changed = true;
       }
       if (painter && (changed || now - lastDraw >= 1000 / 30)) {
-        if (painter.draw(now)) markReady(); lastDraw = now;
+        if (painter.draw(now)) {
+          markReady();
+          if (painter.viewRevision !== undefined && painter.viewRevision !== reportedViewRevision) {
+            reportedViewRevision = painter.viewRevision; onViewReady(reportedViewRevision);
+          }
+        }
+        lastDraw = now;
       }
       if (painter?.animated) frame = requestAnimationFrame(tick);
     } catch { fallback(); }
@@ -93,9 +100,10 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
     else {
       worker = new Worker(new URL('./nodeCanvas.worker.ts', import.meta.url), { type: 'module' });
       worker.onerror = () => fallback();
-      worker.onmessage = (event: MessageEvent<{ type: string; fps?: number; paintMs?: number; maxPaintMs?: number; previewCount?: number }>) => {
+      worker.onmessage = (event: MessageEvent<{ type: string; revision?: number; fps?: number; paintMs?: number; maxPaintMs?: number; previewCount?: number }>) => {
         if (event.data.type === 'ready') markReady();
         if (event.data.type === 'failed') fallback();
+        if (event.data.type === 'view-ready' && event.data.revision !== undefined) onViewReady(event.data.revision);
         if (event.data.type === 'previews-ready') {
           previewInFlight = false; clearTimeout(previewWatchdog);
           if (import.meta.env.DEV) host.dataset.previewCount = String(event.data.previewCount ?? 0);
