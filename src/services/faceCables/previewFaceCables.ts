@@ -33,9 +33,9 @@ export function previewFaceCables(clipId: string, configs: FaceCableConfig[], ti
   const keys = timeline.getClipKeyframes(clipId);
   if (keys.some(k => ['rotation.x', 'rotation.y', 'position.z'].includes(k.property))) throw new Error('Animated 3D transforms are not supported.');
   const mapping = trackingPreviewTransform(getInterpolatedClipTransform(keys, time, clip.transform, { stabilizationEnabled: clip.videoInspectorSections?.stabilization }), source, comp);
-  const face = samplePreciseFace(series, surfaceSourceTime(clip, time, keys.filter(k => k.property === 'speed')))?.faces[0];
   const operatorPlan = compileCableOperatorGraph(clip.effects.find(e => e.id === effectId)?.params ?? {});
   const params = operatorPlan.params;
+  const face = samplePreciseFace(series, surfaceSourceTime(clip, time, keys.filter(k => k.property === 'speed')), Number(params.trackingSmoothing ?? 0))?.faces[0];
   const version = params.faceShadows ? 4 : 3;
   const aspect = comp.width / comp.height, layout = cableFrameLayout(version, configs);
   const facePoints = (params.faceCollision || params.faceShadows) && face?.length ? cableFacePoints(face, mapping, aspect) : undefined;

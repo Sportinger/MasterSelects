@@ -12,7 +12,7 @@ export function sceneCompositeStyle(data: LayerRenderData[], scene: SceneLayer3D
     blendMode: owner?.blendMode ?? 'normal' as const,
     colorCorrection: owner?.colorCorrection,
     effects: (owner?.effects ?? []).filter(effect => !(effect.enabled && (applied.has(effect.id)
-      || (visual?.kind === 'face-cables' && effect.type === 'face-cables')
+      || ((visual?.kind === 'face-cables' || visual?.surfacePlan) && effect.type === 'face-cables' && effect.params.scene3D)
       || (visual?.kind === 'voxel' && effect.type === 'voxel-relief')))),
   };
 }

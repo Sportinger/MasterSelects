@@ -1,3 +1,4 @@
+import { NodeCatalog } from './workspace/NodeCatalog';
 import { getEffectOperator } from '../../../services/operators/operatorRegistry';
 import { useUnifiedNodeActions } from './useUnifiedNodeActions';
 import { useCallback, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
@@ -62,6 +63,7 @@ function batched(label: string, run: () => void): void {
 }
 
 export function NodeWorkspacePanel() {
+  const [catalogOpen, setCatalogOpen] = useState(false);
   const [viewTheme, setViewTheme] = useState<NodeGraphViewTheme>('general');
   const subject = useNodeGraphSubject(viewTheme);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -385,6 +387,8 @@ export function NodeWorkspacePanel() {
   const flockMenu = Boolean(subject.clip.flock && (flockContext || (!contextMenu?.nodeId && selectedNode?.groupId === 'flock')));
   const operatorContext = contextMenuNode?.binding?.kind === 'effect-operator' ? contextMenuNode.binding : null;
   const canDeleteContext = operatorContext ? operatorContext.nodeId !== 'wind' && Boolean(getEffectOperator(operatorContext.operator)?.addable)
+    : contextMenuNode?.binding?.kind === 'scene-operator' ? Boolean(getEffectOperator(contextMenuNode.binding.operator)?.addable)
+    : contextMenuNode?.binding?.kind === 'operator-group' ? false
     : contextMenuNode?.binding?.kind === 'color-node' ? !['input', 'output'].includes(contextMenuNode.binding.nodeType)
     : canDeleteNodeFromClip(subject.clip, contextMenuNode);
   const viewLabel = activeTheme === 'color' ? 'Color subgraph' : subject.view.label;
@@ -430,6 +434,8 @@ export function NodeWorkspacePanel() {
               </>
             )}
           </nav>
+          <button type="button" className="node-workspace-breadcrumb-link node-catalog-toggle" aria-pressed={catalogOpen}
+            onClick={event => { if (event.detail > 0) event.currentTarget.blur(); setCatalogOpen(open => !open); }}>Catalog</button>
           {selectedNode?.groupId === 'color' && (
             <div className="node-workspace-view-actions">
               <button type="button" onClick={() => addColorGraphNode('primary')}>+ Primary</button>
@@ -459,14 +465,15 @@ export function NodeWorkspacePanel() {
           onDeleteNode={unified.deleteNode}
           onDeleteNodes={ids => batched('Delete nodes', () => ids.forEach(unified.deleteNode))}
           onDuplicateSelection={flockSelection.length === selectedNodeIds.length ? () => selectFlockNodes(flockActions.duplicate(flockSelection)) : undefined}
-          onGroupSelection={flockSelection.length === selectedNodeIds.length ? () => { const id = flockActions.group(flockSelection, 'Group'); if (id) selectFlockNodes([id]); } : undefined}
+          onGroupSelection={flockSelection.length > 0 && flockSelection.length === selectedNodeIds.length ? () => { const id = flockActions.group(flockSelection, 'Group'); if (id) selectFlockNodes([id]); }
+            : () => unified.groupNodes(selectedNodeIds.length ? selectedNodeIds : selectedNode ? [selectedNode.id] : [])}
           onToggleNodeBypass={unified.toggleBypass}
           onOpenAddMenu={adapter.supportsAddMenu ? setContextMenu : undefined}
           onToggleGroup={id => { unified.toggleGroup(id); const group = subject.graph.groups?.find(g => g.id === id); if (group) selectNode(group.proxyId); }}
           layoutScaleX={adapter.layoutScaleX}
         />
       </div>
-      <NodeInspector
+      {catalogOpen ? <NodeCatalog width={inspectorWidth} /> : <NodeInspector
         node={selectedNode}
         clip={subject.clip}
         inspectorWidth={inspectorWidth}
@@ -475,7 +482,7 @@ export function NodeWorkspacePanel() {
         onStartResizeInspector={startInspectorResize}
         showClipActions={activeTheme === 'general'}
         flockActions={subject.clip.flock ? flockActions : undefined}
-      />
+      />}
       {contextMenu && !flockMenu && (
         <NodeContextMenu
           x={contextMenu.x}

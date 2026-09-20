@@ -1,3 +1,4 @@
+import { defaultSceneGraph } from '../../src/services/operators/sceneGraph';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildLayersAtTime,
@@ -888,6 +889,7 @@ describe('ExportLayerBuilder', () => {
         type: 'image',
         imageUrl: 'blob:data-only-image',
       },
+      nodeGraph: { version: 1, nodes: [], edges: [], scene: defaultSceneGraph() },
       transform: {},
       effects: [],
     } as unknown as TimelineClip;
@@ -925,6 +927,7 @@ describe('ExportLayerBuilder', () => {
     const layers = buildLayersAtTime(ctx, clipStates, null, false);
 
     expect(layers).toHaveLength(1);
+    expect(layers[0]?.sceneGraph).toEqual(clip.nodeGraph!.scene);
     expect(layers[0]?.source).toEqual({
       type: 'image',
       imageElement,

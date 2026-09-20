@@ -18,7 +18,7 @@ describe('unified clip canvas and canonical effect chain', () => {
     clip.effects = [face, brightness];
     expect(imageChain(clip)).toEqual([['source', 'effect-face'], ['effect-face', 'effect-bright'], ['effect-bright', 'output']]);
     const graph = unified(clip);
-    expect(graph.nodes.filter(n => n.binding?.kind === 'effect-operator')).toHaveLength(12);
+    expect(graph.nodes.some(n => n.operatorId === 'tracking.smooth')).toBe(true);
     expect(graph.edges).toContainEqual(expect.objectContaining({ fromNodeId: 'clip-graph:clip:effect:face/output', toNodeId: 'effect-bright' }));
   });
 
@@ -76,7 +76,8 @@ describe('unified clip canvas and canonical effect chain', () => {
     const graph = buildUnifiedClipGraph(buildClipNodeGraphDocument(clip), clip, [clip, light, camera]);
     expect(graph.groups?.map(g => g.id)).toContain('scene3d');
     const roles = graph.nodes.filter(n => n.binding?.kind === 'scene-node').map(n => n.binding!.kind === 'scene-node' ? n.binding!.role : '');
-    expect(roles).toEqual(expect.arrayContaining(['geometry', 'depth', 'material', 'transform', 'render', 'camera', 'light']));
+    expect(roles).toEqual(expect.arrayContaining(['camera', 'light']));
+    expect(graph.nodes.map(n => n.operatorId)).toEqual(expect.arrayContaining(['geometry.source', 'texture.image', 'texture.uv', 'material.surface', 'scene.mesh', 'scene.clip-transform', 'scene.render', 'depth.estimate']));
     expect(graph.edges).toContainEqual(expect.objectContaining({ fromNodeId: 'clip-graph:clip:scene3d/render', toNodeId: 'effect-bright' }));
     const ids = new Set(graph.nodes.map(n => n.id));
     expect(graph.edges.every(e => ids.has(e.fromNodeId) && ids.has(e.toNodeId))).toBe(true);

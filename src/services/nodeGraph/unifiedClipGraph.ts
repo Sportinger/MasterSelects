@@ -2,6 +2,7 @@ import { withClipSceneGraph } from './clipSceneGraph';
 import type { NodeGraph, NodeGraphDocument, NodeGraphNode } from '../../types/nodeGraph';
 import type { TimelineClip } from '../../types';
 import { buildEffectOperatorGraph } from './effectGraphProjection';
+import { foldOperatorGroups } from './nestedOperatorGroups';
 
 /** A single canvas projection of every domain. Grouping changes presentation, never processing. */
 export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: TimelineClip, clips: TimelineClip[] = []): NodeGraph {
@@ -36,9 +37,11 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     // Boundary adapters only connect the containing clip chain; internal ports retain their semantics.
     for (const edge of edges) {
       if (edge.toNodeId === rootNode.id) {
+        const target = groupId === 'scene3d' && edge.type === 'geometry'
+          ? innerNodes.find(n => n.operatorId === 'geometry.source') ?? entrance : entrance;
         const id = `group-in-${edge.toPortId}`;
-        if (!entrance.inputs.some(p => p.id === id)) entrance.inputs = [...entrance.inputs, { id, label: 'Clip input', type: edge.type, direction: 'input' }];
-        edge.toNodeId = entrance.id; edge.toPortId = id;
+        if (!target.inputs.some(p => p.id === id)) target.inputs = [...target.inputs, { id, label: 'Clip input', type: edge.type, direction: 'input' }];
+        edge.toNodeId = target.id; edge.toPortId = id;
       }
       if (edge.fromNodeId === rootNode.id) {
         const id = `group-out-${edge.fromPortId}`;
@@ -47,9 +50,14 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
       }
     }
     nodes.push(...innerNodes); group.nodeIds.push(...innerNodes.map(n => n.id));
+    for (const nested of inner.groups ?? []) {
+      const collectMembers = (id: string): string[] => (inner.groups ?? []).filter(g => g.parentId === id).flatMap(g => [...g.nodeIds, ...collectMembers(g.id)]);
+      groups.push({ ...nested, id: `${groupId}/${nested.id}`, parentId: nested.parentId ? `${groupId}/${nested.parentId}` : groupId,
+        proxyId: `${inner.id}/@${nested.id}`, nodeIds: [...nested.nodeIds, ...collectMembers(nested.id)].map(idFor) });
+    }
     edges.push(...inner.edges.map(edge => ({ ...edge, id: `${inner.id}/${edge.id}`, fromNodeId: idFor(edge.fromNodeId), toNodeId: idFor(edge.toNodeId) })));
     cursor = Math.max(cursor + 280, ...innerNodes.map(n => n.layout.x + 330));
     expansion = cursor - rootNode.layout.x - 280;
   }
-  return { ...root, nodes, edges, groups };
+  return foldOperatorGroups({ ...root, nodes, edges, groups }, clip.nodeGraph);
 }

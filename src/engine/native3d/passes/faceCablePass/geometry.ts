@@ -34,7 +34,7 @@ export function buildCableSceneGeometry(bake: CableSceneBake, time: number) {
   }
   if (!bake.depthGrid) indices.push(0, 2, 1, 0, 3, 2);
   const outline: number[] = [];
-  if (data[base]) {
+  if (data[base] && bake.surface?.face !== false) {
     const normals = new Float32Array(468 * 3);
     const point = (i: number) => data.subarray(base + 21 + i * 5, base + 24 + i * 5);
     for (let i = 0; i < bake.triangles.length; i += 3) {

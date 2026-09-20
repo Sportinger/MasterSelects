@@ -41,6 +41,7 @@ export interface Layer {
   /** Render-space rotation in radians. A number represents Z-only rotation. */
   rotation: number | { x: number; y: number; z: number };
   is3D?: boolean;  // When true, layer participates in the shared 3D scene
+  sceneGraph?: import('./operatorGraph').SceneOperatorGraph;
   wireframe?: boolean;  // Debug: show as wireframe
   // Mask properties (passed from timeline clip masks for GPU processing)
   maskFeather?: number;  // Blur radius in pixels (0-50), handled in GPU shader

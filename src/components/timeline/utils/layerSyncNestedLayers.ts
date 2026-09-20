@@ -151,6 +151,7 @@ export function buildLayerSyncNestedLayers({
     }
     if (transitionRender) baseLayer.transitionRender = transitionRender;
     if (nestedClip.is3D) baseLayer.is3D = true;
+    baseLayer.sceneGraph = nestedClip.nodeGraph?.scene;
 
     if (nestedClip.source?.videoElement) {
       layers.push({

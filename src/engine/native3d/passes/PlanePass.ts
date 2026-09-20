@@ -89,6 +89,7 @@ export class PlanePass {
         !transparent && layer.alphaMode === 'opaque',
         !!(layer.maskClipId && maskTextureManager?.hasMaskTexture(layer.maskClipId)),
         layer.maskInvert === true,
+        layer.surfacePlan,
       );
       device.queue.writeBuffer(uniformBuffer, 0, uniformData.buffer, uniformData.byteOffset, uniformData.byteLength);
       const maskTextureView = layer.maskClipId && maskTextureManager
@@ -113,6 +114,7 @@ export class PlanePass {
   }
 
   resolveTextureView(device: GPUDevice, layer: ScenePlaneLayer | SceneVoxelLayer): GPUTextureView | null {
+    if (layer.surfacePlan?.textured === false) return this.whiteMaskView;
     const current = this.textures.get(layer.layerId);
     const sourceState = resolvePlaneTextureSource(layer as ScenePlaneLayer, current);
     if (!sourceState) {

@@ -43,6 +43,7 @@ export class FaceCablePass {
       return buffer;
     };
     for (const layer of layers) {
+      if (layer.opacity <= 0) continue;
       const bake = decodeCableScene(layer.cableParams.sceneData), time = Number(layer.cableParams.cableTime);
       if (!bake || !Number.isFinite(time) || time < 0 || time >= bake.duration) {
         const invalid = `${layer.layerId}:${!!bake}:${time}`;
@@ -86,6 +87,8 @@ export class FaceCablePass {
       lighting.forEach((l, i) => uniforms.set(l.data, 32 + i * 32));
       uniforms.set([lighting.length, layer.opacity, cached.geometry.outline.length / 4, (layer.videoRotation ?? 0) / 90], 160);
       uniforms.set(cached.geometry.outline, 164);
+      uniforms.set(layer.surfacePlan?.uv ?? [1, 1, 0, 0], 564);
+      uniforms.set([...(layer.surfacePlan?.tint ?? [1, 1, 1]), layer.surfacePlan?.textured === false ? 0 : 1], 568);
       const uniform = upload(uniforms, GPUBufferUsage.UNIFORM);
       const pass = encoder.beginRenderPass({ colorAttachments: [{ view: color, loadOp: 'load', storeOp: 'store' }],
         depthStencilAttachment: { view: depth, depthLoadOp: 'load', depthStoreOp: 'store' }, label: 'native-face-cables-scene' });

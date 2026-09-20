@@ -14,6 +14,7 @@ export function buildPlaneUniformData(
   forceOpaqueAlpha: boolean,
   hasMask: boolean,
   maskInvert: boolean,
+  surface?: ScenePlaneLayer['surfacePlan'],
 ): Float32Array {
   const data = new Float32Array(PLANE_UNIFORM_SIZE / 4);
   data.set(mvp, 0);
@@ -21,6 +22,8 @@ export function buildPlaneUniformData(
   data[17] = forceOpaqueAlpha ? 1 : 0;
   data[18] = hasMask ? 1 : 0;
   data[19] = maskInvert ? 1 : 0;
+  data.set(surface?.uv ?? [1, 1, 0, 0], 20);
+  data.set([...(surface?.tint ?? [1, 1, 1]), surface?.textured === false ? 0 : 1], 24);
   return data;
 }
 
@@ -60,8 +63,8 @@ function createPlaneScaleMatrix(
   }
 
   return new Float32Array([
-    planeWidth, 0, 0, 0,
-    0, planeHeight, 0, 0,
+    planeWidth * (layer.surfacePlan?.width ?? 1), 0, 0, 0,
+    0, planeHeight * (layer.surfacePlan?.height ?? 1), 0, 0,
     0, 0, 1, 0,
     0, 0, 0, 1,
   ]);

@@ -24,7 +24,7 @@ import type {
 } from './types';
 
 function getNodeBacking(node: NodeGraphNode): ClipNodeGraphBacking {
-  if (node.binding && node.binding.kind !== 'color-node' && node.binding.kind !== 'flock-node' && node.binding.kind !== 'effect-operator' && node.binding.kind !== 'scene-node') {
+  if (node.binding && node.binding.kind !== 'color-node' && node.binding.kind !== 'flock-node' && node.binding.kind !== 'effect-operator' && node.binding.kind !== 'scene-node' && node.binding.kind !== 'scene-operator' && node.binding.kind !== 'operator-group') {
     return node.binding;
   }
 
@@ -144,6 +144,7 @@ function buildProjectedClipNodeGraphState(
     nodes: graph.nodes.map(createNodeState),
     customNodes: cloneCustomNodeDefinitions(clip.nodeGraph?.customNodes),
     groups: clip.nodeGraph?.groups ? structuredClone(clip.nodeGraph.groups) : undefined,
+    scene: clip.nodeGraph?.scene ? structuredClone(clip.nodeGraph.scene) : undefined,
     forcedBuiltIns: clip.nodeGraph?.forcedBuiltIns ? [...clip.nodeGraph.forcedBuiltIns] : undefined,
     ...(manualEdges !== undefined ? { manualEdges } : {}),
   };
@@ -183,6 +184,7 @@ export function reconcileClipNodeGraphState(
     forcedBuiltIns: existingState.forcedBuiltIns ? [...existingState.forcedBuiltIns] : undefined,
     ...(manualEdges !== undefined ? { manualEdges } : {}),
     groups: existingState.groups ? structuredClone(existingState.groups) : undefined,
+    scene: existingState.scene ? structuredClone(existingState.scene) : undefined,
     updatedAt: existingState.updatedAt,
   };
 }
@@ -287,6 +289,7 @@ export function cloneClipNodeGraph(graph?: ClipNodeGraph): ClipNodeGraph | undef
     forcedBuiltIns: graph.forcedBuiltIns ? [...graph.forcedBuiltIns] : undefined,
     manualEdges: cloneManualEdges(graph.manualEdges),
     groups: graph.groups ? structuredClone(graph.groups) : undefined,
+    scene: graph.scene ? structuredClone(graph.scene) : undefined,
     updatedAt: graph.updatedAt,
   };
 }
@@ -336,7 +339,10 @@ export function remapClipNodeGraphEffectIds(
         backing: { kind: 'clip-effect', effectId: nextEffectId },
       };
     }),
-    groups: cloned.groups ? Object.fromEntries(Object.entries(cloned.groups).map(([id, state]) => [id.startsWith('effect:') ? `effect:${effectIdMap.get(id.slice(7)) ?? id.slice(7)}` : id, state])) : undefined,
+    groups: cloned.groups ? Object.fromEntries(Object.entries(cloned.groups).map(([id, state]) => {
+      const [effectId, ...path] = id.slice(7).split('/');
+      return [id.startsWith('effect:') ? `effect:${effectIdMap.get(effectId) ?? effectId}${path.length ? `/${path.join('/')}` : ''}` : id, state];
+    })) : undefined,
     manualEdges: cloned.manualEdges?.map((candidate) => remapManualEdgeEffectIds(candidate, effectIdMap)),
     updatedAt: Date.now(),
   };

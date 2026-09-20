@@ -1,4 +1,5 @@
 import { NodeGraphGroups } from './canvas/NodeGraphGroups';
+import { annotatedGraphBounds, nodeGroupBounds } from './canvas/groupBounds';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent, WheelEvent } from 'react';
 import type {
@@ -105,7 +106,7 @@ export function NodeGraphCanvas({
     }))
   ), [draftLayouts, graph.nodes, layoutScaleX]);
   const nodesById = useMemo(() => new Map(displayNodes.map((node) => [node.id, node])), [displayNodes]);
-  const graphBounds = useMemo(() => getGraphBounds({ ...graph, nodes: displayNodes }), [displayNodes, graph]);
+  const graphBounds = useMemo(() => annotatedGraphBounds(graph, displayNodes), [displayNodes, graph]);
   const selectedEdge = useMemo(() => (
     selectedEdgeId ? graph.edges.find((edge) => edge.id === selectedEdgeId) ?? null : null
   ), [graph.edges, selectedEdgeId]);
@@ -127,11 +128,14 @@ export function NodeGraphCanvas({
     setViewport({
       zoom: nextZoom,
       panX: FIT_MARGIN - (bounds.left * nextZoom),
-      panY: FIT_MARGIN - ((bounds.top - 48) * nextZoom),
+      panY: FIT_MARGIN - (bounds.top * nextZoom),
     });
   }, []);
   const fitGraph = useCallback(() => fitBounds(graphBounds), [fitBounds, graphBounds]);
-  const focusGroup = (id: string) => fitBounds(getGraphBounds({ ...graph, nodes: displayNodes.filter(n => n.groupId === id) }));
+  const focusGroup = (id: string) => {
+    const members = new Set(graph.groups?.find(g => g.id === id)?.nodeIds);
+    fitBounds(nodeGroupBounds(graph, displayNodes).get(id) ?? getGraphBounds({ ...graph, nodes: displayNodes.filter(n => members.has(n.id)) }));
+  };
 
   const fittedGraph = useRef<string | null>(null);
   useEffect(() => {

@@ -467,6 +467,14 @@ Touch activation suppresses the native tap highlight.
 
 ### Face Cables
 
+The [Node Workspace](./Node-Workspace.md) exposes nested Tracking, Surface & depth,
+Cable physics and Cable rendering groups. MediaPipe landmarks, face meshing, depth
+calibration, depth meshing and surface merging are separate typed stages. Merge
+seam width and subdivision settings are saved with the successful bake and shared
+by rendering and collision geometry. The node catalog lists reusable operators;
+existing projects migrate their graph without discarding tracking or baked data.
+
+
 Add **Effects > Add Effect > Tracking > Face Cables** to a video clip. Its
 tracking source is the same clip's precise face result, restored independently
 of the open inspector. Create/retrack that result in **Properties > Tracking**;

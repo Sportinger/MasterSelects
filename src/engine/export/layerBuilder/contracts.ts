@@ -24,6 +24,7 @@ export interface ExportClipStateLike {
 }
 
 export interface BaseLayerPropsLike {
+  sceneGraph?: import('../../../types/operatorGraph').SceneOperatorGraph;
   id: string;
   name: string;
   sourceClipId: string;

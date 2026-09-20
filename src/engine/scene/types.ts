@@ -45,6 +45,7 @@ export interface SceneLayerBase {
   /** Effects evaluated on the source texture before its 3D world transform. */
   layerSpaceEffects?: Effect[];
   mediaTime?: number;
+  surfacePlan?: import('../../types/operatorGraph').SceneSurfacePlan;
 }
 
 export interface ScenePlaneLayer extends SceneLayerBase {

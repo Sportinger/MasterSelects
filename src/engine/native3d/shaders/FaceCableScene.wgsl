@@ -1,5 +1,5 @@
 struct Light { projection: mat4x4f, position: vec4f, color: vec4f, settings: vec4f, direction: vec4f }
-struct Params { mvp: mat4x4f, world: mat4x4f, lights: array<Light, 4>, options: vec4f, outline: array<vec4f, 100> }
+struct Params { mvp: mat4x4f, world: mat4x4f, lights: array<Light, 4>, options: vec4f, outline: array<vec4f, 100>, uvTransform: vec4f, tint: vec4f }
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var texSampler: sampler;
 @group(0) @binding(2) var video: texture_2d<f32>;
@@ -56,7 +56,10 @@ fn visibility(p: vec3f, i: u32) -> f32 {
   if (params.options.w == 1.0) { sourceUv = vec2f(v.uv.y, 1.0 - v.uv.x); }
   if (params.options.w == 2.0) { sourceUv = vec2f(1.0 - v.uv.x, 1.0 - v.uv.y); }
   if (params.options.w == 3.0) { sourceUv = vec2f(1.0 - v.uv.y, v.uv.x); }
-  if (v.material < 1.5) { base = textureSampleLevel(video, texSampler, sourceUv, 0.0).rgb; }
+  if (v.material < 1.5) {
+    let sampled = textureSampleLevel(video, texSampler, sourceUv * params.uvTransform.xy + params.uvTransform.zw, 0.0).rgb;
+    base = select(vec3f(1.0), sampled, params.tint.w > 0.5) * params.tint.rgb;
+  }
   var illumination = vec3f(0.15); var shadowWeight = 0.0; var totalWeight = 0.0;
   for (var i = 0u; i < u32(params.options.x); i++) {
     let light = params.lights[i]; let delta = light.position.xyz - v.world;

@@ -50,14 +50,14 @@ describe('reusable cable operator execution', () => {
       { id: 'b', from: 'transform2', output: 'scene', to: 'transform', input: 'scene' });
     expect(validateEffectGraph(cyclic)).toContain('Cycles are not supported.');
     for (const value of ['{', 'null', JSON.stringify({ ...graph, nodes: [null] })]) expect(() => readEffectGraph(value, defaultCableOperatorGraph)).toThrow();
-    expect(() => compileCableOperatorGraph({ operatorGraph: JSON.stringify({ ...graph, edges: graph.edges.map(e => e.id === 'surface-depth-contact' ? { ...e, from: 'face-contact' } : e) }) })).toThrow('surface.hybrid');
+    expect(() => compileCableOperatorGraph({ operatorGraph: JSON.stringify({ ...graph, edges: graph.edges.map(e => e.id === 'surface-depth-contact' ? { ...e, from: 'face-contact' } : e) }) })).toThrow('Invalid connection');
   });
 
   it('keeps saved depth and reads the same effect toggle bindings after serialization', () => {
     const graph = defaultCableOperatorGraph();
     const params = { operatorGraph: JSON.stringify(graph), sceneData: 'existing-depth', sceneDepth: true, sceneDepthCollision: false, faceCollision: true };
     expect(compileCableOperatorGraph(params).params).toMatchObject({ sceneData: 'existing-depth', sceneDepth: true, sceneDepthCollision: false, faceCollision: true });
-    graph.edges = graph.edges.filter(e => e.from !== 'depth' || e.to !== 'surface');
+    graph.edges = graph.edges.filter(e => e.from !== 'depth' || e.to !== 'calibration');
     expect(compileCableOperatorGraph({ ...params, operatorGraph: JSON.stringify(graph) }).params.sceneDepth).toBe(false);
   });
 });

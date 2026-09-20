@@ -7,6 +7,7 @@ import { renderHostPort } from '../render/renderHostPort';
 import { cableOperatorGraph, compileCableOperatorGraph } from '../faceCables/cableOperatorGraph';
 import { EFFECT_GRAPH_PARAM, connectEffectGraph, operatorEnabled, validateEffectGraph } from './effectGraph';
 import { getEffectOperator } from './operatorRegistry';
+import { SCENE_OPERATORS } from './sceneOperators';
 
 type Params = Record<string, unknown>;
 /** One owner mutation for both form and graph views. Old baked artifacts are retained until a successful bake. */
@@ -60,12 +61,13 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
       const node = graph.nodes.find(n => n.id === id);
       if (!node || node.id === 'wind' || !getEffectOperator(node.operator)?.addable) throw new Error('This group requires that node.');
       graph.nodes = graph.nodes.filter(n => n.id !== id); graph.edges = graph.edges.filter(e => e.from !== id && e.to !== id); delete graph.layout[id];
+      graph.groups?.forEach(g => { g.nodeIds = g.nodeIds.filter(nodeId => nodeId !== id); });
     }),
     addNode: (operatorId: string) => {
       const id = `node-${crypto.randomUUID().slice(0, 8)}`;
       editEffectGraph(clipId, effectId, 'Add node', (graph, params) => {
         const operator = getEffectOperator(operatorId);
-        if (!operator?.addable) throw new Error('Operator cannot be added here.');
+        if (!operator?.addable || SCENE_OPERATORS.includes(operator)) throw new Error('Operator cannot be added here.');
         const node = { id, operator: operator.id, bindings: {} as Record<string, string | [string, string, string]> };
         for (const p of operator.parameters) {
           const key = `${id}_${p.id}`;
@@ -74,7 +76,11 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
             (node.bindings[p.id] as string[]).forEach((k, i) => { params[k] = (p.default as number[])[i]; });
           } else { node.bindings[p.id] = key; params[key] = p.default; }
         }
+        const template = graph.nodes.find(n => n.operator === operatorId);
+        if (template) for (const edge of graph.edges.filter(e => e.to === template.id)) graph.edges.push({ ...edge, id: `${edge.from}-${id}-${edge.input}`, to: id });
+        const group = template && graph.groups?.find(g => g.nodeIds.includes(template.id));
         graph.nodes.push(node); graph.layout[id] = { x: 750, y: 650 + (graph.nodes.length - 13) * 160 };
+        (group ?? graph.groups?.find(g => g.id === 'simulation'))?.nodeIds.push(id);
         const simulation = graph.nodes.find(n => n.operator === 'simulation.rope')!;
         const output = operator.outputs[0];
         if (output.type === 'force' || output.type === 'drag') graph.edges.push({ id: `${id}-${simulation.id}`, from: id, output: output.id, to: simulation.id, input: output.type === 'force' ? 'forces' : 'drag' });

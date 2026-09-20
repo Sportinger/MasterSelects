@@ -2,7 +2,7 @@ import shader from '../../shaders/FaceCableScene.wgsl?raw';
 import { SCENE_COLOR_FORMAT, SCENE_DEPTH_FORMAT } from '../../sceneRenderer/constants';
 import { Logger } from '../../../../services/logger';
 
-export const CABLE_SCENE_UNIFORM_FLOATS = 32 + 4 * 32 + 4 + 400;
+export const CABLE_SCENE_UNIFORM_FLOATS = 32 + 4 * 32 + 4 + 400 + 8;
 export const CABLE_SCENE_VERTEX_LAYOUT: GPUVertexBufferLayout = {
   arrayStride: 48, attributes: [
     { shaderLocation: 0, offset: 0, format: 'float32x3' }, { shaderLocation: 1, offset: 12, format: 'float32x3' },

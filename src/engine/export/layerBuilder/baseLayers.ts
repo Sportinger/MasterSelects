@@ -113,6 +113,7 @@ export function buildBaseLayerProps(
       ? { maskClipId: clip.id, maskInvert: false, masks: mappedAnimation.masks }
       : clip.masks?.some(mask => mask.enabled !== false) ? { maskClipId: clip.id, maskInvert: false } : {}),
     ...(transitionRender ? { transitionRender } : {}),
+    sceneGraph: clip.nodeGraph?.scene,
     ...(clip.is3D ? { is3D: true } : {}),
   };
 }
@@ -181,6 +182,7 @@ export function buildNestedBaseLayer(
       ? { maskClipId: nestedClip.id, maskInvert: false, masks }
       : {}),
     ...(transitionRender ? { transitionRender } : {}),
+    sceneGraph: nestedClip.nodeGraph?.scene,
     ...(nestedClip.is3D ? { is3D: true } : {}),
   };
 }

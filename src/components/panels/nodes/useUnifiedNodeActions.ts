@@ -4,7 +4,9 @@ import type { TimelineClip } from '../../../types';
 import { useTimelineStore } from '../../../stores/timeline';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import { createClipNodeGraphState } from '../../../services/nodeGraph';
-import { createEffectGraphActions } from '../../../services/operators/effectGraphEditing';
+import { createEffectGraphActions, editEffectGraph } from '../../../services/operators/effectGraphEditing';
+import { createSceneGraphActions, editSceneGraph } from '../../../services/operators/sceneGraphEditing';
+import { groupOperators } from '../../../services/operators/operatorGroups';
 import type { FlockGraphActions } from './flock/useFlockGraphActions';
 
 interface BaseActions {
@@ -21,6 +23,7 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
   const bindingActions = (node: NodeGraphNode): BaseActions | null => {
     if (!clip) return null;
     const binding = node.binding;
+    if (binding?.kind === 'scene-operator') return createSceneGraphActions(clip.id);
     if (binding?.kind === 'scene-node') return {
       moveNode: (id, layout) => {
         const state = useTimelineStore.getState(), current = state.clips.find(c => c.id === clip.id)!;
@@ -51,18 +54,36 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
   });
   return {
     message, clearMessage: () => setMessage(''),
+    groupNodes: (ids: string[]) => safely(() => {
+      if (!clip) return;
+      const selected = ids.map(id => graph?.nodes.find(n => n.id === id)).filter((n): n is NodeGraphNode => !!n);
+      const effects = new Set(selected.map(n => n.binding && 'effectId' in n.binding ? n.binding.effectId : undefined));
+      if (!selected.length || effects.size !== 1 || selected.some(n => !['scene-operator', 'effect-operator', 'operator-group'].includes(n.binding?.kind ?? ''))) throw new Error('Select nodes from one effect or scene graph.');
+      const childIds = selected.filter(n => n.binding?.kind === 'operator-group').map(n => n.binding!.kind === 'operator-group' ? n.binding!.groupId.split('/').at(-1)! : '');
+      const nodeIds = selected.filter(n => n.binding?.kind !== 'operator-group').map(localId);
+      const effectId = [...effects][0];
+      if (effectId) editEffectGraph(clip.id, effectId, 'Group nodes', g => { groupOperators(g, nodeIds, childIds); });
+      else editSceneGraph(clip.id, 'Group nodes', d => { groupOperators(d.graph, nodeIds, childIds); });
+    }),
     moveNode: (id: string, position: NodeGraphLayout) => route(id, (actions, node) => {
-      if (node.groupId && !node.id.includes('/')) {
+      if (node.binding?.kind === 'operator-group' || (node.groupId && !node.id.includes('/'))) {
         const state = useTimelineStore.getState(), current = state.clips.find(c => c.id === clip!.id)!;
         if (state.isExporting || state.tracks.find(t => t.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
         const model = current.nodeGraph ?? createClipNodeGraphState(current);
-        state.updateClip(current.id, { nodeGraph: { ...model, groups: { ...model.groups, [node.groupId]: { ...model.groups?.[node.groupId], position } } } });
+        const id = node.binding?.kind === 'operator-group' ? node.binding.groupId : node.groupId!;
+        state.updateClip(current.id, { nodeGraph: { ...model, groups: { ...model.groups, [id]: { ...model.groups?.[id], position } } } });
       } else actions.moveNode(localId(node), { x: position.x - (node.groupOffset?.x ?? 0), y: position.y - (node.groupOffset?.y ?? 0) });
     }),
     toggleBypass: (id: string) => route(id, (actions, node) => actions.toggleBypass(localId(node))),
     deleteNode: (id: string) => route(id, (actions, node) => actions.deleteNode(localId(node))),
     connectPorts: (c: NodeGraphConnectionRequest) => safely(() => {
-      const from = graph?.nodes.find(n => n.id === c.fromNodeId), to = graph?.nodes.find(n => n.id === c.toNodeId);
+      const resolve = (id: string, port: string, direction: 'input' | 'output') => {
+        const node = graph?.nodes.find(n => n.id === id), endpoint = (direction === 'input' ? node?.inputs : node?.outputs)?.find(p => p.id === port)?.metadata?.groupEndpoint;
+        return endpoint ?? { nodeId: id, portId: port };
+      };
+      const a = resolve(c.fromNodeId, c.fromPortId, 'output'), b = resolve(c.toNodeId, c.toPortId, 'input');
+      c = { fromNodeId: a.nodeId, fromPortId: a.portId, toNodeId: b.nodeId, toPortId: b.portId };
+      const from = (graph?.expandedNodes ?? graph?.nodes)?.find(n => n.id === c.fromNodeId), to = (graph?.expandedNodes ?? graph?.nodes)?.find(n => n.id === c.toNodeId);
       if (!from || !to) return;
       const boundary = (node: NodeGraphNode, port: string) => !node.groupId || !node.id.includes('/') || port.startsWith('group-');
       if (boundary(from, c.fromPortId) && boundary(to, c.toPortId)) {
@@ -83,8 +104,10 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
       bindingActions(to)?.connectPorts({ ...c, fromNodeId: localId(from), toNodeId: localId(to) });
     }),
     disconnectEdge: (id: string) => safely(() => {
-      const edge = graph?.edges.find(e => e.id === id), node = graph?.nodes.find(n => n.id === edge?.toNodeId);
+      const edge = graph?.edges.find(e => e.id === id); let node = graph?.nodes.find(n => n.id === edge?.toNodeId);
       if (!edge || !node) return;
+      const endpoint = node.inputs.find(p => p.id === edge.toPortId)?.metadata?.groupEndpoint;
+      if (endpoint) node = graph?.expandedNodes?.find(n => n.id === endpoint.nodeId) ?? node;
       if (edge.toPortId.startsWith('group-') || edge.fromPortId.startsWith('group-')) throw new Error('Reconnect the Clip input/output ports to reorder effects, or bypass an effect to skip it.');
       bindingActions(node)?.disconnectEdge(id.slice(id.lastIndexOf('/') + 1));
     }),

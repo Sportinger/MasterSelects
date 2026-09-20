@@ -38,16 +38,29 @@ export function validateEffectGraph(graph: EffectOperatorGraph): string[] {
     visiting.delete(id); done.add(id); return true;
   };
   for (const n of graph.nodes) if (!visit(n.id)) { errors.push('Cycles are not supported.'); break; }
-  if (graph.nodes.filter(n => n.operator === 'scene.output').length !== 1) errors.push('The graph needs one clip output.');
+  if (graph.nodes.filter(n => n.operator === (graph.domain === 'scene' ? 'scene.render' : 'scene.output')).length !== 1) errors.push('The graph needs one clip output.');
+  if (graph.groups) {
+    if (!Array.isArray(graph.groups) || graph.groups.length > 32) return [...errors, 'Invalid groups.'];
+    const groups = new Map(graph.groups.map(g => [g?.id, g]));
+    const members = new Set<string>();
+    if (groups.size !== graph.groups.length) errors.push('Duplicate group ID.');
+    for (const g of graph.groups) {
+      if (!g || !/^[\w-]+$/.test(g.id) || typeof g.label !== 'string' || typeof g.color !== 'string' || !Array.isArray(g.nodeIds)) { errors.push('Invalid group.'); continue; }
+      for (const id of g.nodeIds) { if (!nodes.has(id) || members.has(id)) errors.push('Invalid group member.'); members.add(id); }
+      const parents = new Set([g.id]); let parent = g.parentId;
+      while (parent) { if (parents.has(parent) || !groups.has(parent)) { errors.push('Invalid group hierarchy.'); break; } parents.add(parent); parent = groups.get(parent)?.parentId; }
+    }
+  }
   return errors;
 }
 
 /** Missing graph means an older project. A malformed saved graph must never silently revert. */
-export function readEffectGraph(value: unknown, fallback: () => EffectOperatorGraph): EffectOperatorGraph {
+export function readEffectGraph(value: unknown, fallback: () => EffectOperatorGraph, migrate?: (graph: EffectOperatorGraph) => EffectOperatorGraph): EffectOperatorGraph {
   if (value === undefined || value === '') return fallback();
   if (typeof value !== 'string' || value.length > 500_000) throw new Error('Invalid saved operator graph.');
   let graph: EffectOperatorGraph;
   try { graph = JSON.parse(value); } catch { throw new Error('Invalid saved operator graph.'); }
+  if (migrate) graph = migrate(graph);
   const errors = validateEffectGraph(graph);
   if (errors.length) throw new Error(errors[0]);
   return graph;

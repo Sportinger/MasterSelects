@@ -34,22 +34,53 @@ preset library still use the existing Flock actions. Right-click a Flock node (o
 the canvas with a Flock node selected) for its operator menu. Color nodes edit the
 active grade directly; select a Color node to add Primary/Wheels nodes.
 
-Face Cables is a cyan group containing source, face tracking, anchors, depth,
-hybrid surface, collisions, wind, rope simulation, rendering and transform nodes.
-The shared operator registry defines typed ports and parameter bindings. Wind uses
-the same directional-force operation in cable physics and Flock's CPU/GPU solvers.
-Additional Wind, Gravity, Drag, Value and Oscillator nodes can be added from the
-node inspector. Connect values to Wind strength, and forces/drag to simulation.
-Invalid types, cycles and missing required inputs are rejected before committing.
-The standard effect form exposes the same settings and keyframes; physics/depth
-changes still require Bake or Rebake physics. Existing baked data is retained.
+Face Cables is a cyan group containing four nested groups: Tracking, Surface &
+depth, Cable physics and Cable rendering. MediaPipe produces landmarks; separate
+nodes smooth them, build anchors and construct the face mesh. Image depth passes
+through calibration and depth-to-mesh before the two meshes meet at Merge surface
+meshes. Both collision nodes use the same mesh-collision operator. The shared Wind
+operation remains used by both cable physics and Flock's CPU/GPU solvers.
 
-A gold **3D Scene** group shows geometry, material/surface, world transform,
-saved cable depth, scene rendering and overlapping camera/light/effector clip
-references. Inspectors edit the original clip fields, including complete XYZ
-transforms and camera lens settings. Scene dependency links reflect the existing
-renderer and timeline; arbitrary rewiring of that fixed scene pipeline is not
-supported. Camera/light references follow their clips' time ranges and visibility.
+Select nodes and press **Ctrl+G** to create a colored subgroup. Collapsed groups
+expose typed boundary ports that still address the original nodes. Their inspector
+renames them, changes their parent and ungroups them without changing processing.
+Groups can contain groups; layout, hierarchy and collapse state persist with the
+project. Grouping across different runtime owners is rejected.
+
+The inspector can add reusable force/value and surface operators. New surface
+operators copy compatible incoming connections from the existing stage; their
+parameters remain independent. Single inputs can also be connected using inspector
+dropdowns. Required inputs, incompatible types, cycles and unsupported executor
+combinations are rejected. Physics, smoothing and surface changes require a new
+bake; appearance/UV/material changes in the scene graph render immediately.
+Existing artifacts remain usable until a successful bake replaces them.
+
+A gold **3D Scene** group exposes an executable surface graph for video/image
+planes and baked Face Cables:
+
+```text
+Decoded frame + UV transform -> Image texture -> Surface material
+Plane geometry / Source geometry + Material -> Mesh -> 3D transform -> 3D render
+```
+
+Rewiring changes rendering: a material without a texture uses its solid color;
+a mesh without geometry/material or a disconnected render output produces no
+object. UV scale/offset, tint, opacity and plane size are independent parameters.
+Source geometry reuses the saved face/depth/cable bake. Removing the transform
+from the connected path bypasses the clip matrix without deleting its keyframes.
+The same saved definition reaches preview, nested compositions and export. No GPU
+objects or media handles are serialized. A saved explicit graph takes precedence
+over the generated default when effects change.
+
+Camera/light references still follow their clips' timing and visibility and expose
+their original settings. Models, splats, voxel relief and Flock retain their
+specialized geometry renderers and field-backed scene projections. The image
+surface executor currently renders one connected mesh per clip, not an arbitrary
+multi-object scene or shader program.
+
+**Catalog** opens a searchable live inventory of registered operators, Flock nodes
+and effects, including signal types, parameters and supported contexts. See the
+[Node Catalog](./Node-Catalog.md) for implementation ownership and extension rules.
 
 Right-clicking the canvas opens an Add Node menu. It can add AI Nodes at the clicked graph position, force field-backed built-ins such as Transform, Mask, and Color into the graph, and add existing effect types from an Effect Nodes submenu. Right-clicking a removable node also exposes Delete Node; pressing Delete or Backspace removes the selected Effect or AI node, and removes a forced built-in node when it was only shown by the graph.
 
@@ -92,6 +123,6 @@ repeated brightness/contrast operations.
 
 The canvas combines domain runtimes; it is not an unrestricted cross-domain shader
 compiler. Reusable force/value connections execute in the cable graph, Flock keeps
-its typed compiler, Color keeps its grade compiler, and scene dependencies remain
+its typed compiler, Color keeps its grade compiler, and image surfaces use the scene executor. Camera/light dependencies remain
 field-backed. New agent tools should use these validated mutations rather than UI
 coordinates or a separate copy of the graph.

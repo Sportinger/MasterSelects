@@ -97,6 +97,7 @@ export interface RenderTimelineTrackSnapshot {
 }
 
 export interface RenderTimelineClipSnapshot {
+  readonly sceneGraph?: import('../../../types/operatorGraph').SceneOperatorGraph;
   readonly id: string;
   readonly trackId: string;
   readonly name: string;

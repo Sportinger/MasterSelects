@@ -5,10 +5,12 @@ import type { CableDepthGrid } from './cableSceneDepth';
 
 export const SCENE_FACE_POINTS = 468;
 export const MAX_CABLE_SCENE_FLOATS = 14_000_000;
+export interface CableSurfacePlan { face: boolean; blendWidth: number; subdivisions: number }
 export interface CableSceneBake {
   version: 1 | 2; fps: number; frames: number; duration: number;
   depthGrid?: CableDepthGrid;
   depthBinding?: string;
+  surface?: CableSurfacePlan;
   cables: FaceCableConfig[]; triangles: number[]; outline: number[]; data: Float32Array;
 }
 export function cableSceneLayout(cables: FaceCableConfig[], depthGrid?: CableDepthGrid) {
@@ -36,6 +38,9 @@ export function decodeCableScene(value: unknown): CableSceneBake | null {
       || !Number.isFinite(b.duration) || b.duration <= 0 || typeof b.data !== 'string') throw Error();
     if (b.version === 1 && b.depthGrid !== undefined) throw Error();
     if (b.depthBinding !== undefined && (typeof b.depthBinding !== 'string' || b.depthBinding.length > 4_000_000)) throw Error();
+    if (b.surface !== undefined && (!b.surface || typeof b.surface.face !== 'boolean'
+      || !Number.isFinite(b.surface.blendWidth) || b.surface.blendWidth < 0 || b.surface.blendWidth > 0.2
+      || !Number.isInteger(b.surface.subdivisions) || b.surface.subdivisions < 0 || b.surface.subdivisions > 5)) throw Error();
     if (b.version === 2 && (!b.depthGrid || ![b.depthGrid.width, b.depthGrid.height].every(n => Number.isInteger(n) && n >= 3 && n <= 49))) throw Error();
     const count = b.frames * cableSceneLayout(b.cables, b.depthGrid).stride;
     if (count > MAX_CABLE_SCENE_FLOATS || !Array.isArray(b.triangles) || !b.triangles.length || b.triangles.length > 6000 || b.triangles.length % 3

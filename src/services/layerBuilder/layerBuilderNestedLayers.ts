@@ -61,6 +61,7 @@ export function buildNestedLayerBase(
   );
 
   const baseLayer: Omit<Layer, 'source'> = {
+    sceneGraph: nestedClip.nodeGraph?.scene,
     id: `nested-layer-${nestedClip.id}`,
     name: nestedClip.name,
     sourceClipId: nestedClip.id,

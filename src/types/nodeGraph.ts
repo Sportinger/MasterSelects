@@ -40,6 +40,7 @@ export type NodeGraphAudioSemanticKind =
   | 'audio-metadata';
 
 export interface NodeGraphPortMetadata {
+  groupEndpoint?: { nodeId: string; portId: string };
   semanticKind?: NodeGraphAudioSemanticKind | string;
   targetClipId?: string;
   signalRefId?: string;
@@ -101,6 +102,8 @@ export type NodeGraphViewTheme = 'general' | 'color' | 'motion' | 'audio' | 'flo
 export type SceneNodeRole = 'geometry' | 'material' | 'transform' | 'render' | 'depth' | 'camera' | 'light' | 'splat-effector';
 
 export type NodeGraphNodeBinding =
+  | { kind: 'scene-operator'; nodeId: string; operator: string }
+  | { kind: 'operator-group'; groupId: string; effectId?: string }
   | { kind: 'scene-node'; clipId: string; nodeId: string; role: SceneNodeRole; effectId?: string }
   | { kind: 'effect-operator'; effectId: string; nodeId: string; operator: string }
   | { kind: 'clip-source' }
@@ -177,7 +180,9 @@ export interface NodeGraph {
   nodes: NodeGraphNode[];
   edges: NodeGraphEdge[];
   domain?: NodeGraphDomain;
-  groups?: Array<{ id: string; label: string; color: string; collapsed: boolean; nodeIds: string[]; proxyId: string }>;
+  groups?: Array<{ id: string; label: string; color: string; collapsed: boolean; nodeIds: string[]; proxyId: string; parentId?: string }>;
+  /** Uncollapsed nodes used to resolve exposed ports of nested groups. */
+  expandedNodes?: NodeGraphNode[];
 }
 
 export interface NodeGraphView {
@@ -195,7 +200,7 @@ export interface NodeGraphDocument {
   views: NodeGraphView[];
 }
 
-export type ClipNodeGraphBacking = Exclude<NodeGraphNodeBinding, { kind: 'color-node' } | { kind: 'flock-node' } | { kind: 'effect-operator' } | { kind: 'scene-node' }>;
+export type ClipNodeGraphBacking = Exclude<NodeGraphNodeBinding, { kind: 'color-node' } | { kind: 'flock-node' } | { kind: 'effect-operator' } | { kind: 'scene-node' } | { kind: 'scene-operator' } | { kind: 'operator-group' }>;
 
 export interface ClipNodeGraphNodeState {
   id: string;
@@ -263,6 +268,7 @@ export type ClipNodeGraphForcedBuiltIn = 'transform' | 'mask' | 'color';
 
 export interface ClipNodeGraph {
   version: 1;
+  scene?: import('./operatorGraph').SceneOperatorGraph;
   nodes: ClipNodeGraphNodeState[];
   customNodes?: ClipCustomNodeDefinition[];
   forcedBuiltIns?: ClipNodeGraphForcedBuiltIn[];

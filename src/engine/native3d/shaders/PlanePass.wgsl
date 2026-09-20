@@ -4,6 +4,8 @@ struct PlaneUniforms {
   forceOpaqueAlpha: f32,
   hasMask: f32,
   maskInvert: f32,
+  uvTransform: vec4f,
+  tint: vec4f,
 }
 
 struct VertexOutput {
@@ -44,7 +46,8 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 
 @fragment
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
-  let color = textureSample(inputTexture, texSampler, input.uv);
+  let sampled = textureSample(inputTexture, texSampler, input.uv * plane.uvTransform.xy + plane.uvTransform.zw);
+  let color = select(vec4f(1.0), sampled, plane.tint.w > 0.5);
   let sourceAlpha = select(color.a, 1.0, plane.forceOpaqueAlpha > 0.5);
   var maskValue = 1.0;
   if (plane.hasMask > 0.5) {
@@ -57,5 +60,5 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   if (alpha < 1.0 / 255.0) {
     discard;
   }
-  return vec4f(color.rgb, alpha);
+  return vec4f(color.rgb * plane.tint.rgb, alpha);
 }

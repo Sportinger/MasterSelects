@@ -1,4 +1,6 @@
 import { EffectOrderControls } from './EffectOrderControls';
+import { SceneOperatorParameters } from './SceneOperatorParameters';
+import { OperatorGroupParameters } from './OperatorGroupParameters';
 import { SceneNodeParameters } from './SceneNodeParameters';
 import { FlockTab } from '../../properties/flock/FlockTab';
 import { OperatorParameters, AddOperatorControl } from './OperatorParameters';
@@ -288,6 +290,16 @@ export function NodeInspector({
 
   if (clip && node.binding?.kind === 'scene-node') {
     return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}><SceneNodeParameters node={node} owner={clip} /></NodeInspectorShell>;
+  }
+  if (clip && node.binding?.kind === 'scene-operator') {
+    return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
+      <SceneOperatorParameters clip={clip} nodeId={node.binding.nodeId} onAdded={id => onSelectNode(`${node.id.slice(0, node.id.lastIndexOf('/') + 1)}${id}`)} />
+    </NodeInspectorShell>;
+  }
+  if (clip && node.binding?.kind === 'operator-group') {
+    return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
+      <OperatorGroupParameters clip={clip} groupId={node.binding.groupId} effectId={node.binding.effectId} />
+    </NodeInspectorShell>;
   }
   if (clip && node.binding?.kind === 'effect-operator') {
     const binding = node.binding;

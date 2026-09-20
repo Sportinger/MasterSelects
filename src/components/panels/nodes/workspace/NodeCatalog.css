@@ -1,0 +1,5 @@
+.node-catalog { padding: 10px; overflow-y: auto; }
+.node-catalog > input, .node-catalog > .inspector-select { margin-bottom: 8px; width: 100%; }
+.node-catalog code { display: block; overflow-wrap: anywhere; color: var(--text-secondary); font-size: 10px; padding: 4px 0; }
+.node-catalog .resolve-inspector-row span { overflow-wrap: anywhere; font-size: 10px; }
+.node-catalog-toggle { margin-left: auto; }

@@ -29,11 +29,15 @@ beforeEach(() => {
 const bake = (signal = new AbortController().signal) => bakeFaceCables('clip', 'effect', [defaultFaceCable()], signal, vi.fn());
 describe('scene depth bake transaction', () => {
   it('commits a complete portable hybrid scene in one history batch and closes its decoder', async () => {
+    env.timeline.clips[0].effects[0].params.surfaceSubdivisions = 2;
+    env.timeline.clips[0].effects[0].params.surfaceBlendWidth = 0.12;
     await bake();
     expect(env.update).toHaveBeenCalledOnce(); expect(env.startBatch).toHaveBeenCalledOnce(); expect(env.endBatch).toHaveBeenCalledOnce();
     const saved = env.update.mock.calls[0][1];
     expect(saved.is3D).toBe(true);
     expect(decodeCableScene(saved.effects[0].params.sceneData)).toMatchObject({ version: 2, frames: 2, depthGrid: { width: 49, height: 49 } });
+    expect(decodeCableScene(saved.effects[0].params.sceneData)?.surface).toEqual({ face: true, blendWidth: 0.12, subdivisions: 2 });
+    expect(JSON.parse(saved.effects[0].params.operatorGraph).nodes.some((n: { operator: string }) => n.operator === 'geometry.merge-surface')).toBe(true);
     expect(env.read.mock.calls.map(c => c[0])).toEqual([0, 0.199999]); expect(env.close).toHaveBeenCalledOnce();
   });
   it.each(['cancel', 'inference failure', 'clip changed'])('keeps the previous bake on %s and always closes its decoder', async reason => {
@@ -75,11 +79,12 @@ describe('scene depth bake transaction', () => {
     await expect(bakeFaceCables('clip', 'effect', [defaultFaceCable()], new AbortController().signal, vi.fn(), vi.fn(), true)).rejects.toThrow(/changed|no longer matches/);
     expect(env.update).not.toHaveBeenCalled(); expect(env.read).not.toHaveBeenCalled();
   });
-  it('reuses older project depth only when its saved face and mapping still match', async () => {
+  it.each(['missing binding', 'implicit face reference'])('reuses older project depth with %s only when its saved face and mapping still match', async legacy => {
     await bake();
     env.timeline.clips[0] = { ...env.timeline.clips[0], ...env.update.mock.calls[0][1] };
     const old = decodeCableScene(env.timeline.clips[0].effects[0].params.sceneData)!;
-    env.timeline.clips[0].effects[0].params.sceneData = encodeCableScene({ ...old, depthBinding: undefined });
+    const binding = JSON.parse(old.depthBinding!); delete binding.referenceFace;
+    env.timeline.clips[0].effects[0].params.sceneData = encodeCableScene({ ...old, depthBinding: legacy === 'missing binding' ? undefined : JSON.stringify(binding) });
     env.update.mockClear(); env.read.mockClear();
     await bakeFaceCables('clip', 'effect', [defaultFaceCable()], new AbortController().signal, vi.fn(), vi.fn(), true);
     expect(env.read).not.toHaveBeenCalled(); expect(env.update).toHaveBeenCalledOnce();

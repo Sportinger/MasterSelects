@@ -9,6 +9,7 @@ import type {
 import { buildSceneWorldMatrix, getSplatOrientationMatrix, multiplyMat4 } from './SceneTransformUtils';
 import { mergeLightClipSettings } from '../../types/light';
 import { isMobileAppleWebKit } from '../../utils/mobileAppleWebKit';
+import { applySceneOperatorGraph } from './sceneGraphRuntime';
 
 function getStableSourceDimensions(
   data: LayerRenderData,
@@ -316,5 +317,6 @@ export function collectScene3DLayers(
     });
   }
 
-  return result;
+  const definitions = new Map(layerData.map(data => [data.layer.id, data.layer.sceneGraph]));
+  return result.map(layer => applySceneOperatorGraph(layer, definitions.get(layer.layerId)));
 }

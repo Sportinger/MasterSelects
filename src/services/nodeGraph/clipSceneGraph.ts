@@ -1,6 +1,8 @@
 import type { TimelineClip } from '../../types';
 import type { NodeGraph, NodeGraphDocument, NodeGraphNode, NodeGraphPort, NodeGraphSignalType, SceneNodeRole } from '../../types/nodeGraph';
 import { edge } from './clipGraphProjectionGraph';
+import { sceneOperatorProjection } from './sceneOperatorProjection';
+import { sceneGraphSupportsSource } from '../operators/sceneGraph';
 
 export function clipHasSceneGraph(clip: TimelineClip): boolean {
   return Boolean(clip.is3D || ['model', 'gaussian-splat', 'gaussian-avatar', 'flock', 'camera', 'light', 'splat-effector'].includes(clip.source?.type ?? '')
@@ -41,15 +43,21 @@ export function withClipSceneGraph(document: NodeGraphDocument, clip: TimelineCl
     graph.nodes.push(depth); geometry.inputs.push(port('depth', 'texture', 'input', 'Depth map'));
     graph.edges.push(edge('depth', 'depth', 'geometry', 'depth', 'texture'));
   }
+  if (sceneGraphSupportsSource(sourceType, !!cable, clip.effects.some(e => e.enabled && e.type === 'voxel-relief'))) {
+    const executable = sceneOperatorProjection(clip, graph.id);
+    graph.nodes = executable.nodes; graph.edges = executable.edges; graph.groups = executable.groups;
+  }
+  const sceneOutput = graph.nodes.find(n => n.id === 'render');
   const dependencies = nonVisual ? [] : clips.filter(c => c.id !== clip.id && ['camera', 'light', 'splat-effector'].includes(c.source?.type ?? '')
     && c.startTime < clip.startTime + clip.duration && c.startTime + c.duration > clip.startTime);
   dependencies.forEach((dependency, index) => {
     const role = dependency.source!.type as 'camera' | 'light' | 'splat-effector';
     const id = `dependency-${dependency.id}`;
-    graph.nodes.push(make(id, role, `${role === 'camera' ? 'Camera' : role === 'light' ? 'Light' : 'Effector'}: ${dependency.name}`, 250 + (index % 3) * 250, 340 + Math.floor(index / 3) * 200,
+    const executable = sceneGraphSupportsSource(sourceType, !!cable, clip.effects.some(e => e.enabled && e.type === 'voxel-relief'));
+    graph.nodes.push(make(id, role, `${role === 'camera' ? 'Camera' : role === 'light' ? 'Light' : 'Effector'}: ${dependency.name}`, (executable ? 810 : 250) + (index % 3) * 250, (executable ? 440 : 340) + Math.floor(index / 3) * 200,
       [], [port('scene', 'scene', 'output', 'Scene')], dependency));
-    render.inputs.push(port(id, 'scene', 'input', role === 'camera' ? 'Camera' : role === 'light' ? 'Light' : 'Effector'));
-    graph.edges.push(edge(id, 'scene', 'render', id, 'scene'));
+    sceneOutput?.inputs.push(port(id, 'scene', 'input', role === 'camera' ? 'Camera' : role === 'light' ? 'Light' : 'Effector'));
+    if (sceneOutput) graph.edges.push(edge(id, 'scene', 'render', id, 'scene'));
   });
 
   const proxy: NodeGraphNode = { id: 'scene3d', kind: 'effect', runtime: 'subgraph', label: '3D Scene', layout: { x: 0, y: 95 },

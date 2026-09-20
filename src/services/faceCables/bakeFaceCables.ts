@@ -70,10 +70,10 @@ export async function bakeFaceCables(clipId: string, effectId: string, configs: 
     inPoint: clip.inPoint, outPoint: clip.outPoint, duration: clip.duration, speed: clip.speed, reversed: clip.reversed,
     transform: clip.transform, transformKeys: sorted, speedKeys, speedSection: clip.videoInspectorSections?.speedChange,
     transitionSourceMap: clip.transitionSourceMap, transitionSourceTimeOverride: clip.transitionSourceTimeOverride,
-    strength: Number(effectParams.sceneDepthStrength) || 1 }) : undefined;
+    strength: Number(effectParams.sceneDepthStrength) || 1, referenceFace: effectParams.depthReferenceFace }) : undefined;
   const savedDepth = reuseDepth ? decodeCableScene(effectParams.sceneData) : null;
   if (reuseDepth && (!depthGrid || !savedDepth?.depthGrid)) throw new Error('Bake scene depth first before reusing it for physics.');
-  const sceneBake = effectParams.scene3D ? createCableSceneBake(configs, fps, frames, clip.duration, aspect, depthGrid, depthBinding) : undefined;
+  const sceneBake = effectParams.scene3D ? createCableSceneBake(configs, fps, frames, clip.duration, aspect, depthGrid, depthBinding, operatorPlan.surfacePlan) : undefined;
   type Pose = { mapping: ReturnType<typeof trackingPreviewTransform>; transform: typeof clip.transform; anchors: (null | [CablePoint, CablePoint])[]; facePoints?: CablePoint[] };
   const poses: Pose[] = [];
   const lengths = configs.map(() => 0);
@@ -87,7 +87,7 @@ export async function bakeFaceCables(clipId: string, effectId: string, configs: 
       const time = Math.min(frame / fps, clip.duration - 1e-6);
       const transform = getInterpolatedClipTransform(neighborKeys(sorted, time), time, clip.transform, { stabilizationEnabled: clip.videoInspectorSections?.stabilization });
       const mapping = trackingPreviewTransform(transform, source, comp);
-      const face = samplePreciseFace(series, surfaceSourceTime(clip, time, speedKeys))?.faces[0];
+      const face = samplePreciseFace(series, surfaceSourceTime(clip, time, speedKeys), Number(effectParams.trackingSmoothing ?? 0))?.faces[0];
       const facePoints = (effectParams.faceCollision || effectParams.faceShadows || effectParams.scene3D) && face?.length ? cableFacePoints(face, mapping, aspect) : undefined;
       sceneBake?.writeFace(frame, face, facePoints, transform, mapping);
       if (savedDepth) sceneBake!.reuseDepth(frame, savedDepth);
@@ -99,7 +99,7 @@ export async function bakeFaceCables(clipId: string, effectId: string, configs: 
         const width = Math.hypot((unit.x - origin.x) * aspect, unit.y - origin.y);
         const strength = Math.max(0.1, Math.min(2, Number(effectParams.sceneDepthStrength) || 1));
         if (Math.abs(sourceTime - previousDepthTime) > 0.5) calibration = undefined;
-        calibration = calibrateCableDepth(depth, face, facePoints, width, strength, calibration);
+        calibration = calibrateCableDepth(depth, effectParams.depthReferenceFace ? face : undefined, effectParams.depthReferenceFace ? facePoints : undefined, width, strength, calibration);
         sceneBake!.writeDepth(frame, calibratedCableDepth(depth, depthGrid, calibration), transform);
         previousDepthTime = sourceTime;
         progress((frame + 1) / frames * 0.25);
@@ -204,7 +204,7 @@ export async function bakeFaceCables(clipId: string, effectId: string, configs: 
   const previous = clip.effects.find(e => e.id === effectId && e.type === 'face-cables');
   if (!previous) throw new Error('The cable effect was removed.');
   const effect = { id: previous.id, type: 'face-cables' as const, name: 'Face Cables', enabled: previous.enabled,
-    params: { ...previous.params, bakedData, sceneData: sceneBake?.encode() ?? '', settings: JSON.stringify(configs) } };
+    params: { ...previous.params, operatorGraph: JSON.stringify(operatorPlan.graph), bakedData, sceneData: sceneBake?.encode() ?? '', settings: JSON.stringify(configs) } };
   const history = useHistoryStore.getState(), batch = history.startBatch('Bake face cables');
   try {
     current.updateClip(clipId, { is3D: !!sceneBake, effects: clip.effects.map(e => e.id === effectId ? effect : e) });

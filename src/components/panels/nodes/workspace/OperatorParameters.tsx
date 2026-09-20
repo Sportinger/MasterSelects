@@ -4,6 +4,7 @@ import type { TimelineClip } from '../../../../types';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { cableOperatorGraph } from '../../../../services/faceCables/cableOperatorGraph';
 import { getEffectOperator, EFFECT_OPERATORS } from '../../../../services/operators/operatorRegistry';
+import { SCENE_OPERATORS } from '../../../../services/operators/sceneOperators';
 import { createEffectGraphActions, editEffectGraph } from '../../../../services/operators/effectGraphEditing';
 import { sampleOperatorParameter, operatorEnabled } from '../../../../services/operators/effectGraph';
 import { ResolveInspectorNumberRow } from '../../properties/resolveInspector/ResolveInspectorNumberRow';
@@ -12,6 +13,7 @@ import { InspectorSelect } from '../../../inspector/InspectorSelect';
 import { PreciseFaceTrackingControls } from '../../properties/PreciseFaceTrackingControls';
 import { TransformTab } from '../../properties/TransformTab';
 import type { Keyframe } from '../../../../types/keyframes';
+import { OperatorConnections } from './OperatorConnections';
 
 const EMPTY_KEYS: Keyframe[] = [];
 export function OperatorParameters({ clip, effectId, nodeId }: { clip: TimelineClip; effectId: string; nodeId: string }) {
@@ -54,6 +56,7 @@ export function OperatorParameters({ clip, effectId, nodeId }: { clip: TimelineC
       })}
       {!operator.parameters.length && <p className="face-cable-hint">{operator.description}</p>}
     </ResolveInspectorSection>
+    <OperatorConnections graph={graph} node={node} clipId={clip.id} effectId={effectId} safely={safely} />
     {operator.id === 'scene.transform' && <TransformTab clipId={clip.id} transform={clip.transform} is3D={clip.is3D} speed={clip.speed} />}
     {operator.id === 'tracking.face' && <PreciseFaceTrackingControls clipId={clip.id} />}
     {operator.invalidates !== 'appearance' && <p className="face-cable-hint">Bake cables to apply changes to playback and export. Saved depth can be reused for physics.</p>}
@@ -68,13 +71,13 @@ export function AdditionalOperatorControls({ clipId, effectId }: { clipId: strin
   const effect = clip.effects.find(e => e.id === effectId); if (!effect) return null;
   let graph;
   try { graph = cableOperatorGraph(effect.params); } catch { return null; }
-  return <>{graph.nodes.filter(n => n.id !== 'wind' && getEffectOperator(n.operator)?.addable)
+  return <>{graph.nodes.filter(n => n.id !== 'wind' && ((getEffectOperator(n.operator)?.addable && Boolean(getEffectOperator(n.operator)?.parameters.length) && n.id !== 'calibration') || ['tracking.smooth', 'geometry.merge-surface'].includes(n.operator)))
     .map(n => <OperatorParameters key={n.id} clip={clip} effectId={effectId} nodeId={n.id} />)}</>;
 }
 
 export function AddOperatorControl({ clipId, effectId, onAdded }: { clipId: string; effectId: string; onAdded?: (id: string) => void }) {
   const [message, setMessage] = useState('');
-  return <><InspectorSelect ariaLabel="Add reusable node" value="" options={[{ value: '', label: 'Add node…' }, ...EFFECT_OPERATORS.filter(o => o.addable).map(o => ({ value: o.id, label: o.label }))]}
+  return <><InspectorSelect ariaLabel="Add reusable node" value="" options={[{ value: '', label: 'Add node…' }, ...EFFECT_OPERATORS.filter(o => o.addable && !SCENE_OPERATORS.includes(o)).map(o => ({ value: o.id, label: o.label }))]}
     onChange={value => { if (!value) return; try { const id = createEffectGraphActions(clipId, effectId).addNode(value); setMessage(''); onAdded?.(id); } catch (error) { setMessage(String(error)); } }} />
     {message && <p role="alert">{message}</p>}</>;
 }

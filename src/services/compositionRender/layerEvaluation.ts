@@ -259,6 +259,7 @@ export function buildEvaluatedClipLayer(params: {
     sourceRect: clipAtTime.sourceRect ? { ...clipAtTime.sourceRect } : undefined,
     ...(masks?.some((mask) => mask.enabled !== false) ? { maskClipId: clipAtTime.id, maskInvert: false, masks } : {}),
     ...(transitionRender ? { transitionRender } : {}),
+    sceneGraph: timelineClip.nodeGraph?.scene,
     ...(timelineClip.is3D ? { is3D: true } : {}),
   };
 }
@@ -362,7 +363,8 @@ export function evaluateNestedComposition(params: {
         ? { maskClipId: clip.id, maskInvert: false, masks: mappedAnimation.masks }
         : {}),
       ...(transitionRender ? { transitionRender } : {}),
-      ...(clip.is3D ? { is3D: true } : {}),
+      sceneGraph: clip.nodeGraph?.scene,
+    ...(clip.is3D ? { is3D: true } : {}),
     };
   };
 
@@ -499,7 +501,8 @@ export function evaluateNestedComposition(params: {
         ? { maskClipId: nestedClip.id, maskInvert: false, masks: nestedMasks }
         : {}),
       ...(transitionRender ? { transitionRender } : {}),
-      ...(nestedClip.is3D ? { is3D: true } : {}),
+      sceneGraph: nestedClip.nodeGraph?.scene,
+    ...(nestedClip.is3D ? { is3D: true } : {}),
     };
 
     if (nestedClip.source?.videoElement) {

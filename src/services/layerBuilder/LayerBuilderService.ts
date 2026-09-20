@@ -491,6 +491,7 @@ export class LayerBuilderService {
     if (layer && clip.is3D) {
       layer.is3D = true;
     }
+    if (layer) layer.sceneGraph = clip.nodeGraph?.scene;
 
     return layer ? bindTerrainLayer(layer, clip, ctx.clips, ctx.playheadPosition) : null;
   }
