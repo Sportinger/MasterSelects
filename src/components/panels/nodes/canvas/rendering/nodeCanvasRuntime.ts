@@ -1,10 +1,10 @@
 import { prefersSoftwareTimelineCanvas } from '../../../../../utils/canvasPlatform';
 import { NodeCanvasPainter } from './NodeCanvasPainter';
-import type { CanvasMessage } from './nodeCanvasTypes';
+import type { CanvasMessage, CanvasWorkerReply } from './nodeCanvasTypes';
 import { releasePreviewFrame, type PreviewFrame } from '../../../../../services/nodePreview/previewTypes';
 
-type Update = Exclude<CanvasMessage, { type: 'init' } | { type: 'previews' }>;
-/** A failed transferred canvas must be replaced, not reused for the software path. */
+type Update = Exclude<CanvasMessage, { type: 'init' | 'presented' | 'previews' }>;
+/** Present worker pixels and their viewport correction in one main-thread task. */
 export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: boolean) => void, onViewReady: (revision: number) => void = () => {}) {
   let disposed = false, worker: Worker | undefined, painter: NodeCanvasPainter | undefined;
   let frame: number | undefined, watchdog: ReturnType<typeof setTimeout> | undefined;
@@ -75,6 +75,7 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
   const fallback = () => {
     if (disposed) return;
     const wasWorker = !!worker;
+    reportedViewRevision = undefined;
     worker?.terminate(); worker = undefined; clearTimeout(watchdog);
     previewInFlight = false; painter?.dispose();
     clearTimeout(previewWatchdog);
@@ -96,14 +97,36 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
   };
   createSurfaces();
   try {
-    if (prefersSoftwareTimelineCanvas() || typeof Worker === 'undefined' || !base.transferControlToOffscreen) { fallback(); }
+    if (prefersSoftwareTimelineCanvas() || typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') { fallback(); }
     else {
+      const presenter = base.getContext('bitmaprenderer');
+      if (!presenter) throw new Error('Bitmap presentation unavailable');
+      host.replaceChildren(base);
       worker = new Worker(new URL('./nodeCanvas.worker.ts', import.meta.url), { type: 'module' });
-      worker.onerror = () => fallback();
-      worker.onmessage = (event: MessageEvent<{ type: string; revision?: number; fps?: number; paintMs?: number; maxPaintMs?: number; previewCount?: number }>) => {
-        if (event.data.type === 'ready') markReady();
+      const activeWorker = worker;
+      worker.onerror = () => { if (!disposed && worker === activeWorker) fallback(); };
+      worker.onmessage = (event: MessageEvent<CanvasWorkerReply>) => {
+        if (disposed || worker !== activeWorker) {
+          if (event.data.type === 'frame') event.data.bitmap.close();
+          return;
+        }
+        if (event.data.type === 'frame') {
+          const { bitmap, revision } = event.data;
+          try {
+            // Both operations happen before the browser's next paint. A bare
+            // worker acknowledgement cannot guarantee that for transferred DOM canvases.
+            if (base.width !== bitmap.width) base.width = bitmap.width;
+            if (base.height !== bitmap.height) base.height = bitmap.height;
+            presenter.transferFromImageBitmap(bitmap);
+            if (revision !== undefined && revision !== reportedViewRevision) {
+              reportedViewRevision = revision; onViewReady(revision);
+            }
+            markReady();
+            activeWorker.postMessage({ type: 'presented' } satisfies CanvasMessage);
+          } catch { fallback(); }
+          finally { bitmap.close(); }
+        }
         if (event.data.type === 'failed') fallback();
-        if (event.data.type === 'view-ready' && event.data.revision !== undefined) onViewReady(event.data.revision);
         if (event.data.type === 'previews-ready') {
           previewInFlight = false; clearTimeout(previewWatchdog);
           if (import.meta.env.DEV) host.dataset.previewCount = String(event.data.previewCount ?? 0);
@@ -115,9 +138,7 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
           host.dataset.maxPaintMs = event.data.maxPaintMs?.toFixed(2);
         }
       };
-      const main = base.transferControlToOffscreen(), animated = overlay.transferControlToOffscreen();
-      const preview = previews.transferControlToOffscreen();
-      worker.postMessage({ type: 'init', base: main, overlay: animated, previews: preview } satisfies CanvasMessage, [main, animated, preview]);
+      worker.postMessage({ type: 'init' } satisfies CanvasMessage);
       watchdog = setTimeout(fallback, 5000);
     }
   } catch { fallback(); }

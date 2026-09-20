@@ -181,10 +181,6 @@
   will-change: transform;
 }
 
-.node-workspace-board.board-interacting .node-graph-canvas-surface {
-  will-change: transform;
-}
-
 .node-workspace-edges {
   position: absolute;
   display: block;

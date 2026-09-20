@@ -32,8 +32,16 @@ export interface CanvasGroup extends Rect { label: string; color: string; collap
 export interface CanvasScene { nodes: CanvasNode[]; cables: CanvasCable[]; groups: CanvasGroup[]; plugs: CanvasPlug[] }
 export interface CanvasTransport { playhead: number; playing: boolean; active: boolean; visible: boolean; reducedMotion: boolean; sourceTimes: Record<string, number>; playbackSpeed?: number; timestamp?: number }
 export type CanvasMessage =
-  | { type: 'init'; base: OffscreenCanvas; overlay: OffscreenCanvas; previews?: OffscreenCanvas }
+  | { type: 'init' }
+  | { type: 'presented' }
   | { type: 'previews'; frames: PreviewFrame[]; batchId: number }
   | { type: 'scene'; scene: CanvasScene }
   | { type: 'view'; view: CanvasView; theme: CanvasTheme; revision?: number }
   | { type: 'transport'; transport: CanvasTransport };
+
+/** Pixels and their coordinate system are presented together on the main thread. */
+export type CanvasWorkerReply =
+  | { type: 'frame'; bitmap: ImageBitmap; revision?: number }
+  | { type: 'failed' }
+  | { type: 'previews-ready'; batchId: number; previewCount: number | undefined }
+  | { type: 'stats'; fps: number; paintMs: number; maxPaintMs: number };

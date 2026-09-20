@@ -14,7 +14,7 @@ interface ZoomTarget {
 }
 
 /** Owns the displayed viewport and the short, cursor-anchored wheel animation. */
-export function useNodeGraphViewport(canvasRef: RefObject<HTMLDivElement | null>) {
+export function useNodeGraphViewport(canvasRef: RefObject<HTMLDivElement | null>, onVisualViewport?: (viewport: Viewport) => void) {
   const [viewport, renderViewport] = useState<Viewport>(DEFAULT_VIEWPORT);
   const currentRef = useRef(viewport);
   const targetRef = useRef<ZoomTarget | null>(null);
@@ -28,8 +28,9 @@ export function useNodeGraphViewport(canvasRef: RefObject<HTMLDivElement | null>
 
   const commitViewport = useCallback((next: Viewport) => {
     currentRef.current = next;
+    onVisualViewport?.(next);
     renderViewport(next);
-  }, []);
+  }, [onVisualViewport]);
 
   // Fit, Reset, graph changes and panning take ownership immediately. A queued
   // wheel frame must never restore the view from before one of these actions.

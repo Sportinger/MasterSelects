@@ -40,8 +40,10 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
     const renderedViews = new Map<number, Viewport>();
     const renderer = createNodeCanvasRuntime(host, ready => { onReady(ready); previewRuntime.current?.reset(); }, revision => {
       const rendered = renderedViews.get(revision);
-      for (const key of renderedViews.keys()) if (key <= revision) renderedViews.delete(key);
-      if (rendered && revision === latestViewRevision) onViewRendered(rendered);
+      for (const key of renderedViews.keys()) if (key < revision) renderedViews.delete(key);
+      // An older requested view may be the frame that was just presented.
+      // Its transform must be acknowledged even while a newer request is pending.
+      if (rendered) onViewRendered(rendered);
     }); runtime.current = renderer;
     const previews = new NodePreviewController(renderer, host); previewRuntime.current = previews;
     previews.scene(previewSource.current.clipId, previewSource.current.nodes, previewSource.current.selectedNodeId, previewSource.current.expanded);

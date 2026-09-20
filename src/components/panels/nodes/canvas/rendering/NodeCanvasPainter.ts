@@ -22,7 +22,7 @@ export class NodeCanvasPainter {
     this.base = base; this.overlay = overlay; this.previewContext = previews;
     if (previews && atlas) this.previews = new NodePreviewPainter(previews, atlas);
   }
-  update(message: Exclude<CanvasMessage, { type: 'init' }>) {
+  update(message: Exclude<CanvasMessage, { type: 'init' | 'presented' }>) {
     if (message.type === 'previews') { this.previews?.receive(message.frames); return; }
     if (message.type === 'scene') {
       this.scene = message.scene; this.baseDirty = true;

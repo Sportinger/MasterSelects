@@ -7,7 +7,7 @@ import { hasUnlockedSource, nodeGroupDropTarget } from './canvas/nodeGroupDrop';
 import { placeTransferredNodes } from './canvas/placeTransferredNodes';
 import { NodeGraphCanvasSurface } from './canvas/rendering/NodeGraphCanvasSurface';
 import { annotatedGraphBounds, nodeGroupBounds } from './canvas/groupBounds';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import type {
   NodeGraph,
@@ -18,7 +18,7 @@ import type {
 } from '../../../services/nodeGraph';
 import { NodeGraphEdges } from './canvas/NodeGraphEdges';
 import { NodeGraphNodeCard } from './canvas/NodeGraphNodeCard';
-import type { NodeGraphPoint } from './canvas/canvasGeometry';
+import type { NodeGraphPoint, Viewport } from './canvas/canvasGeometry';
 import { useNodeGraphViewport } from './canvas/useNodeGraphViewport';
 import { useNodeConnectionDrag } from './canvas/useNodeConnectionDrag';
 import { getConnectionPlugs } from './canvas/connectionPlugs';
@@ -113,10 +113,30 @@ export function NodeGraphCanvas({
   const canvasInnerRef = useRef<HTMLDivElement | null>(null);
   const panGestureRef = useRef<PanGesture | null>(null);
   const pendingPanRef = useRef<{ panX: number; panY: number } | null>(null);
-  const settlingPanRef = useRef<{ panX: number; panY: number } | null>(null);
+  const panFrameRef = useRef<number | null>(null);
   const nodeDragGestureRef = useRef<NodeDragGesture | null>(null);
   const suppressNextClickRef = useRef(false);
-  const { viewport, setViewport } = useNodeGraphViewport(canvasRef);
+  const renderedViewportRef = useRef(DEFAULT_VIEWPORT);
+  const visualViewportRef = useRef(DEFAULT_VIEWPORT);
+  const showVisualViewport = useCallback((visual: Viewport) => {
+    visualViewportRef.current = visual;
+    if (canvasInnerRef.current) {
+      canvasInnerRef.current.style.transform = `translate3d(${visual.panX}px, ${visual.panY}px, 0) scale(${visual.zoom})`;
+    }
+    const rendered = renderedViewportRef.current;
+    const scale = visual.zoom / rendered.zoom;
+    const x = visual.panX - rendered.panX * scale;
+    const y = visual.panY - rendered.panY * scale;
+    if (canvasSurfaceRef.current) {
+      canvasSurfaceRef.current.style.transform = x || y || scale !== 1
+        ? `translate3d(${x}px, ${y}px, 0) scale(${scale})`
+        : '';
+    }
+  }, []);
+  const { viewport, setViewport } = useNodeGraphViewport(canvasRef, showVisualViewport);
+  // This transform has one owner. React must not overwrite a newer pointer
+  // position with the viewport of an earlier scheduled render.
+  useLayoutEffect(() => { showVisualViewport(visualViewportRef.current); }, [showVisualViewport]);
   const [isPanning, setIsPanning] = useState(false);
   const [canvasRendered, setCanvasRendered] = useState(false);
   const [draftLayouts, setDraftLayouts] = useState<Record<string, NodeGraphLayout>>({});
@@ -207,11 +227,12 @@ export function NodeGraphCanvas({
       return { x: 0, y: 0 };
     }
 
+    const visual = visualViewportRef.current;
     return {
-      x: (clientX - rect.left - viewport.panX) / viewport.zoom,
-      y: (clientY - rect.top - viewport.panY) / viewport.zoom,
+      x: (clientX - rect.left - visual.panX) / visual.zoom,
+      y: (clientY - rect.top - visual.panY) / visual.zoom,
     };
-  }, [viewport.panX, viewport.panY, viewport.zoom]);
+  }, []);
 
   const { connectionDraft, startConnectionDrag, startPlugDrag, moveConnectionDrag, finishConnectionDrag, cancelConnectionDrag } = useNodeConnectionDrag({
     graphId: graph.id, canvasRef, nodesById, getGraphPoint: getGraphPointFromClient,
@@ -236,12 +257,12 @@ export function NodeGraphCanvas({
       pointerId: event.pointerId,
       clientX: event.clientX,
       clientY: event.clientY,
-      panX: viewport.panX,
-      panY: viewport.panY,
+      panX: visualViewportRef.current.panX,
+      panY: visualViewportRef.current.panY,
     };
     setIsPanning(true);
     event.currentTarget.setPointerCapture(event.pointerId);
-  }, [viewport.panX, viewport.panY]);
+  }, []);
 
   const handlePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (moveConnectionDrag(event)) return;
@@ -254,12 +275,13 @@ export function NodeGraphCanvas({
       panY: gesture.panY + (event.clientY - gesture.clientY),
     };
     pendingPanRef.current = next;
-    if (canvasInnerRef.current) {
-      canvasInnerRef.current.style.transform = `translate3d(${next.panX}px, ${next.panY}px, 0) scale(${viewport.zoom})`;
-    }
-    const surface = canvasSurfaceRef.current;
-    if (surface) surface.style.transform = `translate3d(${next.panX - gesture.panX}px, ${next.panY - gesture.panY}px, 0)`;
-  }, [moveConnectionDrag, viewport.zoom]);
+    showVisualViewport({ ...visualViewportRef.current, ...next, zoom: viewport.zoom });
+    if (panFrameRef.current === null) panFrameRef.current = requestAnimationFrame(() => {
+      panFrameRef.current = null;
+      const pending = pendingPanRef.current;
+      if (pending) setViewport(current => ({ ...current, ...pending }));
+    });
+  }, [moveConnectionDrag, setViewport, showVisualViewport, viewport.zoom]);
 
   const finishPanGesture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     const gesture = panGestureRef.current;
@@ -268,23 +290,22 @@ export function NodeGraphCanvas({
     const pending = pendingPanRef.current;
     pendingPanRef.current = null;
     if (pending) {
-      settlingPanRef.current = pending;
+      if (panFrameRef.current !== null) cancelAnimationFrame(panFrameRef.current);
+      panFrameRef.current = null;
       setViewport(current => ({ ...current, ...pending }));
-      if (canvasSurfaceRef.current?.dataset.renderer === 'dom') {
-        canvasSurfaceRef.current.style.transform = '';
-        settlingPanRef.current = null;
-      }
     }
     panGestureRef.current = null;
     setIsPanning(false);
-    event.currentTarget.releasePointerCapture(event.pointerId);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }, [setViewport]);
 
-  const handleViewRendered = useCallback((rendered: { panX: number; panY: number }) => {
-    const target = settlingPanRef.current;
-    if (!target || rendered.panX !== target.panX || rendered.panY !== target.panY) return;
-    if (canvasSurfaceRef.current) canvasSurfaceRef.current.style.transform = '';
-    settlingPanRef.current = null;
+  const handleViewRendered = useCallback((rendered: Viewport) => {
+    renderedViewportRef.current = rendered;
+    showVisualViewport(visualViewportRef.current);
+  }, [showVisualViewport]);
+
+  useEffect(() => () => {
+    if (panFrameRef.current !== null) cancelAnimationFrame(panFrameRef.current);
   }, []);
 
   const startNodeDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>, node: NodeGraphNode) => {
@@ -474,7 +495,7 @@ export function NodeGraphCanvas({
             finishPanGesture(event);
           }
         }}
-        onLostPointerCapture={cancelConnectionDrag}
+        onLostPointerCapture={event => { cancelConnectionDrag(event); finishPanGesture(event); }}
         onPointerCancel={(event) => {
           if (!cancelConnectionDrag(event)) {
             finishPanGesture(event);
@@ -535,9 +556,6 @@ export function NodeGraphCanvas({
         <div
           ref={canvasInnerRef}
           className="node-workspace-canvas-inner"
-          style={{
-            transform: `translate3d(${viewport.panX}px, ${viewport.panY}px, 0) scale(${viewport.zoom})`,
-          }}
         >
           <NodeGraphGroups graph={graph} nodes={displayNodes} zoom={viewport.zoom} onToggle={toggleGroup} onFocus={focusGroup}
             frameNodes={groupFrameNodes}
