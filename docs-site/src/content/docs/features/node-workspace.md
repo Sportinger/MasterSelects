@@ -37,8 +37,8 @@ active grade directly; select a Color node to add Primary/Wheels nodes.
 Face Cables is a cyan group containing four nested groups: Tracking, Surface &
 depth, Cable physics and Cable rendering. MediaPipe produces landmarks; separate
 nodes smooth them, build anchors and construct the face mesh. Image depth passes
-through calibration and depth-to-mesh before the two meshes meet at Merge surface
-meshes. Both collision nodes use the same mesh-collision operator. The shared Wind
+through calibration and depth-to-mesh before the two meshes meet at **Stitch
+Surfaces**. Both collision nodes use the same mesh-collision operator. The shared Wind
 operation remains used by both cable physics and Flock's CPU/GPU solvers.
 
 Select nodes and press **Ctrl+G** to create a colored subgroup. Collapsed groups
@@ -54,6 +54,22 @@ dropdowns. Required inputs, incompatible types, cycles and unsupported executor
 combinations are rejected. Physics, smoothing and surface changes require a new
 bake; appearance/UV/material changes in the scene graph render immediately.
 Existing artifacts remain usable until a successful bake replaces them.
+
+Ports show **IN / OUT**, their name and their semantic signal type. Port and wire
+colors distinguish image/texture, depth, geometry, landmarks, material, UV,
+collider, force and curve signals. Hover or keyboard-focus a port for a compact
+tooltip with its type, accepted/produced representations and connection cardinality.
+It sits beside the owning node when space permits; full explanations and coordinate
+constraints stay in the catalog.
+Enter/Space opens the details, Escape dismisses them; tapping a port also opens
+details. Keyboard focus stays visible without leaving a focus ring after a pointer
+click. Folded groups retain their original ports' contracts.
+
+The canvas, connection dropdowns and saved operator graph validator use the same
+format restrictions: relative depth must pass through calibration before depth-to-mesh;
+Stitch Surfaces accepts a face mesh at Primary and a depth mesh at Background.
+The catalog includes these contracts and supports searching their format names.
+Formats here describe intermediate data, not encoded media-file extensions.
 
 A gold **3D Scene** group exposes an executable surface graph for video/image
 planes and baked Face Cables:

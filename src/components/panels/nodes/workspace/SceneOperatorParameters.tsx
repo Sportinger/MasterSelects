@@ -1,3 +1,4 @@
+import { operatorPortsCompatible } from '../../../../services/operators/portContracts';
 import { useState } from 'react';
 import type { TimelineClip } from '../../../../types';
 import { createSceneGraphActions } from '../../../../services/operators/sceneGraphEditing';
@@ -29,7 +30,7 @@ export function SceneOperatorParameters({ clip, nodeId, onAdded }: { clip: Timel
       {operator.inputs.map(port => {
         const edge = definition.graph.edges.find(e => e.to === nodeId && e.input === port.id);
         const sources = definition.graph.nodes.flatMap(candidate => (SCENE_OPERATORS.find(o => o.id === candidate.operator)?.outputs ?? [])
-          .filter(p => candidate.id !== nodeId && p.type === port.type).map(p => ({ value: `${candidate.id}/${p.id}`, label: `${SCENE_OPERATORS.find(o => o.id === candidate.operator)!.label} · ${candidate.id} · ${p.label}` })));
+          .filter(p => candidate.id !== nodeId && operatorPortsCompatible(p, port)).map(p => ({ value: `${candidate.id}/${p.id}`, label: `${SCENE_OPERATORS.find(o => o.id === candidate.operator)!.label} · ${candidate.id} · ${p.label}` })));
         return <ResolveInspectorRow key={port.id} label={port.label}><InspectorSelect ariaLabel={`${operator.label} ${port.label} input`} value={edge ? `${edge.from}/${edge.output}` : ''}
           options={[{ value: '', label: 'Disconnected' }, ...sources]} onChange={value => safely(() => {
             if (!value) { if (edge) actions.disconnectEdge(edge.id); return; }

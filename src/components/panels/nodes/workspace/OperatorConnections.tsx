@@ -1,3 +1,4 @@
+import { operatorPortsCompatible } from '../../../../services/operators/portContracts';
 import type { EffectOperatorGraph, BoundOperatorNode } from '../../../../types/operatorGraph';
 import { getEffectOperator } from '../../../../services/operators/operatorRegistry';
 import { createEffectGraphActions } from '../../../../services/operators/effectGraphEditing';
@@ -14,7 +15,7 @@ export function OperatorConnections({ graph, node, clipId, effectId, safely }: {
     {inputs.map(port => {
       const edge = graph.edges.find(e => e.to === node.id && e.input === port.id);
       const sources = graph.nodes.flatMap(candidate => getEffectOperator(candidate.operator)!.outputs
-        .filter(p => candidate.id !== node.id && p.type === port.type)
+        .filter(p => candidate.id !== node.id && operatorPortsCompatible(p, port))
         .map(p => ({ value: `${candidate.id}/${p.id}`, label: `${getEffectOperator(candidate.operator)!.label} · ${candidate.id}` })));
       return <ResolveInspectorRow key={port.id} label={port.label}><InspectorSelect ariaLabel={`${getEffectOperator(node.operator)!.label} ${port.label} input`}
         value={edge ? `${edge.from}/${edge.output}` : ''} options={[...(!port.required ? [{ value: '', label: 'Disconnected' }] : []), ...sources]}

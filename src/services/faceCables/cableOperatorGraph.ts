@@ -70,7 +70,7 @@ export function compileCableOperatorGraph(params: OperatorParameters) {
   const tracking = smoothing ? expectInput(smoothing, 'landmarks', 'tracking.face') : expectInput(anchors, 'landmarks', 'tracking.face');
   const source = expectInput(tracking, 'image', 'media.source');
   const surface = graphInputNodes(graph, render.id, 'surface')[0];
-  if (surface && surface.operator !== 'geometry.merge-surface') throw new Error('Connect Merge surface meshes to Cable rendering.');
+  if (surface && surface.operator !== 'geometry.merge-surface') throw new Error('Connect Stitch Surfaces to Cable rendering.');
   const faceMesh = surface && graphInputNodes(graph, surface.id, 'primary')[0];
   const depthMesh = surface && graphInputNodes(graph, surface.id, 'background')[0];
   if (faceMesh && (faceMesh.operator !== 'geometry.face' || expectInput(faceMesh, 'landmarks', landmarkSource.operator).id !== landmarkSource.id)) throw new Error('The primary mesh must use the same tracked landmarks as the anchors.');

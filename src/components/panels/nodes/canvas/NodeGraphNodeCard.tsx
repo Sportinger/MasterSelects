@@ -1,6 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { NodeGraphNode, NodeGraphPort } from '../../../../services/nodeGraph';
-import { getNodeGraphPortCompatibilityKey } from '../../../../services/nodeGraph';
+import { NodeGraphPortView } from './NodeGraphPortView';
 import type { ConnectionDraft } from './canvasGeometry';
 import {
   clamp,
@@ -9,7 +9,6 @@ import {
   getNodeHeight,
   getNodeParamNumber,
   getNodePortStartY,
-  getPortTitle,
   isNodeBypassable,
   isNodeBypassed,
   NODE_WIDTH,
@@ -59,39 +58,8 @@ export function NodeGraphNodeCard({
   const hasAudioBadges = getAudioAnalysisBadges(node).length > 0;
   const analysisProgress = clamp(getNodeParamNumber(node, 'progressPercent'), 0, 100);
 
-  const renderPort = (port: NodeGraphPort) => {
-    const isConnectableTarget = !!connectionDraft &&
-      connectionDraft.nodeId !== node.id &&
-      connectionDraft.direction !== port.direction &&
-      connectionDraft.compatibilityKey === getNodeGraphPortCompatibilityKey(port);
-    const isDraftStart = connectionDraft?.nodeId === node.id && connectionDraft.portId === port.id;
-
-    return (
-      <div
-        key={port.id}
-        className={[
-          'node-workspace-port',
-          `node-workspace-port-${port.direction}`,
-          port.metadata?.required ? 'required' : '',
-          isConnectableTarget ? 'connectable' : '',
-          isDraftStart ? 'connecting' : '',
-        ].filter(Boolean).join(' ')}
-        title={`${getPortTitle(port)} - drag to connect, right-click to disconnect`}
-        data-node-id={node.id}
-        data-port-id={port.id}
-        data-direction={port.direction}
-        onPointerDown={(event) => onStartConnectionDrag(event, node, port)}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onDisconnectPortEdges(node, port);
-        }}
-      >
-        <span className="node-workspace-port-dot" />
-        <span className="node-workspace-port-label">{port.label}</span>
-      </div>
-    );
-  };
+  const renderPort = (port: NodeGraphPort) => <NodeGraphPortView key={port.id} node={node} port={port}
+    connectionDraft={connectionDraft} onStartConnectionDrag={onStartConnectionDrag} onDisconnectPortEdges={onDisconnectPortEdges} />;
 
   return (
     <div
@@ -175,9 +143,11 @@ export function NodeGraphNodeCard({
       )}
       <div className="node-workspace-node-ports" style={{ top: getNodePortStartY(node) }}>
         <div className="node-workspace-port-column">
+          {node.inputs.length > 0 && <span className="node-workspace-port-direction">IN</span>}
           {node.inputs.map((port) => renderPort(port))}
         </div>
         <div className="node-workspace-port-column node-workspace-port-column-output">
+          {node.outputs.length > 0 && <span className="node-workspace-port-direction">OUT</span>}
           {node.outputs.map((port) => renderPort(port))}
         </div>
       </div>

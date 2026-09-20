@@ -1,4 +1,6 @@
 import type { NodeGraphEdge, NodeGraphNode } from '../../../../services/nodeGraph';
+import type { CSSProperties } from 'react';
+import { describeNodePort } from '../../../../services/nodeGraph/nodePortPresentation';
 import type { ConnectionDraft, NodeBounds } from './canvasGeometry';
 import { getConnectionPath, getEdgePath } from './canvasGeometry';
 
@@ -43,6 +45,7 @@ export function NodeGraphEdges({
       {edges.map((edge) => {
         const path = getEdgePath(edge, nodesById);
         if (!path) return null;
+        const port = nodesById.get(edge.fromNodeId)?.outputs.find(p => p.id === edge.fromPortId);
         return (
           <g
             key={edge.id}
@@ -61,11 +64,12 @@ export function NodeGraphEdges({
             <path className="node-workspace-edge-hit" d={path} />
             <path
               className={[
-                'node-workspace-edge',
+                'node-workspace-edge port-typed',
                 `node-workspace-edge-${edge.type}`,
                 edge.id === selectedEdgeId ? 'selected' : '',
               ].filter(Boolean).join(' ')}
               d={path}
+              style={{ '--port-color': port ? describeNodePort(port).color : undefined } as CSSProperties}
             />
           </g>
         );

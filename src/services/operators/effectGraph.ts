@@ -1,3 +1,4 @@
+import { operatorPortsCompatible } from './portContracts';
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorBinding, OperatorEdge, OperatorValue } from '../../types/operatorGraph';
 import type { Keyframe } from '../../types/keyframes';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
@@ -23,7 +24,7 @@ export function validateEffectGraph(graph: EffectOperatorGraph): string[] {
     const from = getEffectOperator(nodes.get(e.from)?.operator ?? ''), to = getEffectOperator(nodes.get(e.to)?.operator ?? '');
     const output = from?.outputs.find(p => p.id === e.output), input = to?.inputs.find(p => p.id === e.input);
     const key = `${e.to}:${e.input}`;
-    if (typeof e.id !== 'string' || edgeIds.has(e.id) || e.from === e.to || !output || !input || output.type !== input.type || (!input.repeated && occupied.has(key))) errors.push(`Invalid connection: ${e.id}.`);
+    if (typeof e.id !== 'string' || edgeIds.has(e.id) || e.from === e.to || !output || !input || !operatorPortsCompatible(output, input) || (!input.repeated && occupied.has(key))) errors.push(`Invalid connection: ${e.id}.`);
     occupied.add(key); edgeIds.add(e.id);
   }
   for (const n of graph.nodes) for (const p of getEffectOperator(n.operator)?.inputs ?? []) {

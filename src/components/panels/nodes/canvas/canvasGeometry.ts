@@ -4,16 +4,18 @@ import type {
   NodeGraphNode,
   NodeGraphPort,
 } from '../../../../services/nodeGraph';
-import { getFlockPortType, getNodeGraphPortCompatibilityKey } from '../../../../services/nodeGraph';
+import { getNodeGraphPortCompatibilityKey } from '../../../../services/nodeGraph';
+import { describePortText } from '../../../../services/nodeGraph/nodePortPresentation';
+import { formatsOverlap } from '../../../../services/operators/portContracts';
 
 export const DEFAULT_VIEWPORT = { zoom: 0.88, panX: 36, panY: 28 };
 export const MIN_ZOOM = 0.18;
 export const MAX_ZOOM = 2.4;
 export const NODE_WIDTH = 184;
 export const NODE_MIN_HEIGHT = 126;
-export const PORT_ROW_HEIGHT = 18;
-export const PORT_START_Y = 86;
-export const BADGED_PORT_START_Y = 116;
+export const PORT_ROW_HEIGHT = 32;
+export const PORT_START_Y = 100;
+export const BADGED_PORT_START_Y = 130;
 export const PORT_DOT_CENTER_X = 12;
 export const PORT_DOT_CENTER_Y = 7;
 export const FIT_MARGIN = 42;
@@ -43,6 +45,7 @@ export interface PortReference {
   type: NodeGraphPort['type'];
   /** Ports connect only when these keys match (flock ports use their semantic type). */
   compatibilityKey: string;
+  formats?: string[];
 }
 
 export function createPortReference(nodeId: string, port: NodeGraphPort): PortReference {
@@ -52,7 +55,12 @@ export function createPortReference(nodeId: string, port: NodeGraphPort): PortRe
     direction: port.direction,
     type: port.type,
     compatibilityKey: getNodeGraphPortCompatibilityKey(port),
+    formats: port.metadata?.contract?.formats,
   };
+}
+
+export function canConnectPortReferences(a: PortReference, b: PortReference): boolean {
+  return a.nodeId !== b.nodeId && a.direction !== b.direction && a.compatibilityKey === b.compatibilityKey && formatsOverlap(a.formats, b.formats);
 }
 
 export interface NodeBadge {
@@ -191,11 +199,7 @@ export function getEdgePath(edge: NodeGraphEdge, nodesById: Map<string, NodeGrap
 }
 
 export function getPortTitle(port: NodeGraphPort): string {
-  const flockType = getFlockPortType(port);
-  const detail = flockType
-    ? `${flockType}${port.metadata?.required ? ', required' : ''}${port.metadata?.repeated ? ', accepts many' : ''}`
-    : port.type;
-  return `${port.label} (${detail})`;
+  return describePortText(port);
 }
 
 export function isNodeBypassable(node: NodeGraphNode): boolean {

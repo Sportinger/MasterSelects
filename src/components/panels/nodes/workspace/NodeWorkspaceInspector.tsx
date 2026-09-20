@@ -1,4 +1,5 @@
 import { EffectOrderControls } from './EffectOrderControls';
+import { describeNodePort, describePortText } from '../../../../services/nodeGraph/nodePortPresentation';
 import { SceneOperatorParameters } from './SceneOperatorParameters';
 import { OperatorGroupParameters } from './OperatorGroupParameters';
 import { SceneNodeParameters } from './SceneNodeParameters';
@@ -121,7 +122,7 @@ function PortList({
             const canCreateAI = !!clip && !!nodeId && canSeedAICustomNodeFromPort(port);
 
             return (
-              <div key={port.id} className="node-workspace-inspector-port">
+              <div key={port.id} className="node-workspace-inspector-port" title={describePortText(port)}>
                 <span className="node-workspace-inspector-port-main">
                   <span>{port.label}</span>
                   {port.metadata?.artifactId && (
@@ -129,7 +130,7 @@ function PortList({
                   )}
                 </span>
                 <span className="node-workspace-inspector-port-side">
-                  <span>{port.type}</span>
+                  <span>{describeNodePort(port).typeLabel}</span>
                   {artifactKind && (
                     <button
                       type="button"

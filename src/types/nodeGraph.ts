@@ -1,5 +1,6 @@
 import type { TimelineSourceType } from './index';
 import type { ColorNodeType } from './colorCorrection';
+import type { NodePortContract } from './nodePortContract';
 
 export type NodeGraphSignalType =
   | 'texture'
@@ -40,6 +41,7 @@ export type NodeGraphAudioSemanticKind =
   | 'audio-metadata';
 
 export interface NodeGraphPortMetadata {
+  contract?: NodePortContract;
   groupEndpoint?: { nodeId: string; portId: string };
   semanticKind?: NodeGraphAudioSemanticKind | string;
   targetClipId?: string;

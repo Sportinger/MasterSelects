@@ -6,7 +6,7 @@ title: "Node Catalog"
 
 
 Open **Nodes → Catalog** to search current definitions by name, ID or signal type.
-Filter by supported context and expand an entry for inputs, outputs, default
+Search also matches signal format descriptions. Filter by supported context and expand an entry for inputs, outputs, default
 parameters and keyframe support. The inventory reads the registries at runtime;
 it does not duplicate definitions. It is a reference; add operators from the
 selected node's inspector or the appropriate domain's Add menu.
@@ -66,7 +66,30 @@ The geometry functions have no clip/store/effect ownership. The bake adapter map
 landmarks and depth into a common coordinate system. Native rendering and depth
 collision both consume the same merged exterior, including clipping at image
 edges. Primary geometry retains its exact tracked coordinates and UVs. This is a
-surface-specific merge, not a general solid-mesh Boolean union.
+surface-specific stitch, displayed as **Stitch Surfaces**, not a general solid-mesh
+Boolean union or a simple concatenation of meshes. The stable saved operator ID
+`geometry.merge-surface` is unchanged.
+
+## Port contracts and reusable families
+
+`portContracts.ts` defines semantic
+types, supported intermediate representations and per-port constraints. The same
+contracts feed canvas labels/colors, hover and keyboard details, catalog entries,
+connection dropdowns and operator graph validation. For example, a relative depth
+grid and a calibrated depth grid both have type Depth but are not interchangeable
+at the depth-to-mesh input. Stitch Surfaces requires a primary face mesh with a
+closed UV outline and background depth geometry in the same coordinate space.
+Collapsed boundary ports preserve these restrictions.
+
+Transform and smoothing belong to typed families that preserve their input signal.
+Current executable variants are **UV transform** (UV to UV), **Clip Transform**
+(scene to scene, applying the owning clip's matrix/keyframes) and **Smooth
+Landmarks** (landmarks to landmarks, temporal motion-adaptive filtering). The
+landmark filter uses neighboring samples, preserves fast motion and avoids missing
+detections or timing gaps. These definitions do not yet provide arbitrary mesh
+transforms, selectable smoothing methods, mesh smoothing or image smoothing through
+one polymorphic operator. Such variants require their own supported data contracts
+and executable adapters; adding a catalog label alone is insufficient.
 
 The cable executor currently supports one tracked face, one relative depth branch
 and a rope solver. Additional surface instances can reuse incoming values and be

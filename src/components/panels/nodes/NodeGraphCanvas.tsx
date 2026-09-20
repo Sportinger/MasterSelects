@@ -14,6 +14,7 @@ import { NodeGraphNodeCard } from './canvas/NodeGraphNodeCard';
 import type { ConnectionDraft, NodeGraphPoint, PortReference, Viewport } from './canvas/canvasGeometry';
 import {
   clamp,
+  canConnectPortReferences,
   createPortReference,
   DEFAULT_VIEWPORT,
   FIT_MARGIN,
@@ -267,9 +268,7 @@ export function NodeGraphCanvas({
 
     if (
       portReference &&
-      portReference.nodeId !== draft.nodeId &&
-      portReference.direction !== draft.direction &&
-      portReference.compatibilityKey === draft.compatibilityKey
+      canConnectPortReferences(portReference, draft)
     ) {
       const connection = draft.direction === 'output'
         ? {
