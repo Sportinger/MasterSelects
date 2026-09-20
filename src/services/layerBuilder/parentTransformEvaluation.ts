@@ -126,6 +126,7 @@ export function evaluateParentedClipTransform(
     const interpolatedTransform = mappedAnimation?.transform ?? (keyframes.length > 0
       ? getInterpolatedClipTransform(keyframes, localTime, baseTransform, {
           rotationMode: clip.source?.type === 'camera' ? 'shortest' : 'linear',
+          stabilizationEnabled: clip.videoInspectorSections?.stabilization,
         })
       : baseTransform);
     const ownTransform = applyVideoInspectorTransformBypass(clip, interpolatedTransform);

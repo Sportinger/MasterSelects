@@ -32,7 +32,7 @@ export function previewFaceCables(clipId: string, configs: FaceCableConfig[], ti
   if (!source.width || !source.height) throw new Error('Source dimensions unavailable.');
   const keys = timeline.getClipKeyframes(clipId);
   if (keys.some(k => ['rotation.x', 'rotation.y', 'position.z'].includes(k.property))) throw new Error('Animated 3D transforms are not supported.');
-  const mapping = trackingPreviewTransform(getInterpolatedClipTransform(keys, time, clip.transform), source, comp);
+  const mapping = trackingPreviewTransform(getInterpolatedClipTransform(keys, time, clip.transform, { stabilizationEnabled: clip.videoInspectorSections?.stabilization }), source, comp);
   const face = samplePreciseFace(series, surfaceSourceTime(clip, time, keys.filter(k => k.property === 'speed')))?.faces[0];
   const params = clip.effects.find(e => e.id === effectId)?.params ?? {};
   const version = params.faceShadows ? 4 : 3;

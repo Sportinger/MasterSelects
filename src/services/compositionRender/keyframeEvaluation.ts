@@ -24,9 +24,10 @@ export function evaluateCompositionClipTransform(
   baseTransform: ClipTransform,
   keyframes: readonly Keyframe[] | undefined,
   localTime: number,
+  stabilizationEnabled?: boolean,
 ): ClipTransform {
   if (!keyframes?.length) return baseTransform;
-  return getInterpolatedClipTransform([...keyframes], localTime, baseTransform);
+  return getInterpolatedClipTransform([...keyframes], localTime, baseTransform, { stabilizationEnabled });
 }
 
 export function evaluateCompositionClipEffects(

@@ -54,6 +54,7 @@ export function resolveSceneClipTransform(
     ? baseTransform
     : getInterpolatedClipTransform(keyframes, clipLocalTime, baseTransform, {
         rotationMode: clip.source?.type === 'camera' ? 'shortest' : 'linear',
+          stabilizationEnabled: clip.videoInspectorSections?.stabilization,
       });
 
   if (!clip.parentClipId) {

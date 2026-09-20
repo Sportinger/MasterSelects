@@ -32,6 +32,7 @@ export interface KeyframeInterpolationOptions {
 
 export interface ClipTransformInterpolationOptions {
   rotationMode?: 'linear' | 'shortest';
+  stabilizationEnabled?: boolean;
 }
 
 type BezierSegmentKeyframe = Pick<Keyframe, 'time' | 'value' | 'handleIn' | 'handleOut'>;
@@ -314,6 +315,8 @@ export function interpolateKeyframes(
   return prevKey.value + valueDelta * easedT;
 }
 
+const unstabilizedKeys = new WeakMap<Keyframe[], Keyframe[]>();
+
 // Get full interpolated transform at a given time
 export function getInterpolatedClipTransform(
   keyframes: Keyframe[],
@@ -321,6 +324,14 @@ export function getInterpolatedClipTransform(
   baseTransform: ClipTransform,
   options?: ClipTransformInterpolationOptions
 ): ClipTransform {
+  if (options?.stabilizationEnabled === false) {
+    let filtered = unstabilizedKeys.get(keyframes);
+    if (!filtered) {
+      filtered = keyframes.filter(key => !key.id.startsWith('face-stabilize:'));
+      unstabilizedKeys.set(keyframes, filtered);
+    }
+    keyframes = filtered;
+  }
   const rotationOptions: KeyframeInterpolationOptions | undefined = options?.rotationMode === 'shortest'
     ? { angleMode: 'shortest' }
     : undefined;

@@ -17,7 +17,7 @@ import {
 /** The serializable animation fields shared by runtime and persisted clips. */
 export type TransitionMappedAnimationClip = Pick<
   TimelineClip | SerializableClip,
-  'transform' | 'effects' | 'masks' | 'transitionSourceMap'
+  'transform' | 'effects' | 'masks' | 'transitionSourceMap' | 'videoInspectorSections'
 > & Partial<SurfaceClip>;
 
 function addSurfaces(effects: Effect[], clip: TransitionMappedAnimationClip, time: number, keys?: readonly Keyframe[]): Effect[] {
@@ -48,6 +48,7 @@ function evaluateSingleDomain(
       clip.transform,
       keyframes,
       compositionLocalTime,
+      clip.videoInspectorSections?.stabilization,
     )),
     effects: addSurfaces(cloneEffects(evaluateCompositionClipEffects(clip.effects, keyframes, compositionLocalTime)), clip, compositionLocalTime, keyframes),
     masks: evaluateCompositionClipMasks(clip.masks, keyframes, compositionLocalTime),
@@ -182,11 +183,13 @@ export function evaluateTransitionMappedAnimation(
     parentAnimation.baseTransform,
     parentAnimation.keyframes,
     animationTime,
+    clip.videoInspectorSections?.stabilization,
   );
   const generatedTransform = evaluateCompositionClipTransform(
     clip.transform,
     keyframes,
     compositionLocalTime,
+    clip.videoInspectorSections?.stabilization,
   );
 
   return {

@@ -95,6 +95,7 @@ export function ResolveVisualInspectorSections({
   const addMask = useTimelineStore(state => state.addMask);
   const updateMask = useTimelineStore(state => state.updateMask);
   const removeMask = useTimelineStore(state => state.removeMask);
+  const hasStabilization = useTimelineStore(state => state.clipKeyframes?.get(clipId)?.some(key => key.id.startsWith('face-stabilize:')) ?? false);
   const opacityPercent = opacity * 100;
   const speedPercent = speed * 100;
   const cropSectionEnabled = isVideoInspectorSectionEnabled(sections, 'cropping');
@@ -308,12 +309,15 @@ export function ResolveVisualInspectorSections({
 
       {showTemporalSections && (
         <ResolveInspectorSection
-          collapsible={false}
+          collapsible={hasStabilization}
           defaultOpen={false}
-          enabled={false}
+          enabled={hasStabilization && isVideoInspectorSectionEnabled(sections, 'stabilization')}
+          onEnabledChange={hasStabilization ? enabled => onSectionEnabledChange('stabilization', enabled) : undefined}
           title="Stabilization"
         >
-          <PendingSectionBody>Stabilization controls are not connected yet.</PendingSectionBody>
+          <PendingSectionBody>{hasStabilization
+            ? 'Bypass baked face/lip stabilization while keeping its keyframes, zoom and manual transforms.'
+            : 'Use Tracking > Stabilize face or Stabilize lips first.'}</PendingSectionBody>
         </ResolveInspectorSection>
       )}
     </div>

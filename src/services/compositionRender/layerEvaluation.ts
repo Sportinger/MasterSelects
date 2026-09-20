@@ -190,7 +190,7 @@ export function buildEvaluatedClipLayer(params: {
     anchor: { x: 0.5, y: 0.5 },
     opacity: 1,
   };
-  const transform = mappedAnimation?.transform ?? evaluateCompositionClipTransform(baseTransform, keyframes, timelineLocalTime);
+  const transform = mappedAnimation?.transform ?? evaluateCompositionClipTransform(baseTransform, keyframes, timelineLocalTime, clipAtTime.videoInspectorSections?.stabilization);
   const masks = mappedAnimation?.masks ?? evaluateCompositionClipMasks(clipAtTime.masks, keyframes, timelineLocalTime);
   const effects = mappedAnimation?.effects ?? evaluateCompositionClipEffects(clipAtTime.effects, keyframes, timelineLocalTime, clipAtTime);
   const transitionRender = evaluateTransitionRenderState(

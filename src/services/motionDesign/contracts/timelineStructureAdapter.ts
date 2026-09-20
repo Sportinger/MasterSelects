@@ -153,7 +153,8 @@ export function getTimelineMotionLocalTransformAtTime(
     [...keyframes],
     timelineTime - clip.startTime,
     clip.transform,
-    { rotationMode: clip.source?.type === 'camera' ? 'shortest' : 'linear' },
+    { rotationMode: clip.source?.type === 'camera' ? 'shortest' : 'linear',
+      stabilizationEnabled: clip.videoInspectorSections?.stabilization },
   );
 }
 

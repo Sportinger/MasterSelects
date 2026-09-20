@@ -84,7 +84,7 @@ export async function bakeFaceCables(clipId: string, effectId: string, configs: 
     for (let frame = 0; frame < frames; frame++) {
       signal.throwIfAborted();
       const time = Math.min(frame / fps, clip.duration - 1e-6);
-      const transform = getInterpolatedClipTransform(neighborKeys(sorted, time), time, clip.transform);
+      const transform = getInterpolatedClipTransform(neighborKeys(sorted, time), time, clip.transform, { stabilizationEnabled: clip.videoInspectorSections?.stabilization });
       const mapping = trackingPreviewTransform(transform, source, comp);
       const face = samplePreciseFace(series, surfaceSourceTime(clip, time, speedKeys))?.faces[0];
       const facePoints = (effectParams.faceCollision || effectParams.faceShadows || effectParams.scene3D) && face?.length ? cableFacePoints(face, mapping, aspect) : undefined;
@@ -193,6 +193,7 @@ export async function bakeFaceCables(clipId: string, effectId: string, configs: 
     || useMediaStore.getState().getActiveComposition()?.width !== comp.width
     || useMediaStore.getState().getActiveComposition()?.height !== comp.height
     || useMediaStore.getState().getActiveComposition()?.frameRate !== fps
+    || currentClip.videoInspectorSections?.stabilization !== clip.videoInspectorSections?.stabilization
     || currentClip.effects !== clip.effects || media.activeCompositionId !== useMediaStore.getState().activeCompositionId) throw new Error('The clip changed while baking. Bake again.');
   assertExclusiveTimelineMutationAllowed();
   const previous = clip.effects.find(e => e.id === effectId && e.type === 'face-cables');

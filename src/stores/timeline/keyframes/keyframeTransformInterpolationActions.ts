@@ -64,6 +64,7 @@ export const createKeyframeTransformInterpolationActions: SliceCreator<KeyframeT
       ? baseTransform
       : getInterpolatedClipTransform(keyframes, clipLocalTime, baseTransform, {
           rotationMode: clip.source?.type === 'camera' ? 'shortest' : 'linear',
+          stabilizationEnabled: clip.videoInspectorSections?.stabilization,
         });
     const ownTransform = applyVideoInspectorTransformBypass(clip, interpolatedTransform);
 

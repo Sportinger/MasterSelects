@@ -186,6 +186,8 @@ inspection foundation for subsequent face-driven effects. A second clip using
 the same source and a covered source range can reuse an already loaded face
 analysis; its own cache entry is saved without running inference again.
 
+**Transform > Stabilization** provides a reversible bypass for baked face/lip stabilization. It ignores only generated stabilization keyframes, preserving zoom, manual transforms and all stored keys. The switch is saved with the project and applies to preview, native 3D, nested compositions and export. Existing cable/depth bakes move with the clip; toggling this switch does not rerun depth inference.
+
 **Stabilize face** and **Stabilize lips** bake ordinary position X/Y and rotation
 Z keyframes at the composition frame rate. Face mode levels the outer eye
 corners and anchors the nose; lip mode levels the mouth corners and anchors

@@ -129,6 +129,7 @@ export function buildLayerSyncNestedLayers({
     const transform = mappedAnimation?.transform ?? (keyframes.length > 0
       ? getInterpolatedClipTransform(keyframes, nestedLocalTime, baseTransform, {
           rotationMode: nestedClip.source?.type === 'camera' ? 'shortest' : 'linear',
+          stabilizationEnabled: nestedClip.videoInspectorSections?.stabilization,
         })
       : baseTransform);
     const effects = mappedAnimation?.effects ?? evaluateCompositionClipEffects(

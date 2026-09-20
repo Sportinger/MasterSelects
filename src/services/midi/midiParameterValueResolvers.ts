@@ -93,6 +93,7 @@ function resolveTransformParameterValue(clip: TimelineClip, property: string): n
         baseTransform,
         {
           rotationMode: clip.source?.type === 'camera' ? 'shortest' : 'linear',
+          stabilizationEnabled: clip.videoInspectorSections?.stabilization,
         },
       );
 
