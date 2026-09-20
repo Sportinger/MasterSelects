@@ -327,10 +327,13 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
 `;
 
 /** Injects the compiled image DAG at the legacy inline-invert position, preserving the surrounding effect order. */
-export function specializeVideoFrameLayerCompositeShader(source: string, wgsl: string): string {
+export function specializeVideoFrameLayerCompositeShader(source: string, program: import('../../types/imageOperatorProgram').ImageOperatorProgram): string {
   const marker = '  rgb = select(rgb, 1.0 - rgb, layer.inlineInvert == 1u);';
   if (!source.includes(marker)) throw new Error('Worker video operator insertion point is missing.');
-  return `${wgsl}\n${source.replace(marker, `  let operatorColor = evaluateImageGraph(vec4f(rgb, alpha));\n  rgb = operatorColor.rgb;\n  alpha = operatorColor.a;\n${marker}`)}`;
+  const parameters = program.values.length ? ', layer.imageParameters' : '';
+  const specialized = program.values.length
+    ? source.replace('  _pad1: u32,', '  _pad1: u32,\n  imageParameters: ImageOperatorParameters,') : source;
+  return `${program.wgsl}\n${specialized.replace(marker, `  let operatorColor = evaluateImageGraph(vec4f(rgb, alpha)${parameters});\n  rgb = operatorColor.rgb;\n  alpha = operatorColor.a;\n${marker}`)}`;
 }
 
 export const VIDEO_FRAME_LAYER_DISPLAY_SHADER = `

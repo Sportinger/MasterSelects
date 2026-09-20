@@ -119,8 +119,12 @@ export class EffectsPipeline {
     outputWidth: number,
     outputHeight: number,
     timelineTimeSeconds = 0,
+    resolvedDefinition?: FullscreenEffectDefinition,
   ): Float32Array | null {
-    const definition = getEffect(effect.type);
+    const registered = getEffect(effect.type);
+    const definition = resolvedDefinition ?? (isImageGraphEffectType(effect.type) && isFullscreenEffectDefinition(registered)
+      ? imageGraphDefinition(effect, registered)
+      : registered);
     if (!isFullscreenEffectDefinition(definition) && !isComputeEffectDefinition(definition)) return null;
 
     return definition.packUniforms(
@@ -377,6 +381,7 @@ export class EffectsPipeline {
         outputWidth,
         outputHeight,
         timelineTimeSeconds,
+        definition,
       );
       let effectUniformBuffer: GPUBuffer | null = null;
 

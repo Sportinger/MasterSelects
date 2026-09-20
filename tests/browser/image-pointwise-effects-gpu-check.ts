@@ -21,7 +21,6 @@ async function render(
   readback: GPUBuffer,
   definition: FullscreenEffectDefinition,
   params: Record<string, number>,
-  legacy: boolean,
 ): Promise<Uint8Array> {
   const module = device.createShaderModule({ code: `${common}\n${definition.shader}` });
   const info = await module.getCompilationInfo();
@@ -31,7 +30,7 @@ async function render(
     fragment: { module, entryPoint: definition.entryPoint, targets: [{ format: 'rgba8unorm' }] } });
   const entries: GPUBindGroupEntry[] = [{ binding: 0, resource: sampler }, { binding: 1, resource: source }];
   let uniform: GPUBuffer | undefined;
-  if (legacy) {
+  if (definition.uniformSize > 0) {
     const packed = definition.packUniforms(params, 64, 1)!;
     uniform = device.createBuffer({ size: packed.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     device.queue.writeBuffer(uniform, 0, packed.buffer, packed.byteOffset, packed.byteLength);
@@ -61,8 +60,8 @@ export async function checkPointwiseEffectsGpu(device: GPUDevice, sampler: GPUSa
     for (const item of cases) {
       const legacy = definitions[item.type] as FullscreenEffectDefinition;
       const graph = imageGraphDefinition({ type: item.type, params: item.params }, legacy);
-      const expected = await render(device, sampler, source.createView(), target, readback, legacy, item.params, true);
-      const actual = await render(device, sampler, source.createView(), target, readback, graph, item.params, false);
+      const expected = await render(device, sampler, source.createView(), target, readback, legacy, item.params);
+      const actual = await render(device, sampler, source.createView(), target, readback, graph, item.params);
       const mismatch = expected.findIndex((value, index) => value !== actual[index]);
       if (mismatch >= 0) throw new Error(`${item.name} graph differs from registered shader at byte ${mismatch}`);
       for (let alpha = 3; alpha < actual.length; alpha += 4) {

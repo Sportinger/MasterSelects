@@ -38,6 +38,7 @@ struct LayerUniforms {
   videoRotation: u32,
   anchorX: f32,
   anchorY: f32,
+  operatorValues: array<vec4f, 16>,
 };
 
 @vertex

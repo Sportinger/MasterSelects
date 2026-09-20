@@ -6,7 +6,10 @@ import { createDefaultInvertImageGraph } from '../../src/services/operators/imag
 import { createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
 import type { Effect } from '../../src/types/effects';
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 const effect = (): Effect => ({ id: 'invert-preview', type: 'invert', name: 'Invert', enabled: true, params: {}, operatorGraph: createDefaultInvertImageGraph() });
 
@@ -40,18 +43,23 @@ describe('image operator texture previews', () => {
   });
 
   it('supplies normalized fragment coordinates to a demanded UV-dependent port', () => {
+    vi.stubGlobal('GPUBufferUsage', { UNIFORM: 1, COPY_DST: 2 });
     const stage = imageOperatorPreviewStage({ effectId: 'vignette-preview', nodeId: 'shade', direction: 'output', portId: 'value' });
     vi.spyOn(nodePreviewTextureTap, 'matching').mockReturnValue([{ stage, request: {} as never }]);
     const pass = { setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: vi.fn() } as unknown as GPURenderPassEncoder;
     vi.spyOn(nodePreviewTextureTap, 'draw').mockImplementation((_stage, _device, _encoder, _width, _height, encode) => encode(pass));
     let shader = '';
     const pipeline = { getBindGroupLayout: vi.fn(() => ({})) } as unknown as GPURenderPipeline;
-    const device = { lost: new Promise(() => {}), createShaderModule: vi.fn(({ code }: { code: string }) => { shader = code; return {}; }),
+    const writeBuffer = vi.fn(), createBuffer = vi.fn(() => ({}));
+    const device = { lost: new Promise(() => {}), queue: { writeBuffer }, createBuffer,
+      createShaderModule: vi.fn(({ code }: { code: string }) => { shader = code; return {}; }),
       createRenderPipeline: vi.fn(() => pipeline), createBindGroup: vi.fn(() => ({})) } as unknown as GPUDevice;
     const vignetteEffect = { id: 'vignette-preview', type: 'vignette', name: 'Vignette', enabled: true, params: {},
       operatorGraph: createDefaultVignetteGraph() } as Effect;
     expect(captureImageOperatorPreviews({ effect: vignetteEffect, device, encoder: {} as GPUCommandEncoder, sampler: {} as GPUSampler,
       source: { kind: 'texture', view: {} as GPUTextureView }, width: 640, height: 360 })).toBe(1);
-    expect(shader).toContain('evaluateImageGraph(textureSample(imagePreviewSource, imagePreviewSampler, input.uv), input.uv)');
+    expect(shader).toContain('evaluateImageGraph(textureSample(imagePreviewSource, imagePreviewSampler, input.uv), input.uv, imageParameters)');
+    expect(createBuffer).toHaveBeenCalledTimes(1);
+    expect(writeBuffer).toHaveBeenCalledTimes(1);
   });
 });

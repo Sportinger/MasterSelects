@@ -150,6 +150,8 @@ existing fullscreen pass and alpha behavior. UV-dependent node previews show
 the spatial field instead of inventing a single numeric value. Adding a UV
 dependency to another image graph also routes it through the contextual
 fullscreen path; ordinary pixel-only graphs keep their inline optimization.
+Animated graph parameters update GPU uniform values while reusing the compiled
+pipeline; changing graph wiring or a structural node constant recompiles it.
 
 ### Analog Signal Lab
 

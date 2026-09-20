@@ -103,6 +103,13 @@ describe('image graph lifecycle parity', () => {
       const exportPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(exported), exportParams), pixel, { uv: [0.9, 0.5] });
       expect(previewPixel).toEqual(exportPixel);
       expect(exportPixel[3]).toBe(pixel[3]);
+      const endpointPlans = [0, 2].map(time => {
+        const sampled = evaluateCompositionClipEffects([effect], keys, time)[0];
+        return compileImageOperatorGraph(effectOperatorGraph(sampled), effectOperatorParams(sampled));
+      });
+      expect(endpointPlans[0].key).toBe(endpointPlans[1].key);
+      expect(endpointPlans[0].wgsl).toBe(endpointPlans[1].wgsl);
+      expect(endpointPlans[0].values).not.toEqual(endpointPlans[1].values);
     }
   });
 

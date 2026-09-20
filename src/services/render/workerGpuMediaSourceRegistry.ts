@@ -6,6 +6,7 @@ import type { WorkerRenderHostRuntimeBridge } from './workerRenderHostRuntimeBri
 import type { WorkerRenderHostRuntimeJobOutput } from './workerRenderHostRuntimeHandlers';
 import type { WorkerGpuWebCodecsRenderLayer } from './workerGpuRuntimeCommands';
 import { isImageGraphEffectType } from '../operators/effectGraphOwner';
+import type { ImageOperatorProgram } from '../../types/imageOperatorProgram';
 
 const log = Logger.create('WorkerGpuMediaSourceRegistry');
 
@@ -29,7 +30,7 @@ export interface WorkerGpuVideoPresentationLayerStyle {
   readonly inlineContrast: number;
   readonly inlineSaturation: number;
   readonly inlineInvert: boolean;
-  readonly operatorProgram?: { readonly key: string; readonly wgsl: string };
+  readonly operatorProgram?: ImageOperatorProgram;
   readonly hueShift: number;
   readonly pixelateSize: number;
   readonly kaleidoscopeSegments: number;

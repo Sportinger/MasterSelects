@@ -6,6 +6,8 @@ import type {
 } from './workerGpuTargetSurface';
 import { getCachedWorkerOperatorPipeline, specializeLegacyWorkerLayerShader, uploadWorkerVideoFrameTexture,
   workerTexture2dShader, workerVideoFrameNeedsStraightAlphaUpload } from './workerGpuOperatorPipeline';
+import type { ImageOperatorProgram } from '../../types/imageOperatorProgram';
+import { IMAGE_OPERATOR_PARAMETER_BUFFER_BYTES, packImageOperatorParameters } from '../operators/imageOperatorParameters';
 
 interface WorkerGpuVideoFramePresenterResources {
   readonly pipeline: GPURenderPipeline;
@@ -41,7 +43,7 @@ export interface WorkerGpuVideoFramePresentLayer {
   readonly inlineContrast?: number;
   readonly inlineSaturation?: number;
   readonly inlineInvert?: boolean;
-  readonly operatorProgram?: { readonly key: string; readonly wgsl: string };
+  readonly operatorProgram?: ImageOperatorProgram;
 }
 
 export interface WorkerGpuVideoFrameLayerPresentOptions extends WorkerGpuPresentBaseOptions {
@@ -361,10 +363,10 @@ function createLayerUniformBuffer(
   layer: WorkerGpuVideoFramePresentLayer,
 ): GPUBuffer {
   const buffer = surface.device.createBuffer({
-    size: 32,
+    size: 32 + IMAGE_OPERATOR_PARAMETER_BUFFER_BYTES,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
-  const payload = new ArrayBuffer(32);
+  const payload = new ArrayBuffer(32 + IMAGE_OPERATOR_PARAMETER_BUFFER_BYTES);
   const view = new DataView(payload);
   view.setFloat32(0, finiteOpacity(layer.opacity), true);
   view.setUint32(4, blendModeIndex(layer.blendMode), true);
@@ -372,6 +374,7 @@ function createLayerUniformBuffer(
   view.setFloat32(12, finiteNumber(layer.inlineContrast, 1), true);
   view.setFloat32(16, finiteNumber(layer.inlineSaturation, 1), true);
   view.setUint32(20, layer.inlineInvert === true ? 1 : 0, true);
+  new Float32Array(payload, 32, 64).set(packImageOperatorParameters(layer.operatorProgram?.values ?? []));
   surface.device.queue.writeBuffer(buffer, 0, payload);
   return buffer;
 }
@@ -469,7 +472,7 @@ export async function presentGpuVideoFrameLayers(
       const shader = uploadStraightAlpha ? workerTexture2dShader(VIDEO_FRAME_LAYER_COMPOSITE_SHADER) : VIDEO_FRAME_LAYER_COMPOSITE_SHADER;
       const compositePipeline = layer.operatorProgram ? getCachedWorkerOperatorPipeline(surface.device, resources.operatorPipelines,
         `${uploadStraightAlpha ? 'texture' : 'external'}:${layer.operatorProgram.key}`,
-        specializeLegacyWorkerLayerShader(shader, layer.operatorProgram.wgsl))
+        specializeLegacyWorkerLayerShader(shader, layer.operatorProgram))
         : uploadStraightAlpha ? resources.textureCompositePipeline : resources.compositePipeline;
       const bindGroup = surface.device.createBindGroup({
         layout: compositePipeline.getBindGroupLayout(0),

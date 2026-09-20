@@ -2,6 +2,7 @@
 
 import type { Layer } from '../core/types';
 import type { VideoRotationDegrees } from '../webcodecs/videoTrackOrientation';
+import type { ImageOperatorProgram } from '../../types/imageOperatorProgram';
 import { createCompositorPipelineResources } from './compositor/pipelineResources';
 import { createOperatorCompositePipeline } from './compositor/operatorPipeline';
 import {
@@ -78,23 +79,23 @@ export class CompositorPipeline {
     this.externalCopyPipelines = new Map(resources.externalCopyPipelines);
   }
 
-  getCompositePipeline(program?: { key: string; wgsl: string }): GPURenderPipeline | null {
+  getCompositePipeline(program?: ImageOperatorProgram): GPURenderPipeline | null {
     if (program) return this.getOperatorPipeline(false, program);
     return this.compositePipeline;
   }
 
-  getExternalCompositePipeline(program?: { key: string; wgsl: string }): GPURenderPipeline | null {
+  getExternalCompositePipeline(program?: ImageOperatorProgram): GPURenderPipeline | null {
     if (program) return this.getOperatorPipeline(true, program);
     return this.externalCompositePipeline;
   }
 
-  private getOperatorPipeline(external: boolean, program: { key: string; wgsl: string }): GPURenderPipeline {
+  private getOperatorPipeline(external: boolean, program: ImageOperatorProgram): GPURenderPipeline {
     const key = `${external}:${program.key}`;
     let pipeline = this.operatorPipelines.get(key);
     if (!pipeline) {
       const layout = external ? this.externalCompositeBindGroupLayout : this.compositeBindGroupLayout;
       if (!layout) throw new Error('Composite pipeline is not initialized.');
-      pipeline = createOperatorCompositePipeline(this.device, layout, external, program.wgsl);
+      pipeline = createOperatorCompositePipeline(this.device, layout, external, program);
       // Animated constants may create specializations; keep runtime caches bounded.
       if (this.operatorPipelines.size >= 64) this.operatorPipelines.delete(this.operatorPipelines.keys().next().value!);
       this.operatorPipelines.set(key, pipeline);
@@ -195,7 +196,7 @@ export class CompositorPipeline {
     if (needsUpdate) {
       this.device.queue.writeBuffer(uniformBuffer, 0, this.uniformData);
       // Store copy of current values (both float and u32 views)
-      if (!lastValuesEntry) {
+      if (!lastValuesEntry || lastValuesEntry.float.length !== this.uniformData.length) {
         this.lastUniformValues.set(uniformBuffer, {
           float: new Float32Array(this.uniformData),
           u32: new Uint32Array(this.uniformDataU32),

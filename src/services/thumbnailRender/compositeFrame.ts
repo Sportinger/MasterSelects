@@ -6,6 +6,7 @@ import type { Layer } from '../../types/layers';
 import type { ThumbnailLayerData, ThumbnailRenderTarget, ThumbnailResources } from './contracts';
 import { blobToDataURL } from './frameCapture';
 import { calculateSourcePixelScale } from '../../utils/sourcePixelScale';
+import type { ImageOperatorProgram } from '../../types/imageOperatorProgram';
 
 const log = Logger.create('ThumbnailRenderer');
 
@@ -270,7 +271,7 @@ function createCompositeBinding(
   uniformBuffer: GPUBuffer,
   maskTextureView: GPUTextureView,
   source: { textureView: GPUTextureView | null; externalTexture: GPUExternalTexture | null; useExternalTexture: boolean },
-  operatorProgram?: { key: string; wgsl: string },
+  operatorProgram?: ImageOperatorProgram,
 ): { pipeline: GPURenderPipeline; bindGroup: GPUBindGroup } | null {
   const { compositorPipeline } = resources;
 

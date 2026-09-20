@@ -37,4 +37,14 @@ describe('contextual image operator compiler', () => {
     expect(() => evaluateImageOperatorPlan(plan, [0, 0, 0, 1])).toThrow(/requires normalized UV context/);
     expect(evaluateImageOperatorPlan(plan, [0, 0, 0, 1], { uv: [0.5, 0.5] })).toEqual([0, 0, 0, 1]);
   });
+
+  it('orders UV before dynamic parameters in the shared WGSL ABI', () => {
+    const graph = uvGraph();
+    const half = graph.nodes.find(node => node.id === 'half')!;
+    half.bindings.value = 'center';
+    delete half.constants;
+    const plan = compileImageOperatorPreview(graph, { center: 0.5 }, { nodeId: 'mix', direction: 'output', portId: 'value' });
+    expect(plan.values).toEqual([0.5]);
+    expect(plan.wgsl).toContain('inputColor: vec4f, inputUv: vec2f, imageParameters: ImageOperatorParameters');
+  });
 });

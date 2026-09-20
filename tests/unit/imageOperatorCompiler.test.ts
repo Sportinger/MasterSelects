@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compileImageOperatorGraph, compileImageOperatorPreview, createDefaultInvertImageGraph, evaluateImageOperatorPlan, migrateImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
+import { IMAGE_OPERATOR_PARAMETER_BUFFER_BYTES, packImageOperatorParameters } from '../../src/services/operators/imageOperatorParameters';
 
 describe('local image operator compiler', () => {
   it('compiles the default invert as one inline DAG and preserves alpha', () => {
@@ -32,10 +33,10 @@ describe('local image operator compiler', () => {
         { id: 'e', from: 'combine', output: 'image', to: 'output', input: 'image' },
       ], layout: { frame: { x: 7, y: 9 }, split: { x: 200, y: 0 }, invert: { x: 410, y: 30 }, combine: { x: 620, y: 0 }, output: { x: 800, y: 0 } } };
     const migrated = migrateImageOperatorGraph(graph);
-    expect(migrated.nodes.map(node => node.operator)).toEqual(expect.arrayContaining(['vector.split.vec4', 'vector.combine.vec4', 'values.number', 'math.subtract.scalar']));
+    expect(migrated.nodes.map(node => node.operator)).toEqual(expect.arrayContaining(['vector.split.rgba', 'vector.combine.rgba', 'values.number', 'convert.scalar-to-rgb', 'math.subtract.rgb']));
     expect(migrated.nodes.some(node => node.operator === 'color.invert.rgb')).toBe(false);
     expect(migrated.layout.frame).toEqual({ x: 7, y: 9 });
-    expect(migrated.layout['invert-r']).toEqual({ x: 410, y: 30 });
+    expect(migrated.layout.invert).toEqual({ x: 410, y: 30 });
     expect(evaluateImageOperatorPlan(compileImageOperatorGraph(migrated), [0.2, 0.7, 1, 0.35])).toEqual([0.8, 0.30000000000000004, 0, 0.35]);
   });
 
@@ -49,6 +50,30 @@ describe('local image operator compiler', () => {
     const first = compileImageOperatorGraph(createDefaultInvertImageGraph());
     const second = compileImageOperatorGraph(createDefaultInvertImageGraph());
     expect(first.key).toBe(second.key);
+  });
+
+  it('keeps bound scalar values dynamic while constants remain specialized', () => {
+    const graph = createDefaultInvertImageGraph();
+    const one = graph.nodes.find(node => node.id === 'one')!;
+    one.bindings.value = 'amount';
+    delete one.constants;
+    graph.nodes.push({ id: 'one-copy', operator: 'values.number', operatorVersion: 1, bindings: { value: 'amount' } });
+    graph.edges = graph.edges.map(edge => edge.id === 'one-g' ? { ...edge, from: 'one-copy' } : edge);
+    const first = compileImageOperatorGraph(graph, { amount: 0.6 });
+    const second = compileImageOperatorGraph(graph, { amount: 0.8 });
+    expect(first.key).toBe(second.key);
+    expect(first.wgsl).toBe(second.wgsl);
+    expect(first.values).toEqual([0.6]);
+    expect(second.values).toEqual([0.8]);
+    const parameterInstructions = first.instructions.filter(item => item.operation === 'parameter');
+    expect(parameterInstructions).toHaveLength(2);
+    expect(parameterInstructions.map(item => item.value)).toEqual([0, 0]);
+    expect(first.wgsl).toContain('inputColor: vec4f, imageParameters: ImageOperatorParameters');
+    expect(evaluateImageOperatorPlan(first, [0.2, 0.3, 0.4, 0.5])).toEqual([0.39999999999999997, 0.3, 0.19999999999999996, 0.5]);
+    const packed = packImageOperatorParameters(first.values);
+    expect(packed.byteLength).toBe(IMAGE_OPERATOR_PARAMETER_BUFFER_BYTES);
+    expect([...packed.slice(0, 2)]).toEqual([expect.closeTo(0.6), 0]);
+    expect(() => packImageOperatorParameters(Array.from({ length: 65 }, () => 0))).toThrow(/exceeds 64/);
   });
 
   it('passes RGB through when invert is bypassed', () => {

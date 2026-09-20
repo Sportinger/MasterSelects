@@ -214,7 +214,7 @@ export interface WorkerGpuWebCodecsFrameLayer {
   readonly inlineContrast?: number;
   readonly inlineSaturation?: number;
   readonly inlineInvert?: boolean;
-  readonly operatorProgram?: { readonly key: string; readonly wgsl: string };
+  readonly operatorProgram?: import('../../types/imageOperatorProgram').ImageOperatorProgram;
   readonly hueShift?: number;
   readonly pixelateSize?: number;
   readonly kaleidoscopeSegments?: number;

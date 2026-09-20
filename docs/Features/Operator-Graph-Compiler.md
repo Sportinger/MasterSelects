@@ -22,6 +22,14 @@ Invert uses this graph in both the existing inline compositor and ordered fullsc
 
 Graphs are stored in `effect.operatorGraph`; `effect.params` retains parameter and keyframe ownership. Old serialized `params.operatorGraph` values are validated and migrated on load. Invalid data never silently selects a default graph. Graph layout, groups, and local constants travel with the graph through save/load and history. Incomplete wiring remains visible and pauses execution until repaired.
 
+Bound scalar parameters are runtime uniform slots, not shader literals. Their
+sampled values update independently of the structural program key, allowing
+keyframe playback to reuse GPU pipelines. Repeated references to one binding
+share a slot; unbound node constants remain structural literals. The common
+portable program carries at most 64 scalar values, packed into a 256-byte block
+by the same helper for compositor, fullscreen, node-preview, and worker paths.
+These runtime slots are not a second persisted parameter store.
+
 A graph-local numeric constant uses one Min/Max/Default preference in both its inline control and inspector. These control preferences stay local to the editor and do not duplicate the value in project data; the current value remains in the node's `constants` inside `effect.operatorGraph`. Registry bounds and defaults are used until the user customizes them. `values.number` accepts any finite literal within the chosen UI range, while operators with domain limits continue to enforce their registry bounds.
 
 This is the initial image-effect migration. Other effect families and the persistent Color Nodes model still require migration. The existing specialized Voxel and Face Cables compilers consume the canonical graph through adapters; their GPU and simulation implementations are retained.

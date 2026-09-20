@@ -11,6 +11,8 @@ import {
 } from './workerGpuVideoFrameLayerShaderSource';
 import type { WorkerGpuWebCodecsRenderLayer } from './workerGpuRuntimeCommands';
 import { workerVideoFrameNeedsStraightAlphaUpload } from './workerGpuOperatorPipeline';
+import type { ImageOperatorProgram } from '../../types/imageOperatorProgram';
+import { IMAGE_OPERATOR_PARAMETER_BUFFER_BYTES, packImageOperatorParameters } from '../operators/imageOperatorParameters';
 
 interface WorkerGpuVideoFrameLayerPresenterResources {
   readonly compositePipeline: GPURenderPipeline;
@@ -43,7 +45,7 @@ export interface WorkerGpuVideoFramePresentLayer {
   readonly inlineContrast?: number;
   readonly inlineSaturation?: number;
   readonly inlineInvert?: boolean;
-  readonly operatorProgram?: { readonly key: string; readonly wgsl: string };
+  readonly operatorProgram?: ImageOperatorProgram;
   readonly hueShift?: number;
   readonly pixelateSize?: number;
   readonly kaleidoscopeSegments?: number;
@@ -213,12 +215,12 @@ function createLayerPresenterResources(surface: WorkerGpuTargetSurface): WorkerG
 }
 
 function getOperatorCompositePipeline(resources: WorkerGpuVideoFrameLayerPresenterResources, surface: WorkerGpuTargetSurface,
-  bitmap: boolean, program: { readonly key: string; readonly wgsl: string }): GPURenderPipeline {
+  bitmap: boolean, program: ImageOperatorProgram): GPURenderPipeline {
   const key = `${bitmap ? 'bitmap' : 'external'}:${program.key}`;
   const cached = resources.operatorPipelines.get(key);
   if (cached) return cached;
   const base = bitmap ? BITMAP_LAYER_COMPOSITE_SHADER : VIDEO_FRAME_LAYER_COMPOSITE_SHADER;
-  const source = specializeVideoFrameLayerCompositeShader(base, program.wgsl);
+  const source = specializeVideoFrameLayerCompositeShader(base, program);
   const module = surface.device.createShaderModule({ code: source });
   const pipeline = surface.device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vertexMain', buffers: [] },
     fragment: { module, entryPoint: 'fragmentMain', targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } });
@@ -258,10 +260,10 @@ function createLayerUniformBuffer(
   layer: WorkerGpuVideoFramePresentLayer,
 ): GPUBuffer {
   const buffer = surface.device.createBuffer({
-    size: 272,
+    size: 272 + IMAGE_OPERATOR_PARAMETER_BUFFER_BYTES,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
-  const payload = new ArrayBuffer(272);
+  const payload = new ArrayBuffer(272 + IMAGE_OPERATOR_PARAMETER_BUFFER_BYTES);
   const view = new DataView(payload);
   const f32 = (offset: number, value: number) => view.setFloat32(offset, value, true);
   const u32 = (offset: number, value: number) => view.setUint32(offset, value, true);
@@ -330,6 +332,7 @@ function createLayerUniformBuffer(
   f32(248, Math.max(1, Math.floor(surface.canvas.width)));
   f32(252, Math.max(1, Math.floor(surface.canvas.height)));
   f32(256, (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000);
+  new Float32Array(payload, 272, 64).set(packImageOperatorParameters(layer.operatorProgram?.values ?? []));
   surface.device.queue.writeBuffer(buffer, 0, payload);
   return buffer;
 }

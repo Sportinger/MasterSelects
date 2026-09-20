@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import type { Layer } from '../../src/types/layers';
 import {
   COMPOSITOR_UNIFORM_FLOAT_COUNT,
+  COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT,
+  shouldUpdateLayerUniforms,
   writeLayerUniformData,
 } from '../../src/engine/pipeline/compositor/uniforms';
 
@@ -67,6 +69,24 @@ const EXPECTED_COMPOSITOR_TRANSITION_TYPES = [
 const EXPECTED_COMPOSITOR_DISTORTION_TYPES = [25, 26];
 
 describe('compositor uniforms', () => {
+  it('tracks dynamic operator slots exactly and clears stale values', () => {
+    const buffer = new ArrayBuffer(COMPOSITOR_UNIFORM_FLOAT_COUNT * 4);
+    const floats = new Float32Array(buffer), u32 = new Uint32Array(buffer);
+    const base = createLayer();
+    const program = { key: 'stable', wgsl: '', values: [0.25] };
+    writeLayerUniformData(base, 1, 1, false, floats, u32, { operatorProgram: program, brightness: 0, contrast: 1, saturation: 1, invert: false });
+    const snapshot = { float: new Float32Array(floats), u32: new Uint32Array(u32) };
+    expect(floats[COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT]).toBe(0.25);
+    expect(shouldUpdateLayerUniforms(floats, u32, snapshot)).toBe(false);
+
+    writeLayerUniformData(base, 1, 1, false, floats, u32, { operatorProgram: { ...program, values: [0.2500001] }, brightness: 0, contrast: 1, saturation: 1, invert: false });
+    expect(shouldUpdateLayerUniforms(floats, u32, snapshot)).toBe(true);
+    snapshot.float.set(floats); snapshot.u32.set(u32);
+    writeLayerUniformData(base, 1, 1, false, floats, u32);
+    expect(floats[COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT]).toBe(0);
+    expect(shouldUpdateLayerUniforms(floats, u32, snapshot)).toBe(true);
+  });
+
   it('keeps normal and external video transition shader branches in parity', () => {
     const normalShader = readRepoText('src/shaders/composite.wgsl');
     const externalShader = readRepoText('src/engine/pipeline/compositor/externalCompositeShader.ts');

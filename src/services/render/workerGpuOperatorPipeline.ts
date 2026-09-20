@@ -1,11 +1,21 @@
-export function specializeLegacyWorkerLayerShader(source: string, wgsl: string): string {
+import type { ImageOperatorProgram } from '../../types/imageOperatorProgram';
+
+export function specializeLegacyWorkerLayerShader(source: string, program: ImageOperatorProgram): string {
   const marker = '  adjustedRgb = select(adjustedRgb, 1.0 - adjustedRgb, layer.inlineInvert == 1u);';
   if (!source.includes(marker)) throw new Error('Worker frame operator insertion point is missing.');
-  return `${wgsl}\n${source.replace(marker, `  frameColor = evaluateImageGraph(frameColor);\n  adjustedRgb = frameColor.rgb;\n${marker}`)}`;
+  const parameters = program.values.length ? ', layer.imageParameters' : '';
+  const specialized = program.values.length
+    ? source.replace('  _pad1: u32,', '  _pad1: u32,\n  imageParameters: ImageOperatorParameters,') : source;
+  return `${program.wgsl}\n${specialized.replace(marker, `  frameColor = evaluateImageGraph(frameColor${parameters});\n  adjustedRgb = frameColor.rgb;\n${marker}`)}`;
 }
 
 export function workerGpuOperatorProgramCacheKey(program: { readonly key: string } | undefined): string {
   return program?.key ?? 'no-operator-program';
+}
+
+/** Presentation identity includes frame-varying values; GPU pipeline identity deliberately does not. */
+export function workerGpuOperatorProgramPresentationKey(program: ImageOperatorProgram | undefined): string {
+  return program ? `${program.key}:${program.values.map(value => Math.fround(value)).join(',')}` : 'no-operator-program';
 }
 
 const OPAQUE_VIDEO_FORMATS = new Set(['I420', 'I422', 'I444', 'NV12', 'RGBX', 'BGRX']);

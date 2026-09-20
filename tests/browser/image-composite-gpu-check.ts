@@ -25,16 +25,21 @@ export async function checkImageCompositeGpu(device: GPUDevice, sampler: GPUSamp
     { name: 'plain', program: undefined, invert: false },
     { name: 'brightness-legacy', program: undefined, invert: false, brightness: 0.2 },
     { name: 'brightness-graph', program: compileImageOperatorGraph(createDefaultColorEffectGraph('brightness'), { amount: 0.2 }), invert: false },
+    { name: 'brightness-updated-legacy', program: undefined, invert: false, brightness: 0.45 },
+    { name: 'brightness-updated-graph', program: compileImageOperatorGraph(createDefaultColorEffectGraph('brightness'), { amount: 0.45 }), invert: false },
     { name: 'contrast-legacy', program: undefined, invert: false, contrast: 0.35 },
     { name: 'contrast-graph', program: compileImageOperatorGraph(createDefaultColorEffectGraph('contrast'), { amount: 0.35 }), invert: false },
     { name: 'saturation-legacy', program: undefined, invert: false, saturation: 0.4 },
     { name: 'saturation-graph', program: compileImageOperatorGraph(createDefaultColorEffectGraph('saturation'), { amount: 0.4 }), invert: false },
   ];
   const outputs = new Map<string, Uint8Array>();
+  const pipelines = new Map<string, GPURenderPipeline>();
   let renderPasses = 0;
   try {
     for (const item of cases) {
-      const uniform = compositor.getOrCreateUniformBuffer(`probe-${item.name}`);
+      const uniformKey = item.name === 'brightness-graph' || item.name === 'brightness-updated-graph'
+        ? 'probe-brightness-dynamic' : `probe-${item.name}`;
+      const uniform = compositor.getOrCreateUniformBuffer(uniformKey);
       compositor.updateLayerUniforms(layer, size, size, false, uniform, {
         brightness: item.brightness ?? 0,
         contrast: item.contrast ?? 1,
@@ -44,6 +49,7 @@ export async function checkImageCompositeGpu(device: GPUDevice, sampler: GPUSamp
       });
       const pipeline = compositor.getCompositePipeline(item.program);
       if (!pipeline) throw new Error(`Missing compositor pipeline for ${item.name}`);
+      pipelines.set(item.name, pipeline);
       const bindGroup = compositor.createCompositeBindGroup(sampler, base.createView(), source.createView(), uniform, mask.createView());
       const encoder = device.createCommandEncoder();
       const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.createView(), loadOp: 'clear', storeOp: 'store' }] });
@@ -67,6 +73,15 @@ export async function checkImageCompositeGpu(device: GPUDevice, sampler: GPUSamp
       for (let offset = 3; offset < graph.length; offset += 4) {
         if (graph[offset] !== plain[offset]) throw new Error(`Compositor ${type} graph changed straight alpha`);
       }
+    }
+    if (!equal(outputs.get('brightness-updated-legacy')!, outputs.get('brightness-updated-graph')!)) {
+      throw new Error('Compositor updated Brightness graph differs from legacy output');
+    }
+    if (equal(outputs.get('brightness-graph')!, outputs.get('brightness-updated-graph')!)) {
+      throw new Error('Compositor bound Brightness update did not change pixels');
+    }
+    if (pipelines.get('brightness-graph') !== pipelines.get('brightness-updated-graph')) {
+      throw new Error('Compositor recreated its structural pipeline for a bound-value update');
     }
     if (renderPasses !== cases.length) throw new Error(`Expected one pass per case, got ${renderPasses}/${cases.length}`);
     return renderPasses;

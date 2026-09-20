@@ -50,6 +50,7 @@ struct LayerUniforms {
   videoRotation: u32,
   anchorX: f32,
   anchorY: f32,
+  operatorValues: array<vec4f, 16>,
 };
 
 @group(0) @binding(0) var texSampler: sampler;

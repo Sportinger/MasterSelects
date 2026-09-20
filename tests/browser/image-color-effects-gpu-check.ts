@@ -32,7 +32,6 @@ async function renderDefinition(
   definition: FullscreenEffectDefinition,
   params: Record<string, number>,
   size: number,
-  legacy: boolean,
 ): Promise<Uint8Array> {
   const module = device.createShaderModule({ code: `${common}\n${definition.shader}` });
   const info = await module.getCompilationInfo();
@@ -44,7 +43,7 @@ async function renderDefinition(
   });
   const entries: GPUBindGroupEntry[] = [{ binding: 0, resource: sampler }, { binding: 1, resource: source }];
   let uniform: GPUBuffer | undefined;
-  if (legacy) {
+  if (definition.uniformSize > 0) {
     const packed = definition.packUniforms(params, size, 1)!;
     uniform = device.createBuffer({ size: packed.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     device.queue.writeBuffer(uniform, 0, packed.buffer, packed.byteOffset, packed.byteLength);
@@ -82,9 +81,9 @@ export async function checkRemainingColorEffectsGpu(
       const legacy = effects[item.type] as FullscreenEffectDefinition;
       const graph = imageGraphDefinition({ type: item.type, params: item.params }, legacy);
       const legacyBytes = await renderDefinition(device, sampler, source.createView(), target, readback,
-        legacy, item.params, size, true);
+        legacy, item.params, size);
       const graphBytes = await renderDefinition(device, sampler, source.createView(), target, readback,
-        graph, item.params, size, false);
+        graph, item.params, size);
       const mismatch = legacyBytes.findIndex((value, index) => value !== graphBytes[index]);
       if (mismatch >= 0) throw new Error(`${item.type} graph differs from registered shader at byte ${mismatch}`);
       for (let offset = 3; offset < graphBytes.length; offset += 4) {

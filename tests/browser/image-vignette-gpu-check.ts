@@ -10,7 +10,7 @@ const cases = [
 ] as const;
 
 async function render(device: GPUDevice, sampler: GPUSampler, source: GPUTextureView, target: GPUTexture,
-  readback: GPUBuffer, definition: FullscreenEffectDefinition, params: Record<string, number>, legacy: boolean): Promise<Uint8Array> {
+  readback: GPUBuffer, definition: FullscreenEffectDefinition, params: Record<string, number>): Promise<Uint8Array> {
   const module = device.createShaderModule({ code: `${common}\n${definition.shader}` });
   const info = await module.getCompilationInfo(), errors = info.messages.filter(message => message.type === 'error');
   if (errors.length) throw new Error(errors.map(message => message.message).join('\n'));
@@ -18,7 +18,7 @@ async function render(device: GPUDevice, sampler: GPUSampler, source: GPUTexture
     fragment: { module, entryPoint: definition.entryPoint, targets: [{ format: 'rgba8unorm' }] } });
   const entries: GPUBindGroupEntry[] = [{ binding: 0, resource: sampler }, { binding: 1, resource: source }];
   let uniform: GPUBuffer | undefined;
-  if (legacy) {
+  if (definition.uniformSize > 0) {
     const packed = definition.packUniforms(params, width, height)!;
     uniform = device.createBuffer({ size: packed.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     device.queue.writeBuffer(uniform, 0, packed.buffer, packed.byteOffset, packed.byteLength);
@@ -47,8 +47,8 @@ export async function checkVignetteGpu(device: GPUDevice, sampler: GPUSampler): 
   try {
     for (const item of cases) {
       const graph = imageGraphDefinition({ type: 'vignette', params: item.params }, vignette as FullscreenEffectDefinition);
-      const expected = await render(device, sampler, source.createView(), target, readback, vignette as FullscreenEffectDefinition, item.params, true);
-      const actual = await render(device, sampler, source.createView(), target, readback, graph, item.params, false);
+      const expected = await render(device, sampler, source.createView(), target, readback, vignette as FullscreenEffectDefinition, item.params);
+      const actual = await render(device, sampler, source.createView(), target, readback, graph, item.params);
       const mismatch = expected.findIndex((value, index) => value !== actual[index]);
       if (mismatch >= 0) throw new Error(`Vignette ${item.name} graph differs from registered shader at byte ${mismatch}`);
       for (let alpha = 3; alpha < actual.length; alpha += 4) {

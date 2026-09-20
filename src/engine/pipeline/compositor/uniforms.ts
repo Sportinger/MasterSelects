@@ -1,13 +1,16 @@
 import { BLEND_MODE_MAP } from '../../core/types';
 import type { Layer } from '../../core/types';
 import type { VideoRotationDegrees } from '../../webcodecs/videoTrackOrientation';
+import type { ImageOperatorProgram } from '../../../types/imageOperatorProgram';
+import { IMAGE_OPERATOR_PARAMETER_CAPACITY, packImageOperatorParameters } from '../../../services/operators/imageOperatorParameters';
 
-export const COMPOSITOR_UNIFORM_SIZE = 128;
-export const COMPOSITOR_UNIFORM_FLOAT_COUNT = 32;
+export const COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT = 32;
+export const COMPOSITOR_UNIFORM_FLOAT_COUNT = COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT + IMAGE_OPERATOR_PARAMETER_CAPACITY;
+export const COMPOSITOR_UNIFORM_SIZE = COMPOSITOR_UNIFORM_FLOAT_COUNT * 4;
 export const COMPOSITOR_U32_INDICES: readonly number[] = [1, 10, 11, 16, 21, 22, 29]; // blendMode, mask flags, inlineInvert, transitionType, source rotation
 
 export interface InlineEffectParams {
-  operatorProgram?: { key: string; wgsl: string };
+  operatorProgram?: ImageOperatorProgram;
   brightness: number;  // Offset: 0 = no change, -1..1 range
   contrast: number;    // Multiplier: 1 = no change, 0..3 range
   saturation: number;  // Multiplier: 1 = no change, 0..3 range
@@ -129,6 +132,10 @@ export function writeLayerUniformData(
   uniformDataU32[29] = (videoRotationOverride ?? layer.source?.videoRotation ?? 0) / 90;
   uniformData[30] = layer.anchor?.x ?? 0;
   uniformData[31] = layer.anchor?.y ?? 0;
+  uniformData.fill(0, COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT);
+  if (inlineEffects?.operatorProgram?.values.length) {
+    uniformData.set(packImageOperatorParameters(inlineEffects.operatorProgram.values), COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT);
+  }
 }
 
 export function shouldUpdateLayerUniforms(
@@ -142,14 +149,21 @@ export function shouldUpdateLayerUniforms(
 
   const lastFloat = lastValuesEntry.float;
   const lastU32 = lastValuesEntry.u32;
+  if (lastFloat.length !== COMPOSITOR_UNIFORM_FLOAT_COUNT || lastU32.length !== COMPOSITOR_UNIFORM_FLOAT_COUNT) return true;
 
   // Check float values
-  for (let i = 0; i < COMPOSITOR_UNIFORM_FLOAT_COUNT; i++) {
+  for (let i = 0; i < COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT; i++) {
     // Skip indices that are u32 - compare them separately
     if (COMPOSITOR_U32_INDICES.includes(i)) continue;
     if (Math.abs(uniformData[i] - lastFloat[i]) > 0.00001) {
       return true;
     }
+  }
+
+  // Program values are already stored as f32 and may be meaningfully smaller than the
+  // transform epsilon (thresholds and exposure keyframes in particular).
+  for (let i = COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT; i < COMPOSITOR_UNIFORM_FLOAT_COUNT; i++) {
+    if (uniformData[i] !== lastFloat[i]) return true;
   }
 
   // Check u32 values (blendMode, hasMask, maskInvert, maskFeatherQuality, inlineInvert)

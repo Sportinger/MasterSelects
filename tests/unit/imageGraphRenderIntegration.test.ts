@@ -60,6 +60,8 @@ describe('image graph render integration', () => {
     expect(inline.saturation).toBe(1);
     const ordered = imageGraphDefinition(instance, colorDefinitions[type] as FullscreenEffectDefinition);
     expect(ordered.shader).toContain(inline.operatorProgram!.wgsl);
+    expect(ordered.uniformSize).toBe(256);
+    expect(ordered.packUniforms({}, 1920, 1080)?.[0]).toBe(amount);
     expect(ordered.shader).toContain(`fn ${colorDefinitions[type].entryPoint}`);
     expect(splitLayerEffects([instance, effect()]).complexEffects).toEqual([instance, effect()]);
   });
@@ -73,7 +75,7 @@ describe('image graph render integration', () => {
     const instance = { id: 'vignette-test', type: 'vignette', name: 'Vignette', enabled: true, params: {} };
     expect(splitLayerEffects([instance]).complexEffects).toEqual([instance]);
     const definition = imageGraphDefinition(instance, vignette as FullscreenEffectDefinition);
-    expect(definition.shader).toContain('evaluateImageGraph(textureSample(inputTex, texSampler, input.uv), input.uv)');
+    expect(definition.shader).toContain('evaluateImageGraph(textureSample(inputTex, texSampler, input.uv), input.uv, imageParameters)');
   });
 
   it('routes an edited formerly-local graph with UV capability through a fullscreen pass', () => {
@@ -130,7 +132,7 @@ describe('image graph render integration', () => {
     const createRenderPipeline = vi.fn(() => ({}));
     const device = { createShaderModule, createRenderPipeline, createPipelineLayout: vi.fn(() => ({})) } as unknown as GPUDevice;
     const program = compileImageOperatorGraph(createDefaultInvertImageGraph());
-    createOperatorCompositePipeline(device, {} as GPUBindGroupLayout, external, program.wgsl);
+    createOperatorCompositePipeline(device, {} as GPUBindGroupLayout, external, program);
     expect(createShaderModule.mock.calls[0][0].code).toContain('layerColor = evaluateImageGraph(layerColor);');
     expect(createRenderPipeline).toHaveBeenCalledTimes(1);
   });

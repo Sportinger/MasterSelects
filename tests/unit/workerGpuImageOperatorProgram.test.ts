@@ -4,7 +4,7 @@ import { VIDEO_FRAME_LAYER_COMPOSITE_SHADER, specializeVideoFrameLayerCompositeS
 import { createDefaultInvertImageGraph } from '../../src/services/operators/imageOperatorGraph';
 import type { Layer } from '../../src/types';
 import { shouldUseLayerVideoFramePresenter } from '../../src/services/render/workerRenderHostRuntimeHandlers';
-import { uploadWorkerVideoFrameTexture, workerGpuOperatorProgramCacheKey, workerVideoFrameNeedsStraightAlphaUpload } from '../../src/services/render/workerGpuOperatorPipeline';
+import { uploadWorkerVideoFrameTexture, workerGpuOperatorProgramCacheKey, workerGpuOperatorProgramPresentationKey, workerVideoFrameNeedsStraightAlphaUpload } from '../../src/services/render/workerGpuOperatorPipeline';
 import { hasCompositorRenderLayer } from '../../src/services/render/workerGpuVideoFrameCompositor';
 import { createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
 
@@ -12,6 +12,11 @@ function layerWithEditedInvert(): Layer {
   const graph = createDefaultInvertImageGraph();
   graph.nodes.find(node => node.id === 'one')!.constants = { value: 0.75 };
   return { opacity: 1, blendMode: 'normal', effects: [{ id: 'invert', name: 'Invert', type: 'invert', enabled: true, params: {}, operatorGraph: graph }] } as unknown as Layer;
+}
+function layerWithBrightness(amount: number): Layer {
+  return { opacity: 1, blendMode: 'normal', effects: [
+    { id: 'brightness', name: 'Brightness', type: 'brightness', enabled: true, params: { amount } },
+  ] } as unknown as Layer;
 }
 
 describe('worker GPU image operator program', () => {
@@ -85,8 +90,13 @@ describe('worker GPU image operator program', () => {
 
   it('preserves the compiled edited graph as a serializable layer style', () => {
     const style = resolveWorkerGpuVideoPresentationLayerStyle(layerWithEditedInvert());
+    const defaults = resolveWorkerGpuVideoPresentationLayerStyle({ opacity: 1, blendMode: 'normal', effects: [
+      { id: 'invert-default', name: 'Invert', type: 'invert', enabled: true, params: {} },
+    ] } as unknown as Layer);
     expect(style.operatorProgram?.key).toMatch(/^image-v1-/);
     expect(style.operatorProgram?.wgsl).toContain('0.75');
+    expect(style.operatorProgram?.values).toEqual([]);
+    expect(style.operatorProgram?.key).not.toBe(defaults.operatorProgram?.key);
     expect(JSON.parse(JSON.stringify(style.operatorProgram))).toEqual(style.operatorProgram);
     expect(style.inlineInvert).toBe(false);
   });
@@ -124,18 +134,20 @@ describe('worker GPU image operator program', () => {
   });
 
   it('specializes the existing worker composite shader in the same color-effect position', () => {
-    const program = resolveWorkerGpuVideoPresentationLayerStyle(layerWithEditedInvert()).operatorProgram!;
-    const shader = specializeVideoFrameLayerCompositeShader(VIDEO_FRAME_LAYER_COMPOSITE_SHADER, program.wgsl);
+    const program = resolveWorkerGpuVideoPresentationLayerStyle(layerWithBrightness(0.25)).operatorProgram!;
+    const shader = specializeVideoFrameLayerCompositeShader(VIDEO_FRAME_LAYER_COMPOSITE_SHADER, program);
     expect(shader).toContain('fn evaluateImageGraph');
-    expect(shader).toContain('let operatorColor = evaluateImageGraph(vec4f(rgb, alpha));');
+    expect(shader).toContain('let operatorColor = evaluateImageGraph(vec4f(rgb, alpha), layer.imageParameters);');
     expect(shader.indexOf('operatorColor')).toBeLessThan(shader.indexOf('layer.inlineInvert == 1u'));
     expect((shader.match(/@fragment/g) ?? [])).toHaveLength(1);
   });
 
   it('routes graph-only layers through the layer presenter and keys caches by compiled program', () => {
-    const program = resolveWorkerGpuVideoPresentationLayerStyle(layerWithEditedInvert()).operatorProgram!;
+    const program = resolveWorkerGpuVideoPresentationLayerStyle(layerWithBrightness(0.25)).operatorProgram!;
     expect(shouldUseLayerVideoFramePresenter([{ sourceId: 'video', mediaTime: 0, opacity: 1, blendMode: 'normal', operatorProgram: program }])).toBe(true);
     expect(workerGpuOperatorProgramCacheKey(program)).toBe(program.key);
-    expect(workerGpuOperatorProgramCacheKey({ key: `${program.key}-edited` })).not.toBe(workerGpuOperatorProgramCacheKey(program));
+    const changed = resolveWorkerGpuVideoPresentationLayerStyle(layerWithBrightness(0.5)).operatorProgram!;
+    expect(workerGpuOperatorProgramCacheKey(changed)).toBe(workerGpuOperatorProgramCacheKey(program));
+    expect(workerGpuOperatorProgramPresentationKey(changed)).not.toBe(workerGpuOperatorProgramPresentationKey(program));
   });
 });
