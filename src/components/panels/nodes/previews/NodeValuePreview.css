@@ -1,0 +1,35 @@
+/* Cards use z-index 5, plugs 6: real controls must sit above their transparent hit surfaces. */
+.node-value-preview { position: absolute; z-index: 7; color: var(--text-primary, #ddd); background: var(--bg-primary, #171717); font: 10px system-ui; border-radius: 3px; padding: 4px; display: flex; flex-direction: column; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+.node-value-content { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; }
+.node-value-row { display: flex; align-items: center; justify-content: space-between; gap: 5px; min-height: 22px; }
+.node-value-row > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.node-value-row .draggable-number { font: inherit; color: var(--accent-color, #a2d9e8); }
+.node-value-row input { max-width: 100%; }
+.node-value-large .node-value-content { display: flex; flex-direction: column; justify-content: center; text-align: center; }
+.node-value-large .node-value-row { flex-direction: column-reverse; gap: 0; }
+.node-value-large .draggable-number, .node-value-large output { font-size: 28px; font-weight: 600; line-height: 1.15; }
+.node-value-large .node-value-row > span:first-child { font-size: 10px; }
+.node-value-large small { font-size: 9px; }
+.node-value-status { color: var(--text-secondary, #999); font-size: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 3px; }
+.node-value-preview [role="alert"] { color: var(--warning, #dbb270); }
+.node-value-preview input[type="checkbox"]:focus:not(:focus-visible) { outline: none; }
+.node-value-preview input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent-color, #79b8fa); outline-offset: 2px; }
+.node-value-inline { position: absolute; z-index: 7; color: var(--text-primary, #ddd); font: 500 18px/26px system-ui; font-variant-numeric: tabular-nums; text-align: right; }
+.node-value-inline .node-value-row { flex-direction: column-reverse; align-items: stretch; gap: 0; min-height: 0; }
+.node-value-inline .node-value-row > span:first-child { font: 8px system-ui; color: var(--text-secondary, #999); }
+.node-value-inline .draggable-number { font: 500 18px/24px system-ui; font-variant-numeric: tabular-nums; width: 100%; max-width: 100%; padding: 0 3px; border: 1px solid var(--separator-color, #383838); border-radius: 3px; }
+.node-value-inline small { font-size: 8px; }
+.node-value-computed { cursor: help; }
+.node-inline-math .node-workspace-port { margin-bottom: 52px; }
+.node-inline-math .node-workspace-port-type { visibility: hidden; }
+.node-inline-math .node-workspace-node-title, .node-inline-math .node-workspace-node-description { display: none; }
+.node-math-symbol { position: absolute; pointer-events: none; z-index: 7; font: 500 26px/1 system-ui; color: #85878b; text-align: center; }
+.node-value-inline.node-value-status { color: var(--text-secondary, #999); font: 8px system-ui; text-align: left; }
+.node-math-mode { position: absolute; z-index: 7; font: 11px system-ui; -webkit-tap-highlight-color: transparent; }
+.node-math-mode:has([aria-expanded="true"]) { z-index: 9; }
+.node-math-mode .inspector-select-trigger { height: 25px; border-radius: 3px; color: var(--text-primary, #ddd); background: var(--input-bg, #202020); }
+.node-math-mode .inspector-select-menu { max-width: none; width: 160px; }
+.node-math-mode .inspector-select-trigger:focus:not(:focus-visible) { outline: none; }
+.node-math-mode .inspector-select-trigger:focus-visible { outline: 1px solid var(--accent-color, #79b8fa); }
+.node-math-mode [role="alert"] { display: block; color: var(--warning, #dbb270); background: #202020; }
+.operator-live-value { display: block; width: 100%; text-align: right; color: var(--text-primary, #ddd); font-variant-numeric: tabular-nums; cursor: help; }

@@ -24,7 +24,7 @@ export const SCENE_OPERATORS: readonly OperatorDefinition[] = [
   ]),
   op('geometry.plane', 'Plane geometry', 'A rectangular surface sized relative to the source image. Material UVs are independent of its size.', [], [port('geometry', 'geometry', 'Geometry', ['plane-mesh'])], [number('width', 'Width', 1, 0.01, 10), number('height', 'Height', 1, 0.01, 10)]),
   op('geometry.source', 'Source geometry', 'Uses the saved face/depth/cable geometry of this clip, or its image plane when there is no bake.', [], [port('geometry', 'geometry', 'Geometry', ['plane-mesh', 'baked-geometry'])]),
-  op('scene.mesh', 'Mesh', 'Combines connected geometry and material. A disconnected geometry or material produces no object.', [port('geometry', 'geometry', 'Geometry', ['plane-mesh', 'baked-geometry']), port('material', 'material', 'Material')], [port('scene', 'scene', 'Object')]),
+  op('scene.mesh', 'Mesh', 'Combines connected geometry and material. A disconnected geometry or material produces no object.', [port('geometry', 'geometry', 'Geometry', ['plane-mesh', 'baked-geometry', 'voxel-grid']), port('material', 'material', 'Material')], [port('scene', 'scene', 'Object')]),
   op('scene.clip-transform', 'Clip Transform', 'Applies the clip transform and its keyframes to the connected object.', [port('scene', 'scene', 'Object')], [port('scene', 'scene', 'World space')], [], false),
   op('scene.render', '3D render', 'Renders the connected object with the timeline camera and lights. Disconnect to mute the object.', [port('scene', 'scene', 'Scene')], [port('image', 'image', 'Rendered image')], [], false),
 ];

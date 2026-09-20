@@ -11,6 +11,7 @@ import type { AudioEffectParamValue } from '../../../types/audio';
 import { isAudioEffect, type EffectType } from '../../../types/effects';
 import { EFFECT_REGISTRY, getDefaultParams, getCategoriesWithEffects } from '../../../effects';
 import { groupEffectParameters } from '../../../effects/parameterGroups';
+import { VoxelReliefControls } from './VoxelReliefControls';
 import { EXTRA_CONTROLS_REGISTRY } from '../../../effects/extraControlsRegistry';
 import '../../../effects/effectParameterGroups.css';
 import { addParticleDisintegrateOutroPreset } from '../../../effects/presets/particleDisintegrateOutro';
@@ -195,6 +196,8 @@ function EffectParams({ effect, onChange, clipId, onDragStart, onDragEnd, onPara
   if (Object.keys(effectDef.params).length === 0) {
     return <p className="effect-info">No parameters</p>;
   }
+
+  if (effect.type === 'voxel-relief' && clipId) return <VoxelReliefControls clipId={clipId} effectId={effect.id} />;
 
   const parameterGroups = groupEffectParameters(effectDef.params);
   const ExtraControls = EXTRA_CONTROLS_REGISTRY[effectDef.id];

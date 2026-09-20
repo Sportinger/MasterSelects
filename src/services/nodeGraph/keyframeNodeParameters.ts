@@ -5,7 +5,7 @@ import { propertyRegistry } from '../properties';
 import { getHexColorChannel } from '../../utils/colorParam';
 import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../../stores/mediaStore/types';
 import { hexToRgb01, mergeLightClipSettings } from '../../types/light';
-import { cableOperatorGraph } from '../faceCables/cableOperatorGraph';
+import { effectOperatorGraph, effectOperatorParams, hasEffectOperatorGraph } from '../operators/effectGraphOwner';
 import { getEffectOperator } from '../operators/operatorRegistry';
 import { getKeyframeTimeBasis } from '../flock/time/flockKeyframeTime';
 
@@ -62,16 +62,17 @@ export function keyframeNodeParameters(clip: TimelineClip): KeyframeNodeParamete
     const rgb = hexToRgb01(settings.color);
     (['r', 'g', 'b'] as const).forEach((key, index) => add(`light.color.${key}`, `Color ${key.toUpperCase()}`, 'Light', rgb[index], 0, 1, 'color'));
   }
-  // Reusable cable operators bind their own independent parameters to effect paths.
-  for (const effect of clip.effects.filter(e => e.type === 'face-cables')) {
+  // Reusable operators bind their independent parameters to effect paths.
+  for (const effect of clip.effects.filter(e => hasEffectOperatorGraph(e.type))) {
     try {
-      for (const node of cableOperatorGraph(effect.params).nodes) for (const spec of getEffectOperator(node.operator)?.parameters ?? []) {
+      for (const node of effectOperatorGraph(effect).nodes) for (const spec of getEffectOperator(node.operator)?.parameters ?? []) {
         if (!spec.animatable) continue;
         const binding = node.bindings[spec.id];
         const names = typeof binding === 'string' ? [binding] : Array.isArray(binding) ? binding : binding ? Object.values(binding) : [];
         names.forEach((key, index) => {
           const fallback = Array.isArray(spec.default) ? spec.default[index] : spec.default;
-          const value = effect.params[key] ?? fallback;
+          if (result.has(`effect.${effect.id}.${key}`)) return;
+          const value = effectOperatorParams(effect)[key] ?? fallback;
           if (typeof value === 'number') add(`effect.${effect.id}.${key}`, names.length > 1 ? `${spec.label} ${index + 1}` : spec.label,
             `${effect.name} / ${getEffectOperator(node.operator)?.label ?? node.id}`, value, spec.min, spec.max);
         });
@@ -92,11 +93,11 @@ export function parameterNode(clip: TimelineClip, property: string, nodes: reado
   const effectId = /^effect\.([^.]+)\./.exec(property)?.[1];
   if (effectId) {
     const effect = clip.effects.find(e => e.id === effectId);
-    if (effect?.type === 'face-cables') {
+    if (effect && hasEffectOperatorGraph(effect.type)) {
       const operators = nodes.filter(n => n.binding?.kind === 'effect-operator' && n.binding.effectId === effectId);
       const suffix = property.slice(`effect.${effectId}.`.length);
       try {
-        const owner = cableOperatorGraph(effect.params).nodes.find(n => Object.values(n.bindings).some(binding =>
+        const owner = effectOperatorGraph(effect).nodes.find(n => Object.values(n.bindings).some(binding =>
           (typeof binding === 'string' ? [binding] : Array.isArray(binding) ? binding : Object.values(binding)).includes(suffix)));
         const exact = operators.find(n => n.binding?.kind === 'effect-operator' && n.binding.nodeId === owner?.id);
         if (exact) return exact;

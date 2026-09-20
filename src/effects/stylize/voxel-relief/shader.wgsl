@@ -29,6 +29,12 @@ struct VoxelReliefParams {
   limitToVideo: f32,
   pad1: f32,
   pad2: f32,
+  graphHeightUV: vec4f,
+  graphColorUV: vec4f,
+  graphTintOpacity: vec4f,
+  graphFlags: vec4f,
+  graphBoxSize: vec4f,
+  graphField: array<vec4f, 32>,
 };
 
 struct VoxelCell {
@@ -67,6 +73,15 @@ struct VoxelScreenCell {
 @group(0) @binding(1) var inputTex: texture_2d<f32>;
 @group(0) @binding(2) var<uniform> params: VoxelReliefParams;
 @group(0) @binding(3) var feedbackTex: texture_2d<f32>;
+
+fn voxelHeightTexture(uv: vec2f) -> vec4f {
+  return textureSampleLevel(inputTex, texSampler, clamp(uv * params.graphHeightUV.xy + params.graphHeightUV.zw, vec2f(0.0), vec2f(1.0)), 0.0);
+}
+
+fn voxelColorTexture(uv: vec2f) -> vec4f {
+  let sampled = textureSampleLevel(inputTex, texSampler, clamp(uv * params.graphColorUV.xy + params.graphColorUV.zw, vec2f(0.0), vec2f(1.0)), 0.0);
+  return select(vec4f(params.graphTintOpacity.rgb, 1.0), vec4f(sampled.rgb * params.graphTintOpacity.rgb, sampled.a), params.graphFlags.y > 0.5);
+}
 
 fn voxelFieldSize() -> vec2f {
   let aspect = max(params.width / max(params.height, 1.0), 0.1);
@@ -108,7 +123,14 @@ fn voxelScreenCellSize() -> vec2f {
   return vec2f(cellX, cellX * aspect);
 }
 
+fn voxelMaximumHeight() -> f32 {
+  return max(select(params.baseHeight + params.heightScale, params.graphBoxSize.w, params.graphFlags.z > 0.0), 0.001);
+}
+
 fn voxelHeightFromColor(color: vec4f) -> f32 {
+  if (params.graphFlags.z > 0.0) {
+    return max(0.0, evaluateScalarField(luminance(color.rgb), params.graphField, u32(params.graphFlags.z), u32(params.graphFlags.w))) * color.a * params.graphBoxSize.z;
+  }
   let brightness = pow(clamp(luminance(color.rgb), 0.0, 1.0), max(params.heightContrast, 0.001));
   return max(params.baseHeight, 0.0) * color.a + brightness * max(params.heightScale, 0.0) * color.a;
 }
@@ -118,13 +140,13 @@ fn voxelSampleScreenCell(uv: vec2f, offset: vec2f) -> VoxelScreenCell {
   let cellIndex = floor(uv / cellSize) + offset;
   let center = (cellIndex + vec2f(0.5)) * cellSize;
   let sampleUv = clamp(center, vec2f(0.0), vec2f(1.0));
-  let color = textureSampleLevel(inputTex, texSampler, sampleUv, 0.0);
+  let color = voxelColorTexture(sampleUv);
 
   var cell: VoxelScreenCell;
   cell.center = center;
   cell.local = fract(uv / cellSize);
   cell.color = color;
-  cell.blockHeight = voxelHeightFromColor(color);
+  cell.blockHeight = voxelHeightFromColor(voxelHeightTexture(sampleUv));
   return cell;
 }
 
@@ -135,7 +157,7 @@ fn voxelScreenRelief(uv: vec2f) -> vec4f {
   let leftCell = voxelSampleScreenCell(uv, vec2f(-1.0, 0.0));
   let upCell = voxelSampleScreenCell(uv, vec2f(0.0, -1.0));
 
-  let maxHeight = max(params.baseHeight + params.heightScale, 0.001);
+  let maxHeight = voxelMaximumHeight();
   let height01 = clamp(cell.blockHeight / maxHeight, 0.0, 1.0);
   let viewSlant = clamp((90.0 - clamp(params.tilt, 20.0, 88.0)) / 35.0, 0.0, 1.0);
   let perspectiveAmount = clamp((params.perspective - 0.15) / 1.45, 0.0, 1.0);
@@ -205,7 +227,7 @@ fn voxelScreenPixelColor(uv: vec2f) -> vec4f {
   let cellY = cellX * aspect;
   let cell = vec2f(cellX, cellY);
   let center = (floor(uv / cell) + vec2f(0.5)) * cell;
-  let source = textureSampleLevel(inputTex, texSampler, clamp(center, vec2f(0.0), vec2f(1.0)), 0.0);
+  let source = voxelColorTexture(clamp(center, vec2f(0.0), vec2f(1.0)));
   let local = abs(fract(uv / cell) - vec2f(0.5)) * 2.0;
   let grid = smoothstep(0.86, 1.0, max(local.x, local.y));
   let edgeShade = 1.0 - grid * clamp(params.edgeDarkness, 0.0, 1.0) * 0.42;
@@ -218,7 +240,7 @@ fn voxelFloorCell(fieldSize: vec2f, p: vec3f) -> VoxelCell {
   cell.center = fieldSize * 0.5;
   cell.halfSize = vec3f(fieldSize * 0.5, 0.018);
   cell.height = 0.0;
-  cell.color = textureSampleLevel(inputTex, texSampler, uv, 0.0);
+  cell.color = voxelColorTexture(uv);
   cell.material = 0.0;
   return cell;
 }
@@ -226,16 +248,16 @@ fn voxelFloorCell(fieldSize: vec2f, p: vec3f) -> VoxelCell {
 fn voxelCellFromIndex(index: vec2f, fieldSize: vec2f, cellSize: f32) -> VoxelCell {
   let center = (index + vec2f(0.5)) * cellSize;
   let uv = voxelSourceUv(center / fieldSize);
-  let source = textureSampleLevel(inputTex, texSampler, clamp(uv, vec2f(0.0), vec2f(1.0)), 0.0);
+  let source = voxelHeightTexture(clamp(uv, vec2f(0.0), vec2f(1.0)));
   let brightness = pow(clamp(luminance(source.rgb), 0.0, 1.0), max(params.heightContrast, 0.001));
-  let height = max(params.baseHeight, 0.0) * source.a + brightness * max(params.heightScale, 0.0) * source.a;
+  let height = voxelHeightFromColor(source);
   let fill = clamp(1.0 - params.gap, 0.18, 1.0);
 
   var cell: VoxelCell;
   cell.center = center;
-  cell.halfSize = vec3f(vec2f(cellSize * 0.5 * fill), max(height * 0.5, 0.0005));
+  cell.halfSize = vec3f(vec2f(cellSize * 0.5 * fill) * params.graphBoxSize.xy, max(height * 0.5, 0.0005));
   cell.height = max(height, 0.001);
-  cell.color = source;
+  cell.color = voxelColorTexture(clamp(uv, vec2f(0.0), vec2f(1.0)));
   cell.material = 1.0;
   return cell;
 }
@@ -298,7 +320,7 @@ fn voxelCameraRay(uv: vec2f) -> VoxelRay {
   let perspective = clamp(params.perspective, 0.15, 1.6);
   let fov = voxelRadians(mix(12.0, 42.0, (perspective - 0.15) / 1.45));
   let focal = 1.0 / tan(fov * 0.5);
-  let radius = max(0.9, focal * 0.5 + max(params.heightScale + params.baseHeight, 0.0) * 0.7) *
+  let radius = max(0.9, focal * 0.5 + voxelMaximumHeight() * 0.7) *
     clamp(params.distance, 0.15, 8.0);
   let cosPitch = cos(pitch);
   let sinPitch = sin(pitch);
@@ -354,7 +376,7 @@ fn voxelTrace(ray: VoxelRay) -> VoxelHit {
   hit.sample.cell = voxelEmptyCell();
 
   let traversalBudget = i32(clamp(params.maxSteps * 4.0, 96.0, 576.0));
-  let topZ = max(params.baseHeight + params.heightScale, 0.001);
+  let topZ = voxelMaximumHeight();
   let fieldSize = voxelFieldSize();
   let cellSize = voxelCellSize(fieldSize);
   let boundCenter = vec3f(fieldSize * 0.5, topZ * 0.5);
@@ -499,7 +521,7 @@ fn voxelShade(hit: VoxelHit, ray: VoxelRay) -> vec4f {
     let edgeLocal = abs(hit.position.xy - hit.sample.cell.center) / max(hit.sample.cell.halfSize.xy, vec2f(0.0001));
     let edge = smoothstep(0.78, 1.0, max(edgeLocal.x, edgeLocal.y));
     let edgeShade = 1.0 - edge * clamp(params.edgeDarkness, 0.0, 1.0) * 0.36;
-    let heightLift = smoothstep(0.0, max(params.heightScale + params.baseHeight, 0.001), hit.sample.cell.height) * 0.12;
+    let heightLift = smoothstep(0.0, voxelMaximumHeight(), hit.sample.cell.height) * 0.12;
     color = color * edgeShade + vec3f(heightLift);
   }
 
@@ -514,6 +536,7 @@ fn voxelRenderSample(uv: vec2f) -> vec4f {
 
 @fragment
 fn voxelReliefFragment(input: VertexOutput) -> @location(0) vec4f {
+  if (params.graphFlags.x < 0.5 || params.graphTintOpacity.a <= 0.0) { return vec4f(0.0); }
   // A stable 2x2 sub-pixel pattern suppresses the high-frequency grid moire
   // and smooths thin column silhouettes without relying on temporal blur.
   let pixelSize = vec2f(1.0 / max(params.width, 1.0), 1.0 / max(params.height, 1.0));
@@ -527,5 +550,5 @@ fn voxelReliefFragment(input: VertexOutput) -> @location(0) vec4f {
   let smoothing = select(clamp(params.temporalBlend, 0.0, 0.94), 0.0, params.reset > 0.5);
   let rgb = mix(relief.rgb, previous.rgb, smoothing);
   let alpha = max(relief.a, previous.a * smoothing);
-  return vec4f(rgb, alpha);
+  return vec4f(rgb, alpha * params.graphTintOpacity.a);
 }

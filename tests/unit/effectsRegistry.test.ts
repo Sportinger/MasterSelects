@@ -997,7 +997,7 @@ describe('Specific effect definitions', () => {
 
   it('voxel-relief uniformSize should be 112 bytes', () => {
     const voxelRelief = getEffect('voxel-relief')!;
-    expect(voxelRelief.uniformSize).toBe(112);
+    expect(voxelRelief.uniformSize).toBe(704);
   });
 
   it('voxel-relief camera can orbit continuously across both poles', () => {

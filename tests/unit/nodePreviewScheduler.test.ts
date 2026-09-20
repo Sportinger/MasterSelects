@@ -9,6 +9,16 @@ const request = (key: string, revision = '1'): PreviewRequest => ({ key, revisio
 const result = (r: PreviewRequest): PreviewFrame => ({ key: r.key, revision: r.revision, time: r.time, status: 'live', label: 'Source' });
 
 describe('node preview work budgets', () => {
+  it('updates numbers immediately while both image readback slots remain occupied', () => {
+    const publish = vi.fn(), scheduler = new NodePreviewScheduler(r => r.numeric ? result(r) : new Promise(() => {}), publish, () => 0);
+    const number = { ...request('math'), numeric: true, interval: 16 };
+    scheduler.setRequests([request('image1'), request('image2'), number]); scheduler.tick(0);
+    expect(publish).toHaveBeenLastCalledWith(result(number));
+    scheduler.setRequests([request('image1'), request('image2'), { ...number, revision: 'drag-2' }]); scheduler.tick(16);
+    expect(publish).toHaveBeenLastCalledWith(result({ ...number, revision: 'drag-2' }));
+    expect(scheduler.stats.pixels).toBe(2 * 128 * 72);
+    scheduler.dispose();
+  });
   it('accepts bounded asynchronous latency during playback but rejects a seek or an edit', async () => {
     let finish!: (frame: PreviewFrame) => void;
     const publish = vi.fn(), scheduler = new NodePreviewScheduler(() => new Promise(resolve => finish = resolve), publish, () => 0);

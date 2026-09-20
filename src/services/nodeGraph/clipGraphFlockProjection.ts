@@ -1,4 +1,5 @@
 import { projectFlockPort } from '../flock/graph/flockConnectionGraph';
+import { mathNodeSymbol } from './mathNodeSymbol';
 export { getNodeGraphPortCompatibilityKey } from './graphConnections';
 import type {
   FlockDefinition,
@@ -131,7 +132,8 @@ function buildFlockGraphNode(
       operator: node.operator,
       operatorVersion: node.operatorVersion,
       category,
-      categoryLabel: FLOCK_CATEGORY_LABELS[category],
+      categoryLabel: node.operator === 'flock.math' ? 'Math' : FLOCK_CATEGORY_LABELS[category],
+      mathSymbol: mathNodeSymbol(node.operator, String(node.params.op ?? 'multiply')) ?? '',
       bypassed: node.bypassed === true,
       // A bypassed group instance mutes all of its outputs.
       bypassable: isGroup || (!!operator && operator.bypass.kind !== 'none'),

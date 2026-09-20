@@ -296,9 +296,10 @@ export function findHistoryStateBoundaryViolations(value: unknown): string[] {
       // serializable and must pass: e.g. the mod-matrix route's string
       // `source: 'velocity'` shares the name of a media clip's runtime `source`
       // handle but is durable JSON (#298).
-      // Scene layout is a dictionary keyed by operator IDs such as "texture".
+      // Node layouts are dictionaries keyed by IDs such as "source" or "texture".
       // Only its exact, plain {x, y} coordinates qualify for this exception.
-      const sceneLayout = path.endsWith('.nodeGraph.scene.graph.layout')
+      const sceneLayout = (path.endsWith('.nodeGraph.scene.graph.layout')
+        || /\.nodeGraph\.canvasPlacements\.[^.]+\.nodes$/.test(path))
         && child !== null && typeof child === 'object' && isPlainObject(child)
         && Object.keys(child).length === 2 && 'x' in child && 'y' in child
         && typeof child.x === 'number' && Number.isFinite(child.x)

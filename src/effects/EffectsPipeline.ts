@@ -1,3 +1,4 @@
+import { nodeScalarSampleTap } from '../services/nodePreview/NodeScalarSampleTap';
 // Effects Pipeline - GPU effect processing using the modular effect registry
 
 import { EFFECT_REGISTRY, getEffect } from './index';
@@ -452,6 +453,7 @@ export class EffectsPipeline {
     let swapped = false;
 
     for (const effect of enabledEffects) {
+      if (effect.type === 'voxel-relief') nodeScalarSampleTap.capture(`voxel-effect:${effect.id}`, this.device, commandEncoder, sampler, effectInput);
       if(effect.terrainRender){
         this.denseTerrain??=new DenseTerrainPipeline(this.device);
         this.denseTerrain.encode(commandEncoder,effect.terrainRender,sampler,effectInput,effectOutput,outputWidth,outputHeight);

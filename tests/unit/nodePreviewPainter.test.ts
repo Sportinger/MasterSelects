@@ -15,6 +15,13 @@ const scene: CanvasScene = { nodes: [{ id: 'source', x: 0, y: 0, width: 184, hei
 const frame = (key = 'source', close = vi.fn()): PreviewFrame => ({ key, revision: '1', time: 0, label: 'Source', status: 'live', bitmap: { width: 160, height: 90, close } as unknown as ImageBitmap });
 
 describe('shared preview atlas', () => {
+  it('never allocates or rasterizes an atlas tile for numeric or text viewers', () => {
+    const factory = vi.fn(() => context()), painter = new NodePreviewPainter(context(), factory);
+    painter.receive([{ key: 'source', revision: '1', time: 0, status: 'live', label: 'Number', drawing: { kind: 'number', value: '1.2', caption: 'Height' } },
+      { key: 'camera', revision: '1', time: 0, status: 'live', label: 'Camera', drawing: { kind: 'text', lines: ['FOV: 50'] } }]);
+    painter.draw(scene, view);
+    expect(factory).not.toHaveBeenCalled(); expect(painter.size).toBe(0);
+  });
   it('rasterizes once, closes transferred frames immediately, and reuses the atlas when panning', () => {
     const output = context(), atlas = context(), factory = vi.fn(() => atlas), close = vi.fn();
     const painter = new NodePreviewPainter(output, factory);

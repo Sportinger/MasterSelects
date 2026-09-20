@@ -78,6 +78,7 @@ export interface SceneVoxelLayer extends SceneLayerBase {
   imageElement?: HTMLImageElement;
   canvas?: HTMLCanvasElement;
   voxelParams: Record<string, number | boolean | string>;
+  voxelGraphPlan?: import('../../services/operators/voxelGraph').VoxelGraphPlan;
 }
 
 export interface ScenePrimitiveLayer extends SceneLayerBase {

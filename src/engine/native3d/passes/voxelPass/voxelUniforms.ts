@@ -1,8 +1,10 @@
 import type { SceneCamera, SceneVoxelLayer } from '../../../scene/types';
 import { calculateSourcePixelScale } from '../../../../utils/sourcePixelScale';
 import { WORLD_HEIGHT } from '../../sceneRenderer/constants';
+import { compileVoxelGraph } from '../../../../services/operators/voxelGraph';
+import { packScalarField } from '../../../../services/operators/scalarField';
 
-export const VOXEL_UNIFORM_SIZE = 208;
+export const VOXEL_UNIFORM_SIZE = 800;
 
 export interface VoxelGridDimensions {
   columns: number;
@@ -16,6 +18,7 @@ export interface VoxelFootprint {
 }
 
 export function resolveVoxelGridDimensions(layer: SceneVoxelLayer): VoxelGridDimensions {
+  layer = evaluatedVoxelLayer(layer);
   const columns = Math.min(240, Math.max(4, Math.round(numberParam(layer, 'columns', 107.4))));
   const aspect = layer.sourceWidth / Math.max(layer.sourceHeight, 1);
   return {
@@ -25,6 +28,7 @@ export function resolveVoxelGridDimensions(layer: SceneVoxelLayer): VoxelGridDim
 }
 
 export function shouldRenderVoxelFloor(layer: SceneVoxelLayer): boolean {
+  layer = evaluatedVoxelLayer(layer);
   return numberParam(layer, 'floorBrightness', 0.1) > 0.001;
 }
 
@@ -54,6 +58,8 @@ export function buildVoxelUniformData(
   camera: SceneCamera,
   grid: VoxelGridDimensions = resolveVoxelGridDimensions(layer),
 ): Float32Array {
+  const graph = layer.voxelGraphPlan ?? compileVoxelGraph(layer.voxelParams);
+  layer = { ...layer, voxelParams: graph.params };
   const footprint = resolveVoxelFootprint(layer, camera);
   const planeScale = new Float32Array([
     footprint.width, 0, 0, 0,
@@ -84,9 +90,19 @@ export function buildVoxelUniformData(
     layer.sourceWidth,
   ], 44);
   data.set([layer.sourceHeight, 0, 0, 0], 48);
+  data.set(graph.heightUV, 52);
+  data.set(graph.colorUV, 56);
+  data.set([...graph.tint, graph.opacity], 60);
+  data.set([graph.visible ? 1 : 0, graph.textured ? 1 : 0, graph.field.operations.length, graph.field.output], 64);
+  data.set([...graph.boxSize, graph.maxHeight], 68);
+  data.set(packScalarField(graph.field), 72);
   // Scene camera replaces tilt/yaw/perspective/distance/centerX/centerY/roll;
   // temporalBlend/maxSteps/reset are intentionally ignored by native 3D.
   return data;
+}
+
+function evaluatedVoxelLayer(layer: SceneVoxelLayer): SceneVoxelLayer {
+  return { ...layer, voxelParams: (layer.voxelGraphPlan ?? compileVoxelGraph(layer.voxelParams)).params };
 }
 
 function numberParam(layer: SceneVoxelLayer, key: string, fallback: number): number {

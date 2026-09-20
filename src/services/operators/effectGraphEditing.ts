@@ -5,10 +5,24 @@ import { useTimelineStore } from '../../stores/timeline';
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/exclusiveMutationLease';
 import { renderHostPort } from '../render/renderHostPort';
-import { cableOperatorGraph, compileCableOperatorGraph } from '../faceCables/cableOperatorGraph';
-import { EFFECT_GRAPH_PARAM, connectEffectGraph, operatorEnabled, validateEffectGraph } from './effectGraph';
+import { effectOperatorGraph, validateEffectOwnerGraph, addableEffectOperators, canRemoveEffectOperator } from './effectGraphOwner';
+import { EFFECT_GRAPH_PARAM, connectEffectGraph, operatorEnabled } from './effectGraph';
 import { getEffectOperator } from './operatorRegistry';
-import { SCENE_OPERATORS } from './sceneOperators';
+import type { AnimatableProperty } from '../../types/animationProperties';
+
+/** Shared by the inspector and inline node values; animation keeps its owner. */
+export function setAnimatedOperatorParameter(clipId: string, effectId: string, nodeId: string, parameter: string, value: number | boolean) {
+  assertExclusiveTimelineMutationAllowed();
+  const state = readTimelineRuntimeState(useTimelineStore), clip = state.clips.find(item => item.id === clipId);
+  const effect = clip?.effects.find(item => item.id === effectId);
+  if (!effect || state.isExporting || state.tracks.find(track => track.id === clip!.trackId)?.locked) throw new Error('The clip is unavailable, locked or exporting.');
+  const node = effectOperatorGraph(effect).nodes.find(item => item.id === nodeId);
+  const binding = node?.bindings[parameter];
+  if (typeof binding !== 'string') throw new Error('Parameter unavailable.');
+  const property = `effect.${effectId}.${binding}` as AnimatableProperty;
+  if (typeof value === 'number' && (state.isRecording(clipId, property) || state.hasKeyframes(clipId, property))) state.addKeyframe(clipId, property, value);
+  else setOperatorParameter(clipId, effectId, nodeId, parameter, value);
+}
 
 type Params = Record<string, unknown>;
 /** One owner mutation for both form and graph views. Old baked artifacts are retained until a successful bake. */
@@ -19,12 +33,10 @@ export function editEffectGraph(clipId: string, effectId: string, label: string,
   if (!clip || state.isExporting || state.tracks.find(t => t.id === clip.trackId)?.locked) throw new Error('The clip is unavailable, locked or exporting.');
   const effect = clip.effects.find(e => e.id === effectId);
   if (!effect) throw new Error('Effect unavailable.');
-  const graph = structuredClone(cableOperatorGraph(effect.params)), params = { ...effect.params };
+  const graph = structuredClone(effectOperatorGraph(effect)), params = { ...effect.params };
   edit(graph, params);
-  const errors = validateEffectGraph(graph);
-  if (errors.length) throw new Error(errors[0]);
+  validateEffectOwnerGraph(effect, graph, params);
   params[EFFECT_GRAPH_PARAM] = JSON.stringify(graph);
-  compileCableOperatorGraph(params);
   const batch = startBatch(label);
   try {
     state.updateClip(clipId, { effects: clip.effects.map(e => e.id === effectId ? { ...e, params } : e) });
@@ -54,13 +66,13 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
     disconnectEdge: (id: string) => editEffectGraph(clipId, effectId, 'Disconnect nodes', graph => { graph.edges = graph.edges.filter(e => e.id !== id); }),
     toggleBypass: (id: string) => editEffectGraph(clipId, effectId, 'Bypass node', (graph, params) => {
       const node = graph.nodes.find(n => n.id === id);
-      if (!node || !getEffectOperator(node.operator)?.bypass) return;
+      if (!node || (graph.domain !== 'voxel' && !getEffectOperator(node.operator)?.bypass)) return;
       if (node.enabled) { params[node.enabled] = !operatorEnabled(node, params); node.bypassed = false; }
       else node.bypassed = !node.bypassed;
     }),
     deleteNode: (id: string) => editEffectGraph(clipId, effectId, 'Delete node', graph => {
       const node = graph.nodes.find(n => n.id === id);
-      if (!node || node.id === 'wind' || !getEffectOperator(node.operator)?.addable) throw new Error('This group requires that node.');
+      if (!node || !canRemoveEffectOperator(graph.domain === 'voxel' ? 'voxel-relief' : 'face-cables', node.id, node.operator)) throw new Error('This group requires that node.');
       graph.nodes = graph.nodes.filter(n => n.id !== id); graph.edges = graph.edges.filter(e => e.from !== id && e.to !== id); delete graph.layout[id];
       graph.groups?.forEach(g => { g.nodeIds = g.nodeIds.filter(nodeId => nodeId !== id); });
     }),
@@ -68,7 +80,7 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
       const id = `node-${crypto.randomUUID().slice(0, 8)}`;
       editEffectGraph(clipId, effectId, 'Add node', (graph, params) => {
         const operator = getEffectOperator(operatorId);
-        if (!operator?.addable || SCENE_OPERATORS.includes(operator)) throw new Error('Operator cannot be added here.');
+        if (!operator || !addableEffectOperators(graph.domain === 'voxel' ? 'voxel-relief' : 'face-cables').includes(operator)) throw new Error('Operator cannot be added here.');
         const node = { id, operator: operator.id, bindings: {} as Record<string, string | [string, string, string]> };
         for (const p of operator.parameters) {
           const key = `${id}_${p.id}`;
@@ -84,7 +96,7 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
         (group ?? graph.groups?.find(g => g.id === 'simulation'))?.nodeIds.push(id);
         const simulation = graph.nodes.find(n => n.operator === 'simulation.rope')!;
         const output = operator.outputs[0];
-        if (output.type === 'force' || output.type === 'drag') graph.edges.push({ id: `${id}-${simulation.id}`, from: id, output: output.id, to: simulation.id, input: output.type === 'force' ? 'forces' : 'drag' });
+        if (simulation && (output.type === 'force' || output.type === 'drag')) graph.edges.push({ id: `${id}-${simulation.id}`, from: id, output: output.id, to: simulation.id, input: output.type === 'force' ? 'forces' : 'drag' });
       });
       return id;
     },

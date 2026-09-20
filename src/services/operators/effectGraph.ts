@@ -32,7 +32,7 @@ export function validateEffectGraph(graph: EffectOperatorGraph): string[] {
     if (p.required && !occupied.has(`${n.id}:${p.id}`)) errors.push(`${getEffectOperator(n.operator)!.label}: connect ${p.label}.`);
   }
   if (graphHasCycle(connections.nodes, connections.edges)) errors.push('Cycles are not supported.');
-  if (graph.nodes.filter(n => n.operator === (graph.domain === 'scene' ? 'scene.render' : 'scene.output')).length !== 1) errors.push('The graph needs one clip output.');
+  if (graph.nodes.filter(n => n.operator === (graph.domain === 'voxel' ? 'render.voxel' : graph.domain === 'scene' ? 'scene.render' : 'scene.output')).length !== 1) errors.push('The graph needs one clip output.');
   if (graph.groups) {
     if (!Array.isArray(graph.groups) || graph.groups.length > 32) return [...errors, 'Invalid groups.'];
     const groups = new Map(graph.groups.map(g => [g?.id, g]));

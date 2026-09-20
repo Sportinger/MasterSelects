@@ -6,7 +6,10 @@ import { compileFlockDefinitionCached } from '../flock/compiler/flockCompiler';
 import { evaluateFlockValues, indexFlockKeyframes, resolveBundle } from '../flock/compiler/flockParamEvaluation';
 import { applyFlockLoop } from '../flock/time/flockTimeMapper';
 import { nodePreviewTextureTap } from './NodePreviewTextureTap';
-import type { PreviewFrame, PreviewRequest } from './previewTypes';
+import type { PreviewFrame, PreviewRequest, PreviewValueControl } from './previewTypes';
+import { getFlockOperator } from '../flock/operators/flockOperatorRegistry';
+import { readAnimatedFlockParam } from '../flock/flockAnimatedParams';
+import { createFlockProperty } from '../../types/flock';
 
 /** Uses the existing compiler/runtime. A viewer never advances or restarts a simulation. */
 export async function flockPreview(request: PreviewRequest, clip: TimelineClip, sourceTime: number, keys: readonly Keyframe[]): Promise<PreviewFrame> {
@@ -44,7 +47,24 @@ export async function flockPreview(request: PreviewRequest, clip: TimelineClip, 
   const valueIndex = program.values.findIndex(value => value.nodeId === node.id);
   if (semantic === 'flock:scalar' && valueIndex >= 0) {
     if (evaluated.unavailableAudioClipIds.length) return missing('Referenced audio analysis unavailable');
-    return { ...base, status: 'live', label: 'Scalar output', drawing: { kind: 'text', lines: [String(Number(evaluated.values[valueIndex].toFixed(4)))] } };
+    const descriptor = getFlockOperator(node.operator)!;
+    const controls: PreviewValueControl[] = ['flock.value', 'flock.math'].includes(node.operator) ? descriptor.params.flatMap(spec => {
+      if (spec.type !== 'number') return [];
+      const port = descriptor.inputs.find(port => port.drivesParam === spec.id);
+      if (port && clip.flock!.edges.some(edge => edge.to.nodeId === node.id && edge.to.port === port.id)) return [];
+      const property = createFlockProperty(node.id, spec.id);
+      const value = readAnimatedFlockParam(clip, keys, property, Math.max(0, request.time - clip.startTime)) ?? Number(node.params[spec.id] ?? spec.default);
+      return [{ label: spec.label, value, defaultValue: Number(spec.default), min: spec.min, max: spec.max, step: spec.step,
+        portId: port?.id ?? 'value', direction: port ? 'input' as const : 'output' as const,
+        target: { kind: 'flock' as const, clipId: clip.id, nodeId: node.id, parameter: spec.id } }];
+    }) : [];
+    const values: NonNullable<PreviewFrame['values']> = descriptor.inputs.flatMap(port => {
+      const edge = clip.flock!.edges.find(edge => edge.to.nodeId === node.id && edge.to.port === port.id);
+      const index = edge ? program.values.findIndex(value => value.nodeId === edge.from.nodeId) : -1;
+      return index >= 0 ? [{ portId: port.id, direction: 'input' as const, value: evaluated.values[index] }] : [];
+    });
+    if (node.operator !== 'flock.value') values.push({ portId: 'value', direction: 'output', value: evaluated.values[valueIndex] });
+    return { ...base, controls, values, status: 'live', label: 'Live values', drawing: { kind: 'number', value: String(Number(evaluated.values[valueIndex].toFixed(4))), caption: 'Output' } };
   }
   const spec = [program.simulation, ...program.emitters, ...program.ops, ...program.paths, ...program.obstacles,
     ...program.palettes, ...program.branches, ...program.selections, ...program.trails, program.boundary].find(value => value?.nodeId === node.id);

@@ -1,6 +1,8 @@
+import { nodeScalarSampleTap } from '../../../services/nodePreview/NodeScalarSampleTap';
 import type { SceneCamera, SceneLayer3DData, SceneVoxelLayer } from '../../scene/types';
 import { SCENE_COLOR_FORMAT, SCENE_DEPTH_FORMAT } from '../sceneRenderer/constants';
 import voxelShaderSource from '../shaders/VoxelPass.wgsl?raw';
+import scalarFieldShader from '../../../shaders/scalarField.wgsl?raw';
 import {
   buildVoxelUniformData,
   resolveVoxelGridDimensions,
@@ -43,14 +45,16 @@ export class VoxelPass {
       ],
       label: 'native-scene-voxel-bind-group-layout',
     });
-    const module = device.createShaderModule({ code: voxelShaderSource, label: 'native-scene-voxel-shader' });
+    const module = device.createShaderModule({ code: scalarFieldShader + '\n' + voxelShaderSource, label: 'native-scene-voxel-shader' });
     const layout = device.createPipelineLayout({
       bindGroupLayouts: [this.bindGroupLayout],
       label: 'native-scene-voxel-pipeline-layout',
     });
     const base: Omit<GPURenderPipelineDescriptor, 'vertex' | 'label'> = {
       layout,
-      fragment: { module, entryPoint: 'fragmentMain', targets: [{ format: SCENE_COLOR_FORMAT }] },
+      fragment: { module, entryPoint: 'fragmentMain', targets: [{ format: SCENE_COLOR_FORMAT,
+        blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } },
+      }] },
       // Scene convention: every native3d pipeline draws unculled (see
       // pipelineResources.ts / meshPass) because the projection's Y handling
       // flips winding; depth testing handles occlusion.
@@ -86,6 +90,9 @@ export class VoxelPass {
     this.initialize(device);
     if (!this.cubePipeline || !this.floorPipeline || !this.bindGroupLayout) return false;
 
+    for (const { layer, textureView } of voxelLayers) if (nodeScalarSampleTap.has(`voxel-scene:${layer.clipId}`)) {
+      nodeScalarSampleTap.capture(`voxel-scene:${layer.clipId}`, device, commandEncoder, device.createSampler({ minFilter: 'linear', magFilter: 'linear' }), textureView);
+    }
     const renderPass = commandEncoder.beginRenderPass({
       colorAttachments: [{ view: sceneView, loadOp: 'load', storeOp: 'store' }],
       depthStencilAttachment: {

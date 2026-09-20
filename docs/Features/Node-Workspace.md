@@ -26,6 +26,30 @@ numeric fields, sliders at suitable widths, reset and supported keyframe actions
 The link icon exposes a control to Properties. The Connections section offers a
 keyboard-accessible alternative to cable dragging.
 
+## Math and Voxel Relief
+
+Voxel Relief opens as an editable group with nested geometry and height-field
+steps: frame, UV/image texture, luminance, clamp, power, multiply, add, grid,
+box, instancing, material, mesh, camera, lighting and render. Shared texture,
+material and mesh operators reuse the scene registry. Existing relief parameters
+and animation bindings retain their values when opening an older project.
+
+Math cards put A and B on the left, the operation between them, and the result
+on the right. The operation dropdown is available both on the card and in the
+inspector. Changing modes keeps the node identity, compatible links and numeric
+bindings; inputs absent in the new mode disconnect in the same undo step.
+Flock math cards offer all operations supported by the Flock registry.
+
+Numeric and text viewers use real DOM text and controls, without thumbnail
+generation or atlas tiles. Unconnected numeric operands can be dragged or typed
+directly; the touched number updates immediately while dependent calculations
+finish independently. Numeric jobs do not wait for image-preview readbacks.
+Relief math values use a shared 16-byte GPU sample of the center grid cell; the
+tooltip identifies that sample because field values vary across the image.
+The inspector shows those same live connected inputs and results. No additional
+video decoder is opened. Values, operation changes and their bindings support
+undo and project saves; unavailable live values are shown as a dash.
+
 ## Canvas navigation
 
 Mouse-wheel and trackpad scrolling zoom smoothly around the pointer. Zoom is

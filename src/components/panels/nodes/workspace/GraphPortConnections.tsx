@@ -3,6 +3,9 @@ import { describeNodePort } from '../../../../services/nodeGraph/nodePortPresent
 import type { NodeGraphConnectionRequest } from '../../../../types/nodeGraph';
 import { ResolveInspectorSection, ResolveInspectorRow, ResolveInspectorIconButton } from '../../properties/resolveInspector/ResolveInspectorPrimitives';
 import { InspectorSelect } from '../../../inspector/InspectorSelect';
+import './GraphPortConnections.css';
+import '../../properties/resolveInspector/ResolveInspector.css';
+import '../../properties/resolveInspector/ResolveInspectorNarrow.css';
 
 /** Shared keyboard-accessible counterpart to dragging cables on the canvas. */
 export function GraphPortConnections({ graph, nodeId, labelForNode, onConnect, onDisconnect, onSelectNode }: {

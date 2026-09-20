@@ -4,6 +4,9 @@ import { NodeGraphPortView } from './NodeGraphPortView';
 import { KeyframeNodeCardPreview } from '../keyframes/KeyframeNodeCurve';
 import { NodeAnimationBadge } from '../keyframes/NodeAnimationBadge';
 import { NodePreviewOutput, NodeViewerButton } from '../previews/NodePreviewControls';
+import { NodeValuePreview } from '../previews/NodeValuePreview';
+import { MathNodeMode } from '../previews/MathNodeMode';
+import { inlineNumericPorts } from '../previews/previewGeometry';
 import { requestNodeAnimation } from '../../../../services/nodeGraph/nodeWorkspaceNavigation';
 import type { ConnectionDraft } from './canvasGeometry';
 import {
@@ -20,6 +23,7 @@ import {
 
 interface NodeGraphNodeCardProps {
   node: NodeGraphNode;
+  clipId?: string;
   canvasRendered?: boolean;
   selectedNodeId: string | null;
   isInSelection?: boolean;
@@ -40,12 +44,13 @@ interface NodeGraphNodeCardProps {
 }
 
 function getNodeHeaderLabel(node: NodeGraphNode): string {
-  const categoryLabel = node.binding?.kind === 'flock-node' ? node.params?.categoryLabel : undefined;
+  const categoryLabel = node.params?.categoryLabel;
   return typeof categoryLabel === 'string' ? categoryLabel : node.kind;
 }
 
 export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
   node,
+  clipId,
   canvasRendered = false,
   selectedNodeId,
   isInSelection = false,
@@ -60,7 +65,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
   onTogglePreview,
   onPreviewOutput,
 }: NodeGraphNodeCardProps) {
-  const [keyboardFocused, setKeyboardFocused] = useState(false);
+  const [focusBox, setFocusBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const nodeHeight = getNodeHeight(node);
   const isSelected = node.id === selectedNodeId || isInSelection;
   const isBypassable = isNodeBypassable(node);
@@ -72,22 +77,30 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
   const renderPort = (port: NodeGraphPort) => <NodeGraphPortView key={port.id} node={node} port={port}
     connectionDraft={connectionDraft} onStartConnectionDrag={onStartConnectionDrag} onDisconnectPortEdges={onDisconnectPortEdges} />;
 
-  return (
+  return (<>
     <div
       role="button"
       tabIndex={0}
       className={[
         'node-workspace-node',
+        inlineNumericPorts(node) ? 'node-inline-math' : '',
         `node-workspace-node-${node.kind}`,
         node.binding?.kind === 'flock-node' ? 'node-workspace-node-flock' : '',
         isSelected ? 'selected' : '',
         isBypassed ? 'bypassed' : '',
       ].filter(Boolean).join(' ')}
       data-node-id={node.id}
-      onFocusCapture={event => setKeyboardFocused(event.target.matches(':focus-visible'))}
-      onBlurCapture={event => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setKeyboardFocused(false);
+      onFocusCapture={event => {
+        if (!event.target.matches(':focus-visible')) { setFocusBox(null); return; }
+        const card = event.currentTarget.getBoundingClientRect(), target = event.target.getBoundingClientRect();
+        const scale = card.width / NODE_WIDTH || 1;
+        setFocusBox({ left: (target.left - card.left) / scale, top: (target.top - card.top) / scale,
+          width: target.width / scale, height: target.height / scale });
       }}
+      onBlurCapture={event => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocusBox(null);
+      }}
+      onPointerDownCapture={() => setFocusBox(null)}
       style={{
         left: node.layout.x,
         top: node.layout.y,
@@ -98,7 +111,9 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
         event.stopPropagation();
         onSelectNode(node.id);
       }}
-      onPointerDown={(event) => onStartNodeDrag(event, node)}
+      onPointerDown={event => {
+        event.preventDefault(); event.currentTarget.blur(); onStartNodeDrag(event, node);
+      }}
       onPointerMove={onNodePointerMove}
       onPointerUp={onFinishNodeDrag}
       onPointerCancel={onFinishNodeDrag}
@@ -140,7 +155,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
       <div className="node-workspace-node-description" title={node.description}>
         {node.description ?? 'Built-in processing node'}
       </div>
-      {node.binding?.kind === 'keyframe-node' && (!canvasRendered || keyboardFocused) && <KeyframeNodeCardPreview node={node} />}
+      {node.binding?.kind === 'keyframe-node' && !canvasRendered && <KeyframeNodeCardPreview node={node} />}
       {!!node.animation?.channels.length && (canvasRendered
         ? <button type="button" className="node-animation-badge" style={{ top: getNodePortStartY(node) - 78 }}
             aria-label={`Edit animation for ${node.label}, ${node.animation.channels.length} curves`}
@@ -173,11 +188,18 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
           {node.inputs.length > 0 && <span className="node-workspace-port-direction">IN</span>}
           {node.inputs.map((port) => renderPort(port))}
         </div>
-        <div className="node-workspace-port-column node-workspace-port-column-output">
+        <div className="node-workspace-port-column node-workspace-port-column-output" style={inlineNumericPorts(node) && node.inputs.length > 1 ? { marginTop: 42 } : undefined}>
           {node.outputs.length > 0 && <span className="node-workspace-port-direction">OUT</span>}
           {node.outputs.map((port) => renderPort(port))}
         </div>
       </div>
     </div>
+    {inlineNumericPorts(node) && <span className="node-math-symbol" title={node.label} aria-label={`${node.label} operation`}
+      style={{ left: node.layout.x + 18, top: node.layout.y + getNodePortStartY(node) + (node.inputs.length ? 56 : 8), width: 64 }}>{String(node.params?.mathSymbol ?? '')}</span>}
+    {clipId && <MathNodeMode node={node} clipId={clipId} />}
+    <NodeValuePreview node={node} />
+    {canvasRendered && focusBox && <div aria-hidden="true" className="node-workspace-keyboard-focus"
+      style={{ left: node.layout.x + focusBox.left, top: node.layout.y + focusBox.top, width: focusBox.width, height: focusBox.height }} />}
+    </>
   );
 });

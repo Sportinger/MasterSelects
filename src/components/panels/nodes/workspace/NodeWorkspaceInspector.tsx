@@ -9,6 +9,7 @@ import { SceneNodeParameters } from './SceneNodeParameters';
 import { FlockTab } from '../../properties/flock/FlockTab';
 import { OperatorParameters, AddOperatorControl } from './OperatorParameters';
 import { FaceCableControls } from '../../properties/FaceCableControls';
+import { VoxelReliefControls } from '../../properties/VoxelReliefControls';
 import { useCallback, useMemo, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { getCategoriesWithEffects } from '../../../../effects';
 import { startBatch, endBatch } from '../../../../stores/historyStore';
@@ -329,7 +330,7 @@ export function NodeInspector({
     const binding = node.binding;
     return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
       <EffectOrderControls clip={clip} effectId={binding.effectId} />
-      <OperatorParameters clip={clip} effectId={binding.effectId} nodeId={binding.nodeId} />
+      <OperatorParameters clip={clip} effectId={binding.effectId} nodeId={binding.nodeId} projectedNode={node} />
       {['simulation.rope', 'tracking.anchors', 'render.cables'].includes(binding.operator) && <FaceCableControls clipId={clip.id} effectId={binding.effectId} scope={binding.operator === 'tracking.anchors' ? 'anchors' : binding.operator === 'render.cables' ? 'render' : 'simulation'} />}
       <AddOperatorControl clipId={clip.id} effectId={binding.effectId} onAdded={id => onSelectNode(`${node.id.slice(0, node.id.lastIndexOf('/') + 1)}${id}`)} />
     </NodeInspectorShell>;
@@ -338,6 +339,12 @@ export function NodeInspector({
     return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}><FlockTab clipId={clip.id} /></NodeInspectorShell>;
   }
   const faceEffectId = node.binding?.kind === 'clip-effect' ? node.binding.effectId : undefined;
+  if (clip && faceEffectId && clip.effects.find(e => e.id === faceEffectId)?.type === 'voxel-relief') {
+    return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
+      <EffectOrderControls clip={clip} effectId={faceEffectId} />
+      <VoxelReliefControls clipId={clip.id} effectId={faceEffectId} />
+    </NodeInspectorShell>;
+  }
   if (clip && faceEffectId && clip.effects.find(e => e.id === faceEffectId)?.type === 'face-cables') {
     return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
       <EffectOrderControls clip={clip} effectId={faceEffectId} />
@@ -367,7 +374,7 @@ export function NodeInspector({
     <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
       {clip && node.binding?.kind === 'clip-effect' && <EffectOrderControls clip={clip} effectId={node.binding.effectId} />}
       <div className="node-workspace-inspector-header">
-        <span>{node.kind}</span>
+        <span>{typeof node.params?.categoryLabel === 'string' ? node.params.categoryLabel : node.kind}</span>
         <h3>{node.label}</h3>
         <p>{node.description}</p>
       </div>

@@ -1,0 +1,9 @@
+.node-graph-port-connections, .operator-parameters, .voxel-relief-controls {
+  container-type: inline-size;
+  min-width: 0;
+  width: 100%;
+}
+.node-graph-port-connections .resolve-inspector-row-control > .inspector-select {
+  width: 100%;
+  max-width: 100%;
+}

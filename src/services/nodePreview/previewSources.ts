@@ -17,6 +17,7 @@ import { scenePreview } from './scenePreviews';
 import { sceneValuePreview } from './sceneValuePreviews';
 import { getEffectOperator } from '../operators/operatorRegistry';
 import { flockPreview } from './flockPreviews';
+import { voxelPreview } from './voxelPreviews';
 
 /** Domain adapters read authoritative runtime data; opening a viewer never runs analysis or a bake. */
 export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewArtifactReader): PreviewFrame | Promise<PreviewFrame> {
@@ -28,6 +29,10 @@ export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewA
   const sourceTime = state.getSourceTimeForClip(clip.id, localTime), binding = request.node.binding;
   const semantic = request.port?.metadata?.semanticKind;
   if (binding?.kind === 'flock-node') return flockPreview(request, clip, sourceTime, state.clipKeyframes.get(clip.id) ?? []);
+  if (binding?.kind === 'effect-operator') {
+    const effect = clip.effects.find(value => value.id === binding.effectId);
+    if (effect?.type === 'voxel-relief') return voxelPreview(request, clip, effect, state.clipKeyframes.get(clip.id) ?? [], localTime);
+  }
   const artifact = request.port?.metadata?.sourceArtifact;
   const operator = binding?.kind === 'effect-operator' || binding?.kind === 'scene-operator' ? binding.operator : '';
   if (artifacts && (artifact?.kind === 'scene-depth' || ['depth.calibrate', 'geometry.face', 'geometry.depth', 'geometry.merge-surface', 'collision.mesh', 'simulation.rope'].includes(operator))) {

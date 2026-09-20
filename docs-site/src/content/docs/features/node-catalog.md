@@ -26,6 +26,8 @@ inputs, recorded dependencies and cycles before a connection is changed.
 | `EFFECT_OPERATORS` | Shared operator contracts, used by Face Cables and image-surface scenes |
 | `SCENE_OPERATORS` | Texture, UV, material, geometry, object transform and rendering |
 | `SURFACE_OPERATORS` | Landmark mesh, depth calibration, depth mesh, seam merge and mesh collision |
+| `VOXEL_OPERATORS` | Grid, box, instancing, relief camera/light and rendering |
+| `SCALAR_FIELD_OPERATORS` | Luminance and scalar field arithmetic, fused into the relief GPU pass |
 | `listFlockOperators` | Flock's typed compiler and GPU simulation; `sharedOperator` identifies shared implementations |
 | `EFFECT_REGISTRY` | Existing image effects and composite effect groups |
 

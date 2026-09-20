@@ -21,6 +21,7 @@ export class NodePreviewPainter {
   private sequence = 0;
   private tile = 256;
   private keys?: Set<string>;
+  private textKeys = new Set<string>();
   private get columns() { return ATLAS_WIDTH / this.tile; }
   private get capacity() { return ATLAS_WIDTH * ATLAS_HEIGHT / (this.tile * this.tile); }
   resolution(zoom: number, ratio: number) {
@@ -35,6 +36,10 @@ export class NodePreviewPainter {
     for (const frame of frames) {
       try {
         if (this.keys && !this.keys.has(frame.key)) continue;
+        if (frame.presentation === 'text' || frame.drawing?.kind === 'text' || frame.drawing?.kind === 'number') {
+          this.textKeys.add(frame.key); this.slots.delete(frame.key); this.dirty.add(frame.key); continue;
+        }
+        this.textKeys.delete(frame.key);
         if (!this.atlas) {
           this.atlas = this.createAtlas() ?? undefined;
           if (this.atlas) { this.atlas.canvas.width = ATLAS_WIDTH; this.atlas.canvas.height = ATLAS_HEIGHT; }
@@ -77,6 +82,7 @@ export class NodePreviewPainter {
   retain(keys: Set<string>) {
     this.keys = keys;
     for (const key of this.slots.keys()) if (!keys.has(key)) this.slots.delete(key);
+    for (const key of this.textKeys) if (!keys.has(key)) this.textKeys.delete(key);
     this.allDirty = true;
     if (!keys.size) this.disposeAtlas();
   }
@@ -84,7 +90,7 @@ export class NodePreviewPainter {
     if (this.atlas) { this.atlas.canvas.width = 1; this.atlas.canvas.height = 1; this.atlas = undefined; }
     this.slots.clear();
   }
-  dispose() { this.disposeAtlas(); this.dirty.clear(); }
+  dispose() { this.disposeAtlas(); this.dirty.clear(); this.textKeys.clear(); }
   get size() { return this.slots.size; }
 
   draw(scene: CanvasScene, view: CanvasView) {
@@ -100,6 +106,7 @@ export class NodePreviewPainter {
       if (!previewInView(rect, view) || (!this.allDirty && !this.dirty.has(preview.key))) continue;
       const slot = this.slots.get(preview.key);
       ctx.clearRect(rect.x - 1, rect.y - 1, rect.width + 2, rect.height + 2);
+      if (preview.text || this.textKeys.has(preview.key)) continue;
       ctx.fillStyle = '#101214'; ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
       if (slot && this.atlas) {
         const content = slot.content, scale = Math.min(rect.width / content.width, (rect.height - 32) / content.height);

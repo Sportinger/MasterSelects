@@ -3,6 +3,7 @@ import type { DrawContext } from '../canvas/rendering/paintNodeCanvas';
 
 /** Bounded drawing data is rasterized once into the shared atlas, then reused during pan/zoom. */
 export function paintPreviewDrawing(ctx: DrawContext, drawing: PreviewDrawing, width: number, height: number) {
+  if (drawing.kind === 'text' || drawing.kind === 'number') return;
   ctx.strokeStyle = '#77c7e4'; ctx.fillStyle = '#a2d9e8'; ctx.lineWidth = 1;
   if (drawing.kind === 'material') {
     for (let y = 0; y < height; y += 12) for (let x = 0; x < width; x += 12) {
@@ -12,9 +13,6 @@ export function paintPreviewDrawing(ctx: DrawContext, drawing: PreviewDrawing, w
     ctx.fillStyle = `rgb(${drawing.color.map(value => Math.round(Math.max(0, Math.min(1, value)) * 255)).join(' ')})`;
     ctx.beginPath(); ctx.arc(width / 2, height / 2, Math.min(width, height) * 0.32, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
     ctx.fillStyle = '#b6bfc5'; ctx.font = '10px system-ui'; ctx.fillText(drawing.textured ? 'Texture × tint' : 'Solid color', 6, height - 8);
-  } else if (drawing.kind === 'text') {
-    ctx.font = '12px system-ui'; ctx.textBaseline = 'top';
-    drawing.lines.slice(0, 6).forEach((line, index) => ctx.fillText(line.slice(0, 70), 8, 8 + index * 19, width - 16));
   } else if (drawing.kind === 'plot') {
     const values = drawing.values.slice(0, 256);
     let min = 0, max = 1;

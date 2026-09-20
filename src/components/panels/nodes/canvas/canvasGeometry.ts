@@ -6,7 +6,7 @@ import type {
 } from '../../../../services/nodeGraph';
 import { getNodeGraphPortCompatibilityKey, formatsOverlap } from '../../../../services/nodeGraph/graphConnections';
 import { describePortText } from '../../../../services/nodeGraph/nodePortPresentation';
-import { previewExtraHeight } from '../previews/previewGeometry';
+import { inlineNumericPorts, previewExtraHeight } from '../previews/previewGeometry';
 
 export const DEFAULT_VIEWPORT = { zoom: 0.88, panX: 36, panY: 28 };
 export const MIN_ZOOM = 0.18;
@@ -14,6 +14,7 @@ export const MAX_ZOOM = 2.4;
 export const NODE_WIDTH = 184;
 export const NODE_MIN_HEIGHT = 126;
 export const PORT_ROW_HEIGHT = 32;
+export const nodePortRowHeight = (node: NodeGraphNode) => inlineNumericPorts(node) ? 84 : PORT_ROW_HEIGHT;
 export const PORT_START_Y = 100;
 export const BADGED_PORT_START_Y = 130;
 export const PORT_DOT_CENTER_X = 12.5;
@@ -156,13 +157,15 @@ export function getNodeBadges(node: NodeGraphNode): NodeBadge[] {
 }
 
 export function getNodePortStartY(node: NodeGraphNode): number {
+  if (inlineNumericPorts(node)) return 72 + (node.animation?.channels.length ? 64 : 0);
   if (node.binding?.kind === 'keyframe-node') return 175;
   return (getNodeBadges(node).length > 0 ? BADGED_PORT_START_Y : PORT_START_Y) + (node.animation?.channels.length ? 64 : 0);
 }
 
 export function getNodeHeight(node: NodeGraphNode): number {
   const portRows = Math.max(node.inputs.length, node.outputs.length, 1);
-  return Math.max(NODE_MIN_HEIGHT, getNodePortStartY(node) + (portRows * PORT_ROW_HEIGHT) + 16) + previewExtraHeight(node);
+  if (inlineNumericPorts(node)) return Math.max(NODE_MIN_HEIGHT, getNodePortStartY(node) + (portRows - 1) * nodePortRowHeight(node) + (node.inputs.length === 1 ? 86 : 65));
+  return Math.max(NODE_MIN_HEIGHT, getNodePortStartY(node) + (portRows * nodePortRowHeight(node)) + 16) + previewExtraHeight(node);
 }
 
 export function getGraphBounds(graph: NodeGraph): NodeBounds {
@@ -191,7 +194,8 @@ export function getPortCenter(node: NodeGraphNode, portId: string, direction: 'i
   const portIndex = Math.max(0, ports.findIndex((port) => port.id === portId));
   return {
     x: node.layout.x + (direction === 'input' ? PORT_DOT_CENTER_X : NODE_WIDTH - PORT_DOT_CENTER_X),
-    y: node.layout.y + getNodePortStartY(node) + (portIndex * PORT_ROW_HEIGHT) + PORT_DOT_CENTER_Y,
+    y: node.layout.y + getNodePortStartY(node) + (portIndex * nodePortRowHeight(node)) + PORT_DOT_CENTER_Y
+      + (inlineNumericPorts(node) && direction === 'output' && node.inputs.length > 1 ? 42 : 0),
   };
 }
 

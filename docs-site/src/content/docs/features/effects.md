@@ -376,6 +376,24 @@ With `Limit to Video` enabled, the raymarcher discards voxel cells outside the s
 
 Glow also starts from the iPad-tuned preset: amount 5, threshold 0.7935, radius 1, softness 0.496, 6.85 rings, and 17.95 samples per ring. Existing Glow instances likewise retain their stored parameters.
 
+### Editable Voxel Relief nodes
+
+**Open Nodes** exposes the relief as a nested, editable operator group. The
+default height path is texture → luminance → clamp → power → multiply → add;
+grid points and a box primitive feed **Instance on points**, then material/mesh,
+camera, lighting and render. Texture/UV, material and mesh reuse the shared scene
+operators. Fixed math inputs can be edited directly under their ports, and the
+Math dropdown switches operations on the canvas or in the inspector.
+
+The same connected field program drives 2D raymarching and native 3D instancing.
+The 2D graph camera controls relief framing; native 3D uses the timeline scene
+camera. Geometry, UVs, tint and opacity affect the real render; disconnected or
+muted geometry produces transparency. Existing flat effect values and keyframe
+property IDs stay compatible, including older coarse voxel graphs. One height
+field supports up to 32 register operations and one texture mapping; color may
+use a separate mapping. This is scalar field math, not arbitrary RGB-vector or
+general-purpose geometry processing.
+
 ### Voxel Relief camera & orbit mode
 
 The effect's virtual camera is fully parameterized: `tilt`, `yaw` (±180°, full

@@ -115,6 +115,12 @@ inspector and adds evaluated-parameter and existing-particle previews. Common
 connection checks cover Color, Flock, Face Cables, Scene and manual clip links;
 saved definitions and specialized rendering/simulation stay compatible.
 
+Voxel Relief now exposes nested geometry and height calculations as editable
+nodes. Math nodes offer an operation dropdown on the card and in the inspector,
+editable operands, and live connected values. Number-only previews use real text
+instead of generated thumbnails; the number being edited updates immediately
+while downstream calculations catch up.
+
 Media imports report processing and save failures. Failed audio-proxy writes can
 be retried; project packages follow the configured save policy.
 Switching compositions keeps cached proxy audio available. Reopening split nested

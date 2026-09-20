@@ -4,6 +4,7 @@ import type { NodeGraphNode, NodeGraphPort } from '../../types/nodeGraph';
 export type PreviewDrawing =
   | { kind: 'material'; color: number[]; opacity: number; textured: boolean }
   | { kind: 'text'; lines: string[] }
+  | { kind: 'number'; value: string; caption: string; details?: string[] }
   | { kind: 'plot'; values: number[]; cursor?: number; bipolar?: boolean }
   | { kind: 'points'; points: number[]; edges?: number[]; dimensions: 2 | 3 }
   | { kind: 'depth'; values: number[]; width: number; height: number };
@@ -17,9 +18,24 @@ export interface PreviewFrame {
   bitmap?: ImageBitmap;
   aspectRatio?: number;
   drawing?: PreviewDrawing;
+  /** Text/value viewers stay in the DOM and never allocate atlas tiles. */
+  presentation?: 'text';
+  controls?: PreviewValueControl[];
+  /** Read-only sampled values, alongside editable unconnected operands. */
+  values?: Array<{ portId: string; direction: 'input' | 'output'; value?: number }>;
+}
+
+export interface PreviewValueControl {
+  label: string; value: number | boolean; defaultValue: number | boolean; min?: number; max?: number; step?: number;
+  target: { clipId: string; effectId: string; nodeId: string; parameter: string }
+    | { kind: 'flock'; clipId: string; nodeId: string; parameter: string };
+  portId?: string;
+  direction?: 'input' | 'output';
 }
 
 export interface PreviewRequest {
+  /** Numeric values bypass the image readback queue and pixel budget. */
+  numeric?: boolean;
   key: string;
   revision: string;
   clipId: string;

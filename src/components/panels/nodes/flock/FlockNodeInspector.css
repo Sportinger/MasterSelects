@@ -1,12 +1,10 @@
-.node-workspace-flock-params,
-.node-graph-port-connections {
+.node-workspace-flock-params {
   container-type: inline-size;
   min-width: 0;
   width: 100%;
 }
 
-.node-workspace-flock-params .resolve-inspector-row-control > .inspector-select,
-.node-graph-port-connections .resolve-inspector-row-control > .inspector-select {
+.node-workspace-flock-params .resolve-inspector-row-control > .inspector-select {
   width: 100%;
   max-width: 100%;
 }

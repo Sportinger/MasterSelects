@@ -13,7 +13,7 @@ import type { ConnectionPlug } from '../connectionPlugs';
 import type { HoveredNodePort } from '../useNodePortHover';
 import type { CanvasCurve, CanvasScene } from './nodeCanvasTypes';
 import { makeCanvasCable } from './cableGeometry';
-import { previewRect } from '../../previews/previewGeometry';
+import { inlineNumericPorts, previewRect } from '../../previews/previewGeometry';
 import { previewOutput } from '../../../../../services/nodePreview/previewTypes';
 
 const COLORS: Record<string, string> = { source: '#54be8e', transform: '#5299eb', motion: '#5299eb', color: '#e0c24a', mask: '#be6fd5', effect: '#de8452', custom: '#5cbed6', analysis: '#70f6dc', output: '#97a9be' };
@@ -66,14 +66,14 @@ export function buildCanvasScene(options: Options): CanvasScene {
       bypassable: !!group.bypassNodeId, bypassed: nodes.find(node => node.id === group.bypassNodeId)?.params?.enabled === false });
   }
   scene.nodes = nodes.map(node => ({ id: node.id, x: node.layout.x, y: node.layout.y, width: NODE_WIDTH, height: getNodeHeight(node),
-    label: node.label, description: node.description ?? 'Built-in processing node', kind: typeof node.params?.categoryLabel === 'string' ? node.params.categoryLabel : node.kind,
+    label: inlineNumericPorts(node) ? '' : node.label, description: inlineNumericPorts(node) ? '' : node.description ?? 'Built-in processing node', kind: typeof node.params?.categoryLabel === 'string' ? node.params.categoryLabel : node.kind,
     runtime: node.runtime, color: COLORS[node.kind] ?? '#5cbed6', selected: node.id === options.selectedNodeId || options.selection.has(node.id),
     viewerEnabled: node.preview?.requested,
-    preview: node.preview?.enabled ? { ...previewRect(getNodeHeight(node), node), key: node.preview.key, label: previewOutput(node, node.preview.portId)?.label ?? 'Values' } : undefined,
+    preview: node.preview?.enabled ? { ...previewRect(getNodeHeight(node), node), key: node.preview.key, label: previewOutput(node, node.preview.portId)?.label ?? 'Values', text: inlineNumericPorts(node) } : undefined,
     bypassed: isNodeBypassed(node), bypassable: !!options.canBypass && isNodeBypassable(node), badges: getNodeBadges(node), curve: curveFor(node, options),
     ports: [...node.inputs, ...node.outputs].map(port => {
       const info = describeNodePort(port), center = getPortCenter(node, port.id, port.direction)!;
-      return { x: center.x - node.layout.x, y: center.y - node.layout.y, label: port.label, type: info.typeLabel, color: info.color, input: port.direction === 'input' };
+      return { x: center.x - node.layout.x, y: center.y - node.layout.y, label: port.label, type: inlineNumericPorts(node) ? '' : info.typeLabel, color: info.color, input: port.direction === 'input' };
     }) }));
   const pairs = new Map<string, { input?: ConnectionPlug; output?: ConnectionPlug }>();
   for (const plug of plugs) {

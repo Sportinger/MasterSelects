@@ -4,6 +4,12 @@ import type { NodePortContract } from '../../types/nodePortContract';
 import type { OperatorPort, OperatorSignal } from '../../types/operatorGraph';
 
 export const SIGNAL_FORMAT_LABELS: Record<string, string> = {
+  'grid-points': 'Grid cell centers',
+  'box-primitive': 'Unit box geometry',
+  'voxel-grid': 'Instanced boxes with a height field',
+  'scalar-field': 'Scalar value at each cell',
+  'orbit-camera': 'Perspective orbit camera',
+  'relief-light': 'Ambient and directional light',
   'decoded-frame': 'Decoded video / still-image frame',
   'rgba-texture': '2D RGBA color texture',
   'uv-transform': 'UV scale + offset (U, V)',
@@ -27,6 +33,9 @@ export const SIGNAL_FORMAT_LABELS: Record<string, string> = {
 
 const contract = (typeLabel: string, description: string, ...formats: string[]): NodePortContract => ({ typeLabel, description, formats });
 export const OPERATOR_SIGNAL_CONTRACTS: Record<OperatorSignal, NodePortContract> = {
+  field: contract('Scalar field', 'A numeric value evaluated at each grid cell in one GPU pass.', 'scalar-field'),
+  camera: contract('Camera', 'Perspective orbit camera used by the relief renderer.', 'orbit-camera'),
+  light: contract('Light', 'Directional and ambient relief lighting.', 'relief-light'),
   image: contract('Image', 'Image pixels from the source or rendered output. Encoded files are decoded before entering this port.', 'decoded-frame'),
   texture: contract('Texture', 'A sampled two-dimensional color texture. UV coordinates are supplied separately.', 'rgba-texture'),
   uv: contract('UV', 'Source-image sampling coordinates. Transforming UVs changes image placement on the surface, not its geometry.', 'uv-transform'),

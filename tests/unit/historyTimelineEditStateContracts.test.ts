@@ -434,6 +434,13 @@ describe('HistoryTimelineEditState contracts', () => {
     expect(restored.state.clips[0].captionLayerBinding).not.toBe(clip.captionLayerBinding);
   });
 
+  it('accepts plain node coordinates named source without accepting runtime payloads', () => {
+    const state = { nodeGraph: { canvasPlacements: { 'clip-graph:test': { nodes: { source: { x: 10, y: 20 }, texture: { x: 0, y: 0 } } } } } };
+    expect(findHistoryStateBoundaryViolations(state)).toEqual([]);
+    const invalid = { nodeGraph: { canvasPlacements: { 'clip-graph:test': { nodes: { source: { x: 10, y: 20, videoElement: {} } } } } } };
+    expect(findHistoryStateBoundaryViolations(invalid)).not.toEqual([]);
+  });
+
   it('rejects manual history state objects with runtime payload keys', () => {
     const invalidState = {
       kind: 'history-timeline-edit-state',

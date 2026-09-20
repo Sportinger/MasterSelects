@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { TimelineClip } from '../../../../types/timeline';
 import type { EffectOperatorGraph } from '../../../../types/operatorGraph';
-import { cableOperatorGraph } from '../../../../services/faceCables/cableOperatorGraph';
+import { effectOperatorGraph } from '../../../../services/operators/effectGraphOwner';
 import { sceneGraphForClip } from '../../../../services/operators/sceneGraph';
 import { editEffectGraph } from '../../../../services/operators/effectGraphEditing';
 import { editSceneGraph } from '../../../../services/operators/sceneGraphEditing';
@@ -10,7 +10,8 @@ import { InspectorSelect } from '../../../inspector/InspectorSelect';
 import { ResolveInspectorSection, ResolveInspectorRow, ResolveInspectorIconButton } from '../../properties/resolveInspector/ResolveInspectorPrimitives';
 
 export function OperatorGroupParameters({ clip, groupId, effectId }: { clip: TimelineClip; groupId: string; effectId?: string }) {
-  const graph = effectId ? cableOperatorGraph(clip.effects.find(e => e.id === effectId)?.params ?? {}) : sceneGraphForClip(clip).graph;
+  const effect = clip.effects.find(e => e.id === effectId);
+  const graph = effect ? effectOperatorGraph(effect) : sceneGraphForClip(clip).graph;
   const id = groupId.split('/').at(-1)!, group = graph.groups?.find(g => g.id === id);
   const [name, setName] = useState(group?.label ?? ''), [message, setMessage] = useState('');
   useEffect(() => { setName(group?.label ?? ''); }, [group?.label, groupId]);

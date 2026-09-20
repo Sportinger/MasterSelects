@@ -3,6 +3,7 @@ import type { NodeGraph, NodeGraphDocument, NodeGraphNode } from '../../types/no
 import type { Keyframe } from '../../types/keyframes';
 import type { TimelineClip } from '../../types/timeline';
 import { buildEffectOperatorGraph } from './effectGraphProjection';
+import { hasEffectOperatorGraph } from '../operators/effectGraphOwner';
 import { foldOperatorGroups } from './nestedOperatorGroups';
 import { collapsedArtifactLinks, projectSourceArtifactLinks } from './sourceArtifactProjection';
 import { projectKeyframeNodes } from './keyframeNodeProjection';
@@ -17,7 +18,7 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
   let cursor = 0, expansion = 0;
   for (const rootNode of root.nodes) {
     const effect = rootNode.binding?.kind === 'clip-effect' ? clip.effects.find(e => e.id === (rootNode.binding as { effectId: string }).effectId) : undefined;
-    const inner = effect?.type === 'face-cables' ? buildEffectOperatorGraph(clip, effect)
+    const inner = effect && hasEffectOperatorGraph(effect.type) ? buildEffectOperatorGraph(clip, effect)
       : rootNode.subgraphId ? document.graphs.find(g => g.id === rootNode.subgraphId) : undefined;
     const groupId = rootNode.id === 'scene3d' ? 'scene3d' : effect ? `effect:${effect.id}` : rootNode.binding?.kind === 'clip-color-correction' ? 'color' : 'flock';
     if (!inner) { nodes.push({ ...rootNode, groupOffset: { x: expansion, y: 0 }, layout: { x: rootNode.layout.x + expansion, y: rootNode.layout.y } }); cursor = Math.max(cursor, rootNode.layout.x + expansion + 280); continue; }

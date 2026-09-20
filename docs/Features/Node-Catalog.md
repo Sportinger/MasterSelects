@@ -23,6 +23,8 @@ inputs, recorded dependencies and cycles before a connection is changed.
 | [`EFFECT_OPERATORS`](../../src/services/operators/operatorRegistry.ts) | Shared operator contracts, used by Face Cables and image-surface scenes |
 | [`SCENE_OPERATORS`](../../src/services/operators/sceneOperators.ts) | Texture, UV, material, geometry, object transform and rendering |
 | [`SURFACE_OPERATORS`](../../src/services/operators/surfaceOperators.ts) | Landmark mesh, depth calibration, depth mesh, seam merge and mesh collision |
+| [`VOXEL_OPERATORS`](../../src/services/operators/voxelOperators.ts) | Grid, box, instancing, relief camera/light and rendering |
+| [`SCALAR_FIELD_OPERATORS`](../../src/services/operators/scalarField.ts) | Luminance and scalar field arithmetic, fused into the relief GPU pass |
 | [`listFlockOperators`](../../src/services/flock/operators/flockOperatorRegistry.ts) | Flock's typed compiler and GPU simulation; `sharedOperator` identifies shared implementations |
 | [`EFFECT_REGISTRY`](../../src/effects/index.ts) | Existing image effects and composite effect groups |
 

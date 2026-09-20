@@ -20,7 +20,7 @@ export interface CanvasNode extends Rect {
   badges: Array<{ label: string; tone: string }>; ports: CanvasPort[];
   curve?: CanvasCurve;
   viewerEnabled?: boolean;
-  preview?: Rect & { key: string; label: string };
+  preview?: Rect & { key: string; label: string; text?: boolean };
 }
 export interface CanvasCable {
   baked?: boolean;

@@ -6,10 +6,13 @@ import { useLandmarkTrackingStore } from '../../../../stores/landmarkTrackingSto
 import { NodePreviewScheduler } from '../../../../services/nodePreview/NodePreviewScheduler';
 import { previewOutput, type PreviewFrame, type PreviewRequest } from '../../../../services/nodePreview/previewTypes';
 import { getNodeHeight } from '../canvas/canvasGeometry';
-import { previewAtlasTile, previewRect } from './previewGeometry';
+import { inlineNumericPorts, previewAtlasTile, previewRect } from './previewGeometry';
 import { previewInView } from './NodePreviewPainter';
 import { PreviewArtifactReader } from '../../../../services/nodePreview/PreviewArtifactReader';
 import { nodePreviewTextureTap } from '../../../../services/nodePreview/NodePreviewTextureTap';
+import { isTextPreview, previewTextStore } from '../../../../services/nodePreview/previewTextStore';
+import { nodeScalarSampleTap } from '../../../../services/nodePreview/NodeScalarSampleTap';
+import { scalarPreviewSamples } from '../../../../services/nodePreview/scalarPreviewSamples';
 
 interface Sink { preview: (frame: PreviewFrame) => void; readonly software: boolean; readonly previewBusy: boolean }
 
@@ -26,8 +29,10 @@ export class NodePreviewController {
   private disposed = false;
   private revision = 0;
   private continuity = 0;
+  private textKeys = new Set<string>();
   private unsubscribe: () => void;
   private unsubscribeTracking: () => void;
+  private unsubscribeValues: () => void;
   private sink: Sink;
   private host: HTMLElement;
   private artifacts = new PreviewArtifactReader();
@@ -36,7 +41,14 @@ export class NodePreviewController {
     // Domain readers load after stores finish initialization; they must not pull
     // scene/media runtime owners into the editor's synchronous boot graph.
     const sources = import('../../../../services/nodePreview/previewSources');
-    this.scheduler = new NodePreviewScheduler(request => sources.then(({ produceNodePreview }) => produceNodePreview(request, this.artifacts)), frame => sink.preview(frame));
+    this.scheduler = new NodePreviewScheduler(request => sources.then(({ produceNodePreview }) => produceNodePreview(request, this.artifacts)), frame => {
+      previewTextStore.publish(frame);
+      if (!isTextPreview(frame)) { this.textKeys.delete(frame.key); sink.preview(frame); }
+      else if (!this.textKeys.has(frame.key)) {
+        this.textKeys.add(frame.key);
+        sink.preview({ key: frame.key, revision: frame.revision, time: frame.time, status: frame.status, label: '', presentation: 'text' });
+      }
+    });
     this.unsubscribe = useTimelineStore.subscribe((state, previous) => {
       if (state.clips !== previous.clips || state.clipKeyframes !== previous.clipKeyframes) this.revision++;
       if (state.isPlaying !== previous.isPlaying || (!state.isPlaying && state.playheadPosition !== previous.playheadPosition)
@@ -44,10 +56,14 @@ export class NodePreviewController {
       if (state.playheadPosition !== previous.playheadPosition || state.isPlaying !== previous.isPlaying || state.clips !== previous.clips || state.clipKeyframes !== previous.clipKeyframes) this.wake();
     });
     this.unsubscribeTracking = useLandmarkTrackingStore.subscribe(() => { this.revision++; this.wake(); });
+    this.unsubscribeValues = scalarPreviewSamples.subscribe(() => { this.scheduler.invalidateValues(); this.wake(); });
   }
   scene(clipId: string, nodes: NodeGraphNode[], selected: string | null, expanded?: NodeGraphNode[]) {
     if (this.clipId !== clipId) { this.scheduler.invalidate(); this.revision++; }
     this.clipId = clipId; this.nodes = nodes; this.selected = selected; this.wake();
+    const retained = new Set(nodes.filter(node => node.preview?.enabled).map(node => node.preview!.key));
+    previewTextStore.retain(this, retained);
+    for (const key of this.textKeys) if (!retained.has(key)) this.textKeys.delete(key);
     this.expanded = new Map((expanded ?? nodes).map(node => [node.id, node]));
   }
   viewport(view: CanvasView) { this.view = view; this.wake(); }
@@ -69,10 +85,11 @@ export class NodePreviewController {
         const port = previewOutput(node, node.preview.portId);
         const endpoint = port?.metadata?.groupEndpoint, inner = endpoint && this.expanded.get(endpoint.nodeId);
         const tiny = rect.width * view.zoom < 32 && node.id !== this.selected;
+        const numeric = inlineNumericPorts(node) || this.textKeys.has(node.preview.key);
         requests.push({ key: node.preview.key, revision: `${this.revision}:${tiny ? 'held' : Math.floor(state.playheadPosition * fps)}:${resolution}`,
           continuity: `${this.revision}:${this.continuity}:${resolution}`,
           clipId: this.clipId, node: inner ? { ...inner, preview: node.preview } : node, port: inner ? previewOutput(inner, endpoint?.portId) : port, time: state.playheadPosition, width, height: Math.max(1, Math.min(256, Math.round(width / (node.preview.aspectRatio ?? 16 / 9)))),
-          interval: 1000 / fps, priority: node.id === this.selected ? 2 : 0 });
+          numeric, interval: numeric ? 16 : 1000 / fps, priority: node.id === this.selected ? 2 : 0 });
       }
     }
     this.scheduler.setRequests(requests);
@@ -82,7 +99,7 @@ export class NodePreviewController {
       this.host.dataset.previewStats = JSON.stringify(stats);
     }
     if (!requests.length) { this.artifacts.dispose(); nodePreviewTextureTap.cancelClip(this.clipId); }
-    if (requests.length && (state.isPlaying || this.scheduler.unsettled)) this.timer = setTimeout(() => this.tick(), this.sink.software ? 100 : state.isPlaying ? 32 : 100);
+    if (requests.length && (state.isPlaying || this.scheduler.unsettled)) this.timer = setTimeout(() => this.tick(), requests.some(request => request.numeric) ? 16 : this.sink.software ? 100 : state.isPlaying ? 32 : 100);
   }
-  dispose() { this.disposed = true; clearTimeout(this.timer); this.unsubscribe(); this.unsubscribeTracking(); this.scheduler.dispose(); this.artifacts.dispose(); nodePreviewTextureTap.cancelClip(this.clipId); }
+  dispose() { this.disposed = true; clearTimeout(this.timer); this.unsubscribe(); this.unsubscribeTracking(); this.unsubscribeValues(); this.scheduler.dispose(); this.artifacts.dispose(); nodePreviewTextureTap.cancelClip(this.clipId); nodeScalarSampleTap.cancelClip(this.clipId); scalarPreviewSamples.cancelClip(this.clipId); previewTextStore.retain(this, new Set()); }
 }

@@ -497,6 +497,7 @@ export function NodeGraphCanvas({
             <NodeGraphNodeCard
               key={node.id}
               node={node}
+              clipId={sourceGraph.owner.id}
               canvasRendered={canvasRendered}
               selectedNodeId={selectedNodeId}
               isInSelection={multiSelection.has(node.id)}

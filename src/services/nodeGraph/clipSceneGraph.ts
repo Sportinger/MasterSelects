@@ -15,6 +15,7 @@ export function withClipSceneGraph(document: NodeGraphDocument, clip: TimelineCl
   if (!clipHasSceneGraph(clip)) return document;
   const root = document.graphs.find(g => g.id === document.rootGraphId)!;
   const cable = clip.effects.find(e => e.enabled && e.type === 'face-cables' && e.params.scene3D);
+  const voxel = !cable && clip.effects.find(e => e.enabled && e.type === 'voxel-relief');
   const sourceType = clip.source?.type;
   const nonVisual = sourceType === 'camera' || sourceType === 'light' || sourceType === 'splat-effector';
   const graph: NodeGraph = { id: `${root.id}:scene3d`, owner: root.owner, nodes: [], edges: [] };
@@ -24,10 +25,10 @@ export function withClipSceneGraph(document: NodeGraphDocument, clip: TimelineCl
     layout: clip.nodeGraph?.groups?.scene3d?.nodeLayouts?.[id] ?? { x, y }, inputs, outputs,
     binding: { kind: 'scene-node', clipId: owner.id, nodeId: id, role, ...(role === 'depth' && cable ? { effectId: cable.id } : {}) },
   });
-  const inputType = cable || ['model', 'gaussian-splat', 'flock', 'gaussian-avatar'].includes(sourceType ?? '') ? 'geometry' : 'texture';
+  const inputType = cable || voxel || ['model', 'gaussian-splat', 'flock', 'gaussian-avatar'].includes(sourceType ?? '') ? 'geometry' : 'texture';
   const geometry = make('geometry', nonVisual ? sourceType as SceneNodeRole : 'geometry',
     nonVisual ? sourceType === 'camera' ? 'Camera lens' : sourceType === 'light' ? 'Light' : '3D effector'
-      : cable ? 'Baked face, depth & cables' : sourceType === 'model' ? 'Mesh geometry' : sourceType === 'gaussian-splat' ? 'Gaussian splats' : sourceType === 'flock' ? 'Flock geometry' : 'Image plane',
+      : cable ? 'Baked face, depth & cables' : voxel ? 'Voxel relief geometry' : sourceType === 'model' ? 'Mesh geometry' : sourceType === 'gaussian-splat' ? 'Gaussian splats' : sourceType === 'flock' ? 'Flock geometry' : 'Image plane',
     0, 100, [], [port('geometry', 'geometry', 'output', 'Geometry')]);
   const material = make('material', 'material', 'Material / surface', 250, 100,
     [port('geometry', 'geometry', 'input', 'Geometry')], [port('scene', 'scene', 'output', 'Surface')]);
@@ -67,7 +68,8 @@ export function withClipSceneGraph(document: NodeGraphDocument, clip: TimelineCl
   const mainIds = new Set(['source', 'transform', 'mask', 'color', 'output', ...clip.effects.filter(e => root.nodes.some(n => n.id === `effect-${e.id}` && n.inputs.some(p => p.type !== 'audio'))).map(e => `effect-${e.id}`),
     ...root.nodes.filter(n => n.binding?.kind === 'clip-custom-node' && n.inputs.some(p => p.id === 'input' && p.type === 'texture')).map(n => n.id)]);
   const before = root.nodes.filter(n => mainIds.has(n.id) && !['transform', 'color', 'output'].includes(n.id));
-  const cableIndex = cable ? before.findIndex(n => n.id === `effect-${cable.id}`) : -1;
+  const geometryEffect = cable || voxel;
+  const cableIndex = geometryEffect ? before.findIndex(n => n.id === `effect-${geometryEffect.id}`) : -1;
   const split = cableIndex >= 0 ? cableIndex + 1 : 1;
   const ordered = [...before.slice(0, split), proxy, ...root.nodes.filter(n => n.id === 'color'), ...before.slice(split), root.nodes.find(n => n.id === 'output')!];
   const otherEdges = root.edges.filter(e => !(mainIds.has(e.fromNodeId) && mainIds.has(e.toNodeId) && ['texture', 'geometry'].includes(e.type)));

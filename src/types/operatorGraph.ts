@@ -1,7 +1,7 @@
 import type { NodePortContract } from './nodePortContract';
 /** Durable operator contracts. Values and artifacts belong to the owner; bindings never copy them. */
 export type OperatorValue = number | boolean | string | [number, number, number];
-export type OperatorSignal = 'image' | 'texture' | 'uv' | 'material' | 'geometry' | 'landmarks' | 'anchors' | 'depth' | 'surface' | 'force' | 'drag' | 'curves' | 'scene' | 'number';
+export type OperatorSignal = 'image' | 'texture' | 'uv' | 'material' | 'geometry' | 'landmarks' | 'anchors' | 'depth' | 'surface' | 'force' | 'drag' | 'curves' | 'scene' | 'number' | 'camera' | 'light' | 'field';
 export interface OperatorPort { id: string; label: string; type: OperatorSignal; required?: boolean; repeated?: boolean; contract?: Partial<NodePortContract> }
 export interface OperatorParameter {
   id: string; label: string; type: 'number' | 'boolean' | 'vector'; default: OperatorValue;
@@ -22,7 +22,7 @@ export interface BoundOperatorNode {
 export interface OperatorEdge { id: string; from: string; output: string; to: string; input: string }
 export interface EffectOperatorGraph {
   version: 1;
-  domain?: 'cables' | 'scene';
+  domain?: 'cables' | 'scene' | 'voxel';
   nodes: BoundOperatorNode[]; edges: OperatorEdge[];
   layout: Record<string, { x: number; y: number }>;
   groups?: OperatorGroup[];

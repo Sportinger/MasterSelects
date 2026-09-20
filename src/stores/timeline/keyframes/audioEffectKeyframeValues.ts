@@ -11,6 +11,7 @@ import {
   mergeAudioEffectParamPatch,
 } from '../../../utils/audioEffectParamPath';
 import { clearProcessedAudioAnalysisRefs } from '../helpers/audioAnalysisStateHelpers';
+import { effectOperatorParams } from '../../../services/operators/effectGraphOwner';
 
 export interface AudioKeyframeInvalidationTarget {
   clipId: string;
@@ -58,7 +59,10 @@ export function getLegacyEffectKeyframeBaseValue(
   paramName: string,
 ): number | undefined {
   if (!paramName.includes('.')) {
-    const value = effect.params[paramName];
+    let value = effect.params[paramName];
+    if (value === undefined && effect.type === 'voxel-relief') {
+      try { value = effectOperatorParams(effect)[paramName] as typeof value; } catch { return undefined; }
+    }
     // Cable defaults live in settings; explicit timeline keys supply the animated value.
     if (effect.type === 'face-cables' && /^cable_.+_(slack|windZ|windGusts|stiffness|gravity|damping|viscosity|width)$/.test(paramName)
       && value === undefined) return 0;

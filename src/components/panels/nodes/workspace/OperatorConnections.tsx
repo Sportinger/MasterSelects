@@ -9,6 +9,8 @@ import { getEffectOperator } from '../../../../services/operators/operatorRegist
 import { createEffectGraphActions } from '../../../../services/operators/effectGraphEditing';
 import { ResolveInspectorSection, ResolveInspectorRow } from '../../properties/resolveInspector/ResolveInspectorPrimitives';
 import { InspectorSelect } from '../../../inspector/InspectorSelect';
+import { GraphPortConnections } from './GraphPortConnections';
+import { operatorConnectionGraph } from '../../../../services/operators/operatorConnectionGraph';
 
 export function OperatorConnections({ graph, node, clipId, effectId, safely }: {
   graph: EffectOperatorGraph; node: BoundOperatorNode; clipId: string; effectId: string; safely: (fn: () => void) => void;
@@ -18,8 +20,11 @@ export function OperatorConnections({ graph, node, clipId, effectId, safely }: {
   const artifacts = clip ? sourceArtifactPorts(clip, tracking.ready).filter(p =>
     p.metadata?.sourceArtifact?.kind !== 'scene-depth' || p.metadata.sourceArtifact.effectId === effectId) : [];
   const inputs = getEffectOperator(node.operator)!.inputs.filter(p => !p.repeated);
-  if (!inputs.length) return null;
   const actions = createEffectGraphActions(clipId, effectId);
+  if (graph.domain === 'voxel') return <GraphPortConnections graph={operatorConnectionGraph(graph)} nodeId={node.id}
+    labelForNode={id => { const source = graph.nodes.find(value => value.id === id); return `${getEffectOperator(source?.operator ?? '')?.label ?? id} (${id})`; }}
+    onConnect={connection => safely(() => actions.connectPorts(connection))} onDisconnect={id => safely(() => actions.disconnectEdge(id))} />;
+  if (!inputs.length) return null;
   return <ResolveInspectorSection title="Connections">
     {inputs.map(port => {
       const edge = graph.edges.find(e => e.to === node.id && e.input === port.id);

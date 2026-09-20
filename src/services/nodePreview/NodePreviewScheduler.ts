@@ -10,6 +10,7 @@ type Produce = (request: PreviewRequest) => PreviewFrame | Promise<PreviewFrame>
 export class NodePreviewScheduler {
   private requests = new Map<string, PreviewRequest>();
   private pending = new Set<string>();
+  private pendingNumeric = new Set<string>();
   private completed = new Map<string, { revision: string; at: number }>();
   private attempted = new Map<string, number>();
   private tokens = 262144;
@@ -56,15 +57,17 @@ export class NodePreviewScheduler {
     }).toSorted((a, b) => (this.attempted.get(a.key) ?? -1e9) - (this.attempted.get(b.key) ?? -1e9) - (a.priority - b.priority) * 20);
     let jobs = 0;
     for (const request of ready) {
-      if (this.pending.size >= this.limits.concurrent || jobs >= this.limits.jobsPerTick || this.clock() - start >= this.limits.workMs) break;
-      const pixels = request.width * request.height;
+      if (jobs >= this.limits.jobsPerTick || this.clock() - start >= this.limits.workMs) break;
+      if (request.numeric ? this.pendingNumeric.size >= 16 : this.pending.size - this.pendingNumeric.size >= this.limits.concurrent) continue;
+      const pixels = request.numeric ? 0 : request.width * request.height;
       if (pixels > this.tokens) continue;
       this.tokens -= pixels; this.stats.pixels += pixels; jobs++;
       this.attempted.set(request.key, now);
       this.pending.add(request.key); this.stats.inFlight = this.pending.size;
+      if (request.numeric) this.pendingNumeric.add(request.key);
       const generation = this.generation;
       const finish = (frame: PreviewFrame) => {
-        this.pending.delete(request.key); this.stats.inFlight = this.pending.size;
+        this.pending.delete(request.key); this.pendingNumeric.delete(request.key); this.stats.inFlight = this.pending.size;
         const current = this.requests.get(request.key);
         const continuous = current?.continuity !== undefined && current.continuity === request.continuity
           && Math.abs(current.time - request.time) <= 0.5;
@@ -86,5 +89,6 @@ export class NodePreviewScheduler {
   }
 
   invalidate() { this.completed.clear(); this.generation++; }
+  invalidateValues() { for (const request of this.requests.values()) if (request.numeric) this.completed.delete(request.key); }
   dispose() { this.disposed = true; this.generation++; this.requests.clear(); this.completed.clear(); this.attempted.clear(); }
 }
