@@ -33,7 +33,7 @@ function drawCable(ctx: DrawContext, cable: CanvasCable, zoom: number) {
   const { from, to } = cable, h = Math.max(72, Math.abs(to.x - from.x) * 0.42);
   ctx.strokeStyle = cable.color; ctx.globalAlpha = cable.highlighted ? 1 : 0.55;
   ctx.lineWidth = (cable.highlighted ? 2 : 1.25) / zoom;
-  ctx.setLineDash(cable.draft ? [5 / zoom, 4 / zoom] : []);
+  ctx.setLineDash(cable.draft ? [5 / zoom, 4 / zoom] : cable.baked ? [4 / zoom, 4 / zoom] : []);
   ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.bezierCurveTo(from.x + h, from.y, to.x - h, to.y, to.x, to.y); ctx.stroke(); ctx.setLineDash([]);
   const middle = cablePoint(from, to, 0.5), angle = Math.atan2(to.y - from.y, to.x - from.x - h);
   ctx.save(); ctx.translate(middle.x, middle.y); ctx.rotate(angle); ctx.lineWidth = 1.3 / zoom;
@@ -65,7 +65,7 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
     box(ctx, group.x, group.y, group.width, group.height, 10); ctx.fill(); ctx.globalAlpha = 0.10; ctx.fillStyle = group.color; ctx.fill(); ctx.globalAlpha = 0.6; ctx.stroke();
     ctx.globalAlpha = 0.25; ctx.fillRect(group.x, group.y, group.width, 34); ctx.globalAlpha = 1;
     text(ctx, `${group.collapsed ? '▸' : '▾'} ${group.label}`, group.x + 13, group.y + 21, Math.max(50, group.width - 170), theme.text, 11, 600);
-    text(ctx, `${group.count}     Focus`, group.x + group.width - 12, group.y + 21, 150, theme.muted, 10, 400, 'right');
+    text(ctx, `${group.count}${group.bypassable ? '     Byp' : ''}     Focus`, group.x + group.width - 12, group.y + 21, 150, group.bypassed ? theme.accent : theme.muted, 10, 400, 'right');
   }
   for (const cable of scene.cables) if (cableVisible(cable, view)) drawCable(ctx, cable, view.zoom);
   for (const node of scene.nodes) {
@@ -111,7 +111,7 @@ export function paintOverlay(ctx: DrawContext, scene: CanvasScene, view: CanvasV
   begin(ctx, view);
   if (!transport.visible) return;
   if (transport.active && !transport.reducedMotion) scene.cables.forEach((cable, i) => {
-    if (cable.draft || !cableVisible(cable, view)) return;
+    if (cable.draft || cable.baked || !cableVisible(cable, view)) return;
     const duration = Math.max(1300, Math.min(3600, cable.length * view.zoom / 140 * 1000));
     for (let point = 0; point < 2; point++) {
       const p = signalPosition(cable, (flowSeconds * 1000 / duration + i * 0.61803398875 + point / 2) % 1);

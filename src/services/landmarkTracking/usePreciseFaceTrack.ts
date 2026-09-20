@@ -28,5 +28,7 @@ export function usePreciseFaceTrack(clipId: string) {
     })().catch(() => { /* A missing/evicted cache can always be regenerated. */ });
     return () => { active = false; };
   }, [key, sourceId, clip?.inPoint, clip?.outPoint]);
-  return { summary, ready: !!landmarkRuntime.getSeries(key)?.faceTracking && landmarkRuntime.getSeries(key)?.sourceId === sourceId };
+  const series = landmarkRuntime.getSeries(key);
+  const ready = !!series?.faceTracking && series.sourceId === sourceId;
+  return { summary, ready, createdAt: ready ? series.createdAt : undefined };
 }

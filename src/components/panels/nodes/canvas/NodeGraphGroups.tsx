@@ -3,8 +3,8 @@ import { memo, type CSSProperties } from 'react';
 import type { NodeGraph, NodeGraphNode } from '../../../../types/nodeGraph';
 import { nodeGroupBounds } from './groupBounds';
 
-export const NodeGraphGroups = memo(function NodeGraphGroups({ graph, nodes, onToggle, onFocus }: {
-  graph: NodeGraph; nodes: NodeGraphNode[]; onToggle?: (id: string) => void; onFocus?: (id: string) => void;
+export const NodeGraphGroups = memo(function NodeGraphGroups({ graph, nodes, onToggle, onFocus, onToggleNodeBypass }: {
+  graph: NodeGraph; nodes: NodeGraphNode[]; onToggle?: (id: string) => void; onFocus?: (id: string) => void; onToggleNodeBypass?: (id: string) => void;
 }) {
   const bounds = nodeGroupBounds(graph, nodes);
   return <>{graph.groups?.map(group => {
@@ -19,8 +19,12 @@ export const NodeGraphGroups = memo(function NodeGraphGroups({ graph, nodes, onT
         onPointerDown={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}
         onClick={event => { event.stopPropagation(); if (event.detail > 0) event.currentTarget.blur(); onToggle?.(group.id); }}>
         <span aria-hidden="true">{group.collapsed ? '▸' : '▾'}</span> {group.label}
-        <span className="node-workspace-group-count">{group.collapsed ? 'Effect' : `${members.length} nodes`}</span>
+        <span className="node-workspace-group-count">{group.collapsed ? (group.bypassNodeId ? '' : 'Effect') : `${members.length} nodes`}</span>
       </button>
+      {group.bypassNodeId && onToggleNodeBypass && <button type="button" className="node-workspace-group-focus"
+        aria-label={`Bypass ${group.label} group`} aria-pressed={nodes.find(node => node.id === group.bypassNodeId)?.params?.enabled === false}
+        onPointerDown={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}
+        onClick={event => { event.stopPropagation(); if (event.detail > 0) event.currentTarget.blur(); onToggleNodeBypass(group.bypassNodeId!); }}>Byp</button>}
       <button type="button" className="node-workspace-group-focus" aria-label={`Focus ${group.label} group`}
         onPointerDown={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}
         onClick={event => { event.stopPropagation(); if (event.detail > 0) event.currentTarget.blur(); onFocus?.(group.id); }}>Focus</button>

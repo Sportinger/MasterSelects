@@ -39,6 +39,7 @@ export interface NodeGraphPoint {
 }
 
 export interface PortReference {
+  readOnly?: boolean;
   nodeId: string;
   portId: string;
   direction: NodeGraphPort['direction'];
@@ -50,6 +51,7 @@ export interface PortReference {
 
 export function createPortReference(nodeId: string, port: NodeGraphPort): PortReference {
   return {
+    readOnly: port.metadata?.readOnly,
     nodeId,
     portId: port.id,
     direction: port.direction,
@@ -60,7 +62,7 @@ export function createPortReference(nodeId: string, port: NodeGraphPort): PortRe
 }
 
 export function canConnectPortReferences(a: PortReference, b: PortReference): boolean {
-  return a.nodeId !== b.nodeId && a.direction !== b.direction && a.compatibilityKey === b.compatibilityKey && formatsOverlap(a.formats, b.formats);
+  return !a.readOnly && !b.readOnly && a.nodeId !== b.nodeId && a.direction !== b.direction && a.compatibilityKey === b.compatibilityKey && formatsOverlap(a.formats, b.formats);
 }
 
 export interface NodeBadge {
@@ -145,6 +147,11 @@ export function getFlockNodeBadges(node: NodeGraphNode): NodeBadge[] {
 }
 
 export function getNodeBadges(node: NodeGraphNode): NodeBadge[] {
+  if (node.binding?.kind === 'clip-stabilization') {
+    const status = String(node.params?.status ?? 'Baked');
+    return [{ label: status === 'Baked · settings not recorded' ? 'Legacy bake' : status,
+      title: status, tone: status === 'Rebake needed' ? 'stale' : status === 'Baked' ? 'ready' : 'partial' }];
+  }
   return [...getAudioAnalysisBadges(node), ...getFlockNodeBadges(node)];
 }
 
@@ -215,6 +222,7 @@ export function getPortTitle(port: NodeGraphPort): string {
 }
 
 export function isNodeBypassable(node: NodeGraphNode): boolean {
+  if (node.binding?.kind === 'clip-stabilization') return node.params?.bypassable === true;
   if (node.binding?.kind === 'scene-node' || node.binding?.kind === 'scene-operator' || node.binding?.kind === 'operator-group') return false;
   if (node.binding?.kind === 'effect-operator') return node.params?.bypassable === true;
   if (node.binding?.kind === 'flock-node') {
@@ -228,6 +236,7 @@ export function isNodeBypassable(node: NodeGraphNode): boolean {
 }
 
 export function isNodeBypassed(node: NodeGraphNode): boolean {
+  if (node.binding?.kind === 'clip-stabilization') return node.params?.enabled === false;
   if (node.binding?.kind === 'flock-node') {
     return node.params?.bypassed === true;
   }

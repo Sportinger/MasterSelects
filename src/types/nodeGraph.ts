@@ -41,6 +41,8 @@ export type NodeGraphAudioSemanticKind =
   | 'audio-metadata';
 
 export interface NodeGraphPortMetadata {
+  /** Recorded dependency, changed through its owning action rather than cable editing. */
+  readOnly?: boolean;
   animationProperty?: string;
   sourceArtifact?: { kind: 'face-landmarks' | 'scene-depth'; effectId?: string };
   artifactTarget?: { effectId: string; nodeId: string; portId: string };
@@ -107,6 +109,7 @@ export type NodeGraphViewTheme = 'general' | 'color' | 'motion' | 'audio' | 'flo
 export type SceneNodeRole = 'geometry' | 'material' | 'transform' | 'render' | 'depth' | 'camera' | 'light' | 'splat-effector';
 
 export type NodeGraphNodeBinding =
+  | { kind: 'clip-stabilization'; stage: 'solve' | 'keyframes' }
   | { kind: 'keyframe-node'; nodeId: string }
   | { kind: 'scene-operator'; nodeId: string; operator: string }
   | { kind: 'operator-group'; groupId: string; effectId?: string }
@@ -163,6 +166,7 @@ export interface NodeGraphNode {
 }
 
 export interface NodeGraphEdge {
+  readOnly?: boolean;
   id: string;
   fromNodeId: string;
   fromPortId: string;
@@ -190,7 +194,7 @@ export interface NodeGraph {
   nodes: NodeGraphNode[];
   edges: NodeGraphEdge[];
   domain?: NodeGraphDomain;
-  groups?: Array<{ id: string; label: string; color: string; collapsed: boolean; nodeIds: string[]; proxyId: string; parentId?: string }>;
+  groups?: Array<{ id: string; label: string; color: string; collapsed: boolean; nodeIds: string[]; proxyId: string; parentId?: string; bypassNodeId?: string }>;
   /** Uncollapsed nodes used to resolve exposed ports of nested groups. */
   expandedNodes?: NodeGraphNode[];
 }
@@ -278,6 +282,7 @@ export type ClipNodeGraphForcedBuiltIn = 'transform' | 'mask' | 'color';
 
 export interface ClipNodeGraph {
   version: 1;
+  stabilization?: import('./faceStabilization').ClipStabilizationGraph;
   keyframeNodes?: import('./keyframeNode').KeyframeNodeDefinition[];
   scene?: import('./operatorGraph').SceneOperatorGraph;
   nodes: ClipNodeGraphNodeState[];

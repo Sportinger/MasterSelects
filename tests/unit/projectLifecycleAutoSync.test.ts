@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   isProjectOpen: vi.fn(() => true),
@@ -115,6 +115,19 @@ vi.mock('../../src/stores/midiStore', () => ({
 }));
 
 describe('project lifecycle auto sync', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('does not block local development reloads with an unsaved-work dialog', async () => {
+    vi.stubEnv('DEV', true);
+    const { setupAutoSync, teardownAutoSync } = await import('../../src/services/project/projectLifecycle');
+    setupAutoSync();
+    try {
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(mocks.saveCurrentProject).not.toHaveBeenCalled();
+    } finally { teardownAutoSync(); }
+  });
   it('retains projectless edits across auto-sync setup and releases protection after saving a project', async () => {
     const { setupAutoSync, teardownAutoSync } = await import('../../src/services/project/projectLifecycle');
     const { canReloadAfterChunkFailure } = await import('../../src/runtime/chunkReloadGuard');
@@ -190,6 +203,7 @@ describe('project lifecycle auto sync', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('DEV', false);
     mocks.settingsState.saveMode = 'manual';
     mocks.isProjectOpen.mockReturnValue(true);
     mocks.hasUnsavedChanges.mockReturnValue(true);

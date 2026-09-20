@@ -61,7 +61,7 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): Node
       linkedTrack: graphContext.linkedTrack,
       faceTrackingAvailable: faceTracking.ready,
     });
-    const graph = theme === 'general' ? buildUnifiedClipGraph(document, graphClip, clips) : getNodeGraphView(document, theme);
+    const graph = theme === 'general' ? buildUnifiedClipGraph(document, graphClip, clips, keyframes, faceTracking.createdAt) : getNodeGraphView(document, theme);
     const view = document.views.find((candidate) => candidate.theme === theme) ?? document.views[0];
     const linkedSubtitle = graphContext.linkedClip && graphContext.linkedTrack
       ? ` + ${graphContext.linkedTrack.name} / ${graphContext.linkedTrack.type}`
@@ -83,5 +83,5 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): Node
       view,
       availableViews: document.views,
     };
-  }, [graphContext, theme, clips, faceTracking.ready, keyframes]);
+  }, [graphContext, theme, clips, faceTracking.ready, faceTracking.createdAt, keyframes]);
 }

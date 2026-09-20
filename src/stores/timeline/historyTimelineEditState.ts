@@ -90,6 +90,7 @@ export interface HistoryTimelineClipEditState {
   parentClipId?: string;
   naturalDuration?: number;
   videoState?: ClipVideoState;
+  videoInspectorSections?: TimelineClip['videoInspectorSections'];
   audioState?: ClipAudioState;
   transform: ClipTransform;
   effects: Effect[];
@@ -295,7 +296,14 @@ export function findHistoryStateBoundaryViolations(value: unknown): string[] {
       // serializable and must pass: e.g. the mod-matrix route's string
       // `source: 'velocity'` shares the name of a media clip's runtime `source`
       // handle but is durable JSON (#298).
-      if (HISTORY_RUNTIME_PAYLOAD_KEYS.has(key) && child !== null && typeof child === 'object') {
+      // Scene layout is a dictionary keyed by operator IDs such as "texture".
+      // Only its exact, plain {x, y} coordinates qualify for this exception.
+      const sceneLayout = path.endsWith('.nodeGraph.scene.graph.layout')
+        && child !== null && typeof child === 'object' && isPlainObject(child)
+        && Object.keys(child).length === 2 && 'x' in child && 'y' in child
+        && typeof child.x === 'number' && Number.isFinite(child.x)
+        && typeof child.y === 'number' && Number.isFinite(child.y);
+      if (HISTORY_RUNTIME_PAYLOAD_KEYS.has(key) && child !== null && typeof child === 'object' && !sceneLayout) {
         violations.push(`${childPath}: runtime payload key`);
         continue;
       }
@@ -555,6 +563,7 @@ export function toHistoryTimelineClipEditState(
     parentClipId: clip.parentClipId,
     naturalDuration: clip.source?.naturalDuration,
     videoState: cloneOptionalPlainData(clip.videoState),
+    videoInspectorSections: cloneOptionalPlainData(clip.videoInspectorSections),
     audioState: cloneAudioPlainData<ClipAudioState>(clip.audioState),
     transform: clip.transform,
     effects: clip.effects,

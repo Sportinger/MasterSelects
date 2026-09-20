@@ -81,6 +81,13 @@ export function keyframeNodeParameters(clip: TimelineClip): KeyframeNodeParamete
 }
 
 export function parameterNode(clip: TimelineClip, property: string, nodes: readonly NodeGraphNode[]): NodeGraphNode | undefined {
+  if (/^(opacity$|speed$|position\.|anchor\.|scale\.|rotation\.)/.test(property)) {
+    const transform = nodes.find(node => node.binding?.kind === 'clip-transform')
+      ?? nodes.find(node => node.binding?.kind === 'scene-operator' && node.binding.operator === 'scene.clip-transform')
+      ?? nodes.find(node => node.binding?.kind === 'scene-node' && node.binding.clipId === clip.id && node.binding.role === 'transform')
+      ?? nodes.find(node => node.id === 'scene3d');
+    if (transform) return transform;
+  }
   const effectId = /^effect\.([^.]+)\./.exec(property)?.[1];
   if (effectId) {
     const effect = clip.effects.find(e => e.id === effectId);

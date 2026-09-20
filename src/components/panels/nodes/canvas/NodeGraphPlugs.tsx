@@ -44,16 +44,16 @@ export const NodeGraphPlugs = memo(function NodeGraphPlugs({ plugs, nodes, draft
         transform={`translate(${center.x} ${center.y})`}
         data-edge-id={edge.id} data-node-id={node.id} data-port-id={port.id} data-direction={port.direction}
         aria-label={label}
-        aria-description="Drag to reconnect; release on empty canvas to disconnect. Delete removes this cable. Escape cancels dragging."
+        aria-description={edge.readOnly ? 'Recorded bake dependency. Edit the stabilization or its curves in the inspector.' : 'Drag to reconnect; release on empty canvas to disconnect. Delete removes this cable. Escape cancels dragging.'}
         onPointerDown={event => onStartDrag(event, plug)}
         onClick={event => { event.stopPropagation(); onSelectEdge(edge.id); if (event.detail > 0) event.currentTarget.blur(); }}
         onKeyDown={event => {
           event.stopPropagation();
-          if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); onDisconnectEdge?.(edge.id); }
+          if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); if (!edge.readOnly) onDisconnectEdge?.(edge.id); }
           if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelectEdge(edge.id); }
         }}
-        onContextMenu={event => { event.preventDefault(); event.stopPropagation(); onDisconnectEdge?.(edge.id); }}>
-        <title>{`${label} — drag to reconnect or unplug`}</title>
+        onContextMenu={event => { event.preventDefault(); event.stopPropagation(); if (!edge.readOnly) onDisconnectEdge?.(edge.id); }}>
+        <title>{`${label} — ${edge.readOnly ? 'recorded bake dependency' : 'drag to reconnect or unplug'}`}</title>
         <g className="node-workspace-plug-visual">
           <path className="node-workspace-plug-backing" d={path} />
           <path className="node-workspace-plug-shape" d={path} />

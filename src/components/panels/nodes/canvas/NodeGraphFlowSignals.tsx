@@ -17,7 +17,7 @@ export const NodeGraphFlowSignals = memo(function NodeGraphFlowSignals({ plugs, 
     const inputs = new Map(plugs.filter(p => p.port.direction === 'input').map(p => [p.edge.id, p]));
     return plugs.flatMap(output => {
       const input = inputs.get(output.edge.id);
-      return output.port.direction !== 'output' || !input || output.edge.id === hiddenEdgeId ? [] : [{
+      return output.port.direction !== 'output' || !input || output.edge.readOnly || output.edge.id === hiddenEdgeId ? [] : [{
         id: output.edge.id, color: describeNodePort(output.port).color,
         ...flowSignalTrack(output.tip, input.tip, zoom),
       }];

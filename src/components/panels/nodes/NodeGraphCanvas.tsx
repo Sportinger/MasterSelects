@@ -331,11 +331,12 @@ export function NodeGraphCanvas({
   }, [onSelectNode]);
 
   const disconnectPortEdges = useCallback((node: NodeGraphNode, port: NodeGraphPort) => {
-    if (!onDisconnectEdge) {
+    if (!onDisconnectEdge || port.metadata?.readOnly) {
       return;
     }
 
     for (const edge of graph.edges) {
+      if (edge.readOnly) continue;
       const matchesPort = port.direction === 'output'
         ? edge.fromNodeId === node.id && edge.fromPortId === port.id
         : edge.toNodeId === node.id && edge.toPortId === port.id;
@@ -346,7 +347,7 @@ export function NodeGraphCanvas({
   }, [graph.edges, onDisconnectEdge]);
 
   const disconnectSelectedEdge = useCallback(() => {
-    if (!selectedEdge || !onDisconnectEdge) return;
+    if (!selectedEdge || selectedEdge.readOnly || !onDisconnectEdge) return;
     onDisconnectEdge(selectedEdge.id);
     setSelectedEdgeId(null);
   }, [onDisconnectEdge, selectedEdge]);
@@ -374,7 +375,7 @@ export function NodeGraphCanvas({
           </span>
         </div>
         <div className="node-workspace-toolbar-actions">
-          {selectedEdge && (
+          {selectedEdge && !selectedEdge.readOnly && (
             <button type="button" className="node-workspace-toolbar-button" onClick={disconnectSelectedEdge}>
               Disconnect
             </button>
@@ -460,7 +461,7 @@ export function NodeGraphCanvas({
             transform: `translate(${viewport.panX}px, ${viewport.panY}px) scale(${viewport.zoom})`,
           }}
         >
-          <NodeGraphGroups graph={graph} nodes={displayNodes} onToggle={toggleGroup} onFocus={focusGroup} />
+          <NodeGraphGroups graph={graph} nodes={displayNodes} onToggle={toggleGroup} onFocus={focusGroup} onToggleNodeBypass={onToggleNodeBypass} />
           <NodeGraphEdges
             canvasRendered={canvasRendered}
             zoom={viewport.zoom}

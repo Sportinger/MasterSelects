@@ -34,6 +34,7 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, getGraphP
   }, [graphId]);
 
   const start = (event: ReactPointerEvent, node: NodeGraphNode, port: NodeGraphPort, plug?: ConnectionPlug) => {
+    if (port.metadata?.readOnly || plug?.edge.readOnly) { event.preventDefault(); event.stopPropagation(); return; }
     if (event.button !== 0 || currentDraft.current) return;
     event.preventDefault(); event.stopPropagation();
     (event.currentTarget as HTMLElement | SVGElement).blur();

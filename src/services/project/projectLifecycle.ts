@@ -484,8 +484,10 @@ export function setupAutoSync(): void {
     }
   }));
 
-  // Do not start an unreliable write during navigation; retain the unsaved warning.
+  // Local development reloads frequently through HMR. Do not block those reloads
+  // with a browser dialog; production retains its unsaved-work protection.
   beforeUnloadHandler = event => {
+    if (import.meta.env.DEV) return;
     if (hasUnsavedWorkspace()) {
       event.preventDefault();
       event.returnValue = '';

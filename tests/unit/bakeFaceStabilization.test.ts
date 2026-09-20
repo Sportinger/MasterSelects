@@ -46,6 +46,11 @@ describe('baked face stabilization', () => {
     expect(x[4].value).toBe(x[3].value);
     expect(fakes.start).toHaveBeenCalledOnce(); expect(fakes.end).toHaveBeenCalledOnce();
     expect(fakes.render).toHaveBeenCalledOnce();
+    const baked = (fakes.state.clips as TimelineClip[])[0].nodeGraph?.stabilization?.bake;
+    expect(baked).toMatchObject({ version: 1, target: 'face', lockCenter: true, smoothing: 0,
+      sourceId: 'source', trackingCreatedAt: 0, frameRate: 10, sampleCount: 11 });
+    expect(baked?.inputSignature).toBeTruthy();
+    expect(baked?.curveSignature).toBeTruthy();
   });
   it('replaces only the three stabilization channels when rebaked', () => {
     bakeFaceStabilization('bake', 'face', true, 0);

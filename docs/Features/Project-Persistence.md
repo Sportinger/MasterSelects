@@ -263,6 +263,10 @@ Unsaved edits retain the browser leave-page warning. Save explicitly before clos
 
 The toolbar shows an uncreated project, unsaved changes, an active write, a failed save, or the last successful save time for the current session. Failures remain visible until a successful retry; clicking the status invokes Save. Newly edited state remains unsaved even when an earlier in-flight write succeeds.
 
+Local development builds do not display the browser's unsaved-work confirmation
+on reload, including Vite refreshes. This does not trigger a save or change the
+configured save mode. Production builds retain the unsaved-work confirmation.
+
 Status is runtime-only and scoped to the FSA handle or native project path, not persisted in project data. Manual FSA saves request read/write permission directly from the user gesture before serialization. Failed writes and recovery-protected skipped writes do not show a success toast or advance the saved timestamp. Recovery protection leaves the recoverable autosave untouched.
 
 ## Backup System

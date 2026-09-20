@@ -41,6 +41,36 @@ offscreen graph panels pause the overlay. This visualizes graph direction,
 not measured execution, cache misses or rebaking; saved/baked dependencies can
 still carry a signal. It does not change node state, rendering or export.
 
+## Stabilization bake
+
+Clips with baked face/lip stabilization show a separate **Stabilization** group:
+**Video Source / Face landmarks → Face or Lip stabilization → Transform keyframes
+→ Clip Transform**. The last connection targets the actual 2D or 3D transform;
+opening the graph does not rebake, duplicate keys or change the clip.
+
+Expand/collapse and **Focus** work like other groups. **Byp** on the group or its
+nodes switches the existing stabilization bypass, preserving the keys and manual
+clip transform. Group and node positions, provenance and bypass support project
+storage and history. The curve node's animation area opens the same Position X,
+Position Y and Rotation Z keys that appear on the timeline.
+
+Bypass disables the generated stabilization keys at playback. It does not freeze
+source footage, tracked geometry or cable simulation, and cannot remove movement
+already embedded in a saved Face Cables geometry bake.
+
+The stabilization inspector shows the target clip, tracking availability and bake
+status. New bakes record Face/Lips, center lock, smoothing, tracking revision and
+sample counts. It identifies changed inputs, retracking, edited curves and removed
+keys. Older projects show their existing chain with **Baked · settings not recorded** and unknown
+settings; they do not guess whether Face or Lips was used.
+
+The **Next bake** controls run the existing stabilization calculation on an
+unlocked, supported 2D clip with tracking available. Baking replaces its Position
+X/Y and Rotation Z channels; Undo restores the previous keys and provenance.
+Dashed cables show recorded bake dependencies, remain visible without selection,
+and have no live flow animation or cable-editing actions. Playback reads the saved
+curves; changing the landmarks or bake settings requires another bake.
+
 Nodes, groups, cables, plugs and animation curves are drawn on two viewport-sized
 Canvas 2D layers. Supported browsers transfer these to an OffscreenCanvas worker.
 The static layer changes only after graph/view changes; a separate animation

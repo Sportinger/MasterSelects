@@ -146,6 +146,7 @@ function buildProjectedClipNodeGraphState(
     keyframeNodes: clip.nodeGraph?.keyframeNodes ? structuredClone(clip.nodeGraph.keyframeNodes) : undefined,
     groups: clip.nodeGraph?.groups ? structuredClone(clip.nodeGraph.groups) : undefined,
     scene: clip.nodeGraph?.scene ? structuredClone(clip.nodeGraph.scene) : undefined,
+    stabilization: clip.nodeGraph?.stabilization ? structuredClone(clip.nodeGraph.stabilization) : undefined,
     forcedBuiltIns: clip.nodeGraph?.forcedBuiltIns ? [...clip.nodeGraph.forcedBuiltIns] : undefined,
     ...(manualEdges !== undefined ? { manualEdges } : {}),
   };
@@ -187,6 +188,7 @@ export function reconcileClipNodeGraphState(
     ...(manualEdges !== undefined ? { manualEdges } : {}),
     groups: existingState.groups ? structuredClone(existingState.groups) : undefined,
     scene: existingState.scene ? structuredClone(existingState.scene) : undefined,
+    stabilization: existingState.stabilization ? structuredClone(existingState.stabilization) : undefined,
     updatedAt: existingState.updatedAt,
   };
 }
@@ -293,6 +295,7 @@ export function cloneClipNodeGraph(graph?: ClipNodeGraph): ClipNodeGraph | undef
     manualEdges: cloneManualEdges(graph.manualEdges),
     groups: graph.groups ? structuredClone(graph.groups) : undefined,
     scene: graph.scene ? structuredClone(graph.scene) : undefined,
+    stabilization: graph.stabilization ? structuredClone(graph.stabilization) : undefined,
     updatedAt: graph.updatedAt,
   };
 }

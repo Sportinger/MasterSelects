@@ -9,6 +9,7 @@ import { faceTrackKey, samplePreciseFace } from './preciseFaceSampling';
 import { solveFaceStabilization, type FaceStabilizationTarget, type FaceStabilizationPose } from './faceStabilization';
 import type { Keyframe } from '../../types/keyframes';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
+import { stabilizationCurveSignature, stabilizationInputSignature } from './stabilizationProvenance';
 
 export function bakeFaceStabilization(clipId: string, target: FaceStabilizationTarget, lockCenter: boolean, smoothing: number): number {
   assertExclusiveTimelineMutationAllowed();
@@ -66,7 +67,15 @@ export function bakeFaceStabilization(clipId: string, target: FaceStabilizationT
   nextMap.set(clipId, [...existing.filter(k => !replaced.has(k.property)), ...baked].toSorted((a, b) => a.time - b.time));
   const history = useHistoryStore.getState(), batch = history.startBatch(`Stabilize ${target}`);
   try {
-    useTimelineStore.setState({ clipKeyframes: nextMap });
+    const nodeGraph = clip.nodeGraph ?? { version: 1 as const, nodes: [] };
+    useTimelineStore.setState({ clipKeyframes: nextMap, clips: timeline.clips.map(candidate => candidate.id !== clipId ? candidate : {
+      ...candidate,
+      nodeGraph: { ...nodeGraph, stabilization: { ...nodeGraph.stabilization, bake: {
+        version: 1, target, lockCenter, smoothing, sourceId, trackingCreatedAt: series.createdAt,
+        bakedAt: Date.now(), frameRate: fps, sampleCount: count + 1, detectedSamples: detected,
+        inputSignature: stabilizationInputSignature(clip, existing), curveSignature: stabilizationCurveSignature(baked),
+      } } },
+    }) });
     useTimelineStore.getState().invalidateCache();
     renderHostPort.requestRender();
   } finally { if (batch.opened) history.endBatch(); }

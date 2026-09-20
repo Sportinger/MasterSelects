@@ -1,13 +1,14 @@
 import { withClipSceneGraph } from './clipSceneGraph';
 import type { NodeGraph, NodeGraphDocument, NodeGraphNode } from '../../types/nodeGraph';
-import type { TimelineClip } from '../../types';
+import type { Keyframe, TimelineClip } from '../../types';
 import { buildEffectOperatorGraph } from './effectGraphProjection';
 import { foldOperatorGroups } from './nestedOperatorGroups';
 import { collapsedArtifactLinks, projectSourceArtifactLinks } from './sourceArtifactProjection';
 import { projectKeyframeNodes } from './keyframeNodeProjection';
+import { projectStabilizationGraph } from './stabilizationGraphProjection';
 
 /** A single canvas projection of every domain. Grouping changes presentation, never processing. */
-export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: TimelineClip, clips: TimelineClip[] = []): NodeGraph {
+export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: TimelineClip, clips: TimelineClip[] = [], keys: readonly Keyframe[] = [], trackingCreatedAt?: number): NodeGraph {
   document = withClipSceneGraph(document, clip, clips);
   const root = document.graphs.find(g => g.id === document.rootGraphId)!;
   const nodes: NodeGraphNode[] = [], edges = root.edges.map(e => ({ ...e }));
@@ -63,5 +64,6 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     cursor = Math.max(cursor + 280, ...innerNodes.map(n => n.layout.x + 330));
     expansion = cursor - rootNode.layout.x - 280;
   }
-  return foldOperatorGroups(projectKeyframeNodes(projectSourceArtifactLinks({ ...root, nodes, edges, groups }), clip), clip.nodeGraph);
+  const animated = projectKeyframeNodes(projectSourceArtifactLinks({ ...root, nodes, edges, groups }), clip);
+  return foldOperatorGroups(projectStabilizationGraph(animated, clip, keys, trackingCreatedAt), clip.nodeGraph);
 }

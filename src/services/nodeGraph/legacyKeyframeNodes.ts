@@ -8,11 +8,17 @@ import { keyframeNodeParameters } from './keyframeNodeParameters';
  * an explicit node edit persists the definitions and their presentation.
  */
 export function withLegacyKeyframeNodes(clip: TimelineClip, keys: readonly Keyframe[]): TimelineClip {
-  if (!keys.length) return clip;
+  if (!keys.length && !clip.nodeGraph?.stabilization?.bake) return clip;
   const existing = clip.nodeGraph?.keyframeNodes ?? [];
   const claimed = new Set(existing.flatMap(node => node.channels.flatMap(channel =>
     [channel.property, ...channel.targets.map(target => target.property)])));
   const animated = new Set(keys.map(key => key.property));
+  const transformAnimated = !!clip.nodeGraph?.stabilization?.bake
+    || [...animated].some(property => /^(opacity$|speed$|position\.|anchor\.|scale\.|rotation\.)/.test(property));
+  if (transformAnimated && !clip.nodeGraph?.forcedBuiltIns?.includes('transform')) {
+    const model = clip.nodeGraph ?? { version: 1 as const, nodes: [] };
+    clip = { ...clip, nodeGraph: { ...model, forcedBuiltIns: [...(model.forcedBuiltIns ?? []), 'transform'] } };
+  }
   const parameters = keyframeNodeParameters(clip).filter(parameter => animated.has(parameter.property) && !claimed.has(parameter.property));
   if (!parameters.length) return clip;
 
@@ -37,7 +43,6 @@ export function withLegacyKeyframeNodes(clip: TimelineClip, keys: readonly Keyfr
   const keyframeNodes = [...groups.values()].map(node => ({ ...node,
     layout: { ...node.layout, y: top - 250 - node.channels.length * 32 },
   }));
-  const transformAnimated = parameters.some(parameter => /^(opacity$|speed$|position\.|anchor\.|scale\.|rotation\.)/.test(parameter.property));
   const model = clip.nodeGraph ?? { version: 1 as const, nodes: [] };
   return { ...clip, nodeGraph: { ...model, keyframeNodes: [...existing, ...keyframeNodes],
     forcedBuiltIns: transformAnimated ? [...new Set([...(model.forcedBuiltIns ?? []), 'transform' as const])] : model.forcedBuiltIns,

@@ -27,6 +27,22 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
   const bindingActions = (node: NodeGraphNode): BaseActions | null => {
     if (!clip) return null;
     const binding = node.binding;
+    if (binding?.kind === 'clip-stabilization') return {
+      moveNode: (_id, layout) => {
+        const state = useTimelineStore.getState(), current = state.clips.find(candidate => candidate.id === clip.id);
+        if (!current || state.isExporting || state.tracks.find(track => track.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
+        const model = current.nodeGraph ?? createClipNodeGraphState(current);
+        state.updateClip(clip.id, { nodeGraph: { ...model, stabilization: { ...model.stabilization,
+          layouts: { ...model.stabilization?.layouts, [binding.stage]: layout } } } });
+      },
+      deleteNode: () => { throw new Error('This node represents saved stabilization. Edit or bypass it in the inspector.'); },
+      connectPorts: () => {}, disconnectEdge: () => {}, toggleBypass: () => {
+        const state = useTimelineStore.getState(), current = state.clips.find(candidate => candidate.id === clip.id);
+        if (!current || state.isExporting || state.tracks.find(track => track.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
+        state.updateClip(clip.id, { videoInspectorSections: { ...current.videoInspectorSections,
+          stabilization: current.videoInspectorSections?.stabilization === false } });
+      },
+    };
     if (binding?.kind === 'keyframe-node') return {
       moveNode: (id, layout) => changeKeyframeNode(clip.id, id, { layout }),
       deleteNode: id => removeKeyframeNode(clip.id, id),
@@ -86,6 +102,8 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
     toggleBypass: (id: string) => route(id, (actions, node) => actions.toggleBypass(localId(node))),
     deleteNode: (id: string) => route(id, (actions, node) => actions.deleteNode(localId(node))),
     connectPorts: (c: NodeGraphConnectionRequest) => safely(() => {
+      if (graph?.nodes.find(node => node.id === c.fromNodeId)?.outputs.find(port => port.id === c.fromPortId)?.metadata?.readOnly
+        || graph?.nodes.find(node => node.id === c.toNodeId)?.inputs.find(port => port.id === c.toPortId)?.metadata?.readOnly) return;
       const artifact = graph?.nodes.find(n => n.id === c.fromNodeId)?.outputs.find(p => p.id === c.fromPortId)?.metadata?.sourceArtifact;
       if (artifact && clip) {
         const visible = graph?.nodes.find(n => n.id === c.toNodeId), port = visible?.inputs.find(p => p.id === c.toPortId);
@@ -129,6 +147,7 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
       bindingActions(to)?.connectPorts({ ...c, fromNodeId: localId(from), toNodeId: localId(to) });
     }),
     disconnectEdge: (id: string) => safely(() => {
+      if (graph?.edges.find(edge => edge.id === id)?.readOnly) return;
       for (const animation of clip?.nodeGraph?.keyframeNodes ?? []) for (const channel of animation.channels) {
         for (const property of [channel.property, ...channel.targets.map(t => t.property)]) {
           if (id === keyframeEdgeId(animation.id, property)) { disconnectKeyframeNode(clip!.id, animation.id, property); return; }

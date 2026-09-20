@@ -1,6 +1,7 @@
 import { EffectOrderControls } from './EffectOrderControls';
 import { KeyframeNodeInspector } from '../keyframes/KeyframeNodeInspector';
 import { NodeAnimationInspector } from '../keyframes/NodeAnimationInspector';
+import { StabilizationNodeInspector } from './StabilizationNodeInspector';
 import { describeNodePort, describePortText } from '../../../../services/nodeGraph/nodePortPresentation';
 import { SceneOperatorParameters } from './SceneOperatorParameters';
 import { OperatorGroupParameters } from './OperatorGroupParameters';
@@ -302,6 +303,12 @@ export function NodeInspector({
   }
   if (clip && node.binding?.kind === 'scene-node') {
     return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}><SceneNodeParameters node={node} owner={clip} /></NodeInspectorShell>;
+  }
+  if (clip && node.binding?.kind === 'clip-stabilization') {
+    return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
+      <StabilizationNodeInspector key={`${clip.id}:${node.id}:${clip.nodeGraph?.stabilization?.bake?.bakedAt ?? ''}`}
+        clip={clip} node={node} onOpenProperties={onOpenProperties} />
+    </NodeInspectorShell>;
   }
   if (clip && node.binding?.kind === 'keyframe-node') {
     return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>

@@ -57,7 +57,9 @@ export function buildCanvasScene(options: Options): CanvasScene {
   for (const group of graph.groups ?? []) {
     const b = bounds.get(group.id);
     if (b) scene.groups.push({ x: b.left, y: b.top, width: b.right - b.left, height: b.bottom - b.top,
-      label: group.label, color: group.color ?? '#5cbed6', collapsed: !!group.collapsed, count: `${group.nodeIds.length} nodes` });
+      label: group.label, color: group.color ?? '#5cbed6', collapsed: !!group.collapsed,
+      count: group.collapsed && group.bypassNodeId ? '' : `${group.nodeIds.length} nodes`,
+      bypassable: !!group.bypassNodeId, bypassed: nodes.find(node => node.id === group.bypassNodeId)?.params?.enabled === false });
   }
   scene.nodes = nodes.map(node => ({ id: node.id, x: node.layout.x, y: node.layout.y, width: NODE_WIDTH, height: getNodeHeight(node),
     label: node.label, description: node.description ?? 'Built-in processing node', kind: typeof node.params?.categoryLabel === 'string' ? node.params.categoryLabel : node.kind,
@@ -77,7 +79,8 @@ export function buildCanvasScene(options: Options): CanvasScene {
   }
   for (const [id, pair] of pairs) {
     if (!pair.output || !pair.input || (draft?.moved && draft.reconnectEdgeId === id)) continue;
-    scene.cables.push(makeCanvasCable(pair.output.tip, pair.input.tip, describeNodePort(pair.output.port).color, id === options.selectedEdgeId || id === options.hoveredEdgeId));
+    scene.cables.push({ ...makeCanvasCable(pair.output.tip, pair.input.tip, describeNodePort(pair.output.port).color, id === options.selectedEdgeId || id === options.hoveredEdgeId),
+      baked: pair.output.edge.readOnly });
   }
   const preview = (nodeId: string, portId: string, direction: 'input' | 'output', ghost = false) => {
     const node = nodes.find(n => n.id === nodeId), port = (direction === 'input' ? node?.inputs : node?.outputs)?.find(p => p.id === portId);

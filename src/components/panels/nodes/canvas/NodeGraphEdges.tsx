@@ -96,12 +96,13 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
             onContextMenu={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              onDisconnectEdge?.(edge.id);
+              if (!edge.readOnly) onDisconnectEdge?.(edge.id);
               onClearSelectedEdge();
             }}
           >
             <path className="node-workspace-edge-hit" d={path} />
             <path
+              strokeDasharray={edge.readOnly ? '4 4' : undefined}
               className={[
                 'node-workspace-edge port-typed',
                 `node-workspace-edge-${edge.type}`,

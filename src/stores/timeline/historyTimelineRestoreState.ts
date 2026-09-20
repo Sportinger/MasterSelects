@@ -219,6 +219,7 @@ function createRestoredClip(
       editableHook: clip.editableHook ? { ...clip.editableHook } : undefined,
       parentClipId: clip.parentClipId,
       videoState: clonePlain(clip.videoState),
+      videoInspectorSections: clonePlain(clip.videoInspectorSections),
       audioState: clonePlain(clip.audioState),
       transform: clonePlain(clip.transform),
       effects: clonePlain(clip.effects),
