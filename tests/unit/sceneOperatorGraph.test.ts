@@ -10,6 +10,7 @@ import type { SceneFaceCableLayer } from '../../src/engine/scene/types';
 import { buildPlaneUniformData } from '../../src/engine/native3d/sceneRenderer/planeUniforms';
 import { groupOperators, ungroupOperators } from '../../src/services/operators/operatorGroups';
 import { isClipKeyframeBypassed } from '../../src/services/nodeGraph/keyframePlaybackState';
+import type { ScenePlaneLayer } from '../../src/engine/scene/types';
 
 describe('executable scene operators and nested groups', () => {
   it.each(['frame', 'texture', 'uv', 'geometry', 'material', 'mesh', 'transform', 'render'])('executes and persists bypass for %s', id => {
@@ -60,6 +61,25 @@ describe('executable scene operators and nested groups', () => {
     expect(compileSceneGraph(d)).toMatchObject({ visible: true, textured: false, geometry: 'source' });
     d.graph.edges = d.graph.edges.filter(e => e.to !== 'mesh' || e.input !== 'geometry');
     expect(compileSceneGraph(d).visible).toBe(false);
+  });
+  it.each([['box', 'cube'], ['sphere', 'sphere'], ['cylinder', 'cylinder']] as const)('renders portable %s primitive geometry through the native mesh path', (shape, meshType) => {
+    const d = defaultSceneGraph();
+    const geometry = d.graph.nodes.find(node => node.id === 'geometry')!;
+    geometry.operator = 'geometry.primitive';
+    geometry.bindings = {};
+    geometry.constants = { shape };
+    const plan = compileSceneGraph(d);
+    expect(plan).toMatchObject({ visible: true, textured: false, geometry: 'primitive', primitiveShape: shape });
+    const layer = { kind: 'plane', opacity: 1, worldMatrix: new Float32Array(16) } as ScenePlaneLayer;
+    expect(applySceneOperatorGraph(layer, d)).toMatchObject({ kind: 'primitive', meshType, opacity: 1 });
+  });
+  it('keeps Box as the portable primitive default for older or newly inserted nodes', () => {
+    const d = defaultSceneGraph();
+    const geometry = d.graph.nodes.find(node => node.id === 'geometry')!;
+    geometry.operator = 'geometry.primitive'; geometry.bindings = {};
+    expect(compileSceneGraph(d).primitiveShape).toBe('box');
+    geometry.constants = { shape: 'torus' };
+    expect(() => compileSceneGraph(d)).toThrow('Unsupported scene primitive shape.');
   });
   it('rejects wrong types, cycles and unsupported scene operators', () => {
     const d = defaultSceneGraph();

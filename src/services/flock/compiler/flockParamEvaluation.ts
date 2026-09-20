@@ -4,6 +4,7 @@ import type { FlockVec3 } from '../../../types/flock';
 import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
 import { hexColorToRgb } from '../../../utils/colorParam';
 import { flockHash01 } from './flockCompilerSupport';
+import { evaluateScalarOperation } from '../../operators/scalarOperationSemantics';
 import type {
   FlockColorRef,
   FlockNodeSpec,
@@ -176,22 +177,22 @@ export function evaluateFlockValues(
         const a = p.n.a ?? 0;
         const b = p.n.b ?? 0;
         switch (p.e.op) {
-          case 'add': result = a + b; break;
-          case 'subtract': result = a - b; break;
+          case 'add': result = evaluateScalarOperation('add', a, b); break;
+          case 'subtract': result = evaluateScalarOperation('subtract', a, b); break;
           case 'divide': result = Math.abs(b) < 1e-9 ? 0 : a / b; break;
           case 'min': result = Math.min(a, b); break;
           case 'max': result = Math.max(a, b); break;
           case 'power': result = Math.sign(a) * Math.pow(Math.abs(a), b); break;
           case 'abs': result = Math.abs(a); break;
           case 'sin': result = Math.sin(a) * b; break;
-          default: result = a * b;
+          default: result = evaluateScalarOperation('multiply', a, b);
         }
         break;
       }
       case 'remap': {
         const span = (p.n.inMax ?? 1) - (p.n.inMin ?? 0);
         let t = Math.abs(span) < 1e-9 ? 0 : ((p.n.input ?? 0) - (p.n.inMin ?? 0)) / span;
-        if (p.b.clamp !== false) t = Math.max(0, Math.min(1, t));
+        if (p.b.clamp !== false) t = evaluateScalarOperation('clamp', t, 0, 1);
         result = (p.n.outMin ?? 0) + ((p.n.outMax ?? 1) - (p.n.outMin ?? 0)) * applyCurve(p.e.curve ?? 'linear', t);
         break;
       }

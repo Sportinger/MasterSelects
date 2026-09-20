@@ -2,6 +2,7 @@
 
 import type { AudioEffectParamValue } from '../../../types/audio';
 import type { RulerLaneFormat } from '../../../types/timeline';
+import type { EffectOperatorGraph } from '../../../types/operatorGraph';
 
 export interface ProjectTransform {
   x: number;
@@ -27,6 +28,7 @@ export interface ProjectEffect {
   name: string;
   enabled: boolean;
   params: Record<string, AudioEffectParamValue>;
+  operatorGraph?: EffectOperatorGraph;
 }
 
 export interface ProjectMaskVertex {

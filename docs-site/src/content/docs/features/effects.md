@@ -132,6 +132,15 @@ field, applies a complex-equivalent terrestrial channel, passes the recovered
 signal through an optional VHS transport, measures horizontal sync and color
 burst per line, decodes PAL, and resolves an optional CRT display stage.
 
+Select the clip in the timeline to edit its executable node group: Frame,
+PAL Encode, RF Channel, VHS Transport, Receiver Analysis, PAL Decode,
+Display Resolve, and Image Output. Connections determine the compute plan;
+bypassing RF or VHS removes that stage's dispatch. Direct Frame-to-Output
+wiring performs no analog compute passes. Unfinished wiring remains saved
+and pauses the effect rather than silently restoring the default graph.
+Controls retain their existing parameter/keyframe IDs, ranges, and defaults.
+Decoded and resolved node previews tap the actual GPU output on demand.
+
 The exposed modules cover signal strength, band-limited RF/impulse noise,
 co-channel interference, two-path delayed ghosts with carrier phase and drift,
 receiver tuning and sync/color lock, PAL simple/delay-line/comb decoder modes,
@@ -380,10 +389,17 @@ Glow also starts from the iPad-tuned preset: amount 5, threshold 0.7935, radius 
 
 **Open Nodes** exposes the relief as a nested, editable operator group. The
 default height path is texture → luminance → clamp → power → multiply → add;
-grid points and a box primitive feed **Instance on points**, then material/mesh,
+grid points and a primitive feed **Instance on points**, then material/mesh,
 camera, lighting and render. Texture/UV, material and mesh reuse the shared scene
 operators. Fixed math inputs can be edited directly under their ports, and the
 Math dropdown switches operations on the canvas or in the inspector.
+
+The primitive's Shape dropdown selects Box, Sphere or Cylinder without replacing
+the node or its connections. Box remains the default and retains its original
+edge appearance and instancing cost. Sphere and Cylinder use real topology in
+native 3D and matching analytic intersections in the 2D raymarch path. Voxel
+material color still comes from the existing sampled source/tint/opacity path;
+this does not introduce a general mesh-material or arbitrary texture-slot system.
 
 The same connected field program drives 2D raymarching and native 3D instancing.
 The 2D graph camera controls relief framing; native 3D uses the timeline scene
@@ -435,7 +451,7 @@ effect is still rendered at the active Preview/export target resolution;
 ### Voxel Relief as a true 3D scene object
 
 A clip with an enabled voxel-relief effect that is switched to 3D renders as a
-scene object of kind `voxel` (instanced cubes with real depth) instead of a
+scene object of kind `voxel` (instanced Box, Sphere or Cylinder cells with real depth) instead of a
 flat plane — the scene camera replaces the effect's virtual camera, and the
 effect's camera params plus `temporalBlend`/`maxSteps`/`reset` are ignored in
 3D. The 2D post-effect is excluded for consumed voxel layers so it is not

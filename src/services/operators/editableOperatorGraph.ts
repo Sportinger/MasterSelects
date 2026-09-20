@@ -14,8 +14,8 @@ export function prepareEditableOperatorGraph(graph: EffectOperatorGraph, compile
 }
 
 const reasons = new Map<string, string | undefined>();
-export function operatorGraphPauseReason(effect: Pick<Effect, 'params'>): string | undefined {
-  const saved = effect.params.operatorGraph;
+export function operatorGraphPauseReason(effect: Pick<Effect, 'params' | 'operatorGraph'>): string | undefined {
+  const saved = effect.operatorGraph ? JSON.stringify(effect.operatorGraph) : effect.params.operatorGraph;
   if (typeof saved !== 'string' || !saved) return;
   if (reasons.has(saved)) return reasons.get(saved);
   let reason: string | undefined;

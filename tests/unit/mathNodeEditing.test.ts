@@ -6,6 +6,7 @@ import { useTimelineStore } from '../../src/stores/timeline';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 import { validateEffectGraph } from '../../src/services/operators/effectGraph';
 import type { NodeGraphNode } from '../../src/types/nodeGraph';
+import { effectOperatorCompileParams, effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 
 const initial = useTimelineStore.getState();
 afterEach(() => useTimelineStore.setState(initial));
@@ -17,12 +18,14 @@ describe('math operation changes', () => {
     const node = buildEffectOperatorGraph(clip, clip.effects[0]).nodes.find(node => node.id === 'height')!;
     const before = voxelOperatorGraph(clip.effects[0].params);
     setMathNodeMode(clip.id, node, 'math.divide');
-    const effect = useTimelineStore.getState().clips[0].effects[0], graph = voxelOperatorGraph(effect.params);
+    const effect = useTimelineStore.getState().clips[0].effects[0], graph = effectOperatorGraph(effect);
+    expect(effect.operatorGraph).toBeDefined();
+    expect(effect.params.operatorGraph).toBeUndefined();
     expect(graph.edges).toEqual(before.edges);
     expect(graph.nodes.find(node => node.id === 'height')?.bindings.b).toBe('height');
     expect(effect.params.height).toBe(1.2);
     expect(useTimelineStore.getState().clipKeyframes.get(clip.id)).toBe(keys);
-    expect(compileVoxelGraph(effect.params).maxHeight).toBeCloseTo(1 / 1.2 + 0.015);
+    expect(compileVoxelGraph(effectOperatorCompileParams(effect)).maxHeight).toBeCloseTo(1 / 1.2 + 0.015);
   });
   it('adapts unary, clamp and constant ports without losing output links or dormant numeric bindings', () => {
     const graph = voxelOperatorGraph({}), params = { height: 1.2 };
@@ -46,5 +49,9 @@ describe('math operation changes', () => {
     expect(mathModeOptions({ operatorId: 'math.add' } as NodeGraphNode).map(option => option.value)).toContain('math.clamp');
     expect(mathModeOptions({ operatorId: 'flock.math' } as NodeGraphNode).map(option => option.value))
       .toEqual(['add', 'subtract', 'multiply', 'divide', 'min', 'max', 'power', 'abs', 'sin']);
+  });
+  it('does not present scalar-field Constant for typed image subtract operators', () => {
+    expect(mathModeOptions({ operatorId: 'math.subtract.scalar' } as NodeGraphNode)).toEqual([]);
+    expect(mathModeOptions({ operatorId: 'math.subtract.rgb' } as NodeGraphNode)).toEqual([]);
   });
 });

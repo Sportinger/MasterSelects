@@ -1,4 +1,5 @@
 import { compileCableOperatorGraph } from './cableOperatorGraph';
+import { effectOperatorCompileParams } from '../operators/effectGraphOwner';
 import { cableSavedDepth } from './cableSavedDepth';
 import { sampleCableConfig } from './cableAnimation';
 import { createCableSceneBake } from './cableSceneBake';
@@ -50,7 +51,9 @@ export async function bakeFaceCables(clipId: string, effectId: string, configs: 
   const file = media.files.find(f => f.id === sourceId);
   const source = { width: file?.width ?? clip.source?.videoElement?.videoWidth ?? 0, height: file?.height ?? clip.source?.videoElement?.videoHeight ?? 0 };
   if (!source.width || !source.height) throw new Error('Source dimensions are unavailable.');
-  const operatorPlan = compileCableOperatorGraph(clip.effects.find(e => e.id === effectId)?.params ?? {});
+  const graphEffect = clip.effects.find(e => e.id === effectId && e.type === 'face-cables');
+  if (!graphEffect) throw new Error('The cable effect is unavailable.');
+  const operatorPlan = compileCableOperatorGraph(effectOperatorCompileParams(graphEffect));
   const { params: effectParams, saved: savedDepth } = cableSavedDepth(operatorPlan.params, operatorPlan.useSavedDepth, reuseDepth);
   const version = effectParams.faceShadows && !effectParams.scene3D ? 4 : 3;
   const layout = cableFrameLayout(version, configs);
@@ -202,8 +205,10 @@ export async function bakeFaceCables(clipId: string, effectId: string, configs: 
   assertExclusiveTimelineMutationAllowed();
   const previous = clip.effects.find(e => e.id === effectId && e.type === 'face-cables');
   if (!previous) throw new Error('The cable effect was removed.');
+  const { operatorGraph: _legacyOperatorGraph, ...persistedParams } = previous.params;
+  const nextParams = { ...persistedParams, bakedData, sceneData: sceneBake?.encode() ?? '', settings: JSON.stringify(configs) };
   const effect = { id: previous.id, type: 'face-cables' as const, name: 'Face Cables', enabled: previous.enabled,
-    params: { ...previous.params, operatorGraph: JSON.stringify(operatorPlan.graph), bakedData, sceneData: sceneBake?.encode() ?? '', settings: JSON.stringify(configs) } };
+    params: nextParams, operatorGraph: operatorPlan.graph };
   const history = useHistoryStore.getState(), batch = history.startBatch('Bake face cables');
   try {
     current.updateClip(clipId, { is3D: !!sceneBake, effects: clip.effects.map(e => e.id === effectId ? effect : e) });

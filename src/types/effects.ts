@@ -1,4 +1,5 @@
 import type { AudioEffectParamValue } from './audio';
+import type { EffectOperatorGraph } from './operatorGraph';
 
 export interface Effect {
   id: string;
@@ -6,6 +7,8 @@ export interface Effect {
   type: EffectType;
   enabled: boolean;
   params: Record<string, AudioEffectParamValue>;
+  /** Canonical, versioned operator graph. `params.operatorGraph` is legacy read-only input. */
+  operatorGraph?: EffectOperatorGraph;
   /** Ephemeral render description; resolved once the source texture's PTS is known. */
   surfaceTrack?: import('./planarTracking').PlanarTrack;
   terrainRender?: { track: import('./planarTracking').PlanarTrack; camera: import('./terrainTracking').TerrainCamera };

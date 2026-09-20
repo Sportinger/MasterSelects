@@ -1,6 +1,8 @@
 import type { Effect } from '../../types/effects';
 import { getEffect, isParticleRenderEffectDefinition } from '../../effects';
 import type { InlineEffectParams } from '../pipeline/CompositorPipeline';
+import { effectOperatorGraph } from '../../services/operators/effectGraphOwner';
+import { compileImageOperatorGraph } from '../../services/operators/imageOperatorGraph';
 
 export interface LayerEffectStack {
   inlineEffects: InlineEffectParams;
@@ -21,7 +23,7 @@ function applyInlineEffect(inlineEffects: InlineEffectParams, effect: Effect): v
       inlineEffects.saturation = (effect.params.amount as number) ?? 1;
       break;
     case 'invert':
-      inlineEffects.invert = true;
+      inlineEffects.operatorProgram = compileImageOperatorGraph(effectOperatorGraph(effect), effect.params);
       break;
   }
 }

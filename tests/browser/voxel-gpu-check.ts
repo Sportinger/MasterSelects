@@ -6,12 +6,59 @@ import { createDefaultVoxelGraph } from '../../src/services/operators/voxelGraph
 import { connectEffectGraph } from '../../src/services/operators/effectGraph';
 import type { SceneVoxelLayer } from '../../src/engine/scene/types';
 import { nodeScalarSampleTap } from '../../src/services/nodePreview/NodeScalarSampleTap';
+import { createPrimitiveGeometry } from '../../src/engine/native3d/passes/meshPass/primitiveGeometry';
+
+async function checkLegacyBoxVertexParity(device: GPUDevice): Promise<void> {
+  const geometry = createPrimitiveGeometry('cube')!;
+  const vertices = Float32Array.from(geometry.vertices), indices = Uint32Array.from(geometry.indices);
+  const vertexBuffer = device.createBuffer({ size: vertices.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+  const indexBuffer = device.createBuffer({ size: indices.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+  const mismatch = device.createBuffer({ size: 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+  const readback = device.createBuffer({ size: 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+  device.queue.writeBuffer(vertexBuffer, 0, vertices); device.queue.writeBuffer(indexBuffer, 0, indices);
+  const module = device.createShaderModule({ code: `
+    @group(0) @binding(0) var<storage, read> vertices: array<f32>;
+    @group(0) @binding(1) var<storage, read> indices: array<u32>;
+    @group(0) @binding(2) var<storage, read_write> mismatch: atomic<u32>;
+    fn frame(face: u32) -> mat3x3f { switch face {
+      case 0u: { return mat3x3f(vec3f(0,1,0),vec3f(0,0,1),vec3f(1,0,0)); }
+      case 1u: { return mat3x3f(vec3f(0,-1,0),vec3f(0,0,1),vec3f(-1,0,0)); }
+      case 2u: { return mat3x3f(vec3f(-1,0,0),vec3f(0,0,1),vec3f(0,1,0)); }
+      case 3u: { return mat3x3f(vec3f(1,0,0),vec3f(0,0,1),vec3f(0,-1,0)); }
+      case 4u: { return mat3x3f(vec3f(1,0,0),vec3f(0,1,0),vec3f(0,0,1)); }
+      default: { return mat3x3f(vec3f(1,0,0),vec3f(0,-1,0),vec3f(0,0,-1)); }
+    } }
+    @compute @workgroup_size(36) fn main(@builtin(local_invocation_index) i: u32) {
+      let corners = array<vec2f,6>(vec2f(-1,-1),vec2f(1,-1),vec2f(-1,1),vec2f(-1,1),vec2f(1,-1),vec2f(1,1));
+      let c = corners[i % 6u];
+      let oldEdge = max(abs(c.x), abs(c.y));
+      let base = indices[i] * 8u; let p = vec3f(vertices[base], vertices[base+1u], vertices[base+2u]) / 0.6;
+      let n = vec3f(vertices[base+3u], vertices[base+4u], vertices[base+5u]); let a = abs(n);
+      var uv = p.xy + vec2f(0.5);
+      if (a.x >= a.y && a.x >= a.z) { uv = p.yz + vec2f(0.5); } else if (a.y >= a.z) { uv = p.xz + vec2f(0.5); }
+      let newEdge = max(abs(uv.x - 0.5), abs(uv.y - 0.5)) * 2.0;
+      let onLegacyCube = abs(abs(dot(p, n)) - 0.5) <= 0.00001 && max(abs(p.x), max(abs(p.y), abs(p.z))) <= 0.50001;
+      if (!onLegacyCube || abs(length(n) - 1.0) > 0.00001 || abs(oldEdge - newEdge) > 0.00001) { atomicAdd(&mismatch, 1u); }
+    }` });
+  const info = await module.getCompilationInfo(); const errors = info.messages.filter(message => message.type === 'error');
+  if (errors.length) throw new Error(`Box parity shader: ${errors.map(error => error.message).join('; ')}`);
+  const pipeline = await device.createComputePipelineAsync({ layout: 'auto', compute: { module, entryPoint: 'main' } });
+  const bind = device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
+    { binding: 0, resource: { buffer: vertexBuffer } }, { binding: 1, resource: { buffer: indexBuffer } }, { binding: 2, resource: { buffer: mismatch } },
+  ] });
+  const encoder = device.createCommandEncoder(), pass = encoder.beginComputePass(); pass.setPipeline(pipeline); pass.setBindGroup(0, bind); pass.dispatchWorkgroups(1); pass.end();
+  encoder.copyBufferToBuffer(mismatch, 0, readback, 0, 4); device.queue.submit([encoder.finish()]); await readback.mapAsync(GPUMapMode.READ);
+  const count = new Uint32Array(readback.getMappedRange())[0]; readback.unmap();
+  vertexBuffer.destroy(); indexBuffer.destroy(); mismatch.destroy(); readback.destroy();
+  if (count !== 0) throw new Error(`Default Box differs from legacy GPU geometry/edge inputs at ${count} vertices`);
+}
 
 /** Actual production shaders and uniform packers, with isolated synthetic pixels. */
 export async function checkVoxelGpu(canvas: HTMLCanvasElement): Promise<string> {
   const adapter = await navigator.gpu?.requestAdapter();
   if (!adapter) throw new Error('WebGPU adapter unavailable');
   const device = await adapter.requestDevice();
+  await checkLegacyBoxVertexParity(device);
   const errors: string[] = [];
   device.addEventListener('uncapturederror', event => errors.push(event.error.message));
   device.pushErrorScope('validation');
@@ -42,8 +89,11 @@ export async function checkVoxelGpu(canvas: HTMLCanvasElement): Promise<string> 
   inverted.edges.push({ id: 'invert-input', from: 'clamp', output: 'value', to: 'invert', input: 'b' });
   inverted.edges = connectEffectGraph(inverted, { id: 'invert-output', from: 'invert', output: 'value', to: 'contrast', input: 'a' }).edges;
   const muted = createDefaultVoxelGraph(); muted.nodes.find(node => node.id === 'render')!.bypassed = true;
+  const sphere = createDefaultVoxelGraph(); sphere.nodes.find(node => node.id === 'box')!.operator = 'geometry.sphere';
+  const cylinder = createDefaultVoxelGraph(); cylinder.nodes.find(node => node.id === 'box')!.operator = 'geometry.cylinder';
   const variants = [base, { ...base, height: 0.15 }, { ...base, operatorGraph: JSON.stringify(inverted), one: 1 },
-    { ...base, voxel_material_red: 0.1, voxel_uv_offsetU: 0.25, voxel_box_width: 0.5 }, { ...base, operatorGraph: JSON.stringify(muted) }];
+    { ...base, voxel_material_red: 0.1, voxel_uv_offsetU: 0.25, voxel_box_width: 0.5 }, { ...base, operatorGraph: JSON.stringify(muted) },
+    { ...base, operatorGraph: JSON.stringify(sphere) }, { ...base, operatorGraph: JSON.stringify(cylinder) }];
   const results: string[] = [];
   try {
     for (const mode of ['2D', '3D']) {
@@ -81,7 +131,7 @@ export async function checkVoxelGpu(canvas: HTMLCanvasElement): Promise<string> 
         temporary.forEach(resource => resource.destroy());
       }
       if (new Set(hashes).size !== variants.length) throw new Error(`${mode}: a graph change did not change rendered pixels`);
-      results.push(`${mode}: 5 pixel checks passed (${hashes.join(', ')})`);
+      results.push(`${mode}: ${variants.length} pixel checks passed (${hashes.join(', ')})`);
     }
     const validation = await device.popErrorScope();
     if (validation || errors.length) throw new Error(validation?.message ?? errors.join('\n'));

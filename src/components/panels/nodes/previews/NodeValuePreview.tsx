@@ -29,6 +29,7 @@ export function NodeValuePreview({ node }: { node: NodeGraphNode }) {
   </label>;
   if (inlineNumericPorts(node)) {
     const entries = frame.controls?.filter(entry => entry.portId) ?? [];
+    const editablePorts = new Set(entries.map(entry => `${entry.direction ?? 'input'}:${entry.portId}`));
     return <>
       {entries.map(entry => { const point = getPortCenter(node, entry.portId!, entry.direction ?? 'input');
         return <div className="node-value-inline" key={entry.target.parameter} aria-label={`Value below ${entry.portId}`}
@@ -37,7 +38,7 @@ export function NodeValuePreview({ node }: { node: NodeGraphNode }) {
           {control(entry)}
         </div>;
       })}
-      {frame.values?.map(entry => { const point = getPortCenter(node, entry.portId, entry.direction);
+      {frame.values?.filter(entry => !editablePorts.has(`${entry.direction}:${entry.portId}`)).map(entry => { const point = getPortCenter(node, entry.portId, entry.direction);
         return <output key={`${entry.direction}-${entry.portId}`} className="node-value-inline node-value-computed" aria-label={`${node.label} ${entry.direction} ${entry.portId} live value`}
           onPointerDown={event => event.stopPropagation()}
           title={frame.label.toLowerCase().includes('center cell') ? 'Live sample at the center grid cell. Values vary across the image.' : frame.label} style={{ left: node.layout.x + (entry.direction === 'output' ? 99 : 16), top: point.y + 12, width: 70 }}>

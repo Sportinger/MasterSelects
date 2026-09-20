@@ -144,6 +144,7 @@ function normalizeAdjustmentEffects(layerId: string, effects: readonly Effect[])
       type: effect.effectType,
       enabled: effect.enabled,
       params: { ...effect.parameters },
+      operatorGraph: effects[index]?.operatorGraph,
     };
   });
 }

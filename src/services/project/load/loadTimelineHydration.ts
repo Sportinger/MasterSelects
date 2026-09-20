@@ -30,6 +30,7 @@ import type {
 } from '../../../types';
 import { calcRangeCoverage } from './loadMediaCacheHydration';
 import { recoverPersistedTranscriptStatus } from '../../transcription/persistedTranscriptStatus';
+import { migratePersistedEffectOperatorGraph } from '../../operators/effectGraphOwner';
 import { quantizeFrameLockedClipTimings, quantizeTimeToFrame } from '../../../utils/timelineFrameQuantization';
 import {
   normalizePersistedFaceStatus,
@@ -304,12 +305,13 @@ export function convertProjectCompositionToStore(
         terrainAttachment: cloneTerrainAttachment(c.terrainAttachment),
         terrainScreenAnchor: cloneTerrainScreenAnchor(c.terrainScreenAnchor),
         terrainAnchorConnector: cloneTerrainAnchorConnector(c.terrainAnchorConnector),
-        effects: c.effects.map((effect): Effect => ({
+        effects: c.effects.map((effect): Effect => migratePersistedEffectOperatorGraph({
           id: effect.id,
           name: effect.name,
           type: effect.type as Effect['type'],
           enabled: effect.enabled,
-          params: effect.params,
+          params: structuredClone(effect.params),
+          operatorGraph: effect.operatorGraph ? structuredClone(effect.operatorGraph) : undefined,
         })),
         transitionIn: c.transitionIn ? normalizeTransitionInstanceParams(structuredClone(c.transitionIn)) : undefined,
         transitionOut: c.transitionOut ? normalizeTransitionInstanceParams(structuredClone(c.transitionOut)) : undefined,

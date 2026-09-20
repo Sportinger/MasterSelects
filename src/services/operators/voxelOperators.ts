@@ -11,15 +11,21 @@ const parameters = (group: string): OperatorParameter[] => Object.entries(VOXEL_
   }));
 const op = (id: string, label: string, description: string, inputs: OperatorPort[], outputs: OperatorPort[], params: OperatorParameter[], addable = true): OperatorDefinition =>
   ({ id, version: 1, label, description, inputs, outputs, parameters: params, runtime: 'builtin', invalidates: 'appearance', bypass: 'mute', addable });
+const primitive = (id: string, label: string, variant: string): OperatorDefinition => ({
+  ...op(id, label, `Reusable unit ${label.toLowerCase()}. X and Y scale its footprint within each cell; Z scales the sampled height.`,
+    [], [port('geometry', 'geometry', label, ['box-primitive'])], ['width', 'height', 'depth'].map((name, axis) => ({ id: name, label: `Size ${'XYZ'[axis]}`, type: 'number', default: 1, min: 0, max: axis === 2 ? 4 : 1, step: 0.01, animatable: true }))),
+  family: 'geometry.primitive', variant,
+});
 
 /** Only relief construction and its render controls are new. Image, UV, texture,
  * material and mesh nodes are the existing scene operators. */
 export const VOXEL_OPERATORS: readonly OperatorDefinition[] = [
   op('geometry.grid', 'Grid points', 'Creates a source-aspect grid of cell centers. Columns controls the density in both axes.',
     [], [port('points', 'geometry', 'Points', ['grid-points'])], parameters('relief').filter(param => param.id === 'columns')),
-  op('geometry.box', 'Box geometry', 'Reusable unit box. X and Y scale its footprint within each cell; Z scales the sampled height.',
-    [], [port('geometry', 'geometry', 'Box', ['box-primitive'])], ['width', 'height', 'depth'].map((id, i) => ({ id, label: `Size ${'XYZ'[i]}`, type: 'number', default: 1, min: 0, max: i === 2 ? 4 : 1, step: 0.01, animatable: true }))),
-  op('geometry.instances', 'Instance on points', 'Places one box on each grid point and scales its Z axis with the connected height field. Uses instancing in native 3D and the same field in 2D raymarching.',
+  primitive('geometry.box', 'Box geometry', 'box'),
+  primitive('geometry.sphere', 'Sphere geometry', 'sphere'),
+  primitive('geometry.cylinder', 'Cylinder geometry', 'cylinder'),
+  op('geometry.instances', 'Instance on points', 'Places the connected primitive on each grid point and scales its Z axis with the connected height field. Uses instancing in native 3D and the same shape in 2D raymarching.',
     [port('points', 'geometry', 'Points', ['grid-points']), port('geometry', 'geometry', 'Instance', ['box-primitive']), port('height', 'field', 'Height field')],
     [port('geometry', 'geometry', 'Instances', ['voxel-grid'])], parameters('relief').filter(param => ['gap', 'limitToVideo'].includes(param.id))),
   op('geometry.voxel', 'Voxel Relief', 'Extrudes a grid of cells from the connected texture luminance. Disconnect the height texture to mute the geometry.',

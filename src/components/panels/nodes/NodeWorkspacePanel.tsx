@@ -411,6 +411,7 @@ export function NodeWorkspacePanel() {
           selectedNodeId={selectedNode?.id ?? null}
           selectedNodeIds={selectedNodeIds.length > 1 ? selectedNodeIds : undefined}
           onSelectNode={selectNode}
+          onSelectNodes={selectNodes}
           onToggleNodeSelection={toggleNodeSelection}
           onMoveNode={unified.moveNode}
           onMoveNodes={moves => batched('Move nodes', () => moves.forEach(move => unified.moveNode(move.nodeId, move.layout)))}

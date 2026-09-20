@@ -367,6 +367,30 @@ fn voxelRayBoxInterval(ray: VoxelRay, boundsMin: vec3f, boundsMax: vec3f) -> vec
   );
 }
 
+fn voxelPrimitiveInterval(ray: VoxelRay, center: vec3f, halfSize: vec3f) -> vec2f {
+  if (params.pad1 < 0.5) { return voxelRayBoxInterval(ray, center - halfSize, center + halfSize); }
+  let safeSize = max(halfSize, vec3f(0.000001));
+  let origin = (ray.origin - center) / safeSize;
+  let direction = ray.direction / safeSize;
+  if (params.pad1 < 1.5) {
+    let a = dot(direction, direction); let b = dot(origin, direction); let c = dot(origin, origin) - 1.0;
+    let discriminant = b * b - a * c;
+    if (discriminant < 0.0) { return vec2f(1.0e6, -1.0e6); }
+    let root = sqrt(discriminant); return vec2f((-b - root) / a, (-b + root) / a);
+  }
+  let a = dot(direction.xy, direction.xy); let b = dot(origin.xy, direction.xy); let c = dot(origin.xy, origin.xy) - 1.0;
+  if (a < 0.0000001) {
+    if (c > 0.0) { return vec2f(1.0e6, -1.0e6); }
+    return voxelRayBoxInterval(ray, center - halfSize, center + halfSize);
+  }
+  let discriminant = b * b - a * c;
+  if (discriminant < 0.0) { return vec2f(1.0e6, -1.0e6); }
+  let root = sqrt(discriminant);
+  let side = vec2f((-b - root) / a, (-b + root) / a);
+  let z = vec2f((-1.0 - origin.z) / voxelSafeRayComponent(direction.z), (1.0 - origin.z) / voxelSafeRayComponent(direction.z));
+  return vec2f(max(side.x, min(z.x, z.y)), min(side.y, max(z.x, z.y)));
+}
+
 fn voxelTrace(ray: VoxelRay) -> VoxelHit {
   var hit: VoxelHit;
   hit.hit = 0.0;
@@ -423,7 +447,7 @@ fn voxelTrace(ray: VoxelRay) -> VoxelHit {
       if (params.limitToVideo < 0.5 || voxelCellIsInsideVideo(index, fieldSize, cellSize)) {
         let cell = voxelCellFromIndex(index, fieldSize, cellSize);
         let boxCenter = vec3f(cell.center, cell.height * 0.5);
-        let cellInterval = voxelRayBoxInterval(ray, boxCenter - cell.halfSize, boxCenter + cell.halfSize);
+        let cellInterval = voxelPrimitiveInterval(ray, boxCenter, cell.halfSize);
         let cellTravel = max(cellInterval.x, travel);
         if (cellInterval.x <= cellInterval.y && cellInterval.y >= travel && cellTravel <= nextTravel + 0.00002) {
           hit.hit = 1.0;
@@ -475,6 +499,14 @@ fn voxelFaceNormal(hit: VoxelHit) -> vec3f {
   let cell = hit.sample.cell;
   let local = hit.position - vec3f(cell.center, cell.height * 0.5);
   let halfSize = max(cell.halfSize, vec3f(0.0001));
+  if (params.pad1 > 0.5 && params.pad1 < 1.5) {
+    return normalize(local / (halfSize * halfSize));
+  }
+  if (params.pad1 > 1.5) {
+    let normalized = local / halfSize;
+    if (abs(abs(normalized.z) - 1.0) < 0.002) { return vec3f(0.0, 0.0, select(-1.0, 1.0, local.z >= 0.0)); }
+    return normalize(vec3f(local.x / (halfSize.x * halfSize.x), local.y / (halfSize.y * halfSize.y), 0.0));
+  }
   let faceDistance = abs(abs(local) - halfSize);
 
   if (faceDistance.z <= faceDistance.x && faceDistance.z <= faceDistance.y) {

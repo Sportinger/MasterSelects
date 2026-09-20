@@ -52,6 +52,7 @@ export type {
 } from './nestedComposition/nestedCompositionRuntimeRestore';
 import { Logger } from '../../services/logger';
 import { sanitizeTimelineParentRestoreTree } from '../../services/motionDesign/structure/timelineParentRestoreAdapter';
+import { migratePersistedEffectOperatorGraph } from '../../services/operators/effectGraphOwner';
 
 const log = Logger.create('NestedCompositionLoader');
 
@@ -404,9 +405,13 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
   }
   const nextCompositionPath = [...compositionPath, composition.id];
   const nestedClips: TimelineClip[] = [];
+  const persistedClips = composition.timelineData.clips.map(serializedClip => ({
+    ...serializedClip,
+    effects: (serializedClip.effects ?? []).map(migratePersistedEffectOperatorGraph),
+  }));
   const nestedKeyframes = collectNestedClipKeyframes({
     parentClipId: compClipId,
-    serializedClips: composition.timelineData.clips,
+    serializedClips: persistedClips,
     compositions: mediaStore.compositions,
     depth,
     compositionPath: nextCompositionPath,
@@ -416,8 +421,8 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
     compClipId,
     compositionId: composition.id,
     compositionName: composition.name,
-    serializedClipCount: composition.timelineData.clips.length,
-    serializedClips: composition.timelineData.clips.map((c: SerializableClip) => ({
+    serializedClipCount: persistedClips.length,
+    serializedClips: persistedClips.map((c: SerializableClip) => ({
       id: c.id,
       name: c.name,
       trackId: c.trackId,
@@ -428,7 +433,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
     availableMediaFiles: mediaStore.files.map(f => ({ id: f.id, name: f.name })),
   });
 
-  for (const serializedClip of composition.timelineData.clips) {
+  for (const serializedClip of persistedClips) {
     if (isCurrentTimelineSession && !isCurrentTimelineSession()) break;
     if (serializedClip.isComposition && serializedClip.compositionId) {
       const nestedComp = mediaStore.compositions.find(c => c.id === serializedClip.compositionId);
@@ -636,7 +641,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
 
   const nestedClipsWithRemappedParents = remapNestedParentClipIds(
     compClipId,
-    composition.timelineData.clips,
+    persistedClips,
     nestedClips,
   );
   const sanitizedNestedClips = sanitizeRemappedNestedParentGraph(

@@ -1,4 +1,5 @@
 import type { ScalarFieldProgram } from './scalarField';
+import { evaluateScalarOperation } from './scalarOperationSemantics';
 
 /** Numeric probe uses the same bounded register program as both GPU renderers. */
 export function evaluateScalarField(program: ScalarFieldProgram, luminance: number): number[] {
@@ -9,16 +10,16 @@ export function evaluateScalarField(program: ScalarFieldProgram, luminance: numb
     switch (op) {
       case 0: value = ci; break;
       case 1: value = luminance; break;
-      case 2: value = a + b; break;
-      case 3: value = a - b; break;
-      case 4: value = a * b; break;
+      case 2: value = evaluateScalarOperation('add', a, b); break;
+      case 3: value = evaluateScalarOperation('subtract', a, b); break;
+      case 4: value = evaluateScalarOperation('multiply', a, b); break;
       case 5: value = Math.abs(b) >= 1e-9 ? a / b : 0; break;
       case 6: value = b === 0 ? 1 : a <= 0 ? b < 0 ? 10000 : 0 : Math.pow(a, b); break;
       case 7: value = Math.min(a, b); break;
       case 8: value = Math.max(a, b); break;
       case 9: value = Math.abs(a); break;
       case 10: value = Math.sin(a); break;
-      case 11: value = Math.max(Math.min(b, c), Math.min(Math.max(b, c), a)); break;
+      case 11: value = evaluateScalarOperation('clamp', a, b, c); break;
     }
     values.push(Math.fround(Math.max(-10000, Math.min(10000, value))));
   }

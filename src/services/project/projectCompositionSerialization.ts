@@ -1,5 +1,5 @@
 import type { Composition } from '../../stores/mediaStore';
-import type { ClipVideoState, SerializableClip, SerializableMarker, TimelineClip, VideoBakeRegion } from '../../types';
+import type { ClipVideoState, Effect, SerializableClip, SerializableMarker, TimelineClip, VideoBakeRegion } from '../../types';
 import type { ProjectComposition, ProjectTrack, ProjectClip, ProjectMarker } from '../projectFileService';
 import { clonePlanarTracks } from '../planarTracking/clonePlanarTracks';
 import { cloneTerrainAnchorConnector, cloneTerrainAttachment, cloneTerrainScreenAnchor } from '../../types/terrainAttachment';
@@ -14,6 +14,7 @@ import { toProjectTransform } from './transformSerialization';
 import { serializeMaskEdgeFeathers, serializeMaskKeyframeProperty } from './maskSerialization';
 import { normalizeRulerLaneState } from '../../timeline/tempo/rulerDefaults';
 import { serializeGaussianSplatSequence, serializeModelSequence } from './projectMediaSerialization';
+import { migratePersistedEffectOperatorGraph } from '../operators/effectGraphOwner';
 
 type ProjectSaveClip = SerializableClip & {
   source?: TimelineClip['source'];
@@ -40,6 +41,15 @@ function serializeProjectClipVideoState(videoState: ClipVideoState | undefined):
   return {
     ...structuredClone(videoState),
     bakeRegions: videoState.bakeRegions?.map(serializeProjectVideoBakeRegion),
+  };
+}
+
+function serializeProjectEffect(effect: Effect) {
+  const migrated = migratePersistedEffectOperatorGraph(effect);
+  return {
+    id: migrated.id, type: migrated.type, name: migrated.name || migrated.type,
+    enabled: migrated.enabled !== false, params: structuredClone(migrated.params),
+    operatorGraph: migrated.operatorGraph ? structuredClone(migrated.operatorGraph) : undefined,
   };
 }
 
@@ -130,13 +140,7 @@ export function convertCompositions(compositions: Composition[]): ProjectComposi
       terrainAttachment: cloneTerrainAttachment(c.terrainAttachment),
       terrainScreenAnchor: cloneTerrainScreenAnchor(c.terrainScreenAnchor),
       terrainAnchorConnector: cloneTerrainAnchorConnector(c.terrainAnchorConnector),
-      effects: (c.effects || []).map((e) => ({
-        id: e.id,
-        type: e.type,
-        name: e.name || e.type,
-        enabled: e.enabled !== false,
-        params: e.params || {},
-      })),
+      effects: (c.effects || []).map(serializeProjectEffect),
       transitionIn: c.transitionIn ? normalizeTransitionInstanceParams(structuredClone(c.transitionIn)) : undefined,
       transitionOut: c.transitionOut ? normalizeTransitionInstanceParams(structuredClone(c.transitionOut)) : undefined,
       transitionSourceTimeOverride: c.transitionSourceTimeOverride,

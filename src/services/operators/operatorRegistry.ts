@@ -5,6 +5,8 @@ import { SURFACE_OPERATORS } from './surfaceOperators';
 import { SOURCE_ARTIFACT_OPERATORS } from './sourceArtifactOperators';
 import { VOXEL_OPERATORS } from './voxelOperators';
 import { SCALAR_FIELD_OPERATORS } from './scalarField';
+import { IMAGE_OPERATORS } from './imageOperators';
+import { ANALOG_SIGNAL_OPERATORS } from './analogSignalOperators';
 
 const port = (id: string, type: OperatorSignal, required = false): OperatorPort => ({ id, label: id[0].toUpperCase() + id.slice(1), type, required });
 const number = (id: string, label: string, value: number, min: number, max: number): OperatorParameter =>
@@ -19,6 +21,8 @@ export const EFFECT_OPERATORS: readonly OperatorDefinition[] = [
   ...SOURCE_ARTIFACT_OPERATORS,
   ...VOXEL_OPERATORS,
   ...SCALAR_FIELD_OPERATORS,
+  ...IMAGE_OPERATORS,
+  ...ANALOG_SIGNAL_OPERATORS,
   WIND_OPERATOR,
   { ...stage('forces.gravity', 'Gravity', [], [port('force', 'force')], [number('strength', 'Strength', 1, -30, 30)]), addable: true, bypass: 'mute' },
   { ...stage('forces.drag', 'Drag', [], [port('drag', 'drag')], [number('amount', 'Damping', 0.4, 0, 20)]), addable: true, bypass: 'mute' },

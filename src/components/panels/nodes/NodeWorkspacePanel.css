@@ -168,6 +168,14 @@
   cursor: grabbing;
 }
 
+.node-workspace-marquee {
+  position: absolute;
+  z-index: 8;
+  pointer-events: none;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
 .node-workspace-canvas-inner {
   position: absolute;
   left: 0;

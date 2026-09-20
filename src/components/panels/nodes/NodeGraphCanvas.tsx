@@ -24,6 +24,7 @@ import { useNodeConnectionDrag } from './canvas/useNodeConnectionDrag';
 import { getConnectionPlugs } from './canvas/connectionPlugs';
 import { NodeGraphPlugs } from './canvas/NodeGraphPlugs';
 import { useNodePortHover } from './canvas/useNodePortHover';
+import { useNodeMarqueeSelection } from './canvas/useNodeMarqueeSelection';
 import {
   clamp,
   DEFAULT_VIEWPORT,
@@ -45,6 +46,7 @@ interface NodeGraphCanvasProps {
   selectedNodeIds?: readonly string[];
   onSelectNode: (nodeId: string) => void;
   onToggleNodeSelection?: (nodeId: string) => void;
+  onSelectNodes?: (nodeIds: string[]) => void;
   onMoveNode?: (nodeId: string, layout: NodeGraphLayout) => void;
   onMoveNodes?: (moves: NodeGraphMove[]) => void;
   onConnectPorts?: (connection: NodeGraphConnectionRequest) => void;
@@ -85,6 +87,7 @@ export function NodeGraphCanvas({
   selectedNodeIds,
   onSelectNode,
   onToggleNodeSelection,
+  onSelectNodes,
   onMoveNode,
   onMoveNodes,
   onConnectPorts,
@@ -234,12 +237,20 @@ export function NodeGraphCanvas({
     };
   }, []);
 
+  const nodeMarquee = useNodeMarqueeSelection({
+    nodes: displayNodes,
+    viewport,
+    getGraphPoint: getGraphPointFromClient,
+    onSelectNodes,
+  });
+
   const { connectionDraft, startConnectionDrag, startPlugDrag, moveConnectionDrag, finishConnectionDrag, cancelConnectionDrag } = useNodeConnectionDrag({
     graphId: graph.id, canvasRef, nodesById, getGraphPoint: getGraphPointFromClient,
     onConnectPorts, onReconnectPorts, onDisconnectEdge,
   });
 
   const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (nodeMarquee.start(event)) return;
     if (event.button !== 0) {
       return;
     }
@@ -262,9 +273,10 @@ export function NodeGraphCanvas({
     };
     setIsPanning(true);
     event.currentTarget.setPointerCapture(event.pointerId);
-  }, []);
+  }, [nodeMarquee]);
 
   const handlePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (nodeMarquee.move(event)) return;
     if (moveConnectionDrag(event)) return;
 
     const gesture = panGestureRef.current;
@@ -281,7 +293,7 @@ export function NodeGraphCanvas({
       const pending = pendingPanRef.current;
       if (pending) setViewport(current => ({ ...current, ...pending }));
     });
-  }, [moveConnectionDrag, setViewport, showVisualViewport, viewport.zoom]);
+  }, [moveConnectionDrag, nodeMarquee, setViewport, showVisualViewport, viewport.zoom]);
 
   const finishPanGesture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     const gesture = panGestureRef.current;
@@ -491,12 +503,14 @@ export function NodeGraphCanvas({
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={(event) => {
+          if (nodeMarquee.finish(event)) return;
           if (!finishConnectionDrag(event)) {
             finishPanGesture(event);
           }
         }}
-        onLostPointerCapture={event => { cancelConnectionDrag(event); finishPanGesture(event); }}
+        onLostPointerCapture={event => { nodeMarquee.finish(event); cancelConnectionDrag(event); finishPanGesture(event); }}
         onPointerCancel={(event) => {
+          if (nodeMarquee.finish(event)) return;
           if (!cancelConnectionDrag(event)) {
             finishPanGesture(event);
           }
@@ -530,6 +544,7 @@ export function NodeGraphCanvas({
         }}
         onContextMenu={(event) => {
           event.preventDefault();
+          if (nodeMarquee.suppressContextMenu()) return;
           if ((event.target as Element).closest('.node-workspace-port, .node-workspace-edge-hit')) {
             return;
           }
@@ -553,6 +568,7 @@ export function NodeGraphCanvas({
           surfaceRef={canvasSurfaceRef} onViewRendered={handleViewRendered}
           selectedNodeId={selectedNodeId} selection={multiSelection} selectedEdgeId={selectedEdgeId}
           hoveredEdgeId={hoveredEdgeId} hoveredPort={hoveredPort} draft={connectionDraft} canBypass={!!onToggleNodeBypass} onReady={setCanvasRendered} />
+        {nodeMarquee.marquee && <div className="node-workspace-marquee" style={nodeMarquee.marquee} aria-hidden="true" />}
         <div
           ref={canvasInnerRef}
           className="node-workspace-canvas-inner"

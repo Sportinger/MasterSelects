@@ -23,12 +23,18 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
     id: effectGraphId(clip.id, effect.id), owner: { kind: 'clip', id: clip.id, name: clip.name }, domain: 'clip', issue: graph.incomplete,
     nodes: graph.nodes.map(node => {
       const operator = getEffectOperator(node.operator)!;
+      const projectPort = (p: (typeof operator.inputs)[number], direction: 'input' | 'output') => {
+        const projected = projectOperatorPort(p, direction);
+        const channel = graph.domain === 'image' && (operator.family === 'vector.split' || operator.family === 'vector.combine')
+          ? ({ x: 'R', y: 'G', z: 'B', w: 'A' } as Record<string, string>)[p.id] : undefined;
+        return channel ? { ...projected, label: channel } : projected;
+      };
       return { id: node.id, operatorId: operator.id, label: operator.label, description: operator.description,
-        kind: ['media.source', 'image.frame'].includes(operator.id) ? 'source' : ['scene.output', 'render.voxel'].includes(operator.id) ? 'output' : 'effect',
-        runtime: operator.runtime, inputs: operator.inputs.map(p => projectOperatorPort(p, 'input')), outputs: operator.outputs.map(p => projectOperatorPort(p, 'output')),
+        kind: ['media.source', 'image.frame'].includes(operator.id) ? 'source' : ['scene.output', 'render.voxel', 'image.output'].includes(operator.id) ? 'output' : 'effect',
+        runtime: operator.runtime, inputs: operator.inputs.map(p => projectPort(p, 'input')), outputs: operator.outputs.map(p => projectPort(p, 'output')),
         params: { enabled: operatorEnabled(node, effect.params), bypassable: graph.domain === 'voxel' || !!operator.bypass,
           mathSymbol: mathNodeSymbol(operator.id) ?? '',
-          categoryLabel: ({ math: 'Math', image: 'Image', texture: 'Texture', geometry: 'Geometry', material: 'Material', camera: 'Camera', light: 'Light', render: 'Render', scene: 'Scene', forces: 'Force', simulation: 'Simulation', tracking: 'Tracking' } as Record<string, string>)[operator.id.split('.')[0]] ?? 'Effect' },
+          categoryLabel: ({ analog: 'Analog Signal', math: 'Math', image: 'Image', texture: 'Texture', geometry: 'Geometry', material: 'Material', camera: 'Camera', light: 'Light', render: 'Render', scene: 'Scene', forces: 'Force', simulation: 'Simulation', tracking: 'Tracking' } as Record<string, string>)[operator.id.split('.')[0]] ?? 'Effect' },
         layout: graph.layout[node.id] ?? { x: 0, y: 0 }, domain: 'clip',
         binding: { kind: 'effect-operator', effectId: effect.id, nodeId: node.id, operator: operator.id },
       };

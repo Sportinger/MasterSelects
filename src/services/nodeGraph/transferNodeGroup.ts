@@ -89,8 +89,14 @@ export function transferNodeGroup(clipId: string, view: NodeGraph, nodeIds: stri
     channel.targets = channel.targets.map(binding => ({ ...binding, property: propertyMap.get(binding.property) ?? binding.property }));
   }
   const effects = clip.effects.map(effect => {
-    if (effect.id === target.effect?.id) return { ...effect, params: { ...params, [EFFECT_GRAPH_PARAM]: JSON.stringify(to) } as Effect['params'] };
-    if (effect.id === source.effect?.id) return { ...effect, params: { ...effect.params, [EFFECT_GRAPH_PARAM]: JSON.stringify(from) } };
+    if (effect.id === target.effect?.id) {
+      const nextParams = { ...params } as Effect['params']; delete nextParams[EFFECT_GRAPH_PARAM];
+      return { ...effect, params: nextParams, operatorGraph: to };
+    }
+    if (effect.id === source.effect?.id) {
+      const nextParams = { ...effect.params }; delete nextParams[EFFECT_GRAPH_PARAM];
+      return { ...effect, params: nextParams, operatorGraph: from };
+    }
     return effect;
   });
   const targetNode = view.nodes.find(node => node.binding?.kind === 'effect-operator' ? `effect:${node.binding.effectId}` === targetId

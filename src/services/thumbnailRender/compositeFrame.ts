@@ -121,7 +121,7 @@ function renderLayerToTarget(
     return null;
   }
 
-  const composite = createCompositeBinding(resources, sampler, readView, uniformBuffer, maskInfo.view, source);
+  const composite = createCompositeBinding(resources, sampler, readView, uniformBuffer, maskInfo.view, source, inlineEffects.operatorProgram);
   if (!composite) {
     return null;
   }
@@ -269,13 +269,14 @@ function createCompositeBinding(
   readView: GPUTextureView,
   uniformBuffer: GPUBuffer,
   maskTextureView: GPUTextureView,
-  source: { textureView: GPUTextureView | null; externalTexture: GPUExternalTexture | null; useExternalTexture: boolean }
+  source: { textureView: GPUTextureView | null; externalTexture: GPUExternalTexture | null; useExternalTexture: boolean },
+  operatorProgram?: { key: string; wgsl: string },
 ): { pipeline: GPURenderPipeline; bindGroup: GPUBindGroup } | null {
   const { compositorPipeline } = resources;
 
   if (source.useExternalTexture && source.externalTexture) {
     return {
-      pipeline: compositorPipeline.getExternalCompositePipeline()!,
+      pipeline: compositorPipeline.getExternalCompositePipeline(operatorProgram)!,
       bindGroup: compositorPipeline.createExternalCompositeBindGroup(
         sampler,
         readView,
@@ -288,7 +289,7 @@ function createCompositeBinding(
 
   if (source.textureView) {
     return {
-      pipeline: compositorPipeline.getCompositePipeline()!,
+      pipeline: compositorPipeline.getCompositePipeline(operatorProgram)!,
       bindGroup: compositorPipeline.createCompositeBindGroup(
         sampler,
         readView,

@@ -8,7 +8,6 @@ import {
   type ComputeEffectDefinition,
   type FullscreenEffectDefinition,
 } from './types';
-import commonShader from './_shared/common.wgsl?raw';
 import { getGlyphAtlas } from './_shared/glyphAtlas';
 import { ByteTextureCache } from './_shared/byteTexture';
 import { Logger } from '../services/logger';
@@ -18,6 +17,11 @@ import type { SplitCompareSettings } from '../stores/splitCompareStore';
 import { getLandmarkEffectPoints } from '../services/landmarkTracking/landmarkRuntime';
 import { DenseTerrainPipeline } from './tracking/DenseTerrainPipeline';
 import { nodePreviewTextureTap } from '../services/nodePreview/NodePreviewTextureTap';
+import { imageGraphDefinition } from './_shared/imageGraphDefinition';
+import { EffectPipelineCache } from './EffectPipelineCache';
+import { captureImageOperatorPreviews } from '../services/nodePreview/imageOperatorTexturePreviews';
+import { compileAnalogSignalGraph, createDefaultAnalogSignalGraph } from '../services/operators/analogSignalGraph';
+import { captureAnalogSignalStagePreviews } from '../services/nodePreview/analogSignalPreviews';
 
 const log = Logger.create('EffectsPipeline');
 
@@ -27,6 +31,7 @@ export const INLINE_EFFECT_IDS = new Set(['brightness', 'contrast', 'saturation'
 
 // Effect instance interface (runtime data attached to clips)
 interface EffectInstance {
+  operatorGraph?: import('../types/operatorGraph').EffectOperatorGraph;
   terrainRender?: import('../types/effects').Effect['terrainRender'];
   id: string;
   type: string;
@@ -56,24 +61,18 @@ function toPrimitiveEffectParams(params: Record<string, unknown>): Record<string
 
 export class EffectsPipeline {
   private device: GPUDevice;
-  private pipelines = new Map<string, GPURenderPipeline>();
-  private bindGroupLayouts = new Map<string, GPUBindGroupLayout>();
-  private shaderModules = new Map<string, GPUShaderModule>();
-  private pipelineSignatures = new Map<string, string>();
-  private pendingPipelineSignatures = new Map<string, string>();
-  private failedPipelineSignatures = new Map<string, string>();
+  private pipelineCache: EffectPipelineCache;
   private feedbackStates = new Map<string, FeedbackState>();
   private landmarkBuffers = new Map<string, GPUBuffer>();
   private byteTextures: ByteTextureCache;
   private computeRuntime: ComputeEffectRuntime;
   private splitComparePipeline: SplitComparePipeline;
-  private readonly onPipelineReady?: () => void;
   private initialized = false;
   private denseTerrain?: DenseTerrainPipeline;
 
   constructor(device: GPUDevice, onPipelineReady?: () => void) {
     this.device = device;
-    this.onPipelineReady = onPipelineReady;
+    this.pipelineCache = new EffectPipelineCache(device, onPipelineReady);
     this.computeRuntime = new ComputeEffectRuntime(device);
     this.splitComparePipeline = new SplitComparePipeline(device);
     this.byteTextures = new ByteTextureCache(device);
@@ -90,185 +89,21 @@ export class EffectsPipeline {
     log.info(`Effect runtime ready; ${EFFECT_REGISTRY.size} catalog pipelines will compile lazily`);
   }
 
-  /**
-   * Create GPU pipeline for a single effect
-   */
-  private createEffectPipeline(id: string, effect: FullscreenEffectDefinition): void {
-    const signature = this.getPipelineSignature(effect);
-    const useValidationScope = !!this.onPipelineReady
-      && typeof this.device.pushErrorScope === 'function'
-      && typeof this.device.popErrorScope === 'function';
-    let validationScopeOpen = false;
-    try {
-      if (useValidationScope) {
-        this.device.pushErrorScope('validation');
-        validationScopeOpen = true;
-      }
-
-      // Combine common shader with effect shader
-      const shaderCode = `${commonShader}\n${effect.shader}`;
-
-      const shaderModule = this.device.createShaderModule({
-        label: `effect-${id}`,
-        code: shaderCode,
-      });
-      // Create bind group layout
-      const entries: GPUBindGroupLayoutEntry[] = [
-        { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
-        { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
-      ];
-
-      if (effect.uniformSize > 0) {
-        entries.push({
-          binding: 2,
-          visibility: GPUShaderStage.FRAGMENT,
-          buffer: { type: 'uniform' },
-        });
-      }
-
-      if (effect.usesFeedback) {
-        entries.push({
-          binding: 3,
-          visibility: GPUShaderStage.FRAGMENT,
-          texture: {},
-        });
-      }
-
-      if (effect.glyphAtlas) {
-        entries.push({
-          binding: 4,
-          visibility: GPUShaderStage.FRAGMENT,
-          texture: {},
-        });
-      }
-
-      if (effect.byteTexture) {
-        entries.push({
-          binding: 5,
-          visibility: GPUShaderStage.FRAGMENT,
-          texture: { sampleType: 'uint' },
-        });
-      }
-
-      if (effect.landmarkPoints) {
-        entries.push({
-          binding: 6,
-          visibility: GPUShaderStage.FRAGMENT,
-          buffer: { type: 'read-only-storage' },
-        });
-      }
-
-      const bindGroupLayout = this.device.createBindGroupLayout({
-        label: `effect-${id}-layout`,
-        entries,
-      });
-      // Create render pipeline
-      const pipeline = this.device.createRenderPipeline({
-        label: `effect-${id}-pipeline`,
-        layout: this.device.createPipelineLayout({
-          bindGroupLayouts: [bindGroupLayout],
-        }),
-        vertex: {
-          module: shaderModule,
-          entryPoint: 'vertexMain',
-        },
-        fragment: {
-          module: shaderModule,
-          entryPoint: effect.entryPoint,
-          targets: [{ format: 'rgba8unorm' }],
-        },
-        primitive: { topology: 'triangle-list' },
-      });
-
-      const commitPipeline = () => {
-        this.shaderModules.set(id, shaderModule);
-        this.bindGroupLayouts.set(id, bindGroupLayout);
-        this.pipelines.set(id, pipeline);
-        this.pipelineSignatures.set(id, signature);
-        this.failedPipelineSignatures.delete(id);
-      };
-
-      if (!validationScopeOpen) {
-        commitPipeline();
-        return;
-      }
-
-      this.pendingPipelineSignatures.set(id, signature);
-      validationScopeOpen = false;
-      void this.device.popErrorScope().then((validationError) => {
-        if (this.pendingPipelineSignatures.get(id) !== signature) return;
-        this.pendingPipelineSignatures.delete(id);
-        if (validationError) {
-          this.failedPipelineSignatures.set(id, signature);
-          log.error(`Effect pipeline validation failed: ${id}`, {
-            name: validationError.constructor?.name ?? 'GPUValidationError',
-            message: validationError.message,
-          });
-          return;
-        }
-        commitPipeline();
-        this.onPipelineReady?.();
-      }).catch((error) => {
-        if (this.pendingPipelineSignatures.get(id) !== signature) return;
-        this.pendingPipelineSignatures.delete(id);
-        this.failedPipelineSignatures.set(id, signature);
-        log.error(`Effect pipeline validation failed: ${id}`, error);
-      });
-    } catch (error) {
-      if (validationScopeOpen) {
-        void this.device.popErrorScope().catch(() => undefined);
-      }
-      this.failedPipelineSignatures.set(id, signature);
-      log.error(`Failed to create pipeline for ${id}`, error);
-    }
+  private ensureEffectPipeline(id: string, effect: FullscreenEffectDefinition, compiledGraph = false): boolean {
+    return this.pipelineCache.ensure(id, effect, compiledGraph);
   }
-
-  private getPipelineSignature(effect: FullscreenEffectDefinition): string {
-    return [
-      effect.entryPoint,
-      effect.uniformSize,
-      effect.usesFeedback === true ? 'feedback' : 'no-feedback',
-      effect.glyphAtlas ? 'glyph-atlas' : 'no-glyph-atlas',
-      effect.byteTexture ? 'byte-texture' : 'no-byte-texture',
-      effect.landmarkPoints === true ? 'landmarks' : 'no-landmarks',
-      effect.shader,
-    ].join('\u0000');
-  }
-
-  private ensureEffectPipeline(id: string, effect: FullscreenEffectDefinition): boolean {
-    const signature = this.getPipelineSignature(effect);
-    if (this.pipelines.has(id) && this.pipelineSignatures.get(id) === signature) {
-      return false;
-    }
-    if (this.pendingPipelineSignatures.get(id) === signature) {
-      return false;
-    }
-    if (this.failedPipelineSignatures.get(id) === signature) {
-      return false;
-    }
-
-    this.pipelines.delete(id);
-    this.bindGroupLayouts.delete(id);
-    this.shaderModules.delete(id);
-    this.pipelineSignatures.delete(id);
-    this.pendingPipelineSignatures.delete(id);
-    this.failedPipelineSignatures.delete(id);
-    this.createEffectPipeline(id, effect);
-    return this.pipelines.has(id);
-  }
-
   /**
    * Get pipeline for an effect type
    */
   getEffectPipeline(effectType: string): GPURenderPipeline | undefined {
-    return this.pipelines.get(effectType);
+    return this.pipelineCache.getPipeline(effectType);
   }
 
   /**
    * Get bind group layout for an effect type
    */
   getEffectBindGroupLayout(effectType: string): GPUBindGroupLayout | undefined {
-    return this.bindGroupLayouts.get(effectType);
+    return this.pipelineCache.getBindGroupLayout(effectType);
   }
 
   /**
@@ -313,7 +148,7 @@ export class EffectsPipeline {
     feedbackView?: GPUTextureView,
     glyphAtlasView?: GPUTextureView,
   ): GPUBindGroup | null {
-    const layout = this.bindGroupLayouts.get(effectType);
+    const layout = this.pipelineCache.getBindGroupLayout(effectType);
     if (!layout) return null;
 
     const entries: GPUBindGroupEntry[] = [
@@ -333,10 +168,7 @@ export class EffectsPipeline {
       entries.push({ binding: 4, resource: glyphAtlasView });
     }
 
-    return this.device.createBindGroup({
-      layout,
-      entries,
-    });
+    return this.pipelineCache.createBindGroup(effectType, entries);
   }
 
   private getFeedbackState(effect: EffectInstance, width: number, height: number): FeedbackState {
@@ -453,6 +285,15 @@ export class EffectsPipeline {
     let swapped = false;
 
     for (const effect of enabledEffects) {
+      if (effect.type === 'invert') captureImageOperatorPreviews({
+        effect,
+        device: this.device,
+        encoder: commandEncoder,
+        sampler,
+        source: { kind: 'texture', view: effectInput },
+        width: outputWidth,
+        height: outputHeight,
+      });
       if (effect.type === 'voxel-relief') nodeScalarSampleTap.capture(`voxel-effect:${effect.id}`, this.device, commandEncoder, sampler, effectInput);
       if(effect.terrainRender){
         this.denseTerrain??=new DenseTerrainPipeline(this.device);
@@ -463,14 +304,12 @@ export class EffectsPipeline {
         nodePreviewTextureTap.capture(`effect:${effect.id}`, this.device, commandEncoder, sampler, effectInput, outputWidth, outputHeight);
         continue;
       }
-      const definition = getEffect(effect.type);
+      const registered = getEffect(effect.type);
+      const definition = effect.type === 'invert' && isFullscreenEffectDefinition(registered)
+        ? imageGraphDefinition({ ...effect, type: 'invert' }, registered) : registered;
       if (isComputeEffectDefinition(definition)) {
-        const effectParams = this.createEffectUniformData(
-          effect,
-          outputWidth,
-          outputHeight,
-          timelineTimeSeconds,
-        );
+        if (definition.computeMode === 'analog-signal' && effect.operatorGraph?.incomplete) continue;
+        const effectParams = definition.computeMode === 'analog-signal' ? null : this.createEffectUniformData(effect, outputWidth, outputHeight, timelineTimeSeconds);
         let effectUniformBuffer: GPUBuffer | null = null;
         if (effectParams) {
           effectUniformBuffer = this.device.createBuffer({
@@ -480,7 +319,9 @@ export class EffectsPipeline {
           this.device.queue.writeBuffer(effectUniformBuffer, 0, effectParams.buffer);
         }
         try {
-          this.computeRuntime.encode({
+          const analogPlan = definition.computeMode === 'analog-signal'
+            ? compileAnalogSignalGraph(effect.operatorGraph ?? createDefaultAnalogSignalGraph(), effect.params) : undefined;
+          const rendered = this.computeRuntime.encode({
             commandEncoder,
             definition: definition as ComputeEffectDefinition,
             inputView: effectInput,
@@ -488,7 +329,16 @@ export class EffectsPipeline {
             uniformBuffer: effectUniformBuffer,
             width: outputWidth,
             height: outputHeight,
+            analogPlan,
+            instanceId: effect.id,
+            timelineTimeSeconds,
+            onAnalogStageOutput: (stage, view, width, height) => {
+              if (stage.kind === 'analyze') return;
+              captureAnalogSignalStagePreviews({ effect, nodeId: stage.nodeId, kind: stage.kind, device: this.device,
+                encoder: commandEncoder, sampler, view, width, height });
+            },
           });
+          if (!rendered) continue;
           effectInput = effectOutput;
           effectOutput = this.getNextOutputView(effectOutput, pingView, pongView);
           swapped = !swapped;
@@ -498,16 +348,16 @@ export class EffectsPipeline {
         }
         continue;
       }
+      const pipelineKey = definition?.id ?? effect.type;
       const rebuiltPipeline = isFullscreenEffectDefinition(definition)
-        ? this.ensureEffectPipeline(effect.type, definition)
+        ? this.ensureEffectPipeline(pipelineKey, definition, pipelineKey !== effect.type)
         : false;
-      const pipeline = this.pipelines.get(effect.type);
-      const bindGroupLayout = this.bindGroupLayouts.get(effect.type);
+      const pipeline = this.pipelineCache.getPipeline(pipelineKey);
+      const bindGroupLayout = this.pipelineCache.getBindGroupLayout(pipelineKey);
 
       if (!isFullscreenEffectDefinition(definition) || !pipeline || !bindGroupLayout) {
         if (
-          !this.pendingPipelineSignatures.has(effect.type)
-          && !this.failedPipelineSignatures.has(effect.type)
+          !this.pipelineCache.isPendingOrFailed(pipelineKey)
         ) {
           log.warn(`No pipeline for effect type: ${effect.type}`);
         }
@@ -582,10 +432,8 @@ export class EffectsPipeline {
         entries.push({ binding: 6, resource: { buffer: this.getLandmarkBuffer(effect.id) } });
       }
 
-      const effectBindGroup = this.device.createBindGroup({
-        layout: bindGroupLayout,
-        entries,
-      });
+      const effectBindGroup = this.pipelineCache.createBindGroup(pipelineKey, entries);
+      if (!effectBindGroup) continue;
 
       // Render effect pass
       const effectPass = commandEncoder.beginRenderPass({
@@ -662,12 +510,7 @@ export class EffectsPipeline {
     for (const buffer of this.landmarkBuffers.values()) buffer.destroy();
     this.landmarkBuffers.clear();
     this.byteTextures.destroy();
-    this.pipelines.clear();
-    this.bindGroupLayouts.clear();
-    this.shaderModules.clear();
-    this.pipelineSignatures.clear();
-    this.pendingPipelineSignatures.clear();
-    this.failedPipelineSignatures.clear();
+    this.pipelineCache.clear();
     this.computeRuntime.clear();
     this.splitComparePipeline.destroy();
     this.initialized = false;
@@ -684,6 +527,6 @@ export class EffectsPipeline {
    * Get number of registered effect pipelines
    */
   getPipelineCount(): number {
-    return this.pipelines.size;
+    return this.pipelineCache.size;
   }
 }

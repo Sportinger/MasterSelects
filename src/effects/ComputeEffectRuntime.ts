@@ -1,4 +1,6 @@
 import type { ComputeEffectDefinition } from './types';
+import { AnalogSignalRuntime } from './analog/signal-lab/AnalogSignalRuntime';
+import type { AnalogSignalPlan } from '../services/operators/analogSignalGraph';
 
 interface ComputePipelineState {
   pipeline: GPUComputePipeline;
@@ -25,50 +27,22 @@ interface JumpFloodState {
   textures: JumpFloodTextures | null;
 }
 
-const ANALOG_SIGNAL_WIDTH = 864;
-const ANALOG_SIGNAL_HEIGHT = 313;
-const ANALOG_DECODED_WIDTH = 360;
-const ANALOG_DECODED_HEIGHT = 288;
-
-interface AnalogSignalTextures {
-  encoded: GPUTexture;
-  received: GPUTexture;
-  tape: GPUTexture;
-  decoded: GPUTexture;
-  lineState: GPUBuffer;
-}
-
-interface AnalogSignalState {
-  signature: string;
-  encodePipeline: GPUComputePipeline;
-  channelPipeline: GPUComputePipeline;
-  tapePipeline: GPUComputePipeline;
-  analyzePipeline: GPUComputePipeline;
-  decodePipeline: GPUComputePipeline;
-  resolvePipeline: GPUComputePipeline;
-  encodeLayout: GPUBindGroupLayout;
-  transformLayout: GPUBindGroupLayout;
-  analyzeLayout: GPUBindGroupLayout;
-  decodeLayout: GPUBindGroupLayout;
-  resolveLayout: GPUBindGroupLayout;
-  textures: AnalogSignalTextures;
-}
-
 export class ComputeEffectRuntime {
   private readonly device: GPUDevice;
   private states = new Map<string, ComputePipelineState>();
   private jumpFloodStates = new Map<string, JumpFloodState>();
-  private analogSignalStates = new Map<string, AnalogSignalState>();
+  private readonly analogSignalRuntime: AnalogSignalRuntime;
 
   constructor(device: GPUDevice) {
     this.device = device;
+    this.analogSignalRuntime = new AnalogSignalRuntime(device);
   }
 
   ensure(definition: ComputeEffectDefinition): void {
     if (definition.computeMode === 'jump-flood') {
       this.ensureJumpFlood(definition);
     } else if (definition.computeMode === 'analog-signal') {
-      this.ensureAnalogSignal(definition);
+      this.analogSignalRuntime.ensure(definition);
     } else {
       this.ensureSingle(definition);
     }
@@ -148,87 +122,6 @@ export class ComputeEffectRuntime {
     return state;
   }
 
-  private ensureAnalogSignal(definition: ComputeEffectDefinition): AnalogSignalState {
-    const signature = `${definition.uniformSize}\u0000${definition.shader}`;
-    const current = this.analogSignalStates.get(definition.id);
-    if (current?.signature === signature) return current;
-    if (current) this.destroyAnalogSignalState(current);
-
-    const module = this.device.createShaderModule({
-      label: `compute-effect-${definition.id}-analog-signal`,
-      code: definition.shader,
-    });
-    const uniformEntry: GPUBindGroupLayoutEntry = {
-      binding: 2,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: { type: 'uniform' },
-    };
-    const encodeLayout = this.device.createBindGroupLayout({
-      label: `compute-effect-${definition.id}-analog-encode-layout`,
-      entries: [
-        { binding: 1, visibility: GPUShaderStage.COMPUTE, texture: {} },
-        uniformEntry,
-        { binding: 4, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format: 'rgba16float' } },
-      ],
-    });
-    const transformLayout = this.device.createBindGroupLayout({
-      label: `compute-effect-${definition.id}-analog-transform-layout`,
-      entries: [
-        uniformEntry,
-        { binding: 3, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'unfilterable-float' } },
-        { binding: 4, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format: 'rgba16float' } },
-      ],
-    });
-    const analyzeLayout = this.device.createBindGroupLayout({
-      label: `compute-effect-${definition.id}-analog-analyze-layout`,
-      entries: [
-        uniformEntry,
-        { binding: 3, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'unfilterable-float' } },
-        { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-      ],
-    });
-    const decodeLayout = this.device.createBindGroupLayout({
-      label: `compute-effect-${definition.id}-analog-decode-layout`,
-      entries: [
-        uniformEntry,
-        { binding: 3, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'unfilterable-float' } },
-        { binding: 4, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format: 'rgba16float' } },
-        { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-      ],
-    });
-    const resolveLayout = this.device.createBindGroupLayout({
-      label: `compute-effect-${definition.id}-analog-resolve-layout`,
-      entries: [
-        { binding: 1, visibility: GPUShaderStage.COMPUTE, texture: {} },
-        uniformEntry,
-        { binding: 3, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'unfilterable-float' } },
-        { binding: 5, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format: 'rgba8unorm' } },
-      ],
-    });
-    const pipeline = (label: string, layout: GPUBindGroupLayout, entryPoint: string) => this.device.createComputePipeline({
-      label,
-      layout: this.device.createPipelineLayout({ bindGroupLayouts: [layout] }),
-      compute: { module, entryPoint },
-    });
-    const state: AnalogSignalState = {
-      signature,
-      encodeLayout,
-      transformLayout,
-      analyzeLayout,
-      decodeLayout,
-      resolveLayout,
-      encodePipeline: pipeline(`compute-effect-${definition.id}-pal-encode`, encodeLayout, 'palEncodeCompute'),
-      channelPipeline: pipeline(`compute-effect-${definition.id}-rf-channel`, transformLayout, 'rfChannelCompute'),
-      tapePipeline: pipeline(`compute-effect-${definition.id}-vhs-transport`, transformLayout, 'vhsTransportCompute'),
-      analyzePipeline: pipeline(`compute-effect-${definition.id}-receiver-analyze`, analyzeLayout, 'receiverAnalyzeCompute'),
-      decodePipeline: pipeline(`compute-effect-${definition.id}-pal-decode`, decodeLayout, 'palDecodeCompute'),
-      resolvePipeline: pipeline(`compute-effect-${definition.id}-display-resolve`, resolveLayout, definition.entryPoint),
-      textures: this.createAnalogSignalTextures(definition.id),
-    };
-    this.analogSignalStates.set(definition.id, state);
-    return state;
-  }
-
   encode(options: {
     commandEncoder: GPUCommandEncoder;
     definition: ComputeEffectDefinition;
@@ -237,14 +130,19 @@ export class ComputeEffectRuntime {
     uniformBuffer: GPUBuffer | null;
     width: number;
     height: number;
-  }): void {
+    analogPlan?: AnalogSignalPlan;
+    instanceId?: string;
+    timelineTimeSeconds?: number;
+    onAnalogStageOutput?: (stage: import('../services/operators/analogSignalGraph').AnalogSignalStage, view: GPUTextureView, width: number, height: number) => void;
+  }): boolean {
     if (options.definition.computeMode === 'jump-flood') {
       this.encodeJumpFlood(options);
-      return;
+      return true;
     }
     if (options.definition.computeMode === 'analog-signal') {
-      this.encodeAnalogSignal(options);
-      return;
+      if (!options.analogPlan || !options.instanceId) throw new Error('Analog signal effects require a compiled graph plan');
+      return this.analogSignalRuntime.encode({ ...options, plan: options.analogPlan, instanceId: options.instanceId,
+        timelineTimeSeconds: options.timelineTimeSeconds ?? 0, onStageOutput: options.onAnalogStageOutput });
     }
     const state = this.ensureSingle(options.definition);
     const entries: GPUBindGroupEntry[] = [
@@ -258,80 +156,7 @@ export class ComputeEffectRuntime {
     pass.setBindGroup(0, bindGroup);
     this.dispatch(pass, options.definition, options.width, options.height);
     pass.end();
-  }
-
-  private encodeAnalogSignal(options: {
-    commandEncoder: GPUCommandEncoder;
-    definition: ComputeEffectDefinition;
-    inputView: GPUTextureView;
-    outputView: GPUTextureView;
-    uniformBuffer: GPUBuffer | null;
-    width: number;
-    height: number;
-  }): void {
-    if (!options.uniformBuffer) throw new Error('Analog signal effects require a uniform buffer');
-    const state = this.ensureAnalogSignal(options.definition);
-    const textures = state.textures;
-
-    this.encodePassAtSize(options.commandEncoder, state.encodePipeline, this.device.createBindGroup({
-      layout: state.encodeLayout,
-      entries: [
-        { binding: 1, resource: options.inputView },
-        { binding: 2, resource: { buffer: options.uniformBuffer } },
-        { binding: 4, resource: textures.encoded.createView() },
-      ],
-    }), ANALOG_SIGNAL_WIDTH, ANALOG_SIGNAL_HEIGHT, 'analog-pal-encode');
-
-    this.encodePassAtSize(options.commandEncoder, state.channelPipeline, this.device.createBindGroup({
-      layout: state.transformLayout,
-      entries: [
-        { binding: 2, resource: { buffer: options.uniformBuffer } },
-        { binding: 3, resource: textures.encoded.createView() },
-        { binding: 4, resource: textures.received.createView() },
-      ],
-    }), ANALOG_SIGNAL_WIDTH, ANALOG_SIGNAL_HEIGHT, 'analog-rf-channel');
-
-    this.encodePassAtSize(options.commandEncoder, state.tapePipeline, this.device.createBindGroup({
-      layout: state.transformLayout,
-      entries: [
-        { binding: 2, resource: { buffer: options.uniformBuffer } },
-        { binding: 3, resource: textures.received.createView() },
-        { binding: 4, resource: textures.tape.createView() },
-      ],
-    }), ANALOG_SIGNAL_WIDTH, ANALOG_SIGNAL_HEIGHT, 'analog-vhs-transport');
-
-    const analyzePass = options.commandEncoder.beginComputePass({ label: 'analog-receiver-analyze' });
-    analyzePass.setPipeline(state.analyzePipeline);
-    analyzePass.setBindGroup(0, this.device.createBindGroup({
-      layout: state.analyzeLayout,
-      entries: [
-        { binding: 2, resource: { buffer: options.uniformBuffer } },
-        { binding: 3, resource: textures.tape.createView() },
-        { binding: 6, resource: { buffer: textures.lineState } },
-      ],
-    }));
-    analyzePass.dispatchWorkgroups(1, ANALOG_SIGNAL_HEIGHT);
-    analyzePass.end();
-
-    this.encodePassAtSize(options.commandEncoder, state.decodePipeline, this.device.createBindGroup({
-      layout: state.decodeLayout,
-      entries: [
-        { binding: 2, resource: { buffer: options.uniformBuffer } },
-        { binding: 3, resource: textures.tape.createView() },
-        { binding: 4, resource: textures.decoded.createView() },
-        { binding: 6, resource: { buffer: textures.lineState } },
-      ],
-    }), ANALOG_DECODED_WIDTH, ANALOG_DECODED_HEIGHT, 'analog-pal-decode');
-
-    this.encodePassAtSize(options.commandEncoder, state.resolvePipeline, this.device.createBindGroup({
-      layout: state.resolveLayout,
-      entries: [
-        { binding: 1, resource: options.inputView },
-        { binding: 2, resource: { buffer: options.uniformBuffer } },
-        { binding: 3, resource: textures.decoded.createView() },
-        { binding: 5, resource: options.outputView },
-      ],
-    }), options.width, options.height, 'analog-display-resolve');
+    return true;
   }
 
   private encodeJumpFlood(options: {
@@ -399,21 +224,6 @@ export class ComputeEffectRuntime {
     pass.end();
   }
 
-  private encodePassAtSize(
-    encoder: GPUCommandEncoder,
-    pipeline: GPUComputePipeline,
-    bindGroup: GPUBindGroup,
-    width: number,
-    height: number,
-    label: string,
-  ): void {
-    const pass = encoder.beginComputePass({ label });
-    pass.setPipeline(pipeline);
-    pass.setBindGroup(0, bindGroup);
-    pass.dispatchWorkgroups(Math.ceil(width / 8), Math.ceil(height / 8));
-    pass.end();
-  }
-
   private dispatch(pass: GPUComputePassEncoder, definition: ComputeEffectDefinition, width: number, height: number): void {
     const [workgroupX, workgroupY] = definition.workgroupSize ?? [8, 8];
     pass.dispatchWorkgroups(Math.ceil(width / workgroupX), Math.ceil(height / workgroupY));
@@ -431,31 +241,6 @@ export class ComputeEffectRuntime {
     });
     state.textures = { width, height, ping: create('voronoi-seed-ping'), pong: create('voronoi-seed-pong') };
     return state.textures;
-  }
-
-  private createAnalogSignalTextures(effectId: string): AnalogSignalTextures {
-    const createSignalTexture = (stage: string) => this.device.createTexture({
-      label: `compute-effect-${effectId}-analog-${stage}`,
-      size: [ANALOG_SIGNAL_WIDTH, ANALOG_SIGNAL_HEIGHT],
-      format: 'rgba16float',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING,
-    });
-    return {
-      encoded: createSignalTexture('encoded'),
-      received: createSignalTexture('received'),
-      tape: createSignalTexture('tape'),
-      decoded: this.device.createTexture({
-        label: `compute-effect-${effectId}-analog-decoded`,
-        size: [ANALOG_DECODED_WIDTH, ANALOG_DECODED_HEIGHT],
-        format: 'rgba16float',
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING,
-      }),
-      lineState: this.device.createBuffer({
-        label: `compute-effect-${effectId}-analog-line-state`,
-        size: ANALOG_SIGNAL_HEIGHT * 4 * Float32Array.BYTES_PER_ELEMENT,
-        usage: GPUBufferUsage.STORAGE,
-      }),
-    };
   }
 
   private getJumpStepBuffer(state: JumpFloodState, distance: number): GPUBuffer {
@@ -477,19 +262,10 @@ export class ComputeEffectRuntime {
     for (const buffer of state.stepBuffers.values()) buffer.destroy();
   }
 
-  private destroyAnalogSignalState(state: AnalogSignalState): void {
-    state.textures.encoded.destroy();
-    state.textures.received.destroy();
-    state.textures.tape.destroy();
-    state.textures.decoded.destroy();
-    state.textures.lineState.destroy();
-  }
-
   clear(): void {
     this.states.clear();
     for (const state of this.jumpFloodStates.values()) this.destroyJumpFloodState(state);
     this.jumpFloodStates.clear();
-    for (const state of this.analogSignalStates.values()) this.destroyAnalogSignalState(state);
-    this.analogSignalStates.clear();
+    this.analogSignalRuntime.clear();
   }
 }

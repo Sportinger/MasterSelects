@@ -61,7 +61,7 @@ export const voxelRelief: EffectDefinition = {
       Number(params.roll ?? 0),
       params.lightFollow === true ? 1 : 0,
       params.limitToVideo !== false ? 1 : 0,
-      0,
+      graph.primitiveShape === 'sphere' ? 1 : graph.primitiveShape === 'cylinder' ? 2 : 0,
       0,
       ...graph.heightUV,
       ...graph.colorUV,

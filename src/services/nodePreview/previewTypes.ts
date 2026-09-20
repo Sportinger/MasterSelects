@@ -27,7 +27,7 @@ export interface PreviewFrame {
 
 export interface PreviewValueControl {
   label: string; value: number | boolean; defaultValue: number | boolean; min?: number; max?: number; step?: number;
-  target: { clipId: string; effectId: string; nodeId: string; parameter: string }
+  target: { clipId: string; effectId: string; nodeId: string; parameter: string; storage?: 'constant' }
     | { kind: 'flock'; clipId: string; nodeId: string; parameter: string };
   portId?: string;
   direction?: 'input' | 'output';

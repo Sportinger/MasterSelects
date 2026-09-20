@@ -32,7 +32,9 @@ keyboard-accessible alternative to cable dragging.
 
 Voxel Relief opens as an editable group with nested geometry and height-field
 steps: frame, UV/image texture, luminance, clamp, power, multiply, add, grid,
-box, instancing, material, mesh, camera, lighting and render. Shared texture,
+primitive, instancing, material, mesh, camera, lighting and render. The primitive
+uses one Shape dropdown for Box, Sphere or Cylinder; Box remains the saved default.
+Shared texture,
 material and mesh operators reuse the scene registry. Existing relief parameters
 and animation bindings retain their values when opening an older project.
 
@@ -46,6 +48,13 @@ Numeric and text viewers use real DOM text and controls, without thumbnail
 generation or atlas tiles. Unconnected numeric operands can be dragged or typed
 directly; the touched number updates immediately while dependent calculations
 finish independently. Numeric jobs do not wait for image-preview readbacks.
+For graph-local constants, inline and inspector controls share the same saved
+Min/Max/Default preference. Registry values are the fallback; typed values clamp
+to the effective range and right-click resets to the effective default. A plain
+`values.number` literal may use any finite customized range, while parameters with
+domain constraints retain their registry limits. The preference is editor-local;
+the actual constant, graph layout and groups persist with the project graph and
+participate in undo, save and load.
 Relief math values use a shared 16-byte GPU sample of the center grid cell; the
 tooltip identifies that sample because field values vary across the image.
 The inspector shows those same live connected inputs and results. No additional
@@ -62,6 +71,14 @@ zoom range remains 18–240%; horizontal-only scrolling does not change zoom.
 
 Dragging, **Fit**, **Focus** and **Reset** interrupt any pending zoom animation.
 Reduced-motion preferences keep the same continuous zoom without smoothing.
+
+Right-dragging with a mouse draws a selection marquee after a short movement
+threshold and selects every intersecting node. A stationary right-click keeps the
+existing node/canvas context menu; the context-menu event following a completed
+marquee drag is suppressed. The gesture uses pointer capture so selection continues
+outside the initial hit target. Touch and pen input do not enter this mouse-specific
+gesture. Pointer activation does not leave focus styling behind, while keyboard
+navigation retains the intentional `focus-visible` outline.
 
 ## Inline previews
 
@@ -110,6 +127,21 @@ previews are wireframes, not additional scene renders. Missing data is identifie
 explicitly: opening a viewer never runs analysis or rebakes. Raw inference depth
 is not retained by existing bakes, and the realtime color graph does not evaluate
 its structural key ports; these ports report unavailable output.
+
+Local image-operator graphs use the same fused compiler plan for rendering and
+node previews. A visible viewer requests its exact node port; image, RGB, alpha,
+scalar and vector intermediates are lowered through the canonical image IR and
+captured by the existing GPU preview tap. Per-pixel intermediates therefore show
+their real result rather than the full source or final effect output. Uniform
+numeric inputs remain readable beside that image. No preview pipeline or materialized
+intermediate is created while its viewer is off, and preview shaders are cached per
+GPU device with bounded lifetime and device-loss/HMR handling.
+
+Analog Signal Lab appears as its actual signal chain rather than one opaque effect
+card. PAL, RF, VHS, receiver, decoder and display nodes expose the original effect
+parameters through the shared inspector, including the PAL decoder and tape-speed
+selects. Connections are project data: edits, layout and incomplete wiring use the
+same graph owner, history and save/load path as the effect, with no parallel UI copy.
 
 A third viewport-sized OffscreenCanvas layer draws previews without per-frame
 React updates. A shared atlas has a 32 MiB ceiling and packs 128, 512 or 2048
@@ -329,6 +361,16 @@ Stitch Surfaces accepts a face mesh at Primary and a depth mesh at Background.
 The catalog includes these contracts and supports searching their format names.
 Formats here describe intermediate data, not encoded media-file extensions.
 
+Vector **Split** and **Combine** are each one adaptive inspector workflow backed
+by explicit typed operators (`vec2`, `vec3`, or `vec4`). The Components dropdown
+changes the persisted typed variant; in an image graph, component ports are labeled
+R/G/B/A while retaining stable x/y/z/w port identities. Dragging a vector cable to
+a Split input, or a Combine output to a vector input, can select the one matching
+variant atomically with the connection. Compatible port IDs and exact signal types
+retain their cables. Incompatible existing cables remain visibly invalid and pause
+that graph until repaired; they are never silently reinterpreted or disconnected.
+Image-to-vector and vector-to-image boundaries remain explicit conversion nodes.
+
 Video/image Source also exposes **Face landmarks** and each Face Cables effect's
 **Saved scene depth**, alongside the existing audio-analysis outputs. Tooltips mark
 saved, missing or stale data. Precise tracking is restored from its existing local
@@ -355,6 +397,12 @@ planes and baked Face Cables:
 Decoded frame + UV transform -> Image texture -> Surface material
 Plane geometry / Source geometry + Material -> Mesh -> 3D transform -> 3D render
 ```
+
+`Primitive geometry` is another input to the same Mesh node. Its Box, Sphere and
+Cylinder choices persist on the node and render through the existing native mesh
+path; Box is the default. The connected material currently supplies solid tint
+and opacity to these primitives. Image textures and UV transforms remain plane/
+source-surface features rather than being silently projected onto a primitive.
 
 Rewiring changes rendering: a material without a texture uses its solid color;
 a mesh without geometry/material or a disconnected render output produces no

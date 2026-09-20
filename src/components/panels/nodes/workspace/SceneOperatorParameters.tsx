@@ -9,6 +9,7 @@ import { ResolveInspectorNumberRow } from '../../properties/resolveInspector/Res
 import { ResolveInspectorSection, ResolveInspectorRow, ResolveInspectorIconButton } from '../../properties/resolveInspector/ResolveInspectorPrimitives';
 import { InspectorSelect } from '../../../inspector/InspectorSelect';
 import { TransformTab } from '../../properties/TransformTab';
+import { scenePrimitiveShape, type ScenePrimitiveShape } from '../../../../services/operators/scenePrimitive';
 
 export function SceneOperatorParameters({ clip, nodeId, onAdded }: { clip: TimelineClip; nodeId: string; onAdded: (id: string) => void }) {
   const [message, setMessage] = useState('');
@@ -24,6 +25,10 @@ export function SceneOperatorParameters({ clip, nodeId, onAdded }: { clip: Timel
       onEnabledChange={locked ? undefined : () => safely(() => actions.toggleBypass(nodeId))}>
       <p className="face-cable-hint">{operator.description}</p>
       <p className="face-cable-hint">{sceneBypassDescription(operator.id)}</p>
+      {operator.id === 'geometry.primitive' && <ResolveInspectorRow label="Shape"><InspectorSelect ariaLabel="Primitive shape" value={scenePrimitiveShape(node)}
+        disabled={locked}
+        options={[{ value: 'box', label: 'Box' }, { value: 'sphere', label: 'Sphere' }, { value: 'cylinder', label: 'Cylinder' }]}
+        onChange={value => safely(() => actions.setPrimitiveShape(nodeId, value as ScenePrimitiveShape))} /></ResolveInspectorRow>}
       {operator.parameters.map(spec => {
         const binding = node.bindings[spec.id], value = typeof binding === 'string' ? definition.params[binding] ?? spec.default : spec.default;
         return <ResolveInspectorNumberRow key={spec.id} label={spec.label} ariaLabel={`${operator.label} ${spec.label}`} value={Number(value)} defaultValue={Number(spec.default)} min={spec.min ?? 0} max={spec.max ?? 1} step={spec.step ?? 0.01}

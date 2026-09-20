@@ -11,8 +11,12 @@ import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/ex
 import { startBatch, endBatch } from '../../stores/historyStore';
 
 export function mathModeOptions(node: NodeGraphNode) {
-  if (node.operatorId?.startsWith('math.')) return SCALAR_FIELD_OPERATORS.filter(op => op.id.startsWith('math.'))
-    .map(op => ({ value: op.id, label: op.label }));
+  // Typed image/vector math operators share the `math.*` namespace but not the
+  // scalar-field executable family. Never offer scalar-field modes for them.
+  if (node.operatorId?.startsWith('math.') && SCALAR_FIELD_OPERATORS.some(operator => operator.id === node.operatorId)) {
+    return SCALAR_FIELD_OPERATORS.filter(op => op.id.startsWith('math.'))
+      .map(op => ({ value: op.id, label: op.label }));
+  }
   if (node.operatorId === 'flock.math') return (getFlockOperator('flock.math')?.params.find(p => p.id === 'op')?.options ?? [])
     .map(option => ({ value: option.value, label: option.label }));
   return [];

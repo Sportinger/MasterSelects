@@ -25,6 +25,7 @@ import { resolvePlanarTrackingProjection } from '../../services/planarTracking/t
 import { IDENTITY_TRACKING_SOURCE_TRANSFORM } from '../../services/planarTracking/trackingSourceTransform';
 import { indexTrackingSourceTransforms } from './trackingSourceFrames';
 import { nodePreviewTextureTap } from '../../services/nodePreview/NodePreviewTextureTap';
+import { captureImageOperatorPreviews } from '../../services/nodePreview/imageOperatorTexturePreviews';
 import {
   layerPositionForTerrainScreenAnchor,
   resolveTerrainScreenAnchors,
@@ -519,6 +520,14 @@ export class Compositor {
         continue;
       }
 
+      if (inlineEffects.operatorProgram) {
+        const effect = adjustmentEffects.find(item => item.enabled && item.type === 'invert');
+        const source = useExternalTexture && sourceExternalTexture
+          ? { kind: 'external' as const, texture: sourceExternalTexture }
+          : sourceTextureView ? { kind: 'texture' as const, view: sourceTextureView } : undefined;
+        if (effect && source) captureImageOperatorPreviews({ effect, source, device: state.device,
+          encoder: commandEncoder, sampler: state.sampler, width: sourceWidth, height: sourceHeight });
+      }
       let pipeline: GPURenderPipeline;
       let bindGroup: GPUBindGroup;
       // Text canvases are edited in-place and can also be replaced when the
@@ -530,7 +539,7 @@ export class Compositor {
         if (!isStaticTextureSource) {
           this.compositorPipeline.invalidateBindGroupCache(resourceLayerId);
         }
-        pipeline = this.compositorPipeline.getExternalCompositePipeline()!;
+        pipeline = this.compositorPipeline.getExternalCompositePipeline(inlineEffects.operatorProgram)!;
         bindGroup = this.compositorPipeline.createExternalCompositeBindGroup(
           state.sampler,
           readView,
@@ -541,7 +550,7 @@ export class Compositor {
           isPingBase
         );
       } else if (sourceTextureView) {
-        pipeline = this.compositorPipeline.getCompositePipeline()!;
+        pipeline = this.compositorPipeline.getCompositePipeline(inlineEffects.operatorProgram)!;
         // When complex effects are applied, the final texture view alternates between
         // effectTempView/effectTempView2 depending on effect count parity.
         // Only truly static image/text layers may reuse cached bind groups.

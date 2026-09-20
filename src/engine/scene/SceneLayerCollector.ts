@@ -11,6 +11,7 @@ import { mergeLightClipSettings } from '../../types/light';
 import { isMobileAppleWebKit } from '../../utils/mobileAppleWebKit';
 import { applySceneOperatorGraph } from './sceneGraphRuntime';
 import { compileVoxelGraph } from '../../services/operators/voxelGraph';
+import { effectOperatorCompileParams } from '../../services/operators/effectGraphOwner';
 
 function getStableSourceDimensions(
   data: LayerRenderData,
@@ -233,7 +234,7 @@ export function collectScene3DLayers(
         ? layer.effects?.find((effect) => effect.enabled && effect.type === 'voxel-relief')
         : undefined;
       if (base.kind === 'voxel' && voxelEffect) {
-        const voxelGraphPlan = compileVoxelGraph(voxelEffect.params);
+        const voxelGraphPlan = compileVoxelGraph(effectOperatorCompileParams(voxelEffect));
         if (!voxelGraphPlan.visible || voxelGraphPlan.opacity <= 0) continue;
         result.push({
           ...base,

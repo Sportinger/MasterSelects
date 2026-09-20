@@ -112,6 +112,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
         onSelectNode(node.id);
       }}
       onPointerDown={event => {
+        if (event.button === 2 && event.pointerType === 'mouse') return;
         event.preventDefault(); event.currentTarget.blur(); onStartNodeDrag(event, node);
       }}
       onPointerMove={onNodePointerMove}

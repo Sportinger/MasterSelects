@@ -16,6 +16,7 @@ import { scalarFieldBounds } from '../../src/services/operators/scalarFieldBound
 import { expandVoxelGeometry } from '../../src/services/operators/expandVoxelGeometry';
 import { voxelPreview } from '../../src/services/nodePreview/voxelPreviews';
 import { buildEffectOperatorGraph } from '../../src/services/nodeGraph/effectGraphProjection';
+import { effectOperatorCompileParams } from '../../src/services/operators/effectGraphOwner';
 
 const initial = useTimelineStore.getState();
 afterEach(() => useTimelineStore.setState(initial));
@@ -94,6 +95,13 @@ describe('Executable Voxel Relief operator group', () => {
     expect(compileVoxelGraph(paramsFor(connected, { voxel_uv_scaleU: 2, colorOffset: 0.4, voxel_material_red: 0.25, voxel_material_opacity: 0.6 })))
       .toMatchObject({ heightUV: [2, 1, 0, 0], colorUV: [1, 1, 0.4, 0], tint: [0.25, 1, 1], opacity: 0.6 });
   });
+  it.each([['geometry.box', 'box', 0], ['geometry.sphere', 'sphere', 1], ['geometry.cylinder', 'cylinder', 2]] as const)(
+    'persists and packs the %s primitive through preview and native plans', (operator, primitiveShape, packedShape) => {
+      const graph = createDefaultVoxelGraph(); graph.nodes.find(node => node.id === 'box')!.operator = operator;
+      const plan = compileVoxelGraph(paramsFor(graph));
+      expect(plan).toMatchObject({ visible: true, primitiveShape, boxSize: [1, 1, 1] });
+      expect(voxelRelief.packUniforms(paramsFor(graph), 320, 180)![26]).toBe(packedShape);
+    });
   it('disconnects and bypasses real processing without reverting to a hidden default graph', () => {
     const graph = createDefaultVoxelGraph();
     graph.edges = graph.edges.filter(edge => edge.to !== 'render' || edge.input !== 'scene');
@@ -127,7 +135,7 @@ describe('Executable Voxel Relief operator group', () => {
     editEffectGraph(clip.id, 'relief', 'Edit relief', (graph, params) => { params[graph.nodes.find(node => node.id === id)!.bindings.b as string] = 0.3; });
     actions.connectPorts({ fromNodeId: id, fromPortId: 'value', toNodeId: 'base', toPortId: 'a' });
     const current = useTimelineStore.getState().clips[0];
-    expect(compileVoxelGraph(current.effects[0].params).maxHeight).toBeCloseTo(0.315);
+    expect(compileVoxelGraph(effectOperatorCompileParams(current.effects[0])).maxHeight).toBeCloseTo(0.315);
     const unified = buildUnifiedClipGraph(buildClipNodeGraphDocument(current), current);
     expect(unified.groups?.some(group => group.id === 'effect:relief')).toBe(true);
     expect(parameterNode(current, 'effect.relief.height', unified.nodes)?.binding).toMatchObject({ kind: 'effect-operator', nodeId: 'height' });

@@ -17,7 +17,9 @@ export function NodeGraphPortView({ node, port, connectionDraft, onStartConnecti
   const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const touchCleanup = useRef<(() => void) | undefined>(undefined);
   const info = describeNodePort(port), isDraftStart = connectionDraft?.nodeId === node.id && connectionDraft.portId === port.id;
-  const connectable = connectionDraft && canConnectPortReferences(connectionDraft, createPortReference(node.id, port));
+  const reference = createPortReference(node.id, port);
+  const adaptiveTarget = connectionDraft?.target?.nodeId === node.id && connectionDraft.target.portId === port.id;
+  const connectable = connectionDraft && (canConnectPortReferences(connectionDraft, reference) || adaptiveTarget);
   const keepOpen = () => { clearTimeout(closeTimer.current); };
   const show = () => {
     keepOpen(); const rect = anchor.current?.getBoundingClientRect(); if (!rect) return;

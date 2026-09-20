@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import type { NodeGraphConnectionRequest, NodeGraphNode, NodeGraphPort } from '../../../../types/nodeGraph';
 import { canConnectPortReferences, createPortReference, getPortCenter, type ConnectionDraft, type NodeGraphPoint } from './canvasGeometry';
 import type { ConnectionPlug } from './connectionPlugs';
+import { getEffectOperator } from '../../../../services/operators/operatorRegistry';
 
 interface Options {
   graphId: string;
@@ -62,12 +63,23 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, getGraphP
     const port = (element?.dataset.direction === 'input' ? node?.inputs : node?.outputs)?.find(p => p.id === element?.dataset.portId);
     return node && port ? createPortReference(node.id, port) : undefined;
   };
+  const compatible = (a: ReturnType<typeof createPortReference>, b: ReturnType<typeof createPortReference>) => {
+    if (canConnectPortReferences(a, b)) return true;
+    if (a.readOnly || b.readOnly || a.nodeId === b.nodeId || a.direction === b.direction) return false;
+    const output = a.direction === 'output' ? a : b, input = a.direction === 'input' ? a : b;
+    const outputNode = nodesById.get(output.nodeId), inputNode = nodesById.get(input.nodeId);
+    const outputOperator = outputNode?.operatorId ? getEffectOperator(outputNode.operatorId) : undefined;
+    const inputOperator = inputNode?.operatorId ? getEffectOperator(inputNode.operatorId) : undefined;
+    const vector = (key: string) => ['operator:vec2', 'operator:vec3', 'operator:vec4'].includes(key);
+    return (input.portId === 'value' && inputOperator?.family === 'vector.split' && vector(output.compatibilityKey))
+      || (output.portId === 'value' && outputOperator?.family === 'vector.combine' && vector(input.compatibilityKey));
+  };
   const moveConnectionDrag = (event: ReactPointerEvent): boolean => {
     const draft = currentDraft.current;
     if (!draft || draft.pointerId !== event.pointerId) return false;
     const target = portAt(document.elementFromPoint(event.clientX, event.clientY));
     update({ ...draft, end: getGraphPoint(event.clientX, event.clientY),
-      target: target && canConnectPortReferences(draft, target) ? target : undefined,
+      target: target && compatible(draft, target) ? target : undefined,
       moved: draft.moved || Math.hypot(event.clientX - draft.originClient!.x, event.clientY - draft.originClient!.y) >= 6 });
     return true;
   };
@@ -79,7 +91,7 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, getGraphP
     const port = portAt(target);
     cancel();
     if (draft.reconnectEdgeId && !draft.moved) return true;
-    if (port && canConnectPortReferences(draft, port)) {
+    if (port && compatible(draft, port)) {
       const connection = draft.direction === 'output'
         ? { fromNodeId: draft.nodeId, fromPortId: draft.portId, toNodeId: port.nodeId, toPortId: port.portId }
         : { fromNodeId: port.nodeId, fromPortId: port.portId, toNodeId: draft.nodeId, toPortId: draft.portId };

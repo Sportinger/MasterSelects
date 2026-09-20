@@ -25,6 +25,9 @@ export function resolveMeshLayerColor(
   if (layer.kind === 'text3d') {
     return parseColor(layer.text3DProperties?.color);
   }
+  if (layer.kind === 'primitive' && layer.surfacePlan) {
+    return [...layer.surfacePlan.tint, 1];
+  }
   if (layer.kind === 'model' && modelBaseColor) {
     return modelBaseColor;
   }

@@ -99,6 +99,7 @@ import {
 } from './workerGpuFrameStackHostProjection';
 import { projectWorkerGpuFrameStack } from './workerGpuFrameStackProjector';
 import { closeWorkerGpuFrameStackTransferables } from './workerGpuFrameStackContract';
+import { workerGpuOperatorProgramCacheKey } from './workerGpuOperatorPipeline';
 
 const log = Logger.create('WorkerPresentingRenderHostPort');
 const WORKER_PRESENTING_TARGET_FPS = 60;
@@ -1714,6 +1715,7 @@ class WorkerPresentingRenderHostPortCore {
       inlineContrast: source.inlineContrast,
       inlineSaturation: source.inlineSaturation,
       inlineInvert: source.inlineInvert,
+      operatorProgram: source.operatorProgram,
       hueShift: source.hueShift,
       pixelateSize: source.pixelateSize,
       kaleidoscopeSegments: source.kaleidoscopeSegments,
@@ -2082,6 +2084,7 @@ class WorkerPresentingRenderHostPortCore {
         numberTargetKey(layer.inlineContrast),
         numberTargetKey(layer.inlineSaturation),
         layer.inlineInvert === true ? 'invert' : 'no-invert',
+        workerGpuOperatorProgramCacheKey(layer.operatorProgram),
         numberTargetKey(layer.hueShift),
         numberTargetKey(layer.pixelateSize),
         numberTargetKey(layer.kaleidoscopeSegments),

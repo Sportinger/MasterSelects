@@ -239,6 +239,16 @@ function isPlainObject(value: object): boolean {
   return proto === Object.prototype || proto === null;
 }
 
+/** These objects are dictionaries whose property names are user/domain IDs.
+ * A node can legitimately be named `source`, `texture`, or another runtime-like token. */
+function isDurableIdMapPath(path: string): boolean {
+  return path.endsWith('.nodeGraph.previews.nodes')
+    || path.endsWith('.nodeGraph.scene.graph.layout')
+    || path.endsWith('.operatorGraph.layout')
+    || (path.includes('.nodeGraph.canvasPlacements.') && path.endsWith('.nodes'))
+    || (path.includes('.nodeGraph.groups.') && path.endsWith('.nodeLayouts'));
+}
+
 export function findHistoryStateBoundaryViolations(value: unknown): string[] {
   const violations: string[] = [];
   const stack = new WeakSet<object>();
@@ -296,15 +306,9 @@ export function findHistoryStateBoundaryViolations(value: unknown): string[] {
       // serializable and must pass: e.g. the mod-matrix route's string
       // `source: 'velocity'` shares the name of a media clip's runtime `source`
       // handle but is durable JSON (#298).
-      // Node layouts are dictionaries keyed by IDs such as "source" or "texture".
-      // Only its exact, plain {x, y} coordinates qualify for this exception.
-      const sceneLayout = (path.endsWith('.nodeGraph.scene.graph.layout')
-        || /\.nodeGraph\.canvasPlacements\.[^.]+\.nodes$/.test(path))
-        && child !== null && typeof child === 'object' && isPlainObject(child)
-        && Object.keys(child).length === 2 && 'x' in child && 'y' in child
-        && typeof child.x === 'number' && Number.isFinite(child.x)
-        && typeof child.y === 'number' && Number.isFinite(child.y);
-      if (HISTORY_RUNTIME_PAYLOAD_KEYS.has(key) && child !== null && typeof child === 'object' && !sceneLayout) {
+      // Durable keyed maps use arbitrary node IDs. Their values are still fully
+      // traversed, so a real videoElement/File/etc. nested inside remains rejected.
+      if (HISTORY_RUNTIME_PAYLOAD_KEYS.has(key) && child !== null && typeof child === 'object' && !isDurableIdMapPath(path)) {
         violations.push(`${childPath}: runtime payload key`);
         continue;
       }

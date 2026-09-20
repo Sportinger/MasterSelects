@@ -85,7 +85,7 @@ existing systems, and check their work:
 | --- | --- |
 | **Video** | Edit multiple tracks, nest compositions, work with proxies, sync multicam footage, and import Premiere Pro sequences. |
 | **Nodes** | One clip canvas with nested groups, executable texture/material/geometry nodes, detailed face/depth processing, synchronized effect controls and a searchable catalog. Smooth, continuous exponential wheel and trackpad zoom stays anchored to the pointer. An OffscreenCanvas worker draws the graph and directional signal animation on separate cached layers. Compact animation areas show existing keyframes directly on their target nodes; extract a keyframe node to share a curve, with its cables revealed on selection. A collapsible Stabilization group exposes landmark conversion, baked transform curves and their clip target, with its own bypass and gray inactive keys in the timeline and curve editors. Executable 3D nodes support bypass, including transforms already recorded in supported Face Cables bakes. Typed ports show accepted formats; Video Source exposes reusable tracking and saved depth alongside audio analysis. |
-| **Color & effects** | Grade through Color Nodes or the synchronized Color controls, inspect curves and scopes, combine GPU effects and transitions, and animate masks and properties with keyframes. |
+| **Color & effects** | Grade through Color Nodes or the synchronized Color controls, inspect curves and scopes, combine GPU effects and transitions, and animate masks and properties with keyframes. Invert exposes an executable group of shared vector and math nodes (`1 − RGB`, with alpha preserved), fused into the existing render pass. Analog Signal Lab exposes its PAL, RF, VHS, receiver, decoder, and CRT processing as an editable compute graph. |
 | **Audio** | Edit waveforms and spectrograms, mix tracks with effects and sends, record audio, and separate stems. |
 | **Motion & tracking** | Animate text, shapes, Lottie, and Rive assets; create captions; track faces and surfaces; bypass baked face/lip stabilization without deleting keyframes; and attach graphics to tracked motion. |
 | **3D** | Combine footage with models, lights, cameras, and Gaussian splats in a shared scene. |
@@ -125,6 +125,12 @@ nodes. Math nodes offer an operation dropdown on the card and in the inspector,
 editable operands, and live connected values. Number-only previews use real text
 instead of generated thumbnails; the number being edited updates immediately
 while downstream calculations catch up.
+
+Geometry nodes can select Box, Sphere or Cylinder while retaining Box as the
+default. Voxel Relief uses the selected topology in both its 2D raymarch and
+native instanced render; scene primitives use the existing native mesh renderer.
+Scene-graph primitives currently support solid tint and opacity, not video-texture
+or UV material mapping.
 
 Media imports report processing and save failures. Failed audio-proxy writes can
 be retried; project packages follow the configured save policy.

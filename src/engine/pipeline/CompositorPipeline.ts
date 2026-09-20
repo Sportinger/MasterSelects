@@ -3,6 +3,7 @@
 import type { Layer } from '../core/types';
 import type { VideoRotationDegrees } from '../webcodecs/videoTrackOrientation';
 import { createCompositorPipelineResources } from './compositor/pipelineResources';
+import { createOperatorCompositePipeline } from './compositor/operatorPipeline';
 import {
   COMPOSITOR_UNIFORM_SIZE,
   shouldUpdateLayerUniforms,
@@ -22,6 +23,7 @@ export class CompositorPipeline {
   private copyPipeline: GPURenderPipeline | null = null;
   private externalCopyPipeline: GPURenderPipeline | null = null;
   private externalCopyPipelines = new Map<VideoRotationDegrees, GPURenderPipeline>();
+  private operatorPipelines = new Map<string, GPURenderPipeline>();
 
   // Bind group layouts
   private compositeBindGroupLayout: GPUBindGroupLayout | null = null;
@@ -76,12 +78,28 @@ export class CompositorPipeline {
     this.externalCopyPipelines = new Map(resources.externalCopyPipelines);
   }
 
-  getCompositePipeline(): GPURenderPipeline | null {
+  getCompositePipeline(program?: { key: string; wgsl: string }): GPURenderPipeline | null {
+    if (program) return this.getOperatorPipeline(false, program);
     return this.compositePipeline;
   }
 
-  getExternalCompositePipeline(): GPURenderPipeline | null {
+  getExternalCompositePipeline(program?: { key: string; wgsl: string }): GPURenderPipeline | null {
+    if (program) return this.getOperatorPipeline(true, program);
     return this.externalCompositePipeline;
+  }
+
+  private getOperatorPipeline(external: boolean, program: { key: string; wgsl: string }): GPURenderPipeline {
+    const key = `${external}:${program.key}`;
+    let pipeline = this.operatorPipelines.get(key);
+    if (!pipeline) {
+      const layout = external ? this.externalCompositeBindGroupLayout : this.compositeBindGroupLayout;
+      if (!layout) throw new Error('Composite pipeline is not initialized.');
+      pipeline = createOperatorCompositePipeline(this.device, layout, external, program.wgsl);
+      // Animated constants may create specializations; keep runtime caches bounded.
+      if (this.operatorPipelines.size >= 64) this.operatorPipelines.delete(this.operatorPipelines.keys().next().value!);
+      this.operatorPipelines.set(key, pipeline);
+    }
+    return pipeline;
   }
 
   getCompositeBindGroupLayout(): GPUBindGroupLayout | null {
@@ -305,6 +323,7 @@ export class CompositorPipeline {
   }
 
   destroy(): void {
+    this.operatorPipelines.clear();
     // Destroy per-layer uniform buffers
     for (const buffer of this.layerUniformBuffers.values()) {
       buffer.destroy();

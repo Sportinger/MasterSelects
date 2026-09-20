@@ -20,6 +20,7 @@ export interface VoxelGraphPlan {
   tint: [number, number, number];
   opacity: number;
   boxSize: [number, number, number];
+  primitiveShape: 'box' | 'sphere' | 'cylinder';
   maxHeight: number;
   field: ScalarFieldProgram;
   params: Record<string, number | boolean | string>;
@@ -66,7 +67,7 @@ export function compileVoxelGraph(params: Params): VoxelGraphPlan {
   };
   const textureUV = (texture?: BoundOperatorNode) => voxelTextureMapping(graph, texture, (node, key) => Number(value(node, key)), node => operatorEnabled(node, params));
   const plan: VoxelGraphPlan = { visible: false, heightUV: [1, 1, 0, 0], colorUV: [1, 1, 0, 0], tint: [1, 1, 1], opacity: 1, textured: true,
-    boxSize: [1, 1, 1], maxHeight: 0, field: { operations: [], output: 0 },
+    boxSize: [1, 1, 1], primitiveShape: 'box', maxHeight: 0, field: { operations: [], output: 0 },
     params: Object.fromEntries(Object.entries(VOXEL_RELIEF_PARAMS).map(([id, spec]) => [id, params[id] as number | boolean | string ?? spec.default])) };
   const render = graph.nodes.find(node => node.operator === 'render.voxel')!;
   copy(render);
@@ -80,9 +81,10 @@ export function compileVoxelGraph(params: Params): VoxelGraphPlan {
     copy(geometry); plan.heightUV = heightUV;
   } else if (geometry.operator === 'geometry.instances') {
     const grid = input(geometry, 'points'), box = input(geometry, 'geometry'), field = input(geometry, 'height');
-    if (grid?.operator !== 'geometry.grid' || box?.operator !== 'geometry.box' || !field) return plan;
+    if (grid?.operator !== 'geometry.grid' || !box || !['geometry.box', 'geometry.sphere', 'geometry.cylinder'].includes(box.operator) || !field) return plan;
     copy(grid); copy(geometry);
     plan.boxSize = ['width', 'height', 'depth'].map((key, axis) => Math.max(0, Math.min(axis === 2 ? 4 : 1, Number(value(box, key))))) as [number, number, number];
+    plan.primitiveShape = box.operator.slice('geometry.'.length) as VoxelGraphPlan['primitiveShape'];
     plan.field = compileScalarField(graph, field, (node, name) => Number(value(node, name)), node => operatorEnabled(node, params));
     if (plan.field.textureNodeId) {
       const heightUV = textureUV(nodes.get(plan.field.textureNodeId)); if (!heightUV) return plan;

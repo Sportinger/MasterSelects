@@ -12,6 +12,7 @@ import { DEFAULT_COMPOSITION } from '../../src/stores/mediaStore/constants';
 import { DEFAULT_TRANSFORM, useTimelineStore } from '../../src/stores/timeline';
 import type { Effect, Layer, TimelineClip, TimelineTrack } from '../../src/types';
 import { createDefaultMotionLayerDefinition } from '../../src/types/motionDesign';
+import { createDefaultInvertImageGraph, compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
 
 const initialTimelineState = useTimelineStore.getState();
 const initialMediaState = useMediaStore.getState();
@@ -168,6 +169,25 @@ describe('MD7 Motion Adjustment LayerBuilder integration', () => {
     cleanupLayerBuilder();
     useTimelineStore.setState(initialTimelineState);
     vi.mocked(useMediaStore.getState).mockReturnValue(initialMediaState);
+  });
+
+  it('preserves an edited operator graph through adjustment preview and export normalization', () => {
+    const track = videoTrack('track:graph-adjustment');
+    const operatorGraph = createDefaultInvertImageGraph();
+    operatorGraph.nodes.find(node => node.id === 'one')!.constants = { value: 0.5 };
+    const clip = adjustmentClip('clip:graph-adjustment', track.id, { effects: [{
+      id: 'effect:graph', type: 'invert', name: 'Invert', enabled: true, params: {}, operatorGraph,
+    }] });
+    useTimelineStore.setState({ tracks: [track], clips: [clip], playheadPosition: 1,
+      isPlaying: false, isDraggingPlayhead: false, clipKeyframes: new Map() });
+    const preview = new LayerBuilderService().buildLayersFromStore()[0];
+    initializeLayerBuilder([track]);
+    const exported = buildLayersAtTime(exportContext(track, clip), new Map(), null, false)[0];
+    for (const layer of [preview, exported]) {
+      expect(layer.effects[0].operatorGraph).toEqual(operatorGraph);
+      expect(compileImageOperatorGraph(layer.effects[0].operatorGraph!, layer.effects[0].params).key)
+        .toBe(compileImageOperatorGraph(operatorGraph).key);
+    }
   });
 
   it('normalizes supported effects identically for main preview and export', () => {

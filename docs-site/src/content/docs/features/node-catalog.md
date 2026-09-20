@@ -7,7 +7,9 @@ title: "Node Catalog"
 
 Open **Nodes → Catalog** to search current definitions by name, ID or signal type.
 Search also matches signal format descriptions. Filter by supported context and expand an entry for inputs, outputs, default
-parameters and keyframe support. The inventory reads the registries at runtime;
+parameters, keyframe support, canonical family/variant, backend, fusion, state and invalidation. Where a registry exposes numeric
+ranges or signal formats, the same values flow into the catalog. Remaining local implementations are marked from their owning
+registry rather than maintained as a parallel migration checklist. The inventory reads the registries at runtime;
 it does not duplicate definitions. It is a reference; add operators from the
 selected node's inspector or the appropriate domain's Add menu.
 
@@ -30,6 +32,7 @@ inputs, recorded dependencies and cycles before a connection is changed.
 | `SCALAR_FIELD_OPERATORS` | Luminance and scalar field arithmetic, fused into the relief GPU pass |
 | `listFlockOperators` | Flock's typed compiler and GPU simulation; `sharedOperator` identifies shared implementations |
 | `EFFECT_REGISTRY` | Existing image effects and composite effect groups |
+| `IMAGE_OPERATORS` | Stateless image-local operations lowered by the fused image DAG compiler |
 
 The catalog reports actual supported contexts. A common port name does not imply
 that every domain can execute every operator. Color grading, audio analysis and
@@ -38,6 +41,16 @@ they are visible in the clip graph but are not yet registered in this inventory.
 Model/splat/Flock/voxel renderers have not been replaced by the image-surface
 executor. This inventory deliberately distinguishes what exists from what still
 needs a compatible executor adapter.
+
+The matrix reports `unspecified` or `unknown` when an older registry definition has not yet
+declared fusion, state, unit, value format, consumer, or implementation-ownership metadata. It does not infer capabilities from labels.
+Port formats come directly from shared signal contracts; numeric ranges and steps
+come directly from parameter definitions. “Local” means an owning compiler or
+effect registry still has an implementation pending consolidation, while “shared”
+is only shown when its registry declares or references one.
+Existing effect entries expose their registered pipeline kind and feedback flag;
+their “local” marker means the effect registry still owns that implementation,
+not that a compatible operator migration has already been completed.
 
 ## Face and depth processing
 

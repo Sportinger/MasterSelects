@@ -4,27 +4,29 @@ import type {
   WorkerGpuPresentResult,
   WorkerGpuTargetSurface,
 } from './workerGpuTargetSurface';
+import { getCachedWorkerOperatorPipeline, specializeLegacyWorkerLayerShader, uploadWorkerVideoFrameTexture,
+  workerTexture2dShader, workerVideoFrameNeedsStraightAlphaUpload } from './workerGpuOperatorPipeline';
 
 interface WorkerGpuVideoFramePresenterResources {
   readonly pipeline: GPURenderPipeline;
+  readonly texturePipeline: GPURenderPipeline;
   readonly sampler: GPUSampler;
 }
-
 interface WorkerGpuVideoFrameLayerPresenterResources {
   readonly compositePipeline: GPURenderPipeline;
+  readonly textureCompositePipeline: GPURenderPipeline;
   readonly displayPipeline: GPURenderPipeline;
   readonly sampler: GPUSampler;
+  readonly operatorPipelines: Map<string, GPURenderPipeline>;
   textureA: GPUTexture | null;
   textureB: GPUTexture | null;
   width: number;
   height: number;
 }
-
 interface WorkerGpuVideoFrameDimensions {
   readonly width: number;
   readonly height: number;
 }
-
 export interface WorkerGpuVideoFramePresentOptions extends WorkerGpuPresentBaseOptions {
   readonly frame: VideoFrame;
   readonly timestampSeconds?: number | null;
@@ -39,6 +41,7 @@ export interface WorkerGpuVideoFramePresentLayer {
   readonly inlineContrast?: number;
   readonly inlineSaturation?: number;
   readonly inlineInvert?: boolean;
+  readonly operatorProgram?: { readonly key: string; readonly wgsl: string };
 }
 
 export interface WorkerGpuVideoFrameLayerPresentOptions extends WorkerGpuPresentBaseOptions {
@@ -217,6 +220,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
 const presenterResourcesBySurface = new WeakMap<WorkerGpuTargetSurface, WorkerGpuVideoFramePresenterResources>();
 const layerPresenterResourcesBySurface = new WeakMap<WorkerGpuTargetSurface, WorkerGpuVideoFrameLayerPresenterResources>();
 
+
 const BLEND_MODE_TO_GPU_INDEX: Record<string, number> = {
   normal: 0,
   dissolve: 0,
@@ -261,63 +265,41 @@ function getVideoFrameDimensions(frame: VideoFrame): WorkerGpuVideoFrameDimensio
 }
 
 function createPresenterResources(surface: WorkerGpuTargetSurface): WorkerGpuVideoFramePresenterResources {
-  const pipeline = surface.device.createRenderPipeline({
-    layout: 'auto',
-    vertex: {
-      module: surface.device.createShaderModule({ code: VIDEO_FRAME_SHADER }),
-      entryPoint: 'vertexMain',
-      buffers: [],
-    },
-    fragment: {
-      module: surface.device.createShaderModule({ code: VIDEO_FRAME_SHADER }),
-      entryPoint: 'fragmentMain',
-      targets: [{ format: surface.format }],
-    },
-    primitive: {
-      topology: 'triangle-list',
-    },
-  });
-  return {
-    pipeline,
-    sampler: surface.device.createSampler({
-      magFilter: 'linear',
-      minFilter: 'linear',
-    }),
-  };
+  const module = surface.device.createShaderModule({ code: VIDEO_FRAME_SHADER });
+  const pipeline = surface.device.createRenderPipeline({ layout: 'auto',
+    vertex: { module, entryPoint: 'vertexMain', buffers: [] },
+    fragment: { module, entryPoint: 'fragmentMain', targets: [{ format: surface.format }] },
+    primitive: { topology: 'triangle-list' } });
+  const textureSource = workerTexture2dShader(VIDEO_FRAME_SHADER);
+  const textureModule = surface.device.createShaderModule({ code: textureSource });
+  const texturePipeline = surface.device.createRenderPipeline({ layout: 'auto',
+    vertex: { module: textureModule, entryPoint: 'vertexMain', buffers: [] },
+    fragment: { module: textureModule, entryPoint: 'fragmentMain', targets: [{ format: surface.format }] },
+    primitive: { topology: 'triangle-list' } });
+  return { pipeline, texturePipeline, sampler: surface.device.createSampler({ magFilter: 'linear', minFilter: 'linear' }) };
 }
 
 function createLayerPresenterResources(surface: WorkerGpuTargetSurface): WorkerGpuVideoFrameLayerPresenterResources {
-  const compositePipeline = surface.device.createRenderPipeline({
-    layout: 'auto',
-    vertex: {
-      module: surface.device.createShaderModule({ code: VIDEO_FRAME_LAYER_COMPOSITE_SHADER }),
-      entryPoint: 'vertexMain',
-      buffers: [],
-    },
-    fragment: {
-      module: surface.device.createShaderModule({ code: VIDEO_FRAME_LAYER_COMPOSITE_SHADER }),
-      entryPoint: 'fragmentMain',
-      targets: [{ format: 'rgba8unorm' }],
-    },
+  const compositeModule = surface.device.createShaderModule({ code: VIDEO_FRAME_LAYER_COMPOSITE_SHADER });
+  const compositePipeline = surface.device.createRenderPipeline({ layout: 'auto',
+    vertex: { module: compositeModule, entryPoint: 'vertexMain', buffers: [] },
+    fragment: { module: compositeModule, entryPoint: 'fragmentMain', targets: [{ format: 'rgba8unorm' }] },
+    primitive: { topology: 'triangle-list' } });
+  const textureCompositePipeline = surface.device.createRenderPipeline({
+    layout: 'auto', vertex: { module: surface.device.createShaderModule({ code: workerTexture2dShader(VIDEO_FRAME_LAYER_COMPOSITE_SHADER) }), entryPoint: 'vertexMain' },
+    fragment: { module: surface.device.createShaderModule({ code: workerTexture2dShader(VIDEO_FRAME_LAYER_COMPOSITE_SHADER) }), entryPoint: 'fragmentMain', targets: [{ format: 'rgba8unorm' }] },
     primitive: { topology: 'triangle-list' },
   });
-  const displayPipeline = surface.device.createRenderPipeline({
-    layout: 'auto',
-    vertex: {
-      module: surface.device.createShaderModule({ code: VIDEO_FRAME_LAYER_DISPLAY_SHADER }),
-      entryPoint: 'vertexMain',
-      buffers: [],
-    },
-    fragment: {
-      module: surface.device.createShaderModule({ code: VIDEO_FRAME_LAYER_DISPLAY_SHADER }),
-      entryPoint: 'fragmentMain',
-      targets: [{ format: surface.format }],
-    },
-    primitive: { topology: 'triangle-list' },
-  });
+  const displayModule = surface.device.createShaderModule({ code: VIDEO_FRAME_LAYER_DISPLAY_SHADER });
+  const displayPipeline = surface.device.createRenderPipeline({ layout: 'auto',
+    vertex: { module: displayModule, entryPoint: 'vertexMain', buffers: [] },
+    fragment: { module: displayModule, entryPoint: 'fragmentMain', targets: [{ format: surface.format }] },
+    primitive: { topology: 'triangle-list' } });
   return {
     compositePipeline,
+    textureCompositePipeline,
     displayPipeline,
+    operatorPipelines: new Map(),
     sampler: surface.device.createSampler({
       magFilter: 'linear',
       minFilter: 'linear',
@@ -328,6 +310,7 @@ function createLayerPresenterResources(surface: WorkerGpuTargetSurface): WorkerG
     height: 0,
   };
 }
+
 
 function getPresenterResources(surface: WorkerGpuTargetSurface): WorkerGpuVideoFramePresenterResources {
   const existing = presenterResourcesBySurface.get(surface);
@@ -439,6 +422,7 @@ export async function presentGpuVideoFrameLayers(
   const submittedWorkDoneResolved = false;
   let pass: GPURenderPassEncoder | null = null;
   const uniformBuffers: GPUBuffer[] = [];
+  const uploadedTextures: GPUTexture[] = [];
 
   try {
     if (options.layers.length === 0) {
@@ -474,18 +458,25 @@ export async function presentGpuVideoFrameLayers(
     let readTexture = resources.textureA;
     let writeTexture = resources.textureB;
     for (const layer of options.layers) {
-      const externalTexture = surface.device.importExternalTexture({
-        source: layer.frame,
-        colorSpace: surface.colorSpace ?? 'srgb',
-      });
+      const uploadStraightAlpha = workerVideoFrameNeedsStraightAlphaUpload(layer.frame);
+      const uploadedTexture = uploadStraightAlpha
+        ? uploadWorkerVideoFrameTexture(surface.device, layer.frame, surface.colorSpace ?? 'srgb') : null;
+      if (uploadedTexture) uploadedTextures.push(uploadedTexture);
+      const frameResource: GPUBindingResource = uploadedTexture?.createView() ?? surface.device.importExternalTexture({
+        source: layer.frame, colorSpace: surface.colorSpace ?? 'srgb' });
       const uniformBuffer = createLayerUniformBuffer(surface, layer);
       uniformBuffers.push(uniformBuffer);
+      const shader = uploadStraightAlpha ? workerTexture2dShader(VIDEO_FRAME_LAYER_COMPOSITE_SHADER) : VIDEO_FRAME_LAYER_COMPOSITE_SHADER;
+      const compositePipeline = layer.operatorProgram ? getCachedWorkerOperatorPipeline(surface.device, resources.operatorPipelines,
+        `${uploadStraightAlpha ? 'texture' : 'external'}:${layer.operatorProgram.key}`,
+        specializeLegacyWorkerLayerShader(shader, layer.operatorProgram.wgsl))
+        : uploadStraightAlpha ? resources.textureCompositePipeline : resources.compositePipeline;
       const bindGroup = surface.device.createBindGroup({
-        layout: resources.compositePipeline.getBindGroupLayout(0),
+        layout: compositePipeline.getBindGroupLayout(0),
         entries: [
           { binding: 0, resource: resources.sampler },
           { binding: 1, resource: readTexture.createView() },
-          { binding: 2, resource: externalTexture },
+          { binding: 2, resource: frameResource },
           { binding: 3, resource: { buffer: uniformBuffer } },
         ],
       });
@@ -497,7 +488,7 @@ export async function presentGpuVideoFrameLayers(
           storeOp: 'store',
         }],
       });
-      pass.setPipeline(resources.compositePipeline);
+      pass.setPipeline(compositePipeline);
       pass.setBindGroup(0, bindGroup);
       pass.draw(6);
       pass.end();
@@ -534,6 +525,7 @@ export async function presentGpuVideoFrameLayers(
     for (const buffer of uniformBuffers) {
       buffer.destroy();
     }
+    for (const texture of uploadedTextures) texture.destroy();
     surface.frameSequence = nextSequence;
     surface.diagnostics = {
       ...surface.diagnostics,
@@ -571,6 +563,9 @@ export async function presentGpuVideoFrameLayers(
         // Ignore cleanup errors after a failed WebGPU pass.
       }
     }
+    for (const texture of uploadedTextures) {
+      try { texture.destroy(); } catch { /* Ignore cleanup errors after a failed WebGPU pass. */ }
+    }
     return {
       ok: false,
       diagnostics: createPresentDiagnostics({
@@ -605,6 +600,7 @@ export async function presentGpuVideoFrame(
   let commandSubmitted = false;
   const submittedWorkDoneResolved = false;
   let pass: GPURenderPassEncoder | null = null;
+  let uploadedTexture: GPUTexture | null = null;
 
   try {
     if (!dimensions) {
@@ -612,16 +608,17 @@ export async function presentGpuVideoFrame(
     }
 
     const resources = getPresenterResources(surface);
-    const externalTexture = surface.device.importExternalTexture({
-      source: options.frame,
-      colorSpace: surface.colorSpace ?? 'srgb',
-    });
+    const uploadStraightAlpha = workerVideoFrameNeedsStraightAlphaUpload(options.frame);
+    uploadedTexture = uploadStraightAlpha
+      ? uploadWorkerVideoFrameTexture(surface.device, options.frame, surface.colorSpace ?? 'srgb') : null;
+    const frameResource: GPUBindingResource = uploadedTexture?.createView() ?? surface.device.importExternalTexture({
+      source: options.frame, colorSpace: surface.colorSpace ?? 'srgb' });
 
     const bindGroup = surface.device.createBindGroup({
-      layout: resources.pipeline.getBindGroupLayout(0),
+      layout: (uploadStraightAlpha ? resources.texturePipeline : resources.pipeline).getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: resources.sampler },
-        { binding: 1, resource: externalTexture },
+        { binding: 1, resource: frameResource },
       ],
     });
     const commandEncoder = surface.device.createCommandEncoder({
@@ -636,7 +633,7 @@ export async function presentGpuVideoFrame(
         storeOp: 'store',
       }],
     });
-    pass.setPipeline(resources.pipeline);
+    pass.setPipeline(uploadStraightAlpha ? resources.texturePipeline : resources.pipeline);
     pass.setBindGroup(0, bindGroup);
     pass.draw(6);
     pass.end();
@@ -644,6 +641,8 @@ export async function presentGpuVideoFrame(
 
     surface.device.queue.submit([commandEncoder.finish()]);
     commandSubmitted = true;
+    uploadedTexture?.destroy();
+    uploadedTexture = null;
 
     surface.frameSequence = nextSequence;
     surface.diagnostics = {
@@ -667,6 +666,7 @@ export async function presentGpuVideoFrame(
       }),
     };
   } catch (error) {
+    try { uploadedTexture?.destroy(); } catch { /* Ignore cleanup errors after a failed WebGPU pass. */ }
     if (pass && !renderPassEnded) {
       try {
         pass.end();

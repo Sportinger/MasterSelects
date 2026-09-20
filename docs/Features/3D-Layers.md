@@ -90,6 +90,12 @@ Create primitive mesh clips from the Media Panel via `+ Add > 3D > Mesh` or the 
 - Dragging a mesh item to the timeline creates a 3D clip with `is3D: true` and `meshType`.
 - All transform properties and keyframe animation are supported.
 - Primitive meshes and 3D text render through the native shared scene contract.
+- The Node Workspace scene graph can replace plane/source geometry with one
+  **Primitive geometry** node and select Box, Sphere or Cylinder. Box is the
+  default for new and older shape-less nodes. These graph-created primitives
+  reuse the same native mesh topology and support the connected material's
+  solid tint and opacity; source-image textures and UV transforms are not yet
+  mapped onto them.
 
 ### Preview Scene Gizmo
 

@@ -60,7 +60,8 @@ fn faceFrame(face: u32) -> mat3x3f {
 
 @vertex
 fn voxelVertexMain(
-  @builtin(vertex_index) vertexIndex: u32,
+  @location(0) primitivePosition: vec3f,
+  @location(1) primitiveNormal: vec3f,
   @builtin(instance_index) instanceIndex: u32,
 ) -> VertexOutput {
   let columns = u32(voxel.grid.x);
@@ -87,23 +88,33 @@ fn voxelVertexMain(
     0.0,
   );
 
-  let face = vertexIndex / 6u;
-  let cornerIndex = vertexIndex % 6u;
-  let corners = array<vec2f, 6>(
-    vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(-1.0, 1.0),
-    vec2f(-1.0, 1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0),
-  );
-  let corner = corners[cornerIndex];
-  let frame = faceFrame(face);
-  let uExtent = dot(abs(frame[0]), halfSize);
-  let vExtent = dot(abs(frame[1]), halfSize);
-  let nExtent = dot(abs(frame[2]), halfSize);
-  let localPosition = center + frame[0] * corner.x * uExtent + frame[1] * corner.y * vExtent + frame[2] * nExtent;
+  var normalizedPosition = primitivePosition / 0.6;
+  var normalizedNormal = primitiveNormal;
+  if (voxel.texture.z > 0.5 && voxel.texture.z < 1.5) { normalizedPosition = primitivePosition / 0.7; }
+  if (voxel.texture.z > 1.5) {
+    // MeshPass cylinders are Y-up; relief primitives extrude along local Z.
+    normalizedPosition = vec3f(primitivePosition.x / 0.5, primitivePosition.z / 0.5, primitivePosition.y / 0.6);
+    normalizedNormal = vec3f(primitiveNormal.x, primitiveNormal.z, primitiveNormal.y);
+  }
+  let localPosition = center + normalizedPosition * halfSize * 2.0;
+  var surfaceUv = vec2f(0.5);
+  if (voxel.texture.z < 0.5) {
+    // Preserve the legacy procedural cube's per-face 0..1 corner distance.
+    // The shared primitive mesh intentionally has no authored UVs.
+    let axis = abs(normalizedNormal);
+    if (axis.x >= axis.y && axis.x >= axis.z) { surfaceUv = normalizedPosition.yz + vec2f(0.5); }
+    else if (axis.y >= axis.z) { surfaceUv = normalizedPosition.xz + vec2f(0.5); }
+    else { surfaceUv = normalizedPosition.xy + vec2f(0.5); }
+  } else if (voxel.texture.z < 1.5) {
+    surfaceUv = vec2f(atan2(normalizedPosition.y, normalizedPosition.x) / 6.28318530718 + 0.5, normalizedPosition.z + 0.5);
+  } else {
+    surfaceUv = vec2f(atan2(normalizedPosition.y, normalizedPosition.x) / 6.28318530718 + 0.5, normalizedPosition.z + 0.5);
+  }
 
   var output: VertexOutput;
   output.position = voxel.viewProjection * voxel.world * vec4f(localPosition, 1.0);
-  output.localUv = corner * 0.5 + 0.5;
-  output.localNormal = frame[2];
+  output.localUv = surfaceUv;
+  output.localNormal = normalize(normalizedNormal / max(halfSize, vec3f(0.0001)));
   output.sourceColor = colorAtUv(sourceUv);
   output.height01 = height01;
   output.material = 1.0;

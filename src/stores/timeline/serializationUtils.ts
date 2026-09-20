@@ -33,6 +33,7 @@ import { createDefaultRulerLaneState, normalizeRulerLaneState } from '../../time
 import { CLEARED_TIMELINE_EDIT_PREVIEWS } from './serialization/transientTimelineState';
 import { Logger } from '../../services/logger';
 import { sanitizeTimelineParentRestoreTree } from '../../services/motionDesign/structure/timelineParentRestoreAdapter';
+import { migratePersistedEffectOperatorGraph } from '../../services/operators/effectGraphOwner';
 
 const log = Logger.create('TimelineSerialization');
 function getDefaultExpandedTrackIds(tracks: readonly TimelineTrack[]): string[] {
@@ -94,6 +95,10 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       });
       return;
     }
+    const persistedClips = data.clips.map(clip => ({
+      ...clip,
+      effects: (clip.effects ?? []).map(migratePersistedEffectOperatorGraph),
+    }));
 
     // Restore tracks and basic state
     // Increment animation key to trigger entrance animations on clips
@@ -146,7 +151,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
 
     // Restore keyframes from serialized clips
     const keyframeMap = new Map<string, Keyframe[]>();
-    for (const serializedClip of data.clips) {
+    for (const serializedClip of persistedClips) {
       if (serializedClip.keyframes && serializedClip.keyframes.length > 0) {
         keyframeMap.set(serializedClip.id, serializedClip.keyframes);
       }
@@ -184,7 +189,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     };
 
     let restoreYieldCounter = 0;
-    for (const serializedClip of data.clips) {
+    for (const serializedClip of persistedClips) {
       // Yield every few clips so a large comp loads in responsive chunks instead of
       // one long task that freezes the whole tab. Safe now: autosave is suppressed by
       // the withProjectStoreSyncGuard wrapper around this restore (issue #228).

@@ -3,6 +3,36 @@ import { useEffect, useState } from 'react';
 const SETTINGS_STORAGE_PREFIX = 'editable-draggable-number-settings:';
 const LEGACY_BOUNDS_STORAGE_PREFIX = 'editable-draggable-number-bounds:';
 
+export interface OperatorConstantNumberTarget {
+  clipId: string;
+  effectId: string;
+  nodeId: string;
+  parameter: string;
+}
+
+/** One durable UI preference identity for every view of a graph-local constant. */
+export function operatorConstantNumberPersistenceKey(target: OperatorConstantNumberTarget): string {
+  const key = `operator-constant:${JSON.stringify([target.clipId, target.effectId, target.nodeId, target.parameter])}`;
+  if (typeof localStorage === 'undefined') return key;
+  try {
+    const currentKeys = [SETTINGS_STORAGE_PREFIX, LEGACY_BOUNDS_STORAGE_PREFIX].map(prefix => `${prefix}${key}`);
+    if (!currentKeys.some(candidate => localStorage.getItem(candidate) !== null)) {
+      const legacyKeys = [
+        `operator.${target.effectId}.${target.nodeId}.${target.parameter}`,
+        `node-inline.${target.nodeId}.${target.parameter}`,
+      ];
+      outer: for (const legacyKey of legacyKeys) for (const prefix of [SETTINGS_STORAGE_PREFIX, LEGACY_BOUNDS_STORAGE_PREFIX]) {
+        const value = localStorage.getItem(`${prefix}${legacyKey}`);
+        if (value !== null) {
+          localStorage.setItem(`${SETTINGS_STORAGE_PREFIX}${key}`, value);
+          break outer;
+        }
+      }
+    }
+  } catch { /* Storage may be unavailable; the control still has registry defaults. */ }
+  return key;
+}
+
 export const EDITABLE_DRAGGABLE_NUMBER_SETTINGS_EVENT = 'editable-draggable-number-settings-updated';
 
 export interface EditableDraggableNumberSettings {

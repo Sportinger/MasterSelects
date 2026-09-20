@@ -2,6 +2,7 @@ import type { BoundOperatorNode, SceneOperatorGraph, SceneSurfacePlan } from '..
 import { validateEffectGraph } from './effectGraph';
 import { SCENE_OPERATORS } from './sceneOperators';
 import type { TimelineClip } from '../../types/timeline';
+import { isScenePrimitiveShape, scenePrimitiveShape } from './scenePrimitive';
 
 export function sceneGraphForClip(clip: TimelineClip): SceneOperatorGraph {
   return clip.nodeGraph?.scene ?? defaultSceneGraph(clip.effects.some(e => e.enabled && e.type === 'face-cables' && Boolean(e.params.scene3D)));
@@ -33,6 +34,7 @@ export function validateSceneGraph(definition: SceneOperatorGraph, allowIncomple
   const errors = validateEffectGraph(definition.graph, allowIncomplete);
   if (errors.length) return errors;
   if (definition.graph.nodes.some(n => !SCENE_OPERATORS.some(o => o.id === n.operator))) errors.push('Unsupported scene operator.');
+  if (definition.graph.nodes.some(n => n.operator === 'geometry.primitive' && n.constants?.shape !== undefined && !isScenePrimitiveShape(n.constants.shape))) errors.push('Unsupported scene primitive shape.');
   return errors;
 }
 
@@ -73,11 +75,12 @@ export function compileSceneGraph(definition: SceneOperatorGraph): SceneSurfaceP
   if (object?.operator !== 'scene.mesh') return plan;
   const geometry = input(object, 'geometry'), material = input(object, 'material');
   if (!geometry || !material) return plan;
-  plan.geometry = geometry.operator === 'geometry.plane' ? 'plane' : 'source';
+  plan.geometry = geometry.operator === 'geometry.plane' ? 'plane' : geometry.operator === 'geometry.primitive' ? 'primitive' : 'source';
   if (plan.geometry === 'plane') { plan.width = number(geometry, 'width'); plan.height = number(geometry, 'height'); }
+  if (plan.geometry === 'primitive') { plan.primitiveShape = scenePrimitiveShape(geometry); }
   plan.tint = [number(material, 'red'), number(material, 'green'), number(material, 'blue')]; plan.opacity = number(material, 'opacity');
   const texture = input(material, 'texture');
-  if (texture) { plan.textured = input(texture, 'image')?.operator === 'image.frame'; plan.uv = uv(input(texture, 'uv')); }
+  if (texture) { plan.textured = plan.geometry !== 'primitive' && input(texture, 'image')?.operator === 'image.frame'; plan.uv = uv(input(texture, 'uv')); }
   plan.visible = true;
   return plan;
 }

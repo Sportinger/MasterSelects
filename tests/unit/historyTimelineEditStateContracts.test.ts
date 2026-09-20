@@ -441,6 +441,38 @@ describe('HistoryTimelineEditState contracts', () => {
     expect(findHistoryStateBoundaryViolations(invalid)).not.toEqual([]);
   });
 
+  it('round-trips a source-keyed node preview map while still rejecting nested runtime handles', () => {
+    const clip = makeRuntimeClip();
+    clip.nodeGraph = {
+      version: 1,
+      nodes: [],
+      previews: {
+        enabled: true,
+        nodes: {
+          source: { enabled: true, portId: 'image' },
+        },
+      },
+    };
+    const editState = toHistoryTimelineClipEditState(clip);
+    const roundTrip = JSON.parse(JSON.stringify(editState));
+    expect(roundTrip.nodeGraph.previews.nodes.source).toEqual({ enabled: true, portId: 'image' });
+    expect(findHistoryStateBoundaryViolations(editState)).toEqual([]);
+
+    const invalid = {
+      nodeGraph: {
+        previews: {
+          enabled: true,
+          nodes: {
+            source: { enabled: true, videoElement: { tagName: 'VIDEO' } },
+          },
+        },
+      },
+    };
+    expect(findHistoryStateBoundaryViolations(invalid)).toContain(
+      '$.nodeGraph.previews.nodes.source.videoElement: runtime payload key',
+    );
+  });
+
   it('rejects manual history state objects with runtime payload keys', () => {
     const invalidState = {
       kind: 'history-timeline-edit-state',

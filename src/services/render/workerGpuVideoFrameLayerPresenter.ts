@@ -7,13 +7,16 @@
 import {
   VIDEO_FRAME_LAYER_COMPOSITE_SHADER,
   VIDEO_FRAME_LAYER_DISPLAY_SHADER,
+  specializeVideoFrameLayerCompositeShader,
 } from './workerGpuVideoFrameLayerShaderSource';
 import type { WorkerGpuWebCodecsRenderLayer } from './workerGpuRuntimeCommands';
+import { workerVideoFrameNeedsStraightAlphaUpload } from './workerGpuOperatorPipeline';
 
 interface WorkerGpuVideoFrameLayerPresenterResources {
   readonly compositePipeline: GPURenderPipeline;
   readonly bitmapCompositePipeline: GPURenderPipeline;
   readonly displayPipeline: GPURenderPipeline;
+  readonly operatorPipelines: Map<string, GPURenderPipeline>;
   readonly sampler: GPUSampler;
   textureA: GPUTexture | null;
   textureB: GPUTexture | null;
@@ -40,6 +43,7 @@ export interface WorkerGpuVideoFramePresentLayer {
   readonly inlineContrast?: number;
   readonly inlineSaturation?: number;
   readonly inlineInvert?: boolean;
+  readonly operatorProgram?: { readonly key: string; readonly wgsl: string };
   readonly hueShift?: number;
   readonly pixelateSize?: number;
   readonly kaleidoscopeSegments?: number;
@@ -199,12 +203,28 @@ function createLayerPresenterResources(surface: WorkerGpuTargetSurface): WorkerG
     compositePipeline,
     bitmapCompositePipeline,
     displayPipeline,
+    operatorPipelines: new Map(),
     sampler: surface.device.createSampler({ magFilter: 'linear', minFilter: 'linear' }),
     textureA: null,
     textureB: null,
     width: 0,
     height: 0,
   };
+}
+
+function getOperatorCompositePipeline(resources: WorkerGpuVideoFrameLayerPresenterResources, surface: WorkerGpuTargetSurface,
+  bitmap: boolean, program: { readonly key: string; readonly wgsl: string }): GPURenderPipeline {
+  const key = `${bitmap ? 'bitmap' : 'external'}:${program.key}`;
+  const cached = resources.operatorPipelines.get(key);
+  if (cached) return cached;
+  const base = bitmap ? BITMAP_LAYER_COMPOSITE_SHADER : VIDEO_FRAME_LAYER_COMPOSITE_SHADER;
+  const source = specializeVideoFrameLayerCompositeShader(base, program.wgsl);
+  const module = surface.device.createShaderModule({ code: source });
+  const pipeline = surface.device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vertexMain', buffers: [] },
+    fragment: { module, entryPoint: 'fragmentMain', targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } });
+  if (resources.operatorPipelines.size >= 64) resources.operatorPipelines.delete(resources.operatorPipelines.keys().next().value!);
+  resources.operatorPipelines.set(key, pipeline);
+  return pipeline;
 }
 
 function getLayerPresenterResources(surface: WorkerGpuTargetSurface): WorkerGpuVideoFrameLayerPresenterResources {
@@ -399,15 +419,17 @@ export async function presentGpuVideoFrameLayers(
       }
       const uniformBuffer = createLayerUniformBuffer(surface, layer);
       uniformBuffers.push(uniformBuffer);
-      const compositePipeline = isImageBitmapFrame(layer.frame)
-        ? resources.bitmapCompositePipeline
-        : resources.compositePipeline;
+      const bitmap = isImageBitmapFrame(layer.frame);
+      const uploadStraightAlpha = bitmap || workerVideoFrameNeedsStraightAlphaUpload(layer.frame as VideoFrame);
+      const compositePipeline = layer.operatorProgram
+        ? getOperatorCompositePipeline(resources, surface, uploadStraightAlpha, layer.operatorProgram)
+        : uploadStraightAlpha ? resources.bitmapCompositePipeline : resources.compositePipeline;
       let frameResource: GPUBindingResource;
-      if (isImageBitmapFrame(layer.frame)) {
+      if (uploadStraightAlpha) {
         const bitmapTexture = surface.device.createTexture({
           size: { width: dimensions.width, height: dimensions.height },
           format: 'rgba8unorm',
-          usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING,
+          usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
         });
         uploadedBitmapTextures.push(bitmapTexture);
         surface.device.queue.copyExternalImageToTexture(

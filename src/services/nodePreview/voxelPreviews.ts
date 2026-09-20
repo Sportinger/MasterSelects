@@ -1,10 +1,9 @@
 import type { TimelineClip } from '../../types/timeline';
 import type { Keyframe } from '../../types/keyframes';
 import type { Effect } from '../../types/effects';
-import { voxelOperatorGraph } from '../operators/voxelGraph';
 import { getEffectOperator } from '../operators/operatorRegistry';
 import { operatorEnabled, sampleOperatorParameter } from '../operators/effectGraph';
-import { effectOperatorParams } from '../operators/effectGraphOwner';
+import { effectOperatorGraph, effectOperatorParams } from '../operators/effectGraphOwner';
 import { VOXEL_RELIEF_PARAMS } from '../../effects/stylize/voxel-relief/parameters';
 import { compileScalarField } from '../operators/scalarField';
 import { evaluateScalarField } from '../operators/evaluateScalarField';
@@ -18,7 +17,7 @@ import type { PreviewFrame, PreviewRequest, PreviewValueControl } from './previe
 export async function voxelPreview(request: PreviewRequest, clip: TimelineClip, effect: Effect, keys: Keyframe[], time: number): Promise<PreviewFrame> {
   const base = { key: request.key, revision: request.revision, time: request.time };
   const binding = request.node.binding;
-  const graph = voxelOperatorGraph(effect.params);
+  const graph = effectOperatorGraph(effect);
   const node = binding?.kind === 'effect-operator' && graph.nodes.find(value => value.id === binding.nodeId);
   if (!node) return { ...base, status: 'missing', label: 'Voxel node unavailable' };
   if (!operatorEnabled(node, effect.params)) return { ...base, status: 'missing', label: 'Node bypassed' };

@@ -8,6 +8,7 @@ import {
 import { resolveRenderableSharedSceneCamera } from '../../src/engine/scene/SceneCameraUtils';
 import type { SceneCamera, SceneCameraConfig, SceneVoxelLayer } from '../../src/engine/scene/types';
 import { WORLD_HEIGHT } from '../../src/engine/native3d/sceneRenderer/constants';
+import { compileVoxelGraph, createDefaultVoxelGraph } from '../../src/services/operators/voxelGraph';
 
 const IDENTITY = new Float32Array([
   1, 0, 0, 0,
@@ -63,6 +64,16 @@ function expectOriginVisible(camera: SceneCamera): void {
 }
 
 describe('voxel uniform construction', () => {
+  it.each([['geometry.box', 0], ['geometry.sphere', 1], ['geometry.cylinder', 2]] as const)(
+    'packs the connected %s topology for native instancing', (operator, shapeCode) => {
+      const graph = createDefaultVoxelGraph(); graph.nodes.find(node => node.id === 'box')!.operator = operator;
+      const voxelGraphPlan = compileVoxelGraph({ operatorGraph: JSON.stringify(graph) });
+      const uniforms = buildVoxelUniformData(makeLayer({ voxelGraphPlan }), buildCamera({
+        position: { x: 0, y: 0, z: 3 }, target: { x: 0, y: 0, z: 0 }, up: { x: 0, y: 1, z: 0 },
+        fov: 50, near: 0.1, far: 100, applyDefaultDistance: false,
+      }));
+      expect(uniforms[50]).toBe(shapeCode);
+    });
   it('projects the footprint origin into visible perspective clip space', () => {
     expectOriginVisible(buildCamera({
       position: { x: 0, y: 0, z: 0 },

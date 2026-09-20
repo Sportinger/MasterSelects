@@ -1,5 +1,5 @@
 import { checkGraphConnection, graphHasCycle } from '../nodeGraph/graphConnections';
-import { operatorConnectionGraph } from './operatorConnectionGraph';
+import { operatorConnectionEdge, operatorConnectionGraph } from './operatorConnectionGraph';
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorBinding, OperatorEdge, OperatorValue } from '../../types/operatorGraph';
 import type { Keyframe } from '../../types/keyframes';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
@@ -10,7 +10,8 @@ export const EFFECT_GRAPH_PARAM = 'operatorGraph';
 export type OperatorParameters = Record<string, unknown>;
 
 export function validateEffectGraph(graph: EffectOperatorGraph, allowIncomplete = false): string[] {
-  if (graph?.version !== 1 || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges) || !graph.layout
+  if (graph?.version !== 1 || (graph.schemaVersion !== undefined && graph.schemaVersion !== 1)
+    || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges) || !graph.layout
     || graph.nodes.length > 64 || graph.edges.length > 256) return ['Invalid operator graph.'];
   if (graph.nodes.some(n => !n || typeof n !== 'object') || graph.edges.some(e => !e || typeof e !== 'object')) return ['Invalid graph entries.'];
   if (Object.values(graph.layout).some(p => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y))) return ['Invalid node position.'];
@@ -19,20 +20,30 @@ export function validateEffectGraph(graph: EffectOperatorGraph, allowIncomplete 
   const occupied = new Set<string>(), edgeIds = new Set<string>();
   const validBinding = (b: OperatorBinding) => typeof b === 'string' || (Array.isArray(b) ? b.length === 3 && b.every(v => typeof v === 'string') : b && typeof b.yaw === 'string' && typeof b.pitch === 'string');
   for (const n of graph.nodes) {
-    if (typeof n.id !== 'string' || !/^[\w-]+$/.test(n.id) || !getEffectOperator(n.operator) || !n.bindings || !Object.values(n.bindings).every(validBinding)) errors.push(`Invalid node: ${n.id}.`);
+    if (typeof n.id !== 'string' || !/^[\w-]+$/.test(n.id) || !getEffectOperator(n.operator)
+      || (n.operatorVersion !== undefined && n.operatorVersion !== getEffectOperator(n.operator)?.version)
+      || !n.bindings || !Object.values(n.bindings).every(validBinding)) errors.push(`Invalid node: ${n.id}.`);
   }
   const connections = operatorConnectionGraph(graph);
   for (let index = 0; index < connections.edges.length; index++) {
     const edge = connections.edges[index];
     const check = checkGraphConnection({ ...connections, edges: connections.edges.slice(0, index) }, edge);
-    if (typeof edge.id !== 'string' || edgeIds.has(edge.id) || !check.ok || check.replacesEdgeId) errors.push(`Invalid connection: ${edge.id}.`);
+    const repairableVariantMismatch = allowIncomplete && !check.ok
+      && (check.code === 'type-mismatch' || check.code === 'missing-port');
+    const target = nodes.get(edge.toNodeId);
+    const repeated = target && getEffectOperator(target.operator)?.inputs.find(port => port.id === edge.toPortId)?.repeated;
+    const duplicateInput = !repeated && occupied.has(`${edge.toNodeId}:${edge.toPortId}`);
+    if (typeof edge.id !== 'string' || edgeIds.has(edge.id)
+      || duplicateInput || ((!check.ok && !repairableVariantMismatch) || (check.ok && check.replacesEdgeId))) errors.push(`Invalid connection: ${edge.id}.`);
     occupied.add(`${edge.toNodeId}:${edge.toPortId}`); edgeIds.add(edge.id);
   }
   for (const n of graph.nodes) for (const p of getEffectOperator(n.operator)?.inputs ?? []) {
     if (!allowIncomplete && p.required && !occupied.has(`${n.id}:${p.id}`)) errors.push(`${getEffectOperator(n.operator)!.label}: connect ${p.label}.`);
   }
   if (graphHasCycle(connections.nodes, connections.edges)) errors.push('Cycles are not supported.');
-  const outputOperator = graph.domain === 'voxel' ? 'render.voxel' : graph.domain === 'scene' ? 'scene.render' : 'scene.output';
+  const outputOperator = graph.domain === 'voxel' ? 'render.voxel'
+    : graph.domain === 'scene' ? 'scene.render'
+    : graph.domain === 'image' || graph.domain === 'analog-signal' ? 'image.output' : 'scene.output';
   if (!allowIncomplete && graph.nodes.filter(n => n.operator === outputOperator).length !== 1) errors.push('The graph needs one clip output.');
   if (graph.groups) {
     if (!Array.isArray(graph.groups) || graph.groups.length > 32) return [...errors, 'Invalid groups.'];
@@ -108,6 +119,10 @@ export function evaluateGraphForces(graph: EffectOperatorGraph, simulation: stri
 export function connectEffectGraph(graph: EffectOperatorGraph, edge: OperatorEdge): EffectOperatorGraph {
   const input = getEffectOperator(graph.nodes.find(n => n.id === edge.to)?.operator ?? '')?.inputs.find(p => p.id === edge.input);
   const edges = graph.edges.filter(e => e.id !== edge.id && (input?.repeated || e.to !== edge.to || e.input !== edge.input));
+  // Existing incompatible edges may remain visible after a variant change, but
+  // a new connection must itself satisfy the current typed port contract.
+  const connection = checkGraphConnection(operatorConnectionGraph({ ...graph, edges }), operatorConnectionEdge(edge));
+  if (!connection.ok) throw new Error(`Invalid connection: ${edge.id}.`);
   const next = { ...graph, edges: [...edges, edge] };
   const errors = validateEffectGraph(next, true);
   if (errors.length) throw new Error(errors[0]);

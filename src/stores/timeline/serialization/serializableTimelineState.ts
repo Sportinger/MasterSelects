@@ -8,6 +8,7 @@ import type {
 } from '../types';
 import type { SerializableClip } from '../../../types';
 import { clonePersistedClipAudioState } from '../../../services/audio/clipAudioStatePersistence';
+import { migratePersistedEffectOperatorGraph } from '../../../services/operators/effectGraphOwner';
 import { sanitizePlayheadPosition } from '../../../services/layerBuilder/PlayheadState';
 import { cloneClipNodeGraph } from '../../../services/nodeGraph';
 import { cloneStoryboardClipProperties } from '../../../services/storyboard/core';
@@ -115,7 +116,7 @@ function createSerializableClip(
       : undefined,
     sourceRect: clip.sourceRect ? structuredClone(clip.sourceRect) : undefined,
     transitionRender: clip.transitionRender ? structuredClone(clip.transitionRender) : undefined,
-    effects: clip.effects,
+    effects: clip.effects.map(migratePersistedEffectOperatorGraph),
     ...cloneTimelineTrackingMetadata(clip),
     transitionIn: clip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(clip.transitionIn)) : undefined,
     transitionOut: clip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(clip.transitionOut)) : undefined,

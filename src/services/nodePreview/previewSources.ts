@@ -4,7 +4,7 @@ import type { AnimatableProperty } from '../../types/animationProperties';
 import { landmarkRuntime } from '../landmarkTracking/landmarkRuntime';
 import { faceTrackKey, samplePreciseFace } from '../landmarkTracking/preciseFaceSampling';
 import { FACE_CABLE_ANCHORS } from '../faceCables/cableData';
-import { cableOperatorGraph } from '../faceCables/cableOperatorGraph';
+import { effectOperatorGraph } from '../operators/effectGraphOwner';
 import { sampleOperatorParameter, graphInputNodes } from '../operators/effectGraph';
 import { clipLocalToKeyframeTime } from '../flock/time/flockKeyframeTime';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
@@ -18,6 +18,10 @@ import { sceneValuePreview } from './sceneValuePreviews';
 import { getEffectOperator } from '../operators/operatorRegistry';
 import { flockPreview } from './flockPreviews';
 import { voxelPreview } from './voxelPreviews';
+import { imageOperatorKnownValues, imageOperatorValuePreview } from './imageOperatorPreviews';
+import { imageOperatorPreviewStage, isImageOperatorTextureSignal } from './imageOperatorPreviewStages';
+import { analogSignalNodePreview, analogSignalPreviewProducerNode } from './analogSignalPreviews';
+import type { AnalogSignalPreviewTarget } from './analogSignalPreviewStages';
 
 /** Domain adapters read authoritative runtime data; opening a viewer never runs analysis or a bake. */
 export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewArtifactReader): PreviewFrame | Promise<PreviewFrame> {
@@ -32,6 +36,28 @@ export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewA
   if (binding?.kind === 'effect-operator') {
     const effect = clip.effects.find(value => value.id === binding.effectId);
     if (effect?.type === 'voxel-relief') return voxelPreview(request, clip, effect, state.clipKeyframes.get(clip.id) ?? [], localTime);
+    if (effect?.type === 'invert') {
+      const keys = state.clipKeyframes.get(clip.id) ?? [];
+      const valuePreview = imageOperatorValuePreview(request, clip, effect, keys, localTime);
+      if (valuePreview) return valuePreview;
+      const port = request.port;
+      const signal = port?.metadata?.semanticKind;
+      if (port && binding.operator !== 'image.frame' && isImageOperatorTextureSignal(signal)) {
+        const knownValues = imageOperatorKnownValues(request, clip, effect, keys, localTime);
+        return nodePreviewTextureTap.request(imageOperatorPreviewStage({ effectId: effect.id, nodeId: binding.nodeId,
+          portId: port.id, direction: port.direction }), request).then(frame => knownValues.length ? { ...frame, values: knownValues } : frame);
+      }
+    }
+    if (effect?.type === 'analog-signal-lab') {
+      if (binding.operator === 'image.frame' && request.port?.type === 'texture') return sourcePreview(request, clip, sourceTime);
+      if (request.port?.type === 'texture') {
+        const graph = effectOperatorGraph(effect);
+        const target: AnalogSignalPreviewTarget = { effectId: effect.id, nodeId: binding.nodeId, portId: request.port.id, direction: request.port.direction };
+        const producer = analogSignalPreviewProducerNode(graph, target);
+        if (graph.nodes.find(value => value.id === producer)?.operator === 'image.frame') return sourcePreview(request, clip, sourceTime);
+      }
+      const preview = analogSignalNodePreview(request, effect); if (preview) return preview;
+    }
   }
   const artifact = request.port?.metadata?.sourceArtifact;
   const operator = binding?.kind === 'effect-operator' || binding?.kind === 'scene-operator' ? binding.operator : '';
@@ -41,7 +67,7 @@ export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewA
     if (!effect) return missing('Effect unavailable');
     let stage = artifact?.kind === 'scene-depth' || operator === 'depth.calibrate' ? 'depth' : operator === 'geometry.face' ? 'face' : operator === 'geometry.depth' ? 'depth-mesh' : operator === 'simulation.rope' ? 'cables' : 'surface';
     if (operator === 'collision.mesh' && binding?.kind === 'effect-operator') {
-      const graph = cableOperatorGraph(effect.params), input = graphInputNodes(graph, binding.nodeId, 'geometry')[0];
+      const graph = effectOperatorGraph(effect), input = graphInputNodes(graph, binding.nodeId, 'geometry')[0];
       stage = input?.operator === 'geometry.face' ? 'face' : 'surface';
     }
     const scene = typeof effect.params.sceneData === 'string' ? effect.params.sceneData : '';
@@ -57,7 +83,7 @@ export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewA
     if (binding?.kind === 'effect-operator' && operator !== 'tracking.face') {
       const effect = clip.effects.find(value => value.id === binding.effectId);
       if (effect) {
-        const graph = cableOperatorGraph(effect.params);
+        const graph = effectOperatorGraph(effect);
         let node = graph.nodes.find(value => value.id === binding.nodeId);
         if (node?.operator === 'tracking.anchors') node = graphInputNodes(graph, node.id, 'landmarks')[0];
         if (node?.operator === 'tracking.smooth') smoothing = Number(sampleOperatorParameter(node, 'strength', effect.params, effect.id, state.clipKeyframes.get(clip.id) ?? [], localTime));
@@ -119,7 +145,7 @@ export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewA
   if (binding?.kind === 'effect-operator') {
     if (operator === 'depth.estimate') return missing('Raw depth is not retained after baking');
     const effect = clip.effects.find(value => value.id === binding.effectId), spec = getEffectOperator(operator);
-    const node = effect && cableOperatorGraph(effect.params).nodes.find(value => value.id === binding.nodeId);
+    const node = effect && effectOperatorGraph(effect).nodes.find(value => value.id === binding.nodeId);
     if (node && effect && spec?.parameters.length) {
       const keys = state.clipKeyframes.get(clip.id) ?? [];
       const sample = (name: string) => sampleOperatorParameter(node, name, effect.params, effect.id, keys, localTime);

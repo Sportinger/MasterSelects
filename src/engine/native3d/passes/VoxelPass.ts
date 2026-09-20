@@ -9,6 +9,10 @@ import {
   shouldRenderVoxelFloor,
   VOXEL_UNIFORM_SIZE,
 } from './voxelPass/voxelUniforms';
+import { createPrimitiveGeometry } from './meshPass/primitiveGeometry';
+import { compileVoxelGraph } from '../../../services/operators/voxelGraph';
+
+interface VoxelPrimitiveBuffers { vertex: GPUBuffer; index: GPUBuffer; indexCount: number }
 
 export interface SceneVoxelRenderLayer {
   layer: SceneVoxelLayer;
@@ -19,6 +23,7 @@ export class VoxelPass {
   private cubePipeline: GPURenderPipeline | null = null;
   private floorPipeline: GPURenderPipeline | null = null;
   private bindGroupLayout: GPUBindGroupLayout | null = null;
+  private primitiveBuffers = new Map<'box' | 'sphere' | 'cylinder', VoxelPrimitiveBuffers>();
 
   supports(layer: SceneLayer3DData): layer is SceneVoxelLayer {
     return layer.kind === 'voxel';
@@ -72,7 +77,9 @@ export class VoxelPass {
     });
     this.cubePipeline = device.createRenderPipeline({
       ...base,
-      vertex: { module, entryPoint: 'voxelVertexMain' },
+      vertex: { module, entryPoint: 'voxelVertexMain', buffers: [{ arrayStride: 32, attributes: [
+        { shaderLocation: 0, offset: 0, format: 'float32x3' }, { shaderLocation: 1, offset: 12, format: 'float32x3' },
+      ] }] },
       label: 'native-scene-voxel-cube-pipeline',
     });
   }
@@ -126,8 +133,11 @@ export class VoxelPass {
         renderPass.setPipeline(this.floorPipeline);
         renderPass.draw(6);
       }
+      const primitive = this.getPrimitiveBuffers(device, (layer.voxelGraphPlan ?? compileVoxelGraph(layer.voxelParams)).primitiveShape);
       renderPass.setPipeline(this.cubePipeline);
-      renderPass.draw(36, grid.columns * grid.rows);
+      renderPass.setVertexBuffer(0, primitive.vertex);
+      renderPass.setIndexBuffer(primitive.index, 'uint32');
+      renderPass.drawIndexed(primitive.indexCount, grid.columns * grid.rows);
     }
     renderPass.end();
     return true;
@@ -137,5 +147,17 @@ export class VoxelPass {
     this.cubePipeline = null;
     this.floorPipeline = null;
     this.bindGroupLayout = null;
+    for (const buffers of this.primitiveBuffers.values()) { buffers.vertex.destroy(); buffers.index.destroy(); }
+    this.primitiveBuffers.clear();
+  }
+
+  private getPrimitiveBuffers(device: GPUDevice, shape: 'box' | 'sphere' | 'cylinder'): VoxelPrimitiveBuffers {
+    const cached = this.primitiveBuffers.get(shape); if (cached) return cached;
+    const geometry = createPrimitiveGeometry(shape === 'box' ? 'cube' : shape)!;
+    const vertexData = Float32Array.from(geometry.vertices), indexData = Uint32Array.from(geometry.indices);
+    const vertex = device.createBuffer({ size: geometry.vertices.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, label: `voxel-${shape}-vertices` });
+    const index = device.createBuffer({ size: geometry.indices.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST, label: `voxel-${shape}-indices` });
+    device.queue.writeBuffer(vertex, 0, vertexData); device.queue.writeBuffer(index, 0, indexData);
+    const result = { vertex, index, indexCount: geometry.indices.length }; this.primitiveBuffers.set(shape, result); return result;
   }
 }

@@ -10,6 +10,7 @@ import { compileSceneGraph, sceneGraphForClip, sceneGraphSupportsSource } from '
 import { connectEffectGraph } from './effectGraph';
 import { SCENE_OPERATORS } from './sceneOperators';
 import { prepareEditableOperatorGraph } from './editableOperatorGraph';
+import { SCENE_PRIMITIVE_SHAPES, type ScenePrimitiveShape } from './scenePrimitive';
 
 export function editSceneGraph(clipId: string, label: string, edit: (definition: SceneOperatorGraph) => void) {
   assertExclusiveTimelineMutationAllowed();
@@ -47,13 +48,18 @@ export function createSceneGraphActions(clipId: string) {
       if (!node || !spec || !Number.isFinite(value) || value < (spec.min ?? -Infinity) || value > (spec.max ?? Infinity)) throw new Error('Invalid scene parameter.');
       const binding = node.bindings[name]; if (typeof binding !== 'string') throw new Error('Invalid parameter binding.'); d.params[binding] = value;
     }),
+    setPrimitiveShape: (id: string, shape: ScenePrimitiveShape) => editSceneGraph(clipId, 'Change primitive shape', d => {
+      const node = d.graph.nodes.find(candidate => candidate.id === id);
+      if (node?.operator !== 'geometry.primitive' || !SCENE_PRIMITIVE_SHAPES.includes(shape)) throw new Error('Invalid scene primitive shape.');
+      node.constants = { ...node.constants, shape };
+    }),
     addNode: (operator: string) => {
       const id = `scene-${crypto.randomUUID().slice(0, 8)}`;
       editSceneGraph(clipId, 'Add scene node', d => {
         const spec = SCENE_OPERATORS.find(o => o.id === operator); if (!spec?.addable) throw new Error('Operator is not addable.');
         const bindings: Record<string, string> = {};
         for (const p of spec.parameters) { bindings[p.id] = `${id}_${p.id}`; d.params[bindings[p.id]] = p.default; }
-        d.graph.nodes.push({ id, operator, bindings });
+        d.graph.nodes.push({ id, operator, bindings, ...(operator === 'geometry.primitive' ? { constants: { shape: 'box' } } : {}) });
         d.graph.layout[id] = { x: 280 * ((d.graph.nodes.length - 1) % 5), y: 650 + Math.floor((d.graph.nodes.length - 8) / 5) * 220 };
       }); return id;
     },

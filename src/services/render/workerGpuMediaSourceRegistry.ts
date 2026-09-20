@@ -5,6 +5,9 @@ import { Logger } from '../logger';
 import type { WorkerRenderHostRuntimeBridge } from './workerRenderHostRuntimeBridge';
 import type { WorkerRenderHostRuntimeJobOutput } from './workerRenderHostRuntimeHandlers';
 import type { WorkerGpuWebCodecsRenderLayer } from './workerGpuRuntimeCommands';
+import type { Effect } from '../../types/effects';
+import { effectOperatorGraph } from '../operators/effectGraphOwner';
+import { compileImageOperatorGraph } from '../operators/imageOperatorGraph';
 
 const log = Logger.create('WorkerGpuMediaSourceRegistry');
 
@@ -28,6 +31,7 @@ export interface WorkerGpuVideoPresentationLayerStyle {
   readonly inlineContrast: number;
   readonly inlineSaturation: number;
   readonly inlineInvert: boolean;
+  readonly operatorProgram?: { readonly key: string; readonly wgsl: string };
   readonly hueShift: number;
   readonly pixelateSize: number;
   readonly kaleidoscopeSegments: number;
@@ -180,8 +184,9 @@ function applyWorkerInlineEffect(
     inlineContrast: number;
     inlineSaturation: number;
     inlineInvert: boolean;
+    operatorProgram?: { key: string; wgsl: string };
   },
-  effect: { readonly type: string; readonly params: Record<string, unknown> },
+  effect: Effect,
 ): void {
   switch (effect.type) {
     case 'brightness':
@@ -194,7 +199,8 @@ function applyWorkerInlineEffect(
       params.inlineSaturation = finiteEffectNumber(effect.params.amount, 1);
       break;
     case 'invert':
-      params.inlineInvert = true;
+      params.operatorProgram = compileImageOperatorGraph(effectOperatorGraph(effect), effect.params);
+      params.inlineInvert = false;
       break;
   }
 }
@@ -205,6 +211,7 @@ function workerGpuInlineParams(effectStack: ReturnType<typeof splitLayerEffects>
     inlineContrast: effectStack.inlineEffects.contrast,
     inlineSaturation: effectStack.inlineEffects.saturation,
     inlineInvert: effectStack.inlineEffects.invert,
+    operatorProgram: effectStack.inlineEffects.operatorProgram,
   };
   for (const effect of effectStack.complexEffects ?? []) {
     applyWorkerInlineEffect(params, effect);
@@ -234,6 +241,7 @@ export function resolveWorkerGpuVideoPresentationLayerStyle(layer: Layer): Worke
     inlineContrast: inlineEffects.inlineContrast,
     inlineSaturation: inlineEffects.inlineSaturation,
     inlineInvert: inlineEffects.inlineInvert,
+    operatorProgram: inlineEffects.operatorProgram,
     ...gpuEffects,
     complexEffectCount: effectStack.complexEffects?.length ?? 0,
     renderEffectFallback: hasUnsupportedWorkerRenderEffect ? 'opacity-envelope' : undefined,

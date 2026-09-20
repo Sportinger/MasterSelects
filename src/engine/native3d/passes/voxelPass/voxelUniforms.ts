@@ -89,7 +89,7 @@ export function buildVoxelUniformData(
     numberParam(layer, 'floorBrightness', 0.1),
     layer.sourceWidth,
   ], 44);
-  data.set([layer.sourceHeight, 0, 0, 0], 48);
+  data.set([layer.sourceHeight, 0, graph.primitiveShape === 'sphere' ? 1 : graph.primitiveShape === 'cylinder' ? 2 : 0, 0], 48);
   data.set(graph.heightUV, 52);
   data.set(graph.colorUV, 56);
   data.set([...graph.tint, graph.opacity], 60);

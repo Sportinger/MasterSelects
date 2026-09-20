@@ -7,6 +7,7 @@ export const COMPOSITOR_UNIFORM_FLOAT_COUNT = 32;
 export const COMPOSITOR_U32_INDICES: readonly number[] = [1, 10, 11, 16, 21, 22, 29]; // blendMode, mask flags, inlineInvert, transitionType, source rotation
 
 export interface InlineEffectParams {
+  operatorProgram?: { key: string; wgsl: string };
   brightness: number;  // Offset: 0 = no change, -1..1 range
   contrast: number;    // Multiplier: 1 = no change, 0..3 range
   saturation: number;  // Multiplier: 1 = no change, 0..3 range

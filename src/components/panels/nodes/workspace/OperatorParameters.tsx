@@ -6,7 +6,7 @@ import { useTimelineStore } from '../../../../stores/timeline';
 import { effectOperatorGraph, effectOperatorParams, addableEffectOperators } from '../../../../services/operators/effectGraphOwner';
 import { VOXEL_RELIEF_PARAMS } from '../../../../effects/stylize/voxel-relief/parameters';
 import { getEffectOperator } from '../../../../services/operators/operatorRegistry';
-import { createEffectGraphActions, editEffectGraph } from '../../../../services/operators/effectGraphEditing';
+import { createEffectGraphActions, editEffectGraph, setOperatorConstant, setOperatorVariant } from '../../../../services/operators/effectGraphEditing';
 import { sampleOperatorParameter, operatorEnabled } from '../../../../services/operators/effectGraph';
 import { ResolveInspectorNumberRow } from '../../properties/resolveInspector/ResolveInspectorNumberRow';
 import { ResolveInspectorSection, ResolveInspectorRow } from '../../properties/resolveInspector/ResolveInspectorPrimitives';
@@ -18,6 +18,9 @@ import { OperatorConnections } from './OperatorConnections';
 import { mathModeOptions, setMathNodeMode } from '../../../../services/nodeGraph/mathNodeEditing';
 import type { NodeGraphNode } from '../../../../types/nodeGraph';
 import { OperatorLiveValue } from './OperatorLiveValue';
+import { operatorFamilyOptions } from './operatorFamilyOptions';
+import { operatorConstantNumberPersistenceKey } from '../../../common/EditableDraggableNumberSettings';
+import type { OperatorValue } from '../../../../types/operatorGraph';
 
 const EMPTY_KEYS: Keyframe[] = [];
 export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { clip: TimelineClip; effectId: string; nodeId: string; projectedNode?: NodeGraphNode }) {
@@ -32,10 +35,12 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
   const node = graph.nodes.find(n => n.id === nodeId), operator = node && getEffectOperator(node.operator);
   if (!node || !operator) return null;
   const evaluatedParams = effectOperatorParams(effect);
+  const familyOptions = operatorFamilyOptions(operator);
   const mathNode = { id: node.id, operatorId: node.operator, label: operator.label, kind: 'effect' as const, runtime: 'builtin' as const,
     inputs: [], outputs: [], layout: { x: 0, y: 0 }, binding: { kind: 'effect-operator' as const, effectId, nodeId: node.id, operator: node.operator } };
+  const mathOptions = mathModeOptions(mathNode);
   const safely = (action: () => void) => { try { action(); setMessage(''); } catch (error) { setMessage(String(error)); } };
-  const set = (key: string, value: number | boolean) => safely(() => {
+  const set = (key: string, value: OperatorValue) => safely(() => {
     const property = `effect.${effectId}.${key}` as Keyframe['property'];
     if (typeof value === 'number' && (isRecording(clip.id, property) || keys.some(k => k.property === property))) readTimelineRuntimeState(useTimelineStore).addKeyframe(clip.id, property, value);
     else editEffectGraph(clip.id, effectId, 'Edit node parameter', (_, params) => { params[key] = value; });
@@ -50,15 +55,31 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
   }}>
     <ResolveInspectorSection title={operator.label} enabled={operatorEnabled(node, effect.params)}
       onEnabledChange={graph.domain === 'voxel' || operator.bypass ? () => safely(() => createEffectGraphActions(clip.id, effectId).toggleBypass(node.id)) : undefined}>
-      {node.operator.startsWith('math.') && <ResolveInspectorRow label="Operation">
-        <InspectorSelect ariaLabel="Math operation" value={node.operator} options={mathModeOptions(mathNode)}
+      {mathOptions.length > 1 && <ResolveInspectorRow label="Operation">
+        <InspectorSelect ariaLabel="Math operation" value={node.operator} options={mathOptions}
           onChange={mode => safely(() => setMathNodeMode(clip.id, mathNode, mode))} />
+      </ResolveInspectorRow>}
+      {familyOptions.length > 1 && <ResolveInspectorRow label={operator.family === 'geometry.primitive' ? 'Shape' : 'Components'}>
+        <InspectorSelect ariaLabel={operator.family === 'geometry.primitive' ? 'Primitive shape' : `${operator.family} components`} value={node.operator} options={familyOptions}
+          onChange={variant => safely(() => setOperatorVariant(clip.id, effectId, node.id, variant))} />
       </ResolveInspectorRow>}
       {operator.parameters.map(spec => {
         if (projectedNode && node.operator.startsWith('math.') && graph.edges.some(edge => edge.to === node.id && edge.input === spec.id))
           return <OperatorLiveValue key={spec.id} clipId={clip.id} node={projectedNode} portId={spec.id} label={spec.label} />;
         const binding = node.bindings[spec.id];
         const value = sampleOperatorParameter(node, spec.id, evaluatedParams, effectId, keys, time);
+        const constant = node.constants?.[spec.id];
+        if (binding === undefined && constant !== undefined) {
+          if (spec.type === 'boolean') return <ResolveInspectorRow key={spec.id} label={spec.label}><input aria-label={`${operator.label} ${spec.label}`} type="checkbox"
+            checked={Boolean(constant)} onChange={event => safely(() => setOperatorConstant(clip.id, effectId, node.id, spec.id, event.target.checked))} /></ResolveInspectorRow>;
+          if (spec.type === 'number') return <ResolveInspectorNumberRow key={spec.id} label={spec.label} ariaLabel={`${operator.label} ${spec.label}`}
+            value={Number(constant)} defaultValue={Number(spec.default)} min={spec.min ?? -30} max={spec.max ?? 30} step={spec.step ?? 0.01}
+            onChange={next => safely(() => setOperatorConstant(clip.id, effectId, node.id, spec.id, next))}
+            persistenceKey={operatorConstantNumberPersistenceKey({ clipId: clip.id, effectId, nodeId: node.id, parameter: spec.id })} />;
+          if (spec.type === 'select') return <ResolveInspectorRow key={spec.id} label={spec.label}><InspectorSelect ariaLabel={`${operator.label} ${spec.label}`}
+            value={String(constant)} options={[...(spec.options ?? [])]}
+            onChange={next => safely(() => setOperatorConstant(clip.id, effectId, node.id, spec.id, next))} /></ResolveInspectorRow>;
+        }
         if (typeof binding === 'object' && !Array.isArray(binding)) return <div key={spec.id}>
           {numberRow(binding.yaw, 'Direction', interpolateKeyframes(keys, `effect.${effectId}.${binding.yaw}` as Keyframe['property'], time, Number(effect.params[binding.yaw] ?? 0)), 0, -180, 180, 0.1)}
           {numberRow(binding.pitch, 'Elevation', interpolateKeyframes(keys, `effect.${effectId}.${binding.pitch}` as Keyframe['property'], time, Number(effect.params[binding.pitch] ?? 0)), 0, -90, 90, 0.1)}
@@ -66,6 +87,8 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
         if (Array.isArray(binding) && Array.isArray(value)) return binding.map((key, i) => numberRow(key, `${spec.label} ${'XYZ'[i]}`, value[i], (spec.default as number[])[i], -1, 1));
         if (typeof binding !== 'string') return null;
         if (spec.type === 'boolean') return <ResolveInspectorRow key={spec.id} label={spec.label}><input aria-label={`${operator.label} ${spec.label}`} type="checkbox" checked={Boolean(value)} onChange={event => set(binding, event.target.checked)} /></ResolveInspectorRow>;
+        if (spec.type === 'select') return <ResolveInspectorRow key={spec.id} label={spec.label}><InspectorSelect ariaLabel={`${operator.label} ${spec.label}`}
+          value={String(value)} options={[...(spec.options ?? [])]} onChange={next => set(binding, next)} /></ResolveInspectorRow>;
         const control = effect.type === 'voxel-relief' ? VOXEL_RELIEF_PARAMS[binding] : undefined;
         return numberRow(binding, control?.label ?? spec.label, Number(value), Number(control?.default ?? spec.default), control?.min ?? spec.min, control?.max ?? spec.max, control?.step ?? spec.step, spec.animatable);
       })}

@@ -816,7 +816,7 @@ function rejectInvalidWorkerGpuAdjustmentEnvelope(input: {
   };
 }
 
-function shouldUseLayerVideoFramePresenter(layers: readonly WorkerGpuWebCodecsFrameLayer[]): boolean {
+export function shouldUseLayerVideoFramePresenter(layers: readonly WorkerGpuWebCodecsFrameLayer[]): boolean {
   return layers.length > 1 || layers.some((layer) => (
     !!layer.renderLayer ||
     Math.abs(layer.opacity - 1) > 0.000001 ||
@@ -825,6 +825,7 @@ function shouldUseLayerVideoFramePresenter(layers: readonly WorkerGpuWebCodecsFr
     Math.abs((layer.inlineContrast ?? 1) - 1) > 0.000001 ||
     Math.abs((layer.inlineSaturation ?? 1) - 1) > 0.000001 ||
     layer.inlineInvert === true ||
+    !!layer.operatorProgram ||
     Math.abs((layer.hueShift ?? 0)) > 0.000001 ||
     Math.abs((layer.pixelateSize ?? 0)) > 0.000001 ||
     Math.abs((layer.kaleidoscopeSegments ?? 0)) > 0.000001 ||
@@ -957,6 +958,7 @@ async function readGpuVideoFrameLayersForPresentation(input: {
     inlineContrast: layer.inlineContrast,
     inlineSaturation: layer.inlineSaturation,
     inlineInvert: layer.inlineInvert,
+    operatorProgram: layer.operatorProgram,
     hueShift: layer.hueShift,
     pixelateSize: layer.pixelateSize,
     kaleidoscopeSegments: layer.kaleidoscopeSegments,

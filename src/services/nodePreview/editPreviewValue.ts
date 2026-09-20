@@ -1,5 +1,5 @@
 import type { PreviewValueControl } from './previewTypes';
-import { setAnimatedOperatorParameter } from '../operators/effectGraphEditing';
+import { setAnimatedOperatorParameter, setOperatorConstant } from '../operators/effectGraphEditing';
 import { readTimelineRuntimeState } from '../timeline/timelineRuntimeCoordinator';
 import { useTimelineStore } from '../../stores/timeline';
 import { createFlockProperty } from '../../types/flock';
@@ -9,7 +9,9 @@ import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/ex
 
 export function editPreviewValue(control: PreviewValueControl, value: number | boolean) {
   const target = control.target;
-  if ('effectId' in target) return setAnimatedOperatorParameter(target.clipId, target.effectId, target.nodeId, target.parameter, value);
+  if ('effectId' in target) return target.storage === 'constant'
+    ? setOperatorConstant(target.clipId, target.effectId, target.nodeId, target.parameter, value)
+    : setAnimatedOperatorParameter(target.clipId, target.effectId, target.nodeId, target.parameter, value);
   assertExclusiveTimelineMutationAllowed();
   const state = readTimelineRuntimeState(useTimelineStore), clip = state.clips.find(item => item.id === target.clipId);
   const node = clip?.flock?.nodes.find(item => item.id === target.nodeId);

@@ -8,7 +8,7 @@ import { renderHostPort } from '../render/renderHostPort';
 import { effectOperatorGraph, validateEffectOwnerGraph, addableEffectOperators, canRemoveEffectOperator } from './effectGraphOwner';
 import { EFFECT_GRAPH_PARAM, connectEffectGraph, operatorEnabled } from './effectGraph';
 import { prepareEditableOperatorGraph } from './editableOperatorGraph';
-import { getEffectOperator } from './operatorRegistry';
+import { EFFECT_OPERATORS, getEffectOperator } from './operatorRegistry';
 import type { AnimatableProperty } from '../../types/animationProperties';
 
 /** Shared by the inspector and inline node values; animation keeps its owner. */
@@ -35,12 +35,12 @@ export function editEffectGraph(clipId: string, effectId: string, label: string,
   const effect = clip.effects.find(e => e.id === effectId);
   if (!effect) throw new Error('Effect unavailable.');
   const graph = structuredClone(effectOperatorGraph(effect)), params = { ...effect.params };
+  delete params[EFFECT_GRAPH_PARAM];
   edit(graph, params);
   prepareEditableOperatorGraph(graph, () => validateEffectOwnerGraph(effect, graph, params));
-  params[EFFECT_GRAPH_PARAM] = JSON.stringify(graph);
   const batch = startBatch(label);
   try {
-    state.updateClip(clipId, { effects: clip.effects.map(e => e.id === effectId ? { ...e, params } : e) });
+    state.updateClip(clipId, { effects: clip.effects.map(e => e.id === effectId ? { ...e, params, operatorGraph: graph } : e) });
     state.invalidateCache(); renderHostPort.requestRender();
   } finally { if (batch.opened) endBatch(); }
 }
@@ -51,6 +51,7 @@ export function setOperatorParameter(clipId: string, effectId: string, nodeId: s
     const spec = node && getEffectOperator(node.operator)?.parameters.find(p => p.id === name);
     if (!node || !spec) throw new Error('Parameter unavailable.');
     if (spec.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value) || value < (spec.min ?? -Infinity) || value > (spec.max ?? Infinity))) throw new Error('Parameter is outside its supported range.');
+    if (spec.type === 'select' && (typeof value !== 'string' || !spec.options?.some(option => option.value === value))) throw new Error('Parameter option is unavailable.');
     const binding = node.bindings[name];
     if (typeof binding === 'string') params[binding] = value;
     else if (Array.isArray(binding) && Array.isArray(value)) binding.forEach((key, i) => { params[key] = value[i]; });
@@ -58,10 +59,57 @@ export function setOperatorParameter(clipId: string, effectId: string, nodeId: s
   });
 }
 
+/** Edits a graph-local literal. Exposed/keyframed values continue to use stable effect param bindings. */
+export function setOperatorConstant(clipId: string, effectId: string, nodeId: string, name: string, value: OperatorValue) {
+  editEffectGraph(clipId, effectId, 'Edit node value', graph => {
+    const node = graph.nodes.find(candidate => candidate.id === nodeId);
+    const spec = node && getEffectOperator(node.operator)?.parameters.find(parameter => parameter.id === name);
+    if (!node || !spec || node.bindings[name]) throw new Error('Constant unavailable.');
+    if (spec.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value)
+      || (node.operator !== 'values.number' && (value < (spec.min ?? -Infinity) || value > (spec.max ?? Infinity))))) {
+      throw new Error('Parameter is outside its supported range.');
+    }
+    if (spec.type === 'boolean' && typeof value !== 'boolean') throw new Error('Parameter requires a boolean value.');
+    if (spec.type === 'select' && (typeof value !== 'string' || !spec.options?.some(option => option.value === value))) throw new Error('Parameter option is unavailable.');
+    if (spec.type === 'vector' && (!Array.isArray(value) || value.length !== 3
+      || value.some(component => !Number.isFinite(component)))) throw new Error('Parameter requires a finite vector.');
+    node.constants = { ...node.constants, [name]: value };
+  });
+}
+
+function applyOperatorVariant(graph: EffectOperatorGraph, nodeId: string, operatorId: string): void {
+  const node = graph.nodes.find(candidate => candidate.id === nodeId);
+  const current = node && getEffectOperator(node.operator), target = getEffectOperator(operatorId);
+  if (!node || !current?.family || current.family !== target?.family) throw new Error('Operator variant unavailable.');
+  node.operator = target.id;
+  node.operatorVersion = target.version;
+}
+
+/** Persists an explicit registry variant while retaining stable ports and visibly invalid wiring. */
+export function setOperatorVariant(clipId: string, effectId: string, nodeId: string, operatorId: string) {
+  editEffectGraph(clipId, effectId, 'Change node variant', graph => applyOperatorVariant(graph, nodeId, operatorId));
+}
+
 export function createEffectGraphActions(clipId: string, effectId: string) {
+  const ownerType = (domain: EffectOperatorGraph['domain']) => domain === 'voxel' ? 'voxel-relief'
+    : domain === 'image' ? 'invert' : domain === 'analog-signal' ? 'analog-signal-lab' : 'face-cables';
   return {
     moveNode: (nodeId: string, layout: { x: number; y: number }) => editEffectGraph(clipId, effectId, 'Move node', graph => { graph.layout[nodeId] = layout; }),
     connectPorts: (c: NodeGraphConnectionRequest) => editEffectGraph(clipId, effectId, 'Connect nodes', graph => {
+      const from = graph.nodes.find(node => node.id === c.fromNodeId), to = graph.nodes.find(node => node.id === c.toNodeId);
+      const fromSpec = from && getEffectOperator(from.operator), toSpec = to && getEffectOperator(to.operator);
+      const sourceType = fromSpec?.outputs.find(port => port.id === c.fromPortId)?.type;
+      const targetType = toSpec?.inputs.find(port => port.id === c.toPortId)?.type;
+      if (to && toSpec?.family === 'vector.split' && sourceType) {
+        const variants = EFFECT_OPERATORS.filter(spec => spec.family === toSpec.family
+          && spec.inputs.find(port => port.id === c.toPortId)?.type === sourceType);
+        if (variants.length === 1) applyOperatorVariant(graph, to.id, variants[0].id);
+      }
+      if (from && fromSpec?.family === 'vector.combine' && targetType) {
+        const variants = EFFECT_OPERATORS.filter(spec => spec.family === fromSpec.family
+          && spec.outputs.find(port => port.id === c.fromPortId)?.type === targetType);
+        if (variants.length === 1) applyOperatorVariant(graph, from.id, variants[0].id);
+      }
       graph.edges = connectEffectGraph(graph, { id: `${c.fromNodeId}-${c.fromPortId}-${c.toNodeId}-${c.toPortId}`, from: c.fromNodeId, output: c.fromPortId, to: c.toNodeId, input: c.toPortId }).edges;
     }),
     disconnectEdge: (id: string) => editEffectGraph(clipId, effectId, 'Disconnect nodes', graph => { graph.edges = graph.edges.filter(e => e.id !== id); }),
@@ -73,7 +121,7 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
     }),
     deleteNode: (id: string) => editEffectGraph(clipId, effectId, 'Delete node', graph => {
       const node = graph.nodes.find(n => n.id === id);
-      if (!node || !canRemoveEffectOperator(graph.domain === 'voxel' ? 'voxel-relief' : 'face-cables', node.id, node.operator)) throw new Error('This group requires that node.');
+      if (!node || !canRemoveEffectOperator(ownerType(graph.domain), node.id, node.operator)) throw new Error('This group requires that node.');
       graph.nodes = graph.nodes.filter(n => n.id !== id); graph.edges = graph.edges.filter(e => e.from !== id && e.to !== id); delete graph.layout[id];
       graph.groups?.forEach(g => { g.nodeIds = g.nodeIds.filter(nodeId => nodeId !== id); });
     }),
@@ -81,9 +129,11 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
       const id = `node-${crypto.randomUUID().slice(0, 8)}`;
       editEffectGraph(clipId, effectId, 'Add node', (graph, params) => {
         const operator = getEffectOperator(operatorId);
-        if (!operator || !addableEffectOperators(graph.domain === 'voxel' ? 'voxel-relief' : 'face-cables').includes(operator)) throw new Error('Operator cannot be added here.');
-        const node = { id, operator: operator.id, bindings: {} as Record<string, string | [string, string, string]> };
+        if (!operator || !addableEffectOperators(ownerType(graph.domain)).includes(operator)) throw new Error('Operator cannot be added here.');
+        const node = { id, operator: operator.id, operatorVersion: operator.version,
+          bindings: {} as Record<string, string | [string, string, string]>, constants: {} as Record<string, OperatorValue> };
         for (const p of operator.parameters) {
+          if (graph.domain === 'image') { node.constants[p.id] = p.default; continue; }
           const key = `${id}_${p.id}`;
           if (Array.isArray(p.default)) {
             node.bindings[p.id] = ['x', 'y', 'z'].map(axis => `${key}_${axis}`) as [string, string, string];
