@@ -2,6 +2,7 @@
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
+import { EXPOSURE_PARAMS } from '../remainingColorParams';
 
 export const exposure: EffectDefinition = {
   id: 'exposure',
@@ -12,35 +13,7 @@ export const exposure: EffectDefinition = {
   entryPoint: 'exposureFragment',
   uniformSize: 16,
 
-  params: {
-    exposure: {
-      type: 'number',
-      label: 'Exposure (EV)',
-      default: 0,
-      min: -3,
-      max: 3,
-      step: 0.1,
-      animatable: true,
-    },
-    offset: {
-      type: 'number',
-      label: 'Offset',
-      default: 0,
-      min: -0.5,
-      max: 0.5,
-      step: 0.01,
-      animatable: true,
-    },
-    gamma: {
-      type: 'number',
-      label: 'Gamma',
-      default: 1,
-      min: 0.2,
-      max: 3,
-      step: 0.01,
-      animatable: true,
-    },
-  },
+  params: EXPOSURE_PARAMS,
 
   packUniforms: (params) => {
     return new Float32Array([

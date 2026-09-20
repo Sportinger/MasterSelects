@@ -2,6 +2,7 @@
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
+import { TEMPERATURE_PARAMS } from '../remainingColorParams';
 
 export const temperature: EffectDefinition = {
   id: 'temperature',
@@ -12,26 +13,7 @@ export const temperature: EffectDefinition = {
   entryPoint: 'temperatureFragment',
   uniformSize: 16,
 
-  params: {
-    temperature: {
-      type: 'number',
-      label: 'Temperature',
-      default: 0,
-      min: -1,
-      max: 1,
-      step: 0.01,
-      animatable: true,
-    },
-    tint: {
-      type: 'number',
-      label: 'Tint',
-      default: 0,
-      min: -1,
-      max: 1,
-      step: 0.01,
-      animatable: true,
-    },
-  },
+  params: TEMPERATURE_PARAMS,
 
   packUniforms: (params) => {
     return new Float32Array([

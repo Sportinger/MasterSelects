@@ -2,6 +2,7 @@
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
+import { VIBRANCE_PARAMS } from '../remainingColorParams';
 
 export const vibrance: EffectDefinition = {
   id: 'vibrance',
@@ -12,17 +13,7 @@ export const vibrance: EffectDefinition = {
   entryPoint: 'vibranceFragment',
   uniformSize: 16,
 
-  params: {
-    amount: {
-      type: 'number',
-      label: 'Amount',
-      default: 0,
-      min: -1,
-      max: 1,
-      step: 0.01,
-      animatable: true,
-    },
-  },
+  params: VIBRANCE_PARAMS,
 
   packUniforms: (params) => {
     return new Float32Array([

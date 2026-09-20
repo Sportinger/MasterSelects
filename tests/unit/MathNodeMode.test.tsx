@@ -9,9 +9,16 @@ const node = (operatorId: string): NodeGraphNode => ({
 });
 
 describe('MathNodeMode', () => {
-  it.each(['math.subtract.scalar', 'image.luminance'])('does not show a misleading scalar-field selector for %s', operatorId => {
+  it.each(['image.luminance'])('does not show a misleading scalar-field selector for %s', operatorId => {
     render(<MathNodeMode node={node(operatorId)} clipId="clip-image" />);
     expect(screen.queryByLabelText('Math operation for Subtract')).toBeNull();
+  });
+
+  it('shows only executable scalar variants for local image arithmetic', () => {
+    render(<MathNodeMode node={node('math.subtract.scalar')} clipId="clip-image" />);
+    fireEvent.click(screen.getByLabelText('Math operation for Subtract'));
+    expect(screen.getByRole('option', { name: 'Add' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: 'Constant' })).toBeNull();
   });
 
   it('continues to expose executable scalar-field math modes', () => {

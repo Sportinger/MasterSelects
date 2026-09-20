@@ -144,6 +144,18 @@ edit that same binding. RGB arithmetic is clamped before it is recombined with t
 unchanged source alpha, and graph layout, constants and connections persist with
 the effect through history and project save/load.
 
+The same applies to Exposure, Levels, Hue Shift, Temperature and Vibrance. Their
+inspectors retain the original parameter schemas and keyframes while the canvas
+shows the actual scalar/RGB arithmetic, HSV conversion, channel reducers and
+range/gamma stages. Rewiring those nodes changes the compiled result; source alpha
+continues directly to the final combine node.
+
+Threshold exposes Rec.709 luminance, strict comparison and scalar selection as
+separate nodes. Posterize exposes its effective level floor, multiplication,
+subtraction and raw division chain, with no hidden final clamp. Their original
+Level/Levels controls and keyframes remain the graph bindings, while alpha follows
+the same direct split-to-combine path.
+
 Analog Signal Lab appears as its actual signal chain rather than one opaque effect
 card. PAL, RF, VHS, receiver, decoder and display nodes expose the original effect
 parameters through the shared inspector, including the PAL decoder and tape-speed

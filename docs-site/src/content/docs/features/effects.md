@@ -126,11 +126,23 @@ worker, and export paths.
 
 ### Editable color effect graphs
 
-Brightness, Contrast, Saturation, and Invert also expose editable node groups.
+Brightness, Contrast, Saturation, Invert, Exposure, Levels, Hue Shift,
+Temperature, and Vibrance expose editable node groups.
 Their math is compiled into the existing image processing path: a single
 eligible effect stays inline, while effect stacks retain their ordered passes
 and intermediate clamps. Bound Amount nodes retain the effect's original
 range, default, and keyframe property; alpha bypasses the RGB calculations.
+The other exposed parameters likewise retain their original IDs and ranges.
+Hue Shift uses HSV conversion and wrapped hue in turns; it is not the
+Resolve-style workspace's YIQ hue rotation. Levels retains its original
+unguarded normalization: equal input black/white points remain a singular
+case with backend-dependent output, rather than silently gaining an epsilon.
+
+Threshold and Posterize also expose executable pointwise groups. Threshold
+uses Rec.709 luminance and a strict greater-than comparison (equality is black).
+Posterize retains the original `floor(rgb * levels) / (levels - 1)` formula,
+with levels bounded below by two and no internal output clamp. Both preserve
+source alpha and the original parameter ranges, defaults, and keyframe IDs.
 
 ### Analog Signal Lab
 

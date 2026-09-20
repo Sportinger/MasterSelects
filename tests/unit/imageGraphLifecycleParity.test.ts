@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDefaultInvertImageGraph, compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
-import { effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { effectOperatorGraph, effectOperatorParams } from '../../src/services/operators/effectGraphOwner';
 import { setOperatorConstant } from '../../src/services/operators/effectGraphEditing';
 import { evaluateCompositionClipEffects } from '../../src/services/compositionRender/keyframeEvaluation';
 import { createSerializableTimelineState } from '../../src/stores/timeline/serialization/serializableTimelineState';
@@ -66,6 +66,43 @@ describe('image graph lifecycle parity', () => {
       expect(exportPixel).toEqual(evaluatedPixel(effect, keys, localTime));
     }
     expect(evaluatedPixel(effect, keys, 2)).toEqual([0.3, 0.09999999999999998, -0.30000000000000004, 0.75]);
+  });
+
+  it('keeps remaining pointwise graph parameter interpolation identical in preview and export', () => {
+    const cases = [
+      { type: 'exposure', parameter: 'exposure', from: 0, to: 2, expected: 1 },
+      { type: 'levels', parameter: 'gamma', from: 0.5, to: 1.5, expected: 1 },
+      { type: 'hue-shift', parameter: 'shift', from: 0, to: 1, expected: 0.5 },
+      { type: 'temperature', parameter: 'temperature', from: -1, to: 1, expected: 0 },
+      { type: 'vibrance', parameter: 'amount', from: -1, to: 1, expected: 0 },
+      { type: 'threshold', parameter: 'level', from: 0.2, to: 0.8, expected: 0.5 },
+      { type: 'posterize', parameter: 'levels', from: 2, to: 10, expected: 6 },
+    ] as const;
+    for (const item of cases) {
+      const id = `${item.type}-lifecycle`, clipId = `${item.type}-clip`;
+      const effect: Effect = { id, type: item.type, name: item.type, enabled: true, params: {} };
+      const property = `effect.${id}.${item.parameter}` as Keyframe['property'];
+      const keys: Keyframe[] = [
+        { id: `${id}-0`, clipId, property, time: 0, value: item.from, easing: 'linear' },
+        { id: `${id}-2`, clipId, property, time: 2, value: item.to, easing: 'linear' },
+      ];
+      const clip = createMockClip({ id: clipId, effects: [effect] });
+      useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })], clipKeyframes: new Map([[clip.id, keys]]) });
+      const preview = useTimelineStore.getState().getInterpolatedEffects(clip.id, 1)[0];
+      const exported = buildBaseLayerProps(clip, 1, 0, {
+        time: 1,
+        getInterpolatedTransform: () => clip.transform,
+        getInterpolatedEffects: (_clipId: string, time: number) => evaluateCompositionClipEffects([effect], keys, time),
+        getInterpolatedColorCorrection: () => undefined,
+      } as never)!.effects[0];
+      const previewParams = effectOperatorParams(preview), exportParams = effectOperatorParams(exported);
+      expect(previewParams[item.parameter]).toBeCloseTo(item.expected);
+      expect(exportParams[item.parameter]).toBeCloseTo(item.expected);
+      const previewPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(preview), previewParams), pixel);
+      const exportPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(exported), exportParams), pixel);
+      expect(previewPixel).toEqual(exportPixel);
+      expect(exportPixel[3]).toBe(pixel[3]);
+    }
   });
 
   it('restores graph constants through undo/redo and canonical save/load without runtime payloads', async () => {

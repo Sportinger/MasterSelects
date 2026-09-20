@@ -28,7 +28,11 @@ const log = Logger.create('EffectsPipeline');
 
 // Effects handled inline in the composite shader (no separate GPU pipeline needed)
 // These are applied as uniforms in the composite pass, eliminating separate render passes.
-export const INLINE_EFFECT_IDS = new Set(['brightness', 'contrast', 'saturation', 'invert']);
+export const INLINE_EFFECT_IDS = new Set([
+  'brightness', 'contrast', 'saturation', 'invert',
+  'exposure', 'levels', 'hue-shift', 'temperature', 'vibrance',
+  'threshold', 'posterize',
+]);
 
 // Effect instance interface (runtime data attached to clips)
 interface EffectInstance {

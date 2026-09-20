@@ -1,7 +1,7 @@
 import type { NodePortContract } from './nodePortContract';
 /** Durable operator contracts. Values and artifacts belong to the owner; bindings never copy them. */
 export type OperatorValue = number | boolean | string | [number, number] | [number, number, number] | [number, number, number, number];
-export type OperatorSignal = 'image' | 'pal-signal' | 'receiver-lines' | 'rgb' | 'alpha' | 'mask' | 'vec2' | 'vec3' | 'vec4' | 'texture' | 'uv' | 'material' | 'geometry' | 'primitive-mesh' | 'landmarks' | 'anchors' | 'depth' | 'surface' | 'force' | 'drag' | 'curves' | 'scene' | 'number' | 'camera' | 'light' | 'field';
+export type OperatorSignal = 'image' | 'pal-signal' | 'receiver-lines' | 'rgb' | 'alpha' | 'mask' | 'vec2' | 'vec3' | 'vec4' | 'texture' | 'uv' | 'material' | 'geometry' | 'primitive-mesh' | 'landmarks' | 'anchors' | 'depth' | 'surface' | 'force' | 'drag' | 'curves' | 'scene' | 'number' | 'boolean' | 'camera' | 'light' | 'field';
 export interface OperatorPort { id: string; label: string; type: OperatorSignal; required?: boolean; repeated?: boolean; contract?: Partial<NodePortContract> }
 export interface OperatorParameter {
   id: string; label: string; type: 'number' | 'boolean' | 'vector' | 'select'; default: OperatorValue;

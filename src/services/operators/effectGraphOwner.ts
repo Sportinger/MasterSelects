@@ -14,9 +14,10 @@ import { compileAnalogSignalGraph, createDefaultAnalogSignalGraph } from './anal
 import { ANALOG_SIGNAL_OPERATORS } from './analogSignalOperators';
 import { createDefaultColorEffectGraph, type EditableColorEffectType } from './colorEffectGraphs';
 import { getEffect } from '../../effects';
+import { createDefaultPointwiseEffectGraph, type EditablePointwiseEffectType } from './pointwiseEffectGraphs';
 
-const LOCAL_IMAGE_EFFECTS = new Set(['invert', 'brightness', 'contrast', 'saturation']);
-export function isLocalImageEffectType(type: string): type is 'invert' | EditableColorEffectType { return LOCAL_IMAGE_EFFECTS.has(type); }
+const LOCAL_IMAGE_EFFECTS = new Set(['invert', 'brightness', 'contrast', 'saturation', 'exposure', 'levels', 'hue-shift', 'temperature', 'vibrance', 'threshold', 'posterize']);
+export function isLocalImageEffectType(type: string): type is 'invert' | EditableColorEffectType | EditablePointwiseEffectType { return LOCAL_IMAGE_EFFECTS.has(type); }
 export function hasEffectOperatorGraph(type: string): boolean { return type === 'face-cables' || type === 'voxel-relief' || isLocalImageEffectType(type) || type === 'analog-signal-lab'; }
 type EffectGraphOwner = { type: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph };
 
@@ -36,7 +37,9 @@ export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGra
   }
   const effectType = effect.type;
   if (isLocalImageEffectType(effectType)) {
-    const fallback = effectType === 'invert' ? createDefaultInvertImageGraph : () => createDefaultColorEffectGraph(effectType);
+    const fallback = effectType === 'invert' ? createDefaultInvertImageGraph
+      : effectType === 'threshold' || effectType === 'posterize' ? () => createDefaultPointwiseEffectGraph(effectType)
+        : () => createDefaultColorEffectGraph(effectType);
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
     const graph = migrateImageOperatorGraph(saved);
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');

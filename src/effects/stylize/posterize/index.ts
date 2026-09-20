@@ -2,6 +2,7 @@
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
+import { POSTERIZE_PARAMS } from '../pointwiseParams';
 
 export const posterize: EffectDefinition = {
   id: 'posterize',
@@ -12,17 +13,7 @@ export const posterize: EffectDefinition = {
   entryPoint: 'posterizeFragment',
   uniformSize: 16,
 
-  params: {
-    levels: {
-      type: 'number',
-      label: 'Levels',
-      default: 6,
-      min: 2,
-      max: 32,
-      step: 1,
-      animatable: true,
-    },
-  },
+  params: POSTERIZE_PARAMS,
 
   packUniforms: (params) => {
     return new Float32Array([

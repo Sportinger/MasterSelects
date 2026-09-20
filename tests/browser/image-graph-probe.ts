@@ -5,6 +5,8 @@ import { imageGraphDefinition } from '../../src/effects/_shared/imageGraphDefini
 import { createDefaultInvertImageGraph } from '../../src/services/operators/imageOperatorGraph';
 import { checkImageCompositeGpu } from './image-composite-gpu-check';
 import { checkWorkerImageGraphGpu } from './image-worker-gpu-check';
+import { checkRemainingColorEffectsGpu } from './image-color-effects-gpu-check';
+import { checkPointwiseEffectsGpu } from './image-pointwise-effects-gpu-check';
 
 async function checkGpu() {
   const adapter = await navigator.gpu?.requestAdapter();
@@ -63,7 +65,10 @@ async function checkGpu() {
     for (let index = 3; index < opaque.length; index += 4) opaque[index] = 255;
     await checkImageCompositeGpu(device, sampler, opaque, size);
     await checkImageCompositeGpu(device, sampler, pixels, size);
-    const workerResult = await checkWorkerImageGraphGpu(device);
+    const colorComparisons = await checkRemainingColorEffectsGpu(device, sampler, pixels, size);
+    if (colorComparisons !== 10) throw new Error(`Expected 10 remaining color comparisons, got ${colorComparisons}`);
+    const pointwiseComparisons = await checkPointwiseEffectsGpu(device, sampler);
+    const workerResult = `${await checkWorkerImageGraphGpu(device)}; ${colorComparisons} remaining-color and ${pointwiseComparisons} pointwise shader comparisons`;
     const validation = await device.popErrorScope();
     if (validation) throw new Error(validation.message);
     return `PASS: 64 RGBA pixels — legacy/default byte equality; bypass and rewired output equal input; alpha preserved; actual GPU output changes; ${workerResult}; no validation errors.`;

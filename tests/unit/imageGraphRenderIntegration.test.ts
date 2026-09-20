@@ -6,10 +6,20 @@ import { invert } from '../../src/effects/color/invert';
 import { brightness } from '../../src/effects/color/brightness';
 import { contrast } from '../../src/effects/color/contrast';
 import { saturation } from '../../src/effects/color/saturation';
+import { exposure } from '../../src/effects/color/exposure';
+import { levels } from '../../src/effects/color/levels';
+import { hueShift } from '../../src/effects/color/hue-shift';
+import { temperature } from '../../src/effects/color/temperature';
+import { vibrance } from '../../src/effects/color/vibrance';
+import { threshold } from '../../src/effects/stylize/threshold';
+import { posterize } from '../../src/effects/stylize/posterize';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
 import { createOperatorCompositePipeline } from '../../src/engine/pipeline/compositor/operatorPipeline';
+import { createDefaultPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
 
-const colorDefinitions = { brightness, contrast, saturation } as const;
+const colorDefinitions = { brightness, contrast, saturation, exposure, levels,
+  'hue-shift': hueShift, temperature, vibrance } as const;
+const pointwiseDefinitions = { threshold, posterize } as const;
 
 describe('image graph render integration', () => {
   const effect = () => ({ id: 'invert-test', type: 'invert', name: 'Invert', enabled: true, params: {} });
@@ -49,6 +59,39 @@ describe('image graph render integration', () => {
     const ordered = imageGraphDefinition(instance, colorDefinitions[type] as FullscreenEffectDefinition);
     expect(ordered.shader).toContain(inline.operatorProgram!.wgsl);
     expect(ordered.shader).toContain(`fn ${colorDefinitions[type].entryPoint}`);
+    expect(splitLayerEffects([instance, effect()]).complexEffects).toEqual([instance, effect()]);
+  });
+
+  it('retains posterize white overflow until the render-target format clamps it', () => {
+    const plan = compileImageOperatorGraph(createDefaultPointwiseEffectGraph('posterize'), { levels: 6 });
+    expect(evaluateImageOperatorPlan(plan, [1, 1, 1, 0.4])).toEqual([1.2, 1.2, 1.2, 0.4]);
+  });
+
+  it.each([
+    ['exposure', { exposure: 1.25, offset: -0.1, gamma: 0.8 }],
+    ['levels', { inputBlack: 0.1, inputWhite: 0.9, gamma: 1.4, outputBlack: 0.05, outputWhite: 0.95 }],
+    ['hue-shift', { shift: 0.9 }],
+    ['temperature', { temperature: 0.7, tint: -0.35 }],
+    ['vibrance', { amount: 1 }],
+  ] as const)('uses the canonical %s graph inline and retains ordered multistack passes', (type, params) => {
+    const instance = { id: `${type}-test`, type, name: type, enabled: true, params: { ...params } };
+    const inline = splitLayerEffects([instance]).inlineEffects;
+    expect(inline.operatorProgram?.key).toMatch(/^image-v1-/);
+    const ordered = imageGraphDefinition(instance, colorDefinitions[type] as FullscreenEffectDefinition);
+    expect(ordered.shader).toContain(inline.operatorProgram!.wgsl);
+    expect(ordered.shader).toContain(`fn ${colorDefinitions[type].entryPoint}`);
+    expect(splitLayerEffects([instance, effect()]).complexEffects).toEqual([instance, effect()]);
+  });
+
+  it.each([
+    ['threshold', { level: 0.5 }],
+    ['posterize', { levels: 6 }],
+  ] as const)('uses the canonical pointwise %s graph in inline and ordered paths', (type, params) => {
+    const instance = { id: `${type}-test`, type, name: type, enabled: true, params };
+    const inline = splitLayerEffects([instance]).inlineEffects;
+    expect(inline.operatorProgram?.key).toMatch(/^image-v1-/);
+    const ordered = imageGraphDefinition(instance, pointwiseDefinitions[type] as FullscreenEffectDefinition);
+    expect(ordered.shader).toContain(inline.operatorProgram!.wgsl);
     expect(splitLayerEffects([instance, effect()]).complexEffects).toEqual([instance, effect()]);
   });
 

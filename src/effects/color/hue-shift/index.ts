@@ -2,6 +2,7 @@
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
+import { HUE_SHIFT_PARAMS } from '../remainingColorParams';
 
 export const hueShift: EffectDefinition = {
   id: 'hue-shift',
@@ -12,17 +13,7 @@ export const hueShift: EffectDefinition = {
   entryPoint: 'hueShiftFragment',
   uniformSize: 16,
 
-  params: {
-    shift: {
-      type: 'number',
-      label: 'Shift',
-      default: 0,
-      min: 0,
-      max: 1,
-      step: 0.01,
-      animatable: true,
-    },
-  },
+  params: HUE_SHIFT_PARAMS,
 
   packUniforms: (params) => {
     return new Float32Array([

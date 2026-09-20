@@ -15,12 +15,19 @@ function layerWithEditedInvert(): Layer {
 
 describe('worker GPU image operator program', () => {
   it.each([
-    ['brightness', 0.2],
-    ['contrast', 0],
-    ['saturation', 0],
-  ])('transports a single %s graph without legacy scalar duplication', (type, amount) => {
+    ['brightness', { amount: 0.2 }],
+    ['contrast', { amount: 0 }],
+    ['saturation', { amount: 0 }],
+    ['exposure', { exposure: 0.5, offset: 0.1, gamma: 1.2 }],
+    ['levels', { inputBlack: 0.1, inputWhite: 0.9, gamma: 1.2, outputBlack: 0, outputWhite: 1 }],
+    ['hue-shift', { shift: 0.75 }],
+    ['temperature', { temperature: -0.4, tint: 0.2 }],
+    ['vibrance', { amount: 1 }],
+    ['threshold', { level: 0.5 }],
+    ['posterize', { levels: 6 }],
+  ])('transports a single %s graph without legacy scalar duplication', (type, params) => {
     const layer = { opacity: 1, blendMode: 'normal', effects: [
-      { id: type, name: type, type, enabled: true, params: { amount } },
+      { id: type, name: type, type, enabled: true, params },
     ] } as unknown as Layer;
     const style = resolveWorkerGpuVideoPresentationLayerStyle(layer);
     expect(style.operatorProgram?.key).toMatch(/^image-v1-/);
@@ -32,12 +39,13 @@ describe('worker GPU image operator program', () => {
   it('does not fold an ordered multi-effect stack into worker inline uniforms', () => {
     const layer = { opacity: 1, blendMode: 'normal', effects: [
       { id: 'brightness', name: 'Brightness', type: 'brightness', enabled: true, params: { amount: 0.2 } },
-      { id: 'contrast', name: 'Contrast', type: 'contrast', enabled: true, params: { amount: 0.4 } },
+      { id: 'exposure', name: 'Exposure', type: 'exposure', enabled: true, params: { exposure: 1.5, offset: 0, gamma: 1 } },
     ] } as unknown as Layer;
     const style = resolveWorkerGpuVideoPresentationLayerStyle(layer);
     expect(style.operatorProgram).toBeUndefined();
     expect(style.inlineBrightness).toBe(0);
     expect(style.inlineContrast).toBe(1);
+    expect(style.exposure).toBe(0);
     expect(style.complexEffectCount).toBe(2);
     expect(hasCompositorRenderLayer([{
       sourceId: 'video',

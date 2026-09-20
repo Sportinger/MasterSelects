@@ -2,6 +2,7 @@
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
+import { THRESHOLD_PARAMS } from '../pointwiseParams';
 
 export const threshold: EffectDefinition = {
   id: 'threshold',
@@ -12,17 +13,7 @@ export const threshold: EffectDefinition = {
   entryPoint: 'thresholdFragment',
   uniformSize: 16,
 
-  params: {
-    level: {
-      type: 'number',
-      label: 'Level',
-      default: 0.5,
-      min: 0,
-      max: 1,
-      step: 0.01,
-      animatable: true,
-    },
-  },
+  params: THRESHOLD_PARAMS,
 
   packUniforms: (params) => {
     return new Float32Array([

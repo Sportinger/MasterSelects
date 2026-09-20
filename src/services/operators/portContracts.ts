@@ -63,6 +63,7 @@ export const OPERATOR_SIGNAL_CONTRACTS: Record<OperatorSignal, NodePortContract>
   curves: contract('Curves', 'Ordered spatial points produced by the cable simulation.', 'rope-curves'),
   scene: contract('Scene', 'Geometry and appearance in a scene. A transform preserves this signal type.', 'scene-object'),
   number: contract('Number', 'A scalar value; it can drive a compatible numeric input.', 'scalar'),
+  boolean: contract('Boolean', 'A strict true-or-false condition.', 'boolean'),
 };
 
 export function getOperatorPortContract(port: OperatorPort): NodePortContract {

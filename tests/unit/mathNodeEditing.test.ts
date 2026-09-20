@@ -52,7 +52,10 @@ describe('math operation changes', () => {
       .toEqual(['add', 'subtract', 'multiply', 'divide', 'min', 'max', 'power', 'abs', 'sin']);
   });
   it('does not present scalar-field Constant for typed image subtract operators', () => {
-    expect(mathModeOptions({ operatorId: 'math.subtract.scalar' } as NodeGraphNode)).toEqual([]);
+    const scalarModes = mathModeOptions({ operatorId: 'math.subtract.scalar' } as NodeGraphNode).map(option => option.value);
+    expect(scalarModes).toContain('math.add.scalar');
+    expect(scalarModes).not.toContain('math.constant');
+    expect(scalarModes).not.toContain('math.add.rgb');
     const modes = mathModeOptions({ operatorId: 'math.subtract.rgb' } as NodeGraphNode).map(option => option.value);
     expect(modes).toContain('math.add.rgb');
     expect(modes).not.toContain('math.constant');

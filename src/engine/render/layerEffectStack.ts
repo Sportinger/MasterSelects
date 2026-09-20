@@ -72,17 +72,8 @@ export function splitLayerEffects(
       continue;
     }
 
-    switch (effect.type) {
-      case 'brightness':
-      case 'contrast':
-      case 'saturation':
-      case 'invert':
-        applyInlineEffect(inlineEffects, effect);
-        break;
-      default:
-        complexEffects.push(effect);
-        break;
-    }
+    if (isLocalImageEffectType(effect.type)) applyInlineEffect(inlineEffects, effect);
+    else complexEffects.push(effect);
   }
 
   return {

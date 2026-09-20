@@ -116,7 +116,7 @@ describe('image operator node UI', () => {
     const node = buildEffectOperatorGraph(clip, effect).nodes.find(candidate => candidate.id === 'subtract')!;
     const request = { key: 'subtract', revision: '1', time: 0, clipId: clip.id, node,
       width: 164, height: 100, interval: 16, priority: 1 };
-    expect(imageOperatorValuePreview(request, clip, effect)).toBeUndefined();
+    expect(imageOperatorValuePreview(request, clip, effect)?.drawing).toEqual({ kind: 'number', value: '0.15', caption: 'Result' });
     expect(imageOperatorKnownValues(request, clip, effect)).toEqual([
       { portId: 'a', direction: 'input', value: 0.25 },
       { portId: 'b', direction: 'input', value: 0.1 },
@@ -135,5 +135,19 @@ describe('image operator node UI', () => {
     expect(imageOperatorKnownValues(request, clip, effect)).toEqual([{ portId: 'a', direction: 'input', value: 1 }]);
     effect.operatorGraph!.nodes.find(candidate => candidate.id === 'invert-r')!.bypassed = true;
     expect(imageOperatorKnownValues(request, clip, effect)).toEqual([{ portId: 'a', direction: 'input', value: 1 }]);
+  });
+
+  it('uses the shared IR for constant-only scalar calculations', () => {
+    const { clip, effect } = fixture();
+    effect.operatorGraph!.nodes.push({ id: 'gain', operator: 'math.exp2.scalar', operatorVersion: 1, bindings: {} });
+    effect.operatorGraph!.layout.gain = { x: 660, y: 300 };
+    effect.operatorGraph!.edges.push({ id: 'gain-input', from: 'literal', output: 'value', to: 'gain', input: 'value' });
+    const node = buildEffectOperatorGraph(clip, effect).nodes.find(candidate => candidate.id === 'gain')!;
+    const request = { key: 'gain', revision: '1', time: 0, clipId: clip.id, node,
+      width: 164, height: 100, interval: 16, priority: 1 };
+    const preview = imageOperatorValuePreview(request, clip, effect)!;
+    expect(preview.drawing).toEqual({ kind: 'number', value: '1.1892', caption: 'Result' });
+    expect(preview.controls).toEqual([]);
+    expect(preview.values?.at(-1)?.value).toBeCloseTo(2 ** 0.25);
   });
 });
