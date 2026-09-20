@@ -46,7 +46,14 @@ The source model and conversion identify Apache-2.0; see
 ## Boundaries
 
 This produces **relative monocular depth**, not distances in meters or a complete
-3D mesh. The analysis preview is in source space. Face Cable collision/shadows
-and Voxel Relief depth sampling are separate consumers and are not yet connected.
+3D mesh. The analysis preview is in source space. **Face Cables > Native 3D scene >
+Scene depth** reuses this model during cable baking to add a textured depth surface
+outside the MediaPipe face. It stores calibrated depth alongside the cable scene;
+the standalone grayscale depth video is not required. The surface receives cable
+shadows and participates in scene depth testing. **Collide with scene depth** adds
+cable contact with that exterior surface while MediaPipe retains face contact.
+Depth and cable motion persist in the project; **Rebake physics** reuses the saved
+depth without inference when only cable settings or collision controls change.
+Voxel Relief depth sampling is not yet connected.
 The depth-aware Voxel Relief orchestration plan remains open; this feature does
 not mark its broader renderer/export/3D scope complete.

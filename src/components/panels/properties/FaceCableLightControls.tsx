@@ -21,6 +21,18 @@ export function FaceCableLightControls({ clipId, effectId, busy, onChange }: {
       <input type="checkbox" checked={Boolean(params.scene3D)} disabled={busy} onChange={e => update({ scene3D: e.target.checked })} />Native 3D scene
     </label></ResolveInspectorRow>
     {params.scene3D ? <>
+      <ResolveInspectorRow label="Scene depth"><label className="face-cable-checks">
+        <input type="checkbox" checked={Boolean(params.sceneDepth)} disabled={busy} onChange={e => update({ sceneDepth: e.target.checked })} />Depth for the rest of the image
+      </label></ResolveInspectorRow>
+      {params.sceneDepth && <>
+        <ResolveInspectorRow label="Depth contact"><label className="face-cable-checks">
+          <input type="checkbox" checked={params.sceneDepthCollision !== false} disabled={busy} onChange={e => update({ sceneDepthCollision: e.target.checked })} />Collide with scene depth
+        </label></ResolveInspectorRow>
+        <ResolveInspectorNumberRow label="Depth strength" ariaLabel="Scene depth strength" value={Number(params.sceneDepthStrength) || 1}
+          defaultValue={1} min={0.1} max={2} hardMin={0.1} hardMax={2} step={0.05} disabled={busy}
+          persistenceKey={`face-cables.${effectId}.sceneDepthStrength`} onChange={value => update({ sceneDepthStrength: value })} />
+        <p className="face-cable-hint">Bake estimates depth for hair, body and background; the face and anchors stay MediaPipe. First use downloads a 99 MB model. Video stays on this device. Relative relief, not a complete 3D scan. Depth contact adds collision with this surface; face contact is controlled separately.</p>
+      </>}
       <p className="face-cable-hint">Bake to create cable tubes and the textured face mesh. Existing camera and light clips then control perspective, lighting and shadows in real time. Enable Cast shadows on the light clip. Physics changes still require Bake.</p>
       <button type="button" disabled={busy} onClick={() => {
         const state = useTimelineStore.getState(), clip = state.clips.find(c => c.id === clipId);

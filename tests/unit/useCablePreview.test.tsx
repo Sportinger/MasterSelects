@@ -58,4 +58,17 @@ describe('cable preview scheduling', () => {
     expect(calls.render).toHaveBeenCalledTimes(2);
     expect(calls.globalInvalidate).not.toHaveBeenCalled();
   });
+  it('removes the 2D draft when native scene mode is enabled and explains the required bake', () => {
+    const { result } = renderHook(() => useCablePreview('clip', 'effect', configs, true));
+    act(() => vi.advanceTimersByTime(80));
+    expect(calls.simulate).toHaveBeenCalledTimes(1);
+    const original = useTimelineStore.getState().clips;
+    act(() => useTimelineStore.setState({ clips: original.map(clip => ({ ...clip,
+      effects: [{ id: 'effect', type: 'face-cables', name: 'Face Cables', enabled: true, params: { scene3D: true } }],
+    })) }));
+    act(() => vi.advanceTimersByTime(100));
+    expect(calls.simulate).toHaveBeenCalledTimes(1);
+    expect(result.current).toContain('Bake to update the 3D scene and depth');
+    act(() => useTimelineStore.setState({ clips: original }));
+  });
 });

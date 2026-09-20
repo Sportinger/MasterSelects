@@ -565,9 +565,44 @@ supported by the cable pass. Flat line style uses unlit tubes that still cast
 shadows. Clip transforms and light/camera keyframes are evaluated by the shared
 scene path in preview and export; changing lighting does not rebake physics.
 Bake from a frontal, unparented video without crop or 3D tilt. The captured face
-is a front-surface estimate, not a reconstructed head; the rest of the video stays
-a flat sheet with the face region cut out. There is no reconstructed head back,
-hair or neck depth. Cable/face geometry shares scene depth with other objects;
+is a front-surface estimate, not a reconstructed head. By default the rest of the
+video stays a flat sheet with the face region cut out. Enable **Scene depth >
+Depth for the rest of the image** to estimate hair, neck, body and background
+depth with Depth Anything V2 Small during **Bake cables**. The first bake downloads
+the verified 99 MB model; source pixels stay on the device. **Depth strength**
+controls the relative relief outside the face. MediaPipe still supplies the face
+and cable anchors. The surrounding mesh is welded to the exact face boundary,
+with a soft transition into the estimated depth. Faces may cross the image edges:
+the surrounding surface and face texture are clipped at the source boundary.
+Missing detections use a full-image depth surface.
+
+Depth inference follows source timestamps, including speed and reverse, and runs
+sequentially at Fast quality. This is an offline bake, not full-framerate live ML.
+Version-2 scene artifacts store a bounded depth grid (48 cells on the long edge)
+with every baked frame; preview, scrubbing and export use the same saved geometry
+without inference. Existing version-1 scenes remain readable. Cancel, inference
+errors or changes to the clip during baking preserve the previous result.
+Camera and light movement remains live after baking. The depth surface receives
+cable shadows and can occlude cables. **Collide with scene depth** is enabled by
+default when scene depth is active. It builds a 192×192 front-surface contact map
+from the same welded, clipped mesh used for rendering, transformed back into
+the cable simulation's coordinates. Free cable nodes collide with hair, body and
+background with radius clearance, inward-velocity removal and friction.
+**Collide with tracked face** remains independent and uses MediaPipe inside the
+face. Locked anchors remain pinned. This is a sampled front-surface collider,
+not volumetric collision; thin details and long segments can still be crossed.
+
+**Rebake physics** reuses the depth already saved in the scene artifact while
+simulating new cable settings and collisions. No model inference or download is
+required. It validates frame timing, source/transform/depth settings and every
+tracked face pose before committing. Older depth artifacts are checked against
+their saved geometry. Use **Bake cables** for fresh estimation after changing
+the source, timing, tracking or depth strength. Both the compressed depth and
+the resulting cable motion are stored in normal project effect data; saving and
+reopening the project preserves them without the model cache.
+Relative monocular depth is a 2.5D estimate: large view changes can reveal stretched
+textures and missing unseen surfaces. It does not reconstruct the back of the head.
+Cable/face geometry shares scene depth with other objects;
 shadow maps currently contain cable casters only, not unrelated meshes or splats.
 The approximate face receives shadows without casting scan-triangle self-shadows;
 eye and mouth openings are capped with the captured video. The inspector can add

@@ -49,6 +49,7 @@ fn visibility(p: vec3f, i: u32) -> f32 {
   return 1.0 - (1.0 - lit / 9.0) * params.lights[i].settings.x;
 }
 @fragment fn mainFragment(v: Varying) -> @location(0) vec4f {
+  if (v.material < 1.5 && (any(v.uv < vec2f(0.0)) || any(v.uv > vec2f(1.0)))) { discard; }
   if (v.material < 0.5 && onFace(v.uv)) { discard; }
   var base = v.color;
   var sourceUv = v.uv;

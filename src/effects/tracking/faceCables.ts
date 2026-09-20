@@ -8,6 +8,9 @@ export const faceCables: EffectDefinition = {
   entryPoint: 'faceCablesFragment', uniformSize: CABLE_UNIFORM_SIZE,
   params: {
     scene3D: { type: 'boolean', label: 'Native 3D scene', default: false, hidden: true, animatable: false },
+    sceneDepth: { type: 'boolean', label: 'Scene depth', default: false, hidden: true, animatable: false },
+    sceneDepthCollision: { type: 'boolean', label: 'Scene depth collision', default: true, hidden: true, animatable: false },
+    sceneDepthStrength: { type: 'number', label: 'Scene depth strength', default: 1, min: 0.1, max: 2, step: 0.05, hidden: true, animatable: false },
     sceneData: { type: 'text', label: 'Baked 3D geometry', default: '', hidden: true, animatable: false },
     faceShadows: { type: 'boolean', label: 'Face shadows', default: false, hidden: true, animatable: false },
     lightHorizontal: { type: 'number', label: 'Light horizontal', default: -30, min: -75, max: 75, step: 1, hidden: true, animatable: false },

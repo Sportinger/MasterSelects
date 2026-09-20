@@ -18,6 +18,10 @@ import { projectCableDepth, cableWindAtTime } from './cableDepth';
 import { createCable, stepCable, type CableState, type CablePoint } from './cablePhysics';
 import { cableFrameLayout, FACE_CABLE_ANCHORS, MAX_CABLE_FLOATS, MAX_FACE_CABLES, isFaceCableConfig, encodeCableBake, type FaceCableConfig } from './cableData';
 import type { Keyframe } from '../../types/keyframes';
+import { cableDepthGrid, calibratedCableDepth, calibrateCableDepth, type CableDepthCalibration } from './cableSceneDepth';
+import { openCableDepthReader } from './cableDepthReader';
+import { decodeCableScene } from './cableSceneData';
+import { createCableDepthContact } from './cableDepthContact';
 
 function neighborKeys(groups: Keyframe[][], time: number): Keyframe[] {
   return groups.flatMap(keys => {
@@ -27,7 +31,8 @@ function neighborKeys(groups: Keyframe[][], time: number): Keyframe[] {
   });
 }
 
-export async function bakeFaceCables(clipId: string, effectId: string, configs: FaceCableConfig[], signal: AbortSignal, progress: (value: number) => void): Promise<void> {
+export async function bakeFaceCables(clipId: string, effectId: string, configs: FaceCableConfig[], signal: AbortSignal, progress: (value: number) => void,
+  report: (message: string) => void = () => {}, reuseDepth = false): Promise<void> {
   assertExclusiveTimelineMutationAllowed();
   const timeline = useTimelineStore.getState(), media = useMediaStore.getState();
   const clip = timeline.clips.find(c => c.id === clipId), comp = media.getActiveComposition();
@@ -59,35 +64,64 @@ export async function bakeFaceCables(clipId: string, effectId: string, configs: 
   const sorted = [...groups.values()].map(g => g.toSorted((a, b) => a.time - b.time));
   const speedKeys = keys.filter(k => k.property === 'speed');
   const aspect = comp.width / comp.height;
-  const sceneBake = effectParams.scene3D ? createCableSceneBake(configs, fps, frames, clip.duration, aspect) : undefined;
+  const depthGrid = effectParams.scene3D && effectParams.sceneDepth ? cableDepthGrid(source.width, source.height) : undefined;
+  const depthBinding = depthGrid ? JSON.stringify({ sourceId, source, width: comp.width, height: comp.height, fps,
+    inPoint: clip.inPoint, outPoint: clip.outPoint, duration: clip.duration, speed: clip.speed, reversed: clip.reversed,
+    transform: clip.transform, transformKeys: sorted, speedKeys, speedSection: clip.videoInspectorSections?.speedChange,
+    transitionSourceMap: clip.transitionSourceMap, transitionSourceTimeOverride: clip.transitionSourceTimeOverride,
+    strength: Number(effectParams.sceneDepthStrength) || 1 }) : undefined;
+  const savedDepth = reuseDepth ? decodeCableScene(effectParams.sceneData) : null;
+  if (reuseDepth && (!depthGrid || !savedDepth?.depthGrid)) throw new Error('Bake scene depth first before reusing it for physics.');
+  const sceneBake = effectParams.scene3D ? createCableSceneBake(configs, fps, frames, clip.duration, aspect, depthGrid, depthBinding) : undefined;
   type Pose = { mapping: ReturnType<typeof trackingPreviewTransform>; transform: typeof clip.transform; anchors: (null | [CablePoint, CablePoint])[]; facePoints?: CablePoint[] };
   const poses: Pose[] = [];
   const lengths = configs.map(() => 0);
-  for (let frame = 0; frame < frames; frame++) {
-    signal.throwIfAborted();
-    const time = Math.min(frame / fps, clip.duration - 1e-6);
-    const transform = getInterpolatedClipTransform(neighborKeys(sorted, time), time, clip.transform);
-    const mapping = trackingPreviewTransform(transform, source, comp);
-    const face = samplePreciseFace(series, surfaceSourceTime(clip, time, speedKeys))?.faces[0];
-    const facePoints = (effectParams.faceCollision || effectParams.faceShadows || effectParams.scene3D) && face?.length ? cableFacePoints(face, mapping, aspect) : undefined;
-    sceneBake?.writeFace(frame, face, facePoints, transform, mapping);
-    const anchors = configs.map((config, index): [CablePoint, CablePoint] | null => {
-      if (!face?.length) return null;
-      const anchor = (key: keyof typeof FACE_CABLE_ANCHORS) => {
-        const indices = FACE_CABLE_ANCHORS[key].indices;
-        if (facePoints) return indices.reduce((p, i) => ({ x: p.x + facePoints[i].x / indices.length, y: p.y + facePoints[i].y / indices.length, z: p.z + (facePoints[i].z ?? 0) / indices.length }), { x: 0, y: 0, z: 0 });
-        const uv = indices.reduce((p, i) => ({ x: p.x + face[i].x / indices.length, y: p.y + face[i].y / indices.length }), { x: 0, y: 0 });
-        const projected = mapping.toComposition(uv);
-        return { x: projected.x * aspect, y: projected.y };
-      };
-      const a = anchor(config.from), b = anchor(config.to);
-      if (![a.x, a.y, b.x, b.y].every(Number.isFinite)) return null;
-      if (!config.fromCableId) lengths[index] = Math.max(lengths[index], Math.hypot(a.x - b.x, a.y - b.y, ('z' in a ? Number(a.z) : 0) - ('z' in b ? Number(b.z) : 0)));
-      return [a, b];
-    });
-    poses.push({ mapping, transform, anchors, facePoints });
-    if (frame % 32 === 0) { progress(frame / frames * 0.25); await new Promise<void>(resolve => setTimeout(resolve, 0)); }
-  }
+  let depthReader: Awaited<ReturnType<typeof openCableDepthReader>> | undefined;
+  let calibration: CableDepthCalibration | undefined, previousDepthTime = -Infinity;
+  try {
+    if (depthGrid && !savedDepth) depthReader = await openCableDepthReader(clip.source?.videoElement?.currentSrc ?? '', clip.file, signal, report);
+    if (savedDepth) report('Reusing saved scene depth; checking face and timing...');
+    for (let frame = 0; frame < frames; frame++) {
+      signal.throwIfAborted();
+      const time = Math.min(frame / fps, clip.duration - 1e-6);
+      const transform = getInterpolatedClipTransform(neighborKeys(sorted, time), time, clip.transform);
+      const mapping = trackingPreviewTransform(transform, source, comp);
+      const face = samplePreciseFace(series, surfaceSourceTime(clip, time, speedKeys))?.faces[0];
+      const facePoints = (effectParams.faceCollision || effectParams.faceShadows || effectParams.scene3D) && face?.length ? cableFacePoints(face, mapping, aspect) : undefined;
+      sceneBake?.writeFace(frame, face, facePoints, transform, mapping);
+      if (savedDepth) sceneBake!.reuseDepth(frame, savedDepth);
+      if (depthReader && depthGrid) {
+        const sourceTime = surfaceSourceTime(clip, time, speedKeys);
+        report(`Estimating scene depth: ${frame + 1} / ${frames}`);
+        const depth = await depthReader.read(sourceTime);
+        const origin = mapping.toComposition({ x: 0, y: 0 }), unit = mapping.toComposition({ x: 1, y: 0 });
+        const width = Math.hypot((unit.x - origin.x) * aspect, unit.y - origin.y);
+        const strength = Math.max(0.1, Math.min(2, Number(effectParams.sceneDepthStrength) || 1));
+        if (Math.abs(sourceTime - previousDepthTime) > 0.5) calibration = undefined;
+        calibration = calibrateCableDepth(depth, face, facePoints, width, strength, calibration);
+        sceneBake!.writeDepth(frame, calibratedCableDepth(depth, depthGrid, calibration), transform);
+        previousDepthTime = sourceTime;
+        progress((frame + 1) / frames * 0.25);
+      }
+      const anchors = configs.map((config, index): [CablePoint, CablePoint] | null => {
+        if (!face?.length) return null;
+        const anchor = (key: keyof typeof FACE_CABLE_ANCHORS) => {
+          const indices = FACE_CABLE_ANCHORS[key].indices;
+          if (facePoints) return indices.reduce((p, i) => ({ x: p.x + facePoints[i].x / indices.length, y: p.y + facePoints[i].y / indices.length, z: p.z + (facePoints[i].z ?? 0) / indices.length }), { x: 0, y: 0, z: 0 });
+          const uv = indices.reduce((p, i) => ({ x: p.x + face[i].x / indices.length, y: p.y + face[i].y / indices.length }), { x: 0, y: 0 });
+          const projected = mapping.toComposition(uv);
+          return { x: projected.x * aspect, y: projected.y };
+        };
+        const a = anchor(config.from), b = anchor(config.to);
+        if (![a.x, a.y, b.x, b.y].every(Number.isFinite)) return null;
+        if (!config.fromCableId) lengths[index] = Math.max(lengths[index], Math.hypot(a.x - b.x, a.y - b.y, ('z' in a ? Number(a.z) : 0) - ('z' in b ? Number(b.z) : 0)));
+        return [a, b];
+      });
+      poses.push({ mapping, transform, anchors, facePoints });
+      if (frame % 32 === 0) { progress(frame / frames * 0.25); await new Promise<void>(resolve => setTimeout(resolve, 0)); }
+    }
+  } finally { depthReader?.close(); }
+  report('Simulating cables...');
   if (!lengths.some(v => v > 0)) throw new Error('No usable anchor pairs in the tracked range.');
   const data = new Float32Array(frames * layout.stride);
   const states: (CableState | null)[] = configs.map(() => null);
@@ -95,7 +129,12 @@ export async function bakeFaceCables(clipId: string, effectId: string, configs: 
   const substeps = Math.max(1, Math.ceil(120 / fps)), dt = 1 / fps / substeps;
   for (let frame = 0; frame < frames; frame++) {
     signal.throwIfAborted();
-    const contact = effectParams.faceCollision && poses[frame].facePoints ? createFaceContact(poses[frame].facePoints!) : undefined;
+    const faceContact = effectParams.faceCollision && poses[frame].facePoints ? createFaceContact(poses[frame].facePoints!) : undefined;
+    const depthContact = sceneBake?.scene.depthGrid && effectParams.sceneDepthCollision !== false && poses[frame].anchors.some(Boolean)
+      ? createCableDepthContact(sceneBake.scene, frame, poses[frame].transform, aspect) : undefined;
+    const contact = depthContact ? (point: CablePoint, previous: CablePoint, radius: number) => {
+      depthContact(point, previous, radius); faceContact?.(point, previous, radius);
+    } : faceContact;
     const receiver = version === 4 && poses[frame].facePoints ? createCableShadowReceiver(poses[frame].facePoints!, effectParams) : undefined;
     for (const cable of simulationOrder) {
       let anchors = poses[frame].anchors[cable];

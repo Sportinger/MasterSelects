@@ -24,7 +24,7 @@ export function useCablePreview(clipId: string, effectId: string, configs: FaceC
     if (!active) return '';
     const p = state.clips.find(c => c.id === clipId)?.effects.find(e => e.id === effectId)?.params;
     return JSON.stringify([p?.sharedWind, p?.faceCollision, p?.globalWindStrength, p?.globalWindYaw, p?.globalWindPitch, p?.globalWindGusts,
-      p?.faceShadows, p?.lightHorizontal, p?.lightVertical, p?.shadowStrength, p?.shadowSoftness]);
+      p?.faceShadows, p?.lightHorizontal, p?.lightVertical, p?.shadowStrength, p?.shadowSoftness, p?.scene3D]);
   });
   const [status, setStatus] = useState('');
   useEffect(() => {
@@ -38,6 +38,11 @@ export function useCablePreview(clipId: string, effectId: string, configs: FaceC
     const removed = setCablePreview(clipId, effectId, null);
     if (!active || playing || exporting || !clip || time === null) {
       setStatus(active && playing ? 'Pause playback to preview changes.' : '');
+      if (removed) refresh();
+      return;
+    }
+    if (clip.is3D || clip.effects.find(e => e.id === effectId)?.params.scene3D) {
+      setStatus('Bake to update the 3D scene and depth. Camera and light changes are live.');
       if (removed) refresh();
       return;
     }

@@ -25,6 +25,10 @@ export function FaceCableControls({ clipId, effectId }: { clipId: string; effect
   const tracking = usePreciseFaceTrack(clipId);
   const disabled = !tracking.ready || tracking.summary?.status === "tracking" || tracking.summary?.status === "loading";
   const settings = useTimelineStore(state => state.clips.find(c => c.id === clipId)?.effects.find(e => e.id === effectId)?.params.settings);
+  const canReuseDepth = useTimelineStore(state => {
+    const p = state.clips.find(c => c.id === clipId)?.effects.find(e => e.id === effectId)?.params;
+    return Boolean(p?.scene3D && p?.sceneDepth && p?.sceneData);
+  });
   const [defaults] = useState(defaultFaceCable);
   const [configs, setConfigs] = useState(() => readConfigs(settings));
   const [selected, setSelected] = useState(0);
@@ -38,9 +42,9 @@ export function FaceCableControls({ clipId, effectId }: { clipId: string; effect
   const cable = configs[Math.min(selected, configs.length - 1)];
   const edit = (patch: Partial<FaceCableConfig>) => { setDirty(true); setConfigs(list => list.map((c, i) => i === selected ? { ...c, ...patch } : c)); setMessage('Settings changed — bake to apply.'); };
   const animation = useFaceCableAnimation(clipId, effectId, cable, () => setDirty(true), edit, busy);
-  const bake = async () => {
+  const bake = async (reuseDepth = false) => {
     const abort = new AbortController(); controller.current = abort; setBusy(true); setProgress(0); setMessage('Simulating cables…');
-    try { await bakeFaceCables(clipId, effectId, configs, abort.signal, setProgress); setDirty(false); setMessage(`${configs.length} cable${configs.length === 1 ? '' : 's'} baked · preview and export`); }
+    try { await bakeFaceCables(clipId, effectId, configs, abort.signal, setProgress, setMessage, reuseDepth); setDirty(false); setMessage(`${configs.length} cable${configs.length === 1 ? '' : 's'} baked · preview and export`); }
     catch (error) { setMessage(abort.signal.aborted ? 'Cancelled; previous cables kept.' : error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); controller.current = null; }
   };
@@ -131,8 +135,10 @@ export function FaceCableControls({ clipId, effectId }: { clipId: string; effect
       <p className="face-cable-hint">{tracking.ready ? 'Precise face tracking ready.' : 'Track face precisely in the Tracking panel first.'} Bake saves changes for playback and export.</p>
       <div className="face-cable-actions">
         <button type="button" disabled={disabled || busy} onClick={() => void bake()}>Bake cables</button>
+        {canReuseDepth && <button type="button" disabled={disabled || busy} onClick={() => void bake(true)}>Rebake physics</button>}
         {busy && <button type="button" onClick={() => controller.current?.abort()}>Cancel cables</button>}
       </div>
+      {canReuseDepth && <p className="face-cable-hint">Rebake physics keeps the saved depth and its strength. Use Bake cables after changing the source, timing, tracking or depth strength.</p>}
       {busy && <progress aria-label="Cable bake progress" max={1} value={progress} />}
       <output aria-live="polite">{message}{busy ? ` ${Math.round(progress * 100)}%` : ''}</output>
     </div>

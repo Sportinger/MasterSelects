@@ -21,13 +21,13 @@ export function cableFacePoints(face: LandmarkPoint[], mapping: Mapping, aspect:
 }
 
 /** Rasterized front surface: bounded per-frame work, constant-time contact per rope node. */
-export function createFaceContact(points: CablePoint[], triangles?: number[][]): FaceContact {
-  const vertices = points.slice(0, 468);
+export function createFaceContact(points: CablePoint[], triangles?: number[][], size = SIZE): FaceContact {
+  const vertices = triangles ? points : points.slice(0, 468);
   const minX = Math.min(...vertices.map(p => p.x)), maxX = Math.max(...vertices.map(p => p.x));
   const minY = Math.min(...vertices.map(p => p.y)), maxY = Math.max(...vertices.map(p => p.y));
-  const dx = (maxX - minX) / (SIZE - 1), dy = (maxY - minY) / (SIZE - 1);
+  const dx = (maxX - minX) / (size - 1), dy = (maxY - minY) / (size - 1);
   if (!(dx > 0 && dy > 0)) return () => {};
-  const depth = new Float32Array(SIZE * SIZE).fill(-Infinity);
+  const depth = new Float32Array(size * size).fill(-Infinity);
   const edges = FaceLandmarker.FACE_LANDMARKS_TESSELATION;
   const faces = triangles ?? Array.from({ length: edges.length / 3 }, (_, i) => [edges[i * 3].start, edges[i * 3].end, edges[i * 3 + 1].end]);
   for (const indices of faces) {
@@ -36,26 +36,26 @@ export function createFaceContact(points: CablePoint[], triangles?: number[][]):
     const den = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y);
     if (Math.abs(den) < 1e-12) continue;
     const x0 = Math.max(0, Math.floor((Math.min(a.x, b.x, c.x) - minX) / dx));
-    const x1 = Math.min(SIZE - 1, Math.ceil((Math.max(a.x, b.x, c.x) - minX) / dx));
+    const x1 = Math.min(size - 1, Math.ceil((Math.max(a.x, b.x, c.x) - minX) / dx));
     const y0 = Math.max(0, Math.floor((Math.min(a.y, b.y, c.y) - minY) / dy));
-    const y1 = Math.min(SIZE - 1, Math.ceil((Math.max(a.y, b.y, c.y) - minY) / dy));
+    const y1 = Math.min(size - 1, Math.ceil((Math.max(a.y, b.y, c.y) - minY) / dy));
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
       const px = minX + x * dx, py = minY + y * dy;
       const u = ((b.y - c.y) * (px - c.x) + (c.x - b.x) * (py - c.y)) / den;
       const v = ((c.y - a.y) * (px - c.x) + (a.x - c.x) * (py - c.y)) / den;
       if (u < -1e-5 || v < -1e-5 || u + v > 1.00001) continue;
       const z = u * (a.z ?? 0) + v * (b.z ?? 0) + (1 - u - v) * (c.z ?? 0);
-      depth[y * SIZE + x] = Math.max(depth[y * SIZE + x], z);
+      depth[y * size + x] = Math.max(depth[y * size + x], z);
     }
   }
   return (point, previous, radius) => {
     const x = (point.x - minX) / dx, y = (point.y - minY) / dy;
-    if (x < 0 || y < 0 || x > SIZE - 1 || y > SIZE - 1) return;
+    if (x < 0 || y < 0 || x > size - 1 || y > size - 1) return;
     // Conservative neighboring samples bridge raster holes at triangle edges.
     const ix = Math.floor(x), iy = Math.floor(y);
     let z = -Infinity;
     for (let oy = 0; oy <= 1; oy++) for (let ox = 0; ox <= 1; ox++) {
-      z = Math.max(z, depth[Math.min(SIZE - 1, iy + oy) * SIZE + Math.min(SIZE - 1, ix + ox)]);
+      z = Math.max(z, depth[Math.min(size - 1, iy + oy) * size + Math.min(size - 1, ix + ox)]);
     }
     z += radius;
     if ((point.z ?? 0) >= z) return;

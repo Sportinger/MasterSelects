@@ -19,7 +19,9 @@ in that same project, and refine it around the job in front of you.
 ![Face Cables in MasterSelects: face tracking, custom effect controls, and animated timeline keyframes](docs/images/screenshot-face-cables.png)
 
 *Face Cables: a custom face-tracking effect with cable physics, editable controls,
-and timeline keyframes.*
+and timeline keyframes. Optional AI scene depth gives hair, body and background
+a textured 2.5D surface with cable collision while MediaPipe retains the face and
+cable anchors. Baked depth stays in the project and can be reused for physics.*
 
 ## Why I built this
 

@@ -1,4 +1,5 @@
 import { cableSceneLayout, type CableSceneBake } from '../../../../services/faceCables/cableSceneData';
+import { buildCableDepthGeometry } from '../../../../services/faceCables/cableDepthSurface';
 
 const SIDES = 8;
 const holeCache = new WeakMap<CableSceneBake, number[][]>();
@@ -22,7 +23,7 @@ function faceHoles(bake: CableSceneBake): number[][] {
 }
 export function buildCableSceneGeometry(bake: CableSceneBake, time: number) {
   if (!Number.isFinite(time) || time < 0 || time >= bake.duration) return null;
-  const layout = cableSceneLayout(bake.cables), base = Math.min(bake.frames - 1, Math.floor(time * bake.fps + 1e-5)) * layout.stride;
+  const layout = cableSceneLayout(bake.cables, bake.depthGrid), base = Math.min(bake.frames - 1, Math.floor(time * bake.fps + 1e-5)) * layout.stride;
   const data = bake.data, vertices: number[] = [], indices: number[] = [];
   const add = (p: number[], n: number[], uv: number[], color: number[], material: number) => {
     const index = vertices.length / 12; vertices.push(...p, ...n, ...uv, ...color, material); return index;
@@ -31,7 +32,7 @@ export function buildCableSceneGeometry(bake: CableSceneBake, time: number) {
     const o = base + 1 + i * 5;
     add(Array.from(data.subarray(o, o + 3)), [0, 0, 1], Array.from(data.subarray(o + 3, o + 5)), [1, 1, 1], 0);
   }
-  indices.push(0, 2, 1, 0, 3, 2);
+  if (!bake.depthGrid) indices.push(0, 2, 1, 0, 3, 2);
   const outline: number[] = [];
   if (data[base]) {
     const normals = new Float32Array(468 * 3);
@@ -56,6 +57,12 @@ export function buildCableSceneGeometry(bake: CableSceneBake, time: number) {
       loop.forEach((i, j) => indices.push(middle, i + 4, loop[(j + 1) % loop.length] + 4));
     }
     bake.outline.forEach(i => { const o = base + 21 + i * 5; outline.push(data[o + 3], data[o + 4], 0, 0); });
+  }
+  if (bake.depthGrid) {
+    const surface = buildCableDepthGeometry(bake, base), start = vertices.length / 12;
+    surface.vertices.forEach(p => add(p.position, [0, 0, 1], p.uv, [1, 1, 1], 1));
+    // Textured depth receivers use the same material as the face: cable shadows and scene depth.
+    for (const index of surface.indices) indices.push(index + start);
   }
   // The tracked face receives cable shadows. Its approximate open scan must not cast
   // triangle-shaped self shadows or shadows from the artificial eye/mouth caps.
