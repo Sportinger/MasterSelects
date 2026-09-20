@@ -2,6 +2,7 @@
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
+import { CONTRAST_AMOUNT_PARAM } from '../sharedColorAmountParams';
 
 export const contrast: EffectDefinition = {
   id: 'contrast',
@@ -13,15 +14,7 @@ export const contrast: EffectDefinition = {
   uniformSize: 16,
 
   params: {
-    amount: {
-      type: 'number',
-      label: 'Amount',
-      default: 1,
-      min: 0,
-      max: 3,
-      step: 0.01,
-      animatable: true,
-    },
+    amount: CONTRAST_AMOUNT_PARAM,
   },
 
   packUniforms: (params) => {

@@ -137,6 +137,13 @@ numeric inputs remain readable beside that image. No preview pipeline or materia
 intermediate is created while its viewer is off, and preview shaders are cached per
 GPU device with bounded lifetime and device-loss/HMR handling.
 
+Brightness, Contrast and Saturation open as real math graphs rather than opaque
+effect cards. Their Amount value remains the existing effect parameter, including
+its keyframes and original Min/Max/Default contract; the inline value and inspector
+edit that same binding. RGB arithmetic is clamped before it is recombined with the
+unchanged source alpha, and graph layout, constants and connections persist with
+the effect through history and project save/load.
+
 Analog Signal Lab appears as its actual signal chain rather than one opaque effect
 card. PAL, RF, VHS, receiver, decoder and display nodes expose the original effect
 parameters through the shared inspector, including the PAL decoder and tape-speed

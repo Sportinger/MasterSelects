@@ -5,7 +5,7 @@ import { evaluateScalarOperation } from './scalarOperationSemantics';
 export type ImagePlanValue = 'image' | 'rgb' | 'alpha' | 'scalar' | 'vec2' | 'vec3' | 'vec4';
 export interface ImagePlanInstruction {
   nodeId: string;
-  operation: 'input' | 'constant' | 'subtract' | 'subtract-rgb' | 'scalar-to-rgb' | 'split-rgb' | 'split-alpha' | 'combine' | 'image-to-vec4' | 'vec4-to-image' | 'split-component' | 'combine-vector';
+  operation: 'input' | 'constant' | 'subtract' | 'subtract-rgb' | 'add-rgb' | 'multiply-rgb' | 'clamp-rgb' | 'mix-rgb' | 'luminance-rec601' | 'scalar-to-rgb' | 'split-rgb' | 'split-alpha' | 'combine' | 'image-to-vec4' | 'vec4-to-image' | 'split-component' | 'combine-vector';
   type: ImagePlanValue;
   inputs: number[];
   value?: number;
@@ -166,6 +166,27 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         register = current.bypassed ? b : emit({ nodeId: current.id, operation: 'subtract-rgb', type: 'rgb', inputs: [visitSource(current, 'a'), b] });
         break;
       }
+      case 'math.add.rgb': {
+        const a = visitSource(current, 'a');
+        register = current.bypassed ? a : emit({ nodeId: current.id, operation: 'add-rgb', type: 'rgb', inputs: [a, visitSource(current, 'b')] });
+        break;
+      }
+      case 'math.multiply.rgb': {
+        const a = visitSource(current, 'a');
+        register = current.bypassed ? a : emit({ nodeId: current.id, operation: 'multiply-rgb', type: 'rgb', inputs: [a, visitSource(current, 'b')] });
+        break;
+      }
+      case 'math.clamp.rgb': {
+        const value = visitSource(current, 'value');
+        register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'clamp-rgb', type: 'rgb', inputs: [value, visitSource(current, 'min'), visitSource(current, 'max')] });
+        break;
+      }
+      case 'math.mix.rgb': {
+        const b = visitSource(current, 'b');
+        register = current.bypassed ? b : emit({ nodeId: current.id, operation: 'mix-rgb', type: 'rgb', inputs: [visitSource(current, 'a'), b, visitSource(current, 't')] });
+        break;
+      }
+      case 'color.luminance-rec601.rgb': register = emit({ nodeId: current.id, operation: 'luminance-rec601', type: 'scalar', inputs: [visitSource(current, 'rgb')] }); break;
       case 'vector.combine.rgba': register = emit({ nodeId: current.id, operation: 'combine', type: 'image', inputs: [visitSource(current, 'rgb'), visitSource(current, 'alpha')] }); break;
       default: throw new Error(`Unsupported local image operator: ${current.operator}`);
     }
@@ -188,6 +209,9 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     const expression = item.operation === 'input' ? 'pixel' : item.operation === 'constant' ? f32(item.value ?? 0)
       : item.operation === 'subtract' ? `${args[0]} - ${args[1]}` : item.operation === 'split-rgb' ? `${args[0]}.rgb`
       : item.operation === 'split-alpha' ? `${args[0]}.a` : item.operation === 'subtract-rgb' ? `${args[0]} - ${args[1]}`
+      : item.operation === 'add-rgb' ? `${args[0]} + ${args[1]}` : item.operation === 'multiply-rgb' ? `${args[0]} * ${args[1]}`
+      : item.operation === 'clamp-rgb' ? `clamp(${args[0]}, min(${args[1]}, ${args[2]}), max(${args[1]}, ${args[2]}))` : item.operation === 'mix-rgb' ? `mix(${args[0]}, ${args[1]}, ${args[2]})`
+      : item.operation === 'luminance-rec601' ? `dot(${args[0]}, vec3f(0.299, 0.587, 0.114))`
       : item.operation === 'scalar-to-rgb' ? `vec3f(${args[0]})` : item.operation === 'image-to-vec4' || item.operation === 'vec4-to-image' ? args[0]
       : item.operation === 'split-component' ? `${args[0]}[${item.value}]` : item.operation === 'combine-vector' ? `vec${item.inputs.length}f(${args.join(', ')})`
       : `vec4f(${args[0]}, ${args[1]})`;
@@ -221,6 +245,11 @@ export function evaluateImageOperatorPlan(plan: ImageOperatorPlan, pixel: [numbe
     else if (item.operation === 'split-rgb') values.push((args[0] as number[]).slice(0, 3));
     else if (item.operation === 'split-alpha') values.push((args[0] as number[])[3]);
     else if (item.operation === 'subtract-rgb') values.push((args[0] as number[]).map((channel, index) => evaluateScalarOperation('subtract', channel, (args[1] as number[])[index])));
+    else if (item.operation === 'add-rgb') values.push((args[0] as number[]).map((channel, index) => evaluateScalarOperation('add', channel, (args[1] as number[])[index])));
+    else if (item.operation === 'multiply-rgb') values.push((args[0] as number[]).map((channel, index) => evaluateScalarOperation('multiply', channel, (args[1] as number[])[index])));
+    else if (item.operation === 'clamp-rgb') values.push((args[0] as number[]).map((channel, index) => evaluateScalarOperation('clamp', channel, (args[1] as number[])[index], (args[2] as number[])[index])));
+    else if (item.operation === 'mix-rgb') values.push((args[0] as number[]).map((channel, index) => channel * (1 - (args[2] as number)) + (args[1] as number[])[index] * (args[2] as number)));
+    else if (item.operation === 'luminance-rec601') values.push((args[0] as number[])[0] * 0.299 + (args[0] as number[])[1] * 0.587 + (args[0] as number[])[2] * 0.114);
     else if (item.operation === 'scalar-to-rgb') values.push([args[0] as number, args[0] as number, args[0] as number]);
     else if (item.operation === 'image-to-vec4' || item.operation === 'vec4-to-image') values.push(args[0]);
     else if (item.operation === 'split-component') values.push((args[0] as number[])[item.value ?? 0]);

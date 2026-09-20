@@ -7,6 +7,7 @@ import { createMockClip, createMockTrack } from '../helpers/mockData';
 import { validateEffectGraph } from '../../src/services/operators/effectGraph';
 import type { NodeGraphNode } from '../../src/types/nodeGraph';
 import { effectOperatorCompileParams, effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { createDefaultInvertImageGraph, compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 
 const initial = useTimelineStore.getState();
 afterEach(() => useTimelineStore.setState(initial));
@@ -52,6 +53,34 @@ describe('math operation changes', () => {
   });
   it('does not present scalar-field Constant for typed image subtract operators', () => {
     expect(mathModeOptions({ operatorId: 'math.subtract.scalar' } as NodeGraphNode)).toEqual([]);
-    expect(mathModeOptions({ operatorId: 'math.subtract.rgb' } as NodeGraphNode)).toEqual([]);
+    const modes = mathModeOptions({ operatorId: 'math.subtract.rgb' } as NodeGraphNode).map(option => option.value);
+    expect(modes).toContain('math.add.rgb');
+    expect(modes).not.toContain('math.constant');
+    expect(modes).not.toContain('math.subtract.scalar');
+  });
+  it('changes only within the persisted image math type and keeps compatible connections', () => {
+    const graph = createDefaultInvertImageGraph();
+    const node = graph.nodes.find(item => item.id === 'invert-r')!;
+    expect(() => changeScalarMathMode(graph, {}, node.id, 'math.add.rgb')).toThrow();
+    graph.nodes = [
+      { id: 'frame', operator: 'image.frame', operatorVersion: 1, bindings: {} },
+      { id: 'split', operator: 'vector.split.rgba', operatorVersion: 1, bindings: {} },
+      { id: 'math', operator: 'math.subtract.rgb', operatorVersion: 1, bindings: {} },
+      { id: 'combine', operator: 'vector.combine.rgba', operatorVersion: 1, bindings: {} },
+      { id: 'output', operator: 'image.output', operatorVersion: 1, bindings: {} },
+    ];
+    graph.edges = [
+      { id: 'f', from: 'frame', output: 'image', to: 'split', input: 'image' },
+      ...['a', 'b'].map(input => ({ id: input, from: 'split', output: 'rgb', to: 'math', input })),
+      { id: 'rgb', from: 'math', output: 'value', to: 'combine', input: 'rgb' },
+      { id: 'alpha', from: 'split', output: 'alpha', to: 'combine', input: 'alpha' },
+      { id: 'out', from: 'combine', output: 'image', to: 'output', input: 'image' },
+    ];
+    const before = structuredClone(graph.edges);
+    changeScalarMathMode(graph, {}, 'math', 'math.add.rgb');
+    expect(graph.nodes.find(item => item.id === 'math')?.operator).toBe('math.add.rgb');
+    expect(graph.edges).toEqual(before);
+    expect(evaluateImageOperatorPlan(compileImageOperatorGraph(graph), [0.1, 0.2, 0.3, 0.5])).toEqual([0.2, 0.4, 0.6, 0.5]);
+    expect(() => changeScalarMathMode(graph, {}, 'math', 'math.add')).toThrow();
   });
 });

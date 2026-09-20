@@ -1,7 +1,7 @@
 import type { Effect } from '../../types/effects';
 import { getEffect, isParticleRenderEffectDefinition } from '../../effects';
 import type { InlineEffectParams } from '../pipeline/CompositorPipeline';
-import { effectOperatorGraph } from '../../services/operators/effectGraphOwner';
+import { effectOperatorGraph, effectOperatorParams, isLocalImageEffectType } from '../../services/operators/effectGraphOwner';
 import { compileImageOperatorGraph } from '../../services/operators/imageOperatorGraph';
 
 export interface LayerEffectStack {
@@ -12,19 +12,9 @@ export interface LayerEffectStack {
 }
 
 function applyInlineEffect(inlineEffects: InlineEffectParams, effect: Effect): void {
-  switch (effect.type) {
-    case 'brightness':
-      inlineEffects.brightness = (effect.params.amount as number) ?? 0;
-      break;
-    case 'contrast':
-      inlineEffects.contrast = (effect.params.amount as number) ?? 1;
-      break;
-    case 'saturation':
-      inlineEffects.saturation = (effect.params.amount as number) ?? 1;
-      break;
-    case 'invert':
-      inlineEffects.operatorProgram = compileImageOperatorGraph(effectOperatorGraph(effect), effect.params);
-      break;
+  if (isLocalImageEffectType(effect.type)) {
+    const graph = effectOperatorGraph(effect);
+    if (!graph.incomplete) inlineEffects.operatorProgram = compileImageOperatorGraph(graph, effectOperatorParams(effect));
   }
 }
 

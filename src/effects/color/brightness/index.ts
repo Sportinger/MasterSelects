@@ -2,6 +2,7 @@
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
+import { BRIGHTNESS_AMOUNT_PARAM } from '../sharedColorAmountParams';
 
 export const brightness: EffectDefinition = {
   id: 'brightness',
@@ -13,15 +14,7 @@ export const brightness: EffectDefinition = {
   uniformSize: 16,
 
   params: {
-    amount: {
-      type: 'number',
-      label: 'Amount',
-      default: 0,
-      min: -1,
-      max: 1,
-      step: 0.01,
-      animatable: true,
-    },
+    amount: BRIGHTNESS_AMOUNT_PARAM,
   },
 
   packUniforms: (params) => {

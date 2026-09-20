@@ -2,6 +2,7 @@
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
+import { SATURATION_AMOUNT_PARAM } from '../sharedColorAmountParams';
 
 export const saturation: EffectDefinition = {
   id: 'saturation',
@@ -13,15 +14,7 @@ export const saturation: EffectDefinition = {
   uniformSize: 16,
 
   params: {
-    amount: {
-      type: 'number',
-      label: 'Amount',
-      default: 1,
-      min: 0,
-      max: 3,
-      step: 0.01,
-      animatable: true,
-    },
+    amount: SATURATION_AMOUNT_PARAM,
   },
 
   packUniforms: (params) => {

@@ -1,12 +1,13 @@
 import type { Effect } from '../../types/effects';
 import type { TimelineClip } from '../../types/timeline';
 import type { BoundOperatorNode } from '../../types/operatorGraph';
-import { effectOperatorGraph } from '../operators/effectGraphOwner';
+import { effectOperatorGraph, effectOperatorParams } from '../operators/effectGraphOwner';
 import { getEffectOperator } from '../operators/operatorRegistry';
 import { sampleOperatorParameter } from '../operators/effectGraph';
 import { evaluateScalarOperation } from '../operators/scalarOperationSemantics';
 import type { PreviewFrame, PreviewRequest, PreviewValueControl } from './previewTypes';
 import type { Keyframe } from '../../types/keyframes';
+import { getEffect } from '../../effects';
 
 type PreviewValue = NonNullable<PreviewFrame['values']>[number];
 
@@ -14,6 +15,7 @@ function imageScalarValues(request: PreviewRequest, effect: Effect, keys: Keyfra
   const binding = request.node.binding;
   if (binding?.kind !== 'effect-operator') return undefined;
   const graph = effectOperatorGraph(effect), selected = graph.nodes.find(node => node.id === binding.nodeId);
+  const params = effectOperatorParams(effect);
   if (graph.domain !== 'image' || !selected || !['values.number', 'math.subtract.scalar'].includes(selected.operator)) return undefined;
   const incoming = (nodeId: string, portId: string) => graph.edges.find(edge => edge.to === nodeId && edge.input === portId);
   const cache = new Map<string, number>();
@@ -22,7 +24,7 @@ function imageScalarValues(request: PreviewRequest, effect: Effect, keys: Keyfra
     let value: number | undefined;
     if (node.operator === 'values.number') {
       const candidate = node.bindings.value === undefined ? node.constants?.value
-        : sampleOperatorParameter(node, 'value', effect.params, effect.id, keys, time);
+        : sampleOperatorParameter(node, 'value', params, effect.id, keys, time);
       value = typeof candidate === 'number' && Number.isFinite(candidate) ? candidate : 1;
     } else if (node.operator === 'math.subtract.scalar') {
       const source = (port: string) => {
@@ -60,6 +62,12 @@ export function imageOperatorValuePreview(request: PreviewRequest, clip: Timelin
     const spec = getEffectOperator(selected.operator)!.parameters.find(parameter => parameter.id === 'value')!;
     controls.push({ label: spec.label, value: selected.constants.value, defaultValue: Number(spec.default), min: spec.min, max: spec.max, step: spec.step,
       portId: 'value', direction: 'output', target: { clipId: clip.id, effectId: effect.id, nodeId: selected.id, parameter: 'value', storage: 'constant' } });
+  } else if (selected.operator === 'values.number' && typeof selected.bindings.value === 'string') {
+    const binding = selected.bindings.value, owner = getEffect(effect.type)?.params[binding];
+    const current = evaluate(selected);
+    if (owner?.type === 'number' && current !== undefined) controls.push({ label: owner.label, value: current, defaultValue: Number(owner.default),
+      min: owner.min, max: owner.max, step: owner.step, portId: 'value', direction: 'output', persistenceKey: `operator.${effect.id}.${binding}`,
+      target: { clipId: clip.id, effectId: effect.id, nodeId: selected.id, parameter: 'value' } });
   }
   const output = evaluate(selected);
   return { key: request.key, revision: request.revision, time: request.time, status: 'live', label: 'Live values', controls, values,

@@ -1,6 +1,7 @@
 import { CompositorPipeline } from '../../src/engine/pipeline/CompositorPipeline';
 import type { Layer } from '../../src/engine/core/types';
 import { compileImageOperatorGraph, createDefaultInvertImageGraph } from '../../src/services/operators/imageOperatorGraph';
+import { createDefaultColorEffectGraph } from '../../src/services/operators/colorEffectGraphs';
 
 export async function checkImageCompositeGpu(device: GPUDevice, sampler: GPUSampler, fixture: Uint8Array, size: number) {
   const sampled = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST;
@@ -16,18 +17,31 @@ export async function checkImageCompositeGpu(device: GPUDevice, sampler: GPUSamp
   const layer = { id: 'image-graph-probe', opacity: 1, blendMode: 'normal', position: { x: 0, y: 0 }, scale: { x: 1, y: 1 }, rotation: 0, maskInvert: false } as unknown as Layer;
   const bypass = createDefaultInvertImageGraph();
   bypass.nodes.filter(item => item.id.startsWith('invert-')).forEach(item => { item.bypassed = true; });
-  const cases = [
+  const cases: Array<{ name: string; program?: ReturnType<typeof compileImageOperatorGraph>; invert: boolean;
+    brightness?: number; contrast?: number; saturation?: number }> = [
     { name: 'legacy', program: undefined, invert: true },
     { name: 'graph', program: compileImageOperatorGraph(createDefaultInvertImageGraph()), invert: false },
     { name: 'bypass', program: compileImageOperatorGraph(bypass), invert: false },
     { name: 'plain', program: undefined, invert: false },
+    { name: 'brightness-legacy', program: undefined, invert: false, brightness: 0.2 },
+    { name: 'brightness-graph', program: compileImageOperatorGraph(createDefaultColorEffectGraph('brightness'), { amount: 0.2 }), invert: false },
+    { name: 'contrast-legacy', program: undefined, invert: false, contrast: 0.35 },
+    { name: 'contrast-graph', program: compileImageOperatorGraph(createDefaultColorEffectGraph('contrast'), { amount: 0.35 }), invert: false },
+    { name: 'saturation-legacy', program: undefined, invert: false, saturation: 0.4 },
+    { name: 'saturation-graph', program: compileImageOperatorGraph(createDefaultColorEffectGraph('saturation'), { amount: 0.4 }), invert: false },
   ];
   const outputs = new Map<string, Uint8Array>();
   let renderPasses = 0;
   try {
     for (const item of cases) {
       const uniform = compositor.getOrCreateUniformBuffer(`probe-${item.name}`);
-      compositor.updateLayerUniforms(layer, size, size, false, uniform, { brightness: 0, contrast: 1, saturation: 1, invert: item.invert, operatorProgram: item.program });
+      compositor.updateLayerUniforms(layer, size, size, false, uniform, {
+        brightness: item.brightness ?? 0,
+        contrast: item.contrast ?? 1,
+        saturation: item.saturation ?? 1,
+        invert: item.invert,
+        operatorProgram: item.program,
+      });
       const pipeline = compositor.getCompositePipeline(item.program);
       if (!pipeline) throw new Error(`Missing compositor pipeline for ${item.name}`);
       const bindGroup = compositor.createCompositeBindGroup(sampler, base.createView(), source.createView(), uniform, mask.createView());
@@ -44,6 +58,16 @@ export async function checkImageCompositeGpu(device: GPUDevice, sampler: GPUSamp
     if (!equal(outputs.get('legacy')!, outputs.get('graph')!)) throw new Error('Compositor legacy/default graph pixel readback differs');
     if (!equal(outputs.get('bypass')!, outputs.get('plain')!)) throw new Error('Compositor bypass differs from non-inverted composite');
     if (equal(outputs.get('graph')!, outputs.get('bypass')!)) throw new Error('Compositor bypass did not change output');
+    for (const type of ['brightness', 'contrast', 'saturation']) {
+      if (!equal(outputs.get(`${type}-legacy`)!, outputs.get(`${type}-graph`)!)) {
+        throw new Error(`Compositor ${type} legacy/default graph pixel readback differs`);
+      }
+      const graph = outputs.get(`${type}-graph`)!;
+      const plain = outputs.get('plain')!;
+      for (let offset = 3; offset < graph.length; offset += 4) {
+        if (graph[offset] !== plain[offset]) throw new Error(`Compositor ${type} graph changed straight alpha`);
+      }
+    }
     if (renderPasses !== cases.length) throw new Error(`Expected one pass per case, got ${renderPasses}/${cases.length}`);
     return renderPasses;
   } finally {

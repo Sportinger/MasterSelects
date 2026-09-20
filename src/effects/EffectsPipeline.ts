@@ -22,6 +22,7 @@ import { EffectPipelineCache } from './EffectPipelineCache';
 import { captureImageOperatorPreviews } from '../services/nodePreview/imageOperatorTexturePreviews';
 import { compileAnalogSignalGraph, createDefaultAnalogSignalGraph } from '../services/operators/analogSignalGraph';
 import { captureAnalogSignalStagePreviews } from '../services/nodePreview/analogSignalPreviews';
+import { effectOperatorGraph, isLocalImageEffectType } from '../services/operators/effectGraphOwner';
 
 const log = Logger.create('EffectsPipeline');
 
@@ -285,7 +286,9 @@ export class EffectsPipeline {
     let swapped = false;
 
     for (const effect of enabledEffects) {
-      if (effect.type === 'invert') captureImageOperatorPreviews({
+      const localImageEffect = isLocalImageEffectType(effect.type);
+      if (localImageEffect && effectOperatorGraph(effect).incomplete) continue;
+      if (localImageEffect) captureImageOperatorPreviews({
         effect,
         device: this.device,
         encoder: commandEncoder,
@@ -305,8 +308,8 @@ export class EffectsPipeline {
         continue;
       }
       const registered = getEffect(effect.type);
-      const definition = effect.type === 'invert' && isFullscreenEffectDefinition(registered)
-        ? imageGraphDefinition({ ...effect, type: 'invert' }, registered) : registered;
+      const definition = localImageEffect && isFullscreenEffectDefinition(registered)
+        ? imageGraphDefinition(effect, registered) : registered;
       if (isComputeEffectDefinition(definition)) {
         if (definition.computeMode === 'analog-signal' && effect.operatorGraph?.incomplete) continue;
         const effectParams = definition.computeMode === 'analog-signal' ? null : this.createEffectUniformData(effect, outputWidth, outputHeight, timelineTimeSeconds);

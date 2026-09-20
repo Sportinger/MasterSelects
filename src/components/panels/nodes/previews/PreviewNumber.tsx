@@ -17,9 +17,9 @@ export function PreviewNumber({ entry, revision, nodeId, label, onChange }: {
   }, [entry.value, revision]); // The authoritative preview reconciles after a drag.
   useEffect(() => () => { if (batchOpened.current) endBatch(); }, []);
   const value = local ?? Number(entry.value);
-  const persistenceKey = 'effectId' in entry.target && entry.target.storage === 'constant'
+  const persistenceKey = entry.persistenceKey ?? ('effectId' in entry.target && entry.target.storage === 'constant'
     ? operatorConstantNumberPersistenceKey(entry.target)
-    : `node-inline.${nodeId}.${entry.target.parameter}`;
+    : `node-inline.${nodeId}.${entry.target.parameter}`);
   return <EditableDraggableNumber value={value} defaultValue={Number(entry.defaultValue)} min={entry.min} max={entry.max}
     decimals={entry.step && entry.step >= 1 && Number.isInteger(value) ? 0 : 3} ariaLabel={label}
     persistenceKey={persistenceKey}

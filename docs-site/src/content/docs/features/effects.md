@@ -124,6 +124,14 @@ Contour uses marching-squares cases with interpolated edge crossings. Compute
 and fragment effects can be mixed in one clip stack and use the same preview,
 worker, and export paths.
 
+### Editable color effect graphs
+
+Brightness, Contrast, Saturation, and Invert also expose editable node groups.
+Their math is compiled into the existing image processing path: a single
+eligible effect stays inline, while effect stacks retain their ordered passes
+and intermediate clamps. Bound Amount nodes retain the effect's original
+range, default, and keyframe property; alpha bypasses the RGB calculations.
+
 ### Analog Signal Lab
 
 `Analog Signal Lab` is a dedicated six-pass compute effect rather than a

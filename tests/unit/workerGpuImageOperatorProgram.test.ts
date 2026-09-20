@@ -5,6 +5,7 @@ import { createDefaultInvertImageGraph } from '../../src/services/operators/imag
 import type { Layer } from '../../src/types';
 import { shouldUseLayerVideoFramePresenter } from '../../src/services/render/workerRenderHostRuntimeHandlers';
 import { uploadWorkerVideoFrameTexture, workerGpuOperatorProgramCacheKey, workerVideoFrameNeedsStraightAlphaUpload } from '../../src/services/render/workerGpuOperatorPipeline';
+import { hasCompositorRenderLayer } from '../../src/services/render/workerGpuVideoFrameCompositor';
 
 function layerWithEditedInvert(): Layer {
   const graph = createDefaultInvertImageGraph();
@@ -13,6 +14,44 @@ function layerWithEditedInvert(): Layer {
 }
 
 describe('worker GPU image operator program', () => {
+  it.each([
+    ['brightness', 0.2],
+    ['contrast', 0],
+    ['saturation', 0],
+  ])('transports a single %s graph without legacy scalar duplication', (type, amount) => {
+    const layer = { opacity: 1, blendMode: 'normal', effects: [
+      { id: type, name: type, type, enabled: true, params: { amount } },
+    ] } as unknown as Layer;
+    const style = resolveWorkerGpuVideoPresentationLayerStyle(layer);
+    expect(style.operatorProgram?.key).toMatch(/^image-v1-/);
+    expect(style.inlineBrightness).toBe(0);
+    expect(style.inlineContrast).toBe(1);
+    expect(style.inlineSaturation).toBe(1);
+  });
+
+  it('does not fold an ordered multi-effect stack into worker inline uniforms', () => {
+    const layer = { opacity: 1, blendMode: 'normal', effects: [
+      { id: 'brightness', name: 'Brightness', type: 'brightness', enabled: true, params: { amount: 0.2 } },
+      { id: 'contrast', name: 'Contrast', type: 'contrast', enabled: true, params: { amount: 0.4 } },
+    ] } as unknown as Layer;
+    const style = resolveWorkerGpuVideoPresentationLayerStyle(layer);
+    expect(style.operatorProgram).toBeUndefined();
+    expect(style.inlineBrightness).toBe(0);
+    expect(style.inlineContrast).toBe(1);
+    expect(style.complexEffectCount).toBe(2);
+    expect(hasCompositorRenderLayer([{
+      sourceId: 'video',
+      frame: {} as VideoFrame,
+      opacity: 1,
+      blendMode: 'normal',
+      renderLayer: {
+        id: 'layer', name: 'Layer', visible: true, opacity: 1, blendMode: 'normal',
+        position: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1 }, rotation: 0,
+        effects: layer.effects!,
+      },
+    }])).toBe(true);
+  });
+
   it('preserves the compiled edited graph as a serializable layer style', () => {
     const style = resolveWorkerGpuVideoPresentationLayerStyle(layerWithEditedInvert());
     expect(style.operatorProgram?.key).toMatch(/^image-v1-/);

@@ -3,12 +3,18 @@ import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { editEffectGraph } from '../operators/effectGraphEditing';
 import { SCALAR_FIELD_OPERATORS } from '../operators/scalarField';
 import { effectOperatorParams } from '../operators/effectGraphOwner';
-import { getEffectOperator } from '../operators/operatorRegistry';
+import { EFFECT_OPERATORS, getEffectOperator } from '../operators/operatorRegistry';
 import { getFlockOperator } from '../flock/operators/flockOperatorRegistry';
 import { readTimelineRuntimeState } from '../timeline/timelineRuntimeCoordinator';
 import { useTimelineStore } from '../../stores/timeline';
 import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/exclusiveMutationLease';
 import { startBatch, endBatch } from '../../stores/historyStore';
+
+function typedMathModes(operatorId: string) {
+  const suffix = /\.(rgb|scalar)$/.exec(operatorId)?.[0];
+  if (!operatorId.startsWith('math.') || !suffix) return [];
+  return EFFECT_OPERATORS.filter(operator => operator.id.startsWith('math.') && operator.id.endsWith(suffix) && operator.addable);
+}
 
 export function mathModeOptions(node: NodeGraphNode) {
   // Typed image/vector math operators share the `math.*` namespace but not the
@@ -19,13 +25,19 @@ export function mathModeOptions(node: NodeGraphNode) {
   }
   if (node.operatorId === 'flock.math') return (getFlockOperator('flock.math')?.params.find(p => p.id === 'op')?.options ?? [])
     .map(option => ({ value: option.value, label: option.label }));
+  const typed = typedMathModes(node.operatorId ?? '');
+  if (typed.length > 1) return typed.map(operator => ({ value: operator.id, label: operator.label }));
   return [];
 }
 
 /** Keep stable node IDs, output links and parameter bindings (including keys).
  * Inputs absent from the new operation disconnect in the same undoable edit. */
 export function changeScalarMathMode(graph: EffectOperatorGraph, params: Record<string, unknown>, nodeId: string, mode: string) {
-  const node = graph.nodes.find(n => n.id === nodeId), next = SCALAR_FIELD_OPERATORS.find(op => op.id === mode && mode.startsWith('math.'));
+  const node = graph.nodes.find(n => n.id === nodeId);
+  const typed = typedMathModes(node?.operator ?? '');
+  const candidates = typed.length ? typed : SCALAR_FIELD_OPERATORS.some(op => op.id === node?.operator)
+    ? SCALAR_FIELD_OPERATORS.filter(op => op.id.startsWith('math.')) : [];
+  const next = candidates.find(op => op.id === mode);
   if (!node?.operator.startsWith('math.') || !next) throw new Error('Math operation unavailable.');
   const previous = getEffectOperator(node.operator)!;
   // Materialize implicit values before changing the operation's defaults.
@@ -42,6 +54,7 @@ export function changeScalarMathMode(graph: EffectOperatorGraph, params: Record<
     if (typeof binding === 'string' && params[binding] === undefined) params[binding] = spec.default;
   }
   node.operator = mode;
+  node.operatorVersion = next.version;
   graph.edges = graph.edges.filter(edge => edge.to !== nodeId || next.inputs.some(port => port.id === edge.input));
 }
 

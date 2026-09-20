@@ -4,7 +4,7 @@ import type { AnimatableProperty } from '../../types/animationProperties';
 import { landmarkRuntime } from '../landmarkTracking/landmarkRuntime';
 import { faceTrackKey, samplePreciseFace } from '../landmarkTracking/preciseFaceSampling';
 import { FACE_CABLE_ANCHORS } from '../faceCables/cableData';
-import { effectOperatorGraph } from '../operators/effectGraphOwner';
+import { effectOperatorGraph, isLocalImageEffectType } from '../operators/effectGraphOwner';
 import { sampleOperatorParameter, graphInputNodes } from '../operators/effectGraph';
 import { clipLocalToKeyframeTime } from '../flock/time/flockKeyframeTime';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
@@ -36,7 +36,7 @@ export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewA
   if (binding?.kind === 'effect-operator') {
     const effect = clip.effects.find(value => value.id === binding.effectId);
     if (effect?.type === 'voxel-relief') return voxelPreview(request, clip, effect, state.clipKeyframes.get(clip.id) ?? [], localTime);
-    if (effect?.type === 'invert') {
+    if (effect && isLocalImageEffectType(effect.type)) {
       const keys = state.clipKeyframes.get(clip.id) ?? [];
       const valuePreview = imageOperatorValuePreview(request, clip, effect, keys, localTime);
       if (valuePreview) return valuePreview;

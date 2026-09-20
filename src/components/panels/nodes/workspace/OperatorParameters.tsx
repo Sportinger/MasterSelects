@@ -3,7 +3,7 @@ import { interpolateKeyframes } from '../../../../utils/keyframeInterpolation';
 import { useState } from 'react';
 import type { TimelineClip } from '../../../../types/timeline';
 import { useTimelineStore } from '../../../../stores/timeline';
-import { effectOperatorGraph, effectOperatorParams, addableEffectOperators } from '../../../../services/operators/effectGraphOwner';
+import { effectOperatorGraph, effectOperatorParams, addableEffectOperators, isLocalImageEffectType } from '../../../../services/operators/effectGraphOwner';
 import { VOXEL_RELIEF_PARAMS } from '../../../../effects/stylize/voxel-relief/parameters';
 import { getEffectOperator } from '../../../../services/operators/operatorRegistry';
 import { createEffectGraphActions, editEffectGraph, setOperatorConstant, setOperatorVariant } from '../../../../services/operators/effectGraphEditing';
@@ -21,6 +21,7 @@ import { OperatorLiveValue } from './OperatorLiveValue';
 import { operatorFamilyOptions } from './operatorFamilyOptions';
 import { operatorConstantNumberPersistenceKey } from '../../../common/EditableDraggableNumberSettings';
 import type { OperatorValue } from '../../../../types/operatorGraph';
+import { getEffect } from '../../../../effects';
 
 const EMPTY_KEYS: Keyframe[] = [];
 export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { clip: TimelineClip; effectId: string; nodeId: string; projectedNode?: NodeGraphNode }) {
@@ -89,7 +90,8 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
         if (spec.type === 'boolean') return <ResolveInspectorRow key={spec.id} label={spec.label}><input aria-label={`${operator.label} ${spec.label}`} type="checkbox" checked={Boolean(value)} onChange={event => set(binding, event.target.checked)} /></ResolveInspectorRow>;
         if (spec.type === 'select') return <ResolveInspectorRow key={spec.id} label={spec.label}><InspectorSelect ariaLabel={`${operator.label} ${spec.label}`}
           value={String(value)} options={[...(spec.options ?? [])]} onChange={next => set(binding, next)} /></ResolveInspectorRow>;
-        const control = effect.type === 'voxel-relief' ? VOXEL_RELIEF_PARAMS[binding] : undefined;
+        const control = effect.type === 'voxel-relief' ? VOXEL_RELIEF_PARAMS[binding]
+          : isLocalImageEffectType(effect.type) ? getEffect(effect.type)?.params[binding] : undefined;
         return numberRow(binding, control?.label ?? spec.label, Number(value), Number(control?.default ?? spec.default), control?.min ?? spec.min, control?.max ?? spec.max, control?.step ?? spec.step, spec.animatable);
       })}
       {projectedNode && node.operator.startsWith('math.') && node.operator !== 'math.constant' &&

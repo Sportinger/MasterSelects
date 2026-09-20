@@ -5,9 +5,6 @@ import { Logger } from '../logger';
 import type { WorkerRenderHostRuntimeBridge } from './workerRenderHostRuntimeBridge';
 import type { WorkerRenderHostRuntimeJobOutput } from './workerRenderHostRuntimeHandlers';
 import type { WorkerGpuWebCodecsRenderLayer } from './workerGpuRuntimeCommands';
-import type { Effect } from '../../types/effects';
-import { effectOperatorGraph } from '../operators/effectGraphOwner';
-import { compileImageOperatorGraph } from '../operators/imageOperatorGraph';
 
 const log = Logger.create('WorkerGpuMediaSourceRegistry');
 
@@ -178,45 +175,14 @@ function renderEffectFallbackOpacity(effectStack: ReturnType<typeof splitLayerEf
   return 1 - smoothstep(0.15, 0.55, progress);
 }
 
-function applyWorkerInlineEffect(
-  params: {
-    inlineBrightness: number;
-    inlineContrast: number;
-    inlineSaturation: number;
-    inlineInvert: boolean;
-    operatorProgram?: { key: string; wgsl: string };
-  },
-  effect: Effect,
-): void {
-  switch (effect.type) {
-    case 'brightness':
-      params.inlineBrightness = finiteEffectNumber(effect.params.amount, 0);
-      break;
-    case 'contrast':
-      params.inlineContrast = finiteEffectNumber(effect.params.amount, 1);
-      break;
-    case 'saturation':
-      params.inlineSaturation = finiteEffectNumber(effect.params.amount, 1);
-      break;
-    case 'invert':
-      params.operatorProgram = compileImageOperatorGraph(effectOperatorGraph(effect), effect.params);
-      params.inlineInvert = false;
-      break;
-  }
-}
-
 function workerGpuInlineParams(effectStack: ReturnType<typeof splitLayerEffects>) {
-  const params = {
+  return {
     inlineBrightness: effectStack.inlineEffects.brightness,
     inlineContrast: effectStack.inlineEffects.contrast,
     inlineSaturation: effectStack.inlineEffects.saturation,
     inlineInvert: effectStack.inlineEffects.invert,
     operatorProgram: effectStack.inlineEffects.operatorProgram,
   };
-  for (const effect of effectStack.complexEffects ?? []) {
-    applyWorkerInlineEffect(params, effect);
-  }
-  return params;
 }
 
 export function resolveWorkerGpuVideoPresentationLayerStyle(layer: Layer): WorkerGpuVideoPresentationLayerStyle {

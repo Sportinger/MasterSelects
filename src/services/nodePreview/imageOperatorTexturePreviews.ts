@@ -1,5 +1,5 @@
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
-import { effectOperatorGraph } from '../operators/effectGraphOwner';
+import { effectOperatorGraph, effectOperatorParams } from '../operators/effectGraphOwner';
 import { compileImageOperatorPreview } from '../operators/imageOperatorGraph';
 import { nodePreviewTextureTap } from './NodePreviewTextureTap';
 import { imageOperatorPreviewPrefix, parseImageOperatorPreviewStage } from './imageOperatorPreviewStages';
@@ -70,7 +70,7 @@ export function captureImageOperatorPreviews(options: CaptureImageOperatorPrevie
   for (const { stage } of demands) {
     const target = parseImageOperatorPreviewStage(stage); if (!target) continue;
     try {
-      const plan = compileImageOperatorPreview(graph, options.effect.params, target);
+      const plan = compileImageOperatorPreview(graph, effectOperatorParams(options.effect), target);
       const pipeline = pipelineFor(options.device, plan.key, plan.wgsl, options.source);
       nodePreviewTextureTap.draw(stage, options.device, options.encoder, options.width, options.height, pass => {
         const resource = options.source.kind === 'external' ? options.source.texture : options.source.view;

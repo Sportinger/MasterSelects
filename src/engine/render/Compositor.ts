@@ -26,6 +26,7 @@ import { IDENTITY_TRACKING_SOURCE_TRANSFORM } from '../../services/planarTrackin
 import { indexTrackingSourceTransforms } from './trackingSourceFrames';
 import { nodePreviewTextureTap } from '../../services/nodePreview/NodePreviewTextureTap';
 import { captureImageOperatorPreviews } from '../../services/nodePreview/imageOperatorTexturePreviews';
+import { isLocalImageEffectType } from '../../services/operators/effectGraphOwner';
 import {
   layerPositionForTerrainScreenAnchor,
   resolveTerrainScreenAnchors,
@@ -521,7 +522,7 @@ export class Compositor {
       }
 
       if (inlineEffects.operatorProgram) {
-        const effect = adjustmentEffects.find(item => item.enabled && item.type === 'invert');
+        const effect = adjustmentEffects.find(item => item.enabled && isLocalImageEffectType(item.type));
         const source = useExternalTexture && sourceExternalTexture
           ? { kind: 'external' as const, texture: sourceExternalTexture }
           : sourceTextureView ? { kind: 'texture' as const, view: sourceTextureView } : undefined;

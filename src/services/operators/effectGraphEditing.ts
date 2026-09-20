@@ -5,11 +5,12 @@ import { useTimelineStore } from '../../stores/timeline';
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/exclusiveMutationLease';
 import { renderHostPort } from '../render/renderHostPort';
-import { effectOperatorGraph, validateEffectOwnerGraph, addableEffectOperators, canRemoveEffectOperator } from './effectGraphOwner';
+import { effectOperatorGraph, validateEffectOwnerGraph, addableEffectOperators, canRemoveEffectOperator, isLocalImageEffectType } from './effectGraphOwner';
 import { EFFECT_GRAPH_PARAM, connectEffectGraph, operatorEnabled } from './effectGraph';
 import { prepareEditableOperatorGraph } from './editableOperatorGraph';
 import { EFFECT_OPERATORS, getEffectOperator } from './operatorRegistry';
 import type { AnimatableProperty } from '../../types/animationProperties';
+import { getEffect } from '../../effects';
 
 /** Shared by the inspector and inline node values; animation keeps its owner. */
 export function setAnimatedOperatorParameter(clipId: string, effectId: string, nodeId: string, parameter: string, value: number | boolean) {
@@ -46,13 +47,16 @@ export function editEffectGraph(clipId: string, effectId: string, label: string,
 }
 
 export function setOperatorParameter(clipId: string, effectId: string, nodeId: string, name: string, value: OperatorValue) {
+  const effectType = readTimelineRuntimeState(useTimelineStore).clips.find(clip => clip.id === clipId)?.effects.find(effect => effect.id === effectId)?.type;
   editEffectGraph(clipId, effectId, 'Edit node parameter', (graph, params) => {
     const node = graph.nodes.find(n => n.id === nodeId);
     const spec = node && getEffectOperator(node.operator)?.parameters.find(p => p.id === name);
     if (!node || !spec) throw new Error('Parameter unavailable.');
-    if (spec.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value) || value < (spec.min ?? -Infinity) || value > (spec.max ?? Infinity))) throw new Error('Parameter is outside its supported range.');
-    if (spec.type === 'select' && (typeof value !== 'string' || !spec.options?.some(option => option.value === value))) throw new Error('Parameter option is unavailable.');
     const binding = node.bindings[name];
+    const ownerSpec = typeof binding === 'string' && effectType && isLocalImageEffectType(effectType) ? getEffect(effectType)?.params[binding] : undefined;
+    const min = ownerSpec?.type === 'number' ? ownerSpec.min : spec.min, max = ownerSpec?.type === 'number' ? ownerSpec.max : spec.max;
+    if (spec.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value) || value < (min ?? -Infinity) || value > (max ?? Infinity))) throw new Error('Parameter is outside its supported range.');
+    if (spec.type === 'select' && (typeof value !== 'string' || !spec.options?.some(option => option.value === value))) throw new Error('Parameter option is unavailable.');
     if (typeof binding === 'string') params[binding] = value;
     else if (Array.isArray(binding) && Array.isArray(value)) binding.forEach((key, i) => { params[key] = value[i]; });
     else throw new Error('Edit the exposed direction angles.');
