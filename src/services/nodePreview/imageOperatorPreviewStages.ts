@@ -1,7 +1,7 @@
 import type { NodeGraphPort } from '../../types/nodeGraph';
 
 const PREFIX = 'image-node:';
-const TEXTURE_SIGNALS = new Set(['image', 'rgb', 'alpha', 'number', 'vec2', 'vec3', 'vec4']);
+const TEXTURE_SIGNALS = new Set(['image', 'rgb', 'alpha', 'number', 'boolean', 'vec2', 'vec3', 'vec4']);
 
 export interface ImageOperatorPreviewTarget {
   effectId: string;

@@ -11,11 +11,16 @@ export interface LayerEffectStack {
   unsupportedAfterRenderEffect?: Effect[];
 }
 
-function applyInlineEffect(inlineEffects: InlineEffectParams, effect: Effect): void {
+function applyInlineEffect(inlineEffects: InlineEffectParams, effect: Effect): 'inline' | 'contextual' | 'incomplete' {
   if (isLocalImageEffectType(effect.type)) {
     const graph = effectOperatorGraph(effect);
-    if (!graph.incomplete) inlineEffects.operatorProgram = compileImageOperatorGraph(graph, effectOperatorParams(effect));
+    if (graph.incomplete) return 'incomplete';
+    const program = compileImageOperatorGraph(graph, effectOperatorParams(effect));
+    if (program.capabilities.length) return 'contextual';
+    inlineEffects.operatorProgram = program;
+    return 'inline';
   }
+  return 'contextual';
 }
 
 function isParticleRenderEffect(effect: Effect): boolean {
@@ -72,8 +77,9 @@ export function splitLayerEffects(
       continue;
     }
 
-    if (isLocalImageEffectType(effect.type)) applyInlineEffect(inlineEffects, effect);
-    else complexEffects.push(effect);
+    if (isLocalImageEffectType(effect.type)) {
+      if (applyInlineEffect(inlineEffects, effect) === 'contextual') complexEffects.push(effect);
+    } else complexEffects.push(effect);
   }
 
   return {

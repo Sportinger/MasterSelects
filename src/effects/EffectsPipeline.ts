@@ -22,7 +22,7 @@ import { EffectPipelineCache } from './EffectPipelineCache';
 import { captureImageOperatorPreviews } from '../services/nodePreview/imageOperatorTexturePreviews';
 import { compileAnalogSignalGraph, createDefaultAnalogSignalGraph } from '../services/operators/analogSignalGraph';
 import { captureAnalogSignalStagePreviews } from '../services/nodePreview/analogSignalPreviews';
-import { effectOperatorGraph, isLocalImageEffectType } from '../services/operators/effectGraphOwner';
+import { effectOperatorGraph, isImageGraphEffectType } from '../services/operators/effectGraphOwner';
 
 const log = Logger.create('EffectsPipeline');
 
@@ -290,9 +290,9 @@ export class EffectsPipeline {
     let swapped = false;
 
     for (const effect of enabledEffects) {
-      const localImageEffect = isLocalImageEffectType(effect.type);
-      if (localImageEffect && effectOperatorGraph(effect).incomplete) continue;
-      if (localImageEffect) captureImageOperatorPreviews({
+      const imageGraphEffect = isImageGraphEffectType(effect.type);
+      if (imageGraphEffect && effectOperatorGraph(effect).incomplete) continue;
+      if (imageGraphEffect) captureImageOperatorPreviews({
         effect,
         device: this.device,
         encoder: commandEncoder,
@@ -312,7 +312,7 @@ export class EffectsPipeline {
         continue;
       }
       const registered = getEffect(effect.type);
-      const definition = localImageEffect && isFullscreenEffectDefinition(registered)
+      const definition = imageGraphEffect && isFullscreenEffectDefinition(registered)
         ? imageGraphDefinition(effect, registered) : registered;
       if (isComputeEffectDefinition(definition)) {
         if (definition.computeMode === 'analog-signal' && effect.operatorGraph?.incomplete) continue;

@@ -21,7 +21,7 @@ describe('image operator preview stage contract', () => {
   });
 
   it('routes every compiler-owned image/vector field but not geometry', () => {
-    for (const signal of ['image', 'rgb', 'alpha', 'number', 'vec2', 'vec3', 'vec4']) {
+    for (const signal of ['image', 'rgb', 'alpha', 'number', 'boolean', 'vec2', 'vec3', 'vec4']) {
       expect(isImageOperatorTextureSignal(`operator:${signal}`)).toBe(true);
     }
     expect(isImageOperatorTextureSignal('operator:geometry')).toBe(false);

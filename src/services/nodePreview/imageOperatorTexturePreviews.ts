@@ -34,13 +34,13 @@ struct ImagePreviewVertex { @builtin(position) position: vec4f, @location(0) uv:
   return result;
 }`;
 
-function pipelineFor(device: GPUDevice, key: string, wgsl: string, source: ImageOperatorPreviewSource): GPURenderPipeline {
+function pipelineFor(device: GPUDevice, key: string, wgsl: string, source: ImageOperatorPreviewSource, needsUv: boolean): GPURenderPipeline {
   if (cache?.device !== device) {
     cache = { device, pipelines: new Map() };
     const owner = cache;
     void device.lost.then(() => { if (cache === owner) cache = undefined; });
   }
-  const cacheKey = `${source.kind}:${key}`;
+  const cacheKey = `${source.kind}:${needsUv ? 'uv' : 'pixel'}:${key}`;
   const existing = cache.pipelines.get(cacheKey); if (existing) return existing;
   const textureDeclaration = source.kind === 'external'
     ? '@group(0) @binding(1) var imagePreviewSource: texture_external;'
@@ -52,7 +52,7 @@ function pipelineFor(device: GPUDevice, key: string, wgsl: string, source: Image
 @group(0) @binding(0) var imagePreviewSampler: sampler;
 ${textureDeclaration}
 @fragment fn imagePreviewFragment(input: ImagePreviewVertex) -> @location(0) vec4f {
-  return evaluateImageGraph(${sample});
+  return evaluateImageGraph(${sample}${needsUv ? ', input.uv' : ''});
 }` });
   const pipeline = device.createRenderPipeline({ label: 'image-operator-node-preview', layout: 'auto', vertex: { module, entryPoint: 'imagePreviewVertex' },
     fragment: { module, entryPoint: 'imagePreviewFragment', targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } });
@@ -71,7 +71,7 @@ export function captureImageOperatorPreviews(options: CaptureImageOperatorPrevie
     const target = parseImageOperatorPreviewStage(stage); if (!target) continue;
     try {
       const plan = compileImageOperatorPreview(graph, effectOperatorParams(options.effect), target);
-      const pipeline = pipelineFor(options.device, plan.key, plan.wgsl, options.source);
+      const pipeline = pipelineFor(options.device, plan.key, plan.wgsl, options.source, plan.capabilities.includes('uv'));
       nodePreviewTextureTap.draw(stage, options.device, options.encoder, options.width, options.height, pass => {
         const resource = options.source.kind === 'external' ? options.source.texture : options.source.view;
         const bind = options.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [

@@ -15,10 +15,15 @@ import { ANALOG_SIGNAL_OPERATORS } from './analogSignalOperators';
 import { createDefaultColorEffectGraph, type EditableColorEffectType } from './colorEffectGraphs';
 import { getEffect } from '../../effects';
 import { createDefaultPointwiseEffectGraph, type EditablePointwiseEffectType } from './pointwiseEffectGraphs';
+import { createDefaultContextualEffectGraph, type EditableContextualEffectType } from './contextualEffectGraphs';
 
 const LOCAL_IMAGE_EFFECTS = new Set(['invert', 'brightness', 'contrast', 'saturation', 'exposure', 'levels', 'hue-shift', 'temperature', 'vibrance', 'threshold', 'posterize']);
+const CONTEXTUAL_IMAGE_EFFECTS = new Set(['vignette']);
 export function isLocalImageEffectType(type: string): type is 'invert' | EditableColorEffectType | EditablePointwiseEffectType { return LOCAL_IMAGE_EFFECTS.has(type); }
-export function hasEffectOperatorGraph(type: string): boolean { return type === 'face-cables' || type === 'voxel-relief' || isLocalImageEffectType(type) || type === 'analog-signal-lab'; }
+export function isImageGraphEffectType(type: string): type is 'invert' | EditableColorEffectType | EditablePointwiseEffectType | EditableContextualEffectType {
+  return isLocalImageEffectType(type) || CONTEXTUAL_IMAGE_EFFECTS.has(type);
+}
+export function hasEffectOperatorGraph(type: string): boolean { return type === 'face-cables' || type === 'voxel-relief' || isImageGraphEffectType(type) || type === 'analog-signal-lab'; }
 type EffectGraphOwner = { type: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph };
 
 export function effectOperatorCompileParams(effect: Pick<EffectGraphOwner, 'params' | 'operatorGraph'>): Record<string, unknown> {
@@ -36,9 +41,10 @@ export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGra
     return graph;
   }
   const effectType = effect.type;
-  if (isLocalImageEffectType(effectType)) {
+  if (isImageGraphEffectType(effectType)) {
     const fallback = effectType === 'invert' ? createDefaultInvertImageGraph
       : effectType === 'threshold' || effectType === 'posterize' ? () => createDefaultPointwiseEffectGraph(effectType)
+        : effectType === 'vignette' ? () => createDefaultContextualEffectGraph(effectType)
         : () => createDefaultColorEffectGraph(effectType);
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
     const graph = migrateImageOperatorGraph(saved);
@@ -78,13 +84,13 @@ export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: Ef
   const next = { ...params, [EFFECT_GRAPH_PARAM]: JSON.stringify(graph) };
   if (effect.type === 'voxel-relief') compileVoxelGraph(next);
   else if (effect.type === 'face-cables') compileCableOperatorGraph(next);
-  else if (isLocalImageEffectType(effect.type)) compileImageOperatorGraph(graph, effectOperatorParams({ type: effect.type, params }));
+  else if (isImageGraphEffectType(effect.type)) compileImageOperatorGraph(graph, effectOperatorParams({ type: effect.type, params }));
   else if (effect.type === 'analog-signal-lab') compileAnalogSignalGraph(graph, params);
   else throw new Error('This effect has no operator graph.');
 }
 export function addableEffectOperators(type: string) {
   if (type === 'analog-signal-lab') return ANALOG_SIGNAL_OPERATORS.filter(operator => operator.addable);
-  if (isLocalImageEffectType(type)) {
+  if (isImageGraphEffectType(type)) {
     const shared = ['image.frame', 'values.number'].flatMap(id => {
       const operator = getEffectOperator(id); return operator ? [operator] : [];
     });
@@ -95,7 +101,7 @@ export function addableEffectOperators(type: string) {
 }
 
 export function effectOperatorParams(effect: EffectGraphOwner): Record<string, unknown> {
-  if (isLocalImageEffectType(effect.type)) {
+  if (isImageGraphEffectType(effect.type)) {
     const definition = getEffect(effect.type);
     const defaults = Object.fromEntries(Object.entries(definition?.params ?? {}).map(([id, spec]) => [id, spec.default]));
     return { ...defaults, ...effect.params };

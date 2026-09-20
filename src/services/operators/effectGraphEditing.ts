@@ -5,7 +5,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/exclusiveMutationLease';
 import { renderHostPort } from '../render/renderHostPort';
-import { effectOperatorGraph, validateEffectOwnerGraph, addableEffectOperators, canRemoveEffectOperator, isLocalImageEffectType } from './effectGraphOwner';
+import { effectOperatorGraph, validateEffectOwnerGraph, addableEffectOperators, canRemoveEffectOperator, isImageGraphEffectType } from './effectGraphOwner';
 import { EFFECT_GRAPH_PARAM, connectEffectGraph, operatorEnabled } from './effectGraph';
 import { prepareEditableOperatorGraph } from './editableOperatorGraph';
 import { EFFECT_OPERATORS, getEffectOperator } from './operatorRegistry';
@@ -53,7 +53,7 @@ export function setOperatorParameter(clipId: string, effectId: string, nodeId: s
     const spec = node && getEffectOperator(node.operator)?.parameters.find(p => p.id === name);
     if (!node || !spec) throw new Error('Parameter unavailable.');
     const binding = node.bindings[name];
-    const ownerSpec = typeof binding === 'string' && effectType && isLocalImageEffectType(effectType) ? getEffect(effectType)?.params[binding] : undefined;
+    const ownerSpec = typeof binding === 'string' && effectType && isImageGraphEffectType(effectType) ? getEffect(effectType)?.params[binding] : undefined;
     const min = ownerSpec?.type === 'number' ? ownerSpec.min : spec.min, max = ownerSpec?.type === 'number' ? ownerSpec.max : spec.max;
     if (spec.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value) || value < (min ?? -Infinity) || value > (max ?? Infinity))) throw new Error('Parameter is outside its supported range.');
     if (spec.type === 'select' && (typeof value !== 'string' || !spec.options?.some(option => option.value === value))) throw new Error('Parameter option is unavailable.');

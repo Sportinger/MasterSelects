@@ -5,7 +5,7 @@ import { Logger } from '../logger';
 import type { WorkerRenderHostRuntimeBridge } from './workerRenderHostRuntimeBridge';
 import type { WorkerRenderHostRuntimeJobOutput } from './workerRenderHostRuntimeHandlers';
 import type { WorkerGpuWebCodecsRenderLayer } from './workerGpuRuntimeCommands';
-import { isLocalImageEffectType } from '../operators/effectGraphOwner';
+import { isImageGraphEffectType } from '../operators/effectGraphOwner';
 
 const log = Logger.create('WorkerGpuMediaSourceRegistry');
 
@@ -189,7 +189,7 @@ function workerGpuInlineParams(effectStack: ReturnType<typeof splitLayerEffects>
 export function resolveWorkerGpuVideoPresentationLayerStyle(layer: Layer): WorkerGpuVideoPresentationLayerStyle {
   const effectStack = splitLayerEffects(layer.effects);
   const inlineEffects = workerGpuInlineParams(effectStack);
-  const gpuEffects = workerGpuEffectParams(effectStack.complexEffects?.filter(effect => !isLocalImageEffectType(effect.type)));
+  const gpuEffects = workerGpuEffectParams(effectStack.complexEffects?.filter(effect => !isImageGraphEffectType(effect.type)));
   const baseOpacity = typeof layer.opacity === 'number' && Number.isFinite(layer.opacity)
     ? clamp01(layer.opacity)
     : 1;

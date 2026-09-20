@@ -24,7 +24,7 @@ function imageScalarValues(request: PreviewRequest, effect: Effect, keys: Keyfra
   const evaluatePort = (portId: string, direction: 'input' | 'output'): number | undefined => {
     try {
       const plan = compileImageOperatorPreview(graph, params, { nodeId: selected.id, portId, direction });
-      if (plan.instructions.some(instruction => instruction.operation === 'input')) return undefined;
+      if (plan.capabilities.length || plan.instructions.some(instruction => instruction.operation === 'input')) return undefined;
       const value = evaluateImageOperatorPlan(plan, [0, 0, 0, 0])[0];
       return Number.isFinite(value) ? value : undefined;
     } catch { return undefined; }

@@ -156,6 +156,12 @@ subtraction and raw division chain, with no hidden final clamp. Their original
 Level/Levels controls and keyframes remain the graph bindings, while alpha follows
 the same direct split-to-combine path.
 
+Vignette exposes its real coordinate-driven graph as well. A normalized fragment
+coordinate node feeds the center, aspect, distance and smoothstep chain; it is not
+the texture-transform UV node. Amount, Size, Softness and Roundness remain the
+original effect-owned controls, and the graph stays on the contextual fullscreen
+render path rather than the pixel-only inline stack.
+
 Analog Signal Lab appears as its actual signal chain rather than one opaque effect
 card. PAL, RF, VHS, receiver, decoder and display nodes expose the original effect
 parameters through the shared inspector, including the PAL decoder and tape-speed

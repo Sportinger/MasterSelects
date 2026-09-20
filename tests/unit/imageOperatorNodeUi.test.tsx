@@ -30,6 +30,16 @@ function fixture() {
 }
 
 describe('image operator node UI', () => {
+  it('keeps UV-dependent distances as image previews while exposing uniform operands', () => {
+    const effect: Effect = { id: 'vignette-ui', name: 'Vignette', type: 'vignette', enabled: true, params: {} };
+    const clip = createMockClip({ id: 'vignette-clip', effects: [effect] });
+    const node = buildEffectOperatorGraph(clip, effect).nodes.find(candidate => candidate.id === 'distance')!;
+    const request = { key: 'distance', revision: '1', time: 0, clipId: clip.id, node,
+      width: 164, height: 100, interval: 16, priority: 1 };
+    expect(imageOperatorValuePreview(request, clip, effect)).toBeUndefined();
+    expect(imageOperatorKnownValues(request, clip, effect)).toEqual([{ portId: 'b', direction: 'input', value: 2 }]);
+  });
+
   it('presents one adaptive RGBA split with image-context channel labels', () => {
     const { clip, effect } = fixture();
     const graph = buildEffectOperatorGraph(clip, effect);

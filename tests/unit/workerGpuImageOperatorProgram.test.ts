@@ -6,6 +6,7 @@ import type { Layer } from '../../src/types';
 import { shouldUseLayerVideoFramePresenter } from '../../src/services/render/workerRenderHostRuntimeHandlers';
 import { uploadWorkerVideoFrameTexture, workerGpuOperatorProgramCacheKey, workerVideoFrameNeedsStraightAlphaUpload } from '../../src/services/render/workerGpuOperatorPipeline';
 import { hasCompositorRenderLayer } from '../../src/services/render/workerGpuVideoFrameCompositor';
+import { createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
 
 function layerWithEditedInvert(): Layer {
   const graph = createDefaultInvertImageGraph();
@@ -58,6 +59,28 @@ describe('worker GPU image operator program', () => {
         effects: layer.effects!,
       },
     }])).toBe(true);
+  });
+
+  it('does not transport a UV-capable edited pixel effect as an inline operator', () => {
+    const layer = { opacity: 1, blendMode: 'normal', effects: [
+      { id: 'brightness-uv', name: 'Brightness', type: 'brightness', enabled: true, params: { amount: 0.2 },
+        operatorGraph: createDefaultVignetteGraph() },
+    ] } as unknown as Layer;
+    const style = resolveWorkerGpuVideoPresentationLayerStyle(layer);
+    expect(style.operatorProgram).toBeUndefined();
+    expect(style.complexEffectCount).toBe(1);
+  });
+
+  it('leaves Vignette to the full worker compositor without legacy scalar duplication', () => {
+    const layer = { opacity: 1, blendMode: 'normal', effects: [
+      { id: 'vignette', name: 'Vignette', type: 'vignette', enabled: true,
+        params: { amount: 0.9, size: 0.2, softness: 0.1, roundness: 1.7 } },
+    ] } as unknown as Layer;
+    const style = resolveWorkerGpuVideoPresentationLayerStyle(layer);
+    expect(style.operatorProgram).toBeUndefined();
+    expect(style.complexEffectCount).toBe(1);
+    expect(style.vignetteAmount).toBe(0);
+    expect(style.vignetteSize).toBe(0.5);
   });
 
   it('preserves the compiled edited graph as a serializable layer style', () => {

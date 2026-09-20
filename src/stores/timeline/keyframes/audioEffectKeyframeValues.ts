@@ -13,7 +13,7 @@ import {
 import { clearProcessedAudioAnalysisRefs } from '../helpers/audioAnalysisStateHelpers';
 import {
   effectOperatorParams,
-  isLocalImageEffectType,
+  isImageGraphEffectType,
 } from '../../../services/operators/effectGraphOwner';
 
 export interface AudioKeyframeInvalidationTarget {
@@ -63,7 +63,7 @@ export function getLegacyEffectKeyframeBaseValue(
 ): number | undefined {
   if (!paramName.includes('.')) {
     let value = effect.params[paramName];
-    if (value === undefined && (effect.type === 'voxel-relief' || isLocalImageEffectType(effect.type))) {
+    if (value === undefined && (effect.type === 'voxel-relief' || isImageGraphEffectType(effect.type))) {
       try { value = effectOperatorParams(effect)[paramName] as typeof value; } catch { return undefined; }
     }
     // Cable defaults live in settings; explicit timeline keys supply the animated value.

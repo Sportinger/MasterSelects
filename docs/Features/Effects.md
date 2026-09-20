@@ -142,6 +142,13 @@ Posterize retains the original `floor(rgb * levels) / (levels - 1)` formula,
 with levels bounded below by two and no internal output clamp. Both preserve
 source alpha and the original parameter ranges, defaults, and keyframe IDs.
 
+Vignette exposes normalized pixel coordinates, center/aspect adjustment,
+distance, smoothstep falloff, and gain as an editable graph. It retains its
+existing fullscreen pass and alpha behavior. UV-dependent node previews show
+the spatial field instead of inventing a single numeric value. Adding a UV
+dependency to another image graph also routes it through the contextual
+fullscreen path; ordinary pixel-only graphs keep their inline optimization.
+
 ### Analog Signal Lab
 
 `Analog Signal Lab` is a dedicated six-pass compute effect rather than a

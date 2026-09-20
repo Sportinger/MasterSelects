@@ -77,6 +77,7 @@ describe('image graph lifecycle parity', () => {
       { type: 'vibrance', parameter: 'amount', from: -1, to: 1, expected: 0 },
       { type: 'threshold', parameter: 'level', from: 0.2, to: 0.8, expected: 0.5 },
       { type: 'posterize', parameter: 'levels', from: 2, to: 10, expected: 6 },
+      { type: 'vignette', parameter: 'amount', from: 0, to: 1, expected: 0.5 },
     ] as const;
     for (const item of cases) {
       const id = `${item.type}-lifecycle`, clipId = `${item.type}-clip`;
@@ -98,8 +99,8 @@ describe('image graph lifecycle parity', () => {
       const previewParams = effectOperatorParams(preview), exportParams = effectOperatorParams(exported);
       expect(previewParams[item.parameter]).toBeCloseTo(item.expected);
       expect(exportParams[item.parameter]).toBeCloseTo(item.expected);
-      const previewPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(preview), previewParams), pixel);
-      const exportPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(exported), exportParams), pixel);
+      const previewPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(preview), previewParams), pixel, { uv: [0.9, 0.5] });
+      const exportPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(exported), exportParams), pixel, { uv: [0.9, 0.5] });
       expect(previewPixel).toEqual(exportPixel);
       expect(exportPixel[3]).toBe(pixel[3]);
     }
