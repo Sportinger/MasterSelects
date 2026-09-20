@@ -6,10 +6,10 @@ import { projectOperatorPort } from './effectGraphProjection';
 import { sceneBypassDescription } from '../operators/sceneOperators';
 
 export function sceneOperatorProjection(clip: TimelineClip, id: string): NodeGraph {
-  const definition = sceneGraphForClip(clip), errors = validateSceneGraph(definition);
+  const definition = sceneGraphForClip(clip), errors = validateSceneGraph(definition, typeof definition.graph.incomplete === 'string');
   const owner = { kind: 'clip' as const, id: clip.id, name: clip.name };
   if (errors.length) return { id, owner, nodes: [{ id: 'invalid', label: 'Invalid scene graph', description: errors[0], kind: 'output', runtime: 'builtin', inputs: [], outputs: [], layout: { x: 0, y: 0 } }], edges: [] };
-  return { id, owner, nodes: definition.graph.nodes.map(node => {
+  return { id, owner, issue: definition.graph.incomplete, nodes: definition.graph.nodes.map(node => {
     const op = getEffectOperator(node.operator)!;
     return { id: node.id, label: op.label, description: op.description, operatorId: op.id,
       params: { bypassable: true, enabled: !node.bypassed, bypassDescription: sceneBypassDescription(node.operator) },

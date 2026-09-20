@@ -63,4 +63,3 @@ export function colorNodePorts(node: ColorNode): { inputs: NodeGraphPort[]; outp
       };
   }
 }
-

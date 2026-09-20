@@ -20,7 +20,7 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
     }], edges: [] };
   }
   return {
-    id: effectGraphId(clip.id, effect.id), owner: { kind: 'clip', id: clip.id, name: clip.name }, domain: 'clip',
+    id: effectGraphId(clip.id, effect.id), owner: { kind: 'clip', id: clip.id, name: clip.name }, domain: 'clip', issue: graph.incomplete,
     nodes: graph.nodes.map(node => {
       const operator = getEffectOperator(node.operator)!;
       return { id: node.id, operatorId: operator.id, label: operator.label, description: operator.description,

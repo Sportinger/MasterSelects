@@ -1,4 +1,5 @@
 import { readTimelineRuntimeState } from '../../../services/timeline/timelineRuntimeCoordinator';
+import { transferNodeGroup } from '../../../services/nodeGraph/transferNodeGroup';
 import { NodeCatalog } from './workspace/NodeCatalog';
 import { getEffectOperator } from '../../../services/operators/operatorRegistry';
 import { useUnifiedNodeActions } from './useUnifiedNodeActions';
@@ -413,6 +414,11 @@ export function NodeWorkspacePanel() {
           onToggleNodeSelection={toggleNodeSelection}
           onMoveNode={unified.moveNode}
           onMoveNodes={moves => batched('Move nodes', () => moves.forEach(move => unified.moveNode(move.nodeId, move.layout)))}
+          onTransferNodes={(ids, groupId) => {
+            const moved = transferNodeGroup(subject.id, subject.graph, ids, groupId);
+            selectNodes(Object.values(moved));
+            return moved;
+          }}
           onConnectPorts={unified.connectPorts}
           onDisconnectEdge={unified.disconnectEdge}
           onReconnectPorts={(edgeId, connection) => batched('Reconnect node link', () => reconnectNodePorts(

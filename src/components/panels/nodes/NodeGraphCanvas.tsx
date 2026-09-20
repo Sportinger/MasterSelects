@@ -1,7 +1,10 @@
 import { NodeGraphGroups } from './canvas/NodeGraphGroups';
 import { useNodePreviewPreferences } from './previews/useNodePreviewPreferences';
 import { nodePreviewKey, nodePreviewPreferenceKey, previewOutput } from '../../../services/nodePreview/previewTypes';
-import { spacePreviewGroups } from './canvas/spacePreviewGroups';
+import { useNodeCanvasPlacement } from './canvas/useNodeCanvasPlacement';
+import { groupPlacementMembers } from './canvas/nodeCanvasPlacement';
+import { hasUnlockedSource, nodeGroupDropTarget } from './canvas/nodeGroupDrop';
+import { placeTransferredNodes } from './canvas/placeTransferredNodes';
 import { NodeGraphCanvasSurface } from './canvas/rendering/NodeGraphCanvasSurface';
 import { annotatedGraphBounds, nodeGroupBounds } from './canvas/groupBounds';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -54,6 +57,7 @@ interface NodeGraphCanvasProps {
   onToggleNodeBypass?: (nodeId: string) => void;
   onOpenAddMenu?: (position: { x: number; y: number; layout: NodeGraphLayout; nodeId?: string | null }) => void;
   onToggleGroup?: (id: string) => void;
+  onTransferNodes?: (nodeIds: string[], groupId: string) => Record<string, string>;
   layoutScaleX?: number;
 }
 
@@ -72,6 +76,7 @@ interface NodeDragGesture {
   clientY: number;
   members: Array<{ nodeId: string; startX: number; startY: number }>;
   moved: boolean;
+  groupId?: string;
 }
 
 export function NodeGraphCanvas({
@@ -92,6 +97,7 @@ export function NodeGraphCanvas({
   onToggleNodeBypass,
   onOpenAddMenu,
   onToggleGroup,
+  onTransferNodes,
   layoutScaleX = 1,
 }: NodeGraphCanvasProps) {
   const { preferences, toggleGlobal, toggleNode, selectOutput, aspectRatio } = useNodePreviewPreferences(sourceGraph.owner.id);
@@ -99,7 +105,7 @@ export function NodeGraphCanvas({
     const preference = preferences.nodes[nodePreviewPreferenceKey(sourceGraph.owner.id, node)] ?? preferences.nodes[node.id];
     const port = previewOutput(node, preference?.portId);
     const imageRatio = port?.type === 'texture' || port?.type === 'mask' || port?.metadata?.semanticKind === 'operator:landmarks';
-    return { ...node, preview: { enabled: preferences.enabled && (preference?.enabled ?? true), requested: preference?.enabled ?? true,
+    return { ...node, preview: { enabled: preference?.enabled ?? true, requested: preference?.enabled ?? true,
       portId: preference?.portId, key: nodePreviewKey(sourceGraph.owner.id, node, preference?.portId), aspectRatio: imageRatio ? aspectRatio : 16 / 9 } };
   }) }), [sourceGraph, preferences, aspectRatio]);
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -113,17 +119,20 @@ export function NodeGraphCanvas({
   const draftLayoutsRef = useRef(draftLayouts);
   draftLayoutsRef.current = draftLayouts;
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [groupMessage, setGroupMessage] = useState('');
   const multiSelection = useMemo(() => new Set(selectedNodeIds ?? []), [selectedNodeIds]);
 
-  const spacedNodes = useMemo(() => (
-    spacePreviewGroups({ ...graph, nodes: graph.nodes.map(node => layoutScaleX === 1 ? node : ({ ...node, layout: { x: node.layout.x * layoutScaleX, y: node.layout.y } })) })
-  ), [graph.nodes, graph.groups, layoutScaleX]);
+  const { nodes: spacedNodes, placement, commit: commitPlacement, toggleLock } = useNodeCanvasPlacement(graph, layoutScaleX);
   const displayNodes = useMemo(() => (
     spacedNodes.map((node) => !draftLayouts[node.id] ? node : ({
       ...node,
       layout: draftLayouts[node.id],
     }))
   ), [draftLayouts, spacedNodes]);
+  const nodeGesture = nodeDragGestureRef.current;
+  const freezeGroupFrames = nodeGesture && !nodeGesture.groupId
+    && hasUnlockedSource(graph, placement, nodeGesture.members.map(member => member.nodeId));
+  const groupFrameNodes = freezeGroupFrames ? spacedNodes : displayNodes;
   const nodesById = useMemo(() => new Map(displayNodes.map((node) => [node.id, node])), [displayNodes]);
   const nodesByIdRef = useRef(nodesById);
   nodesByIdRef.current = nodesById;
@@ -254,6 +263,7 @@ export function NodeGraphCanvas({
 
   const startNodeDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>, node: NodeGraphNode) => {
     event.stopPropagation();
+    setGroupMessage('');
     const additive = event.shiftKey || event.ctrlKey || event.metaKey;
     if (additive && onToggleNodeSelection && event.button === 0) {
       onToggleNodeSelection(node.id);
@@ -280,9 +290,25 @@ export function NodeGraphCanvas({
         return member ? [{ nodeId: memberId, startX: member.layout.x, startY: member.layout.y }] : [];
       }),
       moved: false,
+      groupId: !dragsSelection ? graph.groups?.find(group => group.collapsed && group.proxyId === node.id)?.id : undefined,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
-  }, [multiSelection, onSelectNode, onToggleNodeSelection]);
+  }, [multiSelection, onSelectNode, onToggleNodeSelection, graph.groups]);
+
+  const startGroupDrag = (event: ReactPointerEvent<HTMLDivElement>, groupId: string) => {
+    event.stopPropagation();
+    if (event.button !== 0 || (event.target as Element).closest('button')) return;
+    event.preventDefault();
+    const members = [...groupPlacementMembers(placement, groupId)].flatMap(id => {
+      const node = nodesByIdRef.current.get(id);
+      return node ? [{ nodeId: id, startX: node.layout.x, startY: node.layout.y }] : [];
+    });
+    if (!members.length) return;
+    setSelectedEdgeId(null);
+    nodeDragGestureRef.current = { pointerId: event.pointerId, nodeId: members[0].nodeId, groupId,
+      clientX: event.clientX, clientY: event.clientY, members, moved: false };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
 
   const handleNodePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     const gesture = nodeDragGestureRef.current;
@@ -290,7 +316,7 @@ export function NodeGraphCanvas({
 
     const deltaX = (event.clientX - gesture.clientX) / viewport.zoom;
     const deltaY = (event.clientY - gesture.clientY) / viewport.zoom;
-    if (!gesture.moved && Math.hypot(deltaX, deltaY) < 2) return;
+    if (!gesture.moved && Math.hypot(event.clientX - gesture.clientX, event.clientY - gesture.clientY) < 3) return;
     gesture.moved = true;
     setDraftLayouts((current) => {
       const next = { ...current };
@@ -308,20 +334,27 @@ export function NodeGraphCanvas({
     const gesture = nodeDragGestureRef.current;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
 
-    const moves = gesture.moved
+    const moves = gesture.moved && event.type === 'pointerup'
       ? gesture.members.flatMap((member) => {
           const finalLayout = draftLayoutsRef.current[member.nodeId];
           return finalLayout
-            ? [{ nodeId: member.nodeId, layout: { x: Math.round(finalLayout.x / layoutScaleX), y: finalLayout.y } }]
+            ? [{ nodeId: member.nodeId, layout: finalLayout }]
             : [];
         })
       : [];
-    if (moves.length > 1 && onMoveNodes) {
-      onMoveNodes(moves);
-    } else {
-      for (const move of moves) onMoveNode?.(move.nodeId, move.layout);
-    }
-    if (gesture.moved && gesture.members.length > 1) {
+    try {
+      const ids = moves.map(move => move.nodeId);
+      const target = moves.length && !gesture.groupId && onTransferNodes && hasUnlockedSource(graph, placement, ids)
+        ? nodeGroupDropTarget(graph, spacedNodes, placement, ids, getGraphPointFromClient(event.clientX, event.clientY)) : undefined;
+      const placed = target ? placeTransferredNodes(graph, spacedNodes, target, moves) : moves;
+      if (moves.length) commitPlacement(placed, gesture.groupId, gesture.groupId ? undefined : () => {
+        if (target && onTransferNodes) return onTransferNodes(ids, target);
+        const domainMoves = moves.map(move => ({ ...move, layout: { x: Math.round(move.layout.x / layoutScaleX), y: move.layout.y } }));
+        if (domainMoves.length > 1 && onMoveNodes) onMoveNodes(domainMoves);
+        else for (const move of domainMoves) onMoveNode?.(move.nodeId, move.layout);
+      });
+    } catch (error) { setGroupMessage(error instanceof Error ? error.message : String(error)); }
+    if (gesture.moved && gesture.members.length > 1 && !gesture.groupId) {
       suppressNextClickRef.current = true;
     }
     nodeDragGestureRef.current = null;
@@ -330,8 +363,8 @@ export function NodeGraphCanvas({
       for (const member of gesture.members) delete next[member.nodeId];
       return next;
     });
-    event.currentTarget.releasePointerCapture(event.pointerId);
-  }, [layoutScaleX, onMoveNode, onMoveNodes]);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  }, [layoutScaleX, onMoveNode, onMoveNodes, commitPlacement, graph, placement, spacedNodes, getGraphPointFromClient, onTransferNodes]);
 
   const handleNodeClick = useCallback((nodeId: string) => {
     if (suppressNextClickRef.current) {
@@ -387,7 +420,10 @@ export function NodeGraphCanvas({
         </div>
         <div className="node-workspace-toolbar-actions">
           <button type="button" className="node-workspace-toolbar-button" aria-pressed={preferences.enabled}
-            title="Show or hide enabled node previews" onClick={event => { toggleGlobal(); if (event.detail > 0) event.currentTarget.blur(); }}>Previews</button>
+            title="Toggle all node previews" onClick={event => {
+              toggleGlobal(sourceGraph.nodes.map(node => nodePreviewPreferenceKey(sourceGraph.owner.id, node)));
+              if (event.detail > 0) event.currentTarget.blur();
+            }}>Previews</button>
           {selectedEdge && !selectedEdge.readOnly && (
             <button type="button" className="node-workspace-toolbar-button" onClick={disconnectSelectedEdge}>
               Disconnect
@@ -398,6 +434,7 @@ export function NodeGraphCanvas({
           <span className="node-workspace-zoom">{Math.round(viewport.zoom * 100)}%</span>
         </div>
       </div>
+      {groupMessage && <div className="node-workspace-graph-message" role="status">{groupMessage}</div>}
 
       <div
         ref={canvasRef}
@@ -465,7 +502,7 @@ export function NodeGraphCanvas({
           onOpenAddMenu?.({ x: event.clientX, y: event.clientY, layout, nodeId: targetNodeId });
         }}
       >
-        <NodeGraphCanvasSurface graph={graph} nodes={displayNodes} plugs={plugs} viewport={viewport}
+        <NodeGraphCanvasSurface graph={graph} nodes={displayNodes} groupFrameNodes={groupFrameNodes} plugs={plugs} viewport={viewport}
           selectedNodeId={selectedNodeId} selection={multiSelection} selectedEdgeId={selectedEdgeId}
           hoveredEdgeId={hoveredEdgeId} hoveredPort={hoveredPort} draft={connectionDraft} canBypass={!!onToggleNodeBypass} onReady={setCanvasRendered} />
         <div
@@ -474,7 +511,10 @@ export function NodeGraphCanvas({
             transform: `translate(${viewport.panX}px, ${viewport.panY}px) scale(${viewport.zoom})`,
           }}
         >
-          <NodeGraphGroups graph={graph} nodes={displayNodes} onToggle={toggleGroup} onFocus={focusGroup} onToggleNodeBypass={onToggleNodeBypass} />
+          <NodeGraphGroups graph={graph} nodes={displayNodes} zoom={viewport.zoom} onToggle={toggleGroup} onFocus={focusGroup}
+            frameNodes={groupFrameNodes}
+            locks={placement.groups} onToggleLock={toggleLock} onToggleNodeBypass={onToggleNodeBypass}
+            onStartDrag={startGroupDrag} onPointerMove={handleNodePointerMove} onFinishDrag={finishNodeDrag} />
           <NodeGraphEdges
             canvasRendered={canvasRendered}
             zoom={viewport.zoom}

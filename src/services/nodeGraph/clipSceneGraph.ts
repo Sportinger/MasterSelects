@@ -46,7 +46,7 @@ export function withClipSceneGraph(document: NodeGraphDocument, clip: TimelineCl
   }
   if (sceneGraphSupportsSource(sourceType, !!cable, clip.effects.some(e => e.enabled && e.type === 'voxel-relief'))) {
     const executable = sceneOperatorProjection(clip, graph.id);
-    graph.nodes = executable.nodes; graph.edges = executable.edges; graph.groups = executable.groups;
+    graph.nodes = executable.nodes; graph.edges = executable.edges; graph.groups = executable.groups; graph.issue = executable.issue;
   }
   const sceneOutput = graph.nodes.find(n => n.id === 'render');
   const dependencies = nonVisual ? [] : clips.filter(c => c.id !== clip.id && ['camera', 'light', 'splat-effector'].includes(c.source?.type ?? '')

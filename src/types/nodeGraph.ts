@@ -164,7 +164,8 @@ export interface NodeGraph {
   nodes: NodeGraphNode[];
   edges: NodeGraphEdge[];
   domain?: NodeGraphDomain;
-  groups?: Array<{ id: string; label: string; color: string; collapsed: boolean; nodeIds: string[]; proxyId: string; parentId?: string; bypassNodeId?: string }>;
+  issue?: string;
+  groups?: Array<{ id: string; label: string; color: string; collapsed: boolean; nodeIds: string[]; proxyId: string; parentId?: string; bypassNodeId?: string; issue?: string }>;
   /** Uncollapsed nodes used to resolve exposed ports of nested groups. */
   expandedNodes?: NodeGraphNode[];
 }
@@ -250,8 +251,15 @@ export interface ClipCustomNodeDefinition {
 
 export type ClipNodeGraphForcedBuiltIn = 'transform' | 'mask' | 'color';
 
+/** Presentation coordinates, independent of executable domain layouts. */
+export interface NodeCanvasPlacement {
+  nodes: Record<string, NodeGraphLayout>;
+  groups: Record<string, { nodeIds: string[]; proxyId: string; parentId?: string; offset: NodeGraphLayout; locked?: boolean }>;
+}
+
 export interface ClipNodeGraph {
   version: 1;
+  canvasPlacements?: Record<string, NodeCanvasPlacement>;
   previews?: { enabled: boolean; nodes: Record<string, { enabled: boolean; portId?: string }> };
   stabilization?: import('./faceStabilization').ClipStabilizationGraph;
   keyframeNodes?: import('./keyframeNode').KeyframeNodeDefinition[];

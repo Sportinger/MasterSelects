@@ -9,7 +9,7 @@ import { directionFromAngles, periodicWindModulation, windForce } from './wind';
 export const EFFECT_GRAPH_PARAM = 'operatorGraph';
 export type OperatorParameters = Record<string, unknown>;
 
-export function validateEffectGraph(graph: EffectOperatorGraph): string[] {
+export function validateEffectGraph(graph: EffectOperatorGraph, allowIncomplete = false): string[] {
   if (graph?.version !== 1 || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges) || !graph.layout
     || graph.nodes.length > 64 || graph.edges.length > 256) return ['Invalid operator graph.'];
   if (graph.nodes.some(n => !n || typeof n !== 'object') || graph.edges.some(e => !e || typeof e !== 'object')) return ['Invalid graph entries.'];
@@ -29,10 +29,11 @@ export function validateEffectGraph(graph: EffectOperatorGraph): string[] {
     occupied.add(`${edge.toNodeId}:${edge.toPortId}`); edgeIds.add(edge.id);
   }
   for (const n of graph.nodes) for (const p of getEffectOperator(n.operator)?.inputs ?? []) {
-    if (p.required && !occupied.has(`${n.id}:${p.id}`)) errors.push(`${getEffectOperator(n.operator)!.label}: connect ${p.label}.`);
+    if (!allowIncomplete && p.required && !occupied.has(`${n.id}:${p.id}`)) errors.push(`${getEffectOperator(n.operator)!.label}: connect ${p.label}.`);
   }
   if (graphHasCycle(connections.nodes, connections.edges)) errors.push('Cycles are not supported.');
-  if (graph.nodes.filter(n => n.operator === (graph.domain === 'voxel' ? 'render.voxel' : graph.domain === 'scene' ? 'scene.render' : 'scene.output')).length !== 1) errors.push('The graph needs one clip output.');
+  const outputOperator = graph.domain === 'voxel' ? 'render.voxel' : graph.domain === 'scene' ? 'scene.render' : 'scene.output';
+  if (!allowIncomplete && graph.nodes.filter(n => n.operator === outputOperator).length !== 1) errors.push('The graph needs one clip output.');
   if (graph.groups) {
     if (!Array.isArray(graph.groups) || graph.groups.length > 32) return [...errors, 'Invalid groups.'];
     const groups = new Map(graph.groups.map(g => [g?.id, g]));
@@ -55,7 +56,7 @@ export function readEffectGraph(value: unknown, fallback: () => EffectOperatorGr
   let graph: EffectOperatorGraph;
   try { graph = JSON.parse(value); } catch { throw new Error('Invalid saved operator graph.'); }
   if (migrate) graph = migrate(graph);
-  const errors = validateEffectGraph(graph);
+  const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
   if (errors.length) throw new Error(errors[0]);
   return graph;
 }
@@ -108,7 +109,7 @@ export function connectEffectGraph(graph: EffectOperatorGraph, edge: OperatorEdg
   const input = getEffectOperator(graph.nodes.find(n => n.id === edge.to)?.operator ?? '')?.inputs.find(p => p.id === edge.input);
   const edges = graph.edges.filter(e => e.id !== edge.id && (input?.repeated || e.to !== edge.to || e.input !== edge.input));
   const next = { ...graph, edges: [...edges, edge] };
-  const errors = validateEffectGraph(next);
+  const errors = validateEffectGraph(next, true);
   if (errors.length) throw new Error(errors[0]);
   return next;
 }

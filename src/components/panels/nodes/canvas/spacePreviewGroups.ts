@@ -9,12 +9,12 @@ interface GroupBlock extends PreviewLayoutBlock { nodeIds: string[]; group: bool
  * frame, including its empty space, header and nested frames, not just its cards.
  * Folding is projected first, so each pass uses the current proxy or contents.
  */
-export function spacePreviewGroups(graph: NodeGraph): NodeGraphNode[] {
-  if (!graph.groups?.length) return spacePreviewNodes(graph.nodes);
+export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<string> = new Set()): NodeGraphNode[] {
+  if (!graph.groups?.length && !fixedIds.size) return spacePreviewNodes(graph.nodes);
   const nodes = new Map(graph.nodes.map(node => [node.id, node]));
-  const groups = new Map(graph.groups.map(group => [group.id, group]));
+  const groups = new Map((graph.groups ?? []).map(group => [group.id, group]));
   const children = new Map<string | undefined, NonNullable<NodeGraph['groups']>>();
-  for (const group of graph.groups) {
+  for (const group of graph.groups ?? []) {
     const parent = group.parentId && groups.has(group.parentId) ? group.parentId : undefined;
     children.set(parent, [...(children.get(parent) ?? []), group]);
   }
@@ -30,7 +30,7 @@ export function spacePreviewGroups(graph: NodeGraph): NodeGraphNode[] {
       const node = nodes.get(nodeId)!;
       return { id: `node:${nodeId}`, ...node.layout, width: NODE_WIDTH, height: getNodeHeight(node), nodeIds: [nodeId], group: false };
     })];
-    const placed = spacePreviewBlocks(blocks);
+    const placed = spacePreviewBlocks(blocks, new Set(blocks.filter(block => block.nodeIds.some(nodeId => fixedIds.has(nodeId))).map(block => block.id)));
     const childBounds = [];
     for (let index = 0; index < blocks.length; index++) {
       const before = blocks[index], after = placed[index], dx = after.x - before.x, dy = after.y - before.y;

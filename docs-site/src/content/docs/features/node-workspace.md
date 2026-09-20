@@ -5,8 +5,10 @@ title: "Node Workspace"
 The Node Workspace is a dockable, unified view of the canonical node-graph document for the currently selected timeline clip. It follows the same primary selection rule as Properties: the last clicked selected clip is used, with a fallback to the first selected clip. Linked video/audio clips resolve to one graph owner: selecting either side opens the visual clip's graph, while the linked audio clip feeds the source node's audio and analysis ports.
 
 Selecting a clip shows **all its nodes on one canvas**. Color, Flock, Face Cables and
-3D Scene appear as colored groups. The group header collapses a group to one node
-or expands its contents; **Focus** fits that group. Collapse state and layout are
+3D Scene appear as colored groups. Drag the group header to move its entire contents,
+including nested groups. The separate arrow collapses or expands the group;
+**Focus** fits that group. Header text adapts to zoom and truncates when needed;
+frame width and header height never grow to accommodate text. Collapse state and layout are
 saved with the clip and restored when reopening the project. Collapse affects only
 presentation, never rendering or a saved bake.
 
@@ -64,7 +66,8 @@ Reduced-motion preferences keep the same continuous zoom without smoothing.
 ## Inline previews
 
 Previews are enabled by default. The small viewer button on each card toggles that
-node; **Previews** in the toolbar temporarily hides all enabled viewers. Output
+node; **Previews** in the toolbar switches every node viewer off or on together.
+After switching all viewers off, individual node viewers can be enabled again. Output
 selectors switch the viewed port. Preferences are saved on the owning clip and
 survive project/history round trips. Portrait, landscape and square images retain
 their aspect ratio. Placement resolves collisions using the complete card size,
@@ -76,8 +79,26 @@ values or a bounded sample of already simulated particles. Old particle samples
 are marked stale. Scene previews show the shared rendered Flock scene, not an
 independent render of each branch. Opening a viewer never advances the simulation
 or starts missing audio analysis; unavailable outputs are identified explicitly.
-Expanding or folding nested groups reserves each complete frame and moves sibling
-groups together with their contents, keeping headers and unrelated cards apart.
+Automatic placement finds room for new nodes only. Existing nodes and groups keep
+their positions, including intentional overlaps, through edits, folding and saves.
+
+Each group has a **lock** for outgoing membership changes. Unlock the source to
+drag a node into another expanded group or effect; the target may remain locked.
+Unlocking an enclosing effect also releases nodes in its nested groups. Frames
+stay fixed during the drag. On entry, incoming nodes find a free position using
+the full card/preview bounds, and the target frame expands to enclose them.
+Existing nodes retain their positions; ordinary moves within a group remain free.
+Within an effect, dropping into a subgroup changes its saved membership. Between
+compatible effect/scene owners, the node actually transfers to the target graph,
+including parameter values and supported effect keyframes. Internal links and
+unambiguous boundary connections to free inputs move with it. Existing target
+nodes and occupied inputs are preserved; unmatched connections stay disconnected.
+Core nodes such as Cable simulation can move too: an incomplete effect remains
+editable, saves normally, and pauses processing with a warning in its group header.
+Hover the warning for the missing connection. Repairing its wiring resumes it
+automatically, without changing the user's enable toggle. Corrupt wiring and
+incompatible runtimes are still rejected with an explanation. A transfer, its
+placement and parameter/keyframe ownership changes form one undo step.
 
 Source images borrow the current decoded frame. Color input, individual correctors,
 color output, effects, masks and clip output tap the render pipeline. Neutral and

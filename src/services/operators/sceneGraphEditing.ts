@@ -9,13 +9,15 @@ import { createClipNodeGraphState } from '../nodeGraph/clipGraphProjectionState'
 import { compileSceneGraph, sceneGraphForClip, sceneGraphSupportsSource } from './sceneGraph';
 import { connectEffectGraph } from './effectGraph';
 import { SCENE_OPERATORS } from './sceneOperators';
+import { prepareEditableOperatorGraph } from './editableOperatorGraph';
 
 export function editSceneGraph(clipId: string, label: string, edit: (definition: SceneOperatorGraph) => void) {
   assertExclusiveTimelineMutationAllowed();
   const state = readTimelineRuntimeState(useTimelineStore), clip = state.clips.find(c => c.id === clipId);
   if (!clip || state.isExporting || state.tracks.find(t => t.id === clip.trackId)?.locked) throw new Error('The clip is unavailable, locked or exporting.');
   if (!sceneGraphSupportsSource(clip.source?.type, clip.effects.some(e => e.enabled && e.type === 'face-cables' && Boolean(e.params.scene3D)), clip.effects.some(e => e.enabled && e.type === 'voxel-relief'))) throw new Error('This source uses its own geometry renderer.');
-  const definition = structuredClone(sceneGraphForClip(clip)); edit(definition); compileSceneGraph(definition);
+  const definition = structuredClone(sceneGraphForClip(clip)); edit(definition);
+  prepareEditableOperatorGraph(definition.graph, () => compileSceneGraph(definition));
   const batch = startBatch(label);
   try {
     const nodeGraph = clip.nodeGraph ?? createClipNodeGraphState(clip);

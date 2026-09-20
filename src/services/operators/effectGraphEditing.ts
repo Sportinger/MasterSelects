@@ -7,6 +7,7 @@ import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/ex
 import { renderHostPort } from '../render/renderHostPort';
 import { effectOperatorGraph, validateEffectOwnerGraph, addableEffectOperators, canRemoveEffectOperator } from './effectGraphOwner';
 import { EFFECT_GRAPH_PARAM, connectEffectGraph, operatorEnabled } from './effectGraph';
+import { prepareEditableOperatorGraph } from './editableOperatorGraph';
 import { getEffectOperator } from './operatorRegistry';
 import type { AnimatableProperty } from '../../types/animationProperties';
 
@@ -35,7 +36,7 @@ export function editEffectGraph(clipId: string, effectId: string, label: string,
   if (!effect) throw new Error('Effect unavailable.');
   const graph = structuredClone(effectOperatorGraph(effect)), params = { ...effect.params };
   edit(graph, params);
-  validateEffectOwnerGraph(effect, graph, params);
+  prepareEditableOperatorGraph(graph, () => validateEffectOwnerGraph(effect, graph, params));
   params[EFFECT_GRAPH_PARAM] = JSON.stringify(graph);
   const batch = startBatch(label);
   try {

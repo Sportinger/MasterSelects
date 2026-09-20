@@ -9,7 +9,7 @@ import { collapsedArtifactLinks, projectSourceArtifactLinks } from './sourceArti
 import { projectKeyframeNodes } from './keyframeNodeProjection';
 import { projectStabilizationGraph } from './stabilizationGraphProjection';
 
-/** A single canvas projection of every domain. Grouping changes presentation, never processing. */
+/** A single canvas projection of every domain and its executable ownership. */
 export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: TimelineClip, clips: TimelineClip[] = [], keys: readonly Keyframe[] = [], trackingCreatedAt?: number): NodeGraph {
   document = withClipSceneGraph(document, clip, clips);
   const root = document.graphs.find(g => g.id === document.rootGraphId)!;
@@ -26,10 +26,11 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     const offset = state?.position ?? { x: cursor + 35, y: 95 };
     const collapsed = state?.collapsed === true;
     const group = { id: groupId, label: effect?.name ?? (groupId === 'scene3d' ? '3D Scene' : groupId === 'flock' ? 'Flock' : 'Color'),
-      color: groupId === 'scene3d' ? '#d7a262' : groupId === 'flock' ? '#7ea65b' : groupId === 'color' ? '#ba8bd6' : '#55a6c4', collapsed, nodeIds: [] as string[], proxyId: rootNode.id };
+      color: groupId === 'scene3d' ? '#d7a262' : groupId === 'flock' ? '#7ea65b' : groupId === 'color' ? '#ba8bd6' : '#55a6c4', collapsed, nodeIds: [] as string[], proxyId: rootNode.id, issue: inner.issue };
     groups.push(group);
-    if (collapsed) {
-      const proxy: NodeGraphNode = { ...rootNode, runtime: 'subgraph', label: group.label, groupId, groupOffset: offset, layout: offset };
+    if (collapsed || !inner.nodes.length) {
+      const proxy: NodeGraphNode = { ...rootNode, runtime: 'subgraph', label: group.label,
+        description: !inner.nodes.length ? 'Empty effect — drop compatible nodes here' : rootNode.description, groupId, groupOffset: offset, layout: offset };
       nodes.push(proxy);
       if (effect?.type === 'face-cables') edges.push(...collapsedArtifactLinks(inner, proxy, effect.id));
       group.nodeIds.push(rootNode.id); cursor = Math.max(cursor + 320, offset.x + 320); expansion = cursor - rootNode.layout.x - 280; continue;

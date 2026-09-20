@@ -27,13 +27,13 @@ export interface VoxelGraphPlan {
 
 export function voxelOperatorGraph(params: Params): EffectOperatorGraph {
   const graph = readEffectGraph(params[EFFECT_GRAPH_PARAM], createDefaultVoxelGraph);
-  const errors = validateVoxelGraph(graph);
+  const errors = validateVoxelGraph(graph, typeof graph.incomplete === 'string');
   if (errors.length) throw new Error(errors[0]);
   return expandVoxelGeometry(graph);
 }
 
-export function validateVoxelGraph(graph: EffectOperatorGraph): string[] {
-  const errors = validateEffectGraph(graph);
+export function validateVoxelGraph(graph: EffectOperatorGraph, allowIncomplete = false): string[] {
+  const errors = validateEffectGraph(graph, allowIncomplete);
   if (graph.domain !== 'voxel' || graph.nodes.some(node => !isVoxelOperator(node.operator))) errors.push('Unsupported Voxel Relief operator graph.');
   return errors;
 }

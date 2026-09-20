@@ -20,6 +20,7 @@ const COLORS: Record<string, string> = { source: '#54be8e', transform: '#5299eb'
 const EMPTY: Keyframe[] = [];
 interface Options {
   graph: NodeGraph; nodes: NodeGraphNode[]; plugs: ConnectionPlug[];
+  groupFrameNodes?: NodeGraphNode[];
   selectedNodeId: string | null; selection: Set<string>; selectedEdgeId: string | null; hoveredEdgeId: string | null;
   hoveredPort: HoveredNodePort | null; draft: ConnectionDraft | null;
   clips: TimelineClip[]; keyframes: Map<string, Keyframe[]>; sourceTime: SourceOffsetResolver;
@@ -56,7 +57,7 @@ function curveFor(node: NodeGraphNode, options: Options): CanvasCurve | undefine
 
 export function buildCanvasScene(options: Options): CanvasScene {
   const { graph, nodes, plugs, draft, hoveredPort } = options;
-  const bounds = nodeGroupBounds(graph, nodes);
+  const bounds = nodeGroupBounds(graph, options.groupFrameNodes ?? nodes);
   const scene: CanvasScene = { nodes: [], cables: [], groups: [], plugs: [] };
   for (const group of graph.groups ?? []) {
     const b = bounds.get(group.id);

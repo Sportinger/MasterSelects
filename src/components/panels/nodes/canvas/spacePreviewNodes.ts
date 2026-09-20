@@ -18,7 +18,7 @@ export function spacePreviewNodes(nodes: NodeGraphNode[]): NodeGraphNode[] {
 }
 
 /** Sibling groups occupy their full frame; moving a block preserves all its contents. */
-export function spacePreviewBlocks(blocks: PreviewLayoutBlock[]): PreviewLayoutBlock[] {
+export function spacePreviewBlocks(blocks: PreviewLayoutBlock[], fixedIds: ReadonlySet<string> = new Set()): PreviewLayoutBlock[] {
   const cells = new Map<string, Set<Box>>(), positions = new Map<string, PreviewLayoutBlock>();
   const keys = (box: Box) => {
     const result: string[] = [];
@@ -26,9 +26,9 @@ export function spacePreviewBlocks(blocks: PreviewLayoutBlock[]): PreviewLayoutB
       for (let y = Math.floor((box.y - GAP) / CELL); y <= Math.floor((box.y + box.height + GAP) / CELL); y++) result.push(`${x}:${y}`);
     return result;
   };
-  for (const block of blocks.toSorted((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id))) {
+  for (const block of blocks.toSorted((a, b) => Number(fixedIds.has(b.id)) - Number(fixedIds.has(a.id)) || a.y - b.y || a.x - b.x || a.id.localeCompare(b.id))) {
     const box: Box = { ...block, originalX: block.x, originalY: block.y };
-    for (let attempt = 0; attempt < blocks.length; attempt++) {
+    for (let attempt = 0; !fixedIds.has(block.id) && attempt < blocks.length; attempt++) {
       const neighbours = new Set(keys(box).flatMap(key => [...(cells.get(key) ?? [])]));
       const hit = [...neighbours].find(other => box.x < other.x + other.width + GAP && box.x + box.width + GAP > other.x
         && box.y < other.y + other.height + GAP && box.y + box.height + GAP > other.y);

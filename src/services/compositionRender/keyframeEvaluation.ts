@@ -3,6 +3,7 @@ import type { ClipTransform } from '../../types/timelineCore';
 import type { Keyframe } from '../../types/keyframes';
 import type { Effect } from '../../types/effects';
 import { bindCableRenderTime } from '../faceCables/cableRenderTime';
+import { pauseIncompleteOperatorEffects } from '../operators/editableOperatorGraph';
 import { appendSurfaceEffects, type SurfaceClip } from '../planarTracking/surfaceEffects';
 import { createMaskEdgeFeatherProperty, createMaskPathProperty, parseMaskProperty } from '../../types/animationProperties';
 import {
@@ -37,7 +38,7 @@ export function evaluateCompositionClipEffects(
   surfaceClip?: SurfaceClip,
 ): Effect[] {
   const withSurfaces = (result: Effect[]) => {
-    const timed = bindCableRenderTime(result, localTime, surfaceClip?.videoInspectorSections?.stabilization);
+    const timed = bindCableRenderTime(pauseIncompleteOperatorEffects(result), localTime, surfaceClip?.videoInspectorSections?.stabilization);
     return surfaceClip ? appendSurfaceEffects(timed, surfaceClip, localTime, keyframes) : timed;
   };
   if (!effects?.length || !keyframes?.length) return withSurfaces(effects ?? []);

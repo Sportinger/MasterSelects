@@ -6,6 +6,16 @@ import { useMediaStore } from '../../../../stores/mediaStore';
 
 const EMPTY: NonNullable<ClipNodeGraph['previews']> = { enabled: true, nodes: {} };
 
+export function setAllNodePreviews(
+  current: NonNullable<ClipNodeGraph['previews']>,
+  nodeIds: readonly string[],
+): NonNullable<ClipNodeGraph['previews']> {
+  const enabled = !current.enabled;
+  const nodes = { ...current.nodes };
+  nodeIds.forEach(id => { nodes[id] = { ...nodes[id], enabled }; });
+  return { enabled, nodes };
+}
+
 export function useNodePreviewPreferences(clipId: string) {
   const preferences = useTimelineStore(state => state.clips.find(clip => clip.id === clipId)?.nodeGraph?.previews ?? EMPTY);
   const clip = useTimelineStore(state => state.clips.find(value => value.id === clipId));
@@ -18,7 +28,9 @@ export function useNodePreviewPreferences(clipId: string) {
     if (!clip) return;
     state.updateClip(clipId, { nodeGraph: { ...clip.nodeGraph, version: 1, nodes: clip.nodeGraph?.nodes ?? [], previews: edit(clip.nodeGraph?.previews ?? EMPTY) } });
   }, [clipId]);
-  const toggleGlobal = useCallback(() => change(current => ({ ...current, enabled: !current.enabled })), [change]);
+  const toggleGlobal = useCallback((nodeIds: readonly string[]) => {
+    change(current => setAllNodePreviews(current, nodeIds));
+  }, [change]);
   const toggleNode = useCallback((id: string, legacyId?: string) => change(current => {
     const previous = current.nodes[id] ?? (legacyId ? current.nodes[legacyId] : undefined);
     return { ...current, nodes: { ...current.nodes, [id]: { ...previous, enabled: !(previous?.enabled ?? true) } } };

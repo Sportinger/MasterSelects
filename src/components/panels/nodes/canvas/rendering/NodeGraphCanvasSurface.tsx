@@ -19,10 +19,10 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
   const clips = useTimelineStore(state => state.clips);
   const keyframes = useTimelineStore(state => state.clipKeyframes);
   const sourceTime = useTimelineStore(state => state.getSourceTimeForClip);
-  const { graph, nodes, plugs, selection, selectedNodeId, selectedEdgeId, hoveredEdgeId, hoveredPort, draft, canBypass } = options;
+  const { graph, nodes, groupFrameNodes, plugs, selection, selectedNodeId, selectedEdgeId, hoveredEdgeId, hoveredPort, draft, canBypass } = options;
   const scene = useMemo(() => buildCanvasScene({ graph, nodes, plugs, selection, selectedNodeId, selectedEdgeId,
-    hoveredEdgeId, hoveredPort, draft, clips, keyframes, sourceTime, canBypass }),
-  [graph, nodes, plugs, selection, selectedNodeId, selectedEdgeId, hoveredEdgeId, hoveredPort, draft, clips, keyframes, sourceTime, canBypass]);
+    hoveredEdgeId, hoveredPort, draft, clips, keyframes, sourceTime, canBypass, groupFrameNodes }),
+  [graph, nodes, groupFrameNodes, plugs, selection, selectedNodeId, selectedEdgeId, hoveredEdgeId, hoveredPort, draft, clips, keyframes, sourceTime, canBypass]);
   const sceneRef = useRef(scene); sceneRef.current = scene;
   const previewSource = useRef({ clipId: graph.owner.id, nodes, selectedNodeId, expanded: graph.expandedNodes }); previewSource.current = { clipId: graph.owner.id, nodes, selectedNodeId, expanded: graph.expandedNodes };
   const viewportRef = useRef(viewport); viewportRef.current = viewport;

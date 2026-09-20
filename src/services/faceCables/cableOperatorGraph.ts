@@ -2,7 +2,7 @@ import type { EffectOperatorGraph, BoundOperatorNode } from '../../types/operato
 import { migrateCableGraph } from './cableGraphMigration';
 import { cableGraphLandmarks } from './cableGraphLandmarks';
 import type { Keyframe } from '../../types/keyframes';
-import { EFFECT_GRAPH_PARAM, graphInputNodes, operatorEnabled, readEffectGraph, sampleOperatorParameter, evaluateGraphForces, type OperatorParameters } from '../operators/effectGraph';
+import { EFFECT_GRAPH_PARAM, graphInputNodes, operatorEnabled, readEffectGraph, sampleOperatorParameter, evaluateGraphForces, validateEffectGraph, type OperatorParameters } from '../operators/effectGraph';
 
 /** Existing effect properties are the graph's parameter storage, including their existing keyframes. */
 export function defaultCableOperatorGraph(): EffectOperatorGraph {
@@ -56,6 +56,7 @@ export function cableOperatorGraph(params: OperatorParameters) {
 /** Compile the connected group into inputs for the existing rope/depth/render executors. */
 export function compileCableOperatorGraph(params: OperatorParameters) {
   const graph = cableOperatorGraph(params);
+  const errors = validateEffectGraph(graph); if (errors.length) throw new Error(errors[0]);
   const output = graph.nodes.find(n => n.operator === 'scene.output')!;
   const expectInput = (node: BoundOperatorNode, input: string, operator: string) => {
     const value = graphInputNodes(graph, node.id, input)[0];

@@ -63,9 +63,8 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
     if (!inView(group, view)) continue;
     ctx.fillStyle = theme.background; ctx.strokeStyle = group.color; ctx.lineWidth = 1;
     box(ctx, group.x, group.y, group.width, group.height, 10); ctx.fill(); ctx.globalAlpha = 0.10; ctx.fillStyle = group.color; ctx.fill(); ctx.globalAlpha = 0.6; ctx.stroke();
-    ctx.globalAlpha = 0.25; ctx.fillRect(group.x, group.y, group.width, 34); ctx.globalAlpha = 1;
-    text(ctx, `${group.collapsed ? '▸' : '▾'} ${group.label}`, group.x + 13, group.y + 21, Math.max(50, group.width - 170), theme.text, 11, 600);
-    text(ctx, `${group.count}${group.bypassable ? '     Byp' : ''}     Focus`, group.x + group.width - 12, group.y + 21, 150, group.bypassed ? theme.accent : theme.muted, 10, 400, 'right');
+    // Headers remain live DOM controls with zoom-compensated text and hit areas.
+    ctx.globalAlpha = 1;
   }
   for (const cable of scene.cables) if (cableVisible(cable, view)) drawCable(ctx, cable, view.zoom);
   for (const node of scene.nodes) {

@@ -28,9 +28,9 @@ export function defaultSceneGraph(sourceGeometry = false): SceneOperatorGraph {
   } };
 }
 
-export function validateSceneGraph(definition: SceneOperatorGraph): string[] {
+export function validateSceneGraph(definition: SceneOperatorGraph, allowIncomplete = false): string[] {
   if (!definition || !definition.params || typeof definition.params !== 'object' || definition.graph?.domain !== 'scene') return ['Invalid saved scene graph.'];
-  const errors = validateEffectGraph(definition.graph);
+  const errors = validateEffectGraph(definition.graph, allowIncomplete);
   if (errors.length) return errors;
   if (definition.graph.nodes.some(n => !SCENE_OPERATORS.some(o => o.id === n.operator))) errors.push('Unsupported scene operator.');
   return errors;

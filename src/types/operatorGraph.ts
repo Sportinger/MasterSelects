@@ -22,6 +22,8 @@ export interface BoundOperatorNode {
 export interface OperatorEdge { id: string; from: string; output: string; to: string; input: string }
 export interface EffectOperatorGraph {
   version: 1;
+  /** An editable graph whose execution is paused until its missing wiring is repaired. */
+  incomplete?: string;
   domain?: 'cables' | 'scene' | 'voxel';
   nodes: BoundOperatorNode[]; edges: OperatorEdge[];
   layout: Record<string, { x: number; y: number }>;

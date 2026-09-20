@@ -106,7 +106,12 @@ Graph panning reuses unchanged nodes and cables; playback avoids repeated dock
 layout writes, tab measurements and effect evaluation for sibling parameter rows.
 Inline node previews start enabled, can be toggled individually or together, and
 preserve image aspect ratios. A shared worker canvas caches visible thumbnails;
-preview-aware placement keeps cards and expanded group frames apart. Image/color stages, saved
+preview-aware placement finds room for newly created nodes while preserving manual
+positions and overlaps. Drag group headers to move their contents; unlock a source
+group to transfer compatible nodes into another group or effect. Incoming nodes
+find a free position and expand the target frame. Incomplete effects remain
+editable and pause until repaired. Header text adapts to zoom without enlarging
+frames. Image/color stages, saved
 tracking/geometry, material swatches, camera/light values and scene output have
 viewers without starting extra decoders or analysis jobs.
 
