@@ -1,4 +1,5 @@
-import type { AnimatableProperty } from '../../types';
+import { readTimelineRuntimeState } from '../timeline/timelineRuntimeCoordinator';
+import type { AnimatableProperty } from '../../types/animationProperties';
 import type { KeyframeNodeDefinition } from '../../types/keyframeNode';
 import type { NodeGraphLayout } from '../../types/nodeGraph';
 import { useTimelineStore } from '../../stores/timeline';
@@ -11,7 +12,7 @@ import { renderHostPort } from '../render/renderHostPort';
 import { withLegacyKeyframeNodes } from './legacyKeyframeNodes';
 
 function edit(clipId: string, label: string, apply: (nodes: KeyframeNodeDefinition[]) => void) {
-  const state = useTimelineStore.getState(), clip = state.clips.find(c => c.id === clipId);
+  const state = readTimelineRuntimeState(useTimelineStore), clip = state.clips.find(c => c.id === clipId);
   if (!clip) throw new Error('Clip not found.');
   if (state.isExporting || state.tracks.find(t => t.id === clip.trackId)?.locked) throw new Error('The clip is locked or exporting.');
   const resolved = withLegacyKeyframeNodes(clip, state.clipKeyframes.get(clipId) ?? []);
@@ -63,7 +64,7 @@ export function removeKeyframeNode(clipId: string, nodeId: string) {
 
 export function connectKeyframeNode(clipId: string, nodeId: string, property: AnimatableProperty, channelId?: string,
   mapping?: { scale: number; offset: number }) {
-  const state = useTimelineStore.getState(), clip = state.clips.find(c => c.id === clipId);
+  const state = readTimelineRuntimeState(useTimelineStore), clip = state.clips.find(c => c.id === clipId);
   if (!clip) throw new Error('Clip not found.');
   const parameters = keyframeNodeParameters(clip), target = parameters.find(p => p.property === property);
   if (!target) throw new Error('This parameter does not support timeline keyframes.');
@@ -95,7 +96,7 @@ export function connectKeyframeNode(clipId: string, nodeId: string, property: An
       state.addKeyframe(clipId, property, value, time);
     }
     if (!channelId && target.discrete) {
-      for (const key of useTimelineStore.getState().clipKeyframes.get(clipId) ?? []) {
+      for (const key of readTimelineRuntimeState(useTimelineStore).clipKeyframes.get(clipId) ?? []) {
         if (key.property === property && !key.hold) state.updateKeyframe(key.id, { hold: true });
       }
     }

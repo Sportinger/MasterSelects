@@ -11,7 +11,7 @@ import {
   resolveLinkedClipNodeGraphContext,
 } from '../../../services/nodeGraph/clipGraphLinking';
 import { useTimelineStore } from '../../../stores/timeline';
-import type { TimelineClip, TimelineTrack } from '../../../types';
+import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import { withLegacyKeyframeNodes } from '../../../services/nodeGraph/legacyKeyframeNodes';
 
 const EMPTY_KEYFRAMES = [] as const;

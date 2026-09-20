@@ -14,7 +14,7 @@ import {
 } from '../../src/services/flock/mutations/flockGraphMutations';
 import { DEFAULT_TRANSFORM } from '../../src/stores/timeline/constants';
 import type { FlockDefinition } from '../../src/types/flock';
-import type { TimelineClip, TimelineTrack } from '../../src/types';
+import type { TimelineClip, TimelineTrack } from '../../src/types/timeline';
 
 function createFlockClip(definition: FlockDefinition = createFlockPresetDefinition('free-swarm')): TimelineClip {
   return {

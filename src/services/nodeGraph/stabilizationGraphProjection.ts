@@ -1,4 +1,5 @@
-import type { Keyframe, TimelineClip } from '../../types';
+import type { Keyframe } from '../../types/keyframes';
+import type { TimelineClip } from '../../types/timeline';
 import type { NodeGraph, NodeGraphEdge, NodeGraphNode, NodeGraphPort } from '../../types/nodeGraph';
 import { isStabilizationKey, isStabilizationProperty, stabilizationStatus, STABILIZATION_PROPERTIES } from '../landmarkTracking/stabilizationProvenance';
 import { parameterNode } from './keyframeNodeParameters';

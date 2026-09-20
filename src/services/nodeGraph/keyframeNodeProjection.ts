@@ -1,4 +1,4 @@
-import type { TimelineClip } from '../../types';
+import type { TimelineClip } from '../../types/timeline';
 import type { NodeGraph, NodeGraphNode } from '../../types/nodeGraph';
 import { keyframeNodeParameters, parameterNode } from './keyframeNodeParameters';
 

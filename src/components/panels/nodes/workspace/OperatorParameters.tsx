@@ -1,6 +1,7 @@
+import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
 import { interpolateKeyframes } from '../../../../utils/keyframeInterpolation';
 import { useState } from 'react';
-import type { TimelineClip } from '../../../../types';
+import type { TimelineClip } from '../../../../types/timeline';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { cableOperatorGraph } from '../../../../services/faceCables/cableOperatorGraph';
 import { getEffectOperator, EFFECT_OPERATORS } from '../../../../services/operators/operatorRegistry';
@@ -29,14 +30,14 @@ export function OperatorParameters({ clip, effectId, nodeId }: { clip: TimelineC
   const safely = (action: () => void) => { try { action(); setMessage(''); } catch (error) { setMessage(String(error)); } };
   const set = (key: string, value: number | boolean) => safely(() => {
     const property = `effect.${effectId}.${key}` as Keyframe['property'];
-    if (typeof value === 'number' && keys.some(k => k.property === property)) useTimelineStore.getState().addKeyframe(clip.id, property, value);
+    if (typeof value === 'number' && keys.some(k => k.property === property)) readTimelineRuntimeState(useTimelineStore).addKeyframe(clip.id, property, value);
     else editEffectGraph(clip.id, effectId, 'Edit node parameter', (_, params) => { params[key] = value; });
   });
   const numberRow = (key: string, label: string, value: number, fallback: number, min = -30, max = 30, step = 0.01, animatable = true) =>
     <ResolveInspectorNumberRow key={key} label={label} ariaLabel={`${operator.label} ${label}`} value={value} defaultValue={fallback}
       min={min} max={max} step={step} onChange={v => set(key, v)} persistenceKey={`operator.${effectId}.${key}`}
       keyframeToggle={animatable ? <button type="button" className="keyframe-toggle" aria-label={`Keyframe ${operator.label} ${label}`}
-        onClick={() => useTimelineStore.getState().addKeyframe(clip.id, `effect.${effectId}.${key}` as Keyframe['property'], value)}>◇</button> : undefined} />;
+        onClick={() => readTimelineRuntimeState(useTimelineStore).addKeyframe(clip.id, `effect.${effectId}.${key}` as Keyframe['property'], value)}>◇</button> : undefined} />;
   return <div className="operator-parameters" onPointerUp={event => {
     if (event.target instanceof Element) event.target.closest<HTMLElement>('button,select,input[type="checkbox"]')?.blur();
   }}>

@@ -1,4 +1,5 @@
-import type { TimelineClip } from '../../../../types';
+import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
+import type { TimelineClip } from '../../../../types/timeline';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { startBatch, endBatch } from '../../../../stores/historyStore';
 import { ResolveInspectorIconButton, ResolveInspectorRow } from '../../properties/resolveInspector/ResolveInspectorPrimitives';
@@ -9,7 +10,7 @@ export function EffectOrderControls({ clip, effectId }: { clip: TimelineClip; ef
   if (index < 0) return null;
   const move = (offset: number) => {
     startBatch('Reorder effect');
-    try { useTimelineStore.getState().reorderClipEffect(clip.id, effectId, index + offset); } finally { endBatch(); }
+    try { readTimelineRuntimeState(useTimelineStore).reorderClipEffect(clip.id, effectId, index + offset); } finally { endBatch(); }
   };
   return <div className="operator-parameters" onPointerUp={e => { if (e.target instanceof Element) e.target.closest('button')?.blur(); }}>
     <ResolveInspectorRow label="Effect order"><span>{index + 1} / {clip.effects.length}</span>

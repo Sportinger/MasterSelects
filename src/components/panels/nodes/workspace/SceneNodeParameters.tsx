@@ -1,4 +1,6 @@
-import type { NodeGraphNode, TimelineClip } from '../../../../types';
+import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
+import type { NodeGraphNode } from '../../../../types/nodeGraph';
+import type { TimelineClip } from '../../../../types/timeline';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { TransformTab } from '../../properties/TransformTab';
 import { LightTab } from '../../properties/LightTab';
@@ -18,7 +20,7 @@ export function SceneNodeParameters({ node, owner }: { node: NodeGraphNode; owne
   const cable = target.effects.find(e => e.type === 'face-cables' && e.enabled && e.params.scene3D);
   const setWireframe = (wireframe: boolean) => {
     assertExclusiveTimelineMutationAllowed();
-    const state = useTimelineStore.getState();
+    const state = readTimelineRuntimeState(useTimelineStore);
     if (state.isExporting || state.tracks.find(t => t.id === target.trackId)?.locked) return;
     startBatch('Set 3D wireframe');
     try { state.updateClip(target.id, { wireframe }); state.invalidateCache(); } finally { endBatch(); }

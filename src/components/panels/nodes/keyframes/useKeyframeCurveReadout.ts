@@ -1,5 +1,8 @@
+import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
 import { useEffect, useRef } from 'react';
-import type { AnimatableProperty, Keyframe, TimelineClip } from '../../../../types';
+import type { AnimatableProperty } from '../../../../types/animationProperties';
+import type { Keyframe } from '../../../../types/keyframes';
+import type { TimelineClip } from '../../../../types/timeline';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { interpolateKeyframes } from '../../../../utils/keyframeInterpolation';
 import { clipLocalToKeyframeTime, type SourceOffsetResolver } from '../../../../services/flock/time/flockKeyframeTime';
@@ -26,7 +29,7 @@ export function useKeyframeCurveReadout(clip: TimelineClip, property: Animatable
     const update = () => {
       frame = undefined;
       if (!visible || document.hidden) return;
-      const local = Math.max(0, Math.min(clip.duration, useTimelineStore.getState().playheadPosition - clip.startTime));
+      const local = Math.max(0, Math.min(clip.duration, readTimelineRuntimeState(useTimelineStore).playheadPosition - clip.startTime));
       const current = interpolateKeyframes(keys, property, clipLocalToKeyframeTime(clip, property, local, sourceTime), value);
       const text = String(Number(current.toFixed(3)));
       const x = local / Math.max(clip.duration, 0.001) * 172;

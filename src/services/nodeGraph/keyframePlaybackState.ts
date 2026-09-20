@@ -1,4 +1,5 @@
-import type { Keyframe, TimelineClip } from '../../types';
+import type { Keyframe } from '../../types/keyframes';
+import type { TimelineClip } from '../../types/timeline';
 import type { SceneOperatorGraph } from '../../types/operatorGraph';
 import { isStabilizationKeyBypassed } from '../landmarkTracking/stabilizationProvenance';
 import { compileSceneGraph } from '../operators/sceneGraph';

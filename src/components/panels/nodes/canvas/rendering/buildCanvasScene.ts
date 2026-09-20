@@ -1,5 +1,7 @@
 import type { NodeGraph, NodeGraphNode } from '../../../../../types/nodeGraph';
-import type { AnimatableProperty, Keyframe, TimelineClip } from '../../../../../types';
+import type { AnimatableProperty } from '../../../../../types/animationProperties';
+import type { Keyframe } from '../../../../../types/keyframes';
+import type { TimelineClip } from '../../../../../types/timeline';
 import { describeNodePort } from '../../../../../services/nodeGraph/nodePortPresentation';
 import { keyframeNodeParameters } from '../../../../../services/nodeGraph/keyframeNodeParameters';
 import { clipLocalToKeyframeTime, getKeyframeTimeBasis, type SourceOffsetResolver } from '../../../../../services/flock/time/flockKeyframeTime';

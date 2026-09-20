@@ -1,7 +1,8 @@
+import { readTimelineRuntimeState } from '../timeline/timelineRuntimeCoordinator';
 import type { EffectOperatorGraph, OperatorValue } from '../../types/operatorGraph';
 import type { NodeGraphConnectionRequest } from '../../types/nodeGraph';
 import { useTimelineStore } from '../../stores/timeline';
-import { useHistoryStore } from '../../stores/historyStore';
+import { startBatch, endBatch } from '../../stores/historyStore';
 import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/exclusiveMutationLease';
 import { renderHostPort } from '../render/renderHostPort';
 import { cableOperatorGraph, compileCableOperatorGraph } from '../faceCables/cableOperatorGraph';
@@ -14,7 +15,7 @@ type Params = Record<string, unknown>;
 export function editEffectGraph(clipId: string, effectId: string, label: string,
   edit: (graph: EffectOperatorGraph, params: Params) => void) {
   assertExclusiveTimelineMutationAllowed();
-  const state = useTimelineStore.getState(), clip = state.clips.find(c => c.id === clipId);
+  const state = readTimelineRuntimeState(useTimelineStore), clip = state.clips.find(c => c.id === clipId);
   if (!clip || state.isExporting || state.tracks.find(t => t.id === clip.trackId)?.locked) throw new Error('The clip is unavailable, locked or exporting.');
   const effect = clip.effects.find(e => e.id === effectId);
   if (!effect) throw new Error('Effect unavailable.');
@@ -24,11 +25,11 @@ export function editEffectGraph(clipId: string, effectId: string, label: string,
   if (errors.length) throw new Error(errors[0]);
   params[EFFECT_GRAPH_PARAM] = JSON.stringify(graph);
   compileCableOperatorGraph(params);
-  const history = useHistoryStore.getState(), batch = history.startBatch(label);
+  const batch = startBatch(label);
   try {
     state.updateClip(clipId, { effects: clip.effects.map(e => e.id === effectId ? { ...e, params } : e) });
     state.invalidateCache(); renderHostPort.requestRender();
-  } finally { if (batch.opened) history.endBatch(); }
+  } finally { if (batch.opened) endBatch(); }
 }
 
 export function setOperatorParameter(clipId: string, effectId: string, nodeId: string, name: string, value: OperatorValue) {

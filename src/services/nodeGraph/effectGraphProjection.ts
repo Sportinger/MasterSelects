@@ -1,5 +1,6 @@
 import { getOperatorPortContract } from '../operators/portContracts';
-import type { Effect, TimelineClip } from '../../types';
+import type { Effect } from '../../types/effects';
+import type { TimelineClip } from '../../types/timeline';
 import type { NodeGraph, NodeGraphPort, NodeGraphSignalType } from '../../types/nodeGraph';
 import type { OperatorPort } from '../../types/operatorGraph';
 import { cableOperatorGraph } from '../faceCables/cableOperatorGraph';

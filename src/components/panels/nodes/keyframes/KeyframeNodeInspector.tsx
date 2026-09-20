@@ -1,5 +1,8 @@
+import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
 import { useMemo, useState } from 'react';
-import type { AnimatableProperty, Keyframe, TimelineClip } from '../../../../types';
+import type { AnimatableProperty } from '../../../../types/animationProperties';
+import type { Keyframe } from '../../../../types/keyframes';
+import type { TimelineClip } from '../../../../types/timeline';
 import type { KeyframeNodeDefinition } from '../../../../types/keyframeNode';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { startBatch, endBatch } from '../../../../stores/historyStore';
@@ -65,7 +68,7 @@ export function KeyframeChannelEditor({ clip, node, channelId, keys, parameters,
   const playhead = useTimelineStore(s => s.playheadPosition);
   const channel = node.channels.find(c => c.id === channelId)!;
   const parameter = parameters.find(p => p.property === channel.property);
-  const state = useTimelineStore.getState();
+  const state = readTimelineRuntimeState(useTimelineStore);
   const local = Math.max(0, Math.min(clip.duration, playhead - clip.startTime));
   const time = clipLocalToKeyframeTime(clip, channel.property, local, state.getSourceTimeForClip);
   const curve = keys.filter(k => k.property === channel.property).toSorted((a, b) => a.time - b.time);
@@ -77,7 +80,7 @@ export function KeyframeChannelEditor({ clip, node, channelId, keys, parameters,
   const addKey = (newValue: number) => safely('Set animation keyframe', () => {
     state.addKeyframe(clip.id, channel.property, parameter?.discrete ? Number(newValue >= 0.5) : newValue, local);
     if (parameter?.discrete) {
-      const key = useTimelineStore.getState().clipKeyframes.get(clip.id)?.find(k => k.property === channel.property && Math.abs(k.time - time) < 0.001);
+      const key = readTimelineRuntimeState(useTimelineStore).clipKeyframes.get(clip.id)?.find(k => k.property === channel.property && Math.abs(k.time - time) < 0.001);
       if (key) state.updateKeyframe(key.id, { hold: true });
     }
   });

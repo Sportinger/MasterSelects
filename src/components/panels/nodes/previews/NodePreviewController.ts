@@ -1,3 +1,4 @@
+import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
 import type { NodeGraphNode } from '../../../../types/nodeGraph';
 import type { CanvasView } from '../canvas/rendering/nodeCanvasTypes';
 import { useTimelineStore } from '../../../../stores/timeline';
@@ -56,7 +57,7 @@ export class NodePreviewController {
   private tick() {
     this.timer = undefined;
     if (this.disposed) return;
-    const state = useTimelineStore.getState(), view = this.view, requests: PreviewRequest[] = [];
+    const state = readTimelineRuntimeState(useTimelineStore), view = this.view, requests: PreviewRequest[] = [];
     if (view && this.visible && !document.hidden && !state.isExporting) {
       const fps = this.sink.software ? 3 : view.zoom < 0.45 ? 5 : 12;
       const width = Math.max(48, Math.min(256, Math.round(164 * view.zoom * Math.min(1.5, view.ratio))));

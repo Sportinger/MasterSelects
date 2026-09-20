@@ -1,4 +1,4 @@
-import type { TimelineClip, TimelineTrack } from '../../types';
+import type { TimelineClip, TimelineTrack } from '../../types/timeline';
 
 export interface LinkedClipNodeGraphContext {
   selectedClip: TimelineClip;

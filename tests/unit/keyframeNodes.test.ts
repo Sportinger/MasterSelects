@@ -7,7 +7,7 @@ import { keyframeNodeParameters, validateKeyframeNodeTarget } from '../../src/se
 import { buildClipNodeGraphDocument, cloneClipNodeGraph, remapClipNodeGraphEffectIds } from '../../src/services/nodeGraph';
 import { buildUnifiedClipGraph } from '../../src/services/nodeGraph/unifiedClipGraph';
 import { interpolateKeyframes } from '../../src/utils/keyframeInterpolation';
-import type { Keyframe } from '../../src/types';
+import type { Keyframe } from '../../src/types/keyframes';
 import { calculateSourceTime } from '../../src/utils/speedIntegration';
 import { remapKeyframeNodeProperties } from '../../src/services/nodeGraph/keyframeNodeRemapping';
 import { generateBezierPath } from '../../src/components/timeline/utils/curveEditorMath';

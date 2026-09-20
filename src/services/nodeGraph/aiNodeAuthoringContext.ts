@@ -1,4 +1,5 @@
-import type { ClipCustomNodeDefinition, NodeGraph, NodeGraphEdge, NodeGraphNode, TimelineClip, TimelineTrack } from '../../types';
+import type { ClipCustomNodeDefinition, NodeGraph, NodeGraphEdge, NodeGraphNode } from '../../types/nodeGraph';
+import type { TimelineClip, TimelineTrack } from '../../types/timeline';
 import type { AudioEffectInstance, MasterAudioState, MediaFileAudioAnalysisRefs } from '../../types/audio';
 import { getAudioEffect } from '../../engine/audio/AudioEffectRegistry';
 import { createTextLayoutSnapshot } from '../textLayout';

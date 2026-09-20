@@ -1,5 +1,7 @@
+import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
 import { useState } from 'react';
-import type { Keyframe, TimelineClip } from '../../../../types';
+import type { Keyframe } from '../../../../types/keyframes';
+import type { TimelineClip } from '../../../../types/timeline';
 import type { NodeGraphNode } from '../../../../types/nodeGraph';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { useLandmarkTrackingStore } from '../../../../stores/landmarkTrackingStore';
@@ -24,7 +26,8 @@ export function StabilizationNodeInspector({ clip, node, onOpenProperties }: {
   const locked = useTimelineStore(state => state.isExporting || Boolean(state.tracks.find(track => track.id === clip.trackId)?.locked));
   const [target, setTarget] = useState<'face' | 'lips' | ''>(bake?.target ?? '');
   const [lockCenter, setLockCenter] = useState(bake?.lockCenter ?? true);
-  const [smoothing, setSmoothing] = useState(bake?.smoothing ?? useLandmarkTrackingStore.getState().faceSmoothing);
+  const defaultSmoothing = useLandmarkTrackingStore(state => state.faceSmoothing);
+  const [smoothing, setSmoothing] = useState(bake?.smoothing ?? defaultSmoothing);
   const [message, setMessage] = useState('');
   const curveCount = keys.filter(key => isStabilizationProperty(key.property)).length;
   const status = stabilizationStatus(clip, keys, tracking.createdAt);
@@ -57,7 +60,7 @@ export function StabilizationNodeInspector({ clip, node, onOpenProperties }: {
     </ResolveInspectorSection>
     <ResolveInspectorSection title="Apply baked stabilization" enabled={clip.videoInspectorSections?.stabilization !== false}
       onEnabledChange={locked || !keys.some(isStabilizationKey) ? undefined : enabled => safely(() => {
-        const state = useTimelineStore.getState();
+        const state = readTimelineRuntimeState(useTimelineStore);
         const current = state.clips.find(candidate => candidate.id === clip.id);
         if (!current || state.isExporting || state.tracks.find(track => track.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
         const batch = startBatch('Toggle baked stabilization');

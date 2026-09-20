@@ -1,3 +1,4 @@
+import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
 import { useEffect, useRef } from 'react';
 import { useTimelineStore } from '../../../../stores/timeline';
 
@@ -28,7 +29,7 @@ export function useNodeFlowActivity<T extends SVGSVGElement | HTMLDivElement = S
     };
     const onVisibilityChange = () => {
       clearSettle();
-      setActive(useTimelineStore.getState().isPlaying);
+      setActive(readTimelineRuntimeState(useTimelineStore).isPlaying);
     };
     onVisibilityChange();
     const unsubscribe = useTimelineStore.subscribe((state, previous) => {

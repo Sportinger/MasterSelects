@@ -1,6 +1,7 @@
+import { readTimelineRuntimeState } from '../../../services/timeline/timelineRuntimeCoordinator';
 import { useState } from 'react';
 import type { NodeGraph, NodeGraphConnectionRequest, NodeGraphLayout, NodeGraphNode } from '../../../types/nodeGraph';
-import type { TimelineClip } from '../../../types';
+import type { TimelineClip } from '../../../types/timeline';
 import { useTimelineStore } from '../../../stores/timeline';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import { createClipNodeGraphState } from '../../../services/nodeGraph';
@@ -11,7 +12,7 @@ import { connectSourceArtifact } from '../../../services/operators/sourceArtifac
 import type { FlockGraphActions } from './flock/useFlockGraphActions';
 import { changeKeyframeNode, connectKeyframeNode, disconnectKeyframeNode, removeKeyframeNode } from '../../../services/nodeGraph/keyframeNodeActions';
 import { keyframeEdgeId } from '../../../services/nodeGraph/keyframeNodeProjection';
-import type { AnimatableProperty } from '../../../types';
+import type { AnimatableProperty } from '../../../types/animationProperties';
 
 interface BaseActions {
   moveNode: (id: string, layout: NodeGraphLayout) => void;
@@ -29,7 +30,7 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
     const binding = node.binding;
     if (binding?.kind === 'clip-stabilization') return {
       moveNode: (_id, layout) => {
-        const state = useTimelineStore.getState(), current = state.clips.find(candidate => candidate.id === clip.id);
+        const state = readTimelineRuntimeState(useTimelineStore), current = state.clips.find(candidate => candidate.id === clip.id);
         if (!current || state.isExporting || state.tracks.find(track => track.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
         const model = current.nodeGraph ?? createClipNodeGraphState(current);
         state.updateClip(clip.id, { nodeGraph: { ...model, stabilization: { ...model.stabilization,
@@ -37,7 +38,7 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
       },
       deleteNode: () => { throw new Error('This node represents saved stabilization. Edit or bypass it in the inspector.'); },
       connectPorts: () => {}, disconnectEdge: () => {}, toggleBypass: () => {
-        const state = useTimelineStore.getState(), current = state.clips.find(candidate => candidate.id === clip.id);
+        const state = readTimelineRuntimeState(useTimelineStore), current = state.clips.find(candidate => candidate.id === clip.id);
         if (!current || state.isExporting || state.tracks.find(track => track.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
         state.updateClip(clip.id, { videoInspectorSections: { ...current.videoInspectorSections,
           stabilization: current.videoInspectorSections?.stabilization === false } });
@@ -51,7 +52,7 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
     if (binding?.kind === 'scene-operator') return createSceneGraphActions(clip.id);
     if (binding?.kind === 'scene-node') return {
       moveNode: (id, layout) => {
-        const state = useTimelineStore.getState(), current = state.clips.find(c => c.id === clip.id)!;
+        const state = readTimelineRuntimeState(useTimelineStore), current = state.clips.find(c => c.id === clip.id)!;
         if (state.isExporting || state.tracks.find(t => t.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
         const model = current.nodeGraph ?? createClipNodeGraphState(current), group = model.groups?.scene3d;
         startBatch('Move scene node');
@@ -65,7 +66,7 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
     if (binding?.kind === 'flock-node') return { moveNode: flock.moveNode, connectPorts: flock.connect,
       disconnectEdge: flock.disconnect, deleteNode: id => { flock.deleteNodes([id]); }, toggleBypass: flock.toggleBypass };
     if (binding?.kind === 'color-node') {
-      const s = useTimelineStore.getState();
+      const s = readTimelineRuntimeState(useTimelineStore);
       return { moveNode: (id, layout) => s.moveColorNode(clip.id, id, layout),
         connectPorts: c => s.connectColorNodes(clip.id, c.fromNodeId, c.toNodeId, c.fromPortId, c.toPortId),
         disconnectEdge: id => s.removeColorEdge(clip.id, id), deleteNode: id => s.removeColorNode(clip.id, id),
@@ -92,7 +93,7 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
     }),
     moveNode: (id: string, position: NodeGraphLayout) => route(id, (actions, node) => {
       if (node.binding?.kind === 'operator-group' || (node.groupId && !node.id.includes('/'))) {
-        const state = useTimelineStore.getState(), current = state.clips.find(c => c.id === clip!.id)!;
+        const state = readTimelineRuntimeState(useTimelineStore), current = state.clips.find(c => c.id === clip!.id)!;
         if (state.isExporting || state.tracks.find(t => t.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
         const model = current.nodeGraph ?? createClipNodeGraphState(current);
         const id = node.binding?.kind === 'operator-group' ? node.binding.groupId : node.groupId!;
@@ -164,7 +165,7 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
     }),
     toggleGroup: (id: string) => safely(() => {
       if (!clip) return;
-      const state = useTimelineStore.getState(), current = state.clips.find(c => c.id === clip.id)!;
+      const state = readTimelineRuntimeState(useTimelineStore), current = state.clips.find(c => c.id === clip.id)!;
       if (state.isExporting || state.tracks.find(t => t.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
       const model = current.nodeGraph ?? createClipNodeGraphState(current);
       startBatch('Toggle node group');

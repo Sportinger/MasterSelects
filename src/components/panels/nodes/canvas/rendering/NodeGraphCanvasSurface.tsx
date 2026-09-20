@@ -1,3 +1,4 @@
+import { readTimelineRuntimeState } from '../../../../../services/timeline/timelineRuntimeCoordinator';
 import { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useTimelineStore } from '../../../../../stores/timeline';
 import { clipLocalToKeyframeTime } from '../../../../../services/flock/time/flockKeyframeTime';
@@ -36,10 +37,10 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
     previews.scene(previewSource.current.clipId, previewSource.current.nodes, previewSource.current.selectedNodeId, previewSource.current.expanded);
     const motion = matchMedia('(prefers-reduced-motion: reduce)');
     let visible = true, fade: ReturnType<typeof setTimeout> | undefined, frame: number | undefined;
-    let lastPosition = useTimelineStore.getState().playheadPosition, scrubUntil = 0;
+    let lastPosition = readTimelineRuntimeState(useTimelineStore).playheadPosition, scrubUntil = 0;
     const transport = () => {
       frame = undefined;
-      const state = useTimelineStore.getState(), sourceTimes: Record<string, number> = {};
+      const state = readTimelineRuntimeState(useTimelineStore), sourceTimes: Record<string, number> = {};
       previews.visibility(visible && !document.hidden);
       if (visible && !document.hidden) for (const node of sceneRef.current.nodes) {
         const curve = node.curve;

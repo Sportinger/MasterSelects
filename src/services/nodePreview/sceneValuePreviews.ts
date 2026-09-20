@@ -1,4 +1,5 @@
-import type { TimelineClip } from '../../types';
+import { readTimelineRuntimeState } from '../timeline/timelineRuntimeCoordinator';
+import type { TimelineClip } from '../../types/timeline';
 import { useTimelineStore } from '../../stores/timeline';
 import { resolveSceneClipCameraSettings, resolveSceneClipTransform } from '../../engine/scene/SceneTimelineUtils';
 import { getInterpolatedClipLightSettings } from '../../utils/keyframeInterpolation';
@@ -9,7 +10,7 @@ import type { PreviewFrame, PreviewRequest } from './previewTypes';
 export function sceneValuePreview(request: PreviewRequest, clip: TimelineClip): PreviewFrame | Promise<PreviewFrame> {
   const base = { key: request.key, revision: request.revision, time: request.time };
   const binding = request.node.binding;
-  const state = useTimelineStore.getState();
+  const state = readTimelineRuntimeState(useTimelineStore);
   const target = binding?.kind === 'scene-node' ? state.clips.find(value => value.id === binding.clipId) ?? clip : clip;
   const localTime = Math.max(0, request.time - target.startTime);
   const role = binding?.kind === 'scene-node' ? binding.role : 'transform';

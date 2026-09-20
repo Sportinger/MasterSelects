@@ -1,3 +1,4 @@
+import { readTimelineRuntimeState } from '../timeline/timelineRuntimeCoordinator';
 import type { NodeGraphPortMetadata } from '../../types/nodeGraph';
 import { useTimelineStore } from '../../stores/timeline';
 import { landmarkRuntime } from '../landmarkTracking/landmarkRuntime';
@@ -10,7 +11,7 @@ import { sourceArtifactOperator } from './sourceArtifactOperators';
 
 export function connectSourceArtifact(clipId: string, artifact: NonNullable<NodeGraphPortMetadata['sourceArtifact']>,
   target: NonNullable<NodeGraphPortMetadata['artifactTarget']>) {
-  const clip = useTimelineStore.getState().clips.find(c => c.id === clipId);
+  const clip = readTimelineRuntimeState(useTimelineStore).clips.find(c => c.id === clipId);
   if (!clip) throw new Error('Source clip is unavailable.');
   const series = landmarkRuntime.getSeries(faceTrackKey(clip.id));
   const ready = Boolean(series?.faceTracking && series.sourceId === (clip.source?.mediaFileId ?? clip.mediaFileId ?? clip.id));

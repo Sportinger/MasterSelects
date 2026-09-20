@@ -1,5 +1,6 @@
+import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
 import { memo, useEffect, useMemo, useRef } from 'react';
-import type { Keyframe } from '../../../../types';
+import type { Keyframe } from '../../../../types/keyframes';
 import type { NodeGraphNode } from '../../../../types/nodeGraph';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { interpolateKeyframes } from '../../../../utils/keyframeInterpolation';
@@ -36,7 +37,7 @@ export const NodeAnimationBadge = memo(function NodeAnimationBadge({ node, top }
     const update = () => {
       frame = undefined;
       if (!visible || document.hidden) return;
-      const playhead = useTimelineStore.getState().playheadPosition;
+      const playhead = readTimelineRuntimeState(useTimelineStore).playheadPosition;
       const local = Math.max(0, Math.min(clip.duration, playhead - clip.startTime));
       const values = animation.channels.map(channel => interpolateKeyframes(keys, channel.property,
         clipLocalToKeyframeTime(clip, channel.property, local, sourceTime), 0));

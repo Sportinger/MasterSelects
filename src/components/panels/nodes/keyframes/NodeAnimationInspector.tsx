@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import type { Keyframe, TimelineClip } from '../../../../types';
+import type { Keyframe } from '../../../../types/keyframes';
+import type { TimelineClip } from '../../../../types/timeline';
 import type { NodeGraphNode } from '../../../../types/nodeGraph';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { startBatch, endBatch } from '../../../../stores/historyStore';

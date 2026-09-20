@@ -1,9 +1,4 @@
-import type {
-  ClipCustomNodeParamDefinition,
-  ClipCustomNodeParamOption,
-  ClipCustomNodeParamType,
-  ClipCustomNodeParamValue,
-} from '../../types';
+import type { ClipCustomNodeParamDefinition, ClipCustomNodeParamOption, ClipCustomNodeParamType, ClipCustomNodeParamValue } from '../../types/nodeGraph';
 import { normalizeHexColor } from '../../utils/colorParam';
 import {
   extractAINodeStaticDefinition,

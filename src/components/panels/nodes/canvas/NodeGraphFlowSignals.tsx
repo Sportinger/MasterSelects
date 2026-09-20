@@ -1,3 +1,4 @@
+import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
 import { memo, useCallback, useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import { describeNodePort } from '../../../../services/nodeGraph/nodePortPresentation';
 import type { ConnectionPlug } from './connectionPlugs';
@@ -42,7 +43,7 @@ export const NodeGraphFlowSignals = memo(function NodeGraphFlowSignals({ plugs, 
     const clock = new NodeFlowClock();
     let lastRate = -1;
     const updateRate = () => {
-      const state = useTimelineStore.getState(), now = performance.now();
+      const state = readTimelineRuntimeState(useTimelineStore), now = performance.now();
       clock.update({ playhead: state.playheadPosition, playing: state.isPlaying, playbackSpeed: state.playbackSpeed,
         active: root.dataset.flowActive === 'true', visible: !document.hidden, timestamp: now }, now);
       if (clock.rate !== lastRate) {

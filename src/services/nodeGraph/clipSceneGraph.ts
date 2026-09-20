@@ -1,4 +1,4 @@
-import type { TimelineClip } from '../../types';
+import type { TimelineClip } from '../../types/timeline';
 import type { NodeGraph, NodeGraphDocument, NodeGraphNode, NodeGraphPort, NodeGraphSignalType, SceneNodeRole } from '../../types/nodeGraph';
 import { edge } from './clipGraphProjectionGraph';
 import { sceneOperatorProjection } from './sceneOperatorProjection';

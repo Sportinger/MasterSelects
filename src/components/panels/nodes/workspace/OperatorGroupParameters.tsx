@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { TimelineClip } from '../../../../types';
+import type { TimelineClip } from '../../../../types/timeline';
 import type { EffectOperatorGraph } from '../../../../types/operatorGraph';
 import { cableOperatorGraph } from '../../../../services/faceCables/cableOperatorGraph';
 import { sceneGraphForClip } from '../../../../services/operators/sceneGraph';

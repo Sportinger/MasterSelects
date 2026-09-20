@@ -1,5 +1,6 @@
+import { readTimelineRuntimeState } from '../timeline/timelineRuntimeCoordinator';
 import { useTimelineStore } from '../../stores/timeline';
-import type { AnimatableProperty } from '../../types';
+import type { AnimatableProperty } from '../../types/animationProperties';
 import { landmarkRuntime } from '../landmarkTracking/landmarkRuntime';
 import { faceTrackKey, samplePreciseFace } from '../landmarkTracking/preciseFaceSampling';
 import { FACE_CABLE_ANCHORS } from '../faceCables/cableData';
@@ -18,7 +19,7 @@ import { getEffectOperator } from '../operators/operatorRegistry';
 
 /** Domain adapters read authoritative runtime data; opening a viewer never runs analysis or a bake. */
 export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewArtifactReader): PreviewFrame | Promise<PreviewFrame> {
-  const state = useTimelineStore.getState(), clip = state.clips.find(value => value.id === request.clipId);
+  const state = readTimelineRuntimeState(useTimelineStore), clip = state.clips.find(value => value.id === request.clipId);
   const base = { key: request.key, revision: request.revision, time: request.time, aspectRatio: request.node.preview?.aspectRatio };
   const missing = (label: string): PreviewFrame => ({ ...base, status: 'missing', label });
   if (!clip) return missing('Clip unavailable');

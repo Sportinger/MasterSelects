@@ -1,4 +1,4 @@
-import type { TimelineClip } from '../../types';
+import type { TimelineClip } from '../../types/timeline';
 import { mediaRuntimeRegistry } from '../mediaRuntime/registry';
 import type { PreviewFrame, PreviewRequest } from './previewTypes';
 

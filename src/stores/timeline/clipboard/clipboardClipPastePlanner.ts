@@ -2,7 +2,7 @@ import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import { remapClipNodeGraphEffectIds } from '../../../services/nodeGraph';
 import { remapKeyframeNodeProperties } from '../../../services/nodeGraph/keyframeNodeRemapping';
 import { remapFlockKeyframeProperty } from '../editOperations/flockClipKeyframes';
-import { parseMaskProperty, createMaskEdgeFeatherProperty } from '../../../types/animationProperties';
+import { createPastedMasks } from './clipboardMaskPaste';
 import type { ClipboardClipData, Keyframe } from '../types';
 import { cloneStoryboardClipProperties } from '../../../services/storyboard/core';
 import {
@@ -68,24 +68,9 @@ export function createPastedClipboardClipsPlan(
     const requiresAsyncMediaLoad = clipRequiresAsyncMediaLoad(clipData);
     const flockCopy = createPastedFlockCopy(clipData);
     const audioState = createPastedClipAudioState(clipData, effectIdMap, () => `audio-${timestamp}-${createSuffix()}`, timeOffset);
-    const maskIdMap = new Map<string, string>();
-    const masks = clipData.masks?.map(mask => {
-      const id = `mask-${timestamp}-${createSuffix()}`;
-      maskIdMap.set(mask.id, id);
-      return { ...mask, id, vertices: mask.vertices.map(vertex => {
-        const vertexId = `vertex-${timestamp}-${createSuffix()}`;
-        maskIdMap.set(vertex.id, vertexId);
-        return { ...vertex, id: vertexId };
-      }) };
-    });
+    const { masks, remapProperty: remapMaskProperty } = createPastedMasks(clipData.masks, kind => `${kind}-${timestamp}-${createSuffix()}`);
     const remapProperty = (property: string) => {
-      const mask = parseMaskProperty(property);
-      if (mask) {
-        const id = maskIdMap.get(mask.maskId) ?? mask.maskId;
-        property = mask.property === 'edgeFeather'
-          ? createMaskEdgeFeatherProperty(id, mask.edgeId.split('->').map(vertex => maskIdMap.get(vertex) ?? vertex).join('->'))
-          : `mask.${id}.${mask.property}`;
-      }
+      property = remapMaskProperty(property);
       return flockCopy ? remapFlockKeyframeProperty(property as Keyframe['property'], flockCopy.nodeIdMap) : property;
     };
 

@@ -1,6 +1,6 @@
 import { operatorPortsCompatible } from '../../../../services/operators/portContracts';
 import { useState } from 'react';
-import type { TimelineClip } from '../../../../types';
+import type { TimelineClip } from '../../../../types/timeline';
 import { createSceneGraphActions } from '../../../../services/operators/sceneGraphEditing';
 import { sceneGraphForClip } from '../../../../services/operators/sceneGraph';
 import { SCENE_OPERATORS, sceneBypassDescription } from '../../../../services/operators/sceneOperators';

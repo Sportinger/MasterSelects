@@ -12,7 +12,8 @@ import {
 } from '../../src/services/nodeGraph';
 import { setAINodeSandboxTestExecutor } from '../../src/services/nodeGraph/aiNodeSandboxClient';
 import { DEFAULT_TRANSFORM } from '../../src/stores/timeline/constants';
-import type { LayerSource, TimelineClip } from '../../src/types';
+import type { LayerSource } from '../../src/types/layers';
+import type { TimelineClip } from '../../src/types/timeline';
 import { timelineRuntimeCoordinator } from '../../src/services/timeline/timelineRuntimeCoordinator';
 import type { RenderResourceDescriptor } from '../../src/services/timeline/runtimeCoordinatorTypes';
 import { primeTimelineLoudnessEnvelopeCache } from '../../src/services/audio/timelineLoudnessEnvelopeCache';

@@ -1,3 +1,4 @@
+import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
 import { useCallback } from 'react';
 import { useTimelineStore } from '../../../../stores/timeline';
 import type { ClipNodeGraph } from '../../../../types/nodeGraph';
@@ -13,7 +14,7 @@ export function useNodePreviewPreferences(clipId: string) {
   const width = source?.videoElement?.videoWidth || source?.imageElement?.naturalWidth || source?.textCanvas?.width || media?.width || 1920;
   const height = source?.videoElement?.videoHeight || source?.imageElement?.naturalHeight || source?.textCanvas?.height || media?.height || 1080;
   const change = useCallback((edit: (current: typeof EMPTY) => typeof EMPTY) => {
-    const state = useTimelineStore.getState(), clip = state.clips.find(candidate => candidate.id === clipId);
+    const state = readTimelineRuntimeState(useTimelineStore), clip = state.clips.find(candidate => candidate.id === clipId);
     if (!clip) return;
     state.updateClip(clipId, { nodeGraph: { ...clip.nodeGraph, version: 1, nodes: clip.nodeGraph?.nodes ?? [], previews: edit(clip.nodeGraph?.previews ?? EMPTY) } });
   }, [clipId]);

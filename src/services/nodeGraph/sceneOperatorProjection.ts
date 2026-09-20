@@ -1,4 +1,4 @@
-import type { TimelineClip } from '../../types';
+import type { TimelineClip } from '../../types/timeline';
 import type { NodeGraph } from '../../types/nodeGraph';
 import { sceneGraphForClip, validateSceneGraph } from '../operators/sceneGraph';
 import { getEffectOperator } from '../operators/operatorRegistry';

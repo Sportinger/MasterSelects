@@ -16,7 +16,10 @@ import {
   updateClipNodeGraphLayout,
 } from '../../src/services/nodeGraph';
 import { DEFAULT_TEXT_PROPERTIES, DEFAULT_TRANSFORM } from '../../src/stores/timeline/constants';
-import { createDefaultColorCorrectionState, type ClipMask, type Effect, type TimelineClip, type TimelineTrack } from '../../src/types';
+import { createDefaultColorCorrectionState } from '../../src/types/colorCorrection';
+import { type ClipMask } from '../../src/types/masks';
+import { type Effect } from '../../src/types/effects';
+import { type TimelineClip, type TimelineTrack } from '../../src/types/timeline';
 import { primeTimelineLoudnessEnvelopeCache } from '../../src/services/audio/timelineLoudnessEnvelopeCache';
 import {
   primeTimelineFrequencySummaryCache,

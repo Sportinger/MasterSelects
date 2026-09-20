@@ -1,4 +1,5 @@
-import type { TimelineClip } from '../../types';
+import { readTimelineRuntimeState } from '../timeline/timelineRuntimeCoordinator';
+import type { TimelineClip } from '../../types/timeline';
 import type { PreviewArtifactReader } from './PreviewArtifactReader';
 import type { PreviewDrawing, PreviewFrame, PreviewRequest } from './previewTypes';
 import { sceneGraphForClip, compileSceneGraph } from '../operators/sceneGraph';
@@ -57,7 +58,7 @@ export function scenePreview(request: PreviewRequest, clip: TimelineClip, localT
   if (geometry.bypassed) return missing('Geometry muted');
   const transformGeometry = (drawing: PreviewDrawing | undefined): PreviewDrawing | undefined => {
     if (!transformed || drawing?.kind !== 'points' || drawing.dimensions !== 3) return drawing;
-    const state = useTimelineStore.getState(), transform = resolveSceneClipTransform(clip, localTime, request.time, state);
+    const state = readTimelineRuntimeState(useTimelineStore), transform = resolveSceneClipTransform(clip, localTime, request.time, state);
     const { position: p, rotation: r, scale: s } = transform;
     const [rx, ry, rz] = [r.x, r.y, r.z].map(value => value * Math.PI / 180);
     const points = Array.from({ length: drawing.points.length / 3 }, (_, i) => {

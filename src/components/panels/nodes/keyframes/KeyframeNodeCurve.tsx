@@ -1,5 +1,7 @@
 import { memo, useMemo } from 'react';
-import type { AnimatableProperty, Keyframe, TimelineClip } from '../../../../types';
+import type { AnimatableProperty } from '../../../../types/animationProperties';
+import type { Keyframe } from '../../../../types/keyframes';
+import type { TimelineClip } from '../../../../types/timeline';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { interpolateKeyframes } from '../../../../utils/keyframeInterpolation';
 import { clipLocalToKeyframeTime, getKeyframeTimeBasis } from '../../../../services/flock/time/flockKeyframeTime';

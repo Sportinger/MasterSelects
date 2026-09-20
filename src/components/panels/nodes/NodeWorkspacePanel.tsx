@@ -1,3 +1,4 @@
+import { readTimelineRuntimeState } from '../../../services/timeline/timelineRuntimeCoordinator';
 import { NodeCatalog } from './workspace/NodeCatalog';
 import { getEffectOperator } from '../../../services/operators/operatorRegistry';
 import { useUnifiedNodeActions } from './useUnifiedNodeActions';
@@ -482,7 +483,7 @@ export function NodeWorkspacePanel() {
           onConnectPorts={unified.connectPorts}
           onDisconnectEdge={unified.disconnectEdge}
           onReconnectPorts={(edgeId, connection) => batched('Reconnect node link', () => reconnectNodePorts(
-            subject.graph, edgeId, connection, () => useTimelineStore.getState().clips,
+            subject.graph, edgeId, connection, () => readTimelineRuntimeState(useTimelineStore).clips,
             unified.connectPorts, unified.disconnectEdge,
           ))}
           onDeleteNode={unified.deleteNode}

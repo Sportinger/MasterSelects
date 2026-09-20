@@ -1,10 +1,7 @@
-import type {
-  ClipCustomNodeDefinition,
-  ClipCustomNodeParamValue,
-  LayerSource,
-  TextClipProperties,
-  TimelineClip,
-} from '../../types';
+import type { ClipCustomNodeDefinition, ClipCustomNodeParamValue } from '../../types/nodeGraph';
+import type { LayerSource } from '../../types/layers';
+import type { TextClipProperties } from '../../types/text';
+import type { TimelineClip } from '../../types/timeline';
 import { Logger } from '../logger';
 import { getCanvasVersion, markDynamicCanvasUpdated } from '../canvasVersion';
 import { buildClipNodeGraph } from './clipGraphProjection';

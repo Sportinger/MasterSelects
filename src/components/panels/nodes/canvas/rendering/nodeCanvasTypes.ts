@@ -1,4 +1,5 @@
-import type { AnimatableProperty, Keyframe } from '../../../../../types';
+import type { AnimatableProperty } from '../../../../../types/animationProperties';
+import type { Keyframe } from '../../../../../types/keyframes';
 import type { PreviewFrame } from '../../../../../services/nodePreview/previewTypes';
 
 // Only drawing data crosses the worker boundary, never graph params or media handles.

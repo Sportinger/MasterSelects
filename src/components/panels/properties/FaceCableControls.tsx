@@ -26,6 +26,7 @@ export default function FaceCableEffectControls(props: EffectControlProps) {
   return props.clipId && props.effectInstanceId ? <FaceCableControls key={`${props.clipId}:${props.effectInstanceId}`} clipId={props.clipId} effectId={props.effectInstanceId} /> : <span>Select a timeline clip to configure face cables.</span>;
 }
 export function FaceCableControls({ clipId, effectId, scope = 'all' }: { clipId: string; effectId: string; scope?: 'all' | 'simulation' | 'anchors' | 'render' }) {
+  const activatePanelType = useDockStore(state => state.activatePanelType);
   const tracking = usePreciseFaceTrack(clipId);
   const disabled = !tracking.ready || tracking.summary?.status === "tracking" || tracking.summary?.status === "loading";
   const settings = useTimelineStore(state => state.clips.find(c => c.id === clipId)?.effects.find(e => e.id === effectId)?.params.settings);
@@ -78,7 +79,7 @@ export function FaceCableControls({ clipId, effectId, scope = 'all' }: { clipId:
     if (event.target instanceof Element) event.target.closest<HTMLElement>('button, select, input[type="checkbox"], input[type="color"]')?.blur();
   }}>
     {scope === 'all' && <button type="button" className="node-workspace-primary-action" onClick={() => {
-      requestNodeWorkspaceView(clipId, 'general'); useDockStore.getState().activatePanelType('node-workspace');
+      requestNodeWorkspaceView(clipId, 'general'); activatePanelType('node-workspace');
     }}>Open clip nodes</button>}
     {(scope === 'all' || scope === 'anchors') && <ResolveInspectorSection title="Connections">
       <div className="face-cable-actions" role="group" aria-label="Choose cable">

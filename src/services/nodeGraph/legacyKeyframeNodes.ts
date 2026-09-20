@@ -1,4 +1,5 @@
-import type { Keyframe, TimelineClip } from '../../types';
+import type { Keyframe } from '../../types/keyframes';
+import type { TimelineClip } from '../../types/timeline';
 import type { KeyframeNodeDefinition } from '../../types/keyframeNode';
 import { keyframeNodeParameters } from './keyframeNodeParameters';
 

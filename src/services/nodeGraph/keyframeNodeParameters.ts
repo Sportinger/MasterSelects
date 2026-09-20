@@ -1,4 +1,5 @@
-import type { AnimatableProperty, TimelineClip } from '../../types';
+import type { AnimatableProperty } from '../../types/animationProperties';
+import type { TimelineClip } from '../../types/timeline';
 import type { NodeGraphNode } from '../../types/nodeGraph';
 import { propertyRegistry } from '../properties';
 import { getHexColorChannel } from '../../utils/colorParam';

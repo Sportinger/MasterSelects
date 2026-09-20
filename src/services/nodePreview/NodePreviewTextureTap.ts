@@ -62,7 +62,7 @@ export class NodePreviewTextureTap {
     return { key: request.key, revision: request.revision, time: request.time, status: 'missing', label };
   }
   private wake() {
-    void import('../../engine/WebGPUEngine').then(({ engine }) => engine.requestRender()).catch(() => {});
+    void import('../render/renderHostPort').then(({ renderHostPort }) => renderHostPort.requestRender()).catch(() => {});
   }
   private prepare(device: GPUDevice) {
     if (this.preparing || prefersSoftwareTimelineCanvas() || typeof OffscreenCanvas === 'undefined') return;

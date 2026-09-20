@@ -33,6 +33,8 @@ selectors switch the viewed port. Preferences are saved on the owning clip and
 survive project/history round trips. Portrait, landscape and square images retain
 their aspect ratio. Placement resolves collisions using the complete card size,
 including the preview; this also applies when adding nodes to existing graphs.
+Expanding or folding nested groups reserves each complete frame and moves sibling
+groups together with their contents, keeping headers and unrelated cards apart.
 
 Source images borrow the current decoded frame. Color input, individual correctors,
 color output, effects, masks and clip output tap the render pipeline. Neutral and

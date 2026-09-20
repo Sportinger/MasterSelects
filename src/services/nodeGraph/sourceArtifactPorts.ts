@@ -1,4 +1,4 @@
-import type { TimelineClip } from '../../types';
+import type { TimelineClip } from '../../types/timeline';
 import type { NodeGraphPort } from '../../types/nodeGraph';
 import { decodeCableScene } from '../faceCables/cableSceneData';
 import { getEffectOperator } from '../operators/operatorRegistry';

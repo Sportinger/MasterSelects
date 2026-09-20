@@ -1,6 +1,7 @@
 import { withClipSceneGraph } from './clipSceneGraph';
 import type { NodeGraph, NodeGraphDocument, NodeGraphNode } from '../../types/nodeGraph';
-import type { Keyframe, TimelineClip } from '../../types';
+import type { Keyframe } from '../../types/keyframes';
+import type { TimelineClip } from '../../types/timeline';
 import { buildEffectOperatorGraph } from './effectGraphProjection';
 import { foldOperatorGroups } from './nestedOperatorGroups';
 import { collapsedArtifactLinks, projectSourceArtifactLinks } from './sourceArtifactProjection';
