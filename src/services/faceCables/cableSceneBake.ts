@@ -27,14 +27,14 @@ export function cableSceneLocalPoint(p: CablePoint, transform: ClipTransform, as
   return { x: (cos * x + sin * y) / scale.x + a.x, y: (-sin * x + cos * y) / scale.y + a.y,
     z: ((p.z ?? 0) * Z_SCALE - transform.position.z) / (scale.z ?? 1) + a.z };
 }
-export function createCableSceneBake(cables: FaceCableConfig[], fps: number, frames: number, duration: number, aspect: number, depthGrid?: CableDepthGrid, depthBinding?: string, surface?: CableSurfacePlan) {
+export function createCableSceneBake(cables: FaceCableConfig[], fps: number, frames: number, duration: number, aspect: number, depthGrid?: CableDepthGrid, depthBinding?: string, surface?: CableSurfacePlan, mappingBinding?: string) {
   const layout = cableSceneLayout(cables, depthGrid);
   if (layout.stride * frames > MAX_CABLE_SCENE_FLOATS) throw new Error('3D cable geometry is too large; shorten the clip or use fewer segments.');
   const data = new Float32Array(layout.stride * frames);
   const edges = FaceLandmarker.FACE_LANDMARKS_TESSELATION;
   const triangles = Array.from({ length: edges.length / 3 }, (_, i) => [edges[i * 3].start, edges[i * 3].end, edges[i * 3 + 1].end]).flat();
   const outline = FaceLandmarker.FACE_LANDMARKS_FACE_OVAL.map(e => e.start);
-  const scene: CableSceneBake = { version: depthGrid ? 2 : 1, depthGrid, depthBinding, surface, cables, fps, frames, duration, triangles, outline, data };
+  const scene: CableSceneBake = { version: depthGrid ? 2 : 1, depthGrid, depthBinding, mappingBinding, surface, cables, fps, frames, duration, triangles, outline, data };
   return {
     scene,
     reuseDepth(frame: number, previous: CableSceneBake) {

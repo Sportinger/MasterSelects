@@ -3,8 +3,10 @@ import type { Keyframe, TimelineClip } from '../../types';
 export const STABILIZATION_PROPERTIES = ['position.x', 'position.y', 'rotation.z'] as const;
 export const isStabilizationProperty = (property: string) =>
   STABILIZATION_PROPERTIES.some(candidate => candidate === property);
-export const isStabilizationKey = (key: Keyframe) =>
+export const isStabilizationKey = (key: Pick<Keyframe, 'id' | 'property'>) =>
   key.id.startsWith('face-stabilize:') && isStabilizationProperty(key.property);
+export const isStabilizationKeyBypassed = (clip: Pick<TimelineClip, 'videoInspectorSections'> | undefined, key: Pick<Keyframe, 'id' | 'property'>) =>
+  clip?.videoInspectorSections?.stabilization === false && isStabilizationKey(key);
 
 function fingerprint(value: unknown): string {
   const text = JSON.stringify(value);

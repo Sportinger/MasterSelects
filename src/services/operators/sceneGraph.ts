@@ -41,7 +41,10 @@ export function compileSceneGraph(definition: SceneOperatorGraph): SceneSurfaceP
   const errors = validateSceneGraph(definition); if (errors.length) throw new Error(errors[0]);
   const { graph, params } = definition;
   const nodes = new Map(graph.nodes.map(n => [n.id, n]));
-  const input = (node: BoundOperatorNode, port: string) => nodes.get(graph.edges.find(e => e.to === node.id && e.input === port)?.from ?? '');
+  const input = (node: BoundOperatorNode, port: string) => {
+    const source = nodes.get(graph.edges.find(e => e.to === node.id && e.input === port)?.from ?? '');
+    return source?.bypassed && !['texture.uv', 'scene.clip-transform'].includes(source.operator) ? undefined : source;
+  };
   const number = (node: BoundOperatorNode, name: string): number => {
     const spec = SCENE_OPERATORS.find(o => o.id === node.operator)!.parameters.find(p => p.id === name)!;
     const key = node.bindings[name], value = typeof key === 'string' ? params[key] ?? spec.default : spec.default;
@@ -50,16 +53,20 @@ export function compileSceneGraph(definition: SceneOperatorGraph): SceneSurfaceP
   };
   const uv = (node?: BoundOperatorNode): [number, number, number, number] => {
     if (!node) return [1, 1, 0, 0];
+    if (node.bypassed) return uv(input(node, 'uv'));
     const parent = uv(input(node, 'uv')), sx = number(node, 'scaleU'), sy = number(node, 'scaleV');
     const result: [number, number, number, number] = [parent[0] * sx, parent[1] * sy, parent[2] * sx + number(node, 'offsetU'), parent[3] * sy + number(node, 'offsetV')];
     if (result.some(v => !Number.isFinite(v) || Math.abs(v) > 1e6)) throw new Error('Combined UV transform exceeds its supported range.');
     return result;
   };
   const plan: SceneSurfacePlan = { visible: false, geometry: 'source', applyClipTransform: false, width: 1, height: 1, textured: false, uv: [1, 1, 0, 0], tint: [1, 1, 1], opacity: 1 };
-  let object = input(graph.nodes.find(n => n.operator === 'scene.render')!, 'scene');
+  const render = graph.nodes.find(n => n.operator === 'scene.render')!;
+  if (render.bypassed) return plan;
+  let object = input(render, 'scene');
   const transforms = new Set<string>();
   while (object?.operator === 'scene.clip-transform') {
-    transforms.add(object.id); object = input(object, 'scene');
+    if (!object.bypassed) transforms.add(object.id);
+    object = input(object, 'scene');
   }
   if (transforms.size > 1) throw new Error('Apply the clip transform once; connect additional meshes to one transform.');
   plan.applyClipTransform = transforms.size > 0;

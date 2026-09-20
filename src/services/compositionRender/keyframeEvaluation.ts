@@ -37,7 +37,7 @@ export function evaluateCompositionClipEffects(
   surfaceClip?: SurfaceClip,
 ): Effect[] {
   const withSurfaces = (result: Effect[]) => {
-    const timed = bindCableRenderTime(result, localTime);
+    const timed = bindCableRenderTime(result, localTime, surfaceClip?.videoInspectorSections?.stabilization);
     return surfaceClip ? appendSurfaceEffects(timed, surfaceClip, localTime, keyframes) : timed;
   };
   if (!effects?.length || !keyframes?.length) return withSurfaces(effects ?? []);

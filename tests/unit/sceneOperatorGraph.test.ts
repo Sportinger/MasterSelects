@@ -9,8 +9,41 @@ import { applySceneOperatorGraph } from '../../src/engine/scene/sceneGraphRuntim
 import type { SceneFaceCableLayer } from '../../src/engine/scene/types';
 import { buildPlaneUniformData } from '../../src/engine/native3d/sceneRenderer/planeUniforms';
 import { groupOperators, ungroupOperators } from '../../src/services/operators/operatorGroups';
+import { isClipKeyframeBypassed } from '../../src/services/nodeGraph/keyframePlaybackState';
 
 describe('executable scene operators and nested groups', () => {
+  it.each(['frame', 'texture', 'uv', 'geometry', 'material', 'mesh', 'transform', 'render'])('executes and persists bypass for %s', id => {
+    const definition = defaultSceneGraph(true);
+    definition.params.uv_offsetU = 0.4;
+    definition.graph.nodes.find(n => n.id === id)!.bypassed = true;
+    const saved = JSON.parse(JSON.stringify(definition));
+    const plan = compileSceneGraph(saved);
+    if (['geometry', 'material', 'mesh', 'render'].includes(id)) expect(plan.visible).toBe(false);
+    else {
+      expect(plan.visible).toBe(true);
+      expect(plan.textured).toBe(!['frame', 'texture'].includes(id));
+      expect(plan.applyClipTransform).toBe(id !== 'transform');
+      if (id === 'uv') expect(plan.uv).toEqual([1, 1, 0, 0]);
+    }
+    saved.graph.nodes.find((n: { id: string }) => n.id === id).bypassed = false;
+    expect(compileSceneGraph(saved)).toMatchObject({ visible: true, textured: true, applyClipTransform: true, uv: [1, 1, 0.4, 0] });
+  });
+  it('bypasses saved geometry and all transform keyframes together without changing source data', () => {
+    const scene = defaultSceneGraph(true);
+    scene.graph.nodes.find(n => n.id === 'transform')!.bypassed = true;
+    const clip = createMockClip({ is3D: true, source: { type: 'video' } });
+    clip.nodeGraph = { ...createClipNodeGraphState(clip), scene };
+    expect(isClipKeyframeBypassed(clip, { id: 'manual', property: 'position.x' })).toBe(true);
+    expect(isClipKeyframeBypassed(clip, { id: 'manual', property: 'opacity' })).toBe(false);
+    const layer = { kind: 'face-cables', opacity: 1, cableParams: {}, worldMatrix: new Float32Array(16).fill(2) } as SceneFaceCableLayer;
+    const rendered = applySceneOperatorGraph(layer, scene) as SceneFaceCableLayer;
+    expect(rendered.cableParams.cableClipTransformBypassed).toBe(true);
+    expect([...rendered.worldMatrix]).toEqual([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+    expect(layer.cableParams).toEqual({});
+    expect([...layer.worldMatrix]).toEqual(new Array(16).fill(2));
+    clip.nodeGraph = { ...clip.nodeGraph, scene: defaultSceneGraph(true) };
+    expect(isClipKeyframeBypassed(clip, { id: 'manual', property: 'position.x' })).toBe(false);
+  });
   it('evaluates connected geometry, material, UV and transform instead of their display order', () => {
     const d = defaultSceneGraph();
     d.params.material_red = 0.2; d.params.geometry_width = 2; d.params.uv_scaleU = -1; d.params.uv_offsetU = 1;

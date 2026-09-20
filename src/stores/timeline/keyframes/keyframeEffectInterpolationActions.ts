@@ -35,7 +35,7 @@ export const createKeyframeEffectInterpolationActions: SliceCreator<KeyframeEffe
     }
 
     const keyframes = clipKeyframes.get(clipId) || [];
-    const withSurfaces = (effects: typeof clip.effects) => appendSurfaceEffects(bindCableRenderTime(effects, clipLocalTime), clip, clipLocalTime, keyframes);
+    const withSurfaces = (effects: typeof clip.effects) => appendSurfaceEffects(bindCableRenderTime(effects, clipLocalTime, clip.videoInspectorSections?.stabilization), clip, clipLocalTime, keyframes);
     if (keyframes.length === 0) {
       return withSurfaces(clip.effects);
     }

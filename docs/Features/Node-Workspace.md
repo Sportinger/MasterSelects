@@ -54,9 +54,20 @@ clip transform. Group and node positions, provenance and bypass support project
 storage and history. The curve node's animation area opens the same Position X,
 Position Y and Rotation Z keys that appear on the timeline.
 
-Bypass disables the generated stabilization keys at playback. It does not freeze
-source footage, tracked geometry or cable simulation, and cannot remove movement
-already embedded in a saved Face Cables geometry bake.
+Bypass disables the generated stabilization keys at playback and removes their
+recorded image mapping from saved Face Cables geometry. Tracked facial movement
+and simulated cable shapes remain. This correction uses the bake's saved mapping
+provenance, including existing depth bakes; older artifacts without that provenance
+need a new cable bake. The saved geometry itself is never modified.
+The bypassed stabilization keys turn gray in timeline rows, clip markers and
+curve editors; their curve segments become dashed while remaining editable.
+
+Executable 3D scene nodes also support **Byp**. **Clip Transform** passes the object
+through without its transform or transform keyframes, which turn gray. **UV**
+passes through the incoming UVs. Muting **Frame** or **Image texture** leaves the
+material's solid color; muting **Geometry**, **Material**, **Mesh** or **3D render**
+hides the connected object. These controls affect preview and export and preserve
+connections, parameters and keyframes for re-enabling or undo.
 
 The stabilization inspector shows the target clip, tracking availability and bake
 status. New bakes record Face/Lips, center lock, smoothing, tracking revision and

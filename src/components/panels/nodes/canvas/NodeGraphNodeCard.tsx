@@ -111,7 +111,8 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
             <button
               type="button"
               className={`node-workspace-bypass-button${isBypassed ? ' active' : ''}`}
-              title={isBypassed ? 'Bypassed; click to enable' : 'Bypass node'}
+              aria-label={`Bypass ${node.label}`} aria-pressed={isBypassed}
+              title={isBypassed ? 'Bypassed; click to enable' : String(node.params?.bypassDescription ?? 'Bypass node')}
               onPointerDown={(event) => {
                 event.stopPropagation();
               }}

@@ -15,6 +15,7 @@ export function applySceneOperatorGraph(layer: SceneLayer3DData, definition?: Sc
   if (!plan) return { ...layer, opacity: 0 };
   const identity = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
   return { ...layer, ...(plan.geometry === 'plane' ? { kind: 'plane' as const } : {}),
+    ...(layer.kind === 'face-cables' ? { cableParams: { ...layer.cableParams, cableClipTransformBypassed: !plan.applyClipTransform } } : {}),
     worldMatrix: plan.applyClipTransform ? layer.worldMatrix : identity,
     opacity: layer.opacity * (plan.visible ? plan.opacity : 0), surfacePlan: plan };
 }

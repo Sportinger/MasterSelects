@@ -5,6 +5,8 @@ import { retimeKeyframesForEdgeTrim } from '../../../utils/keyframeTrimAnchoring
 import { computeTrimTiming } from '../utils/clipTrimTiming';
 import { getClipShellKeyframeGroups } from '../utils/timelineTrackInteractionShellState';
 import type { ClipInteractionShellCommandContext, ClipInteractionShellCommands } from './types';
+import { isClipKeyframeBypassed } from '../../../services/nodeGraph/keyframePlaybackState';
+import { useTimelineStore } from '../../../stores/timeline';
 
 interface ClipKeyframeTicksProps {
   context: ClipInteractionShellCommandContext;
@@ -14,6 +16,7 @@ interface ClipKeyframeTicksProps {
 const formatShellKeyframeTime = (seconds: number): string => `${seconds.toFixed(2)}s`;
 
 export function ClipKeyframeTicks({ context, commands }: ClipKeyframeTicksProps) {
+  const ownerClip = useTimelineStore(state => state.clips.find(clip => clip.id === context.clip.id));
   const keyframe = context.activeModules.keyframe;
   const trim = context.activeModules.trim?.state;
   const trimTiming = trim?.clipId === context.clip.id
@@ -75,6 +78,7 @@ export function ClipKeyframeTicks({ context, commands }: ClipKeyframeTicksProps)
   return (
     <ClipKeyframeTickList
       groups={keyframeGroups}
+      bypassedKeyframeIds={new Set((keyframe.keyframes ?? []).filter(kf => isClipKeyframeBypassed(ownerClip, kf)).map(kf => kf.id))}
       displayDuration={displayDuration}
       draggingKeyframeIds={keyframeGroupDrag?.keyframeIds}
       isTrackLocked={context.track.locked === true}

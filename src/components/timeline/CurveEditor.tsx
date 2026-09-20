@@ -10,6 +10,7 @@ import {
 import { BEZIER_HANDLE_SIZE } from '../../stores/timeline/constants';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
+import { isClipKeyframeBypassed } from '../../services/nodeGraph/keyframePlaybackState';
 import { formatAudioAutomationGain } from './utils/audioAutomationValue';
 import {
   clampBezierHandleTimeOffset,
@@ -135,6 +136,7 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
   const setCurveEditorHeight = useTimelineStore(s => s.setCurveEditorHeight);
   const allClipKeyframes = useTimelineStore(s => s.clipKeyframes.get(clipId) ?? EMPTY_CLIP_KEYFRAMES);
   const timelineClips = useTimelineStore(s => s.clips);
+  const ownerClip = useMemo(() => findClipById(timelineClips, clipId), [timelineClips, clipId]);
   const mediaFiles = useMediaStore(s => s.files);
   const padding = useMemo(() => ({ top: 20, right: 10, bottom: 20, left: 10 }), []);
   const stateProperty = parseVectorAnimationStateProperty(property);
@@ -564,7 +566,7 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
           <path
             key={`curve-${prevKf.id}-${kf.id}`}
             d={path}
-            className={`curve-editor-curve${isDiscreteStateProperty ? ' step' : ''}`}
+            className={`curve-editor-curve${isDiscreteStateProperty ? ' step' : ''}${isClipKeyframeBypassed(ownerClip, prevKf) || isClipKeyframeBypassed(ownerClip, kf) ? ' bypassed' : ''}`}
           />
         );
       })}
@@ -599,7 +601,8 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
         }
 
         return (
-          <g key={kf.id}>
+          <g key={kf.id} className={isClipKeyframeBypassed(ownerClip, kf) ? 'keyframe-bypassed' : undefined}>
+            {isClipKeyframeBypassed(ownerClip, kf) && <title>Stabilization bypassed · not applied</title>}
             {/* Handle lines (only for selected keyframes) */}
             {showHandleIn && (
               <line

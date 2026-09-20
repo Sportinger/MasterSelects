@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import './ClipKeyframeTicks.css';
 
 export interface ClipKeyframeTickGroupView {
   time: number;
@@ -10,6 +11,7 @@ interface ClipKeyframeTicksProps {
   groups: readonly ClipKeyframeTickGroupView[];
   displayDuration: number;
   draggingKeyframeIds?: readonly string[] | null;
+  bypassedKeyframeIds?: ReadonlySet<string>;
   isTrackLocked: boolean;
   formatTime: (seconds: number) => string;
   onTickMouseDown: (e: React.MouseEvent<HTMLButtonElement>, group: ClipKeyframeTickGroupView) => void;
@@ -19,6 +21,7 @@ export const ClipKeyframeTicks = memo(function ClipKeyframeTicks({
   groups,
   displayDuration,
   draggingKeyframeIds,
+  bypassedKeyframeIds,
   isTrackLocked,
   formatTime,
   onTickMouseDown,
@@ -34,17 +37,21 @@ export const ClipKeyframeTicks = memo(function ClipKeyframeTicks({
           ? group.keyframeIds.some(id => draggingKeyframeIds.includes(id))
           : false;
         const keyframeCount = group.keyframeIds.length || 1;
+        const bypassedCount = group.keyframeIds.filter(id => bypassedKeyframeIds?.has(id)).length;
+        const bypassed = bypassedCount === keyframeCount;
+        const bypassTitle = bypassedCount ? ` · ${bypassedCount} transform keyframes bypassed` : '';
 
         return (
           <button
             type="button"
             key={`${group.time}:${group.keyframeIds.join('|') || i}`}
-            className={`keyframe-tick${isDraggingKeyframeGroup ? ' dragging' : ''}${group.hasStateChange ? ' state-change' : ''}`}
+            className={`keyframe-tick${isDraggingKeyframeGroup ? ' dragging' : ''}${group.hasStateChange ? ' state-change' : ''}${bypassed ? ' bypassed' : ''}`}
             style={{ left: `${xPercent}%` }}
             onMouseDown={isTrackLocked ? undefined : (e) => onTickMouseDown(e, group)}
             onClick={(e) => e.stopPropagation()}
-            aria-label={`Move ${keyframeCount} keyframe${keyframeCount === 1 ? '' : 's'} at ${formatTime(group.time)}`}
-            title={`Drag to move ${keyframeCount} keyframe${keyframeCount === 1 ? '' : 's'} at ${formatTime(group.time)} (Shift snaps to clip keyframes)`}
+            onPointerUp={event => event.currentTarget.blur()}
+            aria-label={`Move ${keyframeCount} keyframe${keyframeCount === 1 ? '' : 's'} at ${formatTime(group.time)}${bypassTitle}`}
+            title={`Drag to move ${keyframeCount} keyframe${keyframeCount === 1 ? '' : 's'} at ${formatTime(group.time)} (Shift snaps to clip keyframes)${bypassTitle}`}
           />
         );
       })}

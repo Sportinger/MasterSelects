@@ -8,6 +8,8 @@ import { Logger } from '../../../services/logger';
 
 interface GeometryCache {
   data: unknown; frame: number; vertices: GPUBuffer; indices: GPUBuffer;
+  stabilizationBypassed: boolean;
+  clipTransformBypassed: boolean;
   geometry: NonNullable<ReturnType<typeof buildCableSceneGeometry>>;
 }
 /** Native scene geometry, depth-tested against other objects; light maps refresh independently of the physics bake. */
@@ -53,12 +55,14 @@ export class FaceCablePass {
       const texture = resolveTexture({ ...layer, kind: 'plane' });
       if (!texture) return false;
       const id = `${target}:${layer.layerId}`, frame = Math.floor(time * bake.fps + 1e-5);
+      const stabilizationBypassed = layer.cableParams.cableStabilizationBypassed === true;
+      const clipTransformBypassed = layer.cableParams.cableClipTransformBypassed === true;
       let cached = this.geometry.get(id);
-      if (!cached || cached.data !== bake || cached.frame !== frame) {
-        const geometry = buildCableSceneGeometry(bake, time);
+      if (!cached || cached.data !== bake || cached.frame !== frame || cached.stabilizationBypassed !== stabilizationBypassed || cached.clipTransformBypassed !== clipTransformBypassed) {
+        const geometry = buildCableSceneGeometry(bake, time, stabilizationBypassed, clipTransformBypassed);
         if (!geometry) continue;
         if (cached) { const old = cached; void device.queue.onSubmittedWorkDone().then(() => { old.vertices.destroy(); old.indices.destroy(); }).catch(() => {}); }
-        cached = { data: bake, frame, geometry, vertices: upload(geometry.vertices, GPUBufferUsage.VERTEX, true), indices: upload(geometry.indices, GPUBufferUsage.INDEX, true) };
+        cached = { data: bake, frame, stabilizationBypassed, clipTransformBypassed, geometry, vertices: upload(geometry.vertices, GPUBufferUsage.VERTEX, true), indices: upload(geometry.indices, GPUBufferUsage.INDEX, true) };
         this.geometry.set(id, cached);
       }
       let shadow = this.shadows.get(id);

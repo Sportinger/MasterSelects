@@ -143,6 +143,18 @@
   color: #36b8ff;
 }
 
+.keyframe-diamond.bypassed,
+.keyframe-diamond.bypassed:is(:hover, .selected, .dragging, .row-highlighted) {
+  background: var(--text-muted);
+  color: var(--text-muted);
+  filter: none;
+  box-shadow: none;
+}
+
+.keyframe-diamond.bypassed:is(:hover, .selected, .dragging) {
+  box-shadow: 0 0 0 1px var(--text-primary);
+}
+
 .keyframe-rotation-path-label {
   position: absolute;
   left: 10px;

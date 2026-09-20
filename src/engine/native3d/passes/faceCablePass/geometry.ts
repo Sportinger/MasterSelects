@@ -1,5 +1,6 @@
 import { cableSceneLayout, type CableSceneBake } from '../../../../services/faceCables/cableSceneData';
 import { buildCableDepthGeometry } from '../../../../services/faceCables/cableDepthSurface';
+import { unstabilizedCableSceneFrame } from '../../../../services/faceCables/cableSceneStabilization';
 
 const SIDES = 8;
 const ringCos = Array.from({ length: SIDES }, (_, side) => Math.cos(side / SIDES * Math.PI * 2));
@@ -23,13 +24,14 @@ function faceHoles(bake: CableSceneBake): number[][] {
   }
   holeCache.set(bake, holes); return holes;
 }
-export function buildCableSceneGeometry(bake: CableSceneBake, time: number) {
+export function buildCableSceneGeometry(bake: CableSceneBake, time: number, stabilizationBypassed = false, clipTransformBypassed = false) {
   if (!Number.isFinite(time) || time < 0 || time >= bake.duration) return null;
-  const layout = cableSceneLayout(bake.cables, bake.depthGrid), base = Math.min(bake.frames - 1, Math.floor(time * bake.fps + 1e-5)) * layout.stride;
-  const data = bake.data;
+  const layout = cableSceneLayout(bake.cables, bake.depthGrid), frame = Math.min(bake.frames - 1, Math.floor(time * bake.fps + 1e-5));
+  const unstabilized = stabilizationBypassed || clipTransformBypassed ? unstabilizedCableSceneFrame(bake, frame, clipTransformBypassed) : null;
+  const data = unstabilized ?? bake.data, base = unstabilized ? 0 : frame * layout.stride;
   const hasFace = Boolean(data[base] && bake.surface?.face !== false);
   const holes = hasFace ? faceHoles(bake) : [];
-  const surface = bake.depthGrid ? buildCableDepthGeometry(bake, base) : null;
+  const surface = bake.depthGrid ? buildCableDepthGeometry(unstabilized ? { ...bake, data } : bake, base) : null;
   let vertexCount = 4 + (hasFace ? 468 + holes.length : 0) + (surface?.vertices.length ?? 0);
   let indexCount = (bake.depthGrid ? 0 : 6) + (hasFace ? bake.triangles.length + holes.reduce((n, loop) => n + loop.length * 3, 0) : 0) + (surface?.indices.length ?? 0);
   bake.cables.forEach((c, ci) => {

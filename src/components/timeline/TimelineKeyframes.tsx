@@ -12,6 +12,7 @@ import './TimelineKeyframes.css';
 import { getKeyframeSegmentIndex } from './utils/keyframeSegmentIndex';
 import { visibleKeyframeMarkers } from './utils/visibleKeyframeMarkers';
 import { DenseKeyframeCanvas } from './components/DenseKeyframeCanvas';
+import { isClipKeyframeBypassed } from '../../services/nodeGraph/keyframePlaybackState';
 
 interface KeyframeData {
   id: string;
@@ -478,9 +479,10 @@ function TimelineKeyframesComponent({
         markers={visibleMarkers.map(item => ({
           x: timeToPixel(getEffectiveClipStartTime(item.clip) + item.kf.time), id: item.kf.id, data: item,
           selected: selectedKeyframeIds.has(item.kf.id), dragging: dragState?.keyframeId === item.kf.id,
+          bypassed: isClipKeyframeBypassed(item.clip, item.kf),
           stateChange: Boolean(parseVectorAnimationStateProperty(item.kf.property)),
           title: `${property}: ${item.kf.value.toFixed(3)} @ ${(getEffectiveClipStartTime(item.clip) + item.kf.time).toFixed(3)}s
-Easing: ${item.kf.easing}
+Easing: ${item.kf.easing}${isClipKeyframeBypassed(item.clip, item.kf) ? '\nStabilization bypassed · not applied' : ''}
 Drag to move; right-click for options; double-click for Graph`,
         }))}
         onDown={(event, item) => handleMouseDown(event, item.kf, item.clip)}
@@ -493,6 +495,7 @@ Drag to move; right-click for options; double-click for Graph`,
         const xPos = timeToPixel(absTime);
         const isSelected = selectedKeyframeIds.has(kf.id);
         const isDragging = dragState?.keyframeId === kf.id;
+        const bypassed = isClipKeyframeBypassed(clip, kf);
         const easing = normalizeEasingType(kf.easing, 'linear');
         const isStateChange = Boolean(parseVectorAnimationStateProperty(kf.property));
         const rotationPathDisplayMode = getRotationPathDisplayMode(kf, clip);
@@ -508,7 +511,7 @@ Drag to move; right-click for options; double-click for Graph`,
         return (
           <div
             key={kf.id}
-            className={`keyframe-diamond easing-${easing} ${isDenseKeyframeRow ? 'dense-row' : ''} ${rotationPathDisplayMode ? `rotation-path-${rotationPathDisplayMode}` : ''} ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isRowHovered ? 'row-highlighted' : ''} ${isStateChange ? 'state-change' : ''} ${aiAnimatedKeyframes.has(kf.id) ? 'ai-keyframe-added' : ''}`}
+            className={`keyframe-diamond easing-${easing} ${bypassed ? 'bypassed' : ''} ${rotationPathDisplayMode ? `rotation-path-${rotationPathDisplayMode}` : ''} ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isRowHovered ? 'row-highlighted' : ''} ${isStateChange ? 'state-change' : ''} ${aiAnimatedKeyframes.has(kf.id) ? 'ai-keyframe-added' : ''}`}
             style={{ left: `${xPos}px` }}
             data-keyframe-id={kf.id}
             onMouseDown={(e) => handleMouseDown(e, kf, clip)}
@@ -516,7 +519,7 @@ Drag to move; right-click for options; double-click for Graph`,
             onMouseEnter={() => onKeyframeRowHover?.(trackId, property, true)}
             onMouseLeave={() => onKeyframeRowHover?.(trackId, property, false)}
             onContextMenu={(e) => handleContextMenu(e, kf)}
-            title={`${property}: ${kf.value.toFixed(3)} @ ${absTime.toFixed(2)}s\nEasing: ${easing}${rotationTitle}\nDrag to move (Shift snaps to clip keyframes)\nDouble-click to open Graph\nRight-click to change segment options`}
+            title={`${property}: ${kf.value.toFixed(3)} @ ${absTime.toFixed(2)}s\nEasing: ${easing}${rotationTitle}${bypassed ? '\nStabilization bypassed · not applied' : ''}\nDrag to move (Shift snaps to clip keyframes)\nDouble-click to open Graph\nRight-click to change segment options`}
           >
             {rotationPathLabel && (
               <span className="keyframe-rotation-path-label" aria-hidden="true">

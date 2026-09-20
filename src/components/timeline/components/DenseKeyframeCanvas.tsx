@@ -3,6 +3,7 @@ import { nearestKeyframeMarker } from '../utils/visibleKeyframeMarkers';
 
 export interface DenseKeyframeMarker<T> {
   x: number; id: string; data: T; title: string; selected: boolean; dragging: boolean; stateChange: boolean;
+  bypassed?: boolean;
 }
 interface Props<T> {
   markers: DenseKeyframeMarker<T>[]; left: number; width: number; highlighted: boolean;
@@ -28,13 +29,16 @@ export function DenseKeyframeCanvas<T>({ markers, left, width, highlighted, onDo
       const amber = style.getPropertyValue('--amber-600').trim() || '#d97706';
       const red = style.getPropertyValue('--red-500').trim() || '#ef4444';
       const cyan = style.getPropertyValue('--cyan-500').trim() || '#06b6d4';
+      const muted = style.getPropertyValue('--text-muted').trim() || '#777777';
+      const selection = style.getPropertyValue('--text-primary').trim() || '#eeeeee';
       // Selected points are drawn last, but no overlapping point is omitted.
       for (const selectedPass of [false, true]) for (const marker of markers) {
         if ((marker.selected || marker.dragging) !== selectedPass) continue;
         const x = marker.x - left, y = height / 2, size = marker.dragging ? 6 : 4;
-        context.fillStyle = marker.dragging || marker.stateChange ? cyan : marker.selected ? red : highlighted ? '#fbbf24' : amber;
+        context.fillStyle = marker.bypassed ? muted : marker.dragging || marker.stateChange ? cyan : marker.selected ? red : highlighted ? '#fbbf24' : amber;
         context.beginPath(); context.moveTo(x, y - size); context.lineTo(x + size, y);
         context.lineTo(x, y + size); context.lineTo(x - size, y); context.closePath(); context.fill();
+        if (marker.bypassed && selectedPass) { context.strokeStyle = selection; context.lineWidth = 1; context.stroke(); }
       }
     };
     draw();
@@ -47,7 +51,9 @@ export function DenseKeyframeCanvas<T>({ markers, left, width, highlighted, onDo
     if (Math.abs(event.clientY - bounds.top - bounds.height / 2) > 9) return;
     return nearestKeyframeMarker(markers, event.clientX - bounds.left + left);
   };
-  return <canvas ref={ref} className="dense-keyframe-canvas" role="img" aria-label={`${markers.length} keyframes; drag a point to move, right-click for options`}
+  const bypassedCount = markers.filter(marker => marker.bypassed).length;
+  return <canvas ref={ref} className="dense-keyframe-canvas" role="img" aria-label={`${markers.length} keyframes${bypassedCount ? `; ${bypassedCount} transform keyframes bypassed` : ''}; drag a point to move, right-click for options`}
+    data-bypassed-count={bypassedCount}
     data-marker-count={markers.length} style={{ position: 'absolute', left, top: 0, width, height: '100%', zIndex: 5 }}
     onMouseDown={event => { const marker = hit(event); if (marker) onDown(event, marker.data); }}
     onDoubleClick={event => { if (hit(event)) onDoubleClick(event); }}

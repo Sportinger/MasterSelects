@@ -3,7 +3,8 @@ import { useState } from 'react';
 import type { TimelineClip } from '../../../../types';
 import { createSceneGraphActions } from '../../../../services/operators/sceneGraphEditing';
 import { sceneGraphForClip } from '../../../../services/operators/sceneGraph';
-import { SCENE_OPERATORS } from '../../../../services/operators/sceneOperators';
+import { SCENE_OPERATORS, sceneBypassDescription } from '../../../../services/operators/sceneOperators';
+import { useTimelineStore } from '../../../../stores/timeline';
 import { ResolveInspectorNumberRow } from '../../properties/resolveInspector/ResolveInspectorNumberRow';
 import { ResolveInspectorSection, ResolveInspectorRow, ResolveInspectorIconButton } from '../../properties/resolveInspector/ResolveInspectorPrimitives';
 import { InspectorSelect } from '../../../inspector/InspectorSelect';
@@ -11,6 +12,7 @@ import { TransformTab } from '../../properties/TransformTab';
 
 export function SceneOperatorParameters({ clip, nodeId, onAdded }: { clip: TimelineClip; nodeId: string; onAdded: (id: string) => void }) {
   const [message, setMessage] = useState('');
+  const locked = useTimelineStore(state => state.isExporting || Boolean(state.tracks.find(track => track.id === clip.trackId)?.locked));
   const definition = sceneGraphForClip(clip), node = definition.graph.nodes.find(n => n.id === nodeId);
   const operator = SCENE_OPERATORS.find(o => o.id === node?.operator), actions = createSceneGraphActions(clip.id);
   if (!node || !operator) return null;
@@ -18,8 +20,10 @@ export function SceneOperatorParameters({ clip, nodeId, onAdded }: { clip: Timel
   return <div className="operator-parameters" onPointerUp={event => {
     if (event.target instanceof Element) event.target.closest<HTMLElement>('button,select')?.blur();
   }}>
-    <ResolveInspectorSection title={operator.label}>
+    <ResolveInspectorSection title={operator.label} enabled={!node.bypassed}
+      onEnabledChange={locked ? undefined : () => safely(() => actions.toggleBypass(nodeId))}>
       <p className="face-cable-hint">{operator.description}</p>
+      <p className="face-cable-hint">{sceneBypassDescription(operator.id)}</p>
       {operator.parameters.map(spec => {
         const binding = node.bindings[spec.id], value = typeof binding === 'string' ? definition.params[binding] ?? spec.default : spec.default;
         return <ResolveInspectorNumberRow key={spec.id} label={spec.label} ariaLabel={`${operator.label} ${spec.label}`} value={Number(value)} defaultValue={Number(spec.default)} min={spec.min ?? 0} max={spec.max ?? 1} step={spec.step ?? 0.01}

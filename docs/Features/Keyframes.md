@@ -19,6 +19,12 @@ parameter again. Opening the graph changes neither project data nor keyframes.
 Timeline, node-inspector and AI edits still update the same curves; the AI's
 `getKeyframes` result includes their bindings.
 
+Bypassed face/lip stabilization and 3D Clip Transform keys appear gray in timeline rows, clip markers
+and curve editors; bypassed curve segments are dashed. Selection remains visible
+and the keys stay editable. This reflects the clip's stabilization or transform bypass without
+changing or deleting the keys. Manual transform and effect animation retain their
+normal colors; a grouped clip marker stays active if it also contains active keys.
+
 `Keyframe.hold` keeps a value until the next key. The node inspector uses this for
 discrete boolean channels and offers Hold for continuous channels. Timeline curve
 paths, speed integration, project save/load and keyframe clipboard preserve it.

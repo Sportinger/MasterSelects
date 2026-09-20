@@ -34,7 +34,11 @@ export function createSceneGraphActions(clipId: string) {
       d.graph.nodes = d.graph.nodes.filter(n => n.id !== id); d.graph.edges = d.graph.edges.filter(e => e.from !== id && e.to !== id);
       d.graph.groups?.forEach(g => { g.nodeIds = g.nodeIds.filter(n => n !== id); }); delete d.graph.layout[id];
     }),
-    toggleBypass: () => {},
+    toggleBypass: (id: string) => editSceneGraph(clipId, 'Toggle scene node bypass', d => {
+      const node = d.graph.nodes.find(n => n.id === id);
+      if (!node) throw new Error('Scene node is unavailable.');
+      node.bypassed = !node.bypassed;
+    }),
     setParameter: (id: string, name: string, value: number) => editSceneGraph(clipId, 'Edit scene node', d => {
       const node = d.graph.nodes.find(n => n.id === id), spec = SCENE_OPERATORS.find(o => o.id === node?.operator)?.parameters.find(p => p.id === name);
       if (!node || !spec || !Number.isFinite(value) || value < (spec.min ?? -Infinity) || value > (spec.max ?? Infinity)) throw new Error('Invalid scene parameter.');

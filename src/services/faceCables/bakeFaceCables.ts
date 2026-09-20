@@ -71,7 +71,8 @@ export async function bakeFaceCables(clipId: string, effectId: string, configs: 
     transform: clip.transform, transformKeys: sorted, speedKeys, speedSection: clip.videoInspectorSections?.speedChange,
     transitionSourceMap: clip.transitionSourceMap, transitionSourceTimeOverride: clip.transitionSourceTimeOverride,
     strength: Number(effectParams.sceneDepthStrength) || 1, referenceFace: effectParams.depthReferenceFace }) : undefined;
-  const sceneBake = effectParams.scene3D ? createCableSceneBake(configs, fps, frames, clip.duration, aspect, depthGrid, depthBinding, operatorPlan.surfacePlan) : undefined;
+  const mappingBinding = depthBinding ? undefined : JSON.stringify({ source, width: comp.width, height: comp.height, transform: clip.transform, transformKeys: sorted });
+  const sceneBake = effectParams.scene3D ? createCableSceneBake(configs, fps, frames, clip.duration, aspect, depthGrid, depthBinding, operatorPlan.surfacePlan, mappingBinding) : undefined;
   type Pose = { mapping: ReturnType<typeof trackingPreviewTransform>; transform: typeof clip.transform; anchors: (null | [CablePoint, CablePoint])[]; facePoints?: CablePoint[] };
   const poses: Pose[] = [];
   const lengths = configs.map(() => 0);

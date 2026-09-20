@@ -10,6 +10,7 @@ export interface CableSceneBake {
   version: 1 | 2; fps: number; frames: number; duration: number;
   depthGrid?: CableDepthGrid;
   depthBinding?: string;
+  mappingBinding?: string;
   surface?: CableSurfacePlan;
   cables: FaceCableConfig[]; triangles: number[]; outline: number[]; data: Float32Array;
 }
@@ -38,6 +39,7 @@ export function decodeCableScene(value: unknown): CableSceneBake | null {
       || !Number.isFinite(b.duration) || b.duration <= 0 || typeof b.data !== 'string') throw Error();
     if (b.version === 1 && b.depthGrid !== undefined) throw Error();
     if (b.depthBinding !== undefined && (typeof b.depthBinding !== 'string' || b.depthBinding.length > 4_000_000)) throw Error();
+    if (b.mappingBinding !== undefined && (typeof b.mappingBinding !== 'string' || b.mappingBinding.length > 4_000_000)) throw Error();
     if (b.surface !== undefined && (!b.surface || typeof b.surface.face !== 'boolean'
       || !Number.isFinite(b.surface.blendWidth) || b.surface.blendWidth < 0 || b.surface.blendWidth > 0.2
       || !Number.isInteger(b.surface.subdivisions) || b.surface.subdivisions < 0 || b.surface.subdivisions > 5)) throw Error();

@@ -600,6 +600,7 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
             >
               {authoringKeyframes.map((keyframe, index) => {
                 if (index === 0) return null;
+                const bypassed = series.keyframes[index - 1].bypassed || series.keyframes[index].bypassed;
                 return (
                   <path
                     key={`${series.id}:curve:${keyframe.id}`}
@@ -609,8 +610,8 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
                       timeToPixel,
                       valueToY,
                     )}
-                    className="curve-editor-curve global-curve-editor-curve"
-                    style={{ stroke: renderedColor }}
+                    className={`curve-editor-curve global-curve-editor-curve${bypassed ? ' bypassed' : ''}`}
+                    style={{ stroke: bypassed ? 'var(--text-muted)' : renderedColor }}
                   />
                 );
               })}
@@ -619,13 +620,14 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
                 const x = timeToPixel(point.compositionTime);
                 const y = valueToY(point.authoringValue);
                 const selected = selection.has(point.id);
+                const pointColor = point.bypassed ? 'var(--text-muted)' : renderedColor;
                 const previous = series.keyframes[index - 1];
                 const next = series.keyframes[index + 1];
                 const handles = selected
                   ? buildRenderedCurveHandles(series, point, previous, next, valueToY, timeToPixel)
                   : [];
                 return (
-                  <g key={`${series.id}:point:${point.id}`}>
+                  <g key={`${series.id}:point:${point.id}`} className={point.bypassed ? 'keyframe-bypassed' : undefined}>
                     {handles.map((handle) => (
                       <React.Fragment key={`${point.id}:${handle.handle}`}>
                         <line
@@ -634,7 +636,7 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
                           x2={handle.x}
                           y2={handle.y}
                           className="curve-editor-handle-line"
-                          style={isActive ? undefined : { stroke: renderedColor }}
+                          style={isActive && !point.bypassed ? undefined : { stroke: pointColor }}
                         />
                         <circle
                           cx={handle.x}
@@ -643,7 +645,7 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
                           className="curve-editor-handle"
                           data-keyframe-id={point.id}
                           data-handle={handle.handle}
-                          style={isActive ? undefined : { fill: renderedColor }}
+                          style={isActive && !point.bypassed ? undefined : { fill: pointColor }}
                           onMouseDown={(event) => handleBezierMouseDown(
                             event,
                             series,
@@ -658,11 +660,11 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
                       cy={y}
                       r={5}
                       className={`curve-editor-keyframe global-curve-editor-keyframe${selected ? ' selected' : ''}`}
-                      style={{ fill: isActive && selected ? undefined : renderedColor }}
+                      style={{ fill: isActive && selected && !point.bypassed ? undefined : pointColor }}
                       data-keyframe-id={point.id}
                       data-series-id={series.id}
                       onMouseDown={(event) => handleKeyframeMouseDown(event, series, point)}
-                    />
+                    >{point.bypassed && <title>Stabilization bypassed · not applied</title>}</circle>
                   </g>
                 );
               })}

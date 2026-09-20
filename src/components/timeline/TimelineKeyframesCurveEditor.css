@@ -75,6 +75,20 @@
   fill: var(--text-secondary);
 }
 
+.curve-editor-curve.bypassed {
+  stroke: var(--text-muted);
+  stroke-dasharray: 4 3;
+}
+
+.keyframe-bypassed .curve-editor-keyframe,
+.keyframe-bypassed .curve-editor-handle {
+  fill: var(--text-muted);
+}
+
+.keyframe-bypassed .curve-editor-handle-line {
+  stroke: var(--text-muted);
+}
+
 .curve-editor-header {
   position: relative;
   display: flex;

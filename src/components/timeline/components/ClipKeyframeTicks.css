@@ -1,0 +1,72 @@
+@layer features {
+/* Keyframe shell controls */
+.clip-keyframe-ticks {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.keyframe-tick {
+  position: absolute;
+  bottom: -4px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  appearance: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  cursor: grab;
+  z-index: 1;
+}
+
+.keyframe-tick::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 5px;
+  width: 4px;
+  height: 4px;
+  background: var(--warning);
+  transform: translateX(-50%) rotate(45deg);
+  opacity: 0.7;
+  transition: opacity 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.keyframe-tick.state-change::after {
+  background: var(--cyan-500);
+}
+
+.keyframe-tick.bypassed::after {
+  background: var(--text-muted);
+}
+
+.keyframe-tick:hover::after,
+.keyframe-tick:focus-visible::after,
+.keyframe-tick.dragging::after {
+  transform: translateX(-50%) rotate(45deg) scale(2.15);
+  opacity: 1;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.keyframe-tick:active,
+.keyframe-tick.dragging {
+  cursor: grabbing;
+}
+
+.timeline-canvas-dom-overlay .clip-interaction-shell .clip-keyframe-ticks {
+  opacity: 1;
+  pointer-events: none;
+}
+
+.timeline-canvas-dom-overlay .clip-interaction-shell .keyframe-tick {
+  pointer-events: auto;
+}
+}

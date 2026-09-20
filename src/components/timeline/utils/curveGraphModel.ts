@@ -9,6 +9,7 @@ import type {
 } from '../../../types/animationProperties';
 import type { Keyframe } from '../../../types/keyframes';
 import type { TimelineClip } from '../../../types/timeline';
+import { isClipKeyframeBypassed } from '../../../services/nodeGraph/keyframePlaybackState';
 import type {
   PropertyAuthoringContext,
   PropertyDescriptor,
@@ -62,6 +63,7 @@ export interface CurveGraphKeyframe {
   handleIn?: BezierHandle;
   handleOut?: BezierHandle;
   keyframe: Keyframe;
+  bypassed?: boolean;
 }
 
 export interface CurveGraphSeries {
@@ -301,6 +303,7 @@ export function buildCurveGraphModel(input: BuildCurveGraphModelInput): CurveGra
           compositionTime: curveLocalTimeToCompositionTime(clip.startTime, keyframe.time),
           storageValue: keyframe.value,
           authoringValue,
+          bypassed: isClipKeyframeBypassed(clip, keyframe),
           easing: keyframe.easing,
           ...(keyframe.handleIn ? { handleIn: { ...keyframe.handleIn } } : {}),
           ...(keyframe.handleOut ? { handleOut: { ...keyframe.handleOut } } : {}),

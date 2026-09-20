@@ -6,6 +6,13 @@ const number = (id: string, label: string, value: number, min: number, max: numb
 const op = (id: string, label: string, description: string, inputs: OperatorPort[], outputs: OperatorPort[], parameters: OperatorParameter[] = [], addable = true): OperatorDefinition =>
   ({ id, version: 1, label, description, inputs, outputs, parameters, runtime: 'builtin', invalidates: 'appearance', addable });
 
+export function sceneBypassDescription(operator: string): string {
+  if (operator === 'scene.clip-transform') return 'Bypass the clip transform and its keyframes; pass the object through.';
+  if (operator === 'texture.uv') return 'Bypass this UV transform; pass the incoming UVs through.';
+  if (operator === 'image.frame' || operator === 'texture.image') return 'Mute this texture source; the material uses its solid color.';
+  return 'Mute this output; the connected object is hidden.';
+}
+
 export const SCENE_OPERATORS: readonly OperatorDefinition[] = [
   op('image.frame', 'Video / image frame', 'The current decoded source frame, shared by every connected texture.', [], [port('image', 'image', 'Frame')], [], false),
   op('texture.image', 'Image texture', 'Uploads the connected frame as a reusable GPU texture.', [port('image', 'image', 'Frame'), port('uv', 'uv', 'UV mapping')], [port('texture', 'texture', 'Texture')]),
