@@ -38,8 +38,8 @@ export function KeyframeCurve({ clip, property, value = 0, compact = false }: {
 
 export function KeyframeNodeCardPreview({ node }: { node: NodeGraphNode }) {
   const clip = useTimelineStore(s => s.clips.find(c => c.id === node.params?.targetClipId));
-  const definition = clip?.nodeGraph?.keyframeNodes?.find(n => n.id === node.id);
-  if (!clip || !definition?.channels[0]) return <div className="keyframe-node-card-empty">Choose a parameter →</div>;
-  const property = definition.channels[0].property;
+  const source = node.outputs[0]?.metadata?.animationProperty;
+  if (!clip || typeof source !== 'string') return <div className="keyframe-node-card-empty">Choose a parameter →</div>;
+  const property = source as AnimatableProperty;
   return <KeyframeCurve clip={clip} property={property} value={keyframeNodeParameters(clip).find(p => p.property === property)?.value} compact />;
 }

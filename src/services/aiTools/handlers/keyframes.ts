@@ -16,6 +16,7 @@ import {
   keyframeValueToStore,
 } from './keyframePositionUnits';
 import { isFlockProperty } from '../../../types/flock';
+import { withLegacyKeyframeNodes } from '../../nodeGraph/legacyKeyframeNodes';
 import {
   clipLocalToKeyframeTime,
   keyframeTimeToClipLocal,
@@ -72,6 +73,7 @@ export async function handleGetKeyframes(
   if (!clip) return { success: false, error: `Clip not found: ${clipId}` };
 
   let keyframes = timelineStore.getClipKeyframes(clipId);
+  const graphClip = withLegacyKeyframeNodes(clip, keyframes);
   if (property) {
     keyframes = keyframes.filter(kf => kf.property === property);
   }
@@ -81,7 +83,7 @@ export async function handleGetKeyframes(
     data: {
       clipId,
       clipStartTime: clip.startTime,
-      animationNodes: clip.nodeGraph?.keyframeNodes?.map(node => ({ id: node.id, label: node.label, channels: node.channels })),
+      animationNodes: graphClip.nodeGraph?.keyframeNodes?.map(node => ({ id: node.id, label: node.label, channels: node.channels })),
       keyframes: keyframes.map(kf => ({
         id: kf.id,
         property: kf.property,

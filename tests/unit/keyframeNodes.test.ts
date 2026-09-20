@@ -25,7 +25,8 @@ const source = () => keys().filter(k => k.property === 'scale.x');
 const target = () => keys().filter(k => k.property === 'scale.y');
 function fixture() {
   useTimelineStore.setState({ ...initial,
-    clips: [createMockClip({ id: 'clip-a', trackId: 'video-1', duration: 10, startTime: 20 })],
+    clips: [createMockClip({ id: 'clip-a', trackId: 'video-1', duration: 10, startTime: 20,
+      nodeGraph: { version: 1, nodes: [], keyframeNodes: [] } })],
     tracks: [createMockTrack({ id: 'video-1', type: 'video' })], playheadPosition: 20,
     clipKeyframes: new Map([['clip-a', [
       createMockKeyframe({ id: 'a', clipId: 'clip-a', property: 'scale.x', time: 0, value: 1 }),

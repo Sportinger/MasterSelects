@@ -13,6 +13,13 @@ node-inspector and AI keyframe edits update the same animation. The node shows a
 live value and moving curve cursor during playback. Removing its bindings leaves
 ordinary editable keys behind.
 
+Existing projects without saved keyframe-node bindings automatically show their
+supported animated parameters as nodes, grouped by parameter section. Opening
+the graph does not modify the original keys or project data. The first node
+edit saves its layout and bindings; removing a node keeps its timeline animation
+and prevents it from being recreated automatically. Existing explicit bindings
+remain unchanged. The AI's `getKeyframes` result also includes these automatic nodes.
+
 `Keyframe.hold` keeps a value until the next key. The node inspector uses this for
 discrete boolean channels and offers Hold for continuous channels. Timeline curve
 paths, speed integration, project save/load and keyframe clipboard preserve it.

@@ -12,6 +12,9 @@ import {
 } from '../../../services/nodeGraph/clipGraphLinking';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineClip, TimelineTrack } from '../../../types';
+import { withLegacyKeyframeNodes } from '../../../services/nodeGraph/legacyKeyframeNodes';
+
+const EMPTY_KEYFRAMES = [] as const;
 
 export interface NodeGraphClipSubject {
   kind: 'clip';
@@ -45,13 +48,14 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): Node
     [clips, tracks, selectedClipId],
   );
   const faceTracking = usePreciseFaceTrack(graphContext?.ownerClip.id ?? '');
+  const keyframes = useTimelineStore(state => state.clipKeyframes.get(graphContext?.ownerClip.id ?? '') ?? EMPTY_KEYFRAMES);
 
   return useMemo(() => {
     if (!graphContext) {
       return null;
     }
 
-    const graphClip = createNodeGraphOwnerClip(graphContext);
+    const graphClip = withLegacyKeyframeNodes(createNodeGraphOwnerClip(graphContext), keyframes);
     const document = buildClipNodeGraphDocument(graphClip, graphContext.ownerTrack ?? undefined, {
       linkedClip: graphContext.linkedClip,
       linkedTrack: graphContext.linkedTrack,
@@ -79,5 +83,5 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): Node
       view,
       availableViews: document.views,
     };
-  }, [graphContext, theme, clips, faceTracking.ready]);
+  }, [graphContext, theme, clips, faceTracking.ready, keyframes]);
 }

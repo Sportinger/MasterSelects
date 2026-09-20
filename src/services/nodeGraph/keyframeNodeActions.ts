@@ -8,12 +8,14 @@ import { keyframeNodeParameters, validateKeyframeNodeTarget } from './keyframeNo
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
 import { clipLocalToKeyframeTime } from '../flock/time/flockKeyframeTime';
 import { renderHostPort } from '../render/renderHostPort';
+import { withLegacyKeyframeNodes } from './legacyKeyframeNodes';
 
 function edit(clipId: string, label: string, apply: (nodes: KeyframeNodeDefinition[]) => void) {
   const state = useTimelineStore.getState(), clip = state.clips.find(c => c.id === clipId);
   if (!clip) throw new Error('Clip not found.');
   if (state.isExporting || state.tracks.find(t => t.id === clip.trackId)?.locked) throw new Error('The clip is locked or exporting.');
-  const model = clip.nodeGraph ?? createClipNodeGraphState(clip);
+  const resolved = withLegacyKeyframeNodes(clip, state.clipKeyframes.get(clipId) ?? []);
+  const model = resolved.nodeGraph ?? createClipNodeGraphState(resolved);
   const nodes = structuredClone(model.keyframeNodes ?? []);
   apply(nodes);
   const batch = startBatch(label);

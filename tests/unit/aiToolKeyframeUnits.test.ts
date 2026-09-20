@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { useMediaStore } from '../../src/stores/mediaStore';
+import { createMockClip } from '../helpers/mockData';
 import {
   handleAddKeyframe,
   handleGetKeyframes,
@@ -21,15 +22,14 @@ const initialMediaState = useMediaStore.getState();
 
 function seedStores(): void {
   useTimelineStore.setState({
-    clips: [{
+    clips: [createMockClip({
       id: CLIP_ID,
       trackId: 'video-1',
-      type: 'video',
       startTime: 0,
       duration: 5,
       inPoint: 0,
       outPoint: 5,
-    }] as never,
+    })],
     clipKeyframes: new Map(),
   } as never);
 
