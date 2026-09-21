@@ -1,4 +1,4 @@
-import common from '../../src/effects/_shared/common.wgsl?raw';
+import common from '../../src/effects/_shared/commonShader';
 import { imageGraphDefinition } from '../../src/effects/_shared/imageGraphDefinition';
 import { exposure } from '../../src/effects/color/exposure';
 import { hueShift } from '../../src/effects/color/hue-shift';

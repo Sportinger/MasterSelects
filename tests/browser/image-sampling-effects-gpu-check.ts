@@ -1,4 +1,4 @@
-import common from '../../src/effects/_shared/common.wgsl?raw';
+import common from '../../src/effects/_shared/commonShader';
 import { imageGraphDefinition } from '../../src/effects/_shared/imageGraphDefinition';
 import { mirror } from '../../src/effects/distort/mirror';
 import { pixelate } from '../../src/effects/distort/pixelate';

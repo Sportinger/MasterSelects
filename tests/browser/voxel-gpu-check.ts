@@ -1,4 +1,4 @@
-import common from '../../src/effects/_shared/common.wgsl?raw';
+import common from '../../src/effects/_shared/commonShader';
 import { voxelRelief } from '../../src/effects/stylize/voxel-relief';
 import { VoxelPass } from '../../src/engine/native3d/passes/VoxelPass';
 import { resolveRenderableSharedSceneCamera } from '../../src/engine/scene/SceneCameraUtils';

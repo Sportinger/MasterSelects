@@ -22,6 +22,7 @@ import { operatorFamilyOptions } from './operatorFamilyOptions';
 import { operatorConstantNumberPersistenceKey } from '../../../common/EditableDraggableNumberSettings';
 import type { OperatorValue } from '../../../../types/operatorGraph';
 import { getEffect } from '../../../../effects';
+import { OperatorColorInput } from './OperatorColorInput';
 
 const EMPTY_KEYS: Keyframe[] = [];
 export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { clip: TimelineClip; effectId: string; nodeId: string; projectedNode?: NodeGraphNode }) {
@@ -73,6 +74,8 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
         if (binding === undefined && constant !== undefined) {
           if (spec.type === 'boolean') return <ResolveInspectorRow key={spec.id} label={spec.label}><input aria-label={`${operator.label} ${spec.label}`} type="checkbox"
             checked={Boolean(constant)} onChange={event => safely(() => setOperatorConstant(clip.id, effectId, node.id, spec.id, event.target.checked))} /></ResolveInspectorRow>;
+          if (spec.type === 'color') return <ResolveInspectorRow key={spec.id} label={spec.label}><OperatorColorInput ariaLabel={`${operator.label} ${spec.label}`}
+            value={String(constant)} onChange={value => safely(() => setOperatorConstant(clip.id, effectId, node.id, spec.id, value))} /></ResolveInspectorRow>;
           if (spec.type === 'number') return <ResolveInspectorNumberRow key={spec.id} label={spec.label} ariaLabel={`${operator.label} ${spec.label}`}
             value={Number(constant)} defaultValue={Number(spec.default)} min={spec.min ?? -30} max={spec.max ?? 30} step={spec.step ?? 0.01}
             onChange={next => safely(() => setOperatorConstant(clip.id, effectId, node.id, spec.id, next))}
@@ -88,6 +91,8 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
         if (Array.isArray(binding) && Array.isArray(value)) return binding.map((key, i) => numberRow(key, `${spec.label} ${'XYZ'[i]}`, value[i], (spec.default as number[])[i], -1, 1));
         if (typeof binding !== 'string') return null;
         if (spec.type === 'boolean') return <ResolveInspectorRow key={spec.id} label={spec.label}><input aria-label={`${operator.label} ${spec.label}`} type="checkbox" checked={Boolean(value)} onChange={event => set(binding, event.target.checked)} /></ResolveInspectorRow>;
+        if (spec.type === 'color') return <ResolveInspectorRow key={spec.id} label={spec.label}><OperatorColorInput ariaLabel={`${operator.label} ${spec.label}`}
+          value={String(value)} onChange={next => set(binding, next)} /></ResolveInspectorRow>;
         if (spec.type === 'select') return <ResolveInspectorRow key={spec.id} label={spec.label}><InspectorSelect ariaLabel={`${operator.label} ${spec.label}`}
           value={String(value)} options={[...(spec.options ?? [])]} onChange={next => set(binding, next)} /></ResolveInspectorRow>;
         const control = effect.type === 'voxel-relief' ? VOXEL_RELIEF_PARAMS[binding]

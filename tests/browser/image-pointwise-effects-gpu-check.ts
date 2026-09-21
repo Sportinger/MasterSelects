@@ -1,4 +1,4 @@
-import common from '../../src/effects/_shared/common.wgsl?raw';
+import common from '../../src/effects/_shared/commonShader';
 import { imageGraphDefinition } from '../../src/effects/_shared/imageGraphDefinition';
 import { posterize } from '../../src/effects/stylize/posterize';
 import { threshold } from '../../src/effects/stylize/threshold';

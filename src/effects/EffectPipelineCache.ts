@@ -1,4 +1,4 @@
-import commonShader from './_shared/common.wgsl?raw';
+import commonShader from './_shared/commonShader';
 import type { FullscreenEffectDefinition } from './types';
 import { Logger } from '../services/logger';
 

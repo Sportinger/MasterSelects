@@ -7,7 +7,7 @@ import { getFlockOperator } from '../flock/operators/flockOperatorRegistry';
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/exclusiveMutationLease';
 
-export function editPreviewValue(control: PreviewValueControl, value: number | boolean) {
+export function editPreviewValue(control: PreviewValueControl, value: number | boolean | string) {
   const target = control.target;
   if ('effectId' in target) return target.storage === 'constant'
     ? setOperatorConstant(target.clipId, target.effectId, target.nodeId, target.parameter, value)

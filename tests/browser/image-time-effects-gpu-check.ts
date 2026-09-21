@@ -1,4 +1,4 @@
-import common from '../../src/effects/_shared/common.wgsl?raw';
+import common from '../../src/effects/_shared/commonShader';
 import { imageGraphDefinition } from '../../src/effects/_shared/imageGraphDefinition';
 import { grain } from '../../src/effects/stylize/grain';
 import { scanlines } from '../../src/effects/stylize/scanlines';

@@ -1,4 +1,4 @@
-import common from '../../src/effects/_shared/common.wgsl?raw';
+import common from '../../src/effects/_shared/commonShader';
 import { imageGraphDefinition } from '../../src/effects/_shared/imageGraphDefinition';
 import { vignette } from '../../src/effects/stylize/vignette';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';

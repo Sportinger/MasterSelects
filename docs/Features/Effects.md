@@ -163,6 +163,16 @@ the sample changes the real result. Pixelate uses the render resolution; Mirror
 keeps its boolean Horizontal/Vertical controls; RGB Split preserves center alpha.
 Each retains its existing parameter defaults and one fullscreen render pass.
 
+Blockify and Block Mosaic use the same coordinate/sampling compiler. Their graphs
+expose cell snapping, quantization or tile borders, and blending; both retain the
+alpha of the snapped sample and the original edge clamp. Block Mosaic replaces
+wall-clock animation with composition timeline time, including for legacy effects,
+so seeking and export reproduce the same tile pattern. Its hash uses the shared
+shader implementation. Bound color nodes read the canonical effect color (including
+eight-digit hex alpha) and update uniforms without recompiling the pipeline.
+Original parameter IDs, ranges and defaults remain unchanged; each effect uses
+one fullscreen pass.
+
 ### Analog Signal Lab
 
 `Analog Signal Lab` is a dedicated six-pass compute effect rather than a

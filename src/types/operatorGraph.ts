@@ -4,7 +4,7 @@ export type OperatorValue = number | boolean | string | [number, number] | [numb
 export type OperatorSignal = 'image' | 'pal-signal' | 'receiver-lines' | 'rgb' | 'alpha' | 'mask' | 'vec2' | 'vec3' | 'vec4' | 'texture' | 'uv' | 'material' | 'geometry' | 'primitive-mesh' | 'landmarks' | 'anchors' | 'depth' | 'surface' | 'force' | 'drag' | 'curves' | 'scene' | 'number' | 'boolean' | 'camera' | 'light' | 'field';
 export interface OperatorPort { id: string; label: string; type: OperatorSignal; required?: boolean; repeated?: boolean; contract?: Partial<NodePortContract> }
 export interface OperatorParameter {
-  id: string; label: string; type: 'number' | 'boolean' | 'vector' | 'select'; default: OperatorValue;
+  id: string; label: string; type: 'number' | 'boolean' | 'vector' | 'select' | 'color'; default: OperatorValue;
   min?: number; max?: number; step?: number; animatable?: boolean;
   /** Optional durable value semantics. Omitted means the registry has not declared them. */
   unit?: string;

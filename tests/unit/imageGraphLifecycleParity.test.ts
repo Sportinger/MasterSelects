@@ -81,6 +81,8 @@ describe('image graph lifecycle parity', () => {
       { type: 'vignette', parameter: 'amount', from: 0, to: 1, expected: 0.5 },
       { type: 'scanlines', parameter: 'opacity', from: 0.1, to: 0.7, expected: 0.4 },
       { type: 'grain', parameter: 'amount', from: 0.05, to: 0.25, expected: 0.15 },
+      { type: 'blockify', parameter: 'scale', from: 2, to: 30, expected: 16 },
+      { type: 'block-mosaic', parameter: 'amount', from: 0, to: 1, expected: 0.5 },
     ] as const;
     for (const item of cases) {
       const id = `${item.type}-lifecycle`, clipId = `${item.type}-clip`;
@@ -102,7 +104,8 @@ describe('image graph lifecycle parity', () => {
       const previewParams = effectOperatorParams(preview), exportParams = effectOperatorParams(exported);
       expect(previewParams[item.parameter]).toBeCloseTo(item.expected);
       expect(exportParams[item.parameter]).toBeCloseTo(item.expected);
-      const context = { uv: [0.9, 0.5] as [number, number], timelineTimeSeconds: 1 };
+      const context = { uv: [0.9, 0.5] as [number, number], resolution: [64, 37] as [number, number], timelineTimeSeconds: 1,
+        sampleImage: () => pixel };
       const previewPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(preview), previewParams), pixel, context);
       const exportPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(exported), exportParams), pixel, context);
       expect(previewPixel).toEqual(exportPixel);
@@ -125,6 +128,20 @@ describe('image graph lifecycle parity', () => {
     const atOne = evaluateImageOperatorPlan(plan, pixel, { uv: [0.37, 0.61], timelineTimeSeconds: 1 });
     const repeated = evaluateImageOperatorPlan(plan, pixel, { uv: [0.37, 0.61], timelineTimeSeconds: 1 });
     const sought = evaluateImageOperatorPlan(plan, pixel, { uv: [0.37, 0.61], timelineTimeSeconds: 2.25 });
+    expect(repeated).toEqual(atOne);
+    expect(sought).not.toEqual(atOne);
+    expect(plan.key).toBe(compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect)).key);
+  });
+
+  it('repeats and seeks Block Mosaic from explicit composition time', () => {
+    const effect: Effect = { id: 'block-mosaic-time', type: 'block-mosaic', name: 'Block Mosaic', enabled: true,
+      params: { scale: 8, amount: 1, speed: 2, colorA: '#33669980', colorB: '#f0c04040' } };
+    const plan = compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect));
+    const evaluate = (timelineTimeSeconds: number) => evaluateImageOperatorPlan(plan, pixel, {
+      uv: [0.37, 0.61], resolution: [64, 37], timelineTimeSeconds,
+      sampleImage: ([u, v]) => [u, v, (u + v) / 2, u > 0.5 ? 0.25 : 0.75],
+    });
+    const atOne = evaluate(1), repeated = evaluate(1), sought = evaluate(2.25);
     expect(repeated).toEqual(atOne);
     expect(sought).not.toEqual(atOne);
     expect(plan.key).toBe(compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect)).key);

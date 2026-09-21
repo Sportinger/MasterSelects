@@ -46,19 +46,24 @@ export function imageOperatorValuePreview(request: PreviewRequest, clip: Timelin
   const binding = request.node.binding;
   if (binding?.kind === 'effect-operator') {
     const selected = effectOperatorGraph(effect).nodes.find(node => node.id === binding.nodeId);
-    if (selected?.operator === 'values.boolean') {
+    if (selected?.operator === 'values.boolean' || selected?.operator === 'values.color') {
       const spec = getEffectOperator(selected.operator)!.parameters.find(parameter => parameter.id === 'value')!;
       const ownerKey = typeof selected.bindings.value === 'string' ? selected.bindings.value : undefined;
       const owner = ownerKey ? getEffect(effect.type)?.params[ownerKey] : undefined;
       const sampled = sampleOperatorParameter(selected, 'value', effectOperatorParams(effect), effect.id, keys, time);
-      const value = typeof sampled === 'boolean' ? sampled : Boolean(spec.default);
+      const color = selected.operator === 'values.color';
+      const value = color
+        ? (typeof sampled === 'string' ? sampled : String(spec.default))
+        : (typeof sampled === 'boolean' ? sampled : Boolean(spec.default));
       const controls: PreviewValueControl[] = [{ label: owner?.label ?? spec.label, value,
-        defaultValue: owner?.type === 'boolean' ? Boolean(owner.default) : Boolean(spec.default), portId: 'value', direction: 'output',
+        defaultValue: color
+          ? (owner?.type === 'color' ? String(owner.default) : String(spec.default))
+          : (owner?.type === 'boolean' ? Boolean(owner.default) : Boolean(spec.default)), portId: 'value', direction: 'output',
         target: ownerKey
           ? { clipId: clip.id, effectId: effect.id, nodeId: selected.id, parameter: 'value' }
           : { clipId: clip.id, effectId: effect.id, nodeId: selected.id, parameter: 'value', storage: 'constant' } }];
       return { key: request.key, revision: request.revision, time: request.time, status: 'live', label: 'Live value', controls,
-        drawing: { kind: 'text', lines: [value ? 'True' : 'False'] } };
+        drawing: { kind: 'text', lines: [color ? String(value) : value ? 'True' : 'False'] } };
     }
   }
   const scalar = imageScalarValues(request, effect, keys, time); if (!scalar) return undefined;

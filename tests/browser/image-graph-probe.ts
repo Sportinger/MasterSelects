@@ -1,4 +1,4 @@
-import common from '../../src/effects/_shared/common.wgsl?raw';
+import common from '../../src/effects/_shared/commonShader';
 import { invert } from '../../src/effects/color/invert';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
 import { imageGraphDefinition } from '../../src/effects/_shared/imageGraphDefinition';
@@ -10,6 +10,7 @@ import { checkPointwiseEffectsGpu } from './image-pointwise-effects-gpu-check';
 import { checkVignetteGpu } from './image-vignette-gpu-check';
 import { checkTimeEffectsGpu } from './image-time-effects-gpu-check';
 import { checkSamplingEffectsGpu } from './image-sampling-effects-gpu-check';
+import { checkBlockEffectsGpu } from './image-block-effects-gpu-check';
 
 async function checkGpu() {
   const adapter = await navigator.gpu?.requestAdapter();
@@ -74,7 +75,8 @@ async function checkGpu() {
     const vignetteComparisons = await checkVignetteGpu(device, sampler);
     const timeComparisons = await checkTimeEffectsGpu(device, sampler);
     const samplingComparisons = await checkSamplingEffectsGpu(device, sampler);
-    const workerResult = `${await checkWorkerImageGraphGpu(device)}; ${colorComparisons} remaining-color, ${pointwiseComparisons} pointwise, ${vignetteComparisons} vignette, ${timeComparisons} time-effect, and ${samplingComparisons} sampling-effect shader comparisons`;
+    const blockComparisons = await checkBlockEffectsGpu(device, sampler);
+    const workerResult = `${await checkWorkerImageGraphGpu(device)}; ${colorComparisons} remaining-color, ${pointwiseComparisons} pointwise, ${vignetteComparisons} vignette, ${timeComparisons} time-effect, ${samplingComparisons} sampling-effect, and ${blockComparisons} block-effect shader comparisons`;
     const validation = await device.popErrorScope();
     if (validation) throw new Error(validation.message);
     return `PASS: 64 RGBA pixels — legacy/default byte equality; bypass and rewired output equal input; alpha preserved; actual GPU output changes; ${workerResult}; no validation errors.`;

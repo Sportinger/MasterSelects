@@ -26,7 +26,7 @@ export interface PreviewFrame {
 }
 
 export interface PreviewValueControl {
-  label: string; value: number | boolean; defaultValue: number | boolean; min?: number; max?: number; step?: number;
+  label: string; value: number | boolean | string; defaultValue: number | boolean | string; min?: number; max?: number; step?: number;
   /** Shares editor-local numeric preferences with another view of this value. */
   persistenceKey?: string;
   target: { clipId: string; effectId: string; nodeId: string; parameter: string; storage?: 'constant' }

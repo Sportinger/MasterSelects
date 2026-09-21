@@ -3,6 +3,7 @@ import type {
   EffectDefinition,
   EffectParam,
 } from '../types';
+import { colorToRgba } from './catalogColor';
 
 type Primitive = number | boolean | string;
 
@@ -14,6 +15,7 @@ export interface CatalogEffectOptions {
   entryPoint: string;
   params?: Record<string, EffectParam>;
   animated?: boolean;
+  clock?: 'timeline';
   variantMap?: Record<string, number>;
 }
 const BASE_PARAMS: Record<string, EffectParam> = {
@@ -32,20 +34,6 @@ const BASE_PARAMS: Record<string, EffectParam> = {
   colorA: { type: 'color', label: 'Ink', default: '#111827', group: 'Color' },
   colorB: { type: 'color', label: 'Paper', default: '#f8fafc', group: 'Color' },
 };
-
-function colorToRgba(value: Primitive | undefined, fallback: string): [number, number, number, number] {
-  const hex = typeof value === 'string' ? value : fallback;
-  const normalized = hex.replace('#', '');
-  if (!/^[\da-f]{6}([\da-f]{2})?$/i.test(normalized)) {
-    return colorToRgba(fallback, '#000000');
-  }
-  return [
-    Number.parseInt(normalized.slice(0, 2), 16) / 255,
-    Number.parseInt(normalized.slice(2, 4), 16) / 255,
-    Number.parseInt(normalized.slice(4, 6), 16) / 255,
-    normalized.length === 8 ? Number.parseInt(normalized.slice(6, 8), 16) / 255 : 1,
-  ];
-}
 
 function numberParam(params: Record<string, Primitive>, key: string, fallback: number): number {
   const value = params[key];
@@ -76,8 +64,8 @@ export function createCatalogEffect(options: CatalogEffectOptions): EffectDefini
     entryPoint: options.entryPoint,
     uniformSize: 64,
     params,
-    requiresContinuousRender: options.animated,
-    packUniforms: (values, width, height) => {
+    requiresContinuousRender: options.clock === 'timeline' ? false : options.animated,
+    packUniforms: (values, width, height, timelineTimeSeconds = 0) => {
       const colorA = colorToRgba(values.colorA, '#111827');
       const colorB = colorToRgba(values.colorB, '#f8fafc');
       const variantValue = values.variant ?? values.kernel ?? values.shape ?? '';
@@ -89,7 +77,7 @@ export function createCatalogEffect(options: CatalogEffectOptions): EffectDefini
         numberParam(values, 'scale', 14),
         numberParam(values, 'amount', 0.75),
         numberParam(values, 'angle', 0),
-        typeof performance === 'undefined' ? 0 : performance.now() / 1_000,
+        options.clock === 'timeline' ? timelineTimeSeconds : typeof performance === 'undefined' ? 0 : performance.now() / 1_000,
         numberParam(values, 'speed', 0),
         variant,
         ...colorA,

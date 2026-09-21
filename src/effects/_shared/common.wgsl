@@ -134,12 +134,6 @@ fn smootherstep(edge0: f32, edge1: f32, x: f32) -> f32 {
   return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
 }
 
-// Random hash function
-fn hash(p: vec2f) -> f32 {
-  let p2 = vec2f(dot(p, vec2f(127.1, 311.7)), dot(p, vec2f(269.5, 183.3)));
-  return fract(sin(dot(p2, vec2f(12.9898, 78.233))) * 43758.5453);
-}
-
 // 2D noise
 fn noise2d(p: vec2f) -> f32 {
   let i = floor(p);

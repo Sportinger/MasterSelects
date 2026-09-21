@@ -13,7 +13,7 @@ import type { AnimatableProperty } from '../../types/animationProperties';
 import { getEffect } from '../../effects';
 
 /** Shared by the inspector and inline node values; animation keeps its owner. */
-export function setAnimatedOperatorParameter(clipId: string, effectId: string, nodeId: string, parameter: string, value: number | boolean) {
+export function setAnimatedOperatorParameter(clipId: string, effectId: string, nodeId: string, parameter: string, value: OperatorValue) {
   assertExclusiveTimelineMutationAllowed();
   const state = readTimelineRuntimeState(useTimelineStore), clip = state.clips.find(item => item.id === clipId);
   const effect = clip?.effects.find(item => item.id === effectId);
@@ -57,6 +57,7 @@ export function setOperatorParameter(clipId: string, effectId: string, nodeId: s
     const min = ownerSpec?.type === 'number' ? ownerSpec.min : spec.min, max = ownerSpec?.type === 'number' ? ownerSpec.max : spec.max;
     if (spec.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value) || value < (min ?? -Infinity) || value > (max ?? Infinity))) throw new Error('Parameter is outside its supported range.');
     if (spec.type === 'boolean' && typeof value !== 'boolean') throw new Error('Parameter requires a boolean value.');
+    if (spec.type === 'color' && (typeof value !== 'string' || !/^#[\da-f]{6}([\da-f]{2})?$/i.test(value))) throw new Error('Parameter requires a hex color.');
     if (spec.type === 'select' && (typeof value !== 'string' || !spec.options?.some(option => option.value === value))) throw new Error('Parameter option is unavailable.');
     if (typeof binding === 'string') params[binding] = value;
     else if (Array.isArray(binding) && Array.isArray(value)) binding.forEach((key, i) => { params[key] = value[i]; });
@@ -75,6 +76,7 @@ export function setOperatorConstant(clipId: string, effectId: string, nodeId: st
       throw new Error('Parameter is outside its supported range.');
     }
     if (spec.type === 'boolean' && typeof value !== 'boolean') throw new Error('Parameter requires a boolean value.');
+    if (spec.type === 'color' && (typeof value !== 'string' || !/^#[\da-f]{6}([\da-f]{2})?$/i.test(value))) throw new Error('Parameter requires a hex color.');
     if (spec.type === 'select' && (typeof value !== 'string' || !spec.options?.some(option => option.value === value))) throw new Error('Parameter option is unavailable.');
     if (spec.type === 'vector' && (!Array.isArray(value) || value.length !== 3
       || value.some(component => !Number.isFinite(component)))) throw new Error('Parameter requires a finite vector.');

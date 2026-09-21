@@ -7,5 +7,6 @@ export const blockify = createCatalogEffect({
 });
 export const blockMosaic = createCatalogEffect({
   id: 'block-mosaic', name: 'Block Mosaic', category: 'pixel', shader, entryPoint: 'blockMosaicFragment', animated: true,
+  clock: 'timeline',
   params: { scale: { type: 'number', label: 'Tile Size', default: 22, min: 4, max: 120, step: 1, group: 'Pattern' } },
 });

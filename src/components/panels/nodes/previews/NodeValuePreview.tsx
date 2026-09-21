@@ -7,6 +7,7 @@ import { getNodeHeight, getPortCenter } from '../canvas/canvasGeometry';
 import { inlineNumericPorts, previewRect } from './previewGeometry';
 import type { PreviewValueControl } from '../../../../services/nodePreview/previewTypes';
 import './NodeValuePreview.css';
+import { OperatorColorInput } from '../workspace/OperatorColorInput';
 
 /** A sibling of the transparent canvas hit target, so values remain real text
  * and focusable controls even when cards and images are drawn by the worker. */
@@ -16,7 +17,7 @@ export function NodeValuePreview({ node }: { node: NodeGraphNode }) {
   const [error, setError] = useState('');
   if (!node.preview?.enabled || !frame) return null;
   const rect = previewRect(getNodeHeight(node), node), drawing = frame.drawing;
-  const change = (control: PreviewValueControl, value: number | boolean) => {
+  const change = (control: PreviewValueControl, value: number | boolean | string) => {
     try { editPreviewValue(control, value); setError(''); return true; }
     catch (error) { setError(String(error)); return false; }
   };
@@ -24,6 +25,8 @@ export function NodeValuePreview({ node }: { node: NodeGraphNode }) {
     <span>{entry.label}</span>
     {typeof entry.value === 'boolean' ? <input type="checkbox" aria-label={`${node.label} ${entry.label} inline`} checked={entry.value}
       onChange={event => change(entry, event.target.checked)} onClick={event => event.currentTarget.blur()} />
+      : typeof entry.value === 'string' ? <OperatorColorInput ariaLabel={`${node.label} ${entry.label} inline`} value={entry.value}
+        onChange={value => change(entry, value)} />
       : <PreviewNumber entry={entry} revision={frame.revision} nodeId={node.id} label={`${node.label} ${entry.label} inline`}
           onChange={value => change(entry, value)} />}
   </label>;

@@ -115,6 +115,15 @@ describe('worker GPU image operator program', () => {
     expect(style[legacyField]).toBe(type === 'mirror' ? false : 0);
   });
 
+  it.each(['blockify', 'block-mosaic'] as const)('leaves %s graph execution to the authoritative worker compositor', type => {
+    const layer = { opacity: 1, blendMode: 'normal', effects: [
+      { id: type, name: type, type, enabled: true, params: { scale: 24, amount: 0.8, speed: 1 } },
+    ] } as unknown as Layer;
+    const style = resolveWorkerGpuVideoPresentationLayerStyle(layer);
+    expect(style.operatorProgram).toBeUndefined();
+    expect(style.complexEffectCount).toBe(1);
+  });
+
   it('preserves the compiled edited graph as a serializable layer style', () => {
     const style = resolveWorkerGpuVideoPresentationLayerStyle(layerWithEditedInvert());
     const defaults = resolveWorkerGpuVideoPresentationLayerStyle({ opacity: 1, blendMode: 'normal', effects: [

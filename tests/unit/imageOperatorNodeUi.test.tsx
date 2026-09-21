@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NodeValuePreview } from '../../src/components/panels/nodes/previews/NodeValuePreview';
 import { buildEffectOperatorGraph } from '../../src/services/nodeGraph/effectGraphProjection';
 import { describeNodePort } from '../../src/services/nodeGraph/nodePortPresentation';
@@ -11,6 +11,8 @@ import type { Effect } from '../../src/types/effects';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 import { getEditableDraggableNumberSettings, operatorConstantNumberPersistenceKey, saveEditableDraggableNumberSettings } from '../../src/components/common/EditableDraggableNumberSettings';
 import { createDefaultMirrorGraph } from '../../src/services/operators/samplingEffectGraphs';
+import { createDefaultBlockMosaicGraph } from '../../src/services/operators/blockEffectGraphs';
+import { OperatorColorInput } from '../../src/components/panels/nodes/workspace/OperatorColorInput';
 
 const initial = useTimelineStore.getState();
 const owner = {};
@@ -24,13 +26,84 @@ afterEach(() => {
 function fixture() {
   const graph = createDefaultInvertImageGraph();
   graph.nodes.push({ id: 'literal', operator: 'values.number', operatorVersion: 1, bindings: {}, constants: { value: 0.25 } });
+  graph.nodes.push({ id: 'color-literal', operator: 'values.color', operatorVersion: 1, bindings: {}, constants: { value: '#112233' } });
   graph.layout.literal = { x: 440, y: 220 };
+  graph.layout['color-literal'] = { x: 440, y: 620 };
   const effect: Effect = { id: 'invert-ui', name: 'Invert', type: 'invert', enabled: true, params: {}, operatorGraph: graph };
   const clip = createMockClip({ id: 'invert-clip', effects: [effect] });
   return { clip, effect };
 }
 
 describe('image operator node UI', () => {
+  it('clears pointer focus after color selection but retains keyboard focus', () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<OperatorColorInput ariaLabel="Graph color" value="#11223380" onChange={onChange} />);
+    let picker = screen.getByLabelText('Graph color');
+    picker.focus();
+    fireEvent.pointerDown(picker);
+    fireEvent.change(picker, { target: { value: '#abcdef' } });
+    expect(onChange).toHaveBeenLastCalledWith('#abcdef80');
+    expect(picker).not.toHaveFocus();
+    rerender(<OperatorColorInput ariaLabel="Graph color" value="#abcdef80" onChange={onChange} />);
+    picker = screen.getByLabelText('Graph color');
+    picker.focus();
+    fireEvent.keyDown(picker, { key: 'ArrowRight' });
+    fireEvent.change(picker, { target: { value: '#fedcba' } });
+    expect(picker).toHaveFocus();
+  });
+
+  it('normalizes an optional hex prefix while retaining alpha', () => {
+    const onChange = vi.fn();
+    render(<OperatorColorInput ariaLabel="Prefixless color" value="11223380" onChange={onChange} />);
+    const picker = screen.getByLabelText('Prefixless color');
+    expect(picker).toHaveValue('#112233');
+    fireEvent.change(picker, { target: { value: '#abcdef' } });
+    expect(onChange).toHaveBeenCalledWith('#abcdef80');
+  });
+  it('edits a graph-local color as a hex string through the shared inline color control', () => {
+    const { clip, effect } = fixture();
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })] });
+    const node = buildEffectOperatorGraph(clip, effect).nodes.find(candidate => candidate.id === 'color-literal')!;
+    node.preview = { enabled: true, requested: true, key: 'image-color-literal' };
+    const frame = imageOperatorValuePreview({ key: 'image-color-literal', revision: '1', time: 0, clipId: clip.id, node,
+      width: 164, height: 100, interval: 16, priority: 1 }, clip, effect)!;
+    expect(frame.controls?.[0]).toMatchObject({ value: '#112233', defaultValue: '#111827' });
+    previewTextStore.retain(owner, new Set(['image-color-literal']));
+    act(() => previewTextStore.publish(frame));
+    render(<NodeValuePreview node={node} />);
+    const picker = screen.getByLabelText('Color Color inline');
+    fireEvent.change(picker, { target: { value: '#abcdef' } });
+    const saved = useTimelineStore.getState().clips[0].effects[0];
+    expect(saved.operatorGraph?.nodes.find(item => item.id === 'color-literal')?.constants?.value).toBe('#abcdef');
+    expect(saved.params.value).toBeUndefined();
+  });
+
+  it('preserves a graph color alpha byte when the native color well changes RGB', () => {
+    const { clip, effect } = fixture();
+    effect.operatorGraph!.nodes.find(item => item.id === 'color-literal')!.constants!.value = '#11223380';
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })] });
+    const node = buildEffectOperatorGraph(clip, effect).nodes.find(candidate => candidate.id === 'color-literal')!;
+    node.preview = { enabled: true, requested: true, key: 'image-color-alpha' };
+    previewTextStore.retain(owner, new Set(['image-color-alpha']));
+    act(() => previewTextStore.publish(imageOperatorValuePreview({ key: 'image-color-alpha', revision: '1', time: 0, clipId: clip.id, node,
+      width: 164, height: 100, interval: 16, priority: 1 }, clip, effect)!));
+    render(<NodeValuePreview node={node} />);
+    fireEvent.change(screen.getByLabelText('Color Color inline'), { target: { value: '#abcdef' } });
+    expect(useTimelineStore.getState().clips[0].effects[0].operatorGraph?.nodes
+      .find(item => item.id === 'color-literal')?.constants?.value).toBe('#abcdef80');
+  });
+
+  it('uses the owning catalog color metadata for a bound color value', () => {
+    const effect: Effect = { id: 'mosaic-ui', name: 'Block Mosaic', type: 'block-mosaic', enabled: true,
+      params: { colorA: '#11223380' }, operatorGraph: createDefaultBlockMosaicGraph() };
+    const clip = createMockClip({ id: 'mosaic-clip', effects: [effect] });
+    const node = buildEffectOperatorGraph(clip, effect).nodes.find(candidate => candidate.id === 'color-a')!;
+    node.preview = { enabled: true, requested: true, key: 'mosaic-color-a' };
+    const frame = imageOperatorValuePreview({ key: 'mosaic-color-a', revision: '1', time: 0, clipId: clip.id, node,
+      width: 164, height: 100, interval: 16, priority: 1 }, clip, effect)!;
+    expect(frame.controls?.[0]).toMatchObject({ label: 'Ink', value: '#11223380', defaultValue: '#111827' });
+  });
+
   it('edits bound Mirror booleans without numeric coercion and preserves owner defaults', () => {
     const effect: Effect = { id: 'mirror-ui', name: 'Mirror', type: 'mirror', enabled: true, params: {}, operatorGraph: createDefaultMirrorGraph() };
     const clip = createMockClip({ id: 'mirror-clip', effects: [effect] });

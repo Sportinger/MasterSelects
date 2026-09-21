@@ -17,11 +17,13 @@ import { getEffect } from '../../effects';
 import { createDefaultPointwiseEffectGraph, type EditablePointwiseEffectType } from './pointwiseEffectGraphs';
 import { createDefaultContextualEffectGraph, type EditableContextualEffectType } from './contextualEffectGraphs';
 import { createDefaultSamplingEffectGraph, type EditableSamplingEffectType } from './samplingEffectGraphs';
+import { createDefaultBlockEffectGraph, type EditableBlockEffectType } from './blockEffectGraphs';
+import { normalizeCatalogColor } from '../../effects/_shared/catalogColor';
 
 const LOCAL_IMAGE_EFFECTS = new Set(['invert', 'brightness', 'contrast', 'saturation', 'exposure', 'levels', 'hue-shift', 'temperature', 'vibrance', 'threshold', 'posterize']);
-const CONTEXTUAL_IMAGE_EFFECTS = new Set(['vignette', 'scanlines', 'grain', 'pixelate', 'mirror', 'rgb-split']);
+const CONTEXTUAL_IMAGE_EFFECTS = new Set(['vignette', 'scanlines', 'grain', 'pixelate', 'mirror', 'rgb-split', 'blockify', 'block-mosaic']);
 export function isLocalImageEffectType(type: string): type is 'invert' | EditableColorEffectType | EditablePointwiseEffectType { return LOCAL_IMAGE_EFFECTS.has(type); }
-export function isImageGraphEffectType(type: string): type is 'invert' | EditableColorEffectType | EditablePointwiseEffectType | EditableContextualEffectType | EditableSamplingEffectType {
+export function isImageGraphEffectType(type: string): type is 'invert' | EditableColorEffectType | EditablePointwiseEffectType | EditableContextualEffectType | EditableSamplingEffectType | EditableBlockEffectType {
   return isLocalImageEffectType(type) || CONTEXTUAL_IMAGE_EFFECTS.has(type);
 }
 export function hasEffectOperatorGraph(type: string): boolean { return type === 'face-cables' || type === 'voxel-relief' || isImageGraphEffectType(type) || type === 'analog-signal-lab'; }
@@ -49,6 +51,8 @@ export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGra
           ? () => createDefaultContextualEffectGraph(effectType)
         : effectType === 'pixelate' || effectType === 'mirror' || effectType === 'rgb-split'
           ? () => createDefaultSamplingEffectGraph(effectType)
+        : effectType === 'blockify' || effectType === 'block-mosaic'
+          ? () => createDefaultBlockEffectGraph(effectType)
         : () => createDefaultColorEffectGraph(effectType);
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
     const graph = migrateImageOperatorGraph(saved);
@@ -109,7 +113,13 @@ export function effectOperatorParams(effect: EffectGraphOwner): Record<string, u
   if (isImageGraphEffectType(effect.type)) {
     const definition = getEffect(effect.type);
     const defaults = Object.fromEntries(Object.entries(definition?.params ?? {}).map(([id, spec]) => [id, spec.default]));
-    return { ...defaults, ...effect.params };
+    const resolved = { ...defaults, ...effect.params };
+    for (const [id, spec] of Object.entries(definition?.params ?? {})) {
+      if (spec.type === 'color' && typeof spec.default === 'string') {
+        resolved[id] = normalizeCatalogColor(resolved[id] as number | boolean | string | undefined, spec.default);
+      }
+    }
+    return resolved;
   }
   if (effect.type !== 'voxel-relief') return effect.params;
   const defaults: Record<string, unknown> = Object.fromEntries(Object.entries(VOXEL_RELIEF_PARAMS).map(([id, spec]) => [id, spec.default]));

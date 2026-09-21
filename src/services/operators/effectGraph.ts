@@ -85,7 +85,7 @@ export function sampleOperatorParameter(node: BoundOperatorNode, parameter: stri
       : value as OperatorValue;
   };
   const binding = node.bindings[parameter], fallback = spec?.default ?? 0;
-  if (!binding) return fallback;
+  if (!binding) return node.constants?.[parameter] ?? fallback;
   if (typeof binding === 'string') return sample(binding, fallback);
   if (Array.isArray(binding)) return binding.map((key, i) => Number(sample(key, Array.isArray(fallback) ? fallback[i] : 0))) as [number, number, number];
   return directionFromAngles(Number(sample(binding.yaw, 0)), Number(sample(binding.pitch, 0)));
