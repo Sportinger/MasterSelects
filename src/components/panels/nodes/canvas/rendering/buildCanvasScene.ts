@@ -67,7 +67,7 @@ export function buildCanvasScene(options: Options): CanvasScene {
       bypassable: !!group.bypassNodeId, bypassed: nodes.find(node => node.id === group.bypassNodeId)?.params?.enabled === false });
   }
   scene.nodes = nodes.map(node => ({ id: node.id, x: node.layout.x, y: node.layout.y, width: NODE_WIDTH, height: getNodeHeight(node),
-    label: inlineNumericPorts(node) ? '' : node.label, description: inlineNumericPorts(node) ? '' : node.description ?? 'Built-in processing node', kind: typeof node.params?.categoryLabel === 'string' ? node.params.categoryLabel : node.kind,
+    label: node.label, description: inlineNumericPorts(node) ? '' : node.description ?? 'Built-in processing node', kind: typeof node.params?.categoryLabel === 'string' ? node.params.categoryLabel : node.kind,
     runtime: node.runtime, color: COLORS[node.kind] ?? '#5cbed6', selected: node.id === options.selectedNodeId || options.selection.has(node.id),
     viewerEnabled: node.preview?.requested,
     preview: node.preview?.enabled ? { ...previewRect(getNodeHeight(node), node), key: node.preview.key, label: previewOutput(node, node.preview.portId)?.label ?? 'Values', text: inlineNumericPorts(node) } : undefined,

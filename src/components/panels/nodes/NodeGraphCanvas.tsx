@@ -163,6 +163,16 @@ export function NodeGraphCanvas({
   const nodesById = useMemo(() => new Map(displayNodes.map((node) => [node.id, node])), [displayNodes]);
   const nodesByIdRef = useRef(nodesById);
   nodesByIdRef.current = nodesById;
+  // Keep card props stable while only the viewport moves. Per-node closures
+  // here bypass React.memo and reconcile every port on every pan/zoom frame.
+  const toggleNodePreview = useCallback((nodeId: string) => {
+    const node = nodesByIdRef.current.get(nodeId);
+    if (node) toggleNode(nodePreviewPreferenceKey(sourceGraph.owner.id, node), nodeId);
+  }, [sourceGraph.owner.id, toggleNode]);
+  const selectNodePreviewOutput = useCallback((nodeId: string, portId: string) => {
+    const node = nodesByIdRef.current.get(nodeId);
+    if (node) selectOutput(nodePreviewPreferenceKey(sourceGraph.owner.id, node), portId);
+  }, [sourceGraph.owner.id, selectOutput]);
   const plugs = useMemo(() => getConnectionPlugs(graph.edges, nodesById), [graph.edges, nodesById]);
   const { hoveredPort, hoveredEdgeId, portHoverEvents } = useNodePortHover(nodesById);
   const graphBounds = useMemo(() => {
@@ -373,8 +383,8 @@ export function NodeGraphCanvas({
     const gesture = nodeDragGestureRef.current;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
 
-    const deltaX = (event.clientX - gesture.clientX) / viewport.zoom;
-    const deltaY = (event.clientY - gesture.clientY) / viewport.zoom;
+    const deltaX = (event.clientX - gesture.clientX) / visualViewportRef.current.zoom;
+    const deltaY = (event.clientY - gesture.clientY) / visualViewportRef.current.zoom;
     if (!gesture.moved && Math.hypot(event.clientX - gesture.clientX, event.clientY - gesture.clientY) < 3) return;
     gesture.moved = true;
     setDraftLayouts((current) => {
@@ -387,7 +397,7 @@ export function NodeGraphCanvas({
       }
       return next;
     });
-  }, [viewport.zoom]);
+  }, []);
 
   const finishNodeDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     const gesture = nodeDragGestureRef.current;
@@ -611,8 +621,8 @@ export function NodeGraphCanvas({
               onStartConnectionDrag={startConnectionDrag}
               onDisconnectPortEdges={disconnectPortEdges}
               onToggleNodeBypass={onToggleNodeBypass}
-              onTogglePreview={() => toggleNode(nodePreviewPreferenceKey(sourceGraph.owner.id, node), node.id)}
-              onPreviewOutput={(_id, portId) => selectOutput(nodePreviewPreferenceKey(sourceGraph.owner.id, node), portId)}
+              onTogglePreview={toggleNodePreview}
+              onPreviewOutput={selectNodePreviewOutput}
             />
           ))}
         </div>

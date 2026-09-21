@@ -24,14 +24,7 @@
 .node-value-computed { cursor: help; }
 .node-inline-math .node-workspace-port { margin-bottom: 52px; }
 .node-inline-math .node-workspace-port-type { visibility: hidden; }
-.node-inline-math .node-workspace-node-title, .node-inline-math .node-workspace-node-description { display: none; }
+.node-inline-math .node-workspace-node-description { display: none; }
 .node-math-symbol { position: absolute; pointer-events: none; z-index: 7; font: 500 26px/1 system-ui; color: #85878b; text-align: center; }
 .node-value-inline.node-value-status { color: var(--text-secondary, #999); font: 8px system-ui; text-align: left; }
-.node-math-mode { position: absolute; z-index: 7; font: 11px system-ui; -webkit-tap-highlight-color: transparent; }
-.node-math-mode:has([aria-expanded="true"]) { z-index: 9; }
-.node-math-mode .inspector-select-trigger { height: 25px; border-radius: 3px; color: var(--text-primary, #ddd); background: var(--input-bg, #202020); }
-.node-math-mode .inspector-select-menu { max-width: none; width: 160px; }
-.node-math-mode .inspector-select-trigger:focus:not(:focus-visible) { outline: none; }
-.node-math-mode .inspector-select-trigger:focus-visible { outline: 1px solid var(--accent-color, #79b8fa); }
-.node-math-mode [role="alert"] { display: block; color: var(--warning, #dbb270); background: #202020; }
 .operator-live-value { display: block; width: 100%; text-align: right; color: var(--text-primary, #ddd); font-variant-numeric: tabular-nums; cursor: help; }

@@ -5,7 +5,6 @@ import { KeyframeNodeCardPreview } from '../keyframes/KeyframeNodeCurve';
 import { NodeAnimationBadge } from '../keyframes/NodeAnimationBadge';
 import { NodePreviewOutput, NodeViewerButton } from '../previews/NodePreviewControls';
 import { NodeValuePreview } from '../previews/NodeValuePreview';
-import { MathNodeMode } from '../previews/MathNodeMode';
 import { inlineNumericPorts } from '../previews/previewGeometry';
 import { requestNodeAnimation } from '../../../../services/nodeGraph/nodeWorkspaceNavigation';
 import type { ConnectionDraft } from './canvasGeometry';
@@ -50,7 +49,6 @@ function getNodeHeaderLabel(node: NodeGraphNode): string {
 
 export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
   node,
-  clipId,
   canvasRendered = false,
   selectedNodeId,
   isInSelection = false,
@@ -197,7 +195,6 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
     </div>
     {inlineNumericPorts(node) && <span className="node-math-symbol" title={node.label} aria-label={`${node.label} operation`}
       style={{ left: node.layout.x + 18, top: node.layout.y + getNodePortStartY(node) + (node.inputs.length ? 56 : 8), width: 64 }}>{String(node.params?.mathSymbol ?? '')}</span>}
-    {clipId && <MathNodeMode node={node} clipId={clipId} />}
     <NodeValuePreview node={node} />
     {canvasRendered && focusBox && <div aria-hidden="true" className="node-workspace-keyboard-focus"
       style={{ left: node.layout.x + focusBox.left, top: node.layout.y + focusBox.top, width: focusBox.width, height: focusBox.height }} />}

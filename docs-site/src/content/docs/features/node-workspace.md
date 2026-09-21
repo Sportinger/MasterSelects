@@ -39,8 +39,9 @@ material and mesh operators reuse the scene registry. Existing relief parameters
 and animation bindings retain their values when opening an older project.
 
 Math cards put A and B on the left, the operation between them, and the result
-on the right. The operation dropdown is available both on the card and in the
-inspector. Changing modes keeps the node identity, compatible links and numeric
+on the right. The operation dropdown is available in the selected node's
+inspector, keeping the canvas card focused on ports and values. Changing modes
+keeps the node identity, compatible links and numeric
 bindings; inputs absent in the new mode disconnect in the same undo step.
 Flock math cards offer all operations supported by the Flock registry.
 
@@ -259,9 +260,10 @@ The original DOM retains hit targets, tooltips and keyboard navigation. A focuse
 node exposes its keyboard focus styling; the inspector stays a regular DOM UI.
 Worker startup/runtime failure replaces the transferred canvases with a main-thread
 software renderer; if Canvas 2D is unavailable, the DOM graph remains usable.
-Panning reuses unchanged node cards and connection controls. Repeated pointer
-movement within one dock pane does not publish another layout update or write
-the persisted layout. This separates graph drawing from the editor's main thread;
+Panning and zooming keep unchanged node-card props and connection callbacks
+stable, while spatial culling limits mounted cards to the visible graph region.
+Repeated pointer movement within one dock pane does not publish another layout
+update or write the persisted layout. This separates graph drawing from the editor's main thread;
 expensive video/effect rendering can still delay mouse event delivery.
 
 For development profiling, `measure-node-graph-interaction` on the authenticated

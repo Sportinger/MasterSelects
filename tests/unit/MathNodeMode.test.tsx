@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { MathNodeMode } from '../../src/components/panels/nodes/previews/MathNodeMode';
+import { NodeGraphNodeCard } from '../../src/components/panels/nodes/canvas/NodeGraphNodeCard';
 import type { NodeGraphNode } from '../../src/types/nodeGraph';
 
 const node = (operatorId: string): NodeGraphNode => ({
@@ -9,23 +9,10 @@ const node = (operatorId: string): NodeGraphNode => ({
 });
 
 describe('MathNodeMode', () => {
-  it.each(['image.luminance'])('does not show a misleading scalar-field selector for %s', operatorId => {
-    render(<MathNodeMode node={node(operatorId)} clipId="clip-image" />);
+  it.each(['image.luminance', 'math.subtract.scalar', 'math.subtract'])('keeps operation controls off node cards for %s', operatorId => {
+    render(<NodeGraphNodeCard node={node(operatorId)} clipId="clip-image" selectedNodeId={null} connectionDraft={null}
+      onSelectNode={() => {}} onStartNodeDrag={() => {}} onNodePointerMove={() => {}} onFinishNodeDrag={() => {}}
+      onStartConnectionDrag={() => {}} onDisconnectPortEdges={() => {}} />);
     expect(screen.queryByLabelText('Math operation for Subtract')).toBeNull();
-  });
-
-  it('shows only executable scalar variants for local image arithmetic', () => {
-    render(<MathNodeMode node={node('math.subtract.scalar')} clipId="clip-image" />);
-    fireEvent.click(screen.getByLabelText('Math operation for Subtract'));
-    expect(screen.getByRole('option', { name: 'Add' })).toBeTruthy();
-    expect(screen.queryByRole('option', { name: 'Constant' })).toBeNull();
-  });
-
-  it('continues to expose executable scalar-field math modes', () => {
-    render(<MathNodeMode node={node('math.subtract')} clipId="clip-voxel" />);
-    const operation = screen.getByLabelText('Math operation for Subtract');
-    expect(operation).toHaveTextContent('Subtract');
-    fireEvent.click(operation);
-    expect(screen.getByRole('option', { name: 'Constant' })).toBeTruthy();
   });
 });

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { NodeCanvasPlacement, NodeGraph, NodeGraphLayout } from '../../../../types/nodeGraph';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
@@ -18,7 +18,7 @@ export function useNodeCanvasPlacement(graph: NodeGraph, layoutScaleX: number) {
     return next;
   }, [graph, saved, layoutScaleX, revision]);
   const nodes = useMemo(() => graph.nodes.map(node => ({ ...node, layout: placement.nodes[node.id] })), [graph.nodes, placement]);
-  const save = (next: NodeCanvasPlacement, label: string, domainCommit?: () => Record<string, string> | void) => {
+  const save = useCallback((next: NodeCanvasPlacement, label: string, domainCommit?: () => Record<string, string> | void) => {
     const state = readTimelineRuntimeState(useTimelineStore);
     const clip = state.clips.find(candidate => candidate.id === graph.owner.id);
     if (clip && (state.isExporting || state.tracks.find(track => track.id === clip.trackId)?.locked)) return;
@@ -36,12 +36,12 @@ export function useNodeCanvasPlacement(graph: NodeGraph, layoutScaleX: number) {
         setRevision(value => value + 1);
       }
     } finally { if (batch.opened) endBatch(); }
-  };
-  const commit = (moves: Array<{ nodeId: string; layout: NodeGraphLayout }>, groupId?: string, domainCommit?: () => Record<string, string> | void) =>
-    save(moveCanvasPlacement(placement, moves, groupId), groupId ? 'Move node group' : 'Move nodes', domainCommit);
-  const toggleLock = (id: string) => {
+  }, [graph.id, graph.owner.id, saved]);
+  const commit = useCallback((moves: Array<{ nodeId: string; layout: NodeGraphLayout }>, groupId?: string, domainCommit?: () => Record<string, string> | void) =>
+    save(moveCanvasPlacement(placement, moves, groupId), groupId ? 'Move node group' : 'Move nodes', domainCommit), [placement, save]);
+  const toggleLock = useCallback((id: string) => {
     const group = placement.groups[id];
     if (group) save({ ...placement, groups: { ...placement.groups, [id]: { ...group, locked: group.locked === false } } }, 'Toggle group lock');
-  };
+  }, [placement, save]);
   return { nodes, placement, commit, toggleLock };
 }

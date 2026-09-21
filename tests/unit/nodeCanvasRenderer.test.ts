@@ -78,18 +78,21 @@ describe('worker delivery and failure recovery', () => {
     vi.useFakeTimers();
     const host = document.createElement('div'), ready = vi.fn(), viewReady = vi.fn();
     const messages: unknown[] = [];
-    const workers: Array<{ onmessage?: (event: { data: { type: string; revision?: number } }) => void; onerror?: () => void; terminate: ReturnType<typeof vi.fn> }> = [];
+    const workers: Array<{ onmessage?: (event: { data: { type: string; revision?: number; bitmap?: ImageBitmap } }) => void; onerror?: () => void; terminate: ReturnType<typeof vi.fn> }> = [];
+    const transferFromImageBitmap = vi.fn();
     vi.stubGlobal('Worker', class {
-      onmessage?: (event: { data: { type: string; revision?: number } }) => void; onerror?: () => void;
+      onmessage?: (event: { data: { type: string; revision?: number; bitmap?: ImageBitmap } }) => void; onerror?: () => void;
       terminate = vi.fn(); constructor() { workers.push(this); } postMessage(message: unknown) { messages.push(message); }
     });
+    vi.stubGlobal('OffscreenCanvas', class {});
     Object.defineProperty(HTMLCanvasElement.prototype, 'transferControlToOffscreen', { configurable: true, value: vi.fn(() => ({})) });
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (this: HTMLCanvasElement) {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (this: HTMLCanvasElement, type: string) {
+      if (type === 'bitmaprenderer') return { transferFromImageBitmap } as unknown as ImageBitmapRenderingContext;
       return { canvas: this, setTransform: vi.fn(), clearRect: vi.fn() } as unknown as CanvasRenderingContext2D;
     });
     const runtime = createNodeCanvasRuntime(host, ready, viewReady);
     runtime.update({ type: 'scene', scene }); runtime.update({ type: 'view', view, theme });
-    return { host, ready, viewReady, messages, workers, runtime };
+    return { host, ready, viewReady, messages, workers, runtime, transferFromImageBitmap };
   }
   it('delivers the latest pointer view without waiting for another animation frame', async () => {
     const s = setup();
@@ -97,12 +100,18 @@ describe('worker delivery and failure recovery', () => {
     await Promise.resolve();
     expect(s.messages.filter(m => (m as { type: string }).type === 'view')).toEqual([{ type: 'view', view: { ...view, panX: 39 }, theme }]);
     expect(s.ready).not.toHaveBeenCalled();
-    s.workers[0].onmessage?.({ data: { type: 'ready' } }); expect(s.ready).toHaveBeenCalledWith(true);
+    const bitmap = { width: 10, height: 8, close: vi.fn() } as unknown as ImageBitmap;
+    s.workers[0].onmessage?.({ data: { type: 'frame', bitmap } });
+    expect(s.transferFromImageBitmap).toHaveBeenCalledWith(bitmap);
+    expect(bitmap.close).toHaveBeenCalledOnce();
+    expect(s.messages).toContainEqual({ type: 'presented' });
+    expect(s.ready).toHaveBeenCalledWith(true);
     s.runtime.dispose(); expect(s.workers[0].terminate).toHaveBeenCalledOnce();
   });
   it('acknowledges the exact viewport revision after the worker paints it', () => {
     const s = setup();
-    s.workers[0].onmessage?.({ data: { type: 'view-ready', revision: 17 } });
+    const bitmap = { width: 10, height: 8, close: vi.fn() } as unknown as ImageBitmap;
+    s.workers[0].onmessage?.({ data: { type: 'frame', bitmap, revision: 17 } });
     expect(s.viewReady).toHaveBeenCalledWith(17);
     s.runtime.dispose();
   });

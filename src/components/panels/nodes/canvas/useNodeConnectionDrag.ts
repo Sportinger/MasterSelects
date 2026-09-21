@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import type { NodeGraphConnectionRequest, NodeGraphNode, NodeGraphPort } from '../../../../types/nodeGraph';
 import { canConnectPortReferences, createPortReference, getPortCenter, type ConnectionDraft, type NodeGraphPoint } from './canvasGeometry';
 import type { ConnectionPlug } from './connectionPlugs';
@@ -17,12 +17,12 @@ interface Options {
 export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, getGraphPoint, onConnectPorts, onReconnectPorts, onDisconnectEdge }: Options) {
   const [connectionDraft, setDraft] = useState<ConnectionDraft | null>(null);
   const currentDraft = useRef(connectionDraft);
-  const update = (draft: ConnectionDraft | null) => { currentDraft.current = draft; setDraft(draft); };
-  const cancel = () => {
+  const update = useCallback((draft: ConnectionDraft | null) => { currentDraft.current = draft; setDraft(draft); }, []);
+  const cancel = useCallback(() => {
     const draft = currentDraft.current;
     update(null);
     if (draft && canvasRef.current?.hasPointerCapture(draft.pointerId)) canvasRef.current.releasePointerCapture(draft.pointerId);
-  };
+  }, [canvasRef, update]);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && currentDraft.current) { event.preventDefault(); event.stopPropagation(); cancel(); }
@@ -31,10 +31,9 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, getGraphP
     window.addEventListener('blur', cancel);
     return () => { window.removeEventListener('keydown', key, true); window.removeEventListener('blur', cancel); cancel(); };
     // Cancel capture when switching graphs or unmounting, without mutating the graph.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graphId]);
+  }, [cancel, graphId]);
 
-  const start = (event: ReactPointerEvent, node: NodeGraphNode, port: NodeGraphPort, plug?: ConnectionPlug) => {
+  const start = useCallback((event: ReactPointerEvent, node: NodeGraphNode, port: NodeGraphPort, plug?: ConnectionPlug) => {
     if (port.metadata?.readOnly || plug?.edge.readOnly) { event.preventDefault(); event.stopPropagation(); return; }
     if (event.button !== 0 || currentDraft.current) return;
     event.preventDefault(); event.stopPropagation();
@@ -46,10 +45,10 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, getGraphP
       reconnectEdgeId: plug?.edge.id,
     });
     canvasRef.current?.setPointerCapture(event.pointerId);
-  };
-  const startConnectionDrag = (event: ReactPointerEvent, node: NodeGraphNode, port: NodeGraphPort) => {
+  }, [canvasRef, getGraphPoint, update]);
+  const startConnectionDrag = useCallback((event: ReactPointerEvent, node: NodeGraphNode, port: NodeGraphPort) => {
     if (onConnectPorts) start(event, node, port);
-  };
+  }, [onConnectPorts, start]);
   const startPlugDrag = (event: ReactPointerEvent<SVGGElement>, plug: ConnectionPlug) => {
     if (!onDisconnectEdge) return;
     const input = plug.port.direction === 'input';
