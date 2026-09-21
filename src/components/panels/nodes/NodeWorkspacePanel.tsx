@@ -408,6 +408,7 @@ export function NodeWorkspacePanel() {
         <NodeGraphCanvas
           key={subject.graph.id}
           graph={displayGraph!}
+          projectGroupStates={subject.projectGroupStates}
           selectedNodeId={selectedNode?.id ?? null}
           selectedNodeIds={selectedNodeIds.length > 1 ? selectedNodeIds : undefined}
           onSelectNode={selectNode}
@@ -434,6 +435,7 @@ export function NodeWorkspacePanel() {
           onToggleNodeBypass={unified.toggleBypass}
           onOpenAddMenu={adapter.supportsAddMenu ? setContextMenu : undefined}
           onToggleGroup={id => { unified.toggleGroup(id); const group = subject.graph.groups?.find(g => g.id === id); if (group) selectNode(group.proxyId); }}
+          onSetAllGroupsCollapsed={unified.setAllGroupsCollapsed}
           layoutScaleX={adapter.layoutScaleX}
         />
       </div>

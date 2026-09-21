@@ -10,7 +10,13 @@ including nested groups. The separate arrow collapses or expands the group;
 **Focus** fits that group. Header text adapts to zoom and truncates when needed;
 frame width and header height never grow to accommodate text. Collapse state and layout are
 saved with the clip and restored when reopening the project. Collapse affects only
-presentation, never rendering or a saved bake. Collapsed effects and subgroups appear as regular node cards with typed ports and an expansion arrow beside the title, without an enclosing group frame. Expanding or collapsing preserves zoom and pan. A short 220 ms transition moves cards, cables and surrounding nodes together; interrupted transitions continue from their current positions. Manual dragging stays direct, and reduced-motion preferences disable the transition.
+presentation, never rendering or a saved bake. Collapsed effects and subgroups appear as regular node cards with typed ports and an expansion arrow beside the title, without an enclosing group frame. Opening or closing an individual group preserves zoom and pan. A short 220 ms transition moves cards, cables and surrounding nodes together. When groups open together, peers start 100 ms apart from left to right using their final arranged positions. The next hierarchy level starts 140 ms after the last group of the previous level, so opening steps remain visibly staggered while overlapping. Closing reverses that sequence. Each step projects and lays out the intermediate hierarchy as an individual fold would: containing frames grow or shrink and surrounding nodes move along with them. Interrupted transitions continue from their current positions. Manual dragging stays direct, and reduced-motion preferences disable the transition.
+
+The toolbar's **Expand all / Collapse all** includes hidden and never-opened
+subgroups. Each action is one undo step. Zoom and pan continuously fit the currently
+displayed intermediate graph throughout the sequence, following its changing size
+instead of moving directly to the final bounds. Wheel zoom or a pointer gesture immediately takes control of the
+view again. Reduced motion makes the fit immediate too.
 
 `NodeGraphDocument` retains the domain graphs behind this common canvas. Explicit
 bindings route each edit to its existing owner; the UI does not maintain a second
@@ -50,7 +56,16 @@ The image compiler expands compositions inline without additional render passes.
 Expansion supports up to four nested levels within the existing image graph
 budgets. Kaleidoscope arranges nodes by data flow, recursively measures expanded
 subgroups, and moves Clip Output after the effect. Added nodes and changed wiring
-participate in layout. Explicitly dragged node positions remain anchored. When a group expands into unrelated nodes or sibling groups, those objects move outside the complete frame, even when their old positions were manually placed. Sibling groups move as a unit; membership stays unchanged. Collapsing restores positions displaced by expansion, so surrounding nodes move closer again. A subsequent manual move replaces that automatic return position.
+participate in layout. Explicitly dragged internal node positions remain anchored.
+On either fold direction, the connected outer chain also reflows, leaving 100 graph
+units between Source, complete effect frames or cards, and Clip Output. Source
+stays in place; old outer anchors cannot leave expanded-sized gaps after closing.
+When a group expands into unrelated nodes or sibling groups, those objects move outside the complete frame, even when their old positions were manually placed. Sibling groups move as a unit; membership stays unchanged. Collapsing restores positions displaced by expansion, so surrounding nodes move closer again. A subsequent manual move replaces that automatic return position.
+
+**Arrange** explicitly sorts the Kaleidoscope hierarchy and its connected outer
+chain again. It releases manual interior anchors, includes expanded subgroup sizes,
+and preserves graph connections and parameters. It is undoable and keeps the
+current viewport; use **Fit** to see the complete arrangement.
 
 ## Math and Voxel Relief
 

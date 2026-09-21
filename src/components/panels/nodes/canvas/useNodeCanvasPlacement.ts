@@ -3,7 +3,7 @@ import type { NodeCanvasPlacement, NodeGraph, NodeGraphLayout } from '../../../.
 import { useTimelineStore } from '../../../../stores/timeline';
 import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
 import { startBatch, endBatch } from '../../../../stores/historyStore';
-import { moveCanvasPlacement, reconcileCanvasPlacement } from './nodeCanvasPlacement';
+import { arrangeFlowPlacement, moveCanvasPlacement, reconcileCanvasPlacement } from './nodeCanvasPlacement';
 
 export function useNodeCanvasPlacement(graph: NodeGraph, layoutScaleX: number) {
   const saved = useTimelineStore(state => state.clips.find(clip => clip.id === graph.owner.id)?.nodeGraph?.canvasPlacements?.[graph.id]);
@@ -43,5 +43,6 @@ export function useNodeCanvasPlacement(graph: NodeGraph, layoutScaleX: number) {
     const group = placement.groups[id];
     if (group) save({ ...placement, groups: { ...placement.groups, [id]: { ...group, locked: group.locked === false } } }, 'Toggle group lock');
   }, [placement, save]);
-  return { nodes, placement, commit, toggleLock };
+  const arrange = useCallback(() => save(arrangeFlowPlacement(graph, placement), 'Arrange effect nodes'), [graph, placement, save]);
+  return { nodes, placement, commit, toggleLock, arrange };
 }

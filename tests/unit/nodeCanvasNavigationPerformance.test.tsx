@@ -127,4 +127,20 @@ describe('node canvas navigation render boundaries', () => {
     expect(background.style.transform).not.toBe(panned);
     expect(background.style.transform).toBe(inner.style.transform);
   });
+
+  it('fits the complete fold destination and clears pointer focus while keeping keyboard focus', () => {
+    const group = { id: 'effect', label: 'Example', color: '#fff', collapsed: true, proxyId: 'Source', nodeIds: ['Source'] };
+    const graph = { ...connectionFixture, groups: [group] }, fold = vi.fn(), select = vi.fn();
+    const view = render(<NodeGraphCanvas graph={graph} selectedNodeId={null} onSelectNode={select} onSetAllGroupsCollapsed={fold} />);
+    const canvas = view.container.querySelector('.node-workspace-canvas')!, inner = view.container.querySelector<HTMLElement>('.node-workspace-canvas-inner')!;
+    pointer(canvas, 'pointerdown', 40, 40); pointer(canvas, 'pointermove', 240, 170); pointer(canvas, 'pointerup', 240, 170);
+    const transform = inner.style.transform, button = view.getByRole('button', { name: 'Expand all' });
+    button.focus(); fireEvent.click(button, { detail: 1 });
+    expect(button).not.toHaveFocus(); expect(fold).toHaveBeenLastCalledWith(false);
+    view.rerender(<NodeGraphCanvas graph={{ ...graph, groups: [{ ...group, collapsed: false }] }} selectedNodeId={null} onSelectNode={select} onSetAllGroupsCollapsed={fold} />);
+    const collapse = view.getByRole('button', { name: 'Collapse all' });
+    collapse.focus(); fireEvent.click(collapse, { detail: 0 });
+    expect(collapse).toHaveFocus(); expect(fold).toHaveBeenLastCalledWith(true);
+    expect(inner.style.transform).not.toBe(transform);
+  });
 });

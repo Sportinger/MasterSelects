@@ -26,6 +26,7 @@ export interface NodeGraphClipSubject {
   selectedClip: TimelineClip;
   linkedClip: TimelineClip | null;
   graph: NodeGraph;
+  projectGroupStates?: (collapsed: Record<string, boolean>) => NodeGraph;
   document: NodeGraphDocument;
   view: NodeGraphView;
   availableViews: NodeGraphView[];
@@ -62,6 +63,12 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): Node
       faceTrackingAvailable: faceTracking.ready,
     });
     const graph = theme === 'general' ? buildUnifiedClipGraph(document, graphClip, clips, keyframes, faceTracking.createdAt) : getNodeGraphView(document, theme);
+    const projectGroupStates = theme === 'general' ? (collapsed: Record<string, boolean>) => {
+      const groups = { ...graphClip.nodeGraph?.groups };
+      for (const [id, value] of Object.entries(collapsed)) groups[id] = { ...groups[id], collapsed: value };
+      return buildUnifiedClipGraph(document, { ...graphClip, nodeGraph: { ...graphClip.nodeGraph,
+        version: 1, nodes: graphClip.nodeGraph?.nodes ?? [], groups } }, clips, keyframes, faceTracking.createdAt);
+    } : undefined;
     const view = document.views.find((candidate) => candidate.theme === theme) ?? document.views[0];
     const linkedSubtitle = graphContext.linkedClip && graphContext.linkedTrack
       ? ` + ${graphContext.linkedTrack.name} / ${graphContext.linkedTrack.type}`
@@ -79,6 +86,7 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): Node
       selectedClip: graphContext.selectedClip,
       linkedClip: graphContext.linkedClip,
       graph,
+      projectGroupStates,
       document,
       view,
       availableViews: document.views,

@@ -5,7 +5,8 @@ import type { NodeGraph, NodeGraphConnectionRequest, NodeGraphLayout, NodeGraphN
 import type { TimelineClip } from '../../../types/timeline';
 import { useTimelineStore } from '../../../stores/timeline';
 import { startBatch, endBatch } from '../../../stores/historyStore';
-import { createClipNodeGraphState } from '../../../services/nodeGraph';
+import { buildClipNodeGraphDocument, createClipNodeGraphState } from '../../../services/nodeGraph';
+import { buildUnifiedClipGraph } from '../../../services/nodeGraph/unifiedClipGraph';
 import { createEffectGraphActions, editEffectGraph, editCompositionInput } from '../../../services/operators/effectGraphEditing';
 import { createSceneGraphActions, editSceneGraph } from '../../../services/operators/sceneGraphEditing';
 import { groupOperators } from '../../../services/operators/operatorGroups';
@@ -179,6 +180,19 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
       if (endpoint) node = graph?.expandedNodes?.find(n => n.id === endpoint.nodeId) ?? node;
       if (edge.toPortId.startsWith('group-') || edge.fromPortId.startsWith('group-')) throw new Error('Reconnect the Clip input/output ports to reorder effects, or bypass an effect to skip it.');
       bindingActions(node)?.disconnectEdge(id.slice(id.lastIndexOf('/') + 1));
+    }),
+    setAllGroupsCollapsed: (collapsed: boolean) => safely(() => {
+      if (!clip) return;
+      const state = readTimelineRuntimeState(useTimelineStore), current = state.clips.find(c => c.id === clip.id);
+      if (!current || state.isExporting || state.tracks.find(t => t.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
+      const model = current.nodeGraph ?? createClipNodeGraphState(current);
+      // Inventory the fully expanded projection: hidden and never-opened descendants count too.
+      const expanded = buildUnifiedClipGraph(buildClipNodeGraphDocument(current), current, state.clips, [], undefined, true);
+      const ids = new Set([...(expanded.groups ?? []), ...(graph?.groups ?? [])].map(group => group.id));
+      const groups = { ...model.groups };
+      for (const id of ids) groups[id] = { ...groups[id], collapsed };
+      startBatch(collapsed ? 'Collapse all node groups' : 'Expand all node groups');
+      try { state.updateClip(current.id, { nodeGraph: { ...model, groups } }); } finally { endBatch(); }
     }),
     toggleGroup: (id: string) => safely(() => {
       if (!clip) return;

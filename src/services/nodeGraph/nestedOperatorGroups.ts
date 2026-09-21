@@ -1,7 +1,7 @@
 import type { NodeGraph, NodeGraphNode, NodeGraphPort, ClipNodeGraph } from '../../types/nodeGraph';
 
 /** Nested groups expose the actual typed endpoints; folding never changes executable edges. */
-export function foldOperatorGroups(graph: NodeGraph, state?: ClipNodeGraph): NodeGraph {
+export function foldOperatorGroups(graph: NodeGraph, state?: ClipNodeGraph, expandAllGroups = false): NodeGraph {
   const groups = graph.groups?.map(g => ({ ...g, nodeIds: [...g.nodeIds] })) ?? [];
   let nodes = graph.nodes.map(n => ({ ...n, layout: { ...n.layout } }));
   const edges = graph.edges.map(e => ({ ...e }));
@@ -15,7 +15,7 @@ export function foldOperatorGroups(graph: NodeGraph, state?: ClipNodeGraph): Nod
   }
   const expandedNodes = nodes;
   for (const g of groups.filter(g => g.parentId).toSorted((a, b) => depth(b.id) - depth(a.id))) {
-    g.collapsed = state?.groups?.[g.id]?.collapsed ?? g.collapsedByDefault ?? false;
+    g.collapsed = !expandAllGroups && (state?.groups?.[g.id]?.collapsed ?? g.collapsedByDefault ?? false);
     if (!g.collapsed) continue;
     const members = nodes.filter(n => g.nodeIds.includes(n.id)); if (!members.length) continue;
     const ids = new Set(members.map(n => n.id));

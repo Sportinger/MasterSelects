@@ -2,16 +2,16 @@ import type { NodeGraph, NodeGraphLayout, NodeGraphNode } from '../../../../type
 import { getNodeHeight, NODE_WIDTH } from './canvasGeometry';
 import { encloseNodeGroup } from './groupBounds';
 import { spacePreviewBlocks, spacePreviewNodes, type PreviewLayoutBlock } from './spacePreviewNodes';
-import { flowGroupLayout } from './flowGroupLayout';
+import { connectedFlowBlocks, flowGroupLayout } from './flowGroupLayout';
 
-interface GroupBlock extends PreviewLayoutBlock { nodeIds: string[]; group: boolean; growing?: boolean }
+interface GroupBlock extends PreviewLayoutBlock { nodeIds: string[]; group: boolean; growing?: boolean; flow?: boolean }
 
 /** Pack from the innermost group outward. Siblings must avoid the entire expanded
  * frame, including its empty space, header and nested frames, not just its cards.
  * Folding is projected first, so each pass uses the current proxy or contents.
  */
 export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<string> = new Set(), expanding: ReadonlySet<string> = new Set(),
-  displacements?: Map<string, NodeGraphLayout>): NodeGraphNode[] {
+  displacements?: Map<string, NodeGraphLayout>, outer?: { reflow: boolean; groupMoves: Map<string, NodeGraphLayout> }): NodeGraphNode[] {
   if (!graph.groups?.length && !fixedIds.size) return spacePreviewNodes(graph.nodes);
   const nodes = new Map(graph.nodes.map(node => [node.id, node]));
   const groups = new Map((graph.groups ?? []).map(group => [group.id, group]));
@@ -35,7 +35,12 @@ export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<strin
     })];
     const fixed = new Set(blocks.filter(block => block.nodeIds.some(nodeId => fixedIds.has(nodeId))).map(block => block.id));
     const arrange = flow || (!id && graph.groups?.some(group => group.layoutMode === 'flow'));
-    const arranged = arrange ? flowGroupLayout(blocks, graph.edges, fixed) : blocks;
+    const outerFlow = !id && arrange ? connectedFlowBlocks(blocks, graph.edges) : new Set<string>();
+    if (outer?.reflow) for (const blockId of outerFlow) fixed.delete(blockId);
+    const source = !id ? blocks.find(block => block.nodeIds.some(nodeId => nodes.get(nodeId)?.binding?.kind === 'clip-source')) : undefined;
+    const flowing = !id ? blocks.filter(block => outerFlow.has(block.id)) : blocks;
+    const flowPositions = new Map((arrange ? flowGroupLayout(flowing, graph.edges, fixed, source) : flowing).map(block => [block.id, block]));
+    const arranged = blocks.map(block => flowPositions.get(block.id) ?? block);
     const growing = arranged.filter(block => block.growing);
     const displaced = new Set<string>();
     if (growing.length) {
@@ -51,6 +56,8 @@ export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<strin
     const childBounds = [];
     for (let index = 0; index < blocks.length; index++) {
       const before = blocks[index], after = placed[index], dx = after.x - before.x, dy = after.y - before.y;
+      if ((dx || dy) && before.group && outerFlow.has(before.id) && (outer?.reflow || before.flow))
+        outer?.groupMoves.set(before.id.slice('group:'.length), { x: dx, y: dy });
       if (dx || dy) for (const nodeId of before.nodeIds) {
         const node = nodes.get(nodeId)!;
         if (displaced.has(before.id) && !displacements?.has(nodeId)) displacements?.set(nodeId, node.layout);
@@ -63,7 +70,7 @@ export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<strin
     const bounds = group.collapsed ? { left: Math.min(...members.map(node => node.layout.x)), top: Math.min(...members.map(node => node.layout.y)),
       right: Math.max(...members.map(node => node.layout.x + NODE_WIDTH)), bottom: Math.max(...members.map(node => node.layout.y + getNodeHeight(node))) }
       : encloseNodeGroup(members, childBounds);
-    return { id: `group:${group.id}`, nodeIds: memberIds, group: true, growing: expanding.has(group.id) || nested.some(block => block.growing),
+    return { id: `group:${group.id}`, nodeIds: memberIds, group: true, flow: flow || nested.some(block => block.flow), growing: expanding.has(group.id) || nested.some(block => block.growing),
       x: bounds.left, y: bounds.top, width: bounds.right - bounds.left, height: bounds.bottom - bounds.top };
   };
   layout();

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RefObject, SetStateAction } from 'react';
-import { clamp, DEFAULT_VIEWPORT, MAX_ZOOM, MIN_ZOOM } from './canvasGeometry';
-import type { NodeGraphPoint, Viewport } from './canvasGeometry';
+import { clamp, DEFAULT_VIEWPORT, FIT_MARGIN, MAX_ZOOM, MIN_ZOOM } from './canvasGeometry';
+import type { NodeBounds, NodeGraphPoint, Viewport } from './canvasGeometry';
 
 const WHEEL_ZOOM_SPEED = 0.0012;
 const ZOOM_SMOOTHING_MS = 65;
@@ -115,4 +115,10 @@ export function useNodeGraphViewport(canvasRef: RefObject<HTMLDivElement | null>
   }, [canvasRef, cancelZoom, commitViewport]);
 
   return { viewport, setViewport };
+}
+
+export function fittedNodeViewport(bounds: NodeBounds, width: number, height: number): Viewport {
+  const zoom = clamp(Math.min(Math.max(1, width - 2 * FIT_MARGIN) / Math.max(1, bounds.right - bounds.left),
+    Math.max(1, height - 2 * FIT_MARGIN) / Math.max(1, bounds.bottom - bounds.top)), MIN_ZOOM, MAX_ZOOM);
+  return { zoom, panX: FIT_MARGIN - bounds.left * zoom, panY: FIT_MARGIN - bounds.top * zoom };
 }

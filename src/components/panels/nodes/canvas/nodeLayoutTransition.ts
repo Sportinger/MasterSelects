@@ -24,10 +24,12 @@ export function createNodeLayoutTransition(before: NodeLayoutSnapshot, target: N
     to: next.get(node.id)?.layout ?? anchor(node.id, before, target) ?? node.layout,
   }));
   const changed = paths.some(({ from, to }) => from.x !== to.x || from.y !== to.y);
-  return { changed, sample(progress: number): NodeLayoutSnapshot {
+  const duration = NODE_LAYOUT_DURATION;
+  return { changed, duration, sample(progress: number): NodeLayoutSnapshot {
     if (progress >= 1) return target;
-    const t = 1 - (1 - Math.max(0, progress)) ** 3;
-    return { graph: base.graph, nodes: paths.map(({ node, from, to }) => ({ ...node,
-      layout: { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t } })) };
+    return { graph: base.graph, nodes: paths.map(({ node, from, to }) => {
+      const t = 1 - (1 - Math.max(0, Math.min(1, progress))) ** 3;
+      return { ...node, layout: { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t } };
+    }) };
   } };
 }

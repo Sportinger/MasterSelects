@@ -19,8 +19,9 @@ export function groupPlacementMembers(placement: NodeCanvasPlacement, id: string
 
 /** Existing positions are fixed obstacles. Only newly appearing nodes are packed. */
 export function reconcileCanvasPlacement(graph: NodeGraph, previous?: NodeCanvasPlacement): NodeCanvasPlacement {
-  const placement: NodeCanvasPlacement = { nodes: { ...previous?.nodes }, groups: { ...previous?.groups }, pinned: { ...previous?.pinned }, displaced: { ...previous?.displaced } };
+  const placement: NodeCanvasPlacement = { ...previous, nodes: { ...previous?.nodes }, groups: { ...previous?.groups }, pinned: { ...previous?.pinned }, displaced: { ...previous?.displaced } };
   const expanding = new Set<string>();
+  let folded = false;
   for (const [id, displacement] of Object.entries(placement.displaced!)) {
     const active = displacement.groups.filter(id => graph.groups?.some(group => group.id === id && !group.collapsed));
     if (active.length === displacement.groups.length) continue;
@@ -31,6 +32,7 @@ export function reconcileCanvasPlacement(graph: NodeGraph, previous?: NodeCanvas
   }
   for (const group of graph.groups ?? []) {
     const before = placement.groups[group.id];
+    if (before && before.collapsed !== !!group.collapsed) folded = true;
     if (!group.collapsed && before?.collapsed) expanding.add(group.id);
     placement.groups[group.id] = { ...before, nodeIds: group.collapsed ? [...new Set([...(before?.nodeIds ?? []), ...group.nodeIds])] : [...group.nodeIds],
       proxyId: group.proxyId, parentId: group.parentId, collapsed: !!group.collapsed, offset: before?.offset ?? { x: 0, y: 0 } };
@@ -66,7 +68,20 @@ export function reconcileCanvasPlacement(graph: NodeGraph, previous?: NodeCanvas
   for (const group of graph.groups ?? []) if (group.collapsed
     && [...groupPlacementMembers(placement, group.id)].some(id => fixed.has(id))) fixed.add(group.proxyId);
   const displaced = new Map<string, NodeGraphLayout>();
-  for (const node of spacePreviewGroups({ ...graph, nodes }, fixed, expanding, displaced)) placement.nodes[node.id] = node.layout;
+  const flow = graph.groups?.some(group => group.layoutMode === 'flow');
+  const outer = { reflow: !!flow && (folded || previous?.flowLayoutVersion !== 1), groupMoves: new Map<string, NodeGraphLayout>() };
+  const visible = new Set(graph.nodes.map(node => node.id));
+  for (const node of spacePreviewGroups({ ...graph, nodes }, fixed, expanding, displaced, outer)) placement.nodes[node.id] = node.layout;
+  // Keep hidden interiors and future regenerated layouts in the translated frame.
+  // Otherwise the next parameter edit would restore the old wide outer spacing.
+  for (const [id, delta] of outer.groupMoves) {
+    const group = placement.groups[id];
+    placement.groups[id] = { ...group, offset: { x: group.offset.x + delta.x, y: group.offset.y + delta.y } };
+    for (const member of groupPlacementMembers(placement, id)) if (!visible.has(member) && placement.nodes[member]) {
+      const point = placement.nodes[member]; placement.nodes[member] = { x: point.x + delta.x, y: point.y + delta.y };
+    }
+  }
+  if (flow) placement.flowLayoutVersion = 1;
   for (const [id, origin] of displaced) {
     const before = placement.displaced![id];
     placement.displaced![id] = { origin: before?.origin ?? origin, groups: [...new Set([...(before?.groups ?? []), ...expanding])] };
@@ -75,7 +90,7 @@ export function reconcileCanvasPlacement(graph: NodeGraph, previous?: NodeCanvas
 }
 
 export function moveCanvasPlacement(placement: NodeCanvasPlacement, moves: Array<{ nodeId: string; layout: NodeGraphLayout }>, groupId?: string): NodeCanvasPlacement {
-  const next = { nodes: { ...placement.nodes }, groups: { ...placement.groups }, pinned: { ...placement.pinned }, displaced: { ...placement.displaced } };
+  const next = { ...placement, nodes: { ...placement.nodes }, groups: { ...placement.groups }, pinned: { ...placement.pinned }, displaced: { ...placement.displaced } };
   if (groupId && moves.length) {
     const first = moves[0], before = placement.nodes[first.nodeId];
     const group = placement.groups[groupId];
@@ -91,4 +106,15 @@ export function moveCanvasPlacement(placement: NodeCanvasPlacement, moves: Array
   }
   for (const move of moves) { next.nodes[move.nodeId] = move.layout; next.pinned[move.nodeId] = true; delete next.displaced[move.nodeId]; }
   return next;
+}
+
+/** Explicit Arrange releases interior anchors only for the flow-layout pilot. */
+export function arrangeFlowPlacement(graph: NodeGraph, placement: NodeCanvasPlacement): NodeCanvasPlacement {
+  const next: NodeCanvasPlacement = { ...placement, flowLayoutVersion: undefined, nodes: { ...placement.nodes }, groups: { ...placement.groups },
+    pinned: { ...placement.pinned }, displaced: { ...placement.displaced } };
+  const members = new Set<string>();
+  for (const group of graph.groups ?? []) if (group.layoutMode === 'flow') groupPlacementMembers(placement, group.id).forEach(id => members.add(id));
+  for (const id of members) { delete next.nodes[id]; delete next.pinned![id]; delete next.displaced![id]; }
+  for (const [id, group] of Object.entries(next.groups)) if (members.has(group.proxyId)) next.groups[id] = { ...group, offset: { x: 0, y: 0 } };
+  return reconcileCanvasPlacement(graph, next);
 }

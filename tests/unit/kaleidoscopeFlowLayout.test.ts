@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { buildClipNodeGraphDocument } from '../../src/services/nodeGraph';
 import { buildUnifiedClipGraph } from '../../src/services/nodeGraph/unifiedClipGraph';
 import { createMockClip } from '../helpers/mockData';
-import { reconcileCanvasPlacement, moveCanvasPlacement } from '../../src/components/panels/nodes/canvas/nodeCanvasPlacement';
+import { reconcileCanvasPlacement, moveCanvasPlacement, arrangeFlowPlacement } from '../../src/components/panels/nodes/canvas/nodeCanvasPlacement';
+import { NODE_WIDTH } from '../../src/components/panels/nodes/canvas/canvasGeometry';
 import { nodeGroupBounds } from '../../src/components/panels/nodes/canvas/groupBounds';
 import { createDefaultUvDistortGraph } from '../../src/services/operators/uvDistortEffectGraphs';
 import type { NodeGraph, NodeCanvasPlacement } from '../../src/types/nodeGraph';
@@ -14,6 +15,44 @@ const project = (clip: ReturnType<typeof fixture>) => buildUnifiedClipGraph(buil
 const position = (graph: NodeGraph, placement: NodeCanvasPlacement) => graph.nodes.map(node => ({ ...node, layout: placement.nodes[node.id] }));
 
 describe('Kaleidoscope dynamic hierarchy layout', () => {
+  it('compacts the entire outer chain despite saved outer anchors and stays stable through repeated complete folds', () => {
+    const clip = fixture(), base = project(clip);
+    const openStates = Object.fromEntries(base.groups!.map(group => [group.id, { collapsed: false }]));
+    clip.nodeGraph = { version: 1, nodes: [], groups: openStates };
+    const expanded = project(clip);
+    let placement = reconcileCanvasPlacement(expanded);
+    const source = expanded.nodes.find(node => node.binding?.kind === 'clip-source')!;
+    const output = expanded.nodes.find(node => node.binding?.kind === 'clip-output')!;
+    placement = moveCanvasPlacement(placement, [{ nodeId: source.id, layout: { x: -1700, y: 350 } },
+      { nodeId: output.id, layout: { x: 12000, y: 50 } }]);
+    for (const collapsed of [true, false, true, false]) {
+      clip.nodeGraph.groups = { ...openStates, 'effect:k': { collapsed } };
+      const graph = project(clip);
+      placement = reconcileCanvasPlacement(graph, placement);
+      const bounds = nodeGroupBounds(graph, position(graph, placement)).get('effect:k')!;
+      expect(bounds.left - placement.nodes[source.id].x - NODE_WIDTH).toBeCloseTo(100);
+      expect(placement.nodes[output.id].x - bounds.right).toBeCloseTo(100);
+      expect(placement.nodes[source.id]).toEqual({ x: -1700, y: 350 });
+      const reread = reconcileCanvasPlacement(graph, placement);
+      expect(reread.nodes).toEqual(placement.nodes);
+      placement = reread;
+    }
+  });
+
+  it('explicitly arranges all opened interiors, clearing their manual anchors without changing the graph', () => {
+    const clip = fixture(), base = project(clip);
+    clip.nodeGraph = { version: 1, nodes: [], groups: Object.fromEntries(base.groups!.map(group => [group.id, { collapsed: false }])) };
+    const graph = project(clip), initial = reconcileCanvasPlacement(graph), unchanged = JSON.stringify(graph);
+    const sample = graph.nodes.find(node => node.binding?.kind === 'effect-operator' && node.binding.nodeId === 'sample')!;
+    const output = graph.nodes.find(node => node.binding?.kind === 'effect-operator' && node.binding.nodeId === 'output')!;
+    const moved = moveCanvasPlacement(initial, [{ nodeId: sample.id, layout: { x: -5000, y: -2000 } },
+      { nodeId: output.id, layout: { x: -5500, y: -3000 } }]);
+    const arranged = arrangeFlowPlacement(graph, moved);
+    expect(arranged.pinned?.[sample.id]).toBeUndefined(); expect(arranged.pinned?.[output.id]).toBeUndefined();
+    expect(arranged.nodes[output.id].x).toBeGreaterThan(arranged.nodes[sample.id].x + NODE_WIDTH);
+    expect(reconcileCanvasPlacement(graph, arranged).nodes).toEqual(arranged.nodes);
+    expect(JSON.stringify(graph)).toBe(unchanged);
+  });
   it('animates opening, closing and interrupted transitions from their current positions without mutating placements', () => {
     const clip = fixture(), compact = project(clip), compactPlacement = reconcileCanvasPlacement(compact);
     clip.nodeGraph = { version: 1, nodes: [], groups: Object.fromEntries(compact.groups!.map(group => [group.id, { collapsed: false }])) };

@@ -1,8 +1,24 @@
 import type { NodeGraphEdge } from '../../../../types/nodeGraph';
 import type { PreviewLayoutBlock } from './spacePreviewNodes';
 
+/** Both sides of an expanding effect participate, including bypass/side links. */
+export function connectedFlowBlocks(blocks: Array<PreviewLayoutBlock & { nodeIds: string[]; flow?: boolean }>, edges: NodeGraphEdge[]): Set<string> {
+  const owner = new Map(blocks.flatMap(block => block.nodeIds.map(id => [id, block.id] as const)));
+  const connected = new Set(blocks.filter(block => block.flow).map(block => block.id));
+  const links = edges.map(edge => [owner.get(edge.fromNodeId), owner.get(edge.toNodeId)]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [from, to] of links) if (from && to && (connected.has(from) || connected.has(to))) {
+      if (!connected.has(from) || !connected.has(to)) changed = true;
+      connected.add(from); connected.add(to);
+    }
+  }
+  return connected;
+}
+
 /** Arrange the current visible hierarchy, using measured child frames as single units. */
-export function flowGroupLayout<T extends PreviewLayoutBlock & { nodeIds: string[] }>(blocks: T[], edges: NodeGraphEdge[], fixed: ReadonlySet<string>): T[] {
+export function flowGroupLayout<T extends PreviewLayoutBlock & { nodeIds: string[] }>(blocks: T[], edges: NodeGraphEdge[], fixed: ReadonlySet<string>, anchor?: { x: number; y: number }): T[] {
   if (!blocks.length) return blocks;
   const owner = new Map(blocks.flatMap(block => block.nodeIds.map(id => [id, block.id] as const)));
   const incoming = new Map(blocks.map(block => [block.id, new Set<string>()]));
@@ -23,7 +39,7 @@ export function flowGroupLayout<T extends PreviewLayoutBlock & { nodeIds: string
     const consumers = blocks.filter(other => incoming.get(other.id)!.has(block.id));
     if (consumers.length) ranks.set(block.id, Math.max(0, Math.min(...consumers.map(other => ranks.get(other.id)!)) - 1));
   }
-  const origin = { x: Math.min(...blocks.map(block => block.x)), y: Math.min(...blocks.map(block => block.y)) };
+  const origin = anchor ?? { x: Math.min(...blocks.map(block => block.x)), y: Math.min(...blocks.map(block => block.y)) };
   const placed = new Map<string, T>();
   let x = origin.x;
   for (const column of [...new Set(ranks.values())].toSorted((a, b) => a - b)) {

@@ -257,6 +257,8 @@ export type ClipNodeGraphForcedBuiltIn = 'transform' | 'mask' | 'color';
 
 /** Presentation coordinates, independent of executable domain layouts. */
 export interface NodeCanvasPlacement {
+  /** Outer flow chains have been compacted, including legacy saved anchors. */
+  flowLayoutVersion?: 1;
   nodes: Record<string, NodeGraphLayout>;
   /** User moves are anchors; computed positions follow topology and fold changes. */
   pinned?: Record<string, true>;

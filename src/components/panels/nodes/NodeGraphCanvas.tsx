@@ -23,19 +23,16 @@ import type {
 import { NodeGraphEdges } from './canvas/NodeGraphEdges';
 import { NodeGraphNodeCard } from './canvas/NodeGraphNodeCard';
 import type { NodeGraphPoint, Viewport } from './canvas/canvasGeometry';
-import { useNodeGraphViewport } from './canvas/useNodeGraphViewport';
+import { fittedNodeViewport, useNodeGraphViewport } from './canvas/useNodeGraphViewport';
+import { useNodeFoldViewport } from './canvas/useNodeFoldViewport';
 import { useNodeConnectionDrag } from './canvas/useNodeConnectionDrag';
 import { getConnectionPlugs } from './canvas/connectionPlugs';
 import { NodeGraphPlugs } from './canvas/NodeGraphPlugs';
 import { useNodePortHover } from './canvas/useNodePortHover';
 import { useNodeMarqueeSelection } from './canvas/useNodeMarqueeSelection';
 import {
-  clamp,
   DEFAULT_VIEWPORT,
-  FIT_MARGIN,
   getGraphBounds,
-  MAX_ZOOM,
-  MIN_ZOOM,
 } from './canvas/canvasGeometry';
 
 export interface NodeGraphMove {
@@ -45,6 +42,7 @@ export interface NodeGraphMove {
 
 interface NodeGraphCanvasProps {
   graph: NodeGraph;
+  projectGroupStates?: (collapsed: Record<string, boolean>) => NodeGraph;
   selectedNodeId: string | null;
   /** Additional multi-selection (domains that support group operations). */
   selectedNodeIds?: readonly string[];
@@ -63,6 +61,7 @@ interface NodeGraphCanvasProps {
   onToggleNodeBypass?: (nodeId: string) => void;
   onOpenAddMenu?: (position: { x: number; y: number; layout: NodeGraphLayout; nodeId?: string | null }) => void;
   onToggleGroup?: (id: string) => void;
+  onSetAllGroupsCollapsed?: (collapsed: boolean) => void;
   onTransferNodes?: (nodeIds: string[], groupId: string) => Record<string, string>;
   layoutScaleX?: number;
 }
@@ -87,6 +86,7 @@ interface NodeDragGesture {
 
 export function NodeGraphCanvas({
   graph: sourceGraph,
+  projectGroupStates,
   selectedNodeId,
   selectedNodeIds,
   onSelectNode,
@@ -104,17 +104,21 @@ export function NodeGraphCanvas({
   onToggleNodeBypass,
   onOpenAddMenu,
   onToggleGroup,
+  onSetAllGroupsCollapsed,
   onTransferNodes,
   layoutScaleX = 1,
 }: NodeGraphCanvasProps) {
   const { preferences, toggleGlobal, toggleNode, selectOutput, aspectRatio } = useNodePreviewPreferences(sourceGraph.owner.id);
-  const targetGraph = useMemo(() => ({ ...sourceGraph, nodes: sourceGraph.nodes.map(node => {
+  const prepareGraph = useCallback((input: NodeGraph) => ({ ...input, nodes: input.nodes.map(node => {
     const preference = preferences.nodes[nodePreviewPreferenceKey(sourceGraph.owner.id, node)] ?? preferences.nodes[node.id];
     const port = previewOutput(node, preference?.portId);
     const imageRatio = port?.type === 'texture' || port?.type === 'mask' || port?.metadata?.semanticKind === 'operator:landmarks';
     return { ...node, preview: { enabled: preference?.enabled ?? true, requested: preference?.enabled ?? true,
       portId: preference?.portId, key: nodePreviewKey(sourceGraph.owner.id, node, preference?.portId), aspectRatio: imageRatio ? aspectRatio : 16 / 9 } };
-  }) }), [sourceGraph, preferences, aspectRatio]);
+  }) }), [sourceGraph.owner.id, preferences, aspectRatio]);
+  const targetGraph = useMemo(() => prepareGraph(sourceGraph), [sourceGraph, prepareGraph]);
+  const projectFolds = useMemo(() => projectGroupStates
+    ? (states: Record<string, boolean>) => prepareGraph(projectGroupStates(states)) : undefined, [projectGroupStates, prepareGraph]);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const recordRender = useCallback((_id: string, _phase: string, duration: number) => recordNodeCanvasRender(canvasRef.current, duration), []);
   const canvasSurfaceRef = useRef<HTMLDivElement | null>(null);
@@ -158,14 +162,14 @@ export function NodeGraphCanvas({
   const [groupMessage, setGroupMessage] = useState('');
   const multiSelection = useMemo(() => new Set(selectedNodeIds ?? []), [selectedNodeIds]);
 
-  const { nodes: spacedNodes, placement, commit: commitPlacement, toggleLock } = useNodeCanvasPlacement(targetGraph, layoutScaleX);
+  const { nodes: spacedNodes, placement, commit: commitPlacement, toggleLock, arrange } = useNodeCanvasPlacement(targetGraph, layoutScaleX);
   const targetNodes = useMemo(() => (
     spacedNodes.map((node) => !draftLayouts[node.id] ? node : ({
       ...node,
       layout: draftLayouts[node.id],
     }))
   ), [draftLayouts, spacedNodes]);
-  const { graph, nodes: displayNodes } = useNodeLayoutTransition(targetGraph, targetNodes, Object.keys(draftLayouts).length > 0);
+  const { graph, nodes: displayNodes, animating } = useNodeLayoutTransition(targetGraph, targetNodes, Object.keys(draftLayouts).length > 0, placement, projectFolds);
   const nodeGesture = nodeDragGestureRef.current;
   const freezeGroupFrames = nodeGesture && !nodeGesture.groupId
     && hasUnlockedSource(graph, placement, nodeGesture.members.map(member => member.nodeId));
@@ -202,21 +206,14 @@ export function NodeGraphCanvas({
     transform: `translate3d(${viewport.panX % 32}px, ${viewport.panY % 32}px, 0)`,
   }) as CSSProperties, [viewport.panX, viewport.panY]);
 
+  const foldViewport = useNodeFoldViewport(canvasRef, sourceGraph, targetGraph, graph, graphBounds, animating, visualViewportRef, setViewport);
+  const cancelFoldFit = foldViewport.cancel;
   const fitBounds = useCallback((bounds: typeof graphBounds) => {
+    cancelFoldFit();
     const canvas = canvasRef.current;
     if (!canvas) return;
-
-    const width = Math.max(1, canvas.clientWidth - (FIT_MARGIN * 2));
-    const height = Math.max(1, canvas.clientHeight - (FIT_MARGIN * 2));
-    const boundsWidth = Math.max(1, bounds.right - bounds.left);
-    const boundsHeight = Math.max(1, bounds.bottom - bounds.top);
-    const nextZoom = clamp(Math.min(width / boundsWidth, height / boundsHeight), MIN_ZOOM, MAX_ZOOM);
-    setViewport({
-      zoom: nextZoom,
-      panX: FIT_MARGIN - (bounds.left * nextZoom),
-      panY: FIT_MARGIN - (bounds.top * nextZoom),
-    });
-  }, [setViewport]);
+    setViewport(fittedNodeViewport(bounds, canvas.clientWidth, canvas.clientHeight));
+  }, [setViewport, cancelFoldFit]);
   const fitGraph = useCallback(() => fitBounds(graphBounds), [fitBounds, graphBounds]);
   const focusGroup = useCallback((id: string) => {
     const members = new Set(graph.groups?.find(g => g.id === id)?.nodeIds);
@@ -240,8 +237,9 @@ export function NodeGraphCanvas({
   }, [graph.nodes, selectedNodeId, fitGraph]);
 
   const resetView = useCallback(() => {
+    cancelFoldFit();
     setViewport(DEFAULT_VIEWPORT);
-  }, [setViewport]);
+  }, [setViewport, cancelFoldFit]);
 
   const getGraphPointFromClient = useCallback((clientX: number, clientY: number): NodeGraphPoint => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -508,8 +506,19 @@ export function NodeGraphCanvas({
               Disconnect
             </button>
           )}
-          <button type="button" className="node-workspace-toolbar-button" onClick={fitGraph}>Fit</button>
-          <button type="button" className="node-workspace-toolbar-button" onClick={resetView}>Reset</button>
+          <button type="button" className="node-workspace-toolbar-button" onClick={event => { fitGraph(); if (event.detail > 0) event.currentTarget.blur(); }}>Fit</button>
+          {!!targetGraph.groups?.length && onSetAllGroupsCollapsed && <button type="button" className="node-workspace-toolbar-button"
+            title="Expand or collapse every group, including nested groups" onClick={event => {
+              const collapsed = !targetGraph.groups?.some(group => group.collapsed);
+              foldViewport.request(collapsed);
+              onSetAllGroupsCollapsed(collapsed);
+              if (event.detail > 0) event.currentTarget.blur();
+            }}>{targetGraph.groups.some(group => group.collapsed) ? 'Expand all' : 'Collapse all'}</button>}
+          {targetGraph.groups?.some(group => group.layoutMode === 'flow') && <button type="button" className="node-workspace-toolbar-button"
+            title="Arrange Kaleidoscope and its connected outer nodes by data flow" onClick={event => {
+              arrange(); if (event.detail > 0) event.currentTarget.blur();
+            }}>Arrange</button>}
+          <button type="button" className="node-workspace-toolbar-button" onClick={event => { resetView(); if (event.detail > 0) event.currentTarget.blur(); }}>Reset</button>
           <span className="node-workspace-zoom">{Math.round(viewport.zoom * 100)}%</span>
         </div>
       </div>
