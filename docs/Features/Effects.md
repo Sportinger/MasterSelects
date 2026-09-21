@@ -252,6 +252,18 @@ copies of the options. Unknown or missing selections use the declared default;
 missing or malformed select definitions fail validation. Choice nodes currently
 require an existing effect binding and are not offered as unbound Add Node items.
 
+Lazy image branches inside sequence and kernel reductions retain the current
+sample index, including through nested branches and resampling scopes. Only the
+selected branch runs for each sample. The CPU reference and GPU compiler use
+the same scope contract; scopes sampled outside a reduction cannot accidentally
+reuse its loop context. Index nodes remain invalid outside their corresponding
+reduction, and nested reductions still require the existing pass-planning rules.
+Pure image selection does not acquire a coordinate dependency or another pass.
+Scoped sampling uses the base mip level of the existing single-level image and
+intermediate textures, with the existing sampler's filtering and addressing.
+This also permits image-dependent branches and loop bounds without implicit
+texture derivatives. External video textures retain their base-level sampling.
+
 ### Graph-internal texture stages
 
 `image.materialize` creates an explicit texture boundary inside an image graph.

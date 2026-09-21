@@ -97,7 +97,7 @@ describe('image graph render integration', () => {
     const packed = definition.packUniforms({}, 1280, 720)!;
     expect(definition.uniformSize).toBe(272);
     expect([...packed.slice(64)]).toEqual([0, 0, 1280, 720]);
-    expect(definition.shader).toContain('fn sampleImageGraphSource(uv: vec2f) -> vec4f { return textureSample(inputTex, texSampler, uv); }');
+    expect(definition.shader).toContain('fn sampleImageGraphSource(uv: vec2f) -> vec4f { return textureSampleLevel(inputTex, texSampler, uv, 0.0); }');
     expect(definition.shader).toContain('input.uv, imageGraphRuntime.inputResolution, imageGraphRuntime.imageParameters');
   });
 

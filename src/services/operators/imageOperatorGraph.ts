@@ -32,7 +32,7 @@ export interface ImageOperatorPlan extends ImageOperatorProgram {
   capabilities: readonly ImageOperatorCapability[];
   instructions: ImagePlanInstruction[];
   output: number;
-  sampleScopes: readonly { id: number; output: number }[];
+  sampleScopes: readonly ImageOperatorSampleScope[];
   kernelScopes?: readonly { id: number; sample: number; weight: number }[];
   rectScopes?: readonly { id: number; sample: number; weight: number }[];
   sequenceScopes?: readonly { id: number; sample: number; weight: number }[];
@@ -40,6 +40,11 @@ export interface ImageOperatorPlan extends ImageOperatorProgram {
   passes?: readonly { id: string; program: ImageOperatorPlan; inputResources: readonly string[]; outputResource?: string }[];
   resources?: readonly { id: string; producerPassId: string; format: 'rgba16float' }[];
   previewResourceId?: string;
+}
+export interface ImageOperatorSampleScope {
+  id: number;
+  output: number;
+  reducerContext?: { kind: 'kernel' | 'sequence'; id: number };
 }
 export interface ImageOperatorPreviewTarget { nodeId: string; direction: 'input' | 'output'; portId: string }
 export type { ImageOperatorCompileContext } from './imageOperatorChoice';
@@ -96,12 +101,16 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
   const instructions: ImagePlanInstruction[] = [], registers = new Map<string, number>(), visiting = new Set<string>();
   const parameterSlots = new Map<string, number>(), parameterValues: number[] = [];
   const resourceInputs: string[] = [];
-  const sampleScopes: Array<{ id: number; output: number }> = [];
+  const sampleScopes: ImageOperatorSampleScope[] = [];
   const kernelScopes: Array<{ id: number; sample: number; weight: number }> = [];
   const rectScopes: Array<{ id: number; sample: number; weight: number }> = [];
   const sequenceScopes: Array<{ id: number; sample: number; weight: number }> = [];
   const scopeBySource = new Map<string, number>(); let nextScopeId = 1;
   let activeScope = 0, activeKernelScope: number | undefined, activeSequenceScope: number | undefined;
+  const reducerContext = (): ImageOperatorSampleScope['reducerContext'] => activeKernelScope !== undefined
+    ? { kind: 'kernel', id: activeKernelScope }
+    : activeSequenceScope !== undefined ? { kind: 'sequence', id: activeSequenceScope } : undefined;
+  const reducerContextKey = (capture = reducerContext()) => capture ? `${capture.kind}:${capture.id}` : 'root';
   const emit = (instruction: ImagePlanInstruction) => instructions.push({ ...instruction, scope: activeScope }) - 1;
   function source(target: BoundOperatorNode, input: string) {
     const item = incoming.get(`${target.id}:${input}`)?.[0];
@@ -132,23 +141,24 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       case 'image.resolution': register = emit({ nodeId: current.id, operation: 'resolution', type: 'vec2', inputs: [] }); break;
       case 'image.timeline-time': register = emit({ nodeId: current.id, operation: 'time', type: 'scalar', inputs: [] }); break;
       case 'image.kernel-index': {
-        if (activeKernelScope !== activeScope) throw new Error('image.kernel-index is only available inside a kernel reduction scope.');
+        if (activeKernelScope === undefined) throw new Error('image.kernel-index is only available inside a kernel reduction scope.');
         register = emit({ nodeId: current.id, operation: 'kernel-index', type: 'vec2', inputs: [] }); break;
       }
       case 'image.sequence-index': {
-        if (activeSequenceScope !== activeScope) throw new Error('image.sequence-index is only available inside a sequence reduction scope.');
+        if (activeSequenceScope === undefined) throw new Error('image.sequence-index is only available inside a sequence reduction scope.');
         register = emit({ nodeId: current.id, operation: output === 't' ? 'sequence-t' : 'sequence-index', type: 'scalar', inputs: [] }); break;
       }
       case 'image.sample': {
         const linked = source(current, 'image'), parentScope = activeScope;
         if (current.bypassed) { register = visit(linked.node, linked.output); break; }
         const uv = visitSource(current, 'uv');
-        const sourceKey = `${linked.node.id}:${linked.output}`;
+        const capture = reducerContext();
+        const sourceKey = `${reducerContextKey(capture)}:${linked.node.id}:${linked.output}`;
         let scope = scopeBySource.get(sourceKey);
         if (scope === undefined) {
           scope = nextScopeId++; scopeBySource.set(sourceKey, scope);
           activeScope = scope; const scopedOutput = visit(linked.node, linked.output); activeScope = parentScope;
-          sampleScopes.push({ id: scope, output: scopedOutput });
+          sampleScopes.push({ id: scope, output: scopedOutput, ...(capture ? { reducerContext: capture } : {}) });
         }
         register = emit({ nodeId: current.id, operation: 'sample-image', type: 'image', inputs: [uv], value: scope });
         break;
@@ -193,9 +203,9 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       case 'control.select.image': {
         const condition = visitSource(current, 'condition'), parentScope = activeScope;
         const branch = (input: 'falseValue' | 'trueValue') => {
-          const linked = source(current, input), scope = nextScopeId++;
+          const linked = source(current, input), scope = nextScopeId++, capture = reducerContext();
           activeScope = scope; const branchOutput = visit(linked.node, linked.output); activeScope = parentScope;
-          sampleScopes.push({ id: scope, output: branchOutput }); return scope;
+          sampleScopes.push({ id: scope, output: branchOutput, ...(capture ? { reducerContext: capture } : {}) }); return scope;
         };
         const falseScope = branch('falseValue'), trueScope = branch('trueValue');
         register = emit({ nodeId: current.id, operation: 'select-image', type: 'image', inputs: [condition, falseScope, trueScope] }); break;
@@ -485,11 +495,16 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     ...(capabilities.includes('resolution') ? ['inputResolution'] : []),
     ...(capabilities.includes('time') ? ['timelineTimeSeconds'] : []),
     ...(parameterValues.length ? ['imageParameters'] : [])].join(', ');
+  const sampleScopeById = new Map(sampleScopes.map(scope => [scope.id, scope]));
+  const reducerCallArgs = (scope: number) => {
+    const capture = sampleScopeById.get(scope)?.reducerContext;
+    return capture?.kind === 'kernel' ? ', kernelIndex' : capture?.kind === 'sequence' ? ', sequenceIndex, sequenceT' : '';
+  };
   const expressions = instructions.map((item, index) => {
     const args = item.inputs.map(input => `v${input}`);
     const expression = item.operation === 'input' ? 'pixel' : item.operation === 'uv' ? 'inputUv' : item.operation === 'resource-input' ? `sampleImageGraphResource${item.value}(inputUv)` : item.operation === 'kernel-index' ? 'kernelIndex' : item.operation === 'sequence-index' ? 'sequenceIndex' : item.operation === 'sequence-t' ? 'sequenceT' : item.operation === 'resolution' ? 'inputResolution'
       : item.operation === 'time' ? 'timelineTimeSeconds' : item.operation === 'sample-image'
-        ? `evaluateImageScope${item.value}(sampleImageGraphSource(${args[0]}), ${contextCallArgs(args[0])})`
+        ? `evaluateImageScope${item.value}(sampleImageGraphSource(${args[0]}), ${contextCallArgs(args[0])}${reducerCallArgs(item.value!)})`
       : item.operation === 'kernel-sum' ? `imageKernelReduce${item.value}(${args[0]}, pixel, inputUv${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''})`
       : item.operation === 'kernel-weight-sum' ? `kernelResult${item.inputs[0]}.weightSum`
       : item.operation === 'rect-sum' ? `imageRectReduce${item.value}(${args[0]}, ${args[1]}, pixel, inputUv${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''})`
@@ -549,7 +564,8 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     if (item.operation === 'rect-sum') return `  let rectResult${index} = ${expression};\n  let v${index}: vec4f = rectResult${index}.sum;`;
     if (item.operation === 'sequence-sum') return `  let sequenceResult${index} = ${expression};\n  let v${index}: vec4f = sequenceResult${index}.sum;`;
     if (item.operation === 'select-image') {
-      const call = (scope: number) => `evaluateImageScope${scope}(pixel, ${contextCallArgs('inputUv')})`;
+      const inputUv = capabilities.includes('uv') ? 'inputUv' : 'vec2f(0.0)';
+      const call = (scope: number) => `evaluateImageScope${scope}(pixel, ${contextCallArgs(inputUv)}${reducerCallArgs(scope)})`;
       return `  var v${index}: vec4f;\n  if (${args[0]}) { v${index} = ${call(item.inputs[2])}; } else { v${index} = ${call(item.inputs[1])}; }`;
     }
     return `  let v${index}: ${type} = ${expression};`;
@@ -570,7 +586,9 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
   if (capabilities.includes('time')) scopeParameters.push('timelineTimeSeconds: f32');
   if (parameterValues.length) scopeParameters.push('imageParameters: ImageOperatorParameters');
   const scopeFunctions = sampleScopes.toSorted((a, b) => b.id - a.id).map(scope => [
-    `fn evaluateImageScope${scope.id}(${scopeParameters.join(', ')}) -> vec4f {`, '  let pixel = inputColor;',
+    `fn evaluateImageScope${scope.id}(${[...scopeParameters,
+      ...(scope.reducerContext?.kind === 'kernel' ? ['kernelIndex: vec2f'] : scope.reducerContext?.kind === 'sequence' ? ['sequenceIndex: f32', 'sequenceT: f32'] : []),
+    ].join(', ')}) -> vec4f {`, '  let pixel = inputColor;',
     ...expressions.filter((_line, index) => instructions[index].scope === scope.id), `  return v${scope.output};`, '}',
   ].join('\n'));
   const reducerWgsl = emitImageReducerWgsl({ instructions, expressions, kernelScopes, rectScopes, sequenceScopes, scopeParameters, capabilities, hasParameters: !!parameterValues.length });

@@ -34,7 +34,8 @@ export function evaluateImageOperatorPlan(plan: ImageOperatorPlan, pixel: [numbe
     else if (item.operation === 'resolution') values.push(context.resolution!);
     else if (item.operation === 'time') values.push(context.timelineTimeSeconds!);
     else if (item.operation === 'sample-image') {
-      const uv = args[0] as [number, number]; values.push(evaluateScope(item.value!, context.sampleImage!(uv), uv)[plan.sampleScopes.find(candidate => candidate.id === item.value)!.output]);
+      const uv = args[0] as [number, number];
+      values.push(evaluateScope(item.value!, context.sampleImage!(uv), uv, kernelIndex, sequenceIndex, sequenceT)[plan.sampleScopes.find(candidate => candidate.id === item.value)!.output]);
     }
     else if (item.operation === 'kernel-sum') {
       const extent = Math.max(0, Math.min(64, Math.trunc(args[0] as number)));
@@ -79,7 +80,7 @@ export function evaluateImageOperatorPlan(plan: ImageOperatorPlan, pixel: [numbe
     else if (item.operation === 'select-image') {
       const chosenScope = item.inputs[(args[0] as boolean) ? 2 : 1];
       const descriptor = plan.sampleScopes.find(candidate => candidate.id === chosenScope)!;
-      values.push(evaluateScope(chosenScope, scopePixel, scopeUv)[descriptor.output]);
+      values.push(evaluateScope(chosenScope, scopePixel, scopeUv, kernelIndex, sequenceIndex, sequenceT)[descriptor.output]);
     }
     else if (item.operation === 'constant') values.push(item.type === 'boolean' ? Boolean(item.value) : item.value ?? 0);
     else if (item.operation === 'parameter') values.push(plan.values[item.value ?? 0]);

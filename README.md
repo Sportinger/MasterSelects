@@ -120,6 +120,8 @@ Effect-bound choice nodes reuse the effect's dropdown options and defaults,
 without copying parameter definitions into saved graphs.
 Multi-stage image graphs share intermediate texture stages between consumers;
 simple graphs retain their single-pass execution.
+Conditional image branches also retain sample indices inside filter loops,
+without evaluating the unused branch.
 
 Node cables have visible semicircular plugs, animated attachment, and docked ghost
 previews over compatible sockets while dragging. Drag either end to reconnect,

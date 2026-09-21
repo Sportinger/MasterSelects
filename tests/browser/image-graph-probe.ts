@@ -18,6 +18,7 @@ import { checkEdgeDetectGpu } from './image-edge-detect-gpu-check';
 import { checkGlowGpu } from './image-glow-gpu-check';
 import { checkUvDistortGpu } from './image-uv-distort-gpu-check';
 import { checkImageOpticsGpu } from './image-optics-gpu-check';
+import { checkImageReducerBranchesGpu } from './image-reducer-branch-gpu-check';
 import { checkImageChoiceGpu } from './image-choice-gpu-check';
 
 async function checkGpu() {
@@ -93,7 +94,8 @@ async function checkGpu() {
     const opticsComparisons = await checkImageOpticsGpu(device);
     const choiceComparisons = await checkImageChoiceGpu(device);
     if (choiceComparisons !== 4) throw new Error(`Expected 4 choice comparisons, got ${choiceComparisons}`);
-    const workerResult = `${await checkWorkerImageGraphGpu(device)}; ${colorComparisons} remaining-color, ${pointwiseComparisons} pointwise, ${vignetteComparisons} vignette, ${timeComparisons} time-effect, ${samplingComparisons} sampling-effect, ${blockComparisons} block-effect, ${blurComparisons} blur, ${materializationComparisons} materialization, ${directionalBlurComparisons} directional-blur, ${edgeDetectComparisons} edge-detect, ${glowComparisons} Glow, ${uvDistortComparisons} UV-distort, ${opticsComparisons} optics, and ${choiceComparisons} choice shader comparisons`;
+    const reducerBranchComparisons = await checkImageReducerBranchesGpu(device);
+    const workerResult = `${await checkWorkerImageGraphGpu(device)}; ${colorComparisons} remaining-color, ${pointwiseComparisons} pointwise, ${vignetteComparisons} vignette, ${timeComparisons} time-effect, ${samplingComparisons} sampling-effect, ${blockComparisons} block-effect, ${blurComparisons} blur, ${materializationComparisons} materialization, ${directionalBlurComparisons} directional-blur, ${edgeDetectComparisons} edge-detect, ${glowComparisons} Glow, ${uvDistortComparisons} UV-distort, ${opticsComparisons} optics, ${choiceComparisons} choice, and ${reducerBranchComparisons} reducer-branch shader comparisons`;
     const validation = await device.popErrorScope();
     if (validation) throw new Error(validation.message);
     return `PASS: 64 RGBA pixels — legacy/default byte equality; bypass and rewired output equal input; alpha preserved; actual GPU output changes; ${workerResult}; no validation errors.`;

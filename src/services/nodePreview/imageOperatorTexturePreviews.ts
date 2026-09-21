@@ -6,6 +6,7 @@ import { imageOperatorPreviewPrefix, parseImageOperatorPreviewStage } from './im
 import { packImageOperatorRuntimeUniforms } from '../operators/imageOperatorRuntimeUniforms';
 import { ImageGraphPassRuntime } from '../../effects/ImageGraphPassRuntime';
 import type { ImageGraphPassBatch } from '../../effects/ImageGraphPassRuntime';
+import { imageGraphSampleExpression } from '../../effects/_shared/imageGraphSampling';
 
 export type ImageOperatorPreviewSource =
   | { kind: 'texture'; view: GPUTextureView }
@@ -71,12 +72,8 @@ function pipelineFor(device: GPUDevice, key: string, wgsl: string, source: Image
   const textureDeclaration = source.kind === 'external'
     ? '@group(0) @binding(1) var imagePreviewSource: texture_external;'
     : '@group(0) @binding(1) var imagePreviewSource: texture_2d<f32>;';
-  const sample = source.kind === 'external'
-    ? 'textureSampleBaseClampToEdge(imagePreviewSource, imagePreviewSampler, input.uv)'
-    : 'textureSample(imagePreviewSource, imagePreviewSampler, input.uv)';
-  const sampleAt = source.kind === 'external'
-    ? 'textureSampleBaseClampToEdge(imagePreviewSource, imagePreviewSampler, uv)'
-    : 'textureSample(imagePreviewSource, imagePreviewSampler, uv)';
+  const sample = imageGraphSampleExpression(source.kind, 'imagePreviewSource', 'imagePreviewSampler', 'input.uv', false);
+  const sampleAt = imageGraphSampleExpression(source.kind, 'imagePreviewSource', 'imagePreviewSampler', 'uv', true);
   const needsContext = needsTime || needsResolution;
   const runtimeDeclaration = hasValues && needsContext
     ? `struct ImagePreviewRuntime { imageParameters: ImageOperatorParameters, timelineTimeSeconds: f32, _pad0: f32, inputResolution: vec2f, };

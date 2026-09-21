@@ -4,6 +4,7 @@ import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams
 import { compileImageOperatorGraph } from '../../services/operators/imageOperatorGraph';
 import { imageOperatorRuntimeUniformSize, packImageOperatorRuntimeUniforms } from '../../services/operators/imageOperatorRuntimeUniforms';
 import type { ImageOperatorPlan } from '../../services/operators/imageOperatorGraph';
+import { imageGraphResourceSampleExpression, imageGraphSampleExpression } from './imageGraphSampling';
 
 export function imageGraphProgramShader(plan: ImageOperatorPlan, entryPoint: string, sourceKind: 'texture' | 'external' = 'texture'): string {
   const needsTime = plan.capabilities.includes('time'), needsResolution = plan.capabilities.includes('resolution'), needsContext = needsTime || needsResolution;
@@ -14,9 +15,9 @@ export function imageGraphProgramShader(plan: ImageOperatorPlan, entryPoint: str
     : plan.values.length ? '@group(0) @binding(2) var<uniform> imageParameters: ImageOperatorParameters;'
       : needsContext ? `struct ImageGraphRuntimeUniforms { timelineTimeSeconds: f32, _pad0: f32, inputResolution: vec2f, };\n@group(0) @binding(2) var<uniform> imageGraphRuntime: ImageGraphRuntimeUniforms;` : '';
   const sourceDeclaration = sourceKind === 'external' ? '@group(0) @binding(1) var inputTex: texture_external;' : '@group(0) @binding(1) var inputTex: texture_2d<f32>;';
-  const sample = sourceKind === 'external' ? 'textureSampleBaseClampToEdge(inputTex, texSampler, input.uv)' : 'textureSample(inputTex, texSampler, input.uv)';
-  const sampleAt = (uv: string) => sourceKind === 'external' ? `textureSampleBaseClampToEdge(inputTex, texSampler, ${uv})` : `textureSample(inputTex, texSampler, ${uv})`;
-  const resourceDeclarations = resources.map((_, index) => `@group(0) @binding(${3 + index}) var imageGraphResource${index}: texture_2d<f32>;\nfn sampleImageGraphResource${index}(uv: vec2f) -> vec4f { return textureSample(imageGraphResource${index}, texSampler, uv); }`).join('\n');
+  const sample = imageGraphSampleExpression(sourceKind, 'inputTex', 'texSampler', 'input.uv', false);
+  const sampleAt = (uv: string) => imageGraphSampleExpression(sourceKind, 'inputTex', 'texSampler', uv, true);
+  const resourceDeclarations = resources.map((_, index) => `@group(0) @binding(${3 + index}) var imageGraphResource${index}: texture_2d<f32>;\nfn sampleImageGraphResource${index}(uv: vec2f) -> vec4f { return ${imageGraphResourceSampleExpression(`imageGraphResource${index}`, 'texSampler', 'uv')}; }`).join('\n');
   return `${plan.wgsl}\n@group(0) @binding(0) var texSampler: sampler;\n${sourceDeclaration}\n${runtimeDeclaration}\n${resourceDeclarations}
 ${plan.capabilities.includes('sample') ? `fn sampleImageGraphSource(uv: vec2f) -> vec4f { return ${sampleAt('uv')}; }` : ''}
 @fragment fn ${entryPoint}(input: VertexOutput) -> @location(0) vec4f {
