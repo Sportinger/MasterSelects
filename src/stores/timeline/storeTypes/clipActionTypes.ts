@@ -195,7 +195,9 @@ export interface ClipEffectActions {
 
 export interface ColorCorrectionActions {
   ensureColorCorrection: (clipId: string) => void;
+  removeColorCorrection: (clipId: string) => void;
   updateColorCorrection: (clipId: string, updater: (current: ColorCorrectionState) => ColorCorrectionState) => void;
+  setColorCorrectionStackIndex: (clipId: string, stackIndex: number) => void;
   setColorCorrectionEnabled: (clipId: string, enabled: boolean) => void;
   setColorViewMode: (clipId: string, viewMode: ColorViewMode) => void;
   setColorNodeDisplayMode: (clipId: string, mode: NonNullable<ColorCorrectionState['ui']['nodeDisplayMode']>) => void;

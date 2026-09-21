@@ -65,6 +65,8 @@ export interface ColorGradeVersion {
 export interface ColorCorrectionState {
   version: 1;
   enabled: boolean;
+  /** Position among visual clip effects; zero keeps Color directly before them. */
+  stackIndex?: number;
   activeVersionId: string;
   versions: ColorGradeVersion[];
   ui: ColorCorrectionUiState;
@@ -107,6 +109,7 @@ export interface RuntimePrimaryColorParams {
 
 export interface RuntimeColorGrade {
   enabled: boolean;
+  stackIndex: number;
   graphHash: string;
   nodeIds: string[];
   primary: RuntimePrimaryColorParams;
@@ -579,6 +582,7 @@ export function compileRuntimeColorGrade(state?: ColorCorrectionState): RuntimeC
 
   return {
     enabled: true,
+    stackIndex: Math.max(0, Math.trunc(state.stackIndex ?? 0)),
     graphHash,
     nodeIds,
     primary,

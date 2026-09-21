@@ -218,6 +218,7 @@ export class Compositor {
       }
 
       const adjustmentEffects = resolveSurfaceFrameEffects(layer.effects, data.displayedMediaTime);
+      const visualAdjustmentEffects = adjustmentEffects.filter(effect => !effect.type.startsWith('audio-'));
 
       // Get uniform buffer
       const uniformBuffer = this.compositorPipeline.getOrCreateUniformBuffer(resourceLayerId);
@@ -260,12 +261,18 @@ export class Compositor {
 
       this.maskTextureManager.logMaskState(maskLookupId, hasMask);
 
-      const {
-        inlineEffects,
-        complexEffects,
-        renderEffects,
-        unsupportedAfterRenderEffect,
-      } = splitLayerEffects(adjustmentEffects, state.skipEffects, adjustmentEffects.some(effect => nodePreviewTextureTap.has(`effect:${effect.id}`)));
+      const orderedColorIndex = !isAdjustmentLayer && !!this.colorPipeline && !state.skipEffects && layer.colorCorrection?.enabled
+        ? Math.min(visualAdjustmentEffects.length, Math.max(0, Math.trunc(layer.colorCorrection.stackIndex)))
+        : null;
+      const beforeColorEffects = orderedColorIndex === null ? visualAdjustmentEffects : visualAdjustmentEffects.slice(0, orderedColorIndex);
+      const afterColorEffects = orderedColorIndex === null ? [] : visualAdjustmentEffects.slice(orderedColorIndex);
+      const forceOrderedPasses = orderedColorIndex !== null || visualAdjustmentEffects.some(effect => nodePreviewTextureTap.has(`effect:${effect.id}`));
+      const beforeColorStack = splitLayerEffects(beforeColorEffects, state.skipEffects, forceOrderedPasses);
+      const afterColorStack = splitLayerEffects(afterColorEffects, state.skipEffects, forceOrderedPasses);
+      const inlineEffects = beforeColorStack.inlineEffects;
+      const complexEffects = [...(beforeColorStack.complexEffects ?? []), ...(afterColorStack.complexEffects ?? [])];
+      const renderEffects = [...(beforeColorStack.renderEffects ?? []), ...(afterColorStack.renderEffects ?? [])];
+      const unsupportedAfterRenderEffect = [...(beforeColorStack.unsupportedAfterRenderEffect ?? []), ...(afterColorStack.unsupportedAfterRenderEffect ?? [])];
       if (unsupportedAfterRenderEffect?.length) {
         log.warn('Ignoring effects after terminal render effect', {
           layerId: layer.id,
@@ -392,6 +399,46 @@ export class Compositor {
             useExternalTexture = false;
             sourceExternalTexture = null;
 
+            const applyComplexEffects = (effects: typeof complexEffects, compare: boolean) => {
+              if (!effects.length || !sourceTextureView) return;
+              const inputView = sourceTextureView;
+              const effectOutput = inputView === state.effectTempView ? state.effectTempView2! : state.effectTempView!;
+              const effectResult = this.effectsPipeline.applyEffects(
+                commandEncoder, effects, state.sampler, inputView, effectOutput,
+                state.effectTempView!, state.effectTempView2!, state.outputWidth, state.outputHeight,
+                state.effectTempTexture, state.effectTempTexture2,
+                compare && state.effectCompareView && state.splitCompare
+                  ? { outputView: state.effectCompareView, settings: state.splitCompare }
+                  : undefined,
+                state.motionTime ?? layer.source?.mediaTime ?? 0,
+                state.frameHistory ? { ...state.frameHistory, scopeId: JSON.stringify([state.historyScopeId ?? 'timeline', resourceLayerId]) } : undefined,
+                state.effectRenderClock ? { ...state.effectRenderClock, scopeId: JSON.stringify([state.effectRenderClock.scopeId, resourceLayerId]) } : undefined,
+              );
+              sourceTextureView = effectResult.finalView;
+            };
+            const applyRenderEffects = (effects: typeof renderEffects) => {
+              if (!effects.length || !sourceTextureView) return;
+              const renderEffect = effects[0];
+              const inputView = sourceTextureView;
+              const particleAccumulation = inputView === state.effectTempView ? state.effectTempView2! : state.effectTempView!;
+              const particleOutput = particleAccumulation === state.effectTempView ? state.effectTempView2! : state.effectTempView!;
+              try {
+                getPixelParticleDisintegrateRenderer(state.device).render({
+                  commandEncoder, sampler: state.sampler, sourceView: inputView,
+                  accumulationView: particleAccumulation, outputView: particleOutput,
+                  outputWidth: state.outputWidth, outputHeight: state.outputHeight, effect: renderEffect,
+                  motionTime: layer.source?.mediaTime ?? state.motionTime ?? 0,
+                  quality: state.particleQuality ?? 'preview',
+                });
+                sourceTextureView = particleOutput;
+              } catch (error) {
+                log.warn('Particle render effect failed; falling back to source texture', { layerId: layer.id, effectType: renderEffect.type, error });
+              }
+            };
+
+            applyComplexEffects(beforeColorStack.complexEffects ?? [], orderedColorIndex === null || (!hasColorCorrection && !afterColorStack.complexEffects?.length));
+            applyRenderEffects(beforeColorStack.renderEffects ?? []);
+
             if (layer.sourceClipId && colorPreview) {
               nodePreviewTextureTap.capture(`color-input:${layer.sourceClipId}`, state.device, commandEncoder, state.sampler, sourceTextureView, sourceWidth, sourceHeight);
               this.colorPipeline?.previewGradeOutputs(layer.sourceClipId, commandEncoder, layer.colorCorrection, state.sampler, sourceTextureView, { width: sourceWidth, height: sourceHeight });
@@ -410,70 +457,8 @@ export class Compositor {
               sourceTextureView = colorResult.finalView;
             }
             if (layer.sourceClipId) nodePreviewTextureTap.capture(`color:${layer.sourceClipId}`, state.device, commandEncoder, state.sampler, sourceTextureView, sourceWidth, sourceHeight);
-
-            if (complexEffects && complexEffects.length > 0) {
-              const effectOutput = sourceTextureView === state.effectTempView
-                ? state.effectTempView2
-                : state.effectTempView;
-              const effectResult = this.effectsPipeline.applyEffects(
-                commandEncoder,
-                complexEffects,
-                state.sampler,
-                sourceTextureView,
-                effectOutput,
-                state.effectTempView,
-                state.effectTempView2,
-                state.outputWidth,
-                state.outputHeight,
-                state.effectTempTexture,
-                state.effectTempTexture2,
-                state.effectCompareView && state.splitCompare
-                  ? { outputView: state.effectCompareView, settings: state.splitCompare }
-                  : undefined,
-                state.motionTime ?? layer.source?.mediaTime ?? 0,
-                state.frameHistory ? {
-                  ...state.frameHistory,
-                  scopeId: JSON.stringify([state.historyScopeId ?? 'timeline', resourceLayerId]),
-                } : undefined,
-                state.effectRenderClock ? {
-                  ...state.effectRenderClock,
-                  scopeId: JSON.stringify([state.effectRenderClock.scopeId, resourceLayerId]),
-                } : undefined,
-              );
-              sourceTextureView = effectResult.finalView;
-            }
-
-            if (renderEffects && renderEffects.length > 0) {
-              const renderEffect = renderEffects[0];
-              const particleAccumulation = sourceTextureView === state.effectTempView
-                ? state.effectTempView2
-                : state.effectTempView;
-              const particleOutput = particleAccumulation === state.effectTempView
-                ? state.effectTempView2
-                : state.effectTempView;
-              try {
-                const renderer = getPixelParticleDisintegrateRenderer(state.device);
-                renderer.render({
-                  commandEncoder,
-                  sampler: state.sampler,
-                  sourceView: sourceTextureView,
-                  accumulationView: particleAccumulation,
-                  outputView: particleOutput,
-                  outputWidth: state.outputWidth,
-                  outputHeight: state.outputHeight,
-                  effect: renderEffect,
-                  motionTime: layer.source?.mediaTime ?? state.motionTime ?? 0,
-                  quality: state.particleQuality ?? 'preview',
-                });
-                sourceTextureView = particleOutput;
-              } catch (error) {
-                log.warn('Particle render effect failed; falling back to source texture', {
-                  layerId: layer.id,
-                  effectType: renderEffect.type,
-                  error,
-                });
-              }
-            }
+            applyComplexEffects(afterColorStack.complexEffects ?? [], true);
+            applyRenderEffects(afterColorStack.renderEffects ?? []);
           }
         }
       }

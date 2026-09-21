@@ -114,6 +114,36 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
     invalidateCache();
   },
 
+  removeColorCorrection: (clipId) => {
+    const { clips, clipKeyframes, keyframeRecordingEnabled, selectedKeyframeIds, invalidateCache } = get();
+    const targetIndex = clips.findIndex(clip => clip.id === clipId);
+    if (targetIndex < 0) return;
+    const target = clips[targetIndex];
+    const cleanup = cleanupClipColorKeyframes(clipId, createColorPropertyMatcher(), {
+      clipKeyframes, keyframeRecordingEnabled, selectedKeyframeIds,
+    });
+    const nodeGraph = target.nodeGraph ? structuredClone(target.nodeGraph) : undefined;
+    if (nodeGraph) {
+      nodeGraph.forcedBuiltIns = nodeGraph.forcedBuiltIns?.filter(node => node !== 'color');
+      if (!nodeGraph.forcedBuiltIns?.length) delete nodeGraph.forcedBuiltIns;
+      if (nodeGraph.groups) delete nodeGraph.groups.color;
+      if (nodeGraph.parameterSources) {
+        for (const property of Object.keys(nodeGraph.parameterSources.targets)) {
+          if (property.startsWith('color.')) delete nodeGraph.parameterSources.targets[property];
+        }
+      }
+    }
+    const nextClips = [...clips];
+    nextClips[targetIndex] = { ...target, colorCorrection: undefined, localColorCorrection: undefined, nodeGraph };
+    set({
+      clips: nextClips,
+      clipKeyframes: cleanup.clipKeyframes,
+      keyframeRecordingEnabled: cleanup.keyframeRecordingEnabled,
+      selectedKeyframeIds: cleanup.selectedKeyframeIds,
+    });
+    invalidateCache();
+  },
+
   updateColorCorrection: (clipId, updater) => {
     const { clips, invalidateCache } = get();
     set({
@@ -128,6 +158,10 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
 
   setColorCorrectionEnabled: (clipId, enabled) => {
     get().updateColorCorrection(clipId, current => ({ ...current, enabled }));
+  },
+
+  setColorCorrectionStackIndex: (clipId, stackIndex) => {
+    get().updateColorCorrection(clipId, current => ({ ...current, stackIndex: Math.max(0, Math.trunc(stackIndex)) }));
   },
 
   setColorViewMode: (clipId, viewMode: ColorViewMode) => {

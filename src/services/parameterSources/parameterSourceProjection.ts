@@ -26,7 +26,6 @@ export function projectParameterSources(graph: NodeGraph, clip: TimelineClip): N
     toNodeId: edge.to, toPortId: edge.input, type: 'number' as const })));
   for (const target of parameterSourceTargets(clip)) {
     const binding = state?.targets[target.path];
-    if (binding?.exposed === false && !binding.source) continue;
     const color = parseColorProperty(target.path);
     if (color && (!clip.colorCorrection || color.versionId !== getActiveColorVersion(clip.colorCorrection)?.id)) continue;
     // The keyframe locator falls back to the clip source for hidden color nodes;
@@ -34,8 +33,12 @@ export function projectParameterSources(graph: NodeGraph, clip: TimelineClip): N
     const owner = color ? nodes.find(node => node.binding?.kind === 'color-node' && node.binding.nodeId === color.nodeId)
       ?? nodes.find(node => node.binding?.kind === 'clip-color-correction') : parameterNode(clip, target.path, nodes);
     if (!owner) continue;
+    const label = color ? `${target.group.split(' / ').at(-1)} / ${target.label}` : target.label;
+    const visible = Boolean(binding?.source || binding?.exposed === true);
+    owner.controlInputs = [...(owner.controlInputs ?? []), { property: target.path, label, group: target.group, visible }];
+    if (!visible) continue;
     const portId = `control:${target.path}`;
-    owner.inputs.push({ id: portId, label: color ? `${target.group.split(' / ').at(-1)} / ${target.label}` : target.label,
+    owner.inputs.push({ id: portId, label,
       type: 'number', direction: 'input', metadata: { controlProperty: target.path, semanticKind: 'control:number' } });
     if (binding?.source && binding.enabled !== false) edges.push({ id: controlTargetEdgeId(target.path),
       fromNodeId: binding.source.nodeId, fromPortId: binding.source.portId, toNodeId: owner.id, toPortId: portId, type: 'number' });

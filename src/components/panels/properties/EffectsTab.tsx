@@ -1,5 +1,5 @@
 // Effects Tab - Add and configure visual/audio effects
-import { Suspense, useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { Fragment, Suspense, useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useEngineStore } from '../../../stores/engineStore';
 import { startBatch, endBatch } from '../../../stores/historyStore';
@@ -407,6 +407,9 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
     effects.filter(e => !isAudioEffect(e.type as EffectType)),
     [effects]
   );
+  const colorStackIndex = hasColorEntry
+    ? Math.min(videoEffects.length, Math.max(0, Math.trunc(clip?.colorCorrection?.stackIndex ?? 0)))
+    : -1;
 
   return (
     <div className="properties-tab-content effects-tab transform-tab-compact" onPointerUp={event => {
@@ -470,7 +473,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
       ) : (
         <div className="effects-list">
           {controlError && <p role="alert" className="parameter-source-error">{controlError}</p>}
-          {clip && <ColorGraphEffectEntry key={clipId} clip={clip} />}
+          {clip && colorStackIndex === 0 && <ColorGraphEffectEntry key={clipId} clip={clip} visualEffectCount={videoEffects.length} />}
           {videoEffects.length === 0 && !hasColorEntry && <div className="panel-empty"><p>No effects applied</p></div>}
           {videoEffects.map((effect, idx) => {
             const interpolated = interpolatedEffects.find(e => e.id === effect.id) || effect;
@@ -484,9 +487,8 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
             const isDragging = dragIdx === idx;
             const isDropTarget = dropIdx === idx;
             const isCollapsed = collapsedEffectIds.has(effect.id);
-            return (
+            return (<Fragment key={effect.id}>
               <div
-                key={effect.id}
                 className={`effect-item ${!isEnabled ? 'bypassed' : ''} ${isDragging ? 'dragging' : ''} ${isDropTarget ? 'drop-target' : ''}`}
                 onDragOver={(e) => {
                   e.preventDefault();
@@ -619,7 +621,8 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                   </div>
                 )}
               </div>
-            );
+              {clip && colorStackIndex === idx + 1 && <ColorGraphEffectEntry clip={clip} visualEffectCount={videoEffects.length} />}
+            </Fragment>);
           })}
         </div>
       )}

@@ -23,11 +23,11 @@ duplicate their connected source graphs and curves independently.
 
 ## Current Pipeline Facts
 
-- Clip effects remain on `TimelineClip.effects` / render `Layer.effects`; `src/components/panels/properties/EffectsTab.tsx` edits the generic effect stack.
+- Generic effects remain on `TimelineClip.effects`, while the clip grade remains in `TimelineClip.colorCorrection`. The Properties Effects tab presents both as one ordered visual stack without duplicating Color into `clip.effects`.
 - Generic effect definitions are registered in `src/effects/index.ts`. `src/effects/EffectsPipeline.ts` handles non-inline effects; brightness, contrast, saturation, and invert are inline compositor effects.
 - `TimelineClip.colorCorrection` is a separate state model in `src/types/colorCorrection.ts`; `RuntimeColorGrade` is attached to render layers.
 - Normal and nested layer builders share `evaluateParameterSourceColorGrade(...)` through their interpolation adapters.
-- The worker WebGPU compositor constructs `ColorPipeline` in `src/services/render/workerGpuVideoFrameCompositor.ts`; `src/engine/render/Compositor.ts` applies it before complex generic effects.
+- The worker WebGPU compositor constructs `ColorPipeline` in `src/services/render/workerGpuVideoFrameCompositor.ts`; `src/engine/render/Compositor.ts` splits generic effects around Color's saved stack position.
 - Waveform, histogram, and vectorscope panels read the final rendered texture through `src/components/panels/scopes/useScopeAnalysis.ts`. General scopes refresh at roughly 15 fps; the combined RGB Parade uses a 10 fps refresh budget and skips unchanged paused frames.
 - `src/engine/core/RenderTargetManager.ts` uses two `rgba8unorm` effect temporary textures.
 
@@ -74,7 +74,10 @@ Supported clips keep the inner Color tab in every theme. The hidden Resolve
 theme presents it as **Image** and also provides the dockable **Color Controls**
 surface. Both routes edit the same `ColorCorrectionState`.
 
-`Effects` remains the generic effects surface. `Color` is the clip-grade surface.
+`Color` remains the dedicated clip-grade surface. The same grade also appears as
+a normal expandable entry in `Effects`, where it can be bypassed, moved through
+the visual stack, opened in Nodes, or removed. Removing it clears its color
+keyframes and parameter bindings; it does not create a duplicate registry effect.
 
 ### Two Editing Surfaces
 

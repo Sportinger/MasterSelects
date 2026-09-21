@@ -119,11 +119,20 @@ export interface NodeGraphLayout {
   y: number;
 }
 
+export interface NodeGraphControlInput {
+  property: string;
+  label: string;
+  group: string;
+  visible: boolean;
+}
+
 export interface NodeGraphNode {
   /** Transient executable alternatives supplied by the owning graph, never saved. */
   connectionVariants?: readonly NodeConnectionVariant[];
   /** Projected viewer presentation; preferences are stored on the owning clip. */
   preview?: { enabled: boolean; requested: boolean; portId?: string; key: string; aspectRatio?: number };
+  /** Transient catalog of scalar inputs that the user may expose on this node. */
+  controlInputs?: readonly NodeGraphControlInput[];
   id: string;
   kind: NodeGraphNodeKind;
   runtime: NodeGraphRuntimeKind;

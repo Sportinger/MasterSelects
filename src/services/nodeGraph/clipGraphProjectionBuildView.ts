@@ -69,19 +69,14 @@ export function buildClipNodeGraphView(
     depth += 1;
   }
 
-  if (isVisualSource(clip) && (hasColorGraph(clip) || hasForcedBuiltInNode(clip, 'color'))) {
-    chain = appendProcessingNode(
-      nodes,
-      edges,
-      chain.nodeId,
-      chain.portId,
-      createColorNode(depth, primarySignal, clip),
-      primarySignal,
-    );
-    depth += 1;
-  }
-
-  for (const effect of clip.effects.filter((candidate) => !isAudioEffect(candidate))) {
+  const visualEffects = clip.effects.filter((candidate) => !isAudioEffect(candidate));
+  const hasColor = isVisualSource(clip) && (hasColorGraph(clip) || hasForcedBuiltInNode(clip, 'color'));
+  const colorIndex = Math.min(visualEffects.length, Math.max(0, Math.trunc(clip.colorCorrection?.stackIndex ?? 0)));
+  for (const [effectIndex, effect] of visualEffects.entries()) {
+    if (hasColor && effectIndex === colorIndex) {
+      chain = appendProcessingNode(nodes, edges, chain.nodeId, chain.portId, createColorNode(depth, primarySignal, clip), primarySignal);
+      depth += 1;
+    }
     chain = appendProcessingNode(
       nodes,
       edges,
@@ -90,6 +85,10 @@ export function buildClipNodeGraphView(
       createEffectNode(effect, depth, MAIN_LANE_Y, primarySignal),
       primarySignal,
     );
+    depth += 1;
+  }
+  if (hasColor && colorIndex === visualEffects.length) {
+    chain = appendProcessingNode(nodes, edges, chain.nodeId, chain.portId, createColorNode(depth, primarySignal, clip), primarySignal);
     depth += 1;
   }
 

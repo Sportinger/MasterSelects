@@ -120,6 +120,26 @@ export function setParameterSourceBinding(clipId: string, property: string, patc
   });
 }
 
+/** Expose one or more supported input sockets as a single undoable edit. */
+export function exposeParameterSourceInputs(clipId: string, properties: readonly string[]): void {
+  const timeline = useTimelineStore.getState(), clip = timeline.clips.find(item => item.id === clipId);
+  const supported = [...new Set(properties)].filter(property => clip && getParameterSourceTarget(clip, property));
+  if (!clip || supported.length !== new Set(properties).size) throw new Error('One or more parameters do not support control inputs.');
+  edit(clipId, supported.length > 1 ? 'Show parameter inputs' : 'Show parameter input', state => {
+    for (const property of supported) state.targets[property] = { ...state.targets[property], exposed: true };
+  });
+}
+
+/** Return optional sockets to the compact view; connected sockets remain projected. */
+export function resetParameterSourceInputs(clipId: string, properties: readonly string[]): void {
+  const timeline = useTimelineStore.getState(), clip = timeline.clips.find(item => item.id === clipId);
+  const supported = [...new Set(properties)].filter(property => clip && getParameterSourceTarget(clip, property));
+  if (!clip || supported.length !== new Set(properties).size) throw new Error('One or more parameters do not support control inputs.');
+  edit(clipId, 'Reset parameter inputs', state => {
+    for (const property of supported) state.targets[property] = { ...state.targets[property], exposed: false };
+  });
+}
+
 export function deleteControlNode(clipId: string, nodeId: string): void {
   edit(clipId, 'Delete parameter source', state => {
     state.graph.nodes = state.graph.nodes.filter(node => node.id !== nodeId);

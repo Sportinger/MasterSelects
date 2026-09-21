@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useDockStore } from '../../../stores/dockStore';
 import { useTimelineStore } from '../../../stores/timeline';
@@ -17,12 +17,14 @@ interface ColorTabProps {
 export function ColorTab({ clipId }: ColorTabProps) {
   const [auxMode, setAuxMode] = useState<ColorAuxMode>('scopes');
   const clip = useTimelineStore(state => state.clips.find(candidate => candidate.id === clipId));
+  const ensureColorCorrection = useTimelineStore(state => state.ensureColorCorrection);
   const selectColorNode = useTimelineStore(state => state.selectColorNode);
   const activatePanelType = useDockStore(state => state.activatePanelType);
   const colorState = ensureColorCorrectionState(clip?.colorCorrection);
   const editableNodes = getEditableColorNodes(colorState);
   const selectedNode = editableNodes.find(node => node.id === colorState.ui.selectedNodeId)
     ?? editableNodes[0];
+  useEffect(() => { ensureColorCorrection(clipId); }, [clipId, ensureColorCorrection]);
   const openAuxPanel = (mode: ColorAuxMode) => {
     setAuxMode(mode);
     activatePanelType(mode === 'scopes' ? 'color-scopes' : 'color-keyframes');

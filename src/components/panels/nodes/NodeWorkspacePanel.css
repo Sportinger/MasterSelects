@@ -368,6 +368,133 @@
   color: #f7c777;
 }
 
+.node-control-input-picker {
+  position: absolute;
+  z-index: 12;
+}
+
+.node-control-input-add {
+  width: 20px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+  background: rgba(22, 25, 29, 0.94);
+  color: var(--text-secondary);
+  font: 500 14px/16px system-ui, sans-serif;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.node-control-input-add:hover:not(:disabled) {
+  border-color: rgba(45, 140, 235, 0.75);
+  color: var(--text-primary);
+}
+
+.node-control-input-add:focus:not(:focus-visible),
+.node-control-input-menu button:focus:not(:focus-visible),
+.node-control-input-menu input:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.node-control-input-add:focus-visible,
+.node-control-input-menu button:focus-visible,
+.node-control-input-menu input:focus-visible {
+  outline: 1px solid var(--accent-color, var(--accent));
+  outline-offset: 1px;
+}
+
+.node-control-input-menu {
+  position: absolute;
+  top: 23px;
+  right: 0;
+  width: 226px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: rgba(20, 22, 25, 0.98);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
+  color: var(--text-primary);
+}
+
+.node-control-input-menu-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 5px;
+  padding: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.node-control-input-menu-head input {
+  min-width: 0;
+  height: 25px;
+  padding: 0 7px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 10px;
+}
+
+.node-control-input-menu-head button,
+.node-control-input-options button {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.node-control-input-menu-head button {
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  font-size: 10px;
+}
+
+.node-control-input-menu-head button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.node-control-input-options {
+  max-height: 230px;
+  overflow: auto;
+  padding: 4px;
+}
+
+.node-control-input-options button {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 7px;
+  border-radius: 4px;
+  text-align: left;
+}
+
+.node-control-input-options button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.node-control-input-options small {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-control-input-empty {
+  display: block;
+  padding: 10px 7px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
 .node-workspace-node-title {
   padding: 9px 10px 0;
   color: var(--text-primary);

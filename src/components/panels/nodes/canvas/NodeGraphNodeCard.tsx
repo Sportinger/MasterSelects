@@ -5,6 +5,7 @@ import { KeyframeNodeCardPreview } from '../keyframes/KeyframeNodeCurve';
 import { NodeAnimationBadge } from '../keyframes/NodeAnimationBadge';
 import { NodePreviewOutput, NodeViewerButton } from '../previews/NodePreviewControls';
 import { NodeValuePreview } from '../previews/NodeValuePreview';
+import { NodeControlInputPicker } from './NodeControlInputPicker';
 import { inlineNumericPorts } from '../previews/previewGeometry';
 import { requestNodeAnimation } from '../../../../services/nodeGraph/nodeWorkspaceNavigation';
 import type { ConnectionDraft } from './canvasGeometry';
@@ -52,6 +53,7 @@ function getNodeHeaderLabel(node: NodeGraphNode): string {
 
 export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
   node,
+  clipId,
   canvasRendered = false,
   selectedNodeId,
   isInSelection = false,
@@ -203,6 +205,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
         </div>
       </div>
     </div>
+    <NodeControlInputPicker clipId={clipId} node={node} />
     {collapsedGroupId && onToggleGroup && <button type="button" className="node-workspace-node-expand"
       style={{ left: node.layout.x + 5, top: node.layout.y + 31 }} aria-label={`Expand ${node.label} group`} aria-expanded={false}
       title={`Expand ${node.label}`} onPointerDown={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}

@@ -8,8 +8,10 @@ import { ColorNodeParameterControls } from '../color/ColorNodeParameterControls'
 import { ResolveInspectorSection } from './resolveInspector/ResolveInspectorPrimitives';
 
 /** A view of the existing clip grade, not another entry in clip.effects. */
-export function ColorGraphEffectEntry({ clip }: { clip: TimelineClip }) {
+export function ColorGraphEffectEntry({ clip, visualEffectCount }: { clip: TimelineClip; visualEffectCount: number }) {
   const setEnabled = useTimelineStore(state => state.setColorCorrectionEnabled);
+  const setStackIndex = useTimelineStore(state => state.setColorCorrectionStackIndex);
+  const removeColor = useTimelineStore(state => state.removeColorCorrection);
   const setNodeEnabled = useTimelineStore(state => state.setColorNodeEnabled);
   const activatePanelType = useDockStore(state => state.activatePanelType);
   const enabled = clip.colorCorrection?.enabled === true;
@@ -18,9 +20,11 @@ export function ColorGraphEffectEntry({ clip }: { clip: TimelineClip }) {
   if (!clip.colorCorrection && !clip.nodeGraph?.forcedBuiltIns?.includes('color')) return null;
   const version = clip.colorCorrection && getActiveColorVersion(clip.colorCorrection);
   const nodes = version?.nodes.filter(isColorGradeNode) ?? [];
+  const stackIndex = Math.min(visualEffectCount, Math.max(0, Math.trunc(clip.colorCorrection?.stackIndex ?? 0)));
 
   return <div className={`effect-item color-graph-effect-entry ${!enabled ? 'bypassed' : ''}`}>
     <div className="effect-header">
+      <span className="effect-drag-handle color-effect-order" title="Color position in the effect stack">&#x2630;</span>
       <button type="button" className="effect-collapse-toggle" aria-expanded={!collapsed}
         title={collapsed ? 'Expand Color' : 'Collapse Color'} onClick={() => setCollapsed(value => !value)}>
         <span className="effect-collapse-chevron" aria-hidden="true">{collapsed ? '\u25B6' : '\u25BC'}</span>
@@ -36,6 +40,12 @@ export function ColorGraphEffectEntry({ clip }: { clip: TimelineClip }) {
       </button>
       <button type="button" className="effect-bypass-btn" aria-label="Open Color Graph in Nodes" title="Open Color Graph in Nodes"
         onClick={() => { requestNodeWorkspaceView(clip.id, 'color'); activatePanelType('node-workspace'); }}>Nodes</button>
+      <button type="button" className="effect-bypass-btn" disabled={stackIndex === 0} aria-label="Move Color up"
+        title="Move Color earlier" onClick={() => setStackIndex(clip.id, stackIndex - 1)}>&uarr;</button>
+      <button type="button" className="effect-bypass-btn" disabled={stackIndex >= visualEffectCount} aria-label="Move Color down"
+        title="Move Color later" onClick={() => setStackIndex(clip.id, stackIndex + 1)}>&darr;</button>
+      <button type="button" className="btn btn-sm btn-danger" aria-label="Remove Color" title="Remove Color"
+        onClick={() => removeColor(clip.id)}>&times;</button>
     </div>
     {!collapsed && <div className="effect-params">
       {version && nodes.map(node => <ResolveInspectorSection key={`${version.id}:${node.id}`} title={node.name}
