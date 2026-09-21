@@ -247,12 +247,20 @@ Dashed cables show recorded bake dependencies, remain visible without selection,
 and have no live flow animation or cable-editing actions. Playback reads the saved
 curves; changing the landmarks or bake settings requires another bake.
 
-Nodes, groups, cables, plugs and animation curves are drawn on two viewport-sized
+Nodes, cables, plugs and animation curves are drawn on two viewport-sized
 Canvas 2D layers. Supported browsers transfer these to an OffscreenCanvas worker.
 The static layer changes only after graph/view changes; a separate animation
 layer updates at 30 Hz without per-frame React renders. Pointer changes reach the
 worker immediately and do not wait behind the decorative animation timer.
-Offscreen geometry is culled and backing stores are bounded to 4096 pixels per
+Group backgrounds remain full-size DOM rectangles behind these layers and follow
+the immediate visual transform. Zooming out exposes the complete background
+without waiting for a worker frame or revealing the edge of a cached bitmap.
+All canvas layers include a 256 CSS-pixel buffer on every side. Nearby nodes,
+cables and previews are prepared before they enter the viewport, covering newly
+exposed edges while the previous frame follows a pan or zoom gesture. The fixed
+workspace clips this buffer; each presented frame retains its logical viewport
+for accurate alignment with the interaction targets.
+Geometry outside the buffer is culled and backing stores are bounded to 4096 pixels per
 dimension and 8 million pixels per layer. Canvas dimensions never follow the
 full graph bounds.
 

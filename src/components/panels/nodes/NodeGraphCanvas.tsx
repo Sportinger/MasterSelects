@@ -113,6 +113,7 @@ export function NodeGraphCanvas({
   }) }), [sourceGraph, preferences, aspectRatio]);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const canvasSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const canvasBackgroundRef = useRef<HTMLDivElement | null>(null);
   const canvasInnerRef = useRef<HTMLDivElement | null>(null);
   const panGestureRef = useRef<PanGesture | null>(null);
   const pendingPanRef = useRef<{ panX: number; panY: number } | null>(null);
@@ -125,6 +126,9 @@ export function NodeGraphCanvas({
     visualViewportRef.current = visual;
     if (canvasInnerRef.current) {
       canvasInnerRef.current.style.transform = `translate3d(${visual.panX}px, ${visual.panY}px, 0) scale(${visual.zoom})`;
+    }
+    if (canvasBackgroundRef.current) {
+      canvasBackgroundRef.current.style.transform = `translate3d(${visual.panX}px, ${visual.panY}px, 0) scale(${visual.zoom})`;
     }
     const rendered = renderedViewportRef.current;
     const scale = visual.zoom / rendered.zoom;
@@ -575,7 +579,7 @@ export function NodeGraphCanvas({
         }}
       >
         <NodeGraphCanvasSurface graph={graph} nodes={displayNodes} groupFrameNodes={groupFrameNodes} plugs={plugs} viewport={viewport}
-          surfaceRef={canvasSurfaceRef} onViewRendered={handleViewRendered}
+          surfaceRef={canvasSurfaceRef} backgroundRef={canvasBackgroundRef} onViewRendered={handleViewRendered}
           selectedNodeId={selectedNodeId} selection={multiSelection} selectedEdgeId={selectedEdgeId}
           hoveredEdgeId={hoveredEdgeId} hoveredPort={hoveredPort} draft={connectionDraft} canBypass={!!onToggleNodeBypass} onReady={setCanvasRendered} />
         {nodeMarquee.marquee && <div className="node-workspace-marquee" style={nodeMarquee.marquee} aria-hidden="true" />}

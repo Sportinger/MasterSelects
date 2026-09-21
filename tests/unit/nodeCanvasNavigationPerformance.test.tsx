@@ -88,4 +88,20 @@ describe('node canvas navigation render boundaries', () => {
     expect(mocks.toggleNode).toHaveBeenCalledExactlyOnceWith('clip-graph:plug-fixture:color:version-a/color-source', 'Source');
     expect(mocks.selectOutput).toHaveBeenCalledExactlyOnceWith('clip-graph:plug-fixture:color:version-a/color-source', 'out');
   });
+
+  it('moves full group backgrounds with the immediate viewport before a worker frame arrives', () => {
+    const view = setup();
+    const background = view.container.querySelector<HTMLElement>('.node-graph-group-backgrounds')!;
+    const inner = view.container.querySelector<HTMLElement>('.node-workspace-canvas-inner')!;
+    const initial = background.style.transform;
+    pointer(view.canvas, 'pointerdown', 40, 40);
+    pointer(view.canvas, 'pointermove', 240, 170);
+    expect(background.style.transform).not.toBe(initial);
+    expect(background.style.transform).toBe(inner.style.transform);
+    pointer(view.canvas, 'pointerup', 240, 170);
+    const panned = background.style.transform;
+    fireEvent.wheel(view.canvas, { deltaY: 900, clientX: 60, clientY: 50 });
+    expect(background.style.transform).not.toBe(panned);
+    expect(background.style.transform).toBe(inner.style.transform);
+  });
 });

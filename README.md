@@ -130,7 +130,10 @@ previews over compatible sockets while dragging. Drag either end to reconnect,
 or release on empty canvas to unplug editable links.
 During playback and timeline scrubbing, light pulses and direction arrows show
 the flow from output to input. They fade when the timeline rests.
-Graph panning reuses unchanged nodes and cables; playback avoids repeated dock
+Graph panning reuses unchanged nodes and cables, with a bounded drawing buffer
+around the viewport to prepare content before it enters at the edges. Group
+backgrounds follow pan and zoom immediately, including when zooming out quickly.
+Playback avoids repeated dock
 layout writes, tab measurements and effect evaluation for sibling parameter rows.
 Inline node previews start enabled, can be toggled individually or together, and
 preserve image aspect ratios. A shared worker canvas caches visible thumbnails;

@@ -59,13 +59,8 @@ function drawCurve(ctx: DrawContext, curve: CanvasCurve, theme: CanvasTheme) {
 /** Static painting occurs only after edits, hover, selection, pan or resize. */
 export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView, theme: CanvasTheme) {
   begin(ctx, view);
-  for (const group of scene.groups) {
-    if (!inView(group, view)) continue;
-    ctx.fillStyle = theme.background; ctx.strokeStyle = group.color; ctx.lineWidth = 1;
-    box(ctx, group.x, group.y, group.width, group.height, 10); ctx.fill(); ctx.globalAlpha = 0.10; ctx.fillStyle = group.color; ctx.fill(); ctx.globalAlpha = 0.6; ctx.stroke();
-    // Headers remain live DOM controls with zoom-compensated text and hit areas.
-    ctx.globalAlpha = 1;
-  }
+  // Group backgrounds and headers stay in the DOM: their complete vector
+  // bounds follow the immediate viewport even while this bitmap catches up.
   for (const cable of scene.cables) if (cableVisible(cable, view)) drawCable(ctx, cable, view.zoom);
   for (const node of scene.nodes) {
     if (!inView(node, view)) continue;

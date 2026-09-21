@@ -1,10 +1,10 @@
 import { readTimelineRuntimeState } from '../../../../../services/timeline/timelineRuntimeCoordinator';
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties, type RefObject } from 'react';
 import { useTimelineStore } from '../../../../../stores/timeline';
 import { clipLocalToKeyframeTime } from '../../../../../services/flock/time/flockKeyframeTime';
 import type { Viewport } from '../canvasGeometry';
 import { buildCanvasScene } from './buildCanvasScene';
-import { canvasPixelRatio, createNodeCanvasRuntime } from './nodeCanvasRuntime';
+import { bufferedCanvasView, createNodeCanvasRuntime, NODE_CANVAS_OVERSCAN } from './nodeCanvasRuntime';
 import type { CanvasTheme } from './nodeCanvasTypes';
 import { NodePreviewController } from '../../previews/NodePreviewController';
 import './NodeGraphCanvasSurface.css';
@@ -13,11 +13,12 @@ type SceneOptions = Parameters<typeof buildCanvasScene>[0];
 type Props = Omit<SceneOptions, 'clips' | 'keyframes' | 'sourceTime'> & {
   viewport: Viewport;
   surfaceRef: RefObject<HTMLDivElement | null>;
+  backgroundRef: RefObject<HTMLDivElement | null>;
   onReady: (ready: boolean) => void;
   onViewRendered: (viewport: Viewport) => void;
 };
 
-export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ viewport, surfaceRef, onReady, onViewRendered, ...options }: Props) {
+export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ viewport, surfaceRef, backgroundRef, onReady, onViewRendered, ...options }: Props) {
   const runtime = useRef<ReturnType<typeof createNodeCanvasRuntime> | null>(null);
   const previewRuntime = useRef<NodePreviewController | null>(null);
   const clips = useTimelineStore(state => state.clips);
@@ -69,9 +70,12 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
     let size = { width: host.clientWidth, height: host.clientHeight };
     let theme: CanvasTheme;
     const view = () => {
-      const measured = { ...viewportRef.current, ...size, ratio: canvasPixelRatio(size.width, size.height, devicePixelRatio) };
+      const viewport = viewportRef.current;
+      const measured = bufferedCanvasView({ ...viewport, ...size }, devicePixelRatio);
       const revision = ++latestViewRevision;
-      renderedViews.set(revision, measured);
+      // Presentation correction uses the logical viewport; canvas pixels have
+      // their own padded origin, offset back by CSS on every rendering layer.
+      renderedViews.set(revision, viewport);
       renderer.update({ type: 'view', view: measured, theme, revision }); previews.viewport(measured);
     };
     const measure = () => {
@@ -113,5 +117,14 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
   useLayoutEffect(() => { runtime.current?.update({ type: 'scene', scene }); refreshRef.current(); }, [scene]);
   useLayoutEffect(() => { previewRuntime.current?.scene(graph.owner.id, nodes, selectedNodeId, graph.expandedNodes); }, [graph.owner.id, nodes, selectedNodeId, graph.expandedNodes]);
   useLayoutEffect(() => { viewRef.current(); }, [viewport]);
-  return <div ref={surfaceRef} className="node-graph-canvas-surface" aria-hidden="true" />;
+  return <>
+    {/* Group fills are cheap vector rectangles. Keep their full geometry on the
+        immediate visual transform so zooming out never exposes a bitmap edge. */}
+    <div ref={backgroundRef} className="node-graph-group-backgrounds" aria-hidden="true">
+      {scene.groups.map((group, index) => <div key={index} style={{ left: group.x, top: group.y,
+        width: group.width, height: group.height, '--group-color': group.color } as CSSProperties} />)}
+    </div>
+    <div ref={surfaceRef} className="node-graph-canvas-surface" aria-hidden="true"
+      style={{ '--node-canvas-overscan': `${NODE_CANVAS_OVERSCAN}px` } as CSSProperties} />
+  </>;
 });

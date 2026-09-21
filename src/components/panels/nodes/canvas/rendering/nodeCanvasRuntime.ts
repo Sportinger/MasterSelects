@@ -1,9 +1,21 @@
 import { prefersSoftwareTimelineCanvas } from '../../../../../utils/canvasPlatform';
 import { NodeCanvasPainter } from './NodeCanvasPainter';
-import type { CanvasMessage, CanvasWorkerReply } from './nodeCanvasTypes';
+import type { CanvasMessage, CanvasView, CanvasWorkerReply } from './nodeCanvasTypes';
 import { releasePreviewFrame, type PreviewFrame } from '../../../../../services/nodePreview/previewTypes';
 
 type Update = Exclude<CanvasMessage, { type: 'init' | 'presented' | 'previews' }>;
+
+// CSS pixels, independent of graph zoom. Keep pixels ready beyond all four
+// edges while the compositor moves the previous frame ahead of the worker.
+export const NODE_CANVAS_OVERSCAN = 256;
+
+export function bufferedCanvasView(view: Omit<CanvasView, 'ratio'>, dpr: number): CanvasView {
+  const width = view.width + NODE_CANVAS_OVERSCAN * 2;
+  const height = view.height + NODE_CANVAS_OVERSCAN * 2;
+  return { ...view, width, height, panX: view.panX + NODE_CANVAS_OVERSCAN,
+    panY: view.panY + NODE_CANVAS_OVERSCAN, ratio: canvasPixelRatio(width, height, dpr) };
+}
+
 /** Present worker pixels and their viewport correction in one main-thread task. */
 export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: boolean) => void, onViewReady: (revision: number) => void = () => {}) {
   let disposed = false, worker: Worker | undefined, painter: NodeCanvasPainter | undefined;

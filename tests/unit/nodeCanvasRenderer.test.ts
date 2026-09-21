@@ -2,7 +2,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { NodeCanvasPainter } from '../../src/components/panels/nodes/canvas/rendering/NodeCanvasPainter';
 import { paintBase, paintOverlay } from '../../src/components/panels/nodes/canvas/rendering/paintNodeCanvas';
 import { makeCanvasCable, signalPosition } from '../../src/components/panels/nodes/canvas/rendering/cableGeometry';
-import { canvasPixelRatio, createNodeCanvasRuntime } from '../../src/components/panels/nodes/canvas/rendering/nodeCanvasRuntime';
+import { bufferedCanvasView, canvasPixelRatio, createNodeCanvasRuntime } from '../../src/components/panels/nodes/canvas/rendering/nodeCanvasRuntime';
 import { buildCanvasScene } from '../../src/components/panels/nodes/canvas/rendering/buildCanvasScene';
 import { getConnectionPlugs } from '../../src/components/panels/nodes/canvas/connectionPlugs';
 import { connectionFixture } from '../helpers/nodeConnectionFixture';
@@ -45,7 +45,30 @@ describe('node canvas frame ownership', () => {
       const ratio = canvasPixelRatio(width, height, dpr);
       expect(width * ratio).toBeLessThanOrEqual(4096); expect(height * ratio).toBeLessThanOrEqual(4096);
       expect(width * height * ratio ** 2).toBeLessThanOrEqual(8_000_001);
+      const buffered = bufferedCanvasView({ ...view, width, height }, dpr);
+      expect(buffered.width * buffered.ratio).toBeLessThanOrEqual(4096);
+      expect(buffered.height * buffered.ratio).toBeLessThanOrEqual(4096);
+      expect(buffered.width * buffered.height * buffered.ratio ** 2).toBeLessThanOrEqual(8_000_001);
     }
+  });
+  it('paints nodes beyond every viewport edge before a delayed pan frame arrives', () => {
+    const options = { graph: connectionFixture, nodes: connectionFixture.nodes, plugs: [], selection: new Set<string>(),
+      selectedNodeId: null, selectedEdgeId: null, hoveredEdgeId: null, hoveredPort: null, draft: null,
+      clips: [], keyframes: new Map(), sourceTime: () => 0 };
+    const node = buildCanvasScene(options).nodes[0];
+    const edgeScene = { ...scene, nodes: [
+      { ...node, id: 'left', x: -180, y: 300, width: 60, height: 60 },
+      { ...node, id: 'right', x: 1120, y: 300, width: 60, height: 60 },
+      { ...node, id: 'top', x: 400, y: -180, width: 60, height: 60 },
+      { ...node, id: 'bottom', x: 400, y: 820, width: 60, height: 60 },
+      { ...node, id: 'distant', x: 5000, y: 5000, width: 60, height: 60 },
+    ] };
+    const painter = new NodeCanvasPainter(context(), context());
+    painter.update({ type: 'scene', scene: edgeScene });
+    painter.update({ type: 'view', view: bufferedCanvasView(view, 2), theme });
+    painter.draw(0);
+    const painted = vi.mocked(paintBase).mock.calls.at(-1)![1];
+    expect(painted.nodes.map(node => node.id)).toEqual(['left', 'right', 'top', 'bottom']);
   });
 });
 
