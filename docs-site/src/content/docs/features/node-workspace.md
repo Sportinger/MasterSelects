@@ -118,7 +118,7 @@ Mouse-wheel and trackpad scrolling zoom smoothly around the pointer. Zoom is
 continuous and exponential: the scroll distance determines the proportional
 change, including fine trackpad movements. Pixel, line and page wheel input are
 normalized, and short frame-based smoothing softens mouse-wheel notches. The
-zoom range remains 18–240%; horizontal-only scrolling does not change zoom.
+zoom range is 5–240%, allowing a wider overview of large graphs; horizontal-only scrolling does not change zoom.
 
 Dragging, **Fit**, **Focus** and **Reset** interrupt any pending zoom animation.
 Reduced-motion preferences keep the same continuous zoom without smoothing.
