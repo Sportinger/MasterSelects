@@ -5,7 +5,7 @@ import { useEngineStore } from '../stores/engineStore';
 import { useTimelineStore } from '../stores/timeline';
 import { applyClipDragPreview } from '../stores/timeline/clipDragPreview';
 import { useMediaStore } from '../stores/mediaStore';
-import { getPlayheadPosition, layerBuilder } from '../services/layerBuilder';
+import { getPlayheadPosition, layerBuilder, playheadFrameHistoryMetadata } from '../services/layerBuilder';
 import { layerPlaybackManager } from '../services/layerPlaybackManager';
 import { liveInputRuntime } from '../services/mediaRuntime/liveInputRuntime';
 import { renderScheduler } from '../services/renderScheduler';
@@ -199,6 +199,7 @@ export function useEngine() {
             const frameContext = {
               compositionId: useMediaStore.getState().activeCompositionId ?? 'timeline:active',
               timelineTimeSeconds: currentPlayhead,
+              frameHistory: playheadFrameHistoryMetadata(timelineState.timelineRevision),
             };
             renderScheduler.setActiveCompLayers([], frameContext);
             const renderStart = performance.now();
@@ -283,6 +284,7 @@ export function useEngine() {
             ? layerFrameContext.activeCompId
             : 'timeline:active',
           timelineTimeSeconds: layerFrameContext.playheadPosition,
+          frameHistory: playheadFrameHistoryMetadata(timelineState.timelineRevision),
         };
         renderScheduler.setActiveCompLayers(layers, frameContext);
 
@@ -319,7 +321,8 @@ export function useEngine() {
 
         // Cache active comp output for parent preview texture sharing
         // This allows parent compositions to show the active comp without video conflicts
-        const activeCompId = useMediaStore.getState().activeCompositionId;
+        const mediaState = useMediaStore.getState();
+        const activeCompId = mediaState.activeCompositionId;
         if (
           activeCompId &&
           !timelineState.isPlaying &&
@@ -329,6 +332,7 @@ export function useEngine() {
           renderHostPort.cacheActiveCompOutput(
             activeCompId,
             frameContext.timelineTimeSeconds,
+            mediaState.compositions.find(composition => composition.id === activeCompId)?.frameRate ?? 30,
           );
         }
         cacheMs += performance.now() - cacheStart;

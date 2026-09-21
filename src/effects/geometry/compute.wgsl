@@ -88,34 +88,16 @@ fn marchingSquaresCompute(@builtin(global_invocation_id) invocation: vec3u) {
   let tr = tonePixel(origin + vec2i(cellSize, 0));
   let br = tonePixel(origin + vec2i(cellSize, cellSize));
   let bl = tonePixel(origin + vec2i(0, cellSize));
-  let mask = select(0u, 1u, tl >= params.threshold)
-    | select(0u, 2u, tr >= params.threshold)
-    | select(0u, 4u, br >= params.threshold)
-    | select(0u, 8u, bl >= params.threshold);
   let top = vec2f(edgePosition(tl, tr), 0.0);
   let right = vec2f(1.0, edgePosition(tr, br));
   let bottom = vec2f(edgePosition(bl, br), 1.0);
   let left = vec2f(0.0, edgePosition(tl, bl));
-  var a = top;
-  var b = top;
-  var c = top;
-  var d = top;
-  var count = 0u;
-  switch mask {
-    case 1u, 14u: { a = left; b = top; count = 1u; }
-    case 2u, 13u: { a = top; b = right; count = 1u; }
-    case 3u, 12u: { a = left; b = right; count = 1u; }
-    case 4u, 11u: { a = right; b = bottom; count = 1u; }
-    case 5u: { a = left; b = top; c = right; d = bottom; count = 2u; }
-    case 6u, 9u: { a = top; b = bottom; count = 1u; }
-    case 7u, 8u: { a = left; b = bottom; count = 1u; }
-    case 10u: { a = top; b = right; c = bottom; d = left; count = 2u; }
-    default: {}
-  }
+  let topology = imageMarchingSquaresTopology(vec4f(step(params.threshold, tl), step(params.threshold, tr),
+    step(params.threshold, br), step(params.threshold, bl)), top, right, bottom, left);
   let local = vec2f(pixel - origin) / f32(cellSize);
   var distance = 10.0;
-  if (count > 0u) { distance = segmentDistance(local, a, b); }
-  if (count > 1u) { distance = min(distance, segmentDistance(local, c, d)); }
+  if (topology.count > 0u) { distance = segmentDistance(local, topology.a, topology.b); }
+  if (topology.count > 1u) { distance = min(distance, segmentDistance(local, topology.c, topology.d)); }
   let line = 1.0 - smoothstep(0.035, 0.1, distance);
   let original = loadClamped(pixel);
   let contourColor = mix(params.colorB.rgb, params.colorA.rgb, line);
@@ -132,17 +114,7 @@ fn pixelSortCompute(@builtin(global_invocation_id) invocation: vec3u) {
     let sourceIndex = min(index, segmentSize - 1);
     colors[index] = loadClamped(vec2i(segmentStart + sourceIndex, i32(invocation.y)));
   }
-  for (var outer = 0; outer < 16; outer = outer + 1) {
-    for (var inner = 0; inner < 15 - outer; inner = inner + 1) {
-      let leftTone = luma(colors[inner].rgb);
-      let rightTone = luma(colors[inner + 1].rgb);
-      if (leftTone > rightTone) {
-        let swap = colors[inner];
-        colors[inner] = colors[inner + 1];
-        colors[inner + 1] = swap;
-      }
-    }
-  }
+  colors = imageStableSort16ByRec709(colors);
   let localIndex = min(15, i32(invocation.x) - segmentStart);
   let original = loadClamped(vec2i(invocation.xy));
   let sorted = colors[localIndex];

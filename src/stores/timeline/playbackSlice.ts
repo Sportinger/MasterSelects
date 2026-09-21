@@ -6,6 +6,7 @@ import { useMediaStore } from '../mediaStore';
 import { renderHostPort } from '../../services/render/renderHostPort';
 import {
   getPlayheadPosition,
+  markPlayheadFrameHistoryDiscontinuity,
   playheadState,
   sanitizePlayheadPosition,
   startInternalPosition,
@@ -51,6 +52,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
     const safeDuration = Math.max(0, sanitizePlayheadPosition(get().duration, safePosition));
     const clampedPosition = Math.max(0, Math.min(safePosition, safeDuration));
 
+    markPlayheadFrameHistoryDiscontinuity('seek');
     set({ playheadPosition: clampedPosition });
 
     // Keep the render-path playhead in sync while paused. This also repairs

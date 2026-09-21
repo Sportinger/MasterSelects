@@ -128,13 +128,17 @@ export class WorkerRenderHostRuntimeBridge {
     timelineTime: number,
     frame: WorkerRenderSoftwareFrame,
     transfer?: Transferable[],
-    options: { readonly readback?: boolean } = {},
+    options: { readonly readback?: boolean; readonly compositionId?: string; readonly frameHistory?: {
+      readonly eventRevision: number; readonly discontinuity?: import('../../effects/frameHistoryTransition').FrameHistoryDiscontinuity; readonly ownerRevision: number;
+    } } = {},
   ): Promise<WorkerRenderHostRuntimeJobOutput> {
     return this.sendCommand({
       type: 'presentSoftwareFrame',
       requestId,
       targetId,
       timelineTime,
+      ...(options.compositionId !== undefined ? { compositionId: options.compositionId } : {}),
+      ...(options.frameHistory ? { frameHistory: options.frameHistory } : {}),
       frame,
       readback: options.readback,
     }, transfer);

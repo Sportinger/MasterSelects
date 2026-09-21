@@ -45,8 +45,10 @@ keeps the node identity, compatible links and numeric
 bindings; inputs absent in the new mode disconnect in the same undo step.
 Flock math cards offer all operations supported by the Flock registry.
 
-Numeric and text viewers use real DOM text and controls, without thumbnail
-generation or atlas tiles. Unconnected numeric operands can be dragged or typed
+Numeric and text viewers, including math symbols and sampled port values, draw
+directly in the worker canvas without thumbnail generation or atlas tiles.
+Editable values retain transparent DOM interaction targets; their controls become
+visible during editing or keyboard focus. Unconnected operands can be dragged or typed
 directly; the touched number updates immediately while dependent calculations
 finish independently. Numeric jobs do not wait for image-preview readbacks.
 For graph-local constants, inline and inspector controls share the same saved
@@ -171,7 +173,9 @@ same graph owner, history and save/load path as the effect, with no parallel UI 
 
 A third viewport-sized OffscreenCanvas layer draws previews without per-frame
 React updates. A shared atlas has a 32 MiB ceiling and packs 128, 512 or 2048
-thumbnails depending on zoom. Images are closed after rasterization. One scheduler
+thumbnails depending on the initial zoom and later enlargement. Atlas enlargement
+copies existing tiles before releasing the old atlas (temporarily up to 64 MiB);
+zooming out does not downsample cached images. Images are closed after rasterization. One scheduler
 limits work to two concurrent producers, 2 million thumbnail pixels/second and a
 2 ms synchronous dispatch budget. GPU copies share one same-device atlas, without
 full-resolution readback or per-node canvases. Compressed geometry is sampled in
@@ -182,7 +186,9 @@ export pause requests. Tiny viewers below 32 screen pixels retain their last
 image; larger viewers refresh at up to 12 Hz (5 Hz at overview zoom, 3 Hz in the
 software fallback). Paused unchanged outputs reuse cached pixels. Continuous
 playback accepts bounded asynchronous latency; edits and seeks discard obsolete
-results. Pan reuses existing atlas pixels. These are bounded preview costs;
+results. Pan and zoom reuse existing atlas pixels; zoom alone does not request new
+paused frames. The next content update uses the current preview resolution.
+These are bounded preview costs;
 expensive processing in the editor's main render path still affects frame time.
 
 The isolated `/tests/browser/node-previews-probe.html` page exercises color stages,
@@ -247,29 +253,83 @@ Dashed cables show recorded bake dependencies, remain visible without selection,
 and have no live flow animation or cable-editing actions. Playback reads the saved
 curves; changing the landmarks or bake settings requires another bake.
 
-Nodes, groups, cables, plugs and animation curves are drawn on two viewport-sized
+Nodes, cables, plugs and animation curves are drawn on two viewport-sized
 Canvas 2D layers. Supported browsers transfer these to an OffscreenCanvas worker.
 The static layer changes only after graph/view changes; a separate animation
 layer updates at 30 Hz without per-frame React renders. Pointer changes reach the
 worker immediately and do not wait behind the decorative animation timer.
-Offscreen geometry is culled and backing stores are bounded to 4096 pixels per
+Fitted system-font labels use a bounded, per-context cache, so pan/zoom frames
+reuse unchanged text clipping rather than repeatedly measuring every prefix.
+Group backgrounds remain full-size DOM rectangles behind these layers and follow
+the immediate visual transform. Zooming out exposes the complete background
+without waiting for a worker frame or revealing the edge of a cached bitmap.
+All canvas layers include a 256 CSS-pixel buffer on every side. Nearby nodes,
+cables and previews are prepared before they enter the viewport, covering newly
+exposed edges while the previous frame follows a pan or zoom gesture. The fixed
+workspace clips this buffer; each presented frame retains its logical viewport
+for accurate alignment with the interaction targets.
+Geometry outside the buffer is culled and backing stores are bounded to 4096 pixels per
 dimension and 8 million pixels per layer. Canvas dimensions never follow the
 full graph bounds.
 
-The original DOM retains hit targets, tooltips and keyboard navigation. A focused
-node exposes its keyboard focus styling; the inspector stays a regular DOM UI.
+The original DOM retains hit targets, tooltips and keyboard navigation only in
+the viewport plus a 256 CSS-pixel margin. Node cards, cable hit paths and port
+grips outside that area are unmounted; crossing cables remain interactive even
+when both endpoint nodes are offscreen. The canvas still receives the complete
+graph. Visibility lists retain their identity until membership changes, avoiding
+DOM subtree reconciliation on every pan frame. Node/connection drags and focused
+node controls temporarily retain all targets to preserve pointer capture and
+keyboard navigation. A focused node exposes its keyboard focus styling; the
+inspector stays a regular DOM UI.
+Canvas mode omits duplicate SVG artwork and port-label DOM. Cable grips use flat
+HTML hit targets with the same reconnect, delete and keyboard actions; the SVG
+renderer remains the fallback. Port descriptions remain accessible and tooltips
+work with pointer, keyboard and touch. The background grid moves on a separate
+cached layer: pan offsets no longer propagate through inherited CSS variables
+and trigger descendant style recalculation.
 Worker startup/runtime failure replaces the transferred canvases with a main-thread
 software renderer; if Canvas 2D is unavailable, the DOM graph remains usable.
 Panning and zooming keep unchanged node-card props and connection callbacks
-stable, while spatial culling limits mounted cards to the visible graph region.
+stable, while spatial culling limits the canvas geometry that is drawn.
 Repeated pointer movement within one dock pane does not publish another layout
 update or write the persisted layout. This separates graph drawing from the editor's main thread;
 expensive video/effect rendering can still delay mouse event delivery.
+Preview sources remain lazy-loaded, but once available their synchronous work
+runs directly inside the scheduler's 2 ms tick budget. A single expensive job can
+exceed that cooperative budget; the scheduler then yields before starting another.
+Promise-based GPU readback stays asynchronous. Moving drawing to the worker does
+not move graph compilation or preview-value evaluation off the main thread.
 
 For development profiling, `measure-node-graph-interaction` on the authenticated
 debug bridge performs a bounded pan and restores the viewport. It reports main-thread
 frame gaps alongside worker drawing time, so a smooth worker is not mistaken for
 smooth mouse handling. It does not edit nodes or timeline data.
+The result includes mounted node, cable, plug and edge-layer DOM counts.
+With the canvas renderer active, `hideEdgeDom: true` temporarily hides the SVG
+cable/plug interaction layers while keeping canvas cables visible; their inline
+display styles are restored after the run. `measureHitTesting: true` additionally
+times `elementFromPoint` after each pan step, including any style/layout flush.
+This is a synthetic isolation probe, not a native pointer-latency measurement;
+hidden SVG elements remain mounted. Compare repeated runs at the same zoom,
+viewport, effect, playback state and preview setting.
+`hideNodeDom: true` similarly isolates the transparent node-card layer (separate
+value controls remain mounted). The probe records viewport size/transform and
+the profiled React child-subtree's render time and commit count. This excludes
+the parent canvas component's own work, other panels, and commit/layout costs.
+Worker samples expose base, animation and preview paint timings; composition and
+bitmap-transfer overhead remains in the total worker paint time. Preview producer
+samples separately count synchronous calls, cumulative CPU time and maximum job
+time, including work that previously escaped the scheduler through microtasks.
+
+The local development page `/tests/browser/node-effect-performance.html` compares
+Exposure, Chroma Key and Holo against their original registered shaders using
+synthetic pixels at 1080p and 4K. It warms pipelines, alternates execution order,
+uses GPU timestamp queries when available, and checks output pixels. A separate
+CPU measurement exercises the real fullscreen `EffectsPipeline.applyEffects`
+for Chroma Key and Holo with stable graphs and no preview requests. Exposure is
+excluded from that CPU test because the editor normally fuses it into the
+compositor. Downloadable JSON keeps GPU execution and CPU preparation separate;
+these measurements do not represent whole-editor playback or decode performance.
 
 ## Keyframe nodes
 
@@ -461,6 +521,11 @@ remain independent. Required processing-chain links cannot be left dangling; use
 bypass to skip an effect.
 
 Effect and AI nodes include a compact bypass toggle in the node header. Effect bypass writes through to the existing effect enabled flag; AI node bypass is stored on the custom node and prevents that generated runtime from processing the preview signal.
+Effect groups also expose **Byp** in their group header, both expanded and
+collapsed. This switches the same effect enabled flag as Properties and shows
+**Bypassed** when inactive. Individual operator bypass states, graph wiring and
+effect parameters remain intact; group bypass participates in undo/redo and
+respects locked tracks and export protection.
 
 Cable ends have colored semicircular **plugs** around their sockets, with grips
 outside the node card. They remain visible above cards, including collapsed groups;

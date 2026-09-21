@@ -168,7 +168,7 @@ function executorHarness(events: string[] = []) {
     })),
   } as unknown as GPUCommandEncoder;
   const compositor = {
-    composite: vi.fn((data: readonly LayerRenderData[]) => {
+    composite: vi.fn((data: readonly LayerRenderData[], _encoder?: GPUCommandEncoder, _state?: unknown) => {
       events.push(`pre-render:${data[0]?.layer.sourceClipId ?? 'missing'}`);
       return {
         finalView: { label: `pre-rendered:${data[0]?.layer.sourceClipId ?? 'missing'}` },
@@ -220,6 +220,41 @@ describe('MD7 strict worker GPU adjustment integration', () => {
       'apply-adjustment-effect',
       'mix-adjustment-result',
     ]);
+  });
+
+  it('forwards portable frame-history metadata without deriving owner revision from graphVersion', () => {
+    const result = buildWorkerGpuAdjustmentExecutionPlan({
+      layers: [adjustmentLayer(), videoLayer()],
+      videoSources: [{ layerId: 'video-runtime-layer', sourceId: 'gpu-video:video-clip' }],
+      frameContext: {
+        compositionId: 'comp-history', timelineTimeSeconds: 3,
+        frameHistory: { eventRevision: 9, discontinuity: 'seek', ownerRevision: 27 },
+      },
+      requestId: 'request-history', targetId: 'preview', frameIndex: 12, intent: 'preview', nowMs: 100,
+      frameIdentity: {
+        requestId: 'request-history', targetId: 'preview', compositionId: 'comp-history', timelineTime: 3,
+        frameIndex: 12, intent: 'preview', submitByMs: 100, expireAfterMs: 1100, exact: true, graphVersion: 731,
+      },
+      resourceNamespace: 'comp-history:preview',
+    });
+    if (!result) throw new Error('Expected adjustment plan');
+    expect(result.frameHistory).toEqual({ eventRevision: 9, discontinuity: 'seek', ownerRevision: 27 });
+    expect(result.frame.graphVersion).toBe(731);
+    expect(result.frameHistory?.ownerRevision).toBe(27);
+
+    const harness = executorHarness();
+    encodeWorkerGpuAdjustmentPlan({
+      plan: result, device: harness.device, commandEncoder: harness.commandEncoder,
+      resources: harness.resources, sources: [{
+        layerId: 'video-clip', sourceId: 'gpu-video:video-clip', data: sourceFrame('video-clip'),
+      }], width: 16, height: 9,
+    });
+    const state = harness.compositor.composite.mock.calls[0]?.[2];
+    expect(state).toMatchObject({
+      historyScopeId: 'comp-history',
+      resourceNamespace: JSON.stringify(['comp-history:preview', 'source', 'video-clip']),
+      frameHistory: { eventRevision: 9, discontinuity: 'seek', ownerRevision: 27 },
+    });
   });
 
   it('executes the exact frozen pass order without reconstructing a second effect model', () => {

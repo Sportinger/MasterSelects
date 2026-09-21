@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   MEMORY_MAX_WINDOW_BYTES,
   hashFrame,
@@ -8,6 +8,8 @@ import {
   resolveWindowOffset,
   sliceWindow,
 } from '../../src/effects/generate/memoryLeak/memoryWindow';
+import { buildMemoryWindow } from '../../src/effects/generate/memoryLeak/memorySource';
+import { memoryLeakHeapSource } from '../../src/effects/generate/memoryLeak/heapSource';
 
 describe('planMemoryWindow', () => {
   it('covers the output aspect with square pixels', () => {
@@ -101,5 +103,38 @@ describe('buildHeapPageMap / gatherHeapWindow', () => {
     expect(Array.from(window)).toEqual([1, 1, 3, 3, 3, 3]);
     const wrapped = gatherHeapWindow(heap, map, 2 * PAGE - 2, 4);
     expect(Array.from(wrapped)).toEqual([3, 3, 1, 1]);
+  });
+});
+
+describe('buildMemoryWindow frame clock', () => {
+  const bytes = Uint8Array.from({ length: 256 * 1024 }, (_, index) => Math.floor(index / 1024) & 255);
+
+  it('uses the supplied frame rate for advance and shuffle boundaries', () => {
+    const snapshot = vi.spyOn(memoryLeakHeapSource, 'getSnapshot').mockReturnValue(bytes);
+    try {
+      const advance = { snapshot: 'clock', size: 8, depth: '8', motion: 'advance', stride: 1, offset: 0 };
+      expect(buildMemoryWindow(advance, 16, 9, 1 / 60, 30)?.data[0]).toBe(0);
+      expect(buildMemoryWindow(advance, 16, 9, 1 / 60, 60)?.data[0]).toBe(1);
+
+      const shuffle = { snapshot: 'clock', size: 8, depth: '8', motion: 'shuffle', seed: 17, offset: 0 };
+      const at30 = buildMemoryWindow(shuffle, 16, 9, 1 / 60, 30)?.offset;
+      const at60 = buildMemoryWindow(shuffle, 16, 9, 1 / 60, 60)?.offset;
+      expect(at30).toBe(resolveWindowOffset(shuffle, 0, bytes.length));
+      expect(at60).toBe(resolveWindowOffset(shuffle, 1, bytes.length));
+      expect(at60).not.toBe(at30);
+    } finally {
+      snapshot.mockRestore();
+    }
+  });
+
+  it('keeps static windows independent of frame rate', () => {
+    const snapshot = vi.spyOn(memoryLeakHeapSource, 'getSnapshot').mockReturnValue(bytes);
+    try {
+      const params = { snapshot: 'clock', size: 8, depth: '8', motion: 'static', offset: .125 };
+      expect(buildMemoryWindow(params, 16, 9, 12.5, 30)?.offset)
+        .toBe(buildMemoryWindow(params, 16, 9, 12.5, 60)?.offset);
+    } finally {
+      snapshot.mockRestore();
+    }
   });
 });

@@ -78,6 +78,7 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
       box(ctx, badgeX, 83, width, 16); ctx.strokeStyle = color; ctx.lineWidth = 0.6; ctx.stroke(); text(ctx, badge.label, badgeX + 5, 94, width - 8, color, 9); badgeX += width + 4;
     }
     if (node.curve) drawCurve(ctx, node.curve, theme);
+    if (node.mathSymbol) text(ctx, node.mathSymbol.text, node.mathSymbol.x, node.mathSymbol.y, 64, theme.muted, 26, 500, 'center');
     for (const port of node.ports) {
       ctx.fillStyle = port.color; ctx.beginPath(); ctx.arc(port.x, port.y, 3.5, 0, Math.PI * 2); ctx.fill();
       const x = port.x + (port.input ? 9 : -9), align = port.input ? 'left' : 'right';

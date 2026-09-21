@@ -24,6 +24,7 @@ import { calculateSourcePixelScale } from '../../../utils/sourcePixelScale';
 import type { RenderDeps } from '../RenderDispatcher';
 import type { DispatcherDebugSnapshotFacet, RenderDispatcherDebugSnapshot } from './dispatcherDebugSnapshot';
 import type { GaussianSequenceFacet, GaussianSplatSceneLoadRequest } from './gaussianSequenceFacet';
+import type { EffectRenderClockContext } from '../../../effects/_shared/byteTexture';
 
 const log = Logger.create('RenderDispatcher');
 
@@ -126,6 +127,7 @@ export class SharedScene3DProcessor {
     cameraOverride?: SceneCameraConfig | null,
     targetId?: string,
     timelineTimeSeconds = 0,
+    effectRenderClock?: EffectRenderClockContext,
   ): void {
     const hasReferenceSize = typeof referenceWidthOrCameraOverride === 'number';
     const referenceWidth = hasReferenceSize ? referenceWidthOrCameraOverride : width;
@@ -329,7 +331,7 @@ export class SharedScene3DProcessor {
       d.maskTextureManager,
       sceneTargetKey,
       d.effectsPipeline && d.sampler
-        ? { effectsPipeline: d.effectsPipeline, sampler: d.sampler, timelineTimeSeconds }
+        ? { effectsPipeline: d.effectsPipeline, sampler: d.sampler, timelineTimeSeconds, effectRenderClock }
         : undefined,
     );
     const gizmoTextureView = sceneGizmo

@@ -361,6 +361,7 @@ class LayerPlaybackManager {
       layers: innerLayers,
       width: state.composition.width,
       height: state.composition.height,
+      frameRate: state.composition.frameRate,
       currentTime: layerTime,
     };
 

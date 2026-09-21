@@ -3,6 +3,7 @@ import { planGlyphAtlas } from '../_shared/glyphAtlas';
 import type { EffectCategory, EffectDefinition, EffectParam } from '../types';
 import glyphInclude from '../_shared/glyph.wgsl?raw';
 import familyShader from './shader.wgsl?raw';
+import { FEEDBACK_PARAMETERS } from '../_shared/feedbackParameters';
 
 interface GlyphEffectOptions {
   id: string;
@@ -61,6 +62,7 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
       speed: { type: 'number' as const, label: 'Speed', default: 1, min: 0, max: 5, step: 0.05, animatable: true, group: 'Motion' },
     } : {}),
     ...(options.feedback ? {
+      ...FEEDBACK_PARAMETERS,
       reset: { type: 'boolean' as const, label: 'Reset Trail', default: false, group: 'Motion' },
     } : {}),
     ...options.params,
@@ -94,7 +96,7 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
       charset: rampFor(values),
       cellSize: 64,
     }),
-    packUniforms: (values, width, height) => {
+    packUniforms: (values, width, height, timelineTimeSeconds = 0) => {
       const ramp = rampFor(values);
       const atlas = planGlyphAtlas({
         fontFamily: String(values.fontFamily ?? FONT_OPTIONS[0].value),
@@ -108,7 +110,7 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
         width, height,
         numeric(values.cellSize, defaultCellSize),
         numeric(values.amount, 1),
-        typeof performance === 'undefined' ? 0 : performance.now() / 1_000,
+        Number.isFinite(timelineTimeSeconds) ? timelineTimeSeconds : 0,
         numeric(values.speed, 0),
         atlas.glyphs.length,
         atlas.columns,

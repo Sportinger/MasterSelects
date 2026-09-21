@@ -58,7 +58,7 @@ async function runDirectRamPreviewSmokeRange(start: number, end: number): Promis
         getInterpolatedSpeed: (id, t) => useTimelineStore.getState().getInterpolatedSpeed(id, t),
         getCompositionDimensions: (compId) => {
           const comp = useMediaStore.getState().compositions.find((candidate) => candidate.id === compId);
-          return { width: comp?.width || 1920, height: comp?.height || 1080 };
+          return { width: comp?.width || 1920, height: comp?.height || 1080, frameRate: comp?.frameRate ?? 30 };
         },
         onFrameCached: (time) => useTimelineStore.getState().addCachedFrame(time),
         onProgress: () => undefined,

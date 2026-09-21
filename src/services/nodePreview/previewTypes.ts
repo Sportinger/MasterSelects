@@ -18,7 +18,7 @@ export interface PreviewFrame {
   bitmap?: ImageBitmap;
   aspectRatio?: number;
   drawing?: PreviewDrawing;
-  /** Text/value viewers stay in the DOM and never allocate atlas tiles. */
+  /** Text/value viewers draw directly in the canvas, without atlas tiles. */
   presentation?: 'text';
   controls?: PreviewValueControl[];
   /** Read-only sampled values, alongside editable unconnected operands. */

@@ -1,7 +1,9 @@
 import type { EffectParam } from '../../types';
+import { FEEDBACK_PARAMETERS } from '../../_shared/feedbackParameters';
 
 /** One schema for the effect form, reusable operator bindings and rendering. */
 export const VOXEL_RELIEF_PARAMS: Record<string, EffectParam> = {
+    ...FEEDBACK_PARAMETERS,
     columns: {
       type: 'number',
       label: 'Columns',

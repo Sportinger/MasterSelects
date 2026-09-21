@@ -52,6 +52,7 @@ export function createTransitionNestedCompositionLayer(params: {
         layers: nestedLayers,
         width: composition.width,
         height: composition.height,
+        frameRate: composition.frameRate,
         currentTime: compositionTime,
         sceneClips,
         sceneTracks,

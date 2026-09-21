@@ -6,10 +6,71 @@ const base = (key: string, resourceInputs?: readonly string[]): ImageOperatorPla
   fusion: 'inline', capabilities: [], instructions: [], output: 0, sampleScopes: [], ...(resourceInputs ? { resourceInputs } : {}) });
 
 describe('ImageGraphPassRuntime', () => {
-  beforeEach(() => { vi.stubGlobal('GPUTextureUsage', { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2 }); vi.stubGlobal('GPUBufferUsage', { UNIFORM: 1, COPY_DST: 2 }); });
+  beforeEach(() => { vi.stubGlobal('GPUTextureUsage', { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2 }); vi.stubGlobal('GPUBufferUsage', { UNIFORM: 1, COPY_DST: 2 });
+    vi.stubGlobal('GPUShaderStage', { FRAGMENT: 2 }); });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('encodes producer order, reuses allocations, resizes, and disposes owned textures', () => {
+  it('borrows external textures in one final pass without allocating or owning them', () => {
+    const draw = vi.fn(), createTexture = vi.fn(), view = {} as GPUTextureView;
+    const createBindGroup = vi.fn(() => ({}));
+    const device = { limits: { maxSampledTexturesPerShaderStage: 16 }, lost: new Promise(() => {}), createTexture,
+      createShaderModule: () => ({}), createRenderPipeline: () => ({ getBindGroupLayout: () => ({}) }), createBindGroup } as unknown as GPUDevice;
+    const encoder = { beginRenderPass: () => ({ setPipeline() {}, setBindGroup() {}, draw, end() {} }) } as unknown as GPUCommandEncoder;
+    const runtime = new ImageGraphPassRuntime(device), options = { encoder, sampler: {} as GPUSampler,
+      source: { kind: 'texture' as const, view: {} as GPUTextureView }, width: 8, height: 8, timelineTimeSeconds: 0,
+      outputView: {} as GPUTextureView, instanceId: 'atlas', plan: base('atlas', ['atlas']) };
+    expect(() => runtime.encode(options)).toThrow(/unavailable resource atlas/);
+    expect(runtime.encode({ ...options, externalResources: new Map([['atlas', { view, identity: 'ramp-A' }]]) })).toBe(true);
+    expect(draw).toHaveBeenCalledOnce(); expect(createTexture).not.toHaveBeenCalled();
+    expect(createBindGroup).toHaveBeenCalledWith(expect.objectContaining({ entries: expect.arrayContaining([{ binding: 3, resource: view }]) }));
+    runtime.dispose();
+  });
+
+  it('packs borrowed uint texture metadata into the aligned runtime block', () => {
+    const writeBuffer = vi.fn(), view = {} as GPUTextureView, createBindGroupLayout = vi.fn(() => ({}));
+    const device = { limits: { maxSampledTexturesPerShaderStage: 16 }, lost: new Promise(() => {}),
+      queue: { writeBuffer }, createShaderModule: vi.fn(() => ({})),
+      createRenderPipeline: vi.fn(() => ({ getBindGroupLayout: () => ({}) })), createBindGroup: vi.fn(() => ({})),
+      createBindGroupLayout, createPipelineLayout: vi.fn(() => ({})),
+      createBuffer: vi.fn(() => ({})), createTexture: vi.fn() } as unknown as GPUDevice;
+    const encoder = { beginRenderPass: () => ({ setPipeline() {}, setBindGroup() {}, draw() {}, end() {} }) } as unknown as GPUCommandEncoder;
+    const plan = { ...base('memory', ['memory-window']), resourceSampling: ['exact-u32-pixel-load'] as const };
+    const runtime = new ImageGraphPassRuntime(device);
+    expect(() => runtime.encode({ encoder, sampler: {} as GPUSampler, source: { kind: 'texture', view: {} as GPUTextureView },
+      width: 8, height: 8, timelineTimeSeconds: 0, outputView: {} as GPUTextureView, instanceId: 'memory', plan,
+      externalResources: new Map([['memory-window', { view, identity: 'missing-metadata' }]]) })).toThrow(/requires runtime metadata/);
+    expect(runtime.encode({ encoder, sampler: {} as GPUSampler, source: { kind: 'texture', view: {} as GPUTextureView },
+      width: 8, height: 8, timelineTimeSeconds: 0, outputView: {} as GPUTextureView, instanceId: 'memory', plan,
+      externalResources: new Map([['memory-window', { view, identity: 'bytes-a', width: 80, height: 45, available: true }]]) })).toBe(true);
+    const packed = writeBuffer.mock.calls.at(-1)?.[2] as Float32Array;
+    expect([...packed]).toEqual([1, 80, 45, 0]);
+    const layoutEntries = createBindGroupLayout.mock.calls[0][0].entries as GPUBindGroupLayoutEntry[];
+    expect(layoutEntries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ binding: 2, buffer: { type: 'uniform' } }),
+      expect.objectContaining({ binding: 3, texture: { sampleType: 'uint' } }),
+    ]));
+    runtime.dispose();
+  });
+
+  it('invalidates batch materializations when borrowed resource content changes', () => {
+    const draw = vi.fn(), device = { limits: { maxSampledTexturesPerShaderStage: 16 }, lost: new Promise(() => {}),
+      createTexture: () => ({ destroy() {}, createView: () => ({}) }), createShaderModule: () => ({}),
+      createRenderPipeline: () => ({ getBindGroupLayout: () => ({}) }), createBindGroup: () => ({}) } as unknown as GPUDevice;
+    const encoder = { beginRenderPass: () => ({ setPipeline() {}, setBindGroup() {}, draw, end() {} }) } as unknown as GPUCommandEncoder;
+    const producer = base('producer', ['atlas']), final = base('final', ['r']);
+    const plan = { ...final, passes: [{ id: 'producer', program: producer, inputResources: ['atlas'], outputResource: 'r' },
+      { id: 'final', program: final, inputResources: ['r'] }], resources: [{ id: 'r', producerPassId: 'producer', format: 'rgba16float' as const }] };
+    const runtime = new ImageGraphPassRuntime(device), common = { encoder, sampler: {} as GPUSampler,
+      source: { kind: 'texture' as const, view: {} as GPUTextureView }, width: 8, height: 8, timelineTimeSeconds: 0,
+      instanceId: 'atlas', plan, batch: runtime.createBatch(), stopAtResourceId: 'r' };
+    const view = {} as GPUTextureView;
+    for (const identity of ['A', 'B', 'A']) runtime.encode({ ...common, externalResources: new Map([['atlas', { view, identity }]]) });
+    expect(draw).toHaveBeenCalledTimes(2);
+    expect(() => runtime.encode({ ...common, externalResources: new Map([['r', { view, identity: 'collision' }]]) })).toThrow(/conflicts/);
+    expect(() => runtime.encode({ ...common, externalResources: new Map([['atlas', { view, identity: '' }]]) })).toThrow(/content identity/);
+  });
+
+  it('drops replaced topology ownership before submission and disposes only the active allocation', () => {
     const draws: unknown[] = [], destroyed: Array<ReturnType<typeof vi.fn>> = [];
     const createTexture = vi.fn(() => { const destroy = vi.fn(); destroyed.push(destroy); const view = {}; return { destroy, createView: () => view }; });
     const pipeline = { getBindGroupLayout: () => ({}) };
@@ -24,7 +85,11 @@ describe('ImageGraphPassRuntime', () => {
     expect(runtime.encode({ ...common, width: 320, height: 180 })).toBe(true);
     expect(draws).toHaveLength(2); expect(createTexture).toHaveBeenCalledTimes(1);
     runtime.encode({ ...common, width: 320, height: 180 }); expect(createTexture).toHaveBeenCalledTimes(1);
-    runtime.encode({ ...common, width: 640, height: 360 }); expect(createTexture).toHaveBeenCalledTimes(2); expect(destroyed[0]).not.toHaveBeenCalled();
+    const replacement = { ...plan, key: 'replacement', passes: plan.passes!.map(pass => ({
+      ...pass, program: { ...pass.program, key: `${pass.program.key}-replacement` },
+    })) };
+    runtime.encode({ ...common, plan: replacement, width: 320, height: 180 });
+    expect(createTexture).toHaveBeenCalledTimes(2); expect(destroyed[0]).not.toHaveBeenCalled();
     runtime.dispose(); expect(destroyed[0]).not.toHaveBeenCalled(); expect(destroyed[1]).toHaveBeenCalledOnce();
   });
 

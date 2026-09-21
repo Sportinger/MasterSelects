@@ -4,7 +4,7 @@
 
 import shader from './shader.wgsl?raw';
 import type { EffectParam, FullscreenEffectDefinition } from '../../types';
-import type { ByteTextureUpload } from '../../_shared/byteTexture';
+import type { ByteTextureContext, ByteTextureUpload } from '../../_shared/byteTexture';
 import { depthParam, numberParam, planMemoryWindow } from './memoryWindow';
 import { buildMemoryWindow, resolveMemorySource } from './memorySource';
 
@@ -70,9 +70,9 @@ const FLOAT_MODE_INDEX: Record<string, number> = { clamp: 0, wrap: 1, abs: 2 };
 
 function provideByteTexture(
   params: Record<string, Primitive>,
-  context: { width: number; height: number; timelineTimeSeconds: number },
+  context: ByteTextureContext,
 ): ByteTextureUpload | null {
-  const window = buildMemoryWindow(params, context.width, context.height, context.timelineTimeSeconds);
+  const window = buildMemoryWindow(params, context.width, context.height, context.timelineTimeSeconds, context.frameRate);
   if (!window) return null;
   return {
     data: window.data,

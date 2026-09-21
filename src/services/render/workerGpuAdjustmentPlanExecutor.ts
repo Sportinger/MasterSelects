@@ -343,6 +343,8 @@ function preRenderSource(
       'source',
       input.source.layerId,
     ]),
+    historyScopeId: input.plan.frame.compositionId,
+    frameHistory: input.plan.frameHistory,
   }).finalView;
 }
 

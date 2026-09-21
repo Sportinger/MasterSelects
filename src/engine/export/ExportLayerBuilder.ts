@@ -184,6 +184,7 @@ function buildExportLayerForClip(
         layers: nestedLayers,
         width: compWidth,
         height: compHeight,
+        frameRate: ctx.mediaCompositions.find(candidate => candidate.id === clip.compositionId)?.frameRate ?? ctx.fps,
         currentTime: nestedTime,
         sceneClips: clip.nestedClips,
         sceneTracks: clip.nestedTracks,

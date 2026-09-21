@@ -19,6 +19,13 @@ import type {
   WorkerGpuRenderDeadline,
   WorkerGpuRenderIntent,
 } from '../../render/workerGpuRuntimeCommands';
+import type { FrameHistoryDiscontinuity } from '../../../effects/frameHistoryTransition';
+
+export interface MotionAdjustmentWorkerGpuFrameHistory {
+  readonly eventRevision: number;
+  readonly discontinuity?: FrameHistoryDiscontinuity;
+  readonly ownerRevision: number;
+}
 
 export const MOTION_ADJUSTMENT_WORKER_GPU_PLAN_VERSION =
   'motion-adjustment-worker-gpu-plan/v1' as const;
@@ -30,6 +37,7 @@ export interface MotionAdjustmentWorkerGpuPlanInput {
   readonly graphVersion: number;
   /** Main supplies a distinct value for every nested composition occurrence. */
   readonly resourceNamespace: string;
+  readonly frameHistory?: MotionAdjustmentWorkerGpuFrameHistory;
 }
 
 export interface MotionAdjustmentWorkerGpuFrameIdentity {
@@ -160,6 +168,7 @@ export interface MotionAdjustmentWorkerGpuExecutionPlan {
   readonly renderPlan: MotionAdjustmentEvaluatedRenderPlan;
   readonly frame: MotionAdjustmentWorkerGpuFrameIdentity;
   readonly resourceNamespace: string;
+  readonly frameHistory?: MotionAdjustmentWorkerGpuFrameHistory;
   readonly resources: readonly MotionAdjustmentWorkerGpuResource[];
   readonly passes: readonly MotionAdjustmentWorkerGpuPass[];
   readonly finalAccumulatorRef: string;
@@ -189,7 +198,7 @@ export function planMotionAdjustmentWorkerGpuExecutionFromRenderPlan(
 ): MotionAdjustmentWorkerGpuExecutionPlan {
   assertMotionAdjustmentEvaluatedRenderPlan(renderPlan);
   const frame = admitFrameIdentity(input, renderPlan);
-  return buildWorkerGpuPlan(renderPlan, frame, input.resourceNamespace);
+  return buildWorkerGpuPlan(renderPlan, frame, input.resourceNamespace, input.frameHistory);
 }
 
 export function serializeMotionAdjustmentWorkerGpuExecutionPlan(
@@ -229,11 +238,13 @@ export function assertMotionAdjustmentWorkerGpuExecutionPlan(
       'finalAccumulatorRef',
       'finalAccumulatorResourceId',
       'paritySignature',
+      ...('frameHistory' in value ? ['frameHistory'] : []),
     ])
     || value.contractVersion !== MOTION_ADJUSTMENT_WORKER_GPU_PLAN_VERSION
     || value.operationPacketVersion !== MOTION_ADJUSTMENT_OPERATION_PACKET_VERSION
     || !isPlainRecord(value.frame)
     || typeof value.resourceNamespace !== 'string'
+    || !isFrameHistory(value.frameHistory)
   ) {
     throw new Error('Invalid motion adjustment worker GPU execution plan');
   }
@@ -243,11 +254,13 @@ export function assertMotionAdjustmentWorkerGpuExecutionPlan(
     deadline: deadlineFromFrame(value.frame),
     graphVersion: value.frame.graphVersion as number,
     resourceNamespace: value.resourceNamespace,
+    ...(value.frameHistory ? { frameHistory: value.frameHistory } : {}),
   }, value.renderPlan);
   const expected = buildWorkerGpuPlan(
     value.renderPlan,
     frame,
     value.resourceNamespace,
+    value.frameHistory as MotionAdjustmentWorkerGpuFrameHistory | undefined,
   );
   if (stableStringify(value) !== stableStringify(expected)) {
     throw new Error('Motion adjustment worker GPU plan diverges from admitted semantics');
@@ -258,6 +271,7 @@ function buildWorkerGpuPlan(
   sourceRenderPlan: MotionAdjustmentEvaluatedRenderPlan,
   frame: MotionAdjustmentWorkerGpuFrameIdentity,
   resourceNamespace: string,
+  frameHistory?: MotionAdjustmentWorkerGpuFrameHistory,
 ): MotionAdjustmentWorkerGpuExecutionPlan {
   const renderPlan = cloneJson(sourceRenderPlan);
   assertMotionAdjustmentEvaluatedRenderPlan(renderPlan);
@@ -485,11 +499,12 @@ function buildWorkerGpuPlan(
     renderPlan,
     frame: { ...frame },
     resourceNamespace,
+    ...(frameHistory ? { frameHistory: { ...frameHistory } } : {}),
     resources,
     passes,
     finalAccumulatorRef: renderPlan.finalAccumulatorRef,
     finalAccumulatorResourceId,
-    paritySignature: createParitySignature(renderPlan, frame),
+    paritySignature: createParitySignature(renderPlan, frame, frameHistory),
   };
   return deepFreezeJson(plan);
 }
@@ -501,7 +516,7 @@ function admitFrameIdentity(
   assertMotionAdjustmentJsonData(input);
   if (
     !isPlainRecord(input)
-    || !hasExactKeys(input, ['deadline', 'graphVersion', 'resourceNamespace'])
+    || !hasExactKeys(input, ['deadline', 'graphVersion', 'resourceNamespace', ...('frameHistory' in input ? ['frameHistory'] : [])])
     || !isPlainRecord(input.deadline)
     || !hasExactKeys(input.deadline, [
       'requestId',
@@ -525,6 +540,7 @@ function admitFrameIdentity(
     || input.deadline.exact !== true
     || !isSafeNonNegativeInteger(input.graphVersion)
     || !isMotionAdjustmentStableId(input.resourceNamespace)
+    || !isFrameHistory(input.frameHistory)
   ) {
     throw new Error('Invalid exact worker GPU adjustment frame identity');
   }
@@ -606,6 +622,7 @@ function createResourceId(
 function createParitySignature(
   renderPlan: MotionAdjustmentEvaluatedRenderPlan,
   frame: MotionAdjustmentWorkerGpuFrameIdentity,
+  frameHistory?: MotionAdjustmentWorkerGpuFrameHistory,
 ): string {
   const canonicalSemantics = stableStringify({
     parityVersion: MOTION_ADJUSTMENT_WORKER_GPU_PARITY_VERSION,
@@ -621,6 +638,7 @@ function createParitySignature(
     frameIndex: frame.frameIndex,
     graphVersion: frame.graphVersion,
     exact: frame.exact,
+    ...(frameHistory ? { frameHistory } : {}),
   });
   return [
     MOTION_ADJUSTMENT_WORKER_GPU_PARITY_VERSION,
@@ -628,6 +646,16 @@ function createParitySignature(
     hashString(canonicalSemantics, 0x9e3779b1),
     canonicalSemantics.length,
   ].join(':');
+}
+
+function isFrameHistory(value: unknown): value is MotionAdjustmentWorkerGpuFrameHistory | undefined {
+  if (value === undefined) return true;
+  return isPlainRecord(value)
+    && hasExactKeys(value, ['eventRevision', 'ownerRevision', ...('discontinuity' in value ? ['discontinuity'] : [])])
+    && isSafeNonNegativeInteger(value.eventRevision)
+    && isSafeNonNegativeInteger(value.ownerRevision)
+    && (value.discontinuity === undefined || value.discontinuity === 'seek'
+      || value.discontinuity === 'loop' || value.discontinuity === 'export-start');
 }
 
 function hashString(value: string, seed: number): string {

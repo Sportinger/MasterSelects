@@ -8,6 +8,7 @@ import { collectScene3DLayers } from '../../scene/SceneLayerCollector';
 import type { EffectsPipeline } from '../../../effects/EffectsPipeline';
 import type { MaskTextureManager } from '../../texture/MaskTextureManager';
 import { useTimelineStore } from '../../../stores/timeline';
+import type { EffectRenderClockContext } from '../../../effects/_shared/byteTexture';
 
 interface NestedCompSceneLogger {
   debug: (message: string, context?: unknown) => void;
@@ -27,6 +28,7 @@ interface Process3DLayersForNestedParams {
   sceneTracks?: TimelineTrack[];
   effectsPipeline?: EffectsPipeline;
   sampler?: GPUSampler;
+  effectRenderClock?: EffectRenderClockContext;
 }
 
 export function process3DLayersForNestedScene(params: Process3DLayersForNestedParams): void {
@@ -43,6 +45,7 @@ export function process3DLayersForNestedScene(params: Process3DLayersForNestedPa
     sceneTracks,
     effectsPipeline,
     sampler,
+    effectRenderClock,
   } = params;
 
   const indices3D: number[] = [];
@@ -116,7 +119,7 @@ export function process3DLayersForNestedScene(params: Process3DLayersForNestedPa
     null,
     maskTextureManager,
     'main',
-    effectsPipeline && sampler ? { effectsPipeline, sampler, timelineTimeSeconds: currentTime ?? 0 } : undefined,
+    effectsPipeline && sampler ? { effectsPipeline, sampler, timelineTimeSeconds: currentTime ?? 0, effectRenderClock } : undefined,
   );
   if (!textureView) {
     for (let i = indices3D.length - 1; i >= 0; i--) layerData.splice(indices3D[i], 1);

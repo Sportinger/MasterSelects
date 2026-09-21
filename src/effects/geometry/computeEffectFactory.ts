@@ -1,5 +1,7 @@
 import type { ComputeEffectDefinition, EffectCategory, EffectParam } from '../types';
 import computeShader from './compute.wgsl?raw';
+import stablePixelSort16 from '../_shared/stablePixelSort16.wgsl?raw';
+import marchingSquaresTopology from '../_shared/marchingSquaresTopology.wgsl?raw';
 
 interface ComputeEffectOptions {
   id: string;
@@ -11,6 +13,25 @@ interface ComputeEffectOptions {
   category?: EffectCategory;
   computeMode?: ComputeEffectDefinition['computeMode'];
   colors?: boolean;
+}
+
+/** Canonical compute-effect parameter schema shared by catalog definitions and operator metadata. */
+export function createComputeEffectParameterSchema(options: Pick<ComputeEffectOptions, 'params' | 'animated' | 'colors'> = {}): Record<string, EffectParam> {
+  const rawParams: Record<string, EffectParam> = {
+    scale: { type: 'number', label: 'Cell / Segment Size', default: 24, min: 4, max: 96, step: 1, animatable: true, group: 'Structure' },
+    amount: { type: 'number', label: 'Amount', default: 0.8, min: 0, max: 1, step: 0.01, animatable: true, group: 'Style' },
+    threshold: { type: 'number', label: 'Threshold', default: 0.45, min: 0, max: 1, step: 0.01, animatable: true, group: 'Style' },
+    ...(options.animated ? {
+      speed: { type: 'number' as const, label: 'Speed', default: 0.5, min: 0, max: 4, step: 0.05, animatable: true, group: 'Motion' },
+    } : {}),
+    ...(options.colors ? {
+      colorA: { type: 'color' as const, label: 'Line', default: '#111827', group: 'Color' },
+      colorB: { type: 'color' as const, label: 'Paper', default: '#f8fafc', group: 'Color' },
+    } : {}),
+    ...options.params,
+  };
+  return Object.fromEntries(Object.entries(rawParams).map(([name, param]) => [name,
+    param.type === 'number' && param.animatable === undefined ? { ...param, animatable: true } : param]));
 }
 
 function numberValue(value: unknown, fallback: number): number {
@@ -28,40 +49,20 @@ function colorValue(value: unknown, fallback: string): [number, number, number, 
 }
 
 export function createComputeEffect(options: ComputeEffectOptions): ComputeEffectDefinition {
-  const rawParams: Record<string, EffectParam> = {
-      scale: { type: 'number' as const, label: 'Cell / Segment Size', default: 24, min: 4, max: 96, step: 1, animatable: true, group: 'Structure' },
-      amount: { type: 'number' as const, label: 'Amount', default: 0.8, min: 0, max: 1, step: 0.01, animatable: true, group: 'Style' },
-      threshold: { type: 'number' as const, label: 'Threshold', default: 0.45, min: 0, max: 1, step: 0.01, animatable: true, group: 'Style' },
-      ...(options.animated ? {
-        speed: { type: 'number' as const, label: 'Speed', default: 0.5, min: 0, max: 4, step: 0.05, animatable: true, group: 'Motion' },
-      } : {}),
-      ...(options.colors ? {
-        colorA: { type: 'color' as const, label: 'Line', default: '#111827', group: 'Color' },
-        colorB: { type: 'color' as const, label: 'Paper', default: '#f8fafc', group: 'Color' },
-      } : {}),
-    ...options.params,
-  };
-  const params: Record<string, EffectParam> = Object.fromEntries(
-    Object.entries(rawParams).map(([name, param]) => [
-      name,
-      param.type === 'number' && param.animatable === undefined
-        ? { ...param, animatable: true }
-        : param,
-    ]),
-  );
+  const params = createComputeEffectParameterSchema(options);
   return {
     pipelineKind: 'compute',
     id: options.id,
     name: options.name,
     category: options.category ?? 'geometry',
-    shader: computeShader,
+    shader: `${stablePixelSort16}\n${marchingSquaresTopology}\n${computeShader}`,
     entryPoint: options.entryPoint,
     uniformSize: 64,
     workgroupSize: [8, 8],
     computeMode: options.computeMode ?? 'single',
     requiresContinuousRender: options.animated,
     params,
-    packUniforms: (params, width, height) => {
+    packUniforms: (params, width, height, timelineTimeSeconds = 0) => {
       const colorA = colorValue(params.colorA, '#111827');
       const colorB = colorValue(params.colorB, '#f8fafc');
       return new Float32Array([
@@ -70,7 +71,7 @@ export function createComputeEffect(options: ComputeEffectOptions): ComputeEffec
         numberValue(params.amount, 0.8),
         numberValue(params.scale, 24),
         numberValue(params.threshold, 0.45),
-        typeof performance === 'undefined' ? 0 : performance.now() / 1_000,
+        Number.isFinite(timelineTimeSeconds) ? timelineTimeSeconds : 0,
         numberValue(params.speed, 0),
         options.variant ?? 0,
         ...colorA,

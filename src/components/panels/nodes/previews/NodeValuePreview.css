@@ -22,6 +22,11 @@
 .node-value-inline .draggable-number { font: 500 18px/24px system-ui; font-variant-numeric: tabular-nums; width: 100%; max-width: 100%; padding: 0 3px; border: 1px solid var(--separator-color, #383838); border-radius: 3px; }
 .node-value-inline small { font-size: 8px; }
 .node-value-computed { cursor: help; }
+.node-value-canvas-control { opacity: 0; }
+.node-value-canvas-control:active,
+.node-value-canvas-control:has(:focus-visible),
+.node-value-canvas-control:has(.draggable-number-input),
+.node-value-canvas-control:has(.inspector-select-trigger[aria-expanded="true"]) { opacity: 1; background: var(--bg-primary, #171717); }
 .node-inline-math .node-workspace-port { margin-bottom: 52px; }
 .node-inline-math .node-workspace-port-type { visibility: hidden; }
 .node-inline-math .node-workspace-node-description { display: none; }

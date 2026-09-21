@@ -541,8 +541,8 @@ export class WebGPUEngine {
     return this.res?.nestedCompRenderer.hasTexture(compositionId) ?? false;
   }
 
-  cacheActiveCompOutput(compositionId: string, timelineTimeSeconds?: number): void {
-    outputPresenter.cacheActiveCompOutput(this.presenterDeps, compositionId, timelineTimeSeconds);
+  cacheActiveCompOutput(compositionId: string, timelineTimeSeconds?: number, frameRate?: number): void {
+    outputPresenter.cacheActiveCompOutput(this.presenterDeps, compositionId, timelineTimeSeconds, frameRate);
   }
 
   copyMainOutputToPreview(canvasId: string): boolean {

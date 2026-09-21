@@ -63,6 +63,7 @@ export function buildLayerBuilderNestedCompositionLayer(input: BuildNestedCompLa
     layers: nestedLayers,
     width: composition?.width || 1920,
     height: composition?.height || 1080,
+    frameRate: composition?.frameRate ?? 30,
     currentTime: timeInfo.clipTime,
     sceneClips: clip.nestedClips,
     sceneTracks: clip.nestedTracks,

@@ -6,6 +6,7 @@ import type {
   WorkerFirstCacheRuntimeSnapshot,
 } from '../../engine/texture/ScrubbingCache';
 import type { EngineStats, Layer } from '../../types';
+import type { FrameHistoryDiscontinuity } from '../../effects/frameHistoryTransition';
 import type { RamPreviewRenderEngine } from '../ramPreviewEngine';
 import type { RenderCapabilityProbeResult, RenderPresentationStrategy } from './renderCapabilityProbe';
 import type { RenderHostSelectionTelemetry } from './renderHostSelection';
@@ -21,6 +22,12 @@ export interface RenderCaptureCanvas {
 export interface RenderSurfaceFrameContext {
   compositionId: string;
   timelineTimeSeconds: number;
+  /** Portable transient metadata; multiple render surfaces may observe one revision. */
+  frameHistory?: {
+    eventRevision: number;
+    discontinuity?: FrameHistoryDiscontinuity;
+    ownerRevision: number;
+  };
 }
 
 export interface RenderHostLayerCollector {
@@ -74,7 +81,7 @@ export interface RenderHostPort {
   render(layers: Layer[], frameContext?: RenderSurfaceFrameContext): void;
   renderCachedFrame(time: number): boolean;
   cacheCompositeFrame(time: number): Promise<void>;
-  cacheActiveCompOutput(compositionId: string, timelineTimeSeconds?: number): void;
+  cacheActiveCompOutput(compositionId: string, timelineTimeSeconds?: number, frameRate?: number): void;
   getIsExporting(): boolean;
   renderToPreviewCanvas(
     canvasId: string,

@@ -187,6 +187,7 @@ export interface NestedCompositionData {
   layers: Layer[];  // Layers from the nested composition to be pre-rendered
   width: number;
   height: number;
+  frameRate?: number;
   currentTime?: number;  // Current time for frame caching
   sceneClips?: TimelineClip[];
   sceneTracks?: TimelineTrack[];

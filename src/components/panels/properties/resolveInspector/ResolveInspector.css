@@ -284,6 +284,30 @@
     display: none;
   }
 
+  .resolve-inspector-text-input {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: 24px;
+    padding: 2px 6px;
+    border: 1px solid var(--separator-color);
+    border-radius: 1px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 12px;
+    outline: 0;
+  }
+
+  .resolve-inspector-text-input:hover {
+    border-color: var(--border-strong);
+    background: color-mix(in srgb, var(--input-bg) 78%, var(--surface-control-hover));
+  }
+
+  .resolve-inspector-text-input:focus-visible {
+    border-color: var(--accent);
+  }
+
   .resolve-inspector-field-static {
     box-sizing: border-box;
     display: grid;

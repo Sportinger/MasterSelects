@@ -1,7 +1,16 @@
 import type { WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntimeCommands';
+import { transitionFrameHistory, type FrameHistoryDiscontinuity, type FrameHistoryLoopPolicy, type FrameHistoryState } from '../../effects/frameHistoryTransition';
 
 type AcuarelaAdjustment = NonNullable<WorkerRenderSoftwarePixelEffects['acuarelaAdjustments']>[number];
 type Rom1Adjustment = NonNullable<WorkerRenderSoftwarePixelEffects['rom1Adjustments']>[number];
+
+export interface WorkerSoftwareFeedbackFrameMetadata {
+  readonly timelineTimeSeconds: number;
+  readonly ownerRevision?: string | number;
+  readonly eventRevision?: number;
+  readonly discontinuity?: FrameHistoryDiscontinuity;
+  readonly compositionId?: string;
+}
 
 export interface WorkerSoftwareFeedbackStore {
   read(input: {
@@ -10,6 +19,8 @@ export interface WorkerSoftwareFeedbackStore {
     readonly width: number;
     readonly height: number;
     readonly reset: boolean;
+    readonly loopPolicy?: FrameHistoryLoopPolicy;
+    readonly frame?: WorkerSoftwareFeedbackFrameMetadata;
   }): Uint8ClampedArray | null;
   write(input: {
     readonly scopeId: string;
@@ -18,6 +29,7 @@ export interface WorkerSoftwareFeedbackStore {
     readonly height: number;
     readonly reset: boolean;
     readonly pixels: Uint8ClampedArray;
+    readonly frame?: WorkerSoftwareFeedbackFrameMetadata;
   }): void;
   deleteScope(scopeId: string): void;
   clear(): void;
@@ -26,8 +38,10 @@ export interface WorkerSoftwareFeedbackStore {
 interface WorkerSoftwareFeedbackEntry {
   readonly width: number;
   readonly height: number;
-  readonly pixels: Uint8ClampedArray;
-  readonly resetActive: boolean;
+  committed: Uint8ClampedArray | null;
+  current: Uint8ClampedArray | null;
+  lifecycle: FrameHistoryState | null;
+  lastEventRevision?: number;
 }
 
 type WorkerSoftwareFeedbackEffectState =
@@ -49,6 +63,7 @@ export interface WorkerSoftwareFeedbackFrame {
   readonly width: number;
   readonly height: number;
   readonly store: WorkerSoftwareFeedbackStore;
+  readonly frame?: WorkerSoftwareFeedbackFrameMetadata;
   readonly effects: readonly WorkerSoftwareFeedbackEffectState[];
 }
 
@@ -151,31 +166,47 @@ function feedbackFbm(
   return normalizer <= 0 ? [0, 0] : [sumX / normalizer, sumY / normalizer];
 }
 
-function storeId(scopeId: string, feedbackKey: string): string {
-  return `${scopeId}\u0000${feedbackKey}`;
+function storeId(scopeId: string, feedbackKey: string, compositionId?: string): string {
+  return `${compositionId ?? ''}\u0000${scopeId}\u0000${feedbackKey}`;
 }
 
 export function createWorkerSoftwareFeedbackStore(): WorkerSoftwareFeedbackStore {
   const entries = new Map<string, WorkerSoftwareFeedbackEntry>();
   return {
     read(input) {
-      const entry = entries.get(storeId(input.scopeId, input.feedbackKey));
-      if (!entry || entry.width !== input.width || entry.height !== input.height) return null;
-      if (input.reset && !entry.resetActive) return null;
-      return entry.pixels;
+      const id = storeId(input.scopeId, input.feedbackKey, input.frame?.compositionId);
+      let entry = entries.get(id);
+      if (!entry || entry.width !== input.width || entry.height !== input.height) {
+        entry = { width: input.width, height: input.height, committed: null, current: null, lifecycle: null };
+        entries.set(id, entry);
+      }
+      const eventIsNew = input.frame?.eventRevision !== undefined && input.frame.eventRevision !== entry.lastEventRevision;
+      const transition = transitionFrameHistory(entry.lifecycle, {
+        timelineTimeSeconds: input.frame?.timelineTimeSeconds ?? 0,
+        ownerRevision: input.frame?.ownerRevision ?? 0,
+        resetRequested: input.reset,
+        discontinuity: eventIsNew ? input.frame?.discontinuity : undefined,
+        loopPolicy: input.loopPolicy ?? 'reset',
+      });
+      entry.lifecycle = transition.state;
+      if (input.frame?.eventRevision !== undefined) entry.lastEventRevision = input.frame.eventRevision;
+      if (transition.action === 'reset') {
+        entry.committed = null;
+        entry.current = null;
+      } else if (transition.action === 'advance') {
+        entry.committed = entry.current;
+      }
+      return entry.committed;
     },
     write(input) {
-      entries.set(storeId(input.scopeId, input.feedbackKey), {
-        width: input.width,
-        height: input.height,
-        pixels: input.pixels,
-        resetActive: input.reset,
-      });
+      const id = storeId(input.scopeId, input.feedbackKey, input.frame?.compositionId);
+      const entry = entries.get(id) ?? { width: input.width, height: input.height, committed: null, current: null, lifecycle: null };
+      entry.current = input.pixels;
+      entries.set(id, entry);
     },
     deleteScope(scopeId) {
-      const prefix = `${scopeId}\u0000`;
       for (const key of entries.keys()) {
-        if (key.startsWith(prefix)) entries.delete(key);
+        if (key.split('\u0000')[1] === scopeId) entries.delete(key);
       }
     },
     clear() {
@@ -195,6 +226,7 @@ export function createWorkerSoftwareFeedbackFrame(input: {
   readonly scopeId: string;
   readonly width: number;
   readonly height: number;
+  readonly frame?: WorkerSoftwareFeedbackFrameMetadata;
 }): WorkerSoftwareFeedbackFrame | null {
   if (!input.store) return null;
   const effects: WorkerSoftwareFeedbackEffectState[] = [];
@@ -210,6 +242,8 @@ export function createWorkerSoftwareFeedbackFrame(input: {
       width: input.width,
       height: input.height,
       reset: adjustment.reset,
+      loopPolicy: adjustment.historyLoop,
+      frame: input.frame,
     }) ?? null,
     next: new Uint8ClampedArray(input.width * input.height * 4),
   } as WorkerSoftwareFeedbackEffectState);
@@ -220,7 +254,7 @@ export function createWorkerSoftwareFeedbackFrame(input: {
     effects.push(createState('rom1', adjustment));
   }
   return effects.length > 0
-    ? { scopeId: input.scopeId, width: input.width, height: input.height, store: input.store, effects }
+    ? { scopeId: input.scopeId, width: input.width, height: input.height, store: input.store, frame: input.frame, effects }
     : null;
 }
 
@@ -375,6 +409,7 @@ export function commitWorkerSoftwareFeedbackFrame(frame: WorkerSoftwareFeedbackF
       height: frame.height,
       reset: effect.adjustment.reset,
       pixels: effect.next,
+      frame: frame.frame,
     });
   }
 }

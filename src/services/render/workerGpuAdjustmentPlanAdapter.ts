@@ -294,5 +294,6 @@ export function buildWorkerGpuAdjustmentExecutionPlan(
     },
     graphVersion: frameIdentity?.graphVersion ?? input.frameIndex,
     resourceNamespace: input.resourceNamespace,
+    ...(input.frameContext.frameHistory ? { frameHistory: input.frameContext.frameHistory } : {}),
   });
 }

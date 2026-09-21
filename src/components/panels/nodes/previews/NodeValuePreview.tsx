@@ -10,9 +10,9 @@ import './NodeValuePreview.css';
 import { OperatorColorInput } from '../workspace/OperatorColorInput';
 import { InspectorSelect } from '../../../inspector/InspectorSelect';
 
-/** A sibling of the transparent canvas hit target, so values remain real text
- * and focusable controls even when cards and images are drawn by the worker. */
-export function NodeValuePreview({ node }: { node: NodeGraphNode }) {
+/** Canvas owns idle visuals. DOM controls remain transparent interaction and
+ * accessibility targets, revealed only for editing or keyboard focus. */
+export function NodeValuePreview({ node, canvasRendered = false }: { node: NodeGraphNode; canvasRendered?: boolean }) {
   const key = node.preview?.key ?? '';
   const frame = useNodeValueFrame(key);
   const [error, setError] = useState('');
@@ -38,13 +38,13 @@ export function NodeValuePreview({ node }: { node: NodeGraphNode }) {
     const editablePorts = new Set(entries.map(entry => `${entry.direction ?? 'input'}:${entry.portId}`));
     return <>
       {entries.map(entry => { const point = getPortCenter(node, entry.portId!, entry.direction ?? 'input');
-        return <div className="node-value-inline" key={entry.target.parameter} aria-label={`Value below ${entry.portId}`}
+        return <div className={`node-value-inline${canvasRendered ? ' node-value-canvas-control' : ''}`} key={entry.target.parameter} aria-label={`Value below ${entry.portId}`}
           style={{ left: node.layout.x + (entry.direction === 'output' ? 99 : 16), top: point.y + 12, width: 70 }}
           onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
           {control(entry)}
         </div>;
       })}
-      {frame.values?.filter(entry => !editablePorts.has(`${entry.direction}:${entry.portId}`)).map(entry => { const point = getPortCenter(node, entry.portId, entry.direction);
+      {!canvasRendered && frame.values?.filter(entry => !editablePorts.has(`${entry.direction}:${entry.portId}`)).map(entry => { const point = getPortCenter(node, entry.portId, entry.direction);
         return <output key={`${entry.direction}-${entry.portId}`} className="node-value-inline node-value-computed" aria-label={`${node.label} ${entry.direction} ${entry.portId} live value`}
           onPointerDown={event => event.stopPropagation()}
           title={frame.label.toLowerCase().includes('center cell') ? 'Live sample at the center grid cell. Values vary across the image.' : frame.label} style={{ left: node.layout.x + (entry.direction === 'output' ? 99 : 16), top: point.y + 12, width: 70 }}>
@@ -54,7 +54,8 @@ export function NodeValuePreview({ node }: { node: NodeGraphNode }) {
         style={{ left: node.layout.x + rect.x, top: node.layout.y + rect.y + 17, width: rect.width }}>{error}</small>}
     </>;
   }
-  return <div className={`node-value-preview${drawing?.kind === 'number' ? ' node-value-large' : ''}`} aria-label={`Values for ${node.label}`}
+  if (canvasRendered && !frame.controls?.length) return null;
+  return <div className={`node-value-preview${drawing?.kind === 'number' ? ' node-value-large' : ''}${canvasRendered && !error ? ' node-value-canvas-control' : ''}`} aria-label={`Values for ${node.label}`}
     style={{ left: node.layout.x + rect.x, top: node.layout.y + rect.y + 17, width: rect.width, height: rect.height - 17 }}
     onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
     <div className="node-value-content">

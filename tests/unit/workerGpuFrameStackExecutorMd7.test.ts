@@ -148,6 +148,8 @@ interface CompositeCall {
   readonly layers: readonly LayerRenderData[];
   readonly namespace: string | undefined;
   readonly pingView: GPUTextureView;
+  readonly historyScopeId?: string;
+  readonly frameHistory?: { readonly eventRevision: number; readonly discontinuity?: 'seek' | 'loop' | 'export-start'; readonly ownerRevision: number };
 }
 
 function fakeResources(input: {
@@ -163,12 +165,14 @@ function fakeResources(input: {
       composite: (
         layers: LayerRenderData[],
         _commandEncoder: GPUCommandEncoder,
-        state: { readonly resourceNamespace?: string; readonly pingView: GPUTextureView },
+        state: { readonly resourceNamespace?: string; readonly pingView: GPUTextureView; readonly historyScopeId?: string; readonly frameHistory?: CompositeCall['frameHistory'] },
       ) => {
         calls.push({
           layers: [...layers],
           namespace: state.resourceNamespace,
           pingView: state.pingView,
+          historyScopeId: state.historyScopeId,
+          frameHistory: state.frameHistory,
         });
         if (input.compositeThrows) throw new Error('compositor failed');
         return { finalView: state.pingView, usedPing: true, layerCount: layers.length };
@@ -259,6 +263,7 @@ function orderedStack(input: {
   readonly bindings?: readonly WorkerGpuFrameStackSourceBinding[];
   readonly order?: readonly string[];
   readonly timelineTime?: number;
+  readonly frameHistory?: WorkerGpuFrameStackContractV1['frameHistory'];
 }): WorkerGpuFrameStackContractV1 {
   const bindings = input.bindings ?? [];
   return {
@@ -267,6 +272,7 @@ function orderedStack(input: {
     occurrenceNamespace: input.namespace,
     dimensions: { width: 640, height: 360 },
     frame: frame(input.compositionId, input.timelineTime),
+    ...(input.frameHistory ? { frameHistory: input.frameHistory } : {}),
     execution: {
       kind: 'ordered-sources',
       bottomToTopLayerIds: input.order ?? bindings.map((entry) => entry.layerId),
@@ -452,6 +458,7 @@ describe('Worker GPU recursive FrameStack executor MD7', () => {
       compositionId: 'composition:root',
       bindings: [solidBinding('bottom'), solidBinding('top')],
       order: ['bottom', 'top'],
+      frameHistory: { eventRevision: 4, discontinuity: 'loop', ownerRevision: 19 },
     });
     const execution = encodeWorkerGpuFrameStack({
       device: gpu.device,
@@ -466,6 +473,10 @@ describe('Worker GPU recursive FrameStack executor MD7', () => {
       'bottom',
       'top',
     ]);
+    expect(compositeCalls[0]).toMatchObject({
+      namespace: 'occurrence:root', historyScopeId: 'composition:root',
+      frameHistory: { eventRevision: 4, discontinuity: 'loop', ownerRevision: 19 },
+    });
     expect(execution.finalView).toBe(compositeCalls[0]?.pingView);
     expect(execution.executedPassIds).toHaveLength(3);
     expect(execution.trace.map((entry) => entry.event)).toEqual([

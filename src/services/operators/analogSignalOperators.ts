@@ -31,7 +31,7 @@ export const ANALOG_SIGNAL_OPERATORS: readonly OperatorDefinition[] = [
   operator('analog.vhs-transport', 'VHS Transport', [port('signal', 'Signal', 'pal-signal', true, PAL)], [port('signal', 'PAL Signal', 'pal-signal', false, PAL)], vhs, 'passthrough'),
   operator('analog.receiver-analyze', 'Receiver Analysis', [port('signal', 'Signal', 'pal-signal', true, PAL)], [port('lines', 'Receiver Lines', 'receiver-lines', false, LINES)], receiver),
   operator('analog.pal-decode', 'PAL Decode', [port('signal', 'Signal', 'pal-signal', true, PAL), port('receiver', 'Receiver Lines', 'receiver-lines', true, LINES)],
-    [port('image', 'Decoded Image', 'image', false, DECODED)], decode),
+    [port('image', 'Decoded Image', 'image', false, DECODED), port('signalAmount', 'Signal Amount', 'number')], decode),
   operator('analog.display-resolve', 'Display Resolve', [port('source', 'Original', 'image', true, ['decoded-frame']), port('decoded', 'Decoded', 'image', true, DECODED)],
     [port('image', 'Image', 'image', false, ['decoded-frame'])], display, 'passthrough'),
 ];

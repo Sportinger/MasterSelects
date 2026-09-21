@@ -5,6 +5,8 @@ import { workerSoftwareEffectPlanForLayer } from '../../src/services/render/work
 import { applyWorkerSoftwareSourceResamplingEffects } from '../../src/services/render/workerSoftwareSourceResamplingEffects';
 import type { Layer } from '../../src/types';
 import type { WorkerRenderSoftwarePixelEffects } from '../../src/services/render/workerRenderHostRuntimeCommands';
+import { createDefaultFisheyeGraph } from '../../src/services/operators/fisheyeEffectGraph';
+import { applyWorkerSoftwarePixelEffects } from '../../src/services/render/workerSoftwarePixelEffects';
 
 const softwareAdjustment: NonNullable<WorkerRenderSoftwarePixelEffects['fisheyeAdjustments']>[number] = {
   projection: 'equidistant',
@@ -126,6 +128,77 @@ describe('fisheye effect', () => {
         samples: 8,
       }),
     ]);
+  });
+
+  it.each(['canonical', 'legacy parameter'] as const)('routes enabled %s graph-backed Fisheye through a portable image plan', storage => {
+    const graph = createDefaultFisheyeGraph();
+    graph.nodes.find(node => node.id === 'curve-scale')!.constants = { value: .42 };
+    const owner = storage === 'canonical' ? { operatorGraph: graph } : {};
+    const params = storage === 'legacy parameter' ? { operatorGraph: JSON.stringify(graph) } : {};
+    const plan = workerSoftwareEffectPlanForLayer({
+      id: 'lens-layer', effects: [{ id: 'fisheye-graph', type: 'fisheye', name: 'Fisheye Lens', enabled: true, params, ...owner }],
+    } as unknown as Layer);
+    expect(plan?.filter).toBe('none');
+    expect(plan?.pixelEffects.imageOperatorPlans).toHaveLength(1);
+    expect(plan?.pixelEffects.fisheyeAdjustments).toBeUndefined();
+  });
+
+  it('ignores a disabled graph-backed Fisheye without rejecting the software layer', () => {
+    const plan = workerSoftwareEffectPlanForLayer({
+      id: 'lens-layer', effects: [{
+        id: 'fisheye-disabled', type: 'fisheye', name: 'Fisheye Lens', enabled: false, params: {}, operatorGraph: { version: 1 },
+      }],
+    } as unknown as Layer);
+    expect(plan).not.toBeNull();
+    expect(plan?.pixelEffects.fisheyeAdjustments).toBeUndefined();
+  });
+
+  it('fails closed instead of reordering a mixed canonical and legacy stack', () => {
+    const plan = workerSoftwareEffectPlanForLayer({
+      id: 'lens-layer', effects: [
+        { id: 'fisheye-graph', type: 'fisheye', name: 'Fisheye Lens', enabled: true, params: {}, operatorGraph: createDefaultFisheyeGraph() },
+        { id: 'legacy-key', type: 'chroma-key', name: 'Chroma Key', enabled: true, params: {} },
+      ],
+    } as unknown as Layer);
+    expect(plan).toBeNull();
+  });
+
+  it('fails closed for malformed persisted graph data', () => {
+    const plan = workerSoftwareEffectPlanForLayer({
+      id: 'lens-layer', effects: [{
+        id: 'fisheye-broken', type: 'fisheye', name: 'Fisheye Lens', enabled: true, params: { operatorGraph: '{broken' },
+      }],
+    } as unknown as Layer);
+    expect(plan).toBeNull();
+  });
+
+  it('executes a persisted identity rewire through the software pixel pipeline', () => {
+    const width = 5, height = 3;
+    const source = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const offset = (y * width + x) * 4;
+      source[offset] = x * 47 + y * 3; source[offset + 1] = y * 83 + x * 5;
+      source[offset + 2] = 19 + x * 21 + y * 11; source[offset + 3] = 31 + x * 37 + y * 17;
+    }
+    const render = (operatorGraph: ReturnType<typeof createDefaultFisheyeGraph>) => {
+      const planned = workerSoftwareEffectPlanForLayer({ id: 'lens-layer', effects: [{
+        id: 'fisheye-graph', type: 'fisheye', name: 'Fisheye Lens', enabled: true, params: {}, operatorGraph,
+      }] } as unknown as Layer)!;
+      const data = new Uint8ClampedArray(source), imageData = { data };
+      const context = { getImageData: () => imageData, putImageData: () => undefined } as unknown as OffscreenCanvasRenderingContext2D;
+      applyWorkerSoftwarePixelEffects(context, width, height, { pixelEffects: planned.pixelEffects } as never, 0);
+      return data;
+    };
+    const defaultOutput = render(createDefaultFisheyeGraph());
+    const identityGraph = createDefaultFisheyeGraph();
+    const outputEdge = identityGraph.edges.find(edge => edge.to === 'output' && edge.input === 'image')!;
+    outputEdge.from = 'frame'; outputEdge.output = 'image';
+    const identityOutput = render(identityGraph);
+    expect(identityOutput).toEqual(source);
+    expect(defaultOutput).not.toEqual(source);
+    const sourceAlpha = [...source].filter((_value, index) => index % 4 === 3);
+    expect([...identityOutput].filter((_value, index) => index % 4 === 3)).toEqual(sourceAlpha);
+    expect([...defaultOutput].filter((_value, index) => index % 4 === 3)).not.toEqual(sourceAlpha);
   });
 
   it('resamples a radial gradient through the software fallback', () => {

@@ -10,8 +10,10 @@ import { SCALAR_FIELD_OPERATORS } from './scalarField';
 import { VOXEL_RELIEF_PARAMS } from '../../effects/stylize/voxel-relief/parameters';
 import { compileImageOperatorGraph, createDefaultInvertImageGraph, migrateImageOperatorGraph } from './imageOperatorGraph';
 import { IMAGE_OPERATORS } from './imageOperators';
+import type { ImageOperatorCompileContext } from './imageOperatorChoice';
 import { compileAnalogSignalGraph, createDefaultAnalogSignalGraph } from './analogSignalGraph';
 import { ANALOG_SIGNAL_OPERATORS } from './analogSignalOperators';
+import { migrateAnalogSignalGraph } from './analogSignalMigration';
 import { createDefaultColorEffectGraph, type EditableColorEffectType } from './colorEffectGraphs';
 import { getEffect } from '../../effects';
 import { createDefaultPointwiseEffectGraph, type EditablePointwiseEffectType } from './pointwiseEffectGraphs';
@@ -24,14 +26,47 @@ import { createDefaultDirectionalBlurGraph, type EditableDirectionalBlurEffectTy
 import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
 import { createDefaultGlowGraph } from './glowEffectGraph';
 import { createDefaultUvDistortGraph, type EditableUvDistortEffectType } from './uvDistortEffectGraphs';
+import { createDefaultFisheyeGraph } from './fisheyeEffectGraph';
+import { normalizeFisheyeParameters } from '../../effects/distort/fisheye/normalization';
+import { createDefaultCrtScreenGraph } from './crtScreenEffectGraph';
+import { createDefaultRibbonScanGraph } from './ribbonScanEffectGraph';
+import { createDefaultWaveLinesGraph } from './waveLinesEffectGraph';
+import { createDefaultGlitchGraph } from './glitchEffectGraph';
+import { createDefaultFilmPrismGraph } from './filmPrismEffectGraph';
+import { createDefaultCrystalGraph } from './crystalEffectGraph';
+import { createDefaultGlassDispersionGraph } from './glassDispersionEffectGraph';
+import { createDefaultHalftoneGraph, type EditableHalftoneEffectType } from './halftoneEffectGraphs';
+import { createDefaultHoloGraph } from './holoEffectGraph';
+import { createDefaultRisoGraph, type EditableRisoEffectType } from './risoEffectGraphs';
+import { createDefaultDitherGraph, type EditableDitherEffectType } from './ditherEffectGraphs';
+import { createDefaultPaperPrintGraph } from './paperPrintEffectGraph';
+import { createDefaultPixelPosterGraph } from './pixelPosterEffectGraph';
+import { createDefaultToneGeometryGraph } from './toneGeometryEffectGraph';
+import { createDefaultCrossStitchGraph } from './crossStitchEffectGraph';
+import { createDefaultMotionHalftoneGraph, type EditableMotionHalftoneEffectType } from './motionHalftoneEffectGraphs';
+import { createDefaultAsciiGhostGraph, createDefaultAsciiGraph, createDefaultBrandGeneratorGraph, createDefaultCapsuleCloudGraph, createDefaultDataHatchGraph, createDefaultDitherTextGraph, createDefaultGlyphMatrixGraph, createDefaultGridGlyphGraph, createDefaultInscribeGraph, createDefaultMatrixGraph, createDefaultNumberFieldGraph, createDefaultPixelCodeGraph, createDefaultPixelDitherGraph, createDefaultRetroMatrixGraph, createDefaultStitchPosterGraph, createDefaultSymbolMatrixGraph, createDefaultUiCollageGraph, createDefaultWordMosaicGraph } from './asciiEffectGraph';
+import { createDefaultAcuarelaGraph } from './acuarelaEffectGraph';
+import { createDefaultVoronoiGraph } from './voronoiEffectGraph';
+import { createDefaultPixelSortGraph } from './pixelSortEffectGraph';
+import { createDefaultQuadtreeGraph } from './quadtreeEffectGraph';
+import { createDefaultContourGraph } from './contourEffectGraph';
+import { createDefaultChromaKeyGraph } from './chromaKeyEffectGraph';
+import { createDefaultRom1Graph } from './rom1EffectGraph';
+import { createDefaultMemoryLeakGraph } from './memoryLeakEffectGraph';
+import { createDefaultContourTypeGraph } from './asciiEffectGraph';
+import { createDefaultGeometryFragmentGraph, type EditableGeometryFragmentEffectType } from './geometryFragmentEffectGraphs';
+import { compileComputeImageGraph } from './computeImageGraph';
+import { VORONOI_OPERATORS } from './voronoiOperators';
 
 const LOCAL_IMAGE_EFFECTS = new Set(['invert', 'brightness', 'contrast', 'saturation', 'exposure', 'levels', 'hue-shift', 'temperature', 'vibrance', 'threshold', 'posterize']);
-const CONTEXTUAL_IMAGE_EFFECTS = new Set(['vignette', 'scanlines', 'grain', 'pixelate', 'mirror', 'rgb-split', 'blockify', 'block-mosaic', 'box-blur', 'gaussian-blur', 'sharpen', 'motion-blur', 'radial-blur', 'zoom-blur', 'edge-detect', 'glow', 'wave', 'twirl', 'bulge', 'kaleidoscope']);
+const CONTEXTUAL_IMAGE_EFFECTS = new Set(['vignette', 'scanlines', 'grain', 'ascii', 'number-field', 'grid-glyph', 'pixel-code', 'word-mosaic', 'glyph-matrix', 'data-hatch', 'brand-generator', 'stitch-poster', 'dither-text', 'symbol-matrix', 'pixel-dither', 'retro-matrix', 'capsule-cloud', 'ui-collage', 'matrix', 'ascii-ghost', 'inscribe', 'acuarela', 'crt-screen', 'ribbon-scan', 'wave-lines', 'glitch', 'film-prism', 'crystal', 'glass-dispersion', 'holo', 'halftone', 'pattern-halftone', 'riso', 'riso-glow', 'dither', 'dither-studio', 'paper-print', 'pixel-poster', 'tone-geometry', 'cross-stitch', 'glitch-grid', 'scatter-mosaic', 'drift-lines', 'pixelate', 'mirror', 'rgb-split', 'blockify', 'block-mosaic', 'box-blur', 'gaussian-blur', 'sharpen', 'motion-blur', 'radial-blur', 'zoom-blur', 'edge-detect', 'glow', 'wave', 'twirl', 'bulge', 'kaleidoscope', 'fisheye']);
+for (const type of ['contour-map', 'crosshatch', 'kilim', 'vector-tiling', 'embroidery', 'outline', 'bricks', 'contour-type', 'chroma-key', 'rom1', 'memory-leak']) CONTEXTUAL_IMAGE_EFFECTS.add(type);
 export function isLocalImageEffectType(type: string): type is 'invert' | EditableColorEffectType | EditablePointwiseEffectType { return LOCAL_IMAGE_EFFECTS.has(type); }
-export function isImageGraphEffectType(type: string): type is 'invert' | 'edge-detect' | 'glow' | EditableColorEffectType | EditablePointwiseEffectType | EditableContextualEffectType | EditableSamplingEffectType | EditableBlockEffectType | EditableBlurEffectType | EditableDirectionalBlurEffectType | EditableUvDistortEffectType {
+export function isImageGraphEffectType(type: string): type is 'invert' | 'edge-detect' | 'glow' | 'fisheye' | 'ascii' | 'number-field' | 'grid-glyph' | 'pixel-code' | 'word-mosaic' | 'glyph-matrix' | 'data-hatch' | 'brand-generator' | 'stitch-poster' | 'dither-text' | 'symbol-matrix' | 'pixel-dither' | 'retro-matrix' | 'capsule-cloud' | 'ui-collage' | 'matrix' | 'ascii-ghost' | 'inscribe' | 'acuarela' | 'crt-screen' | 'ribbon-scan' | 'wave-lines' | 'glitch' | 'film-prism' | 'crystal' | 'glass-dispersion' | 'holo' | 'paper-print' | 'pixel-poster' | 'tone-geometry' | 'cross-stitch' | EditableMotionHalftoneEffectType | EditableHalftoneEffectType | EditableRisoEffectType | EditableDitherEffectType | EditableColorEffectType | EditablePointwiseEffectType | EditableContextualEffectType | EditableSamplingEffectType | EditableBlockEffectType | EditableBlurEffectType | EditableDirectionalBlurEffectType | EditableUvDistortEffectType | EditableGeometryFragmentEffectType | 'contour-type' | 'chroma-key' | 'rom1' | 'memory-leak' {
   return isLocalImageEffectType(type) || CONTEXTUAL_IMAGE_EFFECTS.has(type);
 }
-export function hasEffectOperatorGraph(type: string): boolean { return type === 'face-cables' || type === 'voxel-relief' || isImageGraphEffectType(type) || type === 'analog-signal-lab'; }
+export const isComputeImageEffectType = (type: string) => type === 'voronoi' || type === 'pixel-sort' || type === 'quadtree-zoom' || type === 'contour';
+export function hasEffectOperatorGraph(type: string): boolean { return type === 'face-cables' || type === 'voxel-relief' || isComputeImageEffectType(type) || isImageGraphEffectType(type) || type === 'analog-signal-lab'; }
 type EffectGraphOwner = { type: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph };
 
 export function effectOperatorCompileParams(effect: Pick<EffectGraphOwner, 'params' | 'operatorGraph'>): Record<string, unknown> {
@@ -41,11 +76,46 @@ export function effectOperatorCompileParams(effect: Pick<EffectGraphOwner, 'para
 }
 
 /** Supplies catalog-owned parameter metadata to image lowering without persisting schema copies in graphs. */
-export function effectOperatorCompileContext(effect: Pick<EffectGraphOwner, 'type'>) {
-  return { parameterSchema: getEffect(effect.type)?.params };
+export function effectOperatorCompileContext(effect: Pick<EffectGraphOwner, 'type'>): ImageOperatorCompileContext {
+  const definition = getEffect(effect.type);
+  const context: ImageOperatorCompileContext = {
+    parameterSchema: definition?.params,
+    ...(definition && 'usesFeedback' in definition && definition.usesFeedback ? { allowFrameHistory: true } : {}),
+    ...(effect.type === 'memory-leak' ? { allowMemoryWindow: true } : {}),
+  };
+  if (definition && 'glyphAtlas' in definition && definition.glyphAtlas) {
+    const resolve = definition.glyphAtlas;
+    context.resolveGlyphAtlas = (bindings, params) => {
+      const values: Record<string, number | boolean | string> = {};
+      for (const [name, binding] of Object.entries(bindings)) {
+        const schema = definition.params[binding];
+        if (!schema || schema.type !== (name === 'fontWeight' ? 'number' : name === 'customRamp' ? 'text' : 'select')) {
+          throw new Error(`Glyph atlas binding ${binding} has no compatible owner parameter.`);
+        }
+        const value = params[binding] ?? schema.default;
+        if ((name === 'fontWeight' && (typeof value !== 'number' || !Number.isFinite(value)))
+          || (name !== 'fontWeight' && typeof value !== 'string')) {
+          throw new Error(`Glyph atlas binding ${binding} has an invalid value.`);
+        }
+        values[name] = value as number | string;
+      }
+      return resolve(values);
+    };
+  }
+  return context;
 }
 
 export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGraph {
+  if (isComputeImageEffectType(effect.type)) {
+    const fallback = effect.type === 'voronoi' ? createDefaultVoronoiGraph
+      : effect.type === 'pixel-sort' ? createDefaultPixelSortGraph
+        : effect.type === 'quadtree-zoom' ? createDefaultQuadtreeGraph : createDefaultContourGraph;
+    const graph = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
+    const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
+    if (errors.length) throw new Error(errors[0]);
+    if (!graph.incomplete) compileComputeImageGraph(graph, effectOperatorParams(effect), effectOperatorCompileContext(effect));
+    return graph;
+  }
   if (effect.type === 'analog-signal-lab') {
     const graph = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], createDefaultAnalogSignalGraph);
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
@@ -56,9 +126,52 @@ export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGra
   const effectType = effect.type;
   if (isImageGraphEffectType(effectType)) {
     const fallback = effectType === 'invert' ? createDefaultInvertImageGraph
+      : effectType === 'contour-map' || effectType === 'crosshatch' || effectType === 'kilim'
+        || effectType === 'vector-tiling' || effectType === 'embroidery' || effectType === 'outline' || effectType === 'bricks'
+        ? () => createDefaultGeometryFragmentGraph(effectType)
       : effectType === 'threshold' || effectType === 'posterize' ? () => createDefaultPointwiseEffectGraph(effectType)
         : effectType === 'vignette' || effectType === 'scanlines' || effectType === 'grain'
           ? () => createDefaultContextualEffectGraph(effectType)
+        : effectType === 'ascii' ? createDefaultAsciiGraph
+        : effectType === 'number-field' ? createDefaultNumberFieldGraph
+        : effectType === 'grid-glyph' ? createDefaultGridGlyphGraph
+        : effectType === 'pixel-code' ? createDefaultPixelCodeGraph
+        : effectType === 'word-mosaic' ? createDefaultWordMosaicGraph
+        : effectType === 'glyph-matrix' ? createDefaultGlyphMatrixGraph
+        : effectType === 'data-hatch' ? createDefaultDataHatchGraph
+        : effectType === 'brand-generator' ? createDefaultBrandGeneratorGraph
+        : effectType === 'stitch-poster' ? createDefaultStitchPosterGraph
+        : effectType === 'dither-text' ? createDefaultDitherTextGraph
+        : effectType === 'symbol-matrix' ? createDefaultSymbolMatrixGraph
+        : effectType === 'pixel-dither' ? createDefaultPixelDitherGraph
+        : effectType === 'retro-matrix' ? createDefaultRetroMatrixGraph
+        : effectType === 'capsule-cloud' ? createDefaultCapsuleCloudGraph
+        : effectType === 'ui-collage' ? createDefaultUiCollageGraph
+        : effectType === 'matrix' ? createDefaultMatrixGraph
+        : effectType === 'ascii-ghost' ? createDefaultAsciiGhostGraph
+        : effectType === 'inscribe' ? createDefaultInscribeGraph
+        : effectType === 'contour-type' ? createDefaultContourTypeGraph
+        : effectType === 'chroma-key' ? createDefaultChromaKeyGraph
+        : effectType === 'rom1' ? createDefaultRom1Graph
+        : effectType === 'memory-leak' ? createDefaultMemoryLeakGraph
+        : effectType === 'acuarela' ? createDefaultAcuarelaGraph
+        : effectType === 'crt-screen' ? createDefaultCrtScreenGraph
+        : effectType === 'ribbon-scan' ? createDefaultRibbonScanGraph
+        : effectType === 'wave-lines' ? createDefaultWaveLinesGraph
+        : effectType === 'glitch' ? createDefaultGlitchGraph
+        : effectType === 'film-prism' ? createDefaultFilmPrismGraph
+        : effectType === 'crystal' ? createDefaultCrystalGraph
+        : effectType === 'glass-dispersion' ? createDefaultGlassDispersionGraph
+        : effectType === 'holo' ? createDefaultHoloGraph
+        : effectType === 'riso' || effectType === 'riso-glow' ? () => createDefaultRisoGraph(effectType)
+        : effectType === 'dither' || effectType === 'dither-studio' ? () => createDefaultDitherGraph(effectType)
+        : effectType === 'paper-print' ? createDefaultPaperPrintGraph
+        : effectType === 'pixel-poster' ? createDefaultPixelPosterGraph
+        : effectType === 'tone-geometry' ? createDefaultToneGeometryGraph
+        : effectType === 'cross-stitch' ? createDefaultCrossStitchGraph
+        : effectType === 'glitch-grid' || effectType === 'scatter-mosaic' || effectType === 'drift-lines'
+          ? () => createDefaultMotionHalftoneGraph(effectType)
+        : effectType === 'halftone' || effectType === 'pattern-halftone' ? () => createDefaultHalftoneGraph(effectType)
         : effectType === 'pixelate' || effectType === 'mirror' || effectType === 'rgb-split'
           ? () => createDefaultSamplingEffectGraph(effectType)
         : effectType === 'blockify' || effectType === 'block-mosaic'
@@ -69,6 +182,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGra
           ? () => createDefaultDirectionalBlurGraph(effectType)
         : effectType === 'edge-detect' ? createDefaultEdgeDetectGraph
         : effectType === 'glow' ? createDefaultGlowGraph
+        : effectType === 'fisheye' ? createDefaultFisheyeGraph
         : effectType === 'wave' || effectType === 'twirl' || effectType === 'bulge' || effectType === 'kaleidoscope'
           ? () => createDefaultUvDistortGraph(effectType)
         : () => createDefaultColorEffectGraph(effectType);
@@ -93,7 +207,10 @@ export function migratePersistedEffectOperatorGraph(effect: Effect): Effect {
     if (effect.operatorGraph || legacy !== undefined) throw new Error(`Effect ${effect.id} does not support an operator graph.`);
     return effect;
   }
-  const graph = effectOperatorGraph(effect);
+  const savedGraph = effectOperatorGraph(effect);
+  // Incomplete wiring remains editable; expand legacy display stages once valid.
+  const graph = effect.type === 'analog-signal-lab' && !savedGraph.incomplete
+    ? migrateAnalogSignalGraph(savedGraph) : savedGraph;
   const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
   if (errors.length) throw new Error(errors[0]);
   const versionedGraph: EffectOperatorGraph = {
@@ -113,10 +230,23 @@ export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: Ef
   else if (effect.type === 'face-cables') compileCableOperatorGraph(next);
   else if (isImageGraphEffectType(effect.type)) compileImageOperatorGraph(graph, effectOperatorParams({ type: effect.type, params }), effectOperatorCompileContext(effect));
   else if (effect.type === 'analog-signal-lab') compileAnalogSignalGraph(graph, params);
+  else if (isComputeImageEffectType(effect.type)) compileComputeImageGraph(graph, effectOperatorParams({ type: effect.type, params }), effectOperatorCompileContext(effect));
   else throw new Error('This effect has no operator graph.');
 }
 export function addableEffectOperators(type: string) {
-  if (type === 'analog-signal-lab') return ANALOG_SIGNAL_OPERATORS.filter(operator => operator.addable);
+  if (isComputeImageEffectType(type)) {
+    const shared = ['image.frame', 'values.number', 'values.boolean', 'values.color'].flatMap(id => {
+      const operator = getEffectOperator(id); return operator ? [operator] : [];
+    });
+    const excluded = new Set(['image.materialize', 'image.frame-history', 'glyph.atlas', 'image.named-input', 'image.resource-input']);
+    return [...(type === 'voronoi' ? VORONOI_OPERATORS.filter(operator => operator.addable) : []), ...shared,
+      ...IMAGE_OPERATORS.filter(operator => operator.addable && !excluded.has(operator.id) && !operator.id.startsWith('image.derivative.'))];
+  }
+  if (type === 'analog-signal-lab') return [
+    ...ANALOG_SIGNAL_OPERATORS.filter(operator => operator.addable),
+    ...['image.frame', 'values.number'].flatMap(id => { const operator = getEffectOperator(id); return operator ? [operator] : []; }),
+    ...IMAGE_OPERATORS.filter(operator => operator.addable && operator.id !== 'image.materialize' && !operator.id.startsWith('image.derivative.')),
+  ];
   if (isImageGraphEffectType(type)) {
     const shared = ['image.frame', 'values.number'].flatMap(id => {
       const operator = getEffectOperator(id); return operator ? [operator] : [];
@@ -128,7 +258,7 @@ export function addableEffectOperators(type: string) {
 }
 
 export function effectOperatorParams(effect: EffectGraphOwner): Record<string, unknown> {
-  if (isImageGraphEffectType(effect.type)) {
+  if (isImageGraphEffectType(effect.type) || effect.type === 'analog-signal-lab' || isComputeImageEffectType(effect.type)) {
     const definition = getEffect(effect.type);
     const defaults = Object.fromEntries(Object.entries(definition?.params ?? {}).map(([id, spec]) => [id, spec.default]));
     const resolved = { ...defaults, ...effect.params };
@@ -136,6 +266,9 @@ export function effectOperatorParams(effect: EffectGraphOwner): Record<string, u
       if (spec.type === 'color' && typeof spec.default === 'string') {
         resolved[id] = normalizeCatalogColor(resolved[id] as number | boolean | string | undefined, spec.default);
       }
+    }
+    if (effect.type === 'fisheye') {
+      return { ...resolved, ...normalizeFisheyeParameters(resolved) };
     }
     return resolved;
   }
@@ -148,6 +281,7 @@ export function effectOperatorParams(effect: EffectGraphOwner): Record<string, u
   return { ...defaults, ...effect.params };
 }
 export function canRemoveEffectOperator(type: string, nodeId: string, operatorId: string): boolean {
+  if (isComputeImageEffectType(type)) return !['frame', 'output'].includes(nodeId) && !!getEffectOperator(operatorId)?.addable;
   if (type === 'analog-signal-lab') return !['frame', 'output'].includes(nodeId) && !!getEffectOperator(operatorId)?.addable;
   return type === 'voxel-relief' ? operatorId !== 'render.voxel' && operatorId !== 'image.frame'
     : nodeId !== 'wind' && !!getEffectOperator(operatorId)?.addable;

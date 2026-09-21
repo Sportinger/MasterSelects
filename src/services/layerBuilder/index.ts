@@ -28,6 +28,8 @@ export {
   stopInternalPosition,
   updateInternalPosition,
   updateInternalPlaybackSpeed,
+  markPlayheadFrameHistoryDiscontinuity,
+  playheadFrameHistoryMetadata,
 } from './PlayheadState';
 
 // Re-export FrameContext utilities

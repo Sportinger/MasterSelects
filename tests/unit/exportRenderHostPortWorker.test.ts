@@ -912,10 +912,18 @@ describe('worker-first export render host port', () => {
     exportRenderHostPort.setExporting(true);
     expect(exportRenderHostPort.initExportCanvas(64, 36, false)).toBe(false);
     exportRenderHostPort.setRenderTimeOverride(0);
-    exportRenderHostPort.render([acuarelaLayer]);
+    exportRenderHostPort.render([acuarelaLayer], {
+      compositionId: 'feedback-export', timelineTimeSeconds: 0,
+      frameHistory: { eventRevision: 3, discontinuity: 'export-start', ownerRevision: 11 },
+    });
     await expect(exportRenderHostPort.readPixels()).resolves.toEqual(mockFactory.pixels);
 
     expect(mockFactory.bridge.presentSoftwareFrame).toHaveBeenCalledTimes(1);
+    expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[5]).toEqual({
+      readback: true,
+      compositionId: 'feedback-export',
+      frameHistory: { eventRevision: 3, discontinuity: 'export-start', ownerRevision: 11 },
+    });
     expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].pixelEffects)
       .toMatchObject({
         acuarelaAdjustments: [{
@@ -1637,6 +1645,7 @@ describe('worker-first export render host port', () => {
       exportRenderHostPort.render([adjustmentLayer, videoLayer], {
         compositionId: 'export-adjustment-composition',
         timelineTimeSeconds: 1.25,
+        frameHistory: { eventRevision: 2, discontinuity: 'export-start', ownerRevision: 8 },
       });
 
       await expect(exportRenderHostPort.readPixels()).resolves.toEqual(mockFactory.pixels);
@@ -1654,6 +1663,7 @@ describe('worker-first export render host port', () => {
             exact: true,
           },
           execution: { kind: 'frozen-adjustment' },
+          frameHistory: { eventRevision: 2, discontinuity: 'export-start', ownerRevision: 8 },
           bindings: [{
             // The projector canonicalizes bindings to the stable clip id
             // (workerGpuFrameStackProjector.ts: `layer.sourceClipId ?? layer.id`)

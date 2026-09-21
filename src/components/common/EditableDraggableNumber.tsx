@@ -656,6 +656,12 @@ export function EditableDraggableNumber({
           aria-valuemin={effectiveMin}
           aria-valuenow={value}
           role="slider"
+          tabIndex={disabled ? -1 : 0}
+          onKeyDown={event => {
+            if (!disabled && (event.key === 'Enter' || event.key === ' ')) {
+              event.preventDefault(); event.stopPropagation(); beginEditing();
+            }
+          }}
           onPointerDown={handleTouchPointerDown}
           onMouseDown={handleMouseDown}
           onAuxClick={(e) => {

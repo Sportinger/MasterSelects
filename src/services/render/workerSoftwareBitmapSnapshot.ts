@@ -45,6 +45,13 @@ function constrainedSnapshotSize(input: WorkerSoftwareBitmapSnapshotInput): Work
   };
 }
 
+function getCanvas2dContext(
+  canvas: HTMLCanvasElement | OffscreenCanvas,
+): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null {
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  return context && 'drawImage' in context ? context : null;
+}
+
 function createResizeCanvas(width: number, height: number): {
   readonly canvas: HTMLCanvasElement | OffscreenCanvas;
   readonly context: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -59,7 +66,7 @@ function createResizeCanvas(width: number, height: number): {
   if (!canvas) return null;
   canvas.width = canvasWidth;
   canvas.height = canvasHeight;
-  const context = canvas.getContext('2d', { willReadFrequently: true });
+  const context = getCanvas2dContext(canvas);
   return context ? { canvas, context } : null;
 }
 

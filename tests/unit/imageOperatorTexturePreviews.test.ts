@@ -6,6 +6,10 @@ import { createDefaultInvertImageGraph } from '../../src/services/operators/imag
 import { createDefaultScanlinesGraph, createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
 import type { Effect } from '../../src/types/effects';
 import { createDefaultPixelateGraph } from '../../src/services/operators/samplingEffectGraphs';
+import * as graphOwner from '../../src/services/operators/effectGraphOwner';
+import * as glyphAtlas from '../../src/effects/_shared/glyphAtlas';
+import { createDefaultMemoryLeakGraph } from '../../src/services/operators/memoryLeakEffectGraph';
+import { memoryImageOperatorPreviewTap } from '../../src/services/nodePreview/memoryImageOperatorPreviews';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -15,6 +19,71 @@ afterEach(() => {
 const effect = (): Effect => ({ id: 'invert-preview', type: 'invert', name: 'Invert', enabled: true, params: {}, operatorGraph: createDefaultInvertImageGraph() });
 
 describe('image operator texture previews', () => {
+  it('reports raw uint resources as text with their live dimensions', async () => {
+    const target = { effectId: 'memory-text', nodeId: 'memory', direction: 'output' as const, portId: 'memory' };
+    const stage = imageOperatorPreviewStage(target);
+    const request = { key: 'memory-text', revision: '1', time: 2, clipId: 'clip', node: {}, width: 160, height: 90,
+      interval: 0, priority: 1 } as never;
+    const pending = memoryImageOperatorPreviewTap.request(target, request);
+    memoryImageOperatorPreviewTap.resolve(stage, { view: {} as GPUTextureView, identity: 'memory:2', width: 9, height: 4, available: true }, false);
+    await expect(pending).resolves.toMatchObject({ status: 'live', label: 'Memory words', presentation: 'text',
+      drawing: { kind: 'text', lines: ['Raw unsigned 32-bit texture', 'Available: yes', 'Word width: 9', 'Rows: 4'] } });
+  });
+
+  it('settles an unavailable raw uint diagnostic explicitly', async () => {
+    const target = { effectId: 'memory-missing', nodeId: 'memory', direction: 'output' as const, portId: 'memory' };
+    const stage = imageOperatorPreviewStage(target);
+    const request = { key: 'memory-missing', revision: '1', time: 0, clipId: 'clip', node: {}, width: 160, height: 90,
+      interval: 0, priority: 1 } as never;
+    const pending = memoryImageOperatorPreviewTap.request(target, request);
+    memoryImageOperatorPreviewTap.reject(stage);
+    await expect(pending).resolves.toMatchObject({ status: 'missing', label: 'Memory resource unavailable', presentation: 'text' });
+  });
+
+  it('resolves a disconnected memory source with the owner clock provider', () => {
+    vi.spyOn(nodePreviewTextureTap, 'matching').mockReturnValue([]);
+    const stage = imageOperatorPreviewStage({ effectId: 'memory-preview', nodeId: 'memory', direction: 'output', portId: 'metadata' });
+    vi.spyOn(memoryImageOperatorPreviewTap, 'matching').mockReturnValue([{ stage, target: {
+      effectId: 'memory-preview', nodeId: 'memory', direction: 'output', portId: 'metadata',
+    }, demand: {} as never }]);
+    const resolve = vi.spyOn(memoryImageOperatorPreviewTap, 'resolve').mockImplementation(() => {});
+    const resource = { view: {} as GPUTextureView, identity: 'memory:1', width: 12, height: 7, available: true };
+    const graph = createDefaultMemoryLeakGraph();
+    graph.edges = [...graph.edges.filter(edge => edge.to !== 'output'),
+      { id: 'frame-output-direct', from: 'frame', output: 'image', to: 'output', input: 'image' }];
+    const effect = { id: 'memory-preview', type: 'memory-leak', name: 'Memory Leak', enabled: true, params: {}, operatorGraph: graph } as Effect;
+    const device = { lost: new Promise(() => {}) } as unknown as GPUDevice;
+    const resolveMemoryWindow = vi.fn(() => resource);
+    expect(captureImageOperatorPreviews({ effect, device, encoder: {} as GPUCommandEncoder, sampler: {} as GPUSampler,
+      source: { kind: 'texture', view: {} as GPUTextureView }, width: 64, height: 32, resolveMemoryWindow })).toBe(1);
+    expect(resolveMemoryWindow).toHaveBeenCalledOnce();
+    expect(resolve).toHaveBeenCalledWith(stage, resource, true);
+  });
+
+  it('renders a demanded atlas port through the shared resource runtime', () => {
+    vi.stubGlobal('GPUTextureUsage', { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2 });
+    vi.stubGlobal('GPUBufferUsage', { UNIFORM: 1, COPY_DST: 2 });
+    const graph: NonNullable<Effect['operatorGraph']> = { version: 1, schemaVersion: 1, domain: 'image', layout: {}, nodes: [
+      { id: 'atlas', operator: 'glyph.atlas', operatorVersion: 1, bindings: { rampPreset: 'rampPreset', customRamp: 'customRamp', fontFamily: 'fontFamily', fontWeight: 'fontWeight' } },
+      { id: 'output', operator: 'image.output', operatorVersion: 1, bindings: {} },
+    ], edges: [{ id: 'atlas-output', from: 'atlas', output: 'image', to: 'output', input: 'image' }] };
+    // Owner registration is deliberately separate from resource-runtime coverage.
+    vi.spyOn(graphOwner, 'effectOperatorGraph').mockReturnValue(graph);
+    const stage = imageOperatorPreviewStage({ effectId: 'ascii-preview', nodeId: 'atlas', direction: 'output', portId: 'image' });
+    vi.spyOn(nodePreviewTextureTap, 'matching').mockReturnValue([{ stage, request: {} as never }]);
+    const atlasView = {} as GPUTextureView;
+    vi.spyOn(glyphAtlas, 'getGlyphAtlas').mockReturnValue({ view: atlasView } as glyphAtlas.GlyphAtlasTexture);
+    const capture = vi.spyOn(nodePreviewTextureTap, 'capture').mockImplementation(() => {});
+    const draw = vi.fn(), createBindGroup = vi.fn(() => ({}));
+    const device = { lost: new Promise(() => {}), limits: { maxSampledTexturesPerShaderStage: 16 }, queue: { writeBuffer: vi.fn() },
+      createBuffer: () => ({}), createTexture: () => ({ createView: () => ({}), destroy() {} }), createShaderModule: () => ({}),
+      createRenderPipeline: () => ({ getBindGroupLayout: () => ({}) }), createBindGroup } as unknown as GPUDevice;
+    const encoder = { beginRenderPass: () => ({ setPipeline() {}, setBindGroup() {}, draw, end() {} }) } as unknown as GPUCommandEncoder;
+    expect(captureImageOperatorPreviews({ effect: { id: 'ascii-preview', type: 'ascii', params: {}, operatorGraph: graph }, device, encoder,
+      sampler: {} as GPUSampler, source: { kind: 'texture', view: {} as GPUTextureView }, width: 64, height: 32 })).toBe(1);
+    expect(draw).toHaveBeenCalledOnce(); expect(capture).toHaveBeenCalledOnce();
+    expect(createBindGroup).toHaveBeenCalledWith(expect.objectContaining({ entries: expect.arrayContaining([{ binding: 3, resource: atlasView }]) }));
+  });
   it('does no compiler or GPU work without an active preview demand', () => {
     vi.spyOn(nodePreviewTextureTap, 'matching').mockReturnValue([]);
     const device = new Proxy({}, { get: () => { throw new Error('GPU must stay idle'); } }) as GPUDevice;

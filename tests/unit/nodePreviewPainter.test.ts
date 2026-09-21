@@ -7,7 +7,7 @@ import { connectionFixture } from '../helpers/nodeConnectionFixture';
 import { previewExtraHeight } from '../../src/components/panels/nodes/previews/previewGeometry';
 
 function context() {
-  const calls = { clearRect: vi.fn(), drawImage: vi.fn() };
+  const calls = { clearRect: vi.fn(), drawImage: vi.fn(), fillText: vi.fn(), setTransform: vi.fn() };
   return new Proxy({ canvas: { width: 800, height: 600 }, ...calls }, { get(target, key) { return key in target ? target[key as keyof typeof target] : vi.fn(); } }) as unknown as CanvasRenderingContext2D;
 }
 const view: CanvasView = { width: 800, height: 600, ratio: 1, zoom: 1, panX: 0, panY: 0 };
@@ -16,11 +16,47 @@ const frame = (key = 'source', close = vi.fn()): PreviewFrame => ({ key, revisio
 
 describe('shared preview atlas', () => {
   it('never allocates or rasterizes an atlas tile for numeric or text viewers', () => {
-    const factory = vi.fn(() => context()), painter = new NodePreviewPainter(context(), factory);
+    const output = context(), factory = vi.fn(() => context()), painter = new NodePreviewPainter(output, factory);
     painter.receive([{ key: 'source', revision: '1', time: 0, status: 'live', label: 'Number', drawing: { kind: 'number', value: '1.2', caption: 'Height' } },
       { key: 'camera', revision: '1', time: 0, status: 'live', label: 'Camera', drawing: { kind: 'text', lines: ['FOV: 50'] } }]);
     painter.draw(scene, view);
     expect(factory).not.toHaveBeenCalled(); expect(painter.size).toBe(0);
+    expect(output.fillText).toHaveBeenCalledWith('1.2', expect.any(Number), expect.any(Number), expect.any(Number));
+  });
+  it('draws inline operands and sampled results at their own ports, including when only the top of a node is visible', () => {
+    const output = context(), painter = new NodePreviewPainter(output, () => context());
+    const numeric: CanvasScene = { ...scene, nodes: [{ ...scene.nodes[0], height: 900,
+      preview: { ...scene.nodes[0].preview!, text: true, y: 858 },
+      ports: [{ id: 'a', x: 7, y: 80, label: 'A', type: '', color: '#fff', input: true },
+        { id: 'value', x: 177, y: 122, label: 'Value', type: '', color: '#fff', input: false }] }] };
+    const sample: PreviewFrame = { key: 'source', revision: '1', time: 0, status: 'live', label: 'Center cell', presentation: 'text',
+      controls: [{ portId: 'a', label: 'A', value: 2, defaultValue: 0, target: { clipId: 'c', effectId: 'e', nodeId: 'n', parameter: 'a' } }],
+      values: [{ portId: 'a', direction: 'input', value: 99 }, { portId: 'value', direction: 'output', value: 4.25 }] };
+    painter.receive([sample]); painter.draw(numeric, view);
+    expect(output.fillText).toHaveBeenCalledWith('2', 83, 94, 64);
+    expect(output.fillText).toHaveBeenCalledWith('4.25', 166, 136, 64);
+    expect(vi.mocked(output.fillText).mock.calls.some(call => call[0] === '99')).toBe(false);
+    painter.receive([{ ...sample, values: [{ portId: 'value', direction: 'output', value: 8 }] }]); painter.draw(numeric, view);
+    expect(output.fillText).toHaveBeenCalledWith('8', 166, 136, 64);
+    painter.invalidate(); painter.draw(numeric, { ...view, zoom: 0.5, panX: 40 });
+    expect(output.setTransform).toHaveBeenLastCalledWith(0.5, 0, 0, 0.5, 40, 0);
+    vi.mocked(output.fillText).mockClear(); painter.retain(new Set()); painter.draw(numeric, view);
+    expect(output.fillText).not.toHaveBeenCalled();
+  });
+  it('reuses existing image pixels across zoom tiers without requiring another producer frame', () => {
+    const output = context(), atlases: CanvasRenderingContext2D[] = [];
+    const painter = new NodePreviewPainter(output, () => { const atlas = context(); atlases.push(atlas); return atlas; });
+    painter.resolution(0.2, 1);
+    painter.receive([frame()]); painter.draw(scene, view);
+    for (const zoom of [0.5, 1]) {
+      painter.resolution(zoom, 1); painter.draw(scene, { ...view, zoom });
+      expect(painter.size).toBe(1);
+      expect(atlases.at(-1)!.drawImage).toHaveBeenCalledOnce();
+      expect(atlases.at(-2)!.canvas.width).toBe(1);
+    }
+    painter.resolution(0.2, 1); painter.invalidate(); painter.draw(scene, { ...view, zoom: 0.2 });
+    expect(atlases).toHaveLength(3);
+    expect(output.drawImage).toHaveBeenCalledTimes(4);
   });
   it('rasterizes once, closes transferred frames immediately, and reuses the atlas when panning', () => {
     const output = context(), atlas = context(), factory = vi.fn(() => atlas), close = vi.fn();
@@ -46,6 +82,8 @@ describe('shared preview atlas', () => {
     for (let i = 0; i < 1000; i++) painter.receive([frame(String(i))]);
     expect(painter.size).toBe(1000);
     expect(atlas.canvas.width * atlas.canvas.height * 4).toBe(32 * 1024 * 1024);
+    painter.resolution(1, 1);
+    expect(painter.size).toBe(1000);
   });
   it('adds preview space without moving port endpoints', () => {
     const node = connectionFixture.nodes[0], expanded = { ...node, preview: { enabled: true, requested: true, key: 'source' } };

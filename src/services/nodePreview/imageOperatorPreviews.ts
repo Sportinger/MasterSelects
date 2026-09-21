@@ -3,28 +3,77 @@ import type { TimelineClip } from '../../types/timeline';
 import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams } from '../operators/effectGraphOwner';
 import { getEffectOperator } from '../operators/operatorRegistry';
 import { sampleOperatorParameter } from '../operators/effectGraph';
-import { compileImageOperatorPreview, evaluateImageOperatorPlan } from '../operators/imageOperatorGraph';
+import { compileImageOperatorPreview, evaluateImageOperatorPlan, type ImageOperatorCompileContext } from '../operators/imageOperatorGraph';
 import type { PreviewFrame, PreviewRequest, PreviewValueControl } from './previewTypes';
 import type { Keyframe } from '../../types/keyframes';
 import { getEffect } from '../../effects';
 import { resolveImageOperatorChoice } from '../operators/imageOperatorChoice';
+import { IMAGE_OPERATORS } from '../operators/imageOperators';
+import type { EffectOperatorGraph } from '../../types/operatorGraph';
+import { compileAnalogSignalGraph } from '../operators/analogSignalGraph';
+import type { ImageOperatorPreviewTarget } from './imageOperatorPreviewStages';
 
 type PreviewValue = NonNullable<PreviewFrame['values']>[number];
 
-function imageScalarValues(request: PreviewRequest, effect: Effect, keys: Keyframe[], time: number) {
+const previewOperatorIds = new Set([...IMAGE_OPERATORS.map(operator => operator.id), 'values.number', 'values.boolean', 'values.color', 'values.choice']);
+
+/** Adapts a reachable generic numeric island to the canonical image evaluator without
+ * assigning values to Analog runtime boundaries. The dummy image path only satisfies
+ * the image-plan container and is never evaluated by a numeric preview target. */
+function numericPreviewGraph(graph: EffectOperatorGraph, selectedId: string, params: Record<string, unknown>): {
+  graph: EffectOperatorGraph; params: Record<string, unknown>; context?: ImageOperatorCompileContext;
+} | undefined {
+  if (graph.domain === 'image') return { graph, params };
+  if (graph.domain !== 'analog-signal') return;
+  let canonical: { graph: EffectOperatorGraph; params: Record<string, unknown>; context: ImageOperatorCompileContext } | undefined;
+  try {
+    canonical = compileAnalogSignalGraph(graph, params).stages.find(stage => stage.imagePreview?.graph.nodes.some(node => node.id === selectedId))?.imagePreview;
+  } catch { /* An incomplete owner may still expose an isolated editable literal. */ }
+  if (canonical) return canonical;
+  const byId = new Map(graph.nodes.map(node => [node.id, node])), included = new Set<string>();
+  const visit = (id: string): boolean => {
+    if (included.has(id)) return true;
+    const node = byId.get(id);
+    if (!node || !previewOperatorIds.has(node.operator)) return false;
+    included.add(id);
+    return graph.edges.filter(edge => edge.to === id).every(edge => visit(edge.from));
+  };
+  if (!visit(selectedId)) return;
+  const occupied = new Set(graph.nodes.map(node => node.id));
+  const unique = (base: string) => { let id = base, suffix = 1; while (occupied.has(id)) id = `${base}-${suffix++}`; occupied.add(id); return id; };
+  const frame = unique('__preview-frame'), output = unique('__preview-output');
+  return { params, graph: { version: 1, schemaVersion: 1, domain: 'image', nodes: [
+    ...graph.nodes.filter(node => included.has(node.id)),
+    { id: frame, operator: 'image.frame', operatorVersion: 1, bindings: {} },
+    { id: output, operator: 'image.output', operatorVersion: 1, bindings: {} },
+  ], edges: [...graph.edges.filter(edge => included.has(edge.from) && included.has(edge.to)),
+    { id: unique('__preview-edge'), from: frame, output: 'image', to: output, input: 'image' }], layout: {} } };
+}
+
+export type ImageOperatorPreviewCompiler = (graph: EffectOperatorGraph, params: Record<string, unknown>,
+  target: ImageOperatorPreviewTarget) => ReturnType<typeof compileImageOperatorPreview>;
+
+function imageScalarValues(request: PreviewRequest, effect: Effect, keys: Keyframe[], time: number,
+  compilePreview?: ImageOperatorPreviewCompiler) {
   const binding = request.node.binding;
   if (binding?.kind !== 'effect-operator') return undefined;
-  const graph = effectOperatorGraph(effect), selected = graph.nodes.find(node => node.id === binding.nodeId);
+  const ownerGraph = effectOperatorGraph(effect), selected = ownerGraph.nodes.find(node => node.id === binding.nodeId);
   const params = { ...effectOperatorParams(effect) };
-  if (graph.domain !== 'image' || !selected) return undefined;
-  const definition = getEffectOperator(selected.operator)!;
-  if (![...definition.inputs, ...definition.outputs].some(port => port.type === 'number')) return undefined;
-  for (const node of graph.nodes) if (node.operator === 'values.number' && typeof node.bindings.value === 'string') {
+  if (!selected) return undefined;
+  for (const node of ownerGraph.nodes) if (node.operator === 'values.number' && typeof node.bindings.value === 'string') {
     params[node.bindings.value] = sampleOperatorParameter(node, 'value', params, effect.id, keys, time);
   }
+  const preview = compilePreview ? { graph: ownerGraph, params } : numericPreviewGraph(ownerGraph, selected.id, params);
+  if (!preview) return undefined;
+  const graph = preview.graph; Object.assign(params, preview.params);
+  const definition = getEffectOperator(selected.operator)!;
+  if (![...definition.inputs, ...definition.outputs].some(port => port.type === 'number')) return undefined;
   const evaluatePort = (portId: string, direction: 'input' | 'output'): number | undefined => {
     try {
-      const plan = compileImageOperatorPreview(graph, params, { nodeId: selected.id, portId, direction }, effectOperatorCompileContext(effect));
+      const target = { effectId: effect.id, nodeId: selected.id, portId, direction };
+      const plan = compilePreview?.(graph, params, target)
+        ?? compileImageOperatorPreview(graph, params, target,
+          ('context' in preview ? preview.context : undefined) ?? effectOperatorCompileContext(effect));
       if (plan.capabilities.length || plan.instructions.some(instruction => instruction.operation === 'input')) return undefined;
       const value = evaluateImageOperatorPlan(plan, [0, 0, 0, 0])[0];
       return Number.isFinite(value) ? value : undefined;
@@ -38,12 +87,14 @@ function imageScalarValues(request: PreviewRequest, effect: Effect, keys: Keyfra
   return { graph, selected, evaluate, values };
 }
 
-export function imageOperatorKnownValues(request: PreviewRequest, clip: TimelineClip, effect: Effect, keys: Keyframe[] = [], time = Math.max(0, request.time - clip.startTime)): PreviewValue[] {
-  return imageScalarValues(request, effect, keys, time)?.values.filter(value => value.value !== undefined) ?? [];
+export function imageOperatorKnownValues(request: PreviewRequest, clip: TimelineClip, effect: Effect, keys: Keyframe[] = [],
+  time = Math.max(0, request.time - clip.startTime), compilePreview?: ImageOperatorPreviewCompiler): PreviewValue[] {
+  return imageScalarValues(request, effect, keys, time, compilePreview)?.values.filter(value => value.value !== undefined) ?? [];
 }
 
 /** Numeric previews evaluate canonical bindings without persisting duplicate parameter values. */
-export function imageOperatorValuePreview(request: PreviewRequest, clip: TimelineClip, effect: Effect, keys: Keyframe[] = [], time = Math.max(0, request.time - clip.startTime)): PreviewFrame | undefined {
+export function imageOperatorValuePreview(request: PreviewRequest, clip: TimelineClip, effect: Effect, keys: Keyframe[] = [],
+  time = Math.max(0, request.time - clip.startTime), compilePreview?: ImageOperatorPreviewCompiler): PreviewFrame | undefined {
   const binding = request.node.binding;
   if (binding?.kind === 'effect-operator') {
     const selected = effectOperatorGraph(effect).nodes.find(node => node.id === binding.nodeId);
@@ -84,7 +135,7 @@ export function imageOperatorValuePreview(request: PreviewRequest, clip: Timelin
         drawing: { kind: 'text', lines: [color ? String(value) : value ? 'True' : 'False'] } };
     }
   }
-  const scalar = imageScalarValues(request, effect, keys, time); if (!scalar) return undefined;
+  const scalar = imageScalarValues(request, effect, keys, time, compilePreview); if (!scalar) return undefined;
   const { selected, evaluate, values } = scalar;
   // Per-pixel operands and results must be rendered by the canonical image IR.
   const requestedValue = request.port ? values.find(value => value.direction === request.port!.direction && value.portId === request.port!.id)?.value : evaluate();

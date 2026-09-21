@@ -10,7 +10,9 @@ import {
   createWorkerSoftwareFeedbackFrame,
   hasWorkerSoftwareFeedbackEffects,
   type WorkerSoftwareFeedbackStore,
+  type WorkerSoftwareFeedbackFrameMetadata,
 } from './workerSoftwareFeedbackEffects';
+import { applyWorkerSoftwareImageGraphs } from './workerSoftwareImageGraphs';
 
 function finiteNumber(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -504,6 +506,7 @@ export function hasWorkerSoftwarePixelEffects(layer: WorkerRenderSoftwareFrame['
   const scanlineAdjustmentCount = layer.pixelEffects?.scanlineAdjustments?.length ?? 0;
   const grainAdjustmentCount = layer.pixelEffects?.grainAdjustments?.length ?? 0;
   return feedbackEffectCount > 0
+    || (layer.pixelEffects?.imageOperatorPlans?.length ?? 0) > 0
     || Math.abs(finiteNumber(layer.pixelEffects?.brightness, 0)) > 0.0001
     || exposureAdjustmentCount > 0
     || temperatureAdjustmentCount > 0
@@ -534,6 +537,7 @@ export function applyWorkerSoftwarePixelEffects(
   timelineTime: number,
   feedbackStore?: WorkerSoftwareFeedbackStore,
   feedbackScopeId = 'default',
+  feedbackFrameMetadata?: WorkerSoftwareFeedbackFrameMetadata,
 ): void {
   const brightness = finiteNumber(layer.pixelEffects?.brightness, 0);
   const mirrorHorizontal = layer.pixelEffects?.mirrorHorizontal === true;
@@ -561,12 +565,17 @@ export function applyWorkerSoftwarePixelEffects(
 
   const imageData = context.getImageData(0, 0, width, height);
   const data = imageData.data;
+  applyWorkerSoftwareImageGraphs(data, width, height, layer.pixelEffects?.imageOperatorPlans ?? [], timelineTime, {
+    owners: layer.pixelEffects?.imageOperatorPlanOwners, store: feedbackStore, scopeId: feedbackScopeId,
+    frame: feedbackFrameMetadata ?? { timelineTimeSeconds: timelineTime },
+  });
   const feedbackFrame = createWorkerSoftwareFeedbackFrame({
     pixelEffects: layer.pixelEffects,
     store: feedbackStore,
     scopeId: feedbackScopeId,
     width,
     height,
+    frame: feedbackFrameMetadata ?? { timelineTimeSeconds: timelineTime },
   });
   const sourceData = mirrorHorizontal
     || mirrorVertical

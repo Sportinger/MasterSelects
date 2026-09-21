@@ -70,11 +70,12 @@ export function buildCanvasScene(options: Options): CanvasScene {
     label: node.label, description: inlineNumericPorts(node) ? '' : node.description ?? 'Built-in processing node', kind: typeof node.params?.categoryLabel === 'string' ? node.params.categoryLabel : node.kind,
     runtime: node.runtime, color: COLORS[node.kind] ?? '#5cbed6', selected: node.id === options.selectedNodeId || options.selection.has(node.id),
     viewerEnabled: node.preview?.requested,
+    mathSymbol: inlineNumericPorts(node) ? { text: String(node.params?.mathSymbol ?? ''), x: 50, y: getNodePortStartY(node) + (node.inputs.length ? 56 : 8) + 22 } : undefined,
     preview: node.preview?.enabled ? { ...previewRect(getNodeHeight(node), node), key: node.preview.key, label: previewOutput(node, node.preview.portId)?.label ?? 'Values', text: inlineNumericPorts(node) } : undefined,
     bypassed: isNodeBypassed(node), bypassable: !!options.canBypass && isNodeBypassable(node), badges: getNodeBadges(node), curve: curveFor(node, options),
     ports: [...node.inputs, ...node.outputs].map(port => {
       const info = describeNodePort(port), center = getPortCenter(node, port.id, port.direction)!;
-      return { x: center.x - node.layout.x, y: center.y - node.layout.y, label: port.label, type: inlineNumericPorts(node) ? '' : info.typeLabel, color: info.color, input: port.direction === 'input' };
+      return { id: port.id, x: center.x - node.layout.x, y: center.y - node.layout.y, label: port.label, type: inlineNumericPorts(node) ? '' : info.typeLabel, color: info.color, input: port.direction === 'input' };
     }) }));
   const pairs = new Map<string, { input?: ConnectionPlug; output?: ConnectionPlug }>();
   for (const plug of plugs) {

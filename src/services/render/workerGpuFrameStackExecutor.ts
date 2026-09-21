@@ -387,6 +387,8 @@ function encodeOrderedStack(
     motionTime: context.stack.frame.timelineTime,
     particleQuality: context.stack.frame.intent === 'export' ? 'export' : 'preview',
     resourceNamespace: context.stack.occurrenceNamespace,
+    historyScopeId: context.stack.frame.compositionId,
+    frameHistory: context.stack.frameHistory,
   });
   const passId = orderedPassId(context, 'composite');
   addTrace(ledger, context, 'execute-pass', passId);

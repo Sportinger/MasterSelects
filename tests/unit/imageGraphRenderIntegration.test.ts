@@ -38,6 +38,21 @@ describe('image graph render integration', () => {
     expect(splitLayerEffects([legacy], false, true).complexEffects).toEqual([legacy]);
   });
 
+  it('does not inherit legacy-only resource bindings into generated shaders', () => {
+    const legacy = {
+      ...(invert as FullscreenEffectDefinition), usesFeedback: true,
+      passes: 3,
+      glyphAtlas: () => ({ fontFamily: 'monospace', charset: 'x', cellSize: 32 }),
+      byteTexture: () => ({ width: 1, height: 1, data: new Uint8Array(4), version: 'test' }), landmarkPoints: true,
+    } as FullscreenEffectDefinition;
+    const generated = imageGraphDefinition(effect(), legacy);
+    expect(generated).toMatchObject({ usesFeedback: false });
+    expect(generated.glyphAtlas).toBeUndefined();
+    expect(generated.byteTexture).toBeUndefined();
+    expect(generated.landmarkPoints).toBeUndefined();
+    expect(generated.passes).toBeUndefined();
+  });
+
   it('changes both execution paths when output is rewired directly to the input', () => {
     const graph = createDefaultInvertImageGraph();
     graph.edges = graph.edges.filter(edge => edge.to !== 'output');

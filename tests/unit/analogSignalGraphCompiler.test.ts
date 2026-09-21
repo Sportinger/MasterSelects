@@ -2,8 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { compileAnalogSignalGraph, createDefaultAnalogSignalGraph, validateAnalogSignalGraph } from '../../src/services/operators/analogSignalGraph';
 import { ANALOG_SIGNAL_LAB_PARAMS } from '../../src/effects/analog/signal-lab/parameters';
 import { getEffectOperator } from '../../src/services/operators/operatorRegistry';
+import { createLegacyAnalogSignalGraph } from '../helpers/legacyAnalogSignalGraph';
 
 describe('Analog Signal operator graph compiler', () => {
+  it('rejects fragment derivatives before building a compute program', () => {
+    const graph = createDefaultAnalogSignalGraph();
+    graph.nodes.push({ id: 'fragment-gradient', operator: 'image.derivative.coarse.scalar', operatorVersion: 1, bindings: {} });
+    expect(validateAnalogSignalGraph(graph)).toContain('Analog compute resolve does not support fragment derivatives: fragment-gradient.');
+    expect(() => compileAnalogSignalGraph(graph, {})).toThrow(/fragment derivatives/);
+  });
   it('lowers the real branched six-stage pipeline with stable effect parameter bindings', () => {
     const graph = createDefaultAnalogSignalGraph();
     graph.nodes.find(node => node.id === 'vhs')!.constants = { vhsAmount: 0.55 };
@@ -11,7 +18,10 @@ describe('Analog Signal operator graph compiler', () => {
     expect(plan.stages.map(stage => stage.kind)).toEqual(['encode', 'rf', 'vhs', 'analyze', 'decode', 'resolve']);
     expect(plan.stages.find(stage => stage.kind === 'decode')).toMatchObject({ input: 'vhs', receiver: 'analyze', params: { rfNoise: 0.7, decoder: 'comb', tapeSpeed: 'ep', vhsAmount: 0.55 } });
     expect(plan.stages.find(stage => stage.kind === 'resolve')).toMatchObject({ input: 'decode', source: 'frame', params: { vhsAmount: 0.55 } });
-    expect(plan.output).toBe('resolve');
+    const resolve = plan.stages.find(stage => stage.kind === 'resolve')!;
+    expect(resolve.imageProgram?.resourceInputs).toEqual(expect.arrayContaining(['source', 'decoded']));
+    expect(resolve.imageProgram?.resourceSampling).toEqual(['manual-bilinear-clamp', 'manual-bilinear-clamp']);
+    expect(plan.output).toBe(resolve.nodeId);
     expect(plan.passthrough).toBe(false);
     expect(compileAnalogSignalGraph(graph, { rfNoise: 0.7, decoder: 'comb', tapeSpeed: 'ep' }).key).toBe(plan.key);
   });
@@ -49,9 +59,69 @@ describe('Analog Signal operator graph compiler', () => {
     graph.layout = { frame: graph.layout.frame, output: graph.layout.output };
     expect(compileAnalogSignalGraph(graph)).toMatchObject({ stages: [], output: 'frame', passthrough: true });
 
-    const invalid = createDefaultAnalogSignalGraph();
+    const invalid = createLegacyAnalogSignalGraph();
     invalid.edges.find(edge => edge.id === 'decode-resolve')!.from = 'frame';
     expect(validateAnalogSignalGraph(invalid)).toEqual(expect.arrayContaining([expect.stringContaining('decode-resolve')]));
+  });
+
+  it('keeps the persisted legacy Display Resolve compiler path unchanged', () => {
+    const plan = compileAnalogSignalGraph(createLegacyAnalogSignalGraph(), { palAmount: .7, rfAmount: .4 });
+    const resolve = plan.stages.find(stage => stage.kind === 'resolve')!;
+    expect(resolve.nodeId).toBe('resolve');
+    expect(resolve.imageProgram).toBeUndefined();
+    expect(resolve).toMatchObject({ source: 'frame', input: 'decode' });
+  });
+
+  it('resolves renamed frame/decode boundaries and avoids compiler-node ID collisions', () => {
+    const graph = createDefaultAnalogSignalGraph();
+    for (const [from, to] of [['frame', 'camera'], ['decode', 'decoder']] as const) {
+      graph.nodes.find(node => node.id === from)!.id = to;
+      for (const edge of graph.edges) { if (edge.from === from) edge.from = to; if (edge.to === from) edge.to = to; }
+      graph.layout[to] = graph.layout[from]!; delete graph.layout[from];
+    }
+    graph.nodes.push({ id: '__analog-source', operator: 'values.number', operatorVersion: 1, bindings: {}, constants: { value: 0 } });
+    graph.layout['__analog-source'] = { x: 0, y: 1000 };
+    const resolve = compileAnalogSignalGraph(graph).stages.find(stage => stage.kind === 'resolve')!;
+    expect(resolve).toMatchObject({ source: 'camera', input: 'decoder' });
+    expect(resolve.imageProgram?.resourceInputs).toEqual(expect.arrayContaining(['source', 'decoded']));
+  });
+
+  it('allows a valid source-only image island without inventing a decode resource', () => {
+    const graph = createDefaultAnalogSignalGraph();
+    graph.nodes.push(
+      { id: 'source-vector', operator: 'convert.image-to-vec4', operatorVersion: 1, bindings: {} },
+      { id: 'source-image', operator: 'convert.vec4-to-image', operatorVersion: 1, bindings: {} },
+    );
+    graph.layout['source-vector'] = { x: 1800, y: 900 }; graph.layout['source-image'] = { x: 2100, y: 900 };
+    graph.edges = graph.edges.filter(edge => !(edge.to === 'output' && edge.input === 'image'));
+    graph.edges.push(
+      { id: 'frame-source-vector', from: 'frame', output: 'image', to: 'source-vector', input: 'image' },
+      { id: 'source-vector-image', from: 'source-vector', output: 'value', to: 'source-image', input: 'value' },
+      { id: 'source-image-output', from: 'source-image', output: 'image', to: 'output', input: 'image' },
+    );
+    const resolve = compileAnalogSignalGraph(graph).stages.find(stage => stage.kind === 'resolve')!;
+    expect(resolve).toMatchObject({ source: 'frame' });
+    expect(resolve.input).toBeUndefined();
+    expect(resolve.imageProgram?.resourceInputs).toEqual(['source']);
+  });
+
+  it('allows a decoded-only image island without inventing a source resource', () => {
+    const graph = createDefaultAnalogSignalGraph();
+    graph.nodes.push(
+      { id: 'decoded-vector', operator: 'convert.image-to-vec4', operatorVersion: 1, bindings: {} },
+      { id: 'decoded-image', operator: 'convert.vec4-to-image', operatorVersion: 1, bindings: {} },
+    );
+    graph.layout['decoded-vector'] = { x: 1800, y: 900 }; graph.layout['decoded-image'] = { x: 2100, y: 900 };
+    graph.edges = graph.edges.filter(edge => !(edge.to === 'output' && edge.input === 'image'));
+    graph.edges.push(
+      { id: 'decode-vector', from: 'decode', output: 'image', to: 'decoded-vector', input: 'image' },
+      { id: 'decode-image', from: 'decoded-vector', output: 'value', to: 'decoded-image', input: 'value' },
+      { id: 'decoded-output', from: 'decoded-image', output: 'image', to: 'output', input: 'image' },
+    );
+    const resolve = compileAnalogSignalGraph(graph).stages.find(stage => stage.kind === 'resolve')!;
+    expect(resolve).toMatchObject({ input: 'decode' });
+    expect(resolve.source).toBeUndefined();
+    expect(resolve.imageProgram?.resourceInputs).toEqual(['decoded']);
   });
 
   it('derives select options and numeric bounds from the effect parameter source', () => {

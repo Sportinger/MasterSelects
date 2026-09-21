@@ -19,6 +19,7 @@ const MAX_EXPORT_VIDEO_SOURCE_NESTING_DEPTH = 8;
 // GPU/decoder load; allow up to roughly one second before failing the frame.
 const EXPORT_NESTED_DEFER_RETRY_LIMIT = 60;
 const EXPORT_NESTED_DEFER_RETRY_DELAY_MS = 16;
+let nextExportFrameHistoryOwnerRevision = 1;
 
 export interface ExportRenderSessionOptions {
   readonly runId: string;
@@ -206,6 +207,9 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
   private useZeroCopy = false;
   private liveInputTimelineAnchor: number | null = null;
   private liveInputWallClockAnchor: number | null = null;
+  private readonly frameHistoryOwnerRevision = nextExportFrameHistoryOwnerRevision++;
+  private frameHistoryEventRevision = 0;
+  private exportStartPending = true;
 
   constructor(options: ExportRenderSessionOptions) {
     this.runId = options.runId;
@@ -268,14 +272,22 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
     const maskSyncMs = performance.now() - maskSyncStart;
 
     let renderMs = 0;
+    const frameHistoryEventRevision = ++this.frameHistoryEventRevision;
+    const isExportStart = this.exportStartPending;
     for (let attempt = 0; ; attempt += 1) {
       const renderStart = performance.now();
       try {
         const frameContext: RenderSurfaceFrameContext = {
           compositionId: this.compositionId,
           timelineTimeSeconds: input.time,
+          frameHistory: {
+            eventRevision: frameHistoryEventRevision,
+            ownerRevision: this.frameHistoryOwnerRevision,
+            ...(isExportStart ? { discontinuity: 'export-start' as const } : {}),
+          },
         };
         this.host.render(layers, frameContext);
+        this.exportStartPending = false;
         renderMs += performance.now() - renderStart;
         break;
       } catch (error) {

@@ -1,7 +1,15 @@
 import type { EffectParam } from '../../effects/types';
+import type { ImageOperatorNamedImage } from './imageOperatorResources';
+import type { ResolveImageOperatorGlyphAtlas } from './imageOperatorGlyphResources';
+import type { ImageOperatorFieldResource } from './imageOperatorFieldResources';
 
 export interface ImageOperatorCompileContext {
   parameterSchema?: Record<string, EffectParam>;
+  namedImages?: readonly ImageOperatorNamedImage[];
+  allowFrameHistory?: boolean;
+  allowMemoryWindow?: boolean;
+  resolveGlyphAtlas?: ResolveImageOperatorGlyphAtlas;
+  fieldResources?: readonly ImageOperatorFieldResource[];
 }
 
 function choiceSchema(binding: unknown, context: ImageOperatorCompileContext) {

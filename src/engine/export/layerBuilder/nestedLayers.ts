@@ -378,6 +378,7 @@ function buildNestedLayerForExport(
           layers: subLayers,
           width,
           height,
+          frameRate: mediaCompositions.find(candidate => candidate.id === nestedClip.compositionId)?.frameRate ?? 30,
           currentTime: subCompTime,
           sceneClips: nestedClip.nestedClips,
           sceneTracks: nestedClip.nestedTracks,

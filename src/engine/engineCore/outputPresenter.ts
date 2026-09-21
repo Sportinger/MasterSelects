@@ -24,6 +24,7 @@ export function cacheActiveCompOutput(
   deps: OutputPresenterDeps,
   compositionId: string,
   timelineTimeSeconds?: number,
+  frameRate?: number,
 ): void {
   const res = deps.getResources();
   if (!res) return;
@@ -44,6 +45,7 @@ export function cacheActiveCompOutput(
     width,
     height,
     timelineTimeSeconds,
+    frameRate,
   );
 }
 

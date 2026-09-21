@@ -14,6 +14,12 @@ describe('lexical image reducer branch scopes', () => {
     expect(calls).toEqual(order === 'root-first' ? [root, ...loop] : [...loop, root]);
     expect(plan.wgsl).toContain('fn evaluateImageGraph(');
     expect(plan.wgsl).not.toContain('undefined');
+    const branchScopes = plan.instructions.filter(item => item.operation === 'select-image').flatMap(item => item.inputs.slice(1));
+    expect(branchScopes).toHaveLength(4);
+    branchScopes.forEach(scope => expect(plan.wgsl).not.toContain(`fn evaluateImageScope${scope}`));
+    expect(plan.wgsl).toMatch(/fn evaluateSequenceTerm\d+[^]*if \(v\d+\)/);
+    const reducerScope = plan.sequenceScopes![0].id;
+    expect(plan.instructions.filter(item => item.nodeId === 'uv-high')).not.toContainEqual(expect.objectContaining({ scope: reducerScope }));
   });
 
   it('forwards sequence progress into the sampled image expression', () => {
@@ -47,12 +53,19 @@ describe('lexical image reducer branch scopes', () => {
       : [[.5, .5], [.5, .6], [.8, .5], [.8, .6]];
     expect(calls).toEqual(order === 'root-first' ? [root, ...loop] : [...loop, root]);
     expect(plan.wgsl).not.toContain('undefined');
+    if (kind === 'grid') {
+      const shared = plan.instructions.filter(item => item.nodeId === 'x-base');
+      expect(shared).toHaveLength(1);
+      expect(shared[0].scope).toBe(plan.kernelScopes![0].id);
+    }
   });
 
   it('compiles a root lazy image select without inventing UV context', () => {
     const plan = compileImageOperatorGraph(createRootPureImageSelectGraph());
     expect(plan.capabilities).not.toContain('uv');
     expect(plan.wgsl).not.toContain('undefined');
+    expect(plan.wgsl).toMatch(/fn evaluateImageGraph\([^]*if \(v\d+\)/);
+    expect(plan.wgsl).not.toContain('fn evaluateImageScope');
     expect(evaluateImageOperatorPlan(plan, [.1, .2, .3, .4])).toEqual([.1, .2, .3, .4]);
   });
 

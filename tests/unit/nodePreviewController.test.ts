@@ -40,7 +40,7 @@ it('budgets synchronous preview compilation after lazy loading instead of releas
   } finally { controller.dispose(); }
 });
 
-it('refills a cleared atlas across a zoom tier even when the paused thumbnail width stays unchanged', async () => {
+it('keeps paused previews cached across continuous zoom and atlas tiers', async () => {
   vi.useFakeTimers(); vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
   const publish = vi.fn();
   const controller = new NodePreviewController({ preview: publish, software: false, previewBusy: false }, document.createElement('div'));
@@ -49,20 +49,20 @@ it('refills a cleared atlas across a zoom tier even when the paused thumbnail wi
   controller.viewport(view);
   await vi.advanceTimersByTimeAsync(300);
   expect(publish).toHaveBeenCalledTimes(1);
-  controller.viewport({ ...view, zoom: 0.3501 });
-  await vi.advanceTimersByTimeAsync(300);
-  expect(publish).toHaveBeenCalledTimes(2);
-  const [before, after] = mocked.produce.mock.calls.map(call => call[0]);
-  expect(before.width).toBe(after.width);
-  expect(before.revision).not.toBe(after.revision);
-  expect(before.continuity).not.toBe(after.continuity);
+  for (const zoom of [0.3501, 0.5, 0.8, 1.5, 0.2]) {
+    controller.viewport({ ...view, zoom });
+    await vi.advanceTimersByTimeAsync(300);
+  }
+  expect(publish).toHaveBeenCalledTimes(1);
+  expect(mocked.produce).toHaveBeenCalledTimes(1);
   controller.dispose();
 });
 
-it('publishes live numbers to the DOM without repeating worker text messages after zoom', async () => {
+it('sends actual numbers to the canvas only when changed, and restores them after a worker reset', async () => {
   vi.useFakeTimers(); vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+  let value = '2';
   mocked.produce.mockImplementation(request => ({ key: request.key, revision: request.revision, time: request.time,
-    status: 'live', label: 'Value', drawing: { kind: 'number', value: '2', caption: 'Output' } }));
+    status: 'live', label: 'Value', drawing: { kind: 'number', value, caption: 'Output' } }));
   const publish = vi.fn(), controller = new NodePreviewController({ preview: publish, software: false, previewBusy: false }, document.createElement('div'));
   const view = { width: 800, height: 600, panX: 0, panY: 0, ratio: 1, zoom: 0.3499 };
   controller.scene('clip', [{ ...connectionFixture.nodes[0], preview: { key: 'numeric', enabled: true, requested: true } }], null);
@@ -70,7 +70,17 @@ it('publishes live numbers to the DOM without repeating worker text messages aft
   controller.viewport({ ...view, zoom: 0.3501 }); await vi.advanceTimersByTimeAsync(300);
   expect(publish).toHaveBeenCalledTimes(1);
   expect(publish.mock.calls[0][0]).toMatchObject({ presentation: 'text' });
-  expect(publish.mock.calls[0][0].drawing).toBeUndefined();
+  expect(publish.mock.calls[0][0].drawing).toMatchObject({ kind: 'number', value: '2' });
   expect(previewTextStore.get('numeric')?.drawing).toMatchObject({ kind: 'number', value: '2' });
+  value = '3'; mocked.state.playheadPosition = 1;
+  controller.viewport(view); await vi.advanceTimersByTimeAsync(300);
+  expect(publish).toHaveBeenCalledTimes(2);
+  expect(publish.mock.calls[1][0].drawing.value).toBe('3');
+  mocked.state.playheadPosition = 2;
+  controller.viewport(view); await vi.advanceTimersByTimeAsync(300);
+  expect(publish).toHaveBeenCalledTimes(2);
+  controller.reset(); await vi.advanceTimersByTimeAsync(300);
+  expect(publish).toHaveBeenCalledTimes(3);
+  mocked.state.playheadPosition = 0;
   controller.dispose(); expect(previewTextStore.get('numeric')).toBeUndefined();
 });

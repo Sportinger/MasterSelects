@@ -4,7 +4,7 @@ import {
   hasWorkerSoftwarePixelEffects,
 } from './workerSoftwarePixelEffects';
 import { applyWorkerSoftwareTransitionMask } from './workerSoftwareTransitionMasks';
-import type { WorkerSoftwareFeedbackStore } from './workerSoftwareFeedbackEffects';
+import type { WorkerSoftwareFeedbackFrameMetadata, WorkerSoftwareFeedbackStore } from './workerSoftwareFeedbackEffects';
 import { calculateSourcePixelScale } from '../../utils/sourcePixelScale';
 
 function finiteNumber(value: number | undefined, fallback: number): number {
@@ -116,6 +116,7 @@ export function drawWorkerSoftwareLayer(
   timelineTime = 0,
   feedbackStore?: WorkerSoftwareFeedbackStore,
   feedbackScopeId = 'default',
+  feedbackFrameMetadata?: WorkerSoftwareFeedbackFrameMetadata,
 ): void {
   if (layer.source.kind === 'adjustment') {
     const scratch = createScratchSurface(targetWidth, targetHeight);
@@ -136,6 +137,7 @@ export function drawWorkerSoftwareLayer(
       timelineTime,
       feedbackStore,
       feedbackScopeId,
+      feedbackFrameMetadata,
     );
     context.save();
     context.globalAlpha = Math.max(0, Math.min(1, layer.opacity));
@@ -178,6 +180,7 @@ export function drawWorkerSoftwareLayer(
         timelineTime,
         feedbackStore,
         feedbackScopeId,
+        feedbackFrameMetadata,
       );
       applyWorkerSoftwareTransitionMask(
         scratch.context,

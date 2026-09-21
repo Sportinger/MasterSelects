@@ -38,6 +38,7 @@ interface NestedCompTexture {
   view: GPUTextureView;
   initialized: boolean;
   lastRenderedTimeSeconds?: number;
+  frameRate?: number;
 }
 
 function getNestedCompCacheKey(compositionId: string, renderOccurrenceKey?: string): string {
@@ -200,6 +201,7 @@ export class NestedCompRenderer {
     );
     target.initialized = true;
     target.lastRenderedTimeSeconds = source.lastRenderedTimeSeconds;
+    target.frameRate = source.frameRate;
     return true;
   }
 
@@ -246,6 +248,7 @@ export class NestedCompRenderer {
     suppliedMotionFrameAdmission?: MotionFrameRuntimeAdmission,
     renderOccurrenceKey?: string,
     previewRenderScale = 1,
+    frameRate = 30,
   ): GPUTextureView | null {
     if (depth >= MAX_NESTING_DEPTH) {
       log.warn('Max nesting depth reached in preRender', { compositionId, depth });
@@ -258,6 +261,7 @@ export class NestedCompRenderer {
       : Math.max(0.01, Math.min(1, previewRenderScale));
     const renderWidth = Math.max(1, Math.round(width * effectiveRenderScale));
     const renderHeight = Math.max(1, Math.round(height * effectiveRenderScale));
+    const normalizedFrameRate = Number.isFinite(frameRate) && frameRate > 0 ? frameRate : 30;
 
     // The active composition was already composited by the main render pass.
     // When an inactive parent needs that exact child frame, sample the raw
@@ -274,7 +278,8 @@ export class NestedCompRenderer {
       && activeOutput.texture.height === renderHeight
       && Number.isFinite(currentTime)
       && Number.isFinite(activeOutput.lastRenderedTimeSeconds)
-      && Math.round(activeOutput.lastRenderedTimeSeconds! * 60) === Math.round(currentTime! * 60)
+      && activeOutput.frameRate === normalizedFrameRate
+      && Math.round(activeOutput.lastRenderedTimeSeconds! * normalizedFrameRate) === Math.round(currentTime! * normalizedFrameRate)
     ) {
       return activeOutput.view;
     }
@@ -303,8 +308,9 @@ export class NestedCompRenderer {
     }
 
     // Frame caching: skip re-render if same time and layer count
-    // Quantize time to ~60fps frames to avoid floating point issues
+    // Preserve the generic 60 Hz visual cache while separately tracking the owning effect clock.
     const quantizedTime = currentTime !== undefined ? Math.round(currentTime * 60) : -1;
+    const effectFrameIndex = currentTime !== undefined ? Math.floor(currentTime * normalizedFrameRate) : -1;
     const lastTime = this.lastRenderTime.get(cacheKey);
     const lastCount = this.lastLayerCount.get(cacheKey);
     const motionFrameAdmission = suppliedMotionFrameAdmission ?? (
@@ -336,7 +342,9 @@ export class NestedCompRenderer {
       });
     }
 
-    if (!nestedLayers.some(isCriticalNestedLayer) && !hasMutableAuthoredContent(nestedLayers) && compTexture.initialized && quantizedTime >= 0 && lastTime === quantizedTime && lastCount === nestedLayers.length && lastMotionFrameRevision === motionFrameRevision) {
+    const cachedEffectFrameIndex = compTexture.lastRenderedTimeSeconds !== undefined && compTexture.frameRate !== undefined
+      ? Math.floor(compTexture.lastRenderedTimeSeconds * compTexture.frameRate) : -1;
+    if (!nestedLayers.some(isCriticalNestedLayer) && !hasMutableAuthoredContent(nestedLayers) && compTexture.initialized && quantizedTime >= 0 && lastTime === quantizedTime && lastCount === nestedLayers.length && lastMotionFrameRevision === motionFrameRevision && compTexture.frameRate === normalizedFrameRate && cachedEffectFrameIndex === effectFrameIndex) {
       // Same frame, return cached texture
       return compTexture.view;
     }
@@ -385,6 +393,7 @@ export class NestedCompRenderer {
           sceneClips,
           sceneTracks,
           sampler,
+          { frameRate: normalizedFrameRate, scopeId: cacheKey },
         );
         const nestedSceneLayer = nestedLayerData.find(
           (data) => data.layer.id === '__scene_3d_nested__',
@@ -419,6 +428,7 @@ export class NestedCompRenderer {
         clearPass.end();
         compTexture.initialized = true;
         compTexture.lastRenderedTimeSeconds = Number.isFinite(currentTime) ? currentTime : undefined;
+        compTexture.frameRate = normalizedFrameRate;
         this.lastRenderTime.set(cacheKey, quantizedTime);
         this.lastLayerCount.set(cacheKey, nestedLayers.length);
         this.lastMotionFrameRevision.set(cacheKey, motionFrameRevision);
@@ -447,6 +457,7 @@ export class NestedCompRenderer {
         motionTime: currentTime,
         particleQuality,
         resourceNamespace: cacheKey,
+        effectRenderClock: { frameRate: normalizedFrameRate, scopeId: cacheKey },
       });
       commandEncoder.copyTextureToTexture(
         { texture: sourceTexture },
@@ -456,6 +467,7 @@ export class NestedCompRenderer {
 
       compTexture.initialized = true;
       compTexture.lastRenderedTimeSeconds = Number.isFinite(currentTime) ? currentTime : undefined;
+      compTexture.frameRate = normalizedFrameRate;
       this.lastRenderTime.set(cacheKey, quantizedTime);
       this.lastLayerCount.set(cacheKey, nestedLayers.length);
       this.lastMotionFrameRevision.set(cacheKey, motionFrameRevision);
@@ -478,6 +490,7 @@ export class NestedCompRenderer {
     sceneClips?: TimelineClip[],
     sceneTracks?: TimelineTrack[],
     sampler?: GPUSampler,
+    effectRenderClock?: import('../../effects/_shared/byteTexture').EffectRenderClockContext,
   ): void {
     process3DLayersForNestedScene({
       layerData,
@@ -492,6 +505,7 @@ export class NestedCompRenderer {
       sceneTracks,
       effectsPipeline: this.effectsPipeline,
       sampler,
+      effectRenderClock,
     });
   }
 
@@ -577,6 +591,7 @@ export class NestedCompRenderer {
     width: number,
     height: number,
     timelineTimeSeconds?: number,
+    frameRate = 30,
   ): void {
     let compTexture = this.nestedCompTextures.get(compositionId);
     if (!compTexture || compTexture.texture.width !== width || compTexture.texture.height !== height) {
@@ -605,6 +620,7 @@ export class NestedCompRenderer {
     compTexture.lastRenderedTimeSeconds = Number.isFinite(timelineTimeSeconds)
       ? timelineTimeSeconds
       : undefined;
+    compTexture.frameRate = Number.isFinite(frameRate) && frameRate > 0 ? frameRate : 30;
   }
 
   /**

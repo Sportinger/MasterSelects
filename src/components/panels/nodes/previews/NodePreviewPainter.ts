@@ -4,6 +4,7 @@ import type { CanvasScene, CanvasView, Rect } from '../canvas/rendering/nodeCanv
 import type { DrawContext } from '../canvas/rendering/paintNodeCanvas';
 import { paintPreviewDrawing } from './paintPreviewDrawing';
 import { previewAtlasTile } from './previewGeometry';
+import { paintNodeValues } from './paintNodeValues';
 
 const ATLAS_WIDTH = 2048, ATLAS_HEIGHT = 4096;
 interface Slot { index: number; label: string; status: PreviewFrame['status']; revision: string; used: number; content: Rect }
@@ -21,12 +22,36 @@ export class NodePreviewPainter {
   private sequence = 0;
   private tile = 256;
   private keys?: Set<string>;
-  private textKeys = new Set<string>();
+  private values = new Map<string, PreviewFrame>();
   private get columns() { return ATLAS_WIDTH / this.tile; }
   private get capacity() { return ATLAS_WIDTH * ATLAS_HEIGHT / (this.tile * this.tile); }
   resolution(zoom: number, ratio: number) {
     const tile = previewAtlasTile(zoom, ratio);
-    if (tile !== this.tile) { this.tile = tile; this.disposeAtlas(); this.invalidate(); }
+    if (tile === this.tile) return;
+    // Never downsample a populated cache on zoom-out: repeated zoom cycles
+    // must not progressively blur the original pixels.
+    if (this.atlas && tile < this.tile) return;
+    // A zoom must not evict still-cached viewers just to enlarge their tiles.
+    if (this.atlas && this.slots.size > ATLAS_WIDTH * ATLAS_HEIGHT / (tile * tile)) return;
+    const previous = this.atlas, oldTile = this.tile, oldColumns = this.columns;
+    // Repack cached pixels when the zoom tier changes; never blank every viewer
+    // or trigger source/GPU readbacks just to resize thumbnails.
+    const next = previous ? this.createAtlas() : null;
+    if (previous && !next) return;
+    this.tile = tile;
+    if (previous && next) {
+      next.canvas.width = ATLAS_WIDTH; next.canvas.height = ATLAS_HEIGHT;
+      const retained = [...this.slots.entries()].toSorted((a, b) => b[1].used - a[1].used).slice(0, this.capacity);
+      this.slots.clear();
+      retained.forEach(([key, slot], index) => {
+        next.drawImage(previous.canvas, slot.index % oldColumns * oldTile, Math.floor(slot.index / oldColumns) * oldTile, oldTile, oldTile,
+          index % this.columns * tile, Math.floor(index / this.columns) * tile, tile, tile);
+        const scale = tile / oldTile, content = slot.content;
+        this.slots.set(key, { ...slot, index, content: { x: content.x * scale, y: content.y * scale, width: content.width * scale, height: content.height * scale } });
+      });
+      this.atlas = next; previous.canvas.width = 1; previous.canvas.height = 1;
+    }
+    this.invalidate();
   }
   private context: DrawContext;
   private createAtlas: () => DrawContext | null;
@@ -36,10 +61,12 @@ export class NodePreviewPainter {
     for (const frame of frames) {
       try {
         if (this.keys && !this.keys.has(frame.key)) continue;
+        const { bitmap: _bitmap, ...plain } = frame;
+        if (frame.values || frame.controls || frame.presentation === 'text' || frame.drawing?.kind === 'text' || frame.drawing?.kind === 'number') this.values.set(frame.key, plain);
+        else this.values.delete(frame.key);
         if (frame.presentation === 'text' || frame.drawing?.kind === 'text' || frame.drawing?.kind === 'number') {
-          this.textKeys.add(frame.key); this.slots.delete(frame.key); this.dirty.add(frame.key); continue;
+          this.slots.delete(frame.key); this.dirty.add(frame.key); continue;
         }
-        this.textKeys.delete(frame.key);
         if (!this.atlas) {
           this.atlas = this.createAtlas() ?? undefined;
           if (this.atlas) { this.atlas.canvas.width = ATLAS_WIDTH; this.atlas.canvas.height = ATLAS_HEIGHT; }
@@ -82,7 +109,7 @@ export class NodePreviewPainter {
   retain(keys: Set<string>) {
     this.keys = keys;
     for (const key of this.slots.keys()) if (!keys.has(key)) this.slots.delete(key);
-    for (const key of this.textKeys) if (!keys.has(key)) this.textKeys.delete(key);
+    for (const key of this.values.keys()) if (!keys.has(key)) this.values.delete(key);
     this.allDirty = true;
     if (!keys.size) this.disposeAtlas();
   }
@@ -90,7 +117,7 @@ export class NodePreviewPainter {
     if (this.atlas) { this.atlas.canvas.width = 1; this.atlas.canvas.height = 1; this.atlas = undefined; }
     this.slots.clear();
   }
-  dispose() { this.disposeAtlas(); this.dirty.clear(); this.textKeys.clear(); }
+  dispose() { this.disposeAtlas(); this.dirty.clear(); this.values.clear(); }
   get size() { return this.slots.size; }
 
   draw(scene: CanvasScene, view: CanvasView) {
@@ -103,10 +130,15 @@ export class NodePreviewPainter {
       const preview = node.preview;
       if (!preview) continue;
       const rect = { ...preview, x: node.x + preview.x, y: node.y + preview.y };
-      if (!previewInView(rect, view) || (!this.allDirty && !this.dirty.has(preview.key))) continue;
+      const bounds = preview.text ? node : rect;
+      if (!previewInView(bounds, view) || (!this.allDirty && !this.dirty.has(preview.key))) continue;
       const slot = this.slots.get(preview.key);
-      ctx.clearRect(rect.x - 1, rect.y - 1, rect.width + 2, rect.height + 2);
-      if (preview.text || this.textKeys.has(preview.key)) continue;
+      const values = this.values.get(preview.key);
+      ctx.clearRect(bounds.x - 1, bounds.y - 1, bounds.width + 2, bounds.height + 2);
+      if (preview.text || values?.presentation === 'text' || values?.drawing?.kind === 'text' || values?.drawing?.kind === 'number') {
+        if (values) paintNodeValues(ctx, node, values, rect);
+        continue;
+      }
       ctx.fillStyle = '#101214'; ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
       if (slot && this.atlas) {
         const content = slot.content, scale = Math.min(rect.width / content.width, (rect.height - 32) / content.height);

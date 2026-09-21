@@ -2,6 +2,9 @@
 // Updated every frame by playback loop to avoid store update overhead
 
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
+import type { FrameHistoryDiscontinuity } from '../../effects/frameHistoryTransition';
+
+type PlayheadFrameHistoryDiscontinuity = Extract<FrameHistoryDiscontinuity, 'seek' | 'loop'>;
 
 /**
  * Playhead state data structure
@@ -50,6 +53,12 @@ export interface PlayheadStateData {
 
   /** Playback speed used by the wall-clock fallback */
   clockPlaybackSpeed: number;
+
+  /** Monotonic, non-consuming event observed independently by every render surface. */
+  frameHistoryEventRevision: number;
+
+  /** Most recent explicit timeline discontinuity. */
+  frameHistoryDiscontinuity?: PlayheadFrameHistoryDiscontinuity;
 }
 
 /**
@@ -71,7 +80,21 @@ export const playheadState: PlayheadStateData = {
   clockStartTimeMs: null,
   clockStartPosition: 0,
   clockPlaybackSpeed: 1,
+  frameHistoryEventRevision: 0,
 };
+
+export function markPlayheadFrameHistoryDiscontinuity(discontinuity: PlayheadFrameHistoryDiscontinuity): void {
+  playheadState.frameHistoryEventRevision += 1;
+  playheadState.frameHistoryDiscontinuity = discontinuity;
+}
+
+export function playheadFrameHistoryMetadata(ownerRevision: number) {
+  return {
+    eventRevision: playheadState.frameHistoryEventRevision,
+    ...(playheadState.frameHistoryDiscontinuity ? { discontinuity: playheadState.frameHistoryDiscontinuity } : {}),
+    ownerRevision,
+  };
+}
 
 function getNowMs(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();

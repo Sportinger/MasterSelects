@@ -130,7 +130,7 @@ export const createRamPreviewSlice: SliceCreator<RamPreviewActions> = (set, get)
           getInterpolatedSpeed: (id, t) => get().getInterpolatedSpeed(id, t),
           getCompositionDimensions: (compId) => {
             const comp = mediaState.compositions.find(c => c.id === compId);
-            return { width: comp?.width || 1920, height: comp?.height || 1080 };
+            return { width: comp?.width || 1920, height: comp?.height || 1080, frameRate: comp?.frameRate ?? 30 };
           },
           onFrameCached: (time) => addCachedFrame(time),
           onProgress: (percent) => set(isClipVideoBake

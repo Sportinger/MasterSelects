@@ -2,6 +2,7 @@
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
+import { FEEDBACK_PARAMETERS } from '../../_shared/feedbackParameters';
 
 export const acuarela: EffectDefinition = {
   id: 'acuarela',
@@ -15,6 +16,7 @@ export const acuarela: EffectDefinition = {
   requiresContinuousRender: true,
 
   params: {
+    ...FEEDBACK_PARAMETERS,
     opacity: {
       type: 'number',
       label: 'Opacity',
@@ -95,9 +97,7 @@ export const acuarela: EffectDefinition = {
     },
   },
 
-  packUniforms: (params, width, height) => {
-    const time = performance.now() / 1000;
-
+  packUniforms: (params, width, height, timelineTimeSeconds = 0) => {
     return new Float32Array([
       params.opacity as number ?? 1,
       params.gain as number ?? 0.01,
@@ -109,7 +109,7 @@ export const acuarela: EffectDefinition = {
       params.gainY as number ?? 0.3,
       width,
       height,
-      time,
+      Number.isFinite(timelineTimeSeconds) ? timelineTimeSeconds : 0,
       0,
     ]);
   },

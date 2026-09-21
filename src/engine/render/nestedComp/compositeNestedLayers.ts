@@ -5,6 +5,7 @@ import {
 import type { LayerRenderData } from '../../core/types';
 import type { MaskTextureManager } from '../../texture/MaskTextureManager';
 import type { Compositor } from '../Compositor';
+import type { EffectRenderClockContext } from '../../../effects/_shared/byteTexture';
 
 interface TexturePairTextures {
   pingTexture: GPUTexture;
@@ -33,6 +34,7 @@ interface CompositeNestedLayersParams {
   motionTime?: number;
   particleQuality?: 'preview' | 'export';
   resourceNamespace?: string;
+  effectRenderClock?: EffectRenderClockContext;
 }
 
 function syncNestedLayerMaskTexture(
@@ -94,6 +96,7 @@ export function compositeNestedLayers(params: CompositeNestedLayersParams): GPUT
     motionTime,
     particleQuality = 'preview',
     resourceNamespace,
+    effectRenderClock,
   } = params;
 
   const compositorLayerData = resourceNamespace && layerData.some((data) => data.layer.maskClipId)
@@ -131,6 +134,7 @@ export function compositeNestedLayers(params: CompositeNestedLayersParams): GPUT
     motionTime,
     particleQuality,
     resourceNamespace,
+    effectRenderClock,
   });
 
   return result.finalView === nestedPingView

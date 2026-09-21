@@ -323,12 +323,12 @@ export class MainFallbackRenderHostPort implements RenderHostPort {
     return engine.cacheCompositeFrame(time);
   }
 
-  cacheActiveCompOutput(compositionId: string, timelineTimeSeconds?: number): void {
+  cacheActiveCompOutput(compositionId: string, timelineTimeSeconds?: number, frameRate?: number): void {
     if (timelineTimeSeconds === undefined) {
-      engine.cacheActiveCompOutput(compositionId);
+      engine.cacheActiveCompOutput(compositionId, undefined, frameRate);
       return;
     }
-    engine.cacheActiveCompOutput(compositionId, timelineTimeSeconds);
+    engine.cacheActiveCompOutput(compositionId, timelineTimeSeconds, frameRate);
   }
 
   getIsExporting(): boolean {

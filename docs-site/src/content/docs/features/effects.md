@@ -41,6 +41,22 @@ Fullscreen effect definitions provide:
   `texture_2d<u32>` on binding 5 and re-uploaded only when its `version`
   string changes (`src/effects/_shared/byteTexture.ts`)
 
+Memory Leak stores a canonical editable image graph rather than hiding byte
+interpretation inside one shader. Its typed Memory Window source exposes
+availability and word dimensions as metadata; a separate byte decoder performs
+the 8-bit, 16-bit or IEEE-float mapping before ordinary alpha and mix nodes.
+Advance and Shuffle derive frame indices from the explicit owning-composition
+clock and frame rate, so nested compositions, preview and export address the
+same window at the same composition frame. Frozen artifact blocks are stable
+across sessions. Live FFmpeg heap contents remain intentionally dependent on
+the current browser session and prior FFmpeg work.
+
+Each byte-window version receives an immutable `r32uint` texture. Cache keys
+include render scope and effect identity, while entry-count and byte budgets
+bound retained textures. Eviction drops ownership without destroying textures
+that may still be referenced by an unsubmitted command encoder; runtime GPU
+objects never enter saved project data.
+
 Parameters flagged `hidden: true` stay in project data and undo but are
 omitted from the generic controls and property/keyframe lists; effects use
 them for internal state such as a frozen artifact reference.
@@ -55,6 +71,9 @@ are registered for UI/project data, but are skipped by the fullscreen
 fragment path. Compute definitions are dispatched by `ComputeEffectRuntime`;
 specialized render definitions are rendered by their dedicated compositor
 pass.
+Geometry compute effects use composition timeline time for animation, including
+Voronoi seed motion, so paused preview and export do not depend on wall-clock
+time. Callers without a timeline use deterministic time zero.
 
 The production editor UI is `src/components/panels/properties/EffectsTab.tsx`.
 `src/effects/EffectControls.tsx` is a generic fallback renderer.
@@ -88,6 +107,37 @@ aberration, vignette, and 1/4/8-sample quality are configurable and keyframeable
 where applicable. The WebGPU shader and worker-software export path implement
 the same parameter contract.
 
+Fisheye's default image graph is editable rather than an opaque distortion
+node. It exposes AA jitter, lens projection, edge policy, chromatic sampling,
+vignette, outside coverage and final resolve while retaining one effect pass.
+Persisted edits therefore change preview and export execution, not merely the
+workspace diagram.
+
+The bindings retain the catalog schema exactly. Projection defaults to
+`equidistant` (`equisolid`, `stereographic` and `orthographic` are available);
+Strength is `1` in `-1..1`, Field of View is `140` in `20..175` degrees, Curve
+Bias is `0` in `-1..1`, Radius is `2.1` in `0.1..3`, Zoom and Squeeze are `1`
+in `0.25..4`, Center X/Y are `0.5` in `0..1`, and Rotation is `0` in
+`-180..180` degrees. Preserve Aspect defaults true. Outside defaults to
+`original` (or `transparent`), Feather is `0.05` in `0..0.5`, Edge Mode
+defaults to `transparent` (also `clamp`, `mirror`, `repeat`), and Edge Feather
+is `0.005` in `0..0.1`. Chromatic Aberration is `0` in `0..0.05`, Vignette is
+`0` in `0..1`, Vignette Softness is `0.25` in `0.01..1`, and Samples defaults
+to `4` in `1..8`, normalized to the supported 1/4/8 quality levels. Numeric
+bindings keep their existing keyframe IDs.
+
+Image graphs have an image-specific structural ceiling of 512 nodes and 2048
+edges, plus 2048 expanded compiler instructions. The existing 64-node/256-edge
+limits remain unchanged for non-image graph domains. These are validation and
+lowering bounds, not permission for hidden black-box operators.
+
+The worker-software route transports persisted canonical single-pass plans and
+evaluates them in stack order with bilinear sampling and straight alpha. It
+supports a stack only when every enabled visual effect is image-graph owned and
+none of its plans requires materialized passes or resource inputs; mixed
+graph/legacy and multipass stacks fail closed to the existing host fallback.
+Primary color operations remain after the graph stack.
+
 ## Live Catalog Previews And Looks Foundation
 
 A Look is a serializable named stack of effect IDs, enabled flags, and primitive
@@ -116,6 +166,32 @@ Glyph effects share one exact cell-grid model, curated ASCII ramps, and a
 generated glyph atlas cached beside the effect runtime. The same grid contract
 drives rendering and artifact export, so the exported rows match the visible
 cell selection instead of approximating it independently.
+All 18 glyph variants store that shared pipeline as editable generic graphs.
+Their atlas nodes keep ramp, custom text,
+font, and weight bound to the existing effect parameters; animated weight
+therefore follows the same preview, export, and saved-project timeline. Number
+Field adds quantized tone ink, Grid Glyph adds cell-border coverage, Pixel Code
+uses deterministic hashed cell selection, and Word Mosaic adds its connector band.
+Glyph Matrix advances character selection with timeline time and cell position;
+Data Hatching combines its animated character offset with diagonal hatch coverage.
+Brand Generator adds radial character selection and a frame mask; Stitch Poster
+combines atlas coverage with diagonal thread strokes and its paper background.
+Dither Text uses animated threshold noise; Symbol Matrix combines cell-hashed
+character selection with a timeline-driven brightness pulse.
+Pixel Dither uses a radial neon resolve; Retro Matrix uses an amber scanline
+resolve. Both retain the sampled source alpha and composition timeline clock.
+Capsule Cloud adds signed-distance pill coverage; UI Collage adds cell borders
+and cursor marks. Their character offsets use deterministic spatial hashes.
+Matrix Rain combines hashed column offsets with its animated green head highlight.
+ASCII Ghost combines the current result with explicit previous-frame history using
+component-wise decay, including alpha. Inscribe retains automatic GPU derivatives
+of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy.
+
+Acuarela uses generic noise, vector math, image sampling and blend operators with
+an explicit `image.frame-history` source. The runtime supplies the committed previous
+frame; editing the graph never stores textures in the project. Disconnecting the
+history source removes its runtime dependency, and a direct source-to-output
+connection bypasses the watercolor processing.
 
 `ComputeEffectRuntime` adds storage-texture compute passes to the normal
 ping-pong effect stack. Pixel Sort uses bounded segments, Voronoi uses a
@@ -123,6 +199,71 @@ jump-flood sequence, Quadtree Zoom evaluates hierarchical block variance, and
 Contour uses marching-squares cases with interpolated edge crossings. Compute
 and fragment effects can be mixed in one clip stack and use the same preview,
 worker, and export paths.
+
+Voronoi now exposes an executable `compute-image` graph: seed generation and
+Jump Flood retain their specialized backend, while nearest-seed reads, border
+comparisons, color mixing, and original alpha use shared image operators.
+Connections determine which stages execute; a direct Frame-to-Output connection
+requires no compute stages. Seed coordinates and validity stay in typed raw
+`rgba16float` fields, not color images. The final image program writes through
+the shared compute-storage output adapter, preserving legacy RGBA8 conversion
+instead of introducing a fragment-output rounding difference. Parameters retain
+their existing property IDs, ranges, defaults, and timeline time.
+
+Pixel Sort uses the same compute-image boundary with no intermediate field
+stages. Its graph separates a stable, bounded 16-record segment sort from
+Rec.709 luminance eligibility, amount mixing, and source-alpha preservation.
+The sort keeps legacy duplicate-last padding, nearest-even segment-size rounding,
+and strict greater-than comparisons for ties. Its inputs can be rewired or
+bypassed; the default graph still emits a single compute pass. Effect controls
+retain their authoritative defaults, including segment size 16, amount 0.8,
+and threshold 0.45.
+
+Quadtree Zoom exposes a bounded adaptive partition with jointly computed cell
+origin and size. Its six-level search preserves the legacy five-sample variance
+and timeline-driven threshold pulse. Center sampling, cell borders, RGB styling,
+amount mixing, and original alpha remain separate shared nodes. The default
+graph uses one compute output pass with no intermediate textures; wiring Frame
+directly to Output bypasses it. Minimum cell size defaults to 8 (2–32), variance
+threshold to 0.025 (0.001–0.2), amount to 0.8, and speed to 0.5.
+
+Contour separates integer cell coordinates, corner luminance samples, threshold
+crossings, Marching Squares topology, segment distance, and color mixing into
+editable nodes. The joint topology operator preserves all sixteen cases,
+including ambiguous cells and threshold equality. Original alpha is retained;
+the default uses one compute pass, while direct Frame-to-Output wiring bypasses
+the effect. Integer cell arithmetic preserves exact cell boundaries. Seven GPU
+comparisons verify strict legacy RGBA8 parity without a rounding tolerance.
+
+Contour Map, Crosshatch, and Kilim use granular single-pass image graphs built
+from shared sampling, luminance, scalar/vector math, and palette operations.
+Scale, amount, and colors stay bound to the existing catalog parameters; their
+defaults and ranges are unchanged. Source alpha bypasses styling. Direct source
+wiring removes the pattern, and saved graph edits retain their canonical owner.
+
+Vector Engraving exposes rotation, cell-center sampling, and engraving math.
+Embroidery exposes its thread waveform; Outline exposes four neighbor samples
+and gradient length; Bricks exposes staggered cells, center sampling, bevel
+lighting, and seeded pulsing. Embroidery, Outline, and Bricks use explicit
+timeline time in preview and export. Bricks preserves its legacy sampled
+brick-center alpha; the other three preserve current-source alpha. All retain
+one image pass and their existing catalog parameter IDs, defaults, and ranges.
+Contour Type uses the shared glyph atlas, with separate current-UV index offset,
+cell-center luminance, contour bands, and screen-space derivative coverage.
+
+### Editable keying and feedback graphs
+
+Chroma Key has an editable graph for Rec.601 YCbCr chrominance distance,
+tolerance/softness matte, and green/blue spill suppression. RGB stays straight;
+the matte multiplies source alpha. Existing key choices and parameter IDs remain
+unchanged, including the legacy Custom choice's green fallback. It retains its
+fullscreen output boundary rather than adding a new inline optimization.
+
+ROM1 exposes four noise octaves, displacement, edge masking, source lift,
+feedback decay, and final RGBA mixing as shared nodes. Detail changes frequency,
+not octave count; Speed scales displacement, not timeline time. Its history uses
+the shared seek/reset/loop contract, and feedback can raise output alpha as in
+the legacy shader. Direct source wiring prunes history resources and processing.
 
 ### Editable color effect graphs
 
@@ -241,9 +382,9 @@ functions share their WGSL implementation with the existing Fisheye shader,
 including its original domain clamps and epsilon handling. The software
 Fisheye renderer and image-graph reference evaluator likewise share the pure
 CPU implementations. Strength, curve
-bias, zoom, sampling and edge policy are not part of these primitives. This is
-the shared foundation for Fisheye migration, not yet an editable default
-Fisheye graph.
+bias, zoom, sampling and edge policy are not part of these primitives; the
+editable default graph composes them explicitly with generic math and sampling
+nodes.
 
 Scalar tangent, arctangent and absolute-value nodes complement these optics
 primitives. Absolute value shares its pure reference operation with Voxel and
@@ -255,6 +396,19 @@ passes the original degree value through. Changing a bound angle updates its
 uniform without rebuilding the shader. Fisheye's parameter schema supplies its
 defaults and numeric limits to a shared normalizer; stored/UI angles remain in
 degrees, including their existing keyframe IDs.
+
+Fisheye compatibility checks retain byte-exact RGB and alpha comparisons except
+for one explicitly approved GPU-rounding fixture: at 47×29, the orthographic
+negative-edge-max case (strength −0.59, 8 samples, 20° FOV, feather 0.5,
+edge feather 0.1, squeeze 0.25) permits alpha 78 → 79 at pixel (9, 9).
+The measured cause is GPU multiply/add contraction in the sampling coordinate,
+not a different alpha convention. This is not a general one-byte tolerance:
+other pixels, channels, cases, and larger differences still fail. No production
+shader rounding or quantization is changed to accommodate the fixture.
+
+`math.mix.vec4` is the four-component variant of the existing `math.mix`
+family. It reuses the same compiler/interpreter interpolation semantics and
+bypass contract rather than introducing a Fisheye-only blend operation.
 
 Bound `values.choice` nodes reference a select parameter in `effect.params`.
 Its options, label and default come from the owning effect definition, including
@@ -296,6 +450,87 @@ Intermediate allocations can be reused across frames, but their pixel contents
 are recomputed for each frame. A CPU reference needs an explicit resource sampler
 to evaluate a materialized input; it cannot silently substitute inline evaluation.
 
+Compile contexts may also declare named image sources. They lower to the same
+resource-input contract without inserting another IR stage or pass, with at most
+eight resources per plan. Each declaration selects hardware linear clamp or an
+explicit four-load manual bilinear clamp; both preserve straight RGBA without a
+color conversion. IDs beginning with `image-resource:` remain reserved for
+compiler materialization, and undeclared names, duplicate declarations, unknown
+sampling modes or misaligned runtime descriptors fail closed. Analog Signal Lab
+uses this contract for its original frame and decoded PAL image, with manual
+bilinear sampling fused into the existing final compute pass.
+
+`Load Pixel` evaluates its connected image expression at an exact pixel on the
+output-resolution lattice: coordinates truncate toward zero and clamp to the
+frame bounds, while UV expressions see that pixel's center. GPU textures and
+VideoFrames use integer loads; software evaluation reads an immutable source
+snapshot. Resource loads additionally respect the resource's own extent and
+stride. Typed nearest-seed fields remain raw RGBA16F records (XY pixel position,
+Z validity, W reserved), not color images, and require declared stage provenance.
+
+### CRT Screen
+
+CRT Screen stores its editable generic image graph with the effect. Curvature,
+scanlines, phosphor-mask channels, flicker and final blending remain connected
+operators with the original effect parameter and keyframe IDs. Flicker reads
+composition timeline time, so preview, seeking and export share the same clock.
+
+Glitch and Film Prism likewise store editable generic graphs. Glitch composes
+its band ticks, shared hash and channel samples explicitly; Film Prism exposes
+radial sampling and the shared noise calculation. Both read composition
+timeline time and retain their catalog parameter and keyframe IDs.
+
+Crystal and Glass Dispersion expose their facet direction, refraction offsets
+and image sampling as editable generic graphs. Their vector normalization uses
+the native operation shared by the compiler and evaluator; sampled alpha is
+preserved, and shimmer/pulse animation reads composition timeline time.
+
+Holo exposes its timeline-driven interference, spectrum blend and luminance-edge
+response as an editable generic graph while preserving source alpha. GPU shaders
+retain native automatic derivatives, whose fine/coarse choice is device-defined;
+the deterministic software backend explicitly evaluates automatic derivatives
+as coarse fragment quads rather than claiming universal CPU/GPU byte equality.
+
+Halftone and Pattern Halftone share an editable generic graph construction for
+rotated cell coordinates, luminance-derived mark size, ink mixing and preserved
+source alpha. Pattern Halftone keeps its Circle, Diamond and Line choice bound
+to the catalog-owned select schema instead of persisting duplicate options.
+
+Riso and Riso Glow expose their offset registration samples, Rec.709 ink loads,
+subtractive paper blend and source-alpha path as editable graph operations. Riso
+Glow adds its pulse from composition timeline time; colors and controls remain
+owned by the catalog schema.
+
+Dithering and Dither Studio expose their Bayer/checker thresholds, four-level
+quantization, ink selection and source-alpha path as editable graph operations.
+Dither Studio's Bayer 2, Bayer 4 and Checker choices remain bound to the
+catalog-owned Kernel schema rather than copied into saved graph data.
+
+Pixel Press (`paper-print`) and Pixel Poster expose their source sampling,
+noise/posterization arithmetic and final amount blend as editable graph
+operations with catalog-owned controls and preserved source alpha. Pixel
+Poster's pixelated source remains part of its result even when Amount is zero.
+
+Tone Geometry and Cross Stitch expose their rotated cells, catalog-owned shape
+choice and pattern masks as editable graph operations. Glitch Grid, Scatter
+Mosaic and Drift Lines expose timeline-driven hash/wave displacement and
+sampled-alpha paths; displaced samples determine alpha rather than the original
+undisplaced pixel.
+
+### Ribbon Scan
+
+Ribbon Scan exposes its phase, smoothstep ribbon mask, horizontal displacement,
+sampling and RGB blend as a generic image graph. Both samples retain the original
+UV clamp; output alpha comes from the displaced sample. Scale, amount and speed
+bind to the existing effect parameters, and animation uses composition time.
+
+### Wave Lines
+
+Wave Lines uses shared luminance, coordinate, scalar and color operators for its
+animated line mask and nested color blend. The two colors remain bound to the
+catalog parameters and use the common color normalization. Source alpha is
+preserved; preview and export use the same composition timeline clock.
+
 ### Analog Signal Lab
 
 `Analog Signal Lab` is a dedicated six-pass compute effect rather than a
@@ -312,6 +547,16 @@ wiring performs no analog compute passes. Unfinished wiring remains saved
 and pauses the effect rather than silently restoring the default graph.
 Controls retain their existing parameter/keyframe IDs, ranges, and defaults.
 Decoded and resolved node previews tap the actual GPU output on demand.
+
+New graphs expand Display Resolve into a group of shared math, coordinate,
+sampling, and color nodes: curvature, bloom, scanlines, phosphor mask, flicker,
+and blending are editable connections rather than an opaque display shader.
+The default remains six compute passes; the display group adds no pass.
+Its decoder signal-strength input follows the actual connected transport
+stages, including bypass. Original straight alpha is preserved. Complete saved
+Display Resolve graphs expand on load while preserving bindings, constants,
+groups, and parameter IDs. Incomplete legacy wiring stays editable until it can
+be migrated; it is never replaced by a default graph.
 
 The exposed modules cover signal strength, band-limited RF/impulse noise,
 co-channel interference, two-path delayed ghosts with carrier phase and drift,
@@ -544,10 +789,19 @@ Most effects use a 16-byte-aligned uniform block; a few multi-parameter effects 
 
 Effects can opt into temporal feedback through `usesFeedback`. Feedback effects
 sample their own previous output frame on binding 3 and the pipeline maintains
-a per-effect-instance feedback texture. Acuarela and the frozen Rom1 snapshot
+separate committed-history and current-output textures per composition/layer/effect.
+Repeated renders at the same timeline time re-evaluate against committed history;
+only advancing the frame promotes the latest current output. Acuarela and the frozen Rom1 snapshot
 use this path to build a watery smoke trail from animated fractal UV offsets.
+Acuarela, Rom1 and glyph animation use the supplied composition timeline time
+(zero when omitted), not the wall clock. Explicit seeks, backwards jumps,
+owner revisions and export starts clear frame history. The saved, non-animatable
+`historyLoop` parameter chooses `reset` (the legacy/missing-value default) or
+`continuous` across explicit playback-loop boundaries. Render surfaces receive
+the same event revision so repeated renders consume a discontinuity only once.
 The worker software renderer mirrors standalone Acuarela/Rom1 feedback with a
-per-target/effect software feedback cache for preview and export readback;
+composition/target/effect software feedback cache with the same two-history
+transition policy for preview and export readback;
 Voxel Relief uses the same binding to smooth a
 raymarched block-heightfield between video frames and remains a complex
 raymarch/feedback effect.

@@ -1,5 +1,6 @@
 import type { Effect } from '../../types/effects';
 import type { LandmarkFrame, LandmarkPoint, LandmarkSeries } from './types';
+import { evenlySampleLandmarks, landmarkPointStats, selectSubjectLandmarks } from './subjectLandmarkSemantics';
 
 const TRACKING_EFFECTS = new Set([
   'subject', 'tracked-scene', 'hud-tracker', 'cctv',
@@ -53,29 +54,17 @@ const hotData = import.meta.hot?.data as LandmarkHotData | undefined;
 export const landmarkRuntime = hotData?.runtime ?? new LandmarkRuntime();
 
 function average(points: LandmarkPoint[]): { x: number; y: number; spread: number } {
-  if (!points.length) return { x: 0.5, y: 0.5, spread: 0.15 };
-  const x = points.reduce((sum, point) => sum + point.x, 0) / points.length;
-  const y = points.reduce((sum, point) => sum + point.y, 0) / points.length;
-  const spread = points.reduce((sum, point) => sum + Math.hypot(point.x - x, point.y - y), 0) / points.length;
-  return { x, y, spread };
+  return landmarkPointStats(points);
 }
 
 function pointsForEffect(effect: Effect, frame: LandmarkFrame): LandmarkPoint[] {
   if (effect.type === 'tracked-scene') return frame.faces.flat();
-  if (effect.type === 'subject') {
-    const posePoints = frame.poses.flat();
-    return posePoints.length ? posePoints : frame.faces.flat();
-  }
+  if (effect.type === 'subject') return selectSubjectLandmarks(frame);
   if (effect.type !== 'hand-particles') return [...frame.faces.flat(), ...frame.poses.flat(), ...frame.hands.flat()];
   const hands = frame.hands;
   if (effect.params.source === 'centroid') return hands.map((hand) => average(hand)).map(({ x, y }) => ({ x, y, z: 0 }));
   if (effect.params.source === 'all') return hands.flat();
   return hands.flatMap((hand) => [4, 8, 12, 16, 20].map((index) => hand[index]).filter(Boolean));
-}
-
-function evenlySample(points: LandmarkPoint[], maximum: number): LandmarkPoint[] {
-  if (points.length <= maximum) return points;
-  return Array.from({ length: maximum }, (_, index) => points[Math.floor(index * points.length / maximum)]);
 }
 
 export function getLandmarkEffectPoints(effectId: string): LandmarkPoint[] {
@@ -98,7 +87,7 @@ export function decorateLandmarkEffects(
   return effects.map((effect) => {
     if (!TRACKING_EFFECTS.has(effect.type)) return effect;
     const points = frame ? pointsForEffect(effect, frame) : [];
-    landmarkRuntime.setEffectPoints(effect.id, evenlySample(points, 64));
+    landmarkRuntime.setEffectPoints(effect.id, evenlySampleLandmarks(points, 64));
     const center = average(points);
     const previousCenter = average(previous && frame ? pointsForEffect(effect, previous) : points);
     const useOpticalFlow = effect.type === 'kinetic-trace' && opticalMotion;

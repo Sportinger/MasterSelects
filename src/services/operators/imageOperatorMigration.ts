@@ -1,4 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph } from '../../types/operatorGraph';
+import { IMAGE_EFFECT_GRAPH_LIMITS } from './effectGraphLimits';
 
 const node = (id: string, operator: string, bindings: BoundOperatorNode['bindings'] = {}): BoundOperatorNode => ({ id, operator, operatorVersion: 1, bindings });
 const edge = (id: string, from: string, output: string, to: string, input: string) => ({ id, from, output, to, input });
@@ -22,7 +23,8 @@ export function migrateImageOperatorGraph(graph: EffectOperatorGraph): EffectOpe
   const ids = new Set(migrated.nodes.map(item => item.id)), edgeIds = new Set(migrated.edges.map(item => item.id));
   const unique = (base: string, values: Set<string>) => { let candidate = base, suffix = 2; while (values.has(candidate)) candidate = `${base}-${suffix++}`; values.add(candidate); return candidate; };
   for (const legacy of migrated.nodes.filter(item => item.operator === 'color.invert.rgb')) {
-    if (migrated.nodes.length + 2 > 64) throw new Error('Image graph migration exceeds 64 nodes.');
+    if (migrated.nodes.length + 2 > IMAGE_EFFECT_GRAPH_LIMITS.nodes)
+      throw new Error(`Image graph migration exceeds ${IMAGE_EFFECT_GRAPH_LIMITS.nodes} nodes.`);
     const oneId = unique(`${legacy.id}-one`, ids), splatId = unique(`${legacy.id}-ones`, ids); legacy.operator = 'math.subtract.rgb';
     migrated.nodes.push({ ...node(oneId, 'values.number'), constants: { value: 1 } }, node(splatId, 'convert.scalar-to-rgb'));
     for (const item of migrated.edges.filter(item => item.to === legacy.id && item.input === 'rgb')) item.input = 'b';

@@ -392,6 +392,9 @@ input[type="checkbox"] {
   box-shadow: 0 0 0 1px rgba(45, 140, 235, 0.35);
 }
 
+.draggable-number[role="slider"]:focus:not(:focus-visible) { outline: none; }
+.draggable-number[role="slider"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 .draggable-number-touch-feedback {
   position: fixed;
   z-index: 10020;

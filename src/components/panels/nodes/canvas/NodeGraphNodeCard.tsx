@@ -196,9 +196,9 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
         </div>
       </div>
     </div>
-    {inlineNumericPorts(node) && <span className="node-math-symbol" title={node.label} aria-label={`${node.label} operation`}
+    {!canvasRendered && inlineNumericPorts(node) && <span className="node-math-symbol" title={node.label} aria-label={`${node.label} operation`}
       style={{ left: node.layout.x + 18, top: node.layout.y + getNodePortStartY(node) + (node.inputs.length ? 56 : 8), width: 64 }}>{String(node.params?.mathSymbol ?? '')}</span>}
-    <NodeValuePreview node={node} />
+    <NodeValuePreview node={node} canvasRendered={canvasRendered} />
     {canvasRendered && focusBox && <div aria-hidden="true" className="node-workspace-keyboard-focus"
       style={{ left: node.layout.x + focusBox.left, top: node.layout.y + focusBox.top, width: focusBox.width, height: focusBox.height }} />}
     </>

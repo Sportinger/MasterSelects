@@ -25,6 +25,7 @@ import {
 } from './workerGpuFrameStackContract';
 import { cloneWorkerGpuRenderLayer } from './workerGpuMediaSourceRegistry';
 import type { WorkerGpuRenderIntent } from './workerGpuRuntimeCommands';
+import type { RenderSurfaceFrameContext } from './renderHostTypes';
 import {
   createWorkerSoftwareBitmapSnapshot,
   type WorkerSoftwareBitmapSnapshot,
@@ -125,6 +126,7 @@ export interface WorkerGpuFrameStackProjectionRequest {
   readonly intent: WorkerGpuRenderIntent;
   readonly surface: MotionAdjustmentRenderSurface;
   readonly nowMs: number;
+  readonly frameHistory?: RenderSurfaceFrameContext['frameHistory'];
 }
 
 export interface WorkerGpuFrameStackProjectorInput
@@ -183,6 +185,7 @@ interface PreparedStack {
   readonly occurrenceNamespace: string;
   readonly dimensions: { readonly width: number; readonly height: number };
   readonly frame: WorkerGpuFrameStackIdentity;
+  readonly frameHistory?: RenderSurfaceFrameContext['frameHistory'];
   readonly execution: WorkerGpuFrameStackContractV1['execution'];
   readonly bindings: readonly PreparedBinding[];
 }
@@ -680,6 +683,7 @@ function prepareStack(
           frameContext: {
             compositionId: request.frame.compositionId,
             timelineTimeSeconds: request.frame.timelineTime,
+            ...(request.frameHistory ? { frameHistory: request.frameHistory } : {}),
           },
           requestId: request.frame.requestId,
           targetId: request.frame.targetId,
@@ -710,6 +714,7 @@ function prepareStack(
       occurrenceNamespace: request.occurrenceNamespace,
       dimensions: { width: request.width, height: request.height },
       frame: { ...request.frame, exact: true },
+      ...(request.frameHistory ? { frameHistory: request.frameHistory } : {}),
       execution,
       bindings,
     };
@@ -805,6 +810,7 @@ async function realizePreparedStack(
     occurrenceNamespace: prepared.occurrenceNamespace,
     dimensions: prepared.dimensions,
     frame: prepared.frame,
+    ...(prepared.frameHistory ? { frameHistory: prepared.frameHistory } : {}),
     execution: prepared.execution,
     bindings,
   };

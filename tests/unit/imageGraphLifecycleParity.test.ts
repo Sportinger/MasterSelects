@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDefaultInvertImageGraph, compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
-import { effectOperatorGraph, effectOperatorParams } from '../../src/services/operators/effectGraphOwner';
+import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams } from '../../src/services/operators/effectGraphOwner';
 import { setOperatorConstant } from '../../src/services/operators/effectGraphEditing';
 import { evaluateCompositionClipEffects } from '../../src/services/compositionRender/keyframeEvaluation';
 import { createSerializableTimelineState } from '../../src/stores/timeline/serialization/serializableTimelineState';
@@ -126,33 +126,67 @@ describe('image graph lifecycle parity', () => {
 
   it.each([
     ['wave', 'amplitudeX', 0, .08], ['twirl', 'amount', -2, 3], ['bulge', 'amount', .2, 2.4], ['kaleidoscope', 'rotation', 0, 2.4],
+    ['fisheye', 'rotation', -25.125, 37.5],
+    ['crt-screen', 'speed', .1, 1.1],
+    ['ribbon-scan', 'speed', .1, 1.1],
+    ['wave-lines', 'speed', .1, 1.1],
+    ['glitch', 'speed', .1, 1.1],
+    ['film-prism', 'speed', .1, 1.1],
+    ['crystal', 'speed', .1, 1.1],
+    ['glass-dispersion', 'speed', .1, 1.1],
+    ['holo', 'speed', .1, 1.1],
+    ['halftone', 'angle', -45, 45],
+    ['pattern-halftone', 'angle', -45, 45],
+    ['riso', 'amount', .2, .9],
+    ['riso-glow', 'speed', .1, 1.1],
+    ['dither', 'amount', .2, .9],
+    ['dither-studio', 'scale', 2, 18],
+    ['paper-print', 'scale', 4, 24],
+    ['pixel-poster', 'scale', 2, 18],
+    ['tone-geometry', 'angle', -45, 45],
+    ['cross-stitch', 'amount', .2, .9],
+    ['glitch-grid', 'speed', .1, 1.1],
+    ['scatter-mosaic', 'speed', .1, 1.1],
+    ['drift-lines', 'speed', .1, 1.1],
   ] as const)('keeps %s graph preview, export, dynamic values, and canonical restore aligned', async (type, parameter, from, to) => {
     const id = `${type}-lifecycle`, clipId = `${type}-clip`, effect: Effect = { id, type, name: type, enabled: true, params: {}, operatorGraph: effectOperatorGraph({ type, params: {} }) };
     const property = `effect.${id}.${parameter}` as Keyframe['property'];
     const keys: Keyframe[] = [{ id: `${id}-0`, clipId, property, time: 0, value: from, easing: 'linear' }, { id: `${id}-2`, clipId, property, time: 2, value: to, easing: 'linear' }];
     const clip = createMockClip({ id: clipId, effects: [effect], source: { type: 'solid' }, solidColor: '#315779' } as Partial<TimelineClip>);
     useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })], clipKeyframes: new Map([[clip.id, keys]]) });
-    const evaluate = (candidate: Effect) => {
-      const plan = compileImageOperatorGraph(effectOperatorGraph(candidate), effectOperatorParams(candidate));
-      return { plan, value: evaluateImageOperatorPlan(plan, pixel, { uv: [.71, .36], sampleImage: ([u, v]) => [u, v, u * .3 + v * .2, .2 + u * .6] }) };
+    const evaluate = (candidate: Effect, timelineTimeSeconds: number) => {
+      const plan = compileImageOperatorGraph(effectOperatorGraph(candidate), effectOperatorParams(candidate), effectOperatorCompileContext(candidate));
+      const derivativeContext = type === 'holo' ? { uv: [45.5 / 64, 13.5 / 37] as [number, number],
+        pixelCoordinate: [45, 13] as [number, number], derivativeAutoMode: 'coarse' as const } : { uv: [.71, .36] as [number, number] };
+      return { plan, value: evaluateImageOperatorPlan(plan, pixel, { ...derivativeContext, resolution: [64, 37], timelineTimeSeconds,
+        sampleImage: ([u, v]) => [u, v, u * .3 + v * .2, .2 + u * .6] }) };
     };
     const endpointPlans: ReturnType<typeof compileImageOperatorGraph>[] = [];
     for (const time of [0, 1, 2]) {
       const preview = useTimelineStore.getState().getInterpolatedEffects(clip.id, time)[0];
       const exported = buildBaseLayerProps(clip, time, 0, { time, getInterpolatedTransform: () => clip.transform,
         getInterpolatedEffects: (_clipId: string, at: number) => evaluateCompositionClipEffects([effect], keys, at), getInterpolatedColorCorrection: () => undefined } as never)!.effects[0];
-      const previewResult = evaluate(preview), exportResult = evaluate(exported);
+      const previewResult = evaluate(preview, time), exportResult = evaluate(exported, time);
       expect(previewResult.value).toEqual(exportResult.value);
       expect(previewResult.plan.key).toBe(exportResult.plan.key);
       endpointPlans.push(previewResult.plan);
     }
     expect(new Set(endpointPlans.map(plan => plan.key))).toHaveLength(1);
     expect(endpointPlans[0].values).not.toEqual(endpointPlans[2].values);
+    if (type === 'crt-screen' || type === 'ribbon-scan' || type === 'wave-lines' || type === 'glitch' || type === 'film-prism'
+      || type === 'crystal' || type === 'glass-dispersion' || type === 'holo' || type === 'riso-glow'
+      || type === 'glitch-grid' || type === 'scatter-mosaic' || type === 'drift-lines') {
+      const sampled = evaluateCompositionClipEffects([effect], keys, 1)[0];
+      const seekTimes = type === 'wave-lines' || type === 'film-prism' || type === 'crystal' || type === 'glass-dispersion' || type === 'holo' || type === 'riso-glow'
+        || type === 'scatter-mosaic' || type === 'drift-lines' ? [0, .8]
+        : type === 'glitch-grid' ? [0, 1.9] : type === 'glitch' ? [0, 1.2] : [.25, 1.25];
+      expect(evaluate(sampled, seekTimes[0]).value).not.toEqual(evaluate(sampled, seekTimes[1]).value);
+    }
     const serialized = createSerializableTimelineState(useTimelineStore.getState());
     await useTimelineStore.getState().loadState(JSON.parse(JSON.stringify(serialized)));
     const restored = useTimelineStore.getState().clips.find(candidate => candidate.id === clip.id)!.effects[0];
     expect(effectOperatorGraph(restored)).toEqual(effect.operatorGraph);
-    expect(evaluate(restored).plan.key).toBe(endpointPlans[0].key);
+    expect(evaluate(restored, 1).plan.key).toBe(endpointPlans[0].key);
   });
 
   it.each(['scanlines', 'grain'] as const)('repeats and seeks %s from explicit composition time', type => {

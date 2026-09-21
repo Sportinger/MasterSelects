@@ -19,6 +19,7 @@ import type { RenderSurfaceFrameContext } from '../../../services/render/renderH
 import { Logger } from '../../../services/logger';
 import { resolveNestedPreviewRenderScale } from '../NestedCompRenderer';
 import { useTimelineStore } from '../../../stores/timeline';
+import type { EffectRenderClockContext } from '../../../effects/_shared/byteTexture';
 
 const log = Logger.create('TargetPreviewRenderer');
 
@@ -46,6 +47,7 @@ type Process3DLayers = (
   cameraOverride?: SceneCameraConfig | null,
   targetId?: string,
   timelineTimeSeconds?: number,
+  effectRenderClock?: EffectRenderClockContext,
 ) => void;
 
 export class TargetPreviewRenderer {
@@ -160,6 +162,7 @@ export class TargetPreviewRenderer {
     if (!indPingView || !indPongView) return;
 
     const targetTimelineTime = frameContext?.timelineTimeSeconds ?? this.getEffectiveTimelineTime();
+    const effectRenderClock = { frameRate: composition?.frameRate ?? 30, scopeId: compositionId ?? `target:${canvasId}` };
     this.process3DLayers(
       layerData,
       device,
@@ -170,6 +173,7 @@ export class TargetPreviewRenderer {
       viewportOverride?.cameraOverride,
       canvasId,
       targetTimelineTime,
+      effectRenderClock,
     );
 
     const showGrid = target?.showTransparencyGrid ?? false;
@@ -262,6 +266,7 @@ export class TargetPreviewRenderer {
           motionFrameAdmission,
           data.layer.id,
           nestedPreviewRenderScale,
+          nested.frameRate ?? 30,
         );
         if (view) data.textureView = view;
         else layerData.splice(i, 1);
@@ -297,6 +302,7 @@ export class TargetPreviewRenderer {
         effectTempView2,
         motionTime: frameContext?.timelineTimeSeconds ?? this.getEffectiveTimelineTime(),
         particleQuality: 'preview',
+        effectRenderClock,
       });
       const outputBindGroup = d.outputPipeline.createOutputBindGroup(
         d.sampler,

@@ -174,10 +174,11 @@ describe('ExportRenderSessionImpl', () => {
         getOutputDimensions: expect.any(Function),
       }),
     );
-    expect(mockFactory.engine.render).toHaveBeenCalledWith(layers, {
+    expect(mockFactory.engine.render).toHaveBeenCalledWith(layers, expect.objectContaining({
       compositionId: 'composition-a',
       timelineTimeSeconds: 1.25,
-    });
+      frameHistory: expect.objectContaining({ eventRevision: 1, discontinuity: 'export-start', ownerRevision: expect.any(Number) }),
+    }));
     expect(mockFactory.calls).toEqual([
       'isDeviceValid',
       'setRenderTimeOverride:1.25',
@@ -234,10 +235,41 @@ describe('ExportRenderSessionImpl', () => {
     });
 
     expect(mockFactory.syncExportMaskTextures).toHaveBeenCalledWith(layers, 320, 180, 5, host);
-    expect(host.render).toHaveBeenCalledWith(layers, {
+    expect(host.render).toHaveBeenCalledWith(layers, expect.objectContaining({
       compositionId: 'composition-host',
       timelineTimeSeconds: 5,
+      frameHistory: expect.objectContaining({ eventRevision: 1, discontinuity: 'export-start', ownerRevision: expect.any(Number) }),
+    }));
+  });
+
+  it('emits one export-start boundary and stable monotonic history identity per isolated session', async () => {
+    const hostA = createInjectedHost();
+    const sessionA = new ExportRenderSessionImpl({
+      runId: 'export-run-history-a', compositionId: 'composition-history-a', width: 320, height: 180,
+      stackedAlpha: false, preferZeroCopy: false, host: hostA,
     });
+    await sessionA.begin();
+    await sessionA.renderFrame({ time: 0, layers, timestampMicros: 0, durationMicros: 33333 });
+    await sessionA.renderFrame({ time: 1 / 30, layers, timestampMicros: 33333, durationMicros: 33333 });
+
+    const contextsA = vi.mocked(hostA.render).mock.calls.map(call => call[1]);
+    expect(contextsA.map(context => context.compositionId)).toEqual(['composition-history-a', 'composition-history-a']);
+    expect(contextsA[0].frameHistory).toMatchObject({ eventRevision: 1, discontinuity: 'export-start' });
+    expect(contextsA[1].frameHistory).toMatchObject({ eventRevision: 2 });
+    expect(contextsA[1].frameHistory).not.toHaveProperty('discontinuity');
+    expect(contextsA[1].frameHistory?.ownerRevision).toBe(contextsA[0].frameHistory?.ownerRevision);
+
+    const hostB = createInjectedHost();
+    const sessionB = new ExportRenderSessionImpl({
+      runId: 'export-run-history-b', compositionId: 'composition-history-b', width: 320, height: 180,
+      stackedAlpha: false, preferZeroCopy: false, host: hostB,
+    });
+    await sessionB.begin();
+    await sessionB.renderFrame({ time: 0, layers, timestampMicros: 0, durationMicros: 33333 });
+    const contextB = vi.mocked(hostB.render).mock.calls[0][1];
+    expect(contextB.compositionId).toBe('composition-history-b');
+    expect(contextB.frameHistory).toMatchObject({ eventRevision: 1, discontinuity: 'export-start' });
+    expect(contextB.frameHistory?.ownerRevision).not.toBe(contextsA[0].frameHistory?.ownerRevision);
   });
 
   it('retries a deferred nested composition render before capture', async () => {
@@ -267,6 +299,10 @@ describe('ExportRenderSessionImpl', () => {
 
     expect(capture.kind).toBe('rgba-pixels');
     expect(host.render).toHaveBeenCalledTimes(2);
+    const retryContexts = vi.mocked(host.render).mock.calls.map(call => call[1]);
+    expect(retryContexts[0].frameHistory).toMatchObject({ eventRevision: 1, discontinuity: 'export-start' });
+    expect(retryContexts[1].frameHistory).toMatchObject({ eventRevision: 1, discontinuity: 'export-start' });
+    expect(retryContexts[1].frameHistory?.ownerRevision).toBe(retryContexts[0].frameHistory?.ownerRevision);
     expect(host.ensureExportLayersReady).toHaveBeenCalledTimes(2);
     expect(host.readPixels).toHaveBeenCalledTimes(1);
   });
@@ -333,10 +369,11 @@ describe('ExportRenderSessionImpl', () => {
 
     expect(capture.kind).toBe('rgba-pixels');
     expect(host.ensureReady).toHaveBeenCalledTimes(1);
-    expect(host.render).toHaveBeenCalledWith(layers, {
+    expect(host.render).toHaveBeenCalledWith(layers, expect.objectContaining({
       compositionId: 'composition-recover',
       timelineTimeSeconds: 2,
-    });
+      frameHistory: expect.objectContaining({ eventRevision: 1, discontinuity: 'export-start', ownerRevision: expect.any(Number) }),
+    }));
   });
 
   it('reports the active export host when frame render cannot recover', async () => {

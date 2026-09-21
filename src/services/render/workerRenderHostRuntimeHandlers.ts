@@ -2364,6 +2364,9 @@ function paintSoftwareFrame(
   frame: WorkerRenderSoftwareFrame,
   nowMs: number,
   readback = false,
+  frameContext?: { readonly compositionId?: string; readonly frameHistory?: {
+    readonly eventRevision: number; readonly discontinuity?: import('../../effects/frameHistoryTransition').FrameHistoryDiscontinuity; readonly ownerRevision: number;
+  } },
 ): {
   readonly frameId: string;
   readonly events: readonly WorkerRenderStatusEvent[];
@@ -2400,6 +2403,9 @@ function paintSoftwareFrame(
         timelineTime,
         state.softwareFeedbackCache,
         targetId,
+        { timelineTimeSeconds: timelineTime,
+          ...(frameContext?.compositionId !== undefined ? { compositionId: frameContext.compositionId } : {}),
+          ...frameContext?.frameHistory },
       );
     });
   } finally {
@@ -2597,6 +2603,8 @@ async function acceptCommand(command: WorkerRenderHostRuntimeCommand, nowMs: num
       command.frame,
       nowMs,
       command.readback === true,
+      { ...(command.compositionId !== undefined ? { compositionId: command.compositionId } : {}),
+        ...(command.frameHistory ? { frameHistory: command.frameHistory } : {}) },
     );
     return {
       statusEvents: [

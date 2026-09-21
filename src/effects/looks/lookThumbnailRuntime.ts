@@ -204,6 +204,10 @@ class LookThumbnailRuntime {
       targetRect.height,
       ping,
       pong,
+      undefined,
+      0,
+      undefined,
+      { frameRate: 30, scopeId: `look-thumbnail:${look.id}` },
     );
     const finalTexture = result.finalView === pingView ? ping : result.finalView === pongView ? pong : null;
     if (!finalTexture) {

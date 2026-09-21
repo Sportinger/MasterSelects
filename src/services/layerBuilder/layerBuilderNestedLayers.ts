@@ -113,6 +113,7 @@ export function buildNestedCompositionSourceLayer(
     layers: subLayers,
     width: subComp?.width || 1920,
     height: subComp?.height || 1080,
+    frameRate: subComp?.frameRate ?? 30,
     currentTime: nestedClipTime,
     sceneClips: nestedClip.nestedClips,
     sceneTracks: nestedClip.nestedTracks,

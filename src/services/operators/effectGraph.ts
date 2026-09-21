@@ -5,14 +5,16 @@ import type { Keyframe } from '../../types/keyframes';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
 import { getEffectOperator } from './operatorRegistry';
 import { directionFromAngles, periodicWindModulation, windForce } from './wind';
+import { effectGraphLimits } from './effectGraphLimits';
 
 export const EFFECT_GRAPH_PARAM = 'operatorGraph';
 export type OperatorParameters = Record<string, unknown>;
 
 export function validateEffectGraph(graph: EffectOperatorGraph, allowIncomplete = false): string[] {
+  const limits = effectGraphLimits(graph?.domain);
   if (graph?.version !== 1 || (graph.schemaVersion !== undefined && graph.schemaVersion !== 1)
     || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges) || !graph.layout
-    || graph.nodes.length > 64 || graph.edges.length > 256) return ['Invalid operator graph.'];
+    || graph.nodes.length > limits.nodes || graph.edges.length > limits.edges) return ['Invalid operator graph.'];
   if (graph.nodes.some(n => !n || typeof n !== 'object') || graph.edges.some(e => !e || typeof e !== 'object')) return ['Invalid graph entries.'];
   if (Object.values(graph.layout).some(p => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y))) return ['Invalid node position.'];
   const errors: string[] = [], nodes = new Map(graph.nodes.map(n => [n.id, n]));
@@ -43,7 +45,7 @@ export function validateEffectGraph(graph: EffectOperatorGraph, allowIncomplete 
   if (graphHasCycle(connections.nodes, connections.edges)) errors.push('Cycles are not supported.');
   const outputOperator = graph.domain === 'voxel' ? 'render.voxel'
     : graph.domain === 'scene' ? 'scene.render'
-    : graph.domain === 'image' || graph.domain === 'analog-signal' ? 'image.output' : 'scene.output';
+    : graph.domain === 'image' || graph.domain === 'compute-image' || graph.domain === 'analog-signal' ? 'image.output' : 'scene.output';
   if (!allowIncomplete && graph.nodes.filter(n => n.operator === outputOperator).length !== 1) errors.push('The graph needs one clip output.');
   if (graph.groups) {
     if (!Array.isArray(graph.groups) || graph.groups.length > 32) return [...errors, 'Invalid groups.'];

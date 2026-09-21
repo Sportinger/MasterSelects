@@ -21,6 +21,13 @@ const MAX_CACHED_HTML_VIDEO_SNAPSHOTS_PER_VIDEO = 16;
 const cachedHtmlVideoSnapshots = new WeakMap<HTMLVideoElement, readonly CachedHtmlVideoSnapshot[]>();
 const pendingHtmlVideoSnapshots = new WeakMap<HTMLVideoElement, Map<string, Promise<boolean>>>();
 
+function getCanvas2dContext(
+  canvas: HTMLCanvasElement | OffscreenCanvas,
+): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null {
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  return context && 'drawImage' in context ? context : null;
+}
+
 function quantizedMediaTimeKey(mediaTime: number | undefined): string {
   return typeof mediaTime === 'number' && Number.isFinite(mediaTime)
     ? String(Math.round(mediaTime * 30))
@@ -77,7 +84,7 @@ function createSnapshotCanvas(width: number, height: number): {
   if (!canvas) return null;
   canvas.width = canvasWidth;
   canvas.height = canvasHeight;
-  const context = canvas.getContext('2d', { willReadFrequently: true });
+  const context = getCanvas2dContext(canvas);
   return context ? { canvas, context } : null;
 }
 
@@ -193,7 +200,7 @@ export function updateCachedWorkerSoftwareHtmlVideoSnapshot(input: {
   const canReuse = existing && existing.width === input.width && existing.height === input.height;
   const target = canReuse ? {
     canvas: existing.canvas,
-    context: existing.canvas.getContext('2d', { willReadFrequently: true }),
+    context: getCanvas2dContext(existing.canvas),
   } : createSnapshotCanvas(input.width, input.height);
   if (!target?.context) return false;
   try {

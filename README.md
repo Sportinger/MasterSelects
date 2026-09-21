@@ -100,6 +100,44 @@ Explore the [feature guide](docs/Features/README.md) for workflows and examples.
 Scanlines and Film Grain expose editable UV/time/math graphs with reproducible
 timeline animation; Grain includes an explicit seed. Their paused preview and
 export use the same clock instead of elapsed browser time.
+CRT Screen likewise exposes its curvature, scanline, mask and flicker pipeline
+as an editable generic graph driven by the composition timeline clock.
+Ribbon Scan uses the same graph compiler for its animated ribbon mask, horizontal
+displacement and blending, retaining alpha from the displaced sample.
+Glitch and Film Prism expose their sampling, shared noise/hash math and
+timeline-driven channel displacement as editable generic graphs.
+Crystal and Glass Dispersion expose their facet/refraction sampling in the same
+form, using native vector normalization, sampled alpha and timeline-driven motion.
+Holo exposes interference, spectrum and luminance-edge math as an editable graph;
+GPU rendering keeps native automatic derivatives while software uses explicit coarse quads.
+Halftone and Pattern Halftone expose rotation, cell geometry, luminance-derived
+mark size, ink colors and pattern selection as editable generic graphs.
+Riso and Riso Glow expose registration sampling, subtractive inks and optional
+timeline-driven glow as editable graphs while retaining source alpha.
+Dithering and Dither Studio expose Bayer/checker thresholds, quantization and
+catalog-owned kernel selection as editable graphs with original alpha.
+Pixel Press and Pixel Poster expose their source sampling, grain/posterization
+math and final amount blend as editable graphs while preserving source alpha.
+All 18 glyph effects expose cell sampling, tone mapping, cached glyph atlases
+and their ink, border or cell-index blends as editable graphs. Ramp text, font
+choice and animated weight remain catalog-owned parameters. ASCII Ghost uses
+explicit frame history; Inscribe retains native automatic derivative semantics.
+Acuarela exposes its watercolor sampling, noise and explicit previous-frame input
+as an editable graph using the same scoped feedback history as playback and export.
+Tone Geometry and Cross Stitch expose their rotated cells and pattern masks;
+Glitch Grid, Scatter Mosaic and Drift Lines expose timeline-driven sampled-alpha
+displacement as editable generic graphs.
+Acuarela, Rom1, glyph animations and geometry compute effects use composition timeline time rather than wall-clock time.
+Feedback effects keep paused renders stable and expose a saved History Loop choice
+between Reset (default) and Continuous; seeks and export starts reset history.
+Memory Leak exposes its typed memory-window source, byte decoder, availability
+metadata, mapping and blend as an editable image graph. Advance and Shuffle use
+the actual owning composition frame rate, including nested and export renders.
+Frozen artifact blocks are reproducible across sessions; the live FFmpeg heap is
+intentionally session-dependent. Uploaded `r32uint` windows are immutable per
+version and held in a bounded, render-scope-isolated cache without persisting GPU handles.
+Wave Lines exposes its luminance-driven wave, line mask and two-color blend with
+the same timeline clock and existing color parameters.
 Pixelate, Mirror, RGB Split, Blockify and Block Mosaic use editable
 coordinate/sampling graphs, sharing the same compiler. Block Mosaic uses timeline
 time for reproducible tile changes and exposes its border color as a bound node.
@@ -114,12 +152,43 @@ Glow exposes its ring blur, brightness threshold and additive blend while
 preserving the original center-pixel alpha.
 Wave, Twirl, Bulge and Kaleidoscope expose their UV calculations and sampling
 as editable nodes, including alpha sampled at the transformed position.
-Reusable lens-projection and vector-rotation nodes share their GPU math with
-Fisheye; migration of the complete Fisheye graph remains in progress.
+Fisheye now opens as a complete editable image graph: projection, AA jitter,
+edge handling, chromatic separation, vignette and lens coverage remain ordinary
+connected operators while the established degree-valued controls stay bound to
+their original parameter IDs. Its persisted single-pass graph also uses the
+canonical CPU evaluator in software preview/export; unsupported multipass or
+mixed graph/legacy stacks fail closed instead of silently using legacy math.
 Effect-bound choice nodes reuse the effect's dropdown options and defaults,
 without copying parameter definitions into saved graphs.
 Multi-stage image graphs share intermediate texture stages between consumers;
 simple graphs retain their single-pass execution.
+Compile-context-declared named image sources reuse the same resource-input path
+without adding an IR stage or render pass. Up to eight inputs select either the
+existing hardware linear clamp or explicit manual bilinear clamp sampling while
+preserving straight RGBA; undeclared inputs and the reserved `image-resource:`
+materialization namespace fail closed. Analog Signal Lab's default CRT display
+group now uses these sources through shared math, color, and sampling nodes,
+fused into its existing final compute pass.
+`Load Pixel` adds exact clamped integer access on the output pixel lattice for
+GPU textures, VideoFrames, and software evaluation. Typed seed fields retain
+raw coordinate/validity records rather than being treated as color images.
+Voronoi exposes seed generation, Jump Flood, nearest-seed reads, borders, and
+color mixing as an executable graph. Its final image program keeps the compute
+storage output; disconnecting stages removes their work, and direct source output
+bypasses the effect.
+Pixel Sort separates bounded stable segment sorting, luminance eligibility,
+mixing, and source alpha into editable nodes while retaining one compute pass.
+Quadtree Zoom similarly exposes its bounded adaptive partition, center sampling,
+border treatment, and color mix without intermediate compute stages.
+Contour exposes integer cell coordinates, corner samples, edge interpolation,
+Marching Squares topology, line distance, and color mixing in one compute pass.
+Contour Map, Crosshatch, and Kilim expose their sampling, luminance, pattern,
+palette, and mixing operations as editable single-pass image graphs.
+Vector Engraving, Embroidery, Outline, and Bricks use the same shared image
+operators; animated patterns follow timeline time. Contour Type reuses the
+shared glyph atlas with explicit contour bands and derivative coverage.
+Chroma Key exposes chrominance distance, matte, spill suppression, and alpha;
+ROM1 exposes its four-octave displacement and shared frame-history resolve.
 Conditional image branches also retain sample indices inside filter loops,
 without evaluating the unused branch.
 Explicit angle-conversion nodes preserve degree-valued controls while supplying
@@ -154,9 +223,10 @@ connection checks cover Color, Flock, Face Cables, Scene and manual clip links;
 saved definitions and specialized rendering/simulation stay compatible.
 
 Voxel Relief now exposes nested geometry and height calculations as editable
-nodes. Math nodes offer an operation dropdown on the card and in the inspector,
-editable operands, and live connected values. Number-only previews use real text
-instead of generated thumbnails; the number being edited updates immediately
+nodes. Math nodes offer their operation dropdown in the selected node's inspector,
+editable operands, and live connected values. Numbers and text draw directly in
+the canvas, with transparent DOM targets for editing. Zoom reuses cached preview
+images instead of reloading them; the number being edited updates immediately
 while downstream calculations catch up.
 
 Geometry nodes can select Box, Sphere or Cylinder while retaining Box as the

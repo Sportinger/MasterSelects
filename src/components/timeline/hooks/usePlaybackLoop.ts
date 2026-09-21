@@ -7,6 +7,7 @@ import {
   clearInternalPlaybackHold,
   getPlayheadPosition,
   layerBuilder,
+  markPlayheadFrameHistoryDiscontinuity,
   playheadState,
   startInternalPosition,
   updateInternalPosition,
@@ -245,6 +246,7 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
         // Handle end of timeline / looping (forward playback)
         if (newPosition >= effectiveEnd && playbackSpeed > 0) {
           if (lp) {
+            markPlayheadFrameHistoryDiscontinuity('loop');
             newPosition = effectiveStart;
             // Reset audio master - will be re-established by syncAudioElements
             playheadState.hasMasterAudio = false;
@@ -272,6 +274,7 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
         // Handle start of timeline (reverse playback)
         if (newPosition <= effectiveStart && playbackSpeed < 0) {
           if (lp) {
+            markPlayheadFrameHistoryDiscontinuity('loop');
             newPosition = effectiveEnd;
             // Reset audio master
             playheadState.hasMasterAudio = false;

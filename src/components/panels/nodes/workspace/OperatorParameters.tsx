@@ -24,6 +24,7 @@ import type { OperatorValue } from '../../../../types/operatorGraph';
 import { getEffect } from '../../../../effects';
 import { OperatorColorInput } from './OperatorColorInput';
 import { resolveImageOperatorChoiceValue } from '../../../../services/operators/imageOperatorChoice';
+import { GlyphAtlasControls } from './GlyphAtlasControls';
 
 const EMPTY_KEYS: Keyframe[] = [];
 export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { clip: TimelineClip; effectId: string; nodeId: string; projectedNode?: NodeGraphNode }) {
@@ -38,7 +39,7 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
   const node = graph.nodes.find(n => n.id === nodeId), operator = node && getEffectOperator(node.operator);
   if (!node || !operator) return null;
   const evaluatedParams = effectOperatorParams(effect);
-  const parameterSchema = isImageGraphEffectType(effect.type) ? getEffect(effect.type)?.params : undefined;
+  const parameterSchema = isImageGraphEffectType(effect.type) || effect.type === 'analog-signal-lab' ? getEffect(effect.type)?.params : undefined;
   const familyOptions = operatorFamilyOptions(operator);
   const mathNode = { id: node.id, operatorId: node.operator, label: operator.label, kind: 'effect' as const, runtime: 'builtin' as const,
     inputs: [], outputs: [], layout: { x: 0, y: 0 }, binding: { kind: 'effect-operator' as const, effectId, nodeId: node.id, operator: node.operator } };
@@ -67,6 +68,10 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
         <InspectorSelect ariaLabel={operator.family === 'geometry.primitive' ? 'Primitive shape' : `${operator.family} components`} value={node.operator} options={familyOptions}
           onChange={variant => safely(() => setOperatorVariant(clip.id, effectId, node.id, variant))} />
       </ResolveInspectorRow>}
+      {operator.id === 'glyph.atlas' && <GlyphAtlasControls bindings={node.bindings} params={evaluatedParams} parameterSchema={parameterSchema}
+        onChange={set} renderNumber={(key, spec) => numberRow(key, spec.label,
+          interpolateKeyframes(keys, `effect.${effectId}.${key}` as Keyframe['property'], time, Number(effect.params[key] ?? spec.default)),
+          Number(spec.default), spec.min, spec.max, spec.step, spec.animatable)} />}
       {operator.parameters.map(spec => {
         if (projectedNode && node.operator.startsWith('math.') && graph.edges.some(edge => edge.to === node.id && edge.input === spec.id))
           return <OperatorLiveValue key={spec.id} clipId={clip.id} node={projectedNode} portId={spec.id} label={spec.label} />;
@@ -108,11 +113,11 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
             value={selected} options={[...(select.options ?? [])]} onChange={next => set(binding, next)}
             onReset={control?.type === 'select' ? () => set(binding, control.default) : undefined} /></ResolveInspectorRow>;
         }
-        return numberRow(binding, control?.label ?? spec.label, Number(value), Number(control?.default ?? spec.default), control?.min ?? spec.min, control?.max ?? spec.max, control?.step ?? spec.step, spec.animatable);
+        return numberRow(binding, control?.label ?? spec.label, Number(value), Number(control?.default ?? spec.default), control?.min ?? spec.min, control?.max ?? spec.max, control?.step ?? spec.step, control?.animatable ?? spec.animatable);
       })}
       {projectedNode && node.operator.startsWith('math.') && node.operator !== 'math.constant' &&
         <OperatorLiveValue clipId={clip.id} node={projectedNode} portId="value" label="Result" direction="output" />}
-      {!operator.parameters.length && <p className="face-cable-hint">{operator.description}</p>}
+      {!operator.parameters.length && operator.id !== 'glyph.atlas' && <p className="face-cable-hint">{operator.description}</p>}
     </ResolveInspectorSection>
     <OperatorConnections graph={graph} node={node} clipId={clip.id} effectId={effectId} safely={safely} />
     {operator.id === 'scene.transform' && <TransformTab clipId={clip.id} transform={clip.transform} is3D={clip.is3D} speed={clip.speed} />}

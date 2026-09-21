@@ -9,6 +9,9 @@ import type {
   WorkerGpuWebCodecsFrameLayer,
 } from './workerGpuRuntimeCommands';
 import type { MotionAdjustmentWorkerGpuExecutionPlan } from '../motionDesign/adjustment/workerGpuAdjustmentPlan';
+import type { ImageOperatorPlan } from '../operators/imageOperatorGraph';
+import type { WorkerSoftwareImageGraphOwner } from './workerSoftwareImageGraphs';
+import type { FrameHistoryDiscontinuity } from '../../effects/frameHistoryTransition';
 import type {
   TransitionCenterAxis,
   TransitionPatternMask,
@@ -109,6 +112,8 @@ export type WorkerRenderSoftwareTransition =
 
 export interface WorkerRenderSoftwarePixelEffects {
   readonly brightness: number;
+  readonly imageOperatorPlans?: readonly ImageOperatorPlan[];
+  readonly imageOperatorPlanOwners?: readonly WorkerSoftwareImageGraphOwner[];
   readonly acuarelaAdjustments?: readonly {
     readonly feedbackKey: string;
     readonly opacity: number;
@@ -120,6 +125,7 @@ export interface WorkerRenderSoftwarePixelEffects {
     readonly gainX: number;
     readonly gainY: number;
     readonly reset: boolean;
+    readonly historyLoop?: 'reset' | 'continuous';
   }[];
   readonly rom1Adjustments?: readonly {
     readonly feedbackKey: string;
@@ -132,6 +138,7 @@ export interface WorkerRenderSoftwarePixelEffects {
     readonly gainX: number;
     readonly gainY: number;
     readonly reset: boolean;
+    readonly historyLoop?: 'reset' | 'continuous';
   }[];
   readonly exposureAdjustments?: readonly {
     readonly exposure: number;
@@ -401,6 +408,12 @@ export type WorkerRenderHostRuntimeCommand =
       readonly requestId: string;
       readonly targetId: RenderGraphId;
       readonly timelineTime: number;
+      readonly compositionId?: string;
+      readonly frameHistory?: {
+        readonly eventRevision: number;
+        readonly discontinuity?: FrameHistoryDiscontinuity;
+        readonly ownerRevision: number;
+      };
       readonly frame: WorkerRenderSoftwareFrame;
       readonly readback?: boolean;
     };

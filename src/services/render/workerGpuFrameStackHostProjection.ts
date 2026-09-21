@@ -12,6 +12,7 @@ import type {
   WorkerGpuFrameStackProjectionRequest,
 } from './workerGpuFrameStackProjector';
 import type { WorkerGpuRenderIntent } from './workerGpuRuntimeCommands';
+import type { RenderSurfaceFrameContext } from './renderHostTypes';
 
 export type WorkerGpuFrameStackResolvedVideoSource =
   | {
@@ -58,6 +59,7 @@ export interface WorkerGpuFrameStackHostProjectionInput {
   readonly intent: WorkerGpuRenderIntent;
   readonly surface: MotionAdjustmentRenderSurface;
   readonly nowMs: number;
+  readonly frameHistory?: RenderSurfaceFrameContext['frameHistory'];
   readonly resolveVideoSource: (
     layer: Layer,
   ) => WorkerGpuFrameStackResolvedVideoSource | null;
@@ -326,6 +328,7 @@ function buildRequest(
     intent: input.intent,
     surface: input.surface,
     nowMs: input.nowMs,
+    ...(input.frameHistory ? { frameHistory: input.frameHistory } : {}),
   };
 }
 

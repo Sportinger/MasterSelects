@@ -16,6 +16,7 @@ import {
 } from '../motionDesign/adjustment/sourceContracts';
 import {
   assertMotionAdjustmentWorkerGpuExecutionPlan,
+  type MotionAdjustmentWorkerGpuFrameHistory,
   type MotionAdjustmentWorkerGpuExecutionPlan,
 } from '../motionDesign/adjustment/workerGpuAdjustmentPlan';
 import { MOTION_MEDIA_MAX_RENDER_DIMENSION } from '../motionDesign/media/contracts';
@@ -137,6 +138,7 @@ export interface WorkerGpuFrameStackContractV1 {
   readonly occurrenceNamespace: string;
   readonly dimensions: WorkerGpuFrameStackDimensions;
   readonly frame: WorkerGpuFrameStackIdentity;
+  readonly frameHistory?: MotionAdjustmentWorkerGpuFrameHistory;
   readonly execution: WorkerGpuFrameStackExecution;
   readonly bindings: readonly WorkerGpuFrameStackSourceBinding[];
 }
@@ -1390,6 +1392,7 @@ function inspectWorkerGpuFrameStackContract(
     'frame',
     'execution',
     'bindings',
+    ...('frameHistory' in root ? ['frameHistory'] : []),
   ], path, 'MD7_FRAME_STACK_INVALID_CONTRACT');
   if (dataValue(root, 'contractVersion', path) !== WORKER_GPU_FRAME_STACK_CONTRACT_VERSION) {
     fail('MD7_FRAME_STACK_UNSUPPORTED_VERSION', `${path}.contractVersion`);
@@ -1418,6 +1421,7 @@ function inspectWorkerGpuFrameStackContract(
     parentFrame,
     admission,
   );
+  assertFrameHistory(root.frameHistory, `${path}.frameHistory`);
   if (budget.compositionAncestry.has(frame.compositionId)) {
     fail('MD7_FRAME_STACK_COMPOSITION_CYCLE', `${path}.frame.compositionId`);
   }
@@ -1458,6 +1462,20 @@ function inspectWorkerGpuFrameStackContract(
     depth > 0,
   );
   return value as WorkerGpuFrameStackContractV1;
+}
+
+function assertFrameHistory(value: unknown, path: string): void {
+  if (value === undefined) return;
+  const history = requirePlainRecord(value, path, 'MD7_FRAME_STACK_INVALID_CONTRACT');
+  assertExactKeys(history, [
+    'eventRevision', 'ownerRevision', ...('discontinuity' in history ? ['discontinuity'] : []),
+  ], path, 'MD7_FRAME_STACK_INVALID_CONTRACT');
+  if (
+    !Number.isSafeInteger(history.eventRevision) || (history.eventRevision as number) < 0
+    || !Number.isSafeInteger(history.ownerRevision) || (history.ownerRevision as number) < 0
+    || (history.discontinuity !== undefined && history.discontinuity !== 'seek'
+      && history.discontinuity !== 'loop' && history.discontinuity !== 'export-start')
+  ) fail('MD7_FRAME_STACK_INVALID_CONTRACT', path);
 }
 
 export function validateWorkerGpuFrameStackContract(

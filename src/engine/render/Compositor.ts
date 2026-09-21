@@ -31,6 +31,8 @@ import {
   layerPositionForTerrainScreenAnchor,
   resolveTerrainScreenAnchors,
 } from './terrainScreenAnchor';
+import type { EffectFrameHistoryContext } from '../../effects/EffectsPipeline';
+import type { EffectRenderClockContext } from '../../effects/_shared/byteTexture';
 
 const log = Logger.create('Compositor');
 
@@ -87,6 +89,10 @@ export interface CompositorState {
   particleQuality?: 'preview' | 'export';
   /** Isolates GPU caches for repeated nested/render-target occurrences. */
   resourceNamespace?: string;
+  /** Portable event metadata for stateful GPU effects. */
+  frameHistory?: Omit<EffectFrameHistoryContext, 'scopeId'>;
+  historyScopeId?: string;
+  effectRenderClock?: EffectRenderClockContext;
 }
 
 export class Compositor {
@@ -425,6 +431,14 @@ export class Compositor {
                   ? { outputView: state.effectCompareView, settings: state.splitCompare }
                   : undefined,
                 state.motionTime ?? layer.source?.mediaTime ?? 0,
+                state.frameHistory ? {
+                  ...state.frameHistory,
+                  scopeId: JSON.stringify([state.historyScopeId ?? 'timeline', resourceLayerId]),
+                } : undefined,
+                state.effectRenderClock ? {
+                  ...state.effectRenderClock,
+                  scopeId: JSON.stringify([state.effectRenderClock.scopeId, resourceLayerId]),
+                } : undefined,
               );
               sourceTextureView = effectResult.finalView;
             }

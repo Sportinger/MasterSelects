@@ -657,7 +657,7 @@ describe('NestedCompRenderer shared-scene integration', () => {
       beginRenderPass: vi.fn(() => renderPass),
     } as unknown as GPUCommandEncoder;
     const sampler = {} as GPUSampler;
-    const renderOccurrence = (localTime: number, occurrenceKey: string) => renderer.preRender(
+    const renderOccurrence = (localTime: number, occurrenceKey: string, frameRate = 30) => renderer.preRender(
       'repeated-comp',
       [],
       16,
@@ -672,6 +672,8 @@ describe('NestedCompRenderer shared-scene integration', () => {
       'preview',
       undefined,
       occurrenceKey,
+      1,
+      frameRate,
     );
 
     try {
@@ -688,6 +690,14 @@ describe('NestedCompRenderer shared-scene integration', () => {
         nestedCompTextures: Map<string, { compositionId: string }>;
       }).nestedCompTextures.size).toBe(2);
       expect((renderer as unknown as { lastRenderTime: Map<string, number> }).lastRenderTime.size).toBe(2);
+
+      const passesBeforeClockChecks = renderPass.end.mock.calls.length;
+      renderOccurrence(.042, 'wrapper-layer-clock', 23);
+      renderOccurrence(.044, 'wrapper-layer-clock', 23);
+      expect(renderPass.end.mock.calls.length - passesBeforeClockChecks).toBe(2);
+      const passesBeforeFpsChange = renderPass.end.mock.calls.length;
+      renderOccurrence(.044, 'wrapper-layer-clock', 24);
+      expect(renderPass.end.mock.calls.length - passesBeforeFpsChange).toBe(1);
     } finally {
       renderer.destroy();
       if (previousGPUTextureUsage === undefined) {
@@ -748,6 +758,7 @@ describe('NestedCompRenderer shared-scene integration', () => {
         16,
         16,
         2.5,
+        24,
       );
 
       const reusedView = renderer.preRender(
@@ -765,11 +776,21 @@ describe('NestedCompRenderer shared-scene integration', () => {
         'preview',
         undefined,
         'inactive-parent-wrapper',
+        1,
+        24,
       );
 
       expect(reusedView).toBe(activeView);
       expect(device.createTexture).toHaveBeenCalledOnce();
       expect(mockCompositeNestedLayers).not.toHaveBeenCalled();
+      const texturesBeforeFpsChange = device.createTexture.mock.calls.length;
+      renderer.preRender(
+        'active-child',
+        [],
+        16, 16, { beginRenderPass: () => ({ end: vi.fn() }) } as unknown as GPUCommandEncoder, {} as GPUSampler, 2.5,
+        undefined, undefined, 0, false, 'preview', undefined, 'fps-changed-wrapper', 1, 30,
+      );
+      expect(device.createTexture.mock.calls.length).toBeGreaterThan(texturesBeforeFpsChange);
     } finally {
       renderer.destroy();
       vi.mocked(useMediaStore.getState).mockReturnValue(initialMediaState);

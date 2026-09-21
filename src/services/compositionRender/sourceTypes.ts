@@ -54,6 +54,7 @@ export type CompositionInfo = {
   id: string;
   width?: number;
   height?: number;
+  frameRate?: number;
 };
 
 export interface CompositionSources {

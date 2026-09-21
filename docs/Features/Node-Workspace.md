@@ -45,8 +45,10 @@ keeps the node identity, compatible links and numeric
 bindings; inputs absent in the new mode disconnect in the same undo step.
 Flock math cards offer all operations supported by the Flock registry.
 
-Numeric and text viewers use real DOM text and controls, without thumbnail
-generation or atlas tiles. Unconnected numeric operands can be dragged or typed
+Numeric and text viewers, including math symbols and sampled port values, draw
+directly in the worker canvas without thumbnail generation or atlas tiles.
+Editable values retain transparent DOM interaction targets; their controls become
+visible during editing or keyboard focus. Unconnected operands can be dragged or typed
 directly; the touched number updates immediately while dependent calculations
 finish independently. Numeric jobs do not wait for image-preview readbacks.
 For graph-local constants, inline and inspector controls share the same saved
@@ -171,7 +173,9 @@ same graph owner, history and save/load path as the effect, with no parallel UI 
 
 A third viewport-sized OffscreenCanvas layer draws previews without per-frame
 React updates. A shared atlas has a 32 MiB ceiling and packs 128, 512 or 2048
-thumbnails depending on zoom. Images are closed after rasterization. One scheduler
+thumbnails depending on the initial zoom and later enlargement. Atlas enlargement
+copies existing tiles before releasing the old atlas (temporarily up to 64 MiB);
+zooming out does not downsample cached images. Images are closed after rasterization. One scheduler
 limits work to two concurrent producers, 2 million thumbnail pixels/second and a
 2 ms synchronous dispatch budget. GPU copies share one same-device atlas, without
 full-resolution readback or per-node canvases. Compressed geometry is sampled in
@@ -182,7 +186,9 @@ export pause requests. Tiny viewers below 32 screen pixels retain their last
 image; larger viewers refresh at up to 12 Hz (5 Hz at overview zoom, 3 Hz in the
 software fallback). Paused unchanged outputs reuse cached pixels. Continuous
 playback accepts bounded asynchronous latency; edits and seeks discard obsolete
-results. Pan reuses existing atlas pixels. These are bounded preview costs;
+results. Pan and zoom reuse existing atlas pixels; zoom alone does not request new
+paused frames. The next content update uses the current preview resolution.
+These are bounded preview costs;
 expensive processing in the editor's main render path still affects frame time.
 
 The isolated `/tests/browser/node-previews-probe.html` page exercises color stages,

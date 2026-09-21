@@ -1,5 +1,6 @@
 import type { EffectDefinition, EffectParam } from '../types';
 import shader from './shader.wgsl?raw';
+import { FEEDBACK_PARAMETERS } from '../_shared/feedbackParameters';
 
 interface TrackingEffectOptions {
   id: string;
@@ -42,13 +43,14 @@ export function createTrackingEffect(options: TrackingEffectOptions): EffectDefi
       ...(options.animated ? {
         speed: { type: 'number' as const, label: 'Speed', default: 1, min: 0, max: 5, step: 0.05, animatable: true, group: 'Motion' },
       } : {}),
+      ...(options.feedback ? FEEDBACK_PARAMETERS : {}),
       ...options.params,
     },
-    packUniforms: (params, width, height) => new Float32Array([
+    packUniforms: (params, width, height, timelineTimeSeconds = 0) => new Float32Array([
       width,
       height,
       numeric(params.amount, 0.8),
-      typeof performance === 'undefined' ? 0 : performance.now() / 1_000,
+      Number.isFinite(timelineTimeSeconds) ? timelineTimeSeconds : 0,
       numeric(params.speed, 0),
       numeric(params.trackingCenterX, 0.5),
       numeric(params.trackingCenterY, 0.5),

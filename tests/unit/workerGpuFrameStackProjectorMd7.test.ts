@@ -156,6 +156,7 @@ describe('MD7 Worker GPU host frame-stack projector', () => {
           height: 1080,
         }],
       ),
+      frameHistory: { eventRevision: 6, discontinuity: 'seek', ownerRevision: 14 },
       snapshotBitmap,
     });
 
@@ -183,6 +184,7 @@ describe('MD7 Worker GPU host frame-stack projector', () => {
     expect(projected.bindings[0]?.renderLayer.videoRotation).toBe(90);
     expect(collectWorkerGpuFrameStackTransferables(projected, admission)).toEqual([titleBitmap]);
     expect(validateWorkerGpuFrameStackContract(projected, admission).ok).toBe(true);
+    expect(projected.frameHistory).toEqual({ eventRevision: 6, discontinuity: 'seek', ownerRevision: 14 });
     expect(titleBitmap.closeCount).toBe(0);
   });
 

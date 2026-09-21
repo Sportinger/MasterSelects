@@ -716,7 +716,8 @@ describe('worker presenting render host port', () => {
       position: { x: 0, y: 0, z: 0 },
       scale: { x: 1, y: 1 },
       rotation: 0,
-    }]);
+    }], { compositionId: 'comp-software', timelineTimeSeconds: 3.25,
+      frameHistory: { eventRevision: 7, discontinuity: 'seek', ownerRevision: 11 } });
 
     expect(context).toMatchObject({
       __workerRenderHostContext: true,
@@ -740,7 +741,7 @@ describe('worker presenting render host port', () => {
       expect(bridge.presentSoftwareFrame).toHaveBeenCalledWith(
         expect.stringContaining('worker-presenting:render'),
         'preview',
-        0,
+        3.25,
         expect.objectContaining({
           size: { x: 640, y: 360 },
           layers: [expect.objectContaining({
@@ -755,6 +756,7 @@ describe('worker presenting render host port', () => {
           })],
         }),
         [],
+        { compositionId: 'comp-software', frameHistory: { eventRevision: 7, discontinuity: 'seek', ownerRevision: 11 } },
       );
     });
     await vi.waitFor(() => {

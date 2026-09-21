@@ -4,7 +4,7 @@ import type { AnimatableProperty } from '../../types/animationProperties';
 import { landmarkRuntime } from '../landmarkTracking/landmarkRuntime';
 import { faceTrackKey, samplePreciseFace } from '../landmarkTracking/preciseFaceSampling';
 import { FACE_CABLE_ANCHORS } from '../faceCables/cableData';
-import { effectOperatorGraph, isImageGraphEffectType } from '../operators/effectGraphOwner';
+import { effectOperatorGraph, isComputeImageEffectType, isImageGraphEffectType } from '../operators/effectGraphOwner';
 import { sampleOperatorParameter, graphInputNodes } from '../operators/effectGraph';
 import { clipLocalToKeyframeTime } from '../flock/time/flockKeyframeTime';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
@@ -22,6 +22,8 @@ import { imageOperatorKnownValues, imageOperatorValuePreview } from './imageOper
 import { imageOperatorPreviewStage, isImageOperatorTextureSignal } from './imageOperatorPreviewStages';
 import { analogSignalNodePreview, analogSignalPreviewProducerNode } from './analogSignalPreviews';
 import type { AnalogSignalPreviewTarget } from './analogSignalPreviewStages';
+import { computeImageOperatorValuePreview } from './computeImageOperatorPreviews';
+import { memoryImageOperatorPreviewTap } from './memoryImageOperatorPreviews';
 
 /** Domain adapters read authoritative runtime data; opening a viewer never runs analysis or a bake. */
 export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewArtifactReader): PreviewFrame | Promise<PreviewFrame> {
@@ -36,12 +38,25 @@ export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewA
   if (binding?.kind === 'effect-operator') {
     const effect = clip.effects.find(value => value.id === binding.effectId);
     if (effect?.type === 'voxel-relief') return voxelPreview(request, clip, effect, state.clipKeyframes.get(clip.id) ?? [], localTime);
+    if (effect && isComputeImageEffectType(effect.type)) {
+      const preview = computeImageOperatorValuePreview(request, clip, effect, state.clipKeyframes.get(clip.id) ?? [], localTime);
+      if (preview) return preview;
+      const signal = request.port?.metadata?.semanticKind;
+      if (request.port && binding.operator !== 'image.frame' && isImageOperatorTextureSignal(signal)) {
+        return nodePreviewTextureTap.request(imageOperatorPreviewStage({ effectId: effect.id, nodeId: binding.nodeId,
+          portId: request.port.id, direction: request.port.direction }), request);
+      }
+    }
     if (effect && isImageGraphEffectType(effect.type)) {
       const keys = state.clipKeyframes.get(clip.id) ?? [];
       const valuePreview = imageOperatorValuePreview(request, clip, effect, keys, localTime);
       if (valuePreview) return valuePreview;
       const port = request.port;
       const signal = port?.metadata?.semanticKind;
+      if (port && binding.operator === 'source.memory-window' && (signal === 'operator:uint32-texture' || port.id === 'metadata')) {
+        return memoryImageOperatorPreviewTap.request({ effectId: effect.id, nodeId: binding.nodeId,
+          portId: port.id, direction: port.direction }, request);
+      }
       if (port && binding.operator !== 'image.frame' && isImageOperatorTextureSignal(signal)) {
         const knownValues = imageOperatorKnownValues(request, clip, effect, keys, localTime);
         return nodePreviewTextureTap.request(imageOperatorPreviewStage({ effectId: effect.id, nodeId: binding.nodeId,
@@ -49,6 +64,9 @@ export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewA
       }
     }
     if (effect?.type === 'analog-signal-lab') {
+      const keys = state.clipKeyframes.get(clip.id) ?? [];
+      const valuePreview = imageOperatorValuePreview(request, clip, effect, keys, localTime);
+      if (valuePreview) return valuePreview;
       if (binding.operator === 'image.frame' && request.port?.type === 'texture') return sourcePreview(request, clip, sourceTime);
       if (request.port?.type === 'texture') {
         const graph = effectOperatorGraph(effect);

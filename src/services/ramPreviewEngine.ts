@@ -54,7 +54,7 @@ export interface RamPreviewDeps {
   isFrameCached: (quantizedTime: number) => boolean;
   getSourceTimeForClip: (clipId: string, localTime: number) => number;
   getInterpolatedSpeed: (clipId: string, time: number) => number;
-  getCompositionDimensions: (compositionId: string) => { width: number; height: number };
+  getCompositionDimensions: (compositionId: string) => { width: number; height: number; frameRate?: number };
   onFrameCached: (time: number) => void;
   onProgress: (percent: number) => void;
 }
@@ -678,7 +678,7 @@ export class RamPreviewEngine {
 
     if (nestedLayers.length === 0) return null;
 
-    const { width: compWidth, height: compHeight } = deps.getCompositionDimensions(
+    const { width: compWidth, height: compHeight, frameRate } = deps.getCompositionDimensions(
       clip.compositionId || clip.id
     );
 
@@ -687,6 +687,7 @@ export class RamPreviewEngine {
       layers: nestedLayers,
       width: compWidth,
       height: compHeight,
+      frameRate: frameRate ?? 30,
     };
 
     return clipToRamPreviewLayer(clip, {

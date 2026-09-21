@@ -54,28 +54,17 @@ export function resolveMemorySource(params: Record<string, Primitive>): MemorySo
   };
 }
 
-// The media store imports the effect registry, so it is resolved lazily to
-// keep this effect module free of import cycles. Until it resolves (first
-// render only) the frame clock runs at 30 fps.
-let readFrameRate: () => number = () => 30;
-void import('../../../stores/mediaStore').then(({ useMediaStore }) => {
-  readFrameRate = () => useMediaStore.getState().getActiveComposition()?.frameRate ?? 30;
-}).catch(() => undefined);
-
-export function activeCompositionFrameRate(): number {
-  return readFrameRate();
-}
-
 export function buildMemoryWindow(
   params: Record<string, Primitive>,
   outputWidth: number,
   outputHeight: number,
   timelineTimeSeconds: number,
+  frameRate = 30,
 ): MemoryWindow | null {
   const source = resolveMemorySource(params);
   if (!source) return null;
   const plan = planMemoryWindow(params, outputWidth, outputHeight);
-  const frameIndex = frameIndexAt(timelineTimeSeconds, activeCompositionFrameRate());
+  const frameIndex = frameIndexAt(timelineTimeSeconds, frameRate);
   const offset = resolveWindowOffset(params, frameIndex, source.length);
   log.debug('window', { time: timelineTimeSeconds, frameIndex, offset, bytes: plan.bytes, source: source.key });
   return { plan, offset, data: source.read(offset, plan.bytes), source };

@@ -2,6 +2,11 @@ import type { BlendMode, Layer } from '../../types';
 import type { RuntimePrimaryColorParams } from '../../types/colorCorrection';
 import type { Effect } from '../../types/effects';
 import type { WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntimeCommands';
+import type { ImageOperatorPlan } from '../operators/imageOperatorGraph';
+import { compileImageOperatorGraph } from '../operators/imageOperatorGraph';
+import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams, isImageGraphEffectType } from '../operators/effectGraphOwner';
+import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
+import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraphs';
 
 const CANVAS_COMPOSITE_BY_BLEND_MODE: Partial<Record<BlendMode, GlobalCompositeOperation>> = {
   normal: 'source-over',
@@ -32,6 +37,8 @@ export interface WorkerSoftwareEffectPlan {
 
 interface MutableWorkerSoftwarePixelEffects {
   brightness: number;
+  imageOperatorPlans?: ImageOperatorPlan[];
+  imageOperatorPlanOwners?: import('./workerSoftwareImageGraphs').WorkerSoftwareImageGraphOwner[];
   acuarelaAdjustments?: {
     feedbackKey: string;
     opacity: number;
@@ -43,6 +50,7 @@ interface MutableWorkerSoftwarePixelEffects {
     gainX: number;
     gainY: number;
     reset: boolean;
+    historyLoop?: 'reset' | 'continuous';
   }[];
   rom1Adjustments?: {
     feedbackKey: string;
@@ -55,6 +63,7 @@ interface MutableWorkerSoftwarePixelEffects {
     gainX: number;
     gainY: number;
     reset: boolean;
+    historyLoop?: 'reset' | 'continuous';
   }[];
   mirrorHorizontal?: boolean;
   mirrorVertical?: boolean;
@@ -204,6 +213,7 @@ function effectFilterPart(
         gainX: finiteEffectNumber(effect.params.gainX, 0.3),
         gainY: finiteEffectNumber(effect.params.gainY, 0.3),
         reset: effect.params.reset === true,
+        historyLoop: resolveFeedbackHistoryLoop(effect.params),
       });
       return '';
     case 'rom1':
@@ -219,6 +229,7 @@ function effectFilterPart(
         gainX: finiteEffectNumber(effect.params.gainX, 0.3),
         gainY: finiteEffectNumber(effect.params.gainY, 0.3),
         reset: effect.params.reset === true,
+        historyLoop: resolveFeedbackHistoryLoop(effect.params),
       });
       return '';
     case 'brightness':
@@ -446,8 +457,30 @@ function effectFilterPart(
 }
 
 export function workerSoftwareEffectPlanForLayer(layer: Layer): WorkerSoftwareEffectPlan | null {
-  const parts: string[] = [];
   const pixelEffects = createEmptyPixelEffects(layer.colorCorrection?.primaryNodes);
+  const activeEffects = layer.effects.filter(effect => effect.enabled !== false && !effect.type.startsWith('audio-'));
+  const hasPersistedImageGraph = activeEffects.some(effect => isImageGraphEffectType(effect.type)
+    && (effect.operatorGraph || effect.params.operatorGraph !== undefined));
+  if (hasPersistedImageGraph) {
+    if (!activeEffects.every(effect => isImageGraphEffectType(effect.type))) return null;
+    try {
+      const plans: ImageOperatorPlan[] = [];
+      const owners: import('./workerSoftwareImageGraphs').WorkerSoftwareImageGraphOwner[] = [];
+      for (const effect of activeEffects) {
+        const graph = effectOperatorGraph(effect);
+        if (graph.incomplete) continue;
+        const plan = compileImageOperatorGraph(graph, effectOperatorParams(effect), effectOperatorCompileContext(effect));
+        if (!canApplyWorkerSoftwareImageGraphPlan(plan)) return null;
+        plans.push(plan);
+        owners.push({ feedbackKey: JSON.stringify([layer.id, effect.id]), reset: effect.params.reset === true,
+          historyLoop: resolveFeedbackHistoryLoop(effect.params) });
+      }
+      pixelEffects.imageOperatorPlans = plans;
+      pixelEffects.imageOperatorPlanOwners = owners;
+      return { filter: 'none', pixelEffects };
+    } catch { return null; }
+  }
+  const parts: string[] = [];
   let activeVisualEffectCount = 0;
   for (const effect of layer.effects) {
     if (effect.enabled !== false && !effect.type.startsWith('audio-')) {

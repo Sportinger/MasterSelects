@@ -1,7 +1,7 @@
 import type { NodePortContract } from './nodePortContract';
 /** Durable operator contracts. Values and artifacts belong to the owner; bindings never copy them. */
 export type OperatorValue = number | boolean | string | [number, number] | [number, number, number] | [number, number, number, number];
-export type OperatorSignal = 'image' | 'pal-signal' | 'receiver-lines' | 'rgb' | 'alpha' | 'mask' | 'vec2' | 'vec3' | 'vec4' | 'texture' | 'uv' | 'material' | 'geometry' | 'primitive-mesh' | 'landmarks' | 'anchors' | 'depth' | 'surface' | 'force' | 'drag' | 'curves' | 'scene' | 'number' | 'boolean' | 'camera' | 'light' | 'field';
+export type OperatorSignal = 'image' | 'uint32-texture' | 'pal-signal' | 'receiver-lines' | 'nearest-seed-field' | 'rgb' | 'alpha' | 'mask' | 'vec2' | 'vec3' | 'vec4' | 'texture' | 'uv' | 'material' | 'geometry' | 'primitive-mesh' | 'landmarks' | 'anchors' | 'depth' | 'surface' | 'force' | 'drag' | 'curves' | 'scene' | 'number' | 'boolean' | 'camera' | 'light' | 'field';
 export interface OperatorPort { id: string; label: string; type: OperatorSignal; required?: boolean; repeated?: boolean; contract?: Partial<NodePortContract> }
 export interface OperatorParameter {
   id: string; label: string; type: 'number' | 'boolean' | 'vector' | 'select' | 'color'; default: OperatorValue;
@@ -39,7 +39,7 @@ export interface EffectOperatorGraph {
   schemaVersion?: 1;
   /** An editable graph whose execution is paused until its missing wiring is repaired. */
   incomplete?: string;
-  domain?: 'cables' | 'scene' | 'voxel' | 'image' | 'analog-signal';
+  domain?: 'cables' | 'scene' | 'voxel' | 'image' | 'compute-image' | 'analog-signal';
   nodes: BoundOperatorNode[]; edges: OperatorEdge[];
   layout: Record<string, { x: number; y: number }>;
   groups?: OperatorGroup[];

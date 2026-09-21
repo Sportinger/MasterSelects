@@ -229,6 +229,7 @@ export class RenderDispatcher {
         cameraOverride,
         targetId,
         timelineTimeSeconds,
+        effectRenderClock,
       ) => {
         if (flags.use3DLayers) {
           this.sharedScene3DProcessor.process3DLayers(
@@ -241,6 +242,7 @@ export class RenderDispatcher {
             cameraOverride,
             targetId,
             timelineTimeSeconds,
+            effectRenderClock,
           );
         }
       },
@@ -328,6 +330,9 @@ export class RenderDispatcher {
     const skipEffects = false;
     const isExporting = d.exportCanvasManager.getIsExporting();
     const mediaState = useMediaStore.getState();
+    const renderCompositionId = frameContext?.compositionId ?? mediaState.activeCompositionId ?? 'timeline:active';
+    const renderComposition = mediaState.compositions.find((composition) => composition.id === renderCompositionId);
+    const effectRenderClock = { frameRate: renderComposition?.frameRate ?? 30, scopeId: renderCompositionId };
     const exportComposition = isExporting
       ? mediaState.compositions.find((composition) => composition.id === frameContext?.compositionId)
       : undefined;
@@ -476,6 +481,7 @@ export class RenderDispatcher {
         undefined,
         undefined,
         frameTimelineTime,
+        effectRenderClock,
       );
     }
     debugSnapshot.after3DLayerData = layerData.length;
@@ -558,6 +564,7 @@ export class RenderDispatcher {
           ),
           data.layer.id,
           nestedPreviewRenderScale,
+          nc.frameRate ?? 30,
         );
         if (view) {
           data.textureView = view;
@@ -611,6 +618,9 @@ export class RenderDispatcher {
       splitCompare: isExporting ? undefined : getSplitCompareSettings(),
       motionTime: frameTimelineTime,
       particleQuality: isExporting ? 'export' : 'preview',
+      historyScopeId: frameContext?.compositionId ?? mediaState.activeCompositionId ?? 'timeline:active',
+      frameHistory: frameContext?.frameHistory,
+      effectRenderClock,
     });
     const renderTime = performance.now() - t2;
 

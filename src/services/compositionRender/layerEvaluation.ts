@@ -623,6 +623,7 @@ export function evaluateNestedComposition(params: {
     layers: nestedLayers,
     width: compWidth,
     height: compHeight,
+    frameRate: nestedComp?.frameRate ?? 30,
     currentTime: nestedTime,
     sceneClips: clip.nestedClips,
     sceneTracks: clip.nestedTracks,

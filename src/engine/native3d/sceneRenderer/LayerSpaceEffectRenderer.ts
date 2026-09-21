@@ -1,4 +1,5 @@
 import type { EffectsPipeline } from '../../../effects/EffectsPipeline';
+import type { EffectRenderClockContext } from '../../../effects/_shared/byteTexture';
 import type { ScenePlaneLayer, SceneVoxelLayer } from '../../scene/types';
 
 type TexturedSceneLayer = ScenePlaneLayer | SceneVoxelLayer;
@@ -18,6 +19,7 @@ export interface LayerSpaceEffectContext {
   effectsPipeline: EffectsPipeline;
   sampler: GPUSampler;
   timelineTimeSeconds: number;
+  effectRenderClock?: EffectRenderClockContext;
 }
 
 interface SourceTexture {
@@ -70,6 +72,8 @@ export class LayerSpaceEffectRenderer {
         target.pong,
         undefined,
         options.timelineTimeSeconds,
+        undefined,
+        options.effectRenderClock ? { ...options.effectRenderClock, scopeId: JSON.stringify([options.effectRenderClock.scopeId, layer.layerId]) } : undefined,
       );
       views.set(layer.layerId, result.finalView);
     }

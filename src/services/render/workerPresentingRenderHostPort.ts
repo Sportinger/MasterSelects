@@ -137,6 +137,7 @@ interface WorkerRenderTargetRecord {
 interface WorkerSoftwarePresentationRequest {
   readonly record: WorkerRenderTargetRecord; readonly layers: readonly Layer[];
   readonly source: string; readonly sequence: number; readonly targetKey: string; readonly enforceLatestSequence: boolean;
+  readonly frameContext?: RenderSurfaceFrameContext;
 }
 
 interface WorkerGpuPresentationRequest {
@@ -694,7 +695,7 @@ class WorkerPresentingRenderHostPortCore {
     return this.cacheLatestWorkerCompositeFrame(time);
   }
 
-  cacheActiveCompOutput(_compositionId: string, _timelineTimeSeconds?: number): void {
+  cacheActiveCompOutput(_compositionId: string, _timelineTimeSeconds?: number, _frameRate?: number): void {
     // Worker-presenting cache ownership is runtime-side; legacy composite cache is intentionally not populated here.
   }
 
@@ -1209,6 +1210,7 @@ class WorkerPresentingRenderHostPortCore {
       sequence,
       targetKey: workerPresentationTargetKey(layers),
       enforceLatestSequence: !this.isScrubbing,
+      ...(frameContext ? { frameContext } : {}),
     };
     if (this.inFlightSoftwarePresentationTargets.has(record.target.id)) {
       this.pendingSoftwarePresentationsByTarget.set(record.target.id, request);
@@ -1603,6 +1605,7 @@ class WorkerPresentingRenderHostPortCore {
           ? 'preview'
           : 'target-preview',
       nowMs,
+      ...(frameContext.frameHistory ? { frameHistory: frameContext.frameHistory } : {}),
       resolveVideoSource: (layer) => {
         const resolved = this.resolveGpuFrameStackSource(
           layer,
@@ -2763,13 +2766,11 @@ class WorkerPresentingRenderHostPortCore {
       const contentChanged = this.lastContentKeyByTarget.get(record.target.id) !== contentKey;
       const previousTargetKey = this.lastTargetKeyByTarget.get(record.target.id);
       const targetMoved = previousTargetKey !== undefined && previousTargetKey !== request.targetKey;
-      const output = await bridge.presentSoftwareFrame(
-        requestId,
-        record.target.id,
-        0,
-        packet.frame,
-        packet.transfer,
-      );
+      const present = [requestId, record.target.id, request.frameContext?.timelineTimeSeconds ?? 0, packet.frame, packet.transfer] as const;
+      const output = request.frameContext
+        ? await bridge.presentSoftwareFrame(...present, { compositionId: request.frameContext.compositionId,
+          ...(request.frameContext.frameHistory ? { frameHistory: request.frameContext.frameHistory } : {}) })
+        : await bridge.presentSoftwareFrame(...present);
       this.recordRuntimeOutput(output, {
         changed: contentChanged,
         targetMoved,

@@ -1,7 +1,8 @@
 import commonShader from './_shared/commonShader';
 import { imageGraphProgramShader } from './_shared/imageGraphDefinition';
 import type { ImageOperatorPlan } from '../services/operators/imageOperatorGraph';
-import { packImageOperatorRuntimeUniforms } from '../services/operators/imageOperatorRuntimeUniforms';
+import { imageOperatorRuntimeUniformSize, packImageOperatorRuntimeUniforms, type ImageOperatorResourceMetadata } from '../services/operators/imageOperatorRuntimeUniforms';
+import { imageGraphResourceSampleType } from './_shared/imageGraphShaderResources';
 
 export type ImageGraphPassSource = { kind: 'texture'; view: GPUTextureView } | { kind: 'external'; texture: GPUExternalTexture };
 export interface ImageGraphPassBatch {
@@ -10,6 +11,13 @@ export interface ImageGraphPassBatch {
   readonly transientTextures: GPUTexture[];
   encoder?: GPUCommandEncoder;
   sourceResource?: GPUTextureView | GPUExternalTexture; sampler?: GPUSampler; width?: number; height?: number; timelineTimeSeconds?: number;
+}
+export interface ImageGraphExternalResource {
+  view: GPUTextureView;
+  identity: string;
+  width?: number;
+  height?: number;
+  available?: boolean;
 }
 interface Allocation { width: number; height: number; topology: string; textures: Map<string, GPUTexture>; views: Map<string, GPUTextureView> }
 
@@ -20,6 +28,8 @@ export interface EncodeImageGraphPassesOptions {
   stopAtResourceId?: string;
   /** Ephemeral dedupe scope. Create once per capture/encode batch and then discard. */
   batch?: ImageGraphPassBatch;
+  /** Borrowed runtime resources; identities must change whenever their content changes. */
+  externalResources?: ReadonlyMap<string, ImageGraphExternalResource>;
 }
 
 /** Owns transient GPU allocations for compiled multi-pass image programs. */
@@ -41,7 +51,10 @@ export class ImageGraphPassRuntime {
 
   encode(options: EncodeImageGraphPassesOptions): boolean {
     if (this.disposed) throw new Error('ImageGraphPassRuntime is disposed.');
-    const passes = options.plan.passes;
+    const passes = options.plan.passes?.length ? options.plan.passes
+      : options.plan.resourceInputs?.length
+        ? [{ id: 'image-pass:final', program: options.plan, inputResources: options.plan.resourceInputs, outputResource: undefined }]
+        : undefined;
     if (!passes?.length) return false;
     if (options.batch) {
       const sourceResource = options.source.kind === 'texture' ? options.source.view : options.source.texture;
@@ -64,10 +77,19 @@ export class ImageGraphPassRuntime {
     const allocation = this.allocation(options.instanceId, topology, options.width, options.height, resources);
     const produced = new Set<string>();
     const localViews = new Map<string, GPUTextureView>(), identities = new Map<string, string>();
+    const metadata = new Map<string, ImageOperatorResourceMetadata>();
+    for (const [id, resource] of options.externalResources ?? []) {
+      if (ids.has(id)) throw new Error(`External image resource ${id} conflicts with a materialized resource.`);
+      if (!resource.identity) throw new Error(`External image resource ${id} requires a content identity.`);
+      ids.add(id); produced.add(id); localViews.set(id, resource.view); identities.set(id, resource.identity);
+      if (resource.width !== undefined || resource.height !== undefined || resource.available !== undefined) {
+        metadata.set(id, { width: resource.width!, height: resource.height!, available: resource.available! });
+      }
+    }
     for (const pass of passes) {
       if (pass.inputResources.length > 8) throw new Error(`Image graph pass ${pass.id} exceeds eight resource inputs.`);
       for (const id of pass.inputResources) if (!ids.has(id) || !produced.has(id)) throw new Error(`Image graph pass ${pass.id} reads unavailable resource ${id}.`);
-      const packed = packImageOperatorRuntimeUniforms(pass.program, options.timelineTimeSeconds, options.width, options.height);
+      const packed = packImageOperatorRuntimeUniforms(pass.program, options.timelineTimeSeconds, options.width, options.height, metadata);
       const payloadIdentity = packed ? Array.from(new Uint32Array(packed.buffer, packed.byteOffset, packed.byteLength / 4)).join(',') : '';
       const inputIdentities = pass.inputResources.map(id => identities.get(id) ?? `local:${id}`);
       const producerIdentity = pass.outputResource ? `${pass.outputResource}:${pass.program.key}:${payloadIdentity}:${inputIdentities.join('|')}` : '';
@@ -109,7 +131,21 @@ export class ImageGraphPassRuntime {
     const key = `${source}:${format}:${program.key}`; const found = this.pipelines.get(key);
     if (found) { this.pipelines.delete(key); this.pipelines.set(key, found); return found; }
     const module = this.device.createShaderModule({ code: `${commonShader}\n${imageGraphProgramShader(program, 'imageGraphPassFragment', source)}` });
-    const pipeline = this.device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vertexMain' },
+    let layout: GPUPipelineLayout | 'auto' = 'auto';
+    if (program.resourceSampling?.includes('exact-u32-pixel-load')) {
+      const entries: GPUBindGroupLayoutEntry[] = [
+        { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+        source === 'external'
+          ? { binding: 1, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} }
+          : { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+      ];
+      if (imageOperatorRuntimeUniformSize(program)) entries.push({ binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } });
+      (program.resourceInputs ?? []).forEach((_id, index) => entries.push({ binding: 3 + index, visibility: GPUShaderStage.FRAGMENT,
+        texture: { sampleType: imageGraphResourceSampleType(program.resourceSampling?.[index]) } }));
+      const bindGroupLayout = this.device.createBindGroupLayout({ entries });
+      layout = this.device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+    }
+    const pipeline = this.device.createRenderPipeline({ layout, vertex: { module, entryPoint: 'vertexMain' },
       fragment: { module, entryPoint: 'imageGraphPassFragment', targets: [{ format }] }, primitive: { topology: 'triangle-list' } });
     if (this.pipelines.size >= 64) this.pipelines.delete(this.pipelines.keys().next().value!);
     this.pipelines.set(key, pipeline); return pipeline;
@@ -120,12 +156,17 @@ export class ImageGraphPassRuntime {
     const found = this.allocations.get(allocationKey);
     if (found) { this.allocations.delete(allocationKey); this.allocations.set(allocationKey, found); return found; }
     const previousKey = this.activeAllocationKeys.get(instanceId);
+    // Drop ownership without destroy(): replacement may happen while the old
+    // views are referenced by commands recorded into an unsubmitted encoder.
+    // The encoder/batch keeps them alive until WebGPU can retire them safely.
     if (previousKey && previousKey !== allocationKey) this.allocations.delete(previousKey);
     const next: Allocation = { width, height, topology, textures: new Map(), views: new Map() };
     for (const resource of resources) { const texture = this.device.createTexture({ size: { width, height }, format: 'rgba16float',
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING }); next.textures.set(resource.id, texture); next.views.set(resource.id, texture.createView()); }
     this.allocations.set(allocationKey, next); this.activeAllocationKeys.set(instanceId, allocationKey);
     if (this.allocations.size > 32) {
+      // As above, eviction can occur before submission; explicit destruction
+      // requires a submission-retirement owner outside this synchronous runtime.
       const retiredKey = this.allocations.keys().next().value!; this.allocations.delete(retiredKey);
       for (const [owner, key] of this.activeAllocationKeys) if (key === retiredKey) this.activeAllocationKeys.delete(owner);
     }

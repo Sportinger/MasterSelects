@@ -9,6 +9,10 @@ export const IMAGE_PARAMETER_WGSL = `struct ImageOperatorParameters { values: ar
 export const IMAGE_HASH2D_WGSL = hash2d.replace('fn hash(', 'fn imageGraphHash2d(');
 export const IMAGE_GAUSSIAN_WGSL = gaussian.replace('fn gaussian(', 'fn imageGraphGaussian(');
 export const IMAGE_COORDINATE_ROTATION_WGSL = coordinateRotation;
+export const IMAGE_VECTOR_WGSL = `fn imageGraphNormalize2(value: vec2f) -> vec2f {
+  if (all(value == vec2f(0.0))) { return vec2f(0.0); }
+  return normalize(value);
+}`;
 export const IMAGE_RADIAL_PROJECTION_WGSL = radialProjection
   .replace('fn radialProjectionRadius(', 'fn imageGraphProjectRadius(')
   .replace('fn inverseRadialProjectionRadius(', 'fn imageGraphUnprojectRadius(');

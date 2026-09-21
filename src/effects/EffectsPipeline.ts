@@ -9,7 +9,7 @@ import {
   type FullscreenEffectDefinition,
 } from './types';
 import { getGlyphAtlas } from './_shared/glyphAtlas';
-import { ByteTextureCache } from './_shared/byteTexture';
+import { ByteTextureCache, type EffectRenderClockContext } from './_shared/byteTexture';
 import { Logger } from '../services/logger';
 import { ComputeEffectRuntime } from './ComputeEffectRuntime';
 import { SplitComparePipeline } from './SplitComparePipeline';
@@ -18,14 +18,25 @@ import { getLandmarkEffectPoints } from '../services/landmarkTracking/landmarkRu
 import { DenseTerrainPipeline } from './tracking/DenseTerrainPipeline';
 import { nodePreviewTextureTap } from '../services/nodePreview/NodePreviewTextureTap';
 import { imageGraphDefinition } from './_shared/imageGraphDefinition';
+import { resolveImageGraphExternalResources } from './_shared/imageGraphExternalResources';
 import { EffectPipelineCache } from './EffectPipelineCache';
 import { captureImageOperatorPreviews } from '../services/nodePreview/imageOperatorTexturePreviews';
+import type { ImageOperatorMemoryWindowResource } from '../services/operators/imageOperatorExternalResources';
 import { compileAnalogSignalGraph, createDefaultAnalogSignalGraph } from '../services/operators/analogSignalGraph';
 import { captureAnalogSignalStagePreviews } from '../services/nodePreview/analogSignalPreviews';
-import { effectOperatorCompileContext, effectOperatorGraph, isImageGraphEffectType } from '../services/operators/effectGraphOwner';
+import { captureAnalogImageOperatorPreviews } from '../services/nodePreview/analogImageOperatorPreviews';
+import { captureComputeImageOperatorPreviews, captureComputeImageOutputPreviews } from '../services/nodePreview/computeImageOperatorPreviews';
+import { effectOperatorCompileContext, effectOperatorGraph, isComputeImageEffectType, isImageGraphEffectType } from '../services/operators/effectGraphOwner';
 import { effectOperatorParams } from '../services/operators/effectGraphOwner';
 import { compileImageOperatorGraph } from '../services/operators/imageOperatorGraph';
+import { compileComputeImageGraph } from '../services/operators/computeImageGraph';
 import { ImageGraphPassRuntime } from './ImageGraphPassRuntime';
+import {
+  transitionFrameHistory,
+  type FrameHistoryDiscontinuity,
+  type FrameHistoryState,
+} from './frameHistoryTransition';
+import { resolveFeedbackHistoryLoop } from './_shared/feedbackParameters';
 
 const log = Logger.create('EffectsPipeline');
 
@@ -49,12 +60,22 @@ interface EffectInstance {
 }
 
 interface FeedbackState {
-  texture: GPUTexture;
-  view: GPUTextureView;
+  committedTexture: GPUTexture;
+  committedView: GPUTextureView;
+  currentTexture: GPUTexture;
   width: number;
   height: number;
-  clearPending: boolean;
-  resetActive: boolean;
+  lifecycle: FrameHistoryState | null;
+  lastEventRevision?: number;
+  planKey?: string;
+  committedRevision: number;
+}
+
+export interface EffectFrameHistoryContext {
+  scopeId: string;
+  eventRevision: number;
+  discontinuity?: FrameHistoryDiscontinuity;
+  ownerRevision: number;
 }
 
 function toPrimitiveEffectParams(params: Record<string, unknown>): Record<string, number | boolean | string> {
@@ -185,18 +206,19 @@ export class EffectsPipeline {
     return this.pipelineCache.createBindGroup(effectType, entries);
   }
 
-  private getFeedbackState(effect: EffectInstance, width: number, height: number): FeedbackState {
-    const key = effect.id;
+  private getFeedbackState(effect: EffectInstance, width: number, height: number, scopeId: string): FeedbackState {
+    const key = JSON.stringify([scopeId, effect.id]);
     const existing = this.feedbackStates.get(key);
 
     if (existing && existing.width === width && existing.height === height) {
       return existing;
     }
 
-    existing?.texture.destroy();
+    existing?.committedTexture.destroy();
+    existing?.currentTexture.destroy();
 
-    const texture = this.device.createTexture({
-      label: `effect-feedback-${effect.type}-${effect.id}`,
+    const createTexture = (role: string) => this.device.createTexture({
+      label: `effect-feedback-${role}-${effect.type}-${effect.id}`,
       size: { width, height },
       format: 'rgba8unorm',
       usage: GPUTextureUsage.RENDER_ATTACHMENT |
@@ -204,14 +226,17 @@ export class EffectsPipeline {
         GPUTextureUsage.COPY_DST |
         GPUTextureUsage.COPY_SRC,
     });
+    const committedTexture = createTexture('committed');
+    const currentTexture = createTexture('current');
 
     const state: FeedbackState = {
-      texture,
-      view: texture.createView(),
+      committedTexture,
+      committedView: committedTexture.createView(),
+      currentTexture,
       width,
       height,
-      clearPending: true,
-      resetActive: false,
+      lifecycle: null,
+      committedRevision: 0,
     };
     this.feedbackStates.set(key, state);
     return state;
@@ -220,14 +245,41 @@ export class EffectsPipeline {
   private clearFeedback(commandEncoder: GPUCommandEncoder, state: FeedbackState): void {
     const pass = commandEncoder.beginRenderPass({
       colorAttachments: [{
-        view: state.view,
+        view: state.committedView,
         clearValue: { r: 0, g: 0, b: 0, a: 0 },
         loadOp: 'clear',
         storeOp: 'store',
       }],
     });
     pass.end();
-    state.clearPending = false;
+    state.committedRevision += 1;
+  }
+
+  private prepareFeedbackState(commandEncoder: GPUCommandEncoder, state: FeedbackState, effect: EffectInstance,
+    timelineTimeSeconds: number, frameHistory?: EffectFrameHistoryContext, planKey?: string, rebuiltPipeline = false): void {
+    const eventIsNew = frameHistory !== undefined && frameHistory.eventRevision !== state.lastEventRevision;
+    const recompiled = planKey !== undefined && state.planKey !== undefined && state.planKey !== planKey;
+    const transition = transitionFrameHistory(rebuiltPipeline || recompiled ? null : state.lifecycle, {
+      timelineTimeSeconds, ownerRevision: frameHistory?.ownerRevision ?? 0,
+      resetRequested: effect.params.reset === true,
+      discontinuity: eventIsNew ? frameHistory.discontinuity : undefined,
+      loopPolicy: resolveFeedbackHistoryLoop(effect.params),
+    });
+    state.lifecycle = transition.state;
+    state.planKey = planKey ?? state.planKey;
+    if (frameHistory) state.lastEventRevision = frameHistory.eventRevision;
+    if (transition.action === 'reset') this.clearFeedback(commandEncoder, state);
+    else if (transition.action === 'advance') {
+      commandEncoder.copyTextureToTexture({ texture: state.currentTexture }, { texture: state.committedTexture },
+        { width: state.width, height: state.height });
+      state.committedRevision += 1;
+    }
+  }
+
+  private copyFeedbackOutput(commandEncoder: GPUCommandEncoder, state: FeedbackState, outputView: GPUTextureView,
+    pingView: GPUTextureView, pongView: GPUTextureView, width: number, height: number, pingTexture?: GPUTexture, pongTexture?: GPUTexture): void {
+    const outputTexture = this.getOutputTexture(outputView, pingView, pongView, pingTexture, pongTexture);
+    if (outputTexture) commandEncoder.copyTextureToTexture({ texture: outputTexture }, { texture: state.currentTexture }, { width, height });
   }
 
   private getOutputTexture(
@@ -287,7 +339,14 @@ export class EffectsPipeline {
     pongTexture?: GPUTexture,
     compare?: { outputView: GPUTextureView; settings: SplitCompareSettings },
     timelineTimeSeconds = 0,
+    frameHistory?: EffectFrameHistoryContext,
+    renderClock?: EffectRenderClockContext,
   ): { finalView: GPUTextureView; swapped: boolean } {
+    const requestedFrameRate = renderClock?.frameRate;
+    const clock: EffectRenderClockContext = {
+      frameRate: typeof requestedFrameRate === 'number' && Number.isFinite(requestedFrameRate) && requestedFrameRate > 0 ? requestedFrameRate : 30,
+      scopeId: renderClock?.scopeId || 'legacy',
+    };
     // Filter out audio effects (handled by AudioRoutingManager) and disabled effects
     const enabledEffects = effects.filter(e => e.enabled && !e.type.startsWith('audio-'));
     if (enabledEffects.length === 0) {
@@ -299,10 +358,32 @@ export class EffectsPipeline {
     let swapped = false;
 
     for (const effect of enabledEffects) {
+      const registered = getEffect(effect.type);
       const imageGraphEffect = isImageGraphEffectType(effect.type);
       if (imageGraphEffect && effectOperatorGraph(effect).incomplete) continue;
       const imagePlan = imageGraphEffect ? compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect), effectOperatorCompileContext(effect)) : undefined;
-      const imagePassBatch = imagePlan?.passes?.length ? this.imageGraphPassRuntime.createBatch() : undefined;
+      let feedbackState = imagePlan?.frameHistoryResource
+        ? this.getFeedbackState(effect, outputWidth, outputHeight, frameHistory?.scopeId ?? 'legacy') : null;
+      if (feedbackState && imagePlan) this.prepareFeedbackState(commandEncoder, feedbackState, effect, timelineTimeSeconds, frameHistory, imagePlan.key);
+      const resolveMemoryWindow = imageGraphEffect ? (descriptor: ImageOperatorMemoryWindowResource) => {
+          if (!registered || !isFullscreenEffectDefinition(registered) || !registered.byteTexture) {
+            throw new Error('Memory window graph requires a byte-texture provider.');
+          }
+          const upload = registered.byteTexture({ ...descriptor.options }, {
+            effectInstanceId: effect.id, width: outputWidth, height: outputHeight, timelineTimeSeconds,
+            frameRate: clock.frameRate, scopeId: clock.scopeId,
+          });
+          const key = JSON.stringify([clock.scopeId, effect.id, descriptor.id]);
+          return { view: this.byteTextures.getView(key, upload),
+            identity: upload ? `memory-window:${upload.version}:${upload.width}x${upload.height}` : 'memory-window:unavailable',
+            width: upload?.width ?? 1, height: upload?.height ?? 1, available: upload !== null };
+        } : undefined;
+      const imageExternalResources = imagePlan ? new Map(resolveImageGraphExternalResources(this.device, imagePlan, { resolveMemoryWindow })) : undefined;
+      if (feedbackState && imagePlan?.frameHistoryResource) imageExternalResources?.set(imagePlan.frameHistoryResource, {
+        view: feedbackState.committedView,
+        identity: `effect-history:${feedbackState.committedRevision}`,
+      });
+      const imagePassBatch = imagePlan && (imagePlan.passes?.length || imagePlan.resourceInputs?.length) ? this.imageGraphPassRuntime.createBatch() : undefined;
       if (imageGraphEffect) captureImageOperatorPreviews({
         effect,
         device: this.device,
@@ -314,6 +395,8 @@ export class EffectsPipeline {
         timelineTimeSeconds,
         passRuntime: imagePassBatch ? this.imageGraphPassRuntime : undefined,
         passBatch: imagePassBatch,
+        externalResources: imageExternalResources,
+        resolveMemoryWindow,
       });
       if (effect.type === 'voxel-relief') nodeScalarSampleTap.capture(`voxel-effect:${effect.id}`, this.device, commandEncoder, sampler, effectInput);
       if(effect.terrainRender){
@@ -325,21 +408,28 @@ export class EffectsPipeline {
         nodePreviewTextureTap.capture(`effect:${effect.id}`, this.device, commandEncoder, sampler, effectInput, outputWidth, outputHeight);
         continue;
       }
-      const registered = getEffect(effect.type);
-      if (imagePlan?.passes?.length) {
+      if (imagePlan && (imagePlan.passes?.length || imagePlan.resourceInputs?.length)) {
         try {
           this.imageGraphPassRuntime.encode({ encoder: commandEncoder, sampler, source: { kind: 'texture', view: effectInput }, width: outputWidth,
-            height: outputHeight, timelineTimeSeconds, plan: imagePlan, outputView: effectOutput, outputFormat: 'rgba8unorm', instanceId: effect.id, batch: imagePassBatch });
+            height: outputHeight, timelineTimeSeconds, plan: imagePlan, outputView: effectOutput, outputFormat: 'rgba8unorm',
+            instanceId: JSON.stringify([frameHistory?.scopeId ?? 'legacy', effect.id]), batch: imagePassBatch,
+            externalResources: imageExternalResources });
+          if (feedbackState) this.copyFeedbackOutput(commandEncoder, feedbackState, effectOutput, pingView, pongView,
+            outputWidth, outputHeight, pingTexture, pongTexture);
           effectInput = effectOutput; effectOutput = this.getNextOutputView(effectOutput, pingView, pongView); swapped = !swapped;
           nodePreviewTextureTap.capture(`effect:${effect.id}`, this.device, commandEncoder, sampler, effectInput, outputWidth, outputHeight);
-        } catch (error) { log.error(`Multi-pass image effect failed: ${effect.type}`, error); }
+        } catch (error) { log.error(`Resource-backed image effect failed: ${effect.type}`, error); }
         continue;
       }
       const definition = imageGraphEffect && isFullscreenEffectDefinition(registered)
         ? imageGraphDefinition(effect, registered, timelineTimeSeconds) : registered;
       if (isComputeEffectDefinition(definition)) {
         if (definition.computeMode === 'analog-signal' && effect.operatorGraph?.incomplete) continue;
-        const effectParams = definition.computeMode === 'analog-signal' ? null : this.createEffectUniformData(effect, outputWidth, outputHeight, timelineTimeSeconds);
+        const computeGraph = isComputeImageEffectType(effect.type) ? effectOperatorGraph(effect) : undefined;
+        if (computeGraph?.incomplete) continue;
+        const computeImagePlan = computeGraph ? compileComputeImageGraph(computeGraph, effectOperatorParams(effect), effectOperatorCompileContext(effect)) : undefined;
+        const effectParams = definition.computeMode === 'analog-signal' || computeImagePlan
+          ? null : this.createEffectUniformData(effect, outputWidth, outputHeight, timelineTimeSeconds);
         let effectUniformBuffer: GPUBuffer | null = null;
         if (effectParams) {
           effectUniformBuffer = this.device.createBuffer({
@@ -360,14 +450,27 @@ export class EffectsPipeline {
             width: outputWidth,
             height: outputHeight,
             analogPlan,
-            instanceId: effect.id,
+            computeImagePlan,
+            sampler,
+            onComputeImageResources: fieldResources => captureComputeImageOperatorPreviews({
+              effect, fieldResources, device: this.device, encoder: commandEncoder, sampler,
+              source: { kind: 'texture', view: effectInput }, width: outputWidth, height: outputHeight, timelineTimeSeconds,
+            }),
+            instanceId: computeImagePlan
+              ? JSON.stringify([frameHistory?.scopeId ?? 'legacy', effect.id])
+              : effect.id,
             timelineTimeSeconds,
+            onAnalogImageInputs: (stage, inputs) => captureAnalogImageOperatorPreviews({
+              effect, stage, inputs, device: this.device, encoder: commandEncoder, sampler,
+            }),
             onAnalogStageOutput: (stage, view, width, height) => {
               if (stage.kind === 'analyze') return;
               captureAnalogSignalStagePreviews({ effect, nodeId: stage.nodeId, kind: stage.kind, device: this.device,
                 encoder: commandEncoder, sampler, view, width, height });
             },
           });
+          if (computeImagePlan) captureComputeImageOutputPreviews({ effect, device: this.device, encoder: commandEncoder,
+            sampler, view: rendered ? effectOutput : effectInput, width: outputWidth, height: outputHeight });
           if (!rendered) continue;
           effectInput = effectOutput;
           effectOutput = this.getNextOutputView(effectOutput, pingView, pongView);
@@ -412,21 +515,12 @@ export class EffectsPipeline {
         this.device.queue.writeBuffer(effectUniformBuffer, 0, effectParams.buffer);
       }
 
-      const feedbackState = definition.usesFeedback
-        ? this.getFeedbackState(effect, outputWidth, outputHeight)
+      feedbackState = definition.usesFeedback
+        ? this.getFeedbackState(effect, outputWidth, outputHeight, frameHistory?.scopeId ?? 'legacy')
         : null;
 
       if (feedbackState) {
-        if (rebuiltPipeline) {
-          feedbackState.clearPending = true;
-          feedbackState.resetActive = false;
-        }
-
-        const resetRequested = effect.params.reset === true;
-        if (feedbackState.clearPending || (resetRequested && !feedbackState.resetActive)) {
-          this.clearFeedback(commandEncoder, feedbackState);
-        }
-        feedbackState.resetActive = resetRequested;
+        this.prepareFeedbackState(commandEncoder, feedbackState, effect, timelineTimeSeconds, frameHistory, undefined, rebuiltPipeline);
       }
 
       // Create bind group
@@ -440,7 +534,7 @@ export class EffectsPipeline {
       }
 
       if (feedbackState) {
-        entries.push({ binding: 3, resource: feedbackState.view });
+        entries.push({ binding: 3, resource: feedbackState.committedView });
       }
 
       if (definition.glyphAtlas) {
@@ -455,8 +549,10 @@ export class EffectsPipeline {
           width: outputWidth,
           height: outputHeight,
           timelineTimeSeconds,
+          frameRate: clock.frameRate,
+          scopeId: clock.scopeId,
         });
-        entries.push({ binding: 5, resource: this.byteTextures.getView(effect.id, upload) });
+        entries.push({ binding: 5, resource: this.byteTextures.getView(JSON.stringify([clock.scopeId, effect.id]), upload) });
       }
 
       if (definition.landmarkPoints) {
@@ -480,14 +576,8 @@ export class EffectsPipeline {
       effectPass.end();
 
       if (feedbackState) {
-        const outputTexture = this.getOutputTexture(effectOutput, pingView, pongView, pingTexture, pongTexture);
-        if (outputTexture) {
-          commandEncoder.copyTextureToTexture(
-            { texture: outputTexture },
-            { texture: feedbackState.texture },
-            { width: outputWidth, height: outputHeight }
-          );
-        }
+        this.copyFeedbackOutput(commandEncoder, feedbackState, effectOutput, pingView, pongView,
+          outputWidth, outputHeight, pingTexture, pongTexture);
       }
 
       // Swap buffers for next effect in chain
@@ -535,7 +625,8 @@ export class EffectsPipeline {
   destroy(): void {
     this.denseTerrain?.destroy();this.denseTerrain=undefined;
     for (const state of this.feedbackStates.values()) {
-      state.texture.destroy();
+      state.committedTexture.destroy();
+      state.currentTexture.destroy();
     }
     this.feedbackStates.clear();
     for (const buffer of this.landmarkBuffers.values()) buffer.destroy();

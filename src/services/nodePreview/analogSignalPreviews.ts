@@ -31,7 +31,6 @@ export function analogSignalNodePreview(request: PreviewRequest, effect: AnalogE
     drawing: { kind: 'text', lines: ['864×313 RGBA16F composite signal', 'Open a decoded image output to inspect pixels.'] } };
   if (signal === 'receiver-lines') return { ...base, status: 'missing', label: 'Receiver analysis is metadata',
     drawing: { kind: 'text', lines: ['313 line-state records', 'No image texture is produced by this stage.'] } };
-  if (signal !== 'image') return;
   const stage = analogSignalPreviewStage({ effectId: effect.id, nodeId: binding.nodeId, portId: request.port.id, direction: request.port.direction });
   return nodePreviewTextureTap.request(stage, request).then(frame => frame.status === 'live'
     ? { ...frame, label: analogSignalPreviewLabel(binding.operator, request.port!.direction) } : frame);

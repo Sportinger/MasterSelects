@@ -48,7 +48,9 @@ export function compileImageOperatorPassPlan(graph: EffectOperatorGraph, params:
     const collectSampleBoundaries = (id: string) => {
       if (seen.has(id)) return; seen.add(id);
       if (nodes.get(id)?.operator === 'image.materialize') return;
-      if (nodes.get(id)?.operator === 'image.sample') { const boundary = incoming.get(`${id}:image`); if (boundary) boundaries.push(boundary); return; }
+      if (nodes.get(id)?.operator === 'image.sample' || nodes.get(id)?.operator === 'image.load-pixel-clamped') {
+        const boundary = incoming.get(`${id}:image`); if (boundary) boundaries.push(boundary); return;
+      }
       for (const item of graph.edges) if (item.to === id) collectSampleBoundaries(item.from);
     };
     if (sample) collectSampleBoundaries(sample.from);
@@ -88,8 +90,15 @@ export function compileImageOperatorPassPlan(graph: EffectOperatorGraph, params:
     inputResources: programs.get(cut.resourceId)!.resourceInputs ?? [], outputResource: cut.resourceId }));
   passes.push({ id: 'image-pass:final', program: finalProgram, inputResources: finalProgram.resourceInputs ?? [] });
   const resources = ordered.map(cut => ({ id: cut.resourceId, producerPassId: cut.passId, format: 'rgba16float' as const }));
+  const externalResources = passes.flatMap(pass => pass.program.externalResources ?? [])
+    .filter((resource, index, all) => all.findIndex(candidate => candidate.id === resource.id) === index);
+  const fieldResources = passes.flatMap(pass => pass.program.fieldResources ?? [])
+    .filter((resource, index, all) => all.findIndex(candidate => candidate.resourceId === resource.resourceId) === index);
+  const frameHistoryResource = passes.find(pass => pass.program.frameHistoryResource)?.program.frameHistoryResource;
   const previewResourceId = preview?.direction === 'output' && preview.portId === 'image'
     ? cuts.find(cut => cut.nodeId === preview.nodeId && !cut.edgeId)?.resourceId : undefined;
   return { ...finalProgram, passes, resources, key: `${finalProgram.key}-plan-${passes.map(pass => pass.program.key).join('-')}`,
+    ...(externalResources.length ? { externalResources } : {}), ...(fieldResources.length ? { fieldResources } : {}),
+    ...(frameHistoryResource ? { frameHistoryResource } : {}),
     ...(previewResourceId ? { previewResourceId } : {}) };
 }

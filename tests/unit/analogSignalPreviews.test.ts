@@ -3,7 +3,8 @@ import { analogSignalNodePreview, analogSignalPreviewProducerNode, captureAnalog
 import { analogSignalPreviewStage, parseAnalogSignalPreviewStage } from '../../src/services/nodePreview/analogSignalPreviewStages';
 import type { PreviewRequest } from '../../src/services/nodePreview/previewTypes';
 import { nodePreviewTextureTap } from '../../src/services/nodePreview/NodePreviewTextureTap';
-import { createDefaultAnalogSignalGraph } from '../../src/services/operators/analogSignalGraph';
+import { createDefaultAnalogSignalGraph, compileAnalogSignalGraph } from '../../src/services/operators/analogSignalGraph';
+import { createLegacyAnalogSignalGraph } from '../helpers/legacyAnalogSignalGraph';
 
 describe('Analog Signal node preview demand contract', () => {
   it('round-trips encoded stage identities without retaining runtime resources', () => {
@@ -36,7 +37,7 @@ describe('Analog Signal node preview demand contract', () => {
   });
 
   it('resolves the canonical clip output to the produced resolve texture, including bypass to source', async () => {
-    const graph = createDefaultAnalogSignalGraph();
+    const graph = createLegacyAnalogSignalGraph();
     const target = { effectId: 'analog', nodeId: 'output', direction: 'output' as const, portId: 'image' };
     expect(analogSignalPreviewProducerNode(graph, target)).toBe('resolve');
     graph.nodes.find(node => node.id === 'resolve')!.bypassed = true;
@@ -60,5 +61,13 @@ describe('Analog Signal node preview demand contract', () => {
     await expect(analogSignalNodePreview(request, { id: 'analog', type: 'analog-signal-lab', params: {}, operatorGraph: graph }))
       .resolves.toMatchObject({ status: 'live', label: 'Final Analog Signal output' });
     expect(requestTap).toHaveBeenCalledWith(stage, request); requestTap.mockRestore();
+  });
+
+  it('maps the granular default output to its single executable resolve stage', () => {
+    const graph = createDefaultAnalogSignalGraph(), plan = compileAnalogSignalGraph(graph);
+    const target = { effectId: 'analog', nodeId: 'output', direction: 'output' as const, portId: 'image' };
+    const resolve = plan.stages.at(-1)!;
+    expect(resolve.imageProgram).toBeDefined();
+    expect(analogSignalPreviewProducerNode(graph, target)).toBe(resolve.nodeId);
   });
 });

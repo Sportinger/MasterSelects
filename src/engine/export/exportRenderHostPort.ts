@@ -655,6 +655,7 @@ class WorkerFirstExportRenderHostPort implements ExportRenderHostPort {
         intent: 'export',
         surface: 'export',
         nowMs,
+        ...(frameContext.frameHistory ? { frameHistory: frameContext.frameHistory } : {}),
         resolveVideoSource: resolveExportVideoSource,
       });
       const stack = await projectWorkerGpuFrameStack(request);
@@ -732,7 +733,11 @@ class WorkerFirstExportRenderHostPort implements ExportRenderHostPort {
       this.currentTime ?? 0,
       packet.frame,
       packet.transfer,
-      { readback: true },
+      {
+        readback: true,
+        compositionId: frameContext.compositionId,
+        ...(frameContext.frameHistory ? { frameHistory: frameContext.frameHistory } : {}),
+      },
     );
     this.renderedFrameCount += 1;
     if (output.readback?.pixels) {
