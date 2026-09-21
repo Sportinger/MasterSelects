@@ -11,6 +11,9 @@ import { ResolveInspectorSection, ResolveInspectorRow } from '../../properties/r
 import { InspectorSelect } from '../../../inspector/InspectorSelect';
 import { GraphPortConnections } from './GraphPortConnections';
 import { operatorConnectionGraph } from '../../../../services/operators/operatorConnectionGraph';
+import { addableEffectOperators } from '../../../../services/operators/effectGraphOwner';
+import { findClipOperatorEffect } from '../../../../services/operators/clipOperatorGraphOwner';
+import { resolveAdaptiveGraphConnection } from '../../../../services/nodeGraph/adaptiveGraphConnections';
 
 export function OperatorConnections({ graph, node, clipId, effectId, safely }: {
   graph: EffectOperatorGraph; node: BoundOperatorNode; clipId: string; effectId: string; safely: (fn: () => void) => void;
@@ -21,6 +24,8 @@ export function OperatorConnections({ graph, node, clipId, effectId, safely }: {
     p.metadata?.sourceArtifact?.kind !== 'scene-depth' || p.metadata.sourceArtifact.effectId === effectId) : [];
   const inputs = getEffectOperator(node.operator)!.inputs.filter(p => !p.repeated);
   const actions = createEffectGraphActions(clipId, effectId);
+  const supported = addableEffectOperators(findClipOperatorEffect(clip, effectId)?.type ?? '');
+  const connectionGraph = operatorConnectionGraph(graph, supported);
   if (graph.domain === 'voxel') return <GraphPortConnections graph={operatorConnectionGraph(graph)} nodeId={node.id}
     labelForNode={id => { const source = graph.nodes.find(value => value.id === id); return `${getEffectOperator(source?.operator ?? '')?.label ?? id} (${id})`; }}
     onConnect={connection => safely(() => actions.connectPorts(connection))} onDisconnect={id => safely(() => actions.disconnectEdge(id))} />;
@@ -31,7 +36,8 @@ export function OperatorConnections({ graph, node, clipId, effectId, safely }: {
       const connectedArtifact = sourceArtifactKind(graph.nodes.find(n => n.id === edge?.from)?.operator ?? '');
       const value = connectedArtifact ? `artifact/${sourceArtifactPortId(connectedArtifact, effectId)}` : edge ? `${edge.from}/${edge.output}` : '';
       const sources = graph.nodes.filter(candidate => !sourceArtifactKind(candidate.operator)).flatMap(candidate => getEffectOperator(candidate.operator)!.outputs
-        .filter(p => candidate.id !== node.id && operatorPortsCompatible(p, port))
+        .filter(p => candidate.id !== node.id && (edge?.from === candidate.id && edge.output === p.id || resolveAdaptiveGraphConnection(connectionGraph,
+          { fromNodeId: candidate.id, fromPortId: p.id, toNodeId: node.id, toPortId: port.id }).ok))
         .map(p => ({ value: `${candidate.id}/${p.id}`, label: `${getEffectOperator(candidate.operator)!.label} · ${candidate.id}` })));
       const sourceArtifacts = artifacts.filter(p => operatorPortsCompatible(getEffectOperator(sourceArtifactOperator(p.metadata!.sourceArtifact!.kind))!.outputs[0], port));
       return <ResolveInspectorRow key={port.id} label={port.label}><InspectorSelect ariaLabel={`${getEffectOperator(node.operator)!.label} ${port.label} input`}

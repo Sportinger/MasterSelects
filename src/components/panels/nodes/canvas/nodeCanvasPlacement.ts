@@ -114,7 +114,7 @@ export function moveCanvasPlacement(placement: NodeCanvasPlacement, moves: Array
   return next;
 }
 
-/** Explicit Arrange releases interior anchors only for the flow-layout pilot. */
+/** Explicit Arrange releases manual anchors inside dynamically arranged groups. */
 export function arrangeFlowPlacement(graph: NodeGraph, placement: NodeCanvasPlacement): NodeCanvasPlacement {
   const next: NodeCanvasPlacement = { ...placement, flowLayoutVersion: undefined, nodes: { ...placement.nodes }, groups: { ...placement.groups },
     pinned: { ...placement.pinned }, displaced: { ...placement.displaced } };

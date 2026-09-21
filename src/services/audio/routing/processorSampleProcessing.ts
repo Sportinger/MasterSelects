@@ -1,3 +1,4 @@
+import { processAudioMathBlock } from '../../../engine/audio/effectRender/audioMathBlock';
 import {
   createAudioEqDynamicRuntimeState,
   createSingleBandAudioEqParams,
@@ -320,6 +321,10 @@ export function attachSampleProcessor(node: AudioRouteProcessorNode): void {
   if (!scriptProcessor) return;
   scriptProcessor.onaudioprocess = (event: AudioProcessingEvent) => {
     const processor = node.sampleProcessor;
+    if (processor?.type === 'math-graph') {
+      processAudioMathBlock(processor.program, event.inputBuffer, event.outputBuffer);
+      return;
+    }
     if (!processor) {
       copyInputToOutput(event.inputBuffer, event.outputBuffer);
       node.gainReductionDb = 0;

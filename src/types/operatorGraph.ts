@@ -1,7 +1,7 @@
 import type { NodePortContract } from './nodePortContract';
 /** Durable operator contracts. Values and artifacts belong to the owner; bindings never copy them. */
 export type OperatorValue = number | boolean | string | [number, number] | [number, number, number] | [number, number, number, number];
-export type OperatorSignal = 'image' | 'uint32-texture' | 'pal-signal' | 'receiver-lines' | 'nearest-seed-field' | 'rgb' | 'alpha' | 'mask' | 'vec2' | 'vec3' | 'vec4' | 'texture' | 'uv' | 'material' | 'geometry' | 'primitive-mesh' | 'landmarks' | 'anchors' | 'depth' | 'surface' | 'force' | 'drag' | 'curves' | 'scene' | 'number' | 'boolean' | 'camera' | 'light' | 'field';
+export type OperatorSignal = 'audio' | 'image' | 'uint32-texture' | 'pal-signal' | 'receiver-lines' | 'nearest-seed-field' | 'rgb' | 'alpha' | 'mask' | 'vec2' | 'vec3' | 'vec4' | 'texture' | 'uv' | 'material' | 'geometry' | 'primitive-mesh' | 'landmarks' | 'anchors' | 'depth' | 'surface' | 'force' | 'drag' | 'curves' | 'scene' | 'number' | 'boolean' | 'camera' | 'light' | 'field';
 export interface OperatorPort { id: string; label: string; type: OperatorSignal; required?: boolean; repeated?: boolean; contract?: Partial<NodePortContract> }
 export interface OperatorParameter {
   id: string; label: string; type: 'number' | 'boolean' | 'vector' | 'select' | 'color'; default: OperatorValue;
@@ -20,6 +20,8 @@ export interface OperatorDefinition {
   state?: 'stateless' | 'frame-history' | 'simulation' | 'baked';
   fusion?: 'inline' | 'pass-boundary' | 'none';
   family?: string; variant?: string;
+  /** Same operation with positional port roles; the owner supplies executable variants. */
+  adaptivePorts?: boolean;
   /** Explicit catalog metadata; absent values remain unknown rather than inferred from labels. */
   consumers?: readonly string[];
   implementation?: 'shared' | 'local' | 'unknown';
@@ -57,7 +59,7 @@ export interface EffectOperatorGraph {
   compositionRules?: 1 | 2;
   /** An editable graph whose execution is paused until its missing wiring is repaired. */
   incomplete?: string;
-  domain?: 'cables' | 'scene' | 'voxel' | 'image' | 'compute-image' | 'analog-signal';
+  domain?: 'cables' | 'scene' | 'voxel' | 'image' | 'compute-image' | 'analog-signal' | 'audio';
   nodes: BoundOperatorNode[]; edges: OperatorEdge[];
   layout: Record<string, { x: number; y: number }>;
   groups?: OperatorGroup[];

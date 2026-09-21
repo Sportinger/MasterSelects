@@ -2,6 +2,7 @@ import type { AudioEffectParamValue } from '../../types/audio';
 
 export type { AudioEffectParamValue };
 export type AudioEffectId =
+  | 'audio-math'
   | 'audio-volume'
   | 'audio-pan'
   | 'audio-normalize'
@@ -455,6 +456,9 @@ const AUDIO_EFFECT_DESCRIPTORS = [
     paramNames: Object.freeze(Object.keys(AUDIO_STEREO_SPLIT_DEFAULTS)),
     params: createParamDescriptors(AUDIO_STEREO_SPLIT_DEFAULTS),
   }),
+  Object.freeze({ id: 'audio-math', name: 'Audio Math Graph', category: 'utility', automation: 'none',
+    latencySamples: 0, tailSeconds: 0, defaultAudible: false, paramNames: Object.freeze(['operatorGraph']),
+    params: createParamDescriptors({ operatorGraph: '' }) }),
 ] as const satisfies readonly AudioEffectDescriptor[];
 
 export const AUDIO_EFFECT_REGISTRY: ReadonlyMap<AudioEffectId, AudioEffectDescriptor> = new Map(

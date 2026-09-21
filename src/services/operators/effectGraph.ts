@@ -7,6 +7,8 @@ import { getEffectOperator } from './operatorRegistry';
 import { directionFromAngles, periodicWindModulation, windForce } from './wind';
 import { effectGraphLimits } from './effectGraphLimits';
 import { expandOperatorCompositions } from './operatorComposition';
+import { resolveAdaptiveGraphConnection } from '../nodeGraph/adaptiveGraphConnections';
+import type { OperatorDefinition } from '../../types/operatorGraph';
 
 export const EFFECT_GRAPH_PARAM = 'operatorGraph';
 export type OperatorParameters = Record<string, unknown>;
@@ -46,6 +48,7 @@ export function validateEffectGraph(graph: EffectOperatorGraph, allowIncomplete 
   }
   if (graphHasCycle(connections.nodes, connections.edges)) errors.push('Cycles are not supported.');
   const outputOperator = graph.domain === 'voxel' ? 'render.voxel'
+    : graph.domain === 'audio' ? 'audio.output'
     : graph.domain === 'scene' ? 'scene.render'
     : graph.domain === 'image' || graph.domain === 'compute-image' || graph.domain === 'analog-signal' ? 'image.output' : 'scene.output';
   if (!allowIncomplete && graph.nodes.filter(n => n.operator === outputOperator).length !== 1) errors.push('The graph needs one clip output.');
@@ -120,14 +123,19 @@ export function evaluateGraphForces(graph: EffectOperatorGraph, simulation: stri
   return { force, damping, replacesCableWind: windNodes.length > 0 };
 }
 
-export function connectEffectGraph(graph: EffectOperatorGraph, edge: OperatorEdge): EffectOperatorGraph {
+export function connectEffectGraph(graph: EffectOperatorGraph, edge: OperatorEdge, supported: readonly OperatorDefinition[] = []): EffectOperatorGraph {
   const input = getEffectOperator(graph.nodes.find(n => n.id === edge.to)?.operator ?? '')?.inputs.find(p => p.id === edge.input);
   const edges = graph.edges.filter(e => e.id !== edge.id && (input?.repeated || e.to !== edge.to || e.input !== edge.input));
   // Existing incompatible edges may remain visible after a variant change, but
   // a new connection must itself satisfy the current typed port contract.
-  const connection = checkGraphConnection(operatorConnectionGraph({ ...graph, edges }), operatorConnectionEdge(edge));
-  if (!connection.ok) throw new Error(`Invalid connection: ${edge.id}.`);
-  const next = { ...graph, edges: [...edges, edge] };
+  const connection = resolveAdaptiveGraphConnection(operatorConnectionGraph({ ...graph, edges }, supported), operatorConnectionEdge(edge));
+  if (!connection.ok) throw new Error(connection.message);
+  const fromProjected = (item: typeof connection.connection & { id: string }): OperatorEdge => ({ id: item.id,
+    from: item.fromNodeId, output: item.fromPortId, to: item.toNodeId, input: item.toPortId });
+  const next = { ...graph, nodes: graph.nodes.map(node => {
+    const operator = connection.variants.get(node.id);
+    return operator ? { ...node, operator, operatorVersion: getEffectOperator(operator)!.version } : node;
+  }), edges: [...connection.graph.edges.map(fromProjected), fromProjected({ ...connection.connection, id: edge.id })] };
   const errors = validateEffectGraph(next, true);
   if (errors.length) throw new Error(errors[0]);
   return next;

@@ -23,6 +23,18 @@ adapters map existing saved definitions to the common ports and endpoints. Share
 validation checks signal semantics, supported formats, single versus repeated
 inputs, recorded dependencies and cycles before a connection is changed.
 
+Math and vector split/combine families can declare adaptive ports. Connecting a
+different signal selects an executable variant for the current owner and, where
+necessary, propagates through connected adaptive nodes. Existing cables and fixed
+boundaries constrain the choice; incompatible edits are rejected atomically. No
+image/audio/geometry conversion is inferred. The Add selector shows one entry per
+adaptive family, while the catalog retains its concrete variants.
+
+**Audio Math Graph** lifts the shared Add, Subtract, Multiply, Divide, Min, Max,
+Clamp, Abs, Sin, Cos, Floor, Fract and Mix operations over audio samples. Constants
+broadcast across the samples in each channel. Sample processing has its own audio
+executor; matching labels do not route image shaders into audio or mesh processing.
+
 [`listNodeCatalog`](../../src/services/operators/operatorCatalog.ts) combines:
 
 | Registry | Owner and scope |
@@ -35,6 +47,7 @@ inputs, recorded dependencies and cycles before a connection is changed.
 | [`listFlockOperators`](../../src/services/flock/operators/flockOperatorRegistry.ts) | Flock's typed compiler and GPU simulation; `sharedOperator` identifies shared implementations |
 | [`EFFECT_REGISTRY`](../../src/effects/index.ts) | Existing image effects and composite effect groups |
 | [`IMAGE_OPERATORS`](../../src/services/operators/imageOperators.ts) | Stateless image-local operations lowered by the fused image DAG compiler |
+| [`AUDIO_OPERATORS`](../../src/services/operators/audioOperators.ts) | Shared math families applied independently to audio samples and channels |
 
 The catalog reports actual supported contexts. A common port name does not imply
 that every domain can execute every operator. Color grading, audio analysis and

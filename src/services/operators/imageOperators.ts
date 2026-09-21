@@ -11,6 +11,7 @@ const imageOperator = (definition: Omit<OperatorDefinition, 'version' | 'invalid
   runtime: 'builtin',
   state: 'stateless',
   fusion: 'inline',
+  adaptivePorts: definition.family?.startsWith('math.') || definition.family === 'vector.split' || definition.family === 'vector.combine',
 });
 
 const vectorOperators = ([2, 3, 4] as const).flatMap(size => {

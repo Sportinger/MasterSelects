@@ -330,9 +330,9 @@ export function NodeInspector({
     const binding = node.binding;
     return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
       <EffectOrderControls clip={clip} effectId={binding.effectId} />
-      <OperatorParameters clip={clip} effectId={binding.effectId} nodeId={binding.nodeId} projectedNode={node} />
+      <OperatorParameters clip={nodeTargetClip ?? clip} effectId={binding.effectId} nodeId={binding.nodeId} projectedNode={node} />
       {['simulation.rope', 'tracking.anchors', 'render.cables'].includes(binding.operator) && <FaceCableControls clipId={clip.id} effectId={binding.effectId} scope={binding.operator === 'tracking.anchors' ? 'anchors' : binding.operator === 'render.cables' ? 'render' : 'simulation'} />}
-      <AddOperatorControl clipId={clip.id} effectId={binding.effectId} onAdded={id => onSelectNode(`${node.id.slice(0, node.id.lastIndexOf('/') + 1)}${id}`)} />
+      <AddOperatorControl clipId={nodeTargetClipId ?? clip.id} effectId={binding.effectId} onAdded={id => onSelectNode(`${node.id.slice(0, node.id.lastIndexOf('/') + 1)}${id}`)} />
     </NodeInspectorShell>;
   }
   if (clip?.flock && node.binding?.kind === 'clip-source' && node.groupId === 'flock') {

@@ -1,4 +1,6 @@
 import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
+import { findClipOperatorEffect } from '../../../../services/operators/clipOperatorGraphOwner';
+import { operatorAddMenu } from '../../../../services/operators/operatorAddMenu';
 import { interpolateKeyframes } from '../../../../utils/keyframeInterpolation';
 import { useState } from 'react';
 import type { TimelineClip } from '../../../../types/timeline';
@@ -32,7 +34,7 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
   const time = useTimelineStore(s => s.playheadPosition - clip.startTime);
   const keys = useTimelineStore(s => s.clipKeyframes.get(clip.id) ?? EMPTY_KEYS);
   const isRecording = useTimelineStore(s => s.isRecording);
-  const effect = clip.effects.find(e => e.id === effectId);
+  const effect = findClipOperatorEffect(clip, effectId);
   if (!effect) return null;
   let graph;
   try { graph = effectOperatorGraph(effect); } catch (error) { return <p role="alert">{String(error)}</p>; }
@@ -42,7 +44,7 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
   const parameterSchema = isImageGraphEffectType(effect.type) || effect.type === 'analog-signal-lab' ? getEffect(effect.type)?.params : undefined;
   const familyOptions = operatorFamilyOptions(operator).filter(option => option.value === operator.id || addableEffectOperators(effect.type).some(operator => operator.id === option.value));
   const mathNode = { id: node.id, operatorId: node.operator, label: operator.label, kind: 'effect' as const, runtime: 'builtin' as const,
-    inputs: [], outputs: [], layout: { x: 0, y: 0 }, binding: { kind: 'effect-operator' as const, effectId, nodeId: node.id, operator: node.operator } };
+    inputs: [], outputs: [], params: { operatorOwnerType: effect.type }, layout: { x: 0, y: 0 }, binding: { kind: 'effect-operator' as const, effectId, nodeId: node.id, operator: node.operator } };
   const mathOptions = mathModeOptions(mathNode);
   const safely = (action: () => void) => { try { action(); setMessage(''); } catch (error) { setMessage(String(error)); } };
   const set = (key: string, value: OperatorValue) => safely(() => {
@@ -115,7 +117,7 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
         }
         return numberRow(binding, control?.label ?? spec.label, Number(value), Number(control?.default ?? spec.default), control?.min ?? spec.min, control?.max ?? spec.max, control?.step ?? spec.step, control?.animatable ?? spec.animatable);
       })}
-      {projectedNode && node.operator.startsWith('math.') && node.operator !== 'math.constant' &&
+      {effect.type !== 'audio-math' && projectedNode && node.operator.startsWith('math.') && node.operator !== 'math.constant' &&
         <OperatorLiveValue clipId={clip.id} node={projectedNode} portId="value" label="Result" direction="output" />}
       {!operator.parameters.length && operator.id !== 'glyph.atlas' && <p className="face-cable-hint">{operator.description}</p>}
     </ResolveInspectorSection>
@@ -141,8 +143,8 @@ export function AdditionalOperatorControls({ clipId, effectId }: { clipId: strin
 
 export function AddOperatorControl({ clipId, effectId, onAdded }: { clipId: string; effectId: string; onAdded?: (id: string) => void }) {
   const [message, setMessage] = useState('');
-  const type = useTimelineStore(state => state.clips.find(clip => clip.id === clipId)?.effects.find(effect => effect.id === effectId)?.type ?? '');
-  return <><InspectorSelect ariaLabel="Add reusable node" value="" options={[{ value: '', label: 'Add node…' }, ...addableEffectOperators(type).map(o => ({ value: o.id, label: o.label }))]}
+  const type = useTimelineStore(state => findClipOperatorEffect(state.clips.find(clip => clip.id === clipId), effectId)?.type ?? '');
+  return <><InspectorSelect ariaLabel="Add reusable node" value="" options={[{ value: '', label: 'Add node…' }, ...operatorAddMenu(addableEffectOperators(type)).map(o => ({ value: o.id, label: o.label }))]}
     onChange={value => { if (!value) return; try { const id = createEffectGraphActions(clipId, effectId).addNode(value); setMessage(''); onAdded?.(id); } catch (error) { setMessage(String(error)); } }} />
     {message && <p role="alert">{message}</p>}</>;
 }

@@ -8,18 +8,27 @@ import { renderHostPort } from '../render/renderHostPort';
 import { effectOperatorGraph, validateEffectOwnerGraph, addableEffectOperators, canRemoveEffectOperator, isImageGraphEffectType } from './effectGraphOwner';
 import { EFFECT_GRAPH_PARAM, connectEffectGraph, operatorEnabled } from './effectGraph';
 import { prepareEditableOperatorGraph } from './editableOperatorGraph';
-import { EFFECT_OPERATORS, getEffectOperator } from './operatorRegistry';
+import { getEffectOperator } from './operatorRegistry';
 import type { AnimatableProperty } from '../../types/animationProperties';
 import { getEffect } from '../../effects';
 import { packOperatorCompositions } from './operatorComposition';
+import { findClipOperatorEffect, resolveClipOperatorOwner } from './clipOperatorGraphOwner';
+import type { AudioEffectParams } from '../../types/audio';
+
+function readOwner(clipId: string, effectId: string) {
+  const state = readTimelineRuntimeState(useTimelineStore);
+  const clip = resolveClipOperatorOwner(state.clips.find(item => item.id === clipId), effectId, state.clips);
+  return { state, clip, effect: findClipOperatorEffect(clip, effectId) };
+}
 
 /** One logical input may feed several internal ports; editing its cable is one undoable transaction. */
 export function editCompositionInput(clipId: string, effectId: string, targets: Array<{ nodeId: string; portId: string }>,
   source?: { nodeId: string; portId: string }) {
+  const effectType = readOwner(clipId, effectId).effect?.type;
   editEffectGraph(clipId, effectId, source ? 'Connect composed node' : 'Disconnect composed node', graph => {
     for (const target of targets) {
-      if (source) graph.edges = connectEffectGraph(graph, { id: `${source.nodeId}-${source.portId}-${target.nodeId}-${target.portId}`,
-        from: source.nodeId, output: source.portId, to: target.nodeId, input: target.portId }).edges;
+      if (source) Object.assign(graph, connectEffectGraph(graph, { id: `${source.nodeId}-${source.portId}-${target.nodeId}-${target.portId}`,
+        from: source.nodeId, output: source.portId, to: target.nodeId, input: target.portId }, effectType ? addableEffectOperators(effectType) : []));
       else graph.edges = graph.edges.filter(edge => edge.to !== target.nodeId || edge.input !== target.portId);
     }
   });
@@ -28,9 +37,9 @@ export function editCompositionInput(clipId: string, effectId: string, targets: 
 /** Shared by the inspector and inline node values; animation keeps its owner. */
 export function setAnimatedOperatorParameter(clipId: string, effectId: string, nodeId: string, parameter: string, value: OperatorValue) {
   assertExclusiveTimelineMutationAllowed();
-  const state = readTimelineRuntimeState(useTimelineStore), clip = state.clips.find(item => item.id === clipId);
-  const effect = clip?.effects.find(item => item.id === effectId);
+  const { state, clip, effect } = readOwner(clipId, effectId);
   if (!effect || state.isExporting || state.tracks.find(track => track.id === clip!.trackId)?.locked) throw new Error('The clip is unavailable, locked or exporting.');
+  clipId = clip!.id;
   const node = effectOperatorGraph(effect).nodes.find(item => item.id === nodeId);
   const binding = node?.bindings[parameter];
   if (typeof binding !== 'string') throw new Error('Parameter unavailable.');
@@ -44,23 +53,25 @@ type Params = Record<string, unknown>;
 export function editEffectGraph(clipId: string, effectId: string, label: string,
   edit: (graph: EffectOperatorGraph, params: Params) => void) {
   assertExclusiveTimelineMutationAllowed();
-  const state = readTimelineRuntimeState(useTimelineStore), clip = state.clips.find(c => c.id === clipId);
+  const { state, clip, effect } = readOwner(clipId, effectId);
   if (!clip || state.isExporting || state.tracks.find(t => t.id === clip.trackId)?.locked) throw new Error('The clip is unavailable, locked or exporting.');
-  const effect = clip.effects.find(e => e.id === effectId);
   if (!effect) throw new Error('Effect unavailable.');
+  clipId = clip.id;
   const graph = structuredClone(effectOperatorGraph(effect)), params = { ...effect.params };
   delete params[EFFECT_GRAPH_PARAM];
   edit(graph, params);
   prepareEditableOperatorGraph(graph, () => validateEffectOwnerGraph(effect, graph, params));
   const batch = startBatch(label);
   try {
-    state.updateClip(clipId, { effects: clip.effects.map(e => e.id === effectId ? { ...e, params, operatorGraph: packOperatorCompositions(graph) } : e) });
+    if (effect.type === 'audio-math') state.updateClipAudioEffectInstance(clipId, effectId,
+      { ...params, operatorGraph: JSON.stringify(graph) } as AudioEffectParams);
+    else state.updateClip(clipId, { effects: clip.effects.map(e => e.id === effectId ? { ...e, params, operatorGraph: packOperatorCompositions(graph) } : e) });
     state.invalidateCache(); renderHostPort.requestRender();
   } finally { if (batch.opened) endBatch(); }
 }
 
 export function setOperatorParameter(clipId: string, effectId: string, nodeId: string, name: string, value: OperatorValue) {
-  const effectType = readTimelineRuntimeState(useTimelineStore).clips.find(clip => clip.id === clipId)?.effects.find(effect => effect.id === effectId)?.type;
+  const effectType = readOwner(clipId, effectId).effect?.type;
   editEffectGraph(clipId, effectId, 'Edit node parameter', (graph, params) => {
     const node = graph.nodes.find(n => n.id === nodeId);
     const spec = node && getEffectOperator(node.operator)?.parameters.find(p => p.id === name);
@@ -108,32 +119,20 @@ function applyOperatorVariant(graph: EffectOperatorGraph, nodeId: string, operat
 
 /** Persists an explicit registry variant while retaining stable ports and visibly invalid wiring. */
 export function setOperatorVariant(clipId: string, effectId: string, nodeId: string, operatorId: string) {
-  const effect = readTimelineRuntimeState(useTimelineStore).clips.find(clip => clip.id === clipId)?.effects.find(effect => effect.id === effectId);
+  const { effect } = readOwner(clipId, effectId);
   if (!effect || !addableEffectOperators(effect.type).some(operator => operator.id === operatorId)) throw new Error('Operator variant is not supported in this graph.');
   editEffectGraph(clipId, effectId, 'Change node variant', graph => applyOperatorVariant(graph, nodeId, operatorId));
 }
 
 export function createEffectGraphActions(clipId: string, effectId: string) {
   const ownerType = (domain: EffectOperatorGraph['domain']) => domain === 'voxel' ? 'voxel-relief'
-    : domain === 'image' ? 'invert' : domain === 'analog-signal' ? 'analog-signal-lab' : 'face-cables';
+    : domain === 'audio' ? 'audio-math' : domain === 'image' ? 'invert' : domain === 'analog-signal' ? 'analog-signal-lab' : 'face-cables';
   return {
     moveNode: (nodeId: string, layout: { x: number; y: number }) => editEffectGraph(clipId, effectId, 'Move node', graph => { graph.layout[nodeId] = layout; }),
     connectPorts: (c: NodeGraphConnectionRequest) => editEffectGraph(clipId, effectId, 'Connect nodes', graph => {
-      const from = graph.nodes.find(node => node.id === c.fromNodeId), to = graph.nodes.find(node => node.id === c.toNodeId);
-      const fromSpec = from && getEffectOperator(from.operator), toSpec = to && getEffectOperator(to.operator);
-      const sourceType = fromSpec?.outputs.find(port => port.id === c.fromPortId)?.type;
-      const targetType = toSpec?.inputs.find(port => port.id === c.toPortId)?.type;
-      if (to && toSpec?.family === 'vector.split' && sourceType) {
-        const variants = EFFECT_OPERATORS.filter(spec => spec.family === toSpec.family
-          && spec.inputs.find(port => port.id === c.toPortId)?.type === sourceType);
-        if (variants.length === 1) applyOperatorVariant(graph, to.id, variants[0].id);
-      }
-      if (from && fromSpec?.family === 'vector.combine' && targetType) {
-        const variants = EFFECT_OPERATORS.filter(spec => spec.family === fromSpec.family
-          && spec.outputs.find(port => port.id === c.fromPortId)?.type === targetType);
-        if (variants.length === 1) applyOperatorVariant(graph, from.id, variants[0].id);
-      }
-      graph.edges = connectEffectGraph(graph, { id: `${c.fromNodeId}-${c.fromPortId}-${c.toNodeId}-${c.toPortId}`, from: c.fromNodeId, output: c.fromPortId, to: c.toNodeId, input: c.toPortId }).edges;
+      const type = readOwner(clipId, effectId).effect?.type;
+      Object.assign(graph, connectEffectGraph(graph, { id: `${c.fromNodeId}-${c.fromPortId}-${c.toNodeId}-${c.toPortId}`,
+        from: c.fromNodeId, output: c.fromPortId, to: c.toNodeId, input: c.toPortId }, addableEffectOperators(type ?? ownerType(graph.domain))));
     }),
     disconnectEdge: (id: string) => editEffectGraph(clipId, effectId, 'Disconnect nodes', graph => { graph.edges = graph.edges.filter(e => e.id !== id); }),
     toggleBypass: (id: string) => editEffectGraph(clipId, effectId, 'Bypass node', (graph, params) => {
@@ -156,7 +155,7 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
         const node = { id, operator: operator.id, operatorVersion: operator.version,
           bindings: {} as Record<string, string | [string, string, string]>, constants: {} as Record<string, OperatorValue> };
         for (const p of operator.parameters) {
-          if (graph.domain === 'image') { node.constants[p.id] = p.default; continue; }
+          if (graph.domain === 'image' || graph.domain === 'audio') { node.constants[p.id] = p.default; continue; }
           const key = `${id}_${p.id}`;
           if (Array.isArray(p.default)) {
             node.bindings[p.id] = ['x', 'y', 'z'].map(axis => `${key}_${axis}`) as [string, string, string];
@@ -167,6 +166,8 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
         if (template) for (const edge of graph.edges.filter(e => e.to === template.id)) graph.edges.push({ ...edge, id: `${edge.from}-${id}-${edge.input}`, to: id });
         const group = template && graph.groups?.find(g => g.nodeIds.includes(template.id));
         graph.nodes.push(node); graph.layout[id] = position ?? { x: 750, y: 650 + (graph.nodes.length - 13) * 160 };
+        if (graph.domain === 'audio' && !position) graph.layout[id] = { x: 290,
+          y: Math.max(0, ...Object.entries(graph.layout).filter(([key]) => key !== id).map(([, value]) => value.y)) + 180 };
         (group ?? graph.groups?.find(g => g.id === 'simulation'))?.nodeIds.push(id);
         const simulation = graph.nodes.find(n => n.operator === 'simulation.rope')!;
         const output = operator.outputs[0];

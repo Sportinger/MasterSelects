@@ -17,11 +17,13 @@ import {
   type RenderableAudioEffectInstance,
 } from './audioEffectRenderContracts';
 import { applyExpander, applyNoiseGate, applyNoiseReduction, applyPeakLimiter, applySpectralGate } from './sampleDynamicsProcessors';
+import { audioMathProgram, processAudioMathChannels } from '../../../services/operators/audioOperatorGraph';
+import { createBufferLike } from '../audioBufferFactory';
 import { applyDeClick, applyDelay, applyReverb, applySaturation } from './sampleTimeToneProcessors';
 import { applyChannelSwap, applyMonoSum, applyNormalize, applyPolarityInvert, applyStereoSplit } from './sampleUtilityProcessors';
 
 export function isPureSampleEffect(effectId: string): boolean {
-  return effectId === AUDIO_LIMITER_EFFECT_ID ||
+  return effectId === 'audio-math' || effectId === AUDIO_LIMITER_EFFECT_ID ||
     effectId === AUDIO_NOISE_GATE_EFFECT_ID ||
     effectId === AUDIO_EXPANDER_EFFECT_ID ||
     effectId === AUDIO_DELAY_EFFECT_ID ||
@@ -43,6 +45,13 @@ export function renderPureSampleEffect(
   keyframes: EffectRenderKeyframe[],
 ): AudioBuffer {
   switch (effect.descriptorId) {
+    case 'audio-math': {
+      const result = createBufferLike(buffer);
+      processAudioMathChannels(audioMathProgram(effect.params?.operatorGraph),
+        Array.from({ length: buffer.numberOfChannels }, (_, channel) => buffer.getChannelData(channel)),
+        Array.from({ length: result.numberOfChannels }, (_, channel) => result.getChannelData(channel)));
+      return result;
+    }
     case AUDIO_LIMITER_EFFECT_ID:
       return applyPeakLimiter(buffer, effect, keyframes);
     case AUDIO_NOISE_GATE_EFFECT_ID:

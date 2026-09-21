@@ -130,6 +130,32 @@ describe('manual canvas placement', () => {
 
 
 describe('effect addition layout', () => {
+  it.each(['invert', 'wave', 'voxel-relief', 'analog-signal-lab'])('moves the output out and back for %s with the common fold rules', type => {
+    const beforeClips = useTimelineStore.getState().clips;
+    const clip = createMockClip({ id: 'universal-fold', effects: [] });
+    try {
+      useTimelineStore.setState({ clips: [clip] });
+      const effectId = useTimelineStore.getState().addClipEffect(clip.id, type)!;
+      const current = useTimelineStore.getState().clips[0];
+      const project = (collapsed: boolean) => {
+        const value = { ...current, nodeGraph: { ...current.nodeGraph, version: 1 as const, nodes: current.nodeGraph?.nodes ?? [],
+          groups: { ...current.nodeGraph?.groups, [`effect:${effectId}`]: { collapsed } } } };
+        return buildUnifiedClipGraph(buildClipNodeGraphDocument(value), value);
+      };
+      const compact = project(true), expanded = project(false);
+      expect(expanded.groups!.find(group => group.effectId === effectId)?.layoutMode).toBe('flow');
+      const closed = reconcileCanvasPlacement(compact), opened = reconcileCanvasPlacement(expanded, closed);
+      const nodes = expanded.nodes.map(node => ({ ...node, layout: opened.nodes[node.id] }));
+      const bounds = nodeGroupBounds(expanded, nodes).get(`effect:${effectId}`)!;
+      expect(opened.nodes.output.x).toBeGreaterThan(bounds.right);
+      expect(opened.nodes.output.x).toBeGreaterThan(closed.nodes.output.x);
+      const closedAgain = reconcileCanvasPlacement(compact, opened);
+      expect(closedAgain.nodes.output.x).toBeCloseTo(closed.nodes.output.x);
+      const reopened = reconcileCanvasPlacement(expanded, closedAgain);
+      expect(reopened.nodes.output).toEqual(opened.nodes.output);
+    } finally { useTimelineStore.setState({ clips: beforeClips }); }
+  });
+
   it.each(['brightness', 'kaleidoscope'])('reflows the existing output when the effect panel adds %s', type => {
     const clip = createMockClip({ id: 'layout-add', effects: [] });
     const project = () => {

@@ -3,7 +3,8 @@ export { projectOperatorPort } from '../operators/operatorPortProjection';
 import type { Effect } from '../../types/effects';
 import type { TimelineClip } from '../../types/timeline';
 import type { NodeGraph } from '../../types/nodeGraph';
-import { effectOperatorGraph, isImageGraphEffectType } from '../operators/effectGraphOwner';
+import { addableEffectOperators, effectOperatorGraph, isImageGraphEffectType } from '../operators/effectGraphOwner';
+import { operatorAdaptiveVariants } from '../operators/operatorAdaptiveVariants';
 import { prepareImageEffect } from '../operators/imageEffectRuntimePlan';
 import { getEffectOperator } from '../operators/operatorRegistry';
 import { operatorEnabled } from '../operators/effectGraph';
@@ -21,6 +22,7 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
       inputs: [], outputs: [], layout: { x: 0, y: 0 },
     }], edges: [] };
   }
+  const supported = addableEffectOperators(effect.type);
   return {
     id: effectGraphId(clip.id, effect.id), owner: { kind: 'clip', id: clip.id, name: clip.name }, domain: 'clip', issue: graph.incomplete,
     nodes: graph.nodes.map(node => {
@@ -33,9 +35,10 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
         return channel ? { ...projected, label: channel } : projected;
       };
       return { id: node.id, operatorId: operator.id, label: operator.label, description: operator.description,
-        kind: ['media.source', 'image.frame'].includes(operator.id) ? 'source' : ['scene.output', 'render.voxel', 'image.output'].includes(operator.id) ? 'output' : 'effect',
+        connectionVariants: operatorAdaptiveVariants(operator, supported),
+        kind: ['media.source', 'image.frame', 'audio.input'].includes(operator.id) ? 'source' : ['scene.output', 'render.voxel', 'image.output', 'audio.output'].includes(operator.id) ? 'output' : 'effect',
         runtime: operator.runtime, inputs: operator.inputs.map(p => projectPort(p, 'input')), outputs: operator.outputs.map(p => projectPort(p, 'output')),
-        params: { enabled: operatorEnabled(node, effect.params), bypassable: graph.domain === 'voxel' || !!operator.bypass,
+        params: { targetClipId: clip.id, operatorOwnerType: effect.type, enabled: operatorEnabled(node, effect.params), bypassable: graph.domain === 'voxel' || !!operator.bypass,
           ...(operator.id.startsWith('values.') ? { valueLabel: (typeof node.bindings.value === 'string' ? node.bindings.value : node.id)
             .replace(/([a-z])([A-Z])/g, '$1 $2').replace(/-/g, ' ') } : {}),
           mathSymbol: mathNodeSymbol(operator.id) ?? '',

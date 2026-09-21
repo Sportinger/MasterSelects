@@ -1,20 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
-import type { NodeGraphConnectionRequest, NodeGraphNode, NodeGraphPort } from '../../../../types/nodeGraph';
+import type { NodeGraphConnectionRequest, NodeGraphEdge, NodeGraphNode, NodeGraphPort } from '../../../../types/nodeGraph';
 import { canConnectPortReferences, createPortReference, getPortCenter, type ConnectionDraft, type NodeGraphPoint } from './canvasGeometry';
 import type { ConnectionPlug } from './connectionPlugs';
-import { getEffectOperator } from '../../../../services/operators/operatorRegistry';
+import { resolveAdaptiveGraphConnection } from '../../../../services/nodeGraph/adaptiveGraphConnections';
 
 interface Options {
   graphId: string;
   canvasRef: RefObject<HTMLDivElement | null>;
   nodesById: Map<string, NodeGraphNode>;
+  edges: readonly NodeGraphEdge[];
   getGraphPoint: (x: number, y: number) => NodeGraphPoint;
   onConnectPorts?: (connection: NodeGraphConnectionRequest) => void;
   onReconnectPorts?: (edgeId: string, connection: NodeGraphConnectionRequest) => void;
   onDisconnectEdge?: (edgeId: string) => void;
 }
 
-export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, getGraphPoint, onConnectPorts, onReconnectPorts, onDisconnectEdge }: Options) {
+export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, edges, getGraphPoint, onConnectPorts, onReconnectPorts, onDisconnectEdge }: Options) {
   const [connectionDraft, setDraft] = useState<ConnectionDraft | null>(null);
   const currentDraft = useRef(connectionDraft);
   const update = useCallback((draft: ConnectionDraft | null) => { currentDraft.current = draft; setDraft(draft); }, []);
@@ -66,12 +67,9 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, getGraphP
     if (canConnectPortReferences(a, b)) return true;
     if (a.readOnly || b.readOnly || a.nodeId === b.nodeId || a.direction === b.direction) return false;
     const output = a.direction === 'output' ? a : b, input = a.direction === 'input' ? a : b;
-    const outputNode = nodesById.get(output.nodeId), inputNode = nodesById.get(input.nodeId);
-    const outputOperator = outputNode?.operatorId ? getEffectOperator(outputNode.operatorId) : undefined;
-    const inputOperator = inputNode?.operatorId ? getEffectOperator(inputNode.operatorId) : undefined;
-    const vector = (key: string) => ['operator:vec2', 'operator:vec3', 'operator:vec4'].includes(key);
-    return (input.portId === 'value' && inputOperator?.family === 'vector.split' && vector(output.compatibilityKey))
-      || (output.portId === 'value' && outputOperator?.family === 'vector.combine' && vector(input.compatibilityKey));
+    return resolveAdaptiveGraphConnection({ nodes: [...nodesById.values()], edges }, {
+      fromNodeId: output.nodeId, fromPortId: output.portId, toNodeId: input.nodeId, toPortId: input.portId,
+    }, currentDraft.current?.reconnectEdgeId).ok;
   };
   const moveConnectionDrag = (event: ReactPointerEvent): boolean => {
     const draft = currentDraft.current;

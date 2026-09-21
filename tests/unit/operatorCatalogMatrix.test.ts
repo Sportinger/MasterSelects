@@ -7,11 +7,14 @@ describe('registry-derived operator matrix', () => {
   it('derives execution and family facts from shared operator definitions', () => {
     const catalog = listNodeCatalog();
     const subtract = catalog.find(entry => entry.id === 'math.subtract.rgb');
-    expect(subtract).toMatchObject({ family: 'math.subtract', variant: 'math.subtract.rgb', backend: 'builtin', fusion: 'inline', state: 'stateless', invalidation: 'appearance' });
+    expect(subtract).toMatchObject({ family: 'math.subtract', variant: 'rgb', backend: 'builtin', fusion: 'inline', state: 'stateless', invalidation: 'appearance' });
     expect(subtract?.localImplementations).toEqual([]);
     expect(subtract?.implementation).toBe('unknown');
     expect(subtract?.users).toContain('Local image graphs');
     expect(EFFECT_OPERATORS.find(operator => operator.id === subtract?.id)?.fusion).toBe(subtract?.fusion);
+    expect(catalog.find(entry => entry.id === 'math.multiply.audio-scalar')).toMatchObject({
+      family: 'math.multiply', variant: 'audio-scalar', context: 'Audio samples', implementation: 'shared', users: ['audio'],
+    });
   });
 
   it('reports registered effect backends and remaining local implementations without a second inventory', () => {

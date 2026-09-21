@@ -38,6 +38,7 @@ export const SIGNAL_FORMAT_LABELS: Record<string, string> = {
 
 const contract = (typeLabel: string, description: string, ...formats: string[]): NodePortContract => ({ typeLabel, description, formats });
 export const OPERATOR_SIGNAL_CONTRACTS: Record<OperatorSignal, NodePortContract> = {
+  audio: contract('Audio samples', 'One value per audio sample and channel. Scalar inputs broadcast without changing sample rate or channel count.', 'audio-samples'),
   rgb: contract('RGB', 'Source RGB channels preserving the source color encoding.', 'source-rgb'),
   alpha: contract('Alpha', 'Straight alpha coverage in the normalized zero-to-one range.', 'straight-alpha'),
   mask: contract('Mask', 'A normalized single-channel image mask.', 'normalized-mask'),

@@ -11,6 +11,36 @@ live playback sync for timeline editing, and offline audio processing for export
 
 ## Playback Overview
 
+### Audio Math Graph
+
+In a clip's **Audio FX Stack**, add **Audio Math Graph** and choose **Open Nodes**.
+The default graph is Audio Input → Multiply → Audio Output, with a local Value of
+1. Changing it to 0.5 multiplies the actual samples by 0.5; this is sample processing,
+not an audio-analysis value controlling a visual effect.
+
+The inspector's Add node menu offers shared Add, Subtract, Multiply, Divide, Min,
+Max, Clamp, Abs, Sin, Cos, Floor, Fract and Mix families. Compatible connections
+automatically choose scalar/audio variants, including Audio × Number and
+Audio × Audio. Audio branches originate from the clip's one input stream.
+Constants broadcast without merging channels. Video/audio pairs share one canvas,
+while mutations, locking and undo remain attached to the owning audio clip.
+
+Graphs are data-only, saved in the native audio effect's `operatorGraph` parameter.
+They support local values, manual groups, bypass and up to 64 nodes. Incomplete
+wiring pauses processing as pass-through until repaired. Nonfinite output samples
+become silence; finite values outside ±1 are not automatically clipped. Graphs do
+not yet supply sample-accurate parameter automation, feedback/delay, FFT operations,
+additional track inputs or shared compound definitions. Image/geometry signals
+still require an explicit compatible execution boundary.
+
+Playback, scrub and offline/export invoke the same sample kernel. Plans are cached
+after validation; graph parsing and topology traversal do not run per sample. Live
+playback/scrub currently use the existing 1024-frame stereo ScriptProcessor route;
+this is not an AudioWorklet or a claim of arbitrary-channel live routing. Offline
+processing preserves the source sample rate, channel count and length.
+
+### Sources and tracks
+
 - Video imports can create linked audio clips when audio is detected.
 - Audio-only files are added as audio clips on audio tracks.
 - ElevenLabs speech generated from FlashBoard imports as normal project-local audio under `AI Gen / Audio`.

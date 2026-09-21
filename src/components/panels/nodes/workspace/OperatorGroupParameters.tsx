@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useTimelineStore } from '../../../../stores/timeline';
+import { findClipOperatorEffect } from '../../../../services/operators/clipOperatorGraphOwner';
 import type { TimelineClip } from '../../../../types/timeline';
 import type { EffectOperatorGraph } from '../../../../types/operatorGraph';
 import { effectOperatorGraph } from '../../../../services/operators/effectGraphOwner';
@@ -10,7 +12,8 @@ import { InspectorSelect } from '../../../inspector/InspectorSelect';
 import { ResolveInspectorSection, ResolveInspectorRow, ResolveInspectorIconButton } from '../../properties/resolveInspector/ResolveInspectorPrimitives';
 
 export function OperatorGroupParameters({ clip, groupId, effectId }: { clip: TimelineClip; groupId: string; effectId?: string }) {
-  const effect = clip.effects.find(e => e.id === effectId);
+  const clips = useTimelineStore(state => state.clips);
+  const effect = effectId ? findClipOperatorEffect(clip, effectId, clips) : undefined;
   const graph = effect ? effectOperatorGraph(effect) : sceneGraphForClip(clip).graph;
   const id = groupId.split('/').at(-1)!, group = graph.groups?.find(g => g.id === id);
   const [name, setName] = useState(group?.label ?? ''), [message, setMessage] = useState('');

@@ -2,12 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { NodeGraphCanvas } from '../../src/components/panels/nodes/NodeGraphCanvas';
 import { getEffectOperator } from '../../src/services/operators/operatorRegistry';
+import { operatorAdaptiveVariants } from '../../src/services/operators/operatorAdaptiveVariants';
+import { IMAGE_OPERATORS } from '../../src/services/operators/imageOperators';
 import { projectOperatorPort } from '../../src/services/nodeGraph/effectGraphProjection';
 import type { NodeGraph, NodeGraphNode } from '../../src/types/nodeGraph';
 
 function projectedNode(id: string, operatorId: string, x: number): NodeGraphNode {
   const operator = getEffectOperator(operatorId)!;
   return { id, operatorId, label: operator.label, kind: 'effect', runtime: operator.runtime, layout: { x, y: 50 },
+    connectionVariants: operatorAdaptiveVariants(operator, IMAGE_OPERATORS),
     inputs: operator.inputs.map(port => projectOperatorPort(port, 'input')),
     outputs: operator.outputs.map(port => projectOperatorPort(port, 'output')) };
 }

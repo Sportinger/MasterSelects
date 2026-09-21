@@ -6,6 +6,7 @@ import { SOURCE_ARTIFACT_OPERATORS } from './sourceArtifactOperators';
 import { VOXEL_OPERATORS } from './voxelOperators';
 import { SCALAR_FIELD_OPERATORS } from './scalarField';
 import { IMAGE_OPERATORS } from './imageOperators';
+import { AUDIO_OPERATORS } from './audioOperators';
 import { ANALOG_SIGNAL_OPERATORS } from './analogSignalOperators';
 import { VORONOI_OPERATORS } from './voronoiOperators';
 import { IMAGE_COMPOSITIONS } from './operatorCompositionRegistry';
@@ -18,6 +19,7 @@ const stage = (id: string, label: string, inputs: OperatorPort[], outputs: Opera
   ({ id, version: 1, label, description: label, inputs, outputs, parameters, invalidates, runtime: 'builtin' });
 
 export const EFFECT_OPERATORS: readonly OperatorDefinition[] = [
+  ...AUDIO_OPERATORS,
   ...SCENE_OPERATORS,
   ...SURFACE_OPERATORS,
   ...SOURCE_ARTIFACT_OPERATORS,

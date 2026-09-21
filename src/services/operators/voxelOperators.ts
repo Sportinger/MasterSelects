@@ -6,7 +6,8 @@ const port = (id: string, type: OperatorSignal, label: string, formats?: string[
   ({ id, type, label, ...(formats ? { contract: { formats } } : {}) });
 const parameters = (group: string): OperatorParameter[] => Object.entries(VOXEL_RELIEF_PARAMS)
   .filter(([, value]) => (value.group ?? 'quality') === group).map(([id, value]) => ({
-    id, label: value.label, type: value.type === 'boolean' ? 'boolean' : 'number', default: value.default,
+    id, label: value.label, type: value.type === 'select' ? 'select' : value.type === 'boolean' ? 'boolean' : 'number', default: value.default,
+    ...(value.type === 'select' ? { options: value.options } : {}),
     min: value.min, max: value.max, step: value.step, animatable: value.animatable,
   }));
 const op = (id: string, label: string, description: string, inputs: OperatorPort[], outputs: OperatorPort[], params: OperatorParameter[], addable = true): OperatorDefinition =>

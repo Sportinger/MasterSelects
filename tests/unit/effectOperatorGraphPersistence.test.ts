@@ -86,12 +86,12 @@ describe('effect-owned operator graph persistence', () => {
 
   it('provides the legacy-compatible invert default but preserves an edited canonical image graph', () => {
     const legacy = effect('invert');
-    expect(effectOperatorGraph(legacy)).toEqual(createDefaultInvertImageGraph());
+    expect(effectOperatorGraph(legacy)).toMatchObject(createDefaultInvertImageGraph());
 
     const graph = createDefaultInvertImageGraph();
     graph.layout.invert = { x: 777, y: 12 };
     const restored = migratePersistedEffectOperatorGraph({ ...legacy, operatorGraph: graph });
-    expect(effectOperatorGraph(restored)).toEqual(graph);
+    expect(effectOperatorGraph(restored)).toMatchObject(graph);
   });
 
   it('bridges canonical cable and voxel graphs into params-only runtime compilers', () => {
@@ -111,7 +111,7 @@ describe('effect-owned operator graph persistence', () => {
     const incomplete = createDefaultInvertImageGraph();
     incomplete.edges = incomplete.edges.filter(edge => edge.id !== 'invert-combine');
     incomplete.incomplete = 'Reconnect RGB output.';
-    expect(effectOperatorGraph({ ...effect('invert'), operatorGraph: incomplete })).toEqual(incomplete);
+    expect(effectOperatorGraph({ ...effect('invert'), operatorGraph: incomplete })).toMatchObject(incomplete);
     const addable = addableEffectOperators('invert').map(operator => operator.id);
     expect(addable).toEqual(expect.arrayContaining([
       'image.frame', 'values.number', 'vector.split.vec2', 'vector.split.vec3', 'vector.split.vec4',

@@ -109,7 +109,8 @@ execution in audio, Flock or scene graphs are not implemented yet.
 
 The image compiler expands compositions inline without additional render passes.
 Expansion supports up to four nested levels within the existing image graph
-budgets. Kaleidoscope and Fisheye arrange nodes by data flow, recursively measure expanded
+budgets. All effect groups, including audio graphs, use the common flow layout. Color,
+Flock and scene groups use it too. Groups arrange nodes by data flow, recursively measure expanded
 subgroups, and move Clip Output after the effect. Added nodes and changed wiring
 participate in layout. Explicitly dragged internal node positions remain anchored.
 On either fold direction, the connected outer chain also reflows, leaving 100 graph
@@ -117,7 +118,7 @@ units between Source, complete effect frames or cards, and Clip Output. Source
 stays in place; old outer anchors cannot leave expanded-sized gaps after closing.
 When a group expands into unrelated nodes or sibling groups, those objects move outside the complete frame, even when their old positions were manually placed. Sibling groups move as a unit; membership stays unchanged. Collapsing restores positions displaced by expansion, so surrounding nodes move closer again. A subsequent manual move replaces that automatic return position.
 
-**Arrange** explicitly sorts the Kaleidoscope or Fisheye hierarchy and its connected outer
+**Arrange** explicitly sorts the visible group hierarchy and its connected outer
 chain again. It releases manual interior anchors, includes expanded subgroup sizes,
 and preserves graph connections and parameters. It is undoable and keeps the
 current viewport; use **Fit** to see the complete arrangement.
@@ -224,7 +225,9 @@ values or a bounded sample of already simulated particles. Old particle samples
 are marked stale. Scene previews show the shared rendered Flock scene, not an
 independent render of each branch. Opening a viewer never advances the simulation
 or starts missing audio analysis; unavailable outputs are identified explicitly.
-Outside the Kaleidoscope and Fisheye flow layouts, automatic placement finds room for new nodes only. Existing nodes and groups keep their positions, including intentional overlaps, through edits, folding and saves.
+Manual internal positions remain anchored until Arrange or Reset. Automatic folding,
+surrounding-node displacement, output following, staggered animation and continuous
+fit are shared rules for every group, rather than per-effect implementations.
 
 Each group has a **lock** for outgoing membership changes. Unlock the source to
 drag a node into another expanded group or effect; the target may remain locked.

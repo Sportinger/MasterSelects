@@ -15,6 +15,7 @@ export interface Effect {
 }
 
 export type EffectType =
+  | 'audio-math'
   | 'face-cables'
   | 'surface-overlay'
   | 'terrain-overlay'

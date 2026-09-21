@@ -1,4 +1,6 @@
 import { readTimelineRuntimeState } from '../timeline/timelineRuntimeCoordinator';
+import { findClipOperatorEffect } from '../operators/clipOperatorGraphOwner';
+import { audioOperatorPreview } from './audioOperatorPreviews';
 import { useTimelineStore } from '../../stores/timeline';
 import type { AnimatableProperty } from '../../types/animationProperties';
 import { landmarkRuntime } from '../landmarkTracking/landmarkRuntime';
@@ -27,7 +29,7 @@ import { memoryImageOperatorPreviewTap } from './memoryImageOperatorPreviews';
 
 /** Domain adapters read authoritative runtime data; opening a viewer never runs analysis or a bake. */
 export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewArtifactReader): PreviewFrame | Promise<PreviewFrame> {
-  const state = readTimelineRuntimeState(useTimelineStore), clip = state.clips.find(value => value.id === request.clipId);
+  const state = readTimelineRuntimeState(useTimelineStore), clip = state.clips.find(value => value.id === (request.node.params?.targetClipId ?? request.clipId));
   const base = { key: request.key, revision: request.revision, time: request.time, aspectRatio: request.node.preview?.aspectRatio };
   const missing = (label: string): PreviewFrame => ({ ...base, status: 'missing', label });
   if (!clip) return missing('Clip unavailable');
@@ -36,7 +38,8 @@ export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewA
   const semantic = request.port?.metadata?.semanticKind;
   if (binding?.kind === 'flock-node') return flockPreview(request, clip, sourceTime, state.clipKeyframes.get(clip.id) ?? []);
   if (binding?.kind === 'effect-operator') {
-    const effect = clip.effects.find(value => value.id === binding.effectId);
+    const effect = findClipOperatorEffect(clip, binding.effectId);
+    if (effect?.type === 'audio-math') return audioOperatorPreview({ ...request, clipId: clip.id }, effect);
     if (effect?.type === 'voxel-relief') return voxelPreview(request, clip, effect, state.clipKeyframes.get(clip.id) ?? [], localTime);
     if (effect && isComputeImageEffectType(effect.type)) {
       const preview = computeImageOperatorValuePreview(request, clip, effect, state.clipKeyframes.get(clip.id) ?? [], localTime);

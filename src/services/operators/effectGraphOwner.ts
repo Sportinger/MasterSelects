@@ -1,4 +1,6 @@
 import type { Effect } from '../../types/effects';
+import { audioGraphOperators, compileAudioOperatorGraph, readAudioOperatorGraph } from './audioOperatorGraph';
+import { AUDIO_OPERATORS } from './audioOperators';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { IMAGE_COMPOSITIONS } from './operatorCompositionRegistry';
 import { expandOperatorCompositions, packOperatorCompositions } from './operatorComposition';
@@ -70,7 +72,7 @@ export function isImageGraphEffectType(type: string): type is 'invert' | 'edge-d
   return isLocalImageEffectType(type) || CONTEXTUAL_IMAGE_EFFECTS.has(type);
 }
 export const isComputeImageEffectType = (type: string) => type === 'voronoi' || type === 'pixel-sort' || type === 'quadtree-zoom' || type === 'contour';
-export function hasEffectOperatorGraph(type: string): boolean { return type === 'face-cables' || type === 'voxel-relief' || isComputeImageEffectType(type) || isImageGraphEffectType(type) || type === 'analog-signal-lab'; }
+export function hasEffectOperatorGraph(type: string): boolean { return type === 'audio-math' || type === 'face-cables' || type === 'voxel-relief' || isComputeImageEffectType(type) || isImageGraphEffectType(type) || type === 'analog-signal-lab'; }
 type EffectGraphOwner = { type: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph };
 
 export function effectOperatorCompileParams(effect: Pick<EffectGraphOwner, 'params' | 'operatorGraph'>): Record<string, unknown> {
@@ -110,6 +112,7 @@ export function effectOperatorCompileContext(effect: Pick<EffectGraphOwner, 'typ
 }
 
 export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGraph {
+  if (effect.type === 'audio-math') return readAudioOperatorGraph(effect.params.operatorGraph);
   if (isComputeImageEffectType(effect.type)) {
     const fallback = effect.type === 'voronoi' ? createDefaultVoronoiGraph
       : effect.type === 'pixel-sort' ? createDefaultPixelSortGraph
@@ -232,7 +235,8 @@ export function migratePersistedEffectOperatorGraph(effect: Effect): Effect {
 }
 export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: EffectOperatorGraph, params: Record<string, unknown>) {
   const next = { ...params, [EFFECT_GRAPH_PARAM]: JSON.stringify(graph) };
-  if (effect.type === 'voxel-relief') compileVoxelGraph(next);
+  if (effect.type === 'audio-math') compileAudioOperatorGraph(graph);
+  else if (effect.type === 'voxel-relief') compileVoxelGraph(next);
   else if (effect.type === 'face-cables') compileCableOperatorGraph(next);
   else if (isImageGraphEffectType(effect.type)) compileImageOperatorGraph(graph, effectOperatorParams({ type: effect.type, params }), effectOperatorCompileContext(effect));
   else if (effect.type === 'analog-signal-lab') compileAnalogSignalGraph(graph, params);
@@ -240,6 +244,7 @@ export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: Ef
   else throw new Error('This effect has no operator graph.');
 }
 export function addableEffectOperators(type: string) {
+  if (type === 'audio-math') return audioGraphOperators().filter(operator => operator.addable);
   if (isComputeImageEffectType(type)) {
     const shared = ['image.frame', 'values.number', 'values.boolean', 'values.color'].flatMap(id => {
       const operator = getEffectOperator(id); return operator ? [operator] : [];
@@ -261,6 +266,7 @@ export function addableEffectOperators(type: string) {
   }
   return EFFECT_OPERATORS.filter(operator => operator.addable && (type === 'voxel-relief' ? isVoxelOperator(operator.id)
     : type === 'face-cables' && !operator.composition && operator.id !== 'values.integer'
+      && !AUDIO_OPERATORS.includes(operator) && !IMAGE_OPERATORS.includes(operator)
       && !SCENE_OPERATORS.includes(operator) && !VOXEL_OPERATORS.includes(operator) && !SCALAR_FIELD_OPERATORS.includes(operator)));
 }
 
@@ -288,6 +294,7 @@ export function effectOperatorParams(effect: EffectGraphOwner): Record<string, u
   return { ...defaults, ...effect.params };
 }
 export function canRemoveEffectOperator(type: string, nodeId: string, operatorId: string): boolean {
+  if (type === 'audio-math') return !['audio.input', 'audio.output'].includes(operatorId);
   if (isComputeImageEffectType(type)) return !['frame', 'output'].includes(nodeId) && !!getEffectOperator(operatorId)?.addable;
   if (type === 'analog-signal-lab') return !['frame', 'output'].includes(nodeId) && !!getEffectOperator(operatorId)?.addable;
   return type === 'voxel-relief' ? operatorId !== 'render.voxel' && operatorId !== 'image.frame'

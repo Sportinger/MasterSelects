@@ -60,6 +60,7 @@ export function compileVoxelGraph(params: Params): VoxelGraphPlan {
       throw new Error(`Invalid ${spec.label}.`);
     }
     if (spec.type === 'boolean' && typeof result !== 'boolean') throw new Error(`Invalid ${spec.label}.`);
+    if (spec.type === 'select' && !spec.options?.some(option => option.value === result)) throw new Error(`Invalid ${spec.label}.`);
     return result as OperatorValue;
   };
   const copy = (node: BoundOperatorNode) => {

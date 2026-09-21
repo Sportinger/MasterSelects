@@ -8,6 +8,7 @@ import { startBatch, endBatch } from '../../../stores/historyStore';
 import { buildClipNodeGraphDocument, createClipNodeGraphState } from '../../../services/nodeGraph';
 import { buildUnifiedClipGraph } from '../../../services/nodeGraph/unifiedClipGraph';
 import { createEffectGraphActions, editEffectGraph, editCompositionInput } from '../../../services/operators/effectGraphEditing';
+import { findClipOperatorEffect, resolveClipOperatorOwner } from '../../../services/operators/clipOperatorGraphOwner';
 import { createSceneGraphActions, editSceneGraph } from '../../../services/operators/sceneGraphEditing';
 import { groupOperators } from '../../../services/operators/operatorGroups';
 import { connectSourceArtifact } from '../../../services/operators/sourceArtifactConnections';
@@ -101,12 +102,15 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
       const effectId = graph?.groups?.find(group => group.bypassNodeId === id)?.effectId;
       if (!effectId) { route(id, (actions, node) => actions.toggleBypass(localId(node))); return; }
       safely(() => {
-        const state = readTimelineRuntimeState(useTimelineStore), current = state.clips.find(candidate => candidate.id === clip?.id);
+        const state = readTimelineRuntimeState(useTimelineStore), current = resolveClipOperatorOwner(state.clips.find(candidate => candidate.id === clip?.id), effectId, state.clips);
         if (!current || state.isExporting || state.tracks.find(track => track.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
-        const effect = current.effects.find(candidate => candidate.id === effectId);
+        const effect = findClipOperatorEffect(current, effectId);
         if (!effect) return;
         startBatch('Toggle effect group bypass');
-        try { state.setClipEffectEnabled(current.id, effect.id, !effect.enabled); } finally { endBatch(); }
+        try {
+          if (effect.type === 'audio-math') state.setClipAudioEffectInstanceEnabled(current.id, effect.id, !effect.enabled);
+          else state.setClipEffectEnabled(current.id, effect.id, !effect.enabled);
+        } finally { endBatch(); }
       });
     },
     deleteNode: (id: string) => route(id, (actions, node) => actions.deleteNode(localId(node))),

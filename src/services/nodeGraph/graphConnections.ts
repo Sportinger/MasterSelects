@@ -1,9 +1,10 @@
-import type { NodeGraphConnectionRequest, NodeGraphEdge, NodeGraphPort } from '../../types/nodeGraph';
+import type { NodeConnectionVariant, NodeGraphConnectionRequest, NodeGraphEdge, NodeGraphPort } from '../../types/nodeGraph';
 
 /** The workspace contract is also the editing contract. Domain adapters supply
  * ports/endpoints from their saved owners; this module never stores a graph. */
 export interface ConnectionGraph {
-  nodes: readonly { id: string; inputs: readonly NodeGraphPort[]; outputs: readonly NodeGraphPort[] }[];
+  nodes: readonly { id: string; inputs: readonly NodeGraphPort[]; outputs: readonly NodeGraphPort[];
+    operatorId?: string; connectionVariants?: readonly NodeConnectionVariant[] }[];
   edges: readonly (NodeGraphConnectionRequest & { id: string; readOnly?: boolean })[];
 }
 

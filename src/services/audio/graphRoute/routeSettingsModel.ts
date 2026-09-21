@@ -23,6 +23,7 @@ export type LiveAudioBiquadFilterType =
   | 'allpass';
 
 export type LiveAudioRouteProcessor =
+  | { id: string; type: 'math-graph'; program: import('../../operators/audioOperatorGraph').AudioMathProgram }
   | {
       id: string;
       type: 'pan';

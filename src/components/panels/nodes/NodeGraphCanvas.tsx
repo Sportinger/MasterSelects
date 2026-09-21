@@ -265,7 +265,7 @@ export function NodeGraphCanvas({
   });
 
   const { connectionDraft, startConnectionDrag, startPlugDrag, moveConnectionDrag, finishConnectionDrag, cancelConnectionDrag } = useNodeConnectionDrag({
-    graphId: graph.id, canvasRef, nodesById, getGraphPoint: getGraphPointFromClient,
+    graphId: graph.id, canvasRef, nodesById, edges: graph.edges, getGraphPoint: getGraphPointFromClient,
     onConnectPorts, onReconnectPorts, onDisconnectEdge,
   });
   const domViewport = useNodeDomViewport(canvasRef, viewport, !!nodeGesture || !!connectionDraft);
@@ -518,7 +518,7 @@ export function NodeGraphCanvas({
               if (event.detail > 0) event.currentTarget.blur();
             }}>{targetGraph.groups.some(group => group.collapsed) ? 'Expand all' : 'Collapse all'}</button>}
           {targetGraph.groups?.some(group => group.layoutMode === 'flow') && <button type="button" className="node-workspace-toolbar-button"
-            title="Arrange Kaleidoscope, Fisheye and their connected outer nodes by data flow" onClick={event => {
+            title="Arrange groups and their connected outer nodes by data flow" onClick={event => {
               arrange(); if (event.detail > 0) event.currentTarget.blur();
             }}>Arrange</button>}
           <button type="button" className="node-workspace-toolbar-button" onClick={event => { resetView(); if (event.detail > 0) event.currentTarget.blur(); }}>Reset</button>

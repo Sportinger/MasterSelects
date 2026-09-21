@@ -7,6 +7,7 @@ import { getOperatorPortContract, OPERATOR_SIGNAL_CONTRACTS } from './portContra
 import { describeNodePort } from '../nodeGraph/nodePortPresentation';
 import type { NodePortContract } from '../../types/nodePortContract';
 import { IMAGE_OPERATORS } from './imageOperators';
+import { AUDIO_OPERATORS, AUDIO_SCALAR_OPERATORS } from './audioOperators';
 
 export interface NodeCatalogPort {
   id: string; label: string; type: string; required?: boolean; repeated?: boolean; contract?: NodePortContract;
@@ -32,8 +33,9 @@ export interface NodeCatalogEntry {
 
 const familyOf = (id: string) => id.replace(/\.(scalar|field|rgb|vec[234])$/, '');
 const usersOf = (context: string) => context.split(/\s*\+\s*/).filter(Boolean);
-const operatorContext = (operator: (typeof EFFECT_OPERATORS)[number]) => IMAGE_OPERATORS.includes(operator) || operator.composition
-  ? 'Local image graphs'
+const operatorContext = (operator: (typeof EFFECT_OPERATORS)[number]) => AUDIO_OPERATORS.includes(operator) ? 'Audio samples'
+  : IMAGE_OPERATORS.includes(operator) || operator.composition
+  ? `Local image graphs${AUDIO_SCALAR_OPERATORS.includes(operator) ? ' + Audio samples' : ''}`
   : SCENE_OPERATORS.includes(operator) ? `3D image surfaces${isVoxelOperator(operator.id) ? ' + Voxel Relief' : ''}`
     : isVoxelOperator(operator.id) ? 'Voxel Relief' : operator.id === 'forces.wind' ? 'Face Cables + Flock' : 'Face Cables';
 
@@ -46,7 +48,7 @@ export function listNodeCatalog(): NodeCatalogEntry[] {
     outputs: o.outputs.map(p => { const contract = getOperatorPortContract(p); return { ...p, contract, formats: contract.formats }; }),
     parameters: o.parameters.map(p => ({ ...p, unit: p.unit ?? 'unknown', format: p.format ?? 'unknown' })),
     context: operatorContext(o),
-    family: familyOf(o.id), variant: o.id,
+    family: o.family ?? familyOf(o.id), variant: o.variant ?? o.id,
     backend: o.runtime, fusion: o.fusion ?? 'unspecified', state: o.state ?? 'unspecified', invalidation: o.invalidates,
     users: [...(o.consumers ?? usersOf(operatorContext(o)))],
     localImplementations: o.implementation === 'local' ? [`Operator registry: ${o.id}`] : [],

@@ -3,6 +3,7 @@ import type { NodeGraph, NodeGraphDocument, NodeGraphNode } from '../../types/no
 import type { Keyframe } from '../../types/keyframes';
 import type { TimelineClip } from '../../types/timeline';
 import { buildEffectOperatorGraph } from './effectGraphProjection';
+import { findClipOperatorEffect, resolveClipOperatorOwner } from '../operators/clipOperatorGraphOwner';
 import { hasEffectOperatorGraph } from '../operators/effectGraphOwner';
 import { foldOperatorGroups } from './nestedOperatorGroups';
 import { collapsedArtifactLinks, projectSourceArtifactLinks } from './sourceArtifactProjection';
@@ -18,8 +19,10 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
   const groups: NonNullable<NodeGraph['groups']> = [];
   let cursor = 0, expansion = 0;
   for (const rootNode of root.nodes) {
-    const effect = rootNode.binding?.kind === 'clip-effect' ? clip.effects.find(e => e.id === (rootNode.binding as { effectId: string }).effectId) : undefined;
-    const inner = effect && hasEffectOperatorGraph(effect.type) ? preparedEffects?.get(effect.id) ?? buildEffectOperatorGraph(clip, effect)
+    const effectId = rootNode.binding?.kind === 'clip-effect' || rootNode.binding?.kind === 'clip-audio-effect-instance' ? rootNode.binding.effectId : undefined;
+    const effectClip = effectId ? resolveClipOperatorOwner(clip, effectId, clips) : undefined;
+    const effect = effectId ? findClipOperatorEffect(effectClip, effectId) : undefined;
+    const inner = effect && hasEffectOperatorGraph(effect.type) ? preparedEffects?.get(effect.id) ?? buildEffectOperatorGraph(effectClip!, effect)
       : rootNode.subgraphId ? document.graphs.find(g => g.id === rootNode.subgraphId) : undefined;
     const groupId = rootNode.id === 'scene3d' ? 'scene3d' : effect ? `effect:${effect.id}` : rootNode.binding?.kind === 'clip-color-correction' ? 'color' : 'flock';
     if (!inner) { nodes.push({ ...rootNode, groupOffset: { x: expansion, y: 0 }, layout: { x: rootNode.layout.x + expansion, y: rootNode.layout.y } }); cursor = Math.max(cursor, rootNode.layout.x + expansion + 280); continue; }
@@ -29,7 +32,7 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     const group = { id: groupId, label: effect?.name ?? (groupId === 'scene3d' ? '3D Scene' : groupId === 'flock' ? 'Flock' : 'Color'),
       color: groupId === 'scene3d' ? '#d7a262' : groupId === 'flock' ? '#7ea65b' : groupId === 'color' ? '#ba8bd6' : '#55a6c4', collapsed, nodeIds: [] as string[], proxyId: rootNode.id, issue: inner.issue,
       ...(effect ? { effectId: effect.id, bypassNodeId: rootNode.id, bypassed: !effect.enabled } : {}),
-      ...(effect?.type === 'kaleidoscope' || effect?.type === 'fisheye' ? { layoutMode: 'flow' as const } : {}) };
+      layoutMode: 'flow' as const };
     groups.push(group);
     if (collapsed || !inner.nodes.length) {
       const proxy: NodeGraphNode = { ...rootNode, runtime: 'subgraph', label: group.label,

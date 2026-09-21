@@ -1,4 +1,5 @@
-import { checkGraphConnection, type ConnectionGraph } from '../../../../services/nodeGraph/graphConnections';
+import type { ConnectionGraph } from '../../../../services/nodeGraph/graphConnections';
+import { resolveAdaptiveGraphConnection } from '../../../../services/nodeGraph/adaptiveGraphConnections';
 import { describeNodePort } from '../../../../services/nodeGraph/nodePortPresentation';
 import type { NodeGraphConnectionRequest } from '../../../../types/nodeGraph';
 import { ResolveInspectorSection, ResolveInspectorRow, ResolveInspectorIconButton } from '../../properties/resolveInspector/ResolveInspectorPrimitives';
@@ -22,7 +23,7 @@ export function GraphPortConnections({ graph, nodeId, labelForNode, onConnect, o
       const incoming = graph.edges.filter(edge => edge.toNodeId === nodeId && edge.toPortId === port.id);
       const candidates = graph.nodes.flatMap(source => source.outputs.flatMap(output => {
         const connection = { fromNodeId: source.id, fromPortId: output.id, toNodeId: nodeId, toPortId: port.id };
-        return checkGraphConnection(graph, connection).ok ? [{ connection, label: `${labelForNode(source.id)} · ${output.label}` }] : [];
+        return resolveAdaptiveGraphConnection(graph, connection).ok ? [{ connection, label: `${labelForNode(source.id)} · ${output.label}` }] : [];
       }));
       const info = describeNodePort(port);
       return <div key={port.id}>

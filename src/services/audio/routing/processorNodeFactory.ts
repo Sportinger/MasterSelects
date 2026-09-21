@@ -183,7 +183,7 @@ export function createProcessorNode(
   }
 
   if (
-    processor.type === 'limiter' ||
+    processor.type === 'math-graph' || processor.type === 'limiter' ||
     processor.type === 'noise-gate' ||
     processor.type === 'expander' ||
     processor.type === 'de-click' ||

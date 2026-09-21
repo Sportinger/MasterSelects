@@ -356,6 +356,13 @@
     color: var(--text-primary);
   }
 
+  .resolve-inspector-icon-button.resolve-inspector-text-button {
+    width: auto;
+    padding-inline: 8px;
+    white-space: nowrap;
+    font: inherit;
+  }
+
   .resolve-inspector-icon-button.is-active {
     color: var(--text-primary);
   }

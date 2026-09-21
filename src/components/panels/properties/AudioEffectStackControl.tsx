@@ -14,6 +14,9 @@ import { getAudioEqAllNumericKeyframeEntries } from './audioEqKeyframes';
 import type { RuntimeAnalyzerScope } from './useThrottledRuntimeAnalyzer';
 import { endBatch, startBatch } from '../../../stores/historyStore';
 import { trackEditorControlCommitted } from '../../../services/productAnalytics';
+import { useDockStore } from '../../../stores/dockStore';
+import { requestNodeWorkspaceView } from '../../../services/nodeGraph/nodeWorkspaceNavigation';
+import { ResolveInspectorIconButton, ResolveInspectorRow } from './resolveInspector/ResolveInspectorPrimitives';
 
 function trackAudioEffectControl(
   descriptorId: string,
@@ -128,10 +131,13 @@ export function AudioEffectStackControl({
   onRemoveEffect,
   onReorderEffect,
 }: AudioEffectStackControlProps) {
-  const availableEffects = getAllAudioEffects().filter(effect => !excludeDescriptorIds?.has(effect.id));
+  const availableEffects = getAllAudioEffects().filter(effect => !excludeDescriptorIds?.has(effect.id)
+    && (effect.id !== 'audio-math' || keyframeClipId));
 
   return (
-    <div className={`audio-effect-stack-control ${className ?? ''}`}>
+    <div className={`audio-effect-stack-control ${className ?? ''}`} onPointerUp={event => {
+      if (event.target instanceof Element) event.target.closest<HTMLElement>('button,select,input[type="checkbox"]')?.blur();
+    }}>
       <div className="section-header-row audio-effect-stack-control-header">
         <h4>{title}</h4>
         <select
@@ -260,7 +266,13 @@ export function AudioEffectStackControl({
                   </div>
                 )}
 
-                {isFlexEqualizer ? (
+                {descriptor.id === 'audio-math' ? <ResolveInspectorRow label="Sample graph">
+                  {keyframeClipId && <ResolveInspectorIconButton className="resolve-inspector-text-button" ariaLabel="Open audio math nodes" onClick={event => {
+                    if (event.detail > 0) event.currentTarget.blur();
+                    requestNodeWorkspaceView(keyframeClipId, 'general');
+                    useDockStore.getState().activatePanelType('node-workspace');
+                  }}>Open Nodes</ResolveInspectorIconButton>}
+                </ResolveInspectorRow> : isFlexEqualizer ? (
                   <FlexEqualizerControl
                     params={effect.params}
                     compact={className?.includes('audio-effect-stack-compact') ?? false}

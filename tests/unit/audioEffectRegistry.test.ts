@@ -35,6 +35,7 @@ describe('AudioEffectRegistry', () => {
       'audio-mono-sum',
       'audio-channel-swap',
       'audio-stereo-split',
+      'audio-math',
     ]);
     expect(getAllAudioEffects().map(effect => effect.id)).toEqual([
       'audio-volume',
@@ -60,6 +61,7 @@ describe('AudioEffectRegistry', () => {
       'audio-mono-sum',
       'audio-channel-swap',
       'audio-stereo-split',
+      'audio-math',
     ]);
   });
 

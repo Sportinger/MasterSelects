@@ -118,6 +118,8 @@ export interface NodeGraphLayout {
 }
 
 export interface NodeGraphNode {
+  /** Transient executable alternatives supplied by the owning graph, never saved. */
+  connectionVariants?: readonly NodeConnectionVariant[];
   /** Projected viewer presentation; preferences are stored on the owning clip. */
   preview?: { enabled: boolean; requested: boolean; portId?: string; key: string; aspectRatio?: number };
   id: string;
@@ -265,6 +267,12 @@ export interface NodeCanvasPlacement {
   /** Reversible displacement caused by expanded frames, independent of manual anchors. */
   displaced?: Record<string, { origin: NodeGraphLayout; groups: string[] }>;
   groups: Record<string, { nodeIds: string[]; proxyId: string; parentId?: string; offset: NodeGraphLayout; locked?: boolean; collapsed?: boolean }>;
+}
+
+export interface NodeConnectionVariant {
+  operatorId: string;
+  inputs: readonly NodeGraphPort[];
+  outputs: readonly NodeGraphPort[];
 }
 
 export interface ClipNodeGraph {

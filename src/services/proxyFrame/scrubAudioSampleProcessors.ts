@@ -1,4 +1,5 @@
 import { dbToLinearGain, finiteNumber } from '../../engine/audio/audioMath';
+import { processAudioMathBlock } from '../../engine/audio/effectRender/audioMathBlock';
 import {
   createSpectralGateState,
   processSpectralGateBlock,
@@ -209,6 +210,10 @@ export function attachScrubSampleProcessor(node: ScrubProcessorNode): void {
 
   scriptProcessor.onaudioprocess = (event: AudioProcessingEvent) => {
     const processor = node.sampleProcessor;
+    if (processor?.type === 'math-graph') {
+      processAudioMathBlock(processor.program, event.inputBuffer, event.outputBuffer);
+      return;
+    }
     if (processor?.type === 'limiter') {
       processScrubLimiterFrame(node, event.inputBuffer, event.outputBuffer, processor);
       return;

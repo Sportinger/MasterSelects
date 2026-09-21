@@ -2,18 +2,19 @@ import type { NodeGraphNode } from '../../types/nodeGraph';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { editEffectGraph } from '../operators/effectGraphEditing';
 import { SCALAR_FIELD_OPERATORS } from '../operators/scalarField';
-import { effectOperatorParams } from '../operators/effectGraphOwner';
+import { addableEffectOperators, effectOperatorParams } from '../operators/effectGraphOwner';
 import { EFFECT_OPERATORS, getEffectOperator } from '../operators/operatorRegistry';
 import { getFlockOperator } from '../flock/operators/flockOperatorRegistry';
 import { readTimelineRuntimeState } from '../timeline/timelineRuntimeCoordinator';
 import { useTimelineStore } from '../../stores/timeline';
 import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/exclusiveMutationLease';
 import { startBatch, endBatch } from '../../stores/historyStore';
+import { findClipOperatorEffect, resolveClipOperatorOwner } from '../operators/clipOperatorGraphOwner';
 
 function typedMathModes(operatorId: string) {
-  const suffix = /\.(rgb|scalar)$/.exec(operatorId)?.[0];
-  if (!operatorId.startsWith('math.') || !suffix) return [];
-  return EFFECT_OPERATORS.filter(operator => operator.id.startsWith('math.') && operator.id.endsWith(suffix) && operator.addable);
+  const variant = getEffectOperator(operatorId)?.variant;
+  if (!operatorId.startsWith('math.') || !variant) return [];
+  return EFFECT_OPERATORS.filter(operator => operator.id.startsWith('math.') && operator.variant === variant && operator.addable);
 }
 
 export function mathModeOptions(node: NodeGraphNode) {
@@ -25,7 +26,8 @@ export function mathModeOptions(node: NodeGraphNode) {
   }
   if (node.operatorId === 'flock.math') return (getFlockOperator('flock.math')?.params.find(p => p.id === 'op')?.options ?? [])
     .map(option => ({ value: option.value, label: option.label }));
-  const typed = typedMathModes(node.operatorId ?? '');
+  const supported = typeof node.params?.operatorOwnerType === 'string' ? addableEffectOperators(node.params.operatorOwnerType) : undefined;
+  const typed = typedMathModes(node.operatorId ?? '').filter(operator => !supported || supported.includes(operator));
   if (typed.length > 1) return typed.map(operator => ({ value: operator.id, label: operator.label }));
   return [];
 }
@@ -60,12 +62,16 @@ export function changeScalarMathMode(graph: EffectOperatorGraph, params: Record<
 
 export function setMathNodeMode(clipId: string, node: NodeGraphNode, mode: string) {
   assertExclusiveTimelineMutationAllowed();
-  const state = readTimelineRuntimeState(useTimelineStore), clip = state.clips.find(clip => clip.id === clipId);
+  const state = readTimelineRuntimeState(useTimelineStore);
+  const selected = state.clips.find(clip => clip.id === clipId);
+  const clip = node.binding?.kind === 'effect-operator' ? resolveClipOperatorOwner(selected, node.binding.effectId, state.clips) : selected;
   if (!clip || state.isExporting || state.tracks.find(track => track.id === clip.trackId)?.locked) throw new Error('The clip is unavailable, locked or exporting.');
+  clipId = clip.id;
   const binding = node.binding;
   if (binding?.kind === 'effect-operator') {
-    const effect = clip.effects.find(effect => effect.id === binding.effectId);
+    const effect = findClipOperatorEffect(clip, binding.effectId);
     if (!effect) throw new Error('Math node unavailable.');
+    if (!addableEffectOperators(effect.type).some(operator => operator.id === mode)) throw new Error('Math operation is not supported in this graph.');
     const defaults = effectOperatorParams(effect);
     editEffectGraph(clipId, binding.effectId, 'Change math operation', (graph, params) => {
       const current = graph.nodes.find(n => n.id === binding.nodeId);

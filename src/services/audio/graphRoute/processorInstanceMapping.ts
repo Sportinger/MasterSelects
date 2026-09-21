@@ -1,4 +1,5 @@
 import { hasAudioEffect } from '../../../engine/audio/AudioEffectRegistry';
+import { audioMathProgram } from '../../operators/audioOperatorGraph';
 import { clampAudioPan, finiteNumber } from '../../../engine/audio/audioMath';
 import type { AudioGraphEffectPlanStep } from '../../../engine/audio/AudioGraphTypes';
 import type { AudioEffectInstance, Effect } from '../../nodeGraph/clipGraphProjectionDomain';
@@ -16,6 +17,11 @@ function readAudioEffectParams(
   params: Record<string, unknown> | undefined,
 ): AudioRouteEffectSettings {
   const settings = createNeutralEffectSettings();
+
+  if (descriptorId === 'audio-math') {
+    settings.processors.push({ id: descriptorId, type: 'math-graph', program: audioMathProgram(params?.operatorGraph) });
+    return settings;
+  }
 
   if (descriptorId === 'audio-volume') {
     settings.volume *= Math.max(0, finiteNumber(params?.volume, 1));
