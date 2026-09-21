@@ -1,5 +1,5 @@
 import { interpolateKeyframes } from '../../../../../utils/keyframeInterpolation';
-import { cablePoint, signalPosition } from './cableGeometry';
+import { cableArcLengths, cablePoint, signalPosition } from './cableGeometry';
 import { fitCanvasLabel } from './canvasTextLayout';
 import type { CanvasCable, CanvasCurve, CanvasScene, CanvasTheme, CanvasTransport, CanvasView, Rect } from './nodeCanvasTypes';
 import { pointBehindGroup, subtractOccludedRects } from '../edgeGroupOcclusion';
@@ -56,14 +56,17 @@ function drawCurve(ctx: DrawContext, curve: CanvasCurve, theme: CanvasTheme) {
 /** Static painting occurs only after edits, hover, selection, pan or resize. */
 export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView, theme: CanvasTheme) {
   begin(ctx, view);
+  const viewport = { x: -view.panX / view.zoom - 20, y: -view.panY / view.zoom - 20,
+    width: view.width / view.zoom + 40, height: view.height / view.zoom + 40 };
+  const clips = new Map<Rect[], Rect[]>();
   // Group backgrounds and headers stay in the DOM: their complete vector
   // bounds follow the immediate viewport even while this bitmap catches up.
   for (const cable of scene.cables) if (cableVisible(cable, view)) {
     if (!cable.occlusions?.length) { drawCable(ctx, cable, view.zoom); continue; }
-    const viewport = { x: -view.panX / view.zoom - 20, y: -view.panY / view.zoom - 20,
-      width: view.width / view.zoom + 40, height: view.height / view.zoom + 40 };
+    let visible = clips.get(cable.occlusions);
+    if (!visible) { visible = subtractOccludedRects(viewport, cable.occlusions); clips.set(cable.occlusions, visible); }
     ctx.save(); ctx.beginPath();
-    for (const rect of subtractOccludedRects(viewport, cable.occlusions)) ctx.rect(rect.x, rect.y, rect.width, rect.height);
+    for (const rect of visible) ctx.rect(rect.x, rect.y, rect.width, rect.height);
     ctx.clip(); drawCable(ctx, cable, view.zoom); ctx.restore();
     ctx.save(); ctx.beginPath();
     for (const rect of cable.occlusions) ctx.rect(rect.x, rect.y, rect.width, rect.height);
@@ -75,6 +78,9 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
     box(ctx, 0, 0, node.width, node.height, 6); ctx.fillStyle = theme.card; ctx.fill(); ctx.strokeStyle = node.selected ? theme.accent : theme.border;
     ctx.lineWidth = node.selected ? 2 : 1; ctx.stroke(); ctx.clip();
     ctx.fillStyle = node.color; ctx.fillRect(0, 0, node.width, 3);
+    // Subpixel labels and sockets cannot be read in a moving overview. Keep
+    // card geometry, selection and cables; restore every detail when it settles.
+    if (view.moving && view.zoom < .3) { ctx.restore(); continue; }
     ctx.strokeStyle = theme.border; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 27); ctx.lineTo(node.width, 27); ctx.stroke();
     text(ctx, node.kind.toUpperCase(), 8, 19, 95, theme.muted);
     text(ctx, node.runtime, node.width - 28, 19, 50, theme.muted, 9, 400, 'right');
@@ -100,6 +106,7 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
   }
   // Long fan-out stubs first, so their backing stroke cannot cover shorter grips.
   for (const plug of scene.plugs.toReversed()) {
+    if (view.moving && view.zoom < .25 && !plug.highlighted) continue;
     if (!inView({ x: Math.min(plug.tip.x, plug.center.x) - 8, y: plug.center.y - 8, width: Math.abs(plug.tip.x - plug.center.x) + 16, height: 16 }, view)) continue;
     ctx.save(); ctx.translate(plug.center.x, plug.center.y); ctx.scale(plug.input ? -1 : 1, 1); ctx.globalAlpha = plug.ghost ? 0.5 : 1;
     const offset = Math.abs(plug.tip.x - plug.center.x);
@@ -115,7 +122,7 @@ export function paintOverlay(ctx: DrawContext, scene: CanvasScene, view: CanvasV
   if (!transport.visible) return;
   if (transport.active && !transport.reducedMotion) scene.cables.forEach((cable, i) => {
     if (cable.draft || cable.baked || !cableVisible(cable, view)) return;
-    const duration = Math.max(1300, Math.min(3600, cable.length * view.zoom / 140 * 1000));
+    const duration = Math.max(1300, Math.min(3600, cableArcLengths(cable).length * view.zoom / 140 * 1000));
     for (let point = 0; point < 2; point++) {
       const p = signalPosition(cable, (flowSeconds * 1000 / duration + i * 0.61803398875 + point / 2) % 1);
       ctx.globalAlpha = pointBehindGroup(p, cable.occlusions ?? []) ? .3 : 1;

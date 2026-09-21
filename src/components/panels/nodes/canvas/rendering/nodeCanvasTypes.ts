@@ -5,7 +5,7 @@ import type { PreviewFrame } from '../../../../../services/nodePreview/previewTy
 // Only drawing data crosses the worker boundary, never graph params or media handles.
 export interface Point { x: number; y: number }
 export interface Rect extends Point { width: number; height: number }
-export interface CanvasView { zoom: number; panX: number; panY: number; width: number; height: number; ratio: number }
+export interface CanvasView { zoom: number; panX: number; panY: number; width: number; height: number; ratio: number; moving?: boolean }
 export interface CanvasTheme { background: string; card: string; text: string; muted: string; border: string; accent: string }
 export interface CanvasPort extends Point { id?: string; label: string; type: string; color: string; input: boolean }
 export interface CanvasCurve extends Rect {
@@ -29,7 +29,6 @@ export interface CanvasCable {
   occlusions?: Rect[];
   baked?: boolean;
   from: Point; to: Point; color: string; highlighted: boolean; draft?: boolean;
-  points: Point[]; distances: number[]; length: number;
 }
 export interface CanvasPlug { center: Point; tip: Point; input: boolean; color: string; highlighted: boolean; ghost?: boolean }
 export interface CanvasGroup extends Rect { label: string; color: string; collapsed: boolean; count: string; bypassable?: boolean; bypassed?: boolean }

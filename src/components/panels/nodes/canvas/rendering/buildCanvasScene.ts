@@ -7,7 +7,7 @@ import { keyframeNodeParameters } from '../../../../../services/nodeGraph/keyfra
 import { clipLocalToKeyframeTime, getKeyframeTimeBasis, type SourceOffsetResolver } from '../../../../../services/flock/time/flockKeyframeTime';
 import { interpolateKeyframes } from '../../../../../utils/keyframeInterpolation';
 import { keyframesForProperty } from '../../../../../utils/keyframePropertyIndex';
-import { getNodeBadges, getNodeHeight, getNodePortStartY, getPortCenter, isNodeBypassable, isNodeBypassed, NODE_WIDTH, type ConnectionDraft } from '../canvasGeometry';
+import { getNodeBadges, getNodeHeight, getNodePortStartY, getPortCenter, isNodeBypassable, isNodeBypassed, NODE_WIDTH, type ConnectionDraft, type NodeBounds } from '../canvasGeometry';
 import { nodeGroupBounds } from '../groupBounds';
 import type { ConnectionPlug } from '../connectionPlugs';
 import type { HoveredNodePort } from '../useNodePortHover';
@@ -15,13 +15,14 @@ import type { CanvasCurve, CanvasScene } from './nodeCanvasTypes';
 import { makeCanvasCable } from './cableGeometry';
 import { inlineNumericPorts, isNumericValueNode, previewRect } from '../../previews/previewGeometry';
 import { previewOutput } from '../../../../../services/nodePreview/previewTypes';
-import { edgeGroupOcclusion } from '../edgeGroupOcclusion';
+import { createEdgeGroupOcclusion } from '../edgeGroupOcclusion';
 
 const COLORS: Record<string, string> = { source: '#54be8e', transform: '#5299eb', motion: '#5299eb', color: '#e0c24a', mask: '#be6fd5', effect: '#de8452', custom: '#5cbed6', analysis: '#70f6dc', output: '#97a9be' };
 const EMPTY: Keyframe[] = [];
 interface Options {
   graph: NodeGraph; nodes: NodeGraphNode[]; plugs: ConnectionPlug[];
   groupFrameNodes?: NodeGraphNode[];
+  groupBounds?: ReadonlyMap<string, NodeBounds>;
   selectedNodeId: string | null; selection: Set<string>; selectedEdgeId: string | null; hoveredEdgeId: string | null;
   hoveredPort: HoveredNodePort | null; draft: ConnectionDraft | null;
   clips: TimelineClip[]; keyframes: Map<string, Keyframe[]>; sourceTime: SourceOffsetResolver;
@@ -58,7 +59,8 @@ function curveFor(node: NodeGraphNode, options: Options): CanvasCurve | undefine
 
 export function buildCanvasScene(options: Options): CanvasScene {
   const { graph, nodes, plugs, draft, hoveredPort } = options;
-  const bounds = nodeGroupBounds(graph, options.groupFrameNodes ?? nodes);
+  const bounds = options.groupBounds ?? nodeGroupBounds(graph, options.groupFrameNodes ?? nodes);
+  const occlusions = createEdgeGroupOcclusion(graph, bounds);
   const scene: CanvasScene = { nodes: [], cables: [], groups: [], plugs: [] };
   for (const group of graph.groups ?? []) {
     if (group.collapsed) continue;
@@ -92,7 +94,7 @@ export function buildCanvasScene(options: Options): CanvasScene {
   for (const [id, pair] of pairs) {
     if (!pair.output || !pair.input || (draft?.moved && draft.reconnectEdgeId === id)) continue;
     scene.cables.push({ ...makeCanvasCable(pair.output.tip, pair.input.tip, describeNodePort(pair.output.port).color, id === options.selectedEdgeId || id === options.hoveredEdgeId),
-      occlusions: edgeGroupOcclusion(pair.output.edge, graph, bounds),
+      occlusions: occlusions(pair.output.edge),
       baked: pair.output.edge.readOnly });
   }
   const preview = (nodeId: string, portId: string, direction: 'input' | 'output', ghost = false) => {

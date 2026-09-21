@@ -5,10 +5,13 @@ let painter: NodeCanvasPainter | undefined;
 let layers: OffscreenCanvas[] = [];
 let output: OffscreenCanvas;
 let context: OffscreenCanvasRenderingContext2D;
+let baseContext: OffscreenCanvasRenderingContext2D;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let inFlight = false, dirty = false;
 let frames = 0, paintMs = 0, maxPaintMs = 0, reportAt = performance.now();
 let baseMs = 0, overlayMs = 0, previewMs = 0;
+type Update = Extract<CanvasMessage, { type: 'scene' | 'view' | 'transport' }>;
+const pending = new Map<Update['type'], Update>();
 const post = (message: CanvasWorkerReply, transfer: Transferable[] = []) => self.postMessage(message, transfer);
 
 function schedule(delay = 0) {
@@ -19,15 +22,26 @@ function frame() {
   timer = undefined;
   try {
     const start = performance.now();
+    for (const message of pending.values()) painter?.update(message);
+    pending.clear();
     if (!painter?.draw(start)) return;
-    // Preserve cached layers. Only the composed output is transferred; no
-    // worker-owned canvas can update the visible DOM independently.
+    // During motion the base is redrawn anyway. Transfer it directly rather
+    // than copying the largest layer into another full-screen bitmap first.
+    // Settled views keep their cached layers for cheap signal animation.
     const [base, previews, overlay] = layers;
-    if (output.width !== base.width) output.width = base.width;
-    if (output.height !== base.height) output.height = base.height;
-    context.clearRect(0, 0, output.width, output.height);
-    for (const layer of [base, previews, overlay]) context.drawImage(layer, 0, 0);
-    const bitmap = output.transferToImageBitmap();
+    const moving = painter.moving, target = moving ? base : output, compose = moving ? baseContext : context;
+    if (!moving) {
+      if (output.width !== base.width) output.width = base.width;
+      if (output.height !== base.height) output.height = base.height;
+      context.clearRect(0, 0, output.width, output.height);
+      context.drawImage(base, 0, 0);
+    }
+    compose.save(); compose.setTransform(1, 0, 0, 1, 0, 0);
+    if (painter.previewCount) compose.drawImage(previews, 0, 0);
+    if (painter.hasOverlay) compose.drawImage(overlay, 0, 0);
+    compose.restore();
+    const bitmap = target.transferToImageBitmap();
+    if (moving) painter.invalidateBase();
     dirty = false;
     inFlight = true;
     post({ type: 'frame', bitmap, revision: painter.viewRevision }, [bitmap]);
@@ -62,8 +76,10 @@ self.onmessage = (event: MessageEvent<CanvasMessage>) => {
       const composed = output.getContext('2d', { willReadFrequently: true });
       if (!contexts[0] || !contexts[1] || !contexts[2] || !composed) throw new Error('Canvas 2D unavailable');
       context = composed;
+      baseContext = contexts[0];
       painter = new NodeCanvasPainter(contexts[0], contexts[2], contexts[1], () => new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true }));
-    } else painter?.update(message);
+    } else if (message.type === 'previews') painter?.update(message);
+    else pending.set(message.type, message);
     dirty = true;
     if (message.type === 'previews') post({ type: 'previews-ready', batchId: message.batchId, previewCount: painter?.previewCount });
     if (message.type === 'scene' || message.type === 'view') { clearTimeout(timer); timer = undefined; }

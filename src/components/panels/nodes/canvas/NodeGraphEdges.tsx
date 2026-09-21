@@ -8,7 +8,7 @@ import { useNodeFlowActivity } from './useNodeFlowActivity';
 import { NodeGraphFlowSignals } from './NodeGraphFlowSignals';
 import './NodeGraphFlow.css';
 import { nodeGroupBounds } from './groupBounds';
-import { edgeGroupOcclusion, rectangleClipPath, subtractOccludedRects } from './edgeGroupOcclusion';
+import { createEdgeGroupOcclusion, rectangleClipPath, subtractOccludedRects } from './edgeGroupOcclusion';
 
 interface NodeGraphEdgesProps {
   graph?: NodeGraph;
@@ -47,6 +47,7 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
   const flowRef = useNodeFlowActivity();
   const clipPrefix = useId().replace(/:/g, '');
   const groupBounds = graph ? nodeGroupBounds(graph, frameNodes ?? [...nodesById.values()]) : new Map<string, NodeBounds>();
+  const occlusions = graph ? createEdgeGroupOcclusion(graph, groupBounds) : () => [];
   const endpoints = new Map<string, { input?: ConnectionPlug; output?: ConnectionPlug }>();
   for (const plug of plugs) {
     const pair = endpoints.get(plug.edge.id) ?? {};
@@ -93,7 +94,7 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
         if (visibleEdgeIds && !visibleEdgeIds.has(edge.id)) return null;
         const path = getConnectionPath(pair.output.tip, pair.input.tip);
         const port = nodesById.get(edge.fromNodeId)?.outputs.find(p => p.id === edge.fromPortId);
-        const covers = graph ? edgeGroupOcclusion(edge, graph, groupBounds) : [];
+        const covers = occlusions(edge);
         const clip = `${clipPrefix}-${index}`, dimClip = `${clip}-dim`;
         return (
           <Fragment key={edge.id}>

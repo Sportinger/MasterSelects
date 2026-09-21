@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { NodeCanvasPainter } from '../../src/components/panels/nodes/canvas/rendering/NodeCanvasPainter';
 import { paintBase, paintOverlay } from '../../src/components/panels/nodes/canvas/rendering/paintNodeCanvas';
-import { makeCanvasCable, signalPosition } from '../../src/components/panels/nodes/canvas/rendering/cableGeometry';
+import { cableArcLengths, makeCanvasCable, signalPosition } from '../../src/components/panels/nodes/canvas/rendering/cableGeometry';
 import { bufferedCanvasView, canvasPixelRatio, createNodeCanvasRuntime } from '../../src/components/panels/nodes/canvas/rendering/nodeCanvasRuntime';
 import { buildCanvasScene } from '../../src/components/panels/nodes/canvas/rendering/buildCanvasScene';
 import { getConnectionPlugs } from '../../src/components/panels/nodes/canvas/connectionPlugs';
@@ -92,7 +92,10 @@ describe('canvas geometry uses the same interaction endpoints', () => {
     const cable = makeCanvasCable({ x, y: 0 }, { x: toX, y: 200 }, '#fff');
     expect(signalPosition(cable, 0)).toEqual(cable.from);
     expect(signalPosition(cable, 1)).toEqual(cable.to);
-    expect(cable.distances.every((n, i) => !i || n >= cable.distances[i - 1])).toBe(true);
+    const samples = cableArcLengths(cable);
+    expect(samples.distances.every((n, i) => !i || n >= samples.distances[i - 1])).toBe(true);
+    expect(cableArcLengths(cable)).toBe(samples);
+    expect(cable).not.toHaveProperty('points');
   });
 });
 

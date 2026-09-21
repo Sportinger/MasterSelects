@@ -26,10 +26,10 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
   const clips = useTimelineStore(state => state.clips);
   const keyframes = useTimelineStore(state => state.clipKeyframes);
   const sourceTime = useTimelineStore(state => state.getSourceTimeForClip);
-  const { graph, nodes, groupFrameNodes, plugs, selection, selectedNodeId, selectedEdgeId, hoveredEdgeId, hoveredPort, draft, canBypass } = options;
+  const { graph, nodes, groupFrameNodes, groupBounds, plugs, selection, selectedNodeId, selectedEdgeId, hoveredEdgeId, hoveredPort, draft, canBypass } = options;
   const scene = useMemo(() => buildCanvasScene({ graph, nodes, plugs, selection, selectedNodeId, selectedEdgeId,
-    hoveredEdgeId, hoveredPort, draft, clips, keyframes, sourceTime, canBypass, groupFrameNodes }),
-  [graph, nodes, groupFrameNodes, plugs, selection, selectedNodeId, selectedEdgeId, hoveredEdgeId, hoveredPort, draft, clips, keyframes, sourceTime, canBypass]);
+    hoveredEdgeId, hoveredPort, draft, clips, keyframes, sourceTime, canBypass, groupFrameNodes, groupBounds }),
+  [graph, nodes, groupFrameNodes, groupBounds, plugs, selection, selectedNodeId, selectedEdgeId, hoveredEdgeId, hoveredPort, draft, clips, keyframes, sourceTime, canBypass]);
   const sceneRef = useRef(scene); sceneRef.current = scene;
   const previewSource = useRef({ clipId: graph.owner.id, nodes, selectedNodeId, expanded: graph.expandedNodes }); previewSource.current = { clipId: graph.owner.id, nodes, selectedNodeId, expanded: graph.expandedNodes };
   const viewportRef = useRef(viewport); viewportRef.current = viewport;
@@ -74,7 +74,9 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
     let theme: CanvasTheme;
     const view = () => {
       const viewport = viewportRef.current;
-      const measured = bufferedCanvasView({ ...viewport, ...size }, devicePixelRatio);
+      // Moving overviews do not need a full high-DPI bitmap copied every frame.
+      // The final settled view always restores the normal resolution.
+      const measured = bufferedCanvasView({ ...viewport, ...size, moving: suspendedRef.current }, devicePixelRatio);
       const revision = ++latestViewRevision;
       // Presentation correction uses the logical viewport; canvas pixels have
       // their own padded origin, offset back by CSS on every rendering layer.
@@ -120,7 +122,7 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
   useLayoutEffect(() => { runtime.current?.update({ type: 'scene', scene }); refreshRef.current(); }, [scene]);
   useLayoutEffect(() => { previewRuntime.current?.suspend(previewsSuspended); }, [previewsSuspended]);
   useLayoutEffect(() => { previewRuntime.current?.scene(graph.owner.id, nodes, selectedNodeId, graph.expandedNodes); }, [graph.owner.id, nodes, selectedNodeId, graph.expandedNodes]);
-  useLayoutEffect(() => { viewRef.current(); }, [viewport]);
+  useLayoutEffect(() => { viewRef.current(); }, [viewport, previewsSuspended]);
   return <>
     {/* Group fills are cheap vector rectangles. Keep their full geometry on the
         immediate visual transform so zooming out never exposes a bitmap edge. */}

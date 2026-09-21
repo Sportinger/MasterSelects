@@ -35,9 +35,9 @@ export async function measureNodeGraphInteraction(args: Record<string, unknown>)
     bubbles: true, cancelable: true, pointerId: 9183, pointerType: 'mouse', isPrimary: true,
     button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x + dx, clientY: y + dy,
   }));
-  const gaps: number[] = [], worker: Array<Record<string, string | undefined>> = [];
+  const gaps: number[] = [], foldGaps: number[] = [], worker: Array<Record<string, string | undefined>> = [];
   const hitTestMs: number[] = [];
-  let moved = false, last = 0, sampled = 0;
+  let moved = false, last = 0, sampled = 0, wasFolding = false;
   const start = performance.now();
   const reactBefore = readNodeCanvasProfile(canvas);
   const cpuProfile = args.profileCpu === true ? measureJsCpuProfile({ durationMs: duration }) : undefined;
@@ -45,7 +45,9 @@ export async function measureNodeGraphInteraction(args: Record<string, unknown>)
     if (pan) event('pointerdown', 0, 0);
     await new Promise<void>(resolve => {
       const step = (now: number) => {
-        if (last) gaps.push(now - last); last = now;
+        const folding = canvas.dataset.layoutAnimating === 'true';
+        if (last) { gaps.push(now - last); if (folding || wasFolding) foldGaps.push(now - last); }
+        wasFolding = folding; last = now;
         const elapsed = now - start, phase = Math.min(1, elapsed / duration) * Math.PI * 8;
         if (pan) event('pointermove', Math.sin(phase) * 90, (Math.cos(phase) - 1) * 60);
         moved ||= inner?.style.transform !== before;
@@ -86,5 +88,8 @@ export async function measureNodeGraphInteraction(args: Record<string, unknown>)
       maxMs: Math.max(...hitTestMs) } : null,
     fps: Number((gaps.length * 1000 / gaps.reduce((sum, n) => sum + n, 0)).toFixed(1)),
     p95GapMs: Number((sorted[Math.floor(sorted.length * 0.95)] ?? 0).toFixed(1)), maxGapMs: Math.max(0, ...gaps), worker,
+    folding: foldGaps.length ? { frames: foldGaps.length, elapsedMs: foldGaps.reduce((sum, gap) => sum + gap, 0),
+      fps: foldGaps.length * 1000 / foldGaps.reduce((sum, gap) => sum + gap, 0),
+      p95GapMs: foldGaps.toSorted((a, b) => a - b)[Math.floor(foldGaps.length * .95)], maxGapMs: Math.max(...foldGaps) } : null,
     ...(cpuProfile ? { cpuProfile: await cpuProfile } : {}) } };
 }

@@ -1,6 +1,6 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { edgeGroupOcclusion, pointBehindGroup, subtractOccludedRects } from '../../src/components/panels/nodes/canvas/edgeGroupOcclusion';
+import { createEdgeGroupOcclusion, edgeGroupOcclusion, pointBehindGroup, subtractOccludedRects } from '../../src/components/panels/nodes/canvas/edgeGroupOcclusion';
 import { NodeGraphEdges } from '../../src/components/panels/nodes/canvas/NodeGraphEdges';
 import { connectionFixture } from '../helpers/nodeConnectionFixture';
 import { getConnectionPlugs } from '../../src/components/panels/nodes/canvas/connectionPlugs';
@@ -22,6 +22,9 @@ describe('wires passing behind groups', () => {
     const bounds = nodeGroupBounds(graph, graph.nodes), byId = new Map(graph.nodes.map(node => [node.id, node]));
     expect(edgeGroupOcclusion(graph.edges[0], graph, bounds)).toHaveLength(1);
     expect(edgeGroupOcclusion({ ...graph.edges[0], fromNodeId: 'foreign' }, graph, bounds)).toHaveLength(0);
+    const covers = createEdgeGroupOcclusion(graph, bounds);
+    expect(covers({ ...graph.edges[0], id: 'another-wire' })).toBe(covers(graph.edges[0]));
+    expect(covers({ ...graph.edges[0], fromNodeId: 'foreign' })).toEqual([]);
     const view = render(<NodeGraphEdges graph={graph} edges={graph.edges} graphBounds={{ left: 0, top: 0, right: 1500, bottom: 1000 }}
       nodesById={byId} plugs={getConnectionPlugs(graph.edges, byId)} zoom={1} selectedEdgeId={null} hoveredEdgeId={null}
       connectionDraft={null} onSelectEdge={vi.fn()} onClearSelectedEdge={vi.fn()} />);

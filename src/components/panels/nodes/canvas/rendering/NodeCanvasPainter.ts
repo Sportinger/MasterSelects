@@ -54,6 +54,9 @@ export class NodeCanvasPainter {
   get animated() { return this.transport.visible && this.transport.active && !this.transport.reducedMotion; }
   get viewRevision() { return this.renderedViewRevision; }
   get previewCount() { return this.previews?.size ?? 0; }
+  get hasOverlay() { return this.transport.visible && (this.animated || !!this.visibleScene?.nodes.some(node => node.curve)); }
+  get moving() { return !!this.view?.moving; }
+  invalidateBase() { this.baseDirty = true; }
   draw(now: number): boolean {
     if (!this.scene || !this.view || !this.theme) return false;
     const scene = this.visibleScene ??= this.visibility?.visible(this.view) ?? this.scene;

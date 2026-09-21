@@ -13,7 +13,7 @@ export function bufferedCanvasView(view: Omit<CanvasView, 'ratio'>, dpr: number)
   const width = view.width + NODE_CANVAS_OVERSCAN * 2;
   const height = view.height + NODE_CANVAS_OVERSCAN * 2;
   return { ...view, width, height, panX: view.panX + NODE_CANVAS_OVERSCAN,
-    panY: view.panY + NODE_CANVAS_OVERSCAN, ratio: canvasPixelRatio(width, height, dpr) };
+    panY: view.panY + NODE_CANVAS_OVERSCAN, ratio: canvasPixelRatio(width, height, dpr, view.moving ? 2_000_000 : 8_000_000) };
 }
 
 /** Present worker pixels and their viewport correction in one main-thread task. */
@@ -176,6 +176,6 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
 }
 
 /** Bound both dimensions and area, including very wide/high-DPI displays. */
-export function canvasPixelRatio(width: number, height: number, dpr: number): number {
-  return Math.min(Math.max(1, dpr), 2, 4096 / Math.max(1, width), 4096 / Math.max(1, height), Math.sqrt(8_000_000 / Math.max(1, width * height)));
+export function canvasPixelRatio(width: number, height: number, dpr: number, maxPixels = 8_000_000): number {
+  return Math.min(Math.max(1, dpr), 2, 4096 / Math.max(1, width), 4096 / Math.max(1, height), Math.sqrt(maxPixels / Math.max(1, width * height)));
 }

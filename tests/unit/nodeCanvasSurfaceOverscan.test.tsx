@@ -64,5 +64,16 @@ describe('node canvas overscan presentation', () => {
     renderer.present(second.revision!);
     expect(rendered).toHaveBeenLastCalledWith(next);
     expect(renderer.viewport).toHaveBeenLastCalledWith(second.view);
+
+    vi.stubGlobal('devicePixelRatio', 2);
+    surface.rerender(<NodeGraphCanvasSurface {...props} viewport={next} previewsSuspended />);
+    const moving = lastView();
+    expect(moving.view.moving).toBe(true);
+    expect(moving.view.width * moving.view.height * moving.view.ratio ** 2).toBeLessThanOrEqual(2_000_001);
+    surface.rerender(<NodeGraphCanvasSurface {...props} viewport={next} previewsSuspended={false} />);
+    const settled = lastView();
+    expect(settled.view.moving).toBe(false);
+    expect(settled.view.ratio).toBeGreaterThan(moving.view.ratio);
+    expect(settled.view.zoom).toBe(next.zoom);
   });
 });

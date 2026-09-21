@@ -175,6 +175,7 @@ export function NodeGraphCanvas({
   const freezeGroupFrames = nodeGesture && !nodeGesture.groupId
     && hasUnlockedSource(graph, placement, nodeGesture.members.map(member => member.nodeId));
   const groupFrameNodes = freezeGroupFrames ? spacedNodes : displayNodes;
+  const groupBounds = useMemo(() => nodeGroupBounds(graph, groupFrameNodes), [graph, groupFrameNodes]);
   const nodesById = useMemo(() => new Map(displayNodes.map((node) => [node.id, node])), [displayNodes]);
   const nodesByIdRef = useRef(nodesById);
   nodesByIdRef.current = nodesById;
@@ -191,13 +192,13 @@ export function NodeGraphCanvas({
   const plugs = useMemo(() => getConnectionPlugs(graph.edges, nodesById), [graph.edges, nodesById]);
   const { hoveredPort, hoveredEdgeId, portHoverEvents } = useNodePortHover(nodesById);
   const graphBounds = useMemo(() => {
-    const bounds = annotatedGraphBounds(graph, displayNodes);
+    const bounds = annotatedGraphBounds(graph, displayNodes, freezeGroupFrames ? undefined : groupBounds);
     for (const { tip } of plugs) {
       bounds.left = Math.min(bounds.left, tip.x - 10);
       bounds.right = Math.max(bounds.right, tip.x + 10);
     }
     return bounds;
-  }, [displayNodes, graph, plugs]);
+  }, [displayNodes, graph, plugs, groupBounds, freezeGroupFrames]);
   const selectedEdge = useMemo(() => (
     selectedEdgeId ? graph.edges.find((edge) => edge.id === selectedEdgeId) ?? null : null
   ), [graph.edges, selectedEdgeId]);
@@ -527,6 +528,7 @@ export function NodeGraphCanvas({
 
       <div
         ref={canvasRef}
+        data-layout-animating={animating}
         className={`node-workspace-canvas${canvasRendered ? ' canvas-rendered' : ''}`}
         tabIndex={0}
         {...portHoverEvents}
@@ -595,7 +597,7 @@ export function NodeGraphCanvas({
         }}
       >
         <div className="node-workspace-grid" style={gridStyle} aria-hidden="true" />
-        <NodeGraphCanvasSurface graph={graph} nodes={displayNodes} groupFrameNodes={groupFrameNodes} plugs={plugs} viewport={viewport} previewsSuspended={animating}
+        <NodeGraphCanvasSurface graph={graph} nodes={displayNodes} groupFrameNodes={groupFrameNodes} groupBounds={groupBounds} plugs={plugs} viewport={viewport} previewsSuspended={animating}
           surfaceRef={canvasSurfaceRef} backgroundRef={canvasBackgroundRef} onViewRendered={handleViewRendered}
           selectedNodeId={selectedNodeId} selection={multiSelection} selectedEdgeId={selectedEdgeId}
           hoveredEdgeId={hoveredEdgeId} hoveredPort={hoveredPort} draft={connectionDraft} canBypass={!!onToggleNodeBypass} onReady={setCanvasRendered} />
@@ -605,7 +607,7 @@ export function NodeGraphCanvas({
           className="node-workspace-canvas-inner"
         >
           <NodeGraphGroups graph={graph} nodes={displayNodes} zoom={viewport.zoom} onToggle={toggleGroup} onFocus={focusGroup}
-            frameNodes={groupFrameNodes}
+            frameNodes={groupFrameNodes} groupBounds={groupBounds}
             locks={placement.groups} onToggleLock={toggleLock} onToggleNodeBypass={onToggleNodeBypass}
             onStartDrag={startGroupDrag} onPointerMove={handleNodePointerMove} onFinishDrag={finishNodeDrag} />
           {/* The worker paints moving cards/cables. Rebuild their invisible DOM

@@ -3,7 +3,8 @@ export { projectOperatorPort } from '../operators/operatorPortProjection';
 import type { Effect } from '../../types/effects';
 import type { TimelineClip } from '../../types/timeline';
 import type { NodeGraph } from '../../types/nodeGraph';
-import { effectOperatorGraph } from '../operators/effectGraphOwner';
+import { effectOperatorGraph, isImageGraphEffectType } from '../operators/effectGraphOwner';
+import { prepareImageEffect } from '../operators/imageEffectRuntimePlan';
 import { getEffectOperator } from '../operators/operatorRegistry';
 import { operatorEnabled } from '../operators/effectGraph';
 import { mathNodeSymbol } from './mathNodeSymbol';
@@ -13,7 +14,7 @@ export const effectGraphId = (clipId: string, effectId: string) => `clip-graph:$
 
 export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): NodeGraph {
   let graph;
-  try { graph = effectOperatorGraph(effect); }
+  try { graph = isImageGraphEffectType(effect.type) ? prepareImageEffect(effect).graph : effectOperatorGraph(effect); }
   catch (error) {
     return { id: effectGraphId(clip.id, effect.id), owner: { kind: 'clip', id: clip.id, name: clip.name }, nodes: [{
       id: 'invalid', kind: 'output', runtime: 'builtin', label: 'Invalid saved graph', description: String(error),

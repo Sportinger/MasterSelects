@@ -4,8 +4,24 @@ import type { Rect } from './rendering/nodeCanvasTypes';
 
 /** Endpoint groups own their wires; only unrelated frames cover a passing wire. */
 export function edgeGroupOcclusion(edge: NodeGraphEdge, graph: NodeGraph, bounds: Map<string, NodeBounds>): Rect[] {
-  return (graph.groups ?? []).filter(group => !group.nodeIds.includes(edge.fromNodeId) && !group.nodeIds.includes(edge.toNodeId))
-    .flatMap(group => { const box = bounds.get(group.id); return box ? [{ x: box.left, y: box.top, width: box.right - box.left, height: box.bottom - box.top }] : []; });
+  return createEdgeGroupOcclusion(graph, bounds)(edge);
+}
+
+/** Share covers between wires and across the structured-clone worker message. */
+export function createEdgeGroupOcclusion(graph: NodeGraph, bounds: ReadonlyMap<string, NodeBounds>) {
+  const groups = (graph.groups ?? []).flatMap(group => {
+    const box = bounds.get(group.id);
+    return box ? [{ members: new Set(group.nodeIds), rect: { x: box.left, y: box.top, width: box.right - box.left, height: box.bottom - box.top } }] : [];
+  });
+  const covers = new Map<string, Rect[]>();
+  return (edge: NodeGraphEdge): Rect[] => {
+    const indices: number[] = [];
+    groups.forEach((group, i) => { if (!group.members.has(edge.fromNodeId) && !group.members.has(edge.toNodeId)) indices.push(i); });
+    const key = indices.join(',');
+    let result = covers.get(key);
+    if (!result) { result = indices.map(i => groups[i].rect); covers.set(key, result); }
+    return result;
+  };
 }
 
 /** Disjoint rectangles also work for SVG hit testing; masks alone do not disable pointer events. */

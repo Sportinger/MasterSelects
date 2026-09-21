@@ -113,6 +113,14 @@ vignette, outside coverage and final resolve while retaining one effect pass.
 Persisted edits therefore change preview and export execution, not merely the
 workspace diagram.
 
+Image effects reuse a bounded cache of validated graphs and compiled CPU render
+plans across playback, inline rendering, previews and worker-software export.
+Numeric, Boolean, color and choice changes refill immutable uniform values;
+graph revisions, effect-definition changes and resource-dependent parameters
+rebuild the plan. Preview targets also cache their compiled plans and unsupported
+scopes. This removes repeated graph compilation per frame without changing
+Fisheye sampling quality or its rendered result.
+
 The bindings retain the catalog schema exactly. Projection defaults to
 `equidistant` (`equisolid`, `stereographic` and `orthographic` are available);
 Strength is `1` in `-1..1`, Field of View is `140` in `20..175` degrees, Curve

@@ -12,10 +12,17 @@ export function encloseNodeGroup(members: NodeGraphNode[], children: NodeBounds[
 
 export function nodeGroupBounds(graph: NodeGraph, nodes: NodeGraphNode[]): Map<string, NodeBounds> {
   const bounds = new Map<string, NodeBounds>();
+  const groups = new Map(graph.groups?.map(group => [group.id, group]));
+  const nodesById = new Map(nodes.map(node => [node.id, node]));
+  const childrenById = new Map<string, string[]>();
+  for (const group of graph.groups ?? []) if (group.parentId) {
+    const children = childrenById.get(group.parentId) ?? [];
+    children.push(group.id); childrenById.set(group.parentId, children);
+  }
   const measure = (id: string): NodeBounds | undefined => {
     if (bounds.has(id)) return bounds.get(id);
-    const group = graph.groups?.find(g => g.id === id), members = nodes.filter(n => group?.nodeIds.includes(n.id));
-    const children = group?.collapsed ? [] : (graph.groups ?? []).filter(g => g.parentId === id).map(g => measure(g.id)).filter((b): b is NodeBounds => !!b);
+    const group = groups.get(id), members = (group?.nodeIds ?? []).map(nodeId => nodesById.get(nodeId)).filter((node): node is NodeGraphNode => !!node);
+    const children = group?.collapsed ? [] : (childrenById.get(id) ?? []).map(measure).filter((b): b is NodeBounds => !!b);
     if (!members.length && !children.length) return;
     const value = group?.collapsed
       ? { left: Math.min(...members.map(n => n.layout.x)), top: Math.min(...members.map(n => n.layout.y)),
@@ -25,7 +32,7 @@ export function nodeGroupBounds(graph: NodeGraph, nodes: NodeGraphNode[]): Map<s
   };
   graph.groups?.forEach(g => measure(g.id)); return bounds;
 }
-export function annotatedGraphBounds(graph: NodeGraph, nodes: NodeGraphNode[]): NodeBounds {
-  const all = [getGraphBounds({ ...graph, nodes }), ...nodeGroupBounds(graph, nodes).values()];
+export function annotatedGraphBounds(graph: NodeGraph, nodes: NodeGraphNode[], groups = nodeGroupBounds(graph, nodes)): NodeBounds {
+  const all = [getGraphBounds({ ...graph, nodes }), ...groups.values()];
   return { left: Math.min(...all.map(b => b.left)), top: Math.min(...all.map(b => b.top)), right: Math.max(...all.map(b => b.right)), bottom: Math.max(...all.map(b => b.bottom)) };
 }
