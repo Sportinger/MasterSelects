@@ -101,6 +101,20 @@ describe('worker GPU image operator program', () => {
     expect(style[legacyField]).toBe(identity);
   });
 
+  it.each([
+    ['pixelate', { size: 31 }, 'pixelateSize'],
+    ['mirror', { horizontal: true, vertical: true }, 'mirrorHorizontal'],
+    ['rgb-split', { amount: 0.08, angle: 1.2 }, 'rgbSplitAmount'],
+  ] as const)('leaves sampling %s to the authoritative worker compositor', (type, params, legacyField) => {
+    const layer = { opacity: 1, blendMode: 'normal', effects: [
+      { id: type, name: type, type, enabled: true, params },
+    ] } as unknown as Layer;
+    const style = resolveWorkerGpuVideoPresentationLayerStyle(layer);
+    expect(style.operatorProgram).toBeUndefined();
+    expect(style.complexEffectCount).toBe(1);
+    expect(style[legacyField]).toBe(type === 'mirror' ? false : 0);
+  });
+
   it('preserves the compiled edited graph as a serializable layer style', () => {
     const style = resolveWorkerGpuVideoPresentationLayerStyle(layerWithEditedInvert());
     const defaults = resolveWorkerGpuVideoPresentationLayerStyle({ opacity: 1, blendMode: 'normal', effects: [

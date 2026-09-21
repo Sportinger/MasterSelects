@@ -5,6 +5,7 @@ import { nodePreviewTextureTap } from '../../src/services/nodePreview/NodePrevie
 import { createDefaultInvertImageGraph } from '../../src/services/operators/imageOperatorGraph';
 import { createDefaultScanlinesGraph, createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
 import type { Effect } from '../../src/types/effects';
+import { createDefaultPixelateGraph } from '../../src/services/operators/samplingEffectGraphs';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -80,5 +81,24 @@ describe('image operator texture previews', () => {
       source: { kind: 'texture', view: {} as GPUTextureView }, width: 640, height: 360, timelineTimeSeconds: 4.25 })).toBe(1);
     expect(writes[0]).toHaveLength(68);
     expect(writes[0][64]).toBe(4.25);
+  });
+
+  it('uses the existing external source helper and uploads preview resolution for sampling graphs', () => {
+    vi.stubGlobal('GPUBufferUsage', { UNIFORM: 1, COPY_DST: 2 });
+    const stage = imageOperatorPreviewStage({ effectId: 'pixelate-preview', nodeId: 'sample', direction: 'output', portId: 'image' });
+    vi.spyOn(nodePreviewTextureTap, 'matching').mockReturnValue([{ stage, request: {} as never }]);
+    const pass = { setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: vi.fn() } as unknown as GPURenderPassEncoder;
+    vi.spyOn(nodePreviewTextureTap, 'draw').mockImplementation((_stage, _device, _encoder, _width, _height, encode) => encode(pass));
+    let shader = ''; const writes: Float32Array[] = [];
+    const pipeline = { getBindGroupLayout: vi.fn(() => ({})) } as unknown as GPURenderPipeline;
+    const device = { lost: new Promise(() => {}), queue: { writeBuffer: vi.fn((_buffer: GPUBuffer, _offset: number, data: Float32Array) => writes.push(data)) },
+      createBuffer: vi.fn(() => ({})), createShaderModule: vi.fn(({ code }: { code: string }) => { shader = code; return {}; }),
+      createRenderPipeline: vi.fn(() => pipeline), createBindGroup: vi.fn(() => ({})) } as unknown as GPUDevice;
+    const pixelateEffect = { id: 'pixelate-preview', type: 'pixelate', name: 'Pixelate', enabled: true, params: {},
+      operatorGraph: createDefaultPixelateGraph() } as Effect;
+    expect(captureImageOperatorPreviews({ effect: pixelateEffect, device, encoder: {} as GPUCommandEncoder, sampler: {} as GPUSampler,
+      source: { kind: 'external', texture: {} as GPUExternalTexture }, width: 854, height: 480 })).toBe(1);
+    expect(shader).toContain('fn sampleImageGraphSource(uv: vec2f) -> vec4f { return textureSampleBaseClampToEdge');
+    expect(writes[0].slice(64)).toEqual(new Float32Array([0, 0, 854, 480]));
   });
 });

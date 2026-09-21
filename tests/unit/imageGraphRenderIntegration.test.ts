@@ -19,6 +19,7 @@ import { createDefaultPointwiseEffectGraph } from '../../src/services/operators/
 import { createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
 import { vignette } from '../../src/effects/stylize/vignette';
 import { scanlines } from '../../src/effects/stylize/scanlines';
+import { pixelate } from '../../src/effects/distort/pixelate';
 
 const colorDefinitions = { brightness, contrast, saturation, exposure, levels,
   'hue-shift': hueShift, temperature, vibrance } as const;
@@ -88,6 +89,16 @@ describe('image graph render integration', () => {
     expect(atTwo.packUniforms({}, 1920, 1080)?.[64]).toBe(2);
     expect(atThree.packUniforms({}, 1920, 1080)?.[64]).toBe(3);
     expect(atTwo.shader).toContain('input.uv, imageGraphRuntime.timelineTimeSeconds, imageGraphRuntime.imageParameters');
+  });
+
+  it('adapts sampling graphs with the existing texture source and packed input resolution', () => {
+    const instance = { id: 'pixelate-sample', type: 'pixelate', name: 'Pixelate', enabled: true, params: {} };
+    const definition = imageGraphDefinition(instance, pixelate as FullscreenEffectDefinition);
+    const packed = definition.packUniforms({}, 1280, 720)!;
+    expect(definition.uniformSize).toBe(272);
+    expect([...packed.slice(64)]).toEqual([0, 0, 1280, 720]);
+    expect(definition.shader).toContain('fn sampleImageGraphSource(uv: vec2f) -> vec4f { return textureSample(inputTex, texSampler, uv); }');
+    expect(definition.shader).toContain('input.uv, imageGraphRuntime.inputResolution, imageGraphRuntime.imageParameters');
   });
 
   it('routes an edited formerly-local graph with UV capability through a fullscreen pass', () => {

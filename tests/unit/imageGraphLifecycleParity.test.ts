@@ -8,6 +8,7 @@ import { useTimelineStore } from '../../src/stores/timeline';
 import { captureSnapshot, getHistoryStateView, initHistoryStoreRefs, setHistoryCallbacks } from '../../src/stores/historyStore';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 import type { Effect, Keyframe, TimelineClip } from '../../src/types';
+import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 import { buildBaseLayerProps } from '../../src/engine/export/layerBuilder/baseLayers';
 
 const initialTimeline = useTimelineStore.getState();
@@ -127,6 +128,45 @@ describe('image graph lifecycle parity', () => {
     expect(repeated).toEqual(atOne);
     expect(sought).not.toEqual(atOne);
     expect(plan.key).toBe(compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect)).key);
+  });
+
+  it('re-evaluates the real upstream DAG at each image sample coordinate', () => {
+    const graph: EffectOperatorGraph = {
+      version: 1, schemaVersion: 1, domain: 'image',
+      nodes: [
+        { id: 'frame', operator: 'image.frame', operatorVersion: 1, bindings: {} },
+        { id: 'split', operator: 'vector.split.rgba', operatorVersion: 1, bindings: {} },
+        { id: 'offset', operator: 'values.number', operatorVersion: 1, bindings: {}, constants: { value: 0.1 } },
+        { id: 'splat', operator: 'convert.scalar-to-rgb', operatorVersion: 1, bindings: {} },
+        { id: 'add', operator: 'math.add.rgb', operatorVersion: 1, bindings: {} },
+        { id: 'combine', operator: 'vector.combine.rgba', operatorVersion: 1, bindings: {} },
+        { id: 'uv', operator: 'image.normalized-uv', operatorVersion: 1, bindings: {} },
+        { id: 'sample', operator: 'image.sample', operatorVersion: 1, bindings: {} },
+        { id: 'output', operator: 'image.output', operatorVersion: 1, bindings: {} },
+      ],
+      edges: [
+        { id: 'frame-split', from: 'frame', output: 'image', to: 'split', input: 'image' },
+        { id: 'offset-splat', from: 'offset', output: 'value', to: 'splat', input: 'value' },
+        { id: 'split-add', from: 'split', output: 'rgb', to: 'add', input: 'a' },
+        { id: 'splat-add', from: 'splat', output: 'rgb', to: 'add', input: 'b' },
+        { id: 'add-combine', from: 'add', output: 'value', to: 'combine', input: 'rgb' },
+        { id: 'alpha-combine', from: 'split', output: 'alpha', to: 'combine', input: 'alpha' },
+        { id: 'combine-sample', from: 'combine', output: 'image', to: 'sample', input: 'image' },
+        { id: 'uv-sample', from: 'uv', output: 'uv', to: 'sample', input: 'uv' },
+        { id: 'sample-output', from: 'sample', output: 'image', to: 'output', input: 'image' },
+      ],
+      layout: {},
+    };
+    const plan = compileImageOperatorGraph(graph, {});
+    const sampledCoordinates: Array<[number, number]> = [];
+    const result = evaluateImageOperatorPlan(plan, pixel, {
+      uv: [0.75, 0.5],
+      sampleImage: uv => { sampledCoordinates.push(uv); return [uv[0], uv[1], 0.2, 0.4]; },
+    });
+    expect(sampledCoordinates).toEqual([[0.75, 0.5]]);
+    expect(result[0]).toBeCloseTo(0.85); expect(result[1]).toBeCloseTo(0.6);
+    expect(result[2]).toBeCloseTo(0.3); expect(result[3]).toBe(0.4);
+    expect(result).not.toEqual([0.3, 0.5, 0.9, 0.75]);
   });
 
   it('restores graph constants through undo/redo and canonical save/load without runtime payloads', async () => {

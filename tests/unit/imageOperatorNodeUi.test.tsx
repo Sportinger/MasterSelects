@@ -10,6 +10,7 @@ import { useTimelineStore } from '../../src/stores/timeline';
 import type { Effect } from '../../src/types/effects';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 import { getEditableDraggableNumberSettings, operatorConstantNumberPersistenceKey, saveEditableDraggableNumberSettings } from '../../src/components/common/EditableDraggableNumberSettings';
+import { createDefaultMirrorGraph } from '../../src/services/operators/samplingEffectGraphs';
 
 const initial = useTimelineStore.getState();
 const owner = {};
@@ -30,6 +31,32 @@ function fixture() {
 }
 
 describe('image operator node UI', () => {
+  it('edits bound Mirror booleans without numeric coercion and preserves owner defaults', () => {
+    const effect: Effect = { id: 'mirror-ui', name: 'Mirror', type: 'mirror', enabled: true, params: {}, operatorGraph: createDefaultMirrorGraph() };
+    const clip = createMockClip({ id: 'mirror-clip', effects: [effect] });
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })] });
+    const graph = buildEffectOperatorGraph(clip, effect);
+    const frameFor = (id: 'horizontal' | 'vertical') => {
+      const node = graph.nodes.find(candidate => candidate.id === id)!;
+      node.preview = { enabled: true, requested: true, key: `mirror-${id}` };
+      return { node, frame: imageOperatorValuePreview({ key: `mirror-${id}`, revision: '1', time: 0, clipId: clip.id, node,
+        width: 164, height: 100, interval: 16, priority: 1 }, clip, effect)! };
+    };
+    const horizontal = frameFor('horizontal'), vertical = frameFor('vertical');
+    expect(horizontal.frame.controls?.[0]).toMatchObject({ value: true, defaultValue: true });
+    expect(vertical.frame.controls?.[0]).toMatchObject({ value: false, defaultValue: false });
+    previewTextStore.retain(owner, new Set(['mirror-horizontal']));
+    act(() => previewTextStore.publish(horizontal.frame));
+    render(<NodeValuePreview node={horizontal.node} />);
+    const checkbox = screen.getByRole('checkbox', { name: /Horizontal inline/ });
+    expect(checkbox).toBeChecked();
+    fireEvent.click(checkbox);
+    const saved = useTimelineStore.getState().clips[0].effects[0];
+    expect(saved.params.horizontal).toBe(false);
+    expect(typeof saved.params.horizontal).toBe('boolean');
+    expect(saved.operatorGraph?.nodes.find(node => node.id === 'horizontal')?.bindings.value).toBe('horizontal');
+  });
+
   it('keeps UV-dependent distances as image previews while exposing uniform operands', () => {
     const effect: Effect = { id: 'vignette-ui', name: 'Vignette', type: 'vignette', enabled: true, params: {} };
     const clip = createMockClip({ id: 'vignette-clip', effects: [effect] });

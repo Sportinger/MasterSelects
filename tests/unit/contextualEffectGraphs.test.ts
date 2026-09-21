@@ -11,6 +11,8 @@ import {
 } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import type { Effect } from '../../src/types/effects';
+import { buildEffectOperatorGraph } from '../../src/services/nodeGraph/effectGraphProjection';
+import { createMockClip } from '../helpers/mockData';
 
 const pixel: [number, number, number, number] = [0.2, 0.4, 0.8, 0.35];
 const effect = (params: Record<string, unknown> = getDefaultParams('vignette')): Effect =>
@@ -42,5 +44,12 @@ describe('contextual image effect graph ownership', () => {
     const canonical = migratePersistedEffectOperatorGraph(legacy);
     expect(effectOperatorGraph(JSON.parse(JSON.stringify(canonical)) as Effect)).toEqual(graph);
     expect(canonical.operatorGraph?.nodes.find(node => node.id === 'amount')?.bindings).toEqual({ value: 'amount' });
+  });
+
+  it('keeps UV vec2 component labels distinct from RGBA color channels', () => {
+    const vignetteEffect = effect();
+    const projected = buildEffectOperatorGraph(createMockClip({ effects: [vignetteEffect] }), vignetteEffect);
+    const aspect = projected.nodes.find(node => node.id === 'aspect');
+    expect(aspect?.inputs.map(port => port.label)).toEqual(['X', 'Y']);
   });
 });

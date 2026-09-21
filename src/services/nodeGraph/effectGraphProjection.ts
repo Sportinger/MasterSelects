@@ -25,7 +25,8 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
       const operator = getEffectOperator(node.operator)!;
       const projectPort = (p: (typeof operator.inputs)[number], direction: 'input' | 'output') => {
         const projected = projectOperatorPort(p, direction);
-        const channel = graph.domain === 'image' && (operator.family === 'vector.split' || operator.family === 'vector.combine')
+        const channel = graph.domain === 'image' && operator.variant === 'vec4'
+          && (operator.family === 'vector.split' || operator.family === 'vector.combine')
           ? ({ x: 'R', y: 'G', z: 'B', w: 'A' } as Record<string, string>)[p.id] : undefined;
         return channel ? { ...projected, label: channel } : projected;
       };

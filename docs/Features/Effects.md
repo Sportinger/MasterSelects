@@ -157,6 +157,12 @@ their former wall-clock animation even for legacy graph-less effects. Grain adds
 an explicit Seed control with default `0`; existing controls keep their original
 ranges and defaults. Both preserve source alpha and use one fullscreen pass.
 
+Pixelate, Mirror and RGB Split expose editable coordinate and sampling graphs.
+Sampling follows the connected upstream image expression, so rewiring math before
+the sample changes the real result. Pixelate uses the render resolution; Mirror
+keeps its boolean Horizontal/Vertical controls; RGB Split preserves center alpha.
+Each retains its existing parameter defaults and one fullscreen render pass.
+
 ### Analog Signal Lab
 
 `Analog Signal Lab` is a dedicated six-pass compute effect rather than a

@@ -100,6 +100,8 @@ Explore the [feature guide](docs/Features/README.md) for workflows and examples.
 Scanlines and Film Grain expose editable UV/time/math graphs with reproducible
 timeline animation; Grain includes an explicit seed. Their paused preview and
 export use the same clock instead of elapsed browser time.
+Pixelate, Mirror and RGB Split use editable coordinate/sampling graphs, sharing
+the same compiler rather than hiding their processing inside effect nodes.
 
 Node cables have visible semicircular plugs, animated attachment, and docked ghost
 previews over compatible sockets while dragging. Drag either end to reconnect,

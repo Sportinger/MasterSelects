@@ -65,3 +65,22 @@ effects with deterministic timeline animation, including legacy effects loaded
 without a graph. A paused frame no longer changes with elapsed wall time. Seed
 `0` retains the original Grain formula when evaluated at the same supplied time;
 the old browser-clock epoch cannot be reproduced during export or project reload.
+
+## Sampling image expressions
+
+Pixelate, Mirror and RGB Split use the same canonical graph and a shared Sample
+Image operator. Its image input denotes the connected upstream image expression,
+not a saved texture handle. Sampling at another UV re-evaluates that expression
+at the requested coordinate, including upstream pointwise math and coordinate
+nodes. The compiler shares coordinate scopes within one shader; sampling and
+branches do not create a render pass per node. CPU evaluation requires an
+explicit source-sampling callback, while GPU adapters bind the existing input
+texture and sampler. Existing clamp/filter behavior is retained.
+
+Image resolution is an explicit runtime context value, independent of parameter
+storage and pipeline keys. Pixelate builds a cell-center coordinate from pixel
+size and resolution; Mirror uses typed boolean controls and component selection;
+RGB Split samples offset red and blue while keeping green and alpha at the center.
+Their original parameter IDs, ranges and defaults remain authoritative. All three
+stay on the existing fullscreen path; invalid or cyclic graphs remain errors
+instead of silently restoring the legacy shader.

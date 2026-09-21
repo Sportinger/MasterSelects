@@ -56,6 +56,7 @@ export function setOperatorParameter(clipId: string, effectId: string, nodeId: s
     const ownerSpec = typeof binding === 'string' && effectType && isImageGraphEffectType(effectType) ? getEffect(effectType)?.params[binding] : undefined;
     const min = ownerSpec?.type === 'number' ? ownerSpec.min : spec.min, max = ownerSpec?.type === 'number' ? ownerSpec.max : spec.max;
     if (spec.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value) || value < (min ?? -Infinity) || value > (max ?? Infinity))) throw new Error('Parameter is outside its supported range.');
+    if (spec.type === 'boolean' && typeof value !== 'boolean') throw new Error('Parameter requires a boolean value.');
     if (spec.type === 'select' && (typeof value !== 'string' || !spec.options?.some(option => option.value === value))) throw new Error('Parameter option is unavailable.');
     if (typeof binding === 'string') params[binding] = value;
     else if (Array.isArray(binding) && Array.isArray(value)) binding.forEach((key, i) => { params[key] = value[i]; });

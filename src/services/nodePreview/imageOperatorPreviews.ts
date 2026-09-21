@@ -43,6 +43,24 @@ export function imageOperatorKnownValues(request: PreviewRequest, clip: Timeline
 
 /** Numeric previews evaluate canonical bindings without persisting duplicate parameter values. */
 export function imageOperatorValuePreview(request: PreviewRequest, clip: TimelineClip, effect: Effect, keys: Keyframe[] = [], time = Math.max(0, request.time - clip.startTime)): PreviewFrame | undefined {
+  const binding = request.node.binding;
+  if (binding?.kind === 'effect-operator') {
+    const selected = effectOperatorGraph(effect).nodes.find(node => node.id === binding.nodeId);
+    if (selected?.operator === 'values.boolean') {
+      const spec = getEffectOperator(selected.operator)!.parameters.find(parameter => parameter.id === 'value')!;
+      const ownerKey = typeof selected.bindings.value === 'string' ? selected.bindings.value : undefined;
+      const owner = ownerKey ? getEffect(effect.type)?.params[ownerKey] : undefined;
+      const sampled = sampleOperatorParameter(selected, 'value', effectOperatorParams(effect), effect.id, keys, time);
+      const value = typeof sampled === 'boolean' ? sampled : Boolean(spec.default);
+      const controls: PreviewValueControl[] = [{ label: owner?.label ?? spec.label, value,
+        defaultValue: owner?.type === 'boolean' ? Boolean(owner.default) : Boolean(spec.default), portId: 'value', direction: 'output',
+        target: ownerKey
+          ? { clipId: clip.id, effectId: effect.id, nodeId: selected.id, parameter: 'value' }
+          : { clipId: clip.id, effectId: effect.id, nodeId: selected.id, parameter: 'value', storage: 'constant' } }];
+      return { key: request.key, revision: request.revision, time: request.time, status: 'live', label: 'Live value', controls,
+        drawing: { kind: 'text', lines: [value ? 'True' : 'False'] } };
+    }
+  }
   const scalar = imageScalarValues(request, effect, keys, time); if (!scalar) return undefined;
   const { selected, evaluate, values } = scalar;
   // Per-pixel operands and results must be rendered by the canonical image IR.
