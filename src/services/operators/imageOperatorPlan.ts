@@ -39,10 +39,10 @@ export function compileImageOperatorPassPlan(graph: EffectOperatorGraph, params:
   const hasNeighborhoodUpstream = (id: string, seen = new Set<string>()): boolean => {
     if (seen.has(id)) return false; seen.add(id);
     if (nodes.get(id)?.operator === 'image.materialize') return false;
-    if (nodes.get(id)?.operator === 'image.kernel-grid-reduce' || nodes.get(id)?.operator === 'image.sequence-reduce') return true;
+    if (['image.kernel-grid-reduce', 'image.kernel-rect-reduce', 'image.sequence-reduce'].includes(nodes.get(id)?.operator ?? '')) return true;
     return graph.edges.some(edge => edge.to === id && hasNeighborhoodUpstream(edge.from, seen));
   };
-  for (const reducer of graph.nodes) if ((reducer.operator === 'image.kernel-grid-reduce' || reducer.operator === 'image.sequence-reduce') && reachable.has(reducer.id)) {
+  for (const reducer of graph.nodes) if (['image.kernel-grid-reduce', 'image.kernel-rect-reduce', 'image.sequence-reduce'].includes(reducer.operator) && reachable.has(reducer.id)) {
     const sample = incoming.get(`${reducer.id}:sample`);
     const boundaries: OperatorEdge[] = [], seen = new Set<string>();
     const collectSampleBoundaries = (id: string) => {

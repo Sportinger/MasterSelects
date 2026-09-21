@@ -216,6 +216,15 @@ always one, independent of source alpha. Strength remains animatable with defaul
 1 and range 0–5; Invert defaults to false. Sampling, coefficients and the final
 clamp are editable graph connections rather than an opaque Sobel operation.
 
+Glow composes a ring blur, soft brightness threshold and additive blend from the
+same image and math operators. A rectangular kernel reducer supplies ring-major
+sample coordinates; it does not expand the existing sequence reducer's limit.
+Ring and sample counts retain their original truncation and limits (1–32 rings,
+4–64 samples per ring). The graph adds the weighted center after the ring sum,
+normalizes the accumulated light, applies Amount, and clamps RGB. Source-center
+alpha is preserved exactly. The default graph remains a single pass, including
+the original width-based radius scaling and fractional quality defaults.
+
 ### Graph-internal texture stages
 
 `image.materialize` creates an explicit texture boundary inside an image graph.

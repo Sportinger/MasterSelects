@@ -123,11 +123,6 @@ const PI: f32 = 3.14159265359;
 const TAU: f32 = 6.28318530718;
 const E: f32 = 2.71828182846;
 
-// Gaussian function
-fn gaussian(x: f32, sigma: f32) -> f32 {
-  return exp(-(x * x) / (2.0 * sigma * sigma));
-}
-
 // Smoothstep variant
 fn smootherstep(edge0: f32, edge1: f32, x: f32) -> f32 {
   let t = clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);

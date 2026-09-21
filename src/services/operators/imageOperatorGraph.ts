@@ -1,15 +1,14 @@
 import type { BoundOperatorNode, EffectOperatorGraph } from '../../types/operatorGraph';
 import type { ImageOperatorProgram } from '../../types/imageOperatorProgram';
 import { getEffectOperator } from './operatorRegistry';
-import { evaluateScalarOperation } from './scalarOperationSemantics';
-import { imageFract, imageHsvToRgb, imageRgbToHsv } from './imageColorSemantics';
-import { IMAGE_OPERATOR_PARAMETER_CAPACITY, IMAGE_OPERATOR_PARAMETER_VEC4_COUNT } from './imageOperatorParameters';
+import { IMAGE_OPERATOR_PARAMETER_CAPACITY } from './imageOperatorParameters';
 import { colorToRgba } from '../../effects/_shared/catalogColor';
-import hash2dWgsl from '../../effects/_shared/hash2d.wgsl?raw';
 import { compileImageOperatorPassPlan } from './imageOperatorPlan';
 import { emitImageReducerWgsl } from './imageOperatorReducerWgsl';
 import { migrateImageOperatorGraph } from './imageOperatorMigration';
+import { imageF32 as f32, imageParameterExpression as parameterExpression, IMAGE_COLOR_WGSL, IMAGE_GAUSSIAN_WGSL, IMAGE_HASH2D_WGSL, IMAGE_PARAMETER_WGSL } from './imageOperatorWgsl';
 export { createDefaultInvertImageGraph, migrateImageOperatorGraph } from './imageOperatorMigration';
+export { evaluateImageOperatorPlan } from './imageOperatorEvaluation';
 
 export type ImagePlanValue = 'image' | 'rgb' | 'alpha' | 'scalar' | 'boolean' | 'vec2' | 'vec3' | 'vec4';
 export type ImageOperatorCapability = 'uv' | 'resolution' | 'time' | 'sample';
@@ -20,7 +19,7 @@ export interface ImageOperatorEvaluationContext {
 }
 export interface ImagePlanInstruction {
   nodeId: string;
-  operation: 'input' | 'uv' | 'resolution' | 'time' | 'sample-image' | 'resource-input' | 'kernel-index' | 'kernel-sum' | 'kernel-weight-sum' | 'sequence-index' | 'sequence-t' | 'sequence-sum' | 'sequence-weight-sum' | 'mirror-repeat-vec2' | 'select-image' | 'constant' | 'parameter' | 'parameter-boolean' | 'parameter-color' | 'constant-color' | 'subtract' | 'add-scalar' | 'multiply-scalar' | 'divide-ieee-scalar' | 'reciprocal-scalar' | 'exp2-scalar' | 'exp-scalar' | 'sqrt-scalar' | 'fract-scalar' | 'floor-scalar' | 'step-scalar' | 'max-scalar' | 'clamp-scalar' | 'smoothstep-scalar' | 'mix-scalar' | 'greater-scalar' | 'and-boolean' | 'select-scalar' | 'add-vec2' | 'subtract-vec2' | 'multiply-vec2' | 'divide-vec2' | 'floor-vec2' | 'fract-vec2' | 'clamp-vec2' | 'reduce-min-vec2' | 'hash2d-vec2' | 'dot-vec2' | 'length-vec2' | 'sin-scalar' | 'cos-scalar' | 'scalar-to-vec2' | 'scalar-to-vec4' | 'divide-vec4' | 'subtract-rgb' | 'add-rgb' | 'multiply-rgb' | 'divide-ieee-rgb' | 'max-rgb' | 'power-rgb' | 'floor-rgb' | 'clamp-rgb' | 'mix-rgb' | 'mix-components-rgb' | 'reduce-min-rgb' | 'reduce-max-rgb' | 'luminance-rec601' | 'luminance-rec709' | 'scalar-to-rgb' | 'rgb-to-vec3' | 'vec3-to-rgb' | 'rgb-to-hsv' | 'hsv-to-rgb' | 'split-rgb' | 'split-alpha' | 'combine' | 'image-to-vec4' | 'vec4-to-image' | 'split-component' | 'combine-vector';
+  operation: 'input' | 'uv' | 'resolution' | 'time' | 'sample-image' | 'resource-input' | 'kernel-index' | 'kernel-sum' | 'kernel-weight-sum' | 'rect-sum' | 'rect-weight-sum' | 'sequence-index' | 'sequence-t' | 'sequence-sum' | 'sequence-weight-sum' | 'mirror-repeat-vec2' | 'select-image' | 'constant' | 'parameter' | 'parameter-boolean' | 'parameter-color' | 'constant-color' | 'subtract' | 'add-scalar' | 'multiply-scalar' | 'divide-ieee-scalar' | 'reciprocal-scalar' | 'exp2-scalar' | 'exp-scalar' | 'gaussian-scalar' | 'sqrt-scalar' | 'fract-scalar' | 'floor-scalar' | 'step-scalar' | 'max-scalar' | 'clamp-scalar' | 'smoothstep-scalar' | 'mix-scalar' | 'greater-scalar' | 'and-boolean' | 'select-scalar' | 'add-vec2' | 'subtract-vec2' | 'multiply-vec2' | 'divide-vec2' | 'floor-vec2' | 'fract-vec2' | 'clamp-vec2' | 'reduce-min-vec2' | 'hash2d-vec2' | 'dot-vec2' | 'length-vec2' | 'unit-direction' | 'sin-scalar' | 'cos-scalar' | 'scalar-to-vec2' | 'scalar-to-vec4' | 'multiply-vec4' | 'multiply-vector-scalar' | 'divide-vector-scalar' | 'clamp-rgb-scalar' | 'divide-vec4' | 'subtract-rgb' | 'add-rgb' | 'multiply-rgb' | 'divide-ieee-rgb' | 'max-rgb' | 'power-rgb' | 'floor-rgb' | 'clamp-rgb' | 'mix-rgb' | 'mix-components-rgb' | 'reduce-min-rgb' | 'reduce-max-rgb' | 'luminance-rec601' | 'luminance-rec709' | 'scalar-to-rgb' | 'vec4-to-rgb' | 'rgb-to-vec3' | 'vec3-to-rgb' | 'rgb-to-hsv' | 'hsv-to-rgb' | 'split-rgb' | 'split-alpha' | 'combine' | 'image-to-vec4' | 'vec4-to-image' | 'split-component' | 'combine-vector';
   type: ImagePlanValue;
   inputs: number[];
   value?: number;
@@ -34,6 +33,7 @@ export interface ImageOperatorPlan extends ImageOperatorProgram {
   output: number;
   sampleScopes: readonly { id: number; output: number }[];
   kernelScopes?: readonly { id: number; sample: number; weight: number }[];
+  rectScopes?: readonly { id: number; sample: number; weight: number }[];
   sequenceScopes?: readonly { id: number; sample: number; weight: number }[];
   resourceInputs?: readonly string[];
   passes?: readonly { id: string; program: ImageOperatorPlan; inputResources: readonly string[]; outputResource?: string }[];
@@ -42,35 +42,11 @@ export interface ImageOperatorPlan extends ImageOperatorProgram {
 }
 export interface ImageOperatorPreviewTarget { nodeId: string; direction: 'input' | 'output'; portId: string }
 
-const f32 = (value: number) => Number.isInteger(value) ? `${value}.0` : String(value);
-const parameterExpression = (slot: number) => `imageParameters.values[${Math.floor(slot / 4)}].${'xyzw'[slot % 4]}`;
-const IMAGE_PARAMETER_WGSL = `struct ImageOperatorParameters {
-  values: array<vec4f, ${IMAGE_OPERATOR_PARAMETER_VEC4_COUNT}>,
-};`;
-const IMAGE_HASH2D_WGSL = hash2dWgsl.replace('fn hash(', 'fn imageGraphHash2d(');
-const imageHash2d = (value: number[]) => {
-  const x = value[0] * 127.1 + value[1] * 311.7, y = value[0] * 269.5 + value[1] * 183.3;
-  return imageFract(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453);
-};
-const IMAGE_COLOR_WGSL = `
-fn imageGraphRgbToHsv(c: vec3f) -> vec3f {
-  let K = vec4f(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
-  let p = mix(vec4f(c.bg, K.wz), vec4f(c.gb, K.xy), step(c.b, c.g));
-  let q = mix(vec4f(p.xyw, c.r), vec4f(c.r, p.yzx), step(p.x, c.r));
-  let d = q.x - min(q.w, q.y); let e = 1.0e-10;
-  return vec3f(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
-}
-fn imageGraphHsvToRgb(c: vec3f) -> vec3f {
-  let K = vec4f(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-  let p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-  return c.z * mix(K.xxx, clamp(p - K.xxx, vec3f(0.0), vec3f(1.0)), c.y);
-}`;
 const hash = (value: string) => {
   let result = 0x811c9dc5;
   for (let index = 0; index < value.length; index++) { result ^= value.charCodeAt(index); result = Math.imul(result, 0x01000193); }
   return (result >>> 0).toString(16).padStart(8, '0');
 };
-
 function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<string, unknown>, preview?: ImageOperatorPreviewTarget): ImageOperatorPlan {
   graph = migrateImageOperatorGraph(graph);
   if (graph.domain !== 'image') throw new Error('Expected an image operator graph.');
@@ -113,12 +89,12 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     checking.delete(id); checked.add(id);
   };
   for (const id of nodes.keys()) assertAcyclic(id);
-
   const instructions: ImagePlanInstruction[] = [], registers = new Map<string, number>(), visiting = new Set<string>();
   const parameterSlots = new Map<string, number>(), parameterValues: number[] = [];
   const resourceInputs: string[] = [];
   const sampleScopes: Array<{ id: number; output: number }> = [];
   const kernelScopes: Array<{ id: number; sample: number; weight: number }> = [];
+  const rectScopes: Array<{ id: number; sample: number; weight: number }> = [];
   const sequenceScopes: Array<{ id: number; sample: number; weight: number }> = [];
   const scopeBySource = new Map<string, number>(); let nextScopeId = 1;
   let activeScope = 0, activeKernelScope: number | undefined, activeSequenceScope: number | undefined;
@@ -186,6 +162,16 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         const weightSum = emit({ nodeId: current.id, operation: 'kernel-weight-sum', type: 'scalar', inputs: [sum], value: scope });
         registers.set(`${parentScope}:${current.id}:sum`, sum); registers.set(`${parentScope}:${current.id}:weightSum`, weightSum);
         register = output === 'sum' ? sum : weightSum; break;
+      }
+      case 'image.kernel-rect-reduce': {
+        if (activeKernelScope !== undefined || activeSequenceScope !== undefined) throw new Error('Nested image neighborhood reductions are not supported.');
+        const existing = registers.get(`${activeScope}:${current.id}:sum`);
+        if (existing !== undefined) { register = output === 'sum' ? existing : registers.get(`${activeScope}:${current.id}:weightSum`)!; break; }
+        const parentScope = activeScope, width = visitSource(current, 'width'), height = visitSource(current, 'height'), scope = nextScopeId++;
+        activeScope = scope; activeKernelScope = scope; const sample = visitSource(current, 'sample'), weight = visitSource(current, 'weight'); activeScope = parentScope; activeKernelScope = undefined; rectScopes.push({ id: scope, sample, weight });
+        const sum = emit({ nodeId: current.id, operation: 'rect-sum', type: 'vec4', inputs: [width, height], value: scope });
+        const weightSum = emit({ nodeId: current.id, operation: 'rect-weight-sum', type: 'scalar', inputs: [sum], value: scope });
+        registers.set(`${parentScope}:${current.id}:sum`, sum); registers.set(`${parentScope}:${current.id}:weightSum`, weightSum); register = output === 'sum' ? sum : weightSum; break;
       }
       case 'image.sequence-reduce': {
         if (activeKernelScope !== undefined || activeSequenceScope !== undefined) throw new Error('Nested image neighborhood reductions are not supported.');
@@ -282,8 +268,9 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         break;
       }
       case 'math.floor.scalar': {
-        const value = visitSource(current, 'value'); register = current.bypassed ? value
-          : emit({ nodeId: current.id, operation: 'floor-scalar', type: 'scalar', inputs: [value] }); break;
+        const value = visitSource(current, 'value');
+        register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'floor-scalar', type: 'scalar', inputs: [value] });
+        break;
       }
       case 'math.step.scalar': register = emit({ nodeId: current.id, operation: 'step-scalar', type: 'scalar',
         inputs: [visitSource(current, 'edge'), visitSource(current, 'value')] }); break;
@@ -293,12 +280,18 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         break;
       }
       case 'math.clamp.scalar': {
-        const value = visitSource(current, 'value'); register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'clamp-scalar', type: 'scalar',
-          inputs: [value, visitSource(current, 'min'), visitSource(current, 'max')] }); break;
+        const value = visitSource(current, 'value');
+        register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'clamp-scalar', type: 'scalar',
+          inputs: [value, visitSource(current, 'min'), visitSource(current, 'max')] });
+        break;
       }
       case 'math.sqrt.scalar': {
-        const value = visitSource(current, 'value'); register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'sqrt-scalar', type: 'scalar', inputs: [value] }); break;
+        const value = visitSource(current, 'value');
+        register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'sqrt-scalar', type: 'scalar', inputs: [value] });
+        break;
       }
+      case 'math.gaussian.scalar': register = emit({ nodeId: current.id, operation: 'gaussian-scalar', type: 'scalar',
+        inputs: [visitSource(current, 'value'), visitSource(current, 'sigma')] }); break;
       case 'math.smoothstep.scalar': register = emit({ nodeId: current.id, operation: 'smoothstep-scalar', type: 'scalar',
         inputs: [visitSource(current, 'edge0'), visitSource(current, 'edge1'), visitSource(current, 'value')] }); break;
       case 'math.mix.scalar': {
@@ -319,6 +312,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         inputs: [visitSource(current, 'a'), visitSource(current, 'b')] }); break;
       case 'vector.length.vec2': register = emit({ nodeId: current.id, operation: 'length-vec2', type: 'scalar',
         inputs: [visitSource(current, 'value')] }); break;
+      case 'vector.unit-direction.scalar': register = emit({ nodeId: current.id, operation: 'unit-direction', type: 'vec2', inputs: [visitSource(current, 'angle')] }); break;
       case 'math.floor.vec2': {
         const value = visitSource(current, 'value'); register = current.bypassed ? value
           : emit({ nodeId: current.id, operation: 'floor-vec2', type: 'vec2', inputs: [value] }); break;
@@ -351,6 +345,16 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       case 'math.divide-ieee.vec4': {
         const a = visitSource(current, 'a'); register = current.bypassed ? a : emit({ nodeId: current.id, operation: 'divide-vec4', type: 'vec4', inputs: [a, visitSource(current, 'b')] }); break;
       }
+      case 'math.multiply.vec4': {
+        const a = visitSource(current, 'a'); register = current.bypassed ? a : emit({ nodeId: current.id, operation: 'multiply-vec4', type: 'vec4', inputs: [a, visitSource(current, 'b')] }); break;
+      }
+      case 'math.multiply.image-scalar': case 'math.multiply.rgb-scalar': case 'math.multiply.vec2-scalar': {
+        const a = visitSource(current, 'a'), type = current.operator.includes('.image-') ? 'image' : current.operator.includes('.rgb-') ? 'rgb' : 'vec2';
+        register = current.bypassed ? a : emit({ nodeId: current.id, operation: 'multiply-vector-scalar', type, inputs: [a, visitSource(current, 'b')] }); break;
+      }
+      case 'math.divide-ieee.rgb-scalar': { const a = visitSource(current, 'a'); register = current.bypassed ? a : emit({ nodeId: current.id, operation: 'divide-vector-scalar', type: 'rgb', inputs: [a, visitSource(current, 'b')] }); break; }
+      case 'math.clamp.rgb-scalar': { const value = visitSource(current, 'value'); register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'clamp-rgb-scalar', type: 'rgb', inputs: [value, visitSource(current, 'min'), visitSource(current, 'max')] }); break; }
+      case 'convert.vec4-to-rgb': register = emit({ nodeId: current.id, operation: 'vec4-to-rgb', type: 'rgb', inputs: [visitSource(current, 'value')] }); break;
       case 'compare.greater.scalar': register = emit({ nodeId: current.id, operation: 'greater-scalar', type: 'boolean',
         inputs: [visitSource(current, 'a'), visitSource(current, 'b')] }); break;
       case 'logic.and.boolean': register = emit({ nodeId: current.id, operation: 'and-boolean', type: 'boolean',
@@ -442,7 +446,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
   const output = visit(selected.node, selected.output);
   if (instructions.length > 256) throw new Error('Image graph scoped expansion exceeds 256 instructions.');
   const capabilities: ImageOperatorCapability[] = [];
-  if (instructions.some(item => item.operation === 'uv' || item.operation === 'kernel-sum' || item.operation === 'sequence-sum' || item.operation === 'resource-input')) capabilities.push('uv');
+  if (instructions.some(item => item.operation === 'uv' || item.operation === 'kernel-sum' || item.operation === 'rect-sum' || item.operation === 'sequence-sum' || item.operation === 'resource-input')) capabilities.push('uv');
   if (instructions.some(item => item.operation === 'resolution')) capabilities.push('resolution');
   if (instructions.some(item => item.operation === 'time')) capabilities.push('time');
   if (instructions.some(item => item.operation === 'sample-image')) capabilities.push('sample');
@@ -457,6 +461,8 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         ? `evaluateImageScope${item.value}(sampleImageGraphSource(${args[0]}), ${contextCallArgs(args[0])})`
       : item.operation === 'kernel-sum' ? `imageKernelReduce${item.value}(${args[0]}, pixel, inputUv${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''})`
       : item.operation === 'kernel-weight-sum' ? `kernelResult${item.inputs[0]}.weightSum`
+      : item.operation === 'rect-sum' ? `imageRectReduce${item.value}(${args[0]}, ${args[1]}, pixel, inputUv${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''})`
+      : item.operation === 'rect-weight-sum' ? `rectResult${item.inputs[0]}.weightSum`
       : item.operation === 'sequence-sum' ? `imageSequenceReduce${item.value}(${args[0]}, pixel, inputUv${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''})`
       : item.operation === 'sequence-weight-sum' ? `sequenceResult${item.inputs[0]}.weightSum`
       : item.operation === 'select-image' ? 'lazy-image-selection'
@@ -470,7 +476,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       : item.operation === 'divide-ieee-scalar' ? `${args[0]} / ${args[1]}` : item.operation === 'reciprocal-scalar' ? `1.0 / ${args[0]}`
       : item.operation === 'exp2-scalar' ? `exp2(${args[0]})` : item.operation === 'exp-scalar' ? `exp(${args[0]})` : item.operation === 'fract-scalar' ? `fract(${args[0]})`
       : item.operation === 'floor-scalar' ? `floor(${args[0]})` : item.operation === 'step-scalar' ? `step(${args[0]}, ${args[1]})`
-      : item.operation === 'sqrt-scalar' ? `sqrt(${args[0]})` : item.operation === 'max-scalar' ? `max(${args[0]}, ${args[1]})`
+      : item.operation === 'gaussian-scalar' ? `imageGraphGaussian(${args[0]}, ${args[1]})` : item.operation === 'sqrt-scalar' ? `sqrt(${args[0]})` : item.operation === 'max-scalar' ? `max(${args[0]}, ${args[1]})`
       : item.operation === 'clamp-scalar' ? `clamp(${args[0]}, min(${args[1]}, ${args[2]}), max(${args[1]}, ${args[2]}))` : item.operation === 'greater-scalar' ? `${args[0]} > ${args[1]}`
       : item.operation === 'and-boolean' ? `${args[0]} && ${args[1]}`
       : item.operation === 'smoothstep-scalar' ? `smoothstep(${args[0]}, ${args[1]}, ${args[2]})`
@@ -481,8 +487,10 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       : item.operation === 'mirror-repeat-vec2' ? `select(${args[0]} - floor(${args[0]} * 0.5) * 2.0, vec2f(2.0) - (${args[0]} - floor(${args[0]} * 0.5) * 2.0), (${args[0]} - floor(${args[0]} * 0.5) * 2.0) > vec2f(1.0))`
       : item.operation === 'reduce-min-vec2' ? `min(${args[0]}.x, ${args[0]}.y)` : item.operation === 'hash2d-vec2' ? `imageGraphHash2d(${args[0]})`
       : item.operation === 'dot-vec2' ? `dot(${args[0]}, ${args[1]})` : item.operation === 'length-vec2' ? `length(${args[0]})`
+      : item.operation === 'unit-direction' ? `vec2f(cos(${args[0]}), sin(${args[0]}))`
       : item.operation === 'sin-scalar' ? `sin(${args[0]})` : item.operation === 'cos-scalar' ? `cos(${args[0]})` : item.operation === 'scalar-to-vec2' ? `vec2f(${args[0]})`
-      : item.operation === 'scalar-to-vec4' ? `vec4f(${args[0]})` : item.operation === 'divide-vec4' ? `${args[0]} / ${args[1]}`
+      : item.operation === 'scalar-to-vec4' ? `vec4f(${args[0]})` : item.operation === 'multiply-vec4' || item.operation === 'multiply-vector-scalar' ? `${args[0]} * ${args[1]}`
+      : item.operation === 'divide-vector-scalar' ? `${args[0]} / ${args[1]}` : item.operation === 'clamp-rgb-scalar' ? `clamp(${args[0]}, vec3f(min(${args[1]}, ${args[2]})), vec3f(max(${args[1]}, ${args[2]})))` : item.operation === 'divide-vec4' ? `${args[0]} / ${args[1]}`
       : item.operation === 'select-scalar' ? `select(${args[0]}, ${args[1]}, ${args[2]})`
       : item.operation === 'split-alpha' ? `${args[0]}.a` : item.operation === 'subtract-rgb' ? `${args[0]} - ${args[1]}`
       : item.operation === 'add-rgb' ? `${args[0]} + ${args[1]}` : item.operation === 'multiply-rgb' ? `${args[0]} * ${args[1]}`
@@ -495,13 +503,14 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       : item.operation === 'reduce-max-rgb' ? `max(max(${args[0]}.r, ${args[0]}.g), ${args[0]}.b)`
       : item.operation === 'luminance-rec601' ? `dot(${args[0]}, vec3f(0.299, 0.587, 0.114))`
       : item.operation === 'luminance-rec709' ? `dot(${args[0]}.rgb, vec3f(0.2126, 0.7152, 0.0722))`
-      : item.operation === 'scalar-to-rgb' ? `vec3f(${args[0]})` : item.operation === 'image-to-vec4' || item.operation === 'vec4-to-image' ? args[0]
+      : item.operation === 'scalar-to-rgb' ? `vec3f(${args[0]})` : item.operation === 'vec4-to-rgb' ? `${args[0]}.rgb` : item.operation === 'image-to-vec4' || item.operation === 'vec4-to-image' ? args[0]
       : item.operation === 'rgb-to-vec3' || item.operation === 'vec3-to-rgb' ? args[0]
       : item.operation === 'rgb-to-hsv' ? `imageGraphRgbToHsv(${args[0]})` : item.operation === 'hsv-to-rgb' ? `imageGraphHsvToRgb(${args[0]})`
       : item.operation === 'split-component' ? `${args[0]}[${item.value}]` : item.operation === 'combine-vector' ? `vec${item.inputs.length}f(${args.join(', ')})`
       : `vec4f(${args[0]}, ${args[1]})`;
     const type = item.type === 'image' || item.type === 'vec4' ? 'vec4f' : item.type === 'rgb' || item.type === 'vec3' ? 'vec3f' : item.type === 'vec2' ? 'vec2f' : item.type === 'boolean' ? 'bool' : 'f32';
     if (item.operation === 'kernel-sum') return `  let kernelResult${index} = ${expression};\n  let v${index}: vec4f = kernelResult${index}.sum;`;
+    if (item.operation === 'rect-sum') return `  let rectResult${index} = ${expression};\n  let v${index}: vec4f = rectResult${index}.sum;`;
     if (item.operation === 'sequence-sum') return `  let sequenceResult${index} = ${expression};\n  let v${index}: vec4f = sequenceResult${index}.sum;`;
     if (item.operation === 'select-image') {
       const call = (scope: number) => `evaluateImageScope${scope}(pixel, ${contextCallArgs('inputUv')})`;
@@ -510,7 +519,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     return `  let v${index}: ${type} = ${expression};`;
   });
   const outputType = instructions[output].type;
-  const canonical = JSON.stringify({ capabilities, instructions: instructions.map(({ nodeId: _nodeId, ...instruction }) => instruction), sampleScopes, kernelScopes, sequenceScopes, output, outputType });
+  const canonical = JSON.stringify({ capabilities, instructions: instructions.map(({ nodeId: _nodeId, ...instruction }) => instruction), sampleScopes, kernelScopes, rectScopes, sequenceScopes, output, outputType });
   const returned = outputType === 'image' || outputType === 'vec4' ? `v${output}` : outputType === 'rgb' || outputType === 'vec3' ? `vec4f(v${output}, 1.0)`
     : outputType === 'vec2' ? `vec4f(v${output}, 0.0, 1.0)`
     : outputType === 'boolean' ? `vec4f(vec3f(select(0.0, 1.0, v${output})), 1.0)`
@@ -528,10 +537,11 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     `fn evaluateImageScope${scope.id}(${scopeParameters.join(', ')}) -> vec4f {`, '  let pixel = inputColor;',
     ...expressions.filter((_line, index) => instructions[index].scope === scope.id), `  return v${scope.output};`, '}',
   ].join('\n'));
-  const reducerWgsl = emitImageReducerWgsl({ instructions, expressions, kernelScopes, sequenceScopes, scopeParameters, capabilities, hasParameters: !!parameterValues.length });
-  return { fusion: 'inline', capabilities, instructions, output, sampleScopes, kernelScopes, sequenceScopes, values: parameterValues, key: `image-v1-${hash(JSON.stringify({ canonical, resourceInputs }))}`,
+  const reducerWgsl = emitImageReducerWgsl({ instructions, expressions, kernelScopes, rectScopes, sequenceScopes, scopeParameters, capabilities, hasParameters: !!parameterValues.length });
+  return { fusion: 'inline', capabilities, instructions, output, sampleScopes, kernelScopes, rectScopes, sequenceScopes, values: parameterValues, key: `image-v1-${hash(JSON.stringify({ canonical, resourceInputs }))}`,
     ...(resourceInputs.length ? { resourceInputs } : {}),
-    wgsl: [IMAGE_COLOR_WGSL, ...(instructions.some(item => item.operation === 'hash2d-vec2') ? [IMAGE_HASH2D_WGSL] : []), ...(parameterValues.length ? [IMAGE_PARAMETER_WGSL] : []),
+    wgsl: [IMAGE_COLOR_WGSL, ...(instructions.some(item => item.operation === 'hash2d-vec2') ? [IMAGE_HASH2D_WGSL] : []),
+      ...(instructions.some(item => item.operation === 'gaussian-scalar') ? [IMAGE_GAUSSIAN_WGSL] : []), ...(parameterValues.length ? [IMAGE_PARAMETER_WGSL] : []),
       ...scopeFunctions, ...reducerWgsl, `fn evaluateImageGraph(${parameters.join(', ')}) -> vec4f {`, `  let pixel = inputColor;`,
       ...expressions.filter((_line, index) => instructions[index].scope === 0), `  return ${returned};`, `}`].join('\n') };
 }
@@ -542,144 +552,4 @@ export function compileImageOperatorGraph(graph: EffectOperatorGraph, params: Re
 
 export function compileImageOperatorPreview(graph: EffectOperatorGraph, params: Record<string, unknown>, target: ImageOperatorPreviewTarget): ImageOperatorPlan {
   return compileImageOperatorPassPlan(graph, params, compileImageOperatorTarget, target);
-}
-
-export function evaluateImageOperatorPlan(plan: ImageOperatorPlan, pixel: [number, number, number, number], context: ImageOperatorEvaluationContext = {}): [number, number, number, number] {
-  if (plan.capabilities.includes('uv') && !context.uv) throw new Error('Image operator plan requires normalized UV context.');
-  if (plan.capabilities.includes('resolution') && (!context.resolution || context.resolution.some(value => !Number.isFinite(value) || value <= 0))) {
-    throw new Error('Image operator plan requires finite positive resolution context.');
-  }
-  if (plan.capabilities.includes('time') && (typeof context.timelineTimeSeconds !== 'number' || !Number.isFinite(context.timelineTimeSeconds))) {
-    throw new Error('Image operator plan requires finite timeline time context.');
-  }
-  if (plan.capabilities.includes('sample') && !context.sampleImage) throw new Error('Image operator plan requires an image sampling callback.');
-  if (plan.resourceInputs?.length && !context.sampleResource) throw new Error('Image operator plan requires a materialized resource sampling callback.');
-  function evaluateScope(scope: number, scopePixel: [number, number, number, number], scopeUv: [number, number] | undefined,
-    kernelIndex?: [number, number], sequenceIndex?: number, sequenceT?: number) {
-   const values: Array<number | boolean | number[]> = [];
-   const kernelResults = new Map<number, { sum: number[]; weightSum: number }>();
-   for (const item of plan.instructions) {
-    if ((item.scope ?? 0) !== scope) { values.push(0); continue; }
-    const args = item.inputs.map(input => values[input]);
-    if (item.operation === 'input') values.push(scopePixel);
-    else if (item.operation === 'uv') values.push(scopeUv!);
-    else if (item.operation === 'resource-input') values.push(context.sampleResource!(plan.resourceInputs![item.value!], scopeUv!));
-    else if (item.operation === 'kernel-index') values.push(kernelIndex!);
-    else if (item.operation === 'sequence-index') values.push(sequenceIndex!);
-    else if (item.operation === 'sequence-t') values.push(sequenceT!);
-    else if (item.operation === 'resolution') values.push(context.resolution!);
-    else if (item.operation === 'time') values.push(context.timelineTimeSeconds!);
-    else if (item.operation === 'sample-image') {
-      const uv = args[0] as [number, number]; values.push(evaluateScope(item.value!, context.sampleImage!(uv), uv)[plan.sampleScopes.find(candidate => candidate.id === item.value)!.output]);
-    }
-    else if (item.operation === 'kernel-sum') {
-      const extent = Math.max(0, Math.min(64, Math.trunc(args[0] as number)));
-      const descriptor = plan.kernelScopes?.find(candidate => candidate.id === item.value);
-      if (!descriptor) throw new Error(`Image kernel scope ${String(item.value)} is missing.`);
-      const result = { sum: [0, 0, 0, 0], weightSum: 0 };
-      for (let x = -extent; x <= extent; x++) for (let y = -extent; y <= extent; y++) {
-        const term = evaluateScope(descriptor.id, scopePixel, scopeUv, [x, y]);
-        const sample = term[descriptor.sample] as number[], weight = term[descriptor.weight] as number;
-        for (let channel = 0; channel < 4; channel++) result.sum[channel] += sample[channel] * weight;
-        result.weightSum += weight;
-      }
-      kernelResults.set(item.value!, result); values.push(result.sum);
-    }
-    else if (item.operation === 'kernel-weight-sum') values.push(kernelResults.get(item.value!)!.weightSum);
-    else if (item.operation === 'sequence-sum') {
-      const count = Math.max(1, Math.min(256, Math.trunc(args[0] as number)));
-      const descriptor = plan.sequenceScopes?.find(candidate => candidate.id === item.value);
-      if (!descriptor) throw new Error(`Image sequence scope ${String(item.value)} is missing.`);
-      const result = { sum: [0, 0, 0, 0], weightSum: 0 };
-      for (let index = 0; index < count; index++) {
-        const t = count === 1 ? 0 : index / (count - 1), term = evaluateScope(descriptor.id, scopePixel, scopeUv, undefined, index, t);
-        const sample = term[descriptor.sample] as number[], weight = term[descriptor.weight] as number;
-        for (let channel = 0; channel < 4; channel++) result.sum[channel] += sample[channel] * weight;
-        result.weightSum += weight;
-      }
-      kernelResults.set(item.value!, result); values.push(result.sum);
-    }
-    else if (item.operation === 'sequence-weight-sum') values.push(kernelResults.get(item.value!)!.weightSum);
-    else if (item.operation === 'select-image') {
-      const chosenScope = item.inputs[(args[0] as boolean) ? 2 : 1];
-      const descriptor = plan.sampleScopes.find(candidate => candidate.id === chosenScope)!;
-      values.push(evaluateScope(chosenScope, scopePixel, scopeUv)[descriptor.output]);
-    }
-    else if (item.operation === 'constant') values.push(item.type === 'boolean' ? Boolean(item.value) : item.value ?? 0);
-    else if (item.operation === 'parameter') values.push(plan.values[item.value ?? 0]);
-    else if (item.operation === 'parameter-boolean') values.push(plan.values[item.value ?? 0] > 0.5);
-    else if (item.operation === 'parameter-color') values.push(plan.values.slice(item.value ?? 0, (item.value ?? 0) + 4));
-    else if (item.operation === 'constant-color') values.push(item.color!);
-    else if (item.operation === 'subtract') values.push(evaluateScalarOperation('subtract', args[0] as number, args[1] as number));
-    else if (item.operation === 'add-scalar') values.push(evaluateScalarOperation('add', args[0] as number, args[1] as number));
-    else if (item.operation === 'multiply-scalar') values.push(evaluateScalarOperation('multiply', args[0] as number, args[1] as number));
-    else if (item.operation === 'divide-ieee-scalar') values.push((args[0] as number) / (args[1] as number));
-    else if (item.operation === 'reciprocal-scalar') values.push(1 / (args[0] as number));
-    else if (item.operation === 'exp2-scalar') values.push(2 ** (args[0] as number));
-    else if (item.operation === 'exp-scalar') values.push(Math.exp(args[0] as number));
-    else if (item.operation === 'sqrt-scalar') values.push(Math.sqrt(args[0] as number));
-    else if (item.operation === 'fract-scalar') values.push(imageFract(args[0] as number));
-    else if (item.operation === 'floor-scalar') values.push(Math.floor(args[0] as number));
-    else if (item.operation === 'step-scalar') values.push((args[1] as number) < (args[0] as number) ? 0 : 1);
-    else if (item.operation === 'max-scalar') values.push(Math.max(args[0] as number, args[1] as number));
-    else if (item.operation === 'clamp-scalar') values.push(evaluateScalarOperation('clamp', args[0] as number, args[1] as number, args[2] as number));
-    else if (item.operation === 'and-boolean') values.push((args[0] as boolean) && (args[1] as boolean));
-    else if (item.operation === 'smoothstep-scalar') {
-      const t = Math.max(0, Math.min(1, ((args[2] as number) - (args[0] as number)) / ((args[1] as number) - (args[0] as number))));
-      values.push(t * t * (3 - 2 * t));
-    }
-    else if (item.operation === 'mix-scalar') values.push((args[0] as number) * (1 - (args[2] as number)) + (args[1] as number) * (args[2] as number));
-    else if (item.operation === 'add-vec2') values.push((args[0] as number[]).map((value, index) => evaluateScalarOperation('add', value, (args[1] as number[])[index])));
-    else if (item.operation === 'subtract-vec2') values.push((args[0] as number[]).map((value, index) => evaluateScalarOperation('subtract', value, (args[1] as number[])[index])));
-    else if (item.operation === 'multiply-vec2') values.push((args[0] as number[]).map((value, index) => evaluateScalarOperation('multiply', value, (args[1] as number[])[index])));
-    else if (item.operation === 'divide-vec2') values.push((args[0] as number[]).map((value, index) => value / (args[1] as number[])[index]));
-    else if (item.operation === 'floor-vec2') values.push((args[0] as number[]).map(Math.floor));
-    else if (item.operation === 'fract-vec2') values.push((args[0] as number[]).map(imageFract));
-    else if (item.operation === 'clamp-vec2') values.push((args[0] as number[]).map((value, index) => Math.max((args[1] as number[])[index], Math.min((args[2] as number[])[index], value))));
-    else if (item.operation === 'mirror-repeat-vec2') values.push((args[0] as number[]).map(value => { const wrapped = value - Math.floor(value * .5) * 2; return wrapped > 1 ? 2 - wrapped : wrapped; }));
-    else if (item.operation === 'reduce-min-vec2') values.push(Math.min(...args[0] as number[]));
-    else if (item.operation === 'hash2d-vec2') values.push(imageHash2d(args[0] as number[]));
-    else if (item.operation === 'dot-vec2') values.push((args[0] as number[])[0] * (args[1] as number[])[0] + (args[0] as number[])[1] * (args[1] as number[])[1]);
-    else if (item.operation === 'length-vec2') values.push(Math.hypot(...args[0] as number[]));
-    else if (item.operation === 'sin-scalar') values.push(Math.sin(args[0] as number));
-    else if (item.operation === 'cos-scalar') values.push(Math.cos(args[0] as number));
-    else if (item.operation === 'scalar-to-vec2') values.push([args[0] as number, args[0] as number]);
-    else if (item.operation === 'scalar-to-vec4') values.push([args[0] as number, args[0] as number, args[0] as number, args[0] as number]);
-    else if (item.operation === 'divide-vec4') values.push((args[0] as number[]).map((value, index) => value / (args[1] as number[])[index]));
-    else if (item.operation === 'greater-scalar') values.push((args[0] as number) > (args[1] as number));
-    else if (item.operation === 'select-scalar') values.push((args[2] as boolean) ? args[1] as number : args[0] as number);
-    else if (item.operation === 'split-rgb') values.push((args[0] as number[]).slice(0, 3));
-    else if (item.operation === 'split-alpha') values.push((args[0] as number[])[3]);
-    else if (item.operation === 'subtract-rgb') values.push((args[0] as number[]).map((channel, index) => evaluateScalarOperation('subtract', channel, (args[1] as number[])[index])));
-    else if (item.operation === 'add-rgb') values.push((args[0] as number[]).map((channel, index) => evaluateScalarOperation('add', channel, (args[1] as number[])[index])));
-    else if (item.operation === 'multiply-rgb') values.push((args[0] as number[]).map((channel, index) => evaluateScalarOperation('multiply', channel, (args[1] as number[])[index])));
-    else if (item.operation === 'divide-ieee-rgb') values.push((args[0] as number[]).map((channel, index) => channel / (args[1] as number[])[index]));
-    else if (item.operation === 'max-rgb') values.push((args[0] as number[]).map((channel, index) => Math.max(channel, (args[1] as number[])[index])));
-    else if (item.operation === 'power-rgb') values.push((args[0] as number[]).map((channel, index) => channel ** (args[1] as number[])[index]));
-    else if (item.operation === 'floor-rgb') values.push((args[0] as number[]).map(Math.floor));
-    else if (item.operation === 'clamp-rgb') values.push((args[0] as number[]).map((channel, index) => evaluateScalarOperation('clamp', channel, (args[1] as number[])[index], (args[2] as number[])[index])));
-    else if (item.operation === 'mix-rgb') values.push((args[0] as number[]).map((channel, index) => channel * (1 - (args[2] as number)) + (args[1] as number[])[index] * (args[2] as number)));
-    else if (item.operation === 'mix-components-rgb') values.push((args[0] as number[]).map((channel, index) => channel * (1 - (args[2] as number[])[index]) + (args[1] as number[])[index] * (args[2] as number[])[index]));
-    else if (item.operation === 'reduce-min-rgb') values.push(Math.min(...args[0] as number[]));
-    else if (item.operation === 'reduce-max-rgb') values.push(Math.max(...args[0] as number[]));
-    else if (item.operation === 'luminance-rec601') values.push((args[0] as number[])[0] * 0.299 + (args[0] as number[])[1] * 0.587 + (args[0] as number[])[2] * 0.114);
-    else if (item.operation === 'luminance-rec709') values.push((args[0] as number[])[0] * 0.2126 + (args[0] as number[])[1] * 0.7152 + (args[0] as number[])[2] * 0.0722);
-    else if (item.operation === 'scalar-to-rgb') values.push([args[0] as number, args[0] as number, args[0] as number]);
-    else if (item.operation === 'rgb-to-vec3' || item.operation === 'vec3-to-rgb') values.push(args[0]);
-    else if (item.operation === 'rgb-to-hsv') values.push(imageRgbToHsv(args[0] as [number, number, number]));
-    else if (item.operation === 'hsv-to-rgb') values.push(imageHsvToRgb(args[0] as [number, number, number]));
-    else if (item.operation === 'image-to-vec4' || item.operation === 'vec4-to-image') values.push(args[0]);
-    else if (item.operation === 'split-component') values.push((args[0] as number[])[item.value ?? 0]);
-    else if (item.operation === 'combine-vector') values.push(args as number[]);
-    else values.push([...(args[0] as number[]), args[1] as number]);
-   }
-   return values;
-  }
-  const values = evaluateScope(0, pixel, context.uv);
-  const result = values[plan.output], type = plan.instructions[plan.output].type;
-  if (type === 'image' || type === 'vec4') return result as [number, number, number, number];
-  if (type === 'rgb' || type === 'vec3') return [...result as number[], 1] as [number, number, number, number];
-  if (type === 'vec2') return [...result as number[], 0, 1] as [number, number, number, number];
-  if (type === 'boolean') { const value = result ? 1 : 0; return [value, value, value, 1]; }
-  return [result as number, result as number, result as number, 1];
 }

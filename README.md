@@ -110,6 +110,8 @@ Motion, Radial and Zoom Blur expose directional sampling and weighting as editab
 nodes, retaining their existing parameter ranges and single-pass execution.
 Edge Detect exposes its eight shared neighbor samples, luminance conversion and
 Sobel arithmetic as editable nodes, with the existing opaque output.
+Glow exposes its ring blur, brightness threshold and additive blend while
+preserving the original center-pixel alpha.
 Multi-stage image graphs share intermediate texture stages between consumers;
 simple graphs retain their single-pass execution.
 
