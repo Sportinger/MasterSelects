@@ -14,4 +14,10 @@ describe('adaptive operator family UI', () => {
   it('does not invent variants for an operator without a family', () => {
     expect(operatorFamilyOptions(getEffectOperator('image.frame')!)).toEqual([]);
   });
+
+  it('does not offer owner-only choices on ordinary values while retaining an existing choice node', () => {
+    expect(operatorFamilyOptions(getEffectOperator('values.boolean')!).map(option => option.value)).not.toContain('values.choice');
+    expect(operatorFamilyOptions(getEffectOperator('values.color')!).map(option => option.value)).not.toContain('values.choice');
+    expect(operatorFamilyOptions(getEffectOperator('values.choice')!).map(option => option.value)).toContain('values.choice');
+  });
 });

@@ -1,6 +1,8 @@
 /* Cards use z-index 5, plugs 6: real controls must sit above their transparent hit surfaces. */
 .node-value-preview { position: absolute; z-index: 7; color: var(--text-primary, #ddd); background: var(--bg-primary, #171717); font: 10px system-ui; border-radius: 3px; padding: 4px; display: flex; flex-direction: column; overflow: hidden; -webkit-tap-highlight-color: transparent; }
 .node-value-content { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; }
+.node-value-preview:has(.inspector-select-trigger[aria-expanded="true"]) { z-index: 9; overflow: visible; }
+.node-value-preview:has(.inspector-select-trigger[aria-expanded="true"]) .node-value-content { overflow: visible; }
 .node-value-row { display: flex; align-items: center; justify-content: space-between; gap: 5px; min-height: 22px; }
 .node-value-row > span:first-child { overflow: hidden; text-overflow: ellipsis; }
 .node-value-row .draggable-number { font: inherit; color: var(--accent-color, #a2d9e8); }

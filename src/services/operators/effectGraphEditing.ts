@@ -58,7 +58,8 @@ export function setOperatorParameter(clipId: string, effectId: string, nodeId: s
     if (spec.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value) || value < (min ?? -Infinity) || value > (max ?? Infinity))) throw new Error('Parameter is outside its supported range.');
     if (spec.type === 'boolean' && typeof value !== 'boolean') throw new Error('Parameter requires a boolean value.');
     if (spec.type === 'color' && (typeof value !== 'string' || !/^#[\da-f]{6}([\da-f]{2})?$/i.test(value))) throw new Error('Parameter requires a hex color.');
-    if (spec.type === 'select' && (typeof value !== 'string' || !spec.options?.some(option => option.value === value))) throw new Error('Parameter option is unavailable.');
+    const select = ownerSpec?.type === 'select' ? ownerSpec : spec;
+    if (spec.type === 'select' && (typeof value !== 'string' || !select.options?.some(option => option.value === value))) throw new Error('Parameter option is unavailable.');
     if (typeof binding === 'string') params[binding] = value;
     else if (Array.isArray(binding) && Array.isArray(value)) binding.forEach((key, i) => { params[key] = value[i]; });
     else throw new Error('Edit the exposed direction angles.');

@@ -116,6 +116,8 @@ Wave, Twirl, Bulge and Kaleidoscope expose their UV calculations and sampling
 as editable nodes, including alpha sampled at the transformed position.
 Reusable lens-projection and vector-rotation nodes share their GPU math with
 Fisheye; migration of the complete Fisheye graph remains in progress.
+Effect-bound choice nodes reuse the effect's dropdown options and defaults,
+without copying parameter definitions into saved graphs.
 Multi-stage image graphs share intermediate texture stages between consumers;
 simple graphs retain their single-pass execution.
 

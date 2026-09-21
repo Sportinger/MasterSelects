@@ -40,6 +40,11 @@ export function effectOperatorCompileParams(effect: Pick<EffectGraphOwner, 'para
     : effect.params;
 }
 
+/** Supplies catalog-owned parameter metadata to image lowering without persisting schema copies in graphs. */
+export function effectOperatorCompileContext(effect: Pick<EffectGraphOwner, 'type'>) {
+  return { parameterSchema: getEffect(effect.type)?.params };
+}
+
 export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGraph {
   if (effect.type === 'analog-signal-lab') {
     const graph = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], createDefaultAnalogSignalGraph);
@@ -71,7 +76,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGra
     const graph = migrateImageOperatorGraph(saved);
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
     if (errors.length) throw new Error(errors[0]);
-    if (!graph.incomplete) compileImageOperatorGraph(graph, effectOperatorParams(effect));
+    if (!graph.incomplete) compileImageOperatorGraph(graph, effectOperatorParams(effect), effectOperatorCompileContext(effect));
     return graph;
   }
   const params = effectOperatorCompileParams(effect);
@@ -106,7 +111,7 @@ export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: Ef
   const next = { ...params, [EFFECT_GRAPH_PARAM]: JSON.stringify(graph) };
   if (effect.type === 'voxel-relief') compileVoxelGraph(next);
   else if (effect.type === 'face-cables') compileCableOperatorGraph(next);
-  else if (isImageGraphEffectType(effect.type)) compileImageOperatorGraph(graph, effectOperatorParams({ type: effect.type, params }));
+  else if (isImageGraphEffectType(effect.type)) compileImageOperatorGraph(graph, effectOperatorParams({ type: effect.type, params }), effectOperatorCompileContext(effect));
   else if (effect.type === 'analog-signal-lab') compileAnalogSignalGraph(graph, params);
   else throw new Error('This effect has no operator graph.');
 }

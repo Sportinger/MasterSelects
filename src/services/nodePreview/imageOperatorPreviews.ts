@@ -1,12 +1,13 @@
 import type { Effect } from '../../types/effects';
 import type { TimelineClip } from '../../types/timeline';
-import { effectOperatorGraph, effectOperatorParams } from '../operators/effectGraphOwner';
+import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams } from '../operators/effectGraphOwner';
 import { getEffectOperator } from '../operators/operatorRegistry';
 import { sampleOperatorParameter } from '../operators/effectGraph';
 import { compileImageOperatorPreview, evaluateImageOperatorPlan } from '../operators/imageOperatorGraph';
 import type { PreviewFrame, PreviewRequest, PreviewValueControl } from './previewTypes';
 import type { Keyframe } from '../../types/keyframes';
 import { getEffect } from '../../effects';
+import { resolveImageOperatorChoice } from '../operators/imageOperatorChoice';
 
 type PreviewValue = NonNullable<PreviewFrame['values']>[number];
 
@@ -23,7 +24,7 @@ function imageScalarValues(request: PreviewRequest, effect: Effect, keys: Keyfra
   }
   const evaluatePort = (portId: string, direction: 'input' | 'output'): number | undefined => {
     try {
-      const plan = compileImageOperatorPreview(graph, params, { nodeId: selected.id, portId, direction });
+      const plan = compileImageOperatorPreview(graph, params, { nodeId: selected.id, portId, direction }, effectOperatorCompileContext(effect));
       if (plan.capabilities.length || plan.instructions.some(instruction => instruction.operation === 'input')) return undefined;
       const value = evaluateImageOperatorPlan(plan, [0, 0, 0, 0])[0];
       return Number.isFinite(value) ? value : undefined;
@@ -50,6 +51,18 @@ export function imageOperatorValuePreview(request: PreviewRequest, clip: Timelin
       const scope = selected.operator === 'image.kernel-index' ? 'Kernel' : 'Sequence';
       return { key: request.key, revision: request.revision, time: request.time, status: 'missing', label: `${scope} scope only`,
         presentation: 'text', drawing: { kind: 'text', lines: [`Varies per ${scope.toLowerCase()} sample`] } };
+    }
+    if (selected?.operator === 'values.choice' && typeof selected.bindings.value === 'string') {
+      const ownerKey = selected.bindings.value, owner = getEffect(effect.type)?.params[ownerKey];
+      if (owner?.type !== 'select' || !owner.options?.length) return undefined;
+      const params = effectOperatorParams(effect), context = effectOperatorCompileContext(effect);
+      const selectedIndex = resolveImageOperatorChoice(ownerKey, params, context);
+      const fallback = String(owner.default), value = owner.options[selectedIndex].value;
+      const controls: PreviewValueControl[] = [{ label: owner.label, value, defaultValue: fallback, options: owner.options,
+        portId: 'value', direction: 'output', target: { clipId: clip.id, effectId: effect.id, nodeId: selected.id, parameter: 'value' } }];
+      return { key: request.key, revision: request.revision, time: request.time, status: 'live', label: 'Live value', controls,
+        values: [{ portId: 'value', direction: 'output', value: selectedIndex }],
+        drawing: { kind: 'number', value: String(selectedIndex), caption: owner.options[selectedIndex]?.label ?? value } };
     }
     if (selected?.operator === 'values.boolean' || selected?.operator === 'values.color') {
       const spec = getEffectOperator(selected.operator)!.parameters.find(parameter => parameter.id === 'value')!;

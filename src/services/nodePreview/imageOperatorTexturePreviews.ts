@@ -1,5 +1,5 @@
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
-import { effectOperatorGraph, effectOperatorParams } from '../operators/effectGraphOwner';
+import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams } from '../operators/effectGraphOwner';
 import { compileImageOperatorPreview } from '../operators/imageOperatorGraph';
 import { nodePreviewTextureTap } from './NodePreviewTextureTap';
 import { imageOperatorPreviewPrefix, parseImageOperatorPreviewStage } from './imageOperatorPreviewStages';
@@ -113,7 +113,7 @@ export function captureImageOperatorPreviews(options: CaptureImageOperatorPrevie
   for (const { stage } of demands) {
     const target = parseImageOperatorPreviewStage(stage); if (!target) continue;
     try {
-      const plan = compileImageOperatorPreview(graph, effectOperatorParams(options.effect), target);
+      const plan = compileImageOperatorPreview(graph, effectOperatorParams(options.effect), target, effectOperatorCompileContext(options.effect));
       if (plan.passes?.length) {
         const state = multiPassState;
         if (plan.previewResourceId) {

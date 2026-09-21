@@ -23,6 +23,7 @@ import { operatorConstantNumberPersistenceKey } from '../../../common/EditableDr
 import type { OperatorValue } from '../../../../types/operatorGraph';
 import { getEffect } from '../../../../effects';
 import { OperatorColorInput } from './OperatorColorInput';
+import { resolveImageOperatorChoiceValue } from '../../../../services/operators/imageOperatorChoice';
 
 const EMPTY_KEYS: Keyframe[] = [];
 export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { clip: TimelineClip; effectId: string; nodeId: string; projectedNode?: NodeGraphNode }) {
@@ -37,6 +38,7 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
   const node = graph.nodes.find(n => n.id === nodeId), operator = node && getEffectOperator(node.operator);
   if (!node || !operator) return null;
   const evaluatedParams = effectOperatorParams(effect);
+  const parameterSchema = isImageGraphEffectType(effect.type) ? getEffect(effect.type)?.params : undefined;
   const familyOptions = operatorFamilyOptions(operator);
   const mathNode = { id: node.id, operatorId: node.operator, label: operator.label, kind: 'effect' as const, runtime: 'builtin' as const,
     inputs: [], outputs: [], layout: { x: 0, y: 0 }, binding: { kind: 'effect-operator' as const, effectId, nodeId: node.id, operator: node.operator } };
@@ -92,13 +94,20 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
         </div>;
         if (Array.isArray(binding) && Array.isArray(value)) return binding.map((key, i) => numberRow(key, `${spec.label} ${'XYZ'[i]}`, value[i], (spec.default as number[])[i], -1, 1));
         if (typeof binding !== 'string') return null;
+        const control = effect.type === 'voxel-relief' ? VOXEL_RELIEF_PARAMS[binding]
+          : parameterSchema?.[binding];
         if (spec.type === 'boolean') return <ResolveInspectorRow key={spec.id} label={spec.label}><input aria-label={`${operator.label} ${spec.label}`} type="checkbox" checked={Boolean(value)} onChange={event => set(binding, event.target.checked)} /></ResolveInspectorRow>;
         if (spec.type === 'color') return <ResolveInspectorRow key={spec.id} label={spec.label}><OperatorColorInput ariaLabel={`${operator.label} ${spec.label}`}
           value={String(value)} onChange={next => set(binding, next)} /></ResolveInspectorRow>;
-        if (spec.type === 'select') return <ResolveInspectorRow key={spec.id} label={spec.label}><InspectorSelect ariaLabel={`${operator.label} ${spec.label}`}
-          value={String(value)} options={[...(spec.options ?? [])]} onChange={next => set(binding, next)} /></ResolveInspectorRow>;
-        const control = effect.type === 'voxel-relief' ? VOXEL_RELIEF_PARAMS[binding]
-          : isImageGraphEffectType(effect.type) ? getEffect(effect.type)?.params[binding] : undefined;
+        if (spec.type === 'select') {
+          const select = control?.type === 'select' ? control : spec;
+          const selected = operator.id === 'values.choice' && control?.type === 'select'
+            ? resolveImageOperatorChoiceValue(binding, evaluatedParams, { parameterSchema })
+            : String(value);
+          return <ResolveInspectorRow key={spec.id} label={select.label}><InspectorSelect ariaLabel={`${operator.label} ${select.label}`}
+            value={selected} options={[...(select.options ?? [])]} onChange={next => set(binding, next)}
+            onReset={control?.type === 'select' ? () => set(binding, control.default) : undefined} /></ResolveInspectorRow>;
+        }
         return numberRow(binding, control?.label ?? spec.label, Number(value), Number(control?.default ?? spec.default), control?.min ?? spec.min, control?.max ?? spec.max, control?.step ?? spec.step, spec.animatable);
       })}
       {projectedNode && node.operator.startsWith('math.') && node.operator !== 'math.constant' &&

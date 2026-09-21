@@ -27,6 +27,8 @@ export interface PreviewFrame {
 
 export interface PreviewValueControl {
   label: string; value: number | boolean | string; defaultValue: number | boolean | string; min?: number; max?: number; step?: number;
+  /** Runtime display metadata resolved from the owning catalog; never persisted in the graph. */
+  options?: readonly { value: string; label: string }[];
   /** Shares editor-local numeric preferences with another view of this value. */
   persistenceKey?: string;
   target: { clipId: string; effectId: string; nodeId: string; parameter: string; storage?: 'constant' }

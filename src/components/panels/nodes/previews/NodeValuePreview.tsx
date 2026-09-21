@@ -8,6 +8,7 @@ import { inlineNumericPorts, previewRect } from './previewGeometry';
 import type { PreviewValueControl } from '../../../../services/nodePreview/previewTypes';
 import './NodeValuePreview.css';
 import { OperatorColorInput } from '../workspace/OperatorColorInput';
+import { InspectorSelect } from '../../../inspector/InspectorSelect';
 
 /** A sibling of the transparent canvas hit target, so values remain real text
  * and focusable controls even when cards and images are drawn by the worker. */
@@ -25,6 +26,8 @@ export function NodeValuePreview({ node }: { node: NodeGraphNode }) {
     <span>{entry.label}</span>
     {typeof entry.value === 'boolean' ? <input type="checkbox" aria-label={`${node.label} ${entry.label} inline`} checked={entry.value}
       onChange={event => change(entry, event.target.checked)} onClick={event => event.currentTarget.blur()} />
+      : typeof entry.value === 'string' && entry.options?.length ? <InspectorSelect ariaLabel={`${node.label} ${entry.label} inline`}
+        value={entry.value} options={[...entry.options]} onChange={value => change(entry, value)} onReset={() => change(entry, entry.defaultValue)} />
       : typeof entry.value === 'string' ? <OperatorColorInput ariaLabel={`${node.label} ${entry.label} inline`} value={entry.value}
         onChange={value => change(entry, value)} />
       : <PreviewNumber entry={entry} revision={frame.revision} nodeId={node.id} label={`${node.label} ${entry.label} inline`}

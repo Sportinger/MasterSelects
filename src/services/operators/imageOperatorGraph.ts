@@ -6,6 +6,7 @@ import { colorToRgba } from '../../effects/_shared/catalogColor';
 import { compileImageOperatorPassPlan } from './imageOperatorPlan';
 import { emitImageReducerWgsl } from './imageOperatorReducerWgsl';
 import { migrateImageOperatorGraph } from './imageOperatorMigration';
+import { resolveImageOperatorChoice, type ImageOperatorCompileContext } from './imageOperatorChoice';
 import { imageF32 as f32, imageParameterExpression as parameterExpression, IMAGE_COLOR_WGSL, IMAGE_COORDINATE_ROTATION_WGSL, IMAGE_GAUSSIAN_WGSL, IMAGE_HASH2D_WGSL, IMAGE_PARAMETER_WGSL, IMAGE_RADIAL_PROJECTION_WGSL } from './imageOperatorWgsl';
 export { createDefaultInvertImageGraph, migrateImageOperatorGraph } from './imageOperatorMigration';
 export { evaluateImageOperatorPlan } from './imageOperatorEvaluation';
@@ -41,13 +42,15 @@ export interface ImageOperatorPlan extends ImageOperatorProgram {
   previewResourceId?: string;
 }
 export interface ImageOperatorPreviewTarget { nodeId: string; direction: 'input' | 'output'; portId: string }
+export type { ImageOperatorCompileContext } from './imageOperatorChoice';
 
 const hash = (value: string) => {
   let result = 0x811c9dc5;
   for (let index = 0; index < value.length; index++) { result ^= value.charCodeAt(index); result = Math.imul(result, 0x01000193); }
   return (result >>> 0).toString(16).padStart(8, '0');
 };
-function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<string, unknown>, preview?: ImageOperatorPreviewTarget): ImageOperatorPlan {
+function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<string, unknown>, preview?: ImageOperatorPreviewTarget,
+  context: ImageOperatorCompileContext = {}): ImageOperatorPlan {
   graph = migrateImageOperatorGraph(graph);
   if (graph.domain !== 'image') throw new Error('Expected an image operator graph.');
   if (graph.schemaVersion !== 1) throw new Error(`Unsupported image graph schema version: ${String(graph.schemaVersion)}.`);
@@ -64,6 +67,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     const resolved = typeof binding === 'string' ? params[binding] : item.constants?.value;
     if (resolved !== undefined && typeof resolved !== 'boolean') throw new Error(`Image Boolean ${item.id} must be Boolean.`);
   }
+  for (const item of graph.nodes.filter(item => item.operator === 'values.choice')) resolveImageOperatorChoice(item.bindings.value, params, context);
   const nodes = new Map(graph.nodes.map(item => [item.id, item]));
   if (nodes.size !== graph.nodes.length) throw new Error('Image graph contains duplicate node ids.');
   const outputs = graph.nodes.filter(item => item.operator === 'image.output');
@@ -212,6 +216,19 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
           }
           register = emit({ nodeId: current.id, operation: 'parameter', type: 'scalar', inputs: [], value: slot });
         } else register = emit({ nodeId: current.id, operation: 'constant', type: 'scalar', inputs: [], value });
+        break;
+      }
+      case 'values.choice': {
+        const binding = current.bindings.value;
+        const value = resolveImageOperatorChoice(binding, params, context);
+        const slotKey = `choice:${String(binding)}`;
+        let slot = parameterSlots.get(slotKey);
+        if (slot === undefined) {
+          slot = parameterValues.length;
+          if (slot >= IMAGE_OPERATOR_PARAMETER_CAPACITY) throw new Error(`Image operator program exceeds ${IMAGE_OPERATOR_PARAMETER_CAPACITY} parameter slots.`);
+          parameterSlots.set(slotKey, slot); parameterValues.push(value);
+        }
+        register = emit({ nodeId: current.id, operation: 'parameter', type: 'scalar', inputs: [], value: slot });
         break;
       }
       case 'values.boolean': {
@@ -567,10 +584,11 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       ...expressions.filter((_line, index) => instructions[index].scope === 0), `  return ${returned};`, `}`].join('\n') };
 }
 
-export function compileImageOperatorGraph(graph: EffectOperatorGraph, params: Record<string, unknown> = {}): ImageOperatorPlan {
-  return compileImageOperatorPassPlan(graph, params, compileImageOperatorTarget);
+export function compileImageOperatorGraph(graph: EffectOperatorGraph, params: Record<string, unknown> = {}, context: ImageOperatorCompileContext = {}): ImageOperatorPlan {
+  return compileImageOperatorPassPlan(graph, params, (singleGraph, singleParams, preview) => compileImageOperatorTarget(singleGraph, singleParams, preview, context));
 }
 
-export function compileImageOperatorPreview(graph: EffectOperatorGraph, params: Record<string, unknown>, target: ImageOperatorPreviewTarget): ImageOperatorPlan {
-  return compileImageOperatorPassPlan(graph, params, compileImageOperatorTarget, target);
+export function compileImageOperatorPreview(graph: EffectOperatorGraph, params: Record<string, unknown>, target: ImageOperatorPreviewTarget,
+  context: ImageOperatorCompileContext = {}): ImageOperatorPlan {
+  return compileImageOperatorPassPlan(graph, params, (singleGraph, singleParams, preview) => compileImageOperatorTarget(singleGraph, singleParams, preview, context), target);
 }

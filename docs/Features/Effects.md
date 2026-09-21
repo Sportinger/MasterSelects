@@ -243,6 +243,15 @@ bias, zoom, sampling and edge policy are not part of these primitives. This is
 the shared foundation for Fisheye migration, not yet an editable default
 Fisheye graph.
 
+Bound `values.choice` nodes reference a select parameter in `effect.params`.
+Its options, label and default come from the owning effect definition, including
+the node's inline dropdown and parameter inspector. The compiler lowers the
+selected option's index into a dynamic uniform, so changing the selection does
+not rebuild the shader. Saved graphs contain only the parameter binding, not
+copies of the options. Unknown or missing selections use the declared default;
+missing or malformed select definitions fail validation. Choice nodes currently
+require an existing effect binding and are not offered as unbound Add Node items.
+
 ### Graph-internal texture stages
 
 `image.materialize` creates an explicit texture boundary inside an image graph.

@@ -22,7 +22,7 @@ import { EffectPipelineCache } from './EffectPipelineCache';
 import { captureImageOperatorPreviews } from '../services/nodePreview/imageOperatorTexturePreviews';
 import { compileAnalogSignalGraph, createDefaultAnalogSignalGraph } from '../services/operators/analogSignalGraph';
 import { captureAnalogSignalStagePreviews } from '../services/nodePreview/analogSignalPreviews';
-import { effectOperatorGraph, isImageGraphEffectType } from '../services/operators/effectGraphOwner';
+import { effectOperatorCompileContext, effectOperatorGraph, isImageGraphEffectType } from '../services/operators/effectGraphOwner';
 import { effectOperatorParams } from '../services/operators/effectGraphOwner';
 import { compileImageOperatorGraph } from '../services/operators/imageOperatorGraph';
 import { ImageGraphPassRuntime } from './ImageGraphPassRuntime';
@@ -301,7 +301,7 @@ export class EffectsPipeline {
     for (const effect of enabledEffects) {
       const imageGraphEffect = isImageGraphEffectType(effect.type);
       if (imageGraphEffect && effectOperatorGraph(effect).incomplete) continue;
-      const imagePlan = imageGraphEffect ? compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect)) : undefined;
+      const imagePlan = imageGraphEffect ? compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect), effectOperatorCompileContext(effect)) : undefined;
       const imagePassBatch = imagePlan?.passes?.length ? this.imageGraphPassRuntime.createBatch() : undefined;
       if (imageGraphEffect) captureImageOperatorPreviews({
         effect,

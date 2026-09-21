@@ -1,6 +1,6 @@
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import type { FullscreenEffectDefinition } from '../types';
-import { effectOperatorGraph, effectOperatorParams, isImageGraphEffectType } from '../../services/operators/effectGraphOwner';
+import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams, isImageGraphEffectType } from '../../services/operators/effectGraphOwner';
 import { compileImageOperatorGraph } from '../../services/operators/imageOperatorGraph';
 import { imageOperatorRuntimeUniformSize, packImageOperatorRuntimeUniforms } from '../../services/operators/imageOperatorRuntimeUniforms';
 import type { ImageOperatorPlan } from '../../services/operators/imageOperatorGraph';
@@ -33,7 +33,7 @@ export function imageGraphDefinition(
   if (!isImageGraphEffectType(effect.type)) return definition;
   const graph = effectOperatorGraph(effect);
   if (graph.incomplete) throw new Error(`Cannot render incomplete ${effect.type} operator graph.`);
-  const plan = compileImageOperatorGraph(graph, effectOperatorParams(effect));
+  const plan = compileImageOperatorGraph(graph, effectOperatorParams(effect), effectOperatorCompileContext(effect));
   if (plan.passes?.length) throw new Error('Multi-pass image graphs require ImageGraphPassRuntime.');
   return {
     ...definition,
