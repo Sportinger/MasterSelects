@@ -9,7 +9,7 @@ import { describePortText } from '../../../../services/nodeGraph/nodePortPresent
 import { inlineNumericPorts, previewExtraHeight } from '../previews/previewGeometry';
 
 export const DEFAULT_VIEWPORT = { zoom: 0.88, panX: 36, panY: 28 };
-export const MIN_ZOOM = 0.18;
+export const MIN_ZOOM = 0.05;
 export const MAX_ZOOM = 2.4;
 export const NODE_WIDTH = 184;
 export const NODE_MIN_HEIGHT = 126;
