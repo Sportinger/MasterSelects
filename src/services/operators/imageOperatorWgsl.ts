@@ -1,11 +1,17 @@
 import { IMAGE_OPERATOR_PARAMETER_VEC4_COUNT } from './imageOperatorParameters';
 import hash2d from '../../effects/_shared/hash2d.wgsl?raw';
 import gaussian from '../../effects/_shared/gaussian.wgsl?raw';
+import coordinateRotation from '../../effects/_shared/coordinateRotation.wgsl?raw';
+import radialProjection from '../../effects/_shared/radialProjection.wgsl?raw';
 export const imageF32 = (value: number) => Number.isInteger(value) ? `${value}.0` : String(value);
 export const imageParameterExpression = (slot: number) => `imageParameters.values[${Math.floor(slot / 4)}].${'xyzw'[slot % 4]}`;
 export const IMAGE_PARAMETER_WGSL = `struct ImageOperatorParameters { values: array<vec4f, ${IMAGE_OPERATOR_PARAMETER_VEC4_COUNT}>, };`;
 export const IMAGE_HASH2D_WGSL = hash2d.replace('fn hash(', 'fn imageGraphHash2d(');
 export const IMAGE_GAUSSIAN_WGSL = gaussian.replace('fn gaussian(', 'fn imageGraphGaussian(');
+export const IMAGE_COORDINATE_ROTATION_WGSL = coordinateRotation;
+export const IMAGE_RADIAL_PROJECTION_WGSL = radialProjection
+  .replace('fn radialProjectionRadius(', 'fn imageGraphProjectRadius(')
+  .replace('fn inverseRadialProjectionRadius(', 'fn imageGraphUnprojectRadius(');
 export const IMAGE_COLOR_WGSL = `fn imageGraphRgbToHsv(c: vec3f) -> vec3f {
   let K = vec4f(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0); let p = mix(vec4f(c.bg, K.wz), vec4f(c.gb, K.xy), step(c.b, c.g));
   let q = mix(vec4f(p.xyw, c.r), vec4f(c.r, p.yzx), step(p.x, c.r)); let d = q.x - min(q.w, q.y); let e = 1.0e-10;

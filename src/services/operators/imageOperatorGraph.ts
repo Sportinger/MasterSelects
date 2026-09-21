@@ -6,7 +6,7 @@ import { colorToRgba } from '../../effects/_shared/catalogColor';
 import { compileImageOperatorPassPlan } from './imageOperatorPlan';
 import { emitImageReducerWgsl } from './imageOperatorReducerWgsl';
 import { migrateImageOperatorGraph } from './imageOperatorMigration';
-import { imageF32 as f32, imageParameterExpression as parameterExpression, IMAGE_COLOR_WGSL, IMAGE_GAUSSIAN_WGSL, IMAGE_HASH2D_WGSL, IMAGE_PARAMETER_WGSL } from './imageOperatorWgsl';
+import { imageF32 as f32, imageParameterExpression as parameterExpression, IMAGE_COLOR_WGSL, IMAGE_COORDINATE_ROTATION_WGSL, IMAGE_GAUSSIAN_WGSL, IMAGE_HASH2D_WGSL, IMAGE_PARAMETER_WGSL, IMAGE_RADIAL_PROJECTION_WGSL } from './imageOperatorWgsl';
 export { createDefaultInvertImageGraph, migrateImageOperatorGraph } from './imageOperatorMigration';
 export { evaluateImageOperatorPlan } from './imageOperatorEvaluation';
 
@@ -19,7 +19,7 @@ export interface ImageOperatorEvaluationContext {
 }
 export interface ImagePlanInstruction {
   nodeId: string;
-  operation: 'input' | 'uv' | 'resolution' | 'time' | 'sample-image' | 'resource-input' | 'kernel-index' | 'kernel-sum' | 'kernel-weight-sum' | 'rect-sum' | 'rect-weight-sum' | 'sequence-index' | 'sequence-t' | 'sequence-sum' | 'sequence-weight-sum' | 'mirror-repeat-vec2' | 'select-image' | 'constant' | 'parameter' | 'parameter-boolean' | 'parameter-color' | 'constant-color' | 'subtract' | 'add-scalar' | 'multiply-scalar' | 'divide-ieee-scalar' | 'min-scalar' | 'power-scalar' | 'atan2-scalar' | 'reciprocal-scalar' | 'exp2-scalar' | 'exp-scalar' | 'gaussian-scalar' | 'sqrt-scalar' | 'fract-scalar' | 'floor-scalar' | 'step-scalar' | 'max-scalar' | 'clamp-scalar' | 'smoothstep-scalar' | 'mix-scalar' | 'greater-scalar' | 'and-boolean' | 'select-scalar' | 'select-vec2' | 'add-vec2' | 'subtract-vec2' | 'multiply-vec2' | 'divide-vec2' | 'floor-vec2' | 'fract-vec2' | 'clamp-vec2' | 'reduce-min-vec2' | 'hash2d-vec2' | 'dot-vec2' | 'length-vec2' | 'unit-direction' | 'sin-scalar' | 'cos-scalar' | 'scalar-to-vec2' | 'scalar-to-vec4' | 'multiply-vec4' | 'multiply-vector-scalar' | 'divide-vector-scalar' | 'clamp-rgb-scalar' | 'divide-vec4' | 'subtract-rgb' | 'add-rgb' | 'multiply-rgb' | 'divide-ieee-rgb' | 'max-rgb' | 'power-rgb' | 'floor-rgb' | 'clamp-rgb' | 'mix-rgb' | 'mix-components-rgb' | 'reduce-min-rgb' | 'reduce-max-rgb' | 'luminance-rec601' | 'luminance-rec709' | 'scalar-to-rgb' | 'vec4-to-rgb' | 'rgb-to-vec3' | 'vec3-to-rgb' | 'rgb-to-hsv' | 'hsv-to-rgb' | 'split-rgb' | 'split-alpha' | 'combine' | 'image-to-vec4' | 'vec4-to-image' | 'split-component' | 'combine-vector';
+  operation: 'input' | 'uv' | 'resolution' | 'time' | 'sample-image' | 'resource-input' | 'kernel-index' | 'kernel-sum' | 'kernel-weight-sum' | 'rect-sum' | 'rect-weight-sum' | 'sequence-index' | 'sequence-t' | 'sequence-sum' | 'sequence-weight-sum' | 'mirror-repeat-vec2' | 'select-image' | 'constant' | 'parameter' | 'parameter-boolean' | 'parameter-color' | 'constant-color' | 'subtract' | 'add-scalar' | 'multiply-scalar' | 'divide-ieee-scalar' | 'min-scalar' | 'power-scalar' | 'atan2-scalar' | 'rotate-vec2' | 'project-radius' | 'unproject-radius' | 'reciprocal-scalar' | 'exp2-scalar' | 'exp-scalar' | 'gaussian-scalar' | 'sqrt-scalar' | 'fract-scalar' | 'floor-scalar' | 'step-scalar' | 'max-scalar' | 'clamp-scalar' | 'smoothstep-scalar' | 'mix-scalar' | 'greater-scalar' | 'and-boolean' | 'select-scalar' | 'select-vec2' | 'add-vec2' | 'subtract-vec2' | 'multiply-vec2' | 'divide-vec2' | 'floor-vec2' | 'fract-vec2' | 'clamp-vec2' | 'reduce-min-vec2' | 'hash2d-vec2' | 'dot-vec2' | 'length-vec2' | 'unit-direction' | 'sin-scalar' | 'cos-scalar' | 'scalar-to-vec2' | 'scalar-to-vec4' | 'multiply-vec4' | 'multiply-vector-scalar' | 'divide-vector-scalar' | 'clamp-rgb-scalar' | 'divide-vec4' | 'subtract-rgb' | 'add-rgb' | 'multiply-rgb' | 'divide-ieee-rgb' | 'max-rgb' | 'power-rgb' | 'floor-rgb' | 'clamp-rgb' | 'mix-rgb' | 'mix-components-rgb' | 'reduce-min-rgb' | 'reduce-max-rgb' | 'luminance-rec601' | 'luminance-rec709' | 'scalar-to-rgb' | 'vec4-to-rgb' | 'rgb-to-vec3' | 'vec3-to-rgb' | 'rgb-to-hsv' | 'hsv-to-rgb' | 'split-rgb' | 'split-alpha' | 'combine' | 'image-to-vec4' | 'vec4-to-image' | 'split-component' | 'combine-vector';
   type: ImagePlanValue;
   inputs: number[];
   value?: number;
@@ -284,6 +284,13 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         register = current.bypassed ? a : emit({ nodeId: current.id, operation, type: 'scalar', inputs: [a, visitSource(current, 'b')] }); break;
       }
       case 'math.atan2.scalar': register = emit({ nodeId: current.id, operation: 'atan2-scalar', type: 'scalar', inputs: [visitSource(current, 'y'), visitSource(current, 'x')] }); break;
+      case 'coordinates.rotate.vec2': {
+        const value = visitSource(current, 'value');
+        register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'rotate-vec2', type: 'vec2', inputs: [value, visitSource(current, 'angle')] });
+        break;
+      }
+      case 'optics.project-radius.scalar': register = emit({ nodeId: current.id, operation: 'project-radius', type: 'scalar', inputs: [visitSource(current, 'theta'), visitSource(current, 'maxTheta'), visitSource(current, 'model')] }); break;
+      case 'optics.unproject-radius.scalar': register = emit({ nodeId: current.id, operation: 'unproject-radius', type: 'scalar', inputs: [visitSource(current, 'radius'), visitSource(current, 'maxTheta'), visitSource(current, 'model')] }); break;
       case 'math.clamp.scalar': {
         const value = visitSource(current, 'value');
         register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'clamp-scalar', type: 'scalar',
@@ -485,6 +492,9 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       : item.operation === 'floor-scalar' ? `floor(${args[0]})` : item.operation === 'step-scalar' ? `step(${args[0]}, ${args[1]})`
       : item.operation === 'gaussian-scalar' ? `imageGraphGaussian(${args[0]}, ${args[1]})` : item.operation === 'sqrt-scalar' ? `sqrt(${args[0]})` : item.operation === 'max-scalar' ? `max(${args[0]}, ${args[1]})`
       : item.operation === 'min-scalar' ? `min(${args[0]}, ${args[1]})` : item.operation === 'power-scalar' ? `pow(${args[0]}, ${args[1]})` : item.operation === 'atan2-scalar' ? `atan2(${args[0]}, ${args[1]})`
+      : item.operation === 'rotate-vec2' ? `imageRotate2d(${args[0]}, ${args[1]})`
+      : item.operation === 'project-radius' ? `imageGraphProjectRadius(${args[0]}, ${args[1]}, ${args[2]})`
+      : item.operation === 'unproject-radius' ? `imageGraphUnprojectRadius(${args[0]}, ${args[1]}, ${args[2]})`
       : item.operation === 'clamp-scalar' ? `clamp(${args[0]}, min(${args[1]}, ${args[2]}), max(${args[1]}, ${args[2]}))` : item.operation === 'greater-scalar' ? `${args[0]} > ${args[1]}`
       : item.operation === 'and-boolean' ? `${args[0]} && ${args[1]}`
       : item.operation === 'smoothstep-scalar' ? `smoothstep(${args[0]}, ${args[1]}, ${args[2]})`
@@ -551,6 +561,8 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     ...(resourceInputs.length ? { resourceInputs } : {}),
     wgsl: [IMAGE_COLOR_WGSL, ...(instructions.some(item => item.operation === 'hash2d-vec2') ? [IMAGE_HASH2D_WGSL] : []),
       ...(instructions.some(item => item.operation === 'gaussian-scalar') ? [IMAGE_GAUSSIAN_WGSL] : []), ...(parameterValues.length ? [IMAGE_PARAMETER_WGSL] : []),
+      ...(instructions.some(item => item.operation === 'rotate-vec2') ? [IMAGE_COORDINATE_ROTATION_WGSL] : []),
+      ...(instructions.some(item => item.operation === 'project-radius' || item.operation === 'unproject-radius') ? [IMAGE_RADIAL_PROJECTION_WGSL] : []),
       ...scopeFunctions, ...reducerWgsl, `fn evaluateImageGraph(${parameters.join(', ')}) -> vec4f {`, `  let pixel = inputColor;`,
       ...expressions.filter((_line, index) => instructions[index].scope === 0), `  return ${returned};`, `}`].join('\n') };
 }

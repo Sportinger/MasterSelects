@@ -31,12 +31,21 @@ struct FisheyeParams {
 @group(0) @binding(1) var inputTex: texture_2d<f32>;
 @group(0) @binding(2) var<uniform> params: FisheyeParams;
 
+fn rotate2d(value: vec2f, angle: f32) -> vec2f {
+  let sine = sin(angle);
+  let cosine = cos(angle);
+  return vec2f(
+    value.x * cosine - value.y * sine,
+    value.x * sine + value.y * cosine,
+  );
+}
+
 fn uvToLensSpace(uv: vec2f) -> vec2f {
   var delta = uv - vec2f(params.centerX, params.centerY);
   if (params.preserveAspect > 0.5) {
     delta.x *= params.frameAspect;
   }
-  delta = imageRotate2d(delta, -params.rotation);
+  delta = rotate2d(delta, -params.rotation);
   delta.x *= params.squeeze;
   return delta / max(params.radius * 0.5, 0.0001);
 }
@@ -44,11 +53,37 @@ fn uvToLensSpace(uv: vec2f) -> vec2f {
 fn lensSpaceToUv(lensPosition: vec2f) -> vec2f {
   var delta = lensPosition * max(params.radius * 0.5, 0.0001);
   delta.x /= max(params.squeeze, 0.0001);
-  delta = imageRotate2d(delta, params.rotation);
+  delta = rotate2d(delta, params.rotation);
   if (params.preserveAspect > 0.5) {
     delta.x /= max(params.frameAspect, 0.0001);
   }
   return vec2f(params.centerX, params.centerY) + delta;
+}
+
+fn projectionRadius(theta: f32, maxTheta: f32) -> f32 {
+  if (params.projection < 0.5) {
+    return theta / max(maxTheta, 0.0001);
+  }
+  if (params.projection < 1.5) {
+    return sin(theta * 0.5) / max(sin(maxTheta * 0.5), 0.0001);
+  }
+  if (params.projection < 2.5) {
+    return tan(theta * 0.5) / max(tan(maxTheta * 0.5), 0.0001);
+  }
+  return sin(theta) / max(sin(maxTheta), 0.0001);
+}
+
+fn inverseProjectionRadius(radius: f32, maxTheta: f32) -> f32 {
+  if (params.projection < 0.5) {
+    return radius * maxTheta;
+  }
+  if (params.projection < 1.5) {
+    return 2.0 * asin(clamp(radius * sin(maxTheta * 0.5), -1.0, 1.0));
+  }
+  if (params.projection < 2.5) {
+    return 2.0 * atan(radius * tan(maxTheta * 0.5));
+  }
+  return asin(clamp(radius * sin(maxTheta), -1.0, 1.0));
 }
 
 fn mappedLensRadius(radius: f32) -> f32 {
@@ -57,11 +92,11 @@ fn mappedLensRadius(radius: f32) -> f32 {
   var targetRadius = radius;
 
   if (params.strength >= 0.0) {
-    let theta = inverseRadialProjectionRadius(radius, maxTheta, params.projection);
+    let theta = inverseProjectionRadius(radius, maxTheta);
     targetRadius = tan(theta) / rectilinearScale;
   } else {
     let theta = atan(radius * rectilinearScale);
-    targetRadius = radialProjectionRadius(theta, maxTheta, params.projection);
+    targetRadius = projectionRadius(theta, maxTheta);
   }
 
   let direction = select(-1.0, 1.0, params.strength >= 0.0);

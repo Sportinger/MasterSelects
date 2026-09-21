@@ -1,6 +1,8 @@
 // Physically based fisheye / defisheye lens effect.
 
-import shader from './shader.wgsl?raw';
+import coordinateRotation from '../../_shared/coordinateRotation.wgsl?raw';
+import radialProjection from '../../_shared/radialProjection.wgsl?raw';
+import fisheyeShader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
 
 const PROJECTION_IDS: Record<string, number> = {
@@ -46,7 +48,7 @@ export const fisheye: EffectDefinition = {
   name: 'Fisheye Lens',
   category: 'distort',
 
-  shader,
+  shader: `${coordinateRotation}\n${radialProjection}\n${fisheyeShader}`,
   entryPoint: 'fisheyeFragment',
   uniformSize: 96,
 

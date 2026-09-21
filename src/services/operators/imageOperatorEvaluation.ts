@@ -1,6 +1,7 @@
 import type { ImageOperatorEvaluationContext, ImageOperatorPlan } from './imageOperatorGraph';
 import { evaluateScalarOperation } from './scalarOperationSemantics';
 import { imageFract, imageHsvToRgb, imageRgbToHsv } from './imageColorSemantics';
+import { projectImageRadius, rotateImageCoordinate, unprojectImageRadius } from './imageOpticsSemantics';
 
 const imageHash2d = (value: number[]) => {
   const x = value[0] * 127.1 + value[1] * 311.7, y = value[0] * 269.5 + value[1] * 183.3;
@@ -101,6 +102,9 @@ export function evaluateImageOperatorPlan(plan: ImageOperatorPlan, pixel: [numbe
     else if (item.operation === 'min-scalar') values.push(evaluateScalarOperation('min', args[0] as number, args[1] as number));
     else if (item.operation === 'power-scalar') values.push((args[0] as number) ** (args[1] as number));
     else if (item.operation === 'atan2-scalar') values.push(Math.atan2(args[0] as number, args[1] as number));
+    else if (item.operation === 'rotate-vec2') values.push(rotateImageCoordinate(args[0] as number[], args[1] as number));
+    else if (item.operation === 'project-radius') values.push(projectImageRadius(args[0] as number, args[1] as number, args[2] as number));
+    else if (item.operation === 'unproject-radius') values.push(unprojectImageRadius(args[0] as number, args[1] as number, args[2] as number));
     else if (item.operation === 'clamp-scalar') values.push(evaluateScalarOperation('clamp', args[0] as number, args[1] as number, args[2] as number));
     else if (item.operation === 'and-boolean') values.push((args[0] as boolean) && (args[1] as boolean));
     else if (item.operation === 'smoothstep-scalar') {

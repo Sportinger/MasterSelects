@@ -234,6 +234,17 @@ output is sampled at the transformed coordinates, including alpha, with the
 existing linear/clamp sampler. Rewiring the sample to the original UV bypasses
 the distortion without introducing another render pass.
 
+The image operator catalog also offers two-dimensional rotation and radial
+projection/inverse-projection primitives for equidistant, equisolid,
+stereographic and orthographic lenses. Angles are in radians. The projection
+functions share their WGSL implementation with the existing Fisheye shader,
+including its original domain clamps and epsilon handling. The software
+Fisheye renderer and image-graph reference evaluator likewise share the pure
+CPU implementations. Strength, curve
+bias, zoom, sampling and edge policy are not part of these primitives. This is
+the shared foundation for Fisheye migration, not yet an editable default
+Fisheye graph.
+
 ### Graph-internal texture stages
 
 `image.materialize` creates an explicit texture boundary inside an image graph.

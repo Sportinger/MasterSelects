@@ -114,6 +114,8 @@ Glow exposes its ring blur, brightness threshold and additive blend while
 preserving the original center-pixel alpha.
 Wave, Twirl, Bulge and Kaleidoscope expose their UV calculations and sampling
 as editable nodes, including alpha sampled at the transformed position.
+Reusable lens-projection and vector-rotation nodes share their GPU math with
+Fisheye; migration of the complete Fisheye graph remains in progress.
 Multi-stage image graphs share intermediate texture stages between consumers;
 simple graphs retain their single-pass execution.
 

@@ -1,4 +1,5 @@
 import type { WorkerRenderSoftwareFrame, WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntimeCommands';
+import { projectImageRadius, rotateImageCoordinate, unprojectImageRadius } from '../operators/imageOpticsSemantics';
 
 function finiteNumber(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -292,21 +293,16 @@ type FisheyeAdjustment = NonNullable<
 
 type Rgba = readonly [number, number, number, number];
 
+function fisheyeProjectionModel(projection: FisheyeAdjustment['projection']): number {
+  return projection === 'equisolid' ? 1 : projection === 'stereographic' ? 2 : projection === 'orthographic' ? 3 : 0;
+}
+
 function fisheyeProjectionRadius(
   theta: number,
   maxTheta: number,
   projection: FisheyeAdjustment['projection'],
 ): number {
-  switch (projection) {
-    case 'equisolid':
-      return Math.sin(theta * 0.5) / Math.max(Math.sin(maxTheta * 0.5), 0.0001);
-    case 'stereographic':
-      return Math.tan(theta * 0.5) / Math.max(Math.tan(maxTheta * 0.5), 0.0001);
-    case 'orthographic':
-      return Math.sin(theta) / Math.max(Math.sin(maxTheta), 0.0001);
-    default:
-      return theta / Math.max(maxTheta, 0.0001);
-  }
+  return projectImageRadius(theta, maxTheta, fisheyeProjectionModel(projection));
 }
 
 function fisheyeInverseProjectionRadius(
@@ -314,16 +310,7 @@ function fisheyeInverseProjectionRadius(
   maxTheta: number,
   projection: FisheyeAdjustment['projection'],
 ): number {
-  switch (projection) {
-    case 'equisolid':
-      return 2 * Math.asin(Math.max(-1, Math.min(1, radius * Math.sin(maxTheta * 0.5))));
-    case 'stereographic':
-      return 2 * Math.atan(radius * Math.tan(maxTheta * 0.5));
-    case 'orthographic':
-      return Math.asin(Math.max(-1, Math.min(1, radius * Math.sin(maxTheta))));
-    default:
-      return radius * maxTheta;
-  }
+  return unprojectImageRadius(radius, maxTheta, fisheyeProjectionModel(projection));
 }
 
 function fisheyeMappedRadius(radius: number, adjustment: FisheyeAdjustment): number {
@@ -344,9 +331,7 @@ function fisheyeMappedRadius(radius: number, adjustment: FisheyeAdjustment): num
 }
 
 function rotatePoint(x: number, y: number, angle: number): readonly [number, number] {
-  const sine = Math.sin(angle);
-  const cosine = Math.cos(angle);
-  return [x * cosine - y * sine, x * sine + y * cosine];
+  return rotateImageCoordinate([x, y], angle);
 }
 
 function fisheyeUvToLens(
