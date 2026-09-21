@@ -4,6 +4,8 @@ import { compileImageOperatorPreview } from '../operators/imageOperatorGraph';
 import { nodePreviewTextureTap } from './NodePreviewTextureTap';
 import { imageOperatorPreviewPrefix, parseImageOperatorPreviewStage } from './imageOperatorPreviewStages';
 import { packImageOperatorRuntimeUniforms } from '../operators/imageOperatorRuntimeUniforms';
+import { ImageGraphPassRuntime } from '../../effects/ImageGraphPassRuntime';
+import type { ImageGraphPassBatch } from '../../effects/ImageGraphPassRuntime';
 
 export type ImageOperatorPreviewSource =
   | { kind: 'texture'; view: GPUTextureView }
@@ -19,13 +21,34 @@ export interface CaptureImageOperatorPreviewsOptions {
   height: number;
   /** Composition-local render clock. Callers without a render context are deterministic at zero. */
   timelineTimeSeconds?: number;
+  passRuntime?: ImageGraphPassRuntime;
+  passBatch?: ImageGraphPassBatch;
 }
 
 interface DevicePipelines { device: GPUDevice; pipelines: Map<string, GPURenderPipeline> }
-const hot = import.meta.hot?.data as { imageOperatorPreviewPipelines?: DevicePipelines } | undefined;
+interface PassPreviewState { device: GPUDevice; runtime: ImageGraphPassRuntime; outputs: Map<string, { texture: GPUTexture; view: GPUTextureView; width: number; height: number }> }
+const hot = import.meta.hot?.data as { imageOperatorPreviewPipelines?: DevicePipelines; imageGraphPassPreviewState?: PassPreviewState } | undefined;
 let cache: DevicePipelines | undefined = hot?.imageOperatorPreviewPipelines;
+let passState: PassPreviewState | undefined = hot?.imageGraphPassPreviewState;
 const MAX_PIPELINES = 32;
-if (import.meta.hot) import.meta.hot.dispose(data => { data.imageOperatorPreviewPipelines = cache; });
+if (import.meta.hot) import.meta.hot.dispose(data => { data.imageOperatorPreviewPipelines = cache; data.imageGraphPassPreviewState = passState; });
+function passPreviewState(device: GPUDevice) {
+  if (passState?.device === device) return passState;
+  if (passState) { passState.runtime.dispose(); for (const output of passState.outputs.values()) output.texture.destroy(); }
+  passState = { device, runtime: new ImageGraphPassRuntime(device), outputs: new Map() };
+  const owner = passState; void device.lost.then(() => { if (passState === owner) { owner.runtime.dispose(); for (const output of owner.outputs.values()) output.texture.destroy(); owner.outputs.clear(); passState = undefined; } });
+  return passState;
+}
+function passPreviewOutput(state: PassPreviewState, key: string, width: number, height: number) {
+  const found = state.outputs.get(key);
+  if (found?.width === width && found.height === height) { state.outputs.delete(key); state.outputs.set(key, found); return found; }
+  if (found) state.outputs.delete(key);
+  const texture = state.device.createTexture({ size: { width, height }, format: 'rgba8unorm',
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
+  const output = { texture, view: texture.createView(), width, height }; state.outputs.set(key, output);
+  if (state.outputs.size > 16) state.outputs.delete(state.outputs.keys().next().value!);
+  return output;
+}
 
 const fullscreenVertex = `
 struct ImagePreviewVertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
@@ -84,11 +107,30 @@ export function captureImageOperatorPreviews(options: CaptureImageOperatorPrevie
   const demands = nodePreviewTextureTap.matching(imageOperatorPreviewPrefix(options.effect.id));
   if (!demands.length) return 0;
   const graph = effectOperatorGraph(options.effect);
+  const multiPassState = passPreviewState(options.device), runtime = options.passRuntime ?? multiPassState.runtime;
+  const batch = options.passBatch ?? runtime.createBatch();
   let captured = 0;
   for (const { stage } of demands) {
     const target = parseImageOperatorPreviewStage(stage); if (!target) continue;
     try {
       const plan = compileImageOperatorPreview(graph, effectOperatorParams(options.effect), target);
+      if (plan.passes?.length) {
+        const state = multiPassState;
+        if (plan.previewResourceId) {
+          runtime.encode({ encoder: options.encoder, sampler: options.sampler, source: options.source, width: options.width, height: options.height,
+            timelineTimeSeconds: options.timelineTimeSeconds ?? 0, plan, instanceId: `preview:${options.effect.id}:${stage}`, batch,
+            stopAtResourceId: plan.previewResourceId });
+          const view = runtime.getBatchResourceView(batch, plan.previewResourceId);
+          if (!view) throw new Error(`Materialized preview resource ${plan.previewResourceId} was not produced.`);
+          nodePreviewTextureTap.capture(stage, options.device, options.encoder, options.sampler, view, options.width, options.height);
+          captured++; continue;
+        }
+        const output = passPreviewOutput(state, `${options.effect.id}:${stage}`, options.width, options.height);
+        runtime.encode({ encoder: options.encoder, sampler: options.sampler, source: options.source, width: options.width, height: options.height,
+          timelineTimeSeconds: options.timelineTimeSeconds ?? 0, plan, outputView: output.view, outputFormat: 'rgba8unorm', instanceId: `preview:${options.effect.id}:${stage}`, batch });
+        nodePreviewTextureTap.capture(stage, options.device, options.encoder, options.sampler, output.view, options.width, options.height);
+        captured++; continue;
+      }
       const needsTime = plan.capabilities.includes('time');
       const needsResolution = plan.capabilities.includes('resolution');
       const pipeline = pipelineFor(options.device, plan.key, plan.wgsl, options.source, plan.capabilities.includes('uv'), needsResolution,

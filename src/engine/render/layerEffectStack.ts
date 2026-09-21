@@ -16,7 +16,7 @@ function applyInlineEffect(inlineEffects: InlineEffectParams, effect: Effect): '
     const graph = effectOperatorGraph(effect);
     if (graph.incomplete) return 'incomplete';
     const program = compileImageOperatorGraph(graph, effectOperatorParams(effect));
-    if (program.capabilities.length) return 'contextual';
+    if (program.capabilities.length || program.passes?.length) return 'contextual';
     inlineEffects.operatorProgram = program;
     return 'inline';
   }

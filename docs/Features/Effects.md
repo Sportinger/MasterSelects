@@ -191,9 +191,26 @@ their quantization remain unchanged.
 Sharpen reuses the same kernel reduction for its weighted neighborhood, then
 exposes the unsharp-mask subtraction, gain, addition and RGB clamp as nodes.
 Unlike the blur effects, it retains the original center-pixel alpha.
-Kernel Index has a per-sample scope rather than a single preview value. Nested
-kernel reducers are currently rejected explicitly; graph-internal texture
-materialization for multi-stage filters is a separate follow-up.
+Kernel Index has a per-sample scope rather than a single preview value.
+
+### Graph-internal texture stages
+
+`image.materialize` creates an explicit texture boundary inside an image graph.
+The compiler also inserts a necessary boundary when a kernel samples another
+kernel's image result. Shared consumers reuse one producer stage; branching by
+itself does not create a pass. Pointwise graphs and the default blur graphs keep
+their existing single-pass paths.
+
+Internal textures use straight-alpha `rgba16float`, preserving values outside the
+normalized color range without introducing another 8-bit clamp. Half-float storage
+is still a precision boundary. The existing `rgba8unorm` boundaries between
+separate effects remain unchanged. Resource IDs and pass plans are runtime
+compiler data; GPU handles never enter the saved graph.
+
+Effect rendering and demanded node previews use the same staged execution path.
+Intermediate allocations can be reused across frames, but their pixel contents
+are recomputed for each frame. A CPU reference needs an explicit resource sampler
+to evaluate a materialized input; it cannot silently substitute inline evaluation.
 
 ### Analog Signal Lab
 

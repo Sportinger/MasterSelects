@@ -23,6 +23,9 @@ import { captureImageOperatorPreviews } from '../services/nodePreview/imageOpera
 import { compileAnalogSignalGraph, createDefaultAnalogSignalGraph } from '../services/operators/analogSignalGraph';
 import { captureAnalogSignalStagePreviews } from '../services/nodePreview/analogSignalPreviews';
 import { effectOperatorGraph, isImageGraphEffectType } from '../services/operators/effectGraphOwner';
+import { effectOperatorParams } from '../services/operators/effectGraphOwner';
+import { compileImageOperatorGraph } from '../services/operators/imageOperatorGraph';
+import { ImageGraphPassRuntime } from './ImageGraphPassRuntime';
 
 const log = Logger.create('EffectsPipeline');
 
@@ -72,6 +75,7 @@ export class EffectsPipeline {
   private byteTextures: ByteTextureCache;
   private computeRuntime: ComputeEffectRuntime;
   private splitComparePipeline: SplitComparePipeline;
+  private imageGraphPassRuntime: ImageGraphPassRuntime;
   private initialized = false;
   private denseTerrain?: DenseTerrainPipeline;
 
@@ -81,6 +85,7 @@ export class EffectsPipeline {
     this.computeRuntime = new ComputeEffectRuntime(device);
     this.splitComparePipeline = new SplitComparePipeline(device);
     this.byteTextures = new ByteTextureCache(device);
+    this.imageGraphPassRuntime = new ImageGraphPassRuntime(device);
   }
 
   /**
@@ -296,6 +301,8 @@ export class EffectsPipeline {
     for (const effect of enabledEffects) {
       const imageGraphEffect = isImageGraphEffectType(effect.type);
       if (imageGraphEffect && effectOperatorGraph(effect).incomplete) continue;
+      const imagePlan = imageGraphEffect ? compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect)) : undefined;
+      const imagePassBatch = imagePlan?.passes?.length ? this.imageGraphPassRuntime.createBatch() : undefined;
       if (imageGraphEffect) captureImageOperatorPreviews({
         effect,
         device: this.device,
@@ -305,6 +312,8 @@ export class EffectsPipeline {
         width: outputWidth,
         height: outputHeight,
         timelineTimeSeconds,
+        passRuntime: imagePassBatch ? this.imageGraphPassRuntime : undefined,
+        passBatch: imagePassBatch,
       });
       if (effect.type === 'voxel-relief') nodeScalarSampleTap.capture(`voxel-effect:${effect.id}`, this.device, commandEncoder, sampler, effectInput);
       if(effect.terrainRender){
@@ -317,6 +326,15 @@ export class EffectsPipeline {
         continue;
       }
       const registered = getEffect(effect.type);
+      if (imagePlan?.passes?.length) {
+        try {
+          this.imageGraphPassRuntime.encode({ encoder: commandEncoder, sampler, source: { kind: 'texture', view: effectInput }, width: outputWidth,
+            height: outputHeight, timelineTimeSeconds, plan: imagePlan, outputView: effectOutput, outputFormat: 'rgba8unorm', instanceId: effect.id, batch: imagePassBatch });
+          effectInput = effectOutput; effectOutput = this.getNextOutputView(effectOutput, pingView, pongView); swapped = !swapped;
+          nodePreviewTextureTap.capture(`effect:${effect.id}`, this.device, commandEncoder, sampler, effectInput, outputWidth, outputHeight);
+        } catch (error) { log.error(`Multi-pass image effect failed: ${effect.type}`, error); }
+        continue;
+      }
       const definition = imageGraphEffect && isFullscreenEffectDefinition(registered)
         ? imageGraphDefinition(effect, registered, timelineTimeSeconds) : registered;
       if (isComputeEffectDefinition(definition)) {
@@ -526,6 +544,7 @@ export class EffectsPipeline {
     this.pipelineCache.clear();
     this.computeRuntime.clear();
     this.splitComparePipeline.destroy();
+    this.imageGraphPassRuntime.dispose();
     this.initialized = false;
   }
 
