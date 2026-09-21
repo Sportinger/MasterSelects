@@ -54,6 +54,7 @@ import { useSeedancePreproductionStore } from '../../stores/seedancePreproductio
 import { parseSeedancePreproductionProjectState } from '../seedancePreproduction/contracts';
 import { useTrackingStore } from '../../stores/trackingStore';
 import { ensureLegacyTrackingAssets } from '../planarTracking/trackingAssets';
+import { readTimelineSelectionRecovery, restoreTimelineSelectionRecovery } from './timelineSelectionRecovery';
 
 export { setProjectLoadProgress } from './load/loadProgress';
 export { reloadNestedCompositionClips } from './load/loadTimelineHydration';
@@ -122,7 +123,11 @@ export async function loadProjectToStores(): Promise<void> {
       const parsedProject = readProjectDataForLoad();
       if (!parsedProject) return;
 
-      const { projectData, hydrateFiles } = parsedProject;
+      const { hydrateFiles } = parsedProject;
+      const selectionRecovery = readTimelineSelectionRecovery(parsedProject.projectData);
+      const projectData = selectionRecovery
+        ? { ...parsedProject.projectData, activeCompositionId: selectionRecovery.compositionId }
+        : parsedProject.projectData;
       useTrackingStore.getState().hydrateAssets(projectData.trackingAssets ?? []);
       ensureLegacyTrackingAssets(projectData.compositions);
       hydrateStoryboardProjectState(readStoryboardProjectState(projectData).state);
@@ -219,6 +224,7 @@ export async function loadProjectToStores(): Promise<void> {
 
       setProjectLoadProgress({ phase: 'ui', percent: 58, message: 'Restoring workspace', blocking: true });
       await hydrateDockFlashboardAndWorkspaceFromProject(projectData);
+      restoreTimelineSelectionRecovery(selectionRecovery);
 
       const restoredMediaState = useMediaStore.getState();
       const usedLiveInputIds = new Set(collectUsedLiveInputIds(

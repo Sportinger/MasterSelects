@@ -257,6 +257,8 @@ The `setupAutoSync()` function (in `projectLifecycle.ts`) subscribes to store ch
 ### On Page Unload
 Unsaved edits retain the browser leave-page warning. Save explicitly before closing when you want to retain them; unloading does not reintroduce continuous saving.
 
+The active composition and clip selection (including the focused Properties clip) are remembered in tab-local session storage and restored after a refresh. Selection recovery needs no explicit Save, does not dirty the project, and only selects clips still present in the loaded project. It does not save unsaved timeline edits.
+
 ---
 
 ## Save Status

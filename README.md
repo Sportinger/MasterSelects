@@ -314,6 +314,8 @@ credits, and AI services are separate from this local setup.
 
 Development reloads skip the browser's unsaved-work confirmation. Save explicitly
 before reloading when using manual save mode.
+The active composition and clip selection are restored after a refresh in the same
+browser tab, including the focused clip in Properties, without an extra Save.
 
 Maintainers with the service configuration and private kernel checkout can use
 `npm run dev:full` for the complete development stack. The private hosted kernel

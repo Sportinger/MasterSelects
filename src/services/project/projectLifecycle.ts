@@ -25,6 +25,7 @@ import {
 } from './projectSave';
 import { loadProjectToStores } from './projectLoad';
 import { persistFlashBoardChatJournal } from './flashBoardChatProjectJournal';
+import { setupTimelineSelectionReloadRecovery } from './timelineSelectionRecovery';
 import {
   resetStoryboardProjectState,
   useStoryboardStore,
@@ -362,6 +363,7 @@ export function closeCurrentProject(): void {
  */
 export function setupAutoSync(): void {
   teardownAutoSync();
+  registerAutoSyncDisposer(setupTimelineSelectionReloadRecovery());
   registerAutoSyncDisposer(preserveUnsavedProjectOnChunkFailure(hasUnsavedWorkspace));
   restoreFlashBoardActiveGenerationRecordsFromRecovery();
 
