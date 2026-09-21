@@ -33,6 +33,8 @@ import { createDefaultGlowGraph } from './glowEffectGraph';
 import { createDefaultUvDistortGraph, type EditableUvDistortEffectType } from './uvDistortEffectGraphs';
 import { createDefaultFisheyeGraph } from './fisheyeEffectGraph';
 import { organizeFisheyeGraph } from './fisheyeGraphPresentation';
+import { organizeGaussianBlurGraph } from './gaussianBlurGraphPresentation';
+import { organizeEffectFamilyGraph } from './effectFamilyPresentation';
 import { normalizeFisheyeParameters } from '../../effects/distort/fisheye/normalization';
 import { createDefaultCrtScreenGraph } from './crtScreenEffectGraph';
 import { createDefaultRibbonScanGraph } from './ribbonScanEffectGraph';
@@ -194,7 +196,9 @@ export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGra
           ? () => createDefaultUvDistortGraph(effectType)
         : () => createDefaultColorEffectGraph(effectType);
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
-    const composed = recognizeOperatorCompositions(effectType === 'fisheye' ? organizeFisheyeGraph(saved) : saved);
+    const presented = effectType === 'fisheye' ? organizeFisheyeGraph(saved)
+      : effectType === 'gaussian-blur' ? organizeGaussianBlurGraph(saved) : saved;
+    const composed = organizeEffectFamilyGraph(presented, recognizeOperatorCompositions(presented), effectType, fallback);
     const graph = expandOperatorCompositions(migrateImageOperatorGraph(composed));
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
     if (errors.length) throw new Error(errors[0]);

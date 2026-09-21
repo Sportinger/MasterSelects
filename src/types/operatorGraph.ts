@@ -59,6 +59,14 @@ export interface EffectOperatorGraph {
   compositionRules?: 1 | 2;
   /** Color compositions migrate independently so existing coordinate migration remains stable. */
   colorCompositionRules?: 1;
+  /** Sampling recipes migrate independently; detached instances stay editable. */
+  samplingCompositionRules?: 1;
+  /** Shared color, sampling and glyph processing recipes; explicit detach stays local. */
+  processingCompositionRules?: 1;
+  /** One-time organization of an untouched default effect graph. */
+  effectPresentationRules?: 1;
+  /** The original Gaussian graph has received its one-time presentation layout. */
+  gaussianBlurPresentation?: 1;
   /** An editable graph whose execution is paused until its missing wiring is repaired. */
   incomplete?: string;
   domain?: 'cables' | 'scene' | 'voxel' | 'image' | 'compute-image' | 'analog-signal' | 'audio';

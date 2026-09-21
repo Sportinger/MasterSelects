@@ -145,6 +145,15 @@ time for reproducible tile changes and exposes its border color as a bound node.
 Box and Gaussian Blur expose editable sampling kernels and weights while retaining
 their existing single-pass rendering and alpha averaging. Sharpen reuses the
 kernel foundation and preserves center-pixel alpha.
+Gaussian Blur organizes its original graph into four expandable areas. Shared
+Texel Offset, Gaussian Weight and Normalize Weighted RGBA compositions are available
+under **Reusable Nodes → Sampling**, with exact-pattern reuse in compatible graphs.
+Box/Sharpen, directional blurs, Glow/Edge Detect, Wave/Twirl/Bulge, grid distortions,
+basic color effects and the ASCII/Glyph family now organize untouched graphs into
+expandable processing stages. Reusable sample-count, centered-scale, color, glyph
+grid/atlas and feedback blocks expose explicit inputs; saved custom groups remain
+in place. **Reusable Nodes → Glyph / Feedback** includes ASCII Ghost's stateless
+decay/max blend, with its history source kept separate.
 Motion, Radial and Zoom Blur expose directional sampling and weighting as editable
 nodes, retaining their existing parameter ranges and single-pass execution.
 Edge Detect exposes its eight shared neighbor samples, luminance conversion and

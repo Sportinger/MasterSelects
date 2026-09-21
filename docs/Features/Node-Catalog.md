@@ -18,6 +18,32 @@ select an image effect or an internal node and use
 **right-click → Reusable Nodes**, or the inspector's **Add node** selector.
 Each entry exposes its typed boundary and can be expanded after insertion.
 
+The Sampling category adds Texel Offset, Gaussian Weight, and Normalize Weighted
+RGBA as versioned compositions of existing operators. Their boundary inputs are
+explicit: pixel offset/resolution, offset/sigma, and accumulated RGBA/total weight.
+They have no hidden bindings to an effect's Radius or Samples controls. Gaussian
+weight requires nonzero sigma; normalization requires nonzero total weight.
+Kernel indices still need a surrounding reducer scope. These contracts are shared
+building blocks, not replacements for the existing kernel or sequence reducers.
+
+Further reusable processing recipes are available in the same menu:
+
+| Category | Blocks | Boundary contract |
+| --- | --- | --- |
+| Sampling | Bounded Sample Count | Explicit count, minimum and maximum; integer truncation remains with the reducer. |
+| Coordinates | Scale From Center | Direction, scalar scale and center; no hidden UV or resolution source. |
+| Color | Luma Saturation; Contrast Around Midgray | RGB processing only; clamping and alpha remain with the caller. Saturation uses Rec.601 luminance. |
+| Color | Soft Bright Pass; Sobel Magnitude | Explicit threshold edges and image, or eight neighboring luminance values; no hidden sampling pass. |
+| Glyph | Glyph Cell Grid; Tone to Glyph Index; Glyph Atlas Alpha | Explicit UV/resolution/cell size, tone/invert/count, and atlas image/dimensions/index/local UV/clamp bounds. Atlas loading stays outside the recipes. |
+| Feedback | Decay & Max RGBA | Componentwise `max(current, previous * decay)`; both images and decay are inputs. The block is stateless and never advances history. |
+
+These versioned definitions extract existing primitive regions rather than adding
+effect-specific GPU implementations. Exact structural recognition can share them
+across compatible effects without crossing saved group boundaries. Expanding a
+block exposes its ordinary nodes; editing its interior detaches that instance.
+Supplying an atlas or previous frame still requires a compatible resource-owning
+effect; inserting a processing block does not enable unsupported resources.
+
 All graph editors use the shared node canvas and connection contract. Domain
 registries remain responsible for executable operators and parameter schemas;
 adapters map existing saved definitions to the common ports and endpoints. Shared

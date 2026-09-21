@@ -324,6 +324,33 @@ one fullscreen pass.
 
 ### Editable blur kernels
 
+Untouched Box Blur/Sharpen and Motion/Radial/Zoom Blur graphs now have named
+sampling, weighting and resolve stages. Their compatible regions share Texel
+Offset, Gaussian Weight, Normalize Weighted RGBA, Bounded Sample Count and Scale
+From Center recipes. Reuse is exact-pattern based: different formulas retain
+their original operators, with sample order, bypass thresholds and alpha handling
+owned by the original graph.
+
+Gaussian Blur's original graph has four expandable areas: Radius & Sample Count,
+Kernel Sampling, Gaussian Weight, and Weighted Blur & Bypass. Shared Texel Offset,
+Gaussian Weight, and Normalize Weighted RGBA compositions expose their internal
+primitive nodes. Exact-pattern recognition also reuses compatible pieces in Box
+Blur and Sharpen without changing their formulas. Custom wiring/grouping is not
+replaced by the default presentation, and detached compositions stay local.
+The same blocks can be inserted through Reusable Nodes → Sampling in other image
+graphs; connect their explicit inputs, keeping kernel-index evaluation inside a
+reducer. This change does not introduce another GPU pass or change the blur curve.
+
+The organization/reuse pass also covers Glow, Edge Detect, Wave, Twirl, Bulge,
+Pixelate, Mirror, RGB Split, Blockify, Block Mosaic, the basic color effects and
+all ASCII/Glyph variants. Glow exposes Soft Bright Pass, Edge Detect exposes
+Sobel Magnitude, and Saturation/Vibrance share Luma Saturation. Glyph Cell Grid,
+Tone to Glyph Index and Glyph Atlas Alpha share compatible glyph computations.
+ASCII Ghost's Decay & Max RGBA accepts its current and previous frames explicitly;
+the existing history resource, reset policy and clock remain unchanged. These
+blocks are insertable from Reusable Nodes and expandable into their primitives.
+Saved custom layouts/groups are not automatically replaced by presentation stages.
+
 Box Blur and Gaussian Blur expose their neighborhood sampling as editable graphs:
 kernel index, UV offset, image sample, weight, accumulation and normalization.
 The shared kernel reducer evaluates the connected sample and weight expressions
