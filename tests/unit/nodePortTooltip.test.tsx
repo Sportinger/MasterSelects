@@ -9,12 +9,12 @@ import { placePortTooltip } from '../../src/components/panels/nodes/canvas/portT
 afterEach(cleanup);
 const port = projectOperatorPort(getEffectOperator('geometry.merge-surface')!.inputs[1], 'input');
 const node: NodeGraphNode = { id: 'stitch', label: 'Stitch Surfaces', kind: 'effect', runtime: 'builtin', inputs: [port], outputs: [], layout: { x: 0, y: 0 } };
-const setup = () => {
+const setup = (canvasRendered = false) => {
   const drag = vi.fn(), disconnect = vi.fn(), parentKey = vi.fn();
-  render(<div onKeyDown={parentKey}><NodeGraphPortView node={node} port={port} connectionDraft={null} onStartConnectionDrag={drag} onDisconnectPortEdges={disconnect} /></div>);
+  render(<div onKeyDown={parentKey}><NodeGraphPortView canvasRendered={canvasRendered} node={node} port={port} connectionDraft={null} onStartConnectionDrag={drag} onDisconnectPortEdges={disconnect} /></div>);
   return { anchor: screen.getByRole('button', { name: 'Input Background: Geometry' }), drag, disconnect, parentKey };
 };
-describe('node port information', () => {
+describe.each([false, true])('node port information, canvas=%s', canvasRendered => {
   it('keeps details clear of the owning node and inside the viewport at either screen edge', () => {
     for (const left of [8, 400, 780]) {
       const card = { left, right: left + 184, top: 420, bottom: 550 };
@@ -27,7 +27,7 @@ describe('node port information', () => {
     }
   });
   it('exposes format details on keyboard focus and dismisses with Escape without affecting the node', () => {
-    const { anchor, parentKey } = setup();
+    const { anchor, parentKey } = setup(canvasRendered);
     fireEvent.focus(anchor);
     expect(screen.getByRole('tooltip')).toHaveTextContent('Reconstructed depth mesh');
     expect(screen.getByRole('tooltip')).toHaveTextContent('Optional');
@@ -38,7 +38,7 @@ describe('node port information', () => {
     fireEvent.blur(anchor); expect(screen.queryByRole('tooltip')).toBeNull();
   });
   it('keeps hover details separate from drag and disconnect actions', () => {
-    const { anchor, drag, disconnect } = setup();
+    const { anchor, drag, disconnect } = setup(canvasRendered);
     fireEvent.pointerEnter(anchor);
     expect(screen.getByRole('tooltip')).toHaveTextContent('In · Geometry');
     expect(screen.getByRole('tooltip')).not.toHaveTextContent('Spatial geometry');
@@ -49,7 +49,7 @@ describe('node port information', () => {
     expect(disconnect).toHaveBeenCalledWith(node, port);
   });
   it('opens on a touch tap even when the canvas captures pointerup, but not after a drag', () => {
-    const { anchor } = setup();
+    const { anchor } = setup(canvasRendered);
     const pointer = (target: Element | Window, type: string, x: number) => {
       const event = new Event(type, { bubbles: true });
       Object.defineProperties(event, { pointerType: { value: 'touch' }, pointerId: { value: 3 }, clientX: { value: x }, clientY: { value: 10 } });

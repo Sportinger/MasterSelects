@@ -73,10 +73,15 @@ describe('node canvas navigation render boundaries', () => {
 
   it('does not reconcile stable node cards while panning or wheel zooming', () => {
     const view = setup(200), initial = new Map(mocks.renders);
+    const grid = view.container.querySelector<HTMLElement>('.node-workspace-grid')!;
+    const board = view.container.querySelector<HTMLElement>('.node-workspace-board')!;
+    const gridBefore = grid.style.transform;
     expect(initial.size).toBe(200);
     pointer(view.canvas, 'pointerdown', 40, 40);
     pointer(view.canvas, 'pointermove', 90, 75);
     pointer(view.canvas, 'pointerup', 90, 75);
+    expect(grid.style.transform).not.toBe(gridBefore);
+    expect(board.getAttribute('style')).toBeNull();
     fireEvent.wheel(view.canvas, { deltaY: -120, clientX: 60, clientY: 50 });
     expect(mocks.renders).toEqual(initial);
   });

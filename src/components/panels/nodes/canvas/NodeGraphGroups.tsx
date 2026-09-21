@@ -21,7 +21,8 @@ export const NodeGraphGroups = memo(function NodeGraphGroups({ graph, nodes, zoo
     const box = bounds.get(group.id);
     if (!box) return null;
     const members = nodes.filter(node => group.nodeIds.includes(node.id));
-    return <section key={group.id} aria-label={`${group.label} node group`} className="node-workspace-group"
+    const bypassed = group.bypassed ?? (nodes.find(node => node.id === group.bypassNodeId)?.params?.enabled === false);
+    return <section key={group.id} aria-label={`${group.label} node group`} className="node-workspace-group" data-bypassed={bypassed}
       style={{ left: box.left, top: box.top, width: box.right - box.left, height: box.bottom - box.top, '--group-color': group.color,
         '--group-header-height': `${header.height}px`, '--group-font-size': `${header.fontSize}px`, '--group-icon-size': `${header.iconSize}px`,
         '--group-control-size': `${header.controlSize}px`, '--group-gap': `${header.gap}px`, '--group-padding': `${header.padding}px`,
@@ -36,6 +37,7 @@ export const NodeGraphGroups = memo(function NodeGraphGroups({ graph, nodes, zoo
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d={group.collapsed ? 'M9 5l7 7-7 7' : 'M5 9l7 7 7-7'} /></svg>
         </button>
         <span className="node-workspace-group-title">{group.label}</span>
+        {bypassed && <span className="node-workspace-group-status">Bypassed</span>}
         {group.issue ? <span className="node-workspace-group-warning" role="status" aria-label={`${group.label} paused: ${group.issue}`}
           title={`Paused: ${group.issue}`}>!</span> : <span className="node-workspace-group-count">{group.collapsed ? '' : members.length}</span>}
         {onToggleLock && <button type="button" className="node-workspace-group-toggle" aria-pressed={locks?.[group.id]?.locked !== false}
@@ -47,7 +49,8 @@ export const NodeGraphGroups = memo(function NodeGraphGroups({ graph, nodes, zoo
             <path d={locks?.[group.id]?.locked === false ? 'M8 10V6a4 4 0 0 1 8 0' : 'M8 10V6a4 4 0 0 1 8 0v4'} /></svg>
         </button>}
         {group.bypassNodeId && onToggleNodeBypass && <button type="button" className="node-workspace-group-focus"
-          aria-label={`Bypass ${group.label} group`} aria-pressed={nodes.find(node => node.id === group.bypassNodeId)?.params?.enabled === false}
+          aria-label={`Bypass ${group.label} group`} aria-pressed={bypassed}
+          title={bypassed ? 'Enable group' : 'Bypass group'}
           onPointerDown={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}
           onClick={event => { event.stopPropagation(); if (event.detail > 0) event.currentTarget.blur(); onToggleNodeBypass(group.bypassNodeId!); }}>Byp</button>}
         <button type="button" className="node-workspace-group-focus" aria-label={`Focus ${group.label} group`}

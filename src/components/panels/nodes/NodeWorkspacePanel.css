@@ -71,15 +71,18 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  background:
+  background: var(--bg-primary);
+}
+
+.node-workspace-grid {
+  position: absolute;
+  inset: -32px;
+  pointer-events: none;
+  will-change: transform;
+  background-image:
     linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    var(--bg-primary);
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
   background-size: 32px 32px;
-  background-position:
-    var(--node-workspace-grid-x, 0px) var(--node-workspace-grid-y, 0px),
-    var(--node-workspace-grid-x, 0px) var(--node-workspace-grid-y, 0px),
-    0 0;
 }
 
 .node-workspace-toolbar {

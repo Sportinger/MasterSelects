@@ -7,8 +7,9 @@ import { NodePortDetails } from './NodePortDetails';
 import { placePortTooltip } from './portTooltipPlacement';
 import './NodeGraphPorts.css';
 
-export function NodeGraphPortView({ node, port, connectionDraft, onStartConnectionDrag, onDisconnectPortEdges }: {
+export function NodeGraphPortView({ node, port, canvasRendered = false, connectionDraft, onStartConnectionDrag, onDisconnectPortEdges }: {
   node: NodeGraphNode; port: NodeGraphPort; connectionDraft: ConnectionDraft | null;
+  canvasRendered?: boolean;
   onStartConnectionDrag: (event: ReactPointerEvent<HTMLDivElement>, node: NodeGraphNode, port: NodeGraphPort) => void;
   onDisconnectPortEdges: (node: NodeGraphNode, port: NodeGraphPort) => void;
 }) {
@@ -53,7 +54,7 @@ export function NodeGraphPortView({ node, port, connectionDraft, onStartConnecti
       aria-label={`${port.direction === 'input' ? 'Input' : 'Output'} ${port.label}: ${info.typeLabel}`}
       aria-description={describePortText(port)} aria-describedby={position ? id : undefined}
       className={['node-workspace-port', `node-workspace-port-${port.direction}`, port.metadata?.required ? 'required' : '', connectable ? 'connectable' : '', isDraftStart ? 'connecting' : ''].filter(Boolean).join(' ')}
-      style={{ '--port-color': info.color } as CSSProperties}
+      style={{ '--port-color': info.color, width: canvasRendered ? '100%' : undefined } as CSSProperties}
       data-node-id={node.id} data-port-id={port.id} data-direction={port.direction}
       onPointerEnter={e => { if (e.pointerType !== 'touch' && !connectionDraft) show(); }} onPointerLeave={hideSoon}
       onFocus={show} onBlur={() => setPosition(null)}
@@ -83,8 +84,8 @@ export function NodeGraphPortView({ node, port, connectionDraft, onStartConnecti
         if (event.key === 'Escape') { event.preventDefault(); setPosition(null); }
       }}
       onContextMenu={event => { event.preventDefault(); event.stopPropagation(); setPosition(null); onDisconnectPortEdges(node, port); }}>
-      <span className="node-workspace-port-dot" />
-      <span className="node-workspace-port-copy"><span className="node-workspace-port-label">{port.label}</span><span className="node-workspace-port-type">{info.typeLabel}</span></span>
+      {!canvasRendered && <><span className="node-workspace-port-dot" />
+      <span className="node-workspace-port-copy"><span className="node-workspace-port-label">{port.label}</span><span className="node-workspace-port-type">{info.typeLabel}</span></span></>}
     </div>
     {position && createPortal(<div ref={tooltip} id={id} role="tooltip" className="node-port-tooltip" style={{ ...position, '--port-color': info.color } as CSSProperties}
       onPointerEnter={keepOpen} onPointerLeave={hideSoon}><NodePortDetails port={port} compact /></div>, document.body)}

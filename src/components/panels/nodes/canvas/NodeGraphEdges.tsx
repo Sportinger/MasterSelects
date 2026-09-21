@@ -9,6 +9,7 @@ import { NodeGraphFlowSignals } from './NodeGraphFlowSignals';
 import './NodeGraphFlow.css';
 
 interface NodeGraphEdgesProps {
+  visibleEdgeIds?: ReadonlySet<string>;
   graphBounds: NodeBounds;
   edges: NodeGraphEdge[];
   plugs: ConnectionPlug[];
@@ -24,6 +25,7 @@ interface NodeGraphEdgesProps {
 }
 
 export const NodeGraphEdges = memo(function NodeGraphEdges({
+  visibleEdgeIds,
   graphBounds,
   edges,
   plugs,
@@ -81,6 +83,7 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
       {edges.map((edge) => {
         const pair = endpoints.get(edge.id);
         if (!pair?.input || !pair.output || (connectionDraft?.reconnectEdgeId === edge.id && connectionDraft.moved)) return null;
+        if (visibleEdgeIds && !visibleEdgeIds.has(edge.id)) return null;
         const path = getConnectionPath(pair.output.tip, pair.input.tip);
         const port = nodesById.get(edge.fromNodeId)?.outputs.find(p => p.id === edge.fromPortId);
         return (
@@ -101,7 +104,7 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
             }}
           >
             <path className="node-workspace-edge-hit" d={path} />
-            <path
+            {!canvasRendered && <><path
               strokeDasharray={edge.readOnly ? '4 4' : undefined}
               className={[
                 'node-workspace-edge port-typed',
@@ -114,7 +117,7 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
             <g className="node-workspace-edge-flow">
               <path className="node-workspace-flow-arrow" d="M -4 -4 L 0 0 L -4 4"
                 transform={getConnectionArrowTransform(pair.output.tip, pair.input.tip)} />
-            </g>
+            </g></>}
           </g>
         );
       })}

@@ -26,7 +26,8 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     const offset = state?.position ?? { x: cursor + 35, y: 95 };
     const collapsed = state?.collapsed === true;
     const group = { id: groupId, label: effect?.name ?? (groupId === 'scene3d' ? '3D Scene' : groupId === 'flock' ? 'Flock' : 'Color'),
-      color: groupId === 'scene3d' ? '#d7a262' : groupId === 'flock' ? '#7ea65b' : groupId === 'color' ? '#ba8bd6' : '#55a6c4', collapsed, nodeIds: [] as string[], proxyId: rootNode.id, issue: inner.issue };
+      color: groupId === 'scene3d' ? '#d7a262' : groupId === 'flock' ? '#7ea65b' : groupId === 'color' ? '#ba8bd6' : '#55a6c4', collapsed, nodeIds: [] as string[], proxyId: rootNode.id, issue: inner.issue,
+      ...(effect ? { effectId: effect.id, bypassNodeId: rootNode.id, bypassed: !effect.enabled } : {}) };
     groups.push(group);
     if (collapsed || !inner.nodes.length) {
       const proxy: NodeGraphNode = { ...rootNode, runtime: 'subgraph', label: group.label,

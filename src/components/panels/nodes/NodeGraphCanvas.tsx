@@ -1,4 +1,6 @@
 import { NodeGraphGroups } from './canvas/NodeGraphGroups';
+import { useNodeDomViewport } from './canvas/useNodeDomViewport';
+import { useNodeDomVisibility } from './canvas/useNodeDomVisibility';
 import { useNodePreviewPreferences } from './previews/useNodePreviewPreferences';
 import { nodePreviewKey, nodePreviewPreferenceKey, previewOutput } from '../../../services/nodePreview/previewTypes';
 import { useNodeCanvasPlacement } from './canvas/useNodeCanvasPlacement';
@@ -194,8 +196,8 @@ export function NodeGraphCanvas({
   ), [graph.edges, selectedEdgeId]);
 
   const gridStyle = useMemo(() => ({
-    '--node-workspace-grid-x': `${viewport.panX % 32}px`,
-    '--node-workspace-grid-y': `${viewport.panY % 32}px`,
+    // Move a cached sibling layer; inherited variables invalidate every node style.
+    transform: `translate3d(${viewport.panX % 32}px, ${viewport.panY % 32}px, 0)`,
   }) as CSSProperties, [viewport.panX, viewport.panY]);
 
   const fitBounds = useCallback((bounds: typeof graphBounds) => {
@@ -264,6 +266,8 @@ export function NodeGraphCanvas({
     graphId: graph.id, canvasRef, nodesById, getGraphPoint: getGraphPointFromClient,
     onConnectPorts, onReconnectPorts, onDisconnectEdge,
   });
+  const domViewport = useNodeDomViewport(canvasRef, viewport, !!nodeGesture || !!connectionDraft);
+  const dom = useNodeDomVisibility(displayNodes, plugs, domViewport);
 
   const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (nodeMarquee.start(event)) return;
@@ -483,7 +487,6 @@ export function NodeGraphCanvas({
   return (<Profiler id="node-canvas" onRender={recordRender}>
     <div
       className={`node-workspace-board${isPanning ? ' board-interacting' : ''}`}
-      style={gridStyle}
     >
       <div className="node-workspace-toolbar">
         <div className="node-workspace-toolbar-title">
@@ -580,6 +583,7 @@ export function NodeGraphCanvas({
           onOpenAddMenu?.({ x: event.clientX, y: event.clientY, layout, nodeId: targetNodeId });
         }}
       >
+        <div className="node-workspace-grid" style={gridStyle} aria-hidden="true" />
         <NodeGraphCanvasSurface graph={graph} nodes={displayNodes} groupFrameNodes={groupFrameNodes} plugs={plugs} viewport={viewport}
           surfaceRef={canvasSurfaceRef} backgroundRef={canvasBackgroundRef} onViewRendered={handleViewRendered}
           selectedNodeId={selectedNodeId} selection={multiSelection} selectedEdgeId={selectedEdgeId}
@@ -594,6 +598,7 @@ export function NodeGraphCanvas({
             locks={placement.groups} onToggleLock={toggleLock} onToggleNodeBypass={onToggleNodeBypass}
             onStartDrag={startGroupDrag} onPointerMove={handleNodePointerMove} onFinishDrag={finishNodeDrag} />
           <NodeGraphEdges
+            visibleEdgeIds={dom.edgeIds}
             canvasRendered={canvasRendered}
             zoom={viewport.zoom}
             graphBounds={graphBounds}
@@ -608,10 +613,10 @@ export function NodeGraphCanvas({
             onDisconnectEdge={onDisconnectEdge}
           />
 
-          <NodeGraphPlugs plugs={plugs} nodes={displayNodes} draft={connectionDraft} selectedEdgeId={selectedEdgeId}
+          <NodeGraphPlugs canvasRendered={canvasRendered} visibleNodeIds={dom.nodeIds} visiblePlugIds={dom.plugIds} plugs={plugs} nodes={displayNodes} draft={connectionDraft} selectedEdgeId={selectedEdgeId}
             hoveredPort={hoveredPort} hoveredEdgeId={hoveredEdgeId} onStartConnectionDrag={startConnectionDrag}
             onSelectEdge={setSelectedEdgeId} onStartDrag={startPlugDrag} onDisconnectEdge={onDisconnectEdge} />
-          {displayNodes.map((node) => (
+          {dom.nodes.map((node) => (
             <NodeGraphNodeCard
               key={node.id}
               node={node}

@@ -5,8 +5,12 @@ import { getPortCenter, type ConnectionDraft } from './canvasGeometry';
 import type { ConnectionPlug } from './connectionPlugs';
 import type { HoveredNodePort } from './useNodePortHover';
 import './NodeGraphPlugs.css';
+import { NodeGraphPlugTargets } from './NodeGraphPlugTargets';
 
 interface Props {
+  canvasRendered?: boolean;
+  visibleNodeIds?: ReadonlySet<string>;
+  visiblePlugIds?: ReadonlySet<string>;
   plugs: ConnectionPlug[];
   nodes: NodeGraphNode[];
   draft: ConnectionDraft | null;
@@ -14,14 +18,17 @@ interface Props {
   hoveredEdgeId: string | null;
   selectedEdgeId: string | null;
   onSelectEdge: (id: string) => void;
-  onStartDrag: (event: ReactPointerEvent<SVGGElement>, plug: ConnectionPlug) => void;
+  onStartDrag: (event: ReactPointerEvent, plug: ConnectionPlug) => void;
   onStartConnectionDrag: (event: ReactPointerEvent, node: NodeGraphNode, port: NodeGraphPort) => void;
   onDisconnectEdge?: (id: string) => void;
 }
 
-export const NodeGraphPlugs = memo(function NodeGraphPlugs({ plugs, nodes, draft, hoveredPort, hoveredEdgeId, selectedEdgeId, onSelectEdge, onStartDrag, onStartConnectionDrag, onDisconnectEdge }: Props) {
+export const NodeGraphPlugs = memo(function NodeGraphPlugs({ canvasRendered = false, visibleNodeIds, visiblePlugIds, plugs, nodes, draft, hoveredPort, hoveredEdgeId, selectedEdgeId, onSelectEdge, onStartDrag, onStartConnectionDrag, onDisconnectEdge }: Props) {
+  if (canvasRendered) return <NodeGraphPlugTargets plugs={plugs} nodes={nodes} draft={draft} visiblePlugIds={visiblePlugIds}
+    hoveredPort={hoveredPort} onSelectEdge={onSelectEdge} onStartDrag={onStartDrag}
+    onStartConnectionDrag={onStartConnectionDrag} onDisconnectEdge={onDisconnectEdge} />;
   const occupied = new Set(plugs.map(p => JSON.stringify([p.node.id, p.port.id, p.port.direction])));
-  const previews = nodes.flatMap(node => [...node.inputs, ...node.outputs]
+  const previews = nodes.filter(node => !visibleNodeIds || visibleNodeIds.has(node.id)).flatMap(node => [...node.inputs, ...node.outputs]
     .filter(port => !occupied.has(JSON.stringify([node.id, port.id, port.direction])))
     .map(port => ({ node, port })));
   const targetNode = draft?.target && nodes.find(node => node.id === draft.target!.nodeId);
@@ -32,6 +39,7 @@ export const NodeGraphPlugs = memo(function NodeGraphPlugs({ plugs, nodes, draft
   return <svg className="node-workspace-plugs" width="1" height="1">
     {plugs.toReversed().map(plug => {
       const { edge, node, port, center, tip } = plug;
+      if (visiblePlugIds && !visiblePlugIds.has(`${edge.id}:${port.direction}`)) return null;
       const unplugging = draft?.reconnectEdgeId === edge.id && draft.moved && draft.direction !== port.direction;
       const hovered = hoveredPort?.node.id === node.id && hoveredPort.port.id === port.id && hoveredPort.port.direction === port.direction;
       const sign = port.direction === 'input' ? -1 : 1;

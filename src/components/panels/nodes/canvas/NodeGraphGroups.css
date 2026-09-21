@@ -55,3 +55,6 @@
 .node-workspace-group-header button[aria-pressed="true"] { color: var(--accent-color, #79b8fa); }
 .node-workspace-group-header button:hover { background: rgba(255,255,255,0.08); }
 .node-workspace-group-warning { flex: 0 0 auto; color: #f0bd66; font-weight: 800; cursor: help; }
+.node-workspace-group[data-bypassed="true"] .node-workspace-group-header { background: var(--bg-secondary, #292b2f); }
+.node-workspace-group[data-bypassed="true"] .node-workspace-group-title { color: var(--text-secondary, #aaa); }
+.node-workspace-group-status { flex: 0 0 auto; color: var(--text-secondary, #aaa); font-weight: 400; }

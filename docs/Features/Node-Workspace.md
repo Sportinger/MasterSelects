@@ -266,8 +266,21 @@ Geometry outside the buffer is culled and backing stores are bounded to 4096 pix
 dimension and 8 million pixels per layer. Canvas dimensions never follow the
 full graph bounds.
 
-The original DOM retains hit targets, tooltips and keyboard navigation. A focused
-node exposes its keyboard focus styling; the inspector stays a regular DOM UI.
+The original DOM retains hit targets, tooltips and keyboard navigation only in
+the viewport plus a 256 CSS-pixel margin. Node cards, cable hit paths and port
+grips outside that area are unmounted; crossing cables remain interactive even
+when both endpoint nodes are offscreen. The canvas still receives the complete
+graph. Visibility lists retain their identity until membership changes, avoiding
+DOM subtree reconciliation on every pan frame. Node/connection drags and focused
+node controls temporarily retain all targets to preserve pointer capture and
+keyboard navigation. A focused node exposes its keyboard focus styling; the
+inspector stays a regular DOM UI.
+Canvas mode omits duplicate SVG artwork and port-label DOM. Cable grips use flat
+HTML hit targets with the same reconnect, delete and keyboard actions; the SVG
+renderer remains the fallback. Port descriptions remain accessible and tooltips
+work with pointer, keyboard and touch. The background grid moves on a separate
+cached layer: pan offsets no longer propagate through inherited CSS variables
+and trigger descendant style recalculation.
 Worker startup/runtime failure replaces the transferred canvases with a main-thread
 software renderer; if Canvas 2D is unavailable, the DOM graph remains usable.
 Panning and zooming keep unchanged node-card props and connection callbacks
@@ -502,6 +515,11 @@ remain independent. Required processing-chain links cannot be left dangling; use
 bypass to skip an effect.
 
 Effect and AI nodes include a compact bypass toggle in the node header. Effect bypass writes through to the existing effect enabled flag; AI node bypass is stored on the custom node and prevents that generated runtime from processing the preview signal.
+Effect groups also expose **Byp** in their group header, both expanded and
+collapsed. This switches the same effect enabled flag as Properties and shows
+**Bypassed** when inactive. Individual operator bypass states, graph wiring and
+effect parameters remain intact; group bypass participates in undo/redo and
+respects locked tracks and export protection.
 
 Cable ends have colored semicircular **plugs** around their sockets, with grips
 outside the node card. They remain visible above cards, including collapsed groups;

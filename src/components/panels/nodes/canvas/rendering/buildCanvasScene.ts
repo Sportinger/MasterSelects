@@ -64,7 +64,7 @@ export function buildCanvasScene(options: Options): CanvasScene {
     if (b) scene.groups.push({ x: b.left, y: b.top, width: b.right - b.left, height: b.bottom - b.top,
       label: group.label, color: group.color ?? '#5cbed6', collapsed: !!group.collapsed,
       count: group.collapsed && group.bypassNodeId ? '' : `${group.nodeIds.length} nodes`,
-      bypassable: !!group.bypassNodeId, bypassed: nodes.find(node => node.id === group.bypassNodeId)?.params?.enabled === false });
+      bypassable: !!group.bypassNodeId, bypassed: group.bypassed ?? (nodes.find(node => node.id === group.bypassNodeId)?.params?.enabled === false) });
   }
   scene.nodes = nodes.map(node => ({ id: node.id, x: node.layout.x, y: node.layout.y, width: NODE_WIDTH, height: getNodeHeight(node),
     label: node.label, description: inlineNumericPorts(node) ? '' : node.description ?? 'Built-in processing node', kind: typeof node.params?.categoryLabel === 'string' ? node.params.categoryLabel : node.kind,

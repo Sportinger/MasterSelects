@@ -1,4 +1,6 @@
 .node-workspace-plugs { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 6; }
+.node-workspace-plug-target { position: absolute; z-index: 6; box-sizing: border-box; padding: 0; border: 0; background: transparent; pointer-events: auto; }
+.node-workspace-plug-target:focus-visible { outline: 2px solid var(--port-color); outline-offset: 1px; border-radius: 3px; }
 .node-workspace-plug { color: var(--port-color); cursor: grab; outline: none; -webkit-tap-highlight-color: transparent; touch-action: none; }
 .node-workspace-plug:active { cursor: grabbing; }
 .node-workspace-plug-backing, .node-workspace-plug-shape { fill: none; stroke-linecap: round; pointer-events: none; }

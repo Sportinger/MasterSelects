@@ -73,12 +73,15 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
   const analysisProgress = clamp(getNodeParamNumber(node, 'progressPercent'), 0, 100);
 
   const renderPort = (port: NodeGraphPort) => <NodeGraphPortView key={port.id} node={node} port={port}
+    canvasRendered={canvasRendered}
     connectionDraft={connectionDraft} onStartConnectionDrag={onStartConnectionDrag} onDisconnectPortEdges={onDisconnectPortEdges} />;
 
   return (<>
     <div
       role="button"
       tabIndex={0}
+      aria-label={canvasRendered ? node.label : undefined}
+      aria-description={canvasRendered ? node.description : undefined}
       className={[
         'node-workspace-node',
         inlineNumericPorts(node) ? 'node-inline-math' : '',
@@ -150,10 +153,10 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
           {onTogglePreview && <NodeViewerButton node={node} onToggle={onTogglePreview} />}
         </div>
       </div>
-      <div className="node-workspace-node-title" title={node.label}>{node.label}</div>
+      {!canvasRendered && <><div className="node-workspace-node-title" title={node.label}>{node.label}</div>
       <div className="node-workspace-node-description" title={node.description}>
         {node.description ?? 'Built-in processing node'}
-      </div>
+      </div></>}
       {node.binding?.kind === 'keyframe-node' && !canvasRendered && <KeyframeNodeCardPreview node={node} />}
       {!!node.animation?.channels.length && (canvasRendered
         ? <button type="button" className="node-animation-badge" style={{ top: getNodePortStartY(node) - 78 }}
@@ -163,7 +166,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
             <span>◇ Animation · {node.animation.channels.length} curves</span>
           </button>
         : <NodeAnimationBadge node={node} top={getNodePortStartY(node) - 78} />)}
-      {nodeBadges.length > 0 && (
+      {!canvasRendered && nodeBadges.length > 0 && (
         <div className="node-workspace-node-badges">
           {nodeBadges.map((badge) => (
             <span
@@ -184,11 +187,11 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
       {onPreviewOutput && <NodePreviewOutput node={node} onOutput={onPreviewOutput} />}
       <div className="node-workspace-node-ports" style={{ top: getNodePortStartY(node) }}>
         <div className="node-workspace-port-column">
-          {node.inputs.length > 0 && <span className="node-workspace-port-direction">IN</span>}
+          {!canvasRendered && node.inputs.length > 0 && <span className="node-workspace-port-direction">IN</span>}
           {node.inputs.map((port) => renderPort(port))}
         </div>
         <div className="node-workspace-port-column node-workspace-port-column-output" style={inlineNumericPorts(node) && node.inputs.length > 1 ? { marginTop: 42 } : undefined}>
-          {node.outputs.length > 0 && <span className="node-workspace-port-direction">OUT</span>}
+          {!canvasRendered && node.outputs.length > 0 && <span className="node-workspace-port-direction">OUT</span>}
           {node.outputs.map((port) => renderPort(port))}
         </div>
       </div>

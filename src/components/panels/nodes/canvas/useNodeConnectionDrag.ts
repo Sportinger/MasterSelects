@@ -49,7 +49,7 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, getGraphP
   const startConnectionDrag = useCallback((event: ReactPointerEvent, node: NodeGraphNode, port: NodeGraphPort) => {
     if (onConnectPorts) start(event, node, port);
   }, [onConnectPorts, start]);
-  const startPlugDrag = (event: ReactPointerEvent<SVGGElement>, plug: ConnectionPlug) => {
+  const startPlugDrag = (event: ReactPointerEvent, plug: ConnectionPlug) => {
     if (!onDisconnectEdge) return;
     const input = plug.port.direction === 'input';
     const node = nodesById.get(input ? plug.edge.fromNodeId : plug.edge.toNodeId);

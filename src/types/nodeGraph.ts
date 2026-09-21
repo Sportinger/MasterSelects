@@ -165,7 +165,7 @@ export interface NodeGraph {
   edges: NodeGraphEdge[];
   domain?: NodeGraphDomain;
   issue?: string;
-  groups?: Array<{ id: string; label: string; color: string; collapsed: boolean; nodeIds: string[]; proxyId: string; parentId?: string; bypassNodeId?: string; issue?: string }>;
+  groups?: Array<{ id: string; label: string; color: string; collapsed: boolean; nodeIds: string[]; proxyId: string; parentId?: string; bypassNodeId?: string; effectId?: string; bypassed?: boolean; issue?: string }>;
   /** Uncollapsed nodes used to resolve exposed ports of nested groups. */
   expandedNodes?: NodeGraphNode[];
 }
