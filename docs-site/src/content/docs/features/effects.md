@@ -175,6 +175,28 @@ eight-digit hex alpha) and update uniforms without recompiling the pipeline.
 Original parameter IDs, ranges and defaults remain unchanged; each effect uses
 one fullscreen pass.
 
+### Editable blur kernels
+
+Box Blur and Gaussian Blur expose their neighborhood sampling as editable graphs:
+kernel index, UV offset, image sample, weight, accumulation and normalization.
+The shared kernel reducer evaluates the connected sample and weight expressions
+for each grid position. Changing those connections changes the filter itself.
+A lazy image selection keeps the original radius-below-0.5 identity path without
+evaluating an unused, potentially singular Gaussian expression.
+
+Both preserve the existing two-dimensional sample order, clamp-to-edge sampling,
+RGBA averaging and one fullscreen pass. Gaussian Blur retains its existing
+Radius and Samples controls; this migration does not replace its kernel with a
+different separable approximation. Existing effect-stack texture boundaries and
+their quantization remain unchanged.
+
+Sharpen reuses the same kernel reduction for its weighted neighborhood, then
+exposes the unsharp-mask subtraction, gain, addition and RGB clamp as nodes.
+Unlike the blur effects, it retains the original center-pixel alpha.
+Kernel Index has a per-sample scope rather than a single preview value. Nested
+kernel reducers are currently rejected explicitly; graph-internal texture
+materialization for multi-stage filters is a separate follow-up.
+
 ### Analog Signal Lab
 
 `Analog Signal Lab` is a dedicated six-pass compute effect rather than a

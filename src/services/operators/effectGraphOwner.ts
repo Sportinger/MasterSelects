@@ -19,11 +19,12 @@ import { createDefaultContextualEffectGraph, type EditableContextualEffectType }
 import { createDefaultSamplingEffectGraph, type EditableSamplingEffectType } from './samplingEffectGraphs';
 import { createDefaultBlockEffectGraph, type EditableBlockEffectType } from './blockEffectGraphs';
 import { normalizeCatalogColor } from '../../effects/_shared/catalogColor';
+import { createDefaultBlurEffectGraph, type EditableBlurEffectType } from './blurEffectGraphs';
 
 const LOCAL_IMAGE_EFFECTS = new Set(['invert', 'brightness', 'contrast', 'saturation', 'exposure', 'levels', 'hue-shift', 'temperature', 'vibrance', 'threshold', 'posterize']);
-const CONTEXTUAL_IMAGE_EFFECTS = new Set(['vignette', 'scanlines', 'grain', 'pixelate', 'mirror', 'rgb-split', 'blockify', 'block-mosaic']);
+const CONTEXTUAL_IMAGE_EFFECTS = new Set(['vignette', 'scanlines', 'grain', 'pixelate', 'mirror', 'rgb-split', 'blockify', 'block-mosaic', 'box-blur', 'gaussian-blur', 'sharpen']);
 export function isLocalImageEffectType(type: string): type is 'invert' | EditableColorEffectType | EditablePointwiseEffectType { return LOCAL_IMAGE_EFFECTS.has(type); }
-export function isImageGraphEffectType(type: string): type is 'invert' | EditableColorEffectType | EditablePointwiseEffectType | EditableContextualEffectType | EditableSamplingEffectType | EditableBlockEffectType {
+export function isImageGraphEffectType(type: string): type is 'invert' | EditableColorEffectType | EditablePointwiseEffectType | EditableContextualEffectType | EditableSamplingEffectType | EditableBlockEffectType | EditableBlurEffectType {
   return isLocalImageEffectType(type) || CONTEXTUAL_IMAGE_EFFECTS.has(type);
 }
 export function hasEffectOperatorGraph(type: string): boolean { return type === 'face-cables' || type === 'voxel-relief' || isImageGraphEffectType(type) || type === 'analog-signal-lab'; }
@@ -53,6 +54,8 @@ export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGra
           ? () => createDefaultSamplingEffectGraph(effectType)
         : effectType === 'blockify' || effectType === 'block-mosaic'
           ? () => createDefaultBlockEffectGraph(effectType)
+        : effectType === 'box-blur' || effectType === 'gaussian-blur' || effectType === 'sharpen'
+          ? () => createDefaultBlurEffectGraph(effectType)
         : () => createDefaultColorEffectGraph(effectType);
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
     const graph = migrateImageOperatorGraph(saved);

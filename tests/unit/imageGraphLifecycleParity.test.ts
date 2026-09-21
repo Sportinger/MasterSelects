@@ -83,6 +83,9 @@ describe('image graph lifecycle parity', () => {
       { type: 'grain', parameter: 'amount', from: 0.05, to: 0.25, expected: 0.15 },
       { type: 'blockify', parameter: 'scale', from: 2, to: 30, expected: 16 },
       { type: 'block-mosaic', parameter: 'amount', from: 0, to: 1, expected: 0.5 },
+      { type: 'box-blur', parameter: 'radius', from: 0.49, to: 0.51, expected: 0.5 },
+      { type: 'gaussian-blur', parameter: 'radius', from: 0.5, to: 1.5, expected: 1 },
+      { type: 'sharpen', parameter: 'radius', from: 0.5, to: 1.5, expected: 1 },
     ] as const;
     for (const item of cases) {
       const id = `${item.type}-lifecycle`, clipId = `${item.type}-clip`;
@@ -109,7 +112,8 @@ describe('image graph lifecycle parity', () => {
       const previewPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(preview), previewParams), pixel, context);
       const exportPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(exported), exportParams), pixel, context);
       expect(previewPixel).toEqual(exportPixel);
-      expect(exportPixel[3]).toBe(pixel[3]);
+      if (item.type === 'box-blur' || item.type === 'gaussian-blur') expect(exportPixel[3]).toBeCloseTo(pixel[3], 12);
+      else expect(exportPixel[3]).toBe(pixel[3]);
       const endpointPlans = [0, 2].map(time => {
         const sampled = evaluateCompositionClipEffects([effect], keys, time)[0];
         return compileImageOperatorGraph(effectOperatorGraph(sampled), effectOperatorParams(sampled));
@@ -145,6 +149,12 @@ describe('image graph lifecycle parity', () => {
     expect(repeated).toEqual(atOne);
     expect(sought).not.toEqual(atOne);
     expect(plan.key).toBe(compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect)).key);
+  });
+
+  it('resolves registered blur and sharpen defaults before graph compilation', () => {
+    expect(effectOperatorParams({ type: 'box-blur', params: {} })).toMatchObject({ radius: 5 });
+    expect(effectOperatorParams({ type: 'gaussian-blur', params: {} })).toMatchObject({ radius: 10, samples: 5 });
+    expect(effectOperatorParams({ type: 'sharpen', params: {} })).toMatchObject({ amount: 1, radius: 1 });
   });
 
   it('re-evaluates the real upstream DAG at each image sample coordinate', () => {

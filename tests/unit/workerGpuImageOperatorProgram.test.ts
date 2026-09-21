@@ -124,6 +124,15 @@ describe('worker GPU image operator program', () => {
     expect(style.complexEffectCount).toBe(1);
   });
 
+  it.each(['box-blur', 'gaussian-blur', 'sharpen'] as const)('leaves %s graph execution to one authoritative fullscreen worker pass', type => {
+    const layer = { opacity: 1, blendMode: 'normal', effects: [
+      { id: type, name: type, type, enabled: true, params: {} },
+    ] } as unknown as Layer;
+    const style = resolveWorkerGpuVideoPresentationLayerStyle(layer);
+    expect(style.operatorProgram).toBeUndefined();
+    expect(style.complexEffectCount).toBe(1);
+  });
+
   it('preserves the compiled edited graph as a serializable layer style', () => {
     const style = resolveWorkerGpuVideoPresentationLayerStyle(layerWithEditedInvert());
     const defaults = resolveWorkerGpuVideoPresentationLayerStyle({ opacity: 1, blendMode: 'normal', effects: [

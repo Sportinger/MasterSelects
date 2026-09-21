@@ -13,6 +13,7 @@ import { getEditableDraggableNumberSettings, operatorConstantNumberPersistenceKe
 import { createDefaultMirrorGraph } from '../../src/services/operators/samplingEffectGraphs';
 import { createDefaultBlockMosaicGraph } from '../../src/services/operators/blockEffectGraphs';
 import { OperatorColorInput } from '../../src/components/panels/nodes/workspace/OperatorColorInput';
+import { createDefaultGaussianBlurGraph } from '../../src/services/operators/blurEffectGraphs';
 
 const initial = useTimelineStore.getState();
 const owner = {};
@@ -35,6 +36,19 @@ function fixture() {
 }
 
 describe('image operator node UI', () => {
+  it('labels the kernel index as scoped instead of inventing a numeric or image preview', () => {
+    const effect: Effect = { id: 'blur-ui', name: 'Gaussian Blur', type: 'gaussian-blur', enabled: true,
+      params: {}, operatorGraph: createDefaultGaussianBlurGraph() };
+    const clip = createMockClip({ id: 'blur-clip', effects: [effect] });
+    const node = buildEffectOperatorGraph(clip, effect).nodes.find(candidate => candidate.id === 'index')!;
+    const frame = imageOperatorValuePreview({ key: 'kernel-index', revision: '1', time: 0, clipId: clip.id, node,
+      width: 164, height: 100, interval: 16, priority: 1 }, clip, effect);
+    expect(frame).toMatchObject({ status: 'missing', label: 'Kernel scope only', presentation: 'text',
+      drawing: { kind: 'text', lines: ['Varies per kernel sample'] } });
+    expect(frame?.values).toBeUndefined();
+    expect(frame?.bitmap).toBeUndefined();
+  });
+
   it('clears pointer focus after color selection but retains keyboard focus', () => {
     const onChange = vi.fn();
     const { rerender } = render(<OperatorColorInput ariaLabel="Graph color" value="#11223380" onChange={onChange} />);

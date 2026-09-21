@@ -103,6 +103,9 @@ export use the same clock instead of elapsed browser time.
 Pixelate, Mirror, RGB Split, Blockify and Block Mosaic use editable
 coordinate/sampling graphs, sharing the same compiler. Block Mosaic uses timeline
 time for reproducible tile changes and exposes its border color as a bound node.
+Box and Gaussian Blur expose editable sampling kernels and weights while retaining
+their existing single-pass rendering and alpha averaging. Sharpen reuses the
+kernel foundation and preserves center-pixel alpha.
 
 Node cables have visible semicircular plugs, animated attachment, and docked ghost
 previews over compatible sockets while dragging. Drag either end to reconnect,

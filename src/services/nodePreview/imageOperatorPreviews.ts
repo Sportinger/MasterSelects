@@ -46,6 +46,10 @@ export function imageOperatorValuePreview(request: PreviewRequest, clip: Timelin
   const binding = request.node.binding;
   if (binding?.kind === 'effect-operator') {
     const selected = effectOperatorGraph(effect).nodes.find(node => node.id === binding.nodeId);
+    if (selected?.operator === 'image.kernel-index') return {
+      key: request.key, revision: request.revision, time: request.time, status: 'missing', label: 'Kernel scope only',
+      presentation: 'text', drawing: { kind: 'text', lines: ['Varies per kernel sample'] },
+    };
     if (selected?.operator === 'values.boolean' || selected?.operator === 'values.color') {
       const spec = getEffectOperator(selected.operator)!.parameters.find(parameter => parameter.id === 'value')!;
       const ownerKey = typeof selected.bindings.value === 'string' ? selected.bindings.value : undefined;
