@@ -1,9 +1,5 @@
 import type { AnimatableProperty, KeyframeActions, SliceCreator } from '../types';
-import {
-  compileRuntimeColorGrade,
-  ensureColorCorrectionState,
-  setColorNodeParamValue,
-} from '../../../types';
+import { applyParameterSourcesToEffects, evaluateParameterSourceColorGrade } from '../../../services/parameterSources/parameterSourceRendering';
 import { getHexColorChannel, rgbColorToHex } from '../../../utils/colorParam';
 import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
 import {
@@ -36,7 +32,8 @@ export const createKeyframeEffectInterpolationActions: SliceCreator<KeyframeEffe
     }
 
     const keyframes = clipKeyframes.get(clipId) || [];
-    const withSurfaces = (effects: typeof clip.effects) => appendSurfaceEffects(bindCableRenderTime(pauseIncompleteOperatorEffects(effects), clipLocalTime, clip.videoInspectorSections?.stabilization), clip, clipLocalTime, keyframes);
+    const withSurfaces = (effects: typeof clip.effects) => appendSurfaceEffects(bindCableRenderTime(pauseIncompleteOperatorEffects(
+      applyParameterSourcesToEffects(clip, keyframes, clipLocalTime, effects)), clipLocalTime, clip.videoInspectorSections?.stabilization), clip, clipLocalTime, keyframes);
     if (keyframes.length === 0) {
       return withSurfaces(clip.effects);
     }
@@ -152,24 +149,7 @@ export const createKeyframeEffectInterpolationActions: SliceCreator<KeyframeEffe
       return undefined;
     }
 
-    let colorState = ensureColorCorrectionState(clip.colorCorrection);
     const keyframes = clipKeyframes.get(clipId) || [];
-    const colorKeyframes = keyframes.filter(k => k.property.startsWith('color.'));
-
-    if (colorKeyframes.length > 0) {
-      for (const version of colorState.versions) {
-        for (const node of version.nodes) {
-          for (const [paramName, baseValue] of Object.entries(node.params)) {
-            if (typeof baseValue !== 'number') continue;
-            const propertyKey = `color.${version.id}.${node.id}.${paramName}` as AnimatableProperty;
-            if (!colorKeyframes.some(k => k.property === propertyKey)) continue;
-            const value = interpolateKeyframes(keyframes, propertyKey, clipLocalTime, baseValue);
-            colorState = setColorNodeParamValue(colorState, version.id, node.id, paramName, value);
-          }
-        }
-      }
-    }
-
-    return compileRuntimeColorGrade(colorState);
+    return evaluateParameterSourceColorGrade(clip, keyframes, clipLocalTime);
   },
 });

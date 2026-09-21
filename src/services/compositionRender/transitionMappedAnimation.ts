@@ -4,6 +4,8 @@ import type { ClipMask } from '../../types/masks';
 import type { SerializableClip, TimelineClip } from '../../types/timeline';
 import type { ClipTransform } from '../../types/timelineCore';
 import { appendSurfaceEffects, type SurfaceClip } from '../planarTracking/surfaceEffects';
+import { applyParameterSourcesToEffects } from '../parameterSources/parameterSourceRendering';
+import type { ParameterSourceClip } from '../parameterSources/parameterSourceTargets';
 import {
   isValidTransitionSourceMap,
   resolveTransitionSourceMapTime,
@@ -18,9 +20,12 @@ import {
 export type TransitionMappedAnimationClip = Pick<
   TimelineClip | SerializableClip,
   'transform' | 'effects' | 'masks' | 'transitionSourceMap' | 'videoInspectorSections'
-> & Partial<SurfaceClip>;
+> & Partial<SurfaceClip & ParameterSourceClip>;
 
 function addSurfaces(effects: Effect[], clip: TransitionMappedAnimationClip, time: number, keys?: readonly Keyframe[]): Effect[] {
+  if (clip.nodeGraph?.parameterSources && typeof clip.startTime === 'number') {
+    effects = applyParameterSourcesToEffects({ ...clip, startTime: clip.startTime }, keys ?? [], time, effects);
+  }
   return clip.planarTracks?.length && clip.inPoint !== undefined && clip.outPoint !== undefined
     ? appendSurfaceEffects(effects, clip as SurfaceClip, time, keys)
     : effects;

@@ -28,6 +28,7 @@ import { isMotionProperty } from '../../types/motionDesign';
 import { isFlockProperty } from '../../types/flock';
 import { mergeLightClipSettings, parseLightProperty, setLightSettingValue } from '../../types/light';
 import { propertyRegistry } from '../../services/properties';
+import { isParameterNodeDriven } from '../../services/parameterSources/parameterSourceTargets';
 import { dispatchKeyframeRecordingFeedback } from '../../utils/keyframeRecordingFeedback';
 import { clearProcessedAudioAnalysisRefs } from './helpers/audioAnalysisStateHelpers';
 import { getClipTextBounds } from './keyframes/pathKeyframeValues';
@@ -67,6 +68,17 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     const { isRecording, addKeyframe, updateClipTransform, updateClipEffect, updateClipAudioEffectInstance, updateColorNodeParam, updateMask, updateTextProperties, setMaskEdgeFeather, clips, tracks, hasKeyframes, isPlaying } = get();
     if (isClipOnLockedTrack(clips, tracks, clipId)) return;
     const currentClip = clips.find(c => c.id === clipId);
+    if (currentClip && isParameterNodeDriven(currentClip, property)) return;
+    if (currentClip?.nodeGraph?.parameterSources?.targets[property]?.localMode === 'constant') {
+      const descriptor = propertyRegistry.getDescriptor(property, currentClip);
+      if (descriptor?.write) {
+        const color = parseColorProperty(property);
+        if (color) updateColorNodeParam(clipId, color.versionId, color.nodeId, color.paramName, value);
+        else get().updateClip(clipId, descriptor.write(currentClip, value, property));
+        get().invalidateCache(); renderHostPort.requestRender();
+      }
+      return;
+    }
     const cameraPropertyForValue = parseCameraProperty(property);
     const normalizedPropertyValue = normalizeTimelinePropertyValue(property, value);
     const valueForStorage = cameraPropertyForValue && currentClip?.source?.type === 'camera'

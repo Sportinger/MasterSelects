@@ -14,12 +14,19 @@ The workflow provides a default `Input -> Primary -> Output` graph, serial Prima
 
 Each wheel heading includes a grouped keyframe toggle for its R, G, B and luminance channels. Individual channel toggles remain available and record the actual parameter value, preserving the normal timeline keyframe workflow.
 
+Numeric Corrector/Wheels parameters also accept [procedural parameter sources](/features/node-workspace/#procedural-parameter-sources).
+Choose a source in the ordinary Properties/Nodes inspector; the dedicated Color
+tab keeps its wheel layout and displays effective driven values. A driven channel
+locks the wheel's puck/group actions, while unconnected channels remain editable
+individually. Base values and existing curves are retained. Color-version copies
+duplicate their connected source graphs and curves independently.
+
 ## Current Pipeline Facts
 
 - Clip effects remain on `TimelineClip.effects` / render `Layer.effects`; `src/components/panels/properties/EffectsTab.tsx` edits the generic effect stack.
 - Generic effect definitions are registered in `src/effects/index.ts`. `src/effects/EffectsPipeline.ts` handles non-inline effects; brightness, contrast, saturation, and invert are inline compositor effects.
 - `TimelineClip.colorCorrection` is a separate state model in `src/types/colorCorrection.ts`; `RuntimeColorGrade` is attached to render layers.
-- `src/services/layerBuilder/*` obtains `getInterpolatedColorCorrection(...)` for normal clip layers. Nested composition layers currently call `compileRuntimeColorGrade(...)` directly.
+- Normal and nested layer builders share `evaluateParameterSourceColorGrade(...)` through their interpolation adapters.
 - The worker WebGPU compositor constructs `ColorPipeline` in `src/services/render/workerGpuVideoFrameCompositor.ts`; `src/engine/render/Compositor.ts` applies it before complex generic effects.
 - Waveform, histogram, and vectorscope panels read the final rendered texture through `src/components/panels/scopes/useScopeAnalysis.ts`. General scopes refresh at roughly 15 fps; the combined RGB Parade uses a 10 fps refresh budget and skips unchanged paused frames.
 - `src/engine/core/RenderTargetManager.ts` uses two `rgba8unorm` effect temporary textures.
@@ -31,7 +38,7 @@ Each wheel heading includes a grouped keyframe toggle for its R, G, B and lumina
 - Persistence is explicit: `ProjectClip` includes `colorCorrection` in `src/services/project/types/composition.types.ts`, and project save/load clone it in `src/services/project/projectSave.ts` and `src/services/project/load/loadTimelineHydration.ts`.
 - `ColorCorrectionState` is independent of the generic `EffectType` registry. Primary/Wheels are realtime grade nodes; Input, Output, Source, Alpha Output, Parallel/Layer/Key Mixer, Splitter, and Combiner are structural graph nodes.
 - `buildClipNodeGraphDocument(...)` exposes the active color version as the Color view of the same canonical clip `NodeGraphDocument` used by the general Node Workspace. The color state remains authoritative; the document is a typed projection, not duplicate persistence.
-- Preview interpolation is implemented by `getInterpolatedColorCorrection(...)` in `src/stores/timeline/keyframes/keyframeEffectInterpolationActions.ts`. Nested layer construction uses `compileRuntimeColorGrade(...)` directly, so it does not share that keyframe interpolation route.
+- `getInterpolatedColorCorrection(...)`, nested layer construction and export use the shared pure parameter-source/color evaluator. Keyframes are sampled before the effective grade is compiled; driven values are not overwritten by a second keyframe pass.
 - Color mutations generally replace the clip through `updateColorCorrection(...)` and invalidate the layer cache. `setColorWorkspaceViewport(...)` updates the stored UI viewport without calling `invalidateCache()`.
 - `ColorPipeline` keeps uniform buffers by layer key and uses `queue.writeBuffer(...)`, but creates a bind group for every `applyGrade(...)` call.
 - The `workspaceViewport` field and optional workspace mode belong to `ColorEditor`.

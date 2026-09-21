@@ -8,6 +8,7 @@ import { hasEffectOperatorGraph } from '../operators/effectGraphOwner';
 import { foldOperatorGroups } from './nestedOperatorGroups';
 import { collapsedArtifactLinks, projectSourceArtifactLinks } from './sourceArtifactProjection';
 import { projectKeyframeNodes } from './keyframeNodeProjection';
+import { projectParameterSources } from '../parameterSources/parameterSourceProjection';
 import { projectStabilizationGraph } from './stabilizationGraphProjection';
 
 /** A single canvas projection of every domain and its executable ownership. */
@@ -78,5 +79,5 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     expansion = cursor - rootNode.layout.x - 280;
   }
   const animated = projectKeyframeNodes(projectSourceArtifactLinks({ ...root, nodes, edges, groups }), clip);
-  return foldOperatorGroups(projectStabilizationGraph(animated, clip, keys, trackingCreatedAt), clip.nodeGraph, expandAllGroups);
+  return foldOperatorGroups(projectStabilizationGraph(projectParameterSources(animated, clip), clip, keys, trackingCreatedAt), clip.nodeGraph, expandAllGroups);
 }

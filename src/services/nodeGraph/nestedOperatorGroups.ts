@@ -36,7 +36,7 @@ export function foldOperatorGroups(graph: NodeGraph, state?: ClipNodeGraph, expa
     if (!g.composition) for (const edge of edges) {
       if (!ids.has(edge.toNodeId) || ids.has(edge.fromNodeId)) continue;
       const target = members.find(node => node.id === edge.toNodeId)?.inputs.find(port => port.id === edge.toPortId);
-      if (!target || target.metadata?.repeated) continue;
+      if (!target || target.metadata?.repeated || target.metadata?.controlProperty) continue;
       const source = nodes.find(node => node.id === edge.fromNodeId), output = source?.outputs.find(port => port.id === edge.fromPortId);
       const key = `${edge.fromNodeId}:${edge.fromPortId}:${target.type}`;
       const endpointKey = `${edge.toNodeId}:${edge.toPortId}`;

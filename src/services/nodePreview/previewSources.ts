@@ -11,6 +11,7 @@ import { sampleOperatorParameter, graphInputNodes } from '../operators/effectGra
 import { clipLocalToKeyframeTime } from '../flock/time/flockKeyframeTime';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
 import { sourcePreview } from './sourcePreview';
+import { createParameterSourceEvaluator } from '../parameterSources/parameterSourceEvaluation';
 import type { PreviewFrame, PreviewRequest } from './previewTypes';
 import type { PreviewArtifactReader } from './PreviewArtifactReader';
 import { nodePreviewTextureTap } from './NodePreviewTextureTap';
@@ -35,6 +36,16 @@ export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewA
   if (!clip) return missing('Clip unavailable');
   const localTime = Math.max(0, Math.min(clip.duration, request.time - clip.startTime));
   const sourceTime = state.getSourceTimeForClip(clip.id, localTime), binding = request.node.binding;
+  if (binding?.kind === 'parameter-source' || request.port?.metadata?.controlProperty) {
+    try {
+      const evaluator = createParameterSourceEvaluator(clip, state.clipKeyframes.get(clip.id) ?? [], localTime);
+      const property = request.port?.metadata?.controlProperty;
+      const nodeId = binding?.kind === 'parameter-source' ? binding.nodeId : '';
+      const value = property ? evaluator.resolve(property).value : request.port?.direction === 'input'
+        ? evaluator.evaluateInput(nodeId, request.port.id) : evaluator.evaluateNode({ nodeId, portId: 'value' });
+      return { ...base, status: 'live', label: String(value), presentation: 'text', drawing: { kind: 'number', value: String(value), caption: 'Parameter source' } };
+    } catch (error) { return { ...base, status: 'error', label: error instanceof Error ? error.message : String(error) }; }
+  }
   const semantic = request.port?.metadata?.semanticKind;
   if (binding?.kind === 'flock-node') return flockPreview(request, clip, sourceTime, state.clipKeyframes.get(clip.id) ?? []);
   if (binding?.kind === 'effect-operator') {

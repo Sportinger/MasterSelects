@@ -67,6 +67,8 @@ export interface PropertyDescriptor<T = PropertyValue> {
   valueType: PropertyValueType;
   animatable: boolean;
   defaultValue: T;
+  /** An explicit runtime adapter exists; animatable alone does not imply node control. */
+  controlSource?: { domain: 'clip-scalar'; unit: string; hardMin?: number; hardMax?: number };
   /** Catalog descriptors are discoverable without a clip, but not in clip search. */
   catalogOnly?: boolean;
   authoring?: PropertyAuthoringMetadata;

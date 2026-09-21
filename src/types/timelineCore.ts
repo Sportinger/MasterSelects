@@ -52,6 +52,8 @@ export type TransitionSourceMapSegment =
 
 export interface TransitionSourceMapV2AnimationSnapshot {
   baseTransform: ClipTransform;
+  /** Composition-global clock of copied parameter sources; absent in older projects. */
+  parameterTimelineStart?: number;
   keyframes: Keyframe[];
   sourceEffectIds: string[];
   sourceMaskIds: string[];

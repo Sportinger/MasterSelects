@@ -31,6 +31,7 @@ export function getColorDescriptorForPath(path: string, clip?: TimelineClip): Pr
     valueType: 'number',
     animatable: true,
     defaultValue: def.defaultValue,
+    controlSource: { domain: 'clip-scalar', unit: def.key === 'hue' ? 'degrees' : def.key === 'exposure' ? 'stops' : 'number' },
     ui: {
       min: def.min,
       max: def.max,

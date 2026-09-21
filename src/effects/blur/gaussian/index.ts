@@ -2,6 +2,7 @@
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
+import { GAUSSIAN_BLUR_PARAMS } from './params';
 
 export const gaussianBlur: EffectDefinition = {
   id: 'gaussian-blur',
@@ -12,27 +13,7 @@ export const gaussianBlur: EffectDefinition = {
   entryPoint: 'gaussianBlurFragment',
   uniformSize: 16,
 
-  params: {
-    radius: {
-      type: 'number',
-      label: 'Radius',
-      default: 10,
-      min: 0,
-      max: 50,
-      step: 1,
-      animatable: true,
-    },
-    samples: {
-      type: 'number',
-      label: 'Samples',
-      default: 5,
-      min: 1,
-      max: 64,
-      step: 1,
-      animatable: false,
-      quality: true, // Marks as quality parameter
-    },
-  },
+  params: GAUSSIAN_BLUR_PARAMS,
 
   packUniforms: (params, width, height) => {
     return new Float32Array([

@@ -34,7 +34,7 @@ function isForcedBuiltInNode(nodeId: string): nodeId is 'transform' | 'mask' | '
 
 export function canDeleteNodeFromClip(clip: TimelineClip, node: NodeGraphNode | null | undefined): boolean {
   if (!node) return false;
-  if (node.binding?.kind === 'keyframe-node') return true;
+  if (node.binding?.kind === 'keyframe-node' || node.binding?.kind === 'parameter-source') return true;
   if (node.kind === 'custom' || node.kind === 'effect') {
     return true;
   }

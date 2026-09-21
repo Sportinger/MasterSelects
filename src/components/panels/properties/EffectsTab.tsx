@@ -21,6 +21,8 @@ import {
 import { LabeledValue } from './LabeledValue';
 import { VolumeTab } from './VolumeTab';
 import { ColorGraphEffectEntry } from './ColorGraphEffectEntry';
+import { ParameterSourceNumberRow } from './ParameterSourceNumberRow';
+import { getParameterSourceTarget } from '../../../services/parameterSources/parameterSourceTargets';
 import { resolveLinkedAudioClip } from '../../../services/nodeGraph/clipGraphProjectionAudio';
 import { LandmarkTrackingControls } from './LandmarkTrackingControls';
 import { EffectCatalogPicker } from './EffectCatalogPicker';
@@ -75,6 +77,9 @@ function renderParamControl(
 
   switch (paramDef.type) {
     case 'number': {
+      const sourceClip = clipId ? useTimelineStore.getState().clips.find(clip => clip.id === clipId) : undefined;
+      const property = `effect.${effect.id}.${paramName}`;
+      if (sourceClip && getParameterSourceTarget(sourceClip, property)) return <ParameterSourceNumberRow key={paramName} clipId={sourceClip.id} property={property} />;
       const min = paramDef.min ?? 0;
       // For quality params with noMaxLimit, allow much higher values
       const max = noMaxLimit ? (paramDef.max ?? 1) * 10 : (paramDef.max ?? 1);
@@ -358,7 +363,9 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
   const hasColorEntry = Boolean(clip?.colorCorrection || clip?.nodeGraph?.forcedBuiltIns?.includes('color'));
   const isMotionAdjustmentClip = clip?.source?.type === 'motion-adjustment';
   const clipLocalTime = clip ? playheadPosition - clip.startTime : 0;
-  const interpolatedEffects = getInterpolatedEffects(clipId, clipLocalTime);
+  let interpolatedEffects = effects, controlError = '';
+  try { interpolatedEffects = getInterpolatedEffects(clipId, clipLocalTime); }
+  catch (error) { controlError = error instanceof Error ? error.message : String(error); }
   const handleAddParticleDisintegrateOutro = useCallback(() => {
     if (!clip) return;
     startBatch('Add particle disintegrate out');
@@ -462,6 +469,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
         </> : <div className="panel-empty"><p>This clip has no audio source.</p></div>
       ) : (
         <div className="effects-list">
+          {controlError && <p role="alert" className="parameter-source-error">{controlError}</p>}
           {clip && <ColorGraphEffectEntry key={clipId} clip={clip} />}
           {videoEffects.length === 0 && !hasColorEntry && <div className="panel-empty"><p>No effects applied</p></div>}
           {videoEffects.map((effect, idx) => {

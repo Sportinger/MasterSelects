@@ -6,14 +6,7 @@ import { AudioExportPipeline, DEFAULT_AUDIO_BITRATE, type EncodedAudioResult } f
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
-import {
-  createTransitionSourceClip,
-  DEFAULT_TRANSITION_PLACEMENT,
-  findActiveTransitionPlanForTrack,
-  type ActiveTransitionPlan,
-} from '../../stores/timeline/editOperations/transitionPlanner';
-import { createTimelineTransitionMediaDurationResolver } from '../../services/timeline/timelineTransitionMediaDurations';
-import type { FullExportSettings, ExportProgress, ExportMode, ExportClipState, FrameContext } from './types';
+import type { FullExportSettings, ExportProgress, ExportMode, ExportClipState } from './types';
 import { getFrameTolerance, getKeyframeInterval } from './types';
 import { VideoEncoderWrapper } from './VideoEncoderWrapper';
 import { prepareClipsForExport, cleanupExportMode } from './ClipPreparation';
@@ -53,6 +46,8 @@ import type { TimelineRuntimeAdmissionDecision } from '../../services/timeline/r
 import { ExportPreviewPublisher } from './frameExporter/ExportPreviewPublisher';
 import { prepareTransitionCompositionsForExport } from './prepareTransitionCompositionsForExport';
 import { resolveRequestedExportMode } from './exportModeSelection';
+import { captureExportParameterState } from './frameExporter/parameterSourceSnapshot';
+import { createExportFrameContext } from './frameExporter/createExportFrameContext';
 
 export class FrameExporter {
   // The export preview is informational; four updates per second are smooth
@@ -74,6 +69,7 @@ export class FrameExporter {
   private activeExportRunId: string | null = null;
   private renderSession: ExportRenderSessionImpl | null = null;
   private previewPublisher: ExportPreviewPublisher;
+  private parameterSnapshot?: ReturnType<typeof captureExportParameterState>;
 
   constructor(settings: FullExportSettings) {
     this.settings = settings;
@@ -131,6 +127,7 @@ export class FrameExporter {
   }
 
   private resetAttemptState(): void {
+    this.parameterSnapshot = undefined;
     this.encoder = null;
     this.audioPipeline = null;
     this.frameTimes = [];
@@ -364,6 +361,7 @@ export class FrameExporter {
       reportExportClipStates(exportRunId, this.clipStates);
       this.reportExportRuntimeState(exportRunId, true);
       await prepareTransitionCompositionsForExport();
+      this.parameterSnapshot = captureExportParameterState();
 
       // Initialize layer builder cache (tracks don't change during export)
       initializeLayerBuilder(tracks);
@@ -403,7 +401,8 @@ export class FrameExporter {
         const time = startTime + frame * frameDuration;
 
         // Create FrameContext once per frame - avoids repeated getState() calls
-        const ctx = this.createFrameContext(time, fps, frameTolerance);
+        const ctx = createExportFrameContext(time, fps, frameTolerance, width, height,
+          this.parameterSnapshot!.timeline, this.parameterSnapshot!.media);
         const activeVideoClips = ctx.clipsAtTime.filter((clip) => {
           const track = ctx.trackMap.get(clip.trackId);
           return track?.visible && clip.source?.type === 'video';
@@ -592,81 +591,12 @@ export class FrameExporter {
   }
 
   private cleanup(renderSession: ExportRenderSessionImpl): void {
+    this.parameterSnapshot = undefined;
     cleanupExportMode(this.clipStates, this.parallelDecoder);
     cleanupLayerBuilder();
     this.parallelDecoder = null;
     this.useParallelDecode = false;
     renderSession.dispose();
-  }
-
-  /**
-   * Create FrameContext for a single frame - caches all state lookups.
-   * This is the key optimization: one getState() call per frame instead of 5+.
-   */
-  private createFrameContext(time: number, fps: number, frameTolerance: number): FrameContext {
-    const state = useTimelineStore.getState();
-    const mediaState = useMediaStore.getState();
-    const getMediaDuration = createTimelineTransitionMediaDurationResolver();
-    const clipsAtTime = state.getClipsAtTime(time);
-
-    // Build O(1) lookup maps
-    const trackMap = new Map(state.tracks.map(t => [t.id, t]));
-    const clipsByTrack = new Map(clipsAtTime.map(c => [c.trackId, c]));
-    const transitionParticipantsByTrack = new Map<string, ActiveTransitionPlan>();
-    const renderClipsById = new Map(clipsAtTime.map(c => [c.id, c]));
-
-    for (const track of state.tracks) {
-      if (track.type !== 'video') continue;
-
-      const transition = findActiveTransitionPlanForTrack({
-        clips: state.clips,
-        trackId: track.id,
-        time,
-        placement: DEFAULT_TRANSITION_PLACEMENT,
-        edgePolicy: 'hold',
-        getMediaDuration,
-      });
-      if (!transition) continue;
-
-      transitionParticipantsByTrack.set(track.id, transition);
-      const outgoingSourceClip = createTransitionSourceClip(
-        transition.outgoingClip,
-        transition.plan.outgoing,
-        time
-      );
-      const incomingSourceClip = createTransitionSourceClip(
-        transition.incomingClip,
-        transition.plan.incoming,
-        time
-      );
-      renderClipsById.set(outgoingSourceClip.id, outgoingSourceClip);
-      renderClipsById.set(incomingSourceClip.id, incomingSourceClip);
-    }
-    const renderClipsAtTime = Array.from(renderClipsById.values());
-
-    return {
-      time,
-      fps,
-      frameTolerance,
-      outputWidth: this.settings.width,
-      outputHeight: this.settings.height,
-      clipsAtTime,
-      renderClipsAtTime,
-      compositionClips: state.clips,
-      trackMap,
-      clipsByTrack,
-      transitionParticipantsByTrack,
-      mediaFiles: mediaState.files,
-      mediaCompositions: mediaState.compositions,
-      getInterpolatedTransform: state.getInterpolatedTransform,
-      getInterpolatedEffects: state.getInterpolatedEffects,
-      getInterpolatedColorCorrection: state.getInterpolatedColorCorrection,
-      getInterpolatedVectorAnimationSettings: state.getInterpolatedVectorAnimationSettings,
-      getInterpolatedTextBounds: state.getInterpolatedTextBounds,
-      getInterpolatedLightSettings: state.getInterpolatedLightSettings,
-      getSourceTimeForClip: state.getSourceTimeForClip,
-      getInterpolatedSpeed: state.getInterpolatedSpeed,
-    };
   }
 
   // Static helper methods - delegate to codecHelpers

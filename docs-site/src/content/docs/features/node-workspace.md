@@ -38,6 +38,46 @@ numeric fields, sliders at suitable widths, reset and supported keyframe actions
 The link icon exposes a control to Properties. The Connections section offers a
 keyboard-accessible alternative to cable dragging.
 
+## Procedural parameter sources
+
+Color Corrector/Wheels numeric channels, Hue Shift's Shift and Gaussian Blur's
+Radius support **Fixed**, existing **Keyframes**, or a connected **Node**. Their
+compact Properties/Nodes controls have a **Source** selector and **Go to source**.
+All supported parameter inputs are visible by default, including when previews
+are enabled. **Hide unused port** hides an unconnected input; connected ports stay
+visible. Fixed mode keeps saved keys inactive; switching back to local
+restores them. A connected source overrides the effective value without changing
+the saved basis or curve. Driven fields and target keyframe actions are read-only.
+The reset button resets the local basis, not the curve or binding.
+
+**+ Control** adds Constant, Time, sine LFO, Keyframes, Add, Multiply, Clamp and
+Remap. The node inspector offers numeric inputs and connection dropdowns as an
+alternative to cable dragging. A Keyframes source references a stored curve,
+not the already-modulated result. Combine it with an LFO through Add/Multiply;
+fan out one source through separate Remaps to control multiple parameters.
+Remap makes unit conversions explicit; Clamp supplies explicit limits. Blur
+Radius cannot be negative. Quality/iteration settings are not control targets.
+
+An unwired LFO uses clip time: `offset + amplitude * sin(2π * (frequency * time + phase))`.
+Frequency is Hz; phase is cycles. Connect a Time node in Timeline mode to use the
+containing composition's clock instead. Nested compositions use their own clock;
+generated transition clips retain the original owner's clock. Split/leading trim
+preserves the clip oscillator phase. Moving a clip moves clip-time animation;
+media speed and reverse do not implicitly retime it.
+
+The clip-owned graph is saved under `nodeGraph.parameterSources`, with undoable
+connection changes. Color-version copies get independent reachable sources.
+Parameter ports remain available on folded groups. Preview, inspectors and export
+use the same scalar resolver; export freezes authored effects, grades, bindings
+and curves. Invalid connected sources report errors and stop affected exports
+instead of silently substituting a local value. Unknown saved operators remain
+available for diagnosis. This is a scalar, clip-local MVP, not audio-rate DSP,
+cross-clip wiring or GPU pixel-field reduction.
+
+Factory layouts that previously included Transitions now include **Nodes** in
+that tab position. Existing saved layouts are unchanged; Transitions remains
+available through the panel menu.
+
 ## Saved effect presets
 
 Open **Effect presets** in the Nodes toolbar, select an effect card or a node

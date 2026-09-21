@@ -23,6 +23,7 @@ import {
   resolveLinkedClipNodeGraphContext,
 } from '../../services/nodeGraph/clipGraphLinking';
 import { cleanupEffectParamTimelineState } from './helpers/propertyTimelineCleanup';
+import { reconcileRemovedParameterTargets } from '../../services/parameterSources/parameterSourceLifecycle';
 
 function updateClipEffectState(
   clip: TimelineClip,
@@ -171,7 +172,8 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       legacyAudioEffectRequiresProcessedAnalysis(removedEffect, keyframes),
     );
     set({
-      clips: reconcileEffectRemovalInNodeGraph(state, updatedClip),
+      clips: reconcileEffectRemovalInNodeGraph(state, updatedClip).map(candidate => candidate.id === clipId
+        ? reconcileRemovedParameterTargets(clip, candidate) : candidate),
       ...cleanupEffectParamTimelineState(state, clipId, effectId),
     });
     invalidateCache();

@@ -349,6 +349,7 @@ function ResolveMasterWheel({
 }
 
 function ResolveParameterControl({
+  isParamDriven = () => false,
   clipId,
   config,
   node,
@@ -358,7 +359,7 @@ function ResolveParameterControl({
   onBatchStart,
   onBatchEnd,
 }: Pick<ResolveWheelProps,
-  'clipId' | 'node' | 'createProperty' | 'getParamValue' | 'setParam' | 'onBatchStart' | 'onBatchEnd'
+  'clipId' | 'node' | 'createProperty' | 'getParamValue' | 'setParam' | 'onBatchStart' | 'onBatchEnd' | 'isParamDriven'
 > & { config: ResolveParameterConfig }) {
   if (!config.key) {
     return (
@@ -381,7 +382,7 @@ function ResolveParameterControl({
   const property = createProperty(node.id, definition.key);
 
   return (
-    <div className={`resolve-primary-parameter is-${config.tone}`}>
+    <div className={`resolve-primary-parameter is-${config.tone}`} inert={isParamDriven(definition.key)} aria-disabled={isParamDriven(definition.key)}>
       <MIDIParameterLabel
         as="span"
         target={{
@@ -419,6 +420,7 @@ function ResolveParameterControl({
 }
 
 export function ResolveWheelColorControls({
+  isParamDriven = () => false,
   clipId,
   node,
   wheelParamDefs,
@@ -431,6 +433,7 @@ export function ResolveWheelColorControls({
   onBatchEnd,
 }: ResolveWheelProps) {
   const parameterProps = {
+    isParamDriven,
     clipId,
     node,
     createProperty,
@@ -454,6 +457,7 @@ export function ResolveWheelColorControls({
 
       <div className="resolve-color-wheels-grid">
         {WHEEL_CONTROL_CONFIGS.map(config => {
+          const groupDriven = [config.rKey, config.gKey, config.bKey, config.yKey].some(isParamDriven);
           const rDef = getWheelParamDef(wheelParamDefs, config.rKey);
           const gDef = getWheelParamDef(wheelParamDefs, config.gKey);
           const bDef = getWheelParamDef(wheelParamDefs, config.bKey);
@@ -487,6 +491,7 @@ export function ResolveWheelColorControls({
           const yValue = getParamValue(node, config.yKey, yDef.defaultValue);
           const applyMasterValue = (nextValue: number) => {
             const nextYValue = clampNumber(nextValue, yBounds.min, yBounds.max);
+            if (groupDriven) { if (!isParamDriven(config.yKey)) setParam(node.id, config.yKey, nextYValue); return; }
             const delta = nextYValue - yValue;
             if (Math.abs(delta) < Number.EPSILON) return;
 
@@ -523,7 +528,7 @@ export function ResolveWheelColorControls({
 
           return (
             <section className="resolve-color-wheel" key={config.id}>
-              <header>
+              <header inert={groupDriven} aria-disabled={groupDriven}>
                 <button type="button" title={`Center ${config.label}`} onClick={() => resetWheel(node.id, config)}>
                   <IconCurrentLocation size={17} stroke={1.45} />
                 </button>
@@ -543,7 +548,7 @@ export function ResolveWheelColorControls({
                   <IconRotateClockwise2 size={15} stroke={1.45} />
                 </button>
               </header>
-              <ResolveMasterWheel
+              <div style={{ display: 'contents' }} inert={groupDriven} aria-disabled={groupDriven}><ResolveMasterWheel
                 config={controlConfig}
                 defaultValue={yDef.defaultValue}
                 interactionRange={isResolveGamma ? RESOLVE_GAMMA_INTERACTION_RANGE : undefined}
@@ -557,18 +562,18 @@ export function ResolveWheelColorControls({
                 padStyle={padStyle}
                 step={controlStep}
                 value={yValue}
-              />
+              /></div>
 
               <div className={`resolve-wheel-values${config.id === 'offset' ? ' is-offset' : ''}`}>
                 {channelControls.map(({ channel, key, def, value }) => {
                   const property = createProperty(node.id, key);
                   const rawBounds = getControlBounds(def);
-                  const displayValue = clampNumber(value, rawBounds.min, rawBounds.max)
+                  const displayValue = (isParamDriven(key) ? value : clampNumber(value, rawBounds.min, rawBounds.max))
                     * valueDisplayScale + valueDisplayOffset;
                   const displayMin = rawBounds.min * valueDisplayScale + valueDisplayOffset;
                   const displayMax = rawBounds.max * valueDisplayScale + valueDisplayOffset;
                   return (
-                    <div className={`resolve-wheel-value is-${channel}`} key={key}>
+                    <div className={`resolve-wheel-value is-${channel}`} key={key} inert={isParamDriven(key)} aria-disabled={isParamDriven(key)}>
                       <span className="resolve-wheel-keyframe-toggle">
                         <KeyframeToggle clipId={clipId} property={property} value={getParamValue(node, key, def.defaultValue)} />
                       </span>
@@ -606,7 +611,7 @@ export function ResolveWheelColorControls({
                 })}
               </div>
 
-              <ResolveLumaSlider
+              <div style={{ display: 'contents' }} inert={isParamDriven(config.yKey)} aria-disabled={isParamDriven(config.yKey)}><ResolveLumaSlider
                 defaultValue={yDef.defaultValue}
                 label={`${config.label} luminance`}
                 min={yBounds.min}
@@ -616,8 +621,8 @@ export function ResolveWheelColorControls({
                 onChange={applyMasterValue}
                 onBatchStart={onBatchStart}
                 onBatchEnd={onBatchEnd}
-                onReset={() => resetWheel(node.id, config)}
-              />
+                onReset={() => groupDriven ? setParam(node.id, config.yKey, yDef.defaultValue) : resetWheel(node.id, config)}
+              /></div>
             </section>
           );
         })}

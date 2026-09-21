@@ -2,7 +2,8 @@ import { Logger } from '../../../services/logger';
 import type { TimelineClip } from '../../../stores/timeline/types';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { BlendMode } from '../../../types/blendMode';
-import { compileRuntimeColorGrade } from '../../../types/colorCorrection';
+import { evaluateParameterSourceColorGrade } from '../../../services/parameterSources/parameterSourceRendering';
+import { ParameterSourceError } from '../../../services/parameterSources/parameterSourceEvaluation';
 import type { Effect } from '../../../types/effects';
 import type { Keyframe } from '../../../types/keyframes';
 import { getEffectiveScale } from '../../../utils/transformScale';
@@ -15,6 +16,8 @@ import type { BaseLayerPropsLike, FrameContextLike } from './contracts';
 const log = Logger.create('ExportLayerBuilder');
 
 export function getClipKeyframes(clip: TimelineClip): Keyframe[] {
+  const saved = (clip as TimelineClip & { keyframes?: readonly Keyframe[] }).keyframes;
+  if (saved) return [...saved]; // Export snapshots and serialized nested comps own their curves.
   const storeKeyframes = useTimelineStore.getState().getClipKeyframes(clip.id);
   return storeKeyframes.length
     ? storeKeyframes
@@ -64,6 +67,7 @@ export function buildBaseLayerProps(
     try {
       effects = getInterpolatedEffects(clip.id, clipLocalTime);
     } catch (e) {
+      if (e instanceof ParameterSourceError) throw e;
       log.warn(`Effects interpolation failed for clip ${clip.id}`, e);
     }
   }
@@ -74,6 +78,7 @@ export function buildBaseLayerProps(
       ? getInterpolatedColorCorrection(clip.id, clipLocalTime)
       : undefined;
   } catch (e) {
+    if (e instanceof ParameterSourceError) throw e;
     log.warn(`Color interpolation failed for clip ${clip.id}`, e);
   }
 
@@ -165,7 +170,7 @@ export function buildNestedBaseLayer(
       (transform.blendMode || 'normal') as BlendMode,
     ),
     effects,
-    colorCorrection: compileRuntimeColorGrade(nestedClip.colorCorrection),
+    colorCorrection: evaluateParameterSourceColorGrade(nestedClip, keyframes, nestedClipLocalTime),
     position: {
       x: transform.position?.x || 0,
       y: transform.position?.y || 0,

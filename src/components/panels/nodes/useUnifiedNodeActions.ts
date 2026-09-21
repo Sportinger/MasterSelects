@@ -15,6 +15,7 @@ import { connectSourceArtifact } from '../../../services/operators/sourceArtifac
 import type { FlockGraphActions } from './flock/useFlockGraphActions';
 import { changeKeyframeNode, connectKeyframeNode, disconnectKeyframeNode, removeKeyframeNode } from '../../../services/nodeGraph/keyframeNodeActions';
 import { keyframeEdgeId } from '../../../services/nodeGraph/keyframeNodeProjection';
+import { connectControlNodes, deleteControlNode, disconnectControlEdge, moveControlNode, setParameterSourceBinding } from '../../../services/parameterSources/parameterSourceActions';
 import type { AnimatableProperty } from '../../../types/animationProperties';
 
 interface BaseActions {
@@ -31,6 +32,13 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
   const bindingActions = (node: NodeGraphNode): BaseActions | null => {
     if (!clip) return null;
     const binding = node.binding;
+    if (binding?.kind === 'parameter-source') return {
+      moveNode: (id, layout) => moveControlNode(clip.id, id, layout),
+      deleteNode: id => deleteControlNode(clip.id, id),
+      disconnectEdge: id => disconnectControlEdge(clip.id, id),
+      connectPorts: c => connectControlNodes(clip.id, { nodeId: c.fromNodeId, portId: c.fromPortId }, { nodeId: c.toNodeId, portId: c.toPortId }),
+      toggleBypass: () => {},
+    };
     if (binding?.kind === 'clip-stabilization') return {
       moveNode: (_id, layout) => {
         const state = readTimelineRuntimeState(useTimelineStore), current = state.clips.find(candidate => candidate.id === clip.id);
@@ -136,6 +144,17 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
       c = { fromNodeId: a.nodeId, fromPortId: a.portId, toNodeId: b.nodeId, toPortId: b.portId };
       const from = (graph?.expandedNodes ?? graph?.nodes)?.find(n => n.id === c.fromNodeId), to = (graph?.expandedNodes ?? graph?.nodes)?.find(n => n.id === c.toNodeId);
       if (!from || !to) return;
+      if (from.binding?.kind === 'parameter-source' && clip) {
+        const property = to.inputs.find(port => port.id === c.toPortId)?.metadata?.controlProperty;
+        if (property) setParameterSourceBinding(clip.id, property, { source: { nodeId: from.binding.nodeId, portId: c.fromPortId }, enabled: true });
+        else if (to.binding?.kind === 'parameter-source') connectControlNodes(clip.id,
+          { nodeId: from.binding.nodeId, portId: c.fromPortId }, { nodeId: to.binding.nodeId, portId: c.toPortId });
+        else throw new Error('Connect to a supported parameter input or another control source.');
+        return;
+      }
+      if (to.binding?.kind === 'parameter-source' || to.inputs.find(port => port.id === c.toPortId)?.metadata?.controlProperty) {
+        throw new Error('Use a parameter-control source. For timeline curves, add a Keyframes control source.');
+      }
       if (targets && targets.length > 1 && clip && from.binding?.kind === 'effect-operator' && to.binding?.kind === 'effect-operator'
         && from.binding.effectId === to.binding.effectId) {
         editCompositionInput(clip.id, to.binding.effectId, targets.map(endpoint => ({ nodeId: endpoint.nodeId.split('/').at(-1)!, portId: endpoint.portId })),
@@ -166,6 +185,8 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
       bindingActions(to)?.connectPorts({ ...c, fromNodeId: localId(from), toNodeId: localId(to) });
     }),
     disconnectEdge: (id: string) => safely(() => {
+      if (clip && id.startsWith('control-target:')) { setParameterSourceBinding(clip.id, decodeURIComponent(id.slice('control-target:'.length)), { source: undefined, enabled: undefined }); return; }
+      if (clip?.nodeGraph?.parameterSources?.graph.edges.some(edge => edge.id === id)) { disconnectControlEdge(clip.id, id); return; }
       if (graph?.edges.find(edge => edge.id === id)?.readOnly) return;
       for (const animation of clip?.nodeGraph?.keyframeNodes ?? []) for (const channel of animation.channels) {
         for (const property of [channel.property, ...channel.targets.map(t => t.property)]) {

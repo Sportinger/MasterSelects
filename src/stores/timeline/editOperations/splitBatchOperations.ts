@@ -1,4 +1,6 @@
 import type { Keyframe, TimelineClip, TimelineTrack } from '../../../types';
+import { copyParameterKeyframesToParts, parameterSourceSplitPatch } from '../../../services/parameterSources/parameterSourceLifecycle';
+import { cloneClipNodeGraph } from '../../../services/nodeGraph/clipGraphProjectionState';
 import { stripTimelineSourceRuntimeHandles } from '../sourceRuntimeSanitizer';
 import type { SplitAtTimesOperation, TimelineEditWarning } from './types';
 import {
@@ -45,6 +47,10 @@ export function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
   return {
     transform: structuredClone(clip.transform),
     effects: clip.effects.map(e => structuredClone(e)),
+    ...(clip.colorCorrection ? { colorCorrection: structuredClone(clip.colorCorrection) } : {}),
+    ...(clip.nodeGraph ? { nodeGraph: cloneClipNodeGraph(clip.nodeGraph) } : {}),
+    ...(clip.transitionIn ? { transitionIn: structuredClone(clip.transitionIn) } : {}),
+    ...(clip.transitionOut ? { transitionOut: structuredClone(clip.transitionOut) } : {}),
     ...(clip.masks ? { masks: clip.masks.map(m => structuredClone(m)) } : {}),
     ...(clip.textProperties ? { textProperties: structuredClone(clip.textProperties) } : {}),
       ...(clip.captionProperties ? { captionProperties: structuredClone(clip.captionProperties) } : {}),
@@ -277,6 +283,7 @@ export function applySplitAtTimesOperation(
     newParts.push({
       ...clip,
       ...deepCloneClipProps(clip),
+      ...parameterSourceSplitPatch(clip, partStart - clip.startTime),
       id: partId,
       startTime: partStart,
       duration: partDuration,
@@ -294,6 +301,7 @@ export function applySplitAtTimesOperation(
       newLinkedParts.push({
         ...linkedClip,
         ...deepCloneClipProps(linkedClip),
+        ...parameterSourceSplitPatch(linkedClip, partStart - linkedClip.startTime),
         id: linkedPartId,
         startTime: partStart,
         duration: partDuration,
@@ -392,9 +400,13 @@ export function applySplitAtTimesOperation(
     parentReplacements,
   );
   const keyframeSource = nextClipKeyframes ?? parentPreservation?.clipKeyframes;
+  if (keyframeSource) {
+    nextClipKeyframes = copyParameterKeyframesToParts(keyframeSource, clip, newParts);
+    if (linkedClip) nextClipKeyframes = copyParameterKeyframesToParts(nextClipKeyframes, linkedClip, newLinkedParts);
+  }
   if (clip.source?.type === 'flock' && keyframeSource) {
     nextClipKeyframes = copyFlockKeyframesToClipParts(
-      keyframeSource,
+      nextClipKeyframes ?? keyframeSource,
       clip.id,
       newParts.map((part) => part.id),
     ) ?? nextClipKeyframes;

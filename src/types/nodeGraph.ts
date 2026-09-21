@@ -25,6 +25,7 @@ export interface NodeGraphPortMetadata {
   /** Recorded dependency, changed through its owning action rather than cable editing. */
   readOnly?: boolean;
   animationProperty?: string;
+  controlProperty?: string;
   sourceArtifact?: { kind: 'face-landmarks' | 'scene-depth'; effectId?: string };
   artifactTarget?: { effectId: string; nodeId: string; portId: string };
   contract?: NodePortContract;
@@ -84,6 +85,7 @@ export type NodeGraphViewTheme = 'general' | 'color' | 'motion' | 'audio' | 'flo
 export type SceneNodeRole = 'geometry' | 'material' | 'transform' | 'render' | 'depth' | 'camera' | 'light' | 'splat-effector';
 
 export type NodeGraphNodeBinding =
+  | { kind: 'parameter-source'; nodeId: string }
   | { kind: 'clip-stabilization'; stage: 'solve' | 'keyframes' }
   | { kind: 'keyframe-node'; nodeId: string }
   | { kind: 'scene-operator'; nodeId: string; operator: string }
@@ -291,6 +293,7 @@ export interface ClipNodeGraph {
   previews?: { enabled: boolean; nodes: Record<string, { enabled: boolean; portId?: string }> };
   stabilization?: import('./faceStabilization').ClipStabilizationGraph;
   keyframeNodes?: import('./keyframeNode').KeyframeNodeDefinition[];
+  parameterSources?: import('./parameterSources').ParameterSources;
   scene?: import('./operatorGraph').SceneOperatorGraph;
   nodes: ClipNodeGraphNodeState[];
   customNodes?: ClipCustomNodeDefinition[];

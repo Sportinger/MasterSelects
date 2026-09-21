@@ -9,6 +9,8 @@ import {
   ensureColorCorrectionState,
 } from '../../../../types/colorCorrection';
 import { ColorNodeParameterControls } from '../../color/ColorNodeParameterControls';
+import { ParameterSourceNumberRow } from '../../properties/ParameterSourceNumberRow';
+import { getParameterSourceTarget } from '../../../../services/parameterSources/parameterSourceTargets';
 import { EditableDraggableNumber as DraggableNumber } from '../../../common/EditableDraggableNumber';
 import { BLEND_MODE_GROUPS, formatBlendModeName } from '../../properties/sharedConstants';
 import {
@@ -96,6 +98,9 @@ function EffectParamEditor({
   const setPropertyValue = useTimelineStore((state) => state.setPropertyValue);
   const updateClipEffect = useTimelineStore((state) => state.updateClipEffect);
 
+  const controlProperty = `effect.${effect.id}.${paramName}`;
+  if (getParameterSourceTarget(clip, controlProperty)) return <ParameterSourceNumberRow clipId={clip.id} property={controlProperty} />;
+
   if (paramDef.type === 'number') {
     const min = paramDef.min ?? 0;
     const max = paramDef.max ?? 1;
@@ -173,7 +178,9 @@ export function EffectNodeParameters({ clip, node }: { clip: TimelineClip; node:
   }
 
   const clipLocalTime = playheadPosition - clip.startTime;
-  const interpolatedEffect = getInterpolatedEffects(clip.id, clipLocalTime).find((candidate) => candidate.id === effect.id) ?? effect;
+  let interpolatedEffect = effect;
+  try { interpolatedEffect = getInterpolatedEffects(clip.id, clipLocalTime).find((candidate) => candidate.id === effect.id) ?? effect; }
+  catch { /* ParameterSourceNumberRow displays the per-parameter error. */ }
   const effectDef = EFFECT_REGISTRY.get(effect.type);
   const params = Object.entries(effectDef?.params ?? {});
 

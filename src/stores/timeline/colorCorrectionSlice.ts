@@ -18,6 +18,8 @@ import {
 } from '../../types/colorCorrection';
 import type { ColorCorrectionActions, Keyframe, SliceCreator } from './types';
 import { updateClipColorCorrectionWithRemoteSync } from '../../types/colorGradeOwnership';
+import { duplicateColorParameterSources, reconcileRemovedParameterTargets } from '../../services/parameterSources/parameterSourceLifecycle';
+import { startBatch, endBatch } from '../historyStore';
 
 function updateClipColorState(
   state: ColorCorrectionState | undefined,
@@ -119,7 +121,7 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
         clips,
         clipId,
         current => updateClipColorState(current, updater),
-      ),
+      ).map((clip, index) => reconcileRemovedParameterTargets(clips[index], clip)),
     });
     invalidateCache();
   },
@@ -485,7 +487,7 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
         clips,
         clipId,
         () => createDefaultColorCorrectionState(),
-      ),
+      ).map((clip, index) => reconcileRemovedParameterTargets(clips[index], clip)),
       ...(cleanup.changed ? {
         clipKeyframes: cleanup.clipKeyframes,
         keyframeRecordingEnabled: cleanup.keyframeRecordingEnabled,
@@ -497,7 +499,11 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
 
   duplicateColorVersion: (clipId) => {
     const versionId = createColorNodeId('version');
-    get().updateColorCorrection(clipId, current => {
+    const before = get().clips.find(clip => clip.id === clipId);
+    const originalVersion = before?.colorCorrection && getActiveColorVersion(before.colorCorrection)?.id;
+    const batch = startBatch('Duplicate color version');
+    try {
+      get().updateColorCorrection(clipId, current => {
       const activeVersion = getActiveColorVersion(current);
       if (!activeVersion) return current;
       const clone = cloneColorCorrectionState({
@@ -517,7 +523,20 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
           },
         ],
       };
-    });
+      });
+      if (originalVersion && before) {
+        const keys = get().clipKeyframes.get(clipId) ?? [];
+        const prefix = `color.${originalVersion}.`;
+        const copies = keys.filter(key => key.property.startsWith(prefix)).map(key => ({ ...structuredClone(key),
+          id: `kf-${crypto.randomUUID()}`, property: `color.${versionId}.${key.property.slice(prefix.length)}` as Keyframe['property'] }));
+        const clipKeyframes = new Map(get().clipKeyframes);
+        if (copies.length) clipKeyframes.set(clipId, [...keys, ...copies]);
+        set({ clipKeyframes, clips: get().clips.map(clip => clip.id === clipId && clip.nodeGraph?.parameterSources
+          ? { ...clip, nodeGraph: { ...clip.nodeGraph, parameterSources: duplicateColorParameterSources(before.nodeGraph?.parameterSources, originalVersion, versionId) } }
+          : clip) });
+        get().invalidateCache();
+      }
+    } finally { if (batch.opened) endBatch(); }
     return versionId;
   },
 

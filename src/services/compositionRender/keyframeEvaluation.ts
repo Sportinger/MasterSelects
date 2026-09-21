@@ -2,6 +2,8 @@ import type { ClipMask } from '../../types/masks';
 import type { ClipTransform } from '../../types/timelineCore';
 import type { Keyframe } from '../../types/keyframes';
 import type { Effect } from '../../types/effects';
+import { applyParameterSourcesToEffects } from '../parameterSources/parameterSourceRendering';
+import type { ParameterSourceClip } from '../parameterSources/parameterSourceTargets';
 import { bindCableRenderTime } from '../faceCables/cableRenderTime';
 import { pauseIncompleteOperatorEffects } from '../operators/editableOperatorGraph';
 import { appendSurfaceEffects, type SurfaceClip } from '../planarTracking/surfaceEffects';
@@ -35,9 +37,12 @@ export function evaluateCompositionClipEffects(
   effects: Effect[] | undefined,
   keyframes: readonly Keyframe[] | undefined,
   localTime: number,
-  surfaceClip?: SurfaceClip,
+  surfaceClip?: SurfaceClip & Partial<ParameterSourceClip>,
 ): Effect[] {
   const withSurfaces = (result: Effect[]) => {
+    if (surfaceClip?.nodeGraph?.parameterSources && typeof surfaceClip.startTime === 'number') {
+      result = applyParameterSourcesToEffects({ ...surfaceClip, startTime: surfaceClip.startTime, effects: effects ?? [] }, keyframes ?? [], localTime, result);
+    }
     const timed = bindCableRenderTime(pauseIncompleteOperatorEffects(result), localTime, surfaceClip?.videoInspectorSections?.stabilization);
     return surfaceClip ? appendSurfaceEffects(timed, surfaceClip, localTime, keyframes) : timed;
   };

@@ -27,6 +27,8 @@ import { getEffect } from '../../../../effects';
 import { OperatorColorInput } from './OperatorColorInput';
 import { resolveImageOperatorChoiceValue } from '../../../../services/operators/imageOperatorChoice';
 import { GlyphAtlasControls } from './GlyphAtlasControls';
+import { ParameterSourceNumberRow } from '../../properties/ParameterSourceNumberRow';
+import { getParameterSourceTarget } from '../../../../services/parameterSources/parameterSourceTargets';
 
 const EMPTY_KEYS: Keyframe[] = [];
 export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { clip: TimelineClip; effectId: string; nodeId: string; projectedNode?: NodeGraphNode }) {
@@ -78,6 +80,9 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
         if (projectedNode && node.operator.startsWith('math.') && graph.edges.some(edge => edge.to === node.id && edge.input === spec.id))
           return <OperatorLiveValue key={spec.id} clipId={clip.id} node={projectedNode} portId={spec.id} label={spec.label} />;
         const binding = node.bindings[spec.id];
+        if (typeof binding === 'string' && getParameterSourceTarget(clip, `effect.${effectId}.${binding}`)) {
+          return <ParameterSourceNumberRow key={spec.id} clipId={clip.id} property={`effect.${effectId}.${binding}`} />;
+        }
         const value = sampleOperatorParameter(node, spec.id, evaluatedParams, effectId, keys, time);
         const constant = node.constants?.[spec.id];
         if (binding === undefined && constant !== undefined) {

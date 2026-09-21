@@ -31,6 +31,7 @@ import { FlockNodeContextMenu } from './flock/FlockNodeContextMenu';
 import { FlockGraphStatusBar } from './flock/FlockGraphStatusBar';
 import './NodeWorkspacePanel.css';
 import { addKeyframeNode } from '../../../services/nodeGraph/keyframeNodeActions';
+import { ControlNodeMenu } from './workspace/ControlNodeMenu';
 import { focusKeyframeConnections } from '../../../services/nodeGraph/keyframeNodeProjection';
 
 interface NodeWorkspaceContextMenuState {
@@ -410,6 +411,8 @@ export function NodeWorkspacePanel() {
             setPresetsOpen(false);
             if (!keyframesLocked) selectNode(addKeyframeNode(subject.id, { x: selectedNode?.layout.x ?? 0, y: (selectedNode?.layout.y ?? 0) - 270 }));
           }}>+ Keyframes</button>
+          <ControlNodeMenu clipId={subject.id} disabled={keyframesLocked} onAdded={selectNode}
+            layout={{ x: selectedNode?.layout.x ?? 0, y: (selectedNode?.layout.y ?? 0) - 300 }} />
           {selectedNode?.groupId === 'color' && (
             <div className="node-workspace-view-actions">
               <button type="button" onClick={() => addColorGraphNode('primary')}>+ Primary</button>

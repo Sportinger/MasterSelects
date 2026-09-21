@@ -21,12 +21,13 @@ interface ResolveInspectorNumberRowProps {
   disabled?: boolean;
   persistenceKey?: string;
   onChange: (value: number) => void;
+  onReset?: (value: number) => void;
 }
 
 /** Transform-style slider, editable field and reset action for effect inspectors. */
 export function ResolveInspectorNumberRow({
   label, ariaLabel = label, value, defaultValue, min, max, step, disabled = false,
-  persistenceKey, onChange, keyframeToggle, actions, hardMin = -Infinity, hardMax = Infinity,
+  persistenceKey, onChange, onReset, keyframeToggle, actions, hardMin = -Infinity, hardMax = Infinity,
 }: ResolveInspectorNumberRowProps) {
   useEditableDraggableNumberSettingsRevision(persistenceKey);
   const range = getEffectiveEditableDraggableNumberSettings({ persistenceKey, min, max, defaultValue });
@@ -39,7 +40,7 @@ export function ResolveInspectorNumberRow({
     {actions}
     {keyframeToggle}
     <ResolveInspectorIconButton ariaLabel={`Reset ${label}`} className="resolve-inspector-reset-button"
-      disabled={disabled} onClick={() => change(range.defaultValue ?? defaultValue)}><ResolveResetIcon /></ResolveInspectorIconButton>
+      disabled={disabled} onClick={() => (onReset ?? change)(range.defaultValue ?? defaultValue)}><ResolveResetIcon /></ResolveInspectorIconButton>
   </>}>
     <div className="resolve-inspector-slider-value">
       <HandleOnlyRange aria-label={`${ariaLabel} slider`} value={value} min={effectiveMin} max={effectiveMax}

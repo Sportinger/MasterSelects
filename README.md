@@ -113,6 +113,10 @@ Corrector inspectors expose the same wheel channels edited in the dedicated Colo
 tab, which retains its special wheels/curves layout. A Video / Audio switch defaults to
 video for visual clips; Audio shows the owning clip's audio controls and effects,
 following linked audio when present. Switching the view does not change playback.
+Color numbers, Hue Shift and Gaussian Blur Radius can use fixed values, existing
+keyframes or connected LFO/Math/Remap sources through the shared **Source** controls
+and **+ Control** menu in Nodes. Factory layouts replace their Transitions tab
+with Nodes; saved custom layouts stay unchanged.
 Ribbon Scan uses the same graph compiler for its animated ribbon mask, horizontal
 displacement and blending, retaining alpha from the displaced sample.
 Glitch and Film Prism expose their sampling, shared noise/hash math and

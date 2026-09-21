@@ -34,6 +34,7 @@ import { applyKeyboardEditCommandOperation, isKeyboardEditCommandOperation } fro
 import { applyResolvedMoveClipsOperation } from './resolvedMoveApplyOperation';
 import { ensureTransitionCompositionsForChangedClips, getChangedClipIdsAfterReplacement, removeDetachedTransitionCompositions, setClipsAndCleanupTransitionComps } from './transitionCompositionMaintenance';
 import { buildTrimmedKeyframeState } from './trimKeyframeAnchoring';
+import { trimmedParameterSourceClips } from '../../../services/parameterSources/parameterSourceLifecycle';
 import { getPlayheadPosition } from '../../../services/layerBuilder/PlayheadState';
 export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperationActions> = (set, get) => ({
   applyTimelineEditOperation: (operation: TimelineEditOperation, options): TimelineEditResult => {
@@ -497,7 +498,8 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       ));
       try {
         setClipsAndCleanupTransitionComps(set, previousClips, {
-          clips: nextClips,
+          clips: ['trim-clip', 'trim-edge-to-time', 'ripple-trim-edge-to-time', 'rolling-edit'].includes(operation.type)
+            ? trimmedParameterSourceClips(previousClips, nextClips) : nextClips,
           ...buildTrimmedKeyframeState(previousClips, nextClips, get().clipKeyframes, operation.type),
           ...(shouldClearTransitionPropertiesSelection(get().propertiesSelection, nextClips)
             ? { propertiesSelection: null }

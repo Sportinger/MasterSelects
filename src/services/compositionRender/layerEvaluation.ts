@@ -24,6 +24,7 @@ import {
   evaluateCompositionClipTransform,
 } from './keyframeEvaluation';
 import { evaluateTransitionMappedAnimation } from './transitionMappedAnimation';
+import { evaluateParameterSourceColorGrade } from '../parameterSources/parameterSourceRendering';
 import type {
   CompositionClipSourceEntry,
   CompositionInfo,
@@ -250,6 +251,7 @@ export function buildEvaluatedClipLayer(params: {
     ),
     source: layerSource,
     effects,
+    colorCorrection: evaluateParameterSourceColorGrade(clipAtTime, keyframes ?? [], timelineLocalTime),
     position: transform.position || { x: 0, y: 0, z: 0 },
     anchor: transform.anchor ?? { x: 0, y: 0, z: 0 },
     scale: getEffectiveScale(transform.scale),
@@ -353,6 +355,7 @@ export function evaluateNestedComposition(params: {
       },
       effects: mappedAnimation?.effects
         ?? evaluateCompositionClipEffects(clip.effects, keyframes, clipLocalTime, clip),
+      colorCorrection: evaluateParameterSourceColorGrade(clip, keyframes, clipLocalTime),
       position: transform.position || { x: 0, y: 0, z: 0 },
       anchor: transform.anchor ?? { x: 0, y: 0, z: 0 },
       scale: getEffectiveScale(transform.scale),

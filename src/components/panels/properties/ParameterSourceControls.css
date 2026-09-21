@@ -1,0 +1,11 @@
+@layer features {
+  .parameter-source-control, .parameter-source-inspector { container-type: inline-size; min-width: 0; width: 100%; }
+  .parameter-source-status { display: flex; justify-content: flex-end; gap: 8px; padding: 0 4px 4px; }
+  .parameter-source-status button { font: inherit; font-size: 10px; color: var(--text-secondary); background: none; border: 0; cursor: pointer; }
+  .parameter-source-error { color: var(--text-error, #e88); font-size: 11px; overflow-wrap: anywhere; }
+  :is(.parameter-source-control, .parameter-source-inspector) :is(button, input) { -webkit-tap-highlight-color: transparent; }
+  :is(.parameter-source-control, .parameter-source-inspector) :is(button, input):focus:not(:focus-visible) { outline: none; box-shadow: none; }
+  :is(.parameter-source-control, .parameter-source-inspector) :is(button, input):focus-visible {
+    outline: 1px solid var(--accent-color) !important; outline-offset: -2px !important;
+  }
+}

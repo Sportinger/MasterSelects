@@ -1,6 +1,4 @@
-import {
-  compileRuntimeColorGrade,
-} from '../../types/colorCorrection';
+import { evaluateParameterSourceColorGrade } from '../parameterSources/parameterSourceRendering';
 import type { BlendMode } from '../../types/blendMode';
 import type { Keyframe } from '../../types/keyframes';
 import type { Layer, NestedCompositionData } from '../../types/layers';
@@ -73,7 +71,7 @@ export function buildNestedLayerBase(
       (transform.blendMode || 'normal') as BlendMode,
     ),
     effects: mappedAnimation?.effects ?? evaluateCompositionClipEffects(nestedClip.effects, keyframes, nestedClipLocalTime, nestedClip),
-    colorCorrection: compileRuntimeColorGrade(nestedClip.colorCorrection),
+    colorCorrection: evaluateParameterSourceColorGrade(nestedClip, keyframes, nestedClipLocalTime),
     position: {
       x: transform.position?.x || 0,
       y: transform.position?.y || 0,

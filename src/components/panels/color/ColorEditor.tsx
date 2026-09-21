@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
+import { createParameterSourceEvaluator } from '../../../services/parameterSources/parameterSourceEvaluation';
+import { isParameterNodeDriven } from '../../../services/parameterSources/parameterSourceTargets';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import {
   MAX_RUNTIME_PRIMARY_NODES,
@@ -132,6 +134,7 @@ export function ColorEditor({
   };
 
   const setParam = (nodeId: string, paramName: string, value: number) => {
+    if (isParameterNodeDriven(clip, createColorProperty(activeVersion.id, nodeId, paramName))) return;
     setPropertyValue(
       clipId,
       createColorProperty(activeVersion.id, nodeId, paramName) as AnimatableProperty,
@@ -148,12 +151,25 @@ export function ColorEditor({
       ? node.params[key] as number
       : defaultValue;
     const property = createProperty(node.id, key);
+    if (clip.nodeGraph?.parameterSources?.targets[property]) {
+      try { return createParameterSourceEvaluator(clip, clipColorKeyframes, clipLocalTime).resolve(property).value; }
+      catch { return baseValue; } // Explicit source-error notice below; never write a fallback into the grade.
+    }
     return interpolateKeyframes(clipColorKeyframes, property, clipLocalTime, baseValue);
   };
+  const isParamDriven = (key: string) => !!selectedNode && isParameterNodeDriven(clip, createProperty(selectedNode.id, key));
+  const wheelDriven = (nodeId: string, config: WheelControlConfig) => [config.rKey, config.gKey, config.bKey, config.yKey]
+    .some(key => isParameterNodeDriven(clip, createProperty(nodeId, key)));
+  const drivenChannels = selectedNode ? RUNTIME_COLOR_PARAM_DEFS.filter(def => isParamDriven(def.key)) : [];
+  let sourceError = '';
+  for (const def of drivenChannels) {
+    try { createParameterSourceEvaluator(clip, clipColorKeyframes, clipLocalTime).resolve(createProperty(selectedNode!.id, def.key)); }
+    catch (error) { sourceError = error instanceof Error ? error.message : String(error); break; }
+  }
 
   const handleSetAllColorKeyframes = () => {
     const entries = editableNodes.flatMap(node => {
-      return RUNTIME_COLOR_PARAM_DEFS.map(def => ({
+      return RUNTIME_COLOR_PARAM_DEFS.filter(def => !isParameterNodeDriven(clip, createProperty(node.id, def.key))).map(def => ({
         property: createColorProperty(activeVersion.id, node.id, def.key) as AnimatableProperty,
         value: getAnimatedParamValue(node, def.key, def.defaultValue),
       }));
@@ -179,12 +195,14 @@ export function ColorEditor({
     config: WheelControlConfig,
     values: { r: number; g: number; b: number }
   ) => {
+    if (wheelDriven(nodeId, config)) return;
     setParam(nodeId, config.rKey, values.r);
     setParam(nodeId, config.gKey, values.g);
     setParam(nodeId, config.bKey, values.b);
   };
 
   const resetWheel = (nodeId: string, config: WheelControlConfig) => {
+    if (wheelDriven(nodeId, config)) return;
     handleBatchStart();
     setParam(nodeId, config.rKey, getWheelParamDef(WHEEL_COLOR_PARAM_DEFS, config.rKey).defaultValue);
     setParam(nodeId, config.gKey, getWheelParamDef(WHEEL_COLOR_PARAM_DEFS, config.gKey).defaultValue);
@@ -220,6 +238,7 @@ export function ColorEditor({
     sensitivity = 1,
   ) => {
     if (event.button !== 0) return;
+    if (wheelDriven(node.id, config)) return;
     event.preventDefault();
     event.stopPropagation();
 
@@ -376,6 +395,9 @@ export function ColorEditor({
                 </div>
               </div>
 
+              {drivenChannels.length > 0 && <p className="effect-info" role={sourceError ? 'alert' : undefined}>
+                {sourceError || `Node-controlled: ${drivenChannels.map(def => def.label).join(', ')}. Edit sources in Properties / Effects or Nodes.`}
+              </p>}
               {useWheelControls
                 ? (
                   <WheelColorControls
@@ -383,6 +405,7 @@ export function ColorEditor({
                     node={selectedNode}
                     wheelParamDefs={WHEEL_COLOR_PARAM_DEFS}
                     resolveLayout={surface === 'controls'}
+                    isParamDriven={isParamDriven}
                     createProperty={createProperty}
                     getParamValue={getAnimatedParamValue}
                     setParam={setParam}
@@ -397,6 +420,7 @@ export function ColorEditor({
                     clipId={clipId}
                     node={selectedNode}
                     paramSections={PRIMARY_CONTROL_SECTIONS}
+                    isParamDriven={isParamDriven}
                     createProperty={createProperty}
                     getParamValue={getAnimatedParamValue}
                     setParam={setParam}

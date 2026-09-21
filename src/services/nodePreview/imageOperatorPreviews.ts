@@ -12,13 +12,15 @@ import { IMAGE_OPERATORS } from '../operators/imageOperators';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { compileAnalogSignalGraph } from '../operators/analogSignalGraph';
 import type { ImageOperatorPreviewTarget } from './imageOperatorPreviewStages';
+import { applyParameterSourcesToEffects } from '../parameterSources/parameterSourceRendering';
+import { isParameterNodeDriven } from '../parameterSources/parameterSourceTargets';
 
 type PreviewValue = NonNullable<PreviewFrame['values']>[number];
 type ScalarPreview = { graph: EffectOperatorGraph; selected: EffectOperatorGraph['nodes'][number];
   evaluate: () => number | undefined; values: PreviewValue[] };
 const EMPTY_KEYS: Keyframe[] = [];
 const preparedPreviews = new WeakMap<Effect, { signature: string; graph: EffectOperatorGraph;
-  keys?: Keyframe[]; time?: number; compiler?: ImageOperatorPreviewCompiler; values: Map<string, ScalarPreview | undefined> }>();
+  keys?: Keyframe[]; time?: number; controls?: TimelineClip; compiler?: ImageOperatorPreviewCompiler; values: Map<string, ScalarPreview | undefined> }>();
 
 /** All visible ports of an unchanged effect share its validated graph and scalar
  * results. Folding, panning and retrying a texture tap must not rebuild its shader. */
@@ -71,22 +73,22 @@ export type ImageOperatorPreviewCompiler = (graph: EffectOperatorGraph, params: 
   target: ImageOperatorPreviewTarget) => ReturnType<typeof compileImageOperatorPreview>;
 
 function imageScalarValues(request: PreviewRequest, effect: Effect, keys: Keyframe[], time: number,
-  compilePreview?: ImageOperatorPreviewCompiler): ScalarPreview | undefined {
+  compilePreview?: ImageOperatorPreviewCompiler, clip?: TimelineClip): ScalarPreview | undefined {
   const binding = request.node.binding;
   if (binding?.kind !== 'effect-operator') return undefined;
   const definition = getEffectOperator(binding.operator);
   if (!definition || ![...definition.inputs, ...definition.outputs].some(port => port.type === 'number')) return undefined;
-  const prepared = preparedPreview(effect), sampledKeys = keys.length ? keys : EMPTY_KEYS, sampledTime = keys.length ? time : 0;
-  if (prepared.keys !== sampledKeys || prepared.time !== sampledTime || prepared.compiler !== compilePreview) {
-    prepared.keys = sampledKeys; prepared.time = sampledTime; prepared.compiler = compilePreview; prepared.values.clear();
+  const prepared = preparedPreview(effect), sampledKeys = keys.length ? keys : EMPTY_KEYS, sampledTime = keys.length || clip?.nodeGraph?.parameterSources ? time : 0;
+  if (prepared.keys !== sampledKeys || prepared.time !== sampledTime || prepared.compiler !== compilePreview || prepared.controls !== clip) {
+    prepared.keys = sampledKeys; prepared.time = sampledTime; prepared.controls = clip; prepared.compiler = compilePreview; prepared.values.clear();
   }
   if (!prepared.values.has(binding.nodeId)) prepared.values.set(binding.nodeId,
-    evaluateScalarValues(request, effect, keys, time, prepared.graph, compilePreview));
+    evaluateScalarValues(request, effect, keys, time, prepared.graph, compilePreview, clip));
   return prepared.values.get(binding.nodeId);
 }
 
 function evaluateScalarValues(request: PreviewRequest, effect: Effect, keys: Keyframe[], time: number,
-  ownerGraph: EffectOperatorGraph, compilePreview?: ImageOperatorPreviewCompiler): ScalarPreview | undefined {
+  ownerGraph: EffectOperatorGraph, compilePreview?: ImageOperatorPreviewCompiler, clip?: TimelineClip): ScalarPreview | undefined {
   const binding = request.node.binding;
   if (binding?.kind !== 'effect-operator') return undefined;
   const selected = ownerGraph.nodes.find(node => node.id === binding.nodeId);
@@ -95,6 +97,7 @@ function evaluateScalarValues(request: PreviewRequest, effect: Effect, keys: Key
   for (const node of ownerGraph.nodes) if (['values.number', 'values.integer'].includes(node.operator) && typeof node.bindings.value === 'string') {
     params[node.bindings.value] = sampleOperatorParameter(node, 'value', params, effect.id, keys, time);
   }
+  if (clip?.nodeGraph?.parameterSources) Object.assign(params, applyParameterSourcesToEffects(clip, keys, time, [{ ...effect, params: params as Effect['params'] }])[0].params);
   const preview = compilePreview ? { graph: ownerGraph, params } : numericPreviewGraph(ownerGraph, selected.id, params);
   if (!preview) return undefined;
   const graph = preview.graph; Object.assign(params, preview.params);
@@ -121,7 +124,7 @@ function evaluateScalarValues(request: PreviewRequest, effect: Effect, keys: Key
 
 export function imageOperatorKnownValues(request: PreviewRequest, clip: TimelineClip, effect: Effect, keys: Keyframe[] = [],
   time = Math.max(0, request.time - clip.startTime), compilePreview?: ImageOperatorPreviewCompiler): PreviewValue[] {
-  return imageScalarValues(request, effect, keys, time, compilePreview)?.values.filter(value => value.value !== undefined) ?? [];
+  return imageScalarValues(request, effect, keys, time, compilePreview, clip)?.values.filter(value => value.value !== undefined) ?? [];
 }
 
 /** Numeric previews evaluate canonical bindings without persisting duplicate parameter values. */
@@ -167,7 +170,7 @@ export function imageOperatorValuePreview(request: PreviewRequest, clip: Timelin
         drawing: { kind: 'text', lines: [color ? String(value) : value ? 'True' : 'False'] } };
     }
   }
-  const scalar = imageScalarValues(request, effect, keys, time, compilePreview); if (!scalar) return undefined;
+  const scalar = imageScalarValues(request, effect, keys, time, compilePreview, clip); if (!scalar) return undefined;
   const { selected, evaluate, values } = scalar;
   // Per-pixel operands and results must be rendered by the canonical image IR.
   const requestedValue = request.port ? values.find(value => value.direction === request.port!.direction && value.portId === request.port!.id)?.value : evaluate();
@@ -182,7 +185,7 @@ export function imageOperatorValuePreview(request: PreviewRequest, clip: Timelin
   } else if (numericValue && typeof selected.bindings.value === 'string') {
     const binding = selected.bindings.value, owner = getEffect(effect.type)?.params[binding];
     const current = evaluate();
-    if (owner?.type === 'number' && current !== undefined) controls.push({ label: owner.label, value: current, defaultValue: Number(owner.default),
+    if (owner?.type === 'number' && current !== undefined && !isParameterNodeDriven(clip, `effect.${effect.id}.${binding}`)) controls.push({ label: owner.label, value: current, defaultValue: Number(owner.default),
       min: owner.min, max: owner.max, step: selected.operator === 'values.integer' ? 1 : owner.step, portId: 'value', direction: 'output', persistenceKey: `operator.${effect.id}.${binding}`,
       target: { clipId: clip.id, effectId: effect.id, nodeId: selected.id, parameter: 'value' } });
   }

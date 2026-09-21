@@ -24,6 +24,7 @@ function trackColorControl(controlId: string, controlKind: 'number' | 'slider', 
 type KeyframeProperty = ComponentProps<typeof KeyframeToggle>['property'];
 
 interface PrimaryColorControlsProps {
+  isParamDriven?: (key: string) => boolean;
   clipId: string;
   node: ColorEditorNode;
   paramSections: [string, ColorEditorParamDefinition[]][];
@@ -35,6 +36,7 @@ interface PrimaryColorControlsProps {
 }
 
 export function PrimaryColorControls({
+  isParamDriven = () => false,
   clipId,
   node,
   paramSections,
@@ -71,7 +73,7 @@ export function PrimaryColorControls({
             const sliderMax = sliderSettings.max ?? def.max;
 
             return (
-              <div className="control-row color-control-row" key={def.key}>
+              <div className="control-row color-control-row" key={def.key} inert={isParamDriven(def.key)} aria-disabled={isParamDriven(def.key)}>
                 <KeyframeToggle clipId={clipId} property={property} value={value} />
                 <MIDIParameterLabel as="label" target={midiTarget}>{def.label}</MIDIParameterLabel>
                 <input

@@ -1,4 +1,5 @@
 import { synchronizeEffectChain } from './clipEffectChain';
+import { remapParameterSourceProperties } from '../parameterSources/parameterSourceLifecycle';
 import { extractAINodeGeneratedCode } from './aiNodeDefinition';
 import { buildClipNodeGraphView } from './clipGraphProjectionBuildView';
 import type { TimelineClip, TimelineTrack } from './clipGraphProjectionDomain';
@@ -146,6 +147,7 @@ function buildProjectedClipNodeGraphState(
     previews: clip.nodeGraph?.previews ? structuredClone(clip.nodeGraph.previews) : undefined,
     canvasPlacements: clip.nodeGraph?.canvasPlacements ? structuredClone(clip.nodeGraph.canvasPlacements) : undefined,
     keyframeNodes: clip.nodeGraph?.keyframeNodes ? structuredClone(clip.nodeGraph.keyframeNodes) : undefined,
+    parameterSources: clip.nodeGraph?.parameterSources ? structuredClone(clip.nodeGraph.parameterSources) : undefined,
     groups: clip.nodeGraph?.groups ? structuredClone(clip.nodeGraph.groups) : undefined,
     scene: clip.nodeGraph?.scene ? structuredClone(clip.nodeGraph.scene) : undefined,
     stabilization: clip.nodeGraph?.stabilization ? structuredClone(clip.nodeGraph.stabilization) : undefined,
@@ -188,6 +190,7 @@ export function reconcileClipNodeGraphState(
     previews: existingState.previews ? structuredClone(existingState.previews) : undefined,
     canvasPlacements: existingState.canvasPlacements ? structuredClone(existingState.canvasPlacements) : undefined,
     keyframeNodes: existingState.keyframeNodes ? structuredClone(existingState.keyframeNodes) : undefined,
+    parameterSources: existingState.parameterSources ? structuredClone(existingState.parameterSources) : undefined,
     forcedBuiltIns: existingState.forcedBuiltIns ? [...existingState.forcedBuiltIns] : undefined,
     ...(manualEdges !== undefined ? { manualEdges } : {}),
     groups: existingState.groups ? structuredClone(existingState.groups) : undefined,
@@ -298,6 +301,7 @@ export function cloneClipNodeGraph(graph?: ClipNodeGraph): ClipNodeGraph | undef
     previews: graph.previews ? structuredClone(graph.previews) : undefined,
     canvasPlacements: graph.canvasPlacements ? structuredClone(graph.canvasPlacements) : undefined,
     keyframeNodes: graph.keyframeNodes ? structuredClone(graph.keyframeNodes) : undefined,
+    parameterSources: graph.parameterSources ? structuredClone(graph.parameterSources) : undefined,
     forcedBuiltIns: graph.forcedBuiltIns ? [...graph.forcedBuiltIns] : undefined,
     manualEdges: cloneManualEdges(graph.manualEdges),
     groups: graph.groups ? structuredClone(graph.groups) : undefined,
@@ -336,6 +340,8 @@ export function remapClipNodeGraphEffectIds(
 
   return {
     ...cloned,
+    parameterSources: remapParameterSourceProperties(cloned.parameterSources, path => path.replace(/^effect\.([^.]+)\./,
+      (_, id: string) => `effect.${effectIdMap.get(id) ?? id}.`)),
     keyframeNodes: cloned.keyframeNodes?.map(node => ({ ...node, channels: node.channels.map(channel => {
       const remap = (path: typeof channel.property) => path.replace(/^effect\.([^.]+)\./,
         (_, id: string) => `effect.${effectIdMap.get(id) ?? id}.`) as typeof path;

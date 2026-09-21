@@ -31,6 +31,7 @@ function trackWheelControl(controlId: string, controlKind: 'number' | 'slider', 
 type KeyframeProperty = ComponentProps<typeof KeyframeToggle>['property'];
 
 export interface WheelColorControlsProps {
+  isParamDriven?: (key: string) => boolean;
   clipId: string;
   node: ColorEditorNode;
   wheelParamDefs: ColorEditorParamDefinition[];
@@ -50,6 +51,7 @@ export interface WheelColorControlsProps {
 }
 
 export function WheelColorControls({
+  isParamDriven = () => false,
   clipId,
   node,
   wheelParamDefs,
@@ -68,6 +70,7 @@ export function WheelColorControls({
         clipId={clipId}
         node={node}
         wheelParamDefs={wheelParamDefs}
+        isParamDriven={isParamDriven}
         createProperty={createProperty}
         getParamValue={getParamValue}
         setParam={setParam}
@@ -83,6 +86,7 @@ export function WheelColorControls({
     <div className="properties-section color-control-section color-wheel-section">
       <div className="color-wheels-grid">
         {WHEEL_CONTROL_CONFIGS.map(config => {
+          const groupDriven = [config.rKey, config.gKey, config.bKey, config.yKey].some(isParamDriven);
           const rDef = getWheelParamDef(wheelParamDefs, config.rKey);
           const gDef = getWheelParamDef(wheelParamDefs, config.gKey);
           const bDef = getWheelParamDef(wheelParamDefs, config.bKey);
@@ -121,6 +125,7 @@ export function WheelColorControls({
                 <button
                   type="button"
                   className="color-wheel-reset"
+                  disabled={groupDriven}
                   onClick={() => resetWheel(node.id, config)}
                 >
                   Reset
@@ -128,6 +133,8 @@ export function WheelColorControls({
               </div>
               <div
                 className={`color-wheel-pad color-wheel-pad-${config.id}`}
+                inert={groupDriven}
+                aria-disabled={groupDriven}
                 style={padStyle}
                 onPointerDown={(event) => startWheelDrag(event, node, config)}
                 role="presentation"
@@ -135,7 +142,7 @@ export function WheelColorControls({
                 <span className="color-wheel-puck" />
               </div>
 
-              <div className="color-wheel-luma-row">
+              <div className="color-wheel-luma-row" inert={isParamDriven(config.yKey)} aria-disabled={isParamDriven(config.yKey)}>
                 <KeyframeToggle clipId={clipId} property={yProperty} value={yValue} />
                 <MIDIParameterLabel
                   as="label"
@@ -187,7 +194,7 @@ export function WheelColorControls({
                 {channelControls.map(({ label, key, def, value }) => {
                   const property = createProperty(node.id, key);
                   return (
-                    <div className="color-wheel-channel-row" key={key}>
+                    <div className="color-wheel-channel-row" key={key} inert={isParamDriven(key)} aria-disabled={isParamDriven(key)}>
                       <KeyframeToggle clipId={clipId} property={property} value={value} />
                       <MIDIParameterLabel
                         as="label"

@@ -142,7 +142,7 @@ export function shouldAnimateLiveLayoutElement(id: string): boolean {
 }
 
 function getSequenceStage(id: string): number {
-  if (id === 'panel:media' || id === 'panel:transitions') return 0;
+  if (id === 'panel:media' || id === 'panel:transitions' || id === 'panel:node-workspace') return 0;
   if (isPreviewLayoutAnimationId(id)) return 1;
   if (
     id === 'panel:clip-properties'

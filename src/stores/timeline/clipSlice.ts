@@ -6,7 +6,7 @@ import type { Keyframe } from '../../types/keyframes';
 import type { TimelineClip, TimelineTrack } from '../../types/timeline';
 import type { CoreClipActions, SliceCreator } from './types';
 import { Logger } from '../../services/logger';
-import { cloneClipNodeGraph } from '../../services/nodeGraph';
+import { copyParameterKeyframesToParts, parameterSourceSplitPatch } from '../../services/parameterSources/parameterSourceLifecycle';
 import { getPlayheadPosition } from '../../services/layerBuilder/PlayheadState';
 import { getTimelineDurationForSourceWindow } from '../../utils/clipPlaybackTiming';
 import { quantizeClipStartTime, quantizeFrameLockedClipTiming } from '../../utils/timelineFrameQuantization';
@@ -43,24 +43,6 @@ function isTrackLocked(tracks: TimelineTrack[], trackId: string | undefined): bo
 function isClipOnLockedTrack(clips: TimelineClip[], tracks: TimelineTrack[], clipId: string): boolean {
   const clip = clips.find(c => c.id === clipId);
   return isTrackLocked(tracks, clip?.trackId);
-}
-
-/** Deep clone properties that must not be shared between split clips */
-function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
-  return {
-    transform: structuredClone(clip.transform),
-    effects: clip.effects.map(e => structuredClone(e)),
-    ...(clip.colorCorrection ? { colorCorrection: structuredClone(clip.colorCorrection) } : {}),
-    ...(clip.nodeGraph ? { nodeGraph: cloneClipNodeGraph(clip.nodeGraph) } : {}),
-    ...(clip.masks ? { masks: clip.masks.map(m => structuredClone(m)) } : {}),
-    ...(clip.textProperties ? { textProperties: structuredClone(clip.textProperties) } : {}),
-      ...(clip.captionProperties ? { captionProperties: structuredClone(clip.captionProperties) } : {}),
-      ...(clip.captionLayerBinding ? { captionLayerBinding: structuredClone(clip.captionLayerBinding) } : {}),
-    ...(clip.motion ? { motion: structuredClone(clip.motion) } : {}),
-    ...(clip.flock ? { flock: structuredClone(clip.flock) } : {}),
-    ...(clip.transitionIn ? { transitionIn: structuredClone(clip.transitionIn) } : {}),
-    ...(clip.transitionOut ? { transitionOut: structuredClone(clip.transitionOut) } : {}),
-  };
 }
 
 // Import extracted modules
@@ -101,6 +83,7 @@ import {
 } from './helpers/audioAnalysisStateHelpers';
 import {
   cloneLinkedSourceForPart,
+  deepCloneClipProps,
   cloneSourceForPart,
   collectMotionParentClipIdsDetachedBySplit,
   getSourceForFirstSplitPart,
@@ -460,6 +443,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     const secondClip: TimelineClip = {
       ...clip,
       ...deepCloneClipProps(clip),
+      ...parameterSourceSplitPatch(clip, firstPartDuration),
       id: `clip-${timestamp}-${randomSuffix}-b`,
       startTime: splitTime,
       duration: secondPartDuration,
@@ -491,6 +475,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         linkedSecondClip = {
           ...linkedClip,
           ...deepCloneClipProps(linkedClip),
+          ...parameterSourceSplitPatch(linkedClip, firstPartDuration),
           id: linkedSecondClipId,
           startTime: splitTime,
           duration: secondPartDuration,
@@ -583,7 +568,9 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     const flockPartKeyframes = clip.source?.type === 'flock'
       ? copyFlockKeyframesToClipParts(preservedClipKeyframes ?? clipKeyframes, clip.id, [firstClip.id, secondClip.id])
       : null;
-    const nextClipKeyframes = flockPartKeyframes ?? preservedClipKeyframes;
+    let nextClipKeyframes = copyParameterKeyframesToParts(flockPartKeyframes ?? preservedClipKeyframes ?? clipKeyframes, clip, [firstClip, secondClip]);
+    const originalLinked = clips.find(candidate => candidate.id === clip.linkedClipId);
+    if (originalLinked && linkedFirstClip && linkedSecondClip) nextClipKeyframes = copyParameterKeyframesToParts(nextClipKeyframes, originalLinked, [linkedFirstClip, linkedSecondClip]);
     setClipsAndCleanupTransitionComps(set, clips, {
       clips: remappedClips,
       ...(nextClipKeyframes ? { clipKeyframes: nextClipKeyframes } : {}),

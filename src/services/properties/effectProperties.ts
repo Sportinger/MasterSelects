@@ -36,6 +36,10 @@ function createEffectDescriptor(
     animatable: isEffectParamAnimatable(param),
     defaultValue: param.default,
     catalogOnly: effect === undefined,
+    ...(effectDefinition.id === 'hue-shift' && paramName === 'shift'
+      ? { controlSource: { domain: 'clip-scalar' as const, unit: 'turns' } }
+      : effectDefinition.id === 'gaussian-blur' && paramName === 'radius'
+        ? { controlSource: { domain: 'clip-scalar' as const, unit: 'pixels', hardMin: 0 } } : {}),
     ui: {
       min: param.min,
       max: param.max,

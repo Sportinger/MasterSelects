@@ -158,6 +158,7 @@ function buildTransitionSourceMap(input: {
       defaultSpeed: base.speed ?? (base.reversed ? -1 : 1),
       animation: {
         baseTransform: clone(base.transform),
+        parameterTimelineStart: base.startTime,
         keyframes: rebaseKeyframes(base.keyframes ?? [], targetClipId),
         sourceEffectIds: (base.effects ?? []).map((effect) => effect.id),
         sourceMaskIds: (base.masks ?? []).map((mask) => mask.id),

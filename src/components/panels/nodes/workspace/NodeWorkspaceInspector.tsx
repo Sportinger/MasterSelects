@@ -1,4 +1,5 @@
 import { EffectOrderControls } from './EffectOrderControls';
+import { ControlNodeInspector } from './ControlNodeInspector';
 import { KeyframeNodeInspector } from '../keyframes/KeyframeNodeInspector';
 import { NodeAnimationInspector } from '../keyframes/NodeAnimationInspector';
 import { StabilizationNodeInspector } from './StabilizationNodeInspector';
@@ -314,6 +315,11 @@ export function NodeInspector({
   if (clip && node.binding?.kind === 'keyframe-node') {
     return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
       <KeyframeNodeInspector key={node.id} clip={clip} nodeId={node.binding.nodeId} />
+    </NodeInspectorShell>;
+  }
+  if (clip && node.binding?.kind === 'parameter-source') {
+    return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
+      <ControlNodeInspector key={node.id} clip={clip} nodeId={node.binding.nodeId} />
     </NodeInspectorShell>;
   }
   if (clip && node.binding?.kind === 'scene-operator') {

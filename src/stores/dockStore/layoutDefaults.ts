@@ -11,7 +11,6 @@ import {
 } from './panelRegistry';
 import { MEDIUM_SAVED_DOCK_LAYOUT } from './mediumLayoutDefaults';
 import { LIVE_SAVED_DOCK_LAYOUT } from './liveLayoutDefaults';
-
 export const FACTORY_3D_EDIT_PREVIEW_DEFAULTS: Record<string, Pick<PreviewPanelData, 'initialEditMode' | 'initialEditCameraView'>> = {
   '3d-preview-front': { initialEditMode: true, initialEditCameraView: 'front' },
   '3d-preview-side': { initialEditMode: true, initialEditCameraView: 'side' },
@@ -39,7 +38,7 @@ export const DEFAULT_LAYOUT: DockLayout = {
             panels: [
               { id: 'media', type: 'media', title: 'Media' },
               { id: 'ai-studio', type: 'ai-studio', title: 'AI Studio' },
-              { id: 'transitions', type: 'transitions', title: 'Transitions' },
+              { id: 'node-workspace', type: 'node-workspace', title: 'Nodes' },
             ],
             activeIndex: 0,
           },
@@ -103,7 +102,7 @@ export const RESOLVE_VIDEO_EDIT_LAYOUT: DockLayout = {
         panels: [
           { id: 'media', type: 'media', title: 'Media' },
           { id: 'ai-studio', type: 'ai-studio', title: 'AI Studio' },
-          { id: 'transitions', type: 'transitions', title: 'Transitions' },
+          { id: 'node-workspace', type: 'node-workspace', title: 'Nodes' },
         ],
         activeIndex: 0,
       },
@@ -188,7 +187,7 @@ export const MOBILE_LAYOUT: DockLayout = {
                 panels: [
                   { id: 'media', type: 'media', title: 'Media' },
                   { id: 'ai-studio', type: 'ai-studio', title: 'AI Studio' },
-                  { id: 'transitions', type: 'transitions', title: 'Transitions' },
+                  { id: 'node-workspace', type: 'node-workspace', title: 'Nodes' },
                 ],
                 activeIndex: 0,
               },
@@ -250,7 +249,7 @@ export const VERTICAL_MOBILE_LAYOUT: DockLayout = {
             panels: [
               { id: 'media', type: 'media', title: 'Media' },
               { id: 'ai-studio', type: 'ai-studio', title: 'AI Studio' },
-              { id: 'transitions', type: 'transitions', title: 'Transitions' },
+              { id: 'node-workspace', type: 'node-workspace', title: 'Nodes' },
               { id: 'clip-properties', type: 'clip-properties', title: 'Properties' },
               { id: 'export', type: 'export', title: 'Export' },
               { id: 'color-controls', type: 'color-controls', title: 'Coloring' },
@@ -301,7 +300,7 @@ const AUDIO_EDIT_LAYOUT: DockLayout = {
             panels: [
               { id: 'media', type: 'media', title: 'Media' },
               { id: 'discover', type: 'discover', title: 'Discover' },
-              { id: 'transitions', type: 'transitions', title: 'Transitions' },
+              { id: 'node-workspace', type: 'node-workspace', title: 'Nodes' },
             ],
             activeIndex: 0,
           },
@@ -425,7 +424,7 @@ const THREE_D_EDIT_LAYOUT: DockLayout = {
             panels: [
               { id: 'media', type: 'media', title: 'Media' },
               { id: 'discover', type: 'discover', title: 'Discover' },
-              { id: 'transitions', type: 'transitions', title: 'Transitions' },
+              { id: 'node-workspace', type: 'node-workspace', title: 'Nodes' },
             ],
             activeIndex: 0,
           },
@@ -689,7 +688,6 @@ export const FACTORY_SAVED_DOCK_LAYOUTS: SavedDockLayout[] = [
     factory: true,
   },
 ];
-
 export const DEFAULT_DRAG_STATE: DockDragState = {
   isDragging: false,
   draggedPanel: null,

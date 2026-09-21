@@ -6,6 +6,12 @@ MasterSelects has a modular GPU effect system built around registered effect mod
 
 ## At A Glance
 
+Color numeric channels, Hue Shift's Shift and Gaussian Blur's Radius share
+[parameter sources](./Node-Workspace.md#procedural-parameter-sources): local
+values/keyframes or connected Constant, Time, LFO, Math and Remap nodes. The
+normal compact effect inspector retains its design and shows the effective value
+and source. Other effects and structural settings are not implicitly enabled.
+
 - 37 blend modes are implemented in `src/shaders/composite.wgsl`.
 - 98 GPU effects are registered in `src/effects/`, including fullscreen
   fragment effects, compute effects, glyph effects, tracking effects, and
