@@ -63,6 +63,31 @@ These are also available from the inspector's **Add node** selector in other
 supported image-effect graphs. The parameter and constant folders are organization
 for the original effect, not separate processing blocks.
 
+The **Sampling** section provides **Texel Offset**, **Gaussian Weight**, and
+**Normalize Weighted RGBA**. These expand into existing vector, scalar and
+conversion operators. Exact matching formulas in Gaussian Blur, Box Blur and
+Sharpen become shared instances; edited formulas and user group boundaries are
+preserved. Gaussian Blur's original graph is organized into Radius & Sample Count,
+Kernel Sampling, Gaussian Weight, and Weighted Blur & Bypass, with frame input and
+output outside. The radius threshold and existing sampling/alpha arithmetic are
+unchanged. This is an organization/reuse upgrade, not a separable-blur optimization.
+
+The same organization now covers Box Blur/Sharpen, Motion/Radial/Zoom Blur,
+Glow/Edge Detect, Wave/Twirl/Bulge, Pixelate/Mirror/RGB Split/Blockify/Block Mosaic,
+Brightness/Contrast/Saturation/Exposure/Levels/Temperature/Vibrance/Threshold/
+Posterize/Invert, and all 19 ASCII/Glyph variants (including ASCII Ghost).
+Untouched default graphs receive named parameter, resource and processing stages
+once. Custom wiring, existing user folders and explicitly removed folders are
+not replaced. Interleaved branches stay separate where a folder would make the
+visible signal path cyclic.
+
+**Reusable Nodes** also offers bounded sample count, scale from center, luminance
+saturation, contrast, bright-pass and Sobel blocks. **Glyph** contains cell-grid,
+tone-to-index and atlas-alpha blocks; **Feedback** contains the stateless decay/max
+blend used by ASCII Ghost. Font-atlas and history sources stay outside these
+blocks, so the resource owner and processing inputs remain visible. All blocks
+expand into existing operators; their insertion does not add a render pass.
+
 Each inserted node has typed boundary inputs and outputs and an expandable
 interior. Shared literal constants stay inside; effect-owned values become input
 sockets, so an instance never silently binds to another effect's parameters.
