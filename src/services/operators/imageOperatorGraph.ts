@@ -7,6 +7,7 @@ import { compileImageOperatorPassPlan } from './imageOperatorPlan';
 import { emitImageReducerWgsl } from './imageOperatorReducerWgsl';
 import { migrateImageOperatorGraph } from './imageOperatorMigration';
 import { resolveImageOperatorChoice, type ImageOperatorCompileContext } from './imageOperatorChoice';
+import { imageDegreesToRadians } from './imageAngleSemantics';
 import { imageF32 as f32, imageParameterExpression as parameterExpression, IMAGE_COLOR_WGSL, IMAGE_COORDINATE_ROTATION_WGSL, IMAGE_GAUSSIAN_WGSL, IMAGE_HASH2D_WGSL, IMAGE_PARAMETER_WGSL, IMAGE_RADIAL_PROJECTION_WGSL } from './imageOperatorWgsl';
 export { createDefaultInvertImageGraph, migrateImageOperatorGraph } from './imageOperatorMigration';
 export { evaluateImageOperatorPlan } from './imageOperatorEvaluation';
@@ -20,7 +21,7 @@ export interface ImageOperatorEvaluationContext {
 }
 export interface ImagePlanInstruction {
   nodeId: string;
-  operation: 'input' | 'uv' | 'resolution' | 'time' | 'sample-image' | 'resource-input' | 'kernel-index' | 'kernel-sum' | 'kernel-weight-sum' | 'rect-sum' | 'rect-weight-sum' | 'sequence-index' | 'sequence-t' | 'sequence-sum' | 'sequence-weight-sum' | 'mirror-repeat-vec2' | 'select-image' | 'constant' | 'parameter' | 'parameter-boolean' | 'parameter-color' | 'constant-color' | 'subtract' | 'add-scalar' | 'multiply-scalar' | 'divide-ieee-scalar' | 'min-scalar' | 'power-scalar' | 'atan2-scalar' | 'rotate-vec2' | 'project-radius' | 'unproject-radius' | 'reciprocal-scalar' | 'exp2-scalar' | 'exp-scalar' | 'gaussian-scalar' | 'sqrt-scalar' | 'fract-scalar' | 'floor-scalar' | 'step-scalar' | 'max-scalar' | 'clamp-scalar' | 'smoothstep-scalar' | 'mix-scalar' | 'greater-scalar' | 'and-boolean' | 'select-scalar' | 'select-vec2' | 'add-vec2' | 'subtract-vec2' | 'multiply-vec2' | 'divide-vec2' | 'floor-vec2' | 'fract-vec2' | 'clamp-vec2' | 'reduce-min-vec2' | 'hash2d-vec2' | 'dot-vec2' | 'length-vec2' | 'unit-direction' | 'sin-scalar' | 'cos-scalar' | 'scalar-to-vec2' | 'scalar-to-vec4' | 'multiply-vec4' | 'multiply-vector-scalar' | 'divide-vector-scalar' | 'clamp-rgb-scalar' | 'divide-vec4' | 'subtract-rgb' | 'add-rgb' | 'multiply-rgb' | 'divide-ieee-rgb' | 'max-rgb' | 'power-rgb' | 'floor-rgb' | 'clamp-rgb' | 'mix-rgb' | 'mix-components-rgb' | 'reduce-min-rgb' | 'reduce-max-rgb' | 'luminance-rec601' | 'luminance-rec709' | 'scalar-to-rgb' | 'vec4-to-rgb' | 'rgb-to-vec3' | 'vec3-to-rgb' | 'rgb-to-hsv' | 'hsv-to-rgb' | 'split-rgb' | 'split-alpha' | 'combine' | 'image-to-vec4' | 'vec4-to-image' | 'split-component' | 'combine-vector';
+  operation: 'input' | 'uv' | 'resolution' | 'time' | 'sample-image' | 'resource-input' | 'kernel-index' | 'kernel-sum' | 'kernel-weight-sum' | 'rect-sum' | 'rect-weight-sum' | 'sequence-index' | 'sequence-t' | 'sequence-sum' | 'sequence-weight-sum' | 'mirror-repeat-vec2' | 'select-image' | 'constant' | 'parameter' | 'parameter-boolean' | 'parameter-color' | 'constant-color' | 'subtract' | 'add-scalar' | 'multiply-scalar' | 'divide-ieee-scalar' | 'min-scalar' | 'power-scalar' | 'atan2-scalar' | 'rotate-vec2' | 'project-radius' | 'unproject-radius' | 'reciprocal-scalar' | 'exp2-scalar' | 'exp-scalar' | 'gaussian-scalar' | 'sqrt-scalar' | 'fract-scalar' | 'floor-scalar' | 'step-scalar' | 'max-scalar' | 'clamp-scalar' | 'smoothstep-scalar' | 'mix-scalar' | 'tan-scalar' | 'atan-scalar' | 'abs-scalar' | 'degrees-to-radians' | 'greater-scalar' | 'and-boolean' | 'select-scalar' | 'select-vec2' | 'add-vec2' | 'subtract-vec2' | 'multiply-vec2' | 'divide-vec2' | 'floor-vec2' | 'fract-vec2' | 'clamp-vec2' | 'reduce-min-vec2' | 'hash2d-vec2' | 'dot-vec2' | 'length-vec2' | 'unit-direction' | 'sin-scalar' | 'cos-scalar' | 'scalar-to-vec2' | 'scalar-to-vec4' | 'multiply-vec4' | 'multiply-vector-scalar' | 'divide-vector-scalar' | 'clamp-rgb-scalar' | 'divide-vec4' | 'subtract-rgb' | 'add-rgb' | 'multiply-rgb' | 'divide-ieee-rgb' | 'max-rgb' | 'power-rgb' | 'floor-rgb' | 'clamp-rgb' | 'mix-rgb' | 'mix-components-rgb' | 'reduce-min-rgb' | 'reduce-max-rgb' | 'luminance-rec601' | 'luminance-rec709' | 'scalar-to-rgb' | 'vec4-to-rgb' | 'rgb-to-vec3' | 'vec3-to-rgb' | 'rgb-to-hsv' | 'hsv-to-rgb' | 'split-rgb' | 'split-alpha' | 'combine' | 'image-to-vec4' | 'vec4-to-image' | 'split-component' | 'combine-vector';
   type: ImagePlanValue;
   inputs: number[];
   value?: number;
@@ -311,6 +312,35 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         register = current.bypassed ? a : emit({ nodeId: current.id, operation, type: 'scalar', inputs: [a, visitSource(current, 'b')] }); break;
       }
       case 'math.atan2.scalar': register = emit({ nodeId: current.id, operation: 'atan2-scalar', type: 'scalar', inputs: [visitSource(current, 'y'), visitSource(current, 'x')] }); break;
+      case 'math.tan.scalar': case 'math.atan.scalar': case 'math.abs.scalar': {
+        const value = visitSource(current, 'value');
+        const operation = current.operator === 'math.tan.scalar' ? 'tan-scalar' : current.operator === 'math.atan.scalar' ? 'atan-scalar' : 'abs-scalar';
+        register = current.bypassed ? value : emit({ nodeId: current.id, operation, type: 'scalar', inputs: [value] }); break;
+      }
+      case 'convert.degrees-to-radians.scalar': {
+        const linked = source(current, 'value');
+        if (current.bypassed) { register = visit(linked.node, linked.output); break; }
+        if (linked.node.operator !== 'values.number') {
+          register = emit({ nodeId: current.id, operation: 'degrees-to-radians', type: 'scalar', inputs: [visit(linked.node, linked.output)] }); break;
+        }
+        const binding = linked.node.bindings.value;
+        const raw = typeof binding === 'string' ? params[binding] : undefined;
+        const literal = linked.node.constants?.value;
+        const degrees = typeof raw === 'number' ? raw : typeof literal === 'number' ? literal : 1;
+        const radians = imageDegreesToRadians(degrees);
+        if (!Number.isFinite(radians)) throw new Error(`Image angle ${current.id} must convert to a finite value.`);
+        if (typeof binding !== 'string') {
+          register = emit({ nodeId: current.id, operation: 'constant', type: 'scalar', inputs: [], value: radians }); break;
+        }
+        const slotKey = `degrees-radians:${binding}`;
+        let slot = parameterSlots.get(slotKey);
+        if (slot === undefined) {
+          slot = parameterValues.length;
+          if (slot >= IMAGE_OPERATOR_PARAMETER_CAPACITY) throw new Error(`Image operator program exceeds ${IMAGE_OPERATOR_PARAMETER_CAPACITY} parameter slots.`);
+          parameterSlots.set(slotKey, slot); parameterValues.push(radians);
+        }
+        register = emit({ nodeId: current.id, operation: 'parameter', type: 'scalar', inputs: [], value: slot }); break;
+      }
       case 'coordinates.rotate.vec2': {
         const value = visitSource(current, 'value');
         register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'rotate-vec2', type: 'vec2', inputs: [value, visitSource(current, 'angle')] });
@@ -524,6 +554,8 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       : item.operation === 'floor-scalar' ? `floor(${args[0]})` : item.operation === 'step-scalar' ? `step(${args[0]}, ${args[1]})`
       : item.operation === 'gaussian-scalar' ? `imageGraphGaussian(${args[0]}, ${args[1]})` : item.operation === 'sqrt-scalar' ? `sqrt(${args[0]})` : item.operation === 'max-scalar' ? `max(${args[0]}, ${args[1]})`
       : item.operation === 'min-scalar' ? `min(${args[0]}, ${args[1]})` : item.operation === 'power-scalar' ? `pow(${args[0]}, ${args[1]})` : item.operation === 'atan2-scalar' ? `atan2(${args[0]}, ${args[1]})`
+      : item.operation === 'tan-scalar' ? `tan(${args[0]})` : item.operation === 'atan-scalar' ? `atan(${args[0]})` : item.operation === 'abs-scalar' ? `abs(${args[0]})`
+      : item.operation === 'degrees-to-radians' ? `${args[0]} * ${f32(Math.PI)} / 180.0`
       : item.operation === 'rotate-vec2' ? `imageRotate2d(${args[0]}, ${args[1]})`
       : item.operation === 'project-radius' ? `imageGraphProjectRadius(${args[0]}, ${args[1]}, ${args[2]})`
       : item.operation === 'unproject-radius' ? `imageGraphUnprojectRadius(${args[0]}, ${args[1]}, ${args[2]})`

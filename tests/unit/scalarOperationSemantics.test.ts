@@ -25,4 +25,11 @@ describe('shared scalar operation semantics', () => {
     expect(evaluateScalarOperation('clamp', 12, 10, 2)).toBe(10);
     expect(Number.isNaN(evaluateScalarOperation('add', Number.NaN, 1))).toBe(true);
   });
+
+  it('shares absolute-value semantics while preserving scalar-field output limits', () => {
+    expect(evaluateScalarOperation('abs', -7)).toBe(7);
+    expect(evaluateScalarField({ operations: [[0, 0, 0, -7], [9, 0, 0, 0]], output: 1 }, 0)[1]).toBe(7);
+    expect(flockMath('abs', -7, 123)).toBe(7);
+    expect(evaluateScalarField({ operations: [[0, 0, 0, -20_000], [9, 0, 0, 0]], output: 1 }, 0)[1]).toBe(10_000);
+  });
 });

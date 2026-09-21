@@ -183,7 +183,7 @@ export function evaluateFlockValues(
           case 'min': result = Math.min(a, b); break;
           case 'max': result = Math.max(a, b); break;
           case 'power': result = Math.sign(a) * Math.pow(Math.abs(a), b); break;
-          case 'abs': result = Math.abs(a); break;
+          case 'abs': result = evaluateScalarOperation('abs', a); break;
           case 'sin': result = Math.sin(a) * b; break;
           default: result = evaluateScalarOperation('multiply', a, b);
         }

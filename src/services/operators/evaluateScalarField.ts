@@ -17,7 +17,7 @@ export function evaluateScalarField(program: ScalarFieldProgram, luminance: numb
       case 6: value = b === 0 ? 1 : a <= 0 ? b < 0 ? 10000 : 0 : Math.pow(a, b); break;
       case 7: value = Math.min(a, b); break;
       case 8: value = Math.max(a, b); break;
-      case 9: value = Math.abs(a); break;
+      case 9: value = evaluateScalarOperation('abs', a); break;
       case 10: value = Math.sin(a); break;
       case 11: value = evaluateScalarOperation('clamp', a, b, c); break;
     }

@@ -3,6 +3,7 @@ import { imageGraphProgramShader } from '../../src/effects/_shared/imageGraphDef
 import { fisheye } from '../../src/effects/distort/fisheye';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
 import { compileImageOperatorPreview } from '../../src/services/operators/imageOperatorGraph';
+import { packImageOperatorRuntimeUniforms } from '../../src/services/operators/imageOperatorRuntimeUniforms';
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../src/types/operatorGraph';
 import originalFisheyeShader from './fixtures/fisheye-original.wgsl?raw';
 
@@ -92,6 +93,26 @@ fn referenceUnproject(radius: f32, maximum: f32, model: f32) -> f32 {
 @fragment fn unprojectReference(input: VertexOutput) -> @location(0) vec4f { let v = referenceUnproject(.65, 1.2, MODEL); return vec4f(v, v, v, 1.0) + textureSample(primitiveTexture, primitiveSampler, input.uv) * 0.0; }
 `;
 
+function unaryGraph(operator: string, source: 'uv' | 'bound' | 'literal'): EffectOperatorGraph {
+  const value = source === 'uv' ? node('value', 'vector.split.vec2') : node('value', 'values.number', 37.5);
+  if (source === 'bound') { value.bindings = { value: 'degrees' }; delete value.constants; }
+  return { version: 1, schemaVersion: 1, domain: 'image', layout: {},
+    nodes: [node('frame', 'image.frame'), node('output', 'image.output'), node('uv', 'image.normalized-uv'),
+      value, node('operation', operator)],
+    edges: [edge('frame', 'image', 'output', 'image'),
+      ...(source === 'uv' ? [edge('uv', 'uv', 'value', 'value')] : []),
+      edge('value', source === 'uv' ? 'x' : 'value', 'operation', 'value')] };
+}
+
+const unaryCases = [
+  { operator: 'math.tan.scalar', source: 'uv', expression: 'tan(input.uv.x)' },
+  { operator: 'math.atan.scalar', source: 'uv', expression: 'atan(input.uv.x)' },
+  { operator: 'math.abs.scalar', source: 'uv', expression: 'abs(input.uv.x)' },
+  { operator: 'convert.degrees-to-radians.scalar', source: 'uv', expression: '(input.uv.x * 3.141592653589793) / 180.0' },
+  { operator: 'convert.degrees-to-radians.scalar', source: 'bound', expression: `${Math.fround(37.5 * Math.PI / 180)}` },
+  { operator: 'convert.degrees-to-radians.scalar', source: 'literal', expression: `${Math.fround(37.5 * Math.PI / 180)}` },
+] as const;
+
 export async function checkImageOpticsGpu(device: GPUDevice): Promise<number> {
   const sampler = device.createSampler({ minFilter: 'linear', magFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
   const input = fixture(), source = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
@@ -113,6 +134,20 @@ export async function checkImageOpticsGpu(device: GPUDevice): Promise<number> {
       const reference = primitiveReference.replaceAll('MODEL', `${model}.0`), entry = `${kind}Reference`;
       const expected = await render(device, sampler, source.createView(), target, readback, reference, entry);
       if (expected.some((value, index) => value !== actual[index])) throw new Error(`${kind} model ${model}: ${mismatch(expected, actual)}`); comparisons++;
+    }
+    for (const item of unaryCases) {
+      const plan = compileImageOperatorPreview(unaryGraph(item.operator, item.source), { degrees: 37.5 },
+        { nodeId: 'operation', direction: 'output', portId: 'value' });
+      const reference = `@group(0) @binding(0) var s: sampler; @group(0) @binding(1) var t: texture_2d<f32>;
+        @fragment fn reference(input: VertexOutput) -> @location(0) vec4f {
+          let v = ${item.expression}; return vec4f(v, v, v, 1.0) + textureSample(t, s, input.uv) * 0.0;
+        }`;
+      const expected = await render(device, sampler, source.createView(), target, readback, reference, 'reference');
+      const actual = await render(device, sampler, source.createView(), target, readback,
+        imageGraphProgramShader(plan, 'unaryFragment'), 'unaryFragment',
+        packImageOperatorRuntimeUniforms(plan, 0, width, height));
+      if (expected.some((value, index) => value !== actual[index])) throw new Error(`${item.operator}/${item.source}: ${mismatch(expected, actual)}`);
+      comparisons++;
     }
     return comparisons;
   } finally { source.destroy(); target.destroy(); readback.destroy(); }

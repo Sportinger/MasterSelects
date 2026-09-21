@@ -245,6 +245,17 @@ bias, zoom, sampling and edge policy are not part of these primitives. This is
 the shared foundation for Fisheye migration, not yet an editable default
 Fisheye graph.
 
+Scalar tangent, arctangent and absolute-value nodes complement these optics
+primitives. Absolute value shares its pure reference operation with Voxel and
+Flock while retaining each backend's existing output limits. An explicit
+Degrees to Radians node keeps angle units visible: directly bound or literal
+degree values are converted before GPU uniform/constant rounding, preserving
+the existing Fisheye packing order. Computed inputs convert at runtime; bypass
+passes the original degree value through. Changing a bound angle updates its
+uniform without rebuilding the shader. Fisheye's parameter schema supplies its
+defaults and numeric limits to a shared normalizer; stored/UI angles remain in
+degrees, including their existing keyframe IDs.
+
 Bound `values.choice` nodes reference a select parameter in `effect.params`.
 Its options, label and default come from the owning effect definition, including
 the node's inline dropdown and parameter inspector. The compiler lowers the

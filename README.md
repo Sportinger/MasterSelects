@@ -122,6 +122,8 @@ Multi-stage image graphs share intermediate texture stages between consumers;
 simple graphs retain their single-pass execution.
 Conditional image branches also retain sample indices inside filter loops,
 without evaluating the unused branch.
+Explicit angle-conversion nodes preserve degree-valued controls while supplying
+radians to optics and rotation nodes.
 
 Node cables have visible semicircular plugs, animated attachment, and docked ghost
 previews over compatible sockets while dragging. Drag either end to reconnect,
