@@ -1178,3 +1178,5 @@ animation and retain its current value. Timeline labels identify the cable.
 The paused frame preview samples these keys at the playhead. **Bake cables**
 evaluates them throughout the simulation for playback and export. Segment count,
 connections, attachment locks, color and rendering style remain static settings.
+
+Bypassing an effect automatically collapses its inspector entry and node group. Re-enabling keeps it collapsed; it can still be expanded manually. Adding effects from the Effects panel also updates the connected node layout.

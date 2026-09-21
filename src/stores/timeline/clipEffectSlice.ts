@@ -17,7 +17,7 @@ import {
   hasAudioEffect,
 } from '../../engine/audio/AudioEffectRegistry';
 import { mergeAudioEffectParamPatch } from '../../utils/audioEffectParamPath';
-import { reconcileClipNodeGraphState } from '../../services/nodeGraph';
+import { createClipNodeGraphState, reconcileClipNodeGraphState } from '../../services/nodeGraph';
 import {
   createNodeGraphOwnerClip,
   resolveLinkedClipNodeGraphContext,
@@ -218,6 +218,15 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
           clip => ({
             ...clip,
             effects: clip.effects.map(e => e.id === effectId ? { ...e, enabled } : e),
+            ...(!enabled && updatedEffect ? {
+              nodeGraph: {
+                ...(clip.nodeGraph ?? createClipNodeGraphState(clip)),
+                groups: {
+                  ...clip.nodeGraph?.groups,
+                  [`effect:${effectId}`]: { ...clip.nodeGraph?.groups?.[`effect:${effectId}`], collapsed: true },
+                },
+              },
+            } : {}),
           }),
           legacyAudioEffectRequiresProcessedAnalysis(updatedEffect, keyframes) ||
             legacyAudioEffectRequiresProcessedAnalysis(nextEffect, keyframes),

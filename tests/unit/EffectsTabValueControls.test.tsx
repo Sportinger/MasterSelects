@@ -7,6 +7,16 @@ import type { Effect } from '../../src/types/effects';
 afterEach(cleanup);
 
 describe('EffectsTab numeric controls', () => {
+  it('collapses on bypass and stays collapsed when enabled again', () => {
+    const effect: Effect = { id: 'bypass-test', type: 'brightness', name: 'Brightness', enabled: true, params: { amount: 0.25 } };
+    const view = render(<EffectsTab clipId="clip:effects-controls" effects={[effect]} />);
+    expect(screen.getByLabelText('Amount')).toBeVisible();
+    view.rerender(<EffectsTab clipId="clip:effects-controls" effects={[{ ...effect, enabled: false }]} />);
+    expect(screen.queryByLabelText('Amount')).toBeNull();
+    view.rerender(<EffectsTab clipId="clip:effects-controls" effects={[effect]} />);
+    expect(screen.getByTitle('Expand Brightness')).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('uses the shared Transform-style labeled draggable value without a separate slider', () => {
     const brightness: Effect = {
       id: 'effect:brightness:test',

@@ -1,5 +1,5 @@
 // Effects Tab - Add and configure visual/audio effects
-import { Suspense, useState, useMemo, useCallback } from 'react';
+import { Suspense, useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useEngineStore } from '../../../stores/engineStore';
 import { startBatch, endBatch } from '../../../stores/historyStore';
@@ -325,6 +325,13 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropIdx, setDropIdx] = useState<number | null>(null);
   const [collapsedEffectIds, setCollapsedEffectIds] = useState<Set<string>>(() => new Set());
+
+  const previousEnabled = useRef(new Map<string, boolean>());
+  useEffect(() => {
+    const bypassed = effects.filter(effect => effect.enabled === false && previousEnabled.current.get(effect.id) !== false);
+    previousEnabled.current = new Map(effects.map(effect => [effect.id, effect.enabled !== false]));
+    if (bypassed.length) setCollapsedEffectIds(current => new Set([...current, ...bypassed.map(effect => effect.id)]));
+  }, [effects]);
 
   const toggleEffectCollapsed = useCallback((effectId: string) => {
     setCollapsedEffectIds((current) => {

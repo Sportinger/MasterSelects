@@ -163,7 +163,7 @@ export function NodeGraphCanvas({
   const [groupMessage, setGroupMessage] = useState('');
   const multiSelection = useMemo(() => new Set(selectedNodeIds ?? []), [selectedNodeIds]);
 
-  const { nodes: spacedNodes, placement, commit: commitPlacement, toggleLock, arrange } = useNodeCanvasPlacement(targetGraph, layoutScaleX);
+  const { nodes: spacedNodes, placement, commit: commitPlacement, toggleLock, arrange, reset: resetPlacement } = useNodeCanvasPlacement(targetGraph, layoutScaleX);
   const targetNodes = useMemo(() => (
     spacedNodes.map((node) => !draftLayouts[node.id] ? node : ({
       ...node,
@@ -240,8 +240,9 @@ export function NodeGraphCanvas({
 
   const resetView = useCallback(() => {
     cancelFoldFit();
+    resetPlacement();
     setViewport(DEFAULT_VIEWPORT);
-  }, [setViewport, cancelFoldFit]);
+  }, [setViewport, cancelFoldFit, resetPlacement]);
 
   const getGraphPointFromClient = useCallback((clientX: number, clientY: number): NodeGraphPoint => {
     const rect = canvasRef.current?.getBoundingClientRect();

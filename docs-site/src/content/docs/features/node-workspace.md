@@ -690,3 +690,5 @@ compiler. Reusable force/value connections execute in the cable graph, Flock kee
 its typed compiler, Color keeps its grade compiler, and image surfaces use the scene executor. Camera/light dependencies remain
 field-backed. New agent tools should use these validated mutations rather than UI
 coordinates or a separate copy of the graph.
+
+Adding an effect, including through the Effects panel, reflows its connected outer chain to make room. Bypassing an effect collapses its group and its Effects inspector entry; enabling it again preserves the collapsed state. **Reset** restores the viewport and arranges node positions again, clearing manual canvas anchors and group offsets.

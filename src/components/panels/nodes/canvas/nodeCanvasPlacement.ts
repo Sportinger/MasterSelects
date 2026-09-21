@@ -20,6 +20,12 @@ export function groupPlacementMembers(placement: NodeCanvasPlacement, id: string
 /** Existing positions are fixed obstacles. Only newly appearing nodes are packed. */
 export function reconcileCanvasPlacement(graph: NodeGraph, previous?: NodeCanvasPlacement): NodeCanvasPlacement {
   const placement: NodeCanvasPlacement = { ...previous, nodes: { ...previous?.nodes }, groups: { ...previous?.groups }, pinned: { ...previous?.pinned }, displaced: { ...previous?.displaced } };
+  const addedEffects = new Set<string>();
+  if (previous) {
+    for (const group of graph.groups ?? []) if (group.effectId && !previous.groups[group.id]) addedEffects.add(group.proxyId);
+    for (const node of graph.nodes) if (node.binding?.kind === 'clip-effect' && !previous.nodes[node.id]
+      && !Object.values(previous.groups).some(group => group.proxyId === node.id)) addedEffects.add(node.id);
+  }
   const expanding = new Set<string>();
   let folded = false;
   for (const [id, displacement] of Object.entries(placement.displaced!)) {
@@ -69,7 +75,7 @@ export function reconcileCanvasPlacement(graph: NodeGraph, previous?: NodeCanvas
     && [...groupPlacementMembers(placement, group.id)].some(id => fixed.has(id))) fixed.add(group.proxyId);
   const displaced = new Map<string, NodeGraphLayout>();
   const flow = graph.groups?.some(group => group.layoutMode === 'flow');
-  const outer = { reflow: !!flow && (folded || previous?.flowLayoutVersion !== 1), groupMoves: new Map<string, NodeGraphLayout>() };
+  const outer = { reflow: addedEffects.size > 0 || (!!flow && (folded || previous?.flowLayoutVersion !== 1)), addedEffects, groupMoves: new Map<string, NodeGraphLayout>() };
   const visible = new Set(graph.nodes.map(node => node.id));
   for (const node of spacePreviewGroups({ ...graph, nodes }, fixed, expanding, displaced, outer)) placement.nodes[node.id] = node.layout;
   // Keep hidden interiors and future regenerated layouts in the translated frame.
@@ -117,4 +123,16 @@ export function arrangeFlowPlacement(graph: NodeGraph, placement: NodeCanvasPlac
   for (const id of members) { delete next.nodes[id]; delete next.pinned![id]; delete next.displaced![id]; }
   for (const [id, group] of Object.entries(next.groups)) if (members.has(group.proxyId)) next.groups[id] = { ...group, offset: { x: 0, y: 0 } };
   return reconcileCanvasPlacement(graph, next);
+}
+
+/** Reset manual anchors and arrange every visible group with the existing flow layout. */
+export function resetCanvasPlacement(graph: NodeGraph): NodeCanvasPlacement {
+  const arranged = { ...graph,
+    nodes: graph.nodes.map(node => node.binding?.kind === 'clip-source' ? { ...node, layout: { x: 0, y: 0 } } : node),
+    groups: graph.groups?.map(group => ({ ...group, layoutMode: 'flow' as const })),
+  };
+  const nodes = spacePreviewGroups(arranged, new Set(), new Set(), undefined, {
+    reflow: true, addedEffects: new Set(graph.nodes.map(node => node.id)), groupMoves: new Map(),
+  });
+  return reconcileCanvasPlacement({ ...graph, nodes });
 }

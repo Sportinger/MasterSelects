@@ -1,5 +1,11 @@
+import { act, renderHook, cleanup } from '@testing-library/react';
+import { useNodeCanvasPlacement } from '../../src/components/panels/nodes/canvas/useNodeCanvasPlacement';
+import { createMockClip } from '../helpers/mockData';
+import { useTimelineStore } from '../../src/stores/timeline';
+import { buildClipNodeGraphDocument } from '../../src/services/nodeGraph';
+import { buildUnifiedClipGraph } from '../../src/services/nodeGraph/unifiedClipGraph';
 import { describe, expect, it } from 'vitest';
-import { reconcileCanvasPlacement, moveCanvasPlacement } from '../../src/components/panels/nodes/canvas/nodeCanvasPlacement';
+import { reconcileCanvasPlacement, moveCanvasPlacement, resetCanvasPlacement } from '../../src/components/panels/nodes/canvas/nodeCanvasPlacement';
 import { groupHeaderMetrics } from '../../src/components/panels/nodes/canvas/groupHeaderMetrics';
 import { nodeGroupBounds } from '../../src/components/panels/nodes/canvas/groupBounds';
 import { cloneClipNodeGraph } from '../../src/services/nodeGraph/clipGraphProjectionState';
@@ -16,6 +22,34 @@ const graph: NodeGraph = { ...connectionFixture, edges: [],
 };
 
 describe('manual canvas placement', () => {
+  it('reset replaces persisted manual placement and stays stable on subsequent renders', () => {
+    const clip = createMockClip({ id: graph.owner.id, effects: [] });
+    const previous = useTimelineStore.getState().clips;
+    try {
+      useTimelineStore.setState({ clips: [clip] });
+      const hook = renderHook(() => useNodeCanvasPlacement(graph, 1));
+      act(() => hook.result.current.commit([{ nodeId: 'a', layout: { x: 9000, y: 5000 } }], 'outer'));
+      expect(hook.result.current.placement.nodes.a.x).toBe(9000);
+      act(() => hook.result.current.reset());
+      expect(hook.result.current.placement.pinned).toEqual({});
+      expect(hook.result.current.placement.nodes.a.x).toBeLessThan(9000);
+      const reset = hook.result.current.placement.nodes;
+      hook.rerender();
+      expect(hook.result.current.placement.nodes).toEqual(reset);
+      expect(useTimelineStore.getState().clips[0].nodeGraph?.canvasPlacements?.[graph.id]?.pinned).toEqual({});
+    } finally { cleanup(); useTimelineStore.setState({ clips: previous }); }
+  });
+
+  it('reset clears manual anchors, displaced positions and group offsets', () => {
+    const initial = resetCanvasPlacement(graph);
+    const moved = moveCanvasPlacement(initial, [{ nodeId: 'a', layout: { x: 9000, y: 5000 } }], 'outer');
+    expect(moved.pinned?.a).toBe(true);
+    const reset = resetCanvasPlacement(graph);
+    expect(reset.nodes).toEqual(initial.nodes);
+    expect(reset.pinned).toEqual({});
+    expect(reset.displaced).toEqual({});
+    expect(reset.groups.outer.offset).toEqual({ x: 0, y: 0 });
+  });
   it('pushes unrelated anchored cards and whole sibling groups out of a newly expanded frame', () => {
     const expanded: NodeGraph = { ...graph, nodes: ['a', 'b', 'c', 'd', 'e'].map((id, i) => ({ ...graph.nodes[0], id,
       layout: { x: i === 1 ? 1200 : i * 450, y: i > 1 ? 500 : 100 } })),
@@ -91,5 +125,27 @@ describe('manual canvas placement', () => {
     expect(metrics.height).toBe(groupHeaderMetrics(1).height);
     expect(bounds.get('outer')!.top + metrics.height).toBeLessThan(bounds.get('inner')!.top);
     expect(bounds.get('inner')!.top + metrics.height).toBeLessThan(graph.nodes[1].layout.y);
+  });
+});
+
+
+describe('effect addition layout', () => {
+  it.each(['brightness', 'kaleidoscope'])('reflows the existing output when the effect panel adds %s', type => {
+    const clip = createMockClip({ id: 'layout-add', effects: [] });
+    const project = () => {
+      const current = useTimelineStore.getState().clips.find(item => item.id === clip.id)!;
+      return buildUnifiedClipGraph(buildClipNodeGraphDocument(current), current);
+    };
+    const previousClips = useTimelineStore.getState().clips;
+    try {
+      useTimelineStore.setState({ clips: [clip] });
+      const before = reconcileCanvasPlacement(project());
+      const effectId = useTimelineStore.getState().addClipEffect(clip.id, type);
+      const graph = project();
+      const after = reconcileCanvasPlacement(graph, before);
+      const members = graph.groups?.find(group => group.effectId === effectId)?.nodeIds ?? [`effect-${effectId}`];
+      expect(after.nodes.output.x).toBeGreaterThan(Math.max(...members.map(id => after.nodes[id].x + NODE_WIDTH)));
+      expect(reconcileCanvasPlacement(graph, after).nodes.output).toEqual(after.nodes.output);
+    } finally { useTimelineStore.setState({ clips: previousClips }); }
   });
 });

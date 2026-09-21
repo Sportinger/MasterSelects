@@ -11,8 +11,8 @@ interface GroupBlock extends PreviewLayoutBlock { nodeIds: string[]; group: bool
  * Folding is projected first, so each pass uses the current proxy or contents.
  */
 export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<string> = new Set(), expanding: ReadonlySet<string> = new Set(),
-  displacements?: Map<string, NodeGraphLayout>, outer?: { reflow: boolean; groupMoves: Map<string, NodeGraphLayout> }): NodeGraphNode[] {
-  if (!graph.groups?.length && !fixedIds.size) return spacePreviewNodes(graph.nodes);
+  displacements?: Map<string, NodeGraphLayout>, outer?: { reflow: boolean; addedEffects?: ReadonlySet<string>; groupMoves: Map<string, NodeGraphLayout> }): NodeGraphNode[] {
+  if (!graph.groups?.length && !fixedIds.size && !outer?.reflow) return spacePreviewNodes(graph.nodes);
   const nodes = new Map(graph.nodes.map(node => [node.id, node]));
   const groups = new Map((graph.groups ?? []).map(group => [group.id, group]));
   const children = new Map<string | undefined, NonNullable<NodeGraph['groups']>>();
@@ -35,8 +35,12 @@ export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<strin
         source: !node.inputs.length };
     })];
     const fixed = new Set(blocks.filter(block => block.nodeIds.some(nodeId => fixedIds.has(nodeId))).map(block => block.id));
-    const arrange = flow || (!id && graph.groups?.some(group => group.layoutMode === 'flow'));
-    const outerFlow = !id && arrange ? connectedFlowBlocks(blocks, graph.edges) : new Set<string>();
+    const arrange = flow || (!id && (outer?.addedEffects?.size || graph.groups?.some(group => group.layoutMode === 'flow')));
+    const outerFlow = !id && arrange ? connectedFlowBlocks(blocks.map(block => ({
+      ...block,
+      flow: block.flow || block.nodeIds.some(nodeId => outer?.addedEffects?.has(nodeId))
+        || (block.group && !!outer?.addedEffects?.has(groups.get(block.id.slice('group:'.length))!.proxyId)),
+    })), graph.edges) : new Set<string>();
     if (outer?.reflow) for (const blockId of outerFlow) fixed.delete(blockId);
     const source = !id ? blocks.find(block => block.nodeIds.some(nodeId => nodes.get(nodeId)?.binding?.kind === 'clip-source')) : undefined;
     const flowing = !id ? blocks.filter(block => outerFlow.has(block.id)) : blocks;

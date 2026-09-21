@@ -25,13 +25,12 @@ function setup(collapsed = false, enabled = true) {
 describe('effect group bypass', () => {
   it.each([false, true])('uses the canonical effect flag with collapsed=%s and stale UI state', collapsed => {
     const { clip, graph, project } = setup(collapsed);
-    const beforeNodes = graph.nodes.filter(n => n.binding?.kind === 'effect-operator');
     expect(graph.nodes.some(n => n.id === 'effect-face')).toBe(collapsed);
     const { result } = renderHook(() => useUnifiedNodeActions(clip, graph, null, flock));
     act(() => result.current.toggleBypass('effect-face'));
     expect(useTimelineStore.getState().clips[0].effects[0].enabled).toBe(false);
-    expect(project().groups?.find(g => g.id === 'effect:face')).toMatchObject({ bypassed: true, bypassNodeId: 'effect-face', effectId: 'face' });
-    expect(project().nodes.filter(n => n.binding?.kind === 'effect-operator')).toEqual(beforeNodes);
+    expect(project().groups?.find(g => g.id === 'effect:face')).toMatchObject({ bypassed: true, bypassNodeId: 'effect-face', effectId: 'face', collapsed: true });
+    expect(project().nodes.some(n => n.id === 'effect-face')).toBe(true);
     act(() => result.current.toggleBypass('effect-face'));
     expect(useTimelineStore.getState().clips[0].effects[0]).toEqual(clip.effects[0]);
     expect(project().groups?.find(g => g.id === 'effect:face')?.bypassed).toBe(false);
@@ -54,6 +53,10 @@ describe('effect group bypass', () => {
     const button = view.getByRole('button', { name: 'Bypass Face Cables group' });
     expect(button).toHaveAttribute('aria-pressed', 'false');
     act(() => useTimelineStore.getState().setClipEffectEnabled('clip', 'face', false));
+    expect(project().groups?.find(group => group.id === 'effect:face')?.collapsed).toBe(true);
+    act(() => useTimelineStore.getState().updateClip('clip', { nodeGraph: {
+      ...useTimelineStore.getState().clips[0].nodeGraph!, groups: { 'effect:face': { collapsed: false } },
+    } }));
     const bypassed = project();
     view.rerender(<NodeGraphGroups graph={bypassed} nodes={bypassed.nodes} onToggleNodeBypass={toggle} onStartDrag={drag} />);
     expect(button).toHaveAttribute('aria-pressed', 'true');
