@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-09-21",
+    "type": "improve",
+    "title": "MasterSelects 3.1.5",
+    "description": "Expanded editable effect graphs and refined rendering across previews, nested compositions and export. The node workspace uses fewer DOM elements, draws numeric values in the canvas, preserves cached previews while zooming, and synchronizes effect-group bypass with Properties. Inline numbers also support keyboard editing.",
+    "section": "Release"
+  },
+  {
     "date": "2026-09-19",
     "type": "fix",
     "title": "MasterSelects 3.1.4",
