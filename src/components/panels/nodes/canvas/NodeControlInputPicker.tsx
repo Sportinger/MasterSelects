@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { NodeGraphNode } from '../../../../types/nodeGraph';
 import { exposeParameterSourceInputs, resetParameterSourceInputs } from '../../../../services/parameterSources/parameterSourceActions';
-import { NODE_WIDTH } from './canvasGeometry';
+import { getNodePortStartY, nodePortRowHeight } from './canvasGeometry';
 
 export function NodeControlInputPicker({ clipId, node }: { clipId?: string; node: NodeGraphNode }) {
   const [open, setOpen] = useState(false);
@@ -31,7 +31,10 @@ export function NodeControlInputPicker({ clipId, node }: { clipId?: string; node
   };
 
   return <div ref={rootRef} className="node-control-input-picker"
-    style={{ left: node.layout.x + NODE_WIDTH + 5, top: node.layout.y + 5 }} onPointerDown={stopPointer}>
+    style={{
+      left: node.layout.x + 7,
+      top: node.layout.y + getNodePortStartY(node) + node.inputs.length * nodePortRowHeight(node) - 4,
+    }} onPointerDown={stopPointer}>
     <button type="button" className="node-control-input-add" aria-label={`Add input to ${node.label}`}
       aria-haspopup="dialog" aria-expanded={open} title={available.length ? 'Add or reset inputs' : 'Reset inputs'}
       onPointerDown={stopPointer} onClick={event => { event.stopPropagation(); setOpen(value => !value); }}>

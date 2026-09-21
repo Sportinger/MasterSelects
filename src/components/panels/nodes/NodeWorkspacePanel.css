@@ -407,7 +407,7 @@
 .node-control-input-menu {
   position: absolute;
   top: 23px;
-  right: 0;
+  left: 0;
   width: 226px;
   overflow: hidden;
   border: 1px solid var(--border-color);

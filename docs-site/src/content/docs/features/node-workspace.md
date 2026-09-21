@@ -43,8 +43,9 @@ keyboard-accessible alternative to cable dragging.
 Color Corrector/Wheels numeric channels, Hue Shift's Shift and Gaussian Blur's
 Radius support **Fixed**, existing **Keyframes**, or a connected **Node**. Their
 compact Properties/Nodes controls have a **Source** selector and **Go to source**.
-Nodes with optional scalar controls show a compact `+`, including when previews
-are enabled. It opens a searchable input picker; **All** exposes every remaining
+Nodes with optional scalar controls show a compact `+` directly below their last
+visible input, including when previews are enabled. It opens a searchable input
+picker; **All** exposes every remaining
 supported input in one undoable edit. Only explicitly added or connected ports
 occupy the card, and connected ports stay visible. **Hide unused port** removes
 an unconnected input again; **Reset** hides every unconnected optional input on
