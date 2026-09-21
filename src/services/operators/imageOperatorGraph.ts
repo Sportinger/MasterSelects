@@ -10,6 +10,7 @@ import { compositionGroupInterface, expandOperatorCompositions } from './operato
 import { resolveImageOperatorChoice, type ImageOperatorCompileContext } from './imageOperatorChoice';
 import { IMAGE_FRAME_HISTORY_RESOURCE_ID, type ImageOperatorResourceSampling } from './imageOperatorResources';
 import { imageDegreesToRadians } from './imageAngleSemantics';
+import { validateImageOperatorValues, type ImageOperatorValueBinding } from './imageOperatorValueBindings';
 import { commonPureImageBranchValues, hasUpstreamImageDerivative } from './imageOperatorScopes';
 import { lowerMarchingSquaresTopology } from './imageOperatorJointLowering';
 import type { ImageOperatorExternalResource } from './imageOperatorExternalResources';
@@ -30,19 +31,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
   if (graph.domain !== 'image') throw new Error('Expected an image operator graph.');
   if (graph.schemaVersion !== 1) throw new Error(`Unsupported image graph schema version: ${String(graph.schemaVersion)}.`);
   if (graph.nodes.some(item => item.operatorVersion !== 1)) throw new Error('Unsupported image operator version.');
-  for (const item of graph.nodes.filter(item => item.operator === 'values.number' || item.operator === 'values.integer')) {
-    const binding = item.bindings.value;
-    const resolved = typeof binding === 'string' ? params[binding] : item.constants?.value;
-    if (resolved !== undefined && (typeof resolved !== 'number' || !Number.isFinite(resolved))) {
-      throw new Error(`Image scalar ${item.id} must be finite.`);
-    }
-  }
-  for (const item of graph.nodes.filter(item => item.operator === 'values.boolean')) {
-    const binding = item.bindings.value;
-    const resolved = typeof binding === 'string' ? params[binding] : item.constants?.value;
-    if (resolved !== undefined && typeof resolved !== 'boolean') throw new Error(`Image Boolean ${item.id} must be Boolean.`);
-  }
-  for (const item of graph.nodes.filter(item => item.operator === 'values.choice')) resolveImageOperatorChoice(item.bindings.value, params, context);
+  validateImageOperatorValues(graph, params, context);
   const namedImages = validateImageOperatorResourceContext(graph, context);
   const nodes = new Map(graph.nodes.map(item => [item.id, item]));
   if (nodes.size !== graph.nodes.length) throw new Error('Image graph contains duplicate node ids.');
@@ -71,6 +60,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
   for (const id of nodes.keys()) assertAcyclic(id);
   const instructions: ImagePlanInstruction[] = [], registers = new Map<string, number>(), visiting = new Set<string>();
   const parameterSlots = new Map<string, number>(), parameterValues: number[] = [];
+  const valueBindings: ImageOperatorValueBinding[] = [];
   const resourceInputs: string[] = [], resourceSampling: ImageOperatorResourceSampling[] = [];
   const externalResources: ImageOperatorExternalResource[] = [];
   const fieldResources: ImageOperatorFieldResource[] = [];
@@ -286,6 +276,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
             slot = parameterValues.length;
             if (slot >= IMAGE_OPERATOR_PARAMETER_CAPACITY) throw new Error(`Image operator program exceeds ${IMAGE_OPERATOR_PARAMETER_CAPACITY} parameter slots.`);
             parameterSlots.set(slotKey, slot); parameterValues.push(value);
+            valueBindings.push({ slot, binding, kind: 'number', fallback: typeof literal === 'number' ? literal : 1 });
           }
           register = emit({ nodeId: current.id, operation: 'parameter', type: 'scalar', inputs: [], value: slot });
         } else register = emit({ nodeId: current.id, operation: 'constant', type: 'scalar', inputs: [], value });
@@ -301,6 +292,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
           slot = parameterValues.length;
           if (slot >= IMAGE_OPERATOR_PARAMETER_CAPACITY) throw new Error(`Image operator program exceeds ${IMAGE_OPERATOR_PARAMETER_CAPACITY} parameter slots.`);
           parameterSlots.set(slotKey, slot); parameterValues.push(value);
+          valueBindings.push({ slot, binding: binding as string, kind: 'choice' });
         }
         register = emit({ nodeId: current.id, operation: 'parameter', type: 'scalar', inputs: [], value: slot });
         break;
@@ -319,6 +311,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
           if (slot >= IMAGE_OPERATOR_PARAMETER_CAPACITY) throw new Error(`Image operator program exceeds ${IMAGE_OPERATOR_PARAMETER_CAPACITY} parameter slots.`);
           if (typeof binding === 'string') parameterSlots.set(slotKey, slot);
           parameterValues.push(value ? 1 : 0);
+          valueBindings.push({ slot, binding: binding as string, kind: 'boolean' });
         }
         register = emit({ nodeId: current.id, operation: 'parameter-boolean', type: 'boolean', inputs: [], value: slot }); break;
       }
@@ -336,6 +329,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
           slot = parameterValues.length;
           if (slot + 4 > IMAGE_OPERATOR_PARAMETER_CAPACITY) throw new Error(`Image operator program exceeds ${IMAGE_OPERATOR_PARAMETER_CAPACITY} parameter slots.`);
           parameterSlots.set(slotKey, slot); parameterValues.push(...color);
+          valueBindings.push({ slot, binding, kind: 'color', fallback });
         }
         register = emit({ nodeId: current.id, operation: 'parameter-color', type: 'vec4', inputs: [], value: slot }); break;
       }
@@ -406,6 +400,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
           slot = parameterValues.length;
           if (slot >= IMAGE_OPERATOR_PARAMETER_CAPACITY) throw new Error(`Image operator program exceeds ${IMAGE_OPERATOR_PARAMETER_CAPACITY} parameter slots.`);
           parameterSlots.set(slotKey, slot); parameterValues.push(radians);
+          valueBindings.push({ slot, binding, kind: 'degrees-radians', fallback: typeof literal === 'number' ? literal : 1 });
         }
         register = emit({ nodeId: current.id, operation: 'parameter', type: 'scalar', inputs: [], value: slot }); break;
       }
@@ -605,7 +600,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
   if (instructions.some(item => item.operation.startsWith('derivative-'))) capabilities.push('derivative');
   const emitted = emitImageOperatorWgsl({ instructions, output, capabilities, sampleScopes, kernelScopes, rectScopes, sequenceScopes, segmentSortScopes, quadtreeScopes,
     parameterValues, resourceInputs, resourceSampling });
-  return { fusion: 'inline', capabilities, instructions, output, sampleScopes, kernelScopes, rectScopes, sequenceScopes, segmentSortScopes, quadtreeScopes, values: parameterValues,
+  return { fusion: 'inline', capabilities, instructions, output, sampleScopes, kernelScopes, rectScopes, sequenceScopes, segmentSortScopes, quadtreeScopes, values: parameterValues, valueBindings,
     ...emitted, ...(resourceInputs.length ? { resourceInputs } : {}), ...(resourceSampling.length ? { resourceSampling } : {}),
     ...(externalResources.length ? { externalResources } : {}),
     ...(fieldResources.length ? { fieldResources } : {}),

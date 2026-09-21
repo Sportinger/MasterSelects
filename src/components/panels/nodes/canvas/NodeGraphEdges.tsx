@@ -8,7 +8,7 @@ import { useNodeFlowActivity } from './useNodeFlowActivity';
 import { NodeGraphFlowSignals } from './NodeGraphFlowSignals';
 import './NodeGraphFlow.css';
 import { nodeGroupBounds } from './groupBounds';
-import { edgeGroupOcclusion, subtractOccludedRects } from './edgeGroupOcclusion';
+import { edgeGroupOcclusion, rectangleClipPath, subtractOccludedRects } from './edgeGroupOcclusion';
 
 interface NodeGraphEdgesProps {
   graph?: NodeGraph;
@@ -99,9 +99,9 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
           <Fragment key={edge.id}>
           {covers.length > 0 && <>
             <defs>
-              <clipPath id={clip} clipPathUnits="userSpaceOnUse">{subtractOccludedRects({ x: svgLeft, y: svgTop, width: svgWidth, height: svgHeight }, covers)
-                .map((rect, i) => <rect key={i} {...rect} />)}</clipPath>
-              <clipPath id={dimClip} clipPathUnits="userSpaceOnUse">{covers.map((rect, i) => <rect key={i} {...rect} />)}</clipPath>
+              <clipPath id={clip} clipPathUnits="userSpaceOnUse"><path clipRule="nonzero"
+                d={rectangleClipPath(subtractOccludedRects({ x: svgLeft, y: svgTop, width: svgWidth, height: svgHeight }, covers))} /></clipPath>
+              {!canvasRendered && <clipPath id={dimClip} clipPathUnits="userSpaceOnUse"><path clipRule="nonzero" d={rectangleClipPath(covers)} /></clipPath>}
             </defs>
             {!canvasRendered && <path d={path} className={`node-workspace-edge port-typed node-workspace-edge-${edge.type}`}
               clipPath={`url(#${dimClip})`} style={{ '--port-color': port ? describeNodePort(port).color : undefined, opacity: .3, pointerEvents: 'none' } as CSSProperties} />}

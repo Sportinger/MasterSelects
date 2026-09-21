@@ -12,7 +12,7 @@ export function setAllNodePreviews(
 ): NonNullable<ClipNodeGraph['previews']> {
   const enabled = !current.enabled;
   const nodes = { ...current.nodes };
-  nodeIds.forEach(id => { nodes[id] = { ...nodes[id], enabled }; });
+  new Set([...Object.keys(nodes), ...nodeIds]).forEach(id => { nodes[id] = { ...nodes[id], enabled }; });
   return { enabled, nodes };
 }
 
@@ -33,7 +33,7 @@ export function useNodePreviewPreferences(clipId: string) {
   }, [change]);
   const toggleNode = useCallback((id: string, legacyId?: string) => change(current => {
     const previous = current.nodes[id] ?? (legacyId ? current.nodes[legacyId] : undefined);
-    return { ...current, nodes: { ...current.nodes, [id]: { ...previous, enabled: !(previous?.enabled ?? true) } } };
+    return { ...current, nodes: { ...current.nodes, [id]: { ...previous, enabled: !(previous?.enabled ?? current.enabled) } } };
   }), [change]);
   const selectOutput = useCallback((id: string, portId: string) => change(current => ({ ...current,
     nodes: { ...current.nodes, [id]: { enabled: true, portId } } })), [change]);

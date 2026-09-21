@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createMockClip } from '../helpers/mockData';
 import { buildClipNodeGraphDocument } from '../../src/services/nodeGraph';
 import { buildUnifiedClipGraph } from '../../src/services/nodeGraph/unifiedClipGraph';
@@ -25,6 +25,26 @@ const outputX = (snapshot: NodeLayoutSnapshot) => snapshot.nodes.find(node => no
 const groupWidth = (snapshot: NodeLayoutSnapshot) => { const box = nodeGroupBounds(snapshot.graph, snapshot.nodes).get('effect:k')!; return box.right - box.left; };
 
 describe('progressive node group folding', () => {
+  it('projects only the reached stages, reuses them, and skips remaining work when interrupted or finished', () => {
+    const { before, after, initial, project } = setup();
+    const projectStage = vi.fn(project);
+    const opening = createNodeGroupFoldSequence(before, after, initial, projectStage);
+    expect(projectStage).not.toHaveBeenCalled();
+    opening.sample(0);
+    expect(projectStage).toHaveBeenCalledTimes(1);
+    opening.sample(100 / opening.duration);
+    expect(projectStage).toHaveBeenCalledTimes(1);
+    opening.sample(250 / opening.duration);
+    expect(projectStage).toHaveBeenCalledTimes(3);
+    opening.sample(0);
+    opening.sample(400 / opening.duration);
+    expect(projectStage).toHaveBeenCalledTimes(3); // Last stage already has the final layout.
+    expect(opening.sample(1)).toBe(after);
+    const skipped = createNodeGroupFoldSequence(before, after, initial, projectStage);
+    expect(skipped.sample(1)).toBe(after);
+    expect(projectStage).toHaveBeenCalledTimes(3);
+  });
+
   it('opens actual intermediate hierarchies left to right and grows their frames and the outer chain at each step', () => {
     const { before, after, initial, project, clip } = setup(), saved = JSON.stringify(clip);
     const steps = nodeGroupFoldSteps(before, after, initial, project);

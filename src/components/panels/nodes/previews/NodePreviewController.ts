@@ -25,6 +25,7 @@ export class NodePreviewController {
   private clipId = '';
   private selected: string | null = null;
   private visible = true;
+  private suspended = false;
   private timer?: ReturnType<typeof setTimeout>;
   private disposed = false;
   private revision = 0;
@@ -89,13 +90,25 @@ export class NodePreviewController {
   }
   viewport(view: CanvasView) { this.view = view; this.wake(); }
   visibility(visible: boolean) { this.visible = visible; this.wake(); }
+  /** Keep the last thumbnails while folding; first-time shader work resumes once
+   * cards settle instead of competing with each animation frame. */
+  suspend(suspended: boolean) {
+    if (this.suspended === suspended) return;
+    this.suspended = suspended;
+    if (suspended) {
+      this.scheduler.setRequests([]);
+      nodePreviewTextureTap.cancelClip(this.clipId);
+      nodeScalarSampleTap.cancelClip(this.clipId);
+    }
+    this.wake();
+  }
   reset() { this.textKeys.clear(); this.scheduler.invalidate(); this.wake(); }
   private wake() { if (!this.disposed && this.timer === undefined) this.timer = setTimeout(() => this.tick(), 0); }
   private tick() {
     this.timer = undefined;
     if (this.disposed) return;
     const state = readTimelineRuntimeState(useTimelineStore), view = this.view, requests: PreviewRequest[] = [];
-    if (view && this.visible && !document.hidden && !state.isExporting) {
+    if (view && this.visible && !this.suspended && !document.hidden && !state.isExporting) {
       const fps = this.sink.software ? 3 : view.zoom < 0.45 ? 5 : 12;
       const width = Math.max(48, Math.min(256, Math.round(164 * view.zoom * Math.min(1.5, view.ratio))));
       for (const node of this.nodes) {

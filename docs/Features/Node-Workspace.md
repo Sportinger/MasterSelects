@@ -163,7 +163,14 @@ navigation retains the intentional `focus-visible` outline.
 ## Inline previews
 
 Previews are enabled by default. The small viewer button on each card toggles that
-node; **Previews** in the toolbar switches every node viewer off or on together.
+node; **Previews** in the toolbar switches every node viewer off or on together,
+including hidden nodes. Newly revealed nodes inherit the global setting.
+During fold animations, existing thumbnails remain visible while new preview
+requests pause; they resume at the current timeline time when the layout settles.
+Intermediate fold layouts are computed as their stagger begins. The canvas draws
+moving cards and cables while their DOM interaction targets are omitted until
+the transition ends. Cable hit masks use compact SVG paths, preserving the rule
+that wires behind unrelated groups are dimmed and cannot be selected.
 After switching all viewers off, individual node viewers can be enabled again. Output
 selectors switch the viewed port. Preferences are saved on the owning clip and
 survive project/history round trips. Portrait, landscape and square images retain

@@ -28,5 +28,10 @@ describe('wires passing behind groups', () => {
     const hit = view.container.querySelector('.node-workspace-edge-hit')!;
     expect(hit.parentElement?.getAttribute('clip-path')).toMatch(/^url\(#/);
     expect(view.container.querySelector('path[style*="opacity: 0.3"]')).toHaveStyle({ pointerEvents: 'none' });
+    for (const clip of view.container.querySelectorAll('clipPath')) {
+      expect(clip.children).toHaveLength(1);
+      expect(clip.firstElementChild?.tagName).toBe('path');
+      expect(clip.firstElementChild?.getAttribute('clip-rule')).toBe('nonzero');
+    }
   });
 });

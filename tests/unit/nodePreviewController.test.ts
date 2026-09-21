@@ -58,6 +58,26 @@ it('keeps paused previews cached across continuous zoom and atlas tiers', async 
   controller.dispose();
 });
 
+it('defers newly exposed previews while folding and resumes them at the latest playhead', async () => {
+  vi.useFakeTimers(); vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+  mocked.produce.mockImplementation(request => ({ key: request.key, revision: request.revision, time: request.time,
+    status: 'live', label: 'Image', drawing: { kind: 'plot', values: [0, 1] } }));
+  const publish = vi.fn();
+  const controller = new NodePreviewController({ preview: publish, software: false, previewBusy: false }, document.createElement('div'));
+  controller.suspend(true);
+  controller.scene('clip', [{ ...connectionFixture.nodes[0], preview: { key: 'fold-preview', enabled: true, requested: true } }], null);
+  controller.viewport({ width: 800, height: 600, panX: 0, panY: 0, ratio: 1, zoom: 1 });
+  try {
+    await vi.advanceTimersByTimeAsync(500);
+    expect(mocked.produce).not.toHaveBeenCalled();
+    mocked.state.playheadPosition = 2;
+    controller.suspend(false);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(mocked.produce).toHaveBeenCalledTimes(1);
+    expect(publish.mock.calls[0][0].time).toBe(2);
+  } finally { mocked.state.playheadPosition = 0; controller.dispose(); }
+});
+
 it('sends actual numbers to the canvas only when changed, and restores them after a worker reset', async () => {
   vi.useFakeTimers(); vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
   let value = '2';

@@ -16,11 +16,13 @@ type Props = Omit<SceneOptions, 'clips' | 'keyframes' | 'sourceTime'> & {
   backgroundRef: RefObject<HTMLDivElement | null>;
   onReady: (ready: boolean) => void;
   onViewRendered: (viewport: Viewport) => void;
+  previewsSuspended?: boolean;
 };
 
-export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ viewport, surfaceRef, backgroundRef, onReady, onViewRendered, ...options }: Props) {
+export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ viewport, surfaceRef, backgroundRef, onReady, onViewRendered, previewsSuspended = false, ...options }: Props) {
   const runtime = useRef<ReturnType<typeof createNodeCanvasRuntime> | null>(null);
   const previewRuntime = useRef<NodePreviewController | null>(null);
+  const suspendedRef = useRef(previewsSuspended); suspendedRef.current = previewsSuspended;
   const clips = useTimelineStore(state => state.clips);
   const keyframes = useTimelineStore(state => state.clipKeyframes);
   const sourceTime = useTimelineStore(state => state.getSourceTimeForClip);
@@ -47,6 +49,7 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
       if (rendered) onViewRendered(rendered);
     }); runtime.current = renderer;
     const previews = new NodePreviewController(renderer, host); previewRuntime.current = previews;
+    previews.suspend(suspendedRef.current);
     previews.scene(previewSource.current.clipId, previewSource.current.nodes, previewSource.current.selectedNodeId, previewSource.current.expanded);
     const motion = matchMedia('(prefers-reduced-motion: reduce)');
     let visible = true, fade: ReturnType<typeof setTimeout> | undefined, frame: number | undefined;
@@ -115,6 +118,7 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
     };
   }, [onReady, onViewRendered, surfaceRef]);
   useLayoutEffect(() => { runtime.current?.update({ type: 'scene', scene }); refreshRef.current(); }, [scene]);
+  useLayoutEffect(() => { previewRuntime.current?.suspend(previewsSuspended); }, [previewsSuspended]);
   useLayoutEffect(() => { previewRuntime.current?.scene(graph.owner.id, nodes, selectedNodeId, graph.expandedNodes); }, [graph.owner.id, nodes, selectedNodeId, graph.expandedNodes]);
   useLayoutEffect(() => { viewRef.current(); }, [viewport]);
   return <>

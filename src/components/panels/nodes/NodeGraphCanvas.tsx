@@ -113,7 +113,7 @@ export function NodeGraphCanvas({
     const preference = preferences.nodes[nodePreviewPreferenceKey(sourceGraph.owner.id, node)] ?? preferences.nodes[node.id];
     const port = previewOutput(node, preference?.portId);
     const imageRatio = port?.type === 'texture' || port?.type === 'mask' || port?.metadata?.semanticKind === 'operator:landmarks';
-    return { ...node, preview: { enabled: preference?.enabled ?? true, requested: preference?.enabled ?? true,
+    return { ...node, preview: { enabled: preference?.enabled ?? preferences.enabled, requested: preference?.enabled ?? preferences.enabled,
       portId: preference?.portId, key: nodePreviewKey(sourceGraph.owner.id, node, preference?.portId), aspectRatio: imageRatio ? aspectRatio : 16 / 9 } };
   }) }), [sourceGraph.owner.id, preferences, aspectRatio]);
   const targetGraph = useMemo(() => prepareGraph(sourceGraph), [sourceGraph, prepareGraph]);
@@ -595,7 +595,7 @@ export function NodeGraphCanvas({
         }}
       >
         <div className="node-workspace-grid" style={gridStyle} aria-hidden="true" />
-        <NodeGraphCanvasSurface graph={graph} nodes={displayNodes} groupFrameNodes={groupFrameNodes} plugs={plugs} viewport={viewport}
+        <NodeGraphCanvasSurface graph={graph} nodes={displayNodes} groupFrameNodes={groupFrameNodes} plugs={plugs} viewport={viewport} previewsSuspended={animating}
           surfaceRef={canvasSurfaceRef} backgroundRef={canvasBackgroundRef} onViewRendered={handleViewRendered}
           selectedNodeId={selectedNodeId} selection={multiSelection} selectedEdgeId={selectedEdgeId}
           hoveredEdgeId={hoveredEdgeId} hoveredPort={hoveredPort} draft={connectionDraft} canBypass={!!onToggleNodeBypass} onReady={setCanvasRendered} />
@@ -608,6 +608,9 @@ export function NodeGraphCanvas({
             frameNodes={groupFrameNodes}
             locks={placement.groups} onToggleLock={toggleLock} onToggleNodeBypass={onToggleNodeBypass}
             onStartDrag={startGroupDrag} onPointerMove={handleNodePointerMove} onFinishDrag={finishNodeDrag} />
+          {/* The worker paints moving cards/cables. Rebuild their invisible DOM
+              hit targets once they settle, not on every animation frame. */}
+          {(!canvasRendered || !animating) && <>
           <NodeGraphEdges
             graph={graph} frameNodes={groupFrameNodes}
             visibleEdgeIds={dom.edgeIds}
@@ -650,6 +653,7 @@ export function NodeGraphCanvas({
               onPreviewOutput={selectNodePreviewOutput}
             />
           ))}
+          </>}
         </div>
       </div>
     </div>

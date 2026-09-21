@@ -3,8 +3,8 @@ import type { RuntimePrimaryColorParams } from '../../types/colorCorrection';
 import type { Effect } from '../../types/effects';
 import type { WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntimeCommands';
 import type { ImageOperatorPlan } from '../operators/imageOperatorGraph';
-import { compileImageOperatorGraph } from '../operators/imageOperatorGraph';
-import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams, isImageGraphEffectType } from '../operators/effectGraphOwner';
+import { prepareImageEffect } from '../operators/imageEffectRuntimePlan';
+import { isImageGraphEffectType } from '../operators/effectGraphOwner';
 import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
 import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraphs';
 
@@ -467,9 +467,8 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer): WorkerSoftwareEf
       const plans: ImageOperatorPlan[] = [];
       const owners: import('./workerSoftwareImageGraphs').WorkerSoftwareImageGraphOwner[] = [];
       for (const effect of activeEffects) {
-        const graph = effectOperatorGraph(effect);
-        if (graph.incomplete) continue;
-        const plan = compileImageOperatorGraph(graph, effectOperatorParams(effect), effectOperatorCompileContext(effect));
+        const { plan } = prepareImageEffect(effect);
+        if (!plan) continue;
         if (!canApplyWorkerSoftwareImageGraphPlan(plan)) return null;
         plans.push(plan);
         owners.push({ feedbackKey: JSON.stringify([layer.id, effect.id]), reset: effect.params.reset === true,

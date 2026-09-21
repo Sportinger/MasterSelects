@@ -1,8 +1,8 @@
 import type { Effect } from '../../types/effects';
 import { getEffect, isParticleRenderEffectDefinition } from '../../effects';
 import type { InlineEffectParams } from '../pipeline/CompositorPipeline';
-import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams, isLocalImageEffectType } from '../../services/operators/effectGraphOwner';
-import { compileImageOperatorGraph } from '../../services/operators/imageOperatorGraph';
+import { isLocalImageEffectType } from '../../services/operators/effectGraphOwner';
+import { prepareImageEffect } from '../../services/operators/imageEffectRuntimePlan';
 
 export interface LayerEffectStack {
   inlineEffects: InlineEffectParams;
@@ -13,9 +13,8 @@ export interface LayerEffectStack {
 
 function applyInlineEffect(inlineEffects: InlineEffectParams, effect: Effect): 'inline' | 'contextual' | 'incomplete' {
   if (isLocalImageEffectType(effect.type)) {
-    const graph = effectOperatorGraph(effect);
-    if (graph.incomplete) return 'incomplete';
-    const program = compileImageOperatorGraph(graph, effectOperatorParams(effect), effectOperatorCompileContext(effect));
+    const { plan: program } = prepareImageEffect(effect);
+    if (!program) return 'incomplete';
     if (program.capabilities.length || program.passes?.length) return 'contextual';
     inlineEffects.operatorProgram = program;
     return 'inline';

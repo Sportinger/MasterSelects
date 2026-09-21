@@ -24,4 +24,13 @@ describe('node preview preferences', () => {
       nodes: { source: { enabled: true }, math: { enabled: true } },
     });
   });
+
+  it('also switches stored hidden descendants off when only their group is visible', () => {
+    const off = setAllNodePreviews({ enabled: true, nodes: {
+      hidden: { enabled: true, portId: 'image' },
+    } }, ['group']);
+    expect(off.enabled).toBe(false);
+    expect(off.nodes.hidden).toEqual({ enabled: false, portId: 'image' });
+    expect(off.nodes.group.enabled).toBe(false);
+  });
 });

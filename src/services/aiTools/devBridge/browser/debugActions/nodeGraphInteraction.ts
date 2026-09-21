@@ -1,7 +1,7 @@
 import { readNodeCanvasProfile } from '../../../../../components/panels/nodes/canvas/rendering/nodeCanvasProfile';
 import { measureJsCpuProfile } from './jsCpuProfile';
 
-/** Bounded dev-only pan probe. Restores the viewport; never edits nodes/project data. */
+/** Bounded dev-only pan probe, or passive observation with pan:false for folds. */
 export async function measureNodeGraphInteraction(args: Record<string, unknown>) {
   const canvas = [...document.querySelectorAll<HTMLElement>('.node-workspace-canvas')].find(el => el.clientWidth > 0 && el.clientHeight > 0);
   if (!canvas) return { success: false, error: 'No visible node graph.' };
@@ -11,6 +11,7 @@ export async function measureNodeGraphInteraction(args: Record<string, unknown>)
   if ((hideEdgeDom || hideNodeDom || args.hideInteractionDom || args.hideGroupBackgrounds || args.hideCanvasSurface)
     && !canvas.classList.contains('canvas-rendered')) return { success: false, error: 'DOM isolation requires the canvas renderer.' };
   const duration = Math.max(500, Math.min(10000, Number(args.durationMs) || 5000));
+  const pan = args.pan !== false;
   const rect = canvas.getBoundingClientRect(), x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
   const inner = canvas.querySelector<HTMLElement>('.node-workspace-canvas-inner');
   const before = inner?.style.transform;
@@ -29,7 +30,7 @@ export async function measureNodeGraphInteraction(args: Record<string, unknown>)
   const setCapture = canvas.setPointerCapture, releaseCapture = canvas.releasePointerCapture;
   // Synthetic pointers do not exist in the native capture table. Events are
   // dispatched to the same captured target instead, without global overrides.
-  canvas.setPointerCapture = () => {}; canvas.releasePointerCapture = () => {};
+  if (pan) { canvas.setPointerCapture = () => {}; canvas.releasePointerCapture = () => {}; }
   const event = (type: string, dx: number, dy: number) => canvas.dispatchEvent(new PointerEvent(type, {
     bubbles: true, cancelable: true, pointerId: 9183, pointerType: 'mouse', isPrimary: true,
     button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x + dx, clientY: y + dy,
@@ -41,12 +42,12 @@ export async function measureNodeGraphInteraction(args: Record<string, unknown>)
   const reactBefore = readNodeCanvasProfile(canvas);
   const cpuProfile = args.profileCpu === true ? measureJsCpuProfile({ durationMs: duration }) : undefined;
   try {
-    event('pointerdown', 0, 0);
+    if (pan) event('pointerdown', 0, 0);
     await new Promise<void>(resolve => {
       const step = (now: number) => {
         if (last) gaps.push(now - last); last = now;
         const elapsed = now - start, phase = Math.min(1, elapsed / duration) * Math.PI * 8;
-        event('pointermove', Math.sin(phase) * 90, (Math.cos(phase) - 1) * 60);
+        if (pan) event('pointermove', Math.sin(phase) * 90, (Math.cos(phase) - 1) * 60);
         moved ||= inner?.style.transform !== before;
         if (args.measureHitTesting === true) {
           // Synthetic dispatch bypasses native hit testing. Measure it explicitly
@@ -64,8 +65,10 @@ export async function measureNodeGraphInteraction(args: Record<string, unknown>)
       requestAnimationFrame(step);
     });
   } finally {
-    event('pointermove', 0, 0); event('pointerup', 0, 0);
-    canvas.setPointerCapture = setCapture; canvas.releasePointerCapture = releaseCapture;
+    if (pan) {
+      event('pointermove', 0, 0); event('pointerup', 0, 0);
+      canvas.setPointerCapture = setCapture; canvas.releasePointerCapture = releaseCapture;
+    }
     for (const { element, display, priority } of edgeLayers) {
       if (display) element.style.setProperty('display', display, priority);
       else element.style.removeProperty('display');
@@ -74,7 +77,7 @@ export async function measureNodeGraphInteraction(args: Record<string, unknown>)
   await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
   const sorted = gaps.toSorted((a, b) => a - b);
   const reactAfter = readNodeCanvasProfile(canvas);
-  return { success: true, data: { moved, restored: inner?.style.transform === before, frames: gaps.length, counts, hideEdgeDom, hideNodeDom,
+  return { success: true, data: { pan, moved, restored: inner?.style.transform === before, frames: gaps.length, counts, hideEdgeDom, hideNodeDom,
     hideGroupBackgrounds: args.hideGroupBackgrounds === true, hideInteractionDom: args.hideInteractionDom === true,
     hideCanvasSurface: args.hideCanvasSurface === true, hideGrid: args.hideGrid === true,
     view: { width: rect.width, height: rect.height, transform: before },

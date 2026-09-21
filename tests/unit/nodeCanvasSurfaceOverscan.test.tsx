@@ -16,7 +16,7 @@ vi.mock('../../src/components/panels/nodes/canvas/rendering/nodeCanvasRuntime', 
 }));
 vi.mock('../../src/components/panels/nodes/previews/NodePreviewController', () => ({
   NodePreviewController: class {
-    scene() {} visibility() {} reset() {} dispose() {}
+    scene() {} visibility() {} suspend() {} reset() {} dispose() {}
     viewport = renderer.viewport;
   },
 }));

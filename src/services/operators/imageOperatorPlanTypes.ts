@@ -2,6 +2,7 @@ import type { ImageOperatorProgram } from '../../types/imageOperatorProgram';
 import type { ImageOperatorExternalResource } from './imageOperatorExternalResources';
 import type { ImageOperatorFieldResource } from './imageOperatorFieldResources';
 import type { ImageOperatorResourceSampling } from './imageOperatorResources';
+import type { ImageOperatorValueBinding } from './imageOperatorValueBindings';
 
 export type ImagePlanValue = 'image' | 'rgb' | 'alpha' | 'scalar' | 'boolean' | 'vec2' | 'vec3' | 'vec4';
 export type ImageOperatorCapability = 'uv' | 'resolution' | 'time' | 'sample' | 'pixel-load' | 'derivative';
@@ -24,6 +25,7 @@ export interface ImageOperatorSampleScope {
   reducerContext?: { kind: 'kernel' | 'sequence'; id: number };
 }
 export interface ImageOperatorPlan extends ImageOperatorProgram {
+  valueBindings?: readonly ImageOperatorValueBinding[];
   fusion: 'inline'; capabilities: readonly ImageOperatorCapability[]; instructions: ImagePlanInstruction[]; output: number;
   sampleScopes: readonly ImageOperatorSampleScope[];
   kernelScopes?: readonly { id: number; sample: number; weight: number }[];

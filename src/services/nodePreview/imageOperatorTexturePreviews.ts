@@ -1,6 +1,6 @@
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
-import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams } from '../operators/effectGraphOwner';
-import { compileImageOperatorPreview } from '../operators/imageOperatorGraph';
+import { effectOperatorGraph, effectOperatorParams } from '../operators/effectGraphOwner';
+import { prepareImageEffect, prepareImageEffectPreview } from '../operators/imageEffectRuntimePlan';
 import { nodePreviewTextureTap } from './NodePreviewTextureTap';
 import { imageOperatorPreviewPrefix, parseImageOperatorPreviewStage } from './imageOperatorPreviewStages';
 import { packImageOperatorRuntimeUniforms } from '../operators/imageOperatorRuntimeUniforms';
@@ -117,7 +117,7 @@ export function captureImageOperatorPreviews(options: CaptureImageOperatorPrevie
   const demands = nodePreviewTextureTap.matching(imageOperatorPreviewPrefix(options.effect.id));
   const memoryDemands = memoryImageOperatorPreviewTap.matching(options.effect.id);
   if (!demands.length && !memoryDemands.length) return 0;
-  const graph = effectOperatorGraph(options.effect);
+  const graph = options.compilePreview ? effectOperatorGraph(options.effect) : prepareImageEffect(options.effect).graph;
   const multiPassState = passPreviewState(options.device), runtime = options.passRuntime ?? multiPassState.runtime;
   const batch = options.passBatch ?? runtime.createBatch();
   let captured = 0;
@@ -127,7 +127,7 @@ export function captureImageOperatorPreviews(options: CaptureImageOperatorPrevie
       if (selected?.operator !== 'source.memory-window') continue;
       const metadataTarget = { ...target, portId: 'metadata' };
       const plan = options.compilePreview?.(graph, effectOperatorParams(options.effect), metadataTarget)
-        ?? compileImageOperatorPreview(graph, effectOperatorParams(options.effect), metadataTarget, effectOperatorCompileContext(options.effect));
+        ?? prepareImageEffectPreview(options.effect, metadataTarget);
       const borrowed = options.externalResources;
       const unresolved = (plan.externalResources ?? []).filter(descriptor => !borrowed?.has(descriptor.id));
       const resources = new Map(resolveImageGraphExternalResources(options.device, { externalResources: unresolved }, {
@@ -146,7 +146,7 @@ export function captureImageOperatorPreviews(options: CaptureImageOperatorPrevie
     try {
       const params = effectOperatorParams(options.effect);
       const plan = options.compilePreview?.(graph, params, target)
-        ?? compileImageOperatorPreview(graph, params, target, effectOperatorCompileContext(options.effect));
+        ?? prepareImageEffectPreview(options.effect, target);
       if (plan.passes?.length || plan.resourceInputs?.length) {
         const state = multiPassState;
         const unresolved = (plan.externalResources ?? []).filter(descriptor => !options.externalResources?.has(descriptor.id));

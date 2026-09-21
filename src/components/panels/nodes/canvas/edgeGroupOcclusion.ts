@@ -25,5 +25,10 @@ export function subtractOccludedRects(bounds: Rect, occlusions: Rect[]): Rect[] 
   return visible;
 }
 
+/** One SVG path preserves the rectangle union without thousands of DOM nodes.
+ * Use nonzero winding: overlapping covers must stay covered, not become holes. */
+export const rectangleClipPath = (rects: readonly Rect[]) => rects.map(rect =>
+  `M${rect.x},${rect.y}h${rect.width}v${rect.height}h${-rect.width}Z`).join('');
+
 export const pointBehindGroup = (point: { x: number; y: number }, occlusions: readonly Rect[]) => occlusions.some(rect =>
   point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height);

@@ -1,7 +1,7 @@
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import type { FullscreenEffectDefinition } from '../types';
-import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams, isImageGraphEffectType } from '../../services/operators/effectGraphOwner';
-import { compileImageOperatorGraph } from '../../services/operators/imageOperatorGraph';
+import { isImageGraphEffectType } from '../../services/operators/effectGraphOwner';
+import { prepareImageEffect } from '../../services/operators/imageEffectRuntimePlan';
 import { imageOperatorRuntimeUniformSize, packImageOperatorRuntimeUniforms } from '../../services/operators/imageOperatorRuntimeUniforms';
 import type { ImageOperatorPlan } from '../../services/operators/imageOperatorGraph';
 import { imageGraphLoadFunction, imageGraphSampleExpression } from './imageGraphSampling';
@@ -30,11 +30,11 @@ export function imageGraphDefinition(
   effect: { type: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph },
   definition: FullscreenEffectDefinition,
   timelineTimeSeconds = 0,
+  preparedPlan?: ImageOperatorPlan,
 ): FullscreenEffectDefinition {
   if (!isImageGraphEffectType(effect.type)) return definition;
-  const graph = effectOperatorGraph(effect);
-  if (graph.incomplete) throw new Error(`Cannot render incomplete ${effect.type} operator graph.`);
-  const plan = compileImageOperatorGraph(graph, effectOperatorParams(effect), effectOperatorCompileContext(effect));
+  const plan = preparedPlan ?? prepareImageEffect(effect).plan;
+  if (!plan) throw new Error(`Cannot render incomplete ${effect.type} operator graph.`);
   if (plan.passes?.length) throw new Error('Multi-pass image graphs require ImageGraphPassRuntime.');
   return {
     ...definition,

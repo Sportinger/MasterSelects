@@ -28,7 +28,7 @@ import { captureAnalogImageOperatorPreviews } from '../services/nodePreview/anal
 import { captureComputeImageOperatorPreviews, captureComputeImageOutputPreviews } from '../services/nodePreview/computeImageOperatorPreviews';
 import { effectOperatorCompileContext, effectOperatorGraph, isComputeImageEffectType, isImageGraphEffectType } from '../services/operators/effectGraphOwner';
 import { effectOperatorParams } from '../services/operators/effectGraphOwner';
-import { compileImageOperatorGraph } from '../services/operators/imageOperatorGraph';
+import { prepareImageEffect } from '../services/operators/imageEffectRuntimePlan';
 import { compileComputeImageGraph } from '../services/operators/computeImageGraph';
 import { ImageGraphPassRuntime } from './ImageGraphPassRuntime';
 import {
@@ -360,8 +360,9 @@ export class EffectsPipeline {
     for (const effect of enabledEffects) {
       const registered = getEffect(effect.type);
       const imageGraphEffect = isImageGraphEffectType(effect.type);
-      if (imageGraphEffect && effectOperatorGraph(effect).incomplete) continue;
-      const imagePlan = imageGraphEffect ? compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect), effectOperatorCompileContext(effect)) : undefined;
+      const preparedImage = imageGraphEffect ? prepareImageEffect(effect) : undefined;
+      if (preparedImage?.graph.incomplete) continue;
+      const imagePlan = preparedImage?.plan;
       let feedbackState = imagePlan?.frameHistoryResource
         ? this.getFeedbackState(effect, outputWidth, outputHeight, frameHistory?.scopeId ?? 'legacy') : null;
       if (feedbackState && imagePlan) this.prepareFeedbackState(commandEncoder, feedbackState, effect, timelineTimeSeconds, frameHistory, imagePlan.key);
@@ -422,7 +423,7 @@ export class EffectsPipeline {
         continue;
       }
       const definition = imageGraphEffect && isFullscreenEffectDefinition(registered)
-        ? imageGraphDefinition(effect, registered, timelineTimeSeconds) : registered;
+        ? imageGraphDefinition(effect, registered, timelineTimeSeconds, imagePlan) : registered;
       if (isComputeEffectDefinition(definition)) {
         if (definition.computeMode === 'analog-signal' && effect.operatorGraph?.incomplete) continue;
         const computeGraph = isComputeImageEffectType(effect.type) ? effectOperatorGraph(effect) : undefined;
