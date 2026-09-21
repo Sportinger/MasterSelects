@@ -252,6 +252,8 @@ Canvas 2D layers. Supported browsers transfer these to an OffscreenCanvas worker
 The static layer changes only after graph/view changes; a separate animation
 layer updates at 30 Hz without per-frame React renders. Pointer changes reach the
 worker immediately and do not wait behind the decorative animation timer.
+Fitted system-font labels use a bounded, per-context cache, so pan/zoom frames
+reuse unchanged text clipping rather than repeatedly measuring every prefix.
 Group backgrounds remain full-size DOM rectangles behind these layers and follow
 the immediate visual transform. Zooming out exposes the complete background
 without waiting for a worker frame or revealing the edge of a cached bitmap.
@@ -269,10 +271,15 @@ node exposes its keyboard focus styling; the inspector stays a regular DOM UI.
 Worker startup/runtime failure replaces the transferred canvases with a main-thread
 software renderer; if Canvas 2D is unavailable, the DOM graph remains usable.
 Panning and zooming keep unchanged node-card props and connection callbacks
-stable, while spatial culling limits mounted cards to the visible graph region.
+stable, while spatial culling limits the canvas geometry that is drawn.
 Repeated pointer movement within one dock pane does not publish another layout
 update or write the persisted layout. This separates graph drawing from the editor's main thread;
 expensive video/effect rendering can still delay mouse event delivery.
+Preview sources remain lazy-loaded, but once available their synchronous work
+runs directly inside the scheduler's 2 ms tick budget. A single expensive job can
+exceed that cooperative budget; the scheduler then yields before starting another.
+Promise-based GPU readback stays asynchronous. Moving drawing to the worker does
+not move graph compilation or preview-value evaluation off the main thread.
 
 For development profiling, `measure-node-graph-interaction` on the authenticated
 debug bridge performs a bounded pan and restores the viewport. It reports main-thread
@@ -286,6 +293,14 @@ times `elementFromPoint` after each pan step, including any style/layout flush.
 This is a synthetic isolation probe, not a native pointer-latency measurement;
 hidden SVG elements remain mounted. Compare repeated runs at the same zoom,
 viewport, effect, playback state and preview setting.
+`hideNodeDom: true` similarly isolates the transparent node-card layer (separate
+value controls remain mounted). The probe records viewport size/transform and
+the profiled React child-subtree's render time and commit count. This excludes
+the parent canvas component's own work, other panels, and commit/layout costs.
+Worker samples expose base, animation and preview paint timings; composition and
+bitmap-transfer overhead remains in the total worker paint time. Preview producer
+samples separately count synchronous calls, cumulative CPU time and maximum job
+time, including work that previously escaped the scheduler through microtasks.
 
 The local development page `/tests/browser/node-effect-performance.html` compares
 Exposure, Chroma Key and Holo against their original registered shaders using

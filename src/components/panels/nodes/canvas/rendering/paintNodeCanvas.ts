@@ -1,5 +1,6 @@
 import { interpolateKeyframes } from '../../../../../utils/keyframeInterpolation';
 import { cablePoint, signalPosition } from './cableGeometry';
+import { fitCanvasLabel } from './canvasTextLayout';
 import type { CanvasCable, CanvasCurve, CanvasScene, CanvasTheme, CanvasTransport, CanvasView, Rect } from './nodeCanvasTypes';
 
 export type DrawContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -22,12 +23,7 @@ function box(ctx: DrawContext, x: number, y: number, width: number, height: numb
 }
 function text(ctx: DrawContext, value: string, x: number, y: number, max: number, color: string, size = 10, weight = 400, align: CanvasTextAlign = 'left') {
   ctx.font = `${weight} ${size}px system-ui, sans-serif`; ctx.textAlign = align; ctx.fillStyle = color;
-  let label = value;
-  if (ctx.measureText(label).width > max) {
-    while (label.length && ctx.measureText(label + '…').width > max) label = label.slice(0, -1);
-    label += '…';
-  }
-  ctx.fillText(label, x, y);
+  ctx.fillText(fitCanvasLabel(ctx, value, max), x, y);
 }
 function drawCable(ctx: DrawContext, cable: CanvasCable, zoom: number) {
   const { from, to } = cable, h = Math.max(72, Math.abs(to.x - from.x) * 0.42);

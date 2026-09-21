@@ -137,6 +137,8 @@ Playback avoids repeated dock
 layout writes, tab measurements and effect evaluation for sibling parameter rows.
 Inline node previews start enabled, can be toggled individually or together, and
 preserve image aspect ratios. A shared worker canvas caches visible thumbnails;
+unchanged text layouts are reused during navigation, and preview computation
+yields between expensive jobs using the scheduler's measured CPU budget.
 preview-aware placement finds room for newly created nodes while preserving manual
 positions and overlaps. Drag group headers to move their contents; unlock a source
 group to transfer compatible nodes into another group or effect. Incoming nodes

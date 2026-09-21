@@ -7,7 +7,8 @@ import { hasUnlockedSource, nodeGroupDropTarget } from './canvas/nodeGroupDrop';
 import { placeTransferredNodes } from './canvas/placeTransferredNodes';
 import { NodeGraphCanvasSurface } from './canvas/rendering/NodeGraphCanvasSurface';
 import { annotatedGraphBounds, nodeGroupBounds } from './canvas/groupBounds';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Profiler, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { recordNodeCanvasRender } from './canvas/rendering/nodeCanvasProfile';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import type {
   NodeGraph,
@@ -112,6 +113,7 @@ export function NodeGraphCanvas({
       portId: preference?.portId, key: nodePreviewKey(sourceGraph.owner.id, node, preference?.portId), aspectRatio: imageRatio ? aspectRatio : 16 / 9 } };
   }) }), [sourceGraph, preferences, aspectRatio]);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const recordRender = useCallback((_id: string, _phase: string, duration: number) => recordNodeCanvasRender(canvasRef.current, duration), []);
   const canvasSurfaceRef = useRef<HTMLDivElement | null>(null);
   const canvasBackgroundRef = useRef<HTMLDivElement | null>(null);
   const canvasInnerRef = useRef<HTMLDivElement | null>(null);
@@ -478,7 +480,7 @@ export function NodeGraphCanvas({
     onDeleteNode(selectedNodeId);
   }, [multiSelection, onDeleteNode, onDeleteNodes, selectedNodeId]);
 
-  return (
+  return (<Profiler id="node-canvas" onRender={recordRender}>
     <div
       className={`node-workspace-board${isPanning ? ' board-interacting' : ''}`}
       style={gridStyle}
@@ -632,5 +634,5 @@ export function NodeGraphCanvas({
         </div>
       </div>
     </div>
-  );
+  </Profiler>);
 }

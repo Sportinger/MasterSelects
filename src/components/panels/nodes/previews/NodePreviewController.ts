@@ -36,12 +36,32 @@ export class NodePreviewController {
   private sink: Sink;
   private host: HTMLElement;
   private artifacts = new PreviewArtifactReader();
+  private producerStats = { calls: 0, totalMs: 0, maxMs: 0 };
+  private produce?: typeof import('../../../../services/nodePreview/previewSources').produceNodePreview;
   constructor(sink: Sink, host: HTMLElement) {
     this.sink = sink; this.host = host;
     // Domain readers load after stores finish initialization; they must not pull
     // scene/media runtime owners into the editor's synchronous boot graph.
-    const sources = import('../../../../services/nodePreview/previewSources');
-    this.scheduler = new NodePreviewScheduler(request => sources.then(({ produceNodePreview }) => produceNodePreview(request, this.artifacts)), frame => {
+    void import('../../../../services/nodePreview/previewSources').then(sources => {
+      if (this.disposed) return;
+      this.produce = sources.produceNodePreview; this.wake();
+    }, () => {
+      if (this.disposed) return;
+      this.produce = () => { throw new Error('Preview sources unavailable'); }; this.wake();
+    });
+    // Once loaded, invoke directly inside the scheduler's work budget. Wrapping
+    // every call in sources.then() hid synchronous graph compilation in later
+    // microtasks and let a whole batch monopolize the main thread unchecked.
+    this.scheduler = new NodePreviewScheduler(request => {
+      const start = import.meta.env.DEV ? performance.now() : 0;
+      try { return this.produce!(request, this.artifacts); }
+      finally {
+        if (import.meta.env.DEV) {
+          const elapsed = performance.now() - start;
+          this.producerStats.calls++; this.producerStats.totalMs += elapsed; this.producerStats.maxMs = Math.max(this.producerStats.maxMs, elapsed);
+        }
+      }
+    }, frame => {
       previewTextStore.publish(frame);
       if (!isTextPreview(frame)) { this.textKeys.delete(frame.key); sink.preview(frame); }
       else if (!this.textKeys.has(frame.key)) {
@@ -93,10 +113,11 @@ export class NodePreviewController {
       }
     }
     this.scheduler.setRequests(requests);
-    if (!this.sink.previewBusy) this.scheduler.tick();
+    if (this.produce && !this.sink.previewBusy) this.scheduler.tick();
     if (import.meta.env.DEV) {
       const stats = this.scheduler.stats;
       this.host.dataset.previewStats = JSON.stringify(stats);
+      this.host.dataset.previewProducerStats = JSON.stringify(this.producerStats);
     }
     if (!requests.length) { this.artifacts.dispose(); nodePreviewTextureTap.cancelClip(this.clipId); }
     if (requests.length && (state.isPlaying || this.scheduler.unsettled)) this.timer = setTimeout(() => this.tick(), requests.some(request => request.numeric) ? 16 : this.sink.software ? 100 : state.isPlaying ? 32 : 100);

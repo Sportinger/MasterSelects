@@ -1,10 +1,13 @@
+import { readNodeCanvasProfile } from '../../../../../components/panels/nodes/canvas/rendering/nodeCanvasProfile';
+
 /** Bounded dev-only pan probe. Restores the viewport; never edits nodes/project data. */
 export async function measureNodeGraphInteraction(args: Record<string, unknown>) {
   const canvas = [...document.querySelectorAll<HTMLElement>('.node-workspace-canvas')].find(el => el.clientWidth > 0 && el.clientHeight > 0);
   if (!canvas) return { success: false, error: 'No visible node graph.' };
   if (document.hidden) return { success: false, error: 'The node graph tab is hidden; foreground it before measuring.' };
   const hideEdgeDom = args.hideEdgeDom === true;
-  if (hideEdgeDom && !canvas.classList.contains('canvas-rendered')) return { success: false, error: 'Edge DOM isolation requires the canvas renderer.' };
+  const hideNodeDom = args.hideNodeDom === true;
+  if ((hideEdgeDom || hideNodeDom) && !canvas.classList.contains('canvas-rendered')) return { success: false, error: 'DOM isolation requires the canvas renderer.' };
   const duration = Math.max(500, Math.min(10000, Number(args.durationMs) || 5000));
   const rect = canvas.getBoundingClientRect(), x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
   const inner = canvas.querySelector<HTMLElement>('.node-workspace-canvas-inner');
@@ -13,7 +16,8 @@ export async function measureNodeGraphInteraction(args: Record<string, unknown>)
     edges: canvas.querySelectorAll('.node-workspace-edge-hit').length,
     plugs: canvas.querySelectorAll('.node-workspace-plug').length,
     edgeDomElements: canvas.querySelectorAll('.node-workspace-edges *, .node-workspace-plugs *').length };
-  const edgeLayers = hideEdgeDom ? [...canvas.querySelectorAll<SVGElement>('.node-workspace-edges, .node-workspace-plugs')]
+  const selectors = [hideEdgeDom ? '.node-workspace-edges, .node-workspace-plugs' : '', hideNodeDom ? '.node-workspace-node' : ''].filter(Boolean).join(', ');
+  const edgeLayers = selectors ? [...canvas.querySelectorAll<HTMLElement | SVGElement>(selectors)]
     .map(element => ({ element, display: element.style.getPropertyValue('display'), priority: element.style.getPropertyPriority('display') })) : [];
   for (const { element } of edgeLayers) element.style.setProperty('display', 'none', 'important');
   const setCapture = canvas.setPointerCapture, releaseCapture = canvas.releasePointerCapture;
@@ -28,6 +32,7 @@ export async function measureNodeGraphInteraction(args: Record<string, unknown>)
   const hitTestMs: number[] = [];
   let moved = false, last = 0, sampled = 0;
   const start = performance.now();
+  const reactBefore = readNodeCanvasProfile(canvas);
   try {
     event('pointerdown', 0, 0);
     await new Promise<void>(resolve => {
@@ -61,7 +66,10 @@ export async function measureNodeGraphInteraction(args: Record<string, unknown>)
   }
   await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
   const sorted = gaps.toSorted((a, b) => a - b);
-  return { success: true, data: { moved, restored: inner?.style.transform === before, frames: gaps.length, counts, hideEdgeDom,
+  const reactAfter = readNodeCanvasProfile(canvas);
+  return { success: true, data: { moved, restored: inner?.style.transform === before, frames: gaps.length, counts, hideEdgeDom, hideNodeDom,
+    view: { width: rect.width, height: rect.height, transform: before },
+    react: { commits: reactAfter.commits - reactBefore.commits, renderMs: reactAfter.renderMs - reactBefore.renderMs },
     hitTesting: hitTestMs.length ? { samples: hitTestMs.length, meanMs: hitTestMs.reduce((sum, value) => sum + value, 0) / hitTestMs.length,
       maxMs: Math.max(...hitTestMs) } : null,
     fps: Number((gaps.length * 1000 / gaps.reduce((sum, n) => sum + n, 0)).toFixed(1)),

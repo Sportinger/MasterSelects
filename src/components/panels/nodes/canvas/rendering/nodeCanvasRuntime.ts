@@ -145,6 +145,7 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
           if (pendingPreviews.size) schedule();
         }
         if (event.data.type === 'stats') {
+          if (event.data.phases) host.dataset.paintPhases = JSON.stringify(event.data.phases);
           host.dataset.workerFps = event.data.fps?.toFixed(1);
           host.dataset.paintMs = event.data.paintMs?.toFixed(2);
           host.dataset.maxPaintMs = event.data.maxPaintMs?.toFixed(2);

@@ -8,6 +8,7 @@ let context: OffscreenCanvasRenderingContext2D;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let inFlight = false, dirty = false;
 let frames = 0, paintMs = 0, maxPaintMs = 0, reportAt = performance.now();
+let baseMs = 0, overlayMs = 0, previewMs = 0;
 const post = (message: CanvasWorkerReply, transfer: Transferable[] = []) => self.postMessage(message, transfer);
 
 function schedule(delay = 0) {
@@ -32,8 +33,11 @@ function frame() {
     post({ type: 'frame', bitmap, revision: painter.viewRevision }, [bitmap]);
     const cost = performance.now() - start;
     frames++; paintMs += cost; maxPaintMs = Math.max(maxPaintMs, cost);
+    if (import.meta.env.DEV) { baseMs += painter.timings.baseMs; overlayMs += painter.timings.overlayMs; previewMs += painter.timings.previewMs; }
     if (import.meta.env.DEV && start - reportAt >= 1000) {
-      post({ type: 'stats', fps: frames * 1000 / (start - reportAt), paintMs: paintMs / frames, maxPaintMs });
+      post({ type: 'stats', fps: frames * 1000 / (start - reportAt), paintMs: paintMs / frames, maxPaintMs,
+        phases: { baseMs: baseMs / frames, overlayMs: overlayMs / frames, previewMs: previewMs / frames } });
+      baseMs = 0; overlayMs = 0; previewMs = 0;
       frames = 0; paintMs = 0; maxPaintMs = 0; reportAt = start;
     }
   } catch { post({ type: 'failed' }); }

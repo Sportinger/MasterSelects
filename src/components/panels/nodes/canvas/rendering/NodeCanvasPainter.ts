@@ -21,6 +21,7 @@ export class NodeCanvasPainter {
   private overlay: DrawContext;
   private previews?: NodePreviewPainter;
   private previewContext?: DrawContext;
+  readonly timings = { baseMs: 0, overlayMs: 0, previewMs: 0 };
   constructor(base: DrawContext, overlay: DrawContext, previews?: DrawContext, atlas?: () => DrawContext | null) {
     this.base = base; this.overlay = overlay; this.previewContext = previews;
     if (previews && atlas) this.previews = new NodePreviewPainter(previews, atlas);
@@ -56,9 +57,15 @@ export class NodeCanvasPainter {
   draw(now: number): boolean {
     if (!this.scene || !this.view || !this.theme) return false;
     const scene = this.visibleScene ??= this.visibility?.visible(this.view) ?? this.scene;
+    const start = import.meta.env.DEV ? performance.now() : 0;
     if (this.baseDirty) { paintBase(this.base, scene, this.view, this.theme); this.baseDirty = false; }
+    const baseEnd = import.meta.env.DEV ? performance.now() : 0;
     if (this.overlayDirty || this.animated) { paintOverlay(this.overlay, scene, this.view, this.theme, this.transport, now, this.curveActivity, this.flowClock.advance(now)); this.overlayDirty = false; }
+    const overlayEnd = import.meta.env.DEV ? performance.now() : 0;
     this.previews?.draw(scene, this.view);
+    if (import.meta.env.DEV) {
+      this.timings.baseMs = baseEnd - start; this.timings.overlayMs = overlayEnd - baseEnd; this.timings.previewMs = performance.now() - overlayEnd;
+    }
     return true;
   }
   dispose() { this.previews?.dispose(); }

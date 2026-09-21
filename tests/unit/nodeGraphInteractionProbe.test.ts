@@ -37,4 +37,16 @@ describe('node graph edge DOM performance isolation', () => {
     expect(await measureNodeGraphInteraction({ hideEdgeDom: true })).toMatchObject({ success: false });
     expect(document.querySelector<SVGElement>('.node-workspace-edges')!.style.display).toBe('block');
   });
+
+  it('isolates node hit targets without hiding canvas pixels or unrelated edge layers', async () => {
+    const node = document.createElement('div'); node.className = 'node-workspace-node'; node.style.display = 'flex';
+    document.querySelector('.node-workspace-canvas')!.append(node);
+    const pending = measureNodeGraphInteraction({ durationMs: 500, hideNodeDom: true });
+    expect(node.style.display).toBe('none');
+    expect(document.querySelector<SVGElement>('.node-workspace-edges')!.style.display).toBe('block');
+    expect(document.querySelector('canvas')).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(600);
+    expect(await pending).toMatchObject({ success: true, data: { hideNodeDom: true, react: { commits: 0, renderMs: 0 } } });
+    expect(node.style.display).toBe('flex');
+  });
 });

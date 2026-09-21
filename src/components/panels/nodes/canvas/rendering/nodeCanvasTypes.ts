@@ -44,4 +44,4 @@ export type CanvasWorkerReply =
   | { type: 'frame'; bitmap: ImageBitmap; revision?: number }
   | { type: 'failed' }
   | { type: 'previews-ready'; batchId: number; previewCount: number | undefined }
-  | { type: 'stats'; fps: number; paintMs: number; maxPaintMs: number };
+  | { type: 'stats'; fps: number; paintMs: number; maxPaintMs: number; phases?: { baseMs: number; overlayMs: number; previewMs: number } };

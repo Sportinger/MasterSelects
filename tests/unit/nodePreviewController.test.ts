@@ -14,7 +14,31 @@ vi.mock('../../src/stores/landmarkTrackingStore', () => ({ useLandmarkTrackingSt
 vi.mock('../../src/services/nodePreview/PreviewArtifactReader', () => ({ PreviewArtifactReader: class { dispose() {} } }));
 vi.mock('../../src/services/nodePreview/NodePreviewTextureTap', () => ({ nodePreviewTextureTap: { cancelClip: vi.fn() } }));
 vi.mock('../../src/services/nodePreview/previewSources', () => ({ produceNodePreview: mocked.produce }));
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); mocked.produce.mockClear(); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); mocked.produce.mockReset(); });
+
+it('budgets synchronous preview compilation after lazy loading instead of releasing a microtask burst', async () => {
+  vi.useFakeTimers(); vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+  let cpuTime = 0;
+  vi.spyOn(performance, 'now').mockImplementation(() => cpuTime);
+  mocked.produce.mockImplementation(request => {
+    cpuTime += 3; // One expensive numeric preview exceeds the 2 ms tick budget.
+    return { key: request.key, revision: request.revision, time: request.time,
+      status: 'live', label: 'Value', drawing: { kind: 'number', value: '2', caption: 'Output' } };
+  });
+  const host = document.createElement('div');
+  const controller = new NodePreviewController({ preview: vi.fn(), software: false, previewBusy: false }, host);
+  const nodes = Array.from({ length: 24 }, (_, index) => ({ ...connectionFixture.nodes[0], id: `value-${index}`,
+    operatorId: 'values.number', layout: { x: 0, y: 0 }, preview: { key: `value-${index}`, enabled: true, requested: true } }));
+  controller.scene('clip', nodes, null);
+  controller.viewport({ width: 800, height: 600, panX: 0, panY: 0, ratio: 1, zoom: 1 });
+  try {
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mocked.produce).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(host.dataset.previewStats!).workMs).toBeGreaterThanOrEqual(3);
+    await vi.advanceTimersByTimeAsync(400);
+    expect(new Set(mocked.produce.mock.calls.map(call => call[0].key)).size).toBe(24);
+  } finally { controller.dispose(); }
+});
 
 it('refills a cleared atlas across a zoom tier even when the paused thumbnail width stays unchanged', async () => {
   vi.useFakeTimers(); vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
