@@ -60,7 +60,7 @@ function imageScalarValues(request: PreviewRequest, effect: Effect, keys: Keyfra
   const ownerGraph = effectOperatorGraph(effect), selected = ownerGraph.nodes.find(node => node.id === binding.nodeId);
   const params = { ...effectOperatorParams(effect) };
   if (!selected) return undefined;
-  for (const node of ownerGraph.nodes) if (node.operator === 'values.number' && typeof node.bindings.value === 'string') {
+  for (const node of ownerGraph.nodes) if (['values.number', 'values.integer'].includes(node.operator) && typeof node.bindings.value === 'string') {
     params[node.bindings.value] = sampleOperatorParameter(node, 'value', params, effect.id, keys, time);
   }
   const preview = compilePreview ? { graph: ownerGraph, params } : numericPreviewGraph(ownerGraph, selected.id, params);
@@ -139,21 +139,22 @@ export function imageOperatorValuePreview(request: PreviewRequest, clip: Timelin
   const { selected, evaluate, values } = scalar;
   // Per-pixel operands and results must be rendered by the canonical image IR.
   const requestedValue = request.port ? values.find(value => value.direction === request.port!.direction && value.portId === request.port!.id)?.value : evaluate();
-  if (selected.operator !== 'values.number' && requestedValue === undefined) return undefined;
+  const numericValue = selected.operator === 'values.number' || selected.operator === 'values.integer';
+  if (!numericValue && requestedValue === undefined) return undefined;
   const controls: PreviewValueControl[] = [];
-  if (selected.operator === 'values.number' && typeof selected.constants?.value === 'number' && selected.bindings.value === undefined) {
+  if (numericValue && typeof selected.constants?.value === 'number' && selected.bindings.value === undefined) {
     const spec = getEffectOperator(selected.operator)!.parameters.find(parameter => parameter.id === 'value')!;
-    controls.push({ label: spec.label, value: selected.constants.value, defaultValue: Number(spec.default),
+    controls.push({ label: spec.label, value: selected.operator === 'values.integer' ? Math.trunc(selected.constants.value) : selected.constants.value, defaultValue: Number(spec.default),
       min: Math.min(spec.min ?? -30, selected.constants.value), max: Math.max(spec.max ?? 30, selected.constants.value), step: spec.step,
       portId: 'value', direction: 'output', target: { clipId: clip.id, effectId: effect.id, nodeId: selected.id, parameter: 'value', storage: 'constant' } });
-  } else if (selected.operator === 'values.number' && typeof selected.bindings.value === 'string') {
+  } else if (numericValue && typeof selected.bindings.value === 'string') {
     const binding = selected.bindings.value, owner = getEffect(effect.type)?.params[binding];
     const current = evaluate();
     if (owner?.type === 'number' && current !== undefined) controls.push({ label: owner.label, value: current, defaultValue: Number(owner.default),
-      min: owner.min, max: owner.max, step: owner.step, portId: 'value', direction: 'output', persistenceKey: `operator.${effect.id}.${binding}`,
+      min: owner.min, max: owner.max, step: selected.operator === 'values.integer' ? 1 : owner.step, portId: 'value', direction: 'output', persistenceKey: `operator.${effect.id}.${binding}`,
       target: { clipId: clip.id, effectId: effect.id, nodeId: selected.id, parameter: 'value' } });
   }
   const output = typeof requestedValue === 'number' ? requestedValue : evaluate();
   return { key: request.key, revision: request.revision, time: request.time, status: 'live', label: 'Live values', controls, values,
-    drawing: { kind: 'number', value: output === undefined ? '—' : String(Number(output.toFixed(4))), caption: selected.operator === 'values.number' ? 'Value' : 'Result' } };
+    drawing: { kind: 'number', value: output === undefined ? '—' : String(Number(output.toFixed(4))), caption: numericValue ? 'Value' : 'Result' } };
 }

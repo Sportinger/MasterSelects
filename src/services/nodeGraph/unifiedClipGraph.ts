@@ -27,7 +27,8 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     const collapsed = state?.collapsed === true;
     const group = { id: groupId, label: effect?.name ?? (groupId === 'scene3d' ? '3D Scene' : groupId === 'flock' ? 'Flock' : 'Color'),
       color: groupId === 'scene3d' ? '#d7a262' : groupId === 'flock' ? '#7ea65b' : groupId === 'color' ? '#ba8bd6' : '#55a6c4', collapsed, nodeIds: [] as string[], proxyId: rootNode.id, issue: inner.issue,
-      ...(effect ? { effectId: effect.id, bypassNodeId: rootNode.id, bypassed: !effect.enabled } : {}) };
+      ...(effect ? { effectId: effect.id, bypassNodeId: rootNode.id, bypassed: !effect.enabled } : {}),
+      ...(effect?.type === 'kaleidoscope' ? { layoutMode: 'flow' as const } : {}) };
     groups.push(group);
     if (collapsed || !inner.nodes.length) {
       const proxy: NodeGraphNode = { ...rootNode, runtime: 'subgraph', label: group.label,
@@ -62,6 +63,10 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     for (const nested of inner.groups ?? []) {
       const collectMembers = (id: string): string[] => (inner.groups ?? []).filter(g => g.parentId === id).flatMap(g => [...g.nodeIds, ...collectMembers(g.id)]);
       groups.push({ ...nested, id: `${groupId}/${nested.id}`, parentId: nested.parentId ? `${groupId}/${nested.parentId}` : groupId,
+        ...(nested.composition ? { composition: { ...nested.composition,
+          position: { x: nested.composition.position.x - minX + offset.x, y: nested.composition.position.y - minY + offset.y },
+          inputs: nested.composition.inputs.map(port => ({ ...port, endpoints: port.endpoints.map(endpoint => ({ ...endpoint, nodeId: idFor(endpoint.nodeId) })) })),
+          outputs: nested.composition.outputs.map(port => ({ ...port, endpoints: port.endpoints.map(endpoint => ({ ...endpoint, nodeId: idFor(endpoint.nodeId) })) })) } } : {}),
         proxyId: `${inner.id}/@${nested.id}`, nodeIds: [...nested.nodeIds, ...collectMembers(nested.id)].map(idFor) });
     }
     edges.push(...inner.edges.map(edge => ({ ...edge, id: `${inner.id}/${edge.id}`, fromNodeId: idFor(edge.fromNodeId), toNodeId: idFor(edge.toNodeId) })));

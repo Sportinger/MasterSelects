@@ -2,7 +2,8 @@ import type { NodeGraphNode } from '../../../../types/nodeGraph';
 
 export const NODE_PREVIEW_HEIGHT = 124;
 export const NODE_PREVIEW_WIDTH = 164;
-export const inlineNumericPorts = (node: NodeGraphNode): boolean => !!node.operatorId?.startsWith('math.') || ['values.number', 'flock.value', 'flock.math'].includes(node.operatorId ?? '');
+export const isNumericValueNode = (node: NodeGraphNode): boolean => ['values.number', 'values.integer'].includes(node.operatorId ?? '');
+export const inlineNumericPorts = (node: NodeGraphNode): boolean => !!node.operatorId?.startsWith('math.') || isNumericValueNode(node) || ['flock.value', 'flock.math'].includes(node.operatorId ?? '');
 export function previewAtlasTile(zoom: number, ratio: number) {
   return zoom * ratio < 0.35 ? 64 : zoom * ratio < 0.75 ? 128 : 256;
 }

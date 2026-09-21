@@ -28,10 +28,11 @@ export function paintNodeValues(ctx: DrawContext, node: CanvasNode, frame: Previ
     for (const entry of entries) {
       const port = node.ports.find(port => port.id === entry.portId && port.input === (entry.direction === 'input'));
       if (!port) continue;
-      const x = node.x + (entry.direction === 'output' ? 99 : 16), y = node.y + port.y + 12;
+      const beside = node.valueBesideOutput && entry.direction === 'output';
+      const x = node.x + (beside ? port.x - 102 : entry.direction === 'output' ? 99 : 16), y = node.y + port.y + (beside ? -13 : 12);
       if (entry.editable) {
         ctx.strokeStyle = '#383838'; ctx.lineWidth = 1; ctx.strokeRect(x, y, 70, 26);
-        text(ctx, entry.label, x + 70, y + 26, 70, 8, '#999', 'right');
+        if (!beside) text(ctx, entry.label, x + 70, y + 26, 70, 8, '#999', 'right');
       }
       text(ctx, entry.value, x + 67, y + 2, 64, 18, entry.editable ? '#a2d9e8' : '#ddd', 'right');
     }

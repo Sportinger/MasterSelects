@@ -234,6 +234,7 @@ export function createImageOperatorEvaluator(plan: ImageOperatorPlan) {
     else if (item.operation === 'gaussian-scalar') values.push(Math.exp(-((args[0] as number) ** 2) / ((2 * (args[1] as number)) * (args[1] as number))));
     else if (item.operation === 'sqrt-scalar') values.push(Math.sqrt(args[0] as number));
     else if (item.operation === 'fract-scalar') values.push(imageFract(args[0] as number));
+    else if (item.operation === 'trunc-scalar') values.push(Math.trunc(args[0] as number));
     else if (item.operation === 'floor-scalar') values.push(Math.floor(args[0] as number));
     else if (item.operation === 'round-even-scalar') values.push(roundImageScalarEven(args[0] as number));
     else if (item.operation === 'step-scalar') values.push((args[1] as number) < (args[0] as number) ? 0 : 1);

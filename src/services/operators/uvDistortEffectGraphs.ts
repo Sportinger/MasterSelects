@@ -1,4 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
+import { recognizeOperatorCompositions } from './recognizeOperatorCompositions';
 
 export type EditableUvDistortEffectType = 'wave' | 'twirl' | 'bulge' | 'kaleidoscope';
 const node = (id: string, operator: string, bindings: BoundOperatorNode['bindings'] = {}, constants?: BoundOperatorNode['constants']): BoundOperatorNode =>
@@ -48,5 +49,6 @@ function kaleidoscopeGraph(): EffectOperatorGraph {
 }
 
 export function createDefaultUvDistortGraph(type: EditableUvDistortEffectType): EffectOperatorGraph {
-  return type === 'wave' ? waveGraph() : type === 'twirl' ? twirlGraph() : type === 'bulge' ? bulgeGraph() : kaleidoscopeGraph();
+  if (type !== 'kaleidoscope') return type === 'wave' ? waveGraph() : type === 'twirl' ? twirlGraph() : bulgeGraph();
+  return recognizeOperatorCompositions(kaleidoscopeGraph());
 }

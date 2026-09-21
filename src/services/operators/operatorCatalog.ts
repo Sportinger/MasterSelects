@@ -32,7 +32,7 @@ export interface NodeCatalogEntry {
 
 const familyOf = (id: string) => id.replace(/\.(scalar|field|rgb|vec[234])$/, '');
 const usersOf = (context: string) => context.split(/\s*\+\s*/).filter(Boolean);
-const operatorContext = (operator: (typeof EFFECT_OPERATORS)[number]) => IMAGE_OPERATORS.includes(operator)
+const operatorContext = (operator: (typeof EFFECT_OPERATORS)[number]) => IMAGE_OPERATORS.includes(operator) || operator.composition
   ? 'Local image graphs'
   : SCENE_OPERATORS.includes(operator) ? `3D image surfaces${isVoxelOperator(operator.id) ? ' + Voxel Relief' : ''}`
     : isVoxelOperator(operator.id) ? 'Voxel Relief' : operator.id === 'forces.wind' ? 'Face Cables + Flock' : 'Face Cables';

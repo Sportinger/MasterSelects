@@ -2,6 +2,7 @@ import type { SignalKind, SignalRuntimeKind, SignalGraphEdge } from '../signals/
 import type { TimelineSourceType } from './index';
 import type { ColorNodeType } from './colorCorrection';
 import type { NodePortContract } from './nodePortContract';
+import type { OperatorEndpoint, OperatorPort } from './operatorGraph';
 
 export type NodeGraphSignalType = SignalKind;
 
@@ -28,6 +29,7 @@ export interface NodeGraphPortMetadata {
   artifactTarget?: { effectId: string; nodeId: string; portId: string };
   contract?: NodePortContract;
   groupEndpoint?: { nodeId: string; portId: string };
+  groupEndpoints?: OperatorEndpoint[];
   semanticKind?: NodeGraphAudioSemanticKind | string;
   targetClipId?: string;
   signalRefId?: string;
@@ -165,7 +167,9 @@ export interface NodeGraph {
   edges: NodeGraphEdge[];
   domain?: NodeGraphDomain;
   issue?: string;
-  groups?: Array<{ id: string; label: string; color: string; collapsed: boolean; nodeIds: string[]; proxyId: string; parentId?: string; bypassNodeId?: string; effectId?: string; bypassed?: boolean; issue?: string }>;
+  groups?: Array<{ id: string; label: string; color: string; collapsed: boolean; nodeIds: string[]; proxyId: string; parentId?: string; bypassNodeId?: string; effectId?: string; bypassed?: boolean; issue?: string;
+    collapsedByDefault?: boolean; layoutMode?: 'flow';
+    composition?: { operatorId: string; description: string; position: NodeGraphLayout; inputs: Array<OperatorPort & { endpoints: OperatorEndpoint[] }>; outputs: Array<OperatorPort & { endpoints: OperatorEndpoint[] }> } }>;
   /** Uncollapsed nodes used to resolve exposed ports of nested groups. */
   expandedNodes?: NodeGraphNode[];
 }
@@ -254,7 +258,11 @@ export type ClipNodeGraphForcedBuiltIn = 'transform' | 'mask' | 'color';
 /** Presentation coordinates, independent of executable domain layouts. */
 export interface NodeCanvasPlacement {
   nodes: Record<string, NodeGraphLayout>;
-  groups: Record<string, { nodeIds: string[]; proxyId: string; parentId?: string; offset: NodeGraphLayout; locked?: boolean }>;
+  /** User moves are anchors; computed positions follow topology and fold changes. */
+  pinned?: Record<string, true>;
+  /** Reversible displacement caused by expanded frames, independent of manual anchors. */
+  displaced?: Record<string, { origin: NodeGraphLayout; groups: string[] }>;
+  groups: Record<string, { nodeIds: string[]; proxyId: string; parentId?: string; offset: NodeGraphLayout; locked?: boolean; collapsed?: boolean }>;
 }
 
 export interface ClipNodeGraph {

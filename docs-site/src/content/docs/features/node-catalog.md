@@ -52,6 +52,17 @@ Existing effect entries expose their registered pipeline kind and feedback flag;
 their “local” marker means the effect registry still owns that implementation,
 not that a compatible operator migration has already been completed.
 
+## Composed coordinate nodes
+
+The image context includes three reusable definitions with explicit public ports:
+Cartesian to Polar (position and center to radius and angle), Mirror Repeat
+(value and period to a reflected value), and Polar to Cartesian (radius, angle
+and center to position). Angles use radians. Their bodies contain ordinary
+coordinate and math nodes and expand inline in the image compiler. Matching
+primitive patterns can adopt the same definitions across image effects.
+The numeric Value family exposes Float and Integer variants in the inspector;
+Integer truncates toward zero and keeps the number-port contract.
+
 ## Face and depth processing
 
 `source.face-landmarks` and `source.saved-depth` are executable references to

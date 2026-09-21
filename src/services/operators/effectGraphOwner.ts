@@ -1,5 +1,8 @@
 import type { Effect } from '../../types/effects';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
+import { COORDINATE_COMPOSITIONS } from './coordinateCompositions';
+import { expandOperatorCompositions, packOperatorCompositions } from './operatorComposition';
+import { recognizeOperatorCompositions } from './recognizeOperatorCompositions';
 import { cableOperatorGraph, compileCableOperatorGraph } from '../faceCables/cableOperatorGraph';
 import { compileVoxelGraph, voxelOperatorGraph } from './voxelGraph';
 import { isVoxelOperator, VOXEL_OPERATORS } from './voxelOperators';
@@ -187,7 +190,8 @@ export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGra
           ? () => createDefaultUvDistortGraph(effectType)
         : () => createDefaultColorEffectGraph(effectType);
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
-    const graph = migrateImageOperatorGraph(saved);
+    const composed = recognizeOperatorCompositions(saved);
+    const graph = expandOperatorCompositions(migrateImageOperatorGraph(composed));
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
     if (errors.length) throw new Error(errors[0]);
     if (!graph.incomplete) compileImageOperatorGraph(graph, effectOperatorParams(effect), effectOperatorCompileContext(effect));
@@ -213,10 +217,11 @@ export function migratePersistedEffectOperatorGraph(effect: Effect): Effect {
     ? migrateAnalogSignalGraph(savedGraph) : savedGraph;
   const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
   if (errors.length) throw new Error(errors[0]);
+  const packedGraph = packOperatorCompositions(graph);
   const versionedGraph: EffectOperatorGraph = {
-    ...graph,
+    ...packedGraph,
     schemaVersion: 1,
-    nodes: graph.nodes.map(node => ({ ...node, operatorVersion: node.operatorVersion ?? 1 })),
+    nodes: packedGraph.nodes.map(node => ({ ...node, operatorVersion: node.operatorVersion ?? 1 })),
   };
   if (!versionedGraph.incomplete) validateEffectOwnerGraph(effect, versionedGraph, effect.params);
   const params = { ...effect.params };
@@ -251,10 +256,11 @@ export function addableEffectOperators(type: string) {
     const shared = ['image.frame', 'values.number'].flatMap(id => {
       const operator = getEffectOperator(id); return operator ? [operator] : [];
     });
-    return [...shared, ...IMAGE_OPERATORS.filter(operator => operator.addable)];
+    return [...shared, ...IMAGE_OPERATORS.filter(operator => operator.addable), ...COORDINATE_COMPOSITIONS];
   }
   return EFFECT_OPERATORS.filter(operator => operator.addable && (type === 'voxel-relief' ? isVoxelOperator(operator.id)
-    : type === 'face-cables' && !SCENE_OPERATORS.includes(operator) && !VOXEL_OPERATORS.includes(operator) && !SCALAR_FIELD_OPERATORS.includes(operator)));
+    : type === 'face-cables' && !operator.composition && operator.id !== 'values.integer'
+      && !SCENE_OPERATORS.includes(operator) && !VOXEL_OPERATORS.includes(operator) && !SCALAR_FIELD_OPERATORS.includes(operator)));
 }
 
 export function effectOperatorParams(effect: EffectGraphOwner): Record<string, unknown> {

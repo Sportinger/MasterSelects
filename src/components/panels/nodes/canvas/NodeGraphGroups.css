@@ -58,3 +58,8 @@
 .node-workspace-group[data-bypassed="true"] .node-workspace-group-header { background: var(--bg-secondary, #292b2f); }
 .node-workspace-group[data-bypassed="true"] .node-workspace-group-title { color: var(--text-secondary, #aaa); }
 .node-workspace-group-status { flex: 0 0 auto; color: var(--text-secondary, #aaa); font-weight: 400; }
+.node-workspace-node-expand { position: absolute; z-index: 7; width: 20px; height: 20px; padding: 2px; border: 0; border-radius: 3px; background: transparent; color: var(--text-primary, #ddd); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.node-workspace-node-expand svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; }
+.node-workspace-node-expand:hover { background: rgba(255,255,255,.1); }
+.node-workspace-node-expand:focus:not(:focus-visible) { outline: none; }
+.node-workspace-node-expand:focus-visible { outline: 2px solid var(--accent-color, #79b8fa); outline-offset: 2px; }

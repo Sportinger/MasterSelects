@@ -17,7 +17,10 @@ export function nodeGroupBounds(graph: NodeGraph, nodes: NodeGraphNode[]): Map<s
     const group = graph.groups?.find(g => g.id === id), members = nodes.filter(n => group?.nodeIds.includes(n.id));
     const children = group?.collapsed ? [] : (graph.groups ?? []).filter(g => g.parentId === id).map(g => measure(g.id)).filter((b): b is NodeBounds => !!b);
     if (!members.length && !children.length) return;
-    const value = encloseNodeGroup(members, children);
+    const value = group?.collapsed
+      ? { left: Math.min(...members.map(n => n.layout.x)), top: Math.min(...members.map(n => n.layout.y)),
+        right: Math.max(...members.map(n => n.layout.x + NODE_WIDTH)), bottom: Math.max(...members.map(n => n.layout.y + getNodeHeight(n))) }
+      : encloseNodeGroup(members, children);
     bounds.set(id, value); return value;
   };
   graph.groups?.forEach(g => measure(g.id)); return bounds;

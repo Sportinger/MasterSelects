@@ -1,5 +1,5 @@
-import type { NodeGraphEdge, NodeGraphNode } from '../../../../services/nodeGraph';
-import { memo, type CSSProperties } from 'react';
+import type { NodeGraph, NodeGraphEdge, NodeGraphNode } from '../../../../services/nodeGraph';
+import { Fragment, memo, useId, type CSSProperties } from 'react';
 import { describeNodePort } from '../../../../services/nodeGraph/nodePortPresentation';
 import type { ConnectionDraft, NodeBounds } from './canvasGeometry';
 import { getConnectionArrowTransform, getConnectionPath, getPortCenter } from './canvasGeometry';
@@ -7,8 +7,12 @@ import type { ConnectionPlug } from './connectionPlugs';
 import { useNodeFlowActivity } from './useNodeFlowActivity';
 import { NodeGraphFlowSignals } from './NodeGraphFlowSignals';
 import './NodeGraphFlow.css';
+import { nodeGroupBounds } from './groupBounds';
+import { edgeGroupOcclusion, subtractOccludedRects } from './edgeGroupOcclusion';
 
 interface NodeGraphEdgesProps {
+  graph?: NodeGraph;
+  frameNodes?: NodeGraphNode[];
   visibleEdgeIds?: ReadonlySet<string>;
   graphBounds: NodeBounds;
   edges: NodeGraphEdge[];
@@ -25,6 +29,7 @@ interface NodeGraphEdgesProps {
 }
 
 export const NodeGraphEdges = memo(function NodeGraphEdges({
+  graph, frameNodes,
   visibleEdgeIds,
   graphBounds,
   edges,
@@ -40,6 +45,8 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
   canvasRendered = false,
 }: NodeGraphEdgesProps) {
   const flowRef = useNodeFlowActivity();
+  const clipPrefix = useId().replace(/:/g, '');
+  const groupBounds = graph ? nodeGroupBounds(graph, frameNodes ?? [...nodesById.values()]) : new Map<string, NodeBounds>();
   const endpoints = new Map<string, { input?: ConnectionPlug; output?: ConnectionPlug }>();
   for (const plug of plugs) {
     const pair = endpoints.get(plug.edge.id) ?? {};
@@ -80,15 +87,27 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
       viewBox={`${svgLeft} ${svgTop} ${svgWidth} ${svgHeight}`}
       aria-hidden="true"
     >
-      {edges.map((edge) => {
+      {edges.map((edge, index) => {
         const pair = endpoints.get(edge.id);
         if (!pair?.input || !pair.output || (connectionDraft?.reconnectEdgeId === edge.id && connectionDraft.moved)) return null;
         if (visibleEdgeIds && !visibleEdgeIds.has(edge.id)) return null;
         const path = getConnectionPath(pair.output.tip, pair.input.tip);
         const port = nodesById.get(edge.fromNodeId)?.outputs.find(p => p.id === edge.fromPortId);
+        const covers = graph ? edgeGroupOcclusion(edge, graph, groupBounds) : [];
+        const clip = `${clipPrefix}-${index}`, dimClip = `${clip}-dim`;
         return (
+          <Fragment key={edge.id}>
+          {covers.length > 0 && <>
+            <defs>
+              <clipPath id={clip} clipPathUnits="userSpaceOnUse">{subtractOccludedRects({ x: svgLeft, y: svgTop, width: svgWidth, height: svgHeight }, covers)
+                .map((rect, i) => <rect key={i} {...rect} />)}</clipPath>
+              <clipPath id={dimClip} clipPathUnits="userSpaceOnUse">{covers.map((rect, i) => <rect key={i} {...rect} />)}</clipPath>
+            </defs>
+            {!canvasRendered && <path d={path} className={`node-workspace-edge port-typed node-workspace-edge-${edge.type}`}
+              clipPath={`url(#${dimClip})`} style={{ '--port-color': port ? describeNodePort(port).color : undefined, opacity: .3, pointerEvents: 'none' } as CSSProperties} />}
+          </>}
           <g
-            key={edge.id}
+            clipPath={covers.length ? `url(#${clip})` : undefined}
             className="node-workspace-edge-group"
             data-edge-id={edge.id}
             style={{ '--port-color': port ? describeNodePort(port).color : undefined } as CSSProperties}
@@ -119,10 +138,11 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
                 transform={getConnectionArrowTransform(pair.output.tip, pair.input.tip)} />
             </g></>}
           </g>
+          </Fragment>
         );
       })}
     </svg>
-    {!canvasRendered && <NodeGraphFlowSignals plugs={plugs} zoom={zoom}
+    {!canvasRendered && <NodeGraphFlowSignals plugs={plugs} zoom={zoom} graph={graph} frameNodes={frameNodes}
       hiddenEdgeId={connectionDraft?.moved ? connectionDraft.reconnectEdgeId : undefined} />}
     {draftPath && connectionDraft && <svg className="node-workspace-edges node-workspace-edge-drag-layer" width="1" height="1" aria-hidden="true"
       style={{ '--port-color': draftPort ? describeNodePort(draftPort).color : undefined } as CSSProperties}>

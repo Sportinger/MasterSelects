@@ -15,21 +15,30 @@ export function foldOperatorGroups(graph: NodeGraph, state?: ClipNodeGraph): Nod
   }
   const expandedNodes = nodes;
   for (const g of groups.filter(g => g.parentId).toSorted((a, b) => depth(b.id) - depth(a.id))) {
-    g.collapsed = state?.groups?.[g.id]?.collapsed === true;
+    g.collapsed = state?.groups?.[g.id]?.collapsed ?? g.collapsedByDefault ?? false;
     if (!g.collapsed) continue;
     const members = nodes.filter(n => g.nodeIds.includes(n.id)); if (!members.length) continue;
     const ids = new Set(members.map(n => n.id));
     const effectOwner = members.map(n => n.binding && 'effectId' in n.binding ? n.binding.effectId : undefined).find(Boolean);
     const proxy: NodeGraphNode = { id: g.proxyId, label: g.label, kind: 'effect', runtime: 'subgraph',
-      description: 'Reusable node group. Expand to inspect its processing steps.', inputs: [], outputs: [],
+      description: g.composition?.description ?? 'Local node group. Expand to inspect its processing steps.', inputs: [], outputs: [],
+      ...(g.composition ? { operatorId: g.composition.operatorId, params: { categoryLabel: 'COMPOSED' } } : {}),
       groupId: members[0].groupId, binding: { kind: 'operator-group', groupId: g.id,
         ...(effectOwner ? { effectId: effectOwner } : {}) },
-      layout: { x: Math.min(...members.map(n => n.layout.x)), y: Math.min(...members.map(n => n.layout.y)) } };
+      layout: state?.groups?.[g.id]?.position ?? g.composition?.position ?? { x: Math.min(...members.map(n => n.layout.x)), y: Math.min(...members.map(n => n.layout.y)) } };
     const animated = members.filter(node => node.animation);
     if (animated.length) proxy.animation = { clipId: animated[0].animation!.clipId,
       channels: animated.flatMap(node => node.animation!.channels) };
     const expose = (node: NodeGraphNode, port: NodeGraphPort) => {
       const list = port.direction === 'input' ? proxy.inputs : proxy.outputs;
+      const endpoint = port.metadata?.groupEndpoint ?? { nodeId: node.id, portId: port.id };
+      const declared = (port.direction === 'input' ? g.composition?.inputs : g.composition?.outputs)?.find(p =>
+        p.endpoints.some(item => item.nodeId === endpoint.nodeId && item.portId === endpoint.portId));
+      if (declared) {
+        if (!list.some(p => p.id === declared.id)) list.push({ ...port, id: declared.id, label: declared.label,
+          metadata: { ...port.metadata, groupEndpoint: declared.endpoints[0], groupEndpoints: declared.endpoints } });
+        return declared.id;
+      }
       const id = `${node.id}:${port.id}`;
       if (!list.some(p => p.id === id)) list.push({ ...port, id, label: `${node.label}: ${port.label}`,
         metadata: { ...port.metadata, groupEndpoint: port.metadata?.groupEndpoint ?? { nodeId: node.id, portId: port.id } } });
@@ -50,5 +59,12 @@ export function foldOperatorGroups(graph: NodeGraph, state?: ClipNodeGraph): Nod
   }
   const visible = new Set(nodes.map(n => n.id));
   const hiddenByParent = (id?: string): boolean => { const g = groups.find(group => group.id === id); return !!g && (g.collapsed || hiddenByParent(g.parentId)); };
-  return { ...graph, nodes, expandedNodes, edges: edges.filter(e => visible.has(e.fromNodeId) && visible.has(e.toNodeId)), groups: groups.filter(g => !hiddenByParent(g.parentId)) };
+  const visibleEdges = edges.filter(e => visible.has(e.fromNodeId) && visible.has(e.toNodeId));
+  const seen = new Set<string>();
+  return { ...graph, nodes, expandedNodes, edges: visibleEdges.filter(edge => {
+    const target = nodes.find(node => node.id === edge.toNodeId)?.inputs.find(port => port.id === edge.toPortId);
+    if (!target?.metadata?.groupEndpoints) return true;
+    const key = `${edge.fromNodeId}:${edge.fromPortId}:${edge.toNodeId}:${edge.toPortId}`;
+    if (seen.has(key)) return false; seen.add(key); return true;
+  }), groups: groups.filter(g => !hiddenByParent(g.parentId)) };
 }

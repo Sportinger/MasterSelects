@@ -40,7 +40,7 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
   if (!node || !operator) return null;
   const evaluatedParams = effectOperatorParams(effect);
   const parameterSchema = isImageGraphEffectType(effect.type) || effect.type === 'analog-signal-lab' ? getEffect(effect.type)?.params : undefined;
-  const familyOptions = operatorFamilyOptions(operator);
+  const familyOptions = operatorFamilyOptions(operator).filter(option => option.value === operator.id || addableEffectOperators(effect.type).some(operator => operator.id === option.value));
   const mathNode = { id: node.id, operatorId: node.operator, label: operator.label, kind: 'effect' as const, runtime: 'builtin' as const,
     inputs: [], outputs: [], layout: { x: 0, y: 0 }, binding: { kind: 'effect-operator' as const, effectId, nodeId: node.id, operator: node.operator } };
   const mathOptions = mathModeOptions(mathNode);
@@ -64,8 +64,8 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
         <InspectorSelect ariaLabel="Math operation" value={node.operator} options={mathOptions}
           onChange={mode => safely(() => setMathNodeMode(clip.id, mathNode, mode))} />
       </ResolveInspectorRow>}
-      {familyOptions.length > 1 && <ResolveInspectorRow label={operator.family === 'geometry.primitive' ? 'Shape' : 'Components'}>
-        <InspectorSelect ariaLabel={operator.family === 'geometry.primitive' ? 'Primitive shape' : `${operator.family} components`} value={node.operator} options={familyOptions}
+      {familyOptions.length > 1 && <ResolveInspectorRow label={operator.family === 'values.numeric' ? 'Type' : operator.family === 'geometry.primitive' ? 'Shape' : 'Components'}>
+        <InspectorSelect ariaLabel={operator.family === 'values.numeric' ? 'Value type' : operator.family === 'geometry.primitive' ? 'Primitive shape' : `${operator.family} components`} value={node.operator} options={familyOptions}
           onChange={variant => safely(() => setOperatorVariant(clip.id, effectId, node.id, variant))} />
       </ResolveInspectorRow>}
       {operator.id === 'glyph.atlas' && <GlyphAtlasControls bindings={node.bindings} params={evaluatedParams} parameterSchema={parameterSchema}
@@ -85,8 +85,8 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
             value={String(constant)} onChange={value => safely(() => setOperatorConstant(clip.id, effectId, node.id, spec.id, value))} /></ResolveInspectorRow>;
           if (spec.type === 'number') return <ResolveInspectorNumberRow key={spec.id} label={spec.label} ariaLabel={`${operator.label} ${spec.label}`}
             value={Number(constant)} defaultValue={Number(spec.default)}
-            min={operator.id === 'values.number' ? Math.min(spec.min ?? -30, Number(constant)) : spec.min ?? -30}
-            max={operator.id === 'values.number' ? Math.max(spec.max ?? 30, Number(constant)) : spec.max ?? 30} step={spec.step ?? 0.01}
+            min={operator.family === 'values.numeric' ? Math.min(spec.min ?? -30, Number(constant)) : spec.min ?? -30}
+            max={operator.family === 'values.numeric' ? Math.max(spec.max ?? 30, Number(constant)) : spec.max ?? 30} step={spec.step ?? 0.01}
             onChange={next => safely(() => setOperatorConstant(clip.id, effectId, node.id, spec.id, next))}
             persistenceKey={operatorConstantNumberPersistenceKey({ clipId: clip.id, effectId, nodeId: node.id, parameter: spec.id })} />;
           if (spec.type === 'select') return <ResolveInspectorRow key={spec.id} label={spec.label}><InspectorSelect ariaLabel={`${operator.label} ${spec.label}`}

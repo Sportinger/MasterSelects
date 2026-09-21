@@ -13,8 +13,9 @@ import type { ConnectionPlug } from '../connectionPlugs';
 import type { HoveredNodePort } from '../useNodePortHover';
 import type { CanvasCurve, CanvasScene } from './nodeCanvasTypes';
 import { makeCanvasCable } from './cableGeometry';
-import { inlineNumericPorts, previewRect } from '../../previews/previewGeometry';
+import { inlineNumericPorts, isNumericValueNode, previewRect } from '../../previews/previewGeometry';
 import { previewOutput } from '../../../../../services/nodePreview/previewTypes';
+import { edgeGroupOcclusion } from '../edgeGroupOcclusion';
 
 const COLORS: Record<string, string> = { source: '#54be8e', transform: '#5299eb', motion: '#5299eb', color: '#e0c24a', mask: '#be6fd5', effect: '#de8452', custom: '#5cbed6', analysis: '#70f6dc', output: '#97a9be' };
 const EMPTY: Keyframe[] = [];
@@ -60,6 +61,7 @@ export function buildCanvasScene(options: Options): CanvasScene {
   const bounds = nodeGroupBounds(graph, options.groupFrameNodes ?? nodes);
   const scene: CanvasScene = { nodes: [], cables: [], groups: [], plugs: [] };
   for (const group of graph.groups ?? []) {
+    if (group.collapsed) continue;
     const b = bounds.get(group.id);
     if (b) scene.groups.push({ x: b.left, y: b.top, width: b.right - b.left, height: b.bottom - b.top,
       label: group.label, color: group.color ?? '#5cbed6', collapsed: !!group.collapsed,
@@ -68,14 +70,16 @@ export function buildCanvasScene(options: Options): CanvasScene {
   }
   scene.nodes = nodes.map(node => ({ id: node.id, x: node.layout.x, y: node.layout.y, width: NODE_WIDTH, height: getNodeHeight(node),
     label: node.label, description: inlineNumericPorts(node) ? '' : node.description ?? 'Built-in processing node', kind: typeof node.params?.categoryLabel === 'string' ? node.params.categoryLabel : node.kind,
-    runtime: node.runtime, color: COLORS[node.kind] ?? '#5cbed6', selected: node.id === options.selectedNodeId || options.selection.has(node.id),
+    runtime: node.runtime, color: node.operatorId?.startsWith('values.') ? '#eeeeee' : COLORS[node.kind] ?? '#5cbed6', selected: node.id === options.selectedNodeId || options.selection.has(node.id),
+    valueBesideOutput: isNumericValueNode(node),
+    expandable: graph.groups?.some(group => group.collapsed && group.proxyId === node.id),
     viewerEnabled: node.preview?.requested,
     mathSymbol: inlineNumericPorts(node) ? { text: String(node.params?.mathSymbol ?? ''), x: 50, y: getNodePortStartY(node) + (node.inputs.length ? 56 : 8) + 22 } : undefined,
     preview: node.preview?.enabled ? { ...previewRect(getNodeHeight(node), node), key: node.preview.key, label: previewOutput(node, node.preview.portId)?.label ?? 'Values', text: inlineNumericPorts(node) } : undefined,
     bypassed: isNodeBypassed(node), bypassable: !!options.canBypass && isNodeBypassable(node), badges: getNodeBadges(node), curve: curveFor(node, options),
     ports: [...node.inputs, ...node.outputs].map(port => {
       const info = describeNodePort(port), center = getPortCenter(node, port.id, port.direction)!;
-      return { id: port.id, x: center.x - node.layout.x, y: center.y - node.layout.y, label: port.label, type: inlineNumericPorts(node) ? '' : info.typeLabel, color: info.color, input: port.direction === 'input' };
+      return { id: port.id, x: center.x - node.layout.x, y: center.y - node.layout.y, label: isNumericValueNode(node) ? '' : port.label, type: inlineNumericPorts(node) ? '' : info.typeLabel, color: info.color, input: port.direction === 'input' };
     }) }));
   const pairs = new Map<string, { input?: ConnectionPlug; output?: ConnectionPlug }>();
   for (const plug of plugs) {
@@ -88,6 +92,7 @@ export function buildCanvasScene(options: Options): CanvasScene {
   for (const [id, pair] of pairs) {
     if (!pair.output || !pair.input || (draft?.moved && draft.reconnectEdgeId === id)) continue;
     scene.cables.push({ ...makeCanvasCable(pair.output.tip, pair.input.tip, describeNodePort(pair.output.port).color, id === options.selectedEdgeId || id === options.hoveredEdgeId),
+      occlusions: edgeGroupOcclusion(pair.output.edge, graph, bounds),
       baked: pair.output.edge.readOnly });
   }
   const preview = (nodeId: string, portId: string, direction: 'input' | 'output', ghost = false) => {

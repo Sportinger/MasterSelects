@@ -23,6 +23,14 @@ export interface OperatorDefinition {
   /** Explicit catalog metadata; absent values remain unknown rather than inferred from labels. */
   consumers?: readonly string[];
   implementation?: 'shared' | 'local' | 'unknown';
+  /** Versioned, pure graph implementation. The image compiler expands this inline. */
+  composition?: OperatorCompositionBody;
+}
+export interface OperatorEndpoint { nodeId: string; portId: string }
+export interface OperatorCompositionBody {
+  graph: EffectOperatorGraph;
+  inputs: Record<string, OperatorEndpoint[]>;
+  outputs: Record<string, OperatorEndpoint>;
 }
 export type OperatorBinding = string | [string, string, string] | { yaw: string; pitch: string };
 export interface BoundOperatorNode {
@@ -32,11 +40,15 @@ export interface BoundOperatorNode {
   constants?: Record<string, OperatorValue>;
   /** Optional parameter backing the node's enable control, shared with the effect form. */
   enabled?: string; enabledDefault?: boolean; bypassed?: boolean;
+  /** Stable identities/layout of an instance's interior, including migrated flat nodes. */
+  composition?: { nodeIds: Record<string, string>; layout: EffectOperatorGraph['layout'] };
 }
 export interface OperatorEdge { id: string; from: string; output: string; to: string; input: string }
 export interface EffectOperatorGraph {
   version: 1;
   schemaVersion?: 1;
+  /** Applied exact composition migration revision; local ungrouping is not undone on every read. */
+  compositionRules?: 1;
   /** An editable graph whose execution is paused until its missing wiring is repaired. */
   incomplete?: string;
   domain?: 'cables' | 'scene' | 'voxel' | 'image' | 'compute-image' | 'analog-signal';
@@ -46,6 +58,9 @@ export interface EffectOperatorGraph {
 }
 export interface OperatorGroup {
   id: string; label: string; color: string; nodeIds: string[]; parentId?: string;
+  collapsedByDefault?: boolean;
+  /** Expanded editor view of a shared instance; repacked before persistence. */
+  composition?: { instance: BoundOperatorNode; position: { x: number; y: number } };
 }
 /** Serializable clip-local scene graph. GPU resources remain owned by the renderer. */
 export interface SceneOperatorGraph { graph: EffectOperatorGraph; params: Record<string, OperatorValue> }

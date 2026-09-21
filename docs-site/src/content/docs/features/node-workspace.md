@@ -10,7 +10,7 @@ including nested groups. The separate arrow collapses or expands the group;
 **Focus** fits that group. Header text adapts to zoom and truncates when needed;
 frame width and header height never grow to accommodate text. Collapse state and layout are
 saved with the clip and restored when reopening the project. Collapse affects only
-presentation, never rendering or a saved bake.
+presentation, never rendering or a saved bake. Collapsed effects and subgroups appear as regular node cards with typed ports and an expansion arrow beside the title, without an enclosing group frame. Expanding or collapsing preserves zoom and pan. A short 220 ms transition moves cards, cables and surrounding nodes together; interrupted transitions continue from their current positions. Manual dragging stays direct, and reduced-motion preferences disable the transition.
 
 `NodeGraphDocument` retains the domain graphs behind this common canvas. Explicit
 bindings route each edit to its existing owner; the UI does not maintain a second
@@ -27,6 +27,30 @@ Flock node parameters use the shared compact inspector, with collapsible section
 numeric fields, sliders at suitable widths, reset and supported keyframe actions.
 The link icon exposes a control to Properties. The Connections section offers a
 keyboard-accessible alternative to cable dragging.
+
+## Reusable Kaleidoscope nodes
+
+Kaleidoscope is the first composition pilot. Its graph uses three registered,
+versioned definitions: **Cartesian to Polar**, **Mirror Repeat**, and
+**Polar to Cartesian**. Each behaves like one typed node when collapsed and
+opens into editable primitive nodes. One public input can feed several internal
+ports; connecting or disconnecting that input updates all consumers together.
+
+The definitions can be added to other image-effect graphs. Exact structural
+recognition also replaces matching, ungrouped primitive patterns when an existing
+image graph is opened. It preserves parameter bindings and stable internal IDs;
+changed formulas and unexpected intermediate fan-out stay local. Explicit
+ungrouping is retained. Editing a shared instance's processing steps or name
+detaches that instance into a local group, leaving other instances unchanged.
+Saved graphs retain the definition ID, revision and internal identity/layout map.
+This pilot uses bundled definitions; a project-authored definition library and
+execution in audio, Flock or scene graphs are not implemented yet.
+
+The image compiler expands compositions inline without additional render passes.
+Expansion supports up to four nested levels within the existing image graph
+budgets. Kaleidoscope arranges nodes by data flow, recursively measures expanded
+subgroups, and moves Clip Output after the effect. Added nodes and changed wiring
+participate in layout. Explicitly dragged node positions remain anchored. When a group expands into unrelated nodes or sibling groups, those objects move outside the complete frame, even when their old positions were manually placed. Sibling groups move as a unit; membership stays unchanged. Collapsing restores positions displaced by expansion, so surrounding nodes move closer again. A subsequent manual move replaces that automatic return position.
 
 ## Math and Voxel Relief
 
@@ -45,6 +69,12 @@ keeps the node identity, compatible links and numeric
 bindings; inputs absent in the new mode disconnect in the same undo step.
 Flock math cards offer all operations supported by the Flock registry.
 
+Numeric **Value** cards use a white accent and show the editable number to the
+left of the output connector. Their **Type** dropdown is available only in the
+right inspector. Image graphs offer Float and Integer; Integer truncates toward
+zero after parameter animation while retaining the shared numeric signal port.
+Changing type preserves compatible connections and parameter bindings.
+
 Numeric and text viewers, including math symbols and sampled port values, draw
 directly in the worker canvas without thumbnail generation or atlas tiles.
 Editable values retain transparent DOM interaction targets; their controls become
@@ -53,8 +83,7 @@ directly; the touched number updates immediately while dependent calculations
 finish independently. Numeric jobs do not wait for image-preview readbacks.
 For graph-local constants, inline and inspector controls share the same saved
 Min/Max/Default preference. Registry values are the fallback; typed values clamp
-to the effective range and right-click resets to the effective default. A plain
-`values.number` literal may use any finite customized range, while parameters with
+to the effective range and right-click resets to the effective default. A numeric Value literal may use any finite customized range, while parameters with
 domain constraints retain their registry limits. The preference is editor-local;
 the actual constant, graph layout and groups persist with the project graph and
 participate in undo, save and load.
@@ -63,6 +92,10 @@ tooltip identifies that sample because field values vary across the image.
 The inspector shows those same live connected inputs and results. No additional
 video decoder is opened. Values, operation changes and their bindings support
 undo and project saves; unavailable live values are shown as a dash.
+
+Cable sections passing behind unrelated groups draw at 30% opacity and cannot
+be hovered or clicked there. Wires belonging to a group retain their normal
+appearance and interaction inside that group.
 
 ## Canvas navigation
 
@@ -99,8 +132,7 @@ values or a bounded sample of already simulated particles. Old particle samples
 are marked stale. Scene previews show the shared rendered Flock scene, not an
 independent render of each branch. Opening a viewer never advances the simulation
 or starts missing audio analysis; unavailable outputs are identified explicitly.
-Automatic placement finds room for new nodes only. Existing nodes and groups keep
-their positions, including intentional overlaps, through edits, folding and saves.
+Outside the Kaleidoscope flow-layout pilot, automatic placement finds room for new nodes only. Existing nodes and groups keep their positions, including intentional overlaps, through edits, folding and saves.
 
 Each group has a **lock** for outgoing membership changes. Unlock the source to
 drag a node into another expanded group or effect; the target may remain locked.

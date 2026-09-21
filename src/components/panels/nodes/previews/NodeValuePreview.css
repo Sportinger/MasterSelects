@@ -19,7 +19,10 @@
 .node-value-inline { position: absolute; z-index: 7; color: var(--text-primary, #ddd); font: 500 18px/26px system-ui; font-variant-numeric: tabular-nums; text-align: right; }
 .node-value-inline .node-value-row { flex-direction: column-reverse; align-items: stretch; gap: 0; min-height: 0; }
 .node-value-inline .node-value-row > span:first-child { font: 8px system-ui; color: var(--text-secondary, #999); }
-.node-value-inline .draggable-number { font: 500 18px/24px system-ui; font-variant-numeric: tabular-nums; width: 100%; max-width: 100%; padding: 0 3px; border: 1px solid var(--separator-color, #383838); border-radius: 3px; }
+.node-value-beside .node-value-row > span:first-child { display: none; }
+.node-workspace-node-value { border-top-color: #eeeeee; }
+.node-workspace-node-value.node-inline-math .node-workspace-port-label { visibility: hidden; }
+.node-value-inline .draggable-number { font: 500 18px/24px system-ui; font-variant-numeric: tabular-nums; box-sizing: border-box; width: 100%; max-width: 100%; padding: 0 3px; border: 1px solid var(--separator-color, #383838); border-radius: 3px; }
 .node-value-inline small { font-size: 8px; }
 .node-value-computed { cursor: help; }
 .node-value-canvas-control { opacity: 0; }

@@ -6,6 +6,7 @@ import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
 import { getEffectOperator } from './operatorRegistry';
 import { directionFromAngles, periodicWindModulation, windForce } from './wind';
 import { effectGraphLimits } from './effectGraphLimits';
+import { expandOperatorCompositions } from './operatorComposition';
 
 export const EFFECT_GRAPH_PARAM = 'operatorGraph';
 export type OperatorParameters = Record<string, unknown>;
@@ -16,6 +17,7 @@ export function validateEffectGraph(graph: EffectOperatorGraph, allowIncomplete 
     || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges) || !graph.layout
     || graph.nodes.length > limits.nodes || graph.edges.length > limits.edges) return ['Invalid operator graph.'];
   if (graph.nodes.some(n => !n || typeof n !== 'object') || graph.edges.some(e => !e || typeof e !== 'object')) return ['Invalid graph entries.'];
+  try { graph = expandOperatorCompositions(graph); } catch (error) { return [String(error)]; }
   if (Object.values(graph.layout).some(p => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y))) return ['Invalid node position.'];
   const errors: string[] = [], nodes = new Map(graph.nodes.map(n => [n.id, n]));
   if (nodes.size !== graph.nodes.length) errors.push('Duplicate node ID.');

@@ -6,6 +6,7 @@ import { colorToRgba } from '../../effects/_shared/catalogColor';
 import { compileImageOperatorPassPlan } from './imageOperatorPlan';
 import { emitImageOperatorWgsl } from './imageOperatorWgslEmitter';
 import { migrateImageOperatorGraph } from './imageOperatorMigration';
+import { compositionGroupInterface, expandOperatorCompositions } from './operatorComposition';
 import { resolveImageOperatorChoice, type ImageOperatorCompileContext } from './imageOperatorChoice';
 import { IMAGE_FRAME_HISTORY_RESOURCE_ID, type ImageOperatorResourceSampling } from './imageOperatorResources';
 import { imageDegreesToRadians } from './imageAngleSemantics';
@@ -29,7 +30,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
   if (graph.domain !== 'image') throw new Error('Expected an image operator graph.');
   if (graph.schemaVersion !== 1) throw new Error(`Unsupported image graph schema version: ${String(graph.schemaVersion)}.`);
   if (graph.nodes.some(item => item.operatorVersion !== 1)) throw new Error('Unsupported image operator version.');
-  for (const item of graph.nodes.filter(item => item.operator === 'values.number')) {
+  for (const item of graph.nodes.filter(item => item.operator === 'values.number' || item.operator === 'values.integer')) {
     const binding = item.bindings.value;
     const resolved = typeof binding === 'string' ? params[binding] : item.constants?.value;
     if (resolved !== undefined && (typeof resolved !== 'number' || !Number.isFinite(resolved))) {
@@ -271,6 +272,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         register = emit({ nodeId: current.id, operation: scalar ? 'select-lazy-scalar' : 'select-image', type: scalar ? 'scalar' : 'image',
           inputs: [condition, falseScope, trueScope] }); break;
       }
+      case 'values.integer':
       case 'values.number': {
         const binding = current.bindings.value;
         const raw = typeof binding === 'string' ? params[binding] : undefined;
@@ -287,6 +289,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
           }
           register = emit({ nodeId: current.id, operation: 'parameter', type: 'scalar', inputs: [], value: slot });
         } else register = emit({ nodeId: current.id, operation: 'constant', type: 'scalar', inputs: [], value });
+        if (current.operator === 'values.integer') register = emit({ nodeId: current.id, operation: 'trunc-scalar', type: 'scalar', inputs: [register] });
         break;
       }
       case 'values.choice': {
@@ -637,6 +640,7 @@ function assertDerivativeInputsAreRootLocal(graph: EffectOperatorGraph) {
 }
 
 export function compileImageOperatorGraph(graph: EffectOperatorGraph, params: Record<string, unknown> = {}, context: ImageOperatorCompileContext = {}): ImageOperatorPlan {
+  graph = expandOperatorCompositions(graph);
   assertImageGraphBudget(graph);
   assertDerivativeInputsAreRootLocal(graph);
   return compileImageOperatorPassPlan(graph, params, (singleGraph, singleParams, preview) => compileImageOperatorTarget(singleGraph, singleParams, preview, context));
@@ -644,6 +648,14 @@ export function compileImageOperatorGraph(graph: EffectOperatorGraph, params: Re
 
 export function compileImageOperatorPreview(graph: EffectOperatorGraph, params: Record<string, unknown>, target: ImageOperatorPreviewTarget,
   context: ImageOperatorCompileContext = {}): ImageOperatorPlan {
+  graph = expandOperatorCompositions(graph);
+  const group = graph.groups?.find(group => group.composition?.instance.id === target.nodeId);
+  if (group) {
+    const ports = compositionGroupInterface(graph, group)!;
+    const endpoint = (target.direction === 'input' ? ports.inputs : ports.outputs).find(port => port.id === target.portId)?.endpoints[0];
+    if (!endpoint) throw new Error('Unknown composition preview port.');
+    target = { ...target, nodeId: endpoint.nodeId, portId: endpoint.portId };
+  }
   assertImageGraphBudget(graph);
   assertDerivativeInputsAreRootLocal(graph);
   return compileImageOperatorPassPlan(graph, params, (singleGraph, singleParams, preview) => compileImageOperatorTarget(singleGraph, singleParams, preview, context), target);

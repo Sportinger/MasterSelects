@@ -21,7 +21,8 @@ export function OperatorGroupParameters({ clip, groupId, effectId }: { clip: Tim
     catch (error) { setMessage(String(error)); }
   };
   return <div className="operator-parameters">
-    <ResolveInspectorSection title="Node group">
+    <ResolveInspectorSection title={group.composition ? 'Reusable node' : 'Node group'}>
+      {group.composition && <p className="face-cable-hint">Shared definition, revision {group.composition.instance.operatorVersion ?? 1}. Editing its processing steps or name creates a local group; other instances keep their definition.</p>}
       <ResolveInspectorRow label="Name"><input className="operator-group-name" aria-label="Node group name" value={name} maxLength={80}
         onChange={e => setName(e.target.value)} onBlur={() => { if (name.trim() && name.trim() !== group.label) edit(g => { g.groups!.find(v => v.id === id)!.label = name.trim(); }); }}
         onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); e.stopPropagation(); }} /></ResolveInspectorRow>
@@ -29,7 +30,7 @@ export function OperatorGroupParameters({ clip, groupId, effectId }: { clip: Tim
         ...(graph.groups ?? []).filter(g => g.id !== id).map(g => ({ value: g.id, label: g.label }))]}
         onChange={parentId => edit(g => { g.groups!.find(v => v.id === id)!.parentId = parentId || undefined; })} /></ResolveInspectorRow>
       <ResolveInspectorRow label="Ungroup"><ResolveInspectorIconButton ariaLabel="Ungroup nodes" title="Remove the group and retain every processing node" onClick={() => edit(g => ungroupOperators(g, id))}>↗</ResolveInspectorIconButton></ResolveInspectorRow>
-      <p className="face-cable-hint">Expand using the canvas header. Select nodes and press Ctrl+G to create another group inside this one. Grouping keeps every connection and saved artifact.</p>
+      <p className="face-cable-hint">Expand using the arrow beside the node title. Select nodes and press Ctrl+G to create another group inside this one. Grouping keeps every connection and saved artifact.</p>
     </ResolveInspectorSection>
     {message && <p role="alert">{message}</p>}
   </div>;

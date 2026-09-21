@@ -26,6 +26,10 @@ const vectorOperators = ([2, 3, 4] as const).flatMap(size => {
 
 /** Operators newly owned by the local image compiler. image.frame and values.number stay canonical registry entries. */
 export const IMAGE_OPERATORS: readonly OperatorDefinition[] = [
+  imageOperator({ id: 'values.integer', family: 'values.numeric', variant: 'integer', label: 'Value',
+    description: 'An integer-valued scalar. Truncates toward zero after animation; keeps the numeric signal compatible with math inputs.',
+    inputs: [], outputs: [port('value', 'number', 'Value')],
+    parameters: [{ id: 'value', label: 'Value', type: 'number', default: 1, min: -30, max: 30, step: 1, animatable: true }], addable: true }),
   ...vectorOperators,
   imageOperator({ id: 'vector.normalize.vec2', family: 'vector.normalize', variant: 'vec2', label: 'Normalize Vector',
     description: 'Normalizes a nonzero two-component vector; the CPU reference defines a zero vector as zero.',

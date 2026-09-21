@@ -4,7 +4,7 @@ import { useNodeValueFrame } from './useNodeValueFrame';
 import { editPreviewValue } from '../../../../services/nodePreview/editPreviewValue';
 import { PreviewNumber } from './PreviewNumber';
 import { getNodeHeight, getPortCenter } from '../canvas/canvasGeometry';
-import { inlineNumericPorts, previewRect } from './previewGeometry';
+import { inlineNumericPorts, isNumericValueNode, previewRect } from './previewGeometry';
 import type { PreviewValueControl } from '../../../../services/nodePreview/previewTypes';
 import './NodeValuePreview.css';
 import { OperatorColorInput } from '../workspace/OperatorColorInput';
@@ -38,8 +38,9 @@ export function NodeValuePreview({ node, canvasRendered = false }: { node: NodeG
     const editablePorts = new Set(entries.map(entry => `${entry.direction ?? 'input'}:${entry.portId}`));
     return <>
       {entries.map(entry => { const point = getPortCenter(node, entry.portId!, entry.direction ?? 'input');
-        return <div className={`node-value-inline${canvasRendered ? ' node-value-canvas-control' : ''}`} key={entry.target.parameter} aria-label={`Value below ${entry.portId}`}
-          style={{ left: node.layout.x + (entry.direction === 'output' ? 99 : 16), top: point.y + 12, width: 70 }}
+        const beside = isNumericValueNode(node) && entry.direction === 'output';
+        return <div className={`node-value-inline${beside ? ' node-value-beside' : ''}${canvasRendered ? ' node-value-canvas-control' : ''}`} key={entry.target.parameter} aria-label={`Value ${beside ? 'beside' : 'below'} ${entry.portId}`}
+          style={{ left: beside ? point.x - 102 : node.layout.x + (entry.direction === 'output' ? 99 : 16), top: beside ? point.y - 13 : point.y + 12, width: 70 }}
           onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
           {control(entry)}
         </div>;

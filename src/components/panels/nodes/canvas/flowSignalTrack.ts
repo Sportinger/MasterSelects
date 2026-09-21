@@ -1,7 +1,9 @@
 import type { NodeGraphPoint } from './canvasGeometry';
+import type { Rect } from './rendering/nodeCanvasTypes';
+import { pointBehindGroup } from './edgeGroupOcclusion';
 
 /** Sample the same cubic as the cable into transform-only animation keyframes. */
-export function flowSignalTrack(from: NodeGraphPoint, to: NodeGraphPoint, zoom: number) {
+export function flowSignalTrack(from: NodeGraphPoint, to: NodeGraphPoint, zoom: number, occlusions: Rect[] = []) {
   const handle = Math.max(72, Math.abs(to.x - from.x) * 0.42);
   const left = Math.min(from.x, to.x - handle);
   const top = Math.min(from.y, to.y);
@@ -23,6 +25,7 @@ export function flowSignalTrack(from: NodeGraphPoint, to: NodeGraphPoint, zoom: 
     duration: Math.max(1300, Math.min(3600, length * zoom / 140 * 1000)),
     keyframes: points.map((p, i) => ({
       transform: `translate3d(${p.x - left}px, ${p.y - top}px, 0)`,
+      opacity: pointBehindGroup(p, occlusions) ? .3 : 1,
       offset: length > 0 ? distances[i] / length : i / 48,
     })),
   };

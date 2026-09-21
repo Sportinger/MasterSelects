@@ -5,6 +5,7 @@ import { nodeGroupBounds } from '../../src/components/panels/nodes/canvas/groupB
 import { cloneClipNodeGraph } from '../../src/services/nodeGraph/clipGraphProjectionState';
 import { connectionFixture } from '../helpers/nodeConnectionFixture';
 import type { NodeGraph } from '../../src/types/nodeGraph';
+import { getNodeHeight, NODE_WIDTH } from '../../src/components/panels/nodes/canvas/canvasGeometry';
 
 const graph: NodeGraph = { ...connectionFixture, edges: [],
   nodes: ['a', 'b', 'c'].map((id, i) => ({ ...connectionFixture.nodes[0], id, layout: { x: i * 400, y: 100 } })),
@@ -15,6 +16,33 @@ const graph: NodeGraph = { ...connectionFixture, edges: [],
 };
 
 describe('manual canvas placement', () => {
+  it('pushes unrelated anchored cards and whole sibling groups out of a newly expanded frame', () => {
+    const expanded: NodeGraph = { ...graph, nodes: ['a', 'b', 'c', 'd', 'e'].map((id, i) => ({ ...graph.nodes[0], id,
+      layout: { x: i === 1 ? 1200 : i * 450, y: i > 1 ? 500 : 100 } })),
+      groups: [{ id: 'outer', label: 'Effect', proxyId: 'proxy', nodeIds: ['a', 'b'], collapsed: false },
+        { id: 'sibling', label: 'Other', proxyId: 'other-proxy', nodeIds: ['d', 'e'], collapsed: false }] };
+    const initial = reconcileCanvasPlacement(expanded);
+    const compact = { ...expanded, nodes: [{ ...expanded.nodes[0], id: 'proxy' }, ...expanded.nodes.slice(2)],
+      groups: expanded.groups!.map(group => group.id === 'outer' ? { ...group, collapsed: true, nodeIds: ['proxy'] } : group) };
+    let placed = reconcileCanvasPlacement(compact, initial);
+    placed = moveCanvasPlacement(placed, [{ nodeId: 'c', layout: { x: 400, y: 100 } }]);
+    placed = moveCanvasPlacement(placed, [{ nodeId: 'd', layout: { x: 700, y: 100 } }], 'sibling');
+    const beforeDelta = { x: placed.nodes.e.x - placed.nodes.d.x, y: placed.nodes.e.y - placed.nodes.d.y };
+    const after = reconcileCanvasPlacement(expanded, placed), nodes = expanded.nodes.map(node => ({ ...node, layout: after.nodes[node.id] }));
+    const box = nodeGroupBounds(expanded, nodes).get('outer')!;
+    expect(after.nodes.a).toEqual(initial.nodes.a); expect(after.nodes.b).toEqual(initial.nodes.b);
+    for (const node of nodes.filter(node => ['c', 'd', 'e'].includes(node.id))) expect(node.layout.x >= box.right || node.layout.x + NODE_WIDTH <= box.left
+      || node.layout.y >= box.bottom || node.layout.y + getNodeHeight(node) <= box.top, node.id).toBe(true);
+    expect({ x: after.nodes.e.x - after.nodes.d.x, y: after.nodes.e.y - after.nodes.d.y }).toEqual(beforeDelta);
+    expect(reconcileCanvasPlacement(expanded, after).nodes).toEqual(after.nodes);
+    const closed = reconcileCanvasPlacement(compact, after);
+    for (const id of ['c', 'd', 'e']) expect(closed.nodes[id]).toEqual(placed.nodes[id]);
+    const openedAgain = reconcileCanvasPlacement(expanded, closed);
+    for (const id of ['c', 'd', 'e']) expect(openedAgain.nodes[id]).toEqual(after.nodes[id]);
+    const manual = { x: after.nodes.c.x + 200, y: after.nodes.c.y + 300 };
+    const edited = moveCanvasPlacement(after, [{ nodeId: 'c', layout: manual }]);
+    expect(reconcileCanvasPlacement(compact, edited).nodes.c).toEqual(manual);
+  });
   it('allows overlap, retaining exact coordinates through graph edits and serialization', () => {
     const initial = reconcileCanvasPlacement(graph);
     const moved = moveCanvasPlacement(initial, [{ nodeId: 'a', layout: initial.nodes.c }]);

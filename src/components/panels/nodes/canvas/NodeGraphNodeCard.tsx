@@ -40,6 +40,8 @@ interface NodeGraphNodeCardProps {
   onToggleNodeBypass?: (nodeId: string) => void;
   onTogglePreview?: (nodeId: string) => void;
   onPreviewOutput?: (nodeId: string, portId: string) => void;
+  collapsedGroupId?: string;
+  onToggleGroup?: (groupId: string) => void;
 }
 
 function getNodeHeaderLabel(node: NodeGraphNode): string {
@@ -62,6 +64,8 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
   onToggleNodeBypass,
   onTogglePreview,
   onPreviewOutput,
+  collapsedGroupId,
+  onToggleGroup,
 }: NodeGraphNodeCardProps) {
   const [focusBox, setFocusBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const nodeHeight = getNodeHeight(node);
@@ -86,6 +90,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
         'node-workspace-node',
         inlineNumericPorts(node) ? 'node-inline-math' : '',
         `node-workspace-node-${node.kind}`,
+        node.operatorId?.startsWith('values.') ? 'node-workspace-node-value' : '',
         node.binding?.kind === 'flock-node' ? 'node-workspace-node-flock' : '',
         isSelected ? 'selected' : '',
         isBypassed ? 'bypassed' : '',
@@ -153,7 +158,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
           {onTogglePreview && <NodeViewerButton node={node} onToggle={onTogglePreview} />}
         </div>
       </div>
-      {!canvasRendered && <><div className="node-workspace-node-title" title={node.label}>{node.label}</div>
+      {!canvasRendered && <><div className="node-workspace-node-title" title={node.label} style={collapsedGroupId ? { paddingLeft: 30 } : undefined}>{node.label}</div>
       <div className="node-workspace-node-description" title={node.description}>
         {node.description ?? 'Built-in processing node'}
       </div></>}
@@ -196,6 +201,12 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
         </div>
       </div>
     </div>
+    {collapsedGroupId && onToggleGroup && <button type="button" className="node-workspace-node-expand"
+      style={{ left: node.layout.x + 5, top: node.layout.y + 31 }} aria-label={`Expand ${node.label} group`} aria-expanded={false}
+      title={`Expand ${node.label}`} onPointerDown={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}
+      onClick={event => { event.stopPropagation(); if (event.detail > 0) event.currentTarget.blur(); onToggleGroup(collapsedGroupId); }}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
+    </button>}
     {!canvasRendered && inlineNumericPorts(node) && <span className="node-math-symbol" title={node.label} aria-label={`${node.label} operation`}
       style={{ left: node.layout.x + 18, top: node.layout.y + getNodePortStartY(node) + (node.inputs.length ? 56 : 8), width: 64 }}>{String(node.params?.mathSymbol ?? '')}</span>}
     <NodeValuePreview node={node} canvasRendered={canvasRendered} />

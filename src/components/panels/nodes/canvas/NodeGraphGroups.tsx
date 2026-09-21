@@ -18,6 +18,7 @@ export const NodeGraphGroups = memo(function NodeGraphGroups({ graph, nodes, zoo
   onStartDrag, onPointerMove, onFinishDrag, locks, onToggleLock, frameNodes }: Props) {
   const bounds = nodeGroupBounds(graph, frameNodes ?? nodes), header = groupHeaderMetrics(zoom);
   return <>{graph.groups?.map(group => {
+    if (group.collapsed) return null;
     const box = bounds.get(group.id);
     if (!box) return null;
     const members = nodes.filter(node => group.nodeIds.includes(node.id));

@@ -20,10 +20,13 @@ export interface CanvasNode extends Rect {
   badges: Array<{ label: string; tone: string }>; ports: CanvasPort[];
   curve?: CanvasCurve;
   viewerEnabled?: boolean;
+  valueBesideOutput?: boolean;
+  expandable?: boolean;
   mathSymbol?: Point & { text: string };
   preview?: Rect & { key: string; label: string; text?: boolean };
 }
 export interface CanvasCable {
+  occlusions?: Rect[];
   baked?: boolean;
   from: Point; to: Point; color: string; highlighted: boolean; draft?: boolean;
   points: Point[]; distances: number[]; length: number;

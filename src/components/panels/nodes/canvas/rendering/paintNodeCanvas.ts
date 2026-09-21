@@ -2,6 +2,7 @@ import { interpolateKeyframes } from '../../../../../utils/keyframeInterpolation
 import { cablePoint, signalPosition } from './cableGeometry';
 import { fitCanvasLabel } from './canvasTextLayout';
 import type { CanvasCable, CanvasCurve, CanvasScene, CanvasTheme, CanvasTransport, CanvasView, Rect } from './nodeCanvasTypes';
+import { pointBehindGroup, subtractOccludedRects } from '../edgeGroupOcclusion';
 
 export type DrawContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 export function inView(rect: Rect, view: CanvasView, margin = 30): boolean {
@@ -25,9 +26,9 @@ function text(ctx: DrawContext, value: string, x: number, y: number, max: number
   ctx.font = `${weight} ${size}px system-ui, sans-serif`; ctx.textAlign = align; ctx.fillStyle = color;
   ctx.fillText(fitCanvasLabel(ctx, value, max), x, y);
 }
-function drawCable(ctx: DrawContext, cable: CanvasCable, zoom: number) {
+function drawCable(ctx: DrawContext, cable: CanvasCable, zoom: number, opacity?: number) {
   const { from, to } = cable, h = Math.max(72, Math.abs(to.x - from.x) * 0.42);
-  ctx.strokeStyle = cable.color; ctx.globalAlpha = cable.highlighted ? 1 : 0.55;
+  ctx.strokeStyle = cable.color; ctx.globalAlpha = opacity ?? (cable.highlighted ? 1 : 0.55);
   ctx.lineWidth = (cable.highlighted ? 2 : 1.25) / zoom;
   ctx.setLineDash(cable.draft ? [5 / zoom, 4 / zoom] : cable.baked ? [4 / zoom, 4 / zoom] : []);
   ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.bezierCurveTo(from.x + h, from.y, to.x - h, to.y, to.x, to.y); ctx.stroke(); ctx.setLineDash([]);
@@ -57,7 +58,17 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
   begin(ctx, view);
   // Group backgrounds and headers stay in the DOM: their complete vector
   // bounds follow the immediate viewport even while this bitmap catches up.
-  for (const cable of scene.cables) if (cableVisible(cable, view)) drawCable(ctx, cable, view.zoom);
+  for (const cable of scene.cables) if (cableVisible(cable, view)) {
+    if (!cable.occlusions?.length) { drawCable(ctx, cable, view.zoom); continue; }
+    const viewport = { x: -view.panX / view.zoom - 20, y: -view.panY / view.zoom - 20,
+      width: view.width / view.zoom + 40, height: view.height / view.zoom + 40 };
+    ctx.save(); ctx.beginPath();
+    for (const rect of subtractOccludedRects(viewport, cable.occlusions)) ctx.rect(rect.x, rect.y, rect.width, rect.height);
+    ctx.clip(); drawCable(ctx, cable, view.zoom); ctx.restore();
+    ctx.save(); ctx.beginPath();
+    for (const rect of cable.occlusions) ctx.rect(rect.x, rect.y, rect.width, rect.height);
+    ctx.clip(); drawCable(ctx, cable, view.zoom, .3); ctx.restore();
+  }
   for (const node of scene.nodes) {
     if (!inView(node, view)) continue;
     ctx.save(); ctx.translate(node.x, node.y); ctx.globalAlpha = node.bypassed ? 0.72 : 1;
@@ -69,7 +80,7 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
     text(ctx, node.runtime, node.width - 28, 19, 50, theme.muted, 9, 400, 'right');
     text(ctx, '◉', node.width - 9, 19, 14, node.viewerEnabled ? theme.accent : theme.muted, 12, 400, 'right');
     if (node.bypassable) text(ctx, 'Byp', node.width - 84, 19, 25, node.bypassed ? theme.accent : theme.muted, 9);
-    text(ctx, node.label, 10, 46, node.width - 20, theme.text, 13, 600);
+    text(ctx, node.label, node.expandable ? 30 : 10, 46, node.width - (node.expandable ? 40 : 20), theme.text, 13, 600);
     text(ctx, node.description, 10, 63, node.width - 20, theme.muted, 10);
     let badgeX = 10;
     for (const badge of node.badges) {
@@ -107,9 +118,11 @@ export function paintOverlay(ctx: DrawContext, scene: CanvasScene, view: CanvasV
     const duration = Math.max(1300, Math.min(3600, cable.length * view.zoom / 140 * 1000));
     for (let point = 0; point < 2; point++) {
       const p = signalPosition(cable, (flowSeconds * 1000 / duration + i * 0.61803398875 + point / 2) % 1);
+      ctx.globalAlpha = pointBehindGroup(p, cable.occlusions ?? []) ? .3 : 1;
       ctx.fillStyle = cable.color; ctx.beginPath(); ctx.arc(p.x, p.y, 1.8 / view.zoom, 0, Math.PI * 2); ctx.fill();
     }
   });
+  ctx.globalAlpha = 1;
   for (const node of scene.nodes) {
     const curve = node.curve;
     if (!curve || !inView(node, view)) continue;

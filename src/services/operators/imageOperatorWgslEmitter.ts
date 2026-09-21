@@ -68,6 +68,7 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
       : item.operation === 'add-scalar' ? `${args[0]} + ${args[1]}` : item.operation === 'multiply-scalar' ? `${args[0]} * ${args[1]}`
       : item.operation === 'divide-ieee-scalar' ? `${args[0]} / ${args[1]}` : item.operation === 'reciprocal-scalar' ? `1.0 / ${args[0]}`
       : item.operation === 'exp2-scalar' ? `exp2(${args[0]})` : item.operation === 'exp-scalar' ? `exp(${args[0]})` : item.operation === 'fract-scalar' ? `fract(${args[0]})`
+      : item.operation === 'trunc-scalar' ? `trunc(${args[0]})`
       : item.operation === 'floor-scalar' ? `floor(${args[0]})` : item.operation === 'round-even-scalar' ? `round(${args[0]})`
       : item.operation === 'step-scalar' ? `step(${args[0]}, ${args[1]})`
       : item.operation === 'gaussian-scalar' ? `imageGraphGaussian(${args[0]}, ${args[1]})` : item.operation === 'sqrt-scalar' ? `sqrt(${args[0]})` : item.operation === 'max-scalar' ? `max(${args[0]}, ${args[1]})`

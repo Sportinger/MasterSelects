@@ -19,5 +19,6 @@ export function sceneOperatorProjection(clip: TimelineClip, id: string): NodeGra
     };
   }), edges: definition.graph.edges.map(e => ({ id: e.id, fromNodeId: e.from, fromPortId: e.output, toNodeId: e.to, toPortId: e.input,
     type: projectOperatorPort(getEffectOperator(definition.graph.nodes.find(n => n.id === e.from)!.operator)!.outputs.find(p => p.id === e.output)!, 'output').type })),
-  groups: definition.graph.groups?.map(g => ({ ...g, collapsed: false, proxyId: `group-${g.id}` })) };
+  // Shared composition interfaces currently belong to the image executor.
+  groups: definition.graph.groups?.map(g => ({ ...g, composition: undefined, collapsed: false, proxyId: `group-${g.id}` })) };
 }

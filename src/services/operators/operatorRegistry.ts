@@ -8,6 +8,7 @@ import { SCALAR_FIELD_OPERATORS } from './scalarField';
 import { IMAGE_OPERATORS } from './imageOperators';
 import { ANALOG_SIGNAL_OPERATORS } from './analogSignalOperators';
 import { VORONOI_OPERATORS } from './voronoiOperators';
+import { COORDINATE_COMPOSITIONS } from './coordinateCompositions';
 
 const port = (id: string, type: OperatorSignal, required = false): OperatorPort => ({ id, label: id[0].toUpperCase() + id.slice(1), type, required });
 const number = (id: string, label: string, value: number, min: number, max: number): OperatorParameter =>
@@ -23,12 +24,13 @@ export const EFFECT_OPERATORS: readonly OperatorDefinition[] = [
   ...VOXEL_OPERATORS,
   ...SCALAR_FIELD_OPERATORS,
   ...IMAGE_OPERATORS,
+  ...COORDINATE_COMPOSITIONS,
   ...ANALOG_SIGNAL_OPERATORS,
   ...VORONOI_OPERATORS,
   WIND_OPERATOR,
   { ...stage('forces.gravity', 'Gravity', [], [port('force', 'force')], [number('strength', 'Strength', 1, -30, 30)]), addable: true, bypass: 'mute' },
   { ...stage('forces.drag', 'Drag', [], [port('drag', 'drag')], [number('amount', 'Damping', 0.4, 0, 20)]), addable: true, bypass: 'mute' },
-  { ...stage('values.number', 'Value', [], [port('value', 'number')], [number('value', 'Value', 1, -30, 30)]), addable: true },
+  { ...stage('values.number', 'Value', [], [port('value', 'number')], [number('value', 'Value', 1, -30, 30)]), family: 'values.numeric', variant: 'float', addable: true },
   { ...stage('values.oscillator', 'Oscillator', [], [port('value', 'number')], [number('amplitude', 'Amplitude', 1, 0, 30), number('frequency', 'Frequency', 1, 0, 10), number('offset', 'Offset', 0, -30, 30)]), addable: true },
   stage('media.source', 'Video source', [], [port('image', 'image')], [], 'analysis'),
   stage('tracking.face', 'MediaPipe Face Tracker', [port('image', 'image', true)], [port('landmarks', 'landmarks')], [], 'analysis'),

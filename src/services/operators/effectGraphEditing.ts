@@ -11,6 +11,19 @@ import { prepareEditableOperatorGraph } from './editableOperatorGraph';
 import { EFFECT_OPERATORS, getEffectOperator } from './operatorRegistry';
 import type { AnimatableProperty } from '../../types/animationProperties';
 import { getEffect } from '../../effects';
+import { packOperatorCompositions } from './operatorComposition';
+
+/** One logical input may feed several internal ports; editing its cable is one undoable transaction. */
+export function editCompositionInput(clipId: string, effectId: string, targets: Array<{ nodeId: string; portId: string }>,
+  source?: { nodeId: string; portId: string }) {
+  editEffectGraph(clipId, effectId, source ? 'Connect composed node' : 'Disconnect composed node', graph => {
+    for (const target of targets) {
+      if (source) graph.edges = connectEffectGraph(graph, { id: `${source.nodeId}-${source.portId}-${target.nodeId}-${target.portId}`,
+        from: source.nodeId, output: source.portId, to: target.nodeId, input: target.portId }).edges;
+      else graph.edges = graph.edges.filter(edge => edge.to !== target.nodeId || edge.input !== target.portId);
+    }
+  });
+}
 
 /** Shared by the inspector and inline node values; animation keeps its owner. */
 export function setAnimatedOperatorParameter(clipId: string, effectId: string, nodeId: string, parameter: string, value: OperatorValue) {
@@ -41,7 +54,7 @@ export function editEffectGraph(clipId: string, effectId: string, label: string,
   prepareEditableOperatorGraph(graph, () => validateEffectOwnerGraph(effect, graph, params));
   const batch = startBatch(label);
   try {
-    state.updateClip(clipId, { effects: clip.effects.map(e => e.id === effectId ? { ...e, params, operatorGraph: graph } : e) });
+    state.updateClip(clipId, { effects: clip.effects.map(e => e.id === effectId ? { ...e, params, operatorGraph: packOperatorCompositions(graph) } : e) });
     state.invalidateCache(); renderHostPort.requestRender();
   } finally { if (batch.opened) endBatch(); }
 }
@@ -73,7 +86,7 @@ export function setOperatorConstant(clipId: string, effectId: string, nodeId: st
     const spec = node && getEffectOperator(node.operator)?.parameters.find(parameter => parameter.id === name);
     if (!node || !spec || node.bindings[name]) throw new Error('Constant unavailable.');
     if (spec.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value)
-      || (node.operator !== 'values.number' && (value < (spec.min ?? -Infinity) || value > (spec.max ?? Infinity))))) {
+      || (!['values.number', 'values.integer'].includes(node.operator) && (value < (spec.min ?? -Infinity) || value > (spec.max ?? Infinity))))) {
       throw new Error('Parameter is outside its supported range.');
     }
     if (spec.type === 'boolean' && typeof value !== 'boolean') throw new Error('Parameter requires a boolean value.');
@@ -81,7 +94,7 @@ export function setOperatorConstant(clipId: string, effectId: string, nodeId: st
     if (spec.type === 'select' && (typeof value !== 'string' || !spec.options?.some(option => option.value === value))) throw new Error('Parameter option is unavailable.');
     if (spec.type === 'vector' && (!Array.isArray(value) || value.length !== 3
       || value.some(component => !Number.isFinite(component)))) throw new Error('Parameter requires a finite vector.');
-    node.constants = { ...node.constants, [name]: value };
+    node.constants = { ...node.constants, [name]: node.operator === 'values.integer' && typeof value === 'number' ? Math.trunc(value) : value };
   });
 }
 
@@ -95,6 +108,8 @@ function applyOperatorVariant(graph: EffectOperatorGraph, nodeId: string, operat
 
 /** Persists an explicit registry variant while retaining stable ports and visibly invalid wiring. */
 export function setOperatorVariant(clipId: string, effectId: string, nodeId: string, operatorId: string) {
+  const effect = readTimelineRuntimeState(useTimelineStore).clips.find(clip => clip.id === clipId)?.effects.find(effect => effect.id === effectId);
+  if (!effect || !addableEffectOperators(effect.type).some(operator => operator.id === operatorId)) throw new Error('Operator variant is not supported in this graph.');
   editEffectGraph(clipId, effectId, 'Change node variant', graph => applyOperatorVariant(graph, nodeId, operatorId));
 }
 
@@ -157,7 +172,7 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
         const output = operator.outputs[0];
         if (simulation && (output.type === 'force' || output.type === 'drag')) graph.edges.push({ id: `${id}-${simulation.id}`, from: id, output: output.id, to: simulation.id, input: output.type === 'force' ? 'forces' : 'drag' });
       });
-      return id;
+      return getEffectOperator(operatorId)?.composition ? `@compound-${id}` : id;
     },
   };
 }

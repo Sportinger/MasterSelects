@@ -4,6 +4,7 @@ import { useNodeDomVisibility } from './canvas/useNodeDomVisibility';
 import { useNodePreviewPreferences } from './previews/useNodePreviewPreferences';
 import { nodePreviewKey, nodePreviewPreferenceKey, previewOutput } from '../../../services/nodePreview/previewTypes';
 import { useNodeCanvasPlacement } from './canvas/useNodeCanvasPlacement';
+import { useNodeLayoutTransition } from './canvas/useNodeLayoutTransition';
 import { groupPlacementMembers } from './canvas/nodeCanvasPlacement';
 import { hasUnlockedSource, nodeGroupDropTarget } from './canvas/nodeGroupDrop';
 import { placeTransferredNodes } from './canvas/placeTransferredNodes';
@@ -107,7 +108,7 @@ export function NodeGraphCanvas({
   layoutScaleX = 1,
 }: NodeGraphCanvasProps) {
   const { preferences, toggleGlobal, toggleNode, selectOutput, aspectRatio } = useNodePreviewPreferences(sourceGraph.owner.id);
-  const graph = useMemo(() => ({ ...sourceGraph, nodes: sourceGraph.nodes.map(node => {
+  const targetGraph = useMemo(() => ({ ...sourceGraph, nodes: sourceGraph.nodes.map(node => {
     const preference = preferences.nodes[nodePreviewPreferenceKey(sourceGraph.owner.id, node)] ?? preferences.nodes[node.id];
     const port = previewOutput(node, preference?.portId);
     const imageRatio = port?.type === 'texture' || port?.type === 'mask' || port?.metadata?.semanticKind === 'operator:landmarks';
@@ -157,13 +158,14 @@ export function NodeGraphCanvas({
   const [groupMessage, setGroupMessage] = useState('');
   const multiSelection = useMemo(() => new Set(selectedNodeIds ?? []), [selectedNodeIds]);
 
-  const { nodes: spacedNodes, placement, commit: commitPlacement, toggleLock } = useNodeCanvasPlacement(graph, layoutScaleX);
-  const displayNodes = useMemo(() => (
+  const { nodes: spacedNodes, placement, commit: commitPlacement, toggleLock } = useNodeCanvasPlacement(targetGraph, layoutScaleX);
+  const targetNodes = useMemo(() => (
     spacedNodes.map((node) => !draftLayouts[node.id] ? node : ({
       ...node,
       layout: draftLayouts[node.id],
     }))
   ), [draftLayouts, spacedNodes]);
+  const { graph, nodes: displayNodes } = useNodeLayoutTransition(targetGraph, targetNodes, Object.keys(draftLayouts).length > 0);
   const nodeGesture = nodeDragGestureRef.current;
   const freezeGroupFrames = nodeGesture && !nodeGesture.groupId
     && hasUnlockedSource(graph, placement, nodeGesture.members.map(member => member.nodeId));
@@ -223,7 +225,6 @@ export function NodeGraphCanvas({
 
   const fittedGraph = useRef<string | null>(null);
   const toggleGroup = useCallback((id: string) => {
-    fittedGraph.current = null;
     onToggleGroup?.(id);
   }, [onToggleGroup]);
   const clearSelectedEdge = useCallback(() => setSelectedEdgeId(null), []);
@@ -598,6 +599,7 @@ export function NodeGraphCanvas({
             locks={placement.groups} onToggleLock={toggleLock} onToggleNodeBypass={onToggleNodeBypass}
             onStartDrag={startGroupDrag} onPointerMove={handleNodePointerMove} onFinishDrag={finishNodeDrag} />
           <NodeGraphEdges
+            graph={graph} frameNodes={groupFrameNodes}
             visibleEdgeIds={dom.edgeIds}
             canvasRendered={canvasRendered}
             zoom={viewport.zoom}
@@ -620,6 +622,8 @@ export function NodeGraphCanvas({
             <NodeGraphNodeCard
               key={node.id}
               node={node}
+              collapsedGroupId={graph.groups?.find(group => group.collapsed && group.proxyId === node.id)?.id}
+              onToggleGroup={toggleGroup}
               clipId={sourceGraph.owner.id}
               canvasRendered={canvasRendered}
               selectedNodeId={selectedNodeId}

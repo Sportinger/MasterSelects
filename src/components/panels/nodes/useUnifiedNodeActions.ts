@@ -6,7 +6,7 @@ import type { TimelineClip } from '../../../types/timeline';
 import { useTimelineStore } from '../../../stores/timeline';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import { createClipNodeGraphState } from '../../../services/nodeGraph';
-import { createEffectGraphActions, editEffectGraph } from '../../../services/operators/effectGraphEditing';
+import { createEffectGraphActions, editEffectGraph, editCompositionInput } from '../../../services/operators/effectGraphEditing';
 import { createSceneGraphActions, editSceneGraph } from '../../../services/operators/sceneGraphEditing';
 import { groupOperators } from '../../../services/operators/operatorGroups';
 import { connectSourceArtifact } from '../../../services/operators/sourceArtifactConnections';
@@ -127,9 +127,15 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
         return endpoint ?? { nodeId: id, portId: port };
       };
       const a = resolve(c.fromNodeId, c.fromPortId, 'output'), b = resolve(c.toNodeId, c.toPortId, 'input');
+      const targets = graph?.nodes.find(node => node.id === c.toNodeId)?.inputs.find(port => port.id === c.toPortId)?.metadata?.groupEndpoints;
       c = { fromNodeId: a.nodeId, fromPortId: a.portId, toNodeId: b.nodeId, toPortId: b.portId };
       const from = (graph?.expandedNodes ?? graph?.nodes)?.find(n => n.id === c.fromNodeId), to = (graph?.expandedNodes ?? graph?.nodes)?.find(n => n.id === c.toNodeId);
       if (!from || !to) return;
+      if (targets && targets.length > 1 && clip && from.binding?.kind === 'effect-operator' && to.binding?.kind === 'effect-operator'
+        && from.binding.effectId === to.binding.effectId) {
+        editCompositionInput(clip.id, to.binding.effectId, targets.map(endpoint => ({ nodeId: endpoint.nodeId.split('/').at(-1)!, portId: endpoint.portId })),
+          { nodeId: localId(from), portId: a.portId }); return;
+      }
       if (from.binding?.kind === 'keyframe-node') {
         const property = to.inputs.find(p => p.id === c.toPortId)?.metadata?.animationProperty;
         if (!property || !clip) throw new Error('Connect the curve to an animation parameter.');
@@ -166,6 +172,10 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
       const artifactTarget = node.inputs.find(p => p.id === edge.toPortId)?.metadata?.artifactTarget;
       if (artifactTarget && clip) { createEffectGraphActions(clip.id, artifactTarget.effectId).disconnectEdge(id.slice(id.lastIndexOf('/') + 1)); return; }
       const endpoint = node.inputs.find(p => p.id === edge.toPortId)?.metadata?.groupEndpoint;
+      const targets = node.inputs.find(p => p.id === edge.toPortId)?.metadata?.groupEndpoints;
+      if (targets && targets.length > 1 && clip && node.binding?.kind === 'operator-group' && node.binding.effectId) {
+        editCompositionInput(clip.id, node.binding.effectId, targets.map(endpoint => ({ nodeId: endpoint.nodeId.split('/').at(-1)!, portId: endpoint.portId }))); return;
+      }
       if (endpoint) node = graph?.expandedNodes?.find(n => n.id === endpoint.nodeId) ?? node;
       if (edge.toPortId.startsWith('group-') || edge.fromPortId.startsWith('group-')) throw new Error('Reconnect the Clip input/output ports to reorder effects, or bypass an effect to skip it.');
       bindingActions(node)?.disconnectEdge(id.slice(id.lastIndexOf('/') + 1));
@@ -177,7 +187,7 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
       const model = current.nodeGraph ?? createClipNodeGraphState(current);
       startBatch('Toggle node group');
       try { state.updateClip(current.id, { nodeGraph: { ...model, groups: { ...model.groups,
-        [id]: { ...model.groups?.[id], collapsed: !model.groups?.[id]?.collapsed } } } }); } finally { endBatch(); }
+        [id]: { ...model.groups?.[id], collapsed: !(model.groups?.[id]?.collapsed ?? graph?.groups?.find(group => group.id === id)?.collapsed ?? false) } } } }); } finally { endBatch(); }
     }),
   };
 }

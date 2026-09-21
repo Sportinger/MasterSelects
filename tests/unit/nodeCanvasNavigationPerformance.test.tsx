@@ -26,9 +26,12 @@ vi.mock('../../src/components/panels/nodes/canvas/NodeGraphNodeCard', () => ({
     node: NodeGraphNode;
     onTogglePreview?: (nodeId: string) => void;
     onPreviewOutput?: (nodeId: string, portId: string) => void;
+    collapsedGroupId?: string;
+    onToggleGroup?: (groupId: string) => void;
   }) => {
     mocks.renders.set(props.node.id, (mocks.renders.get(props.node.id) ?? 0) + 1);
     return <div className="node-workspace-node" data-node-id={props.node.id}>
+      {props.collapsedGroupId && <button aria-label={`Expand ${props.node.label} group`} onClick={() => props.onToggleGroup?.(props.collapsedGroupId!)}>Expand</button>}
       <button type="button" aria-label={`toggle ${props.node.id}`} onClick={() => props.onTogglePreview?.(props.node.id)}>toggle</button>
       <button type="button" aria-label={`output ${props.node.id}`} onClick={() => props.onPreviewOutput?.(props.node.id, 'out')}>output</button>
     </div>;
@@ -92,6 +95,21 @@ describe('node canvas navigation render boundaries', () => {
     fireEvent.click(view.getByRole('button', { name: 'output Source' }));
     expect(mocks.toggleNode).toHaveBeenCalledExactlyOnceWith('clip-graph:plug-fixture:color:version-a/color-source', 'Source');
     expect(mocks.selectOutput).toHaveBeenCalledExactlyOnceWith('clip-graph:plug-fixture:color:version-a/color-source', 'out');
+  });
+
+  it('keeps zoom and pan when a group opens or closes after a user pan', () => {
+    const group = { id: 'effect', label: 'Example', color: '#fff', collapsed: true, proxyId: 'Source', nodeIds: ['Source'] };
+    const graph = { ...connectionFixture, groups: [group] };
+    const toggle = vi.fn();
+    const view = render(<NodeGraphCanvas graph={graph} selectedNodeId={null} onSelectNode={vi.fn()} onToggleGroup={toggle} />);
+    const canvas = view.container.querySelector('.node-workspace-canvas')!, inner = view.container.querySelector<HTMLElement>('.node-workspace-canvas-inner')!;
+    pointer(canvas, 'pointerdown', 40, 40); pointer(canvas, 'pointermove', 240, 170); pointer(canvas, 'pointerup', 240, 170);
+    const transform = inner.style.transform;
+    fireEvent.click(view.getByRole('button', { name: 'Expand Source group' }));
+    expect(toggle).toHaveBeenCalledWith('effect');
+    view.rerender(<NodeGraphCanvas graph={{ ...graph, nodes: graph.nodes.map(node => ({ ...node, layout: { x: node.layout.x + 2000, y: node.layout.y } })),
+      groups: [{ ...group, collapsed: false, nodeIds: graph.nodes.map(node => node.id) }] }} selectedNodeId={null} onSelectNode={vi.fn()} onToggleGroup={toggle} />);
+    expect(inner.style.transform).toBe(transform);
   });
 
   it('moves full group backgrounds with the immediate viewport before a worker frame arrives', () => {
