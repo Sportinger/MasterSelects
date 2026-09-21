@@ -623,7 +623,7 @@ export function PropertiesPanel() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         presentation={clipPresentation}
-        visualEffectCount={visualEffects.length}
+        visualEffectCount={visualEffects.length + Number(!isAudioClip && Boolean(selectedClip.colorCorrection || selectedClip.nodeGraph?.forcedBuiltIns?.includes('color')))}
         audioEditCount={audioEditCount}
         maskCount={selectedClip.masks?.length ?? 0}
         sourceAnalysisReady={sourceAnalysisStatus === 'ready'}

@@ -88,6 +88,15 @@ blend used by ASCII Ghost. Font-atlas and history sources stay outside these
 blocks, so the resource owner and processing inputs remain visible. All blocks
 expand into existing operators; their insertion does not add a render pass.
 
+CRT Screen also organizes its untouched default graph into curvature, sampling,
+scanline, phosphor-mask, flicker and final color/alpha stages. **Reusable Nodes →
+Coordinates** includes Radial UV Curvature, **Color** includes RGB Stripe Mask,
+**Signal** includes Sine Gain, and **Sampling** includes Clamped Image Sample.
+Both CRT sine branches share one recipe; compatible Glitch clamp/sample pairs
+share another. Their ports name the actual inputs (including radians, pixel
+width and UV bounds), while timeline time and source images stay outside the
+blocks. Existing user groups and earlier detached compositions are preserved.
+
 Each inserted node has typed boundary inputs and outputs and an expandable
 interior. Shared literal constants stay inside; effect-owned values become input
 sockets, so an instance never silently binds to another effect's parameters.

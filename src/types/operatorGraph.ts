@@ -61,8 +61,8 @@ export interface EffectOperatorGraph {
   colorCompositionRules?: 1;
   /** Sampling recipes migrate independently; detached instances stay editable. */
   samplingCompositionRules?: 1;
-  /** Shared color, sampling and glyph processing recipes; explicit detach stays local. */
-  processingCompositionRules?: 1;
+  /** Shared processing recipes (v2 adds screen blocks); explicit detach stays local. */
+  processingCompositionRules?: 1 | 2;
   /** One-time organization of an untouched default effect graph. */
   effectPresentationRules?: 1;
   /** The original Gaussian graph has received its one-time presentation layout. */

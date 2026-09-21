@@ -103,6 +103,14 @@ timeline animation; Grain includes an explicit seed. Their paused preview and
 export use the same clock instead of elapsed browser time.
 CRT Screen likewise exposes its curvature, scanline, mask and flicker pipeline
 as an editable generic graph driven by the composition timeline clock.
+Its default graph has named processing stages and expandable Radial UV Curvature,
+RGB Stripe Mask, Sine Gain and Clamped Image Sample blocks. CRT scanlines and
+flicker share Sine Gain; compatible Glitch sampling reuses Clamped Image Sample.
+All four blocks are insertable through **Reusable Nodes**, with explicit inputs.
+Properties' Effects tab includes the clip's Color grade as an expandable entry
+with the existing color controls and bypass. A Video / Audio switch defaults to
+video for visual clips; Audio shows the owning clip's audio controls and effects,
+following linked audio when present. Switching the view does not change playback.
 Ribbon Scan uses the same graph compiler for its animated ribbon mask, horizontal
 displacement and blending, retaining alpha from the displaced sample.
 Glitch and Film Prism expose their sampling, shared noise/hash math and

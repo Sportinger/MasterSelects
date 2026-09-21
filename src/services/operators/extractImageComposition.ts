@@ -9,6 +9,8 @@ const title = (id: string) => id.replace(/-/g, ' ').replace(/\b\w/g, letter => l
 export function extractImageComposition(source: EffectOperatorGraph, spec: {
   id: string; label: string; description: string; members: string[]; consumers: string[];
   captureLiterals?: boolean; additionalOutputs?: OperatorEndpoint[];
+  keepLiteralInputs?: string[];
+  inputLabels?: Record<string, string>; outputLabels?: Record<string, string>;
 }): OperatorDefinition {
   const nodes = new Map(source.nodes.map(node => [node.id, node]));
   const members = new Set(spec.members);
@@ -16,7 +18,8 @@ export function extractImageComposition(source: EffectOperatorGraph, spec: {
   if (!members.size || spec.members.some(id => !nodes.has(id))) throw new Error(`Invalid composition members: ${spec.id}`);
   if (spec.captureLiterals !== false) for (const link of source.edges) {
     const from = nodes.get(link.from)!;
-    if (members.has(link.to) && from.operator.startsWith('values.') && from.constants && !Object.keys(from.bindings).length) members.add(from.id);
+    if (members.has(link.to) && from.operator.startsWith('values.') && from.constants && !Object.keys(from.bindings).length
+      && !spec.keepLiteralInputs?.includes(from.id)) members.add(from.id);
   }
   const bodyNodes = source.nodes.filter(node => members.has(node.id));
   if (bodyNodes.some(node => Object.keys(node.bindings).length || ['image.frame', 'image.frame-history', 'glyph.atlas'].includes(node.operator))) {
@@ -36,7 +39,7 @@ export function extractImageComposition(source: EffectOperatorGraph, spec: {
     const id = `${endpoint.nodeId}-${endpoint.portId}`;
     if (exposedOutputs[id]) return;
     if (!members.has(endpoint.nodeId)) throw new Error(`Output outside ${spec.id}: ${endpoint.nodeId}`);
-    outputs.push({ ...outputPort(endpoint.nodeId, endpoint.portId), id, label: title(endpoint.nodeId) });
+    outputs.push({ ...outputPort(endpoint.nodeId, endpoint.portId), id, label: spec.outputLabels?.[id] ?? title(endpoint.nodeId) });
     exposedOutputs[id] = endpoint;
   };
   for (const edge of source.edges) {
@@ -45,7 +48,8 @@ export function extractImageComposition(source: EffectOperatorGraph, spec: {
     const id = `${edge.from}-${edge.output}`;
     if (!exposedInputs[id]) {
       const port = outputPort(edge.from, edge.output);
-      inputs.push({ ...port, id, label: `${title(edge.from)}${['value', 'image', 'uv'].includes(edge.output) ? '' : ` (${port.label})`}`, required: true });
+      inputs.push({ ...port, id, label: spec.inputLabels?.[id]
+        ?? `${title(edge.from)}${['value', 'image', 'uv'].includes(edge.output) ? '' : ` (${port.label})`}`, required: true });
       exposedInputs[id] = [];
     }
     exposedInputs[id].push({ nodeId: edge.to, portId: edge.input });

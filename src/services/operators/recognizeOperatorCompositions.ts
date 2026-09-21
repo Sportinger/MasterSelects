@@ -3,6 +3,7 @@ import { COORDINATE_COMPOSITIONS, coordinateCompositionRevision } from './coordi
 import { COLOR_COMPOSITIONS } from './colorCompositions';
 import { SAMPLING_COMPOSITIONS } from './samplingCompositions';
 import { PROCESSING_COMPOSITIONS } from './processingCompositions';
+import { SCREEN_COMPOSITIONS } from './screenCompositions';
 import { compositionBoundary, packOperatorCompositions, sameCompositionNode } from './operatorComposition';
 import { IMAGE_EFFECT_GRAPH_LIMITS } from './effectGraphLimits';
 import { getOperatorComposition } from './operatorCompositionRegistry';
@@ -11,18 +12,20 @@ const cache = new WeakMap<EffectOperatorGraph, EffectOperatorGraph>();
 /** Exact, bounded structural recognition, independent of effect names and node IDs. */
 export function recognizeOperatorCompositions(source: EffectOperatorGraph): EffectOperatorGraph {
   if (source.domain !== 'image' || source.incomplete || source.compositionRules === 2 && source.colorCompositionRules === 1
-    && source.samplingCompositionRules === 1 && source.processingCompositionRules === 1) return source;
+    && source.samplingCompositionRules === 1 && source.processingCompositionRules === 2) return source;
   const cached = cache.get(source); if (cached) return cached;
   let graph = source;
   let recognizedColor = false;
   let recognizedSampling = false;
   let recognizedProcessing = false;
+  let recognizedScreen = false;
   const rules = [
     ...COORDINATE_COMPOSITIONS.map(definition => ({ definition, revision: coordinateCompositionRevision(definition.id), applied: source.compositionRules ?? 0 })),
     ...COLOR_COMPOSITIONS.map(definition => ({ definition, revision: 1 as const, applied: source.colorCompositionRules ?? 0 })),
     // Like the second coordinate revision, these may nest inside a folder but never cross its boundary.
     ...SAMPLING_COMPOSITIONS.map(definition => ({ definition, revision: 2 as const, applied: source.samplingCompositionRules ? 2 : 0 })),
     ...PROCESSING_COMPOSITIONS.map(definition => ({ definition, revision: 2 as const, applied: source.processingCompositionRules ? 2 : 0 })),
+    ...SCREEN_COMPOSITIONS.map(definition => ({ definition, revision: 2 as const, applied: source.processingCompositionRules === 2 ? 2 : 0 })),
   ];
   for (const { definition, revision, applied } of rules) {
     if (revision <= applied) continue;
@@ -59,12 +62,14 @@ export function recognizeOperatorCompositions(source: EffectOperatorGraph): Effe
       if (COLOR_COMPOSITIONS.includes(definition)) recognizedColor = true;
       if (SAMPLING_COMPOSITIONS.includes(definition)) recognizedSampling = true;
       if (PROCESSING_COMPOSITIONS.includes(definition)) recognizedProcessing = true;
+      if (SCREEN_COMPOSITIONS.includes(definition)) recognizedScreen = true;
     }
   }
   graph = { ...graph, compositionRules: 2,
     ...(source.colorCompositionRules === 1 || recognizedColor ? { colorCompositionRules: 1 as const } : {}),
     ...(source.samplingCompositionRules === 1 || recognizedSampling ? { samplingCompositionRules: 1 as const } : {}),
-    ...(source.processingCompositionRules === 1 || recognizedProcessing ? { processingCompositionRules: 1 as const } : {}) };
+    ...(source.processingCompositionRules === 2 || recognizedScreen ? { processingCompositionRules: 2 as const }
+      : source.processingCompositionRules === 1 || recognizedProcessing ? { processingCompositionRules: 1 as const } : {}) };
   cache.set(source, graph); cache.set(graph, graph);
   return graph;
 }

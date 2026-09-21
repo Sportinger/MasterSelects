@@ -20,6 +20,8 @@ import {
 } from './shared';
 import { LabeledValue } from './LabeledValue';
 import { VolumeTab } from './VolumeTab';
+import { ColorGraphEffectEntry } from './ColorGraphEffectEntry';
+import { resolveLinkedAudioClip } from '../../../services/nodeGraph/clipGraphProjectionAudio';
 import { LandmarkTrackingControls } from './LandmarkTrackingControls';
 import { EffectCatalogPicker } from './EffectCatalogPicker';
 import { trackEditorControlCommitted } from '../../../services/productAnalytics';
@@ -313,6 +315,8 @@ const MOTION_ADJUSTMENT_EFFECT_TYPES = new Set([
 ]);
 
 export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
+  const [showAudioEffects, setShowAudioEffects] = useState(false);
+  const audioMode = Boolean(isAudioClip || showAudioEffects);
   // Reactive data - subscribe to specific values only
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
   const clips = useTimelineStore(state => state.clips);
@@ -348,6 +352,10 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
   const handleBatchStart = useCallback(() => startBatch('Adjust effect'), []);
   const handleBatchEnd = useCallback(() => endBatch(), []);
   const clip = clips.find(c => c.id === clipId);
+  const linkedClip = clip?.linkedClipId ? clips.find(candidate => candidate.id === clip.linkedClipId)
+    : clips.find(candidate => candidate.linkedClipId === clipId);
+  const audioClip = clip ? resolveLinkedAudioClip(clip, linkedClip) : undefined;
+  const hasColorEntry = Boolean(clip?.colorCorrection || clip?.nodeGraph?.forcedBuiltIns?.includes('color'));
   const isMotionAdjustmentClip = clip?.source?.type === 'motion-adjustment';
   const clipLocalTime = clip ? playheadPosition - clip.startTime : 0;
   const interpolatedEffects = getInterpolatedEffects(clipId, clipLocalTime);
@@ -394,9 +402,21 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
   );
 
   return (
-    <div className="properties-tab-content effects-tab transform-tab-compact">
-      {!isAudioClip && clip && <LandmarkTrackingControls clipId={clipId} />}
-      {!isAudioClip && (
+    <div className="properties-tab-content effects-tab transform-tab-compact" onPointerUp={event => {
+      // Leave numeric editing and native select popups alone; clear transient button focus only.
+      if (event.target instanceof Element) event.target.closest<HTMLElement>('button,input[type="checkbox"]')?.blur();
+    }}>
+      <div className="effect-add-row">
+        <div className="effect-mode-toggle" role="group" aria-label="Effect type">
+          <button type="button" className={`effect-mode-btn${!audioMode ? ' active' : ''}`}
+            aria-pressed={!audioMode} disabled={isAudioClip} onClick={() => setShowAudioEffects(false)}>Video</button>
+          <button type="button" className={`effect-mode-btn${audioMode ? ' active' : ''}`}
+            aria-pressed={audioMode} title="Show audio effects" onClick={() => setShowAudioEffects(true)}>Audio</button>
+        </div>
+        <span className="effect-mode-label">{audioMode ? 'Audio effects' : 'Video effects'}</span>
+      </div>
+      {!audioMode && clip && <LandmarkTrackingControls clipId={clipId} />}
+      {!audioMode && (
         <EffectCatalogPicker
           groups={effectCategories}
           sourceFrameId={`${clipId}:${Math.floor(playheadPosition * 30)}`}
@@ -414,7 +434,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
           }}
         />
       )}
-      <div className="effect-add-row">
+      {!audioMode && <div className="effect-add-row">
         {!isAudioClip && (
           <>
             {!isMotionAdjustmentClip && (
@@ -433,13 +453,16 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
             )}
           </>
         )}
-        {isAudioClip && <span className="effect-mode-label">Audio</span>}
-      </div>
+      </div>}
 
-      {isAudioClip ? (
-        <VolumeTab clipId={clipId} effects={effects} />
+      {!audioMode && clip && <ColorGraphEffectEntry key={clipId} clip={clip} />}
+      {audioMode ? (
+        audioClip ? <>
+          {audioClip.id !== clipId && <p className="effect-info">Linked audio: {audioClip.name}</p>}
+          <VolumeTab key={audioClip.id} clipId={audioClip.id} effects={audioClip.effects ?? []} />
+        </> : <div className="panel-empty"><p>This clip has no audio source.</p></div>
       ) : videoEffects.length === 0 ? (
-        <div className="panel-empty"><p>No effects applied</p></div>
+        !hasColorEntry && <div className="panel-empty"><p>No effects applied</p></div>
       ) : (
         <div className="effects-list">
           {videoEffects.map((effect, idx) => {
@@ -467,9 +490,11 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                 onDrop={(e) => {
                   e.preventDefault();
                   const fromIdx = dragIdx ?? parseInt(e.dataTransfer.getData('text/plain'), 10);
-                  if (!isNaN(fromIdx) && fromIdx !== idx) {
+                  const movedEffect = videoEffects[fromIdx];
+                  const targetIndex = effects.findIndex(candidate => candidate.id === effect.id);
+                  if (movedEffect && fromIdx !== idx && targetIndex >= 0) {
                     startBatch('Reorder effect');
-                    reorderClipEffect(clipId, videoEffects[fromIdx].id, idx);
+                    reorderClipEffect(clipId, movedEffect.id, targetIndex);
                     endBatch();
                     trackEditorControlCommitted({
                       area: 'effect',
@@ -477,7 +502,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                       controlKind: 'drag',
                       inputMethod: 'drag',
                       interaction: 'reorder',
-                      itemId: videoEffects[fromIdx].type,
+                      itemId: movedEffect.type,
                       itemKind: 'effect',
                     });
                   }

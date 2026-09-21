@@ -52,6 +52,30 @@
   color: #fff;
 }
 
+.effect-mode-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.effects-tab :is(button, select, input[type="checkbox"]) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.effects-tab :is(button, select, input[type="checkbox"]):focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+
+.effects-tab :is(button, select, input[type="checkbox"]):focus-visible {
+  outline: 1px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+.color-graph-effect-entry .properties-color-controls {
+  height: 400px;
+  padding: 0;
+}
+
 .effect-mode-label {
   flex: 1;
   font-size: var(--font-md);

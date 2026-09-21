@@ -32,14 +32,15 @@ export function ReusableNodeMenu({ clipId, effect, position, onAdded }: {
       >Reusable Nodes</button>
     {!!operators.length && <div className="node-workspace-context-submenu-list context-submenu" style={{ display: open ? 'flex' : 'none' }}>
       <div className="node-workspace-context-submenu-group"><span>Into {effect!.name}</span></div>
-      {['Coordinates', 'Color', 'Sampling', 'Glyph', 'Feedback', 'Fisheye'].map(category => <div key={category} className="node-workspace-context-submenu-group">
+      {['Coordinates', 'Color', 'Sampling', 'Signal', 'Glyph', 'Feedback', 'Fisheye'].map(category => <div key={category} className="node-workspace-context-submenu-group">
         <span>{category}</span>
         {operators.filter(operator => category === 'Fisheye' ? operator.id.startsWith('fisheye.')
           : category === 'Color' ? operator.id.startsWith('color.')
             : category === 'Sampling' ? operator.id.startsWith('sampling.')
-              : category === 'Glyph' ? operator.id.startsWith('glyph.')
-                : category === 'Feedback' ? operator.id.startsWith('feedback.')
-                  : operator.id.startsWith('coordinates.') || operator.id.startsWith('math.')).map(operator =>
+              : category === 'Signal' ? operator.id.startsWith('signal.')
+                : category === 'Glyph' ? operator.id.startsWith('glyph.')
+                  : category === 'Feedback' ? operator.id.startsWith('feedback.')
+                    : operator.id.startsWith('coordinates.') || operator.id.startsWith('math.')).map(operator =>
           <button key={operator.id} type="button" title={operator.description} onClick={() => {
             const batch = startBatch('Add reusable node');
             try {

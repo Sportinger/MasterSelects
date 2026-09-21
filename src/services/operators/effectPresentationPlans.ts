@@ -14,6 +14,16 @@ const BYPASS = 'half enabled bypass bypass-threshold selected';
 
 /** Presentation stages name existing computations; they never replace an operator or route a signal. */
 export function effectPresentationPlan(type: string): EffectPresentationPlan | undefined {
+  if (type === 'crt-screen') return {
+    labels: { curvature: 'Screen Curvature', sampling: 'Clamped Image Sampling', scan: 'Scanlines',
+      mask: 'RGB Phosphor Mask', flicker: 'Timeline Flicker', finish: 'Color Mix & Sampled Alpha' },
+    stage: ({ id }) => includes('uv-split resolution-split', id) ? 'sources'
+      : /^(scan-|scan$)/.test(id) ? 'scan'
+        : /^(time-speed$|flicker(?:-|$))/.test(id) ? 'flicker'
+          : /^(safe-scale$|pixel-x$|mask(?:-|$)|is-|above-half$|below-one-half$)/.test(id) ? 'mask'
+            : includes('min-vec2 max-vec2 clamped-uv curved-sample color', id) ? 'sampling'
+              : /^(masked-color|scanned-color|flickered-color|mixed-color|combine)$/.test(id) ? 'finish' : 'curvature',
+  };
   if (type === 'box-blur' || type === 'sharpen') return {
     labels: { sampling: 'Kernel Sampling', weight: 'Gaussian Weight', average: 'Weighted Average', finish: type === 'sharpen' ? 'Sharpen & Alpha' : 'Radius Bypass' },
     stage: ({ id }) => includes(REDUCE, id) ? 'average'

@@ -409,7 +409,7 @@ same source-handle edges.
 |-----|----------|
 | **Transform** | Compact Source, Transform, Composite, Speed Change, Cropping, and Stabilization sections with transform, opacity, blend, speed, crop, keyframe, and reset controls |
 | **Color / Image** | Clip-level color correction; remains available in every theme, including the hidden Resolve theme |
-| **Effects** | GPU effects list with parameters |
+| **Effects** | Applied video effects and an expandable Color grade; Video / Audio switch exposes clip or linked-audio effects (hidden by default for visual clips). |
 | **Masks** | Mask shapes with mode and feather controls |
 | **Analysis** | Shared analysis map, transcript controls, and compact scene blobs with faces, synchronized dialogue, cuts, metrics, quality, and descriptions |
 

@@ -13,6 +13,7 @@ import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
 import { DraggableNumber, EffectKeyframeToggle, KeyframeToggle, MultiKeyframeToggle } from './shared';
 import { MIDIParameterLabel } from './MIDIParameterLabel';
 import { AudioEffectStackControl } from './AudioEffectStackControl';
+import { LegacyClipAudioEffects } from './LegacyClipAudioEffects';
 import { FlexEqualizerControl } from './FlexEqualizerControl';
 import { useRuntimeAudioMeterSnapshot } from '../../../services/audio/runtimeAudioMeterHooks';
 import {
@@ -439,6 +440,7 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
           onRemoveEffect={(effectId) => removeClipAudioEffectInstance(clipId, effectId)}
           onReorderEffect={(effectId, newIndex) => reorderClipAudioEffectInstance(clipId, effectId, newIndex)}
         />
+        <LegacyClipAudioEffects clipId={clipId} />
       </div>
     </div>
   );

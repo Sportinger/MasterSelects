@@ -48,7 +48,7 @@ export interface AudioEffectStackControlProps {
   runtimeAnalyzer?: AudioEqAnalyzerView;
   runtimeAnalyzerScope?: RuntimeAnalyzerScope;
   runtimeAnalyzerTrackId?: string;
-  onAddEffect: (descriptorId: string) => void;
+  onAddEffect?: (descriptorId: string) => void;
   onUpdateEffect: (effect: AudioEffectInstance, paramName: string, value: AudioEffectParamValue) => void;
   onSetEffectEnabled: (effectId: string, enabled: boolean) => void;
   onRemoveEffect: (effectId: string) => void;
@@ -137,11 +137,11 @@ export function AudioEffectStackControl({
 
   return (
     <div className={`audio-effect-stack-control ${className ?? ''}`} onPointerUp={event => {
-      if (event.target instanceof Element) event.target.closest<HTMLElement>('button,select,input[type="checkbox"]')?.blur();
+      if (event.target instanceof Element) event.target.closest<HTMLElement>('button,input[type="checkbox"]')?.blur();
     }}>
       <div className="section-header-row audio-effect-stack-control-header">
         <h4>{title}</h4>
-        <select
+        {onAddEffect && <select
           className="audio-effect-add-select"
           defaultValue=""
           onChange={(e) => {
@@ -155,7 +155,7 @@ export function AudioEffectStackControl({
           {availableEffects.map(effect => (
             <option key={effect.id} value={effect.id}>{effect.name}</option>
           ))}
-        </select>
+        </select>}
       </div>
 
       {effects.length === 0 ? (

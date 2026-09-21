@@ -36,6 +36,10 @@ Further reusable processing recipes are available in the same menu:
 | Color | Soft Bright Pass; Sobel Magnitude | Explicit threshold edges and image, or eight neighboring luminance values; no hidden sampling pass. |
 | Glyph | Glyph Cell Grid; Tone to Glyph Index; Glyph Atlas Alpha | Explicit UV/resolution/cell size, tone/invert/count, and atlas image/dimensions/index/local UV/clamp bounds. Atlas loading stays outside the recipes. |
 | Feedback | Decay & Max RGBA | Componentwise `max(current, previous * decay)`; both images and decay are inputs. The block is stateless and never advances history. |
+| Coordinates | Radial UV Curvature | Normalized UV, curvature coefficient and amount; no implicit clamping or image sampling. |
+| Color | RGB Stripe Mask | Horizontal UV, image width in pixels, stripe width and low/high channel levels; stripe width is bounded to at least one pixel. |
+| Signal | Sine Gain | `base + amplitude * sin(phase)` in that operand order; phase is in radians and time stays external. |
+| Sampling | Clamped Image Sample | Image, UV and explicit minimum/maximum UV; samples RGBA through the existing image sampler. |
 
 These versioned definitions extract existing primitive regions rather than adding
 effect-specific GPU implementations. Exact structural recognition can share them
@@ -43,6 +47,12 @@ across compatible effects without crossing saved group boundaries. Expanding a
 block exposes its ordinary nodes; editing its interior detaches that instance.
 Supplying an atlas or previous frame still requires a compatible resource-owning
 effect; inserting a processing block does not enable unsupported resources.
+
+CRT Screen reuses Sine Gain twice, for its scanlines and flicker. Glitch can reuse
+the same Clamped Image Sample as CRT wherever its exact clamp/sample boundary
+matches. The recipe extractor can keep selected literal controls as public
+inputs, so curvature and mask levels are not hidden effect-specific bindings.
+The screen recognition revision does not reapply earlier detached recipes.
 
 All graph editors use the shared node canvas and connection contract. Domain
 registries remain responsible for executable operators and parameter schemas;

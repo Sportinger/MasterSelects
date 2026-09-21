@@ -81,6 +81,23 @@ a deterministic color/initials placeholder until their GPU result is ready.
 For motion-adjustment clips, the production tab limits the picker to
 Brightness, Contrast, Saturation, Invert, and Gaussian Blur.
 
+The applied-effects view has a **Video / Audio** switch at the top. Visual clips
+default to Video; audio-only clips open Audio directly. The Audio view reuses the
+existing Volume/EQ and registry effect-stack controls, including Audio Math, and
+also exposes additional legacy clip audio effects without migrating their data.
+For linked video/audio it targets the linked audio owner, like the node graph;
+clips without an audio source show an empty-state explanation. This switch only
+filters the inspector and never enables, disables or reroutes audio.
+
+An initialized clip color grade appears as **Color** in the video effect list,
+including in its badge count. It expands to the same correction-node picker,
+wheels and curves as the Color tab and has a synchronized global enable/bypass
+control and Open Nodes action. Disabled grades remain listed for re-enabling.
+This is the existing built-in color stage before the image-effect stack, not a
+second grade or a new draggable GPU effect. Its storage and render order remain
+unchanged. The current Color panel's wheels edit the selected Corrector/Wheels
+node; choosing the wheels tool does not create a separate Wheels node.
+
 ## Current Effect Categories
 
 - `color` (9): Brightness, Contrast, Saturation, Vibrance, Hue Shift, Temperature, Exposure, Levels, Invert
@@ -507,6 +524,25 @@ CRT Screen stores its editable generic image graph with the effect. Curvature,
 scanlines, phosphor-mask channels, flicker and final blending remain connected
 operators with the original effect parameter and keyframe IDs. Flicker reads
 composition timeline time, so preview, seeking and export share the same clock.
+
+Untouched CRT graphs organize into Screen Curvature, Clamped Image Sampling,
+Scanlines, RGB Phosphor Mask, Timeline Flicker, and Color Mix & Sampled Alpha,
+alongside parameter, constant and source folders. A stage consisting of one
+shared block stays as that expandable block rather than gaining an extra folder.
+Saved user groups, wiring and explicit ungrouping remain authoritative.
+
+Four reusable compositions expose the existing primitives: Radial UV Curvature
+(UV, curvature and amount), RGB Stripe Mask (horizontal UV, pixel width, stripe
+width and low/high levels), Sine Gain (phase, amplitude and base), and Clamped
+Image Sample (image, UV and clamp bounds). The same Sine Gain recipe serves CRT
+scanlines and flicker. Exact clamped-sampling regions in Glitch share the sampling
+recipe, including alpha. Final CRT mixing still preserves alpha from the curved
+sample; no GPU pass, clock, parameter binding or shader formula is added.
+
+The separate Scanlines effect retains its scrolling/density phase and operand
+order. Grain retains its seeded sine-dot noise instead of being substituted with
+Glitch's Hash 2D or CRT's sine gain. Shared primitive operators already cover
+those differences; similarity alone is not treated as an identical recipe.
 
 Glitch and Film Prism likewise store editable generic graphs. Glitch composes
 its band ticks, shared hash and channel samples explicitly; Film Prism exposes

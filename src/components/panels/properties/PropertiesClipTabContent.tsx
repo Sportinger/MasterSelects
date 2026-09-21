@@ -157,7 +157,7 @@ export function PropertiesClipTabContent({
         {activeTab === 'gaussian-splat' && isGaussianSplat && <GaussianSplatTab clipId={selectedClip.id} />}
         {activeTab === 'light' && isLightClip && <LightTab clipId={selectedClip.id} />}
         {activeTab === 'splat-effector' && isSplatEffectorClip && <SplatEffectorTab clipId={selectedClip.id} />}
-        {activeTab === 'effects' && !isLightClip && !isFlockClip && <EffectsTab clipId={selectedClip.id} effects={selectedClip.effects || []} isAudioClip={isAudioClip} />}
+        {activeTab === 'effects' && !isLightClip && !isFlockClip && <EffectsTab key={selectedClip.id} clipId={selectedClip.id} effects={selectedClip.effects || []} isAudioClip={isAudioClip} />}
         {activeTab === 'tracking' && !isFlockClip && <SurfaceTrackingTab key={selectedClip.id} clipId={selectedClip.id} />}
         {activeTab === 'audio-edits' && isAudioClip && <AudioEditStackTab clipId={selectedClip.id} />}
         {activeTab === 'masks' && !isAudioClip && !isLightClip && !isFlockClip && <MasksTab clipId={selectedClip.id} masks={selectedClip.masks} />}
