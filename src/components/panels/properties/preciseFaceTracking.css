@@ -1,12 +1,5 @@
-.precise-face-controls { display:flex; flex-direction:column; gap:8px; padding:12px; font-size:12px; border-bottom:1px solid var(--border-color,#444); }
-.precise-face-controls > span { color:var(--text-secondary,#aaa); }
-.precise-face-controls > div,.precise-face-controls label { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.precise-face-controls button { color:inherit; background:var(--bg-tertiary,#292929); border:1px solid var(--border-color,#555); border-radius:4px; padding:6px 9px; cursor:pointer; }
-.precise-face-controls button:disabled { opacity:.5; cursor:default; }
-.precise-face-controls progress { width:100%; }
-.precise-face-controls :is(button,input),.landmark-tracking-controls button { -webkit-tap-highlight-color:transparent; }
-.precise-face-controls :is(button,input):focus:not(:focus-visible),.landmark-tracking-controls button:focus:not(:focus-visible) { outline:none; box-shadow:none; }
-.precise-face-controls :is(button,input):focus-visible,.landmark-tracking-controls button:focus-visible { outline:2px solid #69e6ff; outline-offset:2px; }
+.precise-face-controls { min-width:0; font-size:12px; }
+.precise-face-controls progress { width:calc(100% - 20px); margin:5px 10px; }
 .face-cable-controls { display:flex; flex-direction:column; gap:8px; padding-top:12px; border-top:1px solid var(--border-color,#444); }
 .face-cable-controls > span { color:var(--text-secondary,#aaa); }
 .face-cable-controls > div { display:flex; gap:6px; flex-wrap:wrap; }

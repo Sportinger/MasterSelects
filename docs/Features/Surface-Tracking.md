@@ -8,6 +8,11 @@ a chosen source frame, reconstructs a short 3D camera sequence and sparse
 ground mesh, or imports a dense reconstruction with future footprint sequences.
 Author it under **Properties → Tracking** on a video clip.
 
+The Tracking panel separates depth preview and baking, precise face tracking,
+surface tracking, and clip linking into collapsible inspector sections. Actions,
+status messages, numeric rows, and keyboard focus use the shared Properties
+inspector styling.
+
 ## Reusable assets and ordinary clips
 
 The current Tracking workspace uses project-owned assets shown in the Media panel's grid, list and board. Assets support naming, folders and context actions. Clips reference a shared asset; retained mesh data is stored once in linked project geometry files and survives save/load and undo.

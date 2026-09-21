@@ -11,11 +11,13 @@ import { assessTrackingSceneCalibration } from '../../../../services/planarTrack
 import './surfaceTracking.css';
 import { DepthEstimationControls } from '../DepthEstimationControls';
 import { PreciseFaceTrackingControls } from '../PreciseFaceTrackingControls';
+import { ResolveInspectorSection } from '../resolveInspector/ResolveInspectorPrimitives';
+import '../trackingPanel.css';
 const LegacyControls = lazy(() => import('./LegacySurfaceTrackingTab').then(m => ({default: m.LegacySurfaceTrackingTab})));
 
 export function SurfaceTrackingTab({clipId, assetId}: {clipId?: string; assetId?: string}) {
   const isSource = useTimelineStore(s => {const clip=s.clips.find(c=>c.id===clipId);return clip?.source?.type==='video'&&!clip.source.liveInputId&&!clip.trackingBinding;});
-  return <>{isSource && clipId && <DepthEstimationControls key={`depth:${clipId}`} clipId={clipId} />}{isSource && clipId && <PreciseFaceTrackingControls key={clipId} clipId={clipId} />}{isSource || assetId ? <TrackingResultTab clipId={clipId} assetId={assetId}/> : clipId ? <TrackingConnectionControls clipId={clipId}/> : null}</>;
+  return <div className="tracking-panel">{isSource && clipId && <DepthEstimationControls key={`depth:${clipId}`} clipId={clipId} />}{isSource && clipId && <PreciseFaceTrackingControls key={clipId} clipId={clipId} />}{isSource || assetId ? <TrackingResultTab clipId={clipId} assetId={assetId}/> : clipId ? <TrackingConnectionControls clipId={clipId}/> : null}</div>;
 }
 
 function TrackingResultTab({clipId,assetId}:{clipId?:string;assetId?:string}) {
@@ -40,7 +42,7 @@ function TrackingResultTab({clipId,assetId}:{clipId?:string;assetId?:string}) {
   return <div className="surface-tracking tracking-workspace" onPointerUp={e => {
     (e.target instanceof HTMLElement ? e.target.closest('button') : null)?.blur();
   }}>
-    <div className="surface-heading"><strong>Tracking</strong>{canTrack && <button title="Create another reusable result" disabled={blocked} onClick={w.create}>+ Result</button>}</div>
+    <ResolveInspectorSection title="Surface tracking" defaultOpen={false} headerActions={canTrack && <button className="tracking-panel-header-action" title="Create another reusable result" disabled={blocked} onClick={w.create}>+ Result</button>}>
     {!!w.tracks.length && !assetId && <label>Result <select aria-label="Tracking result" value={w.track?.id ?? ''} disabled={blocked} onChange={e => w.select(e.target.value)}>
       {w.tracks.map(t => <option key={t.id} value={t.id}>{assets.find(a=>a.track.id===t.id&&a.sourceMediaId===t.sourceId)?.name??t.name}</option>)}
     </select></label>}
@@ -98,6 +100,7 @@ function TrackingResultTab({clipId,assetId}:{clipId?:string;assetId?:string}) {
     </>}
     {w.busy && <><progress max={1} {...(w.progress===null?{}:{value:w.progress})}/><button onClick={w.cancel}>Cancel</button></>}
     <p role="status" className="surface-status">{w.message || editor.message}</p>
-    {canTrack && clipId && <details><summary>Connect this clip to tracking</summary><TrackingConnectionControls clipId={clipId}/></details>}
+    </ResolveInspectorSection>
+    {canTrack && clipId && <ResolveInspectorSection title="Link clip" defaultOpen={false} indicator="none"><TrackingConnectionControls clipId={clipId}/></ResolveInspectorSection>}
   </div>;
 }

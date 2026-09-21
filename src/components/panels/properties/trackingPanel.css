@@ -1,0 +1,23 @@
+@layer features {
+  .tracking-panel { min-width: 0; container-type: inline-size; font-size: 12px; }
+  .tracking-panel .resolve-inspector-section + .resolve-inspector-section { border-top: 1px solid var(--separator-color); }
+  .tracking-panel-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 10px; }
+  .tracking-panel-actions button,
+  .tracking-panel-header-action,
+  .tracking-panel .surface-tracking button { min-height: 26px; padding: 4px 8px; border: 1px solid var(--separator-color); border-radius: 1px; background: var(--input-bg); color: var(--text-primary); font: inherit; cursor: pointer; }
+  .tracking-panel-actions button:hover:not(:disabled),
+  .tracking-panel-header-action:hover:not(:disabled) { background: var(--surface-control-hover); }
+  .tracking-panel-actions button:disabled,
+  .tracking-panel-header-action:disabled { opacity: 0.45; cursor: default; }
+  .tracking-panel-header-action { min-height: 22px; padding: 2px 6px; white-space: nowrap; }
+  .tracking-panel .tracking-workspace { gap: 0; padding: 0; }
+  .tracking-panel .tracking-workspace > .resolve-inspector-section { width: 100%; }
+  .tracking-panel-hint,
+  .tracking-panel-status { display: block; margin: 7px 10px; color: var(--text-muted); font-size: 11px; line-height: 1.4; }
+  .tracking-panel-status:empty { display: none; }
+  .tracking-panel-feedback { padding: 4px 0 8px; border-top: 1px solid var(--separator-color); }
+  .tracking-panel-check { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .tracking-panel :is(button, input, select, summary) { -webkit-tap-highlight-color: transparent; }
+  .tracking-panel :is(button, input, select, summary):focus:not(:focus-visible) { outline: none; box-shadow: none; }
+  .tracking-panel :is(button, input, select, summary):focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+}
