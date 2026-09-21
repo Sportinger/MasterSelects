@@ -278,6 +278,24 @@ For development profiling, `measure-node-graph-interaction` on the authenticated
 debug bridge performs a bounded pan and restores the viewport. It reports main-thread
 frame gaps alongside worker drawing time, so a smooth worker is not mistaken for
 smooth mouse handling. It does not edit nodes or timeline data.
+The result includes mounted node, cable, plug and edge-layer DOM counts.
+With the canvas renderer active, `hideEdgeDom: true` temporarily hides the SVG
+cable/plug interaction layers while keeping canvas cables visible; their inline
+display styles are restored after the run. `measureHitTesting: true` additionally
+times `elementFromPoint` after each pan step, including any style/layout flush.
+This is a synthetic isolation probe, not a native pointer-latency measurement;
+hidden SVG elements remain mounted. Compare repeated runs at the same zoom,
+viewport, effect, playback state and preview setting.
+
+The local development page `/tests/browser/node-effect-performance.html` compares
+Exposure, Chroma Key and Holo against their original registered shaders using
+synthetic pixels at 1080p and 4K. It warms pipelines, alternates execution order,
+uses GPU timestamp queries when available, and checks output pixels. A separate
+CPU measurement exercises the real fullscreen `EffectsPipeline.applyEffects`
+for Chroma Key and Holo with stable graphs and no preview requests. Exposure is
+excluded from that CPU test because the editor normally fuses it into the
+compositor. Downloadable JSON keeps GPU execution and CPU preparation separate;
+these measurements do not represent whole-editor playback or decode performance.
 
 ## Keyframe nodes
 
