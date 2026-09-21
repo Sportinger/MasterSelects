@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../src/services/projectFileService', () => ({
   projectFileService: {
+    getProjectData: vi.fn(() => null),
     isProjectOpen: mocks.isProjectOpen,
     hasUnsavedChanges: mocks.hasUnsavedChanges,
     markDirty: mocks.markDirty,

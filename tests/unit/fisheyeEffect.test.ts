@@ -157,10 +157,23 @@ describe('fisheye effect', () => {
     const plan = workerSoftwareEffectPlanForLayer({
       id: 'lens-layer', effects: [
         { id: 'fisheye-graph', type: 'fisheye', name: 'Fisheye Lens', enabled: true, params: {}, operatorGraph: createDefaultFisheyeGraph() },
-        { id: 'legacy-key', type: 'chroma-key', name: 'Chroma Key', enabled: true, params: {} },
+        { id: 'legacy-blur', type: 'blur', name: 'Legacy Blur', enabled: true, params: { radius: 2 } },
       ],
     } as unknown as Layer);
     expect(plan).toBeNull();
+  });
+
+  it('keeps Fisheye and the migrated Chroma Key in their original graph order', () => {
+    const plan = workerSoftwareEffectPlanForLayer({
+      id: 'lens-layer', effects: [
+        { id: 'fisheye-graph', type: 'fisheye', name: 'Fisheye Lens', enabled: true, params: {}, operatorGraph: createDefaultFisheyeGraph() },
+        { id: 'key', type: 'chroma-key', name: 'Chroma Key', enabled: true, params: {} },
+      ],
+    } as unknown as Layer);
+    expect(plan?.pixelEffects.imageOperatorPlans).toHaveLength(2);
+    expect(plan?.pixelEffects.imageOperatorPlanOwners?.map(owner => owner.feedbackKey)).toEqual([
+      JSON.stringify(['lens-layer', 'fisheye-graph']), JSON.stringify(['lens-layer', 'key']),
+    ]);
   });
 
   it('fails closed for malformed persisted graph data', () => {

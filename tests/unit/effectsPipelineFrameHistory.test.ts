@@ -12,8 +12,9 @@ describe('EffectsPipeline frame history', () => {
     const textures: Array<{ label: string; view: object; destroy: ReturnType<typeof vi.fn> }> = [];
     const createBindGroup = vi.fn((_descriptor: GPUBindGroupDescriptor) => ({}));
     const device = {
+      limits: { maxSampledTexturesPerShaderStage: 16 },
       createShaderModule: vi.fn(() => ({})), createBindGroupLayout: vi.fn(() => ({})), createPipelineLayout: vi.fn(() => ({})),
-      createRenderPipeline: vi.fn(() => ({})), createComputePipeline: vi.fn(() => ({})), createBindGroup,
+      createRenderPipeline: vi.fn(() => ({ getBindGroupLayout: vi.fn(() => ({})) })), createComputePipeline: vi.fn(() => ({})), createBindGroup,
       createBuffer: vi.fn(() => ({ destroy: vi.fn() })),
       createTexture: vi.fn(({ label }: { label: string }) => {
         const texture = { label, view: { label: `${label}-view` }, destroy: vi.fn(), createView() { return this.view; } };

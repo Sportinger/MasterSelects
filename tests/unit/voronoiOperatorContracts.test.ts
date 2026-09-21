@@ -21,7 +21,7 @@ describe('Voronoi operator contracts', () => {
     expect(read.outputs).toEqual([{ id: 'value', label: 'Seed Record', type: 'vec4' }]);
   });
 
-  it('uses authoritative Voronoi catalog metadata without exposing unfinished nodes', () => {
+  it('uses authoritative Voronoi catalog metadata and exposes the implemented compute nodes', () => {
     const seeds = getEffectOperator('geometry.voronoi-seeds')!;
     expect(seeds.parameters).toEqual(['scale', 'speed'].map(id => {
       const spec = voronoi.params[id];
@@ -30,7 +30,7 @@ describe('Voronoi operator contracts', () => {
         step: spec.step, animatable: spec.animatable };
     }));
     for (const id of ['geometry.voronoi-seeds', 'geometry.jump-flood', 'field.read-nearest-seed']) {
-      expect(getEffectOperator(id)?.addable).toBe(false);
+      expect(getEffectOperator(id)?.addable).toBe(true);
     }
     expect(seeds.description).toContain('XY is the seed pixel coordinate');
     expect(getEffectOperator('field.read-nearest-seed')?.description).toContain('Truncates the pixel coordinate');

@@ -282,6 +282,7 @@ Timeline snapping starts disabled unless a previous choice was saved. Hold `Shif
 - Normal click on a linked video clip selects both the video and linked audio clip.
 - Marquee selection also activates linked audio partners for selected video clips.
 - Click empty space to clear selection.
+- Refreshing the page restores the active composition, selected clips, and the focused clip in Properties for that browser tab. Clips absent from the saved project are ignored; an empty selection stays empty.
 - Marquee selection works from empty timeline space.
 - Keyframe selection uses the same shift-toggle pattern.
 
