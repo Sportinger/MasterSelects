@@ -1,17 +1,23 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorDefinition } from '../../types/operatorGraph';
 import { COORDINATE_COMPOSITIONS, coordinateCompositionRevision } from './coordinateCompositions';
+import { COLOR_COMPOSITIONS } from './colorCompositions';
 import { compositionBoundary, packOperatorCompositions, sameCompositionNode } from './operatorComposition';
 import { IMAGE_EFFECT_GRAPH_LIMITS } from './effectGraphLimits';
+import { getOperatorComposition } from './operatorCompositionRegistry';
 
 const cache = new WeakMap<EffectOperatorGraph, EffectOperatorGraph>();
 /** Exact, bounded structural recognition, independent of effect names and node IDs. */
 export function recognizeOperatorCompositions(source: EffectOperatorGraph): EffectOperatorGraph {
-  if (source.domain !== 'image' || source.incomplete || source.compositionRules === 2) return source;
+  if (source.domain !== 'image' || source.incomplete || source.compositionRules === 2 && source.colorCompositionRules === 1) return source;
   const cached = cache.get(source); if (cached) return cached;
   let graph = source;
-  for (const definition of COORDINATE_COMPOSITIONS) {
-    const revision = coordinateCompositionRevision(definition.id);
-    if (revision <= (source.compositionRules ?? 0)) continue;
+  let recognizedColor = false;
+  const rules = [
+    ...COORDINATE_COMPOSITIONS.map(definition => ({ definition, revision: coordinateCompositionRevision(definition.id), applied: source.compositionRules ?? 0 })),
+    ...COLOR_COMPOSITIONS.map(definition => ({ definition, revision: 1 as const, applied: source.colorCompositionRules ?? 0 })),
+  ];
+  for (const { definition, revision, applied } of rules) {
+    if (revision <= applied) continue;
     let remaining = 4096;
     while (remaining > 0) {
       const body = definition.composition!.graph;
@@ -42,16 +48,18 @@ export function recognizeOperatorCompositions(source: EffectOperatorGraph): Effe
       };
       const next = search(); if (!next) break;
       graph = next;
+      if (COLOR_COMPOSITIONS.includes(definition)) recognizedColor = true;
     }
   }
-  graph = { ...graph, compositionRules: 2 };
+  graph = { ...graph, compositionRules: 2,
+    ...(source.colorCompositionRules === 1 || recognizedColor ? { colorCompositionRules: 1 as const } : {}) };
   cache.set(source, graph); cache.set(graph, graph);
   return graph;
 }
 
 function extract(source: EffectOperatorGraph, definition: OperatorDefinition, mapping: Record<string, string>): EffectOperatorGraph | undefined {
   const groupCost = (nodes: BoundOperatorNode[], depth = 0): number => nodes.reduce((total, node) => {
-    const body = COORDINATE_COMPOSITIONS.find(def => def.id === node.operator)?.composition;
+    const body = getOperatorComposition(node.operator)?.composition;
     return total + (body ? depth >= 4 ? Infinity : 1 + groupCost(body.graph.nodes, depth + 1) : 0);
   }, 0);
   if ((source.groups?.length ?? 0) + groupCost(source.nodes) >= 32) return;

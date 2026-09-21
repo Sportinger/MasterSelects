@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { getDefaultParams, getEffect } from '../../src/effects';
 import { EXPOSURE_PARAMS, HUE_SHIFT_PARAMS, LEVELS_PARAMS, TEMPERATURE_PARAMS, VIBRANCE_PARAMS } from '../../src/effects/color/remainingColorParams';
 import { createDefaultColorEffectGraph, type EditableColorEffectType } from '../../src/services/operators/colorEffectGraphs';
+import { expandOperatorCompositions, packOperatorCompositions } from '../../src/services/operators/operatorComposition';
 import { setOperatorParameter } from '../../src/services/operators/effectGraphEditing';
 import { effectOperatorGraph, effectOperatorParams, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
@@ -52,6 +53,24 @@ describe('remaining editable color effect graphs', () => {
     const vibrance = evaluate('vibrance', { amount: 1 }, pixel);
     [gray + (0.2 - gray) * factor, gray + (0.4 - gray) * factor, gray + (0.8 - gray) * factor, 0.35]
       .forEach((value, index) => expect(vibrance[index]).toBeCloseTo(value, 5));
+  });
+
+  it('packs Hue Shift as an editable reusable HSV composition and preserves the legacy graph exactly', () => {
+    const original = createDefaultColorEffectGraph('hue-shift');
+    const graph = effectOperatorGraph(effect('hue-shift'));
+    const group = graph.groups?.find(item => item.composition?.instance.operator === 'color.hue-shift.rgb');
+    expect(group).toBeDefined();
+    expect(graph.colorCompositionRules).toBe(1);
+    expect(graph.nodes.map(node => node.id).toSorted()).toEqual(original.nodes.map(node => node.id).toSorted());
+    expect(graph.edges.map(({ from, output, to, input }) => `${from}:${output}>${to}:${input}`).toSorted())
+      .toEqual(original.edges.map(({ from, output, to, input }) => `${from}:${output}>${to}:${input}`).toSorted());
+    const packed = packOperatorCompositions(graph);
+    expect(packed.nodes.some(node => node.operator === 'color.hue-shift.rgb')).toBe(true);
+    expect(expandOperatorCompositions(packed).edges.map(({ from, output, to, input }) => `${from}:${output}>${to}:${input}`).toSorted())
+      .toEqual(original.edges.map(({ from, output, to, input }) => `${from}:${output}>${to}:${input}`).toSorted());
+    const plan = compileImageOperatorGraph(graph, { shift: .5 });
+    const pixel = evaluateImageOperatorPlan(plan, [1, 0, 0, .35]);
+    [0, 1, 1, .35].forEach((value, index) => expect(pixel[index]).toBeCloseTo(value, 4));
   });
 
   it('executes changed graph wiring and persists stable bound parameter edits', () => {

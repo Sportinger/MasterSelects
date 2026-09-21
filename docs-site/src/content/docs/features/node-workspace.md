@@ -57,6 +57,8 @@ Insertion is one undo step and opens a collapsed destination effect.
 
 The **Fisheye** section contains all 15 processing areas and subgroups, including
 Lens Projection, Chromatic Aberration, Frame Edges, Vignette and Average Samples.
+The **Color** section includes **Hue Shift**, built from the existing RGB/HSV
+conversion, vector and scalar math nodes rather than a separate opaque operator.
 These are also available from the inspector's **Add node** selector in other
 supported image-effect graphs. The parameter and constant folders are organization
 for the original effect, not separate processing blocks.
@@ -96,6 +98,12 @@ folders are retained. New exact recognition rules can extract patterns within a
 folder but never across its boundary. Migration revisions avoid regrouping a
 previously ungrouped instance. Nested instances retain their children's identities
 and positions through save/reopen and detach locally when edited.
+
+Hue Shift uses the same expandable composition model for its RGB-to-HSV conversion,
+wrapped hue addition and HSV-to-RGB conversion. Its Shift value remains outside the
+shared interior as a normal effect-owned parameter, so keyframes and the original
+0–1 turns contract stay intact. Existing flat Hue Shift graphs are recognized by
+structure and retain their primitive IDs when the composition is opened.
 
 The definitions can be added to other image-effect graphs. Exact structural
 recognition also replaces matching, ungrouped primitive patterns when an existing

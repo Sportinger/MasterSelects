@@ -12,8 +12,9 @@ selected node's inspector or the appropriate domain's Add menu.
 
 ## Ownership and reuse
 
-The catalog includes the 15 Fisheye processing groups and the shared coordinate
-compositions. To insert one, select an image effect or an internal node and use
+The catalog includes the 15 Fisheye processing groups, the shared coordinate
+compositions and the expandable HSV-based Hue Shift composition. To insert one,
+select an image effect or an internal node and use
 **right-click → Reusable Nodes**, or the inspector's **Add node** selector.
 Each entry exposes its typed boundary and can be expanded after insertion.
 

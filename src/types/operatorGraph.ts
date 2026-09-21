@@ -57,6 +57,8 @@ export interface EffectOperatorGraph {
   schemaVersion?: 1;
   /** Applied exact composition migration revision; local ungrouping is not undone on every read. */
   compositionRules?: 1 | 2;
+  /** Color compositions migrate independently so existing coordinate migration remains stable. */
+  colorCompositionRules?: 1;
   /** An editable graph whose execution is paused until its missing wiring is repaired. */
   incomplete?: string;
   domain?: 'cables' | 'scene' | 'voxel' | 'image' | 'compute-image' | 'analog-signal' | 'audio';

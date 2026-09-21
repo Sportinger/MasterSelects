@@ -42,6 +42,15 @@ describe('Reusable Nodes menu', () => {
     expect(view.queryByRole('button', { name: 'Vignette', exact: true })).toBeNull();
   });
 
+  it('offers the reusable HSV Hue Shift composition in its own Color section', async () => {
+    const user = userEvent.setup(), view = setup();
+    await user.click(view.getByRole('button', { name: 'Reusable Nodes' }));
+    expect(view.getByText('Color')).toBeVisible();
+    await user.click(view.getByRole('button', { name: 'Hue Shift', exact: true }));
+    const effect = useTimelineStore.getState().clips[0].effects[0];
+    expect(effect.operatorGraph!.nodes.some(node => node.operator === 'color.hue-shift.rgb')).toBe(true);
+  });
+
   it('retains the menu and reports a locked target without changing the effect', async () => {
     const user = userEvent.setup(), view = setup(true);
     await user.click(view.getByRole('button', { name: 'Reusable Nodes' }));
