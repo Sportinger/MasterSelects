@@ -37,7 +37,7 @@ describe('Memory Leak image graph lifecycle', () => {
     const canonical = migratePersistedEffectOperatorGraph(legacy), definition = getEffect('memory-leak')!;
     expect(isImageGraphEffectType('memory-leak')).toBe(true);
     expect(hasEffectOperatorGraph('memory-leak')).toBe(true);
-    expect(canonical.operatorGraph).toEqual(createDefaultMemoryLeakGraph());
+    expect(canonical.operatorGraph).toEqual({ ...createDefaultMemoryLeakGraph(), compositionRules: 2 });
     expect(effectOperatorGraph(canonical)).toEqual(canonical.operatorGraph);
     expect(effectOperatorCompileContext(canonical)).toMatchObject({ parameterSchema: definition.params, allowMemoryWindow: true });
     expect(effectOperatorParams(canonical)).toMatchObject({

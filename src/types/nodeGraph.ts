@@ -275,6 +275,16 @@ export interface NodeConnectionVariant {
   outputs: readonly NodeGraphPort[];
 }
 
+/** A cable released on the canvas, before choosing its new endpoint. */
+export interface NodeConnectionDrop {
+  nodeId: string;
+  portId: string;
+  direction: 'input' | 'output';
+  x: number;
+  y: number;
+  layout: NodeGraphLayout;
+}
+
 export interface ClipNodeGraph {
   version: 1;
   canvasPlacements?: Record<string, NodeCanvasPlacement>;

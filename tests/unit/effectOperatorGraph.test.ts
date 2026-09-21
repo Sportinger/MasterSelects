@@ -40,7 +40,7 @@ describe('reusable cable operator execution', () => {
 
   it('rejects incompatible ports, missing core inputs, cycles and malformed saved data', () => {
     const graph = defaultCableOperatorGraph();
-    expect(() => connectEffectGraph(graph, { id: 'bad', from: 'depth', output: 'depth', to: 'simulation', input: 'forces' })).toThrow('Invalid connection');
+    expect(() => connectEffectGraph(graph, { id: 'bad', from: 'depth', output: 'depth', to: 'simulation', input: 'forces' })).toThrow('No supported variant preserves the connected signal types');
     const missing = structuredClone(graph); missing.edges = missing.edges.filter(e => e.to !== 'anchors');
     expect(validateEffectGraph(missing).join(' ')).toContain('connect Landmarks');
     const cyclic = structuredClone(graph);
@@ -50,7 +50,7 @@ describe('reusable cable operator execution', () => {
       { id: 'b', from: 'transform2', output: 'scene', to: 'transform', input: 'scene' });
     expect(validateEffectGraph(cyclic)).toContain('Cycles are not supported.');
     for (const value of ['{', 'null', JSON.stringify({ ...graph, nodes: [null] })]) expect(() => readEffectGraph(value, defaultCableOperatorGraph)).toThrow();
-    expect(() => compileCableOperatorGraph({ operatorGraph: JSON.stringify({ ...graph, edges: graph.edges.map(e => e.id === 'surface-depth-contact' ? { ...e, from: 'face-contact' } : e) }) })).toThrow('Invalid connection');
+    expect(() => compileCableOperatorGraph({ operatorGraph: JSON.stringify({ ...graph, edges: graph.edges.map(e => e.id === 'surface-depth-contact' ? { ...e, from: 'face-contact' } : e) }) })).toThrow('Invalid connection: surface-depth-contact');
   });
 
   it('keeps saved depth and reads the same effect toggle bindings after serialization', () => {

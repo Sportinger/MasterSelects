@@ -44,6 +44,6 @@ export function useNodeCanvasPlacement(graph: NodeGraph, layoutScaleX: number) {
     if (group) save({ ...placement, groups: { ...placement.groups, [id]: { ...group, locked: group.locked === false } } }, 'Toggle group lock');
   }, [placement, save]);
   const arrange = useCallback(() => save(arrangeFlowPlacement(graph, placement), 'Arrange effect nodes'), [graph, placement, save]);
-  const reset = useCallback(() => save(resetCanvasPlacement(graph), 'Reset node layout'), [graph, save]);
+  const reset = useCallback(() => { const next = resetCanvasPlacement(graph); save(next, 'Reset node layout'); return next; }, [graph, save]);
   return { nodes, placement, commit, toggleLock, arrange, reset };
 }

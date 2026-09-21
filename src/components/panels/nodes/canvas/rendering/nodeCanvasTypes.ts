@@ -7,7 +7,7 @@ export interface Point { x: number; y: number }
 export interface Rect extends Point { width: number; height: number }
 export interface CanvasView { zoom: number; panX: number; panY: number; width: number; height: number; ratio: number; moving?: boolean }
 export interface CanvasTheme { background: string; card: string; text: string; muted: string; border: string; accent: string }
-export interface CanvasPort extends Point { id?: string; label: string; type: string; color: string; input: boolean }
+export interface CanvasPort extends Point { id?: string; label: string; type: string; color: string; input: boolean; highlighted?: boolean }
 export interface CanvasCurve extends Rect {
   clipId: string; start: number; duration: number; property: AnimatableProperty;
   sourceTime: boolean; keys: Keyframe[]; value: number; points: number[];

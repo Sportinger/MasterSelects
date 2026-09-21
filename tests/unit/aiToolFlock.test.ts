@@ -201,7 +201,7 @@ describe('AI Flock tools', () => {
       connect: [{ fromPort: 'behavior', toNodeId: simulation.id, toPort: 'spawn' }],
     });
     expect(mismatch.success).toBe(false);
-    expect(mismatch.error).toMatch(/Cannot connect behavior output to spawn input/);
+    expect(mismatch.error).toMatch(/port signal types or formats do not match/);
     expect(useTimelineStore.getState().clips[0].flock).toBe(before);
 
     const invalid = await handleUpdateFlockNode({ clipId: view.clipId, nodeId: emitter.id, params: { count: -5 } });

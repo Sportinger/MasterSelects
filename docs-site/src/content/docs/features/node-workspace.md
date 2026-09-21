@@ -10,7 +10,7 @@ including nested groups. The separate arrow collapses or expands the group;
 **Focus** fits that group. Header text adapts to zoom and truncates when needed;
 frame width and header height never grow to accommodate text. Collapse state and layout are
 saved with the clip and restored when reopening the project. Collapse affects only
-presentation, never rendering or a saved bake. Collapsed effects and subgroups appear as regular node cards with typed ports and an expansion arrow beside the title, without an enclosing group frame. Opening or closing an individual group preserves zoom and pan. A short 220 ms transition moves cards, cables and surrounding nodes together. When groups open together, peers start 100 ms apart from left to right using their final arranged positions. The next hierarchy level starts 140 ms after the last group of the previous level, so opening steps remain visibly staggered while overlapping. Closing reverses that sequence. Each step projects and lays out the intermediate hierarchy as an individual fold would: containing frames grow or shrink and surrounding nodes move along with them. Interrupted transitions continue from their current positions. Manual dragging stays direct, and reduced-motion preferences disable the transition.
+presentation, never rendering or a saved bake. Collapsed effects and subgroups appear as regular node cards with typed ports and an expansion arrow beside the title, without an enclosing group frame. Groups start collapsed unless an explicit saved state opens them. Expanding one group smoothly fits its changing bounds. Collapsing it restores the zoom and position from immediately before that expansion, or fits the whole graph when no previous view was recorded. A short 220 ms transition moves cards, cables and surrounding nodes together. When groups open together, peers start 100 ms apart from left to right using their final arranged positions. The next hierarchy level starts 140 ms after the last group of the previous level, so opening steps remain visibly staggered while overlapping. Closing reverses that sequence. Each step projects and lays out the intermediate hierarchy as an individual fold would: containing frames grow or shrink and surrounding nodes move along with them. Interrupted transitions continue from their current positions. Manual dragging stays direct, and reduced-motion preferences disable the transition.
 
 The toolbar's **Expand all / Collapse all** includes hidden and never-opened
 subgroups. Each action is one undo step. Zoom and pan continuously fit the currently
@@ -642,9 +642,9 @@ multi-object scene or shader program.
 and effects, including signal types, parameters and supported contexts. See the
 [Node Catalog](/features/node-catalog/) for implementation ownership and extension rules.
 
-Right-clicking the canvas opens an Add Node menu. It can add AI Nodes at the clicked graph position, force field-backed built-ins such as Transform, Mask, and Color into the graph, and add existing effect types from an Effect Nodes submenu. Right-clicking a removable node also exposes Delete Node; pressing Delete or Backspace removes the selected Effect or AI node, and removes a forced built-in node when it was only shown by the graph.
+Right-clicking the canvas opens an Add Node menu. It can add AI Nodes at the clicked graph position, force field-backed built-ins such as Transform, Mask, and Color into the graph, and add existing effect types from an Effect Nodes submenu. Right-clicking a removable node also exposes Delete Node; pressing Delete or Backspace removes the selected visual effect, audio effect or AI node, and removes a forced built-in node when it was only shown by the graph.
 
-Links can be edited directly on the board. Drag from any port to a compatible opposite port to connect it; selecting a link and pressing Disconnect/Delete, or right-clicking the link or port, removes the connection. The visual effect chain always follows the canonical effect stack, including after
+Links can be edited directly on the board. Drag from any socket to a compatible opposite socket to create a new cable, even when that socket already has a connection. Only the separate cable grip edits an existing cable. Selecting a link and pressing Disconnect/Delete, or right-clicking the link, removes the connection. Audio-effect deletion and bypass target the actual audio clip in a linked video/audio pair and participate in undo/redo. The visual effect chain always follows the canonical effect stack, including after
 adding/removing effects in Properties. Connecting effect A's output to effect B's
 input inserts A directly before B and reconnects the remaining chain. The node
 inspector also provides **Move effect earlier/later** controls. Properties reorder
@@ -661,9 +661,9 @@ respects locked tracks and export protection.
 
 Cable ends have colored semicircular **plugs** around their sockets, with grips
 outside the node card. They remain visible above cards, including collapsed groups;
-multiple links on a port have separate grips. Hover or keyboard-focus a free port
-to preview its plug, which can also start a new connection. Existing grips highlight
-on port hover. Plugs slide in and out on attachment and detachment, respecting the
+multiple links on a port have separate grips. Hovering a socket highlights only that
+socket; hovering a grip highlights its cable. A free socket shows a docked plug
+only while a new connection is being dragged. Plugs slide in and out on attachment and detachment, respecting the
 system's reduced-motion preference.
 
 Hovering an individual grip or its wire softly highlights only that cable and its
@@ -674,12 +674,20 @@ the connection and the draft wire snaps to it. Moving away or over an incompatib
 port returns the plug to the pointer. The preview does not change the graph until
 the cable is released.
 
-Drag either end of an existing cable to a compatible port to reconnect it. Releasing
+Drag either grip of an existing cable to a compatible port to reconnect it. Releasing
 on empty canvas disconnects that cable; clicking without dragging does not.
 Dropping back on the original socket keeps the link, while Escape, interrupted
 pointer gestures and incompatible targets restore it. Required or locked links
 retain their existing domain restrictions. Keyboard-focus a connected plug and
 press Delete/Backspace to remove its cable; Enter/Space selects the link.
+
+Right-drag an input or output to empty canvas to open a searchable menu of compatible
+nodes. Choosing an entry creates and connects it in one undo step; opening or
+canceling the menu leaves existing cables untouched. Right-clicking a socket or
+pressing Shift+F10 on a focused socket opens the same menu. Choices respect the
+current graph runtime, direction, formats and adaptive Math variants. Root image
+and audio sockets offer effect instances; internal sockets offer supported
+operators and reusable compositions.
 
 The Transform node writes through to the clip model. Its inspector edits opacity, position, scale, rotation, speed, blend mode, and reverse state through the same timeline store actions used by the Properties panel, so preview, export, history, and project persistence continue to see one clip model.
 
@@ -714,4 +722,4 @@ its typed compiler, Color keeps its grade compiler, and image surfaces use the s
 field-backed. New agent tools should use these validated mutations rather than UI
 coordinates or a separate copy of the graph.
 
-Adding an effect, including through the Effects panel, reflows its connected outer chain to make room. Bypassing an effect collapses its group and its Effects inspector entry; enabling it again preserves the collapsed state. **Reset** restores the viewport and arranges node positions again, clearing manual canvas anchors and group offsets.
+Adding an effect, including through the Effects panel, reflows its connected outer chain to make room. Bypassing an effect collapses its group and its Effects inspector entry; enabling it again preserves the collapsed state. **Reset** arranges node positions again, clears manual canvas anchors and group offsets, and fits the resulting graph with the same bounds and zoom rules as **Fit**.

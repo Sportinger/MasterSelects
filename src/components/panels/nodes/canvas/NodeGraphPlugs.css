@@ -8,7 +8,7 @@
 .node-workspace-plug-shape { stroke: currentColor; stroke-width: 2; }
 .node-workspace-plug-grip { fill: var(--bg-secondary, #202020); stroke: currentColor; stroke-width: 2; pointer-events: none; }
 .node-workspace-plug-hit { fill: transparent; stroke: transparent; pointer-events: all; }
-.node-workspace-plug-collar-hit { fill: none; stroke: transparent; stroke-width: 6; pointer-events: stroke; }
+.node-workspace-plug-collar-hit { fill: none; stroke: transparent; stroke-width: 6; pointer-events: none; }
 .node-workspace-plug:hover .node-workspace-plug-grip, .node-workspace-plug.port-hovered .node-workspace-plug-grip, .node-workspace-plug.edge-hovered .node-workspace-plug-grip, .node-workspace-plug.selected .node-workspace-plug-grip { fill: currentColor; }
 .node-workspace-plug:focus-visible .node-workspace-plug-hit { stroke: var(--port-color); stroke-width: 2; }
 .node-workspace-canvas { touch-action: none; }

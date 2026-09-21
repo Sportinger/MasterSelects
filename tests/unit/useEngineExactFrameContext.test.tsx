@@ -53,6 +53,7 @@ vi.mock('../../src/stores/mediaStore', () => ({
 }));
 
 vi.mock('../../src/services/layerBuilder', () => ({
+  playheadFrameHistoryMetadata: () => ({ eventRevision: 0, ownerRevision: 0 }),
   getPlayheadPosition: (...args: unknown[]) => hoisted.getPlayheadPosition(...args),
   layerBuilder: {
     captureFrameContext: (...args: unknown[]) => hoisted.captureFrameContext(...args),
@@ -164,6 +165,7 @@ describe('useEngine exact producer frame context', () => {
     expect(schedulerContext).toEqual({
       compositionId: 'comp-exact',
       timelineTimeSeconds: 2.5,
+      frameHistory: { eventRevision: 0, ownerRevision: 0 },
     });
     expect(hoisted.setActiveCompLayers).toHaveBeenCalledWith(layers, schedulerContext);
     expect(hoisted.render).toHaveBeenCalledWith(layers, schedulerContext);

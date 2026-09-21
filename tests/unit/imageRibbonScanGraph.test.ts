@@ -25,7 +25,7 @@ describe('Ribbon Scan image graph', () => {
     expect(isImageGraphEffectType(effect.type)).toBe(true);
     expect(isLocalImageEffectType(effect.type)).toBe(false);
     expect(effectOperatorParams(effect)).toMatchObject(getDefaultParams('ribbon-scan'));
-    expect(effectOperatorGraph(effect)).toEqual(createDefaultRibbonScanGraph());
+    expect(effectOperatorGraph(effect)).toEqual({ ...createDefaultRibbonScanGraph(), compositionRules: 2 });
   });
 
   it('uses two explicit shared samples and catalog-owned bindings', () => {

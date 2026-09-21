@@ -1,4 +1,5 @@
-import type { ClipTransform, Keyframe } from '../../types';
+import type { ClipTransform } from '../../types/timelineCore';
+import type { Keyframe } from '../../types/keyframes';
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import { getEffectiveScale } from '../../utils/transformScale';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';

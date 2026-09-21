@@ -31,7 +31,7 @@ beforeEach(() => {
   const comp = { width: 1000, height: 1000, frameRate: 30 };
   const clip = { id: 'clip', trackId: 'track', startTime: 0, duration: 0.3, inPoint: 0, outPoint: 0.3,
     source: { mediaFileId: 'source' }, transform: { rotation: { x: 0, y: 0 }, position: { z: 0 } },
-    effects: [{ id: 'effect', type: 'face-cables', enabled: true }] };
+    effects: [{ id: 'effect', type: 'face-cables', enabled: true, params: {} }] };
   env.timeline = { clips: [clip], tracks: [], clipKeyframes: new Map(), getClipKeyframes: () => [],
     invalidateCache: vi.fn(), updateClip: (_id: string, patch: object) => { env.timeline.clips = [{ ...clip, ...patch }]; } };
   env.media = { activeCompositionId: 'comp', getActiveComposition: () => comp, files: [{ id: 'source', width: 1000, height: 1000 }] };
@@ -72,7 +72,7 @@ describe('cable branches', () => {
     expect(Math.max(...starts) - Math.min(...starts)).toBeGreaterThan(0.001);
   });
   it('uses the same attachment in the draft preview', () => {
-    const configs = pair(), bake = decodeCableBake(previewFaceCables('clip', configs, 0.1))!;
+    const configs = pair(), bake = decodeCableBake(previewFaceCables('clip', configs, 0.1, 'effect'))!;
     const layout = cableFrameLayout(3, configs), parent = layout.offsets[1], child = layout.offsets[0];
     for (let axis = 0; axis < 3; axis++) expect(bake.data[child + 2 + axis]).toBeCloseTo(bake.data[parent + 2 + 12 * 3 + axis], 5);
   });

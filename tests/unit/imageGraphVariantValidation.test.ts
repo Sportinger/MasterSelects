@@ -5,7 +5,7 @@ import { connectEffectGraph, validateEffectGraph } from '../../src/services/oper
 describe('incomplete vector graph integrity', () => {
   it('rejects newly introduced incompatible connections even while preserving older repairable edges', () => {
     const graph = createDefaultInvertImageGraph();
-    expect(() => connectEffectGraph(graph, { id: 'bad', from: 'one', output: 'value', to: 'output', input: 'image' })).toThrow('Invalid connection');
+    expect(() => connectEffectGraph(graph, { id: 'bad', from: 'one', output: 'value', to: 'output', input: 'image' })).toThrow('No supported variant preserves the connected signal types');
     graph.nodes.find(node => node.id === 'combine')!.operator = 'vector.combine.vec2';
     graph.incomplete = 'Repair connections after dimension change';
     expect(() => connectEffectGraph(graph, { id: 'replacement', from: 'one', output: 'value', to: 'invert-r', input: 'a' })).not.toThrow();

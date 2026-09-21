@@ -14,6 +14,7 @@ describe('EffectsPipeline startup', () => {
     const createRenderPipeline = vi.fn(() => ({}));
     const createComputePipeline = vi.fn(() => ({}));
     const device = {
+      lost: new Promise<GPUDeviceLostInfo>(() => {}),
       createShaderModule,
       createBindGroupLayout: vi.fn(() => ({})),
       createPipelineLayout: vi.fn(() => ({})),
@@ -44,6 +45,7 @@ describe('EffectsPipeline startup', () => {
     });
     const onPipelineReady = vi.fn();
     const device = {
+      lost: new Promise<GPUDeviceLostInfo>(() => {}),
       createShaderModule: vi.fn(() => ({})),
       createBindGroupLayout: vi.fn(() => ({})),
       createPipelineLayout: vi.fn(() => ({})),

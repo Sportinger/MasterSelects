@@ -85,7 +85,7 @@ describe('executable operator transfers', () => {
     ] });
     const key = createMockKeyframe({ clipId: clip.id, property: 'effect.from.gravityStrength', time: 0, value: 9 });
     useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })], clipKeyframes: new Map([[clip.id, [key]]]) });
-    const graph = buildUnifiedClipGraph(buildClipNodeGraphDocument(clip), clip);
+    const graph = buildUnifiedClipGraph(buildClipNodeGraphDocument(clip), clip, [clip], [], undefined, true);
     const node = graph.nodes.find(node => node.binding?.kind === 'effect-operator' && node.binding.effectId === 'from' && node.binding.nodeId === 'gravity')!;
     const renamed = transferNodeGroup(clip.id, graph, [node.id], 'effect:to/simulation');
     const current = useTimelineStore.getState().clips[0];
@@ -105,7 +105,7 @@ describe('executable operator transfers', () => {
       { id: 'to', name: 'To', type: 'face-cables', enabled: true, params: {}, operatorGraph: canonical(target.graph) },
     ] });
     useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })], clipKeyframes: new Map() });
-    const view = buildUnifiedClipGraph(buildClipNodeGraphDocument(clip), clip);
+    const view = buildUnifiedClipGraph(buildClipNodeGraphDocument(clip), clip, [clip], [], undefined, true);
     const node = view.nodes.find(node => node.binding?.kind === 'effect-operator' && node.binding.effectId === 'from' && node.binding.nodeId === 'simulation')!;
     const renamed = transferNodeGroup(clip.id, view, [node.id], 'effect:to');
     let current = useTimelineStore.getState().clips[0];
@@ -117,7 +117,7 @@ describe('executable operator transfers', () => {
     expect(useTimelineStore.getState().getInterpolatedEffects(clip.id, 0)[0].enabled).toBe(false);
     expect(evaluateCompositionClipEffects(current.effects, [], 0)[0].enabled).toBe(false);
     expect(() => compileCableOperatorGraph(effectOperatorCompileParams(current.effects[0]))).toThrow('Curves');
-    const projected = buildUnifiedClipGraph(buildClipNodeGraphDocument(current), current);
+    const projected = buildUnifiedClipGraph(buildClipNodeGraphDocument(current), current, [current], [], undefined, true);
     expect(projected.groups!.find(group => group.id === 'effect:from')!.issue).toContain('Curves');
     expect(projected.nodes.some(candidate => candidate.id === renamed[node.id])).toBe(true);
     transferNodeGroup(clip.id, projected, [renamed[node.id]], 'effect:from');
@@ -139,10 +139,10 @@ describe('executable operator transfers', () => {
       { id: 'to', name: 'To', type: 'face-cables', enabled: true, params: {}, operatorGraph: canonical(empty) },
     ] });
     useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })], clipKeyframes: new Map() });
-    const view = buildUnifiedClipGraph(buildClipNodeGraphDocument(clip), clip);
+    const view = buildUnifiedClipGraph(buildClipNodeGraphDocument(clip), clip, [clip], [], undefined, true);
     const ids = view.nodes.filter(node => node.binding?.kind === 'effect-operator' && node.binding.effectId === 'from').map(node => node.id);
     transferNodeGroup(clip.id, view, ids, 'effect:to');
-    const current = useTimelineStore.getState().clips[0], after = buildUnifiedClipGraph(buildClipNodeGraphDocument(current), current);
+    const current = useTimelineStore.getState().clips[0], after = buildUnifiedClipGraph(buildClipNodeGraphDocument(current), current, [current], [], undefined, true);
     expect(after.groups!.find(group => group.id === 'effect:from')!.nodeIds).toHaveLength(1);
     expect(after.nodes.filter(node => node.binding?.kind === 'effect-operator' && node.binding.effectId === 'to')).toHaveLength(ids.length);
     expect(operatorGraphPauseReason(current.effects[0])).toBeTruthy();

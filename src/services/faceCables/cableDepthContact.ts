@@ -1,4 +1,4 @@
-import type { ClipTransform } from '../../types';
+import type { ClipTransform } from '../../types/timelineCore';
 import { getEffectiveScale } from '../../utils/transformScale';
 import { createFaceContact, type FaceContact } from './cableFaceSurface';
 import { buildCableDepthGeometry } from './cableDepthSurface';

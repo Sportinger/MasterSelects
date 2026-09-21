@@ -59,6 +59,6 @@ describe('glow image graph', () => {
     expect(isImageGraphEffectType('glow')).toBe(true);
     expect(isLocalImageEffectType('glow')).toBe(false);
     expect(effectOperatorParams(effect)).toMatchObject({ amount: 5, threshold: .7935, radius: 1, softness: .496, rings: 6.85, samplesPerRing: 17.95 });
-    expect(effectOperatorGraph(effect)).toEqual(createDefaultGlowGraph());
+    expect(effectOperatorGraph(effect)).toEqual({ ...createDefaultGlowGraph(), compositionRules: 2 });
   });
 });

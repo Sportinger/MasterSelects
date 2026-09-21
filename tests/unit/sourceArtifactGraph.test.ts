@@ -3,6 +3,7 @@ import { createMockClip } from '../helpers/mockData';
 import { defaultFaceCable } from '../../src/services/faceCables/cableData';
 import { cableSceneLayout, encodeCableScene } from '../../src/services/faceCables/cableSceneData';
 import { compileCableOperatorGraph } from '../../src/services/faceCables/cableOperatorGraph';
+import { effectOperatorCompileParams } from '../../src/services/operators/effectGraphOwner';
 import { connectSourceArtifact } from '../../src/services/operators/sourceArtifactConnections';
 import { sourceArtifactPorts } from '../../src/services/nodeGraph/sourceArtifactPorts';
 import { buildUnifiedClipGraph } from '../../src/services/nodeGraph/unifiedClipGraph';
@@ -17,7 +18,7 @@ const savedDepth = () => {
   return encodeCableScene({ version: 2, cables, depthGrid, fps: 1, frames: 1, duration: 1, triangles: [0, 1, 2], outline: [0, 1, 2], data: new Float32Array(cableSceneLayout(cables, depthGrid).stride) });
 };
 const current = () => useTimelineStore.getState().clips.find(c => c.id === 'artifact-clip')!;
-const graph = (clip: TimelineClip) => buildUnifiedClipGraph(buildClipNodeGraphDocument(clip, undefined, { faceTrackingAvailable: true }), clip);
+const graph = (clip: TimelineClip, expandAll = false) => buildUnifiedClipGraph(buildClipNodeGraphDocument(clip, undefined, { faceTrackingAvailable: true }), clip, [clip], [], undefined, expandAll);
 beforeEach(() => {
   const clip = createMockClip({ id: 'artifact-clip', source: { type: 'video', mediaFileId: 'artifact-source' }, effects: [
     { id: 'cables', type: 'face-cables', name: 'Face Cables', enabled: true, params: { sceneData: savedDepth(), scene3D: true } },
@@ -37,15 +38,15 @@ describe('video source artifact connections', () => {
     connectSourceArtifact(current().id, { kind: 'face-landmarks' }, { effectId: 'cables', nodeId: 'smoothing', portId: 'landmarks' });
     connectSourceArtifact(current().id, { kind: 'scene-depth', effectId: 'cables' }, { effectId: 'cables', nodeId: 'depth-mesh', portId: 'depth' });
     expect(current().effects[0].params.sceneData).toBe(before);
-    const plan = compileCableOperatorGraph(current().effects[0].params);
+    const plan = compileCableOperatorGraph(effectOperatorCompileParams(current().effects[0]));
     expect(plan.useSavedDepth).toBe(true);
     expect(plan.graph.nodes.filter(n => n.operator.startsWith('source.'))).toHaveLength(2);
-    const projected = graph(current());
+    const projected = graph(current(), true);
     expect(projected.nodes.some(n => n.operatorId?.startsWith('source.'))).toBe(false);
     expect(projected.edges).toContainEqual(expect.objectContaining({ fromNodeId: 'source', fromPortId: 'face-landmarks', toPortId: 'landmarks' }));
     expect(projected.edges).toContainEqual(expect.objectContaining({ fromNodeId: 'source', fromPortId: 'scene-depth:cables', toPortId: 'depth' }));
     const restored = JSON.parse(JSON.stringify(current()));
-    expect(graph(restored).edges).toEqual(projected.edges);
+    expect(graph(restored, true).edges).toEqual(projected.edges);
   });
   it('retains source links and writable endpoints when the effect or its nested group is collapsed', () => {
     connectSourceArtifact(current().id, { kind: 'face-landmarks' }, { effectId: 'cables', nodeId: 'smoothing', portId: 'landmarks' });
@@ -55,7 +56,7 @@ describe('video source artifact connections', () => {
     expect(edge.toNodeId).toBe('effect-cables');
     expect(collapsed.nodes.find(n => n.id === edge.toNodeId)!.inputs.find(p => p.id === edge.toPortId)!.metadata?.artifactTarget)
       .toEqual({ effectId: 'cables', nodeId: 'smoothing', portId: 'landmarks' });
-    clip.nodeGraph.groups = { 'effect:cables/tracking': { collapsed: true } };
+    clip.nodeGraph.groups = { 'effect:cables': { collapsed: false }, 'effect:cables/tracking': { collapsed: true } };
     const nested = graph(clip), boundary = nested.edges.find(e => e.fromPortId === 'face-landmarks')!;
     expect(nested.nodes.find(n => n.id === boundary.toNodeId)!.inputs.find(p => p.id === boundary.toPortId)!.metadata?.groupEndpoint?.portId).toBe('landmarks');
   });
@@ -63,7 +64,7 @@ describe('video source artifact connections', () => {
     const before = JSON.stringify(current());
     expect(() => connectSourceArtifact(current().id, { kind: 'scene-depth', effectId: 'missing' }, { effectId: 'cables', nodeId: 'depth-mesh', portId: 'depth' })).toThrow('Bake scene depth');
     expect(() => connectSourceArtifact(current().id, { kind: 'scene-depth', effectId: 'cables' }, { effectId: 'elsewhere', nodeId: 'depth-mesh', portId: 'depth' })).toThrow('another cable bake');
-    expect(() => connectSourceArtifact(current().id, { kind: 'face-landmarks' }, { effectId: 'cables', nodeId: 'depth-mesh', portId: 'depth' })).toThrow('Invalid connection');
+    expect(() => connectSourceArtifact(current().id, { kind: 'face-landmarks' }, { effectId: 'cables', nodeId: 'depth-mesh', portId: 'depth' })).toThrow('No supported variant preserves the connected signal types');
     expect(JSON.stringify(current())).toBe(before);
   });
 });

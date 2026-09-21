@@ -338,6 +338,7 @@ function distinguishableFramePair(
   const ownedClose = vi.fn();
   const owned = {
     testFrameId: `owned:${label}`,
+    format: 'I420',
     displayWidth: 320,
     displayHeight: 180,
     codedWidth: 320,
@@ -349,6 +350,7 @@ function distinguishableFramePair(
   const clone = vi.fn(() => owned);
   const borrowed = {
     testFrameId: `borrowed:${label}`,
+    format: 'I420',
     displayWidth: 320,
     displayHeight: 180,
     codedWidth: 320,
@@ -919,6 +921,7 @@ describe('MD7 Worker GPU runtime races', () => {
       destroy: whiteMaskDestroy,
     }));
     const device = {
+      lost: new Promise<GPUDeviceLostInfo>(() => {}),
       queue: { writeBuffer: vi.fn(), writeTexture: vi.fn() },
       createBuffer: vi.fn(() => ({ destroy: vi.fn() })),
       createTexture,

@@ -53,14 +53,16 @@ export function createSceneGraphActions(clipId: string) {
       if (node?.operator !== 'geometry.primitive' || !SCENE_PRIMITIVE_SHAPES.includes(shape)) throw new Error('Invalid scene primitive shape.');
       node.constants = { ...node.constants, shape };
     }),
-    addNode: (operator: string) => {
+    addNode: (operator: string, position?: { x: number; y: number }, connection?: NodeGraphConnectionRequest) => {
       const id = `scene-${crypto.randomUUID().slice(0, 8)}`;
       editSceneGraph(clipId, 'Add scene node', d => {
         const spec = SCENE_OPERATORS.find(o => o.id === operator); if (!spec?.addable) throw new Error('Operator is not addable.');
         const bindings: Record<string, string> = {};
         for (const p of spec.parameters) { bindings[p.id] = `${id}_${p.id}`; d.params[bindings[p.id]] = p.default; }
         d.graph.nodes.push({ id, operator, bindings, ...(operator === 'geometry.primitive' ? { constants: { shape: 'box' } } : {}) });
-        d.graph.layout[id] = { x: 280 * ((d.graph.nodes.length - 1) % 5), y: 650 + Math.floor((d.graph.nodes.length - 8) / 5) * 220 };
+        d.graph.layout[id] = position ?? { x: 280 * ((d.graph.nodes.length - 1) % 5), y: 650 + Math.floor((d.graph.nodes.length - 8) / 5) * 220 };
+        if (connection) d.graph = connectEffectGraph(d.graph, { id: `new-${id}`, from: connection.fromNodeId === '__new_connection_node__' ? id : connection.fromNodeId,
+          output: connection.fromPortId, to: connection.toNodeId === '__new_connection_node__' ? id : connection.toNodeId, input: connection.toPortId });
       }); return id;
     },
   };

@@ -41,13 +41,12 @@ export const NodeGraphPlugs = memo(function NodeGraphPlugs({ canvasRendered = fa
       const { edge, node, port, center, tip } = plug;
       if (visiblePlugIds && !visiblePlugIds.has(`${edge.id}:${port.direction}`)) return null;
       const unplugging = draft?.reconnectEdgeId === edge.id && draft.moved && draft.direction !== port.direction;
-      const hovered = hoveredPort?.node.id === node.id && hoveredPort.port.id === port.id && hoveredPort.port.direction === port.direction;
       const sign = port.direction === 'input' ? -1 : 1;
       const other = nodes.find(n => n.id === (port.direction === 'input' ? edge.fromNodeId : edge.toNodeId));
       const label = `${node.label}, ${port.label}: cable ${port.direction === 'input' ? 'from' : 'to'} ${other?.label ?? 'connected node'}`;
       const path = `M 0 -6 A 6 6 0 0 ${sign < 0 ? 0 : 1} 0 6 M ${sign * 6} 0 H ${tip.x - center.x}`;
       return <g key={`${edge.id}:${port.direction}`} role="button" tabIndex={0}
-        className={`node-workspace-plug${selectedEdgeId === edge.id ? ' selected' : ''}${hovered && !hoveredEdgeId ? ' port-hovered' : ''}${hoveredEdgeId === edge.id ? ' edge-hovered' : ''}${unplugging ? ' unplugging' : ''}`}
+        className={`node-workspace-plug${selectedEdgeId === edge.id ? ' selected' : ''}${hoveredEdgeId === edge.id ? ' edge-hovered' : ''}${unplugging ? ' unplugging' : ''}`}
         style={{ '--port-color': describeNodePort(port).color, '--plug-offset': `${sign * 10}px` } as CSSProperties}
         transform={`translate(${center.x} ${center.y})`}
         data-edge-id={edge.id} data-node-id={node.id} data-port-id={port.id} data-direction={port.direction}
@@ -74,7 +73,7 @@ export const NodeGraphPlugs = memo(function NodeGraphPlugs({ canvasRendered = fa
     {previews.map(({ node, port }) => {
       const active = draft
         ? !draft.reconnectEdgeId && draft.nodeId === node.id && draft.portId === port.id && draft.direction === port.direction
-        : hoveredPort?.node.id === node.id && hoveredPort.port.id === port.id && hoveredPort.port.direction === port.direction;
+        : false;
       const center = getPortCenter(node, port.id, port.direction), sign = port.direction === 'input' ? -1 : 1;
       const path = `M 0 -6 A 6 6 0 0 ${sign < 0 ? 0 : 1} 0 6 M ${sign * 6} 0 H ${sign * 24}`;
       return <g key={JSON.stringify([node.id, port.id, port.direction])}

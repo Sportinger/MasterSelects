@@ -1,4 +1,5 @@
 import { NodeGraphGroups } from './canvas/NodeGraphGroups';
+import type { NodeConnectionDrop } from '../../../types/nodeGraph';
 import { useNodeDomViewport } from './canvas/useNodeDomViewport';
 import { useNodeDomVisibility } from './canvas/useNodeDomVisibility';
 import { useNodePreviewPreferences } from './previews/useNodePreviewPreferences';
@@ -53,6 +54,7 @@ interface NodeGraphCanvasProps {
   onMoveNodes?: (moves: NodeGraphMove[]) => void;
   onConnectPorts?: (connection: NodeGraphConnectionRequest) => void;
   onDisconnectEdge?: (edgeId: string) => void;
+  onDropConnection?: (drop: NodeConnectionDrop) => void;
   onReconnectPorts?: (edgeId: string, connection: NodeGraphConnectionRequest) => void;
   onDeleteNode?: (nodeId: string) => void;
   onDeleteNodes?: (nodeIds: string[]) => void;
@@ -96,6 +98,7 @@ export function NodeGraphCanvas({
   onMoveNodes,
   onConnectPorts,
   onDisconnectEdge,
+  onDropConnection,
   onReconnectPorts,
   onDeleteNode,
   onDeleteNodes,
@@ -208,7 +211,7 @@ export function NodeGraphCanvas({
     transform: `translate3d(${viewport.panX % 32}px, ${viewport.panY % 32}px, 0)`,
   }) as CSSProperties, [viewport.panX, viewport.panY]);
 
-  const foldViewport = useNodeFoldViewport(canvasRef, sourceGraph, targetGraph, graph, graphBounds, animating, visualViewportRef, setViewport);
+  const foldViewport = useNodeFoldViewport(canvasRef, sourceGraph, targetGraph, graph, graphBounds, animating, visualViewportRef, setViewport, groupBounds);
   const cancelFoldFit = foldViewport.cancel;
   const fitBounds = useCallback((bounds: typeof graphBounds) => {
     cancelFoldFit();
@@ -224,8 +227,10 @@ export function NodeGraphCanvas({
 
   const fittedGraph = useRef<string | null>(null);
   const toggleGroup = useCallback((id: string) => {
+    const group = sourceGraph.groups?.find(group => group.id === id);
+    if (group && onToggleGroup) foldViewport.request(!group.collapsed, id);
     onToggleGroup?.(id);
-  }, [onToggleGroup]);
+  }, [onToggleGroup, sourceGraph.groups, foldViewport.request]);
   const clearSelectedEdge = useCallback(() => setSelectedEdgeId(null), []);
   useEffect(() => {
     if (fittedGraph.current !== graph.id) { fittedGraph.current = graph.id; fitGraph(); }
@@ -239,10 +244,10 @@ export function NodeGraphCanvas({
   }, [graph.nodes, selectedNodeId, fitGraph]);
 
   const resetView = useCallback(() => {
-    cancelFoldFit();
-    resetPlacement();
-    setViewport(DEFAULT_VIEWPORT);
-  }, [setViewport, cancelFoldFit, resetPlacement]);
+    foldViewport.forget();
+    const reset = resetPlacement();
+    fitBounds(annotatedGraphBounds(targetGraph, targetGraph.nodes.map(node => ({ ...node, layout: reset.nodes[node.id] ?? node.layout }))));
+  }, [foldViewport.forget, resetPlacement, targetGraph, fitBounds]);
 
   const getGraphPointFromClient = useCallback((clientX: number, clientY: number): NodeGraphPoint => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -264,9 +269,9 @@ export function NodeGraphCanvas({
     onSelectNodes,
   });
 
-  const { connectionDraft, startConnectionDrag, startPlugDrag, moveConnectionDrag, finishConnectionDrag, cancelConnectionDrag } = useNodeConnectionDrag({
+  const { connectionDraft, startConnectionDrag, startPlugDrag, moveConnectionDrag, finishConnectionDrag, cancelConnectionDrag, suppressConnectionContextMenu } = useNodeConnectionDrag({
     graphId: graph.id, canvasRef, nodesById, edges: graph.edges, getGraphPoint: getGraphPointFromClient,
-    onConnectPorts, onReconnectPorts, onDisconnectEdge,
+    onConnectPorts, onReconnectPorts, onDisconnectEdge, onDropConnection,
   });
   const domViewport = useNodeDomViewport(canvasRef, viewport, !!nodeGesture || !!connectionDraft);
   const dom = useNodeDomVisibility(displayNodes, plugs, domViewport);
@@ -574,6 +579,18 @@ export function NodeGraphCanvas({
             event.preventDefault();
             deleteSelectedNode();
           }
+        }}
+        onContextMenuCapture={event => {
+          if (suppressConnectionContextMenu()) { event.preventDefault(); event.stopPropagation(); }
+        }}
+        onKeyDownCapture={event => {
+          if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+          const port = (event.target as Element).closest<HTMLElement>('.node-workspace-port');
+          if (!port || !onDropConnection) return;
+          event.preventDefault(); event.stopPropagation();
+          const rect = port.getBoundingClientRect(), x = rect.right + 24, y = rect.bottom;
+          onDropConnection({ nodeId: port.dataset.nodeId!, portId: port.dataset.portId!, direction: port.dataset.direction as 'input' | 'output',
+            x, y, layout: getGraphPointFromClient(x, y) });
         }}
         onContextMenu={(event) => {
           event.preventDefault();

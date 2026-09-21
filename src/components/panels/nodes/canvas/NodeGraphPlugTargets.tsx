@@ -14,17 +14,17 @@ interface Props {
   onDisconnectEdge?: (id: string) => void;
 }
 function targetStyle(plug: Pick<ConnectionPlug, 'center' | 'tip' | 'port'>): CSSProperties {
-  return { left: Math.min(plug.center.x, plug.tip.x) - 8, top: plug.center.y - 12,
-    width: Math.abs(plug.tip.x - plug.center.x) + 16, height: 24,
+  return { left: plug.tip.x - 8, top: plug.tip.y - 12,
+    width: 16, height: 24,
     '--port-color': describeNodePort(plug.port).color } as CSSProperties;
 }
 
 /** Flat hit targets: all plug artwork is already painted by the canvas. */
-export function NodeGraphPlugTargets({ plugs, nodes, draft, visiblePlugIds, hoveredPort,
+export function NodeGraphPlugTargets({ plugs, nodes, draft, visiblePlugIds,
   onSelectEdge, onStartDrag, onStartConnectionDrag, onDisconnectEdge }: Props) {
-  const freeNode = draft ? nodes.find(node => node.id === draft.nodeId) : hoveredPort?.node;
+  const freeNode = draft ? nodes.find(node => node.id === draft.nodeId) : undefined;
   const freePort = draft ? [...(freeNode?.inputs ?? []), ...(freeNode?.outputs ?? [])]
-    .find(port => port.id === draft.portId && port.direction === draft.direction) : hoveredPort?.port;
+    .find(port => port.id === draft.portId && port.direction === draft.direction) : undefined;
   const free = freeNode && freePort && !plugs.some(plug => plug.node.id === freeNode.id
     && plug.port.id === freePort.id && plug.port.direction === freePort.direction) ? { node: freeNode, port: freePort } : null;
   const center = free && getPortCenter(free.node, free.port.id, free.port.direction);

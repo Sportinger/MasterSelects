@@ -63,7 +63,7 @@ describe('existing project keyframe nodes', () => {
     const clip = { ...current(), effects: [{ id: 'cables', type: 'face-cables', name: 'Face Cables', enabled: true,
       params: { settings: JSON.stringify([cable]) } }] };
     const projected = withLegacyKeyframeNodes(clip, [createMockKeyframe({ clipId: clip.id, property, value: 1.6 })]);
-    const graph = buildUnifiedClipGraph(buildClipNodeGraphDocument(projected), projected);
+    const graph = buildUnifiedClipGraph(buildClipNodeGraphDocument(projected), projected, [projected], [], undefined, true);
     const node = graph.nodes.find(n => n.animation?.channels.some(channel => channel.property === property))!;
     expect(node.binding).toMatchObject({ kind: 'effect-operator', operator: 'simulation.rope' });
     expect(node.inputs.some(port => port.metadata?.animationProperty)).toBe(false);

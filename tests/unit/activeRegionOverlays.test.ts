@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ClipAudioEditOperation, VideoBakeRegion } from '../../src/types';
+import type { ClipAudioEditOperation } from '../../src/types/audio';
+import type { VideoBakeRegion } from '../../src/types/clipMetadata';
 import type { TimelineAudioRegionSelection, TimelineVideoBakeRegionSelection } from '../../src/stores/timeline/types';
 import {
   resolveAudioEditOperationOverlays,

@@ -4,7 +4,8 @@ import { nodePreviewTextureTap } from '../../src/services/nodePreview/NodePrevie
 import { produceNodePreview } from '../../src/services/nodePreview/previewSources';
 import { createDefaultPixelSortGraph } from '../../src/services/operators/pixelSortEffectGraph';
 import { useTimelineStore } from '../../src/stores/timeline';
-import type { Effect, Keyframe } from '../../src/types';
+import type { Effect } from '../../src/types/effects';
+import type { Keyframe } from '../../src/types/keyframes';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 
 const initial = useTimelineStore.getState();

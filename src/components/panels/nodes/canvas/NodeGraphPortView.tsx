@@ -7,7 +7,7 @@ import { NodePortDetails } from './NodePortDetails';
 import { placePortTooltip } from './portTooltipPlacement';
 import './NodeGraphPorts.css';
 
-export function NodeGraphPortView({ node, port, canvasRendered = false, connectionDraft, onStartConnectionDrag, onDisconnectPortEdges }: {
+export function NodeGraphPortView({ node, port, canvasRendered = false, connectionDraft, onStartConnectionDrag }: {
   node: NodeGraphNode; port: NodeGraphPort; connectionDraft: ConnectionDraft | null;
   canvasRendered?: boolean;
   onStartConnectionDrag: (event: ReactPointerEvent<HTMLDivElement>, node: NodeGraphNode, port: NodeGraphPort) => void;
@@ -83,7 +83,7 @@ export function NodeGraphPortView({ node, port, canvasRendered = false, connecti
         if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); show(); }
         if (event.key === 'Escape') { event.preventDefault(); setPosition(null); }
       }}
-      onContextMenu={event => { event.preventDefault(); event.stopPropagation(); setPosition(null); onDisconnectPortEdges(node, port); }}>
+      onContextMenu={event => { event.preventDefault(); event.stopPropagation(); setPosition(null); }}>
       {!canvasRendered && <><span className="node-workspace-port-dot" />
       <span className="node-workspace-port-copy"><span className="node-workspace-port-label">{port.label}</span><span className="node-workspace-port-type">{info.typeLabel}</span></span></>}
     </div>

@@ -20,7 +20,7 @@ function reference(uv: [number, number], time: number, params: { scale: number; 
 describe('Glitch image graph', () => {
   it('is registered with catalog-owned parameter defaults', () => {
     expect(isImageGraphEffectType('glitch')).toBe(true);
-    expect(effectOperatorGraph({ type: 'glitch', params: {} })).toEqual(createDefaultGlitchGraph());
+    expect(effectOperatorGraph({ type: 'glitch', params: {} })).toEqual({ ...createDefaultGlitchGraph(), compositionRules: 2 });
     expect(effectOperatorParams({ type: 'glitch', params: {} })).toMatchObject({ scale: 14, amount: .75, speed: 1 });
   });
 

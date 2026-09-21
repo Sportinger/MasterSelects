@@ -29,7 +29,7 @@ describe('CRT Screen image graph', () => {
     expect(isImageGraphEffectType(effect.type)).toBe(true);
     expect(isLocalImageEffectType(effect.type)).toBe(false);
     expect(effectOperatorParams(effect)).toMatchObject(getDefaultParams('crt-screen'));
-    expect(effectOperatorGraph(effect)).toEqual(createDefaultCrtScreenGraph());
+    expect(effectOperatorGraph(effect)).toEqual({ ...createDefaultCrtScreenGraph(), compositionRules: 2 });
   });
 
   it('uses owner-bound parameters and only shared granular operators', () => {

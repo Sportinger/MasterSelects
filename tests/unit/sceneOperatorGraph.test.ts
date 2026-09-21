@@ -83,7 +83,7 @@ describe('executable scene operators and nested groups', () => {
   });
   it('rejects wrong types, cycles and unsupported scene operators', () => {
     const d = defaultSceneGraph();
-    expect(() => connectEffectGraph(d.graph, { id: 'bad', from: 'texture', output: 'texture', to: 'mesh', input: 'geometry' })).toThrow('Invalid connection');
+    expect(() => connectEffectGraph(d.graph, { id: 'bad', from: 'texture', output: 'texture', to: 'mesh', input: 'geometry' })).toThrow('No supported variant preserves the connected signal types');
     expect(() => connectEffectGraph(d.graph, { id: 'cycle', from: 'uv', output: 'uv', to: 'uv', input: 'uv' })).toThrow();
     d.graph.nodes.push({ id: 'wind', operator: 'forces.wind', bindings: {} });
     expect(validateSceneGraph(d)).toContain('Unsupported scene operator.');
@@ -112,7 +112,7 @@ describe('executable scene operators and nested groups', () => {
   });
   it('collapses nested processing into typed boundary ports without changing the executable graph', () => {
     const clip = createMockClip({ id: 'clip', effects: [{ id: 'face', name: 'Face Cables', type: 'face-cables', enabled: true, params: {} }] });
-    clip.nodeGraph = { ...createClipNodeGraphState(clip), groups: { 'effect:face/tracking': { collapsed: true } } };
+    clip.nodeGraph = { ...createClipNodeGraphState(clip), groups: { 'effect:face': { collapsed: false }, 'effect:face/tracking': { collapsed: true } } };
     const graph = buildUnifiedClipGraph(buildClipNodeGraphDocument(clip), clip);
     const group = graph.groups!.find(g => g.id === 'effect:face/tracking')!;
     const proxy = graph.nodes.find(n => n.id === group.proxyId)!;
@@ -132,7 +132,7 @@ describe('executable scene operators and nested groups', () => {
     const params = { operatorGraph: JSON.stringify(definition), sceneDepth: true };
     const before = compileCableOperatorGraph(params).params.sceneDepth;
     const clip = createMockClip({ id: 'clip', effects: [{ id: 'face', type: 'face-cables', name: 'Face Cables', enabled: true, params }] });
-    clip.nodeGraph = { ...createClipNodeGraphState(clip), groups: { [`effect:face/${child}`]: { collapsed: true }, 'effect:face/tracking': { collapsed: true } } };
+    clip.nodeGraph = { ...createClipNodeGraphState(clip), groups: { 'effect:face': { collapsed: false }, [`effect:face/${child}`]: { collapsed: true }, 'effect:face/tracking': { collapsed: true } } };
     const graph = buildUnifiedClipGraph(buildClipNodeGraphDocument(clip), clip);
     expect(graph.groups?.some(g => g.id === `effect:face/${child}`)).toBe(false);
     const proxy = graph.nodes.find(n => n.binding?.kind === 'operator-group' && n.binding.groupId === 'effect:face/tracking')!;

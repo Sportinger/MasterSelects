@@ -225,7 +225,8 @@ describe('Compositor motion adjustment layers', () => {
     expect(uniformCall[2]).toBe(16 / 9);
     expect(uniformCall[3]).toBe(true);
     expect(uniformCall[5]).toEqual({
-      brightness: 0.4,
+      brightness: 0,
+      operatorProgram: expect.objectContaining({ fusion: 'inline', values: [0.4] }),
       contrast: 1,
       saturation: 1,
       invert: false,

@@ -431,3 +431,7 @@ The exact standalone `INFO: Created TensorFlow Lite XNNPACK delegate for CPU.` l
 ### Credential transaction lifetime
 
 YouTube credential reads, writes and deletion wait for their IndexedDB transaction to finish and close the operation connection in a finally block. An aborted transaction is reported as failure even after its individual request succeeded. Encryption keys are read from durable storage for each operation rather than retained after a potentially failed write. First-use key selection uses one readwrite transaction: concurrent callers adopt the key already committed by another caller instead of overwriting it. No real credentials are included in diagnostic payloads.
+
+### Rejected GPU adapter configurations
+
+A rejected `requestAdapter()` configuration now proceeds to the remaining existing platform fallbacks, just like a null adapter result. Previously the rejection escaped the whole initialization sequence, skipping a potentially working default adapter or Android compatibility backend. Pending requests still retain the 15-second deadline; timeouts and superseded initialization do not start extra requests. Missing WebGPU support or failure of every configuration remains a reported startup failure.

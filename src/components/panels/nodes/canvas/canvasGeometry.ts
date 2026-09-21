@@ -73,6 +73,7 @@ export interface NodeBadge {
 }
 
 export interface ConnectionDraft extends PortReference {
+  createOnDrop?: boolean;
   pointerId: number;
   start: NodeGraphPoint;
   end: NodeGraphPoint;

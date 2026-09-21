@@ -27,7 +27,7 @@ describe('Crystal image graph', () => {
     expect(isImageGraphEffectType(effect.type)).toBe(true);
     expect(isLocalImageEffectType(effect.type)).toBe(false);
     expect(effectOperatorParams(effect)).toMatchObject(getDefaultParams('crystal'));
-    expect(effectOperatorGraph(effect)).toEqual(createDefaultCrystalGraph());
+    expect(effectOperatorGraph(effect)).toEqual({ ...createDefaultCrystalGraph(), compositionRules: 2 });
   });
 
   it('uses the agreed generic normalize contract, shared hash and one RGBA sample', () => {

@@ -8,7 +8,7 @@ import type { Effect, TimelineClip } from '../../src/types';
 const face: Effect = { id: 'face', type: 'face-cables', name: 'Face Cables', enabled: true, params: { bakedData: 'keep-bake', sceneData: 'keep-depth' } };
 const brightness: Effect = { id: 'bright', type: 'brightness', name: 'Brightness', enabled: true, params: { amount: 0.2 } };
 const clipWith = (effects = [face]) => createMockClip({ id: 'clip', source: { type: 'video' }, effects });
-const unified = (clip: TimelineClip) => buildUnifiedClipGraph(buildClipNodeGraphDocument(clip), clip);
+const unified = (clip: TimelineClip, expandAll = false) => buildUnifiedClipGraph(buildClipNodeGraphDocument(clip), clip, [clip], [], undefined, expandAll);
 const imageChain = (clip: TimelineClip) => buildClipNodeGraph(clip).edges.filter(e => e.type === 'texture').map(e => [e.fromNodeId, e.toNodeId]);
 
 describe('unified clip canvas and canonical effect chain', () => {
@@ -17,9 +17,10 @@ describe('unified clip canvas and canonical effect chain', () => {
     clip.nodeGraph = { ...createClipNodeGraphState(clip), manualEdges: buildClipNodeGraph(clip).edges };
     clip.effects = [face, brightness];
     expect(imageChain(clip)).toEqual([['source', 'effect-face'], ['effect-face', 'effect-bright'], ['effect-bright', 'output']]);
-    const graph = unified(clip);
+    const graph = unified(clip, true);
     expect(graph.nodes.some(n => n.operatorId === 'tracking.smooth')).toBe(true);
-    expect(graph.edges).toContainEqual(expect.objectContaining({ fromNodeId: 'clip-graph:clip:effect:face/output', toNodeId: 'effect-bright' }));
+    const brightInput = graph.nodes.find(node => node.binding?.kind === 'effect-operator' && node.binding.effectId === 'bright' && node.operatorId === 'image.frame')!;
+    expect(graph.edges).toContainEqual(expect.objectContaining({ fromNodeId: 'clip-graph:clip:effect:face/output', toNodeId: brightInput.id }));
   });
 
   it('reconciles stack reorder and removal, including removing the final effect', () => {
@@ -48,6 +49,7 @@ describe('unified clip canvas and canonical effect chain', () => {
 
   it('collapses only the presentation, preserving links, parameters, bake and expansion layout', () => {
     const clip = clipWith([face, brightness]);
+    clip.nodeGraph = { ...createClipNodeGraphState(clip), groups: { 'effect:face': { collapsed: false } } };
     const expanded = unified(clip);
     clip.nodeGraph = { ...createClipNodeGraphState(clip), groups: { 'effect:face': { collapsed: true } } };
     const collapsed = unified(clip);
@@ -73,12 +75,13 @@ describe('unified clip canvas and canonical effect chain', () => {
     clip.is3D = true;
     const light = createMockClip({ id: 'light', name: 'Key light', source: { type: 'light' }, is3D: true });
     const camera = createMockClip({ id: 'camera', name: 'Camera', source: { type: 'camera' }, is3D: true });
-    const graph = buildUnifiedClipGraph(buildClipNodeGraphDocument(clip), clip, [clip, light, camera]);
+    const graph = buildUnifiedClipGraph(buildClipNodeGraphDocument(clip), clip, [clip, light, camera], [], undefined, true);
     expect(graph.groups?.map(g => g.id)).toContain('scene3d');
     const roles = graph.nodes.filter(n => n.binding?.kind === 'scene-node').map(n => n.binding!.kind === 'scene-node' ? n.binding!.role : '');
     expect(roles).toEqual(expect.arrayContaining(['camera', 'light']));
     expect(graph.nodes.map(n => n.operatorId)).toEqual(expect.arrayContaining(['geometry.source', 'texture.image', 'texture.uv', 'material.surface', 'scene.mesh', 'scene.clip-transform', 'scene.render', 'depth.estimate']));
-    expect(graph.edges).toContainEqual(expect.objectContaining({ fromNodeId: 'clip-graph:clip:scene3d/render', toNodeId: 'effect-bright' }));
+    const brightInput = graph.nodes.find(node => node.binding?.kind === 'effect-operator' && node.binding.effectId === 'bright' && node.operatorId === 'image.frame')!;
+    expect(graph.edges).toContainEqual(expect.objectContaining({ fromNodeId: 'clip-graph:clip:scene3d/render', toNodeId: brightInput.id }));
     const ids = new Set(graph.nodes.map(n => n.id));
     expect(graph.edges.every(e => ids.has(e.fromNodeId) && ids.has(e.toNodeId))).toBe(true);
     for (const e of graph.edges) {

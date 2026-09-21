@@ -3,7 +3,7 @@ import { loadImageMedia } from '../../src/stores/timeline/clip/addImageClip';
 import { blobUrlManager } from '../../src/stores/timeline/helpers/blobUrlManager';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { generateImageThumbnail } from '../../src/stores/timeline/helpers/thumbnailHelpers';
-import type { TimelineClip } from '../../src/types';
+import type { TimelineClip } from '../../src/types/timeline';
 
 vi.mock('../../src/stores/timeline/helpers/thumbnailHelpers', () => ({
   generateImageThumbnail: vi.fn(() => 'data:image/jpeg;base64,thumb'),

@@ -44,7 +44,7 @@ describe('typed node port contracts', () => {
     expect(operatorPortsCompatible(output('depth.calibrate', 'depth'), mesh)).toBe(true);
     const graph = defaultCableOperatorGraph();
     expect(validateEffectGraph(graph)).toEqual([]);
-    expect(() => connectEffectGraph(graph, { id: 'bad-depth', from: 'depth', output: 'depth', to: 'depth-mesh', input: 'depth' })).toThrow('Invalid connection');
+    expect(() => connectEffectGraph(graph, { id: 'bad-depth', from: 'depth', output: 'depth', to: 'depth-mesh', input: 'depth' })).toThrow('No supported variant preserves the connected signal types');
     expect(validateEffectGraph(graph)).toEqual([]);
   });
   it('preserves format restrictions on collapsed boundary ports', () => {

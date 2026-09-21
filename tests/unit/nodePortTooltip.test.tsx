@@ -37,7 +37,7 @@ describe.each([false, true])('node port information, canvas=%s', canvasRendered 
     expect(screen.getByRole('tooltip')).toBeVisible();
     fireEvent.blur(anchor); expect(screen.queryByRole('tooltip')).toBeNull();
   });
-  it('keeps hover details separate from drag and disconnect actions', () => {
+  it('keeps hover details separate from dragging and never disconnects from the socket context menu', () => {
     const { anchor, drag, disconnect } = setup(canvasRendered);
     fireEvent.pointerEnter(anchor);
     expect(screen.getByRole('tooltip')).toHaveTextContent('In · Geometry');
@@ -46,7 +46,7 @@ describe.each([false, true])('node port information, canvas=%s', canvasRendered 
     expect(drag).toHaveBeenCalledWith(expect.anything(), node, port);
     expect(screen.queryByRole('tooltip')).toBeNull();
     fireEvent.contextMenu(anchor);
-    expect(disconnect).toHaveBeenCalledWith(node, port);
+    expect(disconnect).not.toHaveBeenCalled();
   });
   it('opens on a touch tap even when the canvas captures pointerup, but not after a drag', () => {
     const { anchor } = setup(canvasRendered);

@@ -36,7 +36,7 @@ describe('image operator project persistence', () => {
     const [restored] = convertProjectCompositionToStore(JSON.parse(JSON.stringify(convertCompositions([composition]))));
     const loaded = restored.timelineData!.clips[0].effects[0];
     expect(loaded.operatorGraph?.nodes).toHaveLength(14);
-    expect(loaded.operatorGraph?.compositionRules).toBe(1);
+    expect(loaded.operatorGraph?.compositionRules).toBe(2);
     expect(effectOperatorGraph(loaded).groups?.filter(group => group.composition)).toHaveLength(3);
     expect(effectOperatorGraph(loaded).nodes.find(node => node.id === 'base-angle')?.operator).toBe('math.atan2.scalar');
   });

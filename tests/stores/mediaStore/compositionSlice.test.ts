@@ -6,6 +6,7 @@ import { createCompositionSlice, type CompositionActions } from '../../../src/st
 import { createSlotSlice, type SlotActions } from '../../../src/stores/mediaStore/slices/slotSlice';
 import { createMultiLayerSlice, type MultiLayerActions } from '../../../src/stores/mediaStore/slices/multiLayerSlice';
 import { useTimelineStore } from '../../../src/stores/timeline';
+import { createMockClip } from '../../helpers/mockData';
 import { flags } from '../../../src/engine/featureFlags';
 
 // The compositionSlice calls useTimelineStore and useSettingsStore internally,
@@ -1093,7 +1094,7 @@ describe('compositionSlice', () => {
       }),
     });
     useTimelineStore.setState({
-      clips: [{ id: 'clip-1' } as TimelineClip],
+      clips: [createMockClip({ id: 'clip-1' })],
       compositionSwitchSourceTracks: defaultTimelineTracks,
       compositionSwitchTargetTracks: defaultTimelineTracks,
       clipAnimationPhase: 'entering',
@@ -1220,7 +1221,7 @@ describe('compositionSlice', () => {
       openCompositionIds: ['comp-1', comp2.id],
       activeCompositionId: 'comp-1',
     });
-    useTimelineStore.setState({ clips: [{ id: 'clip-1' } as TimelineClip] });
+    useTimelineStore.setState({ clips: [createMockClip({ id: 'clip-1' })] });
     store.getState().closeCompositionTab('comp-1');
     // After closing first tab, active should switch to remaining tab
     expect(store.getState().openCompositionIds).toEqual([comp2.id]);

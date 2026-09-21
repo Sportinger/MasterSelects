@@ -3,14 +3,14 @@ import type { NodeGraphNode, NodeGraphPort } from '../../../../types/nodeGraph';
 
 export interface HoveredNodePort { node: NodeGraphNode; port: NodeGraphPort }
 
-/** Port labels and their outboard plug are one continuous hover/focus target. */
+/** Sockets highlight ports; only the separate cable grip highlights its edge. */
 export function useNodePortHover(nodes: Map<string, NodeGraphNode>) {
   const [hovered, setHovered] = useState<HoveredNodePort | null>(null);
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const update = (target: EventTarget | null) => {
     const edge = target instanceof Element ? target.closest<HTMLElement>('.node-workspace-plug, .node-workspace-edge-group') : null;
     setHoveredEdgeId(edge?.dataset.edgeId ?? null);
-    const element = target instanceof Element ? target.closest<HTMLElement>('.node-workspace-port, .node-workspace-plug') : null;
+    const element = target instanceof Element ? target.closest<HTMLElement>('.node-workspace-port, .node-workspace-plug-preview') : null;
     const node = element && nodes.get(element.dataset.nodeId ?? '');
     const port = (element?.dataset.direction === 'input' ? node?.inputs : node?.outputs)?.find(p => p.id === element?.dataset.portId);
     setHovered(current => node && port

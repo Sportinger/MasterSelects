@@ -81,7 +81,8 @@ export function buildCanvasScene(options: Options): CanvasScene {
     bypassed: isNodeBypassed(node), bypassable: !!options.canBypass && isNodeBypassable(node), badges: getNodeBadges(node), curve: curveFor(node, options),
     ports: [...node.inputs, ...node.outputs].map(port => {
       const info = describeNodePort(port), center = getPortCenter(node, port.id, port.direction)!;
-      return { id: port.id, x: center.x - node.layout.x, y: center.y - node.layout.y, label: isNumericValueNode(node) ? '' : port.label, type: inlineNumericPorts(node) ? '' : info.typeLabel, color: info.color, input: port.direction === 'input' };
+      return { id: port.id, x: center.x - node.layout.x, y: center.y - node.layout.y, label: isNumericValueNode(node) ? '' : port.label, type: inlineNumericPorts(node) ? '' : info.typeLabel, color: info.color, input: port.direction === 'input',
+        highlighted: hoveredPort?.node.id === node.id && hoveredPort.port.id === port.id && hoveredPort.port.direction === port.direction };
     }) }));
   const pairs = new Map<string, { input?: ConnectionPlug; output?: ConnectionPlug }>();
   for (const plug of plugs) {
@@ -89,7 +90,7 @@ export function buildCanvasScene(options: Options): CanvasScene {
     pair[plug.port.direction] = plug; pairs.set(plug.edge.id, pair);
     if (draft?.reconnectEdgeId === plug.edge.id && draft.moved && draft.direction !== plug.port.direction) continue;
     scene.plugs.push({ center: plug.center, tip: plug.tip, input: plug.port.direction === 'input', color: describeNodePort(plug.port).color,
-      highlighted: plug.edge.id === options.selectedEdgeId || plug.edge.id === options.hoveredEdgeId || (hoveredPort?.node.id === plug.node.id && hoveredPort.port.id === plug.port.id) });
+      highlighted: plug.edge.id === options.selectedEdgeId || plug.edge.id === options.hoveredEdgeId });
   }
   for (const [id, pair] of pairs) {
     if (!pair.output || !pair.input || (draft?.moved && draft.reconnectEdgeId === id)) continue;
@@ -105,7 +106,6 @@ export function buildCanvasScene(options: Options): CanvasScene {
     scene.plugs.push({ center, tip, input: direction === 'input', color: describeNodePort(port).color, highlighted: true, ghost });
     return tip;
   };
-  if (hoveredPort && !plugs.some(p => p.node.id === hoveredPort.node.id && p.port.id === hoveredPort.port.id)) preview(hoveredPort.node.id, hoveredPort.port.id, hoveredPort.port.direction);
   if (draft && (!draft.reconnectEdgeId || draft.moved)) {
     const pair = draft.reconnectEdgeId ? pairs.get(draft.reconnectEdgeId) : undefined;
     const start = pair?.[draft.direction]?.tip ?? preview(draft.nodeId, draft.portId, draft.direction);

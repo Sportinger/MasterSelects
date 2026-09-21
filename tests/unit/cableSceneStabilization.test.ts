@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TRANSFORM } from '../../src/stores/timeline/constants';
-import type { Keyframe } from '../../src/types';
+import type { Keyframe } from '../../src/types/keyframes';
 import { getInterpolatedClipTransform } from '../../src/utils/keyframeInterpolation';
 import { trackingPreviewTransform } from '../../src/services/planarTracking/trackingPreviewTransform';
 import { cableFacePoints } from '../../src/services/faceCables/cableFaceSurface';

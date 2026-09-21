@@ -99,7 +99,15 @@ export async function acquireProjectRoot(mode: ProjectRootMode, options: { throw
   if (mode === 'opfs') {
     await ensurePersistentStorage();
     try {
-      return await navigator.storage.getDirectory();
+      try {
+        return await navigator.storage.getDirectory();
+      } catch (error) {
+        // WebKit can abort OPFS while its storage process is resuming. Retry
+        // acquisition once; no project directory or file has been mutated.
+        if (!(error instanceof DOMException) || !['AbortError', 'UnknownError'].includes(error.name)) throw error;
+        await new Promise(resolve => setTimeout(resolve, 200));
+        return await navigator.storage.getDirectory();
+      }
     } catch (error) {
       log.error('Failed to open the origin private file system', error);
       if (options.throwOnFailure) throw error;

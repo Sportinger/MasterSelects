@@ -43,6 +43,8 @@ describe('image preview compilation reuse', () => {
     effect.operatorGraph = createDefaultFisheyeGraph();
     effect.operatorGraph.nodes.find(node => node.id === 'one')!.constants!.value = 2;
     expect(imageOperatorValuePreview(request('one'), clip, effect)?.controls?.[0].value).toBe(2);
+    // Graph edits replace the canonical document; previews cache immutable graph identities.
+    effect.operatorGraph = structuredClone(effect.operatorGraph);
     effect.operatorGraph.nodes.find(node => node.id === 'one')!.constants!.value = 3;
     expect(imageOperatorValuePreview(request('one'), clip, effect)?.controls?.[0].value).toBe(3);
     const keys: Keyframe[] = [

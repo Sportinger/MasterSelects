@@ -307,6 +307,16 @@ export const createNodeGraphSlice: SliceCreator<NodeGraphActions> = (set, get) =
     const context = resolveGraphActionContext(state, clipId);
     if (!context) return;
 
+    if (nodeId.startsWith('audio-effect-')) {
+      const effectId = nodeId.slice('audio-effect-'.length);
+      const owner = [context.clip, context.options.linkedClip].find(candidate =>
+        candidate?.audioState?.effectStack?.some(effect => effect.id === effectId));
+      if (!owner || state.isExporting || tracks.find(track => track.id === owner.trackId)?.locked) return;
+      state.removeClipAudioEffectInstance(owner.id, effectId);
+      renderHostPort.requestRender();
+      return;
+    }
+
     let nextClip: TimelineClip | null = null;
     let nextClipId = context.clipId;
     let cleanup: Partial<TimelineStore> = {};

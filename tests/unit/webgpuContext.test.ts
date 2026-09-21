@@ -73,6 +73,32 @@ describe('WebGPUContext', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it.each(['OperationError', 'NotSupportedError', 'AbortError'])(
+    'recovers from a rejected desktop adapter request (%s) using the default adapter', async name => {
+      Object.defineProperty(navigator, 'platform', { configurable: true, value: 'Win32' });
+      const adapter = createAdapter();
+      const requestAdapter = vi.fn().mockRejectedValueOnce(new DOMException('Backend rejected', name))
+        .mockResolvedValueOnce(adapter);
+      installGpu(requestAdapter);
+      const context = new WebGPUContext();
+      expect(await context.initialize()).toBe(true);
+      expect(context.getDevice()).not.toBeNull();
+      expect(context.getInitializationFailure()).toBeNull();
+      expect(requestAdapter).toHaveBeenNthCalledWith(1, { powerPreference: 'high-performance' });
+      expect(requestAdapter).toHaveBeenNthCalledWith(2);
+    },
+  );
+
+  it('reaches Android compatibility mode when the core backend rejects instead of returning null', async () => {
+    Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Android 15' });
+    const requestAdapter = vi.fn().mockRejectedValueOnce(new DOMException('Core unavailable', 'OperationError'))
+      .mockResolvedValueOnce(createAdapter());
+    installGpu(requestAdapter);
+    expect(await new WebGPUContext().initialize()).toBe(true);
+    expect(requestAdapter).toHaveBeenNthCalledWith(1);
+    expect(requestAdapter).toHaveBeenNthCalledWith(2, { featureLevel: 'compatibility' });
+  });
+
   it('allows another normal initialization after adapters were temporarily unavailable', async () => {
     const requestAdapter = vi.fn<() => Promise<GPUAdapter | null>>().mockResolvedValue(null);
     installGpu(requestAdapter);

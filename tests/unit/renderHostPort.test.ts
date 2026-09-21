@@ -204,7 +204,7 @@ describe('renderHostPort', () => {
     expect(engine.renderCachedFrame).toHaveBeenCalledWith(1.25);
     expect(engine.cacheCompositeFrame).toHaveBeenCalledWith(1.25);
     expect(engine.cacheCompositeFrame).toHaveBeenCalledWith(2.5);
-    expect(engine.cacheActiveCompOutput).toHaveBeenCalledWith('comp-a');
+    expect(engine.cacheActiveCompOutput).toHaveBeenCalledWith('comp-a', undefined, undefined);
     expect(engine.setResolution).toHaveBeenCalledWith(1280, 720);
     expect(engine.getOutputDimensions).toHaveBeenCalledTimes(1);
     expect(engine.readPixels).toHaveBeenCalledTimes(1);

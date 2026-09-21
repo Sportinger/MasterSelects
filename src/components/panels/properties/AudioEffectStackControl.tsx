@@ -131,6 +131,7 @@ export function AudioEffectStackControl({
   onRemoveEffect,
   onReorderEffect,
 }: AudioEffectStackControlProps) {
+  const activatePanelType = useDockStore(state => state.activatePanelType);
   const availableEffects = getAllAudioEffects().filter(effect => !excludeDescriptorIds?.has(effect.id)
     && (effect.id !== 'audio-math' || keyframeClipId));
 
@@ -270,7 +271,7 @@ export function AudioEffectStackControl({
                   {keyframeClipId && <ResolveInspectorIconButton className="resolve-inspector-text-button" ariaLabel="Open audio math nodes" onClick={event => {
                     if (event.detail > 0) event.currentTarget.blur();
                     requestNodeWorkspaceView(keyframeClipId, 'general');
-                    useDockStore.getState().activatePanelType('node-workspace');
+                    activatePanelType('node-workspace');
                   }}>Open Nodes</ResolveInspectorIconButton>}
                 </ResolveInspectorRow> : isFlexEqualizer ? (
                   <FlexEqualizerControl

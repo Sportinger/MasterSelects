@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Effect } from '../../../../types/effects';
 import { useTimelineStore } from '../../../../stores/timeline';
+import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
 import { listEffectPresets, saveEffectPreset, removeEffectPreset, type EffectPreset } from '../../../../services/nodeGraph/effectPresetLibrary';
 import { applyEffectPreset } from '../../../../services/nodeGraph/applyEffectPreset';
 import { ResolveInspectorSection } from '../../properties/resolveInspector/ResolveInspectorPrimitives';
@@ -31,7 +32,7 @@ export function EffectPresetLibrary({ clipId, effect, width, locked, onSelectNod
     <ResolveInspectorSection title="Save a copy" indicator="none">
       <p className="face-cable-hint">{effect ? `Selected: ${effect.name}` : 'Select an effect or a node inside its graph.'}</p>
       <form onSubmit={event => { event.preventDefault(); run(() => {
-        const current = useTimelineStore.getState().clips.find(clip => clip.id === clipId)?.effects.find(candidate => candidate.id === effect?.id);
+        const current = readTimelineRuntimeState(useTimelineStore).clips.find(clip => clip.id === clipId)?.effects.find(candidate => candidate.id === effect?.id);
         if (!current) throw new Error('Select an effect to save.');
         saveEffectPreset(current, name); setName(''); return 'Effect preset saved.';
       }); }}>

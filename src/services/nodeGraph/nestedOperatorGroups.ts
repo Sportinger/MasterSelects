@@ -15,7 +15,7 @@ export function foldOperatorGroups(graph: NodeGraph, state?: ClipNodeGraph, expa
   }
   const expandedNodes = nodes;
   for (const g of groups.filter(g => g.parentId).toSorted((a, b) => depth(b.id) - depth(a.id))) {
-    g.collapsed = !expandAllGroups && (state?.groups?.[g.id]?.collapsed ?? g.collapsedByDefault ?? false);
+    g.collapsed = !expandAllGroups && (state?.groups?.[g.id]?.collapsed ?? true);
     if (!g.collapsed) continue;
     const members = nodes.filter(n => g.nodeIds.includes(n.id)); if (!members.length) continue;
     const ids = new Set(members.map(n => n.id));

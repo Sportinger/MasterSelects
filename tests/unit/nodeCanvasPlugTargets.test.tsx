@@ -20,7 +20,9 @@ describe('canvas plug interaction targets', () => {
     const surface = view.getByRole('button', { name: 'Source, Image out: cable to Surface' });
     const depth = view.getByRole('button', { name: 'Source, Image out: cable to Depth' });
     expect(surface.tagName).toBe('BUTTON');
-    expect(parseFloat(depth.style.width)).toBeGreaterThan(parseFloat(surface.style.width));
+    expect(parseFloat(depth.style.width)).toBe(16);
+    expect(parseFloat(surface.style.width)).toBe(16);
+    expect(depth.style.left).not.toBe(surface.style.left);
     fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse' });
     expect(view.drag).toHaveBeenCalledWith(expect.anything(), view.plugs.find(p => p.edge.id === 'surface-link' && p.port.direction === 'output'));
     surface.focus(); fireEvent.click(surface, { detail: 1 });

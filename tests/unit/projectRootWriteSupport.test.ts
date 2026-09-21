@@ -8,6 +8,26 @@ import { acquireProjectRoot, getProjectWriteSupportError, resolveProjectRootMode
 
 afterEach(() => vi.unstubAllGlobals());
 
+it.each(['AbortError', 'UnknownError'])('recovers an OPFS root after transient %s without recreating projects', async name => {
+  const root = { name: 'existing-storage' } as FileSystemDirectoryHandle;
+  const getDirectory = vi.fn().mockRejectedValueOnce(new DOMException('Storage process resuming', name))
+    .mockResolvedValueOnce(root);
+  vi.stubGlobal('navigator', { storage: { getDirectory } });
+  expect(await acquireProjectRoot('opfs', { throwOnFailure: true })).toBe(root);
+  expect(getDirectory).toHaveBeenCalledTimes(2);
+});
+
+it('bounds OPFS recovery and preserves permission errors without retrying them', async () => {
+  const unavailable = new DOMException('Unavailable', 'UnknownError');
+  const getDirectory = vi.fn().mockRejectedValue(unavailable);
+  vi.stubGlobal('navigator', { storage: { getDirectory } });
+  await expect(acquireProjectRoot('opfs', { throwOnFailure: true })).rejects.toBe(unavailable);
+  expect(getDirectory).toHaveBeenCalledTimes(2);
+  getDirectory.mockClear().mockRejectedValue(new DOMException('Denied', 'SecurityError'));
+  await expect(acquireProjectRoot('opfs', { throwOnFailure: true })).rejects.toMatchObject({ name: 'SecurityError' });
+  expect(getDirectory).toHaveBeenCalledOnce();
+});
+
 it('does not report an inaccessible browser project root as an empty project list', async () => {
   vi.stubGlobal('showDirectoryPicker', undefined);
   vi.stubGlobal('showSaveFilePicker', undefined);

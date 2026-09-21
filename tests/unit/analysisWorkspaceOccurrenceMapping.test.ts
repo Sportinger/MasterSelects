@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Keyframe, TimelineClip } from '../../src/types';
+import type { Keyframe } from '../../src/types/keyframes';
+import type { TimelineClip } from '../../src/types/timeline';
 import {
   buildAnalysisWorkspaceTimelineMapping,
   sourceTimeForAnalysisWorkspacePlayhead,

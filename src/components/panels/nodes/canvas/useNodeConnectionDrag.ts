@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
-import type { NodeGraphConnectionRequest, NodeGraphEdge, NodeGraphNode, NodeGraphPort } from '../../../../types/nodeGraph';
+import type { NodeConnectionDrop, NodeGraphConnectionRequest, NodeGraphEdge, NodeGraphNode, NodeGraphPort } from '../../../../types/nodeGraph';
 import { canConnectPortReferences, createPortReference, getPortCenter, type ConnectionDraft, type NodeGraphPoint } from './canvasGeometry';
 import type { ConnectionPlug } from './connectionPlugs';
 import { resolveAdaptiveGraphConnection } from '../../../../services/nodeGraph/adaptiveGraphConnections';
@@ -13,11 +13,13 @@ interface Options {
   onConnectPorts?: (connection: NodeGraphConnectionRequest) => void;
   onReconnectPorts?: (edgeId: string, connection: NodeGraphConnectionRequest) => void;
   onDisconnectEdge?: (edgeId: string) => void;
+  onDropConnection?: (drop: NodeConnectionDrop) => void;
 }
 
-export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, edges, getGraphPoint, onConnectPorts, onReconnectPorts, onDisconnectEdge }: Options) {
+export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, edges, getGraphPoint, onConnectPorts, onReconnectPorts, onDisconnectEdge, onDropConnection }: Options) {
   const [connectionDraft, setDraft] = useState<ConnectionDraft | null>(null);
   const currentDraft = useRef(connectionDraft);
+  const suppressContextUntil = useRef(0);
   const update = useCallback((draft: ConnectionDraft | null) => { currentDraft.current = draft; setDraft(draft); }, []);
   const cancel = useCallback(() => {
     const draft = currentDraft.current;
@@ -36,7 +38,7 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, edges, ge
 
   const start = useCallback((event: ReactPointerEvent, node: NodeGraphNode, port: NodeGraphPort, plug?: ConnectionPlug) => {
     if (port.metadata?.readOnly || plug?.edge.readOnly) { event.preventDefault(); event.stopPropagation(); return; }
-    if (event.button !== 0 || currentDraft.current) return;
+    if ((event.button !== 0 && !(event.button === 2 && !plug && onDropConnection)) || currentDraft.current) return;
     event.preventDefault(); event.stopPropagation();
     (event.currentTarget as HTMLElement | SVGElement).blur();
     canvasRef.current?.focus({ preventScroll: true });
@@ -44,9 +46,10 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, edges, ge
       start: getPortCenter(node, port.id, port.direction), end: getGraphPoint(event.clientX, event.clientY),
       originClient: { x: event.clientX, y: event.clientY }, moved: false,
       reconnectEdgeId: plug?.edge.id,
+      createOnDrop: event.button === 2,
     });
     canvasRef.current?.setPointerCapture(event.pointerId);
-  }, [canvasRef, getGraphPoint, update]);
+  }, [canvasRef, getGraphPoint, update, onDropConnection]);
   const startConnectionDrag = useCallback((event: ReactPointerEvent, node: NodeGraphNode, port: NodeGraphPort) => {
     if (onConnectPorts) start(event, node, port);
   }, [onConnectPorts, start]);
@@ -86,6 +89,7 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, edges, ge
     event.preventDefault(); event.stopPropagation();
     const target = document.elementFromPoint(event.clientX, event.clientY);
     const port = portAt(target);
+    if (draft.createOnDrop) suppressContextUntil.current = Date.now() + 800;
     cancel();
     if (draft.reconnectEdgeId && !draft.moved) return true;
     if (port && compatible(draft, port)) {
@@ -94,6 +98,11 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, edges, ge
         : { fromNodeId: port.nodeId, fromPortId: port.portId, toNodeId: draft.nodeId, toPortId: draft.portId };
       if (draft.reconnectEdgeId) onReconnectPorts?.(draft.reconnectEdgeId, connection);
       else onConnectPorts?.(connection);
+    } else if (draft.createOnDrop && target && canvasRef.current?.contains(target)
+      && ((!draft.moved && port?.nodeId === draft.nodeId && port.portId === draft.portId)
+        || (draft.moved && !target.closest('.node-workspace-node, .node-workspace-plug, .node-workspace-edge-hit')))) {
+      onDropConnection?.({ nodeId: draft.nodeId, portId: draft.portId, direction: draft.direction,
+        x: event.clientX, y: event.clientY, layout: getGraphPoint(event.clientX, event.clientY) });
     } else if (draft.reconnectEdgeId && (!target || !target.closest('.node-workspace-node, .node-workspace-plug'))) {
       onDisconnectEdge?.(draft.reconnectEdgeId);
     }
@@ -115,5 +124,6 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, edges, ge
     finishConnectionDrag: (...args: Parameters<typeof finishConnectionDrag>) => handlersRef.current.finishConnectionDrag(...args),
     cancelConnectionDrag: (...args: Parameters<typeof cancelConnectionDrag>) => handlersRef.current.cancelConnectionDrag(...args),
   }), []);
-  return { connectionDraft, ...stableHandlers };
+  return { connectionDraft, ...stableHandlers,
+    suppressConnectionContextMenu: () => !!currentDraft.current?.createOnDrop || Date.now() < suppressContextUntil.current };
 }

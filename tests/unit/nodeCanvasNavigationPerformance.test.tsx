@@ -97,7 +97,9 @@ describe('node canvas navigation render boundaries', () => {
     expect(mocks.selectOutput).toHaveBeenCalledExactlyOnceWith('clip-graph:plug-fixture:color:version-a/color-source', 'out');
   });
 
-  it('keeps zoom and pan when a group opens or closes after a user pan', () => {
+  it('focuses an expanded group and restores the view from before expansion on collapse', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1200);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(800);
     const group = { id: 'effect', label: 'Example', color: '#fff', collapsed: true, proxyId: 'Source', nodeIds: ['Source'] };
     const graph = { ...connectionFixture, groups: [group] };
     const toggle = vi.fn();
@@ -109,10 +111,15 @@ describe('node canvas navigation render boundaries', () => {
     expect(toggle).toHaveBeenCalledWith('effect');
     view.rerender(<NodeGraphCanvas graph={{ ...graph, nodes: graph.nodes.map(node => ({ ...node, layout: { x: node.layout.x + 2000, y: node.layout.y } })),
       groups: [{ ...group, collapsed: false, nodeIds: graph.nodes.map(node => node.id) }] }} selectedNodeId={null} onSelectNode={vi.fn()} onToggleGroup={toggle} />);
+    expect(inner.style.transform).not.toBe(transform);
+    fireEvent.click(view.getByRole('button', { name: 'Collapse Example group' }));
+    view.rerender(<NodeGraphCanvas graph={graph} selectedNodeId={null} onSelectNode={vi.fn()} onToggleGroup={toggle} />);
     expect(inner.style.transform).toBe(transform);
   });
 
   it('moves full group backgrounds with the immediate viewport before a worker frame arrives', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1200);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(800);
     const view = setup();
     const background = view.container.querySelector<HTMLElement>('.node-graph-group-backgrounds')!;
     const inner = view.container.querySelector<HTMLElement>('.node-workspace-canvas-inner')!;

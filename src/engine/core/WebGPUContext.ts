@@ -141,6 +141,22 @@ export class WebGPUContext {
     return /android/i.test(`${platform} ${navigator.userAgent || ''}`);
   }
 
+  private async requestAdapter(
+    options: GPURequestAdapterOptions | GPURequestAdapterOptionsWithFeatureLevel | undefined,
+    label: string,
+  ): Promise<GPUAdapter | null> {
+    try {
+      const request = options ? navigator.gpu.requestAdapter(options) : navigator.gpu.requestAdapter();
+      return await this.withTimeout(request, label);
+    } catch (error) {
+      // A rejected configuration can recover on another backend/preference.
+      // A pending or superseded request must never start another GPU request.
+      if (error instanceof GPURequestTimeoutError || error instanceof GPUInitializationCancelledError) throw error;
+      log.warn(`${label} rejected; trying the remaining adapter configurations`, error);
+      return null;
+    }
+  }
+
   private async doInitialize(): Promise<boolean> {
     try {
       const isAndroid = this.isAndroidRuntime();
@@ -152,16 +168,16 @@ export class WebGPUContext {
         // request behind it. Ask for the normal adapter first so devices which
         // previously worked keep their full WebGPU feature level.
         log.info('Android detected; requesting adapter without powerPreference');
-        this.adapter = await this.withTimeout(
-          navigator.gpu.requestAdapter(),
+        this.adapter = await this.requestAdapter(
+          undefined,
           'requestAdapter (Android core)',
         );
       } else {
         // Try with power preference first, then fallback without it.
         // Safari on single-GPU Macs can fail with 'high-performance'.
         log.info(`Requesting adapter with powerPreference: ${this.currentPowerPreference}`);
-        this.adapter = await this.withTimeout(
-          navigator.gpu.requestAdapter({ powerPreference: this.currentPowerPreference }),
+        this.adapter = await this.requestAdapter(
+          { powerPreference: this.currentPowerPreference },
           'requestAdapter (with powerPreference)',
         );
       }
@@ -170,8 +186,8 @@ export class WebGPUContext {
       // unavailable/wedged while the compositor's display GPU still works.
       if (!this.adapter && this.currentPowerPreference === 'high-performance' && this.shouldUseLowPowerFallback()) {
         log.warn('high-performance adapter unavailable on Linux, trying low-power (integrated/display) GPU...');
-        const lowPowerAdapter = await this.withTimeout(
-          navigator.gpu.requestAdapter({ powerPreference: 'low-power' }),
+        const lowPowerAdapter = await this.requestAdapter(
+          { powerPreference: 'low-power' },
           'requestAdapter (low-power fallback)',
         );
         if (lowPowerAdapter) {
@@ -186,8 +202,8 @@ export class WebGPUContext {
       // Fallback 2: try without powerPreference on desktop browsers.
       if (!this.adapter && !isAndroid) {
         log.warn('First adapter request failed, retrying without powerPreference...');
-        this.adapter = await this.withTimeout(
-          navigator.gpu.requestAdapter(),
+        this.adapter = await this.requestAdapter(
+          undefined,
           'requestAdapter (no preference)',
         );
       }
@@ -201,8 +217,8 @@ export class WebGPUContext {
         const compatibilityOptions: GPURequestAdapterOptionsWithFeatureLevel = {
           featureLevel: 'compatibility',
         };
-        this.adapter = await this.withTimeout(
-          navigator.gpu.requestAdapter(compatibilityOptions),
+        this.adapter = await this.requestAdapter(
+          compatibilityOptions,
           'requestAdapter (Android compatibility)',
         );
         if (this.adapter) {

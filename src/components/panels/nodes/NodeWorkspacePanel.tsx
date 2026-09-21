@@ -14,6 +14,8 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { NodeGraphCanvas, type NodeGraphMove } from './NodeGraphCanvas';
 import { reconnectNodePorts } from './canvas/reconnectNodePorts';
 import { NodeContextMenu } from './workspace/NodeContextMenu';
+import { ConnectedNodeMenu } from './workspace/ConnectedNodeMenu';
+import type { NodeConnectionDrop } from '../../../types/nodeGraph';
 import { ReusableNodeMenu } from './workspace/ReusableNodeMenu';
 import { NodeInspector } from './workspace/NodeWorkspaceInspector';
 import {
@@ -92,6 +94,7 @@ export function NodeWorkspacePanel() {
   const flockActions = useFlockGraphActions(subject?.clip.source?.type === 'flock' ? subject.clip : null);
   const effectCategories = useMemo(() => getCategoriesWithEffects(), []);
   const [contextMenu, setContextMenu] = useState<NodeWorkspaceContextMenuState | null>(null);
+  const [connectionMenu, setConnectionMenu] = useState<{ graphId: string; drop: NodeConnectionDrop } | null>(null);
   const [selection, setSelection] = useState<NodeWorkspaceSelection>({ graphId: null, nodeId: null, nodeIds: [] });
   const [inspectorWidth, setInspectorWidth] = useState(() => {
     if (typeof window === 'undefined') {
@@ -274,6 +277,8 @@ export function NodeWorkspacePanel() {
         batched('Toggle node bypass', () => {
           if (node.kind === 'effect' && nodeId.startsWith('effect-')) {
             setClipEffectEnabled(targetClipId, nodeId.slice('effect-'.length), node.params?.enabled === false);
+          } else if (node.binding?.kind === 'clip-audio-effect-instance') {
+            readTimelineRuntimeState(useTimelineStore).setClipAudioEffectInstanceEnabled(targetClipId, node.binding.effectId, node.params?.enabled === false);
           } else if (node.kind === 'custom') {
             updateClipAICustomNode(clipId, nodeId, { bypassed: node.params?.bypassed !== true });
           }
@@ -437,6 +442,7 @@ export function NodeWorkspacePanel() {
             return moved;
           }}
           onConnectPorts={unified.connectPorts}
+          onDropConnection={drop => { setContextMenu(null); setConnectionMenu({ graphId: subject.graph.id, drop }); }}
           onDisconnectEdge={unified.disconnectEdge}
           onReconnectPorts={(edgeId, connection) => batched('Reconnect node link', () => reconnectNodePorts(
             subject.graph, edgeId, connection, () => readTimelineRuntimeState(useTimelineStore).clips,
@@ -467,6 +473,8 @@ export function NodeWorkspacePanel() {
         showClipActions={activeTheme === 'general'}
         flockActions={subject.clip.flock ? flockActions : undefined}
       />}
+      {connectionMenu?.graphId === subject.graph.id && <ConnectedNodeMenu clip={subject.clip} graph={subject.graph} drop={connectionMenu.drop}
+        onClose={() => setConnectionMenu(null)} onAdded={selectNode} />}
       {contextMenu && !flockMenu && (
         <NodeContextMenu
           x={contextMenu.x}

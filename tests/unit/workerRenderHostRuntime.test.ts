@@ -662,7 +662,7 @@ describe('worker render host runtime bridge', () => {
       drawImage: vi.fn(),
       fillRect: vi.fn(),
       getImageData: vi.fn(() => ({
-        data: new Uint8ClampedArray([10, 20, 250, 255]),
+        data: Uint8ClampedArray.from({ length: 320 * 180 * 4 }, (_, i) => [10, 20, 250, 255][i % 4]),
       })),
       putImageData: vi.fn(),
       fillStyle: '',
@@ -716,7 +716,7 @@ describe('worker render host runtime bridge', () => {
       expect(scratchContext.fillRect).toHaveBeenCalledWith(0, 0, 320, 180);
       expect(scratchContext.getImageData).toHaveBeenCalledWith(0, 0, 320, 180);
       const writtenImageData = scratchContext.putImageData.mock.calls[0]?.[0] as ImageData | undefined;
-      expect(writtenImageData?.data).toEqual(new Uint8ClampedArray([36, 46, 255, 255]));
+      expect(writtenImageData?.data.slice(0, 4)).toEqual(new Uint8ClampedArray([36, 46, 255, 255]));
       expect(context.drawImage).toHaveBeenCalledWith(
         expect.any(FakeOffscreenCanvas),
         -160,
@@ -945,7 +945,7 @@ describe('worker render host runtime bridge', () => {
       drawImage: vi.fn(),
       fillRect: vi.fn(),
       getImageData: vi.fn(() => ({
-        data: new Uint8ClampedArray([64, 64, 64, 255]),
+        data: Uint8ClampedArray.from({ length: 320 * 180 * 4 }, (_, i) => [64, 64, 64, 255][i % 4]),
       })),
       putImageData: vi.fn(),
       fillStyle: '',
@@ -1003,7 +1003,7 @@ describe('worker render host runtime bridge', () => {
       }, []);
 
       const writtenImageData = scratchContext.putImageData.mock.calls[0]?.[0] as ImageData | undefined;
-      expect(writtenImageData?.data).toEqual(new Uint8ClampedArray([128, 128, 128, 255]));
+      expect(writtenImageData?.data.slice(0, 4)).toEqual(new Uint8ClampedArray([128, 128, 128, 255]));
       expect(context.drawImage).toHaveBeenCalledWith(
         expect.any(FakeOffscreenCanvas),
         -160,

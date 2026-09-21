@@ -14,16 +14,18 @@ function pointer(target: Element, type: string, x: number, y: number, pointerTyp
   fireEvent(target, event);
 }
 beforeEach(() => {
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1200);
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(800);
   HTMLElement.prototype.setPointerCapture = vi.fn();
   HTMLElement.prototype.hasPointerCapture = vi.fn(() => true);
   HTMLElement.prototype.releasePointerCapture = vi.fn();
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 function setup() {
   const toggle = vi.fn(), move = vi.fn();
   const view = render(<NodeGraphCanvas graph={graph} selectedNodeId={null} onSelectNode={vi.fn()} onToggleGroup={toggle} onMoveNode={move} />);
-  fireEvent.click(view.getByText('Reset'));
   const header = view.container.querySelector('.node-workspace-group-header')!;
   const position = (id: string) => {
     const node = view.container.querySelector<HTMLElement>(`.node-workspace-node[data-node-id="${id}"]`)!;

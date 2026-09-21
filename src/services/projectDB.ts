@@ -46,6 +46,29 @@ class ProjectDatabase {
   private initError: unknown = null;
   private retryInitAfter = 0;
 
+  private async withConnection<T>(operation: (db: IDBDatabase) => Promise<T>): Promise<T> {
+    const db = await this.init();
+    try {
+      return await operation(db);
+    } catch (error) {
+      // A connection may start closing before its `close` event is delivered.
+      // In that case transaction() throws before any request can be submitted.
+      // Do not replay quota failures, aborted transactions or schema errors.
+      if (!(error instanceof DOMException) || error.name !== 'InvalidStateError') throw error;
+      try {
+        db.transaction(STORES.PROJECTS, 'readonly');
+      } catch (probeError) {
+        if (!(probeError instanceof DOMException) || probeError.name !== 'InvalidStateError') throw error;
+        if (this.db === db) {
+          this.db = null;
+          db.close();
+        }
+        return operation(await this.init());
+      }
+      throw error;
+    }
+  }
+
   // Check if IndexedDB is available
   isAvailable(): boolean {
     return this.db !== null && !this.initFailed;
@@ -203,174 +226,174 @@ class ProjectDatabase {
   // ============ Media Files ============
 
   async saveMediaFile(file: StoredMediaFile): Promise<void> {
-    return coreStores.saveMediaFile(await this.init(), file);
+    return this.withConnection(db => coreStores.saveMediaFile(db, file));
   }
 
   async getMediaFile(id: string): Promise<StoredMediaFile | undefined> {
-    return coreStores.getMediaFile(await this.init(), id);
+    return this.withConnection(db => coreStores.getMediaFile(db, id));
   }
 
   async getAllMediaFiles(): Promise<StoredMediaFile[]> {
-    return coreStores.getAllMediaFiles(await this.init());
+    return this.withConnection(db => coreStores.getAllMediaFiles(db));
   }
 
   async deleteMediaFile(id: string): Promise<void> {
-    return coreStores.deleteMediaFile(await this.init(), id);
+    return this.withConnection(db => coreStores.deleteMediaFile(db, id));
   }
 
   // ============ Projects ============
 
   async saveProject(project: StoredProject): Promise<void> {
-    return coreStores.saveProject(await this.init(), project);
+    return this.withConnection(db => coreStores.saveProject(db, project));
   }
 
   async getProject(id: string): Promise<StoredProject | undefined> {
-    return coreStores.getProject(await this.init(), id);
+    return this.withConnection(db => coreStores.getProject(db, id));
   }
 
   async getAllProjects(): Promise<StoredProject[]> {
-    return coreStores.getAllProjects(await this.init());
+    return this.withConnection(db => coreStores.getAllProjects(db));
   }
 
   async deleteProject(id: string): Promise<void> {
-    return coreStores.deleteProject(await this.init(), id);
+    return this.withConnection(db => coreStores.deleteProject(db, id));
   }
 
   // ============ Artifact Manifests ============
 
   async saveArtifactManifest(manifest: ArtifactManifest): Promise<void> {
-    return artifactStores.saveArtifactManifest(await this.init(), manifest);
+    return this.withConnection(db => artifactStores.saveArtifactManifest(db, manifest));
   }
 
   async saveArtifact(manifest: ArtifactManifest, blob: Blob): Promise<void> {
-    return artifactStores.saveArtifact(await this.init(), manifest, blob);
+    return this.withConnection(db => artifactStores.saveArtifact(db, manifest, blob));
   }
 
   async getArtifactManifest(artifactId: string): Promise<ArtifactManifest | undefined> {
-    return artifactStores.getArtifactManifest(await this.init(), artifactId);
+    return this.withConnection(db => artifactStores.getArtifactManifest(db, artifactId));
   }
 
   async listArtifactManifests(): Promise<ArtifactManifest[]> {
-    return artifactStores.listArtifactManifests(await this.init());
+    return this.withConnection(db => artifactStores.listArtifactManifests(db));
   }
 
   async listArtifactManifestsBySource(sourceRef: string): Promise<ArtifactManifest[]> {
-    return artifactStores.listArtifactManifestsBySource(await this.init(), sourceRef);
+    return this.withConnection(db => artifactStores.listArtifactManifestsBySource(db, sourceRef));
   }
 
   async deleteArtifactManifest(artifactId: string): Promise<void> {
-    return artifactStores.deleteArtifactManifest(await this.init(), artifactId);
+    return this.withConnection(db => artifactStores.deleteArtifactManifest(db, artifactId));
   }
 
   async getArtifactBlob(hash: string): Promise<Blob | undefined> {
-    return artifactStores.getArtifactBlob(await this.init(), hash);
+    return this.withConnection(db => artifactStores.getArtifactBlob(db, hash));
   }
 
   async deleteArtifactBlob(hash: string): Promise<boolean> {
-    return artifactStores.deleteArtifactBlob(await this.init(), hash);
+    return this.withConnection(db => artifactStores.deleteArtifactBlob(db, hash));
   }
 
   // ============ Utilities ============
 
   async clearAll(): Promise<void> {
-    return coreStores.clearAll(await this.init(), log);
+    return this.withConnection(db => coreStores.clearAll(db, log));
   }
 
   async getStats(): Promise<{ mediaFiles: number; projects: number; proxyFrames: number }> {
-    return coreStores.getStats(await this.init());
+    return this.withConnection(db => coreStores.getStats(db));
   }
 
   // ============ Proxy Frames ============
 
   async saveProxyFrame(frame: StoredProxyFrame): Promise<void> {
-    return proxyFrameStores.saveProxyFrame(await this.init(), frame);
+    return this.withConnection(db => proxyFrameStores.saveProxyFrame(db, frame));
   }
 
   async saveProxyFramesBatch(frames: StoredProxyFrame[]): Promise<void> {
-    return proxyFrameStores.saveProxyFramesBatch(await this.init(), frames);
+    return this.withConnection(db => proxyFrameStores.saveProxyFramesBatch(db, frames));
   }
 
   async getProxyFrame(mediaFileId: string, frameIndex: number): Promise<StoredProxyFrame | undefined> {
-    return proxyFrameStores.getProxyFrame(await this.init(), mediaFileId, frameIndex);
+    return this.withConnection(db => proxyFrameStores.getProxyFrame(db, mediaFileId, frameIndex));
   }
 
   async getProxyFramesForMedia(mediaFileId: string): Promise<StoredProxyFrame[]> {
-    return proxyFrameStores.getProxyFramesForMedia(await this.init(), mediaFileId);
+    return this.withConnection(db => proxyFrameStores.getProxyFramesForMedia(db, mediaFileId));
   }
 
   async hasProxy(mediaFileId: string): Promise<boolean> {
-    return proxyFrameStores.hasProxy(await this.init(), mediaFileId);
+    return this.withConnection(db => proxyFrameStores.hasProxy(db, mediaFileId));
   }
 
   async getProxyFrameCount(mediaFileId: string): Promise<number> {
-    return proxyFrameStores.getProxyFrameCount(await this.init(), mediaFileId);
+    return this.withConnection(db => proxyFrameStores.getProxyFrameCount(db, mediaFileId));
   }
 
   async deleteProxyFrames(mediaFileId: string): Promise<void> {
-    return proxyFrameStores.deleteProxyFrames(await this.init(), mediaFileId);
+    return this.withConnection(db => proxyFrameStores.deleteProxyFrames(db, mediaFileId));
   }
 
   async clearAllProxyFrames(): Promise<void> {
-    return proxyFrameStores.clearAllProxyFrames(await this.init());
+    return this.withConnection(db => proxyFrameStores.clearAllProxyFrames(db));
   }
 
   // ============ Hash-based Proxy Deduplication ============
 
   async getProxyFrameCountByHash(fileHash: string): Promise<number> {
-    return proxyFrameStores.getProxyFrameCountByHash(await this.init(), fileHash);
+    return this.withConnection(db => proxyFrameStores.getProxyFrameCountByHash(db, fileHash));
   }
 
   async getProxyFrameByHash(fileHash: string, frameIndex: number): Promise<StoredProxyFrame | undefined> {
-    return proxyFrameStores.getProxyFrameByHash(await this.init(), fileHash, frameIndex);
+    return this.withConnection(db => proxyFrameStores.getProxyFrameByHash(db, fileHash, frameIndex));
   }
 
   async hasProxyByHash(fileHash: string): Promise<boolean> {
-    return proxyFrameStores.hasProxyByHash(await this.init(), fileHash);
+    return this.withConnection(db => proxyFrameStores.hasProxyByHash(db, fileHash));
   }
 
   // ============ Thumbnail Deduplication ============
 
   async saveThumbnail(thumbnail: StoredThumbnail): Promise<void> {
-    return thumbnailStores.saveThumbnail(await this.init(), thumbnail);
+    return this.withConnection(db => thumbnailStores.saveThumbnail(db, thumbnail));
   }
 
   async getThumbnail(fileHash: string): Promise<StoredThumbnail | undefined> {
-    return thumbnailStores.getThumbnail(await this.init(), fileHash);
+    return this.withConnection(db => thumbnailStores.getThumbnail(db, fileHash));
   }
 
   async hasThumbnail(fileHash: string): Promise<boolean> {
-    return thumbnailStores.hasThumbnail(await this.init(), fileHash);
+    return this.withConnection(db => thumbnailStores.hasThumbnail(db, fileHash));
   }
 
   async deleteThumbnail(fileHash: string): Promise<void> {
-    return thumbnailStores.deleteThumbnail(await this.init(), fileHash);
+    return this.withConnection(db => thumbnailStores.deleteThumbnail(db, fileHash));
   }
 
   // ============ File System Handles ============
 
   async storeHandle(key: string, handle: FileSystemHandle): Promise<void> {
-    return handleStores.storeHandle(await this.init(), log, key, handle);
+    return this.withConnection(db => handleStores.storeHandle(db, log, key, handle));
   }
 
   async getStoredHandle(key: string): Promise<FileSystemHandle | null> {
-    return handleStores.getStoredHandle(await this.init(), key);
+    return this.withConnection(db => handleStores.getStoredHandle(db, key));
   }
 
   async deleteHandle(key: string): Promise<void> {
-    return handleStores.deleteHandle(await this.init(), key);
+    return this.withConnection(db => handleStores.deleteHandle(db, key));
   }
 
   async listHandleKeys(): Promise<string[]> {
-    return handleStores.listHandleKeys(await this.init());
+    return this.withConnection(db => handleStores.listHandleKeys(db));
   }
 
   async getAllHandles(): Promise<Array<{ key: string; handle: FileSystemHandle }>> {
-    return handleStores.getAllHandles(await this.init());
+    return this.withConnection(db => handleStores.getAllHandles(db));
   }
 
   async hasLastProject(): Promise<boolean> {
     try {
-      return handleStores.hasLastProject(await this.init());
+      return await this.withConnection(db => handleStores.hasLastProject(db));
     } catch {
       return false;
     }
@@ -385,7 +408,7 @@ class ProjectDatabase {
     frames: StoredAnalysis['analyses'][string]['frames'],
     sampleInterval: number
   ): Promise<void> {
-    return analysisCache.saveAnalysis(await this.init(), log, mediaFileId, inPoint, outPoint, frames, sampleInterval);
+    return this.withConnection(db => analysisCache.saveAnalysis(db, log, mediaFileId, inPoint, outPoint, frames, sampleInterval));
   }
 
   async getAnalysis(
@@ -393,45 +416,45 @@ class ProjectDatabase {
     inPoint: number,
     outPoint: number
   ): Promise<StoredAnalysis['analyses'][string] | undefined> {
-    return analysisCache.getAnalysis(await this.init(), mediaFileId, inPoint, outPoint);
+    return this.withConnection(db => analysisCache.getAnalysis(db, mediaFileId, inPoint, outPoint));
   }
 
   async hasAnalysis(mediaFileId: string, inPoint: number, outPoint: number): Promise<boolean> {
-    return analysisCache.hasAnalysis(await this.init(), mediaFileId, inPoint, outPoint);
+    return this.withConnection(db => analysisCache.hasAnalysis(db, mediaFileId, inPoint, outPoint));
   }
 
   async getAnalysisRanges(mediaFileId: string): Promise<string[]> {
-    return analysisCache.getAnalysisRanges(await this.init(), mediaFileId);
+    return this.withConnection(db => analysisCache.getAnalysisRanges(db, mediaFileId));
   }
 
   async deleteAnalysis(mediaFileId: string): Promise<void> {
-    return analysisCache.deleteAnalysis(await this.init(), mediaFileId);
+    return this.withConnection(db => analysisCache.deleteAnalysis(db, mediaFileId));
   }
 
   async clearAllAnalysis(): Promise<void> {
-    return analysisCache.clearAllAnalysis(await this.init(), log);
+    return this.withConnection(db => analysisCache.clearAllAnalysis(db, log));
   }
 
   // ============ Source Thumbnails (1-per-second cache) ============
 
   async saveSourceThumbnailsBatch(frames: StoredSourceThumbnail[]): Promise<void> {
-    return thumbnailStores.saveSourceThumbnailsBatch(await this.init(), frames);
+    return this.withConnection(db => thumbnailStores.saveSourceThumbnailsBatch(db, frames));
   }
 
   async getSourceThumbnails(mediaFileId: string): Promise<StoredSourceThumbnail[]> {
-    return thumbnailStores.getSourceThumbnails(await this.init(), mediaFileId);
+    return this.withConnection(db => thumbnailStores.getSourceThumbnails(db, mediaFileId));
   }
 
   async getSourceThumbnailsByHash(fileHash: string): Promise<StoredSourceThumbnail[]> {
-    return thumbnailStores.getSourceThumbnailsByHash(await this.init(), fileHash);
+    return this.withConnection(db => thumbnailStores.getSourceThumbnailsByHash(db, fileHash));
   }
 
   async deleteSourceThumbnails(mediaFileId: string): Promise<void> {
-    return thumbnailStores.deleteSourceThumbnails(await this.init(), mediaFileId);
+    return this.withConnection(db => thumbnailStores.deleteSourceThumbnails(db, mediaFileId));
   }
 
   async clearAllSourceThumbnails(): Promise<void> {
-    return thumbnailStores.clearAllSourceThumbnails(await this.init());
+    return this.withConnection(db => thumbnailStores.clearAllSourceThumbnails(db));
   }
 }
 

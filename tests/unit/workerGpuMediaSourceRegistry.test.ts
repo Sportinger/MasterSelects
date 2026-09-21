@@ -112,8 +112,15 @@ describe('WorkerGpuMediaSourceRegistry', () => {
       renderEffectFallback: 'opacity-envelope',
       unsupportedRenderEffectTypes: ['pixel-particle-disintegrate'],
       ignoredAfterRenderEffectTypes: ['gaussian-blur'],
-      inlineBrightness: 0.2,
+      inlineBrightness: 0,
+      operatorProgram: undefined,
     });
+    // Ordered graph effects execute through the compositor payload, not the
+    // final inline shader (which would move brightness after the particle pass).
+    expect(sources[0].renderLayer.effects.map(effect => effect.type)).toEqual([
+      'brightness', 'pixel-particle-disintegrate', 'gaussian-blur',
+    ]);
+    expect(sources[0].renderLayer.effects[0].params.amount).toBe(0.2);
     expect(sources[0].renderEffectFallbackOpacity).toBeCloseTo(0.5, 5);
     expect(sources[0].opacity).toBeCloseTo(0.4, 5);
     expect(sources[0].complexEffectCount).toBe(1);

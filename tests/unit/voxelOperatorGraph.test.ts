@@ -136,7 +136,7 @@ describe('Executable Voxel Relief operator group', () => {
     actions.connectPorts({ fromNodeId: id, fromPortId: 'value', toNodeId: 'base', toPortId: 'a' });
     const current = useTimelineStore.getState().clips[0];
     expect(compileVoxelGraph(effectOperatorCompileParams(current.effects[0])).maxHeight).toBeCloseTo(0.315);
-    const unified = buildUnifiedClipGraph(buildClipNodeGraphDocument(current), current);
+    const unified = buildUnifiedClipGraph(buildClipNodeGraphDocument(current), current, [current], [], undefined, true);
     expect(unified.groups?.some(group => group.id === 'effect:relief')).toBe(true);
     expect(parameterNode(current, 'effect.relief.height', unified.nodes)?.binding).toMatchObject({ kind: 'effect-operator', nodeId: 'height' });
     expect(() => actions.addNode('forces.wind')).toThrow();

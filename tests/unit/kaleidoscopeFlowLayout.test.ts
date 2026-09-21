@@ -85,7 +85,9 @@ describe('Kaleidoscope dynamic hierarchy layout', () => {
   });
 
   it('includes newly added wiring while preserving explicit user anchors', () => {
-    const clip = fixture(), before = project(clip), initial = reconcileCanvasPlacement(before);
+    const clip = fixture();
+    clip.nodeGraph = { version: 1, nodes: [], groups: { 'effect:k': { collapsed: false } } };
+    const before = project(clip), initial = reconcileCanvasPlacement(before);
     const uv = before.nodes.find(node => node.binding?.kind === 'effect-operator' && node.binding.nodeId === 'uv')!;
     const manual = { x: initial.nodes[uv.id].x + 70, y: initial.nodes[uv.id].y + 800 };
     const anchored = moveCanvasPlacement(initial, [{ nodeId: uv.id, layout: manual }]);

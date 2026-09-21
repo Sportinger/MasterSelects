@@ -53,9 +53,7 @@ export function buildLayerBuilderNestedCompositionLayer(input: BuildNestedCompLa
     effects,
     colorCorrection,
   });
-  if (passthroughLayer) {
-    return passthroughLayer;
-  }
+  if (passthroughLayer) return passthroughLayer;
 
   const composition = ctx.compositionById.get(clip.compositionId || '');
   const nestedCompData: NestedCompositionData = {

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createMockClip } from '../helpers/mockData';
 
 import { createRemoteColorGradeMediaPatch } from '../../src/services/colorGrades/remoteColorGradeMediaState';
 import { initializeRemoteColorGradeCoordinator } from '../../src/services/colorGrades/remoteColorGradeCoordinator';
@@ -46,12 +47,12 @@ function timelineClip(
   state: ColorCorrectionState,
   mode: 'local' | 'remote' = 'remote',
 ): TimelineClip {
-  return {
+  return createMockClip({
     id,
     mediaFileId: 'media-1',
     colorGradeMode: mode,
     colorCorrection: state,
-  } as TimelineClip;
+  });
 }
 
 describe('remote color grade ownership', () => {

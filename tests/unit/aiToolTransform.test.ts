@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleSetTransform } from '../../src/services/aiTools/handlers/transform';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { DEFAULT_TRANSFORM, useTimelineStore } from '../../src/stores/timeline';
-import type { TimelineClip } from '../../src/types';
+import type { TimelineClip } from '../../src/types/timeline';
 
 const initialTimelineState = useTimelineStore.getState();
 const initialMediaState = useMediaStore.getState();

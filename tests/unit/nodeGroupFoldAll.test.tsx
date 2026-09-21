@@ -29,6 +29,18 @@ function setup() {
 }
 
 describe('fold every node group', () => {
+  it('starts new effect groups and their descendants collapsed, retaining explicitly saved expansion', () => {
+    const clip = createMockClip({ effects: [{ id: 'k', name: 'Kaleidoscope', type: 'kaleidoscope', enabled: true, params: { segments: 6, rotation: 0 } }] });
+    const project = () => buildUnifiedClipGraph(buildClipNodeGraphDocument(clip), clip);
+    expect(project().groups!.every(group => group.collapsed)).toBe(true);
+    clip.nodeGraph = { ...createClipNodeGraphState(clip), groups: { 'effect:k': { collapsed: false } } };
+    const opened = project();
+    expect(opened.groups!.find(group => group.id === 'effect:k')?.collapsed).toBe(false);
+    expect(opened.groups!.filter(group => group.parentId).every(group => group.collapsed)).toBe(true);
+    const child = opened.groups!.find(group => group.parentId)!;
+    clip.nodeGraph.groups![child.id] = { collapsed: false };
+    expect(project().groups!.find(group => group.id === child.id)?.collapsed).toBe(false);
+  });
   it('discovers hidden descendants, preserves processing and positions, and reads fresh state across repeated actions', () => {
     const { clip, graph, project } = setup();
     expect(graph.groups).toHaveLength(1);

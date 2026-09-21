@@ -1,5 +1,5 @@
 import { FaceLandmarker } from '@mediapipe/tasks-vision';
-import type { ClipTransform } from '../../types';
+import type { ClipTransform } from '../../types/timelineCore';
 import type { LandmarkPoint } from '../landmarkTracking/types';
 import type { CablePoint } from './cablePhysics';
 import type { FaceCableConfig } from './cableData';

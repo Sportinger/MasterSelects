@@ -4,9 +4,9 @@ import { NodeGraphCanvas } from '../../src/components/panels/nodes/NodeGraphCanv
 import { connectionFixture } from '../helpers/nodeConnectionFixture';
 import { reconnectNodePorts } from '../../src/components/panels/nodes/canvas/reconnectNodePorts';
 
-function pointer(target: Element, type: string, x = 30, y = 30, pointerId = 1, pointerType = 'mouse') {
+function pointer(target: Element, type: string, x = 30, y = 30, pointerId = 1, pointerType = 'mouse', button = 0) {
   const event = new Event(type, { bubbles: true, cancelable: true });
-  Object.defineProperties(event, Object.fromEntries(Object.entries({ clientX: x, clientY: y, pointerId, pointerType, button: 0 }).map(([key, value]) => [key, { value }])));
+  Object.defineProperties(event, Object.fromEntries(Object.entries({ clientX: x, clientY: y, pointerId, pointerType, button }).map(([key, value]) => [key, { value }])));
   fireEvent(target, event);
 }
 
@@ -20,16 +20,47 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); hit.mockReset(); });
 
 function setup() {
-  const disconnect = vi.fn(), connect = vi.fn(), reconnect = vi.fn(), select = vi.fn();
+  const disconnect = vi.fn(), connect = vi.fn(), reconnect = vi.fn(), select = vi.fn(), drop = vi.fn();
   const view = render(<NodeGraphCanvas graph={connectionFixture} selectedNodeId={null} onSelectNode={select}
-    onConnectPorts={connect} onReconnectPorts={reconnect} onDisconnectEdge={disconnect} />);
+    onConnectPorts={connect} onReconnectPorts={reconnect} onDisconnectEdge={disconnect} onDropConnection={drop} />);
   const canvas = view.container.querySelector('.node-workspace-canvas')!;
   const plug = (edge: string, direction = 'input') => view.container.querySelector(`.node-workspace-plug[data-edge-id="${edge}"][data-direction="${direction}"]`)!;
   const port = (node: string, direction = 'input') => view.container.querySelector(`.node-workspace-port[data-node-id="${node}"][data-direction="${direction}"]`)!;
-  return { ...view, disconnect, connect, reconnect, select, canvas, plug, port };
+  return { ...view, disconnect, connect, reconnect, select, drop, canvas, plug, port };
 }
 
 describe('node cable plugs', () => {
+  it.each(['input', 'output'])('opens compatible-node creation from an occupied %s socket without removing cables', direction => {
+    const s = setup(); hit.mockReturnValue(s.canvas);
+    pointer(s.port('Surface', direction), 'pointerdown', 30, 30, 1, 'mouse', 2);
+    fireEvent.contextMenu(s.port('Surface', direction));
+    pointer(s.canvas, 'pointermove', 160, 110, 1, 'mouse', 2);
+    pointer(s.canvas, 'pointerup', 160, 110, 1, 'mouse', 2);
+    expect(s.drop).toHaveBeenCalledWith(expect.objectContaining({ nodeId: 'Surface', portId: direction === 'input' ? 'in' : 'out', direction, x: 160, y: 110 }));
+    expect(s.disconnect).not.toHaveBeenCalled(); expect(s.reconnect).not.toHaveBeenCalled(); expect(s.connect).not.toHaveBeenCalled();
+  });
+  it('keeps existing fan-out cables when dragging directly on an occupied output', () => {
+    const s = setup(); hit.mockReturnValue(s.port('Surface'));
+    pointer(s.port('Source', 'output'), 'pointerdown'); pointer(s.canvas, 'pointermove', 100, 100); pointer(s.canvas, 'pointerup', 100, 100);
+    expect(s.connect).toHaveBeenCalledWith({ fromNodeId: 'Source', fromPortId: 'out', toNodeId: 'Surface', toPortId: 'in' });
+    expect(s.reconnect).not.toHaveBeenCalled(); expect(s.disconnect).not.toHaveBeenCalled();
+  });
+  it('opens the same menu from a keyboard-focused port', () => {
+    const s = setup(); fireEvent.keyDown(s.port('Surface'), { key: 'F10', shiftKey: true });
+    expect(s.drop).toHaveBeenCalledWith(expect.objectContaining({ nodeId: 'Surface', direction: 'input' }));
+  });
+  it('cancels right-drag without opening a menu and leaves cables intact', () => {
+    const s = setup(); hit.mockReturnValue(s.canvas);
+    pointer(s.port('Source', 'output'), 'pointerdown', 30, 30, 1, 'mouse', 2);
+    pointer(s.canvas, 'pointermove', 150, 110, 1, 'mouse', 2);
+    fireEvent.keyDown(s.canvas, { key: 'Escape' }); pointer(s.canvas, 'pointerup', 150, 110, 1, 'mouse', 2);
+    expect(s.drop).not.toHaveBeenCalled(); expect(s.disconnect).not.toHaveBeenCalled();
+  });
+  it('does not highlight any cable when hovering an occupied socket', () => {
+    const s = setup(); fireEvent.pointerOver(s.port('Source', 'output'));
+    expect(s.container.querySelector('.node-workspace-edge.hovered')).toBeNull();
+    expect(s.container.querySelector('.node-workspace-plug.port-hovered')).toBeNull();
+  });
   it.each(['mouse', 'touch', 'pen'])('unplugs only the dragged cable on empty release (%s)', pointerType => {
     const s = setup(); hit.mockReturnValue(s.canvas);
     pointer(s.plug('surface-link'), 'pointerdown', 30, 30, 1, pointerType);
@@ -93,23 +124,21 @@ describe('node cable plugs', () => {
     expect(s.connect).toHaveBeenCalledExactlyOnceWith({ fromNodeId: 'Surface', fromPortId: 'out', toNodeId: 'Depth', toPortId: 'in' });
     expect(s.disconnect).not.toHaveBeenCalled();
   });
-  it('reveals an empty socket plug on hover and keeps it visible when moving onto its grip', () => {
+  it('only reveals an empty socket plug after starting a cable, not on socket hover', () => {
     const s = setup();
     const preview = s.container.querySelector('.node-workspace-plug-preview[data-node-id="Surface"][data-direction="output"]')!;
     fireEvent.pointerOver(s.port('Surface', 'output'));
+    expect(preview).not.toHaveClass('revealed');
+    pointer(s.port('Surface', 'output'), 'pointerdown');
     expect(preview).toHaveClass('revealed');
-    fireEvent.pointerOut(s.port('Surface', 'output'), { relatedTarget: preview });
-    fireEvent.pointerOver(preview);
-    expect(preview).toHaveClass('revealed');
-    pointer(preview, 'pointerdown');
     hit.mockReturnValue(s.port('Depth'));
     pointer(s.canvas, 'pointermove', 100, 100); pointer(s.canvas, 'pointerup', 100, 100);
     expect(s.connect).toHaveBeenCalledExactlyOnceWith({ fromNodeId: 'Surface', fromPortId: 'out', toNodeId: 'Depth', toPortId: 'in' });
   });
-  it('also reveals the empty socket plug for keyboard focus', () => {
+  it('keeps keyboard focus on the empty socket without highlighting a cable grip', () => {
     const s = setup();
     const preview = s.container.querySelector('.node-workspace-plug-preview[data-node-id="Surface"][data-direction="output"]')!;
-    fireEvent.focus(s.port('Surface', 'output')); expect(preview).toHaveClass('revealed');
+    fireEvent.focus(s.port('Surface', 'output')); expect(preview).not.toHaveClass('revealed');
     fireEvent.blur(s.port('Surface', 'output')); expect(preview).not.toHaveClass('revealed');
   });
   it('previews a docked ghost and snaps the draft only while hovering a compatible socket', () => {

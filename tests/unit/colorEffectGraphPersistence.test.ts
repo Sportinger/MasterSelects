@@ -30,7 +30,7 @@ describe('editable color effect graphs', () => {
 
   it.each(['brightness', 'contrast', 'saturation'] as const)('migrates legacy %s ownership and round-trips the canonical project graph', type => {
     const legacy = effect(type), graph = effectOperatorGraph(legacy);
-    expect(graph).toEqual(createDefaultColorEffectGraph(type));
+    expect(graph).toEqual({ ...createDefaultColorEffectGraph(type), compositionRules: 2 });
     const canonical = migratePersistedEffectOperatorGraph(legacy);
     expect(canonical.operatorGraph).toEqual(graph);
     expect(canonical.params.amount).toBe(getDefaultParams(type).amount);

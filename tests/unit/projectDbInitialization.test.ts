@@ -24,6 +24,94 @@ function succeed(index: number) {
 }
 
 describe('project database initialization recovery', () => {
+  it('reopens a closing connection and waits for the replacement write to commit', async () => {
+    const initial = projectDB.init();
+    const stale = succeed(0);
+    await initial;
+    Object.assign(stale, { transaction: vi.fn(() => {
+      throw new DOMException('The database connection is closing.', 'InvalidStateError');
+    }) });
+    let saved = false;
+    const project = { id: 'recoverable-project' } as Parameters<typeof projectDB.saveProject>[0];
+    const pending = projectDB.saveProject(project).then(() => { saved = true; });
+    await flush();
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(stale.close).toHaveBeenCalledOnce();
+    const transaction = new EventTarget();
+    const put = vi.fn(() => ({ transaction }));
+    const fresh = succeed(1);
+    Object.assign(fresh, { transaction: vi.fn(() => Object.assign(transaction, { objectStore: () => ({ put }) })) });
+    await flush();
+    expect(put).toHaveBeenCalledExactlyOnceWith(project);
+    expect(saved).toBe(false);
+    transaction.dispatchEvent(new Event('complete'));
+    await pending;
+    expect(saved).toBe(true);
+    expect(await projectDB.init()).toBe(fresh);
+  });
+
+  it('shares one reopen when reads encounter a connection closing before its event', async () => {
+    const initial = projectDB.init();
+    const stale = succeed(0);
+    await initial;
+    Object.assign(stale, { transaction: vi.fn(() => {
+      throw new DOMException('Closing', 'InvalidStateError');
+    }) });
+    const reads = Promise.all([projectDB.getProject('a'), projectDB.getProject('b')]);
+    await flush();
+    expect(open).toHaveBeenCalledTimes(2);
+    const fresh = succeed(1);
+    Object.assign(fresh, { transaction: () => ({ objectStore: () => ({ get: (id: string) => {
+      const request = { result: { id }, onsuccess: null as (() => void) | null };
+      queueMicrotask(() => request.onsuccess?.());
+      return request;
+    } }) }) });
+    expect(await reads).toEqual([{ id: 'a' }, { id: 'b' }]);
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['AbortError', 'QuotaExceededError', 'NotFoundError'])(
+    'does not replay project operations for %s', async name => {
+      const initial = projectDB.init();
+      const db = succeed(0);
+      await initial;
+      Object.assign(db, { transaction: () => { throw new DOMException('Storage failure', name); } });
+      await expect(projectDB.saveProject({ id: 'p' } as Parameters<typeof projectDB.saveProject>[0]))
+        .rejects.toMatchObject({ name });
+      expect(open).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('does not replay a write whose transaction aborts after put succeeds', async () => {
+    const initial = projectDB.init();
+    const db = succeed(0);
+    await initial;
+    const transaction = new EventTarget();
+    const put = vi.fn(() => ({ transaction }));
+    Object.assign(db, { transaction: () => Object.assign(transaction, { objectStore: () => ({ put }) }) });
+    const failed = expect(projectDB.saveProject({ id: 'p' } as Parameters<typeof projectDB.saveProject>[0]))
+      .rejects.toMatchObject({ name: 'AbortError' });
+    await flush();
+    transaction.dispatchEvent(new Event('abort'));
+    await failed;
+    expect(put).toHaveBeenCalledOnce();
+    expect(open).toHaveBeenCalledOnce();
+  });
+
+  it('bounds recovery when the replacement connection also closes', async () => {
+    const initial = projectDB.init();
+    const stale = succeed(0);
+    await initial;
+    const transaction = () => { throw new DOMException('Closing', 'InvalidStateError'); };
+    Object.assign(stale, { transaction });
+    const failed = expect(projectDB.getProject('p')).rejects.toMatchObject({ name: 'InvalidStateError' });
+    await flush();
+    const replacement = succeed(1);
+    Object.assign(replacement, { transaction });
+    await failed;
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
   it('retries an aborted open once and shares recovery among concurrent callers', async () => {
     const first = projectDB.init();
     const second = projectDB.init();
@@ -75,6 +163,11 @@ describe('project database initialization recovery', () => {
     expect(projectDB.hasInitFailed()).toBe(true);
     await expect(projectDB.init()).rejects.toMatchObject({ name: 'SecurityError' });
     expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps optional last-project discovery false when opening storage is denied', async () => {
+    open.mockImplementation(() => { throw new DOMException('Storage denied', 'SecurityError'); });
+    expect(await projectDB.hasLastProject()).toBe(false);
   });
 
   it('does not fork a pending open when resetting a previous failure', async () => {

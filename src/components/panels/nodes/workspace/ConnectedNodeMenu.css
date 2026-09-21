@@ -1,0 +1,9 @@
+.node-workspace-context-menu.node-connection-menu { width: 320px; max-width: calc(100vw - 16px); max-height: min(410px, calc(100vh - 16px)); display: flex; flex-direction: column; gap: 6px; padding: 10px; }
+.node-connection-menu > strong { font-size: 11px; color: var(--text-primary); }
+.node-connection-menu > input { width: 100%; box-sizing: border-box; padding: 7px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 3px; outline: none; }
+.node-connection-menu :is(input, button):focus-visible { outline: 1px solid var(--accent-color, #4a9eff); outline-offset: -1px; }
+.node-connection-menu button { -webkit-tap-highlight-color: transparent; outline: none; display: flex; flex-direction: column; align-items: flex-start; width: 100%; }
+.node-connection-menu button small { font-size: 10px; color: var(--text-muted); }
+.node-connection-options { overflow-y: auto; min-height: 0; }
+.node-connection-category { padding: 9px 6px 3px; font-size: 10px; color: var(--text-muted); text-transform: capitalize; }
+.node-connection-menu p { margin: 6px; font-size: 11px; }

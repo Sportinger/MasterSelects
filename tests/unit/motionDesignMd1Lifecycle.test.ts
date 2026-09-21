@@ -1,3 +1,4 @@
+import { migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { describe, expect, it, vi } from 'vitest';
 
 const mediaStoreHarness = vi.hoisted(() => {
@@ -565,7 +566,7 @@ describe('MD1 motion-design lifecycle', () => {
       fixture.clips.find((clip) => clip.id === serializedPolygon.id)?.masks,
     );
     expect(serializedPolygon.effects).toEqual(
-      fixture.clips.find((clip) => clip.id === serializedPolygon.id)?.effects,
+      fixture.clips.find((clip) => clip.id === serializedPolygon.id)?.effects.map(migratePersistedEffectOperatorGraph),
     );
 
     const restored = createRestoredMotionClip(serializedRectangle, 'md1-restored-rectangle')!;
@@ -756,7 +757,7 @@ describe('MD1 motion-design lifecycle', () => {
         })]),
       );
       expect(restoredPolygon?.effects).toEqual(
-        fixture.clips.find((clip) => clip.id === 'md1-clip-polygon')?.effects,
+        fixture.clips.find((clip) => clip.id === 'md1-clip-polygon')?.effects.map(migratePersistedEffectOperatorGraph),
       );
     } finally {
       updateCompositions.mockRestore();

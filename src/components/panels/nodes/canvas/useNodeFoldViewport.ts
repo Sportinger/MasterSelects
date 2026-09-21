@@ -7,15 +7,24 @@ import { NODE_LAYOUT_DURATION } from './nodeLayoutTransition';
 /** Follow the displayed bounds of every intermediate fold, never just the final
  * destination. A manual gesture immediately releases camera ownership. */
 export function useNodeFoldViewport(canvas: RefObject<HTMLDivElement | null>, source: NodeGraph, target: NodeGraph,
-  shown: NodeGraph, bounds: NodeBounds, animating: boolean, visual: RefObject<Viewport>, setViewport: (next: Viewport) => void) {
-  const pending = useRef<{ graph: NodeGraph; collapsed: boolean; from: Viewport; started: number; width: number; height: number } | null>(null);
+  shown: NodeGraph, bounds: NodeBounds, animating: boolean, visual: RefObject<Viewport>, setViewport: (next: Viewport) => void,
+  groupBounds?: ReadonlyMap<string, NodeBounds>) {
+  const savedViews = useRef(new Map<string, Viewport>());
+  const pending = useRef<{ graph: NodeGraph; collapsed: boolean; groupId?: string; restore?: Viewport; from: Viewport; started: number; width: number; height: number } | null>(null);
   const cancel = useCallback(() => { pending.current = null; }, []);
-  const request = useCallback((collapsed: boolean) => {
+  const forget = useCallback(() => { cancel(); savedViews.current.clear(); }, [cancel]);
+  useEffect(forget, [source.id, forget]);
+  const request = useCallback((collapsed: boolean, groupId?: string) => {
     const element = canvas.current;
     if (!element) return;
+    const restore = groupId && collapsed ? savedViews.current.get(groupId) : undefined;
+    if (groupId) {
+      if (collapsed) savedViews.current.delete(groupId);
+      else savedViews.current.set(groupId, { ...visual.current });
+    } else savedViews.current.clear();
     // Read before React moves hundreds of cards. Reading these dimensions after
     // each commit forces a synchronous browser layout during the animation.
-    pending.current = { graph: source, collapsed, from: visual.current, started: performance.now(),
+    pending.current = { graph: source, collapsed, groupId, restore, from: { ...visual.current }, started: performance.now(),
       width: element.clientWidth, height: element.clientHeight };
   }, [source, visual, canvas]);
   useEffect(() => {
@@ -27,16 +36,20 @@ export function useNodeFoldViewport(canvas: RefObject<HTMLDivElement | null>, so
   useLayoutEffect(() => {
     const follow = pending.current, element = canvas.current;
     if (!follow || !element || follow.graph === source) return;
-    if (follow.graph.id !== source.id || !target.groups?.every(group => !!group.collapsed === follow.collapsed)) { cancel(); return; }
+    const matches = follow.groupId ? target.groups?.some(group => group.id === follow.groupId && !!group.collapsed === follow.collapsed)
+      : target.groups?.every(group => !!group.collapsed === follow.collapsed);
+    if (follow.graph.id !== source.id || !matches) { cancel(); return; }
     const finished = !animating && shown === target;
     const progress = finished || matchMedia('(prefers-reduced-motion: reduce)').matches
       ? 1 : Math.min(1, (performance.now() - follow.started) / NODE_LAYOUT_DURATION);
     const t = 1 - (1 - progress) ** 3;
-    const fit = fittedNodeViewport(bounds, follow.width, follow.height);
+    const focusBounds = follow.groupId && !follow.collapsed ? groupBounds?.get(follow.groupId) : bounds;
+    if (!focusBounds) { if (finished) cancel(); return; }
+    const fit = follow.restore ?? fittedNodeViewport(focusBounds, follow.width, follow.height);
     setViewport({ zoom: follow.from.zoom + (fit.zoom - follow.from.zoom) * t,
       panX: follow.from.panX + (fit.panX - follow.from.panX) * t,
       panY: follow.from.panY + (fit.panY - follow.from.panY) * t });
     if (finished) cancel();
-  }, [source, target, shown, bounds, animating, canvas, cancel, setViewport]);
-  return { request, cancel };
+  }, [source, target, shown, bounds, groupBounds, animating, canvas, cancel, setViewport]);
+  return { request, cancel, forget };
 }

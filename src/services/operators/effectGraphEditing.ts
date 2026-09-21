@@ -147,7 +147,9 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
       graph.nodes = graph.nodes.filter(n => n.id !== id); graph.edges = graph.edges.filter(e => e.from !== id && e.to !== id); delete graph.layout[id];
       graph.groups?.forEach(g => { g.nodeIds = g.nodeIds.filter(nodeId => nodeId !== id); });
     }),
-    addNode: (operatorId: string, position?: { x: number; y: number }) => {
+    addNode: (operatorId: string, position?: { x: number; y: number }, connection?: {
+      direction: 'input' | 'output'; endpoints: Array<{ nodeId: string; portId: string }>; portId: string; groupId?: string | null;
+    }) => {
       const id = `node-${crypto.randomUUID().slice(0, 8)}`;
       editEffectGraph(clipId, effectId, 'Add node', (graph, params) => {
         const operator = getEffectOperator(operatorId);
@@ -163,15 +165,22 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
           } else { node.bindings[p.id] = key; params[key] = p.default; }
         }
         const template = graph.nodes.find(n => n.operator === operatorId);
-        if (template) for (const edge of graph.edges.filter(e => e.to === template.id)) graph.edges.push({ ...edge, id: `${edge.from}-${id}-${edge.input}`, to: id });
-        const group = template && graph.groups?.find(g => g.nodeIds.includes(template.id));
+        if (template && !connection) for (const edge of graph.edges.filter(e => e.to === template.id)) graph.edges.push({ ...edge, id: `${edge.from}-${id}-${edge.input}`, to: id });
+        const group = connection?.groupId !== undefined ? graph.groups?.find(g => g.id === connection.groupId)
+          : graph.groups?.find(g => g.nodeIds.includes(connection?.endpoints[0]?.nodeId ?? template?.id ?? ''));
         graph.nodes.push(node); graph.layout[id] = position ?? { x: 750, y: 650 + (graph.nodes.length - 13) * 160 };
         if (graph.domain === 'audio' && !position) graph.layout[id] = { x: 290,
           y: Math.max(0, ...Object.entries(graph.layout).filter(([key]) => key !== id).map(([, value]) => value.y)) + 180 };
-        (group ?? graph.groups?.find(g => g.id === 'simulation'))?.nodeIds.push(id);
+        (group ?? (!connection ? graph.groups?.find(g => g.id === 'simulation') : undefined))?.nodeIds.push(id);
         const simulation = graph.nodes.find(n => n.operator === 'simulation.rope')!;
         const output = operator.outputs[0];
-        if (simulation && (output.type === 'force' || output.type === 'drag')) graph.edges.push({ id: `${id}-${simulation.id}`, from: id, output: output.id, to: simulation.id, input: output.type === 'force' ? 'forces' : 'drag' });
+        if (!connection && simulation && output && (output.type === 'force' || output.type === 'drag')) graph.edges.push({ id: `${id}-${simulation.id}`, from: id, output: output.id, to: simulation.id, input: output.type === 'force' ? 'forces' : 'drag' });
+        for (const endpoint of connection?.endpoints ?? []) {
+          const link = connection!.direction === 'output'
+            ? { from: endpoint.nodeId, output: endpoint.portId, to: id, input: connection!.portId }
+            : { from: id, output: connection!.portId, to: endpoint.nodeId, input: endpoint.portId };
+          Object.assign(graph, connectEffectGraph(graph, { id: `${link.from}-${link.output}-${link.to}-${link.input}`, ...link }, addableEffectOperators(ownerType(graph.domain))));
+        }
       });
       return getEffectOperator(operatorId)?.composition ? `@compound-${id}` : id;
     },

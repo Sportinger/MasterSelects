@@ -152,7 +152,7 @@ describe('sample-domain operator graphs', () => {
     expect(readAudioOperatorGraph(saved).nodes.find(node => node.id === 'gain')?.constants?.value).toBe(0.25);
     expect(audioMathProgram(saved)).toBe(audioMathProgram(saved));
     const document = buildClipNodeGraphDocument(current);
-    const unified = buildUnifiedClipGraph(document, current, [current]);
+    const unified = buildUnifiedClipGraph(document, current, [current], [], undefined, true);
     expect(unified.nodes.some(node => node.operatorId === 'audio.input')).toBe(true);
     expect(unified.nodes.find(node => node.operatorId === 'math.multiply.audio-scalar')?.connectionVariants?.length).toBeGreaterThan(1);
     const actions = createEffectGraphActions(clip.id, effect.id);
@@ -170,7 +170,7 @@ describe('sample-domain operator graphs', () => {
     const audio = createMockClip({ id: 'audio', trackId: 'audio-track', linkedClipId: 'video', source: { type: 'audio' }, audioState: { effectStack: [effect] } });
     useTimelineStore.setState({ clips: [video, audio], tracks: [createMockTrack({ id: video.trackId }), createMockTrack({ id: audio.trackId, type: 'audio' })] });
     const document = buildClipNodeGraphDocument(video, undefined, { linkedClip: audio });
-    const unified = buildUnifiedClipGraph(document, video, [video, audio]);
+    const unified = buildUnifiedClipGraph(document, video, [video, audio], [], undefined, true);
     const multiply = unified.nodes.find(node => node.operatorId === 'math.multiply.audio-scalar')!;
     expect(multiply.params?.targetClipId).toBe(audio.id);
     expect(unified.groups?.find(group => group.effectId === effect.id)?.layoutMode).toBe('flow');

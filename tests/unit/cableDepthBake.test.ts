@@ -37,7 +37,7 @@ describe('scene depth bake transaction', () => {
     graph.nodes.push({ id: 'cached-face', operator: 'source.face-landmarks', bindings: {} }, { id: 'cached-depth', operator: 'source.saved-depth', bindings: {} });
     graph.edges = graph.edges.map(e => e.to === 'smoothing' ? { ...e, from: 'cached-face' } : e.to === 'depth-mesh' ? { ...e, from: 'cached-depth' } : e);
     const params = env.timeline.clips[0].effects[0].params;
-    params.operatorGraph = JSON.stringify(graph); params.sceneDepthStrength = 0.5;
+    env.timeline.clips[0].effects[0].operatorGraph = graph; params.sceneDepthStrength = 0.5;
     env.read.mockClear(); env.update.mockClear();
     await bake();
     expect(env.read).not.toHaveBeenCalled(); expect(env.update).toHaveBeenCalledOnce();
@@ -56,7 +56,8 @@ describe('scene depth bake transaction', () => {
     expect(saved.is3D).toBe(true);
     expect(decodeCableScene(saved.effects[0].params.sceneData)).toMatchObject({ version: 2, frames: 2, depthGrid: { width: 49, height: 49 } });
     expect(decodeCableScene(saved.effects[0].params.sceneData)?.surface).toEqual({ face: true, blendWidth: 0.12, subdivisions: 2 });
-    expect(JSON.parse(saved.effects[0].params.operatorGraph).nodes.some((n: { operator: string }) => n.operator === 'geometry.merge-surface')).toBe(true);
+    expect(saved.effects[0].operatorGraph.nodes.some((n: { operator: string }) => n.operator === 'geometry.merge-surface')).toBe(true);
+    expect(saved.effects[0].params.operatorGraph).toBeUndefined();
     expect(env.read.mock.calls.map(c => c[0])).toEqual([0, 0.199999]); expect(env.close).toHaveBeenCalledOnce();
   });
   it.each(['cancel', 'inference failure', 'clip changed'])('keeps the previous bake on %s and always closes its decoder', async reason => {

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { resolveWorkerGpuVideoPresentationLayerStyle } from '../../src/services/render/workerGpuMediaSourceRegistry';
 import { VIDEO_FRAME_LAYER_COMPOSITE_SHADER, specializeVideoFrameLayerCompositeShader } from '../../src/services/render/workerGpuVideoFrameLayerShaderSource';
 import { createDefaultInvertImageGraph } from '../../src/services/operators/imageOperatorGraph';
-import type { Layer } from '../../src/types';
+import type { Layer } from '../../src/types/layers';
 import { shouldUseLayerVideoFramePresenter } from '../../src/services/render/workerRenderHostRuntimeHandlers';
 import { uploadWorkerVideoFrameTexture, workerGpuOperatorProgramCacheKey, workerGpuOperatorProgramPresentationKey, workerVideoFrameNeedsStraightAlphaUpload } from '../../src/services/render/workerGpuOperatorPipeline';
 import { hasCompositorRenderLayer } from '../../src/services/render/workerGpuVideoFrameCompositor';

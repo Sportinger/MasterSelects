@@ -27,7 +27,7 @@ describe('Glass Dispersion image graph', () => {
     expect(isImageGraphEffectType(effect.type)).toBe(true);
     expect(isLocalImageEffectType(effect.type)).toBe(false);
     expect(effectOperatorParams(effect)).toMatchObject(getDefaultParams('glass-dispersion'));
-    expect(effectOperatorGraph(effect)).toEqual(createDefaultGlassDispersionGraph());
+    expect(effectOperatorGraph(effect)).toEqual({ ...createDefaultGlassDispersionGraph(), compositionRules: 2 });
   });
 
   it('uses generic normalize, shared hashes and four explicit channel/alpha samples', () => {

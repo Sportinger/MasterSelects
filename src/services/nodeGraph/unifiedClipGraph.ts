@@ -28,7 +28,7 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     if (!inner) { nodes.push({ ...rootNode, groupOffset: { x: expansion, y: 0 }, layout: { x: rootNode.layout.x + expansion, y: rootNode.layout.y } }); cursor = Math.max(cursor, rootNode.layout.x + expansion + 280); continue; }
     const state = clip.nodeGraph?.groups?.[groupId];
     const offset = state?.position ?? { x: cursor + 35, y: 95 };
-    const collapsed = !expandAllGroups && state?.collapsed === true;
+    const collapsed = !expandAllGroups && state?.collapsed !== false;
     const group = { id: groupId, label: effect?.name ?? (groupId === 'scene3d' ? '3D Scene' : groupId === 'flock' ? 'Flock' : 'Color'),
       color: groupId === 'scene3d' ? '#d7a262' : groupId === 'flock' ? '#7ea65b' : groupId === 'color' ? '#ba8bd6' : '#55a6c4', collapsed, nodeIds: [] as string[], proxyId: rootNode.id, issue: inner.issue,
       ...(effect ? { effectId: effect.id, bypassNodeId: rootNode.id, bypassed: !effect.enabled } : {}),

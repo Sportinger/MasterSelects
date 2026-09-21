@@ -19,7 +19,7 @@ const state = () => useTimelineStore.getState();
 const clip = () => state().clips[0];
 const keys = () => state().clipKeyframes.get('clip')!;
 const resolved = () => withLegacyKeyframeNodes(clip(), keys());
-const graph = () => { const current = resolved(); return buildUnifiedClipGraph(buildClipNodeGraphDocument(current), current); };
+const graph = (expandAll = false) => { const current = resolved(); return buildUnifiedClipGraph(buildClipNodeGraphDocument(current), current, [current], [], undefined, expandAll); };
 function extract() {
   const node = resolved().nodeGraph!.keyframeNodes![0];
   return extractKeyframeChannel('clip', node.id, node.channels[0].id, { x: -200, y: 0 });
@@ -41,7 +41,7 @@ describe('animation attached to parameter nodes', () => {
     useTimelineStore.setState({ clips: [{ ...clip(), effects: [{ id: 'cables', type: 'face-cables', name: 'Cables', enabled: true,
       params: { settings: JSON.stringify(cables) } }] }], clipKeyframes: new Map([['clip', cables.map(cable =>
       createMockKeyframe({ clipId: 'clip', property: cableProperty('cables', cable.id, 'slack'), value: 2 }))]]) });
-    const projected = graph();
+    const projected = graph(true);
     expect(projected.nodes.filter(node => node.animation)).toHaveLength(1);
     expect(projected.nodes.find(node => node.animation)?.animation?.channels).toHaveLength(12);
     expect(projected.nodes.find(node => node.animation)?.binding).toMatchObject({ operator: 'simulation.rope' });
@@ -105,9 +105,9 @@ describe('animation attached to parameter nodes', () => {
     useTimelineStore.setState({ clips: [{ ...clip(), effects: [{ id: 'cables', type: 'face-cables', name: 'Cables', enabled: true,
       params: { settings: JSON.stringify([cable]) } }], nodeGraph: { version: 1, nodes: [], groups: { 'effect:cables/physics': { collapsed: true } } } }],
       clipKeyframes: new Map([['clip', [createMockKeyframe({ clipId: 'clip', property: cableProperty('cables', cable.id, 'slack'), value: 2 })]]]) });
-    const projected = graph(), physics = projected.groups!.find(group => group.label === 'Cable physics')!;
+    const projected = graph(true), physics = projected.groups!.find(group => group.label === 'Cable physics')!;
     // Use the graph's real group id; the definition may choose a domain-specific id.
-    useTimelineStore.setState({ clips: [{ ...clip(), nodeGraph: { ...clip().nodeGraph!, groups: { [physics.id]: { collapsed: true } } } }] });
+    useTimelineStore.setState({ clips: [{ ...clip(), nodeGraph: { ...clip().nodeGraph!, groups: { 'effect:cables': { collapsed: false }, [physics.id]: { collapsed: true } } } }] });
     expect(graph().nodes.find(node => node.id === physics.proxyId)?.animation?.channels).toHaveLength(1);
   });
 

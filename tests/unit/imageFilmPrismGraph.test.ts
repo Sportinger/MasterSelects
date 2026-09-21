@@ -31,7 +31,7 @@ describe('Film Prism image graph', () => {
     expect(isImageGraphEffectType(effect.type)).toBe(true);
     expect(isLocalImageEffectType(effect.type)).toBe(false);
     expect(effectOperatorParams(effect)).toMatchObject(getDefaultParams('film-prism'));
-    expect(effectOperatorGraph(effect)).toEqual(createDefaultFilmPrismGraph());
+    expect(effectOperatorGraph(effect)).toEqual({ ...createDefaultFilmPrismGraph(), compositionRules: 2 });
   });
 
   it('expands common noise2d into four shared hashes and keeps four samples', () => {

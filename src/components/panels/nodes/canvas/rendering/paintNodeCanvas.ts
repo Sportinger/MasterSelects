@@ -98,6 +98,7 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
     if (node.mathSymbol) text(ctx, node.mathSymbol.text, node.mathSymbol.x, node.mathSymbol.y, 64, theme.muted, 26, 500, 'center');
     for (const port of node.ports) {
       ctx.fillStyle = port.color; ctx.beginPath(); ctx.arc(port.x, port.y, 3.5, 0, Math.PI * 2); ctx.fill();
+      if (port.highlighted) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(port.x, port.y, 5, 0, Math.PI * 2); ctx.stroke(); }
       const x = port.x + (port.input ? 9 : -9), align = port.input ? 'left' : 'right';
       text(ctx, port.label, x, port.y + 1, 65, theme.text, 9, 500, align);
       text(ctx, port.type, x, port.y + 12, 65, port.color, 8, 400, align);

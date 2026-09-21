@@ -1,4 +1,5 @@
 import { useTimelineStore } from '../../stores/timeline';
+import { readTimelineRuntimeState } from '../timeline/timelineRuntimeCoordinator';
 import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/exclusiveMutationLease';
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { renderHostPort } from '../render/renderHostPort';
@@ -6,7 +7,7 @@ import { instantiateEffectPreset, type EffectPreset } from './effectPresetLibrar
 
 export function applyEffectPreset(clipId: string, preset: EffectPreset): string {
   assertExclusiveTimelineMutationAllowed();
-  const state = useTimelineStore.getState();
+  const state = readTimelineRuntimeState(useTimelineStore);
   const clip = state.clips.find(candidate => candidate.id === clipId);
   if (!clip || state.isExporting || state.tracks.find(track => track.id === clip.trackId)?.locked) {
     throw new Error('The clip is unavailable, locked or exporting.');

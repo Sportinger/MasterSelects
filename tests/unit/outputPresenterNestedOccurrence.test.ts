@@ -37,6 +37,7 @@ describe('outputPresenter nested occurrence copy', () => {
       1920,
       1080,
       2.5,
+      undefined,
     );
   });
 

@@ -254,6 +254,7 @@ describe('TargetPreviewRenderer motion-adjustment parity', () => {
       undefined,
       wrapper.id,
       expect.any(Number),
+      30,
     );
     expect(composite.mock.calls[0]?.[0][0]?.textureView).toBe(nestedView);
   });
