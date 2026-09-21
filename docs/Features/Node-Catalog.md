@@ -12,6 +12,11 @@ selected node's inspector or the appropriate domain's Add menu.
 
 ## Ownership and reuse
 
+The catalog includes the 15 Fisheye processing groups and the shared coordinate
+compositions. To insert one, select an image effect or an internal node and use
+**right-click → Reusable Nodes**, or the inspector's **Add node** selector.
+Each entry exposes its typed boundary and can be expanded after insertion.
+
 All graph editors use the shared node canvas and connection contract. Domain
 registries remain responsible for executable operators and parameter schemas;
 adapters map existing saved definitions to the common ports and endpoints. Shared

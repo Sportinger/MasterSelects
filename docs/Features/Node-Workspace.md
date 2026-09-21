@@ -48,6 +48,26 @@ cloud-synced or included in project files; inserted effects are saved normally w
 the project. Clip keyframes and external media are not bundled. Locked clips and
 exports prevent insertion. Storage failures are shown without replacing the library.
 
+## Adding reusable processing nodes
+
+Right-click an image-effect card or one of its internal nodes and open **Reusable
+Nodes**. On empty canvas, the menu uses the selected node's effect; its heading
+shows the destination. The menu supports hover, click/touch and keyboard activation.
+Insertion is one undo step and opens a collapsed destination effect.
+
+The **Fisheye** section contains all 15 processing areas and subgroups, including
+Lens Projection, Chromatic Aberration, Frame Edges, Vignette and Average Samples.
+These are also available from the inspector's **Add node** selector in other
+supported image-effect graphs. The parameter and constant folders are organization
+for the original effect, not separate processing blocks.
+
+Each inserted node has typed boundary inputs and outputs and an expandable
+interior. Shared literal constants stay inside; effect-owned values become input
+sockets, so an instance never silently binds to another effect's parameters.
+Connect the required inputs to finish the graph; incomplete graphs use the existing
+paused-effect behavior. Sampling blocks retain their lexical coordinate/sequence
+semantics. Changing an instance's interior makes it a local editable group.
+
 ## Reusable coordinate nodes
 
 Kaleidoscope is the first composition pilot. Its graph uses three registered,

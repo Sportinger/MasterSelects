@@ -1,6 +1,6 @@
 import type { Effect } from '../../types/effects';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
-import { COORDINATE_COMPOSITIONS } from './coordinateCompositions';
+import { IMAGE_COMPOSITIONS } from './operatorCompositionRegistry';
 import { expandOperatorCompositions, packOperatorCompositions } from './operatorComposition';
 import { recognizeOperatorCompositions } from './recognizeOperatorCompositions';
 import { cableOperatorGraph, compileCableOperatorGraph } from '../faceCables/cableOperatorGraph';
@@ -257,7 +257,7 @@ export function addableEffectOperators(type: string) {
     const shared = ['image.frame', 'values.number'].flatMap(id => {
       const operator = getEffectOperator(id); return operator ? [operator] : [];
     });
-    return [...shared, ...IMAGE_OPERATORS.filter(operator => operator.addable), ...COORDINATE_COMPOSITIONS];
+    return [...shared, ...IMAGE_OPERATORS.filter(operator => operator.addable), ...IMAGE_COMPOSITIONS];
   }
   return EFFECT_OPERATORS.filter(operator => operator.addable && (type === 'voxel-relief' ? isVoxelOperator(operator.id)
     : type === 'face-cables' && !operator.composition && operator.id !== 'values.integer'

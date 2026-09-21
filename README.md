@@ -154,6 +154,9 @@ preserving the original center-pixel alpha.
 Wave, Twirl, Bulge and Kaleidoscope expose their UV calculations and sampling
 as editable nodes, including alpha sampled at the transformed position.
 Fisheye has six main areas with 20 subgroups. Three shared Restore Lens Coordinates
+nodes and all 15 Fisheye processing groups are available through **right-click →
+Reusable Nodes** in supported image-effect graphs, with typed sockets and editable
+interiors. The existing Restore Lens Coordinates
 nodes each contain two reusable Divide X nodes; all 250 original primitives remain
 inspectable, with identical shader math. Collapsed folders combine repeated input
 signals into one socket and name their value outputs. Staged folding reuses prepared effect

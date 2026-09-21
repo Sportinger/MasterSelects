@@ -1,5 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorDefinition, OperatorEndpoint, OperatorGroup } from '../../types/operatorGraph';
-import { getOperatorComposition } from './coordinateCompositions';
+import { getOperatorComposition } from './operatorCompositionRegistry';
 import { IMAGE_EFFECT_GRAPH_LIMITS } from './effectGraphLimits';
 
 const key = (endpoint: OperatorEndpoint) => `${endpoint.nodeId}:${endpoint.portId}`;

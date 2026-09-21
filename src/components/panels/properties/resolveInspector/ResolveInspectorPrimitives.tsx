@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { MouseEventHandler, ReactNode } from 'react';
 import { InspectorRow, InspectorSection } from '../../../inspector/InspectorPrimitives';
 
 interface ResolveInspectorSectionProps {
@@ -81,7 +81,7 @@ interface ResolveInspectorIconButtonProps {
   children: ReactNode;
   className?: string;
   disabled?: boolean;
-  onClick?: () => void;
+  onClick?: MouseEventHandler<HTMLButtonElement>;
   title?: string;
 }
 

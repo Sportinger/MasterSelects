@@ -8,7 +8,7 @@ import { SCALAR_FIELD_OPERATORS } from './scalarField';
 import { IMAGE_OPERATORS } from './imageOperators';
 import { ANALOG_SIGNAL_OPERATORS } from './analogSignalOperators';
 import { VORONOI_OPERATORS } from './voronoiOperators';
-import { COORDINATE_COMPOSITIONS } from './coordinateCompositions';
+import { IMAGE_COMPOSITIONS } from './operatorCompositionRegistry';
 
 const port = (id: string, type: OperatorSignal, required = false): OperatorPort => ({ id, label: id[0].toUpperCase() + id.slice(1), type, required });
 const number = (id: string, label: string, value: number, min: number, max: number): OperatorParameter =>
@@ -24,7 +24,7 @@ export const EFFECT_OPERATORS: readonly OperatorDefinition[] = [
   ...VOXEL_OPERATORS,
   ...SCALAR_FIELD_OPERATORS,
   ...IMAGE_OPERATORS,
-  ...COORDINATE_COMPOSITIONS,
+  ...IMAGE_COMPOSITIONS,
   ...ANALOG_SIGNAL_OPERATORS,
   ...VORONOI_OPERATORS,
   WIND_OPERATOR,

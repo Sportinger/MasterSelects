@@ -14,6 +14,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { NodeGraphCanvas, type NodeGraphMove } from './NodeGraphCanvas';
 import { reconnectNodePorts } from './canvas/reconnectNodePorts';
 import { NodeContextMenu } from './workspace/NodeContextMenu';
+import { ReusableNodeMenu } from './workspace/ReusableNodeMenu';
 import { NodeInspector } from './workspace/NodeWorkspaceInspector';
 import {
   canDeleteNodeFromClip,
@@ -348,6 +349,10 @@ export function NodeWorkspacePanel() {
     : subject.graph.groups?.find(group => group.proxyId === selectedNodeId || group.id === selectedNode?.groupId)?.effectId
       ?? (selectedNode?.id.startsWith('effect-') ? selectedNode.id.slice(7) : undefined);
   const presetEffect = subject.clip.effects.find(effect => effect.id === presetEffectId);
+  const reusableTarget = contextMenu?.nodeId ? contextMenuNode : selectedNode;
+  const reusableEffectId = reusableTarget?.binding && 'effectId' in reusableTarget.binding ? reusableTarget.binding.effectId
+    : subject.graph.groups?.find(group => group.proxyId === reusableTarget?.id || group.id === reusableTarget?.groupId)?.effectId;
+  const reusableEffect = subject.clip.effects.find(effect => effect.id === reusableEffectId);
 
   return (
     <div className="node-workspace-panel" ref={panelRef}>
@@ -481,6 +486,13 @@ export function NodeWorkspacePanel() {
           onAddKeyframes={() => { if (!keyframesLocked) selectNode(addKeyframeNode(subject.id, contextMenu.layout)); closeContextMenu(); }}
           onAddBuiltIn={addBuiltInNode}
           onAddEffect={addEffectNode}
+          reusableNodes={<ReusableNodeMenu clipId={subject.id} effect={reusableEffect}
+            position={{ x: contextMenu.layout.x - (reusableTarget?.groupOffset?.x ?? 0), y: contextMenu.layout.y - (reusableTarget?.groupOffset?.y ?? 0) }}
+            onAdded={id => {
+              const group = subject.graph.groups?.find(group => group.id === `effect:${reusableEffectId}`);
+              if (group?.collapsed) unified.toggleGroup(group.id);
+              selectNode(id); closeContextMenu();
+            }} />}
         />
       )}
       {contextMenu && flockMenu && subject.clip.flock && (

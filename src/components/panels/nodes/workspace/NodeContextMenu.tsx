@@ -1,4 +1,5 @@
 import type { getCategoriesWithEffects } from '../../../../effects';
+import type { ReactNode } from 'react';
 import type { NodeGraphNode } from '../../../../services/nodeGraph';
 import { handleSubmenuHover, handleSubmenuLeave } from '../../media/submenuPosition';
 
@@ -16,6 +17,7 @@ export function NodeContextMenu({
   canAddKeyframes,
   onAddBuiltIn,
   onAddEffect,
+  reusableNodes,
 }: {
   x: number;
   y: number;
@@ -30,6 +32,7 @@ export function NodeContextMenu({
   canAddKeyframes: boolean;
   onAddBuiltIn: (node: 'transform' | 'mask' | 'color') => void;
   onAddEffect: (effectType: string) => void;
+  reusableNodes?: ReactNode;
 }) {
   const left = typeof window === 'undefined' ? x : Math.min(x, window.innerWidth - 188);
   const top = typeof window === 'undefined' ? y : Math.min(y, window.innerHeight - 220);
@@ -59,6 +62,7 @@ export function NodeContextMenu({
         <button type="button" disabled={!canAddVisualBuiltIns} onClick={() => onAddBuiltIn('transform')}>Transform</button>
         <button type="button" disabled={!canAddVisualBuiltIns} onClick={() => onAddBuiltIn('mask')}>Mask</button>
         <button type="button" disabled={!canAddVisualBuiltIns} onClick={() => onAddBuiltIn('color')}>Color</button>
+        {reusableNodes}
         <div
           className="node-workspace-context-submenu"
           onMouseEnter={handleSubmenuHover}

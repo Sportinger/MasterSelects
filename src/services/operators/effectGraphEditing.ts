@@ -148,7 +148,7 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
       graph.nodes = graph.nodes.filter(n => n.id !== id); graph.edges = graph.edges.filter(e => e.from !== id && e.to !== id); delete graph.layout[id];
       graph.groups?.forEach(g => { g.nodeIds = g.nodeIds.filter(nodeId => nodeId !== id); });
     }),
-    addNode: (operatorId: string) => {
+    addNode: (operatorId: string, position?: { x: number; y: number }) => {
       const id = `node-${crypto.randomUUID().slice(0, 8)}`;
       editEffectGraph(clipId, effectId, 'Add node', (graph, params) => {
         const operator = getEffectOperator(operatorId);
@@ -166,7 +166,7 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
         const template = graph.nodes.find(n => n.operator === operatorId);
         if (template) for (const edge of graph.edges.filter(e => e.to === template.id)) graph.edges.push({ ...edge, id: `${edge.from}-${id}-${edge.input}`, to: id });
         const group = template && graph.groups?.find(g => g.nodeIds.includes(template.id));
-        graph.nodes.push(node); graph.layout[id] = { x: 750, y: 650 + (graph.nodes.length - 13) * 160 };
+        graph.nodes.push(node); graph.layout[id] = position ?? { x: 750, y: 650 + (graph.nodes.length - 13) * 160 };
         (group ?? graph.groups?.find(g => g.id === 'simulation'))?.nodeIds.push(id);
         const simulation = graph.nodes.find(n => n.operator === 'simulation.rope')!;
         const output = operator.outputs[0];

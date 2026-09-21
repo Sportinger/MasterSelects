@@ -1275,6 +1275,7 @@
 }
 
 .node-workspace-context-menu button {
+  -webkit-tap-highlight-color: transparent;
   width: 100%;
   height: 26px;
   padding: 0 8px;
@@ -1329,7 +1330,8 @@
   z-index: 3201;
 }
 
-.node-workspace-context-submenu:hover .node-workspace-context-submenu-list.context-submenu {
+.node-workspace-context-submenu:hover .node-workspace-context-submenu-list.context-submenu,
+.node-workspace-context-submenu.is-open .node-workspace-context-submenu-list.context-submenu {
   display: flex;
   flex-direction: column;
   gap: 4px;
