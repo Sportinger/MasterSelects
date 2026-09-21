@@ -16,9 +16,12 @@ import { getMaskDescriptorForPath, getMaskDescriptorsForClip } from './maskPrope
 import { getVectorDescriptorForPath, getVectorDescriptorsForClip } from './vectorAnimationProperties';
 import { getMotionDescriptorForPath, getMotionDescriptorsForClip } from './motionDesignProperties';
 import { getFlockDescriptorForPath, getFlockDescriptorsForClip } from './flockProperties';
+import { getTextDescriptorForPath, getTextDescriptorsForClip } from './textProperties';
 
 export function registerCoreProperties(registry: PropertyRegistry = propertyRegistry): PropertyRegistry {
   registerTransformProperties(registry);
+  registry.registerResolver('text', getTextDescriptorForPath);
+  registry.registerProvider('text', getTextDescriptorsForClip);
   registerEffectTemplates(registry);
   registry.registerResolver('effect-instance', getEffectDescriptorForPath);
   registry.registerProvider('effect-instance', getEffectDescriptorsForClip);

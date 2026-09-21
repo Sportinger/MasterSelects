@@ -1,15 +1,21 @@
 import type { TimelineClip } from '../../types/timeline';
 import { mediaRuntimeRegistry } from '../mediaRuntime/registry';
 import type { PreviewFrame, PreviewRequest } from './previewTypes';
+import { useTimelineStore } from '../../stores/timeline';
+import { renderTextFrame } from '../text/textFrameRuntime';
 
 /** Borrow the presented frame. This viewer never seeks a decoder or creates a media element. */
 export async function sourcePreview(request: PreviewRequest, clip: TimelineClip, sourceTime: number): Promise<PreviewFrame> {
   const source = clip.source;
+  const state = useTimelineStore.getState(), keys = state.clipKeyframes.get(clip.id) ?? [];
+  const localTime = Math.max(0, Math.min(clip.duration, request.time - clip.startTime));
+  const bounds = keys.some(key => key.property.startsWith('textBounds.')) ? state.getInterpolatedTextBounds(clip.id, localTime) : undefined;
+  const textCanvas = source?.type === 'text' ? renderTextFrame(clip, keys, localTime, bounds) : source?.textCanvas;
   const provider = source?.runtimeSessionKey && source.runtimeSourceId ? mediaRuntimeRegistry.getRuntime(source.runtimeSourceId)?.getSessionFrameProvider(source.runtimeSessionKey) : null;
   const videoFrame = provider?.getCurrentFrame() ?? source?.webCodecsPlayer?.getCurrentFrame();
   const video = source?.videoElement;
   const image = source?.imageElement;
-  const input = videoFrame ?? (video && video.readyState >= 2 ? video : null) ?? (image?.complete && image.naturalWidth ? image : null) ?? source?.textCanvas;
+  const input = videoFrame ?? (video && video.readyState >= 2 ? video : null) ?? (image?.complete && image.naturalWidth ? image : null) ?? textCanvas;
   const base = { key: request.key, revision: request.revision, time: request.time };
   if (!input) return { ...base, status: 'missing', label: 'No decoded frame' };
   const width = videoFrame?.displayWidth ?? video?.videoWidth ?? image?.naturalWidth ?? source?.textCanvas?.width ?? 1;

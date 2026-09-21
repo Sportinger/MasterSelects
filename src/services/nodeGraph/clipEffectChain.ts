@@ -2,9 +2,11 @@ import type { TimelineClip, TimelineTrack } from './clipGraphProjectionDomain';
 import type { NodeGraph, NodeGraphConnectionRequest, NodeGraphEdge } from './types';
 import type { ClipNodeGraphBuildOptions } from './clipGraphProjectionShared';
 import { buildClipNodeGraphView } from './clipGraphProjectionBuildView';
+import { migrateTextSourceEdges } from './textGraphProjection';
 
 /** The effect stack owns the image chain. Saved manual links may also contain sidechains. */
 export function synchronizeEffectChain(graph: NodeGraph, saved: NodeGraphEdge[]): NodeGraphEdge[] {
+  saved = migrateTextSourceEdges(graph, saved);
   const visualEffects = new Set(graph.nodes.filter(n => n.binding?.kind === 'clip-effect'
     && n.inputs.some(p => p.type !== 'audio')).map(n => n.id));
   const isImage = (edge: NodeGraphEdge) => ['texture', 'scene', 'geometry'].includes(edge.type);
@@ -30,7 +32,7 @@ export function effectOrderForConnection(clip: TimelineClip, connection: NodeGra
   if (a && b && a !== b) {
     const next = order.filter(id => id !== a); next.splice(next.indexOf(b), 0, a); return next;
   }
-  if (b && ['clip-source', 'clip-transform', 'clip-mask-stack', 'clip-color-correction'].includes(from.binding?.kind ?? '')) return [b, ...order.filter(id => id !== b)];
+  if (b && ['clip-source', 'clip-text', 'clip-transform', 'clip-mask-stack', 'clip-color-correction'].includes(from.binding?.kind ?? '')) return [b, ...order.filter(id => id !== b)];
   if (a && (to.binding?.kind === 'clip-output' || to.binding?.kind === 'clip-custom-node')) return [...order.filter(id => id !== a), a];
   return null;
 }

@@ -25,12 +25,12 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     const effect = effectId ? findClipOperatorEffect(effectClip, effectId) : undefined;
     const inner = effect && hasEffectOperatorGraph(effect.type) ? preparedEffects?.get(effect.id) ?? buildEffectOperatorGraph(effectClip!, effect)
       : rootNode.subgraphId ? document.graphs.find(g => g.id === rootNode.subgraphId) : undefined;
-    const groupId = rootNode.id === 'scene3d' ? 'scene3d' : effect ? `effect:${effect.id}` : rootNode.binding?.kind === 'clip-color-correction' ? 'color' : 'flock';
+    const groupId = rootNode.id === 'text-render' ? 'text' : rootNode.id === 'scene3d' ? 'scene3d' : effect ? `effect:${effect.id}` : rootNode.binding?.kind === 'clip-color-correction' ? 'color' : 'flock';
     if (!inner) { nodes.push({ ...rootNode, groupOffset: { x: expansion, y: 0 }, layout: { x: rootNode.layout.x + expansion, y: rootNode.layout.y } }); cursor = Math.max(cursor, rootNode.layout.x + expansion + 280); continue; }
     const state = clip.nodeGraph?.groups?.[groupId];
     const offset = state?.position ?? { x: cursor + 35, y: 95 };
     const collapsed = !expandAllGroups && state?.collapsed !== false;
-    const group = { id: groupId, label: effect?.name ?? (groupId === 'scene3d' ? '3D Scene' : groupId === 'flock' ? 'Flock' : 'Color'),
+    const group = { id: groupId, label: effect?.name ?? (groupId === 'text' ? 'Text' : groupId === 'scene3d' ? '3D Scene' : groupId === 'flock' ? 'Flock' : 'Color'),
       color: groupId === 'scene3d' ? '#d7a262' : groupId === 'flock' ? '#7ea65b' : groupId === 'color' ? '#ba8bd6' : '#55a6c4', collapsed, nodeIds: [] as string[], proxyId: rootNode.id, issue: inner.issue,
       ...(effect ? { effectId: effect.id, bypassNodeId: rootNode.id, bypassed: !effect.enabled } : {}),
       layoutMode: 'flow' as const };
@@ -55,7 +55,7 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
         const target = groupId === 'scene3d' && edge.type === 'geometry'
           ? innerNodes.find(n => n.operatorId === 'geometry.source') ?? entrance : entrance;
         const id = `group-in-${edge.toPortId}`;
-        if (!target.inputs.some(p => p.id === id)) target.inputs = [...target.inputs, { id, label: 'Clip input', type: edge.type, direction: 'input' }];
+        if (!target.inputs.some(p => p.id === id)) target.inputs = [...target.inputs, { id, label: 'Clip input', type: edge.type, direction: 'input', ...(edge.readOnly ? { metadata: { readOnly: true } } : {}) }];
         edge.toNodeId = target.id; edge.toPortId = id;
       }
       if (edge.fromNodeId === rootNode.id) {

@@ -1,4 +1,5 @@
 import { resolveLinkedAudioClip } from './clipGraphProjectionAudio';
+import { createTextRenderNode, hasTextSourceGraph } from './textGraphProjection';
 import type { TimelineClip, TimelineTrack } from './clipGraphProjectionDomain';
 import { edge } from './clipGraphProjectionGraph';
 import {
@@ -39,11 +40,18 @@ export function buildClipNodeGraphView(
   const sourceNode = createSourceNode(clip, track, options);
   nodes.push(sourceNode);
 
-  const primarySignal = sourceOutputType(clip);
+  const primarySignal = hasTextSourceGraph(clip) ? 'texture' : sourceOutputType(clip);
   const audioClip = resolveLinkedAudioClip(clip, options.linkedClip);
   const hasAudioOutput = Boolean(audioClip);
   let depth = 1;
   let chain: NodeGraphChainHead = { nodeId: sourceNode.id, portId: primarySignal };
+  if (hasTextSourceGraph(clip)) {
+    const text = createTextRenderNode(clip);
+    nodes.push(text);
+    edges.push({ ...edge('source', 'text', text.id, 'input', 'text'), readOnly: true });
+    chain = { nodeId: text.id, portId: 'output' };
+    depth++;
+  }
 
   if (isVisualSource(clip) && (!transformIsDefault(clip) || hasForcedBuiltInNode(clip, 'transform'))) {
     chain = appendProcessingNode(

@@ -3,7 +3,8 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { vectorAnimationRuntimeManager } from '../../../services/vectorAnimation/VectorAnimationRuntimeManager';
 import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
 import { mathSceneRenderer } from '../../../services/mathScene/MathSceneRenderer';
-import { textRenderer } from '../../../services/textRenderer';
+import { renderTextFrame } from '../../../services/text/textFrameRuntime';
+import { sampleTextProperties } from '../../../services/text/textAnimation';
 import type { Layer } from '../../../types/layers';
 import type { BaseLayerPropsLike, FrameContextLike } from './contracts';
 import { getVectorAnimationSettingsForExport } from './sourceLookup';
@@ -50,6 +51,8 @@ export function buildTextLikeLayer(
   } else if (clip.captionProperties && clip.source?.textCanvas) {
     const interpolatedTextBounds = options.ctx?.getInterpolatedTextBounds(clip.id, clipLocalTime);
     const hasBoundsKeyframes = hasTextBoundsKeyframes(clip.id);
+    const sampled = clip.textProperties && sampleTextProperties(clip.textProperties,
+      useTimelineStore.getState().clipKeyframes.get(clip.id) ?? [], clipLocalTime);
     textCanvas = renderCaptionTextClipFrame({
       captionClip: clip,
       clips: options.ctx?.renderClipsAtTime ?? options.ctx?.clipsAtTime ?? [clip],
@@ -62,13 +65,13 @@ export function buildTextLikeLayer(
             options.ctx!,
           )
         : undefined,
-      textPropertiesOverride: hasBoundsKeyframes && interpolatedTextBounds && clip.textProperties
-        ? { ...clip.textProperties, boxEnabled: true, textBounds: interpolatedTextBounds }
-        : undefined,
+      textPropertiesOverride: hasBoundsKeyframes && interpolatedTextBounds && sampled
+        ? { ...sampled, boxEnabled: true, textBounds: interpolatedTextBounds }
+        : sampled === clip.textProperties ? undefined : sampled,
     }).canvas ?? undefined;
   } else if (clip.source?.textCanvas) {
-    textCanvas = clip.source.type === 'text' && options.interpolateTextBounds
-      ? getTextCanvasForExport(clip, clipLocalTime, options.ctx)
+    textCanvas = clip.source.type === 'text'
+      ? getTextCanvasForExport(clip, clipLocalTime, options.interpolateTextBounds ? options.ctx : undefined)
       : clip.source.textCanvas;
   }
 
@@ -92,21 +95,6 @@ function getTextCanvasForExport(
     return sourceCanvas;
   }
 
-  const hasBoundsKeyframes = hasTextBoundsKeyframes(clip.id);
-  if (!hasBoundsKeyframes) {
-    return sourceCanvas;
-  }
-
-  const interpolatedTextBounds = ctx?.getInterpolatedTextBounds(clip.id, clipLocalTime);
-  if (!interpolatedTextBounds) {
-    return sourceCanvas;
-  }
-
-  const runtimeCanvas = textRenderer.createCanvas(sourceCanvas.width, sourceCanvas.height);
-  textRenderer.render({
-    ...clip.textProperties,
-    boxEnabled: true,
-    textBounds: interpolatedTextBounds,
-  }, runtimeCanvas);
-  return runtimeCanvas;
+  const interpolatedTextBounds = hasTextBoundsKeyframes(clip.id) ? ctx?.getInterpolatedTextBounds(clip.id, clipLocalTime) : undefined;
+  return renderTextFrame(clip, useTimelineStore.getState().clipKeyframes.get(clip.id) ?? [], clipLocalTime, interpolatedTextBounds);
 }

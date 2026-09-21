@@ -1,5 +1,6 @@
 import { EffectOrderControls } from './EffectOrderControls';
 import { ControlNodeInspector } from './ControlNodeInspector';
+import { TextNodeParameters } from './TextNodeParameters';
 import { KeyframeNodeInspector } from '../keyframes/KeyframeNodeInspector';
 import { NodeAnimationInspector } from '../keyframes/NodeAnimationInspector';
 import { StabilizationNodeInspector } from './StabilizationNodeInspector';
@@ -305,6 +306,11 @@ export function NodeInspector({
   }
   if (clip && node.binding?.kind === 'scene-node') {
     return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}><SceneNodeParameters node={node} owner={clip} /></NodeInspectorShell>;
+  }
+  if (clip?.textProperties && (node.binding?.kind === 'clip-text' || node.binding?.kind === 'clip-source' && clip.source?.type === 'text')) {
+    return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
+      <TextNodeParameters key={`${clip.id}:${node.id}`} clip={clip} stage={node.binding.kind === 'clip-text' ? node.binding.stage : 'content'} />
+    </NodeInspectorShell>;
   }
   if (clip && node.binding?.kind === 'clip-stabilization') {
     return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>

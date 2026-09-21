@@ -52,6 +52,7 @@ import { isClipOnLockedTrack } from './keyframes/keyframeClipLookup';
 import { createKeyframeViewStateActions } from './keyframes/keyframeViewStateActions';
 import { resolveSpeedMutationTarget } from './helpers/linkedClipSpeed';
 import { normalizeTimelinePropertyValue } from './keyframes/keyframePropertyValue';
+import { parseTextProperty } from '../../services/text/textAnimation';
 
 export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => ({
   ...createKeyframeBasicActions(set, get),
@@ -123,6 +124,12 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
       // Not recording and no keyframes - update static value
       const clip = clips.find(c => c.id === clipId);
       if (!clip) return;
+
+      const textProperty = parseTextProperty(property);
+      if (textProperty && clip.textProperties) {
+        updateTextProperties(clipId, { [textProperty]: valueForStorage });
+        return;
+      }
 
       const vectorAnimationState = parseVectorAnimationStateProperty(property);
       if (vectorAnimationState && isVectorAnimationSourceType(clip.source?.type)) {
@@ -381,6 +388,9 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
 
+    const textProperty = parseTextProperty(property);
+    if (textProperty && isClipOnLockedTrack(clips, get().tracks, clipId)) return;
+
     if (property === 'speed') {
       const target = resolveSpeedMutationTarget(clips, clipId);
       if (!target) return;
@@ -540,6 +550,8 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
           updateMask(clipId, mask.id, { featherQuality: Math.min(100, Math.max(1, Math.round(currentValue))) });
         }
       }
+    } else if (textProperty && clip.textProperties) {
+      get().updateTextProperties(clipId, { [textProperty]: normalizeTimelinePropertyValue(property, currentValue) });
     } else if (parseTextBoundsProperty(property)) {
       const textBoundsProperty = parseTextBoundsProperty(property)!;
       const textBounds = getClipTextBounds(clip);

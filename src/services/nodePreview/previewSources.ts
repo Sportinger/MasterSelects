@@ -12,6 +12,9 @@ import { clipLocalToKeyframeTime } from '../flock/time/flockKeyframeTime';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
 import { sourcePreview } from './sourcePreview';
 import { createParameterSourceEvaluator } from '../parameterSources/parameterSourceEvaluation';
+import { TEXT_NODE_STAGES } from '../text/textNodeStages';
+import { sampleTextProperties } from '../text/textAnimation';
+import { createCaptionFrameModel } from '../captions/captionRuntime';
 import type { PreviewFrame, PreviewRequest } from './previewTypes';
 import type { PreviewArtifactReader } from './PreviewArtifactReader';
 import { nodePreviewTextureTap } from './NodePreviewTextureTap';
@@ -47,6 +50,20 @@ export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewA
     } catch (error) { return { ...base, status: 'error', label: error instanceof Error ? error.message : String(error) }; }
   }
   const semantic = request.port?.metadata?.semanticKind;
+  if (clip.textProperties && (binding?.kind === 'clip-text' || binding?.kind === 'clip-source' && request.port?.type === 'text')) {
+    const stage = binding.kind === 'clip-text' ? binding.stage : 'content';
+    if (stage === 'render' && request.port?.type === 'texture') return sourcePreview(request, clip, sourceTime);
+    const properties = sampleTextProperties(clip.textProperties, state.clipKeyframes.get(clip.id) ?? [], localTime);
+    const content = clip.captionProperties ? createCaptionFrameModel({ captionClip: clip, clips: state.clips, tracks: state.tracks,
+      timelineTime: request.time, resolveSourceTime: (source, time) => state.getSourceTimeForClip(source.id, time - source.startTime) })?.tokens.map(token => token.text).join(' ') ?? '' : properties.text;
+    const lines = stage === 'content' ? content.split('\n')
+      : TEXT_NODE_STAGES[stage].fields.flatMap(field => {
+        const value = properties[field];
+        return value === undefined || typeof value === 'object' ? [] : [`${field}: ${value}`];
+      });
+    return { ...base, status: 'live', presentation: 'text', label: TEXT_NODE_STAGES[stage].label,
+      drawing: { kind: 'text', lines: lines.length ? lines : ['Empty text'] } };
+  }
   if (binding?.kind === 'flock-node') return flockPreview(request, clip, sourceTime, state.clipKeyframes.get(clip.id) ?? []);
   if (binding?.kind === 'effect-operator') {
     const effect = findClipOperatorEffect(clip, binding.effectId);

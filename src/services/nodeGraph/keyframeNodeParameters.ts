@@ -8,6 +8,7 @@ import { hexToRgb01, mergeLightClipSettings } from '../../types/light';
 import { effectOperatorGraph, effectOperatorParams, hasEffectOperatorGraph } from '../operators/effectGraphOwner';
 import { getEffectOperator } from '../operators/operatorRegistry';
 import { getKeyframeTimeBasis } from '../flock/time/flockKeyframeTime';
+import { TEXT_NODE_STAGES } from '../text/textNodeStages';
 
 export interface KeyframeNodeParameter {
   property: AnimatableProperty;
@@ -83,6 +84,11 @@ export function keyframeNodeParameters(clip: TimelineClip): KeyframeNodeParamete
 }
 
 export function parameterNode(clip: TimelineClip, property: string, nodes: readonly NodeGraphNode[]): NodeGraphNode | undefined {
+  if (property.startsWith('text.')) {
+    const stage = Object.entries(TEXT_NODE_STAGES).find(([, definition]) => (definition.fields as readonly string[]).includes(property.slice(5)))?.[0];
+    return nodes.find(node => node.binding?.kind === 'clip-text' && node.binding.stage === stage)
+      ?? nodes.find(node => node.binding?.kind === 'clip-text' && node.binding.stage === 'render');
+  }
   if (/^(opacity$|speed$|position\.|anchor\.|scale\.|rotation\.)/.test(property)) {
     const transform = nodes.find(node => node.binding?.kind === 'clip-transform')
       ?? nodes.find(node => node.binding?.kind === 'scene-operator' && node.binding.operator === 'scene.clip-transform')

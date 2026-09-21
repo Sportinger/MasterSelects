@@ -73,6 +73,7 @@ export function nodePreviewPreferenceKey(clipId: string, node: NodeGraphNode): s
 export function nodePreviewKey(clipId: string, node: NodeGraphNode, portId?: string): string {
   const port = previewOutput(node, portId), binding = node.binding;
   const source = binding?.kind === 'clip-source' || (binding?.kind === 'effect-operator' && binding.operator === 'media.source')
+    || (binding?.kind === 'clip-text' && binding.stage === 'render')
     || (binding?.kind === 'scene-operator' && binding.operator === 'image.frame');
   if (source && port?.type === 'texture' && !port.metadata?.sourceArtifact && (!port.metadata?.semanticKind || port.metadata.semanticKind === 'operator:image')) return JSON.stringify([clipId, 'source-image']);
   if (binding?.kind === 'color-node' && port?.type === 'texture') {

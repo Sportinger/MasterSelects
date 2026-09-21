@@ -7,6 +7,8 @@ import { getClipSourceTimeAtTimelineTime, getClipTimeInfo } from './FrameContext
 import { buildLayerBuilderTextLayer, buildNestedTextSourceLayer } from './layerBuilder2dSources';
 import type { TransformCache } from './TransformCache';
 import type { FrameContext } from './types';
+import { renderTextFrame } from '../text/textFrameRuntime';
+import { sampleTextProperties } from '../text/textAnimation';
 
 type BuildCanvasBackedLayerParams = {
   clip: TimelineClip;
@@ -41,6 +43,7 @@ export function syncLayerBuilderCanvasRuntimeSources(ctx: FrameContext): void {
       ctx.hasKeyframes(clip.id, 'textBounds.path') ||
       ctx.hasKeyframes(clip.id, 'textBounds.position.x') ||
       ctx.hasKeyframes(clip.id, 'textBounds.position.y');
+    const sampled = sampleTextProperties(clip.textProperties, ctx.getClipKeyframes?.(clip.id) ?? [], timeInfo.clipLocalTime);
     renderCaptionTextClipFrame({
       captionClip: clip,
       clips: ctx.clips,
@@ -49,8 +52,8 @@ export function syncLayerBuilderCanvasRuntimeSources(ctx: FrameContext): void {
       resolveSourceTime: (sourceClip, timelineTime) =>
         getClipSourceTimeAtTimelineTime(ctx, sourceClip, timelineTime),
       textPropertiesOverride: hasBoundsKeyframes && interpolatedTextBounds
-        ? { ...clip.textProperties, boxEnabled: true, textBounds: interpolatedTextBounds }
-        : undefined,
+        ? { ...sampled, boxEnabled: true, textBounds: interpolatedTextBounds }
+        : sampled === clip.textProperties ? undefined : sampled,
     });
   }
 
@@ -113,6 +116,13 @@ export function buildNestedLayerBuilderCanvasBackedSourceLayer(
     nestedClip.source?.type === 'solid' ||
     nestedClip.source?.type === 'text'
   ) {
+    if (nestedClip.source.type === 'text' && nestedClip.textProperties) {
+      const keys = ctx.getClipKeyframes?.(nestedClip.id) ?? [];
+      const bounds = keys.some(key => key.property.startsWith('textBounds.'))
+        ? ctx.getInterpolatedTextBounds(nestedClip.id, nestedClipLocalTime) : undefined;
+      const canvas = renderTextFrame(nestedClip, keys, nestedClipLocalTime, bounds);
+      return canvas ? buildNestedTextSourceLayer(baseLayer, canvas) : null;
+    }
     return nestedClip.source.textCanvas ? buildNestedTextSourceLayer(baseLayer, nestedClip.source.textCanvas) : null;
   }
 

@@ -1,5 +1,6 @@
 import { getAudioEffect, hasAudioEffect } from '../../engine/audio/AudioEffectRegistry';
 import { sourceArtifactPorts } from './sourceArtifactPorts';
+import { hasTextSourceGraph } from './textGraphProjection';
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import { ensureColorCorrectionState, getActiveColorVersion } from '../../types/colorCorrection';
 import {
@@ -34,6 +35,7 @@ export function isVisualSource(clip: TimelineClip): boolean {
 }
 
 export function sourceOutputType(clip: TimelineClip): NodeGraphSignalType {
+  if (hasTextSourceGraph(clip)) return 'text';
   switch (clip.source?.type) {
     case 'model':
     case 'gaussian-avatar':

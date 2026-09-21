@@ -89,7 +89,7 @@ export function createValidatedManualEdge(
   return edge(connection.fromNodeId, connection.fromPortId, connection.toNodeId, connection.toPortId, fromPort.type);
 }
 
-export function validateManualEdges(graph: Pick<NodeGraph, 'nodes'>, manualEdges: NodeGraphEdge[]): NodeGraphEdge[] {
+export function validateManualEdges(graph: Pick<NodeGraph, 'nodes'> & Partial<Pick<NodeGraph, 'edges'>>, manualEdges: NodeGraphEdge[]): NodeGraphEdge[] {
   const nextEdges: NodeGraphEdge[] = [];
   const connectedInputs = new Set<string>();
   const edgeIds = new Set<string>();
@@ -111,7 +111,8 @@ export function validateManualEdges(graph: Pick<NodeGraph, 'nodes'>, manualEdges
     nextEdges.push(nextEdge);
   }
 
-  return nextEdges;
+  // Recorded dependencies are always supplied by the owner, not editable manual wiring.
+  return [...nextEdges, ...(graph.edges ?? []).filter(candidate => candidate.readOnly && !edgeIds.has(candidate.id))];
 }
 
 export function cloneLayout(layout: NodeGraphLayout): NodeGraphLayout {

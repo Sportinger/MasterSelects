@@ -11,6 +11,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import { DEFAULT_TEXT_PROPERTIES } from '../../stores/timeline/constants';
 import { googleFontsService, POPULAR_FONTS } from '../../services/googleFontsService';
 import { LabeledValue } from './properties/transformTab/ValueControls';
+import { TextAnimatedNumberRow } from './properties/TextAnimatedNumberRow';
 import {
   PROPERTY_VALUE_RESET_TITLE,
   resetPropertyValueOnContextMenu,
@@ -186,6 +187,8 @@ function TextBoundsPathKeyframeToggle({
 }
 
 interface TextTabProps {
+  disabled?: boolean;
+  scope?: 'all' | 'content' | 'typography' | 'layout' | 'fill' | 'stroke' | 'shadow';
   clipId: string;
   textProperties: TextClipProperties;
   canvasSize?: { width: number; height: number };
@@ -205,6 +208,8 @@ export function TextTab({
   compact = false,
   resetDefaults,
   selectionPills = false,
+  scope = 'all',
+  disabled = false,
 }: TextTabProps) {
   const { updateTextProperties } = useTimelineStore();
   const [localText, setLocalText] = useState(textProperties.text);
@@ -216,14 +221,14 @@ export function TextTab({
 
   // Debounced text update - 50ms for near-instant preview
   useEffect(() => {
-    if (liveText) return;
+    if (liveText || disabled) return;
     const timer = setTimeout(() => {
       if (localText !== textProperties.text) {
         updateTextProperties(clipId, { text: localText });
       }
     }, 50);
     return () => clearTimeout(timer);
-  }, [liveText, localText, clipId, textProperties.text, updateTextProperties]);
+  }, [liveText, disabled, localText, clipId, textProperties.text, updateTextProperties]);
 
   // Load font when component mounts
   useEffect(() => {
@@ -350,7 +355,7 @@ export function TextTab({
 
   return (
     <div className={`tt tt--inspector transform-tab-compact${compact ? ' tt--compact' : ''}`}>
-      {!hideContent && (
+      {!hideContent && (scope === 'all' || scope === 'content') && (
         <ResolveInspectorSection indicator="none" title="Content">
           <ResolveInspectorRow label="Text">
             <textarea
@@ -366,7 +371,8 @@ export function TextTab({
         </ResolveInspectorSection>
       )}
 
-      <ResolveInspectorSection indicator="none" title="Text">
+      {(scope === 'all' || scope === 'typography' || scope === 'fill') && <ResolveInspectorSection indicator="none" title={scope === 'fill' ? 'Fill' : 'Text'}>
+        {scope !== 'fill' && <>
         <ResolveInspectorRow label="Font">
           <InspectorSelect
             ariaLabel="Font family"
@@ -416,25 +422,16 @@ export function TextTab({
             />
           </div>
         </ResolveInspectorRow>
-        <ResolveInspectorRow label="Metrics">
-          <div className="resolve-inspector-values resolve-inspector-values--pair">
-            <TextValue title="Font Size" value={textProperties.fontSize} onChange={value => updateProp('fontSize', value)} min={8} max={500} defaultValue={defaultProperties.fontSize} />
-            <span aria-hidden="true" />
-            <TextValue title="Line Height" value={textProperties.lineHeight} onChange={value => updateProp('lineHeight', value)} min={0.5} max={3} step={0.1} unit="" defaultValue={defaultProperties.lineHeight} />
-          </div>
-        </ResolveInspectorRow>
-        <ResolveInspectorRow label="Tracking">
-          <div className="tt-inspector-single-value">
-            <TextValue title="Letter Spacing" value={textProperties.letterSpacing} onChange={value => updateProp('letterSpacing', value)} min={-10} max={50} defaultValue={defaultProperties.letterSpacing} />
-          </div>
-        </ResolveInspectorRow>
+        {(['fontSize', 'lineHeight', 'letterSpacing'] as const).map(parameter => <TextAnimatedNumberRow key={parameter}
+          clipId={clipId} parameter={parameter} baseValue={textProperties[parameter]} defaultValue={defaultProperties[parameter]} disabled={disabled} animatable={!liveText} />)}
 
-        <ResolveInspectorRow label="Fill">
+        </>}
+        {scope !== 'typography' && <ResolveInspectorRow label="Fill">
           {colorControl(textProperties.color, defaultProperties.color, 'Fill color', value => updateProp('color', value))}
-        </ResolveInspectorRow>
-      </ResolveInspectorSection>
+        </ResolveInspectorRow>}
+      </ResolveInspectorSection>}
 
-      <ResolveInspectorSection
+      {(scope === 'all' || scope === 'stroke') && <ResolveInspectorSection
         defaultOpen={textProperties.strokeEnabled}
         enabled={textProperties.strokeEnabled}
         onEnabledChange={enabled => updateProp('strokeEnabled', enabled)}
@@ -443,14 +440,11 @@ export function TextTab({
         <ResolveInspectorRow label="Color">
           {colorControl(textProperties.strokeColor, defaultProperties.strokeColor, 'Stroke color', value => updateProp('strokeColor', value))}
         </ResolveInspectorRow>
-        <ResolveInspectorRow label="Width">
-          <div className="tt-inspector-single-value">
-            <TextValue title="Stroke Width" value={textProperties.strokeWidth} onChange={value => updateProp('strokeWidth', value)} min={0.5} max={20} step={0.5} defaultValue={defaultProperties.strokeWidth} />
-          </div>
-        </ResolveInspectorRow>
-      </ResolveInspectorSection>
+        <TextAnimatedNumberRow clipId={clipId} parameter="strokeWidth" baseValue={textProperties.strokeWidth}
+          defaultValue={defaultProperties.strokeWidth} disabled={disabled} animatable={!liveText} />
+      </ResolveInspectorSection>}
 
-      <ResolveInspectorSection indicator="none" title="Paragraph">
+      {(scope === 'all' || scope === 'layout') && <><ResolveInspectorSection indicator="none" title="Paragraph">
         <ResolveInspectorRow label="Align">
           <div className="tt-align-row">
             <button aria-label="Align left" className={textProperties.textAlign === 'left' ? 'active' : ''} onClick={() => updateProp('textAlign', 'left')} onContextMenu={event => resetPropertyValueOnContextMenu(event, () => updateProp('textAlign', defaultProperties.textAlign))} title={`Left — ${PROPERTY_VALUE_RESET_TITLE}`} type="button"><IconAlignLeft /></button>
@@ -493,9 +487,9 @@ export function TextTab({
             <span>Rectangular</span>
           </button>
         </ResolveInspectorRow>
-      </ResolveInspectorSection>
+      </ResolveInspectorSection></>}
 
-      <ResolveInspectorSection
+      {(scope === 'all' || scope === 'shadow') && <ResolveInspectorSection
         defaultOpen={textProperties.shadowEnabled}
         enabled={textProperties.shadowEnabled}
         onEnabledChange={enabled => updateProp('shadowEnabled', enabled)}
@@ -504,19 +498,9 @@ export function TextTab({
         <ResolveInspectorRow label="Color">
           {colorControl(textProperties.shadowColor, defaultProperties.shadowColor, 'Shadow color', value => updateProp('shadowColor', value))}
         </ResolveInspectorRow>
-        <ResolveInspectorRow label="Offset">
-          <div className="resolve-inspector-values resolve-inspector-values--pair">
-            <TextValue title="Shadow Offset X" value={textProperties.shadowOffsetX} onChange={value => updateProp('shadowOffsetX', value)} min={-50} max={50} defaultValue={defaultProperties.shadowOffsetX} />
-            <span aria-hidden="true" />
-            <TextValue title="Shadow Offset Y" value={textProperties.shadowOffsetY} onChange={value => updateProp('shadowOffsetY', value)} min={-50} max={50} defaultValue={defaultProperties.shadowOffsetY} />
-          </div>
-        </ResolveInspectorRow>
-        <ResolveInspectorRow label="Blur">
-          <div className="tt-inspector-single-value">
-            <TextValue title="Shadow Blur" value={textProperties.shadowBlur} onChange={value => updateProp('shadowBlur', value)} min={0} max={50} defaultValue={defaultProperties.shadowBlur} />
-          </div>
-        </ResolveInspectorRow>
-      </ResolveInspectorSection>
+        {(['shadowOffsetX', 'shadowOffsetY', 'shadowBlur'] as const).map(parameter => <TextAnimatedNumberRow key={parameter}
+          clipId={clipId} parameter={parameter} baseValue={textProperties[parameter]} defaultValue={defaultProperties[parameter]} disabled={disabled} animatable={!liveText} />)}
+      </ResolveInspectorSection>}
     </div>
   );
 }

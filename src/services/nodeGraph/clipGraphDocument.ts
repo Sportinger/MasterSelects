@@ -1,4 +1,5 @@
 import { colorNodePorts } from './colorGraphPorts';
+import { buildTextSourceGraph } from './textGraphProjection';
 import {
   ensureColorCorrectionState,
   getActiveColorVersion,
@@ -145,12 +146,13 @@ export function buildClipNodeGraphDocument(
   );
   const colorGraph = buildClipColorNodeGraph(clip);
   const flockGraph = buildClipFlockNodeGraph(clip);
+  const textGraph = buildTextSourceGraph(clip);
 
   return {
     id: `clip-graph-document:${clip.id}`,
     owner: rootGraph.owner,
     rootGraphId: rootGraph.id,
-    graphs: [rootGraph, ...(flockGraph ? [flockGraph] : []), ...(colorGraph ? [colorGraph] : [])],
+    graphs: [rootGraph, ...(textGraph ? [textGraph] : []), ...(flockGraph ? [flockGraph] : []), ...(colorGraph ? [colorGraph] : [])],
     views: buildViews(rootGraph, colorGraph, flockGraph),
   };
 }

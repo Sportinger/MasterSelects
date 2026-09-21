@@ -1,6 +1,6 @@
 import type { BlendMode, Layer, TimelineClip } from '../../types';
 import { getLazyImageElementForClip } from '../timeline/lazyImageElements';
-import { textRenderer } from '../textRenderer';
+import { renderTextFrame } from '../text/textFrameRuntime';
 import { getClipTimeInfo } from './FrameContext';
 import { withLayerBuilderMaskProperties } from './layerBuilderLayerPostProcessing';
 import type { TransformCache } from './TransformCache';
@@ -102,20 +102,13 @@ export function buildLayerBuilderTextLayer(
   const interpolatedTextBounds = params.clip.textProperties
     ? params.ctx.getInterpolatedTextBounds(params.clip.id, timeInfo.clipLocalTime)
     : undefined;
-  if (!params.clip.captionProperties && params.clip.textProperties && interpolatedTextBounds && textCanvas) {
+  if (!params.clip.captionProperties && params.clip.textProperties && textCanvas) {
     const hasBoundsKeyframes =
       params.ctx.hasKeyframes(params.clip.id, 'textBounds.path') ||
       params.ctx.hasKeyframes(params.clip.id, 'textBounds.position.x') ||
       params.ctx.hasKeyframes(params.clip.id, 'textBounds.position.y');
-    if (hasBoundsKeyframes) {
-      const runtimeCanvas = textRenderer.createCanvas(textCanvas.width, textCanvas.height);
-      textRenderer.render({
-        ...params.clip.textProperties,
-        boxEnabled: true,
-        textBounds: interpolatedTextBounds,
-      }, runtimeCanvas);
-      textCanvas = runtimeCanvas;
-    }
+    textCanvas = renderTextFrame(params.clip, params.ctx.getClipKeyframes?.(params.clip.id) ?? [],
+      timeInfo.clipLocalTime, hasBoundsKeyframes ? interpolatedTextBounds : undefined) ?? textCanvas;
   }
 
   return buildLayer2dSource({

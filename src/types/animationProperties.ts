@@ -6,6 +6,7 @@ import type {
 import type { MotionProperty } from './motionDesign';
 import type { LightProperty } from './light';
 import type { FlockProperty } from './flock';
+import type { TextProperty } from '../services/text/textAnimation';
 
 // Keyframe animation types
 export type EasingType = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'bezier';
@@ -62,7 +63,7 @@ export type TextBoundsProperty = TextBoundsPathProperty | TextBoundsNumericPrope
 export type TransitionRenderProperty = 'transitionRender.progress';
 
 // Combined animatable property type
-export type AnimatableProperty = TransformProperty | CameraProperty | LightProperty | EffectProperty | NodeGraphParamProperty | ColorProperty | MaskProperty | TextBoundsProperty | TransitionRenderProperty | VectorAnimationInputProperty | VectorAnimationStateProperty | VectorAnimationDataBindingPropertyPath | MotionProperty | FlockProperty;
+export type AnimatableProperty = TransformProperty | CameraProperty | LightProperty | EffectProperty | NodeGraphParamProperty | ColorProperty | MaskProperty | TextBoundsProperty | TextProperty | TransitionRenderProperty | VectorAnimationInputProperty | VectorAnimationStateProperty | VectorAnimationDataBindingPropertyPath | MotionProperty | FlockProperty;
 
 export function isCameraProperty(property: string): property is CameraProperty {
   return /^camera\.(fov|near|far|resolutionWidth|resolutionHeight)$/.test(property);

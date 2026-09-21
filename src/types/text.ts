@@ -1,5 +1,7 @@
 import type { TextBoundsPath } from './masks';
 
+export type TextNodeStage = 'content' | 'typography' | 'layout' | 'fill' | 'stroke' | 'shadow' | 'render';
+
 // Text clip typography properties
 export interface TextClipProperties {
   // Content

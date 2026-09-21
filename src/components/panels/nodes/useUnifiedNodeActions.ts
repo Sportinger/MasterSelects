@@ -39,6 +39,19 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
       connectPorts: c => connectControlNodes(clip.id, { nodeId: c.fromNodeId, portId: c.fromPortId }, { nodeId: c.toNodeId, portId: c.toPortId }),
       toggleBypass: () => {},
     };
+    if (binding?.kind === 'clip-text') return {
+      moveNode: (_id, layout) => {
+        const state = readTimelineRuntimeState(useTimelineStore), current = state.clips.find(candidate => candidate.id === clip.id);
+        if (!current || state.isExporting || state.tracks.find(track => track.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
+        const model = current.nodeGraph ?? createClipNodeGraphState(current), group = model.groups?.text;
+        state.updateClip(clip.id, { nodeGraph: { ...model, groups: { ...model.groups, text: { ...group,
+          nodeLayouts: { ...group?.nodeLayouts, [binding.stage]: layout } } } } });
+      },
+      deleteNode: () => { throw new Error('This node belongs to the text renderer. Edit its settings in the inspector.'); },
+      connectPorts: () => { throw new Error('Text processing links follow the shared text renderer.'); },
+      disconnectEdge: () => { throw new Error('Text processing links follow the shared text renderer.'); },
+      toggleBypass: () => {},
+    };
     if (binding?.kind === 'clip-stabilization') return {
       moveNode: (_id, layout) => {
         const state = readTimelineRuntimeState(useTimelineStore), current = state.clips.find(candidate => candidate.id === clip.id);

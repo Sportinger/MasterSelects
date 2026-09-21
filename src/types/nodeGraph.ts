@@ -86,6 +86,7 @@ export type SceneNodeRole = 'geometry' | 'material' | 'transform' | 'render' | '
 
 export type NodeGraphNodeBinding =
   | { kind: 'parameter-source'; nodeId: string }
+  | { kind: 'clip-text'; stage: import('./text').TextNodeStage }
   | { kind: 'clip-stabilization'; stage: 'solve' | 'keyframes' }
   | { kind: 'keyframe-node'; nodeId: string }
   | { kind: 'scene-operator'; nodeId: string; operator: string }

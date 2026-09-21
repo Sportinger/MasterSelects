@@ -65,17 +65,18 @@ export function withClipSceneGraph(document: NodeGraphDocument, clip: TimelineCl
     inputs: [port('input', inputType, 'input')], outputs: [port('output', 'texture', 'output')], subgraphId: graph.id,
     binding: { kind: 'scene-node', clipId: clip.id, nodeId: 'render', role: 'render' } };
   // Match the runtime: source effects before cable geometry, then scene projection, grade and post effects.
-  const mainIds = new Set(['source', 'transform', 'mask', 'color', 'output', ...clip.effects.filter(e => root.nodes.some(n => n.id === `effect-${e.id}` && n.inputs.some(p => p.type !== 'audio'))).map(e => `effect-${e.id}`),
+  const mainIds = new Set(['source', 'text-render', 'transform', 'mask', 'color', 'output', ...clip.effects.filter(e => root.nodes.some(n => n.id === `effect-${e.id}` && n.inputs.some(p => p.type !== 'audio'))).map(e => `effect-${e.id}`),
     ...root.nodes.filter(n => n.binding?.kind === 'clip-custom-node' && n.inputs.some(p => p.id === 'input' && p.type === 'texture')).map(n => n.id)]);
   const before = root.nodes.filter(n => mainIds.has(n.id) && !['transform', 'color', 'output'].includes(n.id));
   const geometryEffect = cable || voxel;
   const cableIndex = geometryEffect ? before.findIndex(n => n.id === `effect-${geometryEffect.id}`) : -1;
-  const split = cableIndex >= 0 ? cableIndex + 1 : 1;
+  const split = cableIndex >= 0 ? cableIndex + 1 : before.some(node => node.id === 'text-render') ? 2 : 1;
   const ordered = [...before.slice(0, split), proxy, ...root.nodes.filter(n => n.id === 'color'), ...before.slice(split), root.nodes.find(n => n.id === 'output')!];
   const otherEdges = root.edges.filter(e => !(mainIds.has(e.fromNodeId) && mainIds.has(e.toNodeId) && ['texture', 'geometry'].includes(e.type)));
   const mainNodes = ordered.map((n, i) => ({ ...n, inputs: n.inputs.map(p => ({ ...p })), outputs: n.outputs.map(p => ({ ...p })), layout: clip.nodeGraph?.nodes.find(stored => stored.id === n.id)?.layout ?? { ...n.layout, x: i * 280 } }));
   for (let i = 1; i < mainNodes.length; i++) {
     const from = mainNodes[i - 1], to = mainNodes[i];
+    if (to.id === 'text-render') continue; // Retain the recorded text dependency, not a geometry/image cable.
     const output = from.outputs.find(p => p.id === 'output') ?? from.outputs[0];
     const input = to.inputs.find(p => p.id === 'input') ?? to.inputs[0];
     if (!output || !input) continue;
