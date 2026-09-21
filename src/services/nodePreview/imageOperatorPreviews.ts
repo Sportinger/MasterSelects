@@ -14,6 +14,23 @@ import { compileAnalogSignalGraph } from '../operators/analogSignalGraph';
 import type { ImageOperatorPreviewTarget } from './imageOperatorPreviewStages';
 
 type PreviewValue = NonNullable<PreviewFrame['values']>[number];
+type ScalarPreview = { graph: EffectOperatorGraph; selected: EffectOperatorGraph['nodes'][number];
+  evaluate: () => number | undefined; values: PreviewValue[] };
+const EMPTY_KEYS: Keyframe[] = [];
+const preparedPreviews = new WeakMap<Effect, { signature: string; graph: EffectOperatorGraph;
+  keys?: Keyframe[]; time?: number; compiler?: ImageOperatorPreviewCompiler; values: Map<string, ScalarPreview | undefined> }>();
+
+/** All visible ports of an unchanged effect share its validated graph and scalar
+ * results. Folding, panning and retrying a texture tap must not rebuild its shader. */
+function preparedPreview(effect: Effect) {
+  const signature = JSON.stringify([effect.type, effect.params, effect.operatorGraph]);
+  let prepared = preparedPreviews.get(effect);
+  if (!prepared || prepared.signature !== signature) {
+    prepared = { signature, graph: effectOperatorGraph(effect), values: new Map() };
+    preparedPreviews.set(effect, prepared);
+  }
+  return prepared;
+}
 
 const previewOperatorIds = new Set([...IMAGE_OPERATORS.map(operator => operator.id), 'values.number', 'values.boolean', 'values.color', 'values.choice']);
 
@@ -54,10 +71,25 @@ export type ImageOperatorPreviewCompiler = (graph: EffectOperatorGraph, params: 
   target: ImageOperatorPreviewTarget) => ReturnType<typeof compileImageOperatorPreview>;
 
 function imageScalarValues(request: PreviewRequest, effect: Effect, keys: Keyframe[], time: number,
-  compilePreview?: ImageOperatorPreviewCompiler) {
+  compilePreview?: ImageOperatorPreviewCompiler): ScalarPreview | undefined {
   const binding = request.node.binding;
   if (binding?.kind !== 'effect-operator') return undefined;
-  const ownerGraph = effectOperatorGraph(effect), selected = ownerGraph.nodes.find(node => node.id === binding.nodeId);
+  const definition = getEffectOperator(binding.operator);
+  if (!definition || ![...definition.inputs, ...definition.outputs].some(port => port.type === 'number')) return undefined;
+  const prepared = preparedPreview(effect), sampledKeys = keys.length ? keys : EMPTY_KEYS, sampledTime = keys.length ? time : 0;
+  if (prepared.keys !== sampledKeys || prepared.time !== sampledTime || prepared.compiler !== compilePreview) {
+    prepared.keys = sampledKeys; prepared.time = sampledTime; prepared.compiler = compilePreview; prepared.values.clear();
+  }
+  if (!prepared.values.has(binding.nodeId)) prepared.values.set(binding.nodeId,
+    evaluateScalarValues(request, effect, keys, time, prepared.graph, compilePreview));
+  return prepared.values.get(binding.nodeId);
+}
+
+function evaluateScalarValues(request: PreviewRequest, effect: Effect, keys: Keyframe[], time: number,
+  ownerGraph: EffectOperatorGraph, compilePreview?: ImageOperatorPreviewCompiler): ScalarPreview | undefined {
+  const binding = request.node.binding;
+  if (binding?.kind !== 'effect-operator') return undefined;
+  const selected = ownerGraph.nodes.find(node => node.id === binding.nodeId);
   const params = { ...effectOperatorParams(effect) };
   if (!selected) return undefined;
   for (const node of ownerGraph.nodes) if (['values.number', 'values.integer'].includes(node.operator) && typeof node.bindings.value === 'string') {
@@ -97,7 +129,7 @@ export function imageOperatorValuePreview(request: PreviewRequest, clip: Timelin
   time = Math.max(0, request.time - clip.startTime), compilePreview?: ImageOperatorPreviewCompiler): PreviewFrame | undefined {
   const binding = request.node.binding;
   if (binding?.kind === 'effect-operator') {
-    const selected = effectOperatorGraph(effect).nodes.find(node => node.id === binding.nodeId);
+    const selected = preparedPreview(effect).graph.nodes.find(node => node.id === binding.nodeId);
     if (selected?.operator === 'image.kernel-index' || selected?.operator === 'image.sequence-index') {
       const scope = selected.operator === 'image.kernel-index' ? 'Kernel' : 'Sequence';
       return { key: request.key, revision: request.revision, time: request.time, status: 'missing', label: `${scope} scope only`,

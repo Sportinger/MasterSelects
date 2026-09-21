@@ -96,6 +96,9 @@ Editable values retain transparent DOM interaction targets; their controls becom
 visible during editing or keyboard focus. Unconnected operands can be dragged or typed
 directly; the touched number updates immediately while dependent calculations
 finish independently. Numeric jobs do not wait for image-preview readbacks.
+Unchanged image effects share a validated preview graph and cached scalar results
+across their visible ports. Panning, folding and texture-preview retries reuse
+those results; parameter, graph and animated sample changes invalidate them.
 For graph-local constants, inline and inspector controls share the same saved
 Min/Max/Default preference. Registry values are the fallback; typed values clamp
 to the effective range and right-click resets to the effective default. A numeric Value literal may use any finite customized range, while parameters with
@@ -318,6 +321,11 @@ for accurate alignment with the interaction targets.
 Geometry outside the buffer is culled and backing stores are bounded to 4096 pixels per
 dimension and 8 million pixels per layer. Canvas dimensions never follow the
 full graph bounds.
+The worker rasterizes its 2D layers and preview atlas in software before handing
+one composed bitmap to the browser. This avoids GPU-backed Canvas 2D stalls on
+large, zoomed views, observed on Windows/AMD. Pointer movement still transforms
+the last complete bitmap immediately while the worker prepares the next frame;
+this changes only graph drawing, not the GPU effect renderer.
 
 The original DOM retains hit targets, tooltips and keyboard navigation only in
 the viewport plus a 256 CSS-pixel margin. Node cards, cable hit paths and port

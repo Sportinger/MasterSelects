@@ -54,11 +54,15 @@ self.onmessage = (event: MessageEvent<CanvasMessage>) => {
     if (message.type === 'init') {
       layers = Array.from({ length: 3 }, () => new OffscreenCanvas(1, 1));
       output = new OffscreenCanvas(1, 1);
-      const contexts = layers.map(layer => layer.getContext('2d'));
-      const composed = output.getContext('2d');
+      // These layers are copied into a bitmap every frame. GPU-backed 2D
+      // surfaces can stall browser composition for hundreds of milliseconds
+      // on large/zoomed graphs (notably Windows/AMD). Keep rasterization and
+      // copies in this worker; the main thread only presents the final bitmap.
+      const contexts = layers.map(layer => layer.getContext('2d', { willReadFrequently: true }));
+      const composed = output.getContext('2d', { willReadFrequently: true });
       if (!contexts[0] || !contexts[1] || !contexts[2] || !composed) throw new Error('Canvas 2D unavailable');
       context = composed;
-      painter = new NodeCanvasPainter(contexts[0], contexts[2], contexts[1], () => new OffscreenCanvas(1, 1).getContext('2d'));
+      painter = new NodeCanvasPainter(contexts[0], contexts[2], contexts[1], () => new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true }));
     } else painter?.update(message);
     dirty = true;
     if (message.type === 'previews') post({ type: 'previews-ready', batchId: message.batchId, previewCount: painter?.previewCount });
