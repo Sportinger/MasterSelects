@@ -225,6 +225,15 @@ normalizes the accumulated light, applies Amount, and clamps RGB. Source-center
 alpha is preserved exactly. The default graph remains a single pass, including
 the original width-based radius scaling and fractional quality defaults.
 
+Wave, Twirl, Bulge and Kaleidoscope use editable UV/math graphs followed by a
+single image sample. Wave preserves its sequential cross-axis displacement;
+Twirl and Bulge retain their strict radius tests and original center behavior.
+Kaleidoscope retains fractional segment counts and its reflected angular fold.
+All four preserve the existing parameter IDs, defaults and ranges. Their RGBA
+output is sampled at the transformed coordinates, including alpha, with the
+existing linear/clamp sampler. Rewiring the sample to the original UV bypasses
+the distortion without introducing another render pass.
+
 ### Graph-internal texture stages
 
 `image.materialize` creates an explicit texture boundary inside an image graph.

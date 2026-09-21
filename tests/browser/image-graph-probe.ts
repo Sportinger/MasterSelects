@@ -16,6 +16,7 @@ import { checkImageMaterializationGpu } from './image-materialization-gpu-check'
 import { checkDirectionalBlurGpu } from './image-directional-blur-gpu-check';
 import { checkEdgeDetectGpu } from './image-edge-detect-gpu-check';
 import { checkGlowGpu } from './image-glow-gpu-check';
+import { checkUvDistortGpu } from './image-uv-distort-gpu-check';
 
 async function checkGpu() {
   const adapter = await navigator.gpu?.requestAdapter();
@@ -86,7 +87,8 @@ async function checkGpu() {
     const directionalBlurComparisons = await checkDirectionalBlurGpu(device);
     const edgeDetectComparisons = await checkEdgeDetectGpu(device);
     const glowComparisons = await checkGlowGpu(device);
-    const workerResult = `${await checkWorkerImageGraphGpu(device)}; ${colorComparisons} remaining-color, ${pointwiseComparisons} pointwise, ${vignetteComparisons} vignette, ${timeComparisons} time-effect, ${samplingComparisons} sampling-effect, ${blockComparisons} block-effect, ${blurComparisons} blur, ${materializationComparisons} materialization, ${directionalBlurComparisons} directional-blur, ${edgeDetectComparisons} edge-detect, and ${glowComparisons} Glow shader comparisons`;
+    const uvDistortComparisons = await checkUvDistortGpu(device);
+    const workerResult = `${await checkWorkerImageGraphGpu(device)}; ${colorComparisons} remaining-color, ${pointwiseComparisons} pointwise, ${vignetteComparisons} vignette, ${timeComparisons} time-effect, ${samplingComparisons} sampling-effect, ${blockComparisons} block-effect, ${blurComparisons} blur, ${materializationComparisons} materialization, ${directionalBlurComparisons} directional-blur, ${edgeDetectComparisons} edge-detect, ${glowComparisons} Glow, and ${uvDistortComparisons} UV-distort shader comparisons`;
     const validation = await device.popErrorScope();
     if (validation) throw new Error(validation.message);
     return `PASS: 64 RGBA pixels — legacy/default byte equality; bypass and rewired output equal input; alpha preserved; actual GPU output changes; ${workerResult}; no validation errors.`;

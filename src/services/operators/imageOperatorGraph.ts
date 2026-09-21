@@ -19,7 +19,7 @@ export interface ImageOperatorEvaluationContext {
 }
 export interface ImagePlanInstruction {
   nodeId: string;
-  operation: 'input' | 'uv' | 'resolution' | 'time' | 'sample-image' | 'resource-input' | 'kernel-index' | 'kernel-sum' | 'kernel-weight-sum' | 'rect-sum' | 'rect-weight-sum' | 'sequence-index' | 'sequence-t' | 'sequence-sum' | 'sequence-weight-sum' | 'mirror-repeat-vec2' | 'select-image' | 'constant' | 'parameter' | 'parameter-boolean' | 'parameter-color' | 'constant-color' | 'subtract' | 'add-scalar' | 'multiply-scalar' | 'divide-ieee-scalar' | 'reciprocal-scalar' | 'exp2-scalar' | 'exp-scalar' | 'gaussian-scalar' | 'sqrt-scalar' | 'fract-scalar' | 'floor-scalar' | 'step-scalar' | 'max-scalar' | 'clamp-scalar' | 'smoothstep-scalar' | 'mix-scalar' | 'greater-scalar' | 'and-boolean' | 'select-scalar' | 'add-vec2' | 'subtract-vec2' | 'multiply-vec2' | 'divide-vec2' | 'floor-vec2' | 'fract-vec2' | 'clamp-vec2' | 'reduce-min-vec2' | 'hash2d-vec2' | 'dot-vec2' | 'length-vec2' | 'unit-direction' | 'sin-scalar' | 'cos-scalar' | 'scalar-to-vec2' | 'scalar-to-vec4' | 'multiply-vec4' | 'multiply-vector-scalar' | 'divide-vector-scalar' | 'clamp-rgb-scalar' | 'divide-vec4' | 'subtract-rgb' | 'add-rgb' | 'multiply-rgb' | 'divide-ieee-rgb' | 'max-rgb' | 'power-rgb' | 'floor-rgb' | 'clamp-rgb' | 'mix-rgb' | 'mix-components-rgb' | 'reduce-min-rgb' | 'reduce-max-rgb' | 'luminance-rec601' | 'luminance-rec709' | 'scalar-to-rgb' | 'vec4-to-rgb' | 'rgb-to-vec3' | 'vec3-to-rgb' | 'rgb-to-hsv' | 'hsv-to-rgb' | 'split-rgb' | 'split-alpha' | 'combine' | 'image-to-vec4' | 'vec4-to-image' | 'split-component' | 'combine-vector';
+  operation: 'input' | 'uv' | 'resolution' | 'time' | 'sample-image' | 'resource-input' | 'kernel-index' | 'kernel-sum' | 'kernel-weight-sum' | 'rect-sum' | 'rect-weight-sum' | 'sequence-index' | 'sequence-t' | 'sequence-sum' | 'sequence-weight-sum' | 'mirror-repeat-vec2' | 'select-image' | 'constant' | 'parameter' | 'parameter-boolean' | 'parameter-color' | 'constant-color' | 'subtract' | 'add-scalar' | 'multiply-scalar' | 'divide-ieee-scalar' | 'min-scalar' | 'power-scalar' | 'atan2-scalar' | 'reciprocal-scalar' | 'exp2-scalar' | 'exp-scalar' | 'gaussian-scalar' | 'sqrt-scalar' | 'fract-scalar' | 'floor-scalar' | 'step-scalar' | 'max-scalar' | 'clamp-scalar' | 'smoothstep-scalar' | 'mix-scalar' | 'greater-scalar' | 'and-boolean' | 'select-scalar' | 'select-vec2' | 'add-vec2' | 'subtract-vec2' | 'multiply-vec2' | 'divide-vec2' | 'floor-vec2' | 'fract-vec2' | 'clamp-vec2' | 'reduce-min-vec2' | 'hash2d-vec2' | 'dot-vec2' | 'length-vec2' | 'unit-direction' | 'sin-scalar' | 'cos-scalar' | 'scalar-to-vec2' | 'scalar-to-vec4' | 'multiply-vec4' | 'multiply-vector-scalar' | 'divide-vector-scalar' | 'clamp-rgb-scalar' | 'divide-vec4' | 'subtract-rgb' | 'add-rgb' | 'multiply-rgb' | 'divide-ieee-rgb' | 'max-rgb' | 'power-rgb' | 'floor-rgb' | 'clamp-rgb' | 'mix-rgb' | 'mix-components-rgb' | 'reduce-min-rgb' | 'reduce-max-rgb' | 'luminance-rec601' | 'luminance-rec709' | 'scalar-to-rgb' | 'vec4-to-rgb' | 'rgb-to-vec3' | 'vec3-to-rgb' | 'rgb-to-hsv' | 'hsv-to-rgb' | 'split-rgb' | 'split-alpha' | 'combine' | 'image-to-vec4' | 'vec4-to-image' | 'split-component' | 'combine-vector';
   type: ImagePlanValue;
   inputs: number[];
   value?: number;
@@ -279,6 +279,11 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         register = current.bypassed ? a : emit({ nodeId: current.id, operation: 'max-scalar', type: 'scalar', inputs: [a, visitSource(current, 'b')] });
         break;
       }
+      case 'math.min.scalar': case 'math.power.scalar': {
+        const a = visitSource(current, 'a'), operation = current.operator === 'math.min.scalar' ? 'min-scalar' : 'power-scalar';
+        register = current.bypassed ? a : emit({ nodeId: current.id, operation, type: 'scalar', inputs: [a, visitSource(current, 'b')] }); break;
+      }
+      case 'math.atan2.scalar': register = emit({ nodeId: current.id, operation: 'atan2-scalar', type: 'scalar', inputs: [visitSource(current, 'y'), visitSource(current, 'x')] }); break;
       case 'math.clamp.scalar': {
         const value = visitSource(current, 'value');
         register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'clamp-scalar', type: 'scalar',
@@ -360,6 +365,8 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       case 'logic.and.boolean': register = emit({ nodeId: current.id, operation: 'and-boolean', type: 'boolean',
         inputs: [visitSource(current, 'a'), visitSource(current, 'b')] }); break;
       case 'select.scalar': register = emit({ nodeId: current.id, operation: 'select-scalar', type: 'scalar',
+        inputs: [visitSource(current, 'falseValue'), visitSource(current, 'trueValue'), visitSource(current, 'condition')] }); break;
+      case 'select.vec2': register = emit({ nodeId: current.id, operation: 'select-vec2', type: 'vec2',
         inputs: [visitSource(current, 'falseValue'), visitSource(current, 'trueValue'), visitSource(current, 'condition')] }); break;
       case 'convert.image-to-vec4': register = emit({ nodeId: current.id, operation: 'image-to-vec4', type: 'vec4', inputs: [visitSource(current, 'image')] }); break;
       case 'convert.vec4-to-image': register = emit({ nodeId: current.id, operation: 'vec4-to-image', type: 'image', inputs: [visitSource(current, 'value')] }); break;
@@ -477,6 +484,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       : item.operation === 'exp2-scalar' ? `exp2(${args[0]})` : item.operation === 'exp-scalar' ? `exp(${args[0]})` : item.operation === 'fract-scalar' ? `fract(${args[0]})`
       : item.operation === 'floor-scalar' ? `floor(${args[0]})` : item.operation === 'step-scalar' ? `step(${args[0]}, ${args[1]})`
       : item.operation === 'gaussian-scalar' ? `imageGraphGaussian(${args[0]}, ${args[1]})` : item.operation === 'sqrt-scalar' ? `sqrt(${args[0]})` : item.operation === 'max-scalar' ? `max(${args[0]}, ${args[1]})`
+      : item.operation === 'min-scalar' ? `min(${args[0]}, ${args[1]})` : item.operation === 'power-scalar' ? `pow(${args[0]}, ${args[1]})` : item.operation === 'atan2-scalar' ? `atan2(${args[0]}, ${args[1]})`
       : item.operation === 'clamp-scalar' ? `clamp(${args[0]}, min(${args[1]}, ${args[2]}), max(${args[1]}, ${args[2]}))` : item.operation === 'greater-scalar' ? `${args[0]} > ${args[1]}`
       : item.operation === 'and-boolean' ? `${args[0]} && ${args[1]}`
       : item.operation === 'smoothstep-scalar' ? `smoothstep(${args[0]}, ${args[1]}, ${args[2]})`
@@ -492,6 +500,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       : item.operation === 'scalar-to-vec4' ? `vec4f(${args[0]})` : item.operation === 'multiply-vec4' || item.operation === 'multiply-vector-scalar' ? `${args[0]} * ${args[1]}`
       : item.operation === 'divide-vector-scalar' ? `${args[0]} / ${args[1]}` : item.operation === 'clamp-rgb-scalar' ? `clamp(${args[0]}, vec3f(min(${args[1]}, ${args[2]})), vec3f(max(${args[1]}, ${args[2]})))` : item.operation === 'divide-vec4' ? `${args[0]} / ${args[1]}`
       : item.operation === 'select-scalar' ? `select(${args[0]}, ${args[1]}, ${args[2]})`
+      : item.operation === 'select-vec2' ? `select(${args[0]}, ${args[1]}, ${args[2]})`
       : item.operation === 'split-alpha' ? `${args[0]}.a` : item.operation === 'subtract-rgb' ? `${args[0]} - ${args[1]}`
       : item.operation === 'add-rgb' ? `${args[0]} + ${args[1]}` : item.operation === 'multiply-rgb' ? `${args[0]} * ${args[1]}`
       : item.operation === 'divide-ieee-rgb' ? `${args[0]} / ${args[1]}` : item.operation === 'max-rgb' ? `max(${args[0]}, ${args[1]})`

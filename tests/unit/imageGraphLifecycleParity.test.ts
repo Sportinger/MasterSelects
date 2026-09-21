@@ -124,6 +124,37 @@ describe('image graph lifecycle parity', () => {
     }
   });
 
+  it.each([
+    ['wave', 'amplitudeX', 0, .08], ['twirl', 'amount', -2, 3], ['bulge', 'amount', .2, 2.4], ['kaleidoscope', 'rotation', 0, 2.4],
+  ] as const)('keeps %s graph preview, export, dynamic values, and canonical restore aligned', async (type, parameter, from, to) => {
+    const id = `${type}-lifecycle`, clipId = `${type}-clip`, effect: Effect = { id, type, name: type, enabled: true, params: {}, operatorGraph: effectOperatorGraph({ type, params: {} }) };
+    const property = `effect.${id}.${parameter}` as Keyframe['property'];
+    const keys: Keyframe[] = [{ id: `${id}-0`, clipId, property, time: 0, value: from, easing: 'linear' }, { id: `${id}-2`, clipId, property, time: 2, value: to, easing: 'linear' }];
+    const clip = createMockClip({ id: clipId, effects: [effect], source: { type: 'solid' }, solidColor: '#315779' } as Partial<TimelineClip>);
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })], clipKeyframes: new Map([[clip.id, keys]]) });
+    const evaluate = (candidate: Effect) => {
+      const plan = compileImageOperatorGraph(effectOperatorGraph(candidate), effectOperatorParams(candidate));
+      return { plan, value: evaluateImageOperatorPlan(plan, pixel, { uv: [.71, .36], sampleImage: ([u, v]) => [u, v, u * .3 + v * .2, .2 + u * .6] }) };
+    };
+    const endpointPlans: ReturnType<typeof compileImageOperatorGraph>[] = [];
+    for (const time of [0, 1, 2]) {
+      const preview = useTimelineStore.getState().getInterpolatedEffects(clip.id, time)[0];
+      const exported = buildBaseLayerProps(clip, time, 0, { time, getInterpolatedTransform: () => clip.transform,
+        getInterpolatedEffects: (_clipId: string, at: number) => evaluateCompositionClipEffects([effect], keys, at), getInterpolatedColorCorrection: () => undefined } as never)!.effects[0];
+      const previewResult = evaluate(preview), exportResult = evaluate(exported);
+      expect(previewResult.value).toEqual(exportResult.value);
+      expect(previewResult.plan.key).toBe(exportResult.plan.key);
+      endpointPlans.push(previewResult.plan);
+    }
+    expect(new Set(endpointPlans.map(plan => plan.key))).toHaveLength(1);
+    expect(endpointPlans[0].values).not.toEqual(endpointPlans[2].values);
+    const serialized = createSerializableTimelineState(useTimelineStore.getState());
+    await useTimelineStore.getState().loadState(JSON.parse(JSON.stringify(serialized)));
+    const restored = useTimelineStore.getState().clips.find(candidate => candidate.id === clip.id)!.effects[0];
+    expect(effectOperatorGraph(restored)).toEqual(effect.operatorGraph);
+    expect(evaluate(restored).plan.key).toBe(endpointPlans[0].key);
+  });
+
   it.each(['scanlines', 'grain'] as const)('repeats and seeks %s from explicit composition time', type => {
     const effect: Effect = { id: `${type}-time`, type, name: type, enabled: true,
       params: type === 'scanlines' ? { density: 5, opacity: 0.6, speed: 2, seed: 0 }

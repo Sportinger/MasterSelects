@@ -98,6 +98,9 @@ export function evaluateImageOperatorPlan(plan: ImageOperatorPlan, pixel: [numbe
     else if (item.operation === 'floor-scalar') values.push(Math.floor(args[0] as number));
     else if (item.operation === 'step-scalar') values.push((args[1] as number) < (args[0] as number) ? 0 : 1);
     else if (item.operation === 'max-scalar') values.push(Math.max(args[0] as number, args[1] as number));
+    else if (item.operation === 'min-scalar') values.push(evaluateScalarOperation('min', args[0] as number, args[1] as number));
+    else if (item.operation === 'power-scalar') values.push((args[0] as number) ** (args[1] as number));
+    else if (item.operation === 'atan2-scalar') values.push(Math.atan2(args[0] as number, args[1] as number));
     else if (item.operation === 'clamp-scalar') values.push(evaluateScalarOperation('clamp', args[0] as number, args[1] as number, args[2] as number));
     else if (item.operation === 'and-boolean') values.push((args[0] as boolean) && (args[1] as boolean));
     else if (item.operation === 'smoothstep-scalar') {
@@ -129,6 +132,7 @@ export function evaluateImageOperatorPlan(plan: ImageOperatorPlan, pixel: [numbe
     else if (item.operation === 'divide-vec4') values.push((args[0] as number[]).map((value, index) => value / (args[1] as number[])[index]));
     else if (item.operation === 'greater-scalar') values.push((args[0] as number) > (args[1] as number));
     else if (item.operation === 'select-scalar') values.push((args[2] as boolean) ? args[1] as number : args[0] as number);
+    else if (item.operation === 'select-vec2') values.push((args[2] as boolean) ? args[1] : args[0]);
     else if (item.operation === 'split-rgb') values.push((args[0] as number[]).slice(0, 3));
     else if (item.operation === 'split-alpha') values.push((args[0] as number[])[3]);
     else if (item.operation === 'subtract-rgb') values.push((args[0] as number[]).map((channel, index) => evaluateScalarOperation('subtract', channel, (args[1] as number[])[index])));
