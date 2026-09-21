@@ -13,6 +13,8 @@ import {
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import { withLegacyKeyframeNodes } from '../../../services/nodeGraph/legacyKeyframeNodes';
+import { buildEffectOperatorGraph } from '../../../services/nodeGraph/effectGraphProjection';
+import { hasEffectOperatorGraph } from '../../../services/operators/effectGraphOwner';
 
 const EMPTY_KEYFRAMES = [] as const;
 
@@ -62,12 +64,16 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): Node
       linkedTrack: graphContext.linkedTrack,
       faceTrackingAvailable: faceTracking.ready,
     });
-    const graph = theme === 'general' ? buildUnifiedClipGraph(document, graphClip, clips, keyframes, faceTracking.createdAt) : getNodeGraphView(document, theme);
+    // Folding changes presentation only. Compile/project each effect once per
+    // immutable subject, instead of again for every step of a 27-group animation.
+    const preparedEffects = theme === 'general' ? new Map(graphClip.effects.filter(effect => hasEffectOperatorGraph(effect.type))
+      .map(effect => [effect.id, buildEffectOperatorGraph(graphClip, effect)])) : undefined;
+    const graph = theme === 'general' ? buildUnifiedClipGraph(document, graphClip, clips, keyframes, faceTracking.createdAt, false, preparedEffects) : getNodeGraphView(document, theme);
     const projectGroupStates = theme === 'general' ? (collapsed: Record<string, boolean>) => {
       const groups = { ...graphClip.nodeGraph?.groups };
       for (const [id, value] of Object.entries(collapsed)) groups[id] = { ...groups[id], collapsed: value };
       return buildUnifiedClipGraph(document, { ...graphClip, nodeGraph: { ...graphClip.nodeGraph,
-        version: 1, nodes: graphClip.nodeGraph?.nodes ?? [], groups } }, clips, keyframes, faceTracking.createdAt);
+        version: 1, nodes: graphClip.nodeGraph?.nodes ?? [], groups } }, clips, keyframes, faceTracking.createdAt, false, preparedEffects);
     } : undefined;
     const view = document.views.find((candidate) => candidate.theme === theme) ?? document.views[0];
     const linkedSubtitle = graphContext.linkedClip && graphContext.linkedTrack

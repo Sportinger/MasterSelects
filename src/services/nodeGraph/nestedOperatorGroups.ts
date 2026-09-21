@@ -29,6 +29,23 @@ export function foldOperatorGroups(graph: NodeGraph, state?: ClipNodeGraph, expa
     const animated = members.filter(node => node.animation);
     if (animated.length) proxy.animation = { clipId: animated[0].animation!.clipId,
       channels: animated.flatMap(node => node.animation!.channels) };
+    // Local folders infer a public input from each shared incoming signal. Keep
+    // every leaf endpoint so reconnect/disconnect still edits all consumers.
+    const inputBundles = new Map<string, { id: string; label: string; endpoints: Array<{ nodeId: string; portId: string }> }>();
+    const bundleForPort = new Map<string, string>();
+    if (!g.composition) for (const edge of edges) {
+      if (!ids.has(edge.toNodeId) || ids.has(edge.fromNodeId)) continue;
+      const target = members.find(node => node.id === edge.toNodeId)?.inputs.find(port => port.id === edge.toPortId);
+      if (!target || target.metadata?.repeated) continue;
+      const source = nodes.find(node => node.id === edge.fromNodeId), output = source?.outputs.find(port => port.id === edge.fromPortId);
+      const key = `${edge.fromNodeId}:${edge.fromPortId}:${target.type}`;
+      const endpointKey = `${edge.toNodeId}:${edge.toPortId}`;
+      const bundle = inputBundles.get(key) ?? { id: endpointKey,
+        label: String(output?.label && output.label !== 'Value' ? output.label : source?.params?.valueLabel ?? source?.label ?? target.label), endpoints: [] };
+      const endpoints = target.metadata?.groupEndpoints ?? [target.metadata?.groupEndpoint ?? { nodeId: edge.toNodeId, portId: edge.toPortId }];
+      for (const endpoint of endpoints) if (!bundle.endpoints.some(item => item.nodeId === endpoint.nodeId && item.portId === endpoint.portId)) bundle.endpoints.push(endpoint);
+      inputBundles.set(key, bundle); bundleForPort.set(endpointKey, key);
+    }
     const expose = (node: NodeGraphNode, port: NodeGraphPort) => {
       const list = port.direction === 'input' ? proxy.inputs : proxy.outputs;
       const endpoint = port.metadata?.groupEndpoint ?? { nodeId: node.id, portId: port.id };
@@ -40,7 +57,14 @@ export function foldOperatorGroups(graph: NodeGraph, state?: ClipNodeGraph, expa
         return declared.id;
       }
       const id = `${node.id}:${port.id}`;
-      if (!list.some(p => p.id === id)) list.push({ ...port, id, label: `${node.label}: ${port.label}`,
+      const bundleKey = port.direction === 'input' ? bundleForPort.get(id) : undefined;
+      const bundle = bundleKey ? inputBundles.get(bundleKey) : undefined;
+      if (bundle) {
+        if (!list.some(p => p.id === bundle.id)) list.push({ ...port, id: bundle.id, label: bundle.label,
+          metadata: { ...port.metadata, groupEndpoint: bundle.endpoints[0], groupEndpoints: bundle.endpoints } });
+        return bundle.id;
+      }
+      if (!list.some(p => p.id === id)) list.push({ ...port, id, label: `${node.params?.valueLabel ?? node.label}: ${port.label}`,
         metadata: { ...port.metadata, groupEndpoint: port.metadata?.groupEndpoint ?? { nodeId: node.id, portId: port.id } } });
       return id;
     };

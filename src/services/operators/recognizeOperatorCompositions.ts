@@ -1,18 +1,22 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorDefinition } from '../../types/operatorGraph';
-import { COORDINATE_COMPOSITIONS } from './coordinateCompositions';
+import { COORDINATE_COMPOSITIONS, coordinateCompositionRevision } from './coordinateCompositions';
 import { compositionBoundary, packOperatorCompositions, sameCompositionNode } from './operatorComposition';
 import { IMAGE_EFFECT_GRAPH_LIMITS } from './effectGraphLimits';
 
 const cache = new WeakMap<EffectOperatorGraph, EffectOperatorGraph>();
 /** Exact, bounded structural recognition, independent of effect names and node IDs. */
 export function recognizeOperatorCompositions(source: EffectOperatorGraph): EffectOperatorGraph {
-  if (source.domain !== 'image' || source.incomplete || source.compositionRules === 1) return source;
+  if (source.domain !== 'image' || source.incomplete || source.compositionRules === 2) return source;
   const cached = cache.get(source); if (cached) return cached;
   let graph = source;
   for (const definition of COORDINATE_COMPOSITIONS) {
+    const revision = coordinateCompositionRevision(definition.id);
+    if (revision <= (source.compositionRules ?? 0)) continue;
     let remaining = 4096;
     while (remaining > 0) {
-      const body = definition.composition!.graph, protectedIds = new Set(graph.groups?.flatMap(group => group.nodeIds));
+      const body = definition.composition!.graph;
+      const protectedIds = new Set(graph.groups?.filter(group => revision === 1 || group.composition).flatMap(group => group.nodeIds));
+      const owner = new Map(graph.groups?.flatMap(group => group.nodeIds.map(id => [id, group.id] as const)));
       const candidates = new Map(body.nodes.map(node => [node.id,
         graph.nodes.filter(actual => !protectedIds.has(actual.id) && sameCompositionNode(actual, node))]));
       if ([...candidates.values()].some(items => !items.length)) break;
@@ -26,6 +30,8 @@ export function recognizeOperatorCompositions(source: EffectOperatorGraph): Effe
         if (!next) return extract(graph, definition, ids);
         for (const candidate of candidates.get(next.id)!) {
           if (used.has(candidate.id)) continue;
+          // A new shared node may live inside a user's group, but cannot cross its boundary.
+          if (revision > 1 && [...used].some(id => owner.get(id) !== owner.get(candidate.id))) continue;
           ids[next.id] = candidate.id;
           const matches = body.edges.every(edge => !ids[edge.from] || !ids[edge.to] || graph.edges.some(actual =>
             actual.from === ids[edge.from] && actual.output === edge.output && actual.to === ids[edge.to] && actual.input === edge.input));
@@ -38,14 +44,19 @@ export function recognizeOperatorCompositions(source: EffectOperatorGraph): Effe
       graph = next;
     }
   }
-  graph = { ...graph, compositionRules: 1 };
+  graph = { ...graph, compositionRules: 2 };
   cache.set(source, graph); cache.set(graph, graph);
   return graph;
 }
 
 function extract(source: EffectOperatorGraph, definition: OperatorDefinition, mapping: Record<string, string>): EffectOperatorGraph | undefined {
-  if ((source.groups?.length ?? 0) + source.nodes.filter(node => COORDINATE_COMPOSITIONS.some(def => def.id === node.operator)).length >= 32) return;
+  const groupCost = (nodes: BoundOperatorNode[], depth = 0): number => nodes.reduce((total, node) => {
+    const body = COORDINATE_COMPOSITIONS.find(def => def.id === node.operator)?.composition;
+    return total + (body ? depth >= 4 ? Infinity : 1 + groupCost(body.graph.nodes, depth + 1) : 0);
+  }, 0);
+  if ((source.groups?.length ?? 0) + groupCost(source.nodes) >= 32) return;
   const graph = structuredClone(source), ids = { ...mapping }, members = new Set(Object.values(ids));
+  const parent = graph.groups?.find(group => group.nodeIds.includes(Object.values(ids)[0]));
   const unique = (base: string) => { let id = base, count = 2; while (graph.nodes.some(node => node.id === id)
     || graph.groups?.some(group => group.id === `compound-${id}`)) id = `${base}-${count++}`; return id; };
   const first = definition.composition!.graph.nodes[0].id, instanceId = unique(`shared-${ids[first]}`);
@@ -63,7 +74,9 @@ function extract(source: EffectOperatorGraph, definition: OperatorDefinition, ma
   if (!boundary || Object.values(boundary.inputs).some(endpoints => !boundary.incoming.some(edge =>
     edge.to === endpoints[0].nodeId && edge.input === endpoints[0].portId))) return;
   const position = graph.layout[ids[first]] ?? { x: 0, y: 0 };
+  if (parent) parent.nodeIds = parent.nodeIds.filter(id => !Object.values(ids).includes(id));
   (graph.groups ??= []).push({ id: `compound-${instanceId}`, label: definition.label, color: '#799ab4', nodeIds: Object.values(ids),
+    ...(parent ? { parentId: parent.id } : {}),
     collapsedByDefault: true, composition: { instance: { id: instanceId, operator: definition.id, operatorVersion: 1, bindings: {},
       composition: { nodeIds: ids, layout: {} } }, position } });
   return packOperatorCompositions(graph);

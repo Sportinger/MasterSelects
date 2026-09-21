@@ -17,7 +17,10 @@ describe('Fisheye image operator graph ownership', () => {
   it('uses the canonical graph for legacy effects without a persisted graph', () => {
     expect(isImageGraphEffectType('fisheye')).toBe(true);
     expect(isLocalImageEffectType('fisheye')).toBe(false);
-    expect(effectOperatorGraph({ type: 'fisheye', params: {} })).toEqual(createDefaultFisheyeGraph());
+    const graph = effectOperatorGraph({ type: 'fisheye', params: {} });
+    expect(graph.nodes.toSorted((a, b) => a.id.localeCompare(b.id)))
+      .toEqual(createDefaultFisheyeGraph().nodes.toSorted((a, b) => a.id.localeCompare(b.id)));
+    expect(graph.groups?.some(group => group.composition?.instance.operator === 'coordinates.restore-lens.vec2')).toBe(true);
   });
 
   it('keeps the registered degree-based schema and binds every owner parameter', () => {

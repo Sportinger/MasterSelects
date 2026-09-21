@@ -33,6 +33,7 @@ export type EffectType =
   | 'vibrance'
   | 'pixelate'
   | 'kaleidoscope'
+  | 'fisheye'
   | 'mirror'
   | 'invert'
   | 'rgb-split'

@@ -70,7 +70,8 @@ export function expandOperatorCompositions(source: EffectOperatorGraph): EffectO
         to: edge.to === instance.id ? ids[target.nodeId] : target.nodeId, input: target.portId }));
     });
     graph.edges.push(...body.graph.edges.map(edge => ({ ...edge, id: `${instance.id}--${edge.id}`, from: ids[edge.from], to: ids[edge.to] })));
-    graph.nodes.splice(graph.nodes.indexOf(instance), 1, ...body.graph.nodes.map(node => ({ ...structuredClone(node), id: ids[node.id] })));
+    graph.nodes.splice(graph.nodes.indexOf(instance), 1, ...body.graph.nodes.map(node => ({ ...structuredClone(node), id: ids[node.id],
+      ...(instance.composition?.children?.[node.id] ? { composition: structuredClone(instance.composition.children[node.id]) } : {}) })));
     for (const node of body.graph.nodes) {
       const layout = instance.composition?.layout[node.id] ?? body.graph.layout[node.id] ?? { x: 0, y: 0 };
       graph.layout[ids[node.id]] = { x: position.x + layout.x, y: position.y + layout.y };
@@ -78,7 +79,7 @@ export function expandOperatorCompositions(source: EffectOperatorGraph): EffectO
     }
     delete graph.layout[instance.id];
     if (parent) parent.nodeIds = parent.nodeIds.filter(id => id !== instance.id);
-    const storedInstance = { ...instance, composition: { nodeIds: ids, layout: instance.composition?.layout ?? {} } };
+    const storedInstance = { ...instance, composition: { ...instance.composition, nodeIds: ids, layout: instance.composition?.layout ?? {} } };
     (graph.groups ??= []).push({ id: groupId, label: definition.label, color: '#799ab4', nodeIds: Object.values(ids),
       ...(parent ? { parentId: parent.id } : {}), collapsedByDefault: true, composition: { instance: storedInstance, position } });
     if (graph.nodes.length > IMAGE_EFFECT_GRAPH_LIMITS.nodes || graph.edges.length > IMAGE_EFFECT_GRAPH_LIMITS.edges) {
@@ -103,7 +104,11 @@ export function packOperatorCompositions(source: EffectOperatorGraph): EffectOpe
     }
     const layout = Object.fromEntries(Object.entries(ids).map(([local, id]) => [local,
       { x: (graph.layout[id]?.x ?? position.x) - position.x, y: (graph.layout[id]?.y ?? position.y) - position.y }]));
-    const packed = { ...instance, composition: { nodeIds: ids, layout } };
+    const children = Object.fromEntries(Object.entries(ids).flatMap(([local, id]) => {
+      const child = graph.nodes.find(node => node.id === id)?.composition;
+      return child ? [[local, child]] : [];
+    }));
+    const packed = { ...instance, composition: { nodeIds: ids, layout, ...(Object.keys(children).length ? { children } : {}) } };
     const first = graph.nodes.findIndex(node => boundary.members.has(node.id));
     graph.nodes = graph.nodes.filter(node => !boundary.members.has(node.id)); graph.nodes.splice(first, 0, packed);
     graph.edges = graph.edges.filter(edge => !boundary.members.has(edge.from) && !boundary.members.has(edge.to));

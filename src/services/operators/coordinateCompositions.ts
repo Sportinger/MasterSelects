@@ -53,6 +53,34 @@ export const COORDINATE_COMPOSITIONS: readonly OperatorDefinition[] = [
       inputs: { radius: [endpoint('radial', 'b')], angle: [endpoint('direction', 'angle')], center: [endpoint('position', 'b')] },
       outputs: { position: endpoint('position', 'value') },
     }),
+  definition('coordinates.divide-x.vec2', 'Divide X',
+    'Divide X by max(divisor, minimum divisor), preserving Y. The floor is explicit; this is not an absolute-value guard.',
+    [p('value', 'Coordinates', 'vec2'), p('divisor', 'Divisor', 'number'), p('minimum', 'Minimum divisor', 'number')], [p('value', 'Coordinates', 'vec2')], {
+      graph: graph([n('split', 'vector.split.vec2'), n('safe', 'math.max.scalar'), n('divide', 'math.divide-ieee.scalar'), n('result', 'vector.combine.vec2')], [
+        ['split', 'x', 'divide', 'a'], ['safe', 'value', 'divide', 'b'], ['divide', 'value', 'result', 'x'], ['split', 'y', 'result', 'y'],
+      ]),
+      inputs: { value: [endpoint('split', 'value')], divisor: [endpoint('safe', 'a')], minimum: [endpoint('safe', 'b')] },
+      outputs: { value: endpoint('result', 'value') },
+    }),
+  definition('coordinates.restore-lens.vec2', 'Restore Lens Coordinates',
+    'Lens position to image coordinates: radius, undo squeeze, rotate in radians, optionally undo aspect, then add center. Both divisions share an explicit minimum divisor.',
+    [p('position', 'Lens position', 'vec2'), p('radius', 'Radius scale', 'number'), p('squeeze', 'Squeeze', 'number'),
+      p('rotation', 'Rotation (rad)', 'number'), p('aspect', 'Aspect', 'number'), p('preserveAspect', 'Preserve aspect', 'boolean'),
+      p('center', 'Center', 'vec2'), p('minimum', 'Minimum divisor', 'number')], [p('uv', 'UV', 'vec2')], {
+      graph: graph([n('radial', 'math.multiply.vec2-scalar'), n('unsqueeze', 'coordinates.divide-x.vec2'), n('rotate', 'coordinates.rotate.vec2'),
+        n('aspect', 'coordinates.divide-x.vec2'), n('select', 'select.vec2'), n('position', 'math.add.vec2')], [
+        ['radial', 'value', 'unsqueeze', 'value'], ['unsqueeze', 'value', 'rotate', 'value'], ['rotate', 'value', 'aspect', 'value'],
+        ['rotate', 'value', 'select', 'falseValue'], ['aspect', 'value', 'select', 'trueValue'], ['select', 'value', 'position', 'b'],
+      ]),
+      inputs: { position: [endpoint('radial', 'a')], radius: [endpoint('radial', 'b')], squeeze: [endpoint('unsqueeze', 'divisor')],
+        rotation: [endpoint('rotate', 'angle')], aspect: [endpoint('aspect', 'divisor')], preserveAspect: [endpoint('select', 'condition')],
+        center: [endpoint('position', 'a')], minimum: [endpoint('unsqueeze', 'minimum'), endpoint('aspect', 'minimum')] },
+      outputs: { uv: endpoint('position', 'value') },
+    }),
 ];
+
+/** Apply only newly introduced rules to previously migrated graphs; local ungrouping stays local. */
+export const coordinateCompositionRevision = (id: string): 1 | 2 =>
+  id === 'coordinates.divide-x.vec2' || id === 'coordinates.restore-lens.vec2' ? 2 : 1;
 
 export const getOperatorComposition = (id: string) => COORDINATE_COMPOSITIONS.find(definition => definition.id === id);

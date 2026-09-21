@@ -35,6 +35,8 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
         kind: ['media.source', 'image.frame'].includes(operator.id) ? 'source' : ['scene.output', 'render.voxel', 'image.output'].includes(operator.id) ? 'output' : 'effect',
         runtime: operator.runtime, inputs: operator.inputs.map(p => projectPort(p, 'input')), outputs: operator.outputs.map(p => projectPort(p, 'output')),
         params: { enabled: operatorEnabled(node, effect.params), bypassable: graph.domain === 'voxel' || !!operator.bypass,
+          ...(operator.id.startsWith('values.') ? { valueLabel: (typeof node.bindings.value === 'string' ? node.bindings.value : node.id)
+            .replace(/([a-z])([A-Z])/g, '$1 $2').replace(/-/g, ' ') } : {}),
           mathSymbol: mathNodeSymbol(operator.id) ?? '',
           categoryLabel: ({ values: 'Value', analog: 'Analog Signal', math: 'Math', image: 'Image', texture: 'Texture', geometry: 'Geometry', material: 'Material', camera: 'Camera', light: 'Light', render: 'Render', scene: 'Scene', forces: 'Force', simulation: 'Simulation', tracking: 'Tracking' } as Record<string, string>)[operator.id.split('.')[0]] ?? 'Effect' },
         layout: graph.layout[node.id] ?? { x: 0, y: 0 }, domain: 'clip',

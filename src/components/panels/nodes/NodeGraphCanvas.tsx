@@ -144,9 +144,10 @@ export function NodeGraphCanvas({
     const x = visual.panX - rendered.panX * scale;
     const y = visual.panY - rendered.panY * scale;
     if (canvasSurfaceRef.current) {
-      canvasSurfaceRef.current.style.transform = x || y || scale !== 1
-        ? `translate3d(${x}px, ${y}px, 0) scale(${scale})`
-        : '';
+      // Keep the bitmap in the same compositing layer when its view catches up.
+      // Dropping the transform can leave Chromium presenting the previous scale
+      // until the next pointer move, even though the new bitmap is already ready.
+      canvasSurfaceRef.current.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${scale})`;
     }
   }, []);
   const { viewport, setViewport } = useNodeGraphViewport(canvasRef, showVisualViewport);
@@ -515,7 +516,7 @@ export function NodeGraphCanvas({
               if (event.detail > 0) event.currentTarget.blur();
             }}>{targetGraph.groups.some(group => group.collapsed) ? 'Expand all' : 'Collapse all'}</button>}
           {targetGraph.groups?.some(group => group.layoutMode === 'flow') && <button type="button" className="node-workspace-toolbar-button"
-            title="Arrange Kaleidoscope and its connected outer nodes by data flow" onClick={event => {
+            title="Arrange Kaleidoscope, Fisheye and their connected outer nodes by data flow" onClick={event => {
               arrange(); if (event.detail > 0) event.currentTarget.blur();
             }}>Arrange</button>}
           <button type="button" className="node-workspace-toolbar-button" onClick={event => { resetView(); if (event.detail > 0) event.currentTarget.blur(); }}>Reset</button>

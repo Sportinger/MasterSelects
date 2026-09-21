@@ -41,14 +41,20 @@ export interface BoundOperatorNode {
   /** Optional parameter backing the node's enable control, shared with the effect form. */
   enabled?: string; enabledDefault?: boolean; bypassed?: boolean;
   /** Stable identities/layout of an instance's interior, including migrated flat nodes. */
-  composition?: { nodeIds: Record<string, string>; layout: EffectOperatorGraph['layout'] };
+  composition?: OperatorCompositionInstance;
+}
+export interface OperatorCompositionInstance {
+  nodeIds: Record<string, string>;
+  layout: EffectOperatorGraph['layout'];
+  /** Preserve original leaf identities/layout through nested pack/expand cycles. */
+  children?: Record<string, OperatorCompositionInstance>;
 }
 export interface OperatorEdge { id: string; from: string; output: string; to: string; input: string }
 export interface EffectOperatorGraph {
   version: 1;
   schemaVersion?: 1;
   /** Applied exact composition migration revision; local ungrouping is not undone on every read. */
-  compositionRules?: 1;
+  compositionRules?: 1 | 2;
   /** An editable graph whose execution is paused until its missing wiring is repaired. */
   incomplete?: string;
   domain?: 'cables' | 'scene' | 'voxel' | 'image' | 'compute-image' | 'analog-signal';

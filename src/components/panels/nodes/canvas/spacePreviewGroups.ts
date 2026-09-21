@@ -4,7 +4,7 @@ import { encloseNodeGroup } from './groupBounds';
 import { spacePreviewBlocks, spacePreviewNodes, type PreviewLayoutBlock } from './spacePreviewNodes';
 import { connectedFlowBlocks, flowGroupLayout } from './flowGroupLayout';
 
-interface GroupBlock extends PreviewLayoutBlock { nodeIds: string[]; group: boolean; growing?: boolean; flow?: boolean }
+interface GroupBlock extends PreviewLayoutBlock { nodeIds: string[]; group: boolean; growing?: boolean; flow?: boolean; source?: boolean }
 
 /** Pack from the innermost group outward. Siblings must avoid the entire expanded
  * frame, including its empty space, header and nested frames, not just its cards.
@@ -31,7 +31,8 @@ export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<strin
     const memberIds = [...new Set([...listedIds, ...nestedIds])];
     const blocks: GroupBlock[] = [...nested, ...memberIds.filter(nodeId => !nestedIds.has(nodeId)).map(nodeId => {
       const node = nodes.get(nodeId)!;
-      return { id: `node:${nodeId}`, ...node.layout, width: NODE_WIDTH, height: getNodeHeight(node), nodeIds: [nodeId], group: false };
+      return { id: `node:${nodeId}`, ...node.layout, width: NODE_WIDTH, height: getNodeHeight(node), nodeIds: [nodeId], group: false,
+        source: !node.inputs.length };
     })];
     const fixed = new Set(blocks.filter(block => block.nodeIds.some(nodeId => fixedIds.has(nodeId))).map(block => block.id));
     const arrange = flow || (!id && graph.groups?.some(group => group.layoutMode === 'flow'));

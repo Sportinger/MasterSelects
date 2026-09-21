@@ -34,13 +34,34 @@ numeric fields, sliders at suitable widths, reset and supported keyframe actions
 The link icon exposes a control to Properties. The Connections section offers a
 keyboard-accessible alternative to cable dragging.
 
-## Reusable Kaleidoscope nodes
+## Reusable coordinate nodes
 
 Kaleidoscope is the first composition pilot. Its graph uses three registered,
 versioned definitions: **Cartesian to Polar**, **Mirror Repeat**, and
 **Polar to Cartesian**. Each behaves like one typed node when collapsed and
 opens into editable primitive nodes. One public input can feed several internal
 ports; connecting or disconnecting that input updates all consumers together.
+
+Fisheye uses the same system. Its six main areas contain 20 subgroups, including
+three **Restore Lens Coordinates** instances (red, green and blue), each containing
+two reusable **Divide X** nodes. Both definitions are available to other image
+graphs. The remaining subgroups organize constants, sample offsets, lens space,
+projection, radius/zoom, frame borders, channel assembly, vignette and sample resolve.
+The sample reducer sits at the end of the graph; frame input and image output sit
+outside the internal folders. Opening just the effect exposes eight cards;
+opening every level exposes the original 250 primitive nodes.
+Collapsed local folders expose one input per incoming signal, even when several
+internal nodes consume it. Reconnecting or disconnecting that socket updates all
+of its original leaf endpoints; expanding still reveals the individual wires.
+Value outputs carry their parameter or constant names in the folder interface.
+
+The Fisheye upgrade preserves all primitive IDs, parameter bindings, sampling
+scopes and arithmetic, generating the identical shader without additional passes.
+Only the original six-folder organization is reorganized automatically; custom
+folders are retained. New exact recognition rules can extract patterns within a
+folder but never across its boundary. Migration revisions avoid regrouping a
+previously ungrouped instance. Nested instances retain their children's identities
+and positions through save/reopen and detach locally when edited.
 
 The definitions can be added to other image-effect graphs. Exact structural
 recognition also replaces matching, ungrouped primitive patterns when an existing
@@ -54,18 +75,23 @@ execution in audio, Flock or scene graphs are not implemented yet.
 
 The image compiler expands compositions inline without additional render passes.
 Expansion supports up to four nested levels within the existing image graph
-budgets. Kaleidoscope arranges nodes by data flow, recursively measures expanded
-subgroups, and moves Clip Output after the effect. Added nodes and changed wiring
+budgets. Kaleidoscope and Fisheye arrange nodes by data flow, recursively measure expanded
+subgroups, and move Clip Output after the effect. Added nodes and changed wiring
 participate in layout. Explicitly dragged internal node positions remain anchored.
 On either fold direction, the connected outer chain also reflows, leaving 100 graph
 units between Source, complete effect frames or cards, and Clip Output. Source
 stays in place; old outer anchors cannot leave expanded-sized gaps after closing.
 When a group expands into unrelated nodes or sibling groups, those objects move outside the complete frame, even when their old positions were manually placed. Sibling groups move as a unit; membership stays unchanged. Collapsing restores positions displaced by expansion, so surrounding nodes move closer again. A subsequent manual move replaces that automatic return position.
 
-**Arrange** explicitly sorts the Kaleidoscope hierarchy and its connected outer
+**Arrange** explicitly sorts the Kaleidoscope or Fisheye hierarchy and its connected outer
 chain again. It releases manual interior anchors, includes expanded subgroup sizes,
 and preserves graph connections and parameters. It is undoable and keeps the
 current viewport; use **Fit** to see the complete arrangement.
+Large banks of independent values use a compact grid. Staged folding reuses the
+prepared effect interiors instead of recompiling the effect for each subgroup;
+parameter or graph changes prepare a new subject.
+The bitmap keeps a stable compositing layer when a zoom or Fit completes, so
+Chromium does not leave the previous canvas scale behind the updated group frames.
 
 ## Math and Voxel Relief
 
@@ -150,7 +176,7 @@ values or a bounded sample of already simulated particles. Old particle samples
 are marked stale. Scene previews show the shared rendered Flock scene, not an
 independent render of each branch. Opening a viewer never advances the simulation
 or starts missing audio analysis; unavailable outputs are identified explicitly.
-Outside the Kaleidoscope flow-layout pilot, automatic placement finds room for new nodes only. Existing nodes and groups keep their positions, including intentional overlaps, through edits, folding and saves.
+Outside the Kaleidoscope and Fisheye flow layouts, automatic placement finds room for new nodes only. Existing nodes and groups keep their positions, including intentional overlaps, through edits, folding and saves.
 
 Each group has a **lock** for outgoing membership changes. Unlock the source to
 drag a node into another expanded group or effect; the target may remain locked.

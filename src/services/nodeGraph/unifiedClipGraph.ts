@@ -10,7 +10,8 @@ import { projectKeyframeNodes } from './keyframeNodeProjection';
 import { projectStabilizationGraph } from './stabilizationGraphProjection';
 
 /** A single canvas projection of every domain and its executable ownership. */
-export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: TimelineClip, clips: TimelineClip[] = [], keys: readonly Keyframe[] = [], trackingCreatedAt?: number, expandAllGroups = false): NodeGraph {
+export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: TimelineClip, clips: TimelineClip[] = [], keys: readonly Keyframe[] = [], trackingCreatedAt?: number, expandAllGroups = false,
+  preparedEffects?: ReadonlyMap<string, NodeGraph>): NodeGraph {
   document = withClipSceneGraph(document, clip, clips);
   const root = document.graphs.find(g => g.id === document.rootGraphId)!;
   const nodes: NodeGraphNode[] = [], edges = root.edges.map(e => ({ ...e }));
@@ -18,7 +19,7 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
   let cursor = 0, expansion = 0;
   for (const rootNode of root.nodes) {
     const effect = rootNode.binding?.kind === 'clip-effect' ? clip.effects.find(e => e.id === (rootNode.binding as { effectId: string }).effectId) : undefined;
-    const inner = effect && hasEffectOperatorGraph(effect.type) ? buildEffectOperatorGraph(clip, effect)
+    const inner = effect && hasEffectOperatorGraph(effect.type) ? preparedEffects?.get(effect.id) ?? buildEffectOperatorGraph(clip, effect)
       : rootNode.subgraphId ? document.graphs.find(g => g.id === rootNode.subgraphId) : undefined;
     const groupId = rootNode.id === 'scene3d' ? 'scene3d' : effect ? `effect:${effect.id}` : rootNode.binding?.kind === 'clip-color-correction' ? 'color' : 'flock';
     if (!inner) { nodes.push({ ...rootNode, groupOffset: { x: expansion, y: 0 }, layout: { x: rootNode.layout.x + expansion, y: rootNode.layout.y } }); cursor = Math.max(cursor, rootNode.layout.x + expansion + 280); continue; }
@@ -28,7 +29,7 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     const group = { id: groupId, label: effect?.name ?? (groupId === 'scene3d' ? '3D Scene' : groupId === 'flock' ? 'Flock' : 'Color'),
       color: groupId === 'scene3d' ? '#d7a262' : groupId === 'flock' ? '#7ea65b' : groupId === 'color' ? '#ba8bd6' : '#55a6c4', collapsed, nodeIds: [] as string[], proxyId: rootNode.id, issue: inner.issue,
       ...(effect ? { effectId: effect.id, bypassNodeId: rootNode.id, bypassed: !effect.enabled } : {}),
-      ...(effect?.type === 'kaleidoscope' ? { layoutMode: 'flow' as const } : {}) };
+      ...(effect?.type === 'kaleidoscope' || effect?.type === 'fisheye' ? { layoutMode: 'flow' as const } : {}) };
     groups.push(group);
     if (collapsed || !inner.nodes.length) {
       const proxy: NodeGraphNode = { ...rootNode, runtime: 'subgraph', label: group.label,
