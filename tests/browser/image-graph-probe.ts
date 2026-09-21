@@ -13,6 +13,7 @@ import { checkSamplingEffectsGpu } from './image-sampling-effects-gpu-check';
 import { checkBlockEffectsGpu } from './image-block-effects-gpu-check';
 import { checkBlurEffectsGpu } from './image-blur-effects-gpu-check';
 import { checkImageMaterializationGpu } from './image-materialization-gpu-check';
+import { checkDirectionalBlurGpu } from './image-directional-blur-gpu-check';
 
 async function checkGpu() {
   const adapter = await navigator.gpu?.requestAdapter();
@@ -80,7 +81,8 @@ async function checkGpu() {
     const blockComparisons = await checkBlockEffectsGpu(device, sampler);
     const blurComparisons = await checkBlurEffectsGpu(device);
     const materializationComparisons = await checkImageMaterializationGpu(device);
-    const workerResult = `${await checkWorkerImageGraphGpu(device)}; ${colorComparisons} remaining-color, ${pointwiseComparisons} pointwise, ${vignetteComparisons} vignette, ${timeComparisons} time-effect, ${samplingComparisons} sampling-effect, ${blockComparisons} block-effect, ${blurComparisons} blur, and ${materializationComparisons} materialization shader comparisons`;
+    const directionalBlurComparisons = await checkDirectionalBlurGpu(device);
+    const workerResult = `${await checkWorkerImageGraphGpu(device)}; ${colorComparisons} remaining-color, ${pointwiseComparisons} pointwise, ${vignetteComparisons} vignette, ${timeComparisons} time-effect, ${samplingComparisons} sampling-effect, ${blockComparisons} block-effect, ${blurComparisons} blur, ${materializationComparisons} materialization, and ${directionalBlurComparisons} directional-blur shader comparisons`;
     const validation = await device.popErrorScope();
     if (validation) throw new Error(validation.message);
     return `PASS: 64 RGBA pixels — legacy/default byte equality; bypass and rewired output equal input; alpha preserved; actual GPU output changes; ${workerResult}; no validation errors.`;

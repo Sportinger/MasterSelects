@@ -77,7 +77,9 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
           if (spec.type === 'color') return <ResolveInspectorRow key={spec.id} label={spec.label}><OperatorColorInput ariaLabel={`${operator.label} ${spec.label}`}
             value={String(constant)} onChange={value => safely(() => setOperatorConstant(clip.id, effectId, node.id, spec.id, value))} /></ResolveInspectorRow>;
           if (spec.type === 'number') return <ResolveInspectorNumberRow key={spec.id} label={spec.label} ariaLabel={`${operator.label} ${spec.label}`}
-            value={Number(constant)} defaultValue={Number(spec.default)} min={spec.min ?? -30} max={spec.max ?? 30} step={spec.step ?? 0.01}
+            value={Number(constant)} defaultValue={Number(spec.default)}
+            min={operator.id === 'values.number' ? Math.min(spec.min ?? -30, Number(constant)) : spec.min ?? -30}
+            max={operator.id === 'values.number' ? Math.max(spec.max ?? 30, Number(constant)) : spec.max ?? 30} step={spec.step ?? 0.01}
             onChange={next => safely(() => setOperatorConstant(clip.id, effectId, node.id, spec.id, next))}
             persistenceKey={operatorConstantNumberPersistenceKey({ clipId: clip.id, effectId, nodeId: node.id, parameter: spec.id })} />;
           if (spec.type === 'select') return <ResolveInspectorRow key={spec.id} label={spec.label}><InspectorSelect ariaLabel={`${operator.label} ${spec.label}`}

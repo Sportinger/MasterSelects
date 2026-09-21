@@ -46,10 +46,11 @@ export function imageOperatorValuePreview(request: PreviewRequest, clip: Timelin
   const binding = request.node.binding;
   if (binding?.kind === 'effect-operator') {
     const selected = effectOperatorGraph(effect).nodes.find(node => node.id === binding.nodeId);
-    if (selected?.operator === 'image.kernel-index') return {
-      key: request.key, revision: request.revision, time: request.time, status: 'missing', label: 'Kernel scope only',
-      presentation: 'text', drawing: { kind: 'text', lines: ['Varies per kernel sample'] },
-    };
+    if (selected?.operator === 'image.kernel-index' || selected?.operator === 'image.sequence-index') {
+      const scope = selected.operator === 'image.kernel-index' ? 'Kernel' : 'Sequence';
+      return { key: request.key, revision: request.revision, time: request.time, status: 'missing', label: `${scope} scope only`,
+        presentation: 'text', drawing: { kind: 'text', lines: [`Varies per ${scope.toLowerCase()} sample`] } };
+    }
     if (selected?.operator === 'values.boolean' || selected?.operator === 'values.color') {
       const spec = getEffectOperator(selected.operator)!.parameters.find(parameter => parameter.id === 'value')!;
       const ownerKey = typeof selected.bindings.value === 'string' ? selected.bindings.value : undefined;
@@ -78,7 +79,8 @@ export function imageOperatorValuePreview(request: PreviewRequest, clip: Timelin
   const controls: PreviewValueControl[] = [];
   if (selected.operator === 'values.number' && typeof selected.constants?.value === 'number' && selected.bindings.value === undefined) {
     const spec = getEffectOperator(selected.operator)!.parameters.find(parameter => parameter.id === 'value')!;
-    controls.push({ label: spec.label, value: selected.constants.value, defaultValue: Number(spec.default), min: spec.min, max: spec.max, step: spec.step,
+    controls.push({ label: spec.label, value: selected.constants.value, defaultValue: Number(spec.default),
+      min: Math.min(spec.min ?? -30, selected.constants.value), max: Math.max(spec.max ?? 30, selected.constants.value), step: spec.step,
       portId: 'value', direction: 'output', target: { clipId: clip.id, effectId: effect.id, nodeId: selected.id, parameter: 'value', storage: 'constant' } });
   } else if (selected.operator === 'values.number' && typeof selected.bindings.value === 'string') {
     const binding = selected.bindings.value, owner = getEffect(effect.type)?.params[binding];

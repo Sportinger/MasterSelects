@@ -36,13 +36,13 @@ export function compileImageOperatorPassPlan(graph: EffectOperatorGraph, params:
     cuts.push({ nodeId: item.id, producerNodeId: source.from, producerPort: source.output,
       resourceId: `image-resource:${item.id}:image`, passId: `image-pass:${item.id}` });
   }
-  const hasKernelUpstream = (id: string, seen = new Set<string>()): boolean => {
+  const hasNeighborhoodUpstream = (id: string, seen = new Set<string>()): boolean => {
     if (seen.has(id)) return false; seen.add(id);
     if (nodes.get(id)?.operator === 'image.materialize') return false;
-    if (nodes.get(id)?.operator === 'image.kernel-grid-reduce') return true;
-    return graph.edges.some(edge => edge.to === id && hasKernelUpstream(edge.from, seen));
+    if (nodes.get(id)?.operator === 'image.kernel-grid-reduce' || nodes.get(id)?.operator === 'image.sequence-reduce') return true;
+    return graph.edges.some(edge => edge.to === id && hasNeighborhoodUpstream(edge.from, seen));
   };
-  for (const reducer of graph.nodes) if (reducer.operator === 'image.kernel-grid-reduce' && reachable.has(reducer.id)) {
+  for (const reducer of graph.nodes) if ((reducer.operator === 'image.kernel-grid-reduce' || reducer.operator === 'image.sequence-reduce') && reachable.has(reducer.id)) {
     const sample = incoming.get(`${reducer.id}:sample`);
     const boundaries: OperatorEdge[] = [], seen = new Set<string>();
     const collectSampleBoundaries = (id: string) => {
@@ -52,8 +52,8 @@ export function compileImageOperatorPassPlan(graph: EffectOperatorGraph, params:
       for (const item of graph.edges) if (item.to === id) collectSampleBoundaries(item.from);
     };
     if (sample) collectSampleBoundaries(sample.from);
-    const cutEdges = boundaries.filter(item => hasKernelUpstream(item.from));
-    if (!cutEdges.length && sample && hasKernelUpstream(sample.from)) cutEdges.push(sample);
+    const cutEdges = boundaries.filter(item => hasNeighborhoodUpstream(item.from));
+    if (!cutEdges.length && sample && hasNeighborhoodUpstream(sample.from)) cutEdges.push(sample);
     for (const [index, cutEdge] of cutEdges.entries()) {
       const nodeId = `__auto-materialize-${reducer.id}-${index}`;
       cuts.push({ nodeId, producerNodeId: cutEdge.from, producerPort: cutEdge.output, edgeId: cutEdge.id,

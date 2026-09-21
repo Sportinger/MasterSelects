@@ -106,6 +106,8 @@ time for reproducible tile changes and exposes its border color as a bound node.
 Box and Gaussian Blur expose editable sampling kernels and weights while retaining
 their existing single-pass rendering and alpha averaging. Sharpen reuses the
 kernel foundation and preserves center-pixel alpha.
+Motion, Radial and Zoom Blur expose directional sampling and weighting as editable
+nodes, retaining their existing parameter ranges and single-pass execution.
 Multi-stage image graphs share intermediate texture stages between consumers;
 simple graphs retain their single-pass execution.
 

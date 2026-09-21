@@ -7,6 +7,9 @@ import { IMAGE_OPERATOR_PARAMETER_CAPACITY, IMAGE_OPERATOR_PARAMETER_VEC4_COUNT 
 import { colorToRgba } from '../../effects/_shared/catalogColor';
 import hash2dWgsl from '../../effects/_shared/hash2d.wgsl?raw';
 import { compileImageOperatorPassPlan } from './imageOperatorPlan';
+import { emitImageReducerWgsl } from './imageOperatorReducerWgsl';
+import { migrateImageOperatorGraph } from './imageOperatorMigration';
+export { createDefaultInvertImageGraph, migrateImageOperatorGraph } from './imageOperatorMigration';
 
 export type ImagePlanValue = 'image' | 'rgb' | 'alpha' | 'scalar' | 'boolean' | 'vec2' | 'vec3' | 'vec4';
 export type ImageOperatorCapability = 'uv' | 'resolution' | 'time' | 'sample';
@@ -17,7 +20,7 @@ export interface ImageOperatorEvaluationContext {
 }
 export interface ImagePlanInstruction {
   nodeId: string;
-  operation: 'input' | 'uv' | 'resolution' | 'time' | 'sample-image' | 'resource-input' | 'kernel-index' | 'kernel-sum' | 'kernel-weight-sum' | 'select-image' | 'constant' | 'parameter' | 'parameter-boolean' | 'parameter-color' | 'constant-color' | 'subtract' | 'add-scalar' | 'multiply-scalar' | 'divide-ieee-scalar' | 'reciprocal-scalar' | 'exp2-scalar' | 'exp-scalar' | 'fract-scalar' | 'floor-scalar' | 'step-scalar' | 'max-scalar' | 'smoothstep-scalar' | 'mix-scalar' | 'greater-scalar' | 'and-boolean' | 'select-scalar' | 'add-vec2' | 'subtract-vec2' | 'multiply-vec2' | 'divide-vec2' | 'floor-vec2' | 'fract-vec2' | 'clamp-vec2' | 'reduce-min-vec2' | 'hash2d-vec2' | 'dot-vec2' | 'length-vec2' | 'sin-scalar' | 'cos-scalar' | 'scalar-to-vec2' | 'scalar-to-vec4' | 'divide-vec4' | 'subtract-rgb' | 'add-rgb' | 'multiply-rgb' | 'divide-ieee-rgb' | 'max-rgb' | 'power-rgb' | 'floor-rgb' | 'clamp-rgb' | 'mix-rgb' | 'mix-components-rgb' | 'reduce-min-rgb' | 'reduce-max-rgb' | 'luminance-rec601' | 'luminance-rec709' | 'scalar-to-rgb' | 'rgb-to-vec3' | 'vec3-to-rgb' | 'rgb-to-hsv' | 'hsv-to-rgb' | 'split-rgb' | 'split-alpha' | 'combine' | 'image-to-vec4' | 'vec4-to-image' | 'split-component' | 'combine-vector';
+  operation: 'input' | 'uv' | 'resolution' | 'time' | 'sample-image' | 'resource-input' | 'kernel-index' | 'kernel-sum' | 'kernel-weight-sum' | 'sequence-index' | 'sequence-t' | 'sequence-sum' | 'sequence-weight-sum' | 'mirror-repeat-vec2' | 'select-image' | 'constant' | 'parameter' | 'parameter-boolean' | 'parameter-color' | 'constant-color' | 'subtract' | 'add-scalar' | 'multiply-scalar' | 'divide-ieee-scalar' | 'reciprocal-scalar' | 'exp2-scalar' | 'exp-scalar' | 'fract-scalar' | 'floor-scalar' | 'step-scalar' | 'max-scalar' | 'smoothstep-scalar' | 'mix-scalar' | 'greater-scalar' | 'and-boolean' | 'select-scalar' | 'add-vec2' | 'subtract-vec2' | 'multiply-vec2' | 'divide-vec2' | 'floor-vec2' | 'fract-vec2' | 'clamp-vec2' | 'reduce-min-vec2' | 'hash2d-vec2' | 'dot-vec2' | 'length-vec2' | 'sin-scalar' | 'cos-scalar' | 'scalar-to-vec2' | 'scalar-to-vec4' | 'divide-vec4' | 'subtract-rgb' | 'add-rgb' | 'multiply-rgb' | 'divide-ieee-rgb' | 'max-rgb' | 'power-rgb' | 'floor-rgb' | 'clamp-rgb' | 'mix-rgb' | 'mix-components-rgb' | 'reduce-min-rgb' | 'reduce-max-rgb' | 'luminance-rec601' | 'luminance-rec709' | 'scalar-to-rgb' | 'rgb-to-vec3' | 'vec3-to-rgb' | 'rgb-to-hsv' | 'hsv-to-rgb' | 'split-rgb' | 'split-alpha' | 'combine' | 'image-to-vec4' | 'vec4-to-image' | 'split-component' | 'combine-vector';
   type: ImagePlanValue;
   inputs: number[];
   value?: number;
@@ -31,73 +34,13 @@ export interface ImageOperatorPlan extends ImageOperatorProgram {
   output: number;
   sampleScopes: readonly { id: number; output: number }[];
   kernelScopes?: readonly { id: number; sample: number; weight: number }[];
+  sequenceScopes?: readonly { id: number; sample: number; weight: number }[];
   resourceInputs?: readonly string[];
   passes?: readonly { id: string; program: ImageOperatorPlan; inputResources: readonly string[]; outputResource?: string }[];
   resources?: readonly { id: string; producerPassId: string; format: 'rgba16float' }[];
   previewResourceId?: string;
 }
 export interface ImageOperatorPreviewTarget { nodeId: string; direction: 'input' | 'output'; portId: string }
-
-const node = (id: string, operator: string, bindings: BoundOperatorNode['bindings'] = {}): BoundOperatorNode =>
-  ({ id, operator, operatorVersion: 1, bindings });
-const edge = (id: string, from: string, output: string, to: string, input: string) => ({ id, from, output, to, input });
-
-export function createDefaultInvertImageGraph(): EffectOperatorGraph {
-  return {
-    version: 1, schemaVersion: 1, domain: 'image', incomplete: undefined,
-    nodes: [node('frame', 'image.frame'), node('rgba', 'convert.image-to-vec4'), node('split', 'vector.split.vec4'),
-      { ...node('one', 'values.number'), constants: { value: 1 } }, node('invert-r', 'math.subtract.scalar'),
-      node('invert-g', 'math.subtract.scalar'), node('invert-b', 'math.subtract.scalar'), node('combine', 'vector.combine.vec4'),
-      node('image', 'convert.vec4-to-image'), node('output', 'image.output')],
-    edges: [
-      edge('frame-rgba', 'frame', 'image', 'rgba', 'image'), edge('rgba-split', 'rgba', 'value', 'split', 'value'),
-      edge('one-r', 'one', 'value', 'invert-r', 'a'), edge('one-g', 'one', 'value', 'invert-g', 'a'), edge('one-b', 'one', 'value', 'invert-b', 'a'),
-      edge('r-invert', 'split', 'x', 'invert-r', 'b'), edge('g-invert', 'split', 'y', 'invert-g', 'b'), edge('b-invert', 'split', 'z', 'invert-b', 'b'),
-      edge('invert-r-combine', 'invert-r', 'value', 'combine', 'x'), edge('invert-g-combine', 'invert-g', 'value', 'combine', 'y'),
-      edge('invert-b-combine', 'invert-b', 'value', 'combine', 'z'), edge('alpha-combine', 'split', 'w', 'combine', 'w'),
-      edge('combine-image', 'combine', 'value', 'image', 'value'), edge('image-output', 'image', 'image', 'output', 'image'),
-    ],
-    layout: { frame: { x: 0, y: 0 }, rgba: { x: 300, y: 0 }, split: { x: 600, y: 0 }, one: { x: 600, y: 400 },
-      'invert-r': { x: 900, y: 0 }, 'invert-g': { x: 900, y: 400 }, 'invert-b': { x: 900, y: 800 }, combine: { x: 1200, y: 0 }, image: { x: 1500, y: 0 }, output: { x: 1800, y: 0 } },
-  };
-}
-
-/** Upgrades short-lived Paket-A IDs without retaining a second executable model. */
-export function migrateImageOperatorGraph(graph: EffectOperatorGraph): EffectOperatorGraph {
-  const migrated = structuredClone(graph);
-  for (const item of migrated.nodes) {
-    if (item.operator === 'image.rgb-split') item.operator = 'vector.split.rgba';
-    if (item.operator === 'image.rgb-combine') item.operator = 'vector.combine.rgba';
-  }
-  const ids = new Set(migrated.nodes.map(item => item.id));
-  const edgeIds = new Set(migrated.edges.map(item => item.id));
-  const uniqueId = (base: string) => {
-    let candidate = base, suffix = 2;
-    while (ids.has(candidate)) candidate = `${base}-${suffix++}`;
-    ids.add(candidate); return candidate;
-  };
-  const uniqueEdgeId = (base: string) => {
-    let candidate = base, suffix = 2;
-    while (edgeIds.has(candidate)) candidate = `${base}-${suffix++}`;
-    edgeIds.add(candidate); return candidate;
-  };
-  for (const legacy of migrated.nodes.filter(item => item.operator === 'color.invert.rgb')) {
-    if (migrated.nodes.length + 2 > 64) throw new Error('Image graph migration exceeds 64 nodes.');
-    const oneId = uniqueId(`${legacy.id}-one`), splatId = uniqueId(`${legacy.id}-ones`);
-    legacy.operator = 'math.subtract.rgb';
-    migrated.nodes.push({ ...node(oneId, 'values.number'), constants: { value: 1 } }, node(splatId, 'convert.scalar-to-rgb'));
-    const incoming = migrated.edges.filter(item => item.to === legacy.id && item.input === 'rgb');
-    for (const item of incoming) item.input = 'b';
-    for (const item of migrated.edges.filter(item => item.from === legacy.id && item.output === 'rgb')) item.output = 'value';
-    migrated.edges.push(edge(uniqueEdgeId(`${oneId}-splat`), oneId, 'value', splatId, 'value'),
-      edge(uniqueEdgeId(`${splatId}-subtract`), splatId, 'rgb', legacy.id, 'a'));
-    const position = migrated.layout[legacy.id] ?? { x: 0, y: 0 };
-    migrated.layout[oneId] = { x: position.x - 220, y: position.y + 180 };
-    migrated.layout[splatId] = { x: position.x, y: position.y + 180 };
-    for (const group of migrated.groups ?? []) if (group.nodeIds.includes(legacy.id)) group.nodeIds.push(oneId, splatId);
-  }
-  return migrated;
-}
 
 const f32 = (value: number) => Number.isInteger(value) ? `${value}.0` : String(value);
 const parameterExpression = (slot: number) => `imageParameters.values[${Math.floor(slot / 4)}].${'xyzw'[slot % 4]}`;
@@ -176,8 +119,9 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
   const resourceInputs: string[] = [];
   const sampleScopes: Array<{ id: number; output: number }> = [];
   const kernelScopes: Array<{ id: number; sample: number; weight: number }> = [];
+  const sequenceScopes: Array<{ id: number; sample: number; weight: number }> = [];
   const scopeBySource = new Map<string, number>(); let nextScopeId = 1;
-  let activeScope = 0, activeKernelScope: number | undefined;
+  let activeScope = 0, activeKernelScope: number | undefined, activeSequenceScope: number | undefined;
   const emit = (instruction: ImagePlanInstruction) => instructions.push({ ...instruction, scope: activeScope }) - 1;
   function source(target: BoundOperatorNode, input: string) {
     const item = incoming.get(`${target.id}:${input}`)?.[0];
@@ -211,6 +155,10 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         if (activeKernelScope !== activeScope) throw new Error('image.kernel-index is only available inside a kernel reduction scope.');
         register = emit({ nodeId: current.id, operation: 'kernel-index', type: 'vec2', inputs: [] }); break;
       }
+      case 'image.sequence-index': {
+        if (activeSequenceScope !== activeScope) throw new Error('image.sequence-index is only available inside a sequence reduction scope.');
+        register = emit({ nodeId: current.id, operation: output === 't' ? 'sequence-t' : 'sequence-index', type: 'scalar', inputs: [] }); break;
+      }
       case 'image.sample': {
         const linked = source(current, 'image'), parentScope = activeScope;
         if (current.bypassed) { register = visit(linked.node, linked.output); break; }
@@ -226,7 +174,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         break;
       }
       case 'image.kernel-grid-reduce': {
-        if (activeKernelScope !== undefined) throw new Error('Nested image kernel reductions are not supported.');
+        if (activeKernelScope !== undefined || activeSequenceScope !== undefined) throw new Error('Nested image neighborhood reductions are not supported.');
         const existingSum = registers.get(`${activeScope}:${current.id}:sum`);
         if (existingSum !== undefined) { register = output === 'sum' ? existingSum : registers.get(`${activeScope}:${current.id}:weightSum`)!; break; }
         const parentScope = activeScope, extent = visitSource(current, 'extent'), scope = nextScopeId++;
@@ -236,6 +184,19 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         kernelScopes.push({ id: scope, sample, weight });
         const sum = emit({ nodeId: current.id, operation: 'kernel-sum', type: 'vec4', inputs: [extent], value: scope });
         const weightSum = emit({ nodeId: current.id, operation: 'kernel-weight-sum', type: 'scalar', inputs: [sum], value: scope });
+        registers.set(`${parentScope}:${current.id}:sum`, sum); registers.set(`${parentScope}:${current.id}:weightSum`, weightSum);
+        register = output === 'sum' ? sum : weightSum; break;
+      }
+      case 'image.sequence-reduce': {
+        if (activeKernelScope !== undefined || activeSequenceScope !== undefined) throw new Error('Nested image neighborhood reductions are not supported.');
+        const existing = registers.get(`${activeScope}:${current.id}:sum`);
+        if (existing !== undefined) { register = output === 'sum' ? existing : registers.get(`${activeScope}:${current.id}:weightSum`)!; break; }
+        const parentScope = activeScope, count = visitSource(current, 'count'), scope = nextScopeId++;
+        activeScope = scope; activeSequenceScope = scope;
+        const sample = visitSource(current, 'sample'), weight = visitSource(current, 'weight');
+        activeScope = parentScope; activeSequenceScope = undefined; sequenceScopes.push({ id: scope, sample, weight });
+        const sum = emit({ nodeId: current.id, operation: 'sequence-sum', type: 'vec4', inputs: [count], value: scope });
+        const weightSum = emit({ nodeId: current.id, operation: 'sequence-weight-sum', type: 'scalar', inputs: [sum], value: scope });
         registers.set(`${parentScope}:${current.id}:sum`, sum); registers.set(`${parentScope}:${current.id}:weightSum`, weightSum);
         register = output === 'sum' ? sum : weightSum; break;
       }
@@ -359,6 +320,10 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         const value = visitSource(current, 'value'); register = current.bypassed ? value
           : emit({ nodeId: current.id, operation: 'fract-vec2', type: 'vec2', inputs: [value] }); break;
       }
+      case 'coordinates.mirror-repeat.vec2': {
+        const value = visitSource(current, 'value'); register = current.bypassed ? value
+          : emit({ nodeId: current.id, operation: 'mirror-repeat-vec2', type: 'vec2', inputs: [value] }); break;
+      }
       case 'math.clamp.vec2': {
         const value = visitSource(current, 'value'); register = current.bypassed ? value
           : emit({ nodeId: current.id, operation: 'clamp-vec2', type: 'vec2', inputs: [value, visitSource(current, 'min'), visitSource(current, 'max')] }); break;
@@ -469,7 +434,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
   const output = visit(selected.node, selected.output);
   if (instructions.length > 256) throw new Error('Image graph scoped expansion exceeds 256 instructions.');
   const capabilities: ImageOperatorCapability[] = [];
-  if (instructions.some(item => item.operation === 'uv' || item.operation === 'kernel-sum' || item.operation === 'resource-input')) capabilities.push('uv');
+  if (instructions.some(item => item.operation === 'uv' || item.operation === 'kernel-sum' || item.operation === 'sequence-sum' || item.operation === 'resource-input')) capabilities.push('uv');
   if (instructions.some(item => item.operation === 'resolution')) capabilities.push('resolution');
   if (instructions.some(item => item.operation === 'time')) capabilities.push('time');
   if (instructions.some(item => item.operation === 'sample-image')) capabilities.push('sample');
@@ -479,11 +444,13 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     ...(parameterValues.length ? ['imageParameters'] : [])].join(', ');
   const expressions = instructions.map((item, index) => {
     const args = item.inputs.map(input => `v${input}`);
-    const expression = item.operation === 'input' ? 'pixel' : item.operation === 'uv' ? 'inputUv' : item.operation === 'resource-input' ? `sampleImageGraphResource${item.value}(inputUv)` : item.operation === 'kernel-index' ? 'kernelIndex' : item.operation === 'resolution' ? 'inputResolution'
+    const expression = item.operation === 'input' ? 'pixel' : item.operation === 'uv' ? 'inputUv' : item.operation === 'resource-input' ? `sampleImageGraphResource${item.value}(inputUv)` : item.operation === 'kernel-index' ? 'kernelIndex' : item.operation === 'sequence-index' ? 'sequenceIndex' : item.operation === 'sequence-t' ? 'sequenceT' : item.operation === 'resolution' ? 'inputResolution'
       : item.operation === 'time' ? 'timelineTimeSeconds' : item.operation === 'sample-image'
         ? `evaluateImageScope${item.value}(sampleImageGraphSource(${args[0]}), ${contextCallArgs(args[0])})`
       : item.operation === 'kernel-sum' ? `imageKernelReduce${item.value}(${args[0]}, pixel, inputUv${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''})`
       : item.operation === 'kernel-weight-sum' ? `kernelResult${item.inputs[0]}.weightSum`
+      : item.operation === 'sequence-sum' ? `imageSequenceReduce${item.value}(${args[0]}, pixel, inputUv${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''})`
+      : item.operation === 'sequence-weight-sum' ? `sequenceResult${item.inputs[0]}.weightSum`
       : item.operation === 'select-image' ? 'lazy-image-selection'
       : item.operation === 'constant' ? item.type === 'boolean' ? (item.value ? 'true' : 'false') : f32(item.value ?? 0)
       : item.operation === 'parameter' ? parameterExpression(item.value ?? 0)
@@ -502,6 +469,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       : item.operation === 'add-vec2' ? `${args[0]} + ${args[1]}` : item.operation === 'subtract-vec2' ? `${args[0]} - ${args[1]}` : item.operation === 'multiply-vec2' ? `${args[0]} * ${args[1]}`
       : item.operation === 'divide-vec2' ? `${args[0]} / ${args[1]}` : item.operation === 'floor-vec2' ? `floor(${args[0]})`
       : item.operation === 'fract-vec2' ? `fract(${args[0]})` : item.operation === 'clamp-vec2' ? `clamp(${args[0]}, ${args[1]}, ${args[2]})`
+      : item.operation === 'mirror-repeat-vec2' ? `select(${args[0]} - floor(${args[0]} * 0.5) * 2.0, vec2f(2.0) - (${args[0]} - floor(${args[0]} * 0.5) * 2.0), (${args[0]} - floor(${args[0]} * 0.5) * 2.0) > vec2f(1.0))`
       : item.operation === 'reduce-min-vec2' ? `min(${args[0]}.x, ${args[0]}.y)` : item.operation === 'hash2d-vec2' ? `imageGraphHash2d(${args[0]})`
       : item.operation === 'dot-vec2' ? `dot(${args[0]}, ${args[1]})` : item.operation === 'length-vec2' ? `length(${args[0]})`
       : item.operation === 'sin-scalar' ? `sin(${args[0]})` : item.operation === 'cos-scalar' ? `cos(${args[0]})` : item.operation === 'scalar-to-vec2' ? `vec2f(${args[0]})`
@@ -525,6 +493,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       : `vec4f(${args[0]}, ${args[1]})`;
     const type = item.type === 'image' || item.type === 'vec4' ? 'vec4f' : item.type === 'rgb' || item.type === 'vec3' ? 'vec3f' : item.type === 'vec2' ? 'vec2f' : item.type === 'boolean' ? 'bool' : 'f32';
     if (item.operation === 'kernel-sum') return `  let kernelResult${index} = ${expression};\n  let v${index}: vec4f = kernelResult${index}.sum;`;
+    if (item.operation === 'sequence-sum') return `  let sequenceResult${index} = ${expression};\n  let v${index}: vec4f = sequenceResult${index}.sum;`;
     if (item.operation === 'select-image') {
       const call = (scope: number) => `evaluateImageScope${scope}(pixel, ${contextCallArgs('inputUv')})`;
       return `  var v${index}: vec4f;\n  if (${args[0]}) { v${index} = ${call(item.inputs[2])}; } else { v${index} = ${call(item.inputs[1])}; }`;
@@ -532,7 +501,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     return `  let v${index}: ${type} = ${expression};`;
   });
   const outputType = instructions[output].type;
-  const canonical = JSON.stringify({ capabilities, instructions: instructions.map(({ nodeId: _nodeId, ...instruction }) => instruction), sampleScopes, kernelScopes, output, outputType });
+  const canonical = JSON.stringify({ capabilities, instructions: instructions.map(({ nodeId: _nodeId, ...instruction }) => instruction), sampleScopes, kernelScopes, sequenceScopes, output, outputType });
   const returned = outputType === 'image' || outputType === 'vec4' ? `v${output}` : outputType === 'rgb' || outputType === 'vec3' ? `vec4f(v${output}, 1.0)`
     : outputType === 'vec2' ? `vec4f(v${output}, 0.0, 1.0)`
     : outputType === 'boolean' ? `vec4f(vec3f(select(0.0, 1.0, v${output})), 1.0)`
@@ -550,20 +519,11 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     `fn evaluateImageScope${scope.id}(${scopeParameters.join(', ')}) -> vec4f {`, '  let pixel = inputColor;',
     ...expressions.filter((_line, index) => instructions[index].scope === scope.id), `  return v${scope.output};`, '}',
   ].join('\n'));
-  const kernelFunctions = kernelScopes.toSorted((a, b) => b.id - a.id).flatMap(scope => {
-    const termParams = [...scopeParameters, 'kernelIndex: vec2f'];
-    const forwarded = ['centerPixel', 'inputUv', ...(capabilities.includes('resolution') ? ['inputResolution'] : []),
-      ...(capabilities.includes('time') ? ['timelineTimeSeconds'] : []), ...(parameterValues.length ? ['imageParameters'] : []), 'vec2f(f32(x), f32(y))'];
-    const reduceParams = ['extentValue: f32', 'centerPixel: vec4f', 'inputUv: vec2f', ...(capabilities.includes('resolution') ? ['inputResolution: vec2f'] : []),
-      ...(capabilities.includes('time') ? ['timelineTimeSeconds: f32'] : []), ...(parameterValues.length ? ['imageParameters: ImageOperatorParameters'] : [])];
-    return [`fn evaluateKernelTerm${scope.id}(${termParams.join(', ')}) -> ImageKernelTerm {\n  let pixel = inputColor;\n${expressions.filter((_line, index) => instructions[index].scope === scope.id).join('\n')}\n  return ImageKernelTerm(v${scope.sample}, v${scope.weight});\n}`,
-      `fn imageKernelReduce${scope.id}(${reduceParams.join(', ')}) -> ImageKernelResult {\n  let extent = i32(clamp(trunc(extentValue), 0.0, 64.0));\n  var sum = vec4f(0.0); var weightSum = 0.0;\n  for (var x = -extent; x <= extent; x++) { for (var y = -extent; y <= extent; y++) {\n    let term = evaluateKernelTerm${scope.id}(${forwarded.join(', ')}); sum += term.sample * term.weight; weightSum += term.weight;\n  }}\n  return ImageKernelResult(sum, weightSum);\n}`];
-  });
-  const kernelTypes = kernelScopes.length ? ['struct ImageKernelTerm { sample: vec4f, weight: f32 }', 'struct ImageKernelResult { sum: vec4f, weightSum: f32 }'] : [];
-  return { fusion: 'inline', capabilities, instructions, output, sampleScopes, kernelScopes, values: parameterValues, key: `image-v1-${hash(JSON.stringify({ canonical, resourceInputs }))}`,
+  const reducerWgsl = emitImageReducerWgsl({ instructions, expressions, kernelScopes, sequenceScopes, scopeParameters, capabilities, hasParameters: !!parameterValues.length });
+  return { fusion: 'inline', capabilities, instructions, output, sampleScopes, kernelScopes, sequenceScopes, values: parameterValues, key: `image-v1-${hash(JSON.stringify({ canonical, resourceInputs }))}`,
     ...(resourceInputs.length ? { resourceInputs } : {}),
     wgsl: [IMAGE_COLOR_WGSL, ...(instructions.some(item => item.operation === 'hash2d-vec2') ? [IMAGE_HASH2D_WGSL] : []), ...(parameterValues.length ? [IMAGE_PARAMETER_WGSL] : []),
-      ...kernelTypes, ...scopeFunctions, ...kernelFunctions, `fn evaluateImageGraph(${parameters.join(', ')}) -> vec4f {`, `  let pixel = inputColor;`,
+      ...scopeFunctions, ...reducerWgsl, `fn evaluateImageGraph(${parameters.join(', ')}) -> vec4f {`, `  let pixel = inputColor;`,
       ...expressions.filter((_line, index) => instructions[index].scope === 0), `  return ${returned};`, `}`].join('\n') };
 }
 
@@ -585,7 +545,8 @@ export function evaluateImageOperatorPlan(plan: ImageOperatorPlan, pixel: [numbe
   }
   if (plan.capabilities.includes('sample') && !context.sampleImage) throw new Error('Image operator plan requires an image sampling callback.');
   if (plan.resourceInputs?.length && !context.sampleResource) throw new Error('Image operator plan requires a materialized resource sampling callback.');
-  function evaluateScope(scope: number, scopePixel: [number, number, number, number], scopeUv: [number, number] | undefined, kernelIndex?: [number, number]) {
+  function evaluateScope(scope: number, scopePixel: [number, number, number, number], scopeUv: [number, number] | undefined,
+    kernelIndex?: [number, number], sequenceIndex?: number, sequenceT?: number) {
    const values: Array<number | boolean | number[]> = [];
    const kernelResults = new Map<number, { sum: number[]; weightSum: number }>();
    for (const item of plan.instructions) {
@@ -595,6 +556,8 @@ export function evaluateImageOperatorPlan(plan: ImageOperatorPlan, pixel: [numbe
     else if (item.operation === 'uv') values.push(scopeUv!);
     else if (item.operation === 'resource-input') values.push(context.sampleResource!(plan.resourceInputs![item.value!], scopeUv!));
     else if (item.operation === 'kernel-index') values.push(kernelIndex!);
+    else if (item.operation === 'sequence-index') values.push(sequenceIndex!);
+    else if (item.operation === 'sequence-t') values.push(sequenceT!);
     else if (item.operation === 'resolution') values.push(context.resolution!);
     else if (item.operation === 'time') values.push(context.timelineTimeSeconds!);
     else if (item.operation === 'sample-image') {
@@ -614,6 +577,20 @@ export function evaluateImageOperatorPlan(plan: ImageOperatorPlan, pixel: [numbe
       kernelResults.set(item.value!, result); values.push(result.sum);
     }
     else if (item.operation === 'kernel-weight-sum') values.push(kernelResults.get(item.value!)!.weightSum);
+    else if (item.operation === 'sequence-sum') {
+      const count = Math.max(1, Math.min(256, Math.trunc(args[0] as number)));
+      const descriptor = plan.sequenceScopes?.find(candidate => candidate.id === item.value);
+      if (!descriptor) throw new Error(`Image sequence scope ${String(item.value)} is missing.`);
+      const result = { sum: [0, 0, 0, 0], weightSum: 0 };
+      for (let index = 0; index < count; index++) {
+        const t = count === 1 ? 0 : index / (count - 1), term = evaluateScope(descriptor.id, scopePixel, scopeUv, undefined, index, t);
+        const sample = term[descriptor.sample] as number[], weight = term[descriptor.weight] as number;
+        for (let channel = 0; channel < 4; channel++) result.sum[channel] += sample[channel] * weight;
+        result.weightSum += weight;
+      }
+      kernelResults.set(item.value!, result); values.push(result.sum);
+    }
+    else if (item.operation === 'sequence-weight-sum') values.push(kernelResults.get(item.value!)!.weightSum);
     else if (item.operation === 'select-image') {
       const chosenScope = item.inputs[(args[0] as boolean) ? 2 : 1];
       const descriptor = plan.sampleScopes.find(candidate => candidate.id === chosenScope)!;
@@ -648,6 +625,7 @@ export function evaluateImageOperatorPlan(plan: ImageOperatorPlan, pixel: [numbe
     else if (item.operation === 'floor-vec2') values.push((args[0] as number[]).map(Math.floor));
     else if (item.operation === 'fract-vec2') values.push((args[0] as number[]).map(imageFract));
     else if (item.operation === 'clamp-vec2') values.push((args[0] as number[]).map((value, index) => Math.max((args[1] as number[])[index], Math.min((args[2] as number[])[index], value))));
+    else if (item.operation === 'mirror-repeat-vec2') values.push((args[0] as number[]).map(value => { const wrapped = value - Math.floor(value * .5) * 2; return wrapped > 1 ? 2 - wrapped : wrapped; }));
     else if (item.operation === 'reduce-min-vec2') values.push(Math.min(...args[0] as number[]));
     else if (item.operation === 'hash2d-vec2') values.push(imageHash2d(args[0] as number[]));
     else if (item.operation === 'dot-vec2') values.push((args[0] as number[])[0] * (args[1] as number[])[0] + (args[0] as number[])[1] * (args[1] as number[])[1]);

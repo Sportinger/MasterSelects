@@ -193,6 +193,19 @@ exposes the unsharp-mask subtraction, gain, addition and RGB clamp as nodes.
 Unlike the blur effects, it retains the original center-pixel alpha.
 Kernel Index has a per-sample scope rather than a single preview value.
 
+Motion, Radial and Zoom Blur reuse a one-dimensional sequence reduction. The
+Sequence Index exposes the current sample index and normalized position inside
+that reduction, not a single frame-wide preview value. Sample positions, weights
+and averaging remain editable graph operations, and all four RGBA channels are
+averaged. Motion Blur uses explicit mirrored UV boundaries; Radial and Zoom Blur
+retain linear, clamp-to-edge sampling. Existing parameter IDs, defaults, ranges
+and quality controls are unchanged. Each default graph remains one GPU pass.
+
+The sequence reducer supports up to 256 samples; Motion's default graph retains
+its 128-sample ceiling. The existing small-amount identity branches remain lazy
+for Motion and Radial Blur. Zoom Blur still evaluates its sampling path at zero
+amount, matching the legacy shader rather than introducing a new bypass.
+
 ### Graph-internal texture stages
 
 `image.materialize` creates an explicit texture boundary inside an image graph.
