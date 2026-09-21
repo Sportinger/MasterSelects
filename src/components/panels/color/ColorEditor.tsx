@@ -4,6 +4,7 @@ import { startBatch, endBatch } from '../../../stores/historyStore';
 import {
   MAX_RUNTIME_PRIMARY_NODES,
   PRIMARY_COLOR_PARAM_DEFS,
+  RUNTIME_COLOR_PARAM_DEFS,
   WHEEL_COLOR_PARAM_DEFS,
   createColorProperty,
   ensureColorCorrectionState,
@@ -152,11 +153,7 @@ export function ColorEditor({
 
   const handleSetAllColorKeyframes = () => {
     const entries = editableNodes.flatMap(node => {
-      const defs = node.type === 'wheels'
-        ? WHEEL_COLOR_PARAM_DEFS
-        : PRIMARY_COLOR_PARAM_DEFS;
-
-      return defs.map(def => ({
+      return RUNTIME_COLOR_PARAM_DEFS.map(def => ({
         property: createColorProperty(activeVersion.id, node.id, def.key) as AnimatableProperty,
         value: getAnimatedParamValue(node, def.key, def.defaultValue),
       }));

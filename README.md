@@ -108,7 +108,9 @@ RGB Stripe Mask, Sine Gain and Clamped Image Sample blocks. CRT scanlines and
 flicker share Sine Gain; compatible Glitch sampling reuses Clamped Image Sample.
 All four blocks are insertable through **Reusable Nodes**, with explicit inputs.
 Properties' Effects tab includes the clip's Color grade as an expandable entry
-with the existing color controls and bypass. A Video / Audio switch defaults to
+with the normal effect-card design, compact numeric controls, keyframes and bypass.
+Corrector inspectors expose the same wheel channels edited in the dedicated Color
+tab, which retains its special wheels/curves layout. A Video / Audio switch defaults to
 video for visual clips; Audio shows the owning clip's audio controls and effects,
 following linked audio when present. Switching the view does not change playback.
 Ribbon Scan uses the same graph compiler for its animated ribbon mask, horizontal

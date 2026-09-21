@@ -6,13 +6,9 @@ import { useTimelineStore } from '../../../../stores/timeline';
 import type { Effect, TimelineClip } from '../../../../stores/timeline/types';
 import type { NodeGraphNode } from '../../../../services/nodeGraph';
 import {
-  PRIMARY_COLOR_PARAM_DEFS,
-  WHEEL_COLOR_PARAM_DEFS,
-  createColorProperty,
   ensureColorCorrectionState,
-  getActiveColorVersion,
 } from '../../../../types/colorCorrection';
-import type { AnimatableProperty } from '../../../../types/animationProperties';
+import { ColorNodeParameterControls } from '../../color/ColorNodeParameterControls';
 import { EditableDraggableNumber as DraggableNumber } from '../../../common/EditableDraggableNumber';
 import { BLEND_MODE_GROUPS, formatBlendModeName } from '../../properties/sharedConstants';
 import {
@@ -214,11 +210,10 @@ export function EffectNodeParameters({ clip, node }: { clip: TimelineClip; node:
 }
 
 export function ColorNodeParameters({ clip, node }: { clip: TimelineClip; node: NodeGraphNode }) {
-  const setPropertyValue = useTimelineStore((state) => state.setPropertyValue);
   const setColorNodeEnabled = useTimelineStore((state) => state.setColorNodeEnabled);
   const binding = node.binding?.kind === 'color-node' ? node.binding : null;
   const colorState = ensureColorCorrectionState(clip.colorCorrection);
-  const activeVersion = getActiveColorVersion(colorState);
+  const activeVersion = colorState.versions.find(version => version.id === binding?.versionId);
   const colorNode = binding
     ? activeVersion?.nodes.find((candidate) => candidate.id === binding.nodeId)
     : undefined;
@@ -226,10 +221,6 @@ export function ColorNodeParameters({ clip, node }: { clip: TimelineClip; node: 
   if (!binding || !colorNode || (binding.nodeType !== 'primary' && binding.nodeType !== 'wheels')) {
     return <div className="node-workspace-inspector-empty">No editable color parameters</div>;
   }
-
-  const definitions = binding.nodeType === 'wheels'
-    ? WHEEL_COLOR_PARAM_DEFS
-    : PRIMARY_COLOR_PARAM_DEFS;
 
   return (
     <div className="node-workspace-param-list">
@@ -241,27 +232,7 @@ export function ColorNodeParameters({ clip, node }: { clip: TimelineClip; node: 
           onChange={(event) => setColorNodeEnabled(clip.id, colorNode.id, event.target.checked)}
         />
       </label>
-      {definitions.map((definition) => {
-        const value = colorNode.params[definition.key];
-        return (
-          <NumericParamEditor
-            key={definition.key}
-            label={definition.label}
-            value={typeof value === 'number' ? value : definition.defaultValue}
-            onChange={(nextValue) => setPropertyValue(
-              clip.id,
-              createColorProperty(binding.versionId, colorNode.id, definition.key) as AnimatableProperty,
-              nextValue,
-            )}
-            defaultValue={definition.defaultValue}
-            decimals={definition.decimals}
-            min={definition.min}
-            max={definition.max}
-            sensitivity={Math.max(definition.step, (definition.max - definition.min) / 100)}
-            persistenceKey={`node.color.${clip.id}.${binding.versionId}.${colorNode.id}.${definition.key}`}
-          />
-        );
-      })}
+      <ColorNodeParameterControls clip={clip} versionId={binding.versionId} node={colorNode} />
     </div>
   );
 }

@@ -455,16 +455,15 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
         )}
       </div>}
 
-      {!audioMode && clip && <ColorGraphEffectEntry key={clipId} clip={clip} />}
       {audioMode ? (
         audioClip ? <>
           {audioClip.id !== clipId && <p className="effect-info">Linked audio: {audioClip.name}</p>}
           <VolumeTab key={audioClip.id} clipId={audioClip.id} effects={audioClip.effects ?? []} />
         </> : <div className="panel-empty"><p>This clip has no audio source.</p></div>
-      ) : videoEffects.length === 0 ? (
-        !hasColorEntry && <div className="panel-empty"><p>No effects applied</p></div>
       ) : (
         <div className="effects-list">
+          {clip && <ColorGraphEffectEntry key={clipId} clip={clip} />}
+          {videoEffects.length === 0 && !hasColorEntry && <div className="panel-empty"><p>No effects applied</p></div>}
           {videoEffects.map((effect, idx) => {
             const interpolated = interpolatedEffects.find(e => e.id === effect.id) || effect;
             const effectDef = EFFECT_REGISTRY.get(effect.type);

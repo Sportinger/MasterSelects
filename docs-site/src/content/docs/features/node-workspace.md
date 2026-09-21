@@ -24,7 +24,11 @@ copy of effect parameters, Flock definitions, color grades or 3D settings.
 
 The focused **Color Nodes** view uses this same canvas, including navigation,
 cable reconnection, selection and previews. Color edits in either view use one
-mutation owner. Flock, Color, Face Cables, Scene and manual clip links share port
+mutation owner. Corrector and Wheels inspectors expose the same complete set of
+primary and wheel-channel parameters, with playhead-interpolated values, resets
+and keyframe actions. These compact numeric controls are also reused by the Color
+entry in Properties' Effects tab; the dedicated Color tab keeps its wheel UI.
+Flock, Color, Face Cables, Scene and manual clip links share port
 compatibility, format, input replacement and cycle checks. Flock's repeated inputs
 still accept multiple sources. Domain compilers and saved version-1 definitions
 remain intact; existing projects need no format migration.

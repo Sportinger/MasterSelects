@@ -71,11 +71,6 @@
   outline-offset: -2px;
 }
 
-.color-graph-effect-entry .properties-color-controls {
-  height: 400px;
-  padding: 0;
-}
-
 .effect-mode-label {
   flex: 1;
   font-size: var(--font-md);

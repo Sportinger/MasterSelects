@@ -92,13 +92,19 @@ clips without an audio source show an empty-state explanation. This switch only
 filters the inspector and never enables, disables or reroutes audio.
 
 An initialized clip color grade appears as **Color** in the video effect list,
-including in its badge count. It expands to the same correction-node picker,
-wheels and curves as the Color tab and has a synchronized global enable/bypass
-control and Open Nodes action. Disabled grades remain listed for re-enabling.
+including in its badge count. It uses the normal effect card, collapse and bypass
+controls, and compact numeric inspector sections for each correction node, with
+sliders, reset and keyframe actions. The special wheels/curves layout stays in
+the dedicated Color tab. An Open Nodes action opens the same grade. Disabled
+grades remain listed for re-enabling.
 This is the existing built-in color stage before the image-effect stack, not a
 second grade or a new draggable GPU effect. Its storage and render order remain
 unchanged. The current Color panel's wheels edit the selected Corrector/Wheels
 node; choosing the wheels tool does not create a separate Wheels node.
+Corrector and Wheels node inspectors share the complete runtime parameter set,
+including Lift/Gamma/Gain/Offset R/G/B/Y. They display animated values at the
+playhead. Parameter and keyframe discovery includes these channels even in older
+grades that have not stored their default values yet.
 
 ## Current Effect Categories
 

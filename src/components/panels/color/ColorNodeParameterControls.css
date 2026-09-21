@@ -1,0 +1,22 @@
+@layer features {
+  .color-node-parameter-controls {
+    container-type: inline-size;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .color-node-parameter-controls :is(button, input) {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .color-node-parameter-controls :is(button, input):focus:not(:focus-visible) {
+    outline: none;
+    box-shadow: none;
+  }
+
+  .color-node-parameter-controls :is(button, input):focus-visible,
+  [data-theme="resolve"] .properties-panel .color-graph-effect-entry :is(button, input):focus-visible {
+    outline: 1px solid var(--accent-color) !important;
+    outline-offset: -2px !important;
+  }
+}

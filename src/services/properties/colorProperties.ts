@@ -4,6 +4,7 @@ import {
   DEFAULT_PRIMARY_COLOR_PARAMS,
   RUNTIME_COLOR_PARAM_DEFS,
   ensureColorCorrectionState,
+  isColorGradeNode,
   parseColorProperty,
   setColorNodeParamValue,
 } from '../../types/colorCorrection';
@@ -21,7 +22,7 @@ export function getColorDescriptorForPath(path: string, clip?: TimelineClip): Pr
   const state = ensureColorCorrectionState(clip.colorCorrection);
   const version = state.versions.find((candidate) => candidate.id === parsed.versionId);
   const node = version?.nodes.find((candidate) => candidate.id === parsed.nodeId);
-  if (!node || typeof node.params[parsed.paramName] !== 'number') return undefined;
+  if (!node || !isColorGradeNode(node)) return undefined;
 
   return {
     path,
@@ -61,9 +62,9 @@ export function getColorDescriptorsForClip(clip: TimelineClip): PropertyDescript
 
   const state = ensureColorCorrectionState(clip.colorCorrection);
   return state.versions.flatMap((version) =>
-    version.nodes.flatMap((node) =>
-      Object.keys(node.params).flatMap((paramName) => {
-        const descriptor = getColorDescriptorForPath(`color.${version.id}.${node.id}.${paramName}`, clip);
+    version.nodes.filter(isColorGradeNode).flatMap((node) =>
+      RUNTIME_COLOR_PARAM_DEFS.flatMap(({ key }) => {
+        const descriptor = getColorDescriptorForPath(`color.${version.id}.${node.id}.${key}`, clip);
         return descriptor ? [descriptor] : [];
       })
     )

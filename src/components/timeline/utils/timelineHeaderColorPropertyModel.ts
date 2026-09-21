@@ -1,5 +1,5 @@
 import {
-  PRIMARY_COLOR_PARAM_DEFS,
+  RUNTIME_COLOR_PARAM_DEFS,
   ensureColorCorrectionState,
   getActiveColorVersion,
   getColorNodeParamValue,
@@ -10,7 +10,7 @@ import type { Keyframe } from '../../../types/keyframes';
 import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
 import type { HeaderKeyframe, KeyframeTrackClip } from './timelineHeaderPropertyTypes';
 
-const colorParamDefsByKey = new Map(PRIMARY_COLOR_PARAM_DEFS.map((def) => [def.key, def]));
+const colorParamDefsByKey = new Map(RUNTIME_COLOR_PARAM_DEFS.map((def) => [def.key, def]));
 
 function prettifyParamName(paramName: string): string {
   return paramName
@@ -29,7 +29,7 @@ export function getTimelineHeaderColorPropertyMeta(
   const version = colorState?.versions.find((entry) => entry.id === parsed.versionId)
     ?? (colorState ? getActiveColorVersion(colorState) : undefined);
   const node = version?.nodes.find((entry) => entry.id === parsed.nodeId);
-  const def = colorParamDefsByKey.get(parsed.paramName as (typeof PRIMARY_COLOR_PARAM_DEFS)[number]['key']);
+  const def = colorParamDefsByKey.get(parsed.paramName as (typeof RUNTIME_COLOR_PARAM_DEFS)[number]['key']);
 
   return {
     ...parsed,

@@ -220,7 +220,7 @@ export function createPrimaryColorNode(id = 'node_primary', name = 'Corrector'):
     type: 'primary',
     name,
     enabled: true,
-    params: createParamsFromDefs(PRIMARY_COLOR_PARAM_DEFS),
+    params: createParamsFromDefs(RUNTIME_COLOR_PARAM_DEFS),
     position: { x: 160, y: 80 },
   };
 }
@@ -231,7 +231,7 @@ export function createWheelsColorNode(id = 'node_wheels', name = 'Wheels'): Colo
     type: 'wheels',
     name,
     enabled: true,
-    params: createParamsFromDefs(WHEEL_COLOR_PARAM_DEFS),
+    params: createParamsFromDefs(RUNTIME_COLOR_PARAM_DEFS),
     position: { x: 280, y: 80 },
   };
 }
@@ -331,6 +331,14 @@ export function ensureColorCorrectionState(state?: ColorCorrectionState): ColorC
   }
 
   next.enabled = next.enabled !== false;
+  // Older grades stored only the channels exposed by their original tool.
+  // Hydrate neutral defaults so parameter-driven animation also sees wheel
+  // channels before the first base-value edit, without changing rendered color.
+  for (const version of next.versions) {
+    for (const node of version.nodes) {
+      if (isColorGradeNode(node)) node.params = { ...DEFAULT_PRIMARY_COLOR_PARAMS, ...node.params };
+    }
+  }
   next.ui = {
     viewMode: next.ui?.viewMode ?? 'list',
     selectedNodeId: next.ui?.selectedNodeId,
