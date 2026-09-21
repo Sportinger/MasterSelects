@@ -206,6 +206,14 @@ its 128-sample ceiling. The existing small-amount identity branches remain lazy
 for Motion and Radial Blur. Zoom Blur still evaluates its sampling path at zero
 amount, matching the legacy shader rather than introducing a new bypass.
 
+Edge Detect uses eight shared neighbor samples in one pass. Each sampled image is
+converted to Rec.709 luminance before the two Sobel gradients are evaluated in
+their original arithmetic order. Strength is applied to the gradient magnitude,
+then clamped before optional inversion. As in the legacy effect, output alpha is
+always one, independent of source alpha. Strength remains animatable with default
+1 and range 0–5; Invert defaults to false. Sampling, coefficients and the final
+clamp are editable graph connections rather than an opaque Sobel operation.
+
 ### Graph-internal texture stages
 
 `image.materialize` creates an explicit texture boundary inside an image graph.

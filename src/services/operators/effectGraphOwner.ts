@@ -21,11 +21,12 @@ import { createDefaultBlockEffectGraph, type EditableBlockEffectType } from './b
 import { normalizeCatalogColor } from '../../effects/_shared/catalogColor';
 import { createDefaultBlurEffectGraph, type EditableBlurEffectType } from './blurEffectGraphs';
 import { createDefaultDirectionalBlurGraph, type EditableDirectionalBlurEffectType } from './directionalBlurEffectGraphs';
+import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
 
 const LOCAL_IMAGE_EFFECTS = new Set(['invert', 'brightness', 'contrast', 'saturation', 'exposure', 'levels', 'hue-shift', 'temperature', 'vibrance', 'threshold', 'posterize']);
-const CONTEXTUAL_IMAGE_EFFECTS = new Set(['vignette', 'scanlines', 'grain', 'pixelate', 'mirror', 'rgb-split', 'blockify', 'block-mosaic', 'box-blur', 'gaussian-blur', 'sharpen', 'motion-blur', 'radial-blur', 'zoom-blur']);
+const CONTEXTUAL_IMAGE_EFFECTS = new Set(['vignette', 'scanlines', 'grain', 'pixelate', 'mirror', 'rgb-split', 'blockify', 'block-mosaic', 'box-blur', 'gaussian-blur', 'sharpen', 'motion-blur', 'radial-blur', 'zoom-blur', 'edge-detect']);
 export function isLocalImageEffectType(type: string): type is 'invert' | EditableColorEffectType | EditablePointwiseEffectType { return LOCAL_IMAGE_EFFECTS.has(type); }
-export function isImageGraphEffectType(type: string): type is 'invert' | EditableColorEffectType | EditablePointwiseEffectType | EditableContextualEffectType | EditableSamplingEffectType | EditableBlockEffectType | EditableBlurEffectType | EditableDirectionalBlurEffectType {
+export function isImageGraphEffectType(type: string): type is 'invert' | 'edge-detect' | EditableColorEffectType | EditablePointwiseEffectType | EditableContextualEffectType | EditableSamplingEffectType | EditableBlockEffectType | EditableBlurEffectType | EditableDirectionalBlurEffectType {
   return isLocalImageEffectType(type) || CONTEXTUAL_IMAGE_EFFECTS.has(type);
 }
 export function hasEffectOperatorGraph(type: string): boolean { return type === 'face-cables' || type === 'voxel-relief' || isImageGraphEffectType(type) || type === 'analog-signal-lab'; }
@@ -59,6 +60,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGra
           ? () => createDefaultBlurEffectGraph(effectType)
         : effectType === 'motion-blur' || effectType === 'radial-blur' || effectType === 'zoom-blur'
           ? () => createDefaultDirectionalBlurGraph(effectType)
+        : effectType === 'edge-detect' ? createDefaultEdgeDetectGraph
         : () => createDefaultColorEffectGraph(effectType);
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
     const graph = migrateImageOperatorGraph(saved);

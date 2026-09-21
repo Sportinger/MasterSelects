@@ -20,7 +20,7 @@ export interface ImageOperatorEvaluationContext {
 }
 export interface ImagePlanInstruction {
   nodeId: string;
-  operation: 'input' | 'uv' | 'resolution' | 'time' | 'sample-image' | 'resource-input' | 'kernel-index' | 'kernel-sum' | 'kernel-weight-sum' | 'sequence-index' | 'sequence-t' | 'sequence-sum' | 'sequence-weight-sum' | 'mirror-repeat-vec2' | 'select-image' | 'constant' | 'parameter' | 'parameter-boolean' | 'parameter-color' | 'constant-color' | 'subtract' | 'add-scalar' | 'multiply-scalar' | 'divide-ieee-scalar' | 'reciprocal-scalar' | 'exp2-scalar' | 'exp-scalar' | 'fract-scalar' | 'floor-scalar' | 'step-scalar' | 'max-scalar' | 'smoothstep-scalar' | 'mix-scalar' | 'greater-scalar' | 'and-boolean' | 'select-scalar' | 'add-vec2' | 'subtract-vec2' | 'multiply-vec2' | 'divide-vec2' | 'floor-vec2' | 'fract-vec2' | 'clamp-vec2' | 'reduce-min-vec2' | 'hash2d-vec2' | 'dot-vec2' | 'length-vec2' | 'sin-scalar' | 'cos-scalar' | 'scalar-to-vec2' | 'scalar-to-vec4' | 'divide-vec4' | 'subtract-rgb' | 'add-rgb' | 'multiply-rgb' | 'divide-ieee-rgb' | 'max-rgb' | 'power-rgb' | 'floor-rgb' | 'clamp-rgb' | 'mix-rgb' | 'mix-components-rgb' | 'reduce-min-rgb' | 'reduce-max-rgb' | 'luminance-rec601' | 'luminance-rec709' | 'scalar-to-rgb' | 'rgb-to-vec3' | 'vec3-to-rgb' | 'rgb-to-hsv' | 'hsv-to-rgb' | 'split-rgb' | 'split-alpha' | 'combine' | 'image-to-vec4' | 'vec4-to-image' | 'split-component' | 'combine-vector';
+  operation: 'input' | 'uv' | 'resolution' | 'time' | 'sample-image' | 'resource-input' | 'kernel-index' | 'kernel-sum' | 'kernel-weight-sum' | 'sequence-index' | 'sequence-t' | 'sequence-sum' | 'sequence-weight-sum' | 'mirror-repeat-vec2' | 'select-image' | 'constant' | 'parameter' | 'parameter-boolean' | 'parameter-color' | 'constant-color' | 'subtract' | 'add-scalar' | 'multiply-scalar' | 'divide-ieee-scalar' | 'reciprocal-scalar' | 'exp2-scalar' | 'exp-scalar' | 'sqrt-scalar' | 'fract-scalar' | 'floor-scalar' | 'step-scalar' | 'max-scalar' | 'clamp-scalar' | 'smoothstep-scalar' | 'mix-scalar' | 'greater-scalar' | 'and-boolean' | 'select-scalar' | 'add-vec2' | 'subtract-vec2' | 'multiply-vec2' | 'divide-vec2' | 'floor-vec2' | 'fract-vec2' | 'clamp-vec2' | 'reduce-min-vec2' | 'hash2d-vec2' | 'dot-vec2' | 'length-vec2' | 'sin-scalar' | 'cos-scalar' | 'scalar-to-vec2' | 'scalar-to-vec4' | 'divide-vec4' | 'subtract-rgb' | 'add-rgb' | 'multiply-rgb' | 'divide-ieee-rgb' | 'max-rgb' | 'power-rgb' | 'floor-rgb' | 'clamp-rgb' | 'mix-rgb' | 'mix-components-rgb' | 'reduce-min-rgb' | 'reduce-max-rgb' | 'luminance-rec601' | 'luminance-rec709' | 'scalar-to-rgb' | 'rgb-to-vec3' | 'vec3-to-rgb' | 'rgb-to-hsv' | 'hsv-to-rgb' | 'split-rgb' | 'split-alpha' | 'combine' | 'image-to-vec4' | 'vec4-to-image' | 'split-component' | 'combine-vector';
   type: ImagePlanValue;
   inputs: number[];
   value?: number;
@@ -292,6 +292,13 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         register = current.bypassed ? a : emit({ nodeId: current.id, operation: 'max-scalar', type: 'scalar', inputs: [a, visitSource(current, 'b')] });
         break;
       }
+      case 'math.clamp.scalar': {
+        const value = visitSource(current, 'value'); register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'clamp-scalar', type: 'scalar',
+          inputs: [value, visitSource(current, 'min'), visitSource(current, 'max')] }); break;
+      }
+      case 'math.sqrt.scalar': {
+        const value = visitSource(current, 'value'); register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'sqrt-scalar', type: 'scalar', inputs: [value] }); break;
+      }
       case 'math.smoothstep.scalar': register = emit({ nodeId: current.id, operation: 'smoothstep-scalar', type: 'scalar',
         inputs: [visitSource(current, 'edge0'), visitSource(current, 'edge1'), visitSource(current, 'value')] }); break;
       case 'math.mix.scalar': {
@@ -410,7 +417,8 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       case 'vector.reduce-min.rgb': case 'vector.reduce-max.rgb': register = emit({ nodeId: current.id,
         operation: current.operator === 'vector.reduce-min.rgb' ? 'reduce-min-rgb' : 'reduce-max-rgb', type: 'scalar', inputs: [visitSource(current, 'rgb')] }); break;
       case 'color.luminance-rec601.rgb': register = emit({ nodeId: current.id, operation: 'luminance-rec601', type: 'scalar', inputs: [visitSource(current, 'rgb')] }); break;
-      case 'color.luminance-rec709.rgb': register = emit({ nodeId: current.id, operation: 'luminance-rec709', type: 'scalar', inputs: [visitSource(current, 'rgb')] }); break;
+      case 'color.luminance-rec709.rgb': case 'color.luminance-rec709.image': register = emit({ nodeId: current.id, operation: 'luminance-rec709', type: 'scalar',
+        inputs: [visitSource(current, current.operator.endsWith('.image') ? 'image' : 'rgb')] }); break;
       case 'convert.rgb-to-vec3': register = emit({ nodeId: current.id, operation: 'rgb-to-vec3', type: 'vec3', inputs: [visitSource(current, 'rgb')] }); break;
       case 'convert.vec3-to-rgb': register = emit({ nodeId: current.id, operation: 'vec3-to-rgb', type: 'rgb', inputs: [visitSource(current, 'value')] }); break;
       case 'convert.rgb-to-hsv': register = emit({ nodeId: current.id, operation: 'rgb-to-hsv', type: 'vec3', inputs: [visitSource(current, 'rgb')] }); break;
@@ -462,7 +470,8 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       : item.operation === 'divide-ieee-scalar' ? `${args[0]} / ${args[1]}` : item.operation === 'reciprocal-scalar' ? `1.0 / ${args[0]}`
       : item.operation === 'exp2-scalar' ? `exp2(${args[0]})` : item.operation === 'exp-scalar' ? `exp(${args[0]})` : item.operation === 'fract-scalar' ? `fract(${args[0]})`
       : item.operation === 'floor-scalar' ? `floor(${args[0]})` : item.operation === 'step-scalar' ? `step(${args[0]}, ${args[1]})`
-      : item.operation === 'max-scalar' ? `max(${args[0]}, ${args[1]})` : item.operation === 'greater-scalar' ? `${args[0]} > ${args[1]}`
+      : item.operation === 'sqrt-scalar' ? `sqrt(${args[0]})` : item.operation === 'max-scalar' ? `max(${args[0]}, ${args[1]})`
+      : item.operation === 'clamp-scalar' ? `clamp(${args[0]}, min(${args[1]}, ${args[2]}), max(${args[1]}, ${args[2]}))` : item.operation === 'greater-scalar' ? `${args[0]} > ${args[1]}`
       : item.operation === 'and-boolean' ? `${args[0]} && ${args[1]}`
       : item.operation === 'smoothstep-scalar' ? `smoothstep(${args[0]}, ${args[1]}, ${args[2]})`
       : item.operation === 'mix-scalar' ? `mix(${args[0]}, ${args[1]}, ${args[2]})`
@@ -485,7 +494,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       : item.operation === 'reduce-min-rgb' ? `min(min(${args[0]}.r, ${args[0]}.g), ${args[0]}.b)`
       : item.operation === 'reduce-max-rgb' ? `max(max(${args[0]}.r, ${args[0]}.g), ${args[0]}.b)`
       : item.operation === 'luminance-rec601' ? `dot(${args[0]}, vec3f(0.299, 0.587, 0.114))`
-      : item.operation === 'luminance-rec709' ? `dot(${args[0]}, vec3f(0.2126, 0.7152, 0.0722))`
+      : item.operation === 'luminance-rec709' ? `dot(${args[0]}.rgb, vec3f(0.2126, 0.7152, 0.0722))`
       : item.operation === 'scalar-to-rgb' ? `vec3f(${args[0]})` : item.operation === 'image-to-vec4' || item.operation === 'vec4-to-image' ? args[0]
       : item.operation === 'rgb-to-vec3' || item.operation === 'vec3-to-rgb' ? args[0]
       : item.operation === 'rgb-to-hsv' ? `imageGraphRgbToHsv(${args[0]})` : item.operation === 'hsv-to-rgb' ? `imageGraphHsvToRgb(${args[0]})`
@@ -608,10 +617,12 @@ export function evaluateImageOperatorPlan(plan: ImageOperatorPlan, pixel: [numbe
     else if (item.operation === 'reciprocal-scalar') values.push(1 / (args[0] as number));
     else if (item.operation === 'exp2-scalar') values.push(2 ** (args[0] as number));
     else if (item.operation === 'exp-scalar') values.push(Math.exp(args[0] as number));
+    else if (item.operation === 'sqrt-scalar') values.push(Math.sqrt(args[0] as number));
     else if (item.operation === 'fract-scalar') values.push(imageFract(args[0] as number));
     else if (item.operation === 'floor-scalar') values.push(Math.floor(args[0] as number));
     else if (item.operation === 'step-scalar') values.push((args[1] as number) < (args[0] as number) ? 0 : 1);
     else if (item.operation === 'max-scalar') values.push(Math.max(args[0] as number, args[1] as number));
+    else if (item.operation === 'clamp-scalar') values.push(evaluateScalarOperation('clamp', args[0] as number, args[1] as number, args[2] as number));
     else if (item.operation === 'and-boolean') values.push((args[0] as boolean) && (args[1] as boolean));
     else if (item.operation === 'smoothstep-scalar') {
       const t = Math.max(0, Math.min(1, ((args[2] as number) - (args[0] as number)) / ((args[1] as number) - (args[0] as number))));

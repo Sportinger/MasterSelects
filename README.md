@@ -108,6 +108,8 @@ their existing single-pass rendering and alpha averaging. Sharpen reuses the
 kernel foundation and preserves center-pixel alpha.
 Motion, Radial and Zoom Blur expose directional sampling and weighting as editable
 nodes, retaining their existing parameter ranges and single-pass execution.
+Edge Detect exposes its eight shared neighbor samples, luminance conversion and
+Sobel arithmetic as editable nodes, with the existing opaque output.
 Multi-stage image graphs share intermediate texture stages between consumers;
 simple graphs retain their single-pass execution.
 
