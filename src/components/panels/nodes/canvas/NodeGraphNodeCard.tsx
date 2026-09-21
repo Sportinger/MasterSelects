@@ -17,6 +17,7 @@ import {
   getNodePortStartY,
   isNodeBypassable,
   isNodeBypassed,
+  NODE_BYPASS_HITBOX,
   NODE_WIDTH,
 } from './canvasGeometry';
 
@@ -138,6 +139,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
             <button
               type="button"
               className={`node-workspace-bypass-button${isBypassed ? ' active' : ''}`}
+              style={canvasRendered ? { position: 'absolute', ...NODE_BYPASS_HITBOX } : undefined}
               aria-label={`Bypass ${node.label}`} aria-pressed={isBypassed}
               title={isBypassed ? 'Bypassed; click to enable' : String(node.params?.bypassDescription ?? 'Bypass node')}
               onPointerDown={(event) => {

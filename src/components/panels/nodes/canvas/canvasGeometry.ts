@@ -12,6 +12,8 @@ export const DEFAULT_VIEWPORT = { zoom: 0.88, panX: 36, panY: 28 };
 export const MIN_ZOOM = 0.05;
 export const MAX_ZOOM = 2.4;
 export const NODE_WIDTH = 184;
+/** Matches the worker-painted `Byp` label while providing a forgiving pointer target. */
+export const NODE_BYPASS_HITBOX = { left: NODE_WIDTH - 92, top: 3, width: 42, height: 24 } as const;
 export const NODE_MIN_HEIGHT = 126;
 export const PORT_ROW_HEIGHT = 32;
 export const nodePortRowHeight = (node: NodeGraphNode) => inlineNumericPorts(node) ? 84 : PORT_ROW_HEIGHT;

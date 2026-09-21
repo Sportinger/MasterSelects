@@ -6,6 +6,8 @@ import { buildUnifiedClipGraph } from '../../src/services/nodeGraph/unifiedClipG
 import { useUnifiedNodeActions } from '../../src/components/panels/nodes/useUnifiedNodeActions';
 import type { FlockGraphActions } from '../../src/components/panels/nodes/flock/useFlockGraphActions';
 import { NodeGraphGroups } from '../../src/components/panels/nodes/canvas/NodeGraphGroups';
+import { NodeGraphNodeCard } from '../../src/components/panels/nodes/canvas/NodeGraphNodeCard';
+import { NODE_BYPASS_HITBOX } from '../../src/components/panels/nodes/canvas/canvasGeometry';
 import { useTimelineStore } from '../../src/stores/timeline';
 
 afterEach(() => { cleanup(); useTimelineStore.setState({ clips: [], tracks: [], isExporting: false }); });
@@ -66,5 +68,19 @@ describe('effect group bypass', () => {
     expect(toggle).toHaveBeenCalledWith('effect-face');
     button.focus(); fireEvent.click(button, { detail: 0 });
     expect(button).toHaveFocus();
+  });
+
+  it('aligns the invisible canvas-mode button with the painted Byp label and keeps it out of node dragging', () => {
+    const { graph } = setup(true), toggle = vi.fn(), drag = vi.fn();
+    const node = graph.nodes.find(candidate => candidate.id === 'effect-face')!;
+    const view = render(<NodeGraphNodeCard node={node} canvasRendered selectedNodeId={null} connectionDraft={null}
+      onSelectNode={vi.fn()} onStartNodeDrag={drag} onNodePointerMove={vi.fn()} onFinishNodeDrag={vi.fn()}
+      onStartConnectionDrag={vi.fn()} onDisconnectPortEdges={vi.fn()} onToggleNodeBypass={toggle} />);
+    const button = view.getByRole('button', { name: 'Bypass Face Cables' });
+    expect(button).toHaveStyle({ position: 'absolute', left: `${NODE_BYPASS_HITBOX.left}px`, top: `${NODE_BYPASS_HITBOX.top}px`,
+      width: `${NODE_BYPASS_HITBOX.width}px`, height: `${NODE_BYPASS_HITBOX.height}px` });
+    fireEvent.pointerDown(button); fireEvent.click(button, { detail: 1 });
+    expect(toggle).toHaveBeenCalledExactlyOnceWith('effect-face');
+    expect(drag).not.toHaveBeenCalled();
   });
 });
