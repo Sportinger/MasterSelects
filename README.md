@@ -66,7 +66,8 @@ existing systems, and check their work:
   explain how each part of the editor works.
 - **Reusable building blocks.** Registered effect modules, shared inspector
   controls, typed tool schemas, and store slices give new features existing
-  patterns to build on.
+  patterns to build on. The Nodes workspace also saves customized effects and
+  their internal graphs as browser-local presets for independent reuse across projects.
 - **Access to the running editor.** The [local MCP bridge](docs/Features/AI-Bridge-Control.md)
   lets agents inspect the timeline, operate tools, and examine results while
   working on the source.

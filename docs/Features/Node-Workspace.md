@@ -34,6 +34,20 @@ numeric fields, sliders at suitable widths, reset and supported keyframe actions
 The link icon exposes a control to Properties. The Connections section offers a
 keyboard-accessible alternative to cable dragging.
 
+## Saved effect presets
+
+Open **Effect presets** in the Nodes toolbar, select an effect card or a node
+inside its effect graph, enter a name and choose **Save effect copy**. The local
+library stores the effect parameters, enabled state, internal graph, connections,
+groups and internal node positions. **Add copy** appends an independent effect to
+the selected visual clip in one undo step. Editing a copy or deleting its preset
+does not change other copies or the source effect.
+
+Presets are available across projects in the same browser profile. They are not
+cloud-synced or included in project files; inserted effects are saved normally with
+the project. Clip keyframes and external media are not bundled. Locked clips and
+exports prevent insertion. Storage failures are shown without replacing the library.
+
 ## Reusable coordinate nodes
 
 Kaleidoscope is the first composition pilot. Its graph uses three registered,

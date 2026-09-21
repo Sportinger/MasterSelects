@@ -1,0 +1,7 @@
+.effect-preset-library form { display: flex; flex-wrap: wrap; gap: 6px; }
+.effect-preset-library input { min-width: 0; flex: 1; }
+.effect-preset-library form button, .effect-preset-entry button { border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-tertiary); color: var(--text-primary); padding: 4px 8px; cursor: pointer; }
+.effect-preset-library button:disabled { opacity: 0.45; cursor: default; }
+.effect-preset-entry { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
+.effect-preset-entry > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.effect-preset-library input:focus-visible { outline: 2px solid var(--accent-primary, #4a9eff); outline-offset: 2px; }

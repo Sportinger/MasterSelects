@@ -1,6 +1,7 @@
 import { readTimelineRuntimeState } from '../../../services/timeline/timelineRuntimeCoordinator';
 import { transferNodeGroup } from '../../../services/nodeGraph/transferNodeGroup';
 import { NodeCatalog } from './workspace/NodeCatalog';
+import { EffectPresetLibrary } from './workspace/EffectPresetLibrary';
 import { getEffectOperator } from '../../../services/operators/operatorRegistry';
 import { useUnifiedNodeActions } from './useUnifiedNodeActions';
 import { useCallback, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
@@ -69,6 +70,7 @@ function batched(label: string, run: () => void): void {
 
 export function NodeWorkspacePanel() {
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const [presetsOpen, setPresetsOpen] = useState(false);
   const [animationInspector, setAnimationInspector] = useState(false);
   const [viewTheme, setViewTheme] = useState<NodeGraphViewTheme>('general');
   const subject = useNodeGraphSubject(viewTheme);
@@ -159,6 +161,7 @@ export function NodeWorkspacePanel() {
     setContextMenu(null);
     if (request.nodeId) {
       setCatalogOpen(false);
+      setPresetsOpen(false);
       setAnimationInspector(request.animation === true);
       setSelection({ graphId, nodeId: request.nodeId, nodeIds: [] });
     }
@@ -341,6 +344,10 @@ export function NodeWorkspacePanel() {
     : contextMenuNode?.binding?.kind === 'color-node' ? !['input', 'output'].includes(contextMenuNode.binding.nodeType)
     : canDeleteNodeFromClip(subject.clip, contextMenuNode);
   const viewLabel = activeTheme === 'color' ? 'Color subgraph' : subject.view.label;
+  const presetEffectId = selectedNode?.binding && 'effectId' in selectedNode.binding ? selectedNode.binding.effectId
+    : subject.graph.groups?.find(group => group.proxyId === selectedNodeId || group.id === selectedNode?.groupId)?.effectId
+      ?? (selectedNode?.id.startsWith('effect-') ? selectedNode.id.slice(7) : undefined);
+  const presetEffect = subject.clip.effects.find(effect => effect.id === presetEffectId);
 
   return (
     <div className="node-workspace-panel" ref={panelRef}>
@@ -384,10 +391,13 @@ export function NodeWorkspacePanel() {
             )}
           </nav>
           <button type="button" className="node-workspace-breadcrumb-link node-catalog-toggle" aria-pressed={catalogOpen}
-            onClick={event => { if (event.detail > 0) event.currentTarget.blur(); setCatalogOpen(open => !open); }}>Catalog</button>
+            onClick={event => { if (event.detail > 0) event.currentTarget.blur(); setPresetsOpen(false); setCatalogOpen(open => !open); }}>Catalog</button>
+          <button type="button" className="node-workspace-breadcrumb-link" aria-pressed={presetsOpen}
+            onClick={event => { if (event.detail > 0) event.currentTarget.blur(); setCatalogOpen(false); setPresetsOpen(open => !open); }}>Effect presets</button>
           <button type="button" disabled={keyframesLocked} className="node-workspace-breadcrumb-link" onClick={event => {
             if (event.detail > 0) event.currentTarget.blur();
             setCatalogOpen(false);
+            setPresetsOpen(false);
             if (!keyframesLocked) selectNode(addKeyframeNode(subject.id, { x: selectedNode?.layout.x ?? 0, y: (selectedNode?.layout.y ?? 0) - 270 }));
           }}>+ Keyframes</button>
           {selectedNode?.groupId === 'color' && (
@@ -439,7 +449,8 @@ export function NodeWorkspacePanel() {
           layoutScaleX={adapter.layoutScaleX}
         />
       </div>
-      {catalogOpen ? <NodeCatalog width={inspectorWidth} /> : <NodeInspector
+      {presetsOpen ? <EffectPresetLibrary clipId={subject.id} effect={presetEffect} width={inspectorWidth}
+        locked={keyframesLocked || subject.clip.source?.type === 'audio'} onSelectNode={selectNode} /> : catalogOpen ? <NodeCatalog width={inspectorWidth} /> : <NodeInspector
         node={selectedNode}
         showAnimation={animationInspector && isCurrentGraphSelection}
         onShowParameters={() => setAnimationInspector(false)}
