@@ -2,6 +2,7 @@ import { openSurfaceFrames, surfaceFrameIndex, type SurfaceFrameReader } from '.
 import type { NativeTemporalRequest } from './NativeTemporalRuntime';
 import { temporalSourceTime } from './temporalClipSource';
 import { recordTemporalPreparation, setTemporalStatus } from './temporalResourcePreparation';
+import { mediaRuntimeRegistry } from '../../services/mediaRuntime/registry';
 
 /** Absolute clip-time grid: adjacent output frames share the same historical PTS.
  * Slot -1 is the current input, already decoded by the normal playback pipeline. */
@@ -52,7 +53,7 @@ export class SourceTemporalRuntime {
       if (this.residentBytes() + bytes > this.budget) throw new Error('Concurrent source caches exceed the 640 MiB budget.');
       entry = { media: request.media, width, height, bytes, abort: new AbortController(), slots: new Map(), revision: 0,
         atlas: this.device.createTexture({ label: 'source-PTS-cache', size: [width, height, this.layers], format: 'rgba8unorm',
-          usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST }),
+          usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT }),
         ages: this.device.createTexture({ size: [65, 1], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST }),
         latest: request, encoder: request.encoder };
       this.entries.set(request.key, entry);
@@ -109,29 +110,45 @@ export class SourceTemporalRuntime {
         keys.add(entry.reader.frames[Math.max(0, surfaceFrameIndex(entry.reader.frames, time))].time);
       }
     }
+    // Borrow exact native frames already held by the media runtime. This is a
+    // read-only lookup: never seek or take ownership of the playback decoder.
+    const sourceId = mediaRuntimeRegistry.resolveSourceId({ kind: 'video', mediaFileId: entry.media.id });
+    const runtime = sourceId ? mediaRuntimeRegistry.getRuntime(sourceId) : null;
+    if (runtime && entry.reader.rotation === 0 && typeof VideoFrame !== 'undefined') {
+      for (const handle of runtime.frameCache.values()) {
+        const frame = handle.frame;
+        if (!(frame instanceof VideoFrame) || frame.displayWidth !== entry.width || frame.displayHeight !== entry.height) continue;
+        const time = [...keys].find(time => Math.abs(time - frame.timestamp / 1_000_000) <= 1e-6);
+        if (time !== undefined && !entry.slots.has(time)) this.upload(entry, time, keys, frame);
+      }
+    }
     const missing = [...keys].filter(time => !entry.slots.has(time)).toSorted((a, b) => a - b);
     let completed = 0;
     if (!missing.length) return;
-    for await (const frame of entry.reader.readTimes(missing)) {
+    for await (const frame of entry.reader.readGpuTimes(missing)) {
       signal.throwIfAborted();
       // Interrupt a superseded seek, while keeping samples useful for playback.
       const current = new Set(this.wanted(entry, entry.latest).map(item => item.time));
       if (![...current].some(time => keys.has(time))) break;
       const time = missing[completed];
       if (Math.abs(frame.time - time) > 1e-6) throw new Error('Decoder returned the wrong source timestamp.');
-      if (frame.pixels.width !== entry.width || frame.pixels.height !== entry.height) throw new Error('Source frame dimensions changed.');
-      let slot = Array.from({ length: this.layers }, (_, i) => i).find(i => ![...entry.slots.values()].includes(i));
-      if (slot === undefined) {
-        const eviction = [...entry.slots].find(([time]) => !keys.has(time));
-        if (!eviction) throw new Error('Source cache has no recyclable slot.');
-        slot = eviction[1]; entry.slots.delete(eviction[0]);
-      }
-      this.device.queue.writeTexture({ texture: entry.atlas, origin: [0, 0, slot] }, frame.pixels.data as Uint8ClampedArray<ArrayBuffer>,
-        { bytesPerRow: entry.width * 4 }, [entry.width, entry.height]);
-      entry.slots.set(time, slot); entry.revision++; completed++;
+      if (frame.width !== entry.width || frame.height !== entry.height) throw new Error('Source frame dimensions changed.');
+      this.upload(entry, time, keys, frame.source); completed++;
       setTemporalStatus(entry.latest.effectId, `Loading source cache (${completed}/${missing.length})…`);
       if (completed % 8 === 0) this.onReady?.();
     }
+  }
+
+  private upload(entry: Entry, time: number, required: ReadonlySet<number>, source: VideoFrame | HTMLCanvasElement) {
+    let slot = Array.from({ length: this.layers }, (_, i) => i).find(i => ![...entry.slots.values()].includes(i));
+    if (slot === undefined) {
+      const eviction = [...entry.slots].find(([time]) => !required.has(time));
+      if (!eviction) throw new Error('Source cache has no recyclable slot.');
+      slot = eviction[1]; entry.slots.delete(eviction[0]);
+    }
+    this.device.queue.copyExternalImageToTexture({ source },
+      { texture: entry.atlas, origin: [0, 0, slot] }, [entry.width, entry.height]);
+    entry.slots.set(time, slot); entry.revision++;
   }
 
   private residentBytes() { return [...this.entries.values()].reduce((sum, entry) => sum + entry.bytes, 0); }

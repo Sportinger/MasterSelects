@@ -1,8 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest';
-const mock = vi.hoisted(() => ({ read: vi.fn(), batches: vi.fn(), close: vi.fn() }));
+const mock = vi.hoisted(() => ({ read: vi.fn(), batches: vi.fn(), close: vi.fn(), cached: [] as unknown[] }));
+vi.mock('../../src/services/mediaRuntime/registry', () => ({ mediaRuntimeRegistry: { resolveSourceId: () => 'media', getRuntime: () => ({ frameCache: new Map(mock.cached.map((frame, i) => [i, { frame }])) }) } }));
 vi.mock('../../src/services/planarTracking/surfaceFrameReader', async original => ({
-  ...await original<object>(), openSurfaceFrames: async () => ({ read: mock.read, close: mock.close,
-    async *readTimes(times: number[]) { mock.batches(times); for (const time of times) yield await mock.read(time); },
+  ...await original<object>(), openSurfaceFrames: async () => ({ read: mock.read, close: mock.close, rotation: 0,
+    async *readGpuTimes(times: number[]) { mock.batches(times); for (const time of times) { const frame = await mock.read(time); yield { time, duration: frame.duration, width: frame.pixels.width, height: frame.pixels.height, source: frame.pixels }; } },
     frames: Array.from({ length: 1000 }, (_, i) => ({ time: i / 30, duration: 1 / 30 })) }),
 }));
 import { SourceTemporalRuntime, sourceTemporalWindow } from '../../src/effects/time/SourceTemporalRuntime';
@@ -13,7 +14,7 @@ function setup() {
   vi.stubGlobal('GPUTextureUsage', { TEXTURE_BINDING: 1, COPY_DST: 2 });
   mock.read.mockImplementation(async time => ({ time, duration: 1 / 30, pixels: { width: 2, height: 1, data: new Uint8ClampedArray(8) } }));
   const writes = vi.fn();
-  const device = { limits: { maxTextureDimension2D: 8192 }, queue: { writeTexture: writes },
+  const device = { limits: { maxTextureDimension2D: 8192 }, queue: { writeTexture: writes, copyExternalImageToTexture: vi.fn() },
     createTexture: () => ({ createView: () => ({}), destroy() {} }) } as unknown as GPUDevice;
   const request = { key: 'clip', effectId: 'effect', media: { id: 'media', url: 'blob:media', width: 2, height: 1 },
     source: { mediaId: 'media', localTime: 10, duration: 30, inPoint: 0, outPoint: 30, speed: 1, speedKeyframes: [] },
@@ -24,7 +25,7 @@ async function prepare(runtime: SourceTemporalRuntime, request: NativeTemporalRe
   const finish = collectTemporalPreparations(); runtime.resolve(request); await Promise.all(finish());
   return runtime.resolve(request);
 }
-afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); mock.cached = []; });
 
 it('reuses historical PTS during playback instead of decoding the whole window each output frame', async () => {
   const { runtime, request } = setup();
@@ -68,4 +69,17 @@ it('preserves source selection in small/full modes and reverse clips', () => {
   for (let i = 1; i <= 7; i++) await prepare(runtime, { ...playing, source: { ...playing.source, localTime: 10 + i / 30 } });
   expect(mock.batches).toHaveBeenCalledTimes(1);
   runtime.destroy();
+});
+
+it('borrows exact media-cache frames without decoding or releasing their owners', async () => {
+  const { runtime, request } = setup();
+  const close = vi.fn();
+  class CachedFrame { timestamp = 10_000_000; displayWidth = 2; displayHeight = 1; close = close; }
+  vi.stubGlobal('VideoFrame', CachedFrame);
+  mock.cached = [new CachedFrame()];
+  await prepare(runtime, request);
+  expect(mock.read.mock.calls.some(call => call[0] === 10)).toBe(false);
+  expect(mock.read).toHaveBeenCalledTimes(62);
+  runtime.destroy();
+  expect(close).not.toHaveBeenCalled();
 });

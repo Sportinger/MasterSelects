@@ -43,7 +43,7 @@ contributions as I bring them together into a cohesive editor.
 
 Slit Scan adds spatial time displacement to clips, with directional and wave
 profiles, center or clip-mask protection, diagnostic previews, and an editable group built from shared Nodes.
-Small preview and Full Res use the same source-time sampling through a bounded GPU cache; playback reuses loaded frames and batches missing source times with bounded lookahead.
+Small preview and Full Res use the same source-time sampling through a bounded GPU cache; playback reuses loaded frames and batches missing source times with bounded lookahead and transfers frames without CPU pixel readback.
 See [Effects](docs/Features/Effects.md#slit-scan) for controls and preparation limits.
 
 ## Build while you create

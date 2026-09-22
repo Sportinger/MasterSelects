@@ -3,6 +3,8 @@ import type { VideoSample } from 'mediabunny';
 
 export interface SurfaceFrameStamp { time: number; duration: number }
 export interface SurfaceDecodedFrame extends SurfaceFrameStamp { pixels: ImageData }
+/** Borrowed until the next iterator step; never save in a store or close the source. */
+export interface SurfaceGpuFrame extends SurfaceFrameStamp { source: VideoFrame | HTMLCanvasElement; width: number; height: number }
 
 /** Last presented frame, never the next frame or an interpolated pose. */
 export function surfaceFrameIndex(frames: readonly SurfaceFrameStamp[], time: number): number {
@@ -37,6 +39,7 @@ export async function openSurfaceFrames(url: string, signal: AbortSignal, file?:
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d', { willReadFrequently: true });
     if (!context) throw new Error('Could not create tracking canvas.');
+    let gpuCanvas: HTMLCanvasElement | undefined;
     const capture = (sample: VideoSample): SurfaceDecodedFrame => {
       try {
         signal.throwIfAborted();
@@ -49,7 +52,33 @@ export async function openSurfaceFrames(url: string, signal: AbortSignal, file?:
     };
     return {
       frames,
+      rotation: track.rotation,
       close,
+      /** Keep decoded surfaces on the GPU. Resize/rotation also stays on a GPU canvas. */
+      async *readGpuTimes(times: readonly number[]): AsyncGenerator<SurfaceGpuFrame> {
+        const timestamps = times.map(time => frames[Math.max(0, surfaceFrameIndex(frames, time))].time + 0.6e-6);
+        for await (const sample of sink.samplesAtTimestamps(timestamps)) {
+          if (!sample) throw new Error('A requested source frame could not be decoded.');
+          let frame: VideoFrame | undefined;
+          try {
+            signal.throwIfAborted();
+            const scale = Math.min(1, maxEdge / Math.max(sample.displayWidth, sample.displayHeight));
+            const width = Math.max(1, Math.round(sample.displayWidth * scale));
+            const height = Math.max(1, Math.round(sample.displayHeight * scale));
+            if (scale === 1 && sample.rotation === 0) {
+              frame = sample.toVideoFrame();
+              yield { time: sample.timestamp, duration: sample.duration, source: frame, width, height };
+            } else {
+              gpuCanvas ??= document.createElement('canvas');
+              if (gpuCanvas.width !== width || gpuCanvas.height !== height) { gpuCanvas.width = width; gpuCanvas.height = height; }
+              const gpuContext = gpuCanvas.getContext('2d');
+              if (!gpuContext) throw new Error('Could not create GPU transfer canvas.');
+              sample.draw(gpuContext, 0, 0, width, height);
+              yield { time: sample.timestamp, duration: sample.duration, source: gpuCanvas, width, height };
+            }
+          } finally { frame?.close(); sample.close(); }
+        }
+      },
       async read(time: number): Promise<SurfaceDecodedFrame> {
         const stamp = frames[Math.max(0, surfaceFrameIndex(frames, time))];
         const sample = await sink.getSample(stamp.time + 0.6e-6);
