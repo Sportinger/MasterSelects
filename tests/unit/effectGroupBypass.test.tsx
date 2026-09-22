@@ -1,3 +1,6 @@
+import { compileSplatGraph, defaultSplatGraph } from '../../src/services/operators/splatGraph';
+import { effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { isNodeBypassable, isNodeBypassed } from '../../src/components/panels/nodes/canvas/canvasGeometry';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, renderHook } from '@testing-library/react';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
@@ -82,5 +85,49 @@ describe('effect group bypass', () => {
     fireEvent.pointerDown(button); fireEvent.click(button, { detail: 1 });
     expect(toggle).toHaveBeenCalledExactlyOnceWith('effect-face');
     expect(drag).not.toHaveBeenCalled();
+  });
+});
+
+describe('splat branch and scene node bypass', () => {
+  function splat() {
+    const definition = defaultSplatGraph(true);
+    const clip = createMockClip({ id: 'splat', effects: [{ id: 'splat-effect', type: 'splat-exploration', name: 'Splats', enabled: true,
+      params: definition.params, operatorGraph: definition.graph }] });
+    clip.nodeGraph = { ...createClipNodeGraphState(clip), groups: { 'effect:splat-effect': { collapsed: false } } };
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })], isExporting: false });
+    const current = () => useTimelineStore.getState().clips[0];
+    const project = () => buildUnifiedClipGraph(buildClipNodeGraphDocument(current()), current());
+    const branches = () => compileSplatGraph({ graph: effectOperatorGraph(current().effects[0]), params: current().effects[0].params as typeof definition.params });
+    return { clip, project, branches };
+  }
+  it('mutes a collapsed particle branch through its renderer and restores every operation', () => {
+    const { clip, project, branches } = splat(), before = branches(), graph = project();
+    const group = graph.groups!.find(g => g.label === 'Particles')!;
+    const proxy = graph.nodes.find(n => n.id === group.proxyId)!;
+    expect(isNodeBypassable(proxy)).toBe(true);
+    const { result } = renderHook(() => useUnifiedNodeActions(clip, graph, null, flock));
+    act(() => result.current.toggleBypass(proxy.id));
+    expect(result.current.message).toBe('');
+    expect(branches()).toHaveLength(3);
+    expect(branches().some(b => b.operations.some(o => o.kind === 'particles'))).toBe(false);
+    expect(project().groups!.find(g => g.label === 'Particles')!.bypassed).toBe(true);
+    act(() => result.current.toggleBypass(group.bypassNodeId!));
+    expect(branches()).toEqual(before);
+  });
+  it.each(['mesh', 'wireframe', 'transform', 'render'])('executes the displayed %s bypass instead of silently ignoring it', id => {
+    const { branches } = splat();
+    const current = useTimelineStore.getState().clips[0];
+    const graph = buildUnifiedClipGraph(buildClipNodeGraphDocument(current), current, [], [], undefined, true);
+    const { result: hook } = renderHook(() => useUnifiedNodeActions(current, graph, null, flock));
+    const actions = { toggleBypass: (nodeId: string) => hook.current.toggleBypass(`${graph.nodes.find(n => n.binding?.kind === 'effect-operator' && n.binding.nodeId === nodeId)!.id}`) };
+    act(() => actions.toggleBypass(id));
+    const result = branches();
+    const updated = useTimelineStore.getState().clips[0];
+    const projection = buildUnifiedClipGraph(buildClipNodeGraphDocument(updated), updated, [], [], undefined, true);
+    expect(isNodeBypassed(projection.nodes.find(n => n.binding?.kind === 'effect-operator' && n.binding.nodeId === id)!)).toBe(true);
+    if (id === 'render') expect(result).toEqual([]);
+    else if (id === 'transform') expect(result.every(b => !b.applyClipTransform)).toBe(true);
+    else expect(result.some(b => b.mesh)).toBe(false);
+    act(() => actions.toggleBypass(id)); expect(branches()).toHaveLength(4);
   });
 });

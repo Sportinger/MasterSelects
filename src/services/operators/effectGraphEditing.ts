@@ -137,7 +137,7 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
     disconnectEdge: (id: string) => editEffectGraph(clipId, effectId, 'Disconnect nodes', graph => { graph.edges = graph.edges.filter(e => e.id !== id); }),
     toggleBypass: (id: string) => editEffectGraph(clipId, effectId, 'Bypass node', (graph, params) => {
       const node = graph.nodes.find(n => n.id === id);
-      if (!node || (graph.domain !== 'voxel' && !getEffectOperator(node.operator)?.bypass)) return;
+      if (!node || (graph.domain !== 'voxel' && graph.domain !== 'scene' && !getEffectOperator(node.operator)?.bypass)) return;
       if (node.enabled) { params[node.enabled] = !operatorEnabled(node, params); node.bypassed = false; }
       else node.bypassed = !node.bypassed;
     }),

@@ -7,7 +7,7 @@ export function prepareSplatSampling(operations: SplatGraphOperation[], sourceCo
   const fraction = selection >= 0 ? operations[selection].values[0] : 1;
   const count = Math.min(Math.floor(sourceCount * fraction), budget > 0 ? budget : sourceCount);
   const offset = selection >= 0 ? Math.floor(operations[selection].values[1] * 2654435761) % Math.max(1, sourceCount) : 0;
-  return { count, offset, remapped: selection >= 0 || count !== sourceCount, operations: operations.filter((_, i) => i !== selection) };
+  return { count, offset, remapped: selection >= 0, operations: operations.filter((_, i) => i !== selection) };
 }
 export function packSplatOperations(operations: SplatGraphOperation[]): Float32Array {
   if (operations.length > 24) throw new Error('Splat operation budget exceeded.');

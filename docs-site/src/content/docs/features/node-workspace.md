@@ -820,3 +820,5 @@ coordinates or a separate copy of the graph.
 Adding an effect, including through the Effects panel, reflows its connected outer chain to make room. Bypassing an effect collapses its group and its Effects inspector entry; enabling it again preserves the collapsed state. **Reset** arranges node positions again, clears manual canvas anchors and group offsets, and fits the resulting graph with the same bounds and zoom rules as **Fit**.
 
 Gaussian Splat Exploration uses the shared composition mechanism: **Reusable Nodes ? Space** contains Splat Cleanup, Splat Rays, Particle System and Mesh Overlay. Expand the Particles group to edit its simulation and connected forces.
+
+Splat branch groups with one rendering output can be bypassed from their compact node or expanded group header. The action mutes that output and skips its upstream GPU work while retaining its controls and connections.

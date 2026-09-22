@@ -231,7 +231,8 @@ export function getPortTitle(port: NodeGraphPort): string {
 export function isNodeBypassable(node: NodeGraphNode): boolean {
   if (node.binding?.kind === 'clip-stabilization') return node.params?.bypassable === true;
   if (node.binding?.kind === 'scene-operator') return node.params?.bypassable === true;
-  if (node.binding?.kind === 'scene-node' || node.binding?.kind === 'operator-group') return false;
+  if (node.binding?.kind === 'operator-group') return node.params?.bypassable === true;
+  if (node.binding?.kind === 'scene-node') return false;
   if (node.binding?.kind === 'effect-operator') return node.params?.bypassable === true;
   if (node.binding?.kind === 'flock-node') {
     return node.params?.bypassable === true;
@@ -244,6 +245,7 @@ export function isNodeBypassable(node: NodeGraphNode): boolean {
 }
 
 export function isNodeBypassed(node: NodeGraphNode): boolean {
+  if (node.binding?.kind === 'effect-operator' || node.binding?.kind === 'operator-group') return node.params?.enabled === false;
   if (node.binding?.kind === 'scene-operator') return node.params?.enabled === false;
   if (node.binding?.kind === 'clip-stabilization') return node.params?.enabled === false;
   if (node.binding?.kind === 'flock-node') {

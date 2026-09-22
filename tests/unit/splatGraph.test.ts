@@ -1,3 +1,5 @@
+import { splatEffectScene } from '../../src/engine/scene/splatEffectScene';
+import type { Effect } from '../../src/types/effects';
 import { expandOperatorCompositions, packOperatorCompositions } from '../../src/services/operators/operatorComposition';
 import { primitiveSplatGraph } from '../../src/services/operators/splatGraphDefaults';
 import { composeSplatGraph } from '../../src/services/operators/splatGraphComposition';
@@ -135,5 +137,20 @@ describe('reusable splat compositions', () => {
     const legacy = primitiveSplatGraph(true);
     legacy.graph.nodes.find(n => n.id === 'simulation')!.constants = { speed: 5 };
     expect(composeSplatGraph(legacy)).toBe(legacy);
+  });
+});
+
+describe('splat preview work budgets', () => {
+  it('retains source indices for a plain render budget so worker ordering stays usable', () => {
+    const sample = prepareSplatSampling([], 3807536, 500000);
+    expect(sample).toMatchObject({ count: 500000, remapped: false });
+  });
+  it('reuses unchanged scene plans but invalidates edited and animated parameters', () => {
+    const defaults = defaultSplatGraph(true);
+    const effect = { id: 'test', type: 'splat-exploration', enabled: true, params: defaults.params, operatorGraph: defaults.graph } as Effect;
+    const first = splatEffectScene([effect]);
+    expect(splatEffectScene([{ ...effect, params: { ...effect.params } }])).toBe(first);
+    expect(splatEffectScene([{ ...effect, params: { ...effect.params, simulation_speed: 2 } }])).not.toBe(first);
+    expect(splatEffectScene([{ ...effect, operatorGraph: structuredClone(defaults.graph) }])).not.toBe(first);
   });
 });

@@ -334,14 +334,16 @@ export class GaussianSplatGpuRenderer {
         activeSplatCount = scene.splatCount;
       }
 
+      // Bound work before dispatching attribute shaders, not only before drawing.
+      if (maxSplats > 0) activeSplatCount = Math.min(activeSplatCount, maxSplats);
       const graphOperations = options?.graphBranch?.operations ?? [];
       const sampling = prepareSplatSampling(graphOperations, activeSplatCount, options?.graphBranch?.budget);
       if (graphOperations.length || sampling.remapped) {
         const v = camera.viewMatrix;
         const eye = { x: -(v[0] * v[12] + v[1] * v[13] + v[2] * v[14]), y: -(v[4] * v[12] + v[5] * v[13] + v[6] * v[14]), z: -(v[8] * v[12] + v[9] * v[13] + v[10] * v[14]) };
         activeSplatBuffer = this.graphCompute.execute(this.device, commandEncoder, activeSplatBuffer, Math.max(1, sampling.count), sampling.operations, clipLocalTime, worldMatrix, eye, activeSplatCount, sampling.offset, sampling.remapped);
-        activeSplatCount = sampling.count;
       }
+      activeSplatCount = sampling.count;
       const graphMovesPoints = sampling.remapped || graphOperations.some(op => op.kind === 'particles' || (op.kind === 'noise' && op.values[0] === 0));
       // Determine effective splat count (respect maxSplats budget)
       const effectiveSplatCount = maxSplats > 0

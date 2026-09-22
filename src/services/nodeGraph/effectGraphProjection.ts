@@ -49,6 +49,16 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
     }),
     edges: graph.edges.map(edge => ({ id: edge.id, fromNodeId: edge.from, fromPortId: edge.output, toNodeId: edge.to, toPortId: edge.input,
       type: projectOperatorPort(getEffectOperator(graph.nodes.find(n => n.id === edge.from)!.operator)!.outputs.find(p => p.id === edge.output)!, 'output').type })),
-    groups: graph.groups?.map(g => ({ ...g, composition: compositionGroupInterface(graph, g), collapsed: false, proxyId: `group-${g.id}` })),
+    groups: graph.groups?.map(g => {
+      const members = (id: string): string[] => {
+        const group = graph.groups!.find(item => item.id === id)!;
+        return [...group.nodeIds, ...graph.groups!.filter(item => item.parentId === id).flatMap(item => members(item.id))];
+      };
+      const renderers = graph.domain === 'scene' ? graph.nodes.filter(n => members(g.id).includes(n.id)
+        && ['splat.render', 'scene.mesh'].includes(n.operator)) : [];
+      const target = renderers.length === 1 ? renderers[0] : undefined;
+      return { ...g, composition: compositionGroupInterface(graph, g), collapsed: false, proxyId: `group-${g.id}`,
+        ...(target ? { bypassNodeId: target.id, bypassed: !operatorEnabled(target, effect.params) } : {}) };
+    }),
   };
 }

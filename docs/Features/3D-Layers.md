@@ -289,3 +289,12 @@ The Transform tab is context-sensitive:
 - Composition-level camera settings are available alongside camera clips.
 - Environment maps currently drive ambient color only; full image-based lighting, reflections, and HDR sampling are not implemented.
 - Higher-order spherical harmonics are preserved during import, but the current native shader still renders the DC color path only.
+
+Splat branch groups expose a **Bypass** control in both compact and expanded views.
+It mutes the branch's Gaussian Surface or Mesh output, so upstream particle work is
+not dispatched. Individual scene nodes (including Mesh, Wireframe Material, Clip
+Transform and 3D render) use their displayed bypass behavior. Unchanged scene
+parameters reuse the compiled plan. Render budgets apply before attribute compute;
+without a Selection node a budget retains the source prefix and worker depth ordering.
+Lower **Original Splats ? Gaussian Surface ? Splat budget** to reduce full-scan work;
+0 retains every source splat. This is an effect setting and also affects export.

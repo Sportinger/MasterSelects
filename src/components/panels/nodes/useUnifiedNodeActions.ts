@@ -119,6 +119,13 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
       } else actions.moveNode(localId(node), { x: position.x - (node.groupOffset?.x ?? 0), y: position.y - (node.groupOffset?.y ?? 0) });
     }),
     toggleBypass: (id: string) => {
+      const group = graph?.groups?.find(g => g.proxyId === id || g.bypassNodeId === id);
+      const target = group?.bypassNodeId ? (graph?.expandedNodes ?? graph?.nodes)?.find(n => n.id === group.bypassNodeId) : undefined;
+      if (target?.binding?.kind === 'effect-operator' && clip) {
+        const binding = target.binding;
+        safely(() => createEffectGraphActions(clip.id, binding.effectId).toggleBypass(binding.nodeId));
+        return;
+      }
       // Expanded effect groups no longer contain their root proxy node.
       const effectId = graph?.groups?.find(group => group.bypassNodeId === id)?.effectId;
       if (!effectId) { route(id, (actions, node) => actions.toggleBypass(localId(node))); return; }
