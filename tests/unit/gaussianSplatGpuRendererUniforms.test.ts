@@ -168,7 +168,7 @@ describe('GaussianSplatGpuRenderer camera uniforms', () => {
       makeCamera(),
       { width: 1280, height: 720 },
       commandEncoder,
-      { worldMatrix: makeWorldMatrix(1) },
+      { worldMatrix: makeWorldMatrix(1), splatScale: 2.5, nearPlane: 3, farPlane: 80 },
     );
     renderer.renderToTexture(
       'splat-b',
@@ -185,6 +185,12 @@ describe('GaussianSplatGpuRenderer camera uniforms', () => {
       label: 'splat-camera-uniforms-1',
     }));
     expect(writeBuffer.mock.calls[0]?.[0]).not.toBe(writeBuffer.mock.calls[1]?.[0]);
+    expect((writeBuffer.mock.calls[0]?.[2] as Float32Array)[54]).toBeCloseTo(2.5);
+    expect((writeBuffer.mock.calls[1]?.[2] as Float32Array)[54]).toBeCloseTo(1);
+    expect((writeBuffer.mock.calls[0]?.[2] as Float32Array)[56]).toBeCloseTo(3);
+    expect((writeBuffer.mock.calls[0]?.[2] as Float32Array)[57]).toBeCloseTo(80);
+    expect((writeBuffer.mock.calls[1]?.[2] as Float32Array)[56]).toBeCloseTo(0.01);
+    expect((writeBuffer.mock.calls[1]?.[2] as Float32Array)[57]).toBeCloseTo(1000);
 
     const firstCameraBindGroup = renderPasses[0]?.setBindGroup.mock.calls.find(
       ([slot]) => slot === 1,

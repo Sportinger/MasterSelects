@@ -9,7 +9,6 @@ import { createPrimaryMediaObjectUrl } from '../../../services/project/mediaObje
 import {
   resolveGaussianSplatSettingsForSource,
 } from '../../../engine/gaussian/types';
-import { prewarmGaussianSplatRuntime } from '../../../engine/scene/runtime/SharedSplatRuntimeCache';
 
 const DEFAULT_SPLAT_DURATION = 30; // seconds
 const MAX_SPLAT_DURATION = 3600; // 1 hour
@@ -137,14 +136,6 @@ export function loadGaussianSplatMedia(params: LoadGaussianSplatMediaParams): vo
       isLoading: false,
     });
 
-    prewarmGaussianSplatRuntime({
-      cacheKey: runtimeKey || clip.mediaFileId || clip.source?.mediaFileId || clip.id,
-      file: renderableFile,
-      url: gaussianSplatUrl,
-      fileName: gaussianSplatFileName,
-      gaussianSplatSequence: clip.source?.gaussianSplatSequence,
-      requestedMaxSplats: clip.source?.gaussianSplatSettings?.render.maxSplats ?? 0,
-    });
   } catch (err) {
     console.error('[GaussianSplat] loadGaussianSplatMedia failed:', err);
     updateClip(clip.id, { isLoading: false });

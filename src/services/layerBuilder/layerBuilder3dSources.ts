@@ -135,6 +135,10 @@ export function prewarmGaussianSplatClips(ctx: FrameContext, lastSplatLookaheadT
     if (clip.source?.type !== 'gaussian-splat') continue;
     if (!isVideoTrackVisible(ctx, clip.trackId)) continue;
     if (clip.startTime > rangeEnd || clip.startTime + clip.duration < rangeStart) continue;
+    // Native rendering owns its own parse/upload cache. Preparing the legacy
+    // texture runtime as well duplicates large-file work and can monopolize the
+    // main thread immediately after an import.
+    if (resolveSharedSplatUseNativeRenderer(clip.source.gaussianSplatSettings)) continue;
 
     const mediaFile = getMediaFileForClip(ctx, clip);
     if (clip.source?.gaussianSplatSequence || mediaFile?.gaussianSplatSequence) continue;

@@ -9,6 +9,7 @@ const MATRIX_EPSILON = 0.0005;
 
 interface SortedWorkerMessage {
   type: 'sorted';
+  requestId: number;
   order: ArrayBuffer;
   count: number;
   sortTimeMs: number;
@@ -27,10 +28,16 @@ export class SplatOrderSorter {
   private readonly worker: Worker;
   private readonly viewWorldMatrix = new Float32Array(16);
   private readonly lastSubmittedMatrix = new Float32Array(16);
+  private readonly latestRequestedMatrix = new Float32Array(16);
+  private readonly pendingOrderMatrix = new Float32Array(16);
   private readonly clipId: string;
   private pendingOrder: Uint32Array | null = null;
   private pendingCount = 0;
+  private pendingRequestedCount = 0;
   private lastSubmittedCount = 0;
+  private latestRequestedCount = 0;
+  private activeRequestId = 0;
+  private nextRequestId = 1;
   private isSorting = false;
   private initialized = false;
   private sortedOnce = false;
@@ -69,11 +76,27 @@ export class SplatOrderSorter {
   }
 
   requestSort(viewMatrix: Float32Array, worldMatrix: Float32Array, requestedCount: number): void {
-    if (!this.initialized || this.isSorting || requestedCount <= 1) {
+    if (!this.initialized || requestedCount <= 1) {
       return;
     }
 
     multiplyMat4ColumnMajor(viewMatrix, worldMatrix, this.viewWorldMatrix);
+    this.latestRequestedMatrix.set(this.viewWorldMatrix);
+    this.latestRequestedCount = requestedCount;
+
+    if (this.pendingOrder) {
+      const pendingIsCurrent = this.pendingRequestedCount === requestedCount &&
+        !hasMatrixChanged(this.latestRequestedMatrix, this.pendingOrderMatrix);
+      if (pendingIsCurrent) {
+        return;
+      }
+      this.recyclePendingOrder();
+    }
+
+    if (this.isSorting) {
+      return;
+    }
+
     if (
       this.lastSubmittedCount === requestedCount &&
       this.sortedOnce &&
@@ -82,19 +105,39 @@ export class SplatOrderSorter {
       return;
     }
 
-    this.lastSubmittedMatrix.set(this.viewWorldMatrix);
-    this.lastSubmittedCount = requestedCount;
-    this.isSorting = true;
+    this.submitLatestRequest();
+  }
 
-    const matrixForWorker = this.viewWorldMatrix.slice();
+  private submitLatestRequest(): void {
+    this.lastSubmittedMatrix.set(this.latestRequestedMatrix);
+    this.lastSubmittedCount = this.latestRequestedCount;
+    this.isSorting = true;
+    this.activeRequestId = this.nextRequestId;
+    this.nextRequestId += 1;
+
+    const matrixForWorker = this.latestRequestedMatrix.slice();
     this.worker.postMessage(
       {
         type: 'sort',
+        requestId: this.activeRequestId,
         viewWorldMatrix: matrixForWorker.buffer,
-        requestedCount,
+        requestedCount: this.latestRequestedCount,
       },
       [matrixForWorker.buffer],
     );
+  }
+
+  private recycleOrder(order: Uint32Array): void {
+    const sourceBuffer = order.buffer as ArrayBuffer;
+    this.worker.postMessage({ type: 'reuseOrder', order: sourceBuffer }, [sourceBuffer]);
+  }
+
+  private recyclePendingOrder(): void {
+    if (!this.pendingOrder) return;
+    this.recycleOrder(this.pendingOrder);
+    this.pendingOrder = null;
+    this.pendingCount = 0;
+    this.pendingRequestedCount = 0;
   }
 
   applyPending(queue: GPUQueue): number {
@@ -104,13 +147,13 @@ export class SplatOrderSorter {
 
     const order = this.pendingOrder;
     const count = this.pendingCount;
-    const sourceBuffer = order.buffer as ArrayBuffer;
     if (count > 0) {
-      queue.writeBuffer(this.orderBuffer, 0, sourceBuffer, order.byteOffset, count * 4);
+      queue.writeBuffer(this.orderBuffer, 0, order.buffer as ArrayBuffer, order.byteOffset, count * 4);
     }
-    this.worker.postMessage({ type: 'reuseOrder', order: sourceBuffer }, [sourceBuffer]);
+    this.recycleOrder(order);
     this.pendingOrder = null;
     this.pendingCount = 0;
+    this.pendingRequestedCount = 0;
     this.sortedOnce = true;
     return count;
   }
@@ -145,11 +188,32 @@ export class SplatOrderSorter {
       return;
     }
 
-    this.pendingOrder = new Uint32Array(message.order);
-    this.pendingCount = message.count;
+    const order = new Uint32Array(message.order);
+    if (message.requestId !== this.activeRequestId) {
+      this.recycleOrder(order);
+      return;
+    }
+
     this.isSorting = false;
+    const resultIsStale = this.latestRequestedCount !== this.lastSubmittedCount ||
+      hasMatrixChanged(this.latestRequestedMatrix, this.lastSubmittedMatrix);
+    if (resultIsStale) {
+      this.recycleOrder(order);
+      this.submitLatestRequest();
+      log.debug('Discarded stale worker sort result', {
+        clipId: this.clipId,
+        requestId: message.requestId,
+      });
+      return;
+    }
+
+    this.pendingOrder = order;
+    this.pendingCount = message.count;
+    this.pendingRequestedCount = this.lastSubmittedCount;
+    this.pendingOrderMatrix.set(this.lastSubmittedMatrix);
     log.debug('Worker sort completed', {
       clipId: this.clipId,
+      requestId: message.requestId,
       count: message.count,
       sortTimeMs: message.sortTimeMs.toFixed(1),
     });

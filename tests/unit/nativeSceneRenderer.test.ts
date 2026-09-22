@@ -185,7 +185,10 @@ function makeSplatLayer(layerId: string, z: number, opacity: number): SceneSplat
         useNativeRenderer: true,
         backgroundColor: 'transparent',
         maxSplats: 0,
-        sortFrequency: 1,
+        splatScale: 1.75,
+        nearPlane: 2.5,
+        farPlane: 90,
+        sortFrequency: 7,
       },
     } as unknown as ScenePlaneLayer,
   };
@@ -428,6 +431,9 @@ describe('NativeSceneRenderer shared depth contract', () => {
       expect(options.outputView).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
       expect(options.depthLoadOp).toBe('load');
       expect(options.depthStoreOp).toBe('store');
+      expect(options.splatScale).toBeCloseTo(1.75);
+      expect(options.nearPlane).toBeCloseTo(2.5);
+      expect(options.farPlane).toBeCloseTo(90);
     }
 
     expect(firstColorOptions.depthWrite).toBe(false);
@@ -697,7 +703,7 @@ describe('NativeSceneRenderer shared depth contract', () => {
 
     expect(mockGaussianRenderer.renderToTexture.mock.calls[0]?.[4]).toMatchObject({
       precise: false,
-      sortFrequency: 1,
+      sortFrequency: 7,
       depthWrite: false,
     });
     expect(mockGaussianRenderer.renderToTexture.mock.calls[1]?.[4]).toMatchObject({

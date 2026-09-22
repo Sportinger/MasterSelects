@@ -8,6 +8,7 @@ interface InitMessage {
 
 interface SortMessage {
   type: 'sort';
+  requestId: number;
   viewWorldMatrix: ArrayBuffer;
   requestedCount: number;
 }
@@ -60,6 +61,7 @@ workerSelf.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
     workerSelf.postMessage(
       {
         type: 'sorted',
+        requestId: message.requestId,
         order: order.buffer,
         count: result.count,
         sortTimeMs: performance.now() - startTime,

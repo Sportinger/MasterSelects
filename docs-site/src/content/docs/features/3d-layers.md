@@ -154,14 +154,15 @@ Light clips can be created from the Media Panel via `+ Add > 3D > Light` and dra
 Gaussian splat clips are imported through the SuperSplat-compatible `@playcanvas/splat-transform` reader path. Supported scene formats include `.ply`, `.compressed.ply`, `.splat`, `.ksplat`, `.spz`, `.sog`, `.lcc`, and zipped SOG-style `.zip` payloads. Plain point-cloud PLY files without gaussian scale properties fall back to the local point-cloud conversion path.
 
 - Clips are created as `is3D: true`.
-- The Gaussian tab exposes native renderer information together with `maxSplats`, `sortFrequency`, `splatScale`, `orientationPreset`, `nearPlane`, and `farPlane`.
+- The Gaussian tab exposes native renderer information together with `maxSplats`, `sortFrequency`, `splatScale`, `orientationPreset`, `nearPlane`, and `farPlane`. `splatScale` changes each gaussian's covariance without moving its center; `maxSplats` caps the rendered budget (`0` is unlimited); `sortFrequency` controls the realtime depth-order refresh cadence (`0` disables refresh); and the near/far values slice only that splat object in camera-space depth.
 - Gaussian splats participate in scene cameras, object transforms, object-level effectors, preview, nested compositions, export, preload, and readiness checks through the same native shared-scene path.
-- Realtime splat rendering uses a worker-backed back-to-front order buffer based on the SuperSplat/PlayCanvas sorter approach. Precise export can fall back to the existing GPU sort path.
+- Realtime splat rendering uses a worker-backed back-to-front order buffer based on the SuperSplat/PlayCanvas sorter approach. Paused preview and Edit mode honor the configured sort cadence, and obsolete worker results are discarded when a newer object/camera transform has already requested another order. Precise export can fall back to the existing GPU sort path.
 - Sequence splats follow the same shared runtime contract and preload nearby frames without replacing foreground playback with repeated loading overlays.
 - PLY/splat sequences imported into an open project are copied to `Raw/<sequence-name>/` using the original frame names; existing same-size frame files are reused instead of written again.
 - Imported splats and numbered splat sequences store media-panel stats: container label, file size, per-frame splat count, and total sequence splat count.
 - The Transform tab exposes normal object transforms for gaussian splats. Scene navigation lives on camera clips.
-- Large gaussian splats show viewport loading progress during project restore, URL fetch, parser work, normalization, and GPU upload.
+- Edit-mode gizmo motion previews transforms transiently and commits the clip/history change once at drag end, avoiding a full durable-store/render rebuild for every pointer event.
+- Large gaussian splats show viewport loading progress during project restore, URL fetch, parser work, normalization, and GPU upload. Parsing and normalization run in a module worker when available so the editor UI remains interactive.
 
 ## Splat Effectors
 

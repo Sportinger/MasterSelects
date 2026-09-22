@@ -11,62 +11,16 @@ import type {
   GaussianSplatMetadata,
   GaussianSplatLoadOptions,
 } from './types.ts';
-import { detectFormat } from './parseHeader.ts';
 import { parseGaussianSplatHeader as parseHeader } from './parseHeader.ts';
-import { canLoadWithSplatTransform, loadWithSplatTransform } from './SplatTransformLoader.ts';
-import { loadPly } from './PlyLoader.ts';
 import { getSplatCache } from './splatCache.ts';
-import { applyCanonicalBasisCorrection, computeBoundingBox } from './normalize.ts';
+import { loadGaussianSplatAssetOnCurrentThread } from './loadAssetCurrentThread.ts';
+import {
+  canUseGaussianSplatParseWorker,
+  GaussianSplatParseWorkerUnavailableError,
+  loadGaussianSplatAssetInWorker,
+} from './gaussianSplatParseWorkerClient.ts';
 
 const log = Logger.create('GaussianLoader');
-
-function applyAssetBasisCorrection(asset: GaussianSplatAsset): GaussianSplatAsset {
-  let correctedBounds: { min: [number, number, number]; max: [number, number, number] } | null = null;
-
-  for (const frame of asset.frames) {
-    applyCanonicalBasisCorrection(frame.buffer.data, frame.buffer.splatCount);
-
-    const frameBounds = computeBoundingBox(frame.buffer.data, frame.buffer.splatCount);
-    if (!correctedBounds) {
-      correctedBounds = frameBounds;
-      continue;
-    }
-
-    correctedBounds = {
-      min: [
-        Math.min(correctedBounds.min[0], frameBounds.min[0]),
-        Math.min(correctedBounds.min[1], frameBounds.min[1]),
-        Math.min(correctedBounds.min[2], frameBounds.min[2]),
-      ],
-      max: [
-        Math.max(correctedBounds.max[0], frameBounds.max[0]),
-        Math.max(correctedBounds.max[1], frameBounds.max[1]),
-        Math.max(correctedBounds.max[2], frameBounds.max[2]),
-      ],
-    };
-  }
-
-  if (correctedBounds) {
-    asset.metadata = {
-      ...asset.metadata,
-      boundingBox: correctedBounds,
-    };
-  }
-
-  return asset;
-}
-
-function shouldUsePointCloudPlyFallback(
-  format: GaussianSplatFormat,
-  error: unknown,
-): boolean {
-  if (format !== 'ply') {
-    return false;
-  }
-
-  const message = error instanceof Error ? error.message : String(error);
-  return /Missing required splat properties|scale_0|sx|invalid file header/i.test(message);
-}
 
 /**
  * Load and parse a gaussian splat file into a full GaussianSplatAsset.
@@ -85,74 +39,22 @@ export async function loadGaussianSplatAsset(
   format?: GaussianSplatFormat,
   options?: GaussianSplatLoadOptions,
 ): Promise<GaussianSplatAsset> {
-  const resolvedFormat = format ?? detectFormat(file);
-
-  if (!resolvedFormat) {
-    throw new Error(
-      `Cannot detect gaussian splat format for file "${file.name}". ` +
-      'Supported extensions: .ply, .compressed.ply, .splat, .ksplat, .spz, .sog, .lcc, .zip'
-    );
+  if (!canUseGaussianSplatParseWorker()) {
+    return loadGaussianSplatAssetOnCurrentThread(file, format, options);
   }
-
-  log.info('Loading gaussian splat asset', {
-    name: file.name,
-    format: resolvedFormat,
-    sizeMB: (file.size / (1024 * 1024)).toFixed(1),
-  });
-
-  let asset: GaussianSplatAsset;
 
   try {
-    if (resolvedFormat === 'ply' && options?.maxSplats && options.maxSplats > 0) {
-      asset = await loadPly(file, options);
-    } else {
-      if (!canLoadWithSplatTransform(file, resolvedFormat)) {
-        throw new Error(`Format "${resolvedFormat}" is not supported by the splat-transform loader.`);
-      }
-      asset = await loadWithSplatTransform(file, resolvedFormat, options);
+    return await loadGaussianSplatAssetInWorker(file, format, options);
+  } catch (error) {
+    if (!(error instanceof GaussianSplatParseWorkerUnavailableError)) {
+      throw error;
     }
-  } catch (err) {
-    if (shouldUsePointCloudPlyFallback(resolvedFormat, err)) {
-      log.debug('Falling back to point-cloud PLY loader', {
-        name: file.name,
-        format: resolvedFormat,
-        reason: err instanceof Error ? err.message : String(err),
-      });
-      options?.onProgress?.({
-        phase: 'parsing',
-        loadedBytes: file.size,
-        totalBytes: file.size,
-        percent: 0.9,
-        message: 'Parsing point-cloud PLY',
-      });
-      asset = await loadPly(file, options);
-    } else {
-      log.error('Failed to load gaussian splat asset', {
-        name: file.name,
-        format: resolvedFormat,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      throw err;
-    }
+    log.warn('Gaussian splat parse worker unavailable; falling back to the main thread', {
+      name: file.name,
+      error: error.message,
+    });
+    return loadGaussianSplatAssetOnCurrentThread(file, format, options);
   }
-
-  options?.onProgress?.({
-    phase: 'normalizing',
-    loadedBytes: file.size,
-    totalBytes: file.size,
-    percent: 0.96,
-    message: 'Normalizing scene basis',
-  });
-  asset = applyAssetBasisCorrection(asset);
-
-  log.info('Gaussian splat asset loaded', {
-    name: file.name,
-    format: resolvedFormat,
-    splatCount: asset.metadata.splatCount,
-    shDegree: asset.metadata.shDegree,
-  });
-
-  return asset;
 }
 
 /**

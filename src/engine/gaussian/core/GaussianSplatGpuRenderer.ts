@@ -43,6 +43,7 @@ import {
   type GaussianSplatRenderTargetSummary,
 } from './splatRenderer/renderTargetSummary';
 import { resolveSplatRenderTarget } from './splatRenderer/renderTargets';
+import { queueSplatVisibleCountReadback } from './splatRenderer/visibleCountReadback';
 import {
   recordSplatRenderDebug,
   type GaussianSplatRenderDebugSnapshot,
@@ -95,6 +96,24 @@ export class GaussianSplatGpuRenderer {
 
   get isInitialized(): boolean {
     return this._initialized;
+  }
+
+  /** Refresh shader-dependent resources while retaining uploaded scenes across HMR. */
+  refreshAfterHmr(): void {
+    if (!this._initialized || !this.device) return;
+
+    const staleCameraResources = this.cameraUniformPool;
+    this.createPipeline();
+    this.createCameraBuffer();
+    this.renderDebugLoggedClips.clear();
+
+    void this.device.queue.onSubmittedWorkDone()
+      .then(() => {
+        for (const resource of staleCameraResources) resource.buffer.destroy();
+      })
+      .catch(() => {
+        for (const resource of staleCameraResources) resource.buffer.destroy();
+      });
   }
 
   initialize(device: GPUDevice): void {
@@ -228,13 +247,24 @@ export class GaussianSplatGpuRenderer {
       const {
         worldMatrix,
         layerOpacity,
+        splatScale,
+        nearPlane,
+        farPlane,
         depthAlphaCutoff,
         maxSplats,
         sortFrequency,
         clearColor,
         precise,
       } = prepareSplatRenderParams(options);
-      const cameraBindGroup = this.writeCameraUniforms(camera, worldMatrix, layerOpacity, depthAlphaCutoff);
+      const cameraBindGroup = this.writeCameraUniforms(
+        camera,
+        worldMatrix,
+        layerOpacity,
+        depthAlphaCutoff,
+        splatScale,
+        nearPlane,
+        farPlane,
+      );
       if (!cameraBindGroup) {
         return null;
       }
@@ -346,7 +376,11 @@ export class GaussianSplatGpuRenderer {
             readbackBuffer, 0,
             4,
           );
-          this.readbackVisibleCount(clipId, readbackBuffer);
+          queueSplatVisibleCountReadback(
+            this.device,
+            readbackBuffer,
+            (count) => this.lastVisibleCount.set(clipId, count),
+          );
         }
       }
 
@@ -433,6 +467,13 @@ export class GaussianSplatGpuRenderer {
         drawCount,
         viewport,
         backgroundColor: options?.backgroundColor,
+        splatScale,
+        nearPlane,
+        farPlane,
+        sortFrequency,
+        cameraNear: camera.near,
+        cameraFar: camera.far,
+        colorWrite: options?.colorWrite !== false,
         hasParticleOverride: activeSplatBuffer !== scene.splatBuffer,
         usedCull: !!cullIndexBuffer,
         usedSort: usedWorkerSort || !!sortedIndexBuffer,
@@ -614,58 +655,45 @@ export class GaussianSplatGpuRenderer {
     worldMatrix: Float32Array,
     layerOpacity: number,
     depthAlphaCutoff: number,
+    splatScale: number,
+    nearPlane: number,
+    farPlane: number,
   ): GPUBindGroup | null {
     if (!this.device) return null;
     const resource = this.getCameraUniformResource();
     if (!resource) return null;
 
-    return writeSplatCameraUniforms(this.device, resource, camera, worldMatrix, layerOpacity, depthAlphaCutoff);
-  }
-
-  /**
-   * Asynchronously read back the visible splat count from the cull pass.
-   * Updates lastVisibleCount for the next frame's draw call.
-   */
-  private readbackVisibleCount(clipId: string, readbackBuffer: GPUBuffer): void {
-    if (!this.device) {
-      readbackBuffer.destroy();
-      return;
-    }
-
-    this.device.queue.onSubmittedWorkDone()
-      .then(() => readbackBuffer.mapAsync(GPUMapMode.READ))
-      .then(() => {
-        const data = new Uint32Array(readbackBuffer.getMappedRange());
-        const count = data[0] ?? 0;
-        this.lastVisibleCount.set(clipId, count);
-        readbackBuffer.unmap();
-        readbackBuffer.destroy();
-      })
-      .catch((err) => {
-        readbackBuffer.destroy();
-        log.debug('Visible count readback failed (expected during rapid frame changes)', { clipId, error: err });
-      });
+    return writeSplatCameraUniforms(
+      this.device,
+      resource,
+      camera,
+      worldMatrix,
+      layerOpacity,
+      depthAlphaCutoff,
+      splatScale,
+      nearPlane,
+      farPlane,
+    );
   }
 }
 
 // ── HMR Singleton ─────────────────────────────────────────────────────────────
 
-let instance: GaussianSplatGpuRenderer | null = null;
-
+let instance: GaussianSplatGpuRenderer | null = import.meta.hot?.data?.gaussianSplatGpuRenderer ?? null;
 if (import.meta.hot) {
   import.meta.hot.accept();
+  if (instance) {
+    Object.setPrototypeOf(instance, GaussianSplatGpuRenderer.prototype);
+    instance.refreshAfterHmr();
+  }
   import.meta.hot.dispose((data) => {
-    instance?.dispose();
-    data.gaussianSplatGpuRenderer = null;
-    instance = null;
+    data.gaussianSplatGpuRenderer = instance;
   });
 }
-
 export function getGaussianSplatGpuRenderer(): GaussianSplatGpuRenderer {
   if (!instance) instance = new GaussianSplatGpuRenderer();
   return instance;
 }
-
 export function resetGaussianSplatGpuRenderer(): void {
   instance?.dispose();
   instance = null;

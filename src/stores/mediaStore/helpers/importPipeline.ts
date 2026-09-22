@@ -14,7 +14,6 @@ import { fileSystemService } from '../../../services/fileSystemService';
 import { projectDB } from '../../../services/projectDB';
 import { useSettingsStore } from '../../settingsStore';
 import { Logger } from '../../../services/logger';
-import { prewarmGaussianSplatRuntime } from '../../../engine/scene/runtime/SharedSplatRuntimeCache';
 import { prepareLottieAsset } from '../../../services/vectorAnimation/lottieMetadata';
 import { prepareRiveAsset } from '../../../services/vectorAnimation/riveMetadata';
 import { readGaussianSplatFileStats } from './gaussianSplatStats';
@@ -35,6 +34,8 @@ export interface ImportParams {
   generateThumbnail?: boolean;
   /** Force a specific media type instead of auto-detecting (e.g. 'gaussian-avatar' for .zip files) */
   typeOverride?: MediaFile['type'];
+  /** Optional 0-100 progress callback for visible import placeholders. */
+  onProgress?: (progress: number) => void;
 }
 
 export interface ImportResult {
@@ -64,7 +65,10 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
     projectFileName,
     generateThumbnail = true,
     typeOverride,
+    onProgress,
   } = params;
+
+  onProgress?.(2);
 
   // Store handle if provided (for original file location)
   if (handle) {
@@ -80,6 +84,7 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
 
   const type: MediaFile['type'] = typeOverride ?? detectedType as MediaFile['type'];
   let canonicalFile = file;
+  onProgress?.(8);
 
   const vectorAnimationInfo = type === 'lottie' || type === 'rive'
     ? await (type === 'lottie' ? prepareLottieAsset(file) : prepareRiveAsset(file)).then((prepared) => ({
@@ -106,9 +111,11 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
       ? createThumbnail(file, 'image')
       : Promise.resolve(undefined);
   const [info, rawThumbnail] = await Promise.all([infoPromise, thumbnailPromise]);
+  onProgress?.(20);
 
   // Calculate hash for deduplication
   const fileHash = await calculateFileHash(file);
+  onProgress?.(35);
 
   // Handle thumbnail deduplication (unified - was 3x duplicate)
   const thumbnailUrl = generateThumbnail
@@ -122,6 +129,7 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
     info.duration,
     'fps' in info ? info.fps : undefined
   );
+  onProgress?.(45);
 
   // Copy to Raw folder if enabled (unified - was 3x duplicate)
   const copyResult = await copyToRawIfEnabled(
@@ -131,6 +139,7 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
     projectFileName,
     Boolean(handle || absolutePath),
   );
+  onProgress?.(75);
 
   if (copyResult) {
     // The project-local RAW copy is the canonical media source. Promote it to the
@@ -163,6 +172,7 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
     ? await readGaussianSplatFileStats(canonicalFile)
     : undefined;
   const sourceLocation = await resolveProjectMediaSourceLocation(handle);
+  onProgress?.(95);
 
   // Build MediaFile
   const mediaFile: MediaFile = {
@@ -186,17 +196,7 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
     ...gaussianSplatStats,
   };
 
-  if (type === 'gaussian-splat') {
-    void Promise.resolve().then(() => {
-      prewarmGaussianSplatRuntime({
-        cacheKey: fileHash || id,
-        fileHash,
-        file: canonicalFile,
-        fileName: canonicalFile.name || file.name,
-      });
-    });
-  }
-
+  onProgress?.(100);
   return {
     mediaFile,
     projectFileHandle: copyResult?.handle,

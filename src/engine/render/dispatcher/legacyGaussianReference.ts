@@ -308,6 +308,9 @@ export function legacyProcessGaussianSplatLayers(
       {
         clipLocalTime: source.mediaTime,
         backgroundColor: renderSettings.backgroundColor,
+        splatScale: renderSettings.splatScale,
+        nearPlane: renderSettings.nearPlane,
+        farPlane: renderSettings.farPlane,
         effectors: sceneLayer.threeDEffectorsEnabled === false ? [] : activeSplatEffectors,
         worldMatrix: sceneLayer.worldMatrix,
         maxSplats: renderSettings.maxSplats,

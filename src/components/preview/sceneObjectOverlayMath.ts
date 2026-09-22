@@ -5,6 +5,7 @@ import {
   type SceneCameraSettings,
 } from '../../stores/mediaStore/types';
 import { useTimelineStore } from '../../stores/timeline';
+import type { TimelineLayerTransformPreview } from '../../stores/timeline/storeTypes/toolTypes';
 import type {
   SceneCamera,
   SceneCameraConfig,
@@ -74,6 +75,7 @@ interface CollectPreviewSceneObjectsParams {
   compositionId?: string | null;
   sceneNavClipId?: string | null;
   previewCameraOverride?: SceneCameraConfig | null;
+  layerTransformPreview?: TimelineLayerTransformPreview | null;
 }
 
 const AXIS_FALLBACKS: Record<SceneGizmoAxis, { x: number; y: number }> = {
@@ -426,6 +428,7 @@ export function collectPreviewSceneObjects({
   compositionId,
   sceneNavClipId,
   previewCameraOverride,
+  layerTransformPreview,
 }: CollectPreviewSceneObjectsParams): { camera: SceneCamera; objects: PreviewSceneObject[] } {
   const camera = resolveRenderableSharedSceneCamera(viewport, playheadPosition, {
     clips,
@@ -446,12 +449,29 @@ export function collectPreviewSceneObjects({
       const kind = resolveSceneObjectKind(clip);
       if (!kind) return null;
 
-      const transform = resolveSceneClipTransform(
+      const resolvedTransform = resolveSceneClipTransform(
         clip,
         playheadPosition - clip.startTime,
         playheadPosition,
         { clips, clipKeyframes },
       );
+      const preview = layerTransformPreview?.clipId === clip.id
+        ? layerTransformPreview.transform
+        : null;
+      const transform = preview
+        ? {
+            ...resolvedTransform,
+            position: preview.position
+              ? { ...resolvedTransform.position, ...preview.position }
+              : resolvedTransform.position,
+            scale: preview.scale
+              ? { ...resolvedTransform.scale, ...preview.scale }
+              : resolvedTransform.scale,
+            rotation: preview.rotation
+              ? { ...resolvedTransform.rotation, ...preview.rotation }
+              : resolvedTransform.rotation,
+          }
+        : resolvedTransform;
       const { position, transformSpace } = resolveClipWorldPosition(kind, transform, viewport);
       const axisBasis = resolveClipAxisBasis(clip, transform);
       const screen = projectWorldToCanvas(position, camera, canvasSize);

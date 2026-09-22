@@ -159,6 +159,7 @@ export function createFrameContext(playheadPositionOverride?: number): FrameCont
                       y: preview.scale.y ?? entry.transform.scale.y,
                     }
                   : entry.transform.scale,
+                rotationZ: preview.rotation?.z ?? entry.transform.rotationZ,
               },
             }
       )),
@@ -187,6 +188,9 @@ export function createFrameContext(playheadPositionOverride?: number): FrameCont
         scale: preview.scale
           ? { ...localTransform.scale, ...preview.scale }
           : localTransform.scale,
+        rotation: preview.rotation
+          ? { ...localTransform.rotation, ...preview.rotation }
+          : localTransform.rotation,
       };
     }
     const world = resolvePreviewWorlds(timelineTime)?.get(clipId);

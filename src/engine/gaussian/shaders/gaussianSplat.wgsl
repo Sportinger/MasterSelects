@@ -9,7 +9,9 @@ struct CameraUniforms {
   viewport:   vec2f,
   _pad:       vec2f,
   world:      mat4x4f,
-  layer:      vec4f, // x = clip/layer opacity multiplier, y = fragment alpha cutoff
+  layer:      vec4f, // x = opacity, y = alpha cutoff, z = per-gaussian scale
+  clipPlanes: vec2f, // additional per-splat near/far cutoffs in camera-space depth
+  _padClip:   vec2f,
 }
 
 @group(1) @binding(0) var<uniform> camera: CameraUniforms;
@@ -170,7 +172,8 @@ fn vs_main(
 
   // Read splat data
   let pos   = vec3f(splatData[base + 0u], splatData[base + 1u], splatData[base + 2u]);
-  let scale = vec3f(splatData[base + 3u], splatData[base + 4u], splatData[base + 5u]);
+  let scale = vec3f(splatData[base + 3u], splatData[base + 4u], splatData[base + 5u])
+    * max(camera.layer.z, 0.01);
   let quat  = vec4f(splatData[base + 6u], splatData[base + 7u], splatData[base + 8u], splatData[base + 9u]);
   let color = vec3f(splatData[base + 10u], splatData[base + 11u], splatData[base + 12u]);
   let alpha = splatData[base + 13u];
@@ -196,7 +199,9 @@ fn vs_main(
   let supportScale = scale * worldScale;
   let supportRadius3d = 3.0 * max(supportScale.x, max(supportScale.y, supportScale.z));
   let minRenderableDepth = max(0.05, supportRadius3d);
-  if (viewDepth <= minRenderableDepth) {
+  let nearDepth = max(minRenderableDepth, camera.clipPlanes.x);
+  let farDepth = max(nearDepth, camera.clipPlanes.y);
+  if (viewDepth <= nearDepth || viewDepth >= farDepth) {
     return discardVertex();
   }
 

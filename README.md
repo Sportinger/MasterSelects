@@ -89,7 +89,7 @@ existing systems, and check their work:
 | **Color & effects** | Grade through Color Nodes or the synchronized Color controls, inspect curves and scopes, combine GPU effects and transitions, and animate masks and properties with keyframes. |
 | **Audio** | Edit waveforms and spectrograms, mix tracks with effects and sends, record audio, and separate stems. |
 | **Motion & tracking** | Animate text, shapes, Lottie, and Rive assets; create captions; track faces and surfaces; bypass baked face/lip stabilization without deleting keyframes; and attach graphics to tracked motion. |
-| **3D** | Combine footage with models, lights, cameras, and Gaussian splats in a shared scene. |
+| **3D** | Combine footage with models, lights, cameras, and Gaussian splats in a shared scene. Large splats parse off the UI thread with visible progress, and their scale, render budget, sort cadence, and near/far depth slice remain live-editable. |
 | **AI** | Ask the editor to change the timeline, generate media, or use local transcription, segmentation, and depth estimation. |
 
 Arrange the dockable panels for the work at hand. The interface is optimized for

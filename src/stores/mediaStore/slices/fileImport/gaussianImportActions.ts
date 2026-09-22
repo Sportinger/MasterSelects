@@ -1,7 +1,10 @@
 import type { MediaFile, MediaSliceCreator } from '../../types';
 import { generateId, processImport } from '../../helpers/importPipeline';
 import type { FileImportActions } from '../fileImportSlice';
-import { finalizeImportedMediaFile } from './placeholderLifecycle';
+import {
+  finalizeImportedMediaFile,
+  updatePlaceholderImportProgress,
+} from './placeholderLifecycle';
 import { fileImportLog as log } from './log';
 
 export const createGaussianImportActions: MediaSliceCreator<Pick<
@@ -82,6 +85,7 @@ export const createGaussianImportActions: MediaSliceCreator<Pick<
       file,
       url: '',
       fileSize: file.size,
+      importProgress: 0,
       isImporting: true,
     };
     set((state) => ({
@@ -89,7 +93,15 @@ export const createGaussianImportActions: MediaSliceCreator<Pick<
     }));
 
     try {
-      const result = await processImport({ file, id, parentId, typeOverride: 'gaussian-splat' });
+      const result = await processImport({
+        file,
+        id,
+        parentId,
+        typeOverride: 'gaussian-splat',
+        onProgress: (progress) => {
+          set((state) => updatePlaceholderImportProgress(state, id, progress));
+        },
+      });
       finalizeImportedMediaFile(set, get, id, result.mediaFile);
       log.info('Gaussian splat import complete:', result.mediaFile.name);
       return result.mediaFile;

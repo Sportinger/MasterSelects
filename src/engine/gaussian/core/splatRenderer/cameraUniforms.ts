@@ -7,7 +7,7 @@ export interface SplatCameraParams {
   far: number;
 }
 
-export const CAMERA_UNIFORM_SIZE = 224;
+export const CAMERA_UNIFORM_SIZE = 240;
 
 export interface SplatCameraUniformResource {
   buffer: GPUBuffer;
@@ -42,6 +42,9 @@ export function writeSplatCameraUniforms(
   worldMatrix: Float32Array,
   layerOpacity: number,
   depthAlphaCutoff: number,
+  splatScale: number,
+  nearPlane: number,
+  farPlane: number,
 ): GPUBindGroup {
   const data = new Float32Array(CAMERA_UNIFORM_SIZE / 4);
 
@@ -55,6 +58,9 @@ export function writeSplatCameraUniforms(
 
   data[52] = layerOpacity;
   data[53] = depthAlphaCutoff;
+  data[54] = splatScale;
+  data[56] = nearPlane;
+  data[57] = farPlane;
 
   device.queue.writeBuffer(resource.buffer, 0, data);
   return resource.bindGroup;

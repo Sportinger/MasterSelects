@@ -40,6 +40,7 @@ import {
 } from './sceneOverlay/sceneOverlayTransformPlans';
 import { createAxisPlaneDrag } from './sceneOverlay/sceneOverlayDragGeometry';
 import { applyDragTransform } from './sceneOverlay/sceneOverlayDragTransformPlans';
+import { publishLayerTransformPreview } from './publishLayerTransformPreview';
 import { useSceneOverlayGizmoHandlers } from './sceneOverlay/useSceneOverlayGizmoHandlers';
 import { useSceneOverlayKeybindings } from './sceneOverlay/useSceneOverlayKeybindings';
 import {
@@ -124,6 +125,7 @@ export function SceneObjectOverlay({
   enabled,
 }: SceneObjectOverlayProps) {
   const overlayOwnerId = useId();
+  const layerTransformPreview = useTimelineStore((state) => state.layerTransformPreview);
   const [mode, setMode] = useState<SceneGizmoMode>('move');
   const setSceneOverlayActive = useEngineStore((state) => state.setSceneOverlayActive);
   const setSceneGizmoMode = useEngineStore((state) => state.setSceneGizmoMode);
@@ -149,6 +151,33 @@ export function SceneObjectOverlay({
     rotationAngularLastAngle: null,
     rotationAngularAccumulatedRadians: 0,
   });
+  const pendingTransformPreviewRef = useRef<{ clipId: string; transform: ClipTransformPatch } | null>(null);
+  const lastAppliedTransformPreviewRef = useRef<{ clipId: string; transform: ClipTransformPatch } | null>(null);
+  const transformPreviewFrameRef = useRef<number | null>(null);
+
+  const clearOwnedTransformPreview = useCallback(() => {
+    useTimelineStore.setState((state) => state.layerTransformPreview?.ownerId === overlayOwnerId
+      ? { layerTransformPreview: null }
+      : {});
+  }, [overlayOwnerId]);
+
+  const flushPendingTransformPreview = useCallback(() => {
+    transformPreviewFrameRef.current = null;
+    const pending = pendingTransformPreviewRef.current;
+    pendingTransformPreviewRef.current = null;
+    if (!pending) return;
+
+    lastAppliedTransformPreviewRef.current = pending;
+    publishLayerTransformPreview(overlayOwnerId, pending.clipId, pending.transform);
+  }, [overlayOwnerId]);
+
+  const flushPendingTransformPreviewNow = useCallback(() => {
+    if (transformPreviewFrameRef.current !== null) {
+      cancelAnimationFrame(transformPreviewFrameRef.current);
+      transformPreviewFrameRef.current = null;
+    }
+    flushPendingTransformPreview();
+  }, [flushPendingTransformPreview]);
 
   const releasePointerLock = useCallback(() => {
     const { target } = dragRuntimeRef.current;
@@ -254,6 +283,7 @@ export function SceneObjectOverlay({
         compositionId,
         sceneNavClipId,
         previewCameraOverride,
+        layerTransformPreview,
       });
       const editCameraObject = editCameraClip && editCameraTransform
         ? buildCameraPreviewSceneObject(editCameraClip, editCameraTransform, collected.camera, viewport, canvasSize)
@@ -277,6 +307,7 @@ export function SceneObjectOverlay({
       compositionId,
       editCameraClip,
       editCameraTransform,
+      layerTransformPreview,
       previewCameraOverride,
       sceneNavClipId,
       showOnlyEditCamera,
@@ -331,8 +362,15 @@ export function SceneObjectOverlay({
     if (clipId === (editCameraClip?.id ?? sceneNavClipId)) {
       setSceneNavOrbitTarget(null);
     }
+    if (dragState?.transient && dragState.clipId === clipId) {
+      pendingTransformPreviewRef.current = { clipId, transform };
+      if (transformPreviewFrameRef.current === null) {
+        transformPreviewFrameRef.current = requestAnimationFrame(flushPendingTransformPreview);
+      }
+      return;
+    }
     applySceneObjectTransform(clipId, transform);
-  }, [editCameraClip?.id, sceneNavClipId, setSceneNavOrbitTarget]);
+  }, [dragState, editCameraClip?.id, flushPendingTransformPreview, sceneNavClipId, setSceneNavOrbitTarget]);
 
   const resetObjectTransform = useCallback((
     clipId: string,
@@ -386,15 +424,26 @@ export function SceneObjectOverlay({
   }, [objects, sceneNavOrbitTarget, setSceneNavOrbitTarget]);
 
   const endDrag = useCallback(() => {
-    if (!dragState) return;
+    if (!dragState || endedDragRef.current) return;
+    endedDragRef.current = true;
     releasePointerLock();
-    if (!dragState.transient && !endedDragRef.current) {
-      endedDragRef.current = true;
+    if (dragState.transient) {
+      flushPendingTransformPreviewNow();
+      const finalPreview = lastAppliedTransformPreviewRef.current;
+      if (finalPreview?.clipId === dragState.clipId) {
+        startBatch(`Scene ${dragState.mode}`);
+        applySceneObjectTransform(finalPreview.clipId, finalPreview.transform);
+        endBatch();
+      }
+      clearOwnedTransformPreview();
+      pendingTransformPreviewRef.current = null;
+      lastAppliedTransformPreviewRef.current = null;
+    } else {
       endBatch();
     }
     setDragState(null);
     updateHoveredAxis(null);
-  }, [dragState, releasePointerLock, updateHoveredAxis]);
+  }, [clearOwnedTransformPreview, dragState, flushPendingTransformPreviewNow, releasePointerLock, updateHoveredAxis]);
 
   useEffect(() => {
     if (enabled && selectedObject?.screen.visible) return;
@@ -468,7 +517,7 @@ export function SceneObjectOverlay({
     const clip = clips.find((candidate) => candidate.id === params.object.clipId);
     if (!clip) return;
 
-    const transient = false;
+    const transient = params.object.kind !== 'camera';
     const lockTarget = overlayRef.current ?? document.body;
     const overlayRect = overlayRef.current?.getBoundingClientRect();
     const fallbackTarget = params.currentTarget instanceof HTMLElement ? params.currentTarget : undefined;
@@ -487,6 +536,9 @@ export function SceneObjectOverlay({
         })
       : undefined;
     endedDragRef.current = false;
+    pendingTransformPreviewRef.current = null;
+    lastAppliedTransformPreviewRef.current = null;
+    clearOwnedTransformPreview();
     dragRuntimeRef.current = {
       target: lockTarget,
       hasPointerLock: false,
@@ -538,7 +590,14 @@ export function SceneObjectOverlay({
         : {}),
       viewport,
     });
-  }, [camera, clips, getObjectTransform, mode, requestPointerLock, updateHoveredAxis, viewport]);
+  }, [camera, clearOwnedTransformPreview, clips, getObjectTransform, mode, requestPointerLock, updateHoveredAxis, viewport]);
+
+  useEffect(() => () => {
+    if (transformPreviewFrameRef.current !== null) {
+      cancelAnimationFrame(transformPreviewFrameRef.current);
+    }
+    clearOwnedTransformPreview();
+  }, [clearOwnedTransformPreview]);
 
   const {
     handleAxisMouseDown,

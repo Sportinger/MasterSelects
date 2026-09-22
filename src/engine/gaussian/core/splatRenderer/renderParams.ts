@@ -27,6 +27,12 @@ export interface SplatRenderOptions {
   worldMatrix?: Float32Array;
   /** Layer opacity multiplier applied before premultiplied-alpha output. */
   layerOpacity?: number;
+  /** Multiplier for each gaussian's covariance without changing its center position. */
+  splatScale?: number;
+  /** Additional per-splat near depth cutoff in shared camera space. */
+  nearPlane?: number;
+  /** Additional per-splat far depth cutoff in shared camera space. */
+  farPlane?: number;
   /** Fragment alpha cutoff for depth-mask passes. Color passes should leave this at the default. */
   depthAlphaCutoff?: number;
   /** Object-level 3D effectors in shared scene space. */
@@ -56,6 +62,9 @@ export const SORT_THRESHOLD = 50000;
 export interface PreparedSplatRenderParams {
   worldMatrix: Float32Array;
   layerOpacity: number;
+  splatScale: number;
+  nearPlane: number;
+  farPlane: number;
   depthAlphaCutoff: number;
   maxSplats: number;
   sortFrequency: number;
@@ -67,6 +76,9 @@ export function prepareSplatRenderParams(options?: SplatRenderOptions): Prepared
   return {
     worldMatrix: options?.worldMatrix ?? IDENTITY_MATRIX,
     layerOpacity: clamp01(options?.layerOpacity ?? 1),
+    splatScale: clampPositive(options?.splatScale ?? 1),
+    nearPlane: clampPositive(options?.nearPlane ?? 0.01),
+    farPlane: clampPositive(options?.farPlane ?? 1000),
     depthAlphaCutoff: clamp01(options?.depthAlphaCutoff ?? 0),
     maxSplats: options?.maxSplats ?? 0,
     sortFrequency: options?.sortFrequency ?? 1,
@@ -110,6 +122,13 @@ function clamp01(value: number): number {
     return 1;
   }
   return Math.max(0, Math.min(1, value));
+}
+
+function clampPositive(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 1;
+  }
+  return Math.max(0.01, value);
 }
 
 function parseClearColor(backgroundColor?: string): GPUColor {

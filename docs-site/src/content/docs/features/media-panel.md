@@ -111,6 +111,8 @@ Media imports use a two-phase approach:
    - Copy to project RAW folder when `copyMediaToProject` is enabled, or when the import is forced; the setting is disabled by default
    - Existing proxy detection (by file hash)
 
+The import placeholder reports staged progress instead of presenting an apparently frozen panel. Gaussian scene parsing is deferred until the native scene runtime needs it, then runs in a module worker with parser progress when workers are available. The native timeline path owns that one parse/upload lifecycle and does not also start the legacy renderer's prewarm pass.
+
 **Deduplication:** Files with matching name + size are automatically skipped.
 
 **Batch processing:** When importing multiple files, up to 3 files are processed in parallel.

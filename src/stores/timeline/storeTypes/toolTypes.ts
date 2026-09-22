@@ -128,7 +128,11 @@ export interface TimelineClipDragPreview {
 export interface TimelineLayerTransformPreview {
   ownerId: string;
   clipId: string;
-  transform: Partial<Pick<ClipTransform, 'position' | 'scale'>>;
+  transform: {
+    position?: Partial<ClipTransform['position']>;
+    scale?: Partial<ClipTransform['scale']>;
+    rotation?: Partial<ClipTransform['rotation']>;
+  };
 }
 
 export type TimelineAudioDisplayMode = 'compact' | 'detailed' | 'spectral';

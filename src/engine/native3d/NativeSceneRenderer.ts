@@ -393,18 +393,18 @@ export class NativeSceneRenderer {
           depthStoreOp: 'store',
           depthWrite: false,
           layerOpacity: layer.opacity,
+          splatScale: renderSettings.splatScale,
+          nearPlane: renderSettings.nearPlane,
+          farPlane: renderSettings.farPlane,
           depthAlphaCutoff: 0,
           effectors: layerEffectors,
           worldMatrix: layer.worldMatrix,
           maxSplats: renderSettings.maxSplats,
           particleSettings: layer.gaussianSplatSettings?.particle,
-          // Paused preview must use the same worker depth order as playback.
-          // The GPU "precise" sort path is reserved for export/explicit precise
-          // rendering; using it for pause caused a different visual result.
+          // Paused preview uses the same worker depth-order cadence as playback.
+          // The GPU "precise" path remains reserved for export.
           precise: layer.preciseSplatSorting === true,
-          sortFrequency: realtimePlayback && layer.preciseSplatSorting !== true
-            ? renderSettings.sortFrequency
-            : 1,
+          sortFrequency: layer.preciseSplatSorting === true ? 1 : renderSettings.sortFrequency,
           temporalSettings: layer.gaussianSplatSettings?.temporal,
         },
       );
@@ -429,6 +429,9 @@ export class NativeSceneRenderer {
           depthWrite: true,
           colorWrite: false,
           layerOpacity: layer.opacity,
+          splatScale: renderSettings.splatScale,
+          nearPlane: renderSettings.nearPlane,
+          farPlane: renderSettings.farPlane,
           depthAlphaCutoff: SPLAT_SOFT_DEPTH_ALPHA_CUTOFF,
           effectors: layerEffectors,
           worldMatrix: layer.worldMatrix,
@@ -515,17 +518,13 @@ export class NativeSceneRenderer {
   }
 }
 
-let instance: NativeSceneRenderer | null = null;
+let instance: NativeSceneRenderer | null = import.meta.hot?.data?.nativeSceneRenderer ?? null;
 
 if (import.meta.hot) {
   import.meta.hot.accept();
-  if (import.meta.hot.data?.nativeSceneRenderer) {
-    instance = import.meta.hot.data.nativeSceneRenderer;
-  }
+  if (instance) Object.setPrototypeOf(instance, NativeSceneRenderer.prototype);
   import.meta.hot.dispose((data) => {
-    instance?.dispose();
-    data.nativeSceneRenderer = null;
-    instance = null;
+    data.nativeSceneRenderer = instance;
   });
 }
 
