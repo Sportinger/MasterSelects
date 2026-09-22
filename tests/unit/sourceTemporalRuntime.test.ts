@@ -1,7 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest';
-const mock = vi.hoisted(() => ({ read: vi.fn(), close: vi.fn() }));
+const mock = vi.hoisted(() => ({ read: vi.fn(), batches: vi.fn(), close: vi.fn() }));
 vi.mock('../../src/services/planarTracking/surfaceFrameReader', async original => ({
   ...await original<object>(), openSurfaceFrames: async () => ({ read: mock.read, close: mock.close,
+    async *readTimes(times: number[]) { mock.batches(times); for (const time of times) yield await mock.read(time); },
     frames: Array.from({ length: 1000 }, (_, i) => ({ time: i / 30, duration: 1 / 30 })) }),
 }));
 import { SourceTemporalRuntime, sourceTemporalWindow } from '../../src/effects/time/SourceTemporalRuntime';
@@ -31,6 +32,7 @@ it('reuses historical PTS during playback instead of decoding the whole window e
   const initial = mock.read.mock.calls.length;
   for (let i = 1; i <= 30; i++) await prepare(runtime, { ...request, source: { ...request.source, localTime: 10 + i / 30 } });
   expect(initial).toBe(63);
+  expect(mock.batches.mock.calls[0][0]).toHaveLength(63);
   expect(mock.read.mock.calls.length - initial).toBeLessThanOrEqual(16);
   runtime.destroy();
 });
@@ -54,5 +56,16 @@ it('preserves source selection in small/full modes and reverse clips', () => {
   const reverse = { ...request, source: { ...request.source, speed: -1 } };
   expect(sourceTemporalWindow(reverse)[0].time).toBeLessThan(sourceTemporalWindow(reverse).at(-1)!.time);
   expect(sourceTemporalWindow({ ...request, maxEdge: 160 } as NativeTemporalRequest)).toEqual(sourceTemporalWindow(request));
+  runtime.destroy();
+});
+
+ it('prefetches four grid samples in the same decoder batch during playback', async () => {
+  const { runtime, request } = setup();
+  const playing = { ...request, keepPending: true };
+  await prepare(runtime, playing);
+  expect(mock.batches).toHaveBeenCalledTimes(1);
+  expect(mock.batches.mock.calls[0][0]).toHaveLength(67);
+  for (let i = 1; i <= 7; i++) await prepare(runtime, { ...playing, source: { ...playing.source, localTime: 10 + i / 30 } });
+  expect(mock.batches).toHaveBeenCalledTimes(1);
   runtime.destroy();
 });

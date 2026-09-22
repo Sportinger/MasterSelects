@@ -56,6 +56,15 @@ export async function openSurfaceFrames(url: string, signal: AbortSignal, file?:
         if (!sample) throw new Error('The selected video frame could not be decoded.');
         return capture(sample);
       },
+      /** One decoder run for an ordered batch, rather than one GOP seek per sample. */
+      async *readTimes(times: readonly number[]): AsyncGenerator<SurfaceDecodedFrame> {
+        const timestamps = times.map(time => frames[Math.max(0, surfaceFrameIndex(frames, time))].time + 0.6e-6);
+        for await (const sample of sink.samplesAtTimestamps(timestamps)) {
+          signal.throwIfAborted();
+          if (!sample) throw new Error('A requested source frame could not be decoded.');
+          yield capture(sample);
+        }
+      },
       async *readRange(from: number, to: number, limit = 1800): AsyncGenerator<SurfaceDecodedFrame> {
         const first = Math.max(0, surfaceFrameIndex(frames, from));
         const last = Math.max(0, surfaceFrameIndex(frames, to));

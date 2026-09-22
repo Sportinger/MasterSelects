@@ -97,16 +97,28 @@ export class SourceTemporalRuntime {
     const signal = entry.abort.signal;
     if (!entry.reader) entry.reader = await openSurfaceFrames(entry.media.url, signal, entry.media.file, Math.max(entry.width, entry.height));
     signal.throwIfAborted();
-    // Re-evaluate after each decode so a seek supersedes old work immediately.
-    // Bound each job: rendering/export gets a chance to submit and re-evaluate.
-    for (let decoded = 0; decoded < 64; decoded++) {
-      const wanted = this.wanted(entry, entry.latest);
-      const keys = new Set(wanted.map(item => item.time));
-      const missing = [...keys].filter(time => !entry.slots.has(time)).toSorted((a, b) => a - b);
-      if (!missing.length) return;
-      setTemporalStatus(entry.latest.effectId, `Loading source cache (${keys.size - missing.length}/${keys.size})…`);
-      const frame = await entry.reader.read(missing[0]);
+    const request = entry.latest;
+    const keys = new Set(this.wanted(entry, request).map(item => item.time));
+    // Four future grid positions fit in the spare slots. Decode them in this same
+    // batch so playback does not start another decoder for each advancing sample.
+    if (request.keepPending && request.samples > 2) {
+      const step = Math.max(request.horizon, 0.00001) / (Math.min(64, request.samples) - 2);
+      const tick = Math.floor(request.source.localTime / step + 1e-8);
+      for (let i = 1; i <= 4; i++) {
+        const time = temporalSourceTime(request.source, (tick + i) * step);
+        keys.add(entry.reader.frames[Math.max(0, surfaceFrameIndex(entry.reader.frames, time))].time);
+      }
+    }
+    const missing = [...keys].filter(time => !entry.slots.has(time)).toSorted((a, b) => a - b);
+    let completed = 0;
+    if (!missing.length) return;
+    for await (const frame of entry.reader.readTimes(missing)) {
       signal.throwIfAborted();
+      // Interrupt a superseded seek, while keeping samples useful for playback.
+      const current = new Set(this.wanted(entry, entry.latest).map(item => item.time));
+      if (![...current].some(time => keys.has(time))) break;
+      const time = missing[completed];
+      if (Math.abs(frame.time - time) > 1e-6) throw new Error('Decoder returned the wrong source timestamp.');
       if (frame.pixels.width !== entry.width || frame.pixels.height !== entry.height) throw new Error('Source frame dimensions changed.');
       let slot = Array.from({ length: this.layers }, (_, i) => i).find(i => ![...entry.slots.values()].includes(i));
       if (slot === undefined) {
@@ -116,7 +128,9 @@ export class SourceTemporalRuntime {
       }
       this.device.queue.writeTexture({ texture: entry.atlas, origin: [0, 0, slot] }, frame.pixels.data as Uint8ClampedArray<ArrayBuffer>,
         { bytesPerRow: entry.width * 4 }, [entry.width, entry.height]);
-      entry.slots.set(missing[0], slot); entry.revision++;
+      entry.slots.set(time, slot); entry.revision++; completed++;
+      setTemporalStatus(entry.latest.effectId, `Loading source cache (${completed}/${missing.length})…`);
+      if (completed % 8 === 0) this.onReady?.();
     }
   }
 

@@ -53,7 +53,8 @@ Saved graph edits, effect bypass and numeric keyframes use the existing editor p
   changes. There is no rolling-history mode or playback-only sampling fallback.
 - **Source-frame cache**: historical samples use an absolute clip-time grid,
   with the current frame supplied by normal playback. Adjacent output frames reuse
-  source PTS in a GPU texture array; only missing frames are decoded. The graph
+  source PTS in a GPU texture array; missing frames are decoded in one ordered
+  batch per refill, with four future grid samples prefetched during playback. The graph
   samples this array directly instead of baking a complete image each output frame.
   Small/full resolution use the same grid. The bounded cache reserves 68 layers
   plus two CPU frame allocations within 640 MiB across active owners. Sources that
