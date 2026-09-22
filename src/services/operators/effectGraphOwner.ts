@@ -1,3 +1,6 @@
+import { composeSplatGraph } from './splatGraphComposition';
+import { SPLAT_SCALAR_OPERATORS } from './splatScalarInputs';
+import { defaultSplatGraph, compileSplatGraph } from './splatGraph';
 import type { Effect } from '../../types/effects';
 import { audioGraphOperators, compileAudioOperatorGraph, readAudioOperatorGraph } from './audioOperatorGraph';
 import { AUDIO_OPERATORS } from './audioOperators';
@@ -74,7 +77,7 @@ export function isImageGraphEffectType(type: string): type is 'invert' | 'edge-d
   return isLocalImageEffectType(type) || CONTEXTUAL_IMAGE_EFFECTS.has(type);
 }
 export const isComputeImageEffectType = (type: string) => type === 'voronoi' || type === 'pixel-sort' || type === 'quadtree-zoom' || type === 'contour';
-export function hasEffectOperatorGraph(type: string): boolean { return type === 'audio-math' || type === 'face-cables' || type === 'voxel-relief' || isComputeImageEffectType(type) || isImageGraphEffectType(type) || type === 'analog-signal-lab'; }
+export function hasEffectOperatorGraph(type: string): boolean { return type === 'splat-exploration' || type === 'audio-math' || type === 'face-cables' || type === 'voxel-relief' || isComputeImageEffectType(type) || isImageGraphEffectType(type) || type === 'analog-signal-lab'; }
 type EffectGraphOwner = { type: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph };
 
 export function effectOperatorCompileParams(effect: Pick<EffectGraphOwner, 'params' | 'operatorGraph'>): Record<string, unknown> {
@@ -114,6 +117,12 @@ export function effectOperatorCompileContext(effect: Pick<EffectGraphOwner, 'typ
 }
 
 export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGraph {
+  if (effect.type === 'splat-exploration') {
+    const graph = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], () => defaultSplatGraph(true).graph);
+    const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
+    if (errors.length) throw new Error(errors[0]);
+    return expandOperatorCompositions(composeSplatGraph({ graph, params: effect.params as import('../../types/operatorGraph').SceneOperatorGraph['params'] }).graph);
+  }
   if (effect.type === 'audio-math') return readAudioOperatorGraph(effect.params.operatorGraph);
   if (isComputeImageEffectType(effect.type)) {
     const fallback = effect.type === 'voronoi' ? createDefaultVoronoiGraph
@@ -239,7 +248,8 @@ export function migratePersistedEffectOperatorGraph(effect: Effect): Effect {
 }
 export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: EffectOperatorGraph, params: Record<string, unknown>) {
   const next = { ...params, [EFFECT_GRAPH_PARAM]: JSON.stringify(graph) };
-  if (effect.type === 'audio-math') compileAudioOperatorGraph(graph);
+  if (effect.type === 'splat-exploration') compileSplatGraph({ graph, params: { ...defaultSplatGraph(true).params, ...params } as import('../../types/operatorGraph').SceneOperatorGraph['params'] });
+  else if (effect.type === 'audio-math') compileAudioOperatorGraph(graph);
   else if (effect.type === 'voxel-relief') compileVoxelGraph(next);
   else if (effect.type === 'face-cables') compileCableOperatorGraph(next);
   else if (isImageGraphEffectType(effect.type)) compileImageOperatorGraph(graph, effectOperatorParams({ type: effect.type, params }), effectOperatorCompileContext(effect));
@@ -248,6 +258,7 @@ export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: Ef
   else throw new Error('This effect has no operator graph.');
 }
 export function addableEffectOperators(type: string) {
+  if (type === 'splat-exploration') return EFFECT_OPERATORS.filter(o => o.addable && (o.id.startsWith('splat.') || ['scene.mesh', 'material.wireframe', 'forces.gravity', 'forces.drag', 'forces.turbulence'].includes(o.id) || SPLAT_SCALAR_OPERATORS.has(o.id)));
   if (type === 'audio-math') return audioGraphOperators().filter(operator => operator.addable);
   if (isComputeImageEffectType(type)) {
     const shared = ['image.frame', 'values.number', 'values.boolean', 'values.color'].flatMap(id => {
@@ -275,6 +286,7 @@ export function addableEffectOperators(type: string) {
 }
 
 export function effectOperatorParams(effect: EffectGraphOwner): Record<string, unknown> {
+  if (effect.type === 'splat-exploration') return { ...defaultSplatGraph(true).params, ...effect.params };
   if (isImageGraphEffectType(effect.type) || effect.type === 'analog-signal-lab' || isComputeImageEffectType(effect.type)) {
     const definition = getEffect(effect.type);
     const defaults = Object.fromEntries(Object.entries(definition?.params ?? {}).map(([id, spec]) => [id, spec.default]));
@@ -298,6 +310,7 @@ export function effectOperatorParams(effect: EffectGraphOwner): Record<string, u
   return { ...defaults, ...effect.params };
 }
 export function canRemoveEffectOperator(type: string, nodeId: string, operatorId: string): boolean {
+  if (type === 'splat-exploration') return !!addableEffectOperators(type).find(o => o.id === operatorId);
   if (type === 'audio-math') return !['audio.input', 'audio.output'].includes(operatorId);
   if (isComputeImageEffectType(type)) return !['frame', 'output'].includes(nodeId) && !!getEffectOperator(operatorId)?.addable;
   if (type === 'analog-signal-lab') return !['frame', 'output'].includes(nodeId) && !!getEffectOperator(operatorId)?.addable;

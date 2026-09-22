@@ -34,6 +34,7 @@ export interface NodeCatalogEntry {
 const familyOf = (id: string) => id.replace(/\.(scalar|field|rgb|vec[234])$/, '');
 const usersOf = (context: string) => context.split(/\s*\+\s*/).filter(Boolean);
 const operatorContext = (operator: (typeof EFFECT_OPERATORS)[number]) => AUDIO_OPERATORS.includes(operator) ? 'Audio samples'
+  : operator.id.startsWith('splat.') || operator.composition?.graph.domain === 'scene' ? 'Gaussian splat scene graphs'
   : IMAGE_OPERATORS.includes(operator) || operator.composition
   ? `Local image graphs${AUDIO_SCALAR_OPERATORS.includes(operator) ? ' + Audio samples' : ''}`
   : SCENE_OPERATORS.includes(operator) ? `3D image surfaces${isVoxelOperator(operator.id) ? ' + Voxel Relief' : ''}`

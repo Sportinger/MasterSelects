@@ -13,6 +13,7 @@ const port = (id: string, type: NodeGraphSignalType, direction: NodeGraphPort['d
 /** Scene dependencies are projections of their existing clip fields, including camera/light references. */
 export function withClipSceneGraph(document: NodeGraphDocument, clip: TimelineClip, clips: TimelineClip[] = []): NodeGraphDocument {
   if (!clipHasSceneGraph(clip)) return document;
+  if (clip.source?.type === 'gaussian-splat' && clip.effects.some(e => e.type === 'splat-exploration')) return document;
   const root = document.graphs.find(g => g.id === document.rootGraphId)!;
   const cable = clip.effects.find(e => e.enabled && e.type === 'face-cables' && e.params.scene3D);
   const voxel = !cable && clip.effects.find(e => e.enabled && e.type === 'voxel-relief');

@@ -1,3 +1,5 @@
+import { SplatGraphCompute, prepareSplatSampling } from '../graph/SplatGraphCompute';
+import { SplatMeshPass } from '../graph/SplatMeshPass';
 import { Logger } from '../../../services/logger';
 import { SplatRenderTargetPool } from './SplatRenderTargetPool';
 import { SplatVisibilityPass } from './SplatVisibilityPass';
@@ -38,8 +40,7 @@ import {
 } from './splatRenderer/sceneResources';
 import { updateGpuSortFrame, updateWorkerSortFrame } from './splatRenderer/sortGlue';
 import {
-  buildRenderTargetReadbackLayout,
-  summarizeRenderTargetPixels,
+  readRenderTargetSummary,
   type GaussianSplatRenderTargetSummary,
 } from './splatRenderer/renderTargetSummary';
 import { resolveSplatRenderTarget } from './splatRenderer/renderTargets';
@@ -64,6 +65,8 @@ export type {
 // ── Renderer Class ────────────────────────────────────────────────────────────
 
 export class GaussianSplatGpuRenderer {
+  private graphCompute = new SplatGraphCompute();
+  private meshPass = new SplatMeshPass();
   private device: GPUDevice | null = null;
   private pipeline: GPURenderPipeline | null = null;
   private pipelineWithDepth: GPURenderPipeline | null = null;
@@ -100,6 +103,7 @@ export class GaussianSplatGpuRenderer {
 
   /** Refresh shader-dependent resources while retaining uploaded scenes across HMR. */
   refreshAfterHmr(): void {
+    this.graphCompute?.dispose(); this.graphCompute = new SplatGraphCompute(); this.meshPass ??= new SplatMeshPass();
     if (!this._initialized || !this.device) return;
 
     const staleCameraResources = this.cameraUniformPool;
@@ -178,6 +182,7 @@ export class GaussianSplatGpuRenderer {
         log,
       );
       this.sceneCache.set(clipId, scene);
+      this.meshPass.upload(clipId, data.data, data.splatCount);
 
       // Initialize sort pass for this scene's capacity (lazy init)
       if (data.splatCount > SORT_THRESHOLD) {
@@ -198,6 +203,7 @@ export class GaussianSplatGpuRenderer {
 
   /** Release GPU resources for a clip */
   releaseScene(clipId: string): void {
+    this.meshPass.release(clipId);
     const scene = this.sceneCache.get(clipId);
     if (scene) {
       releaseSplatSceneResources(scene);
@@ -256,6 +262,10 @@ export class GaussianSplatGpuRenderer {
         clearColor,
         precise,
       } = prepareSplatRenderParams(options);
+      if (options?.graphBranch?.mesh) {
+        const target = resolveSplatRenderTarget(this.renderTargetPool, this.lastRenderTargets, clipId, viewport, options.outputView);
+        return this.meshPass.render(this.device, commandEncoder, clipId, options.graphBranch.mesh, camera, worldMatrix, target, options);
+      }
       const cameraBindGroup = this.writeCameraUniforms(
         camera,
         worldMatrix,
@@ -324,6 +334,15 @@ export class GaussianSplatGpuRenderer {
         activeSplatCount = scene.splatCount;
       }
 
+      const graphOperations = options?.graphBranch?.operations ?? [];
+      const sampling = prepareSplatSampling(graphOperations, activeSplatCount, options?.graphBranch?.budget);
+      if (graphOperations.length || sampling.remapped) {
+        const v = camera.viewMatrix;
+        const eye = { x: -(v[0] * v[12] + v[1] * v[13] + v[2] * v[14]), y: -(v[4] * v[12] + v[5] * v[13] + v[6] * v[14]), z: -(v[8] * v[12] + v[9] * v[13] + v[10] * v[14]) };
+        activeSplatBuffer = this.graphCompute.execute(this.device, commandEncoder, activeSplatBuffer, Math.max(1, sampling.count), sampling.operations, clipLocalTime, worldMatrix, eye, activeSplatCount, sampling.offset, sampling.remapped);
+        activeSplatCount = sampling.count;
+      }
+      const graphMovesPoints = sampling.remapped || graphOperations.some(op => op.kind === 'particles' || (op.kind === 'noise' && op.values[0] === 0));
       // Determine effective splat count (respect maxSplats budget)
       const effectiveSplatCount = maxSplats > 0
         ? Math.min(activeSplatCount, maxSplats)
@@ -339,14 +358,14 @@ export class GaussianSplatGpuRenderer {
         worldMatrix,
         effectiveSplatCount,
         sortFrequency,
-        precise,
+        precise || graphMovesPoints,
       );
       const { canUseWorkerSort, usedWorkerSort } = workerSortFrame;
       let drawCount = workerSortFrame.drawCount;
 
       if (
         !canUseWorkerSort &&
-        !precise &&
+        !precise && !graphMovesPoints &&
         this.visibilityPass.isInitialized &&
         effectiveSplatCount > CULL_THRESHOLD
       ) {
@@ -399,9 +418,9 @@ export class GaussianSplatGpuRenderer {
         effectiveSplatCount,
         drawCount,
         canUseWorkerSort,
-        precise,
+        precise: precise || graphMovesPoints,
         hasValidatedCullResult,
-        sortFrequency,
+        sortFrequency: graphMovesPoints ? 1 : sortFrequency,
         viewMatrix: camera.viewMatrix,
         worldMatrix,
       });
@@ -491,6 +510,7 @@ export class GaussianSplatGpuRenderer {
 
   /** Called at start of each frame to reset per-frame state */
   beginFrame(): void {
+    this.graphCompute.beginFrame(); this.meshPass.beginFrame(); this.sortPass.beginFrame();
     if (this.renderTargetPool) {
       this.renderTargetPool.resetFrame();
     }
@@ -511,35 +531,7 @@ export class GaussianSplatGpuRenderer {
     const target = this.lastRenderTargets.get(clipId);
     if (!target) return null;
 
-    const { texture, width, height } = target;
-    const readbackLayout = buildRenderTargetReadbackLayout(width, height);
-
-    const readbackBuffer = this.device.createBuffer({
-      size: readbackLayout.bufferSize,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-      label: `splat-render-target-readback-${clipId}`,
-    });
-
-    const commandEncoder = this.device.createCommandEncoder();
-    commandEncoder.copyTextureToBuffer(
-      { texture },
-      { buffer: readbackBuffer, bytesPerRow: readbackLayout.bytesPerRow, rowsPerImage: height },
-      { width, height, depthOrArrayLayers: 1 },
-    );
-    this.device.queue.submit([commandEncoder.finish()]);
-
-    await readbackBuffer.mapAsync(GPUMapMode.READ);
-    const src = new Uint8Array(readbackBuffer.getMappedRange());
-    const summary = summarizeRenderTargetPixels(src, width, height, readbackLayout);
-
-    readbackBuffer.unmap();
-    readbackBuffer.destroy();
-
-    return {
-      width,
-      height,
-      ...summary,
-    };
+    return readRenderTargetSummary(this.device, target);
   }
 
   dispose(): void {
@@ -552,6 +544,7 @@ export class GaussianSplatGpuRenderer {
   // ── Private ────────────────────────────────────────────────────────────────
 
   private disposeGpuResources(): void {
+    this.graphCompute.dispose(); this.meshPass.dispose();
     // Release all scenes
     for (const [clipId, scene] of this.sceneCache) {
       releaseSplatSceneResources(scene);

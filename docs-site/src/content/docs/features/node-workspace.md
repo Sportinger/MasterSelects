@@ -4,6 +4,11 @@ title: "Node Workspace"
 
 The Node Workspace is a dockable, unified view of the canonical node-graph document for the currently selected timeline clip. It follows the same primary selection rule as Properties: the last clicked selected clip is used, with a fallback to the first selected clip. Linked video/audio clips resolve to one graph owner: selecting either side opens the visual clip's graph, while the linked audio clip feeds the source node's audio and analysis ports.
 
+Gaussian splat clips expose their scene nodes here. The **Splat Exploration** effect adds
+editable branches for Gaussian attributes, particles and reconstructed mesh wireframes;
+simulation forces and mesh materials are separate connected nodes. See
+[Splat Exploration nodes](/features/3d-layers/#splat-exploration-nodes) for execution and budgets.
+
 Selecting a clip shows **all its nodes on one canvas**. Color, Flock, Face Cables and
 3D Scene appear as colored groups. Drag the group header to move its entire contents,
 including nested groups. The separate arrow collapses or expands the group;
@@ -813,3 +818,5 @@ field-backed. New agent tools should use these validated mutations rather than U
 coordinates or a separate copy of the graph.
 
 Adding an effect, including through the Effects panel, reflows its connected outer chain to make room. Bypassing an effect collapses its group and its Effects inspector entry; enabling it again preserves the collapsed state. **Reset** arranges node positions again, clears manual canvas anchors and group offsets, and fits the resulting graph with the same bounds and zoom rules as **Fit**.
+
+Gaussian Splat Exploration uses the shared composition mechanism: **Reusable Nodes ? Space** contains Splat Cleanup, Splat Rays, Particle System and Mesh Overlay. Expand the Particles group to edit its simulation and connected forces.

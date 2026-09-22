@@ -21,6 +21,50 @@ MasterSelects authorable 3D content resolves through one shared scene contract.
 
 ## Rendering Model
 
+### Splat Exploration nodes
+
+Add **Splat Exploration** to a Gaussian splat clip, then open its group in Nodes.
+It is a normal effect with an editable operator graph. Its four branches share the
+source coordinates, clip transform and active scene camera:
+
+- Original: size clamp → camera proximity fade → Gaussian Surface.
+- Rays: selection → anisotropic scale → animated rotation noise → color/alpha → Gaussian Surface.
+- Particles: selection → size clamp → particle simulation → camera fade → Gaussian Surface.
+  Shared Turbulence Force, Gravity and Drag nodes connect separately to the simulation.
+  Disconnected forces contribute nothing; bypassing them also removes their contribution.
+- Mesh: Splats to Mesh → Mesh, with a separately connected Wireframe Material.
+
+**Reusable Nodes ? Space** offers versioned Splat Cleanup, Splat Rays, Particle System
+and Mesh Overlay compositions. Each has typed public ports and an expandable body.
+Instances share definitions; editing an interior detaches only that instance into a
+local group. Existing bound flat recipes are organized without changing their controls.
+The effect opens with Original Splats, Rays, Particles and Mesh Overlay groups; Open
+Nodes expands the effect. Gravity and Drag use the same operators as cable physics.
+
+Merge Splat Branches combines these into the clip transform and scene output.
+Attribute nodes pass their input through when bypassed; surface/mesh nodes mute their branch.
+Shared Number, Oscillator and scalar math nodes can drive numeric splat parameters.
+Effect parameters remain keyframeable through the common effect inspector; mesh reconstruction
+settings are deliberately not animated. Time-dependent nodes use clip-local media time.
+
+Radii are **linear local units**, not the logarithmic scales in some training PLY files.
+Selection and Gaussian Surface budgets compact the GPU workload before simulation:
+the starting graph keeps all original splats, at most 16,384 rays and 8,192 particles.
+Color and depth passes reuse the same evaluated particle attributes. Large original scans
+still incur their normal rendering cost; the budget on each Gaussian Surface is editable.
+
+Particles replay the current seeded lifetime with fixed 1/30-second integration steps
+and a final fractional step, making seeking deterministic. This is bounded lifetime
+simulation, without collisions or particle-to-particle interactions.
+The mesh is a cached density-isosurface approximation sampled from at most 32,768 source
+splats on a 12–64-cell grid. It renders as wireframe, retains source coordinates, and is
+not a replacement for a photogrammetry mesh. Connect the unmodified Splat Source to
+reconstruction; animated reconstruction is rejected. Geometry remains renderer-owned.
+
+The scene compiler limits graphs to eight rendered branches and 24 attribute operations
+per branch. Invalid connected graphs report an error and mute the object. Use one Splat
+Exploration scene effect per clip; when several are enabled, the last one supplies its scene.
+
 ```text
 [2D layers] --------------------------------> Existing WebGPU compositor
         |

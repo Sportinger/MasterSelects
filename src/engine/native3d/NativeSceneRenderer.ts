@@ -401,6 +401,7 @@ export class NativeSceneRenderer {
           worldMatrix: layer.worldMatrix,
           maxSplats: renderSettings.maxSplats,
           particleSettings: layer.gaussianSplatSettings?.particle,
+          graphBranch: layer.splatGraphBranch,
           // Paused preview uses the same worker depth-order cadence as playback.
           // The GPU "precise" path remains reserved for export.
           precise: layer.preciseSplatSorting === true,
@@ -437,6 +438,7 @@ export class NativeSceneRenderer {
           worldMatrix: layer.worldMatrix,
           maxSplats: renderSettings.maxSplats,
           particleSettings: layer.gaussianSplatSettings?.particle,
+          graphBranch: layer.splatGraphBranch,
           precise: false,
           sortFrequency: 0,
           temporalSettings: layer.gaussianSplatSettings?.temporal,

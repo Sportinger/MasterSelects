@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import * as compositionRegistry from '../../src/services/operators/operatorCompositionRegistry';
+import { describe, expect, it, vi } from 'vitest';
 import type { EffectOperatorGraph, OperatorDefinition } from '../../src/types/operatorGraph';
 import { COORDINATE_COMPOSITIONS } from '../../src/services/operators/coordinateCompositions';
 import { expandOperatorCompositions, packOperatorCompositions } from '../../src/services/operators/operatorComposition';
@@ -87,7 +88,8 @@ describe('reusable coordinate compositions', () => {
       graph: { version: 1, schemaVersion: 1, domain: 'image', nodes: [{ id: 'child', operator: mirror.id, operatorVersion: 1, bindings: {} }], edges: [], layout: {} },
       inputs: { value: [{ nodeId: 'child', portId: 'value' }], period: [{ nodeId: 'child', portId: 'period' }] }, outputs: { value: { nodeId: 'child', portId: 'value' } },
     } };
-    const definitions = COORDINATE_COMPOSITIONS as OperatorDefinition[]; definitions.push(wrapper);
+    const lookup = compositionRegistry.getOperatorComposition;
+    const registry = vi.spyOn(compositionRegistry, 'getOperatorComposition').mockImplementation(id => id === wrapper.id ? wrapper : lookup(id));
     try {
       const graph: EffectOperatorGraph = { version: 1, domain: 'image', nodes: [{ id: 'outer', operator: wrapper.id, operatorVersion: 1, bindings: {} }], edges: [], layout: {} };
       const expanded = expandOperatorCompositions(graph);
@@ -95,6 +97,6 @@ describe('reusable coordinate compositions', () => {
       expect(packOperatorCompositions(expanded).nodes.map(node => node.operator)).toEqual(['test.nested']);
       wrapper.composition!.graph.nodes[0].operator = wrapper.id;
       expect(() => expandOperatorCompositions(graph)).toThrow(/four levels/);
-    } finally { definitions.pop(); }
+    } finally { registry.mockRestore(); }
   });
 });

@@ -43,7 +43,7 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
   const node = graph.nodes.find(n => n.id === nodeId), operator = node && getEffectOperator(node.operator);
   if (!node || !operator) return null;
   const evaluatedParams = effectOperatorParams(effect);
-  const parameterSchema = isImageGraphEffectType(effect.type) || effect.type === 'analog-signal-lab' ? getEffect(effect.type)?.params : undefined;
+  const parameterSchema = isImageGraphEffectType(effect.type) || effect.type === 'analog-signal-lab' || effect.type === 'splat-exploration' ? getEffect(effect.type)?.params : undefined;
   const familyOptions = operatorFamilyOptions(operator).filter(option => option.value === operator.id || addableEffectOperators(effect.type).some(operator => operator.id === option.value));
   const mathNode = { id: node.id, operatorId: node.operator, label: operator.label, kind: 'effect' as const, runtime: 'builtin' as const,
     inputs: [], outputs: [], params: { operatorOwnerType: effect.type }, layout: { x: 0, y: 0 }, binding: { kind: 'effect-operator' as const, effectId, nodeId: node.id, operator: node.operator } };
@@ -77,6 +77,8 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
           interpolateKeyframes(keys, `effect.${effectId}.${key}` as Keyframe['property'], time, Number(effect.params[key] ?? spec.default)),
           Number(spec.default), spec.min, spec.max, spec.step, spec.animatable)} />}
       {operator.parameters.map(spec => {
+        if (effect.type === 'splat-exploration' && graph.edges.some(e => e.to === node.id && e.input === spec.id))
+          return <ResolveInspectorRow key={spec.id} label={spec.label}><span>Connected node</span></ResolveInspectorRow>;
         if (projectedNode && node.operator.startsWith('math.') && graph.edges.some(edge => edge.to === node.id && edge.input === spec.id))
           return <OperatorLiveValue key={spec.id} clipId={clip.id} node={projectedNode} portId={spec.id} label={spec.label} />;
         const binding = node.bindings[spec.id];

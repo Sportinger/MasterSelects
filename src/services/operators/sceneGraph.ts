@@ -1,3 +1,6 @@
+import { SPLAT_SCALAR_OPERATORS } from './splatScalarInputs';
+import { getOperatorComposition } from './operatorCompositionRegistry';
+import { defaultSplatGraph, compileSplatGraph } from './splatGraph';
 import type { BoundOperatorNode, SceneOperatorGraph, SceneSurfacePlan } from '../../types/operatorGraph';
 import { validateEffectGraph } from './effectGraph';
 import { SCENE_OPERATORS } from './sceneOperators';
@@ -5,7 +8,7 @@ import type { TimelineClip } from '../../types/timeline';
 import { isScenePrimitiveShape, scenePrimitiveShape } from './scenePrimitive';
 
 export function sceneGraphForClip(clip: TimelineClip): SceneOperatorGraph {
-  return clip.nodeGraph?.scene ?? defaultSceneGraph(clip.effects.some(e => e.enabled && e.type === 'face-cables' && Boolean(e.params.scene3D)));
+  return clip.nodeGraph?.scene ?? (clip.source?.type === 'gaussian-splat' ? defaultSplatGraph() : defaultSceneGraph(clip.effects.some(e => e.enabled && e.type === 'face-cables' && Boolean(e.params.scene3D))));
 }
 
 export function defaultSceneGraph(sourceGeometry = false): SceneOperatorGraph {
@@ -33,7 +36,7 @@ export function validateSceneGraph(definition: SceneOperatorGraph, allowIncomple
   if (!definition || !definition.params || typeof definition.params !== 'object' || definition.graph?.domain !== 'scene') return ['Invalid saved scene graph.'];
   const errors = validateEffectGraph(definition.graph, allowIncomplete);
   if (errors.length) return errors;
-  if (definition.graph.nodes.some(n => !SCENE_OPERATORS.some(o => o.id === n.operator))) errors.push('Unsupported scene operator.');
+  if (definition.graph.nodes.some(n => !SCENE_OPERATORS.some(o => o.id === n.operator) && !(definition.graph.nodes.some(node => node.operator === 'splat.source') && (SPLAT_SCALAR_OPERATORS.has(n.operator) || getOperatorComposition(n.operator)?.composition?.graph.domain === 'scene')))) errors.push('Unsupported scene operator.');
   if (definition.graph.nodes.some(n => n.operator === 'geometry.primitive' && n.constants?.shape !== undefined && !isScenePrimitiveShape(n.constants.shape))) errors.push('Unsupported scene primitive shape.');
   return errors;
 }
@@ -41,6 +44,10 @@ export function validateSceneGraph(definition: SceneOperatorGraph, allowIncomple
 /** Evaluate only the connected output. No hidden fallback to the old graph after rewiring. */
 export function compileSceneGraph(definition: SceneOperatorGraph): SceneSurfacePlan {
   const errors = validateSceneGraph(definition); if (errors.length) throw new Error(errors[0]);
+  if (definition.graph.nodes.some(n => n.operator === 'splat.source')) {
+    compileSplatGraph(definition);
+    return { visible: true, geometry: 'source', applyClipTransform: true, width: 1, height: 1, textured: false, uv: [1, 1, 0, 0], tint: [1, 1, 1], opacity: 1 };
+  }
   const { graph, params } = definition;
   const nodes = new Map(graph.nodes.map(n => [n.id, n]));
   const input = (node: BoundOperatorNode, port: string) => {
@@ -86,5 +93,5 @@ export function compileSceneGraph(definition: SceneOperatorGraph): SceneSurfaceP
 }
 
 export function sceneGraphSupportsSource(sourceType?: string, cable = false, voxel = false): boolean {
-  return cable || (!voxel && !['model', 'gaussian-splat', 'gaussian-avatar', 'flock', 'camera', 'light', 'splat-effector'].includes(sourceType ?? ''));
+  return cable || (!voxel && !['model', 'gaussian-avatar', 'flock', 'camera', 'light', 'splat-effector'].includes(sourceType ?? ''));
 }

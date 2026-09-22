@@ -1,3 +1,4 @@
+import { SplatExplorationControls } from './SplatExplorationControls';
 // Effects Tab - Add and configure visual/audio effects
 import { Fragment, Suspense, useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
@@ -204,6 +205,7 @@ function EffectParams({ effect, onChange, clipId, onDragStart, onDragEnd, onPara
     return <p className="effect-info">No parameters</p>;
   }
 
+  if (effect.type === 'splat-exploration' && clipId) return <SplatExplorationControls clipId={clipId} effectId={effect.id} />;
   if (effect.type === 'voxel-relief' && clipId) return <VoxelReliefControls clipId={clipId} effectId={effect.id} />;
 
   const parameterGroups = groupEffectParameters(effectDef.params);

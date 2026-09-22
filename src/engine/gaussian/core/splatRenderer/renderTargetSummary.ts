@@ -71,3 +71,35 @@ export function summarizeRenderTargetPixels(
     nonBlackSampled,
   };
 }
+
+export async function readRenderTargetSummary(device: GPUDevice, target: { texture: GPUTexture; width: number; height: number }): Promise<GaussianSplatRenderTargetSummary> {
+    const { texture, width, height } = target;
+    const readbackLayout = buildRenderTargetReadbackLayout(width, height);
+
+    const readbackBuffer = device.createBuffer({
+      size: readbackLayout.bufferSize,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+      label: 'splat-render-target-readback',
+    });
+
+    const commandEncoder = device.createCommandEncoder();
+    commandEncoder.copyTextureToBuffer(
+      { texture },
+      { buffer: readbackBuffer, bytesPerRow: readbackLayout.bytesPerRow, rowsPerImage: height },
+      { width, height, depthOrArrayLayers: 1 },
+    );
+    device.queue.submit([commandEncoder.finish()]);
+
+    await readbackBuffer.mapAsync(GPUMapMode.READ);
+    const src = new Uint8Array(readbackBuffer.getMappedRange());
+    const summary = summarizeRenderTargetPixels(src, width, height, readbackLayout);
+
+    readbackBuffer.unmap();
+    readbackBuffer.destroy();
+
+    return {
+      width,
+      height,
+      ...summary,
+    };
+}

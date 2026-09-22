@@ -77,7 +77,7 @@ export function setOperatorParameter(clipId: string, effectId: string, nodeId: s
     const spec = node && getEffectOperator(node.operator)?.parameters.find(p => p.id === name);
     if (!node || !spec) throw new Error('Parameter unavailable.');
     const binding = node.bindings[name];
-    const ownerSpec = typeof binding === 'string' && effectType && isImageGraphEffectType(effectType) ? getEffect(effectType)?.params[binding] : undefined;
+    const ownerSpec = typeof binding === 'string' && effectType && (isImageGraphEffectType(effectType) || effectType === 'splat-exploration') ? getEffect(effectType)?.params[binding] : undefined;
     const min = ownerSpec?.type === 'number' ? ownerSpec.min : spec.min, max = ownerSpec?.type === 'number' ? ownerSpec.max : spec.max;
     if (spec.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value) || value < (min ?? -Infinity) || value > (max ?? Infinity))) throw new Error('Parameter is outside its supported range.');
     if (spec.type === 'boolean' && typeof value !== 'boolean') throw new Error('Parameter requires a boolean value.');
@@ -126,7 +126,7 @@ export function setOperatorVariant(clipId: string, effectId: string, nodeId: str
 
 export function createEffectGraphActions(clipId: string, effectId: string) {
   const ownerType = (domain: EffectOperatorGraph['domain']) => domain === 'voxel' ? 'voxel-relief'
-    : domain === 'audio' ? 'audio-math' : domain === 'image' ? 'invert' : domain === 'analog-signal' ? 'analog-signal-lab' : 'face-cables';
+    : domain === 'scene' ? 'splat-exploration' : domain === 'audio' ? 'audio-math' : domain === 'image' ? 'invert' : domain === 'analog-signal' ? 'analog-signal-lab' : 'face-cables';
   return {
     moveNode: (nodeId: string, layout: { x: number; y: number }) => editEffectGraph(clipId, effectId, 'Move node', graph => { graph.layout[nodeId] = layout; }),
     connectPorts: (c: NodeGraphConnectionRequest) => editEffectGraph(clipId, effectId, 'Connect nodes', graph => {

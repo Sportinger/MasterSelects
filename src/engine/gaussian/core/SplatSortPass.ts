@@ -30,7 +30,9 @@ export class SplatSortPass {
   // Sort buffers
   private keyBuffer: GPUBuffer | null = null;
   private sortedIndexBuffer: GPUBuffer | null = null;
-  private uniformBuffer: GPUBuffer | null = null;
+  private uniformBuffers: GPUBuffer[] = [];
+  private uniformCursor = 0;
+  beginFrame(): void { this.uniformCursor = 0; }
 
   // Bind group layouts
   private splatDataLayout: GPUBindGroupLayout | null = null;
@@ -117,16 +119,8 @@ export class SplatSortPass {
         label: 'sort-splat-data-bg',
       });
 
-      const uniformBindGroup = device.createBindGroup({
-        layout: this.uniformLayout!,
-        entries: [
-          { binding: 0, resource: { buffer: this.uniformBuffer! } },
-        ],
-        label: 'sort-uniform-bg',
-      });
-
       // ── Step 1: Compute depth keys ─────────────────────────────────────────
-      this.writeUniforms(device, viewMatrix, worldMatrix, visibleCount, sortPlan.paddedCount, 0, 0);
+      const uniformBindGroup = this.writeUniforms(device, viewMatrix, worldMatrix, visibleCount, sortPlan.paddedCount, 0, 0);
 
       {
         const pass = commandEncoder.beginComputePass({ label: 'splat-depth-keys' });
@@ -143,14 +137,14 @@ export class SplatSortPass {
       for (let k = 2; k <= sortPlan.paddedCount; k *= 2) {
         // Inner loop: j = k/2, k/4, ..., 1
         for (let j = k >> 1; j > 0; j >>= 1) {
-          this.writeUniforms(device, viewMatrix, worldMatrix, visibleCount, sortPlan.paddedCount, k, j);
+          const stepUniforms = this.writeUniforms(device, viewMatrix, worldMatrix, visibleCount, sortPlan.paddedCount, k, j);
 
           const pass = commandEncoder.beginComputePass({
             label: `splat-bitonic-k${k}-j${j}`,
           });
           pass.setPipeline(this.bitonicStepPipeline);
           pass.setBindGroup(0, splatDataBindGroup);
-          pass.setBindGroup(1, uniformBindGroup);
+          pass.setBindGroup(1, stepUniforms);
           pass.setBindGroup(2, this.sortBindGroup!);
           pass.dispatchWorkgroups(workgroupCount);
           pass.end();
@@ -167,11 +161,11 @@ export class SplatSortPass {
   dispose(): void {
     this.keyBuffer?.destroy();
     this.sortedIndexBuffer?.destroy();
-    this.uniformBuffer?.destroy();
+    for (const buffer of this.uniformBuffers) buffer.destroy();
 
     this.keyBuffer = null;
     this.sortedIndexBuffer = null;
-    this.uniformBuffer = null;
+    this.uniformBuffers = []; this.uniformCursor = 0;
     this.sortBindGroup = null;
     this.depthKeyPipeline = null;
     this.bitonicStepPipeline = null;
@@ -261,12 +255,7 @@ export class SplatSortPass {
       label: 'bitonic-step-pipeline',
     });
 
-    // Create uniform buffer
-    this.uniformBuffer = this.device.createBuffer({
-      size: SORT_UNIFORM_SIZE,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-      label: 'sort-uniforms',
-    });
+
   }
 
   private ensureBuffers(device: GPUDevice, count: number): void {
@@ -314,8 +303,9 @@ export class SplatSortPass {
     sortCount: number,
     blockSize: number,
     subBlockSize: number,
-  ): void {
-    if (!this.uniformBuffer) return;
+  ): GPUBindGroup {
+    const index = this.uniformCursor++;
+    const buffer = this.uniformBuffers[index] ??= device.createBuffer({ size: SORT_UNIFORM_SIZE, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
     const data = new ArrayBuffer(SORT_UNIFORM_SIZE);
     const f32 = new Float32Array(data);
@@ -333,7 +323,8 @@ export class SplatSortPass {
     u32[34] = blockSize;
     u32[35] = subBlockSize;
 
-    device.queue.writeBuffer(this.uniformBuffer, 0, data);
+    device.queue.writeBuffer(buffer, 0, data);
+    return device.createBindGroup({ layout: this.uniformLayout!, entries: [{ binding: 0, resource: { buffer } }] });
   }
 }
 

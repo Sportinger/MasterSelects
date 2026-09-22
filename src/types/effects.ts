@@ -54,6 +54,7 @@ export type EffectType =
   | 'acuarela'
   | 'rom1'
   | 'voxel-relief'
+  | 'splat-exploration'
   | 'pixel-particle-disintegrate'
   // Stylization catalog
   | 'dither'

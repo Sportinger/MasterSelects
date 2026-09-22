@@ -1,3 +1,4 @@
+import { splatEffectScene } from './splatEffectScene';
 import type { LayerRenderData } from '../core/types';
 import type {
   SceneLayer3DData,
@@ -9,7 +10,7 @@ import type {
 import { buildSceneWorldMatrix, getSplatOrientationMatrix, multiplyMat4 } from './SceneTransformUtils';
 import { mergeLightClipSettings } from '../../types/light';
 import { isMobileAppleWebKit } from '../../utils/mobileAppleWebKit';
-import { applySceneOperatorGraph } from './sceneGraphRuntime';
+import { expandSceneOperatorGraph } from './sceneGraphRuntime';
 import { compileVoxelGraph } from '../../services/operators/voxelGraph';
 import { effectOperatorCompileParams } from '../../services/operators/effectGraphOwner';
 
@@ -322,6 +323,6 @@ export function collectScene3DLayers(
     });
   }
 
-  const definitions = new Map(layerData.map(data => [data.layer.id, data.layer.sceneGraph]));
-  return result.map(layer => applySceneOperatorGraph(layer, definitions.get(layer.layerId)));
+  const definitions = new Map(layerData.map(data => [data.layer.id, data.layer.source?.type === 'gaussian-splat' ? splatEffectScene(data.layer.effects, data.layer.sceneGraph) : data.layer.sceneGraph]));
+  return result.flatMap(layer => expandSceneOperatorGraph(layer, definitions.get(layer.layerId)));
 }

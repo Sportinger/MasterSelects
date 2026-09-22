@@ -164,6 +164,13 @@ export function NodeWorkspacePanel() {
     }
     setViewTheme('general');
     setContextMenu(null);
+    if (request.theme.startsWith('effect:')) {
+      const current = useTimelineStore.getState().clips.find(c => c.id === request.clipId);
+      if (current) useTimelineStore.getState().updateClip(current.id, { nodeGraph: {
+        version: 1, nodes: [], ...current.nodeGraph, groups: { ...current.nodeGraph?.groups,
+          [request.theme]: { ...current.nodeGraph?.groups?.[request.theme], collapsed: false } },
+      } });
+    }
     if (request.nodeId) {
       setCatalogOpen(false);
       setPresetsOpen(false);

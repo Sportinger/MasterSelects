@@ -3,6 +3,7 @@ import type { GaussianSplatParticleSettings, GaussianSplatTemporalSettings } fro
 
 /** Optional parameters for temporal + particle pipeline steps */
 export interface SplatRenderOptions {
+  graphBranch?: import('../../../../types/splatGraph').SplatGraphBranch;
   /** Clip-local time in seconds (for particle effects) */
   clipLocalTime?: number;
   /** Clear color for the render target. Use "transparent" to preserve alpha. */

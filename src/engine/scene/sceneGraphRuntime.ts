@@ -1,3 +1,7 @@
+import { validateEffectGraph } from '../../services/operators/effectGraph';
+import { compileSplatGraph } from '../../services/operators/splatGraph';
+import { validateSceneGraph } from '../../services/operators/sceneGraph';
+import type { SplatGraphBranch } from '../../types/splatGraph';
 import type { SceneOperatorGraph, SceneSurfacePlan } from '../../types/operatorGraph';
 import type { SceneLayer3DData } from './types';
 import { compileSceneGraph } from '../../services/operators/sceneGraph';
@@ -30,4 +34,22 @@ export function applySceneOperatorGraph(layer: SceneLayer3DData, definition?: Sc
   }
   const cableParams = { ...layer.cableParams, cableClipTransformBypassed: !plan.applyClipTransform };
   return { ...layer, kind: 'face-cables', cableParams, worldMatrix, opacity, surfacePlan: plan };
+}
+
+const splatPlans = new WeakMap<SceneOperatorGraph, SplatGraphBranch[]>();
+export function expandSceneOperatorGraph(layer: SceneLayer3DData, definition?: SceneOperatorGraph): SceneLayer3DData[] {
+  if (layer.kind !== 'splat' || !definition) return [applySceneOperatorGraph(layer, definition)];
+  if (!splatPlans.has(definition) || definition.graph.nodes.some(n => n.operator === 'values.oscillator')) {
+    try {
+      if (definition.graph?.incomplete) throw new Error(definition.graph.incomplete);
+      const errors = definition.graph.nodes.some(n => n.operator.startsWith('values.') || n.operator.startsWith('math.')) ? validateEffectGraph(definition.graph) : validateSceneGraph(definition); if (errors.length) throw new Error(errors[0]);
+      splatPlans.set(definition, compileSplatGraph(definition, layer.mediaTime ?? 0));
+    } catch (error) {
+      Logger.create('SplatGraph').warn('Invalid splat graph; object muted', String(error));
+      splatPlans.set(definition, []);
+    }
+  }
+  return splatPlans.get(definition)!.map(branch => ({ ...layer, splatGraphBranch: branch,
+    worldMatrix: branch.applyClipTransform ? layer.worldMatrix : new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]),
+  }));
 }

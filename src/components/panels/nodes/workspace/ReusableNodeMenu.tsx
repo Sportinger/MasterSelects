@@ -28,13 +28,14 @@ export function ReusableNodeMenu({ clipId, effect, position, onAdded }: {
       (event.currentTarget.firstElementChild as HTMLButtonElement).focus({ preventScroll: true });
     } }}>
     <button type="button" disabled={!operators.length} aria-haspopup="menu" aria-expanded={open}
-      title={operators.length ? `Add a building block to ${effect!.name}` : 'Select an image effect or one of its nodes first'}
+      title={operators.length ? `Add a building block to ${effect!.name}` : 'Select a compatible effect or one of its nodes first'}
       >Reusable Nodes</button>
     {!!operators.length && <div className="node-workspace-context-submenu-list context-submenu" style={{ display: open ? 'flex' : 'none' }}>
       <div className="node-workspace-context-submenu-group"><span>Into {effect!.name}</span></div>
-      {['Coordinates', 'Color', 'Sampling', 'Signal', 'Glyph', 'Feedback', 'Fisheye'].map(category => <div key={category} className="node-workspace-context-submenu-group">
+      {(effect?.type === 'splat-exploration' ? ['Space'] : ['Coordinates', 'Color', 'Sampling', 'Signal', 'Glyph', 'Feedback', 'Fisheye']).map(category => <div key={category} className="node-workspace-context-submenu-group">
         <span>{category}</span>
-        {operators.filter(operator => category === 'Fisheye' ? operator.id.startsWith('fisheye.')
+        {operators.filter(operator => category === 'Space' ? operator.composition?.graph.domain === 'scene'
+          : category === 'Fisheye' ? operator.id.startsWith('fisheye.')
           : category === 'Color' ? operator.id.startsWith('color.')
             : category === 'Sampling' ? operator.id.startsWith('sampling.')
               : category === 'Signal' ? operator.id.startsWith('signal.')

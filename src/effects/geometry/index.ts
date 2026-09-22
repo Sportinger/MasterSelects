@@ -48,3 +48,5 @@ export const embroidery = createCatalogEffect({ id: 'embroidery', name: 'Knitted
 export const kilim = createCatalogEffect({ id: 'kilim', name: 'Kilim Carpet', category: 'geometry', shader, entryPoint: 'kilimFragment' });
 export const outline = createCatalogEffect({ id: 'outline', name: 'Outline', category: 'geometry', shader, entryPoint: 'outlineFragment', animated: true, clock: 'timeline' });
 export const bricks = createCatalogEffect({ id: 'bricks', name: '3D Toy Bricks', category: 'geometry', shader, entryPoint: 'bricksFragment', animated: true, clock: 'timeline' });
+
+export { splatExploration } from './splat-exploration';

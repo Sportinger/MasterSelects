@@ -1,3 +1,5 @@
+import { SPLAT_OPERATORS } from './splatOperators';
+import { PARTICLE_FORCE_OPERATORS } from './particleForces';
 import type { OperatorDefinition, OperatorParameter, OperatorPort, OperatorSignal } from '../../types/operatorGraph';
 
 const port = (id: string, type: OperatorSignal, label = id, formats?: string[]): OperatorPort => ({ id, type, label, ...(formats ? { contract: { formats } } : {}) });
@@ -7,6 +9,7 @@ const op = (id: string, label: string, description: string, inputs: OperatorPort
   ({ id, version: 1, label, description, inputs, outputs, parameters, runtime: 'builtin', invalidates: 'appearance', addable });
 
 export function sceneBypassDescription(operator: string): string {
+  if (operator.startsWith('splat.')) return ['splat.source', 'splat.render', 'splat.surface', 'splat.merge'].includes(operator) ? 'Mute this branch.' : 'Pass the original attributes through unchanged.';
   if (operator === 'scene.clip-transform') return 'Bypass the clip transform and its keyframes; pass the object through.';
   if (operator === 'texture.uv') return 'Bypass this UV transform; pass the incoming UVs through.';
   if (operator === 'image.frame' || operator === 'texture.image') return 'Mute this texture source; the material uses its solid color.';
@@ -14,6 +17,8 @@ export function sceneBypassDescription(operator: string): string {
 }
 
 export const SCENE_OPERATORS: readonly OperatorDefinition[] = [
+  ...PARTICLE_FORCE_OPERATORS,
+  ...SPLAT_OPERATORS,
   op('image.frame', 'Video / image frame', 'The current decoded source frame, shared by every connected texture.', [], [port('image', 'image', 'Frame')], [], false),
   op('texture.image', 'Image texture', 'Uploads the connected frame as a reusable GPU texture.', [port('image', 'image', 'Frame'), port('uv', 'uv', 'UV mapping')], [port('texture', 'texture', 'Texture')]),
   op('texture.uv', 'UV transform', 'Scale and offset source UV coordinates. Chained UV transforms compose in connection order.', [port('uv', 'uv', 'UV')], [port('uv', 'uv', 'UV')], [
@@ -22,10 +27,13 @@ export const SCENE_OPERATORS: readonly OperatorDefinition[] = [
   op('material.surface', 'Surface material', 'Texture with RGB tint and opacity. Without a texture, uses a solid color.', [port('texture', 'texture', 'Color texture')], [port('material', 'material', 'Material')], [
     number('red', 'Red', 1, 0, 2), number('green', 'Green', 1, 0, 2), number('blue', 'Blue', 1, 0, 2), number('opacity', 'Opacity', 1, 0, 1),
   ]),
-  op('geometry.plane', 'Plane geometry', 'A rectangular surface sized relative to the source image. Material UVs are independent of its size.', [], [port('geometry', 'geometry', 'Geometry', ['plane-mesh'])], [number('width', 'Width', 1, 0.01, 10), number('height', 'Height', 1, 0.01, 10)]),
+  op('material.wireframe', 'Wireframe Material', 'Color tint and opacity for a reconstructed splat mesh.', ['red', 'green', 'blue', 'opacity'].map(id => port(id, 'number', id)), [port('material', 'material', 'Material')], [
+    number('red', 'Red', 1, 0, 2), number('green', 'Green', 1, 0, 2), number('blue', 'Blue', 1, 0, 2), number('opacity', 'Opacity', 0.5, 0, 1),
+  ]),
+  op('geometry.plane' , 'Plane geometry', 'A rectangular surface sized relative to the source image. Material UVs are independent of its size.', [], [port('geometry', 'geometry', 'Geometry', ['plane-mesh'])], [number('width', 'Width', 1, 0.01, 10), number('height', 'Height', 1, 0.01, 10)]),
   op('geometry.primitive', 'Primitive geometry', 'A native 3D box, sphere or cylinder. The selected shape is stored with this node.', [], [port('geometry', 'geometry', 'Geometry', ['primitive-mesh'])]),
   op('geometry.source', 'Source geometry', 'Uses the saved face/depth/cable geometry of this clip, or its image plane when there is no bake.', [], [port('geometry', 'geometry', 'Geometry', ['plane-mesh', 'baked-geometry'])]),
-  op('scene.mesh', 'Mesh', 'Combines connected geometry and material. A disconnected geometry or material produces no object.', [port('geometry', 'geometry', 'Geometry', ['plane-mesh', 'primitive-mesh', 'baked-geometry', 'voxel-grid']), port('material', 'material', 'Material')], [port('scene', 'scene', 'Object')]),
+  op('scene.mesh', 'Mesh', 'Combines connected geometry and material. A disconnected geometry or material produces no object.', [port('geometry', 'geometry', 'Geometry', ['plane-mesh', 'primitive-mesh', 'baked-geometry', 'voxel-grid', 'splat-mesh']), port('material', 'material', 'Material')], [port('scene', 'scene', 'Object')]),
   op('scene.clip-transform', 'Clip Transform', 'Applies the clip transform and its keyframes to the connected object.', [port('scene', 'scene', 'Object')], [port('scene', 'scene', 'World space')], [], false),
   op('scene.render', '3D render', 'Renders the connected object with the timeline camera and lights. Disconnect to mute the object.', [port('scene', 'scene', 'Scene')], [port('image', 'image', 'Rendered image')], [], false),
 ];

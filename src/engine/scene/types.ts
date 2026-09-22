@@ -104,6 +104,7 @@ export interface SceneModelLayer extends SceneLayerBase {
 }
 
 export interface SceneSplatLayer extends SceneLayerBase {
+  splatGraphBranch?: import('../../types/splatGraph').SplatGraphBranch;
   kind: 'splat';
   mediaTime?: number;
   gaussianSplatFile?: File;
