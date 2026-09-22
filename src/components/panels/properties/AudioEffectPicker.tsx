@@ -1,6 +1,7 @@
 import { getAllAudioEffects } from '../../../engine/audio/AudioEffectRegistry';
 import './AudioEffectsInspector.css';
 import { EffectCatalogBrowser } from './EffectCatalogBrowser';
+import { AudioEffectTileLabel } from './AudioEffectTileLabel';
 
 export function AudioEffectPicker({ onSelect, excludeDescriptorIds, allowAudioMath, title }: {
   onSelect: (id: string) => void;
@@ -12,5 +13,7 @@ export function AudioEffectPicker({ onSelect, excludeDescriptorIds, allowAudioMa
     && (effect.id !== 'audio-math' || allowAudioMath));
   return <EffectCatalogBrowser entries={effects} title={title} onSelect={onSelect}
     renderTile={(effect, apply) => <button type="button" className="audio-effect-catalog-tile"
-      onClick={apply} title={`Add ${effect.name}`}>{effect.name}</button>} />;
+      onClick={apply} title={`Add ${effect.name}`} aria-label={effect.name}>
+      <AudioEffectTileLabel name={effect.name} />
+    </button>} />;
 }

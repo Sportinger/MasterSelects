@@ -23,8 +23,9 @@
 
 .audio-effect-catalog-tile {
   width: 100%;
+  min-width: 0;
   min-height: 64px;
-  padding: 12px 8px;
+  padding: 4px;
   border: 1px solid var(--border-color);
   border-radius: 6px;
   background: var(--bg-secondary);
@@ -32,6 +33,16 @@
   font: inherit;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+.audio-effect-tile-label {
+  display: block;
+  width: 100%;
+  height: 54px;
+  fill: currentColor;
+  font-family: "Arial Black", "Helvetica Neue", Arial, sans-serif;
+  font-weight: 900;
+  pointer-events: none;
+  user-select: none;
 }
 .audio-effect-catalog-tile:hover { border-color: var(--accent-color); }
 .audio-effect-catalog-tile:focus:not(:focus-visible) { outline: none; }
