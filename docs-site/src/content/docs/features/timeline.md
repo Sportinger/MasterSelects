@@ -276,7 +276,7 @@ Timeline snapping starts disabled unless a previous choice was saved. Hold `Shif
 
 ## Selection
 
-- Click selects a clip.
+- Click selects a clip. Clicking it again keeps it selected by default. Enable **Settings > General > Timeline > Deselect selected clips on repeat click** to restore click-to-deselect; the preference persists in this browser.
 - `Ctrl+Click` adds or removes a clip from the selection.
 - `Shift+Click` toggles only the clicked clip, which is different from the normal linked-selection behavior.
 - Normal click on a linked video clip selects both the video and linked audio clip.

@@ -33,10 +33,14 @@ describe('clip drag intent', () => {
     expect(hasClipDragIntent(100, 50, 105, 54)).toBe(true);
   });
 
-  it('toggles an already-selected clip off on a plain click', () => {
-    expect(shouldDeselectClipOnPointerRelease(true, false, false)).toBe(true);
-    expect(shouldDeselectClipOnPointerRelease(true, true, false)).toBe(false);
-    expect(shouldDeselectClipOnPointerRelease(false, false, false)).toBe(false);
+  it('keeps an already-selected clip selected by default', () => {
+    expect(shouldDeselectClipOnPointerRelease(true, false, false)).toBe(false);
+  });
+
+  it('toggles an already-selected clip off only when enabled', () => {
+    expect(shouldDeselectClipOnPointerRelease(true, false, false, true)).toBe(true);
+    expect(shouldDeselectClipOnPointerRelease(true, true, false, true)).toBe(false);
+    expect(shouldDeselectClipOnPointerRelease(false, false, false, true)).toBe(false);
   });
 
   it('preserves a preselected clip after dragging and clears only temporary drag selection', () => {

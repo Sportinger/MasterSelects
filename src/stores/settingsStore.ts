@@ -140,6 +140,7 @@ interface SettingsState {
   nativeHelperConnected: boolean;  // Current connection status
 
   // Timeline interaction
+  deselectClipOnRepeatClick: boolean;
   timelineZoomAnchor: TimelineZoomAnchor;  // Where Ctrl/Alt+wheel zoom keeps focus
   automaticMobileLayoutEnabled: boolean;  // Use H/V Mobile when the editor viewport is compact
 
@@ -219,6 +220,7 @@ interface SettingsState {
   setNativeDecodeEnabled: (enabled: boolean) => void;
   setNativeHelperPort: (port: number) => void;
   setNativeHelperConnected: (connected: boolean) => void;
+  setDeselectClipOnRepeatClick: (enabled: boolean) => void;
   setTimelineZoomAnchor: (anchor: TimelineZoomAnchor) => void;
   setAutomaticMobileLayoutEnabled: (enabled: boolean) => void;
   setShowShortcutDisplay: (show: boolean) => void;
@@ -287,6 +289,7 @@ export const useSettingsStore = create<SettingsState>()(
       nativeDecodeEnabled: false, // Native FFmpeg decode off by default
       nativeHelperPort: 9876, // Default WebSocket port
       nativeHelperConnected: false, // Not connected initially
+      deselectClipOnRepeatClick: false,
       timelineZoomAnchor: 'mouse' as TimelineZoomAnchor, // Zoom toward the mouse pointer by default
       automaticMobileLayoutEnabled: true,
       showShortcutDisplay: false, // Optional Blender-style input overlay
@@ -374,6 +377,7 @@ export const useSettingsStore = create<SettingsState>()(
         set({ nativeHelperConnected: connected });
       },
 
+      setDeselectClipOnRepeatClick: (enabled) => set({ deselectClipOnRepeatClick: enabled }),
       setTimelineZoomAnchor: (anchor) => {
         set({ timelineZoomAnchor: anchor });
       },
@@ -597,6 +601,7 @@ export const useSettingsStore = create<SettingsState>()(
         turboModeEnabled: state.turboModeEnabled,
         nativeDecodeEnabled: state.nativeDecodeEnabled,
         nativeHelperPort: state.nativeHelperPort,
+        deselectClipOnRepeatClick: state.deselectClipOnRepeatClick,
         timelineZoomAnchor: state.timelineZoomAnchor,
         automaticMobileLayoutEnabled: state.automaticMobileLayoutEnabled,
         showShortcutDisplay: state.showShortcutDisplay,

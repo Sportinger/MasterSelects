@@ -3,6 +3,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { TimelineClip } from '../../../types/timeline';
 import type { ClipDragState } from '../types';
 import { Logger } from '../../../services/logger';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import {
   createResolvedClipMoveOperationPlan,
@@ -437,6 +438,7 @@ export function useClipDrag({
           wasSelectedAtPointerDown,
           shiftSelectionClickCandidate,
           dragStarted,
+          useSettingsStore.getState().deselectClipOnRepeatClick,
         );
         if (shouldDeselect) selectClip(null);
         else if (!shiftSelectionClickCandidate && !dragStarted) {

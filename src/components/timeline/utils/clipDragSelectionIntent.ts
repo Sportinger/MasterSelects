@@ -17,7 +17,8 @@ export function shouldDeselectClipOnPointerRelease(
   wasSelectedAtPointerDown: boolean,
   shiftKey: boolean,
   dragStarted: boolean,
+  deselectOnRepeatClick = false,
 ): boolean {
   if (dragStarted) return !wasSelectedAtPointerDown;
-  return wasSelectedAtPointerDown && !shiftKey;
+  return deselectOnRepeatClick && wasSelectedAtPointerDown && !shiftKey;
 }

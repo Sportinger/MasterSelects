@@ -21,6 +21,7 @@ export function GeneralSettings() {
     autosaveInterval,
     copyMediaToProject,
     timelineZoomAnchor,
+    deselectClipOnRepeatClick,
     automaticMobileLayoutEnabled,
     showShortcutDisplay,
     shortcutDisplayScale,
@@ -30,6 +31,7 @@ export function GeneralSettings() {
     setAutosaveInterval,
     setCopyMediaToProject,
     setTimelineZoomAnchor,
+    setDeselectClipOnRepeatClick,
     setAutomaticMobileLayoutEnabled,
     setShowShortcutDisplay,
     setShortcutDisplayScale,
@@ -130,6 +132,19 @@ export function GeneralSettings() {
         </label>
         <p className="settings-hint">
           Controls whether Ctrl/Alt+scroll zooms toward the cursor or the playhead.
+        </p>
+
+        <label className="settings-row">
+          <span className="settings-label">Deselect selected clips on repeat click</span>
+          <input
+            type="checkbox"
+            checked={deselectClipOnRepeatClick}
+            onChange={(event) => setDeselectClipOnRepeatClick(event.target.checked)}
+            className="settings-checkbox"
+          />
+        </label>
+        <p className="settings-hint">
+          Off by default: clicking a selected clip keeps it selected. Enable to deselect it instead.
         </p>
       </div>
 

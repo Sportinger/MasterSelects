@@ -190,6 +190,21 @@
   color: var(--text-primary);
 }
 
+.settings-checkbox,
+.settings-select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.settings-checkbox:focus:not(:focus-visible),
+.settings-select:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.settings-checkbox:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .settings-checkbox {
   width: 14px;
   height: 14px;
@@ -208,7 +223,7 @@
   cursor: pointer;
 }
 
-.settings-select:focus {
+.settings-select:focus-visible {
   outline: none;
   border-color: var(--accent);
 }
