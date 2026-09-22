@@ -52,8 +52,13 @@ Radii are **linear local units**, not the logarithmic scales in some training PL
 It hides splat centers outside a source-local sphere without deleting source data;
 the optional soft edge fades inward from the radius. Bypass restores the input.
 Place it before a branch split to share the crop, before simulation to restrict emitters,
-or after simulation to keep moving particles inside the sphere. It masks opacity;
-it does not compact the source buffer. Connect its output to Mesh Overlay (or Splats
+or after simulation to keep moving particles inside the sphere. Crops before position
+noise or particle simulation compact the sampled source IDs in a bounded runtime cache.
+Downstream attribute compute, sorting and drawing process only retained IDs; unchanged
+crops reuse the cache. Source files and particle seeds remain intact. Crop edits rescan
+the selected source points. Crops after motion (or legacy source effectors) currently
+retain the opacity-mask path because their positions change each frame.
+Connect its output to Mesh Overlay (or Splats
 to Mesh) to reconstruct from the cropped splats as well. Multiple crops intersect;
 their soft edges weight the reconstruction density. Crop edits invalidate the mesh
 cache, so animating a mesh crop also incurs CPU reconstruction work.

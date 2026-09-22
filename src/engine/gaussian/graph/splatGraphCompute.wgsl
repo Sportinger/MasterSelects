@@ -4,6 +4,7 @@ struct Operation { header: vec4f, a: vec4f, b: vec4f }
 @group(0) @binding(1) var<storage, read_write> outputData: array<f32>;
 @group(0) @binding(2) var<uniform> settings: Settings;
 @group(0) @binding(3) var<storage, read> operations: array<Operation>;
+@group(0) @binding(4) var<storage, read> sourceIndices: array<u32>;
 fn hash(n: u32) -> f32 {
   var x = n; x = ((x >> 16u) ^ x) * 0x45d9f3bu; x = ((x >> 16u) ^ x) * 0x45d9f3bu;
   return f32((x >> 16u) ^ x) / 4294967295.0;
@@ -23,7 +24,8 @@ fn rotate(q: vec4f, degrees: vec3f) -> vec4f {
 fn main(@builtin(global_invocation_id) gid: vec3u) {
   let outputId = gid.x; if (outputId >= settings.count) { return; }
   var id = outputId;
-  if (settings.sampling.x != 0u) { id = (u32(floor(f32(outputId) * f32(settings.sourceCount) / f32(settings.count))) + settings.sampling.y) % settings.sourceCount; }
+  if (settings.sampling.x == 2u) { id = sourceIndices[outputId]; }
+  else if (settings.sampling.x == 1u) { id = (u32(floor(f32(outputId) * f32(settings.sourceCount) / f32(settings.count))) + settings.sampling.y) % settings.sourceCount; }
   let base = id * 14u; let outBase = outputId * 14u;
   var p = vec3f(source[base], source[base+1u], source[base+2u]);
   var scale = vec3f(source[base+3u], source[base+4u], source[base+5u]);

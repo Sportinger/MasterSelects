@@ -21,6 +21,7 @@ export class SplatMeshPass {
   private cursor = 0;
   private retired: GPUBuffer[] = [];
   upload(id: string, data: Float32Array, count: number) { this.release(id); this.sources.set(id, { data, count, meshes: new Map() }); }
+  getSource(id: string): Float32Array | undefined { return this.sources.get(id)?.data; }
   beginFrame() { this.cursor = 0; for (const b of this.retired) b.destroy(); this.retired = []; }
   render(device: GPUDevice, encoder: GPUCommandEncoder, id: string, mesh: NonNullable<SplatGraphBranch['mesh']>, camera: SplatCameraParams,
     world: Float32Array, view: GPUTextureView, options: SplatRenderOptions): GPUTextureView {

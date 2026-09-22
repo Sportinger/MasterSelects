@@ -1,5 +1,6 @@
 import { SplatGraphCompute, prepareSplatSampling } from '../graph/SplatGraphCompute';
 import { SplatMeshPass } from '../graph/SplatMeshPass';
+import { SplatCropCache } from '../graph/SplatCropCache';
 import { Logger } from '../../../services/logger';
 import { SplatRenderTargetPool } from './SplatRenderTargetPool';
 import { SplatVisibilityPass } from './SplatVisibilityPass';
@@ -67,6 +68,7 @@ export type {
 export class GaussianSplatGpuRenderer {
   private graphCompute = new SplatGraphCompute();
   private meshPass = new SplatMeshPass();
+  private cropCache = new SplatCropCache();
   private device: GPUDevice | null = null;
   private pipeline: GPURenderPipeline | null = null;
   private pipelineWithDepth: GPURenderPipeline | null = null;
@@ -104,6 +106,8 @@ export class GaussianSplatGpuRenderer {
   /** Refresh shader-dependent resources while retaining uploaded scenes across HMR. */
   refreshAfterHmr(): void {
     this.graphCompute?.dispose(); this.graphCompute = new SplatGraphCompute(); this.meshPass ??= new SplatMeshPass();
+    this.cropCache?.dispose(); this.cropCache = new SplatCropCache();
+    Object.setPrototypeOf(this.meshPass, SplatMeshPass.prototype);
     if (!this._initialized || !this.device) return;
 
     const staleCameraResources = this.cameraUniformPool;
@@ -203,6 +207,7 @@ export class GaussianSplatGpuRenderer {
 
   /** Release GPU resources for a clip */
   releaseScene(clipId: string): void {
+    this.cropCache.release(clipId);
     this.meshPass.release(clipId);
     const scene = this.sceneCache.get(clipId);
     if (scene) {
@@ -279,7 +284,6 @@ export class GaussianSplatGpuRenderer {
         return null;
       }
 
-      // Determine which splat data buffer to use (may be overridden by particle pass)
       let activeSplatBuffer = scene.splatBuffer;
       let activeSplatCount = scene.splatCount;
       const effectors = options?.effectors ?? [];
@@ -334,18 +338,19 @@ export class GaussianSplatGpuRenderer {
         activeSplatCount = scene.splatCount;
       }
 
-      // Bound work before dispatching attribute shaders, not only before drawing.
       if (maxSplats > 0) activeSplatCount = Math.min(activeSplatCount, maxSplats);
       const graphOperations = options?.graphBranch?.operations ?? [];
       const sampling = prepareSplatSampling(graphOperations, activeSplatCount, options?.graphBranch?.budget);
-      if (graphOperations.length || sampling.remapped) {
+      const sourceData = activeSplatBuffer === scene.splatBuffer ? this.meshPass.getSource(clipId) : undefined;
+      const cropped = sourceData ? this.cropCache.prepare(this.device, clipId, sourceData, activeSplatCount, sampling, graphOperations) : undefined;
+      const graphCount = cropped?.count ?? sampling.count;
+      if (graphCount > 0 && (graphOperations.length || sampling.remapped || cropped)) {
         const v = camera.viewMatrix;
         const eye = { x: -(v[0] * v[12] + v[1] * v[13] + v[2] * v[14]), y: -(v[4] * v[12] + v[5] * v[13] + v[6] * v[14]), z: -(v[8] * v[12] + v[9] * v[13] + v[10] * v[14]) };
-        activeSplatBuffer = this.graphCompute.execute(this.device, commandEncoder, activeSplatBuffer, Math.max(1, sampling.count), sampling.operations, clipLocalTime, worldMatrix, eye, activeSplatCount, sampling.offset, sampling.remapped);
+        activeSplatBuffer = this.graphCompute.execute(this.device, commandEncoder, activeSplatBuffer, graphCount, sampling.operations, clipLocalTime, worldMatrix, eye, activeSplatCount, sampling.offset, sampling.remapped, cropped?.buffer);
       }
-      activeSplatCount = sampling.count;
-      const graphMovesPoints = sampling.remapped || graphOperations.some(op => op.kind === 'particles' || (op.kind === 'noise' && op.values[0] === 0));
-      // Determine effective splat count (respect maxSplats budget)
+      activeSplatCount = graphCount;
+      const graphMovesPoints = !!cropped || sampling.remapped || graphOperations.some(op => op.kind === 'particles' || (op.kind === 'noise' && op.values[0] === 0));
       const effectiveSplatCount = maxSplats > 0
         ? Math.min(activeSplatCount, maxSplats)
         : activeSplatCount;
@@ -512,7 +517,7 @@ export class GaussianSplatGpuRenderer {
 
   /** Called at start of each frame to reset per-frame state */
   beginFrame(): void {
-    this.graphCompute.beginFrame(); this.meshPass.beginFrame(); this.sortPass.beginFrame();
+    this.graphCompute.beginFrame(); this.meshPass.beginFrame(); this.cropCache.beginFrame(); this.sortPass.beginFrame();
     if (this.renderTargetPool) {
       this.renderTargetPool.resetFrame();
     }
@@ -546,7 +551,7 @@ export class GaussianSplatGpuRenderer {
   // ── Private ────────────────────────────────────────────────────────────────
 
   private disposeGpuResources(): void {
-    this.graphCompute.dispose(); this.meshPass.dispose();
+    this.graphCompute.dispose(); this.meshPass.dispose(); this.cropCache.dispose();
     // Release all scenes
     for (const [clipId, scene] of this.sceneCache) {
       releaseSplatSceneResources(scene);
