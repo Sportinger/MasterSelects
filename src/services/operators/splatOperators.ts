@@ -35,7 +35,7 @@ export const SPLAT_OPERATORS: readonly OperatorDefinition[] = [
     ...['x', 'y', 'z'].map(id => number(id, `Center ${id.toUpperCase()}`, 0, -10000, 10000)),
     number('radius', 'Radius', 1, 0, 10000), number('softness', 'Soft edge', 0, 0, 10000),
   ]),
-  { ...op('surface', 'Splats to Mesh', 'Approximate the source with a bounded density isosurface in the source coordinates. Connect to a Mesh and material. Reconstruction uses source positions and opacity before animated modifiers.', [
+  { ...op('surface', 'Splats to Mesh', 'Approximate source splats with a bounded density isosurface. Supports upstream Sphere Crop nodes including soft edges; other attribute modifiers are unsupported. Connect to a Mesh and material.', [
     number('resolution', 'Grid resolution', 32, 12, 64, 1), number('threshold', 'Density threshold', 0.35, 0.01, 4), number('radius', 'Kernel radius (cells)', 1.5, 0.5, 3),
   ].map(p => ({ ...p, animatable: false }))), inputs: [splats('splats'), ...['resolution', 'threshold', 'radius'].map(id => ({ id, label: id, type: 'number' as const }))], outputs: [{ id: 'geometry', label: 'Mesh geometry', type: 'geometry', contract: { formats: ['splat-mesh'] } }], bypass: 'mute', addable: false },
   { ...op('render', 'Gaussian Surface', 'Render the connected Gaussian attributes in the shared 3D scene. Budget caps actual GPU work; 0 uses the source budget.', [number('budget', 'Splat budget', 65536, 0, 1048576, 1)]), outputs: [object('scene')], bypass: 'mute', addable: false },

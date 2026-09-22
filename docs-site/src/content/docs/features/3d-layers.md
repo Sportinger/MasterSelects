@@ -55,7 +55,10 @@ It hides splat centers outside a source-local sphere without deleting source dat
 the optional soft edge fades inward from the radius. Bypass restores the input.
 Place it before a branch split to share the crop, before simulation to restrict emitters,
 or after simulation to keep moving particles inside the sphere. It masks opacity;
-it does not compact the source buffer or crop the separately reconstructed mesh.
+it does not compact the source buffer. Connect its output to Mesh Overlay (or Splats
+to Mesh) to reconstruct from the cropped splats as well. Multiple crops intersect;
+their soft edges weight the reconstruction density. Crop edits invalidate the mesh
+cache, so animating a mesh crop also incurs CPU reconstruction work.
 Selection and Gaussian Surface budgets compact the GPU workload before simulation:
 the starting graph keeps all original splats, at most 16,384 rays and 8,192 particles.
 Color and depth passes reuse the same evaluated particle attributes. Large original scans
@@ -67,8 +70,9 @@ simulation, without collisions or particle-to-particle interactions.
 The Splats to Mesh node computes and caches its geometry on the CPU when first used
 or when reconstruction settings change. The mesh is a density-isosurface approximation sampled from at most 32,768 source
 splats on a 12–64-cell grid. It renders as wireframe, retains source coordinates, and is
-not a replacement for a photogrammetry mesh. Connect the unmodified Splat Source to
-reconstruction; animated reconstruction is rejected. Geometry remains renderer-owned.
+not a replacement for a photogrammetry mesh. Reconstruction accepts Splat Source
+and Sphere Crop chains; other splat modifiers remain unsupported. Density kernels
+can extend slightly beyond retained splat centers. Geometry remains renderer-owned.
 
 The scene compiler limits graphs to eight rendered branches and 24 attribute operations
 per branch. Invalid connected graphs report an error and mute the object. Use one Splat

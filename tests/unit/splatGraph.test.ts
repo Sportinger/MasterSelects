@@ -65,7 +65,20 @@ describe('splat graph execution', () => {
     expect(() => connectEffectGraph(d.graph, { id: 'bad', from: 'plane', output: 'geometry', to: 'limit', input: 'splats' })).toThrow();
     d.params.limit_min = 1; expect(() => compileSplatGraph(d)).toThrow('Minimum'); d.params.limit_min = 0.001;
     d.graph.edges.find(e => e.to === 'reconstruct')!.from = 'motion';
-    expect(() => compileSplatGraph(d)).toThrow('directly');
+    expect(() => compileSplatGraph(d)).toThrow('other attribute modifiers');
+  });
+  it('passes crop settings through to mesh reconstruction and removes bypassed masks', () => {
+    const d = defaultSplatGraph(true);
+    const crop = { id: 'crop', operator: 'splat.sphere-crop', bindings: {}, constants: { x: 1, y: 2, z: 3, radius: 4, softness: 0.2 }, bypassed: false };
+    d.graph.nodes.push(crop);
+    d.graph.edges.find(e => e.to === 'reconstruct' && e.input === 'splats')!.from = 'crop';
+    d.graph.edges.push({ id: 'crop-source', from: 'source', output: 'splats', to: 'crop', input: 'splats' });
+    expect(validateSceneGraph(d)).toEqual([]);
+    expect(compileSplatGraph(d).find(b => b.mesh)?.mesh?.crops).toEqual([{ center: [1, 2, 3], radius: 4, softness: 0.2 }]);
+    crop.constants.radius = 2;
+    expect(compileSplatGraph(d).find(b => b.mesh)?.mesh?.crops?.[0].radius).toBe(2);
+    crop.bypassed = true;
+    expect(compileSplatGraph(d).find(b => b.mesh)?.mesh?.crops).toBeUndefined();
   });
   it('packs simulation and noise parameters without overlapping neighboring operations', () => {
     const ops = compileSplatGraph(defaultSplatGraph(true))[2].operations;
@@ -106,6 +119,22 @@ describe('splat density mesh', () => {
     for (let i = 0; i < 8; i++) data.set([3 + (i & 1) * 0.2, 7 + ((i >> 1) & 1) * 0.2, -5 + ((i >> 2) & 1) * 0.2, 0.01, 0.01, 0.01, 1, 0, 0, 0, 0.3, 0.6, 0.9, 1], i * 14);
     return data;
   };
+  it('reconstructs only retained centers, weights soft edges and never changes the source', () => {
+    const data = source(), before = data.slice();
+    const cropped = { center: [3, 7, -5] as [number, number, number], radius: 0.1, softness: 0 };
+    const retained = data.slice(0, 14);
+    expect(reconstructSplatMesh(data, 8, { ...options, crops: [cropped] }))
+      .toEqual(reconstructSplatMesh(retained, 1, options));
+    const soft = { ...cropped, center: [3.05, 7, -5] as [number, number, number], softness: 0.1 };
+    retained[13] = 0.5;
+    const softMesh = reconstructSplatMesh(data, 8, { ...options, threshold: 0.1, crops: [soft] });
+    const expected = reconstructSplatMesh(retained, 1, { ...options, threshold: 0.1 });
+    expect(softMesh.indices).toEqual(expected.indices);
+    expect(softMesh.vertices.length).toBeGreaterThan(0);
+    softMesh.vertices.forEach((v, i) => expect(v).toBeCloseTo(expected.vertices[i], 5));
+    expect(reconstructSplatMesh(data, 8, { ...options, crops: [cropped, { ...cropped, center: [0, 0, 0] }] }).indices.length).toBe(0);
+    expect(data).toEqual(before);
+  });
   it('creates finite indexed edges in source coordinates and preserves source data', () => {
     const data = source(), copy = data.slice(), mesh = reconstructSplatMesh(data, 8, options);
     expect(mesh.indices.length).toBeGreaterThan(0); expect(mesh.indices.length % 2).toBe(0);

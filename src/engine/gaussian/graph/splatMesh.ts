@@ -1,5 +1,7 @@
+import type { SplatSphereCrop } from '../../../types/splatGraph';
+
 /** Bounded density reconstruction in the same local coordinates as the splat buffer. */
-export interface SplatMeshOptions { resolution: number; threshold: number; radius: number }
+export interface SplatMeshOptions { resolution: number; threshold: number; radius: number; crops?: SplatSphereCrop[] }
 export interface SplatMeshGeometry { vertices: Float32Array; indices: Uint32Array }
 const corners = [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]];
 const tetrahedra = [[0, 5, 1, 6], [0, 1, 2, 6], [0, 2, 3, 6], [0, 3, 7, 6], [0, 7, 4, 6], [0, 4, 5, 6]];
@@ -11,10 +13,24 @@ export function reconstructSplatMesh(source: Float32Array, count: number, option
   const radius = Math.max(0.5, Math.min(3, options.radius));
   const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
   const stride = Math.max(1, Math.ceil(count / 32768));
+  // Evaluate the same center-based opacity mask as the GPU before both bounds
+  // and density accumulation. Never modify the shared source splat buffer.
+  const alphaAt = (b: number) => {
+    let alpha = source[b + 13];
+    for (const crop of options.crops ?? []) {
+      const d = Math.hypot(...crop.center.map((v, a) => source[b + a] - v));
+      const edge = Math.min(crop.softness, crop.radius);
+      if (edge > 0) {
+        const t = Math.max(0, Math.min(1, (d - crop.radius + edge) / edge));
+        alpha *= 1 - t * t * (3 - 2 * t);
+      } else if (d > crop.radius) return 0;
+    }
+    return alpha;
+  };
   let valid = 0;
   for (let i = 0; i < count; i += stride) {
     const b = i * 14;
-    if (!(source[b + 13] > 0.01) || ![source[b], source[b + 1], source[b + 2]].every(Number.isFinite)) continue;
+    if (!(alphaAt(b) > 0.01) || ![source[b], source[b + 1], source[b + 2]].every(Number.isFinite)) continue;
     for (let a = 0; a < 3; a++) { min[a] = Math.min(min[a], source[b + a]); max[a] = Math.max(max[a], source[b + a]); } valid++;
   }
   if (!valid) return { vertices: new Float32Array(), indices: new Uint32Array() };
@@ -26,7 +42,7 @@ export function reconstructSplatMesh(source: Float32Array, count: number, option
   const index = (x: number, y: number, z: number) => x + n * (y + n * z);
   const reach = Math.ceil(radius * 2);
   for (let i = 0; i < count; i += stride) {
-    const b = i * 14, alpha = source[b + 13]; if (!(alpha > 0.01)) continue;
+    const b = i * 14, alpha = alphaAt(b); if (!(alpha > 0.01)) continue;
     const p = origin.map((v, a) => (source[b + a] - v) / step); if (!p.every(Number.isFinite)) continue;
     for (let z = Math.max(0, Math.floor(p[2]) - reach); z <= Math.min(n - 1, Math.ceil(p[2]) + reach); z++)
       for (let y = Math.max(0, Math.floor(p[1]) - reach); y <= Math.min(n - 1, Math.ceil(p[1]) + reach); y++)

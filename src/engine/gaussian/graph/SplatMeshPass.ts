@@ -27,7 +27,7 @@ export class SplatMeshPass {
     // Wireframes contribute color without obstructing transparent scene depth.
     if (options.colorWrite === false) return view;
     const source = this.sources.get(id); if (!source) return view;
-    const key = `${mesh.resolution}/${mesh.threshold}/${mesh.radius}`;
+    const key = JSON.stringify([mesh.resolution, mesh.threshold, mesh.radius, mesh.crops ?? []]);
     let geometry = source.meshes.get(key);
     if (!geometry) {
       const cpu = reconstructSplatMesh(source.data, source.count, mesh);

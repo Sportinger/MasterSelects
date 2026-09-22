@@ -57,10 +57,11 @@ export function compileSplatGraph(definition: SceneOperatorGraph, time = 0): Spl
       if (!geometry || !material || geometry.bypassed || material.bypassed) return;
       if (geometry.operator !== 'splat.surface' || material.operator !== 'material.wireframe') throw new Error('Connect reconstructed splat geometry and a Wireframe Material.');
       const operations = ops(parent(geometry, 'splats')); if (!operations) return;
-      if (operations.length) throw new Error('Connect Splat Source directly to Splats to Mesh; animated reconstruction is not supported.');
+      if (operations.some(op => op.kind !== 'sphere-crop')) throw new Error('Splats to Mesh accepts Splat Source and Sphere Crop nodes; other attribute modifiers are not supported.');
+      const crops = operations.map(({ values: c }) => ({ center: [c[0], c[1], c[2]] as [number, number, number], radius: c[3], softness: c[4] }));
       const v = values(geometry), m = values(material);
       result.push({ id: `${node.id}-${result.length}`, operations: [], applyClipTransform: transform,
-        mesh: { resolution: v[0], threshold: v[1], radius: v[2], opacity: m[3], tint: [m[0], m[1], m[2]] } });
+        mesh: { resolution: v[0], threshold: v[1], radius: v[2], opacity: m[3], tint: [m[0], m[1], m[2]], ...(crops.length ? { crops } : {}) } });
     } else {
       if (node.operator !== 'splat.render') throw new Error('Connect a Gaussian surface or reconstructed mesh to the output.');
       const operations = ops(parent(node, 'splats')); if (!operations) return;

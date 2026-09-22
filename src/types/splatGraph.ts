@@ -4,10 +4,16 @@ export interface SplatGraphOperation {
   values: number[];
 }
 
+export interface SplatSphereCrop {
+  center: [number, number, number];
+  radius: number;
+  softness: number;
+}
+
 export interface SplatGraphBranch {
   id: string;
   operations: SplatGraphOperation[];
   applyClipTransform: boolean;
   budget?: number;
-  mesh?: { resolution: number; threshold: number; radius: number; opacity: number; tint?: [number, number, number] };
+  mesh?: { resolution: number; threshold: number; radius: number; opacity: number; tint?: [number, number, number]; crops?: SplatSphereCrop[] };
 }
