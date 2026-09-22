@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { getEffectiveEditableDraggableNumberSettings, useEditableDraggableNumberSettingsRevision } from '../../../common/EditableDraggableNumberSettings';
 import { LabeledValue } from '../LabeledValue';
 import { HandleOnlyRange } from '../transformTab/HandleOnlyRange';
@@ -8,6 +8,12 @@ import './ResolveInspectorNarrow.css';
 
 interface ResolveInspectorNumberRowProps {
   label: string;
+  suffix?: string;
+  decimals?: number;
+  sensitivity?: number;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+  onCommit?: ComponentProps<typeof LabeledValue>['onCommit'];
   keyframeToggle?: ReactNode;
   actions?: ReactNode;
   ariaLabel?: string;
@@ -27,7 +33,8 @@ interface ResolveInspectorNumberRowProps {
 /** Transform-style slider, editable field and reset action for effect inspectors. */
 export function ResolveInspectorNumberRow({
   label, ariaLabel = label, value, defaultValue, min, max, step, disabled = false,
-  persistenceKey, onChange, onReset, keyframeToggle, actions, hardMin = -Infinity, hardMax = Infinity,
+  persistenceKey, onChange, onReset, keyframeToggle, actions, suffix, decimals, sensitivity = 2,
+  onDragStart, onDragEnd, onCommit, hardMin = -Infinity, hardMax = Infinity,
 }: ResolveInspectorNumberRowProps) {
   useEditableDraggableNumberSettingsRevision(persistenceKey);
   const range = getEffectiveEditableDraggableNumberSettings({ persistenceKey, min, max, defaultValue });
@@ -40,14 +47,15 @@ export function ResolveInspectorNumberRow({
     {actions}
     {keyframeToggle}
     <ResolveInspectorIconButton ariaLabel={`Reset ${label}`} className="resolve-inspector-reset-button"
-      disabled={disabled} onClick={() => (onReset ?? change)(range.defaultValue ?? defaultValue)}><ResolveResetIcon /></ResolveInspectorIconButton>
+      disabled={disabled} onClick={() => { (onReset ?? change)(range.defaultValue ?? defaultValue); onCommit?.('reset'); }}><ResolveResetIcon /></ResolveInspectorIconButton>
   </>}>
     <div className="resolve-inspector-slider-value">
       <HandleOnlyRange aria-label={`${ariaLabel} slider`} value={value} min={effectiveMin} max={effectiveMax}
-        step={step} disabled={disabled} onChange={change} />
+        step={step} disabled={disabled} onChange={change} onDragStart={onDragStart}
+        onDragEnd={() => { onDragEnd?.(); onCommit?.('drag'); }} />
       <LabeledValue label="" ariaLabel={ariaLabel} className="resolve-inspector-field resolve-inspector-field--plain"
-        value={value} defaultValue={defaultValue} min={min} max={max} decimals={step >= 1 ? 0 : 3}
-        sensitivity={2} touchDragAxis="horizontal" disabled={disabled} persistenceKey={persistenceKey}
+        value={value} defaultValue={defaultValue} min={min} max={max} decimals={decimals ?? (step >= 1 ? 0 : 3)} suffix={suffix}
+        sensitivity={sensitivity} onDragStart={onDragStart} onDragEnd={onDragEnd} onCommit={onCommit} touchDragAxis="horizontal" disabled={disabled} persistenceKey={persistenceKey}
         onChange={change} />
     </div>
   </ResolveInspectorRow>;

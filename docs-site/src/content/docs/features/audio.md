@@ -9,6 +9,20 @@ live playback sync for timeline editing, and offline audio processing for export
 
 ---
 
+## Audio effects inspector
+
+The Audio side of Properties > Effects reuses the video/Transform inspector's
+collapsible sections, aligned rows, handle-only sliders, editable number fields,
+reset buttons, and dropdowns. Volume and speed are separate collapsible sections;
+linked-video speed remains read-only until Follow Video is disabled.
+
+Expand **+ Add Effect** to choose an audio effect. Each effect has a collapsible
+section with bypass, move earlier/later, and remove actions. Numeric parameters
+keep supported clip keyframes and grouped drag undo; EQ retains its graph and
+analyzer controls. The shared stack also supplies track and master audio effects.
+Pointer activation avoids stuck focus rings, while keyboard navigation retains
+visible focus.
+
 ## Playback Overview
 
 ### Audio Math Graph

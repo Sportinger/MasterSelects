@@ -10,8 +10,10 @@ import type {
 } from '../../../types/audio';
 import type { Keyframe } from '../../../types/keyframes';
 import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
-import { DraggableNumber, EffectKeyframeToggle, KeyframeToggle, MultiKeyframeToggle } from './shared';
+import { EffectKeyframeToggle, KeyframeToggle, MultiKeyframeToggle } from './shared';
 import { MIDIParameterLabel } from './MIDIParameterLabel';
+import { ResolveInspectorSection, ResolveInspectorRow, ResolveInspectorIconButton, ResolveResetIcon } from './resolveInspector/ResolveInspectorPrimitives';
+import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
 import { AudioEffectStackControl } from './AudioEffectStackControl';
 import { LegacyClipAudioEffects } from './LegacyClipAudioEffects';
 import { FlexEqualizerControl } from './FlexEqualizerControl';
@@ -284,133 +286,64 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
 
   return (
     <div className="properties-tab-content volume-tab">
-      {/* Volume Section */}
-      <div className="properties-section">
-        <div className="section-header-row">
-          <h4>
-            <MIDIParameterLabel target={volumeMIDITarget}>
-              Volume
-            </MIDIParameterLabel>
-          </h4>
-        </div>
-        <div className="control-row">
-          {volumeEffect && (
-            <EffectKeyframeToggle clipId={clipId} effectId={volumeEffect.id} paramName="volume" value={volume} />
-          )}
-          <DraggableNumber
-            value={gainToDb(volume)}
-            onChange={(db) => handleVolumeChange(dbToGain(db))}
-            defaultValue={0}
-            min={SILENCE_THRESHOLD_DB}
-            max={6}
-            decimals={1}
-            suffix=" dB"
-            sensitivity={4}
-            onDragStart={() => startBatch('Adjust audio volume')}
-            onDragEnd={() => endBatch()}
-            onCommit={(method) => trackEditorControlCommitted({
-              area: 'audio',
-              controlId: 'volume',
-              controlKind: 'number',
-              inputMethod: method,
-              interaction: method === 'reset' ? 'reset' : 'change',
-              itemId: 'volume',
-              itemKind: 'property',
-            })}
-          />
-        </div>
-      </div>
+      <ResolveInspectorSection title="Volume" indicator="none">
+        <ResolveInspectorNumberRow label="Level" ariaLabel="Audio volume"
+          value={gainToDb(volume)} onChange={(db) => handleVolumeChange(dbToGain(db))}
+          defaultValue={0} min={SILENCE_THRESHOLD_DB} max={6} hardMin={SILENCE_THRESHOLD_DB} hardMax={6}
+          step={0.1} decimals={1} suffix=" dB" sensitivity={4}
+          persistenceKey={`audio.${clipId}.volume`}
+          actions={volumeMIDITarget ? <MIDIParameterLabel target={volumeMIDITarget}>MIDI</MIDIParameterLabel> : undefined}
+          keyframeToggle={volumeEffect ? <EffectKeyframeToggle clipId={clipId} effectId={volumeEffect.id} paramName="volume" value={volume} /> : undefined}
+          onDragStart={() => startBatch('Adjust audio volume')} onDragEnd={() => endBatch()}
+          onCommit={(method) => trackEditorControlCommitted({
+            area: 'audio', controlId: 'volume', controlKind: 'number', inputMethod: method,
+            interaction: method === 'reset' ? 'reset' : 'change', itemId: 'volume', itemKind: 'property',
+          })}
+        />
+      </ResolveInspectorSection>
 
-      {/* Speed and pitch section */}
-      <div className="properties-section">
-        <div className="section-header-row">
-          <h4>Speed Settings</h4>
-        </div>
+      <ResolveInspectorSection title="Speed Settings" indicator="none">
         {linkedSpeedPair?.audio.id === clipId && (
-          <div className="control-row checkbox-row">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={followsLinkedVideoSpeed}
-                onChange={(event) => setLinkedClipSpeedEnabled(clipId, event.target.checked)}
-              />
-              <span>Follow Linked Video Speed</span>
-            </label>
-            <span className="hint">Turn off to edit this audio clip independently</span>
-          </div>
+          <ResolveInspectorRow label="Follow Video" title="Turn off to edit this audio clip independently">
+            <input type="checkbox" aria-label="Follow Linked Video Speed"
+              checked={followsLinkedVideoSpeed}
+              onChange={(event) => setLinkedClipSpeedEnabled(clipId, event.target.checked)} />
+          </ResolveInspectorRow>
         )}
-        <div className={`control-row ${followsLinkedVideoSpeed ? 'control-row-disabled' : ''}`}>
-          {!followsLinkedVideoSpeed && (
-            <KeyframeToggle clipId={clipId} property="speed" value={speed} />
-          )}
-          <label className="prop-label">Speed</label>
-          <DraggableNumber
-            value={speed * 100}
-            onChange={(percent) => setClipSpeed(clipId, percent / 100)}
-            defaultValue={100}
-            decimals={0}
-            suffix="%"
-            min={CLIP_SPEED_MIN_PERCENT}
-            max={CLIP_SPEED_MAX_PERCENT}
-            sensitivity={1}
-            disabled={followsLinkedVideoSpeed}
-            ariaLabel="Audio speed"
-            onDragStart={() => startBatch('Adjust audio speed')}
-            onDragEnd={() => endBatch()}
-            onCommit={(method) => trackEditorControlCommitted({
-              area: 'audio',
-              controlId: 'speed',
-              controlKind: 'number',
-              inputMethod: method,
-              interaction: method === 'reset' ? 'reset' : 'change',
-              itemId: 'speed',
-              itemKind: 'property',
-            })}
-          />
-        </div>
+        <ResolveInspectorNumberRow label="Speed" ariaLabel="Audio speed"
+          value={speed * 100} onChange={(percent) => setClipSpeed(clipId, percent / 100)}
+          defaultValue={100} min={CLIP_SPEED_MIN_PERCENT} max={CLIP_SPEED_MAX_PERCENT}
+          hardMin={CLIP_SPEED_MIN_PERCENT} hardMax={CLIP_SPEED_MAX_PERCENT}
+          step={1} decimals={0} suffix="%" sensitivity={1} disabled={followsLinkedVideoSpeed}
+          persistenceKey={`audio.${clipId}.speed`}
+          keyframeToggle={!followsLinkedVideoSpeed ? <KeyframeToggle clipId={clipId} property="speed" value={speed} /> : undefined}
+          onDragStart={() => startBatch('Adjust audio speed')} onDragEnd={() => endBatch()}
+          onCommit={(method) => trackEditorControlCommitted({
+            area: 'audio', controlId: 'speed', controlKind: 'number', inputMethod: method,
+            interaction: method === 'reset' ? 'reset' : 'change', itemId: 'speed', itemKind: 'property',
+          })}
+        />
         {(Math.abs(speed) < 0.25 || Math.abs(speed) > 4) && (
           <div className="control-row">
             <span className="hint">Exact timing is used for export; browser preview is limited outside 25-400%.</span>
           </div>
         )}
-        <div className="control-row checkbox-row">
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={preservesPitch}
-              onChange={(e) => setClipPreservesPitch(clipId, e.target.checked)}
-            />
-            <span>Keep Pitch</span>
-          </label>
-          <span className="hint">When speed changes, maintain original pitch</span>
-        </div>
-      </div>
+        <ResolveInspectorRow label="Keep Pitch" title="When speed changes, maintain original pitch">
+          <input type="checkbox" aria-label="Keep Pitch" checked={preservesPitch}
+            onChange={(event) => setClipPreservesPitch(clipId, event.target.checked)} />
+        </ResolveInspectorRow>
+      </ResolveInspectorSection>
 
       {/* Legacy EQ Section - only shown for older clips that already contain a clip.effects audio-eq. */}
       {actualEqEffect && (
-        <div className="properties-section eq-section">
-          <div className="section-header-row">
-            <h4>Legacy Equalizer</h4>
-            {eqAllKeyframeEntries.length > 0 && (
-              <MultiKeyframeToggle
-                clipId={clipId}
-                entries={eqAllKeyframeEntries}
-                dragId={`${clipId}:effect:${actualEqEffect.id}:eq-all`}
-                title="Add all EQ parameter keyframes"
-              />
-            )}
-            <button
-              className="btn btn-sm"
-              onClick={() => setClipEffectEnabled(clipId, actualEqEffect.id, actualEqEffect.enabled === false)}
-            >
-              {actualEqEffect.enabled === false ? 'Enable' : 'Bypass'}
-            </button>
-            <button className="btn btn-sm" onClick={handleResetEQ}>Reset</button>
-            <button className="btn btn-sm btn-danger" onClick={() => removeClipEffect(clipId, actualEqEffect.id)}>
-              Remove
-            </button>
-          </div>
-
+        <ResolveInspectorSection title="Legacy Equalizer" className="audio-effect-inspector-item" enabled={actualEqEffect.enabled !== false}
+          onEnabledChange={(enabled) => setClipEffectEnabled(clipId, actualEqEffect.id, enabled)}
+          headerActions={<>
+            {eqAllKeyframeEntries.length > 0 && <MultiKeyframeToggle clipId={clipId} entries={eqAllKeyframeEntries}
+              dragId={`${clipId}:effect:${actualEqEffect.id}:eq-all`} title="Add all EQ parameter keyframes" />}
+            <ResolveInspectorIconButton ariaLabel="Reset Legacy Equalizer" onClick={handleResetEQ}><ResolveResetIcon /></ResolveInspectorIconButton>
+            <ResolveInspectorIconButton ariaLabel="Remove Legacy Equalizer" onClick={() => removeClipEffect(clipId, actualEqEffect.id)}>&#215;</ResolveInspectorIconButton>
+          </>}>
           <FlexEqualizerControl
             params={eqParams}
             runtimeAnalyzerScope={trackId ? 'track' : undefined}
@@ -422,11 +355,11 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
             onUpdateParamPath={handleEQPathChange}
             onChangeParams={handleEQParamsChange}
           />
-        </div>
+        </ResolveInspectorSection>
       )}
 
       {/* Registry Audio Effects Section */}
-      <div className="properties-section audio-effect-stack-section">
+      <div className="audio-effect-stack-section">
         <AudioEffectStackControl
           effects={clipAudioEffectStack}
           excludeDescriptorIds={LEGACY_VOLUME_EFFECT_IDS}

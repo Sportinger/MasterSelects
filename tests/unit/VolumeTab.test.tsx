@@ -18,10 +18,9 @@ function createStackEqEffect(id = 'eq-1'): AudioEffectInstance {
 }
 
 function addStackEqFromSelect(container: HTMLElement): AudioEffectInstance {
-  const addSelect = container.querySelector('.audio-effect-add-select');
-  expect(addSelect).not.toBeNull();
-
-  fireEvent.change(addSelect!, { target: { value: 'audio-eq' } });
+  fireEvent.click(within(container).getByRole('button', { name: '+ Add Effect' }));
+  fireEvent.click(within(container).getByRole('combobox', { name: 'Add audio effect' }));
+  fireEvent.click(screen.getByRole('option', { name: 'EQ', exact: true }));
 
   const effect = useTimelineStore.getState().clips[0].audioState?.effectStack?.find(item => item.descriptorId === 'audio-eq');
   expect(effect).toBeDefined();
@@ -70,6 +69,31 @@ describe('VolumeTab', () => {
       keyframeRecordingEnabled: new Set(),
       runtimeAudioMeters: { trackMeters: {} },
     });
+  });
+
+  it('edits, resets, collapses, bypasses, reorders and removes shared effect sections', () => {
+    const store = useTimelineStore.getState();
+    store.addClipAudioEffectInstance('clip-1', 'audio-delay');
+    store.addClipAudioEffectInstance('clip-1', 'audio-reverb');
+    render(<VolumeTab clipId="clip-1" effects={[]} />);
+    const delay = () => useTimelineStore.getState().clips[0].audioState!.effectStack!.find(effect => effect.descriptorId === 'audio-delay')!;
+    const original = delay().params.delayMs;
+    fireEvent.keyDown(screen.getByLabelText('Delay ms slider'), { key: 'ArrowRight' });
+    expect(delay().params.delayMs).toBe(Number(original) + 1);
+    fireEvent.click(screen.getByRole('button', { name: 'Reset Delay ms' }));
+    expect(delay().params.delayMs).toBe(original);
+    fireEvent.click(screen.getByRole('button', { name: 'Delay', exact: true }));
+    expect(screen.queryByLabelText('Delay ms')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Delay', exact: true }));
+    expect(screen.getByLabelText('Delay ms')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('switch', { name: 'Disable Delay' }));
+    expect(delay().enabled).toBe(false);
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable Delay' }));
+    expect(delay().enabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Move Delay later' }));
+    expect(useTimelineStore.getState().clips[0].audioState!.effectStack!.map(effect => effect.descriptorId)).toEqual(['audio-reverb', 'audio-delay']);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Delay' }));
+    expect(delay()).toBeUndefined();
   });
 
   it('does not create legacy volume or EQ effects just by rendering', () => {
@@ -160,7 +184,7 @@ describe('VolumeTab', () => {
 
   it('creates the legacy volume effect only when the user edits volume', () => {
     const { container } = render(<VolumeTab clipId="clip-1" effects={[]} />);
-    const volumeControl = container.querySelector('.control-row .draggable-number');
+    const volumeControl = screen.getByLabelText('Audio volume');
     expect(volumeControl).not.toBeNull();
 
     fireEvent.doubleClick(volumeControl!);
@@ -410,7 +434,7 @@ describe('VolumeTab', () => {
     });
 
     const { container } = render(<VolumeTab clipId="clip-1" effects={[]} />);
-    const sectionToggle = container.querySelector('.audio-effect-stack-item-header .keyframe-toggle');
+    const sectionToggle = container.querySelector('.audio-effect-inspector-item .resolve-inspector-header-actions .keyframe-toggle');
     expect(sectionToggle).not.toBeNull();
 
     fireEvent.click(sectionToggle!);
