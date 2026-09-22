@@ -56,9 +56,13 @@ function audioStatePatchInvalidatesProcessedAudioAnalysis(
 
 export function clipUpdatesInvalidateProcessedAudioAnalysis(
   updates: Partial<TimelineClip>,
-  currentClip?: Pick<TimelineClip, 'audioState'>,
+  currentClip?: Pick<TimelineClip, 'audioState' | 'videoInspectorSections'>,
 ): boolean {
   return (Object.keys(updates) as Array<keyof TimelineClip>).some(key => {
+    if (key === 'videoInspectorSections') {
+      return (currentClip?.videoInspectorSections?.speedChange !== false)
+        !== (updates.videoInspectorSections?.speedChange !== false);
+    }
     if (!AUDIO_RELEVANT_UPDATE_KEYS.has(key)) return false;
     if (key === 'audioState') {
       return audioStatePatchInvalidatesProcessedAudioAnalysis(currentClip?.audioState, updates.audioState);
@@ -85,13 +89,7 @@ export function applyClipUpdatesWithAudioAnalysisInvalidation(
   updates: Partial<TimelineClip>,
 ): TimelineClip {
   const hasAudioStateUpdate = Object.prototype.hasOwnProperty.call(updates, 'audioState');
-  const invalidateProcessedAnalysis = (Object.keys(updates) as Array<keyof TimelineClip>).some(key => {
-    if (!AUDIO_RELEVANT_UPDATE_KEYS.has(key)) return false;
-    if (key === 'audioState') {
-      return audioStatePatchInvalidatesProcessedAudioAnalysis(clip.audioState, updates.audioState);
-    }
-    return true;
-  });
+  const invalidateProcessedAnalysis = clipUpdatesInvalidateProcessedAudioAnalysis(updates, clip);
   const nextClip: TimelineClip = {
     ...clip,
     ...updates,

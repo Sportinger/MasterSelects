@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createProcessedClipAudioStateHash } from '../../../src/services/audio/processedWaveformEligibility';
+import { applyClipUpdatesWithAudioAnalysisInvalidation } from '../../../src/stores/timeline/helpers/audioAnalysisStateHelpers';
 import { ClipAudioRenderService } from '../../../src/services/audio/ClipAudioRenderService';
 import type { Effect, Keyframe } from '../../../src/types';
 import { createMockClip } from '../../helpers/mockData';
@@ -61,6 +63,36 @@ function dftMagnitude(values: ArrayLike<number>, sampleRate: number, frequencyHz
 describe('ClipAudioRenderService', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('bypasses speed automation without discarding it and restores it when enabled', async () => {
+    const sourceBuffer = createMockAudioBuffer([[0.1, 0.2, 0.3, 0.4]], 4);
+    const speedBuffer = createMockAudioBuffer([[0.1, 0.3]], 4);
+    const timeStretchProcessor = {
+      processConstantSpeed: vi.fn(async () => speedBuffer),
+      processWithKeyframes: vi.fn(async () => speedBuffer),
+    };
+    const service = new ClipAudioRenderService({ timeStretchProcessor });
+    const clip = createMockClip({ id: 'bypass', speed: 2, effects: [],
+      videoInspectorSections: { speedChange: false } });
+    const keyframes: Keyframe[] = [
+      { id: 'speed-kf', clipId: 'bypass', property: 'speed', time: 0, value: 2, easing: 'linear' },
+    ];
+    const enabledClip = { ...clip, videoInspectorSections: { speedChange: true } };
+    expect(createProcessedClipAudioStateHash(clip, { keyframes }))
+      .not.toBe(createProcessedClipAudioStateHash(enabledClip, { keyframes }));
+    const cachedClip = { ...enabledClip, audioState: { processedAnalysisRefs: {} } };
+    expect(applyClipUpdatesWithAudioAnalysisInvalidation(cachedClip,
+      { videoInspectorSections: { speedChange: false } }).audioState?.processedAnalysisRefs).toBeUndefined();
+    const bypassed = await service.render({ clip, sourceBuffer, sourceIsClipRange: true, keyframes });
+    expect(bypassed.buffer).toBe(sourceBuffer);
+    expect(timeStretchProcessor.processWithKeyframes).not.toHaveBeenCalled();
+    expect(clip.speed).toBe(2);
+    expect(keyframes[0].value).toBe(2);
+    const enabled = await service.render({ clip: { ...clip, videoInspectorSections: { speedChange: true } },
+      sourceBuffer, sourceIsClipRange: true, keyframes });
+    expect(enabled.buffer).toBe(speedBuffer);
+    expect(timeStretchProcessor.processWithKeyframes).toHaveBeenCalledOnce();
   });
 
   it('renders trim, speed, and audio effects through a single clip graph path', async () => {

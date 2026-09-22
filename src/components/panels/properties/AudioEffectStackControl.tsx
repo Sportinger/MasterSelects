@@ -1,9 +1,11 @@
+import { useState, type ReactNode } from 'react';
+import { EffectCard } from './EffectCard';
+import { AudioEffectPicker } from './AudioEffectPicker';
 import type { AudioDynamicsReductionSnapshot, AudioEffectInstance } from '../../../types';
 import type { AudioEqAnalyzerView } from '../../../engine/audio/eq/AudioEqTypes';
 import './VolumeBlendshapeTabs.css';
 import './AudioEffectsInspector.css';
 import {
-  getAllAudioEffects,
   getAudioEffect,
   type AudioEffectParamValue,
 } from '../../../engine/audio/AudioEffectRegistry';
@@ -17,7 +19,7 @@ import { endBatch, startBatch } from '../../../stores/historyStore';
 import { trackEditorControlCommitted } from '../../../services/productAnalytics';
 import { useDockStore } from '../../../stores/dockStore';
 import { requestNodeWorkspaceView } from '../../../services/nodeGraph/nodeWorkspaceNavigation';
-import { ResolveInspectorSection, ResolveInspectorIconButton, ResolveInspectorRow } from './resolveInspector/ResolveInspectorPrimitives';
+import { ResolveInspectorIconButton, ResolveInspectorRow } from './resolveInspector/ResolveInspectorPrimitives';
 
 import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
 import { InspectorSelect } from '../../inspector/InspectorSelect';
@@ -42,6 +44,7 @@ function trackAudioEffectControl(
 
 export interface AudioEffectStackControlProps {
   title?: string;
+  beforeEffects?: ReactNode;
   effects: readonly AudioEffectInstance[];
   emptyLabel?: string;
   addLabel?: string;
@@ -119,6 +122,7 @@ function getAudioEffectValue(
 
 export function AudioEffectStackControl({
   title = 'Audio FX Stack',
+  beforeEffects,
   effects,
   emptyLabel = 'No audio effects',
   addLabel = '+ Add Effect',
@@ -136,27 +140,27 @@ export function AudioEffectStackControl({
   onReorderEffect,
 }: AudioEffectStackControlProps) {
   const activatePanelType = useDockStore(state => state.activatePanelType);
-  const availableEffects = getAllAudioEffects().filter(effect => !excludeDescriptorIds?.has(effect.id)
-    && (effect.id !== 'audio-math' || keyframeClipId));
+  const [draggedEffectId, setDraggedEffectId] = useState<string | null>(null);
+  const [dropEffectId, setDropEffectId] = useState<string | null>(null);
+  const reorder = (effect: AudioEffectInstance, index: number) => {
+    onReorderEffect(effect.id, index);
+    trackAudioEffectControl(effect.descriptorId, 'effect-stack-order', 'button', 'click', 'reorder');
+  };
 
   return (
     <div className={`audio-effect-stack-control ${className ?? ''}`} onPointerUp={event => {
       if (event.target instanceof Element) event.target.closest<HTMLElement>('button,input[type="checkbox"]')?.blur();
     }}>
-      {onAddEffect && <ResolveInspectorSection title={addLabel} indicator="none" defaultOpen={false}>
-        <ResolveInspectorRow label="Audio effect">
-          <InspectorSelect ariaLabel="Add audio effect" value=""
-            options={[{ value: '', label: 'Choose effect', disabled: true }, ...availableEffects.map(effect => ({ value: effect.id, label: effect.name }))]}
-            onChange={(descriptorId) => {
-              onAddEffect(descriptorId);
-              trackAudioEffectControl(descriptorId, 'effect-stack-add', 'select', 'select', 'add');
-            }} />
-        </ResolveInspectorRow>
-      </ResolveInspectorSection>}
+      {onAddEffect && <AudioEffectPicker title={addLabel} excludeDescriptorIds={excludeDescriptorIds}
+        allowAudioMath={Boolean(keyframeClipId)} onSelect={id => {
+          onAddEffect(id);
+          trackAudioEffectControl(id, 'effect-stack-add', 'select', 'select', 'add');
+        }} />}
+      {beforeEffects}
       {!onAddEffect && <h4>{title}</h4>}
 
       {effects.length === 0 ? (
-        <div className="audio-effect-stack-empty">{emptyLabel}</div>
+        <div className="panel-empty"><p>{emptyLabel}</p></div>
       ) : (
         <div className="audio-effect-stack-list">
           {effects.map((effect, index) => {
@@ -172,31 +176,35 @@ export function AudioEffectStackControl({
                 )
               : [];
             return (
-              <ResolveInspectorSection key={effect.id} title={descriptor.name}
-                className="audio-effect-inspector-item" enabled={enabled}
+              <EffectCard key={effect.id} title={descriptor.name}
+                className={`audio-effect-inspector-item ${draggedEffectId === effect.id ? 'dragging' : ''} ${dropEffectId === effect.id ? 'drop-target' : ''}`} enabled={enabled}
+                dragHandleProps={{ draggable: true, onDragStart: event => {
+                  setDraggedEffectId(effect.id); event.dataTransfer.effectAllowed = 'move';
+                  event.dataTransfer.setData('text/plain', effect.id);
+                } }}
+                onDragOver={event => { if (draggedEffectId) { event.preventDefault(); setDropEffectId(effect.id); } }}
+                onDragLeave={() => setDropEffectId(null)}
+                onDragEnd={() => { setDraggedEffectId(null); setDropEffectId(null); }}
+                onDrop={event => {
+                  event.preventDefault();
+                  const moved = effects.find(candidate => candidate.id === draggedEffectId);
+                  if (moved && moved.id !== effect.id) reorder(moved, index);
+                  setDraggedEffectId(null); setDropEffectId(null);
+                }}
+                onMoveEarlier={index > 0 ? () => reorder(effect, index - 1) : undefined}
+                onMoveLater={index < effects.length - 1 ? () => reorder(effect, index + 1) : undefined}
+                onRemove={() => {
+                  onRemoveEffect(effect.id);
+                  trackAudioEffectControl(descriptor.id, 'effect-remove', 'button', 'click', 'remove');
+                }}
                 onEnabledChange={(next) => {
                   onSetEffectEnabled(effect.id, next);
                   trackAudioEffectControl(descriptor.id, 'effect-enabled', 'button', 'click', next ? 'enable' : 'disable');
                 }}
                 headerActions={<>
-                  <ResolveInspectorIconButton ariaLabel={`Move ${descriptor.name} earlier`} disabled={index === 0}
-                    onClick={() => {
-                      onReorderEffect(effect.id, index - 1);
-                      trackAudioEffectControl(descriptor.id, 'effect-stack-order', 'button', 'click', 'reorder');
-                    }}>&#8593;</ResolveInspectorIconButton>
-                  <ResolveInspectorIconButton ariaLabel={`Move ${descriptor.name} later`} disabled={index >= effects.length - 1}
-                    onClick={() => {
-                      onReorderEffect(effect.id, index + 1);
-                      trackAudioEffectControl(descriptor.id, 'effect-stack-order', 'button', 'click', 'reorder');
-                    }}>&#8595;</ResolveInspectorIconButton>
                   {keyframeClipId && eqAllKeyframeEntries.length > 0 && <MultiKeyframeToggle
                     clipId={keyframeClipId} entries={eqAllKeyframeEntries}
                     dragId={`${keyframeClipId}:effect:${effect.id}:eq-all`} title="Add all EQ parameter keyframes" />}
-                  <ResolveInspectorIconButton ariaLabel={`Remove ${descriptor.name}`}
-                    onClick={() => {
-                      onRemoveEffect(effect.id);
-                      trackAudioEffectControl(descriptor.id, 'effect-remove', 'button', 'click', 'remove');
-                    }}>&#215;</ResolveInspectorIconButton>
                 </>}>
                 {dynamicsView && (
                   <div className={`audio-dynamics-view ${dynamicsView.effectId}`}>
@@ -315,7 +323,7 @@ export function AudioEffectStackControl({
                     })}
                   </div>
                 )}
-              </ResolveInspectorSection>
+              </EffectCard>
             );
           })}
         </div>

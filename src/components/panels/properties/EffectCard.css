@@ -1,0 +1,16 @@
+.audio-effect-card :is(button, [tabindex]),
+.audio-effect-catalog > summary {
+  -webkit-tap-highlight-color: transparent;
+}
+.audio-effect-card :is(button, [tabindex]):focus:not(:focus-visible),
+.audio-effect-catalog > summary:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+.audio-effect-card :is(button, [tabindex]):focus-visible,
+.audio-effect-catalog > summary:focus-visible {
+  outline: 1px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+.effect-reorder-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); }

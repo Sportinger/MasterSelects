@@ -11,17 +11,25 @@ live playback sync for timeline editing, and offline audio processing for export
 
 ## Audio effects inspector
 
-The Audio side of Properties > Effects reuses the video/Transform inspector's
-collapsible sections, aligned rows, handle-only sliders, editable number fields,
-reset buttons, and dropdowns. Volume and speed are separate collapsible sections;
-linked-video speed remains read-only until Follow Video is disabled.
+The Audio side of Properties > Effects reuses the video effect card styling:
+bordered cards, matching headers, disclosure arrows, blue bypass icons and red
+remove buttons. Inner controls reuse the Transform inspector's aligned rows,
+handle-only sliders, editable numbers, resets, dropdowns, and supported keyframes.
+The video effect catalog and its image previews remain unchanged.
 
-Expand **+ Add Effect** to choose an audio effect. Each effect has a collapsible
-section with bypass, move earlier/later, and remove actions. Numeric parameters
-keep supported clip keyframes and grouped drag undo; EQ retains its graph and
-analyzer controls. The shared stack also supplies track and master audio effects.
-Pointer activation avoids stuck focus rings, while keyboard navigation retains
-visible focus.
+Audio **+ Add Effect** offers searchable, categorized text-only tiles. Each tile
+is one add button, without a graph or a separate footer button. Added effects have
+bypass, removal, and ordering via drag, Up/Down keys, or the grip's ordering menu.
+The same audio stack supplies clip, track, and master effects; clip parameters
+retain keyframes and grouped drag undo. EQ retains its functional graph/analyzer.
+
+Built-in Volume and Speed Settings also have bypass switches and ordering grips.
+Their order is a persisted inspector layout preference, not DSP processing order.
+Bypass preserves stored values and keyframes; speed bypass plays at normal speed
+and applies to offline audio rendering as well. Volume keyframes can be added
+before the first volume edit. Linked speed remains read-only until Follow Video
+is disabled. Built-in controls cannot be removed.
+Pointer activation avoids stuck focus rings; keyboard navigation retains visible focus.
 
 ## Playback Overview
 

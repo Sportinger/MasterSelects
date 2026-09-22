@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { useUiSettingsStore } from '../../src/stores/uiSettingsStore';
 import { VolumeTab } from '../../src/components/panels/properties/VolumeTab';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { runtimeAudioMeterBus } from '../../src/services/audio/runtimeAudioMeterBus';
@@ -18,9 +19,8 @@ function createStackEqEffect(id = 'eq-1'): AudioEffectInstance {
 }
 
 function addStackEqFromSelect(container: HTMLElement): AudioEffectInstance {
-  fireEvent.click(within(container).getByRole('button', { name: '+ Add Effect' }));
-  fireEvent.click(within(container).getByRole('combobox', { name: 'Add audio effect' }));
-  fireEvent.click(screen.getByRole('option', { name: 'EQ', exact: true }));
+  fireEvent.click(within(container).getByText('+ Add Effect', { exact: true }));
+  fireEvent.click(within(container).getByRole('button', { name: 'EQ', exact: true }));
 
   const effect = useTimelineStore.getState().clips[0].audioState?.effectStack?.find(item => item.descriptorId === 'audio-eq');
   expect(effect).toBeDefined();
@@ -71,6 +71,36 @@ describe('VolumeTab', () => {
     });
   });
 
+  it('bypasses built-in controls without losing keyframes and reorders their cards', () => {
+    useUiSettingsStore.setState({ audioSpeedCardFirst: false });
+    const { container } = render(<VolumeTab clipId="clip-1" effects={[]} />);
+    const volumeCard = screen.getByTitle('Collapse Volume').closest('.effect-item')!;
+    fireEvent.click(volumeCard.querySelector('.keyframe-toggle')!);
+    const volume = useTimelineStore.getState().clips[0].effects.find(effect => effect.type === 'audio-volume')!;
+    expect(volume).toBeDefined();
+    const keys = useTimelineStore.getState().clipKeyframes.get('clip-1');
+    expect(keys).toEqual([expect.objectContaining({ property: `effect.${volume.id}.volume` })]);
+    fireEvent.click(screen.getByRole('switch', { name: 'Disable Volume' }));
+    expect(useTimelineStore.getState().clips[0].effects.find(effect => effect.id === volume.id)?.enabled).toBe(false);
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable Volume' }));
+    expect(useTimelineStore.getState().clipKeyframes.get('clip-1')).toEqual(keys);
+    act(() => {
+      useTimelineStore.getState().setClipSpeed('clip-1', 2);
+      useTimelineStore.getState().addKeyframe('clip-1', 'speed', 3, 0);
+    });
+    const speedKeys = useTimelineStore.getState().clipKeyframes.get('clip-1');
+    fireEvent.click(screen.getByRole('switch', { name: 'Disable Speed Settings' }));
+    expect(useTimelineStore.getState().getInterpolatedSpeed('clip-1', 0)).toBe(1);
+    expect(useTimelineStore.getState().clips[0].speed).toBe(2);
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable Speed Settings' }));
+    expect(useTimelineStore.getState().getInterpolatedSpeed('clip-1', 0)).toBe(3);
+    expect(useTimelineStore.getState().clipKeyframes.get('clip-1')).toEqual(speedKeys);
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Reorder Speed Settings' }), { key: 'ArrowUp' });
+    expect(useUiSettingsStore.getState().audioSpeedCardFirst).toBe(true);
+    expect(container.querySelector('.audio-builtin-cards')?.children[1]).toHaveStyle({ order: '0' });
+    useUiSettingsStore.setState({ audioSpeedCardFirst: false });
+  });
+
   it('edits, resets, collapses, bypasses, reorders and removes shared effect sections', () => {
     const store = useTimelineStore.getState();
     store.addClipAudioEffectInstance('clip-1', 'audio-delay');
@@ -82,14 +112,23 @@ describe('VolumeTab', () => {
     expect(delay().params.delayMs).toBe(Number(original) + 1);
     fireEvent.click(screen.getByRole('button', { name: 'Reset Delay ms' }));
     expect(delay().params.delayMs).toBe(original);
-    fireEvent.click(screen.getByRole('button', { name: 'Delay', exact: true }));
+    fireEvent.click(screen.getByTitle(/^(Collapse|Expand) Delay$/));
     expect(screen.queryByLabelText('Delay ms')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Delay', exact: true }));
+    fireEvent.click(screen.getByTitle(/^(Collapse|Expand) Delay$/));
     expect(screen.getByLabelText('Delay ms')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('switch', { name: 'Disable Delay' }));
     expect(delay().enabled).toBe(false);
     fireEvent.click(screen.getByRole('switch', { name: 'Enable Delay' }));
     expect(delay().enabled).toBe(true);
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Reorder Delay' }), { key: 'ArrowDown' });
+    expect(useTimelineStore.getState().clips[0].audioState!.effectStack!.map(effect => effect.descriptorId)).toEqual(['audio-reverb', 'audio-delay']);
+    const dragHandle = screen.getByRole('button', { name: 'Reorder Delay' });
+    const reverbCard = screen.getByTitle(/^(Collapse|Expand) Reverb$/).closest('.effect-item')!;
+    fireEvent.dragStart(dragHandle, { dataTransfer: { setData: () => undefined } });
+    fireEvent.dragOver(reverbCard);
+    fireEvent.drop(reverbCard);
+    expect(useTimelineStore.getState().clips[0].audioState!.effectStack!.map(effect => effect.descriptorId)).toEqual(['audio-delay', 'audio-reverb']);
+    fireEvent.click(dragHandle);
     fireEvent.click(screen.getByRole('button', { name: 'Move Delay later' }));
     expect(useTimelineStore.getState().clips[0].audioState!.effectStack!.map(effect => effect.descriptorId)).toEqual(['audio-reverb', 'audio-delay']);
     fireEvent.click(screen.getByRole('button', { name: 'Remove Delay' }));
@@ -434,7 +473,7 @@ describe('VolumeTab', () => {
     });
 
     const { container } = render(<VolumeTab clipId="clip-1" effects={[]} />);
-    const sectionToggle = container.querySelector('.audio-effect-inspector-item .resolve-inspector-header-actions .keyframe-toggle');
+    const sectionToggle = container.querySelector('.audio-effect-inspector-item .effect-header .keyframe-toggle');
     expect(sectionToggle).not.toBeNull();
 
     fireEvent.click(sectionToggle!);

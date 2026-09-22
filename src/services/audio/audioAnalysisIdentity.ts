@@ -34,6 +34,7 @@ export interface ClipAudioAnalysisIdentityInput {
   outPoint?: number;
   duration?: number;
   speed?: number;
+  speedEnabled?: boolean;
   reversed?: boolean;
   preservesPitch?: boolean;
   trackGraphIdentity?: string | null;
@@ -253,6 +254,7 @@ export function createClipAudioStateIdentityPayload(
       outPoint: input.outPoint,
       duration: input.duration,
       speed: input.speed ?? 1,
+      speedEnabled: input.speedEnabled === false ? false : undefined,
       reversed: input.reversed === true,
       preservesPitch: input.preservesPitch !== false,
     },

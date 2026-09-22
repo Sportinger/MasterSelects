@@ -123,6 +123,7 @@ export interface ProjectClip {
 
   // Speed
   speed?: number;
+  videoInspectorSections?: import('../../../types/timeline').ClipVideoInspectorSections;
   preservesPitch?: boolean;
   followsLinkedVideoSpeed?: boolean;
   freeRun?: boolean;

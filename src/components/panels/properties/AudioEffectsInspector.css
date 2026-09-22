@@ -1,10 +1,3 @@
-/* Shared inspector layout, with room for effect ordering and keyframe actions. */
-.audio-effect-inspector-item > .resolve-inspector-section-header > .resolve-inspector-header-actions {
-  display: flex;
-  width: auto;
-  gap: 5px;
-}
-
 .volume-tab input[type="checkbox"],
 .audio-effect-stack-control input[type="checkbox"] {
   accent-color: var(--accent);
@@ -21,3 +14,27 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* Match the video stack spacing; cards own their bottom margin. */
+.volume-tab .audio-effect-stack-control,
+.volume-tab .audio-effect-stack-list {
+  gap: 0;
+}
+
+.audio-effect-catalog-tile {
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.audio-effect-catalog-tile:hover { border-color: var(--accent-color); }
+.audio-effect-catalog-tile:focus:not(:focus-visible) { outline: none; }
+.audio-effect-catalog-tile:focus-visible { outline: 2px solid var(--accent-color); outline-offset: -2px; }
+
+.audio-builtin-cards { display: flex; flex-direction: column; }

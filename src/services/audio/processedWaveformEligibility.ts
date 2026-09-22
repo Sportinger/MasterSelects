@@ -258,6 +258,7 @@ export function createProcessedClipAudioIdentityInput(
     outPoint: clip.outPoint,
     duration: clip.duration,
     speed: clip.speed,
+    speedEnabled: clip.videoInspectorSections?.speedChange !== false,
     reversed: clip.reversed,
     preservesPitch: clip.preservesPitch,
     trackGraphIdentity: options.trackGraphIdentity,

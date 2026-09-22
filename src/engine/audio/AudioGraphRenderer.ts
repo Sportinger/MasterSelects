@@ -1,3 +1,4 @@
+import { applyVideoInspectorSpeedBypass } from '../../services/videoInspector/sectionBypass';
 import {
   AUDIO_GRAPH_SCHEMA_VERSION,
   type AudioGraphAnalysisRefsDescriptor,
@@ -98,7 +99,7 @@ function normalizeTimeRange(clip: TimelineClip): AudioGraphTimeRangeDescriptor {
     endTime: startTime + duration,
     inPoint,
     outPoint,
-    playbackRate: finiteNumber(clip.speed, 1),
+    playbackRate: applyVideoInspectorSpeedBypass(clip, finiteNumber(clip.speed, 1)),
     reversed: clip.reversed === true,
     preservesPitch: clip.preservesPitch !== false,
   };

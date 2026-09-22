@@ -482,12 +482,14 @@ export function RotationKeyframeToggle({ clipId, x, y, z }: { clipId: string; x:
 export function EffectKeyframeToggle({
   clipId,
   effectId,
+  ensureEffectId,
   paramName,
   property,
   value,
 }: {
   clipId: string;
   effectId?: string;
+  ensureEffectId?: () => string;
   paramName?: string;
   property?: AnimatableProperty;
   value: number;
@@ -496,8 +498,10 @@ export function EffectKeyframeToggle({
   const { recording, hasKeyframes } = useKeyframeToggleState(clipId, [effectProperty]);
 
   const handleApply = useCallback((mode: KeyframeToggleDragMode) => {
-    applyKeyframeToggleEntries(mode, clipId, [{ property: effectProperty, value }]);
-  }, [clipId, effectProperty, value]);
+    const resolvedProperty = !property && !effectId && ensureEffectId
+      ? createEffectProperty(ensureEffectId(), paramName ?? '') : effectProperty;
+    applyKeyframeToggleEntries(mode, clipId, [{ property: resolvedProperty, value }]);
+  }, [clipId, effectProperty, value, property, effectId, ensureEffectId, paramName]);
 
   return (
     <KeyframeStopwatchButton

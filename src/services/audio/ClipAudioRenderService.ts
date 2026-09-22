@@ -1,3 +1,4 @@
+import { isVideoInspectorSectionEnabled } from '../videoInspector/sectionBypass';
 import type { EffectRenderProgress } from '../../engine/audio/AudioEffectRenderer';
 import { AudioEffectRenderer, audioEffectRenderer } from '../../engine/audio/AudioEffectRenderer';
 import { AudioExtractor, audioExtractor } from '../../engine/audio/AudioExtractor';
@@ -283,6 +284,7 @@ export class ClipAudioRenderService {
     keyframes: readonly Keyframe[],
     onProgress?: (progress: ClipAudioRenderProgress) => void,
   ): Promise<AudioBuffer> {
+    if (!isVideoInspectorSectionEnabled(clip.videoInspectorSections, 'speedChange')) return buffer;
     const speedKeyframes = keyframes.filter(keyframe => keyframe.property === 'speed');
     const defaultSpeed = Math.abs(clip.speed ?? 1) || 0.01;
     const preservesPitch = clip.preservesPitch !== false;

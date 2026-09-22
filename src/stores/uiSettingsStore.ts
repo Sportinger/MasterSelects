@@ -18,6 +18,8 @@ export function clampInterfaceTextScale(value: number): number {
 }
 
 interface UiSettingsState {
+  audioSpeedCardFirst: boolean;
+  setAudioSpeedCardFirst: (first: boolean) => void;
   interfaceTextScale: number;
   interfaceFontFamily: InterfaceFontFamily;
   highReadabilityMode: boolean;
@@ -52,6 +54,8 @@ export const useUiSettingsStore = create<UiSettingsState>()(
   subscribeWithSelector(
     persist(
       (set) => ({
+        audioSpeedCardFirst: false,
+        setAudioSpeedCardFirst: (first) => set({ audioSpeedCardFirst: first }),
         interfaceTextScale: DEFAULT_INTERFACE_TEXT_SCALE,
         interfaceFontFamily: 'system',
         highReadabilityMode: false,

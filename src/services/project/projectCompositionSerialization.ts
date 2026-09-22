@@ -188,6 +188,7 @@ export function convertCompositions(compositions: Composition[]): ProjectComposi
       reversed: c.reversed || false,
       disabled: c.disabled || false,
       speed: c.speed,
+      videoInspectorSections: c.videoInspectorSections,
       preservesPitch: c.preservesPitch,
       followsLinkedVideoSpeed: c.followsLinkedVideoSpeed,
       freeRun: c.freeRun,

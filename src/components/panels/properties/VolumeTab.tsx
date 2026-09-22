@@ -1,3 +1,6 @@
+import { useAudioBuiltinCardOrder } from './useAudioBuiltinCardOrder';
+import { isVideoInspectorSectionEnabled } from '../../../services/videoInspector/sectionBypass';
+import { EffectCard } from './EffectCard';
 // Volume Tab - Audio volume and EQ controls
 import { useTimelineStore } from '../../../stores/timeline';
 import {
@@ -12,7 +15,7 @@ import type { Keyframe } from '../../../types/keyframes';
 import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
 import { EffectKeyframeToggle, KeyframeToggle, MultiKeyframeToggle } from './shared';
 import { MIDIParameterLabel } from './MIDIParameterLabel';
-import { ResolveInspectorSection, ResolveInspectorRow, ResolveInspectorIconButton, ResolveResetIcon } from './resolveInspector/ResolveInspectorPrimitives';
+import { ResolveInspectorRow, ResolveInspectorIconButton, ResolveResetIcon } from './resolveInspector/ResolveInspectorPrimitives';
 import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
 import { AudioEffectStackControl } from './AudioEffectStackControl';
 import { LegacyClipAudioEffects } from './LegacyClipAudioEffects';
@@ -162,6 +165,7 @@ function interpolateAudioEffectStack(
 }
 
 export function VolumeTab({ clipId, effects }: VolumeTabProps) {
+  const builtinCardProps = useAudioBuiltinCardOrder();
   // Reactive data - subscribe to specific values only
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
   const clips = useTimelineStore(state => state.clips);
@@ -284,25 +288,33 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
     updateClipAudioEffectInstance(clipId, effect.id, { [paramName]: value });
   };
 
-  return (
-    <div className="properties-tab-content volume-tab">
-      <ResolveInspectorSection title="Volume" indicator="none">
+  const builtInControls = (<>
+      <div className="audio-builtin-cards">
+      <EffectCard title="Volume" {...builtinCardProps('volume')} enabled={actualVolumeEffect?.enabled !== false}
+        onEnabledChange={enabled => setClipEffectEnabled(clipId, getOrCreateLegacyAudioEffectId('audio-volume'), enabled)}>
         <ResolveInspectorNumberRow label="Level" ariaLabel="Audio volume"
           value={gainToDb(volume)} onChange={(db) => handleVolumeChange(dbToGain(db))}
           defaultValue={0} min={SILENCE_THRESHOLD_DB} max={6} hardMin={SILENCE_THRESHOLD_DB} hardMax={6}
           step={0.1} decimals={1} suffix=" dB" sensitivity={4}
           persistenceKey={`audio.${clipId}.volume`}
           actions={volumeMIDITarget ? <MIDIParameterLabel target={volumeMIDITarget}>MIDI</MIDIParameterLabel> : undefined}
-          keyframeToggle={volumeEffect ? <EffectKeyframeToggle clipId={clipId} effectId={volumeEffect.id} paramName="volume" value={volume} /> : undefined}
+          keyframeToggle={<EffectKeyframeToggle clipId={clipId} effectId={actualVolumeEffect?.id}
+            ensureEffectId={() => getOrCreateLegacyAudioEffectId('audio-volume')} paramName="volume" value={volume} />}
           onDragStart={() => startBatch('Adjust audio volume')} onDragEnd={() => endBatch()}
           onCommit={(method) => trackEditorControlCommitted({
             area: 'audio', controlId: 'volume', controlKind: 'number', inputMethod: method,
             interaction: method === 'reset' ? 'reset' : 'change', itemId: 'volume', itemKind: 'property',
           })}
         />
-      </ResolveInspectorSection>
+      </EffectCard>
 
-      <ResolveInspectorSection title="Speed Settings" indicator="none">
+      <EffectCard title="Speed Settings" {...builtinCardProps('speed')}
+        enabled={isVideoInspectorSectionEnabled(clip?.videoInspectorSections, 'speedChange')}
+        onEnabledChange={enabled => {
+          const state = useTimelineStore.getState();
+          const current = state.clips.find(candidate => candidate.id === clipId);
+          if (current) state.updateClip(clipId, { videoInspectorSections: { ...current.videoInspectorSections, speedChange: enabled } });
+        }}>
         {linkedSpeedPair?.audio.id === clipId && (
           <ResolveInspectorRow label="Follow Video" title="Turn off to edit this audio clip independently">
             <input type="checkbox" aria-label="Follow Linked Video Speed"
@@ -332,17 +344,19 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
           <input type="checkbox" aria-label="Keep Pitch" checked={preservesPitch}
             onChange={(event) => setClipPreservesPitch(clipId, event.target.checked)} />
         </ResolveInspectorRow>
-      </ResolveInspectorSection>
+      </EffectCard>
+
+      </div>
 
       {/* Legacy EQ Section - only shown for older clips that already contain a clip.effects audio-eq. */}
       {actualEqEffect && (
-        <ResolveInspectorSection title="Legacy Equalizer" className="audio-effect-inspector-item" enabled={actualEqEffect.enabled !== false}
+        <EffectCard title="Legacy Equalizer" className="audio-effect-inspector-item" enabled={actualEqEffect.enabled !== false}
           onEnabledChange={(enabled) => setClipEffectEnabled(clipId, actualEqEffect.id, enabled)}
+          onRemove={() => removeClipEffect(clipId, actualEqEffect.id)}
           headerActions={<>
             {eqAllKeyframeEntries.length > 0 && <MultiKeyframeToggle clipId={clipId} entries={eqAllKeyframeEntries}
               dragId={`${clipId}:effect:${actualEqEffect.id}:eq-all`} title="Add all EQ parameter keyframes" />}
             <ResolveInspectorIconButton ariaLabel="Reset Legacy Equalizer" onClick={handleResetEQ}><ResolveResetIcon /></ResolveInspectorIconButton>
-            <ResolveInspectorIconButton ariaLabel="Remove Legacy Equalizer" onClick={() => removeClipEffect(clipId, actualEqEffect.id)}>&#215;</ResolveInspectorIconButton>
           </>}>
           <FlexEqualizerControl
             params={eqParams}
@@ -355,12 +369,17 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
             onUpdateParamPath={handleEQPathChange}
             onChangeParams={handleEQParamsChange}
           />
-        </ResolveInspectorSection>
+        </EffectCard>
       )}
 
+  </>);
+
+  return (
+    <div className="properties-tab-content volume-tab">
       {/* Registry Audio Effects Section */}
       <div className="audio-effect-stack-section">
         <AudioEffectStackControl
+          beforeEffects={builtInControls}
           effects={clipAudioEffectStack}
           excludeDescriptorIds={LEGACY_VOLUME_EFFECT_IDS}
           keyframeClipId={clipId}
