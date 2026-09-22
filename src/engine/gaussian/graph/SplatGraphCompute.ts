@@ -1,13 +1,15 @@
 import type { SplatGraphOperation } from '../../../types/splatGraph';
 import shader from './splatGraphCompute.wgsl?raw';
 
-const codes: Record<SplatGraphOperation['kind'], number> = { limit: 1, scale: 2, rotate: 3, color: 4, select: 5, noise: 6, particles: 7, 'camera-fade': 8 };
+const codes: Record<SplatGraphOperation['kind'], number> = { limit: 1, scale: 2, rotate: 3, color: 4, select: 5, noise: 6, particles: 7, 'camera-fade': 8, 'sphere-crop': 9 };
 export function prepareSplatSampling(operations: SplatGraphOperation[], sourceCount: number, budget = 0) {
   const selection = operations.findIndex(op => op.kind === 'select');
   const fraction = selection >= 0 ? operations[selection].values[0] : 1;
   const count = Math.min(Math.floor(sourceCount * fraction), budget > 0 ? budget : sourceCount);
   const offset = selection >= 0 ? Math.floor(operations[selection].values[1] * 2654435761) % Math.max(1, sourceCount) : 0;
-  return { count, offset, remapped: selection >= 0, operations: operations.filter((_, i) => i !== selection) };
+  // File order is not spatially representative. A reduced prefix can omit the
+  // visible surface entirely; sample across the full source and sort that output.
+  return { count, offset, remapped: selection >= 0 || count < sourceCount, operations: operations.filter((_, i) => i !== selection) };
 }
 export function packSplatOperations(operations: SplatGraphOperation[]): Float32Array {
   if (operations.length > 24) throw new Error('Splat operation budget exceeded.');

@@ -50,6 +50,12 @@ Effect parameters remain keyframeable through the common effect inspector; mesh 
 settings are deliberately not animated. Time-dependent nodes use clip-local media time.
 
 Radii are **linear local units**, not the logarithmic scales in some training PLY files.
+**Sphere Crop** is a reusable splat operator with Center X/Y/Z, Radius and Soft edge.
+It hides splat centers outside a source-local sphere without deleting source data;
+the optional soft edge fades inward from the radius. Bypass restores the input.
+Place it before a branch split to share the crop, before simulation to restrict emitters,
+or after simulation to keep moving particles inside the sphere. It masks opacity;
+it does not compact the source buffer or crop the separately reconstructed mesh.
 Selection and Gaussian Surface budgets compact the GPU workload before simulation:
 the starting graph keeps all original splats, at most 16,384 rays and 8,192 particles.
 Color and depth passes reuse the same evaluated particle attributes. Large original scans
@@ -58,7 +64,8 @@ still incur their normal rendering cost; the budget on each Gaussian Surface is 
 Particles replay the current seeded lifetime with fixed 1/30-second integration steps
 and a final fractional step, making seeking deterministic. This is bounded lifetime
 simulation, without collisions or particle-to-particle interactions.
-The mesh is a cached density-isosurface approximation sampled from at most 32,768 source
+The Splats to Mesh node computes and caches its geometry on the CPU when first used
+or when reconstruction settings change. The mesh is a density-isosurface approximation sampled from at most 32,768 source
 splats on a 12–64-cell grid. It renders as wireframe, retains source coordinates, and is
 not a replacement for a photogrammetry mesh. Connect the unmodified Splat Source to
 reconstruction; animated reconstruction is rejected. Geometry remains renderer-owned.
@@ -297,6 +304,8 @@ It mutes the branch's Gaussian Surface or Mesh output, so upstream particle work
 not dispatched. Individual scene nodes (including Mesh, Wireframe Material, Clip
 Transform and 3D render) use their displayed bypass behavior. Unchanged scene
 parameters reuse the compiled plan. Render budgets apply before attribute compute;
-without a Selection node a budget retains the source prefix and worker depth ordering.
+reduced budgets sample across the entire source rather than retaining a file prefix,
+which can omit the visible surface of an ordered scan. Remapped branches use GPU
+depth sorting for their sampled output; full unmodified scans retain worker ordering.
 Lower **Original Splats ? Gaussian Surface ? Splat budget** to reduce full-scan work;
 0 retains every source splat. This is an effect setting and also affects export.

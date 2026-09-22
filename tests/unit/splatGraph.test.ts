@@ -14,6 +14,20 @@ import { reconstructSplatMesh } from '../../src/engine/gaussian/graph/splatMesh'
 import { packSplatOperations, prepareSplatSampling } from '../../src/engine/gaussian/graph/SplatGraphCompute';
 
 describe('splat graph execution', () => {
+  it('compiles a reusable sphere crop and restores the source stream when bypassed', () => {
+    const d = defaultSplatGraph();
+    const crop = { id: 'crop', operator: 'splat.sphere-crop', bindings: {}, constants: { x: 1, y: -2, z: 3, radius: 4, softness: 0.5 }, bypassed: false };
+    d.graph.nodes.push(crop);
+    d.graph.edges.find(e => e.to === 'surface')!.from = 'crop';
+    d.graph.edges.push({ id: 'source-crop', from: 'source', output: 'splats', to: 'crop', input: 'splats' });
+    expect(validateSceneGraph(d)).toEqual([]);
+    const operations = compileSplatGraph(d)[0].operations;
+    expect(operations).toEqual([{ kind: 'sphere-crop', values: [1, -2, 3, 4, 0.5] }]);
+    expect(Array.from(packSplatOperations(operations).slice(0, 9))).toEqual([9, 0, 0, 0, 1, -2, 3, 4, 0.5]);
+    crop.bypassed = true;
+    expect(compileSplatGraph(d)[0].operations).toEqual([]);
+    expect(d.graph.nodes.some(node => node.id === 'source')).toBe(true);
+  });
   it('opens splats in the executable scene graph without changing legacy sources', () => {
     expect(sceneGraphSupportsSource('gaussian-splat')).toBe(true);
     expect(sceneGraphSupportsSource('flock')).toBe(false);
@@ -141,9 +155,11 @@ describe('reusable splat compositions', () => {
 });
 
 describe('splat preview work budgets', () => {
-  it('retains source indices for a plain render budget so worker ordering stays usable', () => {
+  it('remaps a reduced render budget across the entire scan, even without attribute operations', () => {
     const sample = prepareSplatSampling([], 3807536, 500000);
-    expect(sample).toMatchObject({ count: 500000, remapped: false });
+    expect(sample).toMatchObject({ count: 500000, remapped: true, offset: 0, operations: [] });
+    expect(prepareSplatSampling([], 3807536, 0)).toMatchObject({ count: 3807536, remapped: false });
+    expect(prepareSplatSampling([], 100, 500000)).toMatchObject({ count: 100, remapped: false });
   });
   it('reuses unchanged scene plans but invalidates edited and animated parameters', () => {
     const defaults = defaultSplatGraph(true);

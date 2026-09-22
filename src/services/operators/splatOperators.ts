@@ -31,6 +31,10 @@ export const SPLAT_OPERATORS: readonly OperatorDefinition[] = [
   { ...op('drag', 'Particle Drag', 'Exponential velocity damping, independent of playback frame rate.', [number('coefficient', 'Drag', 0.4, 0, 10)]),
     inputs: [{ id: 'coefficient', label: 'Drag', type: 'number' }], outputs: [{ id: 'drag', label: 'Drag', type: 'drag' }], bypass: 'mute', addable: false },
   op('camera-fade', 'Camera Proximity Fade', 'Reduce radius and opacity smoothly in a sphere around the active scene camera. Distances are world units.', [number('radius', 'Clear radius', 0.2, 0, 100), number('transition', 'Transition', 0.5, 0.001, 100)]),
+  op('sphere-crop', 'Sphere Crop', 'Keep splat centers inside a sphere in source-local coordinates. Fade inward from the radius with Soft edge; bypass restores the input. Source data is unchanged.', [
+    ...['x', 'y', 'z'].map(id => number(id, `Center ${id.toUpperCase()}`, 0, -10000, 10000)),
+    number('radius', 'Radius', 1, 0, 10000), number('softness', 'Soft edge', 0, 0, 10000),
+  ]),
   { ...op('surface', 'Splats to Mesh', 'Approximate the source with a bounded density isosurface in the source coordinates. Connect to a Mesh and material. Reconstruction uses source positions and opacity before animated modifiers.', [
     number('resolution', 'Grid resolution', 32, 12, 64, 1), number('threshold', 'Density threshold', 0.35, 0.01, 4), number('radius', 'Kernel radius (cells)', 1.5, 0.5, 3),
   ].map(p => ({ ...p, animatable: false }))), inputs: [splats('splats'), ...['resolution', 'threshold', 'radius'].map(id => ({ id, label: id, type: 'number' as const }))], outputs: [{ id: 'geometry', label: 'Mesh geometry', type: 'geometry', contract: { formats: ['splat-mesh'] } }], bypass: 'mute', addable: false },

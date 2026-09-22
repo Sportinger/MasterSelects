@@ -69,6 +69,13 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
         let fade = smoothstep(a.x, a.x + a.y, distance(world, settings.camera.xyz));
         alpha *= fade; scale *= max(0.001, fade);
       }
+      case 9u: {
+        let d = distance(p, a.xyz);
+        let edge = min(b.x, a.w);
+        if (edge > 0.0) {
+          alpha *= 1.0 - smoothstep(a.w - edge, a.w, d);
+        } else if (d > a.w) { alpha = 0.0; }
+      }
       default: {}
     }
   }
