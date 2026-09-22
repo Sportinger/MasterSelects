@@ -1,0 +1,47 @@
+import { afterEach, expect, it, vi } from 'vitest';
+import { EffectsPipeline } from '../../src/effects/EffectsPipeline';
+import { TemporalEffectResources } from '../../src/effects/time/TemporalEffectResources';
+import { collectTemporalPreparations, getTemporalStatus } from '../../src/effects/time/temporalResourcePreparation';
+
+function setup() {
+  vi.stubGlobal('GPUShaderStage', { FRAGMENT: 2 });
+  vi.stubGlobal('GPUBufferUsage', { UNIFORM: 1, COPY_DST: 2, STORAGE: 4 });
+  vi.stubGlobal('GPUTextureUsage', { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2, COPY_DST: 4, COPY_SRC: 8 });
+  const device = {
+    limits: { maxSampledTexturesPerShaderStage: 16 }, lost: new Promise(() => undefined),
+    queue: { writeBuffer: vi.fn(), writeTexture: vi.fn() },
+    createShaderModule: vi.fn(() => ({})), createBindGroupLayout: vi.fn(() => ({})), createPipelineLayout: vi.fn(() => ({})),
+    createRenderPipeline: vi.fn(() => ({ getBindGroupLayout: vi.fn(() => ({})) })), createComputePipeline: vi.fn(() => ({})),
+    createBindGroup: vi.fn(() => ({})), createSampler: vi.fn(() => ({})),
+    createBuffer: vi.fn(() => ({ destroy: vi.fn() })),
+    createTexture: vi.fn(() => ({ createView: () => ({}), destroy: vi.fn() })),
+  } as unknown as GPUDevice;
+  const draw = vi.fn();
+  const encoder = { beginRenderPass: vi.fn(() => ({ setPipeline: vi.fn(), setBindGroup: vi.fn(), draw, end: vi.fn() })) } as unknown as GPUCommandEncoder;
+  const pipeline = new EffectsPipeline(device);
+  vi.spyOn(TemporalEffectResources.prototype, 'resolveNamed').mockImplementation(() => {});
+  const failure = new Error('Source frame cache exceeds the 640 MiB budget.');
+  const resolve = vi.spyOn(TemporalEffectResources.prototype, 'resolveNative').mockImplementation(() => { throw failure; });
+  const input = {} as GPUTextureView, output = {} as GPUTextureView;
+  const slitScan = { id: 'failed-slit', type: 'slit-scan', name: 'Slit Scan', enabled: true, params: {} };
+  const render = (effects = [slitScan]) => pipeline.applyEffects(encoder, effects, {} as GPUSampler, input, output,
+    output, {} as GPUTextureView, 8, 8);
+  return { pipeline, resolve, failure, render, input, output, draw, slitScan };
+}
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+it('preserves the image when a temporal resource fails and continues rendering later effects', () => {
+  const { render, input, output, slitScan, draw, resolve } = setup();
+  expect(render()).toEqual({ finalView: input, swapped: false });
+  expect(getTemporalStatus(slitScan.id)).toContain('Effect unavailable: Source frame cache');
+  expect(resolve).toHaveBeenCalledOnce();
+  expect(draw).not.toHaveBeenCalled();
+  expect(render([slitScan, { id: 'invert', type: 'invert', name: 'Invert', enabled: true, params: {} }]).finalView).toBe(output);
+  expect(draw).toHaveBeenCalled();
+});
+
+it('propagates the same failure during export so an effect cannot be silently omitted', () => {
+  const { render, failure } = setup();
+  const finish = collectTemporalPreparations();
+  try { expect(() => render()).toThrow(failure); } finally { finish(); }
+});

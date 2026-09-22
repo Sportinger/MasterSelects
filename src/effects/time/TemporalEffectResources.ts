@@ -5,7 +5,7 @@ import { SLIT_SCAN_PROTECTION_RESOURCE } from '../../services/operators/slitScan
 import { SLIT_SCAN_TIME_MAP_RESOURCE } from '../../services/operators/slitScanTimeMapGraph';
 import { SlitScanMaskRuntime } from './SlitScanMaskRuntime';
 import { TimeMapMediaRuntime } from './TimeMapMediaRuntime';
-import { setTemporalStatus } from './temporalResourcePreparation';
+import { isCollectingTemporalPreparations, setTemporalStatus } from './temporalResourcePreparation';
 import type { TemporalClipSource } from './temporalClipSource';
 import { SourceTemporalRuntime } from './SourceTemporalRuntime';
 import { useTimelineStore } from '../../stores/timeline';
@@ -29,6 +29,7 @@ export class TemporalEffectResources {
     return this.native.resolve({ key: JSON.stringify([scopeId, effect.id]), effectId: effect.id, media, source,
       horizon: Math.max(0, Math.min(4, Number(effect.params.delay ?? 1))), samples: Number(effect.params.temporalSamples ?? 32),
       nearest: effect.params.temporalInterpolation === 'nearest', encoder, keepPending: useTimelineStore.getState().isPlaying,
+      useProxy: useMediaStore.getState().proxyEnabled && !isCollectingTemporalPreparations(),
       maxEdge: effect.params.temporalResolution === 'native' ? undefined : 160 });
   }
 

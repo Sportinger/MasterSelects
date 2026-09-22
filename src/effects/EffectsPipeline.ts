@@ -1,5 +1,6 @@
 import { InputHistoryRuntime } from './time/InputHistoryRuntime';
 import { TemporalEffectResources } from './time/TemporalEffectResources';
+import { isCollectingTemporalPreparations, setTemporalStatus } from './time/temporalResourcePreparation';
 import type { ClipMask } from '../types/masks';
 import type { TemporalClipSource } from './time/temporalClipSource';
 import { nodeScalarSampleTap } from '../services/nodePreview/NodeScalarSampleTap';
@@ -397,15 +398,21 @@ export class EffectsPipeline {
           String(effect.params.temporalInterpolation ?? 'linear'),
           effect.params.temporalMode === 'prepared' && effect.params.temporalResolution === 'native') : undefined);
       const imageExternalResources = imagePlan ? new Map(resolveImageGraphExternalResources(this.device, imagePlan, { resolveMemoryWindow, resolveInputHistory: inputHistory ? descriptor => inputHistory[descriptor.part] : undefined })) : undefined;
-      if (imageExternalResources && imagePlan) this.temporalResources.resolveNamed(imageExternalResources,
-        imagePlan.resourceInputs ?? [], effect, frameHistory?.scopeId ?? clock.scopeId,
-        timelineTimeSeconds, sourceMasks, outputWidth, outputHeight, commandEncoder);
-      if (nativeTemporal && imagePlan && preparedImage && imageExternalResources) {
-        const nativeHistory = this.temporalResources.resolveNative(effect,
-          frameHistory?.scopeId ?? clock.scopeId, temporalSource, commandEncoder);
-        if (nativeHistory) for (const resource of imagePlan.externalResources ?? []) {
-          if (resource.kind === 'input-history') imageExternalResources.set(resource.id, nativeHistory[resource.part]);
+      try {
+        if (imageExternalResources && imagePlan) this.temporalResources.resolveNamed(imageExternalResources,
+          imagePlan.resourceInputs ?? [], effect, frameHistory?.scopeId ?? clock.scopeId,
+          timelineTimeSeconds, sourceMasks, outputWidth, outputHeight, commandEncoder);
+        if (nativeTemporal && imagePlan && preparedImage && imageExternalResources) {
+          const nativeHistory = this.temporalResources.resolveNative(effect,
+            frameHistory?.scopeId ?? clock.scopeId, temporalSource, commandEncoder);
+          if (nativeHistory) for (const resource of imagePlan.externalResources ?? []) {
+            if (resource.kind === 'input-history') imageExternalResources.set(resource.id, nativeHistory[resource.part]);
+          }
         }
+      } catch (error) {
+        setTemporalStatus(effect.id, `Effect unavailable: ${error instanceof Error ? error.message : String(error)}`);
+        if (isCollectingTemporalPreparations()) throw error; // Export must not silently omit an effect.
+        continue; // Keep the input and let the rest of the preview stack render.
       }
       if (feedbackState && imagePlan?.frameHistoryResource) imageExternalResources?.set(imagePlan.frameHistoryResource, {
         view: feedbackState.committedView,

@@ -9,7 +9,7 @@ export const slitScanParams: Record<string, EffectParam> = {
   ] },
   temporalSamples: { ...number('Samples', 32, 2, 64, 1, 'Sampling'), animatable: false },
   temporalResolution: { type: 'select', label: 'Resolution', default: '160', group: 'Sampling', options: [
-    { value: 'native', label: 'Full source resolution (streamed)' },
+    { value: 'native', label: 'Full size (follows preview Proxy mode)' },
     { value: '160', label: 'Small preview · 160 px' },
   ] },
   protectionMask: { type: 'text', label: 'Protection mask', default: '', group: 'Resources' },

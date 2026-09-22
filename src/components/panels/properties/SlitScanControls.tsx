@@ -22,9 +22,9 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId }:
     <ResolveInspectorSection title="Preview quality" defaultOpen>
       <ResolveInspectorRow label="Quality"><InspectorSelect ariaLabel="Slit Scan preview quality"
         value={params.temporalResolution === 'native' ? 'full' : 'preview'}
-        options={[{ value: 'preview', label: 'Small preview · 160 px' }, { value: 'full', label: 'Full Res · source resolution' }]}
+        options={[{ value: 'preview', label: 'Small preview · 160 px' }, { value: 'full', label: 'Full size · follows Proxy mode' }]}
         onChange={value => onChange({ ...params, temporalResolution: value === 'full' ? 'native' : '160' })} /></ResolveInspectorRow>
-      <p className="effect-info">Both qualities use the same source times, including after a seek. Only spatial resolution changes. Source frames are cached for playback. After a seek, missing frames load into the preview.</p>
+      <p className="effect-info">Both qualities use the same source times. Full size uses the full proxy resolution when timeline Proxy mode is on, otherwise the original resolution. Small preview scales to 160 px. Composition size stays unchanged.</p>
       {preparationStatus && <p className="effect-info" role="status">{preparationStatus}</p>}
     </ResolveInspectorSection>
     <ResolveInspectorSection title="Time map source" defaultOpen>

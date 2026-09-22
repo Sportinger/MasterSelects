@@ -1,35 +1,37 @@
 import { afterEach, expect, it, vi } from 'vitest';
-const mock = vi.hoisted(() => ({ read: vi.fn(), batches: vi.fn(), close: vi.fn(), upload: vi.fn() }));
-vi.mock('../../src/engine/texture/TemporalFrameUploader', () => ({ TemporalFrameUploader: class { upload = mock.upload; } }));
+const mock = vi.hoisted(() => ({ read: vi.fn(), batches: vi.fn(), close: vi.fn(), upload: vi.fn(), proxySize: vi.fn() }));
+vi.mock('../../src/effects/time/SourceProxyDimensions', () => ({ SourceProxyDimensions: class { resolve = mock.proxySize; destroy() {} } }));
+vi.mock('../../src/engine/texture/TemporalFrameUploader', () => ({ TemporalFrameUploader: class { upload = mock.upload; destroy() {} } }));
 vi.mock('../../src/services/mediaRuntime/sourceFrames/SourceFrameService', () => ({ sourceFrameService: {
   acquire: () => ({ ready: Promise.resolve({ frames: Array.from({ length: 1000 }, (_, i) => ({ time: i / 30, duration: 1 / 30 })) }),
     cancel: vi.fn(), release: mock.close,
-    async request({ times, priority, onFrame }: any) {
-      mock.batches(times, priority);
-      for (const time of [...times].toSorted((a, b) => a - b)) { await mock.read(time); onFrame({ time }); }
+    async request({ times, priority, onFrame, proxyFps }: any) {
+      mock.batches(times, priority, proxyFps);
+      for (const time of [...times].toSorted((a, b) => a - b)) { await mock.read(time); onFrame(proxyFps ? { time, image: {} } : { time }); }
     },
   }),
 } }));
 import { SourceTemporalRuntime, sourceTemporalWindow } from '../../src/effects/time/SourceTemporalRuntime';
-import { collectTemporalPreparations } from '../../src/effects/time/temporalResourcePreparation';
+import { collectTemporalPreparations, getTemporalStatus } from '../../src/effects/time/temporalResourcePreparation';
 import type { SourceTemporalRequest } from '../../src/effects/time/SourceTemporalRuntime';
 
 function setup() {
   vi.stubGlobal('GPUTextureUsage', { TEXTURE_BINDING: 1, COPY_DST: 2 });
   mock.read.mockResolvedValue(undefined);
   const writes = vi.fn();
+  const createTexture = vi.fn(() => ({ createView: () => ({}), destroy: vi.fn() }));
   const device = { limits: { maxTextureDimension2D: 8192 }, queue: { writeTexture: writes, copyExternalImageToTexture: vi.fn() },
-    createTexture: () => ({ createView: () => ({}), destroy() {} }) } as unknown as GPUDevice;
+    createTexture } as unknown as GPUDevice;
   const request = { key: 'clip', effectId: 'effect', media: { id: 'media', url: 'blob:media', width: 2, height: 1 },
     source: { mediaId: 'media', localTime: 10, duration: 30, inPoint: 0, outPoint: 30, speed: 1, speedKeyframes: [] },
     horizon: 4, samples: 64, nearest: true, encoder: {} } as SourceTemporalRequest;
-  return { runtime: new SourceTemporalRuntime(device), request, writes };
+  return { runtime: new SourceTemporalRuntime(device), request, writes, createTexture };
 }
 async function prepare(runtime: SourceTemporalRuntime, request: SourceTemporalRequest) {
   const finish = collectTemporalPreparations(); runtime.resolve(request); await Promise.all(finish());
   return runtime.resolve(request);
 }
-afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.clearAllMocks(); mock.proxySize.mockReset(); vi.unstubAllGlobals(); });
 
 it('reuses historical PTS during playback instead of decoding the whole window each output frame', async () => {
   const { runtime, request } = setup();
@@ -84,4 +86,55 @@ it('uploads each source PTS once and retains it across repeated renders', async 
   expect(mock.upload).toHaveBeenCalledTimes(uploads);
   runtime.destroy();
   expect(mock.close).toHaveBeenCalledTimes(1);
+});
+
+it('renders native 4K with a fitting sample count and bounds prefetch by actual capacity', async () => {
+  const { runtime, request, createTexture } = setup();
+  const full = { ...request, media: { ...request.media, width: 3840, height: 2160 }, samples: 16, keepPending: true };
+  await prepare(runtime, full);
+  await vi.waitFor(() => expect(mock.upload).toHaveBeenCalledTimes(18));
+  expect(createTexture).toHaveBeenCalledWith(expect.objectContaining({ size: [3840, 2160, 18] }));
+  expect(mock.batches.mock.calls.map(call => [call[0].length, call[1]])).toEqual([[15, 'required'], [3, 'prefetch']]);
+  // A later seek still recycles slots; reducing prefetch must not exhaust the atlas.
+  await prepare(runtime, { ...full, source: { ...full.source, localTime: 20 } });
+  runtime.destroy();
+});
+
+it('rejects oversized native requests before allocation and recovers after choosing Small preview', async () => {
+  const { runtime, request, createTexture } = setup();
+  const full = { ...request, media: { ...request.media, width: 3840, height: 2160 }, samples: 32 };
+  expect(() => runtime.resolve(full)).toThrow(/at most 19 samples or Small preview/);
+  expect(createTexture).not.toHaveBeenCalled();
+  await prepare(runtime, { ...full, maxEdge: 160 });
+  expect(createTexture).toHaveBeenCalledWith(expect.objectContaining({ size: [160, 90, 35] }));
+  runtime.destroy();
+});
+
+it('reallocates for sample-count changes without leaving the previous GPU cache resident', async () => {
+  const { runtime, request, createTexture } = setup();
+  await prepare(runtime, { ...request, samples: 8 });
+  const oldAtlas = createTexture.mock.results[0].value;
+  await prepare(runtime, { ...request, samples: 32 });
+  expect(oldAtlas.destroy).toHaveBeenCalledOnce();
+  expect(createTexture).toHaveBeenCalledWith(expect.objectContaining({ size: [2, 1, 35] }));
+  runtime.destroy();
+});
+
+it('uses actual full proxy dimensions for a 4K clip with 64 samples and releases them when Proxy is disabled', async () => {
+  const { runtime, request, createTexture } = setup();
+  mock.proxySize.mockReturnValue({ width: 1280, height: 720 });
+  const proxy = { ...request, useProxy: true,
+    media: { ...request.media, width: 3840, height: 2160, proxyStatus: 'ready' as const, proxyFps: 30 } };
+  await prepare(runtime, proxy);
+  expect(createTexture).toHaveBeenCalledWith(expect.objectContaining({ size: [1280, 720, 67] }));
+  expect(mock.batches.mock.calls[0][2]).toBe(30);
+  expect(getTemporalStatus(request.effectId)).toContain('Full size · Proxy · 1280 × 720');
+  const proxyAtlas = createTexture.mock.results[0].value;
+  expect(() => runtime.resolve({ ...proxy, useProxy: false })).toThrow(/640 MiB/);
+  expect(proxyAtlas.destroy).toHaveBeenCalledOnce();
+  await prepare(runtime, { ...proxy, useProxy: false, samples: 16 });
+  expect(createTexture).toHaveBeenCalledWith(expect.objectContaining({ size: [3840, 2160, 18] }));
+  expect(mock.batches.mock.calls.at(-1)![2]).toBeUndefined();
+  expect(getTemporalStatus(request.effectId)).toContain('Full size · Original · 3840 × 2160');
+  runtime.destroy();
 });

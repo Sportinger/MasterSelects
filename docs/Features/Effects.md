@@ -46,16 +46,20 @@ Saved graph edits, effect bypass and numeric keyframes use the existing editor p
   and speed. Render preceding effects to an intermediate video to include them;
   arbitrary preceding effect stacks are not reevaluated.
 - **Preview quality** at the top of the inspector switches between Small preview
-  (160 px maximum edge) and Full Res. Both use the same source timestamps and sample
-  count during playback, after seeks, and during export. Only spatial resolution
-  changes. There is no rolling-history mode or playback-only sampling fallback.
+  (160 px maximum edge) and Full size. Both use the same source timestamps and sample
+  count. Full size follows timeline Proxy mode: it uses the actual full JPEG proxy
+  dimensions when enabled, otherwise original resolution. The composition/output
+  dimensions remain unchanged, including 4K. The inspector status identifies Proxy,
+  Original or mixed fallback frames and the actual cache dimensions. Full-size
+  export uses originals regardless of the preview Proxy switch. There is no
+  rolling-history mode or playback-only temporal sampling fallback.
 - **Source-frame cache**: historical samples use an absolute clip-time grid,
   with the current frame supplied by normal playback. Adjacent output frames reuse
   source PTS in a GPU texture array. A shared source-frame service coalesces requests
   from temporal consumers and borrows exact native VideoFrames already resident in
   the media runtime, without seeking the playback decoder. Missing frames use one
   independent sequential decoder cursor per source, reused across nearby forward
-  refills and released after inactivity. Required frames take priority over the four
+  refills and released after inactivity. Required frames take priority over up to four
   future grid samples prefetched during playback; superseded seeks cancel obsolete
   requests. Full/Small changes reuse the source index during a short grace period.
   A WebGPU pass writes each newly needed frame into the persistent array, applying
@@ -64,13 +68,23 @@ Saved graph edits, effect bypass and numeric keyframes use the existing editor p
   after submission rather than pinned in another raw-frame cache, which can exhaust
   hardware decoder surfaces. Tracking's CPU frame reader is unchanged. The graph
   samples this array directly instead of baking a complete image each output frame.
-  Small/full resolution use the same grid. The bounded cache reserves 68 layers
-  with a two-frame allowance within 640 MiB across active owners (browser-managed
-  decoder storage is separate). Sources that
-  exceed this budget report an error instead of silently reducing Full Res.
-- **Low-mode limit**: Small preview currently decodes the original and scales on
-  the GPU. The existing proxy-frame cache is not connected to this temporal path;
-  decoding a distant source window can therefore cost similarly in both qualities.
+  Small/full resolution use the same grid. The cache allocates the requested
+  history plus up to four optional prefetch layers, with a two-frame allowance
+  within 640 MiB across active owners (browser-managed decoder storage is separate).
+  For a single original 3840 × 2160 source this allows up to 19 total samples;
+  1080p originals and 1280 × 720 proxies support 64. Oversized requests show an actionable inspector status and
+  bypass only the affected effect in preview; the image and subsequent effects
+  remain visible. Export fails explicitly rather than omitting the effect.
+  Neither resolution nor sample count is silently reduced.
+- **Proxy reuse**: Small preview and Full size with timeline Proxy mode enabled
+  reuse exact JPEG frames from the existing proxy cache with bounded load concurrency. Their
+  indices must map unambiguously back to the requested source PTS. Missing,
+  corrupt or ambiguous frames fall back to original decoding. Legacy all-intra
+  video proxies and TurboRes/HAP proxy contracts are not used by this path.
+  Full size reads actual proxy dimensions before allocating the atlas, rather
+  than expanding every proxy to the original 4K dimensions. Full size with Proxy
+  disabled, and full-size export, use original frames. No proxy generation is
+  started by the effect itself; use the existing media workflow.
 - **Temporal sampling**: Blend adjacent frames is linear interpolation and can
   produce double contours when objects move. Nearest frame disables this blending;
   it does not change spatial resolution. Time bands only quantize the time map.
@@ -92,6 +106,9 @@ Playback reuses cached source frames; decoder speed still limits cache refill. C
 never saved in project JSON. Node previews borrow the effect's source resources.
 Legacy saved `temporalMode` values no longer select a separate rolling mode;
 existing spatial graph wiring is preserved.
+
+See [Temporal frame access](../architecture/Temporal-Frame-Access.md) for shared
+service ownership, other consumers and migration candidates.
 
 ## Registry And UI
 

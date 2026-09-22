@@ -2,12 +2,19 @@ import { mediaRuntimeRegistry } from '../registry';
 import type { MediaSourceRuntime } from '../types';
 import { surfaceFrameIndex } from '../../planarTracking/surfaceFrameReader';
 import { openSourceFrameReader, type SourceFrameAsset, type SourceFrameReader, type SourceFrameSurface } from './SourceFrameReader';
+import { readSourceProxyFrames, type SourceProxySurface } from './SourceProxyFrames';
+import { Logger } from '../../logger';
+
+export type SourceFrameResource = SourceFrameSurface | SourceProxySurface;
+const log = Logger.create('SourceFrames');
 
 export interface SourceFrameRequest {
   times: readonly number[];
   priority: 'required' | 'prefetch';
   signal?: AbortSignal;
-  onFrame(surface: SourceFrameSurface): void;
+  /** Only supported JPEG proxies with an unambiguous source-PTS mapping. */
+  proxyFps?: number;
+  onFrame(surface: SourceFrameResource): void;
 }
 interface Job extends SourceFrameRequest {
   owner: symbol; remaining: Set<number>; resolve(): void; reject(error: unknown): void; detach(): void;
@@ -88,8 +95,9 @@ export class SourceFrameService {
     });
   }
 
-  private deliver(source: Source, surface: SourceFrameSurface) {
+  private deliver(source: Source, surface: SourceFrameResource) {
     for (const job of [...source.jobs]) {
+      if ('image' in surface && !job.proxyFps) continue; // Original-only requests never receive proxy pixels.
       if (!job.remaining.has(surface.time)) continue;
       try { job.onFrame(surface); job.remaining.delete(surface.time); }
       catch (error) { this.finish(source, job, error); continue; }
@@ -100,6 +108,8 @@ export class SourceFrameService {
   private async pump(source: Source) {
     if (source.running || source.abort.signal.aborted) return;
     source.running = true;
+    const started = performance.now();
+    let proxyFrames = 0, decodedFrames = 0;
     try {
       const reader = await source.ready;
       while (source.jobs.size && !source.abort.signal.aborted) {
@@ -124,9 +134,23 @@ export class SourceFrameService {
         }
         const required = [...source.jobs].filter(job => job.priority === 'required');
         const selected = required.length ? required : [...source.jobs];
+        const proxyRates = new Set(selected.map(job => job.proxyFps).filter((fps): fps is number => !!fps));
+        for (const fps of proxyRates) {
+          const proxyJobs = selected.filter(job => job.proxyFps === fps);
+          await readSourceProxyFrames({ mediaId: source.asset.id, frames: reader.frames, fps, rotation: reader.rotation,
+            times: [...new Set(proxyJobs.flatMap(job => [...job.remaining]))],
+            shouldContinue: () => !source.abort.signal.aborted && proxyJobs.some(job => source.jobs.has(job))
+              && (required.length > 0 || ![...source.jobs].some(job => job.priority === 'required')),
+            onFrame: surface => { proxyFrames++; this.deliver(source, surface); },
+          });
+        }
+        // Proxy callbacks may finish/cancel jobs or admit higher-priority work.
+        if (selected.some(job => !source.jobs.has(job))
+          || (!required.length && [...source.jobs].some(job => job.priority === 'required'))) continue;
         const times = [...new Set(selected.flatMap(job => [...job.remaining]))].toSorted((a, b) => a - b);
         if (!times.length) continue;
         for await (const surface of reader.read(times)) {
+          decodedFrames++;
           if (!source.jobs.size || source.abort.signal.aborted) break;
           // Newly arrived consumers can join a frame already being decoded.
           this.deliver(source, surface);
@@ -142,6 +166,9 @@ export class SourceFrameService {
     } catch (error) {
       for (const job of [...source.jobs]) this.finish(source, job, error);
     } finally {
+      if (proxyFrames + decodedFrames >= 8) log.info('Temporal source window prepared', {
+        mediaId: source.asset.id, proxyFrames, decodedFrames, elapsedMs: Math.round(performance.now() - started),
+      });
       source.running = false;
       if (source.jobs.size && !source.abort.signal.aborted) void this.pump(source);
       else if (!source.abort.signal.aborted) source.idleTimer = setTimeout(() => {

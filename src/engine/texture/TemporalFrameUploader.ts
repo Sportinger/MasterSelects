@@ -1,4 +1,4 @@
-import type { SourceFrameSurface } from '../../services/mediaRuntime/sourceFrames/SourceFrameReader';
+import type { SourceFrameResource } from '../../services/mediaRuntime/sourceFrames/SourceFrameService';
 
 const shader = /* wgsl */`
 @group(0) @binding(0) var source: texture_external;
@@ -21,30 +21,48 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
  * Resize, container rotation and external-texture color conversion run on WebGPU.
  * Submit before the callback returns: closing the VideoFrame expires its import. */
 export class TemporalFrameUploader {
-  private pipelines = new Map<number, GPURenderPipeline>();
+  private pipelines = new Map<string, GPURenderPipeline>();
   private sampler: GPUSampler;
   private module: GPUShaderModule;
+  private imageModule: GPUShaderModule;
+  private imageTexture?: GPUTexture;
   private device: GPUDevice;
   constructor(device: GPUDevice) {
     this.device = device;
     this.sampler = device.createSampler({ minFilter: 'linear', magFilter: 'linear' });
     this.module = device.createShaderModule({ label: 'temporal-frame-upload', code: shader });
+    this.imageModule = device.createShaderModule({ label: 'temporal-proxy-upload', code: shader
+      .replace('source: texture_external', 'source: texture_2d<f32>')
+      .replace('textureSampleBaseClampToEdge(source, linearSampler, uv)', 'textureSampleLevel(source, linearSampler, uv, 0.0)') });
   }
 
-  upload(surface: SourceFrameSurface, atlas: GPUTexture, layer: number) {
-    if (!surface.frame.codedWidth) throw new Error('Temporal source frame was closed before upload.');
+  upload(surface: SourceFrameResource, atlas: GPUTexture, layer: number) {
+    const isImage = 'image' in surface;
+    if (!isImage && !surface.frame.codedWidth) throw new Error('Temporal source frame was closed before upload.');
     const rotation = ((surface.rotation % 360) + 360) % 360;
     if (![0, 90, 180, 270].includes(rotation)) throw new Error('Unsupported source rotation.');
-    let pipeline = this.pipelines.get(rotation);
+    const key = `${isImage ? 'image' : 'video'}:${rotation}`;
+    let pipeline = this.pipelines.get(key);
     if (!pipeline) {
       pipeline = this.device.createRenderPipeline({ label: 'temporal-frame-upload', layout: 'auto',
         vertex: { module: this.module, entryPoint: 'vertex' },
-        fragment: { module: this.module, entryPoint: 'fragment', constants: { rotation }, targets: [{ format: 'rgba8unorm' }] },
+        fragment: { module: isImage ? this.imageModule : this.module, entryPoint: 'fragment', constants: { rotation }, targets: [{ format: 'rgba8unorm' }] },
         primitive: { topology: 'triangle-list' } });
-      this.pipelines.set(rotation, pipeline);
+      this.pipelines.set(key, pipeline);
     }
+    let resource: GPUTextureView | GPUExternalTexture;
+    if (isImage) {
+      if (this.imageTexture?.width !== surface.width || this.imageTexture.height !== surface.height) {
+        this.imageTexture?.destroy();
+        this.imageTexture = this.device.createTexture({ label: 'temporal-proxy-transfer',
+          size: [surface.width, surface.height], format: 'rgba8unorm',
+          usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT });
+      }
+      this.device.queue.copyExternalImageToTexture({ source: surface.image }, { texture: this.imageTexture }, [surface.width, surface.height]);
+      resource = this.imageTexture.createView();
+    } else resource = this.device.importExternalTexture({ source: surface.frame, colorSpace: 'srgb' });
     const bindGroup = this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
-      { binding: 0, resource: this.device.importExternalTexture({ source: surface.frame, colorSpace: 'srgb' }) },
+      { binding: 0, resource },
       { binding: 1, resource: this.sampler },
     ] });
     const encoder = this.device.createCommandEncoder({ label: 'temporal-frame-upload' });
@@ -55,4 +73,5 @@ export class TemporalFrameUploader {
     pass.setPipeline(pipeline); pass.setBindGroup(0, bindGroup); pass.draw(3); pass.end();
     this.device.queue.submit([encoder.finish()]);
   }
+  destroy() { this.imageTexture?.destroy(); this.imageTexture = undefined; }
 }

@@ -270,6 +270,12 @@ NestedCompRenderer → OutputPipeline → SlicePipeline.
 
 Permanent architecture rules:
 
+- Before adding multi-time video sampling or an auxiliary video texture, read
+  [Temporal frame access](docs/architecture/Temporal-Frame-Access.md). Reuse
+  `SourceFrameService` and the GPU upload path for source-frame consumers; do not
+  add a decoder per requested frame. Source history and previous-output feedback
+  are different contracts. The current Slit Scan integration is effect-specific:
+  adding `image.sample-history` to another effect does not opt it into this path.
 - Product-source ceiling is 700 LOC per file. Splits must reduce real
   coupling — no `helpers.ts`/`utils.ts` dumping grounds, no blind splits.
 - Runtime handles (File, Blob, object URLs, DOM/media elements,

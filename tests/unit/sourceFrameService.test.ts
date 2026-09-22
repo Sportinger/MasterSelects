@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ open: vi.fn(), cache: new Map(), publish: vi.fn(), retain: vi.fn(), release: vi.fn() }));
+const mocks = vi.hoisted(() => ({ open: vi.fn(), cache: new Map(), publish: vi.fn(), retain: vi.fn(), release: vi.fn(), proxy: vi.fn() }));
+vi.mock('../../src/services/proxyFrameCache', () => ({ proxyFrameCache: {
+  getNearestCachedFrameEntry: () => null, getFrame: mocks.proxy,
+} }));
 vi.mock('../../src/services/mediaRuntime/registry', () => ({ mediaRuntimeRegistry: {
   retainRuntime: mocks.retain, releaseRuntime: mocks.release,
 } }));
@@ -32,6 +35,7 @@ function fakeReader() {
 beforeEach(() => {
   vi.stubGlobal('VideoFrame', Frame); reader = fakeReader();
   mocks.open.mockResolvedValue(reader);
+  mocks.proxy.mockResolvedValue(null);
   mocks.retain.mockReturnValue({ sourceId: 'media:video', frameCache: mocks.cache, cacheFrame: mocks.publish });
   service = new SourceFrameService();
 });
@@ -93,4 +97,26 @@ it('keeps the reader through a quality switch, then releases it after the last o
   expect(mocks.open).toHaveBeenCalledTimes(1); expect(reader.close).not.toHaveBeenCalled();
   b.release(); await vi.advanceTimersByTimeAsync(2500);
   expect(reader.close).toHaveBeenCalledOnce(); expect(mocks.release).toHaveBeenCalledOnce();
+});
+
+it('serves Low from the proxy cache while the same PTS still decodes native pixels for Full Res', async () => {
+  const image = { complete: true, naturalWidth: 4, naturalHeight: 2 };
+  mocks.proxy.mockResolvedValue(image);
+  const low = service.acquire(asset), full = service.acquire(asset), lowFrame = vi.fn(), fullFrame = vi.fn();
+  await Promise.all([
+    low.request({ times: [1], proxyFps: 10, priority: 'required', onFrame: lowFrame }),
+    full.request({ times: [1], priority: 'required', onFrame: fullFrame }),
+  ]);
+  expect(lowFrame.mock.calls[0][0].image).toBe(image);
+  expect(fullFrame.mock.calls[0][0].frame).toBeInstanceOf(Frame);
+  expect(reader.batches).toEqual([[1]]);
+});
+
+it('decodes only missing proxy frames through the original source fallback', async () => {
+  mocks.proxy.mockImplementation(async (_id, time) => Math.floor(time * 10) === 10
+    ? { complete: true, naturalWidth: 4, naturalHeight: 2 } : null);
+  const lease = service.acquire(asset), seen = vi.fn();
+  await lease.request({ times: [1, 2], proxyFps: 10, priority: 'required', onFrame: seen });
+  expect(reader.batches).toEqual([[2]]);
+  expect(seen.mock.calls.map(call => call[0].time)).toEqual([1, 2]);
 });
