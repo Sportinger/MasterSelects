@@ -27,6 +27,12 @@ function makeSplatData(positions: Array<[number, number, number]>): Float32Array
 }
 
 describe('splatOrderSortCore', () => {
+  it('sorts compacted centers using output indices rather than original source IDs', () => {
+    const data = makeSplatData([[0, 0, -100], [0, 0, -1], [0, 0, -5], [0, 0, -20]]);
+    const centers = buildSplatCenters(data, 3, new Uint32Array([2, 1, 3]));
+    expect([...centers]).toEqual([0, 0, -5, 0, 0, -1, 0, 0, -20]);
+    expect([...sortSplatOrderByDepth(centers, IDENTITY, 3).order]).toEqual([2, 0, 1]);
+  });
   it('sorts splats back-to-front in right-handed view space', () => {
     const centers = buildSplatCenters(makeSplatData([
       [0, 0, -10],

@@ -28,10 +28,10 @@ function buildIdentityOrder(order: Uint32Array, count: number): Uint32Array {
   return order;
 }
 
-export function buildSplatCenters(data: Float32Array, splatCount: number): Float32Array {
+export function buildSplatCenters(data: Float32Array, splatCount: number, sourceIndices?: Uint32Array): Float32Array {
   const centers = new Float32Array(splatCount * 3);
   for (let i = 0; i < splatCount; i += 1) {
-    const srcBase = i * FLOATS_PER_SPLAT;
+    const srcBase = (sourceIndices ? sourceIndices[i] : i) * FLOATS_PER_SPLAT;
     const dstBase = i * 3;
     centers[dstBase + 0] = data[srcBase + 0];
     centers[dstBase + 1] = data[srcBase + 1];

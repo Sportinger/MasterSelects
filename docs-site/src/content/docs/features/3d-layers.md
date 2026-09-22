@@ -315,6 +315,8 @@ Transform and 3D render) use their displayed bypass behavior. Unchanged scene
 parameters reuse the compiled plan. Render budgets apply before attribute compute;
 reduced budgets sample across the entire source rather than retaining a file prefix,
 which can omit the visible surface of an ordered scan. Remapped branches use GPU
-depth sorting for their sampled output; full unmodified scans retain worker ordering.
+depth sorting only when positions move or precise output is requested. Static sampled
+and cropped branches retain independent worker ordering for their actual output IDs.
+Changing color, radius or rotation does not force per-frame GPU depth sorting.
 Lower **Original Splats ? Gaussian Surface ? Splat budget** to reduce full-scan work;
 0 retains every source splat. This is an effect setting and also affects export.

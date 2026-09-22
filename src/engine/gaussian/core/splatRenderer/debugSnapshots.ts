@@ -1,4 +1,6 @@
 export interface GaussianSplatRenderDebugSnapshot {
+  lastBranchRenders?: Record<string, { drawCount: number; sortMode?: 'worker' | 'gpu' | 'identity' }>;
+  sortMode?: 'worker' | 'gpu' | 'identity';
   clipId: string;
   sceneSplatCount: number;
   activeSplatCount: number;
@@ -21,6 +23,8 @@ interface RenderDebugLogger {
 }
 
 export interface SplatRenderDebugFrame {
+  branchId?: string;
+  sortMode?: 'worker' | 'gpu' | 'identity';
   clipId: string;
   sceneSplatCount: number;
   activeSplatCount: number;
@@ -74,6 +78,9 @@ export function recordSplatRenderDebug(
   if (!frame.colorWrite && snapshots.has(frame.clipId)) return;
 
   snapshots.set(frame.clipId, {
+    ...(frame.branchId ? { lastBranchRenders: { ...snapshots.get(frame.clipId)?.lastBranchRenders,
+      [frame.branchId]: { drawCount: frame.drawCount, sortMode: frame.sortMode } } } : {}),
+    sortMode: frame.sortMode,
     clipId: frame.clipId,
     sceneSplatCount: frame.sceneSplatCount,
     activeSplatCount: frame.activeSplatCount,

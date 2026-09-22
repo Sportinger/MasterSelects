@@ -49,6 +49,7 @@ export class SplatOrderSorter {
     clipId: string,
     data: Float32Array,
     splatCount: number,
+    sourceIndices?: Uint32Array,
   ) {
     this.clipId = clipId;
     this.orderBuffer = this.createInitialOrderBuffer(device, clipId, splatCount);
@@ -59,7 +60,7 @@ export class SplatOrderSorter {
     this.worker.addEventListener('message', this.handleWorkerMessage);
     this.worker.addEventListener('error', this.handleWorkerError);
 
-    const centers = buildSplatCenters(data, splatCount);
+    const centers = buildSplatCenters(data, splatCount, sourceIndices);
     this.worker.postMessage(
       {
         type: 'init',

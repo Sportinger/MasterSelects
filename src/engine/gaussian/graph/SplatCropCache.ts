@@ -29,7 +29,7 @@ export function compactCropIndices(source: Float32Array, sourceCount: number, sa
   return ids.slice(0, kept);
 }
 
-interface Entry { key: string; buffer: GPUBuffer; count: number }
+interface Entry { key: string; buffer: GPUBuffer; count: number; indices: Uint32Array }
 /** Runtime-only, bounded cache. Crop edits rescan; steady playback reuses GPU IDs. */
 export class SplatCropCache {
   private entries = new Map<string, { source: Float32Array; items: Entry[] }>();
@@ -48,7 +48,7 @@ export class SplatCropCache {
     const indices = compactCropIndices(source, sourceCount, sampling, crops);
     const buffer = device.createBuffer({ label: 'Cropped splat source indices', size: Math.max(4, indices.byteLength), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
     if (indices.length) device.queue.writeBuffer(buffer, 0, indices.buffer as ArrayBuffer);
-    const entry = { key, buffer, count: indices.length };
+    const entry = { key, buffer, count: indices.length, indices };
     if (cache.items.length >= 6) this.retired.push(cache.items.shift()!.buffer);
     cache.items.push(entry);
     return entry;
