@@ -100,6 +100,7 @@ export interface HistoryTimelineClipEditState {
   terrainScreenAnchor?: TimelineClip['terrainScreenAnchor'];
   terrainAnchorConnector?: TimelineClip['terrainAnchorConnector'];
   colorCorrection?: ColorCorrectionState;
+  sceneGraphOutput?: TimelineClip['sceneGraphOutput'];
   nodeGraph?: ClipNodeGraph;
   keyframes?: Keyframe[];
   masks?: ClipMask[];
@@ -173,6 +174,7 @@ export interface HistoryTimelineEditState {
     // Optional so schema v1 entries written before #299 stay readable.
     tempoMap?: TempoMap;
     masterAudioState?: MasterAudioState;
+    sharedSceneGraphs?: import('../../types/sharedSceneGraph').SharedSceneGraphs;
   };
 }
 
@@ -193,6 +195,7 @@ export interface CreateHistoryTimelineEditStateInput {
   markers?: TimelineMarker[];
   tempoMap?: TempoMap;
   masterAudioState?: MasterAudioState;
+  sharedSceneGraphs?: import('../../types/sharedSceneGraph').SharedSceneGraphs;
 }
 
 const HISTORY_RUNTIME_PAYLOAD_KEYS = new Set([
@@ -578,6 +581,7 @@ export function toHistoryTimelineClipEditState(
         terrainScreenAnchor: cloneTerrainScreenAnchor(clip.terrainScreenAnchor),
         terrainAnchorConnector: cloneTerrainAnchorConnector(clip.terrainAnchorConnector),
     colorCorrection: clip.colorCorrection,
+    sceneGraphOutput: clip.sceneGraphOutput,
     nodeGraph: clip.nodeGraph,
     keyframes: keyframes.length > 0 ? keyframes : undefined,
     masks: clip.masks && clip.masks.length > 0 ? clip.masks : undefined,
@@ -658,6 +662,7 @@ export function createHistoryTimelineEditState(
         : input.clipKeyframes ?? {}),
       markers: cloneHistoryPlainData(input.markers ?? []),
       tempoMap: input.tempoMap ? cloneHistoryPlainData(input.tempoMap) : undefined,
+      sharedSceneGraphs: cloneAudioPlainData(input.sharedSceneGraphs),
       masterAudioState: cloneAudioPlainData<MasterAudioState>(input.masterAudioState),
     },
   };

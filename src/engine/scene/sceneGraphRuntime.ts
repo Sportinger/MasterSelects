@@ -37,7 +37,8 @@ export function applySceneOperatorGraph(layer: SceneLayer3DData, definition?: Sc
 }
 
 const splatPlans = new WeakMap<SceneOperatorGraph, SplatGraphBranch[]>();
-export function expandSceneOperatorGraph(layer: SceneLayer3DData, definition?: SceneOperatorGraph): SceneLayer3DData[] {
+export function expandSceneOperatorGraph(layer: SceneLayer3DData, definition?: SceneOperatorGraph, selection?: { include?: string[]; exclude?: string[] }): SceneLayer3DData[] {
+  if (selection?.include?.length === 0) return [];
   if (layer.kind !== 'splat' || !definition) return [applySceneOperatorGraph(layer, definition)];
   if (!splatPlans.has(definition) || definition.graph.nodes.some(n => n.operator === 'values.oscillator')) {
     try {
@@ -49,7 +50,8 @@ export function expandSceneOperatorGraph(layer: SceneLayer3DData, definition?: S
       splatPlans.set(definition, []);
     }
   }
-  return splatPlans.get(definition)!.map(branch => ({ ...layer, splatGraphBranch: branch,
+  return splatPlans.get(definition)!.filter(branch => (!selection?.include || selection.include.includes(branch.outputNodeId ?? ''))
+    && !selection?.exclude?.includes(branch.outputNodeId ?? '')).map(branch => ({ ...layer, splatGraphBranch: branch,
     worldMatrix: branch.applyClipTransform ? layer.worldMatrix : new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]),
   }));
 }

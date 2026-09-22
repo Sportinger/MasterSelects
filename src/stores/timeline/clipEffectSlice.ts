@@ -181,6 +181,12 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
   },
 
   updateClipEffect: (clipId, effectId, params) => {
+    const state = get(), ref = state.clips.find(c => c.id === clipId)?.sceneGraphOutput;
+    const document = ref && state.sharedSceneGraphs?.[ref.graphId];
+    if (document?.effect.id === effectId) {
+      set({ sharedSceneGraphs: { ...state.sharedSceneGraphs, [document.id]: { ...document, effect: { ...document.effect, params: mergeLegacyEffectParamPatch(document.effect, params) } } } });
+      state.invalidateCache(); captureSnapshot('Adjust shared graph'); return;
+    }
     const { clips, clipKeyframes, invalidateCache } = get();
     const keyframes = clipKeyframes.get(clipId) ?? [];
     set({
@@ -208,6 +214,12 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
   },
 
   setClipEffectEnabled: (clipId, effectId, enabled) => {
+    const state = get(), ref = state.clips.find(c => c.id === clipId)?.sceneGraphOutput;
+    const document = ref && state.sharedSceneGraphs?.[ref.graphId];
+    if (document?.effect.id === effectId) {
+      set({ sharedSceneGraphs: { ...state.sharedSceneGraphs, [document.id]: { ...document, effect: { ...document.effect, enabled } } } });
+      state.invalidateCache(); captureSnapshot('Bypass shared graph'); return;
+    }
     const { clips, clipKeyframes, invalidateCache } = get();
     const keyframes = clipKeyframes.get(clipId) ?? [];
     set({

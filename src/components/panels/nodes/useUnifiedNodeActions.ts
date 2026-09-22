@@ -127,7 +127,9 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
         return;
       }
       // Expanded effect groups no longer contain their root proxy node.
-      const effectId = graph?.groups?.find(group => group.bypassNodeId === id)?.effectId;
+      const rootBinding = graph?.nodes.find(node => node.id === id)?.binding;
+      const effectId = graph?.groups?.find(group => group.bypassNodeId === id)?.effectId
+        ?? (rootBinding?.kind === 'clip-effect' ? rootBinding.effectId : undefined);
       if (!effectId) { route(id, (actions, node) => actions.toggleBypass(localId(node))); return; }
       safely(() => {
         const state = readTimelineRuntimeState(useTimelineStore), current = resolveClipOperatorOwner(state.clips.find(candidate => candidate.id === clip?.id), effectId, state.clips);

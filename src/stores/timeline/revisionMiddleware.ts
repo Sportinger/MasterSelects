@@ -1,3 +1,4 @@
+import { synchronizeSharedSceneGraphs } from './sharedSceneGraphSynchronization';
 import type { StateCreator, StoreApi } from 'zustand';
 
 import type { TimelineClip } from '../../types/timeline';
@@ -11,6 +12,7 @@ const WATCHED_TIMELINE_KEYS = [
   'clipKeyframes',
   'markers',
   'masterAudioState',
+  'sharedSceneGraphs',
   'duration',
   'durationLocked',
   'inPoint',
@@ -38,6 +40,7 @@ const HISTORY_SNAPSHOT_TIMELINE_KEYS = [
   'markers',
   'tempoMap',
   'masterAudioState',
+  'sharedSceneGraphs',
 ] as const satisfies readonly (keyof TimelineStore)[];
 
 type TimelineStatePatch = TimelineStore | Partial<TimelineStore>;
@@ -185,7 +188,7 @@ export const withTimelineRevision = (
     }
 
     const patch = typeof update === 'function' ? update(currentState) : update;
-    const revisedPatch = applyRevision(currentState, synchronizeKeyframeNodes(currentState, patch), replace);
+    const revisedPatch = applyRevision(currentState, synchronizeSharedSceneGraphs(currentState, synchronizeKeyframeNodes(currentState, patch)), replace);
 
     if (replace) {
       set(revisedPatch as TimelineStore, true);

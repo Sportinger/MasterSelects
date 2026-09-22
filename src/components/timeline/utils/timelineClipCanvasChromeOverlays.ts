@@ -137,13 +137,13 @@ export function createTimelineClipCanvasChromeOverlays(input: {
       id: clip.id,
       iconType,
       showIcon: !hasBodyPreview && !input.thumbnailVisibleClipIds?.has(clip.id),
-      label: clip.name,
+      label: clip.sceneGraphOutput ? `${clip.sceneGraphOutput.nodeIds ? '[out]' : '[graph]'} ${clip.name}` : clip.name,
       left: visibleLeft - input.chromeScrollX,
       width: visibleW,
       badges: createTimelineClipCanvasChromeBadges(passiveBadges),
       badgeReserve: getTimelineClipCanvasPassiveDecorationBadgeReserve(passiveBadges),
       isAudio: iconType === 'audio',
-      linked: Boolean(clip.linkedClipId || clip.linkedGroupId),
+      linked: Boolean(clip.linkedClipId || clip.linkedGroupId || clip.sceneGraphOutput),
     });
   }
   return overlays;

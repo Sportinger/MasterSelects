@@ -159,6 +159,7 @@ export interface TimelineClip {
   colorCorrection?: ColorCorrectionState;  // Professional node/list color correction state
   colorGradeMode?: ColorGradeMode; // Local clip grade or source-owned remote grade
   localColorCorrection?: ColorCorrectionState; // Preserved local grade while remote mode is active
+  sceneGraphOutput?: import('./sharedSceneGraph').SceneGraphOutput;
   nodeGraph?: ClipNodeGraph; // Field-backed node graph UI state for this clip
   isLoading?: boolean;    // True while media is being loaded
   needsReload?: boolean;  // True if file handle needs re-authorization after page refresh
@@ -303,6 +304,7 @@ export interface SerializableClip {
   colorCorrection?: ColorCorrectionState;
   colorGradeMode?: ColorGradeMode;
   localColorCorrection?: ColorCorrectionState;
+  sceneGraphOutput?: import('./sharedSceneGraph').SceneGraphOutput;
   nodeGraph?: ClipNodeGraph; // Field-backed node graph UI state
   keyframes?: Keyframe[];    // Animation keyframes for this clip
   // Nested composition support
@@ -419,6 +421,7 @@ export interface TempoMap {
 
 // Serializable timeline data for composition storage
 export interface CompositionTimelineData {
+  sharedSceneGraphs?: import('./sharedSceneGraph').SharedSceneGraphs;
   tracks: TimelineTrack[];
   clips: SerializableClip[];
   playheadPosition: number;

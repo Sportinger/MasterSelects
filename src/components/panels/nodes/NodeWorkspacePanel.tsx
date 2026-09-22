@@ -1,3 +1,4 @@
+import { SceneOutputNavigation } from './workspace/SceneOutputNavigation';
 import { readTimelineRuntimeState } from '../../../services/timeline/timelineRuntimeCoordinator';
 import { transferNodeGroup } from '../../../services/nodeGraph/transferNodeGroup';
 import { NodeCatalog } from './workspace/NodeCatalog';
@@ -13,6 +14,8 @@ import { startBatch, endBatch } from '../../../stores/historyStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import { NodeGraphCanvas, type NodeGraphMove } from './NodeGraphCanvas';
 import { reconnectNodePorts } from './canvas/reconnectNodePorts';
+import { sceneOutputTarget } from '../../../services/nodeGraph/sceneGraphOutputs';
+import { publishSceneGraphOutput } from '../../../services/nodeGraph/publishSceneGraphOutput';
 import { NodeContextMenu } from './workspace/NodeContextMenu';
 import { ConnectedNodeMenu } from './workspace/ConnectedNodeMenu';
 import type { NodeConnectionDrop } from '../../../types/nodeGraph';
@@ -418,6 +421,12 @@ export function NodeWorkspacePanel() {
             setPresetsOpen(false);
             if (!keyframesLocked) selectNode(addKeyframeNode(subject.id, { x: selectedNode?.layout.x ?? 0, y: (selectedNode?.layout.y ?? 0) - 270 }));
           }}>+ Keyframes</button>
+          {sceneOutputTarget(subject.clip, subject.graph, selectedNode) && <button type="button" className="node-workspace-breadcrumb-link"
+            disabled={keyframesLocked} onClick={event => {
+              if (event.detail > 0) event.currentTarget.blur();
+              const target = sceneOutputTarget(subject.clip, subject.graph, selectedNode);
+              if (target) publishSceneGraphOutput(subject.id, target);
+            }}>Show output in timeline</button>}
           <ControlNodeMenu clipId={subject.id} disabled={keyframesLocked} onAdded={selectNode}
             layout={{ x: selectedNode?.layout.x ?? 0, y: (selectedNode?.layout.y ?? 0) - 300 }} />
           {selectedNode?.groupId === 'color' && (
@@ -427,6 +436,7 @@ export function NodeWorkspacePanel() {
             </div>
           )}
         </div>
+        <SceneOutputNavigation clip={subject.clip} graph={subject.graph} onFocus={selectNode} />
         {subject.clip.flock && (
           <FlockGraphStatusBar
             clip={subject.clip}
@@ -437,6 +447,7 @@ export function NodeWorkspacePanel() {
         {unified.message && <div className="node-workspace-graph-message" role="status">{unified.message}<button type="button" onClick={unified.clearMessage}>Dismiss</button></div>}
         <NodeGraphCanvas
           key={subject.graph.id}
+          initialGroupId={subject.clip.sceneGraphOutput?.groupId}
           graph={displayGraph!}
           projectGroupStates={subject.projectGroupStates}
           selectedNodeId={selectedNode?.id ?? null}
@@ -490,6 +501,8 @@ export function NodeWorkspacePanel() {
           x={contextMenu.x}
           y={contextMenu.y}
           targetNode={contextMenuNode}
+          onPublishOutput={sceneOutputTarget(subject.clip, subject.graph, contextMenuNode) && !keyframesLocked
+            ? () => { const target = sceneOutputTarget(subject.clip, subject.graph, contextMenuNode); if (target) publishSceneGraphOutput(subject.id, target); closeContextMenu(); } : undefined}
           canDeleteTarget={canDeleteContext}
           canAddVisualBuiltIns={subject.clip.source?.type !== 'audio'}
           effectCategories={effectCategories}

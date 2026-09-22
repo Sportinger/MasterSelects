@@ -49,6 +49,7 @@ export interface StateSnapshot {
     // the active lane stay out as view state.
     tempoMap?: TempoMap;
     masterAudioState?: MasterAudioState;
+    sharedSceneGraphs?: import('../../types/sharedSceneGraph').SharedSceneGraphs;
   };
   timelineEditState?: HistoryTimelineEditState;
   media: {
@@ -143,6 +144,7 @@ export interface TimelineStoreState {
   markers: TimelineMarker[];
   tempoMap?: TempoMap;
   masterAudioState?: MasterAudioState;
+  sharedSceneGraphs?: import('../../types/sharedSceneGraph').SharedSceneGraphs;
   isExporting?: boolean;
 }
 

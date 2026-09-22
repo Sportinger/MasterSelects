@@ -1,3 +1,4 @@
+import { sharedSceneOutputLayer } from './sharedSceneOutputLayer';
 // LayerBuilderService orchestrates layer building and delegates audio/video synchronization.
 import type { TimelineClip, Layer, VideoBakeRegion } from '../../types';
 import type { FrameContext } from './types';
@@ -491,7 +492,7 @@ export class LayerBuilderService {
     if (layer && clip.is3D) {
       layer.is3D = true;
     }
-    if (layer) layer.sceneGraph = clip.nodeGraph?.scene;
+    if (layer) { layer.sceneGraph = clip.nodeGraph?.scene; Object.assign(layer, sharedSceneOutputLayer(clip, ctx.playheadPosition)); }
 
     return layer ? bindTerrainLayer(layer, clip, ctx.clips, ctx.playheadPosition) : null;
   }

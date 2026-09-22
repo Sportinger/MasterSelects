@@ -24,6 +24,10 @@ export interface ExportClipStateLike {
 }
 
 export interface BaseLayerPropsLike {
+  sharedSceneGraph?: import('../../../types/operatorGraph').SceneOperatorGraph;
+  sharedSceneTime?: number;
+  sharedSceneTransform?: import('../../../types/timelineCore').ClipTransform;
+  sceneGraphOutputSelection?: { include?: string[]; exclude?: string[] };
   sceneGraph?: import('../../../types/operatorGraph').SceneOperatorGraph;
   id: string;
   name: string;

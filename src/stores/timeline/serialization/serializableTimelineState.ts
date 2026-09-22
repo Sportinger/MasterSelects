@@ -36,6 +36,7 @@ type SerializableTimelineStateInput = Pick<
   | 'activeRulerLaneId'
   | 'videoBakeRegions'
   | 'masterAudioState'
+  | 'sharedSceneGraphs'
 >;
 
 function createSerializableTrack(track: TimelineTrack): TimelineTrack {
@@ -127,6 +128,7 @@ function createSerializableClip(
     localColorCorrection: clip.localColorCorrection
       ? structuredClone(clip.localColorCorrection)
       : undefined,
+    sceneGraphOutput: clip.sceneGraphOutput,
     nodeGraph: cloneClipNodeGraph(clip.nodeGraph),
     keyframes: keyframes.length > 0 ? keyframes : undefined,
     isComposition: clip.isComposition,
@@ -176,6 +178,7 @@ export function createSerializableTimelineState(
   state: SerializableTimelineStateInput,
 ): CompositionTimelineData {
   return {
+    sharedSceneGraphs: state.sharedSceneGraphs,
     tracks: state.tracks.map(createSerializableTrack),
     clips: state.clips.map(clip => createSerializableClip(clip, state.clipKeyframes)),
     playheadPosition: sanitizePlayheadPosition(state.playheadPosition, 0),

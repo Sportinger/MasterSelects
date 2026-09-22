@@ -71,6 +71,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       // No data - start with fresh default timeline
       set({
         tracks: DEFAULT_TRACKS.map(t => ({ ...t })),
+        sharedSceneGraphs: undefined,
         clips: [],
         playheadPosition: 0,
         duration: 60,
@@ -110,6 +111,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     );
 
     set({
+      sharedSceneGraphs: data.sharedSceneGraphs,
       tracks: data.tracks.map(t => ({ ...t })),
       clips: [], // We'll restore clips separately
       playheadPosition: safePlayheadPosition,
@@ -285,6 +287,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     runtimeAudioMeterBus.clearAll();
     set({
       clips: [],
+      sharedSceneGraphs: undefined,
       layers: [],
       selectedClipIds: new Set(),
       primarySelectedClipId: null,

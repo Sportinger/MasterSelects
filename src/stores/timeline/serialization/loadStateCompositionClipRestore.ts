@@ -208,6 +208,7 @@ function createCompositionAudioClip(serializedClip: SerializableClip, sourceDura
     localColorCorrection: serializedClip.localColorCorrection
       ? structuredClone(serializedClip.localColorCorrection)
       : undefined,
+    sceneGraphOutput: serializedClip.sceneGraphOutput,
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     isLoading: false,
     isComposition: true,
@@ -253,6 +254,7 @@ function createCompositionVideoClip(serializedClip: SerializableClip, sourceDura
     localColorCorrection: serializedClip.localColorCorrection
       ? structuredClone(serializedClip.localColorCorrection)
       : undefined,
+    sceneGraphOutput: serializedClip.sceneGraphOutput,
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     masks: serializedClip.masks || [],
     isLoading: true,

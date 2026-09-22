@@ -10,6 +10,7 @@ export function NodeContextMenu({
   canDeleteTarget,
   canAddVisualBuiltIns,
   effectCategories,
+  onPublishOutput,
   onClose,
   onDeleteNode,
   onAddAI,
@@ -25,6 +26,7 @@ export function NodeContextMenu({
   canDeleteTarget: boolean;
   canAddVisualBuiltIns: boolean;
   effectCategories: ReturnType<typeof getCategoriesWithEffects>;
+  onPublishOutput?: () => void;
   onClose: () => void;
   onDeleteNode: () => void;
   onAddAI: () => void;
@@ -53,6 +55,7 @@ export function NodeContextMenu({
       >
         {targetNode && (
           <>
+            {onPublishOutput && <button type="button" onClick={onPublishOutput}>Show output in timeline</button>}
             <button type="button" disabled={!canDeleteTarget} onClick={onDeleteNode}>Delete Node</button>
             <div className="node-workspace-context-separator" />
           </>

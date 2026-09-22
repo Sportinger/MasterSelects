@@ -1,3 +1,4 @@
+import { sharedSceneOutputLayer } from './sharedSceneOutputLayer';
 import { evaluateParameterSourceColorGrade } from '../parameterSources/parameterSourceRendering';
 import type { BlendMode } from '../../types/blendMode';
 import type { Keyframe } from '../../types/keyframes';
@@ -59,6 +60,7 @@ export function buildNestedLayerBase(
   );
 
   const baseLayer: Omit<Layer, 'source'> = {
+    ...sharedSceneOutputLayer(nestedClip, parentContext.timelineTime),
     sceneGraph: nestedClip.nodeGraph?.scene,
     id: `nested-layer-${nestedClip.id}`,
     name: nestedClip.name,

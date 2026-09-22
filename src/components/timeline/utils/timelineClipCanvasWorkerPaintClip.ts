@@ -32,7 +32,7 @@ export function createTimelineClipCanvasWorkerPaintClipInput(
   return {
     id: clip.id,
     trackId: clip.trackId,
-    label: clip.name,
+    label: clip.sceneGraphOutput ? `${clip.sceneGraphOutput.nodeIds ? '[out]' : '[graph]'} ${clip.name}` : clip.name,
     startTime: clip.startTime,
     duration: clip.duration,
     isAudio,

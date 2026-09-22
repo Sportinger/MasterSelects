@@ -1,3 +1,4 @@
+import { projectSceneGraphClip } from '../../../services/nodeGraph/sceneGraphOutputs';
 import { buildUnifiedClipGraph } from '../../../services/nodeGraph/unifiedClipGraph';
 import { usePreciseFaceTrack } from '../../../services/landmarkTracking/usePreciseFaceTrack';
 import { useMemo } from 'react';
@@ -38,6 +39,7 @@ export type NodeGraphSubject = NodeGraphClipSubject;
 
 export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): NodeGraphSubject | null {
   const clips = useTimelineStore((state) => state.clips);
+  const documents = useTimelineStore(state => state.sharedSceneGraphs);
   const tracks = useTimelineStore((state) => state.tracks);
   const selectedClipIds = useTimelineStore((state) => state.selectedClipIds);
   const primarySelectedClipId = useTimelineStore((state) => state.primarySelectedClipId);
@@ -58,7 +60,7 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): Node
       return null;
     }
 
-    const graphClip = withLegacyKeyframeNodes(createNodeGraphOwnerClip(graphContext), keyframes);
+    const graphClip = withLegacyKeyframeNodes(projectSceneGraphClip(createNodeGraphOwnerClip(graphContext), documents), keyframes);
     const document = buildClipNodeGraphDocument(graphClip, graphContext.ownerTrack ?? undefined, {
       linkedClip: graphContext.linkedClip,
       linkedTrack: graphContext.linkedTrack,
@@ -84,7 +86,7 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): Node
       kind: 'clip',
       id: graphClip.id,
       name: graphClip.name,
-      subtitle: graphContext.ownerTrack
+      subtitle: graphClip.sceneGraphOutput ? `${documents?.[graphClip.sceneGraphOutput.graphId]?.name ?? 'Shared graph'} ? ${graphClip.sceneGraphOutput.label}` : graphContext.ownerTrack
         ? `${graphContext.ownerTrack.name} / ${graphContext.ownerTrack.type}${linkedSubtitle}`
         : 'Timeline clip',
       clip: graphClip,
@@ -97,5 +99,5 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): Node
       view,
       availableViews: document.views,
     };
-  }, [graphContext, theme, clips, faceTracking.ready, faceTracking.createdAt, keyframes]);
+  }, [graphContext, documents, theme, clips, faceTracking.ready, faceTracking.createdAt, keyframes]);
 }

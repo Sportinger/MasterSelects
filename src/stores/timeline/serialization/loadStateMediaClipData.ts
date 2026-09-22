@@ -113,6 +113,7 @@ export function createRestoredMediaClip(params: {
     localColorCorrection: serializedClip.localColorCorrection
       ? structuredClone(serializedClip.localColorCorrection)
       : undefined,
+    sceneGraphOutput: serializedClip.sceneGraphOutput,
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     isLoading: !needsReload,
     masks: serializedClip.masks,

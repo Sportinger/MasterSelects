@@ -1,4 +1,5 @@
 import { splatEffectScene } from './splatEffectScene';
+import { getEffectiveScale } from '../../utils/transformScale';
 import type { LayerRenderData } from '../core/types';
 import type {
   SceneLayer3DData,
@@ -158,7 +159,16 @@ export function collectScene3DLayers(
 
     const source = layer.source;
     const worldTransform = buildWorldTransform(data);
-    const worldMatrix = buildSceneWorldMatrix(worldTransform);
+    let worldMatrix = buildSceneWorldMatrix(worldTransform);
+    const shared = layer.sharedSceneTransform;
+    if (shared) {
+      const scale = getEffectiveScale(shared.scale);
+      worldMatrix = multiplyMat4(buildSceneWorldMatrix({ position: shared.position,
+        anchor: shared.anchor ?? { x: 0, y: 0, z: 0 }, scale: { ...scale, z: scale.z ?? 1 },
+        rotationDegrees: shared.rotation,
+        rotationRadians: { x: shared.rotation.x * Math.PI / 180, y: shared.rotation.y * Math.PI / 180, z: shared.rotation.z * Math.PI / 180 },
+      }), worldMatrix);
+    }
     const base = {
       kind: resolveSceneLayerKind(data),
       layerId: layer.id,
@@ -323,6 +333,10 @@ export function collectScene3DLayers(
     });
   }
 
-  const definitions = new Map(layerData.map(data => [data.layer.id, data.layer.source?.type === 'gaussian-splat' ? splatEffectScene(data.layer.effects, data.layer.sceneGraph) : data.layer.sceneGraph]));
-  return result.flatMap(layer => expandSceneOperatorGraph(layer, definitions.get(layer.layerId)));
+  const definitions = new Map(layerData.map(data => [data.layer.id, data.layer.sharedSceneTime !== undefined ? data.layer.sharedSceneGraph : (data.layer.source?.type === 'gaussian-splat' ? splatEffectScene(data.layer.effects, data.layer.sceneGraph) : data.layer.sceneGraph)]));
+  const outputs = new Map(layerData.map(data => [data.layer.id, data.layer]));
+  return result.flatMap(layer => {
+    const output = outputs.get(layer.layerId);
+    return expandSceneOperatorGraph(output?.sharedSceneTime !== undefined && layer.kind === 'splat' ? { ...layer, mediaTime: output.sharedSceneTime } : layer, definitions.get(layer.layerId), output?.sceneGraphOutputSelection);
+  });
 }

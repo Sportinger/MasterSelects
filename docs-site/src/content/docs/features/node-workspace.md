@@ -9,6 +9,28 @@ editable branches for Gaussian attributes, particles and reconstructed mesh wire
 simulation forces and mesh materials are separate connected nodes. See
 [Splat Exploration nodes](/features/3d-layers/#splat-exploration-nodes) for execution and budgets.
 
+### Shared scene outputs in the timeline
+
+Select a Gaussian Surface, Mesh node, or a group containing those outputs and choose
+**Show output in timeline** in the toolbar or node context menu. This adds a video
+track with a linked output clip. The graph moves into a composition-owned document;
+each clip edits the same nodes. The original output excludes published branches,
+so mesh and particles are not drawn twice. Upstream crops and uploaded scan data
+continue to share the renderer caches and the same scene camera/depth buffer.
+
+The output navigation bar links the original, mesh, and particle views. Selecting
+an output focuses its group when available. Timeline labels mark `[graph]` and
+`[out]` clips. Output opacity, visibility, and additional transforms are local;
+the scan alignment and graph clock are shared. Moving the original clip moves its
+outputs once; trimming an output changes its visibility window without restarting
+the graph. Hiding the original does not hide dependent outputs. Deleting an output
+returns its branch to the original; deleting the original retains the graph for
+its remaining outputs. Graph documents and references participate in undo and
+project persistence.
+
+This first stage publishes Gaussian scene branches. Independent graph retiming,
+cross-composition output links, and independent graph copies are not exposed.
+
 Selecting a clip shows **all its nodes on one canvas**. Color, Flock, Face Cables and
 3D Scene appear as colored groups. Drag the group header to move its entire contents,
 including nested groups. The separate arrow collapses or expands the group;

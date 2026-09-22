@@ -60,12 +60,12 @@ export function compileSplatGraph(definition: SceneOperatorGraph, time = 0): Spl
       if (operations.some(op => op.kind !== 'sphere-crop')) throw new Error('Splats to Mesh accepts Splat Source and Sphere Crop nodes; other attribute modifiers are not supported.');
       const crops = operations.map(({ values: c }) => ({ center: [c[0], c[1], c[2]] as [number, number, number], radius: c[3], softness: c[4] }));
       const v = values(geometry), m = values(material);
-      result.push({ id: `${node.id}-${result.length}`, operations: [], applyClipTransform: transform,
+      result.push({ id: `${node.id}-${result.length}`, outputNodeId: node.id, operations: [], applyClipTransform: transform,
         mesh: { resolution: v[0], threshold: v[1], radius: v[2], opacity: m[3], tint: [m[0], m[1], m[2]], ...(crops.length ? { crops } : {}) } });
     } else {
       if (node.operator !== 'splat.render') throw new Error('Connect a Gaussian surface or reconstructed mesh to the output.');
       const operations = ops(parent(node, 'splats')); if (!operations) return;
-      result.push({ id: `${node.id}-${result.length}`, operations, applyClipTransform: transform, budget: values(node)[0] });
+      result.push({ id: `${node.id}-${result.length}`, outputNodeId: node.id, operations, applyClipTransform: transform, budget: values(node)[0] });
     }
     if (result.length > 8) throw new Error('Use at most eight rendered splat branches.');
   };

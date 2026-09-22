@@ -53,6 +53,7 @@ function createTimelineSnapshot(refs: HistoryStoreRefs): StateSnapshot['timeline
     clipKeyframes: keyframesObj,
     markers: deepClone(timeline?.markers || []),
     tempoMap: deepClone(timeline?.tempoMap),
+    sharedSceneGraphs: deepClone(timeline?.sharedSceneGraphs),
     masterAudioState: cloneMasterAudioState(timeline?.masterAudioState),
   };
 }
@@ -81,6 +82,7 @@ function createTimelineEditStateSnapshot(
     clipKeyframes: timeline.clipKeyframes,
     markers: timeline.markers || [],
     tempoMap: timeline.tempoMap,
+    sharedSceneGraphs: timeline.sharedSceneGraphs,
     masterAudioState: timeline.masterAudioState,
   });
 }
@@ -113,6 +115,7 @@ function createTimelineSnapshotFromEditState(
     ),
     markers: deepClone(restored.markers),
     tempoMap: deepClone(restored.tempoMap),
+    sharedSceneGraphs: restored.sharedSceneGraphs,
     masterAudioState: cloneMasterAudioState(restored.masterAudioState),
   };
 }

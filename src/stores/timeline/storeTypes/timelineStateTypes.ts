@@ -39,6 +39,7 @@ import type { ClipStemSeparationJobState } from './stemJobTypes';
 import type { TimelineMaskEditPreview } from '../maskEditPreview';
 
 export interface TimelineState {
+  sharedSceneGraphs?: import('../../../types/sharedSceneGraph').SharedSceneGraphs;
   tracks: TimelineTrack[];
   clips: TimelineClip[];
   playheadPosition: number;

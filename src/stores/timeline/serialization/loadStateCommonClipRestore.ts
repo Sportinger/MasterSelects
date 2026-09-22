@@ -27,6 +27,7 @@ export function applyCommonRestoredClipFields(serializedClip: SerializableClip):
   | 'colorGradeMode'
   | 'localColorCorrection'
   | 'nodeGraph'
+  | 'sceneGraphOutput'
   | 'masks'
   | 'speed'
   | 'preservesPitch'
@@ -58,6 +59,7 @@ export function applyCommonRestoredClipFields(serializedClip: SerializableClip):
     localColorCorrection: serializedClip.localColorCorrection
       ? structuredClone(serializedClip.localColorCorrection)
       : undefined,
+    sceneGraphOutput: serializedClip.sceneGraphOutput,
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     masks: serializedClip.masks,
     speed: serializedClip.speed,

@@ -65,6 +65,12 @@ export function editEffectGraph(clipId: string, effectId: string, label: string,
   try {
     if (effect.type === 'audio-math') state.updateClipAudioEffectInstance(clipId, effectId,
       { ...params, operatorGraph: JSON.stringify(graph) } as AudioEffectParams);
+    else if (clip.sceneGraphOutput && state.sharedSceneGraphs?.[clip.sceneGraphOutput.graphId]?.effect.id === effectId) {
+      const graphId = clip.sceneGraphOutput.graphId, document = state.sharedSceneGraphs?.[graphId];
+      if (!document || document.effect.id !== effectId) throw new Error('Shared graph unavailable.');
+      useTimelineStore.setState({ sharedSceneGraphs: { ...state.sharedSceneGraphs, [graphId]: { ...document,
+        effect: { ...effect, params, operatorGraph: packOperatorCompositions(graph) } } } });
+    }
     else state.updateClip(clipId, { effects: clip.effects.map(e => e.id === effectId ? { ...e, params, operatorGraph: packOperatorCompositions(graph) } : e) });
     state.invalidateCache(); renderHostPort.requestRender();
   } finally { if (batch.opened) endBatch(); }

@@ -63,6 +63,7 @@ export function applyHistorySnapshot(
       }
 
       timelineState = {
+        sharedSceneGraphs: deepClone(snapshot.timeline.sharedSceneGraphs),
         clips: snapshot.timeline.clips.map(cloneClipForHistory),
         tracks: snapshot.timeline.tracks.map(cloneTrackForHistory),
         selectedClipIds: new Set(snapshot.timeline.selectedClipIds || []),

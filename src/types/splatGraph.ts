@@ -12,6 +12,7 @@ export interface SplatSphereCrop {
 
 export interface SplatGraphBranch {
   id: string;
+  outputNodeId?: string;
   operations: SplatGraphOperation[];
   applyClipTransform: boolean;
   budget?: number;

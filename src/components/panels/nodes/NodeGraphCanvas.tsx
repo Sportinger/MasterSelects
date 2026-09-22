@@ -44,6 +44,7 @@ export interface NodeGraphMove {
 interface NodeGraphCanvasProps {
   graph: NodeGraph;
   projectGroupStates?: (collapsed: Record<string, boolean>) => NodeGraph;
+  initialGroupId?: string;
   selectedNodeId: string | null;
   /** Additional multi-selection (domains that support group operations). */
   selectedNodeIds?: readonly string[];
@@ -89,6 +90,7 @@ interface NodeDragGesture {
 export function NodeGraphCanvas({
   graph: sourceGraph,
   projectGroupStates,
+  initialGroupId,
   selectedNodeId,
   selectedNodeIds,
   onSelectNode,
@@ -233,8 +235,12 @@ export function NodeGraphCanvas({
   }, [onToggleGroup, sourceGraph.groups, foldViewport.request]);
   const clearSelectedEdge = useCallback(() => setSelectedEdgeId(null), []);
   useEffect(() => {
-    if (fittedGraph.current !== graph.id) { fittedGraph.current = graph.id; fitGraph(); }
-  }, [graph.id, fitGraph]);
+    if (fittedGraph.current !== graph.id) {
+      fittedGraph.current = graph.id;
+      const group = initialGroupId && graph.groups?.find(g => g.id.split('/').at(-1) === initialGroupId.split('/').at(-1));
+      if (group) focusGroup(group.id); else fitGraph();
+    }
+  }, [graph.id, graph.groups, initialGroupId, focusGroup, fitGraph]);
 
   const knownNodes = useRef(new Set(graph.nodes.map(node => node.id)));
   useEffect(() => {

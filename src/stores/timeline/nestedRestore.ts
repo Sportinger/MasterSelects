@@ -100,6 +100,7 @@ function createRestoredNestedClipCommon(
     transitionSourceMap: serializedClip.transitionSourceMap ? structuredClone(serializedClip.transitionSourceMap) : undefined,
     transitionRecipeBlendWindows: serializedClip.transitionRecipeBlendWindows ? structuredClone(serializedClip.transitionRecipeBlendWindows) : undefined,
     colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+    sceneGraphOutput: serializedClip.sceneGraphOutput,
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     masks: serializedClip.masks || [],
     reversed: serializedClip.reversed,

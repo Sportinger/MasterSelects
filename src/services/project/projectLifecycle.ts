@@ -401,6 +401,7 @@ export function setupAutoSync(): void {
       state.outPoint,
       state.loopPlayback,
       state.durationLocked,
+      state.sharedSceneGraphs,
     ] as const,
     () => {
       markProjectDirty();

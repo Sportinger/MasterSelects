@@ -152,6 +152,7 @@ export function convertCompositions(compositions: Composition[]): ProjectComposi
       localColorCorrection: c.localColorCorrection
         ? structuredClone(c.localColorCorrection)
         : undefined,
+      sceneGraphOutput: c.sceneGraphOutput,
       nodeGraph: remapKeyframeNodeProperties(cloneClipNodeGraph(c.nodeGraph), property => serializeMaskKeyframeProperty(property, c.masks)),
       masks: (c.masks || []).map((m) => ({
         id: m.id,
@@ -257,6 +258,7 @@ export function convertCompositions(compositions: Composition[]): ProjectComposi
       videoBakeRegions: timelineData?.videoBakeRegions
         ? timelineData.videoBakeRegions.map(serializeProjectVideoBakeRegion)
         : undefined,
+      sharedSceneGraphs: timelineData?.sharedSceneGraphs,
       masterAudioState: timelineData?.masterAudioState
         ? structuredClone(timelineData.masterAudioState)
         : undefined,

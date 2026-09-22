@@ -324,6 +324,7 @@ export function convertProjectCompositionToStore(
         localColorCorrection: c.localColorCorrection
           ? structuredClone(c.localColorCorrection)
           : undefined,
+        sceneGraphOutput: c.sceneGraphOutput,
         nodeGraph: remapKeyframeNodeProperties(cloneClipNodeGraph(c.nodeGraph), property => hydrateMaskKeyframeProperty(property, c.masks)),
         masks: c.masks.map((mask): ClipMask => ({
           id: mask.id,
@@ -427,6 +428,7 @@ export function convertProjectCompositionToStore(
       outPoint: viewState?.outPoint ?? null,
       loopPlayback: false,
       videoBakeRegions: pc.videoBakeRegions ? structuredClone(pc.videoBakeRegions) : undefined,
+      sharedSceneGraphs: pc.sharedSceneGraphs,
       masterAudioState: pc.masterAudioState ? structuredClone(pc.masterAudioState) : undefined,
       markers: (pc.markers || []).map((marker) => ({
         id: marker.id,

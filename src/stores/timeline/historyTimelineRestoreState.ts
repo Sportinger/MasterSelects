@@ -33,6 +33,7 @@ export interface HistoryTimelineRestoreCurrentState {
   markers?: Readonly<HistoryTimelineEditState['timeline']['markers']>;
   tempoMap?: HistoryTimelineEditState['timeline']['tempoMap'];
   masterAudioState?: HistoryTimelineEditState['timeline']['masterAudioState'];
+  sharedSceneGraphs?: HistoryTimelineEditState['timeline']['sharedSceneGraphs'];
 }
 
 export interface HistoryTimelineRestoreState {
@@ -49,6 +50,7 @@ export interface HistoryTimelineRestoreState {
   markers: HistoryTimelineEditState['timeline']['markers'];
   tempoMap?: HistoryTimelineEditState['timeline']['tempoMap'];
   masterAudioState?: HistoryTimelineEditState['timeline']['masterAudioState'];
+  sharedSceneGraphs?: HistoryTimelineEditState['timeline']['sharedSceneGraphs'];
 }
 
 export interface HistoryTimelineRestoreDiagnostics {
@@ -229,6 +231,7 @@ function createRestoredClip(
     terrainAnchorConnector: cloneTerrainAnchorConnector(clip.terrainAnchorConnector),
     trackingBinding: clip.trackingBinding ? structuredClone(clip.trackingBinding) : undefined,
       colorCorrection: clonePlain(clip.colorCorrection),
+      sceneGraphOutput: clonePlain(clip.sceneGraphOutput),
       nodeGraph: clonePlain(clip.nodeGraph),
       masks: clonePlain(clip.masks),
       transcriptStatus: clip.transcriptStatus,
@@ -428,6 +431,7 @@ export function createHistoryTimelineRestoreState(
       // of this function is fed straight to the store's shallow-merging
       // setState — so an `undefined` here would CLOBBER the live tempo map
       // rather than leave it alone. Fall back to the current one.
+      sharedSceneGraphs: clonePlain(historyState.timeline.sharedSceneGraphs),
       masterAudioState: clonePlain(historyState.timeline.masterAudioState),
     },
     diagnostics: {

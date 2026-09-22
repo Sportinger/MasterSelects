@@ -32,7 +32,7 @@ describe('splat graph execution', () => {
     expect(sceneGraphSupportsSource('gaussian-splat')).toBe(true);
     expect(sceneGraphSupportsSource('flock')).toBe(false);
     const d = defaultSplatGraph(); expect(validateSceneGraph(d)).toEqual([]);
-    expect(compileSplatGraph(d)).toEqual([{ id: 'surface-0', operations: [], applyClipTransform: true, budget: 0 }]);
+    expect(compileSplatGraph(d)).toEqual([{ id: 'surface-0', outputNodeId: 'surface', operations: [], applyClipTransform: true, budget: 0 }]);
   });
   it('round trips four independent branches and preserves the shared transform', () => {
     const d = JSON.parse(JSON.stringify(defaultSplatGraph(true)));

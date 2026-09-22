@@ -102,6 +102,7 @@ export interface ProjectClip {
   colorCorrection?: ColorCorrectionState;
   colorGradeMode?: ColorGradeMode;
   localColorCorrection?: ColorCorrectionState;
+  sceneGraphOutput?: import('../../../types/sharedSceneGraph').SceneGraphOutput;
   nodeGraph?: ClipNodeGraph;
 
   // Masks
@@ -200,6 +201,7 @@ export interface ProjectClip {
 }
 
 export interface ProjectComposition {
+  sharedSceneGraphs?: import('../../../types/sharedSceneGraph').SharedSceneGraphs;
   id: string;
   name: string;
   width: number;

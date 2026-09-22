@@ -1,3 +1,4 @@
+import { sharedSceneOutputLayer } from '../../../services/layerBuilder/sharedSceneOutputLayer';
 import { Logger } from '../../../services/logger';
 import type { TimelineClip } from '../../../stores/timeline/types';
 import { useTimelineStore } from '../../../stores/timeline';
@@ -118,6 +119,7 @@ export function buildBaseLayerProps(
       ? { maskClipId: clip.id, maskInvert: false, masks: mappedAnimation.masks }
       : clip.masks?.some(mask => mask.enabled !== false) ? { maskClipId: clip.id, maskInvert: false } : {}),
     ...(transitionRender ? { transitionRender } : {}),
+    ...sharedSceneOutputLayer(clip, ctx.time),
     sceneGraph: clip.nodeGraph?.scene,
     ...(clip.is3D ? { is3D: true } : {}),
   };
@@ -187,6 +189,7 @@ export function buildNestedBaseLayer(
       ? { maskClipId: nestedClip.id, maskInvert: false, masks }
       : {}),
     ...(transitionRender ? { transitionRender } : {}),
+    ...sharedSceneOutputLayer(nestedClip, parentContext.timelineTime),
     sceneGraph: nestedClip.nodeGraph?.scene,
     ...(nestedClip.is3D ? { is3D: true } : {}),
   };

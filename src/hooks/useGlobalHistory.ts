@@ -335,6 +335,7 @@ export function useGlobalHistory() {
         tracks: state.tracks,
         clipKeyframes: state.clipKeyframes,
         markers: state.markers,
+        sharedSceneGraphs: state.sharedSceneGraphs,
         masterAudioState: (state as { masterAudioState?: unknown }).masterAudioState,
       }),
       (curr, prev) => {
@@ -368,6 +369,8 @@ export function useGlobalHistory() {
           debouncedCapture('Modify keyframes');
         } else if (curr.markers !== prev.markers) {
           debouncedCapture('Modify markers');
+        } else if (curr.sharedSceneGraphs !== prev.sharedSceneGraphs) {
+          debouncedCapture('Edit shared node graph');
         } else if (curr.masterAudioState !== prev.masterAudioState) {
           debouncedCapture('Modify master audio');
         }
