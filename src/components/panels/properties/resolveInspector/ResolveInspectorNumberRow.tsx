@@ -22,6 +22,8 @@ interface ResolveInspectorNumberRowProps {
   min: number;
   max: number;
   step: number;
+  /** Optional wider range for numeric entry than the slider. */
+  numberMax?: number;
   hardMin?: number;
   hardMax?: number;
   disabled?: boolean;
@@ -34,7 +36,7 @@ interface ResolveInspectorNumberRowProps {
 export function ResolveInspectorNumberRow({
   label, ariaLabel = label, value, defaultValue, min, max, step, disabled = false,
   persistenceKey, onChange, onReset, keyframeToggle, actions, suffix, decimals, sensitivity = 2,
-  onDragStart, onDragEnd, onCommit, hardMin = -Infinity, hardMax = Infinity,
+  onDragStart, onDragEnd, onCommit, numberMax = max, hardMin = -Infinity, hardMax = Infinity,
 }: ResolveInspectorNumberRowProps) {
   useEditableDraggableNumberSettingsRevision(persistenceKey);
   const range = getEffectiveEditableDraggableNumberSettings({ persistenceKey, min, max, defaultValue });
@@ -54,7 +56,7 @@ export function ResolveInspectorNumberRow({
         step={step} disabled={disabled} onChange={change} onDragStart={onDragStart}
         onDragEnd={() => { onDragEnd?.(); onCommit?.('drag'); }} />
       <LabeledValue label="" ariaLabel={ariaLabel} className="resolve-inspector-field resolve-inspector-field--plain"
-        value={value} defaultValue={defaultValue} min={min} max={max} decimals={decimals ?? (step >= 1 ? 0 : 3)} suffix={suffix}
+        value={value} defaultValue={defaultValue} min={min} max={numberMax} decimals={decimals ?? (step >= 1 ? 0 : 3)} suffix={suffix}
         sensitivity={sensitivity} onDragStart={onDragStart} onDragEnd={onDragEnd} onCommit={onCommit} touchDragAxis="horizontal" disabled={disabled} persistenceKey={persistenceKey}
         onChange={change} />
     </div>

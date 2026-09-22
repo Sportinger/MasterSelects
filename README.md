@@ -145,7 +145,7 @@ automation curves to replace the destination range while keeping surrounding
 keyframes and other properties intact.
 Use **View > Thumbnails** in the timeline to hide or restore clip previews while
 keeping clip labels and audio waveforms visible.
-Timeline volume keyframe rows and inline curves show gain in dB.
+Timeline volume keyframe rows and inline curves show gain in dB. Clip Volume offers a slider up to +18 dB and numeric entry up to +64 dB.
 Deleting timeline gaps moves the playhead with the remaining material.
 Timeline snapping starts off; hold **Shift** to snap temporarily or enable the
 magnet button to keep it on. Your choice is remembered.

@@ -42,7 +42,7 @@ import {
 } from '../../../stores/timeline/helpers/linkedClipSpeed';
 import { trackEditorControlCommitted } from '../../../services/productAnalytics';
 
-// dB conversion helpers (internal gain 0–2 ↔ display dB)
+// dB conversion helpers (linear gain to/from display dB)
 const SILENCE_THRESHOLD_DB = -60;
 const gainToDb = (gain: number): number => gain <= 0 ? SILENCE_THRESHOLD_DB : Math.max(SILENCE_THRESHOLD_DB, 20 * Math.log10(gain));
 const dbToGain = (db: number): number => db <= SILENCE_THRESHOLD_DB ? 0 : Math.pow(10, db / 20);
@@ -294,7 +294,7 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
         onEnabledChange={enabled => setClipEffectEnabled(clipId, getOrCreateLegacyAudioEffectId('audio-volume'), enabled)}>
         <ResolveInspectorNumberRow label="Level" ariaLabel="Audio volume"
           value={gainToDb(volume)} onChange={(db) => handleVolumeChange(dbToGain(db))}
-          defaultValue={0} min={SILENCE_THRESHOLD_DB} max={6} hardMin={SILENCE_THRESHOLD_DB} hardMax={6}
+          defaultValue={0} min={SILENCE_THRESHOLD_DB} max={18} numberMax={64} hardMin={SILENCE_THRESHOLD_DB} hardMax={64}
           step={0.1} decimals={1} suffix=" dB" sensitivity={4}
           persistenceKey={`audio.${clipId}.volume`}
           actions={volumeMIDITarget ? <MIDIParameterLabel target={volumeMIDITarget}>MIDI</MIDIParameterLabel> : undefined}
