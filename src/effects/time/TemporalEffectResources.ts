@@ -8,10 +8,6 @@ import { TimeMapMediaRuntime } from './TimeMapMediaRuntime';
 import { setTemporalStatus } from './temporalResourcePreparation';
 import type { TemporalClipSource } from './temporalClipSource';
 import { SourceTemporalRuntime } from './SourceTemporalRuntime';
-import { temporalDemandGraph } from '../../services/operators/temporalDemandGraph';
-import { compileImageOperatorGraph } from '../../services/operators/imageOperatorGraph';
-import { effectOperatorCompileContext, effectOperatorParams } from '../../services/operators/effectGraphOwner';
-import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { useTimelineStore } from '../../stores/timeline';
 
 /** Device-local resource ownership for temporal graphs and their node previews. */
@@ -25,17 +21,14 @@ export class TemporalEffectResources {
     this.native = new SourceTemporalRuntime(device, onReady);
   }
 
-  resolveNative(effect: { id: string; type: string; params: Record<string, unknown> }, graph: EffectOperatorGraph,
-    scopeId: string, source: TemporalClipSource | undefined, encoder: GPUCommandEncoder, inputView: GPUTextureView,
-    sampler: GPUSampler, timelineTime: number, externalResources: ReadonlyMap<string, ResolvedImageGraphExternalResource>) {
+  resolveNative(effect: { id: string; type: string; params: Record<string, unknown> },
+    scopeId: string, source: TemporalClipSource | undefined, encoder: GPUCommandEncoder) {
     if (!source) throw new Error('Full-resolution temporal sampling requires a source video clip.');
     const media = useMediaStore.getState().files.find(file => file.id === source.mediaId);
     if (!media || media.type !== 'video') throw new Error('Full-resolution source video is unavailable.');
-    const demandPlan = compileImageOperatorGraph(temporalDemandGraph(graph), effectOperatorParams(effect), effectOperatorCompileContext(effect));
     return this.native.resolve({ key: JSON.stringify([scopeId, effect.id]), effectId: effect.id, media, source,
       horizon: Math.max(0, Math.min(4, Number(effect.params.delay ?? 1))), samples: Number(effect.params.temporalSamples ?? 32),
-      nearest: effect.params.temporalInterpolation === 'nearest', demandPlan, externalResources,
-      encoder, inputView, sampler, timelineTime, keepPending: useTimelineStore.getState().isPlaying,
+      nearest: effect.params.temporalInterpolation === 'nearest', encoder, keepPending: useTimelineStore.getState().isPlaying,
       maxEdge: effect.params.temporalResolution === 'native' ? undefined : 160 });
   }
 

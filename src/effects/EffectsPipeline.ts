@@ -401,9 +401,8 @@ export class EffectsPipeline {
         imagePlan.resourceInputs ?? [], effect, frameHistory?.scopeId ?? clock.scopeId,
         timelineTimeSeconds, sourceMasks, outputWidth, outputHeight, commandEncoder);
       if (nativeTemporal && imagePlan && preparedImage && imageExternalResources) {
-        const nativeHistory = this.temporalResources.resolveNative(effect, preparedImage.graph,
-          frameHistory?.scopeId ?? clock.scopeId, temporalSource, commandEncoder, effectInput, sampler,
-          timelineTimeSeconds, imageExternalResources);
+        const nativeHistory = this.temporalResources.resolveNative(effect,
+          frameHistory?.scopeId ?? clock.scopeId, temporalSource, commandEncoder);
         if (nativeHistory) for (const resource of imagePlan.externalResources ?? []) {
           if (resource.kind === 'input-history') imageExternalResources.set(resource.id, nativeHistory[resource.part]);
         }

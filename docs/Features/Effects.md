@@ -51,16 +51,26 @@ Saved graph edits, effect bypass and numeric keyframes use the existing editor p
   changes. There is no rolling-history mode or playback-only sampling fallback.
 - **Source-frame cache**: historical samples use an absolute clip-time grid,
   with the current frame supplied by normal playback. Adjacent output frames reuse
-  source PTS in a GPU texture array; missing frames are decoded in one ordered
-  batch per refill, with four future grid samples prefetched during playback.
-  Exact native VideoFrames already resident in the media runtime are reused without
-  seeking its playback decoder. Decoded frames transfer directly to the GPU array;
-  resizing and rotation use a canvas without CPU pixel readback. Tracking's CPU
-  frame reader is unchanged. The graph
+  source PTS in a GPU texture array. A shared source-frame service coalesces requests
+  from temporal consumers and borrows exact native VideoFrames already resident in
+  the media runtime, without seeking the playback decoder. Missing frames use one
+  independent sequential decoder cursor per source, reused across nearby forward
+  refills and released after inactivity. Required frames take priority over the four
+  future grid samples prefetched during playback; superseded seeks cancel obsolete
+  requests. Full/Small changes reuse the source index during a short grace period.
+  A WebGPU pass writes each newly needed frame into the persistent array, applying
+  resize, container rotation and external-texture color conversion without Canvas,
+  ImageData or CPU pixel readback. Borrowed decoder handles are closed immediately
+  after submission rather than pinned in another raw-frame cache, which can exhaust
+  hardware decoder surfaces. Tracking's CPU frame reader is unchanged. The graph
   samples this array directly instead of baking a complete image each output frame.
   Small/full resolution use the same grid. The bounded cache reserves 68 layers
-  plus two CPU frame allocations within 640 MiB across active owners. Sources that
+  with a two-frame allowance within 640 MiB across active owners (browser-managed
+  decoder storage is separate). Sources that
   exceed this budget report an error instead of silently reducing Full Res.
+- **Low-mode limit**: Small preview currently decodes the original and scales on
+  the GPU. The existing proxy-frame cache is not connected to this temporal path;
+  decoding a distant source window can therefore cost similarly in both qualities.
 - **Temporal sampling**: Blend adjacent frames is linear interpolation and can
   produce double contours when objects move. Nearest frame disables this blending;
   it does not change spatial resolution. Time bands only quantize the time map.
