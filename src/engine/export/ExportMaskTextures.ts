@@ -10,7 +10,7 @@ const exportMaskVersions = new Map<string, string>();
 
 function getMaskShapeHash(masks: ClipMask[]): string {
   return masks.map(mask =>
-    `${mask.enabled !== false}|${mask.inverted}|${mask.closed}|${mask.mode}|` +
+    `${mask.enabled !== false}|${mask.compositeEnabled !== false}|${mask.inverted}|${mask.closed}|${mask.mode}|` +
     `${mask.vertices.map((vertex: MaskVertex) => [
       vertex.x.toFixed(4),
       vertex.y.toFixed(4),

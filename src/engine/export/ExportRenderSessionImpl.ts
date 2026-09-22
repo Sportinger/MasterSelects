@@ -12,6 +12,7 @@ import {
 import { seekVideo } from './VideoSeeker';
 import type { RenderSurfaceFrameContext } from '../../services/render/renderHostTypes';
 import { waitForLiveInputExportTime } from './liveInputExport';
+import { collectTemporalPreparations, awaitTemporalPreparations } from '../../effects/time/temporalResourcePreparation';
 
 const MAX_EXPORT_VIDEO_SOURCE_NESTING_DEPTH = 8;
 // Two real-media nesting levels can need several compositor turns after every
@@ -274,6 +275,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
     let renderMs = 0;
     const frameHistoryEventRevision = ++this.frameHistoryEventRevision;
     const isExportStart = this.exportStartPending;
+    let temporalPreparationAttempts = 0;
     for (let attempt = 0; ; attempt += 1) {
       const renderStart = performance.now();
       try {
@@ -286,7 +288,16 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
             ...(isExportStart ? { discontinuity: 'export-start' as const } : {}),
           },
         };
-        this.host.render(layers, frameContext);
+        const finishPreparations = collectTemporalPreparations();
+        let pending: Promise<unknown>[];
+        try { this.host.render(layers, frameContext); }
+        finally { pending = finishPreparations(); }
+        if (pending.length) {
+          if (++temporalPreparationAttempts > 8) throw new Error('Temporal effect resources did not settle for the export frame.');
+          await awaitTemporalPreparations(pending, this.signal);
+          renderMs += performance.now() - renderStart;
+          continue;
+        }
         this.exportStartPending = false;
         renderMs += performance.now() - renderStart;
         break;

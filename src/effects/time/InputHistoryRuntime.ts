@@ -17,12 +17,20 @@ export class InputHistoryRuntime {
   constructor(device: GPUDevice) { this.device = device; }
 
   prepare(key: string, encoder: GPUCommandEncoder, source: GPUTextureView, sampler: GPUSampler,
-    width: number, height: number, time: number, horizon: number, context?: EffectFrameHistoryContext) {
-    const [w, h] = inputHistorySize(width, height);
+    width: number, height: number, time: number, horizon: number, context?: EffectFrameHistoryContext, interpolation = 'linear', fullResolution = false) {
+    const [w, h] = fullResolution ? [width, height] : inputHistorySize(width, height, 160);
+    const bytes = w * h * 64 * 4;
+    const budget = 512 * 1024 * 1024;
+    if (bytes > budget) throw new Error('Full-resolution rolling history exceeds 512 MiB. Use Live preview for playback at this resolution.');
     let state = this.entries.get(key);
     if (state && (state.width !== w || state.height !== h)) { this.remove(key); state = undefined; }
     if (!state) {
-      // Four history owners at most: < 225 MiB total, independent of export resolution.
+      while ([...this.entries.values()].reduce((sum, entry) => sum + entry.width * entry.height * 64 * 4, 0) + bytes > budget) {
+        const old = [...this.entries].find(([, entry]) => entry.encoder !== encoder);
+        if (!old) throw new Error('Simultaneous rolling histories exceed the 512 MiB budget.');
+        this.remove(old[0]);
+      }
+      // Four tiny live-history owners: at most 25 MiB, independent of source resolution.
       if (this.entries.size >= 4) {
         const oldest = [...this.entries].filter(([, entry]) => entry.encoder !== encoder)
           .toSorted((a, b) => a[1].used - b[1].used)[0];
@@ -31,11 +39,11 @@ export class InputHistoryRuntime {
         if (!oldest) return this.emptyResources();
         this.remove(oldest[0]);
       }
-      const atlas = this.device.createTexture({ label: 'input-history-atlas', size: [w * 8, h * 8], format: 'rgba8unorm',
+      const atlas = this.device.createTexture({ label: 'input-history-atlas', size: [w, h, 64], format: 'rgba8unorm',
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
       const ages = this.device.createTexture({ label: 'input-history-ages', size: [65, 1], format: 'rgba32float',
         usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING });
-      state = { atlas, ages, atlasView: atlas.createView(), agesView: ages.createView(), width: w, height: h,
+      state = { atlas, ages, atlasView: atlas.createView({ dimension: '2d-array' }), agesView: ages.createView(), width: w, height: h,
         clock: new InputHistoryClock(), used: 0, revision: 0 };
       this.entries.set(key, state);
     }
@@ -53,15 +61,16 @@ export class InputHistoryRuntime {
       const bind = this.device.createBindGroup({ layout: this.pipeline.getBindGroupLayout(0), entries: [
         { binding: 0, resource: sampler }, { binding: 1, resource: source },
       ] });
-      const pass = encoder.beginRenderPass({ colorAttachments: [{ view: state.atlasView, loadOp: 'load', storeOp: 'store' }] });
+      const pass = encoder.beginRenderPass({ colorAttachments: [{ view: state.atlas.createView({ dimension: '2d', baseArrayLayer: state.clock.newest, arrayLayerCount: 1 }), loadOp: 'clear', storeOp: 'store' }] });
       pass.setPipeline(this.pipeline); pass.setBindGroup(0, bind);
-      pass.setViewport((state.clock.newest % 8) * w, Math.floor(state.clock.newest / 8) * h, w, h, 0, 1);
+      pass.setViewport(0, 0, w, h, 0, 1);
       pass.draw(6); pass.end();
       state.revision++;
     }
     const data = state.clock.metadata(time);
+    data[64 * 4 + 2] = interpolation === 'nearest' ? -1 : 0;
     this.device.queue.writeTexture({ texture: state.ages }, data.buffer as ArrayBuffer, { bytesPerRow: 65 * 16 }, [65, 1]);
-    const identity = `${key}:${state.revision}:${time}`;
+    const identity = `${key}:${state.revision}:${time}:${interpolation}`;
     return {
       atlas: { view: state.atlasView, identity: `${identity}:atlas` },
       ages: { view: state.agesView, identity: `${identity}:ages` },
@@ -71,12 +80,12 @@ export class InputHistoryRuntime {
   private remove(key: string) {
     const entry = this.entries.get(key); entry?.atlas.destroy(); entry?.ages.destroy(); this.entries.delete(key);
   }
-  private emptyResources() {
+  emptyResources() {
     this.empty ??= {
       atlas: this.device.createTexture({ size: [1, 1], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING }),
       ages: this.device.createTexture({ size: [65, 1], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING }),
     };
-    return { atlas: { view: this.empty.atlas.createView(), identity: 'input-history:capacity' },
+    return { atlas: { view: this.empty.atlas.createView({ dimension: '2d-array' }), identity: 'input-history:capacity' },
       ages: { view: this.empty.ages.createView(), identity: 'input-history:capacity' } };
   }
   destroy() {

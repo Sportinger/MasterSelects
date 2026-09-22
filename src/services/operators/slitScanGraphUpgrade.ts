@@ -1,5 +1,7 @@
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { createDefaultSlitScanGraph } from './slitScanEffectGraph';
+import { withSlitScanProtection } from './slitScanProtectionGraph';
+import { withSlitScanTimeMap } from './slitScanTimeMapGraph';
 
 // Upgrade the initial in-session graph without replacing edits to existing nodes.
 const additions = new Set(['bands', 'radial-distance', 'ring-frequency', 'ring-position', 'ring-time', 'ring-cycles',
@@ -9,6 +11,10 @@ const additions = new Set(['bands', 'radial-distance', 'ring-frequency', 'ring-p
   'stepped-time', 'use-bands', 'smooth-or-banded']);
 
 export function upgradeSlitScanGraph(graph: EffectOperatorGraph): EffectOperatorGraph {
+  return withSlitScanTimeMap(withSlitScanProtection(upgradeProfiles(graph)));
+}
+
+function upgradeProfiles(graph: EffectOperatorGraph): EffectOperatorGraph {
   const route = graph.edges.find(edge => edge.to === 'masked-delay' && edge.input === 'a' && edge.from === 'profile-offset');
   if (!route || graph.nodes.some(node => additions.has(node.id)) || !graph.nodes.some(node => node.id === 'radius-distance')) return graph;
   const template = createDefaultSlitScanGraph();

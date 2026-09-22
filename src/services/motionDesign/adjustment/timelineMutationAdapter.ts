@@ -740,7 +740,7 @@ function timelineClipToAdjustmentLayer(
   const mix = {
     opacity: finiteNumber(transform.opacity, 'opacity', 0, 1),
     blendMode: parseBlendMode(transform.blendMode),
-    masks: (clip.masks ?? []).filter((mask) => mask.enabled).map((mask) => {
+    masks: (clip.masks ?? []).filter((mask) => mask.enabled && mask.compositeEnabled !== false).map((mask) => {
       if (!mask.closed || Object.keys(mask.edgeFeathers ?? {}).length > 0) {
         throw mutationError(
           'MD7_ADJUSTMENT_UNSUPPORTED_MASK',

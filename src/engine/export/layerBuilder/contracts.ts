@@ -32,6 +32,7 @@ export interface BaseLayerPropsLike {
   id: string;
   name: string;
   sourceClipId: string;
+  temporalSource?: import('../../../effects/time/temporalClipSource').TemporalClipSource;
   visible: boolean;
   opacity: number;
   blendMode: BlendMode;

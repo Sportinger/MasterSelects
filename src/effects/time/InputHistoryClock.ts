@@ -39,7 +39,7 @@ export class InputHistoryClock {
   }
 }
 
-export function inputHistorySize(width: number, height: number): [number, number] {
-  const scale = Math.min(1, 640 / Math.max(width, height), Math.sqrt(230400 / (width * height)));
+export function inputHistorySize(width: number, height: number, maxEdge = 640): [number, number] {
+  const scale = Math.min(1, maxEdge / Math.max(width, height), Math.sqrt(230400 / (width * height)));
   return [Math.max(1, Math.floor(width * scale)), Math.max(1, Math.floor(height * scale))];
 }

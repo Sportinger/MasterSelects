@@ -163,6 +163,7 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
       id: maskId,
       name: maskData?.name || `Mask ${maskCount}`,
       purpose: maskData?.purpose,
+      compositeEnabled: maskData?.compositeEnabled,
       vertices: maskData?.vertices || [],
       closed: maskData?.closed ?? false,
       opacity: maskData?.opacity ?? 1,

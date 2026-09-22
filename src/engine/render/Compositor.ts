@@ -413,6 +413,8 @@ export class Compositor {
                 state.motionTime ?? layer.source?.mediaTime ?? 0,
                 state.frameHistory ? { ...state.frameHistory, scopeId: JSON.stringify([state.historyScopeId ?? 'timeline', resourceLayerId]) } : undefined,
                 state.effectRenderClock ? { ...state.effectRenderClock, scopeId: JSON.stringify([state.effectRenderClock.scopeId, resourceLayerId]) } : undefined,
+                layer.masks,
+                layer.temporalSource,
               );
               sourceTextureView = effectResult.finalView;
             };

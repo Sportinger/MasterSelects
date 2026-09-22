@@ -141,7 +141,8 @@ export class ImageGraphPassRuntime {
       ];
       if (imageOperatorRuntimeUniformSize(program)) entries.push({ binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } });
       (program.resourceInputs ?? []).forEach((_id, index) => entries.push({ binding: 3 + index, visibility: GPUShaderStage.FRAGMENT,
-        texture: { sampleType: imageGraphResourceSampleType(program.resourceSampling?.[index]) } }));
+        texture: { sampleType: imageGraphResourceSampleType(program.resourceSampling?.[index]),
+          viewDimension: _id === 'input-history:atlas' ? '2d-array' : '2d' } }));
       const bindGroupLayout = this.device.createBindGroupLayout({ entries });
       layout = this.device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
     }

@@ -1,5 +1,6 @@
 import { sharedSceneOutputLayer } from '../../../services/layerBuilder/sharedSceneOutputLayer';
 import { Logger } from '../../../services/logger';
+import { temporalClipSource } from '../../../effects/time/temporalClipSource';
 import type { TimelineClip } from '../../../stores/timeline/types';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { BlendMode } from '../../../types/blendMode';
@@ -94,6 +95,7 @@ export function buildBaseLayerProps(
     id: `export_layer_${trackIndex}`,
     name: clip.name,
     sourceClipId: clip.id,
+    temporalSource: temporalClipSource(clip, clipLocalTime, keyframes),
     visible: true,
     opacity: transform.opacity ?? 1,
     blendMode: resolveTransitionRecipeBlendMode(
@@ -117,7 +119,8 @@ export function buildBaseLayerProps(
     sourceRect: clip.sourceRect ? { ...clip.sourceRect } : undefined,
     ...(mappedAnimation?.masks?.some(mask => mask.enabled !== false)
       ? { maskClipId: clip.id, maskInvert: false, masks: mappedAnimation.masks }
-      : clip.masks?.some(mask => mask.enabled !== false) ? { maskClipId: clip.id, maskInvert: false } : {}),
+      : clip.masks?.some(mask => mask.enabled !== false) ? { maskClipId: clip.id, maskInvert: false,
+        masks: evaluateCompositionClipMasks(clip.masks, keyframes, clipLocalTime) } : {}),
     ...(transitionRender ? { transitionRender } : {}),
     ...sharedSceneOutputLayer(clip, ctx.time),
     sceneGraph: clip.nodeGraph?.scene,

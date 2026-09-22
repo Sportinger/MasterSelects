@@ -73,7 +73,7 @@ function masksFromLayer(layer: Layer): MotionAdjustmentMaskContract[] {
     height: layer.source?.intrinsicHeight || layer.source?.videoElement?.videoHeight || layer.source?.imageElement?.naturalHeight || 1,
   };
   return (layer.masks ?? [])
-    .filter((mask) => mask.enabled !== false && mask.closed)
+    .filter((mask) => mask.enabled !== false && mask.compositeEnabled !== false && mask.closed)
     .map((mask) => ({
       id: mask.id,
       mode: mask.mode,

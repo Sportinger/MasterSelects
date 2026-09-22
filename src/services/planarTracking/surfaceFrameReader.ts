@@ -12,7 +12,8 @@ export function surfaceFrameIndex(frames: readonly SurfaceFrameStamp[], time: nu
 }
 
 /** Independent WebCodecs decoder; source PTS and pixels are acquired together. */
-export async function openSurfaceFrames(url: string, signal: AbortSignal, file?: Blob) {
+export async function openSurfaceFrames(url: string, signal: AbortSignal, file?: Blob, maxEdge = 1280) {
+  if (!Number.isInteger(maxEdge) || maxEdge < 1 || maxEdge > 16384) throw new Error('Invalid source frame resolution.');
   signal.throwIfAborted();
   const input = new Input({ formats: ALL_FORMATS, source: file?.size
     ? new BlobSource(file, { maxCacheSize: 16 * 1024 * 1024 }) : new UrlSource(url) });
@@ -39,8 +40,8 @@ export async function openSurfaceFrames(url: string, signal: AbortSignal, file?:
     const capture = (sample: VideoSample): SurfaceDecodedFrame => {
       try {
         signal.throwIfAborted();
-        const scale = Math.min(1, 1280 / Math.max(sample.displayWidth, sample.displayHeight));
-        const width = Math.round(sample.displayWidth * scale), height = Math.round(sample.displayHeight * scale);
+        const scale = Math.min(1, maxEdge / Math.max(sample.displayWidth, sample.displayHeight));
+        const width = Math.max(1, Math.round(sample.displayWidth * scale)), height = Math.max(1, Math.round(sample.displayHeight * scale));
         if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
         sample.draw(context, 0, 0, width, height);
         return { time: sample.timestamp, duration: sample.duration, pixels: context.getImageData(0, 0, width, height) };

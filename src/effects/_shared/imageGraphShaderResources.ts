@@ -48,6 +48,7 @@ export function imageGraphResourceDeclarations(plan: Pick<ImageOperatorPlan, 're
   validateImageGraphResourceSampling(plan);
   return (plan.resourceInputs ?? []).map((_id, index) => {
     const texture = `imageGraphResource${index}`, mode = plan.resourceSampling?.[index];
+    if (_id === 'input-history:atlas') return `@group(0) @binding(${3 + index}) var ${texture}: texture_2d_array<f32>;`;
     if (mode === 'exact-u32-pixel-load') {
       return `@group(0) @binding(${3 + index}) var ${texture}: texture_2d<u32>;\n${uintDecodeFunctions(index, texture)}`;
     }

@@ -28,9 +28,9 @@ and source. Other effects and structural settings are not implicitly enabled.
 
 Add **Time > Slit Scan** to a video clip, or add its effect group in Nodes.
 The editable group reuses UV, vector, math, choice, timeline-time and RGBA mix
-operators. Five named groups organize source controls, scan direction, wave
-shape, center protection and time sampling. Only `image.sample-history` is a
-new atomic operator; it reads the input to this effect, not its previous output.
+operators. Named groups organize source controls, scan direction, wave
+shape, center and subject protection, time sampling and diagnostic previews. Only `image.sample-history` is a
+new atomic operator; Slit Scan supplies timestamped source frames to it, not its previous output.
 Saved graph edits, effect bypass and numeric keyframes use the existing editor paths.
 
 - **Delay (s)**: maximum past-time offset, 0-4 seconds. Zero is unchanged.
@@ -42,21 +42,41 @@ Saved graph edits, effect bypass and numeric keyframes use the existing editor p
 - **Wave**: number of waves, phase and animation speed in cycles per second.
 - **Time bands**: 0 or 1 keeps smooth time; 2-64 quantizes the map into stepped ages.
 - **Mix**: blend with the original input, including alpha.
+- **Source sampling** decodes the source video independently, applying clip trim
+  and speed. Render preceding effects to an intermediate video to include them;
+  arbitrary preceding effect stacks are not reevaluated.
+- **Preview quality** at the top of the inspector switches between Small preview
+  (160 px maximum edge) and Full Res. Both use the same source timestamps and sample
+  count during playback, after seeks, and during export. Only spatial resolution
+  changes. There is no rolling-history mode or playback-only sampling fallback.
+- **Source-frame cache**: historical samples use an absolute clip-time grid,
+  with the current frame supplied by normal playback. Adjacent output frames reuse
+  source PTS in a GPU texture array; only missing frames are decoded. The graph
+  samples this array directly instead of baking a complete image each output frame.
+  Small/full resolution use the same grid. The bounded cache reserves 68 layers
+  plus two CPU frame allocations within 640 MiB across active owners. Sources that
+  exceed this budget report an error instead of silently reducing Full Res.
+- **Temporal sampling**: Blend adjacent frames is linear interpolation and can
+  produce double contours when objects move. Nearest frame disables this blending;
+  it does not change spatial resolution. Time bands only quantize the time map.
+- **Protection mask**: select an existing clip mask. Its animated shape, inversion
+  and feather are evaluated at the output time. White coverage removes the time
+  offset, so the protected area keeps moving at the current time. **Protection
+  strength** scales the coverage; existing center protection remains active too.
+  Choose **Effect input only** in the Masks inspector to avoid cutting the clip alpha.
+- **Preview**: Result, Time map or Protection mask. The time map shows black for
+  current time and white for the maximum delay; white in the protection preview
+  means full protection. Both previews expose the actual graph signals.
 
-Playback fills a device-local ring of up to 64 input samples covering four
-seconds, with interpolation between their actual timeline timestamps. Historical
-samples are reduced to at most 640 pixels on the long edge and 230,400 pixels;
-the current input stays at full resolution. Motion in the source or camera is
-needed for a visible slit-scan deformation. No foreground tracking is implied.
-
-Seeking, reverse timeline movement, looping, source-owner changes and export
-start reset history. During warm-up, unavailable ages hold the oldest sample.
-Pausing does not accumulate samples. Export fills its own history from the export
-range start; arbitrary seeks do not reconstruct missing frames. This is a causal
-playback effect, so sparse preview frames and export can differ. Four history
-owners per effects pipeline are retained (under 225 MiB); additional simultaneous
-owners pass through their current input. Histories are runtime-only and never
-saved in project JSON. Node previews borrow the same history as the effect.
+The requested output time determines up to 64 source samples across the delay
+window. Seeking reconstructs that window rather than starting the effect again.
+At clip boundaries the first or last available source frame holds. During
+preparation, preview uses the resident subset and shows loading progress; export
+waits for the complete requested window. A large seek can require an initial load.
+Playback reuses cached source frames; decoder speed still limits cache refill. Caches and decoder handles are runtime-only and
+never saved in project JSON. Node previews borrow the effect's source resources.
+Legacy saved `temporalMode` values no longer select a separate rolling mode;
+existing spatial graph wiring is preserved.
 
 ## Registry And UI
 

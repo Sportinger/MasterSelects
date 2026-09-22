@@ -330,6 +330,7 @@ export function convertProjectCompositionToStore(
           id: mask.id,
           name: mask.name,
           purpose: mask.purpose,
+          compositeEnabled: mask.compositeEnabled,
           mode: mask.mode,
           inverted: mask.inverted,
           opacity: mask.opacity,

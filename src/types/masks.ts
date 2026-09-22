@@ -16,6 +16,8 @@ export interface ClipMask {
   id: string;
   name: string;
   purpose?: 'crop';        // Semantic system mask used by Resolve-style cropping
+  /** False keeps this mask available to effects without cutting the clip alpha. Legacy default: true. */
+  compositeEnabled?: boolean;
   vertices: MaskVertex[];
   closed: boolean;        // Is the path closed
   opacity: number;        // 0-1

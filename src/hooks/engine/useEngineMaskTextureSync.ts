@@ -60,7 +60,7 @@ export function resolvePreviewMaskTexturePlan(input: {
 
 function getMaskShapeHash(masks: ClipMask[]): string {
   return masks.map(m =>
-    `${m.enabled !== false}|${m.inverted}|${m.closed}|${m.mode}|` +
+    `${m.enabled !== false}|${m.compositeEnabled !== false}|${m.inverted}|${m.closed}|${m.mode}|` +
     `${m.vertices.map((v: MaskVertex) => [
       v.x.toFixed(4),
       v.y.toFixed(4),

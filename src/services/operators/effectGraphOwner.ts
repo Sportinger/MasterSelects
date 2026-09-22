@@ -1,4 +1,6 @@
 import { upgradeSlitScanGraph } from './slitScanGraphUpgrade';
+import { SLIT_SCAN_PROTECTION_RESOURCE } from './slitScanProtectionGraph';
+import { SLIT_SCAN_TIME_MAP_RESOURCE } from './slitScanTimeMapGraph';
 import { createDefaultSlitScanGraph } from './slitScanEffectGraph';
 import { composeSplatGraph } from './splatGraphComposition';
 import { SPLAT_SCALAR_OPERATORS } from './splatScalarInputs';
@@ -93,6 +95,8 @@ export function effectOperatorCompileContext(effect: Pick<EffectGraphOwner, 'typ
   const definition = getEffect(effect.type);
   const context: ImageOperatorCompileContext = {
     parameterSchema: definition?.params,
+    ...(effect.type === 'slit-scan' ? { namedImages: [SLIT_SCAN_PROTECTION_RESOURCE, SLIT_SCAN_TIME_MAP_RESOURCE]
+      .map(id => ({ id, sampling: 'hardware-linear-clamp' as const })) } : {}),
     ...(definition && 'usesInputHistory' in definition && definition.usesInputHistory ? { allowInputHistory: true } : {}),
     ...(definition && 'usesFeedback' in definition && definition.usesFeedback ? { allowFrameHistory: true } : {}),
     ...(effect.type === 'memory-leak' ? { allowMemoryWindow: true } : {}),

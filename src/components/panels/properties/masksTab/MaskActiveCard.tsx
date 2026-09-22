@@ -6,6 +6,8 @@ import { MaskEdgeSection } from './MaskEdgeSection';
 import { MaskModeSegmented } from './MaskModeSegmented';
 import { MaskTransformSection } from './MaskTransformSection';
 import { MaskVertexTools } from './MaskVertexTools';
+import { InspectorSelect } from '../../../inspector/InspectorSelect';
+import { ResolveInspectorRow } from '../resolveInspector/ResolveInspectorPrimitives';
 
 interface MaskActiveCardShortcutRegistry {
   getLabel: (command: ShortcutActionId) => string;
@@ -96,6 +98,11 @@ export function MaskActiveCard({
       />
 
       <MaskModeSegmented activeMask={activeMask} clipId={clipId} updateMask={updateMask} />
+      {activeMask.purpose !== 'crop' && <ResolveInspectorRow label="Mask usage">
+        <InspectorSelect ariaLabel="Mask usage" value={activeMask.compositeEnabled === false ? 'effect' : 'composite'}
+          options={[{ value: 'composite', label: 'Composite + effect input' }, { value: 'effect', label: 'Effect input only' }]}
+          onChange={value => updateMask(clipId, activeMask.id, { compositeEnabled: value !== 'effect' })} />
+      </ResolveInspectorRow>}
 
       <MaskTransformSection
         activeMask={activeMask}

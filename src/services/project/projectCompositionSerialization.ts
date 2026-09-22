@@ -158,6 +158,7 @@ export function convertCompositions(compositions: Composition[]): ProjectComposi
         id: m.id,
         name: m.name || 'Mask',
         purpose: m.purpose,
+        compositeEnabled: m.compositeEnabled,
         mode: m.mode || 'add',
         inverted: m.inverted || false,
         opacity: m.opacity ?? 1,

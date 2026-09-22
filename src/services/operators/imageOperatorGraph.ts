@@ -591,7 +591,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     : source(outputs[0], 'image');
   const output = visit(selected.node, selected.output);
   const capabilities: ImageOperatorCapability[] = [];
-  if (instructions.some(item => item.operation === 'uv' || item.operation === 'kernel-sum' || item.operation === 'rect-sum' || item.operation === 'sequence-sum'
+  if (instructions.some(item => item.operation === 'uv' || item.operation === 'sample-input-history' || item.operation === 'kernel-sum' || item.operation === 'rect-sum' || item.operation === 'sequence-sum'
     || item.operation === 'segment-sort-luma' || item.operation === 'quadtree-partition' || item.operation === 'resource-input' || item.operation === 'resource-load-input')) capabilities.push('uv');
   if (instructions.some(item => item.operation === 'resolution' || item.operation === 'load-image' || item.operation === 'field-load-nearest-seed' || item.operation === 'segment-sort-luma' || item.operation === 'quadtree-partition')) capabilities.push('resolution');
   if (instructions.some(item => item.operation === 'time')) capabilities.push('time');

@@ -3,6 +3,8 @@ import type { Keyframe } from '../../types/keyframes';
 import { renderClipAINodesToCanvas } from '../nodeGraph';
 import { getClipTimeInfo } from './FrameContext';
 import type { FrameContext } from './types';
+import { evaluateCompositionClipMasks } from '../compositionRender/keyframeEvaluation';
+import { temporalClipSource } from '../../effects/time/temporalClipSource';
 
 function findLinkedClip(clip: TimelineClip, ctx: FrameContext): TimelineClip | null {
   if (clip.linkedClipId) {
@@ -14,9 +16,11 @@ function findLinkedClip(clip: TimelineClip, ctx: FrameContext): TimelineClip | n
 export function addLayerBuilderMaskProperties(
   layer: Layer,
   clip: TimelineClip,
-  _localTime?: number,
-  _keyframes?: readonly Keyframe[],
+  localTime = 0,
+  keyframes: readonly Keyframe[] = [],
 ): void {
+  layer.temporalSource = temporalClipSource(clip, localTime, keyframes);
+  layer.masks ??= evaluateCompositionClipMasks(clip.masks, keyframes, localTime);
   if (clip.masks?.some(mask => mask.enabled !== false)) {
     layer.maskClipId = clip.id;
     layer.maskInvert = false;

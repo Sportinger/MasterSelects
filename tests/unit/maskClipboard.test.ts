@@ -55,6 +55,7 @@ describe('mask clipboard', () => {
     const sourceMask: ClipMask = {
       id: 'mask-a',
       name: 'Reveal',
+      compositeEnabled: false,
       vertices: [vertex('v1', 0.1, 0.2), vertex('v2', 0.8, 0.2)],
       edgeFeathers: { [sourceEdgeId]: 18 },
       closed: true,
@@ -117,6 +118,7 @@ describe('mask clipboard', () => {
     const target = useTimelineStore.getState().clips.find(candidate => candidate.id === 'target')!;
     const pastedMask = target.masks?.[0];
     expect(pastedMask?.id).toBeTruthy();
+    expect(pastedMask?.compositeEnabled).toBe(false);
     expect(pastedMask?.id).not.toBe('mask-a');
     expect(pastedMask?.vertices.map(v => v.id)).not.toContain('v1');
     expect(pastedMask?.vertices.map(v => v.id)).not.toContain('v2');

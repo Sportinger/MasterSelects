@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Layer } from '../../src/types';
 import type { ExportRenderHostPort } from '../../src/engine/export/exportRenderHostPort';
+import { recordTemporalPreparation } from '../../src/effects/time/temporalResourcePreparation';
 
 const mockFactory = vi.hoisted(() => {
   const calls: string[] = [];
@@ -120,6 +121,7 @@ function createInjectedHost(): ExportRenderHostPort {
     createVideoFrameFromExport: vi.fn(async () => null),
     readPixels: vi.fn(async () => new Uint8ClampedArray(320 * 180 * 4)),
     cleanupExportCanvas: vi.fn(),
+    requestPreviewRender: vi.fn(),
     hasMaskTexture: vi.fn(() => false),
     updateMaskTexture: vi.fn(),
     removeMaskTexture: vi.fn(),
@@ -135,6 +137,40 @@ beforeEach(() => {
 });
 
 describe('ExportRenderSessionImpl', () => {
+  it('waits for temporal decoding, rerenders the same frame, and only then captures', async () => {
+    const host = createInjectedHost();
+    const session = new ExportRenderSessionImpl({ runId: 'temporal', compositionId: 'composition-a',
+      width: 320, height: 180, stackedAlpha: false, preferZeroCopy: false, host });
+    await session.begin();
+    let release!: () => void;
+    let entered!: () => void;
+    const preparing = new Promise<void>(resolve => { release = resolve; });
+    const renderEntered = new Promise<void>(resolve => { entered = resolve; });
+    vi.mocked(host.render).mockImplementationOnce(() => { recordTemporalPreparation(preparing); entered(); });
+    const capture = session.renderFrame({ time: 2, layers, timestampMicros: 2000000, durationMicros: 33333 });
+    await renderEntered;
+    expect(host.readPixels).not.toHaveBeenCalled();
+    release();
+    await capture;
+    expect(host.render).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(host.render).mock.calls[1]).toEqual(vi.mocked(host.render).mock.calls[0]);
+    expect(host.readPixels).toHaveBeenCalledTimes(1);
+    session.dispose();
+  });
+
+  it('rejects a failed temporal resource without capturing a placeholder', async () => {
+    const host = createInjectedHost();
+    const session = new ExportRenderSessionImpl({ runId: 'temporal-error', compositionId: 'composition-a',
+      width: 320, height: 180, stackedAlpha: false, preferZeroCopy: false, host });
+    await session.begin();
+    vi.mocked(host.render).mockImplementationOnce(() => {
+      recordTemporalPreparation(Promise.reject(new Error('source decode failed')));
+    });
+    await expect(session.renderFrame({ time: 2, layers, timestampMicros: 2000000, durationMicros: 33333 })).rejects.toThrow('source decode failed');
+    expect(host.readPixels).not.toHaveBeenCalled();
+    session.dispose();
+  });
+
   it('begins with the original export setup order', async () => {
     const session = createSession();
 

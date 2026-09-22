@@ -12,6 +12,8 @@ let blurCanvas: OffscreenCanvas | null = null;
 let blurCtx: OffscreenCanvasRenderingContext2D | null = null;
 
 export interface MaskTextureRenderOptions {
+  /** Explicit effect use ignores the mask's independent compositing toggle. */
+  purpose?: 'composite' | 'effect';
   featherScale?: number;
   maxFeatherQualityScale?: number;
 }
@@ -44,7 +46,7 @@ export function createMaskTextureRasterKey(
   options: MaskTextureRenderOptions = {},
 ): string {
   const renderedMasks = masks
-    .filter(mask => mask.enabled !== false && mask.vertices.length >= 3 && mask.closed)
+    .filter(mask => mask.enabled !== false && (options.purpose === 'effect' || mask.compositeEnabled !== false) && mask.vertices.length >= 3 && mask.closed)
     .map(mask => ({
       closed: mask.closed,
       inverted: mask.inverted,
@@ -321,7 +323,7 @@ export function generateMaskTexture(
 ): ImageData | null {
   if (!masks || masks.length === 0) return null;
 
-  const enabledMasks = masks.filter(m => m.enabled !== false && m.vertices.length >= 3 && m.closed);
+  const enabledMasks = masks.filter(m => m.enabled !== false && (options.purpose === 'effect' || m.compositeEnabled !== false) && m.vertices.length >= 3 && m.closed);
   if (enabledMasks.length === 0) return null;
 
   const ctx = ensureMaskCanvas(width, height);

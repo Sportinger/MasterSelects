@@ -4,6 +4,28 @@ const number = (label: string, value: number, min: number, max: number, step: nu
   ({ type: 'number', label, default: value, min, max, step, group, animatable: true });
 
 export const slitScanParams: Record<string, EffectParam> = {
+  temporalInterpolation: { type: 'select', label: 'Temporal sampling', default: 'linear', group: 'Sampling', options: [
+    { value: 'linear', label: 'Blend adjacent frames' }, { value: 'nearest', label: 'Nearest frame (no blending)' },
+  ] },
+  temporalSamples: { ...number('Samples', 32, 2, 64, 1, 'Sampling'), animatable: false },
+  temporalResolution: { type: 'select', label: 'Resolution', default: '160', group: 'Sampling', options: [
+    { value: 'native', label: 'Full source resolution (streamed)' },
+    { value: '160', label: 'Small preview · 160 px' },
+  ] },
+  protectionMask: { type: 'text', label: 'Protection mask', default: '', group: 'Resources' },
+  mapMediaId: { type: 'text', label: 'Time map source', default: '', group: 'Resources' },
+  mapAmount: number('Map mix', 0, 0, 1, 0.01, 'Time map'),
+  mapStart: number('Map start (timeline s)', 0, -3600, 3600, 0.01, 'Time map'),
+  mapChannel: { type: 'select', label: 'Map channel', default: 'luminance', group: 'Time map', options: [
+    { value: 'luminance', label: 'Luminance' }, { value: 'alpha', label: 'Alpha' },
+  ] },
+  mapInvert: { type: 'select', label: 'Invert map', default: 'off', group: 'Time map', options: [
+    { value: 'off', label: 'Off' }, { value: 'on', label: 'On' },
+  ] },
+  preview: { type: 'select', label: 'Preview', default: 'result', group: 'Time', options: [
+    { value: 'result', label: 'Result' }, { value: 'time', label: 'Time map' }, { value: 'mask', label: 'Protection mask' },
+  ] },
+  maskStrength: number('Protection strength', 1, 0, 1, 0.01, 'Subject protection'),
   delay: number('Delay (s)', 1, 0, 4, 0.01, 'Time'),
   profile: { type: 'select', label: 'Profile', default: 'linear', group: 'Time', options: [
     { value: 'linear', label: 'Linear scan' }, { value: 'center', label: 'Out from center' },

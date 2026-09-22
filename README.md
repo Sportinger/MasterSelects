@@ -4,7 +4,7 @@ A media editor and an agent-friendly foundation for creative tools.
 
 Edit video, mix audio, animate graphics, build 3D scenes, and work with live
 visuals. MasterSelects combines these workflows in a browser-based workspace
-with WebGPU rendering and a multitrack timeline.
+with WebGPU rendering and a multitrack timeline. Selected timeline clips stay selected on repeat clicks by default; click-to-deselect is optional in Settings > General > Timeline.
 
 When your project needs a tool that isn't there yet, you can have a coding agent
 build it into the editor while you work. Try the new effect, panel, or workflow
@@ -42,8 +42,9 @@ Meanwhile, I'll keep a refined version available at
 contributions as I bring them together into a cohesive editor.
 
 Slit Scan adds spatial time displacement to clips, with directional and wave
-profiles, a protected center, and an editable group built from shared Nodes.
-See [Effects](docs/Features/Effects.md#slit-scan) for controls and playback-history limits.
+profiles, center or clip-mask protection, diagnostic previews, and an editable group built from shared Nodes.
+Small preview and Full Res use the same source-time sampling through a bounded GPU cache; playback reuses loaded frames and decodes only missing source times.
+See [Effects](docs/Features/Effects.md#slit-scan) for controls and preparation limits.
 
 ## Build while you create
 
@@ -91,7 +92,7 @@ existing systems, and check their work:
 | **Video** | Edit multiple tracks, nest compositions, work with proxies, sync multicam footage, and import Premiere Pro sequences. |
 | **Nodes** | One clip canvas with nested groups, executable texture/material/geometry nodes, detailed face/depth processing, synchronized effect controls and a searchable catalog. Smooth, continuous exponential wheel and trackpad zoom stays anchored to the pointer. An OffscreenCanvas worker draws the graph and directional signal animation on separate cached layers. Compact animation areas show existing keyframes directly on their target nodes; extract a keyframe node to share a curve, with its cables revealed on selection. A collapsible Stabilization group exposes landmark conversion, baked transform curves and their clip target, with its own bypass and gray inactive keys in the timeline and curve editors. Executable 3D nodes support bypass, including transforms already recorded in supported Face Cables bakes. Typed ports show accepted formats; Video Source exposes reusable tracking and saved depth alongside audio analysis. |
 | **Color & effects** | Grade through Color Nodes or the synchronized Color controls, inspect curves and scopes, combine GPU effects and transitions, and animate masks and properties with keyframes. |
-| **Audio** | Edit waveforms and spectrograms, mix tracks with effects and sends, record audio, and separate stems. |
+| **Audio** | Edit waveforms and spectrograms, mix tracks with effects and sends, record audio, and separate stems. Audio effects reuse the shared collapsible inspector with sliders, numeric fields, resets, and keyframes. |
 | **Motion & tracking** | Animate text, shapes, Lottie, and Rive assets; create captions; track faces and surfaces; bypass baked face/lip stabilization without deleting keyframes; and attach graphics to tracked motion. |
 | **3D** | Combine footage with models, lights, cameras, and Gaussian splats in a shared scene. Large splats parse off the UI thread with visible progress. Splat Exploration with branch bypass and compute budgets exposes editable nodes for sphere cropping, stretched splats, particle simulation, camera fading, and an approximate mesh wireframe that respects upstream sphere crops. Mesh and particle outputs can appear as linked timeline clips sharing one node graph and scene. Static node branches retain background worker sorting. Early sphere crops remove outside splats from downstream GPU work; per-branch budgets sample across the entire scan. |
 | **AI** | Ask the editor to change the timeline, generate media, or use local transcription, segmentation, and depth estimation. |

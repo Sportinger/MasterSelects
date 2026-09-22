@@ -1,4 +1,6 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge, OperatorGroup } from '../../types/operatorGraph';
+import { withSlitScanProtection } from './slitScanProtectionGraph';
+import { withSlitScanTimeMap } from './slitScanTimeMapGraph';
 
 type Ref = { node: string; port: string };
 
@@ -84,5 +86,5 @@ export function createDefaultSlitScanGraph(): EffectOperatorGraph {
   const mixed = node('mix-rgba', 'math.mix.vec4', { a: original, b: delayed, t: clamp('safe-mix', mix) });
   const image = node('result', 'convert.vec4-to-image', { value: mixed }, 'image');
   node('output', 'image.output', { image });
-  return { version: 1, schemaVersion: 1, domain: 'image', nodes, edges, groups, layout };
+  return withSlitScanTimeMap(withSlitScanProtection({ version: 1, schemaVersion: 1, domain: 'image', nodes, edges, groups, layout }));
 }

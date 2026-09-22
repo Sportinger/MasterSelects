@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MaskTextureManager } from '../../src/engine/texture/MaskTextureManager';
 import type { ClipMask } from '../../src/types/masks';
-import { createMaskTextureRasterKey } from '../../src/utils/maskRenderer';
+import { createMaskTextureRasterKey, generateMaskTexture } from '../../src/utils/maskRenderer';
 
 function createMask(ids = ['a', 'b', 'c']): ClipMask {
   return {
@@ -53,6 +53,16 @@ afterEach(() => {
 });
 
 describe('nested mask raster cache', () => {
+  it('keeps effect-only masks out of clip alpha while retaining an explicit effect raster identity', () => {
+    const mask = createMask();
+    const original = createMaskTextureRasterKey([mask], 16, 16);
+    mask.compositeEnabled = false;
+    expect(generateMaskTexture([mask], 16, 16)).toBeNull();
+    expect(createMaskTextureRasterKey([mask], 16, 16)).toBe(createMaskTextureRasterKey([], 16, 16));
+    expect(createMaskTextureRasterKey([mask], 16, 16, { purpose: 'effect' })).toBe(original);
+    mask.enabled = false;
+    expect(generateMaskTexture([mask], 16, 16, { purpose: 'effect' })).toBeNull();
+  });
   it('shares a raster across cloned masks with different authoring ids', () => {
     const firstMask = createMask(['a', 'b', 'c']);
     const clonedMask = createMask(['x', 'y', 'z']);

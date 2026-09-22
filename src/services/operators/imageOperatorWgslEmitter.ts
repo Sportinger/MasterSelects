@@ -33,7 +33,7 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
   const expressions = instructions.map((item, index) => {
     const args = item.inputs.map(input => `v${input}`);
     const expression = item.operation === 'input' ? 'pixel' : item.operation === 'uv' ? 'inputUv'
-      : item.operation === 'sample-input-history' ? `sampleInputHistory(imageGraphResource${item.resourceSlots![0]}, imageGraphResource${item.resourceSlots![1]}, texSampler, ${args.join(', ')})`
+      : item.operation === 'sample-input-history' ? `sampleInputHistory(imageGraphResource${item.resourceSlots![0]}, imageGraphResource${item.resourceSlots![1]}, texSampler, ${args.join(', ')}, inputUv)`
       : item.operation === 'resource-input' ? `sampleImageGraphResource${item.value}(inputUv)`
       : item.operation === 'resource-load-input' ? `loadImageGraphResource${item.value}(inputPixel)`
       : item.operation === 'field-load-nearest-seed' ? `loadImageGraphResource${item.value}(imageGraphPixelCoordinate(${args[0]}, inputResolution))`

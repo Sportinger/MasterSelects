@@ -19,6 +19,7 @@ MasterSelects supports per-clip vector masks with preview-overlay editing, selec
 - Mask path animation is exposed as one `Mask Path` stopwatch, not separate vertex X/Y stopwatches.
 - The active mask can be copied and pasted to another selected clip together with its mask keyframes, keeping keyframe times relative to the target clip start.
 - Mask rows can be moved up or down to change mask compositing order.
+- **Mask usage** separates clip compositing from effect inputs. Choose **Effect input only** to keep a mask available for an effect without cutting the clip alpha; **Composite + effect input** retains normal compositing. Existing masks keep normal compositing by default.
 - Individual mask edges can be selected and given their own edge feather value.
 - The registered AI tool surface can inspect, create, remove, and update masks and vertices, including whole-path keyframes.
 - Mask changes are serialized with the project.
@@ -40,11 +41,13 @@ MasterSelects supports per-clip vector masks with preview-overlay editing, selec
 - `expanded`
 - `position`
 - `enabled`
+- `compositeEnabled` (optional, defaults to true for existing projects)
 - `visible`
 - `outlineColor`
 
 `MaskMode` is `add`, `subtract`, or `intersect`.
 `enabled` controls whether a mask contributes to the rendered mask texture.
+`compositeEnabled: false` excludes the mask from clip compositing while allowing an effect to explicitly select it. It does not disable mask editing, animation, inversion, or feathering. Effect selection remains independent of this setting; choosing effect-only usage alone does not apply an effect. The built-in crop mask always uses its normal crop controls.
 `visible` controls only the preview overlay outline and edit handles.
 `outlineColor` controls the SVG stroke color used for that mask in the preview overlay.
 Each `MaskVertex` can store `handleMode` as `none`, `mirrored`, or `split`.

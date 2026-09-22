@@ -52,6 +52,7 @@ export interface ProjectMask {
   id: string;
   name: string;
   purpose?: 'crop';
+  compositeEnabled?: boolean;
   mode: 'add' | 'subtract' | 'intersect';
   inverted: boolean;
   opacity: number;
