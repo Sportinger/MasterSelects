@@ -32,9 +32,9 @@ const allCategories = CATEGORY_INFO.map(({ id }) => id);
 describe('Effect category registration', () => {
   const expectedPopulatedCategories: EffectCategory[] = [
     'color', 'blur', 'distort', 'stylize', 'generate', 'keying', 'halftone', 'analog',
-    'pixel', 'glyph', 'geometry', 'tracking',
+    'pixel', 'glyph', 'geometry', 'tracking', 'time',
   ];
-  const expectedEmptyCategories: EffectCategory[] = ['time', 'transition'];
+  const expectedEmptyCategories: EffectCategory[] = ['transition'];
 
   it('should have every catalog category defined', () => {
     for (const cat of allCategories) {
@@ -89,7 +89,7 @@ describe('Effect category registration', () => {
   });
 
   it('getEffectsByCategory should return empty array for empty category', () => {
-    const timeEffects = getEffectsByCategory('time');
+    const timeEffects = getEffectsByCategory('transition');
     expect(timeEffects).toHaveLength(0);
   });
 

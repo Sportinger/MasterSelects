@@ -8,6 +8,7 @@ export type ImagePlanValue = 'image' | 'rgb' | 'alpha' | 'scalar' | 'boolean' | 
 export type ImageOperatorCapability = 'uv' | 'resolution' | 'time' | 'sample' | 'pixel-load' | 'derivative';
 export interface ImageOperatorEvaluationContext {
   uv?: [number, number]; resolution?: [number, number]; timelineTimeSeconds?: number;
+  sampleInputHistory?: (uv: [number, number], delay: number, current: [number, number, number, number]) => [number, number, number, number];
   sampleImage?: (uv: [number, number]) => [number, number, number, number];
   sampleResource?: (resourceId: string, uv: [number, number]) => [number, number, number, number];
   loadImage?: (pixel: [number, number]) => [number, number, number, number];
@@ -19,6 +20,7 @@ export interface ImageOperatorEvaluationContext {
 export interface ImagePlanInstruction {
   nodeId: string; operation: string; type: ImagePlanValue; inputs: number[]; value?: number;
   color?: [number, number, number, number]; scope?: number;
+  resourceSlots?: number[];
 }
 export interface ImageOperatorSampleScope {
   id: number; output: number; type?: 'image' | 'scalar'; coordinate?: 'uv' | 'pixel';

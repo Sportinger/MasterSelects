@@ -2,6 +2,7 @@ import type { ImageOperatorCapability, ImageOperatorSampleScope, ImagePlanInstru
 import type { ImageOperatorResourceSampling } from './imageOperatorResources';
 import { emitImageReducerWgsl } from './imageOperatorReducerWgsl';
 import { imageF32 as f32, imageParameterExpression as parameterExpression, IMAGE_COLOR_WGSL, IMAGE_COORDINATE_ROTATION_WGSL, IMAGE_GAUSSIAN_WGSL, IMAGE_HASH2D_WGSL, IMAGE_PARAMETER_WGSL, IMAGE_RADIAL_PROJECTION_WGSL, IMAGE_VECTOR_WGSL } from './imageOperatorWgsl';
+import { INPUT_HISTORY_SAMPLE_WGSL } from './inputHistorySampling';
 import { IMAGE_BAYER_4_WGSL } from './imagePatternSemantics';
 import { emitImageSegmentSortWgsl, IMAGE_SEGMENT_SORT_WGSL } from './imageOperatorSegmentSortWgsl';
 import { emitImageQuadtreeWgsl } from './imageOperatorQuadtreeWgsl';
@@ -32,6 +33,7 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
   const expressions = instructions.map((item, index) => {
     const args = item.inputs.map(input => `v${input}`);
     const expression = item.operation === 'input' ? 'pixel' : item.operation === 'uv' ? 'inputUv'
+      : item.operation === 'sample-input-history' ? `sampleInputHistory(imageGraphResource${item.resourceSlots![0]}, imageGraphResource${item.resourceSlots![1]}, texSampler, ${args.join(', ')})`
       : item.operation === 'resource-input' ? `sampleImageGraphResource${item.value}(inputUv)`
       : item.operation === 'resource-load-input' ? `loadImageGraphResource${item.value}(inputPixel)`
       : item.operation === 'field-load-nearest-seed' ? `loadImageGraphResource${item.value}(imageGraphPixelCoordinate(${args[0]}, inputResolution))`
@@ -159,7 +161,7 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
   const quadtreeWgsl = emitImageQuadtreeWgsl({ instructions, sampleScopes, quadtreeScopes, capabilities, hasParameters: !!parameterValues.length });
   const key = `image-v1-${hash(JSON.stringify({ canonical, resourceInputs, resourceSampling }))}`;
   const pixelLoadWgsl = capabilities.includes('pixel-load') ? 'fn imageGraphPixelCoordinate(pixel: vec2f, resolution: vec2f) -> vec2i { return clamp(vec2i(pixel), vec2i(0), vec2i(resolution) - 1); }' : '';
-  const wgsl = [IMAGE_COLOR_WGSL, pixelLoadWgsl, ...(instructions.some(item => item.operation === 'hash2d-vec2') ? [IMAGE_HASH2D_WGSL] : []),
+  const wgsl = [...(instructions.some(item => item.operation === 'sample-input-history') ? [INPUT_HISTORY_SAMPLE_WGSL] : []), IMAGE_COLOR_WGSL, pixelLoadWgsl, ...(instructions.some(item => item.operation === 'hash2d-vec2') ? [IMAGE_HASH2D_WGSL] : []),
       ...(instructions.some(item => item.operation === 'gaussian-scalar') ? [IMAGE_GAUSSIAN_WGSL] : []), ...(parameterValues.length ? [IMAGE_PARAMETER_WGSL] : []),
       ...(instructions.some(item => item.operation === 'rotate-vec2') ? [IMAGE_COORDINATE_ROTATION_WGSL] : []),
       ...(instructions.some(item => item.operation === 'normalize-vec2') ? [IMAGE_VECTOR_WGSL] : []),

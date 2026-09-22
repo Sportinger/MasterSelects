@@ -15,6 +15,7 @@ export interface Effect {
 }
 
 export type EffectType =
+  | 'slit-scan'
   | 'audio-math'
   | 'face-cables'
   | 'surface-overlay'

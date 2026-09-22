@@ -7,6 +7,7 @@ export interface ImageOperatorCompileContext {
   parameterSchema?: Record<string, EffectParam>;
   namedImages?: readonly ImageOperatorNamedImage[];
   allowFrameHistory?: boolean;
+  allowInputHistory?: boolean;
   allowMemoryWindow?: boolean;
   resolveGlyphAtlas?: ResolveImageOperatorGlyphAtlas;
   fieldResources?: readonly ImageOperatorFieldResource[];

@@ -15,6 +15,9 @@ export function validateImageOperatorResourceContext(graph: EffectOperatorGraph,
   if (!context.allowFrameHistory && graph.nodes.some(item => item.operator === 'image.frame-history')) {
     throw new Error('Image frame history requires an explicit compile-context opt-in.');
   }
+  if (!context.allowInputHistory && graph.nodes.some(item => item.operator === 'image.sample-history')) {
+    throw new Error('Input history requires an explicit compile-context opt-in.');
+  }
   return namedImages;
 }
 
@@ -47,6 +50,17 @@ export function createImageOperatorResourceLowering(options: {
     return slot;
   };
   return (current: BoundOperatorNode, output: string): number | undefined => {
+    if (current.operator === 'image.sample-history') {
+      const atlas = 'input-history:atlas', ages = 'input-history:ages';
+      for (const [id, part] of [[atlas, 'atlas'], [ages, 'ages']] as const) {
+        if (!options.state.externalResources.some(resource => resource.id === id)) options.state.externalResources.push({ id, kind: 'input-history', part });
+      }
+      const atlasSlot = resourceSlot(atlas, 'hardware-linear-clamp', 'Image');
+      const agesSlot = resourceSlot(ages, 'exact-pixel-load', 'Image');
+      return options.emit({ nodeId: current.id, operation: 'sample-input-history', type: 'image',
+        inputs: [options.visitSource(current, 'uv'), options.visitSource(current, 'delay'), options.visitSource(current, 'current')],
+        resourceSlots: [atlasSlot, agesSlot] });
+    }
     const memorySlot = (producer: BoundOperatorNode) => {
       const descriptor = resolveImageOperatorMemoryWindow(producer, options.params, options.context.allowMemoryWindow);
       if (!options.state.externalResources.some(resource => resource.id === descriptor.id)) options.state.externalResources.push(descriptor);

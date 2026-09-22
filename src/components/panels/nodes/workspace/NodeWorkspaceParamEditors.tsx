@@ -1,3 +1,4 @@
+import { SlitScanControls } from '../../properties/SlitScanControls';
 import { useCallback } from 'react';
 import { EFFECT_REGISTRY } from '../../../../effects';
 import type { EffectParam } from '../../../../effects';
@@ -167,6 +168,7 @@ function EffectParamEditor({
 }
 
 export function EffectNodeParameters({ clip, node }: { clip: TimelineClip; node: NodeGraphNode }) {
+  const updateClipEffect = useTimelineStore(state => state.updateClipEffect);
   const playheadPosition = useTimelineStore((state) => state.playheadPosition);
   const getInterpolatedEffects = useTimelineStore((state) => state.getInterpolatedEffects);
   const setClipEffectEnabled = useTimelineStore((state) => state.setClipEffectEnabled);
@@ -183,6 +185,8 @@ export function EffectNodeParameters({ clip, node }: { clip: TimelineClip; node:
   catch { /* ParameterSourceNumberRow displays the per-parameter error. */ }
   const effectDef = EFFECT_REGISTRY.get(effect.type);
   const params = Object.entries(effectDef?.params ?? {});
+  if (effect.type === 'slit-scan') return <SlitScanControls effectId={effect.type} effectInstanceId={effect.id} clipId={clip.id}
+    params={interpolatedEffect.params as Record<string, number | boolean | string>} onChange={values => updateClipEffect(clip.id, effect.id, values)} />;
 
   return (
     <div className="node-workspace-param-list">

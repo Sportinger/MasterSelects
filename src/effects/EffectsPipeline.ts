@@ -1,3 +1,4 @@
+import { InputHistoryRuntime } from './time/InputHistoryRuntime';
 import { nodeScalarSampleTap } from '../services/nodePreview/NodeScalarSampleTap';
 // Effects Pipeline - GPU effect processing using the modular effect registry
 
@@ -89,6 +90,7 @@ function toPrimitiveEffectParams(params: Record<string, unknown>): Record<string
 }
 
 export class EffectsPipeline {
+  private inputHistory: InputHistoryRuntime;
   private device: GPUDevice;
   private pipelineCache: EffectPipelineCache;
   private feedbackStates = new Map<string, FeedbackState>();
@@ -102,6 +104,7 @@ export class EffectsPipeline {
 
   constructor(device: GPUDevice, onPipelineReady?: () => void) {
     this.device = device;
+    this.inputHistory = new InputHistoryRuntime(device);
     this.pipelineCache = new EffectPipelineCache(device, onPipelineReady);
     this.computeRuntime = new ComputeEffectRuntime(device);
     this.splitComparePipeline = new SplitComparePipeline(device);
@@ -166,6 +169,7 @@ export class EffectsPipeline {
     if (INLINE_EFFECT_IDS.has(effectType)) return;
     const effect = getEffect(effectType);
     if (isFullscreenEffectDefinition(effect)) {
+      if (effect.usesInputHistory) return; // The graph supplies the temporal sampler bindings.
       this.ensureEffectPipeline(effectType, effect);
     } else if (isComputeEffectDefinition(effect)) {
       this.computeRuntime.ensure(effect);
@@ -379,7 +383,10 @@ export class EffectsPipeline {
             identity: upload ? `memory-window:${upload.version}:${upload.width}x${upload.height}` : 'memory-window:unavailable',
             width: upload?.width ?? 1, height: upload?.height ?? 1, available: upload !== null };
         } : undefined;
-      const imageExternalResources = imagePlan ? new Map(resolveImageGraphExternalResources(this.device, imagePlan, { resolveMemoryWindow })) : undefined;
+      const inputHistory = imagePlan?.externalResources?.some(resource => resource.kind === 'input-history')
+        ? this.inputHistory.prepare(JSON.stringify([frameHistory?.scopeId ?? clock.scopeId, effect.id]), commandEncoder,
+          effectInput, sampler, outputWidth, outputHeight, timelineTimeSeconds, 4, frameHistory) : undefined;
+      const imageExternalResources = imagePlan ? new Map(resolveImageGraphExternalResources(this.device, imagePlan, { resolveMemoryWindow, resolveInputHistory: inputHistory ? descriptor => inputHistory[descriptor.part] : undefined })) : undefined;
       if (feedbackState && imagePlan?.frameHistoryResource) imageExternalResources?.set(imagePlan.frameHistoryResource, {
         view: feedbackState.committedView,
         identity: `effect-history:${feedbackState.committedRevision}`,
@@ -624,6 +631,7 @@ export class EffectsPipeline {
    * Clean up resources
    */
   destroy(): void {
+    this.inputHistory.destroy();
     this.denseTerrain?.destroy();this.denseTerrain=undefined;
     for (const state of this.feedbackStates.values()) {
       state.committedTexture.destroy();

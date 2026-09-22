@@ -76,6 +76,9 @@ export interface FullscreenEffectDefinition {
   // Optional: Effect samples its own previous output frame through binding 3.
   usesFeedback?: boolean;
 
+  // Samples a bounded history of this pass's input (not recursive feedback).
+  usesInputHistory?: boolean;
+
   // Optional font atlas sampled from binding 4.
   glyphAtlas?: (params: Record<string, number | boolean | string>) => GlyphAtlasOptions;
 

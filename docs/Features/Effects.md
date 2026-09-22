@@ -13,16 +13,50 @@ normal compact effect inspector retains its design and shows the effective value
 and source. Other effects and structural settings are not implicitly enabled.
 
 - 37 blend modes are implemented in `src/shaders/composite.wgsl`.
-- 98 GPU effects are registered in `src/effects/`, including fullscreen
+- 99 GPU effects are registered in `src/effects/`, including fullscreen
   fragment effects, compute effects, glyph effects, tracking effects, and
   specialized render effects.
 - The populated clip-effect categories are `color`, `blur`, `distort`,
   `stylize`, `generate`, `keying`, `halftone`, `analog`, `pixel`, `glyph`,
-  `geometry`, and `tracking`.
+  `geometry`, `tracking`, and `time`.
 - `generate` holds the [Memory Leak](./Memory-Leak.md) generator, which
   reinterprets leftover bytes of the FFmpeg wasm heap as pixels through the
   byte-texture binding described below.
-- `time` and `transition` have no registered clip-stack effects and are hidden from the add-effect UI. Timeline transitions are implemented separately in `src/transitions/` because they own two clips, source handles, hold-frame policy, and export participants.
+- `time` contains Slit Scan. `transition` has no registered clip-stack effects and is hidden from the add-effect UI. Timeline transitions are implemented separately in `src/transitions/` because they own two clips, source handles, hold-frame policy, and export participants.
+
+## Slit Scan
+
+Add **Time > Slit Scan** to a video clip, or add its effect group in Nodes.
+The editable group reuses UV, vector, math, choice, timeline-time and RGBA mix
+operators. Five named groups organize source controls, scan direction, wave
+shape, center protection and time sampling. Only `image.sample-history` is a
+new atomic operator; it reads the input to this effect, not its previous output.
+Saved graph edits, effect bypass and numeric keyframes use the existing editor paths.
+
+- **Delay (s)**: maximum past-time offset, 0-4 seconds. Zero is unchanged.
+- **Scan direction / Angle**: left-to-right (0 degrees), top-to-bottom (90 degrees),
+  bottom-to-top (-90 degrees), right-to-left (180 degrees), or any diagonal angle.
+- **Profile**: Linear scan, Out from center, Wave / folds, Radial scan or Time rings.
+- **Protected center**: normalized X/Y position, circular radius measured in
+  image-height units, and feather. Radius zero disables protection.
+- **Wave**: number of waves, phase and animation speed in cycles per second.
+- **Time bands**: 0 or 1 keeps smooth time; 2-64 quantizes the map into stepped ages.
+- **Mix**: blend with the original input, including alpha.
+
+Playback fills a device-local ring of up to 64 input samples covering four
+seconds, with interpolation between their actual timeline timestamps. Historical
+samples are reduced to at most 640 pixels on the long edge and 230,400 pixels;
+the current input stays at full resolution. Motion in the source or camera is
+needed for a visible slit-scan deformation. No foreground tracking is implied.
+
+Seeking, reverse timeline movement, looping, source-owner changes and export
+start reset history. During warm-up, unavailable ages hold the oldest sample.
+Pausing does not accumulate samples. Export fills its own history from the export
+range start; arbitrary seeks do not reconstruct missing frames. This is a causal
+playback effect, so sparse preview frames and export can differ. Four history
+owners per effects pipeline are retained (under 225 MiB); additional simultaneous
+owners pass through their current input. Histories are runtime-only and never
+saved in project JSON. Node previews borrow the same history as the effect.
 
 ## Registry And UI
 

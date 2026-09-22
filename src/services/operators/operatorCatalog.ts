@@ -66,7 +66,7 @@ export function listNodeCatalog(): NodeCatalogEntry[] {
     inputs: [{ id: 'image', label: 'Image', type: 'texture', contract: OPERATOR_SIGNAL_CONTRACTS.texture, formats: OPERATOR_SIGNAL_CONTRACTS.texture.formats }], outputs: [{ id: 'image', label: 'Image', type: 'texture', contract: OPERATOR_SIGNAL_CONTRACTS.texture, formats: OPERATOR_SIGNAL_CONTRACTS.texture.formats }],
     parameters: Object.entries(e.params).filter(([, p]) => !p.hidden).map(([id, p]) => ({ id, label: p.label, type: p.type, default: p.default, animatable: p.animatable, min: p.min, max: p.max, step: p.step, unit: 'unknown', format: 'unknown' })),
     family: `effect.${e.category}`, variant: e.id, backend: e.pipelineKind ?? 'fullscreen',
-    fusion: e.id === 'invert' ? 'inline migration target' : 'pass-boundary', state: 'usesFeedback' in e && e.usesFeedback ? 'frame-history' : 'stateless', invalidation: 'appearance',
+    fusion: e.id === 'invert' ? 'inline migration target' : 'pass-boundary', state: (('usesFeedback' in e && e.usesFeedback) || ('usesInputHistory' in e && e.usesInputHistory)) ? 'frame-history' : 'stateless', invalidation: 'appearance',
     users: ['Clip effect stack'], localImplementations: [`Effect registry: ${e.id}`], implementation: 'local',
   }));
   return [...operators, ...flock, ...effects].toSorted((a, b) => a.category.localeCompare(b.category) || a.label.localeCompare(b.label));

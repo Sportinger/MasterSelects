@@ -1,3 +1,5 @@
+import { upgradeSlitScanGraph } from './slitScanGraphUpgrade';
+import { createDefaultSlitScanGraph } from './slitScanEffectGraph';
 import { composeSplatGraph } from './splatGraphComposition';
 import { SPLAT_SCALAR_OPERATORS } from './splatScalarInputs';
 import { defaultSplatGraph, compileSplatGraph } from './splatGraph';
@@ -70,10 +72,10 @@ import { compileComputeImageGraph } from './computeImageGraph';
 import { VORONOI_OPERATORS } from './voronoiOperators';
 
 const LOCAL_IMAGE_EFFECTS = new Set(['invert', 'brightness', 'contrast', 'saturation', 'exposure', 'levels', 'hue-shift', 'temperature', 'vibrance', 'threshold', 'posterize']);
-const CONTEXTUAL_IMAGE_EFFECTS = new Set(['vignette', 'scanlines', 'grain', 'ascii', 'number-field', 'grid-glyph', 'pixel-code', 'word-mosaic', 'glyph-matrix', 'data-hatch', 'brand-generator', 'stitch-poster', 'dither-text', 'symbol-matrix', 'pixel-dither', 'retro-matrix', 'capsule-cloud', 'ui-collage', 'matrix', 'ascii-ghost', 'inscribe', 'acuarela', 'crt-screen', 'ribbon-scan', 'wave-lines', 'glitch', 'film-prism', 'crystal', 'glass-dispersion', 'holo', 'halftone', 'pattern-halftone', 'riso', 'riso-glow', 'dither', 'dither-studio', 'paper-print', 'pixel-poster', 'tone-geometry', 'cross-stitch', 'glitch-grid', 'scatter-mosaic', 'drift-lines', 'pixelate', 'mirror', 'rgb-split', 'blockify', 'block-mosaic', 'box-blur', 'gaussian-blur', 'sharpen', 'motion-blur', 'radial-blur', 'zoom-blur', 'edge-detect', 'glow', 'wave', 'twirl', 'bulge', 'kaleidoscope', 'fisheye']);
+const CONTEXTUAL_IMAGE_EFFECTS = new Set(['slit-scan', 'vignette', 'scanlines', 'grain', 'ascii', 'number-field', 'grid-glyph', 'pixel-code', 'word-mosaic', 'glyph-matrix', 'data-hatch', 'brand-generator', 'stitch-poster', 'dither-text', 'symbol-matrix', 'pixel-dither', 'retro-matrix', 'capsule-cloud', 'ui-collage', 'matrix', 'ascii-ghost', 'inscribe', 'acuarela', 'crt-screen', 'ribbon-scan', 'wave-lines', 'glitch', 'film-prism', 'crystal', 'glass-dispersion', 'holo', 'halftone', 'pattern-halftone', 'riso', 'riso-glow', 'dither', 'dither-studio', 'paper-print', 'pixel-poster', 'tone-geometry', 'cross-stitch', 'glitch-grid', 'scatter-mosaic', 'drift-lines', 'pixelate', 'mirror', 'rgb-split', 'blockify', 'block-mosaic', 'box-blur', 'gaussian-blur', 'sharpen', 'motion-blur', 'radial-blur', 'zoom-blur', 'edge-detect', 'glow', 'wave', 'twirl', 'bulge', 'kaleidoscope', 'fisheye']);
 for (const type of ['contour-map', 'crosshatch', 'kilim', 'vector-tiling', 'embroidery', 'outline', 'bricks', 'contour-type', 'chroma-key', 'rom1', 'memory-leak']) CONTEXTUAL_IMAGE_EFFECTS.add(type);
 export function isLocalImageEffectType(type: string): type is 'invert' | EditableColorEffectType | EditablePointwiseEffectType { return LOCAL_IMAGE_EFFECTS.has(type); }
-export function isImageGraphEffectType(type: string): type is 'invert' | 'edge-detect' | 'glow' | 'fisheye' | 'ascii' | 'number-field' | 'grid-glyph' | 'pixel-code' | 'word-mosaic' | 'glyph-matrix' | 'data-hatch' | 'brand-generator' | 'stitch-poster' | 'dither-text' | 'symbol-matrix' | 'pixel-dither' | 'retro-matrix' | 'capsule-cloud' | 'ui-collage' | 'matrix' | 'ascii-ghost' | 'inscribe' | 'acuarela' | 'crt-screen' | 'ribbon-scan' | 'wave-lines' | 'glitch' | 'film-prism' | 'crystal' | 'glass-dispersion' | 'holo' | 'paper-print' | 'pixel-poster' | 'tone-geometry' | 'cross-stitch' | EditableMotionHalftoneEffectType | EditableHalftoneEffectType | EditableRisoEffectType | EditableDitherEffectType | EditableColorEffectType | EditablePointwiseEffectType | EditableContextualEffectType | EditableSamplingEffectType | EditableBlockEffectType | EditableBlurEffectType | EditableDirectionalBlurEffectType | EditableUvDistortEffectType | EditableGeometryFragmentEffectType | 'contour-type' | 'chroma-key' | 'rom1' | 'memory-leak' {
+export function isImageGraphEffectType(type: string): type is 'slit-scan' | 'invert' | 'edge-detect' | 'glow' | 'fisheye' | 'ascii' | 'number-field' | 'grid-glyph' | 'pixel-code' | 'word-mosaic' | 'glyph-matrix' | 'data-hatch' | 'brand-generator' | 'stitch-poster' | 'dither-text' | 'symbol-matrix' | 'pixel-dither' | 'retro-matrix' | 'capsule-cloud' | 'ui-collage' | 'matrix' | 'ascii-ghost' | 'inscribe' | 'acuarela' | 'crt-screen' | 'ribbon-scan' | 'wave-lines' | 'glitch' | 'film-prism' | 'crystal' | 'glass-dispersion' | 'holo' | 'paper-print' | 'pixel-poster' | 'tone-geometry' | 'cross-stitch' | EditableMotionHalftoneEffectType | EditableHalftoneEffectType | EditableRisoEffectType | EditableDitherEffectType | EditableColorEffectType | EditablePointwiseEffectType | EditableContextualEffectType | EditableSamplingEffectType | EditableBlockEffectType | EditableBlurEffectType | EditableDirectionalBlurEffectType | EditableUvDistortEffectType | EditableGeometryFragmentEffectType | 'contour-type' | 'chroma-key' | 'rom1' | 'memory-leak' {
   return isLocalImageEffectType(type) || CONTEXTUAL_IMAGE_EFFECTS.has(type);
 }
 export const isComputeImageEffectType = (type: string) => type === 'voronoi' || type === 'pixel-sort' || type === 'quadtree-zoom' || type === 'contour';
@@ -91,6 +93,7 @@ export function effectOperatorCompileContext(effect: Pick<EffectGraphOwner, 'typ
   const definition = getEffect(effect.type);
   const context: ImageOperatorCompileContext = {
     parameterSchema: definition?.params,
+    ...(definition && 'usesInputHistory' in definition && definition.usesInputHistory ? { allowInputHistory: true } : {}),
     ...(definition && 'usesFeedback' in definition && definition.usesFeedback ? { allowFrameHistory: true } : {}),
     ...(effect.type === 'memory-leak' ? { allowMemoryWindow: true } : {}),
   };
@@ -143,7 +146,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGra
   }
   const effectType = effect.type;
   if (isImageGraphEffectType(effectType)) {
-    const fallback = effectType === 'invert' ? createDefaultInvertImageGraph
+    const fallback = effectType === 'slit-scan' ? createDefaultSlitScanGraph : effectType === 'invert' ? createDefaultInvertImageGraph
       : effectType === 'contour-map' || effectType === 'crosshatch' || effectType === 'kilim'
         || effectType === 'vector-tiling' || effectType === 'embroidery' || effectType === 'outline' || effectType === 'bricks'
         ? () => createDefaultGeometryFragmentGraph(effectType)
@@ -205,7 +208,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGra
           ? () => createDefaultUvDistortGraph(effectType)
         : () => createDefaultColorEffectGraph(effectType);
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
-    const presented = effectType === 'fisheye' ? organizeFisheyeGraph(saved)
+    const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(saved)
       : effectType === 'gaussian-blur' ? organizeGaussianBlurGraph(saved) : saved;
     const composed = organizeEffectFamilyGraph(presented, recognizeOperatorCompositions(presented), effectType, fallback);
     const graph = expandOperatorCompositions(migrateImageOperatorGraph(composed));

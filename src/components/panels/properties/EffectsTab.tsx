@@ -1,3 +1,4 @@
+import { SlitScanControls } from './SlitScanControls';
 import { SplatExplorationControls } from './SplatExplorationControls';
 // Effects Tab - Add and configure visual/audio effects
 import { Fragment, Suspense, useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -204,6 +205,8 @@ function EffectParams({ effect, onChange, clipId, onDragStart, onDragEnd, onPara
   if (Object.keys(effectDef.params).length === 0) {
     return <p className="effect-info">No parameters</p>;
   }
+
+  if (effect.type === 'slit-scan') return <SlitScanControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} onChange={onChange} clipId={clipId} />;
 
   if (effect.type === 'splat-exploration' && clipId) return <SplatExplorationControls clipId={clipId} effectId={effect.id} />;
   if (effect.type === 'voxel-relief' && clipId) return <VoxelReliefControls clipId={clipId} effectId={effect.id} />;

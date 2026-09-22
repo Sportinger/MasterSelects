@@ -41,6 +41,10 @@ Meanwhile, I'll keep a refined version available at
 [masterselects.com](https://www.masterselects.com/), reviewing and polishing
 contributions as I bring them together into a cohesive editor.
 
+Slit Scan adds spatial time displacement to clips, with directional and wave
+profiles, a protected center, and an editable group built from shared Nodes.
+See [Effects](docs/Features/Effects.md#slit-scan) for controls and playback-history limits.
+
 ## Build while you create
 
 Start the editor locally from source, open your project, and work from there:

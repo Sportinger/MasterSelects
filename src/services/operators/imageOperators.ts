@@ -27,6 +27,11 @@ const vectorOperators = ([2, 3, 4] as const).flatMap(size => {
 
 /** Operators newly owned by the local image compiler. image.frame and values.number stay canonical registry entries. */
 export const IMAGE_OPERATORS: readonly OperatorDefinition[] = [
+  { ...imageOperator({ id: 'image.sample-history', family: 'image.sample', variant: 'history', label: 'Sample Input History',
+    description: 'Samples the effect input at an earlier playback time. Delay is in seconds; seeks reset the bounded history.',
+    inputs: [port('uv', 'vec2', 'UV', true), port('delay', 'number', 'Delay (s)', true), port('current', 'image', 'Current image', true)],
+    outputs: [port('image', 'image', 'Image')], parameters: [], addable: true,
+    consumers: ['image'], implementation: 'shared' }), state: 'frame-history', fusion: 'pass-boundary' },
   imageOperator({ id: 'values.integer', family: 'values.numeric', variant: 'integer', label: 'Value',
     description: 'An integer-valued scalar. Truncates toward zero after animation; keeps the numeric signal compatible with math inputs.',
     inputs: [], outputs: [port('value', 'number', 'Value')],

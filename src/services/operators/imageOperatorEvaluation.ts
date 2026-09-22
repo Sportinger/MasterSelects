@@ -93,6 +93,10 @@ export function createImageOperatorEvaluator(plan: ImageOperatorPlan) {
     const args = item.inputs.map(input => values[input]);
     if (item.operation === 'input') values.push(scopePixel);
     else if (item.operation === 'uv') values.push(scopeUv!);
+    else if (item.operation === 'sample-input-history') {
+      if (!context.sampleInputHistory) throw new Error('Image operator plan requires an input history sampling callback.');
+      values.push(context.sampleInputHistory(args[0] as [number, number], Math.max(0, Math.min(4, args[1] as number)), args[2] as [number, number, number, number]));
+    }
     else if (item.operation === 'resource-input') values.push(context.sampleResource!(plan.resourceInputs![item.value!], scopeUv!));
     else if (item.operation === 'resource-load-input') values.push(context.loadResource!(plan.resourceInputs![item.value!],
       [Math.floor(scopeUv![0] * context.resolution![0]), Math.floor(scopeUv![1] * context.resolution![1])]));
