@@ -2,7 +2,22 @@ import { describe, expect, it, vi } from 'vitest';
 import { executeBatchCore } from '../../src/services/aiTools/handlers/batch';
 import type { BatchToolExecutor } from '../../src/services/aiTools/handlers/batch';
 
+const focusNodeGraph = vi.hoisted(() => vi.fn(async () => ({ success: true })));
+vi.mock('../../src/services/aiTools/handlers/focusNodeGraph', () => ({ handleFocusNodeGraph: focusNodeGraph }));
+
 describe('AI tool batch core', () => {
+  it('shows the target node graph before the next batch action', async () => {
+    focusNodeGraph.mockClear();
+    const executeTool = vi.fn<BatchToolExecutor>(async (tool) => {
+      if (tool === 'setTransform') expect(focusNodeGraph).toHaveBeenCalledWith({ clipId: 'clip-1' });
+      return { success: true };
+    });
+    await executeBatchCore({ actions: [
+      { tool: 'editOperatorGraph', args: { clipId: 'clip-1', effectId: 'effect-1', action: 'set' } },
+      { tool: 'setTransform', args: { clipId: 'clip-1', x: 120 } },
+    ] }, { callerContext: 'internal', executeTool, staggerBudgetMs: 0 });
+    expect(focusNodeGraph).toHaveBeenCalledTimes(1);
+  });
   it('waits for each presentation frame before applying the next action', async () => {
     let release!: () => void;
     const presented = new Promise<void>(resolve => { release = resolve; });

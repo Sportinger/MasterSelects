@@ -19,7 +19,7 @@ Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in on
 | **Audio** | Edit waveforms, mix tracks, record, apply effects, and separate stems. |
 | **Motion & tracking** | Animate text and shapes, create captions, and attach graphics to tracked footage. |
 | **3D** | Combine footage, models, lights, cameras, Gaussian splats, and particle effects. |
-| **AI** | Ask the in-app agent to edit the timeline or generate media; use local analysis tools where available. |
+| **AI** | Ask the in-app agent to edit the timeline or generate media. Node work opens beside Preview so you can watch each step. |
 
 ### Node graphs
 

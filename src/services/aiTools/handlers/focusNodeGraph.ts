@@ -1,20 +1,25 @@
 import { useTimelineStore } from '../../../stores/timeline';
 import { FACTORY_START_LAYOUT_ID, useDockStore } from '../../../stores/dockStore';
-import { findPanelAndGroup, findTabGroupById } from '../../../stores/dockStore/layoutTree';
+import { findFirstTabGroup, findPanelAndGroup, findTabGroupById } from '../../../stores/dockStore/layoutTree';
 import type { DockNode, DockPanel, NodeWorkspacePanelData } from '../../../types/dock';
 import { requestNodeWorkspaceView } from '../../nodeGraph/nodeWorkspaceNavigation';
 import type { ToolResult } from '../types';
 
-function availablePanel(panel: DockPanel, clipId: string) {
-  const assigned = (panel.data as NodeWorkspacePanelData | undefined)?.nodeClipId;
-  return panel.type === 'node-workspace' && (!assigned || assigned === clipId);
+function assignedClip(panel: DockPanel): string | undefined {
+  return (panel.data as NodeWorkspacePanelData | undefined)?.nodeClipId ?? undefined;
 }
-function findAvailable(node: DockNode, clipId: string): { panel: DockPanel; groupId: string } | undefined {
+function preferredPanel(panels: DockPanel[], clipId: string): DockPanel | undefined {
+  const nodes = panels.filter(panel => panel.type === 'node-workspace');
+  return nodes.find(panel => assignedClip(panel) === clipId)
+    ?? nodes.find(panel => !assignedClip(panel))
+    ?? nodes[0];
+}
+function findDockedNodes(node: DockNode): { panel: DockPanel; groupId: string }[] {
   if (node.kind === 'tab-group') {
-    const panel = node.panels.find(panel => availablePanel(panel, clipId));
-    return panel ? { panel, groupId: node.id } : undefined;
+    return node.panels.filter(panel => panel.type === 'node-workspace')
+      .map(panel => ({ panel, groupId: node.id }));
   }
-  return findAvailable(node.children[0], clipId) ?? findAvailable(node.children[1], clipId);
+  return [...findDockedNodes(node.children[0]), ...findDockedNodes(node.children[1])];
 }
 
 /** Select the graph owner and reveal Nodes alongside Preview, keeping chat visible. */
@@ -28,22 +33,37 @@ export async function handleFocusNodeGraph(args: Record<string, unknown>): Promi
   if (dock.activeSavedLayoutId === FACTORY_START_LAYOUT_ID) {
     return { success: false, error: 'Open the editor first to show a node graph.' };
   }
-  const preview = findPanelAndGroup(dock.layout.root, 'preview');
-  if (!preview) return { success: false, error: 'A docked Preview panel is required to place Nodes beside it.' };
+  let preview = findPanelAndGroup(dock.layout.root, 'preview');
+  if (!preview) {
+    const group = findFirstTabGroup(dock.layout.root);
+    if (!group) return { success: false, error: 'An editor panel group is required to show Preview and Nodes.' };
+    dock.addPanelTypeToGroup('preview', group.id);
+    preview = findPanelAndGroup(useDockStore.getState().layout.root, 'preview');
+    if (!preview) return { success: false, error: 'Could not create a docked Preview panel.' };
+  }
   const target = { groupId: preview.groupId, position: 'center' as const };
-  const previewGroup = findTabGroupById(dock.layout.root, preview.groupId)!;
-  const nearby = previewGroup.panels.find(panel => availablePanel(panel, clip.id));
-  const nodes = nearby ? { panel: nearby, groupId: preview.groupId } : findAvailable(dock.layout.root, clip.id);
-  const floating = dock.layout.floatingPanels.find(p => availablePanel(p.panel, clip.id));
+  const current = useDockStore.getState();
+  const docked = findDockedNodes(current.layout.root);
+  const nodes = docked.find(item => item.groupId === preview.groupId && assignedClip(item.panel) === clip.id)
+    ?? docked.find(item => assignedClip(item.panel) === clip.id)
+    ?? docked.find(item => item.groupId === preview.groupId && !assignedClip(item.panel))
+    ?? docked.find(item => !assignedClip(item.panel))
+    ?? docked.find(item => item.groupId === preview.groupId)
+    ?? docked[0];
+  const floatingNodes = dock.layout.floatingPanels.filter(p => p.panel.type === 'node-workspace');
+  const floating = floatingNodes.find(p => assignedClip(p.panel) === clip.id)
+    ?? floatingNodes.find(p => !assignedClip(p.panel))
+    ?? floatingNodes[0];
   if (nodes && nodes.groupId !== preview.groupId) dock.movePanel(nodes.panel.id, nodes.groupId, target);
   else if (!nodes && floating) dock.dockFloatingPanel(floating.id, target);
   else if (!nodes) dock.addPanelTypeToGroup('node-workspace', preview.groupId);
   const group = findTabGroupById(useDockStore.getState().layout.root, preview.groupId)!;
-  const panel = group.panels.find(candidate => availablePanel(candidate, clip.id));
+  const panel = preferredPanel(group.panels, clip.id);
   if (!panel) return { success: false, error: 'Could not create the clip-bound Nodes panel.' };
   useDockStore.getState().updatePanelData(panel.id, { nodeClipId: clip.id });
   useTimelineStore.getState().selectClips([clip.id]);
   requestNodeWorkspaceView(clip.id, 'general', panel.id);
+  useDockStore.getState().setMaximizedPanel(null);
   useDockStore.getState().setActiveTab(preview.groupId, group.panels.findIndex(candidate => candidate.id === panel.id));
   return { success: true, data: { clipId: clip.id, selectedClipIds: [clip.id], panel: 'node-workspace', panelId: panel.id, pinnedClipId: clip.id, groupId: preview.groupId, view: 'general' } };
 }

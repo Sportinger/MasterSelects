@@ -9,13 +9,15 @@ import { handleFocusNodeGraph } from '../aiTools/handlers/focusNodeGraph';
 import type { FlashBoardExecutedToolCall } from './FlashBoardChatTypes';
 
 const log = Logger.create('AgentNodePresentation');
-const nodeTools = new Set<string>([...NODE_GRAPH_STREAM_TOOLS, 'getOperatorGraph']);
 const graphEditTools = new Set<string>(NODE_GRAPH_STREAM_TOOLS.filter(tool => !['addEffect', 'updateEffect', 'removeEffect'].includes(tool)));
+const nodeTools = new Set<string>([
+  ...graphEditTools, 'getOperatorGraph', 'getFlockClip', 'createFlockClip',
+  'applyFlockPreset', 'exposeFlockParam', 'unexposeFlockParam',
+]);
 
 /** Browser presentation only: show actual tool work, then fold the finished graph. */
 export class FlashBoardNodeGraphPresentation {
   private clips = new Set<string>();
-  private focusedClips = new Set<string>();
   private failed = false;
   private readonly enabled: boolean;
   constructor(enabled = true) { this.enabled = enabled; }
@@ -27,19 +29,20 @@ export class FlashBoardNodeGraphPresentation {
       if (!nodeTools.has(call.toolCall.name)) continue;
       try {
         const args = JSON.parse(call.toolCall.arguments) as Record<string, unknown>;
-        if (typeof args.clipId !== 'string') continue;
         const data = call.result.data as Record<string, unknown> | undefined;
+        const resultClip = data?.clip as Record<string, unknown> | undefined;
+        const clipId = typeof args.clipId === 'string' ? args.clipId
+          : typeof data?.clipId === 'string' ? data.clipId
+            : typeof resultClip?.id === 'string' ? resultClip.id : undefined;
+        if (!clipId) continue;
         const effectId = typeof args.effectId === 'string' ? args.effectId
           : typeof data?.effectId === 'string' ? data.effectId : undefined;
-        this.clips.add(args.clipId);
-        if (graphEditTools.has(call.toolCall.name) && !this.focusedClips.has(args.clipId)) {
-          this.focusedClips.add(args.clipId);
-          void handleFocusNodeGraph({ clipId: args.clipId }).then(result => {
-            if (!result.success) log.warn('Could not focus agent node work', result.error);
-          }).catch(error => log.warn('Could not focus agent node work', error));
-        }
+        if (graphEditTools.has(call.toolCall.name)) this.clips.add(clipId);
+        void handleFocusNodeGraph({ clipId }).then(result => {
+          if (!result.success) log.warn('Could not focus agent node work', result.error);
+        }).catch(error => log.warn('Could not focus agent node work', error));
         const root = effectId ? `effect:${effectId}` : call.toolCall.name.includes('Flock') ? 'flock' : undefined;
-        this.setCollapsed(args.clipId, false, root);
+        if (graphEditTools.has(call.toolCall.name)) this.setCollapsed(clipId, false, root);
       } catch (error) { log.warn('Could not reveal agent node work', error); }
     }
   }

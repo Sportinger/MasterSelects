@@ -4,6 +4,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import type { AIToolExecutionOptions, ToolResult } from '../types';
 import { executeToolInternal } from './index';
+import { handleFocusNodeGraph } from './focusNodeGraph';
 import { setStaggerBudget, consumeStaggerDelay } from '../executionState';
 import { checkToolAccess } from '../policy';
 import type { CallerContext } from '../policy';
@@ -14,6 +15,13 @@ export interface BatchAction {
   args?: Record<string, unknown>;
   [key: string]: unknown;
 }
+
+const NODE_GRAPH_ACTIONS = new Set([
+  'createImageNodeGraph', 'editOperatorGraph', 'getOperatorGraph',
+  'createFlockClip', 'getFlockClip', 'applyFlockPreset', 'addFlockNode',
+  'updateFlockNode', 'removeFlockNodes', 'connectFlockPorts',
+  'disconnectFlockEdge', 'exposeFlockParam', 'unexposeFlockParam',
+]);
 
 export interface BatchActionResult {
   tool: string;
@@ -209,6 +217,15 @@ export async function executeBatchCore(
 
       results.push(actionResult);
       await options.hooks?.afterAction?.(normalizedAction, actionResult);
+
+      if (result.success && NODE_GRAPH_ACTIONS.has(action.tool)) {
+        const data = result.data as { clipId?: unknown; clip?: { id?: unknown } } | undefined;
+        const clipId = toolArgs.clipId ?? data?.clipId ?? data?.clip?.id;
+        if (typeof clipId === 'string') {
+          try { await handleFocusNodeGraph({ clipId }); }
+          catch { /* Presentation must not change the batch result. */ }
+        }
+      }
 
       if (!result.success) {
         allSucceeded = false;

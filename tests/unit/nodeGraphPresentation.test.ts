@@ -26,7 +26,7 @@ describe('agent node group presentation', () => {
     presentation.observe([call()]);
     expect(focusNodeGraph).toHaveBeenCalledWith({ clipId: 'working' });
     presentation.observe([call()]);
-    expect(focusNodeGraph).toHaveBeenCalledTimes(1);
+    expect(focusNodeGraph).toHaveBeenCalledTimes(2);
     expect(groups()[`effect:${effectId}`].collapsed).toBe(false);
     const descendants = Object.entries(groups()).filter(([id]) => id.startsWith(`effect:${effectId}/`));
     expect(descendants.length).toBeGreaterThan(0);
@@ -34,6 +34,15 @@ describe('agent node group presentation', () => {
     presentation.complete();
     expect(Object.values(groups()).every(group => group.collapsed === true)).toBe(true);
     expect(useTimelineStore.getState().clips.find(clip => clip.id === 'other')).toBe(other);
+  });
+  it('reactivates Nodes for every graph tool, including graph reads', () => {
+    const presentation = new FlashBoardNodeGraphPresentation();
+    presentation.observe([call()]);
+    presentation.observe([{ ...call(), toolCall: {
+      name: 'getOperatorGraph', id: 'read', arguments: JSON.stringify({ clipId: 'working' }),
+    } }]);
+    expect(focusNodeGraph).toHaveBeenCalledTimes(2);
+    expect(focusNodeGraph).toHaveBeenLastCalledWith({ clipId: 'working' });
   });
   it('leaves failed work open and never changes a planning turn', () => {
     const presentation = new FlashBoardNodeGraphPresentation();
