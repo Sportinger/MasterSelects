@@ -72,7 +72,13 @@ implementation choices, or mandatory user testing.
    Choose a reasonable implementation and continue. Ask only when missing
    information materially changes the result and cannot be established from
    the workspace, or an action exceeds the user's authorization.
-2. **Verify it yourself.** Run the cheapest checks that actually cover the
+2. **Verify it yourself, after implementation is complete.** Finish the agreed
+   implementation first, then run the relevant tests and live checks together
+   in a final verification phase. Do not interrupt each implementation step
+   with tests, browser checks, type checks, or builds. Reading code and inspecting
+   diffs during implementation is fine. After fixing a final-check failure,
+   repeat only the checks affected by that fix.
+   Run the cheapest checks that actually cover the
    change. For behavior changes, use targeted tests and the running editor
    where useful. Use normal browser automation and the visible editor UI by
    default; the AI bridge is optional, not a prerequisite for testing. Reuse
