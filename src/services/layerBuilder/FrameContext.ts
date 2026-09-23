@@ -99,6 +99,7 @@ export function createFrameContext(playheadPositionOverride?: number): FrameCont
     masterAudioState,
     clipDragPreview,
     layerTransformPreview,
+    maskEditPreview,
     clipKeyframes,
     getInterpolatedTransform,
     getInterpolatedEffects,
@@ -226,6 +227,7 @@ export function createFrameContext(playheadPositionOverride?: number): FrameCont
 
   const context: FrameContext = {
     // Raw data
+    maskEditPreview,
     clips,
     tracks,
     isPlaying,

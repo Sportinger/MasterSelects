@@ -14,6 +14,7 @@ MasterSelects supports per-clip vector masks with preview-overlay editing, selec
 - Mask outlines, vertices, handles, and hit areas keep screen-stable sizes while zooming the preview.
 - Whole-mask dragging uses an internal mask offset for static masks. When `Mask Path` recording is active or path keyframes exist, it translates the vertices and records the path instead.
 - Mask outlines are projected through the active layer transform, so 2D and 3D movement, scale, and rotation keep the editable overlay aligned with the rendered mask.
+- Proxy video and image dimensions do not change mask outline geometry: projection uses the original media dimensions, matching compositing. Live canvas sources follow their current canvas size.
 - When the mask tab is active, the normal preview Edit Mode toggle becomes navigation-only: wheel zoom and Alt/MMB pan stay available, but layer transform handles are disabled.
 - Mask outlines are only shown while the mask tab is open. Opening the tab activates the current mask for editing; leaving the tab hides the overlay again.
 - Mask path animation is exposed as one `Mask Path` stopwatch, not separate vertex X/Y stopwatches.
@@ -97,6 +98,7 @@ The preview overlay is implemented in `src/components/preview/MaskOverlay.tsx`.
 - Mask geometry is edited in layer-local UV space and projected to the preview with the current layer transform.
 - Whole-mask dragging moves the internal `position.x` and `position.y` offset for static masks. With Mask Path recording armed or existing path keyframes, it translates all vertices and commits a path keyframe instead.
 - Whole-mask, vertex, bezier-handle, and edge drags use a transient evaluated-mask preview. The SVG overlay follows every animation frame, while project data, keyframes, cache invalidation, and undo history are committed only once when the pointer is released.
+- Effects that consume clip masks, including Slit Scan protection, receive that same transient geometry during dragging, without modifying cached layers.
 - Dragging an edge moves the two adjacent vertices together.
 - Clicking an edge selects it. Clicking empty preview space clears vertex and edge selection.
 - Holding Shift while dragging an edge snaps that edge horizontal or vertical, whichever is closer.

@@ -5,6 +5,20 @@ import { getClipTimeInfo } from './FrameContext';
 import type { FrameContext } from './types';
 import { evaluateCompositionClipMasks } from '../compositionRender/keyframeEvaluation';
 import { temporalClipSource } from '../../effects/time/temporalClipSource';
+import { applyMaskEditPreview, type TimelineMaskEditPreview } from '../../stores/timeline/maskEditPreview';
+
+/** Apply evaluated drag geometry after the cache, without changing cached layers. */
+export function applyLayerBuilderMaskEditPreview(
+  layers: Layer[],
+  preview: TimelineMaskEditPreview | null | undefined,
+): Layer[] {
+  if (!preview) return layers;
+  return layers.map(layer => {
+    if (layer.sourceClipId !== preview.clipId) return layer;
+    const masks = applyMaskEditPreview(preview.clipId, layer.masks, preview);
+    return masks === layer.masks ? layer : { ...layer, masks };
+  });
+}
 
 function findLinkedClip(clip: TimelineClip, ctx: FrameContext): TimelineClip | null {
   if (clip.linkedClipId) {

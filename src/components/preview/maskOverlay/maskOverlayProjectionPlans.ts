@@ -38,6 +38,21 @@ export function getLayerSourceSize(
 ): { width: number; height: number } {
   if (!layer?.source) return fallback;
 
+  // Match Compositor: proxy/decode texture sizes do not define the layer's
+  // geometry. Live canvas sources are the exception and can resize in place.
+  if (layer.source.canvasElement) {
+    return {
+      width: layer.source.canvasElement.width || fallback.width,
+      height: layer.source.canvasElement.height || fallback.height,
+    };
+  }
+  const intrinsicWidth = layer.source.intrinsicWidth;
+  const intrinsicHeight = layer.source.intrinsicHeight;
+  if (Number.isFinite(intrinsicWidth) && intrinsicWidth! > 0
+    && Number.isFinite(intrinsicHeight) && intrinsicHeight! > 0) {
+    return { width: intrinsicWidth!, height: intrinsicHeight! };
+  }
+
   if (layer.source.videoElement) {
     return {
       width: layer.source.videoElement.videoWidth || fallback.width,
@@ -69,13 +84,6 @@ export function getLayerSourceSize(
     const size = getMotionRenderSize(layer.source.motion);
     return { width: size.width, height: size.height };
   }
-  if (layer.source.intrinsicWidth && layer.source.intrinsicHeight) {
-    return {
-      width: layer.source.intrinsicWidth,
-      height: layer.source.intrinsicHeight,
-    };
-  }
-
   return fallback;
 }
 

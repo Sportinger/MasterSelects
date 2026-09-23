@@ -41,6 +41,7 @@ import {
 import { buildLayerBuilderLightLayer } from './layerBuilderLightLayer';
 import {
   applyLayerBuilderAINodesToLayer,
+  applyLayerBuilderMaskEditPreview,
   withLayerBuilderMaskProperties,
 } from './layerBuilderLayerPostProcessing';
 import { buildLayerBuilderMotionShapeLayer } from './layerBuilderMotionLayers';
@@ -196,7 +197,10 @@ export class LayerBuilderService {
     this.layerCache.setCachedLayers(primaryLayers);
 
     // Merge background layers from active layer slots
-    return this.mergeBackgroundLayers(primaryLayers, ctx.playheadPosition);
+    return this.mergeBackgroundLayers(
+      applyLayerBuilderMaskEditPreview(primaryLayers, ctx.maskEditPreview),
+      ctx.playheadPosition,
+    );
   }
 
   private getActiveCompositionVideoBakeRegion(ctx: FrameContext): VideoBakeRegion | undefined {

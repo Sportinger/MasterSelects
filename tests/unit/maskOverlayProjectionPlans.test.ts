@@ -40,6 +40,40 @@ function createTransform(): ClipTransform {
 }
 
 describe('maskOverlayProjectionPlans', () => {
+  it.each(['video', 'image'] as const)('keeps %s proxy masks at the original media size', (type) => {
+    const layer = createLayer();
+    layer.source = {
+      type,
+      intrinsicWidth: 1920,
+      intrinsicHeight: 1080,
+      ...(type === 'video'
+        ? { videoElement: { videoWidth: 1280, videoHeight: 720 } as HTMLVideoElement }
+        : { imageElement: { naturalWidth: 1280, naturalHeight: 720 } as HTMLImageElement }),
+    };
+    expect(getLayerSourceSize(layer, { width: 1920, height: 1080 }))
+      .toEqual({ width: 1920, height: 1080 });
+    expect(getProjectionParams(layer, 1920, 1080)).toMatchObject({
+      sourceWidth: 1920, sourceHeight: 1080,
+    });
+  });
+
+  it('follows live canvas resizing even when intrinsic metadata is stale', () => {
+    const layer = createLayer();
+    layer.source!.canvasElement = { width: 1080, height: 1920 } as HTMLCanvasElement;
+    expect(getLayerSourceSize(layer, { width: 1920, height: 1080 }))
+      .toEqual({ width: 1080, height: 1920 });
+  });
+
+  it('falls back to the decoded dimensions when intrinsic dimensions are invalid', () => {
+    const layer = createLayer();
+    layer.source = {
+      type: 'video', intrinsicWidth: NaN, intrinsicHeight: 0,
+      videoElement: { videoWidth: 1280, videoHeight: 720 } as HTMLVideoElement,
+    };
+    expect(getLayerSourceSize(layer, { width: 1920, height: 1080 }))
+      .toEqual({ width: 1280, height: 720 });
+  });
+
   it('projects masks with the current clip transform including uniform scale', () => {
     const layer = createLayer();
     const projectionLayer = withClipProjectionTransform(layer, createTransform());

@@ -39,6 +39,7 @@ export interface ClipTimeInfo {
  * Eliminates duplicate store reads and array filtering
  */
 export interface FrameContext {
+  maskEditPreview?: import('../../stores/timeline/maskEditPreview').TimelineMaskEditPreview | null;
   // Raw store data
   clips: TimelineClip[];
   tracks: TimelineTrack[];
