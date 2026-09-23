@@ -49,6 +49,10 @@ export function surfaceEffectForFrame(track: PlanarTrack, presentedTime: number)
     const params: Effect['params'] = { color: track.color, opacity: track.opacity * fade, fill: track.fill,
       lineWidth: track.lineWidth, inset: track.inset, shape: track.shape };
     sample.quad.forEach((p, i) => { params[`x${i}`] = p.x; params[`y${i}`] = p.y; });
+    if(track.object && sample.contour) {
+      params.contourCount=Math.min(64,sample.contour.length);
+      sample.contour.slice(0,64).forEach((p,i)=>{params[`cx${i}`]=p.x;params[`cy${i}`]=p.y;});
+    }
     const occlusion = sampleOcclusion(track, time);
     params.occluded = !!occlusion;
     occlusion?.forEach((p,i) => { params[`ox${i}`] = p.x; params[`oy${i}`] = p.y; });

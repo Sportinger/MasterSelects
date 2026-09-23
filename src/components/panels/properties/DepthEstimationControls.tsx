@@ -94,8 +94,7 @@ export function DepthEstimationControls({ clipId }: { clipId: string }) {
     <ResolveInspectorNumberRow label={label} value={value} defaultValue={defaultValue} min={min} max={max} hardMin={min} hardMax={max} step={step} disabled={!!busy} onChange={onChange} />;
   return <div className="depth-estimation" onPointerUp={e => {
     if (e.target instanceof Element) e.target.closest<HTMLElement>('button,select,input[type="checkbox"]')?.blur();
-  }}><ResolveInspectorSection title="Depth map">
-    <p className="tracking-panel-hint">Local analysis · 99 MB first download</p>
+  }}><ResolveInspectorSection indicator="none" title="Depth map" defaultOpen={false}>
     <div className="tracking-panel-actions">
       <button disabled={!!busy || ready} onClick={() => void run('load')}>{ready ? 'Model ready' : cached ? 'Load cached depth model' : 'Download depth model'}</button>
       <button disabled={!!busy || !ready} onClick={() => { depthRuntime.dispose(); setReady(false); setMessage('Depth model unloaded; download cache kept.'); }}>Unload model</button>
@@ -111,15 +110,13 @@ export function DepthEstimationControls({ clipId }: { clipId: string }) {
       {busy && <button onClick={() => controller.current?.abort()}>Stop</button>}
     </div>
     <canvas ref={canvas} className={hasFrame ? 'depth-map-visible' : ''} aria-label="Estimated depth map" />
-    <p className="tracking-panel-hint">White near · black far · source view</p>
   </ResolveInspectorSection>
-  <ResolveInspectorSection title="Bake depth video" defaultOpen={false}>
+  <ResolveInspectorSection indicator="none" title="Bake depth video" defaultOpen={false}>
     {number('Source start', from, clip.inPoint, clip.outPoint, 0.01, setFrom, clip.inPoint)}
     {number('Source end', to, clip.inPoint, clip.outPoint, 0.01, setTo, clip.outPoint)}
     <ResolveInspectorRow label="Bake FPS"><InspectorSelect ariaLabel="Depth bake frame rate" value={String(fps)} disabled={!!busy} onChange={v => setFps(Number(v))}
       options={[10, 15, 30].map(v => ({ value: String(v), label: `${v} fps` }))} /></ResolveInspectorRow>
     <div className="tracking-panel-actions"><button disabled={!!busy} onClick={() => void run('bake')}>Bake to Media</button></div>
-    <p className="tracking-panel-hint">Reusable grayscale MP4 · up to 120 seconds</p>
   </ResolveInspectorSection>
   {(busy || message) && <div className="tracking-panel-feedback">
     {busy && busy !== 'live' && <progress aria-label="Depth progress" value={progress} max={1} />}

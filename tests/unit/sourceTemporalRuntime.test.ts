@@ -1,5 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest';
-const mock = vi.hoisted(() => ({ read: vi.fn(), batches: vi.fn(), close: vi.fn(), upload: vi.fn(), proxySize: vi.fn() }));
+const mock = vi.hoisted(() => ({ read: vi.fn(), batches: vi.fn(), close: vi.fn(), upload: vi.fn(), proxySize: vi.fn(), current: vi.fn(() => ({})) }));
+vi.mock('../../src/effects/time/StabilizedCurrentFrame', () => ({ StabilizedCurrentFrame: class {
+  constructor(_device: unknown, readonly width: number, readonly height: number) {}
+  encode = mock.current; destroy() {}
+} }));
 vi.mock('../../src/effects/time/SourceProxyDimensions', () => ({ SourceProxyDimensions: class { resolve = mock.proxySize; destroy() {} } }));
 vi.mock('../../src/engine/texture/TemporalFrameUploader', () => ({ TemporalFrameUploader: class { upload = mock.upload; destroy() {} } }));
 vi.mock('../../src/services/mediaRuntime/sourceFrames/SourceFrameService', () => ({ sourceFrameService: {
@@ -54,6 +58,50 @@ it('aligns current and historical decoded PTS separately, including reverse play
     }
   }
   runtime.destroy();
+});
+
+it('stabilizes advancing playback immediately even when history decoding has not completed', async () => {
+  const { runtime, request, writes } = setup();
+  let release!: () => void;
+  mock.read.mockImplementation(() => new Promise<void>(resolve => { release = resolve; }));
+  const input = { view: {} as GPUTextureView, width: 2, height: 1 };
+  const playing = { ...request, stabilization: stabilization(), currentInput: input, keepPending: true };
+  const finish = collectTemporalPreparations();
+  for (let i = 0; i < 5; i++) {
+    const result = runtime.resolve({ ...playing, source: { ...playing.source, localTime: 10 + i / 30 } });
+    expect(result?.current?.view).toBe(mock.current.mock.results.at(-1)!.value);
+    expect(mock.current.mock.calls.at(-1)).toEqual([request.encoder, input.view, expect.any(Array)]);
+    expect((mock.current.mock.calls.at(-1) as any)[2][2]).toBeCloseTo((10 + i / 30) / 100);
+  }
+  expect(writes).toHaveBeenCalledTimes(5);
+  await Promise.resolve(); await Promise.resolve();
+  const pending = finish();
+  mock.read.mockResolvedValue(undefined); release?.();
+  await Promise.all(pending);
+  runtime.destroy();
+});
+
+it('does not decode duplicate current frames for zero-delay stabilization', async () => {
+  const { runtime, request } = setup();
+  const playing = { ...request, horizon: 0, stabilization: stabilization(), keepPending: true,
+    currentInput: { view: {} as GPUTextureView, width: 2, height: 1 } };
+  await prepare(runtime, playing);
+  await prepare(runtime, { ...playing, source: { ...request.source, localTime: 11 } });
+  expect(mock.read).not.toHaveBeenCalled();
+  expect(mock.current).toHaveBeenCalled();
+  runtime.destroy();
+});
+
+it('recovers a transient decoder failure without replacing the effect', async () => {
+  const { runtime, request } = setup();
+  vi.useFakeTimers();
+  try {
+    mock.read.mockRejectedValueOnce(new Error('Temporary decode failure'));
+    await expect(prepare(runtime, request)).rejects.toThrow('Temporary decode failure');
+    expect(() => runtime.resolve(request)).toThrow('Temporary decode failure');
+    await vi.advanceTimersByTimeAsync(1100);
+    await expect(prepare(runtime, request)).resolves.toHaveProperty('atlas');
+  } finally { runtime.destroy(); vi.useRealTimers(); }
 });
 
 it('invalidates stabilized pixels on tracking changes and preserves the unstabilized path', async () => {

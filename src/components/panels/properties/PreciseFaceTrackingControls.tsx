@@ -47,8 +47,7 @@ export function PreciseFaceTrackingControls({ clipId }: { clipId: string }) {
       const target = event.target;
       if (target instanceof Element) target.closest<HTMLElement>('button, select, input')?.blur();
     }}>
-    <ResolveInspectorSection title="Face tracking" defaultOpen={false}>
-    <p className="tracking-panel-hint">478 landmarks · one face per source frame</p>
+    <ResolveInspectorSection indicator="none" title="Face tracking" defaultOpen={false}>
     <ResolveInspectorRow label="Detection">
       <InspectorSelect ariaLabel="Face detection mode" value={mode} disabled={anyBusy}
         onChange={value => setMode(value as 'independent' | 'video')}

@@ -1,4 +1,6 @@
-import { useRef } from 'react';
+import { trackingLivePreview } from '../../../services/planarTracking/trackingLivePreview';
+import { TrackingLivePreview } from './TrackingLivePreview';
+import { useRef, useSyncExternalStore } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTrackingStore } from '../../../stores/trackingStore';
@@ -13,11 +15,13 @@ import { layerBuilder } from '../../../services/layerBuilder';
 import { renderHostPort } from '../../../services/render/renderHostPort';
 import type { SurfacePoint, SurfaceQuad } from '../../../types/planarTracking';
 import { TrackingGeometryPreview } from './TrackingGeometryPreview';
+import { ObjectTrackingOverlay } from './ObjectTrackingOverlay';
 
 const defaultQuad:SurfaceQuad=[{x:.3,y:.3},{x:.7,y:.3},{x:.7,y:.7},{x:.3,y:.7}];
 
 export function TrackingPreviewOverlay({displayedCompId,width,height,resolution}: {displayedCompId:string|null;width:number;height:number;resolution:{width:number;height:number}}) {
   const editor=useTrackingEditorStore();
+  const live=useSyncExternalStore(trackingLivePreview.subscribe,trackingLivePreview.snapshot);
   const clips=useTimelineStore(s=>s.clips);
   const playhead=useTimelineStore(s=>s.playheadPosition);
   const disabled=useTimelineStore(s=>s.isPlaying||s.isExporting||!!s.tracks.find(t=>t.id===s.clips.find(c=>c.id===editor.clipId)?.trackId)?.locked);
@@ -31,6 +35,7 @@ export function TrackingPreviewOverlay({displayedCompId,width,height,resolution}
     : selected?.source?.type==='video'?selected:clips.find(c=>c.id===asset?.sourceVideoClipId);
   const track=selected?.trackingBinding?asset?.track:source?.planarTracks?.find(t=>t.id===editor.trackId)??asset?.track;
   if(!editor.active||displayedCompId!==compositionId||!track||width<=0||height<=0)return null;
+  if(live?.clipId===source?.id&&live?.trackId===track.id)return <TrackingLivePreview width={width} height={height}/>;
   if(editor.view==='3d'&&track.terrain)return <div className="tracking-preview-layer" style={{width,height}}><TrackingGeometryPreview terrain={track.terrain} width={width} height={height}/></div>;
   if(!source)return null;
   const timeline=useTimelineStore.getState();
@@ -39,9 +44,13 @@ export function TrackingPreviewOverlay({displayedCompId,width,height,resolution}
   const file=files.find(f=>f.id===(source.source?.mediaFileId??source.mediaFileId));
   const transform=timeline.getInterpolatedTransform(source.id,playhead-source.startTime);
   const mapping=trackingPreviewTransform(transform,{width:file?.width??track.terrain?.intrinsics.width??resolution.width,height:file?.height??track.terrain?.intrinsics.height??resolution.height},resolution);
+  if(track.object && editor.tool!=='place' && editor.tool!=='occlusion') {
+    return <ObjectTrackingOverlay showOutline={!!frame||!!editor.contourDraft||!!editor.objectPrompts.length} points={editor.contourDraft??frame?.contour??track.object.referenceContour} width={width} height={height}
+      disabled={disabled} toSource={mapping.toSource} toComposition={mapping.toComposition}/>;
+  }
   const quad=editor.draft??(editor.tool==='occlusion'?sampleOcclusion(track,time):frame?.quad)??track.referenceQuad??defaultQuad;
   const displayQuad=quad.map(mapping.toComposition);
-  const editing=!disabled&&(editor.tool==='surface'||editor.tool==='occlusion');
+  const editing=!disabled&&!editor.actionBusy&&(editor.tool==='surface'||editor.tool==='occlusion');
   const placing=!disabled&&editor.tool==='place'&&!!selected?.trackingBinding;
   if(!editing&&!placing&&!frame)return null;
   const point=(event:{clientX:number;clientY:number},element:Element):SurfacePoint=>{

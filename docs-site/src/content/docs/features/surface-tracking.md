@@ -8,16 +8,57 @@ a chosen source frame, reconstructs a short 3D camera sequence and sparse
 ground mesh, or imports a dense reconstruction with future footprint sequences.
 Author it under **Properties → Tracking** on a video clip.
 
-The Tracking panel separates depth preview and baking, precise face tracking,
-surface tracking, and clip linking into collapsible inspector sections. Actions,
-status messages, numeric rows, and keyboard focus use the shared Properties
-inspector styling.
+The Tracking panel groups depth, face, object/surface tracking and clip linking
+into aligned collapsible sections without bypass indicators or instructional
+paragraphs. **Tracks** lists this clip's results with their type and frame count;
+select a result or delete it with the trash button. Deletion is undoable. A
+published result used by another clip is retained in Media to preserve that link.
+
+## Object selection and tracking
+
+Choose **+ Object** and click a person or object in Preview. Additional clicks
+include regions; Ctrl/Command-click excludes them. Include/Exclude buttons also
+support touch. Clicks can be queued while selection runs. Selection stays active
+while the Tracking panel is open, including after a tracking pass.
+
+The first selection downloads SlimSAM; inference runs locally in a worker.
+The default six-corner enclosing contour has 10% padding (adjustable to 50%).
+Use **Points** to change the count (up to 64); **Edit outline** allows dragging
+vertices, adding one on an edge, or removing one with Alt-click/Delete. Keyboard
+arrows move vertices; Enter on an edge inserts one. **Apply correction** saves
+manual outline edits before scrubbing.
+
+Selection clicks, their include/exclude labels and the resulting outline are
+saved per decoded source frame as user anchors. Reopening a user frame restores
+its prompts. Corrections taper into neighboring tracked contours between user
+anchors; retracking preserves anchors. This is geometric refinement of existing
+motion, not model training or recovery of unobserved frames.
+
+**Track** contains source start/end and forward/backward actions. The live
+source preview draws each processed frame with its contour. On completion or
+loss, the timeline moves to the last valid source sample where possible. A clear
+stop message reports texture loss, invalid geometry, a pass limit or cancellation.
+Cancelling keeps the previous saved track. The live view excludes clip effects.
+Retracking replaces only frames actually returned by the pass. A premature stop
+preserves later samples and stabilization reference frames outside that interval.
+
+OpenCV uses foreground feature flow with a separate robust local affine fit at
+each vertex, allowing local rotation, scaling and deformation. The safety margin
+is rebuilt from the detailed contour each frame, and a collapse check compares
+silhouette area with observed feature scale. This is not semantic video
+segmentation: blur, occlusion, wheel/background texture and large pose changes
+can still drift or lose the object; add user anchors and rerun short ranges.
+
+**Use track ? Create animated mask** produces an ordinary editable effect-input
+mask with held path keys at composition frame times, including reverse and speed
+mapping. Untracked gaps use empty, zero-area paths. **Render outline** optionally
+includes the contour in the video and export; it is off by default.
 
 ## Reusable assets and ordinary clips
 
 The current Tracking workspace uses project-owned assets shown in the Media panel's grid, list and board. Assets support naming, folders and context actions. Clips reference a shared asset; retained mesh data is stored once in linked project geometry files and survives save/load and undo.
 
-On a source video, use **Track surface** for a planar solve, **Reconstruct 3D** for a short browser-local sparse solve, or import a dense `.msterrain.json` reconstruction. Set corners, reference/range and exclusion areas in the main Preview. Coverage indicators preserve gaps rather than implying a continuous solve.
+On a source video, use **+ Surface** for a planar solve, **+ 3D** for a short browser-local sparse solve, or import a dense `.msterrain.json` reconstruction. Set corners, reference/range and exclusion areas in the main Preview. Coverage indicators preserve gaps rather than implying a continuous solve.
 
 On a normal text, shape, image or nested-composition clip, choose an asset and **Follow position** or **Project onto surface**. Place the attachment in Preview and adjust size, rotation and timing in Tracking. These modes attach composited visual clips; camera, light, model and audio clips are not projection targets. Source transforms and the displayed video's decoded frame time determine the projection in preview, nested compositions and export.
 

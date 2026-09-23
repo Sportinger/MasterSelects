@@ -6,11 +6,12 @@ import { SLIT_SCAN_TIME_MAP_RESOURCE } from '../../services/operators/slitScanTi
 import { SlitScanMaskRuntime } from './SlitScanMaskRuntime';
 import { TimeMapMediaRuntime } from './TimeMapMediaRuntime';
 import { isCollectingTemporalPreparations, setTemporalStatus } from './temporalResourcePreparation';
-import type { TemporalClipSource } from './temporalClipSource';
-import { SourceTemporalRuntime } from './SourceTemporalRuntime';
+import { temporalSourceTime, type TemporalClipSource } from './temporalClipSource';
+import { SourceTemporalRuntime, sourceTemporalWindow } from './SourceTemporalRuntime';
 import { useTimelineStore } from '../../stores/timeline';
 import { useTrackingStore } from '../../stores/trackingStore';
-import { slitScanStabilization } from './slit-scan/stabilization';
+import { SlitScanTrackingGap, slitScanSourceTransform, slitScanStabilization } from './slit-scan/stabilization';
+import type { SourceTemporalRequest } from './SourceTemporalRuntime';
 
 /** Device-local resource ownership for temporal graphs and their node previews. */
 export class TemporalEffectResources {
@@ -24,16 +25,36 @@ export class TemporalEffectResources {
   }
 
   resolveNative(effect: { id: string; type: string; params: Record<string, unknown> },
-    scopeId: string, source: TemporalClipSource | undefined, encoder: GPUCommandEncoder) {
+    scopeId: string, source: TemporalClipSource | undefined, encoder: GPUCommandEncoder,
+    currentInput?: { view: GPUTextureView; width: number; height: number }) {
     if (!source) throw new Error('Full-resolution temporal sampling requires a source video clip.');
     const media = useMediaStore.getState().files.find(file => file.id === source.mediaId);
     if (!media || media.type !== 'video') throw new Error('Full-resolution source video is unavailable.');
-    return this.native.resolve({ key: JSON.stringify([scopeId, effect.id]), effectId: effect.id, media, source,
+    const request: SourceTemporalRequest = { key: JSON.stringify([scopeId, effect.id]), effectId: effect.id, media, source,
       horizon: Math.max(0, Math.min(4, Number(effect.params.delay ?? 1))), samples: Number(effect.params.temporalSamples ?? 32),
-      nearest: effect.params.temporalInterpolation === 'nearest', encoder, keepPending: useTimelineStore.getState().isPlaying,
+      nearest: effect.params.temporalInterpolation === 'nearest', encoder, currentInput, keepPending: useTimelineStore.getState().isPlaying,
       useProxy: useMediaStore.getState().proxyEnabled && !isCollectingTemporalPreparations(),
       stabilization: slitScanStabilization(effect.params, useTrackingStore.getState().assets, source.mediaId, media.width!, media.height!),
-      maxEdge: effect.params.temporalResolution === 'native' ? undefined : 160 });
+      maxEdge: effect.params.temporalResolution === 'native' ? undefined : 160 };
+    try {
+      // Validate before replacing the cache, so an unavailable track does not
+      // evict the working, unstabilized history on every preview frame.
+      if (request.stabilization) {
+        slitScanSourceTransform(request.stabilization, temporalSourceTime(source, source.localTime));
+        if (request.horizon > 0) for (const sample of sourceTemporalWindow(request)) {
+          slitScanSourceTransform(request.stabilization, sample.time);
+        }
+      }
+      return this.native.resolve(request);
+    }
+    catch (error) {
+      if (!(error instanceof SlitScanTrackingGap) || isCollectingTemporalPreparations()) throw error;
+      // One coordinate space for the whole window: never mix corrected and raw
+      // frames, but keep the temporal effect usable while the user edits a track.
+      const history = this.native.resolve({ ...request, stabilization: undefined });
+      setTemporalStatus(effect.id, `Stabilization paused: ${error.message} Slit Scan remains active.`);
+      return history ? { ...history, current: currentInput ? { view: currentInput.view, identity: 'unstabilized-input' } : undefined } : undefined;
+    }
   }
 
   resolveNamed(resources: Map<string, ResolvedImageGraphExternalResource>, requested: readonly string[],

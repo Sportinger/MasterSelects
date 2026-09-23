@@ -45,6 +45,7 @@ Slit Scan adds spatial time displacement to clips, with directional and wave
 profiles, center or clip-mask protection, diagnostic previews, and an editable group built from shared Nodes.
 Deleting a selected protection mask keeps Slit Scan running without mask protection; undo restores the connection.
 Object stabilization can track a selected mask in both directions, align current and historical frames to a reference, and create a feathered protection mask without cutting out the clip. Position, rotation and size correction share reusable source tracking; uncovered tracking windows are reported explicitly.
+Stabilization applies directly to the current playback input. Tracking gaps pause only stabilization in preview while Slit Scan continues; transient source-cache failures retry automatically.
 Small preview and Full size use the same source-time sampling through a bounded GPU cache. A shared frame service reuses exact cached frames, coalesces source requests and continues decoding across playback refills. Small preview can use existing JPEG proxies; Full size follows timeline Proxy mode at actual proxy resolution, including in 4K compositions. The inspector identifies proxy/original use and cache dimensions. Full-size export uses originals. WebGPU handles frame conversion and resizing without Canvas or CPU pixel readback; required frames take priority over lookahead.
 Lookahead refills continuously during playback; historical proxy reads do not redirect timeline preloading. Cache allocation follows the requested sample count; an oversized request reports its limit without blanking the preview or other effects. See [Effects](docs/Features/Effects.md#slit-scan) for controls and preparation limits.
 
@@ -98,6 +99,8 @@ existing systems, and check their work:
 | **Motion & tracking** | Animate text, shapes, Lottie, and Rive assets; create captions; track faces and surfaces; bypass baked face/lip stabilization without deleting keyframes; and attach graphics to tracked motion. |
 | **3D** | Combine footage with models, lights, cameras, and Gaussian splats in a shared scene. Large splats parse off the UI thread with visible progress. Splat Exploration with branch bypass and compute budgets exposes editable nodes for sphere cropping, stretched splats, particle simulation, camera fading, and an approximate mesh wireframe that respects upstream sphere crops. Mesh and particle outputs can appear as linked timeline clips sharing one node graph and scene. Static node branches retain background worker sorting. Early sphere crops remove outside splats from downstream GPU work; per-branch budgets sample across the entire scan. |
 | **AI** | Ask the editor to change the timeline, generate media, or use local transcription, segmentation, and depth estimation. |
+
+Object tracking supports repeated include/exclude clicks, editable padded contours with up to 64 points, saved user-frame corrections, a live tracking preview, and animated mask creation. The Tracking inspector lists reusable results with undoable deletion. See [Surface & object tracking](docs/Features/Surface-Tracking.md).
 
 Arrange the dockable panels for the work at hand. The interface is optimized for
 touch and iPad, with phone workflows still being refined. Multiple preview

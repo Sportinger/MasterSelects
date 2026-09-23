@@ -96,7 +96,7 @@ export function getInterpolatedMaskPathValue(
 ): MaskPathKeyframeValue {
   const pathKeyframes = keyframes
     .filter(keyframe => keyframe.property === property && keyframe.pathValue)
-    .sort((a, b) => a.time - b.time);
+    .toSorted((a, b) => a.time - b.time);
 
   if (pathKeyframes.length === 0) return defaultValue;
   if (pathKeyframes.length === 1) return cloneMaskPathValue(pathKeyframes[0].pathValue!);
@@ -118,6 +118,7 @@ export function getInterpolatedMaskPathValue(
   const prevPath = prevKey.pathValue;
   const nextPath = nextKey.pathValue;
   if (!prevPath || !nextPath) return defaultValue;
+  if (prevKey.hold) return cloneMaskPathValue(time < nextKey.time ? prevPath : nextPath);
 
   const range = nextKey.time - prevKey.time;
   const localTime = time - prevKey.time;

@@ -7,7 +7,7 @@ import shader from './surfaceOverlay.wgsl?raw';
 export const surfaceOverlay: EffectDefinition = {
   internal: true,
   id: 'surface-overlay', name: 'Surface Overlay', category: 'tracking', shader,
-  entryPoint: 'surfaceOverlayFragment', uniformSize: 128, params: {},
+  entryPoint: 'surfaceOverlayFragment', uniformSize: 1152, params: {},
   packUniforms(params, width, height) {
     const quad = Array.from({ length: 4 }, (_, i) => ({ x: Number(params[`x${i}`]), y: Number(params[`y${i}`]) })) as SurfaceQuad;
     const m = inverseMatrix(quadMatrix(quad));
@@ -18,8 +18,9 @@ export const surfaceOverlay: EffectDefinition = {
       ...m.slice(0,3), 0, ...m.slice(3,6), 0, ...m.slice(6,9), 0,
       ...color, Number(params.opacity ?? 1),
       width, height, Number(params.lineWidth ?? 3), Number(params.fill ?? 0.12),
-      Number(params.inset ?? 0), params.shape === 'ellipse' ? 1 : params.shape === 'cross' ? 2 : 0, params.occluded ? 1 : 0, 0,
+      Number(params.inset ?? 0), params.shape === 'ellipse' ? 1 : params.shape === 'cross' ? 2 : 0, params.occluded ? 1 : 0, Math.max(0,Math.min(64,Math.floor(Number(params.contourCount)||0))),
       ...Array.from({length:4},(_,i)=>[Number(params[`ox${i}`] ?? 0),Number(params[`oy${i}`] ?? 0)]).flat(),
+      ...Array.from({length:64},(_,i)=>[Number(params[`cx${i}`]??0),Number(params[`cy${i}`]??0),0,0]).flat(),
     ]);
   },
 };

@@ -406,7 +406,8 @@ export class EffectsPipeline {
           timelineTimeSeconds, sourceMasks, outputWidth, outputHeight, commandEncoder);
         if (nativeTemporal && imagePlan && preparedImage && imageExternalResources) {
           const nativeHistory = this.temporalResources.resolveNative(effect,
-            frameHistory?.scopeId ?? clock.scopeId, temporalSource, commandEncoder);
+            frameHistory?.scopeId ?? clock.scopeId, temporalSource, commandEncoder,
+            { view: effectInput, width: outputWidth, height: outputHeight });
           if (effect.params.stabilizationAssetId && !nativeHistory?.current) continue;
           if (nativeHistory?.current) graphInput = nativeHistory.current.view;
           if (nativeHistory) for (const resource of imagePlan.externalResources ?? []) {

@@ -4,7 +4,7 @@
   .tracking-panel-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 10px; }
   .tracking-panel-actions button,
   .tracking-panel-header-action,
-  .tracking-panel .surface-tracking button:not(.inspector-disclosure):not(.inspector-status-control):not(.tracking-panel-header-action) { min-height: 26px; padding: 4px 8px; border: 1px solid var(--separator-color); border-radius: 1px; background: var(--input-bg); color: var(--text-primary); font: inherit; cursor: pointer; }
+  .tracking-panel .surface-tracking button:not(.inspector-disclosure):not(.inspector-status-control):not(.tracking-panel-header-action):not(.resolve-inspector-icon-button) { min-height: 26px; padding: 4px 8px; border: 1px solid var(--separator-color); border-radius: 1px; background: var(--input-bg); color: var(--text-primary); font: inherit; cursor: pointer; }
   .tracking-panel-actions button:hover:not(:disabled),
   .tracking-panel-header-action:hover:not(:disabled) { background: var(--surface-control-hover); }
   .tracking-panel-actions button:disabled,

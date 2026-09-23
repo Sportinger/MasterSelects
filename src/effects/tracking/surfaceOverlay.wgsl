@@ -2,6 +2,7 @@ struct Params {
   row0: vec4f, row1: vec4f, row2: vec4f,
   color: vec4f, display: vec4f, options: vec4f,
   occ01: vec4f, occ23: vec4f,
+  contour: array<vec4f,64>,
 }
 @group(0) @binding(0) var texSampler: sampler;
 @group(0) @binding(1) var inputTex: texture_2d<f32>;
@@ -29,6 +30,23 @@ fn occluded(p: vec2f)->bool {
   if(params.options.y==2) {
     let diagonal=min(abs(centered.x-centered.y),abs(centered.x+centered.y));
     alpha=max(alpha,(1-smoothstep(params.display.z*aa,params.display.z*aa+aa,diagonal))*select(0.0,1.0,distance<0));
+  }
+  if(params.options.w>=3) {
+    let count=u32(params.options.w);
+    let pixel=input.uv*params.display.xy;
+    var closest=1e10;
+    var inside=false;
+    for(var i=0u;i<count;i++) {
+      let a=params.contour[i].xy*params.display.xy;
+      let b=params.contour[(i+1u)%count].xy*params.display.xy;
+      let edge=b-a;
+      let t=clamp(dot(pixel-a,edge)/max(dot(edge,edge),0.000001),0.0,1.0);
+      closest=min(closest,length(pixel-a-t*edge));
+      if((a.y>pixel.y)!=(b.y>pixel.y)) {
+        if(pixel.x<(b.x-a.x)*(pixel.y-a.y)/(b.y-a.y)+a.x) {inside=!inside;}
+      }
+    }
+    alpha=max(1-smoothstep(params.display.z,params.display.z+1,closest),select(0.0,params.display.w,inside));
   }
   if(w<=0 || (params.options.z>0 && occluded(input.uv))) {alpha=0;}
   alpha*=params.color.a;

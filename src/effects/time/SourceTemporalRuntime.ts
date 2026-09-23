@@ -7,12 +7,14 @@ import { temporalSourceTime, type TemporalClipSource } from './temporalClipSourc
 import { recordTemporalPreparation, setTemporalStatus } from './temporalResourcePreparation';
 import { SourceProxyDimensions } from './SourceProxyDimensions';
 import { SlitScanTrackingGap, slitScanSourceTransform, type SlitScanStabilization } from './slit-scan/stabilization';
+import { StabilizedCurrentFrame } from './StabilizedCurrentFrame';
 
 export interface SourceTemporalRequest {
   key: string; effectId: string; media: MediaFile; source: TemporalClipSource;
   horizon: number; samples: number; nearest: boolean; encoder: GPUCommandEncoder;
   keepPending?: boolean; maxEdge?: number; useProxy?: boolean;
   stabilization?: SlitScanStabilization;
+  currentInput?: { view: GPUTextureView; width: number; height: number };
 }
 
 /** Absolute clip-time grid: adjacent output frames share the same historical PTS.
@@ -34,6 +36,7 @@ interface Entry {
   media: MediaFile; width: number; height: number; bytes: number; layers: number; prefetchCount: number; proxyFps?: number;
   abort: AbortController; lease: SourceFrameLease; reader?: SourceFrameReader;
   pending?: Promise<void>; pendingKeys?: Set<number>; prefetch?: Promise<void>; error?: Error;
+  retryAt?: number; retryTimer?: ReturnType<typeof setTimeout>; currentFrame?: StabilizedCurrentFrame;
   atlas: GPUTexture; ages: GPUTexture; slots: Map<number, number>; proxyTimes: Set<number>; revision: number;
   latest: SourceTemporalRequest; encoder: GPUCommandEncoder;
 }
@@ -66,23 +69,26 @@ export class SourceTemporalRuntime {
     }
     // Stabilization also owns the current PTS: every temporal sample must share
     // the reference coordinate space, including zero delay and the Mix input.
-    const currentCount = request.stabilization ? 1 : 0;
-    const historyCount = Math.max(2, Math.min(64, Math.round(request.samples))) - 1 + currentCount;
+    const currentCount = request.stabilization && !request.currentInput ? 1 : 0;
+    const currentBytes = request.stabilization && request.currentInput ? request.currentInput.width * request.currentInput.height * 4 : 0;
+    const zeroDelay = request.horizon === 0 && !!request.currentInput;
+    const historyCount = zeroDelay ? 1 : Math.max(2, Math.min(64, Math.round(request.samples))) - 1 + currentCount;
     // Reserve only the requested history, plus as much optional prefetch as fits.
     // Two frame-sized allowances cover upload scratch/storage outside the atlas.
     const capacity = Math.min(this.device.limits.maxTextureArrayLayers ?? 256,
-      Math.floor(this.budget / (width * height * 4)) - 2);
+      Math.floor((this.budget - currentBytes) / (width * height * 4)) - 2);
     if (historyCount > capacity) {
       this.release(request.key);
       throw new Error(`Full Res ${width} × ${height} with ${historyCount + 1 - currentCount} samples exceeds the 640 MiB source cache. `
         + (capacity >= 1 ? `Choose at most ${capacity + 1 - currentCount} samples or Small preview.` : 'Use Small preview.'));
     }
-    const prefetchCount = Math.min(4, capacity - historyCount);
+    const prefetchCount = zeroDelay ? 0 : Math.min(4, capacity - historyCount);
     const layers = historyCount + prefetchCount;
-    const bytes = width * height * 4 * (layers + 2);
+    const bytes = width * height * 4 * (layers + 2) + currentBytes;
     let entry = this.entries.get(request.key);
+    if (entry?.error && performance.now() >= (entry.retryAt ?? 0)) { this.release(request.key); entry = undefined; }
     if (entry && (entry.media.url !== request.media.url || entry.media.file !== request.media.file
-      || entry.width !== width || entry.height !== height || entry.layers !== layers
+      || entry.width !== width || entry.height !== height || entry.layers !== layers || entry.bytes !== bytes
       || entry.prefetchCount !== prefetchCount || entry.proxyFps !== proxyFps
       || entry.latest.stabilization?.identity !== request.stabilization?.identity)) { this.release(request.key); entry = undefined; }
     if (!entry) {
@@ -102,6 +108,18 @@ export class SourceTemporalRuntime {
     }
     entry.latest = request; entry.encoder = request.encoder;
     if (entry.error) throw entry.error;
+    let presented = request.currentInput && !request.stabilization
+      ? { view: request.currentInput.view, identity: 'current-input' } : undefined;
+    if (request.stabilization && request.currentInput) {
+      const { view, width: inputWidth, height: inputHeight } = request.currentInput;
+      const time = temporalSourceTime(request.source, request.source.localTime);
+      const matrix = slitScanSourceTransform(request.stabilization, time);
+      if (entry.currentFrame?.width !== inputWidth || entry.currentFrame.height !== inputHeight) {
+        entry.currentFrame?.destroy();
+        entry.currentFrame = new StabilizedCurrentFrame(this.device, inputWidth, inputHeight);
+      }
+      presented = { view: entry.currentFrame.encode(request.encoder, view, matrix), identity: `${request.stabilization.identity}:${time}` };
+    }
     const wanted = entry.reader ? this.wanted(entry, request) : undefined;
     const ready = wanted?.every(item => entry!.slots.has(item.time));
     if (!ready && entry.prefetch) entry.lease.cancel();
@@ -115,18 +133,19 @@ export class SourceTemporalRuntime {
         // Coverage is a property of this requested window, not a permanent decoder failure.
         if (error instanceof SlitScanTrackingGap) throw error;
         owner.error = error instanceof Error ? error : new Error(String(error));
+        this.retry(owner);
         setTemporalStatus(request.effectId, owner.error.message); throw owner.error;
       }).finally(() => { owner.pending = undefined; owner.pendingKeys = undefined; this.onReady?.(); });
       void owner.pending.catch(() => undefined);
     }
     if (!ready) recordTemporalPreparation(entry.pending!);
     if (ready && !entry.pending && !entry.prefetch) this.prefetch(entry);
-    if (!wanted || !entry.slots.size) return undefined;
+    if ((!wanted || !entry.slots.size) && !presented) return undefined;
     // During a cache miss preview can use only resident source frames. Export waits
     // for the exact window through the preparation barrier above.
-    const current = request.stabilization ? wanted[0] : undefined;
+    const current = request.stabilization && !presented ? wanted?.[0] : undefined;
     if (current && !entry.slots.has(current.time)) return undefined;
-    const available = (current ? wanted.slice(1) : wanted).filter(item => entry!.slots.has(item.time));
+    const available = (current ? wanted!.slice(1) : wanted ?? []).filter(item => entry!.slots.has(item.time));
     const data = new Float32Array(65 * 4);
     data[1] = -1;
     for (const [i, sample] of available.entries()) {
@@ -136,18 +155,18 @@ export class SourceTemporalRuntime {
     this.device.queue.writeTexture({ texture: entry.ages }, data, { bytesPerRow: 65 * 16 }, [65, 1]);
     if (ready) {
       const proxyCount = available.filter(sample => entry!.proxyTimes.has(sample.time)).length;
-      const source = proxyCount === available.length ? 'Proxy' : proxyCount ? 'Proxy + original' : 'Original';
+      const source = !available.length && presented ? 'Current input' : proxyCount === available.length ? 'Proxy' : proxyCount ? 'Proxy + original' : 'Original';
       setTemporalStatus(request.effectId, `${request.maxEdge ? 'Small preview' : 'Full size'} · ${source} · ${width} × ${height} · source cache ready`);
     }
     const identity = JSON.stringify([request.key, request.stabilization?.identity, current?.time, entry.revision, available, request.nearest]);
-    return { current: current ? { view: entry.atlas.createView({ dimension: '2d', baseArrayLayer: entry.slots.get(current.time)!, arrayLayerCount: 1 }), identity } : undefined,
+    return { current: presented ?? (current ? { view: entry.atlas.createView({ dimension: '2d', baseArrayLayer: entry.slots.get(current.time)!, arrayLayerCount: 1 }), identity } : undefined),
       atlas: { view: entry.atlas.createView({ dimension: '2d-array' }), identity },
       ages: { view: entry.ages.createView(), identity } };
   }
 
   private wanted(entry: Entry, request: SourceTemporalRequest) {
-    const samples = sourceTemporalWindow(request);
-    if (request.stabilization) samples.unshift({ age: 0, time: temporalSourceTime(request.source, request.source.localTime) });
+    const samples = request.currentInput && request.horizon === 0 ? [] : sourceTemporalWindow(request);
+    if (request.stabilization && !request.currentInput) samples.unshift({ age: 0, time: temporalSourceTime(request.source, request.source.localTime) });
     const wanted = samples.map(sample => ({ ...sample,
       time: entry.reader!.frames[Math.max(0, surfaceFrameIndex(entry.reader!.frames, sample.time))].time }));
     if (request.stabilization) for (const sample of wanted) slitScanSourceTransform(request.stabilization, sample.time);
@@ -181,7 +200,7 @@ export class SourceTemporalRuntime {
     // Replenish on every advancing window, including fully resident windows.
     // Waiting for the next miss exhausts lookahead in periodic four-frame bursts.
     // Prefetch stays outside the export/seek preparation barrier.
-    if (request.keepPending && request.samples > 2 && entry.prefetchCount) {
+    if (request.keepPending && request.horizon > 0 && request.samples > 2 && entry.prefetchCount) {
       const keys = new Set(this.wanted(entry, request).map(item => item.time));
       const step = Math.max(request.horizon, 0.00001) / (Math.min(64, request.samples) - 2);
       const tick = Math.floor(request.source.localTime / step + 1e-8);
@@ -200,6 +219,7 @@ export class SourceTemporalRuntime {
       }).catch(error => {
         if (!signal.aborted && !(error instanceof DOMException && error.name === 'AbortError')) {
           entry.error = error instanceof Error ? error : new Error(String(error));
+          this.retry(entry);
         }
       }).finally(() => { entry.prefetch = undefined; this.onReady?.(); });
     }
@@ -220,9 +240,15 @@ export class SourceTemporalRuntime {
   }
 
   private residentBytes() { return [...this.entries.values()].reduce((sum, entry) => sum + entry.bytes, 0); }
+  private retry(entry: Entry) {
+    entry.retryAt = performance.now() + 1000;
+    clearTimeout(entry.retryTimer);
+    entry.retryTimer = setTimeout(() => this.onReady?.(), 1010);
+  }
   release(key: string) {
     const entry = this.entries.get(key);
     if (!entry) return;
+    clearTimeout(entry.retryTimer); entry.currentFrame?.destroy();
     entry.abort.abort(); entry.lease.release(); entry.atlas.destroy(); entry.ages.destroy(); this.entries.delete(key);
   }
   destroy() { for (const key of this.entries.keys()) this.release(key); this.uploader.destroy(); this.proxyDimensions.destroy(); }

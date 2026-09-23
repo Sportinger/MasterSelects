@@ -8,6 +8,11 @@ export interface SurfaceSample {
   quad: SurfaceQuad;
   confidence: number;
   manual?: boolean;
+  /** User include/exclude prompts on this decoded source frame. */
+  objectPrompts?: (SurfacePoint & {label: 0 | 1})[];
+  /** Object contours deform independently; quad is their attachment bounds. */
+  contour?: SurfacePoint[];
+  detailContour?: SurfacePoint[];
 }
 export interface SurfaceOcclusion { time: number; quad: SurfaceQuad | null }
 export interface PlanarTrack {
@@ -38,4 +43,5 @@ export interface PlanarTrack {
   footstepPresentation?: 'decision';
   /** Authored scenic beat; displayed drop distance is fictional, not measured. */
   footstepInterlude?: { start: number; end: number; dropMeters: number; dropGreaterThan?: boolean };
+  object?: { referenceContour: SurfacePoint[]; detailContour: SurfacePoint[]; padding?: number };
 }

@@ -92,7 +92,7 @@ describe('planar tracking render contract',()=>{
     expect(evaluateCompositionClipEffects([],[],0,clip)).toEqual(effects);
     if ('packUniforms' in surfaceOverlay) {
       const buffer=surfaceOverlay.packUniforms(effects[0].params as Record<string,number|boolean|string>,1920,1080)!;
-      expect(buffer.byteLength).toBe(128);expect([...buffer].every(Number.isFinite)).toBe(true);
+      expect(buffer.byteLength).toBe(1152);expect([...buffer].every(Number.isFinite)).toBe(true);
     }
     expect(appendSurfaceEffects([],{...clip,planarTracks:[{...track,enabled:false}]},0)).toEqual([]);
   });

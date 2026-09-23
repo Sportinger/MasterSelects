@@ -68,8 +68,11 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
   as the tracking area. The generated mask stays in reference coordinates; use
   **Create protection mask** after changing the reference, or edit it in Masks.
   Its **Mask feather** is also editable directly under Protection mask.
-  Missing/foreign tracking and uncovered delay windows report an explicit error;
-  preview bypasses the affected effect and export fails instead of inventing motion.
+  Missing/foreign tracking and uncovered delay windows report an explicit error.
+  A reference or sample gap pauses only stabilization in preview: Slit Scan keeps
+  processing the whole window in unstabilized coordinates and resumes correction
+  when coverage returns. Export fails instead of silently dropping stabilization.
+  Reset **Reference (source s)** to use the track's current reference after retracking.
   Choose **Off** to disable stabilization or author a new source selection.
 - **Source sampling** decodes the source video independently, applying clip trim
   and speed. Render preceding effects to an intermediate video to include them;
@@ -83,8 +86,10 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
   export uses originals regardless of the preview Proxy switch. There is no
   rolling-history mode or playback-only temporal sampling fallback.
 - **Source-frame cache**: historical samples use an absolute clip-time grid,
-  with the current frame supplied by normal playback, or a dedicated source-cache
-  layer when object stabilization is active. Adjacent output frames reuse
+  with the current frame supplied by normal playback. Stabilization transforms
+  that available input synchronously on the GPU, so playback never waits for a
+  duplicate current-frame decode. Zero delay needs no historical decoding.
+  Adjacent output frames reuse
   source PTS in a GPU texture array. A shared source-frame service coalesces requests
   from temporal consumers and borrows exact native VideoFrames already resident in
   the media runtime, without seeking the playback decoder. Missing frames use one
@@ -105,11 +110,13 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
   history plus up to four optional prefetch layers, with a two-frame allowance
   within 640 MiB across active owners (browser-managed decoder storage is separate).
   For a single original 3840 × 2160 source this allows up to 19 total samples
-  (18 with object stabilization, which also caches the current frame);
+  (18 with object stabilization, including its corrected input texture);
   1080p originals and 1280 × 720 proxies support 64. Oversized requests show an actionable inspector status and
   bypass only the affected effect in preview; the image and subsequent effects
   remain visible. Export fails explicitly rather than omitting the effect.
   Neither resolution nor sample count is silently reduced.
+  Transient source-cache failures retry after one second without removing and
+  re-adding the effect; persistent failures remain visible in the status.
 - **Proxy reuse**: Small preview and Full size with timeline Proxy mode enabled
   reuse exact JPEG frames from the existing proxy cache with bounded load concurrency. Their
   background reads share cached/in-flight loads without moving the timeline's

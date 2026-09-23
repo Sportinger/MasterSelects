@@ -160,6 +160,8 @@ beforeEach(() => {
   });
   fakes.mediaState.files = [{id: 'media-1', name: 'source.mp4', fps: 25, url: 'blob:source'}];
   fakes.trackingState.assets = [];
+  fakes.trackingState.removeAsset = vi.fn();
+  fakes.mediaState.compositions = [];
   fakes.publishTrackingAsset.mockImplementation((clipId: string, track: PlanarTrack) => ({
     ...makeAsset(track),
     sourceVideoClipId: clipId,
@@ -226,7 +228,7 @@ describe('useTrackingWorkspace', () => {
 
     expect(fakes.timelineState.updateClip).not.toHaveBeenCalled();
     expect(fakes.trackSurface).not.toHaveBeenCalled();
-    expect(result.current.message).toBe('Choose a range inside this clip that includes the playhead.');
+    expect(result.current.message).toBe('Stopped: Choose a range inside this clip that includes the playhead.');
   });
 
   it('publishes the exact samples from a successful tracking run', async () => {
@@ -244,7 +246,21 @@ describe('useTrackingWorkspace', () => {
     const updated = fakes.timelineState.clips[0].planarTracks[0] as PlanarTrack;
     expect(updated.samples).toEqual(trackedSamples);
     expect(fakes.publishTrackingAsset).toHaveBeenLastCalledWith('clip-1', updated);
-    expect(result.current.message).toBe('2 frames tracked');
+    expect(result.current.message).toBe('Complete: 2 frames tracked');
+  });
+
+  it('preserves existing reference frames beyond a prematurely stopped tracking pass', async () => {
+    const oldSamples = [1, 2, 3, 4, 5].map(time => ({ time, duration: 1, quad, confidence: 1 }));
+    installSourceClip([makeTrack('track-a', oldSamples)]);
+    fakes.trackSurface.mockResolvedValue({ samples: [{ ...oldSamples[1], quad: correctedQuad }], stopped: 'Lost object' });
+    const { result } = renderHook(() => useTrackingWorkspace('clip-1'));
+    await waitFor(() => expect(result.current.url).toBe('blob:source'));
+    await act(async () => result.current.run('surface'));
+    const updated = fakes.timelineState.clips[0].planarTracks[0] as PlanarTrack;
+    expect(updated.samples.map(sample => sample.time)).toEqual([1, 2, 3, 4, 5]);
+    expect(updated.samples[1].quad).toEqual(correctedQuad);
+    expect(updated.samples[4]).toEqual(oldSamples[4]);
+    expect(result.current.message).toContain('Stopped:');
   });
 
   it('cancels an active run and keeps the previous result', async () => {
@@ -266,7 +282,7 @@ describe('useTrackingWorkspace', () => {
     await act(async () => operation);
 
     expect(runSignal?.aborted).toBe(true);
-    expect(result.current.message).toBe('Cancelled — previous result kept');
+    expect(result.current.message).toBe('Stopped by you. Previous result kept.');
     expect(fakes.timelineState.updateClip).not.toHaveBeenCalled();
   });
 
@@ -313,4 +329,23 @@ describe('useTrackingWorkspace', () => {
     expect(fakes.publishTrackingAsset).not.toHaveBeenCalled();
     expect(fakes.trackSurface).not.toHaveBeenCalled();
   });
+});
+
+it('deletes a clip result and its unused published asset in an undo batch',()=>{
+  const track=makeTrack('delete-me');installSourceClip([track]);fakes.trackingState.assets=[makeAsset(track)];
+  const {result}=renderHook(()=>useTrackingWorkspace('clip-1'));
+  act(()=>result.current.remove(track.id));
+  expect(fakes.timelineState.clips[0].planarTracks).toEqual([]);
+  expect(fakes.trackingState.removeAsset).toHaveBeenCalledWith('asset-delete-me');
+  expect(fakes.historyEndBatch).toHaveBeenCalled();
+});
+it('keeps a published result used by another composition and respects track locks',()=>{
+  const track=makeTrack('shared');installSourceClip([track]);fakes.trackingState.assets=[makeAsset(track)];
+  fakes.mediaState.compositions=[{id:'other',timelineData:{clips:[{id:'linked',trackingBinding:{assetId:'asset-shared'}}]}}];
+  const {result,rerender}=renderHook(()=>useTrackingWorkspace('clip-1'));
+  fakes.timelineState.tracks[0].locked=true;rerender();
+  act(()=>result.current.remove(track.id));expect(fakes.timelineState.updateClip).not.toHaveBeenCalled();
+  fakes.timelineState.tracks[0].locked=false;rerender();
+  act(()=>result.current.remove(track.id));expect(fakes.timelineState.clips[0].planarTracks).toEqual([]);
+  expect(fakes.trackingState.removeAsset).not.toHaveBeenCalled();
 });

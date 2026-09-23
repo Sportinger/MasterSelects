@@ -11,6 +11,7 @@ export interface TrackSurfaceRequest {
   to: number;
   quad: SurfaceQuad;
   signal: AbortSignal;
+  onFrame?: (sample: SurfaceSample, pixels: ImageData) => void;
   onProgress: (progress: number, sample: SurfaceSample) => void;
 }
 
@@ -48,10 +49,12 @@ export async function trackSurface(request: TrackSurfaceRequest): Promise<{ samp
     for await (const frame of reader.readRange(request.from, request.to)) {
       request.signal.throwIfAborted();
       const { time, duration, pixels } = frame;
+      const preview = request.onFrame ? new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height) : undefined;
       const result = await step(pixels, time, previousTime, i === 0);
       if (result.lost || !result.quad || !validQuad(result.quad)) { stopped = `${time.toFixed(3)}s: ${result.reason ?? 'Invalid surface'}`; break; }
       const sample = { time, duration, quad: result.quad, confidence: result.confidence ?? 1, ...(i === 0 ? { manual: true } : {}) };
       samples.push(sample); request.onProgress((i + 1) / count, sample);
+      if (preview) request.onFrame?.(sample, preview);
       previousTime = time; i++;
     }
     if (!stopped && requestedCount > count) stopped = `Pass complete at ${samples.at(-1)!.time.toFixed(3)}s. Continue from that frame.`;
