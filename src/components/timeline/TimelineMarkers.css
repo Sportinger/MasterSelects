@@ -384,25 +384,21 @@
   to { transform: translate3d(calc(var(--timeline-switch-base-x, 0px) - 140vw - 100%), 0, 0); }
 }
 
-.playhead.timeline-switch-enter-left,
 .timeline-marker.timeline-switch-enter-left,
 .in-out-marker.timeline-switch-enter-left {
   animation: timeline-switch-enter-left 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-.playhead.timeline-switch-enter-right,
 .timeline-marker.timeline-switch-enter-right,
 .in-out-marker.timeline-switch-enter-right {
   animation: timeline-switch-enter-right 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-.playhead.timeline-switch-exit-right,
 .timeline-marker.timeline-switch-exit-right,
 .in-out-marker.timeline-switch-exit-right {
   animation: timeline-switch-exit-right 0.175s cubic-bezier(0.7, 0, 0.84, 0) forwards;
 }
 
-.playhead.timeline-switch-exit-left,
 .timeline-marker.timeline-switch-exit-left,
 .in-out-marker.timeline-switch-exit-left {
   animation: timeline-switch-exit-left 0.175s cubic-bezier(0.7, 0, 0.84, 0) forwards;

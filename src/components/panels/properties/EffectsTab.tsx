@@ -3,7 +3,8 @@ import { EffectSectionBypass } from './resolveInspector/EffectSectionBypass';
 import { ResolveInspectorSection } from './resolveInspector/ResolveInspectorPrimitives';
 import { SplatExplorationControls } from './SplatExplorationControls';
 // Effects Tab - Add and configure visual/audio effects
-import { Fragment, Suspense, useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { Fragment, Suspense, memo, useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { shallow } from 'zustand/shallow';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useEngineStore } from '../../../stores/engineStore';
 import { startBatch, endBatch } from '../../../stores/historyStore';
@@ -181,7 +182,7 @@ function renderParamControl(
 
 // Effect parameters with collapsible Quality section
 interface EffectParamsProps {
-  effect: { id: string; type: string; params: PrimitiveEffectParams };
+  effect: { id: string; type: string; params: PrimitiveEffectParams; operatorGraph?: import('../../../types/operatorGraph').EffectOperatorGraph };
   onChange: (params: PrimitiveEffectParams) => void;
   clipId?: string;
   onDragStart?: () => void;
@@ -193,9 +194,32 @@ interface EffectParamsProps {
   ) => void;
 }
 
-function EffectParams(props: EffectParamsProps) {
-  return <EffectSectionBypass clipId={props.clipId} effectId={props.effect.id}><EffectParamsContent {...props} /></EffectSectionBypass>;
-}
+type EffectParamsViewProps = Omit<EffectParamsProps, 'onChange' | 'onParamCommit'> & { clipId: string };
+
+const EffectParams = memo(function EffectParams(props: EffectParamsViewProps) {
+  const { clipId, effect } = props;
+  const onChange = (params: PrimitiveEffectParams) => {
+    const { setPropertyValue, updateClipEffect } = useTimelineStore.getState();
+    Object.entries(params).forEach(([paramName, value]) => {
+      if (typeof value === 'number') {
+        setPropertyValue(clipId, `effect.${effect.id}.${paramName}` as AnimatableProperty, value);
+      } else {
+        updateClipEffect(clipId, effect.id, { [paramName]: value });
+      }
+    });
+  };
+  const onParamCommit: EffectParamsProps['onParamCommit'] = (paramName, controlKind, inputMethod) => {
+    trackEditorControlCommitted({ area: 'effect', controlId: paramName, controlKind, inputMethod,
+      interaction: inputMethod === 'reset' ? 'reset' : 'change', itemId: effect.type, itemKind: 'effect' });
+  };
+  return <EffectSectionBypass clipId={clipId} effectId={effect.id}>
+    <EffectParamsContent {...props} onChange={onChange} onParamCommit={onParamCommit} />
+  </EffectSectionBypass>;
+}, (previous, next) => previous.clipId === next.clipId
+  && previous.effect.id === next.effect.id && previous.effect.type === next.effect.type
+  && previous.effect.operatorGraph === next.effect.operatorGraph
+  && shallow(previous.effect.params, next.effect.params)
+  && previous.onDragStart === next.onDragStart && previous.onDragEnd === next.onDragEnd);
 
 function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd, onParamCommit }: EffectParamsProps) {
   const [qualityExpanded, setQualityExpanded] = useState(false);
@@ -325,7 +349,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
   const effectOrbitTarget = useEngineStore(state => state.effectOrbitTarget);
   const setEffectOrbitTarget = useEngineStore(state => state.setEffectOrbitTarget);
   // Actions from getState() - stable, no subscription needed
-  const { addClipEffect, addKeyframe, removeClipEffect, updateClipEffect, setClipEffectEnabled, reorderClipEffect, setPropertyValue, getInterpolatedEffects } = useTimelineStore.getState();
+  const { addClipEffect, addKeyframe, removeClipEffect, setClipEffectEnabled, reorderClipEffect, getInterpolatedEffects } = useTimelineStore.getState();
 
   // Drag-and-drop reorder state
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -593,26 +617,6 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                       effect={{ ...effect, params: primitiveParams }}
                       onDragStart={handleBatchStart}
                       onDragEnd={handleBatchEnd}
-                      onParamCommit={(paramName, controlKind, inputMethod) => {
-                        trackEditorControlCommitted({
-                          area: 'effect',
-                          controlId: paramName,
-                          controlKind,
-                          inputMethod,
-                          interaction: inputMethod === 'reset' ? 'reset' : 'change',
-                          itemId: effect.type,
-                          itemKind: 'effect',
-                        });
-                      }}
-                      onChange={(params) => {
-                        Object.entries(params).forEach(([paramName, value]) => {
-                          if (typeof value === 'number') {
-                            setPropertyValue(clipId, `effect.${effect.id}.${paramName}` as AnimatableProperty, value);
-                          } else {
-                            updateClipEffect(clipId, effect.id, { [paramName]: value });
-                          }
-                        });
-                      }}
                       clipId={clipId}
                     />
                   </div>

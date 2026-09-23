@@ -41,6 +41,8 @@ Meanwhile, I'll keep a refined version available at
 [masterselects.com](https://www.masterselects.com/), reviewing and polishing
 contributions as I bring them together into a cohesive editor.
 
+Effect inspectors reuse unchanged controls during playback while keeping animated values live. Slit Scan's 3D sampler list follows authored graph changes rather than rebuilding on each playhead tick.
+
 Slit Scan adds spatial time displacement to clips, with directional and wave
 profiles, center or clip-mask protection, diagnostic previews, and an editable group built from shared Nodes.
 Deleting a selected protection mask keeps Slit Scan running without mask protection; undo restores the connection.
