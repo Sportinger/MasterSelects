@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hybridTemporalBatches, hybridTemporalMemory, hybridTemporalWindow } from '../../src/effects/time/hybridTemporalWindow';
+import { hybridTemporalBatches, hybridTemporalBudget, hybridTemporalMemory, hybridTemporalWindow } from '../../src/effects/time/hybridTemporalWindow';
 import type { SourceTemporalRequest } from '../../src/effects/time/SourceTemporalRuntime';
 import { temporalCurrentGraph } from '../../src/services/operators/temporalDemandGraph';
 import { createDefaultSlitScanGraph } from '../../src/services/operators/slitScanEffectGraph';
@@ -64,6 +64,19 @@ describe('hybrid source windows', () => {
     const graph = temporalCurrentGraph(createDefaultSlitScanGraph(), 'history');
     const plan = prepareImageEffect({ type: 'slit-scan', params: {}, operatorGraph: graph }).plan!;
     expect(plan.externalResources?.some(r => r.kind === 'input-history')).toBeFalsy();
+  });
+  it('uses the remaining selected budget for capacity overflow, subject to GPU layer limits', () => {
+    const mib = 1024 * 1024;
+    const available = (4096 - 256) * mib; // Geometry / another resident owner already reserved.
+    const memory = hybridTemporalMemory(1920, 1080, 1920, 1080, 1920, 256, hybridTemporalBudget(available));
+    expect(memory.capacity).toBe(256);
+    expect(memory.bytes).toBeLessThanOrEqual(available);
+    const constrained = hybridTemporalMemory(1920, 1080, 1920, 1080, 1920, 256, hybridTemporalBudget(400 * mib));
+    expect(constrained.bytes).toBeLessThanOrEqual(400 * mib);
+    const failed = hybridTemporalMemory(1920, 1080, 1920, 1080, 1920, 256, hybridTemporalBudget(available, true));
+    expect(failed.capacity).toBeLessThan(memory.capacity);
+    expect(failed.bytes).toBeLessThanOrEqual(640 * mib);
+    expect(hybridTemporalBudget(400 * mib, true)).toBe(400 * mib);
   });
 });
 

@@ -16,6 +16,8 @@ export interface ExportRenderFrameInput {
   readonly durationMicros?: number;
   /** Exact timeline spacing; encoding timestamps may be rounded to microseconds. */
   readonly frameStepSeconds?: number;
+  /** Includes this output. Temporal batching must not prepare beyond the export range. */
+  readonly framesRemaining?: number;
 }
 
 export interface ExportVideoFrameCapture {

@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { awaitTemporalPreparations, collectTemporalPreparations, recordTemporalPreparation } from '../../src/effects/time/temporalResourcePreparation';
+import { awaitTemporalPreparations, collectTemporalPreparations, recordTemporalPreparation, temporalExportFramesRemaining, temporalExportFrameStep } from '../../src/effects/time/temporalResourcePreparation';
 
 describe('temporal resource render barrier', () => {
+  it('scopes the remaining export range to the synchronous render', () => {
+    const finish = collectTemporalPreparations(1 / 30, 7);
+    expect(temporalExportFrameStep()).toBe(1 / 30);
+    expect(temporalExportFramesRemaining()).toBe(7);
+    finish();
+    expect(temporalExportFramesRemaining()).toBeUndefined();
+    expect(temporalExportFrameStep()).toBeUndefined();
+  });
   it('collects each resource once and waits until every decoder finishes', async () => {
     let finishFirst!: () => void, finishSecond!: () => void;
     const first = new Promise<void>(resolve => { finishFirst = resolve; });

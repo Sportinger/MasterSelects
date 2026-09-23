@@ -166,14 +166,17 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
   rejects allocation, one retry drops optional headroom without changing quality.
   Windows that do not fit, or whose GPU allocation still fails, automatically use
   Hybrid streaming and report the fallback. Resolution, time window and requested
-  samples stay unchanged. Streaming may be slower; changing memory/quality/window
+  samples stay unchanged. Capacity overflow uses the remaining selected history
+  budget, after geometry and interactive-history reservations, up to the GPU's
+  texture-array layer limit. Actual GPU allocation failures retain a conservative
+  ceiling of 640 MiB for streaming. Streaming may be slower; changing memory/quality/window
   settings retries resident storage. Temporary source-load failures retry after a
   short delay while retaining available cached samples, without recreating the effect.
   It uses the same authored time-map/mask graph and stabilization contract.
   Implementation is experimental: a resident Full HD preview with 1920 samples
   and 74 distinct source frames was observed after the black-preview correction
-  (752 MiB allocated instead of 4074 MiB). Playback/export speed measurements and
-  regression checks remain pending while builds and tests are paused.
+  (752 MiB allocated instead of 4074 MiB). Native linear export measurements are
+  recorded below; other playback and geometry configurations are not covered by them.
 - **Preview quality: Adaptive** is optional for resident history at Full size.
   Playback, playhead dragging and paused parameter edits use adaptive history
   resolution, with a 960-pixel maximum edge even when full-size frames fit in
@@ -193,16 +196,42 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
   (up to four images / 64 MiB, with one oversized image allowed).
   Initial decoding is still required. Performance
   has not yet been benchmarked.
-- **Export processing** (Sampling): `Shared source frames (Hybrid)` is an opt-in
+- **Export processing** (Sampling): `Shared source frames (Hybrid)` is the default
   block renderer for full-size Hybrid exports (including resident-mode fallback) of the standard linear scan,
-  including arbitrary scan angles. It prepares up to eight output frames from
+  including arbitrary scan angles. Block size follows the remaining GPU memory
+  after reserving source/current/demand buffers, up to 100 output frames. The
+  final block stops at the export range or clip boundary. GPU allocation failure
+  halves the block size automatically. It prepares these output frames from
   one source-ordered request and writes contributing strips directly from borrowed
-  VideoFrames. Output tiles share the existing 640 MiB budget; the current effect
+  VideoFrames. Output tiles share the available history budget; the current effect
   input is added separately when each output is consumed. It leaves normal preview
   unchanged. Custom graphs, masks, stabilization, non-linear profiles, time maps,
-  and small-preview quality retain the individual-frame path. Changing parameters
-  invalidates prepared output tiles. Default: `Individual frames`. This path is
-  experimental; its GPU parity and performance checks have not yet been run.
+  and small-preview quality retain the individual-frame path. Saved graph layout,
+  edge order and the standard optional groups' neutral bypass states do not disable
+  batching; changed nodes, wiring or bypass routes still use individual frames.
+  Changing parameters invalidates prepared output tiles. Both export-processing
+  choices use original full-size source frames at Full size; this is independent
+  of the timeline's yellow scrubbing-cache indicator.
+  Larger blocks delay the first output while amortizing source decoding across more
+  outputs. They cache completed historical contributions, not the entire export.
+  At 1920×1080, 100 RGBA16F output tiles plus temporal metadata reserve about
+  1.56 GiB, in addition to current/source/demand buffers. Strip bounds are built in
+  one pass over each tile's sample metadata. Current effect input remains live;
+  changed parameters invalidate the block. Source-clock acceleration is included
+  in the spacing of prepared outputs.
+
+  **Verification (2026-09-23, local Windows/Chrome/WebGPU):** a six-frame
+  1920×1080 / 30 fps H.264 comparison at the same source range, 1920 samples,
+  Nearest sampling and a 38.97762-second delay completed in 21.03 s with
+  Individual frames and 7.27 s with Shared source frames. Render/preparation time
+  within the frame loop was 19.67 s versus 5.61 s. The shared run used one block
+  and 911 requested source frames; it stopped after the six requested outputs.
+  The encoded outputs had SSIM 0.997296: close agreement, not bit-exact parity.
+  A separate 688-frame Full HD export completed successfully with 100-frame
+  blocks in 80.20 s. These are observations from this project and machine, not
+  guaranteed speedups for every codec, graph or memory budget. Targeted tests cover
+  graph/bypass recognition, memory bounds, output spacing, strip coverage,
+  remaining-range propagation and allocation-failure shrink/cleanup.
 - **Time factor (×)** (Time): scales the source lookback from 1× to 100× without
   changing clip speed, duration, audio timing or composition FPS. Effective window
   = Delay × Time factor (up to 6000 seconds). Existing effects default to 1×.

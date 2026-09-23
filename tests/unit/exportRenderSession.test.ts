@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Layer } from '../../src/types';
 import type { ExportRenderHostPort } from '../../src/engine/export/exportRenderHostPort';
-import { recordTemporalPreparation } from '../../src/effects/time/temporalResourcePreparation';
+import { recordTemporalPreparation, temporalExportFramesRemaining } from '../../src/effects/time/temporalResourcePreparation';
 
 const mockFactory = vi.hoisted(() => {
   const calls: string[] = [];
@@ -146,8 +146,10 @@ describe('ExportRenderSessionImpl', () => {
     let entered!: () => void;
     const preparing = new Promise<void>(resolve => { release = resolve; });
     const renderEntered = new Promise<void>(resolve => { entered = resolve; });
-    vi.mocked(host.render).mockImplementationOnce(() => { recordTemporalPreparation(preparing); entered(); });
-    const capture = session.renderFrame({ time: 2, layers, timestampMicros: 2000000, durationMicros: 33333 });
+    const remaining: (number | undefined)[] = [];
+    vi.mocked(host.render).mockImplementationOnce(() => { remaining.push(temporalExportFramesRemaining()); recordTemporalPreparation(preparing); entered(); })
+      .mockImplementationOnce(() => { remaining.push(temporalExportFramesRemaining()); });
+    const capture = session.renderFrame({ time: 2, layers, timestampMicros: 2000000, durationMicros: 33333, frameStepSeconds: 1 / 30, framesRemaining: 7 });
     await renderEntered;
     expect(host.readPixels).not.toHaveBeenCalled();
     release();
@@ -155,6 +157,8 @@ describe('ExportRenderSessionImpl', () => {
     expect(host.render).toHaveBeenCalledTimes(2);
     expect(vi.mocked(host.render).mock.calls[1]).toEqual(vi.mocked(host.render).mock.calls[0]);
     expect(host.readPixels).toHaveBeenCalledTimes(1);
+    expect(remaining).toEqual([7, 7]);
+    expect(temporalExportFramesRemaining()).toBeUndefined();
     session.dispose();
   });
 

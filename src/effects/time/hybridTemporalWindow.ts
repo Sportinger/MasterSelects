@@ -3,6 +3,12 @@ import { sourceTemporalWindow, type SourceTemporalRequest } from './SourceTempor
 import { MAX_HYBRID_TEMPORAL_SAMPLES } from './sourceTemporalLimits';
 import { temporalSourceTime } from './temporalClipSource';
 
+/** Capacity overflow can use the remaining resident budget. An actual GPU
+ * allocation failure retains the conservative streaming ceiling on retries. */
+export function hybridTemporalBudget(availableBytes: number, allocationFailed = false): number {
+  return allocationFailed ? Math.min(availableBytes, 640 * 1024 * 1024) : availableBytes;
+}
+
 /** Keep temporal positions, but give equal decoded PTS one GPU cache identity. */
 export function hybridTemporalWindow(request: SourceTemporalRequest, frames: readonly { time: number; duration: number }[]) {
   if (!frames.length) throw new Error('Source video has no indexed frames.');

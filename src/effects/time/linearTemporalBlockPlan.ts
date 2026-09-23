@@ -1,12 +1,10 @@
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
-import { effectOperatorGraph } from '../../services/operators/effectGraphOwner';
+import { isLinearTemporalGraph } from './linearTemporalGraph';
 import { slitScanNumber } from './slit-scan/parameters';
 import { hybridTemporalWindow } from './hybridTemporalWindow';
 import type { SourceTemporalRequest } from './SourceTemporalRuntime';
 
 export type ScanAxis = number; // angle in degrees
-const semantics = (graph: EffectOperatorGraph) => JSON.stringify({ nodes: graph.nodes, edges: graph.edges, groups: graph.groups });
-let defaultSemantics: string | undefined;
 
 /** Fail closed on authored graphs and time-varying spatial fields. They retain Hybrid. */
 export function linearTemporalAxis(request: SourceTemporalRequest, graph: EffectOperatorGraph,
@@ -18,21 +16,20 @@ export function linearTemporalAxis(request: SourceTemporalRequest, graph: Effect
     || slitScanNumber(params, 'mapAmount') > 0 || params.protectionMask
     || slitScanNumber(params, 'centerX') !== 0.5 || slitScanNumber(params, 'centerY') !== 0.5) return undefined;
   const angle = ((slitScanNumber(params, 'angle') % 360) + 360) % 360;
-  defaultSemantics ??= semantics(effectOperatorGraph({ type: 'slit-scan', params: {} }));
-  if (semantics(graph) !== defaultSemantics) return undefined;
+  if (!isLinearTemporalGraph(graph)) return undefined;
   return angle;
 }
 
 /** Reserve output tiles separately from the source atlas, inside the existing budget. */
-export function linearTemporalBlockMemory(width: number, height: number) {
+export function linearTemporalBlockMemory(width: number, height: number, availableBytes: number) {
   const perFrame = width * height * 8 + (8192 + 1) * 16;
-  const count = Math.min(8, Math.floor(256 * 1024 * 1024 / perFrame));
+  const count = Math.min(100, Math.floor(availableBytes / perFrame));
   return count >= 2 ? { count, bytes: count * perFrame } : { count: 0, bytes: 0 };
 }
 
 export function linearTemporalBlockPlan(request: SourceTemporalRequest, frames: readonly { time: number; duration: number }[],
   step: number, count: number) {
-  return Array.from({ length: count }, (_, i) => request.source.localTime + i * step)
+  return Array.from({ length: count }, (_, i) => request.source.localTime + i * step * (request.source.clockRate ?? 1))
     .filter((time, i) => i === 0 || time < request.source.duration)
     .map(localTime => ({ localTime, ...hybridTemporalWindow({ ...request, source: { ...request.source, localTime } }, frames) }));
 }
@@ -47,6 +44,22 @@ export function linearTemporalStrip(metadata: Float32Array, group: number, delay
     low = Math.min(low, metadata[Math.max(0, i - 1) * 4]);
     high = Math.max(high, i + 1 < count ? metadata[(i + 1) * 4] : delay);
   }
+  return stripBounds(low, high, delay, axis, width, height);
+}
+
+/** Resolve every source's temporal bounds in one pass, even for 100 output tiles. */
+export function linearTemporalStrips(metadata: Float32Array, delay: number, axis: ScanAxis, width: number, height: number) {
+  const count = metadata[metadata.length - 4], bounds = new Map<number, [number, number]>();
+  for (let i = 0; i < count; i++) for (const group of [metadata[i * 4 + 1], metadata[i * 4 + 2]]) {
+    if (!group) continue;
+    const [low, high] = bounds.get(group) ?? [Infinity, -Infinity];
+    bounds.set(group, [Math.min(low, metadata[Math.max(0, i - 1) * 4]),
+      Math.max(high, i + 1 < count ? metadata[(i + 1) * 4] : delay)]);
+  }
+  return new Map([...bounds].map(([group, [low, high]]) => [group, stripBounds(low, high, delay, axis, width, height)]));
+}
+
+function stripBounds(low: number, high: number, delay: number, axis: ScanAxis, width: number, height: number): [number, number, number, number] | undefined {
   if (high < 0 || low > delay) return undefined;
   const start = Math.max(0, low / delay), end = Math.min(1, high / delay);
   const cosine = Math.cos(axis * Math.PI / 180), sine = Math.sin(axis * Math.PI / 180);

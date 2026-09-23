@@ -1,15 +1,18 @@
 let collecting: Set<Promise<unknown>> | undefined;
 let exportFrameStep: number | undefined;
+let exportFramesRemaining: number | undefined;
 export const temporalExportFrameStep = () => exportFrameStep;
+export const temporalExportFramesRemaining = () => exportFramesRemaining;
 export const isCollectingTemporalPreparations = () => collecting !== undefined;
 
 /** Collect only resources requested by one synchronous render, not unrelated tabs/owners. */
-export function collectTemporalPreparations(frameStep?: number) {
+export function collectTemporalPreparations(frameStep?: number, framesRemaining?: number) {
   if (collecting) throw new Error('Temporal resource preparation cannot nest render collectors.');
   const pending = new Set<Promise<unknown>>();
   collecting = pending;
   exportFrameStep = frameStep && Number.isFinite(frameStep) && frameStep > 0 ? frameStep : undefined;
-  return () => { if (collecting === pending) { collecting = undefined; exportFrameStep = undefined; } return [...pending]; };
+  exportFramesRemaining = framesRemaining && Number.isFinite(framesRemaining) && framesRemaining > 0 ? Math.floor(framesRemaining) : undefined;
+  return () => { if (collecting === pending) { collecting = undefined; exportFrameStep = undefined; exportFramesRemaining = undefined; } return [...pending]; };
 }
 
 export function recordTemporalPreparation(promise: Promise<unknown>) { collecting?.add(promise); }

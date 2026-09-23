@@ -449,6 +449,7 @@ export class FrameExporter {
             timestampMicros,
             durationMicros,
             frameStepSeconds: 1 / fps,
+            framesRemaining: totalFrames - frame,
           });
         } catch (error) {
           if (error instanceof ExportFrameCaptureUnavailableError) {

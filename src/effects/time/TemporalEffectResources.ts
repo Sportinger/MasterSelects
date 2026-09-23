@@ -18,6 +18,7 @@ import { useTrackingStore } from '../../stores/trackingStore';
 import { SlitScanTrackingGap, slitScanSourceTransform, slitScanStabilization } from './slit-scan/stabilization';
 import type { SourceTemporalRequest } from './SourceTemporalRuntime';
 import { HybridTemporalRuntime, type HybridTemporalContext } from './HybridTemporalRuntime';
+import { hybridTemporalBudget } from './hybridTemporalWindow';
 import { hybridTemporalSampleLimit } from './sourceTemporalLimits';
 import { slitScanNumber } from './slit-scan/parameters';
 import { recordSlitScanPresentation } from './slit-scan/playbackDiagnostics';
@@ -43,7 +44,7 @@ export class TemporalEffectResources {
   private hybrid?: HybridTemporalRuntime;
   private resident?: ResidentTemporalRuntime;
   private interactiveResident?: ResidentTemporalRuntime;
-  private residentFallbacks = new Map<string, string>();
+  private residentFallbacks = new Map<string, { signature: string; allocationFailed: boolean }>();
   private device: GPUDevice;
   private onReady?: () => void;
   readonly previewFrames: TemporalPreviewFrames;
@@ -114,7 +115,7 @@ export class TemporalEffectResources {
         // Keep the interactive cache warm at pause. Full quality may stream
         // alongside it; both resident owners share the selected memory ceiling.
         const budgetMiB = preview?.budgetMiB ?? Math.max(1, Math.floor(memoryMiB - (this.interactiveResident?.allocatedBytes ?? 0) / 1024 / 1024));
-        if (!interactive) hybridBudget = Math.min(hybridBudget, budgetMiB * 1024 * 1024);
+        if (!interactive) hybridBudget = hybridTemporalBudget(budgetMiB * 1024 * 1024);
         const runtime = interactive
           ? (this.interactiveResident ??= new ResidentTemporalRuntime(this.device, this.onReady))
           : (this.resident ??= new ResidentTemporalRuntime(this.device, this.onReady));
@@ -123,7 +124,9 @@ export class TemporalEffectResources {
         const signature = JSON.stringify([media.id, media.url, media.width, media.height,
           budgetMiB, interactive, input.horizon, input.samples, input.nearest, input.maxEdge,
           input.currentInput?.width, input.currentInput?.height, input.stabilization?.identity]);
-        fallback = this.residentFallbacks.get(input.key) === signature;
+        const previousFallback = this.residentFallbacks.get(input.key);
+        fallback = previousFallback?.signature === signature;
+        if (fallback && previousFallback?.allocationFailed) hybridBudget = hybridTemporalBudget(hybridBudget, true);
         if (!fallback) {
           this.residentFallbacks.delete(input.key);
           this.hybrid?.release(input.key);
@@ -136,7 +139,9 @@ export class TemporalEffectResources {
             return result;
           } catch (error) {
             if (!(error instanceof ResidentTemporalCapacityError) && !(error instanceof ResidentGpuMemoryError)) throw error;
-            this.residentFallbacks.set(input.key, signature);
+            const allocationFailed = error instanceof ResidentGpuMemoryError;
+            this.residentFallbacks.set(input.key, { signature, allocationFailed });
+            if (allocationFailed) hybridBudget = hybridTemporalBudget(hybridBudget, true);
             runtime.release(input.key);
             fallback = true;
           }

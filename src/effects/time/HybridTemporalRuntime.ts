@@ -10,7 +10,7 @@ import { ImageGraphPassRuntime } from '../ImageGraphPassRuntime';
 import { StabilizedCurrentFrame } from './StabilizedCurrentFrame';
 import { HybridTemporalGpu } from './HybridTemporalGpu';
 import { hybridTemporalBatches, hybridTemporalMemory, hybridTemporalWindow } from './hybridTemporalWindow';
-import { recordTemporalPreparation, setTemporalStatus, temporalExportFrameStep } from './temporalResourcePreparation';
+import { recordTemporalPreparation, setTemporalStatus, temporalExportFrameStep, temporalExportFramesRemaining } from './temporalResourcePreparation';
 import { LinearTemporalBlock } from './LinearTemporalBlock';
 import { linearTemporalAxis, linearTemporalBlockMemory } from './linearTemporalBlockPlan';
 import { slitScanSourceTransform } from './slit-scan/stabilization';
@@ -64,7 +64,10 @@ export class HybridTemporalRuntime {
     if (!queryIds.length) throw new Error('Hybrid requires a temporal query.');
     const step = temporalExportFrameStep();
     const axis = queryIds.length === 1 ? linearTemporalAxis(request, context.graph, context.effect.params, step) : undefined;
-    const blockMemory = axis === undefined ? { count: 0, bytes: 0 } : linearTemporalBlockMemory(width, height);
+    const baseMemory = axis === undefined ? undefined
+      : hybridTemporalMemory(width, height, sw, sh, 2, device.limits.maxTextureArrayLayers, budget, queryIds.length);
+    const blockMemory = baseMemory ? linearTemporalBlockMemory(width, height, budget - baseMemory.bytes) : { count: 0, bytes: 0 };
+    const blockCount = Math.min(blockMemory.count, temporalExportFramesRemaining() ?? blockMemory.count);
     const memory = hybridTemporalMemory(width, height, sw, sh, blockMemory.count ? 2 : request.samples, device.limits.maxTextureArrayLayers,
       budget - blockMemory.bytes, queryIds.length);
     memory.bytes += blockMemory.bytes;
@@ -139,7 +142,7 @@ export class HybridTemporalRuntime {
           entry!.atlas.createView({ dimension: '2d-array' }), entry!.queries[0].branch.createView(),
           entry!.queries[0].outputs[entry!.index].createView(), slots, false);
         void Promise.resolve().then(() => device.queue.onSubmittedWorkDone()).finally(() => buffer.destroy());
-        this.finish(entry!, request, current, signature, `shared source · ${blockMemory.count} outputs`, tile.times.length);
+        this.finish(entry!, request, current, signature, `shared source · ${entry!.block!.count} outputs`, tile.times.length);
       };
       if (entry.block.find(blockIdentity, request.source.localTime)) { consume(request.encoder); return entry.result; }
       const owner = entry;
@@ -149,7 +152,7 @@ export class HybridTemporalRuntime {
           if (!request.keepPending && owner.requested !== signature) throw new DOMException('Hybrid seek superseded.', 'AbortError'); };
         check();
         await owner.block!.prepare(blockIdentity, request, owner.reader!, owner.lease, this.uploader,
-          axis, step, blockMemory.count, owner.abort.signal, check);
+          axis, step, blockCount, owner.abort.signal, check);
         check(); const encoder = device.createCommandEncoder(); consume(encoder); device.queue.submit([encoder.finish()]);
       })());
       recordTemporalPreparation(owner.pending); return owner.result;
