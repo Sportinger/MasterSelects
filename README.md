@@ -1,264 +1,43 @@
 # MasterSelects
 
-A media editor and an agent-friendly foundation for creative tools.
+A browser-based video editor and a workspace you can extend while you create.
+Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in one multitrack timeline. The editor runs on React, TypeScript, WebGPU, and WebCodecs.
 
-The in-app agent receives the complete base node and effect inventory, including full ports and parameter contracts for node requests. It can create and edit image operator graphs and inspect selected nodes with their neighbors. Codex Direct can stream graph changes; the browser pins a Nodes panel beside Preview to the named clip and applies complete records as they arrive. Every Nodes panel can follow Active selection or stay assigned to a clip. The view fits newly added nodes when they extend outside the canvas. Groups open during agent work and collapse after successful completion; the node inspector starts collapsed. See [Node Catalog](docs/Features/Node-Catalog.md).
+[Open the editor](https://www.masterselects.com/) · [Documentation](https://www.masterselects.com/docs/) · [Discord](https://discord.com/invite/K8dApzG3XC) · [Report an issue](https://github.com/Sportinger/MasterSelects/issues)
 
-Edit video, mix audio, animate graphics, build 3D scenes, and work with live
-visuals. MasterSelects combines these workflows in a browser-based workspace
-with WebGPU rendering and a multitrack timeline. Selected timeline clips stay selected on repeat clicks by default; click-to-deselect is optional in Settings > General > Timeline.
+![Face Cables effect in MasterSelects](docs/images/screenshot-face-cables.png)
 
-When your project needs a tool that isn't there yet, you can have a coding agent
-build it into the editor while you work. Try the new effect, panel, or workflow
-in that same project, and refine it around the job in front of you.
+*Face Cables combines face tracking, animated controls, and optional scene depth. See the [feature guide](docs/Features/README.md) for this and other workflows.*
 
-[Open the editor](https://www.masterselects.com/) ·
-[About MasterSelects](https://www.masterselects.com/about/) ·
-[Documentation](https://www.masterselects.com/docs/) ·
-[Discord](https://discord.com/invite/K8dApzG3XC) ·
-[Report an issue](https://github.com/Sportinger/MasterSelects/issues)
+## What you can make
 
-![Face Cables in MasterSelects: face tracking, custom effect controls, and animated timeline keyframes](docs/images/screenshot-face-cables.png)
+| Workspace | Highlights |
+| --- | --- |
+| **Video** | Multitrack editing, nested compositions, proxies, multicam, and Premiere Pro sequence import. |
+| **Nodes** | Build and reuse effect, color, geometry, and 3D graphs with typed connections and live previews. |
+| **Color & effects** | Grade footage, combine GPU effects and transitions, and animate masks and properties. |
+| **Audio** | Edit waveforms, mix tracks, record, apply effects, and separate stems. |
+| **Motion & tracking** | Animate text and shapes, create captions, and attach graphics to tracked footage. |
+| **3D** | Combine footage, models, lights, cameras, Gaussian splats, and particle effects. |
+| **AI** | Ask the in-app agent to edit the timeline or generate media; use local analysis tools where available. |
 
-*Face Cables: a custom face-tracking effect with cable physics, editable controls,
-and timeline keyframes. Optional AI scene depth gives hair, body and background
-a textured 2.5D surface with cable collision while MediaPipe retains the face and
-cable anchors. Baked depth stays in the project and can be reused for physics.*
-
-## Why I built this
-
-No Adobe subscription, no patience for cracks, and no template-first online
-editor. I wanted a creative workspace I could make my own.
-
-AI should be able to do the edit, and help build the tool itself, right when you
-need it. A real project gives you a reason to build something and a place to
-try it immediately.
-
-<h3>I want people to contribute the useful things they build. An effect made for
-one person's project can become a tool someone else already has when they need
-it. As those contributions become part of MasterSelects, both people and their
-agents have more to work with, and the next task gets a little easier.</h3>
-
-Meanwhile, I'll keep a refined version available at
-[masterselects.com](https://www.masterselects.com/), reviewing and polishing
-contributions as I bring them together into a cohesive editor.
-
-Slit Scan also has [3D time surfaces and motion bands](docs/Features/Slit-Scan-3D.md), with a saved reference projection, explicit base sampler, native scene-camera rendering and bounded DIS deformation. New effects start with a motion-deformed surface using the `history` sampler and a 256-column mesh; mesh quality can reach 2048 columns. Saved projects retain source-pair DIS fields in a linked disk cache; bounded background writes let rendering resume while persistence finishes.
-
-Effect inspectors reuse unchanged controls during playback while keeping animated values live. The Properties panel remembers its active tab and scroll position when hidden and reopened. Slit Scan's 3D sampler list follows authored graph changes rather than rebuilding on each playhead tick.
-
-Slit Scan's temporary reference view yields to scene-camera navigation, so orbiting remains responsive after returning to the reference image.
-
-Effect and node numeric drags coalesce input per animation frame and retain the final released value. Effect inspectors write only changed parameters instead of rewriting the entire parameter snapshot.
-
-[Inspector graph preparation](docs/Features/Inspector-Performance.md) runs in a shared worker for image effects. Numeric drags share one undo transaction, and ordinary geometry value changes reuse compiled instructions.
-
-Slit Scan 3D adaptive playback and scrubbing cap the mesh at 128 columns; pause and export retain the selected quality. The source-time lookup is cached across playback frames.
-
-Slit Scan history refills include upcoming frames and present complete windows while lookahead continues. Adaptive preparation takes priority over paused full-quality decoding to keep playback from chasing late source frames.
-
-Slit Scan's optional **Seam smoothing (px)** softens resolved source-time boundaries with adjustable edge protection. Native 3D surfaces automatically use premultiplied mipmaps and anisotropic texture filtering for minification and oblique views.
-
-Slit Scan's 3D time surface can use resolved source-frame times and blend weights for depth, without DIS or a calibration image. This visualizes temporal sampling; it does not reconstruct object motion or physical scene depth.
-
-The Slit Scan **Motion-deformed surface** additionally follows image points through forward/backward source motion, so motion can stretch and shear the grid over time. It preserves stationary areas; untracked regions can keep their original position or leave diagnostic gaps.
-
-Slit Scan adds spatial time displacement to clips, with directional and wave
-profiles, center or clip-mask protection, diagnostic previews, and an editable group built from shared Nodes.
-Deleting a selected protection mask keeps Slit Scan running without mask protection; undo restores the connection.
-Slit Scan time fields add color/HSV, noise and separate time masks. The shared depth controls can bake and assign a source-aligned depth video with provenance and coverage checks; live/export verification of these additions is pending.
-Delay, Map mix and Noise amount also accept the shared parameter-source graph, including LFO modulation and binding bypass.
-Object stabilization can track a selected mask in both directions, align current and historical frames to a reference, and create a feathered protection mask without cutting out the clip. Position, rotation and size correction share reusable source tracking; uncovered tracking windows are reported explicitly.
-Stabilization applies directly to the current playback input. Tracking gaps pause only stabilization in preview and export while Slit Scan continues; transient source-cache failures retry automatically.
-Slit Scan supports 2-256 samples, within the GPU layer and 640 MiB cache limits. New effects default to Full size. Inspector sections without bypass switches—Sampling, Preview quality, Time and Wave—appear before switchable sections, with Sampling expanded. New effects start with optional switchable sections bypassed and collapsed. Small preview and Full size use the same source-time sampling through a bounded GPU cache. A shared frame service reuses exact cached frames, coalesces source requests and continues decoding across playback refills. Small preview can use existing JPEG proxies; Full size follows timeline Proxy mode at actual proxy resolution, including in 4K compositions. Full-size export uses originals. WebGPU handles frame conversion and resizing without Canvas or CPU pixel readback; required frames take priority over lookahead.
-An optional Hybrid frame-storage mode combines a bounded GPU cache with streamed GPU accumulation. Its sample maximum follows source resolution (up to 8192), while duplicate source timestamps share texture layers. Hybrid uses original frames, holds the last completed preview during preparation, and waits for complete frames during export; large windows may render below real-time speed.
-Slit Scan offers shared-source export processing for native Hybrid linear scans: up to 100 output frames reuse each decoded source and receive only its contributing GPU strips, including saved graphs with the standard optional groups bypassed. Complex graphs retain the individual-frame Hybrid path. Resident-history capacity overflow uses the selected remaining memory budget up to the GPU texture-layer limit; actual allocation failures retain the conservative 640 MiB streaming ceiling. Both export-processing choices preserve full-size source resolution.
-New Slit Scan effects use resident GPU video history inspired by TouchDesigner, with a 4 GiB history budget, Nearest temporal sampling, 1920 samples, shared-source Hybrid export processing, Full size and Adaptive preview quality. Source frames stay in tiled GPU pages, with direct time lookup and a selectable 640 MiB to 4 GiB history budget. Allocation follows distinct source frames plus refill headroom, rather than filling the budget up front. Playback and scrubbing hold a complete effect image during refills to avoid seams from missing time samples; exports await exact frames. Oversized windows fall back to Hybrid streaming without reducing resolution or sample count. Playback/export performance validation is pending.
-Slit Scan's Time factor (1–100×) expands its source-history window without changing clip speed, duration or composition FPS. The effective lookback is Delay × Time factor; clip boundaries hold. The adjacent Bypass slowdown toggle keeps source acceleration in the result and shortens the clip proportionally; disabling it restores the duration. Audio remains unchanged.
-Resident GPU history has optional Adaptive preview quality: playback, scrubbing and parameter edits use history frames capped at a 960-pixel edge, reduced further when memory requires it. Paused value changes refresh the adaptive result, then switch to full resolution when ready; export and temporal sample counts are unchanged. Full-quality caches stay warm across playback when the shared memory budget allows it.
-
-Slit Scan's optional Scan smoothing combines cached DIS source-frame motion with the final delay gradient. **Stretch threshold (×)** selects local expansion, with a red preview mask and reusable Source Motion/deformation/filter nodes. The independent WebGPU DIS fast path uses a Gaussian pyramid, patch search, dense aggregation and backward-flow confidence checks. First use prepares a bounded GPU field cache; threshold edits reuse it. Smoothing blends existing pixels and does not synthesize intermediate frames. DIS quality and performance are not yet live-verified; builds/tests remain paused.
+Import video, audio, images, animations, 3D assets, and Premiere Pro projects. Export video, audio, still frames, and interchange formats. Browser, operating system, and GPU support affect available codecs and performance. See [media import](docs/Features/Media-Panel.md) and [export](docs/Features/Export.md).
 
 ## Build while you create
 
-Mask feather includes independent contour offset and balance controls: move a soft or sharp edge inward or outward, or pan the transition midpoint within the feather ramp. Both controls are animatable. See [Masks](docs/Features/Masks.md).
+I built MasterSelects because I wanted an editor I could shape around a project. When a tool is missing, a coding agent can add an effect, control, or workflow to the source; you can try it in the same project and contribute it for others to use.
 
-Start the editor locally from source, open your project, and work from there:
-
-1. **Find the missing piece.** A task in your project calls for a new effect,
-   control, or workflow.
-2. **Build it with your agent.** Let your coding agent add it to the codebase
-   while you work on the project.
-3. **Use and refine it.** Try it in the same project and adjust it to what the
-   work actually needs.
-4. **Contribute it back.** Share useful additions so the next person, and their
-   agent, can build on them.
-
-See [Run locally](#run-locally) to get started.
-
-## An agent-friendly codebase
-
-The codebase gives coding agents concrete ways to find their bearings, extend
-existing systems, and check their work:
-
-- **A map of the project.** [AGENTS.md](AGENTS.md) documents architecture,
-  conventions, and verification workflows; the [feature docs](docs/Features/README.md)
-  explain how each part of the editor works.
-- **Reusable building blocks.** Registered effect modules, shared inspector
-  controls, typed tool schemas, and store slices give new features existing
-  patterns to build on. The Nodes workspace also saves customized effects and
-  their internal graphs as browser-local presets for independent reuse across projects.
-- **Access to the running editor.** The [local MCP bridge](docs/Features/AI-Bridge-Control.md)
-  lets agents inspect the timeline, operate tools, and examine results while
-  working on the source.
-- **Performance diagnostics.** When playback feels slow or laggy, agents can
-  sample frame timings, inspect main-thread work, decoder state, cache usage,
-  and audio drift, and read playback traces through the bridge. Repeatable
-  playback and scrub probes help reproduce a problem and compare changes.
-  See [playback debugging](docs/Features/Playback-Debugging.md).
-- **9,000+ automated test definitions.** The test suite includes editor behavior,
-  project state, tool policy, and architecture checks. Agents can run relevant
-  tests as they change the code.
-
-## Make the edit
-
-| Workspace | What you can do |
-| --- | --- |
-| **Video** | Edit multiple tracks, nest compositions, work with proxies, sync multicam footage, and import Premiere Pro sequences. |
-| **Nodes** | One clip canvas with nested groups, executable texture/material/geometry nodes, detailed face/depth processing, synchronized effect controls and a searchable catalog. Smooth, continuous exponential wheel and trackpad zoom stays anchored to the pointer. An OffscreenCanvas worker draws the graph and directional signal animation on separate cached layers. Compact animation areas show existing keyframes directly on their target nodes; extract a keyframe node to share a curve, with its cables revealed on selection. A collapsible Stabilization group exposes landmark conversion, baked transform curves and their clip target, with its own bypass and gray inactive keys in the timeline and curve editors. Executable 3D nodes support bypass, including transforms already recorded in supported Face Cables bakes. Typed ports show accepted formats; Video Source exposes reusable tracking and saved depth alongside audio analysis. |
-| **Color & effects** | Grade through Color Nodes or the synchronized Color controls, inspect curves and scopes, combine GPU effects and transitions, and animate masks and properties with keyframes. Mask outlines stay aligned with proxy media, and effect masks follow live mask edits. |
-| **Audio** | Edit waveforms and spectrograms, mix tracks with effects and sends, record audio, and separate stems. Audio effects use video-style cards with bypass, ordering grips, keyframes, and a searchable effect picker with oversized, bold typographic tiles. |
-| **Motion & tracking** | Animate text, shapes, Lottie, and Rive assets; create captions; track faces and surfaces; bypass baked face/lip stabilization without deleting keyframes; and attach graphics to tracked motion. |
-| **3D** | Combine footage with models, lights, cameras, and Gaussian splats in a shared scene. Large splats parse off the UI thread with visible progress. Splat Exploration with branch bypass and compute budgets exposes editable nodes for sphere cropping, stretched splats, particle simulation, camera fading, and an approximate mesh wireframe that respects upstream sphere crops. Mesh and particle outputs can appear as linked timeline clips sharing one node graph and scene. Static node branches retain background worker sorting. Early sphere crops remove outside splats from downstream GPU work; per-branch budgets sample across the entire scan. |
-| **AI** | Ask the editor to change the timeline, generate media, or use local transcription, segmentation, and depth estimation. |
-
-The Nodes inspector can be collapsed with the narrow handle on its left edge to give the graph more room.
-
-Object tracking supports repeated include/exclude clicks, editable padded contours with up to 64 points, saved user-frame corrections, a live tracking preview, and animated mask creation. The Tracking inspector lists reusable results with undoable deletion. See [Surface & object tracking](docs/Features/Surface-Tracking.md).
-
-Arrange the dockable panels for the work at hand. The interface is optimized for
-touch and iPad, with phone workflows still being refined. Multiple preview
-outputs support live and installation workflows.
-
-Explore the [feature guide](docs/Features/README.md) for workflows and examples.
-
-Node cables have visible semicircular plugs, animated attachment, and docked ghost
-previews over compatible sockets while dragging. Drag either end to reconnect,
-or release on empty canvas to unplug editable links.
-Added nodes settle into place, removed nodes shrink away, and new cables draw from
-output to input. These graph edit animations also apply to agent changes and respect
-reduced motion settings.
-AI edits present a frame after each tool step, including steps inside a batch;
-large compound node groups reveal their cards and cables progressively.
-During playback and timeline scrubbing, light pulses and direction arrows show
-the flow from output to input. They fade when the timeline rests.
-Graph panning reuses unchanged nodes and cables; playback avoids repeated dock
-layout writes, tab measurements and effect evaluation for sibling parameter rows.
-The viewport follows groups as the agent opens or closes them and yields to manual navigation.
-Inline node previews start enabled, can be toggled individually or together, and
-preserve image aspect ratios. A shared worker canvas caches visible thumbnails;
-preview-aware placement finds room for newly created nodes while preserving manual
-positions and overlaps. Drag group headers to move their contents; unlock a source
-group to transfer compatible nodes into another group or effect. Incoming nodes
-find a free position and expand the target frame. Incomplete effects remain
-editable and pause until repaired. Header text adapts to zoom without enlarging
-frames. Image/color stages, saved
-tracking/geometry, material swatches, camera/light values and scene output have
-viewers without starting extra decoders or analysis jobs.
-
-Inspector section switches synchronize with matching Node group bypasses, including
-nested image groups with a defined pass-through and existing scene branch mutes.
-Bypassing a parent image group preserves its children's individual settings.
-
-Color Nodes uses the same canvas as Nodes. Flock uses the shared compact
-inspector and adds evaluated-parameter and existing-particle previews. Common
-connection checks cover Color, Flock, Face Cables, Scene and manual clip links;
-saved definitions and specialized rendering/simulation stay compatible.
-
-Voxel Relief now exposes nested geometry and height calculations as editable
-nodes. Math nodes offer an operation dropdown on the card and in the inspector,
-editable operands, and live connected values. Number-only previews use real text
-instead of generated thumbnails; the number being edited updates immediately
-while downstream calculations catch up.
-
-Media imports report processing and save failures. Failed audio-proxy writes can
-be retried; project packages follow the configured save policy.
-Switching compositions keeps cached proxy audio available. Reopening split nested
-clips uses the full source composition duration, and nested previews retain the
-correct source timing after splits. Precise export skips unused
-nested video sources when the selected range and composition timing allow it.
-At nested cuts, export waits for the new frame before capture.
-
-Find keyboard shortcuts by action or key combination in Settings. Copy and paste
-automation curves to replace the destination range while keeping surrounding
-keyframes and other properties intact.
-Use **View > Thumbnails** in the timeline to hide or restore clip previews while
-keeping clip labels and audio waveforms visible.
-During video thumbnail generation, existing previews remain visible until replacement frames finish decoding.
-Timeline volume keyframe rows and inline curves show gain in dB. Clip Volume offers a slider up to +18 dB and numeric entry up to +64 dB.
-Deleting timeline gaps moves the playhead with the remaining material.
-Timeline snapping starts off; hold **Shift** to snap temporarily or enable the
-magnet button to keep it on. Your choice is remembered.
-Shift snapping during trimming preserves the selected clips and linked audio/video trim scope.
-**Export Current Frame** saves a JPG at full composition resolution with a black
-background, even when the preview uses reduced quality.
-Right-button scrubbing scrolls at the timeline edges. Moving clips between tracks
-keeps their original timing, and reversed thumbnails follow the visible source range.
-Settings > General includes a timeline RAM-cache budget in GB, with approximate
-browser-reported RAM and live usage. Non-proxy scrub frames use a bounded RAM cache
-alongside the GPU cache; the yellow ruler indicates frames retained in either tier.
-Idle preloading expands with the budget. Playback retains those frames and can
-add already decoded HTML-video frames without starting another decoder.
-Nested audio-only compositions retain their sound; mixdowns include clip timing
-and audio processing. Board-to-timeline drops restore the board view after auto-pan.
-New compositions are revealed in the Media panel. Preview source menus group
-composition layers and expand them on hover, keyboard focus, or a touch toggle.
-Board collisions use the nearest free grid position. Reusing Text, Camera, or Mesh
-media preserves the item's saved properties. Nested mixdowns refresh when source
-timing, effects, automation, or child compositions change. Prompt Book updates
-completed tool calls while the chat response is still running.
+The codebase includes [agent instructions](AGENTS.md), [feature documentation](docs/Features/README.md), reusable editor components, and an [authenticated local bridge](docs/Features/AI-Bridge-Control.md) for inspecting and operating the running editor. The hosted AI kernel is maintained separately from this repository.
 
 ## Try it
 
-Open [masterselects.com](https://www.masterselects.com/), import a clip, and drag it
-onto the timeline. Use **Space** to play, **C** to cut, and **Ctrl/Cmd+S** to save.
-See the [keyboard shortcuts](docs/Features/Keyboard-Shortcuts.md) for more.
+Open [masterselects.com](https://www.masterselects.com/), import a clip, and drag it onto the timeline. Press **Space** to play, **C** to cut, and **Ctrl/Cmd+S** to save. More controls are in the [keyboard shortcuts](docs/Features/Keyboard-Shortcuts.md).
 
-Use a recent browser with WebGPU support. Chrome or Edge on desktop is a good
-starting point. Available codecs, local file access, and performance depend on
-your browser, operating system, and GPU.
-
-GPU startup tries the remaining adapter configurations when a request is rejected.
-Project storage can reopen closing database connections and retry transient
-browser-storage startup failures. See [debugging](docs/Features/Debugging.md) and
-[project persistence](docs/Features/Project-Persistence.md).
-
-Editing and rendering run locally. Hosted AI and media generation use external
-services and may require credits; local AI features may download models on first
-use. See [AI integration](docs/Features/AI-Integration.md) and
-[security and privacy boundaries](docs/Features/Security.md).
-
-MasterSelects is under active development. Keep backups of important projects.
-When reporting a problem, include your browser, operating system, and steps to
-reproduce it.
-
-## Media in, media out
-
-- **Import:** video, audio, images, Premiere Pro projects, Lottie and Rive
-  animation, OBJ/glTF/GLB models, and Gaussian splats.
-- **Export:** video through WebCodecs or FFmpeg, still frames, audio, and FCPXML. During video export, `Finish File Early` finalizes and downloads the portion rendered so far.
-  for interchange with other editors.
-- **Optional Native Helper:** adds local services such as downloads, additional
-  storage support, and AI sidecars.
-
-Codec support varies by platform; a file extension alone does not guarantee
-decoding. Details: [media import](docs/Features/Media-Panel.md),
-[export](docs/Features/Export.md), and
-[Native Helper setup](tools/native-helper/README.md).
+Chrome or Edge on desktop is a good starting point. Editing and rendering run locally in the browser; hosted AI and media generation use external services and may require credits. Local AI features may download models on first use. MasterSelects is under active development, so keep backups of important projects.
 
 ## Run locally
 
-Install the Node.js version in [`.node-version`](.node-version), then:
+Install the Node.js version in [`.node-version`](.node-version), then run:
 
 ```bash
 git clone https://github.com/Sportinger/MasterSelects.git
@@ -267,53 +46,14 @@ npm ci
 npm run dev
 ```
 
-Open **http://localhost:5173**. This starts the browser editor. Hosted login,
-credits, and AI services are separate from this local setup.
+Open **http://localhost:5173**. Hosted login, credits, and AI services need the full development stack and separate service configuration. Maintainers with the private kernel checkout can use `npm run dev:full`.
 
-Development reloads skip the browser's unsaved-work confirmation. Save explicitly
-before reloading when using manual save mode.
-The active composition and clip selection are restored after a refresh in the same
-browser tab, including the focused clip in Properties, without an extra Save.
-
-Maintainers with the service configuration and private kernel checkout can use
-`npm run dev:full` for the complete development stack. The private hosted kernel
-is maintained separately and is not included in this repository.
-
-External agents can connect to the running development editor through the local,
-authenticated MCP bridge:
-
-```bash
-npm run mcp
-```
-
-See [AI bridge control](docs/Features/AI-Bridge-Control.md) for setup and access
-boundaries.
+External agents can connect to the local editor with `npm run mcp`; see [AI bridge control](docs/Features/AI-Bridge-Control.md) for setup and access boundaries.
 
 ## Contribute
 
-An effect or tool you built for your own project could be useful to others.
-Send a focused pull request with a short example of what it does. For a larger
-feature, open an issue first to discuss how it fits the editor. Bug reports,
-reproducible examples, and documentation improvements are welcome too.
-
-The core stack is **React, TypeScript, Zustand, WebGPU, and WebCodecs**. Start with
-`src/components/` for the UI, `src/stores/` for editor state, `src/engine/` for
-rendering and export, and `src/services/` for media and integrations.
-
-Read [AGENTS.md](AGENTS.md) for repository conventions. Keep feature documentation
-alongside behavior changes and run checks relevant to the files you change:
-
-```bash
-npx vitest run tests/unit/<relevant-file>.test.ts
-npm run build
-```
+Focused pull requests, reproducible bug reports, and documentation improvements are welcome. For larger features, open an issue first. Read [AGENTS.md](AGENTS.md) for repository conventions and use the [feature guide](docs/Features/README.md) to find the relevant architecture and workflows.
 
 ## License
 
-MasterSelects is licensed under the **GNU Affero General Public License v3.0 only
-(AGPL-3.0-only)**. Commercial use is permitted under its terms. Distribution and
-network use of modified versions carry source-sharing obligations; videos and
-other ordinary media you create with the editor do not inherit its license.
-
-See [LICENSE](LICENSE) for the full terms, [LICENSING.md](LICENSING.md) for scope,
-and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for component notices.
+MasterSelects is licensed under **AGPL-3.0-only**. Commercial use is permitted under its terms. Videos and other ordinary media made with the editor do not inherit its license. See [LICENSE](LICENSE), [LICENSING.md](LICENSING.md), and [third-party notices](THIRD_PARTY_NOTICES.md).
