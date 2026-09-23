@@ -1,6 +1,7 @@
 import { getAiUser, json } from '../../lib/db';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
 import { isAllowedRelayOrigin } from '../../lib/rtmp/guards';
+import { getClientIp } from '../../lib/rateLimit';
 
 const DEFAULT_KERNEL_ORIGIN = 'https://fassandra.de';
 
@@ -36,11 +37,13 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   }
 
   try {
+    const clientIp = getClientIp(request);
     return await fetch(upstream, {
       headers: {
         Authorization: `Bearer ${token}`,
         Upgrade: 'websocket',
         'X-MasterSelects-Principal': principal.id,
+        ...(clientIp ? { 'X-MasterSelects-Client-IP': clientIp } : {}),
       },
       method: 'GET',
     });

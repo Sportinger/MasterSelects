@@ -91,6 +91,14 @@ and a signed-in session, binds the authenticated user principal, injects the
 server-side kernel credential, and relays to `/kernel/direct-codex/ws`. The
 private relay validates that credential, bounds message and connection counts,
 and is the only component allowed to connect to the loopback Codex app-server.
+Before each Codex Direct turn, the kernel checks the user's prompt with content
+moderation. Requests flagged for sexual, hateful, harassing, illicit, violent,
+or self-harm instruction content are rejected with a message in the chat. The
+kernel logs the rejection category, authenticated principal, time, and the
+Cloudflare client IP for abuse investigation, without logging the prompt text.
+If moderation is unavailable, the turn is rejected until it can be checked.
+The `dev:full` and `dev:lan` WebSocket proxy also goes through this kernel
+relay, using a local development principal and the connecting socket address.
 
 ## Auto lifecycle (internal Normal Path)
 

@@ -277,7 +277,7 @@ export default defineConfig(({ command, mode }) => {
   const isDevServer = command === 'serve';
   const enableDevBridge = isDevServer && mode !== 'test';
   const freezeE2eSourceSnapshot = process.env.MASTERSELECTS_E2E_FREEZE_SOURCE === '1';
-  const directCodexToken = process.env.MASTERSELECTS_DIRECT_CODEX_TOKEN?.trim();
+  const directCodexKernelToken = process.env.MASTERSELECTS_DIRECT_CODEX_KERNEL_TOKEN?.trim();
   const devChatProxyOrigin = process.env.MASTERSELECTS_DEV_CHAT_PROXY_ORIGIN?.trim();
   const hostedApiProxyTarget = 'http://127.0.0.1:8788';
   const hostedApiProxyRoutes = [
@@ -332,20 +332,22 @@ export default defineConfig(({ command, mode }) => {
     target: hostedApiProxyTarget,
     ws: true,
   };
-  if (directCodexToken) {
+  if (directCodexKernelToken) {
     hostedApiProxy['/api/direct-codex/ws'] = {
       changeOrigin: false,
       configure(proxy) {
-        proxy.on('proxyReqWs', (proxyRequest) => {
-          // Codex app-server intentionally rejects browser Origin headers. The
-          // public side remains same-origin with Vite; strip Origin only on the
-          // authenticated localhost hop to the isolated app-server.
+        proxy.on('proxyReqWs', (proxyRequest, request) => {
+          // The dev browser shares the production kernel moderation boundary.
           proxyRequest.removeHeader('origin');
+          proxyRequest.setHeader('X-MasterSelects-Client-IP', request.socket.remoteAddress ?? 'unknown');
         });
       },
-      headers: { Authorization: `Bearer ${directCodexToken}` },
-      rewrite: () => '/',
-      target: 'ws://127.0.0.1:4500',
+      headers: {
+        Authorization: `Bearer ${directCodexKernelToken}`,
+        'X-MasterSelects-Principal': 'local-dev',
+      },
+      rewrite: () => '/kernel/direct-codex/ws',
+      target: 'ws://127.0.0.1:8787',
       ws: true,
     };
   }

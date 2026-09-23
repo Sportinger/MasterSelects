@@ -54,6 +54,20 @@ describe('Codex Direct edge route', () => {
     );
   });
 
+  it('passes Cloudflare client IP to the authenticated kernel relay', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const context = contextFor({ guestUser: guest, user: null });
+    context.request = new Request(context.request.url, { headers: {
+      Origin: 'https://www.masterselects.com', Upgrade: 'websocket',
+      'CF-Connecting-IP': '198.51.100.23',
+    } });
+    await onRequest(context);
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({
+      'X-MasterSelects-Client-IP': '198.51.100.23',
+    });
+  });
+
   it('rejects a request without a verified account or guest principal', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

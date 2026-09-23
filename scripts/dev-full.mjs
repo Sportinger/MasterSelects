@@ -550,7 +550,7 @@ function startVite(lanHost) {
     || 'https://www.masterselects.com';
   const viteEnvironment = {
     ...(lanHost ? { MASTERSELECTS_LAN_HOST: lanHost } : {}),
-    ...(logicAgentToken ? { MASTERSELECTS_DIRECT_CODEX_TOKEN: logicAgentToken } : {}),
+    ...(logicAgentToken ? { MASTERSELECTS_DIRECT_CODEX_KERNEL_TOKEN: devVarsEnvironment.KERNEL_AUTH_TOKEN } : {}),
     ...(!hasLocalTelegramDevChat ? { MASTERSELECTS_DEV_CHAT_PROXY_ORIGIN: devChatProxyOrigin } : {}),
   };
   spawnNodeProcess(
