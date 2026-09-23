@@ -31,6 +31,15 @@ describe('hybrid source windows', () => {
   it('uses only the current image at zero delay', () => {
     expect(hybridTemporalWindow({ ...request, horizon: 0 }, frames).times).toEqual([]);
   });
+  it('expands source lookback at 10x while keeping graph coordinates and current time unchanged', () => {
+    const source = { ...request.source, localTime: 50, duration: 60, outPoint: 60 };
+    const stamps = Array.from({ length: 1441 }, (_, i) => ({ time: i / 24, duration: 1 / 24 }));
+    const result = hybridTemporalWindow({ ...request, source, horizon: 40, timeFactor: 10 }, stamps);
+    expect(Math.min(...result.times)).toBeLessThan(10.1);
+    expect(result.metadata[(result.samples.length - 1) * 4]).toBeGreaterThanOrEqual(4);
+    for (let i = 1; i < result.samples.length; i++) expect(result.metadata[i * 4]).toBeCloseTo(result.samples[i].age / 10, 5);
+    expect(result.metadata[0]).toBe(0); expect(source.localTime).toBe(50); expect(source.speed).toBe(1);
+  });
   it('blends across the full source-frame interval instead of shrinking crossfades at high sample counts', () => {
     for (const count of [64, 625, 1080, 1920]) {
       const result = hybridTemporalWindow({ ...request, samples: count }, frames);

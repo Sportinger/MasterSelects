@@ -13,6 +13,8 @@ import { MAX_SOURCE_TEMPORAL_SAMPLES, SOURCE_TEMPORAL_METADATA_WIDTH } from './s
 export interface SourceTemporalRequest {
   key: string; effectId: string; media: MediaFile; source: TemporalClipSource;
   horizon: number; samples: number; nearest: boolean; encoder: GPUCommandEncoder;
+  /** Source lookback expands; graph delay coordinates stay in authored seconds. */
+  timeFactor?: number;
   keepPending?: boolean; maxEdge?: number; useProxy?: boolean;
   stabilization?: SlitScanStabilization;
   currentInput?: { view: GPUTextureView; width: number; height: number };
@@ -150,7 +152,7 @@ export class SourceTemporalRuntime {
     const data = new Float32Array(SOURCE_TEMPORAL_METADATA_WIDTH * 4);
     data[1] = -1;
     for (const [i, sample] of available.entries()) {
-      data[(i + 1) * 4] = sample.age; data[(i + 1) * 4 + 1] = entry.slots.get(sample.time)!;
+      data[(i + 1) * 4] = sample.age / (request.timeFactor ?? 1); data[(i + 1) * 4 + 1] = entry.slots.get(sample.time)!;
     }
     const header = MAX_SOURCE_TEMPORAL_SAMPLES * 4;
     data[header] = available.length + 1; data[header + 1] = Number(request.nearest); data[header + 2] = 3;
@@ -160,7 +162,7 @@ export class SourceTemporalRuntime {
       const source = !available.length && presented ? 'Current input' : proxyCount === available.length ? 'Proxy' : proxyCount ? 'Proxy + original' : 'Original';
       setTemporalStatus(request.effectId, `${request.maxEdge ? 'Small preview' : 'Full size'} · ${source} · ${width} × ${height} · source cache ready`);
     }
-    const identity = JSON.stringify([request.key, request.stabilization?.identity, current?.time, entry.revision, available, request.nearest]);
+    const identity = JSON.stringify([request.key, request.stabilization?.identity, current?.time, entry.revision, available, request.nearest, request.timeFactor]);
     return { current: presented ?? (current ? { view: entry.atlas.createView({ dimension: '2d', baseArrayLayer: entry.slots.get(current.time)!, arrayLayerCount: 1 }), identity } : undefined),
       atlas: { view: entry.atlas.createView({ dimension: '2d-array' }), identity },
       ages: { view: entry.ages.createView(), identity } };

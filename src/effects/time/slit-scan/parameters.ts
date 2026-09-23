@@ -40,6 +40,7 @@ export const slitScanParams: Record<string, EffectParam> = {
   ] },
   maskStrength: number('Protection strength', 1, 0, 1, 0.01, 'Subject protection'),
   delay: number('Delay (s)', 1, 0, 4, 0.01, 'Time'),
+  timeFactor: number('Time factor (×)', 1, 1, 10, 0.1, 'Time'),
   profile: { type: 'select', label: 'Profile', default: 'linear', group: 'Time', options: [
     { value: 'linear', label: 'Linear scan' }, { value: 'center', label: 'Out from center' },
     { value: 'wave', label: 'Wave / folds' },

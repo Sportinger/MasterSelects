@@ -12,6 +12,16 @@ import { TemporalEffectResources } from '../../src/effects/time/TemporalEffectRe
 import { collectTemporalPreparations, getTemporalStatus, recordTemporalPreparation } from '../../src/effects/time/temporalResourcePreparation';
 
 afterEach(() => vi.clearAllMocks());
+it('defaults old effects to 1x and clamps time factor to 1–10 without retiming the clip', () => {
+  state.assets = [];
+  const resources = new TemporalEffectResources({} as GPUDevice);
+  const source = { mediaId: 'media', localTime: 50, duration: 60, inPoint: 0, outPoint: 60, speed: 1, speedKeyframes: [] };
+  for (const [factor, expected] of [[undefined, 1], [5, 5], [10, 10], [100, 10], [0, 1], [NaN, 1]]) {
+    resources.resolveNative({ id: 'effect', type: 'slit-scan', params: { delay: 4, timeFactor: factor } }, 'clip', source, {} as GPUCommandEncoder);
+    expect(state.resolve.mock.calls.at(-1)![0]).toMatchObject({ horizon: 4 * expected!, timeFactor: expected, source });
+  }
+  expect(source.speed).toBe(1); expect(source.duration).toBe(60); resources.destroy();
+});
 it('keeps Slit Scan active after a track edit removes the reference and resumes correction when restored', () => {
   const quad = [{ x: .2, y: .2 }, { x: .4, y: .2 }, { x: .4, y: .4 }, { x: .2, y: .4 }];
   const sample = { time: 2, duration: 1, quad, confidence: 1 };

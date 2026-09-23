@@ -78,11 +78,13 @@ try {
   if(!largeNeeded.includes(1919)||!largeNeeded.some(i=>i>1080))throw Error('Large sample metadata was truncated');
   large.destroy();checks.push('PASS 1920 sample metadata and GPU demand bitset: frame 1919 requested');
   // Sparse 2-fps source: a dense temporal grid must still produce a smooth ramp.
-  const window=hybridTemporalWindow({source:{localTime:4,duration:4,inPoint:0,outPoint:4,speed:1,speedKeyframes:[]},horizon:4,samples:625,nearest:false},
-    Array.from({length:9},(_,i)=>({time:i/2,duration:.5})));
+  for (const factor of [1,10]) {
+  const horizon=4*factor;
+  const window=hybridTemporalWindow({source:{localTime:horizon,duration:horizon,inPoint:0,outPoint:horizon,speed:1,speedKeyframes:[]},horizon,timeFactor:factor,samples:625,nearest:false},
+    Array.from({length:9},(_,i)=>({time:i/2*factor,duration:.5*factor})));
   const smoothAges=device.createBuffer({size:window.metadata.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
   device.queue.writeBuffer(smoothAges,0,window.metadata);
-  window.times.forEach((time,i)=>pixels.set([Math.round(time/4*255),0,0,255],(i+1)*4));
+  window.times.forEach((time,i)=>pixels.set([Math.round(time/horizon*255),0,0,255],(i+1)*4));
   for(let i=0;i<width;i++)input.set([255,0,0,255],i*4);
   device.queue.writeTexture({texture:atlas},pixels,{bytesPerRow:4,rowsPerImage:1},[1,1,256]);
   device.queue.writeTexture({texture:current},input,{bytesPerRow:width*4},[width,1]);
@@ -98,7 +100,8 @@ try {
   for(let i=0;i<width;i++)smoothError=Math.max(smoothError,Math.abs(half(smoothPixels[i*4])-(1-i/255)));
   smoothRead.unmap();smoothRead.destroy();smoothAges.destroy();smoothBuffers.forEach(b=>b.destroy());
   if(smoothError>.006)throw Error(`Source interpolation still has plateaus: ${smoothError}`);
-  checks.push(`PASS 625 samples from 2-fps source: smooth full-width interpolation, max error ${smoothError}`);
+  checks.push(`PASS ${factor}x factor, ${horizon}s source window: smooth full-width interpolation, max error ${smoothError}`);
+  }
   checks.push(await probeHybridRuntime(device));
   const error=await device.popErrorScope();if(error)throw Error(error.message);
   result.textContent=checks.join('\n');device.destroy();

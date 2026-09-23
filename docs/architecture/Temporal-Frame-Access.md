@@ -72,6 +72,12 @@ samples can follow source resolution (up to 8192 positions); the resident atlas
 remains bounded by memory and device array-layer limits. Hybrid currently uses
 original sources even when preview proxies are enabled.
 
+Slit Scan's `timeFactor` expands the requested source horizon by 1–10×. Source
+times and stabilization coverage use that full horizon; uploaded age metadata is
+divided by the factor so saved/custom graph delay coordinates remain unchanged.
+This applies to both cache and Hybrid GPU paths, including demand bitsets and
+export preparation. It does not change clip speed, audio, duration or output FPS.
+
 GPU resources belong to their device/consumer. Slit Scan's atlas has a separate
 640 MiB budget; browser decoder storage is additional. Allocate only requested
 history and optional lookahead, not a fixed maximum layer count. Temporal resource

@@ -14,6 +14,7 @@ import { SlitScanTrackingGap, slitScanSourceTransform, slitScanStabilization } f
 import type { SourceTemporalRequest } from './SourceTemporalRuntime';
 import { HybridTemporalRuntime, type HybridTemporalContext } from './HybridTemporalRuntime';
 import { hybridTemporalSampleLimit } from './sourceTemporalLimits';
+import { slitScanNumber } from './slit-scan/parameters';
 
 /** Device-local resource ownership for temporal graphs and their node previews. */
 export class TemporalEffectResources {
@@ -37,8 +38,10 @@ export class TemporalEffectResources {
     const media = useMediaStore.getState().files.find(file => file.id === source.mediaId);
     if (!media || media.type !== 'video') throw new Error('Full-resolution source video is unavailable.');
     const limit = effect.params.temporalStorage === 'hybrid' ? hybridTemporalSampleLimit(media.width, media.height) : 256;
+    const timeFactor = slitScanNumber(effect.params, 'timeFactor');
     const request: SourceTemporalRequest = { key: JSON.stringify([scopeId, effect.id]), effectId: effect.id, media, source,
-      horizon: Math.max(0, Math.min(4, Number(effect.params.delay ?? 1))), samples: Math.max(2, Math.min(limit, Math.round(Number(effect.params.temporalSamples ?? 32)) || 32)),
+      horizon: slitScanNumber(effect.params, 'delay') * timeFactor, timeFactor,
+      samples: Math.max(2, Math.min(limit, Math.round(Number(effect.params.temporalSamples ?? 32)) || 32)),
       nearest: effect.params.temporalInterpolation === 'nearest', encoder, currentInput, keepPending: useTimelineStore.getState().isPlaying,
       useProxy: useMediaStore.getState().proxyEnabled && !isCollectingTemporalPreparations(),
       stabilization: slitScanStabilization(effect.params, useTrackingStore.getState().assets, source.mediaId, media.width!, media.height!),

@@ -55,6 +55,13 @@ Saved graph edits, effect bypass and numeric keyframes use the existing editor p
   Original or mixed fallback frames and the actual cache dimensions. Full-size
   export uses originals regardless of the preview Proxy switch. There is no
   rolling-history mode or playback-only temporal sampling fallback.
+- **Time factor (×)** (Time): scales the source lookback from 1× to 10× without
+  changing clip speed, duration, audio timing or composition FPS. Effective window
+  = Delay × Time factor (up to 40 seconds). Existing effects default to 1×.
+  Both storage modes use the expanded source window; graph delay coordinates stay
+  unchanged, so custom time maps and protection masks keep their authored behavior.
+  Clip boundaries hold the first/last available frame. High factors only add
+  distinct frames where source history exists; use Hybrid for large windows.
 - **Frame storage** (Sampling): **GPU cache** preserves the existing direct-atlas
   mode and its 256-sample maximum. **Hybrid · bounded GPU memory** adds a persistent
   GPU cache plus streaming for windows larger than its budget. Its Samples maximum

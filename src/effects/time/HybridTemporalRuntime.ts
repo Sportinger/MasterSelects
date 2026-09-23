@@ -86,7 +86,7 @@ export class HybridTemporalRuntime {
     const window = hybridTemporalWindow(request, entry.reader.frames);
     // Validate canonical decoded timestamps before changing any GPU state.
     if (request.stabilization) for (const time of window.times) slitScanSourceTransform(request.stabilization, time);
-    const signature = JSON.stringify([request.source, request.horizon, request.samples, request.nearest,
+    const signature = JSON.stringify([request.source, request.horizon, request.timeFactor, request.samples, request.nearest,
       context.graph, context.effect.params, context.timelineTime, [...context.externalResources].map(([id, r]) => [id, r.identity])]);
     entry.requested = signature;
     if (entry.signature === signature) return entry.result;
@@ -177,7 +177,7 @@ export class HybridTemporalRuntime {
       atlas: { view: entry.outputs[entry.index].createView({ dimension: '2d-array' }), identity: signature },
       ages: { view: entry.ages.createView(), identity: 'hybrid-output' } };
     entry.index = 1 - entry.index;
-    setTemporalStatus(request.effectId, `Hybrid · ${mode} · ${request.samples} samples · ${sourceFrames} distinct source frames · ${entry.slots.size}/${entry.capacity} cached`);
+    setTemporalStatus(request.effectId, `Hybrid · ${mode} · ${request.horizon.toFixed(2)} s window · ${request.samples} samples · ${sourceFrames} distinct source frames · ${entry.slots.size}/${entry.capacity} cached`);
   }
 
   release(key: string) {

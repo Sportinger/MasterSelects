@@ -20,7 +20,9 @@ export function hybridTemporalWindow(request: SourceTemporalRequest, frames: rea
     samples.push({ age: item.age, group, nextGroup, blend });
   }
   const metadata = new Float32Array((samples.length + 1) * 4);
-  samples.forEach((sample, i) => metadata.set([sample.age, sample.group, sample.nextGroup, sample.blend], i * 4));
+  // Normalize ages rather than rewriting saved/custom graphs. Their 0–4 second
+  // delay now addresses a source window up to 40 seconds, including GPU demand.
+  samples.forEach((sample, i) => metadata.set([sample.age / (request.timeFactor ?? 1), sample.group, sample.nextGroup, sample.blend], i * 4));
   metadata.set([samples.length, Number(request.nearest), 0, 0], samples.length * 4);
   return { times, samples, metadata };
 }

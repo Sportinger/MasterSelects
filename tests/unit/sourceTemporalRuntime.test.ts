@@ -39,6 +39,18 @@ async function prepare(runtime: SourceTemporalRuntime, request: SourceTemporalRe
 }
 afterEach(() => { vi.clearAllMocks(); mock.proxySize.mockReset(); vi.unstubAllGlobals(); });
 
+it('expands cache-mode source history without hitting the graph sampler four-second ceiling', async () => {
+  const { runtime, request, writes } = setup();
+  const expanded = { ...request, horizon: 20, timeFactor: 10, source: { ...request.source, localTime: 25 } };
+  await prepare(runtime, expanded);
+  const metadata = writes.mock.calls.at(-1)![1] as Float32Array;
+  const window = sourceTemporalWindow(expanded);
+  expect(Math.min(...mock.read.mock.calls.map(call => call[0]))).toBeLessThan(5.1);
+  expect(metadata[window.length * 4]).toBeCloseTo(window.at(-1)!.age / 10);
+  expect(metadata[window.length * 4]).toBeLessThan(2.1);
+  runtime.destroy();
+});
+
 function stabilization(identity = 'track:1'): SlitScanStabilization {
   const quad: SurfaceQuad = [{ x: .2, y: .2 }, { x: .4, y: .2 }, { x: .4, y: .6 }, { x: .2, y: .6 }];
   const track = { enabled: true, fps: 30, samples: Array.from({ length: 1000 }, (_, i) => ({ time: i / 30,
