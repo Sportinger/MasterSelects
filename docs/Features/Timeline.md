@@ -6,6 +6,8 @@ The Timeline is the core editing interface for multi-track editing. It now cover
 
 Right-button scrubbing scrolls the viewport at either edge and follows its current scroll offset. Moving clips to another track preserves their original start times even with snapping disabled; occupied destinations do not silently shift or trim the selection. Reversed, trimmed clip thumbnails use the visible source interval in both software and worker rendering paths.
 
+Holding or releasing Shift during an edge trim changes only snapping. Selected clips and linked audio/video retain the same trim scope in the live preview and committed edit.
+
 Section resize observations update only the element that changed, so an audio or video child resize does not re-sample a transient parent split height during track-property edits.
 
 ---
@@ -102,6 +104,7 @@ getTrackChildren()  // Query child tracks
 - Imported from the media panel or by dropping files on the timeline.
 - External drag previews are shown only for valid destinations. Video ghosts are always blue and audio ghosts are always green. A normal video-lane drop previews only the video, without an extra linked-audio ghost lane. Dropping a video that contains audio directly on an audio lane instead previews and places the linked audio on that exact lane plus the video on the lowest free video lane (normally `Video 1`); silent video, images, generated visuals, and other incompatible sources show no clip ghost on audio lanes.
 - Thumbnails and proxies are supported.
+- During video thumbnail generation, both the worker and software canvas keep decoded source previews visible while newer frames decode, then update them without blanking the thumbnail strip.
 - **View > Thumbnails** immediately hides or restores timeline thumbnails, including cached frames and nested-composition segment previews. Clip titles, type pictograms, composition boundaries, and audio waveforms remain visible. Hidden thumbnails do not schedule timeline thumbnail warmups. The worker and main-thread software canvas both respect this setting.
 - In Video Focus, holding Ctrl/Strg while dragging inside a visual clip marks a clip-scoped video bake region. Double-click marks the full visible clip. Clip-scoped regions currently use the transient preview cache path and can be unbaked or removed from the clip overlay.
 - Holding Ctrl/Strg while dragging on the ruler marks a composition-scoped video bake region. Baking a ruler region renders the visible composition into a compressed WebCodecs proxy and substitutes that single proxy layer during preview playback, so the generic RAM cache indicator is not the durable bake source.

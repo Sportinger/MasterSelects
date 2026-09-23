@@ -27,8 +27,13 @@ export class ThumbnailMemoryTier {
     outPoint: number,
     count: number,
     reversed?: boolean,
+    isAvailable?: (url: string) => boolean,
   ): (string | null)[] {
-    const sourceCache = this.cache.get(mediaFileId);
+    const storedFrames = this.cache.get(mediaFileId);
+    // Pending decodes must not displace an already drawable nearest frame.
+    const sourceCache = storedFrames && isAvailable
+      ? new Map([...storedFrames].filter(([, url]) => isAvailable(url)))
+      : storedFrames;
     if (!sourceCache || sourceCache.size === 0 || count <= 0) {
       return new Array(count).fill(null);
     }

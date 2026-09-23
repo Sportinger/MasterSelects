@@ -19,7 +19,7 @@ export function drawTimelineClipCanvasThumbnails(
 ): number {
   const count = Math.max(1, Math.min(maxThumbnailSlots, Math.floor(w / thumbnailSlotPx)));
   const inPoint = clip.inPoint ?? 0;
-  const urls = isFlockThumbnailSourceId(mediaFileId)
+  let urls = isFlockThumbnailSourceId(mediaFileId)
     ? flockThumbnailService.getUrlsForRange(clip.id, inPoint, clip.outPoint ?? inPoint + clip.duration, count, clip.reversed)
     : staticThumbnailUrl
     ? Array.from({ length: count }, () => staticThumbnailUrl)
@@ -30,6 +30,18 @@ export function drawTimelineClipCanvasThumbnails(
       count,
       clip.reversed,
     );
+  let hasMissingBitmap = false;
+  for (const url of urls) {
+    if (url && !getThumbnailBitmap(url)) {
+      hasMissingBitmap = true;
+      ensureThumbnailBitmap(url, requestRedraw, mediaFileId);
+    }
+  }
+  if (hasMissingBitmap && clip.source?.type === 'video') {
+    urls = thumbnailCacheService.getDecodedThumbnailsForRange(
+      mediaFileId, inPoint, clip.outPoint ?? inPoint + clip.duration, count, clip.reversed,
+    );
+  }
   const slotW = w / count;
   let drawn = 0;
   for (let i = 0; i < count; i++) {
@@ -39,8 +51,6 @@ export function drawTimelineClipCanvasThumbnails(
     if (bmp) {
       drawTimelineClipCanvasCover(ctx, bmp, x + i * slotW, top, slotW, h);
       drawn += 1;
-    } else {
-      ensureThumbnailBitmap(url, requestRedraw, mediaFileId);
     }
   }
   return drawn;

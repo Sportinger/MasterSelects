@@ -10,6 +10,7 @@ import { ThumbnailInvalidationController } from './thumbnailCache/invalidation';
 import { ThumbnailMemoryTier } from './thumbnailCache/memoryTier';
 import { ThumbnailPersistentTier } from './thumbnailCache/persistentTier';
 import { ThumbnailRequestQueue } from './thumbnailCache/requestQueue';
+import { hasThumbnailBitmap } from './timeline/thumbnailBitmapCache';
 import {
   cleanupThumbnailGenerationVideo,
   createThumbnailGenerationVideoFromUrl,
@@ -98,6 +99,17 @@ class ThumbnailCacheService {
     reversed?: boolean,
   ): (string | null)[] {
     return this.memory.getThumbnailsForRange(mediaFileId, inPoint, outPoint, count, reversed);
+  }
+
+  /** Sample only decoded frames while newer thumbnail URLs are warming up. */
+  getDecodedThumbnailsForRange(
+    mediaFileId: string,
+    inPoint: number,
+    outPoint: number,
+    count: number,
+    reversed?: boolean,
+  ): (string | null)[] {
+    return this.memory.getThumbnailsForRange(mediaFileId, inPoint, outPoint, count, reversed, hasThumbnailBitmap);
   }
 
   /** Get status for a source */

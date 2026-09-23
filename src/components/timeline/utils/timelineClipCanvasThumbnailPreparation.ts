@@ -128,7 +128,7 @@ export function collectTimelineClipCanvasWorkerThumbnailPreparation(input: {
     const staticThumbnailUrl = clip.source?.type === 'image'
       ? input.mediaThumbnailUrlsById?.get(mediaFileId)
       : undefined;
-    const urls = isFlockThumbnailSourceId(mediaFileId)
+    let urls = isFlockThumbnailSourceId(mediaFileId)
       ? flockThumbnailService.getUrlsForRange(clip.id, visibleInPoint, visibleOutPoint, count, clip.reversed)
       : staticThumbnailUrl
       ? Array.from({ length: count }, () => staticThumbnailUrl)
@@ -150,8 +150,18 @@ export function collectTimelineClipCanvasWorkerThumbnailPreparation(input: {
       missingBitmapRefsByUrl.set(url, { url, mediaFileId });
     });
     if (hasMissingBitmap) {
-      handledClipIds.add(clip.id);
-      continue;
+      // Keep the decoded source frames visible until their replacements decode.
+      // Missing URLs above still participate in the normal bitmap warmup.
+      urls = clip.source?.type === 'video'
+        ? thumbnailCacheService.getDecodedThumbnailsForRange(
+          mediaFileId, visibleInPoint, visibleOutPoint, count, clip.reversed,
+        )
+        : [];
+      if (!urls.some(Boolean)) {
+        handledClipIds.add(clip.id);
+        continue;
+      }
+      visibleBitmapClipIds.add(clip.id);
     }
 
     handledClipIds.add(clip.id);

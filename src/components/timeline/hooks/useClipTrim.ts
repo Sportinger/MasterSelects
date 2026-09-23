@@ -357,8 +357,7 @@ export function useClipTrim({
       const isClipLocked = (candidate: TimelineClip): boolean =>
         tracks.find(track => track.id === candidate.trackId)?.locked === true;
       if (isClipLocked(clip)) return;
-      const initialSingleClip = e.shiftKey;
-      const initialIncludeLinked = shouldIncludeLinkedTrim(clip, selectedClipIds, initialSingleClip);
+      const initialIncludeLinked = shouldIncludeLinkedTrim(clip, selectedClipIds);
       if (initialIncludeLinked && clip.linkedClipId) {
         const linkedClip = clipMap.get(clip.linkedClipId);
         if (linkedClip && isClipLocked(linkedClip)) return;
@@ -383,7 +382,7 @@ export function useClipTrim({
         {
           enabled: isTimelineSnappingActive(snappingEnabled, {
             altKey: trim.altKey,
-            shiftKey: trim.singleClip === true,
+            shiftKey: trim.shiftKey === true,
           }),
           times: trimSnapTimes,
           threshold: trimSnapThreshold,
@@ -410,7 +409,7 @@ export function useClipTrim({
         startX: e.clientX,
         currentX: e.clientX,
         altKey: e.altKey,
-        singleClip: initialSingleClip,
+        shiftKey: e.shiftKey,
         includeLinked: initialIncludeLinked,
         snapIndicatorTime: null,
         isSnapping: false,
@@ -436,7 +435,7 @@ export function useClipTrim({
           ...newTrim,
           currentX: moveEvent.clientX,
           altKey: moveEvent.altKey,
-          singleClip: moveEvent.shiftKey,
+          shiftKey: moveEvent.shiftKey,
         };
         // Resolve the snapped delta once: drives the green snap line AND the live
         // clip resize (shared so the preview matches where the trim commits).
@@ -504,7 +503,7 @@ export function useClipTrim({
         const commitTrim: ClipTrimState = {
           ...trim,
           altKey: upEvent.altKey,
-          singleClip: upEvent.shiftKey,
+          shiftKey: upEvent.shiftKey,
         };
         const rawDelta = pixelToTime(commitTrim.currentX - commitTrim.startX);
         const deltaTime = computeGestureAdjustedDelta(commitTrim, rawDelta, clipToTrim).delta;
