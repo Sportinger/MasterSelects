@@ -130,6 +130,8 @@ existing systems, and check their work:
 | **3D** | Combine footage with models, lights, cameras, and Gaussian splats in a shared scene. Large splats parse off the UI thread with visible progress. Splat Exploration with branch bypass and compute budgets exposes editable nodes for sphere cropping, stretched splats, particle simulation, camera fading, and an approximate mesh wireframe that respects upstream sphere crops. Mesh and particle outputs can appear as linked timeline clips sharing one node graph and scene. Static node branches retain background worker sorting. Early sphere crops remove outside splats from downstream GPU work; per-branch budgets sample across the entire scan. |
 | **AI** | Ask the editor to change the timeline, generate media, or use local transcription, segmentation, and depth estimation. |
 
+The Nodes inspector can be collapsed with the narrow handle on its left edge to give the graph more room.
+
 Object tracking supports repeated include/exclude clicks, editable padded contours with up to 64 points, saved user-frame corrections, a live tracking preview, and animated mask creation. The Tracking inspector lists reusable results with undoable deletion. See [Surface & object tracking](docs/Features/Surface-Tracking.md).
 
 Arrange the dockable panels for the work at hand. The interface is optimized for

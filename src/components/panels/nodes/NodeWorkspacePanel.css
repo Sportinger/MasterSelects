@@ -74,6 +74,21 @@
   background: var(--bg-primary);
 }
 
+.node-workspace-inspector-handle {
+  flex: 0 0 20px;
+  align-self: stretch;
+  padding: 8px 0 0;
+  border: 0;
+  border-left: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.node-workspace-inspector-handle:hover { color: var(--text-primary); background: var(--bg-hover); }
+
 .node-workspace-grid {
   position: absolute;
   inset: -32px;
@@ -2008,3 +2023,7 @@
 .node-workspace-panel button, .node-workspace-panel select { -webkit-tap-highlight-color: transparent; }
 .node-workspace-panel button:focus:not(:focus-visible), .node-workspace-panel select:focus:not(:focus-visible) { outline: none; box-shadow: none; }
 .node-workspace-panel button:focus-visible, .node-workspace-panel select:focus-visible { outline: 2px solid var(--accent-primary, #4a9eff); outline-offset: 2px; }
+.node-workspace-panel.node-workspace-pointer-focus :is(button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: none;
+}
