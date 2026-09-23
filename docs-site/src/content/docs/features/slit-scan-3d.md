@@ -25,6 +25,9 @@ the scene camera do not redefine it.
 The **Reference view** button temporarily aligns the preview with that reference.
 Navigating the scene camera releases this preview override, so orbit, pan and
 dolly immediately show the surface from the new camera position.
+The geometry inspector shows active preparation and DIS progress in large red text;
+completed status returns to small gray text. Explanatory paragraphs below the
+controls are omitted.
 
 Inspector drag input is coalesced to the latest value per animation frame;
 release flushes the final value before ending the undo batch. Numeric typing,

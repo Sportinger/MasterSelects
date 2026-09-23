@@ -14,6 +14,12 @@ import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNu
 import { KeyframeToggle } from './shared';
 import type { AnimatableProperty } from '../../../types/animationProperties';
 
+function isGeometryStatusBusy(message: string): boolean {
+  const pairs = /analysed\s+(\d+)\/(\d+)/i.exec(message);
+  if (pairs) return Number(pairs[1]) < Number(pairs[2]);
+  return /preparing|loading|analysing|computing|rendering|decoding|waiting/i.test(message);
+}
+
 export function SlitScanGeometryControls({ params, onChange, clipId, effectInstanceId, operatorGraph }: Pick<EffectControlProps, 'params' | 'onChange' | 'clipId' | 'effectInstanceId'> & { operatorGraph?: EffectOperatorGraph }) {
   // Sampler identities belong to the authored graph, not the interpolated
   // parameter snapshot recreated by the inspector on every playhead update.
@@ -64,16 +70,9 @@ export function SlitScanGeometryControls({ params, onChange, clipId, effectInsta
           onChange={value => clipId && effectInstanceId
             ? useTimelineStore.getState().setPropertyValue(clipId, `effect.${effectInstanceId}.${key}` as AnimatableProperty, value)
             : onChange({ ...params, [key]: value })} />)}
-      <p className="tracking-panel-status">{mode === 'motion-surface'
-        ? 'Tracks grid points from sampled source times to the current time. Untracked regions retain their original XY or leave gaps. Motion is estimated, not recovered scene depth.'
-        : mode === 'motion-band'
-        ? 'Motion bands follow a linear scan seed. Occlusion ends segments. Alpha below 50% is cut out; depth resolves overlaps.'
-        : params.geometryTimeBasis === 'samples'
-          ? 'Depth follows source-frame times and blend weights. Current input is the zero-depth reference. No motion analysis is needed when Flow depth is zero.'
-          : 'Depth follows the base time query. RGB offsets and image smoothing affect color only.'}</p>
-      {status && <p className="tracking-panel-status">{status}</p>}
+      {status && <p className={`tracking-panel-status${isGeometryStatusBusy(status) ? ' slit-scan-geometry-status--active' : ''}`} role="status">{status}</p>}
       {motionStatus && (mode === 'motion-surface' || mode === 'motion-band' || Number(params.geometryFlowDepth ?? 0) !== 0)
-        && <p className="tracking-panel-status">{motionStatus}</p>}
+        && <p className={`tracking-panel-status${isGeometryStatusBusy(motionStatus) ? ' slit-scan-geometry-status--active' : ''}`} role="status">{motionStatus}</p>}
       <ResolveInspectorRow label="Reference view"><ResolveInspectorIconButton ariaLabel="Return to Slit Scan reference view"
         onClick={event => {
           if (event.detail > 0) event.currentTarget.blur();
@@ -82,7 +81,6 @@ export function SlitScanGeometryControls({ params, onChange, clipId, effectInsta
             target: { x: 0, y: 0, z: 0 }, up: { x: 0, y: 1, z: 0 }, fov: 50, near: .1, far: 1000,
             projection, orthographicScale: 2, applyDefaultDistance: false });
         }}>↶</ResolveInspectorIconButton></ResolveInspectorRow>
-      <p className="tracking-panel-status">Reference view changes preview only. Use the scene camera controls to save an export view.</p>
     </>}
   </ResolveInspectorSection>;
 }
