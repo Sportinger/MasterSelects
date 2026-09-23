@@ -208,6 +208,13 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
   While paused, a fresh adaptive result is shown until the requested
   full-quality result is ready; an older Hybrid result cannot replace that preview.
   Exports never use the adaptive preview.
+  Cache misses also request upcoming source frames, so playback can catch up
+  without waiting for a ready frame to start lookahead. Complete, GPU-validated
+  windows display while the speculative tail continues loading. Lookahead visits
+  only newly entering grid positions rather than rebuilding the entire history.
+  Initial adaptive preparation takes priority over paused full-quality decoding;
+  starting playback suspends outstanding full-quality source requests while
+  retaining reusable GPU slots. Initial history decoding can still take time.
   Temporal sample count, time window and composition dimensions stay unchanged.
   A complete-window estimate reserves interactive slots up front to avoid repeated
   cache replacement as the clip advances. The warm interactive cache can supply a

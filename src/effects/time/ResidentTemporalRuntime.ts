@@ -10,7 +10,7 @@ import { StabilizedCurrentFrame } from './StabilizedCurrentFrame';
 import { slitScanSourceTransform } from './slit-scan/stabilization';
 import { temporalSourceTime } from './temporalClipSource';
 import type { ResolvedImageGraphExternalResource } from '../_shared/imageGraphExternalResources';
-import { slitScanPlaybackLookahead } from './slit-scan/playbackLookahead';
+import { residentTemporalLookahead } from './residentTemporalLookahead';
 import { adjacentMotionPairs, disMotionMetadata, type ResidentMotionFrames } from './residentMotionFrames';
 
 interface ResidentResult {
@@ -23,7 +23,7 @@ interface ResidentResult {
 interface Cache {
   atlas: GPUTexture; ages: GPUTexture; metadataWidth: number;
   columns: number; rows: number; layers: number; capacity: number; bytes: number;
-  slots: Map<number, number>; revision: number; current?: StabilizedCurrentFrame;
+  slots: Map<number, number>; revision: number; current?: StabilizedCurrentFrame; uploadValidated?: boolean;
 }
 interface Entry {
   identity: string; lease: SourceFrameLease; abort: AbortController; reader?: SourceFrameReader; cache?: Cache;
@@ -130,12 +130,18 @@ export class ResidentTemporalRuntime {
       !window.times.every(time => cache.slots.has(time) || entry!.pendingKeys!.has(time))) entry.lease.cancel();
     if (!ready && !entry.pending && !entry.prefetch && !entry.error) {
       const owner = entry;
-      owner.pendingKeys = keys;
-      owner.pending = this.pending(owner, this.load(owner, keys, keys, width, height, 'required'));
+      // Refill with a lead even on a miss. Waiting for a fully ready frame before
+      // prefetching otherwise leaves playback chasing one late frame forever.
+      const wanted = new Set([...keys, ...this.lookahead(entry, keys)]);
+      owner.pendingKeys = wanted;
+      owner.pending = this.pending(owner, this.load(owner, wanted, wanted, width, height, 'required'));
     }
-    const preparing = entry.pending ?? (!ready ? entry.prefetch : undefined);
+    // A validated, complete window can render while the speculative tail loads.
+    const uploadsReady = !window.times.length || cache.uploadValidated;
+    const preparing = !ready || !uploadsReady || (entry.pending && !entry.pendingKeys)
+      ? entry.pending ?? entry.prefetch : undefined;
     if (preparing) recordTemporalPreparation(preparing);
-    if (!ready || preparing) {
+    if (!ready || preparing || !uploadsReady) {
       // Removing missing grid points creates large time jumps and hard seams.
       // Presentation holds an owned, completed output while this window loads.
       setTemporalStatus(request.effectId, entry.error ? 'GPU history · cached preview · retrying source load…'
@@ -210,8 +216,8 @@ export class ResidentTemporalRuntime {
         ? slitScanSourceTransform(entry.latest.stabilization, frame.time) : undefined,
       { x: slot! % cache.columns * width, y: Math.floor(slot! % page / cache.columns) * height, width, height });
       // Validate the upload pipeline and atlas before reporting this window ready.
-      if (!uploadValidation) {
-        uploadValidation = this.checkedGpuOperation(upload);
+      if (!cache.uploadValidated && !uploadValidation) {
+        uploadValidation = this.checkedGpuOperation(upload).then(() => { cache.uploadValidated = true; this.onReady?.(); });
         void uploadValidation.catch(() => undefined);
       } else upload();
       cache.slots.set(frame.time, slot); cache.revision++; completed++;
@@ -235,27 +241,20 @@ export class ResidentTemporalRuntime {
   }
 
   private prefetch(entry: Entry, required: Set<number>, width: number, height: number) {
-    const request = entry.latest, cache = entry.cache!;
-    if (request.motionPairs || isCollectingTemporalPreparations() || entry.pending || entry.prefetch || entry.error || !request.horizon) return;
-    const count = Math.min(192, Math.ceil(12 * (request.source.clockRate ?? 1)), cache.capacity - required.size);
-    if (count <= 0) return;
-    const step = Math.max(request.horizon / Math.max(1, request.samples - 2), entry.reader!.frames[0].duration);
-    // Prime several advancing windows even while paused. A one-frame lookahead
-    // starts too late, and cancelling it when playback reaches it starves refill.
-    const accelerated = (request.source.clockRate ?? 1) > 1;
-    const future = new Set<number>(accelerated ? slitScanPlaybackLookahead(request.source, entry.reader!.frames,
-      required, cache.slots, cache.capacity - required.size) : []);
-    for (let i = 1; !accelerated && i <= count && future.size < count; i++) {
-      const next = hybridTemporalWindow({ ...request, source: { ...request.source, localTime: request.source.localTime + step * i } }, entry.reader!.frames);
-      for (const time of next.times) if (!required.has(time) && !cache.slots.has(time)) future.add(time);
-    }
-    const times = [...future].slice(0, count);
+    if (entry.pending || entry.prefetch || entry.error) return;
+    const times = this.lookahead(entry, required);
     if (!times.length) return;
-    try { if (request.stabilization) for (const time of times) slitScanSourceTransform(request.stabilization, time); }
-    catch { return; } // Speculative coverage never fails the requested frame.
     entry.prefetchKeys = new Set(times);
     entry.prefetch = this.load(entry, entry.prefetchKeys, new Set([...required, ...times]), width, height, 'prefetch')
       .catch(() => undefined).finally(() => { entry.prefetch = undefined; entry.prefetchKeys = undefined; this.onReady?.(); });
+  }
+
+  private lookahead(entry: Entry, required: Set<number>): number[] {
+    if (entry.latest.motionPairs || isCollectingTemporalPreparations()) return [];
+    const times = residentTemporalLookahead(entry.latest, entry.reader!.frames, required, entry.cache!.slots, entry.cache!.capacity);
+    try { if (entry.latest.stabilization) for (const time of times) slitScanSourceTransform(entry.latest.stabilization, time); }
+    catch { return []; } // Speculative coverage never fails the requested frame.
+    return times;
   }
 
   private metadataTexture(width: number) {
@@ -264,6 +263,10 @@ export class ResidentTemporalRuntime {
   }
   private bytes() { return [...this.entries.values()].reduce((sum, entry) => sum + (entry.cache?.bytes ?? 0), 0); }
   get allocatedBytes() { return this.bytes(); }
+  suspend(key: string) {
+    const entry = this.entries.get(key);
+    if (entry?.pendingKeys || entry?.prefetch) entry.lease.cancel();
+  }
   pin(key: string, operation: Promise<void>) {
     const entry = this.entries.get(key); if (!entry) return;
     entry.pinned = operation;

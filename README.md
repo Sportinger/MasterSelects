@@ -53,6 +53,8 @@ Effect and node numeric drags coalesce input per animation frame and retain the 
 
 Slit Scan 3D adaptive playback and scrubbing cap the mesh at 128 columns; pause and export retain the selected quality. The source-time lookup is cached across playback frames.
 
+Slit Scan history refills include upcoming frames and present complete windows while lookahead continues. Adaptive preparation takes priority over paused full-quality decoding to keep playback from chasing late source frames.
+
 Slit Scan's optional **Seam smoothing (px)** softens resolved source-time boundaries with adjustable edge protection. Native 3D surfaces automatically use premultiplied mipmaps and anisotropic texture filtering for minification and oblique views.
 
 Slit Scan's 3D time surface can use resolved source-frame times and blend weights for depth, without DIS or a calibration image. This visualizes temporal sampling; it does not reconstruct object motion or physical scene depth.

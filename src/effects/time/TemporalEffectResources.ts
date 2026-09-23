@@ -21,7 +21,7 @@ import { HybridTemporalRuntime, type HybridTemporalContext } from './HybridTempo
 import { hybridTemporalBudget } from './hybridTemporalWindow';
 import { hybridTemporalSampleLimit } from './sourceTemporalLimits';
 import { slitScanNumber } from './slit-scan/parameters';
-import { recordSlitScanPresentation } from './slit-scan/playbackDiagnostics';
+import { recordSlitScanPresentation, recordSlitScanRequest } from './slit-scan/playbackDiagnostics';
 import { ResidentGpuMemoryError, ResidentTemporalRuntime } from './ResidentTemporalRuntime';
 import { ResidentTemporalCapacityError } from './residentTemporalLayout';
 import { adaptiveTemporalPreview } from './adaptiveTemporalPreview';
@@ -61,6 +61,7 @@ export class TemporalEffectResources {
     scopeId: string, source: TemporalClipSource | undefined, encoder: GPUCommandEncoder,
     currentInput?: { view: GPUTextureView; width: number; height: number }, hybridContext?: HybridTemporalContext): ResolvedTemporalHistory | undefined {
     if (!source) throw new Error('Full-resolution temporal sampling requires a source video clip.');
+    if (!isCollectingTemporalPreparations()) recordSlitScanRequest(effect.id, source.localTime);
     const media = useMediaStore.getState().files.find(file => file.id === source.mediaId);
     if (!media || media.type !== 'video') throw new Error('Full-resolution source video is unavailable.');
     const resident = effect.params.temporalStorage === 'resident';
@@ -100,12 +101,16 @@ export class TemporalEffectResources {
           try {
             fast = this.interactiveResident.resolve({ ...input, maxEdge: quick.maxEdge,
               reserveFrames: quick.reserveFrames, retainCurrentInput: true }, quick.budgetMiB);
+            // Finish the interactive window first. Competing full-size requests
+            // seek the shared decoder away from the preview that playback needs.
+            if (!fast) return undefined;
           } catch (error) {
             if (!(error instanceof ResidentTemporalCapacityError) && !(error instanceof ResidentGpuMemoryError)) throw error;
             this.interactiveResident.release(input.key);
           }
         }
         const preview = interactive ? adaptiveTemporalPreview(input, memoryMiB) : undefined;
+        if (preview) this.resident?.suspend(request.key);
         if (preview && (this.resident?.allocatedBytes ?? 0) + preview.budgetMiB * 1024 * 1024 > memoryMiB * 1024 * 1024) {
           // A paused full-quality cache can stay warm across Play/Pause when
           // its allocation plus the interactive ceiling fit the shared budget.
