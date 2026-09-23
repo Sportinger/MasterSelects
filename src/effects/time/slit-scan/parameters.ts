@@ -29,6 +29,8 @@ export const slitScanParams: Record<string, EffectParam> = {
   ] },
   temporalSamples: { ...number('Samples', 1920, 2, MAX_HYBRID_TEMPORAL_SAMPLES, 1, 'Sampling'), animatable: false },
   scanSmoothing: number('Scan smoothing (px)', 0, 0, 4, 0.1, 'Sampling'),
+  seamSmoothing: number('Seam smoothing (px)', 0, 0, 8, .1, 'Sampling'),
+  seamEdgeProtection: number('Seam edge protection', .65, 0, 1, .01, 'Sampling'),
   scanStretchThreshold: number('Stretch threshold (×)', 2, 1.01, 16, .05, 'Sampling'),
   // Retain the old binding for user-authored consumers of the time-gradient node.
   scanTimeThreshold: number('Time change (ms / 1%)', 100, 0, 2000, 1, 'Resources'),

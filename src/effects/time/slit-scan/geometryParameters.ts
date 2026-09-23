@@ -3,12 +3,18 @@ import { MAX_HYBRID_TEMPORAL_SAMPLES } from '../sourceTemporalLimits';
 
 /** Numeric query, age and optional motion fields; band vertices and clock table. */
 export function slitScanGeometryBytes(params: Record<string, unknown>, width: number, height: number): number {
-  if (!['time-surface', 'motion-band', 'motion-surface'].includes(String(params.geometryMode))) return 0;
+  const seamBytes = Number(params.seamSmoothing) > 0 ? width * height * 20 : 0;
+  if (!['time-surface', 'motion-band', 'motion-surface'].includes(String(params.geometryMode))) return seamBytes;
   const band = ['motion-band', 'motion-surface'].includes(String(params.geometryMode));
   const fields = 2 + Number(band || Number(params.geometryFlowDepth ?? 0) !== 0);
   const columns = slitScanMeshColumns(params.geometryQuality);
   const rows = Math.max(1, Math.min(Math.max(288, Math.min(512, columns)), Math.round(columns * height / width)));
-  return width * height * (16 * fields + 4) + 8193 * 4 + (MAX_HYBRID_TEMPORAL_SAMPLES + 1) * 16
+  let mipBytes = 0;
+  for (let w = width, h = height; ; w = Math.max(1, w >> 1), h = Math.max(1, h >> 1)) {
+    mipBytes += w * h * 4;
+    if (w <= 1 && h <= 1) break;
+  }
+  return seamBytes + width * height * 16 * fields + mipBytes + 8193 * 4 + (MAX_HYBRID_TEMPORAL_SAMPLES + 1) * 16
     + (band ? (columns + 1) * (rows + 1) * 16 + 8192 * 16 : 0);
 }
 

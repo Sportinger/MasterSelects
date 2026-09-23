@@ -26,6 +26,25 @@ and source. Other effects and structural settings are not implicitly enabled.
 
 ## Slit Scan
 
+**Sampling → Seam smoothing (px)** adds an optional 0–8 px directional filter
+after the complete Slit Scan color output. Start around 1–2 px. Its mask follows
+curvature in the selected base sampler's resolved source ages, including actual
+source timestamps and blend weights. Linear time ramps and ordinary color edges
+alone do not trigger it. **Seam edge protection** appears when enabled and reduces
+cross-edge mixing; transparent boundaries receive additional protection. This is
+a color-based safeguard, not object segmentation. It does not synthesize motion
+or intermediate source frames and remains separate from DIS-based Scan smoothing.
+The default is zero, with no additional query/filter passes. Supported output is
+**Result** with **linked RGB time** and resolved source-frame metadata; other modes
+display an explanatory status. The explicit geometry base sampler is used when
+selected, otherwise `history`. Preview and export apply the same final filter,
+including shared-source Hybrid output. Active filtering owns a full-size numeric
+query and color target, reserved from the temporal memory budget.
+
+Native 3D Slit Scan surfaces automatically create a premultiplied color mip chain
+and use trilinear/8× anisotropic filtering. This reduces minification and oblique-view
+aliasing; it does not remove geometric gaps or create missing temporal samples.
+
 Delay, Map mix and Noise amount can be driven through the shared parameter-source
 graph (constants, LFOs, keyframe sources, Remap and Clamp). Disabling the source
 binding restores the authored parameter; source values must remain within the

@@ -9,6 +9,8 @@ import { imagePlanResourceSignature, imagePlanSupportsValueRebinding } from '../
 /** Numeric query output shares the exact evaluated graph and source resources
  * with color. It never reads back pixels or creates a second source history. */
 export class GeometryQueryOutput {
+  private readonly purpose: string;
+  constructor(purpose = 'geometry') { this.purpose = purpose; }
   trajectory?: import('../DisTrajectory').DisTrajectory;
   private texture?: GPUTexture;
   private device?: GPUDevice;
@@ -52,7 +54,7 @@ export class GeometryQueryOutput {
       { id: 'slit-scan-query-output', program: plan, inputResources: plan.resourceInputs ?? [] },
     ] };
     this.runtime = frame.passRuntime;
-    this.instanceId = JSON.stringify(['slit-scan-query', motion, frame.scopeId, frame.effect.id]);
+    this.instanceId = JSON.stringify(['slit-scan-query', this.purpose, motion, frame.scopeId, frame.effect.id]);
     const encoded = frame.passRuntime.encode({ encoder: frame.encoder, sampler: frame.sampler,
       source: { kind: 'texture', view: frame.input }, width: frame.width, height: frame.height,
       timelineTimeSeconds: frame.timelineTime, plan: renderPlan, outputView: view, outputFormat: 'rgba32float',

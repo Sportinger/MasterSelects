@@ -17,6 +17,8 @@ export interface SlitScanGeometryCapture {
   timelineTime: number;
   scopeId: string;
   source?: TemporalClipSource;
+  /** Optional query already encoded for seam filtering in this same frame. */
+  baseQuery?: { samplerId: string; view: GPUTextureView };
   resources: ReadonlyMap<string, ImageGraphExternalResource>;
   /** Exact color-sampler descriptors: never select the first history in a multi-query graph. */
   historyResources: readonly import('../../../services/operators/imageOperatorExternalResources').ImageOperatorInputHistoryResource[];

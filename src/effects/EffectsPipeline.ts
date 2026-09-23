@@ -42,6 +42,8 @@ import {
   type FrameHistoryState,
 } from './frameHistoryTransition';
 import { resolveFeedbackHistoryLoop } from './_shared/feedbackParameters';
+import { toPrimitiveEffectParams } from './_shared/effectUniformParams';
+import { SlitScanOutputProcessing } from './time/slit-scan/SlitScanOutputProcessing';
 
 const log = Logger.create('EffectsPipeline');
 
@@ -83,15 +85,6 @@ export interface EffectFrameHistoryContext {
   ownerRevision: number;
 }
 
-function toPrimitiveEffectParams(params: Record<string, unknown>): Record<string, number | boolean | string> {
-  const primitiveParams: Record<string, number | boolean | string> = {};
-  for (const [key, value] of Object.entries(params)) {
-    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string') {
-      primitiveParams[key] = value;
-    }
-  }
-  return primitiveParams;
-}
 
 export class EffectsPipeline {
   private inputHistory: InputHistoryRuntime;
@@ -106,6 +99,7 @@ export class EffectsPipeline {
   private imageGraphPassRuntime: ImageGraphPassRuntime;
   private initialized = false;
   private denseTerrain?: DenseTerrainPipeline;
+  private slitScanOutput = new SlitScanOutputProcessing();
 
   constructor(device: GPUDevice, onPipelineReady?: () => void) {
     this.device = device;
@@ -449,10 +443,10 @@ export class EffectsPipeline {
             height: outputHeight, timelineTimeSeconds, plan: imagePlan, outputView: effectOutput, outputFormat: 'rgba8unorm',
             instanceId: JSON.stringify([frameHistory?.scopeId ?? 'legacy', effect.id]), batch: imagePassBatch,
             externalResources: imageExternalResources });
-          effectInput = this.temporalResources.finishImage(effect.id, timelineTimeSeconds, commandEncoder, effectOutput, outputWidth, outputHeight, previewKey);
-          if (geometryCapture && effect.type === 'slit-scan' && preparedImage && imageExternalResources) {
-            geometryCapture({ effect, graph: preparedImage.graph, device: this.device, encoder: commandEncoder,
-              sampler, input: graphInput, color: effectInput, width: outputWidth, height: outputHeight,
+          effectInput = effectOutput;
+          if (effect.type === 'slit-scan' && preparedImage && imageExternalResources) {
+            effectInput = this.slitScanOutput.process({ effect, graph: preparedImage.graph, device: this.device, encoder: commandEncoder,
+              sampler, input: graphInput, color: effectOutput, width: outputWidth, height: outputHeight,
               timelineTime: timelineTimeSeconds, scopeId: frameHistory?.scopeId ?? clock.scopeId,
               source: temporalSource, resources: imageExternalResources,
               historyResources: imagePlan.externalResources?.filter(resource => resource.kind === 'input-history') ?? [],
@@ -460,8 +454,9 @@ export class EffectsPipeline {
               resolveResources: (plan, resources, graph) => this.temporalResources.resolveNamed(resources,
                 [...new Set([...(plan.resourceInputs ?? []), ...(plan.passes?.flatMap(pass => pass.inputResources) ?? [])])],
                 effect, frameHistory?.scopeId ?? clock.scopeId, timelineTimeSeconds, sourceMasks, outputWidth, outputHeight,
-                commandEncoder, temporalSource, { view: graphInput, width: outputWidth, height: outputHeight }, plan.externalResources, graph) });
+                commandEncoder, temporalSource, { view: graphInput, width: outputWidth, height: outputHeight }, plan.externalResources, graph) }, geometryCapture);
           }
+          effectInput = this.temporalResources.finishImage(effect.id, timelineTimeSeconds, commandEncoder, effectInput, outputWidth, outputHeight, previewKey);
           if (feedbackState) this.copyFeedbackOutput(commandEncoder, feedbackState, effectOutput, pingView, pongView,
             outputWidth, outputHeight, pingTexture, pongTexture);
           effectOutput = this.getNextOutputView(effectOutput, pingView, pongView); swapped = !swapped;
@@ -669,6 +664,7 @@ export class EffectsPipeline {
   destroy(): void {
     this.inputHistory.destroy();
     this.temporalResources.destroy();
+    this.slitScanOutput.destroy();
     this.denseTerrain?.destroy();this.denseTerrain=undefined;
     for (const state of this.feedbackStates.values()) {
       state.committedTexture.destroy();

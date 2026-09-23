@@ -11,13 +11,13 @@ import { BandTrajectoryField } from '../../../effects/time/slit-scan/BandTraject
 import { MotionSurfaceField } from '../../../effects/time/slit-scan/MotionSurfaceField';
 import { temporalSourceTime } from '../../../effects/time/temporalClipSource';
 import { isCollectingTemporalPreparations, setTemporalStatus } from '../../../effects/time/temporalResourcePreparation';
-import { TemporalPreviewFrames } from '../../../effects/time/TemporalPreviewFrames';
+import { SlitScanColorPyramid } from '../passes/SlitScanColorPyramid';
 import type { SlitScanGeometryFrame } from '../../../effects/time/slit-scan/geometryContract';
 import { SlitScanProjectedEffects } from '../passes/SlitScanProjectedEffects';
 import type { LayerSpaceEffectContext } from './LayerSpaceEffectRenderer';
 
 interface SurfaceOwner { device: GPUDevice; query: GeometryQueryOutput; motion: GeometryQueryOutput; age: GeometryAgeField;
-  band: BandTrajectoryField; surface?: MotionSurfaceField; color: TemporalPreviewFrames; lastDraw?: SlitScanSurfaceDraw; lastFrame?: SlitScanGeometryFrame; target: string }
+  band: BandTrajectoryField; surface?: MotionSurfaceField; color: SlitScanColorPyramid; lastDraw?: SlitScanSurfaceDraw; lastFrame?: SlitScanGeometryFrame; target: string }
 
 /** Device resources are scoped to a scene target and layer, never durable data. */
 export class SlitScanSceneSurfaces {
@@ -60,7 +60,7 @@ export class SlitScanSceneSurfaces {
       if (owner) this.release(key, owner);
       owner = { device: frame.device, query: new GeometryQueryOutput(), motion: new GeometryQueryOutput(),
         age: new GeometryAgeField(frame.device), band: new BandTrajectoryField(frame.device),
-        color: new TemporalPreviewFrames(frame.device), target };
+        color: new SlitScanColorPyramid(frame.device), target };
       this.owners.set(key, owner);
     }
     const params = frame.effect.params;
@@ -74,7 +74,7 @@ export class SlitScanSceneSurfaces {
       this.draws.delete(layer.layerId);
       return;
     }
-    const query = owner.query.capture(frame, String(params.geometrySampler ?? ''));
+    const query = frame.baseQuery?.samplerId === samplerId ? frame.baseQuery.view : owner.query.capture(frame, samplerId);
     if (!query) return;
     let flowDepth = Number(params.geometryFlowDepth ?? 0);
     const isBand = params.geometryMode === 'motion-band';
@@ -119,9 +119,9 @@ export class SlitScanSceneSurfaces {
         temporalSourceTime(frame.source, frame.source.localTime), columns, rows, Number(params.geometryMotionAmount ?? 1),
         params.geometryMotionGaps !== 'cut');
     }
-    owner.color.capture('complete', frame.encoder, frame.color, frame.width, frame.height);
+    const color = owner.color.capture(frame.encoder, frame.color, frame.width, frame.height);
     const draw = { mvp: buildPlaneMvp(layer, camera), reference: new Float32Array(reference.viewProjection),
-      inverseReference: new Float32Array(reference.inverseViewProjection), color: owner.color.get('complete', frame.width, frame.height)!, geometry,
+      inverseReference: new Float32Array(reference.inverseViewProjection), color, premultiplied: true, geometry,
       columns, rows, timeDepth: Number(params.geometryTimeDepth ?? .25), opacity: layer.opacity, band };
     owner.lastDraw = draw; this.draws.set(layer.layerId, draw);
     const identity = JSON.stringify([frame.scopeId, frame.effect.id, frame.graph, params, frame.source,

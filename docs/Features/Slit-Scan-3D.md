@@ -168,3 +168,16 @@ while the current clock and time factor update small uniforms each frame.
 
 Implementation verification is still in progress; this page is not a claim that
 the complete editor/export acceptance checks have passed.
+
+Color filtering uses an owned premultiplied mip chain and 8× anisotropic sampling
+with screen-space derivatives. Transparent texels cannot contribute hidden RGB
+to reduced levels. Mip storage is reserved from the temporal memory budget
+(roughly one third extra over the color snapshot for normal video dimensions).
+This filtering is automatic in native preview and scene export. It improves
+oblique/minified texture detail, without smoothing geometry or closing holes.
+
+The optional **Sampling → Seam smoothing (px)** filter runs before the 3D color
+snapshot. Its numeric base query is reused by the surface when the sampler matches.
+It uses resolved source ages, not DIS, and applies only to Result with linked RGB
+time. Radius zero skips the extra work. Edge protection reduces cross-edge blur;
+large real temporal discontinuities still need better source-frame interpolation.

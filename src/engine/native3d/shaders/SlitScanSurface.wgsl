@@ -62,16 +62,18 @@ fn unproject(p: vec3f) -> vec3f {
 }
 
 @fragment fn fragmentMain(input: SurfaceVertex) -> @location(0) vec4f {
-  if (input.valid < .5) { discard; }
   // Reproject the interpolated position, then divide. Interpolated vertex UV
   // would distort the image on triangles whose vertices have different depth.
   let projected = surface.reference * vec4f(input.localPosition, 1.0);
   let uv = select(projected.xy / projected.w * vec2f(.5, -.5) + vec2f(.5),input.imageUV,surface.mode.x>.5);
-  let color = textureSampleLevel(colorTexture, colorSampler, uv, 0.0);
+  let color = textureSampleGrad(colorTexture, colorSampler, uv, dpdx(uv), dpdy(uv));
+  if (input.valid < .5) { discard; }
   // Free bands use an explicit cutout surface: depth resolves self-overlap,
   // without pretending object sorting is order-independent transparency.
   if (surface.mode.x>.5 && color.a<.5) { discard; }
   let alpha = select(color.a,1.0,surface.mode.x>.5) * surface.shape.w;
   if (alpha <= 0.0) { discard; }
-  return vec4f(color.rgb * alpha, alpha);
+  let premultipliedRgb = color.rgb * surface.shape.w / select(1.0,max(color.a,.000001),surface.mode.x>.5);
+  let rgb = select(color.rgb * alpha, premultipliedRgb, surface.mode.y > .5);
+  return vec4f(rgb, alpha);
 }

@@ -18,6 +18,7 @@ import { ParameterSourceNumberRow } from './ParameterSourceNumberRow';
 
 export function SlitScanControls({ params, onChange, clipId, effectInstanceId, operatorGraph }: EffectControlProps & { operatorGraph?: EffectOperatorGraph }) {
   const motionStatus = useSyncExternalStore(subscribeTemporalStatus, () => getTemporalStatus(`${effectInstanceId}:dis`));
+  const seamStatus = useSyncExternalStore(subscribeTemporalStatus, () => getTemporalStatus(`${effectInstanceId}:seams`));
   const setPropertyValue = useTimelineStore(state => state.setPropertyValue);
   const masks = useTimelineStore(state => state.clips.find(clip => clip.id === clipId)?.masks);
   const files = useMediaStore(state => state.files);
@@ -37,6 +38,7 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId, o
       {Object.entries(slitScanParams).filter(([key, parameter]) => parameter.group === group && !['temporalMode', 'temporalResolution'].includes(key)).map(([key, parameter]) => {
         if (key === 'temporalMemory' && params.temporalStorage !== 'resident') return null;
         if (key === 'temporalBatch' && !originalHistory) return null;
+        if (key === 'seamEdgeProtection' && !(Number(params.seamSmoothing) > 0)) return null;
         if (parameter.type === 'select') return <ResolveInspectorRow key={key} label={parameter.label}>
           <InspectorSelect ariaLabel={`Slit Scan ${parameter.label}`} value={String(params[key] ?? parameter.default)}
             options={parameter.options!} onChange={value => onChange({ ...params, [key]: value })} />
@@ -67,6 +69,8 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId, o
       })}
       {group === 'Sampling' && (params.scanSmoothingPreview === true || Number(params.scanSmoothing) > 0) && motionStatus &&
         <ResolveInspectorRow label="Motion analysis"><span role="status" title={motionStatus}>{motionStatus}</span></ResolveInspectorRow>}
+      {group === 'Sampling' && Number(params.seamSmoothing) > 0 && seamStatus &&
+        <ResolveInspectorRow label="Seam smoothing"><span role="status" title={seamStatus}>{seamStatus}</span></ResolveInspectorRow>}
   </ResolveInspectorSection>;
   return <div className="effects-tab transform-tab-compact">
     {renderGroup('Sampling')}

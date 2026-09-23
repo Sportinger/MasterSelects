@@ -12,6 +12,7 @@ export interface SlitScanSurfaceDraw {
   timeDepth: number;
   opacity: number;
   band?: GPUTextureView;
+  premultiplied?: boolean;
 }
 
 /** Native scene mesh with no CPU per-frame geometry readback or extra decoder. */
@@ -36,6 +37,7 @@ export class SlitScanSurfacePass {
       data.set(draw.mvp, 0); data.set(draw.reference, 16); data.set(draw.inverseReference, 32);
       data.set([columns, rows, draw.timeDepth, draw.opacity], 48);
       data[52] = Number(!!draw.band);
+      data[53] = Number(!!draw.premultiplied);
       const buffer = device.createBuffer({ label: 'slit-scan-surface-uniform', size: data.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
       temporaryBuffers.push(buffer);
@@ -72,6 +74,6 @@ export class SlitScanSurfacePass {
       primitive: { topology: 'triangle-list', cullMode: 'none' },
       depthStencil: { format: SCENE_DEPTH_FORMAT, depthWriteEnabled: true, depthCompare: 'less-equal' },
     });
-    this.sampler = device.createSampler({ minFilter: 'linear', magFilter: 'linear' });
+    this.sampler = device.createSampler({ minFilter: 'linear', magFilter: 'linear', mipmapFilter: 'linear', maxAnisotropy: 8 });
   }
 }

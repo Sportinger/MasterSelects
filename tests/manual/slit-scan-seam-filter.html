@@ -1,0 +1,77 @@
+<!doctype html><meta charset="utf-8"><title>Slit Scan filtering regression</title>
+<h1>Slit Scan filtering regression</h1><pre id="result">Running…</pre>
+<script type="module">
+import { SlitScanSeamSmoothing } from '/src/effects/time/slit-scan/SlitScanSeamSmoothing.ts';
+import { SlitScanColorPyramid } from '/src/engine/native3d/passes/SlitScanColorPyramid.ts';
+import { SlitScanSurfacePass } from '/src/engine/native3d/passes/SlitScanSurfacePass.ts';
+const result=document.querySelector('#result');
+try {
+  const adapter=await navigator.gpu.requestAdapter(); if(!adapter)throw Error('WebGPU unavailable');
+  const device=await adapter.requestDevice(); device.pushErrorScope('validation');
+  const results=[], size=32;
+  const record=(name,pass,detail)=>results.push({name,pass,detail});
+  const texture=(w,h,format,data)=>{
+    const t=device.createTexture({size:[w,h],format,usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+    device.queue.writeTexture({texture:t},data,{bytesPerRow:w*(format==='rgba32float'?16:4)},[w,h]);return t;
+  };
+  const reader=device.createComputePipeline({layout:'auto',compute:{entryPoint:'main',module:device.createShaderModule({code:`
+    @group(0) @binding(0) var image:texture_2d<f32>;
+    @group(0) @binding(1) var<storage,read_write> data:array<vec4f>;
+    @compute @workgroup_size(1) fn main(@builtin(global_invocation_id) id:vec3u) {
+      data[id.y*textureDimensions(image).x+id.x]=textureLoad(image,vec2i(id.xy),0);
+    }`})}});
+  async function pixels(encoder,view,w,h) {
+    const bytes=w*h*16, buffer=device.createBuffer({size:bytes,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+    const read=device.createBuffer({size:bytes,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+    const pass=encoder.beginComputePass();pass.setPipeline(reader);pass.setBindGroup(0,device.createBindGroup({layout:reader.getBindGroupLayout(0),entries:[
+      {binding:0,resource:view},{binding:1,resource:{buffer}}]}));pass.dispatchWorkgroups(w,h);pass.end();
+    encoder.copyBufferToBuffer(buffer,0,read,0,bytes);device.queue.submit([encoder.finish()]);await read.mapAsync(GPUMapMode.READ);
+    const values=new Float32Array(read.getMappedRange()).slice();read.unmap();read.destroy();buffer.destroy();return values;
+  }
+  const filter=new SlitScanSeamSmoothing(device);
+  const sampling={interpolation:'nearest',samples:[{delay:0,currentInput:true,contributions:[]},
+    {delay:1,currentInput:false,contributions:[{sourceTime:9,weight:1}]}]};
+  async function seam({radius=2,protection=0,mix=1,timeStep=true,contrast=false,alpha=false,linear=false}={}) {
+    const data=new Uint8Array(size*size*4), query=new Float32Array(size*size*4);
+    for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+      const i=(y*size+x)*4, right=x>=16;
+      const c=contrast?(right?255:0):(right?153:102);data.set([c,c,c,alpha&&right?0:255],i);
+      query.set([.5,.5,linear?x/(size-1):timeStep?Number(right):0,1],i);
+    }
+    const input=texture(size,size,'rgba8unorm',data), q=texture(size,size,'rgba32float',query), encoder=device.createCommandEncoder();
+    const view=filter.encode(encoder,input.createView(),q.createView(),size,size,{...sampling,interpolation:linear?'linear':'nearest'},10,radius,protection,mix);
+    const values=await pixels(encoder,view,size,size);input.destroy();q.destroy();return values;
+  }
+  const at=(values,x,c=0)=>values[(16*size+x)*4+c];
+  const smoothed=await seam();record('temporal seam softened locally',at(smoothed,15)>.41&&at(smoothed,16)<.59&&Math.abs(at(smoothed,8)-.4)<.005,[at(smoothed,15),at(smoothed,16)]);
+  for(const [name,options] of [['zero radius',{radius:0}],['zero mix',{mix:0}],['ordinary image edge',{timeStep:false}],['continuous time ramp',{linear:true}]]) {
+    const values=await seam(options);record(name,Math.abs(at(values,15)-.4)<.005&&Math.abs(at(values,16)-.6)<.005,[at(values,15),at(values,16)]);
+  }
+  const protectedEdge=await seam({contrast:true,protection:1});record('strong edge protection',at(protectedEdge,15)<.02&&at(protectedEdge,16)>.98,[at(protectedEdge,15),at(protectedEdge,16)]);
+  const alpha=await seam({alpha:true});record('transparent edge protected',at(alpha,15,3)>.98&&at(alpha,16,3)<.02,[at(alpha,15,3),at(alpha,16,3)]);
+  const pyramid=new SlitScanColorPyramid(device), surface=new SlitScanSurfacePass(), temporary=[];
+  async function minified(transparency) {
+    const data=new Uint8Array(64*64*4);
+    for(let y=0;y<64;y++)for(let x=0;x<64;x++){
+      const odd=(x+y)%2;
+      data.set(transparency?(odd?[255,0,0,0]:[255,255,255,255]):[odd*255,odd*255,odd*255,255],(y*64+x)*4);
+    }
+    const input=texture(64,64,'rgba8unorm',data), geom=texture(1,1,'rgba32float',new Float32Array([0,0,0,1]));
+    const color=device.createTexture({size:[32,32],format:'rgba8unorm',usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.TEXTURE_BINDING});
+    const depth=device.createTexture({size:[32,32],format:'depth24plus',usage:GPUTextureUsage.RENDER_ATTACHMENT});
+    const encoder=device.createCommandEncoder(), view=pyramid.capture(encoder,input.createView(),64,64);
+    const clear=encoder.beginRenderPass({colorAttachments:[{view:color.createView(),loadOp:'clear',storeOp:'store',clearValue:[0,0,0,0]}],
+      depthStencilAttachment:{view:depth.createView(),depthLoadOp:'clear',depthStoreOp:'store',depthClearValue:1}});clear.end();
+    const identity=new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]), mvp=identity.slice();mvp[0]=.25;mvp[5]=.25;
+    surface.render(device,encoder,color.createView(),depth.createView(),[{mvp,reference:identity,inverseReference:identity,
+      color:view,geometry:geom.createView(),columns:1,rows:1,timeDepth:0,opacity:1,premultiplied:true}],temporary);
+    const values=await pixels(encoder,color.createView(),32,32);
+    input.destroy();geom.destroy();color.destroy();depth.destroy();return Array.from(values.slice((16*32+16)*4,(16*32+16)*4+4));
+  }
+  const checker=await minified(false);record('3D minification averages checkerboard',checker.slice(0,3).every(v=>Math.abs(v-.5)<.02)&&checker[3]>.99,checker);
+  const transparent=await minified(true);record('premultiplied mip chain avoids hidden red fringe',transparent.every(v=>Math.abs(v-.5)<.02),transparent);
+  const error=await device.popErrorScope();if(error)throw Error(error.message);
+  filter.destroy();pyramid.destroy();surface.dispose();temporary.forEach(b=>b.destroy());
+  result.textContent=JSON.stringify({pass:results.every(r=>r.pass),results},null,2);
+} catch(error) { result.textContent=`FAIL: ${error.stack??error}`; }
+</script>
