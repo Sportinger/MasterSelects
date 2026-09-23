@@ -10,6 +10,29 @@ WebGPU-backed preview with RAM preview caching, source monitor playback, edit ov
 
 ## Overview
 
+### Timeline scrub RAM cache
+
+**Settings > General > Performance — Timeline RAM cache** controls an additional
+CPU pixel cache in 0.25 GB steps (binary GB/GiB), including 0 to disable it.
+The default is up to 0.5 GB. The maximum is a quarter of browser-reported RAM,
+capped at 4 GB; browsers without a memory estimate use a 1 GB maximum. The RAM
+estimate is rounded/capped by the browser and is not a reading of free memory.
+This is a per-editor-tab budget, not a reservation or a total application limit.
+
+Non-proxy HTML-video scrub frames use a 960-pixel longest-side cap. A bounded CPU
+pixel LRU retains frames beyond the separate 192 MB/192-frame GPU cache and uploads
+them again on demand. The yellow ruler ranges include both tiers. Lowering the
+budget immediately drops older CPU frames; settings persist across reloads.
+Proxy caches, temporal effects and rendered RAM previews keep their own budgets.
+
+Allocations evict older entries first. Catchable CPU capture failures lower the
+effective RAM budget for the current cache owner; Settings reports the reduction.
+GPU error scopes prevent failed uploads from becoming visible cache entries and
+reduce the GPU budget on out-of-memory errors. Device loss clears both tiers.
+These safeguards do not guarantee recovery from a browser/process-level memory
+termination. Capturing CPU pixels adds readback work, and restoring them adds a
+GPU upload; the setting does not pre-decode an entire timeline.
+
 The preview system uses a shared render host and a unified render-target store. The main preview canvas, additional preview panels, multi-preview slots, and output windows all register as render targets through the shared render-target path.
 
 Current preview-related overlays and modes include:

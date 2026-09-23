@@ -79,6 +79,7 @@ export async function cacheBackgroundVideoFrame(
         resizeHeight: target.height,
         resizeQuality: 'medium',
       });
+      if (session.disposed) return false;
       return scrubCache.addFrameFromSource(
         bitmap,
         session.videoSrc,

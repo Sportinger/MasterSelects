@@ -14,6 +14,7 @@ import { requestShortcutDisplayPreview } from '../shortcutDisplayPreview';
 import { OutputSettings } from './OutputSettings';
 import { AIFeaturesSettings } from './AIFeaturesSettings';
 import { ProductAnalyticsSettings } from './ProductAnalyticsSettings';
+import { ScrubCacheSettings } from './ScrubCacheSettings';
 
 export function GeneralSettings() {
   const {
@@ -231,6 +232,7 @@ export function GeneralSettings() {
       </div>
 
       {/* Performance */}
+      <ScrubCacheSettings />
       <div className="settings-group">
         <div className="settings-group-title">Performance</div>
 

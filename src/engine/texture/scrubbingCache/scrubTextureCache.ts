@@ -6,6 +6,7 @@ import {
   SCRUB_CACHE_FPS,
 } from './cacheKeys';
 import { shouldStageHtmlVideoFrame } from '../videoFrameCopyPolicy';
+import { ScrubRamCache } from './scrubRamCache';
 
 type ScrubbingTextureEntry = {
   texture: GPUTexture;
@@ -35,13 +36,24 @@ export class ScrubTextureCache {
   private reuses = 0;
   private releases = 0;
   private pendingCaptures = new Set<string>();
+  private readonly ram = new ScrubRamCache();
+  private pendingUploads = new Map<string, ScrubbingTextureEntry>();
+  private generation = 0;
+  private lost = false;
+  private gpuFailureLimit = Infinity;
 
-  constructor(device: GPUDevice) {
-    this.device = device;
+  private readonly onChanged?: () => void;
+  constructor(device: GPUDevice, onChanged?: () => void) {
+    this.device = device; this.onChanged = onChanged;
+    void device.lost?.then(() => { this.lost = true; this.clear(); });
   }
 
+  setRamBudget(bytes: number): void { this.ram.setBudget(bytes); this.onChanged?.(); }
+  getRamSnapshot() { return this.ram.getSnapshot(); }
+
   hasFrame(videoSrc: string, frameIndex: number): boolean {
-    return this.cache.has(getScrubbingKeyForFrame(videoSrc, frameIndex));
+    const key = getScrubbingKeyForFrame(videoSrc, frameIndex);
+    return this.cache.has(key) || this.ram.has(key) || this.pendingUploads.has(key);
   }
 
   cacheFrameAtTime(video: HTMLVideoElement, time: number): void {
@@ -62,9 +74,10 @@ export class ScrubTextureCache {
     const videoSrc = video.src;
     if (!videoSrc) return;
     const key = getScrubbingKey(videoSrc, time);
-    if (this.cache.has(key) || this.pendingCaptures.has(key)) return;
+    if (this.hasFrame(videoSrc, frameIndexForTime(time)) || this.pendingCaptures.has(key)) return;
 
     this.pendingCaptures.add(key);
+    const generation = this.generation;
     const bitmapOptions = needsDownscale
       ? {
           resizeWidth: target.width,
@@ -74,8 +87,11 @@ export class ScrubTextureCache {
       : undefined;
     void createImageBitmap(video, bitmapOptions)
       .then((bitmap) => {
-        this.addFrameFromSource(bitmap, videoSrc, time, bitmap.width, bitmap.height);
-        bitmap.close();
+        try {
+          if (generation === this.generation && !this.lost) {
+            this.addFrameFromSource(bitmap, videoSrc, time, bitmap.width, bitmap.height);
+          }
+        } finally { bitmap.close(); }
       })
       .catch(() => { /* frame unavailable - skip */ })
       .finally(() => {
@@ -90,7 +106,7 @@ export class ScrubTextureCache {
     width: number,
     height: number
   ): boolean {
-    if (!videoSrc || width <= 0 || height <= 0) return false;
+    if (!videoSrc || width <= 0 || height <= 0 || this.lost) return false;
 
     const key = getScrubbingKey(videoSrc, time);
     if (this.cache.has(key)) {
@@ -98,29 +114,11 @@ export class ScrubTextureCache {
       return false;
     }
 
-    const texture = this.device.createTexture({
-      size: [width, height],
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
-    });
-
-    try {
-      this.device.queue.copyExternalImageToTexture(
-        { source },
-        { texture },
-        [width, height]
-      );
-
-      const bytes = width * height * 4;
-      this.cache.set(key, { texture, view: texture.createView(), bytes });
-      this.bytes += bytes;
-      this.allocations += 1;
-      this.evictIfNeeded();
-      return true;
-    } catch {
-      texture.destroy();
-      return false;
-    }
+    const target = this.computeSize(width, height);
+    this.ram.capture(key, source, target.width, target.height);
+    const pixels = this.ram.get(key);
+    // CPU pixels are already resized; direct fallback keeps its original geometry.
+    return this.upload(key, pixels ?? source, pixels?.width ?? width, pixels?.height ?? height);
   }
 
   getCachedFrame(videoSrc: string, time: number): GPUTextureView | null {
@@ -136,6 +134,8 @@ export class ScrubTextureCache {
     if (entry) {
       return this.touchEntry(key, entry);
     }
+    const pixels = this.ram.get(key);
+    if (pixels) this.upload(key, pixels, pixels.width, pixels.height);
     return null;
   }
 
@@ -170,6 +170,10 @@ export class ScrubTextureCache {
       if (next) {
         return this.touchEntry(nextKey, next);
       }
+      for (const key of [previousKey, nextKey]) {
+        const pixels = this.ram.get(key);
+        if (pixels) { this.upload(key, pixels, pixels.width, pixels.height); return null; }
+      }
     }
 
     return null;
@@ -180,14 +184,14 @@ export class ScrubTextureCache {
 
     const prefix = `${videoSrc}:`;
     const frameIndices = new Set<number>();
-    for (const key of this.cache.keys()) {
+    for (const key of [...this.cache.keys(), ...this.ram.keys()]) {
       if (!key.startsWith(prefix)) continue;
       frameIndices.add(frameIndexForTime(getScrubbingKeyTime(key)));
     }
 
     if (frameIndices.size === 0) return [];
 
-    const sorted = [...frameIndices].sort((a, b) => a - b);
+    const sorted = [...frameIndices].toSorted((a, b) => a - b);
     const ranges: Array<{ startFrame: number; endFrame: number }> = [
       { startFrame: sorted[0], endFrame: sorted[0] },
     ];
@@ -219,6 +223,15 @@ export class ScrubTextureCache {
   }
 
   clear(videoSrc?: string): void {
+    this.generation++;
+    this.pendingCaptures.clear();
+    this.ram.clear(videoSrc);
+    for (const [key, entry] of this.pendingUploads) {
+      if (videoSrc && !key.startsWith(`${videoSrc}:`)) continue;
+      entry.texture.destroy();
+      this.pendingUploads.delete(key);
+    }
+    this.onChanged?.();
     if (videoSrc) {
       const prefix = `${videoSrc}:`;
       for (const key of [...this.cache.keys()]) {
@@ -267,8 +280,10 @@ export class ScrubTextureCache {
     };
   }
 
-  private evictIfNeeded(): void {
-    while (this.cache.size > this.maxFrames || this.bytes > this.maxBytes) {
+  private evictIfNeeded(incoming = 0): void {
+    const pendingBytes = [...this.pendingUploads.values()].reduce((sum, entry) => sum + entry.bytes, 0);
+    while (this.cache.size + this.pendingUploads.size >= this.maxFrames ||
+      this.bytes + pendingBytes + incoming > Math.min(this.maxBytes, this.gpuFailureLimit)) {
       const oldestKey = this.cache.keys().next().value;
       if (!oldestKey) break;
 
@@ -281,6 +296,60 @@ export class ScrubTextureCache {
       }
       this.cache.delete(oldestKey);
     }
+  }
+
+  /** Publish textures only after WebGPU's asynchronous error scopes confirm success. */
+  private upload(key: string, source: HTMLVideoElement | ImageBitmap | ImageData,
+    width: number, height: number): boolean {
+    const bytes = width * height * 4;
+    if (this.lost || this.pendingUploads.has(key) || this.pendingUploads.size >= 4 ||
+      bytes > Math.min(this.maxBytes, this.gpuFailureLimit)) return false;
+    this.evictIfNeeded(bytes);
+    let entry: ScrubbingTextureEntry | undefined;
+    let allocated: GPUTexture | undefined;
+    this.device.pushErrorScope('out-of-memory');
+    this.device.pushErrorScope('validation');
+    try {
+      const texture = this.device.createTexture({ size: [width, height], format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT });
+      allocated = texture;
+      entry = { texture, view: texture.createView(), bytes };
+      if ('data' in source) {
+        this.device.queue.writeTexture({ texture }, source.data as Uint8ClampedArray<ArrayBuffer>,
+          { bytesPerRow: width * 4 }, [width, height]);
+      } else {
+        this.device.queue.copyExternalImageToTexture({ source }, { texture }, [width, height]);
+      }
+      this.pendingUploads.set(key, entry);
+    } catch {
+      allocated?.destroy();
+      entry = undefined;
+    }
+    const candidate = entry;
+    const scopes = [this.device.popErrorScope(), this.device.popErrorScope()];
+    void Promise.all(scopes).then(([validation, memory]) => {
+      if (!candidate || this.pendingUploads.get(key) !== candidate) return;
+      this.pendingUploads.delete(key);
+      if (validation || memory || this.lost || this.bytes + bytes > this.gpuFailureLimit) {
+        candidate.texture.destroy();
+        if (memory) {
+          this.gpuFailureLimit = Math.floor(Math.min(this.maxBytes, this.gpuFailureLimit,
+            this.bytes + bytes) * 0.75);
+          this.evictIfNeeded();
+        }
+      } else {
+        this.cache.set(key, candidate);
+        this.bytes += bytes;
+        this.allocations++;
+      }
+      this.onChanged?.();
+    }).catch(() => {
+      if (candidate && this.pendingUploads.get(key) === candidate) {
+        this.pendingUploads.delete(key);
+        candidate.texture.destroy();
+      }
+    });
+    return !!candidate;
   }
 
   getRuntimeCacheSnapshot(): {

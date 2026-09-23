@@ -14,6 +14,8 @@ import { quantizeTime } from './scrubbingCache/cacheKeys';
 import { LastFrameCache } from './scrubbingCache/lastFrameCache';
 import { RamPreviewCache } from './scrubbingCache/ramPreviewCache';
 import { ScrubTextureCache } from './scrubbingCache/scrubTextureCache';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { GIB, normalizeScrubRamGB } from '../../services/scrubCacheMemory';
 
 const log = Logger.create('ScrubbingCache');
 
@@ -27,6 +29,7 @@ export interface ScrubbingCacheStats {
   evictions: number;
   budgetMode: 'static';
   background: BackgroundScrubCacheStats;
+  ram?: ReturnType<ScrubTextureCache['getRamSnapshot']>;
 }
 
 export type WorkerFirstCacheRuntimeOwner = 'source-frame' | 'composite-frame';
@@ -54,9 +57,15 @@ export class ScrubbingCache {
   private readonly backgroundPreload: BackgroundPreloadController;
   private readonly lastFrameCache: LastFrameCache;
   private readonly ramPreviewCache = new RamPreviewCache();
+  private readonly unsubscribeRamBudget: () => void;
 
   constructor(device: GPUDevice, onBackgroundFrameCached?: () => void) {
-    this.scrubTextureCache = new ScrubTextureCache(device);
+    this.scrubTextureCache = new ScrubTextureCache(device, onBackgroundFrameCached);
+    this.unsubscribeRamBudget = useSettingsStore.subscribe(
+      (state) => state.scrubCacheRamGB,
+      (value) => this.scrubTextureCache.setRamBudget(normalizeScrubRamGB(value) * GIB),
+      { fireImmediately: true },
+    );
     this.backgroundPreload = new BackgroundPreloadController(
       this.scrubTextureCache,
       onBackgroundFrameCached
@@ -149,6 +158,7 @@ export class ScrubbingCache {
       evictions: snapshot.evictions,
       budgetMode: 'static',
       background: this.backgroundPreload.getStats(),
+      ram: this.scrubTextureCache.getRamSnapshot(),
     };
   }
 
@@ -156,9 +166,16 @@ export class ScrubbingCache {
     const scrub = this.scrubTextureCache.getRuntimeCacheSnapshot();
     const lastFrame = this.lastFrameCache.getRuntimeCacheSnapshot();
     const ramPreview = this.ramPreviewCache.getRuntimeCacheSnapshot();
+    const scrubRam = this.scrubTextureCache.getRamSnapshot();
     return {
       generatedAtMs: Date.now(),
       records: [
+        {
+          cacheId: 'scrubbing:ram-cache', owner: 'source-frame',
+          entries: scrubRam.count, bytes: scrubRam.bytes, allocations: scrubRam.allocations,
+          reuses: scrubRam.reuses, evictions: scrubRam.evictions, releases: scrubRam.releases,
+          transfers: 0, leakChecks: 1,
+        },
         {
           cacheId: 'scrubbing:texture-cache',
           owner: 'source-frame',
@@ -352,6 +369,7 @@ export class ScrubbingCache {
   }
 
   destroy(): void {
+    this.unsubscribeRamBudget();
     this.clearAll();
   }
 }

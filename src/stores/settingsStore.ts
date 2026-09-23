@@ -7,6 +7,7 @@ import { subscribeWithSelector, persist } from 'zustand/middleware';
 import { youtubeCredentialManager } from '../services/youtubeCredentialManager';
 import { projectFileService } from '../services/project/ProjectFileService';
 import { flags } from '../engine/featureFlags';
+import { normalizeScrubRamGB } from '../services/scrubCacheMemory';
 import { Logger } from '../services/logger';
 import type { SimpleSynthPreset } from '../engine/audio/synth/simpleSynthPresets';
 import type { SimpleSynthInstrument } from '../types/midiClip';
@@ -150,6 +151,8 @@ interface SettingsState {
 
   // GPU preference
   gpuPowerPreference: GPUPowerPreference;  // 'high-performance' (dGPU) or 'low-power' (iGPU)
+  scrubCacheRamGB: number;
+  setScrubCacheRamGB: (value: number) => void;
 
   // AI Features
   matanyoneEnabled: boolean;      // Enable MatAnyone2 video matting
@@ -295,6 +298,8 @@ export const useSettingsStore = create<SettingsState>()(
       showShortcutDisplay: false, // Optional Blender-style input overlay
       shortcutDisplayScale: DEFAULT_SHORTCUT_DISPLAY_SCALE,
       gpuPowerPreference: 'high-performance', // Prefer dGPU by default
+      scrubCacheRamGB: normalizeScrubRamGB(undefined),
+      setScrubCacheRamGB: (value) => set({ scrubCacheRamGB: normalizeScrubRamGB(value) }),
       matanyoneEnabled: false, // MatAnyone2 disabled by default
       matanyonePythonPath: '', // Auto-detect Python path
       guidedActionReplayVisualizationMode: 'concise' as GuidedActionReplayVisualizationMode,
@@ -607,6 +612,7 @@ export const useSettingsStore = create<SettingsState>()(
         showShortcutDisplay: state.showShortcutDisplay,
         shortcutDisplayScale: state.shortcutDisplayScale,
         gpuPowerPreference: state.gpuPowerPreference,
+        scrubCacheRamGB: state.scrubCacheRamGB,
         matanyoneEnabled: state.matanyoneEnabled,
         matanyonePythonPath: state.matanyonePythonPath,
         guidedActionReplayVisualizationMode: state.guidedActionReplayVisualizationMode,
@@ -661,6 +667,7 @@ export const useSettingsStore = create<SettingsState>()(
         return {
           ...currentState,
           ...supportedPersistedState,
+          scrubCacheRamGB: normalizeScrubRamGB(supportedPersistedState.scrubCacheRamGB),
           resolveThemeUnlocked,
           theme: normalizeThemeMode(
             supportedPersistedState.theme ?? currentState.theme,

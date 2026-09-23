@@ -165,6 +165,9 @@ Shift snapping during trimming preserves the selected clips and linked audio/vid
 background, even when the preview uses reduced quality.
 Right-button scrubbing scrolls at the timeline edges. Moving clips between tracks
 keeps their original timing, and reversed thumbnails follow the visible source range.
+Settings > General includes a timeline RAM-cache budget in GB, with approximate
+browser-reported RAM and live usage. Non-proxy scrub frames use a bounded RAM cache
+alongside the GPU cache; the yellow ruler indicates frames retained in either tier.
 Nested audio-only compositions retain their sound; mixdowns include clip timing
 and audio processing. Board-to-timeline drops restore the board view after auto-pan.
 New compositions are revealed in the Media panel. Preview source menus group

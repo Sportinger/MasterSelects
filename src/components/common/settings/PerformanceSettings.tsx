@@ -1,4 +1,5 @@
 import { useSettingsStore, type GPUPowerPreference } from '../../../stores/settingsStore';
+import { ScrubCacheSettings } from './ScrubCacheSettings';
 
 export function PerformanceSettings() {
   const {
@@ -9,6 +10,7 @@ export function PerformanceSettings() {
   return (
     <div className="settings-category-content">
       <h2>Performance</h2>
+      <ScrubCacheSettings />
 
       <div className="settings-group">
         <div className="settings-group-title">GPU</div>
