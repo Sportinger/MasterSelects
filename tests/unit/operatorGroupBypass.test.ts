@@ -5,6 +5,7 @@ import { packOperatorCompositions, expandOperatorCompositions } from '../../src/
 import { effectOperatorGraph, effectOperatorCompileContext } from '../../src/services/operators/effectGraphOwner';
 import { getDefaultParams } from '../../src/effects';
 import { evaluateMaterializedImage } from '../helpers/evaluateMaterializedImage';
+import { createInitialSlitScanGraph } from '../../src/services/operators/slitScanGraphUpgrade';
 
 const input: [number, number, number, number] = [.2, .7, 1, .35];
 function grouped() {
@@ -17,6 +18,19 @@ function grouped() {
   return graph;
 }
 describe('operator group bypass', () => {
+  it('starts new Slit Scan optional sections bypassed without changing the core scan', () => {
+    const graph = createInitialSlitScanGraph();
+    const optional = ['scan-protection', 'subject-protection', 'time-map', 'rgb-time',
+      'field-shaping', 'field-combination', 'field-noise', 'field-motion'];
+    for (const id of optional) {
+      const group = graph.groups?.find(group => group.id === id);
+      expect(group?.bypassed, id).toBe(true);
+      expect(operatorGroupBypassRoutes(graph, group!)?.size, id).toBeGreaterThan(0);
+    }
+    expect(graph.groups?.find(group => group.id === 'scan-history')?.bypassed).not.toBe(true);
+    const effect = { type: 'slit-scan', params: getDefaultParams('slit-scan'), operatorGraph: graph };
+    expect(() => effectOperatorGraph(effect)).not.toThrow();
+  });
   it('removes mask protection from the rendered Slit Scan result, not just its UI state', () => {
     const effect = { type: 'slit-scan', params: getDefaultParams('slit-scan') };
     const graph = effectOperatorGraph(effect);

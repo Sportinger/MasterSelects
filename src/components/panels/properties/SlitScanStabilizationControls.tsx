@@ -50,7 +50,7 @@ export function SlitScanStabilizationControls({ clipId, effectInstanceId, params
   };
   return <div className="tracking-panel" onPointerUp={event => {
     (event.target instanceof HTMLElement ? event.target.closest('button') : null)?.blur();
-  }}><ResolveInspectorSection title="Object stabilization" defaultOpen
+  }}><ResolveInspectorSection title="Object stabilization" defaultOpen={false}
     enabled={params.stabilizationEnabled !== false}
     onEnabledChange={blocked ? undefined : enabled => onChange({ ...params, stabilizationEnabled: enabled })}>
     <ResolveInspectorRow label="Tracking"><InspectorSelect ariaLabel="Slit Scan stabilization tracking" value={selected}

@@ -9,6 +9,8 @@ describe('audio effect tile catalog', () => {
     const select = vi.fn();
     const { container } = render(<AudioEffectPicker onSelect={select} excludeDescriptorIds={new Set(['audio-volume'])} />);
     fireEvent.click(screen.getByText('+ Add Effect'));
+    fireEvent(container.querySelector('details')!, new Event('toggle', { bubbles: true }));
+    expect(screen.getByRole('textbox', { name: 'Search effects' })).toHaveFocus();
     expect(screen.queryByRole('button', { name: 'Volume', exact: true })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Audio Math Graph', exact: true })).toBeNull();
     fireEvent.change(screen.getByLabelText('Search effects'), { target: { value: 'delay' } });

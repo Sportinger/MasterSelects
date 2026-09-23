@@ -3,8 +3,10 @@ title: "Slit Scan 3D"
 ---
 
 Slit Scan's **3D geometry** inspector selects the existing 2D image, a reference
-time surface, a motion-deformed surface, or a free motion band. Existing effects default to 2D. Selecting
-a 3D representation enables the clip's shared scene participation.
+time surface, a motion-deformed surface, or a free motion band. New Slit Scan effects
+start with Motion-deformed surface and the `history` base sampler; existing effects
+retain their saved representation. Selecting a 3D representation enables the clip's
+shared scene participation.
 
 The base time sampler is an explicitly saved graph node identity. RGB offsets
 remain color operations: geometry follows the selected base query. A missing
@@ -130,8 +132,9 @@ existing scene-camera controls to save an export view. Source-history preparatio
 and required DIS work participate in the existing export barrier. A pending Hybrid
 image is not paired with a new geometry field. Export errors are propagated.
 
-Mesh quality is separate from image resolution and DIS resolution. Grid dimensions
-are bounded to 256 columns and 288 rows. Numeric field memory is reserved from the
+Mesh quality is separate from image resolution and DIS resolution. The default is
+256 columns; 128, 512, 1024 and 2048 columns are also available. Rows follow the
+image aspect ratio up to 512. Numeric field memory is reserved from the
 selected history budget. Bidirectional bands reduce their raw analysis allocation
 to keep the two flow atlases bounded. No geometry point owns a decoder and no
 previous playback frame becomes source history.

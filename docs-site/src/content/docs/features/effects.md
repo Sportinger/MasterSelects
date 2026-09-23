@@ -107,7 +107,7 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
 - **Source sampling** decodes the source video independently, applying clip trim
   and speed. Render preceding effects to an intermediate video to include them;
   arbitrary preceding effect stacks are not reevaluated.
-- **Sampling** is the first inspector section and opens by default. **Preview quality**
+- **Sampling**, **Preview quality**, **Time** and **Wave** appear first in the Slit Scan inspector because they have no section bypass switch. Newly added effects start with 3D geometry enabled and the other switchable sections bypassed and collapsed; enabling a section opens it. Existing effects keep their saved switch states. Sampling opens by default. **Preview quality**
   switches between Small preview
   (160 px maximum edge) and Full size. Both use the same source timestamps and sample
   count. New Slit Scan effects default to resident GPU history, 4 GiB history memory,

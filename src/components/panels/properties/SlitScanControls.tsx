@@ -69,7 +69,6 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId, o
         <ResolveInspectorRow label="Motion analysis"><span role="status" title={motionStatus}>{motionStatus}</span></ResolveInspectorRow>}
   </ResolveInspectorSection>;
   return <div className="effects-tab transform-tab-compact">
-    <SlitScanGeometryControls params={params} onChange={onChange} clipId={clipId} effectInstanceId={effectInstanceId} operatorGraph={operatorGraph} />
     {renderGroup('Sampling')}
     <ResolveInspectorSection title="Preview quality" defaultOpen>
       <ResolveInspectorRow label="Quality"><InspectorSelect ariaLabel="Slit Scan preview quality"
@@ -82,9 +81,12 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId, o
           onChange={value => onChange({ ...params, temporalPreview: value })} />
       </ResolveInspectorRow>}
     </ResolveInspectorSection>
+    {renderGroup('Time')}
+    {renderGroup('Wave')}
+    <SlitScanGeometryControls params={params} onChange={onChange} clipId={clipId} effectInstanceId={effectInstanceId} operatorGraph={operatorGraph} />
     <SlitScanStabilizationControls params={params} onChange={onChange} clipId={clipId} effectInstanceId={effectInstanceId} />
     <SlitScanTimeFieldControls params={params} onChange={onChange} clipId={clipId} effectInstanceId={effectInstanceId} />
-    <ResolveInspectorSection title="Protection mask" bypassGroupId="subject-protection" defaultOpen>
+    <ResolveInspectorSection title="Protection mask" bypassGroupId="subject-protection" defaultOpen={false}>
       <ResolveInspectorRow label="Clip mask"><InspectorSelect ariaLabel="Slit Scan protection mask"
         value={String(params.protectionMask ?? '')} options={[{ value: '', label: 'None' },
           ...(params.protectionMask && !selectedMask ? [{ value: String(params.protectionMask), label: 'Missing mask', disabled: true }] : []),
@@ -94,6 +96,6 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId, o
         min={0} max={200} hardMin={0} hardMax={1000} numberMax={1000} step={1} suffix="px"
         onChange={value => setPropertyValue(clipId, `mask.${selectedMask.id}.feather`, value)} />}
     </ResolveInspectorSection>
-    {['Time', 'Subject protection', 'Protected center', 'Wave'].map(renderGroup)}
+    {['Subject protection', 'Protected center'].map(renderGroup)}
   </div>;
 }

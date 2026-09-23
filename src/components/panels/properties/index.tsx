@@ -1,5 +1,5 @@
 // Properties Panel - Main container with lazy-loaded tabs
-import { useState, useEffect, useCallback, useMemo, useRef, useSyncExternalStore, Suspense, lazy } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, useSyncExternalStore, Suspense, lazy } from 'react';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import { selectIsSlotGridPanelActive, useSlotGridPanelStore } from '../../../stores/slotGridPanelStore';
@@ -25,6 +25,7 @@ import {
   PropertiesTabLoading,
 } from './PropertiesClipTabContent';
 import type { PropertiesTab } from './propertiesPanelTypes';
+import { canKeepClipPropertiesTab } from './propertiesClipTabAvailability';
 import { useTrackingEditorStore } from '../../../stores/trackingEditorStore';
 import { liveInputRuntime } from '../../../services/mediaRuntime/liveInputRuntime';
 import { resolveClipTranscriptWords } from '../../../services/transcription/clipTranscriptResolver';
@@ -57,6 +58,16 @@ function getSelectionKey(
   return fallbackClipId ? `clip:${fallbackClipId}` : null;
 }
 
+// The dock unmounts inactive panels. Keep this session-only view state outside the panel.
+const propertiesView = {
+  selectionKey: null as string | null,
+  activeTab: 'transform' as PropertiesTab,
+  clipTab: 'transform' as PropertiesTab,
+  clipTabTouched: false,
+  scrollTop: 0,
+  scrollByTab: new Map<PropertiesTab, number>(),
+};
+
 export function PropertiesPanel() {
   const openedTrackingAssetId = useTrackingEditorStore(s => s.openedAssetId);
   // Reactive data - subscribe to specific values only
@@ -80,9 +91,11 @@ export function PropertiesPanel() {
   const ensureSlotClipSettings = useMediaStore(state => state.ensureSlotClipSettings) as (compositionId: string, duration: number) => void;
   // Actions from getState() - stable, no subscription needed
   const { getInterpolatedTransform, getInterpolatedCameraSettings, getInterpolatedSpeed } = useTimelineStore.getState();
-  const [activeTab, setActiveTab] = useState<PropertiesTab>('transform');
-  const [lastSelectionKey, setLastSelectionKey] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<PropertiesTab>(() => propertiesView.activeTab);
+  const [lastSelectionKey, setLastSelectionKey] = useState<string | null>(() => propertiesView.selectionKey);
   const pendingTabRef = useRef<PropertiesTab | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const restoringScrollRef = useRef(false);
 
   useEffect(() => {
     trackEditorSurfaceViewed(activeTab);
@@ -118,6 +131,44 @@ export function PropertiesPanel() {
   const isMasterPropertiesSelected = propertiesSelection?.kind === 'master';
   const masterAudio = masterAudioState ?? DEFAULT_MASTER_AUDIO_STATE;
   const selectionKey = getSelectionKey(propertiesSelection, fallbackSelectedClipId);
+  useLayoutEffect(() => {
+    if (propertiesView.activeTab !== activeTab) {
+      propertiesView.scrollTop = propertiesView.scrollByTab.get(activeTab) ?? 0;
+    }
+    propertiesView.selectionKey = selectionKey;
+    propertiesView.activeTab = activeTab;
+    const content = panelRef.current?.querySelector<HTMLElement>(':scope > .properties-content');
+    if (!content || propertiesView.scrollTop === 0) return;
+    const scrollTop = propertiesView.scrollTop;
+    restoringScrollRef.current = true;
+    const restore = () => {
+      content.scrollTop = scrollTop;
+      if (content.scrollTop >= scrollTop - 1) {
+        restoringScrollRef.current = false;
+        observer.disconnect();
+      }
+    };
+    const observer = new MutationObserver(restore);
+    restore();
+    // Suspense can replace a short loading placeholder after the first layout.
+    if (restoringScrollRef.current) observer.observe(content, { childList: true, subtree: true });
+    const timeout = window.setTimeout(() => { restoringScrollRef.current = false; observer.disconnect(); }, 2000);
+    return () => { window.clearTimeout(timeout); restoringScrollRef.current = false; observer.disconnect(); };
+  }, [activeTab, selectionKey]);
+  const handlePanelScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (!restoringScrollRef.current && target instanceof HTMLElement && target.classList.contains('properties-content')) {
+      propertiesView.scrollTop = target.scrollTop;
+      propertiesView.scrollByTab.set(activeTab, target.scrollTop);
+    }
+  }, [activeTab]);
+  const panelProps = { ref: panelRef, onScrollCapture: handlePanelScroll };
+  const selectClipTab = useCallback((tab: PropertiesTab) => {
+    pendingTabRef.current = null;
+    propertiesView.clipTab = tab;
+    propertiesView.clipTabTouched = true;
+    setActiveTab(tab);
+  }, []);
   const selectedSlotComposition = selectedSlotCompositionId
     ? compositions.find(c => c.id === selectedSlotCompositionId) ?? null
     : null;
@@ -165,6 +216,13 @@ export function PropertiesPanel() {
   const isLightClip = selectedClip?.source?.type === 'light';
   const isSplatEffectorClip = selectedClip?.source?.type === 'splat-effector';
   const isLiveInputClip = Boolean(selectedClip?.source?.liveInputId);
+  const clipPresentation = {
+    isStoryboardClip, isAudioClip, isCameraClip, isMathSceneClip, isFlockClip,
+    isMotionAdjustmentClip, isMotionShapeClip, isEditableHookClip, isCaptionClip,
+    isTextClip, is3DTextClip, isLiveInputClip, isVectorAnimationClip,
+    vectorAnimationTabLabel, isModelClip, isGaussianAvatar, isGaussianSplat,
+    isLightClip, isSplatEffectorClip, isSolidClip,
+  };
   useEffect(() => {
     if (selectedSlotCompositionId && !selectedSlotComposition) {
       selectSlotComposition(null);
@@ -263,6 +321,12 @@ export function PropertiesPanel() {
         return;
       }
 
+      // Clip changes return to the last tab the user chose, when available.
+      if (propertiesView.clipTabTouched && canKeepClipPropertiesTab(propertiesView.clipTab, clipPresentation)) {
+        setActiveTab(propertiesView.clipTab);
+        return;
+      }
+
       // Set appropriate default tab based on clip type
       if (isStoryboardClip) {
         setActiveTab('storyboard');
@@ -341,6 +405,8 @@ export function PropertiesPanel() {
           : tab;
       // Store as pending so clip-switch effect doesn't override it
       pendingTabRef.current = requestedTab;
+      propertiesView.clipTab = requestedTab;
+      propertiesView.clipTabTouched = true;
       setActiveTab(requestedTab);
     };
     window.addEventListener('openPropertiesTab', handler);
@@ -352,14 +418,14 @@ export function PropertiesPanel() {
     useTimelineStore.getState().updateSolidColor(selectedClipId, e.target.value);
   }, [selectedClipId]);
 
-  if (openedTrackingAssetId) return <div className="properties-panel">
+  if (openedTrackingAssetId) return <div className="properties-panel" {...panelProps}>
     <div className="panel-header"><h3>Tracking</h3><button onPointerUp={e=>e.currentTarget.blur()} onClick={()=>useTrackingEditorStore.getState().setEditor({openedAssetId:null})}>Back to clip</button></div>
     <div className="properties-content"><Suspense fallback={<PropertiesTabLoading/>}><TrackingAssetTab assetId={openedTrackingAssetId}/></Suspense></div>
   </div>;
 
   if (slotGridActive && !selectedSlotComposition) {
     return (
-      <div className="properties-panel">
+      <div className="properties-panel" {...panelProps}>
         <div className="panel-header"><h3>Properties</h3></div>
         <div className="panel-empty"><p>Select a slot to edit slot clip settings</p></div>
       </div>
@@ -368,7 +434,7 @@ export function PropertiesPanel() {
 
   if (isSlotMode && selectedSlotComposition && selectedSlotIndex !== undefined) {
     return (
-      <div className="properties-panel">
+      <div className="properties-panel" {...panelProps}>
         <PropertiesTabStrip>
           <button className="tab-btn active" onClick={() => setActiveTab('slot-clip')}>
             Slot Clip
@@ -389,7 +455,7 @@ export function PropertiesPanel() {
 
   if (selectedTransitionSelection) {
     return (
-      <div className="properties-panel">
+      <div className="properties-panel" {...panelProps}>
         <PropertiesTabStrip>
           <button className="tab-btn active" onClick={() => setActiveTab('transition')}>
             TRANSITION Parameters
@@ -423,7 +489,7 @@ export function PropertiesPanel() {
     const hasBusControls = isAudioTrack || isMidiTrack;
 
     return (
-      <div className="properties-panel">
+      <div className="properties-panel" {...panelProps}>
         <PropertiesTabStrip>
           {hasBusControls && (
             <button
@@ -479,7 +545,7 @@ export function PropertiesPanel() {
     const masterEffectCount = masterAudio.effectStack?.length ?? 0;
 
     return (
-      <div className="properties-panel">
+      <div className="properties-panel" {...panelProps}>
         <PropertiesTabStrip>
           <button
             className={`tab-btn ${activeTab === 'master-controls' ? 'active' : ''}`}
@@ -508,7 +574,7 @@ export function PropertiesPanel() {
       return <PropertiesReconnectLiveInput reconnectRequiredCount={reconnectRequiredCount} />;
     }
     return (
-      <div className="properties-panel">
+      <div className="properties-panel" {...panelProps}>
         <div className="panel-header"><h3>Properties</h3></div>
         <div className="panel-empty"><p>Select a clip to edit properties</p></div>
       </div>
@@ -565,28 +631,6 @@ export function PropertiesPanel() {
   const sourceSceneDescriptionMessage = selectedClip.sceneDescriptionMessage
     ?? selectedMediaArtifacts?.sceneDescriptionMessage;
 
-  const clipPresentation = {
-    isStoryboardClip,
-    isAudioClip,
-    isCameraClip,
-    isMathSceneClip,
-    isFlockClip,
-    isMotionAdjustmentClip,
-    isMotionShapeClip,
-    isEditableHookClip,
-    isCaptionClip,
-    isTextClip,
-    is3DTextClip,
-    isLiveInputClip,
-    isVectorAnimationClip,
-    vectorAnimationTabLabel,
-    isModelClip,
-    isGaussianAvatar,
-    isGaussianSplat,
-    isLightClip,
-    isSplatEffectorClip,
-    isSolidClip,
-  };
   const clipAnalysis = {
     analysis: sourceAnalysis,
     analysisStatus: sourceAnalysisStatus,
@@ -601,7 +645,7 @@ export function PropertiesPanel() {
   };
 
   return (
-    <div className="properties-panel">
+    <div className="properties-panel" {...panelProps}>
       {/* Solid color picker — always visible at top when a solid clip is selected */}
       {isSolidClip && (
         <div className="solid-color-bar">
@@ -621,7 +665,7 @@ export function PropertiesPanel() {
 
       <PropertiesClipTabStrip
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={selectClipTab}
         presentation={clipPresentation}
         visualEffectCount={visualEffects.length + Number(!isAudioClip && Boolean(selectedClip.colorCorrection || selectedClip.nodeGraph?.forcedBuiltIns?.includes('color')))}
         audioEditCount={audioEditCount}

@@ -49,7 +49,9 @@ export function EffectCatalogPicker({ groups, sourceFrameId, onSelect }: EffectC
   };
 
   return (
-    <details className="effect-catalog-picker" ref={detailsRef}>
+    <details className="effect-catalog-picker" ref={detailsRef} onToggle={event => {
+      if (event.currentTarget.open) event.currentTarget.querySelector<HTMLInputElement>('input[aria-label="Search effects"]')?.focus();
+    }}>
       <summary>+ Add Effect</summary>
       <div className="effect-catalog-picker-body">
         <div className="effect-catalog-tools">

@@ -1,6 +1,7 @@
 import { GeometryQueryOutput } from '../../../effects/time/slit-scan/GeometryQueryOutput';
 import { GeometryAgeField } from '../../../effects/time/slit-scan/GeometryAgeField';
 import { createSlitScanReference, readSlitScanReference } from '../../../effects/time/slit-scan/geometryReference';
+import { slitScanMeshColumns } from '../../../effects/time/slit-scan/geometryParameters';
 import type { SlitScanGeometryCapture } from '../../../effects/time/slit-scan/geometryCapture';
 import type { SceneCamera, ScenePlaneLayer } from '../../scene/types';
 import { SlitScanSurfacePass, type SlitScanSurfaceDraw } from '../passes/SlitScanSurfacePass';
@@ -91,8 +92,8 @@ export class SlitScanSceneSurfaces {
     }
     const projection = params.geometryProjection === 'orthographic' ? 'orthographic' : 'perspective';
     const reference = readSlitScanReference(params.geometryReference) ?? createSlitScanReference(projection);
-    const columns = Math.min(frame.width, params.geometryQuality === 'high' ? 256 : 128);
-    const rows = Math.max(1, Math.min(288, frame.height, Math.round(columns * frame.height / frame.width)));
+    const columns = slitScanMeshColumns(params.geometryQuality);
+    const rows = Math.max(1, Math.min(Math.max(288, Math.min(512, columns)), Math.round(columns * frame.height / frame.width)));
     let band: GPUTextureView | undefined;
     if (isBand) {
       const angle = Number(params.angle ?? 0);

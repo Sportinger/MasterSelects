@@ -25,6 +25,14 @@ export function upgradeSlitScanGraph(graph: EffectOperatorGraph): EffectOperator
   return withSlitScanFieldGroups(withSlitScanRgbTime(withSlitScanMotion(withSlitScanGroupBypasses(withSlitScanTimeMap(withSlitScanProtection(upgradeProfiles(graph)))))));
 }
 
+/** New effects start with optional graph branches muted; existing saved graphs keep their states. */
+export function createInitialSlitScanGraph(): EffectOperatorGraph {
+  const graph = upgradeSlitScanGraph(createDefaultSlitScanGraph());
+  const muted = new Set(['scan-protection', 'subject-protection', 'time-map', 'rgb-time',
+    'field-shaping', 'field-combination', 'field-noise', 'field-motion']);
+  return { ...graph, groups: graph.groups?.map(group => muted.has(group.id) ? { ...group, bypassed: true } : group) };
+}
+
 function upgradeProfiles(graph: EffectOperatorGraph): EffectOperatorGraph {
   const route = graph.edges.find(edge => edge.to === 'masked-delay' && edge.input === 'a' && edge.from === 'profile-offset');
   if (!route || graph.nodes.some(node => additions.has(node.id)) || !graph.nodes.some(node => node.id === 'radius-distance')) return graph;

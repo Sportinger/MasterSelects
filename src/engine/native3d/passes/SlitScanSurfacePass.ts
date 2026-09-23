@@ -30,8 +30,8 @@ export class SlitScanSurfacePass {
     });
     pass.setPipeline(this.pipeline!);
     for (const draw of draws) {
-      const columns = Math.max(1, Math.min(512, Math.round(draw.columns)));
-      const rows = Math.max(1, Math.min(288, Math.round(draw.rows)));
+      const columns = Math.max(1, Math.min(2048, Math.round(draw.columns)));
+      const rows = Math.max(1, Math.min(512, Math.round(draw.rows)));
       const data = new Float32Array(56);
       data.set(draw.mvp, 0); data.set(draw.reference, 16); data.set(draw.inverseReference, 32);
       data.set([columns, rows, draw.timeDepth, draw.opacity], 48);

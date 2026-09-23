@@ -395,6 +395,8 @@ in `docs/ongoing/Resolve-20-UI-Parity.md`.
 
 The unified Properties panel adapts its tabs to the selected clip type, selected audio track/layer, selected master bus, and slot-grid mode. Its dock tab is always titled **Properties** and uses a slightly lighter tab surface than neighboring panels. Transcript controls live inside Analysis; linked video/audio companions share the same transcript state, so selecting either side opens the same Analysis workspace. Clips that support both layer dimensions expose the 2D/3D switch in the Transform section, while model, Gaussian-splat, light, and effector clips that require 3D show a static `3D` badge instead of a disabled switch. The Source row does not repeat the dimension switch.
 
+Properties remembers the last clip tab the user opened and its vertical scroll position, including while the dock panel is hidden. Selecting another clip reopens that tab when the clip offers it; incompatible tabs use the clip's default without forgetting the user's choice.
+
 Selecting a timeline transition switches the panel to `TRANSITION Parameters`.
 That tab shows the transition type, first-pass centered placement with timeline
 body offset support,

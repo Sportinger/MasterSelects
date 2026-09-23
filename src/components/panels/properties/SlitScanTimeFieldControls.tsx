@@ -44,7 +44,7 @@ export function SlitScanTimeFieldControls({ params, onChange, clipId, effectInst
         <p className="tracking-panel-status">Offsets stay inside Delay. Protection applies to every channel; alpha uses base time. Scan smoothing is bypassed.</p>
       </>}
     </ResolveInspectorSection>
-    <ResolveInspectorSection title="Time field source" bypassGroupId="time-map" defaultOpen>
+    <ResolveInspectorSection title="Time field source" bypassGroupId="time-map" defaultOpen={false}>
       <ResolveInspectorRow label="Preset"><InspectorSelect ariaLabel="Slit Scan time field preset" value=""
         options={[{ value: '', label: 'Apply preset…', disabled: true }, ...slitScanTimeFieldPresets.map(({ value, label }) => ({ value, label }))]}
         onChange={value => { const preset = slitScanTimeFieldPreset(value); if (preset) onChange({ ...params, ...preset }); }} /></ResolveInspectorRow>
@@ -68,7 +68,7 @@ export function SlitScanTimeFieldControls({ params, onChange, clipId, effectInst
       {row('mapAmount')}
       {source === 'external' && <>{row('mapAlignment')}{params.mapAlignment !== 'source' && row('mapStart')}</>}
     </ResolveInspectorSection>
-    {source === 'motion' && <ResolveInspectorSection title="Motion field" bypassGroupId="field-motion" defaultOpen>
+    {source === 'motion' && <ResolveInspectorSection title="Motion field" bypassGroupId="field-motion" defaultOpen={false}>
       {row('mapMotionMode')}{params.mapMotionMode === 'direction' && row('mapMotionAngle')}
       {['mapMotionMin', 'mapMotionMax', 'mapMotionConfidence'].map(row)}
     </ResolveInspectorSection>}
