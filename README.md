@@ -148,6 +148,8 @@ or release on empty canvas to unplug editable links.
 Added nodes settle into place, removed nodes shrink away, and new cables draw from
 output to input. These graph edit animations also apply to agent changes and respect
 reduced motion settings.
+AI edits present a frame after each tool step, including steps inside a batch;
+large compound node groups reveal their cards and cables progressively.
 During playback and timeline scrubbing, light pulses and direction arrows show
 the flow from output to input. They fade when the timeline rests.
 Graph panning reuses unchanged nodes and cables; playback avoids repeated dock

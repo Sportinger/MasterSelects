@@ -4,6 +4,7 @@ const NODE_ENTER_MS = 330;
 const NODE_EXIT_MS = 210;
 const CABLE_ENTER_MS = 430;
 const CABLE_EXIT_MS = 190;
+const MAX_ENTRY_STAGGER_MS = 1400;
 
 interface Motion<T> { item: T; start: number; exit: boolean }
 
@@ -23,11 +24,18 @@ export class NodeSceneMotion {
     if (!before || before.graphId !== scene.graphId) { this.clear(); return; }
     const oldNodes = new Map(before.nodes.map(node => [node.id, node]));
     const newNodes = new Set(scene.nodes.map(node => node.id));
-    for (const node of scene.nodes) if (!oldNodes.has(node.id)) this.nodes.set(node.id, { item: node, start: now, exit: false });
+    const addedNodes = scene.nodes.filter(node => !oldNodes.has(node.id)).toSorted((a, b) => a.x - b.x || a.y - b.y);
+    const nodeStep = addedNodes.length > 1 ? Math.min(35, MAX_ENTRY_STAGGER_MS / (addedNodes.length - 1)) : 0;
+    addedNodes.forEach((node, index) => this.nodes.set(node.id, { item: node, start: now + index * nodeStep, exit: false }));
     for (const node of before.nodes) if (!newNodes.has(node.id)) this.nodes.set(node.id, { item: node, start: now, exit: true });
     const oldCables = new Map(before.cables.filter(cable => cable.id).map(cable => [cable.id!, cable]));
     const newCables = new Set(scene.cables.map(cable => cable.id));
-    for (const cable of scene.cables) if (cable.id && !oldCables.has(cable.id)) this.cables.set(cable.id, { item: cable, start: now, exit: false });
+    const addedCables = scene.cables.filter(cable => cable.id && !oldCables.has(cable.id))
+      .toSorted((a, b) => a.from.x - b.from.x || a.from.y - b.from.y);
+    const cableStep = addedCables.length > 1 ? Math.min(35, MAX_ENTRY_STAGGER_MS / (addedCables.length - 1)) : 0;
+    addedCables.forEach((cable, index) => this.cables.set(cable.id!, {
+      item: cable, start: now + index * cableStep, exit: false,
+    }));
     for (const cable of before.cables) if (cable.id && !newCables.has(cable.id)) this.cables.set(cable.id, { item: cable, start: now, exit: true });
   }
 

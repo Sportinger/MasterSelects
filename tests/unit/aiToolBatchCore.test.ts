@@ -3,6 +3,20 @@ import { executeBatchCore } from '../../src/services/aiTools/handlers/batch';
 import type { BatchToolExecutor } from '../../src/services/aiTools/handlers/batch';
 
 describe('AI tool batch core', () => {
+  it('waits for each presentation frame before applying the next action', async () => {
+    let release!: () => void;
+    const presented = new Promise<void>(resolve => { release = resolve; });
+    const executeTool = vi.fn<BatchToolExecutor>(async () => ({ success: true }));
+    const run = executeBatchCore({ actions: [
+      { tool: 'splitClip', args: { clipId: 'clip-1', splitTime: 4 } },
+      { tool: 'setTransform', args: { clipId: 'clip-1', x: 120 } },
+    ] }, { callerContext: 'internal', executeTool, staggerBudgetMs: 0,
+      onBatchAction: ({ index }) => index === 1 ? presented : undefined });
+    await vi.waitFor(() => expect(executeTool).toHaveBeenCalledTimes(1));
+    release();
+    await run;
+    expect(executeTool).toHaveBeenCalledTimes(2);
+  });
   it('executes normalized batch actions with before/after hooks', async () => {
     const executeTool = vi.fn<BatchToolExecutor>(async (tool, args) => ({
       success: true,
@@ -10,6 +24,7 @@ describe('AI tool batch core', () => {
     }));
     const beforeAction = vi.fn();
     const afterAction = vi.fn();
+    const onBatchAction = vi.fn();
 
     const result = await executeBatchCore({
       actions: [
@@ -20,6 +35,7 @@ describe('AI tool batch core', () => {
       callerContext: 'internal',
       executeTool,
       hooks: { beforeAction, afterAction },
+      onBatchAction,
       staggerBudgetMs: 0,
     });
 
@@ -28,6 +44,8 @@ describe('AI tool batch core', () => {
     expect(executeTool).toHaveBeenNthCalledWith(2, 'setTransform', { clipId: 'clip-1', x: 120 }, 'internal');
     expect(beforeAction).toHaveBeenCalledTimes(2);
     expect(afterAction).toHaveBeenCalledTimes(2);
+    expect(onBatchAction).toHaveBeenNthCalledWith(1, { index: 1, total: 2, tool: 'splitClip', success: true });
+    expect(onBatchAction).toHaveBeenNthCalledWith(2, { index: 2, total: 2, tool: 'setTransform', success: true });
     expect(beforeAction).toHaveBeenNthCalledWith(2, expect.objectContaining({
       args: { clipId: 'clip-1', x: 120 },
       index: 1,

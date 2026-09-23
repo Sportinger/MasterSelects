@@ -2,6 +2,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import { EFFECT_REGISTRY } from '../../effects';
 import type { ToolResult } from '../aiTools/types';
 import { resolveNodeGraphStreamReferences, type NodeGraphStreamRecord } from '../nodeGraph/nodeGraphStream';
+import { yieldEditorPresentationFrame } from './yieldEditorPresentationFrame';
 
 type Execute = (tool: string, args: Record<string, unknown>, id: string) => Promise<ToolResult>;
 
@@ -50,8 +51,7 @@ export class FlashBoardNodeGraphStream {
     const result = await this.checked(record.tool, { ...args, clipId: this.clipId }, String(record.seq));
     this.results.set(record.ref, result.data);
     this.completedOperations++;
-    // Let the graph projection paint between already-buffered operations as well.
-    await new Promise<void>(resolve => setTimeout(resolve, 0));
+    await yieldEditorPresentationFrame();
   }
 
   private async checked(tool: string, args: Record<string, unknown>, sequence: string): Promise<ToolResult> {

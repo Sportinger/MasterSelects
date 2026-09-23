@@ -224,6 +224,13 @@ export async function executeBatchCore(
       });
     }
 
+    // A batch is one provider call, but its editor mutations are already
+    // sequential. Surface each completed step while later steps are running.
+    try {
+      await options.onBatchAction?.({ index: i + 1, total: actions.length, tool: action.tool,
+        success: results.at(-1)?.success === true });
+    } catch { /* Presentation must never change the batch result. */ }
+
     if (i < actions.length - 1) {
       const delay = consumeStaggerDelay(actions.length - 1 - i);
       if (!await delayWithSignal(delay, options.signal)) {

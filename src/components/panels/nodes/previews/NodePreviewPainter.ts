@@ -128,15 +128,17 @@ export class NodePreviewPainter {
     ctx.setTransform(view.ratio * view.zoom, 0, 0, view.ratio * view.zoom, view.ratio * view.panX, view.ratio * view.panY);
     for (const node of scene.nodes) {
       const preview = node.preview;
-      if (!preview) continue;
+      if (!preview || node.disappearing) continue;
       const rect = { ...preview, x: node.x + preview.x, y: node.y + preview.y };
       const bounds = preview.text ? node : rect;
       if (!previewInView(bounds, view) || (!this.allDirty && !this.dirty.has(preview.key))) continue;
       const slot = this.slots.get(preview.key);
       const values = this.values.get(preview.key);
       ctx.clearRect(bounds.x - 1, bounds.y - 1, bounds.width + 2, bounds.height + 2);
+      ctx.save(); ctx.globalAlpha = node.appearance ?? 1;
       if (preview.text || values?.presentation === 'text' || values?.drawing?.kind === 'text' || values?.drawing?.kind === 'number') {
         if (values) paintNodeValues(ctx, node, values, rect);
+        ctx.restore();
         continue;
       }
       ctx.fillStyle = '#101214'; ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
@@ -151,6 +153,7 @@ export class NodePreviewPainter {
       ctx.fillStyle = '#b6bfc5'; ctx.fillText(preview.label, rect.x + 4, rect.y + 3, rect.width - 12);
       ctx.fillStyle = slot?.status === 'stale' || slot?.status === 'error' ? '#dbb270' : '#87939b';
       ctx.fillText(slot?.label ?? 'Waiting for preview', rect.x + 4, rect.y + rect.height - 13, rect.width - 8);
+      ctx.restore();
     }
     this.allDirty = false; this.dirty.clear();
   }

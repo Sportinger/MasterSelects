@@ -25,6 +25,7 @@ import { getToolPolicy } from '../aiTools/policy';
 import { NodeGraphStreamParser, NODE_GRAPH_STREAM_PROTOCOL } from '../nodeGraph/nodeGraphStream';
 import { FlashBoardNodeGraphStream } from './FlashBoardNodeGraphStream';
 import { CodexStreamDiagnostics } from './CodexStreamDiagnostics';
+import { yieldEditorPresentationFrame } from './yieldEditorPresentationFrame';
 import {
   clearDirectCodexReloadSnapshot,
   readDirectCodexReloadSnapshot,
@@ -460,6 +461,12 @@ async function runDirectCodexChat(
         toolName,
         signal => executeAITool(toolName, executionArgs, caller, {
           auditProviderToolCallId: callId,
+          onBatchAction: async ({ index, total, tool, success }) => {
+            emitAgentActivity(request, { kind: 'progress',
+              label: `${safeToolActivityLabel(tool)} ${success ? 'completed' : 'failed'}`,
+              current: index, total });
+            await yieldEditorPresentationFrame();
+          },
           executionMode: 'normal',
           guidedReplay: false,
           signal,
@@ -486,6 +493,7 @@ async function runDirectCodexChat(
       safeLabel,
       toolName,
     });
+    await yieldEditorPresentationFrame();
     send({
       id: message.id,
       result: {

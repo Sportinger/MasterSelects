@@ -10,6 +10,8 @@ Agent `focusNodeGraph` and node streams pin the targeted panel beside Preview to
 
 Graph edits animate structural changes in the canvas: added nodes scale and fade in, removed nodes fade and shrink out, and new cables draw from output to input. The same animation applies to direct edits and agent edits. Hover, parameter, layout, and playback updates do not restart it. Reduced motion settings show the final graph immediately.
 
+Codex Direct presents a frame between completed editor tools and between the actions inside `executeBatch`. The first successful agent graph edit also opens and pins Nodes beside Preview automatically. A bulk graph projection reveals new cards and cables in a short wave. This keeps the visible construction sequential even when the agent uses ordinary tool calls rather than the optional node text stream.
+
 The node inspector starts collapsed. Agent graph reads and edits reveal the affected effect group and its descendants while work proceeds, for both tool calls and streamed records. A successfully completed chat turn collapses all groups in the clips it worked on. Failed, cancelled and planning turns do not apply that final collapse. Unrelated clips retain their group state.
 
 When added nodes extend beyond the visible canvas, the view fits the complete graph after their layout settles, including nodes arriving through agent tools or streamed node code. Additions already in view keep the camera unchanged. Parameter edits and removals do not reset manual navigation; a pointer or wheel gesture cancels a pending automatic fit. Group folding retains its own focus and restore behavior.

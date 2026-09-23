@@ -36,6 +36,8 @@ export interface AIToolCallExecutionResult {
 
 export interface AIToolExecutionOptions {
   auditProviderToolCallId?: string;
+  /** Presentation only: report each completed action while executeBatch is still running. */
+  onBatchAction?: (step: { index: number; total: number; tool: string; success: boolean }) => void | Promise<void>;
   signal?: AbortSignal;
   staggerBudgetMs?: number;
   suppressHistory?: boolean;

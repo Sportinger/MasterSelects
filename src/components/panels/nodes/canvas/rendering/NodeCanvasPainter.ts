@@ -65,13 +65,16 @@ export class NodeCanvasPainter {
     const scene = this.visibleScene ??= this.visibility?.visible(this.view) ?? this.scene;
     if (this.transport.reducedMotion) this.sceneMotion.clear();
     const paintScene = this.sceneMotion.active ? this.sceneMotion.frame(scene, now) : scene;
-    if (this.sceneMotion.active || paintScene !== scene) this.baseDirty = true;
+    if (this.sceneMotion.active || paintScene !== scene) {
+      this.baseDirty = true;
+      this.previews?.invalidate();
+    }
     const start = import.meta.env.DEV ? performance.now() : 0;
     if (this.baseDirty) { paintBase(this.base, paintScene, this.view, this.theme); this.baseDirty = false; }
     const baseEnd = import.meta.env.DEV ? performance.now() : 0;
     if (this.overlayDirty || this.animated) { paintOverlay(this.overlay, scene, this.view, this.theme, this.transport, now, this.curveActivity, this.flowClock.advance(now)); this.overlayDirty = false; }
     const overlayEnd = import.meta.env.DEV ? performance.now() : 0;
-    this.previews?.draw(scene, this.view);
+    this.previews?.draw(paintScene, this.view);
     if (import.meta.env.DEV) {
       this.timings.baseMs = baseEnd - start; this.timings.overlayMs = overlayEnd - baseEnd; this.timings.previewMs = performance.now() - overlayEnd;
     }

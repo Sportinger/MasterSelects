@@ -1,8 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { createMockClip } from '../helpers/mockData';
 import { FlashBoardNodeGraphPresentation } from '../../src/services/flashboard/FlashBoardNodeGraphPresentation';
 import type { FlashBoardExecutedToolCall } from '../../src/services/flashboard/FlashBoardChatTypes';
+
+const focusNodeGraph = vi.hoisted(() => vi.fn(async () => ({ success: true })));
+vi.mock('../../src/services/aiTools/handlers/focusNodeGraph', () => ({ handleFocusNodeGraph: focusNodeGraph }));
 
 const initial = useTimelineStore.getState();
 let effectId: string;
@@ -11,6 +14,7 @@ const call = (success = true): FlashBoardExecutedToolCall => ({ modelContent: ''
 const groups = () => useTimelineStore.getState().clips.find(clip => clip.id === 'working')!.nodeGraph!.groups!;
 
 beforeEach(() => {
+  focusNodeGraph.mockClear();
   useTimelineStore.setState({ clips: [createMockClip({ id: 'working', effects: [] }), createMockClip({ id: 'other', effects: [] })], isExporting: false });
   effectId = useTimelineStore.getState().addClipEffect('working', 'fisheye')!;
 });
@@ -20,6 +24,9 @@ describe('agent node group presentation', () => {
     const presentation = new FlashBoardNodeGraphPresentation();
     const other = useTimelineStore.getState().clips.find(clip => clip.id === 'other');
     presentation.observe([call()]);
+    expect(focusNodeGraph).toHaveBeenCalledWith({ clipId: 'working' });
+    presentation.observe([call()]);
+    expect(focusNodeGraph).toHaveBeenCalledTimes(1);
     expect(groups()[`effect:${effectId}`].collapsed).toBe(false);
     const descendants = Object.entries(groups()).filter(([id]) => id.startsWith(`effect:${effectId}/`));
     expect(descendants.length).toBeGreaterThan(0);

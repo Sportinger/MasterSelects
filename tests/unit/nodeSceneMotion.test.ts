@@ -8,6 +8,21 @@ const scene = (nodes: CanvasNode[], cables: CanvasCable[], graphId = 'graph'): C
   ({ graphId, nodes, cables, groups: [], plugs: [] });
 
 describe('node scene edit motion', () => {
+  it('reveals a compound graph in a wave instead of one visual block', () => {
+    const motion = new NodeSceneMotion();
+    const nodes = Array.from({ length: 4 }, (_, index) => ({ ...node, id: `node-${index}`, x: index * 100 }));
+    const cables = Array.from({ length: 3 }, (_, index) => ({ ...cable, id: `edge-${index}`, from: { x: index * 100, y: 60 } }));
+    const full = scene(nodes, cables);
+    motion.update(scene([], []), 0);
+    motion.update(full, 100);
+    const first = motion.frame(full, 110);
+    expect(first.nodes[0].appearance).toBeGreaterThan(0);
+    expect(first.nodes[3].appearance).toBe(0);
+    expect(first.cables[0].appearance).toBeGreaterThan(0);
+    expect(first.cables[2].appearance).toBe(0);
+    motion.frame(full, 1000);
+    expect(motion.active).toBe(false);
+  });
   it('animates added and removed graph elements without restarting on scene refresh', () => {
     const motion = new NodeSceneMotion();
     const empty = scene([], []), full = scene([node], [cable]);
