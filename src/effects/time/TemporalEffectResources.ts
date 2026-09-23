@@ -9,6 +9,8 @@ import { isCollectingTemporalPreparations, setTemporalStatus } from './temporalR
 import type { TemporalClipSource } from './temporalClipSource';
 import { SourceTemporalRuntime } from './SourceTemporalRuntime';
 import { useTimelineStore } from '../../stores/timeline';
+import { useTrackingStore } from '../../stores/trackingStore';
+import { slitScanStabilization } from './slit-scan/stabilization';
 
 /** Device-local resource ownership for temporal graphs and their node previews. */
 export class TemporalEffectResources {
@@ -30,6 +32,7 @@ export class TemporalEffectResources {
       horizon: Math.max(0, Math.min(4, Number(effect.params.delay ?? 1))), samples: Number(effect.params.temporalSamples ?? 32),
       nearest: effect.params.temporalInterpolation === 'nearest', encoder, keepPending: useTimelineStore.getState().isPlaying,
       useProxy: useMediaStore.getState().proxyEnabled && !isCollectingTemporalPreparations(),
+      stabilization: slitScanStabilization(effect.params, useTrackingStore.getState().assets, source.mediaId, media.width!, media.height!),
       maxEdge: effect.params.temporalResolution === 'native' ? undefined : 160 });
   }
 

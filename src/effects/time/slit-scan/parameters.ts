@@ -13,6 +13,15 @@ export const slitScanParams: Record<string, EffectParam> = {
     { value: '160', label: 'Small preview · 160 px' },
   ] },
   protectionMask: { type: 'text', label: 'Protection mask', default: '', group: 'Resources' },
+  stabilizationAssetId: { type: 'text', label: 'Stabilization tracking', default: '', group: 'Resources' },
+  stabilizationReference: { ...number('Reference (source s)', 0, 0, 86400, 0.001, 'Stabilization'), animatable: false },
+  stabilizationStrength: { ...number('Strength', 1, 0, 1, 0.01, 'Stabilization'), animatable: false },
+  stabilizationRotation: { type: 'select', label: 'Rotation', default: 'on', group: 'Stabilization', options: [
+    { value: 'on', label: 'Lock rotation' }, { value: 'off', label: 'Keep rotation' },
+  ] },
+  stabilizationScale: { type: 'select', label: 'Scale', default: 'on', group: 'Stabilization', options: [
+    { value: 'on', label: 'Lock size' }, { value: 'off', label: 'Keep size changes' },
+  ] },
   mapMediaId: { type: 'text', label: 'Time map source', default: '', group: 'Resources' },
   mapAmount: number('Map mix', 0, 0, 1, 0.01, 'Time map'),
   mapStart: number('Map start (timeline s)', 0, -3600, 3600, 0.01, 'Time map'),

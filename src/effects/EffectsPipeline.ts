@@ -391,13 +391,15 @@ export class EffectsPipeline {
             identity: upload ? `memory-window:${upload.version}:${upload.width}x${upload.height}` : 'memory-window:unavailable',
             width: upload?.width ?? 1, height: upload?.height ?? 1, available: upload !== null };
         } : undefined;
-      const nativeTemporal = effect.type === 'slit-scan' && imagePlan?.externalResources?.some(resource => resource.kind === 'input-history');
+      const nativeTemporal = effect.type === 'slit-scan' && (effect.params.stabilizationAssetId
+        || imagePlan?.externalResources?.some(resource => resource.kind === 'input-history'));
       const inputHistory = nativeTemporal ? this.inputHistory.emptyResources() : (imagePlan?.externalResources?.some(resource => resource.kind === 'input-history')
         ? this.inputHistory.prepare(JSON.stringify([frameHistory?.scopeId ?? clock.scopeId, effect.id]), commandEncoder,
           effectInput, sampler, outputWidth, outputHeight, timelineTimeSeconds, 4, frameHistory,
           String(effect.params.temporalInterpolation ?? 'linear'),
           effect.params.temporalMode === 'prepared' && effect.params.temporalResolution === 'native') : undefined);
       const imageExternalResources = imagePlan ? new Map(resolveImageGraphExternalResources(this.device, imagePlan, { resolveMemoryWindow, resolveInputHistory: inputHistory ? descriptor => inputHistory[descriptor.part] : undefined })) : undefined;
+      let graphInput = effectInput;
       try {
         if (imageExternalResources && imagePlan) this.temporalResources.resolveNamed(imageExternalResources,
           imagePlan.resourceInputs ?? [], effect, frameHistory?.scopeId ?? clock.scopeId,
@@ -405,6 +407,8 @@ export class EffectsPipeline {
         if (nativeTemporal && imagePlan && preparedImage && imageExternalResources) {
           const nativeHistory = this.temporalResources.resolveNative(effect,
             frameHistory?.scopeId ?? clock.scopeId, temporalSource, commandEncoder);
+          if (effect.params.stabilizationAssetId && !nativeHistory?.current) continue;
+          if (nativeHistory?.current) graphInput = nativeHistory.current.view;
           if (nativeHistory) for (const resource of imagePlan.externalResources ?? []) {
             if (resource.kind === 'input-history') imageExternalResources.set(resource.id, nativeHistory[resource.part]);
           }
@@ -424,7 +428,7 @@ export class EffectsPipeline {
         device: this.device,
         encoder: commandEncoder,
         sampler,
-        source: { kind: 'texture', view: effectInput },
+        source: { kind: 'texture', view: graphInput },
         width: outputWidth,
         height: outputHeight,
         timelineTimeSeconds,
@@ -445,7 +449,7 @@ export class EffectsPipeline {
       }
       if (imagePlan && (imagePlan.passes?.length || imagePlan.resourceInputs?.length)) {
         try {
-          this.imageGraphPassRuntime.encode({ encoder: commandEncoder, sampler, source: { kind: 'texture', view: effectInput }, width: outputWidth,
+          this.imageGraphPassRuntime.encode({ encoder: commandEncoder, sampler, source: { kind: 'texture', view: graphInput }, width: outputWidth,
             height: outputHeight, timelineTimeSeconds, plan: imagePlan, outputView: effectOutput, outputFormat: 'rgba8unorm',
             instanceId: JSON.stringify([frameHistory?.scopeId ?? 'legacy', effect.id]), batch: imagePassBatch,
             externalResources: imageExternalResources });
@@ -561,7 +565,7 @@ export class EffectsPipeline {
       // Create bind group
       const entries: GPUBindGroupEntry[] = [
         { binding: 0, resource: sampler },
-        { binding: 1, resource: effectInput },
+        { binding: 1, resource: graphInput },
       ];
 
       if (effectUniformBuffer) {

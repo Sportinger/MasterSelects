@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { EffectsPipeline } from '../../src/effects/EffectsPipeline';
 import { TemporalEffectResources } from '../../src/effects/time/TemporalEffectResources';
+import { ImageGraphPassRuntime } from '../../src/effects/ImageGraphPassRuntime';
 import { collectTemporalPreparations, getTemporalStatus } from '../../src/effects/time/temporalResourcePreparation';
 
 function setup() {
@@ -26,7 +27,7 @@ function setup() {
   const slitScan = { id: 'failed-slit', type: 'slit-scan', name: 'Slit Scan', enabled: true, params: {} };
   const render = (effects = [slitScan]) => pipeline.applyEffects(encoder, effects, {} as GPUSampler, input, output,
     output, {} as GPUTextureView, 8, 8);
-  return { pipeline, resolve, failure, render, input, output, draw, slitScan };
+  return { pipeline, device, resolve, failure, render, input, output, draw, slitScan };
 }
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -44,4 +45,35 @@ it('propagates the same failure during export so an effect cannot be silently om
   const { render, failure } = setup();
   const finish = collectTemporalPreparations();
   try { expect(() => render()).toThrow(failure); } finally { finish(); }
+});
+
+it('feeds the stabilized current frame to the graph and waits instead of mixing coordinate spaces', () => {
+  const { render, resolve, slitScan, input } = setup();
+  const stabilized = { ...slitScan, params: { stabilizationAssetId: 'track' } };
+  resolve.mockReturnValue(undefined);
+  expect(render([stabilized])).toEqual({ finalView: input, swapped: false });
+  const current = {} as GPUTextureView;
+  resolve.mockReturnValue({ current: { view: current, identity: 'current' }, atlas: { view: {} as GPUTextureView, identity: 'atlas' }, ages: { view: {} as GPUTextureView, identity: 'ages' } });
+  const encode = vi.spyOn(ImageGraphPassRuntime.prototype, 'encode').mockImplementation(() => {});
+  render([stabilized]);
+  expect(encode).toHaveBeenCalledWith(expect.objectContaining({ source: { kind: 'texture', view: current } }));
+});
+
+it('keeps stabilization when an edited graph outputs only the current frame', () => {
+  const { render, device, resolve, slitScan, output } = setup();
+  const current = {} as GPUTextureView;
+  resolve.mockReturnValue({ current: { view: current, identity: 'current' },
+    atlas: { view: {} as GPUTextureView, identity: 'atlas' }, ages: { view: {} as GPUTextureView, identity: 'ages' } });
+  const effect = { ...slitScan, params: { stabilizationAssetId: 'track' }, operatorGraph: {
+    version: 1 as const, schemaVersion: 1 as const, domain: 'image' as const,
+    nodes: [
+      { id: 'frame', operator: 'image.frame', operatorVersion: 1, bindings: {} },
+      { id: 'output', operator: 'image.output', operatorVersion: 1, bindings: {} },
+    ], edges: [{ id: 'direct', from: 'frame', output: 'image', to: 'output', input: 'image' }], layout: {},
+  } };
+  expect(render([effect]).finalView).toBe(output);
+  expect(resolve).toHaveBeenCalledOnce();
+  expect(device.createBindGroup).toHaveBeenCalledWith(expect.objectContaining({
+    entries: expect.arrayContaining([{ binding: 1, resource: current }]),
+  }));
 });

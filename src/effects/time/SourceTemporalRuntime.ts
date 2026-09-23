@@ -6,11 +6,13 @@ import type { MediaFile } from '../../stores/mediaStore/types';
 import { temporalSourceTime, type TemporalClipSource } from './temporalClipSource';
 import { recordTemporalPreparation, setTemporalStatus } from './temporalResourcePreparation';
 import { SourceProxyDimensions } from './SourceProxyDimensions';
+import { SlitScanTrackingGap, slitScanSourceTransform, type SlitScanStabilization } from './slit-scan/stabilization';
 
 export interface SourceTemporalRequest {
   key: string; effectId: string; media: MediaFile; source: TemporalClipSource;
   horizon: number; samples: number; nearest: boolean; encoder: GPUCommandEncoder;
   keepPending?: boolean; maxEdge?: number; useProxy?: boolean;
+  stabilization?: SlitScanStabilization;
 }
 
 /** Absolute clip-time grid: adjacent output frames share the same historical PTS.
@@ -62,15 +64,18 @@ export class SourceTemporalRuntime {
     if (!(width > 0 && height > 0) || Math.max(width, height) > this.device.limits.maxTextureDimension2D) {
       throw new Error('Source dimensions exceed this GPU\'s texture limit. Use Small preview.');
     }
-    const historyCount = Math.max(2, Math.min(64, Math.round(request.samples))) - 1;
+    // Stabilization also owns the current PTS: every temporal sample must share
+    // the reference coordinate space, including zero delay and the Mix input.
+    const currentCount = request.stabilization ? 1 : 0;
+    const historyCount = Math.max(2, Math.min(64, Math.round(request.samples))) - 1 + currentCount;
     // Reserve only the requested history, plus as much optional prefetch as fits.
     // Two frame-sized allowances cover upload scratch/storage outside the atlas.
     const capacity = Math.min(this.device.limits.maxTextureArrayLayers ?? 256,
       Math.floor(this.budget / (width * height * 4)) - 2);
     if (historyCount > capacity) {
       this.release(request.key);
-      throw new Error(`Full Res ${width} × ${height} with ${historyCount + 1} samples exceeds the 640 MiB source cache. `
-        + (capacity >= 1 ? `Choose at most ${capacity + 1} samples or Small preview.` : 'Use Small preview.'));
+      throw new Error(`Full Res ${width} × ${height} with ${historyCount + 1 - currentCount} samples exceeds the 640 MiB source cache. `
+        + (capacity >= 1 ? `Choose at most ${capacity + 1 - currentCount} samples or Small preview.` : 'Use Small preview.'));
     }
     const prefetchCount = Math.min(4, capacity - historyCount);
     const layers = historyCount + prefetchCount;
@@ -78,7 +83,8 @@ export class SourceTemporalRuntime {
     let entry = this.entries.get(request.key);
     if (entry && (entry.media.url !== request.media.url || entry.media.file !== request.media.file
       || entry.width !== width || entry.height !== height || entry.layers !== layers
-      || entry.prefetchCount !== prefetchCount || entry.proxyFps !== proxyFps)) { this.release(request.key); entry = undefined; }
+      || entry.prefetchCount !== prefetchCount || entry.proxyFps !== proxyFps
+      || entry.latest.stabilization?.identity !== request.stabilization?.identity)) { this.release(request.key); entry = undefined; }
     if (!entry) {
       for (const [key, old] of this.entries) {
         if (this.residentBytes() + bytes <= this.budget) break;
@@ -106,6 +112,8 @@ export class SourceTemporalRuntime {
       const owner = entry;
       owner.pending = this.prepare(owner).catch(error => {
         if (owner.abort.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) return;
+        // Coverage is a property of this requested window, not a permanent decoder failure.
+        if (error instanceof SlitScanTrackingGap) throw error;
         owner.error = error instanceof Error ? error : new Error(String(error));
         setTemporalStatus(request.effectId, owner.error.message); throw owner.error;
       }).finally(() => { owner.pending = undefined; owner.pendingKeys = undefined; this.onReady?.(); });
@@ -116,7 +124,9 @@ export class SourceTemporalRuntime {
     if (!wanted || !entry.slots.size) return undefined;
     // During a cache miss preview can use only resident source frames. Export waits
     // for the exact window through the preparation barrier above.
-    const available = wanted.filter(item => entry!.slots.has(item.time));
+    const current = request.stabilization ? wanted[0] : undefined;
+    if (current && !entry.slots.has(current.time)) return undefined;
+    const available = (current ? wanted.slice(1) : wanted).filter(item => entry!.slots.has(item.time));
     const data = new Float32Array(65 * 4);
     data[1] = -1;
     for (const [i, sample] of available.entries()) {
@@ -129,14 +139,19 @@ export class SourceTemporalRuntime {
       const source = proxyCount === available.length ? 'Proxy' : proxyCount ? 'Proxy + original' : 'Original';
       setTemporalStatus(request.effectId, `${request.maxEdge ? 'Small preview' : 'Full size'} · ${source} · ${width} × ${height} · source cache ready`);
     }
-    const identity = `${request.key}:${entry.revision}:${JSON.stringify(available)}:${request.nearest}`;
-    return { atlas: { view: entry.atlas.createView({ dimension: '2d-array' }), identity },
+    const identity = JSON.stringify([request.key, request.stabilization?.identity, current?.time, entry.revision, available, request.nearest]);
+    return { current: current ? { view: entry.atlas.createView({ dimension: '2d', baseArrayLayer: entry.slots.get(current.time)!, arrayLayerCount: 1 }), identity } : undefined,
+      atlas: { view: entry.atlas.createView({ dimension: '2d-array' }), identity },
       ages: { view: entry.ages.createView(), identity } };
   }
 
   private wanted(entry: Entry, request: SourceTemporalRequest) {
-    return sourceTemporalWindow(request).map(sample => ({ ...sample,
+    const samples = sourceTemporalWindow(request);
+    if (request.stabilization) samples.unshift({ age: 0, time: temporalSourceTime(request.source, request.source.localTime) });
+    const wanted = samples.map(sample => ({ ...sample,
       time: entry.reader!.frames[Math.max(0, surfaceFrameIndex(entry.reader!.frames, sample.time))].time }));
+    if (request.stabilization) for (const sample of wanted) slitScanSourceTransform(request.stabilization, sample.time);
+    return wanted;
   }
 
   private async prepare(entry: Entry) {
@@ -175,7 +190,11 @@ export class SourceTemporalRuntime {
         const time = temporalSourceTime(request.source, (tick + i) * step);
         future.add(entry.reader!.frames[Math.max(0, surfaceFrameIndex(entry.reader!.frames, time))].time);
       }
-      const pending = [...future].filter(time => !entry.slots.has(time));
+      const pending = [...future].filter(time => {
+        if (entry.slots.has(time)) return false;
+        try { if (request.stabilization) slitScanSourceTransform(request.stabilization, time); return true; }
+        catch (error) { if (error instanceof SlitScanTrackingGap) return false; throw error; }
+      });
       if (pending.length) entry.prefetch = entry.lease.request({ times: pending, priority: 'prefetch', signal, proxyFps,
         onFrame: frame => this.upload(entry, frame, new Set([...keys, ...future])),
       }).catch(error => {
@@ -194,7 +213,8 @@ export class SourceTemporalRuntime {
       if (!eviction) throw new Error('Source cache has no recyclable slot.');
       slot = eviction[1]; entry.slots.delete(eviction[0]); entry.proxyTimes.delete(eviction[0]);
     }
-    this.uploader.upload(frame, entry.atlas, slot);
+    this.uploader.upload(frame, entry.atlas, slot, entry.latest.stabilization
+      ? slitScanSourceTransform(entry.latest.stabilization, frame.time) : undefined);
     if ('image' in frame) entry.proxyTimes.add(frame.time);
     entry.slots.set(frame.time, slot); entry.revision++;
   }

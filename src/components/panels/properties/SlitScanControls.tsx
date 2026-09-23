@@ -9,11 +9,13 @@ import { ResolveInspectorRow, ResolveInspectorSection } from './resolveInspector
 import { Fragment, useSyncExternalStore } from 'react';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { getTemporalStatus, subscribeTemporalStatus } from '../../../effects/time/temporalResourcePreparation';
+import { SlitScanStabilizationControls } from './SlitScanStabilizationControls';
 
 export function SlitScanControls({ params, onChange, clipId, effectInstanceId }: EffectControlProps) {
   const setPropertyValue = useTimelineStore(state => state.setPropertyValue);
   const masks = useTimelineStore(state => state.clips.find(clip => clip.id === clipId)?.masks);
   const files = useMediaStore(state => state.files);
+  const selectedMask = masks?.find(mask => mask.id === params.protectionMask);
   const preparationStatus = useSyncExternalStore(subscribeTemporalStatus, () => getTemporalStatus(effectInstanceId ?? ''));
   const changeNumber = (key: string, value: number) => clipId && effectInstanceId
     ? setPropertyValue(clipId, `effect.${effectInstanceId}.${key}` as AnimatableProperty, value)
@@ -27,6 +29,7 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId }:
       <p className="effect-info">Both qualities use the same source times. Full size uses the full proxy resolution when timeline Proxy mode is on, otherwise the original resolution. Small preview scales to 160 px. Composition size stays unchanged.</p>
       {preparationStatus && <p className="effect-info" role="status">{preparationStatus}</p>}
     </ResolveInspectorSection>
+    <SlitScanStabilizationControls params={params} onChange={onChange} clipId={clipId} effectInstanceId={effectInstanceId} />
     <ResolveInspectorSection title="Time map source" defaultOpen>
       <ResolveInspectorRow label="Image / video"><InspectorSelect ariaLabel="Slit Scan time map source"
         value={String(params.mapMediaId ?? '')} options={[{ value: '', label: 'Profile only' },
@@ -37,8 +40,13 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId }:
     <ResolveInspectorSection title="Protection mask" defaultOpen>
       <ResolveInspectorRow label="Clip mask"><InspectorSelect ariaLabel="Slit Scan protection mask"
         value={String(params.protectionMask ?? '')} options={[{ value: '', label: 'None' },
+          ...(params.protectionMask && !selectedMask ? [{ value: String(params.protectionMask), label: 'Missing mask', disabled: true }] : []),
           ...(masks ?? []).filter(mask => mask.purpose !== 'crop').map(mask => ({ value: mask.id, label: mask.name }))]}
         onChange={value => onChange({ ...params, protectionMask: value })} /></ResolveInspectorRow>
+      {selectedMask && clipId && <ResolveInspectorNumberRow label="Mask feather" value={selectedMask.feather} defaultValue={30}
+        min={0} max={200} hardMin={0} hardMax={1000} numberMax={1000} step={1} suffix="px"
+        onChange={value => setPropertyValue(clipId, `mask.${selectedMask.id}.feather`, value)} />}
+      {selectedMask?.enabled === false && <p className="effect-info" role="status">This mask is disabled. Enable its Render switch in Masks to protect the object.</p>}
       <p className="effect-info">White protects the current frame. Use “Effect input only” in Masks to keep the full clip visible.</p>
     </ResolveInspectorSection>
     {['Time', 'Sampling', 'Time map', 'Subject protection', 'Protected center', 'Wave'].map(group => <ResolveInspectorSection key={group} title={group} defaultOpen={group === 'Time'}>

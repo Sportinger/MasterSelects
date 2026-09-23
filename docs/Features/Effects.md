@@ -33,7 +33,7 @@ shape, center and subject protection, time sampling and diagnostic previews. Onl
 new atomic operator; Slit Scan supplies timestamped source frames to it, not its previous output.
 Saved graph edits, effect bypass and numeric keyframes use the existing editor paths.
 
-- **Delay (s)**: maximum past-time offset, 0-4 seconds. Zero is unchanged.
+- **Delay (s)**: maximum past-time offset, 0-4 seconds. Zero removes time displacement; object stabilization, when enabled, still applies.
 - **Scan direction / Angle**: left-to-right (0 degrees), top-to-bottom (90 degrees),
   bottom-to-top (-90 degrees), right-to-left (180 degrees), or any diagonal angle.
 - **Profile**: Linear scan, Out from center, Wave / folds, Radial scan or Time rings.
@@ -41,7 +41,27 @@ Saved graph edits, effect bypass and numeric keyframes use the existing editor p
   image-height units, and feather. Radius zero disables protection.
 - **Wave**: number of waves, phase and animation speed in cycles per second.
 - **Time bands**: 0 or 1 keeps smooth time; 2-64 quantizes the map into stepped ages.
-- **Mix**: blend with the original input, including alpha.
+- **Mix**: blend with the current input, including alpha. With object stabilization enabled, both inputs share the stabilized reference coordinates.
+- **Object stabilization**: choose an existing tracking asset for the same source,
+  or select a clip mask around a textured object at a clear reference frame and
+  click **Track mask & stabilize**. **Create selection mask** provides an editable
+  starting rectangle; fit it in Masks before tracking. Tracking runs locally in
+  both directions over the trimmed source range. On completion, one undoable
+  operation saves the tracking asset, enables stabilization and creates a separate
+  **Slit Scan protection** mask with **New mask feather** (30 px by default).
+  The mask is automatically **Effect input only**, so it does not cut out the clip.
+  Cancellation or changing the source/selection during tracking keeps prior settings.
+  Position, rotation and size are aligned to **Reference (source s)** before
+  temporal sampling, for both the current frame and every historical source PTS.
+  **Strength**, **Rotation** and **Scale** adjust the correction. This is a planar
+  image alignment, not perspective correction or an object-shaped cutout; uncovered
+  image borders are transparent. Other mask shapes use their bounding quadrilateral
+  as the tracking area. The generated mask stays in reference coordinates; use
+  **Create protection mask** after changing the reference, or edit it in Masks.
+  Its **Mask feather** is also editable directly under Protection mask.
+  Missing/foreign tracking and uncovered delay windows report an explicit error;
+  preview bypasses the affected effect and export fails instead of inventing motion.
+  Choose **Off** to disable stabilization or author a new source selection.
 - **Source sampling** decodes the source video independently, applying clip trim
   and speed. Render preceding effects to an intermediate video to include them;
   arbitrary preceding effect stacks are not reevaluated.
@@ -54,7 +74,8 @@ Saved graph edits, effect bypass and numeric keyframes use the existing editor p
   export uses originals regardless of the preview Proxy switch. There is no
   rolling-history mode or playback-only temporal sampling fallback.
 - **Source-frame cache**: historical samples use an absolute clip-time grid,
-  with the current frame supplied by normal playback. Adjacent output frames reuse
+  with the current frame supplied by normal playback, or a dedicated source-cache
+  layer when object stabilization is active. Adjacent output frames reuse
   source PTS in a GPU texture array. A shared source-frame service coalesces requests
   from temporal consumers and borrows exact native VideoFrames already resident in
   the media runtime, without seeking the playback decoder. Missing frames use one
@@ -74,7 +95,8 @@ Saved graph edits, effect bypass and numeric keyframes use the existing editor p
   Small/full resolution use the same grid. The cache allocates the requested
   history plus up to four optional prefetch layers, with a two-frame allowance
   within 640 MiB across active owners (browser-managed decoder storage is separate).
-  For a single original 3840 × 2160 source this allows up to 19 total samples;
+  For a single original 3840 × 2160 source this allows up to 19 total samples
+  (18 with object stabilization, which also caches the current frame);
   1080p originals and 1280 × 720 proxies support 64. Oversized requests show an actionable inspector status and
   bypass only the affected effect in preview; the image and subsequent effects
   remain visible. Export fails explicitly rather than omitting the effect.

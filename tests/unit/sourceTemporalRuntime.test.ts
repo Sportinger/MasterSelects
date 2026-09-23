@@ -14,6 +14,8 @@ vi.mock('../../src/services/mediaRuntime/sourceFrames/SourceFrameService', () =>
 import { SourceTemporalRuntime, sourceTemporalWindow } from '../../src/effects/time/SourceTemporalRuntime';
 import { collectTemporalPreparations, getTemporalStatus } from '../../src/effects/time/temporalResourcePreparation';
 import type { SourceTemporalRequest } from '../../src/effects/time/SourceTemporalRuntime';
+import type { PlanarTrack, SurfaceQuad } from '../../src/types/planarTracking';
+import type { SlitScanStabilization } from '../../src/effects/time/slit-scan/stabilization';
 
 function setup() {
   vi.stubGlobal('GPUTextureUsage', { TEXTURE_BINDING: 1, COPY_DST: 2 });
@@ -32,6 +34,49 @@ async function prepare(runtime: SourceTemporalRuntime, request: SourceTemporalRe
   return runtime.resolve(request);
 }
 afterEach(() => { vi.clearAllMocks(); mock.proxySize.mockReset(); vi.unstubAllGlobals(); });
+
+function stabilization(identity = 'track:1'): SlitScanStabilization {
+  const quad: SurfaceQuad = [{ x: .2, y: .2 }, { x: .4, y: .2 }, { x: .4, y: .6 }, { x: .2, y: .6 }];
+  const track = { enabled: true, fps: 30, samples: Array.from({ length: 1000 }, (_, i) => ({ time: i / 30,
+    duration: 1 / 30, confidence: 1, quad: quad.map(p => ({ x: p.x + i / 3000, y: p.y })) as SurfaceQuad })) } as PlanarTrack;
+  return { identity, track, settings: { referenceTime: 0, strength: 1, position: true, rotation: true, scale: true }, width: 2, height: 1 };
+}
+
+it('aligns current and historical decoded PTS separately, including reverse playback', async () => {
+  const { runtime, request } = setup();
+  for (const speed of [1, -1]) {
+    const result = await prepare(runtime, { ...request, stabilization: stabilization(),
+      source: { ...request.source, localTime: 10.017, speed } });
+    expect(result?.current).toBeDefined();
+    for (const [frame, , , matrix] of mock.upload.mock.calls) {
+      expect(matrix[2]).toBeCloseTo(frame.time / 100);
+      expect(matrix[5]).toBeCloseTo(0);
+    }
+  }
+  runtime.destroy();
+});
+
+it('invalidates stabilized pixels on tracking changes and preserves the unstabilized path', async () => {
+  const { runtime, request, createTexture } = setup();
+  await prepare(runtime, { ...request, stabilization: stabilization() });
+  const atlas = createTexture.mock.results[0].value;
+  const count = mock.upload.mock.calls.length;
+  await prepare(runtime, { ...request, stabilization: stabilization('track:2') });
+  expect(atlas.destroy).toHaveBeenCalledOnce();
+  expect(mock.upload.mock.calls.length).toBeGreaterThan(count);
+  const plain = await prepare(runtime, request);
+  expect(plain?.current).toBeUndefined();
+  expect(mock.upload.mock.calls.at(-1)?.[3]).toBeUndefined();
+  runtime.destroy();
+});
+
+it('rejects uncovered source windows without permanently poisoning later valid seeks', async () => {
+  const { runtime, request } = setup();
+  const s = stabilization(); s.track.samples = s.track.samples.filter(sample => sample.time < 12);
+  await expect(prepare(runtime, { ...request, stabilization: s, source: { ...request.source, localTime: 20 } })).rejects.toThrow(/sample-gap/);
+  await expect(prepare(runtime, { ...request, stabilization: s })).resolves.toHaveProperty('current');
+  runtime.destroy();
+});
 
 it('reuses historical PTS during playback instead of decoding the whole window each output frame', async () => {
   const { runtime, request } = setup();
