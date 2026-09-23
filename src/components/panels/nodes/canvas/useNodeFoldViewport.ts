@@ -10,7 +10,10 @@ export function useNodeFoldViewport(canvas: RefObject<HTMLDivElement | null>, so
   shown: NodeGraph, bounds: NodeBounds, animating: boolean, visual: RefObject<Viewport>, setViewport: (next: Viewport) => void,
   groupBounds?: ReadonlyMap<string, NodeBounds>) {
   const savedViews = useRef(new Map<string, Viewport>());
-  const pending = useRef<{ graph: NodeGraph; collapsed: boolean; groupId?: string; restore?: Viewport; from: Viewport; started: number; width: number; height: number } | null>(null);
+  const pending = useRef<{ graph: NodeGraph; collapsed: boolean; groupId?: string; restore?: Viewport; from: Viewport; started: number; width: number; height: number; automatic?: boolean } | null>(null);
+  const previousFolds = useRef({ graph: source, states: new Map(source.groups?.map(group => [group.id, !!group.collapsed])) });
+  const sourceFoldsChanged = previousFolds.current.graph.id === source.id && !!source.groups?.some(group =>
+    previousFolds.current.states.has(group.id) && previousFolds.current.states.get(group.id) !== !!group.collapsed);
   const cancel = useCallback(() => { pending.current = null; }, []);
   const forget = useCallback(() => { cancel(); savedViews.current.clear(); }, [cancel]);
   useEffect(forget, [source.id, forget]);
@@ -34,9 +37,15 @@ export function useNodeFoldViewport(canvas: RefObject<HTMLDivElement | null>, so
     return () => { element?.removeEventListener('wheel', cancel, true); element?.removeEventListener('pointerdown', cancel, true); };
   }, [canvas, cancel]);
   useLayoutEffect(() => {
+    if (sourceFoldsChanged && !pending.current) {
+      const element = canvas.current;
+      if (element) pending.current = { graph: previousFolds.current.graph, collapsed: false, automatic: true,
+        from: { ...visual.current }, started: performance.now(), width: element.clientWidth, height: element.clientHeight };
+    }
+    previousFolds.current = { graph: source, states: new Map(source.groups?.map(group => [group.id, !!group.collapsed])) };
     const follow = pending.current, element = canvas.current;
     if (!follow || !element || follow.graph === source) return;
-    const matches = follow.groupId ? target.groups?.some(group => group.id === follow.groupId && !!group.collapsed === follow.collapsed)
+    const matches = follow.automatic ? true : follow.groupId ? target.groups?.some(group => group.id === follow.groupId && !!group.collapsed === follow.collapsed)
       : target.groups?.every(group => !!group.collapsed === follow.collapsed);
     if (follow.graph.id !== source.id || !matches) { cancel(); return; }
     const finished = !animating && shown === target;
@@ -46,10 +55,18 @@ export function useNodeFoldViewport(canvas: RefObject<HTMLDivElement | null>, so
     const focusBounds = follow.groupId && !follow.collapsed ? groupBounds?.get(follow.groupId) : bounds;
     if (!focusBounds) { if (finished) cancel(); return; }
     const fit = follow.restore ?? fittedNodeViewport(focusBounds, follow.width, follow.height);
+    if (follow.automatic) {
+      const current = visual.current, amount = finished ? 1 : 0.28;
+      setViewport({ zoom: current.zoom + (fit.zoom - current.zoom) * amount,
+        panX: current.panX + (fit.panX - current.panX) * amount,
+        panY: current.panY + (fit.panY - current.panY) * amount });
+      if (finished) cancel();
+      return;
+    }
     setViewport({ zoom: follow.from.zoom + (fit.zoom - follow.from.zoom) * t,
       panX: follow.from.panX + (fit.panX - follow.from.panX) * t,
       panY: follow.from.panY + (fit.panY - follow.from.panY) * t });
     if (finished) cancel();
-  }, [source, target, shown, bounds, groupBounds, animating, canvas, cancel, setViewport]);
-  return { request, cancel, forget, following: pending.current !== null };
+  }, [source, target, shown, bounds, groupBounds, animating, canvas, cancel, setViewport, sourceFoldsChanged, visual]);
+  return { request, cancel, forget, following: pending.current !== null || sourceFoldsChanged };
 }

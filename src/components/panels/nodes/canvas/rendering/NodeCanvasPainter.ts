@@ -3,6 +3,7 @@ import { paintBase, paintOverlay, type DrawContext, type CurveActivity } from '.
 import { NodeFlowClock } from './NodeFlowClock';
 import { NodePreviewPainter } from '../../previews/NodePreviewPainter';
 import { CanvasSceneVisibility } from './canvasSceneVisibility';
+import { NodeSceneMotion } from './NodeSceneMotion';
 
 /** Shared worker/software renderer. Two viewport layers keep all static content cached. */
 export class NodeCanvasPainter {
@@ -17,6 +18,7 @@ export class NodeCanvasPainter {
   private renderedViewRevision: number | undefined;
   private curveActivity = new Map<string, CurveActivity>();
   private flowClock = new NodeFlowClock();
+  private sceneMotion = new NodeSceneMotion();
   private base: DrawContext;
   private overlay: DrawContext;
   private previews?: NodePreviewPainter;
@@ -29,6 +31,7 @@ export class NodeCanvasPainter {
   update(message: Exclude<CanvasMessage, { type: 'init' | 'presented' }>) {
     if (message.type === 'previews') { this.previews?.receive(message.frames); return; }
     if (message.type === 'scene') {
+      this.sceneMotion.update(message.scene, performance.now());
       this.scene = message.scene; this.visibility = new CanvasSceneVisibility(message.scene); this.visibleScene = undefined; this.baseDirty = true;
       this.previews?.retain(new Set(this.scene.nodes.flatMap(node => node.preview ? [node.preview.key] : [])));
       const ids = new Set(this.scene.nodes.map(node => node.id));
@@ -51,7 +54,7 @@ export class NodeCanvasPainter {
     }
     this.overlayDirty = true;
   }
-  get animated() { return this.transport.visible && this.transport.active && !this.transport.reducedMotion; }
+  get animated() { return this.transport.visible && !this.transport.reducedMotion && (this.transport.active || this.sceneMotion.active); }
   get viewRevision() { return this.renderedViewRevision; }
   get previewCount() { return this.previews?.size ?? 0; }
   get hasOverlay() { return this.transport.visible && (this.animated || !!this.visibleScene?.nodes.some(node => node.curve)); }
@@ -60,8 +63,11 @@ export class NodeCanvasPainter {
   draw(now: number): boolean {
     if (!this.scene || !this.view || !this.theme) return false;
     const scene = this.visibleScene ??= this.visibility?.visible(this.view) ?? this.scene;
+    if (this.transport.reducedMotion) this.sceneMotion.clear();
+    const paintScene = this.sceneMotion.active ? this.sceneMotion.frame(scene, now) : scene;
+    if (this.sceneMotion.active || paintScene !== scene) this.baseDirty = true;
     const start = import.meta.env.DEV ? performance.now() : 0;
-    if (this.baseDirty) { paintBase(this.base, scene, this.view, this.theme); this.baseDirty = false; }
+    if (this.baseDirty) { paintBase(this.base, paintScene, this.view, this.theme); this.baseDirty = false; }
     const baseEnd = import.meta.env.DEV ? performance.now() : 0;
     if (this.overlayDirty || this.animated) { paintOverlay(this.overlay, scene, this.view, this.theme, this.transport, now, this.curveActivity, this.flowClock.advance(now)); this.overlayDirty = false; }
     const overlayEnd = import.meta.env.DEV ? performance.now() : 0;

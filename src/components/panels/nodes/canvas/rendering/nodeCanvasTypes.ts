@@ -16,6 +16,7 @@ export interface CanvasCurve extends Rect {
 }
 export interface CanvasNode extends Rect {
   id: string; label: string; description: string; kind: string; runtime: string;
+  appearance?: number; disappearing?: boolean;
   color: string; selected: boolean; bypassed: boolean; bypassable: boolean;
   badges: Array<{ label: string; tone: string }>; ports: CanvasPort[];
   curve?: CanvasCurve;
@@ -26,13 +27,14 @@ export interface CanvasNode extends Rect {
   preview?: Rect & { key: string; label: string; text?: boolean };
 }
 export interface CanvasCable {
+  id?: string; appearance?: number; disappearing?: boolean;
   occlusions?: Rect[];
   baked?: boolean;
   from: Point; to: Point; color: string; highlighted: boolean; draft?: boolean;
 }
 export interface CanvasPlug { center: Point; tip: Point; input: boolean; color: string; highlighted: boolean; ghost?: boolean }
 export interface CanvasGroup extends Rect { label: string; color: string; collapsed: boolean; count: string; bypassable?: boolean; bypassed?: boolean }
-export interface CanvasScene { nodes: CanvasNode[]; cables: CanvasCable[]; groups: CanvasGroup[]; plugs: CanvasPlug[] }
+export interface CanvasScene { graphId?: string; nodes: CanvasNode[]; cables: CanvasCable[]; groups: CanvasGroup[]; plugs: CanvasPlug[] }
 export interface CanvasTransport { playhead: number; playing: boolean; active: boolean; visible: boolean; reducedMotion: boolean; sourceTimes: Record<string, number>; playbackSpeed?: number; timestamp?: number }
 export type CanvasMessage =
   | { type: 'init' }

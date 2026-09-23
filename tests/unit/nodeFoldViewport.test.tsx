@@ -8,6 +8,29 @@ import type { NodeGraph } from '../../src/types/nodeGraph';
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('viewport following the actual fold animation', () => {
+  it('follows agent-driven group changes without a click request, then yields to a wheel gesture', () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    const canvas = document.createElement('div');
+    Object.defineProperties(canvas, { clientWidth: { value: 1200 }, clientHeight: { value: 700 } });
+    const element = { current: canvas }, visual = { current: { zoom: 1, panX: 0, panY: 0 } };
+    const change = vi.fn((value) => { visual.current = value; });
+    const group = { id: 'g', label: 'Group', proxyId: 'Source', nodeIds: ['Source'], collapsed: true };
+    const closed = { ...connectionFixture, groups: [group] };
+    const open = { ...closed, groups: [{ ...group, collapsed: false }] };
+    const bounds = (right: number) => ({ left: 0, top: 0, right, bottom: 300 });
+    const view = renderHook(({ source, shown, right, animating }: { source: NodeGraph; shown: NodeGraph; right: number; animating: boolean }) =>
+      useNodeFoldViewport(element, source, source, shown, bounds(right), animating, visual, change),
+    { initialProps: { source: closed, shown: closed, right: 900, animating: false } });
+    view.rerender({ source: open, shown: closed, right: 1800, animating: true });
+    expect(change).toHaveBeenCalled();
+    view.rerender({ source: open, shown: open, right: 4000, animating: false });
+    expect(change).toHaveBeenLastCalledWith(fittedNodeViewport(bounds(4000), 1200, 700));
+    view.rerender({ source: closed, shown: open, right: 1800, animating: true });
+    const count = change.mock.calls.length;
+    act(() => canvas.dispatchEvent(new WheelEvent('wheel')));
+    view.rerender({ source: closed, shown: closed, right: 900, animating: false });
+    expect(change).toHaveBeenCalledTimes(count);
+  });
   it('focuses one growing group and restores the viewport from before its expansion on collapse', () => {
     let now = 0;
     vi.spyOn(performance, 'now').mockImplementation(() => now);

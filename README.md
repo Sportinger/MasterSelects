@@ -145,10 +145,14 @@ Explore the [feature guide](docs/Features/README.md) for workflows and examples.
 Node cables have visible semicircular plugs, animated attachment, and docked ghost
 previews over compatible sockets while dragging. Drag either end to reconnect,
 or release on empty canvas to unplug editable links.
+Added nodes settle into place, removed nodes shrink away, and new cables draw from
+output to input. These graph edit animations also apply to agent changes and respect
+reduced motion settings.
 During playback and timeline scrubbing, light pulses and direction arrows show
 the flow from output to input. They fade when the timeline rests.
 Graph panning reuses unchanged nodes and cables; playback avoids repeated dock
 layout writes, tab measurements and effect evaluation for sibling parameter rows.
+The viewport follows groups as the agent opens or closes them and yields to manual navigation.
 Inline node previews start enabled, can be toggled individually or together, and
 preserve image aspect ratios. A shared worker canvas caches visible thumbnails;
 preview-aware placement finds room for newly created nodes while preserving manual

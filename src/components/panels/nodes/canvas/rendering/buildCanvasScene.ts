@@ -61,7 +61,7 @@ export function buildCanvasScene(options: Options): CanvasScene {
   const { graph, nodes, plugs, draft, hoveredPort } = options;
   const bounds = options.groupBounds ?? nodeGroupBounds(graph, options.groupFrameNodes ?? nodes);
   const occlusions = createEdgeGroupOcclusion(graph, bounds);
-  const scene: CanvasScene = { nodes: [], cables: [], groups: [], plugs: [] };
+  const scene: CanvasScene = { graphId: graph.id, nodes: [], cables: [], groups: [], plugs: [] };
   for (const group of graph.groups ?? []) {
     if (group.collapsed) continue;
     const b = bounds.get(group.id);
@@ -94,7 +94,7 @@ export function buildCanvasScene(options: Options): CanvasScene {
   }
   for (const [id, pair] of pairs) {
     if (!pair.output || !pair.input || (draft?.moved && draft.reconnectEdgeId === id)) continue;
-    scene.cables.push({ ...makeCanvasCable(pair.output.tip, pair.input.tip, describeNodePort(pair.output.port).color, id === options.selectedEdgeId || id === options.hoveredEdgeId),
+    scene.cables.push({ ...makeCanvasCable(pair.output.tip, pair.input.tip, describeNodePort(pair.output.port).color, id === options.selectedEdgeId || id === options.hoveredEdgeId), id,
       occlusions: occlusions(pair.output.edge),
       baked: pair.output.edge.readOnly });
   }

@@ -28,10 +28,20 @@ function text(ctx: DrawContext, value: string, x: number, y: number, max: number
 }
 function drawCable(ctx: DrawContext, cable: CanvasCable, zoom: number, opacity?: number) {
   const { from, to } = cable, h = Math.max(72, Math.abs(to.x - from.x) * 0.42);
-  ctx.strokeStyle = cable.color; ctx.globalAlpha = opacity ?? (cable.highlighted ? 1 : 0.55);
+  const appearance = cable.appearance ?? 1;
+  ctx.strokeStyle = cable.color; ctx.globalAlpha = (opacity ?? (cable.highlighted ? 1 : 0.55)) * (cable.disappearing ? appearance : 1);
   ctx.lineWidth = (cable.highlighted ? 2 : 1.25) / zoom;
   ctx.setLineDash(cable.draft ? [5 / zoom, 4 / zoom] : cable.baked ? [4 / zoom, 4 / zoom] : []);
-  ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.bezierCurveTo(from.x + h, from.y, to.x - h, to.y, to.x, to.y); ctx.stroke(); ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(from.x, from.y);
+  if (!cable.disappearing && appearance < 1) {
+    const steps = Math.max(2, Math.ceil(appearance * 36));
+    for (let index = 1; index <= steps; index++) {
+      const point = cablePoint(from, to, appearance * index / steps);
+      ctx.lineTo(point.x, point.y);
+    }
+  } else ctx.bezierCurveTo(from.x + h, from.y, to.x - h, to.y, to.x, to.y);
+  ctx.stroke(); ctx.setLineDash([]);
+  if (appearance < 1 && !cable.disappearing) { ctx.globalAlpha = 1; return; }
   const middle = cablePoint(from, to, 0.5), angle = Math.atan2(to.y - from.y, to.x - from.x - h);
   ctx.save(); ctx.translate(middle.x, middle.y); ctx.rotate(angle); ctx.lineWidth = 1.3 / zoom;
   ctx.beginPath(); ctx.moveTo(-3 / zoom, -3 / zoom); ctx.lineTo(0, 0); ctx.lineTo(-3 / zoom, 3 / zoom); ctx.stroke(); ctx.restore(); ctx.globalAlpha = 1;
@@ -74,7 +84,13 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
   }
   for (const node of scene.nodes) {
     if (!inView(node, view)) continue;
-    ctx.save(); ctx.translate(node.x, node.y); ctx.globalAlpha = node.bypassed ? 0.72 : 1;
+    ctx.save(); ctx.translate(node.x, node.y);
+    const appearance = node.appearance ?? 1;
+    if (appearance < 1) {
+      const scale = node.disappearing ? 0.94 + appearance * 0.06 : 0.88 + appearance * 0.12;
+      ctx.translate(node.width / 2, node.height / 2); ctx.scale(scale, scale); ctx.translate(-node.width / 2, -node.height / 2);
+    }
+    ctx.globalAlpha = (node.bypassed ? 0.72 : 1) * appearance;
     box(ctx, 0, 0, node.width, node.height, 6); ctx.fillStyle = theme.card; ctx.fill(); ctx.strokeStyle = node.selected ? theme.accent : theme.border;
     ctx.lineWidth = node.selected ? 2 : 1; ctx.stroke(); ctx.clip();
     ctx.fillStyle = node.color; ctx.fillRect(0, 0, node.width, 3);
