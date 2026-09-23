@@ -50,7 +50,7 @@ the same time, on the same branch. Therefore:
 - Agents may start or restart the shared dev environment (`npm run dev:full`)
   when the task requires it. Resolve the exact MasterSelects process tree and
   never stop unrelated Node processes; after every restart, wait for all four
-  services and re-read the rotated bridge token before continuing.
+  services; if using the optional bridge, re-read its rotated token.
 - Never close a browser window or tab yourself, including windows or tabs the
   agent opened for setup, authentication, verification, or testing. Leave them
   open for the user unless the user explicitly asks you to close the specific
@@ -74,7 +74,9 @@ implementation choices, or mandatory user testing.
    the workspace, or an action exceeds the user's authorization.
 2. **Verify it yourself.** Run the cheapest checks that actually cover the
    change. For behavior changes, use targeted tests and the running editor
-   where useful. Reuse one existing test tab and run scenarios sequentially;
+   where useful. Use normal browser automation and the visible editor UI by
+   default; the AI bridge is optional, not a prerequisite for testing. Reuse
+   one existing test tab and run scenarios sequentially;
    open another only when isolation is technically necessary, explaining why
    before opening it. The running local editor at `https://localhost:5173/editor`
    is explicitly authorized by the user as a test project. Test product behavior
@@ -129,15 +131,26 @@ forward and verify it yourself.
 | Local API (wrangler pages dev + local D1) | `http://127.0.0.1:8788` |
 | Logic Codex app-server | `ws://127.0.0.1:4500` |
 
-- Starting dev:full **rotates `.ai-bridge-token`** — always read the token
-  fresh from the file.
+- Starting dev:full **rotates `.ai-bridge-token`** — when using the optional
+  bridge, read the token fresh from the file.
 - `npm run dev:lan` serves the same stack over HTTPS on the LAN so a real
   iPad/phone can be tested and driven through the bridge. Requires a TLS pair
   in `.certs/` with **≤398 days** validity (Apple rejects longer ones with a
   fatal TLS error). Full setup: `docs/Features/LAN-Device-Testing.md`.
 - Vite, kernel, and wrangler logs are interleaved in the dev:full console.
 
-## 4. AI bridge — reaching the running editor
+## 4. Browser testing and optional AI bridge
+
+Use the normal browser to operate and verify the running editor. Prefer its
+visible controls for timeline editing, effects, playback/seek, camera navigation,
+reload, and export. Browser automation is explicitly supported; a bridge
+connection or bridge-specific skill is not required. Reuse the existing test
+tab and inspect the rendered result. If the user requests browser-only testing,
+do not use the bridge for that task.
+
+The AI bridge below is an optional diagnostic/automation transport when useful
+and consistent with the user's instructions. Its absence is not a blocker when
+the same check can be completed in the browser.
 
 The dev server exposes the live editor to agents. Two transports, same
 Bearer token from `.ai-bridge-token` in the repo root:
@@ -188,16 +201,16 @@ Full-app debugging: with an explicit `sessionId` and `confirm: true`, use `captu
 
 Calling an editor tool directly proves only that tool. For any change to
 prompts, playbooks, tool schemas, chat history handling, kernel routing, or
-the provider loop, run the complete in-app agent through the bridge:
+the provider loop, run the complete in-app agent in the browser:
 
-1. `bridge_list_sessions`, then `bridge_select_session` — pin the intended
-   project/timeline explicitly.
-2. Start the run with `bridge_send_chat_message` (pick the model class with
-   `bridge_set_chat_model_class` when it matters) and inspect the
-   finished run yourself; this is the pre-commit verification for kernel-affecting work.
-3. Read the finished run via `bridge_get_history` and the bridge audit
-   endpoints: resolved prompt, ordered tool calls, arguments, results,
-   status, timing.
+1. Select the intended browser tab and verify its project/timeline.
+2. Send the message through the in-app chat UI (select the model class there
+   when it matters) and inspect the finished run yourself; this is the
+   pre-commit verification for kernel-affecting work.
+3. Review the finished chat and the corresponding audit evidence (section 6):
+   resolved prompt, ordered tool calls, arguments, results, status, timing.
+   The optional bridge history/audit endpoints may supplement this review
+   unless the user requested browser-only testing.
 4. Classify a failure before editing code: prompt/playbook, history/
    continuity, tool schema/result size, policy/approval, or provider-loop
    orchestration. Never patch the system prompt to mask a non-prompt defect.
