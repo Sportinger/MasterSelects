@@ -28,11 +28,12 @@ const MAX_PLANS = 32;
 const signature = (value: unknown) => JSON.stringify(value, (_key, item) =>
   typeof item === 'number' && (!Number.isFinite(item) || Object.is(item, -0))
     ? { imageParameterNumber: Object.is(item, -0) ? '-0' : String(item) } : item);
-const motionResources = (graph: EffectOperatorGraph, params: Record<string, unknown>, effect: ImageEffect) => signature([imageFilterShortcutKey(graph, params, effectOperatorCompileContext(effect)), graph.nodes
+export const imagePlanResourceSignature = (graph: EffectOperatorGraph, params: Record<string, unknown>, effect: ImageEffect) => signature([imageFilterShortcutKey(graph, params, effectOperatorCompileContext(effect)), graph.nodes
   .filter(node => node.operator === 'image.source-motion').map(node => ['lookback', 'timeFactor', 'stabilize', 'required', 'denseInverseSearch'].map(key => {
     const binding = node.bindings[key];
     return typeof binding === 'string' ? params[binding] : node.constants?.[key];
   }))]);
+export const imagePlanSupportsValueRebinding = (graph: EffectOperatorGraph) => !graph.nodes.some(node => node.operator === 'glyph.atlas' || node.operator === 'source.memory-window');
 
 /** Prepare once per graph revision; animated values only refill uniform slots. */
 export function prepareImageEffect(effect: ImageEffect): PreparedImageEffect {
@@ -44,7 +45,7 @@ export function prepareImageEffect(effect: ImageEffect): PreparedImageEffect {
   if (cached && cached.definition === definition) {
     plans.delete(key); plans.set(key, cached);
     if (cached.parameterSignature === parameterSignature) return cached.prepared;
-    if (cached.uniformsOnly && cached.prepared.plan && cached.motionResourceSignature === motionResources(cached.prepared.graph, params, effect)) {
+    if (cached.uniformsOnly && cached.prepared.plan && cached.motionResourceSignature === imagePlanResourceSignature(cached.prepared.graph, params, effect)) {
       const context = effectOperatorCompileContext(effect);
       validateImageOperatorValues(cached.prepared.graph, params, context);
       const prepared = { graph: cached.prepared.graph, plan: bindImageOperatorValues(cached.prepared.plan, params, context) };
@@ -60,9 +61,9 @@ export function prepareImageEffect(effect: ImageEffect): PreparedImageEffect {
   const plan = graph.incomplete ? undefined : compileImageOperatorGraph(graph, params, effectOperatorCompileContext(effect));
   const prepared = { graph, plan };
   // Atlas/byte-resource metadata can depend on params, not just uniform values.
-  const uniformsOnly = !graph.nodes.some(node => node.operator === 'glyph.atlas' || node.operator === 'source.memory-window');
+  const uniformsOnly = imagePlanSupportsValueRebinding(graph);
   plans.delete(key);
-  const entry = { definition, parameterSignature, prepared, uniformsOnly, motionResourceSignature: motionResources(graph, params, effect), previews: new Map() };
+  const entry = { definition, parameterSignature, prepared, uniformsOnly, motionResourceSignature: imagePlanResourceSignature(graph, params, effect), previews: new Map() };
   plans.set(key, entry);
   graphEntries.set(graph, entry);
   if (plans.size > MAX_PLANS) plans.delete(plans.keys().next().value!);

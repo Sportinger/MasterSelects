@@ -3,7 +3,7 @@ import { useTimelineStore } from '../../../../stores/timeline';
 import { findClipOperatorEffect } from '../../../../services/operators/clipOperatorGraphOwner';
 import type { TimelineClip } from '../../../../types/timeline';
 import type { EffectOperatorGraph } from '../../../../types/operatorGraph';
-import { effectOperatorGraph } from '../../../../services/operators/effectGraphOwner';
+import { useInspectorEffectGraph } from './useInspectorEffectGraph';
 import { sceneGraphForClip } from '../../../../services/operators/sceneGraph';
 import { editEffectGraph } from '../../../../services/operators/effectGraphEditing';
 import { editSceneGraph } from '../../../../services/operators/sceneGraphEditing';
@@ -17,10 +17,13 @@ import { ResolveInspectorSection, ResolveInspectorRow, ResolveInspectorIconButto
 export function OperatorGroupParameters({ clip, groupId, effectId }: { clip: TimelineClip; groupId: string; effectId?: string }) {
   const clips = useTimelineStore(state => state.clips);
   const effect = effectId ? findClipOperatorEffect(clip, effectId, clips) : undefined;
-  const graph = effect ? effectOperatorGraph(effect) : sceneGraphForClip(clip).graph;
-  const id = groupId.split('/').at(-1)!, group = graph.groups?.find(g => g.id === id);
+  const prepared = useInspectorEffectGraph(effect);
+  const graph = effect ? prepared.graph : sceneGraphForClip(clip).graph;
+  const id = groupId.split('/').at(-1)!, group = graph?.groups?.find(g => g.id === id);
   const [name, setName] = useState(group?.label ?? ''), [message, setMessage] = useState('');
   useEffect(() => { setName(group?.label ?? ''); }, [group?.label, groupId]);
+  if (prepared.error) return <p role="alert">{prepared.error}</p>;
+  if (!graph) return <p role="status">Preparing graph controls…</p>;
   if (!group) return null;
   const renderer = operatorGroupRenderer(graph, id);
   const canBypass = !!effectId && (!!renderer || !!operatorGroupBypassRoutes(graph, group));

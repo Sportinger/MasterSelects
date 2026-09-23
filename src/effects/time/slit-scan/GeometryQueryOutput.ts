@@ -3,6 +3,8 @@ import { effectOperatorCompileContext, effectOperatorParams } from '../../../ser
 import { slitScanGeometryQuery } from './geometryContract';
 import type { SlitScanGeometryCapture } from './geometryCapture';
 import { slitScanGeometryMotionGraph } from '../../../services/operators/slitScanGeometryMotionGraph';
+import { bindImageOperatorValues, validateImageOperatorValues } from '../../../services/operators/imageOperatorValueBindings';
+import { imagePlanResourceSignature, imagePlanSupportsValueRebinding } from '../../../services/operators/imageEffectRuntimePlan';
 
 /** Numeric query output shares the exact evaluated graph and source resources
  * with color. It never reads back pixels or creates a second source history. */
@@ -12,16 +14,26 @@ export class GeometryQueryOutput {
   private device?: GPUDevice;
   private runtime?: SlitScanGeometryCapture['passRuntime'];
   private instanceId?: string;
-  private compiled?: { key: string; graph: SlitScanGeometryCapture['graph']; plan: ReturnType<typeof compileImageOperatorGraph> };
+  private compiled?: { key: string; values: string; resources: string; graph: SlitScanGeometryCapture['graph']; plan: ReturnType<typeof compileImageOperatorGraph> };
 
   capture(frame: SlitScanGeometryCapture, samplerId: string, motion = false): GPUTextureView | undefined {
     if (!frame.source) throw new Error('Slit Scan geometry requires a source video.');
     const params = effectOperatorParams(frame.effect);
-    const key = JSON.stringify([frame.graph, params, frame.effect.type, samplerId, motion]);
+    const key = JSON.stringify([frame.graph, frame.effect.type, samplerId, motion]);
+    const values = JSON.stringify(params);
+    const context = effectOperatorCompileContext(frame.effect);
     if (this.compiled?.key !== key) {
       const graph = motion ? slitScanGeometryMotionGraph(frame.graph, samplerId) : slitScanGeometryQuery(frame.graph, samplerId);
-      const plan = compileImageOperatorGraph(graph, params, effectOperatorCompileContext(frame.effect));
-      this.compiled = { key, graph, plan };
+      const plan = compileImageOperatorGraph(graph, params, context);
+      this.compiled = { key, values, graph, plan, resources: imagePlanResourceSignature(graph, params, frame.effect) };
+    } else if (this.compiled.values !== values) {
+      const cached = this.compiled;
+      const resources = imagePlanResourceSignature(cached.graph, params, frame.effect);
+      validateImageOperatorValues(cached.graph, params, context);
+      const plan = imagePlanSupportsValueRebinding(cached.graph) && resources === cached.resources
+        ? bindImageOperatorValues(cached.plan, params, context)
+        : compileImageOperatorGraph(cached.graph, params, context);
+      this.compiled = { ...cached, values, resources, plan };
     }
     const { graph, plan } = this.compiled;
     const resources = new Map(frame.resources);

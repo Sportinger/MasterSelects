@@ -124,7 +124,7 @@ export function effectOperatorCompileContext(effect: Pick<EffectGraphOwner, 'typ
   return context;
 }
 
-export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGraph {
+export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspectionOnly?: boolean } = {}): EffectOperatorGraph {
   if (effect.type === 'splat-exploration') {
     const graph = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], () => defaultSplatGraph(true).graph);
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
@@ -219,7 +219,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner): EffectOperatorGra
     const graph = expandOperatorCompositions(migrateImageOperatorGraph(composed));
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
     if (errors.length) throw new Error(errors[0]);
-    if (!graph.incomplete) compileImageOperatorGraph(graph, effectOperatorParams(effect), effectOperatorCompileContext(effect));
+    if (!graph.incomplete && !options.inspectionOnly) compileImageOperatorGraph(graph, effectOperatorParams(effect), effectOperatorCompileContext(effect));
     return graph;
   }
   const params = effectOperatorCompileParams(effect);

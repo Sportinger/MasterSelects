@@ -18,7 +18,7 @@ describe('image effect runtime plan reuse', () => {
     expect(initial.plan).toEqual(freshPlan(effect));
   });
 
-  it('updates every Fisheye uniform without re-lowering, mutating old frames or changing the shader', () => {
+  it('matches fresh Fisheye plans across branch changes and rebinds uniforms without mutating old frames', () => {
     const effect = { type: 'fisheye', params: {} };
     const initial = prepareImageEffect(effect).plan!;
     const saved = [...initial.values];
@@ -28,9 +28,14 @@ describe('image effect runtime plan reuse', () => {
         rotation: 37, preserveAspect: false, outside: 'transparent', feather: .15, edgeMode: 'mirror',
         edgeFeather: .04, chromaticAberration: .03, vignette: .4, vignetteSoftness: .3, samples: 8 } };
       const animated = prepareImageEffect(changed).plan!;
-      expect(animated.instructions).toBe(initial.instructions);
-      expect(animated.sampleScopes).toBe(initial.sampleScopes);
       expect(animated).toEqual(freshPlan(changed));
+      // Optimized branches may change above (e.g. zero aberration to nonzero).
+      // A numeric change within the same branches must only rebind uniforms.
+      const rotated = { ...changed, params: { ...changed.params, rotation: 38 } };
+      const rebound = prepareImageEffect(rotated).plan!;
+      expect(rebound.instructions).toBe(animated.instructions);
+      expect(rebound.sampleScopes).toBe(animated.sampleScopes);
+      expect(rebound).toEqual(freshPlan(rotated));
       const definition = imageGraphDefinition(changed, fisheye as FullscreenEffectDefinition, 3, animated);
       expect(definition.packUniforms({}, 1280, 720)?.slice(0, animated.values.length))
         .toEqual(new Float32Array(animated.values));

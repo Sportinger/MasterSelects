@@ -5,6 +5,7 @@ import { HandleOnlyRange } from '../transformTab/HandleOnlyRange';
 import { ResolveInspectorIconButton, ResolveInspectorRow, ResolveResetIcon } from './ResolveInspectorPrimitives';
 import './ResolveInspector.css';
 import './ResolveInspectorNarrow.css';
+import { useInspectorHistoryBatch } from './useInspectorHistoryBatch';
 
 interface ResolveInspectorNumberRowProps {
   label: string;
@@ -38,6 +39,7 @@ export function ResolveInspectorNumberRow({
   persistenceKey, onChange, onReset, keyframeToggle, actions, suffix, decimals, sensitivity = 2,
   onDragStart, onDragEnd, onCommit, numberMax = max, hardMin = -Infinity, hardMax = Infinity,
 }: ResolveInspectorNumberRowProps) {
+  const drag = useInspectorHistoryBatch(label, onDragStart, onDragEnd);
   useEditableDraggableNumberSettingsRevision(persistenceKey);
   const range = getEffectiveEditableDraggableNumberSettings({ persistenceKey, min, max, defaultValue });
   const effectiveMin = Math.max(hardMin, Math.min(hardMax, range.min ?? min));
@@ -53,11 +55,11 @@ export function ResolveInspectorNumberRow({
   </>}>
     <div className="resolve-inspector-slider-value">
       <HandleOnlyRange aria-label={`${ariaLabel} slider`} value={value} min={effectiveMin} max={effectiveMax}
-        step={step} disabled={disabled} onChange={change} onDragStart={onDragStart}
-        onDragEnd={() => { onDragEnd?.(); onCommit?.('drag'); }} />
+        step={step} disabled={disabled} onChange={change} onDragStart={drag.begin}
+        onDragEnd={() => { drag.end(); onCommit?.('drag'); }} />
       <LabeledValue label="" ariaLabel={ariaLabel} className="resolve-inspector-field resolve-inspector-field--plain"
         value={value} defaultValue={defaultValue} min={min} max={numberMax} decimals={decimals ?? (step >= 1 ? 0 : 3)} suffix={suffix}
-        sensitivity={sensitivity} onDragStart={onDragStart} onDragEnd={onDragEnd} onCommit={onCommit} touchDragAxis="horizontal" disabled={disabled} persistenceKey={persistenceKey}
+        sensitivity={sensitivity} onDragStart={drag.begin} onDragEnd={drag.end} onCommit={onCommit} touchDragAxis="horizontal" disabled={disabled} persistenceKey={persistenceKey}
         onChange={change} />
     </div>
   </ResolveInspectorRow>;

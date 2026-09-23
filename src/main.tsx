@@ -15,6 +15,9 @@ import {
 } from './routing/entryExperience'
 import { installChunkLoadRecovery } from './runtime/chunkLoadRecovery'
 import { createReactRootErrorHandlers } from './services/diagnostics/diagnosticReporter'
+import { configureInspectorGraphWorker } from './services/operators/inspectorGraphClient'
+
+configureInspectorGraphWorker(() => new Worker(new URL('./workers/inspectorGraphWorker.ts', import.meta.url), { type: 'module' }));
 
 installChunkLoadRecovery();
 

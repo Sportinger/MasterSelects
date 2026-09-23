@@ -5,7 +5,8 @@ import { interpolateKeyframes } from '../../../../utils/keyframeInterpolation';
 import { useState } from 'react';
 import type { TimelineClip } from '../../../../types/timeline';
 import { useTimelineStore } from '../../../../stores/timeline';
-import { effectOperatorGraph, effectOperatorParams, addableEffectOperators, isImageGraphEffectType } from '../../../../services/operators/effectGraphOwner';
+import { effectOperatorParams, addableEffectOperators, isImageGraphEffectType } from '../../../../services/operators/effectGraphOwner';
+import { useInspectorEffectGraph } from './useInspectorEffectGraph';
 import { VOXEL_RELIEF_PARAMS } from '../../../../effects/stylize/voxel-relief/parameters';
 import { getEffectOperator } from '../../../../services/operators/operatorRegistry';
 import { createEffectGraphActions, editEffectGraph, setOperatorConstant, setOperatorVariant } from '../../../../services/operators/effectGraphEditing';
@@ -35,11 +36,12 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
   const [message, setMessage] = useState('');
   const time = useTimelineStore(s => s.playheadPosition - clip.startTime);
   const keys = useTimelineStore(s => s.clipKeyframes.get(clip.id) ?? EMPTY_KEYS);
-  const isRecording = useTimelineStore(s => s.isRecording);
   const effect = findClipOperatorEffect(clip, effectId);
+  const prepared = useInspectorEffectGraph(effect);
   if (!effect) return null;
-  let graph;
-  try { graph = effectOperatorGraph(effect); } catch (error) { return <p role="alert">{String(error)}</p>; }
+  if (prepared.error) return <p role="alert">{prepared.error}</p>;
+  const graph = prepared.graph;
+  if (!graph) return <p role="status">Preparing graph controls…</p>;
   const node = graph.nodes.find(n => n.id === nodeId), operator = node && getEffectOperator(node.operator);
   if (!node || !operator) return null;
   const evaluatedParams = effectOperatorParams(effect);
@@ -51,7 +53,7 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
   const safely = (action: () => void) => { try { action(); setMessage(''); } catch (error) { setMessage(String(error)); } };
   const set = (key: string, value: OperatorValue) => safely(() => {
     const property = `effect.${effectId}.${key}` as Keyframe['property'];
-    if (typeof value === 'number' && (isRecording(clip.id, property) || keys.some(k => k.property === property))) readTimelineRuntimeState(useTimelineStore).addKeyframe(clip.id, property, value);
+    if (typeof value === 'number') readTimelineRuntimeState(useTimelineStore).setPropertyValue(clip.id, property, value);
     else editEffectGraph(clip.id, effectId, 'Edit node parameter', (_, params) => { params[key] = value; });
   });
   const numberRow = (key: string, label: string, value: number, fallback: number, min = -30, max = 30, step = 0.01, animatable = true) =>
@@ -140,10 +142,9 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
 /** The effect form is another view of the same graph parameter bindings. */
 export function AdditionalOperatorControls({ clipId, effectId }: { clipId: string; effectId: string }) {
   const clip = useTimelineStore(s => s.clips.find(c => c.id === clipId));
-  if (!clip) return null;
-  const effect = clip.effects.find(e => e.id === effectId); if (!effect) return null;
-  let graph;
-  try { graph = effectOperatorGraph(effect); } catch { return null; }
+  const effect = clip?.effects.find(e => e.id === effectId);
+  const { graph } = useInspectorEffectGraph(effect);
+  if (!clip || !effect || !graph) return null;
   return <>{graph.nodes.filter(n => n.id !== 'wind' && ((getEffectOperator(n.operator)?.addable && Boolean(getEffectOperator(n.operator)?.parameters.length) && n.id !== 'calibration') || ['tracking.smooth', 'geometry.merge-surface'].includes(n.operator)))
     .map(n => <OperatorParameters key={n.id} clip={clip} effectId={effectId} nodeId={n.id} />)}</>;
 }

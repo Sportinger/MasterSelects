@@ -49,6 +49,8 @@ Slit Scan's temporary reference view yields to scene-camera navigation, so orbit
 
 Effect and node numeric drags coalesce input per animation frame and retain the final released value. Effect inspectors write only changed parameters instead of rewriting the entire parameter snapshot.
 
+[Inspector graph preparation](docs/Features/Inspector-Performance.md) runs in a shared worker for image effects. Numeric drags share one undo transaction, and ordinary geometry value changes reuse compiled instructions.
+
 Slit Scan's 3D time surface can use resolved source-frame times and blend weights for depth, without DIS or a calibration image. This visualizes temporal sampling; it does not reconstruct object motion or physical scene depth.
 
 The Slit Scan **Motion-deformed surface** additionally follows image points through forward/backward source motion, so motion can stretch and shear the grid over time. It preserves stationary areas; untracked regions can keep their original position or leave diagnostic gaps.

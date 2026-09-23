@@ -1,0 +1,38 @@
+<!doctype html><meta charset="utf-8"><title>Inspector graph worker probe</title>
+<pre id="result">Preparing worker probe…</pre>
+<script type="module">
+import { InspectorGraphQueue } from '/src/services/operators/inspectorGraphQueue.ts';
+import { effectOperatorGraph } from '/src/services/operators/effectGraphOwner.ts';
+import { getDefaultParams } from '/src/effects/index.ts';
+const output = document.querySelector('#result');
+const input = { type: 'slit-scan', params: getDefaultParams('slit-scan') };
+const start = performance.now();
+const reference = effectOperatorGraph(input);
+const previousMainThreadMs = performance.now() - start;
+let posts = 0, ticks = 0;
+const timer = setInterval(() => ticks++, 10);
+const queue = new InspectorGraphQueue(() => {
+  const worker = new Worker(new URL('/src/workers/inspectorGraphWorker.ts', location.href), { type: 'module' });
+  const post = worker.postMessage.bind(worker);
+  worker.postMessage = message => { posts++; post(message); };
+  return worker;
+});
+const wait = (key, values) => new Promise((resolve, reject) => {
+  let close;
+  const update = () => {
+    const result = queue.read(key);
+    if (result.error) { close?.(); reject(new Error(result.error)); }
+    if (result.graph) { close?.(); resolve(result); }
+  };
+  close = queue.subscribe(key, values, update); update();
+});
+try {
+  const result = await wait('default', input);
+  for (let angle = 0; angle < 100; angle++) await wait('default', { ...input, params: { ...input.params, angle } });
+  const exactGraph = JSON.stringify(reference) === JSON.stringify(result.graph);
+  output.textContent = JSON.stringify({ pass: exactGraph && posts === 1 && ticks > 0,
+    exactGraph, workerJobsFor101Reads: posts, responsiveTimerTicks: ticks,
+    previousMainThreadMs, workerNormalizationMs: result.durationMs, nodes: result.graph.nodes.length }, null, 2);
+} catch (error) { output.textContent = String(error.stack ?? error); }
+finally { clearInterval(timer); }
+</script>

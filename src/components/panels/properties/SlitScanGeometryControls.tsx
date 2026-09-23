@@ -2,7 +2,7 @@ import { useMemo, useSyncExternalStore } from 'react';
 import type { EffectControlProps } from '../../../effects/types';
 import { slitScanGeometryParams } from '../../../effects/time/slit-scan/geometryParameters';
 import { createSlitScanReference } from '../../../effects/time/slit-scan/geometryReference';
-import { effectOperatorGraph } from '../../../services/operators/effectGraphOwner';
+import { useInspectorEffectGraph } from '../nodes/workspace/useInspectorEffectGraph';
 import { findClipOperatorEffect } from '../../../services/operators/clipOperatorGraphOwner';
 import type { EffectOperatorGraph } from '../../../types/operatorGraph';
 import { useTimelineStore } from '../../../stores/timeline';
@@ -21,10 +21,9 @@ export function SlitScanGeometryControls({ params, onChange, clipId, effectInsta
     state.clips.find(clip => clip.id === clipId), effectInstanceId ?? '', state.clips,
   )?.params);
   const graphParams = authoredParams ?? params;
-  const samplerState = useMemo(() => {
-    try { return { samplers: effectOperatorGraph({ type: 'slit-scan', params: graphParams, operatorGraph }).nodes.filter(node => node.operator === 'image.sample-history').map(node => node.id), error: '' }; }
-    catch (error) { return { samplers: [], error: String(error) }; }
-  }, [operatorGraph, graphParams]);
+  const prepared = useInspectorEffectGraph({ type: 'slit-scan', params: graphParams, operatorGraph });
+  const samplerState = useMemo(() => ({ samplers: prepared.graph?.nodes
+    .filter(node => node.operator === 'image.sample-history').map(node => node.id) ?? [], error: prepared.error }), [prepared]);
   const { samplers } = samplerState;
   const status = useSyncExternalStore(subscribeTemporalStatus, () => getTemporalStatus(`${effectInstanceId}:geometry`) || getTemporalStatus(effectInstanceId ?? ''));
   const motionStatus = useSyncExternalStore(subscribeTemporalStatus, () => getTemporalStatus(`${effectInstanceId}:dis`));
@@ -47,6 +46,7 @@ export function SlitScanGeometryControls({ params, onChange, clipId, effectInsta
     <ResolveInspectorRow label="Representation"><InspectorSelect ariaLabel="Slit Scan representation" value={mode}
       options={slitScanGeometryParams.geometryMode.options!} onChange={changeMode} /></ResolveInspectorRow>
     {mode !== '2d' && <>
+      {!prepared.graph && !prepared.error && <p role="status" className="tracking-panel-status">Preparing graph controls…</p>}
       {samplerState.error && <p role="status" className="tracking-panel-status">{samplerState.error}</p>}
       <ResolveInspectorRow label="Base time sampler"><InspectorSelect ariaLabel="Slit Scan base time sampler"
         value={String(params.geometrySampler ?? '')} options={[{ value: '', label: 'Select sampler…' }, ...samplers.map(value => ({ value, label: value }))]}
