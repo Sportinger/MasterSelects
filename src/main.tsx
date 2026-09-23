@@ -21,6 +21,13 @@ configureInspectorGraphWorker(() => new Worker(new URL('./workers/inspectorGraph
 
 installChunkLoadRecovery();
 
+document.addEventListener('pointerdown', () => {
+  document.documentElement.classList.add('pointer-focus');
+}, true);
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Tab') document.documentElement.classList.remove('pointer-focus');
+}, true);
+
 const initialExperience = resolveEntryExperience(window.location);
 const canonicalPath = canonicalEntryPath(window.location);
 

@@ -4,7 +4,7 @@
 
 The Node Workspace is a dockable, unified view of the canonical node-graph document for the currently selected timeline clip. It follows the same primary selection rule as Properties: the last clicked selected clip is used, with a fallback to the first selected clip. Linked video/audio clips resolve to one graph owner: selecting either side opens the visual clip's graph, while the linked audio clip feeds the source node's audio and analysis ports.
 
-The narrow handle beside the right inspector hides or restores it, giving the graph the full panel width. Pointer interaction does not leave a blue focus ring on Nodes controls; keyboard Tab navigation still shows focus.
+The narrow handle beside the right inspector hides or restores it, giving the graph the full panel width. Pointer interaction does not leave a blue focus ring on editor controls; keyboard Tab navigation still shows focus.
 
 Gaussian splat clips expose their scene nodes here. The **Splat Exploration** effect adds
 editable branches for Gaussian attributes, particles and reconstructed mesh wireframes;

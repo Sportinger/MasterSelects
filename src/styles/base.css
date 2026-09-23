@@ -7,6 +7,11 @@
   box-sizing: border-box;
 }
 
+html.pointer-focus :is(button, input, select, textarea, summary, [tabindex], [contenteditable]):focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 html, body, #root {
   width: 100%;
   max-width: 100%;

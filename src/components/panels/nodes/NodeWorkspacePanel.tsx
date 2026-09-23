@@ -5,7 +5,7 @@ import { NodeCatalog } from './workspace/NodeCatalog';
 import { EffectPresetLibrary } from './workspace/EffectPresetLibrary';
 import { getEffectOperator } from '../../../services/operators/operatorRegistry';
 import { useUnifiedNodeActions } from './useUnifiedNodeActions';
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { getCategoriesWithEffects } from '../../../effects';
 import type { NodeGraphConnectionRequest, NodeGraphLayout, NodeGraphViewTheme } from '../../../services/nodeGraph';
 import type { NodeWorkspaceViewRequest } from '../../../services/nodeGraph/nodeWorkspaceNavigation';
@@ -84,16 +84,6 @@ export function NodeWorkspacePanel() {
   const subject = useNodeGraphSubject(viewTheme);
   const keyframesLocked = useTimelineStore(state => state.isExporting || Boolean(state.tracks.find(t => t.id === subject?.clip.trackId)?.locked));
   const panelRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const restoreKeyboardFocus = (event: KeyboardEvent) => {
-      if (event.key === 'Tab') panelRef.current?.classList.remove('node-workspace-pointer-focus');
-    };
-    document.addEventListener('keydown', restoreKeyboardFocus, true);
-    return () => document.removeEventListener('keydown', restoreKeyboardFocus, true);
-  }, []);
-  const hidePointerFocus = (event: ReactPointerEvent<HTMLDivElement>) => {
-    event.currentTarget.classList.add('node-workspace-pointer-focus');
-  };
   const moveClipNodeGraphNode = useTimelineStore((state) => state.moveClipNodeGraphNode);
   const showClipNodeGraphBuiltIn = useTimelineStore((state) => state.showClipNodeGraphBuiltIn);
   const connectClipNodeGraphPorts = useTimelineStore((state) => state.connectClipNodeGraphPorts);
@@ -349,7 +339,7 @@ export function NodeWorkspacePanel() {
 
   if (!subject || !adapter) {
     return (
-      <div className="node-workspace-panel" ref={panelRef} onPointerDownCapture={hidePointerFocus}>
+      <div className="node-workspace-panel" ref={panelRef}>
         <div className="node-workspace-empty-state">
           <h3>Nodes</h3>
           <p>Select a timeline clip</p>
@@ -382,7 +372,7 @@ export function NodeWorkspacePanel() {
   const reusableEffect = subject.clip.effects.find(effect => effect.id === reusableEffectId);
 
   return (
-    <div className="node-workspace-panel" ref={panelRef} onPointerDownCapture={hidePointerFocus}>
+    <div className="node-workspace-panel" ref={panelRef}>
       <div className="node-workspace-main">
         <div className="node-workspace-view-bar">
           <div className="node-workspace-view-tabs" role="tablist" aria-label="Node graph theme">
