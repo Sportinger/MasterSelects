@@ -1,0 +1,132 @@
+.clippy-chat-overlay {
+  position: fixed;
+  top: max(54px, env(safe-area-inset-top));
+  right: max(22px, env(safe-area-inset-right));
+  z-index: 900;
+  width: min(610px, calc(100vw - 36px));
+  height: 350px;
+  pointer-events: none;
+}
+
+.clippy-chat-character {
+  position: absolute;
+  top: -18px;
+  right: 0;
+  width: 195px;
+  height: 300px;
+}
+
+.clippy-chat-character > video,
+.clippy-chat-character > img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+
+.clippy-chat-controls {
+  position: absolute;
+  top: 6px;
+  right: 194px;
+  display: flex;
+  gap: 4px;
+  pointer-events: auto;
+}
+
+.clippy-chat-overlay button,
+.clippy-chat-launcher {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color, #404047);
+  color: var(--text-primary, #eeeef2);
+  background: var(--bg-secondary, #25252c);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.clippy-chat-overlay button:focus:not(:focus-visible),
+.clippy-chat-launcher:focus:not(:focus-visible) { outline: none; }
+
+.clippy-chat-overlay button:focus-visible,
+.clippy-chat-overlay textarea:focus-visible,
+.clippy-chat-launcher:focus-visible {
+  outline: 2px solid var(--accent-color, #7e9cff);
+  outline-offset: 3px;
+}
+
+.clippy-chat-controls button {
+  width: 30px;
+  height: 30px;
+  padding: 5px;
+  border-radius: 50%;
+}
+
+.clippy-chat-controls svg { width: 16px; height: 16px; }
+
+.clippy-chat-composer {
+  position: absolute;
+  top: 245px;
+  left: 0;
+  width: calc(100% - 112px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px 16px 24px;
+  box-sizing: border-box;
+  border: 1px solid var(--border-color, #44444c);
+  border-radius: 26px;
+  background: var(--bg-secondary, #25252c);
+  box-shadow: 0 12px 44px #0005;
+  pointer-events: auto;
+}
+
+.clippy-chat-composer textarea {
+  flex: 1;
+  min-width: 0;
+  height: 62px;
+  max-height: 130px;
+  resize: none;
+  padding: 4px 0;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 4px;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary, #eeeef2);
+  font: inherit;
+  font-size: 20px;
+  line-height: 1.35;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.clippy-chat-composer textarea::placeholder { color: #96969f; opacity: 1; }
+.clippy-chat-composer > button { flex: 0 0 42px; height: 42px; border-radius: 50%; }
+.clippy-chat-overlay button:disabled { opacity: .4; cursor: default; }
+.clippy-chat-overlay button:hover:not(:disabled), .clippy-chat-launcher:hover { filter: brightness(1.16); }
+.clippy-chat-composer svg { width: 23px; height: 23px; }
+.clippy-chat-error { position: absolute; top: 345px; left: 12px; color: var(--text-primary, #eeeef2); }
+
+.clippy-chat-launcher {
+  position: fixed;
+  top: max(60px, env(safe-area-inset-top));
+  right: max(22px, env(safe-area-inset-right));
+  z-index: 900;
+  gap: 8px;
+  padding: 5px 12px 5px 7px;
+  border-radius: 20px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.clippy-chat-launcher img { width: 20px; height: 30px; object-fit: contain; }
+
+@media (max-width: 600px), (max-height: 550px) {
+  .clippy-chat-overlay { right: 12px; width: min(440px, calc(100vw - 24px)); height: 255px; }
+  .clippy-chat-character { width: 130px; height: 210px; top: -8px; }
+  .clippy-chat-controls { right: 132px; }
+  .clippy-chat-controls button { width: 36px; height: 36px; }
+  .clippy-chat-composer { top: 176px; width: calc(100% - 40px); padding: 12px 14px 12px 18px; }
+  .clippy-chat-composer textarea { height: 54px; font-size: 18px; }
+  .clippy-chat-error { top: 251px; }
+}
