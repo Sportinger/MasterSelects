@@ -1,4 +1,5 @@
 import type { MediaFile, MediaFolder } from '../../stores/mediaStore';
+import { readDepthMapMetadata } from '../depthEstimation/depthMapMetadata';
 import { isProxyFrameCountComplete } from '../../stores/mediaStore/helpers/proxyCompleteness';
 import type { ProjectClip, ProjectFolder, ProjectMediaFile } from '../projectFileService';
 
@@ -60,6 +61,7 @@ export function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
       sourceSelection: file.sourceSelection ? { ...file.sourceSelection } : undefined,
       externalOrigin: file.externalOrigin ? structuredClone(file.externalOrigin) : undefined,
       fileHash: file.fileHash,
+      depthMap: readDepthMapMetadata(file.depthMap),
       duration: file.duration,
       width: file.width,
       height: file.height,

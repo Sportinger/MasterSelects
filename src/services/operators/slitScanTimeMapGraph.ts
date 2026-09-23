@@ -1,10 +1,11 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
+import { withSlitScanTimeFields } from './slitScanTimeFieldsGraph';
 
 export const SLIT_SCAN_TIME_MAP_RESOURCE = 'slit-scan:time-map';
 
 /** Keep authored profile inputs, inserting a map mix before temporal band quantization. */
 export function withSlitScanTimeMap(graph: EffectOperatorGraph): EffectOperatorGraph {
-  if (graph.nodes.some(node => node.id.startsWith('time-map-'))) return graph;
+  if (graph.nodes.some(node => node.id.startsWith('time-map-'))) return withSlitScanTimeFields(graph);
   const routes = graph.edges.filter(edge => (edge.to === 'band-position' && edge.input === 'a')
     || (edge.to === 'smooth-or-banded' && edge.input === 'falseValue'));
   if (routes.length !== 2 || !['zero', 'one'].every(id => graph.nodes.some(node => node.id === id))) return graph;
@@ -36,12 +37,12 @@ export function withSlitScanTimeMap(graph: EffectOperatorGraph): EffectOperatorG
     add(`mix-${index}`, 'math.mix.scalar'); link(route.from, route.output, `mix-${index}`, 'a');
     link('time-map-selected', 'value', `mix-${index}`, 'b'); link('time-map-safe-amount', 'value', `mix-${index}`, 't');
   }
-  return { ...graph, nodes: [...graph.nodes, ...nodes],
+  return withSlitScanTimeFields({ ...graph, nodes: [...graph.nodes, ...nodes],
     edges: [...graph.edges.map(edge => {
       const index = routes.indexOf(edge);
       return index < 0 ? edge : { ...edge, from: `time-map-mix-${index}`, output: 'value' };
     }), ...edges],
     groups: [...graph.groups ?? [], { id: 'time-map', label: 'External Time Map', color: '#8b5cf6', nodeIds: nodes.map(node => node.id) }],
     layout: { ...graph.layout, ...Object.fromEntries(nodes.map((node, i) => [node.id, { x: 8400 + (i % 4) * 280, y: Math.floor(i / 4) * 180 }])) },
-  };
+  });
 }

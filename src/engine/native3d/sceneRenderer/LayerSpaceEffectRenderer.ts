@@ -1,6 +1,7 @@
 import type { EffectsPipeline } from '../../../effects/EffectsPipeline';
 import type { EffectRenderClockContext } from '../../../effects/_shared/byteTexture';
 import type { ScenePlaneLayer, SceneVoxelLayer } from '../../scene/types';
+import type { SlitScanGeometryCapture } from '../../../effects/time/slit-scan/geometryCapture';
 
 type TexturedSceneLayer = ScenePlaneLayer | SceneVoxelLayer;
 
@@ -34,6 +35,7 @@ interface PrepareLayerSpaceEffectsOptions extends LayerSpaceEffectContext {
   layers: TexturedSceneLayer[];
   targetKey: string;
   resolveSource: (layer: TexturedSceneLayer) => SourceTexture | null;
+  geometryCapture?: (layer: TexturedSceneLayer, frame: SlitScanGeometryCapture) => void;
 }
 
 /** Renders effects into an object's texture before the native 3D projection. */
@@ -74,6 +76,9 @@ export class LayerSpaceEffectRenderer {
         options.timelineTimeSeconds,
         undefined,
         options.effectRenderClock ? { ...options.effectRenderClock, scopeId: JSON.stringify([options.effectRenderClock.scopeId, layer.layerId]) } : undefined,
+        layer.sourceMasks,
+        layer.temporalSource,
+        options.geometryCapture ? frame => options.geometryCapture!(layer, frame) : undefined,
       );
       views.set(layer.layerId, result.finalView);
     }

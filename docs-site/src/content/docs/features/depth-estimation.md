@@ -59,3 +59,25 @@ depth without inference when only cable settings or collision controls change.
 Voxel Relief depth sampling is not yet connected.
 The depth-aware Voxel Relief orchestration plan remains open; this feature does
 not mark its broader renderer/export/3D scope complete.
+
+## Slit Scan time maps
+
+Slit Scan's external time-field source includes the existing depth controls and a
+**Bake and use as time map** action. It imports the baked video into Media with
+source ID/fingerprint, source range, FPS, polarity and model revision metadata,
+then assigns it to the effect. The same metadata is saved for ordinary depth
+bakes. A changed source or composition prevents automatic assignment.
+
+**Depth source** alignment follows the clip's source clock, including trim,
+reverse, speed and Time factor bypass. **Timeline (free)** retains the independent
+`Map start` offset. Selecting a depth asset sets luminance and the polarity for
+near pixels at the current time and far pixels in the past. Missing provenance,
+a mismatched source fingerprint or an uncovered source time produces an explicit
+error. Stabilized source alignment applies the source's UV transform; incomplete
+tracking stops this aligned map instead of combining different coordinate spaces.
+
+Video maps use shared source decoding and direct GPU upload, with a maximum
+640-pixel edge. They do not allocate a second full source-history atlas. Bake
+limits remain 120 source seconds and 10/15/30 FPS. Depth is relative and the H.264
+map is quantized. Live GPU, save/load and export verification of this integration
+is pending.

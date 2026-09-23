@@ -1,13 +1,26 @@
+import { applyOperatorGroupBypasses } from './operatorGroupBypass';
+import type { ImageOperatorCompileContext } from './imageOperatorChoice';
 import type { EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 import type { ImageOperatorPlan, ImageOperatorPreviewTarget } from './imageOperatorGraph';
+import { materializeMotionImages } from './motionImagePasses';
+import { bypassIdentityImageFilters } from './imageFilterShortcuts';
 
 type CompileSingle = (graph: EffectOperatorGraph, params: Record<string, unknown>, preview?: ImageOperatorPreviewTarget) => ImageOperatorPlan;
-interface Cut { nodeId: string; producerNodeId: string; producerPort: string; resourceId: string; passId: string; edgeId?: string }
+interface Cut { nodeId: string; producerNodeId: string; producerPort: string; resourceId: string; passId: string; edgeId?: string; maxEdge?: number }
 
 /** Adds explicit and required neighborhood barriers while every pass still uses the canonical image instruction compiler. */
 export function compileImageOperatorPassPlan(graph: EffectOperatorGraph, params: Record<string, unknown>, compileSingle: CompileSingle,
-  preview?: ImageOperatorPreviewTarget): ImageOperatorPlan {
+  preview?: ImageOperatorPreviewTarget, context: ImageOperatorCompileContext = {}): ImageOperatorPlan {
   if (graph.nodes.some(item => item.operator === 'image.resource-input')) throw new Error('image.resource-input is compiler-internal and cannot be persisted.');
+  if (graph.groups?.some(group => group.bypassed)) {
+    graph = applyOperatorGroupBypasses(graph);
+    graph = { ...graph, groups: graph.groups?.map(group => ({ ...group, bypassed: false })) };
+  }
+  graph = materializeMotionImages(bypassIdentityImageFilters(graph, params, context), params);
+  if (preview?.direction === 'output' && preview.portId === 'image'
+    && graph.nodes.some(node => node.id === `__motion-field:${preview!.nodeId}`)) {
+    preview = { ...preview, nodeId: `__motion-field:${preview.nodeId}` };
+  }
   const incoming = new Map<string, OperatorEdge>();
   for (const item of graph.edges) {
     const key = `${item.to}:${item.input}`;
@@ -34,7 +47,8 @@ export function compileImageOperatorPassPlan(graph: EffectOperatorGraph, params:
     const source = incoming.get(`${item.id}:image`);
     if (!source) throw new Error(`Image materialize ${item.id}:image is not connected.`);
     cuts.push({ nodeId: item.id, producerNodeId: source.from, producerPort: source.output,
-      resourceId: `image-resource:${item.id}:image`, passId: `image-pass:${item.id}` });
+      resourceId: `image-resource:${item.id}:image`, passId: `image-pass:${item.id}`,
+      maxEdge: item.id.startsWith('__motion-') ? Number(item.constants?.maxEdge) || undefined : undefined });
   }
   const hasNeighborhoodUpstream = (id: string, seen = new Set<string>()): boolean => {
     if (seen.has(id)) return false; seen.add(id);
@@ -89,7 +103,7 @@ export function compileImageOperatorPassPlan(graph: EffectOperatorGraph, params:
   const passes: Array<{ id: string; program: ImageOperatorPlan; inputResources: readonly string[]; outputResource?: string }> = ordered.map(cut => ({ id: cut.passId, program: programs.get(cut.resourceId)!,
     inputResources: programs.get(cut.resourceId)!.resourceInputs ?? [], outputResource: cut.resourceId }));
   passes.push({ id: 'image-pass:final', program: finalProgram, inputResources: finalProgram.resourceInputs ?? [] });
-  const resources = ordered.map(cut => ({ id: cut.resourceId, producerPassId: cut.passId, format: 'rgba16float' as const }));
+  const resources = ordered.map(cut => ({ id: cut.resourceId, producerPassId: cut.passId, format: 'rgba16float' as const, maxEdge: cut.maxEdge }));
   const externalResources = passes.flatMap(pass => pass.program.externalResources ?? [])
     .filter((resource, index, all) => all.findIndex(candidate => candidate.id === resource.id) === index);
   const fieldResources = passes.flatMap(pass => pass.program.fieldResources ?? [])

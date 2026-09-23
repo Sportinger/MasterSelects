@@ -1,4 +1,6 @@
 import { Logger } from '../../services/logger';
+import { SlitScanSceneSurfaces } from './sceneRenderer/SlitScanSceneSurfaces';
+import { isCollectingTemporalPreparations } from '../../effects/time/temporalResourcePreparation';
 import { getGaussianSplatGpuRenderer } from '../gaussian/core/GaussianSplatGpuRenderer';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../gaussian/types';
 import { resolveSharedSplatSceneKey } from '../scene/runtime/SharedSplatRuntimeUtils';
@@ -73,6 +75,10 @@ export class NativeSceneRenderer {
   private readonly modelRuntimeCache = new ModelRuntimeCache();
   private readonly lastRenderableModelSequenceUrls = new Map<string, string>();
   private readonly layerSpaceEffectRenderer = new LayerSpaceEffectRenderer();
+  private slitScanSurfaces?: SlitScanSceneSurfaces;
+  private get geometrySurfaces(): SlitScanSceneSurfaces {
+    return this.slitScanSurfaces ??= new SlitScanSceneSurfaces();
+  }
 
   private getSplatSceneKey(layer: SceneSplatLayer): string {
     return resolveSharedSplatSceneKey({
@@ -107,6 +113,7 @@ export class NativeSceneRenderer {
       targets.depthTexture.destroy();
       this.sceneTargets.delete(key);
       this.layerSpaceEffectRenderer.releaseTarget(key);
+      this.slitScanSurfaces?.releaseTarget(key);
       this.faceCablePass.releaseTarget(key);
     }
   }
@@ -119,6 +126,7 @@ export class NativeSceneRenderer {
     targets.depthTexture.destroy();
     this.sceneTargets.delete(targetKey);
     this.layerSpaceEffectRenderer.releaseTarget(targetKey);
+    this.slitScanSurfaces?.releaseTarget(targetKey);
     this.faceCablePass.releaseTarget(targetKey);
   }
 
@@ -219,6 +227,7 @@ export class NativeSceneRenderer {
     this.voxelPass.dispose();
     this.gizmoPass.dispose();
     this.layerSpaceEffectRenderer.destroy();
+    this.slitScanSurfaces?.destroy(); this.slitScanSurfaces = undefined;
     this.modelRuntimeCache.clear();
   }
 
@@ -301,7 +310,7 @@ export class NativeSceneRenderer {
       nativeMeshLayers,
       this.lastRenderableModelSequenceUrls,
     );
-    const { opaquePlanes, transparentPlanes } = splitPlaneLayers(planeLayers, camera);
+    this.geometrySurfaces.begin(targetKey, planeLayers.filter(layer => !!layer.slitScanGeometry), camera, device);
     this.planePass.pruneTextureCache(new Set([...planeLayers, ...voxelLayers, ...cableLayers].map((layer) => layer.layerId)));
     const effectedTextureViews = layerSpaceEffects
       ? this.layerSpaceEffectRenderer.prepare({
@@ -310,6 +319,9 @@ export class NativeSceneRenderer {
           commandEncoder,
           layers: [...planeLayers, ...voxelLayers, ...cableLayers.map(layer => ({ ...layer, kind: 'plane' as const }))],
           targetKey,
+          geometryCapture: (layer, frame) => {
+            if (layer.kind === 'plane') this.geometrySurfaces.capture(targetKey, layer, camera, frame);
+          },
           resolveSource: (layer) => {
             const view = this.planePass.resolveTextureView(device, layer);
             const cached = this.planePass.getCachedTexture(layer.layerId);
@@ -317,6 +329,11 @@ export class NativeSceneRenderer {
           },
         })
       : new Map<string, GPUTextureView>();
+    // Keep a visible image while the first motion field is prepared. Export
+    // still waits for geometry through its temporal preparation barrier.
+    const readySurfaces = planeLayers.filter(layer => !!layer.slitScanGeometry && this.geometrySurfaces.hasDraw(layer.layerId));
+    const { opaquePlanes, transparentPlanes } = splitPlaneLayers(planeLayers.filter(layer => !layer.slitScanGeometry
+      || (!isCollectingTemporalPreparations() && !this.geometrySurfaces.hasDraw(layer.layerId))), camera);
     this.meshPass.pruneModelCache(activeModelUrls);
     // Flock simulations advance (compute) before any scene render pass is opened.
     const flockPlans = this.flockPass.prepare(device, commandEncoder, flockLayers, realtimePlayback);
@@ -466,8 +483,14 @@ export class NativeSceneRenderer {
       return null;
     }
 
-    if (!this.planePass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, transparentPlanes, camera, true, temporaryBuffers, maskTextureManager, effectedTextureViews)) {
-      return null;
+    // Slit Scan retains source alpha. Composite after opaque geometry so its
+    // translucent pixels reveal the scene already rendered behind the surface.
+    for (const layer of sortBySceneLayerDepth([...transparentPlanes, ...readySurfaces], camera)) {
+      if (layer.slitScanGeometry && this.geometrySurfaces.hasDraw(layer.layerId)) {
+        this.geometrySurfaces.render(device, commandEncoder, this.sceneView, this.sceneDepthView, temporaryBuffers, camera.viewport, layerSpaceEffects, layer.layerId);
+      } else if (!this.planePass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, [layer], camera, true, temporaryBuffers, maskTextureManager, effectedTextureViews)) {
+        return null;
+      }
     }
     if (!this.flockPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, flockPlans, camera, 'transparent', temporaryBuffers)) return null;
     const gizmoLayer = gizmo

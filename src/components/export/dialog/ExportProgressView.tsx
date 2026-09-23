@@ -1,12 +1,14 @@
 import type { ExportProgress } from '../../../engine/export';
 import { formatTime } from './exportDialogFormat';
+import { ExportRunActions } from '../ExportRunActions';
 
 interface ExportProgressViewProps {
   progress: ExportProgress | null;
   onCancel: () => void;
+  onFinishEarly: () => void;
 }
 
-export function ExportProgressView({ progress, onCancel }: ExportProgressViewProps) {
+export function ExportProgressView({ progress, onCancel, onFinishEarly }: ExportProgressViewProps) {
   return (
     <>
       <div className="export-progress">
@@ -45,9 +47,8 @@ export function ExportProgressView({ progress, onCancel }: ExportProgressViewPro
       </div>
 
       <div className="export-actions">
-        <button className="export-cancel" onClick={onCancel}>
-          Cancel Export
-        </button>
+        <ExportRunActions onCancel={onCancel} onFinishEarly={onFinishEarly}
+          canFinishEarly={progress?.phase === 'video' && progress.currentFrame > 0} />
       </div>
     </>
   );

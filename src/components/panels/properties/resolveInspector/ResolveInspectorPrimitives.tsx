@@ -23,11 +23,12 @@ export function ResolveInspectorSection({
   defaultOpen = true,
   enabled,
   headerActions,
-  indicator = 'active',
+  indicator,
   onEnabledChange,
   title,
 }: ResolveInspectorSectionProps) {
   const groupBypass = useEffectSectionBypass(bypassGroupId ? `group:${bypassGroupId}` : title);
+  const resolvedIndicator = indicator ?? (groupBypass || onEnabledChange || enabled !== undefined ? 'active' : 'none');
   return (
     <InspectorSection
       alwaysOpenWhenEnabled
@@ -36,8 +37,8 @@ export function ResolveInspectorSection({
       defaultOpen={defaultOpen}
       enabled={enabled ?? groupBypass?.enabled}
       headerActions={headerActions}
-      indicator={indicator}
-      onEnabledChange={onEnabledChange ?? (enabled === undefined && indicator !== 'none' ? groupBypass?.onEnabledChange : undefined)}
+      indicator={resolvedIndicator}
+      onEnabledChange={onEnabledChange ?? (enabled === undefined && resolvedIndicator !== 'none' ? groupBypass?.onEnabledChange : undefined)}
       readOnlyIndicator="status"
       title={title}
       variant="resolve"

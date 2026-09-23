@@ -681,6 +681,9 @@ export function useExportRunController({
 
   return {
     handleCancel,
+    handleFinishEarly: videoEnabled && !isImageMode && !isGifMode && !isXmlMode
+      ? () => { exporter?.finishEarly(); ffmpegFrameRendererRef.current?.finishEarly(); }
+      : undefined,
     handlePrimaryExport: () => { void submissionGate.run(handlePrimaryExport).catch(error => {
       if (activeAnalyticsRunRef.current) {
         failExportAnalytics(activeAnalyticsRunRef.current, error); activeAnalyticsRunRef.current = null;

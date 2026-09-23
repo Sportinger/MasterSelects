@@ -44,7 +44,7 @@ export type ColorProperty = `color.${string}.${string}.${string}`;
 // - mask.{maskId}.path stores the whole bezier path as one keyframe value
 // - mask.{maskId}.position.x/y and edge values remain numeric keyframes
 export type MaskPathProperty = `mask.${string}.path`;
-export type MaskNumericPropertyName = 'position.x' | 'position.y' | 'rotation' | 'feather' | 'featherQuality';
+export type MaskNumericPropertyName = 'position.x' | 'position.y' | 'rotation' | 'feather' | 'featherQuality' | 'featherOffset' | 'featherBalance';
 export type MaskNumericProperty = `mask.${string}.${MaskNumericPropertyName}`;
 export type MaskEdgeFeatherProperty = `mask.${string}.edge.${string}.feather`;
 export type MaskProperty = MaskPathProperty | MaskNumericProperty | MaskEdgeFeatherProperty;
@@ -130,7 +130,7 @@ export function isMaskPathProperty(property: string): property is MaskPathProper
 }
 
 export function isMaskNumericProperty(property: string): property is MaskNumericProperty {
-  return /^mask\.[^.]+\.(position\.(x|y)|rotation|feather|featherQuality)$/.test(property);
+  return /^mask\.[^.]+\.(position\.(x|y)|rotation|feather|featherQuality|featherOffset|featherBalance)$/.test(property);
 }
 
 export function isMaskEdgeFeatherProperty(property: string): property is MaskEdgeFeatherProperty {
@@ -153,7 +153,7 @@ export function parseMaskProperty(property: string): ParsedMaskProperty | null {
     maskProperty === 'position.y' ||
     maskProperty === 'rotation' ||
     maskProperty === 'feather' ||
-    maskProperty === 'featherQuality'
+    maskProperty === 'featherQuality' || maskProperty === 'featherOffset' || maskProperty === 'featherBalance'
   ) {
     return { maskId, property: maskProperty };
   }

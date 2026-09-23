@@ -169,6 +169,8 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
       opacity: maskData?.opacity ?? 1,
       feather: maskData?.feather ?? 0,
       featherQuality: maskData?.featherQuality ?? 50, // 1-100 (1-33=low, 34-66=medium, 67-100=high)
+      featherOffset: maskData?.featherOffset ?? 0,
+      featherBalance: maskData?.featherBalance ?? 0,
       inverted: maskData?.inverted ?? false,
       mode: maskData?.mode ?? 'add',
       expanded: maskData?.expanded ?? true,

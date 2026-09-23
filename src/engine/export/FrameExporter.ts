@@ -59,6 +59,7 @@ export class FrameExporter {
   private encoder: VideoEncoderWrapper | null = null;
   private audioPipeline: AudioExportPipeline | null = null;
   private isCancelled = false;
+  private finishEarlyRequested = false;
   private frameTimes: number[] = [];
   private clipStates: Map<string, ExportClipState> = new Map();
   private readonly requestedExportMode: ExportMode;
@@ -69,7 +70,7 @@ export class FrameExporter {
   private activeExportRunId: string | null = null;
   private renderSession: ExportRenderSessionImpl | null = null;
   private previewPublisher: ExportPreviewPublisher;
-  private parameterSnapshot?: ReturnType<typeof captureExportParameterState>;
+  private parameterSnapshot?: Awaited<ReturnType<typeof captureExportParameterState>>;
 
   constructor(settings: FullExportSettings) {
     this.settings = settings;
@@ -361,7 +362,7 @@ export class FrameExporter {
       reportExportClipStates(exportRunId, this.clipStates);
       this.reportExportRuntimeState(exportRunId, true);
       await prepareTransitionCompositionsForExport();
-      this.parameterSnapshot = captureExportParameterState();
+      this.parameterSnapshot = await captureExportParameterState();
 
       // Initialize layer builder cache (tracks don't change during export)
       initializeLayerBuilder(tracks);
@@ -388,6 +389,7 @@ export class FrameExporter {
       let previousClipSignature: string | null = null;
 
       // Phase 1: Encode video frames
+      let encodedFrames = 0;
       for (let frame = 0; frame < totalFrames; frame++) {
         if (this.isCancelled) {
           log.info('Export cancelled');
@@ -397,6 +399,7 @@ export class FrameExporter {
           return null;
         }
 
+        if (this.finishEarlyRequested && encodedFrames > 0) break;
         const frameStart = performance.now();
         const time = startTime + frame * frameDuration;
 
@@ -445,6 +448,7 @@ export class FrameExporter {
             layers,
             timestampMicros,
             durationMicros,
+            frameStepSeconds: 1 / fps,
           });
         } catch (error) {
           if (error instanceof ExportFrameCaptureUnavailableError) {
@@ -478,6 +482,7 @@ export class FrameExporter {
           encodeMs = performance.now() - encodeStart;
         }
 
+        encodedFrames = frame + 1;
         // Early cancellation check after expensive encode
         if (this.isCancelled) {
           finalStatus = 'cancelled';
@@ -526,11 +531,13 @@ export class FrameExporter {
 
       // Phase 2: Attach the already encoded audio before muxing.
       if (audioResult && audioResult.chunks.length > 0) {
-        this.encoder.addAudioChunks(audioResult);
+        this.encoder.addAudioChunks(audioResult, encodedFrames < totalFrames ? encodedFrames / fps : undefined);
       } else if (shouldExportAudio) {
         log.debug('No audio to add');
       }
 
+      onProgress({ phase: 'muxing', currentFrame: encodedFrames, totalFrames,
+        percent: 100, estimatedTimeRemaining: 0, currentTime: startTime + encodedFrames / fps });
       const muxStart = performance.now();
       const blob = await this.encoder.finish();
       exportDiagnostics.recordPhase('mux', performance.now() - muxStart);
@@ -559,6 +566,10 @@ export class FrameExporter {
       this.audioPipeline = null;
       this.renderSession = null;
     }
+  }
+
+  finishEarly(): void {
+    this.finishEarlyRequested = true;
   }
 
   cancel(): void {

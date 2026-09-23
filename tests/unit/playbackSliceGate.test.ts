@@ -6,6 +6,7 @@ import type { TimelineStore } from '../../src/stores/timeline/types';
 const getRuntimeFrameProvider = vi.fn();
 const requestNewFrameRender = vi.fn();
 const getLastPresentedVideoTime = vi.fn();
+const clearScrubbingCache = vi.fn();
 const primeReverseWorkerRuntimeSourcesForPlayback = vi.hoisted(() => vi.fn().mockResolvedValue(0));
 
 const mediaStoreMock = vi.hoisted(() => ({
@@ -33,11 +34,11 @@ vi.mock('../../src/services/layerBuilder/reverseWorkerWebCodecsRuntime', () => (
   primeReverseWorkerRuntimeSourcesForPlayback,
 }));
 
-vi.mock('../../src/engine/WebGPUEngine', () => ({
-  engine: {
+vi.mock('../../src/services/render/renderHostPort', () => ({
+  renderHostPort: {
     requestNewFrameRender: (...args: unknown[]) => requestNewFrameRender(...args),
     setIsPlaying: vi.fn(),
-    clearScrubbingCache: vi.fn(),
+    clearScrubbingCache: (...args: unknown[]) => clearScrubbingCache(...args),
     clearVideoCache: vi.fn(),
     getLastPresentedVideoTime: (...args: unknown[]) => getLastPresentedVideoTime(...args),
   },
@@ -67,6 +68,7 @@ function createPlaybackTestStore(initialState: Partial<TimelineStore>): Playback
 describe('playbackSlice HTML readiness gate', () => {
   beforeEach(() => {
     getRuntimeFrameProvider.mockReset();
+    clearScrubbingCache.mockReset();
     requestNewFrameRender.mockReset();
     getLastPresentedVideoTime.mockReset();
     getLastPresentedVideoTime.mockReturnValue(undefined);
@@ -90,6 +92,12 @@ describe('playbackSlice HTML readiness gate', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('preserves cached source frames when starting playback', async () => {
+    const state = createPlaybackTestStore({ isPlaying: false, duration: 10, playheadPosition: 0 });
+    await state.play();
+    expect(clearScrubbingCache).toHaveBeenCalledWith(undefined, { preserveFrames: true });
   });
 
   it('skips HTML readiness warmup for full WebCodecs clips', async () => {

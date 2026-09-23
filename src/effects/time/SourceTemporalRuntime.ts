@@ -16,6 +16,18 @@ export interface SourceTemporalRequest {
   /** Source lookback expands; graph delay coordinates stay in authored seconds. */
   timeFactor?: number;
   keepPending?: boolean; maxEdge?: number; useProxy?: boolean;
+  /** Optional capacity plan for a resident interactive window as playback advances. */
+  reserveFrames?: number;
+  /** Own the current input when a resident result is held across render frames. */
+  retainCurrentInput?: boolean;
+  /** Analysis reads decoded source PTS even at zero delay, never the composite input. */
+  sourceOnly?: boolean;
+  /** Include a real adjacent source frame for cached dense motion analysis. */
+  motionPairs?: boolean;
+  /** Trajectory consumers need every intermediate PTS and the next endpoint. */
+  motionTrajectories?: boolean;
+  /** Geometry requires a complete color/query package rather than a partial cache. */
+  completeWindow?: boolean;
   stabilization?: SlitScanStabilization;
   currentInput?: { view: GPUTextureView; width: number; height: number };
 }
@@ -142,6 +154,7 @@ export class SourceTemporalRuntime {
       void owner.pending.catch(() => undefined);
     }
     if (!ready) recordTemporalPreparation(entry.pending!);
+    if (!ready && request.completeWindow) return undefined;
     if (ready && !entry.pending && !entry.prefetch) this.prefetch(entry);
     if ((!wanted || !entry.slots.size) && !presented) return undefined;
     // During a cache miss preview can use only resident source frames. Export waits
@@ -165,7 +178,13 @@ export class SourceTemporalRuntime {
     const identity = JSON.stringify([request.key, request.stabilization?.identity, current?.time, entry.revision, available, request.nearest, request.timeFactor]);
     return { current: presented ?? (current ? { view: entry.atlas.createView({ dimension: '2d', baseArrayLayer: entry.slots.get(current.time)!, arrayLayerCount: 1 }), identity } : undefined),
       atlas: { view: entry.atlas.createView({ dimension: '2d-array' }), identity },
-      ages: { view: entry.ages.createView(), identity } };
+      ages: { view: entry.ages.createView(), identity, temporalSamples: {
+        interpolation: request.nearest ? 'nearest' as const : 'linear' as const,
+        samples: [{ delay: 0, currentInput: true, contributions: [] }, ...available.map(sample => ({
+          delay: sample.age / (request.timeFactor ?? 1), currentInput: false,
+          contributions: [{ sourceTime: sample.time, weight: 1 }],
+        }))],
+      } } };
   }
 
   private wanted(entry: Entry, request: SourceTemporalRequest) {

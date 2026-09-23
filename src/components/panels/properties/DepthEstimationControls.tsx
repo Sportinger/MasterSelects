@@ -6,13 +6,13 @@ import { surfaceSourceTime } from '../../../services/planarTracking/surfaceEffec
 import { depthRuntime } from '../../../services/depthEstimation/depthRuntime';
 import { clearDepthModelCache, depthModelCached } from '../../../services/depthEstimation/depthModel';
 import { depthImage, normalizeDepth, type DepthRange } from '../../../services/depthEstimation/depthMath';
-import { bakeDepthVideo } from '../../../services/depthEstimation/bakeDepthVideo';
+import { bakeDepthMedia } from '../../../services/depthEstimation/bakeDepthMedia';
 import { ResolveInspectorSection, ResolveInspectorRow } from './resolveInspector/ResolveInspectorPrimitives';
 import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
 import { InspectorSelect } from '../../inspector/InspectorSelect';
 import './depthEstimation.css';
 
-export function DepthEstimationControls({ clipId }: { clipId: string }) {
+export function DepthEstimationControls({ clipId, timeMapEffectId }: { clipId: string; timeMapEffectId?: string }) {
   const clip = useTimelineStore(s => s.clips.find(c => c.id === clipId));
   const [edge, setEdge] = useState(280), [fps, setFps] = useState(30);
   const [from, setFrom] = useState(clip?.inPoint ?? 0), [to, setTo] = useState(clip?.outPoint ?? 1);
@@ -34,7 +34,7 @@ export function DepthEstimationControls({ clipId }: { clipId: string }) {
     const abort = new AbortController(); controller.current = abort; setBusy(mode); setProgress(0);
     let reader: SurfaceFrameReader | undefined;
     const ownedUrl = clip.file?.size ? URL.createObjectURL(clip.file) : undefined;
-    const url = ownedUrl ?? clip.source?.videoElement?.currentSrc ?? '';
+    const url = ownedUrl ?? (clip.source?.videoElement?.currentSrc || useMediaStore.getState().files.find(item => item.id === sourceId)?.url || '');
     const original = clip, originalProject = useMediaStore.getState().activeCompositionId;
     const isCurrent = () => {
       const current = useTimelineStore.getState().clips.find(c => c.id === clipId);
@@ -47,13 +47,20 @@ export function DepthEstimationControls({ clipId }: { clipId: string }) {
       if (mode === 'load') { setMessage(`Depth model ready: ${depthRuntime.backend}`); return; }
       if (mode === 'bake') {
         if (from < clip.inPoint || to > clip.outPoint + 1e-6) throw new Error('Choose a source range inside this clip.');
-        const blob = await bakeDepthVideo({ url, file: clip.file, from, to, fps, edge, smoothing, invert, signal: abort.signal, progress: report });
-        abort.signal.throwIfAborted();
-        if (!isCurrent()) throw new Error('The source or composition changed. Bake again.');
+        const source = useMediaStore.getState().files.find(item => item.id === sourceId);
+        if (!source) throw new Error('The source media is missing. Relink it before baking depth.');
         const name = `${clip.name.replace(/\.[^.]+$/, '')} - Depth ${from.toFixed(2)}-${to.toFixed(2)}s ${Date.now()}.mp4`;
-        setMessage('Adding depth video to Media');
-        await useMediaStore.getState().importFile(new File([blob], name, { type: 'video/mp4' }));
-        setMessage(`Depth video added to Media (${(blob.size / 1e6).toFixed(1)} MB). Source range ${from.toFixed(2)}-${to.toFixed(2)} s; no source effects or audio.`);
+        const media = await bakeDepthMedia(source, name,
+          { url, file: clip.file, from, to, fps, edge, smoothing, invert, signal: abort.signal, progress: report },
+          () => !!isCurrent());
+        if (timeMapEffectId) {
+          const state = useTimelineStore.getState();
+          const effect = state.clips.find(item => item.id === clipId)?.effects.find(item => item.id === timeMapEffectId);
+          if (!effect || effect.type !== 'slit-scan') throw new Error('Depth is in Media; the original Slit Scan effect is no longer available.');
+          state.updateClipEffect(clipId, timeMapEffectId, { ...effect.params, mapSource: 'external', mapMediaId: media.id,
+            mapAlignment: 'source', mapChannel: 'luminance', mapAmount: 1, mapInvert: media.depthMap!.nearIsWhite ? 'on' : 'off' });
+        }
+        setMessage(`Depth video ${timeMapEffectId ? 'assigned as time map' : 'added to Media'}. Source range ${from.toFixed(2)}-${to.toFixed(2)} s; no source effects or audio.`);
         return;
       }
       reader = await openSurfaceFrames(url, abort.signal, clip.file);
@@ -116,7 +123,9 @@ export function DepthEstimationControls({ clipId }: { clipId: string }) {
     {number('Source end', to, clip.inPoint, clip.outPoint, 0.01, setTo, clip.outPoint)}
     <ResolveInspectorRow label="Bake FPS"><InspectorSelect ariaLabel="Depth bake frame rate" value={String(fps)} disabled={!!busy} onChange={v => setFps(Number(v))}
       options={[10, 15, 30].map(v => ({ value: String(v), label: `${v} fps` }))} /></ResolveInspectorRow>
-    <div className="tracking-panel-actions"><button disabled={!!busy} onClick={() => void run('bake')}>Bake to Media</button></div>
+    <div className="tracking-panel-actions"><button disabled={!!busy} onClick={() => void run('bake')}>{timeMapEffectId ? 'Bake and use as time map' : 'Bake to Media'}</button>
+      {busy === 'bake' && <button onClick={() => controller.current?.abort()}>Stop bake</button>}</div>
+    <p className="tracking-panel-status">Up to 120 source seconds. Relative depth; white is near unless inverted.</p>
   </ResolveInspectorSection>
   {(busy || message) && <div className="tracking-panel-feedback">
     {busy && busy !== 'live' && <progress aria-label="Depth progress" value={progress} max={1} />}

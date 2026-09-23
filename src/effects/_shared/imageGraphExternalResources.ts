@@ -1,5 +1,5 @@
 import type { ImageOperatorPlan } from '../../services/operators/imageOperatorGraph';
-import type { ImageOperatorInputHistoryResource, ImageOperatorMemoryWindowResource } from '../../services/operators/imageOperatorExternalResources';
+import type { ImageOperatorInputHistoryResource, ImageOperatorMemoryWindowResource, ImageOperatorSourceMotionResource } from '../../services/operators/imageOperatorExternalResources';
 import { getGlyphAtlas, glyphAtlasCacheKey } from './glyphAtlas';
 
 export interface ResolvedImageGraphExternalResource {
@@ -8,11 +8,14 @@ export interface ResolvedImageGraphExternalResource {
   readonly width?: number;
   readonly height?: number;
   readonly available?: boolean;
+  readonly disTrajectory?: import('../time/DisTrajectory').DisTrajectory;
+  readonly temporalSamples?: import('../time/TemporalSampleMetadata').TemporalSampleMetadata;
 }
 
 export interface ImageGraphExternalResourceContext {
   resolveInputHistory?: (descriptor: ImageOperatorInputHistoryResource) => ResolvedImageGraphExternalResource;
   resolveMemoryWindow?: (descriptor: ImageOperatorMemoryWindowResource) => ResolvedImageGraphExternalResource;
+  resolveSourceMotion?: (descriptor: ImageOperatorSourceMotionResource) => ResolvedImageGraphExternalResource;
 }
 
 /** Resolves serializable graph descriptors to borrowed, device-local resources. */
@@ -26,13 +29,13 @@ export function resolveImageGraphExternalResources(
 
   for (const descriptor of plan.externalResources ?? []) {
     if (!descriptor.id) throw new Error('Image graph external resource requires a non-empty id.');
-    if (descriptor.kind !== 'glyph-atlas' && descriptor.kind !== 'memory-window' && descriptor.kind !== 'input-history') {
+    if (descriptor.kind !== 'glyph-atlas' && descriptor.kind !== 'memory-window' && descriptor.kind !== 'input-history' && descriptor.kind !== 'source-motion') {
       throw new Error(`Unsupported image graph external resource kind: ${String((descriptor as { kind?: unknown }).kind)}.`);
     }
     if (descriptor.kind === 'memory-window' && !context.resolveMemoryWindow) {
       throw new Error('Memory window resources require an explicit runtime resolver.');
     }
-    const identity = descriptor.kind === 'input-history' ? `input-history:${descriptor.part}` : descriptor.kind === 'glyph-atlas'
+    const identity = descriptor.kind === 'source-motion' ? JSON.stringify(descriptor) : descriptor.kind === 'input-history' ? `input-history:${descriptor.part}` : descriptor.kind === 'glyph-atlas'
       ? `glyph-atlas:${glyphAtlasCacheKey(descriptor.options)}`
       : `memory-window:${JSON.stringify(Object.entries(descriptor.options).toSorted(([a], [b]) => a.localeCompare(b)))}`;
     const previous = identities.get(descriptor.id);
@@ -45,6 +48,10 @@ export function resolveImageGraphExternalResources(
 
   for (const descriptor of plan.externalResources ?? []) {
     if (resolved.has(descriptor.id)) continue;
+    if (descriptor.kind === 'source-motion') {
+      if (!context.resolveSourceMotion) throw new Error('Source Motion needs a source-resource owner.');
+      resolved.set(descriptor.id, context.resolveSourceMotion(descriptor)); continue;
+    }
     if (descriptor.kind === 'input-history') {
       if (!context.resolveInputHistory) throw new Error('Input history requires a runtime resolver.');
       resolved.set(descriptor.id, context.resolveInputHistory(descriptor));

@@ -109,7 +109,7 @@ export interface RenderHostPort {
   requestRender(): void;
   requestNewFrameRender(): void;
   clearVideoCache(): void;
-  clearScrubbingCache(videoSrc?: string): void;
+  clearScrubbingCache(videoSrc?: string, options?: { preserveFrames?: boolean }): void;
   clearCompositeCache(): void;
   clearCaches(): void;
   clearFrame(): void;

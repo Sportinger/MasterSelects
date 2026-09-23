@@ -22,6 +22,8 @@ export interface ClipMask {
   closed: boolean;        // Is the path closed
   opacity: number;        // 0-1
   feather: number;        // Blur amount in pixels
+  featherOffset?: number; // Signed contour expansion in pixels; positive moves outward.
+  featherBalance?: number; // Transition midpoint balance (-100 inward to +100 outward); 0 is centered.
   edgeFeathers?: Record<string, number>; // Per-edge blur amount in pixels, keyed by ordered vertex pair
   featherQuality: number; // 0=low (fast), 1=medium, 2=high (smooth)
   inverted: boolean;

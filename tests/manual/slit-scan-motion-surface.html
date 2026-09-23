@@ -1,0 +1,106 @@
+<!doctype html><meta charset="utf-8"><title>Slit Scan motion surface regression</title>
+<h1>Slit Scan motion surface regression</h1><pre id="result">Running…</pre>
+<script type="module">
+import { MotionSurfaceField } from '/src/effects/time/slit-scan/MotionSurfaceField.ts';
+import { DisFlowGpu } from '/src/effects/time/DisFlowGpu.ts';
+const result=document.querySelector('#result');
+try {
+  const adapter=await navigator.gpu.requestAdapter();if(!adapter)throw new Error('No WebGPU');
+  const device=await adapter.requestDevice();device.pushErrorScope('validation');
+  const size=128, cells=16, width=cells+1, count=width*width;
+  const texture=(format,usage,layers=1)=>device.createTexture({size:[size,size,layers],format,usage});
+  const forward=texture('rgba16float',GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.TEXTURE_BINDING,2);
+  const backward=texture('rgba16float',GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.TEXTURE_BINDING,2);
+  const age=texture('rgba32float',GPUTextureUsage.COPY_DST|GPUTextureUsage.TEXTURE_BINDING);
+  const fill=device.createComputePipeline({layout:'auto',compute:{entryPoint:'main',module:device.createShaderModule({code:`
+    @group(0) @binding(0) var fieldOut: texture_storage_2d_array<rgba16float,write>;
+    @group(0) @binding(1) var<uniform> p: vec4f;
+    @compute @workgroup_size(8,8) fn main(@builtin(global_invocation_id) id:vec3u) {
+      let x=(f32(id.x)+.5)/f32(textureDimensions(fieldOut).x);
+      let v=p.x*select(1.0,x-.5,p.w>.5)*f32(id.z+1u);
+      textureStore(fieldOut,vec2i(id.xy),i32(id.z),vec4f(v,p.y,p.z,1.0));
+    }`})}});
+  const copy=device.createComputePipeline({layout:'auto',compute:{entryPoint:'main',module:device.createShaderModule({code:`
+    @group(0) @binding(0) var image: texture_2d<f32>;
+    @group(0) @binding(1) var<storage,read_write> data: array<vec4f>;
+    @compute @workgroup_size(1) fn main(@builtin(global_invocation_id) id:vec3u) {
+      data[id.y*textureDimensions(image).x+id.x]=textureLoad(image,vec2i(id.xy),0);
+    }`})}});
+  const field=new MotionSurfaceField(device), results=[];
+  const base={forward:forward.createView({dimension:'2d-array'}),backward:backward.createView({dimension:'2d-array'}),
+    width:size,height:size,columns:1,rows:1,identity:'known-motion',
+    pairs:[{sourceTime:0,targetTime:1,slot:0},{sourceTime:1,targetTime:2,slot:1}]};
+  async function fillFlow(vx,confidence=1,gradient=0,reverseVx=vx) {
+    const encoder=device.createCommandEncoder(),buffers=[];
+    for(const [target,v] of [[forward,vx],[backward,reverseVx]]) {
+      const buffer=device.createBuffer({size:16,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});buffers.push(buffer);
+      device.queue.writeBuffer(buffer,0,new Float32Array([v,0,confidence,gradient]));
+      const pass=encoder.beginComputePass();pass.setPipeline(fill);pass.setBindGroup(0,device.createBindGroup({layout:fill.getBindGroupLayout(0),entries:[
+        {binding:0,resource:target.createView({dimension:'2d-array'})},{binding:1,resource:{buffer}}]}));
+      pass.dispatchWorkgroups(size/8,size/8,2);pass.end();
+    }
+    device.queue.submit([encoder.finish()]);await device.queue.onSubmittedWorkDone();buffers.forEach(b=>b.destroy());
+  }
+  async function sample(now,delay,trajectory=base,amount=1,keepUntracked=false) {
+    const ages=new Float32Array(size*size*4);for(let i=0;i<size*size;i++)ages[i*4]=delay;
+    device.queue.writeTexture({texture:age},ages,{bytesPerRow:size*16},[size,size]);
+    const encoder=device.createCommandEncoder(),view=field.encode(encoder,trajectory,age.createView(),now,cells,cells,amount,keepUntracked);
+    const output=device.createBuffer({size:count*16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+    const read=device.createBuffer({size:count*16,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+    const pass=encoder.beginComputePass();pass.setPipeline(copy);pass.setBindGroup(0,device.createBindGroup({layout:copy.getBindGroupLayout(0),entries:[
+      {binding:0,resource:view},{binding:1,resource:{buffer:output}}]}));pass.dispatchWorkgroups(width,width);pass.end();
+    encoder.copyBufferToBuffer(output,0,read,0,count*16);device.queue.submit([encoder.finish()]);await read.mapAsync(GPUMapMode.READ);
+    const values=new Float32Array(read.getMappedRange()).slice();read.unmap();read.destroy();output.destroy();return values;
+  }
+  const point=(values,x=8,y=8)=>[...values.slice((y*width+x)*4,(y*width+x)*4+3)];
+  function check(name,actual,expected,tolerance=1e-5) {
+    const error=Math.max(...actual.map((v,i)=>Math.abs(v-expected[i])));results.push({name,error,pass:error<tolerance});
+  }
+  await fillFlow(0);
+  let values=await sample(1,1);check('stationary rectangle corner',point(values,16,16),[1,1,1]);
+  check('stationary rectangle interior',point(values,4,12),[.25,.75,1]);
+  await fillFlow(.0625);
+  check('first source interval',point(await sample(1,1)),[.5625,.5,1]);
+  check('shape changes with source motion at next time',point(await sample(2,1)),[.625,.5,1]);
+  check('subframe interval starts at actual requested time',point(await sample(1.5,.25)),[.53125,.5,1]);
+  check('zero delay unchanged',point(await sample(1,0)),[.5,.5,1]);
+  check('zero deformation unchanged',point(await sample(1,1,base,0)),[.5,.5,1]);
+  await fillFlow(.0625,1,0,.125);
+  check('reverse uses independently measured backward field',point(await sample(0,-1)),[.375,.5,1]);
+  const reversed={...base,pairs:[{sourceTime:1,targetTime:0,slot:0}]};
+  check('reversed stored pair selects backward for increasing time',point(await sample(1,1,reversed)),[.625,.5,1]);
+  await fillFlow(.25,1,1);
+  check('spatial gradient stretches grid spacing',point(await sample(1,1),12,8),[.8125,.5,1]);
+  await fillFlow(0,.05);
+  check('low confidence ends track',[point(await sample(1,1))[2]],[0]);
+  check('visible fallback retains original XY',point(await sample(1,1,base,1,true)),[.5,.5,1]);
+  await fillFlow(0);
+  const gap={...base,pairs:[{sourceTime:0,targetTime:.4,slot:0},{sourceTime:.6,targetTime:1,slot:1}]};
+  check('missing interval is not bridged',[point(await sample(1,1,gap))[2]],[0]);
+  const long={...base,pairs:Array.from({length:513},(_,i)=>({sourceTime:i,targetTime:i+1,slot:0}))};
+  check('integration work is bounded',[point(await sample(513,513,long))[2]],[0]);
+  // Now measure real DIS on two translated original images and feed its actual
+  // forward/backward outputs into the same production geometry compute pass.
+  result.textContent='Checking measured DIS → geometry…';
+  const pixels=new Uint8Array(size*size*8),dx=2,dt=.04;
+  for(let l=0;l<2;l++)for(let y=0;y<size;y++)for(let x=0;x<size;x++) {
+    const sx=x-l*dx,v=.5+.17*Math.sin(sx*.31+y*.13)+.14*Math.cos(y*.37-sx*.17)+.12*Math.sin(sx*.71+y*.53);
+    const c=Math.round(v*255);pixels.set([c,c,c,255],((l*size+y)*size+x)*4);
+  }
+  const atlas=texture('rgba8unorm',GPUTextureUsage.COPY_DST|GPUTextureUsage.TEXTURE_BINDING,2);
+  device.queue.writeTexture({texture:atlas},pixels,{bytesPerRow:size*4,rowsPerImage:size},[size,size,2]);
+  const dis=await DisFlowGpu.create(device,size,size);
+  await dis.pair({atlas,width:size,height:size,columns:1,rows:1,layers:2,slots:new Map([[0,0],[dt,1]]),
+    pairs:new Map([[0,dt]]),metadata:new Float32Array(),identity:'translated'},0,dt,forward,backward);
+  values=await sample(dt,dt,{...base,pairs:[{sourceTime:0,targetTime:dt,slot:0}]});
+  let accepted=0,error=0,total=0;
+  for(let y=3;y<=13;y++)for(let x=3;x<=13;x++) {
+    const p=point(values,x,y);total++;if(p[2]>.5){accepted++;error+=Math.hypot((p[0]-x/cells)*size-dx,(p[1]-y/cells)*size);}
+  }
+  results.push({name:'measured DIS transports actual image points',acceptedFraction:accepted/total,
+    meanPixelError:accepted?error/accepted:null,pass:accepted/total>.6&&error/accepted<.75});
+  const validation=await device.popErrorScope();if(validation)throw new Error(validation.message);
+  field.destroy();dis.destroy();[forward,backward,age,atlas].forEach(t=>t.destroy());
+  result.textContent=JSON.stringify({pass:results.every(r=>r.pass),results},null,2);
+}catch(error){result.textContent=`FAIL: ${error.stack??error}`;}
+</script>

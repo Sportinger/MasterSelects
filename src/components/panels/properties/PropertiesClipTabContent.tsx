@@ -6,11 +6,11 @@ import type { ClipTransform } from '../../../types/timelineCore';
 import type { SceneCameraSettings } from '../../../stores/mediaStore/types';
 import { TextTab } from '../TextTab';
 import { PropertiesTabStrip } from './PropertiesTabStrip';
+import { EffectsTab } from './EffectsTab';
 import type { ClipPropertiesPresentation, PropertiesTab } from './propertiesPanelTypes';
 
 const TransformTab = lazy(() => import('./TransformTab').then(m => ({ default: m.TransformTab })));
 const ColorTab = lazy(() => import('./ColorTab').then(m => ({ default: m.ColorTab })));
-const EffectsTab = lazy(() => import('./EffectsTab').then(m => ({ default: m.EffectsTab })));
 const AudioEditStackTab = lazy(() => import('./AudioEditStackTab').then(m => ({ default: m.AudioEditStackTab })));
 const MasksTab = lazy(() => import('./MasksTab').then(m => ({ default: m.MasksTab })));
 const SurfaceTrackingTab = lazy(() => import('./surfaceTracking/SurfaceTrackingTab').then(m => ({ default: m.SurfaceTrackingTab })));

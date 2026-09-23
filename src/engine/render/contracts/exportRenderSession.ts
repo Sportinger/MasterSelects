@@ -14,6 +14,8 @@ export interface ExportRenderFrameInput {
   readonly layers: readonly Layer[];
   readonly timestampMicros?: number;
   readonly durationMicros?: number;
+  /** Exact timeline spacing; encoding timestamps may be rounded to microseconds. */
+  readonly frameStepSeconds?: number;
 }
 
 export interface ExportVideoFrameCapture {

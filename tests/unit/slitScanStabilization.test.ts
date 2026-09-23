@@ -16,6 +16,13 @@ const asset: TrackingAsset = { id: 'asset', type: 'tracking', name: 'Object', cr
 const params = { stabilizationAssetId: 'asset', stabilizationReference: 0 };
 
 describe('Slit Scan source stabilization binding', () => {
+  it('bypasses source transforms without discarding the selected tracking result', () => {
+    const disabled = { ...params, stabilizationEnabled: false };
+    expect(slitScanStabilization(disabled, [asset], 'media', 1920, 1080)).toBeUndefined();
+    expect(slitScanStabilization(disabled, [], 'media', 1920, 1080)).toBeUndefined();
+    expect(slitScanStabilization({ ...disabled, stabilizationEnabled: true }, [asset], 'media', 1920, 1080)?.track.id).toBe('track');
+    expect(disabled.stabilizationAssetId).toBe('asset');
+  });
   it('uses tracking independently of the marker toggle and aligns source PTS to reference', () => {
     const s = slitScanStabilization(params, [asset], 'media', 1920, 1080)!;
     const source = projectPoint(slitScanSourceTransform(s, 1), quad[0]);

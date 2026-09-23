@@ -26,6 +26,32 @@ and source. Other effects and structural settings are not implicitly enabled.
 
 ## Slit Scan
 
+Delay, Map mix and Noise amount can be driven through the shared parameter-source
+graph (constants, LFOs, keyframe sources, Remap and Clamp). Disabling the source
+binding restores the authored parameter; source values must remain within the
+parameter's runtime range. **Nodes > + Control > Audio envelope** reads an existing
+RMS or loudness analysis for a selected audio/video clip. Timeline seconds follow
+that source's placement, trim and speed; Source seconds require an explicit time
+input. Linear/nearest sampling and floor/ceiling normalization are deterministic.
+Missing analysis is reported as unavailable. Export snapshots copy the analysis
+and source placement; full live audio/export verification remains pending.
+
+Time fields support input/external Luma, Alpha, RGB and HSV channels, deterministic
+smooth/cell noise and independent clip masks. Shaping and an optional noise
+combination feed the existing bands and protection stages. External sources also
+offer **Bake and use as time map** through the shared [Depth controls](Depth-Estimation.md#slit-scan-time-maps).
+Depth source alignment validates provenance and coverage; freely aligned external
+videos retain the timeline offset. End-to-end validation of these additions is pending.
+
+**Source motion** is also available as a time-field source. It samples a fixed
+1/30-source-second pair at analysis delay zero, independently of Scan smoothing.
+Choose magnitude or velocity projected on an axis, then set its UV-per-graph-second
+range and confidence threshold. Unreliable pixels blend back to the scan profile.
+This source waits for required analysis frames and retains full analysis resolution
+while playing. Selecting another field or setting Map mix to zero prunes unused
+analysis resources. Motion accuracy and seek/export parity still need verification.
+
+
 Add **Time > Slit Scan** to a video clip, or add its effect group in Nodes.
 The editable group reuses UV, vector, math, choice, timeline-time and RGBA mix
 operators. Named groups organize source controls, scan direction, wave
@@ -37,12 +63,13 @@ Inspector section switches and matching Node group bypasses share one saved stat
 This includes nested image groups with an unambiguous typed pass-through boundary
 and scene groups with an existing renderer mute. Parent image-group bypasses keep
 child bypass states, values, keyframes and wiring intact. Sections without a valid
-bypass remain status indicators. Slit Scan explicitly links Time map source / Time
+bypass omit the automatic blue indicator; explicit read-only status remains supported.
+Slit Scan explicitly links Time map source / Time
 map, Protection mask / Subject protection, and Protected center to their groups;
 their switches work in either view. Bypassing the Protected Center graph also skips
 its radial/rings profile branch, returning to the upstream linear/center/wave profile.
 
-- **Delay (s)**: maximum past-time offset, 0-4 seconds. Zero removes time displacement; object stabilization, when enabled, still applies.
+- **Delay (s)**: maximum past-time offset, 0-60 seconds. Zero removes time displacement; object stabilization, when enabled, still applies.
 - **Scan direction / Angle**: left-to-right (0 degrees), top-to-bottom (90 degrees),
   bottom-to-top (-90 degrees), right-to-left (180 degrees), or any diagonal angle.
 - **Profile**: Linear scan, Out from center, Wave / folds, Radial scan or Time rings.
@@ -81,19 +108,118 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
 - **Sampling** is the first inspector section and opens by default. **Preview quality**
   switches between Small preview
   (160 px maximum edge) and Full size. Both use the same source timestamps and sample
-  count. New Slit Scan effects default to Full size. Full size follows timeline Proxy mode: it uses the actual full JPEG proxy
+  count. New Slit Scan effects default to resident GPU history, 4 GiB history memory,
+  Nearest temporal sampling, shared-source Hybrid export processing, 1920 samples,
+  zero scan smoothing, a 0.25 deformation threshold, Full size and Adaptive preview quality.
+  The sample count is limited by the source's longer dimension in the inspector.
+  Full size follows timeline Proxy mode for GPU cache: it uses the actual full JPEG proxy
   dimensions when enabled, otherwise original resolution. The composition/output
-  dimensions remain unchanged, including 4K. The inspector status identifies Proxy,
-  Original or mixed fallback frames and the actual cache dimensions. Full-size
+  dimensions remain unchanged, including 4K. Full-size
   export uses originals regardless of the preview Proxy switch. There is no
   rolling-history mode or playback-only temporal sampling fallback.
-- **Time factor (×)** (Time): scales the source lookback from 1× to 10× without
+- **GPU history ? resident video volume** (Sampling ? Frame storage): the default
+  TouchDesigner-style history for both preview and export. All distinct source
+  frames required by the current temporal window stay resident in tiled GPU
+  texture-array pages. The effect graph samples them directly with binary time
+  lookup, preserving grid interpolation and adjacent-source-frame blending.
+  Duplicate source PTS share storage. Source-resolution sample counts are available;
+  Samples is not the number of allocated complete images. Full size uses originals;
+  Small preview explicitly scales them to 160 px. Original quality defaults do not
+  change when selecting this mode.
+- **Scan smoothing (px)** (Sampling): optional nine-tap directional filtering,
+  off at zero, with a radius up to four output pixels. The generated mask combines
+  cached DIS motion with the actual delay gradient. **Stretch threshold (×)**
+  measures maximum local expansion (default 2×, transition width 0.25×);
+  pure compression does not activate the mask. The eye previews that mask in red,
+  including at zero smoothing, and is disabled for export.
+  DIS analyses original adjacent source frames using an independent WebGPU
+  implementation of Gaussian pyramids, inverse-compositional patch search,
+  spatial propagation and residual-weighted dense aggregation. A backward-flow
+  check reduces confidence at inconsistent correspondences. This is the fast DIS
+  path without variational refinement, not an OpenCV binary or a learned model.
+  Source-frame pairs are cached in a bounded GPU atlas; changing the threshold
+  reuses them. First use and uncached windows need preparation, with pair progress
+  reported in the effect status. During preparation the optional mask is invalid
+  and the base scan continues; export waits for analysis. The analysis size is
+  bounded independently of output resolution, while each output pixel samples
+  its own source time. The generated detector migrates without replacing authored
+  delay wiring; old time-gradient bindings remain available to custom consumers.
+  Motion estimates remain approximate, particularly at occlusions or weak texture.
+  This filter blends existing pixels; it does not synthesize intermediate frames.
+  Build, targeted regression execution and live DIS quality/performance checks
+  are currently paused at the user's request. No measured speedup is claimed.
+- **History memory** appears for resident GPU history: 640 MiB, 1 GiB, 2 GiB or
+  4 GiB. This is the history allocation budget, not a measurement of free device
+  memory; the rest of the editor and decoder need additional memory. Allocation
+  follows the distinct source frames currently needed, with 25% refill headroom
+  (at least four slots when available), rather than reserving the full budget.
+  GPU allocation/upload validation errors are reported instead of marking the
+  window ready. The initial
+  window loads before direct sampling becomes available. Moving windows retain
+  overlapping frames and refill missing PTS. During playback/scrubbing, an owned
+  snapshot holds the last complete effect image while missing frames load. Missing
+  temporal positions are never removed to produce a partial preview: that caused
+  hard seams after fast seeks, especially with Nearest sampling. First load shows
+  the input until a complete result exists. Export waits for exact samples.
+  Up to twelve spare slots prime upcoming windows, including while paused, and
+  useful prefetch requests continue when playback catches up to them. If the GPU
+  rejects allocation, one retry drops optional headroom without changing quality.
+  Windows that do not fit, or whose GPU allocation still fails, automatically use
+  Hybrid streaming and report the fallback. Resolution, time window and requested
+  samples stay unchanged. Streaming may be slower; changing memory/quality/window
+  settings retries resident storage. Temporary source-load failures retry after a
+  short delay while retaining available cached samples, without recreating the effect.
+  It uses the same authored time-map/mask graph and stabilization contract.
+  Implementation is experimental: a resident Full HD preview with 1920 samples
+  and 74 distinct source frames was observed after the black-preview correction
+  (752 MiB allocated instead of 4074 MiB). Playback/export speed measurements and
+  regression checks remain pending while builds and tests are paused.
+- **Preview quality: Adaptive** is optional for resident history at Full size.
+  Playback, playhead dragging and paused parameter edits use adaptive history
+  resolution, with a 960-pixel maximum edge even when full-size frames fit in
+  memory; longer windows may reduce this further. This bounds interactive upload
+  and sampling bandwidth rather than adapting only to VRAM capacity.
+  A paused full-quality cache survives playback when its allocation plus the
+  interactive memory ceiling fits the selected budget.
+  While paused, a fresh adaptive result is shown until the requested
+  full-quality result is ready; an older Hybrid result cannot replace that preview.
+  Exports never use the adaptive preview.
+  Temporal sample count, time window and composition dimensions stay unchanged.
+  A complete-window estimate reserves interactive slots up front to avoid repeated
+  cache replacement as the clip advances. The warm interactive cache can supply a
+  temporary image while paused full-quality rendering prepares, sharing the selected
+  memory ceiling with that render. Presentation snapshots own complete effect images,
+  independent of cache slots being recycled, and use a separate bounded GPU cache
+  (up to four images / 64 MiB, with one oversized image allowed).
+  Initial decoding is still required. Performance
+  has not yet been benchmarked.
+- **Export processing** (Sampling): `Shared source frames (Hybrid)` is an opt-in
+  block renderer for full-size Hybrid exports (including resident-mode fallback) of the standard linear scan,
+  including arbitrary scan angles. It prepares up to eight output frames from
+  one source-ordered request and writes contributing strips directly from borrowed
+  VideoFrames. Output tiles share the existing 640 MiB budget; the current effect
+  input is added separately when each output is consumed. It leaves normal preview
+  unchanged. Custom graphs, masks, stabilization, non-linear profiles, time maps,
+  and small-preview quality retain the individual-frame path. Changing parameters
+  invalidates prepared output tiles. Default: `Individual frames`. This path is
+  experimental; its GPU parity and performance checks have not yet been run.
+- **Time factor (×)** (Time): scales the source lookback from 1× to 100× without
   changing clip speed, duration, audio timing or composition FPS. Effective window
-  = Delay × Time factor (up to 40 seconds). Existing effects default to 1×.
+  = Delay × Time factor (up to 6000 seconds). Existing effects default to 1×.
   Both storage modes use the expanded source window; graph delay coordinates stay
   unchanged, so custom time maps and protection masks keep their authored behavior.
   Clip boundaries hold the first/last available frame. High factors only add
   distinct frames where source history exists; use Hybrid for large windows.
+- **Bypass slowdown** (fast-forward toggle beside Time factor): keeps the source
+  acceleration instead of compensating it at the output. At 4x, two seconds into
+  the clip samples the eight-second source position, with the same expanded
+  history window. Default off. Applies to GPU cache, Hybrid, resident history and
+  export. The clip duration is divided by the factor; changing the factor updates
+  that duration, and disabling/removing the bypass restores the source span.
+  Audio remains unchanged. Acceleration uses the normal video playback/export
+  clock, so no separate current-frame decoder blocks the history. Earlier effects
+  still apply to the current input. Wave and external-map animation retain their
+  composition clock. Animated factors remap from clip start and can jump in time.
 - **Frame storage** (Sampling): **GPU cache** preserves the existing direct-atlas
   mode and its 256-sample maximum. **Hybrid · bounded GPU memory** adds a persistent
   GPU cache plus streaming for windows larger than its budget. Its Samples maximum
@@ -177,7 +303,7 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
 The requested output time determines up to 64 source samples across the delay
 window. Seeking reconstructs that window rather than starting the effect again.
 At clip boundaries the first or last available source frame holds. During
-preparation, preview uses the resident subset and shows loading progress; export
+preparation, resident GPU preview holds the last complete image and shows loading progress; export
 waits for the complete requested window. A large seek can require an initial load.
 Playback reuses cached source frames; decoder speed still limits cache refill. Caches and decoder handles are runtime-only and
 never saved in project JSON. Node previews borrow the effect's source resources.

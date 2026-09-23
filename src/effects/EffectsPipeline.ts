@@ -3,8 +3,8 @@ import { TemporalEffectResources } from './time/TemporalEffectResources';
 import { isCollectingTemporalPreparations, setTemporalStatus } from './time/temporalResourcePreparation';
 import type { ClipMask } from '../types/masks';
 import type { TemporalClipSource } from './time/temporalClipSource';
+import type { SlitScanGeometryCaptureSink } from './time/slit-scan/geometryCapture';
 import { nodeScalarSampleTap } from '../services/nodePreview/NodeScalarSampleTap';
-// Effects Pipeline - GPU effect processing using the modular effect registry
 
 import { EFFECT_REGISTRY, getEffect } from './index';
 import {
@@ -19,7 +19,7 @@ import { Logger } from '../services/logger';
 import { ComputeEffectRuntime } from './ComputeEffectRuntime';
 import { SplitComparePipeline } from './SplitComparePipeline';
 import type { SplitCompareSettings } from '../stores/splitCompareStore';
-import { getLandmarkEffectPoints } from '../services/landmarkTracking/landmarkRuntime';
+import { EffectLandmarkBuffers } from './EffectLandmarkBuffers';
 import { DenseTerrainPipeline } from './tracking/DenseTerrainPipeline';
 import { nodePreviewTextureTap } from '../services/nodePreview/NodePreviewTextureTap';
 import { imageGraphDefinition } from './_shared/imageGraphDefinition';
@@ -99,7 +99,7 @@ export class EffectsPipeline {
   private device: GPUDevice;
   private pipelineCache: EffectPipelineCache;
   private feedbackStates = new Map<string, FeedbackState>();
-  private landmarkBuffers = new Map<string, GPUBuffer>();
+  private landmarkBuffers = new EffectLandmarkBuffers();
   private byteTextures: ByteTextureCache;
   private computeRuntime: ComputeEffectRuntime;
   private splitComparePipeline: SplitComparePipeline;
@@ -308,30 +308,6 @@ export class EffectsPipeline {
     return currentOutput === pingView ? pongView : pingView;
   }
 
-  private getLandmarkBuffer(effectId: string): GPUBuffer {
-    let buffer = this.landmarkBuffers.get(effectId);
-    if (!buffer) {
-      buffer = this.device.createBuffer({
-        label: `effect-landmarks-${effectId}`,
-        size: (4 + 64 * 4) * Float32Array.BYTES_PER_ELEMENT,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-      });
-      this.landmarkBuffers.set(effectId, buffer);
-    }
-    const points = getLandmarkEffectPoints(effectId).slice(0, 64);
-    const packed = new Float32Array(4 + 64 * 4);
-    packed[0] = points.length;
-    for (let index = 0; index < points.length; index += 1) {
-      const offset = 4 + index * 4;
-      packed[offset] = points[index].x;
-      packed[offset + 1] = points[index].y;
-      packed[offset + 2] = points[index].z;
-      packed[offset + 3] = points[index].visibility ?? 1;
-    }
-    this.device.queue.writeBuffer(buffer, 0, packed);
-    return buffer;
-  }
-
   /**
    * Apply effects to a texture using ping-pong rendering
    */
@@ -353,13 +329,13 @@ export class EffectsPipeline {
     renderClock?: EffectRenderClockContext,
     sourceMasks?: readonly ClipMask[],
     temporalSource?: TemporalClipSource,
+    geometryCapture?: SlitScanGeometryCaptureSink,
   ): { finalView: GPUTextureView; swapped: boolean } {
     const requestedFrameRate = renderClock?.frameRate;
     const clock: EffectRenderClockContext = {
       frameRate: typeof requestedFrameRate === 'number' && Number.isFinite(requestedFrameRate) && requestedFrameRate > 0 ? requestedFrameRate : 30,
       scopeId: renderClock?.scopeId || 'legacy',
     };
-    // Filter out audio effects (handled by AudioRoutingManager) and disabled effects
     const enabledEffects = effects.filter(e => e.enabled && !e.type.startsWith('audio-'));
     if (enabledEffects.length === 0) {
       return { finalView: inputView, swapped: false };
@@ -369,7 +345,11 @@ export class EffectsPipeline {
     let effectOutput = outputView;
     let swapped = false;
 
-    for (const effect of enabledEffects) {
+    for (const originalEffect of enabledEffects) {
+      const effect = originalEffect.type === 'slit-scan' && (isCollectingTemporalPreparations() || geometryCapture)
+        ? { ...originalEffect, params: { ...originalEffect.params, scanSmoothingPreview: false } } : originalEffect;
+      const previewKey = effect.type === 'slit-scan' && effect.params.temporalStorage === 'resident' && !isCollectingTemporalPreparations()
+        ? JSON.stringify([frameHistory?.scopeId ?? clock.scopeId, effect.id, temporalSource?.mediaId, effect.params.scanSmoothingPreview === true]) : undefined;
       const registered = getEffect(effect.type);
       const imageGraphEffect = isImageGraphEffectType(effect.type);
       const preparedImage = imageGraphEffect ? prepareImageEffect(effect) : undefined;
@@ -391,28 +371,42 @@ export class EffectsPipeline {
             identity: upload ? `memory-window:${upload.version}:${upload.width}x${upload.height}` : 'memory-window:unavailable',
             width: upload?.width ?? 1, height: upload?.height ?? 1, available: upload !== null };
         } : undefined;
-      const nativeTemporal = effect.type === 'slit-scan' && (effect.params.stabilizationAssetId
+      const stabilizationActive = effect.params.stabilizationEnabled !== false && !!effect.params.stabilizationAssetId;
+      const nativeTemporal = effect.type === 'slit-scan' && (stabilizationActive
         || imagePlan?.externalResources?.some(resource => resource.kind === 'input-history'));
       const inputHistory = nativeTemporal ? this.inputHistory.emptyResources() : (imagePlan?.externalResources?.some(resource => resource.kind === 'input-history')
         ? this.inputHistory.prepare(JSON.stringify([frameHistory?.scopeId ?? clock.scopeId, effect.id]), commandEncoder,
           effectInput, sampler, outputWidth, outputHeight, timelineTimeSeconds, 4, frameHistory,
           String(effect.params.temporalInterpolation ?? 'linear'),
           effect.params.temporalMode === 'prepared' && effect.params.temporalResolution === 'native') : undefined);
-      const imageExternalResources = imagePlan ? new Map(resolveImageGraphExternalResources(this.device, imagePlan, { resolveMemoryWindow, resolveInputHistory: inputHistory ? descriptor => inputHistory[descriptor.part] : undefined })) : undefined;
+      const imageExternalResources = imagePlan ? new Map(resolveImageGraphExternalResources(this.device, imagePlan, { resolveMemoryWindow,
+        resolveSourceMotion: descriptor => this.inputHistory.emptyResources()[descriptor.part], resolveInputHistory: inputHistory ? descriptor => inputHistory[descriptor.part] : undefined })) : undefined;
       let graphInput = effectInput;
       try {
-        if (imageExternalResources && imagePlan) this.temporalResources.resolveNamed(imageExternalResources,
-          imagePlan.resourceInputs ?? [], effect, frameHistory?.scopeId ?? clock.scopeId,
-          timelineTimeSeconds, sourceMasks, outputWidth, outputHeight, commandEncoder);
+        if (imageExternalResources && imagePlan && !this.temporalResources.resolveNamed(imageExternalResources,
+          [...new Set([...(imagePlan.resourceInputs ?? []), ...(imagePlan.passes?.flatMap(pass => pass.inputResources) ?? [])])], effect, frameHistory?.scopeId ?? clock.scopeId,
+          timelineTimeSeconds, sourceMasks, outputWidth, outputHeight, commandEncoder, temporalSource,
+          { view: effectInput, width: outputWidth, height: outputHeight }, imagePlan.externalResources, preparedImage?.graph)) {
+          effectInput = this.temporalResources.previewFrames.get(previewKey, outputWidth, outputHeight) ?? effectInput; continue;
+        }
         if (nativeTemporal && imagePlan && preparedImage && imageExternalResources) {
           const nativeHistory = this.temporalResources.resolveNative(effect,
             frameHistory?.scopeId ?? clock.scopeId, temporalSource, commandEncoder,
             { view: effectInput, width: outputWidth, height: outputHeight },
-            { graph: preparedImage.graph, sampler, timelineTime: timelineTimeSeconds, externalResources: imageExternalResources, effect });
-          if (!nativeHistory || (effect.params.stabilizationAssetId && !nativeHistory.current)) continue;
+            { queryIds: imagePlan.externalResources?.flatMap(resource => resource.kind === 'input-history' && resource.owner ? [resource.owner] : []),
+              graph: preparedImage.graph, sampler, timelineTime: timelineTimeSeconds, externalResources: imageExternalResources, effect });
+          if (!nativeHistory || (stabilizationActive && !nativeHistory.current)) {
+            effectInput = this.temporalResources.previewFrames.get(previewKey, outputWidth, outputHeight) ?? effectInput;
+            continue;
+          }
           if (nativeHistory?.current) graphInput = nativeHistory.current.view;
           if (nativeHistory) for (const resource of imagePlan.externalResources ?? []) {
-            if (resource.kind === 'input-history') imageExternalResources.set(resource.id, nativeHistory[resource.part]);
+            if (resource.kind === 'input-history') {
+              const queries = nativeHistory.queries;
+              const selected = queries && resource.owner ? queries[resource.owner] : nativeHistory;
+              if (!selected) throw new Error(`Temporal query ${resource.owner} is unavailable.`);
+              imageExternalResources.set(resource.id, selected[resource.part]);
+            }
           }
         }
       } catch (error) {
@@ -455,11 +449,28 @@ export class EffectsPipeline {
             height: outputHeight, timelineTimeSeconds, plan: imagePlan, outputView: effectOutput, outputFormat: 'rgba8unorm',
             instanceId: JSON.stringify([frameHistory?.scopeId ?? 'legacy', effect.id]), batch: imagePassBatch,
             externalResources: imageExternalResources });
+          effectInput = this.temporalResources.finishImage(effect.id, timelineTimeSeconds, commandEncoder, effectOutput, outputWidth, outputHeight, previewKey);
+          if (geometryCapture && effect.type === 'slit-scan' && preparedImage && imageExternalResources) {
+            geometryCapture({ effect, graph: preparedImage.graph, device: this.device, encoder: commandEncoder,
+              sampler, input: graphInput, color: effectInput, width: outputWidth, height: outputHeight,
+              timelineTime: timelineTimeSeconds, scopeId: frameHistory?.scopeId ?? clock.scopeId,
+              source: temporalSource, resources: imageExternalResources,
+              historyResources: imagePlan.externalResources?.filter(resource => resource.kind === 'input-history') ?? [],
+              passRuntime: this.imageGraphPassRuntime,
+              resolveResources: (plan, resources, graph) => this.temporalResources.resolveNamed(resources,
+                [...new Set([...(plan.resourceInputs ?? []), ...(plan.passes?.flatMap(pass => pass.inputResources) ?? [])])],
+                effect, frameHistory?.scopeId ?? clock.scopeId, timelineTimeSeconds, sourceMasks, outputWidth, outputHeight,
+                commandEncoder, temporalSource, { view: graphInput, width: outputWidth, height: outputHeight }, plan.externalResources, graph) });
+          }
           if (feedbackState) this.copyFeedbackOutput(commandEncoder, feedbackState, effectOutput, pingView, pongView,
             outputWidth, outputHeight, pingTexture, pongTexture);
-          effectInput = effectOutput; effectOutput = this.getNextOutputView(effectOutput, pingView, pongView); swapped = !swapped;
+          effectOutput = this.getNextOutputView(effectOutput, pingView, pongView); swapped = !swapped;
           nodePreviewTextureTap.capture(`effect:${effect.id}`, this.device, commandEncoder, sampler, effectInput, outputWidth, outputHeight);
-        } catch (error) { log.error(`Resource-backed image effect failed: ${effect.type}`, error); }
+        } catch (error) {
+          log.error(`Resource-backed image effect failed: ${effect.type}`, error);
+          if (isCollectingTemporalPreparations()) throw error;
+          if (geometryCapture) setTemporalStatus(`${effect.id}:geometry`, `Geometry unavailable: ${String(error)}`);
+        }
         continue;
       }
       const definition = imageGraphEffect && isFullscreenEffectDefinition(registered)
@@ -538,7 +549,6 @@ export class EffectsPipeline {
         continue;
       }
 
-      // Create uniform buffer for effect parameters
       const effectParams = this.createEffectUniformData(
         effect,
         outputWidth,
@@ -564,7 +574,6 @@ export class EffectsPipeline {
         this.prepareFeedbackState(commandEncoder, feedbackState, effect, timelineTimeSeconds, frameHistory, undefined, rebuiltPipeline);
       }
 
-      // Create bind group
       const entries: GPUBindGroupEntry[] = [
         { binding: 0, resource: sampler },
         { binding: 1, resource: graphInput },
@@ -597,13 +606,12 @@ export class EffectsPipeline {
       }
 
       if (definition.landmarkPoints) {
-        entries.push({ binding: 6, resource: { buffer: this.getLandmarkBuffer(effect.id) } });
+        entries.push({ binding: 6, resource: { buffer: this.landmarkBuffers.get(this.device, effect.id) } });
       }
 
       const effectBindGroup = this.pipelineCache.createBindGroup(pipelineKey, entries);
       if (!effectBindGroup) continue;
 
-      // Render effect pass
       const effectPass = commandEncoder.beginRenderPass({
         colorAttachments: [{
           view: effectOutput,
@@ -621,7 +629,6 @@ export class EffectsPipeline {
           outputWidth, outputHeight, pingTexture, pongTexture);
       }
 
-      // Swap buffers for next effect in chain
       effectInput = effectOutput;
       effectOutput = this.getNextOutputView(effectOutput, pingView, pongView);
       swapped = !swapped;
@@ -640,7 +647,6 @@ export class EffectsPipeline {
       effectInput = compare.outputView;
     }
 
-    // effectInput now contains the final result
     return { finalView: effectInput, swapped };
   }
 
@@ -660,9 +666,6 @@ export class EffectsPipeline {
     return this.denseTerrain.encodeContentProjection(commandEncoder, projection, sampler, contentView, backgroundView, outputView, outputWidth, outputHeight, opacity, resourceKey);
   }
 
-  /**
-   * Clean up resources
-   */
   destroy(): void {
     this.inputHistory.destroy();
     this.temporalResources.destroy();
@@ -672,8 +675,7 @@ export class EffectsPipeline {
       state.currentTexture.destroy();
     }
     this.feedbackStates.clear();
-    for (const buffer of this.landmarkBuffers.values()) buffer.destroy();
-    this.landmarkBuffers.clear();
+    this.landmarkBuffers.destroy();
     this.byteTextures.destroy();
     this.pipelineCache.clear();
     this.computeRuntime.clear();

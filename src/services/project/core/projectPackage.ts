@@ -101,6 +101,7 @@ function getPackagedPhysicalFolderPath(
     case 'CACHE_SPLATS': return `${mediaFolder}/.masterselects-cache/splats`;
     case 'CACHE_ARTIFACTS': return `${mediaFolder}/.masterselects-cache/artifacts`;
     case 'CACHE_WAVEFORMS': return `${mediaFolder}/.masterselects-cache/waveforms`;
+    case 'CACHE_MOTION': return `${mediaFolder}/.masterselects-cache/motion`;
     case 'BACKUPS': return `${mediaFolder}/.masterselects-cache/Backups`;
     default: return PROJECT_FOLDERS[folder];
   }

@@ -1,23 +1,45 @@
 import type { EffectParam } from '../../types';
+import { slitScanGeometryParams } from './geometryParameters';
 import { MAX_HYBRID_TEMPORAL_SAMPLES } from '../sourceTemporalLimits';
+import { slitScanTimeFieldParams, timeFieldChannelOptions } from './timeFieldParameters';
 
 const number = (label: string, value: number, min: number, max: number, step: number, group: string): EffectParam =>
   ({ type: 'number', label, default: value, min, max, step, group, animatable: true });
 
 export const slitScanParams: Record<string, EffectParam> = {
-  temporalStorage: { type: 'select', label: 'Frame storage', default: 'cache', group: 'Sampling', options: [
+  ...slitScanGeometryParams,
+  ...slitScanTimeFieldParams,
+  temporalStorage: { type: 'select', label: 'Frame storage', default: 'resident', group: 'Sampling', options: [
     { value: 'cache', label: 'GPU cache' }, { value: 'hybrid', label: 'Hybrid · bounded GPU memory' },
+    { value: 'resident', label: 'GPU history · resident video volume' },
   ] },
-  temporalInterpolation: { type: 'select', label: 'Temporal sampling', default: 'linear', group: 'Sampling', options: [
+  temporalMemory: { type: 'select', label: 'History memory', default: '4096', group: 'Sampling', options: [
+    { value: '640', label: '640 MiB' }, { value: '1024', label: '1 GiB' },
+    { value: '2048', label: '2 GiB' }, { value: '4096', label: '4 GiB' },
+  ] },
+  temporalPreview: { type: 'select', label: 'Preview quality', default: 'adaptive', group: 'Preview quality', options: [
+    { value: 'full', label: 'Full resolution' },
+    { value: 'adaptive', label: 'Adaptive · playback / scrub / edits' },
+  ] },
+  temporalInterpolation: { type: 'select', label: 'Temporal sampling', default: 'nearest', group: 'Sampling', options: [
     { value: 'linear', label: 'Blend adjacent frames' }, { value: 'nearest', label: 'Nearest frame (no blending)' },
   ] },
-  temporalSamples: { ...number('Samples', 32, 2, MAX_HYBRID_TEMPORAL_SAMPLES, 1, 'Sampling'), animatable: false },
+  temporalBatch: { type: 'select', label: 'Export processing', default: 'block', group: 'Sampling', options: [
+    { value: 'single', label: 'Individual frames' }, { value: 'block', label: 'Shared source frames (Hybrid)' },
+  ] },
+  temporalSamples: { ...number('Samples', 1920, 2, MAX_HYBRID_TEMPORAL_SAMPLES, 1, 'Sampling'), animatable: false },
+  scanSmoothing: number('Scan smoothing (px)', 0, 0, 4, 0.1, 'Sampling'),
+  scanStretchThreshold: number('Stretch threshold (×)', 2, 1.01, 16, .05, 'Sampling'),
+  // Retain the old binding for user-authored consumers of the time-gradient node.
+  scanTimeThreshold: number('Time change (ms / 1%)', 100, 0, 2000, 1, 'Resources'),
+  scanSmoothingPreview: { type: 'boolean', label: 'Show smoothing areas', default: false, group: 'Resources' },
   temporalResolution: { type: 'select', label: 'Resolution', default: 'native', group: 'Sampling', options: [
     { value: 'native', label: 'Full size (follows preview Proxy mode)' },
     { value: '160', label: 'Small preview · 160 px' },
   ] },
   protectionMask: { type: 'text', label: 'Protection mask', default: '', group: 'Resources' },
   stabilizationAssetId: { type: 'text', label: 'Stabilization tracking', default: '', group: 'Resources' },
+  stabilizationEnabled: { type: 'boolean', label: 'Enable stabilization', default: true, group: 'Resources' },
   stabilizationReference: { ...number('Reference (source s)', 0, 0, 86400, 0.001, 'Stabilization'), animatable: false },
   stabilizationStrength: { ...number('Strength', 1, 0, 1, 0.01, 'Stabilization'), animatable: false },
   stabilizationRotation: { type: 'select', label: 'Rotation', default: 'on', group: 'Stabilization', options: [
@@ -31,6 +53,7 @@ export const slitScanParams: Record<string, EffectParam> = {
   mapStart: number('Map start (timeline s)', 0, -3600, 3600, 0.01, 'Time map'),
   mapChannel: { type: 'select', label: 'Map channel', default: 'luminance', group: 'Time map', options: [
     { value: 'luminance', label: 'Luminance' }, { value: 'alpha', label: 'Alpha' },
+    ...timeFieldChannelOptions,
   ] },
   mapInvert: { type: 'select', label: 'Invert map', default: 'off', group: 'Time map', options: [
     { value: 'off', label: 'Off' }, { value: 'on', label: 'On' },
@@ -39,8 +62,9 @@ export const slitScanParams: Record<string, EffectParam> = {
     { value: 'result', label: 'Result' }, { value: 'time', label: 'Time map' }, { value: 'mask', label: 'Protection mask' },
   ] },
   maskStrength: number('Protection strength', 1, 0, 1, 0.01, 'Subject protection'),
-  delay: number('Delay (s)', 1, 0, 4, 0.01, 'Time'),
-  timeFactor: number('Time factor (×)', 1, 1, 10, 0.1, 'Time'),
+  delay: number('Delay (s)', 1, 0, 60, 0.01, 'Time'),
+  timeFactor: number('Time factor (×)', 1, 1, 100, 0.1, 'Time'),
+  bypassSlowdown: { type: 'boolean', label: 'Bypass slowdown', default: false, group: 'Resources' },
   profile: { type: 'select', label: 'Profile', default: 'linear', group: 'Time', options: [
     { value: 'linear', label: 'Linear scan' }, { value: 'center', label: 'Out from center' },
     { value: 'wave', label: 'Wave / folds' },

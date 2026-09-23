@@ -91,12 +91,15 @@ export function getMaskDescriptorForPath(path: string, clip?: TimelineClip): Pro
     };
   }
 
-  const numericProperty = parsed.property as 'position.x' | 'position.y' | 'feather' | 'featherQuality';
+  const numericProperty = parsed.property;
   const labelByProperty: Record<typeof numericProperty, string> = {
     'position.x': `${mask.name} X`,
     'position.y': `${mask.name} Y`,
     feather: `${mask.name} Feather`,
     featherQuality: `${mask.name} Feather Quality`,
+    featherOffset: `${mask.name} Feather Offset`,
+    featherBalance: `${mask.name} Feather Balance`,
+    rotation: `${mask.name} Rotation`,
   };
 
   return {
@@ -105,10 +108,10 @@ export function getMaskDescriptorForPath(path: string, clip?: TimelineClip): Pro
     group: 'Masks',
     valueType: 'number',
     animatable: true,
-      defaultValue: numericProperty.startsWith('position.') ? 0 : numericProperty === 'featherQuality' ? 1 : 0,
+    defaultValue: numericProperty === 'featherQuality' ? 50 : 0,
     ui: {
-      min: numericProperty === 'feather' ? 0 : numericProperty === 'featherQuality' ? 1 : undefined,
-      max: numericProperty === 'featherQuality' ? 100 : undefined,
+      min: numericProperty === 'featherBalance' ? -100 : numericProperty === 'feather' ? 0 : numericProperty === 'featherQuality' ? 1 : undefined,
+      max: numericProperty === 'featherBalance' ? 100 : numericProperty === 'featherQuality' ? 100 : undefined,
       step: numericProperty === 'featherQuality' ? 1 : 0.1,
       aliases: [mask.name, numericProperty],
     },
@@ -117,6 +120,8 @@ export function getMaskDescriptorForPath(path: string, clip?: TimelineClip): Pro
       if (!targetMask) return undefined;
       if (numericProperty === 'position.x') return targetMask.position.x;
       if (numericProperty === 'position.y') return targetMask.position.y;
+      if (numericProperty === 'featherBalance') return targetMask.featherBalance ?? 0;
+      if (numericProperty === 'featherOffset') return targetMask.featherOffset ?? 0;
       return targetMask[numericProperty];
     },
     write: (targetClip, value) => ({
@@ -143,6 +148,8 @@ export function getMaskDescriptorsForClip(clip: TimelineClip): PropertyDescripto
     });
     return [
       getMaskDescriptorForPath(`mask.${mask.id}.path`, clip),
+      getMaskDescriptorForPath(`mask.${mask.id}.featherOffset`, clip),
+      getMaskDescriptorForPath(`mask.${mask.id}.featherBalance`, clip),
       getMaskDescriptorForPath(`mask.${mask.id}.position.x`, clip),
       getMaskDescriptorForPath(`mask.${mask.id}.position.y`, clip),
       getMaskDescriptorForPath(`mask.${mask.id}.feather`, clip),

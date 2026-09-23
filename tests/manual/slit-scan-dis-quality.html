@@ -1,0 +1,50 @@
+<!doctype html><meta charset="utf-8"><title>Slit Scan DIS numerical check</title>
+<h1>Slit Scan DIS numerical check</h1><pre id="result">Running…</pre>
+<script type="module">
+import { DisFlowGpu } from '/src/effects/time/DisFlowGpu.ts';
+const result=document.querySelector('#result');
+const half=h=>{const s=h&32768?-1:1,e=(h>>10)&31,m=h&1023;return s*(e===0?2**-14*m/1024:e===31?(m?NaN:Infinity):2**(e-15)*(1+m/1024));};
+const luma=(x,y)=>.5+.17*Math.sin(x*.31+y*.13)+.14*Math.cos(y*.37-x*.17)+.12*Math.sin(x*.71+y*.53);
+try {
+  const adapter=await navigator.gpu.requestAdapter();if(!adapter)throw new Error('No WebGPU adapter');
+  const device=await adapter.requestDevice(),size=128,dt=.04;
+  const gpu=await DisFlowGpu.create(device,size,size), results=[];
+  const cases=[['still',0,0],['x',2,0],['y',0,-2],['subpixel',.5,-.25],['large',8,5],['reversePTS',-2,1],['flat',0,0],['occlusion',2,0],['cut',0,0]];
+  for(const [name,dx,dy] of cases) {
+    result.textContent=`Running ${name}…`;
+    const pixels=new Uint8Array(size*size*8);
+    for(let layer=0;layer<2;layer++)for(let y=0;y<size;y++)for(let x=0;x<size;x++) {
+      let v=name==='flat'?.5:luma(x-layer*dx,y-layer*dy);
+      if(layer&&name==='occlusion'&&x>=48&&x<80&&y>=40&&y<88)v=.9;
+      if(layer&&name==='cut')v=.5+.3*Math.sin(x*1.71)*Math.cos(y*1.93);
+      const c=Math.round(v*255);pixels.set([c,c,c,255],((layer*size+y)*size+x)*4);
+    }
+    const atlas=device.createTexture({size:[size,size,2],format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+    const volume=device.createTexture({size:[size,size,2],format:'rgba16float',usage:GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.COPY_SRC});
+    device.queue.writeTexture({texture:atlas},pixels,{bytesPerRow:size*4,rowsPerImage:size},[size,size,2]);
+    const delta=name==='reversePTS'?-dt:dt;
+    await gpu.pair({atlas,width:size,height:size,columns:1,rows:1,layers:2,
+      slots:new Map([[1,0],[1+delta,1]]),pairs:new Map([[1,1+delta]]),metadata:new Float32Array(),identity:name},1,1+delta,volume);
+    const read=device.createBuffer({size:size*size*8,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+    const encoder=device.createCommandEncoder();encoder.copyTextureToBuffer({texture:volume},{buffer:read,bytesPerRow:size*8},[size,size]);
+    device.queue.submit([encoder.finish()]);await read.mapAsync(GPUMapMode.READ);
+    const values=new Uint16Array(read.getMappedRange()),errors=[];let confidence=0,valid=0,accepted=0,occludedConfidence=0,occludedCount=0;
+    for(let y=16;y<size-16;y++)for(let x=16;x<size-16;x++) {
+      const i=(y*size+x)*4,c=half(values[i+2]),v=half(values[i+3]);confidence+=c;valid+=v;
+      if(c>.15&&v>.5){accepted++;errors.push(Math.hypot(half(values[i])*size*delta-dx,half(values[i+1])*size*delta-dy));}
+      if(x>=52&&x<76&&y>=44&&y<84){occludedConfidence+=c;occludedCount++;}
+    }
+    const count=(size-32)**2,sorted=errors.toSorted((a,b)=>a-b);
+    const stats={name,delta,expectedDisplacement:[dx,dy],acceptedFraction:accepted/count,
+      meanConfidence:confidence/count,validFraction:valid/count,
+      meanEndpointError:errors.length?errors.reduce((a,b)=>a+b,0)/errors.length:null,
+      p95EndpointError:sorted.length?sorted[Math.floor((sorted.length-1)*.95)]:null,
+      occludedConfidence:occludedConfidence/occludedCount};
+    stats.pass=['flat','cut'].includes(name)?stats.meanConfidence<.15:
+      stats.acceptedFraction>.6&&stats.meanEndpointError<.5&&stats.p95EndpointError<1;
+    if(name==='occlusion')stats.pass=stats.pass&&stats.occludedConfidence<.15;
+    results.push(stats);read.unmap();read.destroy();atlas.destroy();volume.destroy();
+  }
+  gpu.destroy();device.destroy();result.textContent=JSON.stringify({pass:results.every(r=>r.pass),results},null,2);
+}catch(error){result.textContent=`FAIL: ${error.stack??error}`;}
+</script>

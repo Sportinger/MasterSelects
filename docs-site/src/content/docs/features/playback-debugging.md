@@ -16,6 +16,16 @@ Playback bugs in MasterSelects usually span three layers at once:
 
 Use the browser monitors and AI bridge tools together instead of guessing from the UI.
 
+For an inspector-dependent slowdown, compare ten seconds of playback with the
+same effect enabled and its controls expanded versus collapsed. Use
+`samplePlaybackFramePacing` for whole-page frame gaps and long animation-frame
+attribution: render-loop CPU timings alone omit React work triggered by playhead
+updates. Raw video callbacks and render counts also do not prove a temporal
+effect produced new images; inspect `getStats().slitScanPlayback` alongside them.
+Keep graph discovery tied to authored effect changes and avoid rebuilding
+unchanged parameter controls on every playhead tick. Animated values must still
+update, including changes made in Nodes.
+
 ---
 
 ## Browser Surfaces

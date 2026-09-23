@@ -24,13 +24,14 @@ import {
 } from '../../services/nodeGraph/clipGraphLinking';
 import { cleanupEffectParamTimelineState } from './helpers/propertyTimelineCleanup';
 import { reconcileRemovedParameterTargets } from '../../services/parameterSources/parameterSourceLifecycle';
+import { reconcileSlitScanDuration } from './helpers/slitScanDuration';
 
 function updateClipEffectState(
   clip: TimelineClip,
   updater: (clip: TimelineClip) => TimelineClip,
   invalidateProcessedAudio: boolean,
 ): TimelineClip {
-  const updated = updater(clip);
+  const updated = reconcileSlitScanDuration(clip, updater(clip));
   return invalidateProcessedAudio ? clearProcessedAudioAnalysisRefs(updated) : updated;
 }
 
@@ -177,6 +178,7 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       ...cleanupEffectParamTimelineState(state, clipId, effectId),
     });
     invalidateCache();
+    get().updateDuration();
     captureSnapshot('Remove effect');
   },
 
@@ -210,6 +212,7 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       }),
     });
     invalidateCache();
+    get().updateDuration();
     captureSnapshot('Adjust effect');
   },
 
@@ -248,6 +251,7 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       }),
     });
     invalidateCache();
+    get().updateDuration();
     captureSnapshot(enabled ? 'Enable effect' : 'Bypass effect');
   },
 

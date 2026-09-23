@@ -2,7 +2,8 @@ import commonShader from './_shared/commonShader';
 import { imageGraphProgramShader } from './_shared/imageGraphDefinition';
 import type { ImageOperatorPlan } from '../services/operators/imageOperatorGraph';
 import { imageOperatorRuntimeUniformSize, packImageOperatorRuntimeUniforms, type ImageOperatorResourceMetadata } from '../services/operators/imageOperatorRuntimeUniforms';
-import { imageGraphResourceSampleType } from './_shared/imageGraphShaderResources';
+import { imageGraphResourceSampleType, imageGraphResourceViewDimension } from './_shared/imageGraphShaderResources';
+import { motionAnalysisMaxEdge } from './time/motionAnalysisQuality';
 
 export type ImageGraphPassSource = { kind: 'texture'; view: GPUTextureView } | { kind: 'external'; texture: GPUExternalTexture };
 export interface ImageGraphPassBatch {
@@ -18,6 +19,8 @@ export interface ImageGraphExternalResource {
   width?: number;
   height?: number;
   available?: boolean;
+  disTrajectory?: import('./time/DisTrajectory').DisTrajectory;
+  temporalSamples?: import('./time/TemporalSampleMetadata').TemporalSampleMetadata;
 }
 interface Allocation { width: number; height: number; topology: string; textures: Map<string, GPUTexture>; views: Map<string, GPUTextureView> }
 
@@ -70,10 +73,13 @@ export class ImageGraphPassRuntime {
     const requiredSampledTextures = 1 + Math.max(...passes.map(pass => pass.inputResources.length));
     if (this.device.limits.maxSampledTexturesPerShaderStage < requiredSampledTextures)
       throw new Error('Device cannot bind the required image graph resources.');
-    const resources = options.plan.resources ?? [];
+    const analysisEdge = options.plan.externalResources?.some(resource => resource.kind === 'source-motion' && resource.required)
+      ? 320 : motionAnalysisMaxEdge();
+    const resources = (options.plan.resources ?? []).map(resource => resource.maxEdge && resource.id.startsWith('image-resource:__motion-')
+      ? { ...resource, maxEdge: Math.min(resource.maxEdge, analysisEdge) } : resource);
     const descriptors = new Map(resources.map(item => [item.id, item]));
     const ids = new Set(descriptors.keys());
-    const topology = `${options.plan.key}:${passes.map(pass => `${pass.id}>${pass.outputResource ?? 'final'}:${pass.inputResources.join(',')}`).join('|')}`;
+    const topology = `${options.plan.key}:${resources.map(resource => resource.maxEdge ?? 0).join(',')}:${passes.map(pass => `${pass.id}>${pass.outputResource ?? 'final'}:${pass.inputResources.join(',')}`).join('|')}`;
     const allocation = this.allocation(options.instanceId, topology, options.width, options.height, resources);
     const produced = new Set<string>();
     const localViews = new Map<string, GPUTextureView>(), identities = new Map<string, string>();
@@ -89,17 +95,20 @@ export class ImageGraphPassRuntime {
     for (const pass of passes) {
       if (pass.inputResources.length > 8) throw new Error(`Image graph pass ${pass.id} exceeds eight resource inputs.`);
       for (const id of pass.inputResources) if (!ids.has(id) || !produced.has(id)) throw new Error(`Image graph pass ${pass.id} reads unavailable resource ${id}.`);
-      const packed = packImageOperatorRuntimeUniforms(pass.program, options.timelineTimeSeconds, options.width, options.height, metadata);
+      const maxEdge = pass.outputResource ? descriptors.get(pass.outputResource)?.maxEdge : undefined;
+      const scale = maxEdge ? Math.min(1, maxEdge / Math.max(options.width, options.height)) : 1;
+      const width = Math.max(1, Math.round(options.width * scale)), height = Math.max(1, Math.round(options.height * scale));
+      const packed = packImageOperatorRuntimeUniforms(pass.program, options.timelineTimeSeconds, width, height, metadata);
       const payloadIdentity = packed ? Array.from(new Uint32Array(packed.buffer, packed.byteOffset, packed.byteLength / 4)).join(',') : '';
       const inputIdentities = pass.inputResources.map(id => identities.get(id) ?? `local:${id}`);
-      const producerIdentity = pass.outputResource ? `${pass.outputResource}:${pass.program.key}:${payloadIdentity}:${inputIdentities.join('|')}` : '';
+      const producerIdentity = pass.outputResource ? `${pass.outputResource}:${width}x${height}:${pass.program.key}:${payloadIdentity}:${inputIdentities.join('|')}` : '';
       const shared = producerIdentity ? options.batch?.encoded.get(producerIdentity) : undefined;
       if (pass.outputResource && shared) { localViews.set(pass.outputResource, shared.view); identities.set(pass.outputResource, shared.identity); produced.add(pass.outputResource);
         options.batch?.resources.set(pass.outputResource, shared); if (pass.outputResource === options.stopAtResourceId) break; continue; }
       let output = pass.outputResource ? allocation.views.get(pass.outputResource) : options.outputView;
       const priorResource = pass.outputResource ? options.batch?.resources.get(pass.outputResource) : undefined;
       if (pass.outputResource && priorResource && priorResource.identity !== producerIdentity) {
-        const texture = this.device.createTexture({ size: { width: options.width, height: options.height }, format: 'rgba16float',
+        const texture = this.device.createTexture({ size: { width, height }, format: 'rgba16float',
           usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
         options.batch!.transientTextures.push(texture); output = texture.createView();
       }
@@ -142,7 +151,7 @@ export class ImageGraphPassRuntime {
       if (imageOperatorRuntimeUniformSize(program)) entries.push({ binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } });
       (program.resourceInputs ?? []).forEach((_id, index) => entries.push({ binding: 3 + index, visibility: GPUShaderStage.FRAGMENT,
         texture: { sampleType: imageGraphResourceSampleType(program.resourceSampling?.[index]),
-          viewDimension: _id === 'input-history:atlas' ? '2d-array' : '2d' } }));
+          viewDimension: imageGraphResourceViewDimension(_id) } }));
       const bindGroupLayout = this.device.createBindGroupLayout({ entries });
       layout = this.device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
     }
@@ -152,7 +161,7 @@ export class ImageGraphPassRuntime {
     this.pipelines.set(key, pipeline); return pipeline;
   }
 
-  private allocation(instanceId: string, topology: string, width: number, height: number, resources: readonly { id: string }[]): Allocation {
+  private allocation(instanceId: string, topology: string, width: number, height: number, resources: readonly { id: string; maxEdge?: number }[]): Allocation {
     const allocationKey = `${instanceId}:${width}x${height}:${topology}`;
     const found = this.allocations.get(allocationKey);
     if (found) { this.allocations.delete(allocationKey); this.allocations.set(allocationKey, found); return found; }
@@ -162,7 +171,8 @@ export class ImageGraphPassRuntime {
     // The encoder/batch keeps them alive until WebGPU can retire them safely.
     if (previousKey && previousKey !== allocationKey) this.allocations.delete(previousKey);
     const next: Allocation = { width, height, topology, textures: new Map(), views: new Map() };
-    for (const resource of resources) { const texture = this.device.createTexture({ size: { width, height }, format: 'rgba16float',
+    for (const resource of resources) { const scale = resource.maxEdge ? Math.min(1, resource.maxEdge / Math.max(width, height)) : 1;
+      const texture = this.device.createTexture({ size: { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) }, format: 'rgba16float',
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING }); next.textures.set(resource.id, texture); next.views.set(resource.id, texture.createView()); }
     this.allocations.set(allocationKey, next); this.activeAllocationKeys.set(instanceId, allocationKey);
     if (this.allocations.size > 32) {
@@ -172,6 +182,15 @@ export class ImageGraphPassRuntime {
       for (const [owner, key] of this.activeAllocationKeys) if (key === retiredKey) this.activeAllocationKeys.delete(owner);
     }
     return next;
+  }
+
+  release(instanceId: string): void {
+    const key = this.activeAllocationKeys.get(instanceId);
+    if (!key) return;
+    const allocation = this.allocations.get(key);
+    this.activeAllocationKeys.delete(instanceId); this.allocations.delete(key);
+    if (allocation) void Promise.resolve().then(() => this.device.queue.onSubmittedWorkDone())
+      .then(() => this.destroyAllocation(allocation), () => this.destroyAllocation(allocation));
   }
 
   private destroyAllocation(value: Allocation) { for (const texture of value.textures.values()) texture.destroy(); }

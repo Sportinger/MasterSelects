@@ -70,8 +70,8 @@ export class CacheManager {
     };
   }
 
-  clearScrubbingCache(videoSrc?: string): void {
-    this.scrubbingCache?.clearScrubbingCache(videoSrc);
+  clearScrubbingCache(videoSrc?: string, options?: { preserveFrames?: boolean }): void {
+    this.scrubbingCache?.clearScrubbingCache(videoSrc, options);
   }
 
   ensureVideoFrameCached(video: HTMLVideoElement, ownerId?: string): void {

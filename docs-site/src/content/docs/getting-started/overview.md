@@ -65,6 +65,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | [Media Runtime](/features/media-runtime/) | Shared source/runtime registry, decode sessions, frame-provider reuse, and slot/background playback bindings |
 | [ProRes Browser Decode](/features/prores-browser-decode/) | Experimental TurboRes-backed progressive ProRes 422 import, preview, Source Monitor, proxy, audio, export, and lifecycle gates |
 | [Effects](/features/effects/) | 98-effect registry, live media thumbnails, fisheye lens correction, glyph/compute/tracking runtimes, physical PAL/RF/VHS emulation, split compare, and timeline transitions |
+| [Slit Scan 3D](/features/slit-scan-3d/) | Reference time surfaces, DIS deformation, source-pair motion bands, scene cameras and geometry settings |
 | [Memory Leak](/features/memory-leak/) | Generator that shows real leftover bytes of the FFmpeg wasm heap as 8/16/32-bit pixels, with clip feeding, per-frame motion, and freezable blocks |
 | [Color Correction](/features/color-correction/) | Node/list color tab, graph data model, GPU pipeline, scopes, and realtime grading workflow |
 | [Masks](/features/masks/) | Overlay mask editing, whole-path keyframes, feathering, and stored modes |

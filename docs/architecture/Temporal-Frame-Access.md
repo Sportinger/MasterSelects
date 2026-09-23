@@ -13,6 +13,58 @@ candidates, not measured speedups for consumers that have not been migrated.
 | Previously rendered effect input | `InputHistoryRuntime` | Rolling capture, including preceding effects; reset/hold/advance follows the render clock. |
 | CPU pixels for analysis | An explicit CPU consumer adapter | Decode can be shared, but algorithms accepting `ImageData` still require pixel conversion. |
 
+## Motion fields and Slit Scan reconstruction
+
+Motion analysis is an image-graph contract. `image.optical-flow` accepts two
+explicit images and their signed time interval. `image.source-motion` declares
+a source-video history window; its `denseInverseSearch` option selects cached
+DIS source pairs. The original local Lucas-Kanade route remains available for
+existing authored consumers. Neither uses the previous playback frame.
+Motion RG is UV velocity per graph-delay second, B confidence, A validity.
+
+The generated Slit Scan detector enables DIS. `SourceMotionHistory` obtains
+original PTS through `ResidentTemporalRuntime`, shared `SourceFrameService`
+leases and `TemporalFrameUploader`. The DIS raw-image budget is 64 MiB; its
+RGBA16F flow atlas uses the same slot layout (up to 128 MiB, plus scratch).
+Analysis starts at a 320-pixel maximum edge and reduces it for long windows.
+Adjacent analysis frames are selected from the real timestamp index, including
+variable frame rates and trim boundaries, rather than arbitrary scan samples.
+With stabilization selected, both images use its reference coordinate system.
+
+`DisFlowGpu` independently implements the fast DIS path described by
+[Kroeger et al.](https://arxiv.org/abs/1603.03590): Gaussian pyramid, mean-normalized
+8×8 inverse-compositional patch search, overlapping stride-4 patches, spatial
+propagation and residual-weighted densification at each scale. It additionally
+checks forward/backward correspondence. Variational refinement is not included;
+this is not the OpenCV binary or a learned model. Both directions are solved on
+the GPU without CPU pixel readback. Each submitted pair yields before the next.
+
+`DisMotionCache` keys fields by exact reference/target PTS and source allocation.
+Changing threshold or output size reuses measured pairs. Source/analysis-size or
+stabilization changes invalidate the cache; evicted PTS need recomputation.
+Raw slots remain pinned while analysis is pending, and destruction waits for
+submitted work. Cached UV/source-second velocities are converted by per-grid
+metadata to graph-clock velocity, including Time factor, reverse/variable speed
+and held boundaries. Every output pixel looks up its own source time directly;
+the cached DIS lookup is not decimated to the old 80-pixel playback field.
+
+`motion.temporal-deformation` uses inverse singular values of
+`I + velocity_pixels * gradient(delay)^T`. **Stretch threshold (×)** compares
+maximum stretch (default 2, transition width 0.25), weighted by confidence.
+Pure compression does not activate the mask. The generated time-gradient-only
+detector migrates to this path without replacing authored scan wiring; its old
+parameter remains available for custom consumers. RGB-separated time sampling
+retains its existing smoothing bypass.
+
+The nine-tap directional filter blends pixels, not intermediate video frames.
+Only the preview-owner overlay is forced off during export. When radius and eye
+are off, compiler shortcuts remove analysis resources and their owners release
+leases. Pending analysis leaves an invalid optional mask while preview continues;
+export waits through the shared preparation collector. Runtime handles remain
+device-local; graphs contain ordinary reusable typed nodes. Builds/test execution
+are paused. Live DIS accuracy, cache/performance behavior and export parity still
+require verification; do not infer a measured speedup from this implementation.
+
 ## Shared source path
 
 The implementation lives in
@@ -72,7 +124,83 @@ samples can follow source resolution (up to 8192 positions); the resident atlas
 remains bounded by memory and device array-layer limits. Hybrid currently uses
 original sources even when preview proxies are enabled.
 
-Slit Scan's `timeFactor` expands the requested source horizon by 1–10×. Source
+`ResidentTemporalRuntime` adds an opt-in `temporalStorage: resident` consumer.
+With `temporalPreview: adaptive`, TemporalEffectResources owns a separate resident
+interactive cache for playback, dragging and paused parameter edits. A complete-window estimate chooses
+a power-of-two downscale and reserves capacity before the clipped history grows;
+it never changes temporal sample count. Paused renders refresh the adaptive result while
+full-quality preparation completes, and account for its bytes in the remaining
+resident/Hybrid budget. Export excludes and releases the interactive cache.
+Interactive results capture the current input into an owned texture in the same
+render encoder. They never retain a borrowed compositor ping/pong view for pause.
+EffectsPipeline captures complete effect outputs in TemporalPreviewFrames. During
+refills it presents this owned image instead of retaining mutable atlas/metadata
+views. The snapshot cache is capped at four images / 64 MiB (one oversized image
+is allowed), with GPU destruction deferred until submitted work completes.
+Snapshots are presentation-only and never become temporal source history.
+It implements a logical x/y/time volume using tiled 2D texture-array pages rather
+than introducing a second shader resource type. Texture array layer count is not
+used as a temporal sample cap: frames can occupy independent tiles within pages.
+The shared TemporalFrameUploader renders borrowed source frames into those tiles
+with viewport/scissor bounds. The original decode lease and PTS index remain owned
+by SourceFrameService. No decoder-per-sample or rolling rendered-output history.
+
+The mode keeps the entire requested window resident. Two-row RGBA32F metadata
+maps the existing temporal grid to two physical source slots plus a source blend;
+header mode 4 selects the resident sampler. A binary lower-bound search finds grid
+neighbors; negative slots sample the current effect input. Spatial UVs clamp within
+each tile to avoid neighboring-frame bleed. The metadata allocation and tile pages
+obey the selected 640 MiB to 4 GiB budget and device limits. Allocation follows
+distinct PTS plus 25% headroom (minimum four optional slots), capped by source
+frame count and budget. Growth retires the old allocation before replacement;
+GPU allocation and initial upload validation complete before readiness.
+Incomplete windows do not
+produce partially sampled exports: pending work joins the preparation barrier.
+Interactive cache misses hold the last complete effect image. Dropping missing grid
+positions would bridge large time gaps with current/old frames and create hard seams
+in Nearest mode, so no partial metadata reaches the resident sampler. Initial load
+uses the source input until the first complete image. This path never feeds export. Lookahead fills
+up to twelve spare slots and is not cancelled merely because playback reaches its
+pending PTS. GPU out-of-memory allocation retries once without optional headroom.
+Typed capacity errors or exhausted GPU allocation retries select Hybrid streaming
+in TemporalEffectResources. A per-effect settings signature latches that fallback
+across advancing playback, avoiding repeated allocation attempts/cache eviction.
+Changing memory/window/quality settings permits another resident attempt. Async
+memory failures resolve the preparation barrier before routing the next resolve
+through Hybrid; other export failures remain errors. Interactive source-load errors
+retry after one second, retaining decoded GPU slots when the reader is available.
+Stable source slots are reused across window
+advances and spare slots can prefetch future PTS. Preview/export, mask/time-map and
+stabilization semantics remain in the existing graph/source contracts.
+
+Reference principle: [TouchDesigner Texture 3D](https://derivative.ca/UserGuide/Texture_3D_TOP)
+and [Time Machine](https://derivative.ca/UserGuide/Time_Machine_TOP).
+This is an independent implementation of the resident-history principle, not a
+TouchDesigner integration. A Full HD resident preview has been observed, but
+playback/export regression checks and performance measurements remain pending;
+no real-time performance claim has been established. Compiled image program keys
+include emitted WGSL so surviving GPU pipeline caches cannot confuse revised
+temporal sampling helpers with the previous implementation during HMR.
+
+The optional `temporalBatch: block` Hybrid export path reverses source/output
+iteration for the standard linear graph. An exact, unrounded export frame step
+is scoped to the synchronous temporal preparation collector. The planner builds
+up to eight output windows, deduplicates their source PTS, and requests them in
+source order through the same SourceFrameService lease. LinearTemporalBlockGpu
+uses TemporalFrameUploader.importVideo to draw conservative strip rectangles
+straight from each borrowed external texture into RGBA16F output tiles. Submit
+before the callback returns. No retained decoder surfaces, full source-atlas
+uploads, or GPU demand readbacks are needed for these historical contributions.
+Current-input contributions are added only when consuming an output tile.
+Tile memory is reserved from Hybrid's existing budget. Cache identity includes
+source mapping, temporal settings, effect parameters and exact export spacing;
+only a matching local output time can consume a tile. Eligibility fails closed
+for custom graphs, spatial protection, stabilization, non-linear profiles, time
+maps and reduced source resolution. Preview keeps the existing Hybrid path.
+This implementation is opt-in and still awaits execution of its GPU/regression
+and performance validation; do not infer a measured speedup from the architecture.
+
+Slit Scan's `timeFactor` expands the requested source horizon by 1–100×. Source
 times and stabilization coverage use that full horizon; uploaded age metadata is
 divided by the factor so saved/custom graph delay coordinates remain unchanged.
 This applies to both cache and Hybrid GPU paths, including demand bitsets and

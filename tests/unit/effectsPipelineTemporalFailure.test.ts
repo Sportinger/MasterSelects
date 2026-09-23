@@ -20,7 +20,7 @@ function setup() {
   const draw = vi.fn();
   const encoder = { beginRenderPass: vi.fn(() => ({ setPipeline: vi.fn(), setBindGroup: vi.fn(), draw, end: vi.fn() })) } as unknown as GPUCommandEncoder;
   const pipeline = new EffectsPipeline(device);
-  vi.spyOn(TemporalEffectResources.prototype, 'resolveNamed').mockImplementation(() => {});
+  vi.spyOn(TemporalEffectResources.prototype, 'resolveNamed').mockReturnValue(true);
   const failure = new Error('Source frame cache exceeds the 640 MiB budget.');
   const resolve = vi.spyOn(TemporalEffectResources.prototype, 'resolveNative').mockImplementation(() => { throw failure; });
   const input = {} as GPUTextureView, output = {} as GPUTextureView;
@@ -30,6 +30,15 @@ function setup() {
   return { pipeline, device, resolve, failure, render, input, output, draw, slitScan };
 }
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+it('resolves time-mask resources read by intermediate Slit Scan passes', () => {
+  const { render, resolve, slitScan } = setup();
+  resolve.mockReturnValue({ atlas: { view: {} as GPUTextureView, identity: 'atlas' },
+    ages: { view: {} as GPUTextureView, identity: 'ages' } });
+  vi.spyOn(ImageGraphPassRuntime.prototype, 'encode').mockReturnValue(true);
+  render([{ ...slitScan, params: { mapSource: 'mask', mapAmount: 1, mapMaskId: 'test-mask' } }]);
+  expect(vi.mocked(TemporalEffectResources.prototype.resolveNamed).mock.calls[0][1]).toContain('slit-scan:time-mask');
+});
 
 it('preserves the image when a temporal resource fails and continues rendering later effects', () => {
   const { render, input, output, slitScan, draw, resolve } = setup();

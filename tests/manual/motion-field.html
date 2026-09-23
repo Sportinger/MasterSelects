@@ -1,0 +1,51 @@
+<!doctype html><meta charset="utf-8"><title>Motion field GPU regression</title>
+<h1>Motion field GPU regression</h1><pre id="result">Running…</pre>
+<script type="module">
+import { HISTORY_OPTICAL_FLOW_WGSL } from '/src/services/operators/opticalFlowWgsl.ts';
+import { RESIDENT_TEMPORAL_SAMPLE_WGSL } from '/src/services/operators/residentTemporalSampling.ts';
+import { MOTION_IMAGE_WGSL } from '/src/services/operators/motionImageWgsl.ts';
+const result = document.querySelector('#result');
+try {
+  const adapter = await navigator.gpu.requestAdapter(), device = await adapter.requestDevice();
+  device.pushErrorScope('validation');
+  const size = 160, pixels = new Uint8Array(size*size*4*2);
+  for(let layer=0;layer<2;layer++) for(let y=0;y<size;y++) for(let x=0;x<size;x++) {
+    const u=(x+.5-layer)/size, v=(y+.5)/size;
+    const value=Math.round(255*(.5+.2*Math.sin(u*24)*Math.cos(v*31)+.15*Math.cos(u*45+v*17)));
+    pixels.set([value,value,value,255],((layer*size+y)*size+x)*4);
+  }
+  const atlas=device.createTexture({size:[size,size,2],format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+  device.queue.writeTexture({texture:atlas},pixels,{bytesPerRow:size*4,rowsPerImage:size},[size,size,2]);
+  const ages=device.createTexture({size:[3,2],format:'rgba32float',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+  device.queue.writeTexture({texture:ages},new Float32Array([0,0,0,0, .1,1,1,0, 2,0,4,0, 0,0,0,0, 0,0,0,0, 1,1,0,0]),{bytesPerRow:48},[3,2]);
+  const sampler=device.createSampler({minFilter:'linear',magFilter:'linear'});
+  const buffer=device.createBuffer({size:64,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+  const readback=device.createBuffer({size:64,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+  const module=device.createShaderModule({code:RESIDENT_TEMPORAL_SAMPLE_WGSL+HISTORY_OPTICAL_FLOW_WGSL+MOTION_IMAGE_WGSL+`
+    @group(0) @binding(0) var atlas:texture_2d_array<f32>;
+    @group(0) @binding(1) var ages:texture_2d<f32>;
+    @group(0) @binding(2) var s:sampler;
+    @group(0) @binding(3) var<storage,read_write> results:array<vec4f>;
+    @compute @workgroup_size(1) fn main() {
+      results[0]=imageHistoryOpticalFlow(atlas,ages,s,vec2f(.5),0.0,.1,vec2f(80.0));
+      results[1]=imageHistoryOpticalFlow(atlas,ages,s,vec2f(.5),0.0,.1,vec2f(320.0));
+      results[2]=motionTemporalDeformation(vec4f(-.005,0.0,1.0,1.0),vec2f(1.0,0.0),vec2f(100.0));
+      results[3]=motionTemporalDeformation(vec4f(.01,0.0,1.0,1.0),vec2f(1.0,0.0),vec2f(100.0));
+    }`});
+  const pipeline=await device.createComputePipelineAsync({layout:'auto',compute:{module,entryPoint:'main'}});
+  const bind=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[
+    {binding:0,resource:atlas.createView({dimension:'2d-array'})},{binding:1,resource:ages.createView()},
+    {binding:2,resource:sampler},{binding:3,resource:{buffer}}]});
+  const encoder=device.createCommandEncoder(), pass=encoder.beginComputePass();
+  pass.setPipeline(pipeline);pass.setBindGroup(0,bind);pass.dispatchWorkgroups(1);pass.end();
+  encoder.copyBufferToBuffer(buffer,0,readback,0,64);device.queue.submit([encoder.finish()]);
+  await readback.mapAsync(GPUMapMode.READ);
+  const values=Array.from(new Float32Array(readback.getMappedRange()));readback.unmap();
+  const error=await device.popErrorScope();if(error)throw Error(error.message);
+  if(Math.abs(values[0]+1/size/.1)>.015 || values[2]<.1)throw Error('Incorrect signed source flow: '+values.slice(0,4));
+  if(values.slice(0,4).some((v,i)=>Math.abs(v-values[i+4])>.0001))throw Error('Upscaled analysis field changed source motion');
+  if(Math.abs(values[8]-2)>.001 || Math.abs(values[12]-1)>.001)throw Error('Stretch/compression mismatch');
+  result.textContent='PASS: signed history flow; source-pixel patch size; expansion/compression.\n'+JSON.stringify(values);
+  for(const item of [atlas,ages,buffer,readback])item.destroy();device.destroy();
+} catch(error) { result.textContent='FAIL: '+error.stack; }
+</script>

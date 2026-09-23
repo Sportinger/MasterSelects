@@ -15,6 +15,7 @@ import {
   isVideoInspectorSectionEnabled,
 } from '../../../services/videoInspector/sectionBypass';
 import { findClipById } from './keyframeClipLookup';
+import { slitScanPlaybackFactor } from '../../../effects/time/slit-scan/timeFactor';
 
 type KeyframeTransformInterpolationActions = Pick<
   KeyframeActions,
@@ -118,17 +119,19 @@ export const createKeyframeTransformInterpolationActions: SliceCreator<KeyframeT
 
     const keyframes = clipKeyframes.get(clipId) || [];
     const defaultSpeed = clip.speed ?? 1;
-
+    const factor = slitScanPlaybackFactor(clip, keyframes, clipLocalTime);
     return applyVideoInspectorSpeedBypass(
       clip,
-      getSpeedAtTime(keyframes, clipLocalTime, defaultSpeed),
-    );
+      getSpeedAtTime(keyframes, clipLocalTime * factor, defaultSpeed),
+    ) * factor;
   },
 
   getSourceTimeForClip: (clipId, clipLocalTime) => {
     const { clips, clipKeyframes } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return clipLocalTime;
+
+    clipLocalTime *= slitScanPlaybackFactor(clip, clipKeyframes.get(clipId) ?? [], clipLocalTime);
 
     if (!isVideoInspectorSectionEnabled(clip.videoInspectorSections, 'speedChange')) {
       return clipLocalTime;

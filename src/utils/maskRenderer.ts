@@ -2,6 +2,7 @@
 
 import type { ClipMask, MaskVertex } from '../types';
 import { transformMaskPoint } from './maskTransform';
+import { applyMaskFeatherBalance } from './maskFeatherProfile';
 
 // Canvas for rendering masks (reused for performance)
 let maskCanvas: OffscreenCanvas | null = null;
@@ -57,6 +58,8 @@ export function createMaskTextureRasterKey(
       position: [mask.position.x, mask.position.y],
       rotation: mask.rotation ?? 0,
       feather: mask.feather || 0,
+      featherOffset: mask.featherOffset ?? 0,
+      featherBalance: mask.featherBalance ?? 0,
       featherQuality: mask.featherQuality ?? 50,
       vertices: mask.vertices.map(vertex => [
         vertex.x,
@@ -272,6 +275,18 @@ function renderMaskAlpha(mask: ClipMask, width: number, height: number, featherS
   shapeCtx.clearRect(0, 0, width, height);
   shapeCtx.fillStyle = '#ffffff';
   drawMaskPath(shapeCtx, mask, width, height);
+  const offset = (mask.featherOffset ?? 0) * featherScale;
+  if (Number.isFinite(offset) && offset !== 0) {
+    shapeCtx.beginPath();
+    traceMaskPath(shapeCtx, mask, width, height);
+    shapeCtx.globalCompositeOperation = (offset > 0) !== mask.inverted ? 'source-over' : 'destination-out';
+    shapeCtx.strokeStyle = '#ffffff';
+    shapeCtx.lineWidth = 2 * Math.abs(offset);
+    shapeCtx.lineJoin = 'round';
+    shapeCtx.lineCap = 'round';
+    shapeCtx.stroke();
+    shapeCtx.globalCompositeOperation = 'source-over';
+  }
   applyEdgeFeathersToShapeCanvas(mask, width, height, featherScale);
   return maskShapeCanvas!;
 }
@@ -351,6 +366,12 @@ export function generateMaskTexture(
       ? Math.min(baseFeatherQualityScale, options.maxFeatherQualityScale)
       : baseFeatherQualityScale;
     const maskCanvasSource = applyFeatherToShapeCanvas(width, height, feather, featherQualityScale);
+    if ((mask.featherBalance ?? 0) !== 0) {
+      const shapeCtx = ensureMaskShapeCanvas(width, height);
+      const pixels = shapeCtx.getImageData(0, 0, width, height);
+      applyMaskFeatherBalance(pixels.data, mask.inverted ? -mask.featherBalance! : mask.featherBalance!);
+      shapeCtx.putImageData(pixels, 0, 0);
+    }
 
     // Set composite operation based on mask mode
     switch (mask.mode) {

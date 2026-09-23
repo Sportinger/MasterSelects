@@ -13,6 +13,20 @@ import type { Effect } from '../../src/types/effects';
 const initial = useTimelineStore.getState();
 afterEach(() => { cleanup(); useTimelineStore.setState(initial); });
 
+it('does not advertise a bypass for configuration sections without a runtime binding', () => {
+  const view = render(<ResolveInspectorSection title="Sampling">Quality settings</ResolveInspectorSection>);
+  expect(screen.queryByRole('switch')).toBeNull();
+  expect(view.container.querySelector('.resolve-inspector-status-dot')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Sampling' }));
+  expect(screen.queryByText('Quality settings')).toBeNull();
+});
+
+it('retains an explicit read-only status without presenting a nonfunctional switch', () => {
+  const view = render(<ResolveInspectorSection title="Tracking" enabled={false}>Tracking settings</ResolveInspectorSection>);
+  expect(screen.queryByRole('switch')).toBeNull();
+  expect(view.container.querySelector('.resolve-inspector-status-dot.is-inactive')).not.toBeNull();
+});
+
 it('synchronizes section clicks, group projection and node-group actions without changing parameters', () => {
   const effect: Effect = { id: 'slit', type: 'slit-scan', name: 'Slit Scan', enabled: true, params: getDefaultParams('slit-scan') };
   const clip = createMockClip({ id: 'section-clip', trackId: 'section-track', effects: [effect] });

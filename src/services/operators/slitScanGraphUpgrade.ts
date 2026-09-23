@@ -1,8 +1,11 @@
+import { withSlitScanFieldGroups } from './slitScanFieldGroups';
+import { withSlitScanRgbTime } from './slitScanRgbTimeGraph';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { createDefaultSlitScanGraph } from './slitScanEffectGraph';
 import { withSlitScanProtection } from './slitScanProtectionGraph';
 import { withSlitScanTimeMap } from './slitScanTimeMapGraph';
 import { withSlitScanGroupBypasses } from './slitScanGroupBypass';
+import { withSlitScanMotion } from './slitScanMotionGraph';
 
 // Upgrade the initial in-session graph without replacing edits to existing nodes.
 const additions = new Set(['bands', 'radial-distance', 'ring-frequency', 'ring-position', 'ring-time', 'ring-cycles',
@@ -12,7 +15,14 @@ const additions = new Set(['bands', 'radial-distance', 'ring-frequency', 'ring-p
   'stepped-time', 'use-bands', 'smooth-or-banded']);
 
 export function upgradeSlitScanGraph(graph: EffectOperatorGraph): EffectOperatorGraph {
-  return withSlitScanGroupBypasses(withSlitScanTimeMap(withSlitScanProtection(upgradeProfiles(graph))));
+  // Raise only the original safety ceiling; preserve user-authored limits and wiring.
+  const legacyLimit = graph.nodes.find(node => node.id === 'max-delay' && node.operator === 'values.number'
+    && node.constants?.value === 4 && !Object.keys(node.bindings ?? {}).length);
+  if (legacyLimit && graph.edges.some(edge => edge.from === legacyLimit.id && edge.to === 'safe-delay' && edge.input === 'max')) {
+    graph = { ...graph, nodes: graph.nodes.map(node => node === legacyLimit
+      ? { ...node, constants: { ...node.constants, value: 60 } } : node) };
+  }
+  return withSlitScanFieldGroups(withSlitScanRgbTime(withSlitScanMotion(withSlitScanGroupBypasses(withSlitScanTimeMap(withSlitScanProtection(upgradeProfiles(graph)))))));
 }
 
 function upgradeProfiles(graph: EffectOperatorGraph): EffectOperatorGraph {

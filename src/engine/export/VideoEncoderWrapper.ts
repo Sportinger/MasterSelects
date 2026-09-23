@@ -380,7 +380,7 @@ export class VideoEncoderWrapper {
     this.framesSubmittedSinceFlush = 0;
   }
 
-  addAudioChunks(audioResult: EncodedAudioResult): void {
+  addAudioChunks(audioResult: EncodedAudioResult, maxDurationSeconds?: number): void {
     if (!this.muxer || !this.hasAudio) {
       log.warn('Cannot add audio: muxer not ready or audio not enabled');
       return;
@@ -390,6 +390,9 @@ export class VideoEncoderWrapper {
 
     for (let i = 0; i < audioResult.chunks.length; i++) {
       const chunk = audioResult.chunks[i];
+      // Keep complete audio packets only; compressed packets cannot be split.
+      if (maxDurationSeconds !== undefined &&
+        chunk.timestamp + (chunk.duration ?? 0) > Math.round(maxDurationSeconds * 1_000_000)) break;
       const meta = audioResult.metadata[i];
       this.muxer.addAudioChunk(chunk, meta);
     }

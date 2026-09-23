@@ -1,4 +1,5 @@
 import type { Composition } from '../../stores/mediaStore/types';
+import { cloneAudioParameterSources } from '../parameterSources/audioParameterContext';
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import type { ActiveTransitionPlan } from '../../stores/timeline/editOperations/transitionPlanner';
 import type { Keyframe } from '../../types/keyframes';
@@ -353,7 +354,7 @@ function hydrateTransitionClip(
     sourceRect: optionalClone(clip.sourceRect),
     effects: clone(clip.effects ?? []),
     colorCorrection: optionalClone(clip.colorCorrection),
-    nodeGraph: optionalClone(clip.nodeGraph),
+    nodeGraph: clip.nodeGraph ? { ...optionalClone(clip.nodeGraph)!, parameterSources: cloneAudioParameterSources(clip.nodeGraph.parameterSources) } : undefined,
     masks: optionalClone(clip.masks),
     transcript: optionalClone(clip.transcript),
     transcriptStatus: clip.transcriptStatus,

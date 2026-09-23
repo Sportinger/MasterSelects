@@ -4,5 +4,6 @@ export interface ImageOperatorMemoryWindowOptions {
   size: number; depth: '8' | '16' | '32'; offset: number; motion: 'static' | 'advance' | 'shuffle'; stride: number; seed: number; snapshot: string;
 }
 export interface ImageOperatorMemoryWindowResource { id: string; kind: 'memory-window'; options: ImageOperatorMemoryWindowOptions }
-export interface ImageOperatorInputHistoryResource { id: string; kind: 'input-history'; part: 'atlas' | 'ages' }
-export type ImageOperatorExternalResource = ImageOperatorGlyphAtlasResource | ImageOperatorMemoryWindowResource | ImageOperatorInputHistoryResource;
+export interface ImageOperatorInputHistoryResource { id: string; kind: 'input-history'; part: 'atlas' | 'ages'; owner?: string }
+export interface ImageOperatorSourceMotionResource { id: string; kind: 'source-motion'; part: 'atlas' | 'ages'; owner: string; lookback: number; timeFactor: number; stabilize?: boolean; required?: boolean; denseInverseSearch?: boolean }
+export type ImageOperatorExternalResource = ImageOperatorGlyphAtlasResource | ImageOperatorMemoryWindowResource | ImageOperatorInputHistoryResource | ImageOperatorSourceMotionResource;

@@ -135,6 +135,16 @@ export class FFmpegFrameRenderer {
     }
   }
 
+  private finishEarlyRequested = false;
+
+  finishEarly(): void {
+    this.finishEarlyRequested = true;
+  }
+
+  shouldFinishEarly(): boolean {
+    return this.finishEarlyRequested;
+  }
+
   cancel(): void {
     this.cancelled = true;
     this.releaseRuntimeResources();

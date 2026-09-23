@@ -101,6 +101,13 @@ export function evaluateCompositionClipMasks(
     const rotationProperty = `mask.${mask.id}.rotation` as Keyframe['property'];
     const featherProperty = `mask.${mask.id}.feather` as Keyframe['property'];
     const featherQualityProperty = `mask.${mask.id}.featherQuality` as Keyframe['property'];
+    for (const name of ['featherOffset', 'featherBalance'] as const) {
+      const property = `mask.${mask.id}.${name}` as Keyframe['property'];
+      if (maskKeyframes.some(keyframe => keyframe.property === property)) {
+        const value = interpolateKeyframes(maskKeyframes, property, localTime, mask[name] ?? (0));
+        nextMask[name] = name === 'featherBalance' ? Math.max(-100, Math.min(100, value)) : value;
+      }
+    }
 
     if (maskKeyframes.some((keyframe) => keyframe.property === positionXProperty)) {
       nextMask.position.x = interpolateKeyframes(maskKeyframes, positionXProperty, localTime, mask.position.x);

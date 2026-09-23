@@ -230,6 +230,10 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
           updateMask(clipId, mask.id, { rotation: value });
         } else if (maskProperty.property === 'feather') {
           updateMask(clipId, mask.id, { feather: Math.max(0, value) });
+        } else if (maskProperty.property === 'featherOffset') {
+          updateMask(clipId, mask.id, { featherOffset: value });
+        } else if (maskProperty.property === 'featherBalance') {
+          updateMask(clipId, mask.id, { featherBalance: Math.max(-100, Math.min(100, value)) });
         } else if (maskProperty.property === 'edgeFeather') {
           setMaskEdgeFeather(clipId, mask.id, maskProperty.edgeId, Math.max(0, value));
         } else if (maskProperty.property === 'featherQuality') {
@@ -544,6 +548,10 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
           updateMask(clipId, mask.id, { rotation: currentValue });
         } else if (maskProperty.property === 'feather') {
           updateMask(clipId, mask.id, { feather: Math.max(0, currentValue) });
+        } else if (maskProperty.property === 'featherOffset') {
+          updateMask(clipId, mask.id, { featherOffset: currentValue });
+        } else if (maskProperty.property === 'featherBalance') {
+          updateMask(clipId, mask.id, { featherBalance: Math.max(-100, Math.min(100, currentValue)) });
         } else if (maskProperty.property === 'edgeFeather') {
           setMaskEdgeFeather(clipId, mask.id, maskProperty.edgeId, Math.max(0, currentValue));
         } else if (maskProperty.property === 'featherQuality') {

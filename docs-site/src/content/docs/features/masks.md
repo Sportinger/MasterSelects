@@ -23,6 +23,7 @@ MasterSelects supports per-clip vector masks with preview-overlay editing, selec
 - The active mask can be copied and pasted to another selected clip together with its mask keyframes, keeping keyframe times relative to the target clip start.
 - Mask rows can be moved up or down to change mask compositing order.
 - **Mask usage** separates clip compositing from effect inputs. Choose **Effect input only** to keep a mask available for an effect without cutting the clip alpha; **Composite + effect input** retains normal compositing. Existing masks keep normal compositing by default.
+- **Slit Scan object stabilization** can track a selected object mask in both directions and create a separate, static reference-space protection mask. Set **New mask feather** before tracking (default 30 px); the generated mask automatically uses **Effect input only**. Its interior keeps the current time while the surrounding image receives time displacement. Adjust its feather in Slit Scan or its geometry in Masks. Recreate it after changing the stabilization reference. See [Effects](/features/effects/#slit-scan).
 - Individual mask edges can be selected and given their own edge feather value.
 - The registered AI tool surface can inspect, create, remove, and update masks and vertices, including whole-path keyframes.
 - Mask changes are serialized with the project.
@@ -138,6 +139,8 @@ The properties panel exposes the following controls per mask:
 - Mode dropdown
 - Render enabled toggle
 - Feather
+- Feather offset (pixels, negative inward and positive outward)
+- Feather balance (-100% inward to +100% outward, 0% centered)
 - Edge Feather, shown when exactly one edge is selected
 - Feather quality
 - Inverted
@@ -146,8 +149,9 @@ The properties panel exposes the following controls per mask:
 `featherQuality` is stored as a 1-100 value in the UI and defaults to `50` for new masks.
 Lower values use a lower-resolution CPU blur path for faster previews; higher values preserve more edge detail.
 Feather is applied per mask before mask-mode compositing, so a later subtract mask can still cut into an earlier feathered add mask.
+Feather offset moves the rendered contour without moving vertices. It is independent of softness: even a hard edge with Feather at zero can move inward or outward. Feather balance pans the half-opacity midpoint inside the existing feather ramp, keeping fully transparent and opaque endpoints fixed. One side becomes shorter and steeper while the other becomes longer and softer. Zero balance preserves the symmetric profile; negative values pan inward and positive values outward. Defaults are zero offset and zero balance, including for older projects. The red whole-mask guide follows the shifted contour and balance. Individual edge feather overrides remain attached to their authored edges.
 Edge Feather is stored per ordered edge and is copied, pasted, saved, loaded, previewed, and exported with the mask.
-Changing either mask Feather or Edge Feather shows a transient red SVG ramp over the affected edge/path: 50% red on the edge, fading to 0% at the feather radius. It fades in over 50 ms, stays stable while the value keeps changing, fades out immediately when dragging ends, and otherwise fades out over 500 ms after 500 ms without another change.
+Changing mask Feather shows a transient red SVG ramp across the transition band: strong red at its inner boundary, fading outward to transparent across the same band. The solid mask interior remains clear; the guide does not fade away on both sides of a bright center. Individual Edge Feather retains its edge-centered guide. The guide fades in over 50 ms, stays stable while the value keeps changing, fades out immediately when dragging ends, and otherwise fades out over 500 ms after 500 ms without another change.
 Right-clicking a mask row, or clicking its color swatch, opens the outline color palette for that mask.
 Mask opacity is intentionally not exposed in the mask panel. Layer opacity is handled by the normal transform controls.
 
@@ -157,7 +161,7 @@ The active mask exposes a dedicated `Mask Path` stopwatch for `mask.{maskId}.pat
 That path keyframe stores the whole mask shape at once: all vertices, bezier handles, handle modes, and the closed/open state.
 This is the primary animation workflow for changing individual mask vertices over time.
 
-Mask feather, per-edge feather, and feather quality use the normal numeric keyframe workflow.
+Mask feather, feather offset, balance, per-edge feather, and feather quality use the normal numeric keyframe workflow. Offset and balance use `mask.{maskId}.featherOffset` and `mask.{maskId}.featherBalance` and are preserved in saved projects and export.
 Per-edge feather keyframes use `mask.{maskId}.edge.{fromVertexId}->{toVertexId}.feather`; project save files remap the edge portion through vertex indexes so animated edge feather survives reloads.
 The underlying `mask.{maskId}.position.x` and `mask.{maskId}.position.y` properties stay supported for automation paths, but they are not exposed in the Mask tab.
 Copying a mask copies every `mask.{maskId}.*` keyframe. Pasting creates a new mask id and remaps all pasted mask keyframes to that id.

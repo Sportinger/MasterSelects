@@ -18,6 +18,17 @@ export const CONTROL_OPERATORS: readonly OperatorDefinition[] = [
     number('amplitude', 'Amplitude', 1), number('offset', 'Offset', 0), number('phase', 'Phase (cycles)', 0, 0, 1)],
     ['time', 'frequency', 'amplitude', 'offset', 'phase']),
   source('control.keyframes', 'Keyframes', [{ id: 'property', label: 'Source curve', type: 'select', default: '', options: [] }]),
+  source('control.audio-envelope', 'Audio envelope', [
+    { id: 'audioClipId', label: 'Audio source', type: 'select', default: '', options: [] },
+    { id: 'basis', label: 'Time basis', type: 'select', default: 'timeline', options: [
+      { value: 'timeline', label: 'Timeline seconds' }, { value: 'source', label: 'Source seconds' }] },
+    { id: 'metric', label: 'Level', type: 'select', default: 'rms-dbfs', options: [
+      { value: 'rms-dbfs', label: 'RMS (dBFS)' }, { value: 'momentary-lufs', label: 'Momentary loudness' },
+      { value: 'short-term-lufs', label: 'Short-term loudness' }] },
+    { id: 'interpolation', label: 'Interpolation', type: 'select', default: 'linear', options: [
+      { value: 'linear', label: 'Linear' }, { value: 'nearest', label: 'Nearest' }] },
+    number('floorDb', 'Silence level (dB)', -60, -120, 0), number('ceilingDb', 'Full level (dB)', 0, -60, 12),
+  ], ['time']),
   ...IMAGE_OPERATORS.filter(def => ['math.add.scalar', 'math.multiply.scalar', 'math.clamp.scalar'].includes(def.id)),
   source('control.remap', 'Remap', [number('inMin', 'Input minimum', -1), number('inMax', 'Input maximum', 1),
     number('outMin', 'Output minimum', 0), number('outMax', 'Output maximum', 1)],
@@ -36,5 +47,6 @@ export function createControlNode(operator: string, id: string): BoundOperatorNo
     ...Object.fromEntries(definition.parameters.map(param => [param.id, param.default])),
     // An unwired LFO uses authored clip time, not a constant zero-time input.
     ...(operator === 'control.lfo' ? { time: 'clip' } : {}),
+    ...(operator === 'control.audio-envelope' ? { time: 'timeline' } : {}),
   } };
 }

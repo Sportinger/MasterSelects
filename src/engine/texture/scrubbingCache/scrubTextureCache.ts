@@ -36,6 +36,7 @@ export class ScrubTextureCache {
   private reuses = 0;
   private releases = 0;
   private pendingCaptures = new Set<string>();
+  private playbackCallbacks = new Map<HTMLVideoElement, () => void>();
   private readonly ram = new ScrubRamCache();
   private pendingUploads = new Map<string, ScrubbingTextureEntry>();
   private generation = 0;
@@ -48,12 +49,61 @@ export class ScrubTextureCache {
     void device.lost?.then(() => { this.lost = true; this.clear(); });
   }
 
-  setRamBudget(bytes: number): void { this.ram.setBudget(bytes); this.onChanged?.(); }
+  setRamBudget(bytes: number): void {
+    this.ram.setBudget(bytes);
+    if (bytes === 0) for (const stop of this.playbackCallbacks.values()) stop();
+    this.onChanged?.();
+  }
   getRamSnapshot() { return this.ram.getSnapshot(); }
 
   hasFrame(videoSrc: string, frameIndex: number): boolean {
     const key = getScrubbingKeyForFrame(videoSrc, frameIndex);
     return this.cache.has(key) || this.ram.has(key) || this.pendingUploads.has(key);
+  }
+
+  // Rendering may reuse its layer data. Follow decoded frames and video restarts
+  // directly, including temporary pauses while the playback sync code seeks.
+  cachePlaybackFrame(video: HTMLVideoElement): void {
+    if (this.lost || this.ram.getSnapshot().maxBytes === 0) return;
+    if (typeof video.requestVideoFrameCallback !== 'function') {
+      if (!video.paused) this.capturePlaybackImage(video, video.currentTime);
+      return;
+    }
+    if (this.playbackCallbacks.has(video)) return;
+    let handle: number | undefined;
+    const pause = () => {
+      if (handle !== undefined) video.cancelVideoFrameCallback(handle);
+      handle = undefined;
+    };
+    const start = () => {
+      if (video.paused || handle !== undefined || this.lost || this.ram.getSnapshot().maxBytes === 0) return;
+      handle = video.requestVideoFrameCallback((_now, metadata) => {
+        handle = undefined;
+        if (!video.paused && !this.lost && this.ram.getSnapshot().maxBytes > 0) {
+          this.capturePlaybackImage(video, metadata.mediaTime);
+          start();
+        }
+      });
+    };
+    this.playbackCallbacks.set(video, () => {
+      pause();
+      video.removeEventListener('pause', pause);
+      video.removeEventListener('play', start);
+      this.playbackCallbacks.delete(video);
+    });
+    video.addEventListener('pause', pause);
+    video.addEventListener('play', start);
+    start();
+  }
+
+  stopPlaybackCapture(video: HTMLVideoElement): void {
+    this.playbackCallbacks.get(video)?.();
+  }
+
+  private capturePlaybackImage(video: HTMLVideoElement, time: number): void {
+    // One conversion in flight: slow readback skips frames instead of queuing work.
+    if (video.seeking || this.pendingCaptures.size > 0 || this.pendingUploads.size > 0) return;
+    this.cacheFrameAtTime(video, time);
   }
 
   cacheFrameAtTime(video: HTMLVideoElement, time: number): void {
@@ -224,6 +274,10 @@ export class ScrubTextureCache {
 
   clear(videoSrc?: string): void {
     this.generation++;
+    for (const [video, stop] of this.playbackCallbacks) {
+      if (videoSrc && video.src !== videoSrc) continue;
+      stop();
+    }
     this.pendingCaptures.clear();
     this.ram.clear(videoSrc);
     for (const [key, entry] of this.pendingUploads) {

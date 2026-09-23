@@ -43,7 +43,14 @@ export class TemporalFrameUploader {
       .replace('textureSampleBaseClampToEdge(source, linearSampler, uv)', 'textureSampleLevel(source, linearSampler, uv, 0.0)') });
   }
 
-  upload(surface: SourceFrameResource, atlas: GPUTexture, layer: number, outputToSource?: readonly number[]) {
+  /** Borrow only until the source callback returns; submit every consuming draw first. */
+  importVideo(surface: SourceFrameResource): GPUExternalTexture {
+    if ('image' in surface || !surface.frame.codedWidth) throw new Error('Direct temporal rendering requires a live original VideoFrame.');
+    return this.device.importExternalTexture({ source: surface.frame, colorSpace: 'srgb' });
+  }
+
+  upload(surface: SourceFrameResource, atlas: GPUTexture, layer: number, outputToSource?: readonly number[],
+    region?: { x: number; y: number; width: number; height: number }) {
     const m = outputToSource ?? [1, 0, 0, 0, 1, 0, 0, 0, 1];
     this.device.queue.writeBuffer(this.transformBuffer, 0, new Float32Array([m[0], m[1], m[2], 0, m[3], m[4], m[5], 0]));
     const isImage = 'image' in surface;
@@ -69,7 +76,7 @@ export class TemporalFrameUploader {
       }
       this.device.queue.copyExternalImageToTexture({ source: surface.image }, { texture: this.imageTexture }, [surface.width, surface.height]);
       resource = this.imageTexture.createView();
-    } else resource = this.device.importExternalTexture({ source: surface.frame, colorSpace: 'srgb' });
+    } else resource = this.importVideo(surface);
     const bindGroup = this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
       { binding: 0, resource },
       { binding: 1, resource: this.sampler },
@@ -78,9 +85,14 @@ export class TemporalFrameUploader {
     const encoder = this.device.createCommandEncoder({ label: 'temporal-frame-upload' });
     const pass = encoder.beginRenderPass({ colorAttachments: [{
       view: atlas.createView({ dimension: '2d', baseArrayLayer: layer, arrayLayerCount: 1 }),
-      loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 0],
+      loadOp: region ? 'load' : 'clear', storeOp: 'store', clearValue: [0, 0, 0, 0],
     }] });
-    pass.setPipeline(pipeline); pass.setBindGroup(0, bindGroup); pass.draw(3); pass.end();
+    pass.setPipeline(pipeline); pass.setBindGroup(0, bindGroup);
+    if (region) {
+      pass.setViewport(region.x, region.y, region.width, region.height, 0, 1);
+      pass.setScissorRect(region.x, region.y, region.width, region.height);
+    }
+    pass.draw(3); pass.end();
     this.device.queue.submit([encoder.finish()]);
   }
   destroy() { this.imageTexture?.destroy(); this.imageTexture = undefined; this.transformBuffer.destroy(); }

@@ -1,0 +1,51 @@
+<!doctype html><meta charset="utf-8"><title>Slit Scan sampled geometry regression</title>
+<h1>Slit Scan sampled geometry regression</h1><pre id="result">Running…</pre>
+<script type="module">
+import { GeometryAgeField } from '/src/effects/time/slit-scan/GeometryAgeField.ts';
+const result = document.querySelector('#result');
+try {
+  const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter) throw new Error('WebGPU unavailable');
+  const device = await adapter.requestDevice(); device.pushErrorScope('validation');
+  const delays = [0,.0625,.125,.1875,.25,.3125,.375,.5,1];
+  const query = device.createTexture({size:[delays.length,1], format:'rgba32float',
+    usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+  device.queue.writeTexture({texture:query},new Float32Array(delays.flatMap(d=>[.5,.5,d,1])),
+    {bytesPerRow:delays.length*16},[delays.length,1]);
+  const source = {mediaId:'probe',localTime:10,duration:20,inPoint:100,outPoint:120,speed:1,speedKeyframes:[]};
+  const sampling = {interpolation:'nearest', samples:[
+    {delay:0,currentInput:true,contributions:[]},
+    {delay:.25,currentInput:false,contributions:[{sourceTime:109.9375,weight:.5},{sourceTime:109.8125,weight:.5}]},
+    {delay:.5,currentInput:false,contributions:[{sourceTime:109.75,weight:.25},{sourceTime:109.5,weight:.75}]},
+  ]};
+  const copy = device.createComputePipeline({layout:'auto',compute:{entryPoint:'main',module:device.createShaderModule({code:`
+    @group(0) @binding(0) var field: texture_2d<f32>;
+    @group(0) @binding(1) var<storage,read_write> values: array<vec4f>;
+    @compute @workgroup_size(1) fn main(@builtin(global_invocation_id) id:vec3u) {
+      values[id.x] = textureLoad(field,vec2i(i32(id.x),0),0);
+    }`})}});
+  const field = new GeometryAgeField(device), bytes=delays.length*16, results=[];
+  const cases = [
+    {name:'nearest including ties and clamp',mode:'nearest',sign:1,age:[0,0,.125,.125,.125,.125,.4375,.4375,.4375],current:[1,1,0,0,0,0,0,0,0]},
+    {name:'linear including four source contributions',mode:'linear',sign:1,age:[0,.03125,.0625,.09375,.125,.203125,.28125,.4375,.4375],current:[1,.75,.5,.25,0,0,0,0,0]},
+    {name:'reverse signed source age',mode:'linear',sign:-1,age:[0,-.03125,-.0625,-.09375,-.125,-.203125,-.28125,-.4375,-.4375],current:[1,.75,.5,.25,0,0,0,0,0]},
+  ];
+  for (const test of cases) {
+    const metadata = {...sampling,interpolation:test.mode,samples:sampling.samples.map(s=>({...s,
+      contributions:s.contributions.map(c=>({...c,sourceTime:110+(c.sourceTime-110)*test.sign}))}))};
+    const encoder=device.createCommandEncoder();
+    const output=field.encode(encoder,query.createView(),delays.length,1,source,4,undefined,0,0,metadata);
+    const buffer=device.createBuffer({size:bytes,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+    const read=device.createBuffer({size:bytes,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});
+    const pass=encoder.beginComputePass();pass.setPipeline(copy);pass.setBindGroup(0,device.createBindGroup({layout:copy.getBindGroupLayout(0),entries:[
+      {binding:0,resource:output},{binding:1,resource:{buffer}}]}));pass.dispatchWorkgroups(delays.length);pass.end();
+    encoder.copyBufferToBuffer(buffer,0,read,0,bytes);device.queue.submit([encoder.finish()]);await read.mapAsync(GPUMapMode.READ);
+    const values=new Float32Array(read.getMappedRange());let maxError=0;
+    for(let i=0;i<delays.length;i++) maxError=Math.max(maxError,Math.abs(values[i*4]-test.age[i]),Math.abs(values[i*4+2]-test.current[i]),Math.abs(values[i*4+1]),Math.abs(values[i*4+3]-1));
+    results.push({name:test.name,maxError,pass:maxError<1e-6});read.unmap();read.destroy();buffer.destroy();
+  }
+  const error=await device.popErrorScope();if(error)throw new Error(error.message);
+  field.destroy();await device.queue.onSubmittedWorkDone();query.destroy();
+  result.textContent=JSON.stringify({pass:results.every(r=>r.pass),results},null,2);
+} catch(error) { result.textContent=`FAIL: ${error.stack??error}`; }
+</script>

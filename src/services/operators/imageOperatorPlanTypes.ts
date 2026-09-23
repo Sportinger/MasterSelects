@@ -9,6 +9,9 @@ export type ImageOperatorCapability = 'uv' | 'resolution' | 'time' | 'sample' | 
 export interface ImageOperatorEvaluationContext {
   uv?: [number, number]; resolution?: [number, number]; timelineTimeSeconds?: number;
   sampleInputHistory?: (uv: [number, number], delay: number, current: [number, number, number, number]) => [number, number, number, number];
+  sampleMotionHistory?: (owner: string, uv: [number, number], delay: number) => [number, number, number, number];
+  /** Already analysed DIS field in graph-clock UV/second, confidence, validity. */
+  sampleDisMotion?: (owner: string, uv: [number, number], delay: number) => [number, number, number, number];
   sampleImage?: (uv: [number, number]) => [number, number, number, number];
   sampleResource?: (resourceId: string, uv: [number, number]) => [number, number, number, number];
   loadImage?: (pixel: [number, number]) => [number, number, number, number];
@@ -37,7 +40,7 @@ export interface ImageOperatorPlan extends ImageOperatorProgram {
   quadtreeScopes?: readonly { id: number; sample: number }[];
   resourceInputs?: readonly string[]; resourceSampling?: readonly ImageOperatorResourceSampling[];
   passes?: readonly { id: string; program: ImageOperatorPlan; inputResources: readonly string[]; outputResource?: string }[];
-  resources?: readonly { id: string; producerPassId: string; format: 'rgba16float' }[];
+  resources?: readonly { id: string; producerPassId: string; format: 'rgba16float'; maxEdge?: number }[];
   previewResourceId?: string; frameHistoryResource?: string;
   externalResources?: readonly ImageOperatorExternalResource[]; fieldResources?: readonly ImageOperatorFieldResource[];
 }

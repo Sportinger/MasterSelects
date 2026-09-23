@@ -14,6 +14,19 @@ function data(id: string, type: 'video' | 'light', effects: Effect[] = []): Laye
 const collect = (layers: LayerRenderData[]) => collectScene3DLayers(layers, { width: 640, height: 480 });
 
 describe('3D effect routing', () => {
+  it.each(['time-surface', 'motion-surface'])('keeps each Slit Scan %s downstream stack on its own projected image and applies opacity once', geometryMode => {
+    const slit: Effect = { id: 'slit', name: 'Slit Scan', type: 'slit-scan', enabled: true, params: { geometryMode } };
+    const layer = data('surface', 'video', [slit, brightness]);
+    layer.layer.opacity = .4;
+    for (const layers of [[layer], [layer, data('other', 'video')]]) {
+      const scene = collect(layers);
+      const surface = scene.find(item => item.layerId === 'surface');
+      expect(surface?.layerSpaceEffects).toEqual([slit]);
+      expect(surface?.kind === 'plane' && surface.postProjectionEffects).toEqual([brightness]);
+      expect(surface?.opacity).toBe(.4);
+      expect(sceneCompositeStyle(layers, scene, true)).toMatchObject({ effects: [], opacity: 1 });
+    }
+  });
   it('keeps post-render brightness with lights before or after the visual layer', () => {
     for (const layers of [[data('light', 'light'), data('face', 'video', [cable, brightness])],
       [data('face', 'video', [cable, brightness]), data('light', 'light')]]) {

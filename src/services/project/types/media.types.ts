@@ -6,6 +6,7 @@ import type { LiveInputSource } from '../../../types/liveInput';
 import type { SourceAnnotation } from '../../../types/sourceAnnotation';
 import type { SceneCutAnalysis } from '../../../types/sceneCutAnalysis';
 import type { RemoteColorGradeState } from '../../../types/colorGradeOwnership';
+import type { DepthMapMetadata } from '../../../types/depthMap';
 import type {
   ExternalMediaOrigin,
   LinkedMediaSource,
@@ -18,6 +19,7 @@ import type {
 } from './schema.types';
 
 export interface ProjectMediaFile extends MediaVideoTrackMetadata {
+  depthMap?: DepthMapMetadata;
   id: string;
   name: string;
   type: 'video' | 'audio' | 'image' | 'model' | 'gaussian-splat' | 'lottie' | 'rive';

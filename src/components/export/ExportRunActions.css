@@ -1,0 +1,31 @@
+.export-run-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: 100%;
+}
+
+.export-run-actions button {
+  width: 100%;
+  padding: var(--sp-2);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-md);
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.export-run-actions .export-run-cancel {
+  color: var(--danger-light);
+  background: var(--danger-dim);
+}
+
+.export-run-actions .export-run-finish {
+  color: var(--warning-light);
+  background: var(--warning-dim);
+}
+
+.export-run-actions button:hover:not(:disabled) { filter: brightness(1.2); }
+.export-run-actions button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.export-run-actions button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.export-run-actions button:disabled { opacity: 0.5; cursor: default; }

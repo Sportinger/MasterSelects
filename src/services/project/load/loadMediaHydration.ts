@@ -1,4 +1,5 @@
 import { Logger } from '../../logger';
+import { readDepthMapMetadata } from '../../depthEstimation/depthMapMetadata';
 import { type MediaFile, type MediaFolder } from '../../../stores/mediaStore';
 import {
   getExpectedProxyFrameCount,
@@ -233,6 +234,7 @@ export async function convertProjectMediaToStore(
       sourceSelection: pm.sourceSelection ? { ...pm.sourceSelection } : undefined,
       externalOrigin: pm.externalOrigin ? structuredClone(pm.externalOrigin) : undefined,
       fileHash: pm.fileHash,
+      depthMap: readDepthMapMetadata(pm.depthMap),
       audioAnalysisRefs: pm.audioAnalysisRefs ? structuredClone(pm.audioAnalysisRefs) : undefined,
       stemInfo: pm.stemInfo ? structuredClone(pm.stemInfo) : undefined,
       waveform: pm.waveform ? [...pm.waveform] : undefined,

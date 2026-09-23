@@ -11,6 +11,8 @@ import { partitionImageQuadtree } from './imageQuadtreePartitionSemantics';
 import { imageScopeReadsPrimaryInput } from './imageOperatorScopes';
 import { roundImageScalarEven } from './imageRoundingSemantics';
 import { marchingSquaresTopology } from './marchingSquaresTopology';
+import { temporalDeformation } from './motionDeformationMath';
+import { evaluateOpticalFlow, evaluateDirectionalSmooth, evaluateMotionConsistency } from './motionImageEvaluation';
 import { imageIntegerCellOrigin } from './imageCoordinateSemantics';
 import { decodeBytePixel8, decodeBytePixel16, decodeBytePixel32, type BytePixelFloatMode } from './bytePixelSemantics';
 
@@ -95,7 +97,33 @@ export function createImageOperatorEvaluator(plan: ImageOperatorPlan) {
     else if (item.operation === 'uv') values.push(scopeUv!);
     else if (item.operation === 'sample-input-history') {
       if (!context.sampleInputHistory) throw new Error('Image operator plan requires an input history sampling callback.');
-      values.push(context.sampleInputHistory(args[0] as [number, number], Math.max(0, Math.min(4, args[1] as number)), args[2] as [number, number, number, number]));
+      values.push(context.sampleInputHistory(args[0] as [number, number], Math.max(0, args[1] as number), args[2] as [number, number, number, number]));
+    }
+    else if (item.operation === 'optical-flow' || item.operation === 'directional-smooth' || item.operation === 'motion-consistency') {
+      if (!context.sampleResource) throw new Error('Motion image operators require materialized resource sampling.');
+      const sample = (slot: number) => (uv: [number, number]) => context.sampleResource!(plan.resourceInputs![slot], uv);
+      values.push(item.operation === 'optical-flow'
+        ? evaluateOpticalFlow(sample(item.resourceSlots![0]), sample(item.resourceSlots![1]), scopeUv!, args[0] as number, context.resolution!)
+        : item.operation === 'motion-consistency'
+        ? evaluateMotionConsistency(sample(item.resourceSlots![0]), scopeUv!, args[0] as number, context.resolution!)
+        : evaluateDirectionalSmooth(sample(item.resourceSlots![0]), scopeUv!, args[0] as number[], args[1] as number, args[2] as number, context.resolution!));
+    }
+    else if (item.operation === 'source-motion') {
+      if (item.value === 1) {
+        if (!context.sampleDisMotion) throw new Error('DIS requires an explicitly prepared source-pair motion field.');
+        values.push(context.sampleDisMotion(item.nodeId, args[0] as [number, number], args[1] as number));
+        continue;
+      }
+      if (!context.sampleMotionHistory) throw new Error('Source motion requires explicit source-history sampling.');
+      const uv = args[0] as [number, number], delay = args[1] as number, delta = Math.max(0, Math.min(1, args[2] as number));
+        values.push(evaluateOpticalFlow(p => context.sampleMotionHistory!(item.nodeId, p, delay),
+          p => context.sampleMotionHistory!(item.nodeId, p, delay + delta), uv, -delta, context.resolution!));
+    }
+    else if (item.operation === 'temporal-deformation') values.push(temporalDeformation(args[0] as number[], args[1] as number[], args[2] as number[]));
+    else if (item.operation === 'mask-overlay') {
+      const color = args[0] as number[], tint = args[2] as number[];
+      const weight = Math.max(0, Math.min(1, args[1] as number)) * Math.max(0, Math.min(1, args[3] as number));
+      values.push([0, 1, 2].map(i => color[i] + (tint[i] - color[i]) * weight).concat(color[3]));
     }
     else if (item.operation === 'resource-input') values.push(context.sampleResource!(plan.resourceInputs![item.value!], scopeUv!));
     else if (item.operation === 'resource-load-input') values.push(context.loadResource!(plan.resourceInputs![item.value!],

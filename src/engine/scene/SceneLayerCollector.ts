@@ -181,7 +181,21 @@ export function collectScene3DLayers(
       worldTransform,
       maskClipId: layer.maskClipId,
       maskInvert: layer.maskInvert,
+      temporalSource: layer.temporalSource,
+      sourceMasks: layer.masks,
     };
+    const slitGeometry = layer.effects?.find(e => e.enabled && e.type === 'slit-scan'
+      && ['time-surface', 'motion-band', 'motion-surface'].includes(String(e.params.geometryMode)));
+    if (slitGeometry) {
+      result.push({ ...base, kind: 'plane', slitScanGeometry: slitGeometry,
+        layerSpaceEffects: layer.effects.filter((effect, index) => effect.enabled && index <= layer.effects.indexOf(slitGeometry)),
+        postProjectionEffects: layer.effects.filter((effect, index) => effect.enabled && index > layer.effects.indexOf(slitGeometry)),
+        videoElement: source?.videoElement ?? undefined, videoFrame: source?.videoFrame ?? undefined,
+        imageElement: source?.imageElement ?? undefined, canvas: source?.textCanvas ?? undefined,
+        preciseVideoSampling: options.preciseVideoSampling || !!source?.videoElement,
+        mediaTime: source?.mediaTime, alphaMode: 'straight', doubleSided: true });
+      continue;
+    }
     const cableEffect = layer.effects?.find(e => e.enabled && e.type === 'face-cables' && e.params.scene3D && e.params.sceneData);
     if (cableEffect) {
       result.push({ ...base, kind: 'face-cables', cableParams: cableEffect.params,

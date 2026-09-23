@@ -4,6 +4,7 @@ import { applyOperatorGroupBypasses, operatorGroupBypassRoutes } from '../../src
 import { packOperatorCompositions, expandOperatorCompositions } from '../../src/services/operators/operatorComposition';
 import { effectOperatorGraph, effectOperatorCompileContext } from '../../src/services/operators/effectGraphOwner';
 import { getDefaultParams } from '../../src/effects';
+import { evaluateMaterializedImage } from '../helpers/evaluateMaterializedImage';
 
 const input: [number, number, number, number] = [.2, .7, 1, .35];
 function grouped() {
@@ -19,7 +20,7 @@ describe('operator group bypass', () => {
   it('removes mask protection from the rendered Slit Scan result, not just its UI state', () => {
     const effect = { type: 'slit-scan', params: getDefaultParams('slit-scan') };
     const graph = effectOperatorGraph(effect);
-    const evaluate = () => evaluateImageOperatorPlan(compileImageOperatorGraph(graph, effect.params, effectOperatorCompileContext(effect)), [0, 0, 0, 1], {
+    const evaluate = () => evaluateMaterializedImage(compileImageOperatorGraph(graph, effect.params, effectOperatorCompileContext(effect)), [0, 0, 0, 1], {
       uv: [1, .5], resolution: [100, 100], timelineTimeSeconds: 0,
       sampleResource: id => id === 'slit-scan:protection' ? [1, 0, 0, 1] : [0, 0, 0, 1],
       sampleInputHistory: (_uv, delay) => [delay, delay, delay, 1],

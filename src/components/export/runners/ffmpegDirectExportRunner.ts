@@ -147,6 +147,7 @@ export async function runFfmpegDirectExport(
           return null;
         }
 
+        if (ffmpegFrameRenderer.shouldFinishEarly() && frames.length > 0) break;
         const time = input.startTime + i * frameDuration;
 
         if (i === 0) log.debug('Frame 0: Building layers...');
@@ -225,6 +226,7 @@ export async function runFfmpegDirectExport(
     if (frames.length === 0) {
       throw new Error('No frames rendered');
     }
+    settings.endTime = Math.min(input.endTime, input.startTime + frames.length / input.fps);
 
     let audioBuffer: AudioBuffer | null = null;
 
@@ -248,7 +250,7 @@ export async function runFfmpegDirectExport(
 
         audioBuffer = await audioPipeline.exportRawAudio(
           input.startTime,
-          input.endTime,
+          Math.min(input.endTime, input.startTime + frames.length / input.fps),
           (audioProgress) => {
             const percent = 30 + (audioProgress.percent * 0.1);
             input.onFfmpegProgress({

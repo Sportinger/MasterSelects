@@ -288,7 +288,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
             ...(isExportStart ? { discontinuity: 'export-start' as const } : {}),
           },
         };
-        const finishPreparations = collectTemporalPreparations();
+        const finishPreparations = collectTemporalPreparations(input.frameStepSeconds);
         let pending: Promise<unknown>[];
         try { this.host.render(layers, frameContext); }
         finally { pending = finishPreparations(); }

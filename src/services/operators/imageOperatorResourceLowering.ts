@@ -29,6 +29,7 @@ export interface ImageOperatorResourceLoweringState {
 }
 
 export function createImageOperatorResourceLowering(options: {
+  multipleHistories?: boolean;
   context: ImageOperatorCompileContext; params: Record<string, unknown>; namedImages: ReadonlyMap<string, ImageOperatorResourceSampling>;
   parameterSlots: Map<string, number>; parameterValues: number[]; state: ImageOperatorResourceLoweringState;
   emit: (instruction: ImagePlanInstruction) => number;
@@ -50,10 +51,41 @@ export function createImageOperatorResourceLowering(options: {
     return slot;
   };
   return (current: BoundOperatorNode, output: string): number | undefined => {
+    if (current.operator === 'image.source-motion') {
+      const number = (key: string, fallback: number, min: number, max: number) => {
+        const binding = current.bindings[key];
+        const value = typeof binding === 'string' ? options.params[binding] : current.constants?.[key];
+        return typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
+      };
+      const flag = (key: string) => (typeof current.bindings[key] === 'string' ? options.params[current.bindings[key] as string] : current.constants?.[key]) === true;
+      const slots = (['atlas', 'ages'] as const).map(part => {
+        const id = `source-motion:${current.id}:${part}`;
+        if (!options.state.externalResources.some(resource => resource.id === id)) options.state.externalResources.push({
+          id, kind: 'source-motion', part, owner: current.id, stabilize: flag('stabilize'), required: flag('required'), denseInverseSearch: flag('denseInverseSearch'), lookback: number('lookback', 4, 0, 6000), timeFactor: number('timeFactor', 1, 1, 100),
+        });
+        return resourceSlot(id, part === 'atlas' ? 'hardware-linear-clamp' : 'exact-pixel-load', 'Image');
+      });
+      return options.emit({ nodeId: current.id, operation: 'source-motion', type: 'image', value: Number(flag('denseInverseSearch')),
+        inputs: ['uv', 'delay', 'interval'].map(input => options.visitSource(current, input)), resourceSlots: slots });
+    }
+    if (current.operator === 'image.optical-flow' || current.operator === 'image.directional-smooth' || current.operator === 'image.motion-consistency') {
+      const optical = current.operator === 'image.optical-flow';
+      const consistency = current.operator === 'image.motion-consistency';
+      const slots = (optical ? ['reference', 'target'] : ['image']).map(input => {
+        const linked = options.source(current, input);
+        if (linked.node.operator !== 'image.resource-input' || typeof linked.node.bindings.resource !== 'string') {
+          throw new Error(`${current.operator} requires a compiler-materialized image.`);
+        }
+        return resourceSlot(linked.node.bindings.resource, 'hardware-linear-clamp', 'Image');
+      });
+      return options.emit({ nodeId: current.id, operation: optical ? 'optical-flow' : consistency ? 'motion-consistency' : 'directional-smooth', type: 'image',
+        inputs: (optical ? ['delta'] : consistency ? ['radius'] : ['direction', 'radius', 'mask']).map(input => options.visitSource(current, input)), resourceSlots: slots });
+    }
     if (current.operator === 'image.sample-history') {
-      const atlas = 'input-history:atlas', ages = 'input-history:ages';
+      const prefix = options.multipleHistories ? `input-history:${current.id}` : 'input-history';
+      const atlas = `${prefix}:atlas`, ages = `${prefix}:ages`;
       for (const [id, part] of [[atlas, 'atlas'], [ages, 'ages']] as const) {
-        if (!options.state.externalResources.some(resource => resource.id === id)) options.state.externalResources.push({ id, kind: 'input-history', part });
+        if (!options.state.externalResources.some(resource => resource.id === id)) options.state.externalResources.push({ id, kind: 'input-history', part, owner: current.id });
       }
       const atlasSlot = resourceSlot(atlas, 'hardware-linear-clamp', 'Image');
       const agesSlot = resourceSlot(ages, 'exact-pixel-load', 'Image');

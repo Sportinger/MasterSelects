@@ -61,8 +61,18 @@ describe('hybrid source windows', () => {
     expect(() => hybridTemporalMemory(7680, 4320, 7680, 4320, 256, 256)).toThrow(/budget/);
   });
   it('extracts the authored current branch without a recursive history dependency', () => {
-    const graph = temporalCurrentGraph(createDefaultSlitScanGraph());
+    const graph = temporalCurrentGraph(createDefaultSlitScanGraph(), 'history');
     const plan = prepareImageEffect({ type: 'slit-scan', params: {}, operatorGraph: graph }).plan!;
     expect(plan.externalResources?.some(r => r.kind === 'input-history')).toBeFalsy();
   });
+});
+
+
+it('accounts for every query output inside the shared Hybrid memory budget', () => {
+  const budget = 640 * 1024 * 1024;
+  const single = hybridTemporalMemory(1920, 1080, 1920, 1080, 256, 256, budget, 1);
+  const rgb = hybridTemporalMemory(1920, 1080, 1920, 1080, 256, 256, budget, 4);
+  expect(rgb.capacity).toBeLessThan(single.capacity);
+  expect(rgb.bytes).toBeLessThanOrEqual(budget);
+  expect(() => hybridTemporalMemory(3840, 2160, 3840, 2160, 256, 256, budget, 4)).toThrow('budget');
 });

@@ -13,6 +13,16 @@ export function compositionNodeIds(instance: BoundOperatorNode, definition: Oper
   return Object.fromEntries(definition.composition!.graph.nodes.map(node => [node.id, instance.composition?.nodeIds[node.id] ?? `${instance.id}--${node.id}`]));
 }
 
+/** Group bypass contracts follow the same public ports as composition edges. */
+function remapGroupBypassEndpoints(graph: EffectOperatorGraph, replacements: ReadonlyMap<string, OperatorEndpoint>) {
+  for (const group of graph.groups ?? []) if (group.bypassOutputs) {
+    group.bypassOutputs = Object.fromEntries(Object.entries(group.bypassOutputs).map(([output, target]) => {
+      const mappedOutput = replacements.get(output);
+      return [mappedOutput ? key(mappedOutput) : output, replacements.get(key(target)) ?? target];
+    }));
+  }
+}
+
 /** Only explicit public inputs/outputs may cross a shared definition's boundary. */
 export function compositionBoundary(graph: EffectOperatorGraph, definition: OperatorDefinition, ids: Record<string, string>) {
   const body = definition.composition!;
@@ -69,6 +79,8 @@ export function expandOperatorCompositions(source: EffectOperatorGraph): EffectO
         from: from ? ids[from.nodeId] : edge.from, output: from?.portId ?? edge.output,
         to: edge.to === instance.id ? ids[target.nodeId] : target.nodeId, input: target.portId }));
     });
+    remapGroupBypassEndpoints(graph, new Map(Object.entries(body.outputs).map(([port, endpoint]) =>
+      [`${instance.id}:${port}`, { nodeId: ids[endpoint.nodeId], portId: endpoint.portId }])));
     graph.edges.push(...body.graph.edges.map(edge => ({ ...edge, id: `${instance.id}--${edge.id}`, from: ids[edge.from], to: ids[edge.to] })));
     graph.nodes.splice(graph.nodes.indexOf(instance), 1, ...body.graph.nodes.map(node => ({ ...structuredClone(node), id: ids[node.id],
       ...(instance.composition?.children?.[node.id] ? { composition: structuredClone(instance.composition.children[node.id]) } : {}) })));
@@ -121,6 +133,8 @@ export function packOperatorCompositions(source: EffectOperatorGraph): EffectOpe
       const port = Object.entries(boundary.outputs).find(([, endpoint]) => endpoint.nodeId === edge.from && endpoint.portId === edge.output)![0];
       graph.edges.push({ ...edge, from: instance.id, output: port });
     }
+    remapGroupBypassEndpoints(graph, new Map(Object.entries(boundary.outputs).map(([port, endpoint]) =>
+      [key(endpoint), { nodeId: instance.id, portId: port }])));
     for (const id of boundary.members) delete graph.layout[id];
     graph.layout[instance.id] = position;
     const parent = graph.groups!.find(parent => parent.id === group.parentId);

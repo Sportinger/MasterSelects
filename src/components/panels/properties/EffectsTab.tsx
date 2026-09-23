@@ -235,7 +235,7 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
     return <p className="effect-info">No parameters</p>;
   }
 
-  if (effect.type === 'slit-scan') return <SlitScanControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} onChange={onChange} clipId={clipId} />;
+  if (effect.type === 'slit-scan') return <SlitScanControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} operatorGraph={effect.operatorGraph} onChange={onChange} clipId={clipId} />;
 
   if (effect.type === 'splat-exploration' && clipId) return <SplatExplorationControls clipId={clipId} effectId={effect.id} />;
   if (effect.type === 'voxel-relief' && clipId) return <VoxelReliefControls clipId={clipId} effectId={effect.id} />;

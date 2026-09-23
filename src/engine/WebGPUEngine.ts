@@ -349,8 +349,8 @@ export class WebGPUEngine {
     return this.cacheManager.getScrubbingCacheStats();
   }
 
-  clearScrubbingCache(videoSrc?: string): void {
-    this.cacheManager.clearScrubbingCache(videoSrc);
+  clearScrubbingCache(videoSrc?: string, options?: { preserveFrames?: boolean }): void {
+    this.cacheManager.clearScrubbingCache(videoSrc, options);
   }
 
   // === RAM PREVIEW CACHE ===

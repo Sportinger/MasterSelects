@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { getDefaultParams } from '../../src/effects';
 import { createDefaultSlitScanGraph } from '../../src/services/operators/slitScanEffectGraph';
-import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
+import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
+import { evaluateMaterializedImage } from '../helpers/evaluateMaterializedImage';
 import { effectOperatorCompileContext, effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { InputHistoryClock, inputHistorySize } from '../../src/effects/time/InputHistoryClock';
 import { withSlitScanProtection } from '../../src/services/operators/slitScanProtectionGraph';
@@ -9,16 +10,30 @@ import { withSlitScanProtection } from '../../src/services/operators/slitScanPro
 function sample(uv: [number, number], overrides: Record<string, number | string> = {}, time = 0) {
   const params = { ...getDefaultParams('slit-scan'), ...overrides };
   const plan = compileImageOperatorGraph(createDefaultSlitScanGraph(), params, effectOperatorCompileContext({ type: 'slit-scan' }));
-  return evaluateImageOperatorPlan(plan, [0, 0, 0, 1], {
+  return evaluateMaterializedImage(plan, [0, 0, 0, 1], {
     uv, resolution: [100, 100], timelineTimeSeconds: time,
     sampleResource: id => id === 'slit-scan:time-map'
       ? [Number(overrides.testMap ?? 0), Number(overrides.testMap ?? 0), Number(overrides.testMap ?? 0), Number(overrides.testAlpha ?? 1)]
       : [Number(overrides.testMask ?? 0), 0, 0, 1],
     sampleInputHistory: (_uv, delay, current) => delay === 0 ? current : [delay, delay, delay, 1],
+    sampleMotionHistory: () => [0, 0, 0, 1],
   });
 }
 
 describe('Slit Scan editable time displacement', () => {
+  it('uses the full 60-second delay and upgrades the original saved ceiling without mutating it', () => {
+    expect(sample([1, 0.5], { delay: 60 })[0]).toBeCloseTo(60);
+    expect(sample([0.5, 0.5], { delay: 60 })[0]).toBeCloseTo(30);
+    const graph = createDefaultSlitScanGraph();
+    const ceiling = graph.nodes.find(node => node.id === 'max-delay')!;
+    ceiling.constants = { value: 4 };
+    const restored = effectOperatorGraph({ type: 'slit-scan', params: getDefaultParams('slit-scan'), operatorGraph: graph });
+    expect(restored.nodes.find(node => node.id === 'max-delay')!.constants?.value).toBe(60);
+    expect(ceiling.constants.value).toBe(4);
+    ceiling.constants = { value: 2 };
+    expect(effectOperatorGraph({ type: 'slit-scan', params: getDefaultParams('slit-scan'), operatorGraph: graph })
+      .nodes.find(node => node.id === 'max-delay')!.constants?.value).toBe(2);
+  });
   it('mixes external luminance or alpha before bands and subject protection', () => {
     expect(sample([1, 0.5], { testMap: 0.2, mapAmount: 1 })[0]).toBeCloseTo(0.2);
     expect(sample([1, 0.5], { testMap: 0.2, mapAmount: 0.5 })[0]).toBeCloseTo(0.6);
@@ -73,7 +88,7 @@ describe('Slit Scan editable time displacement', () => {
     const restored = effectOperatorGraph({ type: 'slit-scan', params: getDefaultParams('slit-scan'), operatorGraph: graph });
     expect(restored.nodes.find(node => node.id === 'tau')!.constants).toEqual({ value: 3 });
     expect(() => compileImageOperatorGraph(graph, getDefaultParams('slit-scan'), { ...effectOperatorCompileContext({ type: 'slit-scan' }), allowInputHistory: false })).toThrow(/history/i);
-    expect(graph.groups).toHaveLength(8);
+    expect(graph.groups?.some(group => group.id === 'scan-motion')).toBe(true);
   });
   it('supports aspect-aware radial scans, animated rings and discrete time bands', () => {
     expect(sample([0.5, 0.5], { profile: 'radial' })[0]).toBe(0);

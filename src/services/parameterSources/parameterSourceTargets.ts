@@ -2,6 +2,7 @@ import type { TimelineClip } from '../../types/timeline';
 import { isColorGradeNode, parseColorProperty, RUNTIME_COLOR_PARAM_DEFS } from '../../types/colorCorrection';
 import { HUE_SHIFT_PARAMS } from '../../effects/color/remainingColorParams';
 import { GAUSSIAN_BLUR_PARAMS } from '../../effects/blur/gaussian/params';
+import { slitScanParams } from '../../effects/time/slit-scan/parameters';
 
 export interface ParameterSourceTarget {
   path: string;
@@ -34,6 +35,16 @@ export function parameterSourceTargets(clip: ParameterSourceClip): ParameterSour
     }
   }
   for (const effect of clip.effects) {
+    if (effect.type === 'slit-scan') {
+      for (const name of ['delay', 'mapAmount', 'mapNoiseAmount']) {
+        const def = slitScanParams[name], stored = effect.params[name];
+        targets.push({ path: `effect.${effect.id}.${name}`, label: def.label, group: effect.name,
+          value: typeof stored === 'number' ? stored : Number(def.default), defaultValue: Number(def.default),
+          min: def.min!, max: def.max!, hardMin: def.min!, hardMax: def.max!, step: def.step!,
+          unit: name === 'delay' ? 'seconds' : 'number' });
+      }
+      continue;
+    }
     const entry = effect.type === 'hue-shift' ? { name: 'shift', def: HUE_SHIFT_PARAMS.shift, unit: 'turns' }
       : effect.type === 'gaussian-blur' ? { name: 'radius', def: GAUSSIAN_BLUR_PARAMS.radius, unit: 'pixels' } : undefined;
     if (!entry) continue;

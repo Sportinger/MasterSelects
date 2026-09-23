@@ -59,6 +59,8 @@ export interface ProjectMask {
   feather: number;
   edgeFeathers?: Record<string, number>;
   featherQuality: number;
+  featherOffset?: number;
+  featherBalance?: number;
   enabled: boolean;
   visible: boolean;
   outlineColor?: string;

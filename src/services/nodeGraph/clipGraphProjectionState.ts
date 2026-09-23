@@ -1,4 +1,5 @@
 import { synchronizeEffectChain } from './clipEffectChain';
+import { cloneAudioParameterSources } from '../parameterSources/audioParameterContext';
 import { remapParameterSourceProperties } from '../parameterSources/parameterSourceLifecycle';
 import { extractAINodeGeneratedCode } from './aiNodeDefinition';
 import { buildClipNodeGraphView } from './clipGraphProjectionBuildView';
@@ -301,7 +302,7 @@ export function cloneClipNodeGraph(graph?: ClipNodeGraph): ClipNodeGraph | undef
     previews: graph.previews ? structuredClone(graph.previews) : undefined,
     canvasPlacements: graph.canvasPlacements ? structuredClone(graph.canvasPlacements) : undefined,
     keyframeNodes: graph.keyframeNodes ? structuredClone(graph.keyframeNodes) : undefined,
-    parameterSources: graph.parameterSources ? structuredClone(graph.parameterSources) : undefined,
+    parameterSources: cloneAudioParameterSources(graph.parameterSources),
     forcedBuiltIns: graph.forcedBuiltIns ? [...graph.forcedBuiltIns] : undefined,
     manualEdges: cloneManualEdges(graph.manualEdges),
     groups: graph.groups ? structuredClone(graph.groups) : undefined,

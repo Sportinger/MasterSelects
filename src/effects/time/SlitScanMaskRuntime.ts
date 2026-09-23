@@ -10,8 +10,23 @@ export class SlitScanMaskRuntime {
   private readonly device: GPUDevice;
   private entries = new Map<string, MaskEntry>();
   private empty?: GPUTexture;
+  private emptyField?: GPUTexture;
   private retiredRevision = 0;
   constructor(device: GPUDevice) { this.device = device; }
+
+  /** Unlike protection, a missing time mask must carry zero validity as well as zero coverage. */
+  resolveField(key: string, maskId: unknown, masks: readonly ClipMask[] | undefined,
+    width: number, height: number, encoder: GPUCommandEncoder): ResolvedImageGraphExternalResource {
+    if (typeof maskId === 'string' && masks?.some(mask => mask.id === maskId)) {
+      return this.resolve(key, maskId, masks, width, height, encoder);
+    }
+    if (!this.emptyField) {
+      this.emptyField = this.device.createTexture({ size: [1, 1], format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+      this.device.queue.writeTexture({ texture: this.emptyField }, new Uint8Array([0, 0, 0, 0]), { bytesPerRow: 4 }, [1, 1]);
+    }
+    return { view: this.emptyField.createView(), identity: 'slit-scan:missing-time-mask' };
+  }
 
   resolve(key: string, maskId: unknown, masks: readonly ClipMask[] | undefined,
     width: number, height: number, encoder: GPUCommandEncoder): ResolvedImageGraphExternalResource {
@@ -59,5 +74,6 @@ export class SlitScanMaskRuntime {
   destroy() {
     for (const entry of this.entries.values()) entry.texture.destroy();
     this.entries.clear(); this.empty?.destroy(); this.empty = undefined;
+    this.emptyField?.destroy(); this.emptyField = undefined;
   }
 }

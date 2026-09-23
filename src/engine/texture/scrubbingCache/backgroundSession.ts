@@ -11,4 +11,7 @@ export interface BackgroundPreloadSession {
   lastRequestedFrame: number;
   lastScheduleAt: number;
   duration: number;
+  windowStart: number;
+  windowEnd: number;
+  attemptedFrames: Set<number>;
 }

@@ -165,6 +165,8 @@ export function convertCompositions(compositions: Composition[]): ProjectComposi
         feather: m.feather || 0,
         edgeFeathers: serializeMaskEdgeFeathers(m),
         featherQuality: m.featherQuality ?? 50,
+        featherOffset: m.featherOffset ?? 0,
+        featherBalance: m.featherBalance ?? 0,
         enabled: m.enabled !== false,
         visible: m.visible !== false,
         outlineColor: m.outlineColor,

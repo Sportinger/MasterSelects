@@ -72,6 +72,58 @@ function gpu() {
 }
 
 describe('two-tier scrub cache', () => {
+  it('follows decoded frames without another render and cancels on clear', () => {
+    const { cache } = gpu();
+    cache.setRamBudget(8192);
+    let callback!: VideoFrameRequestCallback;
+    const listeners = new Map<string, () => void>();
+    const video = { src: 'playing', paused: false, seeking: false,
+      requestVideoFrameCallback: vi.fn((fn: VideoFrameRequestCallback) => { callback = fn; return 1; }),
+      cancelVideoFrameCallback: vi.fn(),
+      addEventListener: vi.fn((event: string, handler: () => void) => listeners.set(event, handler)),
+      removeEventListener: vi.fn(),
+    } as unknown as HTMLVideoElement;
+    const capture = vi.spyOn(cache, 'cacheFrameAtTime').mockImplementation(() => {});
+    cache.cachePlaybackFrame(video);
+    cache.cachePlaybackFrame(video);
+    expect(video.requestVideoFrameCallback).toHaveBeenCalledTimes(1);
+    callback(0, { mediaTime: 1.25 } as VideoFrameCallbackMetadata);
+    expect(capture).toHaveBeenCalledWith(video, 1.25);
+    expect(video.requestVideoFrameCallback).toHaveBeenCalledTimes(2);
+    Object.assign(video, { paused: true });
+    listeners.get('pause')?.();
+    Object.assign(video, { paused: false });
+    listeners.get('play')?.();
+    expect(video.requestVideoFrameCallback).toHaveBeenCalledTimes(3);
+    cache.clear();
+    expect(video.cancelVideoFrameCallback).toHaveBeenCalledTimes(2);
+    expect(video.removeEventListener).toHaveBeenCalledTimes(2);
+  });
+  it('fills during playback, skips seeking and limits in-flight conversions', async () => {
+    pixelCanvas();
+    const { cache } = gpu();
+    cache.setRamBudget(8192);
+    let resolveBitmap!: (bitmap: ImageBitmap) => void;
+    const convert = vi.fn(() => new Promise<ImageBitmap>((resolve) => { resolveBitmap = resolve; }));
+    vi.stubGlobal('createImageBitmap', convert);
+    const video = { src: 'playing', videoWidth: 1920, videoHeight: 1080,
+      readyState: 4, paused: false, seeking: true, currentTime: 1 } as HTMLVideoElement;
+    cache.cachePlaybackFrame(video);
+    expect(convert).not.toHaveBeenCalled();
+    Object.assign(video, { seeking: false });
+    cache.cachePlaybackFrame(video);
+    Object.assign(video, { currentTime: 2 });
+    cache.cachePlaybackFrame(video);
+    expect(convert).toHaveBeenCalledTimes(1);
+    const close = vi.fn();
+    resolveBitmap({ width: 2, height: 2, close } as unknown as ImageBitmap);
+    await vi.waitFor(() => expect(close).toHaveBeenCalledOnce());
+    expect(cache.hasFrame('playing', 30)).toBe(true);
+    expect(cache.hasFrame('playing', 60)).toBe(false);
+    cache.setRamBudget(0);
+    cache.cachePlaybackFrame(video);
+    expect(convert).toHaveBeenCalledTimes(1);
+  });
   it('restores GPU-evicted frames from RAM and keeps their yellow ranges', async () => {
     pixelCanvas();
     const { cache, device } = gpu();

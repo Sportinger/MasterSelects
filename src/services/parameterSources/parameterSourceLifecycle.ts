@@ -2,6 +2,7 @@ import type { ParameterSources } from '../../types/parameterSources';
 import type { TimelineClip } from '../../types/timeline';
 import type { Keyframe } from '../../types/keyframes';
 import { parameterSourceTargets } from './parameterSourceTargets';
+import { cloneAudioParameterSources } from './audioParameterContext';
 
 /** Only explicit owner removal cleans up sources. Unknown persisted paths are kept for diagnostics. */
 export function reconcileRemovedParameterTargets(before: TimelineClip, after: TimelineClip): TimelineClip {
@@ -52,7 +53,7 @@ export function duplicateColorParameterSources(state: ParameterSources | undefin
 /** Canonical property identities change together, including references used as curve sources. */
 export function remapParameterSourceProperties(state: ParameterSources | undefined, remap: (path: string) => string): ParameterSources | undefined {
   if (!state) return undefined;
-  const result = structuredClone(state);
+  const result = cloneAudioParameterSources(state)!;
   result.targets = Object.fromEntries(Object.entries(result.targets).map(([path, binding]) => [remap(path), binding]));
   for (const node of result.graph.nodes) {
     if (node.operator === 'control.keyframes' && typeof node.constants?.property === 'string') {

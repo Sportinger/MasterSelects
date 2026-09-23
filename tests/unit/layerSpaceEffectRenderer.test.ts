@@ -41,6 +41,9 @@ describe('LayerSpaceEffectRenderer', () => {
       layerId: 'plane-1',
       layerSpaceEffects: [analogEffect],
       mediaTime: 7.5,
+      temporalSource: { mediaId: 'video', localTime: 1.5, duration: 10,
+        inPoint: 3, outPoint: 13, speed: -1, speedKeyframes: [] },
+      sourceMasks: [{ id: 'protection-mask' }],
     } as unknown as ScenePlaneLayer;
     const sourceView = { label: 'source-view' } as unknown as GPUTextureView;
     const renderer = new LayerSpaceEffectRenderer();
@@ -52,6 +55,7 @@ describe('LayerSpaceEffectRenderer', () => {
         effectsPipeline: effectsPipeline as never,
         sampler: {} as GPUSampler,
         timelineTimeSeconds: 2.25,
+        effectRenderClock: { frameRate: 24, scopeId: 'export' },
         layers: [layer],
         targetKey: 'main',
         resolveSource: () => ({ view: sourceView, width: 640, height: 360 }),
@@ -63,6 +67,11 @@ describe('LayerSpaceEffectRenderer', () => {
       expect(effectsPipeline.applyEffects.mock.calls[0]?.[7]).toBe(640);
       expect(effectsPipeline.applyEffects.mock.calls[0]?.[8]).toBe(360);
       expect(effectsPipeline.applyEffects.mock.calls[0]?.[12]).toBe(2.25);
+      expect(effectsPipeline.applyEffects.mock.calls[0]?.[14]).toEqual({
+        frameRate: 24, scopeId: JSON.stringify(['export', 'plane-1']),
+      });
+      expect(effectsPipeline.applyEffects.mock.calls[0]?.[15]).toBe(layer.sourceMasks);
+      expect(effectsPipeline.applyEffects.mock.calls[0]?.[16]).toBe(layer.temporalSource);
       expect(result.get('plane-1')).toEqual(expect.objectContaining({
         label: expect.stringContaining('pong-view'),
       }));

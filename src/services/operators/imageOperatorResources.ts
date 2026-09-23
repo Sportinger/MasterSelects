@@ -10,7 +10,7 @@ export function validateImageOperatorNamedImages(images: readonly ImageOperatorN
   const result = new Map<string, ImageOperatorResourceSampling>();
   for (const image of images ?? []) {
     if (typeof image?.id !== 'string' || !image.id) throw new Error('Image named input declarations require a non-empty string id.');
-    if (image.id === IMAGE_FRAME_HISTORY_RESOURCE_ID || image.id.startsWith('image-resource:') || image.id.startsWith('glyph-atlas:') || image.id.startsWith('memory-window:') || image.id.startsWith('input-history:')) {
+    if (image.id === IMAGE_FRAME_HISTORY_RESOURCE_ID || image.id.startsWith('image-resource:') || image.id.startsWith('glyph-atlas:') || image.id.startsWith('memory-window:') || image.id.startsWith('input-history:') || image.id.startsWith('source-motion:')) {
       throw new Error(`Image named input ${image.id} uses a reserved compiler resource namespace.`);
     }
     if (result.has(image.id)) throw new Error(`Duplicate image named input declaration: ${image.id}.`);

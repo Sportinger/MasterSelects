@@ -15,6 +15,7 @@ export class SlitScanTrackingGap extends Error {}
 /** Resolve once from the canonical asset; cached source pixels depend on its revision. */
 export function slitScanStabilization(params: Record<string, unknown>, assets: readonly TrackingAsset[],
   mediaId: string, width: number, height: number): SlitScanStabilization | undefined {
+  if (params.stabilizationEnabled === false) return undefined;
   const id = params.stabilizationAssetId;
   if (typeof id !== 'string' || !id) return undefined;
   const asset = assets.find(item => item.id === id);

@@ -177,7 +177,8 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
             setNormalizeAudio={setNormalizeAudio}
           />
         ) : (
-          <ExportProgressView progress={progress} onCancel={handleCancel} />
+          <ExportProgressView progress={progress} onCancel={handleCancel}
+            onFinishEarly={() => exporter?.finishEarly()} />
         )}
       </div>
 

@@ -44,6 +44,7 @@ import type {
 } from '../../types/mediaMetadata';
 import type { RemoteColorGradeState } from '../../types/colorGradeOwnership';
 import type { TrackingAsset } from '../../types/trackingAsset';
+import type { DepthMapMetadata } from '../../types/depthMap';
 
 // Media item types
 export type ImportedMediaType =
@@ -117,6 +118,7 @@ export interface MediaItem {
 
 // Imported file
 export interface MediaFile extends MediaItem, MediaVideoTrackMetadata {
+  depthMap?: DepthMapMetadata;
   type: ImportedMediaType;
   file?: File;
   url: string;

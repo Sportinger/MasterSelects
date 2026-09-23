@@ -5,6 +5,7 @@ import { createMaskEdgeFeatherProperty } from '../../src/types/animationProperti
 import type { ClipMask } from '../../src/types/masks';
 import type { TimelineClip } from '../../src/types/timeline';
 import { createMaskEdgeId } from '../../src/utils/maskEdgeFeathers';
+import { evaluateCompositionClipMasks } from '../../src/services/compositionRender/keyframeEvaluation';
 
 const initialTimelineState = useTimelineStore.getState();
 
@@ -55,6 +56,32 @@ function clip(masks: ClipMask[]): TimelineClip {
 }
 
 describe('mask edge feather', () => {
+  it('edits and records feather offset and balance without changing the editable path', () => {
+    const activeMask = mask();
+    useTimelineStore.setState({ clips: [clip([activeMask])], playheadPosition: 1 });
+    for (const [name, value] of [['featherOffset', -80], ['featherBalance', 4]] as const) {
+      const property = `mask.mask-a.${name}` as const;
+      useTimelineStore.getState().setPropertyValue('clip-a', property, value);
+      expect(useTimelineStore.getState().clips[0].masks?.[0][name]).toBe(value);
+      useTimelineStore.getState().toggleKeyframeRecording('clip-a', property);
+      useTimelineStore.getState().setPropertyValue('clip-a', property, value + 1);
+      expect(useTimelineStore.getState().clipKeyframes.get('clip-a')).toEqual(expect.arrayContaining([
+        expect.objectContaining({ property, time: 1, value: value + 1 }),
+      ]));
+    }
+    expect(useTimelineStore.getState().clips[0].masks?.[0].vertices).toEqual(activeMask.vertices);
+  });
+  it('animates contour offset and balance identically in direct and nested rendering', () => {
+    const activeMask = mask();
+    const keyframes = (['featherOffset', 'featherBalance'] as const).flatMap((name) => [
+      { id: `${name}-0`, clipId: 'clip-a', property: `mask.mask-a.${name}` as const, time: 0, value: name === 'featherOffset' ? -80 : 1, easing: 'linear' as const },
+      { id: `${name}-2`, clipId: 'clip-a', property: `mask.mask-a.${name}` as const, time: 2, value: name === 'featherOffset' ? 80 : 5, easing: 'linear' as const },
+    ]);
+    useTimelineStore.setState({ clips: [clip([activeMask])], clipKeyframes: new Map([['clip-a', keyframes]]) });
+    const direct = useTimelineStore.getState().getInterpolatedMasks('clip-a', 1)!;
+    expect(direct[0]).toMatchObject({ featherOffset: 0, featherBalance: 3, feather: 0 });
+    expect(evaluateCompositionClipMasks([activeMask], keyframes, 1)).toEqual(direct);
+  });
   beforeEach(() => {
     useTimelineStore.setState(initialTimelineState);
     useTimelineStore.setState({

@@ -18,6 +18,8 @@ FCPXML is exposed as a selectable export container for NLE interchange.
 
 ### Current Panel Layout
 
+- During video export, red `Cancel` discards the run. Yellow `Finish File Early` below it finishes the current frame, finalizes the partial file, and downloads it. Available after the first frame in WebCodecs, HTMLVideo, FFmpeg, and HAP; disabled during preparation and finalization. Audio ends with the partial video (browser-compressed audio keeps only complete packets). Audio-only, GIF, image sequences, and batch conversion do not offer early finish.
+
 - A sticky summary bar at the top wraps compact badges in at least two columns, ending in a green Export pill that includes the estimated file size when a byte estimate is available.
 - Its first badge shows `SaC` when export resolution and frame rate match the active composition, or `NaC` otherwise; clicking `NaC` copies those composition settings into Export.
 - Clicking a summary badge smooth-scrolls within that Export panel to the related control group and briefly highlights it.

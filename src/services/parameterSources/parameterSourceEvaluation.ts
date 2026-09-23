@@ -6,6 +6,9 @@ import { evaluateScalarOperation } from '../operators/scalarOperationSemantics';
 import { getControlOperator } from './controlOperators';
 import { parameterSourceTargets, type ParameterSourceClip } from './parameterSourceTargets';
 import { parameterSourceTime } from './parameterSourceTime';
+import { evaluateAudioParameter, frozenAudioParameterContext, type AudioParameterContext } from './audioParameterContext';
+import type { AudioEnvelopeSampling } from './audioEnvelopeSampling';
+import { liveAudioParameterContext } from './audioParameterRuntime';
 
 export class ParameterSourceError extends Error {
   readonly nodeId?: string;
@@ -61,7 +64,7 @@ function compile(graph: EffectOperatorGraph): CompiledControls {
 
 /** One request shares source values across all targets and reads curves from their original owner. */
 export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyframes: readonly Keyframe[], localTime: number,
-  timelineTime = clip.startTime + localTime) {
+  timelineTime = clip.startTime + localTime, audioContext?: AudioParameterContext) {
   const state = clip.nodeGraph?.parameterSources;
   const clock = parameterSourceTime(clip, keyframes, localTime, timelineTime);
   const targets = new Map(parameterSourceTargets(clip).map(target => [target.path, target]));
@@ -100,6 +103,7 @@ export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyfra
       };
       let unit = 'number';
       if (node.operator === 'control.time') unit = 'seconds';
+      else if (node.operator === 'control.audio-envelope') compatible(inputUnit('time'), 'seconds', nodeId);
       else if (node.operator === 'control.keyframes') unit = targets.get(String(node.constants?.property))?.unit ?? 'number';
       else if (node.operator === 'control.lfo') {
         compatible(inputUnit('time'), 'seconds', nodeId); compatible(inputUnit('frequency'), 'Hz', nodeId);
@@ -159,6 +163,22 @@ export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyfra
           value = input('offset') + input('amplitude', 1) * evaluateScalarOperation('sin', 2 * Math.PI * (input('frequency', 1) * time + input('phase'))); break;
         }
         case 'control.keyframes': value = sampleCurve(String(node.constants?.property ?? '')); break;
+        case 'control.audio-envelope': {
+          const context = frozenAudioParameterContext(state.graph) ?? audioContext ?? liveAudioParameterContext(state.graph);
+          if (!context) throw new ParameterSourceError('Audio analysis context is unavailable.', nodeId);
+          const linked = program.inputs.get(`${nodeId}\0time`);
+          if (!linked && node.constants?.basis === 'source' && node.constants?.time === 'timeline') {
+            throw new ParameterSourceError('Connect explicit source seconds to the Audio envelope time input.', nodeId);
+          }
+          const time = linked ? evaluateNode(linked) : node.constants?.time === 'timeline' ? clock.timelineTime : input('time');
+          value = evaluateAudioParameter(context, String(node.constants?.audioClipId ?? ''), time,
+            String(node.constants?.basis ?? 'timeline') as 'timeline' | 'source', {
+              metric: String(node.constants?.metric ?? 'rms-dbfs') as AudioEnvelopeSampling['metric'],
+              interpolation: String(node.constants?.interpolation ?? 'linear') as AudioEnvelopeSampling['interpolation'],
+              floorDb: input('floorDb', -60), ceilingDb: input('ceilingDb', 0),
+            });
+          break;
+        }
         case 'math.add.scalar': value = evaluateScalarOperation('add', input('a'), input('b')); break;
         case 'math.multiply.scalar': value = evaluateScalarOperation('multiply', input('a'), input('b', 1)); break;
         case 'math.clamp.scalar': {
@@ -200,6 +220,7 @@ export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyfra
     if (source) return evaluateNode(source);
     const raw = node.constants?.[portId] ?? definition.parameters.find(param => param.id === portId)?.default ?? 0;
     if (node.operator === 'control.lfo' && portId === 'time' && raw === 'clip') return finite(clipTime, nodeId);
+    if (node.operator === 'control.audio-envelope' && portId === 'time' && raw === 'timeline') return finite(clock.timelineTime, nodeId);
     if (typeof raw !== 'number') throw new ParameterSourceError('Control input requires a number.', nodeId);
     return finite(raw, nodeId);
   };

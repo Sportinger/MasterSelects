@@ -1,4 +1,5 @@
 import { useEngineStore } from '../../../stores/engineStore';
+import { slitScanPlaybackDiagnostics } from '../../../effects/time/slit-scan/playbackDiagnostics';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { Logger } from '../../logger';
@@ -405,7 +406,7 @@ function round(v: number): number {
 export async function handleGetStats(): Promise<ToolResult> {
   return {
     success: true,
-    data: collectSnapshot(),
+    data: { ...collectSnapshot(), slitScanPlayback: slitScanPlaybackDiagnostics() },
   };
 }
 

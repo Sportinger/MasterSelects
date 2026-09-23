@@ -337,6 +337,8 @@ export function convertProjectCompositionToStore(
           feather: mask.feather,
           edgeFeathers: hydrateMaskEdgeFeathers(mask),
           featherQuality: mask.featherQuality ?? 50,
+          featherOffset: mask.featherOffset ?? 0,
+          featherBalance: mask.featherBalance ?? 0,
           enabled: mask.enabled !== false,
           visible: mask.visible !== false,
           outlineColor: mask.outlineColor,

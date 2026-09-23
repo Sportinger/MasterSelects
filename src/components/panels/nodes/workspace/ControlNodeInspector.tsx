@@ -11,6 +11,7 @@ import { ResolveInspectorNumberRow } from '../../properties/resolveInspector/Res
 import '../../properties/ParameterSourceControls.css';
 
 export function ControlNodeInspector({ clip, nodeId }: { clip: TimelineClip; nodeId: string }) {
+  const audioClips = useTimelineStore(state => state.clips);
   const time = useTimelineStore(state => Math.max(0, Math.min(clip.duration, state.playheadPosition - clip.startTime)));
   const keys = useTimelineStore(state => state.clipKeyframes.get(clip.id));
   const locked = useTimelineStore(state => state.isExporting || state.tracks.some(track => track.id === clip.trackId && track.locked));
@@ -32,7 +33,9 @@ export function ControlNodeInspector({ clip, nodeId }: { clip: TimelineClip; nod
       <ResolveInspectorRow label="Output"><output>{outputError ? 'Unavailable' : output}</output></ResolveInspectorRow>
       {definition.parameters.filter(param => !inputIds.has(param.id)).map(param => {
         if (param.type === 'select') {
-          const options = param.id === 'property' ? [{ value: '', label: 'Choose stored curve' }, ...targets.map(target => ({ value: target.path, label: `${target.group} / ${target.label}` }))] : [...(param.options ?? [])];
+          const options = param.id === 'audioClipId'
+            ? [{ value: '', label: 'Choose analyzed audio source' }, ...audioClips.filter(item => item.source?.type === 'audio' || item.source?.type === 'video').map(item => ({ value: item.id, label: item.name }))]
+            : param.id === 'property' ? [{ value: '', label: 'Choose stored curve' }, ...targets.map(target => ({ value: target.path, label: `${target.group} / ${target.label}` }))] : [...(param.options ?? [])];
           return <ResolveInspectorRow key={param.id} label={param.label}><InspectorSelect ariaLabel={param.label} disabled={locked}
             value={String(node.constants?.[param.id] ?? param.default)} options={options}
             onChange={value => safely(() => setControlNodeValue(clip.id, nodeId, param.id, value))} /></ResolveInspectorRow>;
@@ -47,7 +50,7 @@ export function ControlNodeInspector({ clip, nodeId }: { clip: TimelineClip; nod
         const raw = node.constants?.[input.id] ?? param?.default ?? 0;
         return <ResolveInspectorSection key={input.id} title={param?.label ?? input.label} indicator="none">
           <ResolveInspectorRow label="Input"><InspectorSelect ariaLabel={`${input.label} input source`} disabled={locked}
-            value={edge?.from ?? ''} options={[{ value: '', label: input.id === 'time' && raw === 'clip' ? 'Clip time' : 'Local value' },
+            value={edge?.from ?? ''} options={[{ value: '', label: input.id === 'time' && raw === 'clip' ? 'Clip time' : input.id === 'time' && raw === 'timeline' ? 'Timeline time' : 'Local value' },
               ...graph.nodes.filter(candidate => candidate.id !== nodeId).map(candidate => ({ value: candidate.id,
                 label: `${getControlOperator(candidate.operator)?.label ?? candidate.operator} · ${candidate.id.slice(-6)}` }))]}
             onChange={source => safely(() => {

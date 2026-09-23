@@ -1,6 +1,7 @@
 import type { ExportProgress } from '../../engine/export';
 import type { FFmpegProgress } from '../../engine/ffmpeg';
 import type { EncoderType } from './useExportState';
+import { ExportRunActions } from './ExportRunActions';
 
 interface ExportProgressViewProps {
   encoder: EncoderType;
@@ -12,6 +13,7 @@ interface ExportProgressViewProps {
   isGifMode: boolean;
   formatTime: (seconds: number) => string;
   onCancel: () => void;
+  onFinishEarly?: () => void;
 }
 
 export function ExportProgressView({
@@ -24,6 +26,7 @@ export function ExportProgressView({
   isGifMode,
   formatTime,
   onCancel,
+  onFinishEarly,
 }: ExportProgressViewProps) {
   const progressPercent = (encoder === 'webcodecs' || encoder === 'htmlvideo' || encoder === 'hap')
     ? (progress?.percent ?? 0)
@@ -92,9 +95,10 @@ export function ExportProgressView({
           ETA: {formatTime(progress.estimatedTimeRemaining)}
         </div>
       )}
-      <button className="btn export-cancel-btn" onClick={onCancel}>
-        Cancel
-      </button>
+      <ExportRunActions onCancel={onCancel} onFinishEarly={onFinishEarly}
+        canFinishEarly={usesBrowserProgress
+          ? progress?.phase === 'video' && progress.currentFrame > 0
+          : exportPhase === 'rendering' && (ffmpegProgress?.frame ?? 0) > 0} />
     </div>
   );
 }

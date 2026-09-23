@@ -44,12 +44,19 @@ export interface SceneLayerBase {
   maskInvert?: boolean;
   /** Effects evaluated on the source texture before its 3D world transform. */
   layerSpaceEffects?: Effect[];
+  /** Source clock and masks must survive the image-to-scene boundary. */
+  temporalSource?: import('../../effects/time/temporalClipSource').TemporalClipSource;
+  sourceMasks?: readonly import('../../types/masks').ClipMask[];
   mediaTime?: number;
   surfacePlan?: import('../../types/operatorGraph').SceneSurfacePlan;
 }
 
 export interface ScenePlaneLayer extends SceneLayerBase {
   kind: 'plane';
+  /** A textured plane promoted to the deterministic Slit Scan surface pass. */
+  slitScanGeometry?: Effect;
+  /** Effects evaluated on this owner's projected image, before scene compositing. */
+  postProjectionEffects?: Effect[];
   videoElement?: HTMLVideoElement;
   videoFrame?: VideoFrame;
   preciseVideoSampling?: boolean;

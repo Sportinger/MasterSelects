@@ -360,7 +360,7 @@ export function ExportPanel() {
     setEffectiveExportSettings,
   ]);
 
-  const { handleCancel, handlePrimaryExport } = useExportRunController({
+  const { handleCancel, handleFinishEarly, handlePrimaryExport } = useExportRunController({
     exportState,
     playheadPosition,
     startExport,
@@ -810,6 +810,7 @@ export function ExportPanel() {
           isGifMode={isGifMode}
           formatTime={formatTime}
           onCancel={handleCancel}
+          onFinishEarly={handleFinishEarly}
         />
       )}
     </div>

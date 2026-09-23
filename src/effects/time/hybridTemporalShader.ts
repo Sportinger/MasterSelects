@@ -7,7 +7,7 @@ fn weights(delayInput: f32) -> Weights {
   let header = ages[arrayLength(&ages) - 1u];
   let count = u32(header.x);
   if (count <= 1u) { return Weights(vec4u(0u), vec4f(1.0, 0.0, 0.0, 0.0)); }
-  let delay = clamp(delayInput, 0.0, 4.0);
+  let delay = max(delayInput, 0.0);
   var lo = 1u; var hi = count - 1u;
   while (lo < hi) {
     let mid = (lo + hi) / 2u;

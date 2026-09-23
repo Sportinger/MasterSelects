@@ -5,6 +5,7 @@ import { DraggableNumber, KeyframeToggle } from '../shared';
 import { PrecisionSlider } from '../DragValueInputs';
 import { MIDIParameterLabel } from '../MIDIParameterLabel';
 import { MaskPathKeyframeToggle } from './MaskPathKeyframeToggle';
+import { ResolveInspectorNumberRow } from '../resolveInspector/ResolveInspectorNumberRow';
 
 interface MaskEdgeSectionProps {
   activeMask: ClipMask;
@@ -137,6 +138,18 @@ export function MaskEdgeSection({
             />
           </div>
         )}
+        {(['featherOffset', 'featherBalance'] as const).map(name => {
+          const offset = name === 'featherOffset', value = activeMask[name] ?? 0;
+          const property = createMaskNumericProperty(activeMask.id, name);
+          return <ResolveInspectorNumberRow key={name} label={offset ? 'Feather offset' : 'Feather balance'}
+            ariaLabel={`${activeMask.name} ${offset ? 'feather offset' : 'feather balance'}`}
+            value={value} defaultValue={0} min={offset ? -500 : -100} max={offset ? 500 : 100}
+            step={1} suffix={offset ? 'px' : '%'} decimals={offset ? 1 : 0}
+            hardMin={offset ? -10000 : -100} hardMax={offset ? 10000 : 100}
+            onDragStart={onBatchStart} onDragEnd={onBatchEnd}
+            keyframeToggle={<KeyframeToggle clipId={clipId} property={property} value={value} />}
+            onChange={next => { setPropertyValue(clipId, property, next); showMaskFeatherPreview(activeMask.id, null); }} />;
+        })}
         <div className="control-row mask-feather-guide-row">
           <span className="mask-feather-guide-label">Feather guide</span>
           <button
@@ -144,6 +157,7 @@ export function MaskEdgeSection({
             aria-label="Show red feather guide while adjusting masks"
             className={`mask-feather-guide-toggle ${maskFeatherPreviewEnabled ? 'is-on' : ''}`}
             onClick={() => setMaskFeatherPreviewEnabled(!maskFeatherPreviewEnabled)}
+            onPointerUp={event => event.currentTarget.blur()}
             role="switch"
             title={maskFeatherPreviewEnabled ? 'Hide red feather guide' : 'Show red feather guide'}
             type="button"

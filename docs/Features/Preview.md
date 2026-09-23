@@ -21,6 +21,13 @@ Non-proxy HTML-video scrub frames use a 960-pixel longest-side cap. A bounded CP
 pixel LRU retains frames beyond the separate 192 MB/192-frame GPU cache and uploads
 them again on demand. The yellow ruler ranges include both tiers. Lowering the
 budget immediately drops older CPU frames; settings persist across reloads.
+Paused background loading progressively fills a budget-sized neighborhood, sharing
+the allowance between active sources; its 72-frame queue is a batch size rather
+than a total preload limit. Starting playback releases detached preload decoders
+while retaining cached frames. During HTML-video playback, already decoded frames
+also populate the cache opportunistically, with one bitmap conversion in flight
+and no extra decoder. Seeking, busy conversions and a disabled RAM tier skip this
+playback capture to prioritize playback.
 Proxy caches, temporal effects and rendered RAM previews keep their own budgets.
 
 Allocations evict older entries first. Catchable CPU capture failures lower the

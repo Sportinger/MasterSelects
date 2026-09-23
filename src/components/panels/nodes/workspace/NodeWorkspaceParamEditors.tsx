@@ -186,6 +186,7 @@ export function EffectNodeParameters({ clip, node }: { clip: TimelineClip; node:
   const effectDef = EFFECT_REGISTRY.get(effect.type);
   const params = Object.entries(effectDef?.params ?? {});
   if (effect.type === 'slit-scan') return <SlitScanControls effectId={effect.type} effectInstanceId={effect.id} clipId={clip.id}
+    operatorGraph={effect.operatorGraph}
     params={interpolatedEffect.params as Record<string, number | boolean | string>} onChange={values => updateClipEffect(clip.id, effect.id, values)} />;
 
   return (

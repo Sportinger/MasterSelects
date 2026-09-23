@@ -126,11 +126,9 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       clipAudioAnalysisJobService.cancelKind('waveform-pyramid');
       setTimelineWaveformWarmupPlaybackSuppressed(true);
       playheadState.position = playbackStartPosition;
-      // Scrub textures and their detached preload videos are useful while
-      // seeking, but compete directly with decoder/GPU resources once normal
-      // playback starts. AI montages can leave many discontinuous source
-      // neighborhoods cached, so release them before warming the first frame.
-      renderHostPort.clearScrubbingCache();
+      // Stop detached preload decoders before playback warmup, but preserve
+      // the bounded source-frame caches and their yellow timeline coverage.
+      renderHostPort.clearScrubbingCache(undefined, { preserveFrames: true });
       renderHostPort.clearVideoCache();
     }
 

@@ -94,7 +94,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     const linked = source(target, input);
     return visit(linked.node, linked.output);
   }
-  const lowerResource = createImageOperatorResourceLowering({ context, params, namedImages, parameterSlots, parameterValues,
+  const lowerResource = createImageOperatorResourceLowering({ multipleHistories: graph.nodes.filter(node => node.operator === 'image.sample-history').length > 1, context, params, namedImages, parameterSlots, parameterValues,
     state: { resourceInputs, resourceSampling, externalResources, fieldResources }, emit, source, visitSource, activePixelLoad: () => activePixelLoad });
   function visit(current: BoundOperatorNode, output: string): number {
     const cacheKey = `${activeScope}:${current.id}:${output}`;
@@ -114,6 +114,10 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       case 'image.normalized-uv': register = emit({ nodeId: current.id, operation: 'uv', type: 'vec2', inputs: [] }); break;
       case 'image.resolution': register = emit({ nodeId: current.id, operation: 'resolution', type: 'vec2', inputs: [] }); break;
       case 'image.timeline-time': register = emit({ nodeId: current.id, operation: 'time', type: 'scalar', inputs: [] }); break;
+      case 'motion.temporal-deformation': register = emit({ nodeId: current.id, operation: 'temporal-deformation', type: 'vec4',
+        inputs: ['motion', 'gradient', 'resolution'].map(input => visitSource(current, input)) }); break;
+      case 'image.mask-overlay': register = emit({ nodeId: current.id, operation: 'mask-overlay', type: 'image',
+        inputs: ['image', 'mask', 'color', 'opacity'].map(input => visitSource(current, input)) }); break;
       case 'image.derivative.auto.scalar': case 'image.derivative.fine.scalar': case 'image.derivative.coarse.scalar': {
         if (activeScope !== 0 || activeKernelScope !== undefined || activeSequenceScope !== undefined) {
           throw new Error('Image derivatives are only available in the root evaluation scope.');
@@ -601,6 +605,9 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
   if (instructions.some(item => item.operation === 'sample-image')) capabilities.push('sample');
   if (instructions.some(item => item.operation === 'load-image' || item.operation === 'field-load-nearest-seed' || item.operation === 'segment-sort-luma' || item.operation === 'quadtree-partition')) capabilities.push('pixel-load');
   if (instructions.some(item => item.operation.startsWith('derivative-'))) capabilities.push('derivative');
+  if (instructions.some(item => ['optical-flow', 'source-motion', 'motion-consistency', 'directional-smooth'].includes(item.operation))) {
+    for (const capability of ['uv', 'resolution'] as const) if (!capabilities.includes(capability)) capabilities.push(capability);
+  }
   const emitted = emitImageOperatorWgsl({ instructions, output, capabilities, sampleScopes, kernelScopes, rectScopes, sequenceScopes, segmentSortScopes, quadtreeScopes,
     parameterValues, resourceInputs, resourceSampling });
   return { fusion: 'inline', capabilities, instructions, output, sampleScopes, kernelScopes, rectScopes, sequenceScopes, segmentSortScopes, quadtreeScopes, values: parameterValues, valueBindings,
@@ -641,7 +648,7 @@ export function compileImageOperatorGraph(graph: EffectOperatorGraph, params: Re
   graph = expandOperatorCompositions(graph);
   assertImageGraphBudget(graph);
   assertDerivativeInputsAreRootLocal(graph);
-  return compileImageOperatorPassPlan(graph, params, (singleGraph, singleParams, preview) => compileImageOperatorTarget(singleGraph, singleParams, preview, context));
+  return compileImageOperatorPassPlan(graph, params, (singleGraph, singleParams, preview) => compileImageOperatorTarget(singleGraph, singleParams, preview, context), undefined, context);
 }
 
 export function compileImageOperatorPreview(graph: EffectOperatorGraph, params: Record<string, unknown>, target: ImageOperatorPreviewTarget,
@@ -656,5 +663,5 @@ export function compileImageOperatorPreview(graph: EffectOperatorGraph, params: 
   }
   assertImageGraphBudget(graph);
   assertDerivativeInputsAreRootLocal(graph);
-  return compileImageOperatorPassPlan(graph, params, (singleGraph, singleParams, preview) => compileImageOperatorTarget(singleGraph, singleParams, preview, context), target);
+  return compileImageOperatorPassPlan(graph, params, (singleGraph, singleParams, preview) => compileImageOperatorTarget(singleGraph, singleParams, preview, context), target, context);
 }

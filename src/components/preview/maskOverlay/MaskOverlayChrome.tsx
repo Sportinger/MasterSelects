@@ -11,6 +11,7 @@ import type {
 } from './maskOverlayTypes';
 import type { MaskBoundsCorner, ProjectedMaskBounds } from './maskBoundsGeometry';
 import { useTouchMouseBridge } from '../useTouchMouseBridge';
+import { MaskFeatherProfileGuide } from './MaskFeatherProfileGuide';
 
 type VertexMouseTarget = 'vertex' | 'handleIn' | 'handleOut';
 const FEATHER_PREVIEW_GRADIENT_STEPS = 32;
@@ -135,7 +136,7 @@ export function MaskOverlayChrome({
       : pathData
     : '';
   const featherPreviewRadius = Math.max(3 * unitsPerScreenPx, featherPreviewAmount * unitsPerScreenPx);
-  const showFeatherPreview = featherPreviewPath.length > 0 && featherPreviewAmount > 0;
+  const showFeatherPreview = featherPreviewPath.length > 0 && (featherPreviewAmount > 0 || (activeMask?.featherOffset ?? 0) !== 0);
   const featherPreviewStrokes = showFeatherPreview
     ? Array.from({ length: FEATHER_PREVIEW_GRADIENT_STEPS }, (_, index) => {
         const step = index + 1;
@@ -234,7 +235,9 @@ export function MaskOverlayChrome({
           className={`mask-feather-preview ${featherPreview?.phase === 'out' ? 'fade-out' : 'fade-in'}`}
           pointerEvents="none"
         >
-          {featherPreviewStrokes.map((stroke, index) => (
+          {!featherPreview?.edgeId && activeMask ? <MaskFeatherProfileGuide path={featherPreviewPath}
+            width={canvasWidth} height={canvasHeight} feather={featherPreviewAmount}
+            offset={activeMask.featherOffset ?? 0} balance={activeMask.featherBalance ?? 0} /> : featherPreviewStrokes.map((stroke, index) => (
             <path
               key={`feather-gradient-${index}`}
               d={featherPreviewPath}

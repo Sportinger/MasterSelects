@@ -154,7 +154,7 @@ export function captureImageOperatorPreviews(options: CaptureImageOperatorPrevie
           resolveMemoryWindow: options.resolveMemoryWindow,
         }));
         for (const [id, resource] of options.externalResources ?? []) {
-          if (plan.resourceInputs?.includes(id)) externalResources.set(id, resource);
+          if (plan.resourceInputs?.includes(id) || plan.passes?.some(pass => pass.inputResources.includes(id))) externalResources.set(id, resource);
         }
         if (plan.previewResourceId) {
           runtime.encode({ encoder: options.encoder, sampler: options.sampler, source: options.source, width: options.width, height: options.height,

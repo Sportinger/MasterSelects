@@ -1,0 +1,52 @@
+<!doctype html><meta charset="utf-8"><title>Slit Scan mesh projection regression</title>
+<h1>Slit Scan mesh projection regression</h1><pre id="result">Running…</pre>
+<script type="module">
+import { SlitScanSurfacePass } from '/src/engine/native3d/passes/SlitScanSurfacePass.ts';
+import { createSlitScanReference } from '/src/effects/time/slit-scan/geometryReference.ts';
+const result = document.querySelector('#result');
+try {
+  const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter) throw new Error('WebGPU adapter unavailable');
+  const device = await adapter.requestDevice();
+  device.pushErrorScope('validation');
+  const size = 128, pixels = new Uint8Array(size * size * 4), field = new Float32Array(size * size * 4);
+  for (let y=0;y<size;y++) for(let x=0;x<size;x++) {
+    const i=(y*size+x)*4;
+    pixels.set([x*2,y*2,((x>>3)^(y>>3))%2*255,64+(x+y)%192],i);
+    field.set([Math.sin(x*.3)*Math.cos(y*.23)*1.7,0,0,1],i);
+  }
+  const texture=(format,usage)=>device.createTexture({size:[size,size],format,usage});
+  const input=texture('rgba8unorm',GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST);
+  const geometry=texture('rgba32float',GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST);
+  device.queue.writeTexture({texture:input},pixels,{bytesPerRow:size*4},[size,size]);
+  device.queue.writeTexture({texture:geometry},field,{bytesPerRow:size*16},[size,size]);
+  const surface=new SlitScanSurfacePass(), results=[];
+  for (const projection of ['perspective','orthographic']) {
+    const ref=createSlitScanReference(projection);
+    const output=texture('rgba8unorm',GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC);
+    const depth=texture('depth24plus',GPUTextureUsage.RENDER_ATTACHMENT);
+    const read=device.createBuffer({size:pixels.length,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+    const encoder=device.createCommandEncoder(), temporary=[];
+    const clear=encoder.beginRenderPass({colorAttachments:[{view:output.createView(),loadOp:'clear',storeOp:'store',clearValue:[0,0,0,0]}],
+      depthStencilAttachment:{view:depth.createView(),depthLoadOp:'clear',depthStoreOp:'store',depthClearValue:1}});clear.end();
+    surface.render(device,encoder,output.createView(),depth.createView(),[{
+      mvp:new Float32Array(ref.viewProjection),reference:new Float32Array(ref.viewProjection),
+      inverseReference:new Float32Array(ref.inverseViewProjection),color:input.createView(),geometry:geometry.createView(),
+      columns:64,rows:64,timeDepth:1,opacity:1,
+    }],temporary);
+    encoder.copyTextureToBuffer({texture:output},{buffer:read,bytesPerRow:size*4},[size,size]);
+    device.queue.submit([encoder.finish()]);await read.mapAsync(GPUMapMode.READ);
+    const actual=new Uint8Array(read.getMappedRange());let max=0,total=0,alphaMax=0,holes=0;
+    for(let i=0;i<pixels.length;i++) {
+      const expected=i%4===3?pixels[i]:Math.round(pixels[i]*pixels[i-i%4+3]/255);
+      const error=Math.abs(actual[i]-expected); max=Math.max(max,error);total+=error;
+      if(i%4===3){alphaMax=Math.max(alphaMax,error);if(actual[i]===0)holes++;}
+    }
+    results.push({projection,maxByteError:max,meanByteError:total/pixels.length,alphaMax,holes,pass:max<=2&&alphaMax<=1&&holes===0});
+    read.unmap();read.destroy();output.destroy();depth.destroy();temporary.forEach(b=>b.destroy());
+  }
+  const validation=await device.popErrorScope();if(validation)throw new Error(validation.message);
+  surface.dispose();input.destroy();geometry.destroy();device.destroy();
+  result.textContent=JSON.stringify({pass:results.every(r=>r.pass),results},null,2);
+} catch(error) {result.textContent=`FAIL: ${error.stack??error}`;}
+</script>

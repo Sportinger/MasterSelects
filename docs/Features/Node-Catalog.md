@@ -12,6 +12,37 @@ selected node's inspector or the appropriate domain's Add menu.
 
 ## Ownership and reuse
 
+The parameter-control menu includes **Audio envelope** (`control.audio-envelope`).
+It reads mixed RMS, momentary LUFS or short-term LUFS from existing analysis;
+it does not use live FFT or the playback AudioContext. The selected clip ID,
+time basis, interpolation and dB normalization are stored in the control graph.
+Slit Scan exposes Delay, Map mix and Noise amount as scalar targets. Use Remap
+to convert the normalized audio value into a desired delay range. Audio source
+and export integration have unit coverage; live end-to-end verification is pending.
+
+Image effects expose six reusable motion operators through **Add node**:
+
+| Node | Contract |
+| --- | --- |
+| Optical Flow | Reference image, target image, signed target-minus-reference interval. Outputs RG velocity in UV/second, B confidence, A validity. |
+| Source Motion | Source-video UV, delay, analysis interval (0–1 graph seconds), declared lookback and Time factor. Explicit source times, independent of playback history; requires a video clip. |
+| Temporal Deformation | Motion field, delay gradient in seconds/output-pixel and resolution. Outputs maximum/minimum stretch, confidence and signed Jacobian determinant. |
+| Motion Field Consistency | Confidence-weighted neighboring motion vectors; disagreement reduces confidence before measuring deformation. Radius is a fraction of the longest image edge. |
+| Directional Smoothing | Image, pixel-space direction, radius and strength mask; nine weighted taps, preserving pixels at zero strength. |
+| Mask Overlay | Image, scalar mask, RGB color and opacity. Preserves alpha; normally renders in exports as well. |
+
+Optical Flow uses bounded low-resolution image passes. Source Motion uses shared
+source decoding and a separate bounded analysis atlas. Its **DIS cached source
+pairs** option uses real adjacent source PTS instead of the connected interval:
+an independent WebGPU fast DIS implementation with Gaussian pyramids, overlapping
+patch search, dense aggregation and forward/backward consistency. Cached fields
+are sampled at each output pixel's source time. The original local estimator
+remains the default for existing consumers. Slit Scan enables DIS for its stretch
+mask and disables the red overlay during export. These estimates can fail at
+occlusions, weak texture or large motion; they do not reconstruct missing frames.
+Earlier local-estimator probes do not validate DIS. Build/test execution is paused;
+live DIS quality and performance have not yet been verified.
+
 The catalog includes the 15 Fisheye processing groups, the shared coordinate
 compositions and the expandable HSV-based Hue Shift composition. To insert one,
 select an image effect or an internal node and use

@@ -1,6 +1,8 @@
+import { withSlitScanRgbTime } from './slitScanRgbTimeGraph';
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge, OperatorGroup } from '../../types/operatorGraph';
 import { withSlitScanProtection } from './slitScanProtectionGraph';
 import { withSlitScanTimeMap } from './slitScanTimeMapGraph';
+import { withSlitScanMotion } from './slitScanMotionGraph';
 
 type Ref = { node: string; port: string };
 
@@ -78,7 +80,7 @@ export function createDefaultSlitScanGraph(): EffectOperatorGraph {
   const bandIndex = unary('band-index', 'math.floor.scalar', mul('band-grid', bandPosition, count));
   const stepped = binary('stepped-time', 'math.divide-ieee.scalar', bandIndex, binary('band-divisor', 'math.subtract.scalar', count, one));
   const quantized = select('smooth-or-banded', binary('use-bands', 'compare.greater.scalar', bands, one), spatialOffset, stepped);
-  const safeDelay = node('safe-delay', 'math.clamp.scalar', { value: delay, min: zero, max: n('max-delay', 4) });
+  const safeDelay = node('safe-delay', 'math.clamp.scalar', { value: delay, min: zero, max: n('max-delay', 60) });
   const seconds = mul('sample-delay', mul('masked-delay', quantized, mask), safeDelay);
   const sample = node('history', 'image.sample-history', { uv, delay: seconds, current: frame }, 'image');
   const original = node('original-rgba', 'convert.image-to-vec4', { image: frame });
@@ -86,5 +88,5 @@ export function createDefaultSlitScanGraph(): EffectOperatorGraph {
   const mixed = node('mix-rgba', 'math.mix.vec4', { a: original, b: delayed, t: clamp('safe-mix', mix) });
   const image = node('result', 'convert.vec4-to-image', { value: mixed }, 'image');
   node('output', 'image.output', { image });
-  return withSlitScanTimeMap(withSlitScanProtection({ version: 1, schemaVersion: 1, domain: 'image', nodes, edges, groups, layout }));
+  return withSlitScanRgbTime(withSlitScanMotion(withSlitScanTimeMap(withSlitScanProtection({ version: 1, schemaVersion: 1, domain: 'image', nodes, edges, groups, layout }))));
 }

@@ -62,6 +62,8 @@ const mockFactory = vi.hoisted(() => {
       this.cancelled = true;
     });
     isCancelled = vi.fn(() => this.cancelled);
+    shouldFinishEarly = vi.fn(() => false);
+    finishEarly = vi.fn(() => { this.shouldFinishEarly.mockReturnValue(true); });
     getRuntimeRunId = vi.fn(() => 'runtime-run-a');
 
     constructor() {

@@ -41,19 +41,33 @@ Meanwhile, I'll keep a refined version available at
 [masterselects.com](https://www.masterselects.com/), reviewing and polishing
 contributions as I bring them together into a cohesive editor.
 
+Slit Scan also has optional [3D time surfaces and motion bands](docs/Features/Slit-Scan-3D.md), with a saved reference projection, explicit base sampler, native scene-camera rendering and bounded DIS deformation. Saved projects retain source-pair DIS fields in a linked disk cache; bounded background writes let rendering resume while persistence finishes.
+
 Effect inspectors reuse unchanged controls during playback while keeping animated values live. Slit Scan's 3D sampler list follows authored graph changes rather than rebuilding on each playhead tick.
+
+Slit Scan's 3D time surface can use resolved source-frame times and blend weights for depth, without DIS or a calibration image. This visualizes temporal sampling; it does not reconstruct object motion or physical scene depth.
+
+The Slit Scan **Motion-deformed surface** additionally follows image points through forward/backward source motion, so motion can stretch and shear the grid over time. It preserves stationary areas; untracked regions can keep their original position or leave diagnostic gaps.
 
 Slit Scan adds spatial time displacement to clips, with directional and wave
 profiles, center or clip-mask protection, diagnostic previews, and an editable group built from shared Nodes.
 Deleting a selected protection mask keeps Slit Scan running without mask protection; undo restores the connection.
+Slit Scan time fields add color/HSV, noise and separate time masks. The shared depth controls can bake and assign a source-aligned depth video with provenance and coverage checks; live/export verification of these additions is pending.
+Delay, Map mix and Noise amount also accept the shared parameter-source graph, including LFO modulation and binding bypass.
 Object stabilization can track a selected mask in both directions, align current and historical frames to a reference, and create a feathered protection mask without cutting out the clip. Position, rotation and size correction share reusable source tracking; uncovered tracking windows are reported explicitly.
 Stabilization applies directly to the current playback input. Tracking gaps pause only stabilization in preview and export while Slit Scan continues; transient source-cache failures retry automatically.
-Slit Scan supports 2-256 samples, within the GPU layer and 640 MiB cache limits. New effects default to Full size, with Sampling first and expanded in the inspector. Small preview and Full size use the same source-time sampling through a bounded GPU cache. A shared frame service reuses exact cached frames, coalesces source requests and continues decoding across playback refills. Small preview can use existing JPEG proxies; Full size follows timeline Proxy mode at actual proxy resolution, including in 4K compositions. The inspector identifies proxy/original use and cache dimensions. Full-size export uses originals. WebGPU handles frame conversion and resizing without Canvas or CPU pixel readback; required frames take priority over lookahead.
+Slit Scan supports 2-256 samples, within the GPU layer and 640 MiB cache limits. New effects default to Full size, with Sampling first and expanded in the inspector. Small preview and Full size use the same source-time sampling through a bounded GPU cache. A shared frame service reuses exact cached frames, coalesces source requests and continues decoding across playback refills. Small preview can use existing JPEG proxies; Full size follows timeline Proxy mode at actual proxy resolution, including in 4K compositions. Full-size export uses originals. WebGPU handles frame conversion and resizing without Canvas or CPU pixel readback; required frames take priority over lookahead.
 An optional Hybrid frame-storage mode combines a bounded GPU cache with streamed GPU accumulation. Its sample maximum follows source resolution (up to 8192), while duplicate source timestamps share texture layers. Hybrid uses original frames, holds the last completed preview during preparation, and waits for complete frames during export; large windows may render below real-time speed.
-Slit Scan's Time factor (1–10×) expands its source-history window without changing clip speed, duration or composition FPS. The effective lookback is Delay × Time factor; clip boundaries hold.
-Lookahead refills continuously during playback; historical proxy reads do not redirect timeline preloading. Cache allocation follows the requested sample count; an oversized request reports its limit without blanking the preview or other effects. See [Effects](docs/Features/Effects.md#slit-scan) for controls and preparation limits.
+Slit Scan offers opt-in shared-source export processing for native Hybrid linear scans: up to eight output frames reuse each decoded source and receive only its contributing GPU strips. Complex graphs retain the existing Hybrid path.
+New Slit Scan effects use resident GPU video history inspired by TouchDesigner, with a 4 GiB history budget, Nearest temporal sampling, 1920 samples, shared-source Hybrid export processing, Full size and Adaptive preview quality. Source frames stay in tiled GPU pages, with direct time lookup and a selectable 640 MiB to 4 GiB history budget. Allocation follows distinct source frames plus refill headroom, rather than filling the budget up front. Playback and scrubbing hold a complete effect image during refills to avoid seams from missing time samples; exports await exact frames. Oversized windows fall back to Hybrid streaming without reducing resolution or sample count. Playback/export performance validation is pending.
+Slit Scan's Time factor (1–100×) expands its source-history window without changing clip speed, duration or composition FPS. The effective lookback is Delay × Time factor; clip boundaries hold. The adjacent Bypass slowdown toggle keeps source acceleration in the result and shortens the clip proportionally; disabling it restores the duration. Audio remains unchanged.
+Resident GPU history has optional Adaptive preview quality: playback, scrubbing and parameter edits use history frames capped at a 960-pixel edge, reduced further when memory requires it. Paused value changes refresh the adaptive result, then switch to full resolution when ready; export and temporal sample counts are unchanged. Full-quality caches stay warm across playback when the shared memory budget allows it.
+
+Slit Scan's optional Scan smoothing combines cached DIS source-frame motion with the final delay gradient. **Stretch threshold (×)** selects local expansion, with a red preview mask and reusable Source Motion/deformation/filter nodes. The independent WebGPU DIS fast path uses a Gaussian pyramid, patch search, dense aggregation and backward-flow confidence checks. First use prepares a bounded GPU field cache; threshold edits reuse it. Smoothing blends existing pixels and does not synthesize intermediate frames. DIS quality and performance are not yet live-verified; builds/tests remain paused.
 
 ## Build while you create
+
+Mask feather includes independent contour offset and balance controls: move a soft or sharp edge inward or outward, or pan the transition midpoint within the feather ramp. Both controls are animatable. See [Masks](docs/Features/Masks.md).
 
 Start the editor locally from source, open your project, and work from there:
 
@@ -171,6 +185,8 @@ keeps their original timing, and reversed thumbnails follow the visible source r
 Settings > General includes a timeline RAM-cache budget in GB, with approximate
 browser-reported RAM and live usage. Non-proxy scrub frames use a bounded RAM cache
 alongside the GPU cache; the yellow ruler indicates frames retained in either tier.
+Idle preloading expands with the budget. Playback retains those frames and can
+add already decoded HTML-video frames without starting another decoder.
 Nested audio-only compositions retain their sound; mixdowns include clip timing
 and audio processing. Board-to-timeline drops restore the board view after auto-pan.
 New compositions are revealed in the Media panel. Preview source menus group
@@ -208,7 +224,7 @@ reproduce it.
 
 - **Import:** video, audio, images, Premiere Pro projects, Lottie and Rive
   animation, OBJ/glTF/GLB models, and Gaussian splats.
-- **Export:** video through WebCodecs or FFmpeg, still frames, audio, and FCPXML
+- **Export:** video through WebCodecs or FFmpeg, still frames, audio, and FCPXML. During video export, `Finish File Early` finalizes and downloads the portion rendered so far.
   for interchange with other editors.
 - **Optional Native Helper:** adds local services such as downloads, additional
   storage support, and AI sidecars.

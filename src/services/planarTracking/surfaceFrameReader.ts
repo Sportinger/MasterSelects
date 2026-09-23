@@ -7,7 +7,7 @@ export interface SurfaceDecodedFrame extends SurfaceFrameStamp { pixels: ImageDa
 export interface SurfaceGpuFrame extends SurfaceFrameStamp { source: VideoFrame | HTMLCanvasElement; width: number; height: number }
 
 /** Last presented frame, never the next frame or an interpolated pose. */
-export function surfaceFrameIndex(frames: readonly SurfaceFrameStamp[], time: number): number {
+export function surfaceFrameIndex(frames: readonly Pick<SurfaceFrameStamp, 'time'>[], time: number): number {
   let lo = 0, hi = frames.length;
   while (lo < hi) { const mid = (lo + hi) >>> 1; if (frames[mid].time <= time + 0.6e-6) lo = mid + 1; else hi = mid; }
   return lo - 1;

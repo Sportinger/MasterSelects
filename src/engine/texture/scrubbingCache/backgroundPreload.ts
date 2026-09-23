@@ -13,6 +13,7 @@ import {
 } from './backgroundVideoOps';
 import { frameIndexForTime, SCRUB_CACHE_FPS } from './cacheKeys';
 import { ScrubTextureCache } from './scrubTextureCache';
+import { getScrubPreloadWindow } from './scrubPreloadWindow';
 
 const log = Logger.create('ScrubbingCache');
 
@@ -38,12 +39,7 @@ export class BackgroundPreloadController {
   private activeSession: BackgroundPreloadSession | null = null;
   private paused = false;
 
-  private readonly scrubAheadFrames = 48;
-  private readonly scrubBehindFrames = 24;
-  private readonly idleAheadFrames = 24;
-  private readonly idleBehindFrames = 12;
   private readonly maxQueueFrames = 72;
-  private readonly staleDistanceFrames = 180;
   private readonly jumpResetFrames = 180;
   private readonly rescheduleIntervalMs = 80;
   private readonly seekTimeoutMs = 900;
@@ -106,10 +102,29 @@ export class BackgroundPreloadController {
 
     session.lastRequestedFrame = targetFrame;
     session.lastScheduleAt = now;
-    this.pruneQueue(session, targetFrame);
+    const size = this.scrubCache.computeSize(video.videoWidth, video.videoHeight);
+    const window = getScrubPreloadWindow({
+      targetFrame,
+      lastFrame: session.duration > 0 ? Math.max(0, Math.ceil(session.duration * SCRUB_CACHE_FPS) - 1) : targetFrame,
+      ramBytes: this.scrubCache.getRamSnapshot().maxBytes,
+      frameBytes: size.width * size.height * 4,
+      sourceCount: this.sessions.size,
+      isDragging: options.isDragging === true,
+    });
+    if (previousFrame !== targetFrame || session.windowStart !== window.start || session.windowEnd !== window.end) {
+      session.attemptedFrames.clear();
+    }
+    session.windowStart = window.start;
+    session.windowEnd = window.end;
+    this.pruneQueue(session);
+    this.refillQueue(session);
+    this.processQueue(session);
+  }
 
-    const ahead = options.isDragging ? this.scrubAheadFrames : this.idleAheadFrames;
-    const behind = options.isDragging ? this.scrubBehindFrames : this.idleBehindFrames;
+  private refillQueue(session: BackgroundPreloadSession): void {
+    const targetFrame = session.lastRequestedFrame;
+    const ahead = Math.max(0, session.windowEnd - targetFrame);
+    const behind = Math.max(0, targetFrame - session.windowStart);
 
     this.enqueueFrame(session, targetFrame, true);
     if (session.direction < 0) {
@@ -119,9 +134,6 @@ export class BackgroundPreloadController {
       for (let i = 1; i <= ahead; i++) this.enqueueFrame(session, targetFrame + i, i <= 6);
       for (let i = 1; i <= behind; i++) this.enqueueFrame(session, targetFrame - i, false);
     }
-
-    this.trimQueue(session);
-    this.processQueue(session);
   }
 
   clear(videoSrc?: string): void {
@@ -201,6 +213,9 @@ export class BackgroundPreloadController {
       lastRequestedFrame: -1,
       lastScheduleAt: 0,
       duration: getFiniteDuration(video.duration) ?? 0,
+      windowStart: 0,
+      windowEnd: 0,
+      attemptedFrames: new Set(),
     };
 
     this.sessions.set(videoSrc, session);
@@ -228,6 +243,7 @@ export class BackgroundPreloadController {
 
   private enqueueFrame(session: BackgroundPreloadSession, frameIndex: number, priority: boolean): void {
     if (frameIndex < 0) return;
+    if (session.queue.length >= this.maxQueueFrames || session.attemptedFrames.has(frameIndex)) return;
     if (session.duration > 0 && frameIndex / SCRUB_CACHE_FPS > session.duration) return;
     if (this.scrubCache.hasFrame(session.videoSrc, frameIndex)) {
       this.skipped++;
@@ -243,24 +259,15 @@ export class BackgroundPreloadController {
     }
   }
 
-  private pruneQueue(session: BackgroundPreloadSession, centerFrame: number): void {
+  private pruneQueue(session: BackgroundPreloadSession): void {
     if (session.queue.length === 0) return;
     session.queue = session.queue.filter((frameIndex) => {
-      const keep = Math.abs(frameIndex - centerFrame) <= this.staleDistanceFrames;
+      const keep = frameIndex >= session.windowStart && frameIndex <= session.windowEnd;
       if (!keep) {
         session.queuedFrames.delete(frameIndex);
       }
       return keep;
     });
-  }
-
-  private trimQueue(session: BackgroundPreloadSession): void {
-    while (session.queue.length > this.maxQueueFrames) {
-      const frameIndex = session.queue.pop();
-      if (frameIndex !== undefined) {
-        session.queuedFrames.delete(frameIndex);
-      }
-    }
   }
 
   private resetQueue(session: BackgroundPreloadSession): void {
@@ -278,12 +285,16 @@ export class BackgroundPreloadController {
 
   private async processQueueAsync(session: BackgroundPreloadSession): Promise<void> {
     try {
-      while (!session.disposed && !this.paused && session.queue.length > 0) {
+      while (!session.disposed && !this.paused) {
+        // Refill bounded batches without requiring another render or user seek.
+        // Each missing frame is attempted once per neighborhood, including failures.
+        if (session.queue.length === 0) this.refillQueue(session);
         const frameIndex = session.queue.shift();
         if (frameIndex === undefined) break;
         session.queuedFrames.delete(frameIndex);
+        session.attemptedFrames.add(frameIndex);
 
-        if (session.lastRequestedFrame >= 0 && Math.abs(frameIndex - session.lastRequestedFrame) > this.staleDistanceFrames) {
+        if (frameIndex < session.windowStart || frameIndex > session.windowEnd) {
           this.skipped++;
           continue;
         }

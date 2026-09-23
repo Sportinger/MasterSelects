@@ -44,11 +44,16 @@ fn decodeImageGraphBytePixel${index}(pixel: vec2f, depth: f32, floatMode: f32, f
 }
 
 /** Source-independent declarations for render and compute Image IR adapters. */
+/** Shared by WGSL declarations and explicit bind-group layouts. */
+export function imageGraphResourceViewDimension(id: string): GPUTextureViewDimension {
+  return (id.startsWith('input-history:') || id.startsWith('source-motion:')) && id.endsWith(':atlas') ? '2d-array' : '2d';
+}
+
 export function imageGraphResourceDeclarations(plan: Pick<ImageOperatorPlan, 'resourceInputs' | 'resourceSampling' | 'capabilities'>): string {
   validateImageGraphResourceSampling(plan);
   return (plan.resourceInputs ?? []).map((_id, index) => {
     const texture = `imageGraphResource${index}`, mode = plan.resourceSampling?.[index];
-    if (_id === 'input-history:atlas') return `@group(0) @binding(${3 + index}) var ${texture}: texture_2d_array<f32>;`;
+    if (imageGraphResourceViewDimension(_id) === '2d-array') return `@group(0) @binding(${3 + index}) var ${texture}: texture_2d_array<f32>;`;
     if (mode === 'exact-u32-pixel-load') {
       return `@group(0) @binding(${3 + index}) var ${texture}: texture_2d<u32>;\n${uintDecodeFunctions(index, texture)}`;
     }

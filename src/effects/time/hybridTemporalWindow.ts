@@ -1,6 +1,7 @@
 import { surfaceFrameIndex } from '../../services/planarTracking/surfaceFrameReader';
 import { sourceTemporalWindow, type SourceTemporalRequest } from './SourceTemporalRuntime';
 import { MAX_HYBRID_TEMPORAL_SAMPLES } from './sourceTemporalLimits';
+import { temporalSourceTime } from './temporalClipSource';
 
 /** Keep temporal positions, but give equal decoded PTS one GPU cache identity. */
 export function hybridTemporalWindow(request: SourceTemporalRequest, frames: readonly { time: number; duration: number }[]) {
@@ -12,16 +13,19 @@ export function hybridTemporalWindow(request: SourceTemporalRequest, frames: rea
     if (group === undefined) { group = times.length + 1; groups.set(time, group); times.push(time); }
     return group;
   };
-  if (request.horizon > 0) for (const item of sourceTemporalWindow(request, MAX_HYBRID_TEMPORAL_SAMPLES)) {
-    const index = Math.max(0, surfaceFrameIndex(frames, item.time));
+  const sourceSample = (sourceTime: number) => {
+    const index = Math.max(0, surfaceFrameIndex(frames, sourceTime));
     const time = frames[index].time, next = frames[Math.min(index + 1, frames.length - 1)].time;
-    const blend = request.nearest || next <= time ? 0 : Math.max(0, Math.min(1, (item.time - time) / (next - time)));
+    const blend = request.nearest || next <= time ? 0 : Math.max(0, Math.min(1, (sourceTime - time) / (next - time)));
     const group = groupFor(time), nextGroup = blend > 0 ? groupFor(next) : group;
-    samples.push({ age: item.age, group, nextGroup, blend });
+    return { group, nextGroup, blend };
+  };
+  if (request.sourceOnly) samples[0] = { age: 0, ...sourceSample(temporalSourceTime(request.source, request.source.localTime)) };
+  if (request.horizon > 0) for (const item of sourceTemporalWindow(request, MAX_HYBRID_TEMPORAL_SAMPLES)) {
+    samples.push({ age: item.age, ...sourceSample(item.time) });
   }
   const metadata = new Float32Array((samples.length + 1) * 4);
-  // Normalize ages rather than rewriting saved/custom graphs. Their 0–4 second
-  // delay now addresses a source window up to 40 seconds, including GPU demand.
+  // Normalize ages so graph delay coordinates address the expanded source window.
   samples.forEach((sample, i) => metadata.set([sample.age / (request.timeFactor ?? 1), sample.group, sample.nextGroup, sample.blend], i * 4));
   metadata.set([samples.length, Number(request.nearest), 0, 0], samples.length * 4);
   return { times, samples, metadata };
@@ -29,11 +33,12 @@ export function hybridTemporalWindow(request: SourceTemporalRequest, frames: rea
 
 /** Two output/current slots, a demand map and current-branch image; upload scratch is separate. */
 export function hybridTemporalMemory(width: number, height: number, sourceWidth: number, sourceHeight: number,
-  samples: number, maxLayers: number, budget = 640 * 1024 * 1024) {
+  samples: number, maxLayers: number, budget = 640 * 1024 * 1024, queries = 1) {
+  if (!Number.isInteger(queries) || queries < 1) throw new Error('Hybrid requires at least one temporal query.');
   const frameBytes = sourceWidth * sourceHeight * 4;
-  const fixedBytes = width * height * 44 + frameBytes * 2 + (MAX_HYBRID_TEMPORAL_SAMPLES + 1) * 20 + 16384;
+  const fixedBytes = width * height * (8 + 36 * queries) + frameBytes * 2 + (MAX_HYBRID_TEMPORAL_SAMPLES + 1) * 20 + 16384;
   const capacity = Math.min(maxLayers, Math.max(1, samples - 1), Math.floor((budget - fixedBytes) / frameBytes));
-  if (capacity < 1) throw new Error('Hybrid temporal rendering exceeds the 640 MiB budget at this resolution. Use a smaller output or preview.');
+  if (capacity < 1) throw new Error('Hybrid temporal rendering exceeds the available GPU budget at this resolution. Use a smaller output or preview.');
   return { capacity, bytes: fixedBytes + capacity * frameBytes };
 }
 

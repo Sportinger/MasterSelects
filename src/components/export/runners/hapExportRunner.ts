@@ -178,6 +178,7 @@ export async function runHapExport(
     const startedAt = performance.now();
     for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
       if (frameRenderer.isCancelled()) return null;
+      if (frameRenderer.shouldFinishEarly() && pendingSamples.length > 0) break;
 
       const frameTime = input.startTime + frameIndex * frameDuration;
       const layers = await frameRenderer.buildLayersAtTime(frameTime);
@@ -288,7 +289,7 @@ export async function runHapExport(
         input.audioPipelineRef.current = audioPipeline;
         const audioBuffer = await audioPipeline.exportRawAudio(
           input.startTime,
-          input.endTime,
+          Math.min(input.endTime, input.startTime + pendingSamples.length / input.fps),
           (audioProgress) => {
             const percent = 88 + audioProgress.percent * 0.06;
             input.onTimelineProgress(percent, input.endTime);

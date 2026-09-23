@@ -108,6 +108,7 @@ export class ScrubbingCache {
     options: { isDragging?: boolean; isPlaying?: boolean } = {}
   ): void {
     this.backgroundPreload.preloadAroundTime(video, targetTime, options);
+    if (options.isPlaying) this.scrubTextureCache.cachePlaybackFrame(video);
   }
 
   getCachedFrame(videoSrc: string, time: number): GPUTextureView | null {
@@ -228,9 +229,9 @@ export class ScrubbingCache {
     };
   }
 
-  clearScrubbingCache(videoSrc?: string): void {
+  clearScrubbingCache(videoSrc?: string, options?: { preserveFrames?: boolean }): void {
     this.backgroundPreload.clear(videoSrc);
-    this.scrubTextureCache.clear(videoSrc);
+    if (!options?.preserveFrames) this.scrubTextureCache.clear(videoSrc);
   }
 
   captureVideoFrame(video: HTMLVideoElement, ownerId?: string): boolean {
@@ -306,6 +307,7 @@ export class ScrubbingCache {
   }
 
   cleanupVideo(video: HTMLVideoElement): void {
+    this.scrubTextureCache.stopPlaybackCapture(video);
     this.lastFrameCache.cleanupVideo(video);
   }
 

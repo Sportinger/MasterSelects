@@ -443,8 +443,8 @@ export class MainFallbackRenderHostPort implements RenderHostPort {
     engine.clearVideoCache();
   }
 
-  clearScrubbingCache(videoSrc?: string): void {
-    engine.clearScrubbingCache(videoSrc);
+  clearScrubbingCache(videoSrc?: string, options?: { preserveFrames?: boolean }): void {
+    engine.clearScrubbingCache(videoSrc, options);
   }
 
   clearCompositeCache(): void {
