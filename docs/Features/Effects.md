@@ -33,6 +33,15 @@ shape, center and subject protection, time sampling and diagnostic previews. Onl
 new atomic operator; Slit Scan supplies timestamped source frames to it, not its previous output.
 Saved graph edits, effect bypass and numeric keyframes use the existing editor paths.
 
+Inspector section switches and matching Node group bypasses share one saved state.
+This includes nested image groups with an unambiguous typed pass-through boundary
+and scene groups with an existing renderer mute. Parent image-group bypasses keep
+child bypass states, values, keyframes and wiring intact. Sections without a valid
+bypass remain status indicators. Slit Scan explicitly links Time map source / Time
+map, Protection mask / Subject protection, and Protected center to their groups;
+their switches work in either view. Bypassing the Protected Center graph also skips
+its radial/rings profile branch, returning to the upstream linear/center/wave profile.
+
 - **Delay (s)**: maximum past-time offset, 0-4 seconds. Zero removes time displacement; object stabilization, when enabled, still applies.
 - **Scan direction / Angle**: left-to-right (0 degrees), top-to-bottom (90 degrees),
   bottom-to-top (-90 degrees), right-to-left (180 degrees), or any diagonal angle.

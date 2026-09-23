@@ -90,6 +90,7 @@ export function expandOperatorCompositions(source: EffectOperatorGraph): EffectO
 
 /** Reuse unchanged definitions. An edited interior becomes a local group, never mutates other instances. */
 export function packOperatorCompositions(source: EffectOperatorGraph): EffectOperatorGraph {
+  if (source.groups?.some(group => group.bypassed)) return source;
   if (!source.groups?.some(group => group.composition)) return source;
   const graph = structuredClone(source);
   const depth = (group: OperatorGroup): number => group.parentId ? 1 + depth(graph.groups!.find(parent => parent.id === group.parentId)!) : 0;

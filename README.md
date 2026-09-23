@@ -123,6 +123,10 @@ frames. Image/color stages, saved
 tracking/geometry, material swatches, camera/light values and scene output have
 viewers without starting extra decoders or analysis jobs.
 
+Inspector section switches synchronize with matching Node group bypasses, including
+nested image groups with a defined pass-through and existing scene branch mutes.
+Bypassing a parent image group preserves its children's individual settings.
+
 Color Nodes uses the same canvas as Nodes. Flock uses the shared compact
 inspector and adds evaluated-parameter and existing-particle previews. Common
 connection checks cover Color, Flock, Face Cables, Scene and manual clip links;

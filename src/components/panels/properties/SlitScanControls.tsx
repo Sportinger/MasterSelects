@@ -30,14 +30,14 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId }:
       {preparationStatus && <p className="effect-info" role="status">{preparationStatus}</p>}
     </ResolveInspectorSection>
     <SlitScanStabilizationControls params={params} onChange={onChange} clipId={clipId} effectInstanceId={effectInstanceId} />
-    <ResolveInspectorSection title="Time map source" defaultOpen>
+    <ResolveInspectorSection title="Time map source" bypassGroupId="time-map" defaultOpen>
       <ResolveInspectorRow label="Image / video"><InspectorSelect ariaLabel="Slit Scan time map source"
         value={String(params.mapMediaId ?? '')} options={[{ value: '', label: 'Profile only' },
           ...files.filter(file => file.type === 'image' || file.type === 'video').map(file => ({ value: file.id, label: file.name }))]}
         onChange={value => onChange({ ...params, mapMediaId: value, mapAmount: value ? 1 : 0 })} /></ResolveInspectorRow>
       <p className="effect-info">Imported images, depth or mask videos use normalized clip coordinates. Map start aligns video time zero to the composition timeline; boundaries hold the first or last frame.</p>
     </ResolveInspectorSection>
-    <ResolveInspectorSection title="Protection mask" defaultOpen>
+    <ResolveInspectorSection title="Protection mask" bypassGroupId="subject-protection" defaultOpen>
       <ResolveInspectorRow label="Clip mask"><InspectorSelect ariaLabel="Slit Scan protection mask"
         value={String(params.protectionMask ?? '')} options={[{ value: '', label: 'None' },
           ...(params.protectionMask && !selectedMask ? [{ value: String(params.protectionMask), label: 'Missing mask', disabled: true }] : []),
@@ -49,7 +49,9 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId }:
       {selectedMask?.enabled === false && <p className="effect-info" role="status">This mask is disabled. Enable its Render switch in Masks to protect the object.</p>}
       <p className="effect-info">White protects the current frame. Use “Effect input only” in Masks to keep the full clip visible.</p>
     </ResolveInspectorSection>
-    {['Time', 'Sampling', 'Time map', 'Subject protection', 'Protected center', 'Wave'].map(group => <ResolveInspectorSection key={group} title={group} defaultOpen={group === 'Time'}>
+    {['Time', 'Sampling', 'Time map', 'Subject protection', 'Protected center', 'Wave'].map(group => <ResolveInspectorSection key={group} title={group}
+      bypassGroupId={({ 'Time map': 'time-map', 'Subject protection': 'subject-protection', 'Protected center': 'scan-protection' } as Record<string, string>)[group]}
+      defaultOpen={group === 'Time'}>
       {Object.entries(slitScanParams).filter(([key, parameter]) => parameter.group === group && !['temporalMode', 'temporalResolution'].includes(key)).map(([key, parameter]) => {
         if (parameter.type === 'select') return <ResolveInspectorRow key={key} label={parameter.label}>
           <InspectorSelect ariaLabel={`Slit Scan ${parameter.label}`} value={String(params[key] ?? parameter.default)}

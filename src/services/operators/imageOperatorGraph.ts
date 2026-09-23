@@ -25,9 +25,12 @@ export type { ImageOperatorCompileContext } from './imageOperatorChoice';
 export type { ImageOperatorExternalResource, ImageOperatorGlyphAtlasBindings, ResolveImageOperatorGlyphAtlas } from './imageOperatorGlyphResources';
 export type { ImageOperatorMemoryWindowOptions, ImageOperatorMemoryWindowResource } from './imageOperatorExternalResources';
 
+import { applyOperatorGroupBypasses } from './operatorGroupBypass';
+
 function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<string, unknown>, preview?: ImageOperatorPreviewTarget,
   context: ImageOperatorCompileContext = {}): ImageOperatorPlan {
   graph = migrateImageOperatorGraph(graph);
+  graph = applyOperatorGroupBypasses(graph);
   if (graph.domain !== 'image') throw new Error('Expected an image operator graph.');
   if (graph.schemaVersion !== 1) throw new Error(`Unsupported image graph schema version: ${String(graph.schemaVersion)}.`);
   if (graph.nodes.some(item => item.operatorVersion !== 1)) throw new Error('Unsupported image operator version.');

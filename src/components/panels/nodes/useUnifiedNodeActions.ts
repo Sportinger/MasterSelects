@@ -17,6 +17,7 @@ import { changeKeyframeNode, connectKeyframeNode, disconnectKeyframeNode, remove
 import { keyframeEdgeId } from '../../../services/nodeGraph/keyframeNodeProjection';
 import { connectControlNodes, deleteControlNode, disconnectControlEdge, moveControlNode, setParameterSourceBinding } from '../../../services/parameterSources/parameterSourceActions';
 import type { AnimatableProperty } from '../../../types/animationProperties';
+import { setEffectGroupEnabled } from '../../../services/operators/effectGroupBypassEditing';
 
 interface BaseActions {
   moveNode: (id: string, layout: NodeGraphLayout) => void;
@@ -120,6 +121,13 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
     }),
     toggleBypass: (id: string) => {
       const group = graph?.groups?.find(g => g.proxyId === id || g.bypassNodeId === id);
+      if (group?.parentId && group.bypassNodeId && clip) {
+        const effectGroup = graph?.groups?.find(candidate => candidate.effectId && group.id.startsWith(`${candidate.id}/`));
+        if (effectGroup?.effectId) {
+          safely(() => setEffectGroupEnabled(clip.id, effectGroup.effectId!, group.id.split('/').at(-1)!, group.bypassed === true));
+          return;
+        }
+      }
       const target = group?.bypassNodeId ? (graph?.expandedNodes ?? graph?.nodes)?.find(n => n.id === group.bypassNodeId) : undefined;
       if (target?.binding?.kind === 'effect-operator' && clip) {
         const binding = target.binding;

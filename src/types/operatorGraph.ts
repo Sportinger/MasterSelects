@@ -76,6 +76,10 @@ export interface EffectOperatorGraph {
 }
 export interface OperatorGroup {
   id: string; label: string; color: string; nodeIds: string[]; parentId?: string;
+  /** Skip this group's unambiguous typed boundary; child and node states are retained. */
+  bypassed?: boolean;
+  /** Authored neutral outputs for groups whose boundary cannot be inferred from signal types. */
+  bypassOutputs?: Record<string, OperatorEndpoint>;
   collapsedByDefault?: boolean;
   /** Expanded editor view of a shared instance; repacked before persistence. */
   composition?: { instance: BoundOperatorNode; position: { x: number; y: number } };

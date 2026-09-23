@@ -47,6 +47,22 @@
     cursor: default;
   }
 
+  .inspector-disclosure,
+  .inspector-status-control {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .inspector-disclosure:focus:not(:focus-visible),
+  .inspector-status-control:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  .inspector-disclosure:focus-visible,
+  .inspector-status-control:focus-visible {
+    outline: 2px solid var(--timeline-playhead);
+    outline-offset: 2px;
+  }
+
   .inspector-disclosure > svg {
     width: 10px;
     height: 10px;

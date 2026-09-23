@@ -1,8 +1,10 @@
 import type { MouseEventHandler, ReactNode } from 'react';
 import { InspectorRow, InspectorSection } from '../../../inspector/InspectorPrimitives';
+import { useEffectSectionBypass } from './EffectSectionBypass';
 
 interface ResolveInspectorSectionProps {
   children: ReactNode;
+  bypassGroupId?: string;
   className?: string;
   collapsible?: boolean;
   defaultOpen?: boolean;
@@ -15,6 +17,7 @@ interface ResolveInspectorSectionProps {
 
 export function ResolveInspectorSection({
   children,
+  bypassGroupId,
   className,
   collapsible = true,
   defaultOpen = true,
@@ -24,16 +27,17 @@ export function ResolveInspectorSection({
   onEnabledChange,
   title,
 }: ResolveInspectorSectionProps) {
+  const groupBypass = useEffectSectionBypass(bypassGroupId ? `group:${bypassGroupId}` : title);
   return (
     <InspectorSection
       alwaysOpenWhenEnabled
       className={className}
       collapsible={collapsible}
       defaultOpen={defaultOpen}
-      enabled={enabled}
+      enabled={enabled ?? groupBypass?.enabled}
       headerActions={headerActions}
       indicator={indicator}
-      onEnabledChange={onEnabledChange}
+      onEnabledChange={onEnabledChange ?? (enabled === undefined && indicator !== 'none' ? groupBypass?.onEnabledChange : undefined)}
       readOnlyIndicator="status"
       title={title}
       variant="resolve"

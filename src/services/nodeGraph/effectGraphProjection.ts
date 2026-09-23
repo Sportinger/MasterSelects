@@ -10,6 +10,7 @@ import { getEffectOperator } from '../operators/operatorRegistry';
 import { operatorEnabled } from '../operators/effectGraph';
 import { mathNodeSymbol } from './mathNodeSymbol';
 import { compositionGroupInterface } from '../operators/operatorComposition';
+import { operatorGroupBypassRoutes, operatorGroupRenderer } from '../operators/operatorGroupBypass';
 
 export const effectGraphId = (clipId: string, effectId: string) => `clip-graph:${clipId}:effect:${effectId}`;
 
@@ -50,14 +51,9 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
     edges: graph.edges.map(edge => ({ id: edge.id, fromNodeId: edge.from, fromPortId: edge.output, toNodeId: edge.to, toPortId: edge.input,
       type: projectOperatorPort(getEffectOperator(graph.nodes.find(n => n.id === edge.from)!.operator)!.outputs.find(p => p.id === edge.output)!, 'output').type })),
     groups: graph.groups?.map(g => {
-      const members = (id: string): string[] => {
-        const group = graph.groups!.find(item => item.id === id)!;
-        return [...group.nodeIds, ...graph.groups!.filter(item => item.parentId === id).flatMap(item => members(item.id))];
-      };
-      const renderers = graph.domain === 'scene' ? graph.nodes.filter(n => members(g.id).includes(n.id)
-        && ['splat.render', 'scene.mesh'].includes(n.operator)) : [];
-      const target = renderers.length === 1 ? renderers[0] : undefined;
+      const target = operatorGroupRenderer(graph, g.id);
       return { ...g, composition: compositionGroupInterface(graph, g), collapsed: false, proxyId: `group-${g.id}`,
+        ...(operatorGroupBypassRoutes(graph, g) ? { bypassNodeId: `group-${g.id}`, bypassed: g.bypassed === true } : {}),
         ...(target ? { bypassNodeId: target.id, bypassed: !operatorEnabled(target, effect.params) } : {}) };
     }),
   };

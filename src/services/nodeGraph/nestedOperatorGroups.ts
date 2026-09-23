@@ -23,7 +23,7 @@ export function foldOperatorGroups(graph: NodeGraph, state?: ClipNodeGraph, expa
     const proxy: NodeGraphNode = { id: g.proxyId, label: g.label, kind: 'effect', runtime: 'subgraph',
       description: g.composition?.description ?? 'Local node group. Expand to inspect its processing steps.', inputs: [], outputs: [],
       ...(g.composition ? { operatorId: g.composition.operatorId, params: { categoryLabel: 'COMPOSED' } } : {}),
-      ...(g.bypassNodeId ? { params: { bypassable: true, enabled: !g.bypassed, bypassDescription: 'Mute this rendered branch, including its upstream computation.' } } : {}),
+      ...(g.bypassNodeId ? { params: { bypassable: true, enabled: !g.bypassed, bypassDescription: 'Bypass this group while keeping its settings and connections.' } } : {}),
       groupId: members[0].groupId, binding: { kind: 'operator-group', groupId: g.id,
         ...(effectOwner ? { effectId: effectOwner } : {}) },
       layout: state?.groups?.[g.id]?.position ?? g.composition?.position ?? { x: Math.min(...members.map(n => n.layout.x)), y: Math.min(...members.map(n => n.layout.y)) } };

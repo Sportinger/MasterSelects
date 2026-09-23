@@ -1,4 +1,6 @@
 import { SlitScanControls } from './SlitScanControls';
+import { EffectSectionBypass } from './resolveInspector/EffectSectionBypass';
+import { ResolveInspectorSection } from './resolveInspector/ResolveInspectorPrimitives';
 import { SplatExplorationControls } from './SplatExplorationControls';
 // Effects Tab - Add and configure visual/audio effects
 import { Fragment, Suspense, useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -191,9 +193,12 @@ interface EffectParamsProps {
   ) => void;
 }
 
-function EffectParams({ effect, onChange, clipId, onDragStart, onDragEnd, onParamCommit }: EffectParamsProps) {
+function EffectParams(props: EffectParamsProps) {
+  return <EffectSectionBypass clipId={props.clipId} effectId={props.effect.id}><EffectParamsContent {...props} /></EffectSectionBypass>;
+}
+
+function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd, onParamCommit }: EffectParamsProps) {
   const [qualityExpanded, setQualityExpanded] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   const effectDef = EFFECT_REGISTRY.get(effect.type);
   if (!effectDef) {
@@ -243,28 +248,15 @@ function EffectParams({ effect, onChange, clipId, onDragStart, onDragEnd, onPara
       )}
 
       {namedGroups.map((group) => {
-        const isExpanded = expandedGroups[group.id] ?? group.id !== 'group:camera';
         return (
-          <div className="effect-quality-section" key={group.id}>
-            <div
-              className="effect-quality-header"
-              onClick={() => setExpandedGroups((current) => ({
-                ...current,
-                [group.id]: !isExpanded,
-              }))}
-            >
-              <span className="effect-quality-toggle">{isExpanded ? '\u25BC' : '\u25B6'}</span>
-              <span className="effect-quality-title">{group.label}</span>
-            </div>
-            {isExpanded && (
+          <ResolveInspectorSection key={group.id} title={group.label!} defaultOpen={group.id !== 'group:camera'}>
               <div className="effect-quality-params">
                 {group.params.map(([paramName, paramDef]) => {
                   const value = effect.params[paramName] ?? paramDef.default;
                   return renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, false, onDragStart, onDragEnd, onParamCommit);
                 })}
               </div>
-            )}
-          </div>
+          </ResolveInspectorSection>
         );
       })}
 

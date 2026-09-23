@@ -68,6 +68,7 @@ export function InspectorSection({
           aria-expanded={open}
           className={`inspector-disclosure ${prefix}-disclosure`}
           disabled={!collapsible}
+          onPointerUp={event => event.currentTarget.blur()}
           onClick={() => {
             if (collapsible) setOpen(current => !current);
           }}
@@ -86,6 +87,7 @@ export function InspectorSection({
             className={`inspector-status-control ${statusClass} is-${indicatorEnabled ? 'active' : 'inactive'}`}
             disabled={!onEnabledChange}
             onClick={toggleEnabled}
+            onPointerUp={event => event.currentTarget.blur()}
             role="switch"
             type="button"
           />
