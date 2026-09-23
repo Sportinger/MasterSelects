@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditableDraggableNumber } from '../../src/components/common/EditableDraggableNumber';
 
 function dispatchMouseMove(target: EventTarget, init: MouseEventInit & { movementX?: number }) {
@@ -19,12 +19,14 @@ function dispatchMouseMove(target: EventTarget, init: MouseEventInit & { movemen
 }
 
 function lastChangedValue(onChange: ReturnType<typeof vi.fn>): number {
+  if (vi.isFakeTimers()) act(() => vi.advanceTimersToNextFrame());
   const lastCall = onChange.mock.calls.at(-1);
   if (!lastCall) throw new Error('Expected onChange to be called');
   return lastCall[0] as number;
 }
 
 describe('EditableDraggableNumber drag behavior', () => {
+  beforeEach(() => vi.useFakeTimers());
   afterEach(() => {
     cleanup();
     vi.useRealTimers();

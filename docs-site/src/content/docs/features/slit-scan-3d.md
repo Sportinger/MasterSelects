@@ -24,6 +24,11 @@ The **Reference view** button temporarily aligns the preview with that reference
 Navigating the scene camera releases this preview override, so orbit, pan and
 dolly immediately show the surface from the new camera position.
 
+Inspector drag input is coalesced to the latest value per animation frame;
+release flushes the final value before ending the undo batch. Numeric typing,
+keyboard steps and resets remain immediate. Full parameter snapshots from
+effect controls write only changed fields, preserving unrelated animation.
+
 Time depth is signed and follows requested continuous source age, including trim,
 reverse, source overrides and speed changes. It is not normalized to each frame's
 minimum and maximum. A Float32 table with 8192 intervals evaluates the existing

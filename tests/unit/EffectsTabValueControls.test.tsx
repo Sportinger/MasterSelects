@@ -1,12 +1,24 @@
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useTimelineStore } from '../../src/stores/timeline';
 
 import { EffectsTab } from '../../src/components/panels/properties/EffectsTab';
 import type { Effect } from '../../src/types/effects';
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe('EffectsTab numeric controls', () => {
+  it('writes only the edited parameter from a complete control snapshot', () => {
+    const numeric = vi.spyOn(useTimelineStore.getState(), 'setPropertyValue').mockImplementation(() => {});
+    const patch = vi.spyOn(useTimelineStore.getState(), 'updateClipEffect').mockImplementation(() => {});
+    const effect: Effect = { id: 'single-edit', type: 'brightness', name: 'Brightness', enabled: true,
+      params: { amount: 0.25, unchangedNumber: 12, unchangedSelect: 'keep' } };
+    render(<EffectsTab clipId="clip:effects-controls" effects={[effect]} />);
+    fireEvent.contextMenu(screen.getByLabelText('Amount'));
+    expect(numeric).toHaveBeenCalledTimes(1);
+    expect(numeric).toHaveBeenCalledWith('clip:effects-controls', 'effect.single-edit.amount', 0);
+    expect(patch).not.toHaveBeenCalled();
+  });
   it('refreshes displayed parameters after otherwise identical effect snapshots', () => {
     const effect: Effect = { id: 'animated', type: 'brightness', name: 'Brightness', enabled: true, params: { amount: 0.25 } };
     const view = render(<EffectsTab clipId="clip:effects-controls" effects={[effect]} />);

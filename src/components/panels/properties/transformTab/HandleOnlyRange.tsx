@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useFrameCoalescedNumberChange } from '../../../common/useFrameCoalescedNumberChange';
 
 const THUMB_WIDTH_PX = 7;
 const FINE_POINTER_HIT_RADIUS_PX = 6;
@@ -59,9 +60,8 @@ export function HandleOnlyRange({
   const sliderRef = useRef<HTMLDivElement>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const [isTouchDragging, setIsTouchDragging] = useState(false);
-  const onChangeRef = useRef(onChange);
+  const { enqueue, flush } = useFrameCoalescedNumberChange(onChange);
   const onDragEndRef = useRef(onDragEnd);
-  onChangeRef.current = onChange;
   onDragEndRef.current = onDragEnd;
 
   useEffect(() => () => {
@@ -69,8 +69,9 @@ export function HandleOnlyRange({
     if (!dragState) return;
     dragState.removeWindowListeners();
     dragStateRef.current = null;
+    flush();
     onDragEndRef.current?.();
-  }, []);
+  }, [flush]);
 
   const clampedValue = clamp(value, min, max);
   const range = max - min;
@@ -134,7 +135,7 @@ export function HandleOnlyRange({
           const usableWidth = Math.max(1, slider.getBoundingClientRect().width - THUMB_WIDTH_PX);
           const nextValue = dragState.startValue
             + ((pointerEvent.clientX - dragState.startClientX) / usableWidth) * (max - min);
-          onChangeRef.current(roundToStep(nextValue, min, max, step));
+          enqueue(roundToStep(nextValue, min, max, step));
         };
         const finishDrag = (pointerEvent?: globalThis.PointerEvent) => {
           if (dragStateRef.current !== dragState) return;
@@ -146,6 +147,7 @@ export function HandleOnlyRange({
           dragState.removeWindowListeners();
           dragStateRef.current = null;
           setIsTouchDragging(false);
+          flush();
           onDragEndRef.current?.();
         };
         const handleWindowBlur = () => finishDrag();

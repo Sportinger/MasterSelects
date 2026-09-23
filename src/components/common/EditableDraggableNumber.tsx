@@ -11,6 +11,7 @@ import {
 } from './EditableDraggableNumberSettings';
 import { resolvePointerLockDragDeltaX } from './pointerLockDragDelta';
 import { useEditableDraggableNumberTouch } from './useEditableDraggableNumberTouch';
+import { useFrameCoalescedNumberChange } from './useFrameCoalescedNumberChange';
 
 interface PopoverPlacement {
   top: number;
@@ -106,6 +107,7 @@ export function EditableDraggableNumber({
   onDragEnd,
   onCommit,
 }: EditableDraggableNumberProps) {
+  const { enqueue, flush } = useFrameCoalescedNumberChange(onChange);
   const spanRef = useRef<HTMLSpanElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLSpanElement>(null);
@@ -311,9 +313,10 @@ export function EditableDraggableNumber({
     value,
     disabled,
     interactionBlocked: isEditing || showBoundsPopover,
-    onChange,
+    onChange: enqueue,
     onDragStart,
     onDragEnd: () => {
+      flush();
       onDragEnd?.();
       onCommit?.('drag');
     },
@@ -414,7 +417,7 @@ export function EditableDraggableNumber({
       const unclampedValue = startValue.current + deltaValue;
       const nextValue = clampValue(unclampedValue, effectiveMin, effectiveMax);
       const preciseValue = roundValue(nextValue, decimals);
-      onChange(preciseValue);
+      enqueue(preciseValue);
     };
 
     const handleMouseUp = () => {
@@ -426,6 +429,7 @@ export function EditableDraggableNumber({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       if (dragStarted.current) {
+        flush();
         onDragEnd?.();
         onCommit?.('drag');
       }
@@ -443,7 +447,7 @@ export function EditableDraggableNumber({
     disabled,
     effectiveMax,
     effectiveMin,
-    onChange,
+    enqueue, flush,
     onDragEnd,
     onCommit,
     onDragStart,

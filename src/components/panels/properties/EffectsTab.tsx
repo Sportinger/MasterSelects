@@ -200,13 +200,18 @@ const EffectParams = memo(function EffectParams(props: EffectParamsViewProps) {
   const { clipId, effect } = props;
   const onChange = (params: PrimitiveEffectParams) => {
     const { setPropertyValue, updateClipEffect } = useTimelineStore.getState();
+    const patch: PrimitiveEffectParams = {};
     Object.entries(params).forEach(([paramName, value]) => {
+      // Controls may return a full snapshot. Only authored changes should
+      // touch the graph, invalidate rendering, or create keyframes.
+      if (Object.is(value, effect.params[paramName])) return;
       if (typeof value === 'number') {
         setPropertyValue(clipId, `effect.${effect.id}.${paramName}` as AnimatableProperty, value);
       } else {
-        updateClipEffect(clipId, effect.id, { [paramName]: value });
+        patch[paramName] = value;
       }
     });
+    if (Object.keys(patch).length) updateClipEffect(clipId, effect.id, patch);
   };
   const onParamCommit: EffectParamsProps['onParamCommit'] = (paramName, controlKind, inputMethod) => {
     trackEditorControlCommitted({ area: 'effect', controlId: paramName, controlKind, inputMethod,
