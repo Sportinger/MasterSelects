@@ -2,6 +2,7 @@ import { temporalSourceTime, type TemporalClipSource } from '../temporalClipSour
 import { MOTION_IMAGE_WGSL } from '../../../services/operators/motionImageWgsl';
 import type { TemporalSampleMetadata } from '../TemporalSampleMetadata';
 import { geometrySampleTimes, GEOMETRY_SAMPLE_TIME_WGSL } from './geometrySampleTimes';
+import { GeometrySourceClock } from './GeometrySourceClock';
 
 const shader = MOTION_IMAGE_WGSL + GEOMETRY_SAMPLE_TIME_WGSL + /* wgsl */`
 struct Clock { range: vec4f, flow: vec4f }
@@ -53,7 +54,7 @@ fn displacement(p: vec2i) -> vec2f {
   } else {
     let position = clamp((delay-clock.range.x)/clock.range.y,0.0,1.0)*clock.range.z;
     let lo = u32(floor(position)); let hi = min(lo+1u,u32(clock.range.z));
-    age.x = mix(ages[lo],ages[hi],fract(position));
+    age.x = clock.range.w - mix(ages[lo],ages[hi],fract(position));
   }
   textureStore(output,vec2i(id.xy),vec4f(age.x,height,age.y,1.0));
 }`;
@@ -69,7 +70,7 @@ export class GeometryAgeField {
   private readonly clock: GPUBuffer;
   private samples: GPUBuffer;
   private texture?: GPUTexture;
-  private signature = '';
+  private sourceClock = new GeometrySourceClock();
 
   constructor(device: GPUDevice) {
     this.device = device;
@@ -93,18 +94,10 @@ export class GeometryAgeField {
     source: TemporalClipSource, factor: number, motion?: GPUTextureView, flowDepth = 0, smoothing = 0,
     sampling?: TemporalSampleMetadata): GPUTextureView {
     if (!(factor > 0) || !Number.isFinite(factor)) throw new Error('Invalid geometry time factor.');
-    const signature = JSON.stringify([source, factor]);
-    if (!sampling && signature !== this.signature) {
-      const lower = (source.localTime - source.duration) / factor;
-      const span = Math.max(source.duration / factor, 1e-8);
-      const now = temporalSourceTime(source, source.localTime);
-      const data = new Float32Array(8193);
-      for (let i = 0; i <= 8192; i++) {
-        data[i] = now - temporalSourceTime(source, source.localTime - factor * (lower + span * i / 8192));
-      }
-      this.device.queue.writeBuffer(this.table, 0, data);
-      this.device.queue.writeBuffer(this.clock, 0, new Float32Array([lower, span, 8192, 0]));
-      this.signature = signature;
+    if (!sampling) {
+      const clock = this.sourceClock.sample(source, factor);
+      if (clock.changed) this.device.queue.writeBuffer(this.table, 0, clock.table);
+      this.device.queue.writeBuffer(this.clock, 0, clock.range);
     }
     if (sampling) {
       const data = geometrySampleTimes(sampling, temporalSourceTime(source, source.localTime));

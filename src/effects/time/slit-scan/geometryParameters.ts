@@ -22,6 +22,16 @@ export function slitScanMeshColumns(quality: unknown): number {
   }
 }
 
+/** Adaptive source history alone does not reduce trajectory/mesh work. */
+export function slitScanGeometryGrid(params: Record<string, unknown>, width: number, height: number,
+  interactive: boolean, exporting = false) {
+  const requested = slitScanMeshColumns(params.geometryQuality);
+  const adaptive = params.temporalPreview === 'adaptive' && interactive && !exporting;
+  const columns = adaptive ? Math.min(128, requested) : requested;
+  const rows = Math.max(1, Math.min(Math.max(288, Math.min(512, columns)), Math.round(columns * height / Math.max(1, width))));
+  return { columns, rows, adaptive };
+}
+
 export const slitScanGeometryParams: Record<string, EffectParam> = {
   geometryMode: { type: 'select', label: 'Representation', default: '2d', group: '3D geometry', options: [
     { value: '2d', label: '2D image' }, { value: 'time-surface', label: 'Reference time surface' },

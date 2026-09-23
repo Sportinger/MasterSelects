@@ -162,5 +162,11 @@ package. `ready · saving` means rendering can proceed while files finish.
 `DisMotion` and `DisPersistence` logs separate GPU computation, readback,
 checksum, file-write and project-reference timings for diagnosing slow storage.
 
+Adaptive preview also limits 3D meshes to 128 columns during playback and
+scrubbing. Pausing and exporting use the selected mesh resolution. The geometry
+status displays the active preview grid. Source-time lookup tables are reused
+across playhead changes; speed mappings, trims and holds invalidate the table,
+while the current clock and time factor update small uniforms each frame.
+
 Implementation verification is still in progress; this page is not a claim that
 the complete editor/export acceptance checks have passed.

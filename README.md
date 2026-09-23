@@ -51,6 +51,8 @@ Effect and node numeric drags coalesce input per animation frame and retain the 
 
 [Inspector graph preparation](docs/Features/Inspector-Performance.md) runs in a shared worker for image effects. Numeric drags share one undo transaction, and ordinary geometry value changes reuse compiled instructions.
 
+Slit Scan 3D adaptive playback and scrubbing cap the mesh at 128 columns; pause and export retain the selected quality. The source-time lookup is cached across playback frames.
+
 Slit Scan's 3D time surface can use resolved source-frame times and blend weights for depth, without DIS or a calibration image. This visualizes temporal sampling; it does not reconstruct object motion or physical scene depth.
 
 The Slit Scan **Motion-deformed surface** additionally follows image points through forward/backward source motion, so motion can stretch and shear the grid over time. It preserves stationary areas; untracked regions can keep their original position or leave diagnostic gaps.

@@ -1,7 +1,8 @@
 import { GeometryQueryOutput } from '../../../effects/time/slit-scan/GeometryQueryOutput';
 import { GeometryAgeField } from '../../../effects/time/slit-scan/GeometryAgeField';
 import { createSlitScanReference, readSlitScanReference } from '../../../effects/time/slit-scan/geometryReference';
-import { slitScanMeshColumns } from '../../../effects/time/slit-scan/geometryParameters';
+import { slitScanGeometryGrid } from '../../../effects/time/slit-scan/geometryParameters';
+import { useTimelineStore } from '../../../stores/timeline';
 import type { SlitScanGeometryCapture } from '../../../effects/time/slit-scan/geometryCapture';
 import type { SceneCamera, ScenePlaneLayer } from '../../scene/types';
 import { SlitScanSurfacePass, type SlitScanSurfaceDraw } from '../passes/SlitScanSurfacePass';
@@ -92,8 +93,9 @@ export class SlitScanSceneSurfaces {
     }
     const projection = params.geometryProjection === 'orthographic' ? 'orthographic' : 'perspective';
     const reference = readSlitScanReference(params.geometryReference) ?? createSlitScanReference(projection);
-    const columns = slitScanMeshColumns(params.geometryQuality);
-    const rows = Math.max(1, Math.min(Math.max(288, Math.min(512, columns)), Math.round(columns * frame.height / frame.width)));
+    const timeline = useTimelineStore.getState();
+    const { columns, rows, adaptive } = slitScanGeometryGrid(params, frame.width, frame.height,
+      timeline.isPlaying || timeline.isDraggingPlayhead, isCollectingTemporalPreparations());
     let band: GPUTextureView | undefined;
     if (isBand) {
       const angle = Number(params.angle ?? 0);
@@ -132,9 +134,10 @@ export class SlitScanSceneSurfaces {
         coordinates: params.stabilizationEnabled !== false && params.stabilizationAssetId ? 'stabilized-reference' as const : 'source' as const,
         velocityUnit: 'uv-per-graph-delay-second' as const } } : {}),
     };
-    setTemporalStatus(`${frame.effect.id}:geometry`, unsupported
+    const status = unsupported
       ? 'Time surface only: custom UV mapping is not supported for flow deformation.'
-      : isMotionSurface ? 'Motion surface · ready' : isBand ? 'Motion band · ready' : sampledTime ? 'Sampled time surface · ready' : 'Time surface · ready');
+      : isMotionSurface ? 'Motion surface · ready' : isBand ? 'Motion band · ready' : sampledTime ? 'Sampled time surface · ready' : 'Time surface · ready';
+    setTemporalStatus(`${frame.effect.id}:geometry`, status + (adaptive ? ` · preview mesh ${columns}×${rows}` : ''));
   }
 
   render(device: GPUDevice, encoder: GPUCommandEncoder, color: GPUTextureView, depth: GPUTextureView, temporary: GPUBuffer[],
