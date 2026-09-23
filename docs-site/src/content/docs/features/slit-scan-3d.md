@@ -20,6 +20,10 @@ into the reference image; vertex UV interpolation alone would distort triangles
 with unequal depths. The reference is fixed in object space. Orbiting and moving
 the scene camera do not redefine it.
 
+The **Reference view** button temporarily aligns the preview with that reference.
+Navigating the scene camera releases this preview override, so orbit, pan and
+dolly immediately show the surface from the new camera position.
+
 Time depth is signed and follows requested continuous source age, including trim,
 reverse, source overrides and speed changes. It is not normalized to each frame's
 minimum and maximum. A Float32 table with 8192 intervals evaluates the existing

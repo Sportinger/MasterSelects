@@ -64,6 +64,11 @@ export function usePreviewSceneCameraActions({
     const engineState = useEngineStore.getState();
     const timelineState = useTimelineStore.getState();
     const clip = timelineState.clips.find((candidate) => candidate.id === clipId);
+    // A temporary reference view must yield when the user navigates the
+    // scene camera; otherwise its fixed pose hides every orbit/pan update.
+    if (clip?.source?.type === 'camera' && engineState.previewCameraOverride) {
+      engineState.setPreviewCameraOverride(null);
+    }
     if (engineState.sceneNavNoKeyframes && clip?.source?.type === 'camera') {
       const baseTransform = timelineState.getInterpolatedTransform(clipId, timelineState.playheadPosition - clip.startTime);
       engineState.setSceneCameraLiveOverride(clipId, {
