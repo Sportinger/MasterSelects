@@ -48,6 +48,11 @@ nearest-cached-frame fallback for deterministic temporal effects. No automatic
 proxy generation is triggered. Legacy all-intra and TurboRes/HAP proxy contracts
 need separate timestamp/geometry validation before they can be admitted.
 
+Source-time consumers call `proxyFrameCache.getFrame(..., false)` to share exact
+loads without redirecting interactive timeline preloading. Do not treat each
+historical sample as a new playback/scrub position. Slit Scan replenishes its own
+lookahead on ready output frames as the grid advances, not only after a cache miss.
+
 Slit Scan Small preview can reuse proxies; Full size follows the preview's global
 Proxy switch. `SourceProxyDimensions` reads actual JPEG dimensions and source
 rotation before atlas allocation. Do not allocate original 4K history for a

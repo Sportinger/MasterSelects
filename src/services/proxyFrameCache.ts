@@ -353,7 +353,7 @@ class ProxyFrameCache {
   }
 
   // Get a frame from cache or load it
-  async getFrame(mediaFileId: string, time: number, fps: number = 30): Promise<HTMLImageElement | null> {
+  async getFrame(mediaFileId: string, time: number, fps: number = 30, preload = true): Promise<HTMLImageElement | null> {
     if (!JPEG_PROXY_FRAMES_ENABLED) return null;
     const frameIndex = Math.floor(time * fps);
     const key = getProxyFrameCacheKey(mediaFileId, frameIndex);
@@ -362,17 +362,18 @@ class ProxyFrameCache {
     const cached = touchCachedEntry(this.cache, key);
     if (cached) return cached.image;
 
-    return resolveWithLoadingMap(
+    const image = await resolveWithLoadingMap(
       this.loadingPromises,
       key,
       () => this.loadFrame(mediaFileId, frameIndex),
       (image) => {
         this.addToCache(mediaFileId, frameIndex, image);
-        // Trigger preload of upcoming frames
-        this.schedulePreload(mediaFileId, frameIndex, fps);
         return image;
       },
     );
+    // Background consumers share loads, without changing timeline preload state.
+    if (image && preload) this.schedulePreload(mediaFileId, frameIndex, fps);
+    return image;
   }
 
   // Load a single frame as an image element via a short-lived object URL lease

@@ -40,6 +40,7 @@ it('caps image loads at four and discards callbacks after a superseded seek', as
   const read = readSourceProxyFrames({ mediaId: 'media', frames, times: frames.map(frame => frame.time), fps: 30,
     rotation: 0, shouldContinue: () => active, onFrame });
   expect(mock.load).toHaveBeenCalledTimes(4);
+  expect(mock.load.mock.calls.every(call => call[3] === false)).toBe(true);
   active = false; resumes.forEach(resume => resume()); await read;
   expect(mock.load).toHaveBeenCalledTimes(4); expect(onFrame).not.toHaveBeenCalled();
 });

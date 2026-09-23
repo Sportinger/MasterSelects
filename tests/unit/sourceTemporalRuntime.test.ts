@@ -66,14 +66,31 @@ it('preserves source selection in small/full modes and reverse clips', () => {
   runtime.destroy();
 });
 
- it('schedules four future samples below required work without blocking the preparation barrier', async () => {
+it('continuously replenishes lookahead before the current source window runs out', async () => {
   const { runtime, request } = setup();
-  const playing = { ...request, keepPending: true };
+  const playing = { ...request, horizon: 3.08, samples: 32, keepPending: true };
   await prepare(runtime, playing);
-  await vi.waitFor(() => expect(mock.upload).toHaveBeenCalledTimes(67));
-  expect(mock.batches.mock.calls.map(call => [call[0].length, call[1]])).toEqual([[63, 'required'], [4, 'prefetch']]);
-  for (let i = 1; i <= 7; i++) await prepare(runtime, { ...playing, source: { ...playing.source, localTime: 10 + i / 30 } });
-  expect(mock.batches).toHaveBeenCalledTimes(2);
+  await vi.waitFor(() => expect(mock.upload).toHaveBeenCalledTimes(35));
+  expect(mock.batches.mock.calls.map(call => [call[0].length, call[1]])).toEqual([[31, 'required'], [4, 'prefetch']]);
+  for (let i = 1; i <= 240; i++) {
+    const finish = collectTemporalPreparations();
+    runtime.resolve({ ...playing, source: { ...playing.source, localTime: 10 + i / 30 } });
+    expect(finish(), `required cache miss at playback frame ${i}`).toEqual([]);
+    // Let low-priority I/O finish between output frames, never wait for required
+    // work here: the regression exhausted four prefetched samples periodically.
+    for (let tick = 0; tick < 12; tick++) await Promise.resolve();
+  }
+  expect(mock.batches.mock.calls.filter(call => call[1] === 'required')).toHaveLength(1);
+  expect(mock.batches.mock.calls.filter(call => call[1] === 'prefetch').length).toBeGreaterThan(60);
+  runtime.destroy();
+});
+
+it('starts lookahead when playback resumes from an already prepared paused frame', async () => {
+  const { runtime, request } = setup();
+  await prepare(runtime, request);
+  expect(mock.batches.mock.calls.map(call => call[1])).toEqual(['required']);
+  runtime.resolve({ ...request, keepPending: true });
+  await vi.waitFor(() => expect(mock.batches.mock.calls.map(call => call[1])).toEqual(['required', 'prefetch']));
   runtime.destroy();
 });
 

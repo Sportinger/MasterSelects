@@ -799,6 +799,34 @@ describe('proxyFrameCache scrub preloading', () => {
     vi.restoreAllMocks();
   });
 
+  it('loads historical JPEGs without redirecting or expanding the timeline preload queue', async () => {
+    const loader = cache as unknown as { loadFrame(id: string, index: number): Promise<HTMLImageElement | null> };
+    const image = createMockImage();
+    const load = vi.spyOn(loader, 'loadFrame').mockResolvedValue(image);
+    cache.schedulePreload('media-1', 180, 30);
+    const queued = [...cache.preloadQueue], direction = cache.scrubDirection;
+    expect(await proxyFrameCache.getFrame('media-1', 1, 30, false)).toBe(image);
+    expect(load).toHaveBeenCalledOnce();
+    expect(cache.lastScrubFrame).toBe(180);
+    expect(cache.scrubDirection).toBe(direction);
+    expect(cache.preloadQueue).toEqual(queued);
+    expect(proxyFrameCache.getNearestCachedFrameEntry('media-1', 30, 0)?.image).toBe(image);
+  });
+
+  it('shares a background load with playback while preserving foreground preload behavior', async () => {
+    const loader = cache as unknown as { loadFrame(id: string, index: number): Promise<HTMLImageElement | null> };
+    const image = createMockImage();
+    let finish!: (image: HTMLImageElement) => void;
+    const load = vi.spyOn(loader, 'loadFrame').mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const background = proxyFrameCache.getFrame('media-1', 2, 30, false);
+    const foreground = proxyFrameCache.getFrame('media-1', 2, 30);
+    finish(image);
+    expect(await Promise.all([background, foreground])).toEqual([image, image]);
+    expect(load).toHaveBeenCalledOnce();
+    expect(cache.lastScrubFrame).toBe(60);
+    expect(cache.preloadQueue).toContain('media-1_61');
+  });
+
   it('drops stale queued preloads for the same media after a large scrub jump', () => {
     cache.preloadQueue = [
       'media_with_under_score_580',

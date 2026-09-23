@@ -23,6 +23,7 @@ it('awaits actual proxy dimensions, rotates them and shares the preparation', as
   await Promise.all(pending);
   expect(sizes.resolve(media, 30)).toEqual({ width: 720, height: 1280 });
   expect(mock.load).toHaveBeenCalledOnce();
+  expect(mock.load).toHaveBeenCalledWith(media.id, 0, 30, false);
   expect(mock.release).toHaveBeenCalledOnce();
   expect(ready).toHaveBeenCalledOnce();
   sizes.destroy();

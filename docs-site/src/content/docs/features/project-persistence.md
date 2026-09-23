@@ -56,6 +56,7 @@ Storage is selected from available capabilities. Browser folder pickers use FSA.
 - `showDirectoryPicker()` for folder selection
 - `FileSystemDirectoryHandle` + `FileSystemFileHandle` for all I/O
 - Handles stored in IndexedDB (`fsHandles` store) for session persistence
+- Requests persistent browser storage before caching project handles in IndexedDB, reducing the risk that the browser evicts recent-project links under storage pressure
 - Permission re-requested on page reload if needed
 
 ### Browser Storage (OPFS)
@@ -69,6 +70,8 @@ Storage is selected from available capabilities. Browser folder pickers use FSA.
 - Retries a transient OPFS root acquisition failure once before reporting it; permission and quota errors remain failures
 
 Project database operations reopen a cached IndexedDB connection if it starts closing before its close event arrives. Recovery is limited to one replacement connection and only runs when a new transaction cannot start. Saving still waits for transaction commit; aborted writes, quota failures and schema errors are not replayed.
+
+Persistent-storage permission applies to the browser origin, covering both OPFS and IndexedDB. It does not prevent users or browser settings from clearing site data; FSA project files remain in their selected filesystem folders, but cleared IndexedDB handles must be selected again.
 
 ### Native Helper Backend
 - Uses a local Rust helper (`tools/native-helper`) communicating via WebSocket (port 9876) and HTTP (port 9877)

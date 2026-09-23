@@ -27,7 +27,7 @@ export class SourceProxyDimensions {
   }
   private async load(media: MediaFile, fps: number): Promise<Size | undefined> {
     const image = proxyFrameCache.getNearestCachedFrameEntry(media.id, 0, 0)?.image
-      ?? await proxyFrameCache.getFrame(media.id, 0, fps);
+      ?? await proxyFrameCache.getFrame(media.id, 0, fps, false);
     if (!image?.complete || !image.naturalWidth || !image.naturalHeight) return undefined;
     const lease = sourceFrameService.acquire(media);
     try {

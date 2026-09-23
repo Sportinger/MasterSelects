@@ -18,8 +18,8 @@ export function exactProxyFrameIndex(frames: readonly SurfaceFrameStamp[], time:
 }
 
 /** Reuses the editor's JPEG cache and its coalesced disk/image loads. Never uses
- * the nearest-frame fallback. At most four explicit loads survive a seek;
- * the shared cache may independently prewarm neighboring frames. */
+ * the nearest-frame fallback or timeline preloading. At most four loads survive
+ * a seek; historical lookups never move the interactive preload position. */
 export async function readSourceProxyFrames(options: {
   mediaId: string; frames: readonly SurfaceFrameStamp[]; times: readonly number[]; fps: number; rotation: number;
   shouldContinue(): boolean; onFrame(frame: SourceProxySurface): void;
@@ -35,7 +35,7 @@ export async function readSourceProxyFrames(options: {
         image = proxyFrameCache.getNearestCachedFrameEntry(options.mediaId, index, 0)?.image
           // getFrame accepts seconds and floors the index; stay inside this bin
           // to avoid floating-point underflow at e.g. 29.97 fps.
-          ?? await proxyFrameCache.getFrame(options.mediaId, (index + 0.1) / options.fps, options.fps);
+          ?? await proxyFrameCache.getFrame(options.mediaId, (index + 0.1) / options.fps, options.fps, false);
       } catch { continue; } // Missing/corrupt proxy: the source decoder supplies it.
       if (!options.shouldContinue()) return;
       if (!image?.complete || !image.naturalWidth || !image.naturalHeight) continue;

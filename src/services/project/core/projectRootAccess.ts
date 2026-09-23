@@ -60,10 +60,10 @@ export function getProjectWriteSupportError(): string | null {
 }
 
 /**
- * OPFS is evictable by default: under storage pressure the browser may drop
- * the whole origin, taking projects and imported media with it. Requesting
- * persistence is the only defence the platform offers, so ask before the
- * first write rather than after data exists.
+ * Browser-managed storage is evictable by default: under storage pressure the
+ * browser may drop OPFS project data as well as IndexedDB-held FSA handles and
+ * caches. Requesting persistence is the only defence the platform offers, so
+ * ask before the first browser-storage write rather than after data exists.
  */
 export async function ensurePersistentStorage(): Promise<boolean> {
   if (typeof navigator === 'undefined' || typeof navigator.storage?.persist !== 'function') {

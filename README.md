@@ -44,7 +44,7 @@ contributions as I bring them together into a cohesive editor.
 Slit Scan adds spatial time displacement to clips, with directional and wave
 profiles, center or clip-mask protection, diagnostic previews, and an editable group built from shared Nodes.
 Small preview and Full size use the same source-time sampling through a bounded GPU cache. A shared frame service reuses exact cached frames, coalesces source requests and continues decoding across playback refills. Small preview can use existing JPEG proxies; Full size follows timeline Proxy mode at actual proxy resolution, including in 4K compositions. The inspector identifies proxy/original use and cache dimensions. Full-size export uses originals. WebGPU handles frame conversion and resizing without Canvas or CPU pixel readback; required frames take priority over lookahead.
-Cache allocation follows the requested sample count; an oversized request reports its limit without blanking the preview or other effects. See [Effects](docs/Features/Effects.md#slit-scan) for controls and preparation limits.
+Lookahead refills continuously during playback; historical proxy reads do not redirect timeline preloading. Cache allocation follows the requested sample count; an oversized request reports its limit without blanking the preview or other effects. See [Effects](docs/Features/Effects.md#slit-scan) for controls and preparation limits.
 
 ## Build while you create
 

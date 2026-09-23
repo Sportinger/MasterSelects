@@ -112,6 +112,7 @@ export class SourceTemporalRuntime {
       void owner.pending.catch(() => undefined);
     }
     if (!ready) recordTemporalPreparation(entry.pending!);
+    if (ready && !entry.pending && !entry.prefetch) this.prefetch(entry);
     if (!wanted || !entry.slots.size) return undefined;
     // During a cache miss preview can use only resident source frames. Export waits
     // for the exact window through the preparation barrier above.
@@ -158,15 +159,21 @@ export class SourceTemporalRuntime {
       } });
     }
     signal.throwIfAborted();
-    // Prefetch never delays the exact export/seek barrier. The shared scheduler
-    // continues the same decoder cursor, but required work can preempt it.
+  }
+
+  private prefetch(entry: Entry) {
+    const request = entry.latest, signal = entry.abort.signal, proxyFps = entry.proxyFps;
+    // Replenish on every advancing window, including fully resident windows.
+    // Waiting for the next miss exhausts lookahead in periodic four-frame bursts.
+    // Prefetch stays outside the export/seek preparation barrier.
     if (request.keepPending && request.samples > 2 && entry.prefetchCount) {
+      const keys = new Set(this.wanted(entry, request).map(item => item.time));
       const step = Math.max(request.horizon, 0.00001) / (Math.min(64, request.samples) - 2);
       const tick = Math.floor(request.source.localTime / step + 1e-8);
       const future = new Set<number>();
       for (let i = 1; i <= entry.prefetchCount; i++) {
         const time = temporalSourceTime(request.source, (tick + i) * step);
-        future.add(entry.reader.frames[Math.max(0, surfaceFrameIndex(entry.reader.frames, time))].time);
+        future.add(entry.reader!.frames[Math.max(0, surfaceFrameIndex(entry.reader!.frames, time))].time);
       }
       const pending = [...future].filter(time => !entry.slots.has(time));
       if (pending.length) entry.prefetch = entry.lease.request({ times: pending, priority: 'prefetch', signal, proxyFps,

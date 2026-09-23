@@ -60,7 +60,10 @@ Saved graph edits, effect bypass and numeric keyframes use the existing editor p
   the media runtime, without seeking the playback decoder. Missing frames use one
   independent sequential decoder cursor per source, reused across nearby forward
   refills and released after inactivity. Required frames take priority over up to four
-  future grid samples prefetched during playback; superseded seeks cancel obsolete
+  future grid samples prefetched during playback. Lookahead is replenished as the
+  source-time grid advances, even while the current window is fully cached, and
+  starts when playback resumes from a prepared paused frame. It does not wait for
+  periodic cache misses before refilling. Superseded seeks cancel obsolete
   requests. Full/Small changes reuse the source index during a short grace period.
   A WebGPU pass writes each newly needed frame into the persistent array, applying
   resize, container rotation and external-texture color conversion without Canvas,
@@ -78,6 +81,8 @@ Saved graph edits, effect bypass and numeric keyframes use the existing editor p
   Neither resolution nor sample count is silently reduced.
 - **Proxy reuse**: Small preview and Full size with timeline Proxy mode enabled
   reuse exact JPEG frames from the existing proxy cache with bounded load concurrency. Their
+  background reads share cached/in-flight loads without moving the timeline's
+  interactive preload position or scheduling neighboring playback frames. Their
   indices must map unambiguously back to the requested source PTS. Missing,
   corrupt or ambiguous frames fall back to original decoding. Legacy all-intra
   video proxies and TurboRes/HAP proxy contracts are not used by this path.
