@@ -198,6 +198,32 @@ it('uploads each source PTS once and retains it across repeated renders', async 
   expect(mock.close).toHaveBeenCalledTimes(1);
 });
 
+it('supports 256 samples with a distinct metadata header and reuses duplicate source PTS', async () => {
+  const { runtime, request, writes, createTexture } = setup();
+  const dense = { ...request, samples: 256 };
+  await prepare(runtime, dense);
+  expect(sourceTemporalWindow(dense)).toHaveLength(255);
+  expect(createTexture).toHaveBeenCalledWith(expect.objectContaining({ size: [257, 1] }));
+  const metadata = writes.mock.calls.at(-1)![1] as Float32Array;
+  expect(metadata).toHaveLength(257 * 4);
+  expect(metadata[256 * 4]).toBe(256);
+  expect(metadata[256 * 4 + 2]).toBe(3);
+  const times = mock.upload.mock.calls.map(([frame]) => frame.time);
+  expect(new Set(times).size).toBe(times.length);
+  expect(times.length).toBeLessThan(255); // 30 fps source, dense grid: decode each PTS once.
+  await prepare(runtime, dense);
+  expect(mock.upload).toHaveBeenCalledTimes(times.length);
+  runtime.destroy();
+});
+
+it('rejects high sample counts beyond the existing memory budget before allocating', () => {
+  const { runtime, request, createTexture } = setup();
+  expect(() => runtime.resolve({ ...request, samples: 256,
+    media: { ...request.media, width: 1920, height: 1080 } })).toThrow(/640 MiB/);
+  expect(createTexture).not.toHaveBeenCalled();
+  runtime.destroy();
+});
+
 it('renders native 4K with a fitting sample count and bounds prefetch by actual capacity', async () => {
   const { runtime, request, createTexture } = setup();
   const full = { ...request, media: { ...request.media, width: 3840, height: 2160 }, samples: 16, keepPending: true };

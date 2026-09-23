@@ -1,0 +1,52 @@
+<!doctype html><meta charset="utf-8"><title>Slit Scan sample capacity regression</title>
+<h1>Slit Scan GPU sample capacity</h1><pre id="result">Running…</pre>
+<script type="module">
+import { INPUT_HISTORY_SAMPLE_WGSL } from '/src/services/operators/inputHistorySampling.ts';
+const result = document.querySelector('#result');
+try {
+  const adapter = await navigator.gpu.requestAdapter();
+  const device = await adapter.requestDevice();
+  const checks = [];
+  for (const count of [64, 256]) {
+    const atlas = device.createTexture({size:[1,1,count],format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+    const ages = device.createTexture({size:[count+1,1],format:'rgba32float',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+    const pixels = new Uint8Array(count*4), metadata = new Float32Array((count+1)*4);
+    metadata[1]=-1;
+    for(let i=0;i<count;i++) {
+      pixels.set([i,0,0,255],i*4);
+      if(i) metadata.set([i/(count-1),i,0,0],i*4);
+    }
+    metadata.set([count,1,3,0],count*4);
+    device.queue.writeTexture({texture:atlas},pixels,{bytesPerRow:4,rowsPerImage:1},[1,1,count]);
+    device.queue.writeTexture({texture:ages},metadata,{bytesPerRow:(count+1)*16},[count+1,1]);
+    for (const index of [Math.floor(count*.7),count-1]) {
+      device.pushErrorScope('validation');
+      const module = device.createShaderModule({code: INPUT_HISTORY_SAMPLE_WGSL+`
+        @group(0) @binding(0) var atlas:texture_2d_array<f32>;
+        @group(0) @binding(1) var ages:texture_2d<f32>;
+        @group(0) @binding(2) var s:sampler;
+        @vertex fn vertex(@builtin(vertex_index) i:u32)->@builtin(position) vec4f {
+          let uv=vec2f(f32((i<<1u)&2u),f32(i&2u)); return vec4f(uv*2.0-1.0,0.0,1.0);
+        }
+        @fragment fn fragment()->@location(0) vec4f {
+          return sampleInputHistory(atlas,ages,s,vec2f(.5),${index/(count-1)},vec4f(0,0,0,1),vec2f(.5));
+        }`});
+      const pipeline=device.createRenderPipeline({layout:'auto',vertex:{module,entryPoint:'vertex'},fragment:{module,entryPoint:'fragment',targets:[{format:'rgba8unorm'}]}});
+      const bind=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[
+        {binding:0,resource:atlas.createView({dimension:'2d-array'})},{binding:1,resource:ages.createView()},{binding:2,resource:device.createSampler()}]});
+      const output=device.createTexture({size:[1,1],format:'rgba8unorm',usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});
+      const buffer=device.createBuffer({size:256,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+      const encoder=device.createCommandEncoder(), pass=encoder.beginRenderPass({colorAttachments:[{view:output.createView(),loadOp:'clear',storeOp:'store'}]});
+      pass.setPipeline(pipeline);pass.setBindGroup(0,bind);pass.draw(3);pass.end();
+      encoder.copyTextureToBuffer({texture:output},{buffer,bytesPerRow:256},[1,1]);device.queue.submit([encoder.finish()]);
+      await buffer.mapAsync(GPUMapMode.READ);const actual=new Uint8Array(buffer.getMappedRange())[0];buffer.unmap();
+      const error=await device.popErrorScope();if(error)throw Error(error.message);
+      if(actual!==index)throw Error(`${count} samples, index ${index}: got ${actual}`);
+      checks.push(`PASS: ${count} samples, sample ${index} → pixel ${actual}`);
+      buffer.destroy();output.destroy();
+    }
+    atlas.destroy();ages.destroy();
+  }
+  result.textContent=checks.join('\n');device.destroy();
+} catch(error) { result.textContent=`FAIL: ${error.stack??error}`; }
+</script>

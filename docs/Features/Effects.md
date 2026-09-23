@@ -69,9 +69,10 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
   **Create protection mask** after changing the reference, or edit it in Masks.
   Its **Mask feather** is also editable directly under Protection mask.
   Missing/foreign tracking and uncovered delay windows report an explicit error.
-  A reference or sample gap pauses only stabilization in preview: Slit Scan keeps
+  A reference or sample gap pauses only stabilization in preview and export: Slit Scan keeps
   processing the whole window in unstabilized coordinates and resumes correction
-  when coverage returns. Export fails instead of silently dropping stabilization.
+  when coverage returns. The inspector reports the gap; export still waits for
+  the requested source frames. Missing assets and decode failures remain errors.
   Reset **Reference (source s)** to use the track's current reference after retracking.
   Choose **Off** to disable stabilization or author a new source selection.
 - **Source sampling** decodes the source video independently, applying clip trim
@@ -86,7 +87,11 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
   export uses originals regardless of the preview Proxy switch. There is no
   rolling-history mode or playback-only temporal sampling fallback.
 - **Source-frame cache**: historical samples use an absolute clip-time grid,
-  with the current frame supplied by normal playback. Stabilization transforms
+  with **Samples** selectable from 2 to 256 (default 32). Higher counts retain
+  the same source-PTS reuse, including duplicate grid samples of one decoded frame.
+  The 640 MiB budget and GPU array-layer limit still apply; 256 is available at
+  small preview sizes, while full-size sources may require fewer samples.
+  The current frame is supplied by normal playback. Stabilization transforms
   that available input synchronously on the GPU, so playback never waits for a
   duplicate current-frame decode. Zero delay needs no historical decoding.
   Adjacent output frames reuse

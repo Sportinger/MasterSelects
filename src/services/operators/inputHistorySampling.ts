@@ -2,9 +2,10 @@
 export const INPUT_HISTORY_SAMPLE_WGSL = `
 fn sampleInputHistory(atlas: texture_2d_array<f32>, ages: texture_2d<f32>, s: sampler,
   uv: vec2f, requestedDelay: f32, current: vec4f, outputUv: vec2f) -> vec4f {
-  let header = textureLoad(ages, vec2i(64, 0), 0);
+  let metadataCount = textureDimensions(ages).x - 1u;
+  let header = textureLoad(ages, vec2i(i32(metadataCount), 0), 0);
   if (header.z > 2.5) {
-    let count = u32(clamp(header.x, 1.0, 64.0));
+    let count = u32(clamp(header.x, 1.0, f32(metadataCount)));
     let delay = clamp(requestedDelay, 0.0, 4.0);
     let size = vec2f(textureDimensions(atlas));
     let coord = clamp(uv, 0.5 / size, vec2f(1.0) - 0.5 / size);

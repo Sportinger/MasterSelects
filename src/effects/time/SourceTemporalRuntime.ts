@@ -8,6 +8,7 @@ import { recordTemporalPreparation, setTemporalStatus } from './temporalResource
 import { SourceProxyDimensions } from './SourceProxyDimensions';
 import { SlitScanTrackingGap, slitScanSourceTransform, type SlitScanStabilization } from './slit-scan/stabilization';
 import { StabilizedCurrentFrame } from './StabilizedCurrentFrame';
+import { MAX_SOURCE_TEMPORAL_SAMPLES, SOURCE_TEMPORAL_METADATA_WIDTH } from './sourceTemporalLimits';
 
 export interface SourceTemporalRequest {
   key: string; effectId: string; media: MediaFile; source: TemporalClipSource;
@@ -22,7 +23,7 @@ export interface SourceTemporalRequest {
 export function sourceTemporalWindow(request: Pick<SourceTemporalRequest, 'source' | 'horizon' | 'samples'>) {
   if (request.samples <= 2) return [{ age: request.horizon,
     time: temporalSourceTime(request.source, request.source.localTime - request.horizon) }];
-  const count = Math.max(3, Math.min(64, Math.round(request.samples)));
+  const count = Math.max(3, Math.min(MAX_SOURCE_TEMPORAL_SAMPLES, Math.round(request.samples)));
   const step = Math.max(request.horizon, 0.00001) / (count - 2);
   const time = request.source.localTime;
   const tick = Math.floor(time / step + 1e-8);
@@ -72,7 +73,7 @@ export class SourceTemporalRuntime {
     const currentCount = request.stabilization && !request.currentInput ? 1 : 0;
     const currentBytes = request.stabilization && request.currentInput ? request.currentInput.width * request.currentInput.height * 4 : 0;
     const zeroDelay = request.horizon === 0 && !!request.currentInput;
-    const historyCount = zeroDelay ? 1 : Math.max(2, Math.min(64, Math.round(request.samples))) - 1 + currentCount;
+    const historyCount = zeroDelay ? 1 : Math.max(2, Math.min(MAX_SOURCE_TEMPORAL_SAMPLES, Math.round(request.samples))) - 1 + currentCount;
     // Reserve only the requested history, plus as much optional prefetch as fits.
     // Two frame-sized allowances cover upload scratch/storage outside the atlas.
     const capacity = Math.min(this.device.limits.maxTextureArrayLayers ?? 256,
@@ -102,7 +103,7 @@ export class SourceTemporalRuntime {
         lease: sourceFrameService.acquire(request.media),
         atlas: this.device.createTexture({ label: 'source-PTS-cache', size: [width, height, layers], format: 'rgba8unorm',
           usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT }),
-        ages: this.device.createTexture({ size: [65, 1], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST }),
+        ages: this.device.createTexture({ size: [SOURCE_TEMPORAL_METADATA_WIDTH, 1], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST }),
         latest: request, encoder: request.encoder };
       this.entries.set(request.key, entry);
     }
@@ -146,13 +147,14 @@ export class SourceTemporalRuntime {
     const current = request.stabilization && !presented ? wanted?.[0] : undefined;
     if (current && !entry.slots.has(current.time)) return undefined;
     const available = (current ? wanted!.slice(1) : wanted ?? []).filter(item => entry!.slots.has(item.time));
-    const data = new Float32Array(65 * 4);
+    const data = new Float32Array(SOURCE_TEMPORAL_METADATA_WIDTH * 4);
     data[1] = -1;
     for (const [i, sample] of available.entries()) {
       data[(i + 1) * 4] = sample.age; data[(i + 1) * 4 + 1] = entry.slots.get(sample.time)!;
     }
-    data[256] = available.length + 1; data[257] = Number(request.nearest); data[258] = 3;
-    this.device.queue.writeTexture({ texture: entry.ages }, data, { bytesPerRow: 65 * 16 }, [65, 1]);
+    const header = MAX_SOURCE_TEMPORAL_SAMPLES * 4;
+    data[header] = available.length + 1; data[header + 1] = Number(request.nearest); data[header + 2] = 3;
+    this.device.queue.writeTexture({ texture: entry.ages }, data, { bytesPerRow: SOURCE_TEMPORAL_METADATA_WIDTH * 16 }, [SOURCE_TEMPORAL_METADATA_WIDTH, 1]);
     if (ready) {
       const proxyCount = available.filter(sample => entry!.proxyTimes.has(sample.time)).length;
       const source = !available.length && presented ? 'Current input' : proxyCount === available.length ? 'Proxy' : proxyCount ? 'Proxy + original' : 'Original';
@@ -202,7 +204,7 @@ export class SourceTemporalRuntime {
     // Prefetch stays outside the export/seek preparation barrier.
     if (request.keepPending && request.horizon > 0 && request.samples > 2 && entry.prefetchCount) {
       const keys = new Set(this.wanted(entry, request).map(item => item.time));
-      const step = Math.max(request.horizon, 0.00001) / (Math.min(64, request.samples) - 2);
+      const step = Math.max(request.horizon, 0.00001) / (Math.min(MAX_SOURCE_TEMPORAL_SAMPLES, request.samples) - 2);
       const tick = Math.floor(request.source.localTime / step + 1e-8);
       const future = new Set<number>();
       for (let i = 1; i <= entry.prefetchCount; i++) {

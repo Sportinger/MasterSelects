@@ -1,4 +1,5 @@
 import type { EffectParam } from '../../types';
+import { MAX_SOURCE_TEMPORAL_SAMPLES } from '../sourceTemporalLimits';
 
 const number = (label: string, value: number, min: number, max: number, step: number, group: string): EffectParam =>
   ({ type: 'number', label, default: value, min, max, step, group, animatable: true });
@@ -7,7 +8,7 @@ export const slitScanParams: Record<string, EffectParam> = {
   temporalInterpolation: { type: 'select', label: 'Temporal sampling', default: 'linear', group: 'Sampling', options: [
     { value: 'linear', label: 'Blend adjacent frames' }, { value: 'nearest', label: 'Nearest frame (no blending)' },
   ] },
-  temporalSamples: { ...number('Samples', 32, 2, 64, 1, 'Sampling'), animatable: false },
+  temporalSamples: { ...number('Samples', 32, 2, MAX_SOURCE_TEMPORAL_SAMPLES, 1, 'Sampling'), animatable: false },
   temporalResolution: { type: 'select', label: 'Resolution', default: '160', group: 'Sampling', options: [
     { value: 'native', label: 'Full size (follows preview Proxy mode)' },
     { value: '160', label: 'Small preview · 160 px' },

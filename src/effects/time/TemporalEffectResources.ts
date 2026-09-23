@@ -48,9 +48,10 @@ export class TemporalEffectResources {
       return this.native.resolve(request);
     }
     catch (error) {
-      if (!(error instanceof SlitScanTrackingGap) || isCollectingTemporalPreparations()) throw error;
+      if (!(error instanceof SlitScanTrackingGap)) throw error;
       // One coordinate space for the whole window: never mix corrected and raw
-      // frames, but keep the temporal effect usable while the user edits a track.
+      // frames. Preview and export use the same fallback for tracking gaps;
+      // export still waits for every requested source frame in the collector.
       const history = this.native.resolve({ ...request, stabilization: undefined });
       setTemporalStatus(effect.id, `Stabilization paused: ${error.message} Slit Scan remains active.`);
       return history ? { ...history, current: currentInput ? { view: currentInput.view, identity: 'unstabilized-input' } : undefined } : undefined;
