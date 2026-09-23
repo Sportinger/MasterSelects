@@ -78,9 +78,10 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
 - **Source sampling** decodes the source video independently, applying clip trim
   and speed. Render preceding effects to an intermediate video to include them;
   arbitrary preceding effect stacks are not reevaluated.
-- **Preview quality** at the top of the inspector switches between Small preview
+- **Sampling** is the first inspector section and opens by default. **Preview quality**
+  switches between Small preview
   (160 px maximum edge) and Full size. Both use the same source timestamps and sample
-  count. Full size follows timeline Proxy mode: it uses the actual full JPEG proxy
+  count. New Slit Scan effects default to Full size. Full size follows timeline Proxy mode: it uses the actual full JPEG proxy
   dimensions when enabled, otherwise original resolution. The composition/output
   dimensions remain unchanged, including 4K. The inspector status identifies Proxy,
   Original or mixed fallback frames and the actual cache dimensions. Full-size

@@ -12,7 +12,7 @@ export const slitScanParams: Record<string, EffectParam> = {
     { value: 'linear', label: 'Blend adjacent frames' }, { value: 'nearest', label: 'Nearest frame (no blending)' },
   ] },
   temporalSamples: { ...number('Samples', 32, 2, MAX_HYBRID_TEMPORAL_SAMPLES, 1, 'Sampling'), animatable: false },
-  temporalResolution: { type: 'select', label: 'Resolution', default: '160', group: 'Sampling', options: [
+  temporalResolution: { type: 'select', label: 'Resolution', default: 'native', group: 'Sampling', options: [
     { value: 'native', label: 'Full size (follows preview Proxy mode)' },
     { value: '160', label: 'Small preview · 160 px' },
   ] },

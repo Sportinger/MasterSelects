@@ -81,8 +81,6 @@ export function SlitScanStabilizationControls({ clipId, effectInstanceId, params
       <button type="button" disabled={!!blocked || !!selected || !params.protectionMask} onClick={() => void run()}>Track mask &amp; stabilize</button>
       {busy && <button type="button" onClick={() => controller.current?.abort()}>Cancel tracking</button>}
     </div>
-    <p className="effect-info">Select a textured object mask at a clear frame, then track in both directions. Position, rotation and size lock to the reference before time sampling. Perspective changes are not corrected; uncovered edges are transparent.</p>
-    {selected && <p className="effect-info">Protection masks use the stabilized image coordinates. Recreate the mask after changing the reference. Choose Off before tracking a new selection.</p>}
     {message && <p className="effect-info" role="status">{message}</p>}
   </ResolveInspectorSection></div>;
 }

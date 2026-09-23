@@ -6,9 +6,8 @@ import { useTimelineStore } from '../../../stores/timeline';
 import type { AnimatableProperty } from '../../../types/animationProperties';
 import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
 import { ResolveInspectorRow, ResolveInspectorSection } from './resolveInspector/ResolveInspectorPrimitives';
-import { Fragment, useSyncExternalStore } from 'react';
+import { Fragment } from 'react';
 import { useMediaStore } from '../../../stores/mediaStore';
-import { getTemporalStatus, subscribeTemporalStatus } from '../../../effects/time/temporalResourcePreparation';
 import { SlitScanStabilizationControls } from './SlitScanStabilizationControls';
 import { hybridTemporalSampleLimit } from '../../../effects/time/sourceTemporalLimits';
 
@@ -22,42 +21,13 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId }:
   const media = files.find(file => file.id === mediaId);
   const sampleLimit = params.temporalStorage === 'hybrid' ? hybridTemporalSampleLimit(media?.width, media?.height) : 256;
   const selectedMask = masks?.find(mask => mask.id === params.protectionMask);
-  const preparationStatus = useSyncExternalStore(subscribeTemporalStatus, () => getTemporalStatus(effectInstanceId ?? ''));
   const changeNumber = (key: string, value: number) => clipId && effectInstanceId
     ? setPropertyValue(clipId, `effect.${effectInstanceId}.${key}` as AnimatableProperty, value)
     : onChange({ ...params, [key]: value });
   return <div className="effects-tab transform-tab-compact">
-    <ResolveInspectorSection title="Preview quality" defaultOpen>
-      <ResolveInspectorRow label="Quality"><InspectorSelect ariaLabel="Slit Scan preview quality"
-        value={params.temporalResolution === 'native' ? 'full' : 'preview'}
-        options={[{ value: 'preview', label: 'Small preview · 160 px' }, { value: 'full', label: params.temporalStorage === 'hybrid' ? 'Full size · original' : 'Full size · follows Proxy mode' }]}
-        onChange={value => onChange({ ...params, temporalResolution: value === 'full' ? 'native' : '160' })} /></ResolveInspectorRow>
-      <p className="effect-info">{params.temporalStorage === 'hybrid' ? 'Hybrid uses original source frames. Full size preserves source resolution; Small preview scales to 160 px.' : 'Both qualities use the same source times. Full size follows timeline Proxy mode; Small preview scales to 160 px.'} Composition size stays unchanged.</p>
-      {preparationStatus && <p className="effect-info" role="status">{preparationStatus}</p>}
-    </ResolveInspectorSection>
-    <SlitScanStabilizationControls params={params} onChange={onChange} clipId={clipId} effectInstanceId={effectInstanceId} />
-    <ResolveInspectorSection title="Time map source" bypassGroupId="time-map" defaultOpen>
-      <ResolveInspectorRow label="Image / video"><InspectorSelect ariaLabel="Slit Scan time map source"
-        value={String(params.mapMediaId ?? '')} options={[{ value: '', label: 'Profile only' },
-          ...files.filter(file => file.type === 'image' || file.type === 'video').map(file => ({ value: file.id, label: file.name }))]}
-        onChange={value => onChange({ ...params, mapMediaId: value, mapAmount: value ? 1 : 0 })} /></ResolveInspectorRow>
-      <p className="effect-info">Imported images, depth or mask videos use normalized clip coordinates. Map start aligns video time zero to the composition timeline; boundaries hold the first or last frame.</p>
-    </ResolveInspectorSection>
-    <ResolveInspectorSection title="Protection mask" bypassGroupId="subject-protection" defaultOpen>
-      <ResolveInspectorRow label="Clip mask"><InspectorSelect ariaLabel="Slit Scan protection mask"
-        value={String(params.protectionMask ?? '')} options={[{ value: '', label: 'None' },
-          ...(params.protectionMask && !selectedMask ? [{ value: String(params.protectionMask), label: 'Missing mask', disabled: true }] : []),
-          ...(masks ?? []).filter(mask => mask.purpose !== 'crop').map(mask => ({ value: mask.id, label: mask.name }))]}
-        onChange={value => onChange({ ...params, protectionMask: value })} /></ResolveInspectorRow>
-      {selectedMask && clipId && <ResolveInspectorNumberRow label="Mask feather" value={selectedMask.feather} defaultValue={30}
-        min={0} max={200} hardMin={0} hardMax={1000} numberMax={1000} step={1} suffix="px"
-        onChange={value => setPropertyValue(clipId, `mask.${selectedMask.id}.feather`, value)} />}
-      {selectedMask?.enabled === false && <p className="effect-info" role="status">This mask is disabled. Enable its Render switch in Masks to protect the object.</p>}
-      <p className="effect-info">White protects the current frame. Use “Effect input only” in Masks to keep the full clip visible.</p>
-    </ResolveInspectorSection>
-    {['Time', 'Sampling', 'Time map', 'Subject protection', 'Protected center', 'Wave'].map(group => <ResolveInspectorSection key={group} title={group}
+    {['Sampling', 'Time', 'Time map', 'Subject protection', 'Protected center', 'Wave'].map(group => <ResolveInspectorSection key={group} title={group}
       bypassGroupId={({ 'Time map': 'time-map', 'Subject protection': 'subject-protection', 'Protected center': 'scan-protection' } as Record<string, string>)[group]}
-      defaultOpen={group === 'Time'}>
+      defaultOpen={group === 'Sampling' || group === 'Time'}>
       {Object.entries(slitScanParams).filter(([key, parameter]) => parameter.group === group && !['temporalMode', 'temporalResolution'].includes(key)).map(([key, parameter]) => {
         if (parameter.type === 'select') return <ResolveInspectorRow key={key} label={parameter.label}>
           <InspectorSelect ariaLabel={`Slit Scan ${parameter.label}`} value={String(params[key] ?? parameter.default)}
@@ -77,6 +47,28 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId }:
           hardMin={parameter.min} hardMax={maximum} onChange={value => changeNumber(key, key === 'temporalSamples' ? Math.round(value) : value)} /></Fragment>;
       })}
     </ResolveInspectorSection>)}
-    <p className="effect-info">Source sampling applies clip trim and speed. Earlier effects are not reevaluated: render them to a video first. Clip boundaries hold. Frames load through a bounded cache; export waits for the requested result. Full Res may need preparation time.</p>
+    <ResolveInspectorSection title="Preview quality" defaultOpen>
+      <ResolveInspectorRow label="Quality"><InspectorSelect ariaLabel="Slit Scan preview quality"
+        value={params.temporalResolution === 'native' ? 'full' : 'preview'}
+        options={[{ value: 'preview', label: 'Small preview · 160 px' }, { value: 'full', label: params.temporalStorage === 'hybrid' ? 'Full size · original' : 'Full size · follows Proxy mode' }]}
+        onChange={value => onChange({ ...params, temporalResolution: value === 'full' ? 'native' : '160' })} /></ResolveInspectorRow>
+    </ResolveInspectorSection>
+    <SlitScanStabilizationControls params={params} onChange={onChange} clipId={clipId} effectInstanceId={effectInstanceId} />
+    <ResolveInspectorSection title="Time map source" bypassGroupId="time-map" defaultOpen>
+      <ResolveInspectorRow label="Image / video"><InspectorSelect ariaLabel="Slit Scan time map source"
+        value={String(params.mapMediaId ?? '')} options={[{ value: '', label: 'Profile only' },
+          ...files.filter(file => file.type === 'image' || file.type === 'video').map(file => ({ value: file.id, label: file.name }))]}
+        onChange={value => onChange({ ...params, mapMediaId: value, mapAmount: value ? 1 : 0 })} /></ResolveInspectorRow>
+    </ResolveInspectorSection>
+    <ResolveInspectorSection title="Protection mask" bypassGroupId="subject-protection" defaultOpen>
+      <ResolveInspectorRow label="Clip mask"><InspectorSelect ariaLabel="Slit Scan protection mask"
+        value={String(params.protectionMask ?? '')} options={[{ value: '', label: 'None' },
+          ...(params.protectionMask && !selectedMask ? [{ value: String(params.protectionMask), label: 'Missing mask', disabled: true }] : []),
+          ...(masks ?? []).filter(mask => mask.purpose !== 'crop').map(mask => ({ value: mask.id, label: mask.name }))]}
+        onChange={value => onChange({ ...params, protectionMask: value })} /></ResolveInspectorRow>
+      {selectedMask && clipId && <ResolveInspectorNumberRow label="Mask feather" value={selectedMask.feather} defaultValue={30}
+        min={0} max={200} hardMin={0} hardMax={1000} numberMax={1000} step={1} suffix="px"
+        onChange={value => setPropertyValue(clipId, `mask.${selectedMask.id}.feather`, value)} />}
+    </ResolveInspectorSection>
   </div>;
 }
