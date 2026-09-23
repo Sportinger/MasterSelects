@@ -75,7 +75,8 @@ export function reconcileCanvasPlacement(graph: NodeGraph, previous?: NodeCanvas
     && [...groupPlacementMembers(placement, group.id)].some(id => fixed.has(id))) fixed.add(group.proxyId);
   const displaced = new Map<string, NodeGraphLayout>();
   const flow = graph.groups?.some(group => group.layoutMode === 'flow');
-  const outer = { reflow: addedEffects.size > 0 || (!!flow && (folded || previous?.flowLayoutVersion !== 1)), addedEffects, groupMoves: new Map<string, NodeGraphLayout>() };
+  const growingFlow = previous && graph.nodes.some(node => dynamic.has(node.id) && !previous.nodes[node.id]);
+  const outer = { reflow: addedEffects.size > 0 || (!!flow && (folded || growingFlow || previous?.flowLayoutVersion !== 1)), addedEffects, groupMoves: new Map<string, NodeGraphLayout>() };
   const visible = new Set(graph.nodes.map(node => node.id));
   for (const node of spacePreviewGroups({ ...graph, nodes }, fixed, expanding, displaced, outer)) placement.nodes[node.id] = node.layout;
   // Keep hidden interiors and future regenerated layouts in the translated frame.

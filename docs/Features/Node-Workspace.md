@@ -4,6 +4,16 @@
 
 The Node Workspace is a dockable, unified view of the canonical node-graph document for the currently selected timeline clip. It follows the same primary selection rule as Properties: the last clicked selected clip is used, with a fallback to the first selected clip. Linked video/audio clips resolve to one graph owner: selecting either side opens the visual clip's graph, while the linked audio clip feeds the source node's audio and analysis ports.
 
+Each Nodes panel has its own **Node graph source** selector. **Active** is the default and follows timeline selection. Selecting a clip pins that panel to its graph even when another clip is selected or selection is cleared. Additional Nodes panels can show different clips; assignments persist with the dock layout. A missing assigned clip shows an explicit unavailable state instead of silently following another clip. Choose Active to release the assignment. Clips in other compositions become available again when their composition is active.
+
+Agent `focusNodeGraph` and node streams pin the targeted panel beside Preview to their explicit clip. Existing panels pinned to other clips and detached windows are preserved. Navigation requests target the chosen panel instance.
+
+The node inspector starts collapsed. Agent graph reads and edits reveal the affected effect group and its descendants while work proceeds, for both tool calls and streamed records. A successfully completed chat turn collapses all groups in the clips it worked on. Failed, cancelled and planning turns do not apply that final collapse. Unrelated clips retain their group state.
+
+When added nodes extend beyond the visible canvas, the view fits the complete graph after their layout settles, including nodes arriving through agent tools or streamed node code. Additions already in view keep the camera unchanged. Parameter edits and removals do not reset manual navigation; a pointer or wheel gesture cancels a pending automatic fit. Group folding retains its own focus and restore behavior.
+
+During construction, flow-layout groups arrange unconnected nodes side by side in a compact grid, sized from their card dimensions. Once connected, nodes return to the usual directed flow layout. Explicit manual positions inside the group stay fixed. Each addition reflows the outer chain so the growing group stays between Source on the left and Output on the right, moving Output outward as needed.
+
 The narrow handle beside the right inspector hides or restores it, giving the graph the full panel width. Pointer interaction does not leave a blue focus ring on editor controls; keyboard Tab navigation still shows focus.
 
 Gaussian splat clips expose their scene nodes here. The **Splat Exploration** effect adds

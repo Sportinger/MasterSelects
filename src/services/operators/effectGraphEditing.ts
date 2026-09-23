@@ -102,6 +102,7 @@ export function setOperatorConstant(clipId: string, effectId: string, nodeId: st
     const node = graph.nodes.find(candidate => candidate.id === nodeId);
     const spec = node && getEffectOperator(node.operator)?.parameters.find(parameter => parameter.id === name);
     if (!node || !spec || node.bindings[name]) throw new Error('Constant unavailable.');
+    if (name === 'value' && node.valueControl && (typeof value !== 'number' || value < node.valueControl.min || value > node.valueControl.max)) throw new Error('Value is outside the authored slider range.');
     if (spec.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value)
       || (!['values.number', 'values.integer'].includes(node.operator) && (value < (spec.min ?? -Infinity) || value > (spec.max ?? Infinity))))) {
       throw new Error('Parameter is outside its supported range.');

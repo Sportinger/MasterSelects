@@ -78,7 +78,9 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
         onChange={set} renderNumber={(key, spec) => numberRow(key, spec.label,
           interpolateKeyframes(keys, `effect.${effectId}.${key}` as Keyframe['property'], time, Number(effect.params[key] ?? spec.default)),
           Number(spec.default), spec.min, spec.max, spec.step, spec.animatable)} />}
-      {operator.parameters.map(spec => {
+      {operator.parameters.map(registrySpec => {
+        const spec = registrySpec.id === 'value' && node.valueControl
+          ? { ...registrySpec, ...node.valueControl } : registrySpec;
         if (effect.type === 'splat-exploration' && graph.edges.some(e => e.to === node.id && e.input === spec.id))
           return <ResolveInspectorRow key={spec.id} label={spec.label}><span>Connected node</span></ResolveInspectorRow>;
         if (projectedNode && node.operator.startsWith('math.') && graph.edges.some(edge => edge.to === node.id && edge.input === spec.id))

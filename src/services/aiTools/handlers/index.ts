@@ -8,6 +8,9 @@ import {
   useDockStore,
 } from '../../../stores/dockStore';
 import type { ToolResult } from '../types';
+import { handleSearchNodeCatalog, handleGetNodeDefinitions } from './nodeCatalog';
+import { handleFocusNodeGraph } from './focusNodeGraph';
+import { handleCreateImageNodeGraph, handleGetOperatorGraph, handleEditOperatorGraph } from './operatorGraph';
 import type { CallerContext } from '../policy';
 import { normalizeToolName } from '../policy';
 import {
@@ -382,6 +385,12 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>, call
   runTimelineCanvasSpectralPlaybackSmoke: handleRunTimelineCanvasSpectralPlaybackSmoke,
   setRenderHostMode: handleSetRenderHostMode,
   getNodeWorkspaceDebugState: handleGetNodeWorkspaceDebugState,
+  searchNodeCatalog: handleSearchNodeCatalog,
+  focusNodeGraph: handleFocusNodeGraph,
+  createImageNodeGraph: handleCreateImageNodeGraph,
+  getOperatorGraph: handleGetOperatorGraph,
+  editOperatorGraph: handleEditOperatorGraph,
+  getNodeDefinitions: handleGetNodeDefinitions,
   sendAINodePrompt: handleSendAINodePrompt,
   getDockLayoutDebugState: handleGetDockLayoutDebugState,
   switchDockLayout: handleSwitchDockLayout,

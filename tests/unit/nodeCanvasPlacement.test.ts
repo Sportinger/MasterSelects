@@ -130,6 +130,26 @@ describe('manual canvas placement', () => {
 
 
 describe('effect addition layout', () => {
+  it('keeps a growing construction grid between Source and Output, even with a saved output anchor', () => {
+    const makeGraph = (count: number): NodeGraph => {
+      const ids = ['source', 'frame', 'result', 'output', ...Array.from({ length: count }, (_, i) => `value${i}`)];
+      return { ...graph, nodes: ids.map((id, i) => ({ ...graph.nodes[0], id,
+        layout: { x: i * 250, y: 0 }, binding: id === 'source' ? { kind: 'clip-source' } : id === 'output' ? { kind: 'clip-output' } : undefined })),
+        edges: [['source', 'frame'], ['frame', 'result'], ['result', 'output']].map(([fromNodeId, toNodeId]) => ({
+          id: `${fromNodeId}-${toNodeId}`, fromNodeId, toNodeId, fromPortId: 'out', toPortId: 'in', type: 'texture' })),
+        groups: [{ id: 'building', label: 'Building', proxyId: 'proxy', nodeIds: ids.filter(id => !['source', 'output'].includes(id)), layoutMode: 'flow', effectId: 'test-effect', collapsed: false }] };
+    };
+    let placed = reconcileCanvasPlacement(makeGraph(0));
+    placed = moveCanvasPlacement(placed, [{ nodeId: 'output', layout: placed.nodes.output }]);
+    for (let count = 1; count <= 6; count++) {
+      const current = makeGraph(count);
+      placed = reconcileCanvasPlacement(current, placed);
+      const bounds = nodeGroupBounds(current, current.nodes.map(node => ({ ...node, layout: placed.nodes[node.id] }))).get('building')!;
+      expect(bounds.left).toBeGreaterThan(placed.nodes.source.x + NODE_WIDTH);
+      expect(placed.nodes.output.x).toBeGreaterThan(bounds.right);
+      expect(reconcileCanvasPlacement(current, placed).nodes.output).toEqual(placed.nodes.output);
+    }
+  });
   it.each(['invert', 'wave', 'voxel-relief', 'analog-signal-lab'])('moves the output out and back for %s with the common fold rules', type => {
     const beforeClips = useTimelineStore.getState().clips;
     const clip = createMockClip({ id: 'universal-fold', effects: [] });

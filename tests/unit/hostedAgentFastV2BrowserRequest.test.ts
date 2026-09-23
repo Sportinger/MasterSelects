@@ -91,6 +91,11 @@ describe('Fast V2 browser request', () => {
       visualReferences: [],
     });
     expect(request.compactSnapshot.stateFingerprint).toMatch(/^sha256:[a-f0-9]{64}$/);
+    const semantic = request.compactSnapshot.payload.semanticTimelineState as Record<string, unknown>;
+    const catalog = semantic.editorNodeCatalog as { total: number; groups: { entries: string[][] }[] };
+    const ids = catalog.groups.flatMap(g => g.entries.map(e => e[0]));
+    expect(ids.length).toBe(catalog.total);
+    expect(ids).toEqual(expect.arrayContaining(['values.number', 'control:control.lfo', 'color:primary', 'audio:audio-eq']));
     expect(JSON.stringify(request)).not.toMatch(
       /systemPrompt|providerInput|toolSchemaVersion|maxTurnSpendCredits|reasoningEffort/,
     );

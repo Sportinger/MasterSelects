@@ -21,6 +21,27 @@ export function connectedFlowBlocks(blocks: Array<PreviewLayoutBlock & { nodeIds
 export function flowGroupLayout<T extends PreviewLayoutBlock & { nodeIds: string[]; source?: boolean }>(blocks: T[], edges: NodeGraphEdge[], fixed: ReadonlySet<string>, anchor?: { x: number; y: number }): T[] {
   if (!blocks.length) return blocks;
   const owner = new Map(blocks.flatMap(block => block.nodeIds.map(id => [id, block.id] as const)));
+  const linked = new Set<string>();
+  for (const edge of edges) {
+    const from = owner.get(edge.fromNodeId), to = owner.get(edge.toNodeId);
+    if (from && to && from !== to) { linked.add(from); linked.add(to); }
+  }
+  // During incremental construction most processing nodes have no cables yet.
+  // Pack those beside each other; connected nodes immediately rejoin normal flow.
+  const loose = blocks.filter(block => !linked.has(block.id) && !fixed.has(block.id));
+  if (loose.length >= 2) {
+    const looseIds = new Set(loose.map(block => block.id));
+    const connected = flowGroupLayout(blocks.filter(block => !looseIds.has(block.id)), edges, fixed, anchor);
+    const width = Math.max(...loose.map(block => block.width)), height = Math.max(...loose.map(block => block.height));
+    const columns = Math.min(loose.length, Math.max(2, Math.ceil(Math.sqrt(loose.length * (height + 80) / (width + 100)))));
+    const x = anchor?.x ?? Math.min(...blocks.map(block => block.x));
+    const y = connected.length ? Math.max(...connected.map(block => block.y + block.height)) + 80
+      : anchor?.y ?? Math.min(...blocks.map(block => block.y));
+    const placed = new Map(connected.map(block => [block.id, block]));
+    loose.forEach((block, index) => placed.set(block.id, { ...block,
+      x: x + (index % columns) * (width + 100), y: y + Math.floor(index / columns) * (height + 80) }));
+    return blocks.map(block => placed.get(block.id)!);
+  }
   const incoming = new Map(blocks.map(block => [block.id, new Set<string>()]));
   for (const edge of edges) {
     const from = owner.get(edge.fromNodeId), to = owner.get(edge.toNodeId);

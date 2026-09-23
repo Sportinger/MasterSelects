@@ -1,7 +1,7 @@
 export const DIRECT_CODEX_MODEL = 'gpt-5.6-sol';
 
-const DIRECT_CODEX_THREAD_KEY = 'masterselects.direct-codex.threads.v9';
-const DIRECT_CODEX_PREVIOUS_THREAD_KEY = 'masterselects.direct-codex.threads.v8';
+const DIRECT_CODEX_THREAD_KEY = 'masterselects.direct-codex.threads.v12';
+const DIRECT_CODEX_PREVIOUS_THREAD_KEY = 'masterselects.direct-codex.threads.v11';
 const DIRECT_CODEX_LEGACY_THREAD_KEY = 'masterselects.direct-codex.thread.v5';
 
 export interface DirectCodexThreadSession {

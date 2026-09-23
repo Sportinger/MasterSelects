@@ -29,6 +29,10 @@ export function validateEffectGraph(graph: EffectOperatorGraph, allowIncomplete 
     if (typeof n.id !== 'string' || !/^[\w-]+$/.test(n.id) || !getEffectOperator(n.operator)
       || (n.operatorVersion !== undefined && n.operatorVersion !== getEffectOperator(n.operator)?.version)
       || !n.bindings || !Object.values(n.bindings).every(validBinding)) errors.push(`Invalid node: ${n.id}.`);
+    const control = n.valueControl;
+    if (control && (!['values.number', 'values.integer'].includes(n.operator) || n.bindings.value
+      || typeof control.label !== 'string' || !control.label.trim() || control.label.length > 80
+      || ![control.min, control.max, control.step].every(Number.isFinite) || control.min >= control.max || control.step <= 0)) errors.push(`Invalid value control: ${n.id}.`);
   }
   const connections = operatorConnectionGraph(graph);
   for (let index = 0; index < connections.edges.length; index++) {

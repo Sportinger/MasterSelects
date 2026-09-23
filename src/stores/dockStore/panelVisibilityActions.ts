@@ -237,6 +237,8 @@ export const createPanelVisibilityActions: DockSliceCreator<PanelVisibilityActio
   updatePanelData: (panelId, data) => {
     set((state) => ({
       layout: updatePanelDataInLayout(state.layout, panelId, data),
+      browserWindowPanels: state.browserWindowPanels.map(item => item.panel.id === panelId
+        ? { ...item, panel: { ...item.panel, data: { ...item.panel.data, ...data } } } : item),
     }));
   },
 });

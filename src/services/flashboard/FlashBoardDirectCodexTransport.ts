@@ -20,6 +20,11 @@ import {
   createDirectCodexTurnToolPolicy,
 } from './FlashBoardDirectCodexTurnPolicy';
 import { useMediaStore } from '../../stores/mediaStore';
+import { buildAgentNodeCatalogContext } from '../nodeGraph/agentNodeCatalog';
+import { getToolPolicy } from '../aiTools/policy';
+import { NodeGraphStreamParser, NODE_GRAPH_STREAM_PROTOCOL } from '../nodeGraph/nodeGraphStream';
+import { FlashBoardNodeGraphStream } from './FlashBoardNodeGraphStream';
+import { CodexStreamDiagnostics } from './CodexStreamDiagnostics';
 import {
   clearDirectCodexReloadSnapshot,
   readDirectCodexReloadSnapshot,
@@ -236,6 +241,12 @@ export function buildDirectCodexVerifiedResponse(
 ): string {
   if (toolCalls.length === 0) return modelResponse;
   if (toolCalls.some(call => !call.result.success)) return modelResponse;
+  // Read-only results can contain many entities with repeated `id`/`value` fields.
+  // Flattening them into a single verified field destroys the discovery answer.
+  if (toolCalls.some(call => ['searchNodeCatalog', 'getNodeDefinitions', 'focusNodeGraph', 'getOperatorGraph'].includes(call.toolCall.name))
+    && toolCalls.every(call => getToolPolicy(call.toolCall.name)?.readOnly === true)) {
+    return modelResponse;
+  }
 
   const availableFields = new Map<string, DirectNamedResultField>();
   for (const call of toolCalls) {
@@ -263,11 +274,12 @@ export function buildDirectCodexVerifiedResponse(
   return parts.join(' ');
 }
 
-function directTurnInput(request: FlashBoardChatRequest): Array<Record<string, unknown>> {
+export function directTurnInput(request: FlashBoardChatRequest): Array<Record<string, unknown>> {
   const input: Array<Record<string, unknown>> = [{
     text: request.prompt,
     type: 'text',
   }];
+  input.push({ type: 'text', text: JSON.stringify({ editorNodeCatalog: buildAgentNodeCatalogContext(request.prompt), nodeGraphStream: NODE_GRAPH_STREAM_PROTOCOL }) });
   for (const reference of request.visualReferences ?? []) {
     input.push({ detail: 'auto', type: 'image', url: reference.dataUrl });
   }
@@ -295,6 +307,7 @@ async function runDirectCodexChat(
   const turnToolPolicy = createDirectCodexTurnToolPolicy();
   const handledToolCallIds = new Set<string>();
   const executedToolCalls: FlashBoardExecutedToolCall[] = [];
+  const streamDiagnostics = new CodexStreamDiagnostics();
   let toolResponseQueue = Promise.resolve();
   let nextRequestId = 1;
   const reloadSnapshot = request.resumeMessageId
@@ -305,6 +318,8 @@ async function runDirectCodexChat(
     ?? '';
   let turnId = resumeOnly ? reloadSnapshot?.turnId ?? '' : '';
   let finalText = '';
+  let terminalError: Error | undefined;
+  let providerTurnCompleted = false;
   let streamedText = '';
   let completionResolve: (() => void) | undefined;
   let completionReject: ((error: Error) => void) | undefined;
@@ -315,6 +330,8 @@ async function runDirectCodexChat(
   void completion.catch(() => undefined);
 
   const fail = (error: Error) => {
+    terminalError = error;
+    nodeStream.stop();
     for (const waiter of pending.values()) waiter.reject(error);
     pending.clear();
     completionReject?.(error);
@@ -332,6 +349,31 @@ async function runDirectCodexChat(
       send({ id, method, params });
     });
   };
+  const nodeStream = new FlashBoardNodeGraphStream(async (toolName, args, sequence) => {
+    const callId = `${turnId}:${sequence}`;
+    const caller = callerForDirectTool(toolName);
+    if (!caller || resumeOnly) return { success: false, error: 'Node stream is unavailable in a resumed turn.' };
+    const safeLabel = safeToolActivityLabel(toolName);
+    emitAgentActivity(request, { kind: 'operation', operationId: callId, phase: 'started', safeLabel, toolName });
+    const guarded = turnToolPolicy.beforeTool(toolName, args);
+    const result = guarded ?? await runDirectCodexToolWithRecovery(toolName,
+      signal => executeAITool(toolName, args, caller, {
+        auditProviderToolCallId: callId, executionMode: request.toolExecutionMode ?? (request.intent === 'plan' ? 'plan' : 'normal'), guidedReplay: false, legacyFeedback: 'off', signal,
+      }), request.signal);
+    if (!guarded) turnToolPolicy.afterTool(toolName, args, result);
+    const call = { modelContent: '', result, toolCall: { arguments: JSON.stringify(args), id: callId, name: toolName } };
+    executedToolCalls.push(call); request.onExecutedToolCalls?.([call]);
+    emitAgentActivity(request, { kind: 'operation', operationId: callId, phase: result.success ? 'completed' : 'failed', safeLabel, toolName });
+    if (result.success && toolName !== 'focusNodeGraph') streamDiagnostics.operationCompleted();
+    return result;
+  }, request.signal);
+  const nodeParser = new NodeGraphStreamParser(record => {
+    toolResponseQueue = toolResponseQueue.then(() => nodeStream.accept(record)).catch(error => {
+      fail(error instanceof Error ? error : new Error('Node stream failed.'));
+      throw error;
+    });
+    void toolResponseQueue.catch(() => undefined);
+  });
   const respondToTool = async (message: RpcMessage) => {
     const params = record(message.params);
     const callId = typeof params.callId === 'string' ? params.callId : '';
@@ -484,17 +526,24 @@ async function runDirectCodexChat(
 
       const params = record(message.params);
       if (message.method === 'item/agentMessage/delta') {
+        if (params.threadId !== threadId || params.turnId !== turnId) return;
         const delta = typeof params.delta === 'string' ? params.delta : '';
         if (delta) {
           streamedText += delta;
+          streamDiagnostics.delta(delta);
           request.onTextDelta?.(delta);
+          if (!resumeOnly) nodeParser.push(delta);
         }
       } else if (message.method === 'item/completed') {
+        if (params.threadId !== threadId || params.turnId !== turnId) return;
         const item = record(params.item);
         if (item.type === 'agentMessage' && typeof item.text === 'string') finalText = item.text;
+        if (item.type === 'agentMessage' && !resumeOnly && params.turnId === turnId) nodeParser.push('\n');
       } else if (message.method === 'turn/completed') {
         const turn = record(params.turn);
         if (turn.id !== turnId) return;
+        streamDiagnostics.providerCompleted();
+        providerTurnCompleted = turn.status === 'completed';
         if (turn.status === 'completed') completionResolve?.();
         else completionReject?.(new Error(`Codex Direct ended with status ${String(turn.status)}.`));
       } else if (message.method === 'error') {
@@ -512,6 +561,7 @@ async function runDirectCodexChat(
     'Codex Direct is unavailable. Start MasterSelects with npm run dev:full.',
   )));
   socket.addEventListener('close', () => {
+    if (nodeParser.active && !providerTurnCompleted) fail(new Error('Codex disconnected during the node stream. Completed steps remain undoable.'));
     if (!finalText && !streamedText) fail(new Error('Codex Direct disconnected before completion.'));
   });
 
@@ -577,11 +627,22 @@ async function runDirectCodexChat(
       });
     }
     await completion;
+    if (!resumeOnly) nodeParser.finish();
+    await toolResponseQueue;
+    if (terminalError) throw terminalError;
     const response = finalText.trim() || streamedText.trim();
     if (!response) throw new Error('Codex Direct returned no final message.');
     if (request.resumeMessageId) clearDirectCodexReloadSnapshot(request.resumeMessageId);
-    return buildDirectCodexVerifiedResponse(request.prompt, response, executedToolCalls);
+    return nodeParser.active
+      ? `Node-Graph aktualisiert: ${nodeStream.completedOperations} Schritte ausgeführt.`
+      : buildDirectCodexVerifiedResponse(request.prompt, response, executedToolCalls);
   } finally {
+    nodeStream.stop();
+    if (nodeParser.active) {
+      const timing = streamDiagnostics.finish(turnId);
+      emitAgentActivity(request, { kind: 'progress',
+        label: `Node-Stream: ${timing.deltas} Text-Deltas; ${timing.operationsBeforeCompletion} Schritte bei laufender Antwort. Erste Änderung: ${timing.firstOperationMs ?? '–'} ms; Antwortende: ${timing.providerCompletedMs ?? '–'} ms.${terminalError ? ` Unterbrochen: ${terminalError.message}` : ''}` });
+    }
     request.signal?.removeEventListener('abort', abort);
     if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
       socket.close();

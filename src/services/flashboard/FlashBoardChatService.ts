@@ -1,4 +1,5 @@
 import { sendIntelligenceChat } from './FlashBoardChatProviderTransport';
+import { FlashBoardNodeGraphPresentation } from './FlashBoardNodeGraphPresentation';
 import {
   appendFlashBoardChatRunToolCalls,
   beginFlashBoardChatRun,
@@ -57,6 +58,7 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
   request.onPhase?.('kernel');
   const executedToolCalls: Parameters<typeof completeFlashBoardChatRun>[1]['executedToolCalls'] = [];
   const run = beginFlashBoardChatRun({ ...request, prompt });
+  const nodePresentation = new FlashBoardNodeGraphPresentation(request.intent !== 'plan' && request.toolExecutionMode !== 'plan');
   const tracedRequest: FlashBoardChatRequest = {
     ...request,
     activityRunId: run.runId,
@@ -64,6 +66,7 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
     onExecutedToolCalls: (toolCalls) => {
       executedToolCalls.push(...toolCalls);
       appendFlashBoardChatRunToolCalls(run.runId, toolCalls);
+      nodePresentation.observe(toolCalls);
       request.onExecutedToolCalls?.(toolCalls);
     },
     onActivityEvent: request.onActivityEvent,
@@ -71,6 +74,7 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
 
   try {
     const response = await sendIntelligenceChat(tracedRequest);
+    if (!request.signal?.aborted) nodePresentation.complete();
     const completed = completeFlashBoardChatRun(run.runId, {
       executedToolCalls,
       response,

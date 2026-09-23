@@ -26,6 +26,7 @@ import { NodeGraphNodeCard } from './canvas/NodeGraphNodeCard';
 import type { NodeGraphPoint, Viewport } from './canvas/canvasGeometry';
 import { fittedNodeViewport, useNodeGraphViewport } from './canvas/useNodeGraphViewport';
 import { useNodeFoldViewport } from './canvas/useNodeFoldViewport';
+import { useNodeGrowthViewport } from './canvas/useNodeGrowthViewport';
 import { useNodeConnectionDrag } from './canvas/useNodeConnectionDrag';
 import { getConnectionPlugs } from './canvas/connectionPlugs';
 import { NodeGraphPlugs } from './canvas/NodeGraphPlugs';
@@ -242,12 +243,7 @@ export function NodeGraphCanvas({
     }
   }, [graph.id, graph.groups, initialGroupId, focusGroup, fitGraph]);
 
-  const knownNodes = useRef(new Set(graph.nodes.map(node => node.id)));
-  useEffect(() => {
-    const selected = graph.nodes.find(node => node.id === selectedNodeId);
-    if (selected?.binding?.kind === 'keyframe-node' && !knownNodes.current.has(selected.id)) fitGraph();
-    knownNodes.current = new Set(graph.nodes.map(node => node.id));
-  }, [graph.nodes, selectedNodeId, fitGraph]);
+  useNodeGrowthViewport(canvasRef, graph, graphBounds, animating, visualViewportRef, fitBounds, foldViewport.following);
 
   const resetView = useCallback(() => {
     foldViewport.forget();

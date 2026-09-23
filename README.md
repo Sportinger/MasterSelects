@@ -2,6 +2,8 @@
 
 A media editor and an agent-friendly foundation for creative tools.
 
+The in-app agent receives the complete base node and effect inventory, including full ports and parameter contracts for node requests. It can create and edit image operator graphs and inspect selected nodes with their neighbors. Codex Direct can stream graph changes; the browser pins a Nodes panel beside Preview to the named clip and applies complete records as they arrive. Every Nodes panel can follow Active selection or stay assigned to a clip. The view fits newly added nodes when they extend outside the canvas. Groups open during agent work and collapse after successful completion; the node inspector starts collapsed. See [Node Catalog](docs/Features/Node-Catalog.md).
+
 Edit video, mix audio, animate graphics, build 3D scenes, and work with live
 visuals. MasterSelects combines these workflows in a browser-based workspace
 with WebGPU rendering and a multitrack timeline. Selected timeline clips stay selected on repeat clicks by default; click-to-deselect is optional in Settings > General > Timeline.

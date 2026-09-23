@@ -51,5 +51,5 @@ export function useNodeFoldViewport(canvas: RefObject<HTMLDivElement | null>, so
       panY: follow.from.panY + (fit.panY - follow.from.panY) * t });
     if (finished) cancel();
   }, [source, target, shown, bounds, groupBounds, animating, canvas, cancel, setViewport]);
-  return { request, cancel, forget };
+  return { request, cancel, forget, following: pending.current !== null };
 }

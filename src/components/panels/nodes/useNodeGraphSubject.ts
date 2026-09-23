@@ -37,16 +37,16 @@ export interface NodeGraphClipSubject {
 
 export type NodeGraphSubject = NodeGraphClipSubject;
 
-export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general'): NodeGraphSubject | null {
+export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general', pinnedClipId?: string | null): NodeGraphSubject | null {
   const clips = useTimelineStore((state) => state.clips);
   const documents = useTimelineStore(state => state.sharedSceneGraphs);
   const tracks = useTimelineStore((state) => state.tracks);
   const selectedClipIds = useTimelineStore((state) => state.selectedClipIds);
   const primarySelectedClipId = useTimelineStore((state) => state.primarySelectedClipId);
 
-  const selectedClipId = primarySelectedClipId && selectedClipIds.has(primarySelectedClipId)
+  const selectedClipId = pinnedClipId ?? (primarySelectedClipId && selectedClipIds.has(primarySelectedClipId)
     ? primarySelectedClipId
-    : selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
+    : selectedClipIds.size > 0 ? [...selectedClipIds][0] : null);
 
   const graphContext = useMemo(
     () => resolveLinkedClipNodeGraphContext(clips, tracks, selectedClipId),

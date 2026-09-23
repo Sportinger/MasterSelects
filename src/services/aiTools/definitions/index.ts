@@ -20,6 +20,8 @@ import { transitionToolDefinitions } from './transitions';
 import { maskToolDefinitions } from './masks';
 import { statsToolDefinitions } from './stats';
 import { nodeWorkspaceToolDefinitions } from './nodeWorkspace';
+import { nodeCatalogToolDefinitions } from './nodeCatalog';
+import { operatorGraphToolDefinitions } from './operatorGraph';
 import { workerFirstToolDefinitions } from './workerFirst';
 import { workerFirstRuntimeToolDefinitions } from './workerFirstRuntime';
 import { storyboardToolDefinitions } from './storyboard';
@@ -48,6 +50,8 @@ export const AI_TOOLS = [
   ...workerFirstToolDefinitions,
   ...workerFirstRuntimeToolDefinitions,
   ...nodeWorkspaceToolDefinitions,
+  ...nodeCatalogToolDefinitions,
+  ...operatorGraphToolDefinitions,
   ...storyboardToolDefinitions,
 ];
 
@@ -75,5 +79,7 @@ export {
   workerFirstToolDefinitions,
   workerFirstRuntimeToolDefinitions,
   nodeWorkspaceToolDefinitions,
+  nodeCatalogToolDefinitions,
+  operatorGraphToolDefinitions,
   storyboardToolDefinitions,
 };

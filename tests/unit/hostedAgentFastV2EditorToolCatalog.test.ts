@@ -26,6 +26,9 @@ describe('Fast V2 editor tool catalog', () => {
     expect(new Set(names).size).toBe(names.length);
     expect(names).toEqual(expect.arrayContaining([
       'createTextClip',
+      'searchNodeCatalog',
+      'getNodeDefinitions',
+      'focusNodeGraph',
       'createCaptionClip',
       'createMotionShapeClip',
       'getCaptionProperties',

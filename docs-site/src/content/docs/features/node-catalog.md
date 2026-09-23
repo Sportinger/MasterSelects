@@ -5,6 +5,37 @@ title: "Node Catalog"
 [Back to Features](/features/readme/) · [Node Workspace](/features/node-workspace/)
 
 
+## Agent discovery
+
+Codex Direct and Fast receive `editorNodeCatalog` before the first model action of each turn. This is the complete compact inventory of registered operators, visual effects, Flock nodes, audio effects, parameter sources, Color nodes and common field-backed clip stages, not a search result limited to a few entries. Rows contain the exact catalog ID, name, input/output signal types and availability, grouped by kind and owning context. Project-local custom definitions are outside this base inventory.
+
+Two read-only tools provide more detail:
+
+Requests containing `node`, `nodes`, Node compounds or German `Knoten` compounds also receive all full definitions in `editorNodeCatalog.definitions` before the first action: exact ports, parameters, defaults, ranges and choices. Other requests retain the compact inventory. No top-N truncation or mandatory discovery call is applied.
+
+- `searchNodeCatalog({ query?, kind?, context?, inputType?, outputType?, offset?, limit? })` returns compact summaries, a total count and `nextOffset`. The default page has 12 entries, with at most 30. Exact IDs and names rank first; all whitespace-separated search terms must match.
+- `getNodeDefinitions({ ids })` reads up to eight exact IDs together, returning underlying type IDs, ports, parameter defaults, ranges, choices and declared animation support. Unknown IDs appear in `missingIds`.
+
+Catalog IDs distinguish parameter-control versions from image operators with the same underlying ID. For example, `control:values.number` and `values.number` retain their own parameter contracts. Built-in clip stages have source-dependent contracts; their empty static port/parameter lists do not imply that they have no editable controls. Fixed anchors and internal render primitives are marked explicitly. Signal filters are discovery aids, not proof that a connection is valid for a particular graph owner. Normal domain validation still applies when editing.
+
+`focusNodeGraph({ clipId })` selects an existing timeline clip and pins a Nodes panel to it beside Preview, so a separately docked AI Studio stays visible while the graph changes. The assignment survives selection changes. Existing panels pinned to other clips and detached windows remain untouched. Every panel can return to selection-following **Active** through its source selector. It requires the editor and a docked Preview. Clip creation remains a separate operation when no suitable clip exists.
+
+These discovery/focus tools do not create or mutate graphs. Shaders, implementation functions and internal composition bodies are excluded from discovery results. Existing Codex Direct conversations start a fresh protocol thread after this catalog-tool update so the new tools are available.
+
+## Codex Direct node stream
+
+Direct receives the `nodeGraphStream` version-1 contract alongside the inventory. An exact `ms-nodegraph-v1` fenced block contains newline-delimited JSON. Its first record is `{"op":"begin","schemaVersion":1,"clipId":"<existing clip ID>"}`. Only after receiving that complete record does the browser select the clip and open Nodes beside Preview automatically; no separate focus call is necessary. A new clip must be created before the stream, using its returned ID.
+
+Each subsequent `tool` record has a consecutive `seq` starting at 1, a unique `ref`, an allowed `tool` and `args`. The browser supplies the pinned `clipId`. Earlier scalar tool results can be referenced with `{"$ref":"alias","field":"effectId"}` or `nodeId`. `{"op":"end","lastSeq":N}` and a closing fence terminate the stream. Partial lines never execute, and ordinary prose/code fences do not trigger graph changes.
+
+Supported operations are visual-effect add/update/remove, Flock node add/update/remove/connect/disconnect, `createImageNodeGraph` and `editOperatorGraph`, using deterministic handlers, policy, audit and undo boundaries. Color and parameter-source graph authoring are not yet supported by this stream. The Fast/kernel route still uses its normal operation plans. Invalid records, owner errors, denied tools or cancellation stop later work; completed steps remain visible and undoable. A reload does not replay streamed mutations. Limits are 128 operations, 64 KiB per line and 1 MiB per block.
+
+`createImageNodeGraph({ clipId, name? })` creates a neutral source-to-output graph using the existing image-effect runtime. `editOperatorGraph` adds/removes/moves registered operators, sets parameters, connects/disconnects ports and configures local numeric sliders. Each call is one atomic edit, also usable in node-code records. The same tool edits existing effect-owned graphs. Incomplete intermediate wiring is explicitly reported and execution pauses until repaired. Native domains retain their existing owner restrictions.
+
+`getOperatorGraph({ clipId })` lists effect graph owners and status. Add `effectId` for actual nodes, values and edges. Add `nodeIds`, `hops: 0..4` and `direction: upstream|downstream|both` to inspect only a region. Boundary cables and omitted-node counts make the selection explicit. It reads saved graph state, not GPU telemetry, and remains available in plan mode.
+
+The chat Work Log records the received text-delta count, operations applied before `turn/completed`, and relative timestamps for the first operation and provider completion. The `CodexNodeStream` logger adds the first 16 chunk sizes/timestamps without prompt or answer contents. An operation preceding provider completion proves incremental execution; the visible Nodes panel is the rendering check.
+
 Open **Nodes → Catalog** to search current definitions by name, ID or signal type.
 Search also matches signal format descriptions. Filter by supported context and expand an entry for inputs, outputs, default
 parameters, keyframe support, canonical family/variant, backend, fusion, state and invalidation. Where a registry exposes numeric

@@ -35,6 +35,8 @@ import { FlockGraphStatusBar } from './flock/FlockGraphStatusBar';
 import './NodeWorkspacePanel.css';
 import { addKeyframeNode } from '../../../services/nodeGraph/keyframeNodeActions';
 import { ControlNodeMenu } from './workspace/ControlNodeMenu';
+import { NodeWorkspaceSourceSelect } from './workspace/NodeWorkspaceSourceSelect';
+import type { NodeWorkspacePanelData } from '../../../types/dock';
 import { focusKeyframeConnections } from '../../../services/nodeGraph/keyframeNodeProjection';
 
 interface NodeWorkspaceContextMenuState {
@@ -75,13 +77,17 @@ function batched(label: string, run: () => void): void {
   }
 }
 
-export function NodeWorkspacePanel() {
+export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panelId?: string; data?: NodeWorkspacePanelData }) {
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [presetsOpen, setPresetsOpen] = useState(false);
   const [animationInspector, setAnimationInspector] = useState(false);
-  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [viewTheme, setViewTheme] = useState<NodeGraphViewTheme>('general');
-  const subject = useNodeGraphSubject(viewTheme);
+  const pinnedClipId = typeof data?.nodeClipId === 'string' && data.nodeClipId ? data.nodeClipId : null;
+  const subject = useNodeGraphSubject(viewTheme, pinnedClipId);
+  const updatePanelData = useDockStore(state => state.updatePanelData);
+  const setSource = (nodeClipId: string | null) => updatePanelData(panelId, { nodeClipId });
+  const sourceSelect = <NodeWorkspaceSourceSelect clipId={pinnedClipId} onChange={setSource} />;
   const keyframesLocked = useTimelineStore(state => state.isExporting || Boolean(state.tracks.find(t => t.id === subject?.clip.trackId)?.locked));
   const panelRef = useRef<HTMLDivElement | null>(null);
   const moveClipNodeGraphNode = useTimelineStore((state) => state.moveClipNodeGraphNode);
@@ -169,8 +175,9 @@ export function NodeWorkspacePanel() {
     setViewTheme('general');
     setContextMenu(null);
     if (request.theme.startsWith('effect:')) {
-      const current = useTimelineStore.getState().clips.find(c => c.id === request.clipId);
-      if (current) useTimelineStore.getState().updateClip(current.id, { nodeGraph: {
+      const state = readTimelineRuntimeState(useTimelineStore);
+      const current = state.clips.find(c => c.id === request.clipId);
+      if (current) state.updateClip(current.id, { nodeGraph: {
         version: 1, nodes: [], ...current.nodeGraph, groups: { ...current.nodeGraph?.groups,
           [request.theme]: { ...current.nodeGraph?.groups?.[request.theme], collapsed: false } },
       } });
@@ -182,7 +189,7 @@ export function NodeWorkspacePanel() {
       setSelection({ graphId, nodeId: request.nodeId, nodeIds: [] });
     }
   }, [selectClip, subject?.id, subject?.selectedClip.id, graphId]);
-  useNodeWorkspaceViewRequests(handleViewRequest);
+  useNodeWorkspaceViewRequests(handleViewRequest, panelId, pinnedClipId);
 
   const startInspectorResize = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -340,9 +347,12 @@ export function NodeWorkspacePanel() {
   if (!subject || !adapter) {
     return (
       <div className="node-workspace-panel" ref={panelRef}>
-        <div className="node-workspace-empty-state">
-          <h3>Nodes</h3>
-          <p>Select a timeline clip</p>
+        <div className="node-workspace-main">
+          <div className="node-workspace-view-bar">{sourceSelect}</div>
+          <div className="node-workspace-empty-state">
+            <h3>Nodes</h3>
+            <p>{pinnedClipId ? 'Assigned clip is not in the active composition. Choose another source or Active.' : 'Select a timeline clip'}</p>
+          </div>
         </div>
       </div>
     );
@@ -375,6 +385,7 @@ export function NodeWorkspacePanel() {
     <div className="node-workspace-panel" ref={panelRef}>
       <div className="node-workspace-main">
         <div className="node-workspace-view-bar">
+          {sourceSelect}
           <div className="node-workspace-view-tabs" role="tablist" aria-label="Node graph theme">
             {subject.availableViews.filter(view => view.theme === 'general').map((view) => (
               <button
@@ -432,8 +443,8 @@ export function NodeWorkspacePanel() {
             layout={{ x: selectedNode?.layout.x ?? 0, y: (selectedNode?.layout.y ?? 0) - 300 }} />
           {selectedNode?.groupId === 'color' && (
             <div className="node-workspace-view-actions">
-              <button type="button" onClick={() => addColorGraphNode('primary')}>+ Primary</button>
-              <button type="button" onClick={() => addColorGraphNode('wheels')}>+ Wheels</button>
+              <button type="button" onClick={event => { if (event.detail > 0) event.currentTarget.blur(); addColorGraphNode('primary'); }}>+ Primary</button>
+              <button type="button" onClick={event => { if (event.detail > 0) event.currentTarget.blur(); addColorGraphNode('wheels'); }}>+ Wheels</button>
             </div>
           )}
         </div>

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { AI_TOOLS } from '../../src/services/aiTools';
 import {
   buildDirectCodexBaseInstructions,
+  directTurnInput,
   buildDirectCodexDynamicTools,
   buildDirectCodexVerifiedResponse,
   createDirectCodexTurnToolGuard,
@@ -38,6 +39,37 @@ import { readDirectCodexThreadSession } from '../../src/services/flashboard/Flas
 import { normalizeFlashBoardChatMessage } from '../../src/services/project/flashBoardChatProjectCodec';
 
 describe('FlashBoard Codex Direct path', () => {
+  it('preserves partial graph verification instead of matching x inside Mix', () => {
+    const answer = 'Blue Mix % is 75; one node inspected.';
+    expect(buildDirectCodexVerifiedResponse('Prüfe den Blue-Mix-Regler.', answer, [{
+      toolCall: { id: 'graph-read', name: 'getOperatorGraph', arguments: '{}' },
+      result: { success: true, data: { nodes: [{ id: 'amount', constants: { value: 75 }, position: { x: -520, y: 500 } }] } },
+    }])).toBe(answer);
+  });
+  it('preserves catalog answers instead of replacing requested IDs with the last parameter ID', () => {
+    const answer = '487 entries. effect:gaussian-blur; control:control.time. Time basis: clip, timeline.';
+    expect(buildDirectCodexVerifiedResponse('Nenne die echten IDs und Time-basis-Werte.', answer, [{
+      toolCall: { id: 'catalog-details', name: 'getNodeDefinitions', arguments: '{}' },
+      result: { success: true, data: { definitions: [{ id: 'control:control.time', parameters: [{ id: 'basis', default: 'clip' }] }] } },
+    }])).toBe(answer);
+  });
+  it('preserves an inspected graph focus answer instead of reporting an unrelated nested clip ID', () => {
+    const answer = 'Video clip-a is selected; Nodes is next to Preview.';
+    expect(buildDirectCodexVerifiedResponse('Open the video clip node panel.', answer, [
+      { toolCall: { id: 'read', name: 'getTimelineState', arguments: '{}' },
+        result: { success: true, data: { clips: [{ id: 'clip-a' }, { id: 'clip-audio' }] } } },
+      { toolCall: { id: 'focus', name: 'focusNodeGraph', arguments: '{}' },
+        result: { success: true, data: { clipId: 'clip-a', panel: 'node-workspace' } } },
+    ])).toBe(answer);
+  });
+  it('includes the complete base node inventory before any model tool call', () => {
+    const input = directTurnInput({ prompt: 'Build a node graph' });
+    expect(input[0]).toEqual({ type: 'text', text: 'Build a node graph' });
+    const { editorNodeCatalog } = JSON.parse(input[1].text as string);
+    const ids = editorNodeCatalog.groups.flatMap((g: { entries: string[][] }) => g.entries.map(e => e[0]));
+    expect(ids.length).toBe(editorNodeCatalog.total);
+    expect(ids).toEqual(expect.arrayContaining(['values.number', 'control:control.lfo', 'color:primary', 'audio:audio-eq']));
+  });
   it('skips project inspection for standalone media generation requests', () => {
     const instructions = buildDirectCodexBaseInstructions();
 

@@ -6,6 +6,7 @@ import type {
   CurvesPanelData,
   DockPanel,
   MultiPreviewPanelData,
+  NodeWorkspacePanelData,
   PreviewPanelData,
   ScopesPanelData,
   TimelinePanelData,
@@ -93,7 +94,7 @@ export function DockPanelContent({ panel, allowPanelMaximize = false }: DockPane
     case 'audio-mixer':
       return <Suspense fallback={<PanelLoading />}><AudioMixerPanel /></Suspense>;
     case 'node-workspace':
-      return <Suspense fallback={<PanelLoading />}><NodeWorkspacePanel /></Suspense>;
+      return <Suspense fallback={<PanelLoading />}><NodeWorkspacePanel panelId={panel.id} data={panel.data as NodeWorkspacePanelData | undefined} /></Suspense>;
     case 'color-nodes':
       return <Suspense fallback={<PanelLoading />}><ColorNodesPanel /></Suspense>;
     case 'color-controls':

@@ -53,6 +53,7 @@ export interface AIToolExecutionOptions {
 
 // Tools that modify the timeline or media (need history tracking)
 export const MODIFYING_TOOLS = new Set([
+  'createImageNodeGraph', 'editOperatorGraph',
   'splitClip', 'splitClipEvenly', 'splitClipAtTimes', 'reorderClips', 'deleteClip', 'deleteClips', 'moveClip', 'trimClip',
   'createTrack', 'deleteTrack', 'setTrackVisibility', 'setTrackMuted',
   'cutRangesFromClip',

@@ -22,7 +22,7 @@ export const WIP_PANEL_TYPES: PanelType[] = [];
 // Panel types that may exist more than once at the same time. These spawn a fresh,
 // independent instance (unique id) from the tab-bar "+" instead of focusing the
 // existing one. Only one shared Timeline/Slot host owns Timeline mode at a time.
-export const MULTI_INSTANCE_PANEL_TYPES: PanelType[] = ['preview', 'color-controls', 'curves', 'slot-grid'];
+export const MULTI_INSTANCE_PANEL_TYPES: PanelType[] = ['preview', 'node-workspace', 'color-controls', 'curves', 'slot-grid'];
 
 // AI panel types for View menu grouping
 export const AI_PANEL_TYPES: PanelType[] = ['ai-studio', 'story', 'ai-segment', 'scene-description'];
@@ -84,7 +84,12 @@ export interface TimelinePanelData {
   timelineSurfaceMode?: 'timeline' | 'slot-grid';
 }
 
-export type PanelData = PreviewPanelData | MultiPreviewPanelData | ScopesPanelData | CurvesPanelData | TimelinePanelData;
+export interface NodeWorkspacePanelData {
+  /** null/omitted follows the active selection; a clip ID pins this panel. */
+  nodeClipId?: string | null;
+}
+
+export type PanelData = PreviewPanelData | MultiPreviewPanelData | ScopesPanelData | CurvesPanelData | TimelinePanelData | NodeWorkspacePanelData;
 
 // A panel instance
 export interface DockPanel {

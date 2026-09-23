@@ -8,6 +8,7 @@ import {
 import { buildTimelineSpeechProjection } from '../../transcription/timelineSpeechProjection';
 import { sanitizeHostedAgentFastV2SemanticJson } from './fastV2SemanticTimelineState';
 import { buildHostedAgentFastV2EditorToolCatalog } from './fastV2EditorToolCatalog';
+import { buildAgentNodeCatalogContext } from '../../nodeGraph/agentNodeCatalog';
 import {
   fingerprintPublicTimelineStateV1,
 } from '../wp1Spike/publicOperationContracts';
@@ -127,8 +128,11 @@ function compactEditableHook(
   return undefined;
 }
 
-function compactTimelinePayload(input: HostedAgentFastV2TimelineSnapshotInput) {
-  const semanticTimelineState = sanitizeHostedAgentFastV2SemanticJson(input.semanticTimelineState);
+function compactTimelinePayload(input: HostedAgentFastV2TimelineSnapshotInput, request: string) {
+  const semanticTimelineState = sanitizeHostedAgentFastV2SemanticJson({
+    ...input.semanticTimelineState,
+    editorNodeCatalog: buildAgentNodeCatalogContext(request),
+  });
   const activeComposition = semanticTimelineState.activeComposition;
   const compositionSize = activeComposition !== null
     && typeof activeComposition === 'object'
@@ -244,7 +248,7 @@ export async function buildHostedAgentFastV2BrowserRequest(
   return parseHostedAgentFastV2StartRequest({
     clientInstanceId: input.clientInstanceId,
     compactSnapshot: {
-      payload: compactTimelinePayload(snapshot),
+      payload: compactTimelinePayload(snapshot, input.request),
       schemaVersion: 1,
       stateFingerprint,
       timelineRevision: snapshot.timelineRevision,

@@ -74,6 +74,8 @@
   background: var(--bg-primary);
 }
 
+.node-workspace-source-select { width: 170px; min-width: 90px; flex-shrink: 1; }
+
 .node-workspace-inspector-handle {
   flex: 0 0 20px;
   align-self: stretch;
