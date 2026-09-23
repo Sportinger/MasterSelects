@@ -21,6 +21,12 @@ Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in on
 | **3D** | Combine footage, models, lights, cameras, Gaussian splats, and particle effects. |
 | **AI** | Ask the in-app agent to edit the timeline or generate media; use local analysis tools where available. |
 
+### Node graphs
+
+| Detail view | Full graph |
+| --- | --- |
+| <a href="docs/images/node-graph-detail.png"><img src="docs/images/node-graph-detail.png" alt="Connected nodes with image and depth previews" width="320"></a> | <a href="docs/images/node-graph-overview.png"><img src="docs/images/node-graph-overview.png" alt="Large connected node graph" width="320"></a> |
+
 Import video, audio, images, animations, 3D assets, and Premiere Pro projects. Export video, audio, still frames, and interchange formats. Browser, operating system, and GPU support affect available codecs and performance. See [media import](docs/Features/Media-Panel.md) and [export](docs/Features/Export.md).
 
 ## Build while you create
