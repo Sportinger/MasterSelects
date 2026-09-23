@@ -1,0 +1,106 @@
+<!doctype html><meta charset="utf-8"><title>Slit Scan Hybrid GPU regression</title>
+<h1>Slit Scan Hybrid GPU parity</h1><pre id="result">Running…</pre>
+<script type="module">
+import { HybridTemporalGpu } from '/src/effects/time/HybridTemporalGpu.ts';
+import { INPUT_HISTORY_SAMPLE_WGSL } from '/src/services/operators/inputHistorySampling.ts';
+import { probeHybridRuntime } from './hybrid-runtime-probe.ts';
+import { hybridTemporalWindow } from '/src/effects/time/hybridTemporalWindow.ts';
+const result = document.querySelector('#result');
+try {
+  const adapter = await navigator.gpu.requestAdapter(), device = await adapter.requestDevice();
+  device.pushErrorScope('validation');
+  const gpu = new HybridTemporalGpu(device), width = 256;
+  const texture = (format, layers = 1, w = width) => device.createTexture({size:[w,1,layers],format,
+    usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});
+  const demand = texture('rgba32float'), atlas = texture('rgba8unorm',256,1), current = texture('rgba8unorm');
+  const ages = texture('rgba32float',1,257), output = texture('rgba16float'), reference = texture('rgba16float');
+  const metadata = device.createBuffer({size:257*16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
+  const pixels = new Uint8Array(256*4), input = new Uint8Array(width*4), map = new Float32Array(width*4);
+  for(let i=0;i<256;i++) {pixels.set([i,255-i,i%17*15,255],i*4);input.set([55,20,70,255],i*4);
+    map.set([.5,.5,i/255*4,1],i*4);}
+  device.queue.writeTexture({texture:atlas},pixels,{bytesPerRow:4,rowsPerImage:1},[1,1,256]);
+  device.queue.writeTexture({texture:current},input,{bytesPerRow:width*4},[width,1]);
+  device.queue.writeTexture({texture:demand},map,{bytesPerRow:width*16},[width,1]);
+  const sampler = device.createSampler({minFilter:'linear',magFilter:'linear'});
+  const module = device.createShaderModule({code:INPUT_HISTORY_SAMPLE_WGSL+`
+    @group(0) @binding(0) var atlas:texture_2d_array<f32>;
+    @group(0) @binding(1) var ages:texture_2d<f32>;
+    @group(0) @binding(2) var s:sampler;
+    @group(0) @binding(3) var demand:texture_2d<f32>;
+    @group(0) @binding(4) var current:texture_2d<f32>;
+    @vertex fn vertex(@builtin(vertex_index) i:u32)->@builtin(position) vec4f {
+      let uv=vec2f(f32((i<<1u)&2u),f32(i&2u));return vec4f(uv*2.0-1.0,0.0,1.0);
+    }
+    @fragment fn fragment(@builtin(position) p:vec4f)->@location(0) vec4f {
+      let d=textureLoad(demand,vec2i(p.xy),0);
+      return sampleInputHistory(atlas,ages,s,d.xy,d.z,textureLoad(current,vec2i(p.xy),0),vec2f(.5));
+    }`});
+  const pipeline = device.createRenderPipeline({layout:'auto',vertex:{module,entryPoint:'vertex'},fragment:{module,entryPoint:'fragment',targets:[{format:'rgba16float'}]}});
+  const bind = device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[
+    {binding:0,resource:atlas.createView({dimension:'2d-array'})},{binding:1,resource:ages.createView()},
+    {binding:2,resource:sampler},{binding:3,resource:demand.createView()},{binding:4,resource:current.createView()}]});
+  const half = n => {const sign=n&32768?-1:1,e=(n>>10)&31,m=n&1023;return sign*(e===0?m*2**-24:(1+m/1024)*2**(e-15));};
+  const checks = [];
+  for(const nearest of [false,true]) for(const capacity of [255,7]) {
+    const data = new Float32Array(257*4);
+    data[1]=0;
+    for(let i=1;i<256;i++) data.set([Math.max(0,(i-1)/254*4),i,0,0],i*4);
+    data.set([256,Number(nearest),3,0],1024);
+    device.queue.writeBuffer(metadata,0,data);
+    const cached = data.slice();cached[1]=-1;
+    device.queue.writeTexture({texture:ages},cached,{bytesPerRow:257*16},[257,1]);
+    const needed = await gpu.needed(demand.createView(),metadata,width,1);
+    if(!needed.includes(255)||!needed.includes(0))throw Error('Demand bitset lost high or current group');
+    const encoder = device.createCommandEncoder(), buffers=[];
+    for(let start=1;start<256;start+=capacity) {
+      const mapping=new Int32Array(256).fill(-1);if(start===1)mapping[0]=0;
+      for(let i=start;i<Math.min(start+capacity,256);i++)mapping[i]=i;
+      buffers.push(gpu.accumulate(encoder,demand.createView(),metadata,atlas.createView({dimension:'2d-array'}),current.createView(),output.createView(),mapping,start===1));
+    }
+    const pass=encoder.beginRenderPass({colorAttachments:[{view:reference.createView(),loadOp:'clear',storeOp:'store'}]});
+    pass.setPipeline(pipeline);pass.setBindGroup(0,bind);pass.draw(3);pass.end();
+    const readback=device.createBuffer({size:width*16,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+    encoder.copyTextureToBuffer({texture:output},{buffer:readback,bytesPerRow:width*8},[width,1]);
+    encoder.copyTextureToBuffer({texture:reference},{buffer:readback,offset:width*8,bytesPerRow:width*8},[width,1]);
+    device.queue.submit([encoder.finish()]);await readback.mapAsync(GPUMapMode.READ);
+    const values=new Uint16Array(readback.getMappedRange());let max=0;
+    for(let i=0;i<width*4;i++)max=Math.max(max,Math.abs(half(values[i])-half(values[i+width*4])));
+    readback.unmap();readback.destroy();buffers.forEach(b=>b.destroy());
+    if(max>.001)throw Error(`Parity error ${max}`);
+    checks.push(`PASS ${nearest?'nearest':'linear'}, ${capacity===255?'resident':'37 batches'}, 256 samples: max pixel delta ${max}`);
+  }
+  const extended = new Float32Array(1921*4);
+  for(let i=0;i<1920;i++)extended.set([i/1919*4,i,0,0],i*4);
+  extended.set([1920,0,0,0],1920*4);
+  const large=device.createBuffer({size:extended.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
+  device.queue.writeBuffer(large,0,extended);
+  const largeNeeded=await gpu.needed(demand.createView(),large,width,1,1920);
+  if(!largeNeeded.includes(1919)||!largeNeeded.some(i=>i>1080))throw Error('Large sample metadata was truncated');
+  large.destroy();checks.push('PASS 1920 sample metadata and GPU demand bitset: frame 1919 requested');
+  // Sparse 2-fps source: a dense temporal grid must still produce a smooth ramp.
+  const window=hybridTemporalWindow({source:{localTime:4,duration:4,inPoint:0,outPoint:4,speed:1,speedKeyframes:[]},horizon:4,samples:625,nearest:false},
+    Array.from({length:9},(_,i)=>({time:i/2,duration:.5})));
+  const smoothAges=device.createBuffer({size:window.metadata.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});
+  device.queue.writeBuffer(smoothAges,0,window.metadata);
+  window.times.forEach((time,i)=>pixels.set([Math.round(time/4*255),0,0,255],(i+1)*4));
+  for(let i=0;i<width;i++)input.set([255,0,0,255],i*4);
+  device.queue.writeTexture({texture:atlas},pixels,{bytesPerRow:4,rowsPerImage:1},[1,1,256]);
+  device.queue.writeTexture({texture:current},input,{bytesPerRow:width*4},[width,1]);
+  const smoothEncoder=device.createCommandEncoder(), smoothBuffers=[];
+  for(let start=1;start<=window.times.length;start+=3) {
+    const mapping=new Int32Array(window.times.length+1).fill(-1);if(start===1)mapping[0]=0;
+    for(let i=start;i<Math.min(start+3,mapping.length);i++)mapping[i]=i;
+    smoothBuffers.push(gpu.accumulate(smoothEncoder,demand.createView(),smoothAges,atlas.createView({dimension:'2d-array'}),current.createView(),output.createView(),mapping,start===1));
+  }
+  const smoothRead=device.createBuffer({size:width*8,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+  smoothEncoder.copyTextureToBuffer({texture:output},{buffer:smoothRead,bytesPerRow:width*8},[width,1]);device.queue.submit([smoothEncoder.finish()]);
+  await smoothRead.mapAsync(GPUMapMode.READ);const smoothPixels=new Uint16Array(smoothRead.getMappedRange());let smoothError=0;
+  for(let i=0;i<width;i++)smoothError=Math.max(smoothError,Math.abs(half(smoothPixels[i*4])-(1-i/255)));
+  smoothRead.unmap();smoothRead.destroy();smoothAges.destroy();smoothBuffers.forEach(b=>b.destroy());
+  if(smoothError>.006)throw Error(`Source interpolation still has plateaus: ${smoothError}`);
+  checks.push(`PASS 625 samples from 2-fps source: smooth full-width interpolation, max error ${smoothError}`);
+  checks.push(await probeHybridRuntime(device));
+  const error=await device.popErrorScope();if(error)throw Error(error.message);
+  result.textContent=checks.join('\n');device.destroy();
+} catch(error) {result.textContent=`FAIL: ${error.stack??error}`;}
+</script>

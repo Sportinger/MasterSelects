@@ -60,6 +60,18 @@ rotation before atlas allocation. Do not allocate original 4K history for a
 resident frames' actual origin. Full-size export explicitly requests originals.
 
 The service shares decoding, not arbitrary processed images or every GPU atlas.
+`HybridTemporalRuntime` is an optional Slit Scan consumer of the same frame leases
+and `TemporalFrameUploader`. It preserves the absolute temporal grid but deduplicates
+decoded PTS. Per-pixel UV/delay evaluation stays on the GPU; oversized windows read
+back a compact usage bitset, consume resident frames first, then reuse atlas slots
+in source-ordered batches. RGBA16F additive accumulation reconstructs the two
+temporal interpolation contributions. Fully resident windows avoid demand readback
+and decoding. Derived demand/current graphs preserve authored mapping and current
+input processing. Export uses the existing temporal preparation barrier. Hybrid
+samples can follow source resolution (up to 8192 positions); the resident atlas
+remains bounded by memory and device array-layer limits. Hybrid currently uses
+original sources even when preview proxies are enabled.
+
 GPU resources belong to their device/consumer. Slit Scan's atlas has a separate
 640 MiB budget; browser decoder storage is additional. Allocate only requested
 history and optional lookahead, not a fixed maximum layer count. Temporal resource

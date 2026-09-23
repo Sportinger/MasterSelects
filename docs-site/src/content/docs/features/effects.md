@@ -55,6 +55,27 @@ Saved graph edits, effect bypass and numeric keyframes use the existing editor p
   Original or mixed fallback frames and the actual cache dimensions. Full-size
   export uses originals regardless of the preview Proxy switch. There is no
   rolling-history mode or playback-only temporal sampling fallback.
+- **Frame storage** (Sampling): **GPU cache** preserves the existing direct-atlas
+  mode and its 256-sample maximum. **Hybrid · bounded GPU memory** adds a persistent
+  GPU cache plus streaming for windows larger than its budget. Its Samples maximum
+  follows the source's longer dimension (1920 for 1920 × 1080, capped at 8192).
+  Equal source timestamps share one cached texture layer. All requested temporal
+  positions remain available: the GPU evaluates UV/delay per output pixel and
+  combines adjacent temporal weights. **Blend adjacent frames** interpolates
+  between real source timestamps within each grid position as well: increasing
+  Samples does not squeeze crossfades into narrow bands between repeated frames.
+  This is crossfading, not optical-flow synthesis. Fully resident windows use one composite
+  pass; larger windows read back only a compact frame-usage bitset, decode/upload
+  needed frames in source order, and accumulate successive batches into an RGBA16F
+  result. This has small half-float rounding differences from direct sampling.
+  Hybrid uses originals in both preview and export, including Small preview.
+  Its 640 MiB budget includes current/result buffers and upload allowances;
+  browser decoder storage and custom graph intermediate images are additional.
+  Preview holds the last finished result during preparation (the source input on
+  first load); export waits for the complete requested result. Streaming can be
+  slower than real-time. Status distinguishes temporal samples, distinct source
+  frames and resident frames. Higher sample counts do not invent missing video
+  frames: at 24 fps, a 2.5-second window has only about 60 distinct source frames.
 - **Source-frame cache**: historical samples use an absolute clip-time grid,
   with the current frame supplied by normal playback. Adjacent output frames reuse
   source PTS in a GPU texture array. A shared source-frame service coalesces requests

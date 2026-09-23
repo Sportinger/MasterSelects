@@ -407,8 +407,9 @@ export class EffectsPipeline {
         if (nativeTemporal && imagePlan && preparedImage && imageExternalResources) {
           const nativeHistory = this.temporalResources.resolveNative(effect,
             frameHistory?.scopeId ?? clock.scopeId, temporalSource, commandEncoder,
-            { view: effectInput, width: outputWidth, height: outputHeight });
-          if (effect.params.stabilizationAssetId && !nativeHistory?.current) continue;
+            { view: effectInput, width: outputWidth, height: outputHeight },
+            { graph: preparedImage.graph, sampler, timelineTime: timelineTimeSeconds, externalResources: imageExternalResources, effect });
+          if (!nativeHistory || (effect.params.stabilizationAssetId && !nativeHistory.current)) continue;
           if (nativeHistory?.current) graphInput = nativeHistory.current.view;
           if (nativeHistory) for (const resource of imagePlan.externalResources ?? []) {
             if (resource.kind === 'input-history') imageExternalResources.set(resource.id, nativeHistory[resource.part]);

@@ -20,10 +20,10 @@ export interface SourceTemporalRequest {
 
 /** Absolute clip-time grid: adjacent output frames share the same historical PTS.
  * Slot -1 is the current input, already decoded by the normal playback pipeline. */
-export function sourceTemporalWindow(request: Pick<SourceTemporalRequest, 'source' | 'horizon' | 'samples'>) {
+export function sourceTemporalWindow(request: Pick<SourceTemporalRequest, 'source' | 'horizon' | 'samples'>, limit = MAX_SOURCE_TEMPORAL_SAMPLES) {
   if (request.samples <= 2) return [{ age: request.horizon,
     time: temporalSourceTime(request.source, request.source.localTime - request.horizon) }];
-  const count = Math.max(3, Math.min(MAX_SOURCE_TEMPORAL_SAMPLES, Math.round(request.samples)));
+  const count = Math.max(3, Math.min(limit, Math.round(request.samples)));
   const step = Math.max(request.horizon, 0.00001) / (count - 2);
   const time = request.source.localTime;
   const tick = Math.floor(time / step + 1e-8);

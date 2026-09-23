@@ -10,11 +10,17 @@ import { Fragment, useSyncExternalStore } from 'react';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { getTemporalStatus, subscribeTemporalStatus } from '../../../effects/time/temporalResourcePreparation';
 import { SlitScanStabilizationControls } from './SlitScanStabilizationControls';
+import { hybridTemporalSampleLimit } from '../../../effects/time/sourceTemporalLimits';
 
 export function SlitScanControls({ params, onChange, clipId, effectInstanceId }: EffectControlProps) {
   const setPropertyValue = useTimelineStore(state => state.setPropertyValue);
   const masks = useTimelineStore(state => state.clips.find(clip => clip.id === clipId)?.masks);
   const files = useMediaStore(state => state.files);
+  const mediaId = useTimelineStore(state => {
+    const clip = state.clips.find(item => item.id === clipId); return clip?.source?.mediaFileId ?? clip?.mediaFileId;
+  });
+  const media = files.find(file => file.id === mediaId);
+  const sampleLimit = params.temporalStorage === 'hybrid' ? hybridTemporalSampleLimit(media?.width, media?.height) : 256;
   const selectedMask = masks?.find(mask => mask.id === params.protectionMask);
   const preparationStatus = useSyncExternalStore(subscribeTemporalStatus, () => getTemporalStatus(effectInstanceId ?? ''));
   const changeNumber = (key: string, value: number) => clipId && effectInstanceId
@@ -24,9 +30,9 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId }:
     <ResolveInspectorSection title="Preview quality" defaultOpen>
       <ResolveInspectorRow label="Quality"><InspectorSelect ariaLabel="Slit Scan preview quality"
         value={params.temporalResolution === 'native' ? 'full' : 'preview'}
-        options={[{ value: 'preview', label: 'Small preview · 160 px' }, { value: 'full', label: 'Full size · follows Proxy mode' }]}
+        options={[{ value: 'preview', label: 'Small preview · 160 px' }, { value: 'full', label: params.temporalStorage === 'hybrid' ? 'Full size · original' : 'Full size · follows Proxy mode' }]}
         onChange={value => onChange({ ...params, temporalResolution: value === 'full' ? 'native' : '160' })} /></ResolveInspectorRow>
-      <p className="effect-info">Both qualities use the same source times. Full size uses the full proxy resolution when timeline Proxy mode is on, otherwise the original resolution. Small preview scales to 160 px. Composition size stays unchanged.</p>
+      <p className="effect-info">{params.temporalStorage === 'hybrid' ? 'Hybrid uses original source frames. Full size preserves source resolution; Small preview scales to 160 px.' : 'Both qualities use the same source times. Full size follows timeline Proxy mode; Small preview scales to 160 px.'} Composition size stays unchanged.</p>
       {preparationStatus && <p className="effect-info" role="status">{preparationStatus}</p>}
     </ResolveInspectorSection>
     <SlitScanStabilizationControls params={params} onChange={onChange} clipId={clipId} effectInstanceId={effectInstanceId} />
@@ -58,16 +64,17 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId }:
             options={parameter.options!} onChange={value => onChange({ ...params, [key]: value })} />
         </ResolveInspectorRow>;
         const property = `effect.${effectInstanceId}.${key}` as AnimatableProperty;
+        const maximum = key === 'temporalSamples' ? sampleLimit : parameter.max!;
         return <Fragment key={key}>{key === 'angle' && <ResolveInspectorRow label="Scan direction">
           <InspectorSelect ariaLabel="Slit Scan scan direction"
             value={[0, 90, -90, 180].includes(slitScanNumber(params, key)) ? String(slitScanNumber(params, key)) : 'custom'}
             options={[{ value: '0', label: 'Left → right' }, { value: '90', label: 'Top → bottom' },
               { value: '-90', label: 'Bottom → top' }, { value: '180', label: 'Right → left' }, { value: 'custom', label: 'Custom angle', disabled: true }]}
             onChange={value => changeNumber(key, Number(value))} />
-        </ResolveInspectorRow>}<ResolveInspectorNumberRow label={parameter.label} value={slitScanNumber(params, key)}
-          defaultValue={Number(parameter.default)} min={parameter.min!} max={parameter.max!} step={parameter.step!}
+        </ResolveInspectorRow>}<ResolveInspectorNumberRow label={parameter.label} value={Math.min(maximum, slitScanNumber(params, key))}
+          defaultValue={Number(parameter.default)} min={parameter.min!} max={maximum} step={parameter.step!}
           keyframeToggle={parameter.animatable && clipId && effectInstanceId ? <KeyframeToggle clipId={clipId} property={property} value={slitScanNumber(params, key)} /> : undefined}
-          hardMin={parameter.min} hardMax={parameter.max} onChange={value => changeNumber(key, value)} /></Fragment>;
+          hardMin={parameter.min} hardMax={maximum} onChange={value => changeNumber(key, key === 'temporalSamples' ? Math.round(value) : value)} /></Fragment>;
       })}
     </ResolveInspectorSection>)}
     <p className="effect-info">Source sampling applies clip trim and speed. Earlier effects are not reevaluated: render them to a video first. Clip boundaries hold. Frames load through a bounded cache; export waits for the requested result. Full Res may need preparation time.</p>

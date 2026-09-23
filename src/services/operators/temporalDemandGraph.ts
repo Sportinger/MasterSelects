@@ -1,5 +1,15 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 
+/** Preserve authored processing of the sampler's current-image branch. */
+export function temporalCurrentGraph(graph: EffectOperatorGraph): EffectOperatorGraph {
+  const history = graph.nodes.filter(node => node.operator === 'image.sample-history');
+  const output = graph.nodes.filter(node => node.operator === 'image.output');
+  const current = graph.edges.find(edge => edge.to === history[0]?.id && edge.input === 'current');
+  if (history.length !== 1 || output.length !== 1 || !current) throw new Error('Hybrid rendering requires one connected temporal sampler.');
+  return { ...graph, edges: [...graph.edges.filter(edge => edge.to !== output[0].id),
+    { ...current, id: '__hybrid_current_output', to: output[0].id, input: 'image' }] };
+}
+
 /** Evaluate the authored temporal request itself: RG = source UV, B = output delay.
  * The editor graph stays unchanged, including custom maps and protection wiring.
  */

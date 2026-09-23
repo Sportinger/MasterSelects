@@ -12,47 +12,62 @@ import { useTimelineStore } from '../../stores/timeline';
 import { useTrackingStore } from '../../stores/trackingStore';
 import { SlitScanTrackingGap, slitScanSourceTransform, slitScanStabilization } from './slit-scan/stabilization';
 import type { SourceTemporalRequest } from './SourceTemporalRuntime';
+import { HybridTemporalRuntime, type HybridTemporalContext } from './HybridTemporalRuntime';
+import { hybridTemporalSampleLimit } from './sourceTemporalLimits';
 
 /** Device-local resource ownership for temporal graphs and their node previews. */
 export class TemporalEffectResources {
   private masks: SlitScanMaskRuntime;
   private maps: TimeMapMediaRuntime;
   private native: SourceTemporalRuntime;
+  private hybrid?: HybridTemporalRuntime;
+  private device: GPUDevice;
+  private onReady?: () => void;
   constructor(device: GPUDevice, onReady?: () => void) {
     this.masks = new SlitScanMaskRuntime(device);
     this.maps = new TimeMapMediaRuntime(device, onReady);
     this.native = new SourceTemporalRuntime(device, onReady);
+    this.device = device; this.onReady = onReady;
   }
 
   resolveNative(effect: { id: string; type: string; params: Record<string, unknown> },
     scopeId: string, source: TemporalClipSource | undefined, encoder: GPUCommandEncoder,
-    currentInput?: { view: GPUTextureView; width: number; height: number }) {
+    currentInput?: { view: GPUTextureView; width: number; height: number }, hybridContext?: HybridTemporalContext) {
     if (!source) throw new Error('Full-resolution temporal sampling requires a source video clip.');
     const media = useMediaStore.getState().files.find(file => file.id === source.mediaId);
     if (!media || media.type !== 'video') throw new Error('Full-resolution source video is unavailable.');
+    const limit = effect.params.temporalStorage === 'hybrid' ? hybridTemporalSampleLimit(media.width, media.height) : 256;
     const request: SourceTemporalRequest = { key: JSON.stringify([scopeId, effect.id]), effectId: effect.id, media, source,
-      horizon: Math.max(0, Math.min(4, Number(effect.params.delay ?? 1))), samples: Number(effect.params.temporalSamples ?? 32),
+      horizon: Math.max(0, Math.min(4, Number(effect.params.delay ?? 1))), samples: Math.max(2, Math.min(limit, Math.round(Number(effect.params.temporalSamples ?? 32)) || 32)),
       nearest: effect.params.temporalInterpolation === 'nearest', encoder, currentInput, keepPending: useTimelineStore.getState().isPlaying,
       useProxy: useMediaStore.getState().proxyEnabled && !isCollectingTemporalPreparations(),
       stabilization: slitScanStabilization(effect.params, useTrackingStore.getState().assets, source.mediaId, media.width!, media.height!),
       maxEdge: effect.params.temporalResolution === 'native' ? undefined : 160 };
+    const hybrid = effect.params.temporalStorage === 'hybrid';
+    if (hybrid) this.native.release(request.key); else this.hybrid?.release(request.key);
+    const resolve = (input: SourceTemporalRequest) => {
+      if (!hybrid) return this.native.resolve(input);
+      if (!hybridContext) throw new Error('Hybrid graph context is unavailable.');
+      this.hybrid ??= new HybridTemporalRuntime(this.device, this.onReady);
+      return this.hybrid.resolve(input, hybridContext);
+    };
     try {
       // Validate before replacing the cache, so an unavailable track does not
       // evict the working, unstabilized history on every preview frame.
       if (request.stabilization) {
         slitScanSourceTransform(request.stabilization, temporalSourceTime(source, source.localTime));
-        if (request.horizon > 0) for (const sample of sourceTemporalWindow(request)) {
+        if (request.horizon > 0) for (const sample of sourceTemporalWindow(request, limit)) {
           slitScanSourceTransform(request.stabilization, sample.time);
         }
       }
-      return this.native.resolve(request);
+      return resolve(request);
     }
     catch (error) {
       if (!(error instanceof SlitScanTrackingGap)) throw error;
       // One coordinate space for the whole window: never mix corrected and raw
       // frames. Preview and export use the same fallback for tracking gaps;
       // export still waits for every requested source frame in the collector.
-      const history = this.native.resolve({ ...request, stabilization: undefined });
+      const history = resolve({ ...request, stabilization: undefined });
       setTemporalStatus(effect.id, `Stabilization paused: ${error.message} Slit Scan remains active.`);
       return history ? { ...history, current: currentInput ? { view: currentInput.view, identity: 'unstabilized-input' } : undefined } : undefined;
     }
@@ -81,5 +96,5 @@ export class TemporalEffectResources {
     }
   }
 
-  destroy() { this.native.destroy(); this.maps.destroy(); this.masks.destroy(); }
+  destroy() { this.native.destroy(); this.hybrid?.destroy(); this.maps.destroy(); this.masks.destroy(); }
 }
