@@ -50,6 +50,7 @@ MasterSelects supports per-clip vector masks with preview-overlay editing, selec
 `enabled` controls whether a mask contributes to the rendered mask texture.
 `compositeEnabled: false` excludes the mask from clip compositing while allowing an effect to explicitly select it. It does not disable mask editing, animation, inversion, or feathering. Effect selection remains independent of this setting; choosing effect-only usage alone does not apply an effect. The built-in crop mask always uses its normal crop controls.
 `visible` controls only the preview overlay outline and edit handles.
+Deleting a mask selected as Slit Scan protection makes the effect continue without that protection. Undo restores the mask connection; a missing mask reference in a loaded project also falls back to no protection.
 `outlineColor` controls the SVG stroke color used for that mask in the preview overlay.
 Each `MaskVertex` can store `handleMode` as `none`, `mirrored`, or `split`.
 Per-mask inversion is baked into the generated mask texture before GPU compositing, so mixed normal/inverted masks on the same clip do not rely on a clip-wide inversion flag.

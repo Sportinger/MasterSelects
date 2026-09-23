@@ -15,7 +15,12 @@ export class SlitScanMaskRuntime {
 
   resolve(key: string, maskId: unknown, masks: readonly ClipMask[] | undefined,
     width: number, height: number, encoder: GPUCommandEncoder): ResolvedImageGraphExternalResource {
-    if (typeof maskId !== 'string' || !maskId) {
+    const mask = typeof maskId === 'string' && maskId
+      ? masks?.find(item => item.id === maskId)
+      : undefined;
+    // Deletion (or an older project with a dangling reference) removes only
+    // protection, not the effect. Keep the stored id so undo reconnects it.
+    if (!mask) {
       if (!this.empty) {
         this.empty = this.device.createTexture({ size: [1, 1], format: 'rgba8unorm',
           usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
@@ -23,8 +28,6 @@ export class SlitScanMaskRuntime {
       }
       return { view: this.empty.createView(), identity: 'slit-scan:no-protection' };
     }
-    const mask = masks?.find(item => item.id === maskId);
-    if (!mask) throw new Error('Slit Scan protection mask is unavailable for this source. Select an existing clip mask.');
     const [w, h] = inputHistorySize(width, height);
     const selected = [{ ...mask, mode: 'add' as const }];
     const options = { purpose: 'effect' as const, featherScale: w / width };
