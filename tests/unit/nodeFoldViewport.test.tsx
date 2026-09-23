@@ -8,6 +8,52 @@ import type { NodeGraph } from '../../src/types/nodeGraph';
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('viewport following the actual fold animation', () => {
+  it('tracks the displayed borders exactly regardless of intermediate render count', () => {
+    let now = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    const canvas = document.createElement('div');
+    Object.defineProperties(canvas, { clientWidth: { value: 1200 }, clientHeight: { value: 700 } });
+    const bounds = (right: number) => ({ left: 0, top: 0, right, bottom: 300 });
+    const visual = { current: fittedNodeViewport(bounds(900), 1200, 700) };
+    const change = vi.fn((value) => { visual.current = value; });
+    const group = { id: 'g', label: 'Group', proxyId: 'Source', nodeIds: ['Source'], collapsed: true };
+    const closed = { ...connectionFixture, groups: [group] };
+    const open = { ...closed, groups: [{ ...group, collapsed: false }] };
+    const view = renderHook(({ source, right, animating }) =>
+      useNodeFoldViewport({ current: canvas }, source, source, animating ? closed : source,
+        bounds(right), animating, visual, change),
+    { initialProps: { source: closed, right: 900, animating: false } });
+    view.rerender({ source: open, right: 900, animating: true });
+    now = 110;
+    view.rerender({ source: open, right: 3000, animating: true });
+    const halfway = fittedNodeViewport(bounds(3000), 1200, 700);
+    expect(visual.current).toEqual(halfway);
+    view.rerender({ source: open, right: 3000, animating: true });
+    expect(visual.current).toEqual(halfway);
+    now = 219;
+    view.rerender({ source: open, right: 3999, animating: true });
+    expect(visual.current).toEqual(fittedNodeViewport(bounds(3999), 1200, 700));
+    now = 220;
+    view.rerender({ source: open, right: 4000, animating: false });
+    expect(visual.current).toEqual(fittedNodeViewport(bounds(4000), 1200, 700));
+  });
+  it('starts automatic following at the current manual view without a jump', () => {
+    vi.spyOn(performance, 'now').mockReturnValue(0);
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    const canvas = document.createElement('div');
+    Object.defineProperties(canvas, { clientWidth: { value: 1200 }, clientHeight: { value: 700 } });
+    const visual = { current: { zoom: 0.2, panX: -170, panY: 90 } };
+    const original = { ...visual.current }, change = vi.fn(value => { visual.current = value; });
+    const group = { id: 'g', label: 'Group', proxyId: 'Source', nodeIds: ['Source'], collapsed: true };
+    const closed = { ...connectionFixture, groups: [group] };
+    const view = renderHook(({ source }) => useNodeFoldViewport({ current: canvas }, source, source, closed,
+      { left: 0, top: 0, right: 900, bottom: 300 }, true, visual, change), { initialProps: { source: closed } });
+    view.rerender({ source: { ...closed, groups: [{ ...group, collapsed: false }] } });
+    expect(visual.current.zoom).toBeCloseTo(original.zoom);
+    expect(visual.current.panX).toBeCloseTo(original.panX);
+    expect(visual.current.panY).toBeCloseTo(original.panY);
+  });
   it('follows agent-driven group changes without a click request, then yields to a wheel gesture', () => {
     vi.stubGlobal('matchMedia', () => ({ matches: false }));
     const canvas = document.createElement('div');

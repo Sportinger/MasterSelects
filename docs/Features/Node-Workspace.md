@@ -16,7 +16,7 @@ The node inspector starts collapsed. Agent graph reads and edits reveal the affe
 
 When added nodes extend beyond the visible canvas, the view fits the complete graph after their layout settles, including nodes arriving through agent tools or streamed node code. Additions already in view keep the camera unchanged. Parameter edits and removals do not reset manual navigation; a pointer or wheel gesture cancels a pending automatic fit. Group folding retains its own focus and restore behavior.
 
-When an agent opens or closes groups, the viewport follows the graph's changing bounds through the fold animation and settles on the complete visible graph. Manual pointer or wheel navigation releases the automatic camera follow.
+When an agent opens or closes groups, the viewport follows the same animated bounds as the effect and color group outlines, without a separate camera lag or final catch-up jump. New offscreen nodes are framed during their placement animation. Manual pointer or wheel navigation releases the automatic camera follow.
 
 During construction, flow-layout groups arrange unconnected nodes side by side in a compact grid, sized from their card dimensions. Once connected, nodes return to the usual directed flow layout. Explicit manual positions inside the group stay fixed. Each addition reflows the outer chain so the growing group stays between Source on the left and Output on the right, moving Output outward as needed.
 

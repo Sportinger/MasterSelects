@@ -16,12 +16,15 @@ function setup() {
   return { ...hook, element, fit };
 }
 describe('node graph growth framing', () => {
-  it('fits new offscreen nodes after layout settles, but not ordinary changes or removals', () => {
+  it('follows offscreen additions during layout, but not ordinary changes or removals', () => {
     const { rerender, fit } = setup();
     rerender({ value: graph('source', 'mix'), bounds: large, animating: true });
-    expect(fit).not.toHaveBeenCalled();
-    rerender({ value: graph('source', 'mix'), bounds: large, animating: false });
     expect(fit).toHaveBeenCalledExactlyOnceWith(large);
+    const intermediate = { ...large, right: 1700 };
+    rerender({ value: graph('source', 'mix'), bounds: intermediate, animating: true });
+    expect(fit).toHaveBeenLastCalledWith(intermediate);
+    rerender({ value: graph('source', 'mix'), bounds: large, animating: false });
+    expect(fit).toHaveBeenLastCalledWith(large);
     fit.mockClear();
     rerender({ value: graph('source', 'mix'), bounds: { ...large, right: 1800 }, animating: false });
     rerender({ value: graph('source'), bounds: large, animating: false });
@@ -32,6 +35,7 @@ describe('node graph growth framing', () => {
     rerender({ value: graph('source', 'mix'), bounds: small, animating: false });
     expect(fit).not.toHaveBeenCalled();
     rerender({ value: graph('source', 'mix', 'output'), bounds: large, animating: true });
+    fit.mockClear();
     act(() => element.dispatchEvent(new Event('wheel')));
     rerender({ value: graph('source', 'mix', 'output'), bounds: large, animating: false });
     expect(fit).not.toHaveBeenCalled();

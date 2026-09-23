@@ -10,7 +10,7 @@ export function useNodeFoldViewport(canvas: RefObject<HTMLDivElement | null>, so
   shown: NodeGraph, bounds: NodeBounds, animating: boolean, visual: RefObject<Viewport>, setViewport: (next: Viewport) => void,
   groupBounds?: ReadonlyMap<string, NodeBounds>) {
   const savedViews = useRef(new Map<string, Viewport>());
-  const pending = useRef<{ graph: NodeGraph; collapsed: boolean; groupId?: string; restore?: Viewport; from: Viewport; started: number; width: number; height: number; automatic?: boolean } | null>(null);
+  const pending = useRef<{ graph: NodeGraph; collapsed: boolean; groupId?: string; restore?: Viewport; from: Viewport; initialFit?: Viewport; started: number; width: number; height: number; automatic?: boolean } | null>(null);
   const previousFolds = useRef({ graph: source, states: new Map(source.groups?.map(group => [group.id, !!group.collapsed])) });
   const sourceFoldsChanged = previousFolds.current.graph.id === source.id && !!source.groups?.some(group =>
     previousFolds.current.states.has(group.id) && previousFolds.current.states.get(group.id) !== !!group.collapsed);
@@ -55,17 +55,19 @@ export function useNodeFoldViewport(canvas: RefObject<HTMLDivElement | null>, so
     const focusBounds = follow.groupId && !follow.collapsed ? groupBounds?.get(follow.groupId) : bounds;
     if (!focusBounds) { if (finished) cancel(); return; }
     const fit = follow.restore ?? fittedNodeViewport(focusBounds, follow.width, follow.height);
-    if (follow.automatic) {
-      const current = visual.current, amount = finished ? 1 : 0.28;
-      setViewport({ zoom: current.zoom + (fit.zoom - current.zoom) * amount,
-        panX: current.panX + (fit.panX - current.panX) * amount,
-        panY: current.panY + (fit.panY - current.panY) * amount });
-      if (finished) cancel();
-      return;
-    }
-    setViewport({ zoom: follow.from.zoom + (fit.zoom - follow.from.zoom) * t,
+    if (follow.restore) setViewport({ zoom: follow.from.zoom + (fit.zoom - follow.from.zoom) * t,
       panX: follow.from.panX + (fit.panX - follow.from.panX) * t,
       panY: follow.from.panY + (fit.panY - follow.from.panY) * t });
+    else {
+      // The bounds already carry the layout animation's easing. Follow that
+      // exact frame, fading only the user's initial framing offset. A second
+      // smoothing loop would lag behind the group borders and snap on finish.
+      const initial = follow.initialFit ??= fit;
+      const residual = (1 - t) * fit.zoom / initial.zoom;
+      setViewport({ zoom: fit.zoom + (follow.from.zoom - initial.zoom) * residual,
+        panX: fit.panX + (follow.from.panX - initial.panX) * residual,
+        panY: fit.panY + (follow.from.panY - initial.panY) * residual });
+    }
     if (finished) cancel();
   }, [source, target, shown, bounds, groupBounds, animating, canvas, cancel, setViewport, sourceFoldsChanged, visual]);
   return { request, cancel, forget, following: pending.current !== null || sourceFoldsChanged };

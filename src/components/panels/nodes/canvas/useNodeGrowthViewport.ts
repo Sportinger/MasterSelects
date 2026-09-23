@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 import type { NodeGraph } from '../../../../types/nodeGraph';
 import { FIT_MARGIN, type NodeBounds, type Viewport } from './canvasGeometry';
 
-/** Reframe additions once their placement settles, without undoing manual navigation. */
+/** Follow additions using the same displayed bounds as the animated group frames. */
 export function useNodeGrowthViewport(canvas: RefObject<HTMLDivElement | null>, graph: NodeGraph,
   bounds: NodeBounds, animating: boolean, visual: RefObject<Viewport>, fit: (bounds: NodeBounds) => void, preserveFoldView = true) {
   const known = useRef({ graphId: graph.id, ids: new Set(graph.nodes.map(node => node.id)),
@@ -28,8 +28,8 @@ export function useNodeGrowthViewport(canvas: RefObject<HTMLDivElement | null>, 
     known.current = { graphId: graph.id, ids: new Set(graph.nodes.map(node => node.id)),
       folds: new Map(graph.groups?.map(group => [group.id, !!group.collapsed])) };
     const element = canvas.current;
-    if (!pending.current || animating || !element || !element.clientWidth || !element.clientHeight) return;
-    pending.current = false;
+    if (!pending.current || !element || !element.clientWidth || !element.clientHeight) return;
+    if (!animating) pending.current = false;
     const view = visual.current;
     // Keep the current view when additions already fit. Parameter/edge changes,
     // removals and manual moves alone never trigger a camera reset.
