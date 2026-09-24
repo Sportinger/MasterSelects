@@ -129,7 +129,8 @@ public final class MainActivity extends ComponentActivity {
             });
             String bridge;
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(getAssets().open("android-bridge.js"), StandardCharsets.UTF_8))) {
-                bridge = reader.lines().collect(Collectors.joining("\n"));
+                bridge = reader.lines().collect(Collectors.joining("\n"))
+                    .replace("__MASTERSELECTS_ANDROID_SDK__", Integer.toString(android.os.Build.VERSION.SDK_INT));
             }
             WebViewCompat.addDocumentStartJavaScript(editor, bridge, Set.of(EditorUrlPolicy.ORIGIN));
             editor.setDownloadListener(this::downloadUrl);

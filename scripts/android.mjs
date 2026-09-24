@@ -20,7 +20,7 @@ const option = name => {
 const sdk = [process.env.ANDROID_HOME, process.env.ANDROID_SDK_ROOT,
   path.join(homedir(), 'android-sdk'), path.join(homedir(), 'AppData/Local/Android/Sdk'),
   path.join(homedir(), 'Library/Android/sdk'), path.join(homedir(), 'Android/Sdk')]
-  .find(candidate => candidate && existsSync(path.join(candidate, 'platforms/android-36')));
+  .find(candidate => candidate && ['android-37', 'android-37.0'].some(platform => existsSync(path.join(candidate, 'platforms', platform))));
 const env = { ...process.env, ...(sdk ? { ANDROID_HOME: sdk } : {}) };
 
 // Batch files need cmd.exe on Windows. Arguments to those calls are internally
@@ -45,7 +45,7 @@ function run(executable, args, { capture = false } = {}) {
 }
 
 function requireSdk() {
-  if (!sdk) throw new Error('Install Android SDK platform 36 and build tools 35.0.0, then set ANDROID_HOME. See docs/Features/Android-App.md.');
+  if (!sdk) throw new Error('Install Android SDK platform 37.0 and build tools 36.0.0, then set ANDROID_HOME. See docs/Features/Android-App.md.');
 }
 
 async function writeLinks(packageName, fingerprints, filename) {
@@ -62,7 +62,7 @@ async function gradle(tasks) {
 
 async function main() {
   if (command === 'doctor') {
-    console.log(`Android SDK 36: ${sdk || 'NOT FOUND (set ANDROID_HOME)'}`);
+    console.log(`Android SDK 37: ${sdk || 'NOT FOUND (set ANDROID_HOME)'}`);
     console.log(`Java: ${(await run('java', ['-version'], { capture: true })).split('\n')[0]}`);
     console.log('Build: node scripts/android.mjs build');
     if (sdk) console.log(await run(path.join(sdk, 'platform-tools', windows ? 'adb.exe' : 'adb'), ['devices', '-l'], { capture: true }));

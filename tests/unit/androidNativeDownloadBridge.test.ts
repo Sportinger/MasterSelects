@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 const script = readFileSync('android/app/src/main/assets/android-bridge.js', 'utf8');
 
-function bridge(rejectBegin = false) {
+function bridge(rejectBegin = false, androidApi = 37) {
   const calls: Array<Record<string, unknown>> = [];
   class Anchor { href = ''; download = ''; click() {} }
   const native = {
@@ -16,7 +16,8 @@ function bridge(rejectBegin = false) {
       queueMicrotask(() => native.onmessage({ data: JSON.stringify({ id: call.id, error: rejectBegin && call.op === 'begin' ? 'Save cancelled' : null }) }));
     },
   };
-  const window = { MasterSelectsNative: native, alert: vi.fn(), top: null as unknown, __masterselectsAndroid: undefined as unknown };
+  const window = { MasterSelectsNative: native, alert: vi.fn(), top: null as unknown, __masterselectsAndroid: undefined as unknown,
+    showDirectoryPicker: vi.fn(), showSaveFilePicker: vi.fn(), showOpenFilePicker: vi.fn() };
   window.top = window;
   const fakeUrl = { createObjectURL: (_blob?: NodeBlob) => 'blob:test', revokeObjectURL: vi.fn() };
   const context = {
@@ -24,11 +25,22 @@ function bridge(rejectBegin = false) {
     crypto: { randomUUID: () => 'test-transfer' }, fetch: vi.fn(), setTimeout, clearTimeout, Uint8Array,
     btoa: (value: string) => Buffer.from(value, 'binary').toString('base64'),
   };
-  runInNewContext(script, context);
+  runInNewContext(script.replace('__MASTERSELECTS_ANDROID_SDK__', String(androidApi)), context);
   return { calls, window, Anchor, fakeUrl, app: window.__masterselectsAndroid as { download: (blob: NodeBlob, name: string) => Promise<void> } };
 }
 
 describe('packaged Android export transport', () => {
+  it('lets older Android devices fall back to OPFS instead of exposing unusable pickers', () => {
+    const { window } = bridge(false, 36);
+    expect(window.showDirectoryPicker).toBeUndefined();
+    expect(window.showSaveFilePicker).toBeUndefined();
+    expect(window.showOpenFilePicker).toBeUndefined();
+  });
+  it('preserves the system pickers on Android 17', () => {
+    const { window } = bridge(false, 37);
+    expect(typeof window.showDirectoryPicker).toBe('function');
+    expect(typeof window.showSaveFilePicker).toBe('function');
+  });
   it('sends an exact binary file as acknowledged chunks followed by finalization', async () => {
     const { app, calls } = bridge();
     const bytes = Uint8Array.from({ length: 600000 }, (_, index) => index % 256);

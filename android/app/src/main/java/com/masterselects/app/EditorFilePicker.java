@@ -49,9 +49,13 @@ final class EditorFilePicker {
         callback = next;
         try {
             Intent intent = createPickerIntent(params);
+            if (BuildConfig.DEBUG) android.util.Log.d("MasterSelectsPicker", "mode=" + params.getMode() + " action=" + intent.getAction());
             selectingFolder = Intent.ACTION_OPEN_DOCUMENT_TREE.equals(intent.getAction());
             launcher.launch(intent);
-        } catch (RuntimeException error) { callback = null; selectingFolder = false; next.onReceiveValue(null); }
+        } catch (RuntimeException error) {
+            android.util.Log.e("MasterSelectsPicker", "Could not launch the requested picker", error);
+            callback = null; selectingFolder = false; next.onReceiveValue(null);
+        }
         return true;
     }
     static Intent createPickerIntent(WebChromeClient.FileChooserParams params) {

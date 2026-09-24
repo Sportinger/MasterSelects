@@ -2,10 +2,18 @@ package com.masterselects.app;
 
 import android.content.Intent;
 import android.webkit.WebChromeClient;
-import junit.framework.TestCase;
+import org.junit.Test;
+import static org.junit.Assert.*;
 
 /** Run on Android: Intent behavior and the WebView chooser contract need the framework. */
-public final class EditorFilePickerTest extends TestCase {
+public final class EditorFilePickerTest {
+    @Test
+    public void testApplicationOptsIntoAndroid17FileSystemAccess() {
+        int target = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+            .getTargetContext().getApplicationInfo().targetSdkVersion;
+        assertTrue("WebView cancels directory requests below target SDK 37", target >= 37);
+    }
+    @Test
     public void testProjectDirectoryUsesUnfilteredTreePicker() {
         Intent result = EditorFilePicker.createPickerIntent(params(2, new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)));
         assertEquals(Intent.ACTION_OPEN_DOCUMENT_TREE, result.getAction());
@@ -14,6 +22,7 @@ public final class EditorFilePickerTest extends TestCase {
         assertNull(result.getExtras());
     }
 
+    @Test
     public void testWritableFileRetainsDocumentActionAndGrants() {
         Intent request = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("application/json")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
@@ -23,6 +32,7 @@ public final class EditorFilePickerTest extends TestCase {
         assertEquals("application/json", result.getType());
     }
 
+    @Test
     public void testSaveCreatesDocumentInsteadOfSelectingAnExistingFile() {
         Intent result = EditorFilePicker.createPickerIntent(params(3,
             new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("video/mp4")));
@@ -30,6 +40,7 @@ public final class EditorFilePickerTest extends TestCase {
         assertEquals("export.mp4", result.getStringExtra(Intent.EXTRA_TITLE));
     }
 
+    @Test
     public void testMultipleImportPreservesMimeFilters() {
         Intent request = new Intent(Intent.ACTION_GET_CONTENT).setType("video/*")
             .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)

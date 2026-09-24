@@ -5,7 +5,7 @@
 The Android project packages the full built editor inside Android WebView. Local
 editing starts without internet, including the bundled FFmpeg WASM tier. Cloud AI,
 login, credits, media search and externally hosted models still need a connection.
-This is a development app, not a published Play Store release.
+The app is available to invited Google Play internal testers; it is not a public release.
 
 ## Runtime
 
@@ -26,8 +26,12 @@ This is a development app, not a published Play Store release.
 - File selection preserves WebView's requested operation: import, writable file,
   **Save as**, or Android's folder picker. Folder requests have no file MIME filter.
   Selected document/tree URIs retain only the read/write grants returned by Android.
-  Recent WebViews that expose File System Access can therefore use project folders;
-  older versions use the existing app-private storage fallback. Android restricts
+  Android 17/API 37 with a supporting WebView can use project folders. The app
+  targets API 37 to opt into WebView's File System Access compatibility change;
+  targeting 36 silently cancels folder requests before the native callback.
+  On Android 16 and below, the native startup script hides the nonfunctional
+  picker APIs so the editor uses its existing app-private OPFS storage fallback.
+  Android restricts
   selection of storage roots and some system folders. Camera/microphone permissions
   are requested on use.
 - Blob/data-URL exports use Android **Save as**, then offer **Share**. Transfers use
@@ -61,10 +65,10 @@ still needs real-device integration checks.
 
 ## Build
 
-Install the repo's pinned Node version, JDK 17, Android SDK platform 36, build tools
-35.0.0 or later, and platform-tools. Set `ANDROID_HOME`; common per-user SDK paths
-are also recognized. Gradle 8.13 is pinned with distribution SHA-256 verification;
-AGP is 8.13.2.
+Install the repo's pinned Node version, JDK 17, Android SDK platform 37.0, build tools
+36.0.0 or later, and platform-tools. Set `ANDROID_HOME`; common per-user SDK paths
+are also recognized. Gradle 9.3.1 is pinned with distribution SHA-256 verification;
+AGP is 9.1.1.
 
 ```sh
 npm ci
@@ -150,3 +154,11 @@ References: [Android local web content](https://developer.android.com/develop/ui
 [WebView](https://developer.android.com/develop/ui/views/layout/webapps/webview),
 [WebGPU compatibility](https://developer.chrome.com/blog/new-in-webgpu-146),
 [Screen Wake Lock](https://developer.chrome.com/docs/capabilities/web-apis/wake-lock).
+
+## Device verification
+
+On Pixel 10 Pro with Android 17 and WebView 152, project-folder selection, native
+video import, explicit save, and restoring the saved media entry after an app
+restart were verified. Five on-device picker contract tests and five bridge
+unit tests pass. Android 16 and older storage fallback is covered by bridge
+unit tests; it still needs a physical-device run.

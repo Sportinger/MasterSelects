@@ -1,5 +1,12 @@
 (() => {
   if (window !== window.top || !window.MasterSelectsNative) return;
+  // WebView can expose picker functions while cancelling every request on
+  // Android < 17. Let the editor use its existing OPFS backend on those devices.
+  if (Number('__MASTERSELECTS_ANDROID_SDK__') < 37) {
+    for (const name of ['showDirectoryPicker', 'showSaveFilePicker', 'showOpenFilePicker']) {
+      Object.defineProperty(window, name, { configurable: true, value: undefined });
+    }
+  }
   const pending = new Map();
   let nextId = 0;
   let saving = false;

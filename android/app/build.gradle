@@ -13,12 +13,12 @@ if (signingValues.values().any { it != null } && !hasSigning) {
 
 android {
     namespace 'com.masterselects.app'
-    compileSdk 36
+    compileSdk 37
 
     defaultConfig {
         applicationId 'com.masterselects.app'
         minSdk 29
-        targetSdk 36
+        targetSdk 37
         versionCode releaseCode
         versionName editorPackage.version
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
@@ -62,7 +62,7 @@ dependencies {
 
 android {
     androidResources { noCompress += ['wasm', 'gz', 'mp4', 'webm', 'mov', 'onnx'] }
-    buildFeatures { buildConfig true }
+    buildFeatures { buildConfig true; resValues true }
 }
 tasks.register('requireEditorBundle') {
     doLast {
