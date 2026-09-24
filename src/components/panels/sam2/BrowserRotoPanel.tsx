@@ -9,6 +9,8 @@ import { RotoPreview } from './RotoPreview';
 import { projectFileService } from '../../../services/projectFileService';
 import { rotoRuntime } from '../../../services/roto/rotoRuntime';
 import { encodeRotoMaskVideo } from '../../../services/roto/rotoMaskVideo';
+import { createRotoClipMask } from '../../../services/roto/rotoClipMask';
+import { trackingTimelineTime } from '../../../services/planarTracking/trackingTimelineTime';
 import { surfaceSourceTime } from '../../../services/planarTracking/surfaceEffects';
 import type { SurfaceDecodedFrame } from '../../../services/planarTracking/surfaceFrameReader';
 import type { RotoMask, RotoPoint } from '../../../services/roto/rotoTypes';
@@ -107,9 +109,17 @@ export function BrowserRotoPanel() {
       points, pointTime: frame?.time, onPoint: (point, time) => void selectInPreview(point, time) });
   }, [mainPreview, supported, clip?.id, sourceId, compositionId, media?.file, media?.url, clip?.inPoint, clip?.outPoint, edges, busy, label, points, frame, count]);
   const track = (direction: 1 | -1) => run(async signal => {
-    const s = session.current; if (!s) return;
+    const s = session.current; if (!s || !clip) return;
+    const timeline = useTimelineStore.getState();
+    if (timeline.isExporting || timeline.tracks.find(t => t.id === clip.trackId)?.locked) throw new Error('The clip is locked or unavailable.');
+    timeline.pause(); setMainPreview(true);
+    const fps = useMediaStore.getState().compositions.find(c => c.id === compositionId)?.frameRate ?? 30;
     await s.track(direction, seconds, signal, (decoded, selected, fraction) => {
+      const state = useTimelineStore.getState(), current = state.clips.find(c => c.id === clip.id);
+      signal.throwIfAborted();
+      if (!current || useMediaStore.getState().activeCompositionId !== compositionId) throw new Error('The tracked clip is no longer active.');
       display(decoded, selected); report(fraction, `Tracking source ${decoded.time.toFixed(3)} s · ${s.masks.size} masks`);
+      state.setPlayheadPosition(trackingTimelineTime(current, decoded, state.getClipKeyframes(current.id), fps, state.playheadPosition));
     }, report);
     setMessage(`Tracking complete. ${s.masks.size} source frames. Scrub below to inspect or correct.`);
   });
@@ -169,6 +179,12 @@ export function BrowserRotoPanel() {
             <button disabled={busy || !points.some(p => p.label === 1)} onClick={() => void track(1)}>Track forward</button>
             <button disabled={busy || count < 2} onClick={() => void exportMask()}>Mask video to Media</button>
             <button disabled={busy || count < 2} onClick={() => void exportMask(true)}>Cutout to Media</button>
+            <button disabled={busy || !count} onClick={() => void run(async () => {
+              const s = session.current; if (!s || !clip) return;
+              createRotoClipMask(clip.id, compositionId, [...s.masks.values()], s.edges);
+              setMainPreview(false);
+              setMessage('Animated clip mask created. Edit it under Properties > Masks. It is saved with the project; untracked frames are transparent.');
+            })}>Convert to clip mask</button>
           </div>
           <div className="roto-actions">
             <button disabled={busy || !count} onClick={() => { session.current?.clearMasks(); setCount(0); pointsRef.current = []; setPoints([]); setMask(undefined); setMessage('Masks and reference points for this clip were cleared.'); }}>Clear clip masks</button>

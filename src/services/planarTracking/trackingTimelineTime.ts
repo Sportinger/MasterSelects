@@ -4,7 +4,7 @@ import type { Keyframe } from '../../types/keyframes';
 import { surfaceSourceTime } from './surfaceEffects';
 
 /** Find an output frame displaying this source sample, including reverse/retimed clips. */
-export function trackingTimelineTime(clip:TimelineClip,sample:SurfaceSample,keys:Keyframe[],fps:number,current:number):number {
+export function trackingTimelineTime(clip:TimelineClip,sample:Pick<SurfaceSample, 'time' | 'duration'>,keys:Keyframe[],fps:number,current:number):number {
   const count=Math.min(36000,Math.ceil(clip.duration*fps));
   let best=Math.max(0,Math.min(clip.duration,current-clip.startTime)),error=Infinity;
   for(let i=0;i<count;i++) {

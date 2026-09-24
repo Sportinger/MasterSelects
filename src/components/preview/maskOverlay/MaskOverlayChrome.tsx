@@ -1,4 +1,5 @@
-import type { MouseEvent as ReactMouseEvent, RefObject } from 'react';
+import { useMemo, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
+import { maskVertexSizing } from './maskVertexSizing';
 import { inferMaskVertexHandleMode } from '../../../utils/maskVertexHandles';
 import type { ClipMask } from "../../../types/masks";
 import { createMaskEdgeId, getMaskEdgeFeather } from '../../../utils/maskEdgeFeathers';
@@ -113,9 +114,8 @@ export function MaskOverlayChrome({
     displayWidth > 0 ? canvasWidth / displayWidth : 1,
     displayHeight > 0 ? canvasHeight / displayHeight : 1,
   ) / zoomScale;
-  const vertexSize = 8 * unitsPerScreenPx;
   const handleSize = 6 * unitsPerScreenPx;
-  const vertexHitRadius = 14 * unitsPerScreenPx;
+  const vertexSizes = useMemo(() => maskVertexSizing(canvasVertices, unitsPerScreenPx), [canvasVertices, unitsPerScreenPx]);
   const thinStrokeWidth = unitsPerScreenPx;
   const outlineStrokeWidth = 2 * unitsPerScreenPx;
   const ringStrokeWidth = 1.5 * unitsPerScreenPx;
@@ -426,6 +426,9 @@ export function MaskOverlayChrome({
         const isClosableFirst = isFirst &&
           (maskEditMode === 'drawing' || maskEditMode === 'drawingPen') &&
           activeMask.vertices.length >= 3;
+        const emphasized = isHovered || isClosableFirst || (isSelected && selectedVertexIds.size === 1);
+        const vertexSize = emphasized ? 8 * unitsPerScreenPx : vertexSizes[index].size;
+        const vertexHitRadius = emphasized ? 14 * unitsPerScreenPx : vertexSizes[index].hitRadius;
 
         return (
           <g
@@ -473,7 +476,7 @@ export function MaskOverlayChrome({
               height={vertexSize}
               fill={isSelected ? '#2997E5' : '#fff'}
               stroke={isClosableFirst ? '#ff4d4d' : '#2997E5'}
-              strokeWidth={isClosableFirst ? outlineStrokeWidth : thinStrokeWidth}
+              strokeWidth={isClosableFirst ? outlineStrokeWidth : Math.min(thinStrokeWidth, vertexSize * .2)}
               cursor={isClosableFirst ? 'crosshair' : 'move'}
               className={`mask-vertex-point ${isSelected ? 'selected' : ''}`}
               data-guided-target={`mask-vertex:${activeMask.id}:${vertex.id}`}

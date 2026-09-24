@@ -212,7 +212,9 @@ The ONNX conversion is from `square-zero-labs/sam2.1-tiny-video-onnx`, revision
    Add points on a problem frame and rerun the relevant direction. Existing user
    anchors reinitialize the model when reached; masks outside the pass are kept.
 5. The main Preview shows the blue mask at the current playhead, accounting for
-   clip position, scale, rotation, anchor and source crop. Scrub to inspect tracked
+   clip position, scale, rotation, anchor and source crop. Tracking pauses playback
+   and moves the playhead to each computed source frame, so the video and blue
+   selection advance in the main Preview. Scrub to inspect tracked
    frames, then click to correct. Selection is disabled during playback, processing
    or on a locked track. **Edit in Preview** returns normal Preview interactions
    when turned off; the overlay is never included in composition exports.
@@ -227,6 +229,16 @@ The ONNX conversion is from `square-zero-labs/sam2.1-tiny-video-onnx`, revision
    **Cutout to Media** instead exports source RGB with a VP9/WebM alpha sidecar in
    the container. Both exports exclude source audio and clip effects and use source
    timing; position or retime the imported asset to match an edited timeline clip.
+7. **Convert to clip mask** creates an animated, editable mask under
+   **Properties > Masks**, with held path keyframes at composition frame times.
+   Source trims, reverse playback and speed curves are baked into those times.
+   The mask intersects existing clip masks and is empty outside tracked coverage.
+   Conversion preserves pixel contours, holes and disconnected regions as one
+   path with retraced connecting segments; edge softness becomes editable mask
+   feathering and can differ slightly from the bitmap preview. The new mask is
+   saved with the project and conversion is one undo step. Later tracking changes
+   do not update it automatically. Conversion is limited to 18,000 output frames
+   and 300,000 stored vertices; use a shorter clip or mask-video export above that.
 
 The source preview is limited to a 1024-pixel edge. Segmentation retains holes
 and disconnected regions, but produces binary membership rather than estimated
@@ -234,7 +246,8 @@ hair/transparency alpha. Edge softness is geometric feathering, not learned
 matting. Image-warping effects are not inverted by the main Preview selection;
 use the raw Detail preview for those clips. The H.264 mask video is lossy. Masks, correction points and edge settings
 survive panel and clip switches in the same editor tab; inactive decoders are
-released. Export before reloading, closing the editor or changing projects.
+released. Export or convert to a clip mask before reloading, closing the editor
+or changing projects. Converted clip masks remain in the saved project.
 Replacing a source or changing its trim resets that clip's session. **Clear clip
 masks** frees its mask memory explicitly. The shared mask budget is 256 MiB;
 tracking stops at the budget without silently evicting other clips. Each pass covers

@@ -321,7 +321,7 @@ export function PreviewCanvasMount({
                   canvasHeight={effectiveResolution.height}
                   displayWidth={canvasSize.width}
                   displayHeight={canvasSize.height}
-                  viewZoom={maskNavigationMode ? viewZoom : 1}
+                  viewZoom={viewTransform.transform ? viewZoom : 1}
                 />
               )}
               {isEditableSource && sam2Active && (
