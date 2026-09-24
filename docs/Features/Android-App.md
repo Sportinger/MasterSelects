@@ -18,12 +18,18 @@ This is a development app, not a published Play Store release.
   reach the hosted backend. Missing local resources return 404 instead of silently
   mixing editor versions. External models retain their original network URLs.
   Local responses include COOP/COEP; actual isolation support depends on WebView.
-- Projects use the existing OPFS backend in the app's WebView profile. Chrome
-  projects and cookies are separate. Installation does not migrate or clear them.
+- Projects use a selected Android folder when File System Access is available,
+  otherwise the existing OPFS backend in the app's WebView profile. Chrome
+  browser storage and cookies are separate. Installation does not migrate or clear them.
   Copy/reimport media when moving a project. Uninstalling or clearing app data
   removes app-local projects, so keep external backups.
-- Import uses Android's document picker with multiple selection. Only selected
-  content URIs are returned. Camera/microphone permissions are requested on use.
+- File selection preserves WebView's requested operation: import, writable file,
+  **Save as**, or Android's folder picker. Folder requests have no file MIME filter.
+  Selected document/tree URIs retain only the read/write grants returned by Android.
+  Recent WebViews that expose File System Access can therefore use project folders;
+  older versions use the existing app-private storage fallback. Android restricts
+  selection of storage roots and some system folders. Camera/microphone permissions
+  are requested on use.
 - Blob/data-URL exports use Android **Save as**, then offer **Share**. Transfers use
   acknowledged 256 KiB chunks and verify the total byte count. Cancelled/failed
   saves remove the partial destination where the provider supports deletion.
@@ -114,6 +120,15 @@ programs must be addressed before store release. Gradle wrapper and AndroidX
 dependencies retain their upstream licenses; editor licensing remains unchanged.
 
 ## Verification and limits
+
+`EditorFilePickerTest` is an Android instrumentation regression test for folder,
+writable-file, save and multi-file requests. From `android/`, build with
+`./gradlew :app:assembleDebugAndroidTest`, then install the test APK with
+`adb -s <serial> install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk`.
+With the current debug app already installed, run
+`adb -s <serial> shell am instrument -w -r com.masterselects.app.debug.test/androidx.test.runner.AndroidJUnitRunner`.
+Use `gradlew.bat` on Windows. This manual invocation preserves the installed app
+and its data; Gradle's `connectedDebugAndroidTest` uninstalls the app during cleanup.
 
 Automated checks cover URL/origin restrictions, signing identities, binary chunk
 integrity, cancellation and screen-lock races. Device acceptance must cover offline
