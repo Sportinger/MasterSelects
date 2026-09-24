@@ -56,8 +56,7 @@ export async function openRecentProject(context: RecentProjectOpeningContext, id
   }
 
   if (!storedHandle || storedHandle.kind !== 'directory') {
-    await removeRecentProject(id);
-    return false;
+    throw new Error(`The saved folder access for "${recentProject.name}" is unavailable. Use Open existing to reconnect its project folder. The recent entry has been kept.`);
   }
 
   const projectHandle = storedHandle as FileSystemDirectoryHandle;
@@ -67,13 +66,13 @@ export async function openRecentProject(context: RecentProjectOpeningContext, id
   }
 
   if (permission !== 'granted') {
-    return false;
+    throw new Error(`Folder access was not granted for "${recentProject.name}". Retry or use Open existing to reconnect it.`);
   }
 
   context.activateFsaBackend();
   const loaded = await context.coreService.loadProject(projectHandle);
   if (!loaded) {
-    await removeRecentProject(id);
+    throw new Error(`"${recentProject.name}" could not be read. Its folder link has been kept; retry or choose its folder with Open existing.`);
   }
   return loaded;
 }

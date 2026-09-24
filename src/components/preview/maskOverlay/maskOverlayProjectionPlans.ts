@@ -3,7 +3,7 @@ import type { ClipTransform } from "../../../types/timelineCore";
 import type { ClipMask, MaskVertex } from "../../../types/masks";
 import { getMotionRenderSize } from "../../../engine/motion/MotionTypes";
 import { getEffectiveScale } from "../../../utils/transformScale";
-import { transformMaskPoint, type MaskTransformSize } from '../../../utils/maskTransform';
+import { prepareMaskPointTransform, type MaskTransformSize } from '../../../utils/maskTransform';
 import { type LayerUvProjectionParams } from '../editModeOverlayMath';
 import type {
   CanvasMaskVertex,
@@ -118,7 +118,8 @@ export function buildProjectedMaskPath(
 ): string {
   if (mask.vertices.length < 2) return '';
 
-  const pointFor = (point: { x: number; y: number }) => projectPoint(transformMaskPoint(mask, point, sourceSize));
+  const transform = prepareMaskPointTransform(mask, sourceSize);
+  const pointFor = (point: { x: number; y: number }) => projectPoint(transform(point));
   let d = '';
 
   for (let i = 0; i < mask.vertices.length; i += 1) {
@@ -157,17 +158,17 @@ export function buildCanvasMaskVertices(
   sourceSize: MaskTransformSize = { width: 1, height: 1 },
 ): CanvasMaskVertex[] {
   if (!mask) return [];
-
+  const transform = prepareMaskPointTransform(mask, sourceSize);
   return mask.vertices.map((vertex) => {
-    const point = projectPoint(transformMaskPoint(mask, vertex, sourceSize));
-    const handleInPoint = projectPoint(transformMaskPoint(mask, {
+    const point = projectPoint(transform(vertex));
+    const handleInPoint = projectPoint(transform({
       x: vertex.x + vertex.handleIn.x,
       y: vertex.y + vertex.handleIn.y,
-    }, sourceSize));
-    const handleOutPoint = projectPoint(transformMaskPoint(mask, {
+    }));
+    const handleOutPoint = projectPoint(transform({
       x: vertex.x + vertex.handleOut.x,
       y: vertex.y + vertex.handleOut.y,
-    }, sourceSize));
+    }));
 
     return {
       ...vertex,
@@ -208,7 +209,8 @@ export function buildMaskEdgeSegments(
   if (!mask || !mask.visible || mask.vertices.length < 2) return [];
   const verts = mask.vertices;
   const segments: MaskEdgeSegment[] = [];
-  const pointFor = (point: { x: number; y: number }) => projectPoint(transformMaskPoint(mask, point, sourceSize));
+  const transform = prepareMaskPointTransform(mask, sourceSize);
+  const pointFor = (point: { x: number; y: number }) => projectPoint(transform(point));
 
   for (let i = 1; i < verts.length; i++) {
     const prev = verts[i - 1];

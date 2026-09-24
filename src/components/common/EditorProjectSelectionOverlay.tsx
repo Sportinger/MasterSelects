@@ -171,8 +171,8 @@ export function EditorProjectSelectionOverlay({
       }
       await loadProjectToStores();
       completeSelection();
-    } catch {
-      setError('The project could not be opened.');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'The project could not be opened.');
     } finally {
       setRecentProjects(projectFileService.getRecentProjects());
       setBusyAction(null);

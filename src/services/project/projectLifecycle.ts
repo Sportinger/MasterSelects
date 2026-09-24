@@ -487,10 +487,9 @@ export function setupAutoSync(): void {
     }
   }));
 
-  // Local development reloads frequently through HMR. Do not block those reloads
-  // with a browser dialog; production retains its unsaved-work protection.
+  // Development reloads can discard the same unsaved project and media state.
+  // Preserve the browser's unsaved-work protection in every environment.
   beforeUnloadHandler = event => {
-    if (import.meta.env.DEV) return;
     if (hasUnsavedWorkspace()) {
       event.preventDefault();
       event.returnValue = '';

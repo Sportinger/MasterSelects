@@ -14,6 +14,7 @@ MasterSelects supports per-clip vector masks with preview-overlay editing, selec
 - Mask drawing and editing can extend into preview pasteboard space outside the visible content.
 - Mask navigation preserves the composition aspect ratio and uses the same neutral pasteboard around it as the regular transform editor, keeping the composition boundary visible while zooming and panning.
 - Mask outlines and handles keep screen-stable sizes in both normal and mask-navigation preview zoom. Dense paths use smaller vertex markers and hit areas based on neighboring points' screen spacing. Zooming in restores larger markers; a hovered or individually selected point remains emphasized.
+- Dense mask contours prepare their transform once per geometry batch, including raster generation. Unrotated masks skip center scans. Preview hover and vertex-selection changes reuse the current interpolated mask geometry instead of cloning its keyframe paths again.
 - Whole-mask dragging uses an internal mask offset for static masks. When `Mask Path` recording is active or path keyframes exist, it translates the vertices and records the path instead.
 - Mask outlines are projected through the active layer transform, so 2D and 3D movement, scale, and rotation keep the editable overlay aligned with the rendered mask.
 - Proxy video and image dimensions do not change mask outline geometry: projection uses the original media dimensions, matching compositing. Live canvas sources follow their current canvas size.

@@ -128,6 +128,15 @@ describe('Editor project selection overlay', () => {
     act(() => vi.advanceTimersByTime(200));
     expect(onProjectSelected).toHaveBeenCalledOnce();
   });
+
+  it('shows the recovery reason without hiding the recent project', async () => {
+    mocks.openRecentProject.mockRejectedValue(new Error('Saved folder access unavailable. Use Open existing.'));
+    render(<EditorProjectSelectionOverlay onProjectSelected={() => undefined} />);
+    fireEvent.click(screen.getByRole('button', { name: /Interview Cut/i }));
+    await waitFor(() => expect(screen.getByText('Saved folder access unavailable. Use Open existing.')).toBeTruthy());
+    expect(screen.getByRole('button', { name: /Interview Cut/i })).toBeTruthy();
+    expect(mocks.loadProjectToStores).not.toHaveBeenCalled();
+  });
 });
 
 

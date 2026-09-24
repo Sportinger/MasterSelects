@@ -118,14 +118,14 @@ vi.mock('../../src/stores/midiStore', () => ({
 describe('project lifecycle auto sync', () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it('does not block local development reloads with an unsaved-work dialog', async () => {
+  it('protects unsaved work from automatic development reloads', async () => {
     vi.stubEnv('DEV', true);
     const { setupAutoSync, teardownAutoSync } = await import('../../src/services/project/projectLifecycle');
     setupAutoSync();
     try {
       const event = new Event('beforeunload', { cancelable: true });
       window.dispatchEvent(event);
-      expect(event.defaultPrevented).toBe(false);
+      expect(event.defaultPrevented).toBe(true);
       expect(mocks.saveCurrentProject).not.toHaveBeenCalled();
     } finally { teardownAutoSync(); }
   });

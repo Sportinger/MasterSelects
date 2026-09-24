@@ -1,7 +1,7 @@
 // Mask Renderer - Generates mask textures from ClipMask data using Canvas2D
 
 import type { ClipMask, MaskVertex } from '../types';
-import { transformMaskPoint } from './maskTransform';
+import { prepareMaskPointTransform, transformMaskPoint } from './maskTransform';
 import { applyMaskFeatherBalance } from './maskFeatherProfile';
 
 // Canvas for rendering masks (reused for performance)
@@ -102,8 +102,9 @@ function traceMaskPath(
 ): boolean {
   const { vertices, closed } = mask;
   if (vertices.length < 2) return false;
+  const transform = prepareMaskPointTransform(mask, { width, height });
   const pointFor = (point: { x: number; y: number }) => {
-    const transformed = transformMaskPoint(mask, point, { width, height });
+    const transformed = transform(point);
     return { x: transformed.x * width, y: transformed.y * height };
   };
 

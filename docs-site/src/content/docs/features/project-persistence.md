@@ -6,6 +6,14 @@ title: "Project Persistence"
 
 Local project storage with manual saving and interval autosave (five minutes by default), backups, and media relinking. Projects can use a user-selected folder through the **File System Access API**, **browser storage (OPFS)**, or the **Native Helper**.
 
+Development reloads use the same unsaved-work protection as production. A full
+page reload caused by source changes must not silently discard unsaved edits.
+Recent-project entries are retained when a cached folder handle is unavailable,
+permission is denied, or a project read fails. The project picker explains which
+recovery action is needed; reconnect the existing folder rather than create a
+new project. External media may need their source-folder permission renewed
+separately; project-local media are restored from the project's media folder.
+
 ---
 
 ## Table of Contents

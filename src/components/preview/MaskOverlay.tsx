@@ -90,6 +90,7 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
 
   const {
     clips,
+    clipKeyframes,
     layers,
     selectedClipIds,
     playheadPosition,
@@ -137,13 +138,14 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
   // Get first selected clip for mask editing
   const selectedClipId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
   const selectedClip = clips.find(c => c.id === selectedClipId);
-  const selectedClipMasks = selectedClip
+  const selectedClipKeys = selectedClipId ? clipKeyframes.get(selectedClipId) : undefined;
+  const selectedClipMasks = useMemo(() => selectedClip
     ? applyMaskEditPreview(
         selectedClip.id,
         getInterpolatedMasks(selectedClip.id, playheadPosition - selectedClip.startTime) ?? selectedClip.masks,
         maskEditPreview,
       )
-    : undefined;
+    : undefined, [selectedClip, selectedClipKeys, getInterpolatedMasks, playheadPosition, maskEditPreview]);
   const activeMask = selectedClipMasks?.find(m => m.id === activeMaskId) ?? selectedClipMasks?.[0];
   const activeLayer = useMemo(() => {
     if (!selectedClip) return undefined;
