@@ -200,8 +200,10 @@ memory attention and temporal object pointers. The pinned model download is
 The ONNX conversion is from `square-zero-labs/sam2.1-tiny-video-onnx`, revision
 `3b2984dd865f6e9d2cc6aed0be6a5a5c2eb352ce` (Apache-2.0).
 
-1. Select a video clip and choose **Use current frame**. The panel shows its raw
-   source frame, independently of clip effects and composition transforms.
+1. Select a video clip and open **AI Segment > Browser Roto**. **Edit in Preview**
+   is enabled initially: click directly on the object in the main Preview. The
+   corresponding source frame loads automatically. **Use current frame** is also
+   available, and **Detail preview** opens an optional raw-source view.
 2. Click **Include** points on the object and **Exclude** points on unwanted
    regions. Right-click or Ctrl/Command-click also excludes. **Undo point** revises
    the current selection. The first inference downloads and loads the model if needed.
@@ -211,7 +213,17 @@ The ONNX conversion is from `square-zero-labs/sam2.1-tiny-video-onnx`, revision
 4. Navigate with the source-frame buttons or **Source time → Go to source time**.
    Add points on a problem frame and rerun the relevant direction. Existing user
    anchors reinitialize the model when reached; masks outside the pass are kept.
-5. Inspect **Selection overlay**, **Mask**, **Cutout**, or **Source**, then choose
+5. The main Preview shows the blue mask at the current playhead, accounting for
+   clip position, scale, rotation, anchor and source crop. Scrub to inspect tracked
+   frames, then click to correct. Selection is disabled during playback, processing
+   or on a locked track. **Edit in Preview** returns normal Preview interactions
+   when turned off; the overlay is never included in composition exports.
+   Use **Detail preview > Zoom** (Fit, 200%, 400%) and scroll for precise points.
+   **Mask edges** adjusts expansion/shrinkage and edge softness in mask-resolution
+   pixels. Both controls are reversible; preview and exports use the same alpha.
+   Keyboard users can move the canvas cursor with arrow keys (Shift: ten pixels)
+   and press Enter to add a point, or Ctrl/Command+Enter to exclude.
+6. Inspect **Selection overlay**, **Mask**, **Cutout**, or **Source**, then choose
    **Mask video to Media**. The grayscale H.264 video is copied into the project;
    white selects the object. Its filename/status records the source-time origin.
    **Cutout to Media** instead exports source RGB with a VP9/WebM alpha sidecar in
@@ -220,9 +232,14 @@ The ONNX conversion is from `square-zero-labs/sam2.1-tiny-video-onnx`, revision
 
 The source preview is limited to a 1024-pixel edge. Segmentation retains holes
 and disconnected regions, but produces binary membership rather than estimated
-hair/transparency alpha. The H.264 mask video is lossy. Interactive masks and
-correction points live only in the panel session: export before closing it or
-changing the selected clip. Mask storage is capped at 256 MiB; each pass covers
+hair/transparency alpha. Edge softness is geometric feathering, not learned
+matting. Image-warping effects are not inverted by the main Preview selection;
+use the raw Detail preview for those clips. The H.264 mask video is lossy. Masks, correction points and edge settings
+survive panel and clip switches in the same editor tab; inactive decoders are
+released. Export before reloading, closing the editor or changing projects.
+Replacing a source or changing its trim resets that clip's session. **Clear clip
+masks** frees its mask memory explicitly. The shared mask budget is 256 MiB;
+tracking stops at the budget without silently evicting other clips. Each pass covers
 up to 30 source seconds. Export refuses coverage gaps. **Stop rotoscoping** stops
 the worker, retaining completed masks and the verified model cache. A subsequent
 operation reloads cached models. Existing MatAnyone2 matting remains on its own tab.

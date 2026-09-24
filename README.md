@@ -31,7 +31,7 @@ Import video, audio, images, animations, 3D assets, and Premiere Pro projects. E
 
 ## Build while you create
 
-[Browser Roto](docs/Features/AI-Integration.md#browser-roto-sam-21) uses local SAM 2.1 video segmentation to select moving objects, correct reference frames, track in both directions, and export mask videos without the Native Helper.
+[Browser Roto](docs/Features/AI-Integration.md#browser-roto-sam-21) uses local SAM 2.1 video segmentation to select moving objects directly in Preview, correct reference frames, track in both directions, refine mask edges, and export mask or transparent videos without the Native Helper. Roto masks and corrections survive panel and clip switches within the editor tab.
 
 I built MasterSelects because I wanted an editor I could shape around a project. When a tool is missing, a coding agent can add an effect, control, or workflow to the source; you can try it in the same project and contribute it for others to use.
 

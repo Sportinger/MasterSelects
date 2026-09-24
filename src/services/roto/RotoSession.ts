@@ -1,6 +1,7 @@
 import { openSurfaceFrames, surfaceFrameIndex, type SurfaceFrameReader, type SurfaceDecodedFrame } from '../planarTracking/surfaceFrameReader';
 import { rotoRuntime } from './rotoRuntime';
 import type { RotoMask, RotoPoint } from './rotoTypes';
+import { DEFAULT_ROTO_EDGES, type RotoEdges } from './rotoEdges';
 
 /** Owns decoding and source-space masks outside durable application stores. */
 export class RotoSession {
@@ -8,22 +9,30 @@ export class RotoSession {
   private sourceController = new AbortController();
   private ownedUrl?: string;
   private maskBytes = 0;
+  private reserve?: (delta: number) => void;
+  edges: RotoEdges = { ...DEFAULT_ROTO_EDGES };
+  lastTime?: number;
+  get memoryBytes() { return this.maskBytes; }
   readonly masks = new Map<number, RotoMask>();
   readonly anchors = new Map<number, RotoPoint[]>();
   current?: SurfaceDecodedFrame;
   readonly url: string; readonly file: Blob | undefined; readonly from: number; readonly to: number;
-  constructor(url: string, file: Blob | undefined, from: number, to: number) {
+  constructor(url: string, file: Blob | undefined, from: number, to: number, reserve?: (delta: number) => void) {
     this.url = url; this.file = file; this.from = from; this.to = to;
+    this.reserve = reserve;
   }
   async open() {
     if (this.reader) return;
+    const signal = this.sourceController.signal;
     this.ownedUrl = this.file?.size ? URL.createObjectURL(this.file) : undefined;
-    this.reader = await openSurfaceFrames(this.ownedUrl ?? this.url, this.sourceController.signal, this.file, 1024);
+    const reader = await openSurfaceFrames(this.ownedUrl ?? this.url, signal, this.file, 1024);
+    if (signal.aborted) { reader.close(); signal.throwIfAborted(); }
+    this.reader = reader;
   }
   async show(time: number) {
     await this.open();
     const frame = await this.reader!.read(Math.max(this.from, Math.min(this.to - 1e-6, time)));
-    this.current = frame; return frame;
+    this.current = frame; this.lastTime = frame.time; return frame;
   }
   async read(time: number) { await this.open(); return this.reader!.read(time); }
   stepTime(direction: number) {
@@ -34,6 +43,7 @@ export class RotoSession {
   private save(frame: SurfaceDecodedFrame, data: Uint8Array) {
     const old = this.masks.get(frame.time);
     if (this.maskBytes - (old?.data.length ?? 0) + data.length > 256 * 1024 * 1024) throw new Error('Mask memory limit reached. Export this range before starting another.');
+    this.reserve?.(data.length - (old?.data.length ?? 0));
     this.maskBytes += data.length - (old?.data.length ?? 0);
     const mask = { time: frame.time, duration: frame.duration, width: frame.pixels.width, height: frame.pixels.height, data };
     this.masks.set(frame.time, mask); return mask;
@@ -44,8 +54,9 @@ export class RotoSession {
     await rotoRuntime.prepare(signal, progress);
     const result = await rotoRuntime.seed(frame.pixels, points, this.reader!.frames.length, signal);
     signal.throwIfAborted();
+    const mask = this.save(frame, result.mask!);
     this.anchors.set(frame.time, points.map(p => ({ ...p })));
-    return this.save(frame, result.mask!);
+    return mask;
   }
   async track(direction: 1 | -1, seconds: number, signal: AbortSignal,
     update: (frame: SurfaceDecodedFrame, mask: RotoMask, fraction: number) => void,
@@ -64,7 +75,7 @@ export class RotoSession {
         ? await rotoRuntime.seed(frame.pixels, correction ?? points, ordered.length - i, signal)
         : await rotoRuntime.step(frame.pixels, signal);
       signal.throwIfAborted();
-      const mask = this.save(frame, result.mask!); this.current = frame;
+      const mask = this.save(frame, result.mask!); this.current = frame; this.lastTime = frame.time;
       update(frame, mask, ++i / ordered.length);
     }
   }
@@ -75,5 +86,12 @@ export class RotoSession {
     if (previous) this.maskBytes -= previous.data.length;
     this.masks.delete(this.current.time);
   }
-  dispose() { this.sourceController.abort(); this.reader?.close(); if (this.ownedUrl) URL.revokeObjectURL(this.ownedUrl); }
+  clearMasks() { this.masks.clear(); this.anchors.clear(); this.maskBytes = 0; }
+  /** Release decoding resources while retaining the user's masks and reference points. */
+  suspend() {
+    this.sourceController.abort(); this.reader?.close(); this.reader = undefined;
+    if (this.ownedUrl) URL.revokeObjectURL(this.ownedUrl);
+    this.ownedUrl = undefined; this.current = undefined; this.sourceController = new AbortController();
+  }
+  dispose() { this.suspend(); this.clearMasks(); }
 }

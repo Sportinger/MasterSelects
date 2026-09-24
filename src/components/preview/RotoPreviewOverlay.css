@@ -1,0 +1,6 @@
+.roto-main-preview { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); overflow: hidden; z-index: 55; pointer-events: none; }
+.roto-main-mask { position: absolute; left: 0; top: 0; width: 1px; height: 1px; transform-origin: 0 0; pointer-events: none; }
+.roto-main-input { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: auto; touch-action: pan-x pan-y; -webkit-tap-highlight-color: transparent; }
+.roto-main-input:focus:not(:focus-visible) { outline: none; }
+.roto-main-input:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.roto-main-hint { position: absolute; left: 10px; top: 42px; padding: 5px 8px; border-radius: 3px; color: var(--text-primary); background: var(--bg-primary); font-size: 11px; pointer-events: none; }

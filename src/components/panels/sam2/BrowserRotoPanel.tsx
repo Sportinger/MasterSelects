@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
-import { RotoSession } from '../../../services/roto/RotoSession';
+import type { RotoSession } from '../../../services/roto/RotoSession';
+import { rotoPreview } from '../../../services/roto/rotoPreview';
+import { rotoSessions } from '../../../services/roto/rotoSessions';
+import { DEFAULT_ROTO_EDGES, type RotoEdges } from '../../../services/roto/rotoEdges';
+import { RotoPreview } from './RotoPreview';
+import { projectFileService } from '../../../services/projectFileService';
 import { rotoRuntime } from '../../../services/roto/rotoRuntime';
 import { encodeRotoMaskVideo } from '../../../services/roto/rotoMaskVideo';
 import { surfaceSourceTime } from '../../../services/planarTracking/surfaceEffects';
@@ -21,57 +26,53 @@ export function BrowserRotoPanel() {
   const [ready, setReady] = useState(rotoRuntime.ready), [hasFrame, setHasFrame] = useState(false);
   const [seconds, setSeconds] = useState(2), [sourceTime, setSourceTime] = useState(0), [count, setCount] = useState(0);
   const [view, setView] = useState('overlay'), [label, setLabel] = useState<0 | 1>(1);
+  const [zoom, setZoom] = useState(1), [edges, setEdges] = useState<RotoEdges>({ ...DEFAULT_ROTO_EDGES });
   const [points, setPoints] = useState<RotoPoint[]>([]);
-  const canvas = useRef<HTMLCanvasElement>(null), session = useRef<RotoSession | undefined>(undefined);
-  const operation = useRef<AbortController | undefined>(undefined), frame = useRef<SurfaceDecodedFrame | undefined>(undefined);
-  const mask = useRef<RotoMask | undefined>(undefined), pointsRef = useRef<RotoPoint[]>([]);
+  const [mainPreview, setMainPreview] = useState(true);
+  const previewOwner = useRef({});
+  const session = useRef<RotoSession | undefined>(undefined);
+  const operation = useRef<AbortController | undefined>(undefined);
+  const [frame, setFrame] = useState<SurfaceDecodedFrame>(), [mask, setMask] = useState<RotoMask>();
+  const pointsRef = useRef<RotoPoint[]>([]);
   const supported = clip?.source?.type === 'video' && !clip.source.liveInputId;
   useEffect(() => {
-    setHasFrame(false); setCount(0); setPoints([]); pointsRef.current = []; setMessage(''); frame.current = undefined; mask.current = undefined;
-    return () => { operation.current?.abort(); session.current?.dispose(); session.current = undefined; };
+    setHasFrame(false); setCount(0); setBusy(false); setPoints([]); pointsRef.current = []; setMessage(''); setFrame(undefined); setMask(undefined);
+    if (!supported || !clip) return;
+    let lease: ReturnType<typeof rotoSessions.acquire>;
+    try {
+      lease = rotoSessions.acquire({ key: `${compositionId}/${clip.id}/${sourceId ?? ''}`,
+        scope: projectFileService.getProjectData()?.createdAt ?? 'unsaved',
+        url: media?.url ?? clip.source?.videoElement?.currentSrc ?? '', file: clip.file ?? media?.file,
+        from: clip.inPoint, to: clip.outPoint });
+    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); return; }
+    const s = lease.session; session.current = s; setEdges({ ...s.edges }); setCount(s.masks.size);
+    if (s.lastTime !== undefined) void run(async signal => {
+      const decoded = await s.show(s.lastTime!); signal.throwIfAborted();
+      display(decoded, s.masks.get(decoded.time)); setMessage('Restored masks and reference points for this clip.');
+    });
+    return () => {
+      const active = operation.current; operation.current = undefined; active?.abort();
+      lease.release(); session.current = undefined;
+    };
   }, [clip?.id, sourceId, compositionId, media?.file, media?.url, clip?.inPoint, clip?.outPoint]);
 
-  const draw = () => {
-    if (!canvas.current || !frame.current) return;
-    const target = canvas.current, pixels = frame.current.pixels;
-    target.width = pixels.width; target.height = pixels.height;
-    const ctx = target.getContext('2d')!;
-    const rendered = new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height);
-    const selected = mask.current?.time === frame.current.time ? mask.current.data : undefined;
-    for (let i = 0; i < pixels.width * pixels.height; i++) {
-      const value = selected?.[i] ?? 0;
-      if (view === 'mask') rendered.data[4 * i] = rendered.data[4 * i + 1] = rendered.data[4 * i + 2] = value;
-      else if (view === 'cutout' && !value) {
-        const shade = ((Math.floor((i % pixels.width) / 16) + Math.floor(i / pixels.width / 16)) % 2) ? 45 : 65;
-        rendered.data[4 * i] = rendered.data[4 * i + 1] = rendered.data[4 * i + 2] = shade;
-      } else if (view === 'overlay' && value) {
-        rendered.data[4 * i] *= .55; rendered.data[4 * i + 1] = rendered.data[4 * i + 1] * .55 + 60;
-        rendered.data[4 * i + 2] = rendered.data[4 * i + 2] * .55 + 110;
-      }
-    }
-    ctx.putImageData(rendered, 0, 0);
-    if (view === 'overlay') for (const point of pointsRef.current) {
-      ctx.beginPath(); ctx.arc(point.x * pixels.width, point.y * pixels.height, 6, 0, 2 * Math.PI);
-      ctx.fillStyle = point.label ? '#27ae60' : '#e74c3c'; ctx.fill(); ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke();
-    }
-  };
-  useEffect(draw, [view]);
   const display = (decoded: SurfaceDecodedFrame, selected?: RotoMask) => {
-    frame.current = decoded; mask.current = selected; setSourceTime(decoded.time); setHasFrame(true);
+    setFrame(decoded); setMask(selected); setSourceTime(decoded.time); setHasFrame(true);
     pointsRef.current = session.current?.anchors.get(decoded.time) ?? []; setPoints(pointsRef.current);
-    setCount(session.current?.masks.size ?? 0); draw();
+    setCount(session.current?.masks.size ?? 0);
   };
+  const changeEdges = (next: RotoEdges) => { setEdges(next); if (session.current) session.current.edges = next; };
   const report = (value: number, text: string) => { setProgress(value); setMessage(text); };
   const run = async (action: (signal: AbortSignal) => Promise<void>) => {
     if (operation.current) return;
     const abort = new AbortController(); operation.current = abort; setBusy(true); setProgress(0);
     try { await action(abort.signal); }
-    catch (error) { setMessage(abort.signal.aborted ? 'Stopped. Completed masks are kept.' : error instanceof Error ? error.message : String(error)); }
+    catch (error) { if (operation.current === abort) setMessage(abort.signal.aborted ? 'Stopped. Completed masks are kept.' : error instanceof Error ? error.message : String(error)); }
     finally { if (operation.current === abort) { operation.current = undefined; setBusy(false); setReady(rotoRuntime.ready); } }
   };
   const getSession = async () => {
     if (!clip || !supported) throw new Error('Select a source video clip.');
-    session.current ??= new RotoSession(media?.url ?? clip.source?.videoElement?.currentSrc ?? '', clip.file ?? media?.file, clip.inPoint, clip.outPoint);
+    if (!session.current) throw new Error('Reopen this clip in Roto to start a session.');
     await session.current.open(); return session.current;
   };
   const show = (time?: number) => run(async signal => {
@@ -83,10 +84,28 @@ export function BrowserRotoPanel() {
   });
   const select = (next: RotoPoint[]) => run(async signal => {
     const s = session.current; if (!s?.current) return;
-    pointsRef.current = next; setPoints(next); draw();
+    pointsRef.current = next; setPoints(next);
     const result = await s.select(next, signal, report); display(s.current, result);
     setMessage('Reference mask updated. Track forward or backward to update neighboring frames.');
   });
+  const selectInPreview = (point: RotoPoint, sourceTime: number) => run(async signal => {
+    const s = await getSession(), previousTime = s.current?.time;
+    const decoded = await s.show(sourceTime); signal.throwIfAborted();
+    const next = [...(previousTime === decoded.time ? pointsRef.current : s.anchors.get(decoded.time) ?? []), point];
+    display(decoded, s.masks.get(decoded.time)); pointsRef.current = next; setPoints(next);
+    const result = await s.select(next, signal, report); signal.throwIfAborted(); display(decoded, result);
+    setMessage('Reference mask updated from Preview. Track forward or backward to update neighboring frames.');
+  });
+  useEffect(() => {
+    const owner = previewOwner.current;
+    return () => rotoPreview.clear(owner);
+  }, []);
+  useEffect(() => {
+    const s = session.current;
+    if (!mainPreview || !supported || !clip || !s) { rotoPreview.clear(previewOwner.current); return; }
+    rotoPreview.show(previewOwner.current, { clipId: clip.id, compositionId, session: s, edges, busy, label,
+      points, pointTime: frame?.time, onPoint: (point, time) => void selectInPreview(point, time) });
+  }, [mainPreview, supported, clip?.id, sourceId, compositionId, media?.file, media?.url, clip?.inPoint, clip?.outPoint, edges, busy, label, points, frame, count]);
   const track = (direction: 1 | -1) => run(async signal => {
     const s = session.current; if (!s) return;
     await s.track(direction, seconds, signal, (decoded, selected, fraction) => {
@@ -97,14 +116,14 @@ export function BrowserRotoPanel() {
   const exportMask = (cutout = false) => run(async signal => {
     const s = session.current; if (!s || !clip) return;
     const frames = [...s.masks.values()], start = Math.min(...frames.map(f => f.time));
-    const blob = await encodeRotoMaskVideo(frames, signal, report, cutout ? time => s.read(time) : undefined); signal.throwIfAborted();
+    const blob = await encodeRotoMaskVideo(frames, signal, report, cutout ? time => s.read(time) : undefined, s.edges); signal.throwIfAborted();
     const name = `${clip.name.replace(/\.[^.]+$/, '')} - Roto ${cutout ? 'cutout' : 'mask'} from ${start.toFixed(3)}s.${cutout ? 'webm' : 'mp4'}`;
     const imported = await useMediaStore.getState().importFile(new File([blob], name, { type: blob.type }), undefined, { forceCopyToProject: true });
     if (!('type' in imported) || imported.type !== 'video') throw new Error('Mask video import failed.');
     setMessage(`${cutout ? 'Transparent cutout' : 'Mask video'} added to Media. Video time 0 corresponds to source ${start.toFixed(3)} s.`);
   });
 
-  return <div className="browser-roto" onPointerUp={e => {
+  return <div className="browser-roto" onKeyDown={e => e.stopPropagation()} onPointerUp={e => {
     if (e.target instanceof Element) e.target.closest<HTMLElement>('button,input[type="checkbox"]')?.blur();
   }}>
     <ResolveInspectorSection title="Browser Rotoscoping" indicator="none">
@@ -114,29 +133,30 @@ export function BrowserRotoPanel() {
           <button disabled={busy || !ready} onClick={() => { rotoRuntime.dispose(); setReady(false); }}>Unload model</button>
           <button disabled={busy} onClick={() => void show()}>Use current frame</button>
         </div>
-        <p className="roto-hint">Runs locally with WebGPU. Select in the source preview below; clip effects are excluded.</p>
-        {hasFrame && <>
+        <p className="roto-hint">Click the object in the main Preview. Right-click or Ctrl/Command-click excludes. Runs locally with WebGPU.</p>
+        <div className="roto-actions">
+          <button aria-pressed={mainPreview} onClick={() => setMainPreview(v => !v)}>Edit in Preview</button>
+          <button aria-pressed={label === 1} disabled={busy} onClick={() => setLabel(1)}>Include</button>
+          <button aria-pressed={label === 0} disabled={busy} onClick={() => setLabel(0)}>Exclude</button>
+          <button disabled={busy || points.length === 0} onClick={() => {
+            const next = pointsRef.current.slice(0, -1);
+            if (next.some(p => p.label === 1)) void select(next);
+            else { pointsRef.current = []; setPoints([]); session.current?.clearCurrentPoints(); setCount(session.current?.masks.size ?? 0); setMask(undefined); }
+          }}>Undo point</button>
+        </div>
+        {hasFrame && frame && <ResolveInspectorSection title="Detail preview" defaultOpen={false} indicator="none">
           <ResolveInspectorRow label="Preview"><InspectorSelect ariaLabel="Roto preview" value={view} disabled={busy} onChange={setView}
             options={[{ value: 'overlay', label: 'Selection overlay' }, { value: 'mask', label: 'Mask' }, { value: 'cutout', label: 'Cutout' }, { value: 'source', label: 'Source' }]} /></ResolveInspectorRow>
-          <div className="roto-actions">
-            <button aria-pressed={label === 1} disabled={busy} onClick={() => setLabel(1)}>Include</button>
-            <button aria-pressed={label === 0} disabled={busy} onClick={() => setLabel(0)}>Exclude</button>
-            <button disabled={busy || points.length === 0} onClick={() => {
-              const next = pointsRef.current.slice(0, -1);
-              if (next.some(p => p.label === 1)) void select(next);
-              else { pointsRef.current = []; setPoints([]); session.current?.clearCurrentPoints(); setCount(session.current?.masks.size ?? 0); mask.current = undefined; draw(); }
-            }}>Undo point</button>
-          </div>
-        </>}
-        <canvas ref={canvas} aria-label="Roto source selection" className={hasFrame ? 'roto-source-visible' : ''}
-          onContextMenu={e => e.preventDefault()} onPointerDown={e => {
-            if (busy || !hasFrame || !canvas.current) return;
-            e.preventDefault();
-            const rect = canvas.current.getBoundingClientRect();
-            const point: RotoPoint = { x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)), y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)), label: e.button === 2 || e.ctrlKey || e.metaKey ? 0 : label };
-            void select([...pointsRef.current, point]);
-          }} />
+          <ResolveInspectorRow label="Zoom"><InspectorSelect ariaLabel="Roto preview zoom" value={String(zoom)} onChange={v => setZoom(Number(v))}
+            options={[{ value: '1', label: 'Fit' }, { value: '2', label: '200%' }, { value: '4', label: '400%' }]} /></ResolveInspectorRow>
+          <RotoPreview frame={frame} mask={mask} points={points} edges={edges} view={view} zoom={zoom}
+            label={label} disabled={busy} onPoint={point => void select([...pointsRef.current, point])} />
+        </ResolveInspectorSection>}
         {hasFrame && <>
+          <ResolveInspectorSection title="Mask edges" indicator="none">
+            <ResolveInspectorNumberRow label="Expand / shrink (px)" value={edges.offset} defaultValue={0} min={-8} max={8} hardMin={-8} hardMax={8} step={.1} disabled={busy} onChange={offset => changeEdges({ ...edges, offset })} />
+            <ResolveInspectorNumberRow label="Edge softness (px)" value={edges.softness} defaultValue={0} min={0} max={8} hardMin={0} hardMax={8} step={.1} disabled={busy} onChange={softness => changeEdges({ ...edges, softness })} />
+          </ResolveInspectorSection>
           <ResolveInspectorNumberRow label="Source time (s)" value={sourceTime} defaultValue={clip!.inPoint} min={clip!.inPoint} max={clip!.outPoint} hardMin={clip!.inPoint} hardMax={clip!.outPoint} step={.001} disabled={busy} onChange={setSourceTime} />
           <div className="roto-actions">
             <button disabled={busy} onClick={() => void show(session.current?.stepTime(-1))}>Previous source frame</button>
@@ -150,7 +170,10 @@ export function BrowserRotoPanel() {
             <button disabled={busy || count < 2} onClick={() => void exportMask()}>Mask video to Media</button>
             <button disabled={busy || count < 2} onClick={() => void exportMask(true)}>Cutout to Media</button>
           </div>
-          <p className="roto-hint">{count} masks · Add points on any frame to correct the selection, then track again. Export before closing this panel.</p>
+          <div className="roto-actions">
+            <button disabled={busy || !count} onClick={() => { session.current?.clearMasks(); setCount(0); pointsRef.current = []; setPoints([]); setMask(undefined); setMessage('Masks and reference points for this clip were cleared.'); }}>Clear clip masks</button>
+          </div>
+          <p className="roto-hint">{count} masks · Add points on any frame to correct the selection, then track again. Masks stay available across panel and clip switches in this tab. Export before reloading or closing the editor.</p>
         </>}
       </>}
       {busy && <div className="roto-actions"><progress aria-label="Rotoscoping progress" value={progress} max={1} /><button onClick={() => operation.current?.abort()}>Stop rotoscoping</button></div>}

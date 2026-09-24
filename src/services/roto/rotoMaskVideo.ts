@@ -1,5 +1,6 @@
 import { BufferTarget, CanvasSource, Mp4OutputFormat, WebMOutputFormat, Output, canEncodeVideo } from 'mediabunny';
 import type { RotoMask } from './rotoTypes';
+import { DEFAULT_ROTO_EDGES, refineRotoEdges, type RotoEdges } from './rotoEdges';
 
 export function orderedRotoMasks(masks: RotoMask[]) {
   const frames = masks.toSorted((a, b) => a.time - b.time);
@@ -13,7 +14,7 @@ export function orderedRotoMasks(masks: RotoMask[]) {
 }
 /** Preserve each source presentation timestamp and duration, including variable frame rates. */
 export async function encodeRotoMaskVideo(masks: RotoMask[], signal: AbortSignal, progress: (value: number, message: string) => void,
-  readSource?: (time: number) => Promise<{ pixels: ImageData }>) {
+  readSource?: (time: number) => Promise<{ pixels: ImageData }>, edges: RotoEdges = DEFAULT_ROTO_EDGES) {
   const frames = orderedRotoMasks(masks);
   const codec = readSource ? 'vp9' : 'avc';
   if (!await canEncodeVideo(codec)) throw new Error(`${codec} export is unavailable in this browser.`);
@@ -28,11 +29,12 @@ export async function encodeRotoMaskVideo(masks: RotoMask[], signal: AbortSignal
     for (let i = 0; i < frames.length; i++) {
       signal.throwIfAborted();
       const f = frames[i]; map.width = f.width; map.height = f.height;
+      const alpha = refineRotoEdges(f, edges);
       const pixels = readSource ? (await readSource(f.time)).pixels : mapCtx.createImageData(f.width, f.height);
       if (pixels.width !== f.width || pixels.height !== f.height) throw new Error('Source dimensions changed after tracking.');
       for (let j = 0; j < f.data.length; j++) {
-        if (readSource) pixels.data[4 * j + 3] = f.data[j];
-        else { pixels.data[4 * j] = pixels.data[4 * j + 1] = pixels.data[4 * j + 2] = f.data[j]; pixels.data[4 * j + 3] = 255; }
+        if (readSource) pixels.data[4 * j + 3] = alpha[j];
+        else { pixels.data[4 * j] = pixels.data[4 * j + 1] = pixels.data[4 * j + 2] = alpha[j]; pixels.data[4 * j + 3] = 255; }
       }
       mapCtx.putImageData(pixels, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(map, 0, 0, canvas.width, canvas.height);
       await video.add(f.time - frames[0].time, f.duration);

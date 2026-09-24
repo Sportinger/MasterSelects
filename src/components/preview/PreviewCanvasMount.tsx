@@ -1,4 +1,7 @@
 import type React from 'react';
+import { useSyncExternalStore } from 'react';
+import { rotoPreview } from '../../services/roto/rotoPreview';
+import { RotoPreviewOverlay } from './RotoPreviewOverlay';
 import type { createTextBoundsNumericProperty } from '../../types/animationProperties';
 import type { Layer } from '../../types/layers';
 import type { MaskVertex, TextBoundsPath } from '../../types/masks';
@@ -216,6 +219,8 @@ export function PreviewCanvasMount({
   worldGridPlane,
   onOpenStats,
 }: PreviewCanvasMountProps) {
+  const rotoState = useSyncExternalStore(rotoPreview.subscribe, rotoPreview.snapshot);
+  const rotoActive = !!rotoState && rotoState.compositionId === displayedCompId && rotoState.clipId === selectedClip?.id;
   const layerEditTouchBridge = useTouchMouseBridge<HTMLCanvasElement>();
   const preview3DMediaDrop = usePreview3DMediaDrop({
     canvasWrapperRef,
@@ -325,6 +330,8 @@ export function PreviewCanvasMount({
                   canvasHeight={effectiveResolution.height}
                 />
               )}
+              {isEditableSource && !isExporting && !sourceMonitorActive && <RotoPreviewOverlay
+                displayedCompId={displayedCompId} width={canvasSize.width} height={canvasSize.height} resolution={effectiveResolution} />}
               {isEditableSource && !isExporting && <PreciseFaceOverlay canvasWidth={effectiveResolution.width} canvasHeight={effectiveResolution.height}
                 displayWidth={canvasSize.width} displayHeight={canvasSize.height} />}
               {isEditableSource && selectedClip?.analysis?.faceAnalysis && (
@@ -396,7 +403,7 @@ export function PreviewCanvasMount({
 
         <PreviewSplatProgressOverlay progress={activeSplatLoadProgress} />
 
-        {layerTransformMode && isEngineReady && (
+        {layerTransformMode && isEngineReady && !rotoActive && (
           <canvas
             ref={overlayRef}
             width={containerSize.width || 100}
