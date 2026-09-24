@@ -5,6 +5,7 @@ import { AccountDialog } from './AccountDialog';
 import { AuthDialog } from './AuthDialog';
 import { BillingSuccessCelebration } from './BillingSuccessCelebration';
 import { PricingDialog } from './PricingDialog';
+import { getAndroidApp } from '../../services/android/androidApp';
 import './authBillingDialogs.css';
 
 interface BillingSuccessState {
@@ -96,8 +97,8 @@ export function AccountDialogHost() {
   return (
     <div className="account-dialog-host">
       {accountDialog === 'auth' && <AuthDialog onClose={closeAccountDialog} />}
-      {accountDialog === 'pricing' && <PricingDialog onClose={closeAccountDialog} />}
-      {accountDialog === 'account' && (
+      {accountDialog === 'pricing' && !getAndroidApp() && <PricingDialog onClose={closeAccountDialog} />}
+      {(accountDialog === 'account' || (accountDialog === 'pricing' && getAndroidApp())) && (
         <AccountDialog
           initialRedeemCode={redeemCode}
           onClose={closeAccountDialog}

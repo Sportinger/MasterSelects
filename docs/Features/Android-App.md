@@ -52,8 +52,12 @@ inside WebView. No server authentication bypass or credential copying is added.
 
 Google OAuth in embedded WebView is not supported in this version. Android offers
 email login instead; Google needs a future secure browser-to-app session handoff.
-External documentation and checkout links open in the browser. Checkout session
-continuity and the hosted AI login journey need real-device integration checks.
+External documentation opens in the browser. The Android beta disables purchases,
+plan changes and the external billing portal; existing account credits remain
+usable. Purchase entry points also refuse checkout/portal API requests. Website
+billing is unchanged. Play Billing or an applicable enrolled alternative-payment
+program is needed before enabling Android purchases. The hosted AI login journey
+still needs real-device integration checks.
 
 ## Build
 

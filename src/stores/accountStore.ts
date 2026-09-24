@@ -6,6 +6,9 @@ import {
   type ProductAnalyticsCheckoutFailureStage,
 } from '../services/productAnalytics';
 import { navigateToTrustedUrl, requireTrustedNavigationUrl } from '../services/security/trustedNavigation';
+import { getAndroidApp } from '../services/android/androidApp';
+
+const ANDROID_PURCHASE_NOTICE = 'Purchases are not available in this Android beta. You can use the credits already on your account.';
 
 export type AccountDialogKind = 'auth' | 'pricing' | 'account' | null;
 
@@ -131,6 +134,10 @@ export const useAccountStore = create<AccountState>((set, get) => ({
   openAuthDialog: () => set({ dialog: 'auth', error: null, notice: null }),
   openAccountDialog: () => set({ dialog: 'account', error: null, notice: null }),
   openPricingDialog: () => {
+    if (getAndroidApp()) {
+      set({ dialog: 'account', error: ANDROID_PURCHASE_NOTICE, notice: null });
+      return;
+    }
     productAnalytics.track('pricing_viewed');
     set({ dialog: 'pricing', error: null, notice: null });
   },
@@ -200,6 +207,7 @@ export const useAccountStore = create<AccountState>((set, get) => ({
     }
   },
   startCheckout: async (planId, legalConsent) => {
+    if (getAndroidApp()) { set({ error: ANDROID_PURCHASE_NOTICE }); return; }
     set({ isLoading: true, error: null });
     const analyticsPlanId = String(pickCheckoutPlanId(planId));
     let failureStage: ProductAnalyticsCheckoutFailureStage = 'session_create';
@@ -233,6 +241,7 @@ export const useAccountStore = create<AccountState>((set, get) => ({
     }
   },
   openBillingPortal: async () => {
+    if (getAndroidApp()) { set({ error: ANDROID_PURCHASE_NOTICE }); return; }
     set({ isLoading: true, error: null });
 
     try {

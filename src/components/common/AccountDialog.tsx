@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useAccountStore } from '../../stores/accountStore';
 import { cloudApi } from '../../services/cloudApi';
+import { getAndroidApp } from '../../services/android/androidApp';
 import { applyConfirmedCreditUpdate } from '../../services/credits/creditBalanceCoordinator';
 import { BILLING_PLANS, formatBillingPlanLabel } from '../../services/billingPlans';
 import { CLOUD_AI_PRICE_ROWS, CLOUD_EUR_PER_CREDIT, CLOUD_PRICE_BASELINE_PLAN } from '../../services/cloudAiPricing';
@@ -284,7 +285,9 @@ export function AccountDialog({ initialRedeemCode = '', onClose, onRedeemed }: A
             </div>
           )}
 
-          <div className={`account-actions-row ${hasBillingAccount ? '' : 'account-actions-row-single'}`.trim()}>
+          {getAndroidApp() ? (
+            <p className="auth-dialog-notice">Purchases are not available in this Android beta. You can use the credits already on your account.</p>
+          ) : <div className={`account-actions-row ${hasBillingAccount ? '' : 'account-actions-row-single'}`.trim()}>
             <button
               className="auth-dialog-submit"
               disabled={isLoading}
@@ -303,6 +306,7 @@ export function AccountDialog({ initialRedeemCode = '', onClose, onRedeemed }: A
             )}
           </div>
 
+          }
           <div className="account-signout-row">
             <button
               className="auth-dialog-action-ghost"

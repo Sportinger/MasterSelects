@@ -45,7 +45,7 @@ Chrome or Edge on desktop is a good starting point. Editing and rendering run lo
 
 ## Run locally
 
-An [Android development app](docs/Features/Android-App.md) packages the editor for offline local editing, with Android project-folder selection, media import, export saving/sharing, and online cloud services. Build it from the final web build with `node scripts/android.mjs build`; device verification and store release are separate steps.
+An [Android development app](docs/Features/Android-App.md) packages the editor for offline local editing, with Android project-folder selection, media import, export saving/sharing, and online cloud services. Android beta purchases are disabled; existing account credits remain usable. Build it from the final web build with `node scripts/android.mjs build`; device verification and store release are separate steps.
 
 Install the Node.js version in [`.node-version`](.node-version), then run:
 
