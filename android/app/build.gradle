@@ -1,0 +1,72 @@
+plugins {
+    id 'com.android.application'
+}
+
+def editorPackage = new groovy.json.JsonSlurper().parse(rootProject.file('../package.json'))
+def releaseCode = providers.gradleProperty('androidVersionCode').orElse('1').get().toInteger()
+def signingNames = ['MS_ANDROID_KEYSTORE', 'MS_ANDROID_STORE_PASSWORD', 'MS_ANDROID_KEY_ALIAS', 'MS_ANDROID_KEY_PASSWORD']
+def signingValues = signingNames.collectEntries { [(it): System.getenv(it)] }
+def hasSigning = signingValues.values().every { it != null && !it.isBlank() }
+if (signingValues.values().any { it != null } && !hasSigning) {
+    throw new GradleException('Set all four MS_ANDROID signing environment variables, or none.')
+}
+
+android {
+    namespace 'com.masterselects.app'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.masterselects.app'
+        minSdk 29
+        targetSdk 36
+        versionCode releaseCode
+        versionName editorPackage.version
+    }
+    signingConfigs {
+        if (hasSigning) {
+            release {
+                storeFile file(signingValues.MS_ANDROID_KEYSTORE)
+                storePassword signingValues.MS_ANDROID_STORE_PASSWORD
+                keyAlias signingValues.MS_ANDROID_KEY_ALIAS
+                keyPassword signingValues.MS_ANDROID_KEY_PASSWORD
+            }
+        }
+    }
+    buildTypes {
+        debug {
+            applicationIdSuffix '.debug'
+            versionNameSuffix '-dev'
+            resValue 'string', 'app_name', 'MasterSelects Dev'
+        }
+        release {
+            resValue 'string', 'app_name', 'MasterSelects'
+            if (hasSigning) signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
+    compileOptions {
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+    implementation 'androidx.webkit:webkit:1.14.0'
+    implementation 'androidx.activity:activity:1.10.1'
+    testImplementation 'junit:junit:4.13.2'
+}
+
+android {
+    androidResources { noCompress += ['wasm', 'gz', 'mp4', 'webm', 'mov', 'onnx'] }
+    buildFeatures { buildConfig true }
+}
+tasks.register('requireEditorBundle') {
+    doLast {
+        if (!file('src/main/assets/editor/index.html').isFile() || !file('src/main/assets/editor-files.json').isFile()) {
+            throw new GradleException('Bundle the editor first: node scripts/android.mjs prepare')
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn 'requireEditorBundle' }

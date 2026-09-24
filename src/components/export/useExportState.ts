@@ -1,6 +1,7 @@
 // Export state management hook - uses the shared export store for undo/project persistence
 
 import { useCallback, useEffect, useState } from 'react';
+import { useExportScreenWakeLock } from '../../hooks/useExportScreenWakeLock';
 import { useShallow } from 'zustand/react/shallow';
 import { Logger } from '../../services/logger';
 import { FrameExporter } from '../../engine/export';
@@ -114,6 +115,7 @@ export function useExportState(
   const [isFFmpegReady, setIsFFmpegReady] = useState(false);
   const [ffmpegLoadError, setFfmpegLoadError] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  useExportScreenWakeLock(isExporting);
   const [progress, setProgress] = useState<ExportProgress | null>(null);
   const [ffmpegProgress, setFfmpegProgress] = useState<FFmpegProgress | null>(null);
   const [exportPhase, setExportPhase] = useState<'idle' | 'rendering' | 'audio' | 'encoding'>('idle');

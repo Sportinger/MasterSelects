@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useExportScreenWakeLock } from '../../../hooks/useExportScreenWakeLock';
 import { downloadBlob } from '../../../engine/export';
 import { Logger } from '../../../services/logger';
 import { resolveMediaFileForTimelineDrop } from '../../../services/timeline/timelineExternalDropMediaResolver';
@@ -29,6 +30,7 @@ function isSupportedMediaType(type: MediaFile['type']): type is BatchSourceMedia
 export function useBatchExportController({ jobs, mediaFiles }: UseBatchExportControllerInput) {
   const [runtimeByJob, setRuntimeByJob] = useState<BatchExportRuntimeMap>({});
   const [isRunning, setIsRunning] = useState(false);
+  useExportScreenWakeLock(isRunning);
   const runnerRef = useRef<BatchSourceExportRunner | null>(null);
   const cancelRequestedRef = useRef(false);
 

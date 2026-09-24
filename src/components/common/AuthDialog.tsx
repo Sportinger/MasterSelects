@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { IconArrowRight, IconMail, IconSparkles, IconX } from '@tabler/icons-react';
 import { useAccountStore } from '../../stores/accountStore';
 import type { BillingPlanId } from '../../services/cloudApi';
+import { getAndroidApp } from '../../services/android/androidApp';
 import './authBillingDialogs.css';
 
 const DEV_PLANS: { id: BillingPlanId; label: string }[] = [
@@ -45,6 +46,7 @@ function GoogleLogo() {
 }
 
 export function AuthDialog({ onClose }: AuthDialogProps) {
+  const androidApp = getAndroidApp();
   const [email, setEmail] = useState('');
   const [isClosing, setIsClosing] = useState(false);
   const { devLogin, error, isLoading, login, notice } = useAccountStore();
@@ -155,12 +157,14 @@ export function AuthDialog({ onClose }: AuthDialogProps) {
           <button
             className="auth-dialog-google-button"
             disabled={isLoading}
-            onClick={handleGoogleSignIn}
+            onClick={androidApp ? () => { void androidApp.openEmailSignInLink().catch(() => {}); } : handleGoogleSignIn}
             type="button"
           >
-            <GoogleLogo />
-            <span>{isLoading ? 'Opening Google...' : 'Continue with Google'}</span>
+            {androidApp ? <IconMail size={18} aria-hidden="true" /> : <GoogleLogo />}
+            <span>{androidApp ? 'Open email sign-in link' : isLoading ? 'Opening Google...' : 'Continue with Google'}</span>
           </button>
+
+          {androidApp && <p className="auth-dialog-description">Send yourself a link, then open it with MasterSelects or paste it here. Local editing works without signing in.</p>}
 
           {notice && <div className="auth-dialog-notice auth-dialog-notice-success">{notice}</div>}
           {error && <div className="auth-dialog-notice auth-dialog-notice-error">{error}</div>}

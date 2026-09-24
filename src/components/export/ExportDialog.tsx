@@ -12,6 +12,7 @@ import { ExportProgressView } from './dialog/ExportProgressView';
 import { ExportSettingsForm } from './dialog/ExportSettingsForm';
 import { ExportUnsupportedState } from './dialog/ExportUnsupportedState';
 import { useExportDialogSupport } from './dialog/useExportDialogSupport';
+import { useExportScreenWakeLock } from '../../hooks/useExportScreenWakeLock';
 
 const log = Logger.create('ExportDialog');
 
@@ -48,6 +49,7 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
   const [normalizeAudio, setNormalizeAudio] = useState(false);
 
   const [isExporting, setIsExporting] = useState(false);
+  useExportScreenWakeLock(isExporting);
   const [progress, setProgress] = useState<ExportProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exporter, setExporter] = useState<FrameExporter | null>(null);

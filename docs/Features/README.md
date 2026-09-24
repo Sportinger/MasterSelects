@@ -4,6 +4,8 @@
 
 Feature documentation for the `master` branch.
 
+[Android App](./Android-App.md): bundled offline editor, Android file import and export, build/signing instructions, and device limits.
+
 ---
 
 ## Overview

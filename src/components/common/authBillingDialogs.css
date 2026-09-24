@@ -2011,6 +2011,19 @@
   transform: none;
 }
 
+.auth-dialog-signin button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.auth-dialog-signin button:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.auth-dialog-signin button:focus-visible {
+  outline: 2px solid var(--accent-color, #7dd3fc);
+  outline-offset: 3px;
+}
+
 .auth-dialog-google-logo {
   display: block;
   height: 24px;
@@ -2049,7 +2062,7 @@
   width: 100%;
 }
 
-.auth-dialog-input-shell:focus-within {
+.auth-dialog-input-shell:has(.auth-dialog-input:focus-visible) {
   background: rgba(255, 255, 255, 0.065);
   border-color: rgba(84, 214, 255, 0.58);
   box-shadow: 0 0 0 3px rgba(45, 140, 235, 0.16);
