@@ -191,7 +191,45 @@ Hosted AI behavior:
 
 ## AI Segmentation and MatAnyone2
 
-The panel combines two different mask sources:
+### Browser Roto (SAM 2.1)
+
+**AI Segment → Browser Roto** is independent of the Native Helper. It uses the
+full SAM 2.1 Hiera-Tiny video export: image encoder, mask decoder, memory encoder,
+memory attention and temporal object pointers. The pinned model download is
+190,072,872 bytes, SHA-256 verified and cached in the browser. WebGPU is required.
+The ONNX conversion is from `square-zero-labs/sam2.1-tiny-video-onnx`, revision
+`3b2984dd865f6e9d2cc6aed0be6a5a5c2eb352ce` (Apache-2.0).
+
+1. Select a video clip and choose **Use current frame**. The panel shows its raw
+   source frame, independently of clip effects and composition transforms.
+2. Click **Include** points on the object and **Exclude** points on unwanted
+   regions. Right-click or Ctrl/Command-click also excludes. **Undo point** revises
+   the current selection. The first inference downloads and loads the model if needed.
+3. Set **Track range (s)** and track forward or backward. Both passes start from
+   a user-authored reference. Source frame timestamps, including variable frame
+   durations, determine the stored masks.
+4. Navigate with the source-frame buttons or **Source time → Go to source time**.
+   Add points on a problem frame and rerun the relevant direction. Existing user
+   anchors reinitialize the model when reached; masks outside the pass are kept.
+5. Inspect **Selection overlay**, **Mask**, **Cutout**, or **Source**, then choose
+   **Mask video to Media**. The grayscale H.264 video is copied into the project;
+   white selects the object. Its filename/status records the source-time origin.
+   **Cutout to Media** instead exports source RGB with a VP9/WebM alpha sidecar in
+   the container. Both exports exclude source audio and clip effects and use source
+   timing; position or retime the imported asset to match an edited timeline clip.
+
+The source preview is limited to a 1024-pixel edge. Segmentation retains holes
+and disconnected regions, but produces binary membership rather than estimated
+hair/transparency alpha. The H.264 mask video is lossy. Interactive masks and
+correction points live only in the panel session: export before closing it or
+changing the selected clip. Mask storage is capped at 256 MiB; each pass covers
+up to 30 source seconds. Export refuses coverage gaps. **Stop rotoscoping** stops
+the worker, retaining completed masks and the verified model cache. A subsequent
+operation reloads cached models. Existing MatAnyone2 matting remains on its own tab.
+
+### MatAnyone2 workflow (legacy SAM 2 and Paint selection)
+
+The **MatAnyone2** tab combines two different mask sources:
 - **SAM 2** runs locally in the browser for interactive segmentation and frame propagation
 - **Paint** is a browser-only fallback that does not require a model download
 - **MatAnyone2** is a separate native-helper-backed video matting step that consumes either mask source and produces a transparent foreground video plus an alpha sidecar

@@ -1,0 +1,12 @@
+.browser-roto { overflow: auto; min-height: 0; flex: 1; padding: 8px; color: var(--text-primary); }
+.roto-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0; align-items: center; }
+.roto-actions button, .roto-workflow button { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 3px; padding: 5px 8px; cursor: pointer; font-size: 11px; -webkit-tap-highlight-color: transparent; }
+.roto-actions button[aria-pressed="true"], .roto-workflow button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.roto-actions button:disabled { opacity: .45; cursor: default; }
+.roto-actions button:focus:not(:focus-visible), .roto-workflow button:focus:not(:focus-visible) { outline: none; }
+.roto-actions button:focus-visible, .roto-workflow button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.browser-roto canvas { display: none; width: 100%; max-height: 420px; object-fit: contain; cursor: crosshair; touch-action: none; }
+.browser-roto canvas.roto-source-visible { display: block; width: auto; max-width: 100%; height: auto; margin: 8px auto; }
+.browser-roto output, .roto-hint { display: block; font-size: 11px; line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; margin: 8px 0; }
+.roto-workflow { display: flex; gap: 6px; padding: 8px; border-bottom: 1px solid var(--border-color); }
+.roto-legacy { position: relative; min-height: 0; flex: 1; display: flex; flex-direction: column; }

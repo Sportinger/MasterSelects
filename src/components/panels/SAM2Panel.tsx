@@ -31,6 +31,7 @@ import { MatAnyoneOverlays, MatAnyoneStatusBar } from './sam2/MatAnyoneStatusVie
 import type { LayerSourceRect } from '../../types/layers';
 import type { ClipTransform } from '../../types/timelineCore';
 import './SAM2Panel.css';
+import { BrowserRotoPanel } from './sam2/BrowserRotoPanel';
 
 type MaskOrigin = {
   clipId: string;
@@ -53,6 +54,7 @@ function captureMaskOrigin(clipId: string): MaskOrigin | null {
 }
 
 export function SAM2Panel() {
+  const [workflow, setWorkflow] = useState<'browser' | 'matting'>('browser');
   const [showSetup, setShowSetup] = useState(false);
   const [maskMode, setMaskMode] = useState<MaskMode>('paint');
   const [isPainting, setIsPainting] = useState(false);
@@ -93,6 +95,7 @@ export function SAM2Panel() {
 
   // Check MatAnyone2 status on mount (skip if already resolved)
   useEffect(() => {
+    if (workflow !== 'matting') return;
     const current = useMatAnyoneStore.getState().setupStatus;
     if (current !== 'not-checked') return; // Already resolved (StrictMode re-mount)
 
@@ -113,14 +116,14 @@ export function SAM2Panel() {
 
     const timeout = setTimeout(() => tryCheck(0), 500);
     return () => { cancelled = true; clearTimeout(timeout); };
-  }, []);
+  }, [workflow]);
 
   // SAM2 auto-load
   useEffect(() => {
-    if (sam2Status === 'not-downloaded') {
+    if (workflow === 'matting' && sam2Status === 'not-downloaded') {
       getSAM2Service().checkAndAutoLoad();
     }
-  }, [sam2Status]);
+  }, [sam2Status, workflow]);
 
   useEffect(() => {
     setMatImportError(null);
@@ -569,6 +572,11 @@ export function SAM2Panel() {
   // --- Render ---
   return (
     <div className="sam2-panel">
+      <div className="roto-workflow" onPointerUp={e => { if (e.target instanceof HTMLButtonElement) e.target.blur(); }}>
+        <button aria-pressed={workflow === 'browser'} onClick={() => { useSAM2Store.getState().setActive(false); setWorkflow('browser'); }}>Browser Roto</button>
+        <button aria-pressed={workflow === 'matting'} onClick={() => setWorkflow('matting')}>MatAnyone2</button>
+      </div>
+      {workflow === 'browser' ? <BrowserRotoPanel /> : <div className="roto-legacy">
       <MatAnyoneOverlays
         matStatus={matStatus}
         matError={matError}
@@ -646,6 +654,7 @@ export function SAM2Panel() {
       />
 
       {showSetup && <MatAnyoneSetupDialog onClose={() => setShowSetup(false)} />}
+      </div>}
     </div>
   );
 }

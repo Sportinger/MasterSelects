@@ -256,16 +256,18 @@ function compressOversizedSam2OrtWasm(): Plugin {
       const workerMatches = workerFiles.filter((fileName) =>
         readFileSync(path.join(assetsDirectory, fileName), 'utf8').includes(SAM2_ORT_WASM_GZIP_PLACEHOLDER),
       );
-      if (workerMatches.length !== 1) {
-        throw new Error(`Expected one SAM2 worker placeholder, found ${workerMatches.length}.`);
+      if (workerMatches.length === 0) {
+        throw new Error('Missing SAM2 worker runtime placeholder.');
       }
 
-      const workerPath = path.join(assetsDirectory, workerMatches[0]);
-      const workerSource = readFileSync(workerPath, 'utf8').replaceAll(
-        SAM2_ORT_WASM_GZIP_PLACEHOLDER,
-        `/assets/${gzipFileName}`,
-      );
-      writeFileSync(workerPath, workerSource);
+      for (const workerFile of workerMatches) {
+        const workerPath = path.join(assetsDirectory, workerFile);
+        const workerSource = readFileSync(workerPath, 'utf8').replaceAll(
+          SAM2_ORT_WASM_GZIP_PLACEHOLDER,
+          `/assets/${gzipFileName}`,
+        );
+        writeFileSync(workerPath, workerSource);
+      }
       writeFileSync(path.join(assetsDirectory, gzipFileName), gzipBytes);
       unlinkSync(wasmPath);
     },

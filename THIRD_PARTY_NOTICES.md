@@ -3,6 +3,19 @@
 MasterSelects includes the following third-party software. Each component
 remains available under its own license terms.
 
+## SAM 2.1 Tiny video segmentation (optional download)
+
+- Original model: <https://github.com/facebookresearch/sam2>
+- Copyright: Meta Platforms, Inc. and affiliates
+- ONNX conversion: <https://huggingface.co/square-zero-labs/sam2.1-tiny-video-onnx>
+- Conversion revision: `3b2984dd865f6e9d2cc6aed0be6a5a5c2eb352ce`
+- License: Apache-2.0; original license: <https://github.com/facebookresearch/sam2/blob/main/LICENSE>
+- Five model files are downloaded on demand from Hugging Face and verified by
+  SHA-256. They are not hosted by MasterSelects. The conversion's learned
+  preprocessing and temporal constants are included in
+  `src/services/roto/sam21Constants.json`; the editor's AGPL license does not
+  replace their Apache-2.0 terms.
+
 ## Retained MasterSelects source notices
 
 This source tree includes material from earlier MasterSelects versions published
