@@ -4,8 +4,8 @@
 
 Local project storage with manual saving and interval autosave (five minutes by default), backups, and media relinking. Projects can use a user-selected folder through the **File System Access API**, **browser storage (OPFS)**, or the **Native Helper**.
 
-Development reloads use the same unsaved-work protection as production. A full
-page reload caused by source changes must not silently discard unsaved edits.
+Development reloads, including Vite refreshes, skip the browser's unsaved-work
+confirmation. Save before refreshing if you need to retain unsaved edits.
 Recent-project entries are retained when a cached folder handle is unavailable,
 permission is denied, or a project read fails. The project picker explains which
 recovery action is needed; reconnect the existing folder rather than create a
@@ -269,7 +269,7 @@ The `setupAutoSync()` function (in `projectLifecycle.ts`) subscribes to store ch
 - Syncs all store state to project data, then writes `project.json`
 
 ### On Page Unload
-Unsaved edits retain the browser leave-page warning. Save explicitly before closing when you want to retain them; unloading does not reintroduce continuous saving.
+In production, unsaved edits retain the browser leave-page warning. Development reloads show no confirmation. Save explicitly before closing or refreshing when you want to retain edits; unloading does not reintroduce continuous saving.
 
 The active composition and clip selection (including the focused Properties clip) are remembered in tab-local session storage and restored after a refresh. Selection recovery needs no explicit Save, does not dirty the project, and only selects clips still present in the loaded project. It does not save unsaved timeline edits.
 

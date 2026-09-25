@@ -118,15 +118,25 @@ vi.mock('../../src/stores/midiStore', () => ({
 describe('project lifecycle auto sync', () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it('protects unsaved work from automatic development reloads', async () => {
+  it('allows development reloads without the browser confirmation', async () => {
     vi.stubEnv('DEV', true);
     const { setupAutoSync, teardownAutoSync } = await import('../../src/services/project/projectLifecycle');
     setupAutoSync();
     try {
       const event = new Event('beforeunload', { cancelable: true });
       window.dispatchEvent(event);
-      expect(event.defaultPrevented).toBe(true);
+      expect(event.defaultPrevented).toBe(false);
       expect(mocks.saveCurrentProject).not.toHaveBeenCalled();
+    } finally { teardownAutoSync(); }
+  });
+  it('protects unsaved work from production reloads', async () => {
+    vi.stubEnv('DEV', false);
+    const { setupAutoSync, teardownAutoSync } = await import('../../src/services/project/projectLifecycle');
+    setupAutoSync();
+    try {
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
     } finally { teardownAutoSync(); }
   });
   it('retains projectless edits across auto-sync setup and releases protection after saving a project', async () => {

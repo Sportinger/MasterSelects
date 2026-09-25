@@ -487,10 +487,9 @@ export function setupAutoSync(): void {
     }
   }));
 
-  // Development reloads can discard the same unsaved project and media state.
-  // Preserve the browser's unsaved-work protection in every environment.
+  // Development refreshes are frequent; keep the unload warning for production only.
   beforeUnloadHandler = event => {
-    if (hasUnsavedWorkspace()) {
+    if (!import.meta.env.DEV && hasUnsavedWorkspace()) {
       event.preventDefault();
       event.returnValue = '';
     }
