@@ -24,9 +24,22 @@ function differsBeyond<T extends object>(a: T, b: T, ignored: (key: string) => b
   }
   return false;
 }
+// Card positions inside an effect graph are presentation, like canvas placement.
+function effectsContentChanged(previous: TimelineClip['effects'], next: TimelineClip['effects']) {
+  if (previous === next) return false;
+  if (!previous || !next || previous.length !== next.length) return true;
+  return next.some((effect, index) => {
+    const before = previous[index];
+    if (before === effect) return false;
+    if (differsBeyond(before, effect, key => key === 'operatorGraph')) return true;
+    const a = before.operatorGraph, b = effect.operatorGraph;
+    return a !== b && (!a || !b || differsBeyond(a, b, key => key === 'layout'));
+  });
+}
 function clipContentChanged(previous: TimelineClip, next: TimelineClip) {
   if (previous === next) return false;
-  if (previous.id !== next.id || differsBeyond(previous, next, key => key === 'nodeGraph')) return true;
+  if (previous.id !== next.id || differsBeyond(previous, next, key => key === 'nodeGraph' || key === 'effects')) return true;
+  if (effectsContentChanged(previous.effects, next.effects)) return true;
   const a = previous.nodeGraph, b = next.nodeGraph;
   return a !== b && (!a || !b || differsBeyond(a, b, key => PRESENTATION_GRAPH_KEYS.has(key)));
 }

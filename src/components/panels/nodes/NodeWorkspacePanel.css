@@ -266,6 +266,11 @@
   stroke: rgba(190, 111, 213, 0.76);
 }
 
+/* Groups a card with its sibling editors for focus tracking; adds no box. */
+.node-workspace-node-slot {
+  display: contents;
+}
+
 .node-workspace-node {
   position: absolute;
   contain: layout paint style;

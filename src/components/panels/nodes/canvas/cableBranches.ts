@@ -23,6 +23,8 @@ export interface RoutedCable {
   to: NodeGraphPoint;
   fromNode?: string; toNode?: string;
   fromBranch?: string; toBranch?: string;
+  /** Waypoints that route the cable around cards; absent for direct cables. */
+  via?: readonly NodeGraphPoint[];
 }
 
 /** Graph units shared by the painted branch point and its DOM hit targets. */

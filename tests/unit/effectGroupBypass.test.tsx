@@ -73,6 +73,28 @@ describe('effect group bypass', () => {
     expect(button).toHaveFocus();
   });
 
+  it('mounts canvas-mode card controls only while the card is active and reports focus from inside it', () => {
+    const { graph } = setup(true), focus = vi.fn();
+    const node = graph.nodes.find(candidate => candidate.id === 'effect-face')!;
+    const props = { node, canvasRendered: true, selectedNodeId: null, connectionDraft: null, onSelectNode: vi.fn(), onStartNodeDrag: vi.fn(),
+      onNodePointerMove: vi.fn(), onFinishNodeDrag: vi.fn(), onStartConnectionDrag: vi.fn(), onDisconnectPortEdges: vi.fn(),
+      onToggleNodeBypass: vi.fn(), onFocusChange: focus };
+    const view = render(<NodeGraphNodeCard {...props} active={false} />);
+    const card = view.container.querySelector<HTMLElement>('.node-workspace-node')!;
+    expect(card).toHaveAttribute('tabindex', '0');
+    expect(view.queryByRole('button', { name: 'Bypass Face Cables' })).toBeNull();
+    card.focus();
+    expect(focus).toHaveBeenLastCalledWith('effect-face', true);
+    view.rerender(<NodeGraphNodeCard {...props} active />);
+    // The same card element stays mounted, so focus and pointer capture survive activation.
+    expect(view.container.querySelector('.node-workspace-node')).toBe(card);
+    expect(card).toHaveFocus();
+    view.getByRole('button', { name: 'Bypass Face Cables' }).focus();
+    expect(focus).toHaveBeenLastCalledWith('effect-face', true);
+    card.blur(); (document.activeElement as HTMLElement | null)?.blur();
+    expect(focus).toHaveBeenLastCalledWith('effect-face', false);
+  });
+
   it('aligns the invisible canvas-mode button with the painted Byp label and keeps it out of node dragging', () => {
     const { graph } = setup(true), toggle = vi.fn(), drag = vi.fn();
     const node = graph.nodes.find(candidate => candidate.id === 'effect-face')!;

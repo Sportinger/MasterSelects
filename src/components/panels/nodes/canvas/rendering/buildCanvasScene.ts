@@ -109,7 +109,7 @@ export function buildCanvasScene(options: Options): CanvasScene {
     if (draft?.moved && draft.reconnectEdgeId === cable.id) continue;
     const highlighted = cable.id === options.selectedEdgeId || cable.id === options.hoveredEdgeId;
     scene.cables.push({ ...makeCanvasCable(cable.from, cable.to, describeNodePort(cable.output.port).color, highlighted, false, options.cableStyle), id: cable.id,
-      fromNode: cable.fromNode, toNode: cable.toNode, fromBranch: cable.fromBranch, toBranch: cable.toBranch,
+      fromNode: cable.fromNode, toNode: cable.toNode, fromBranch: cable.fromBranch, toBranch: cable.toBranch, ...(cable.via ? { via: [...cable.via] } : {}),
       occlusions: cable.edge ? occlusions(cable.edge) : undefined, baked: cable.edge?.readOnly });
   }
   if (options.branches?.length) scene.branches = options.branches;

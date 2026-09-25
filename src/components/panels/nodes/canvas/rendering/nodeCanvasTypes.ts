@@ -39,6 +39,8 @@ export interface CanvasCable {
   from: Point; to: Point; color: string; highlighted: boolean; draft?: boolean;
   /** Omitted for the default bezier. */
   style?: NodeCableStyle;
+  /** Waypoints around cards when obstacle avoidance is on. */
+  via?: Point[];
 }
 export interface CanvasPlug { id?: string; nodeId?: string; center: Point; tip: Point; input: boolean; color: string; highlighted: boolean; ghost?: boolean }
 /** Presentation-only cable branch point. */

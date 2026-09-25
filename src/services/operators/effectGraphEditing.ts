@@ -134,12 +134,34 @@ export function setOperatorVariant(clipId: string, effectId: string, nodeId: str
   editEffectGraph(clipId, effectId, 'Change node variant', graph => applyOperatorVariant(graph, nodeId, operatorId));
 }
 
+/**
+ * A top-level card move replaces only the stored layout map: no expansion,
+ * validation or repacking, and nodes/edges keep their identity, so render
+ * plans and previews recognize the edit as presentation. Returns false when
+ * the node lives inside an expanded composition or a shared/audio graph.
+ */
+function moveTopLevelEffectNode(clipId: string, effectId: string, nodeId: string, layout: { x: number; y: number }): boolean {
+  assertExclusiveTimelineMutationAllowed();
+  const { state, clip, effect } = readOwner(clipId, effectId), graph = effect?.operatorGraph;
+  if (!clip || !effect || !graph || effect.type === 'audio-math' || !graph.nodes.some(node => node.id === nodeId)) return false;
+  if (clip.sceneGraphOutput && state.sharedSceneGraphs?.[clip.sceneGraphOutput.graphId]?.effect.id === effectId) return false;
+  if (state.isExporting || state.tracks.find(track => track.id === clip.trackId)?.locked) throw new Error('The clip is unavailable, locked or exporting.');
+  const batch = startBatch('Move node');
+  try {
+    state.updateClip(clip.id, { effects: clip.effects.map(item => item.id === effectId
+      ? { ...item, operatorGraph: { ...graph, layout: { ...graph.layout, [nodeId]: layout } } } : item) });
+  } finally { if (batch.opened) endBatch(); }
+  return true;
+}
+
 export function createEffectGraphActions(clipId: string, effectId: string) {
   const ownerType = (domain: EffectOperatorGraph['domain']) => domain === 'voxel' ? 'voxel-relief'
     : domain === 'scene' ? 'splat-exploration' : domain === 'audio' ? 'audio-math' : domain === 'image' ? 'invert' : domain === 'analog-signal' ? 'analog-signal-lab' : 'face-cables';
   return {
-    moveNode: (nodeId: string, layout: { x: number; y: number }) => editEffectGraph(clipId, effectId, 'Move node', graph => { graph.layout[nodeId] = layout; },
-      { presentationOnly: true }),
+    moveNode: (nodeId: string, layout: { x: number; y: number }) => {
+      if (!moveTopLevelEffectNode(clipId, effectId, nodeId, layout)) editEffectGraph(clipId, effectId, 'Move node', graph => { graph.layout[nodeId] = layout; },
+        { presentationOnly: true });
+    },
     connectPorts: (c: NodeGraphConnectionRequest) => editEffectGraph(clipId, effectId, 'Connect nodes', graph => {
       const type = readOwner(clipId, effectId).effect?.type;
       Object.assign(graph, connectEffectGraph(graph, { id: `${c.fromNodeId}-${c.fromPortId}-${c.toNodeId}-${c.toPortId}`,

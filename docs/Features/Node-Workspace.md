@@ -322,6 +322,16 @@ leave and enter horizontally and loop around their ports. Painting, flow signals
 hover and click hit testing, and culling all use the same route. The choice is
 an editor preference that persists across sessions, not project data.
 
+**Avoid** is an independent toggle that routes cables around cards instead of
+across them, in every line style: Curved and Smart detours use rounded corners,
+Angular keeps hard corners. Routes run on a coarse orthogonal grid with a small
+clearance around each card, prefer few bends, and bundle cables from the same
+output into shared lanes. They are computed in a worker once the layout settles
+(about 0.2 s for 700 cables), never per frame. Cables attached to a card being
+dragged run direct until the drop reroutes them; backward links, links without a
+clear path inside the search window and hidden legacy DOM rendering keep direct
+routes. Avoid is an editor preference like the line style.
+
 ### Cable branch points
 
 Double-click a cable, or right-click it and choose **Add branch point here**, to
@@ -376,7 +386,19 @@ canvas owns the pointer capture. React, scene building and placement run once, o
 release. In the DOM fallback, and before a canvas paints, cards move in React.
 Moving an effect-internal card writes only its layout: the render plan cache
 ignores card positions, so a move neither recompiles the effect nor clears
-cached frames. Clicking or dragging the already selected card does not reselect it. Moving
+cached frames. Clicking or dragging the already selected card does not reselect it.
+In canvas mode each card is a single focusable hit target. Its ports, buttons,
+plug grips and inline editors mount only while the card is active: under the
+pointer (tracked geometrically, so it also works during a captured connection
+drag), selected, or focused. Activation keeps the same card element, so focus
+and pointer capture survive it. Selection changes and connection drafts reach
+only the cards they affect. A top-level effect card move replaces only the
+stored layout map, and previews treat such layout-only edits as presentation,
+so a drop neither recompiles, re-renders previews nor clears cached frames.
+Clip updates serialize the timeline for transition maintenance only when a
+changed clip takes part in a transition; before, every clip edit revalidated
+every effect graph. Active cards also stay mounted while other hit targets mount
+in batches, so a focused or captured card never loses focus mid-batch. Moving
 views keep full resolution and every detail. Node cards and repeated plug shapes
 are cached as bitmaps at or above the current pixel scale and redrawn only when
 their content changes or the zoom needs a sharper bitmap; overview levels keep

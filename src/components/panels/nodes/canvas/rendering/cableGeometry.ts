@@ -12,7 +12,7 @@ const routes = new WeakMap<CanvasCable, CachedRoute>();
 export function canvasCableRoute(cable: CanvasCable): CachedRoute {
   let cached = routes.get(cable);
   if (!cached) {
-    const route = cableRoute(cable.from, cable.to, cable.style);
+    const route = cableRoute(cable.from, cable.to, cable.style, cable.via);
     cached = { route, bounds: cableRouteBounds(route), middle: cableRouteMidpoint(route) };
     routes.set(cable, cached);
   }

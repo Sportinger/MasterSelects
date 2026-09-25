@@ -8,8 +8,8 @@ const CELL = 256;
 interface Segment { edgeId: string; ax: number; ay: number; bx: number; by: number }
 
 /** Same route as the painted cable, sampled into a polyline. */
-function cablePolyline(from: NodeGraphPoint, to: NodeGraphPoint, style: NodeCableStyle): NodeGraphPoint[] {
-  return sampleCableRoute(cableRoute(from, to, style), SAMPLES);
+function cablePolyline(from: NodeGraphPoint, to: NodeGraphPoint, style: NodeCableStyle, via?: readonly NodeGraphPoint[]): NodeGraphPoint[] {
+  return sampleCableRoute(cableRoute(from, to, style, via), via?.length ? 8 : SAMPLES);
 }
 
 /** Closest approach between segments p0-p1 and q0-q1: distance and parameter on p. */
@@ -44,10 +44,10 @@ function segmentApproach(p0x: number, p0y: number, p1x: number, p1y: number, s: 
  * so a fast sweep jumps across thin cables; querying the swept segment between
  * two pointer samples finds every cable crossed and returns the latest one.
  */
-export function createEdgeHitIndex(cables: Iterable<{ id: string; from: NodeGraphPoint; to: NodeGraphPoint }>, style: NodeCableStyle = 'curved') {
+export function createEdgeHitIndex(cables: Iterable<{ id: string; from: NodeGraphPoint; to: NodeGraphPoint; via?: readonly NodeGraphPoint[] }>, style: NodeCableStyle = 'curved') {
   const cells = new Map<string, Segment[]>();
   for (const cable of cables) {
-    const points = cablePolyline(cable.from, cable.to, style);
+    const points = cablePolyline(cable.from, cable.to, style, cable.via);
     for (let index = 1; index < points.length; index++) {
       const a = points[index - 1], b = points[index];
       const segment = { edgeId: cable.id, ax: a.x, ay: a.y, bx: b.x, by: b.y };

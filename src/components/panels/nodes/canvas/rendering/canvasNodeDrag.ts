@@ -22,7 +22,8 @@ export function applyNodeDrag(visible: CanvasScene, full: CanvasScene, drag: Can
     nodes: [...visible.nodes.filter(node => !ids.has(node.id)),
       ...full.nodes.filter(node => ids.has(node.id)).map(node => ({ ...node, x: node.x + drag.dx, y: node.y + drag.dy }))],
     cables: [...visible.cables.filter(cable => !cable.id || !cables.has(cable.id)),
-      ...full.cables.filter(cable => cable.id && cables.has(cable.id)).map(cable => ({ ...cable,
+      // Moving cables run direct until the drop reroutes them.
+      ...full.cables.filter(cable => cable.id && cables.has(cable.id)).map(cable => ({ ...cable, via: undefined,
         from: movesFrom(cable) ? shift(cable.from) : cable.from,
         to: movesTo(cable) ? shift(cable.to) : cable.to }))],
     plugs: [...visible.plugs.filter(plug => !movedPlug(plug)),

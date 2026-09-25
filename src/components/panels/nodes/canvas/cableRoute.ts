@@ -13,6 +13,8 @@ const STUB = 36;
 const LOOP_DROP = 120;
 /** Corner radius of smart routes, in graph units. */
 const CORNER_RADIUS = 56;
+/** Softer corners for curved cables that detour around cards. */
+const CURVED_DETOUR_RADIUS = 110;
 /** Cubic handle factor that approximates a circular quarter arc. */
 const ARC = 0.5523;
 
@@ -32,13 +34,13 @@ function orthogonalPoints(from: RoutePoint, to: RoutePoint): RoutePoint[] {
 }
 
 /** Replaces each corner by a quarter-circle-like cubic, never longer than half a leg. */
-function roundCorners(points: RoutePoint[]): CableRoute {
+function roundCorners(points: RoutePoint[], cornerRadius = CORNER_RADIUS): CableRoute {
   const segments: CableSegment[] = [];
   const unit = (a: RoutePoint, b: RoutePoint) => { const length = Math.hypot(b.x - a.x, b.y - a.y) || 1; return { x: (b.x - a.x) / length, y: (b.y - a.y) / length, length }; };
   for (let index = 1; index < points.length - 1; index++) {
     const previous = points[index - 1], corner = points[index], next = points[index + 1];
     const into = unit(previous, corner), out = unit(corner, next);
-    const radius = Math.min(CORNER_RADIUS, into.length / 2, out.length / 2);
+    const radius = Math.min(cornerRadius, into.length / 2, out.length / 2);
     const start = { x: corner.x - into.x * radius, y: corner.y - into.y * radius };
     const end = { x: corner.x + out.x * radius, y: corner.y + out.y * radius };
     segments.push({ to: start }, { c1: { x: start.x + into.x * radius * ARC, y: start.y + into.y * radius * ARC },
@@ -49,7 +51,13 @@ function roundCorners(points: RoutePoint[]): CableRoute {
 }
 
 /** The single description of a cable path shared by painting, hit testing, bounds and flow signals. */
-export function cableRoute(from: RoutePoint, to: RoutePoint, style: NodeCableStyle = 'curved'): CableRoute {
+export function cableRoute(from: RoutePoint, to: RoutePoint, style: NodeCableStyle = 'curved', via?: readonly RoutePoint[]): CableRoute {
+  // Obstacle-avoiding waypoints: each style keeps its character along the detour.
+  if (via?.length) {
+    const points = [from, ...via, to];
+    if (style === 'angular') return { from, segments: points.slice(1).map(point => ({ to: point })) };
+    return roundCorners(points, style === 'curved' ? CURVED_DETOUR_RADIUS : CORNER_RADIUS);
+  }
   if (style === 'angular') { const [start, ...rest] = orthogonalPoints(from, to); return { from: start, segments: rest.map(point => ({ to: point })) }; }
   if (style === 'smart') return roundCorners(orthogonalPoints(from, to));
   const h = Math.max(72, Math.abs(to.x - from.x) * 0.42);

@@ -44,6 +44,9 @@ interface NodeGraphNodeCardProps {
   onPreviewOutput?: (nodeId: string, portId: string) => void;
   collapsedGroupId?: string;
   onToggleGroup?: (groupId: string) => void;
+  /** Canvas mode: inactive cards keep only their focusable hit target; ports and controls mount when active. */
+  active?: boolean;
+  onFocusChange?: (nodeId: string, focused: boolean) => void;
 }
 
 function getNodeHeaderLabel(node: NodeGraphNode): string {
@@ -69,7 +72,10 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
   onPreviewOutput,
   collapsedGroupId,
   onToggleGroup,
+  active = true,
+  onFocusChange,
 }: NodeGraphNodeCardProps) {
+  const content = !canvasRendered || active;
   const [focusBox, setFocusBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const nodeHeight = getNodeHeight(node);
   const isSelected = node.id === selectedNodeId || isInSelection;
@@ -83,7 +89,10 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
     canvasRendered={canvasRendered}
     connectionDraft={connectionDraft} onStartConnectionDrag={onStartConnectionDrag} onDisconnectPortEdges={onDisconnectPortEdges} />;
 
-  return (<>
+  // A display:contents slot reports focus inside the card and its sibling editors.
+  return (<div className="node-workspace-node-slot"
+    onFocusCapture={() => onFocusChange?.(node.id, true)}
+    onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onFocusChange?.(node.id, false); }}>
     <div
       role="button"
       tabIndex={0}
@@ -134,7 +143,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
         }
       }}
     >
-      <div className="node-workspace-node-header">
+      {content && <><div className="node-workspace-node-header">
         <span>{getNodeHeaderLabel(node)}</span>
         <div className="node-workspace-node-header-actions">
           {isBypassable && onToggleNodeBypass && (
@@ -203,9 +212,9 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
           {!canvasRendered && node.outputs.length > 0 && <span className="node-workspace-port-direction">OUT</span>}
           {node.outputs.map((port) => renderPort(port))}
         </div>
-      </div>
+      </div></>}
     </div>
-    <NodeControlInputPicker clipId={clipId} node={node} />
+    {content && <><NodeControlInputPicker clipId={clipId} node={node} />
     {collapsedGroupId && onToggleGroup && <button type="button" className="node-workspace-node-expand"
       style={{ left: node.layout.x + 5, top: node.layout.y + 31 }} aria-label={`Expand ${node.label} group`} aria-expanded={false}
       title={`Expand ${node.label}`} onPointerDown={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}
@@ -217,6 +226,6 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
     <NodeValuePreview node={node} canvasRendered={canvasRendered} />
     {canvasRendered && focusBox && <div aria-hidden="true" className="node-workspace-keyboard-focus"
       style={{ left: node.layout.x + focusBox.left, top: node.layout.y + focusBox.top, width: focusBox.width, height: focusBox.height }} />}
-    </>
-  );
+    </>}
+  </div>);
 });

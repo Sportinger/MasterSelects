@@ -153,10 +153,13 @@ export function ensureTransitionCompositionsForChangedClips(
   const parentComposition = getTimelineParentComposition(mediaState, get);
   if (!parentComposition) return;
 
-  const serializableClips = get().getSerializableState().clips;
+  // Serializing the whole timeline validates every effect graph; only pay for it
+  // when a changed clip actually takes part in a transition.
+  let serializableClips: ReturnType<ReturnType<TimelineGet>['getSerializableState']>['clips'] | undefined;
   for (const clip of get().clips) {
     if (!clip.transitionOut) continue;
     if (!changed.has(clip.id) && !changed.has(clip.transitionOut.linkedClipId)) continue;
+    serializableClips ??= get().getSerializableState().clips;
 
     ensureTransitionCompositionForPair({
       outgoingClipId: clip.id,

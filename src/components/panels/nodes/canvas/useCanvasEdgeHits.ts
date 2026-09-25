@@ -18,7 +18,7 @@ const CLICK_SLOP_PX = 4;
 export function useCanvasEdgeHits(options: {
   enabled: boolean;
   /** Painted cable legs, including branch trunks (`branch:<id>`). */
-  cables: ReadonlyArray<{ id: string; from: NodeGraphPoint; to: NodeGraphPoint }>;
+  cables: ReadonlyArray<{ id: string; from: NodeGraphPoint; to: NodeGraphPoint; via?: readonly NodeGraphPoint[] }>;
   canvas: RefObject<HTMLDivElement | null>;
   visual: RefObject<Viewport>;
   getGraphPoint: (clientX: number, clientY: number) => NodeGraphPoint;
