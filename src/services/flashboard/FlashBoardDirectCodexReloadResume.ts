@@ -1,9 +1,13 @@
+import { isDirectModelProfileId, type DirectModelProfileId } from './FlashBoardDirectModelProfile';
+
 const DIRECT_CODEX_RELOAD_KEY = 'masterselects.direct-codex.active-turns.v1';
 const DIRECT_CODEX_RELOAD_TTL_MS = 10 * 60 * 1_000;
 
 export interface DirectCodexReloadSnapshot {
   assistantMessageId: string;
   conversationRef: string;
+  /** Absent in snapshots written before model profiles; those were Codex turns. */
+  modelProfile?: DirectModelProfileId;
   prompt: string;
   threadId: string;
   turnId: string | null;
@@ -30,6 +34,7 @@ function parseSnapshot(value: unknown): DirectCodexReloadSnapshot | null {
     candidate.version !== 1
     || !validIdentifier(candidate.assistantMessageId)
     || !validIdentifier(candidate.conversationRef)
+    || (candidate.modelProfile !== undefined && !isDirectModelProfileId(candidate.modelProfile))
     || !validIdentifier(candidate.threadId)
     || (candidate.turnId !== null && !validIdentifier(candidate.turnId))
     || typeof candidate.prompt !== 'string'

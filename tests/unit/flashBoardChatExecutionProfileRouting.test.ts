@@ -59,6 +59,10 @@ describe('Normal Path chat request routing', () => {
     expect(standard.action).toBe('send');
     if (direct.action !== 'send' || staleLogic.action !== 'send' || standard.action !== 'send') return;
     expect(direct.request.agentPath).toBe('direct-codex');
+    expect(direct.request.directModelProfile).toBe('codex');
+    expect(standard.request.agentPath).toBe('direct-codex');
+    expect(standard.request.directModelProfile).toBe('deepseek');
+    expect(staleLogic.request).not.toHaveProperty('agentPath');
     expect(direct.request).not.toHaveProperty('requestedAgentMode');
     expect(staleLogic.request).not.toHaveProperty('requestedAgentMode');
     expect(standard.request).not.toHaveProperty('requestedAgentMode');

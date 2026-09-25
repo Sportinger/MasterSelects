@@ -27,6 +27,7 @@ import {
   resetDirectCodexSession,
   resumeDirectCodexChat,
 } from '../../../services/flashboard/FlashBoardDirectCodexTransport';
+import { isDirectChatAgentMode } from '../../../services/flashboard/FlashBoardDirectModelProfile';
 import {
   clearDirectCodexReloadSnapshot,
   hasDirectCodexReloadSnapshot,
@@ -183,7 +184,7 @@ export function useFlashBoardChatController({
       && getFlashBoardDirectChatRunSnapshot(directConversationRef),
     () => false,
   );
-  const isChatting = localIsChatting || (chatAgentMode === 'direct' && directChatRunning);
+  const isChatting = localIsChatting || (isDirectChatAgentMode(chatAgentMode) && directChatRunning);
   const chatOptionsState = useMemo(() => buildFlashBoardChatOptionsState({
     chatModel,
     chatProvider,
@@ -345,7 +346,7 @@ export function useFlashBoardChatController({
     }
     if (
       effectiveChatProvider === 'kie'
-      && effectiveChatAgentMode !== 'direct'
+      && !isDirectChatAgentMode(effectiveChatAgentMode)
       && effectiveChatModelClass !== 'fast'
       && !availableChatModelClasses.includes(effectiveChatModelClass)
     ) {
@@ -384,7 +385,7 @@ export function useFlashBoardChatController({
 
     if (chatSendPlan.action === 'abort') {
       if (
-        effectiveChatAgentMode === 'direct'
+        isDirectChatAgentMode(effectiveChatAgentMode)
         && directConversationRef !== null
         && cancelFlashBoardDirectChatRun(directConversationRef)
       ) {
@@ -401,7 +402,7 @@ export function useFlashBoardChatController({
       return { status: 'rejected', success: false, error: chatSendPlan.errorMessage };
     }
 
-    const abortController = effectiveChatAgentMode === 'direct'
+    const abortController = isDirectChatAgentMode(effectiveChatAgentMode)
       ? directConversationRef === null
         ? null
         : startFlashBoardDirectChatRun(directConversationRef)
@@ -413,13 +414,13 @@ export function useFlashBoardChatController({
       setChatError(error);
       return { status: 'rejected', success: false, error };
     }
-    if (effectiveChatAgentMode !== 'direct') chatAbortRef.current?.abort();
+    if (!isDirectChatAgentMode(effectiveChatAgentMode)) chatAbortRef.current?.abort();
     chatAbortRef.current = abortController;
     const userMessageId = createFlashBoardChatMessageId('user');
     const assistantMessageId = createFlashBoardChatMessageId('assistant');
     const optimisticMessages = buildFlashBoardChatOptimisticMessages({
       assistantMessageId,
-      ...(effectiveChatAgentMode === 'direct' && directConversationRef !== null
+      ...(isDirectChatAgentMode(effectiveChatAgentMode) && directConversationRef !== null
         ? { conversationRef: directConversationRef }
         : {}),
       userMessageId,
@@ -568,7 +569,7 @@ export function useFlashBoardChatController({
         success: true,
       };
     } catch (error) {
-      const recoverableDirect = effectiveChatAgentMode === 'direct'
+      const recoverableDirect = isDirectChatAgentMode(effectiveChatAgentMode)
         && !abortController.signal.aborted
         && hasDirectCodexReloadSnapshot(assistantMessageId);
       if (recoverableDirect) {
@@ -590,7 +591,7 @@ export function useFlashBoardChatController({
           success: false,
         };
       }
-      if (effectiveChatAgentMode === 'direct') {
+      if (isDirectChatAgentMode(effectiveChatAgentMode)) {
         clearDirectCodexReloadSnapshot(assistantMessageId);
       }
       const errorMessage = abortController.signal.aborted
@@ -604,7 +605,7 @@ export function useFlashBoardChatController({
         success: false,
       };
     } finally {
-      if (effectiveChatAgentMode === 'direct') {
+      if (isDirectChatAgentMode(effectiveChatAgentMode)) {
         finishFlashBoardDirectChatRun(abortController);
       }
       if (chatAbortRef.current === abortController) {

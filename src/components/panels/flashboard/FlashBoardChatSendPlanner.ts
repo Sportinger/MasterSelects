@@ -10,6 +10,7 @@ import {
   type FlashBoardOpenAiReasoningEffort,
 } from '../../../services/flashboard/FlashBoardChatService';
 import { buildFlashBoardChatRequestPrompt } from '../../../services/flashboard/FlashBoardChatHistory';
+import { directModelProfileForAgentMode } from '../../../services/flashboard/FlashBoardDirectModelProfile';
 import type { FlashBoardChatMessage } from './FlashBoardChatOutput';
 
 export { buildFlashBoardChatRequestPrompt } from '../../../services/flashboard/FlashBoardChatHistory';
@@ -149,7 +150,10 @@ export function buildFlashBoardChatSendPlan({
     return { action: 'error', errorMessage: 'Write a chat prompt before starting chat.' };
   }
 
-  if (chatProvider === 'kie' && !canUseHostedChat && chatAgentMode !== 'direct') {
+  const directModelProfile = directModelProfileForAgentMode(chatAgentMode);
+  const directCodex = directModelProfile !== null;
+
+  if (chatProvider === 'kie' && !canUseHostedChat && !directCodex) {
     return {
       action: 'error',
       dialogTarget: !hasHostedSession ? 'auth' : 'pricing',
@@ -161,11 +165,11 @@ export function buildFlashBoardChatSendPlan({
     };
   }
 
-  if (chatProvider === 'kie' && !hasHostedSession && chatAgentMode === 'direct' && !import.meta.env.DEV) {
+  if (chatProvider === 'kie' && !hasHostedSession && directCodex && !import.meta.env.DEV) {
     return {
       action: 'error',
       dialogTarget: 'auth',
-      errorMessage: 'Sign in to use Codex Direct.',
+      errorMessage: `Sign in to use ${directModelProfile === 'deepseek' ? 'Fast' : 'Codex Direct'}.`,
     };
   }
 
@@ -176,12 +180,13 @@ export function buildFlashBoardChatSendPlan({
   );
   const guided = decisionPolicy !== 'automatic';
   const nativePlanConversation = chatIntent === 'plan' && conversationRef !== undefined;
-  const directCodex = chatAgentMode === 'direct';
 
   return {
     action: 'send',
     request: {
-      ...(directCodex ? { agentPath: 'direct-codex' as const } : {}),
+      ...(directCodex
+        ? { agentPath: 'direct-codex' as const, directModelProfile }
+        : {}),
       ...(directCodex && conversationRef !== undefined ? { conversationRef } : {}),
       ...(chatProvider === 'kie' && canUseHostedChat
         ? {

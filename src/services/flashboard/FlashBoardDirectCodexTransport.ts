@@ -36,10 +36,10 @@ import {
   runDirectCodexToolWithRecovery,
 } from './FlashBoardDirectCodexToolRecovery';
 import {
-  DIRECT_CODEX_MODEL,
   readStoredDirectCodexThreadId,
   startOrResumeDirectCodexThread,
 } from './FlashBoardDirectCodexThreadSession';
+import { resolveDirectModelProfile } from './FlashBoardDirectModelProfile';
 
 export { createDirectCodexTurnToolGuard } from './FlashBoardDirectCodexTurnPolicy';
 export { runDirectCodexToolWithRecovery } from './FlashBoardDirectCodexToolRecovery';
@@ -99,6 +99,7 @@ export function buildDirectCodexDynamicTools(
     ...AI_TOOLS,
     ...DIRECT_CODEX_MEDIA_TOOL_DEFINITIONS,
   ],
+  deferLoading = true,
 ): Array<Record<string, unknown>> {
   const seen = new Set<string>();
   const definitions = tools.flatMap((tool) => {
@@ -106,7 +107,7 @@ export function buildDirectCodexDynamicTools(
     if (seen.has(name)) return [];
     seen.add(name);
     return [{
-      deferLoading: true,
+      ...(deferLoading ? { deferLoading: true } : {}),
       description: tool.function.description,
       inputSchema: tool.function.parameters,
       name,
@@ -307,8 +308,10 @@ async function runDirectCodexChat(
   const reloadSnapshot = request.resumeMessageId
     ? readDirectCodexReloadSnapshot(request.resumeMessageId)
     : null;
+  const modelProfileId = request.directModelProfile;
+  const modelProfile = resolveDirectModelProfile(modelProfileId);
   let threadId = reloadSnapshot?.threadId
-    ?? readStoredDirectCodexThreadId(request.conversationRef)
+    ?? readStoredDirectCodexThreadId(request.conversationRef, modelProfileId)
     ?? '';
   let turnId = resumeOnly ? reloadSnapshot?.turnId ?? '' : '';
   let finalText = '';
@@ -595,8 +598,9 @@ async function runDirectCodexChat(
     send({ method: 'initialized', params: {} });
     const session = await startOrResumeDirectCodexThread(
       requestRpc,
-      buildDirectCodexDynamicTools(),
+      buildDirectCodexDynamicTools(undefined, modelProfile.deferToolLoading),
       request.conversationRef,
+      modelProfileId,
     );
     threadId = session.threadId;
     turnId = session.activeTurnId ?? '';
@@ -608,11 +612,11 @@ async function runDirectCodexChat(
     if (!turnId) {
       const startedTurn = record(await requestRpc('turn/start', {
         approvalPolicy: 'never',
-        effort: 'xhigh',
+        effort: modelProfile.effort,
         input: directTurnInput(request),
-        model: DIRECT_CODEX_MODEL,
+        model: modelProfile.model,
         sandboxPolicy: { networkAccess: false, type: 'readOnly' },
-        serviceTier: 'fast',
+        ...(modelProfile.serviceTier ? { serviceTier: modelProfile.serviceTier } : {}),
         threadId,
       }));
       turnId = String(record(startedTurn.turn).id ?? '');
@@ -622,6 +626,7 @@ async function runDirectCodexChat(
       saveDirectCodexReloadSnapshot({
         assistantMessageId: request.resumeMessageId,
         conversationRef: request.conversationRef?.trim() || 'default',
+        ...(modelProfileId ? { modelProfile: modelProfileId } : {}),
         prompt: request.prompt,
         threadId,
         turnId,
@@ -669,6 +674,7 @@ export async function resumeDirectCodexChat(input: {
     conversationRef: snapshot.conversationRef === 'default'
       ? undefined
       : snapshot.conversationRef,
+    ...(snapshot.modelProfile ? { directModelProfile: snapshot.modelProfile } : {}),
     prompt: snapshot.prompt,
     resumeMessageId: snapshot.assistantMessageId,
   }, true);

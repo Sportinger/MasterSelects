@@ -1,4 +1,5 @@
 import type { ToolDefinition, ToolResult } from '../aiTools';
+import type { DirectModelProfileId } from './FlashBoardDirectModelProfile';
 import type {
   KernelActiveDecision,
   KernelDecisionPrompt,
@@ -93,6 +94,8 @@ export interface FlashBoardChatRequest {
   activityRunId?: string;
   /** Direct path from the isolated Codex app-server to browser editor tools. */
   agentPath?: 'normal' | 'direct-codex';
+  /** Model behind the Direct path; defaults to Codex. */
+  directModelProfile?: DirectModelProfileId;
   activeDecision?: KernelActiveDecision;
   /** Opaque browser conversation binding; the kernel owns native provider state. */
   conversationRef?: string;

@@ -1,7 +1,11 @@
 import type { FlashBoardChatAgentMode } from '../../../services/flashboard/FlashBoardChatService';
 
 export const FLASHBOARD_CHAT_AGENT_OPTIONS = [
-  { id: 'standard', label: 'Fast', title: 'Fast: use DeepSeek in Auto.' },
+  {
+    id: 'standard',
+    label: 'Fast',
+    title: 'Fast: the Codex Direct workflow running on DeepSeek V4.1 Flash.',
+  },
   {
     id: 'direct',
     label: 'Codex Direct',

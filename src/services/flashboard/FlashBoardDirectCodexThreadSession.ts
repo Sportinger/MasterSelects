@@ -1,4 +1,9 @@
-export const DIRECT_CODEX_MODEL = 'gpt-5.6-sol';
+import {
+  DIRECT_MODEL_PROFILE_IDS,
+  resolveDirectModelProfile,
+  type DirectModelProfileId,
+} from './FlashBoardDirectModelProfile';
+
 
 const DIRECT_CODEX_THREAD_KEY = 'masterselects.direct-codex.threads.v12';
 const DIRECT_CODEX_PREVIOUS_THREAD_KEY = 'masterselects.direct-codex.threads.v11';
@@ -16,8 +21,8 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function directConversationKey(conversationRef?: string): string {
-  return conversationRef?.trim() || 'default';
+function directConversationKey(conversationRef?: string, profileId?: DirectModelProfileId): string {
+  return `${resolveDirectModelProfile(profileId).threadNamespace}${conversationRef?.trim() || 'default'}`;
 }
 
 function readStoredThreadIds(): Record<string, string> {
@@ -35,9 +40,12 @@ function readStoredThreadIds(): Record<string, string> {
 
 export function readStoredDirectCodexThreadId(
   conversationRef?: string,
+  profileId?: DirectModelProfileId,
 ): string | undefined {
-  const stored = readStoredThreadIds()[directConversationKey(conversationRef)];
+  const stored = readStoredThreadIds()[directConversationKey(conversationRef, profileId)];
   if (stored) return stored;
+  // Legacy single-thread storage predates profiles and always held Codex threads.
+  if (resolveDirectModelProfile(profileId).threadNamespace) return undefined;
   try {
     return window.sessionStorage.getItem(DIRECT_CODEX_LEGACY_THREAD_KEY)?.trim() || undefined;
   } catch {
@@ -45,16 +53,34 @@ export function readStoredDirectCodexThreadId(
   }
 }
 
-function storeDirectCodexThreadId(threadId: string, conversationRef?: string): void {
+function storeDirectCodexThreadId(
+  threadId: string,
+  conversationRef: string | undefined,
+  profileId: DirectModelProfileId | undefined,
+): void {
   try {
     window.sessionStorage.setItem(DIRECT_CODEX_THREAD_KEY, JSON.stringify({
       ...readStoredThreadIds(),
-      [directConversationKey(conversationRef)]: threadId,
+      [directConversationKey(conversationRef, profileId)]: threadId,
     }));
     window.sessionStorage.removeItem(DIRECT_CODEX_PREVIOUS_THREAD_KEY);
     window.sessionStorage.removeItem(DIRECT_CODEX_LEGACY_THREAD_KEY);
   } catch {
     // The live module still retains the thread even when storage is unavailable.
+  }
+}
+
+function forgetDirectCodexThreadId(
+  conversationRef: string | undefined,
+  profileId: DirectModelProfileId | undefined,
+): void {
+  try {
+    const stored = readStoredThreadIds();
+    delete stored[directConversationKey(conversationRef, profileId)];
+    if (Object.keys(stored).length === 0) window.sessionStorage.removeItem(DIRECT_CODEX_THREAD_KEY);
+    else window.sessionStorage.setItem(DIRECT_CODEX_THREAD_KEY, JSON.stringify(stored));
+  } catch {
+    // The next thread/start replaces the stale binding.
   }
 }
 
@@ -67,7 +93,9 @@ export function resetDirectCodexSession(conversationRef?: string): void {
       return;
     }
     const stored = readStoredThreadIds();
-    delete stored[directConversationKey(conversationRef)];
+    for (const profileId of DIRECT_MODEL_PROFILE_IDS) {
+      delete stored[directConversationKey(conversationRef, profileId)];
+    }
     if (Object.keys(stored).length === 0) window.sessionStorage.removeItem(DIRECT_CODEX_THREAD_KEY);
     else window.sessionStorage.setItem(DIRECT_CODEX_THREAD_KEY, JSON.stringify(stored));
     window.sessionStorage.removeItem(DIRECT_CODEX_PREVIOUS_THREAD_KEY);
@@ -99,7 +127,8 @@ export function buildDirectCodexBaseInstructions(): string {
   ].join(' ');
 }
 
-function directThreadConfiguration(): Record<string, unknown> {
+function directThreadConfiguration(profileId?: DirectModelProfileId): Record<string, unknown> {
+  const profile = resolveDirectModelProfile(profileId);
   return {
     approvalPolicy: 'never',
     baseInstructions: buildDirectCodexBaseInstructions(),
@@ -131,7 +160,8 @@ function directThreadConfiguration(): Record<string, unknown> {
       mcp_servers: {},
       web_search: 'disabled',
     },
-    model: DIRECT_CODEX_MODEL,
+    model: profile.model,
+    ...(profile.modelProvider ? { modelProvider: profile.modelProvider } : {}),
     sandbox: 'read-only',
     serviceName: 'masterselects_direct',
   };
@@ -166,12 +196,13 @@ export async function startOrResumeDirectCodexThread(
   requestRpc: (method: string, params: unknown) => Promise<unknown>,
   dynamicTools: Array<Record<string, unknown>>,
   conversationRef?: string,
+  profileId?: DirectModelProfileId,
 ): Promise<DirectCodexThreadSession> {
-  const storedThreadId = readStoredDirectCodexThreadId(conversationRef);
+  const storedThreadId = readStoredDirectCodexThreadId(conversationRef, profileId);
   if (storedThreadId) {
     try {
       const resumed = record(await requestRpc('thread/resume', {
-        ...directThreadConfiguration(),
+        ...directThreadConfiguration(profileId),
         initialTurnsPage: { itemsView: 'full', limit: 5, sortDirection: 'desc' },
         threadId: storedThreadId,
       }));
@@ -180,17 +211,17 @@ export async function startOrResumeDirectCodexThread(
         return readDirectCodexThreadSession(resumedThreadId, resumed);
       }
     } catch {
-      resetDirectCodexSession(conversationRef);
+      forgetDirectCodexThreadId(conversationRef, profileId);
     }
   }
 
   const started = record(await requestRpc('thread/start', {
-    ...directThreadConfiguration(),
+    ...directThreadConfiguration(profileId),
     dynamicTools,
     ephemeral: false,
   }));
   const threadId = String(record(started.thread).id ?? '');
   if (!threadId) throw new Error('Codex Direct did not create a session.');
-  storeDirectCodexThreadId(threadId, conversationRef);
+  storeDirectCodexThreadId(threadId, conversationRef, profileId);
   return { threadId };
 }

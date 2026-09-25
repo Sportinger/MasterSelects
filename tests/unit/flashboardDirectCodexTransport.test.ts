@@ -35,7 +35,11 @@ import {
   readDirectCodexReloadSnapshot,
   saveDirectCodexReloadSnapshot,
 } from '../../src/services/flashboard/FlashBoardDirectCodexReloadResume';
-import { readDirectCodexThreadSession } from '../../src/services/flashboard/FlashBoardDirectCodexThreadSession';
+import {
+  readDirectCodexThreadSession,
+  resetDirectCodexSession,
+  startOrResumeDirectCodexThread,
+} from '../../src/services/flashboard/FlashBoardDirectCodexThreadSession';
 import { normalizeFlashBoardChatMessage } from '../../src/services/project/flashBoardChatProjectCodec';
 
 describe('FlashBoard Codex Direct path', () => {
@@ -134,6 +138,35 @@ describe('FlashBoard Codex Direct path', () => {
     });
 
     clearDirectCodexReloadSnapshot(assistantMessageId);
+  });
+
+  it('keeps Direct prompt and config but swaps the model for the DeepSeek profile', async () => {
+    resetDirectCodexSession();
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
+    const requestRpc = async (method: string, params: unknown) => {
+      calls.push({ method, params: params as Record<string, unknown> });
+      return { thread: { id: `thread-${calls.length}` } };
+    };
+
+    await startOrResumeDirectCodexThread(requestRpc, [], 'conversation-profile-1', 'codex');
+    await startOrResumeDirectCodexThread(requestRpc, [], 'conversation-profile-1', 'deepseek');
+
+    expect(calls.map(call => call.method)).toEqual(['thread/start', 'thread/start']);
+    const [codex, deepseek] = calls.map(call => call.params);
+    expect(codex.model).toBe('gpt-5.6-sol');
+    expect(codex).not.toHaveProperty('modelProvider');
+    expect(deepseek.model).toBe('deepseek-flash');
+    expect(deepseek.modelProvider).toBe('deepseek');
+    expect(deepseek.baseInstructions).toBe(codex.baseInstructions);
+    expect(deepseek.config).toEqual(codex.config);
+
+    calls.length = 0;
+    await startOrResumeDirectCodexThread(requestRpc, [], 'conversation-profile-1', 'deepseek');
+    expect(calls[0]).toMatchObject({
+      method: 'thread/resume',
+      params: { modelProvider: 'deepseek', threadId: 'thread-2' },
+    });
+    resetDirectCodexSession();
   });
 
   it('detects the in-progress turn returned by thread/resume', () => {

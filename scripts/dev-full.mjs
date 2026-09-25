@@ -404,14 +404,23 @@ async function startLogicAgent() {
     '',
     '[mcp_servers]',
     '',
+    // Fast runs the Direct workflow on DeepSeek through this app-server.
+    '[model_providers.deepseek]',
+    'name = "DeepSeek"',
+    'base_url = "https://api.deepseek.com/v1"',
+    'env_key = "DEEPSEEK_API_KEY"',
+    'wire_api = "responses"',
+    '',
   ].join('\n'), {
     encoding: 'utf8',
     flag: 'wx',
     mode: 0o600,
   });
+  const deepseekApiKey = readDevVarsEnvironment().DEEPSEEK_API_KEY?.trim();
   const logicAgentEnvironment = {
     ...childEnv,
     CODEX_HOME: logicCodexHomePath,
+    ...(deepseekApiKey ? { DEEPSEEK_API_KEY: deepseekApiKey } : {}),
   };
 
   const codexArgs = [
