@@ -539,8 +539,8 @@ Backward scrubbing and reverse playback keep that same data-flow direction.
 Motion stops after scrubbing settles or playback pauses; holding the playhead
 still does not keep it running. Disconnected cables and connection drafts have
 no moving signal.
-The points fade in when playback or scrubbing starts and fade out in place when
-it stops. Each point also fades and shrinks near both cable ends, so it never
+The points fade in within 100 ms when playback or scrubbing starts and fade out
+in place when it stops. Each point also fades and shrinks near both cable ends, so it never
 pops when it wraps back to the output. Their size grows with the canvas zoom
 within a readable 1.4-5 screen pixel range.
 
