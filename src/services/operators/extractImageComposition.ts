@@ -22,7 +22,7 @@ export function extractImageComposition(source: EffectOperatorGraph, spec: {
       && !spec.keepLiteralInputs?.includes(from.id)) members.add(from.id);
   }
   const bodyNodes = source.nodes.filter(node => members.has(node.id));
-  if (bodyNodes.some(node => Object.keys(node.bindings).length || ['image.frame', 'image.frame-history', 'glyph.atlas'].includes(node.operator))) {
+  if (bodyNodes.some(node => Object.keys(node.bindings).length || ['image.frame', 'image.frame-history', 'glyph.atlas', 'glyph.text-atlas'].includes(node.operator))) {
     throw new Error(`Composition ${spec.id} must expose bound values and resources as inputs.`);
   }
   const outputPort = (nodeId: string, portId: string): OperatorPort => {

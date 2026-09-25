@@ -113,6 +113,7 @@ export function setOperatorConstant(clipId: string, effectId: string, nodeId: st
     if (spec.type === 'boolean' && typeof value !== 'boolean') throw new Error('Parameter requires a boolean value.');
     if (spec.type === 'color' && (typeof value !== 'string' || !/^#[\da-f]{6}([\da-f]{2})?$/i.test(value))) throw new Error('Parameter requires a hex color.');
     if (spec.type === 'select' && (typeof value !== 'string' || !spec.options?.some(option => option.value === value))) throw new Error('Parameter option is unavailable.');
+    if (spec.type === 'text' && (typeof value !== 'string' || Array.from(value).length > (spec.maxLength ?? Infinity))) throw new Error('Parameter text is too long.');
     if (spec.type === 'vector' && (!Array.isArray(value) || value.length !== 3
       || value.some(component => !Number.isFinite(component)))) throw new Error('Parameter requires a finite vector.');
     node.constants = { ...node.constants, [name]: node.operator === 'values.integer' && typeof value === 'number' ? Math.trunc(value) : value };

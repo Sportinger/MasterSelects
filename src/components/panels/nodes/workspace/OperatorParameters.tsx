@@ -102,6 +102,9 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
             max={operator.family === 'values.numeric' ? Math.max(spec.max ?? 30, Number(constant)) : spec.max ?? 30} step={spec.step ?? 0.01}
             onChange={next => safely(() => setOperatorConstant(clip.id, effectId, node.id, spec.id, next))}
             persistenceKey={operatorConstantNumberPersistenceKey({ clipId: clip.id, effectId, nodeId: node.id, parameter: spec.id })} />;
+          if (spec.type === 'text') return <ResolveInspectorRow key={spec.id} label={spec.label}><input aria-label={`${operator.label} ${spec.label}`}
+            className="resolve-inspector-text-input" type="text" value={String(constant)} maxLength={spec.maxLength}
+            onChange={event => safely(() => setOperatorConstant(clip.id, effectId, node.id, spec.id, event.target.value))} /></ResolveInspectorRow>;
           if (spec.type === 'select') return <ResolveInspectorRow key={spec.id} label={spec.label}><InspectorSelect ariaLabel={`${operator.label} ${spec.label}`}
             value={String(constant)} options={[...(spec.options ?? [])]}
             onChange={next => safely(() => setOperatorConstant(clip.id, effectId, node.id, spec.id, next))} /></ResolveInspectorRow>;

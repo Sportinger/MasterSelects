@@ -90,6 +90,22 @@ weight requires nonzero sigma; normalization requires nonzero total weight.
 Kernel indices still need a surrounding reducer scope. These contracts are shared
 building blocks, not replacements for the existing kernel or sequence reducers.
 
+### Text in any image graph
+
+**Text Atlas** renders its own typed characters (up to 256, in order) with a
+selectable font and weight into a cached glyph atlas. It needs no glyph effect or
+effect-owned ramp, so it can be added to every general image graph, including
+graphs created with `createImageNodeGraph`. Its outputs are the atlas image,
+glyph count, columns and rows.
+
+**Glyph Sample** draws one glyph from any connected atlas: it takes the atlas and
+its columns/rows, a glyph **Index** (0 = first character, rounded to the nearest
+glyph) and a **Local UV** in 0–1 (top-left origin), and returns the glyph coverage.
+The atlas row is derived from the glyph centre, so computed integer indices stay
+exact on the GPU. Typical use: cell ID → index math → Glyph Sample → mix a text
+color over the background. Compute image effects (Voronoi, Pixel Sort, Quadtree
+Zoom, Contour) and Analog Signal Lab do not offer Text Atlas.
+
 Further reusable processing recipes are available in the same menu:
 
 | Category | Blocks | Boundary contract |

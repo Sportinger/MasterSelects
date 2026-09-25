@@ -290,14 +290,14 @@ export function addableEffectOperators(type: string) {
     const shared = ['image.frame', 'values.number', 'values.boolean', 'values.color'].flatMap(id => {
       const operator = getEffectOperator(id); return operator ? [operator] : [];
     });
-    const excluded = new Set(['image.materialize', 'image.frame-history', 'glyph.atlas', 'image.named-input', 'image.resource-input']);
+    const excluded = new Set(['image.materialize', 'image.frame-history', 'glyph.atlas', 'glyph.text-atlas', 'image.named-input', 'image.resource-input']);
     return [...(type === 'voronoi' ? VORONOI_OPERATORS.filter(operator => operator.addable) : []), ...shared,
       ...IMAGE_OPERATORS.filter(operator => operator.addable && !excluded.has(operator.id) && !operator.id.startsWith('image.derivative.'))];
   }
   if (type === 'analog-signal-lab') return [
     ...ANALOG_SIGNAL_OPERATORS.filter(operator => operator.addable),
     ...['image.frame', 'values.number'].flatMap(id => { const operator = getEffectOperator(id); return operator ? [operator] : []; }),
-    ...IMAGE_OPERATORS.filter(operator => operator.addable && operator.id !== 'image.materialize' && !operator.id.startsWith('image.derivative.')),
+    ...IMAGE_OPERATORS.filter(operator => operator.addable && operator.id !== 'image.materialize' && operator.id !== 'glyph.text-atlas' && !operator.id.startsWith('image.derivative.')),
   ];
   if (isImageGraphEffectType(type)) {
     const shared = ['image.frame', 'values.number'].flatMap(id => {

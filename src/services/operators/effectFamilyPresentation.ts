@@ -66,7 +66,7 @@ export function organizeEffectFamilyGraph(source: EffectOperatorGraph, composed:
       || node.id === 'rgba' && type === 'invert') continue;
     let stage: string;
     if (node.operator.startsWith('values.')) stage = literal(node) ? 'constants' : 'controls';
-    else if (['image.normalized-uv', 'image.resolution', 'image.timeline-time', 'image.kernel-index', 'image.sequence-index', 'glyph.atlas', 'image.frame-history'].includes(node.operator)) stage = 'sources';
+    else if (['image.normalized-uv', 'image.resolution', 'image.timeline-time', 'image.kernel-index', 'image.sequence-index', 'glyph.atlas', 'glyph.text-atlas', 'image.frame-history'].includes(node.operator)) stage = 'sources';
     else if (node.composition) {
       const leaves = Object.values(node.composition.nodeIds).flatMap(id => originalNodes.get(id) ?? []);
       // Prefer computational leaves: captured/shared literal placement must not determine the stage.

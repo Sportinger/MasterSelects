@@ -1,5 +1,7 @@
 import type { OperatorDefinition, OperatorPort } from '../../types/operatorGraph';
 import { MOTION_IMAGE_OPERATORS } from './motionImageOperators';
+import { GLYPH_FONT_OPTIONS } from '../../effects/_shared/glyphFonts';
+import { TEXT_ATLAS_DEFAULT_CHARACTERS, TEXT_ATLAS_MAX_CHARACTERS } from './imageOperatorGlyphResources';
 
 const port = (id: string, type: OperatorPort['type'], label: string, required = false): OperatorPort =>
   ({ id, type, label, required, ...(type === 'image' && required
@@ -52,6 +54,16 @@ export const IMAGE_OPERATORS: readonly OperatorDefinition[] = [
     inputs: [], outputs: [port('image', 'image', 'Atlas'), port('glyphCount', 'number', 'Glyph Count'),
       port('columns', 'number', 'Columns'), port('rows', 'number', 'Rows')], parameters: [],
     consumers: ['image', 'glyph'], implementation: 'shared' }),
+  imageOperator({ id: 'glyph.text-atlas', family: 'glyph.text-atlas', variant: 'text', label: 'Text Atlas',
+    description: 'Renders the typed characters into a cached glyph atlas, in order: glyph index 0 is the first character. Use Glyph Sample to draw a glyph by index.',
+    inputs: [], outputs: [port('image', 'image', 'Atlas'), port('glyphCount', 'number', 'Glyph Count'),
+      port('columns', 'number', 'Columns'), port('rows', 'number', 'Rows')],
+    parameters: [
+      { id: 'characters', label: 'Characters', type: 'text', default: TEXT_ATLAS_DEFAULT_CHARACTERS, maxLength: TEXT_ATLAS_MAX_CHARACTERS },
+      { id: 'fontFamily', label: 'Font', type: 'select', default: GLYPH_FONT_OPTIONS[0].value, options: GLYPH_FONT_OPTIONS },
+      { id: 'fontWeight', label: 'Weight', type: 'number', default: 600, min: 100, max: 900, step: 100 },
+    ],
+    addable: true, consumers: ['Image graphs'], implementation: 'shared' }),
   imageOperator({ id: 'convert.image-to-vec4', label: 'Image to RGBA', description: 'Adapts one sampled image pixel to a four-component value.',
     inputs: [port('image', 'image', 'Image', true)], outputs: [port('value', 'vec4', 'RGBA')], parameters: [], addable: true }),
   imageOperator({ id: 'convert.vec4-to-image', label: 'RGBA to Image', description: 'Adapts a four-component value to one image pixel.',

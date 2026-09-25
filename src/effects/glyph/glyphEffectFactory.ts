@@ -4,6 +4,7 @@ import type { EffectCategory, EffectDefinition, EffectParam } from '../types';
 import glyphInclude from '../_shared/glyph.wgsl?raw';
 import familyShader from './shader.wgsl?raw';
 import { FEEDBACK_PARAMETERS } from '../_shared/feedbackParameters';
+import { GLYPH_FONT_OPTIONS } from '../_shared/glyphFonts';
 
 interface GlyphEffectOptions {
   id: string;
@@ -18,11 +19,7 @@ interface GlyphEffectOptions {
   category?: EffectCategory;
 }
 
-const FONT_OPTIONS = [
-  { value: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', label: 'Monospace' },
-  { value: 'Georgia, serif', label: 'Serif' },
-  { value: 'system-ui, sans-serif', label: 'Sans Serif' },
-];
+const FONT_OPTIONS = GLYPH_FONT_OPTIONS;
 
 function parseColor(value: unknown, fallback: string): [number, number, number, number] {
   const hex = typeof value === 'string' && /^#[\da-f]{6}$/i.test(value) ? value : fallback;

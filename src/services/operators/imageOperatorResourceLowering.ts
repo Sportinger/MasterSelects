@@ -2,7 +2,7 @@ import type { BoundOperatorNode, EffectOperatorGraph } from '../../types/operato
 import { IMAGE_OPERATOR_PARAMETER_CAPACITY } from './imageOperatorParameters';
 import type { ImageOperatorCompileContext } from './imageOperatorChoice';
 import { resolveImageOperatorFieldResource, type ImageOperatorFieldResource } from './imageOperatorFieldResources';
-import { resolveImageOperatorGlyphAtlas } from './imageOperatorGlyphResources';
+import { resolveImageOperatorGlyphAtlas, resolveImageOperatorTextAtlas } from './imageOperatorGlyphResources';
 import type { ImageOperatorExternalResource } from './imageOperatorExternalResources';
 import { IMAGE_FRAME_HISTORY_RESOURCE_ID, resolveImageOperatorNamedImage, validateImageOperatorNamedImages,
   type ImageOperatorResourceSampling } from './imageOperatorResources';
@@ -129,8 +129,9 @@ export function createImageOperatorResourceLowering(options: {
       return options.emit({ nodeId: current.id, operation: 'field-load-nearest-seed', type: 'vec4',
         inputs: [options.visitSource(current, 'pixel')], value: slot });
     }
-    if (current.operator !== 'glyph.atlas') return undefined;
-    const resolved = resolveImageOperatorGlyphAtlas(current, options.params, options.context.resolveGlyphAtlas);
+    if (current.operator !== 'glyph.atlas' && current.operator !== 'glyph.text-atlas') return undefined;
+    const resolved = current.operator === 'glyph.text-atlas' ? resolveImageOperatorTextAtlas(current)
+      : resolveImageOperatorGlyphAtlas(current, options.params, options.context.resolveGlyphAtlas);
     if (output === 'image') {
       if (!options.state.externalResources.some(resource => resource.id === resolved.descriptor.id)) options.state.externalResources.push(resolved.descriptor);
       return options.emit({ nodeId: current.id, operation: options.activePixelLoad() ? 'resource-load-input' : 'resource-input',
