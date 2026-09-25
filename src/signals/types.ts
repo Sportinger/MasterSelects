@@ -2,6 +2,8 @@ export const SIGNAL_SCHEMA_VERSION = 1 as const;
 
 export const SIGNAL_KINDS = [
   'texture',
+  /** Time-addressable video: any moment of it can be read, not only the current frame. */
+  'clip',
   'audio',
   'geometry',
   'point-cloud',

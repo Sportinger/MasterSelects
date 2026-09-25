@@ -549,6 +549,20 @@ offscreen graph panels pause the overlay. This visualizes graph direction,
 not measured execution, cache misses or rebaking; saved/baked dependencies can
 still carry a signal. It does not change node state, rendering or export.
 
+## Source clip for time effects
+
+A **texture** is the current frame only. Time effects (Slit Scan, Time Stack)
+need other moments of a video, so they have a second input, **Source clip**
+(`clip` signal, amber). On a clip with source video, a read-only `clip` cable
+runs from the Source card straight to the time effect, past any preceding
+effects: the time effect reads the original source video, not the processed
+texture on its main input.
+
+Generated sources (motion shapes, text, nested compositions) have no source
+clip. The time effect's clip input then stays empty and its card shows
+**No source clip**; the renderer skips the effect and passes its input through.
+When an effect group is expanded, the cable ends at the history sampler inside it.
+
 ## Stabilization bake
 
 Clips with baked face/lip stabilization show a separate **Stabilization** group:

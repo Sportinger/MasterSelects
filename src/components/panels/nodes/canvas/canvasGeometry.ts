@@ -160,7 +160,13 @@ export function getNodeBadges(node: NodeGraphNode): NodeBadge[] {
     return [{ label: status === 'Baked · settings not recorded' ? 'Legacy bake' : status,
       title: status, tone: status === 'Rebake needed' ? 'stale' : status === 'Baked' ? 'ready' : 'partial' }];
   }
-  return [...getAudioAnalysisBadges(node), ...getFlockNodeBadges(node)];
+  return [...getAudioAnalysisBadges(node), ...getFlockNodeBadges(node), ...getTemporalSourceBadges(node)];
+}
+
+/** A time effect without a source clip is skipped by the renderer and passes its input through. */
+export function getTemporalSourceBadges(node: NodeGraphNode): NodeBadge[] {
+  return node.params?.sourceClipMissing === true ? [{ label: 'No source clip', tone: 'empty',
+    title: "This effect reads other moments of the clip's original source video. This clip has no source video, so the effect is skipped and its input passes through unchanged." }] : [];
 }
 
 export function getNodePortStartY(node: NodeGraphNode): number {

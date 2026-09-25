@@ -2,6 +2,7 @@ import { resolveLinkedAudioClip } from './clipGraphProjectionAudio';
 import { createTextRenderNode, hasTextSourceGraph } from './textGraphProjection';
 import type { TimelineClip, TimelineTrack } from './clipGraphProjectionDomain';
 import { edge } from './clipGraphProjectionGraph';
+import { connectTimeEffectSourceClip } from './clipGraphSourceClip';
 import {
   appendAudioProcessingNodes,
   appendProcessingNode,
@@ -145,6 +146,8 @@ export function buildClipNodeGraphView(
     );
     edges.push(edge(audioResult.chain.nodeId, audioResult.chain.portId, outputNode.id, 'audio', 'audio'));
   }
+
+  if (primarySignal === 'texture') connectTimeEffectSourceClip(clip, nodes, edges, sourceNode);
 
   return {
     id: `clip-graph:${clip.id}`,

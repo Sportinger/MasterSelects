@@ -53,9 +53,11 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     for (const edge of edges) {
       if (edge.toNodeId === rootNode.id) {
         const target = groupId === 'scene3d' && edge.type === 'geometry'
-          ? innerNodes.find(n => n.operatorId === 'geometry.source') ?? entrance : entrance;
+          ? innerNodes.find(n => n.operatorId === 'geometry.source') ?? entrance
+          // Time effects read the source clip where they sample history.
+          : edge.type === 'clip' ? innerNodes.find(n => n.operatorId === 'image.sample-history') ?? entrance : entrance;
         const id = `group-in-${edge.toPortId}`;
-        if (!target.inputs.some(p => p.id === id)) target.inputs = [...target.inputs, { id, label: 'Clip input', type: edge.type, direction: 'input', ...(edge.readOnly ? { metadata: { readOnly: true } } : {}) }];
+        if (!target.inputs.some(p => p.id === id)) target.inputs = [...target.inputs, { id, label: edge.type === 'clip' ? 'Source clip' : 'Clip input', type: edge.type, direction: 'input', ...(edge.readOnly ? { metadata: { readOnly: true } } : {}) }];
         edge.toNodeId = target.id; edge.toPortId = id;
       }
       if (edge.fromNodeId === rootNode.id) {

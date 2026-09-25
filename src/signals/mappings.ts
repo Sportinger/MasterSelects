@@ -6,6 +6,7 @@ import type { SignalKind } from './types';
 
 export const SIGNAL_KIND_BY_NODE_GRAPH_SIGNAL_TYPE: Record<NodeGraphSignalType, SignalKind> = {
   texture: 'texture',
+  clip: 'clip',
   audio: 'audio',
   geometry: 'geometry',
   'point-cloud': 'point-cloud',
