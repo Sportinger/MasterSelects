@@ -4,7 +4,7 @@ import { COLOR_COMPOSITIONS } from './colorCompositions';
 import { SAMPLING_COMPOSITIONS } from './samplingCompositions';
 import { PROCESSING_COMPOSITIONS } from './processingCompositions';
 import { SCREEN_COMPOSITIONS } from './screenCompositions';
-import { compositionBoundary, packOperatorCompositions, sameCompositionNode } from './operatorComposition';
+import { compositionBoundary, compositionNodeMatcher, packOperatorCompositions } from './operatorComposition';
 import { IMAGE_EFFECT_GRAPH_LIMITS } from './effectGraphLimits';
 import { getOperatorComposition } from './operatorCompositionRegistry';
 
@@ -15,6 +15,7 @@ export function recognizeOperatorCompositions(source: EffectOperatorGraph): Effe
     && source.samplingCompositionRules === 1 && source.processingCompositionRules === 2) return source;
   const cached = cache.get(source); if (cached) return cached;
   let graph = source;
+  const sameCompositionNode = compositionNodeMatcher();
   let recognizedColor = false;
   let recognizedSampling = false;
   let recognizedProcessing = false;

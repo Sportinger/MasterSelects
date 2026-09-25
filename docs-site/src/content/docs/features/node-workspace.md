@@ -322,6 +322,35 @@ leave and enter horizontally and loop around their ports. Painting, flow signals
 hover and click hit testing, and culling all use the same route. The choice is
 an editor preference that persists across sessions, not project data.
 
+**Avoid** is an independent toggle that routes cables around cards instead of
+across them, in every line style: Curved and Smart detours use rounded corners,
+Angular keeps hard corners. Routes run on a coarse orthogonal grid with a small
+clearance around each card, prefer few bends, and bundle cables from the same
+output into shared lanes. They are computed in a worker once the layout settles
+(about 0.2 s for 700 cables), never per frame. Cables attached to a card being
+dragged run direct until the drop reroutes them; backward links, links without a
+clear path inside the search window and hidden legacy DOM rendering keep direct
+routes. Avoid is an editor preference like the line style.
+
+### Cable branch points
+
+Double-click a cable, or right-click it and choose **Add branch point here**, to
+split it at that position. One trunk then runs from the output to the point, and
+the connection continues from there. Drag the grip beside a point onto another
+input to add a branch; every connection leaving through one point shares a single
+output grip, so an output can fan out from any position instead of from the stack
+of grips beside its socket. Points can be split again (a double-click on a trunk
+inserts a point before the existing one) for as many levels as needed.
+Drag a point to move it; Shift-click or a right-drag marquee selects several
+points, which then move together. Double-click a point, press Delete, or use
+**Remove branch point** in its context menu to remove it: its cables continue from
+the previous point or the output. Right-clicking a cable also offers
+**Disconnect**. Branch points are presentation only: every connection still runs
+output to input, so rendering, export and undo of the graph itself are unchanged.
+Points are stored with the canvas layout, participate in undo and project saves,
+and are ignored while their connections are hidden by a collapsed group. The
+accessible DOM fallback renderer draws connections without branch points.
+
 ## Canvas navigation
 
 Mouse-wheel and trackpad scrolling zoom smoothly around the pointer. Zoom is
@@ -357,7 +386,19 @@ canvas owns the pointer capture. React, scene building and placement run once, o
 release. In the DOM fallback, and before a canvas paints, cards move in React.
 Moving an effect-internal card writes only its layout: the render plan cache
 ignores card positions, so a move neither recompiles the effect nor clears
-cached frames. Clicking or dragging the already selected card does not reselect it. Moving
+cached frames. Clicking or dragging the already selected card does not reselect it.
+In canvas mode each card is a single focusable hit target. Its ports, buttons,
+plug grips and inline editors mount only while the card is active: under the
+pointer (tracked geometrically, so it also works during a captured connection
+drag), selected, or focused. Activation keeps the same card element, so focus
+and pointer capture survive it. Selection changes and connection drafts reach
+only the cards they affect. A top-level effect card move replaces only the
+stored layout map, and previews treat such layout-only edits as presentation,
+so a drop neither recompiles, re-renders previews nor clears cached frames.
+Clip updates serialize the timeline for transition maintenance only when a
+changed clip takes part in a transition; before, every clip edit revalidated
+every effect graph. Active cards also stay mounted while other hit targets mount
+in batches, so a focused or captured card never loses focus mid-batch. Moving
 views keep full resolution and every detail. Node cards and repeated plug shapes
 are cached as bitmaps at or above the current pixel scale and redrawn only when
 their content changes or the zoom needs a sharper bitmap; overview levels keep

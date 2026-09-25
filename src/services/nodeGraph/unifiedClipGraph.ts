@@ -65,8 +65,10 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
       }
     }
     nodes.push(...innerNodes); group.nodeIds.push(...innerNodes.map(n => n.id));
+    const children = new Map<string, NonNullable<NodeGraph['groups']>>();
+    for (const nested of inner.groups ?? []) if (nested.parentId) children.set(nested.parentId, [...children.get(nested.parentId) ?? [], nested]);
+    const collectMembers = (id: string): string[] => (children.get(id) ?? []).flatMap(g => [...g.nodeIds, ...collectMembers(g.id)]);
     for (const nested of inner.groups ?? []) {
-      const collectMembers = (id: string): string[] => (inner.groups ?? []).filter(g => g.parentId === id).flatMap(g => [...g.nodeIds, ...collectMembers(g.id)]);
       groups.push({ ...nested, ...(nested.bypassNodeId ? { bypassNodeId: idFor(nested.bypassNodeId) } : {}), id: `${groupId}/${nested.id}`, parentId: nested.parentId ? `${groupId}/${nested.parentId}` : groupId,
         ...(nested.composition ? { composition: { ...nested.composition,
           position: { x: nested.composition.position.x - minX + offset.x, y: nested.composition.position.y - minY + offset.y },

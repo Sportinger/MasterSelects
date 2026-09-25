@@ -125,6 +125,15 @@ export function effectOperatorCompileContext(effect: Pick<EffectGraphOwner, 'typ
   return context;
 }
 
+/**
+ * Resolved image graphs per stored graph revision. The node workspace, parameter
+ * sources and previews all resolve the same effect after every edit; recognition,
+ * expansion and validation of a large graph ran once per caller. Stored graphs may
+ * be mutated in place by render callers, so a hit also requires identical content.
+ * Results are shared between callers and must be treated as read-only.
+ */
+const resolvedImageGraphs = new WeakMap<object, Map<string, { signature: string; params: unknown; graph: EffectOperatorGraph }>>();
+
 export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspectionOnly?: boolean } = {}): EffectOperatorGraph {
   if (effect.type === 'splat-exploration') {
     const graph = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], () => defaultSplatGraph(true).graph);
@@ -213,6 +222,11 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
         : effectType === 'wave' || effectType === 'twirl' || effectType === 'bulge' || effectType === 'kaleidoscope'
           ? () => createDefaultUvDistortGraph(effectType)
         : () => createDefaultColorEffectGraph(effectType);
+    const source: object = effect.operatorGraph ?? effect.params;
+    const key = `${effectType}|${options.inspectionOnly ? 'inspect' : 'compile'}`, known = resolvedImageGraphs.get(source)?.get(key);
+    const signature = effect.operatorGraph ? JSON.stringify(effect.operatorGraph) : String(effect.params[EFFECT_GRAPH_PARAM] ?? '');
+    // Parameters only reach the compile check, so inspection ignores their identity.
+    if (known && known.signature === signature && (options.inspectionOnly || known.params === effect.params)) return known.graph;
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
     const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(saved)
       : effectType === 'gaussian-blur' ? organizeGaussianBlurGraph(saved) : saved;
@@ -221,6 +235,9 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
     if (errors.length) throw new Error(errors[0]);
     if (!graph.incomplete && !options.inspectionOnly) compileImageOperatorGraph(graph, effectOperatorParams(effect), effectOperatorCompileContext(effect));
+    const entries = resolvedImageGraphs.get(source) ?? new Map<string, { signature: string; params: unknown; graph: EffectOperatorGraph }>();
+    entries.set(key, { signature, params: effect.params, graph });
+    resolvedImageGraphs.set(source, entries);
     return graph;
   }
   const params = effectOperatorCompileParams(effect);

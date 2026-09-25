@@ -3,12 +3,21 @@ import { getOperatorComposition } from './operatorCompositionRegistry';
 import { IMAGE_EFFECT_GRAPH_LIMITS } from './effectGraphLimits';
 
 const key = (endpoint: OperatorEndpoint) => `${endpoint.nodeId}:${endpoint.portId}`;
-export const sameCompositionNode = (a: BoundOperatorNode, b: BoundOperatorNode): boolean => {
-  const semantic = (node: BoundOperatorNode) => Object.entries(node)
-    .filter(([name]) => !['id', 'operatorVersion', 'composition'].includes(name))
-    .toSorted(([a], [b]) => a.localeCompare(b));
-  return (a.operatorVersion ?? 1) === (b.operatorVersion ?? 1) && JSON.stringify(semantic(a)) === JSON.stringify(semantic(b));
-};
+const compositionSignature = (node: BoundOperatorNode) => JSON.stringify(Object.entries(node)
+  .filter(([name]) => !['id', 'operatorVersion', 'composition'].includes(name))
+  .toSorted(([a], [b]) => a.localeCompare(b)));
+export const sameCompositionNode = (a: BoundOperatorNode, b: BoundOperatorNode): boolean =>
+  (a.operatorVersion ?? 1) === (b.operatorVersion ?? 1) && compositionSignature(a) === compositionSignature(b);
+/** `sameCompositionNode` for one recognition pass over unchanging nodes: each signature is serialized once. */
+export function compositionNodeMatcher(): (a: BoundOperatorNode, b: BoundOperatorNode) => boolean {
+  const signatures = new Map<BoundOperatorNode, string>();
+  const signature = (node: BoundOperatorNode) => {
+    let known = signatures.get(node);
+    if (known === undefined) signatures.set(node, known = compositionSignature(node));
+    return known;
+  };
+  return (a, b) => (a.operatorVersion ?? 1) === (b.operatorVersion ?? 1) && signature(a) === signature(b);
+}
 export function compositionNodeIds(instance: BoundOperatorNode, definition: OperatorDefinition): Record<string, string> {
   return Object.fromEntries(definition.composition!.graph.nodes.map(node => [node.id, instance.composition?.nodeIds[node.id] ?? `${instance.id}--${node.id}`]));
 }
