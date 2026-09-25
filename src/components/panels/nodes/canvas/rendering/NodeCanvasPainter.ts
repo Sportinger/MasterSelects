@@ -103,7 +103,8 @@ export class NodeCanvasPainter {
     }
     this.overlayDirty = true;
   }
-  get animated() { return this.transport.visible && !this.transport.reducedMotion && (this.transport.active || this.sceneMotion.active); }
+  get animated() { return this.transport.visible && !this.transport.reducedMotion
+    && (this.transport.active || this.sceneMotion.active || this.flowClock.fading(performance.now())); }
   get viewRevision() { return this.renderedViewRevision; }
   get layoutMoving() { return this.sceneMotion.active; }
   get previewCount() { return this.previews?.size ?? 0; }
@@ -129,7 +130,8 @@ export class NodeCanvasPainter {
     }
     const baseEnd = import.meta.env.DEV ? performance.now() : 0;
     if (this.overlayDirty || this.animated || (moving && this.hoveredEdgeId)) {
-      paintOverlay(this.overlay, moving ? paintScene : scene, this.view, this.theme, this.transport, now, this.curveActivity, this.flowClock.advance(now), this.hoveredEdgeId);
+      paintOverlay(this.overlay, moving ? paintScene : scene, this.view, this.theme, this.transport, now, this.curveActivity, this.flowClock.advance(now), this.hoveredEdgeId,
+        this.flowClock.level(now));
       this.overlayDirty = false;
     }
     const overlayEnd = import.meta.env.DEV ? performance.now() : 0;

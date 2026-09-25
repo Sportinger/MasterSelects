@@ -233,18 +233,30 @@ export function drawNodeCard(ctx: DrawContext, node: CanvasNode, theme: CanvasTh
 }
 
 export interface CurveActivity { playhead: number; values: number[]; until: number }
+/** Signal dots grow with zoom, within a readable screen range. */
+const signalScreenRadius = (zoom: number) => Math.max(1.4, Math.min(5, 2.6 * Math.sqrt(zoom)));
+/** Each dot fades and shrinks near both cable ends, so wrapping to the start never pops. */
+const signalEnvelope = (fraction: number) => {
+  const edge = Math.min(1, fraction / 0.12, (1 - fraction) / 0.12);
+  return edge * edge * (3 - 2 * edge);
+};
 export function paintOverlay(ctx: DrawContext, scene: CanvasScene, view: CanvasView, theme: CanvasTheme, transport: CanvasTransport, now: number, activity: Map<string, CurveActivity>, flowSeconds = 0,
-  hoveredEdgeId: string | null = null) {
+  hoveredEdgeId: string | null = null, flowLevel = transport.active ? 1 : 0) {
   begin(ctx, view);
   if (hoveredEdgeId) paintHoveredEdge(ctx, scene, hoveredEdgeId, view, theme);
   if (!transport.visible) return;
-  if (transport.active && !transport.reducedMotion) scene.cables.forEach((cable, i) => {
+  const radius = signalScreenRadius(view.zoom) / view.zoom;
+  if (flowLevel > 0 && !transport.reducedMotion) scene.cables.forEach((cable, i) => {
     if (cable.draft || cable.baked || !cableVisible(cable, view)) return;
     const duration = Math.max(1300, Math.min(3600, cableArcLengths(cable).length * view.zoom / 140 * 1000));
     for (let point = 0; point < 2; point++) {
-      const p = signalPosition(cable, (flowSeconds * 1000 / duration + i * 0.61803398875 + point / 2) % 1);
-      ctx.globalAlpha = pointBehindGroup(p, cable.occlusions ?? []) ? .3 : 1;
-      ctx.fillStyle = cable.color; ctx.beginPath(); ctx.arc(p.x, p.y, 1.8 / view.zoom, 0, Math.PI * 2); ctx.fill();
+      const fraction = (flowSeconds * 1000 / duration + i * 0.61803398875 + point / 2) % 1;
+      const envelope = signalEnvelope(fraction);
+      if (envelope <= 0) continue;
+      const p = signalPosition(cable, fraction);
+      ctx.globalAlpha = flowLevel * envelope * (pointBehindGroup(p, cable.occlusions ?? []) ? .3 : 1);
+      ctx.fillStyle = cable.color; ctx.beginPath();
+      ctx.arc(p.x, p.y, radius * (0.35 + 0.65 * envelope) * (0.6 + 0.4 * flowLevel), 0, Math.PI * 2); ctx.fill();
     }
   });
   ctx.globalAlpha = 1;

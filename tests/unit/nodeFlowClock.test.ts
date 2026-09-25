@@ -20,6 +20,17 @@ describe('flow follows transport speed', () => {
     clock.update({ ...stopped, playhead: 2, timestamp: 2000 }, 2000);
     expect(clock.advance(5000)).toBe(3);
   });
+  it('fades signal dots in on playback and out in place on pause, drawing the final hidden frame', () => {
+    const clock = new NodeFlowClock(); clock.update(stopped, 0);
+    expect(clock.level(0)).toBe(0); expect(clock.fading(1000)).toBe(false);
+    clock.update({ ...stopped, playing: true, active: true }, 1000);
+    expect(clock.level(1000)).toBe(0); expect(clock.level(1130)).toBeCloseTo(0.5); expect(clock.level(1260)).toBe(1);
+    clock.update({ ...stopped, playhead: 1, timestamp: 2000 }, 2000);
+    expect(clock.level(2130)).toBeCloseTo(0.5); expect(clock.fading(2270)).toBe(true);
+    expect(clock.level(2270)).toBe(0); expect(clock.fading(2400)).toBe(false);
+    clock.update({ ...stopped, playing: true, active: true }, 3000); clock.update({ ...stopped, timestamp: 3100 }, 3100);
+    expect(clock.level(3100)).toBeGreaterThan(0); expect(clock.level(3360)).toBe(0); // a reversed fade starts where it was
+  });
   it('settles a stationary scrub and resumes without counting hidden/idle time', () => {
     const clock = new NodeFlowClock(); clock.update(stopped, 0);
     clock.update({ ...stopped, active: true, playhead: 0.1, timestamp: 100 }, 100);

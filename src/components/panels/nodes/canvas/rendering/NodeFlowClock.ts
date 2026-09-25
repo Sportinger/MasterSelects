@@ -1,13 +1,25 @@
 import type { CanvasTransport } from './nodeCanvasTypes';
 
 type Sample = Pick<CanvasTransport, 'playhead' | 'playing' | 'active' | 'visible' | 'playbackSpeed' | 'timestamp'>;
+/** Signal dots fade in when playback or a scrub starts and fade out in place when it stops. */
+const FADE_MS = 260;
+const ease = (value: number) => value * value * (3 - 2 * value);
 /** Transport speed drives decorative motion; graph direction stays output -> input. */
 export class NodeFlowClock {
   private previous: Sample | undefined;
   private lastAdvance = 0;
   private expires = 0;
   private phase = 0;
+  private fade = { from: 0, to: 0, start: -Infinity };
   rate = 0;
+
+  /** Opacity of the signal dots, 0 when hidden and 1 while playback or scrubbing runs. */
+  level(now: number): number {
+    const t = Math.min(1, Math.max(0, (now - this.fade.start) / FADE_MS));
+    return this.fade.from + (this.fade.to - this.fade.from) * ease(t);
+  }
+  /** True while a fade still needs frames, including the final frame at its end value. */
+  fading(now: number): boolean { return now < this.fade.start + FADE_MS + 40; }
 
   update(sample: Sample, now: number) {
     this.advance(now);
@@ -23,6 +35,8 @@ export class NodeFlowClock {
       this.rate = Math.abs(sample.playhead - previous.playhead) * 1000 / elapsed;
       this.expires = now + 180;
     } else if (previous?.playing) { this.rate = 0; this.expires = now; }
+    const target = sample.active && sample.visible ? 1 : 0;
+    if (target !== this.fade.to) this.fade = { from: this.level(now), to: target, start: now };
     if (!previous || sample.playhead !== previous.playhead || sample.playing !== previous.playing) this.previous = sample;
     this.lastAdvance = now;
   }
