@@ -1,4 +1,4 @@
-import type { NodeGraph, NodeGraphNode } from '../../../../../types/nodeGraph';
+import type { NodeCableStyle, NodeGraph, NodeGraphNode } from '../../../../../types/nodeGraph';
 import type { AnimatableProperty } from '../../../../../types/animationProperties';
 import type { Keyframe } from '../../../../../types/keyframes';
 import type { TimelineClip } from '../../../../../types/timeline';
@@ -28,6 +28,7 @@ interface Options {
   clips: TimelineClip[]; keyframes: Map<string, Keyframe[]>; sourceTime: SourceOffsetResolver;
   canBypass?: boolean;
   glideMs?: number;
+  cableStyle?: NodeCableStyle;
 }
 
 // Curves depend on clip/keyframe edits, not pan, hover, selection or playback.
@@ -95,7 +96,7 @@ export function buildCanvasScene(options: Options): CanvasScene {
   }
   for (const [id, pair] of pairs) {
     if (!pair.output || !pair.input || (draft?.moved && draft.reconnectEdgeId === id)) continue;
-    scene.cables.push({ ...makeCanvasCable(pair.output.tip, pair.input.tip, describeNodePort(pair.output.port).color, id === options.selectedEdgeId || id === options.hoveredEdgeId), id,
+    scene.cables.push({ ...makeCanvasCable(pair.output.tip, pair.input.tip, describeNodePort(pair.output.port).color, id === options.selectedEdgeId || id === options.hoveredEdgeId, false, options.cableStyle), id,
       fromNode: pair.output.edge.fromNodeId, toNode: pair.output.edge.toNodeId,
       occlusions: occlusions(pair.output.edge),
       baked: pair.output.edge.readOnly });
@@ -115,7 +116,7 @@ export function buildCanvasScene(options: Options): CanvasScene {
       : { x: draft.end.x + (draft.direction === 'output' ? -21 : 21), y: draft.end.y };
     const node = nodes.find(n => n.id === draft.nodeId), port = (draft.direction === 'input' ? node?.inputs : node?.outputs)?.find(p => p.id === draft.portId);
     const color = port ? describeNodePort(port).color : '#afbdd0';
-    if (start && end) scene.cables.push(makeCanvasCable(draft.direction === 'output' ? start : end, draft.direction === 'output' ? end : start, color, true, true));
+    if (start && end) scene.cables.push(makeCanvasCable(draft.direction === 'output' ? start : end, draft.direction === 'output' ? end : start, color, true, true, options.cableStyle));
     if (!draft.target && end) scene.plugs.push({ center: draft.end, tip: end, input: draft.direction === 'output', color, highlighted: true });
   }
   return scene;

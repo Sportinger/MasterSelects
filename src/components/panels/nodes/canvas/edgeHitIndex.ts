@@ -1,19 +1,15 @@
 import type { NodeGraphPoint } from './canvasGeometry';
+import type { NodeCableStyle } from '../../../../types/nodeGraph';
+import { cableRoute, sampleCableRoute } from './cableRoute';
 
 const SAMPLES = 20;
 const CELL = 256;
 
 interface Segment { edgeId: string; ax: number; ay: number; bx: number; by: number }
 
-/** Same symmetric cubic as getConnectionPath, sampled into a polyline. */
-function cablePolyline(from: NodeGraphPoint, to: NodeGraphPoint): NodeGraphPoint[] {
-  const handle = Math.max(72, Math.abs(to.x - from.x) * 0.42);
-  const c1 = { x: from.x + handle, y: from.y }, c2 = { x: to.x - handle, y: to.y };
-  return Array.from({ length: SAMPLES + 1 }, (_, index) => {
-    const t = index / SAMPLES, u = 1 - t;
-    return { x: u * u * u * from.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * to.x,
-      y: u * u * u * from.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * to.y };
-  });
+/** Same route as the painted cable, sampled into a polyline. */
+function cablePolyline(from: NodeGraphPoint, to: NodeGraphPoint, style: NodeCableStyle): NodeGraphPoint[] {
+  return sampleCableRoute(cableRoute(from, to, style), SAMPLES);
 }
 
 /** Closest approach between segments p0-p1 and q0-q1: distance and parameter on p. */
@@ -48,10 +44,10 @@ function segmentApproach(p0x: number, p0y: number, p1x: number, p1y: number, s: 
  * so a fast sweep jumps across thin cables; querying the swept segment between
  * two pointer samples finds every cable crossed and returns the latest one.
  */
-export function createEdgeHitIndex(cables: Iterable<{ id: string; from: NodeGraphPoint; to: NodeGraphPoint }>) {
+export function createEdgeHitIndex(cables: Iterable<{ id: string; from: NodeGraphPoint; to: NodeGraphPoint }>, style: NodeCableStyle = 'curved') {
   const cells = new Map<string, Segment[]>();
   for (const cable of cables) {
-    const points = cablePolyline(cable.from, cable.to);
+    const points = cablePolyline(cable.from, cable.to, style);
     for (let index = 1; index < points.length; index++) {
       const a = points[index - 1], b = points[index];
       const segment = { edgeId: cable.id, ax: a.x, ay: a.y, bx: b.x, by: b.y };

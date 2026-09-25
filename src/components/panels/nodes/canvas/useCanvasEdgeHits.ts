@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, type RefObject } from 'react';
 import type { NodeGraphPoint, Viewport } from './canvasGeometry';
 import type { ConnectionPlug } from './connectionPlugs';
 import { createEdgeHitIndex } from './edgeHitIndex';
+import { useSettingsStore } from '../../../../stores/settingsStore';
 
 /** Canvas mode mounts no per-cable DOM hit paths. */
 export const NO_EDGE_TARGETS: ReadonlySet<string> = new Set();
@@ -24,6 +25,7 @@ export function useCanvasEdgeHits(options: {
   hover: RefObject<((edgeId: string | null) => void) | null>;
 }) {
   const { enabled, plugs, canvas, visual, getGraphPoint, hover } = options;
+  const cableStyle = useSettingsStore(state => state.nodeCableStyle);
   const index = useMemo(() => {
     if (!enabled) return null;
     const pairs = new Map<string, { from?: NodeGraphPoint; to?: NodeGraphPoint }>();
@@ -32,8 +34,8 @@ export function useCanvasEdgeHits(options: {
       if (plug.port.direction === 'output') pair.from = plug.tip; else pair.to = plug.tip;
       pairs.set(plug.edge.id, pair);
     }
-    return createEdgeHitIndex([...pairs].flatMap(([id, pair]) => pair.from && pair.to ? [{ id, from: pair.from, to: pair.to }] : []));
-  }, [enabled, plugs]);
+    return createEdgeHitIndex([...pairs].flatMap(([id, pair]) => pair.from && pair.to ? [{ id, from: pair.from, to: pair.to }] : []), cableStyle);
+  }, [enabled, plugs, cableStyle]);
   const last = useRef<NodeGraphPoint | null>(null);
   const hovered = useRef<string | null>(null);
 

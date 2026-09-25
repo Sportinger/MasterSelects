@@ -11,6 +11,7 @@ import { normalizeScrubRamGB } from '../services/scrubCacheMemory';
 import { Logger } from '../services/logger';
 import type { SimpleSynthPreset } from '../engine/audio/synth/simpleSynthPresets';
 import type { SimpleSynthInstrument } from '../types/midiClip';
+import type { NodeCableStyle } from '../types/nodeGraph';
 import { generateClipId } from './timeline/helpers/idGenerator';
 import type { ShortcutPresetId, ShortcutMap, KeyCombo, ShortcutActionId, CustomShortcutPreset } from '../services/shortcutTypes';
 import { PRESETS, DEFAULT_PRESET_ID } from '../services/shortcutPresets';
@@ -143,6 +144,7 @@ interface SettingsState {
   // Timeline interaction
   deselectClipOnRepeatClick: boolean;
   timelineZoomAnchor: TimelineZoomAnchor;  // Where Ctrl/Alt+wheel zoom keeps focus
+  nodeCableStyle: NodeCableStyle;  // Node editor cable routing
   automaticMobileLayoutEnabled: boolean;  // Use H/V Mobile when the editor viewport is compact
 
   // Input display
@@ -225,6 +227,7 @@ interface SettingsState {
   setNativeHelperConnected: (connected: boolean) => void;
   setDeselectClipOnRepeatClick: (enabled: boolean) => void;
   setTimelineZoomAnchor: (anchor: TimelineZoomAnchor) => void;
+  setNodeCableStyle: (style: NodeCableStyle) => void;
   setAutomaticMobileLayoutEnabled: (enabled: boolean) => void;
   setShowShortcutDisplay: (show: boolean) => void;
   setShortcutDisplayScale: (scale: number) => void;
@@ -294,6 +297,7 @@ export const useSettingsStore = create<SettingsState>()(
       nativeHelperConnected: false, // Not connected initially
       deselectClipOnRepeatClick: false,
       timelineZoomAnchor: 'mouse' as TimelineZoomAnchor, // Zoom toward the mouse pointer by default
+      nodeCableStyle: 'curved' as NodeCableStyle,
       automaticMobileLayoutEnabled: true,
       showShortcutDisplay: false, // Optional Blender-style input overlay
       shortcutDisplayScale: DEFAULT_SHORTCUT_DISPLAY_SCALE,
@@ -383,6 +387,7 @@ export const useSettingsStore = create<SettingsState>()(
       },
 
       setDeselectClipOnRepeatClick: (enabled) => set({ deselectClipOnRepeatClick: enabled }),
+      setNodeCableStyle: (nodeCableStyle) => set({ nodeCableStyle }),
       setTimelineZoomAnchor: (anchor) => {
         set({ timelineZoomAnchor: anchor });
       },
@@ -608,6 +613,7 @@ export const useSettingsStore = create<SettingsState>()(
         nativeHelperPort: state.nativeHelperPort,
         deselectClipOnRepeatClick: state.deselectClipOnRepeatClick,
         timelineZoomAnchor: state.timelineZoomAnchor,
+        nodeCableStyle: state.nodeCableStyle,
         automaticMobileLayoutEnabled: state.automaticMobileLayoutEnabled,
         showShortcutDisplay: state.showShortcutDisplay,
         shortcutDisplayScale: state.shortcutDisplayScale,

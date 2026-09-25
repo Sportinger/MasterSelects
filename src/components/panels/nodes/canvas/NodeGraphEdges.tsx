@@ -7,6 +7,7 @@ import type { ConnectionPlug } from './connectionPlugs';
 import { useNodeFlowActivity } from './useNodeFlowActivity';
 import { NodeGraphFlowSignals } from './NodeGraphFlowSignals';
 import './NodeGraphFlow.css';
+import { useSettingsStore } from '../../../../stores/settingsStore';
 import { nodeGroupBounds } from './groupBounds';
 import { createEdgeGroupOcclusion, rectangleClipPath, subtractOccludedRects } from './edgeGroupOcclusion';
 import type { Rect } from './rendering/nodeCanvasTypes';
@@ -47,6 +48,7 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
 }: NodeGraphEdgesProps) {
   const flowRef = useNodeFlowActivity();
   const clipPrefix = useId().replace(/:/g, '');
+  const cableStyle = useSettingsStore(state => state.nodeCableStyle);
   const groupBounds = graph ? nodeGroupBounds(graph, frameNodes ?? [...nodesById.values()]) : new Map<string, NodeBounds>();
   const occlusions = graph ? createEdgeGroupOcclusion(graph, groupBounds) : () => [];
   const endpoints = new Map<string, { input?: ConnectionPlug; output?: ConnectionPlug }>();
@@ -91,7 +93,7 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
     x: draftEnd.x + (connectionDraft.direction === 'output' ? -1 : 1) * (dockedCenter ? 24 : 21), y: draftEnd.y,
   };
   const draftPath = connectionDraft && draftStart && draftTip && (!connectionDraft.reconnectEdgeId || connectionDraft.moved)
-    ? connectionDraft.direction === 'output' ? getConnectionPath(draftStart, draftTip) : getConnectionPath(draftTip, draftStart)
+    ? connectionDraft.direction === 'output' ? getConnectionPath(draftStart, draftTip, cableStyle) : getConnectionPath(draftTip, draftStart, cableStyle)
     : null;
   return <>
     <svg
@@ -113,7 +115,7 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
         const pair = endpoints.get(edge.id);
         if (!pair?.input || !pair.output || (connectionDraft?.reconnectEdgeId === edge.id && connectionDraft.moved)) return null;
         if (visibleEdgeIds && !visibleEdgeIds.has(edge.id)) return null;
-        const path = getConnectionPath(pair.output.tip, pair.input.tip);
+        const path = getConnectionPath(pair.output.tip, pair.input.tip, cableStyle);
         const port = nodesById.get(edge.fromNodeId)?.outputs.find(p => p.id === edge.fromPortId);
         const covers = occlusions(edge);
         const clip = covers.length ? visibleClip(covers) : '', dimClip = `${clipPrefix}-${index}-dim`;
@@ -155,7 +157,7 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
             />
             <g className="node-workspace-edge-flow">
               <path className="node-workspace-flow-arrow" d="M -4 -4 L 0 0 L -4 4"
-                transform={getConnectionArrowTransform(pair.output.tip, pair.input.tip)} />
+                transform={getConnectionArrowTransform(pair.output.tip, pair.input.tip, cableStyle)} />
             </g></>}
           </g>
           </Fragment>

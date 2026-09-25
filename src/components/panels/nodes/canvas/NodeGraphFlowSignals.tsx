@@ -9,6 +9,7 @@ import { useTimelineStore } from '../../../../stores/timeline';
 import type { NodeGraph, NodeGraphNode } from '../../../../types/nodeGraph';
 import { nodeGroupBounds } from './groupBounds';
 import { edgeGroupOcclusion } from './edgeGroupOcclusion';
+import { useSettingsStore } from '../../../../stores/settingsStore';
 
 /** Small HTML layers move along cables; the large SVG stays static during playback. */
 export const NodeGraphFlowSignals = memo(function NodeGraphFlowSignals({ plugs, hiddenEdgeId, zoom, graph, frameNodes }: {
@@ -18,6 +19,7 @@ export const NodeGraphFlowSignals = memo(function NodeGraphFlowSignals({ plugs, 
   const syncRef = useRef(() => {});
   const onActivity = useCallback(() => syncRef.current(), []);
   const ref = useNodeFlowActivity<HTMLDivElement>(onActivity);
+  const cableStyle = useSettingsStore(state => state.nodeCableStyle);
   const routes = useMemo(() => {
     const bounds = graph ? nodeGroupBounds(graph, frameNodes ?? graph.nodes) : new Map();
     const inputs = new Map(plugs.filter(p => p.port.direction === 'input').map(p => [p.edge.id, p]));
@@ -25,10 +27,10 @@ export const NodeGraphFlowSignals = memo(function NodeGraphFlowSignals({ plugs, 
       const input = inputs.get(output.edge.id);
       return output.port.direction !== 'output' || !input || output.edge.readOnly || output.edge.id === hiddenEdgeId ? [] : [{
         id: output.edge.id, color: describeNodePort(output.port).color,
-        ...flowSignalTrack(output.tip, input.tip, zoom, graph ? edgeGroupOcclusion(output.edge, graph, bounds) : []),
+        ...flowSignalTrack(output.tip, input.tip, zoom, graph ? edgeGroupOcclusion(output.edge, graph, bounds) : [], cableStyle),
       }];
     });
-  }, [plugs, hiddenEdgeId, zoom, graph, frameNodes]);
+  }, [plugs, hiddenEdgeId, zoom, graph, frameNodes, cableStyle]);
 
   useEffect(() => {
     const root = ref.current;

@@ -18,6 +18,13 @@ describe('image effect runtime plan reuse', () => {
     expect(initial.plan).toEqual(freshPlan(effect));
   });
 
+  it('keeps the compiled plan when only editor card positions change', () => {
+    const effect = { type: 'fisheye', params: {}, operatorGraph: createDefaultFisheyeGraph() };
+    const initial = prepareImageEffect(effect);
+    const layout = Object.fromEntries(Object.entries(effect.operatorGraph.layout).map(([id, point]) => [id, { x: point.x + 900, y: point.y - 40 }]));
+    expect(prepareImageEffect({ ...effect, operatorGraph: { ...effect.operatorGraph, layout } })).toBe(initial);
+  });
+
   it('matches fresh Fisheye plans across branch changes and rebinds uniforms without mutating old frames', () => {
     const effect = { type: 'fisheye', params: {} };
     const initial = prepareImageEffect(effect).plan!;

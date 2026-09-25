@@ -1,6 +1,8 @@
 import type { AnimatableProperty } from '../../../../../types/animationProperties';
 import type { Keyframe } from '../../../../../types/keyframes';
 import type { PreviewFrame } from '../../../../../services/nodePreview/previewTypes';
+import type { CanvasNodeDrag } from './canvasNodeDrag';
+import type { NodeCableStyle } from '../../../../../types/nodeGraph';
 
 // Only drawing data crosses the worker boundary, never graph params or media handles.
 export interface Point { x: number; y: number }
@@ -33,6 +35,8 @@ export interface CanvasCable {
   occlusions?: Rect[];
   baked?: boolean;
   from: Point; to: Point; color: string; highlighted: boolean; draft?: boolean;
+  /** Omitted for the default bezier. */
+  style?: NodeCableStyle;
 }
 export interface CanvasPlug { id?: string; center: Point; tip: Point; input: boolean; color: string; highlighted: boolean; ghost?: boolean }
 export interface CanvasGroup extends Rect { id?: string; nodeIds?: string[]; label: string; color: string; collapsed: boolean; count: string; bypassable?: boolean; bypassed?: boolean }
@@ -47,7 +51,9 @@ export type CanvasMessage =
   | { type: 'view'; view: CanvasView; theme: CanvasTheme; revision?: number }
   | { type: 'transport'; transport: CanvasTransport }
   /** Hover highlight only repaints the overlay; the scene and base layer stay untouched. */
-  | { type: 'hover'; edgeId: string | null };
+  | { type: 'hover'; edgeId: string | null }
+  /** Pointer drag offset; the scene keeps committed positions until the drop. */
+  | { type: 'drag'; drag: CanvasNodeDrag | null };
 
 /** Pixels and their coordinate system are presented together on the main thread. */
 export type CanvasWorkerReply =

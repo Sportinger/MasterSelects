@@ -50,6 +50,13 @@ describe('manual canvas placement', () => {
     expect(reset.displaced).toEqual({});
     expect(reset.groups.outer.offset).toEqual({ x: 0, y: 0 });
   });
+  it('freezes the grouped arrangement on a manual move while ungrouped stages stay dynamic', () => {
+    const initial = resetCanvasPlacement(graph);
+    const moved = moveCanvasPlacement(initial, [{ nodeId: 'a', layout: { x: 9000, y: 5000 } }]);
+    expect(moved.pinned).toMatchObject({ a: true, b: true });
+    expect(moved.pinned?.c).toBeUndefined();
+    expect(moved.nodes.b).toEqual(initial.nodes.b);
+  });
   it('pushes unrelated anchored cards and whole sibling groups out of a newly expanded frame', () => {
     const expanded: NodeGraph = { ...graph, nodes: ['a', 'b', 'c', 'd', 'e'].map((id, i) => ({ ...graph.nodes[0], id,
       layout: { x: i === 1 ? 1200 : i * 450, y: i > 1 ? 500 : 100 } })),

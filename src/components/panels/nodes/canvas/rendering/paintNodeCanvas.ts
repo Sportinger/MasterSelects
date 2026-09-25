@@ -1,5 +1,6 @@
 import { interpolateKeyframes } from '../../../../../utils/keyframeInterpolation';
-import { cableArcLengths, cablePoint, signalPosition } from './cableGeometry';
+import { cableArcLengths, canvasCableRoute, signalPosition } from './cableGeometry';
+import { cableRoutePoint, traceCableRoute } from '../cableRoute';
 import { fitCanvasLabel } from './canvasTextLayout';
 import type { CanvasCable, CanvasCurve, CanvasNode, CanvasScene, CanvasTheme, CanvasTransport, CanvasView, Rect } from './nodeCanvasTypes';
 import { CARD_SPRITE_PAD } from './nodeCardSprites';
@@ -11,9 +12,7 @@ export function inView(rect: Rect, view: CanvasView, margin = 30): boolean {
     && (rect.y + rect.height) * view.zoom + view.panY >= -margin && rect.y * view.zoom + view.panY <= view.height + margin;
 }
 function cableVisible(cable: CanvasCable, view: CanvasView): boolean {
-  const h = Math.max(72, Math.abs(cable.to.x - cable.from.x) * 0.42);
-  const left = Math.min(cable.from.x, cable.to.x - h), right = Math.max(cable.from.x + h, cable.to.x);
-  return inView({ x: left, y: Math.min(cable.from.y, cable.to.y), width: right - left, height: Math.abs(cable.to.y - cable.from.y) }, view);
+  return inView(canvasCableRoute(cable).bounds, view);
 }
 function begin(ctx: DrawContext, view: CanvasView) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -31,22 +30,22 @@ function text(ctx: DrawContext, value: string, x: number, y: number, max: number
 function cableScreenScale(zoom: number) { return Math.min(1, 0.4 + zoom * 1.2); }
 
 function drawCable(ctx: DrawContext, cable: CanvasCable, zoom: number, opacity?: number) {
-  const { from, to } = cable, h = Math.max(72, Math.abs(to.x - from.x) * 0.42);
+  const { from } = cable, { route, middle: { point: middle, angle } } = canvasCableRoute(cable);
   const appearance = cable.appearance ?? 1;
   ctx.strokeStyle = cable.color; ctx.globalAlpha = (opacity ?? (cable.highlighted ? 1 : 0.55)) * (cable.disappearing ? appearance : 1);
   ctx.lineWidth = (cable.highlighted ? 2 : 1.25) * cableScreenScale(zoom) / zoom;
   ctx.setLineDash(cable.draft ? [5 / zoom, 4 / zoom] : cable.baked ? [4 / zoom, 4 / zoom] : []);
-  ctx.beginPath(); ctx.moveTo(from.x, from.y);
+  ctx.beginPath();
   if (!cable.disappearing && appearance < 1) {
+    ctx.moveTo(from.x, from.y);
     const steps = Math.max(2, Math.ceil(appearance * 36));
     for (let index = 1; index <= steps; index++) {
-      const point = cablePoint(from, to, appearance * index / steps);
+      const point = cableRoutePoint(route, appearance * index / steps);
       ctx.lineTo(point.x, point.y);
     }
-  } else ctx.bezierCurveTo(from.x + h, from.y, to.x - h, to.y, to.x, to.y);
+  } else traceCableRoute(ctx, route);
   ctx.stroke(); ctx.setLineDash([]);
   if (appearance < 1 && !cable.disappearing) { ctx.globalAlpha = 1; return; }
-  const middle = cablePoint(from, to, 0.5), angle = Math.atan2(to.y - from.y, to.x - from.x - h);
   ctx.save(); ctx.translate(middle.x, middle.y); ctx.rotate(angle); ctx.lineWidth = 1.3 * cableScreenScale(zoom) / zoom;
   ctx.beginPath(); ctx.moveTo(-3 / zoom, -3 / zoom); ctx.lineTo(0, 0); ctx.lineTo(-3 / zoom, 3 / zoom); ctx.stroke(); ctx.restore(); ctx.globalAlpha = 1;
 }
@@ -66,13 +65,12 @@ function drawCables(ctx: DrawContext, cables: readonly CanvasCable[], zoom: numb
   for (const cable of cables) {
     const appearance = cable.appearance ?? 1;
     if (!cable.disappearing && appearance < 1) { drawCable(ctx, cable, zoom, opacity); continue; }
-    const { from, to } = cable, h = Math.max(72, Math.abs(to.x - from.x) * 0.42);
+    const { route, middle: { point: middle, angle } } = canvasCableRoute(cable);
     const alpha = (opacity ?? (cable.highlighted ? 1 : 0.55)) * (cable.disappearing ? appearance : 1);
     const dash = cable.draft ? [5 / zoom, 4 / zoom] : cable.baked ? [4 / zoom, 4 / zoom] : [];
     const thin = cableScreenScale(zoom);
     const curve = batch(cable.color, alpha, (cable.highlighted ? 2 : 1.25) * thin / zoom, dash);
-    curve.moveTo(from.x, from.y); curve.bezierCurveTo(from.x + h, from.y, to.x - h, to.y, to.x, to.y);
-    const middle = cablePoint(from, to, 0.5), angle = Math.atan2(to.y - from.y, to.x - from.x - h);
+    traceCableRoute(curve, route);
     const cos = Math.cos(angle), sin = Math.sin(angle), size = 3 / zoom;
     const arrow = batch(cable.color, alpha, 1.3 * thin / zoom, []);
     arrow.moveTo(middle.x + (-size * cos + size * sin), middle.y + (-size * sin - size * cos));

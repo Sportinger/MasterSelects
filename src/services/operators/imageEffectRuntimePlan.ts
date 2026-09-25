@@ -33,11 +33,15 @@ export const imagePlanResourceSignature = (graph: EffectOperatorGraph, params: R
     const binding = node.bindings[key];
     return typeof binding === 'string' ? params[binding] : node.constants?.[key];
   }))]);
+// Card positions are editor presentation: moving a node must not recompile the
+// plan. Graphs may be edited in place, so the key is derived on every call.
+const executableGraph = (graph: EffectOperatorGraph) => ({ ...graph, layout: undefined,
+  groups: graph.groups?.map(group => group.composition ? { ...group, composition: { instance: group.composition.instance } } : group) });
 export const imagePlanSupportsValueRebinding = (graph: EffectOperatorGraph) => !graph.nodes.some(node => node.operator === 'glyph.atlas' || node.operator === 'source.memory-window');
 
 /** Prepare once per graph revision; animated values only refill uniform slots. */
 export function prepareImageEffect(effect: ImageEffect): PreparedImageEffect {
-  const key = signature([effect.type, effect.operatorGraph ?? effect.params[EFFECT_GRAPH_PARAM] ?? null]);
+  const key = signature([effect.type, effect.operatorGraph ? executableGraph(effect.operatorGraph) : effect.params[EFFECT_GRAPH_PARAM] ?? null]);
   const definition = getEffect(effect.type);
   const params = effectOperatorParams(effect);
   const parameterSignature = signature(params);

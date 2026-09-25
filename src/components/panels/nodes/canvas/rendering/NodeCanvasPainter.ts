@@ -5,6 +5,7 @@ import { NodeFlowClock } from './NodeFlowClock';
 import { NodePreviewPainter } from '../../previews/NodePreviewPainter';
 import { CanvasSceneVisibility } from './canvasSceneVisibility';
 import { NodeSceneMotion } from './NodeSceneMotion';
+import { applyNodeDrag, type CanvasNodeDrag } from './canvasNodeDrag';
 
 /**
  * During build-up motion each group frame spans only its members that are
@@ -56,6 +57,7 @@ export class NodeCanvasPainter {
   readonly timings = { baseMs: 0, overlayMs: 0, previewMs: 0 };
   private cards = new NodeCardSprites();
   private hoveredEdgeId: string | null = null;
+  private drag: CanvasNodeDrag | undefined;
   private cardSignatures = new Map<string, string>();
   constructor(base: DrawContext, overlay: DrawContext, previews?: DrawContext, atlas?: () => DrawContext | null) {
     this.base = base; this.overlay = overlay; this.previewContext = previews;
@@ -64,6 +66,10 @@ export class NodeCanvasPainter {
   update(message: Exclude<CanvasMessage, { type: 'init' | 'presented' }>) {
     if (message.type === 'previews') { this.previews?.receive(message.frames); return; }
     if (message.type === 'hover') { this.hoveredEdgeId = message.edgeId; this.overlayDirty = true; return; }
+    if (message.type === 'drag') {
+      this.drag = message.drag ?? undefined; this.visibleScene = undefined;
+      this.baseDirty = true; this.overlayDirty = true; this.previews?.invalidate(); return;
+    }
     if (message.type === 'scene') {
       this.sceneMotion.update(message.scene, performance.now());
       this.scene = message.scene; this.visibility = new CanvasSceneVisibility(message.scene); this.visibleScene = undefined; this.baseDirty = true;
@@ -98,7 +104,7 @@ export class NodeCanvasPainter {
   get hasOverlay() { return !!this.hoveredEdgeId || (this.transport.visible && (this.animated || !!this.visibleScene?.nodes.some(node => node.curve))); }
   draw(now: number): boolean {
     if (!this.scene || !this.view || !this.theme) return false;
-    const scene = this.visibleScene ??= this.visibility?.visible(this.view) ?? this.scene;
+    const scene = this.visibleScene ??= this.withDrag(this.visibility?.visible(this.view) ?? this.scene);
     if (this.transport.reducedMotion) this.sceneMotion.clear();
     const moving = this.sceneMotion.active;
     const paintScene = moving ? growGroupFrames(scene, this.sceneMotion.frame(scene, now)) : scene;
@@ -126,5 +132,6 @@ export class NodeCanvasPainter {
     }
     return true;
   }
+  private withDrag(visible: CanvasScene) { return this.drag && this.scene ? applyNodeDrag(visible, this.scene, this.drag) : visible; }
   dispose() { this.previews?.dispose(); this.cards.clear(); }
 }

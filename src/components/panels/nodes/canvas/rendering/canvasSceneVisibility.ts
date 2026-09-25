@@ -1,4 +1,5 @@
 import type { CanvasCable, CanvasPlug, CanvasScene, CanvasView, Rect } from './nodeCanvasTypes';
+import { canvasCableRoute } from './cableGeometry';
 
 const CELL_SIZE = 512;
 const MAX_ITEM_CELLS = 64;
@@ -10,10 +11,7 @@ function validRect(rect: Rect): boolean {
 }
 
 function cableBounds(cable: CanvasCable): Rect {
-  const h = Math.max(72, Math.abs(cable.to.x - cable.from.x) * .42);
-  const left = Math.min(cable.from.x, cable.to.x - h);
-  const right = Math.max(cable.from.x + h, cable.to.x);
-  return { x: left, y: Math.min(cable.from.y, cable.to.y), width: right - left, height: Math.abs(cable.to.y - cable.from.y) };
+  return canvasCableRoute(cable).bounds;
 }
 
 function plugBounds(plug: CanvasPlug): Rect {

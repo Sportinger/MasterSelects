@@ -248,6 +248,10 @@ budgets. All effect groups, including audio graphs, use the common flow layout. 
 Flock and scene groups use it too. Groups arrange nodes by data flow, recursively measure expanded
 subgroups, and move Clip Output after the effect. Added nodes and changed wiring
 participate in layout. Explicitly dragged internal node positions remain anchored.
+Moving any card keeps the grouped arrangement as shown: the move anchors every
+current group member, so other cards and frames do not re-flow around the moved
+card. New nodes are still placed automatically, and ungrouped downstream stages
+such as Clip Output still follow a resized effect.
 On either fold direction, the connected outer chain also reflows, leaving 100 graph
 units between Source, complete effect frames or cards, and Clip Output. Source
 stays in place; old outer anchors cannot leave expanded-sized gaps after closing.
@@ -311,6 +315,13 @@ Cable sections passing behind unrelated groups draw at 30% opacity and cannot
 be hovered or clicked there. Wires belonging to a group retain their normal
 appearance and interaction inside that group.
 
+The toolbar's **Lines** button cycles the cable routing: **Curved** (the default
+bezier), **Angular** (orthogonal lanes with hard corners) and **Smart** (the same
+orthogonal lanes with rounded corners). Backward links in both orthogonal styles
+leave and enter horizontally and loop around their ports. Painting, flow signals,
+hover and click hit testing, and culling all use the same route. The choice is
+an editor preference that persists across sessions, not project data.
+
 ## Canvas navigation
 
 Mouse-wheel and trackpad scrolling zoom smoothly around the pointer. Zoom is
@@ -339,7 +350,14 @@ During fold animations, existing thumbnails remain visible while new preview
 requests pause; they resume at the current timeline time when the layout settles.
 Intermediate fold layouts are computed as each group starts. The main thread sends
 one layout per fold step; the canvas worker eases cards, cables and plugs between
-steps at display rate, so motion needs no per-frame React or scene work. Moving
+steps at display rate, so motion needs no per-frame React or scene work.
+Dragging a card works the same way: pointer moves only send an offset for the
+dragged cards (and their cable ends and plugs) to the canvas worker, and the
+canvas owns the pointer capture. React, scene building and placement run once, on
+release. In the DOM fallback, and before a canvas paints, cards move in React.
+Moving an effect-internal card writes only its layout: the render plan cache
+ignores card positions, so a move neither recompiles the effect nor clears
+cached frames. Clicking or dragging the already selected card does not reselect it. Moving
 views keep full resolution and every detail. Node cards and repeated plug shapes
 are cached as bitmaps at or above the current pixel scale and redrawn only when
 their content changes or the zoom needs a sharper bitmap; overview levels keep

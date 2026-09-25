@@ -98,6 +98,13 @@ export function reconcileCanvasPlacement(graph: NodeGraph, previous?: NodeCanvas
 
 export function moveCanvasPlacement(placement: NodeCanvasPlacement, moves: Array<{ nodeId: string; layout: NodeGraphLayout }>, groupId?: string): NodeCanvasPlacement {
   const next = { ...placement, nodes: { ...placement.nodes }, groups: { ...placement.groups }, pinned: { ...placement.pinned }, displaced: { ...placement.displaced } };
+  // A manual move keeps the grouped arrangement the user sees. Unpinned flow
+  // members would otherwise re-flow around the moved card and shift whole groups.
+  // Ungrouped downstream stages still follow a resized effect, new nodes are
+  // still placed automatically, and Arrange releases the pins.
+  if (moves.length) for (const group of Object.values(next.groups)) for (const id of [group.proxyId, ...group.nodeIds]) {
+    if (next.nodes[id]) next.pinned[id] = true;
+  }
   if (groupId && moves.length) {
     const first = moves[0], before = placement.nodes[first.nodeId];
     const group = placement.groups[groupId];

@@ -115,6 +115,9 @@ export type NodeGraphNodeBinding =
       operator: string;
     };
 
+/** Node editor cable drawing: bezier (default), orthogonal hard corners, or compact routed curves. */
+export type NodeCableStyle = 'curved' | 'angular' | 'smart';
+
 export interface NodeGraphLayout {
   x: number;
   y: number;

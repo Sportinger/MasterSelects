@@ -7,6 +7,8 @@ import type {
 import { getNodeGraphPortCompatibilityKey, formatsOverlap } from '../../../../services/nodeGraph/graphConnections';
 import { describePortText } from '../../../../services/nodeGraph/nodePortPresentation';
 import { inlineNumericPorts, previewExtraHeight } from '../previews/previewGeometry';
+import type { NodeCableStyle } from '../../../../types/nodeGraph';
+import { cableRoute, cableRouteMidpoint, cableRouteSvg } from './cableRoute';
 
 export const DEFAULT_VIEWPORT = { zoom: 0.88, panX: 36, panY: 28 };
 export const MIN_ZOOM = 0.05;
@@ -202,16 +204,14 @@ export function getPortCenter(node: NodeGraphNode, portId: string, direction: 'i
   };
 }
 
-export function getConnectionPath(from: NodeGraphPoint, to: NodeGraphPoint): string {
-  const handle = Math.max(72, Math.abs(to.x - from.x) * 0.42);
-  return `M ${from.x} ${from.y} C ${from.x + handle} ${from.y}, ${to.x - handle} ${to.y}, ${to.x} ${to.y}`;
+export function getConnectionPath(from: NodeGraphPoint, to: NodeGraphPoint, style: NodeCableStyle = 'curved'): string {
+  return cableRouteSvg(cableRoute(from, to, style));
 }
 
-/** Position and tangent at t=0.5 of getConnectionPath's symmetric cubic. */
-export function getConnectionArrowTransform(from: NodeGraphPoint, to: NodeGraphPoint): string {
-  const handle = Math.max(72, Math.abs(to.x - from.x) * 0.42);
-  const angle = Math.atan2(to.y - from.y, to.x - from.x - handle) * 180 / Math.PI;
-  return `translate(${(from.x + to.x) / 2} ${(from.y + to.y) / 2}) rotate(${angle})`;
+/** Position and travel direction halfway along getConnectionPath's route. */
+export function getConnectionArrowTransform(from: NodeGraphPoint, to: NodeGraphPoint, style: NodeCableStyle = 'curved'): string {
+  const { point, angle } = cableRouteMidpoint(cableRoute(from, to, style));
+  return `translate(${point.x} ${point.y}) rotate(${angle * 180 / Math.PI})`;
 }
 
 export function getEdgePath(edge: NodeGraphEdge, nodesById: Map<string, NodeGraphNode>): string | null {

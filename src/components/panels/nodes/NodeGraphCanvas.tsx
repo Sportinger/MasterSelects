@@ -12,6 +12,7 @@ import { groupPlacementMembers } from './canvas/nodeCanvasPlacement';
 import { hasUnlockedSource, nodeGroupDropTarget } from './canvas/nodeGroupDrop';
 import { placeTransferredNodes } from './canvas/placeTransferredNodes';
 import { NodeGraphCanvasSurface } from './canvas/rendering/NodeGraphCanvasSurface';
+import type { CanvasNodeDrag } from './canvas/rendering/canvasNodeDrag';
 import { annotatedGraphBounds, nodeGroupBounds } from './canvas/groupBounds';
 import { Profiler, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { recordNodeCanvasRender } from './canvas/rendering/nodeCanvasProfile';
@@ -25,6 +26,7 @@ import type {
 } from '../../../services/nodeGraph';
 import { NodeGraphEdges } from './canvas/NodeGraphEdges';
 import { NodeGraphNodeCard } from './canvas/NodeGraphNodeCard';
+import { NodeCableStyleButton } from './canvas/NodeCableStyleButton';
 import type { NodeGraphPoint, Viewport } from './canvas/canvasGeometry';
 import { fittedNodeViewport, useNodeGraphViewport } from './canvas/useNodeGraphViewport';
 import { useNodeFoldViewport } from './canvas/useNodeFoldViewport';
@@ -88,6 +90,7 @@ interface NodeDragGesture {
   members: Array<{ nodeId: string; startX: number; startY: number }>;
   moved: boolean;
   groupId?: string;
+  delta?: { x: number; y: number };
 }
 
 export function NodeGraphCanvas({
@@ -165,11 +168,11 @@ export function NodeGraphCanvas({
   const [isPanning, setIsPanning] = useState(false);
   const [canvasRendered, setCanvasRendered] = useState(false);
   const [draftLayouts, setDraftLayouts] = useState<Record<string, NodeGraphLayout>>({});
-  const draftLayoutsRef = useRef(draftLayouts);
-  draftLayoutsRef.current = draftLayouts;
+  const [nodeDragging, setNodeDragging] = useState(false);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [groupMessage, setGroupMessage] = useState('');
   const multiSelection = useMemo(() => new Set(selectedNodeIds ?? []), [selectedNodeIds]);
+  const soleSelectionRef = useRef<string | null>(null); soleSelectionRef.current = multiSelection.size > 1 ? null : selectedNodeId;
 
   const { nodes: spacedNodes, placement, commit: commitPlacement, toggleLock, arrange, reset: resetPlacement } = useNodeCanvasPlacement(targetGraph, layoutScaleX);
   const targetNodes = useMemo(() => (
@@ -178,7 +181,7 @@ export function NodeGraphCanvas({
       layout: draftLayouts[node.id],
     }))
   ), [draftLayouts, spacedNodes]);
-  const { graph, nodes: displayNodes, animating, glideMs } = useNodeLayoutTransition(targetGraph, targetNodes, Object.keys(draftLayouts).length > 0, placement, projectFolds);
+  const { graph, nodes: displayNodes, animating, glideMs } = useNodeLayoutTransition(targetGraph, targetNodes, nodeDragging || Object.keys(draftLayouts).length > 0, placement, projectFolds);
   const nodeGesture = nodeDragGestureRef.current;
   const freezeGroupFrames = nodeGesture && !nodeGesture.groupId
     && hasUnlockedSource(graph, placement, nodeGesture.members.map(member => member.nodeId));
@@ -285,6 +288,7 @@ export function NodeGraphCanvas({
   const mountedNodes = canvasRendered ? dom.nodes.slice(0, mountedNodeCount) : dom.nodes;
   const cablesReady = useDeferredValue(hitTargetsActive);
   const hoverChannel = useRef<((edgeId: string | null) => void) | null>(null); // canvas-mode cable hits from a geometry index
+  const dragChannel = useRef<((drag: CanvasNodeDrag | null) => boolean) | null>(null); // card drags repaint in the worker, not React
   const edgeHits = useCanvasEdgeHits({ enabled: canvasRendered && !animating, plugs, canvas: canvasRef, visual: visualViewportRef, getGraphPoint: getGraphPointFromClient, hover: hoverChannel });
 
   const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
@@ -371,9 +375,8 @@ export function NodeGraphCanvas({
     }
 
     const dragsSelection = multiSelection.size > 1 && multiSelection.has(node.id);
-    if (!dragsSelection) {
-      onSelectNode(node.id);
-    }
+    // Re-selecting the sole selected card re-renders the whole editor for nothing.
+    if (!dragsSelection && node.id !== soleSelectionRef.current) onSelectNode(node.id);
     if (event.button !== 0) {
       return;
     }
@@ -391,7 +394,7 @@ export function NodeGraphCanvas({
       moved: false,
       groupId: !dragsSelection ? graph.groups?.find(group => group.collapsed && group.proxyId === node.id)?.id : undefined,
     };
-    event.currentTarget.setPointerCapture(event.pointerId);
+    (canvasRef.current ?? event.currentTarget).setPointerCapture(event.pointerId); // cards may remount; the canvas stays
   }, [multiSelection, onSelectNode, onToggleNodeSelection, graph.groups]);
 
   const startGroupDrag = (event: ReactPointerEvent<HTMLDivElement>, groupId: string) => {
@@ -416,17 +419,13 @@ export function NodeGraphCanvas({
     const deltaX = (event.clientX - gesture.clientX) / visualViewportRef.current.zoom;
     const deltaY = (event.clientY - gesture.clientY) / visualViewportRef.current.zoom;
     if (!gesture.moved && Math.hypot(event.clientX - gesture.clientX, event.clientY - gesture.clientY) < 3) return;
+    if (!gesture.moved) setNodeDragging(true);
     gesture.moved = true;
-    setDraftLayouts((current) => {
-      const next = { ...current };
-      for (const member of gesture.members) {
-        next[member.nodeId] = {
-          x: Math.round(member.startX + deltaX),
-          y: Math.round(member.startY + deltaY),
-        };
-      }
-      return next;
-    });
+    gesture.delta = { x: deltaX, y: deltaY };
+    // Group frames and headers are DOM, so group drags keep the React path.
+    if (!gesture.groupId && dragChannel.current?.({ nodeIds: gesture.members.map(member => member.nodeId), dx: deltaX, dy: deltaY })) return;
+    setDraftLayouts(current => ({ ...current, ...Object.fromEntries(gesture.members.map(member => [member.nodeId,
+      { x: Math.round(member.startX + deltaX), y: Math.round(member.startY + deltaY) }])) }));
   }, []);
 
   const finishNodeDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
@@ -434,12 +433,8 @@ export function NodeGraphCanvas({
     if (!gesture || gesture.pointerId !== event.pointerId) return;
 
     const moves = gesture.moved && event.type === 'pointerup'
-      ? gesture.members.flatMap((member) => {
-          const finalLayout = draftLayoutsRef.current[member.nodeId];
-          return finalLayout
-            ? [{ nodeId: member.nodeId, layout: finalLayout }]
-            : [];
-        })
+      ? gesture.members.map((member) => ({ nodeId: member.nodeId,
+          layout: { x: Math.round(member.startX + (gesture.delta?.x ?? 0)), y: Math.round(member.startY + (gesture.delta?.y ?? 0)) } }))
       : [];
     try {
       const ids = moves.map(move => move.nodeId);
@@ -453,10 +448,10 @@ export function NodeGraphCanvas({
         else for (const move of domainMoves) onMoveNode?.(move.nodeId, move.layout);
       });
     } catch (error) { setGroupMessage(error instanceof Error ? error.message : String(error)); }
-    if (gesture.moved && gesture.members.length > 1 && !gesture.groupId) {
-      suppressNextClickRef.current = true;
-    }
+    if (gesture.moved && gesture.members.length > 1 && !gesture.groupId) suppressNextClickRef.current = true;
     nodeDragGestureRef.current = null;
+    dragChannel.current?.(null); // committed positions arrive with the next scene in the same worker update
+    setNodeDragging(false);
     setDraftLayouts((current) => {
       const next = { ...current };
       for (const member of gesture.members) delete next[member.nodeId];
@@ -470,7 +465,7 @@ export function NodeGraphCanvas({
       suppressNextClickRef.current = false;
       return;
     }
-    onSelectNode(nodeId);
+    if (nodeId !== soleSelectionRef.current) onSelectNode(nodeId);
   }, [onSelectNode]);
 
   const disconnectPortEdges = useCallback((node: NodeGraphNode, port: NodeGraphPort) => {
@@ -522,11 +517,8 @@ export function NodeGraphCanvas({
               toggleGlobal(sourceGraph.nodes.map(node => nodePreviewPreferenceKey(sourceGraph.owner.id, node)));
               if (event.detail > 0) event.currentTarget.blur();
             }}>Previews</button>
-          {selectedEdge && !selectedEdge.readOnly && (
-            <button type="button" className="node-workspace-toolbar-button" onClick={disconnectSelectedEdge}>
-              Disconnect
-            </button>
-          )}
+          <NodeCableStyleButton />
+          {selectedEdge && !selectedEdge.readOnly && <button type="button" className="node-workspace-toolbar-button" onClick={disconnectSelectedEdge}>Disconnect</button>}
           <button type="button" className="node-workspace-toolbar-button" onClick={event => { fitGraph(); if (event.detail > 0) event.currentTarget.blur(); }}>Fit</button>
           {!!targetGraph.groups?.length && onSetAllGroupsCollapsed && <button type="button" className="node-workspace-toolbar-button"
             title="Expand or collapse every group, including nested groups" onClick={event => {
@@ -552,17 +544,19 @@ export function NodeGraphCanvas({
         tabIndex={0}
         {...portHoverEvents}
         onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
+        onPointerMove={event => { handleNodePointerMove(event); handlePointerMove(event); }}
         onPointerLeave={edgeHits.leave}
         onPointerUp={(event) => {
+          if (nodeDragGestureRef.current?.pointerId === event.pointerId) { finishNodeDrag(event); return; }
           if (nodeMarquee.finish(event)) return;
           if (!finishConnectionDrag(event)) {
             finishPanGesture(event);
             const clicked = edgeHits.release(event.clientX, event.clientY); if (clicked) setSelectedEdgeId(clicked);
           }
         }}
-        onLostPointerCapture={event => { nodeMarquee.finish(event); cancelConnectionDrag(event); finishPanGesture(event); }}
+        onLostPointerCapture={event => { finishNodeDrag(event); nodeMarquee.finish(event); cancelConnectionDrag(event); finishPanGesture(event); }}
         onPointerCancel={(event) => {
+          finishNodeDrag(event);
           if (nodeMarquee.finish(event)) return;
           if (!cancelConnectionDrag(event)) {
             finishPanGesture(event);
@@ -632,7 +626,7 @@ export function NodeGraphCanvas({
         }}
       >
         <div className="node-workspace-grid" style={gridStyle} aria-hidden="true" />
-        <NodeGraphCanvasSurface graph={graph} nodes={displayNodes} glideMs={glideMs} hoverRef={hoverChannel} groupFrameNodes={groupFrameNodes} groupBounds={groupBounds} plugs={plugs} viewport={viewport} previewsSuspended={animating}
+        <NodeGraphCanvasSurface graph={graph} nodes={displayNodes} glideMs={glideMs} hoverRef={hoverChannel} dragRef={dragChannel} groupFrameNodes={groupFrameNodes} groupBounds={groupBounds} plugs={plugs} viewport={viewport} previewsSuspended={animating}
           surfaceRef={canvasSurfaceRef} backgroundRef={canvasBackgroundRef} onViewRendered={handleViewRendered}
           selectedNodeId={selectedNodeId} selection={multiSelection} selectedEdgeId={selectedEdgeId}
           hoveredEdgeId={hoveredEdgeId} hoveredPort={hoveredPort} draft={connectionDraft} canBypass={!!onToggleNodeBypass} onReady={setCanvasRendered} />

@@ -9,7 +9,7 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 let inFlight = false, dirty = false, motionReported = false;
 let frames = 0, paintMs = 0, maxPaintMs = 0, reportAt = performance.now();
 let baseMs = 0, overlayMs = 0, previewMs = 0, updateMs = 0, composeMs = 0, drawMs = 0;
-type Update = Extract<CanvasMessage, { type: 'scene' | 'view' | 'transport' | 'hover' }>;
+type Update = Extract<CanvasMessage, { type: 'scene' | 'view' | 'transport' | 'hover' | 'drag' }>;
 const pending = new Map<Update['type'], Update>();
 const post = (message: CanvasWorkerReply, transfer: Transferable[] = []) => self.postMessage(message, transfer);
 function reportEvicted() {
@@ -89,7 +89,7 @@ self.onmessage = (event: MessageEvent<CanvasMessage>) => {
     else pending.set(message.type, message);
     dirty = true;
     if (message.type === 'previews') { reportEvicted(); post({ type: 'previews-ready', batchId: message.batchId, previewCount: painter?.previewCount }); }
-    if (message.type === 'scene' || message.type === 'view') { clearTimeout(timer); timer = undefined; }
+    if (message.type === 'scene' || message.type === 'view' || message.type === 'drag') { clearTimeout(timer); timer = undefined; }
     schedule();
   } catch { post({ type: 'failed' }); }
 };

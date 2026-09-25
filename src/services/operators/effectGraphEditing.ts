@@ -51,16 +51,18 @@ export function setAnimatedOperatorParameter(clipId: string, effectId: string, n
 type Params = Record<string, unknown>;
 /** One owner mutation for both form and graph views. Old baked artifacts are retained until a successful bake. */
 export function editEffectGraph(clipId: string, effectId: string, label: string,
-  edit: (graph: EffectOperatorGraph, params: Params) => void) {
+  edit: (graph: EffectOperatorGraph, params: Params) => void, options: { presentationOnly?: boolean } = {}) {
   assertExclusiveTimelineMutationAllowed();
   const { state, clip, effect } = readOwner(clipId, effectId);
   if (!clip || state.isExporting || state.tracks.find(t => t.id === clip.trackId)?.locked) throw new Error('The clip is unavailable, locked or exporting.');
   if (!effect) throw new Error('Effect unavailable.');
   clipId = clip.id;
-  const graph = structuredClone(effectOperatorGraph(effect)), params = { ...effect.params };
+  // Position edits only replace the layout map: no deep clone, no recompile.
+  const source = effectOperatorGraph(effect);
+  const graph = options.presentationOnly ? { ...source, layout: { ...source.layout } } : structuredClone(source), params = { ...effect.params };
   delete params[EFFECT_GRAPH_PARAM];
   edit(graph, params);
-  prepareEditableOperatorGraph(graph, () => validateEffectOwnerGraph(effect, graph, params));
+  if (!options.presentationOnly) prepareEditableOperatorGraph(graph, () => validateEffectOwnerGraph(effect, graph, params));
   const batch = startBatch(label);
   try {
     if (effect.type === 'audio-math') state.updateClipAudioEffectInstance(clipId, effectId,
@@ -72,7 +74,8 @@ export function editEffectGraph(clipId: string, effectId: string, label: string,
         effect: { ...effect, params, operatorGraph: packOperatorCompositions(graph) } } } });
     }
     else state.updateClip(clipId, { effects: clip.effects.map(e => e.id === effectId ? { ...e, params, operatorGraph: packOperatorCompositions(graph) } : e) });
-    state.invalidateCache(); renderHostPort.requestRender();
+    // Card positions change no pixels: keep cached frames and skip a render.
+    if (!options.presentationOnly) { state.invalidateCache(); renderHostPort.requestRender(); }
   } finally { if (batch.opened) endBatch(); }
 }
 
@@ -135,7 +138,8 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
   const ownerType = (domain: EffectOperatorGraph['domain']) => domain === 'voxel' ? 'voxel-relief'
     : domain === 'scene' ? 'splat-exploration' : domain === 'audio' ? 'audio-math' : domain === 'image' ? 'invert' : domain === 'analog-signal' ? 'analog-signal-lab' : 'face-cables';
   return {
-    moveNode: (nodeId: string, layout: { x: number; y: number }) => editEffectGraph(clipId, effectId, 'Move node', graph => { graph.layout[nodeId] = layout; }),
+    moveNode: (nodeId: string, layout: { x: number; y: number }) => editEffectGraph(clipId, effectId, 'Move node', graph => { graph.layout[nodeId] = layout; },
+      { presentationOnly: true }),
     connectPorts: (c: NodeGraphConnectionRequest) => editEffectGraph(clipId, effectId, 'Connect nodes', graph => {
       const type = readOwner(clipId, effectId).effect?.type;
       Object.assign(graph, connectEffectGraph(graph, { id: `${c.fromNodeId}-${c.fromPortId}-${c.toNodeId}-${c.toPortId}`,

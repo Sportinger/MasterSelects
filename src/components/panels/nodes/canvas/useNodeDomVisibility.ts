@@ -3,6 +3,7 @@ import type { NodeGraphNode } from '../../../../types/nodeGraph';
 import type { NodeBounds } from './canvasGeometry';
 import type { ConnectionPlug } from './connectionPlugs';
 import { cableDomVisible, intersectsNodeDomView, nodeDomVisible } from './nodeDomVisibility';
+import { useSettingsStore } from '../../../../stores/settingsStore';
 
 function useStableMembers<T>(next: T[]): T[] {
   const previous = useRef(next);
@@ -12,6 +13,7 @@ function useStableMembers<T>(next: T[]): T[] {
 
 /** Pan coordinates must not invalidate memoized DOM subtrees unless membership changes. */
 export function useNodeDomVisibility(nodes: NodeGraphNode[], plugs: ConnectionPlug[], view: NodeBounds | null) {
+  const cableStyle = useSettingsStore(state => state.nodeCableStyle);
   const candidates = useMemo(() => {
     const visibleNodes = nodes.filter(node => nodeDomVisible(node, view));
     const visiblePlugs = plugs.filter(({ center, tip }) => intersectsNodeDomView(view, {
@@ -22,9 +24,9 @@ export function useNodeDomVisibility(nodes: NodeGraphNode[], plugs: ConnectionPl
       const pair = endpoints.get(plug.edge.id) ?? {};
       pair[plug.port.direction] = plug; endpoints.set(plug.edge.id, pair);
     }
-    const visibleEdges = [...endpoints].filter(([, pair]) => pair.input && pair.output && cableDomVisible(pair.output.tip, pair.input.tip, view)).map(([id]) => id);
+    const visibleEdges = [...endpoints].filter(([, pair]) => pair.input && pair.output && cableDomVisible(pair.output.tip, pair.input.tip, view, cableStyle)).map(([id]) => id);
     return { visibleNodes, visiblePlugs, visibleEdges };
-  }, [nodes, plugs, view]);
+  }, [nodes, plugs, view, cableStyle]);
   const visibleNodes = useStableMembers(candidates.visibleNodes);
   const visiblePlugs = useStableMembers(candidates.visiblePlugs);
   const visibleEdges = useStableMembers(candidates.visibleEdges);
