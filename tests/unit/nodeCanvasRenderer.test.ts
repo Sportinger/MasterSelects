@@ -6,7 +6,8 @@ import { bufferedCanvasView, canvasPixelRatio, createNodeCanvasRuntime } from '.
 import { buildCanvasScene } from '../../src/components/panels/nodes/canvas/rendering/buildCanvasScene';
 import { getConnectionPlugs } from '../../src/components/panels/nodes/canvas/connectionPlugs';
 import { connectionFixture } from '../helpers/nodeConnectionFixture';
-import type { CanvasScene, CanvasTransport, CanvasTheme, CanvasView } from '../../src/components/panels/nodes/canvas/rendering/nodeCanvasTypes';
+import type { CanvasMessage, CanvasScene, CanvasTransport, CanvasTheme, CanvasView } from '../../src/components/panels/nodes/canvas/rendering/nodeCanvasTypes';
+import { dragUpdatesFirst } from '../../src/components/panels/nodes/canvas/rendering/canvasNodeDrag';
 
 vi.mock('../../src/components/panels/nodes/canvas/rendering/paintNodeCanvas', () => ({ paintBase: vi.fn(), paintOverlay: vi.fn() }));
 const view: CanvasView = { zoom: 1, panX: 0, panY: 0, width: 1000, height: 700, ratio: 2 };
@@ -29,6 +30,28 @@ describe('node canvas frame ownership', () => {
     painter.update({ type: 'view', view: { ...view, panX: 100 }, theme }); painter.draw(5000);
     painter.update({ type: 'scene', scene }); painter.draw(5001);
     expect(paintBase).toHaveBeenCalledTimes(3);
+  });
+  it('holds a dropped card at its release point until the committed scene moves it, also within one batch', () => {
+    const card = { id: 'n', x: 0, y: 0, width: 200, height: 100, label: 'N', description: '', kind: 'effect', runtime: 'builtin',
+      color: '#fff', selected: false, bypassed: false, bypassable: false, badges: [], ports: [] };
+    const at = (x: number): CanvasScene => ({ ...scene, nodes: [{ ...card, x }] });
+    const painted = () => (vi.mocked(paintBase).mock.calls.at(-1)![1] as CanvasScene).nodes.find(node => node.id === 'n')!.x;
+    const painter = new NodeCanvasPainter(context(), context());
+    painter.update({ type: 'scene', scene: at(0) }); painter.update({ type: 'view', view, theme });
+    painter.update({ type: 'drag', drag: { nodeIds: ['n'], dx: 80, dy: 0 } }); painter.draw(0);
+    expect(painted()).toBe(80);
+    painter.update({ type: 'drag', drag: null, hold: true }); painter.draw(1);
+    expect(painted()).toBe(80);
+    painter.update({ type: 'scene', scene: at(0) }); painter.draw(2); // unrelated scene: still held
+    expect(painted()).toBe(80);
+    painter.update({ type: 'scene', scene: at(80) }); painter.draw(3); // committed: no double offset
+    expect(painted()).toBe(80);
+    painter.update({ type: 'drag', drag: { nodeIds: ['n'], dx: 40, dy: 0 } });
+    for (const message of dragUpdatesFirst<CanvasMessage>([{ type: 'scene', scene: at(120) }, { type: 'drag', drag: null, hold: true }])) {
+      painter.update(message as Exclude<CanvasMessage, { type: 'init' | 'presented' }>);
+    }
+    painter.draw(4);
+    expect(painted()).toBe(120);
   });
   it('stops decorative frames when paused, offscreen, hidden or motion is reduced; final values still draw', () => {
     const painter = new NodeCanvasPainter(context(), context());

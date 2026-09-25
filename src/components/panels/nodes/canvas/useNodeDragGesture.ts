@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type MutableRefObject, type PointerEvent as 
 import type { NodeCanvasPlacement, NodeGraph, NodeGraphLayout, NodeGraphNode } from '../../../../types/nodeGraph';
 import type { NodeGraphMove } from '../NodeGraphCanvas';
 import type { NodeGraphPoint, Viewport } from './canvasGeometry';
-import type { CanvasNodeDrag } from './rendering/canvasNodeDrag';
+import type { NodeCanvasDragChannel } from './rendering/canvasNodeDrag';
 import { groupPlacementMembers } from './nodeCanvasPlacement';
 import { hasUnlockedSource, nodeGroupDropTarget } from './nodeGroupDrop';
 import { placeTransferredNodes } from './placeTransferredNodes';
@@ -36,7 +36,7 @@ interface Options {
   nodesByIdRef: RefObject<Map<string, NodeGraphNode>>;
   canvasRef: RefObject<HTMLDivElement | null>;
   visualViewportRef: RefObject<Viewport>;
-  dragChannel: RefObject<((drag: CanvasNodeDrag | null) => boolean) | null>;
+  dragChannel: RefObject<NodeCanvasDragChannel | null>;
   suppressNextClickRef: MutableRefObject<boolean>;
   layoutScaleX: number;
   getGraphPoint: (clientX: number, clientY: number) => NodeGraphPoint;
@@ -138,7 +138,8 @@ export function useNodeDragHandlers(options: Options) {
       } catch (error) { o.setGroupMessage(error instanceof Error ? error.message : String(error)); }
       if (gesture.moved && gesture.members.length > 1 && !gesture.groupId) o.suppressNextClickRef.current = true;
       o.state.gestureRef.current = null;
-      o.dragChannel.current?.(null); // committed positions arrive with the next scene in the same worker update
+      // Committed positions reach the painter with a later scene; hold the dropped cards until then.
+      o.dragChannel.current?.(null, moves.length > 0);
       o.state.setNodeDragging(false);
       clearDraft(gesture.members);
       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);

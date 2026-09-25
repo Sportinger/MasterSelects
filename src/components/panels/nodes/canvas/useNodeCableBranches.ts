@@ -5,7 +5,7 @@ import { startBatch, endBatch } from '../../../../stores/historyStore';
 import type { NodeGraphPoint } from './canvasGeometry';
 import type { NodeMarqueeRect } from './useNodeMarqueeSelection';
 import type { CanvasBranch } from './rendering/nodeCanvasTypes';
-import type { CanvasNodeDrag } from './rendering/canvasNodeDrag';
+import type { NodeCanvasDragChannel } from './rendering/canvasNodeDrag';
 import { addBranchTarget, branchCableId, branchOfCable, insertCableBranch, removeCableBranches, type ResolvedCableBranches, type RoutedCable } from './cableBranches';
 
 type Branches = Record<string, NodeCableBranch>;
@@ -18,7 +18,7 @@ interface Options {
   cables: readonly RoutedCable[];
   commit: (branches: Branches, label: string) => void;
   getGraphPoint: (clientX: number, clientY: number) => NodeGraphPoint;
-  dragChannel: RefObject<((drag: CanvasNodeDrag | null) => boolean) | null>;
+  dragChannel: RefObject<NodeCanvasDragChannel | null>;
   canvas: RefObject<HTMLDivElement | null>;
   onConnectPorts?: (connection: NodeGraphConnectionRequest) => void;
 }
@@ -107,12 +107,13 @@ export function useNodeCableBranches({ branches, resolved, cables, commit, getGr
     if (!active || active.pointerId !== event.pointerId) return;
     gesture.current = null;
     const { delta } = active, current = latest.current.branches;
-    if (delta && event.type === 'pointerup' && Math.hypot(delta.x, delta.y) > 0.5) {
+    const committed = !!delta && event.type === 'pointerup' && Math.hypot(delta.x, delta.y) > 0.5;
+    if (committed) {
       const next = { ...current };
       for (const id of active.ids) if (next[id]) next[id] = { ...next[id], x: Math.round(next[id].x + delta.x), y: Math.round(next[id].y + delta.y) };
       latest.current.commit(next, active.ids.length > 1 ? 'Move cable branch points' : 'Move cable branch point');
     }
-    dragChannel.current?.(null); // the committed positions arrive with the next scene
+    dragChannel.current?.(null, committed); // the committed positions arrive with a later scene
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }, [dragChannel]);
 

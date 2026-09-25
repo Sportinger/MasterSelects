@@ -2,6 +2,9 @@ import type { CanvasScene, Point } from './nodeCanvasTypes';
 
 /** Graph-space offset of cards and branch points under a pointer drag, applied by the canvas painter. */
 export interface CanvasNodeDrag { nodeIds: string[]; branchIds?: string[]; dx: number; dy: number }
+/** Sends a drag to the painter; false while React still moves the cards. `hold` keeps a released
+ * drag painted until the committed scene has moved its items, so the old position never flashes. */
+export type NodeCanvasDragChannel = (drag: CanvasNodeDrag | null, hold?: boolean) => boolean;
 
 /**
  * Offsets dragged cards and branch points together with their cable ends and
@@ -31,3 +34,14 @@ export function applyNodeDrag(visible: CanvasScene, full: CanvasScene, drag: Can
     ...(full.branches ? { branches: full.branches.map(branch => branches.has(branch.id) ? { ...branch, ...shift(branch) } : branch) } : {}),
   };
 }
+
+/** Scene positions of the dragged items; a released drag is held until a committed scene changes them. */
+export function draggedPositions(scene: CanvasScene, drag: CanvasNodeDrag): string {
+  const ids = new Set(drag.nodeIds), branches = new Set(drag.branchIds);
+  return JSON.stringify([scene.nodes.filter(node => ids.has(node.id)).map(node => [node.id, node.x, node.y]),
+    (scene.branches ?? []).filter(branch => branches.has(branch.id)).map(branch => [branch.id, branch.x, branch.y])]);
+}
+
+/** A drag release is applied before a scene of the same batch, so the hold compares against the pre-drop positions. */
+export const dragUpdatesFirst = <T extends { type: string }>(messages: Iterable<T>): T[] =>
+  [...messages].toSorted((a, b) => Number(b.type === 'drag') - Number(a.type === 'drag'));

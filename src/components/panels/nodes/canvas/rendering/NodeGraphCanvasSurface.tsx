@@ -7,7 +7,7 @@ import type { Viewport } from '../canvasGeometry';
 import { buildCanvasScene } from './buildCanvasScene';
 import { bufferedCanvasView, createNodeCanvasRuntime, NODE_CANVAS_OVERSCAN } from './nodeCanvasRuntime';
 import type { CanvasTheme } from './nodeCanvasTypes';
-import type { CanvasNodeDrag } from './canvasNodeDrag';
+import type { NodeCanvasDragChannel } from './canvasNodeDrag';
 import { NodePreviewController } from '../../previews/NodePreviewController';
 import './NodeGraphCanvasSurface.css';
 
@@ -21,7 +21,7 @@ type Props = Omit<SceneOptions, 'clips' | 'keyframes' | 'sourceTime'> & {
   /** Filled with a direct worker hover channel for pointer hit testing. */
   hoverRef?: MutableRefObject<((edgeId: string | null) => void) | null>;
   /** Filled with a direct channel for pointer-drag offsets; false when no canvas paints them. */
-  dragRef?: MutableRefObject<((drag: CanvasNodeDrag | null) => boolean) | null>;
+  dragRef?: MutableRefObject<NodeCanvasDragChannel | null>;
   previewsSuspended?: boolean;
 };
 
@@ -57,10 +57,15 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
     }); runtime.current = renderer;
     const previews = new NodePreviewController(renderer, host); previewRuntime.current = previews;
     if (hoverRef) hoverRef.current = edgeId => renderer.update({ type: 'hover', edgeId });
-    if (dragRef) dragRef.current = drag => {
+    let heldDrag: ReturnType<typeof setTimeout> | undefined;
+    if (dragRef) dragRef.current = (drag, hold) => {
       // Until a canvas paints (and in the DOM fallback) the visible cards move in React.
       if (host.dataset.renderer !== 'worker' && host.dataset.renderer !== 'software') return false;
-      renderer.update({ type: 'drag', drag }); return true;
+      clearTimeout(heldDrag);
+      renderer.update({ type: 'drag', drag, hold });
+      // A rejected or unchanged commit never moves the items; release them anyway.
+      if (hold) heldDrag = setTimeout(() => renderer.update({ type: 'drag', drag: null }), 1500);
+      return true;
     };
     previews.suspend(suspendedRef.current);
     previews.scene(previewSource.current.clipId, previewSource.current.nodes, previewSource.current.selectedNodeId, previewSource.current.expanded);
@@ -124,7 +129,7 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
     document.addEventListener('visibilitychange', queueTransport); motion.addEventListener('change', queueTransport);
     window.addEventListener('resize', measure);
     return () => {
-      unsubscribe(); resize?.disconnect(); intersection?.disconnect(); themeObserver.disconnect(); clearTimeout(fade);
+      unsubscribe(); resize?.disconnect(); intersection?.disconnect(); themeObserver.disconnect(); clearTimeout(fade); clearTimeout(heldDrag);
       if (frame !== undefined) cancelAnimationFrame(frame);
       document.removeEventListener('visibilitychange', queueTransport); motion.removeEventListener('change', queueTransport);
       window.removeEventListener('resize', measure); previews.dispose(); previewRuntime.current = null; renderer.dispose(); runtime.current = null;

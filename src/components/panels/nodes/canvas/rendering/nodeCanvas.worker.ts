@@ -1,5 +1,6 @@
 import { NodeCanvasPainter } from './NodeCanvasPainter';
 import type { CanvasMessage, CanvasWorkerReply } from './nodeCanvasTypes';
+import { dragUpdatesFirst } from './canvasNodeDrag';
 
 let painter: NodeCanvasPainter | undefined;
 let layers: OffscreenCanvas[] = [];
@@ -25,7 +26,7 @@ function frame() {
   timer = undefined;
   try {
     const start = performance.now();
-    for (const message of pending.values()) painter?.update(message);
+    for (const message of dragUpdatesFirst(pending.values())) painter?.update(message);
     pending.clear();
     const updated = performance.now();
     if (!painter?.draw(start)) return;

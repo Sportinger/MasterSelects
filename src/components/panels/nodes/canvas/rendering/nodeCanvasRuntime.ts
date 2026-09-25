@@ -1,5 +1,6 @@
 import { prefersSoftwareTimelineCanvas } from '../../../../../utils/canvasPlatform';
 import { NodeCanvasPainter } from './NodeCanvasPainter';
+import { dragUpdatesFirst } from './canvasNodeDrag';
 import type { CanvasMessage, CanvasView, CanvasWorkerReply } from './nodeCanvasTypes';
 import { releasePreviewFrame, type PreviewFrame } from '../../../../../services/nodePreview/previewTypes';
 
@@ -44,7 +45,7 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
     frame = undefined;
     if (disposed) return;
     try {
-      for (const message of pending.values()) {
+      for (const message of dragUpdatesFirst(pending.values())) {
         if (worker) worker.postMessage(message); else painter?.update(message);
       }
       let changed = pending.size > 0; pending.clear();

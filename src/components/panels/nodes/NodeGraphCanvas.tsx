@@ -10,7 +10,7 @@ import { useNodeCanvasPlacement } from './canvas/useNodeCanvasPlacement';
 import { useNodeLayoutTransition } from './canvas/useNodeLayoutTransition';
 import { hasUnlockedSource } from './canvas/nodeGroupDrop';
 import { NodeGraphCanvasSurface } from './canvas/rendering/NodeGraphCanvasSurface';
-import type { CanvasNodeDrag } from './canvas/rendering/canvasNodeDrag';
+import type { NodeCanvasDragChannel } from './canvas/rendering/canvasNodeDrag';
 import { annotatedGraphBounds, nodeGroupBounds } from './canvas/groupBounds';
 import { Profiler, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { recordNodeCanvasRender } from './canvas/rendering/nodeCanvasProfile';
@@ -254,7 +254,7 @@ export function NodeGraphCanvas({
     const rect = canvasRef.current?.getBoundingClientRect(), visual = visualViewportRef.current;
     return rect ? { x: (clientX - rect.left - visual.panX) / visual.zoom, y: (clientY - rect.top - visual.panY) / visual.zoom } : { x: 0, y: 0 };
   }, []);
-  const dragChannel = useRef<((drag: CanvasNodeDrag | null) => boolean) | null>(null); // card drags repaint in the worker, not React
+  const dragChannel = useRef<NodeCanvasDragChannel | null>(null); // card drags repaint in the worker, not React
   const { startNodeDrag, startGroupDrag, handleNodePointerMove, finishNodeDrag, handleNodeClick } = useNodeDragHandlers({ state: dragState, graph, placement, spacedNodes,
     multiSelection, soleSelectionRef, nodesByIdRef, canvasRef, visualViewportRef, dragChannel, suppressNextClickRef, layoutScaleX, getGraphPoint: getGraphPointFromClient,
     commitPlacement, onSelectNode, onToggleNodeSelection, onMoveNode, onMoveNodes, onTransferNodes, setGroupMessage, setSelectedEdgeId });

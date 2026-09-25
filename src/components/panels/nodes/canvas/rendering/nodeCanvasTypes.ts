@@ -59,7 +59,8 @@ export type CanvasMessage =
   /** Hover highlight only repaints the overlay; the scene and base layer stay untouched. */
   | { type: 'hover'; edgeId: string | null }
   /** Pointer drag offset; the scene keeps committed positions until the drop. */
-  | { type: 'drag'; drag: CanvasNodeDrag | null };
+  // `hold` releases the drag once a committed scene has moved the dragged items.
+  | { type: 'drag'; drag: CanvasNodeDrag | null; hold?: boolean };
 
 /** Pixels and their coordinate system are presented together on the main thread. */
 export type CanvasWorkerReply =

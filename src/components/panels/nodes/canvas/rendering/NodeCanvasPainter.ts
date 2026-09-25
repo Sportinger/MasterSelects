@@ -5,7 +5,7 @@ import { NodeFlowClock } from './NodeFlowClock';
 import { NodePreviewPainter } from '../../previews/NodePreviewPainter';
 import { CanvasSceneVisibility } from './canvasSceneVisibility';
 import { NodeSceneMotion } from './NodeSceneMotion';
-import { applyNodeDrag, type CanvasNodeDrag } from './canvasNodeDrag';
+import { applyNodeDrag, draggedPositions, type CanvasNodeDrag } from './canvasNodeDrag';
 
 /**
  * During build-up motion each group frame spans only its members that are
@@ -58,6 +58,7 @@ export class NodeCanvasPainter {
   private cards = new NodeCardSprites();
   private hoveredEdgeId: string | null = null;
   private drag: CanvasNodeDrag | undefined;
+  private heldDrag: string | undefined;
   private cardSignatures = new Map<string, string>();
   constructor(base: DrawContext, overlay: DrawContext, previews?: DrawContext, atlas?: () => DrawContext | null) {
     this.base = base; this.overlay = overlay; this.previewContext = previews;
@@ -67,12 +68,18 @@ export class NodeCanvasPainter {
     if (message.type === 'previews') { this.previews?.receive(message.frames); return; }
     if (message.type === 'hover') { this.hoveredEdgeId = message.edgeId; this.overlayDirty = true; return; }
     if (message.type === 'drag') {
+      // Until the committed scene arrives, the dropped items stay where they were released.
+      if (message.hold && this.drag && this.scene) { this.heldDrag = draggedPositions(this.scene, this.drag); return; }
+      this.heldDrag = undefined;
       this.drag = message.drag ?? undefined; this.visibleScene = undefined;
       this.baseDirty = true; this.overlayDirty = true; this.previews?.invalidate(); return;
     }
     if (message.type === 'scene') {
       this.sceneMotion.update(message.scene, performance.now());
       this.scene = message.scene; this.visibility = new CanvasSceneVisibility(message.scene); this.visibleScene = undefined; this.baseDirty = true;
+      if (this.heldDrag !== undefined && this.drag && draggedPositions(message.scene, this.drag) !== this.heldDrag) {
+        this.drag = undefined; this.heldDrag = undefined; this.previews?.invalidate();
+      }
       this.cardSignatures = new Map(message.scene.nodes.map(node => [node.id, cardSignature(node)]));
       this.cards.retain(new Set(this.cardSignatures.keys()));
       this.previews?.retain(new Set(this.scene.nodes.flatMap(node => node.preview ? [node.preview.key] : [])));
