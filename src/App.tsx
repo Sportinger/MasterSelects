@@ -15,7 +15,6 @@ import { CameraSolveJobOverlay } from './components/common/CameraSolveJobOverlay
 import { ShortcutDisplayOverlay } from './components/common/ShortcutDisplayOverlay';
 import { MuscriptorDialogHost } from './components/common/MuscriptorDialogHost';
 import { SourceFitDialogHost } from './components/common/SourceFitDialog';
-import { ClippyChatOverlay } from './components/common/clippyChat/ClippyChatOverlay';
 import { GuidedActionOverlay } from './components/guidedActions/GuidedActionOverlay';
 import { FlashBoardRuntimeHost } from './components/panels/flashboard/FlashBoardRuntimeHost';
 import { EditorPlaybackRuntimeHost } from './components/common/EditorPlaybackRuntimeHost';
@@ -545,9 +544,6 @@ function App({ initialExperience = 'editor' }: AppProps) {
       {!isStartLayout && (
         <>
           <GuidedActionOverlay />
-          {!isProjectBootPending && isProjectOpen && !isProjectPermissionPending
-            && !showTutorialSetup && !activeCampaign && !activeInteractiveCampaign
-            && <ClippyChatOverlay />}
           <ShortcutDisplayOverlay />
           <ProjectLoadProgressOverlay />
           <CameraSolveJobOverlay />

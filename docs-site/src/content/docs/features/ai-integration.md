@@ -26,26 +26,6 @@ Model-powered editing through the private hosted-agent kernel and shared public 
 
 ## FlashBoard Chat
 
-### Clippy editor overlay
-
-After a project opens, the editor displays Clippy near the upper-right edge
-with a large chat input below and to his left. Its gray placeholder reads
-`inside me`. Enter or the arrow opens the existing media AI chat composer with
-the typed draft; Shift+Enter inserts a newline. Sending and agent execution
-remain in the normal chat composer.
-
-The overlay leaves the surrounding editor interactive. Close (or Escape while
-using the overlay) reduces it to **Ask Clippy**; reopening preserves an unsent
-draft. Dismissal is remembered for the current tab session. It is hidden during
-project selection and active tutorials. Playback starts muted, has replay and
-sound controls, and respects reduced-motion preferences. Apple mobile WebKit
-and video failures use the transparent image fallback.
-
-The video source in `src/components/common/clippyChat/ClippyChatOverlay.tsx`
-currently uses the existing transparent `/clippy-intro.webm` as a placeholder.
-Replace `DEFAULT_VIDEO_SRC` with the final keyed performance when available.
-The new green-background render is not bundled in the editor.
-
 > **Two explicit runtimes:** `Codex Direct` is the default in development and
 > production and reaches the isolated Codex app-server through authenticated
 > same-origin relays. `Fast` uses Hosted Agent V2 through the kernel-owned
