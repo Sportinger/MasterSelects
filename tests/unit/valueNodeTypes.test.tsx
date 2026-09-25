@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { compileImageOperatorPreview, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { createDefaultUvDistortGraph } from '../../src/services/operators/uvDistortEffectGraphs';
@@ -13,8 +13,10 @@ import { useTimelineStore } from '../../src/stores/timeline';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 import { connectionFixture } from '../helpers/nodeConnectionFixture';
 import type { Keyframe } from '../../src/types/keyframes';
+import { installInProcessInspectorGraphWorker } from '../helpers/inspectorGraphWorker';
 
 const initial = useTimelineStore.getState();
+beforeEach(installInProcessInspectorGraphWorker);
 afterEach(() => { cleanup(); useTimelineStore.setState(initial); });
 const cardProps = { selectedNodeId: null, connectionDraft: null, onSelectNode: vi.fn(), onStartNodeDrag: vi.fn(),
   onNodePointerMove: vi.fn(), onFinishNodeDrag: vi.fn(), onStartConnectionDrag: vi.fn(), onDisconnectPortEdges: vi.fn() };
@@ -39,7 +41,7 @@ describe('typed Value nodes and collapsed cards', () => {
     expect(frame?.values?.find(value => value.direction === 'output')?.value).toBe(-2);
   });
 
-  it('keeps type selection in the inspector and retains bindings when switching variants', () => {
+  it('keeps type selection in the inspector and retains bindings when switching variants', async () => {
     const clip = createMockClip({ effects: [{ id: 'k', name: 'Kaleidoscope', type: 'kaleidoscope', enabled: true, params: { segments: 6 }, operatorGraph: createDefaultUvDistortGraph('kaleidoscope') }] });
     useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })] });
     setOperatorVariant(clip.id, 'k', 'segments', 'values.integer');
@@ -47,7 +49,7 @@ describe('typed Value nodes and collapsed cards', () => {
     expect(effect.operatorGraph?.nodes.find(node => node.id === 'segments')).toMatchObject({ operator: 'values.integer', bindings: { value: 'segments' } });
     const node = buildEffectOperatorGraph(saved, effect).nodes.find(node => node.id === 'segments')!;
     const view = render(<><NodeGraphNodeCard {...cardProps} node={node} /><OperatorParameters clip={saved} effectId="k" nodeId="segments" /></>);
-    expect(view.getByLabelText('Value type').closest('.operator-parameters')).not.toBeNull();
+    expect((await view.findByLabelText('Value type')).closest('.operator-parameters')).not.toBeNull();
     expect(view.container.querySelector('.node-workspace-node [aria-haspopup]')).toBeNull();
     expect(view.container.querySelector('.node-workspace-node-value')).not.toBeNull();
   });

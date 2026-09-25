@@ -51,3 +51,38 @@ export function withSlitScanDisMask(graph: EffectOperatorGraph): EffectOperatorG
   }
   return result;
 }
+
+/** Offer the generated DIS field to the base sampler through a Flow strength
+ * scale (RG only; confidence/validity pass through). The inspector switch selects
+ * the sampler's motion input; while off, compile shortcuts drop that edge. */
+export function withSlitScanMotionCompensation(graph: EffectOperatorGraph): EffectOperatorGraph {
+  const dis = graph.nodes.find(node => node.id === 'motion-scan-dis-source' && node.operator === 'image.source-motion');
+  const delay = graph.edges.find(edge => edge.to === dis?.id && edge.input === 'delay');
+  const history = graph.nodes.find(node => node.operator === 'image.sample-history'
+    && graph.edges.some(edge => edge.to === node.id && edge.input === 'delay' && edge.from === delay?.from && edge.output === delay?.output));
+  if (!dis || !history || graph.nodes.some(node => node.id === 'motion-comp-scaled')) return graph;
+  const existing = graph.edges.find(edge => edge.to === history.id && edge.input === 'motion');
+  // Only the generated direct wiring is upgraded; authored motion sources stay.
+  if (existing && existing.from !== dis.id) return graph;
+  if (!existing && history.bindings.motionCompensation !== undefined) return graph;
+  const nodes: BoundOperatorNode[] = [], edges: OperatorEdge[] = [];
+  const add = (name: string, operator: string, inputs: Record<string, [string, string]> = {}, output = 'value',
+    constants?: BoundOperatorNode['constants'], bindings: Record<string, string> = {}): [string, string] => {
+    const id = `motion-comp-${name}`;
+    nodes.push({ id, operator, operatorVersion: 1, bindings, ...(constants ? { constants } : {}) });
+    for (const [input, [from, port]] of Object.entries(inputs)) edges.push({ id: `${id}:${input}`, from, output: port, to: id, input });
+    return [id, output];
+  };
+  const strength = add('strength', 'values.number', {}, 'value', undefined, { value: 'temporalMotionStrength' });
+  const one = add('one', 'values.number', {}, 'value', { value: 1 });
+  const scale = add('scale', 'vector.combine.vec4', { x: strength, y: strength, z: one, w: one });
+  const field = add('field', 'convert.image-to-vec4', { image: [dis.id, 'image'] });
+  const scaled = add('scaled', 'math.multiply.vec4', { a: field, b: scale });
+  const image = add('image', 'convert.vec4-to-image', { value: scaled }, 'image');
+  return { ...graph,
+    nodes: [...graph.nodes.map(node => node === history ? { ...node, bindings: { ...node.bindings, motionCompensation: 'temporalMotion' } } : node), ...nodes],
+    edges: [...graph.edges.filter(edge => edge !== existing), ...edges,
+      { id: `${history.id}:motion`, from: image[0], output: image[1], to: history.id, input: 'motion' }],
+    groups: graph.groups?.map(group => group.id === 'scan-motion' ? { ...group, nodeIds: [...group.nodeIds, ...nodes.map(node => node.id)] } : group),
+    layout: { ...graph.layout, ...Object.fromEntries(nodes.map((node, i) => [node.id, { x: 10000 + i * 280, y: 2600 }])) } };
+}

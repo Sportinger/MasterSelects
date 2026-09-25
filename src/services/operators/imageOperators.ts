@@ -32,9 +32,12 @@ const vectorOperators = ([2, 3, 4] as const).flatMap(size => {
 export const IMAGE_OPERATORS: readonly OperatorDefinition[] = [
   ...MOTION_IMAGE_OPERATORS,
   { ...imageOperator({ id: 'image.sample-history', family: 'image.sample', variant: 'history', label: 'Sample Input History',
-    description: 'Samples an earlier image using a delay in seconds. Slit Scan reloads source frames after seeks; live input-history owners reset their captured history.',
-    inputs: [port('uv', 'vec2', 'UV', true), port('delay', 'number', 'Delay (s)', true), port('current', 'image', 'Current image', true)],
-    outputs: [port('image', 'image', 'Image')], parameters: [], addable: true,
+    description: 'Samples an earlier image using a delay in seconds. Slit Scan reloads source frames after seeks; live input-history owners reset their captured history. With Motion compensation, a connected forward motion field (RG = UV per delay-second, B = confidence, A = validity) moves each decoded frame to the exact requested time in resident GPU history.',
+    inputs: [port('uv', 'vec2', 'UV', true), port('delay', 'number', 'Delay (s)', true), port('current', 'image', 'Current image', true),
+      port('motion', 'image', 'Motion field')],
+    outputs: [port('image', 'image', 'Image')], addable: true,
+    parameters: [{ id: 'motionCompensation', label: 'Motion compensation', type: 'select', default: 'off', options: [
+      { value: 'off', label: 'Off' }, { value: 'motion', label: 'Use motion field' }] }],
     consumers: ['image'], implementation: 'shared' }), state: 'frame-history', fusion: 'pass-boundary' },
   imageOperator({ id: 'values.integer', family: 'values.numeric', variant: 'integer', label: 'Value',
     description: 'An integer-valued scalar. Truncates toward zero after animation; keeps the numeric signal compatible with math inputs.',

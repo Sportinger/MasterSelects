@@ -26,6 +26,21 @@ and source. Other effects and structural settings are not implicitly enabled.
 
 ## Slit Scan
 
+**Motion compensation** (section switch, `DIS optical flow · resident history`) removes
+temporal seams at their source instead of blurring them. Each decoded frame the
+sampler picks is shifted along cached DIS optical flow to the exact requested time,
+so Nearest and Blend both produce continuous motion between the few real frames a
+short window contains (for example 30 frames for 1 s at 30 fps). Low-confidence or
+invalid flow (occlusions, fast motion beyond the estimator) falls back to the
+unshifted frame, so errors stay local. It reuses the same cached, project-persisted
+DIS source pairs as Scan smoothing and does not touch planar tracking. It needs
+**GPU history · resident video volume**; GPU cache, Hybrid storage and a Hybrid
+capacity fallback render without compensation, and the status row says so. While
+it is on, export renders individual frames instead of shared-source blocks. With
+Time factor at full sample resolution every sample already has its own frame, so
+compensation matters most for short windows. **Flow strength** scales the displacement
+from 0 to 2 (default 1), preserving confidence and validity. Default Off, with no extra work.
+
 **Sampling → Seam smoothing (px)** adds an optional 0–8 px directional filter
 after the complete Slit Scan color output. Start around 1–2 px. Its mask follows
 curvature in the selected base sampler's resolved source ages, including actual
@@ -265,6 +280,12 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
   unchanged, so custom time maps and protection masks keep their authored behavior.
   Clip boundaries hold the first/last available frame. High factors only add
   distinct frames where source history exists; use Hybrid for large windows.
+- **Match sample resolution** (bar button beside Time factor): sets Time factor to
+  `(Samples − 2) / (source fps × Delay)`, rounded up to 0.1×, so every sample step
+  addresses its own source frame (30 fps, 1 s Delay, 1920 samples → 64×). It is
+  capped at 100×; the tooltip then suggests a longer Delay. It never changes Bypass
+  slowdown, clip speed or duration, and is disabled while Time factor has keyframes
+  or the source frame rate is unknown. The button is highlighted while the factor matches.
 - **Bypass slowdown** (fast-forward toggle beside Time factor): keeps the source
   acceleration instead of compensating it at the output. At 4x, two seconds into
   the clip samples the eight-second source position, with the same expanded

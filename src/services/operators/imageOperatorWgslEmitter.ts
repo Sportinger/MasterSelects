@@ -35,7 +35,7 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
   const expressions = instructions.map((item, index) => {
     const args = item.inputs.map(input => `v${input}`);
     const expression = item.operation === 'input' ? 'pixel' : item.operation === 'uv' ? 'inputUv'
-      : item.operation === 'sample-input-history' ? `sampleInputHistory(imageGraphResource${item.resourceSlots![0]}, imageGraphResource${item.resourceSlots![1]}, texSampler, ${args.join(', ')}, inputUv)`
+      : item.operation === 'sample-input-history' ? `${args.length > 3 ? 'sampleInputHistoryMotion' : 'sampleInputHistory'}(imageGraphResource${item.resourceSlots![0]}, imageGraphResource${item.resourceSlots![1]}, texSampler, ${args.join(', ')}, inputUv)`
       : item.operation === 'optical-flow' ? `imageOpticalFlow(imageGraphResource${item.resourceSlots![0]}, imageGraphResource${item.resourceSlots![1]}, texSampler, inputUv, ${args[0]}, inputResolution)`
       : item.operation === 'source-motion' ? `imageHistoryOpticalFlow(imageGraphResource${item.resourceSlots![0]}, imageGraphResource${item.resourceSlots![1]}, texSampler, ${args.join(', ')}, inputResolution)`
       : item.operation === 'motion-consistency' ? `motionSpatialConsensus(imageGraphResource${item.resourceSlots![0]}, texSampler, inputUv, ${args[0]}, inputResolution)`

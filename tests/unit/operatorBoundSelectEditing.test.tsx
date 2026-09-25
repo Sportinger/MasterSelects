@@ -1,11 +1,12 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OperatorParameters } from '../../src/components/panels/nodes/workspace/OperatorParameters';
 import { createDefaultInvertImageGraph } from '../../src/services/operators/imageOperatorGraph';
 import { setOperatorParameter } from '../../src/services/operators/effectGraphEditing';
 import { useTimelineStore } from '../../src/stores/timeline';
 import type { Effect } from '../../src/types/effects';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
+import { installInProcessInspectorGraphWorker } from '../helpers/inspectorGraphWorker';
 
 vi.mock('../../src/effects', async importOriginal => {
   const actual = await importOriginal<typeof import('../../src/effects')>();
@@ -18,6 +19,7 @@ vi.mock('../../src/effects', async importOriginal => {
 });
 
 const initial = useTimelineStore.getState();
+beforeEach(installInProcessInspectorGraphWorker);
 afterEach(() => { cleanup(); useTimelineStore.setState(initial); });
 
 function fixture(projectionMode = 'equidistant') {
@@ -32,10 +34,10 @@ function fixture(projectionMode = 'equidistant') {
 }
 
 describe('bound operator select parameters', () => {
-  it('renders labels and options from the owning effect schema and persists the stable binding', () => {
+  it('renders labels and options from the owning effect schema and persists the stable binding', async () => {
     const { clip, effect } = fixture('unknown');
     render(<OperatorParameters clip={clip} effectId={effect.id} nodeId="projection" />);
-    const select = screen.getByRole('combobox', { name: 'Choice Projection Model' });
+    const select = await screen.findByRole('combobox', { name: 'Choice Projection Model' });
     expect(select).toHaveTextContent('Stereographic');
     fireEvent.click(select);
     fireEvent.click(screen.getByRole('option', { name: 'Equidistant' }));

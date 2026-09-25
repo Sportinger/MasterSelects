@@ -66,4 +66,13 @@ fn sampleInputHistory(atlas: texture_2d_array<f32>, ages: texture_2d<f32>, s: sa
     }
   }
   return current;
+}
+/** Motion input is used only by resident GPU history; other storage modes keep
+ * the plain sampler (their owners report that compensation is unavailable). */
+fn sampleInputHistoryMotion(atlas: texture_2d_array<f32>, ages: texture_2d<f32>, s: sampler,
+  uv: vec2f, requestedDelay: f32, current: vec4f, motion: vec4f, outputUv: vec2f) -> vec4f {
+  let metadataCount = textureDimensions(ages).x - 1u;
+  let header = textureLoad(ages, vec2i(i32(metadataCount), 0), 0);
+  if (header.z > 3.5) { return sampleResidentTemporalMotion(atlas, ages, s, uv, requestedDelay, current, header, motion); }
+  return sampleInputHistory(atlas, ages, s, uv, requestedDelay, current, outputUv);
 }`;

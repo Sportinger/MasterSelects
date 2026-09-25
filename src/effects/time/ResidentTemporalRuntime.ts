@@ -154,7 +154,7 @@ export class ResidentTemporalRuntime {
       const retired = cache.ages; cache.ages = this.metadataTexture(metadataWidth); cache.metadataWidth = metadataWidth;
       void Promise.resolve().then(() => this.device.queue.onSubmittedWorkDone()).finally(() => retired.destroy());
     }
-    const data = residentTemporalMetadata(window.metadata, window.times, cache.slots, cache.columns, cache.rows);
+    const data = residentTemporalMetadata(window.metadata, window.times, cache.slots, cache.columns, cache.rows, window.offsets);
     this.device.queue.writeTexture({ texture: cache.ages }, data, { bytesPerRow: metadataWidth * 16, rowsPerImage: 2 }, [metadataWidth, 2]);
     let current = request.currentInput.view;
     if (!request.sourceOnly && (request.stabilization || request.retainCurrentInput)) {

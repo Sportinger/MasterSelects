@@ -5,6 +5,7 @@ import { createDefaultAsciiGhostGraph, createDefaultCapsuleCloudGraph, createDef
 import { EFFECT_GRAPH_PARAM } from '../../src/services/operators/effectGraph';
 import { editEffectGraph } from '../../src/services/operators/effectGraphEditing';
 import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { expandOperatorCompositions } from '../../src/services/operators/operatorComposition';
 import { evaluateCompositionClipEffects } from '../../src/services/compositionRender/keyframeEvaluation';
 import { getHistoryStateView, initHistoryStoreRefs, setHistoryCallbacks } from '../../src/stores/historyStore';
 import { useTimelineStore } from '../../src/stores/timeline';
@@ -47,7 +48,8 @@ describe('Acuarela and animated glyph image graph lifecycle', () => {
     const canonical = migratePersistedEffectOperatorGraph(base);
     const definition = getEffect(item.type)!;
     expect(canonical.params).not.toHaveProperty(EFFECT_GRAPH_PARAM);
-    expect(effectOperatorGraph(canonical)).toEqual(canonical.operatorGraph);
+    // Projects persist packed shared blocks; the runtime resolves their exact expansion.
+    expect(effectOperatorGraph(canonical)).toEqual(expandOperatorCompositions(canonical.operatorGraph!));
     expect(effectOperatorParams(canonical).speed).toBe(item.speedDefault);
     expect(definition.params.speed).toMatchObject({ default: item.speedDefault, min: 0, max: item.speedMax, animatable: true });
     expect(canonical.operatorGraph!.nodes.some(node => node.bindings.value === 'speed')).toBe(true);
@@ -87,7 +89,7 @@ describe('Acuarela and animated glyph image graph lifecycle', () => {
     const restored = useTimelineStore.getState().clips[0].effects[0];
     expect(restored.operatorGraph).toEqual(editedGraph);
     expect(restored.params).toEqual(editedParams);
-    expect(effectOperatorGraph(restored)).toEqual(editedGraph);
+    expect(effectOperatorGraph(restored)).toEqual(expandOperatorCompositions(editedGraph));
     expect(useTimelineStore.getState().clipKeyframes.get(clip.id)?.map(key => key.value)).toEqual([0, item.speedMax]);
   });
 });

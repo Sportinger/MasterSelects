@@ -31,8 +31,10 @@ export function residentTemporalLayout(width: number, height: number, wanted: nu
 
 export class ResidentTemporalCapacityError extends Error {}
 
+/** Row 0: grid age, lower/upper slot, PTS blend. Row 1: graph-delay offsets from
+ * each grid age to its lower/upper decoded PTS; the last column holds the tile grid. */
 export function residentTemporalMetadata(metadata: Float32Array, times: readonly number[], slots: ReadonlyMap<number, number>,
-  columns: number, rows: number) {
+  columns: number, rows: number, offsets: readonly (readonly number[])[] = []) {
   const width = metadata.length / 4;
   const result = new Float32Array(metadata.length * 2); result.set(metadata);
   for (let i = 0; i < width - 1; i++) for (const offset of [1, 2]) {
@@ -41,6 +43,7 @@ export function residentTemporalMetadata(metadata: Float32Array, times: readonly
     if (slot === undefined) throw new Error('GPU history metadata refers to a missing source frame.');
     result[i * 4 + offset] = slot;
   }
+  offsets.forEach(([lower = 0, upper = lower], i) => { if (i < width - 1) result.set([lower, upper], (width + i) * 4); });
   result[(width - 1) * 4 + 2] = 4;
   result.set([columns, rows, 0, 0], (2 * width - 1) * 4);
   return result;

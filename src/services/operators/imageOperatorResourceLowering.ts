@@ -35,6 +35,7 @@ export function createImageOperatorResourceLowering(options: {
   emit: (instruction: ImagePlanInstruction) => number;
   source: (target: BoundOperatorNode, input: string) => { node: BoundOperatorNode; output: string };
   visitSource: (target: BoundOperatorNode, input: string) => number;
+  connected: (target: BoundOperatorNode, input: string) => boolean;
   activePixelLoad: () => boolean;
 }) {
   const resourceSlot = (resourceId: string, sampling: ImageOperatorResourceSampling, kind: 'Image' | 'Field') => {
@@ -89,8 +90,10 @@ export function createImageOperatorResourceLowering(options: {
       }
       const atlasSlot = resourceSlot(atlas, 'hardware-linear-clamp', 'Image');
       const agesSlot = resourceSlot(ages, 'exact-pixel-load', 'Image');
+      // Compile shortcuts remove the motion edge while compensation is off.
+      const motion = options.connected(current, 'motion') ? [options.visitSource(current, 'motion')] : [];
       return options.emit({ nodeId: current.id, operation: 'sample-input-history', type: 'image',
-        inputs: [options.visitSource(current, 'uv'), options.visitSource(current, 'delay'), options.visitSource(current, 'current')],
+        inputs: [options.visitSource(current, 'uv'), options.visitSource(current, 'delay'), options.visitSource(current, 'current'), ...motion],
         resourceSlots: [atlasSlot, agesSlot] });
     }
     const memorySlot = (producer: BoundOperatorNode) => {

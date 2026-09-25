@@ -65,13 +65,30 @@ function shortcuts(graph: EffectOperatorGraph, params: Record<string, unknown>, 
   return result;
 }
 
+/** History samplers ignore a connected motion field unless their Motion
+ * compensation selects it; the unused analysis then becomes unreachable. */
+function inactiveMotionEdges(graph: EffectOperatorGraph, params: Record<string, unknown>) {
+  const inactive = new Set<string>();
+  for (const node of graph.nodes) {
+    if (node.operator !== 'image.sample-history') continue;
+    const binding = node.bindings.motionCompensation;
+    const mode = typeof binding === 'string' ? params[binding] : node.constants?.motionCompensation;
+    if (mode === 'motion') continue;
+    for (const edge of graph.edges) if (edge.to === node.id && edge.input === 'motion') inactive.add(edge.id);
+  }
+  return inactive;
+}
+
 /** Parameter changes that cross zero/overlay gates must rebuild the pass plan;
  * other slider changes can continue to update uniforms only. */
 export function imageFilterShortcutKey(graph: EffectOperatorGraph, params: Record<string, unknown>, context: ImageOperatorCompileContext = {}) {
-  return [...shortcuts(graph, params, context)].map(([id, edge]) => `${id}:${edge.from}:${edge.output}`).join('|');
+  return [...[...shortcuts(graph, params, context)].map(([id, edge]) => `${id}:${edge.from}:${edge.output}`),
+    ...[...inactiveMotionEdges(graph, params)].map(id => `motion-off:${id}`)].join('|');
 }
 
 export function bypassIdentityImageFilters(graph: EffectOperatorGraph, params: Record<string, unknown>, context: ImageOperatorCompileContext = {}): EffectOperatorGraph {
+  const inactive = inactiveMotionEdges(graph, params);
+  if (inactive.size) graph = { ...graph, edges: graph.edges.filter(edge => !inactive.has(edge.id)) };
   const bypass = shortcuts(graph, params, context);
   if (!bypass.size) return graph;
   return { ...graph, edges: graph.edges.map(edge => {

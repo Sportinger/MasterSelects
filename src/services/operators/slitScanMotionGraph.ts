@@ -1,13 +1,13 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 import { withSlitScanTimeGradient } from './slitScanTimeGradient';
-import { withSlitScanDisMask } from './slitScanDisGraph';
+import { withSlitScanDisMask, withSlitScanMotionCompensation } from './slitScanDisGraph';
 
 type Ref = { node: string; port: string };
 
 /** Authored, reusable image nodes. Insert before the existing diagnostic preview
  * selector; never replace the user's scan expression or time-map wiring. */
 export function withSlitScanMotion(graph: EffectOperatorGraph): EffectOperatorGraph {
-  if (graph.nodes.some(node => node.id.startsWith('motion-scan-'))) return withSlitScanDisMask(withSlitScanTimeGradient(repairInitialMotionGraph(graph)));
+  if (graph.nodes.some(node => node.id.startsWith('motion-scan-'))) return withSlitScanMotionCompensation(withSlitScanDisMask(withSlitScanTimeGradient(repairInitialMotionGraph(graph))));
   const history = graph.nodes.filter(node => node.operator === 'image.sample-history');
   if (history.length !== 1) return graph;
   const delay = graph.edges.find(edge => edge.to === history[0].id && edge.input === 'delay');
@@ -54,11 +54,11 @@ export function withSlitScanMotion(graph: EffectOperatorGraph): EffectOperatorGr
   const overlay = node('overlay', 'image.mask-overlay', { image: smooth, mask: visibleMask, color, opacity: n('opacity', .55) }, 'image');
   // Derivatives execute in a root fragment scope, outside the lazy diagnostic selector.
   const result = node('result', 'image.materialize', { image: overlay }, 'image');
-  return withSlitScanDisMask(withSlitScanTimeGradient({ ...graph, nodes: [...graph.nodes, ...nodes],
+  return withSlitScanMotionCompensation(withSlitScanDisMask(withSlitScanTimeGradient({ ...graph, nodes: [...graph.nodes, ...nodes],
     edges: [...graph.edges.map(edge => edge === route ? { ...edge, from: result.node, output: result.port } : edge), ...edges],
     groups: [...graph.groups ?? [], { id: 'scan-motion', label: 'Time Gradient Smoothing', color: '#ef4444', nodeIds: nodes.map(item => item.id) }],
     layout: { ...graph.layout, ...Object.fromEntries(nodes.map((item, i) => [item.id, { x: 10000 + (i % 5) * 280, y: Math.floor(i / 5) * 180 }])) },
-  }));
+  })));
 }
 
 /** Repair only the initial generated wiring, including graphs already in a store. */

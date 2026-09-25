@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { slitScanPlaybackFactor } from '../../src/effects/time/slit-scan/timeFactor';
+import { slitScanFullResolutionFactor, slitScanPlaybackFactor } from '../../src/effects/time/slit-scan/timeFactor';
 import { temporalClipSource, temporalSourceTime } from '../../src/effects/time/temporalClipSource';
 import { reconcileSlitScanDuration } from '../../src/stores/timeline/helpers/slitScanDuration';
 import { createKeyframeTransformInterpolationActions } from '../../src/stores/timeline/keyframes/keyframeTransformInterpolationActions';
@@ -58,3 +58,13 @@ it('shortens a clip, follows factor edits, and restores duration on bypass/remov
   expect(reconcileSlitScanDuration(edited, edited)).toBe(edited);
 });
 
+
+it('matches the source frame count to the temporal sample grid', () => {
+  expect(slitScanFullResolutionFactor(30, 1, 1920)).toEqual({ factor: 64, frames: 1920, steps: 1918, capped: false });
+  const window = slitScanFullResolutionFactor(29.97, 2, 1080)!;
+  expect(window.frames).toBeGreaterThanOrEqual(window.steps);
+  expect(slitScanFullResolutionFactor(60, .1, 1920)).toMatchObject({ factor: 100, frames: 600, capped: true });
+  expect(slitScanFullResolutionFactor(30, 1, 20)?.factor).toBe(1);
+  expect(slitScanFullResolutionFactor(undefined, 1, 1920)).toBeUndefined();
+  expect(slitScanFullResolutionFactor(30, 0, 1920)).toBeUndefined();
+});

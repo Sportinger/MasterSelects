@@ -227,6 +227,16 @@ clip-time grid, trim/speed mapping and current-input semantics. Time Stack uses
 explicit relative delays through `sourceTemporalWindow` and one shared sampler
 inside Sequence Blend. Source windows share decoding and GPU upload infrastructure.
 
+Motion-compensated sampling is an optional `motion` input on the same sampler, not
+a second decoder or synthesized frame cache. Resident metadata row 1 stores, per
+grid position, the graph-delay offset to its lower/upper decoded PTS. The resident
+sampler moves each chosen frame by `uv - v * (frameAge - requestedDelay)`, where
+`v` is the cached DIS field (UV per delay-second) evaluated at the pixel's own
+UV and delay; confidence/validity fade it back to plain sampling. The sampler's
+`motionCompensation` parameter gates the edge at compile time, so an idle field
+adds no analysis. GPU cache and Hybrid storage keep plain sampling, and linear
+block export is disabled while compensation is active to preserve preview parity.
+
 `usesInputHistory: true` enables compilation of `image.sample-history`; it does
 not select deterministic source sampling by itself. Owners additionally declare
 `sourceTimeOwner` and route through `TemporalEffectResources.resolveSource`.

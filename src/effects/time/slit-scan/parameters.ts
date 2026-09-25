@@ -24,6 +24,11 @@ export const slitScanParams: Record<string, EffectParam> = {
   temporalInterpolation: { type: 'select', label: 'Temporal sampling', default: 'nearest', group: 'Sampling', options: [
     { value: 'linear', label: 'Blend adjacent frames' }, { value: 'nearest', label: 'Nearest frame (no blending)' },
   ] },
+  // Section switch in the inspector; the select value keeps room for other motion sources.
+  temporalMotion: { type: 'select', label: 'Motion compensation', default: 'off', group: 'Resources', options: [
+    { value: 'off', label: 'Off' }, { value: 'motion', label: 'DIS optical flow' },
+  ] },
+  temporalMotionStrength: number('Flow strength', 1, 0, 2, .01, 'Motion compensation'),
   temporalBatch: { type: 'select', label: 'Export processing', default: 'block', group: 'Sampling', options: [
     { value: 'single', label: 'Individual frames' }, { value: 'block', label: 'Shared source frames (Hybrid)' },
   ] },

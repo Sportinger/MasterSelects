@@ -10,6 +10,7 @@ import { createMockClip, createMockTrack } from '../helpers/mockData';
 import type { Effect, Keyframe, TimelineClip } from '../../src/types';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 import { buildBaseLayerProps } from '../../src/engine/export/layerBuilder/baseLayers';
+import { imageFilterShortcutKey } from '../../src/services/operators/imageFilterShortcuts';
 
 const initialTimeline = useTimelineStore.getState();
 const pixel: [number, number, number, number] = [0.2, 0.4, 0.8, 0.75];
@@ -114,13 +115,18 @@ describe('image graph lifecycle parity', () => {
       expect(previewPixel).toEqual(exportPixel);
       if (item.type === 'box-blur' || item.type === 'gaussian-blur') expect(exportPixel[3]).toBeCloseTo(pixel[3], 12);
       else expect(exportPixel[3]).toBe(pixel[3]);
-      const endpointPlans = [0, 2].map(time => {
+      const endpoints = [0, 2].map(time => {
         const sampled = evaluateCompositionClipEffects([effect], keys, time)[0];
-        return compileImageOperatorGraph(effectOperatorGraph(sampled), effectOperatorParams(sampled));
+        const graph = effectOperatorGraph(sampled), params = effectOperatorParams(sampled);
+        return { plan: compileImageOperatorGraph(graph, params), gates: imageFilterShortcutKey(graph, params, effectOperatorCompileContext(sampled)) };
       });
-      expect(endpointPlans[0].key).toBe(endpointPlans[1].key);
-      expect(endpointPlans[0].wgsl).toBe(endpointPlans[1].wgsl);
-      expect(endpointPlans[0].values).not.toEqual(endpointPlans[1].values);
+      // Crossing a proven identity gate (a 0/1 mix, a zero radius) rebuilds the pass plan by design;
+      // every other animated value only refills uniforms of the same program.
+      if (endpoints[0].gates === endpoints[1].gates) {
+        expect(endpoints[0].plan.key).toBe(endpoints[1].plan.key);
+        expect(endpoints[0].plan.wgsl).toBe(endpoints[1].plan.wgsl);
+      } else expect(endpoints[0].plan.key).not.toBe(endpoints[1].plan.key);
+      expect(endpoints[0].plan.values).not.toEqual(endpoints[1].plan.values);
     }
   });
 
@@ -185,7 +191,10 @@ describe('image graph lifecycle parity', () => {
     const serialized = createSerializableTimelineState(useTimelineStore.getState());
     await useTimelineStore.getState().loadState(JSON.parse(JSON.stringify(serialized)));
     const restored = useTimelineStore.getState().clips.find(candidate => candidate.id === clip.id)!.effects[0];
-    expect(effectOperatorGraph(restored)).toEqual(effect.operatorGraph);
+    // Loading may reorder connections while packing shared blocks, but must preserve all graph data.
+    const restoredGraph = effectOperatorGraph(restored), originalGraph = effectOperatorGraph(effect);
+    expect({ ...restoredGraph, edges: restoredGraph.edges.toSorted((a, b) => a.id.localeCompare(b.id)) })
+      .toEqual({ ...originalGraph, edges: originalGraph.edges.toSorted((a, b) => a.id.localeCompare(b.id)) });
     expect(evaluate(restored, 1).plan.key).toBe(endpointPlans[0].key);
   });
 

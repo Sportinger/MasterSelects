@@ -306,6 +306,8 @@ export function addableEffectOperators(type: string) {
     return [...shared, ...IMAGE_OPERATORS.filter(operator => operator.addable), ...IMAGE_COMPOSITIONS];
   }
   return EFFECT_OPERATORS.filter(operator => operator.addable && (type === 'voxel-relief' ? isVoxelOperator(operator.id)
+    // Shared particle forces live with the scene operators but still drive cable physics.
+    : type === 'face-cables' && operator.consumers?.includes('Cable physics') ? true
     : type === 'face-cables' && !operator.composition && operator.id !== 'values.integer'
       && !AUDIO_OPERATORS.includes(operator) && !IMAGE_OPERATORS.includes(operator)
       && !SCENE_OPERATORS.includes(operator) && !VOXEL_OPERATORS.includes(operator) && !SCALAR_FIELD_OPERATORS.includes(operator)));

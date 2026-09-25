@@ -9,7 +9,8 @@ export type ScanAxis = number; // angle in degrees
 /** Fail closed on authored graphs and time-varying spatial fields. They retain Hybrid. */
 export function linearTemporalAxis(request: SourceTemporalRequest, graph: EffectOperatorGraph,
   params: Record<string, unknown>, step?: number): ScanAxis | undefined {
-  if (params.rgbTimeMode === 'separate') return undefined;
+  // Shared-source blocks composite without per-pixel motion; keep per-frame parity.
+  if (params.rgbTimeMode === 'separate' || params.temporalMotion === 'motion') return undefined;
   if (params.temporalBatch !== 'block' || !step || request.maxEdge || request.stabilization || request.horizon <= 0
     || (params.profile ?? 'linear') !== 'linear' || (params.preview ?? 'result') !== 'result'
     || slitScanNumber(params, 'protect') > 0 || slitScanNumber(params, 'bands') > 1

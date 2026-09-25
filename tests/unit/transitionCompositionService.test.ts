@@ -362,6 +362,7 @@ describe('transition composition service', () => {
       defaultSpeed: outgoing.speed,
       animation: {
         baseTransform: outgoing.transform,
+        parameterTimelineStart: outgoing.startTime,
         keyframes: parentKeyframes.map((keyframe) => ({
           ...keyframe,
           id: `${source.id}:${keyframe.id}`,

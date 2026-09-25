@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { effectOperatorGraph, effectOperatorParams, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { expandOperatorCompositions } from '../../src/services/operators/operatorComposition';
 import { editEffectGraph } from '../../src/services/operators/effectGraphEditing';
 import { evaluateCompositionClipEffects } from '../../src/services/compositionRender/keyframeEvaluation';
 import { createSerializableTimelineState } from '../../src/stores/timeline/serialization/serializableTimelineState';
@@ -42,7 +43,8 @@ describe('glyph image graph lifecycle', () => {
     const originalRamp = effectOperatorParams(canonical).customRamp;
     const atlas = canonical.operatorGraph!.nodes.find(node => node.operator === 'glyph.atlas')!;
     expect(atlas.bindings).toEqual({ rampPreset: 'rampPreset', customRamp: 'customRamp', fontFamily: 'fontFamily', fontWeight: 'fontWeight' });
-    expect(effectOperatorGraph(canonical)).toEqual(canonical.operatorGraph);
+    // Projects persist packed shared blocks; the runtime resolves their exact expansion.
+    expect(effectOperatorGraph(canonical)).toEqual(expandOperatorCompositions(canonical.operatorGraph!));
     expect(effectOperatorParams(canonical)).toMatchObject({ cellSize, amount: 1, fontWeight: 600 });
 
     const clip = createMockClip({ id: `${type}-clip`, effects: [canonical], source: { type: 'solid' }, solidColor: '#315779' });
@@ -75,7 +77,7 @@ describe('glyph image graph lifecycle', () => {
     await useTimelineStore.getState().loadState(JSON.parse(JSON.stringify(serialized)));
     const restored = useTimelineStore.getState().clips[0].effects[0];
     expect(restored.params.customRamp).toBe(' .@');
-    expect(effectOperatorGraph(restored)).toEqual(editedGraph);
+    expect(effectOperatorGraph(restored)).toEqual(expandOperatorCompositions(editedGraph));
     expect(useTimelineStore.getState().clipKeyframes.get(clip.id)?.map(key => key.value)).toEqual([300, 900]);
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getEffect } from '../../src/effects';
 import { EFFECT_GRAPH_PARAM } from '../../src/services/operators/effectGraph';
 import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { expandOperatorCompositions } from '../../src/services/operators/operatorComposition';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import type { Effect } from '../../src/types/effects';
 
@@ -35,7 +36,10 @@ describe('geometry pattern image graph lifecycle', () => {
     const legacy = effect(type, { [EFFECT_GRAPH_PARAM]: JSON.stringify(canonical) });
     const migrated = migratePersistedEffectOperatorGraph(legacy);
     expect(migrated.params).not.toHaveProperty(EFFECT_GRAPH_PARAM);
-    expect(migrated.operatorGraph).toEqual(canonical);
+    // Packing can reorder edges; every node, connection and presentation field must survive.
+    const expanded = expandOperatorCompositions(migrated.operatorGraph!);
+    expect({ ...expanded, edges: expanded.edges.toSorted((a, b) => a.id.localeCompare(b.id)) })
+      .toEqual({ ...canonical, edges: canonical.edges.toSorted((a, b) => a.id.localeCompare(b.id)) });
   });
 
   it.each(effects)('$name preserves independent layout/group snapshots and persisted edits', ({ type }) => {
@@ -46,7 +50,7 @@ describe('geometry pattern image graph lifecycle', () => {
     edited.params = { ...edited.params, amount: .31, scale: 27 };
     const undoSnapshot = structuredClone(original), redoSnapshot = structuredClone(edited);
 
-    expect(effectOperatorGraph(JSON.parse(JSON.stringify(redoSnapshot)))).toEqual(edited.operatorGraph);
+    expect(effectOperatorGraph(JSON.parse(JSON.stringify(redoSnapshot)))).toEqual(expandOperatorCompositions(edited.operatorGraph!));
     expect(effectOperatorGraph(undoSnapshot).layout.output).not.toEqual({ x: 777, y: 222 });
     expect(undoSnapshot.params).not.toHaveProperty('amount');
     expect(effectOperatorParams(redoSnapshot)).toMatchObject({ amount: .31, scale: 27 });

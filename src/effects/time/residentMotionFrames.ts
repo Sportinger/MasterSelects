@@ -47,7 +47,7 @@ export function disMotionMetadata(metadata: Float32Array, request: SourceTempora
     const epsilon = .0001;
     const rate = (temporalSourceTime(request.source, local + epsilon)
       - temporalSourceTime(request.source, local - epsilon)) / (2 * epsilon) * factor;
-    data[(width + i) * 4] = rate;
+    data[(width + i) * 4] = rate; data[(width + i) * 4 + 1] = 0;
   }
   data[(width - 1) * 4 + 2] = 5;
   return data;

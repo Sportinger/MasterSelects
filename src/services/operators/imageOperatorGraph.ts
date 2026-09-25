@@ -95,7 +95,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     return visit(linked.node, linked.output);
   }
   const lowerResource = createImageOperatorResourceLowering({ multipleHistories: graph.nodes.filter(node => node.operator === 'image.sample-history').length > 1, context, params, namedImages, parameterSlots, parameterValues,
-    state: { resourceInputs, resourceSampling, externalResources, fieldResources }, emit, source, visitSource, activePixelLoad: () => activePixelLoad });
+    state: { resourceInputs, resourceSampling, externalResources, fieldResources }, emit, source, visitSource, connected: (target, input) => !!incoming.get(`${target.id}:${input}`)?.length, activePixelLoad: () => activePixelLoad });
   function visit(current: BoundOperatorNode, output: string): number {
     const cacheKey = `${activeScope}:${current.id}:${output}`;
     const cached = registers.get(cacheKey); if (cached !== undefined) return cached;
