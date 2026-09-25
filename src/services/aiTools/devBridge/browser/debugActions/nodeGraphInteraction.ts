@@ -11,7 +11,10 @@ export async function measureNodeGraphInteraction(args: Record<string, unknown>)
   if ((hideEdgeDom || hideNodeDom || args.hideInteractionDom || args.hideGroupBackgrounds || args.hideCanvasSurface)
     && !canvas.classList.contains('canvas-rendered')) return { success: false, error: 'DOM isolation requires the canvas renderer.' };
   const duration = Math.max(500, Math.min(10000, Number(args.durationMs) || 5000));
-  const pan = args.pan !== false;
+  // hoverSweep: buttonless pointer moves along the same path (cable hover probing).
+  const hoverSweep = args.hoverSweep === true;
+  const pan = args.pan !== false && !hoverSweep;
+  const radius = Math.max(10, Math.min(1000, Number(args.radiusPx) || 90));
   const rect = canvas.getBoundingClientRect(), x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
   const inner = canvas.querySelector<HTMLElement>('.node-workspace-canvas-inner');
   const before = inner?.style.transform;
@@ -33,13 +36,20 @@ export async function measureNodeGraphInteraction(args: Record<string, unknown>)
   if (pan) { canvas.setPointerCapture = () => {}; canvas.releasePointerCapture = () => {}; }
   const event = (type: string, dx: number, dy: number) => canvas.dispatchEvent(new PointerEvent(type, {
     bubbles: true, cancelable: true, pointerId: 9183, pointerType: 'mouse', isPrimary: true,
-    button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x + dx, clientY: y + dy,
+    button: 0, buttons: type === 'pointerup' || hoverSweep ? 0 : 1, clientX: x + dx, clientY: y + dy,
   }));
   const gaps: number[] = [], foldGaps: number[] = [], worker: Array<Record<string, string | undefined>> = [];
   const hitTestMs: number[] = [];
+  // Visible graph frames: bitmaps the worker presented, sampled every tick.
+  const surfaceHost = canvas.querySelector<HTMLElement>('.node-graph-canvas-surface');
+  const presentedCount = () => Number(surfaceHost?.dataset.presentedFrames ?? 0);
+  const presents: number[] = [];
+  let lastPresented = presentedCount();
   let moved = false, last = 0, sampled = 0, wasFolding = false;
   const start = performance.now();
   const reactBefore = readNodeCanvasProfile(canvas);
+  const timingsRef = () => (window as unknown as { __nodeCanvasTimings?: Record<string, { n: number; ms: number; max: number }> }).__nodeCanvasTimings ?? {};
+  const timingsBefore = JSON.parse(JSON.stringify(timingsRef())) as Record<string, { n: number; ms: number; max: number }>;
   const cpuProfile = args.profileCpu === true ? measureJsCpuProfile({ durationMs: duration }) : undefined;
   try {
     if (pan) event('pointerdown', 0, 0);
@@ -48,14 +58,16 @@ export async function measureNodeGraphInteraction(args: Record<string, unknown>)
         const folding = canvas.dataset.layoutAnimating === 'true';
         if (last) { gaps.push(now - last); if (folding || wasFolding) foldGaps.push(now - last); }
         wasFolding = folding; last = now;
+        const presented = presentedCount();
+        if (presented !== lastPresented) { presents.push(now); lastPresented = presented; }
         const elapsed = now - start, phase = Math.min(1, elapsed / duration) * Math.PI * 8;
-        if (pan) event('pointermove', Math.sin(phase) * 90, (Math.cos(phase) - 1) * 60);
+        if (pan || hoverSweep) event('pointermove', Math.sin(phase) * radius, (Math.cos(phase) - 1) * radius * 2 / 3);
         moved ||= inner?.style.transform !== before;
         if (args.measureHitTesting === true) {
           // Synthetic dispatch bypasses native hit testing. Measure it explicitly
           // when isolating SVG costs, including any required style/layout flush.
           const hitStart = performance.now();
-          document.elementFromPoint(x + Math.sin(phase) * 90, y + (Math.cos(phase) - 1) * 60);
+          document.elementFromPoint(x + Math.sin(phase) * radius, y + (Math.cos(phase) - 1) * radius * 2 / 3);
           hitTestMs.push(performance.now() - hitStart);
         }
         if (elapsed - sampled >= 1000) {
@@ -79,7 +91,14 @@ export async function measureNodeGraphInteraction(args: Record<string, unknown>)
   await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
   const sorted = gaps.toSorted((a, b) => a - b);
   const reactAfter = readNodeCanvasProfile(canvas);
-  return { success: true, data: { pan, moved, restored: inner?.style.transform === before, frames: gaps.length, counts, hideEdgeDom, hideNodeDom,
+  const presentGaps = presents.slice(1).map((time, index) => time - presents[index]);
+  const visible = { frames: presents.length, firstAtMs: presents.length ? Number((presents[0] - start).toFixed(0)) : null,
+    activeFps: presents.length > 1 ? Number(((presents.length - 1) * 1000 / (presents.at(-1)! - presents[0])).toFixed(1)) : 0,
+    maxGapMs: Number(Math.max(0, ...presentGaps).toFixed(0)),
+    gapsMs: presentGaps.map(gap => Math.round(gap)).slice(0, 60) };
+  const phaseTimings = Object.fromEntries(Object.entries(timingsRef()).map(([name, value]) => [name, {
+    n: value.n - (timingsBefore[name]?.n ?? 0), ms: Number((value.ms - (timingsBefore[name]?.ms ?? 0)).toFixed(1)), max: Number(value.max.toFixed(1)) }]));
+  return { success: true, data: { phaseTimings, visible, canvasConnected: canvas.isConnected, surfaceConnected: !!surfaceHost?.isConnected, canvasCount: document.querySelectorAll(".node-workspace-canvas").length, pan, moved, restored: inner?.style.transform === before, frames: gaps.length, counts, hideEdgeDom, hideNodeDom,
     hideGroupBackgrounds: args.hideGroupBackgrounds === true, hideInteractionDom: args.hideInteractionDom === true,
     hideCanvasSurface: args.hideCanvasSurface === true, hideGrid: args.hideGrid === true,
     view: { width: rect.width, height: rect.height, transform: before },

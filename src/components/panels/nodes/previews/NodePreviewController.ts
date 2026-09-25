@@ -1,5 +1,6 @@
 import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
 import type { NodeGraphNode } from '../../../../types/nodeGraph';
+import type { TimelineClip } from '../../../../types/timeline';
 import type { CanvasView } from '../canvas/rendering/nodeCanvasTypes';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { useLandmarkTrackingStore } from '../../../../stores/landmarkTrackingStore';
@@ -14,6 +15,25 @@ import { isTextPreview, previewTextStore } from '../../../../services/nodePrevie
 import { nodeScalarSampleTap } from '../../../../services/nodePreview/NodeScalarSampleTap';
 import { scalarPreviewSamples } from '../../../../services/nodePreview/scalarPreviewSamples';
 
+// Fold state, placement and viewer toggles are graph presentation. Writing them
+// replaces the clip object but never changes a rendered or sampled value.
+const PRESENTATION_GRAPH_KEYS = new Set(['groups', 'canvasPlacements', 'previews', 'updatedAt']);
+function differsBeyond<T extends object>(a: T, b: T, ignored: (key: string) => boolean) {
+  for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    if (!ignored(key) && (a as Record<string, unknown>)[key] !== (b as Record<string, unknown>)[key]) return true;
+  }
+  return false;
+}
+function clipContentChanged(previous: TimelineClip, next: TimelineClip) {
+  if (previous === next) return false;
+  if (previous.id !== next.id || differsBeyond(previous, next, key => key === 'nodeGraph')) return true;
+  const a = previous.nodeGraph, b = next.nodeGraph;
+  return a !== b && (!a || !b || differsBeyond(a, b, key => PRESENTATION_GRAPH_KEYS.has(key)));
+}
+function clipsContentChanged(previous: readonly TimelineClip[], next: readonly TimelineClip[]) {
+  return previous.length !== next.length || next.some((clip, index) => clipContentChanged(previous[index], clip));
+}
+
 interface Sink { preview: (frame: PreviewFrame) => void; readonly software: boolean; readonly previewBusy: boolean }
 
 /** One clock per workspace; transport stays outside React and transfers no graph on playback. */
@@ -27,6 +47,7 @@ export class NodePreviewController {
   private visible = true;
   private suspended = false;
   private timer?: ReturnType<typeof setTimeout>;
+  private backoffTimer = false;
   private disposed = false;
   private revision = 0;
   private continuity = 0;
@@ -72,7 +93,7 @@ export class NodePreviewController {
       }
     });
     this.unsubscribe = useTimelineStore.subscribe((state, previous) => {
-      if (state.clips !== previous.clips || state.clipKeyframes !== previous.clipKeyframes) this.revision++;
+      if ((state.clips !== previous.clips && clipsContentChanged(previous.clips, state.clips)) || state.clipKeyframes !== previous.clipKeyframes) this.revision++;
       if (state.isPlaying !== previous.isPlaying || (!state.isPlaying && state.playheadPosition !== previous.playheadPosition)
         || Math.abs(state.playheadPosition - previous.playheadPosition) > 0.5) this.continuity++;
       if (state.playheadPosition !== previous.playheadPosition || state.isPlaying !== previous.isPlaying || state.clips !== previous.clips || state.clipKeyframes !== previous.clipKeyframes) this.wake();
@@ -103,10 +124,17 @@ export class NodePreviewController {
     this.wake();
   }
   reset() { this.textKeys.clear(); this.scheduler.invalidate(); this.wake(); }
-  private wake() { if (!this.disposed && this.timer === undefined) this.timer = setTimeout(() => this.tick(), 0); }
+  private wake() {
+    // A retry backoff must not delay fresh content such as a seek or an edit.
+    if (this.backoffTimer) { clearTimeout(this.timer); this.timer = undefined; this.backoffTimer = false; }
+    if (!this.disposed && this.timer === undefined) this.timer = setTimeout(() => this.tick(), 0);
+  }
   private tick() {
-    this.timer = undefined;
+    this.timer = undefined; this.backoffTimer = false;
     if (this.disposed) return;
+    // Preview compilation competes with the canvas build-up for the main thread;
+    // keep current thumbnails and resume once the worker's layout motion settles.
+    if (this.host.dataset.workerMotion === 'true') { this.timer = setTimeout(() => this.tick(), 150); return; }
     const state = readTimelineRuntimeState(useTimelineStore), view = this.view, requests: PreviewRequest[] = [];
     if (view && this.visible && !this.suspended && !document.hidden && !state.isExporting) {
       const fps = this.sink.software ? 3 : view.zoom < 0.45 ? 5 : 12;
@@ -123,7 +151,8 @@ export class NodePreviewController {
         const numeric = inlineNumericPorts(node) || this.textKeys.has(node.preview.key);
         // Zoom changes presentation, not content. Keep paused images and values
         // cached; the next content update uses the latest requested resolution.
-        requests.push({ key: node.preview.key, revision: `${this.revision}:${state.isPlaying ? tiny ? 'held' : Math.floor(state.playheadPosition * fps) : state.playheadPosition}`,
+        // Thumbnails too small to read hold their frame instead of re-rendering per seek.
+        requests.push({ key: node.preview.key, revision: `${this.revision}:${tiny ? 'held' : state.isPlaying ? Math.floor(state.playheadPosition * fps) : state.playheadPosition}`,
           continuity: `${this.revision}:${this.continuity}`,
           clipId: this.clipId, node: inner ? { ...inner, preview: node.preview } : node, port: inner ? previewOutput(inner, endpoint?.portId) : port, time: state.playheadPosition, width, height: Math.max(1, Math.min(256, Math.round(width / (node.preview.aspectRatio ?? 16 / 9)))),
           numeric, interval: numeric ? 16 : 1000 / fps, priority: node.id === this.selected ? 2 : 0 });
@@ -137,7 +166,12 @@ export class NodePreviewController {
       this.host.dataset.previewProducerStats = JSON.stringify(this.producerStats);
     }
     if (!requests.length) { this.artifacts.dispose(); nodePreviewTextureTap.cancelClip(this.clipId); }
-    if (requests.length && (state.isPlaying || this.scheduler.unsettled)) this.timer = setTimeout(() => this.tick(), requests.some(request => request.numeric) ? 16 : this.sink.software ? 100 : state.isPlaying ? 32 : 100);
+    if (requests.length && (state.isPlaying || this.scheduler.unsettled)) {
+      const cadence = requests.some(request => request.numeric) ? 16 : this.sink.software ? 100 : state.isPlaying ? 32 : 100;
+      const delay = state.isPlaying ? cadence : Math.max(cadence, this.scheduler.nextRetryIn());
+      this.backoffTimer = delay > cadence;
+      this.timer = setTimeout(() => this.tick(), delay);
+    }
   }
   dispose() { this.disposed = true; clearTimeout(this.timer); this.unsubscribe(); this.unsubscribeTracking(); this.unsubscribeValues(); this.scheduler.dispose(); this.artifacts.dispose(); nodePreviewTextureTap.cancelClip(this.clipId); nodeScalarSampleTap.cancelClip(this.clipId); scalarPreviewSamples.cancelClip(this.clipId); previewTextStore.retain(this, new Set()); }
 }

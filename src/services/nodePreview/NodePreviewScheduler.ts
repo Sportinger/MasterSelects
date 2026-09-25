@@ -5,6 +5,11 @@ export interface PreviewSchedulerStats {
   errors: number; workMs: number; pixels: number;
 }
 type Produce = (request: PreviewRequest) => PreviewFrame | Promise<PreviewFrame>;
+// A preview that keeps coming back empty backs off exponentially and then rests
+// until its revision changes. Endless retries of an unrenderable stage would
+// otherwise wake the render loop every interval and keep a paused engine busy.
+const MAX_MISSES = 3;
+const MAX_RETRY_MS = 2000;
 
 /** Latest-request mailbox, bounded concurrency and a shared token bucket. No per-node timers. */
 export class NodePreviewScheduler {
@@ -13,6 +18,7 @@ export class NodePreviewScheduler {
   private pendingNumeric = new Set<string>();
   private completed = new Map<string, { revision: string; at: number }>();
   private attempted = new Map<string, number>();
+  private misses = new Map<string, { revision: string; count: number }>();
   private tokens = 262144;
   private lastTick = 0;
   private disposed = false;
@@ -28,7 +34,23 @@ export class NodePreviewScheduler {
     limits = { concurrent: 2, pixelsPerSecond: 2_000_000, workMs: 2, jobsPerTick: 24 }) {
     this.produce = produce; this.publish = publish; this.clock = clock; this.limits = limits;
   }
-  get unsettled() { return this.pending.size > 0 || [...this.requests.values()].some(request => this.completed.get(request.key)?.revision !== request.revision); }
+  get unsettled() { return this.pending.size > 0 || [...this.requests.values()].some(request => this.awaiting(request)); }
+  /** Milliseconds until the earliest unsettled request may be attempted again. */
+  nextRetryIn(now = this.clock()) {
+    if (this.pending.size) return 0;
+    let wait = Infinity;
+    for (const request of this.requests.values()) if (!this.pending.has(request.key) && this.awaiting(request))
+      wait = Math.min(wait, (this.attempted.get(request.key) ?? -Infinity) + this.retryDelay(request) - now);
+    return Number.isFinite(wait) ? Math.max(0, wait) : 0;
+  }
+  private awaiting(request: PreviewRequest) {
+    const miss = this.misses.get(request.key);
+    return this.completed.get(request.key)?.revision !== request.revision && !(miss?.revision === request.revision && miss.count >= MAX_MISSES);
+  }
+  private retryDelay(request: PreviewRequest) {
+    const miss = this.misses.get(request.key);
+    return miss?.revision === request.revision ? Math.min(MAX_RETRY_MS, request.interval * 2 ** miss.count) : request.interval;
+  }
 
   setRequests(requests: PreviewRequest[]) {
     if (this.disposed) return;
@@ -41,6 +63,7 @@ export class NodePreviewScheduler {
     this.requests = next;
     for (const key of this.completed.keys()) if (!next.has(key)) this.completed.delete(key);
     for (const key of this.attempted.keys()) if (!next.has(key)) this.attempted.delete(key);
+    for (const key of this.misses.keys()) if (!next.has(key)) this.misses.delete(key);
     this.stats.requested = next.size;
   }
 
@@ -50,11 +73,8 @@ export class NodePreviewScheduler {
     this.lastTick = now;
     const start = this.clock();
     // Age dominates selection priority, so a selected node cannot starve its neighbours.
-    const ready = [...this.requests.values()].filter(request => {
-      const done = this.completed.get(request.key);
-      return !this.pending.has(request.key) && done?.revision !== request.revision
-        && now - (this.attempted.get(request.key) ?? -Infinity) >= request.interval;
-    }).toSorted((a, b) => (this.attempted.get(a.key) ?? -1e9) - (this.attempted.get(b.key) ?? -1e9) - (a.priority - b.priority) * 20);
+    const ready = [...this.requests.values()].filter(request => !this.pending.has(request.key) && this.awaiting(request)
+      && now - (this.attempted.get(request.key) ?? -Infinity) >= this.retryDelay(request)).toSorted((a, b) => (this.attempted.get(a.key) ?? -1e9) - (this.attempted.get(b.key) ?? -1e9) - (a.priority - b.priority) * 20);
     let jobs = 0;
     for (const request of ready) {
       if (jobs >= this.limits.jobsPerTick || this.clock() - start >= this.limits.workMs) break;
@@ -74,7 +94,12 @@ export class NodePreviewScheduler {
         if (this.disposed || generation !== this.generation || !current || (current.revision !== request.revision && !continuous)) {
           releasePreviewFrame(frame); this.stats.discarded++; return;
         }
-        if (frame.status !== 'missing' && frame.status !== 'error' && frame.status !== 'stale') this.completed.set(request.key, { revision: request.revision, at: now });
+        if (frame.status !== 'missing' && frame.status !== 'error' && frame.status !== 'stale') {
+          this.completed.set(request.key, { revision: request.revision, at: now }); this.misses.delete(request.key);
+        } else {
+          const miss = this.misses.get(request.key);
+          this.misses.set(request.key, { revision: request.revision, count: miss?.revision === request.revision ? miss.count + 1 : 1 });
+        }
         this.stats.completed++;
         this.publish(frame);
       };
@@ -88,7 +113,7 @@ export class NodePreviewScheduler {
     this.stats.workMs = this.clock() - start;
   }
 
-  invalidate() { this.completed.clear(); this.generation++; }
-  invalidateValues() { for (const request of this.requests.values()) if (request.numeric) this.completed.delete(request.key); }
-  dispose() { this.disposed = true; this.generation++; this.requests.clear(); this.completed.clear(); this.attempted.clear(); }
+  invalidate() { this.completed.clear(); this.misses.clear(); this.generation++; }
+  invalidateValues() { for (const request of this.requests.values()) if (request.numeric) { this.completed.delete(request.key); this.misses.delete(request.key); } }
+  dispose() { this.disposed = true; this.generation++; this.requests.clear(); this.completed.clear(); this.attempted.clear(); this.misses.clear(); }
 }

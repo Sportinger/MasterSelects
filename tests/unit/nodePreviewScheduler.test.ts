@@ -51,6 +51,18 @@ describe('node preview work budgets', () => {
     expect(produce).toHaveBeenCalledOnce(); expect(scheduler.unsettled).toBe(false);
     scheduler.setRequests([]); expect(scheduler.stats.requested).toBe(0);
   });
+  it('backs off unrenderable paused previews and settles until the revision changes', () => {
+    const produce = vi.fn((r: PreviewRequest): PreviewFrame => ({ ...result(r), status: 'missing', label: 'No rendered output at this time' }));
+    const scheduler = new NodePreviewScheduler(produce, vi.fn(), () => 0);
+    scheduler.setRequests([request('stage')]);
+    for (let time = 0; time <= 20000; time += 100) scheduler.tick(time);
+    expect(produce).toHaveBeenCalledTimes(3);
+    expect(scheduler.unsettled).toBe(false);
+    scheduler.setRequests([request('stage', 'seek')]);
+    expect(scheduler.unsettled).toBe(true); expect(scheduler.nextRetryIn(20000)).toBe(0);
+    scheduler.tick(20000); expect(produce).toHaveBeenCalledTimes(4);
+    scheduler.dispose();
+  });
   it.each([16, 64, 128])('fairly services %i visible previews while bounding pixel throughput', count => {
     const publish = vi.fn(), scheduler = new NodePreviewScheduler(result, publish, () => 0);
     const requests = Array.from({ length: count }, (_, i) => ({ ...request(String(i)), priority: i === 0 ? 2 : 0 }));

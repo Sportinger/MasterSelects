@@ -28,13 +28,16 @@ export interface CanvasNode extends Rect {
 }
 export interface CanvasCable {
   id?: string; appearance?: number; disappearing?: boolean;
+  /** Endpoint node ids: a new cable connects once both of its nodes have appeared. */
+  fromNode?: string; toNode?: string;
   occlusions?: Rect[];
   baked?: boolean;
   from: Point; to: Point; color: string; highlighted: boolean; draft?: boolean;
 }
-export interface CanvasPlug { center: Point; tip: Point; input: boolean; color: string; highlighted: boolean; ghost?: boolean }
-export interface CanvasGroup extends Rect { label: string; color: string; collapsed: boolean; count: string; bypassable?: boolean; bypassed?: boolean }
-export interface CanvasScene { graphId?: string; nodes: CanvasNode[]; cables: CanvasCable[]; groups: CanvasGroup[]; plugs: CanvasPlug[] }
+export interface CanvasPlug { id?: string; center: Point; tip: Point; input: boolean; color: string; highlighted: boolean; ghost?: boolean }
+export interface CanvasGroup extends Rect { id?: string; nodeIds?: string[]; label: string; color: string; collapsed: boolean; count: string; bypassable?: boolean; bypassed?: boolean }
+/** glideMs: the worker eases positions from what it currently shows to this scene. */
+export interface CanvasScene { graphId?: string; nodes: CanvasNode[]; cables: CanvasCable[]; groups: CanvasGroup[]; plugs: CanvasPlug[]; glideMs?: number }
 export interface CanvasTransport { playhead: number; playing: boolean; active: boolean; visible: boolean; reducedMotion: boolean; sourceTimes: Record<string, number>; playbackSpeed?: number; timestamp?: number }
 export type CanvasMessage =
   | { type: 'init' }
@@ -42,11 +45,14 @@ export type CanvasMessage =
   | { type: 'previews'; frames: PreviewFrame[]; batchId: number }
   | { type: 'scene'; scene: CanvasScene }
   | { type: 'view'; view: CanvasView; theme: CanvasTheme; revision?: number }
-  | { type: 'transport'; transport: CanvasTransport };
+  | { type: 'transport'; transport: CanvasTransport }
+  /** Hover highlight only repaints the overlay; the scene and base layer stay untouched. */
+  | { type: 'hover'; edgeId: string | null };
 
 /** Pixels and their coordinate system are presented together on the main thread. */
 export type CanvasWorkerReply =
   | { type: 'frame'; bitmap: ImageBitmap; revision?: number }
   | { type: 'failed' }
   | { type: 'previews-ready'; batchId: number; previewCount: number | undefined }
-  | { type: 'stats'; fps: number; paintMs: number; maxPaintMs: number; phases?: { baseMs: number; overlayMs: number; previewMs: number } };
+  | { type: 'motion'; active: boolean }
+  | { type: 'stats'; fps: number; paintMs: number; maxPaintMs: number; phases?: { baseMs: number; overlayMs: number; previewMs: number; updateMs?: number; drawMs?: number; composeMs?: number } };

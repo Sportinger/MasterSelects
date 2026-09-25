@@ -9,6 +9,7 @@ import { NodeGraphFlowSignals } from './NodeGraphFlowSignals';
 import './NodeGraphFlow.css';
 import { nodeGroupBounds } from './groupBounds';
 import { createEdgeGroupOcclusion, rectangleClipPath, subtractOccludedRects } from './edgeGroupOcclusion';
+import type { Rect } from './rendering/nodeCanvasTypes';
 
 interface NodeGraphEdgesProps {
   graph?: NodeGraph;
@@ -59,6 +60,23 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
   const svgWidth = graphBounds.right - graphBounds.left + 192;
   const svgHeight = graphBounds.bottom - graphBounds.top + 192;
 
+  const sharedClips = new Map<Rect[], { id: string; d: string }>();
+  const visibleClip = (covers: Rect[]) => {
+    let shared = sharedClips.get(covers);
+    if (!shared) {
+      shared = { id: `${clipPrefix}-visible-${sharedClips.size}`,
+        d: rectangleClipPath(subtractOccludedRects({ x: svgLeft, y: svgTop, width: svgWidth, height: svgHeight }, covers)) };
+      sharedClips.set(covers, shared);
+    }
+    return shared.id;
+  };
+  // Resolve clips before rendering so the shared <defs> precede their users.
+  for (const edge of edges) {
+    const pair = endpoints.get(edge.id);
+    if (!pair?.input || !pair.output || (visibleEdgeIds && !visibleEdgeIds.has(edge.id))) continue;
+    const covers = occlusions(edge);
+    if (covers.length) visibleClip(covers);
+  }
   const draftPair = connectionDraft?.reconnectEdgeId ? endpoints.get(connectionDraft.reconnectEdgeId) : undefined;
   const draftNode = connectionDraft && nodesById.get(connectionDraft.nodeId);
   const draftPort = (connectionDraft?.direction === 'input' ? draftNode?.inputs : draftNode?.outputs)?.find(p => p.id === connectionDraft?.portId);
@@ -88,6 +106,9 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
       viewBox={`${svgLeft} ${svgTop} ${svgWidth} ${svgHeight}`}
       aria-hidden="true"
     >
+      {/* Cables behind the same groups share one visible-area clip: it keeps hidden
+          cable parts unclickable without one clip path computation per cable. */}
+      <defs>{[...sharedClips.values()].map(({ id, d }) => <clipPath key={id} id={id} clipPathUnits="userSpaceOnUse"><path clipRule="nonzero" d={d} /></clipPath>)}</defs>
       {edges.map((edge, index) => {
         const pair = endpoints.get(edge.id);
         if (!pair?.input || !pair.output || (connectionDraft?.reconnectEdgeId === edge.id && connectionDraft.moved)) return null;
@@ -95,15 +116,13 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
         const path = getConnectionPath(pair.output.tip, pair.input.tip);
         const port = nodesById.get(edge.fromNodeId)?.outputs.find(p => p.id === edge.fromPortId);
         const covers = occlusions(edge);
-        const clip = `${clipPrefix}-${index}`, dimClip = `${clip}-dim`;
+        const clip = covers.length ? visibleClip(covers) : '', dimClip = `${clipPrefix}-${index}-dim`;
         return (
           <Fragment key={edge.id}>
           {covers.length > 0 && <>
-            <defs>
-              <clipPath id={clip} clipPathUnits="userSpaceOnUse"><path clipRule="nonzero"
-                d={rectangleClipPath(subtractOccludedRects({ x: svgLeft, y: svgTop, width: svgWidth, height: svgHeight }, covers))} /></clipPath>
-              {!canvasRendered && <clipPath id={dimClip} clipPathUnits="userSpaceOnUse"><path clipRule="nonzero" d={rectangleClipPath(covers)} /></clipPath>}
-            </defs>
+            {!canvasRendered && <defs>
+              <clipPath id={dimClip} clipPathUnits="userSpaceOnUse"><path clipRule="nonzero" d={rectangleClipPath(covers)} /></clipPath>
+            </defs>}
             {!canvasRendered && <path d={path} className={`node-workspace-edge port-typed node-workspace-edge-${edge.type}`}
               clipPath={`url(#${dimClip})`} style={{ '--port-color': port ? describeNodePort(port).color : undefined, opacity: .3, pointerEvents: 'none' } as CSSProperties} />}
           </>}

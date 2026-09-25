@@ -2,6 +2,8 @@ import { NodeGraphGroups } from './canvas/NodeGraphGroups';
 import type { NodeConnectionDrop } from '../../../types/nodeGraph';
 import { useNodeDomViewport } from './canvas/useNodeDomViewport';
 import { useNodeDomVisibility } from './canvas/useNodeDomVisibility';
+import { useProgressiveMount } from './canvas/useProgressiveMount';
+import { NO_EDGE_TARGETS, useCanvasEdgeHits } from './canvas/useCanvasEdgeHits';
 import { useNodePreviewPreferences } from './previews/useNodePreviewPreferences';
 import { nodePreviewKey, nodePreviewPreferenceKey, previewOutput } from '../../../services/nodePreview/previewTypes';
 import { useNodeCanvasPlacement } from './canvas/useNodeCanvasPlacement';
@@ -11,7 +13,7 @@ import { hasUnlockedSource, nodeGroupDropTarget } from './canvas/nodeGroupDrop';
 import { placeTransferredNodes } from './canvas/placeTransferredNodes';
 import { NodeGraphCanvasSurface } from './canvas/rendering/NodeGraphCanvasSurface';
 import { annotatedGraphBounds, nodeGroupBounds } from './canvas/groupBounds';
-import { Profiler, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Profiler, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { recordNodeCanvasRender } from './canvas/rendering/nodeCanvasProfile';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import type {
@@ -176,7 +178,7 @@ export function NodeGraphCanvas({
       layout: draftLayouts[node.id],
     }))
   ), [draftLayouts, spacedNodes]);
-  const { graph, nodes: displayNodes, animating } = useNodeLayoutTransition(targetGraph, targetNodes, Object.keys(draftLayouts).length > 0, placement, projectFolds);
+  const { graph, nodes: displayNodes, animating, glideMs } = useNodeLayoutTransition(targetGraph, targetNodes, Object.keys(draftLayouts).length > 0, placement, projectFolds);
   const nodeGesture = nodeDragGestureRef.current;
   const freezeGroupFrames = nodeGesture && !nodeGesture.groupId
     && hasUnlockedSource(graph, placement, nodeGesture.members.map(member => member.nodeId));
@@ -214,7 +216,7 @@ export function NodeGraphCanvas({
     transform: `translate3d(${viewport.panX % 32}px, ${viewport.panY % 32}px, 0)`,
   }) as CSSProperties, [viewport.panX, viewport.panY]);
 
-  const foldViewport = useNodeFoldViewport(canvasRef, sourceGraph, targetGraph, graph, graphBounds, animating, visualViewportRef, setViewport, groupBounds);
+  const foldViewport = useNodeFoldViewport(canvasRef, sourceGraph, targetGraph, graph, graphBounds, animating, visualViewportRef, setViewport, groupBounds, showVisualViewport);
   const cancelFoldFit = foldViewport.cancel;
   const fitBounds = useCallback((bounds: typeof graphBounds) => {
     cancelFoldFit();
@@ -275,8 +277,15 @@ export function NodeGraphCanvas({
     graphId: graph.id, canvasRef, nodesById, edges: graph.edges, getGraphPoint: getGraphPointFromClient,
     onConnectPorts, onReconnectPorts, onDisconnectEdge, onDropConnection,
   });
-  const domViewport = useNodeDomViewport(canvasRef, viewport, !!nodeGesture || !!connectionDraft);
+  const domViewport = useNodeDomViewport(canvasRef, viewport, !!nodeGesture || !!connectionDraft, isPanning);
   const dom = useNodeDomVisibility(displayNodes, plugs, domViewport);
+  // Settled hit targets: cards mount in batches, cables/plugs as a deferred update.
+  const hitTargetsActive = !canvasRendered || !animating;
+  const mountedNodeCount = useProgressiveMount(dom.nodes.length, hitTargetsActive && canvasRendered);
+  const mountedNodes = canvasRendered ? dom.nodes.slice(0, mountedNodeCount) : dom.nodes;
+  const cablesReady = useDeferredValue(hitTargetsActive);
+  const hoverChannel = useRef<((edgeId: string | null) => void) | null>(null); // canvas-mode cable hits from a geometry index
+  const edgeHits = useCanvasEdgeHits({ enabled: canvasRendered && !animating, plugs, canvas: canvasRef, visual: visualViewportRef, getGraphPoint: getGraphPointFromClient, hover: hoverChannel });
 
   const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (nodeMarquee.start(event)) return;
@@ -291,6 +300,7 @@ export function NodeGraphCanvas({
     ) {
       return;
     }
+    if (!target.closest('.node-workspace-plug, .node-workspace-group-header')) edgeHits.press(event.clientX, event.clientY);
 
     setSelectedEdgeId(null);
     panGestureRef.current = {
@@ -302,9 +312,10 @@ export function NodeGraphCanvas({
     };
     setIsPanning(true);
     event.currentTarget.setPointerCapture(event.pointerId);
-  }, [nodeMarquee]);
+  }, [edgeHits, nodeMarquee]);
 
   const handlePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.buttons === 0 && event.pointerType !== 'touch') edgeHits.move(event.clientX, event.clientY);
     if (nodeMarquee.move(event)) return;
     if (moveConnectionDrag(event)) return;
 
@@ -322,7 +333,7 @@ export function NodeGraphCanvas({
       const pending = pendingPanRef.current;
       if (pending) setViewport(current => ({ ...current, ...pending }));
     });
-  }, [moveConnectionDrag, nodeMarquee, setViewport, showVisualViewport, viewport.zoom]);
+  }, [edgeHits, moveConnectionDrag, nodeMarquee, setViewport, showVisualViewport, viewport.zoom]);
 
   const finishPanGesture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     const gesture = panGestureRef.current;
@@ -542,10 +553,12 @@ export function NodeGraphCanvas({
         {...portHoverEvents}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
+        onPointerLeave={edgeHits.leave}
         onPointerUp={(event) => {
           if (nodeMarquee.finish(event)) return;
           if (!finishConnectionDrag(event)) {
             finishPanGesture(event);
+            const clicked = edgeHits.release(event.clientX, event.clientY); if (clicked) setSelectedEdgeId(clicked);
           }
         }}
         onLostPointerCapture={event => { nodeMarquee.finish(event); cancelConnectionDrag(event); finishPanGesture(event); }}
@@ -600,6 +613,8 @@ export function NodeGraphCanvas({
           if ((event.target as Element).closest('.node-workspace-port, .node-workspace-edge-hit')) {
             return;
           }
+          const cable = !(event.target as Element).closest('.node-workspace-node, .node-workspace-plug') ? edgeHits.at(event.clientX, event.clientY) : null;
+          if (cable) { if (!graph.edges.find(edge => edge.id === cable)?.readOnly) onDisconnectEdge?.(cable); setSelectedEdgeId(null); return; }
           const targetNode = (event.target as Element).closest('.node-workspace-node') as HTMLElement | null;
           const targetNodeId = targetNode?.dataset.nodeId ?? null;
           if (targetNodeId && !multiSelection.has(targetNodeId)) {
@@ -617,7 +632,7 @@ export function NodeGraphCanvas({
         }}
       >
         <div className="node-workspace-grid" style={gridStyle} aria-hidden="true" />
-        <NodeGraphCanvasSurface graph={graph} nodes={displayNodes} groupFrameNodes={groupFrameNodes} groupBounds={groupBounds} plugs={plugs} viewport={viewport} previewsSuspended={animating}
+        <NodeGraphCanvasSurface graph={graph} nodes={displayNodes} glideMs={glideMs} hoverRef={hoverChannel} groupFrameNodes={groupFrameNodes} groupBounds={groupBounds} plugs={plugs} viewport={viewport} previewsSuspended={animating}
           surfaceRef={canvasSurfaceRef} backgroundRef={canvasBackgroundRef} onViewRendered={handleViewRendered}
           selectedNodeId={selectedNodeId} selection={multiSelection} selectedEdgeId={selectedEdgeId}
           hoveredEdgeId={hoveredEdgeId} hoveredPort={hoveredPort} draft={connectionDraft} canBypass={!!onToggleNodeBypass} onReady={setCanvasRendered} />
@@ -632,10 +647,11 @@ export function NodeGraphCanvas({
             onStartDrag={startGroupDrag} onPointerMove={handleNodePointerMove} onFinishDrag={finishNodeDrag} />
           {/* The worker paints moving cards/cables. Rebuild their invisible DOM
               hit targets once they settle, not on every animation frame. */}
-          {(!canvasRendered || !animating) && <>
+          {hitTargetsActive && <>
+          {(!canvasRendered || cablesReady) && <>
           <NodeGraphEdges
             graph={graph} frameNodes={groupFrameNodes}
-            visibleEdgeIds={dom.edgeIds}
+            visibleEdgeIds={canvasRendered ? NO_EDGE_TARGETS : dom.edgeIds}
             canvasRendered={canvasRendered}
             zoom={viewport.zoom}
             graphBounds={graphBounds}
@@ -653,7 +669,8 @@ export function NodeGraphCanvas({
           <NodeGraphPlugs canvasRendered={canvasRendered} visibleNodeIds={dom.nodeIds} visiblePlugIds={dom.plugIds} plugs={plugs} nodes={displayNodes} draft={connectionDraft} selectedEdgeId={selectedEdgeId}
             hoveredPort={hoveredPort} hoveredEdgeId={hoveredEdgeId} onStartConnectionDrag={startConnectionDrag}
             onSelectEdge={setSelectedEdgeId} onStartDrag={startPlugDrag} onDisconnectEdge={onDisconnectEdge} />
-          {dom.nodes.map((node) => (
+          </>}
+          {mountedNodes.map((node) => (
             <NodeGraphNodeCard
               key={node.id}
               node={node}

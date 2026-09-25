@@ -63,7 +63,8 @@ export async function seekBackgroundVideo(
 export async function cacheBackgroundVideoFrame(
   session: BackgroundPreloadSession,
   targetTime: number,
-  scrubCache: ScrubTextureCache
+  scrubCache: ScrubTextureCache,
+  notify = true
 ): Promise<boolean> {
   const video = session.video;
   if (video.videoWidth === 0 || video.videoHeight === 0 || video.readyState < 2) {
@@ -80,13 +81,9 @@ export async function cacheBackgroundVideoFrame(
         resizeQuality: 'medium',
       });
       if (session.disposed) return false;
-      return scrubCache.addFrameFromSource(
-        bitmap,
-        session.videoSrc,
-        targetTime,
-        bitmap.width,
-        bitmap.height
-      );
+      const owned = bitmap;
+      bitmap = null;
+      return scrubCache.addBackgroundFrame(owned, session.videoSrc, targetTime, notify);
     } catch {
       return false;
     } finally {
@@ -99,12 +96,36 @@ export async function cacheBackgroundVideoFrame(
     session.videoSrc,
     targetTime,
     video.videoWidth,
-    video.videoHeight
+    video.videoHeight,
+    notify
   );
 }
 
-export function yieldBackgroundPreload(): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, 0));
+// Background filling is optional work: it pauses while the user interacts with
+// any part of the editor and resumes only in idle time after input settles.
+const INPUT_QUIET_MS = 1500;
+let lastUserInputAt = -Infinity;
+if (typeof window !== 'undefined') {
+  const markInput = () => { lastUserInputAt = performance.now(); };
+  for (const type of ['pointerdown', 'pointermove', 'wheel', 'keydown'] as const) {
+    window.addEventListener(type, markInput, { capture: true, passive: true });
+  }
+}
+
+function waitForIdle(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(() => resolve(), { timeout: 2000 });
+    else window.setTimeout(resolve, 0);
+  });
+}
+
+/** Background filling only spends idle frame time; interaction and rendering come first. */
+export async function yieldBackgroundPreload(): Promise<void> {
+  await waitForIdle();
+  for (let quiet = performance.now() - lastUserInputAt; quiet < INPUT_QUIET_MS; quiet = performance.now() - lastUserInputAt) {
+    await new Promise((resolve) => window.setTimeout(resolve, INPUT_QUIET_MS - quiet));
+    await waitForIdle();
+  }
 }
 
 function waitForVideoEvent(

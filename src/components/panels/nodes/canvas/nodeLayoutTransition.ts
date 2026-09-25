@@ -25,11 +25,19 @@ export function createNodeLayoutTransition(before: NodeLayoutSnapshot, target: N
   }));
   const changed = paths.some(({ from, to }) => from.x !== to.x || from.y !== to.y);
   const duration = NODE_LAYOUT_DURATION;
-  return { changed, duration, sample(progress: number): NodeLayoutSnapshot {
+  // Nodes that do not move in this fold step keep their identity, so a staggered
+  // fold only re-derives the group that is actually animating.
+  const settled = paths.map(({ node, from, to }) => from.x === to.x && from.y === to.y
+    ? (node.layout.x === to.x && node.layout.y === to.y ? node : { ...node, layout: to }) : undefined);
+  return { changed, duration,
+    /** Final positions of this move, with outgoing interiors parked on their proxy. */
+    end(): NodeLayoutSnapshot {
+      return { graph: base.graph, nodes: paths.map(({ node, to }, index) => settled[index] ?? { ...node, layout: to }) };
+    },
+    sample(progress: number): NodeLayoutSnapshot {
     if (progress >= 1) return target;
-    return { graph: base.graph, nodes: paths.map(({ node, from, to }) => {
-      const t = 1 - (1 - Math.max(0, Math.min(1, progress))) ** 3;
-      return { ...node, layout: { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t } };
-    }) };
+    const t = 1 - (1 - Math.max(0, Math.min(1, progress))) ** 3;
+    return { graph: base.graph, nodes: paths.map(({ node, from, to }, index) => settled[index]
+      ?? { ...node, layout: { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t } }) };
   } };
 }

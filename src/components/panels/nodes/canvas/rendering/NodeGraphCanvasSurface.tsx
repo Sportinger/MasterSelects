@@ -1,5 +1,5 @@
 import { readTimelineRuntimeState } from '../../../../../services/timeline/timelineRuntimeCoordinator';
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties, type RefObject } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties, type MutableRefObject, type RefObject } from 'react';
 import { useTimelineStore } from '../../../../../stores/timeline';
 import { clipLocalToKeyframeTime } from '../../../../../services/flock/time/flockKeyframeTime';
 import type { Viewport } from '../canvasGeometry';
@@ -16,20 +16,22 @@ type Props = Omit<SceneOptions, 'clips' | 'keyframes' | 'sourceTime'> & {
   backgroundRef: RefObject<HTMLDivElement | null>;
   onReady: (ready: boolean) => void;
   onViewRendered: (viewport: Viewport) => void;
+  /** Filled with a direct worker hover channel for pointer hit testing. */
+  hoverRef?: MutableRefObject<((edgeId: string | null) => void) | null>;
   previewsSuspended?: boolean;
 };
 
-export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ viewport, surfaceRef, backgroundRef, onReady, onViewRendered, previewsSuspended = false, ...options }: Props) {
+export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ viewport, surfaceRef, backgroundRef, onReady, onViewRendered, previewsSuspended = false, hoverRef, ...options }: Props) {
   const runtime = useRef<ReturnType<typeof createNodeCanvasRuntime> | null>(null);
   const previewRuntime = useRef<NodePreviewController | null>(null);
   const suspendedRef = useRef(previewsSuspended); suspendedRef.current = previewsSuspended;
   const clips = useTimelineStore(state => state.clips);
   const keyframes = useTimelineStore(state => state.clipKeyframes);
   const sourceTime = useTimelineStore(state => state.getSourceTimeForClip);
-  const { graph, nodes, groupFrameNodes, groupBounds, plugs, selection, selectedNodeId, selectedEdgeId, hoveredEdgeId, hoveredPort, draft, canBypass } = options;
+  const { graph, nodes, groupFrameNodes, groupBounds, plugs, selection, selectedNodeId, selectedEdgeId, hoveredEdgeId, hoveredPort, draft, canBypass, glideMs } = options;
   const scene = useMemo(() => buildCanvasScene({ graph, nodes, plugs, selection, selectedNodeId, selectedEdgeId,
-    hoveredEdgeId, hoveredPort, draft, clips, keyframes, sourceTime, canBypass, groupFrameNodes, groupBounds }),
-  [graph, nodes, groupFrameNodes, groupBounds, plugs, selection, selectedNodeId, selectedEdgeId, hoveredEdgeId, hoveredPort, draft, clips, keyframes, sourceTime, canBypass]);
+    hoveredEdgeId: null, hoveredPort, draft, clips, keyframes, sourceTime, canBypass, groupFrameNodes, groupBounds, glideMs }),
+  [graph, nodes, groupFrameNodes, groupBounds, plugs, selection, selectedNodeId, selectedEdgeId, hoveredPort, draft, clips, keyframes, sourceTime, canBypass, glideMs]);
   const sceneRef = useRef(scene); sceneRef.current = scene;
   const previewSource = useRef({ clipId: graph.owner.id, nodes, selectedNodeId, expanded: graph.expandedNodes }); previewSource.current = { clipId: graph.owner.id, nodes, selectedNodeId, expanded: graph.expandedNodes };
   const viewportRef = useRef(viewport); viewportRef.current = viewport;
@@ -49,6 +51,7 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
       if (rendered) onViewRendered(rendered);
     }); runtime.current = renderer;
     const previews = new NodePreviewController(renderer, host); previewRuntime.current = previews;
+    if (hoverRef) hoverRef.current = edgeId => renderer.update({ type: 'hover', edgeId });
     previews.suspend(suspendedRef.current);
     previews.scene(previewSource.current.clipId, previewSource.current.nodes, previewSource.current.selectedNodeId, previewSource.current.expanded);
     const motion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -74,8 +77,6 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
     let theme: CanvasTheme;
     const view = () => {
       const viewport = viewportRef.current;
-      // Moving overviews do not need a full high-DPI bitmap copied every frame.
-      // The final settled view always restores the normal resolution.
       const measured = bufferedCanvasView({ ...viewport, ...size, moving: suspendedRef.current }, devicePixelRatio);
       const revision = ++latestViewRevision;
       // Presentation correction uses the logical viewport; canvas pixels have
@@ -117,10 +118,13 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
       if (frame !== undefined) cancelAnimationFrame(frame);
       document.removeEventListener('visibilitychange', queueTransport); motion.removeEventListener('change', queueTransport);
       window.removeEventListener('resize', measure); previews.dispose(); previewRuntime.current = null; renderer.dispose(); runtime.current = null;
+      if (hoverRef) hoverRef.current = null;
     };
-  }, [onReady, onViewRendered, surfaceRef]);
+  }, [onReady, onViewRendered, surfaceRef, hoverRef]);
   useLayoutEffect(() => { runtime.current?.update({ type: 'scene', scene }); refreshRef.current(); }, [scene]);
   useLayoutEffect(() => { previewRuntime.current?.suspend(previewsSuspended); }, [previewsSuspended]);
+  // Edge hover is drawn on the worker overlay; it never rebuilds or clones the scene.
+  useLayoutEffect(() => { runtime.current?.update({ type: 'hover', edgeId: hoveredEdgeId }); }, [hoveredEdgeId]);
   useLayoutEffect(() => { previewRuntime.current?.scene(graph.owner.id, nodes, selectedNodeId, graph.expandedNodes); }, [graph.owner.id, nodes, selectedNodeId, graph.expandedNodes]);
   useLayoutEffect(() => { viewRef.current(); }, [viewport, previewsSuspended]);
   return <>

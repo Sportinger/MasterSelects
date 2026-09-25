@@ -69,11 +69,12 @@ describe('node canvas overscan presentation', () => {
     surface.rerender(<NodeGraphCanvasSurface {...props} viewport={next} previewsSuspended />);
     const moving = lastView();
     expect(moving.view.moving).toBe(true);
-    expect(moving.view.width * moving.view.height * moving.view.ratio ** 2).toBeLessThanOrEqual(2_000_001);
+    // Motion keeps full display quality; only the absolute pixel bound applies.
+    expect(moving.view.width * moving.view.height * moving.view.ratio ** 2).toBeLessThanOrEqual(8_000_001);
     surface.rerender(<NodeGraphCanvasSurface {...props} viewport={next} previewsSuspended={false} />);
     const settled = lastView();
     expect(settled.view.moving).toBe(false);
-    expect(settled.view.ratio).toBeGreaterThan(moving.view.ratio);
+    expect(settled.view.ratio).toBe(moving.view.ratio);
     expect(settled.view.zoom).toBe(next.zoom);
   });
 });

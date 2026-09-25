@@ -154,7 +154,8 @@ export class ScrubTextureCache {
     videoSrc: string,
     time: number,
     width: number,
-    height: number
+    height: number,
+    notify = true
   ): boolean {
     if (!videoSrc || width <= 0 || height <= 0 || this.lost) return false;
 
@@ -168,7 +169,21 @@ export class ScrubTextureCache {
     this.ram.capture(key, source, target.width, target.height);
     const pixels = this.ram.get(key);
     // CPU pixels are already resized; direct fallback keeps its original geometry.
-    return this.upload(key, pixels ?? source, pixels?.width ?? width, pixels?.height ?? height);
+    return this.upload(key, pixels ?? source, pixels?.width ?? width, pixels?.height ?? height, notify);
+  }
+
+  /**
+   * Background neighbour frames: the already resized bitmap goes straight to the
+   * GPU, and its CPU copy is read back off the main thread. Takes ownership of
+   * the bitmap.
+   */
+  addBackgroundFrame(bitmap: ImageBitmap, videoSrc: string, time: number, notify: boolean): boolean {
+    if (!videoSrc || bitmap.width <= 0 || bitmap.height <= 0 || this.lost) { bitmap.close(); return false; }
+    const key = getScrubbingKey(videoSrc, time);
+    if (this.cache.has(key)) { this.reuses += 1; bitmap.close(); return false; }
+    const uploaded = this.upload(key, bitmap, bitmap.width, bitmap.height, notify);
+    this.ram.captureDetached(key, bitmap);
+    return uploaded;
   }
 
   getCachedFrame(videoSrc: string, time: number): GPUTextureView | null {
@@ -353,8 +368,9 @@ export class ScrubTextureCache {
   }
 
   /** Publish textures only after WebGPU's asynchronous error scopes confirm success. */
+  /** notify=false publishes silently: background neighbours do not change the displayed frame. */
   private upload(key: string, source: HTMLVideoElement | ImageBitmap | ImageData,
-    width: number, height: number): boolean {
+    width: number, height: number, notify = true): boolean {
     const bytes = width * height * 4;
     if (this.lost || this.pendingUploads.has(key) || this.pendingUploads.size >= 4 ||
       bytes > Math.min(this.maxBytes, this.gpuFailureLimit)) return false;
@@ -396,7 +412,7 @@ export class ScrubTextureCache {
         this.bytes += bytes;
         this.allocations++;
       }
-      this.onChanged?.();
+      if (notify || memory) this.onChanged?.();
     }).catch(() => {
       if (candidate && this.pendingUploads.get(key) === candidate) {
         this.pendingUploads.delete(key);

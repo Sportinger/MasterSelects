@@ -64,7 +64,10 @@ export class RenderLoop {
 
   private readonly IDLE_TIMEOUT = 1000; // 1s before idle
   private readonly IDLE_SUPPRESSION_TIMEOUT = 3000; // bounded reload warmup
-  private readonly PAUSED_PREVIEW_HOLD_FRAME_TIME = 15; // WebGPU canvas contents are not persistent between presents
+  // Requested renders (seek, decoded frame, preview capture) still run immediately.
+  // Between them a paused view only needs an occasional re-present; full-rate
+  // re-renders of heavy effects starved editor interaction after every wake.
+  private readonly PAUSED_PREVIEW_HOLD_FRAME_TIME = 250;
   private readonly VIDEO_FRAME_TIME = 15; // ~60fps target with tolerance for 16.6ms display ticks
   private readonly SCRUB_FRAME_TIME = 15; // ~60fps during scrubbing with tolerance for 16.6ms display ticks
   private readonly FRAME_TIME_TOLERANCE = 1.5; // lets a 16.6ms RAF satisfy a nominal 60fps cadence

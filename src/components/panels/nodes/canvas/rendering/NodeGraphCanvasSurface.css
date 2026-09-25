@@ -18,3 +18,10 @@
 .node-workspace-canvas.canvas-rendered .node-workspace-node { -webkit-tap-highlight-color: transparent; }
 .node-workspace-canvas.canvas-rendered .node-workspace-node:focus:not(:focus-visible) { outline: none; }
 .node-workspace-canvas.canvas-rendered .node-workspace-node:focus-visible { outline: 2px solid var(--accent-color, #79b8fa); outline-offset: 2px; }
+/* Invisible hit-target cards still cost clip/effect work on every pan frame of a
+   large graph. The board owns the pointer while panning, so drop them from paint. */
+.node-workspace-board.board-interacting .node-workspace-canvas.canvas-rendered .node-workspace-node { visibility: hidden; }
+/* While the worker builds or folds the layout it draws growing group frames itself;
+   the static DOM frames return once its motion has settled. */
+.node-workspace-canvas:has(.node-graph-canvas-surface[data-worker-motion="true"]) .node-graph-group-backgrounds,
+.node-workspace-canvas:has(.node-graph-canvas-surface[data-worker-motion="true"]) .node-workspace-group { visibility: hidden; }

@@ -79,8 +79,11 @@ function imageScalarValues(request: PreviewRequest, effect: Effect, keys: Keyfra
   const definition = getEffectOperator(binding.operator);
   if (!definition || ![...definition.inputs, ...definition.outputs].some(port => port.type === 'number')) return undefined;
   const prepared = preparedPreview(effect), sampledKeys = keys.length ? keys : EMPTY_KEYS, sampledTime = keys.length || clip?.nodeGraph?.parameterSources ? time : 0;
-  if (prepared.keys !== sampledKeys || prepared.time !== sampledTime || prepared.compiler !== compilePreview || prepared.controls !== clip) {
-    prepared.keys = sampledKeys; prepared.time = sampledTime; prepared.controls = clip; prepared.compiler = compilePreview; prepared.values.clear();
+  // The clip only affects values through parameter sources. Folding, layout and
+  // other graph-view edits replace the clip object and must not recompile every value.
+  const controls = clip?.nodeGraph?.parameterSources ? clip : undefined;
+  if (prepared.keys !== sampledKeys || prepared.time !== sampledTime || prepared.compiler !== compilePreview || prepared.controls !== controls) {
+    prepared.keys = sampledKeys; prepared.time = sampledTime; prepared.controls = controls; prepared.compiler = compilePreview; prepared.values.clear();
   }
   if (!prepared.values.has(binding.nodeId)) prepared.values.set(binding.nodeId,
     evaluateScalarValues(request, effect, keys, time, prepared.graph, compilePreview, clip));

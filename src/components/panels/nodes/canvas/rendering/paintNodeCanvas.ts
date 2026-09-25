@@ -1,7 +1,8 @@
 import { interpolateKeyframes } from '../../../../../utils/keyframeInterpolation';
 import { cableArcLengths, cablePoint, signalPosition } from './cableGeometry';
 import { fitCanvasLabel } from './canvasTextLayout';
-import type { CanvasCable, CanvasCurve, CanvasScene, CanvasTheme, CanvasTransport, CanvasView, Rect } from './nodeCanvasTypes';
+import type { CanvasCable, CanvasCurve, CanvasNode, CanvasScene, CanvasTheme, CanvasTransport, CanvasView, Rect } from './nodeCanvasTypes';
+import { CARD_SPRITE_PAD } from './nodeCardSprites';
 import { pointBehindGroup, subtractOccludedRects } from '../edgeGroupOcclusion';
 
 export type DrawContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -26,11 +27,14 @@ function text(ctx: DrawContext, value: string, x: number, y: number, max: number
   ctx.font = `${weight} ${size}px system-ui, sans-serif`; ctx.textAlign = align; ctx.fillStyle = color;
   ctx.fillText(fitCanvasLabel(ctx, value, max), x, y);
 }
+/** Cables keep their screen width near 100% zoom and thin out in far overviews. */
+function cableScreenScale(zoom: number) { return Math.min(1, 0.4 + zoom * 1.2); }
+
 function drawCable(ctx: DrawContext, cable: CanvasCable, zoom: number, opacity?: number) {
   const { from, to } = cable, h = Math.max(72, Math.abs(to.x - from.x) * 0.42);
   const appearance = cable.appearance ?? 1;
   ctx.strokeStyle = cable.color; ctx.globalAlpha = (opacity ?? (cable.highlighted ? 1 : 0.55)) * (cable.disappearing ? appearance : 1);
-  ctx.lineWidth = (cable.highlighted ? 2 : 1.25) / zoom;
+  ctx.lineWidth = (cable.highlighted ? 2 : 1.25) * cableScreenScale(zoom) / zoom;
   ctx.setLineDash(cable.draft ? [5 / zoom, 4 / zoom] : cable.baked ? [4 / zoom, 4 / zoom] : []);
   ctx.beginPath(); ctx.moveTo(from.x, from.y);
   if (!cable.disappearing && appearance < 1) {
@@ -43,8 +47,42 @@ function drawCable(ctx: DrawContext, cable: CanvasCable, zoom: number, opacity?:
   ctx.stroke(); ctx.setLineDash([]);
   if (appearance < 1 && !cable.disappearing) { ctx.globalAlpha = 1; return; }
   const middle = cablePoint(from, to, 0.5), angle = Math.atan2(to.y - from.y, to.x - from.x - h);
-  ctx.save(); ctx.translate(middle.x, middle.y); ctx.rotate(angle); ctx.lineWidth = 1.3 / zoom;
+  ctx.save(); ctx.translate(middle.x, middle.y); ctx.rotate(angle); ctx.lineWidth = 1.3 * cableScreenScale(zoom) / zoom;
   ctx.beginPath(); ctx.moveTo(-3 / zoom, -3 / zoom); ctx.lineTo(0, 0); ctx.lineTo(-3 / zoom, 3 / zoom); ctx.stroke(); ctx.restore(); ctx.globalAlpha = 1;
+}
+/**
+ * Settled cables that share colour, opacity, width and dash become one path and
+ * one stroke, instead of one stroke per cable and per arrow head. Cables that
+ * are still drawing in keep their individual progressive path.
+ */
+function drawCables(ctx: DrawContext, cables: readonly CanvasCable[], zoom: number, opacity?: number) {
+  const batches = new Map<string, { path: Path2D; color: string; alpha: number; width: number; dash: number[] }>();
+  const batch = (color: string, alpha: number, width: number, dash: number[]) => {
+    const key = `${color}|${alpha}|${width}|${dash.join(',')}`;
+    let entry = batches.get(key);
+    if (!entry) { entry = { path: new Path2D(), color, alpha, width, dash }; batches.set(key, entry); }
+    return entry.path;
+  };
+  for (const cable of cables) {
+    const appearance = cable.appearance ?? 1;
+    if (!cable.disappearing && appearance < 1) { drawCable(ctx, cable, zoom, opacity); continue; }
+    const { from, to } = cable, h = Math.max(72, Math.abs(to.x - from.x) * 0.42);
+    const alpha = (opacity ?? (cable.highlighted ? 1 : 0.55)) * (cable.disappearing ? appearance : 1);
+    const dash = cable.draft ? [5 / zoom, 4 / zoom] : cable.baked ? [4 / zoom, 4 / zoom] : [];
+    const thin = cableScreenScale(zoom);
+    const curve = batch(cable.color, alpha, (cable.highlighted ? 2 : 1.25) * thin / zoom, dash);
+    curve.moveTo(from.x, from.y); curve.bezierCurveTo(from.x + h, from.y, to.x - h, to.y, to.x, to.y);
+    const middle = cablePoint(from, to, 0.5), angle = Math.atan2(to.y - from.y, to.x - from.x - h);
+    const cos = Math.cos(angle), sin = Math.sin(angle), size = 3 / zoom;
+    const arrow = batch(cable.color, alpha, 1.3 * thin / zoom, []);
+    arrow.moveTo(middle.x + (-size * cos + size * sin), middle.y + (-size * sin - size * cos));
+    arrow.lineTo(middle.x, middle.y);
+    arrow.lineTo(middle.x + (-size * cos - size * sin), middle.y + (-size * sin + size * cos));
+  }
+  for (const { path, color, alpha, width, dash } of batches.values()) {
+    ctx.strokeStyle = color; ctx.globalAlpha = alpha; ctx.lineWidth = width; ctx.setLineDash(dash); ctx.stroke(path);
+  }
+  ctx.setLineDash([]); ctx.globalAlpha = 1;
 }
 function curveShape(curve: CanvasCurve) {
   return curve.compactBadge ? { x: curve.x + 5, y: curve.y + 23, width: 108, height: 22 }
@@ -64,23 +102,46 @@ function drawCurve(ctx: DrawContext, curve: CanvasCurve, theme: CanvasTheme) {
 }
 
 /** Static painting occurs only after edits, hover, selection, pan or resize. */
-export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView, theme: CanvasTheme) {
+/** Worker-drawn group frames while a build-up animation owns the layout. */
+function paintGroupFrames(ctx: DrawContext, scene: CanvasScene, view: CanvasView, theme: CanvasTheme) {
+  for (const group of scene.groups) {
+    if (!inView(group, view)) continue;
+    box(ctx, group.x, group.y, group.width, group.height, 10);
+    ctx.globalAlpha = 1; ctx.fillStyle = theme.background; ctx.fill();
+    ctx.globalAlpha = 0.1; ctx.fillStyle = group.color; ctx.fill();
+    ctx.globalAlpha = 0.6; ctx.strokeStyle = group.color; ctx.lineWidth = 1 / view.zoom; ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView, theme: CanvasTheme, drawGroups = false,
+  cardSprite?: (node: CanvasNode) => CanvasImageSource | undefined,
+  shapeSprite?: (key: string, bounds: Rect, paint: (ctx: OffscreenCanvasRenderingContext2D) => void) => { canvas: OffscreenCanvas; level: number } | undefined) {
   begin(ctx, view);
+  if (drawGroups) paintGroupFrames(ctx, scene, view, theme);
   const viewport = { x: -view.panX / view.zoom - 20, y: -view.panY / view.zoom - 20,
     width: view.width / view.zoom + 40, height: view.height / view.zoom + 40 };
   const clips = new Map<Rect[], Rect[]>();
   // Group backgrounds and headers stay in the DOM: their complete vector
   // bounds follow the immediate viewport even while this bitmap catches up.
+  // Cables that pass behind the same groups share one clip per pass. Clipping
+  // each cable separately dominated raster time on large expanded graphs.
+  const occluded = new Map<Rect[], CanvasCable[]>(), open: CanvasCable[] = [];
   for (const cable of scene.cables) if (cableVisible(cable, view)) {
-    if (!cable.occlusions?.length) { drawCable(ctx, cable, view.zoom); continue; }
-    let visible = clips.get(cable.occlusions);
-    if (!visible) { visible = subtractOccludedRects(viewport, cable.occlusions); clips.set(cable.occlusions, visible); }
+    if (!cable.occlusions?.length) { open.push(cable); continue; }
+    const batch = occluded.get(cable.occlusions);
+    if (batch) batch.push(cable); else occluded.set(cable.occlusions, [cable]);
+  }
+  drawCables(ctx, open, view.zoom);
+  for (const [occlusions, cables] of occluded) {
+    let visible = clips.get(occlusions);
+    if (!visible) { visible = subtractOccludedRects(viewport, occlusions); clips.set(occlusions, visible); }
     ctx.save(); ctx.beginPath();
     for (const rect of visible) ctx.rect(rect.x, rect.y, rect.width, rect.height);
-    ctx.clip(); drawCable(ctx, cable, view.zoom); ctx.restore();
+    ctx.clip(); drawCables(ctx, cables, view.zoom); ctx.restore();
     ctx.save(); ctx.beginPath();
-    for (const rect of cable.occlusions) ctx.rect(rect.x, rect.y, rect.width, rect.height);
-    ctx.clip(); drawCable(ctx, cable, view.zoom, .3); ctx.restore();
+    for (const rect of occlusions) ctx.rect(rect.x, rect.y, rect.width, rect.height);
+    ctx.clip(); drawCables(ctx, cables, view.zoom, .3); ctx.restore();
   }
   for (const node of scene.nodes) {
     if (!inView(node, view)) continue;
@@ -91,12 +152,49 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
       ctx.translate(node.width / 2, node.height / 2); ctx.scale(scale, scale); ctx.translate(-node.width / 2, -node.height / 2);
     }
     ctx.globalAlpha = (node.bypassed ? 0.72 : 1) * appearance;
+    const sprite = cardSprite?.(node);
+    if (sprite) {
+      ctx.drawImage(sprite, -CARD_SPRITE_PAD, -CARD_SPRITE_PAD, node.width + CARD_SPRITE_PAD * 2, node.height + CARD_SPRITE_PAD * 2);
+      ctx.restore(); continue;
+    }
+    drawNodeCard(ctx, node, theme);
+    ctx.restore();
+  }
+  // Long fan-out stubs first, so their backing stroke cannot cover shorter grips.
+  for (const plug of scene.plugs.toReversed()) {
+    if (!inView({ x: Math.min(plug.tip.x, plug.center.x) - 8, y: plug.center.y - 8, width: Math.abs(plug.tip.x - plug.center.x) + 16, height: 16 }, view)) continue;
+    ctx.save(); ctx.translate(plug.center.x, plug.center.y); ctx.scale(plug.input ? -1 : 1, 1); ctx.globalAlpha = plug.ghost ? 0.5 : 1;
+    const offset = Math.abs(plug.tip.x - plug.center.x);
+    // Plugs repeat a handful of variants hundreds of times; blit a shared sprite.
+    const bounds = { x: -9, y: -9, width: offset + 18, height: 18 };
+    const sprite = shapeSprite?.(`plug|${plug.color}|${offset}|${plug.highlighted ? 1 : 0}|${theme.background}`, bounds,
+      sprite => drawPlug(sprite, offset, plug.color, plug.highlighted, theme));
+    if (sprite) ctx.drawImage(sprite.canvas, bounds.x, bounds.y, sprite.canvas.width / sprite.level, sprite.canvas.height / sprite.level);
+    else drawPlug(ctx, offset, plug.color, plug.highlighted, theme);
+    ctx.restore();
+  }
+}
+
+function paintHoveredEdge(ctx: DrawContext, scene: CanvasScene, edgeId: string, view: CanvasView, theme: CanvasTheme) {
+  const cable = scene.cables.find(item => item.id === edgeId);
+  if (cable) drawCable(ctx, { ...cable, highlighted: true, appearance: 1, disappearing: false }, view.zoom, 1);
+  for (const plug of scene.plugs) if (plug.id === `${edgeId}:input` || plug.id === `${edgeId}:output`) {
+    ctx.save(); ctx.translate(plug.center.x, plug.center.y); ctx.scale(plug.input ? -1 : 1, 1);
+    drawPlug(ctx, Math.abs(plug.tip.x - plug.center.x), plug.color, true, theme); ctx.restore();
+  }
+}
+
+function drawPlug(ctx: DrawContext, offset: number, color: string, highlighted: boolean, theme: CanvasTheme) {
+  ctx.beginPath(); ctx.arc(0, 0, 6, -Math.PI / 2, Math.PI / 2); ctx.moveTo(6, 0); ctx.lineTo(offset, 0);
+  ctx.strokeStyle = theme.background; ctx.lineWidth = 5; ctx.stroke(); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+  box(ctx, offset - 5, -3, 10, 6, 2); ctx.fillStyle = highlighted ? color : theme.background; ctx.fill(); ctx.lineWidth = 1; ctx.stroke();
+}
+
+/** A complete card at the context's current origin; shared by direct paint and sprites. */
+export function drawNodeCard(ctx: DrawContext, node: CanvasNode, theme: CanvasTheme) {
     box(ctx, 0, 0, node.width, node.height, 6); ctx.fillStyle = theme.card; ctx.fill(); ctx.strokeStyle = node.selected ? theme.accent : theme.border;
     ctx.lineWidth = node.selected ? 2 : 1; ctx.stroke(); ctx.clip();
     ctx.fillStyle = node.color; ctx.fillRect(0, 0, node.width, 3);
-    // Subpixel labels and sockets cannot be read in a moving overview. Keep
-    // card geometry, selection and cables; restore every detail when it settles.
-    if (view.moving && view.zoom < .3) { ctx.restore(); continue; }
     ctx.strokeStyle = theme.border; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 27); ctx.lineTo(node.width, 27); ctx.stroke();
     text(ctx, node.kind.toUpperCase(), 8, 19, 95, theme.muted);
     text(ctx, node.runtime, node.width - 28, 19, 50, theme.muted, 9, 400, 'right');
@@ -119,23 +217,13 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
       text(ctx, port.label, x, port.y + 1, 65, theme.text, 9, 500, align);
       text(ctx, port.type, x, port.y + 12, 65, port.color, 8, 400, align);
     }
-    ctx.restore();
-  }
-  // Long fan-out stubs first, so their backing stroke cannot cover shorter grips.
-  for (const plug of scene.plugs.toReversed()) {
-    if (view.moving && view.zoom < .25 && !plug.highlighted) continue;
-    if (!inView({ x: Math.min(plug.tip.x, plug.center.x) - 8, y: plug.center.y - 8, width: Math.abs(plug.tip.x - plug.center.x) + 16, height: 16 }, view)) continue;
-    ctx.save(); ctx.translate(plug.center.x, plug.center.y); ctx.scale(plug.input ? -1 : 1, 1); ctx.globalAlpha = plug.ghost ? 0.5 : 1;
-    const offset = Math.abs(plug.tip.x - plug.center.x);
-    ctx.beginPath(); ctx.arc(0, 0, 6, -Math.PI / 2, Math.PI / 2); ctx.moveTo(6, 0); ctx.lineTo(offset, 0);
-    ctx.strokeStyle = theme.background; ctx.lineWidth = 5; ctx.stroke(); ctx.strokeStyle = plug.color; ctx.lineWidth = 2; ctx.stroke();
-    box(ctx, offset - 5, -3, 10, 6, 2); ctx.fillStyle = plug.highlighted ? plug.color : theme.background; ctx.fill(); ctx.lineWidth = 1; ctx.stroke(); ctx.restore();
-  }
 }
 
 export interface CurveActivity { playhead: number; values: number[]; until: number }
-export function paintOverlay(ctx: DrawContext, scene: CanvasScene, view: CanvasView, theme: CanvasTheme, transport: CanvasTransport, now: number, activity: Map<string, CurveActivity>, flowSeconds = 0) {
+export function paintOverlay(ctx: DrawContext, scene: CanvasScene, view: CanvasView, theme: CanvasTheme, transport: CanvasTransport, now: number, activity: Map<string, CurveActivity>, flowSeconds = 0,
+  hoveredEdgeId: string | null = null) {
   begin(ctx, view);
+  if (hoveredEdgeId) paintHoveredEdge(ctx, scene, hoveredEdgeId, view, theme);
   if (!transport.visible) return;
   if (transport.active && !transport.reducedMotion) scene.cables.forEach((cable, i) => {
     if (cable.draft || cable.baked || !cableVisible(cable, view)) return;

@@ -316,11 +316,14 @@ export class BackgroundPreloadController {
           continue;
         }
 
-        const cached = await cacheBackgroundVideoFrame(session, time, this.scrubCache);
+        const displayed = frameIndex === session.lastRequestedFrame;
+        const cached = await cacheBackgroundVideoFrame(session, time, this.scrubCache, displayed);
         if (cached) {
           this.filled++;
           this.lastFillLatencyMs = Math.round(performance.now() - startedAt);
-          this.requestRenderForFill();
+          // Neighbour frames do not change the displayed image; waking the
+          // compositor for them keeps a paused engine rendering continuously.
+          if (displayed) this.requestRenderForFill();
         } else {
           this.failed++;
         }

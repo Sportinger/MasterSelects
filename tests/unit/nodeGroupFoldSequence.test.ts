@@ -4,7 +4,7 @@ import { buildClipNodeGraphDocument } from '../../src/services/nodeGraph';
 import { buildUnifiedClipGraph } from '../../src/services/nodeGraph/unifiedClipGraph';
 import { reconcileCanvasPlacement } from '../../src/components/panels/nodes/canvas/nodeCanvasPlacement';
 import { nodeGroupBounds } from '../../src/components/panels/nodes/canvas/groupBounds';
-import { createNodeGroupFoldSequence, nodeGroupFoldSteps } from '../../src/components/panels/nodes/canvas/nodeGroupFoldSequence';
+import { createNodeGroupFoldKeyframes, createNodeGroupFoldSequence, nodeGroupFoldSteps } from '../../src/components/panels/nodes/canvas/nodeGroupFoldSequence';
 import type { NodeLayoutSnapshot } from '../../src/components/panels/nodes/canvas/nodeLayoutTransition';
 
 function setup() {
@@ -87,5 +87,21 @@ describe('progressive node group folding', () => {
     const moved = { ...after, nodes: after.nodes.map(node => cartesian.nodeIds.includes(node.id) ? { ...node, layout: { x: 10000, y: node.layout.y } } : node) };
     const steps = nodeGroupFoldSteps(before, moved, initial, project);
     expect(steps.at(-1)!.groupId).toBe(cartesian.id);
+  });
+
+  it('emits one keyframe per group and starts the next only after the previous build-up', () => {
+    const { before, after, initial, project } = setup();
+    const keyframes = createNodeGroupFoldKeyframes(before, after, initial, project);
+    const first = keyframes.next(0);
+    expect(first?.graph.groups!.filter(group => !group.collapsed)).toHaveLength(1);
+    expect(keyframes.next(0)).toBeUndefined();
+    expect(keyframes.done(0)).toBe(false);
+    let elapsed = 0, emitted = 1;
+    while (!keyframes.done(elapsed) && elapsed < 60000) {
+      elapsed += 16;
+      if (keyframes.next(elapsed)) emitted++;
+    }
+    expect(emitted).toBe(nodeGroupFoldSteps(before, after, initial, project).length);
+    expect(keyframes.done(elapsed)).toBe(true);
   });
 });

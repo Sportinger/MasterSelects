@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { memo } from 'react';
 import type { NodeGraphNode } from '../../src/types/nodeGraph';
 import { connectionFixture } from '../helpers/nodeConnectionFixture';
+
+// Fold framing is a spring camera driven by animation frames; let it land.
+const useFrameClock = () => vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame', 'performance', 'setTimeout', 'clearTimeout'] });
+const settleCamera = () => act(() => { vi.advanceTimersByTime(3000); });
 
 const mocks = vi.hoisted(() => ({
   renders: new Map<string, number>(),
@@ -98,6 +102,7 @@ describe('node canvas navigation render boundaries', () => {
   });
 
   it('focuses an expanded group and restores the view from before expansion on collapse', () => {
+    useFrameClock();
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1200);
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(800);
     const group = { id: 'effect', label: 'Example', color: '#fff', collapsed: true, proxyId: 'Source', nodeIds: ['Source'] };
@@ -111,10 +116,13 @@ describe('node canvas navigation render boundaries', () => {
     expect(toggle).toHaveBeenCalledWith('effect');
     view.rerender(<NodeGraphCanvas graph={{ ...graph, nodes: graph.nodes.map(node => ({ ...node, layout: { x: node.layout.x + 2000, y: node.layout.y } })),
       groups: [{ ...group, collapsed: false, nodeIds: graph.nodes.map(node => node.id) }] }} selectedNodeId={null} onSelectNode={vi.fn()} onToggleGroup={toggle} />);
+    settleCamera();
     expect(inner.style.transform).not.toBe(transform);
     fireEvent.click(view.getByRole('button', { name: 'Collapse Example group' }));
     view.rerender(<NodeGraphCanvas graph={graph} selectedNodeId={null} onSelectNode={vi.fn()} onToggleGroup={toggle} />);
+    settleCamera();
     expect(inner.style.transform).toBe(transform);
+    vi.useRealTimers();
   });
 
   it('moves full group backgrounds with the immediate viewport before a worker frame arrives', () => {
@@ -136,6 +144,7 @@ describe('node canvas navigation render boundaries', () => {
   });
 
   it('fits the complete fold destination and clears pointer focus while keeping keyboard focus', () => {
+    useFrameClock();
     const group = { id: 'effect', label: 'Example', color: '#fff', collapsed: true, proxyId: 'Source', nodeIds: ['Source'] };
     const graph = { ...connectionFixture, groups: [group] }, fold = vi.fn(), select = vi.fn();
     const view = render(<NodeGraphCanvas graph={graph} selectedNodeId={null} onSelectNode={select} onSetAllGroupsCollapsed={fold} />);
@@ -148,6 +157,8 @@ describe('node canvas navigation render boundaries', () => {
     const collapse = view.getByRole('button', { name: 'Collapse all' });
     collapse.focus(); fireEvent.click(collapse, { detail: 0 });
     expect(collapse).toHaveFocus(); expect(fold).toHaveBeenLastCalledWith(true);
+    settleCamera();
     expect(inner.style.transform).not.toBe(transform);
+    vi.useRealTimers();
   });
 });

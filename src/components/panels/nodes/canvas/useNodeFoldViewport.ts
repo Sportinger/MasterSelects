@@ -3,18 +3,51 @@ import type { NodeGraph } from '../../../../types/nodeGraph';
 import type { NodeBounds, Viewport } from './canvasGeometry';
 import { fittedNodeViewport } from './useNodeGraphViewport';
 import { NODE_LAYOUT_DURATION } from './nodeLayoutTransition';
+import { cameraViewport, cameraWorld, createCameraSpring, stepCameraSpring, type CameraSpring } from './foldCameraSpring';
+
+const VIEW_COMMIT_MS = 80;
+
 
 /** Follow the displayed bounds of every intermediate fold, never just the final
  * destination. A manual gesture immediately releases camera ownership. */
 export function useNodeFoldViewport(canvas: RefObject<HTMLDivElement | null>, source: NodeGraph, target: NodeGraph,
   shown: NodeGraph, bounds: NodeBounds, animating: boolean, visual: RefObject<Viewport>, setViewport: (next: Viewport) => void,
-  groupBounds?: ReadonlyMap<string, NodeBounds>) {
+  groupBounds?: ReadonlyMap<string, NodeBounds>, showVisual?: (next: Viewport) => void) {
   const savedViews = useRef(new Map<string, Viewport>());
+  // Fold steps arrive as keyframes. A single spring camera follows the latest
+  // framing on the visual transform and keeps its velocity across steps.
+  const camera = useRef<{ spring: CameraSpring; width: number; height: number; last: number; frame: number; committedAt: number } | null>(null);
+  const glideTo = useCallback((next: Viewport) => {
+    const element = canvas.current;
+    if (!showVisual || !element) { setViewport(next); return; }
+    const active = camera.current;
+    if (active) { active.spring.target = cameraWorld(next, active.width, active.height); return; }
+    const width = element.clientWidth, height = element.clientHeight;
+    const state = { spring: createCameraSpring(visual.current, next, width, height), width, height, last: performance.now(), frame: 0, committedAt: 0 };
+    camera.current = state;
+    const step = (now: number) => {
+      if (camera.current !== state) return;
+      const settled = stepCameraSpring(state.spring, (now - state.last) / 1000);
+      state.last = now;
+      const view = cameraViewport(state.spring, width, height);
+      if (settled) { camera.current = null; setViewport(view); return; }
+      // The canvas worker only draws the committed view plus overscan. Commit at a
+      // bounded rate so zooming out never reveals an unpainted, clipped bitmap.
+      if (now - state.committedAt >= VIEW_COMMIT_MS) { state.committedAt = now; setViewport(view); }
+      else showVisual(view);
+      state.frame = requestAnimationFrame(step);
+    };
+    state.frame = requestAnimationFrame(step);
+  }, [canvas, setViewport, showVisual, visual]);
+  const stopTween = useCallback(() => {
+    if (camera.current) cancelAnimationFrame(camera.current.frame);
+    camera.current = null;
+  }, []);
   const pending = useRef<{ graph: NodeGraph; collapsed: boolean; groupId?: string; restore?: Viewport; from: Viewport; initialFit?: Viewport; started: number; width: number; height: number; automatic?: boolean } | null>(null);
   const previousFolds = useRef({ graph: source, states: new Map(source.groups?.map(group => [group.id, !!group.collapsed])) });
   const sourceFoldsChanged = previousFolds.current.graph.id === source.id && !!source.groups?.some(group =>
     previousFolds.current.states.has(group.id) && previousFolds.current.states.get(group.id) !== !!group.collapsed);
-  const cancel = useCallback(() => { pending.current = null; }, []);
+  const cancel = useCallback(() => { pending.current = null; stopTween(); }, [stopTween]);
   const forget = useCallback(() => { cancel(); savedViews.current.clear(); }, [cancel]);
   useEffect(forget, [source.id, forget]);
   const request = useCallback((collapsed: boolean, groupId?: string) => {
@@ -55,7 +88,8 @@ export function useNodeFoldViewport(canvas: RefObject<HTMLDivElement | null>, so
     const focusBounds = follow.groupId && !follow.collapsed ? groupBounds?.get(follow.groupId) : bounds;
     if (!focusBounds) { if (finished) cancel(); return; }
     const fit = follow.restore ?? fittedNodeViewport(focusBounds, follow.width, follow.height);
-    if (follow.restore) setViewport({ zoom: follow.from.zoom + (fit.zoom - follow.from.zoom) * t,
+    const apply = glideTo;
+    if (follow.restore) apply({ zoom: follow.from.zoom + (fit.zoom - follow.from.zoom) * t,
       panX: follow.from.panX + (fit.panX - follow.from.panX) * t,
       panY: follow.from.panY + (fit.panY - follow.from.panY) * t });
     else {
@@ -64,11 +98,11 @@ export function useNodeFoldViewport(canvas: RefObject<HTMLDivElement | null>, so
       // smoothing loop would lag behind the group borders and snap on finish.
       const initial = follow.initialFit ??= fit;
       const residual = (1 - t) * fit.zoom / initial.zoom;
-      setViewport({ zoom: fit.zoom + (follow.from.zoom - initial.zoom) * residual,
+      apply({ zoom: fit.zoom + (follow.from.zoom - initial.zoom) * residual,
         panX: fit.panX + (follow.from.panX - initial.panX) * residual,
         panY: fit.panY + (follow.from.panY - initial.panY) * residual });
     }
-    if (finished) cancel();
-  }, [source, target, shown, bounds, groupBounds, animating, canvas, cancel, setViewport, sourceFoldsChanged, visual]);
+    if (finished) pending.current = null;
+  }, [source, target, shown, bounds, groupBounds, animating, canvas, cancel, glideTo, sourceFoldsChanged, visual]);
   return { request, cancel, forget, following: pending.current !== null || sourceFoldsChanged };
 }

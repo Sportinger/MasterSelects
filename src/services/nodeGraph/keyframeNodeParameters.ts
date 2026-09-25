@@ -9,6 +9,34 @@ import { effectOperatorGraph, effectOperatorParams, hasEffectOperatorGraph } fro
 import { getEffectOperator } from '../operators/operatorRegistry';
 import { getKeyframeTimeBasis } from '../flock/time/flockKeyframeTime';
 import { TEXT_NODE_STAGES } from '../text/textNodeStages';
+import type { EffectOperatorGraph } from '../../types/operatorGraph';
+
+type OwnerEffect = Parameters<typeof effectOperatorGraph>[0];
+// Effects are immutable store snapshots. Folding re-projects the clip graph for
+// every staggered group, so reading, validating and indexing a large operator
+// graph once per effect object keeps each projection step cheap.
+const ownerGraphs = new WeakMap<OwnerEffect, { graph: EffectOperatorGraph; owners?: Map<string, string> } | { error: unknown }>();
+function ownerGraph(effect: OwnerEffect) {
+  let entry = ownerGraphs.get(effect);
+  if (!entry) {
+    try { entry = { graph: effectOperatorGraph(effect) }; } catch (error) { entry = { error }; }
+    ownerGraphs.set(effect, entry);
+  }
+  if ('error' in entry) throw entry.error;
+  return entry;
+}
+function bindingOwnerId(effect: OwnerEffect, suffix: string): string | undefined {
+  const entry = ownerGraph(effect);
+  if (!entry.owners) {
+    entry.owners = new Map();
+    for (const node of entry.graph.nodes) for (const binding of Object.values(node.bindings)) {
+      for (const name of typeof binding === 'string' ? [binding] : Array.isArray(binding) ? binding : Object.values(binding)) {
+        if (typeof name === 'string' && !entry.owners.has(name)) entry.owners.set(name, node.id);
+      }
+    }
+  }
+  return entry.owners.get(suffix);
+}
 
 export interface KeyframeNodeParameter {
   property: AnimatableProperty;
@@ -66,7 +94,7 @@ export function keyframeNodeParameters(clip: TimelineClip): KeyframeNodeParamete
   // Reusable operators bind their independent parameters to effect paths.
   for (const effect of clip.effects.filter(e => hasEffectOperatorGraph(e.type))) {
     try {
-      for (const node of effectOperatorGraph(effect).nodes) for (const spec of getEffectOperator(node.operator)?.parameters ?? []) {
+      for (const node of ownerGraph(effect).graph.nodes) for (const spec of getEffectOperator(node.operator)?.parameters ?? []) {
         if (!spec.animatable) continue;
         const binding = node.bindings[spec.id];
         const names = typeof binding === 'string' ? [binding] : Array.isArray(binding) ? binding : binding ? Object.values(binding) : [];
@@ -103,9 +131,8 @@ export function parameterNode(clip: TimelineClip, property: string, nodes: reado
       const operators = nodes.filter(n => n.binding?.kind === 'effect-operator' && n.binding.effectId === effectId);
       const suffix = property.slice(`effect.${effectId}.`.length);
       try {
-        const owner = effectOperatorGraph(effect).nodes.find(n => Object.values(n.bindings).some(binding =>
-          (typeof binding === 'string' ? [binding] : Array.isArray(binding) ? binding : Object.values(binding)).includes(suffix)));
-        const exact = operators.find(n => n.binding?.kind === 'effect-operator' && n.binding.nodeId === owner?.id);
+        const ownerId = bindingOwnerId(effect, suffix);
+        const exact = operators.find(n => n.binding?.kind === 'effect-operator' && n.binding.nodeId === ownerId);
         if (exact) return exact;
       } catch { /* Fall back to the owning effect. */ }
       const simulation = operators.find(n => n.binding?.kind === 'effect-operator' && n.binding.operator === 'simulation.rope');

@@ -1,6 +1,30 @@
 import type { EffectOperatorGraph, OperatorGroup } from '../../types/operatorGraph';
 import { getEffectOperator } from './operatorRegistry';
 
+type BypassRoutes = Map<string, { from: string; output: string }> | undefined;
+interface GraphIndex {
+  nodes: Map<string, EffectOperatorGraph['nodes'][number]>;
+  sources: Map<string, string[]>;
+  routes: Map<OperatorGroup, BypassRoutes>;
+  bypassed?: EffectOperatorGraph;
+}
+// Graphs are immutable snapshots. Previews, projection and every render compile
+// the same large graph repeatedly, so lookups and results are shared per object.
+const indexes = new WeakMap<EffectOperatorGraph, GraphIndex>();
+function graphIndex(graph: EffectOperatorGraph): GraphIndex {
+  let index = indexes.get(graph);
+  if (!index) {
+    const sources = new Map<string, string[]>();
+    for (const edge of graph.edges) {
+      const list = sources.get(edge.to);
+      if (list) list.push(edge.from); else sources.set(edge.to, [edge.from]);
+    }
+    index = { nodes: new Map(graph.nodes.map(node => [node.id, node])), sources, routes: new Map() };
+    indexes.set(graph, index);
+  }
+  return index;
+}
+
 export function operatorGroupMembers(graph: EffectOperatorGraph, groupId: string): Set<string> {
   const members = new Set<string>(), visited = new Set<string>();
   const visit = (id: string) => {
@@ -14,14 +38,22 @@ export function operatorGroupMembers(graph: EffectOperatorGraph, groupId: string
 }
 
 /** Only offer pass-through when every output has one unique, type-compatible external source. */
-export function operatorGroupBypassRoutes(graph: EffectOperatorGraph, group: OperatorGroup) {
+export function operatorGroupBypassRoutes(graph: EffectOperatorGraph, group: OperatorGroup): BypassRoutes {
   if (graph.domain !== 'image') return undefined;
+  const index = graphIndex(graph);
+  if (index.routes.has(group)) return index.routes.get(group);
+  const routes = computeBypassRoutes(graph, group, index);
+  index.routes.set(group, routes);
+  return routes;
+}
+
+function computeBypassRoutes(graph: EffectOperatorGraph, group: OperatorGroup, index: GraphIndex): BypassRoutes {
   const members = operatorGroupMembers(graph, group.id);
   const incoming = graph.edges.filter(edge => !members.has(edge.from) && members.has(edge.to));
   const outgoing = graph.edges.filter(edge => members.has(edge.from) && !members.has(edge.to));
   if (!incoming.length || !outgoing.length) return undefined;
   const signal = (id: string, port: string) => {
-    const node = graph.nodes.find(node => node.id === id);
+    const node = index.nodes.get(id);
     return node && getEffectOperator(node.operator)?.outputs.find(output => output.id === port)?.type;
   };
   const routes = new Map<string, { from: string; output: string }>();
@@ -39,7 +71,7 @@ export function operatorGroupBypassRoutes(graph: EffectOperatorGraph, group: Ope
       if (members.has(id)) return true;
       if (visited.has(id)) return false;
       visited.add(id);
-      return graph.edges.filter(link => link.to === id).some(link => dependsOnGroup(link.from));
+      return (index.sources.get(id) ?? []).some(dependsOnGroup);
     };
     if (dependsOnGroup(candidate.from)) return undefined;
     routes.set(edge.id, candidate);
@@ -59,6 +91,11 @@ export function operatorGroupRenderer(graph: EffectOperatorGraph, groupId: strin
 export function applyOperatorGroupBypasses(graph: EffectOperatorGraph): EffectOperatorGraph {
   const bypassed = graph.groups?.filter(group => group.bypassed) ?? [];
   if (!bypassed.length) return graph;
+  const index = graphIndex(graph);
+  return index.bypassed ??= bypassGraph(graph, bypassed);
+}
+
+function bypassGraph(graph: EffectOperatorGraph, bypassed: OperatorGroup[]): EffectOperatorGraph {
   const depth = (group: OperatorGroup): number => {
     const visited = new Set([group.id]);
     while (group.parentId) {

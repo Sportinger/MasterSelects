@@ -13,7 +13,7 @@ export function bufferedCanvasView(view: Omit<CanvasView, 'ratio'>, dpr: number)
   const width = view.width + NODE_CANVAS_OVERSCAN * 2;
   const height = view.height + NODE_CANVAS_OVERSCAN * 2;
   return { ...view, width, height, panX: view.panX + NODE_CANVAS_OVERSCAN,
-    panY: view.panY + NODE_CANVAS_OVERSCAN, ratio: canvasPixelRatio(width, height, dpr, view.moving ? 2_000_000 : 8_000_000) };
+    panY: view.panY + NODE_CANVAS_OVERSCAN, ratio: canvasPixelRatio(width, height, dpr) };
 }
 
 /** Present worker pixels and their viewport correction in one main-thread task. */
@@ -61,6 +61,7 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
       if (painter && (changed || now - lastDraw >= 1000 / 30)) {
         if (painter.draw(now)) {
           markReady();
+          host.dataset.workerMotion = String(painter.layoutMoving);
           if (painter.viewRevision !== undefined && painter.viewRevision !== reportedViewRevision) {
             reportedViewRevision = painter.viewRevision; onViewReady(reportedViewRevision);
           }
@@ -130,6 +131,8 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
             if (base.width !== bitmap.width) base.width = bitmap.width;
             if (base.height !== bitmap.height) base.height = bitmap.height;
             presenter.transferFromImageBitmap(bitmap);
+            // Dev probes count what the user actually sees, not main-thread ticks.
+            if (import.meta.env.DEV) host.dataset.presentedFrames = String(Number(host.dataset.presentedFrames ?? 0) + 1);
             if (revision !== undefined && revision !== reportedViewRevision) {
               reportedViewRevision = revision; onViewReady(revision);
             }
@@ -139,6 +142,7 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
           finally { bitmap.close(); }
         }
         if (event.data.type === 'failed') fallback();
+        if (event.data.type === 'motion') host.dataset.workerMotion = String(event.data.active);
         if (event.data.type === 'previews-ready') {
           previewInFlight = false; clearTimeout(previewWatchdog);
           if (import.meta.env.DEV) host.dataset.previewCount = String(event.data.previewCount ?? 0);
