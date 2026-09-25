@@ -158,7 +158,7 @@ export function NodeGraphCanvas({
       canvasSurfaceRef.current.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${scale})`;
     }
   }, []);
-  const { viewport, setViewport } = useNodeGraphViewport(canvasRef, showVisualViewport);
+  const { viewport, setViewport, zoomingRef } = useNodeGraphViewport(canvasRef, showVisualViewport);
   // This transform has one owner. React must not overwrite a newer pointer
   // position with the viewport of an earlier scheduled render.
   useLayoutEffect(() => { showVisualViewport(visualViewportRef.current); }, [showVisualViewport]);
@@ -277,7 +277,7 @@ export function NodeGraphCanvas({
     graphId: graph.id, canvasRef, nodesById, edges: graph.edges, getGraphPoint: getGraphPointFromClient,
     onConnectPorts, onReconnectPorts, onDisconnectEdge, onDropConnection,
   });
-  const domViewport = useNodeDomViewport(canvasRef, viewport, !!nodeGesture || !!connectionDraft, isPanning);
+  const domViewport = useNodeDomViewport(canvasRef, viewport, !!nodeGesture || !!connectionDraft, isPanning, zoomingRef);
   const dom = useNodeDomVisibility(displayNodes, plugs, domViewport);
   // Settled hit targets: cards mount in batches, cables/plugs as a deferred update.
   const hitTargetsActive = !canvasRendered || !animating;

@@ -51,6 +51,24 @@ describe('node preview work budgets', () => {
     expect(produce).toHaveBeenCalledOnce(); expect(scheduler.unsettled).toBe(false);
     scheduler.setRequests([]); expect(scheduler.stats.requested).toBe(0);
   });
+  it('keeps completed and unrenderable revisions while a preview is scrolled out of view', () => {
+    const produce = vi.fn((r: PreviewRequest): PreviewFrame => r.key === 'empty' ? { ...result(r), status: 'missing', label: 'No output' } : result(r));
+    const scheduler = new NodePreviewScheduler(produce, vi.fn(), () => 0);
+    const visible = [request('image'), request('empty')];
+    let time = 0;
+    for (let pass = 0; pass < 4; pass++) {
+      scheduler.setRequests(visible);
+      for (let step = 0; step < 50; step++) scheduler.tick(time += 100);
+      scheduler.setRequests([]); scheduler.tick(time += 100);
+    }
+    expect(produce.mock.calls.filter(([r]) => r.key === 'image')).toHaveLength(1);
+    expect(produce.mock.calls.filter(([r]) => r.key === 'empty')).toHaveLength(3);
+    scheduler.forget(['image']); scheduler.retain(new Set(['image']));
+    scheduler.setRequests(visible); scheduler.tick(time += 100);
+    expect(produce.mock.calls.filter(([r]) => r.key === 'image')).toHaveLength(2);
+    expect(produce.mock.calls.filter(([r]) => r.key === 'empty')).toHaveLength(4);
+    scheduler.dispose();
+  });
   it('backs off unrenderable paused previews and settles until the revision changes', () => {
     const produce = vi.fn((r: PreviewRequest): PreviewFrame => ({ ...result(r), status: 'missing', label: 'No rendered output at this time' }));
     const scheduler = new NodePreviewScheduler(produce, vi.fn(), () => 0);

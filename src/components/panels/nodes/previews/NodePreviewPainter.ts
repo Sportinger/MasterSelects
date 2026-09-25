@@ -23,6 +23,7 @@ export class NodePreviewPainter {
   private tile = 256;
   private keys?: Set<string>;
   private values = new Map<string, PreviewFrame>();
+  private evicted = new Set<string>();
   private get columns() { return ATLAS_WIDTH / this.tile; }
   private get capacity() { return ATLAS_WIDTH * ATLAS_HEIGHT / (this.tile * this.tile); }
   resolution(zoom: number, ratio: number) {
@@ -41,7 +42,9 @@ export class NodePreviewPainter {
     this.tile = tile;
     if (previous && next) {
       next.canvas.width = ATLAS_WIDTH; next.canvas.height = ATLAS_HEIGHT;
-      const retained = [...this.slots.entries()].toSorted((a, b) => b[1].used - a[1].used).slice(0, this.capacity);
+      const ranked = [...this.slots.entries()].toSorted((a, b) => b[1].used - a[1].used);
+      const retained = ranked.slice(0, this.capacity);
+      for (const [key] of ranked.slice(this.capacity)) this.evicted.add(key);
       this.slots.clear();
       retained.forEach(([key, slot], index) => {
         next.drawImage(previous.canvas, slot.index % oldColumns * oldTile, Math.floor(slot.index / oldColumns) * oldTile, oldTile, oldTile,
@@ -72,13 +75,14 @@ export class NodePreviewPainter {
           if (this.atlas) { this.atlas.canvas.width = ATLAS_WIDTH; this.atlas.canvas.height = ATLAS_HEIGHT; }
         }
         if (!this.atlas) continue;
+        this.evicted.delete(frame.key);
         let slot = this.slots.get(frame.key);
         if (!slot) {
           const occupied = new Set([...this.slots.values()].map(value => value.index));
           let index = 0; while (occupied.has(index)) index++;
           if (index >= this.capacity) {
             const oldest = [...this.slots.entries()].toSorted((a, b) => a[1].used - b[1].used)[0];
-            index = oldest[1].index; this.slots.delete(oldest[0]); this.dirty.add(oldest[0]);
+            index = oldest[1].index; this.slots.delete(oldest[0]); this.dirty.add(oldest[0]); this.evicted.add(oldest[0]);
           }
           slot = { index, label: '', status: 'missing', revision: '', used: 0, content: { x: 0, y: 0, width: this.tile, height: this.tile } }; this.slots.set(frame.key, slot);
         }
@@ -119,6 +123,8 @@ export class NodePreviewPainter {
   }
   dispose() { this.disposeAtlas(); this.dirty.clear(); this.values.clear(); }
   get size() { return this.slots.size; }
+  /** Keys whose cached pixels were dropped for capacity since the last call. */
+  takeEvicted(): string[] { const keys = [...this.evicted]; this.evicted.clear(); return keys; }
 
   draw(scene: CanvasScene, view: CanvasView) {
     if (!this.allDirty && !this.dirty.size) return;

@@ -40,7 +40,7 @@ it('budgets synchronous preview compilation after lazy loading instead of releas
   } finally { controller.dispose(); }
 });
 
-it('keeps paused previews cached across continuous zoom and atlas tiers', async () => {
+it('keeps paused previews cached within a resolution tier and when zooming out, but sharpens them when zooming in', async () => {
   vi.useFakeTimers(); vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
   const publish = vi.fn();
   const controller = new NodePreviewController({ preview: publish, software: false, previewBusy: false }, document.createElement('div'));
@@ -48,14 +48,38 @@ it('keeps paused previews cached across continuous zoom and atlas tiers', async 
   controller.scene('clip', [{ ...connectionFixture.nodes[0], preview: { key: 'source', enabled: true, requested: true } }], null);
   controller.viewport(view);
   await vi.advanceTimersByTimeAsync(300);
-  expect(publish).toHaveBeenCalledTimes(1);
-  for (const zoom of [0.3501, 0.5, 0.8, 1.5, 0.2]) {
+  controller.viewport({ ...view, zoom: 0.3501 });
+  await vi.advanceTimersByTimeAsync(300);
+  expect(mocked.produce).toHaveBeenCalledTimes(1);
+  for (const zoom of [0.8, 1.5]) {
     controller.viewport({ ...view, zoom });
     await vi.advanceTimersByTimeAsync(300);
   }
-  expect(publish).toHaveBeenCalledTimes(1);
-  expect(mocked.produce).toHaveBeenCalledTimes(1);
+  const widths = mocked.produce.mock.calls.map(([request]) => request.width);
+  expect(widths).toHaveLength(3);
+  expect(widths[1]).toBeGreaterThanOrEqual(0.8 * 164);
+  expect(widths[2]).toBe(256);
+  for (const zoom of [0.5, 0.2, 1.2]) {
+    controller.viewport({ ...view, zoom });
+    await vi.advanceTimersByTimeAsync(300);
+  }
+  expect(mocked.produce).toHaveBeenCalledTimes(3);
   controller.dispose();
+});
+
+it('renders a preview again after the canvas atlas evicted its pixels', async () => {
+  vi.useFakeTimers(); vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+  const sink: { preview: ReturnType<typeof vi.fn>; software: boolean; previewBusy: boolean; onPreviewsEvicted?: (keys: string[]) => void } = { preview: vi.fn(), software: false, previewBusy: false };
+  const controller = new NodePreviewController(sink, document.createElement('div'));
+  controller.scene('clip', [{ ...connectionFixture.nodes[0], preview: { key: 'source', enabled: true, requested: true } }], null);
+  controller.viewport({ width: 800, height: 600, panX: 0, panY: 0, ratio: 1, zoom: 1 });
+  await vi.advanceTimersByTimeAsync(300);
+  expect(mocked.produce).toHaveBeenCalledTimes(1);
+  sink.onPreviewsEvicted?.(['source']);
+  await vi.advanceTimersByTimeAsync(300);
+  expect(mocked.produce).toHaveBeenCalledTimes(2);
+  controller.dispose();
+  expect(sink.onPreviewsEvicted).toBeUndefined();
 });
 
 it('defers newly exposed previews while folding and resumes them at the latest playhead', async () => {

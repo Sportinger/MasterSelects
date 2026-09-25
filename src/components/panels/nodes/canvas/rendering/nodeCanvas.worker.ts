@@ -12,6 +12,10 @@ let baseMs = 0, overlayMs = 0, previewMs = 0, updateMs = 0, composeMs = 0, drawM
 type Update = Extract<CanvasMessage, { type: 'scene' | 'view' | 'transport' | 'hover' }>;
 const pending = new Map<Update['type'], Update>();
 const post = (message: CanvasWorkerReply, transfer: Transferable[] = []) => self.postMessage(message, transfer);
+function reportEvicted() {
+  const keys = painter?.takeEvictedPreviews();
+  if (keys?.length) post({ type: 'previews-evicted', keys });
+}
 
 function schedule(delay = 0) {
   if (!inFlight && timer === undefined) timer = setTimeout(frame, delay);
@@ -25,6 +29,7 @@ function frame() {
     pending.clear();
     const updated = performance.now();
     if (!painter?.draw(start)) return;
+    reportEvicted();
     const drawn = performance.now();
     // Always compose into the output layer. Transferring the base itself
     // detaches its backing store, and reallocating it every motion frame cost
@@ -32,8 +37,9 @@ function frame() {
     const [base, previews, overlay] = layers;
     if (output.width !== base.width) output.width = base.width;
     if (output.height !== base.height) output.height = base.height;
-    context.clearRect(0, 0, output.width, output.height);
-    context.drawImage(base, 0, 0);
+    // 'copy' replaces every output pixel, so no separate full-surface clear pass.
+    context.globalCompositeOperation = 'copy'; context.drawImage(base, 0, 0);
+    context.globalCompositeOperation = 'source-over';
     context.save(); context.setTransform(1, 0, 0, 1, 0, 0);
     if (painter.previewCount) context.drawImage(previews, 0, 0);
     if (painter.hasOverlay) context.drawImage(overlay, 0, 0);
@@ -82,7 +88,7 @@ self.onmessage = (event: MessageEvent<CanvasMessage>) => {
     } else if (message.type === 'previews') painter?.update(message);
     else pending.set(message.type, message);
     dirty = true;
-    if (message.type === 'previews') post({ type: 'previews-ready', batchId: message.batchId, previewCount: painter?.previewCount });
+    if (message.type === 'previews') { reportEvicted(); post({ type: 'previews-ready', batchId: message.batchId, previewCount: painter?.previewCount }); }
     if (message.type === 'scene' || message.type === 'view') { clearTimeout(timer); timer = undefined; }
     schedule();
   } catch { post({ type: 'failed' }); }

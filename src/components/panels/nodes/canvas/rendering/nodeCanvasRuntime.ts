@@ -26,6 +26,7 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
   let previewWatchdog: ReturnType<typeof setTimeout> | undefined;
   let ready = false, lastDraw = -Infinity;
   let reportedViewRevision: number | undefined;
+  let onPreviewsEvicted: ((keys: string[]) => void) | undefined;
   const latest = new Map<Update['type'], Update>(), pending = new Map<Update['type'], Update>();
   const createSurfaces = () => {
     base = document.createElement('canvas'); overlay = document.createElement('canvas');
@@ -60,6 +61,8 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
       }
       if (painter && (changed || now - lastDraw >= 1000 / 30)) {
         if (painter.draw(now)) {
+          const evicted = painter.takeEvictedPreviews();
+          if (evicted.length) onPreviewsEvicted?.(evicted);
           markReady();
           host.dataset.workerMotion = String(painter.layoutMoving);
           if (painter.viewRevision !== undefined && painter.viewRevision !== reportedViewRevision) {
@@ -142,6 +145,7 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
           finally { bitmap.close(); }
         }
         if (event.data.type === 'failed') fallback();
+        if (event.data.type === 'previews-evicted') onPreviewsEvicted?.(event.data.keys);
         if (event.data.type === 'motion') host.dataset.workerMotion = String(event.data.active);
         if (event.data.type === 'previews-ready') {
           previewInFlight = false; clearTimeout(previewWatchdog);
@@ -168,6 +172,7 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
       schedule();
     },
     get previewBusy() { return previewInFlight; },
+    set onPreviewsEvicted(handler: ((keys: string[]) => void) | undefined) { onPreviewsEvicted = handler; },
     get software() { return !worker; },
     dispose() {
       disposed = true; worker?.terminate(); clearTimeout(watchdog);

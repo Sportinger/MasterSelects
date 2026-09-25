@@ -94,6 +94,7 @@ export class NodeCanvasPainter {
   get viewRevision() { return this.renderedViewRevision; }
   get layoutMoving() { return this.sceneMotion.active; }
   get previewCount() { return this.previews?.size ?? 0; }
+  takeEvictedPreviews() { return this.previews?.takeEvicted() ?? []; }
   get hasOverlay() { return !!this.hoveredEdgeId || (this.transport.visible && (this.animated || !!this.visibleScene?.nodes.some(node => node.curve))); }
   draw(now: number): boolean {
     if (!this.scene || !this.view || !this.theme) return false;

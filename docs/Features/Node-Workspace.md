@@ -342,7 +342,10 @@ one layout per fold step; the canvas worker eases cards, cables and plugs betwee
 steps at display rate, so motion needs no per-frame React or scene work. Moving
 views keep full resolution and every detail. Node cards and repeated plug shapes
 are cached as bitmaps at or above the current pixel scale and redrawn only when
-their content or zoom level changes; cables are stroked in shared batches, and
+their content changes or the zoom needs a sharper bitmap; overview levels keep
+zoom-in headroom and zooming out reuses a card bitmap for up to one octave, so a
+fast wheel zoom does not re-rasterize every card. While a wheel zoom animates,
+invisible DOM hit targets keep their membership and update once it settles; cables are stroked in shared batches, and
 far overviews draw them slightly thinner. Card hit targets return in small
 batches after a fold. In canvas mode, cable hover, click and context menu use a
 geometry index instead of per-cable DOM paths: the segment between two pointer
@@ -453,8 +456,12 @@ stage produces no output retries with exponential backoff and rests
 after three misses until the playhead, an edit or the graph changes, so an
 unrenderable stage cannot keep the paused render loop awake. Continuous
 playback accepts bounded asynchronous latency; edits and seeks discard obsolete
-results. Pan and zoom reuse existing atlas pixels; zoom alone does not request new
-paused frames. The next content update uses the current preview resolution.
+results. Pan and zoom reuse existing atlas pixels. Previews that scroll out of
+view keep their completed or miss state, so moving them back into view neither
+re-renders cached pixels nor restarts their retry budget; only images the atlas
+evicted for capacity are requested again. Zooming into a higher resolution tier
+(half-octave steps up to 256 px) re-renders a paused viewer once at that size;
+zooming out keeps the sharper image.
 These are bounded preview costs;
 expensive processing in the editor's main render path still affects frame time.
 

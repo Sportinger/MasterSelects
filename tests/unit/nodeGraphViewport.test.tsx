@@ -1,6 +1,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useNodeGraphViewport } from '../../src/components/panels/nodes/canvas/useNodeGraphViewport';
+import { useNodeDomViewport } from '../../src/components/panels/nodes/canvas/useNodeDomViewport';
 import { DEFAULT_VIEWPORT, MAX_ZOOM, MIN_ZOOM } from '../../src/components/panels/nodes/canvas/canvasGeometry';
 import type { Viewport } from '../../src/components/panels/nodes/canvas/canvasGeometry';
 
@@ -60,6 +61,29 @@ function point(view: Viewport, x = 300, y = 200) {
 }
 
 describe('node graph wheel zoom', () => {
+  it('keeps DOM hit-target membership while a wheel zoom animates and refreshes it once settled', () => {
+    const canvas = document.createElement('div');
+    Object.defineProperty(canvas, 'clientWidth', { value: 800 });
+    Object.defineProperty(canvas, 'clientHeight', { value: 600 });
+    canvas.getBoundingClientRect = () => ({ left: 100, top: 50, width: 800, height: 600 }) as DOMRect;
+    const ref = { current: canvas };
+    const hook = renderHook(() => {
+      const graph = useNodeGraphViewport(ref);
+      return { ...graph, dom: useNodeDomViewport(ref, graph.viewport, false, false, graph.zoomingRef) };
+    });
+    const before = hook.result.current.dom;
+    expect(before).not.toBeNull();
+    act(() => { canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: -600, clientX: 400, clientY: 250, bubbles: true, cancelable: true })); });
+    tick(); tick();
+    expect(hook.result.current.viewport.zoom).toBeGreaterThan(DEFAULT_VIEWPORT.zoom);
+    expect(hook.result.current.zoomingRef.current).toBe(true);
+    expect(hook.result.current.dom).toBe(before);
+    settle();
+    expect(hook.result.current.zoomingRef.current).toBe(false);
+    expect(hook.result.current.dom).not.toBe(before);
+    expect(hook.result.current.dom!.right - hook.result.current.dom!.left).toBeLessThan(before!.right - before!.left);
+  });
+
   it('smooths a wheel notch across frames while keeping the cursor point fixed', () => {
     const view = setup();
     const anchor = point(view.result.current.viewport);

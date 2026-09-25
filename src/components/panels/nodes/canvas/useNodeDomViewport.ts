@@ -3,7 +3,8 @@ import type { NodeBounds, Viewport } from './canvasGeometry';
 import { retainNodeDomViewport } from './nodeDomVisibility';
 
 /** Measure only on resize, never force a layout read on every pan frame. */
-export function useNodeDomViewport(ref: RefObject<HTMLDivElement | null>, viewport: Viewport, interacting: boolean, frozen = false) {
+export function useNodeDomViewport(ref: RefObject<HTMLDivElement | null>, viewport: Viewport, interacting: boolean, frozen = false,
+  zooming?: RefObject<boolean>) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [focused, setFocused] = useState(false);
   const retained = useRef<NodeBounds | null>(null);
@@ -25,12 +26,13 @@ export function useNodeDomViewport(ref: RefObject<HTMLDivElement | null>, viewpo
     return () => { observer?.disconnect(); window.removeEventListener('resize', resize); document.removeEventListener('focusin', focus); document.removeEventListener('focusout', focus); };
   }, [ref]);
   // Retain pointer capture and keyboard navigation until the interaction ends.
-  // A pan owns the pointer: keep the hit-target membership until it settles, so
-  // fast or low-frame-rate pans never rebuild cards and cables on every step.
+  // A pan or wheel zoom owns the view: keep the hit-target membership until it
+  // settles, so fast or low-frame-rate pans and zooms never rebuild cards and
+  // cables on every step.
   return useMemo(() => {
     if (interacting || focused) return null;
-    if (frozen && retained.current) return retained.current;
+    if ((frozen || zooming?.current) && retained.current) return retained.current;
     retained.current = retainNodeDomViewport(retained.current, viewport, size.width, size.height);
     return retained.current;
-  }, [interacting, focused, frozen, viewport, size]);
+  }, [interacting, focused, frozen, zooming, viewport, size]);
 }

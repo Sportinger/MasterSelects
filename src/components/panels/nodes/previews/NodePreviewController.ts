@@ -34,7 +34,7 @@ function clipsContentChanged(previous: readonly TimelineClip[], next: readonly T
   return previous.length !== next.length || next.some((clip, index) => clipContentChanged(previous[index], clip));
 }
 
-interface Sink { preview: (frame: PreviewFrame) => void; readonly software: boolean; readonly previewBusy: boolean }
+interface Sink { preview: (frame: PreviewFrame) => void; readonly software: boolean; readonly previewBusy: boolean; onPreviewsEvicted?: (keys: string[]) => void }
 
 /** One clock per workspace; transport stays outside React and transfers no graph on playback. */
 export class NodePreviewController {
@@ -52,6 +52,8 @@ export class NodePreviewController {
   private revision = 0;
   private continuity = 0;
   private textKeys = new Set<string>();
+  /** Highest request width already rendered for each preview's current content. */
+  private resolved = new Map<string, { content: string; tier: number }>();
   private unsubscribe: () => void;
   private unsubscribeTracking: () => void;
   private unsubscribeValues: () => void;
@@ -62,6 +64,7 @@ export class NodePreviewController {
   private produce?: typeof import('../../../../services/nodePreview/previewSources').produceNodePreview;
   constructor(sink: Sink, host: HTMLElement) {
     this.sink = sink; this.host = host;
+    sink.onPreviewsEvicted = keys => { this.scheduler.forget(keys); this.wake(); };
     // Domain readers load after stores finish initialization; they must not pull
     // scene/media runtime owners into the editor's synchronous boot graph.
     void import('../../../../services/nodePreview/previewSources').then(sources => {
@@ -107,6 +110,8 @@ export class NodePreviewController {
     const retained = new Set(nodes.filter(node => node.preview?.enabled).map(node => node.preview!.key));
     previewTextStore.retain(this, retained);
     for (const key of this.textKeys) if (!retained.has(key)) this.textKeys.delete(key);
+    for (const key of this.resolved.keys()) if (!retained.has(key)) this.resolved.delete(key);
+    this.scheduler.retain(retained);
     this.expanded = new Map((expanded ?? nodes).map(node => [node.id, node]));
   }
   viewport(view: CanvasView) { this.view = view; this.wake(); }
@@ -123,7 +128,7 @@ export class NodePreviewController {
     }
     this.wake();
   }
-  reset() { this.textKeys.clear(); this.scheduler.invalidate(); this.wake(); }
+  reset() { this.textKeys.clear(); this.resolved.clear(); this.scheduler.invalidate(); this.wake(); }
   private wake() {
     // A retry backoff must not delay fresh content such as a seek or an edit.
     if (this.backoffTimer) { clearTimeout(this.timer); this.timer = undefined; this.backoffTimer = false; }
@@ -138,7 +143,9 @@ export class NodePreviewController {
     const state = readTimelineRuntimeState(useTimelineStore), view = this.view, requests: PreviewRequest[] = [];
     if (view && this.visible && !this.suspended && !document.hidden && !state.isExporting) {
       const fps = this.sink.software ? 3 : view.zoom < 0.45 ? 5 : 12;
-      const width = Math.max(48, Math.min(256, Math.round(164 * view.zoom * Math.min(1.5, view.ratio))));
+      // Half-octave buckets: a new tier re-renders at most ~1.4x the needed pixels.
+      const needed = 164 * view.zoom * Math.min(1.5, view.ratio);
+      const width = Math.max(48, Math.min(256, Math.ceil(2 ** (Math.ceil(Math.log2(Math.max(1, needed)) * 2) / 2))));
       for (const node of this.nodes) {
         if (!node.preview?.enabled) continue;
         const rect = previewRect(getNodeHeight(node), node);
@@ -149,12 +156,18 @@ export class NodePreviewController {
         const endpoint = port?.metadata?.groupEndpoint, inner = endpoint && this.expanded.get(endpoint.nodeId);
         const tiny = rect.width * view.zoom < 32 && node.id !== this.selected;
         const numeric = inlineNumericPorts(node) || this.textKeys.has(node.preview.key);
-        // Zoom changes presentation, not content. Keep paused images and values
-        // cached; the next content update uses the latest requested resolution.
-        // Thumbnails too small to read hold their frame instead of re-rendering per seek.
-        requests.push({ key: node.preview.key, revision: `${this.revision}:${tiny ? 'held' : state.isPlaying ? Math.floor(state.playheadPosition * fps) : state.playheadPosition}`,
+        // Thumbnails too small to read hold their last frame instead of re-rendering
+        // per seek, and zooming across that threshold must not re-render either.
+        const resolved = this.resolved.get(node.preview.key);
+        const held = tiny && resolved?.content.startsWith(`${this.revision}:`) ? resolved.content : undefined;
+        const content = held ?? `${this.revision}:${tiny ? 'held' : state.isPlaying ? Math.floor(state.playheadPosition * fps) : state.playheadPosition}`;
+        // Zooming out keeps the sharper cached image; zooming into a higher
+        // resolution tier re-renders once instead of magnifying overview pixels.
+        const tier = numeric ? width : Math.max(width, resolved?.content === content ? resolved.tier : 0);
+        this.resolved.set(node.preview.key, { content, tier });
+        requests.push({ key: node.preview.key, revision: numeric ? content : `${content}@${tier}`,
           continuity: `${this.revision}:${this.continuity}`,
-          clipId: this.clipId, node: inner ? { ...inner, preview: node.preview } : node, port: inner ? previewOutput(inner, endpoint?.portId) : port, time: state.playheadPosition, width, height: Math.max(1, Math.min(256, Math.round(width / (node.preview.aspectRatio ?? 16 / 9)))),
+          clipId: this.clipId, node: inner ? { ...inner, preview: node.preview } : node, port: inner ? previewOutput(inner, endpoint?.portId) : port, time: state.playheadPosition, width: tier, height: Math.max(1, Math.min(256, Math.round(tier / (node.preview.aspectRatio ?? 16 / 9)))),
           numeric, interval: numeric ? 16 : 1000 / fps, priority: node.id === this.selected ? 2 : 0 });
       }
     }
@@ -173,5 +186,5 @@ export class NodePreviewController {
       this.timer = setTimeout(() => this.tick(), delay);
     }
   }
-  dispose() { this.disposed = true; clearTimeout(this.timer); this.unsubscribe(); this.unsubscribeTracking(); this.unsubscribeValues(); this.scheduler.dispose(); this.artifacts.dispose(); nodePreviewTextureTap.cancelClip(this.clipId); nodeScalarSampleTap.cancelClip(this.clipId); scalarPreviewSamples.cancelClip(this.clipId); previewTextStore.retain(this, new Set()); }
+  dispose() { this.sink.onPreviewsEvicted = undefined; this.disposed = true; clearTimeout(this.timer); this.unsubscribe(); this.unsubscribeTracking(); this.unsubscribeValues(); this.scheduler.dispose(); this.artifacts.dispose(); nodePreviewTextureTap.cancelClip(this.clipId); nodeScalarSampleTap.cancelClip(this.clipId); scalarPreviewSamples.cancelClip(this.clipId); previewTextStore.retain(this, new Set()); }
 }

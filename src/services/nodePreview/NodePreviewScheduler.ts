@@ -61,9 +61,9 @@ export class NodePreviewScheduler {
       else next.set(request.key, { ...request, width: Math.max(previous.width, request.width), height: Math.max(previous.height, request.height), priority: Math.max(previous.priority, request.priority) });
     }
     this.requests = next;
-    for (const key of this.completed.keys()) if (!next.has(key)) this.completed.delete(key);
-    for (const key of this.attempted.keys()) if (!next.has(key)) this.attempted.delete(key);
-    for (const key of this.misses.keys()) if (!next.has(key)) this.misses.delete(key);
+    // Completed revisions and miss backoff outlive visibility: zooming or panning
+    // a node back into view must neither re-render pixels the painter still holds
+    // nor restart the retry budget of an unrenderable stage.
     this.stats.requested = next.size;
   }
 
@@ -113,6 +113,12 @@ export class NodePreviewScheduler {
     this.stats.workMs = this.clock() - start;
   }
 
+  /** Drop state for previews that left the graph. */
+  retain(keys: ReadonlySet<string>) {
+    for (const map of [this.completed, this.attempted, this.misses]) for (const key of map.keys()) if (!keys.has(key)) map.delete(key);
+  }
+  /** The painter no longer holds these pixels; render them again when requested. */
+  forget(keys: Iterable<string>) { for (const key of keys) this.completed.delete(key); }
   invalidate() { this.completed.clear(); this.misses.clear(); this.generation++; }
   invalidateValues() { for (const request of this.requests.values()) if (request.numeric) { this.completed.delete(request.key); this.misses.delete(request.key); } }
   dispose() { this.disposed = true; this.generation++; this.requests.clear(); this.completed.clear(); this.attempted.clear(); this.misses.clear(); }

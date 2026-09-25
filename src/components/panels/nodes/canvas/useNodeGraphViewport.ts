@@ -19,11 +19,14 @@ export function useNodeGraphViewport(canvasRef: RefObject<HTMLDivElement | null>
   const currentRef = useRef(viewport);
   const targetRef = useRef<ZoomTarget | null>(null);
   const frameRef = useRef<number | null>(null);
+  // Read during render, never rendered: true while a wheel animation owns the view.
+  const zoomingRef = useRef(false);
 
   const cancelZoom = useCallback(() => {
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
     frameRef.current = null;
     targetRef.current = null;
+    zoomingRef.current = false;
   }, []);
 
   const commitViewport = useCallback((next: Viewport) => {
@@ -65,9 +68,10 @@ export function useNodeGraphViewport(canvasRef: RefObject<HTMLDivElement | null>
       const zoom = settled ? target.zoom : currentRef.current.zoom * Math.exp(
         remaining * (1 - Math.exp(-elapsed / ZOOM_SMOOTHING_MS)),
       );
+      // Clear before the final commit so that render refreshes hit targets.
+      if (settled) { targetRef.current = null; zoomingRef.current = false; }
       applyZoom(target, zoom);
-      if (settled) targetRef.current = null;
-      else frameRef.current = requestAnimationFrame(animate);
+      if (!settled) frameRef.current = requestAnimationFrame(animate);
     };
 
     const wheel = (event: WheelEvent) => {
@@ -98,6 +102,7 @@ export function useNodeGraphViewport(canvasRef: RefObject<HTMLDivElement | null>
       }
       targetRef.current = target;
       if (frameRef.current === null) {
+        zoomingRef.current = true;
         lastFrameTime = performance.now();
         frameRef.current = requestAnimationFrame(animate);
       }
@@ -114,7 +119,7 @@ export function useNodeGraphViewport(canvasRef: RefObject<HTMLDivElement | null>
     };
   }, [canvasRef, cancelZoom, commitViewport]);
 
-  return { viewport, setViewport };
+  return { viewport, setViewport, zoomingRef };
 }
 
 export function fittedNodeViewport(bounds: NodeBounds, width: number, height: number): Viewport {

@@ -17,11 +17,12 @@ export function cardSignature(node: CanvasNode): string {
 /**
  * Node cards are static while a large graph pans, folds or builds up. Each card
  * is rasterized once at or above the current pixel scale (quantized upwards in
- * half-octaves, so it is never magnified) and then only blitted. Cards that
+ * half-octaves, so it is never magnified; overview levels keep zoom-in
+ * headroom) and then only blitted. Cards that
  * would be large on screen are drawn directly instead of cached.
  */
 export class NodeCardSprites {
-  private readonly sprites = new Map<string, { key: string; canvas: OffscreenCanvas; bytes: number }>();
+  private readonly sprites = new Map<string, { signature: string; level: number; canvas: OffscreenCanvas; bytes: number }>();
   private bytes = 0;
   private themeKey = '';
 
@@ -30,12 +31,15 @@ export class NodeCardSprites {
     // Every view message carries a fresh theme object; only its values matter.
     const themeKey = `${theme.background}|${theme.card}|${theme.text}|${theme.muted}|${theme.border}|${theme.accent}`;
     if (themeKey !== this.themeKey) { this.clear(); this.themeKey = themeKey; }
-    const level = 2 ** (Math.ceil(Math.log2(pixelScale) * 2) / 2);
+    const needed = 2 ** (Math.ceil(Math.log2(pixelScale) * 2) / 2);
+    // Overview sprites are tiny; rasterize them with zoom-in headroom so a fast
+    // wheel zoom does not re-rasterize every card at each half-octave.
+    const level = needed * (needed <= 0.125 ? 4 : needed < 0.5 ? 2 : 1);
     const width = Math.ceil((node.width + CARD_SPRITE_PAD * 2) * level), height = Math.ceil((node.height + CARD_SPRITE_PAD * 2) * level);
     if (Math.max(width, height) > MAX_SPRITE_EDGE) return undefined;
-    const key = `${level}|${signature}`;
     const cached = this.sprites.get(node.id);
-    if (cached?.key === key) {
+    // Zooming out reuses a sharper sprite for up to one octave (or its headroom).
+    if (cached?.signature === signature && cached.level >= needed && cached.level <= Math.max(needed * 2, level)) {
       this.sprites.delete(node.id); this.sprites.set(node.id, cached);
       return cached.canvas;
     }
@@ -50,7 +54,7 @@ export class NodeCardSprites {
     ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.textBaseline = 'alphabetic';
     paint(ctx, node, theme);
     const bytes = width * height * 4;
-    this.sprites.set(node.id, { key, canvas, bytes }); this.bytes += bytes;
+    this.sprites.set(node.id, { signature, level, canvas, bytes }); this.bytes += bytes;
     while (this.bytes > SPRITE_BUDGET_BYTES && this.sprites.size > 1) {
       const [id, oldest] = this.sprites.entries().next().value!;
       this.sprites.delete(id); this.bytes -= oldest.bytes;
@@ -78,7 +82,7 @@ export class NodeCardSprites {
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     paint(ctx);
     const bytes = width * height * 4;
-    this.sprites.set(id, { key: id, canvas, bytes }); this.bytes += bytes;
+    this.sprites.set(id, { signature: key, level, canvas, bytes }); this.bytes += bytes;
     return { canvas, level };
   }
 
