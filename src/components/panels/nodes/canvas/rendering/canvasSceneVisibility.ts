@@ -69,12 +69,14 @@ export class CanvasSceneVisibility {
   private readonly cables: RectIndex<CanvasCable>;
   private readonly groups: RectIndex<CanvasScene['groups'][number]>;
   private readonly plugs: RectIndex<CanvasPlug>;
+  private readonly branches: CanvasScene['branches'];
 
   constructor(scene: CanvasScene) {
     this.nodes = new RectIndex(scene.nodes, node => node);
     this.cables = new RectIndex(scene.cables, cableBounds);
     this.groups = new RectIndex(scene.groups, group => group);
     this.plugs = new RectIndex(scene.plugs, plugBounds);
+    this.branches = scene.branches;
   }
 
   visible(view: CanvasView, margin = 30): CanvasScene {
@@ -84,6 +86,7 @@ export class CanvasSceneVisibility {
     const zoom = view.zoom;
     const rect = { x: (-view.panX - margin) / zoom, y: (-view.panY - margin) / zoom,
       width: (view.width + margin * 2) / zoom, height: (view.height + margin * 2) / zoom };
-    return { nodes: this.nodes.query(rect), cables: this.cables.query(rect), groups: this.groups.query(rect), plugs: this.plugs.query(rect) };
+    return { nodes: this.nodes.query(rect), cables: this.cables.query(rect), groups: this.groups.query(rect), plugs: this.plugs.query(rect),
+      ...(this.branches ? { branches: this.branches } : {}) };
   }
 }

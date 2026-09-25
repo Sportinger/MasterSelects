@@ -27,6 +27,10 @@ import type {
 import { NodeGraphEdges } from './canvas/NodeGraphEdges';
 import { NodeGraphNodeCard } from './canvas/NodeGraphNodeCard';
 import { NodeCableStyleButton } from './canvas/NodeCableStyleButton';
+import { resolveCableBranches, routeCables } from './canvas/cableBranches';
+import { useNodeCableBranches } from './canvas/useNodeCableBranches';
+import { NodeGraphBranchHandles } from './canvas/NodeGraphBranchHandles';
+import { NodeCableMenu } from './canvas/NodeCableMenu';
 import type { NodeGraphPoint, Viewport } from './canvas/canvasGeometry';
 import { fittedNodeViewport, useNodeGraphViewport } from './canvas/useNodeGraphViewport';
 import { useNodeFoldViewport } from './canvas/useNodeFoldViewport';
@@ -174,7 +178,7 @@ export function NodeGraphCanvas({
   const multiSelection = useMemo(() => new Set(selectedNodeIds ?? []), [selectedNodeIds]);
   const soleSelectionRef = useRef<string | null>(null); soleSelectionRef.current = multiSelection.size > 1 ? null : selectedNodeId;
 
-  const { nodes: spacedNodes, placement, commit: commitPlacement, toggleLock, arrange, reset: resetPlacement } = useNodeCanvasPlacement(targetGraph, layoutScaleX);
+  const { nodes: spacedNodes, placement, commit: commitPlacement, setBranches, toggleLock, arrange, reset: resetPlacement } = useNodeCanvasPlacement(targetGraph, layoutScaleX);
   const targetNodes = useMemo(() => (
     spacedNodes.map((node) => !draftLayouts[node.id] ? node : ({
       ...node,
@@ -200,19 +204,19 @@ export function NodeGraphCanvas({
     const node = nodesByIdRef.current.get(nodeId);
     if (node) selectOutput(nodePreviewPreferenceKey(sourceGraph.owner.id, node), portId);
   }, [sourceGraph.owner.id, selectOutput]);
-  const plugs = useMemo(() => getConnectionPlugs(graph.edges, nodesById), [graph.edges, nodesById]);
+  const resolvedBranches = useMemo(() => resolveCableBranches(graph.edges, placement.branches), [graph.edges, placement.branches]);
+  const plugs = useMemo(() => getConnectionPlugs(graph.edges, nodesById, resolvedBranches.edgeRoot), [graph.edges, nodesById, resolvedBranches]);
+  const routedCables = useMemo(() => routeCables(plugs, resolvedBranches), [plugs, resolvedBranches]);
   const { hoveredPort, hoveredEdgeId, portHoverEvents } = useNodePortHover(nodesById);
   const graphBounds = useMemo(() => {
     const bounds = annotatedGraphBounds(graph, displayNodes, freezeGroupFrames ? undefined : groupBounds);
-    for (const { tip } of plugs) {
-      bounds.left = Math.min(bounds.left, tip.x - 10);
-      bounds.right = Math.max(bounds.right, tip.x + 10);
+    for (const { tip } of plugs) { bounds.left = Math.min(bounds.left, tip.x - 10); bounds.right = Math.max(bounds.right, tip.x + 10); }
+    for (const { x, y } of resolvedBranches.live.values()) {
+      bounds.left = Math.min(bounds.left, x - 20); bounds.right = Math.max(bounds.right, x + 30); bounds.top = Math.min(bounds.top, y - 20); bounds.bottom = Math.max(bounds.bottom, y + 20);
     }
     return bounds;
-  }, [displayNodes, graph, plugs, groupBounds, freezeGroupFrames]);
-  const selectedEdge = useMemo(() => (
-    selectedEdgeId ? graph.edges.find((edge) => edge.id === selectedEdgeId) ?? null : null
-  ), [graph.edges, selectedEdgeId]);
+  }, [displayNodes, graph, plugs, groupBounds, freezeGroupFrames, resolvedBranches]);
+  const selectedEdge = useMemo(() => (selectedEdgeId ? graph.edges.find((edge) => edge.id === selectedEdgeId) ?? null : null), [graph.edges, selectedEdgeId]);
 
   const gridStyle = useMemo(() => ({
     // Move a cached sibling layer; inherited variables invalidate every node style.
@@ -257,28 +261,23 @@ export function NodeGraphCanvas({
   }, [foldViewport.forget, resetPlacement, targetGraph, fitBounds]);
 
   const getGraphPointFromClient = useCallback((clientX: number, clientY: number): NodeGraphPoint => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) {
-      return { x: 0, y: 0 };
-    }
-
-    const visual = visualViewportRef.current;
-    return {
-      x: (clientX - rect.left - visual.panX) / visual.zoom,
-      y: (clientY - rect.top - visual.panY) / visual.zoom,
-    };
+    const rect = canvasRef.current?.getBoundingClientRect(), visual = visualViewportRef.current;
+    return rect ? { x: (clientX - rect.left - visual.panX) / visual.zoom, y: (clientY - rect.top - visual.panY) / visual.zoom } : { x: 0, y: 0 };
   }, []);
+  const dragChannel = useRef<((drag: CanvasNodeDrag | null) => boolean) | null>(null); // card drags repaint in the worker, not React
+  const branchUi = useNodeCableBranches({ branches: placement.branches, resolved: resolvedBranches, cables: routedCables, commit: setBranches,
+    getGraphPoint: getGraphPointFromClient, dragChannel, canvas: canvasRef, onConnectPorts });
 
   const nodeMarquee = useNodeMarqueeSelection({
     nodes: displayNodes,
     viewport,
     getGraphPoint: getGraphPointFromClient,
-    onSelectNodes,
+    onSelectNodes, onSelectRect: branchUi.selectInRect,
   });
 
-  const { connectionDraft, startConnectionDrag, startPlugDrag, moveConnectionDrag, finishConnectionDrag, cancelConnectionDrag, suppressConnectionContextMenu } = useNodeConnectionDrag({
+  const { connectionDraft, startConnectionDrag, startPlugDrag, startBranchDrag, moveConnectionDrag, finishConnectionDrag, cancelConnectionDrag, suppressConnectionContextMenu } = useNodeConnectionDrag({
     graphId: graph.id, canvasRef, nodesById, edges: graph.edges, getGraphPoint: getGraphPointFromClient,
-    onConnectPorts, onReconnectPorts, onDisconnectEdge, onDropConnection,
+    onConnectPorts, onReconnectPorts, onDisconnectEdge, onDropConnection, onConnectBranch: branchUi.connect,
   });
   const domViewport = useNodeDomViewport(canvasRef, viewport, !!nodeGesture || !!connectionDraft, isPanning, zoomingRef);
   const dom = useNodeDomVisibility(displayNodes, plugs, domViewport);
@@ -288,8 +287,7 @@ export function NodeGraphCanvas({
   const mountedNodes = canvasRendered ? dom.nodes.slice(0, mountedNodeCount) : dom.nodes;
   const cablesReady = useDeferredValue(hitTargetsActive);
   const hoverChannel = useRef<((edgeId: string | null) => void) | null>(null); // canvas-mode cable hits from a geometry index
-  const dragChannel = useRef<((drag: CanvasNodeDrag | null) => boolean) | null>(null); // card drags repaint in the worker, not React
-  const edgeHits = useCanvasEdgeHits({ enabled: canvasRendered && !animating, plugs, canvas: canvasRef, visual: visualViewportRef, getGraphPoint: getGraphPointFromClient, hover: hoverChannel });
+  const edgeHits = useCanvasEdgeHits({ enabled: canvasRendered && !animating, cables: routedCables, canvas: canvasRef, visual: visualViewportRef, getGraphPoint: getGraphPointFromClient, hover: hoverChannel });
 
   const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (nodeMarquee.start(event)) return;
@@ -592,6 +590,9 @@ export function NodeGraphCanvas({
         onContextMenuCapture={event => {
           if (suppressConnectionContextMenu()) { event.preventDefault(); event.stopPropagation(); }
         }}
+        onDoubleClick={event => {
+          if (!(event.target as Element).closest('.node-workspace-node, .node-workspace-group, .node-workspace-plug')) branchUi.insertAt(edgeHits.at(event.clientX, event.clientY), getGraphPointFromClient(event.clientX, event.clientY));
+        }}
         onKeyDownCapture={event => {
           if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
           const port = (event.target as Element).closest<HTMLElement>('.node-workspace-port');
@@ -608,7 +609,7 @@ export function NodeGraphCanvas({
             return;
           }
           const cable = !(event.target as Element).closest('.node-workspace-node, .node-workspace-plug') ? edgeHits.at(event.clientX, event.clientY) : null;
-          if (cable) { if (!graph.edges.find(edge => edge.id === cable)?.readOnly) onDisconnectEdge?.(cable); setSelectedEdgeId(null); return; }
+          if (cable) { branchUi.openMenu(cable, event.clientX, event.clientY); return; }
           const targetNode = (event.target as Element).closest('.node-workspace-node') as HTMLElement | null;
           const targetNodeId = targetNode?.dataset.nodeId ?? null;
           if (targetNodeId && !multiSelection.has(targetNodeId)) {
@@ -629,7 +630,8 @@ export function NodeGraphCanvas({
         <NodeGraphCanvasSurface graph={graph} nodes={displayNodes} glideMs={glideMs} hoverRef={hoverChannel} dragRef={dragChannel} groupFrameNodes={groupFrameNodes} groupBounds={groupBounds} plugs={plugs} viewport={viewport} previewsSuspended={animating}
           surfaceRef={canvasSurfaceRef} backgroundRef={canvasBackgroundRef} onViewRendered={handleViewRendered}
           selectedNodeId={selectedNodeId} selection={multiSelection} selectedEdgeId={selectedEdgeId}
-          hoveredEdgeId={hoveredEdgeId} hoveredPort={hoveredPort} draft={connectionDraft} canBypass={!!onToggleNodeBypass} onReady={setCanvasRendered} />
+          hoveredEdgeId={hoveredEdgeId} hoveredPort={hoveredPort} draft={connectionDraft} canBypass={!!onToggleNodeBypass} onReady={setCanvasRendered}
+          cables={routedCables} edgeRoots={resolvedBranches.edgeRoot} branches={branchUi.sceneBranches} />
         {nodeMarquee.marquee && <div className="node-workspace-marquee" style={nodeMarquee.marquee} aria-hidden="true" />}
         <div
           ref={canvasInnerRef}
@@ -687,8 +689,11 @@ export function NodeGraphCanvas({
             />
           ))}
           </>}
+          {canvasRendered && <NodeGraphBranchHandles {...branchUi.handles} zoom={viewport.zoom} onStartConnection={startBranchDrag} />}
         </div>
       </div>
+      {branchUi.menu && <NodeCableMenu menu={branchUi.menu} onClose={branchUi.closeMenu} onAddBranch={branchUi.insertAt} onRemoveBranch={id => branchUi.remove([id])}
+        onDisconnect={onDisconnectEdge && (id => { onDisconnectEdge(id); setSelectedEdgeId(null); })} />}
     </div>
   </Profiler>);
 }

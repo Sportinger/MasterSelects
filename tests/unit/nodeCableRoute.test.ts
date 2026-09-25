@@ -40,8 +40,8 @@ describe('worker node drag overrides', () => {
   const scene: CanvasScene = {
     nodes: [{ id: 'a', x: 0, y: 0 } as CanvasScene['nodes'][number], { id: 'b', x: 500, y: 0 } as CanvasScene['nodes'][number]],
     cables: [{ id: 'e', fromNode: 'a', toNode: 'b', from: { x: 184, y: 40 }, to: { x: 500, y: 40 }, color: '#fff', highlighted: false }],
-    plugs: [{ id: 'e:output', center: { x: 180, y: 40 }, tip: { x: 184, y: 40 }, input: false, color: '#fff', highlighted: false },
-      { id: 'e:input', center: { x: 504, y: 40 }, tip: { x: 500, y: 40 }, input: true, color: '#fff', highlighted: false }],
+    plugs: [{ id: 'e:output', nodeId: 'a', center: { x: 180, y: 40 }, tip: { x: 184, y: 40 }, input: false, color: '#fff', highlighted: false },
+      { id: 'e:input', nodeId: 'b', center: { x: 504, y: 40 }, tip: { x: 500, y: 40 }, input: true, color: '#fff', highlighted: false }],
     groups: [],
   };
 

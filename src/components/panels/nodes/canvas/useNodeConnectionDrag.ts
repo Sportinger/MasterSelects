@@ -14,9 +14,11 @@ interface Options {
   onReconnectPorts?: (edgeId: string, connection: NodeGraphConnectionRequest) => void;
   onDisconnectEdge?: (edgeId: string) => void;
   onDropConnection?: (drop: NodeConnectionDrop) => void;
+  /** A cable dragged out of a branch point: connect it and route it through that point. */
+  onConnectBranch?: (branchId: string, connection: NodeGraphConnectionRequest) => void;
 }
 
-export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, edges, getGraphPoint, onConnectPorts, onReconnectPorts, onDisconnectEdge, onDropConnection }: Options) {
+export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, edges, getGraphPoint, onConnectPorts, onReconnectPorts, onDisconnectEdge, onDropConnection, onConnectBranch }: Options) {
   const [connectionDraft, setDraft] = useState<ConnectionDraft | null>(null);
   const currentDraft = useRef(connectionDraft);
   const suppressContextUntil = useRef(0);
@@ -36,14 +38,14 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, edges, ge
     // Cancel capture when switching graphs or unmounting, without mutating the graph.
   }, [cancel, graphId]);
 
-  const start = useCallback((event: ReactPointerEvent, node: NodeGraphNode, port: NodeGraphPort, plug?: ConnectionPlug) => {
+  const start = useCallback((event: ReactPointerEvent, node: NodeGraphNode, port: NodeGraphPort, plug?: ConnectionPlug, branch?: { id: string; point: NodeGraphPoint }) => {
     if (port.metadata?.readOnly || plug?.edge.readOnly) { event.preventDefault(); event.stopPropagation(); return; }
     if ((event.button !== 0 && !(event.button === 2 && !plug && onDropConnection)) || currentDraft.current) return;
     event.preventDefault(); event.stopPropagation();
     (event.currentTarget as HTMLElement | SVGElement).blur();
     canvasRef.current?.focus({ preventScroll: true });
     update({ ...createPortReference(node.id, port), pointerId: event.pointerId,
-      start: getPortCenter(node, port.id, port.direction), end: getGraphPoint(event.clientX, event.clientY),
+      start: branch?.point ?? getPortCenter(node, port.id, port.direction), end: getGraphPoint(event.clientX, event.clientY), branchId: branch?.id,
       originClient: { x: event.clientX, y: event.clientY }, moved: false,
       reconnectEdgeId: plug?.edge.id,
       createOnDrop: event.button === 2,
@@ -53,6 +55,10 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, edges, ge
   const startConnectionDrag = useCallback((event: ReactPointerEvent, node: NodeGraphNode, port: NodeGraphPort) => {
     if (onConnectPorts) start(event, node, port);
   }, [onConnectPorts, start]);
+  const startBranchDrag = (event: ReactPointerEvent, branch: { id: string; nodeId: string; portId: string; point: NodeGraphPoint }) => {
+    const node = nodesById.get(branch.nodeId), port = node?.outputs.find(item => item.id === branch.portId);
+    if (node && port && onConnectBranch) start(event, node, port, undefined, { id: branch.id, point: branch.point });
+  };
   const startPlugDrag = (event: ReactPointerEvent, plug: ConnectionPlug) => {
     if (!onDisconnectEdge) return;
     const input = plug.port.direction === 'input';
@@ -97,6 +103,7 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, edges, ge
         ? { fromNodeId: draft.nodeId, fromPortId: draft.portId, toNodeId: port.nodeId, toPortId: port.portId }
         : { fromNodeId: port.nodeId, fromPortId: port.portId, toNodeId: draft.nodeId, toPortId: draft.portId };
       if (draft.reconnectEdgeId) onReconnectPorts?.(draft.reconnectEdgeId, connection);
+      else if (draft.branchId && onConnectBranch) onConnectBranch(draft.branchId, connection);
       else onConnectPorts?.(connection);
     } else if (draft.createOnDrop && target && canvasRef.current?.contains(target)
       && ((!draft.moved && port?.nodeId === draft.nodeId && port.portId === draft.portId)
@@ -114,12 +121,13 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, edges, ge
   };
   // Stable event entry points let cards/plugs skip renders during viewport motion,
   // while the gesture always reads the latest ports, callbacks and coordinates.
-  const handlers = { startConnectionDrag, startPlugDrag, moveConnectionDrag, finishConnectionDrag, cancelConnectionDrag };
+  const handlers = { startConnectionDrag, startPlugDrag, startBranchDrag, moveConnectionDrag, finishConnectionDrag, cancelConnectionDrag };
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
   const stableHandlers = useMemo(() => ({
     startConnectionDrag: (...args: Parameters<typeof startConnectionDrag>) => handlersRef.current.startConnectionDrag(...args),
     startPlugDrag: (...args: Parameters<typeof startPlugDrag>) => handlersRef.current.startPlugDrag(...args),
+    startBranchDrag: (...args: Parameters<typeof startBranchDrag>) => handlersRef.current.startBranchDrag(...args),
     moveConnectionDrag: (...args: Parameters<typeof moveConnectionDrag>) => handlersRef.current.moveConnectionDrag(...args),
     finishConnectionDrag: (...args: Parameters<typeof finishConnectionDrag>) => handlersRef.current.finishConnectionDrag(...args),
     cancelConnectionDrag: (...args: Parameters<typeof cancelConnectionDrag>) => handlersRef.current.cancelConnectionDrag(...args),

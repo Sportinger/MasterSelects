@@ -273,7 +273,21 @@ export interface ClipCustomNodeDefinition {
 export type ClipNodeGraphForcedBuiltIn = 'transform' | 'mask' | 'color';
 
 /** Presentation coordinates, independent of executable domain layouts. */
+/** Presentation-only cable branch point: every connection still runs output → input. */
+export interface NodeCableBranch {
+  nodeId: string;
+  portId: string;
+  /** Branch point this one continues from; otherwise the output socket. */
+  parentId?: string;
+  x: number;
+  y: number;
+  /** Input sockets whose cables leave from this point. */
+  targets: Array<{ nodeId: string; portId: string }>;
+}
+
 export interface NodeCanvasPlacement {
+  /** Cable branch points, keyed by id. Layout data: never read by rendering or export. */
+  branches?: Record<string, NodeCableBranch>;
   /** Outer flow chains have been compacted, including legacy saved anchors. */
   flowLayoutVersion?: 1;
   nodes: Record<string, NodeGraphLayout>;

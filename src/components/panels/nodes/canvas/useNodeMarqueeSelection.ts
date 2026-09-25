@@ -44,9 +44,11 @@ interface Options {
   viewport: Viewport;
   getGraphPoint: (clientX: number, clientY: number) => { x: number; y: number };
   onSelectNodes?: (nodeIds: string[]) => void;
+  /** The marquee in graph units, for selectable items that are not cards. */
+  onSelectRect?: (rect: NodeMarqueeRect) => void;
 }
 
-export function useNodeMarqueeSelection({ nodes, viewport, getGraphPoint, onSelectNodes }: Options) {
+export function useNodeMarqueeSelection({ nodes, viewport, getGraphPoint, onSelectNodes, onSelectRect }: Options) {
   const gestureRef = useRef<Gesture | null>(null);
   const suppressContextMenuRef = useRef(false);
   const [marquee, setMarquee] = useState<NodeMarqueeRect | null>(null);
@@ -74,6 +76,7 @@ export function useNodeMarqueeSelection({ nodes, viewport, getGraphPoint, onSele
     const endPoint = getGraphPoint(event.clientX, event.clientY);
     const graphRect = normalizedNodeMarquee(startPoint.x, startPoint.y, endPoint.x, endPoint.y);
     onSelectNodes?.(nodesIntersectingMarquee(nodes, graphRect));
+    onSelectRect?.(graphRect);
     setMarquee(normalizedNodeMarquee(
       (startPoint.x * viewport.zoom) + viewport.panX,
       (startPoint.y * viewport.zoom) + viewport.panY,
@@ -81,7 +84,7 @@ export function useNodeMarqueeSelection({ nodes, viewport, getGraphPoint, onSele
       (endPoint.y * viewport.zoom) + viewport.panY,
     ));
     return true;
-  }, [getGraphPoint, nodes, onSelectNodes, viewport]);
+  }, [getGraphPoint, nodes, onSelectNodes, onSelectRect, viewport]);
 
   const finish = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     const gesture = gestureRef.current;

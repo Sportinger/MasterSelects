@@ -85,6 +85,8 @@ export interface ConnectionDraft extends PortReference {
   moved?: boolean;
   reconnectEdgeId?: string;
   target?: PortReference;
+  /** A new cable dragged out of this branch point; `start` is the point. */
+  branchId?: string;
 }
 
 export function clamp(value: number, min: number, max: number): number {

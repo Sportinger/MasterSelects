@@ -322,6 +322,25 @@ leave and enter horizontally and loop around their ports. Painting, flow signals
 hover and click hit testing, and culling all use the same route. The choice is
 an editor preference that persists across sessions, not project data.
 
+### Cable branch points
+
+Double-click a cable, or right-click it and choose **Add branch point here**, to
+split it at that position. One trunk then runs from the output to the point, and
+the connection continues from there. Drag the grip beside a point onto another
+input to add a branch; every connection leaving through one point shares a single
+output grip, so an output can fan out from any position instead of from the stack
+of grips beside its socket. Points can be split again (a double-click on a trunk
+inserts a point before the existing one) for as many levels as needed.
+Drag a point to move it; Shift-click or a right-drag marquee selects several
+points, which then move together. Double-click a point, press Delete, or use
+**Remove branch point** in its context menu to remove it: its cables continue from
+the previous point or the output. Right-clicking a cable also offers
+**Disconnect**. Branch points are presentation only: every connection still runs
+output to input, so rendering, export and undo of the graph itself are unchanged.
+Points are stored with the canvas layout, participate in undo and project saves,
+and are ignored while their connections are hidden by a collapsed group. The
+accessible DOM fallback renderer draws connections without branch points.
+
 ## Canvas navigation
 
 Mouse-wheel and trackpad scrolling zoom smoothly around the pointer. Zoom is

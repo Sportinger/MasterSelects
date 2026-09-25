@@ -1,8 +1,9 @@
 import { interpolateKeyframes } from '../../../../../utils/keyframeInterpolation';
 import { cableArcLengths, canvasCableRoute, signalPosition } from './cableGeometry';
 import { cableRoutePoint, traceCableRoute } from '../cableRoute';
+import { branchMetrics } from '../cableBranches';
 import { fitCanvasLabel } from './canvasTextLayout';
-import type { CanvasCable, CanvasCurve, CanvasNode, CanvasScene, CanvasTheme, CanvasTransport, CanvasView, Rect } from './nodeCanvasTypes';
+import type { CanvasBranch, CanvasCable, CanvasCurve, CanvasNode, CanvasScene, CanvasTheme, CanvasTransport, CanvasView, Rect } from './nodeCanvasTypes';
 import { CARD_SPRITE_PAD } from './nodeCardSprites';
 import { pointBehindGroup, subtractOccludedRects } from '../edgeGroupOcclusion';
 
@@ -171,6 +172,20 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
     else drawPlug(ctx, offset, plug.color, plug.highlighted, theme);
     ctx.restore();
   }
+  const { radius, grip } = branchMetrics(view.zoom);
+  for (const branch of scene.branches ?? []) if (inView({ x: branch.x - radius, y: branch.y - radius, width: grip + radius * 2, height: radius * 2 }, view)) {
+    drawBranchPoint(ctx, branch, theme, radius, grip, view.zoom);
+  }
+}
+
+function drawBranchPoint(ctx: DrawContext, branch: CanvasBranch, theme: CanvasTheme, radius: number, grip: number, zoom: number) {
+  const unit = Math.max(1, 1 / zoom), tab = { width: 4 * unit + 4, height: 3 * unit + 3 };
+  ctx.globalAlpha = 1; ctx.lineWidth = 2 * unit; ctx.strokeStyle = branch.color;
+  ctx.beginPath(); ctx.moveTo(branch.x + radius, branch.y); ctx.lineTo(branch.x + grip - tab.width / 2, branch.y); ctx.stroke();
+  box(ctx, branch.x + grip - tab.width, branch.y - tab.height / 2, tab.width, tab.height, unit * 2); ctx.fillStyle = theme.background; ctx.fill(); ctx.lineWidth = unit; ctx.stroke();
+  ctx.beginPath(); ctx.arc(branch.x, branch.y, radius - unit, 0, Math.PI * 2);
+  ctx.fillStyle = branch.selected ? theme.accent : branch.color; ctx.fill();
+  ctx.lineWidth = 2 * unit; ctx.strokeStyle = branch.selected ? theme.text : theme.background; ctx.stroke();
 }
 
 function paintHoveredEdge(ctx: DrawContext, scene: CanvasScene, edgeId: string, view: CanvasView, theme: CanvasTheme) {

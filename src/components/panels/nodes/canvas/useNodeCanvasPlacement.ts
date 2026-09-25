@@ -39,11 +39,12 @@ export function useNodeCanvasPlacement(graph: NodeGraph, layoutScaleX: number) {
   }, [graph.id, graph.owner.id, saved]);
   const commit = useCallback((moves: Array<{ nodeId: string; layout: NodeGraphLayout }>, groupId?: string, domainCommit?: () => Record<string, string> | void) =>
     save(moveCanvasPlacement(placement, moves, groupId), groupId ? 'Move node group' : 'Move nodes', domainCommit), [placement, save]);
+  const setBranches = useCallback((branches: NonNullable<NodeCanvasPlacement['branches']>, label: string) => save({ ...placement, branches }, label), [placement, save]);
   const toggleLock = useCallback((id: string) => {
     const group = placement.groups[id];
     if (group) save({ ...placement, groups: { ...placement.groups, [id]: { ...group, locked: group.locked === false } } }, 'Toggle group lock');
   }, [placement, save]);
   const arrange = useCallback(() => save(arrangeFlowPlacement(graph, placement), 'Arrange effect nodes'), [graph, placement, save]);
   const reset = useCallback(() => { const next = resetCanvasPlacement(graph); save(next, 'Reset node layout'); return next; }, [graph, save]);
-  return { nodes, placement, commit, toggleLock, arrange, reset };
+  return { nodes, placement, commit, setBranches, toggleLock, arrange, reset };
 }

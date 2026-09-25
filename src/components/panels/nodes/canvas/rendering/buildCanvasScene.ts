@@ -10,8 +10,9 @@ import { keyframesForProperty } from '../../../../../utils/keyframePropertyIndex
 import { getNodeBadges, getNodeHeight, getNodePortStartY, getPortCenter, isNodeBypassable, isNodeBypassed, NODE_WIDTH, type ConnectionDraft, type NodeBounds } from '../canvasGeometry';
 import { nodeGroupBounds } from '../groupBounds';
 import type { ConnectionPlug } from '../connectionPlugs';
+import type { RoutedCable } from '../cableBranches';
 import type { HoveredNodePort } from '../useNodePortHover';
-import type { CanvasCurve, CanvasScene } from './nodeCanvasTypes';
+import type { CanvasBranch, CanvasCurve, CanvasScene } from './nodeCanvasTypes';
 import { makeCanvasCable } from './cableGeometry';
 import { inlineNumericPorts, isNumericValueNode, previewRect } from '../../previews/previewGeometry';
 import { previewOutput } from '../../../../../services/nodePreview/previewTypes';
@@ -29,6 +30,11 @@ interface Options {
   canBypass?: boolean;
   glideMs?: number;
   cableStyle?: NodeCableStyle;
+  /** Routed cables, including branch trunks; without them every connection runs grip to grip. */
+  cables?: RoutedCable[];
+  /** Top-level branch per edge: its connections share one output grip. */
+  edgeRoots?: ReadonlyMap<string, string>;
+  branches?: CanvasBranch[];
 }
 
 // Curves depend on clip/keyframe edits, not pan, hover, selection or playback.
@@ -86,21 +92,27 @@ export function buildCanvasScene(options: Options): CanvasScene {
       return { id: port.id, x: center.x - node.layout.x, y: center.y - node.layout.y, label: isNumericValueNode(node) ? '' : port.label, type: inlineNumericPorts(node) ? '' : info.typeLabel, color: info.color, input: port.direction === 'input',
         highlighted: hoveredPort?.node.id === node.id && hoveredPort.port.id === port.id && hoveredPort.port.direction === port.direction };
     }) }));
-  const pairs = new Map<string, { input?: ConnectionPlug; output?: ConnectionPlug }>();
+  const pairs = new Map<string, { input?: ConnectionPlug; output?: ConnectionPlug }>(), sharedGrips = new Set<string>();
   for (const plug of plugs) {
     const pair = pairs.get(plug.edge.id) ?? {};
     pair[plug.port.direction] = plug; pairs.set(plug.edge.id, pair);
     if (draft?.reconnectEdgeId === plug.edge.id && draft.moved && draft.direction !== plug.port.direction) continue;
-    scene.plugs.push({ id: `${plug.edge.id}:${plug.port.direction}`, center: plug.center, tip: plug.tip, input: plug.port.direction === 'input', color: describeNodePort(plug.port).color,
+    // Connections through one branch point draw a single output grip.
+    const root = plug.port.direction === 'output' ? options.edgeRoots?.get(plug.edge.id) : undefined;
+    if (root !== undefined) { if (sharedGrips.has(root)) continue; sharedGrips.add(root); }
+    scene.plugs.push({ id: `${plug.edge.id}:${plug.port.direction}`, nodeId: plug.node.id, center: plug.center, tip: plug.tip, input: plug.port.direction === 'input', color: describeNodePort(plug.port).color,
       highlighted: plug.edge.id === options.selectedEdgeId || plug.edge.id === options.hoveredEdgeId });
   }
-  for (const [id, pair] of pairs) {
-    if (!pair.output || !pair.input || (draft?.moved && draft.reconnectEdgeId === id)) continue;
-    scene.cables.push({ ...makeCanvasCable(pair.output.tip, pair.input.tip, describeNodePort(pair.output.port).color, id === options.selectedEdgeId || id === options.hoveredEdgeId, false, options.cableStyle), id,
-      fromNode: pair.output.edge.fromNodeId, toNode: pair.output.edge.toNodeId,
-      occlusions: occlusions(pair.output.edge),
-      baked: pair.output.edge.readOnly });
+  const routed: RoutedCable[] = options.cables ?? [...pairs].flatMap(([id, { output, input }]) => output && input
+    ? [{ id, edge: output.edge, output, from: output.tip, to: input.tip, fromNode: output.edge.fromNodeId, toNode: output.edge.toNodeId }] : []);
+  for (const cable of routed) {
+    if (draft?.moved && draft.reconnectEdgeId === cable.id) continue;
+    const highlighted = cable.id === options.selectedEdgeId || cable.id === options.hoveredEdgeId;
+    scene.cables.push({ ...makeCanvasCable(cable.from, cable.to, describeNodePort(cable.output.port).color, highlighted, false, options.cableStyle), id: cable.id,
+      fromNode: cable.fromNode, toNode: cable.toNode, fromBranch: cable.fromBranch, toBranch: cable.toBranch,
+      occlusions: cable.edge ? occlusions(cable.edge) : undefined, baked: cable.edge?.readOnly });
   }
+  if (options.branches?.length) scene.branches = options.branches;
   const preview = (nodeId: string, portId: string, direction: 'input' | 'output', ghost = false) => {
     const node = nodes.find(n => n.id === nodeId), port = (direction === 'input' ? node?.inputs : node?.outputs)?.find(p => p.id === portId);
     if (!node || !port) return null;
@@ -111,7 +123,7 @@ export function buildCanvasScene(options: Options): CanvasScene {
   };
   if (draft && (!draft.reconnectEdgeId || draft.moved)) {
     const pair = draft.reconnectEdgeId ? pairs.get(draft.reconnectEdgeId) : undefined;
-    const start = pair?.[draft.direction]?.tip ?? preview(draft.nodeId, draft.portId, draft.direction);
+    const start = draft.branchId ? draft.start : pair?.[draft.direction]?.tip ?? preview(draft.nodeId, draft.portId, draft.direction);
     const end = draft.target ? preview(draft.target.nodeId, draft.target.portId, draft.target.direction, true)
       : { x: draft.end.x + (draft.direction === 'output' ? -21 : 21), y: draft.end.y };
     const node = nodes.find(n => n.id === draft.nodeId), port = (draft.direction === 'input' ? node?.inputs : node?.outputs)?.find(p => p.id === draft.portId);
