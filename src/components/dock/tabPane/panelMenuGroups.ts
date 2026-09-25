@@ -19,6 +19,7 @@ const PANEL_MENU_GROUP_DEFINITIONS: readonly PanelMenuGroup[] = [
       'clip-properties',
       'history',
       'annotations',
+      'documents',
       'stats',
       'transitions',
     ],

@@ -91,7 +91,10 @@ export async function handleEditOperatorGraph(args: Record<string, unknown>): Pr
     let nodeId: string | undefined;
     if (action === 'add') {
       const operatorId = text(args, 'operatorId'), spec = getEffectOperator(operatorId);
-      if (!spec || !addableEffectOperators(effect.type).some(op => op.id === operatorId)) throw new Error('Operator cannot be added in this owner.');
+      if (!spec) throw new Error(`Unknown operator: ${operatorId}.`);
+      if (!addableEffectOperators(effect.type).some(op => op.id === operatorId)) {
+        throw new Error(`Operator ${operatorId} (${spec.label}) cannot be added to ${effect.type}. ${spec.description}`);
+      }
       if (args.nodeId !== undefined) {
         nodeId = text(args, 'nodeId');
         if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(nodeId) || graph.nodes.some(n => n.id === nodeId)) throw new Error('Node ID is invalid or already exists.');

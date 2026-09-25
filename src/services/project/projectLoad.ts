@@ -53,6 +53,9 @@ import {
 import { useSeedancePreproductionStore } from '../../stores/seedancePreproductionStore';
 import { parseSeedancePreproductionProjectState } from '../seedancePreproduction/contracts';
 import { useTrackingStore } from '../../stores/trackingStore';
+import { useDocumentsStore } from '../../stores/documentsStore';
+import { migrateStoryDocuments } from '../documents/migrateStoryDocuments';
+import { readDocumentsManifest } from '../documents/documentArtifacts';
 import { ensureLegacyTrackingAssets } from '../planarTracking/trackingAssets';
 import { readTimelineSelectionRecovery, restoreTimelineSelectionRecovery } from './timelineSelectionRecovery';
 
@@ -131,6 +134,9 @@ export async function loadProjectToStores(): Promise<void> {
       useTrackingStore.getState().hydrateAssets(projectData.trackingAssets ?? []);
       ensureLegacyTrackingAssets(projectData.compositions);
       hydrateStoryboardProjectState(readStoryboardProjectState(projectData).state);
+      useDocumentsStore.getState().hydrate(await readDocumentsManifest(projectData.documents) ?? migrateStoryDocuments(
+        parseSeedancePreproductionProjectState(projectData.seedancePreproduction),
+      ));
       useSeedancePreproductionStore.getState().hydrate(
         parseSeedancePreproductionProjectState(projectData.seedancePreproduction),
       );

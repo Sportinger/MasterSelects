@@ -13,12 +13,54 @@ describe('node graph text stream', () => {
   it('recognizes split markers and only emits complete records before the response ends', () => {
     const received: NodeGraphStreamRecord[] = [];
     const parser = new NodeGraphStreamParser(record => received.push(record));
-    for (const char of 'Some prose\n' + header + begin + operation.slice(0, -1)) parser.push(char);
+    for (const char of 'Some prose\n' + header + begin + operation.slice(0, -2)) parser.push(char);
     expect(received.map(r => r.op)).toEqual(['begin']);
-    parser.push('\n');
+    parser.push('}');
     expect(received.map(r => r.op)).toEqual(['begin', 'tool']);
-    parser.push('{"op":"end","lastSeq":1}\n```'); parser.finish();
+    parser.push('\n{"op":"end","lastSeq":1}\n```'); parser.finish();
     expect(received.map(r => r.op)).toEqual(['begin', 'tool', 'end']);
+  });
+  it('handles pretty JSON and escaped braces split across deltas without executing partial arguments', () => {
+    const receive = vi.fn(), parser = new NodeGraphStreamParser(receive);
+    const record = { op: 'tool', seq: 1, ref: 'node', tool: 'editOperatorGraph',
+      args: { action: 'slider', nodeId: 'value', label: 'Brace } and quote " and slash \\', min: 0, max: 1 } };
+    parser.push(header + begin);
+    const json = JSON.stringify(record, null, 2);
+    for (const char of json.slice(0, -1)) parser.push(char);
+    expect(receive).toHaveBeenCalledTimes(1);
+    parser.push('}');
+    expect(receive).toHaveBeenLastCalledWith(record);
+    expect(receive).toHaveBeenCalledTimes(2);
+    parser.push('\n{"op":"end","lastSeq":1}\r\n```\r\n');
+    parser.finish();
+  });
+  it('applies nodes, cables and rewiring before later records or the block terminator arrive', async () => {
+    const execute = vi.fn().mockResolvedValue({ success: true, data: { effectId: 'effect-1' } });
+    const controller = new FlashBoardNodeGraphStream(execute);
+    let queue = Promise.resolve();
+    const parser = new NodeGraphStreamParser(record => { queue = queue.then(() => controller.accept(record)); });
+    parser.push(header + begin);
+    const edits = [
+      { action: 'add', nodeId: 'node1', operatorId: 'values.number' },
+      { action: 'add', nodeId: 'node2', operatorId: 'math.add.scalar' },
+      { action: 'connect', fromNodeId: 'node1', fromPortId: 'value', toNodeId: 'node2', toPortId: 'a' },
+      { action: 'disconnect', edgeId: 'cable1' },
+      { action: 'move', nodeId: 'node2', position: { x: 400, y: 300 } },
+      { action: 'remove', nodeId: 'node1' },
+    ];
+    for (const [index, args] of edits.entries()) {
+      const json = JSON.stringify({ op: 'tool', seq: index + 1, ref: `step${index}`, tool: 'editOperatorGraph', args });
+      parser.push(json.slice(0, -1));
+      await queue;
+      expect(execute).toHaveBeenCalledTimes(index + 1); // begin plus prior edits only
+      parser.push('}');
+      await queue;
+      expect(execute).toHaveBeenLastCalledWith('editOperatorGraph', { ...args, clipId: 'clip-a' }, `node-stream:${index + 1}`);
+      expect(controller.completedOperations).toBe(index + 1);
+    }
+    parser.push('{"op":"end","lastSeq":6}\n```');
+    parser.finish(); await queue;
+    expect(execute).toHaveBeenCalledTimes(7);
   });
   it('ignores prose, generic code blocks and embedded stream examples', () => {
     const receive = vi.fn(); const parser = new NodeGraphStreamParser(receive);

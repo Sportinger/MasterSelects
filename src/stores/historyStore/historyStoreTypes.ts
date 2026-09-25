@@ -32,6 +32,7 @@ import type { StoryboardProjectState } from '../../services/storyboard/contracts
 import type { TrackingAsset } from '../../types/trackingAsset';
 
 export interface StateSnapshot {
+  documents?: import('../../types/documents').DocumentsProjectState;
   timestamp: number;
   label: string;
   timeline: {

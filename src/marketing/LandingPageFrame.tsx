@@ -89,6 +89,7 @@ interface LandingProjectOverviewProps {
   onOpenProject?: () => Promise<void> | void;
   onOpenRecentProject?: (projectId: string) => Promise<void> | void;
   onRemoveItem?: (item: LandingProjectMediaItem) => void;
+  onOpenItem?: (item: LandingProjectMediaItem) => void;
   onShowProjects?: () => void;
   onToggleSourceItem: (item: LandingProjectMediaItem) => void;
   openingProjectId: string | null;
@@ -110,6 +111,7 @@ export function LandingProjectOverview({
   onOpenProject,
   onOpenRecentProject,
   onRemoveItem,
+  onOpenItem,
   onShowProjects,
   onToggleSourceItem,
   openingProjectId,
@@ -139,6 +141,7 @@ export function LandingProjectOverview({
         disabled={disabled}
         items={items}
         onRemoveItem={onRemoveItem}
+        onOpenItem={onOpenItem}
         onShowProjects={onShowProjects}
         onToggleSourceItem={onToggleSourceItem}
         removingItemId={removingItemId}

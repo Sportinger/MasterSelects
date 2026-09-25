@@ -260,6 +260,33 @@ describe('hosted chat route billing actions', () => {
     expect(persistedChat).not.toContain('USER_PROMPT_SENTINEL');
   });
 
+  it('pins a review chat call to its separately capped Kie key', async () => {
+    mocks.authorize.mockResolvedValue({ balance: 100, duplicateRound: null, ok: true, turn });
+    mocks.provider.mockResolvedValue({
+      credits_consumed: 1,
+      output: [{ type: 'message', content: [{ type: 'output_text', text: 'Done' }] }],
+    });
+    mocks.settle.mockResolvedValue({ balance: 94, creditsCharged: 6, ledgerEntryId: 'ledger-1' });
+    const context = contextFor({
+      billingRoundIndex: 0,
+      billingTurnAction: 'continue',
+      billingTurnId: 'turn-1',
+      idempotencyKey: 'turn-1:openai-responses:0',
+      input: [{ content: 'Review test', role: 'user' }],
+      model: 'gpt-5-6-terra',
+      protocol: 'openai-responses',
+    });
+    context.data.user = { id: 'review', email: 'review@example.test', reviewer: true };
+    context.env.KIEAI_API_KEY = 'regular-key';
+    context.env.KIEAI_REVIEW_API_KEY = 'capped-review-key';
+    expect((await onRequest(context)).status).toBe(200);
+    expect(mocks.provider).toHaveBeenCalledWith(
+      expect.objectContaining({ KIEAI_API_KEY: 'capped-review-key' }),
+      expect.anything(),
+    );
+    expect(context.env.KIEAI_API_KEY).toBe('regular-key');
+  });
+
   it('replays the durable round response without consulting the best-effort chat log', async () => {
     const duplicateRound = {
       cached_input_tokens: null,

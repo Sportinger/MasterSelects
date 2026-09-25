@@ -24,6 +24,7 @@ import { useClipInteractionShellModuleCommandDispatcher } from './hooks/useClipI
 import { useTimelineTrackClipRowEvents } from './hooks/useTimelineTrackClipRowEvents';
 import { useTimelineTrackInteractionShellState } from './hooks/useTimelineTrackInteractionShellState';
 import { useTimelineTrackPointerTools } from './hooks/useTimelineTrackPointerTools';
+import { useDocumentPassageClipDrop } from './hooks/useDocumentPassageClipDrop';
 import {
   reportTimelineCanvasDomDiagnostics,
   unregisterTimelineCanvasTrackDiagnostics,
@@ -505,6 +506,7 @@ function TimelineTrackComponent({
   };
   const handleShellModuleCommand = useClipInteractionShellModuleCommandDispatcher();
   const selectedTrackClip = allTrackClips.find((c) => selectedClipIds.has(c.id));
+  const documentDrop = useDocumentPassageClipDrop({ trackId: track.id, clipRowRef, hitTestClipAtClientX, onDrop, onDragOver, onDragEnter, onDragLeave });
   const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
   const isPropertiesSelected = propertiesSelection?.kind === 'track' && propertiesSelection.trackId === track.id;
   const trackLaneStyle = {
@@ -526,11 +528,13 @@ function TimelineTrackComponent({
       data-track-id={track.id}
       data-dock-layout-child-anim-id={`timeline-track-lane:${track.id}`}
       style={trackLaneStyle}
-      onDrop={(event) => onDrop(event, track.id)}
-      onDragOver={(event) => onDragOver(event, track.id)}
-      onDragEnter={(event) => onDragEnter(event, track.id)}
-      onDragLeave={onDragLeave}
+      onDrop={documentDrop.drop}
+      onDragOver={documentDrop.dragOver}
+      onDragEnter={documentDrop.dragEnter}
+      onDragLeave={documentDrop.dragLeave}
     >
+      {documentDrop.target && <div className="document-drop-preview" style={{ left: Math.max(4, documentDrop.target.x) }}>
+        Link passage to {allTrackClips.find(clip => clip.id === documentDrop.target?.clipId)?.name ?? 'clip'} · full clip</div>}
       {/* Clip row - the normal clip area */}
       <div
         ref={clipRowRef}

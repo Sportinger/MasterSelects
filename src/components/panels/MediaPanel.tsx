@@ -6,6 +6,7 @@ import './media/MediaPanelWoodTheme.css';
 import type { MediaContextSolidSettingsDialogState } from './media/context/useMediaContextLocalHandlers';
 import { useMediaClassicListUiState } from './media/list/useMediaClassicListUiState';
 import { MediaPanelContentView } from './media/panel/MediaPanelContentView';
+import { MediaPanelDocuments } from './media/panel/MediaPanelDocuments';
 import { MediaPanelHeader } from './media/panel/MediaPanelHeader';
 import { MediaPanelOverlayMounts } from './media/panel/MediaPanelOverlayMounts';
 import { useMediaPanelCommandBindings } from './media/panel/useMediaPanelCommandBindings';
@@ -680,6 +681,8 @@ export function MediaPanel() {
         style={{ position: 'fixed', width: 1, height: 1, opacity: 0, pointerEvents: 'none', left: -10000, top: 0 }}
         onChange={handleFileChange}
       />
+
+      <MediaPanelDocuments query={mediaSearchQuery} />
 
       <MediaPanelContentView
         viewMode={viewMode}

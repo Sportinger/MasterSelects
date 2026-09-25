@@ -4,6 +4,8 @@ title: "Overview"
 
 Feature documentation for the `master` branch.
 
+[Android App](/features/android-app/): bundled offline editor, Android file import and export, build/signing instructions, and device limits.
+
 ---
 
 ## Overview
@@ -14,6 +16,8 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 
 | Capability | Description |
 |---|---|
+| **Notebook** | [Write project notes, mark scenes and link passages](/features/documents/), with document import, original views and screenplay layout |
+| **Time Stack** | [Blend delayed video instances](/features/time-stack/) in a compact editable node group with deterministic source sampling |
 | **AI Depth Map** | [Local depth estimation](/features/depth-estimation/), live source preview and reusable depth-video baking |
 | **WebGPU Rendering** | Shared render path for main preview, independent targets, output windows, and export |
 | **Timeline Editing** | Multi-track editing, nested compositions, markers, transitions, shortcuts, and keyframes |

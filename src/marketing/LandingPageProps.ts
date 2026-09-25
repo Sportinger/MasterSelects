@@ -51,6 +51,7 @@ export interface LandingPageProps {
   onRemoveProjectFile?: (
     item: LandingProjectMediaItem,
   ) => Promise<boolean | void> | boolean | void;
+  onOpenProjectFile?: (item: LandingProjectMediaItem) => void;
   openingProjectId?: string | null;
   onRenderVideo?: () => Promise<void> | void;
   onSelectReviewVariant?: (variantId: string) => Promise<boolean> | boolean | void;

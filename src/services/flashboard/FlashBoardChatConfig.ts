@@ -110,13 +110,6 @@ export const FLASHBOARD_OPENAI_REASONING_EFFORT_OPTIONS: Array<{
 ];
 export const DEFAULT_FLASHBOARD_CHAT_TEMPERATURE = 0.7;
 export const FLASHBOARD_CHAT_MAX_PROVIDER_TOOLS = 128;
-/**
- * Tool rounds per turn. 12 could not finish real work: reading a 26-clip
- * timeline plus editing it already spent most of the budget, and a long
- * transcript was unreachable. This is a runaway guard, not a work budget —
- * it exists so a looping model cannot burn credits forever.
- */
-export const FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS = 400;
 /** Output tokens per provider round. 2048 truncated long plans mid-list. */
 export const FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS = 32_000;
 /**

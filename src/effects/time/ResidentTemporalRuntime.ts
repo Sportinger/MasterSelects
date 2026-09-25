@@ -54,7 +54,8 @@ export class ResidentTemporalRuntime {
     const budget = memoryMiB * 1024 * 1024;
     const identity = JSON.stringify([request.media.id, request.media.url, width, height, memoryMiB,
       request.sourceOnly ? null : [request.currentInput.width, request.currentInput.height],
-      request.stabilization?.identity, request.retainCurrentInput, request.sourceOnly, request.motionPairs]);
+      request.stabilization?.identity, request.retainCurrentInput, request.sourceOnly, request.motionPairs,
+      request.delays ? request.reserveFrames : undefined]);
     let entry = this.entries.get(request.key);
     if (entry && (entry.identity !== identity || entry.latest.media.file !== request.media.file)) { this.release(request.key); entry = undefined; }
     if (entry?.error && !(entry.error instanceof ResidentGpuMemoryError) && performance.now() >= (entry.retryAt ?? Infinity)) {
@@ -243,7 +244,7 @@ export class ResidentTemporalRuntime {
   private prefetch(entry: Entry, required: Set<number>, width: number, height: number) {
     if (entry.pending || entry.prefetch || entry.error) return;
     const times = this.lookahead(entry, required);
-    if (!times.length) return;
+    if (!times.length || times.every(time => entry.cache!.slots.has(time))) return;
     entry.prefetchKeys = new Set(times);
     entry.prefetch = this.load(entry, entry.prefetchKeys, new Set([...required, ...times]), width, height, 'prefetch')
       .catch(() => undefined).finally(() => { entry.prefetch = undefined; entry.prefetchKeys = undefined; this.onReady?.(); });

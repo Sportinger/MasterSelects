@@ -18,6 +18,7 @@ import {
   deepClone,
 } from './snapshotCloning';
 import { cloneTrackingAssets } from '../trackingStore';
+import { useDocumentsStore } from '../documentsStore';
 
 function cloneClipWithoutSourceArtifacts(clip: TimelineClip): TimelineClip {
   const {
@@ -190,6 +191,7 @@ export function createHistorySnapshot(
   return {
     timestamp,
     label,
+    documents: useDocumentsStore.getState().snapshot(),
     timeline: timelineEditState
       ? createTimelineSnapshotFromEditState(timelineEditState, timeline?.selectedKeyframeIds)
       : createTimelineSnapshot(refs),

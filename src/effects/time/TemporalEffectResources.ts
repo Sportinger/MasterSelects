@@ -1,3 +1,4 @@
+import { TimeStackResources } from './time-stack/TimeStackResources';
 import type { ClipMask } from '../../types/masks';
 import { slitScanGeometryBytes } from './slit-scan/geometryParameters';
 import type { ResolvedImageGraphExternalResource } from '../_shared/imageGraphExternalResources';
@@ -41,6 +42,7 @@ export class TemporalEffectResources {
   private masks: SlitScanMaskRuntime;
   private maps: TimeMapMediaRuntime;
   private native: SourceTemporalRuntime;
+  private timeStacks: TimeStackResources;
   private hybrid?: HybridTemporalRuntime;
   private resident?: ResidentTemporalRuntime;
   private interactiveResident?: ResidentTemporalRuntime;
@@ -53,8 +55,18 @@ export class TemporalEffectResources {
     this.masks = new SlitScanMaskRuntime(device);
     this.maps = new TimeMapMediaRuntime(device, onReady);
     this.native = new SourceTemporalRuntime(device, onReady);
+    this.timeStacks = new TimeStackResources(device, onReady);
     this.device = device; this.onReady = onReady;
     this.previewFrames = new TemporalPreviewFrames(device);
+  }
+
+  retainTimeStacks(scope: string, effectIds: ReadonlySet<string>) { this.timeStacks.retain(scope, effectIds); }
+
+  resolveSource(owner: 'slit-scan' | 'time-stack', effect: { id: string; type: string; params: Record<string, unknown> },
+    scopeId: string, source: TemporalClipSource | undefined, encoder: GPUCommandEncoder,
+    currentInput: { view: GPUTextureView; width: number; height: number }, context?: HybridTemporalContext): ResolvedTemporalHistory | undefined {
+    return owner === 'time-stack' ? this.timeStacks.resolve(effect, scopeId, source, encoder, currentInput)
+      : this.resolveNative(effect, scopeId, source, encoder, currentInput, context);
   }
 
   resolveNative(effect: { id: string; type: string; params: Record<string, unknown> },
@@ -259,6 +271,6 @@ export class TemporalEffectResources {
     return this.motionHistory.resolve(resources, descriptors, scopeId, effect, source, encoder, input);
   }
 
-  destroy() { this.motionHistory?.destroy(); this.native.destroy(); this.hybrid?.destroy(); this.resident?.destroy(); this.interactiveResident?.destroy();
+  destroy() { this.timeStacks.destroy(); this.motionHistory?.destroy(); this.native.destroy(); this.hybrid?.destroy(); this.resident?.destroy(); this.interactiveResident?.destroy();
     this.previewFrames.destroy(); this.residentFallbacks.clear(); this.maps.destroy(); this.masks.destroy(); }
 }

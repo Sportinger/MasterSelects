@@ -111,6 +111,19 @@
     color: #fff;
   }
 
+  /* Pointer highlighting stays on the compositor/style path: no React render per row. */
+  @media (hover: hover) {
+    .inspector-select-menu:not(.inspector-select-menu--touch) .inspector-select-option:not(:disabled):hover {
+      background: color-mix(in srgb, var(--accent) 72%, #164a9d);
+      color: #fff;
+    }
+    .inspector-select-menu:not(.inspector-select-menu--touch):has(.inspector-select-option:hover)
+      .inspector-select-option.is-active:not(:hover) {
+      background: transparent;
+      color: var(--text-primary);
+    }
+  }
+
   .inspector-select-option:disabled {
     color: var(--text-disabled, #666);
   }

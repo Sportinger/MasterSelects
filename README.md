@@ -19,15 +19,19 @@ Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in on
 | **Audio** | Edit waveforms, mix tracks, record, apply effects, and separate stems. |
 | **Motion & tracking** | Animate text and shapes, create captions, and attach graphics to tracked footage. |
 | **3D** | Combine footage, models, lights, cameras, Gaussian splats, and particle effects. |
-| **AI** | Ask the in-app agent to edit the timeline or generate media. A dismissible Clippy overlay offers a large “inside me” input that opens your draft in AI chat. Node work opens beside Preview, with the view following the animated groups. |
+| **AI** | Ask the in-app agent to edit the timeline or generate media. A dismissible Clippy overlay offers a large “inside me” input that opens your draft in AI chat. Nodes and cables appear beside Preview as individual AI instructions arrive. |
 
 ### Node graphs
+
+[Time Stack](docs/Features/Time-Stack.md) blends up to 32 delayed instances of a video in an editable node group, with shared source-frame sampling, all 37 timeline blend modes, and mouse-wheel control.
 
 | Detail view | Full graph |
 | --- | --- |
 | <a href="docs/images/node-graph-detail.png"><img src="docs/images/node-graph-detail.png" alt="Connected nodes with image and depth previews" width="320"></a> | <a href="docs/images/node-graph-overview.png"><img src="docs/images/node-graph-overview.png" alt="Large connected node graph" width="320"></a> |
 
 Import video, audio, images, animations, 3D assets, and Premiere Pro projects. Export video, audio, still frames, and interchange formats. Browser, operating system, and GPU support affect available codecs and performance. See [media import](docs/Features/Media-Panel.md) and [export](docs/Features/Export.md).
+
+The [Notebook](docs/Features/Documents.md) is a continuous writing surface for notes and screenplays. Passages can receive labels, scene ranges, comments and media links after writing; imported PDFs retain an original-page view.
 
 ## Build while you create
 

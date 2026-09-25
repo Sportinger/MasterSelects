@@ -1,4 +1,4 @@
-import compositeShader from '../../../shaders/composite.wgsl?raw';
+import compositeShader from '../../../shaders/compositeShader';
 import { EXTERNAL_COMPOSITE_SHADER } from './externalCompositeShader';
 import type { ImageOperatorProgram } from '../../../types/imageOperatorProgram';
 

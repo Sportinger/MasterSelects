@@ -246,6 +246,12 @@ export function InspectorSelect<T extends string>({
     ? undefined
     : `${listboxId}-${String(activeValue).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 
+  useEffect(() => {
+    if (!open || touchPickerActive || !activeOptionId) return;
+    const option = document.getElementById(activeOptionId);
+    option?.scrollIntoView?.({ block: 'nearest' });
+  }, [open, touchPickerActive, activeOptionId]);
+
   const handleTouchPickerScroll = () => {
     const menu = menuRef.current;
     if (!touchPickerActive || !touchScrollSelection || !menu) return;
@@ -295,7 +301,6 @@ export function InspectorSelect<T extends string>({
               key={option.value}
               onClick={event => choose(option, event.detail === 0)}
               onMouseDown={event => event.preventDefault()}
-              onMouseEnter={() => !touchPickerActive && !option.disabled && setActiveValue(option.value)}
               role="option"
               style={option.style}
               title={option.title}

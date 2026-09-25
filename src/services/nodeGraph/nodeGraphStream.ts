@@ -7,15 +7,14 @@ export const NODE_GRAPH_STREAM_TOOLS = [
 
 export const NODE_GRAPH_STREAM_PROTOCOL = {
   schemaVersion: 1, transport: 'Codex Direct assistant text deltas', fence: 'ms-nodegraph-v1',
-  framing: 'One JSON record per newline inside the exact fenced block. One block per turn.',
+  framing: 'JSON object records inside the exact fenced block. Separate records with whitespace (newlines recommended). Each record executes at its closing brace, without waiting for a newline, closing fence or response end. Multiple sequential blocks are supported; each begins with fresh sequence numbers and result aliases.',
   begin: { op: 'begin', schemaVersion: 1, clipId: '<existing active-timeline clip ID>' },
   operation: { op: 'tool', seq: 1, ref: '<unique result alias>', tool: '<allowed tool>', args: {} },
   end: { op: 'end', lastSeq: '<last operation sequence number>' },
   resultReference: { $ref: '<earlier result alias>', field: '<top-level result.data field, e.g. nodeId or effectId>' },
   allowedTools: NODE_GRAPH_STREAM_TOOLS,
   ownership: 'begin pins the existing clip. Operation args omit clipId; the browser supplies it. A new clip must already exist before begin.',
-  execution: 'Complete records execute immediately in sequence through normal editor policy and undo. Incomplete records never execute. On error/cancel prior completed operations remain undoable; later operations stop. Reload does not replay a stream.',
-  limits: { operations: 128, lineCharacters: 65536, streamCharacters: 1048576 },
+  execution: 'Complete records execute immediately in sequence through normal editor policy and undo. Incomplete records never execute. Failed operations report their errors and later independent operations continue. Failed result aliases remain unavailable. Cancellation, lost ownership or invalid framing stops execution; prior completed operations remain undoable. Reload does not replay a stream.',
 } as const;
 
 export type NodeGraphStreamRecord =
@@ -35,22 +34,42 @@ export class NodeGraphStreamParser {
   private state: 'outside' | 'begin' | 'operations' | 'close' | 'done' = 'outside';
   private nextSequence = 1;
   private aliases = new Set<string>();
-  private characters = 0;
   private otherFence = false;
+  private depth = 0;
+  private quoted = false;
+  private escaped = false;
   active = false;
 
   private readonly receive: (record: NodeGraphStreamRecord) => void;
   constructor(receive: (record: NodeGraphStreamRecord) => void) { this.receive = receive; }
 
   push(delta: string): void {
-    this.buffer += delta;
-    let newline: number;
-    while ((newline = this.buffer.indexOf('\n')) >= 0) {
-      const line = this.buffer.slice(0, newline).replace(/\r$/, '');
-      this.buffer = this.buffer.slice(newline + 1);
-      this.line(line);
+    for (const character of delta) {
+      if (this.state === 'begin' || this.state === 'operations') {
+        if (!this.buffer && /\s/.test(character)) continue;
+        if (!this.buffer && character !== '{') throw new Error('Expected a node stream object.');
+        this.buffer += character;
+        if (this.quoted) {
+          if (this.escaped) this.escaped = false;
+          else if (character === '\\') this.escaped = true;
+          else if (character === '"') this.quoted = false;
+        } else if (character === '"') this.quoted = true;
+        else if (character === '{' || character === '[') this.depth++;
+        else if (character === '}' || character === ']') this.depth--;
+        if (this.depth === 0) {
+          const complete = this.buffer;
+          this.buffer = '';
+          this.line(complete);
+        }
+      } else if (character === '\n') {
+        const line = this.buffer.replace(/\r$/, '');
+        this.buffer = '';
+        // Whitespace between the end record and closing fence is framing.
+        if (this.state !== 'close' || line.trim()) this.line(line);
+      } else {
+        this.buffer += character;
+      }
     }
-    if (this.buffer.length > 65536) throw new Error('Node stream line exceeds the size limit.');
   }
 
   finish(): void {
@@ -59,7 +78,6 @@ export class NodeGraphStreamParser {
   }
 
   private line(line: string): void {
-    if (line.length > 65536) throw new Error('Node stream line exceeds the size limit.');
     if (this.state === 'outside') {
       if (line === '```ms-nodegraph-v1' && !this.otherFence) {
         this.state = 'begin'; this.active = true;
@@ -67,11 +85,11 @@ export class NodeGraphStreamParser {
       return;
     }
     if (this.state === 'done') {
-      if (line === '```ms-nodegraph-v1') throw new Error('Only one node stream is allowed per turn.');
+      if (line === '```ms-nodegraph-v1') {
+        this.state = 'begin'; this.nextSequence = 1; this.aliases.clear();
+      }
       return;
     }
-    this.characters += line.length + 1;
-    if (this.characters > 1048576) throw new Error('Node stream exceeds the size limit.');
     if (this.state === 'close') {
       if (line !== '```') throw new Error('Expected the node stream closing fence.');
       this.state = 'done'; return;
@@ -89,7 +107,7 @@ export class NodeGraphStreamParser {
       if (value.lastSeq !== this.nextSequence - 1 || !keys(value, ['op', 'lastSeq'])) throw new Error('Node stream end sequence mismatch.');
       this.state = 'close';
     } else {
-      if (value.op !== 'tool' || value.seq !== this.nextSequence || this.nextSequence > 128
+      if (value.op !== 'tool' || value.seq !== this.nextSequence
         || typeof value.tool !== 'string' || !NODE_GRAPH_STREAM_TOOLS.includes(value.tool as typeof NODE_GRAPH_STREAM_TOOLS[number])
         || typeof value.ref !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(value.ref) || this.aliases.has(value.ref)
         || !object(value.args) || 'clipId' in value.args || !keys(value, ['op', 'seq', 'ref', 'tool', 'args'])) {

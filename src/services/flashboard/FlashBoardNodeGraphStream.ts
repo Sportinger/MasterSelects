@@ -4,6 +4,8 @@ import type { ToolResult } from '../aiTools/types';
 import { resolveNodeGraphStreamReferences, type NodeGraphStreamRecord } from '../nodeGraph/nodeGraphStream';
 import { yieldEditorPresentationFrame } from './yieldEditorPresentationFrame';
 
+export interface NodeStreamFailure { seq: number; ref: string; tool: string; args: Record<string, unknown>; error: string; executed: boolean }
+
 type Execute = (tool: string, args: Record<string, unknown>, id: string) => Promise<ToolResult>;
 
 /** Executes explicit stream records through the same audited tool boundary as tool calls. */
@@ -12,16 +14,20 @@ export class FlashBoardNodeGraphStream {
   private results = new Map<string, unknown>();
   private stopped = false;
   completedOperations = 0;
+  readonly failures: NodeStreamFailure[] = [];
+  private block = 0;
   private readonly execute: Execute;
   private readonly signal?: AbortSignal;
   constructor(execute: Execute, signal?: AbortSignal) { this.execute = execute; this.signal = signal; }
   stop(): void { this.stopped = true; }
 
-  async accept(record: NodeGraphStreamRecord): Promise<void> {
+  async accept(record: NodeGraphStreamRecord): Promise<NodeStreamFailure | undefined> {
     if (this.stopped || this.signal?.aborted) throw new Error('Node stream stopped.');
     if (record.op === 'end') return;
     if (record.op === 'begin') {
       this.clipId = record.clipId;
+      this.results.clear();
+      this.block++;
       await this.checked('focusNodeGraph', { clipId: this.clipId }, 'begin');
       return;
     }
@@ -30,6 +36,15 @@ export class FlashBoardNodeGraphStream {
     if (!clip || state.isExporting || state.tracks.find(t => t.id === clip.trackId)?.locked) {
       throw new Error('Node stream owner is missing, locked or exporting.');
     }
+    try {
+      return await this.operation(record, clip);
+    } catch (error) {
+      if (this.stopped || this.signal?.aborted) throw error;
+      return this.failed(record, error instanceof Error ? error.message : String(error), false);
+    }
+  }
+
+  private async operation(record: Extract<NodeGraphStreamRecord, { op: 'tool' }>, clip: ReturnType<typeof useTimelineStore.getState>['clips'][number]): Promise<NodeStreamFailure | undefined> {
     const args = resolveNodeGraphStreamReferences(record.args, this.results) as Record<string, unknown>;
     if (record.tool.endsWith('Effect')) {
       const effect = record.tool === 'addEffect' ? undefined : clip.effects.find(e => e.id === args.effectId);
@@ -48,14 +63,25 @@ export class FlashBoardNodeGraphStream {
         }
       }
     }
-    const result = await this.checked(record.tool, { ...args, clipId: this.clipId }, String(record.seq));
+    const result = await this.execute(record.tool, { ...args, clipId: this.clipId }, this.operationId(String(record.seq)));
+    if (!result.success) return this.failed(record, result.error ?? `${record.tool} failed.`, true);
     this.results.set(record.ref, result.data);
     this.completedOperations++;
     await yieldEditorPresentationFrame();
   }
 
+  private failed(record: Extract<NodeGraphStreamRecord, { op: 'tool' }>, error: string, executed: boolean): NodeStreamFailure {
+    const failure = { seq: record.seq, ref: record.ref, tool: record.tool, args: record.args, error, executed };
+    this.failures.push(failure);
+    return failure;
+  }
+
+  private operationId(sequence: string): string {
+    return this.block <= 1 ? `node-stream:${sequence}` : `node-stream:${this.block}:${sequence}`;
+  }
+
   private async checked(tool: string, args: Record<string, unknown>, sequence: string): Promise<ToolResult> {
-    const result = await this.execute(tool, args, `node-stream:${sequence}`);
+    const result = await this.execute(tool, args, this.operationId(sequence));
     if (!result.success) { this.stopped = true; throw new Error(result.error ?? `Node stream ${tool} failed.`); }
     return result;
   }

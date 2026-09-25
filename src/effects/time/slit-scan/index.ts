@@ -5,5 +5,5 @@ import { slitScanParams } from './parameters';
 export const slitScan: FullscreenEffectDefinition = {
   id: 'slit-scan', name: 'Slit Scan', category: 'time',
   shader: '// Rendered by the editable Slit Scan Image IR group.', entryPoint: 'slitScanFragment', uniformSize: 0,
-  usesInputHistory: true, params: slitScanParams, packUniforms: () => null,
+  usesInputHistory: true, sourceTimeOwner: 'slit-scan', params: slitScanParams, packUniforms: () => null,
 };

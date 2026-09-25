@@ -1,4 +1,4 @@
-import compositeShader from '../../../shaders/composite.wgsl?raw';
+import compositeShader from '../../../shaders/compositeShader';
 import {
   COPY_SHADER,
   EXTERNAL_COPY_90_SHADER,

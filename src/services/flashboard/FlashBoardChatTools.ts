@@ -7,7 +7,6 @@ import {
 } from '../aiTools';
 import {
   FLASHBOARD_CHAT_MAX_PROVIDER_TOOLS,
-  FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS,
   FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS,
 } from './FlashBoardChatConfig';
 import {
@@ -372,7 +371,7 @@ export async function runChatCompletionToolLoop(
 ): Promise<string> {
   const executedToolCalls: FlashBoardExecutedToolCall[] = [];
 
-  for (let iteration = 0; iteration < FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS; iteration += 1) {
+  for (let iteration = 0; ; iteration += 1) {
     if (signal?.aborted) throw signal.reason ?? new DOMException('Chat stopped.', 'AbortError');
     const result = await complete(messages);
     const content = result.content?.trim() || null;
@@ -452,5 +451,4 @@ export async function runChatCompletionToolLoop(
     }
   }
 
-  return formatToolFollowupFallback(executedToolCalls) || 'Stopped after too many tool iterations.';
 }

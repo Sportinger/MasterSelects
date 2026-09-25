@@ -13,6 +13,8 @@ import { MAX_SOURCE_TEMPORAL_SAMPLES, SOURCE_TEMPORAL_METADATA_WIDTH } from './s
 export interface SourceTemporalRequest {
   key: string; effectId: string; media: MediaFile; source: TemporalClipSource;
   horizon: number; samples: number; nearest: boolean; encoder: GPUCommandEncoder;
+  /** Explicit delays relative to this output frame, independent of the Slit Scan grid. */
+  delays?: readonly number[];
   /** Source lookback expands; graph delay coordinates stay in authored seconds. */
   timeFactor?: number;
   keepPending?: boolean; maxEdge?: number; useProxy?: boolean;
@@ -34,7 +36,14 @@ export interface SourceTemporalRequest {
 
 /** Absolute clip-time grid: adjacent output frames share the same historical PTS.
  * Slot -1 is the current input, already decoded by the normal playback pipeline. */
-export function sourceTemporalWindow(request: Pick<SourceTemporalRequest, 'source' | 'horizon' | 'samples'>, limit = MAX_SOURCE_TEMPORAL_SAMPLES) {
+export function sourceTemporalWindow(request: Pick<SourceTemporalRequest, 'source' | 'horizon' | 'samples' | 'delays'>, limit = MAX_SOURCE_TEMPORAL_SAMPLES) {
+  if (request.delays) {
+    if (request.delays.length >= limit || request.delays.some(age => !Number.isFinite(age) || age <= 0)) {
+      throw new Error('Source delays must be finite, positive and fit the temporal sample limit.');
+    }
+    return [...new Set(request.delays)].toSorted((a, b) => a - b)
+      .map(age => ({ age, time: temporalSourceTime(request.source, request.source.localTime - age) }));
+  }
   if (request.samples <= 2) return [{ age: request.horizon,
     time: temporalSourceTime(request.source, request.source.localTime - request.horizon) }];
   const count = Math.max(3, Math.min(limit, Math.round(request.samples)));
@@ -97,7 +106,7 @@ export class SourceTemporalRuntime {
       throw new Error(`Full Res ${width} × ${height} with ${historyCount + 1 - currentCount} samples exceeds the 640 MiB source cache. `
         + (capacity >= 1 ? `Choose at most ${capacity + 1 - currentCount} samples or Small preview.` : 'Use Small preview.'));
     }
-    const prefetchCount = zeroDelay ? 0 : Math.min(4, capacity - historyCount);
+    const prefetchCount = zeroDelay || request.delays ? 0 : Math.min(4, capacity - historyCount);
     const layers = historyCount + prefetchCount;
     const bytes = width * height * 4 * (layers + 2) + currentBytes;
     let entry = this.entries.get(request.key);

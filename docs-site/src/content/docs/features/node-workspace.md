@@ -10,11 +10,11 @@ When an agent reads or edits a clip's node graph, the editor activates a Nodes t
 
 Graph edits animate structural changes in the canvas: added nodes scale and fade in, removed nodes fade and shrink out, and new cables draw from output to input. The same animation applies to direct edits and agent edits. Hover, parameter, layout, and playback updates do not restart it. Reduced motion settings show the final graph immediately.
 
-Codex Direct presents a frame between completed editor tools and between the actions inside `executeBatch`. Agent graph work is shown in the active Nodes tab, including ordinary tool calls and the optional node text stream. A bulk graph projection reveals new cards and cables in a short wave.
+Codex Direct streams graph construction as individual operations: each complete node, cable, parameter change, move or removal is applied while the next instruction is still arriving. The parser recognizes the closing brace of each JSON record, including formatted records and split text deltas; it does not wait for a newline, the whole code block or the completed response. Each operation passes the normal tool policy, undo and audit boundary. Incomplete records never execute; cancellation or failure stops later edits and leaves completed edits undoable. Other tools and legacy batches still present a frame between actions.
 
 The node inspector starts collapsed. Agent graph reads and edits reveal the affected effect group and its descendants while work proceeds, for both tool calls and streamed records. A successfully completed chat turn collapses all groups in the clips it worked on. Failed, cancelled and planning turns do not apply that final collapse. Unrelated clips retain their group state.
 
-When added nodes extend beyond the visible canvas, the view fits the complete graph after their layout settles, including nodes arriving through agent tools or streamed node code. Additions already in view keep the camera unchanged. Parameter edits and removals do not reset manual navigation; a pointer or wheel gesture cancels a pending automatic fit. Group folding retains its own focus and restore behavior.
+When added nodes extend beyond the visible canvas, the view fits the complete graph during their layout animation, including nodes arriving through agent tools or streamed node code. Additions already in view keep the camera unchanged. Parameter edits and removals do not reset manual navigation; a pointer or wheel gesture cancels a pending automatic fit. Group folding retains its own focus and restore behavior.
 
 When an agent opens or closes groups, the viewport follows the same animated bounds as the effect and color group outlines, without a separate camera lag or final catch-up jump. New offscreen nodes are framed during their placement animation. Manual pointer or wheel navigation releases the automatic camera follow.
 
@@ -55,7 +55,7 @@ including nested groups. The separate arrow collapses or expands the group;
 **Focus** fits that group. Header text adapts to zoom and truncates when needed;
 frame width and header height never grow to accommodate text. Collapse state and layout are
 saved with the clip and restored when reopening the project. Collapse affects only
-presentation, never rendering or a saved bake. Collapsed effects and subgroups appear as regular node cards with typed ports and an expansion arrow beside the title, without an enclosing group frame. Groups start collapsed unless an explicit saved state opens them. Expanding one group smoothly fits its changing bounds. Collapsing it restores the zoom and position from immediately before that expansion, or fits the whole graph when no previous view was recorded. A short 220 ms transition moves cards, cables and surrounding nodes together. When groups open together, peers start 100 ms apart from left to right using their final arranged positions. The next hierarchy level starts 140 ms after the last group of the previous level, so opening steps remain visibly staggered while overlapping. Closing reverses that sequence. Each step projects and lays out the intermediate hierarchy as an individual fold would: containing frames grow or shrink and surrounding nodes move along with them. Interrupted transitions continue from their current positions. Manual dragging stays direct, and reduced-motion preferences disable the transition.
+presentation, never rendering or a saved bake. Collapsed effects and subgroups appear as regular node cards with typed ports and an expansion arrow beside the title, without an enclosing group frame. Groups start collapsed unless an explicit saved state opens them. Expanding one group smoothly fits its changing bounds. Collapsing it restores the zoom and position from immediately before that expansion, or fits the whole graph when no previous view was recorded. A short 220 ms transition moves cards, cables and surrounding nodes together. When groups open together, they build depth first from left to right: a group and all of its subgroups finish before the next group to its right starts. Within a group, cards appear one after another from left to right, and each cable draws in once both of its nodes are visible; group frames grow with the cards already shown. The next group starts as the last card of the previous one fades in. Closing reverses that sequence, and each group glides into its proxy. A slow frame delays later groups instead of letting them stack. The camera follows as one softly damped move and settles once at the end. Each step projects and lays out the intermediate hierarchy as an individual fold would: containing frames grow or shrink and surrounding nodes move along with them. Interrupted transitions continue from their current positions. Manual dragging stays direct, and reduced-motion preferences disable the transition.
 
 The toolbar's **Expand all / Collapse all** includes hidden and never-opened
 subgroups. Each action is one undo step. Zoom and pan continuously fit the currently
@@ -337,17 +337,19 @@ node; **Previews** in the toolbar switches every node viewer off or on together,
 including hidden nodes. Newly revealed nodes inherit the global setting.
 During fold animations, existing thumbnails remain visible while new preview
 requests pause; they resume at the current timeline time when the layout settles.
-Intermediate fold layouts are computed as their stagger begins. The canvas draws
-moving cards and cables while their DOM interaction targets are omitted until
-the transition ends. Cable hit masks use compact SVG paths, preserving the rule
-that wires behind unrelated groups are dimmed and cannot be selected.
-Fold frames share group bounds and cable occlusion masks. Signal-path samples
-are computed only by the painter when active flow needs them, and group-header
-controls remain mounted while their geometry moves. The worker coalesces pending
-scene updates and transfers the moving base directly, without an extra full-frame
-copy. Moving graph bitmaps use a two-megapixel budget and omit unreadable details
-at overview zoom; normal resolution and all details return when the fold settles.
-This affects only the node canvas, never the video preview or export quality.
+Intermediate fold layouts are computed as each group starts. The main thread sends
+one layout per fold step; the canvas worker eases cards, cables and plugs between
+steps at display rate, so motion needs no per-frame React or scene work. Moving
+views keep full resolution and every detail. Node cards and repeated plug shapes
+are cached as bitmaps at or above the current pixel scale and redrawn only when
+their content or zoom level changes; cables are stroked in shared batches, and
+far overviews draw them slightly thinner. Card hit targets return in small
+batches after a fold. In canvas mode, cable hover, click and context menu use a
+geometry index instead of per-cable DOM paths: the segment between two pointer
+samples is tested, so fast sweeps highlight every cable they cross, and pressing
+on a cable still pans the view. Hover highlights are drawn on the worker overlay
+without rebuilding the scene. Wires behind unrelated groups stay dimmed and cannot
+be selected. This affects only the node canvas, never the video preview or export quality.
 After switching all viewers off, individual node viewers can be enabled again. Output
 selectors switch the viewed port. Preferences are saved on the owning clip and
 survive project/history round trips. Portrait, landscape and square images retain
@@ -446,7 +448,10 @@ one additional lazy worker. Both worker delivery and data jobs have watchdogs.
 Only visible viewers request work. Hidden panels/tabs, collapsed contents and
 export pause requests. Tiny viewers below 32 screen pixels retain their last
 image; larger viewers refresh at up to 12 Hz (5 Hz at overview zoom, 3 Hz in the
-software fallback). Paused unchanged outputs reuse cached pixels. Continuous
+software fallback). Paused unchanged outputs reuse cached pixels. A viewer whose
+stage produces no output retries with exponential backoff and rests
+after three misses until the playhead, an edit or the graph changes, so an
+unrenderable stage cannot keep the paused render loop awake. Continuous
 playback accepts bounded asynchronous latency; edits and seeks discard obsolete
 results. Pan and zoom reuse existing atlas pixels; zoom alone does not request new
 paused frames. The next content update uses the current preview resolution.

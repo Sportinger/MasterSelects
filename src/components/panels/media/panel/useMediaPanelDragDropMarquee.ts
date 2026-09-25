@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, type Dispatch, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type SetStateAction } from 'react';
 import { Logger } from '../../../../services/logger';
+import { importProjectDocument, isDocumentImportCandidate } from '../../../../services/documents/importDocument';
+import { useDocumentsStore } from '../../../../stores/documentsStore';
 import { mediaNeedsRelink } from '../../../../services/project/relinkMedia';
 import { useMediaStore, type MediaFolder, type ProjectItem } from '../../../../stores/mediaStore';
 import {
@@ -234,7 +236,20 @@ export function useMediaPanelDragDropMarquee({
       return [];
     }
 
-    const imported = await importDroppedMediaFiles(droppedFiles, targetParentId, {
+    const documentRecords = droppedFiles.filter(record => isDocumentImportCandidate(record.file));
+    const mediaRecords = droppedFiles.filter(record => !isDocumentImportCandidate(record.file));
+    for (const record of documentRecords) {
+      try {
+        const parsed = await importProjectDocument(record.file);
+        useDocumentsStore.getState().importDocument(record.file.name, parsed.kind, parsed.blocks,
+          parsed.source, undefined, parsed.screenplayTitlePage);
+      } catch (error) {
+        log.warn('Document import failed', { name: record.file.name, error });
+        window.alert(`Could not import ${record.file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+    if (!mediaRecords.length) return [];
+    const imported = await importDroppedMediaFiles(mediaRecords, targetParentId, {
       createFolder,
       existingFolders: folders,
       importFiles,

@@ -46,6 +46,7 @@ const LandingPanel = lazy(() => import('../../marketing/LandingPanel').then(m =>
 const StoryPanel = lazy(() => import('../story/StoryPanel').then(m => ({ default: m.StoryPanel })));
 const AIStudioPanel = lazy(() => import('../panels/ai-studio/AIStudioPanel').then(m => ({ default: m.AIStudioPanel })));
 const AnnotationsPanel = lazy(() => import('../panels/annotations/AnnotationsPanel').then(m => ({ default: m.AnnotationsPanel })));
+const DocumentsPanel = lazy(() => import('../panels/documents/DocumentsPanel').then(m => ({ default: m.DocumentsPanel })));
 const MediaDiscoveryPanel = lazy(() => import('../panels/media-discovery/MediaDiscoveryPanel').then(m => ({ default: m.MediaDiscoveryPanel })));
 const ThreeDScanPanel = lazy(() => import('../panels/three-d-scan/ThreeDScanPanel').then(m => ({ default: m.ThreeDScanPanel })));
 const CurvesPanel = lazy(() => import('../panels/curves/CurvesPanel').then(m => ({ default: m.CurvesPanel })));
@@ -141,6 +142,8 @@ export function DockPanelContent({ panel, allowPanelMaximize = false }: DockPane
       return <Suspense fallback={<PanelLoading />}><AIStudioPanel /></Suspense>;
     case 'annotations':
       return <Suspense fallback={<PanelLoading />}><AnnotationsPanel /></Suspense>;
+    case 'documents':
+      return <Suspense fallback={<PanelLoading />}><DocumentsPanel /></Suspense>;
     case 'history':
       return <Suspense fallback={<PanelLoading />}><HistoryPanel /></Suspense>;
     case 'stats':

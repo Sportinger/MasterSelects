@@ -2,6 +2,23 @@
 title: "Codex Usage Monitoring"
 ---
 
+## Codex Direct in AI Studio
+
+Run `node scripts/direct-codex-usage.mjs` to inspect the isolated local
+app-server used by AI Studio and FlashBoard Codex Direct. It reads the
+app-server's own Codex session records, filters `masterselects_direct`, and
+writes `.codex-usage/direct-codex-report.json` with each turn's reported
+input, cached input, output, reasoning and total tokens, model-call count,
+and completion status. No chat text is copied into this report.
+
+While `dev:full` runs, the command reads its isolated temporary Codex home.
+When that dev stack shuts down, `dev-full.mjs` archives only its session logs
+under `.codex-usage/direct-codex-sessions/`, so the report can still include
+finished sessions after a restart. The report does not cover production or
+older sessions deleted before this archive behavior was added. A turn without
+an app-server completion event remains `unconfirmed`; closing a connection
+alone does not prove it stopped consuming tokens.
+
 MasterSelects includes a local Codex session monitor for answering:
 
 - what the user asked

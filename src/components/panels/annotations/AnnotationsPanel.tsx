@@ -3,6 +3,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAnnotationStore } from '../../../stores/annotationStore';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
+import { useDocumentsStore } from '../../../stores/documentsStore';
+import { useDockStore } from '../../../stores/dockStore';
 import type { SourceAnnotation } from '../../../types/sourceAnnotation';
 import './AnnotationsPanel.css';
 
@@ -31,6 +33,7 @@ function createAnnotationId(): string {
 }
 
 export function AnnotationsPanel() {
+  const documents = useDocumentsStore(state => state.documents);
   const {
     activeCompositionId,
     compositions,
@@ -263,6 +266,12 @@ export function AnnotationsPanel() {
             {resolvedAnnotations.length === 0 ? (
               <div className="annotations-panel-empty">No annotations for this {targetKind.toLowerCase()}.</div>
             ) : resolvedAnnotations.map(({ annotation, startTime: displayStartTime, endTime: displayEndTime, clipName }) => {
+              const documentReferences = documents.flatMap(doc => doc.links
+                .filter(link => link.target.kind === (sourceFile ? 'source-annotation' : 'composition-annotation')
+                  && link.target.annotationId === annotation.id
+                  && (sourceFile ? link.target.kind === 'source-annotation' && link.target.mediaId === sourceFile.id
+                    : link.target.kind === 'composition-annotation' && link.target.compositionId === composition?.id))
+                .map(link => ({ documentId: doc.id, title: doc.title, blockId: link.anchor.blockId })));
               const active = currentTime >= displayStartTime && currentTime <= displayEndTime;
               const scopeLabel = sourceFile
                 ? 'Source'
@@ -270,7 +279,11 @@ export function AnnotationsPanel() {
                   ? `Clip${clipName ? ` · ${clipName}` : ''}`
                   : 'Composition';
               return (
-                <article className={`annotations-panel-item scope-${annotation.scope ?? (sourceFile ? 'source' : 'composition')}${active ? ' active' : ''}`} key={annotation.id}>
+                <article className={`annotations-panel-item scope-${annotation.scope ?? (sourceFile ? 'source' : 'composition')}${active ? ' active' : ''}`} key={annotation.id}
+                  draggable onDragStart={event => event.dataTransfer.setData('application/x-ms-annotation', JSON.stringify({
+                    annotationId: annotation.id,
+                    ...(sourceFile ? { mediaId: sourceFile.id } : { compositionId: composition?.id }),
+                  }))}>
                   <button type="button" className="annotations-panel-item-main" onClick={() => seekToAnnotation(displayStartTime)}>
                     <span className="annotations-panel-item-scope">{scopeLabel}</span>
                     <span className="annotations-panel-item-range">
@@ -278,6 +291,16 @@ export function AnnotationsPanel() {
                     </span>
                     <span className="annotations-panel-item-text">{annotation.text}</span>
                   </button>
+                  {documentReferences.length > 0 && <button type="button" title="Show linked document passage"
+                    onClick={() => {
+                      const chosen = documentReferences.length === 1 ? 0 : Number(window.prompt(
+                        documentReferences.map((ref, index) => `${index + 1}. ${ref.title}`).join('\n'), '1',
+                      )) - 1;
+                      const reference = documentReferences[chosen];
+                      if (!reference) return;
+                      useDocumentsStore.getState().showAnchor(reference.documentId, reference.blockId);
+                      useDockStore.getState().activatePanelType('documents');
+                    }}>In document</button>}
                   <button
                     type="button"
                     className="annotations-panel-delete"

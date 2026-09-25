@@ -20,6 +20,7 @@ import { flashBoardMediaBridge } from '../../services/flashboard/FlashBoardMedia
 import { Logger } from '../../services/logger';
 import { sanitizeTimelineParentRestoreTree } from '../../services/motionDesign/structure/timelineParentRestoreAdapter';
 import { cloneTrackingAssets } from '../trackingStore';
+import { useDocumentsStore } from '../documentsStore';
 
 const log = Logger.create('HistorySnapshotApply');
 
@@ -34,6 +35,7 @@ export function applyHistorySnapshot(
   options: ApplyHistorySnapshotOptions = {}
 ): void {
   if (!snapshot) return;
+  if (snapshot.documents) useDocumentsStore.getState().hydrate(snapshot.documents);
 
   // Apply timeline state (including layers)
   if (refs.setTimelineState && refs.getTimelineState) {

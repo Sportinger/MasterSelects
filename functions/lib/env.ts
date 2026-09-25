@@ -64,7 +64,9 @@ export interface Env {
   GOOGLE_CLIENT_SECRET?: string;
   KERNEL_AUTH_TOKEN?: string;
   KERNEL_ORIGIN?: string;
+  KERNEL_REVIEW_ORIGIN?: string;
   KIEAI_API_KEY?: string;
+  KIEAI_REVIEW_API_KEY?: string;
   KIEAI_GENERATION_RATE_LIMITER?: AppDurableObjectNamespace;
   KV: AppKVNamespace;
   MEDIA: AppR2Bucket;
@@ -104,6 +106,7 @@ export interface Env {
 export interface AppUser {
   email: string;
   id: string;
+  reviewer?: boolean;
 }
 
 export interface AppContextData {

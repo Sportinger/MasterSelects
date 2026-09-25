@@ -32,6 +32,7 @@ import {
 } from '../../stores/storyboardStore';
 import { useSeedancePreproductionStore } from '../../stores/seedancePreproductionStore';
 import { useTrackingStore } from '../../stores/trackingStore';
+import { useDocumentsStore } from '../../stores/documentsStore';
 import {
   bucketRuntime,
   classifyProductAnalyticsFailure,
@@ -240,6 +241,7 @@ export async function createBlankProject(name: string): Promise<BlankProjectCrea
     resetFlashBoardActiveGenerationState();
     resetStoryboardProjectState();
     useSeedancePreproductionStore.getState().reset();
+    useDocumentsStore.getState().reset();
     useExportStore.getState().reset();
     useTrackingStore.getState().reset();
     useMediaStore.getState().newProject();
@@ -351,6 +353,7 @@ export function closeCurrentProject(): void {
   resetFlashBoardActiveGenerationState();
   resetStoryboardProjectState();
   useSeedancePreproductionStore.getState().reset();
+  useDocumentsStore.getState().reset();
   useExportStore.getState().reset();
   useTrackingStore.getState().reset();
   useMediaStore.getState().newProject();
@@ -469,6 +472,14 @@ export function setupAutoSync(): void {
       markProjectDirty();
     }
   }));
+  registerAutoSyncDisposer(useDocumentsStore.subscribe(
+    state => state.documents,
+    () => markProjectDirty(),
+  ));
+  registerAutoSyncDisposer(useDocumentsStore.subscribe(
+    state => state.activeDocumentId,
+    () => markProjectDirty(),
+  ));
 
   registerAutoSyncDisposer(useExportStore.subscribe(
     (state) => [state.settings, state.presets, state.selectedPresetId, state.batch] as const,

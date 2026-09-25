@@ -117,6 +117,30 @@ describe('timeline external drop command executor', () => {
     );
   });
 
+  it('places a document reference with its source window after the clip loads', async () => {
+    const actions = createActions();
+    const file = new File(['video'], 'take.mp4', { type: 'video/mp4' });
+    const applySourceWindow = vi.fn();
+    actions.addClip.mockResolvedValue('clip-1');
+    setMediaState({ files: [mediaFile({ id: 'source-1', file, duration: 12 })] });
+
+    const result = await executeTimelineExternalDropCommand({
+      actions,
+      command: { kind: 'media-file', itemId: 'source-1' },
+      isAudioOnlyMediaFile: () => false,
+      isVideoTrack: true,
+      mediaFilePolicy: 'strict-track-type',
+      resolveStartTime: duration => (duration ?? 0) + 10,
+      sourceWindow: { start: 2, end: 6 },
+      applySourceWindow,
+      trackId: 'video-1',
+    });
+
+    expect(result).toEqual({ handled: true });
+    expect(actions.addClip).toHaveBeenCalledWith('video-1', file, 14, 4, 'source-1', undefined, undefined);
+    expect(applySourceWindow).toHaveBeenCalledWith('clip-1', { start: 2, end: 6 });
+  });
+
   it('applies the placement choice resolved for a visual media drop', async () => {
     const actions = createActions();
     const file = new File(['video'], 'portrait.mp4', { type: 'video/mp4' });

@@ -39,6 +39,23 @@ async function prepare(runtime: SourceTemporalRuntime, request: SourceTemporalRe
 }
 afterEach(() => { vi.clearAllMocks(); mock.proxySize.mockReset(); vi.unstubAllGlobals(); });
 
+it('loads explicit output-relative source times through the export barrier, including reverse and repeat seeks', async () => {
+  const { runtime, request, writes } = setup();
+  for (const speed of [1, -1]) for (const localTime of [2.017, 4.017, 2.017]) {
+    const input = { view: {} as GPUTextureView, width: 2, height: 1 };
+    const exact = { ...request, horizon: 0.2, samples: 3, delays: [0.1, 0.2], completeWindow: true, currentInput: input,
+      source: { ...request.source, localTime, inPoint: 1, outPoint: 10, duration: 9, speed } };
+    const window = sourceTemporalWindow(exact);
+    expect(window.map(sample => sample.age)).toEqual([0.1, 0.2]);
+    expect(window[0].time).toBeCloseTo(speed > 0 ? 1 + localTime - 0.1 : 10 - localTime + 0.1);
+    const result = await prepare(runtime, exact);
+    expect(result).toBeDefined();
+    const metadata = writes.mock.calls.at(-1)![1] as Float32Array;
+    expect(metadata[4]).toBeCloseTo(0.1); expect(metadata[8]).toBeCloseTo(0.2);
+  }
+  runtime.destroy(); expect(mock.close).toHaveBeenCalled();
+});
+
 it('expands cache-mode source history without hitting the graph sampler four-second ceiling', async () => {
   const { runtime, request, writes } = setup();
   const expanded = { ...request, horizon: 20, timeFactor: 10, source: { ...request.source, localTime: 25 } };

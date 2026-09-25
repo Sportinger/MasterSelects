@@ -165,3 +165,6 @@ docs/completed/plans/
 # Local TLS certificates for LAN device testing (private keys - never commit)
 .certs/
 .ai-bridge-url
+
+# Python bytecode from local test helpers
+__pycache__/

@@ -178,6 +178,8 @@ export interface ProjectFile {
 
   // START-layout Seedance preproduction workflow and generated artifact lineage
   seedancePreproduction?: SeedancePreproductionProjectState;
+  documents?: import('../../../types/documents').DocumentsProjectState
+    | import('../../../types/documents').DocumentsProjectManifest;
 
   // Generated media items
   textItems?: ProjectTextItem[];

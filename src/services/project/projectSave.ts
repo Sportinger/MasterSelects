@@ -61,6 +61,8 @@ import {
 } from '../../stores/storyboardStore';
 import { getSeedancePreproductionProjectState } from '../../stores/seedancePreproductionStore';
 import { useTrackingStore } from '../../stores/trackingStore';
+import { useDocumentsStore } from '../../stores/documentsStore';
+import { writeDocumentsManifest } from '../documents/documentArtifacts';
 import { cloneTrackingAssets, ensureLegacyTrackingAssets } from '../planarTracking/trackingAssets';
 import {
   collectLegacyMediaArtifactSeeds,
@@ -495,6 +497,9 @@ export async function syncStoresToProject(): Promise<void> {
       });
       projectData.storyboard = getStoryboardProjectSnapshot();
       projectData.seedancePreproduction = getSeedancePreproductionProjectState();
+      projectData.documents = await writeDocumentsManifest(
+        useDocumentsStore.getState().serialize(), projectData.documents,
+      );
 
       if (!await persistFlashBoardChatJournal(getFlashBoardChatMessages())) {
         log.warn(' Chat journal could not be mirrored to the project folder');

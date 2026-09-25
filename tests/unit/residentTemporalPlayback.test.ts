@@ -35,6 +35,38 @@ async function allocate(runtime: ResidentTemporalRuntime) {
 }
 afterEach(() => { mock.jobs = []; vi.clearAllMocks(); vi.unstubAllGlobals(); });
 
+it('warms an exact Time Stack interval and reuses it across advancing outputs without cancelling the decoder', async () => {
+  const runtime = setup();
+  const stack = { ...request, samples: 20, horizon: 1.9, delays: Array.from({ length: 19 }, (_, i) => (i + 1) * 0.1), reserveFrames: 80 };
+  runtime.resolve(stack, 640); await settle(); runtime.resolve(stack, 640); await settle();
+  expect(runtime.resolve(stack, 640)).toBeUndefined();
+  const job = mock.jobs[0];
+  expect(job.times.length).toBeGreaterThan(60); // Intermediate PTS, not just the nineteen taps.
+  for (const time of job.times) job.onFrame({ time });
+  job.resolve(); await settle();
+  const uploads = mock.upload.mock.calls.length;
+  for (let frame = 0; frame <= 10; frame++) {
+    const next = { ...stack, source: { ...stack.source, localTime: 5 + frame / 30 } };
+    expect(runtime.resolve(next, 640)?.atlas).toBeDefined();
+  }
+  expect(mock.upload).toHaveBeenCalledTimes(uploads);
+  expect(mock.cancel).not.toHaveBeenCalled();
+  runtime.destroy();
+});
+
+it.each([1, -1])('preloads all delayed streams at original PTS, with bounded memory, speed %s', speed => {
+  const stack = { ...request, samples: 20, horizon: 3.8, delays: Array.from({ length: 19 }, (_, i) => (i + 1) * 0.2),
+    source: { ...request.source, speed } };
+  const required = new Set(hybridTemporalWindow(stack, frames).times);
+  for (const capacity of [80, 160]) {
+    const ahead = residentTemporalLookahead(stack, frames, required, new Map(), capacity);
+    expect(new Set([...required, ...ahead]).size).toBeLessThanOrEqual(capacity);
+    const next = hybridTemporalWindow({ ...stack, source: { ...stack.source, localTime: 5 + 1 / 30 } }, frames);
+    for (const time of next.times) expect(required.has(time) || ahead.includes(time)).toBe(true);
+    expect(ahead.every(time => frames.some(frame => frame.time === time))).toBe(true);
+  }
+});
+
 it('refills a miss with lookahead and presents a complete advancing window before the speculative tail finishes', async () => {
   const runtime = setup(); await allocate(runtime);
   expect(runtime.resolve(request, 640)).toBeUndefined();

@@ -1,3 +1,4 @@
+import { blendSequencePixel } from './sequenceBlend';
 import type { ImageOperatorEvaluationContext, ImageOperatorPlan } from './imageOperatorGraph';
 import { evaluateScalarOperation } from './scalarOperationSemantics';
 import { imageFract, imageHsvToRgb, imageRgbToHsv } from './imageColorSemantics';
@@ -240,7 +241,9 @@ export function createImageOperatorEvaluator(plan: ImageOperatorPlan) {
       for (let index = 0; index < count; index++) {
         const t = count === 1 ? 0 : index / (count - 1), term = evaluateScope(descriptor.id, scopePixel, scopeUv, undefined, index, t);
         const sample = term[descriptor.sample] as number[], weight = term[descriptor.weight] as number;
-        for (let channel = 0; channel < 4; channel++) result.sum[channel] += sample[channel] * weight;
+        if (descriptor.blend) result.sum = index === 0 ? [...sample.slice(0, 3), Math.max(0, Math.min(1, sample[3] * weight))]
+          : blendSequencePixel(result.sum, sample, args[1] as number, weight, scopeUv, context.timelineTimeSeconds ?? 0);
+        else for (let channel = 0; channel < 4; channel++) result.sum[channel] += sample[channel] * weight;
         result.weightSum += weight;
       }
       kernelResults.set(item.value!, result); values.push(result.sum);

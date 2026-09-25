@@ -17,6 +17,8 @@ import { useMediaStore } from '../stores/mediaStore';
 import { isUserVisibleComposition } from '../stores/mediaStore/compositionVisibility';
 import { useFlashBoardStore } from '../stores/flashboardStore';
 import { useSeedancePreproductionStore } from '../stores/seedancePreproductionStore';
+import { useDocumentsStore } from '../stores/documentsStore';
+import { importProjectDocument } from '../services/documents/importDocument';
 import {
   RECENT_PROJECTS_CHANGED_EVENT,
   projectFileService,
@@ -79,6 +81,7 @@ function resolveOpenProjectSelectionId(recentProjects: RecentProjectEntry[]): st
 
 export function LandingPanel() {
   const loadSavedLayout = useDockStore((state) => state.loadSavedLayout);
+  const pendingDocumentRef = useRef<string | null>(null);
   const storedFiles = useMediaStore((state) => state.files);
   const storedTextItems = useMediaStore((state) => state.textItems);
   const activeCompositionId = useMediaStore((state) => state.activeCompositionId);
@@ -91,6 +94,7 @@ export function LandingPanel() {
   const currentProjectName = useMediaStore((state) => state.currentProjectName);
   const openCompositionTab = useMediaStore((state) => state.openCompositionTab);
   const planningDocuments = useSeedancePreproductionStore((state) => state.documents);
+  const projectDocuments = useDocumentsStore((state) => state.documents);
   const putPlanningDocument = useSeedancePreproductionStore((state) => state.putDocument);
   const removePlanningDocument = useSeedancePreproductionStore((state) => state.removeDocument);
   const isMediaLoading = useMediaStore((state) => state.isLoading);
@@ -239,13 +243,14 @@ export function LandingPanel() {
       textPreview: item.text,
       type: 'text' as const,
     })),
-    ...planningDocuments.map((document) => ({
+    ...projectDocuments.map((document) => ({
       id: document.id,
-      name: document.name,
-      textPreview: document.text,
+      name: document.title.trim() || document.blocks.map(block => block.text.trim())
+        .find(Boolean)?.slice(0, 60) || 'Untitled note',
+      textPreview: document.blocks.map(block => block.text).join('\n'),
       type: 'document' as const,
     })),
-  ], [files, planningDocuments, textItems]);
+  ], [files, projectDocuments, textItems]);
 
   const openEditor = useCallback(() => {
     if (selectedProjectId === null) {
@@ -258,6 +263,13 @@ export function LandingPanel() {
     }
     setIsOpeningEditor(true);
   }, [selectedProjectId]);
+
+  const openProjectFile = useCallback((item: LandingProjectMediaItem) => {
+    if (item.type !== 'document') return;
+    useDocumentsStore.getState().selectDocument(item.id);
+    pendingDocumentRef.current = item.id;
+    openEditor();
+  }, [openEditor]);
 
   const runBackgroundChat = useCallback(async (
     prompt?: string,
@@ -459,7 +471,11 @@ export function LandingPanel() {
       const documentKey = `${record.file.name}|${record.file.size}|${record.file.lastModified}`;
       if (existingDocumentKeys.has(documentKey)) continue;
       try {
-        putPlanningDocument(await extractPlanningDocument(record.file));
+        const legacy = await extractPlanningDocument(record.file);
+        const parsed = await importProjectDocument(record.file);
+        useDocumentsStore.getState().importDocument(record.file.name, parsed.kind, parsed.blocks,
+          parsed.source, `story:${legacy.id}`, parsed.screenplayTitlePage);
+        putPlanningDocument(legacy);
         existingDocumentKeys.add(documentKey);
         importedCount += 1;
       } catch (error) {
@@ -491,7 +507,8 @@ export function LandingPanel() {
   const removeProjectFile = useCallback(async (item: LandingProjectMediaItem) => {
     const mediaStore = useMediaStore.getState();
     if (item.type === 'document') {
-      removePlanningDocument(item.id);
+      useDocumentsStore.getState().deleteDocument(item.id);
+      if (item.id.startsWith('story:')) removePlanningDocument(item.id.slice('story:'.length));
       return true;
     }
     if (item.type === 'text') {
@@ -528,6 +545,10 @@ export function LandingPanel() {
         transitionDurationMs: reduceMotion ? 0 : START_EDITOR_REVEAL_DURATION_MS,
         transitionStaggerMode: 'sequence',
       });
+      if (pendingDocumentRef.current) {
+        pendingDocumentRef.current = null;
+        window.setTimeout(() => useDockStore.getState().activatePanelType('documents'), 0);
+      }
     }, reduceMotion ? 0 : START_CHAT_EXIT_DURATION_MS);
 
     return () => window.clearTimeout(timeoutId);
@@ -559,6 +580,7 @@ export function LandingPanel() {
         onOpenRecentProject={openRecentProject}
         onPickProjectFiles={pickProjectFiles}
         onRemoveProjectFile={removeProjectFile}
+        onOpenProjectFile={openProjectFile}
         onOpenEditor={openEditor}
         onRenderVideo={renderReviewedVideo}
         onSelectSequence={selectSequence}

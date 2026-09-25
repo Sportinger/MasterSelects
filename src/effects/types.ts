@@ -79,6 +79,9 @@ export interface FullscreenEffectDefinition {
   // Samples a bounded history of this pass's input (not recursive feedback).
   usesInputHistory?: boolean;
 
+  /** Explicit ownership of deterministic original-source time sampling. */
+  sourceTimeOwner?: 'slit-scan' | 'time-stack';
+
   // Optional font atlas sampled from binding 4.
   glyphAtlas?: (params: Record<string, number | boolean | string>) => GlyphAtlasOptions;
 

@@ -132,6 +132,10 @@ function devBridgeFixture(): ToolPolicyEntry {
 const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   // ── READ-ONLY (low risk) ──────────────────────────────────────────────
   ['getTimelineState', allowKernelOperation(readOnly())],
+  ['listDocuments', allowKernelOperation(readOnly())],
+  ['searchDocuments', allowKernelOperation(readOnly())],
+  ['readDocument', allowKernelOperation(readOnly())],
+  ['getDocumentLinks', allowKernelOperation(readOnly())],
   ['getTimelineTranscript', allowKernelOperation(readOnly())],
   ['getTimelineRangeSelection', readOnly()],
   ['verifyTimelineInvariants', {
@@ -609,6 +613,10 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['removeVertex', mutatingMedium()],
   ['updateVertex', mutatingMedium()],
   ['addStoryboardScene', mutatingMedium()],
+  ['createProjectDocument', allowKernelOperation(mutatingMedium())],
+  ['editDocumentBlock', allowKernelOperation(mutatingMedium())],
+  ['addDocumentComment', allowKernelOperation(mutatingMedium())],
+  ['addDocumentMediaLink', allowKernelOperation(mutatingMedium())],
   ['updateStoryboardScene', mutatingMedium()],
   ['createTimelineVariantSet', mutatingMedium()],
   ['addTimelineVariantOption', mutatingMedium()],

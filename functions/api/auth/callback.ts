@@ -11,6 +11,7 @@ import {
 import { exchangeGoogleCodeForProfile } from '../../lib/authProviders';
 import { json, methodNotAllowed } from '../../lib/db';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
+import { reviewerSignInPage } from '../../lib/reviewerSignInPage';
 
 function wantsJsonResponse(request: Request): boolean {
   const acceptHeader = request.headers.get('Accept') ?? '';
@@ -27,6 +28,10 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   const providerError = url.searchParams.get('error');
   const code = url.searchParams.get('code');
   const token = url.searchParams.get('token');
+
+  // Non-secret marker accepted by the existing Android sign-in-link dialog.
+  // The actual credential is entered on the same-origin POST form, never in the URL.
+  if (stateId === 'review' && token === 'review') return reviewerSignInPage();
 
   if (providerError) {
     return json(

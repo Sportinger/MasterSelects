@@ -65,7 +65,17 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   if (path === null) {
     return json({ error: 'Invalid kernel route.' }, { status: 400 });
   }
-  const normalPathResponse = await tryHandleNormalPath(context, path);
+  const reviewOrigin = context.data.user?.reviewer
+    ? context.env.KERNEL_REVIEW_ORIGIN?.trim() : null;
+  if (context.data.user?.reviewer && (!reviewOrigin
+    || reviewOrigin === context.env.KERNEL_ORIGIN?.trim()
+    || !path.startsWith('normal/'))) {
+    return json({ error: 'The isolated review kernel is unavailable.' }, { status: 503 });
+  }
+  const normalPathContext = reviewOrigin
+    ? { ...context, env: { ...context.env, HOSTED_AGENT_KERNEL_ORIGIN: reviewOrigin } }
+    : context;
+  const normalPathResponse = await tryHandleNormalPath(normalPathContext, path);
   if (normalPathResponse) {
     return normalPathResponse;
   }

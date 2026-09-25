@@ -502,6 +502,16 @@ function shutdownAll() {
     && path.dirname(path.resolve(logicCodexHomePath)) === path.resolve(logicCredentialDirectory)
     && fs.existsSync(logicCodexHomePath)
   ) {
+    const sessionSource = path.join(logicCodexHomePath, 'sessions');
+    if (fs.existsSync(sessionSource)) {
+      const archive = path.join(repoRoot, '.codex-usage', 'direct-codex-sessions', path.basename(logicCredentialDirectory));
+      try {
+        fs.mkdirSync(archive, { recursive: true });
+        fs.cpSync(sessionSource, archive, { recursive: true, force: true });
+      } catch (error) {
+        console.warn('[dev-full] Could not archive local Codex session logs:', error);
+      }
+    }
     fs.rmSync(logicCodexHomePath, { recursive: true, force: true });
   }
   if (logicCredentialDirectory && fs.existsSync(logicCredentialDirectory)) {

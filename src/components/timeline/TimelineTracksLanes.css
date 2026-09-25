@@ -181,6 +181,23 @@
   touch-action: none;
 }
 
+.document-drop-preview {
+  position: absolute;
+  top: 2px;
+  z-index: 30;
+  max-width: min(320px, 80%);
+  padding: 4px 7px;
+  border: 1px solid var(--accent-color, #5f9df7);
+  border-radius: 4px;
+  background: var(--bg-primary, #17191d);
+  color: var(--text-primary, #fff);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
 .timeline-container.is-track-resizing .track-header,
 .timeline-container.is-track-resizing .track-lane {
   transition: background 160ms ease, border-color 160ms ease;

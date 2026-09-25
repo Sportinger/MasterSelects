@@ -16,6 +16,8 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 
 | Capability | Description |
 |---|---|
+| **Notebook** | [Write project notes, mark scenes and link passages](Documents.md), with document import, original views and screenplay layout |
+| **Time Stack** | [Blend delayed video instances](Time-Stack.md) in a compact editable node group with deterministic source sampling |
 | **AI Depth Map** | [Local depth estimation](Depth-Estimation.md), live source preview and reusable depth-video baking |
 | **WebGPU Rendering** | Shared render path for main preview, independent targets, output windows, and export |
 | **Timeline Editing** | Multi-track editing, nested compositions, markers, transitions, shortcuts, and keyframes |

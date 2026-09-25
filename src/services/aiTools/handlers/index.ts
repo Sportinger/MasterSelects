@@ -237,6 +237,11 @@ import {
   handlePreviewMediaGeneration,
   handleStartMediaGeneration,
 } from './mediaGeneration';
+import {
+  handleListDocuments, handleSearchDocuments, handleReadDocument,
+  handleGetDocumentLinks, handleCreateProjectDocument, handleEditDocumentBlock,
+  handleAddDocumentComment, handleAddDocumentMediaLink,
+} from './documents';
 
 const mediaHandlers: Record<string, (
   args: Record<string, unknown>,
@@ -261,6 +266,14 @@ const mediaHandlers: Record<string, (
 
 // Self-contained handlers (no store dependency, or fetch own stores)
 const selfContainedHandlers: Record<string, (args: Record<string, unknown>, callerContext?: CallerContext) => Promise<ToolResult>> = {
+  listDocuments: handleListDocuments,
+  searchDocuments: handleSearchDocuments,
+  readDocument: handleReadDocument,
+  getDocumentLinks: handleGetDocumentLinks,
+  createProjectDocument: handleCreateProjectDocument,
+  editDocumentBlock: handleEditDocumentBlock,
+  addDocumentComment: handleAddDocumentComment,
+  addDocumentMediaLink: handleAddDocumentMediaLink,
   profileAppInteraction: handleProfileAppInteraction,
   clickAppControl: handleClickAppControl,
   fillAppControl: handleFillAppControl,

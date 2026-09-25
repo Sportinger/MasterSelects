@@ -22,6 +22,7 @@ export const BUILT_IN_PANEL_TYPES: PanelType[] = [
   '3d-scan',
   'discover',
   'annotations',
+  'documents',
   'ai-studio',
   'export',
   'midi-mapping',

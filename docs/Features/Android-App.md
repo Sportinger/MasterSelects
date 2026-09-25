@@ -49,6 +49,31 @@ The app is available to invited Google Play internal testers; it is not a public
 
 ## Cloud sign-in
 
+### Review access preparation (not enabled)
+
+The server contains a dedicated review sign-in form at
+`/api/auth/callback?state=review&token=review`, compatible with the Android
+**Open email sign-in link** dialog. These URL values are public markers, not
+credentials. The form sends the separately generated 256-bit access code by POST.
+Only an explicitly provisioned user can sign in; codes are stored as SHA-256
+hashes. Disabling the account or changing its hash invalidates existing review
+sessions. Migration `0029_reviewer_access.sql` is required before provisioning.
+
+This is **not a working cloud reviewer account yet**. New accounts default to
+disabled. Review sessions may access account status, credit summary, hosted Kie
+chat and the Normal Path kernel only when both a separately capped
+`KIEAI_REVIEW_API_KEY` and a distinct `KERNEL_REVIEW_ORIGIN` are configured.
+The Kie chat route replaces the ordinary key before dispatch; Normal Path turns
+are sent to the dedicated review kernel origin. That kernel must be pinned to
+Kie with the **same capped review key** and have no other paid provider keys.
+Other cloud AI routes remain blocked. The vendor-side key cap, rather than app
+credits, is the hard provider-spend boundary. `reviewerBudget.ts` and the
+migration offer additional atomic reservations, but cannot substitute for the
+vendor cap without proven upper cost bounds. No production account, credential,
+review kernel or provider key binding has been provisioned by this implementation.
+
+### Regular account sign-in
+
 Use **Send link**, then open the email link with MasterSelects after App Links are
 configured, or use **Open email sign-in link** and paste the original link. The
 existing server validates the signed, expiring token and issues its session cookie

@@ -24,6 +24,7 @@ interface LandingProjectMediaStripProps {
   disabled?: boolean;
   items: LandingProjectMediaItem[];
   onRemoveItem?: (item: LandingProjectMediaItem) => void;
+  onOpenItem?: (item: LandingProjectMediaItem) => void;
   onShowProjects?: () => void;
   onToggleSourceItem?: (item: LandingProjectMediaItem) => void;
   removingItemId?: string | null;
@@ -43,6 +44,7 @@ function LandingMediaPreview({
   disabled = false,
   item,
   onRemove,
+  onOpen,
   onToggleSource,
   removing = false,
   sourceSelected = false,
@@ -51,6 +53,7 @@ function LandingMediaPreview({
   disabled?: boolean;
   item: LandingProjectMediaItem;
   onRemove?: () => void;
+  onOpen?: () => void;
   onToggleSource?: () => void;
   removing?: boolean;
   sourceSelected?: boolean;
@@ -72,6 +75,7 @@ function LandingMediaPreview({
         sourceSelectionMode && !sourceSelected ? 'is-source-excluded' : '',
       ].filter(Boolean).join(' ')}
       title={item.name}
+      onDoubleClick={item.type === 'document' ? onOpen : undefined}
     >
       <div className="landing-media-file-preview">
         {item.type === 'video' && item.mediaUrl ? (
@@ -142,6 +146,7 @@ export function LandingProjectMediaStrip({
   disabled = false,
   items,
   onRemoveItem,
+  onOpenItem,
   onShowProjects,
   onToggleSourceItem,
   removingItemId = null,
@@ -185,6 +190,7 @@ export function LandingProjectMediaStrip({
             key={item.id}
             removing={removingItemId === item.id}
             onRemove={!sourceSelectionMode && onRemoveItem ? () => onRemoveItem(item) : undefined}
+            onOpen={onOpenItem ? () => onOpenItem(item) : undefined}
             onToggleSource={onToggleSourceItem ? () => onToggleSourceItem(item) : undefined}
             sourceSelected={selectedSourceItemIds.has(item.id)}
             sourceSelectionMode={sourceSelectionMode}

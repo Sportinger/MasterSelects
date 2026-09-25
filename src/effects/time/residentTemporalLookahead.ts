@@ -2,12 +2,14 @@ import { surfaceFrameIndex } from '../../services/planarTracking/surfaceFrameRea
 import type { SourceTemporalRequest } from './SourceTemporalRuntime';
 import { temporalSourceTime } from './temporalClipSource';
 import { slitScanPlaybackLookahead } from './slit-scan/playbackLookahead';
+import { explicitTemporalLookahead } from './explicitTemporalLookahead';
 
 /** Only the leading grid positions are new as the absolute window advances.
  * Do not rebuild thousands of historical samples for every speculative frame. */
 export function residentTemporalLookahead(request: SourceTemporalRequest,
   frames: readonly { time: number; duration: number }[], required: ReadonlySet<number>,
   resident: ReadonlyMap<number, number>, capacity: number): number[] {
+  if (request.delays) return explicitTemporalLookahead(request, frames, required, capacity);
   const rate = request.source.clockRate ?? 1;
   const count = Math.min(192, Math.ceil(12 * rate), capacity - required.size);
   if (count <= 0 || !request.horizon || !frames.length) return [];

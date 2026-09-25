@@ -1,3 +1,4 @@
+import { Profiler } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -159,4 +160,23 @@ describe('InspectorSelect pointer interaction', () => {
     expect(onChange).toHaveBeenLastCalledWith('multiply');
     expect(screen.getByRole('listbox')).toBeInTheDocument();
   });
+});
+
+
+it('keeps pointer hover out of React renders and preserves keyboard selection', () => {
+  const onChange = vi.fn(), onRender = vi.fn();
+  render(<Profiler id="select" onRender={onRender}><InspectorSelect ariaLabel="Blend test"
+    options={[...OPTIONS]} value="normal" onChange={onChange} wheelSelection /></Profiler>);
+  const trigger = screen.getByRole('combobox', { name: 'Blend test' });
+  fireEvent.click(trigger);
+  onRender.mockClear();
+  fireEvent.mouseEnter(screen.getByRole('option', { name: 'Screen' }));
+  expect(onRender).not.toHaveBeenCalled();
+  fireEvent.wheel(screen.getByRole('listbox'), { deltaY: 100 });
+  expect(onChange).not.toHaveBeenCalled();
+  fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+  fireEvent.keyDown(trigger, { key: 'Enter' });
+  expect(onChange).toHaveBeenCalledWith('multiply');
+  expect(trigger).toHaveFocus();
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
 });

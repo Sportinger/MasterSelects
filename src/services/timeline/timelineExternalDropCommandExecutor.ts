@@ -61,6 +61,8 @@ export interface TimelineExternalDropCommandExecutionParams {
   resolveAddClipOptions?: (mediaFile: MediaFile) => AddClipOptions | Promise<AddClipOptions | undefined> | undefined;
   resolveLinkedVideoTrackId?: (startTime: number, duration?: number) => string | undefined;
   resolveStartTime: (duration?: number) => number;
+  sourceWindow?: { start: number; end: number };
+  applySourceWindow?: (clipId: string, window: { start: number; end: number }) => void;
   trackId: string;
 }
 
@@ -131,9 +133,11 @@ async function executeMediaFileDropCommand(
     return rejected('unresolved-media-file');
   }
 
-  const startTime = params.resolveStartTime(mediaFile.duration);
+  const duration = params.sourceWindow
+    ? params.sourceWindow.end - params.sourceWindow.start : mediaFile.duration;
+  const startTime = params.resolveStartTime(duration);
   const linkedVideoTrackId = routesLinkedVideoFromAudioTrack
-    ? params.resolveLinkedVideoTrackId?.(startTime, mediaFile.duration)
+    ? params.resolveLinkedVideoTrackId?.(startTime, duration)
     : undefined;
   if (routesLinkedVideoFromAudioTrack && !linkedVideoTrackId) {
     log.debug('No compatible video track is available for the linked video clip');
@@ -142,6 +146,15 @@ async function executeMediaFileDropCommand(
   const placementTrackId = linkedVideoTrackId ?? params.trackId;
   const mediaTypeOverride = getTimelineDropMediaTypeOverride(mediaFile);
   const addClipOptions = await params.resolveAddClipOptions?.(mediaFile);
+  if (params.sourceWindow) {
+    const clipId = await params.actions.addClip(placementTrackId, file, startTime, duration,
+      mediaFileId, mediaTypeOverride,
+      routesLinkedVideoFromAudioTrack
+        ? { ...addClipOptions, linkedAudioTrackId: params.trackId } : addClipOptions);
+    if (!clipId) return rejected('clip-creation-failed');
+    params.applySourceWindow?.(clipId, params.sourceWindow);
+    return handled();
+  }
   if (routesLinkedVideoFromAudioTrack) {
     params.actions.addClip(
       placementTrackId,

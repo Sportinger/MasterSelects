@@ -9,7 +9,7 @@ import type { AnimatableProperty } from './animationProperties';
 
 // Panel types that can be docked
 // Note: Effects, Transcript, Analysis are now integrated into Properties panel
-export type PanelType = 'start' | 'preview' | 'multi-preview' | 'timeline' | 'curves' | 'clip-properties' | 'history' | 'annotations' | 'stats' | 'audio-mixer' | 'node-workspace' | 'color-nodes' | 'color-controls' | 'color-clips' | 'color-timeline' | 'color-scopes' | 'color-keyframes' | 'media' | '3d-scan' | 'discover' | 'ai-studio' | 'export' | 'midi-mapping' | 'capture' | 'go-live' | 'slot-grid' | 'stream-chat' | 'stream-analytics' | 'story' | 'ai-segment' | 'scene-description' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
+export type PanelType = 'start' | 'preview' | 'multi-preview' | 'timeline' | 'curves' | 'clip-properties' | 'history' | 'annotations' | 'documents' | 'stats' | 'audio-mixer' | 'node-workspace' | 'color-nodes' | 'color-controls' | 'color-clips' | 'color-timeline' | 'color-scopes' | 'color-keyframes' | 'media' | '3d-scan' | 'discover' | 'ai-studio' | 'export' | 'midi-mapping' | 'capture' | 'go-live' | 'slot-grid' | 'stream-chat' | 'stream-analytics' | 'story' | 'ai-segment' | 'scene-description' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
 export type DockLayoutTransitionStaggerMode = 'puzzle' | 'sequence';
 export type DockLayoutStartTransitionDirection = 'to-start' | 'from-start';
 
@@ -368,6 +368,14 @@ export const PANEL_CONFIGS: Record<PanelType, PanelConfig> = {
     icon: 'MessageSquare',
     minWidth: 300,
     minHeight: 260,
+    closable: false,
+  },
+  documents: {
+    type: 'documents',
+    title: 'Notebook',
+    icon: 'FileText',
+    minWidth: 360,
+    minHeight: 300,
     closable: false,
   },
   'ai-studio': {

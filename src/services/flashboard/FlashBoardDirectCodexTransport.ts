@@ -48,8 +48,6 @@ export {
   resetDirectCodexSession,
 } from './FlashBoardDirectCodexThreadSession';
 
-const MAX_PROTOCOL_MESSAGE_CHARS = 16 * 1024 * 1024;
-const MAX_TOOL_RESULT_CHARS = 4 * 1024 * 1024;
 
 type RpcId = number | string;
 
@@ -161,18 +159,13 @@ export function normalizeDirectCodexToolArguments(
   return { ...normalized, mediaFileId: mediaFile.id };
 }
 
-function boundedToolResult(result: ToolResult): string {
+function serializeToolResult(result: ToolResult): string {
   const serialized = JSON.stringify(result, (_key, value) => (
     typeof value === 'string' && /^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(value)
       ? '[image attached separately]'
       : value
   ));
-  if (serialized.length <= MAX_TOOL_RESULT_CHARS) return serialized;
-  return JSON.stringify({
-    success: false,
-    error: 'The MasterSelects tool result exceeded the Direct Codex transport limit.',
-    data: { originalCharacters: serialized.length },
-  });
+  return serialized;
 }
 
 function findImageDataUrl(value: unknown, seen = new WeakSet<object>()): string | undefined {
@@ -198,7 +191,7 @@ function findImageDataUrl(value: unknown, seen = new WeakSet<object>()): string 
 
 function directToolContentItems(result: ToolResult): Array<Record<string, unknown>> {
   const contentItems: Array<Record<string, unknown>> = [{
-    text: boundedToolResult(result),
+    text: serializeToolResult(result),
     type: 'inputText',
   }];
   const imageUrl = findImageDataUrl(result.data);
@@ -309,7 +302,7 @@ async function runDirectCodexChat(
   const handledToolCallIds = new Set<string>();
   const executedToolCalls: FlashBoardExecutedToolCall[] = [];
   const streamDiagnostics = new CodexStreamDiagnostics();
-  let toolResponseQueue = Promise.resolve();
+  let toolResponseQueue: Promise<unknown> = Promise.resolve();
   let nextRequestId = 1;
   const reloadSnapshot = request.resumeMessageId
     ? readDirectCodexReloadSnapshot(request.resumeMessageId)
@@ -505,7 +498,7 @@ async function runDirectCodexChat(
 
   socket.addEventListener('message', (event) => {
     try {
-      if (typeof event.data !== 'string' || event.data.length > MAX_PROTOCOL_MESSAGE_CHARS) {
+      if (typeof event.data !== 'string') {
         throw new Error('Codex Direct returned an invalid protocol message.');
       }
       const message = JSON.parse(event.data) as RpcMessage;

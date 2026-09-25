@@ -25,6 +25,7 @@ import { operatorGraphToolDefinitions } from './operatorGraph';
 import { workerFirstToolDefinitions } from './workerFirst';
 import { workerFirstRuntimeToolDefinitions } from './workerFirstRuntime';
 import { storyboardToolDefinitions } from './storyboard';
+import { documentToolDefinitions } from './documents';
 
 // Combined tool definitions array (OpenAI function calling format)
 export const AI_TOOLS = [
@@ -53,6 +54,7 @@ export const AI_TOOLS = [
   ...nodeCatalogToolDefinitions,
   ...operatorGraphToolDefinitions,
   ...storyboardToolDefinitions,
+  ...documentToolDefinitions,
 ];
 
 // Re-export individual definition sets for selective use
@@ -82,4 +84,5 @@ export {
   nodeCatalogToolDefinitions,
   operatorGraphToolDefinitions,
   storyboardToolDefinitions,
+  documentToolDefinitions,
 };

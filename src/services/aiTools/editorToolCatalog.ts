@@ -12,6 +12,7 @@ import {
   playbackToolDefinitions,
   previewToolDefinitions,
   storyboardToolDefinitions,
+  documentToolDefinitions,
   captionToolDefinitions,
   textToolDefinitions,
   timelineToolDefinitions,
@@ -66,6 +67,7 @@ const CANDIDATE_EDITOR_TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   ...transitionToolDefinitions,
   ...maskToolDefinitions,
   ...storyboardToolDefinitions,
+  ...documentToolDefinitions,
   ...flockToolDefinitions,
 ];
 

@@ -1,8 +1,10 @@
-import { loadUserFromSession } from './lib/auth';
+import { clearAuthCookies, loadUserFromSession } from './lib/auth';
 import { buildRequestId } from './lib/db';
 import { ensureGuestAccess } from './lib/guestAccess';
 import type { AppContext, AppRouteHandler } from './lib/env';
 import { isSupportedPagePath } from '../src/routing/entryExperience';
+import { json } from './lib/db';
+import { ReviewerAccessRevokedError } from './lib/reviewerAccess';
 
 const VISIT_RETENTION_TTL_SECONDS = 180 * 24 * 60 * 60;
 
@@ -203,12 +205,35 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
 
   try {
     context.data.user = await loadUserFromSession(context.request, context.env);
-  } catch {
+  } catch (error) {
+    if (error instanceof ReviewerAccessRevokedError) {
+      const headers = new Headers();
+      await clearAuthCookies(headers, context.request);
+      return withHeaders(json({ error: 'reviewer_access_revoked' }, { status: 403, headers }), context.request);
+    }
     context.data.user = null;
   }
 
   let guestSetCookie: string | null = null;
   const pathname = new URL(context.request.url).pathname;
+  // The review identity may only reach routes pinned to a separately capped
+  // Kie credential and a dedicated Kie-only kernel. Other paid adapters remain
+  // inaccessible, including video, audio and preproduction routes.
+  if (context.data.user?.reviewer && pathname.startsWith('/api/')) {
+    const reviewReady = Boolean(context.env.KIEAI_REVIEW_API_KEY?.trim()
+      && context.env.KERNEL_REVIEW_ORIGIN?.trim()
+      && context.env.KERNEL_REVIEW_ORIGIN?.trim() !== context.env.KERNEL_ORIGIN?.trim());
+    const publicAuthRoute = ['/api/auth/logout', '/api/auth/reviewer', '/api/auth/callback']
+      .includes(pathname);
+    const reviewRoute = ['/api/me', '/api/billing/summary', '/api/ai/chat'].includes(pathname)
+      || pathname.startsWith('/api/kernel/normal/');
+    if (!publicAuthRoute && !(reviewReady && reviewRoute)) {
+      return withHeaders(json({
+        error: 'reviewer_provider_budget_unavailable',
+        message: 'This route is unavailable to the isolated review account.',
+      }, { status: 503 }), context.request);
+    }
+  }
   const needsGuestAiAccess = pathname === '/api/me'
     || pathname === '/api/billing/summary'
     || pathname === '/api/direct-codex/ws'

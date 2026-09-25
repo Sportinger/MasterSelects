@@ -35,7 +35,7 @@ export interface ImageOperatorPlan extends ImageOperatorProgram {
   sampleScopes: readonly ImageOperatorSampleScope[];
   kernelScopes?: readonly { id: number; sample: number; weight: number }[];
   rectScopes?: readonly { id: number; sample: number; weight: number }[];
-  sequenceScopes?: readonly { id: number; sample: number; weight: number }[];
+  sequenceScopes?: readonly { id: number; sample: number; weight: number; blend?: boolean }[];
   segmentSortScopes?: readonly { id: number; sample: number }[];
   quadtreeScopes?: readonly { id: number; sample: number }[];
   resourceInputs?: readonly string[]; resourceSampling?: readonly ImageOperatorResourceSampling[];

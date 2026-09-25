@@ -16,7 +16,7 @@ const hash = (value: string) => {
   for (let index = 0; index < value.length; index++) { result ^= value.charCodeAt(index); result = Math.imul(result, 0x01000193); }
   return (result >>> 0).toString(16).padStart(8, '0');
 };
-interface ReducerScope { id: number; sample: number; weight: number }
+interface ReducerScope { id: number; sample: number; weight: number; blend?: boolean }
 export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstruction[]; output: number; capabilities: ImageOperatorCapability[];
   sampleScopes: ImageOperatorSampleScope[]; kernelScopes: ReducerScope[]; rectScopes: ReducerScope[]; sequenceScopes: ReducerScope[];
   segmentSortScopes: readonly { id: number; sample: number }[];
@@ -66,7 +66,7 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
       : item.operation === 'kernel-weight-sum' ? `kernelResult${item.inputs[0]}.weightSum`
       : item.operation === 'rect-sum' ? `imageRectReduce${item.value}(${args[0]}, ${args[1]}, pixel, inputUv${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''})`
       : item.operation === 'rect-weight-sum' ? `rectResult${item.inputs[0]}.weightSum`
-      : item.operation === 'sequence-sum' ? `imageSequenceReduce${item.value}(${args[0]}, pixel, inputUv${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''})`
+      : item.operation === 'sequence-sum' ? `imageSequenceReduce${item.value}(${args.join(', ')}, pixel, inputUv${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''})`
       : item.operation === 'sequence-weight-sum' ? `sequenceResult${item.inputs[0]}.weightSum`
       : item.operation === 'select-image' || item.operation === 'select-lazy-scalar' ? 'lazy-selection'
       : item.operation === 'constant' ? item.type === 'boolean' ? (item.value ? 'true' : 'false') : f32(item.value ?? 0)

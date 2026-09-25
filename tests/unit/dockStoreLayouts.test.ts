@@ -48,6 +48,17 @@ describe('dock store saved layouts', () => {
     ] });
   });
 
+  it('renames persisted Documents tabs to Notebook while preserving custom titles', () => {
+    const layout: DockLayout = { root: { kind: 'tab-group', id: 'notes', activeIndex: 0, panels: [
+      { id: 'old', type: 'documents', title: 'Documents' },
+      { id: 'custom', type: 'documents', title: 'My notes' },
+    ] }, floatingPanels: [] };
+    expect(cleanupPersistedLayout(layout).root).toMatchObject({ panels: [
+      { id: 'old', type: 'documents', title: 'Notebook' },
+      { id: 'custom', type: 'documents', title: 'My notes' },
+    ] });
+  });
+
   beforeEach(() => {
     localStorage.clear();
     useSettingsStore.setState({ theme: 'dark' });

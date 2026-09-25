@@ -214,19 +214,23 @@ export preparation collector must receive the error rather than export a bypass.
 
 ## Current graph integration
 
-[`EffectsPipeline`](../../src/effects/EffectsPipeline.ts) currently chooses
-`TemporalEffectResources` / `SourceTemporalRuntime` **only for `slit-scan`**.
-Its `image.sample-history` node receives the persistent atlas and age metadata;
-the same graph feeds the effect and node previews. The absolute clip-time grid,
-trim/speed mapping and current-input sample belong to `SourceTemporalRuntime`,
-not to the generic frame service.
+Temporal owners now declare `sourceTimeOwner` explicitly in their fullscreen
+effect definition. Slit Scan retains TemporalEffectResources; Time Stack uses
+TimeStackResources and ResidentTemporalRuntime with explicit output-relative
+delays and a bounded continuous-window/lookahead cache. Both share SourceFrameService and TemporalFrameUploader. Time Stack's
+single graph sampler runs inside Sequence Blend and shares one atlas for every
+iteration. Its export preparation requires the complete window.
+
+Slit Scan's `image.sample-history` receives its persistent atlas and age metadata;
+the same graph feeds the effect and node previews. Slit Scan retains its absolute
+clip-time grid, trim/speed mapping and current-input semantics. Time Stack uses
+explicit relative delays through `sourceTemporalWindow` and one shared sampler
+inside Sequence Blend. Source windows share decoding and GPU upload infrastructure.
 
 `usesInputHistory: true` enables compilation of `image.sample-history`; it does
-not select deterministic source sampling. A different owner currently falls
-through to `InputHistoryRuntime`. Only Slit Scan declares this flag in the
-registered effects at this audit. Before adding another source-time effect,
-introduce an explicit owner capability/resolver instead of copying the Slit Scan
-type check or assuming the node opts in automatically. Keep previous-output
+not select deterministic source sampling by itself. Owners additionally declare
+`sourceTimeOwner` and route through `TemporalEffectResources.resolveSource`.
+Unowned history continues to use InputHistoryRuntime. Keep previous-output
 feedback and preceding-effect input history distinct.
 
 ## Other paths and consumers

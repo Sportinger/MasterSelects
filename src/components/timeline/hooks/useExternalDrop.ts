@@ -41,11 +41,32 @@ import {
 } from '../../../timeline';
 import { executeTimelineExternalDropCommand } from '../../../services/timeline/timelineExternalDropCommandExecutor';
 import { requestSourceFitDecision } from '../../common/sourceFitDialog/sourceFitDialogController';
+import { useTimelineStore } from '../../../stores/timeline';
+import { DOCUMENT_MEDIA_REFERENCE_MIME, parseDocumentMediaDrag } from '../../../services/documents/documentMediaDrag';
 
 const log = Logger.create('useExternalDrop');
 
 function isAudioOnlyMediaFile(mediaFile: MediaFile, file?: File): boolean {
   return mediaFile.type === 'audio' || Boolean(file && isAudioFile(file));
+}
+
+function readDocumentDrop(dataTransfer: DataTransfer): { valid: boolean; sourceWindow?: { start: number; end: number } } {
+  if (!dataTransfer.types.includes(DOCUMENT_MEDIA_REFERENCE_MIME)) return { valid: true };
+  const mediaId = dataTransfer.getData('application/x-media-file-id');
+  const drag = parseDocumentMediaDrag(dataTransfer.getData(DOCUMENT_MEDIA_REFERENCE_MIME), mediaId);
+  const media = useMediaStore.getState().files.find(item => item.id === mediaId);
+  if (!drag || !media) return { valid: false };
+  if (drag.start === undefined || drag.end === undefined) return { valid: true };
+  if (!Number.isFinite(media.duration) || drag.end > media.duration! + 0.001) return { valid: false };
+  return { valid: true, sourceWindow: { start: drag.start, end: drag.end } };
+}
+
+function applyDocumentSourceWindow(clipId: string, window: { start: number; end: number }): void {
+  const timeline = useTimelineStore.getState();
+  const clip = timeline.clips.find(item => item.id === clipId);
+  if (!clip) return;
+  timeline.trimClip(clipId, window.start, window.end);
+  if (clip.linkedClipId) timeline.trimClip(clip.linkedClipId, window.start, window.end);
 }
 
 interface UseExternalDropReturn {
@@ -406,6 +427,8 @@ export function useExternalDrop({
       const dropCommand = planExternalDropCommand(e.dataTransfer);
 
       clearExternalDragSession();
+      const documentDrop = readDocumentDrop(e.dataTransfer);
+      if (!documentDrop.valid) return;
 
       if (!canRouteTimelineExternalDropCommandToTrack(dropCommand, trackType)) {
         log.debug('Drop command cannot be routed to the requested new track type', {
@@ -483,6 +506,8 @@ export function useExternalDrop({
         mediaFilePolicy: 'strict-track-type',
         resolveAddClipOptions,
         resolveStartTime: () => startTime,
+        sourceWindow: documentDrop.sourceWindow,
+        applySourceWindow: applyDocumentSourceWindow,
         trackId: newTrackId,
       });
       if (commandResult.handled) {
@@ -529,6 +554,8 @@ export function useExternalDrop({
       const targetTrack = tracks.find((t) => t.id === trackId);
       const isVideoTrack = targetTrack?.type === 'video';
       const dropCommand = planExternalDropCommand(e.dataTransfer);
+      const documentDrop = readDocumentDrop(e.dataTransfer);
+      if (!documentDrop.valid) return;
       if (targetTrack?.type === 'midi') {
         log.debug('External drops cannot be routed to MIDI tracks', {
           commandKind: dropCommand.kind,
@@ -593,6 +620,8 @@ export function useExternalDrop({
         mediaFilePolicy: 'strict-track-type',
         resolveAddClipOptions,
         resolveStartTime: prepareDropStartTime,
+        sourceWindow: documentDrop.sourceWindow,
+        applySourceWindow: applyDocumentSourceWindow,
         trackId,
       });
       if (commandResult.handled) {

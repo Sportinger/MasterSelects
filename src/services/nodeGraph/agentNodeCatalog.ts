@@ -46,7 +46,10 @@ export function getAgentNodeCatalog(): AgentNodeDefinition[] {
       id: entry.id, typeId: effect?.id ?? entry.id, label: entry.label,
       kind: effect ? 'effect' : flockOperator ? 'flock' : 'operator',
       context: entry.context, description: entry.description, category: entry.category,
-      availability: effect && 'internal' in effect && effect.internal ? 'internal' : 'owner-dependent',
+      availability: effect && 'internal' in effect && effect.internal ? 'internal'
+        : operator && !operator.addable && !['image.frame', 'values.number'].includes(operator.id)
+          ? (operator.id.endsWith('.output') || operator.id.endsWith('.input') ? 'fixed-anchor' : 'internal')
+          : 'owner-dependent',
       inputs: entry.inputs.map(port), outputs: entry.outputs.map(port), parameters: parameters.map(parameter),
     };
   });

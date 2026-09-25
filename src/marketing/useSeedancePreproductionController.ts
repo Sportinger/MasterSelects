@@ -12,6 +12,7 @@ import {
   type SeedancePreproductionPhase,
   type SeedancePreproductionRun,
   type SeedanceSourceBundleReference,
+  type SeedancePlanningDocument,
   type SeedanceStory,
   type SeedanceStoryIdea,
 } from '../services/seedancePreproduction/contracts';
@@ -53,6 +54,7 @@ import {
   readSeedancePreproductionStore,
 } from '../services/seedancePreproduction/storeRuntime';
 import { useSeedancePreproductionStore } from '../stores/seedancePreproductionStore';
+import { useDocumentsStore } from '../stores/documentsStore';
 
 const COMMONS_RESEARCH_BATCH_SIZE = 4;
 
@@ -95,8 +97,20 @@ async function ensureSourceBundle(
     throw new Error('One or more selected Story source files became unavailable.');
   }
   const state = readSeedancePreproductionStore();
+  const projectDocuments: SeedancePlanningDocument[] = useDocumentsStore.getState().documents.map(doc => ({
+    id: doc.id,
+    name: doc.title,
+    mimeType: doc.source?.mimeType ?? 'text/plain',
+    text: doc.blocks.map(block => block.text).join('\n'),
+    truncated: doc.source?.report?.includes('truncated') ?? false,
+    pageCount: doc.source?.pageCount,
+    byteLength: doc.source?.byteLength ?? 0,
+    createdAt: doc.createdAt,
+    format: doc.source?.format === 'pdf' ? 'pdf' : doc.source?.format === 'markdown' ? 'markdown' : 'text',
+    lastModified: doc.source?.importedAt ?? doc.updatedAt,
+  }));
   const snapshot = await createSeedanceSourceBundleSnapshot({
-    documents: selectedIds === null ? state.documents : [],
+    documents: selectedIds === null ? projectDocuments : [],
     mediaFiles,
   });
   signal?.throwIfAborted();

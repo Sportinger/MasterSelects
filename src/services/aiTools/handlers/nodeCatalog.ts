@@ -11,8 +11,8 @@ export async function handleSearchNodeCatalog(args: Record<string, unknown>): Pr
   }
   if (args.kind !== undefined && !AGENT_NODE_KINDS.includes(args.kind as typeof AGENT_NODE_KINDS[number])) return fail('Unknown node kind.');
   const offset = args.offset ?? 0, limit = args.limit ?? 12;
-  if (typeof offset !== 'number' || !Number.isInteger(offset) || offset < 0 || offset > 100000
-    || typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 30) return fail('Invalid pagination: offset 0..100000 and limit 1..30 must be integers.');
+  if (typeof offset !== 'number' || !Number.isSafeInteger(offset) || offset < 0
+    || typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 1) return fail('Invalid pagination: offset must be a non-negative safe integer and limit a positive safe integer.');
   const query = ((args.query as string | undefined) ?? '').trim().toLowerCase();
   const terms = query.split(/\s+/).filter(Boolean);
   const context = ((args.context as string | undefined) ?? '').trim().toLowerCase();
@@ -32,9 +32,9 @@ export async function handleSearchNodeCatalog(args: Record<string, unknown>): Pr
 
 export async function handleGetNodeDefinitions(args: Record<string, unknown>): Promise<ToolResult> {
   const ids = args.ids;
-  if (Object.keys(args).some(key => key !== 'ids') || !Array.isArray(ids) || ids.length < 1 || ids.length > 8
+  if (Object.keys(args).some(key => key !== 'ids') || !Array.isArray(ids) || ids.length < 1
     || ids.some(id => typeof id !== 'string' || id.length < 1 || id.length > 160) || new Set(ids).size !== ids.length) {
-    return fail('ids must contain 1..8 unique exact catalog IDs.');
+    return fail('ids must contain unique exact catalog IDs (at least one).');
   }
   const byId = new Map(getAgentNodeCatalog().map(entry => [entry.id, entry]));
   return { success: true, data: { definitions: ids.flatMap(id => byId.has(id) ? [byId.get(id)!] : []),

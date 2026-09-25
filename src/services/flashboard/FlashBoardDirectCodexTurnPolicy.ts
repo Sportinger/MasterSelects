@@ -1,7 +1,6 @@
 import { getToolPolicy } from '../aiTools';
 import type { ToolResult } from '../aiTools';
 
-const MAX_TOOL_CALLS_PER_TURN = 120;
 const MAX_IDENTICAL_READ_ATTEMPTS = 3;
 
 const DEDUPED_READ_TOOLS = new Set([
@@ -35,6 +34,11 @@ function canonicalize(value: unknown): unknown {
       .toSorted(([left], [right]) => left.localeCompare(right))
       .map(([key, entry]) => [key, canonicalize(entry)]),
   );
+}
+
+function isNodeCreation(toolName: string, args: Record<string, unknown>): boolean {
+  return ['createImageNodeGraph', 'addFlockNode', 'addEffect'].includes(toolName)
+    || (toolName === 'editOperatorGraph' && args.action === 'add');
 }
 
 function toolCallKey(toolName: string, args: Record<string, unknown>): string {
@@ -71,7 +75,6 @@ export interface DirectCodexTurnToolPolicy {
 export function createDirectCodexTurnToolPolicy(): DirectCodexTurnToolPolicy {
   let mediaGenerationStarted = false;
   let projectRevision = 0;
-  let totalToolCalls = 0;
   const completedMutationKeys = new Set<string>();
   const completedReadKeys = new Set<string>();
   const identicalReadAttempts = new Map<string, number>();
@@ -85,18 +88,6 @@ export function createDirectCodexTurnToolPolicy(): DirectCodexTurnToolPolicy {
 
   return {
     beforeTool(toolName, args) {
-      totalToolCalls += 1;
-      if (totalToolCalls > MAX_TOOL_CALLS_PER_TURN) {
-        return {
-          success: false,
-          error: `Codex Direct stopped after ${MAX_TOOL_CALLS_PER_TURN} tool calls in one turn.`,
-          data: {
-            instruction: 'Summarize the verified work already completed. Ask the user for a follow-up turn if more work is genuinely required.',
-            reason: 'direct_turn_tool_call_limit',
-          },
-        };
-      }
-
       if (toolName === 'startMediaGeneration') {
         if (!mediaGenerationStarted) {
           mediaGenerationStarted = true;
@@ -121,7 +112,8 @@ export function createDirectCodexTurnToolPolicy(): DirectCodexTurnToolPolicy {
         }
       }
 
-      if (getToolPolicy(toolName)?.readOnly === false) {
+      // Separate calls may intentionally create identical graph elements.
+      if (!isNodeCreation(toolName, args) && getToolPolicy(toolName)?.readOnly === false) {
         const key = toolCallKey(toolName, args);
         if (completedMutationKeys.has(key)) {
           return {

@@ -70,7 +70,7 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
   const sampleScopes: ImageOperatorSampleScope[] = [];
   const kernelScopes: Array<{ id: number; sample: number; weight: number }> = [];
   const rectScopes: Array<{ id: number; sample: number; weight: number }> = [];
-  const sequenceScopes: Array<{ id: number; sample: number; weight: number }> = [];
+  const sequenceScopes: Array<{ id: number; sample: number; weight: number; blend?: boolean }> = [];
   const segmentSortScopes: Array<{ id: number; sample: number }> = [];
   const quadtreeScopes: Array<{ id: number; sample: number }> = [];
   const scopeBySource = new Map<string, number>(), scopeParents = new Map<number, number>(), capturable = new Set<string>(); let nextScopeId = 1;
@@ -236,15 +236,18 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         const weightSum = emit({ nodeId: current.id, operation: 'rect-weight-sum', type: 'scalar', inputs: [sum], value: scope });
         registers.set(`${parentScope}:${current.id}:sum`, sum); registers.set(`${parentScope}:${current.id}:weightSum`, weightSum); register = output === 'sum' ? sum : weightSum; break;
       }
+      case 'image.sequence-blend':
       case 'image.sequence-reduce': {
+        const blend = current.operator === 'image.sequence-blend';
         if (activeSegmentSort || activeQuadtree || activeKernelScope !== undefined || activeSequenceScope !== undefined) throw new Error('Nested image neighborhood reductions are not supported.');
         const existing = registers.get(`${activeScope}:${current.id}:sum`);
         if (existing !== undefined) { register = output === 'sum' ? existing : registers.get(`${activeScope}:${current.id}:weightSum`)!; break; }
-        const parentScope = activeScope, count = visitSource(current, 'count'), scope = nextScopeId++;
+        const parentScope = activeScope, count = visitSource(current, 'count'), mode = blend ? visitSource(current, 'mode') : undefined, scope = nextScopeId++;
         activeScope = scope; activeSequenceScope = scope;
         const sample = visitSource(current, 'sample'), weight = visitSource(current, 'weight');
-        activeScope = parentScope; activeSequenceScope = undefined; sequenceScopes.push({ id: scope, sample, weight });
-        const sum = emit({ nodeId: current.id, operation: 'sequence-sum', type: 'vec4', inputs: [count], value: scope });
+        activeScope = parentScope; activeSequenceScope = undefined; sequenceScopes.push({ id: scope, sample, weight, ...(blend ? { blend: true } : {}) });
+        const sum = emit({ nodeId: current.id, operation: 'sequence-sum', type: blend ? 'image' : 'vec4', inputs: mode === undefined ? [count] : [count, mode], value: scope });
+        if (blend) { register = sum; break; }
         const weightSum = emit({ nodeId: current.id, operation: 'sequence-weight-sum', type: 'scalar', inputs: [sum], value: scope });
         registers.set(`${parentScope}:${current.id}:sum`, sum); registers.set(`${parentScope}:${current.id}:weightSum`, weightSum);
         register = output === 'sum' ? sum : weightSum; break;
@@ -600,8 +603,9 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
   const capabilities: ImageOperatorCapability[] = [];
   if (instructions.some(item => item.operation === 'uv' || item.operation === 'sample-input-history' || item.operation === 'kernel-sum' || item.operation === 'rect-sum' || item.operation === 'sequence-sum'
     || item.operation === 'segment-sort-luma' || item.operation === 'quadtree-partition' || item.operation === 'resource-input' || item.operation === 'resource-load-input')) capabilities.push('uv');
+  if (sequenceScopes.some(scope => scope.blend) && !capabilities.includes('uv')) capabilities.push('uv');
   if (instructions.some(item => item.operation === 'resolution' || item.operation === 'load-image' || item.operation === 'field-load-nearest-seed' || item.operation === 'segment-sort-luma' || item.operation === 'quadtree-partition')) capabilities.push('resolution');
-  if (instructions.some(item => item.operation === 'time')) capabilities.push('time');
+  if (instructions.some(item => item.operation === 'time') || sequenceScopes.some(scope => scope.blend)) capabilities.push('time');
   if (instructions.some(item => item.operation === 'sample-image')) capabilities.push('sample');
   if (instructions.some(item => item.operation === 'load-image' || item.operation === 'field-load-nearest-seed' || item.operation === 'segment-sort-luma' || item.operation === 'quadtree-partition')) capabilities.push('pixel-load');
   if (instructions.some(item => item.operation.startsWith('derivative-'))) capabilities.push('derivative');

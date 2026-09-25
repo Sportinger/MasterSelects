@@ -470,7 +470,15 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   const startTime = Date.now();
 
   try {
-    const payload = await runHostedKieChatCompletion(context.env, request);
+    const reviewKey = context.data.user?.reviewer
+      ? context.env.KIEAI_REVIEW_API_KEY?.trim() : null;
+    if (context.data.user?.reviewer && !reviewKey) {
+      throw new Error('The isolated review provider credential is unavailable.');
+    }
+    const providerEnv = reviewKey
+      ? { ...context.env, KIEAI_API_KEY: reviewKey }
+      : context.env;
+    const payload = await runHostedKieChatCompletion(providerEnv, request);
     const durationMs = Date.now() - startTime;
     const settlement = await settleHostedChatRound(
       context.env.DB,

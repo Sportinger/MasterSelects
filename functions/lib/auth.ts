@@ -1,4 +1,5 @@
 import { timingSafeEqualStrings } from './constantTime';
+import { getReviewerAccount, isReviewerAccount, ReviewerAccessRevokedError } from './reviewerAccess';
 import type { AppUser, Env } from './env';
 
 export const AUTH_STATE_COOKIE_NAME = '__ms_auth_state';
@@ -384,7 +385,7 @@ export async function createSession(
     provider: normalizeProvider(input.provider),
     providerUserId: input.providerUserId,
     redirectTo: input.redirectTo ?? '/',
-    sessionId: crypto.randomUUID(),
+    sessionId: input.provider === 'reviewer' ? `reviewer:${crypto.randomUUID()}` : crypto.randomUUID(),
     userId: input.userId,
   };
 
@@ -408,7 +409,15 @@ export async function loadSession(env: Env, sessionId: string): Promise<SessionR
 
   if (Date.parse(session.expiresAt) <= Date.now()) {
     await env.KV.delete(`${SESSION_KV_PREFIX}${sessionId}`);
+    if (session.provider === 'reviewer') throw new ReviewerAccessRevokedError();
     return null;
+  }
+
+  if (session.provider === 'reviewer') {
+    const account = await getReviewerAccount(env.DB, session.userId).catch(() => null);
+    if (!account || !timingSafeEqualStrings(account.credential_hash, session.providerUserId)) {
+      throw new ReviewerAccessRevokedError();
+    }
   }
 
   return session;
@@ -422,7 +431,10 @@ export async function loadSessionFromRequest(request: Request, env: Env): Promis
     return null;
   }
 
-  return loadSession(env, sessionId);
+  const session = await loadSession(env, sessionId);
+  // A missing KV record must not turn a signed reviewer cookie into guest access.
+  if (!session && sessionId.startsWith('reviewer:')) throw new ReviewerAccessRevokedError();
+  return session;
 }
 
 export async function loadUserFromSession(request: Request, env: Env): Promise<AppUser | null> {
@@ -435,6 +447,7 @@ export async function loadUserFromSession(request: Request, env: Env): Promise<A
   return {
     email: session.email,
     id: session.userId,
+    ...(session.provider === 'reviewer' ? { reviewer: true } : {}),
   };
 }
 
@@ -487,6 +500,9 @@ export async function ensureUserRecord(
     .first<UserRow>();
 
   if (existingUser) {
+    if (await isReviewerAccount(env.DB, existingUser.id)) {
+      throw new ReviewerAccessRevokedError();
+    }
     const existingUserId = existingUser.id;
 
     await env.DB.prepare(

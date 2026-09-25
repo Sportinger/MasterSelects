@@ -1,3 +1,4 @@
+import { timeStackSettings } from './time/time-stack/settings';
 import { InputHistoryRuntime } from './time/InputHistoryRuntime';
 import { TemporalEffectResources } from './time/TemporalEffectResources';
 import { isCollectingTemporalPreparations, setTemporalStatus } from './time/temporalResourcePreparation';
@@ -331,6 +332,7 @@ export class EffectsPipeline {
       scopeId: renderClock?.scopeId || 'legacy',
     };
     const enabledEffects = effects.filter(e => e.enabled && !e.type.startsWith('audio-'));
+    this.temporalResources.retainTimeStacks(frameHistory?.scopeId ?? clock.scopeId, new Set(enabledEffects.filter(effect => effect.type === 'time-stack').map(effect => effect.id)));
     if (enabledEffects.length === 0) {
       return { finalView: inputView, swapped: false };
     }
@@ -340,9 +342,10 @@ export class EffectsPipeline {
     let swapped = false;
 
     for (const originalEffect of enabledEffects) {
-      const effect = originalEffect.type === 'slit-scan' && (isCollectingTemporalPreparations() || geometryCapture)
+      const stackSettings = originalEffect.type === 'time-stack' ? timeStackSettings(originalEffect.params, temporalSource?.localTime ?? 0) : undefined;
+      const effect = stackSettings ? { ...originalEffect, params: { ...originalEffect.params, count: stackSettings.activeCount, offset: stackSettings.offset } } : originalEffect.type === 'slit-scan' && (isCollectingTemporalPreparations() || geometryCapture)
         ? { ...originalEffect, params: { ...originalEffect.params, scanSmoothingPreview: false } } : originalEffect;
-      const previewKey = effect.type === 'slit-scan' && effect.params.temporalStorage === 'resident' && !isCollectingTemporalPreparations()
+      const previewKey = (effect.type === 'time-stack' || (effect.type === 'slit-scan' && effect.params.temporalStorage === 'resident')) && !isCollectingTemporalPreparations()
         ? JSON.stringify([frameHistory?.scopeId ?? clock.scopeId, effect.id, temporalSource?.mediaId, effect.params.scanSmoothingPreview === true]) : undefined;
       const registered = getEffect(effect.type);
       const imageGraphEffect = isImageGraphEffectType(effect.type);
@@ -366,7 +369,8 @@ export class EffectsPipeline {
             width: upload?.width ?? 1, height: upload?.height ?? 1, available: upload !== null };
         } : undefined;
       const stabilizationActive = effect.params.stabilizationEnabled !== false && !!effect.params.stabilizationAssetId;
-      const nativeTemporal = effect.type === 'slit-scan' && (stabilizationActive
+      const sourceTimeOwner = isFullscreenEffectDefinition(registered) ? registered.sourceTimeOwner : undefined;
+      const nativeTemporal = !!sourceTimeOwner && (stabilizationActive
         || imagePlan?.externalResources?.some(resource => resource.kind === 'input-history'));
       const inputHistory = nativeTemporal ? this.inputHistory.emptyResources() : (imagePlan?.externalResources?.some(resource => resource.kind === 'input-history')
         ? this.inputHistory.prepare(JSON.stringify([frameHistory?.scopeId ?? clock.scopeId, effect.id]), commandEncoder,
@@ -384,7 +388,7 @@ export class EffectsPipeline {
           effectInput = this.temporalResources.previewFrames.get(previewKey, outputWidth, outputHeight) ?? effectInput; continue;
         }
         if (nativeTemporal && imagePlan && preparedImage && imageExternalResources) {
-          const nativeHistory = this.temporalResources.resolveNative(effect,
+          const nativeHistory = this.temporalResources.resolveSource(sourceTimeOwner!, sourceTimeOwner === 'time-stack' ? originalEffect : effect,
             frameHistory?.scopeId ?? clock.scopeId, temporalSource, commandEncoder,
             { view: effectInput, width: outputWidth, height: outputHeight },
             { queryIds: imagePlan.externalResources?.flatMap(resource => resource.kind === 'input-history' && resource.owner ? [resource.owner] : []),

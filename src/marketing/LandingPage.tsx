@@ -56,6 +56,7 @@ export function LandingPage({
   onShowProjectPicker,
   onOpenRecentProject,
   onRemoveProjectFile,
+  onOpenProjectFile,
   openingProjectId = null,
   onRenderVideo,
   onSelectReviewVariant, onSelectSequence,
@@ -529,6 +530,7 @@ export function LandingPage({
           onOpenProject={onOpenProject}
           onOpenRecentProject={onOpenRecentProject}
           onRemoveItem={onRemoveProjectFile ? handleRemoveProjectFile : undefined}
+          onOpenItem={onOpenProjectFile}
           onShowProjects={onShowProjectPicker && !projectSelectionPending ? () => {
             seedance.reset();
             setPromptPath(directPathAvailable ? 'direct' : 'auto');
