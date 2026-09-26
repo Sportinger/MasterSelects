@@ -18,6 +18,8 @@ import {
   type FlockOperatorCategory,
 } from '../flock/operators/flockOperatorTypes';
 import type { TimelineClip } from './clipGraphProjectionDomain';
+import { hasFlockGraph } from '../flock/flockEffect';
+import { operatorCardLabel } from '../operators/operatorTaxonomy';
 import type {
   ClipCustomNodeParamValue,
   NodeGraph,
@@ -51,8 +53,8 @@ export function getClipFlockGraphId(clipId: string): string {
   return `clip-graph:${clipId}:flock`;
 }
 
-export function clipSupportsFlockGraph(clip: Pick<TimelineClip, 'source' | 'flock'>): boolean {
-  return clip.source?.type === 'flock' && !!clip.flock;
+export function clipSupportsFlockGraph(clip: Pick<TimelineClip, 'source' | 'flock' | 'effects'>): boolean {
+  return hasFlockGraph(clip);
 }
 
 export function flockPortSemanticKind(type: FlockPortType): string {
@@ -132,7 +134,8 @@ function buildFlockGraphNode(
       operator: node.operator,
       operatorVersion: node.operatorVersion,
       category,
-      categoryLabel: node.operator === 'flock.math' ? 'Math' : FLOCK_CATEGORY_LABELS[category],
+      // Card badge from the shared node categories (Particles, Force, Output, ...).
+      categoryLabel: isGroup ? FLOCK_CATEGORY_LABELS[category] : operatorCardLabel({ id: node.operator }),
       mathSymbol: mathNodeSymbol(node.operator, String(node.params.op ?? 'multiply')) ?? '',
       bypassed: node.bypassed === true,
       // A bypassed group instance mutes all of its outputs.

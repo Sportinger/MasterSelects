@@ -13,7 +13,7 @@ import { cloneClipNodeGraph } from '../../services/nodeGraph';
 import { normalizeTransitionInstanceParams } from '../../transitions';
 import { normalizeMotionLayerDefinitionForLoad } from '../../services/motionDesign/contracts/replicatorTimelineAdapter';
 import { serializeVideoBakeRegion } from './videoBakeSlice';
-import { normalizeRestoredFlockDefinition } from './serialization/flockDefinitionRestore';
+import { normalizeRestoredFlockDefinition, restoredFlockDefinitionOf } from './serialization/flockDefinitionRestore';
 import { blobUrlManager } from './helpers/blobUrlManager';
 import type { RestoredRuntimePatch } from './vectorRuntimeRestore';
 import {
@@ -90,6 +90,7 @@ function createRestoredNestedClipCommon(
     sourceRect: serializedClip.sourceRect ? { ...serializedClip.sourceRect } : undefined,
     transitionRender: serializedClip.transitionRender ? structuredClone(serializedClip.transitionRender) : undefined,
     effects: serializedClip.effects || [],
+    flock: restoredFlockDefinitionOf(serializedClip),
     planarTracks: clonePlanarTracks(serializedClip.planarTracks),
     trackingBinding: cloneTrackingBinding(serializedClip.trackingBinding),
     terrainAttachment: cloneTerrainAttachment(serializedClip.terrainAttachment),

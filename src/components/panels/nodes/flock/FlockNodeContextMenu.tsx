@@ -1,7 +1,7 @@
 import { useMemo, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent } from 'react';
 import type { FlockDefinition } from '../../../../types/flock';
 import type { NodeGraphLayout, NodeGraphNode } from '../../../../services/nodeGraph';
-import { FLOCK_CATEGORY_LABELS, type FlockOperatorCategory } from '../../../../services/flock/operators/flockOperatorTypes';
+import { NODE_CATEGORIES, operatorCategoryId } from '../../../../services/operators/operatorTaxonomy';
 import { FLOCK_GROUP_OPERATOR_ID, listFlockOperators } from '../../../../services/flock/operators/flockOperatorRegistry';
 import { FLOCK_PRESETS } from '../../../../services/flock/presets/flockPresets';
 import {
@@ -14,10 +14,6 @@ import {
 import { handleSubmenuHover, handleSubmenuLeave } from '../../media/submenuPosition';
 import { isNodeBypassable, isNodeBypassed } from '../canvas/canvasGeometry';
 import type { FlockGraphActions } from './useFlockGraphActions';
-
-const CATEGORY_ORDER: FlockOperatorCategory[] = [
-  'population', 'behavior', 'guidance', 'selection', 'values', 'simulation', 'render', 'output',
-];
 
 function blurAfterPointer(event: MouseEvent<HTMLButtonElement>): void {
   if (event.detail > 0) event.currentTarget.blur();
@@ -64,8 +60,9 @@ export function FlockNodeContextMenu({
   const selection = selectedNodeIds.length > 0 ? selectedNodeIds : targetNode ? [targetNode.id] : [];
   const operatorsByCategory = useMemo(() => {
     const operators = listFlockOperators().filter((operator) => operator.id !== FLOCK_GROUP_OPERATOR_ID);
-    return CATEGORY_ORDER
-      .map((category) => ({ category, operators: operators.filter((operator) => operator.category === category) }))
+    // The shared node categories (Particles, Forces & Physics, ...), as in the workspace menu.
+    return NODE_CATEGORIES
+      .map((category) => ({ category: category.id, label: category.label, operators: operators.filter((operator) => operatorCategoryId(operator) === category.id) }))
       .filter((entry) => entry.operators.length > 0);
   }, []);
 
@@ -159,9 +156,9 @@ export function FlockNodeContextMenu({
         <div className="node-workspace-context-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
           <button type="button" aria-haspopup="menu">Add Node</button>
           <div className="node-workspace-context-submenu-list context-submenu">
-            {operatorsByCategory.map(({ category, operators }) => (
+            {operatorsByCategory.map(({ category, label, operators }) => (
               <div key={category} className="node-workspace-context-submenu-group">
-                <span>{FLOCK_CATEGORY_LABELS[category]}</span>
+                <span>{label}</span>
                 {operators.map((operator) => (
                   <button
                     key={operator.id}

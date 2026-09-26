@@ -53,6 +53,7 @@ export type {
 import { Logger } from '../../services/logger';
 import { sanitizeTimelineParentRestoreTree } from '../../services/motionDesign/structure/timelineParentRestoreAdapter';
 import { migratePersistedEffectOperatorGraph } from '../../services/operators/effectGraphOwner';
+import { withPersistedFlockingEffect } from './serialization/flockDefinitionRestore';
 
 const log = Logger.create('NestedCompositionLoader');
 
@@ -405,7 +406,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
   }
   const nextCompositionPath = [...compositionPath, composition.id];
   const nestedClips: TimelineClip[] = [];
-  const persistedClips = composition.timelineData.clips.map(serializedClip => ({
+  const persistedClips = composition.timelineData.clips.map(serializedClip => withPersistedFlockingEffect({
     ...serializedClip,
     effects: (serializedClip.effects ?? []).map(migratePersistedEffectOperatorGraph),
   }));

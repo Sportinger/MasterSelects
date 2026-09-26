@@ -242,6 +242,9 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
   const defaults = getDefaultParams(effect.type);
 
   if (Object.keys(effectDef.params).length === 0) {
+    // Parameterless effects with their own inspector (Flocking shows its swarm controls).
+    const Controls = EXTRA_CONTROLS_REGISTRY[effectDef.id];
+    if (Controls) return <div className="effect-extra-controls"><Suspense fallback={null}><Controls effectInstanceId={effect.id} effectId={effect.type} params={effect.params} onChange={onChange} clipId={clipId} /></Suspense></div>;
     return exposedGraphValues(effect.operatorGraph).length ? null : <p className="effect-info">No parameters</p>;
   }
 

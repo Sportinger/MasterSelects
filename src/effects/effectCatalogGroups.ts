@@ -17,7 +17,7 @@ export const EFFECT_GROUPS = [
   { id: 'keying', label: 'Keying', effects: ['chroma-key'] },
   { id: 'time', label: 'Time', effects: ['slit-scan', 'time-stack', 'kinetic-trace'] },
   { id: 'tracking', label: 'Tracking & Overlays', effects: ['face-cables', 'hand-particles', 'hud-tracker', 'cctv', 'subject', 'tracked-scene', 'stardust', 'rain-reveal'] },
-  { id: 'scene', label: '3D & Particles', effects: ['voxel-relief', 'splat-exploration', 'bricks', 'pixel-particle-disintegrate'] },
+  { id: 'scene', label: '3D & Particles', effects: ['voxel-relief', 'splat-exploration', 'bricks', 'pixel-particle-disintegrate', 'flocking'] },
 ] as const;
 export type EffectGroupId = typeof EFFECT_GROUPS[number]['id'];
 

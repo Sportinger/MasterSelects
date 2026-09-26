@@ -16,6 +16,7 @@ import {
 } from '../flock/flockPropertyValues';
 import { FLOCK_GROUP_OPERATOR_ID, getFlockOperator } from '../flock/operators/flockOperatorRegistry';
 import type { FlockParamDescriptor } from '../flock/operators/flockOperatorTypes';
+import { hasFlockGraph } from '../flock/flockEffect';
 
 const COMPONENT_LABELS: Record<FlockParamComponent, string> = {
   x: 'X',
@@ -27,7 +28,7 @@ const COMPONENT_LABELS: Record<FlockParamComponent, string> = {
 };
 
 function getFlockClipDefinition(clip: TimelineClip | undefined): FlockDefinition | null {
-  return clip?.source?.type === 'flock' && clip.flock ? clip.flock : null;
+  return hasFlockGraph(clip) && clip?.flock ? clip.flock : null;
 }
 
 function getNodeLabel(definition: FlockDefinition, node: FlockNode | undefined): string {

@@ -404,7 +404,7 @@ export function applySplitAtTimesOperation(
     nextClipKeyframes = copyParameterKeyframesToParts(keyframeSource, clip, newParts);
     if (linkedClip) nextClipKeyframes = copyParameterKeyframesToParts(nextClipKeyframes, linkedClip, newLinkedParts);
   }
-  if (clip.source?.type === 'flock' && keyframeSource) {
+  if (clip.flock && keyframeSource) {
     nextClipKeyframes = copyFlockKeyframesToClipParts(
       nextClipKeyframes ?? keyframeSource,
       clip.id,

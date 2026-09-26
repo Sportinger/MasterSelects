@@ -6,6 +6,7 @@ import { nestedFlockSourceTime } from '../flock/time/flockTimeMapper';
 import { getClipTimeInfo } from './FrameContext';
 import type { TransformCache } from './TransformCache';
 import type { FrameContext } from './types';
+import { rendersFlock } from '../flock/flockEffect';
 
 const flockKeyframeCache = new WeakMap<readonly Keyframe[], Keyframe[]>();
 
@@ -24,20 +25,21 @@ export function flockSourceTimeFromClipTime(clip: Pick<TimelineClip, 'reversed' 
   return clip.reversed === true ? clip.inPoint + clip.outPoint - clipTime : clipTime;
 }
 
-/** Runtime-only flock layer source. Returns null for non-flock clips. */
+/** Runtime-only flock layer source. Returns null unless the clip's Flocking effect renders. */
 export function buildFlockLayerSource(
   clip: TimelineClip,
   sourceTime: number,
   keyframes: readonly Keyframe[] | undefined,
   consumer: FlockRenderConsumer,
 ): Layer['source'] {
-  if (clip.source?.type !== 'flock' || !clip.flock) return null;
-  const compiled = compileFlockDefinitionCached(clip.flock);
+  const definition = clip.flock;
+  if (!definition || !rendersFlock(clip)) return null;
+  const compiled = compileFlockDefinitionCached(definition);
   return {
     type: 'flock',
     flock: {
       clipId: clip.id,
-      definition: clip.flock,
+      definition,
       program: compiled.ok ? compiled.program : null,
       diagnostics: compiled.diagnostics,
       keyframes: flockKeyframesOf(keyframes),
@@ -58,25 +60,40 @@ export function buildNestedLayerBuilderFlockLayer(
   return source ? { ...baseLayer, source, is3D: true } : null;
 }
 
+/** A Flocking effect on a nested image clip draws its swarm as an extra layer above the clip's image. */
+export function buildNestedFlockOverlayLayer(
+  nestedLayer: Layer,
+  nestedClip: TimelineClip,
+  nestedClipLocalTime: number,
+  keyframes: readonly Keyframe[] | undefined,
+): Layer | null {
+  if (nestedClip.source?.type === 'flock') return null;
+  const layer = buildNestedLayerBuilderFlockLayer(nestedLayer, nestedClip, nestedClipLocalTime, keyframes);
+  return layer ? { ...layer, id: `${nestedLayer.id}_flock`, effects: [] } : null;
+}
+
 type BuildFlockLayerParams = {
   clip: TimelineClip;
   layerIndex: number;
   ctx: FrameContext;
   transformCache: TransformCache;
   opacityOverride?: number;
+  /** Set for the swarm layer drawn above an image clip (the clip keeps its own layer). */
+  overlay?: boolean;
 };
 
 export function buildLayerBuilderFlockLayer(params: BuildFlockLayerParams): Layer | null {
   const { clip, layerIndex, ctx, transformCache, opacityOverride } = params;
-  if (clip.source?.type !== 'flock' || !clip.flock) return null;
+  if (!rendersFlock(clip)) return null;
+  const suffix = params.overlay ? '_flock' : '';
   const timeInfo = getClipTimeInfo(ctx, clip);
   const transform = transformCache.getTransform(
-    `${ctx.activeCompId}_${layerIndex}_${clip.id}`,
+    `${ctx.activeCompId}_${layerIndex}_${clip.id}${suffix}`,
     ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime),
   );
   const keyframes = useTimelineStore.getState().clipKeyframes.get(clip.id);
   return {
-    id: `${ctx.activeCompId}_layer_${layerIndex}_${clip.id}`,
+    id: `${ctx.activeCompId}_layer_${layerIndex}_${clip.id}${suffix}`,
     name: clip.name,
     sourceClipId: clip.id,
     visible: true,

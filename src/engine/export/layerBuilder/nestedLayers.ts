@@ -321,6 +321,11 @@ export function buildNestedLayersForExport(
         timelineTime: nestedTime,
       },
     );
+    // A Flocking effect on a nested image clip draws its swarm above the clip's image.
+    const flockSource = nestedLayer && nestedClip.source?.type !== 'flock'
+      ? buildFlockLayerSource(nestedClip, nestedFlockSourceTime(nestedClip, nestedClipLocalTime), getClipKeyframes(nestedClip), 'export')
+      : null;
+    if (nestedLayer && flockSource) layers.push({ ...nestedLayer, id: `${nestedLayer.id}_flock`, source: flockSource, effects: [], is3D: true });
     if (nestedLayer) {
       layers.push(bindTerrainLayer(nestedLayer, nestedClip, clip.nestedClips, nestedTime));
     }

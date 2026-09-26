@@ -352,6 +352,13 @@ export class LayerBuilderService {
         ? trackClips[trackClips.length - 1]
         : trackClips[0];
       const layer = this.buildLayerForClip(clip, layerIndex, ctx);
+      // A Flocking effect on an image clip draws its swarm above the clip's own image.
+      const flockLayer = clip.source?.type !== 'flock'
+        ? buildLayerBuilderFlockLayer({ clip, layerIndex, ctx, transformCache: this.transformCache, overlay: true })
+        : null;
+      if (flockLayer) {
+        layers.push(flockLayer);
+      }
       if (layer) {
         layers.push(layer);
       }

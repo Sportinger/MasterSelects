@@ -34,6 +34,8 @@ import { CLEARED_TIMELINE_EDIT_PREVIEWS } from './serialization/transientTimelin
 import { Logger } from '../../services/logger';
 import { sanitizeTimelineParentRestoreTree } from '../../services/motionDesign/structure/timelineParentRestoreAdapter';
 import { migratePersistedEffectOperatorGraph } from '../../services/operators/effectGraphOwner';
+import { restoredFlockDefinitionOf, withPersistedFlockingEffect } from './serialization/flockDefinitionRestore';
+import type { TimelineClip } from '../../types/timeline';
 
 const log = Logger.create('TimelineSerialization');
 function getDefaultExpandedTrackIds(tracks: readonly TimelineTrack[]): string[] {
@@ -96,10 +98,11 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       });
       return;
     }
-    const persistedClips = data.clips.map(clip => ({
+    const persistedClips = data.clips.map(clip => withPersistedFlockingEffect({
       ...clip,
       effects: (clip.effects ?? []).map(migratePersistedEffectOperatorGraph),
     }));
+    const persistedById = new Map(persistedClips.map(clip => [clip.id, clip]));
 
     // Restore tracks and basic state
     // Increment animation key to trigger entrance animations on clips
@@ -171,7 +174,12 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     const restoreBuffer = createLoadStateRestoreBuffer(set);
     const flushRestoredClipBuffer = restoreBuffer.flush;
     const patchRestoredClip = restoreBuffer.patch;
-    const pushRestoredClip = restoreBuffer.push;
+    // Any clip may carry a Flocking effect; its swarm definition is restored with it.
+    const pushRestoredClip = (clip: TimelineClip) => {
+      const persisted = persistedById.get(clip.id);
+      const flock = clip.flock ?? (persisted ? restoredFlockDefinitionOf(persisted) : undefined);
+      restoreBuffer.push(flock && !clip.flock ? { ...clip, flock } : clip);
+    };
     const pushRestoredNestedKeyframes = restoreBuffer.pushNestedKeyframes;
     const scheduleRestoredCompositionAudioWarmup = () => {
       scheduleCompositionAudioMixdownWarmup({

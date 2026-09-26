@@ -79,7 +79,7 @@ export function listNodeCatalog(): NodeCatalogEntry[] {
     implementation: o.implementation ?? 'unknown',
   }));
   const flockPort = (p: Omit<NodeCatalogPort, 'formats'>): NodeCatalogPort => { const contract = describeNodePort({ type: p.type, metadata: { semanticKind: `flock:${p.type}` } }); return { ...p, contract, formats: contract.formats }; };
-  const flock: NodeCatalogEntry[] = listFlockOperators().map(o => ({ ...o, inputs: o.inputs.map(flockPort), outputs: o.outputs.map(flockPort), category: `${o.category[0].toUpperCase()}${o.category.slice(1)}`, context: 'Flock', domains: ['Flock'], visibility: 'public' as const, tags: catalogText(o.id).tags, parameters: o.params.map(p => ({ ...p, unit: 'unknown', format: 'unknown' })),
+  const flock: NodeCatalogEntry[] = listFlockOperators().map(o => ({ ...o, inputs: o.inputs.map(flockPort), outputs: o.outputs.map(flockPort), category: operatorCategoryLabel(o), context: 'Flock', domains: ['Flock'], visibility: 'public' as const, tags: catalogText(o.id).tags, parameters: o.params.map(p => ({ ...p, unit: 'unknown', format: 'unknown' })),
     family: familyOf(o.sharedOperator ?? o.id), variant: o.id, backend: 'wgsl', fusion: 'compiler-owned',
     state: o.id === 'flock.simulation' || o.id === 'flock.trails' ? 'simulation' : 'stateless', invalidation: o.phase,
     users: ['Flock'], localImplementations: o.sharedOperator ? [] : ['Flock compiler'], implementation: o.sharedOperator ? 'shared' : 'local' }));

@@ -347,7 +347,7 @@ export function NodeInspector({
       <AddOperatorControl clipId={nodeTargetClipId ?? clip.id} effectId={binding.effectId} onAdded={id => onSelectNode(`${node.id.slice(0, node.id.lastIndexOf('/') + 1)}${id}`)} />
     </NodeInspectorShell>;
   }
-  if (clip?.flock && node.binding?.kind === 'clip-source' && node.groupId === 'flock') {
+  if (clip?.flock && (node.binding?.kind === 'clip-source' || node.binding?.kind === 'clip-effect') && node.groupId === 'flock') {
     return <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}><FlockTab clipId={clip.id} /></NodeInspectorShell>;
   }
   const faceEffectId = node.binding?.kind === 'clip-effect' ? node.binding.effectId : undefined;

@@ -13,6 +13,7 @@ import { FlockAddControlPicker } from './FlockAddControlPicker';
 import { FlockDiagnosticsSection } from './FlockDiagnosticsSection';
 import { FlockExposedControls } from './FlockExposedControls';
 import { FlockTimeQualitySection } from './FlockTimeQualitySection';
+import { hasFlockGraph } from '../../../../services/flock/flockEffect';
 import './FlockTab.css';
 
 function blurOnPointer(event: React.PointerEvent<HTMLButtonElement>) {
@@ -101,7 +102,7 @@ export function FlockTab({ clipId }: { clipId: string }) {
   const playheadPosition = useTimelineStore((state) => state.playheadPosition);
   const getSourceTimeForClip = useTimelineStore((state) => state.getSourceTimeForClip);
 
-  if (!clip || clip.source?.type !== 'flock' || !clip.flock) {
+  if (!clip || !hasFlockGraph(clip) || !clip.flock) {
     return <div className="panel-empty"><p>This clip has no flock definition.</p></div>;
   }
 

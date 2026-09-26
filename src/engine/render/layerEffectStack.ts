@@ -38,6 +38,8 @@ export function splitLayerEffects(
     invert: false,
   };
 
+  // Flocking draws in the 3D scene; it never changes the clip's own pixels.
+  effects = effects?.filter(effect => effect.type !== 'flocking');
   if (skipEffects || !effects || effects.length === 0) {
     return { inlineEffects };
   }

@@ -25,7 +25,8 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     const effect = effectId ? findClipOperatorEffect(effectClip, effectId) : undefined;
     const inner = effect && hasEffectOperatorGraph(effect.type) ? preparedEffects?.get(effect.id) ?? buildEffectOperatorGraph(effectClip!, effect)
       : rootNode.subgraphId ? document.graphs.find(g => g.id === rootNode.subgraphId) : undefined;
-    const groupId = rootNode.id === 'text-render' ? 'text' : rootNode.id === 'scene3d' ? 'scene3d' : effect ? `effect:${effect.id}` : rootNode.binding?.kind === 'clip-color-correction' ? 'color' : 'flock';
+    const groupId = rootNode.id === 'text-render' ? 'text' : rootNode.id === 'scene3d' ? 'scene3d' : effect?.type === 'flocking' ? 'flock'
+      : effect ? `effect:${effect.id}` : rootNode.binding?.kind === 'clip-color-correction' ? 'color' : 'flock';
     if (!inner) { nodes.push({ ...rootNode, groupOffset: { x: expansion, y: 0 }, layout: { x: rootNode.layout.x + expansion, y: rootNode.layout.y } }); cursor = Math.max(cursor, rootNode.layout.x + expansion + 280); continue; }
     const state = clip.nodeGraph?.groups?.[groupId];
     const offset = state?.position ?? { x: cursor + 35, y: 95 };

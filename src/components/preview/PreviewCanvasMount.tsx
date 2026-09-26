@@ -39,6 +39,7 @@ import { NativeLiveInputPreview } from './NativeLiveInputPreview';
 import { TrackingPreviewOverlay } from './tracking/TrackingPreviewOverlay';
 import { usePreview3DMediaDrop } from './usePreview3DMediaDrop';
 import { FlockGuidanceOverlay } from './flock/FlockGuidanceOverlay';
+import { rendersFlock } from '../../services/flock/flockEffect';
 
 interface PreviewCanvasMountProps {
   activeSharedSceneOverlayContent: boolean;
@@ -467,7 +468,7 @@ export function PreviewCanvasMount({
         )}
 
         {isEngineReady && isEditableSource && !isExporting && !sourceMonitorActive
-          && selectedClip?.source?.type === 'flock' && (
+          && rendersFlock(selectedClip) && (
           <div
             className="preview-flock-guidance-overlay-host"
             style={{

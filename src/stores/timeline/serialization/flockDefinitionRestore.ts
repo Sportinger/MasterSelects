@@ -1,5 +1,6 @@
 import { FLOCK_DEFINITION_VERSION, type FlockDefinition } from '../../../types/flock';
 import { Logger } from '../../../services/logger';
+import { flockingEffectOf, withFlockingEffect } from '../../../services/flock/flockEffect';
 
 const log = Logger.create('FlockRestore');
 
@@ -33,4 +34,19 @@ export function normalizeRestoredFlockDefinition(value: unknown): FlockDefinitio
       ? { loop: raw.time.loop === 'reset' ? 'reset' : 'none', loopSeconds: Number(raw.time.loopSeconds) || 10 }
       : { loop: 'none', loopSeconds: 10 },
   };
+}
+
+type PersistedFlockClip = { id: string; sourceType?: string; flock?: unknown; effects?: import('../../../types/effects').Effect[] };
+
+
+/** Flocking became an effect: legacy flock clips gain the effect entry that now carries their swarm. */
+export function withPersistedFlockingEffect<T extends PersistedFlockClip>(clip: T): T {
+  if (clip.sourceType !== 'flock' || !clip.flock || flockingEffectOf(clip)) return clip;
+  return { ...clip, effects: withFlockingEffect(clip.effects ?? [], `${clip.id}-flocking`) };
+}
+
+/** The persisted swarm definition of any clip carrying a Flocking effect (or a legacy flock host). */
+export function restoredFlockDefinitionOf(clip: PersistedFlockClip): FlockDefinition | undefined {
+  if (!clip.flock || !(clip.sourceType === 'flock' || flockingEffectOf(clip))) return undefined;
+  return normalizeRestoredFlockDefinition(clip.flock) ?? undefined;
 }

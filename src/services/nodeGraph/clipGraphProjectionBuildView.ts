@@ -8,7 +8,7 @@ import {
   appendProcessingNode,
   createColorNode,
   createCustomNode,
-  createEffectNode,
+  createClipEffectNode,
   createMaskNode,
   createOutputNode,
   createSourceNode,
@@ -91,7 +91,7 @@ export function buildClipNodeGraphView(
       edges,
       chain.nodeId,
       chain.portId,
-      createEffectNode(effect, depth, MAIN_LANE_Y, primarySignal),
+      createClipEffectNode(clip, effect, depth, MAIN_LANE_Y, primarySignal),
       primarySignal,
     );
     depth += 1;
@@ -136,7 +136,7 @@ export function buildClipNodeGraphView(
   });
   // Free-standing effect groups have no chain links until they are wired in.
   clip.effects.filter((candidate) => candidate.detached && !isAudioEffect(candidate)).forEach((effect, index) => {
-    nodes.push(createEffectNode(effect, depth + standaloneCustomNodes.length + index + 1, MAIN_LANE_Y + 360, primarySignal));
+    nodes.push(createClipEffectNode(clip, effect, depth + standaloneCustomNodes.length + index + 1, MAIN_LANE_Y + 360, primarySignal));
   });
 
   if (audioClip && primarySignal !== 'audio') {

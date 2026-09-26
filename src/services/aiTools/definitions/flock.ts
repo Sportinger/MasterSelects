@@ -38,7 +38,7 @@ export const flockToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'createFlockClip',
-      description: 'Create a native 3D Flock clip (GPU particle swarm driven by an editable node graph) from a built-in preset on an unlocked video track. Presets: free-swarm, krill-cloud, vortex, follow-path, technical-network, shrimp-pullback, violet-filaments. Omitted timing uses the playhead and ten seconds.',
+      description: 'Create an empty clip carrying a Flocking effect (native 3D GPU particle swarm driven by an editable node graph) from a built-in preset on an unlocked video track. To add a swarm over an existing clip instead, call addEffect with effectType flocking on it; every flock tool accepts any clip with a Flocking effect. Presets: free-swarm, krill-cloud, vortex, follow-path, technical-network, shrimp-pullback, violet-filaments. Omitted timing uses the playhead and ten seconds.',
       parameters: {
         type: 'object',
         properties: {
@@ -56,11 +56,11 @@ export const flockToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'getFlockClip',
-      description: 'Read a Flock clip: preset, capacity, graph nodes/edges, exposed controls with their keyframe property paths, compile diagnostics and bounded runtime status (state, alive count, step, memory, cache). Never returns particle arrays. Keyframe paths are flock.node.<nodeId>.<param>[.x|.y|.z|.r|.g|.b] and use simulation source time.',
+      description: 'Read the Flocking effect of a clip: preset, capacity, graph nodes/edges, exposed controls with their keyframe property paths, compile diagnostics and bounded runtime status (state, alive count, step, memory, cache). Never returns particle arrays. Keyframe paths are flock.node.<nodeId>.<param>[.x|.y|.z|.r|.g|.b] and use simulation source time.',
       parameters: {
         type: 'object',
         properties: {
-          clipId: { type: 'string', description: 'The flock clip id.' },
+          clipId: { type: 'string', description: 'Id of a clip with a Flocking effect.' },
           includeGraph: { type: 'boolean', description: 'Include node parameter values and edge endpoints. Defaults to true.' },
         },
         required: ['clipId'],
@@ -75,7 +75,7 @@ export const flockToolDefinitions: ToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          clipId: { type: 'string', description: 'The flock clip id.' },
+          clipId: { type: 'string', description: 'Id of a clip with a Flocking effect.' },
           presetId: { type: 'string', description: 'Preset id from createFlockClip.' },
         },
         required: ['clipId', 'presetId'],
@@ -90,7 +90,7 @@ export const flockToolDefinitions: ToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          clipId: { type: 'string', description: 'The flock clip id.' },
+          clipId: { type: 'string', description: 'Id of a clip with a Flocking effect.' },
           operator: { type: 'string', description: 'Operator id from listFlockOperators, for example flock.vortex.' },
           params: paramsSchema,
           label: { type: 'string', description: 'Optional node label.' },
@@ -128,7 +128,7 @@ export const flockToolDefinitions: ToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          clipId: { type: 'string', description: 'The flock clip id.' },
+          clipId: { type: 'string', description: 'Id of a clip with a Flocking effect.' },
           nodeId: { type: 'string', description: 'Node id from getFlockClip.' },
           params: paramsSchema,
           bypassed: { type: 'boolean', description: 'Bypass (mute or pass through) the node when its operator supports it.' },
@@ -146,7 +146,7 @@ export const flockToolDefinitions: ToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          clipId: { type: 'string', description: 'The flock clip id.' },
+          clipId: { type: 'string', description: 'Id of a clip with a Flocking effect.' },
           nodeIds: { type: 'array', minItems: 1, items: { type: 'string' }, description: 'Node ids to remove.' },
         },
         required: ['clipId', 'nodeIds'],
@@ -161,7 +161,7 @@ export const flockToolDefinitions: ToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          clipId: { type: 'string', description: 'The flock clip id.' },
+          clipId: { type: 'string', description: 'Id of a clip with a Flocking effect.' },
           from: portRefSchema,
           to: portRefSchema,
         },
@@ -177,7 +177,7 @@ export const flockToolDefinitions: ToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          clipId: { type: 'string', description: 'The flock clip id.' },
+          clipId: { type: 'string', description: 'Id of a clip with a Flocking effect.' },
           edgeId: { type: 'string', description: 'Edge id from getFlockClip.' },
         },
         required: ['clipId', 'edgeId'],
@@ -192,7 +192,7 @@ export const flockToolDefinitions: ToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          clipId: { type: 'string', description: 'The flock clip id.' },
+          clipId: { type: 'string', description: 'Id of a clip with a Flocking effect.' },
           nodeId: { type: 'string', description: 'Node id.' },
           param: { type: 'string', description: 'Parameter id.' },
           label: { type: 'string', description: 'Control label.' },
@@ -212,7 +212,7 @@ export const flockToolDefinitions: ToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          clipId: { type: 'string', description: 'The flock clip id.' },
+          clipId: { type: 'string', description: 'Id of a clip with a Flocking effect.' },
           exposedId: { type: 'string', description: 'Exposed control id from getFlockClip.' },
         },
         required: ['clipId', 'exposedId'],
@@ -227,7 +227,7 @@ export const flockToolDefinitions: ToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          clipId: { type: 'string', description: 'The flock clip id.' },
+          clipId: { type: 'string', description: 'Id of a clip with a Flocking effect.' },
           start: { type: 'number', description: 'Range start in simulation source seconds.' },
           end: { type: 'number', description: 'Range end in simulation source seconds, greater than start.' },
           persist: { type: 'boolean', description: 'Persist checkpoints in the browser cache. Defaults to false.' },
@@ -244,7 +244,7 @@ export const flockToolDefinitions: ToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          clipId: { type: 'string', description: 'The flock clip id.' },
+          clipId: { type: 'string', description: 'Id of a clip with a Flocking effect.' },
         },
         required: ['clipId'],
       },
@@ -258,7 +258,7 @@ export const flockToolDefinitions: ToolDefinition[] = [
       parameters: {
         type: 'object',
         properties: {
-          clipId: { type: 'string', description: 'The flock clip id.' },
+          clipId: { type: 'string', description: 'Id of a clip with a Flocking effect.' },
           maxCount: { type: 'integer', description: 'Particles to sample, 1 to 256. Defaults to 32.' },
         },
         required: ['clipId'],

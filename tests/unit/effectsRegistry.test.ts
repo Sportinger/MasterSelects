@@ -17,6 +17,8 @@ import {
   hasEffect,
   getEffectConfig,
   effectStackNeedsContinuousRender,
+  EFFECT_GROUPS,
+  effectGroup,
 } from '../../src/effects/index';
 import {
   CATEGORY_INFO,
@@ -55,16 +57,10 @@ describe('Effect category registration', () => {
     }
   });
 
-  it('getCategoriesWithEffects should only return non-empty categories', () => {
+  it('getCategoriesWithEffects should only return non-empty look groups', () => {
     const populated = getCategoriesWithEffects();
-    const categoryNames = populated.map(c => c.category);
-
-    for (const cat of expectedPopulatedCategories) {
-      expect(categoryNames).toContain(cat);
-    }
-    for (const cat of expectedEmptyCategories) {
-      expect(categoryNames).not.toContain(cat);
-    }
+    expect(populated.map(c => c.category)).toEqual(EFFECT_GROUPS.map(group => group.label).filter(label => populated.some(c => c.category === label)));
+    expect(populated.every(c => c.effects.length > 0)).toBe(true);
   });
 
   it('getCategoriesWithEffects should return objects with category and effects array', () => {
@@ -73,9 +69,9 @@ describe('Effect category registration', () => {
       expect(typeof entry.category).toBe('string');
       expect(Array.isArray(entry.effects)).toBe(true);
       expect(entry.effects.length).toBeGreaterThan(0);
-      // Every effect in the entry should belong to that category
+      // Every effect in the entry belongs to that look group
       for (const effect of entry.effects) {
-        expect(effect.category).toBe(entry.category);
+        expect(effectGroup(effect.id).id).toBe(entry.group);
       }
     }
   });

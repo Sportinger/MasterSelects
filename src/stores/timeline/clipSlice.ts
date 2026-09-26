@@ -565,7 +565,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         ? [clip.linkedClipId, linkedFirstClip.id, linkedSecondClip.id]
         : []),
     ];
-    const flockPartKeyframes = clip.source?.type === 'flock'
+    const flockPartKeyframes = clip.flock
       ? copyFlockKeyframesToClipParts(preservedClipKeyframes ?? clipKeyframes, clip.id, [firstClip.id, secondClip.id])
       : null;
     let nextClipKeyframes = copyParameterKeyframesToParts(flockPartKeyframes ?? preservedClipKeyframes ?? clipKeyframes, clip, [firstClip, secondClip]);

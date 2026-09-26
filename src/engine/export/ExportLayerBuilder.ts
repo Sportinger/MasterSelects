@@ -128,6 +128,15 @@ function tryBuildExportNestedCompositionPassthrough(input: {
   };
 }
 
+/** The swarm of a Flocking effect on an image clip, drawn as a 3D layer above the clip's image. */
+function buildExportFlockOverlay(clip: TimelineClip, layer: Layer, ctx: FrameContextWithMedia): Layer | null {
+  if (clip.source?.type === 'flock') return null;
+  const clipLocalTime = ctx.time - clip.startTime;
+  const sourceTime = flockSourceTimeFromClipTime(clip, getClipSourceWindowTime(clip, clipLocalTime, ctx));
+  const source = buildFlockLayerSource(clip, sourceTime, useTimelineStore.getState().clipKeyframes.get(clip.id), 'export');
+  return source ? { ...layer, id: `${layer.id}_flock`, source, effects: [], is3D: true } : null;
+}
+
 function buildExportLayerForClip(
   clip: TimelineClip,
   trackIndex: number,
@@ -367,6 +376,8 @@ export function buildLayersAtTime(
       parallelDecoder,
       useParallelDecode,
     );
+    const flockOverlay = layer ? buildExportFlockOverlay(clip, layer, layerContext) : null;
+    if (flockOverlay) layers.push(flockOverlay);
     if (layer) layers.push(bindTerrainLayer(
       layer,
       clip,

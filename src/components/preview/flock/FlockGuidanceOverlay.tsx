@@ -23,6 +23,7 @@ import {
   type Vec3,
 } from './flockGuidanceOverlayMath';
 import './FlockGuidanceOverlay.css';
+import { rendersFlock } from '../../../services/flock/flockEffect';
 
 export interface FlockGuidanceOverlayProps {
   clip: TimelineClip | null;
@@ -74,8 +75,7 @@ export function FlockGuidanceOverlay({
   const liveClip = clip ? clips.find((candidate) => candidate.id === clip.id) ?? null : null;
   const locked = !!liveClip && tracks.find((track) => track.id === liveClip.trackId)?.locked === true;
   const active = !!liveClip
-    && liveClip.source?.type === 'flock'
-    && !!liveClip.flock
+    && rendersFlock(liveClip)
     && playheadPosition >= liveClip.startTime
     && playheadPosition < liveClip.startTime + liveClip.duration;
   const visible = enabled && active && !locked && !isPlaying && isViewportUsable(viewport) && canvasSize.width > 0;

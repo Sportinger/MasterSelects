@@ -217,7 +217,7 @@ export function convertCompositions(compositions: Composition[]): ProjectComposi
       // Math scene clip support
       mathScene: c.mathScene ? structuredClone(c.mathScene) : undefined,
       // Flock clip executable graph (plain JSON; runtime caches live elsewhere)
-      flock: (c.source?.type === 'flock' || c.sourceType === 'flock') && c.flock ? structuredClone(c.flock) : undefined,
+      flock: c.flock ? structuredClone(c.flock) : undefined,
       // Motion design clip support
       motion: c.motion ? normalizeMotionLayerDefinition(c.motion) : undefined,
       vectorAnimationSettings: c.source?.vectorAnimationSettings || c.vectorAnimationSettings || undefined,

@@ -18,6 +18,7 @@ import {
   mergeAINodeParamDefaults,
 } from '../../nodeGraph';
 import type { ToolResult } from '../types';
+import { hasFlockGraph } from '../../flock/flockEffect';
 
 const AI_NODE_KIE_MODEL = 'gpt-5-6-luna';
 const AI_NODE_MAX_TOKENS = 100_000;
@@ -314,7 +315,7 @@ export async function handleGetNodeWorkspaceDebugState(args: Record<string, unkn
       selected: selectedClipIds.includes(clip.id),
       customNodes,
       graph,
-      ...(clip.source?.type === 'flock' && includeGraph ? { flockGraph: buildClipFlockNodeGraph(clip) } : {}),
+      ...(hasFlockGraph(clip) && includeGraph ? { flockGraph: buildClipFlockNodeGraph(clip) } : {}),
     };
   });
 

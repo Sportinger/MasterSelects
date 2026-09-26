@@ -26,6 +26,8 @@ import { cleanupEffectParamTimelineState } from './helpers/propertyTimelineClean
 import { reconcileRemovedParameterTargets } from '../../services/parameterSources/parameterSourceLifecycle';
 import { createInitialSlitScanGraph } from '../../services/operators/slitScanGraphUpgrade';
 import { reconcileSlitScanDuration } from './helpers/slitScanDuration';
+import { FLOCKING_EFFECT_TYPE, flockingEffectOf } from '../../services/flock/flockEffect';
+import { createFlockPresetDefinition } from '../../services/flock/presets/flockPresets';
 
 function updateClipEffectState(
   clip: TimelineClip,
@@ -136,9 +138,12 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
   addClipEffect: (clipId, effectType) => {
     const { clipKeyframes, invalidateCache } = get();
     const clips = get().clips;
+    // One swarm per clip: adding Flocking again returns the existing effect.
+    const existingFlocking = effectType === FLOCKING_EFFECT_TYPE ? flockingEffectOf(clips.find(c => c.id === clipId)) : undefined;
+    if (existingFlocking) return existingFlocking.id;
     const effect: Effect = {
       id: generateEffectId(),
-      name: effectType,
+      name: effectType === FLOCKING_EFFECT_TYPE ? 'Flocking' : effectType,
       type: effectType as EffectType,
       enabled: true,
       params: { ...getDefaultEffectParams(effectType), ...(effectType === 'slit-scan' ? {
@@ -155,7 +160,11 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       clips: clips.map(c => c.id === clipId
         ? updateClipEffectState(
             c,
-            clip => ({ ...clip, effects: [...(clip.effects || []), effect] }),
+            clip => ({
+              ...clip,
+              effects: [...(clip.effects || []), effect],
+              ...(effectType === FLOCKING_EFFECT_TYPE ? { flock: clip.flock ?? createFlockPresetDefinition() } : {}),
+            }),
             legacyAudioEffectRequiresProcessedAnalysis(effect, keyframes),
           )
         : c),
@@ -178,13 +187,22 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       candidate => ({
         ...candidate,
         effects: candidate.effects.filter(effect => effect.id !== effectId),
+        // The swarm graph belongs to its Flocking effect.
+        ...(removedEffect.type === FLOCKING_EFFECT_TYPE ? { flock: undefined } : {}),
       }),
       legacyAudioEffectRequiresProcessedAnalysis(removedEffect, keyframes),
     );
+    const cleanup = cleanupEffectParamTimelineState(state, clipId, effectId);
+    if (removedEffect.type === FLOCKING_EFFECT_TYPE && keyframes.some(keyframe => keyframe.property.startsWith('flock.node.'))) {
+      const clipKeyframesAfter = new Map(cleanup.clipKeyframes ?? clipKeyframes);
+      const kept = (clipKeyframesAfter.get(clipId) ?? []).filter(keyframe => !keyframe.property.startsWith('flock.node.'));
+      if (kept.length) clipKeyframesAfter.set(clipId, kept); else clipKeyframesAfter.delete(clipId);
+      cleanup.clipKeyframes = clipKeyframesAfter;
+    }
     set({
       clips: reconcileEffectRemovalInNodeGraph(state, updatedClip).map(candidate => candidate.id === clipId
         ? reconcileRemovedParameterTargets(clip, candidate) : candidate),
-      ...cleanupEffectParamTimelineState(state, clipId, effectId),
+      ...cleanup,
     });
     invalidateCache();
     get().updateDuration();

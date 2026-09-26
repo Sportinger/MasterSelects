@@ -25,6 +25,7 @@ import { readFlockParamValue, resolveFlockParamDescriptor } from '../../flock/fl
 import { flockRuntime } from '../../../engine/flock/runtime/flockRuntimeApi';
 import { selectClipAndOpenTab } from '../aiFeedback';
 import type { ToolResult } from '../types';
+import { hasFlockGraph } from '../../flock/flockEffect';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -55,7 +56,7 @@ function getFlockClip(clipId: unknown): TimelineClip {
   const id = requireString(clipId, 'clipId');
   const clip = useTimelineStore.getState().clips.find((candidate) => candidate.id === id);
   if (!clip) throw new Error(`Clip not found: ${id}`);
-  if (clip.source?.type !== 'flock' || !clip.flock) throw new Error(`Clip ${id} is not a flock clip`);
+  if (!hasFlockGraph(clip) || !clip.flock) throw new Error(`Clip ${id} has no Flocking effect`);
   return clip;
 }
 

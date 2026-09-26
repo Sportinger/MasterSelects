@@ -23,6 +23,7 @@ export type EffectType =
   | 'slit-scan'
   | 'audio-math'
   | 'face-cables'
+  | 'flocking'
   | 'surface-overlay'
   | 'terrain-overlay'
   | 'hue-shift'

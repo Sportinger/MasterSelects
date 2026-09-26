@@ -4,7 +4,7 @@ import type { FlockDefinition, FlockParamValue } from '../../types/flock';
 import { createFlockProperty, parseFlockProperty } from '../../types/flock';
 import type { FlockClipActions, SliceCreator } from './types';
 import { DEFAULT_TRANSFORM } from './constants';
-import { generateFlockClipId } from './helpers/idGenerator';
+import { generateEffectId, generateFlockClipId } from './helpers/idGenerator';
 import { renderHostPort } from '../../services/render/renderHostPort';
 import { Logger } from '../../services/logger';
 import {
@@ -28,6 +28,7 @@ import {
 import { createFlockPresetDefinition, getFlockPreset, DEFAULT_FLOCK_PRESET_ID } from '../../services/flock/presets/flockPresets';
 import { FLOCK_GROUP_OPERATOR_ID } from '../../services/flock/operators/flockOperatorRegistry';
 import { readFlockParamForProperty, writeFlockParamForProperty } from '../../services/flock/flockPropertyValues';
+import { hasFlockGraph, withFlockingEffect } from '../../services/flock/flockEffect';
 
 const log = Logger.create('FlockClipSlice');
 
@@ -54,7 +55,7 @@ const belongsToNodes = (nodeIds: ReadonlySet<string>) => (keyframe: Keyframe) =>
 export const createFlockClipSlice: SliceCreator<FlockClipActions> = (set, get) => {
   const findFlockClip = (clipId: string): TimelineClip | null => {
     const clip = get().clips.find((candidate) => candidate.id === clipId);
-    return clip?.source?.type === 'flock' && clip.flock ? clip : null;
+    return hasFlockGraph(clip) ? clip! : null;
   };
 
   const isLocked = (clip: TimelineClip) => get().tracks.find((track) => track.id === clip.trackId)?.locked === true;
@@ -115,7 +116,8 @@ export const createFlockClipSlice: SliceCreator<FlockClipActions> = (set, get) =
         source: { type: 'flock', naturalDuration: duration },
         flock: definition,
         transform: { ...DEFAULT_TRANSFORM },
-        effects: [],
+        // An empty host clip carrying the Flocking effect.
+        effects: withFlockingEffect([], generateEffectId()),
         isLoading: false,
         is3D: true,
       };

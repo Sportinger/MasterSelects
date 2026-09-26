@@ -56,6 +56,13 @@ const EXACT: Record<string, NodeCategoryId> = {
   'splat.particles': 'particles', 'splat.particle-system': 'particles', 'splat.gravity': 'forces', 'splat.drag': 'forces', 'splat.turbulence': 'forces',
   'simulation.image-particles': 'particles', 'simulation.particle-release': 'particles', 'simulation.particle-motion': 'particles', 'simulation.rope': 'forces',
   'splat.surface': 'output', 'splat.render': 'output', 'splat.clean-surface': 'output', 'splat.ray-field': 'output', 'splat.mesh-overlay': 'output',
+  // Flocking swarm graph.
+  'flock.emitter': 'particles', 'flock.merge-spawn': 'particles', 'flock.simulation': 'particles', 'flock.rules': 'particles',
+  'flock.cruise': 'particles', 'flock.cluster': 'particles', 'flock.compose': 'particles',
+  'flock.attractor': 'forces', 'flock.vortex': 'forces', 'flock.turbulence': 'forces', 'flock.drag': 'forces', 'flock.wind': 'forces',
+  'flock.path': 'forces', 'flock.follow-path': 'forces', 'flock.obstacle': 'forces', 'flock.boundary': 'forces',
+  'flock.value': 'values', 'flock.oscillator': 'values', 'flock.time': 'values', 'flock.math': 'math', 'flock.remap': 'math',
+  'flock.audio': 'inputs', 'flock.palette': 'color', 'flock.trails': 'output', 'flock.output': 'output',
 };
 const PREFIX: ReadonlyArray<[string, NodeCategoryId]> = [
   ['values.', 'values'], ['math.', 'math'], ['compare.', 'logic'], ['logic.', 'logic'], ['select.', 'logic'], ['control.select.', 'logic'],
@@ -67,6 +74,7 @@ const PREFIX: ReadonlyArray<[string, NodeCategoryId]> = [
   ['geometry.', 'geometry'], ['material.', 'shading'], ['texture.', 'shading'], ['camera.', 'shading'], ['light.', 'shading'],
   ['forces.', 'forces'], ['collision.', 'forces'], ['simulation.', 'particles'],
   ['tracking.', 'tracking'], ['depth.', 'tracking'], ['render.', 'output'],
+  ['flock.select-', 'logic'], ['flock.render-', 'output'],
 ];
 
 /** Explicit category, or undefined for an unmapped operator (a catalog test keeps this exhaustive). */

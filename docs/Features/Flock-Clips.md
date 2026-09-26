@@ -19,6 +19,33 @@ inspector, including repeated behavior inputs. Previews read existing particle
 samples and evaluated parameters without starting another simulation; scene
 images are labeled as the shared Flock scene.
 
+## Flocking is an effect
+
+The swarm is the **Flocking** effect (*Effects → 3D & Particles → Flocking*) and
+works on **any** clip: video, image, text or an empty host clip. The clip's own
+image stays visible underneath; the swarm is drawn as an extra 3D layer directly
+above it with the clip's transform. Disabling or bypassing the effect hides the
+swarm, removing it deletes the graph and its `flock.node.*` keyframes. One swarm
+per clip: adding Flocking again selects the existing effect.
+
+- In the **Effects** tab the Flocking entry shows the same controls as the Flock
+  tab (preset, Open Nodes, exposed controls, Time & Quality, diagnostics).
+- On the node canvas the effect node is the green **Flock** group with bypass.
+- *Add Layer → Generators → Flock: …* still creates an empty host clip that
+  carries the effect. Older projects' flock clips are migrated on load: they gain
+  the Flocking effect entry; nothing else changes.
+- Swarm nodes are filed under the shared node categories — **Particles**
+  (emitter, spawn merge, simulation, flock rules, cruise, cluster, compose),
+  **Forces & Physics** (attractor, vortex, turbulence, drag, wind, path, follow
+  path, obstacle, boundary), **Logic & Switch** (selections), **Values & Time**,
+  **Math**, **Color & Mask** (palette), **Inputs** (audio) and **Output & Render**
+  (points, instances, links, trails, curves, glyphs, vectors, output). The
+  workspace right-click menu lists them with every other node and adds a
+  Flocking effect on first use; same-named nodes of other graphs name their graph,
+  e.g. *Drag (Flocking)*.
+- AI tools: `addEffect` with `effectType: "flocking"` adds a swarm to an existing
+  clip; every flock tool accepts any clip with a Flocking effect.
+
 Plan and acceptance criteria: [`docs/ongoing/Flocking-Clips-And-Node-Graphs-Plan.md`](../ongoing/Flocking-Clips-And-Node-Graphs-Plan.md).
 
 ---

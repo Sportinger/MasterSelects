@@ -14,6 +14,7 @@ import {
 import type { AudioEffectInstance, Effect, TimelineClip, TimelineTrack } from './clipGraphProjectionDomain';
 import { clonePort, edge, inputPort, outputPort } from './clipGraphProjectionGraph';
 import { getClipFlockGraphId } from './clipGraphFlockProjection';
+import { FLOCKING_EFFECT_TYPE, flockingEffectOf } from '../flock/flockEffect';
 import {
   AUDIO_LANE_Y,
   AUDIO_ANALYSIS_LANE_Y,
@@ -172,7 +173,8 @@ export function createSourceNode(
     layout: { x: 0, y: MAIN_LANE_Y },
     domain: 'clip',
     binding: { kind: 'clip-source' },
-    ...(clip.source?.type === 'flock' ? { subgraphId: getClipFlockGraphId(clip.id) } : {}),
+    // Legacy flock hosts without a Flocking effect keep the graph on their source.
+    ...(clip.source?.type === 'flock' && !flockingEffectOf(clip) ? { subgraphId: getClipFlockGraphId(clip.id) } : {}),
   };
 }
 export function createTransformNode(depth: number, signalType: NodeGraphSignalType, clip: TimelineClip): NodeGraphNode {
@@ -268,6 +270,12 @@ export function createEffectNode(
     domain: 'clip',
     binding: { kind: 'clip-effect', effectId: effect.id },
   };
+}
+
+/** An effect node of this clip; the Flocking effect opens the clip's flock graph. */
+export function createClipEffectNode(clip: TimelineClip, effect: Effect, depth: number, laneY: number, signalType: NodeGraphSignalType): NodeGraphNode {
+  const node = createEffectNode(effect, depth, laneY, signalType);
+  return effect.type === FLOCKING_EFFECT_TYPE && clip.flock ? { ...node, subgraphId: getClipFlockGraphId(clip.id) } : node;
 }
 
 export function createAudioEffectInstanceNode(

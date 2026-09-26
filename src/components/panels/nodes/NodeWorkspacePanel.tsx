@@ -43,6 +43,9 @@ import { ControlNodeMenu } from './workspace/ControlNodeMenu';
 import { NodeWorkspaceSourceSelect } from './workspace/NodeWorkspaceSourceSelect';
 import type { NodeWorkspacePanelData } from '../../../types/dock';
 import { focusKeyframeConnections } from '../../../services/nodeGraph/keyframeNodeProjection';
+import { flockingEffectOf, hasFlockGraph } from '../../../services/flock/flockEffect';
+import { flockMenuOperators } from '../../../services/flock/flockMenuOperators';
+import { getFlockOperator } from '../../../services/flock/operators/flockOperatorRegistry';
 /** Graph kinds that accept operator nodes, in the order they receive a node nobody else offers. */
 const GRAPH_OWNER_TYPES = ['invert', 'analog-signal-lab', 'voxel-relief', 'face-cables', 'splat-exploration', 'pixel-particle-disintegrate'];
 
@@ -109,7 +112,7 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
   const ensureColorCorrection = useTimelineStore((state) => state.ensureColorCorrection);
   const addColorNode = useTimelineStore((state) => state.addColorNode);
   const selectClip = useTimelineStore((state) => state.selectClip);
-  const flockActions = useFlockGraphActions(subject?.clip.source?.type === 'flock' ? subject.clip : null);
+  const flockActions = useFlockGraphActions(hasFlockGraph(subject?.clip) ? subject!.clip : null);
   const effectCategories = useMemo(() => getCategoriesWithEffects(), []);
   const [contextMenuError, setContextMenuError] = useState('');
   const [contextMenu, setContextMenu] = useState<NodeWorkspaceContextMenuState | null>(null);
@@ -598,14 +601,33 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
                     catch (error) { setContextMenuError(error instanceof Error ? error.message : String(error)); }
                   } };
                 const existing = subject.clip.effects.find(effect => effect.type === type);
-                return { effectId: existing?.id ?? `new:${type}`, operators: addableEffectOperators(type),
+                return { effectId: existing?.id ?? `new:${type}`, operators: addableEffectOperators(type), graphLabel: getEffect(type)?.name,
                   effectName: existing ? displayName(existing) : `new ${getEffect(type)?.name ?? type}`,
                   onAdd: insert(() => existing?.id ?? addClipEffect(subject.id, type)) };
               }) : [];
+              // Swarm nodes go into the clip's Flocking effect, which is added on first use.
+              const flocking = flockingEffectOf(subject.clip);
+              const flockOwner = imageCapable ? [{ effectId: flocking?.id ?? 'new:flocking', operators: flockMenuOperators(), graphLabel: 'Flocking',
+                effectName: flocking ? 'Flocking' : 'a new Flocking effect',
+                onAdd: (operatorId: string) => {
+                  const batch = startBatch('Add node');
+                  try {
+                    if (!flockingEffectOf(useTimelineStore.getState().clips.find(clip => clip.id === subject.id))) addClipEffect(subject.id, 'flocking');
+                    const offset = subject.graph.nodes.find(node => node.binding?.kind === 'flock-node')?.groupOffset;
+                    const nodeId = useTimelineStore.getState().addFlockGraphNode(subject.id, operatorId,
+                      { layout: { x: contextMenu.layout.x - (offset?.x ?? 0), y: contextMenu.layout.y - (offset?.y ?? 0) } });
+                    if (!nodeId) throw new Error(`${getFlockOperator(operatorId)?.label ?? operatorId} cannot be added to this swarm.`);
+                    const group = subject.graph.groups?.find(candidate => candidate.id === 'flock');
+                    if (group?.collapsed) unified.toggleGroup(group.id);
+                    closeContextMenu();
+                  } catch (error) { setContextMenuError(error instanceof Error ? error.message : String(error)); }
+                  finally { if (batch.opened) endBatch(); }
+                } }] : [];
               return { owners: [
                 ...(reusableEffect ? [{ effectId: reusableEffect.id, operators: addableEffectOperators(reusableEffect.type), onAdd: insert(() => reusableEffect.id),
-                  effectName: displayName(reusableEffect) }] : []),
+                  effectName: displayName(reusableEffect), graphLabel: getEffect(reusableEffect.type)?.name }] : []),
                 ...kinds,
+                ...flockOwner,
               ] };
             })(),
             controls: { disabled: keyframesLocked, onAdd: operatorId => {

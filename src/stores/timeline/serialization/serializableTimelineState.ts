@@ -158,7 +158,7 @@ function createSerializableClip(
       : undefined,
     vectorAnimationSettings: dataOnlySource?.vectorAnimationSettings,
     mathScene: dataOnlySource?.type === 'math-scene' && clip.mathScene ? structuredClone(clip.mathScene) : undefined,
-    flock: dataOnlySource?.type === 'flock' && clip.flock ? structuredClone(clip.flock) : undefined,
+    flock: clip.flock ? structuredClone(clip.flock) : undefined,
     motion: clip.motion ? normalizeMotionLayerDefinition(clip.motion) : undefined,
     is3D: clip.is3D || undefined,
     threeDEffectorsEnabled: dataOnlySource?.threeDEffectorsEnabled,

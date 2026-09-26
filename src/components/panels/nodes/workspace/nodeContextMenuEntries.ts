@@ -5,7 +5,11 @@ import { catalogText } from '../../../../services/nodeGraph/catalogText';
 import { CONTROL_OPERATORS } from '../../../../services/parameterSources/controlOperators';
 import type { NodeMenuEntry } from './NodeMenuTree';
 
-export interface GraphTarget { effectId: string; effectName: string; operators: readonly OperatorDefinition[]; onAdd: (operatorId: string) => void }
+export interface GraphTarget {
+  effectId: string; effectName: string; operators: readonly OperatorDefinition[]; onAdd: (operatorId: string) => void;
+  /** Short graph name used to tell same-named nodes apart. */
+  graphLabel?: string;
+}
 
 export interface NodeContextMenuSources {
   clipStages: {
@@ -46,9 +50,13 @@ function layerMenu(owners: readonly GraphTarget[], id: string, label: string, gr
   const children = NODE_CATEGORIES.flatMap((category): NodeMenuEntry[] => {
     const local = clipItems.get(category.id) ?? [];
     const found = categories.find(group => group.id === category.id);
+    // Same-named nodes of different graphs (e.g. Drag of splats and of a swarm) name their graph.
+    const labelCount = new Map<string, number>();
+    for (const operator of found?.entries ?? []) labelCount.set(operator.label, (labelCount.get(operator.label) ?? 0) + 1);
     const graphEntries: NodeMenuEntry[] = (found?.entries ?? []).map(operator => {
       const owner = routed.get(operator.id)!, text = describe(operator.id, operator.description);
-      return { kind: 'item' as const, id: `${id}:${operator.id}`, label: operator.label,
+      const label = labelCount.get(operator.label)! > 1 ? `${operator.label} (${owner.graphLabel ?? owner.effectName})` : operator.label;
+      return { kind: 'item' as const, id: `${id}:${operator.id}`, label,
         title: `${text.title ?? operator.label}\nAdds to ${owner.effectName}.`,
         keywords: `${operator.id} ${label} ${category.label} ${owner.effectName} ${text.keywords}`, onSelect: () => owner.onAdd(operator.id) };
     });
