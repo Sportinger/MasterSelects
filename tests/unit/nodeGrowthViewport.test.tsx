@@ -16,7 +16,7 @@ function setup() {
   return { ...hook, element, fit };
 }
 describe('node graph growth framing', () => {
-  it('follows offscreen additions during layout, but not ordinary changes or removals', () => {
+  it('follows offscreen additions during layout, but not ordinary changes', () => {
     const { rerender, fit } = setup();
     rerender({ value: graph('source', 'mix'), bounds: large, animating: true });
     expect(fit).toHaveBeenCalledExactlyOnceWith(large);
@@ -27,7 +27,38 @@ describe('node graph growth framing', () => {
     expect(fit).toHaveBeenLastCalledWith(large);
     fit.mockClear();
     rerender({ value: graph('source', 'mix'), bounds: { ...large, right: 1800 }, animating: false });
+    expect(fit).not.toHaveBeenCalled();
+  });
+  it('refits remaining nodes throughout removal layout, then leaves manual moves alone', () => {
+    const { rerender, fit } = setup();
+    rerender({ value: graph('source', 'mix'), bounds: large, animating: false });
+    fit.mockClear();
+    rerender({ value: graph('source'), bounds: small, animating: true });
+    expect(fit).toHaveBeenCalledExactlyOnceWith(small);
+    const settled = { ...small, right: 200 };
+    rerender({ value: graph('source'), bounds: settled, animating: false });
+    expect(fit).toHaveBeenLastCalledWith(settled);
+    fit.mockClear();
     rerender({ value: graph('source'), bounds: large, animating: false });
+    expect(fit).not.toHaveBeenCalled();
+  });
+  it('detects replacement at the same node count and safely handles an empty graph', () => {
+    const { rerender, fit } = setup();
+    rerender({ value: graph('replacement'), bounds: small, animating: false });
+    expect(fit).toHaveBeenCalledExactlyOnceWith(small);
+    fit.mockClear();
+    rerender({ value: graph(), bounds: small, animating: false });
+    expect(fit).not.toHaveBeenCalled();
+    rerender({ value: graph('new'), bounds: large, animating: false });
+    expect(fit).toHaveBeenCalledExactlyOnceWith(large);
+  });
+  it.each(['pointerdown', 'wheel'])('lets %s cancel removal framing', event => {
+    const { rerender, fit, element } = setup();
+    rerender({ value: graph('source', 'mix'), bounds: large, animating: false });
+    rerender({ value: graph('source'), bounds: small, animating: true });
+    fit.mockClear();
+    act(() => element.dispatchEvent(new Event(event)));
+    rerender({ value: graph('source'), bounds: small, animating: false });
     expect(fit).not.toHaveBeenCalled();
   });
   it('keeps visible additions and manual navigation in place', () => {

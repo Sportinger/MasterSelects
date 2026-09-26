@@ -14,7 +14,7 @@ Codex Direct streams graph construction as individual operations: each complete 
 
 The node inspector starts collapsed. Agent graph reads and edits reveal the affected effect group and its descendants while work proceeds, for both tool calls and streamed records. A successfully completed chat turn collapses all groups in the clips it worked on. Failed, cancelled and planning turns do not apply that final collapse. Unrelated clips retain their group state.
 
-When added nodes extend beyond the visible canvas, the view fits the complete graph during their layout animation, including nodes arriving through agent tools or streamed node code. Additions already in view keep the camera unchanged. Parameter edits and removals do not reset manual navigation; a pointer or wheel gesture cancels a pending automatic fit. Group folding retains its own focus and restore behavior.
+When added nodes extend beyond the visible canvas, the view fits the complete graph during their layout animation, including nodes arriving through agent tools or streamed node code. Additions already in view keep the camera unchanged. Removing nodes reframes the remaining graph throughout its layout animation, including deletions by internal and external AI agents. Parameter edits do not reset manual navigation; a pointer or wheel gesture cancels a pending automatic fit. Group folding retains its own focus and restore behavior.
 
 When an agent opens or closes groups, the viewport follows the same animated bounds as the effect and color group outlines, without a separate camera lag or final catch-up jump. New offscreen nodes are framed during their placement animation. Manual pointer or wheel navigation releases the automatic camera follow.
 
