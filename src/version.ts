@@ -1,3 +1,3 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '3.1.7';
+export const APP_VERSION = '3.1.8';

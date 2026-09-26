@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-09-26",
+    "type": "new",
+    "title": "MasterSelects 3.1.8",
+    "description": "Node workspace release: every node, node group and effect is sorted into clear categories with descriptions and search synonyms, and the right-click menu offers them as nested submenus with counts. Nodes can be created freely or inserted into a cable. Graph values can be exposed as keyframeable effect parameters, Temporal Smooth calms flickering masks, effect looks of one engine switch via Style, and Pixel Particle Disintegrate is an editable particle graph. Playback stays smooth with the node graph open, and the in-app agent offers Fast, Medium and Slow models with lower token use.",
+    "section": "Release"
+  },
+  {
     "date": "2026-09-21",
     "type": "improve",
     "title": "MasterSelects 3.1.5",
