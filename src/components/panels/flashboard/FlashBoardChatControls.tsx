@@ -48,11 +48,12 @@ export function FlashBoardChatControls({
           type="button"
           onClick={() => onOpenPopover('chatModelClass')}
           title={`Model: ${flashBoardChatAgentModeLabel(chatAgentMode)}`}
+          aria-label={`Model: ${flashBoardChatAgentModeLabel(chatAgentMode)}`}
           aria-haspopup="menu"
           aria-expanded={activePopover === 'chatModelClass'}
           disabled={isChatting}
         >
-          <span className="fb-pill-label">Model</span>
+          <span className="fb-pill-label">{flashBoardChatAgentModeLabel(chatAgentMode)}</span>
         </button>
         <button
           className="fb-pill fb-prompt-book-pill"

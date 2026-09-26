@@ -181,9 +181,10 @@ export function AIStudioChat() {
                 className={activeMenu === 'model' ? 'active' : ''}
                 disabled={isChatting}
                 onClick={() => setActiveMenu((menu) => menu === 'model' ? null : 'model')}
+                aria-label={`Model: ${agentModeLabel(chatAgentMode)}`}
                 title={`Model: ${agentModeLabel(chatAgentMode)}`}
               >
-                Model
+                {agentModeLabel(chatAgentMode)}
               </AIStudioPill>
               <AIStudioPill onClick={() => setPromptBookOpen(true)} title="Open chat Prompt Book">
                 Prompt Book

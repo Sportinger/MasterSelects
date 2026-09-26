@@ -33,7 +33,7 @@ describe('FlashBoard hosted route controls', () => {
   it('offers only Fast, Medium and Slow in the Model menu', () => {
     renderControls({ renderedPopover: 'chatModelClass' });
 
-    expect(screen.getByRole('button', { name: 'Model' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Model: Fast' })).toHaveTextContent('Fast');
     expect(screen.getByRole('button', { name: 'Prompt Book' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Very Fast' })).not.toBeInTheDocument();
     expect(screen.getByRole('menuitemradio', { name: 'Fast' })).toBeInTheDocument();
