@@ -297,15 +297,11 @@
   cursor: pointer;
 }
 
-.ai-studio-island-credits {
-  min-width: 250px;
+.ai-studio-island-tile-scale {
+  min-width: 132px;
   justify-content: center;
   gap: 9px;
   padding-inline: 13px;
-}
-
-.ai-studio-island-credits.is-compact {
-  min-width: 0;
 }
 
 .ai-studio-tile-scale {
@@ -339,38 +335,6 @@
 .ai-studio-tile-scale-glyph.large {
   width: 12px;
   height: 12px;
-}
-
-.ai-studio-credit-divider {
-  width: 1px;
-  height: 24px;
-  flex: 0 0 auto;
-  background: var(--border-color);
-}
-
-.ai-studio-credit-summary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-.ai-studio-credit-gem {
-  color: var(--accent);
-  font-size: 10px;
-}
-
-.ai-studio-credit-summary strong {
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-
-.ai-studio-credit-summary > span:last-child {
-  color: var(--text-secondary);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
 }
 
 .ai-studio-island-controls {

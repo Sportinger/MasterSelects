@@ -4,7 +4,7 @@ AI Studio is a dockable generation workspace for running several AI image, video
 
 New projects and legacy projects without saved Studio workspaces start on `Chat`. Once the user selects another Studio workspace, that active selection remains part of the persisted project state and is restored on the next load.
 
-The Chat history uses the full stage height directly below the workspace tabs. Floating credit controls overlay only their own compact area instead of reserving an empty row across the top of the conversation.
+The Chat history uses the full stage height directly below the workspace tabs. There is no floating credit banner in Chat or Generation. Generation retains its tile-size control.
 
 ## Workspace Layout
 

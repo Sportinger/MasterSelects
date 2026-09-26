@@ -6,7 +6,6 @@ import {
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { useAccountStore } from '../../../stores/accountStore';
 import { AIStudioGenerationCanvas } from './AIStudioGenerationCanvas';
 import { AIStudioGenerationBar } from './AIStudioGenerationBar';
 
@@ -32,6 +31,7 @@ uniform vec4 uRect[2];
 uniform float uRadius[2];
 uniform float uTone[2];
 uniform float uBlend;
+uniform int uIslandCount;
 uniform vec3 uSolidColor;
 uniform vec3 uGlassColor;
 uniform vec3 uBorderColor;
@@ -54,6 +54,7 @@ void main() {
   float tone = 0.0;
 
   for (int index = 0; index < 2; index++) {
+    if (index >= uIslandCount) continue;
     float islandDistance = roundedBox(
       point - uRect[index].xy,
       uRect[index].zw,
@@ -79,7 +80,7 @@ void main() {
 }
 `;
 
-type IslandId = 'credits' | 'controls';
+type IslandId = 'tile-scale' | 'controls';
 type DockEdge = 'left' | 'right' | 'top' | 'bottom';
 
 interface IslandMotion {
@@ -117,7 +118,7 @@ interface ThemePalette {
 }
 
 const ISLAND_DEFINITIONS: Array<{ id: IslandId; tone: number }> = [
-  { id: 'credits', tone: 0 },
+  { id: 'tile-scale', tone: 0 },
   { id: 'controls', tone: 0 },
 ];
 
@@ -153,8 +154,8 @@ function readThemePalette(stage: HTMLElement): ThemePalette {
   };
 }
 
-function createIslandMotions(): IslandMotion[] {
-  return ISLAND_DEFINITIONS.map(({ id, tone }) => ({
+function createIslandMotions(showTileScale: boolean): IslandMotion[] {
+  return ISLAND_DEFINITIONS.filter(({ id }) => showTileScale || id !== 'tile-scale').map(({ id, tone }) => ({
     id,
     tone,
     x: 0,
@@ -267,7 +268,7 @@ function snapIsland(index: number, islands: IslandMotion[], bounds: StageBounds)
 
 function placeIslandAtAnchor(island: IslandMotion, bounds: StageBounds): void {
   switch (island.id) {
-    case 'credits':
+    case 'tile-scale':
       island.targetX = bounds.width - island.width - EDGE_PADDING;
       island.targetY = EDGE_PADDING;
       break;
@@ -317,7 +318,7 @@ export function AIStudioMetaballStage({
   const stageRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const islandElementsRef = useRef<Array<HTMLDivElement | null>>([]);
-  const islandsRef = useRef<IslandMotion[]>(createIslandMotions());
+  const islandsRef = useRef<IslandMotion[]>(createIslandMotions(showTileScale));
   const boundsRef = useRef<StageBounds>({ width: 1, height: 1 });
   const initializedRef = useRef(false);
   const zIndexRef = useRef(10);
@@ -325,14 +326,15 @@ export function AIStudioMetaballStage({
     () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
     [],
   );
-  const creditBalance = useAccountStore((state) => state.creditBalance);
-  const formattedCredits = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(creditBalance);
   const [tileSize, setTileSize] = useState(DEFAULT_TILE_SIZE);
 
   useEffect(() => {
     const stage = stageRef.current;
     const canvas = canvasRef.current;
     if (!stage || !canvas) return undefined;
+
+    islandsRef.current = createIslandMotions(showTileScale);
+    initializedRef.current = false;
 
     const gl = canvas.getContext('webgl', {
       alpha: true,
@@ -364,6 +366,7 @@ export function AIStudioMetaballStage({
       radius: gl.getUniformLocation(program, 'uRadius'),
       tone: gl.getUniformLocation(program, 'uTone'),
       blend: gl.getUniformLocation(program, 'uBlend'),
+      count: gl.getUniformLocation(program, 'uIslandCount'),
       solidColor: gl.getUniformLocation(program, 'uSolidColor'),
       glassColor: gl.getUniformLocation(program, 'uGlassColor'),
       borderColor: gl.getUniformLocation(program, 'uBorderColor'),
@@ -463,6 +466,7 @@ export function AIStudioMetaballStage({
         gl.uniform1fv(uniforms.radius, radiusValues);
         gl.uniform1fv(uniforms.tone, toneValues);
         gl.uniform1f(uniforms.blend, 34 * pixelRatio);
+        gl.uniform1i(uniforms.count, islandsRef.current.length);
         gl.uniform3fv(uniforms.solidColor, themePalette.solid);
         gl.uniform3fv(uniforms.glassColor, themePalette.glass);
         gl.uniform3fv(uniforms.borderColor, themePalette.border);
@@ -484,7 +488,7 @@ export function AIStudioMetaballStage({
         if (fragmentShader) gl.deleteShader(fragmentShader);
       }
     };
-  }, [reducedMotion]);
+  }, [reducedMotion, showTileScale]);
 
   const handlePointerDown = (index: number) => (event: ReactPointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest('[data-ai-studio-control]')) return;
@@ -527,32 +531,20 @@ export function AIStudioMetaballStage({
   };
 
   const renderIslandContent = (id: IslandId) => {
-    if (id === 'credits') {
+    if (id === 'tile-scale') {
       return (
-        <>
-          {showTileScale && (
-            <>
-              <label className="ai-studio-tile-scale" data-ai-studio-control title={`Tile size: ${tileSize}px`}>
-                <span className="ai-studio-tile-scale-glyph small" aria-hidden="true" />
-                <input
-                  aria-label="Tile size"
-                  max={MAX_TILE_SIZE}
-                  min={MIN_TILE_SIZE}
-                  onChange={(event) => setTileSize(Number(event.currentTarget.value))}
-                  type="range"
-                  value={tileSize}
-                />
-                <span className="ai-studio-tile-scale-glyph large" aria-hidden="true" />
-              </label>
-              <span className="ai-studio-credit-divider" aria-hidden="true" />
-            </>
-          )}
-          <div className="ai-studio-credit-summary">
-            <span className="ai-studio-credit-gem" aria-hidden="true">◆</span>
-            <strong>{formattedCredits}</strong>
-            <span>credits</span>
-          </div>
-        </>
+        <label className="ai-studio-tile-scale" data-ai-studio-control title={`Tile size: ${tileSize}px`}>
+          <span className="ai-studio-tile-scale-glyph small" aria-hidden="true" />
+          <input
+            aria-label="Tile size"
+            max={MAX_TILE_SIZE}
+            min={MIN_TILE_SIZE}
+            onChange={(event) => setTileSize(Number(event.currentTarget.value))}
+            type="range"
+            value={tileSize}
+          />
+          <span className="ai-studio-tile-scale-glyph large" aria-hidden="true" />
+        </label>
       );
     }
     return controls ?? <AIStudioGenerationBar />;
@@ -562,9 +554,9 @@ export function AIStudioMetaballStage({
     <div className="ai-studio-stage" ref={stageRef}>
       <canvas className="ai-studio-metaball-canvas" ref={canvasRef} aria-hidden="true" />
       {content ?? <AIStudioGenerationCanvas tileSize={tileSize} />}
-      {ISLAND_DEFINITIONS.map((definition, index) => (
+      {ISLAND_DEFINITIONS.filter(({ id }) => showTileScale || id !== 'tile-scale').map((definition, index) => (
         <div
-          className={`ai-studio-island ai-studio-island-${definition.id} ${definition.id === 'credits' && !showTileScale ? 'is-compact' : ''}`}
+          className={`ai-studio-island ai-studio-island-${definition.id}`}
           key={definition.id}
           onPointerCancel={handlePointerUp(index)}
           onPointerDown={handlePointerDown(index)}
