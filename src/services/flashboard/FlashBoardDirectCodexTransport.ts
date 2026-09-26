@@ -20,7 +20,7 @@ import {
   createDirectCodexTurnToolPolicy,
 } from './FlashBoardDirectCodexTurnPolicy';
 import { useMediaStore } from '../../stores/mediaStore';
-import { buildAgentNodeCatalogContext } from '../nodeGraph/agentNodeCatalog';
+import { buildAgentNodeCatalogText } from '../nodeGraph/agentNodeCatalog';
 import { getToolPolicy } from '../aiTools/policy';
 import { NodeGraphStreamParser, NODE_GRAPH_STREAM_PROTOCOL } from '../nodeGraph/nodeGraphStream';
 import { FlashBoardNodeGraphStream } from './FlashBoardNodeGraphStream';
@@ -269,12 +269,16 @@ export function buildDirectCodexVerifiedResponse(
   return parts.join(' ');
 }
 
-export function directTurnInput(request: FlashBoardChatRequest): Array<Record<string, unknown>> {
+/** Reference material goes out once per thread; resumed turns already carry it in history. */
+export function directTurnInput(request: FlashBoardChatRequest, includeReference = true): Array<Record<string, unknown>> {
   const input: Array<Record<string, unknown>> = [{
     text: request.prompt,
     type: 'text',
   }];
-  input.push({ type: 'text', text: JSON.stringify({ editorNodeCatalog: buildAgentNodeCatalogContext(request.prompt), nodeGraphStream: NODE_GRAPH_STREAM_PROTOCOL }) });
+  if (includeReference) {
+    input.push({ type: 'text', text: buildAgentNodeCatalogText() });
+    input.push({ type: 'text', text: JSON.stringify({ nodeGraphStream: NODE_GRAPH_STREAM_PROTOCOL }) });
+  }
   for (const reference of request.visualReferences ?? []) {
     input.push({ detail: 'auto', type: 'image', url: reference.dataUrl });
   }
@@ -613,7 +617,7 @@ async function runDirectCodexChat(
       const startedTurn = record(await requestRpc('turn/start', {
         approvalPolicy: 'never',
         effort: modelProfile.effort,
-        input: directTurnInput(request),
+        input: directTurnInput(request, session.newThread === true),
         model: modelProfile.model,
         sandboxPolicy: { networkAccess: false, type: 'readOnly' },
         ...(modelProfile.serviceTier ? { serviceTier: modelProfile.serviceTier } : {}),

@@ -116,3 +116,28 @@ export function buildAgentNodeCatalogContext(request = '') {
     groups: [...groups.values()], total: catalog.length,
     ...(includeDefinitions ? { definitions: catalog } : {}) };
 }
+
+function shortPurpose(description: string): string {
+  const sentence = description.split(/(?<=\.)\s/u)[0].replace(/\.$/u, '').trim();
+  if (sentence.length <= 48) return sentence;
+  const cut = sentence.slice(0, 48);
+  return cut.slice(0, Math.max(cut.lastIndexOf(' '), 24)).trim();
+}
+
+/**
+ * Plain-text inventory for provider turns: one line per addable node, grouped
+ * by context. Ports, parameters and ranges stay behind getNodeDefinitions.
+ */
+export function buildAgentNodeCatalogText(): string {
+  const contexts = new Map<string, string[]>();
+  for (const entry of getAgentNodeCatalog()) {
+    if (entry.availability === 'internal') continue;
+    const types = (ports: AgentNodePort[]) => [...new Set(ports.map(p => p.type))].join(',');
+    const anchor = entry.availability === 'fixed-anchor' ? ' [anchor]' : '';
+    const lines = contexts.get(entry.context) ?? [];
+    lines.push(`${entry.id} ${types(entry.inputs)}>${types(entry.outputs)} ${shortPurpose(entry.description) || entry.label}${anchor}`);
+    contexts.set(entry.context, lines);
+  }
+  return ['Editor node catalog. Line: id inputTypes>outputTypes purpose. Exact ports, parameters and ranges: getNodeDefinitions(ids). Search: searchNodeCatalog. Show a graph: focusNodeGraph.',
+    ...[...contexts].map(([context, lines]) => `## ${context}\n${lines.join('\n')}`)].join('\n');
+}

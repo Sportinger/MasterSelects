@@ -12,6 +12,8 @@ const DIRECT_CODEX_LEGACY_THREAD_KEY = 'masterselects.direct-codex.thread.v5';
 export interface DirectCodexThreadSession {
   activeTurnId?: string;
   completedText?: string;
+  /** A freshly started thread has no reference material in its history yet. */
+  newThread?: boolean;
   threadId: string;
 }
 
@@ -223,5 +225,5 @@ export async function startOrResumeDirectCodexThread(
   const threadId = String(record(started.thread).id ?? '');
   if (!threadId) throw new Error('Codex Direct did not create a session.');
   storeDirectCodexThreadId(threadId, conversationRef, profileId);
-  return { threadId };
+  return { newThread: true, threadId };
 }

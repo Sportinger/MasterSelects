@@ -10,7 +10,7 @@ export const nodeCatalogToolDefinitions: ToolDefinition[] = [
   } },
   { type: 'function', function: {
     name: 'searchNodeCatalog',
-    description: 'Search registered nodes and visual/audio effects by ID, name, description or signal type. The complete compact base inventory is already in editorNodeCatalog at turn start. Returns paginated summaries; getNodeDefinitions reads exact contracts for selected IDs. Availability depends on the graph owner; signal-type filters do not validate a connection.',
+    description: 'Search registered nodes and visual/audio effects by ID, name, description or signal type. A compact base inventory (editor node catalog) is supplied at conversation start. Returns paginated summaries; getNodeDefinitions reads exact contracts for selected IDs. Availability depends on the graph owner; signal-type filters do not validate a connection.',
     parameters: { type: 'object', additionalProperties: false, properties: {
       query: { type: 'string', maxLength: 200, description: 'Case-insensitive search terms; all terms must match. Omit to browse.' },
       kind: { type: 'string', enum: ['operator', 'effect', 'audio-effect', 'flock', 'control', 'color', 'builtin'] },

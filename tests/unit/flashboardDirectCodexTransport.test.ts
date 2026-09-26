@@ -66,13 +66,17 @@ describe('FlashBoard Codex Direct path', () => {
         result: { success: true, data: { clipId: 'clip-a', panel: 'node-workspace' } } },
     ])).toBe(answer);
   });
-  it('includes the complete base node inventory before any model tool call', () => {
+  it('includes a compact node inventory once per thread before any model tool call', () => {
     const input = directTurnInput({ prompt: 'Build a node graph' });
     expect(input[0]).toEqual({ type: 'text', text: 'Build a node graph' });
-    const { editorNodeCatalog } = JSON.parse(input[1].text as string);
-    const ids = editorNodeCatalog.groups.flatMap((g: { entries: string[][] }) => g.entries.map(e => e[0]));
-    expect(ids.length).toBe(editorNodeCatalog.total);
-    expect(ids).toEqual(expect.arrayContaining(['values.number', 'control:control.lfo', 'color:primary', 'audio:audio-eq']));
+    const catalog = input[1].text as string;
+    for (const id of ['values.number', 'control:control.lfo', 'color:primary', 'audio:audio-eq']) {
+      expect(catalog.split('\n').some(line => line.startsWith(`${id} `))).toBe(true);
+    }
+    expect(catalog).not.toContain('"parameters"');
+    expect(catalog.length).toBeLessThan(60_000);
+    expect(JSON.parse(input[2].text as string)).toHaveProperty('nodeGraphStream');
+    expect(directTurnInput({ prompt: 'Next step' }, false)).toEqual([{ type: 'text', text: 'Next step' }]);
   });
   it('skips project inspection for standalone media generation requests', () => {
     const instructions = buildDirectCodexBaseInstructions();
