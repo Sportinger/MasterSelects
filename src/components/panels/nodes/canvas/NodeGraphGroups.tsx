@@ -28,8 +28,6 @@ export const NodeGraphGroups = memo(function NodeGraphGroups({ graph, nodes, zoo
     const bypassed = group.bypassed ?? (nodesById.get(group.bypassNodeId ?? '')?.params?.enabled === false);
     return <section key={group.id} aria-label={`${group.label} node group`} className="node-workspace-group" data-bypassed={bypassed}
       style={{ left: box.left, top: box.top, width: box.right - box.left, height: box.bottom - box.top, '--group-color': group.color,
-        '--group-fill': group.colorDepth === undefined ? '9%' : group.colorDepth % 2 ? '38%' : '12%',
-        '--group-header-fill': group.colorDepth !== undefined && group.colorDepth % 2 ? '46%' : '25%',
         '--group-header-height': `${header.height}px`, '--group-font-size': `${header.fontSize}px`, '--group-icon-size': `${header.iconSize}px`,
         '--group-control-size': `${header.controlSize}px`, '--group-gap': `${header.gap}px`, '--group-padding': `${header.padding}px`,
         '--group-focus-width': `${2 / zoom}px` } as CSSProperties}>

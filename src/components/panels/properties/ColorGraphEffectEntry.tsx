@@ -1,4 +1,3 @@
-import { EffectColorStripe } from './EffectColorStripe';
 import { useEffect, useState } from 'react';
 import type { TimelineClip } from '../../../types/timeline';
 import { getActiveColorVersion, isColorGradeNode } from '../../../types/colorCorrection';
@@ -25,7 +24,6 @@ export function ColorGraphEffectEntry({ clip, visualEffectCount }: { clip: Timel
 
   return <div className={`effect-item color-graph-effect-entry ${!enabled ? 'bypassed' : ''}`}>
     <div className="effect-header">
-      <EffectColorStripe identity="color" />
       <span className="effect-drag-handle color-effect-order" title="Color position in the effect stack">&#x2630;</span>
       <button type="button" className="effect-collapse-toggle" aria-expanded={!collapsed}
         title={collapsed ? 'Expand Color' : 'Collapse Color'} onClick={() => setCollapsed(value => !value)}>

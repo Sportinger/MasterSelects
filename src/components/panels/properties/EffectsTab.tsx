@@ -1,4 +1,3 @@
-import { EffectColorStripe } from './EffectColorStripe';
 import { TimeStackControls } from './TimeStackControls';
 import { SlitScanControls } from './SlitScanControls';
 import { EffectSectionBypass } from './resolveInspector/EffectSectionBypass';
@@ -554,7 +553,6 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                 onDragEnd={() => { setDragIdx(null); setDropIdx(null); }}
               >
                 <div className="effect-header">
-                  <EffectColorStripe identity={`effect:${effect.id}`} />
                   <span
                     className="effect-drag-handle"
                     title="Drag to reorder"

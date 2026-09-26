@@ -1,10 +1,8 @@
-import { EffectColorStripe } from './EffectColorStripe';
 import { useEffect, useId, useState, type ComponentProps, type ReactNode } from 'react';
 import './EffectCard.css';
 
 type EffectCardProps = Omit<ComponentProps<'div'>, 'title'> & {
   title: string;
-  colorIdentity?: string;
   children: ReactNode;
   enabled?: boolean;
   onEnabledChange?: (enabled: boolean) => void;
@@ -18,7 +16,7 @@ type EffectCardProps = Omit<ComponentProps<'div'>, 'title'> & {
 };
 
 /** Audio cards reuse the existing video effect card styling. */
-export function EffectCard({ title, colorIdentity, children, enabled = true, onEnabledChange, onRemove,
+export function EffectCard({ title, children, enabled = true, onEnabledChange, onRemove,
   headerActions, onMoveEarlier, onMoveLater, collapsed, onToggleCollapsed, dragHandleProps, className = '', ...props }: EffectCardProps) {
   const [localCollapsed, setLocalCollapsed] = useState(!enabled);
   const contentId = useId();
@@ -27,7 +25,6 @@ export function EffectCard({ title, colorIdentity, children, enabled = true, onE
   useEffect(() => { if (!enabled) setLocalCollapsed(true); }, [enabled]);
   return <div {...props} className={`effect-item audio-effect-card ${!enabled ? 'bypassed' : ''} ${className}`}>
     <div className="effect-header">
-      {colorIdentity && <EffectColorStripe identity={colorIdentity} />}
       {dragHandleProps && <span className="effect-drag-handle" title="Drag to reorder; click for ordering actions" role="button" tabIndex={0} aria-label={`Reorder ${title}`}
         onClick={() => setReorderOpen(value => !value)} onKeyDown={event => {
           if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {

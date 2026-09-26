@@ -1,8 +1,0 @@
-.effect-color-stripe {
-  display: block;
-  flex: 0 0 3px;
-  width: 3px;
-  height: 18px;
-  border-radius: 2px;
-  pointer-events: none;
-}
