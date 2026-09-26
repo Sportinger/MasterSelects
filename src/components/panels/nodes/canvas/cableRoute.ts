@@ -66,12 +66,28 @@ function simplifyWaypoints(points: RoutePoint[]): RoutePoint[] {
   return result;
 }
 
+/** Angular must remain orthogonal even when grid snapping or an animated
+ * endpoint leaves a small diagonal between two obstacle waypoints. */
+function squareAngularPoints(points: RoutePoint[]): RoutePoint[] {
+  const squared = [points[0]];
+  for (let index = 1; index < points.length; index++) {
+    const previous = squared.at(-1)!, point = points[index];
+    if (previous.x !== point.x && previous.y !== point.y) {
+      const next = points[index + 1];
+      const enterHorizontal = index === 1 || (index < points.length - 1 && next?.x === point.x);
+      squared.push(enterHorizontal ? { x: point.x, y: previous.y } : { x: previous.x, y: point.y });
+    }
+    squared.push(point);
+  }
+  return simplifyWaypoints(squared);
+}
+
 /** The single description of a cable path shared by painting, hit testing, bounds and flow signals. */
 export function cableRoute(from: RoutePoint, to: RoutePoint, style: NodeCableStyle = 'curved', via?: readonly RoutePoint[]): CableRoute {
   // Obstacle-avoiding waypoints: each style keeps its character along the detour.
   if (via?.length) {
     const points = simplifyWaypoints([from, ...via, to]);
-    if (style === 'angular') return { from, segments: points.slice(1).map(point => ({ to: point })) };
+    if (style === 'angular') return { from, segments: squareAngularPoints(points).slice(1).map(point => ({ to: point })) };
     // Stay inside the routing clearance instead of cutting across obstacle corners.
     return roundCorners(points, Math.min(24, style === 'curved' ? CURVED_DETOUR_RADIUS : CORNER_RADIUS));
   }

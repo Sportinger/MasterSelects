@@ -16,10 +16,15 @@ function followEndpoints(route: Route, cable: RoutedCable): NodeGraphPoint[] {
   if (same(route.from, cable.from) && same(route.to, cable.to)) return route.via;
   const fromDx = cable.from.x - route.from.x, fromDy = cable.from.y - route.from.y;
   const toDx = cable.to.x - route.to.x, toDy = cable.to.y - route.to.y;
-  return route.via.map((point, index) => {
-    const weight = (index + 1) / (route.via.length + 1);
-    return { x: point.x + fromDx * (1 - weight) + toDx * weight,
-      y: point.y + fromDy * (1 - weight) + toDy * weight };
+  const shift = (value: number, start: number, end: number, first: number, last: number) => {
+    const weight = Math.abs(end - start) > 0.001 ? Math.max(0, Math.min(1, (value - start) / (end - start))) : 0.5;
+    return value + first * (1 - weight) + last * weight;
+  };
+  return route.via.map(point => {
+    // Equal X coordinates stay equal (a vertical lane); equal Y coordinates
+    // stay equal (a horizontal run) while the two ports move independently.
+    return { x: shift(point.x, route.from.x, route.to.x, fromDx, toDx),
+      y: shift(point.y, route.from.y, route.to.y, fromDy, toDy) };
   });
 }
 

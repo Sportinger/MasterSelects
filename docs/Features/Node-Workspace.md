@@ -339,7 +339,7 @@ runs are removed before corners are rounded.
 
 The toolbar's **Lines** button cycles the cable routing: **Curved** (the default
 bezier), **Angular** (orthogonal lanes with hard corners, with parallel links between
-the same cards bundled into very close adjacent lanes) and **Smart** (the same
+the same cards bundled into very close adjacent lanes; animated and avoided routes stay orthogonal) and **Smart** (the same
 orthogonal lanes with rounded corners). Backward links in both orthogonal styles
 leave and enter horizontally and loop around their ports. Painting, flow signals,
 hover and click hit testing, and culling all use the same route. The choice is
