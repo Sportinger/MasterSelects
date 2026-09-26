@@ -1,5 +1,5 @@
 import { useTimelineStore } from '../../stores/timeline';
-import { EFFECT_REGISTRY } from '../../effects';
+import { EFFECT_REGISTRY, resolveEffectTypeId } from '../../effects';
 import type { ToolResult } from '../aiTools/types';
 import { resolveNodeGraphStreamReferences, type NodeGraphStreamRecord } from '../nodeGraph/nodeGraphStream';
 import { yieldEditorPresentationFrame } from './yieldEditorPresentationFrame';
@@ -53,13 +53,18 @@ export class FlashBoardNodeGraphStream {
       if (args.effectId === undefined && this.lastEffectId) args.effectId = this.lastEffectId;
       if (typeof args.effectId === 'string') this.lastEffectId = args.effectId;
     }
+    if (record.tool === 'addEffect' && typeof args.effectType === 'string') args.effectType = resolveEffectTypeId(args.effectType);
+    if (record.tool === 'addEffect' && typeof args.effectType !== 'string') {
+      throw new Error(`addEffect needs effectType (the catalog typeId, e.g. "gaussian-blur"); got ${Object.keys(args).join(', ') || 'no fields'}.`);
+    }
     if (record.tool.endsWith('Effect')) {
       const effect = record.tool === 'addEffect' ? undefined : clip.effects.find(e => e.id === args.effectId);
       if (record.tool !== 'addEffect' && !effect) throw new Error('Effect does not belong to the stream clip.');
       const definition = EFFECT_REGISTRY.get(record.tool === 'addEffect' ? String(args.effectType) : effect!.type);
-      if (!definition) throw new Error('Unknown stream effect type.');
+      if (!definition) throw new Error(`Unknown effect type: ${String(args.effectType)}. Use the catalog typeId.`);
       const allowed = record.tool === 'addEffect' ? ['effectType', 'params'] : record.tool === 'updateEffect' ? ['effectId', 'params'] : ['effectId'];
-      if (Object.keys(args).some(k => !allowed.includes(k))) throw new Error('Unknown stream effect argument.');
+      const unknown = Object.keys(args).filter(k => !allowed.includes(k));
+      if (unknown.length) throw new Error(`${record.tool} does not accept ${unknown.join(', ')}; allowed: ${allowed.join(', ')}.`);
       if (args.params !== undefined) {
         if (!args.params || typeof args.params !== 'object' || Array.isArray(args.params)) throw new Error('Invalid effect parameters.');
         for (const [key, value] of Object.entries(args.params)) {

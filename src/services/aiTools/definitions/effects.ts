@@ -22,7 +22,7 @@ export const effectToolDefinitions: ToolDefinition[] = [
         type: 'object',
         properties: {
           clipId: { type: 'string', description: 'The clip ID' },
-          effectType: { type: 'string', description: 'Effect type ID (e.g. "brightnessContrast", "gaussianBlur", "chromaKey")' },
+          effectType: { type: 'string', description: 'Effect type ID from listEffects or a node-catalog typeId, e.g. "brightness", "gaussian-blur", "chroma-key", "pixel-particle-disintegrate". Catalog IDs such as "effect:glow" are accepted.' },
           params: { type: 'object', description: 'Optional initial parameter values. If not provided, defaults are used.' },
         },
         required: ['clipId', 'effectType'],

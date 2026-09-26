@@ -15,6 +15,7 @@ export const NODE_GRAPH_STREAM_PROTOCOL = {
   resultReference: { $ref: '<earlier result alias>', field: '<top-level result.data field, e.g. nodeId or effectId>' },
   allowedTools: NODE_GRAPH_STREAM_TOOLS,
   ownership: 'begin pins the existing clip. Operation args omit clipId; the browser supplies it. A new clip must already exist before begin.',
+  effectTools: 'addEffect args: { effectType: "<catalog typeId, e.g. pixel-particle-disintegrate>", params? }. updateEffect args: { effectId: "<effect instance ID>", params }. removeEffect args: { effectId }. No other fields are accepted.',
   effectDefault: 'editOperatorGraph args may omit effectId: it defaults to the graph this block last created (createImageNodeGraph) or named explicitly.',
   order: 'Build in dataflow order, one record per node: each editOperatorGraph add carries its inputs, params and slider fields, and references only nodes added earlier. Do not add all nodes first and wire them afterwards; use separate connect records only for rewiring, feedback or the final output cable.',
   execution: 'Complete records execute immediately in sequence through normal editor policy and undo. Incomplete records never execute. Failed operations and malformed records are skipped, later records continue, and every skipped step is reported back with your next tool result. Failed result aliases remain unavailable. Cancellation or lost ownership stops execution; prior completed operations remain undoable. Reload does not replay a stream.',

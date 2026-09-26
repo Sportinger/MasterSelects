@@ -154,7 +154,7 @@ export function buildAgentNodeCatalogText(): string {
   }
   const ordered = [...sections.values()].toSorted((a, b) => rank(CONTEXT_ORDER, a.context) - rank(CONTEXT_ORDER, b.context)
     || rank(CATEGORY_ORDER, a.category) - rank(CATEGORY_ORDER, b.category) || a.category.localeCompare(b.category));
-  return ['Editor node catalog. Line: id inputTypes>outputTypes purpose. Exact ports, parameters and ranges: getNodeDefinitions(ids). Search: searchNodeCatalog. Show a graph: focusNodeGraph.',
+  return ['Editor node catalog. Line: id inputTypes>outputTypes purpose. Exact ports, parameters and ranges: getNodeDefinitions(ids). Search: searchNodeCatalog. Show a graph: focusNodeGraph. Clip effects (effect:<typeId>) are stacked effects, not graph nodes: addEffect { effectType: "<typeId>" }.',
     ...ordered.map(section => `## ${section.context} › ${section.category}\n${section.lines.join('\n')}`)].join('\n');
 }
 
@@ -170,7 +170,8 @@ function compactParameter(parameter: AgentNodeParameter): string {
 export const AGENT_NODE_DEFINITION_LEGEND = 'Ports are id:type (! required, * repeated). Params are id:type [min..max] {options} =default. Use exact port and param IDs.';
 export function compactAgentNodeDefinition(entry: AgentNodeDefinition) {
   return {
-    id: entry.id, ...(entry.typeId !== entry.id ? { typeId: entry.typeId } : {}), label: entry.label,
+    id: entry.id, ...(entry.typeId !== entry.id ? { typeId: entry.typeId } : {}),
+    ...(entry.kind === 'effect' ? { addWith: `addEffect { effectType: "${entry.typeId}" }; keyframe params as effect.<effectId>.<paramId>` } : {}), label: entry.label,
     context: entry.context, availability: entry.availability, description: entry.description,
     in: entry.inputs.map(compactPort), out: entry.outputs.map(compactPort),
     ...(entry.parameters.length ? { params: entry.parameters.map(compactParameter) } : {}),

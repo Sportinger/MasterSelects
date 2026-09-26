@@ -112,6 +112,24 @@ describe('node graph text stream', () => {
     await expect(failure.accept(JSON.parse(operation))).rejects.toThrow('stopped');
   });
 
+  it('accepts node-catalog effect IDs and executes them with the registry ID', async () => {
+    const execute = vi.fn().mockResolvedValue({ success: true, data: {} });
+    const controller = new FlashBoardNodeGraphStream(execute);
+    await controller.accept({ op: 'begin', schemaVersion: 1, clipId: 'clip-a' });
+    await expect(controller.accept(JSON.parse(operation.replace('"gaussian-blur"', '"effect:gaussian-blur"')))).resolves.toBeUndefined();
+    expect(execute).toHaveBeenLastCalledWith('addEffect', expect.objectContaining({ effectType: 'gaussian-blur' }), 'node-stream:1');
+    expect(controller.failures).toHaveLength(0);
+  });
+
+  it('names the missing effectType instead of reporting an unknown effect', async () => {
+    const execute = vi.fn().mockResolvedValue({ success: true, data: {} });
+    const controller = new FlashBoardNodeGraphStream(execute);
+    await controller.accept({ op: 'begin', schemaVersion: 1, clipId: 'clip-a' });
+    await expect(controller.accept(JSON.parse(operation.replace('"effectType"', '"typeId"'))))
+      .resolves.toMatchObject({ executed: false, error: expect.stringContaining('addEffect needs effectType') });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
   it('skips and reports malformed records when a rejection handler is supplied', () => {
     const received: NodeGraphStreamRecord[] = [], rejected: unknown[] = [];
     const parser = new NodeGraphStreamParser(record => received.push(record), rejection => rejected.push(rejection));

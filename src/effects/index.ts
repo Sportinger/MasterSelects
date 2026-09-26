@@ -178,6 +178,14 @@ export function hasEffect(id: string): boolean {
 }
 
 /**
+ * Accept node-catalog IDs (`effect:glow`) wherever an effect type is expected;
+ * the catalog prefixes effect entries, the registry does not.
+ */
+export function resolveEffectTypeId(id: string): string {
+  return id.startsWith('effect:') && hasEffect(id.slice(7)) ? id.slice(7) : id;
+}
+
+/**
  * Check if an active effect stack needs wall-clock driven re-rendering.
  */
 export function effectStackNeedsContinuousRender(

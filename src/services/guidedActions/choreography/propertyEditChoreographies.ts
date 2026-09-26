@@ -1,6 +1,7 @@
 import type { GuidedAction, GuidedActionFamily, GuidedTargetRef, GuidedToolCall } from './choreographyTypeAliases';
 import type { GuidedToolChoreographyContext } from './types';
 import { createExecutionAction, formatToolName, readNumber, readString } from './choreographyShared';
+import { resolveEffectTypeId } from '../../../effects';
 
 export function compileEffectEdit(
   toolCall: GuidedToolCall,
@@ -9,7 +10,8 @@ export function compileEffectEdit(
   const family: GuidedActionFamily = 'property-edit';
   const clipId = readString(toolCall.args.clipId);
   const effectId = readString(toolCall.args.effectId);
-  const effectType = readString(toolCall.args.effectType);
+  const requestedEffectType = readString(toolCall.args.effectType);
+  const effectType = requestedEffectType ? resolveEffectTypeId(requestedEffectType) : undefined;
   const actions = compilePropertiesStackEdit(toolCall, family, 'effects', 'Edit effect');
 
   if (context.includeValidation && clipId) {

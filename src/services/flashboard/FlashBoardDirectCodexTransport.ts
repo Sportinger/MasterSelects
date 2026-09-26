@@ -22,7 +22,7 @@ import {
 import { useMediaStore } from '../../stores/mediaStore';
 import { getToolPolicy } from '../aiTools/policy';
 import { NodeGraphStreamParser, NODE_GRAPH_STREAM_PROTOCOL } from '../nodeGraph/nodeGraphStream';
-import { FlashBoardNodeGraphStream } from './FlashBoardNodeGraphStream';
+import { FlashBoardNodeGraphStream, type NodeStreamFailure } from './FlashBoardNodeGraphStream';
 import { NodeStreamFeedback, nodeStreamUserNotice } from './FlashBoardNodeStreamFeedback';
 import { DIRECT_EAGER_TOOLS, compactDirectToolEntry, directToolSchemaEntry, localDirectToolResult } from './FlashBoardDirectToolSurface';
 import { directToolContentItems } from './FlashBoardDirectToolResultContent';
@@ -339,14 +339,28 @@ async function runDirectCodexChat(
     return result;
   }, request.signal);
   const streamFeedback = new NodeStreamFeedback(nodeStream.failures);
+  // Steps rejected before execution never reach the audited tool boundary; keep them in the turn's history.
+  let skippedStreamSteps = 0;
+  const recordSkippedStreamStep = (failure: NodeStreamFailure | undefined) => {
+    if (!failure || failure.executed) return;
+    const callId = `${turnId}:node-stream-skipped:${++skippedStreamSteps}`;
+    const call = { modelContent: '', result: { success: false, error: failure.error },
+      toolCall: { arguments: JSON.stringify(failure.args), id: callId, name: failure.tool } };
+    executedToolCalls.push(call); request.onExecutedToolCalls?.([call]);
+    emitAgentActivity(request, { kind: 'operation', operationId: callId, phase: 'failed', safeLabel: safeToolActivityLabel(failure.tool), toolName: failure.tool });
+  };
   const nodeParser = new NodeGraphStreamParser(record => {
-    toolResponseQueue = toolResponseQueue.then(() => nodeStream.accept(record)).catch(error => {
+    toolResponseQueue = toolResponseQueue.then(() => nodeStream.accept(record)).then(recordSkippedStreamStep).catch(error => {
       fail(error instanceof Error ? error : new Error('Node stream failed.'));
       throw error;
     });
     void toolResponseQueue.catch(() => undefined);
-  }, rejection => nodeStream.failures.push({ seq: rejection.seq ?? 0, ref: '', tool: rejection.tool ?? 'record',
-    args: rejection.args ?? {}, error: `Record skipped: ${rejection.reason}`, executed: false }));
+  }, rejection => {
+    const failure = { seq: rejection.seq ?? 0, ref: '', tool: rejection.tool ?? 'record',
+      args: rejection.args ?? {}, error: `Record skipped: ${rejection.reason}`, executed: false };
+    nodeStream.failures.push(failure);
+    recordSkippedStreamStep(failure);
+  });
   const respondToTool = async (message: RpcMessage) => {
     const params = record(message.params);
     const callId = typeof params.callId === 'string' ? params.callId : '';

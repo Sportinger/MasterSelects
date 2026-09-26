@@ -1,5 +1,5 @@
 import { useTimelineStore } from '../../../stores/timeline';
-import { getAllEffects, getDefaultParams, hasEffect, getCategoriesWithEffects } from '../../../effects';
+import { getAllEffects, getDefaultParams, hasEffect, getCategoriesWithEffects, resolveEffectTypeId } from '../../../effects';
 import type { ToolResult } from '../types';
 import { selectClipAndOpenTab } from '../aiFeedback';
 import {
@@ -42,7 +42,7 @@ export async function handleAddEffect(
   timelineStore: TimelineStore
 ): Promise<ToolResult> {
   const clipId = args.clipId as string;
-  const effectType = args.effectType as string;
+  const effectType = resolveEffectTypeId(String(args.effectType ?? ''));
   const customParams = args.params as Record<string, unknown> | undefined;
 
   const clip = timelineStore.clips.find(c => c.id === clipId);
