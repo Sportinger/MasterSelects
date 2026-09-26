@@ -145,6 +145,38 @@ describe('WebCodecsExportMode decoder recovery', () => {
     }));
   });
 
+  it('keeps decoder context across repeated short forward jumps from a sped-up clip', async () => {
+    const samples = createSamples(120);
+    let currentFrame: VideoFrame | null = null;
+    const decoder = createDecoder(timestamp => {
+      mode.handleDecoderOutput({ timestamp, close: vi.fn() } as unknown as VideoFrame);
+    });
+    const player: ExportModePlayer = {
+      getDecoder: () => decoder as unknown as VideoDecoder,
+      getSamples: () => samples,
+      getSampleIndex: () => 0,
+      setSampleIndex: vi.fn(),
+      getVideoTrackTimescale: () => 30,
+      getCodecConfig: () => ({ codec: 'avc1.test' }),
+      getFrameRate: () => 30,
+      getCurrentFrame: () => currentFrame,
+      setCurrentFrame: frame => { currentFrame = frame; },
+      isSimpleMode: () => false,
+      seekAsync: vi.fn(),
+    };
+    const mode = new WebCodecsExportMode(player);
+
+    await mode.prepareForSequentialExport(0);
+    decoder.reset.mockClear();
+    await mode.seekDuringExport(7 / 30);
+    await mode.seekDuringExport(14 / 30);
+
+    expect(decoder.reset).not.toHaveBeenCalled();
+    expect(currentFrame?.timestamp).toBeCloseTo(14e6 / 30, -3);
+    expect(decoder.decode.mock.calls.length).toBeLessThan(25);
+    mode.endSequentialExport();
+  });
+
   it('extends the startup window when reordered frames are initially withheld', async () => {
     const samples = createSamples(300);
     let currentFrame: VideoFrame | null = null;

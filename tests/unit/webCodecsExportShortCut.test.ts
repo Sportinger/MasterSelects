@@ -4,7 +4,7 @@ import type { Sample } from '../../src/engine/webCodecsTypes';
 
 afterEach(() => vi.unstubAllGlobals());
 
-it('releases skipped frames on a short forward cut before exhausting the decoder surface pool', async () => {
+it('continues through a short forward cut without exhausting the decoder surface pool', async () => {
   vi.stubGlobal('EncodedVideoChunk', class {
     timestamp: number;
     constructor(init: EncodedVideoChunkInit) { this.timestamp = Math.trunc(init.timestamp); }
@@ -56,10 +56,10 @@ it('releases skipped frames on a short forward cut before exhausting the decoder
   }
 
   try {
-    // Seven unsubmitted samples: below the old eight-sample restart threshold.
+    // Seven unsubmitted samples fit in the continuous forward decode window.
     await mode.seekDuringExport(1634 / 30);
     expect(currentFrame?.timestamp).toBe(Math.trunc(1634 * 1e6 / 30));
-    expect(decoder.reset).toHaveBeenCalledOnce();
+    expect(decoder.reset).not.toHaveBeenCalled();
     expect(peakSurfaces).toBeLessThanOrEqual(11);
   } finally {
     mode.destroy();

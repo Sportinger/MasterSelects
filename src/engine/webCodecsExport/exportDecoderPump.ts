@@ -3,13 +3,14 @@
 import { Logger } from '../../services/logger';
 import type { ExportModePlayer } from '../WebCodecsExportMode';
 import type { Sample } from '../webCodecsTypes';
+import { frameToleranceUs } from './exportSamplePlanning';
 
 const log = Logger.create('WebCodecsExportMode');
 
 interface ExportDecoderPumpHooks {
   sampleTimestampUs(sample: Sample): number;
   onSamplesSubmitted(endIndexExclusive: number): number;
-  waitForBufferedTarget(targetCtsUs: number, timeoutMs: number): Promise<void>;
+  findBufferedFrameIndex(targetCtsUs: number, toleranceUs: number): number;
   refreshBufferedFrameIndex(): void;
   getBufferedFrameCount(): number;
 }
@@ -34,6 +35,33 @@ export class ExportDecoderPump {
       throw new Error(`FAST export decoder closed during ${context}`);
     }
     return decoder;
+  }
+
+  async waitForBufferedTarget(
+    targetCtsUs: number,
+    timeoutMs: number,
+    toleranceUs = frameToleranceUs(this.player.getFrameRate(), 2.5),
+    allowIdleExit = true,
+  ): Promise<void> {
+    const startTime = performance.now();
+    let previousBufferSize = this.hooks.getBufferedFrameCount();
+    let stablePolls = 0;
+
+    while (performance.now() - startTime < timeoutMs) {
+      this.hooks.refreshBufferedFrameIndex();
+      if (this.hooks.findBufferedFrameIndex(targetCtsUs, toleranceUs) >= 0) return;
+
+      const decoder = this.getConfiguredDecoderOrThrow('waitForBufferedTarget');
+      const bufferSize = this.hooks.getBufferedFrameCount();
+      if (bufferSize !== previousBufferSize || decoder.decodeQueueSize > 0) {
+        previousBufferSize = bufferSize;
+        stablePolls = 0;
+      } else if (allowIdleExit && ++stablePolls >= 4) {
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    this.hooks.refreshBufferedFrameIndex();
   }
 
   isRecoverableDecoderFailure(error: unknown): boolean {
@@ -177,7 +205,7 @@ export class ExportDecoderPump {
     if (endIndexExclusive >= samples.length) {
       await this.waitForDecoderFlush(Math.max(4000, (endIndexExclusive - startIndex) * 10));
     } else if (awaitTargetOutput) {
-      await this.hooks.waitForBufferedTarget(
+      await this.waitForBufferedTarget(
         targetCtsUs,
         Math.max(1200, (endIndexExclusive - startIndex) * 12)
       );

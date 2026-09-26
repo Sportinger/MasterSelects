@@ -48,10 +48,46 @@ it('waits for the requested source frame instead of exporting its buffered neigh
   mode.endSequentialExport();
 });
 
+it('submits later samples when a reordered target frame is withheld beyond the first decode window', async () => {
+  let currentFrame: VideoFrame | null = null;
+  const samples = Array.from({ length: 60 }, (_, index) => ({ number: index, track_id: 1,
+    cts: index, dts: index, duration: 1, timescale: 30, is_sync: index % 30 === 0,
+    size: 1, data: new ArrayBuffer(1) } as Sample));
+  const delayedTargetCts = Math.trunc(4e6 / 30);
+  let heldTarget: number | null = null;
+  const emit = (timestamp: number) => mode.handleDecoderOutput({ timestamp, close: vi.fn() } as unknown as VideoFrame);
+  const decoder = { state: 'configured', decodeQueueSize: 0, reset: vi.fn(), configure: vi.fn(),
+    flush: vi.fn().mockResolvedValue(undefined), decode: vi.fn((chunk: EncodedVideoChunk) => {
+      if (chunk.timestamp === delayedTargetCts) {
+        heldTarget = chunk.timestamp;
+      } else {
+        emit(chunk.timestamp);
+      }
+      if (chunk.timestamp >= Math.trunc(10e6 / 30) && heldTarget !== null) {
+        emit(heldTarget);
+        heldTarget = null;
+      }
+    }) };
+  const player: ExportModePlayer = { getDecoder: () => decoder as unknown as VideoDecoder,
+    getSamples: () => samples, getSampleIndex: () => 0, setSampleIndex: vi.fn(),
+    getVideoTrackTimescale: () => 30, getCodecConfig: () => ({ codec: 'avc1.test' }),
+    getFrameRate: () => 30, getCurrentFrame: () => currentFrame,
+    setCurrentFrame: frame => { currentFrame = frame; }, isSimpleMode: () => false, seekAsync: vi.fn() };
+  const mode = new WebCodecsExportMode(player);
+
+  await mode.prepareForSequentialExport(0);
+  await expect(mode.seekDuringExport(4 / 30)).resolves.toBeUndefined();
+  expect(currentFrame?.timestamp).toBe(delayedTargetCts);
+  expect(decoder.decode.mock.calls.some(([chunk]) => chunk.timestamp >= Math.trunc(10e6 / 30))).toBe(true);
+  mode.endSequentialExport();
+});
+
 it('fails FAST export when the exact source frame never arrives instead of substituting a hold', async () => {
   const { mode } = createExport(true);
   await mode.prepareForSequentialExport(0);
   await expect(mode.seekDuringExport(4 / 30)).rejects.toThrow('could not decode frame');
+  expect((mode as unknown as { exportFrameBuffer: Map<number, VideoFrame> }).exportFrameBuffer.size)
+    .toBeLessThanOrEqual(8);
   mode.endSequentialExport();
 });
 
