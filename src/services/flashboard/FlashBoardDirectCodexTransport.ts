@@ -164,10 +164,13 @@ export function normalizeDirectCodexToolArguments(
   return { ...normalized, mediaFileId: mediaFile.id };
 }
 
+/** In exec the result is a content-item array; stringifying it would dump ~1M tokens of base64. */
+const IMAGE_PLACEHOLDER = '[image attached as the inputImage content item; in exec view it with image(item.imageUrl, "low"), never text() the result]';
+
 function serializeToolResult(result: ToolResult): string {
   const serialized = JSON.stringify(result, (_key, value) => (
     typeof value === 'string' && /^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(value)
-      ? '[image attached separately]'
+      ? IMAGE_PLACEHOLDER
       : value
   ));
   return serialized;
