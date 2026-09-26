@@ -75,3 +75,19 @@ export function groupDepthClips(bounds: Rect, covers: readonly Rect[]): Map<numb
   }
   return layers;
 }
+
+// Covers are immutable within a scene. Their covered regions do not depend on
+// the viewport, so panning and zooming must not repartition them on every paint.
+const coveredLayers = new WeakMap<readonly Rect[], Map<number, Rect[]>>();
+export function coveredGroupDepthClips(covers: readonly Rect[]): Map<number, Rect[]> {
+  const cached = coveredLayers.get(covers);
+  if (cached) return cached;
+  if (!covers.length) return new Map();
+  const x = Math.min(...covers.map(rect => rect.x)), y = Math.min(...covers.map(rect => rect.y));
+  const right = Math.max(...covers.map(rect => rect.x + rect.width));
+  const bottom = Math.max(...covers.map(rect => rect.y + rect.height));
+  const layers = groupDepthClips({ x, y, width: right - x, height: bottom - y }, covers);
+  layers.delete(0);
+  coveredLayers.set(covers, layers);
+  return layers;
+}

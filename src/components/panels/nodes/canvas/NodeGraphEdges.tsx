@@ -9,7 +9,7 @@ import { NodeGraphFlowSignals } from './NodeGraphFlowSignals';
 import './NodeGraphFlow.css';
 import { useSettingsStore } from '../../../../stores/settingsStore';
 import { nodeGroupBounds } from './groupBounds';
-import { coveredCableOpacity, createEdgeGroupOcclusion, groupDepthClips, rectangleClipPath, subtractOccludedRects } from './edgeGroupOcclusion';
+import { coveredCableOpacity, coveredGroupDepthClips, createEdgeGroupOcclusion, rectangleClipPath, subtractOccludedRects } from './edgeGroupOcclusion';
 import type { Rect } from './rendering/nodeCanvasTypes';
 
 interface NodeGraphEdgesProps {
@@ -71,8 +71,7 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
         d: rectangleClipPath(subtractOccludedRects({ x: svgLeft, y: svgTop, width: svgWidth, height: svgHeight }, covers)) };
       sharedClips.set(covers, shared);
       if (!canvasRendered) coveredClips.set(covers,
-        [...groupDepthClips({ x: svgLeft, y: svgTop, width: svgWidth, height: svgHeight }, covers)]
-          .filter(([depth]) => depth > 0)
+        [...coveredGroupDepthClips(covers)]
           .map(([depth, rects]) => ({ id: `${shared.id}-${depth}`, d: rectangleClipPath(rects), depth })));
     }
     return shared.id;

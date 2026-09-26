@@ -5,7 +5,7 @@ import { branchMetrics } from '../cableBranches';
 import { fitCanvasLabel } from './canvasTextLayout';
 import type { CanvasBranch, CanvasCable, CanvasCurve, CanvasNode, CanvasScene, CanvasTheme, CanvasTransport, CanvasView, Rect } from './nodeCanvasTypes';
 import { CARD_SPRITE_PAD } from './nodeCardSprites';
-import { coveredCableOpacity, groupDepthAt, groupDepthClips } from '../edgeGroupOcclusion';
+import { coveredCableOpacity, coveredGroupDepthClips, groupDepthAt, subtractOccludedRects } from '../edgeGroupOcclusion';
 
 export type DrawContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 export function inView(rect: Rect, view: CanvasView, margin = 30): boolean {
@@ -14,6 +14,11 @@ export function inView(rect: Rect, view: CanvasView, margin = 30): boolean {
 }
 function cableVisible(cable: CanvasCable, view: CanvasView): boolean {
   return inView(canvasCableRoute(cable).bounds, view);
+}
+function intersectsCable(rect: Rect, cable: CanvasCable, margin: number): boolean {
+  const bounds = canvasCableRoute(cable).bounds;
+  return rect.x <= bounds.x + bounds.width + margin && rect.x + rect.width >= bounds.x - margin
+    && rect.y <= bounds.y + bounds.height + margin && rect.y + rect.height >= bounds.y - margin;
 }
 function begin(ctx: DrawContext, view: CanvasView) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -55,33 +60,39 @@ function drawCable(ctx: DrawContext, cable: CanvasCable, zoom: number, opacity?:
  * one stroke, instead of one stroke per cable and per arrow head. Cables that
  * are still drawing in keep their individual progressive path.
  */
-function drawCables(ctx: DrawContext, cables: readonly CanvasCable[], zoom: number, opacity?: number) {
-  const batches = new Map<string, { path: Path2D; color: string; alpha: number; width: number; dash: number[] }>();
-  const batch = (color: string, alpha: number, width: number, dash: number[]) => {
-    const key = `${color}|${alpha}|${width}|${dash.join(',')}`;
+function prepareCables(cables: readonly CanvasCable[], zoom: number) {
+  const progressive: CanvasCable[] = [];
+  const batches = new Map<string, { path: Path2D; color: string; alpha: number; fade: number; width: number; dash: number[] }>();
+  const batch = (color: string, alpha: number, fade: number, width: number, dash: number[]) => {
+    const key = `${color}|${alpha}|${fade}|${width}|${dash.join(',')}`;
     let entry = batches.get(key);
-    if (!entry) { entry = { path: new Path2D(), color, alpha, width, dash }; batches.set(key, entry); }
+    if (!entry) { entry = { path: new Path2D(), color, alpha, fade, width, dash }; batches.set(key, entry); }
     return entry.path;
   };
   for (const cable of cables) {
     const appearance = cable.appearance ?? 1;
-    if (!cable.disappearing && appearance < 1) { drawCable(ctx, cable, zoom, opacity); continue; }
+    if (!cable.disappearing && appearance < 1) { progressive.push(cable); continue; }
     const { route, middle: { point: middle, angle } } = canvasCableRoute(cable);
-    const alpha = (opacity ?? (cable.highlighted ? 1 : 0.55)) * (cable.disappearing ? appearance : 1);
+    const fade = cable.disappearing ? appearance : 1;
+    const alpha = (cable.highlighted ? 1 : 0.55) * fade;
     const dash = cable.draft ? [5 / zoom, 4 / zoom] : cable.baked ? [4 / zoom, 4 / zoom] : [];
     const thin = cableScreenScale(zoom);
-    const curve = batch(cable.color, alpha, (cable.highlighted ? 2 : 1.25) * thin / zoom, dash);
+    const curve = batch(cable.color, alpha, fade, (cable.highlighted ? 2 : 1.25) * thin / zoom, dash);
     traceCableRoute(curve, route);
     const cos = Math.cos(angle), sin = Math.sin(angle), size = 3 / zoom;
-    const arrow = batch(cable.color, alpha, 1.3 * thin / zoom, []);
+    const arrow = batch(cable.color, alpha, fade, 1.3 * thin / zoom, []);
     arrow.moveTo(middle.x + (-size * cos + size * sin), middle.y + (-size * sin - size * cos));
     arrow.lineTo(middle.x, middle.y);
     arrow.lineTo(middle.x + (-size * cos - size * sin), middle.y + (-size * sin + size * cos));
   }
-  for (const { path, color, alpha, width, dash } of batches.values()) {
-    ctx.strokeStyle = color; ctx.globalAlpha = alpha; ctx.lineWidth = width; ctx.setLineDash(dash); ctx.stroke(path);
-  }
-  ctx.setLineDash([]); ctx.globalAlpha = 1;
+  return (ctx: DrawContext, opacity?: number) => {
+    for (const cable of progressive) drawCable(ctx, cable, zoom, opacity);
+    for (const { path, color, alpha, fade, width, dash } of batches.values()) {
+      ctx.strokeStyle = color; ctx.globalAlpha = opacity === undefined ? alpha : opacity * fade;
+      ctx.lineWidth = width; ctx.setLineDash(dash); ctx.stroke(path);
+    }
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+  };
 }
 function curveShape(curve: CanvasCurve) {
   return curve.compactBadge ? { x: curve.x + 5, y: curve.y + 23, width: 108, height: 22 }
@@ -125,17 +136,29 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
   // Cables that pass behind the same groups share one clip per pass. Clipping
   // each cable separately dominated raster time on large expanded graphs.
   const occluded = new Map<Rect[], CanvasCable[]>(), open: CanvasCable[] = [];
+  const cableMargin = 6 / view.zoom;
   for (const cable of scene.cables) if (cableVisible(cable, view)) {
-    if (!cable.occlusions?.length) { open.push(cable); continue; }
+    if (!cable.occlusions?.some(rect => intersectsCable(rect, cable, cableMargin))) { open.push(cable); continue; }
     const batch = occluded.get(cable.occlusions);
     if (batch) batch.push(cable); else occluded.set(cable.occlusions, [cable]);
   }
-  drawCables(ctx, open, view.zoom);
+  prepareCables(open, view.zoom)(ctx);
   for (const [occlusions, cables] of occluded) {
-    for (const [depth, rects] of groupDepthClips(viewport, occlusions)) {
+    // Construct curve/arrow paths once, then reuse them for all opacity passes.
+    const paint = prepareCables(cables, view.zoom);
+    const visible = subtractOccludedRects(viewport, occlusions);
+    if (visible.length) {
       ctx.save(); ctx.beginPath();
-      for (const rect of rects) ctx.rect(rect.x, rect.y, rect.width, rect.height);
-      ctx.clip(); drawCables(ctx, cables, view.zoom, depth ? coveredCableOpacity(depth) : undefined); ctx.restore();
+      for (const rect of visible) ctx.rect(rect.x, rect.y, rect.width, rect.height);
+      ctx.clip(); paint(ctx); ctx.restore();
+    }
+    for (const [depth, rects] of coveredGroupDepthClips(occlusions)) {
+      const onScreen = rects.filter(rect => inView(rect, view)
+        && cables.some(cable => intersectsCable(rect, cable, cableMargin)));
+      if (!onScreen.length) continue;
+      ctx.save(); ctx.beginPath();
+      for (const rect of onScreen) ctx.rect(rect.x, rect.y, rect.width, rect.height);
+      ctx.clip(); paint(ctx, coveredCableOpacity(depth)); ctx.restore();
     }
   }
   for (const node of scene.nodes) {

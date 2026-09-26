@@ -323,7 +323,10 @@ undo and project saves; unavailable live values are shown as a dash.
 
 Cable sections passing behind unrelated groups draw at 30% opacity under one
 frame, 15% under two, 7.5% under three, and halve again for each additional
-frame. Flow signals follow the same depth fading. Covered sections cannot
+frame. Covered regions are cached independently of pan and zoom; cable paths
+are built once per paint and reused across depth layers. Wires that do not cross
+any covering frame use a single normal pass, and irrelevant depth clips are skipped.
+Flow signals follow the same depth fading. Covered sections cannot
 be hovered or clicked there. Wires belonging to a group retain their normal
 appearance and interaction inside that group.
 
