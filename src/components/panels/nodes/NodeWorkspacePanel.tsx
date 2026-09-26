@@ -19,11 +19,11 @@ import { publishSceneGraphOutput } from '../../../services/nodeGraph/publishScen
 import { NodeContextMenu } from './workspace/NodeContextMenu';
 import { ConnectedNodeMenu } from './workspace/ConnectedNodeMenu';
 import type { NodeConnectionDrop } from '../../../types/nodeGraph';
-import { buildNodeContextMenuEntries } from './workspace/nodeContextMenuEntries';
+import { buildCableInsertEntries, buildNodeContextMenuEntries } from './workspace/nodeContextMenuEntries';
 import { addableEffectOperators } from '../../../services/operators/effectGraphOwner';
 import { addEffectGraphNode } from './workspace/addEffectGraphNode';
+import { FREE_NODE_GRAPH_NAME, freeNodeGraphEffectId } from '../../../services/operators/imageNodeGraphEffect';
 import { addControlNode } from '../../../services/parameterSources/parameterSourceActions';
-import { useSettingsStore } from '../../../stores/settingsStore';
 import { NodeInspector } from './workspace/NodeWorkspaceInspector';
 import {
   canDeleteNodeFromClip,
@@ -42,6 +42,8 @@ import { ControlNodeMenu } from './workspace/ControlNodeMenu';
 import { NodeWorkspaceSourceSelect } from './workspace/NodeWorkspaceSourceSelect';
 import type { NodeWorkspacePanelData } from '../../../types/dock';
 import { focusKeyframeConnections } from '../../../services/nodeGraph/keyframeNodeProjection';
+/** Graph kinds that accept operator nodes, in the order they receive a node nobody else offers. */
+const GRAPH_OWNER_TYPES = ['invert', 'analog-signal-lab', 'voxel-relief', 'face-cables', 'splat-exploration', 'pixel-particle-disintegrate'];
 
 interface NodeWorkspaceContextMenuState {
   x: number;
@@ -108,8 +110,6 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
   const selectClip = useTimelineStore((state) => state.selectClip);
   const flockActions = useFlockGraphActions(subject?.clip.source?.type === 'flock' ? subject.clip : null);
   const effectCategories = useMemo(() => getCategoriesWithEffects(), []);
-  const advancedNodes = useSettingsStore(state => state.nodeAdvancedCatalog);
-  const setAdvancedNodes = useSettingsStore(state => state.setNodeAdvancedCatalog);
   const [contextMenuError, setContextMenuError] = useState('');
   const [contextMenu, setContextMenu] = useState<NodeWorkspaceContextMenuState | null>(null);
   const [connectionMenu, setConnectionMenu] = useState<{ graphId: string; drop: NodeConnectionDrop } | null>(null);
@@ -484,6 +484,31 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
           }}
           onConnectPorts={unified.connectPorts}
           onDropConnection={drop => { setContextMenu(null); setConnectionMenu({ graphId: subject.graph.id, drop }); }}
+          cableInsertEntries={(edge, point) => {
+            // Cables inside one effect graph: any of its nodes goes between the cable's ends.
+            const from = subject.graph.nodes.find(node => node.id === edge.fromNodeId), to = subject.graph.nodes.find(node => node.id === edge.toNodeId);
+            const effectId = from?.binding?.kind === 'effect-operator' ? from.binding.effectId : undefined;
+            const effect = subject.clip.effects.find(candidate => candidate.id === effectId);
+            if (!effect || to?.binding?.kind !== 'effect-operator' || to.binding.effectId !== effect.id) return [];
+            return buildCableInsertEntries({ effectId: effect.id, effectName: effect.name === effect.type ? getEffect(effect.type)?.name ?? effect.name : effect.name,
+              operators: addableEffectOperators(effect.type), onAdd: operatorId => {
+                const batch = startBatch('Insert node into cable');
+                try {
+                  const offset = from?.groupOffset;
+                  const nodeId = addEffectGraphNode(subject.id, effect.id, operatorId, { x: point.x - (offset?.x ?? 0), y: point.y - (offset?.y ?? 0) });
+                  const operator = getEffectOperator(operatorId);
+                  const port = <T extends { id: string; type: string }>(ports: readonly T[] | undefined) => ports?.find(candidate => candidate.type === edge.type) ?? ports?.[0];
+                  const input = port(operator?.inputs), output = port(operator?.outputs);
+                  // No type filter: connect what fits; an unconnectable side keeps the original cable.
+                  let wired = 0;
+                  try { if (input) { unified.connectPorts({ fromNodeId: edge.fromNodeId, fromPortId: edge.fromPortId, toNodeId: nodeId, toPortId: input.id }); wired++; } } catch { /* stays unconnected */ }
+                  try { if (output) { unified.connectPorts({ fromNodeId: nodeId, fromPortId: output.id, toNodeId: edge.toNodeId, toPortId: edge.toPortId }); wired++; } } catch { /* stays unconnected */ }
+                  if (wired === 2) { try { unified.disconnectEdge(edge.id); } catch { /* already replaced */ } }
+                  selectNode(nodeId);
+                } catch (error) { console.warn('Insert node into cable failed', error); }
+                finally { if (batch.opened) endBatch(); }
+              } });
+          }}
           onDisconnectEdge={unified.disconnectEdge}
           onReconnectPorts={(edgeId, connection) => batched('Reconnect node link', () => reconnectNodePorts(
             subject.graph, edgeId, connection, () => readTimelineRuntimeState(useTimelineStore).clips,
@@ -535,28 +560,43 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
               onAddAI: addAICustomNode, onAddStage: addBuiltInNode,
               onAddKeyframes: () => { if (!keyframesLocked) selectNode(addKeyframeNode(subject.id, contextMenu.layout)); closeContextMenu(); } },
             effects: { groups: effectCategories, onAdd: addEffectNode },
-            graphs: { targetEffectId: reusableEffect?.id, advanced: advancedNodes, effects: subject.clip.effects.map(effect => ({
-              effectId: effect.id, effectName: effect.name === effect.type ? getEffect(effect.type)?.name ?? effect.name : effect.name,
-              operators: addableEffectOperators(effect.type), onAdd: (operatorId: string) => {
+            graphs: (() => {
+              const insert = (effectId: () => string) => (operatorId: string) => {
+                const batch = startBatch('Add node');
                 try {
-                  // Local graph coordinates: offset of the pointer node, or of any card of that effect.
-                  const offset = effect.id === reusableEffect?.id ? reusableTarget?.groupOffset
-                    : subject.graph.nodes.find(node => node.binding && 'effectId' in node.binding && node.binding.effectId === effect.id)?.groupOffset;
-                  const id = addEffectGraphNode(subject.id, effect.id, operatorId,
+                  const id = effectId();
+                  // Graph-local coordinates: offset of the pointer node, or of any card of that effect.
+                  const offset = id === reusableEffect?.id ? reusableTarget?.groupOffset
+                    : subject.graph.nodes.find(node => node.binding && 'effectId' in node.binding && node.binding.effectId === id)?.groupOffset;
+                  const nodeId = addEffectGraphNode(subject.id, id, operatorId,
                     { x: contextMenu.layout.x - (offset?.x ?? 0), y: contextMenu.layout.y - (offset?.y ?? 0) });
-                  const group = subject.graph.groups?.find(candidate => candidate.id === `effect:${effect.id}`);
+                  const group = subject.graph.groups?.find(candidate => candidate.id === `effect:${id}`);
                   if (group?.collapsed) unified.toggleGroup(group.id);
-                  selectNode(id); closeContextMenu();
+                  selectNode(nodeId); closeContextMenu();
                 } catch (error) { setContextMenuError(error instanceof Error ? error.message : String(error)); }
-              } })) },
+                finally { if (batch.opened) endBatch(); }
+              };
+              const imageCapable = !['audio', 'motion-adjustment'].includes(subject.clip.source?.type ?? '');
+              const displayName = (effect: { name: string; type: string }) => effect.name === effect.type ? getEffect(effect.type)?.name ?? effect.name : effect.name;
+              // Every graph kind: an existing effect of that kind receives the node, otherwise one is added on first use.
+              const kinds = imageCapable ? GRAPH_OWNER_TYPES.map(type => {
+                const existing = type === 'invert' ? undefined : subject.clip.effects.find(effect => effect.type === type);
+                return { effectId: existing?.id ?? `new:${type}`, operators: addableEffectOperators(type),
+                  effectName: type === 'invert' ? FREE_NODE_GRAPH_NAME : existing ? displayName(existing) : `new ${getEffect(type)?.name ?? type}`,
+                  onAdd: insert(() => type === 'invert' ? freeNodeGraphEffectId(subject.id) : existing?.id ?? addClipEffect(subject.id, type)) };
+              }) : [];
+              return { owners: [
+                ...(reusableEffect ? [{ effectId: reusableEffect.id, operators: addableEffectOperators(reusableEffect.type), onAdd: insert(() => reusableEffect.id),
+                  effectName: displayName(reusableEffect) }] : []),
+                ...kinds,
+              ] };
+            })(),
             controls: { disabled: keyframesLocked, onAdd: operatorId => {
               try { selectNode(addControlNode(subject.id, operatorId, contextMenu.layout)); closeContextMenu(); }
               catch (error) { setContextMenuError(error instanceof Error ? error.message : String(error)); }
             } },
           })}
-          advanced={advancedNodes}
           error={contextMenuError}
-          onToggleAdvanced={() => setAdvancedNodes(!advancedNodes)}
           onClose={closeContextMenu}
           onDeleteNode={() => {
             if (contextMenuNode) {

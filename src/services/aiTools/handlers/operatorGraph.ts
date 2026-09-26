@@ -1,18 +1,17 @@
 import { useTimelineStore } from '../../../stores/timeline';
 import { startBatch, endBatch, cancelHistoryBatch } from '../../../stores/historyStore';
 import { assertExclusiveTimelineMutationAllowed } from '../../../stores/timeline/exclusiveMutationLease';
-import type { Effect } from '../../../types/effects';
 import type { EffectOperatorGraph, OperatorValue } from '../../../types/operatorGraph';
 import { readTimelineRuntimeState } from '../../timeline/timelineRuntimeCoordinator';
 import { findClipOperatorEffect } from '../../operators/clipOperatorGraphOwner';
-import { addableEffectOperators, effectOperatorGraph, effectOperatorParams, hasEffectOperatorGraph, validateEffectOwnerGraph } from '../../operators/effectGraphOwner';
+import { addableEffectOperators, effectOperatorGraph, effectOperatorParams, hasEffectOperatorGraph } from '../../operators/effectGraphOwner';
 import { selectOperatorGraphSlice } from '../../nodeGraph/operatorGraphSlice';
 import { createEffectGraphActions, editEffectGraph, setOperatorConstant, setOperatorParameter } from '../../operators/effectGraphEditing';
 import { AGENT_GRAPH_LEGEND, agentGraphNode, foldCompoundsForAgent } from '../../nodeGraph/operatorGraphAgentView';
 import { getEffectOperator } from '../../operators/operatorRegistry';
 import { EFFECT_GRAPH_PARAM } from '../../operators/effectGraph';
 import { setGraphValueExposed } from '../../operators/exposedGraphValues';
-import { renderHostPort } from '../../render/renderHostPort';
+import { createImageNodeGraphEffect } from '../../operators/imageNodeGraphEffect';
 import type { ToolResult } from '../types';
 import { compoundGroup, connectPublicPorts, nodePosition, openInputs, parseEndpointRef, publicPorts, type ConnectedCable } from './operatorGraphPorts';
 
@@ -59,22 +58,9 @@ const failure = (error: unknown): ToolResult => ({ success: false, error: error 
 
 export async function handleCreateImageNodeGraph(args: Record<string, unknown>): Promise<ToolResult> {
   try {
-    const { state, clip } = owner(args, true);
-    if (clip.source?.type === 'motion-adjustment' || clip.source?.type === 'audio') throw new Error('An image-capable clip is required.');
+    const { clip } = owner(args, true);
     if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim() || args.name.length > 100)) throw new Error('Invalid graph name.');
-    const graph: EffectOperatorGraph = { version: 1, schemaVersion: 1, domain: 'image',
-      nodes: [{ id: 'frame', operator: 'image.frame', operatorVersion: 1, bindings: {} }, { id: 'output', operator: 'image.output', operatorVersion: 1, bindings: {} }],
-      edges: [{ id: 'frame-output', from: 'frame', output: 'image', to: 'output', input: 'image' }],
-      layout: { frame: { x: 0, y: 0 }, output: { x: 900, y: 0 } } };
-    // Image graphs already execute through the existing image-effect owner.
-    const effect: Effect = { id: `effect-${crypto.randomUUID()}`, type: 'invert', name: String(args.name ?? 'Image Graph'), enabled: true, params: {}, operatorGraph: graph };
-    validateEffectOwnerGraph(effect, graph, effect.params);
-    const batch = startBatch('Create image node graph');
-    try { state.updateClip(clip.id, { effects: [...clip.effects, effect], nodeGraph: {
-      version: 1, nodes: [], ...clip.nodeGraph,
-      groups: { ...clip.nodeGraph?.groups, [`effect:${effect.id}`]: { collapsed: false } },
-    } }); state.invalidateCache(); renderHostPort.requestRender(); }
-    finally { if (batch.opened) endBatch(); }
+    const effect = { id: createImageNodeGraphEffect(clip.id, String(args.name ?? 'Image Graph')) };
     return { success: true, data: { clipId: clip.id, effectId: effect.id, sourceNodeId: 'frame', sourcePortId: 'image', outputNodeId: 'output', outputPortId: 'image' } };
   } catch (error) { return failure(error); }
 }

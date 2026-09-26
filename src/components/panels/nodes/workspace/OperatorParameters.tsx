@@ -22,7 +22,6 @@ import type { NodeGraphNode } from '../../../../types/nodeGraph';
 import { OperatorLiveValue } from './OperatorLiveValue';
 import { operatorFamilyOptions } from './operatorFamilyOptions';
 import { groupOperatorMenu, operatorFamilyChoiceLabel } from '../../../../services/operators/operatorTaxonomy';
-import { useSettingsStore } from '../../../../stores/settingsStore';
 import { operatorConstantNumberPersistenceKey } from '../../../common/EditableDraggableNumberSettings';
 import type { OperatorValue } from '../../../../types/operatorGraph';
 import { getEffect } from '../../../../effects';
@@ -161,10 +160,9 @@ export function AdditionalOperatorControls({ clipId, effectId }: { clipId: strin
 export function AddOperatorControl({ clipId, effectId, onAdded }: { clipId: string; effectId: string; onAdded?: (id: string) => void }) {
   const [message, setMessage] = useState('');
   const type = useTimelineStore(state => findClipOperatorEffect(state.clips.find(clip => clip.id === clipId), effectId)?.type ?? '');
-  const advanced = useSettingsStore(state => state.nodeAdvancedCatalog);
   const operators = addableEffectOperators(type);
   // Basic nodes first, then reusable node groups, each by category.
-  const groups = [false, true].flatMap(compositions => groupOperatorMenu(operators.filter(operator => Boolean(operator.composition) === compositions), { advanced })
+  const groups = [false, true].flatMap(compositions => groupOperatorMenu(operators.filter(operator => Boolean(operator.composition) === compositions), { advanced: true })
     .map(group => ({ label: compositions ? `Node Groups · ${group.label}` : group.label,
       options: group.entries.map(operator => ({ value: operator.id, label: operator.label })) })));
   return <><InspectorSelect ariaLabel="Add reusable node" value="" groups={[{ options: [{ value: '', label: 'Add node…' }] }, ...groups]}

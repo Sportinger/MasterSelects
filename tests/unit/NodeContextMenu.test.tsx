@@ -3,31 +3,35 @@ import { cleanup, render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { NodeContextMenu } from '../../src/components/panels/nodes/workspace/NodeContextMenu';
-import { buildNodeContextMenuEntries } from '../../src/components/panels/nodes/workspace/nodeContextMenuEntries';
+import { buildCableInsertEntries, buildNodeContextMenuEntries } from '../../src/components/panels/nodes/workspace/nodeContextMenuEntries';
 import { addEffectGraphNode } from '../../src/components/panels/nodes/workspace/addEffectGraphNode';
 import { getCategoriesWithEffects } from '../../src/effects';
 import { addableEffectOperators, effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { useTimelineStore } from '../../src/stores/timeline';
+import { FREE_NODE_GRAPH_NAME, freeNodeGraphEffectId } from '../../src/services/operators/imageNodeGraphEffect';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 
 afterEach(() => { cleanup(); useTimelineStore.setState({ clips: [], tracks: [], isExporting: false }); });
 
 function Menu({ withGraph = true, onAdded, onEffect }: { withGraph?: boolean; onAdded: (id: string) => void; onEffect: (id: string) => void }) {
   const [error, setError] = useState('');
-  const [advanced, setAdvanced] = useState(false);
   const effect = useTimelineStore.getState().clips[0]?.effects[0];
+  const insert = (effectId: () => string) => (operatorId: string) => {
+    try { onAdded(addEffectGraphNode('menu-clip', effectId(), operatorId, { x: 400, y: 250 })); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+  };
   const entries = buildNodeContextMenuEntries({
     clipStages: { canAddVisual: true, canAddKeyframes: true, onAddAI: vi.fn(), onAddKeyframes: vi.fn(), onAddStage: vi.fn() },
     effects: { groups: getCategoriesWithEffects(), onAdd: onEffect },
-    graphs: { advanced, targetEffectId: withGraph ? effect?.id : undefined, effects: effect ? [{ effectId: effect.id, effectName: 'Invert',
-      operators: addableEffectOperators(effect.type), onAdd: (operatorId: string) => {
-        try { onAdded(addEffectGraphNode('menu-clip', effect.id, operatorId, { x: 400, y: 250 })); }
-        catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
-      } }] : [] },
+    graphs: { owners: [
+      ...(withGraph && effect ? [{ effectId: effect.id, effectName: 'Invert', operators: addableEffectOperators(effect.type), onAdd: insert(() => effect.id) }] : []),
+      { effectId: 'free', effectName: FREE_NODE_GRAPH_NAME, operators: addableEffectOperators('invert'), onAdd: insert(() => freeNodeGraphEffectId('menu-clip')) },
+      { effectId: 'new:voxel-relief', effectName: 'new Voxel Relief', operators: addableEffectOperators('voxel-relief'), onAdd: vi.fn() },
+    ] },
     controls: { disabled: false, onAdd: vi.fn() },
   });
-  return <NodeContextMenu x={10} y={10} targetNode={null} canDeleteTarget={false} entries={entries} advanced={advanced} error={error}
-    onToggleAdvanced={() => setAdvanced(value => !value)} onClose={vi.fn()} onDeleteNode={vi.fn()} />;
+  return <NodeContextMenu x={10} y={10} targetNode={null} canDeleteTarget={false} entries={entries} error={error}
+    onClose={vi.fn()} onDeleteNode={vi.fn()} />;
 }
 
 function setup(options: { locked?: boolean; withGraph?: boolean } = {}) {
@@ -107,13 +111,18 @@ describe('node workspace context menu', () => {
     expect(view.onEffect).toHaveBeenCalledWith('chroma-key');
   });
 
-  it('lists advanced building parts only after opting in', async () => {
+  it('lists nodes of every graph kind and routes each to a graph that accepts it', async () => {
     const user = userEvent.setup(), view = setup();
-    await user.click(view.getByRole('button', { name: 'Node Groups' }));
-    await user.click(view.getByRole('button', { name: 'Coordinates & Lens' }));
-    expect(view.queryByRole('menuitem', { name: 'Eight Sample Offsets' })).toBeNull();
-    await user.click(view.getByRole('menuitemcheckbox', { name: 'Advanced nodes' }));
-    await user.click(view.getByRole('button', { name: 'Node Groups' }));
+    await user.click(view.getByRole('button', { name: 'Nodes' }));
+    await user.click(view.getByRole('button', { name: 'Shading' }));
+    expect(view.getByRole('menuitem', { name: 'Relief Light' })).toHaveAttribute('title', expect.stringContaining('Adds to new Voxel Relief'));
+  });
+
+  it('always lists effect building parts and shows how many entries each submenu holds', async () => {
+    const user = userEvent.setup(), view = setup();
+    const groups = view.getByRole('button', { name: 'Node Groups' });
+    expect(Number(groups.querySelector('.node-workspace-context-count')?.textContent)).toBeGreaterThan(10);
+    await user.click(groups);
     await user.click(view.getByRole('button', { name: 'Coordinates & Lens' }));
     expect(view.getByRole('menuitem', { name: 'Eight Sample Offsets' })).toBeVisible();
   });
@@ -128,12 +137,28 @@ describe('node workspace context menu', () => {
     expect(useTimelineStore.getState().clips[0].effects[0].operatorGraph).toBeUndefined();
   });
 
-  it('offers every effect graph of the clip when no graph node is targeted', async () => {
+  it('creates nodes freely in the clip node graph when no graph node is targeted', async () => {
     const user = userEvent.setup(), view = setup({ withGraph: false });
     await user.click(view.getByRole('button', { name: 'Nodes' }));
     await user.click(view.getByRole('button', { name: 'Math' }));
-    await user.click(view.getByRole('button', { name: 'Into Invert' }));
+    expect(view.getByRole('menuitem', { name: 'Add' })).toHaveAttribute('title', expect.stringContaining('Adds to Node Graph'));
     await user.click(view.getByRole('menuitem', { name: 'Add' }));
-    expect(useTimelineStore.getState().clips[0].effects[0].operatorGraph!.nodes.some(node => node.operator.startsWith('math.add'))).toBe(true);
+    await user.click(view.getByRole('button', { name: 'Nodes' }));
+    await user.click(view.getByRole('button', { name: 'Math' }));
+    await user.click(view.getByRole('menuitem', { name: 'Multiply' }));
+    const graphs = useTimelineStore.getState().clips[0].effects.filter(effect => effect.name === FREE_NODE_GRAPH_NAME);
+    expect(graphs).toHaveLength(1);
+    expect(graphs[0].operatorGraph!.nodes.map(node => node.operator)).toEqual(expect.arrayContaining(['math.add.scalar', 'math.multiply.scalar']));
+  });
+  it('offers every node and node group of a cable graph without type filtering', () => {
+    const onAdd = vi.fn();
+    const entries = buildCableInsertEntries({ effectId: 'fx', effectName: 'Invert', operators: addableEffectOperators('invert'), onAdd });
+    expect(entries.map(entry => entry.label)).toEqual(['Nodes', 'Node Groups']);
+    const categories = entries[0].kind === 'submenu' ? entries[0].children.map(entry => entry.label) : [];
+    expect(categories).toEqual(expect.arrayContaining(['Math', 'Color & Mask', 'Sampling & Filter', 'Time & Motion']));
+    const math = entries[0].kind === 'submenu' ? entries[0].children.find(entry => entry.label === 'Math') : undefined;
+    const add = math?.kind === 'submenu' ? math.children.find(entry => entry.label === 'Add') : undefined;
+    if (add?.kind === 'item') add.onSelect();
+    expect(onAdd).toHaveBeenCalledWith(expect.stringMatching(/^math\.add\./));
   });
 });

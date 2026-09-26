@@ -158,16 +158,23 @@ The canvas context menu has three levels, each with nested category submenus:
 - **Effects**: complete looks by group (Color & Tone, Blur & Sharpen, Lens & Distort,
   Print & Halftone, Text & Glyph, Analog & Glitch, …).
 
-Graph nodes and node groups go into the effect under the pointer or the selected
-effect node; the submenu names it ("Into Invert"). Without such a target, each
-category lists every effect graph of the clip as its own "Into …" submenu. Search at
-the top matches names, categories, descriptions and synonyms (for example "green
-screen" finds Chroma Key) and shows where each result lives. **Advanced nodes** also
-lists effect building parts and compiler-level nodes; the choice is an editor
-preference shared with the inspector's **Add node** selector and the Node catalog.
-The menu supports hover, click/touch and keyboard activation (Enter or Right opens a
-submenu, Escape or Left closes it). Insertion is one undo step and opens a collapsed
-destination effect; a locked or exporting clip reports the reason in the menu.
+Nodes and Node Groups list every building block of every graph kind (image,
+analog signal, 3D relief, face cables, splat, particles); each submenu shows how many
+entries it holds. A choice goes into the effect under the pointer or the selected
+effect node when that graph accepts it, otherwise into an existing effect of the
+matching kind, and otherwise into a new one: image nodes create the clip's free
+**Node Graph** effect on first use, splat nodes a Splat Exploration effect, and so
+on. The tooltip names the destination. Search at the top matches names, categories,
+descriptions and synonyms (for example "green screen" finds Chroma Key) and shows
+where each result lives. The menu supports hover, click/touch and keyboard
+activation (Enter or Right opens a submenu, Escape or Left closes it). Insertion is
+one undo step and opens a collapsed destination effect; a locked or exporting clip
+reports the reason in the menu.
+
+Right-clicking a cable inside an effect graph also offers that graph's Nodes and
+Node Groups, without type filtering. The chosen node is placed at the pointer and
+wired between the cable's ends (preferring ports of the cable's type); if a side
+cannot connect, the node stays unconnected there and the original cable remains.
 
 The Fisheye node groups include Lens Projection, Chromatic Aberration, Lens Vignette
 and Lens Coverage; its other processing areas are advanced building parts.

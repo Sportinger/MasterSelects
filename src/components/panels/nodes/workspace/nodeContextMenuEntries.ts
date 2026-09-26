@@ -1,6 +1,6 @@
 import type { getCategoriesWithEffects } from '../../../../effects';
 import type { OperatorDefinition } from '../../../../types/operatorGraph';
-import { groupOperatorMenu, NODE_CATEGORIES, type NodeCategoryId } from '../../../../services/operators/operatorTaxonomy';
+import { collapseOperatorFamilies, groupOperatorMenu, menuFamilyKey, NODE_CATEGORIES, type NodeCategoryId } from '../../../../services/operators/operatorTaxonomy';
 import { catalogText } from '../../../../services/nodeGraph/catalogText';
 import { CONTROL_OPERATORS } from '../../../../services/parameterSources/controlOperators';
 import type { NodeMenuEntry } from './NodeMenuTree';
@@ -13,8 +13,12 @@ export interface NodeContextMenuSources {
     onAddAI: () => void; onAddKeyframes: () => void; onAddStage: (stage: 'transform' | 'mask' | 'color') => void;
   };
   effects: { groups: ReturnType<typeof getCategoriesWithEffects>; onAdd: (effectType: string) => void };
-  /** Effect graphs of the clip; the one under the pointer or selection is the direct target. */
-  graphs: { effects: readonly GraphTarget[]; targetEffectId?: string; advanced: boolean };
+  /**
+   * Graphs that can receive nodes, in priority order: the effect under the pointer
+   * or selection first, then the clip's graphs by kind (existing or created on use).
+   * The menu lists every node of every graph; each goes to the first graph accepting it.
+   */
+  graphs: { owners: readonly GraphTarget[] };
   controls?: { disabled: boolean; onAdd: (operatorId: string) => void };
 }
 
@@ -26,6 +30,40 @@ const describe = (id: string, fallback?: string) => {
 /** Clip-level nodes (stages, controls) sit in the same categories as graph nodes. */
 const CLIP_STAGE_CATEGORY: Record<string, NodeCategoryId> = { ai: 'inputs', keyframes: 'values', transform: 'coordinates', mask: 'color', color: 'color' };
 const controlCategory = (id: string): NodeCategoryId => id.startsWith('math.') || id === 'control.remap' ? 'math' : 'values';
+
+/** Nodes or node groups of the given graphs by category; clip-level items join their categories. */
+function layerMenu(owners: readonly GraphTarget[], id: string, label: string, groups: boolean,
+  clipItems: ReadonlyMap<NodeCategoryId, NodeMenuEntry[]> = new Map()): NodeMenuEntry {
+  // One entry per family across all graphs; the first graph offering it receives the node.
+  const routed = new Map<string, GraphTarget>();
+  const operators: OperatorDefinition[] = [];
+  for (const owner of owners) for (const operator of collapseOperatorFamilies(owner.operators.filter(candidate => Boolean(candidate.composition) === groups))) {
+    const key = `${menuFamilyKey(operator)}|${operator.label}`;
+    if (routed.has(key)) continue;
+    routed.set(key, owner); routed.set(operator.id, owner); operators.push(operator);
+  }
+  const categories = groupOperatorMenu(operators, { advanced: true });
+  const children = NODE_CATEGORIES.flatMap((category): NodeMenuEntry[] => {
+    const local = clipItems.get(category.id) ?? [];
+    const found = categories.find(group => group.id === category.id);
+    const graphEntries: NodeMenuEntry[] = (found?.entries ?? []).map(operator => {
+      const owner = routed.get(operator.id)!, text = describe(operator.id, operator.description);
+      return { kind: 'item' as const, id: `${id}:${operator.id}`, label: operator.label,
+        title: `${text.title ?? operator.label}\nAdds to ${owner.effectName}.`,
+        keywords: `${operator.id} ${label} ${category.label} ${owner.effectName} ${text.keywords}`, onSelect: () => owner.onAdd(operator.id) };
+    });
+    if (!local.length && !graphEntries.length) return [];
+    return [{ kind: 'submenu', id: `${id}:${category.id}`, label: category.label, children: [...local, ...graphEntries] }];
+  });
+  return { kind: 'submenu', id, label, disabled: !children.length, children,
+    title: children.length ? undefined : `This clip cannot hold ${label.toLowerCase()}` };
+}
+
+/** Right-clicked cable: every node and node group of its graph, placed between the cable's ends. */
+export function buildCableInsertEntries(graph: GraphTarget): NodeMenuEntry[] {
+  return [layerMenu([graph], 'cable-nodes', 'Nodes', false), layerMenu([graph], 'cable-node-groups', 'Node Groups', true)]
+    .filter(entry => entry.kind !== 'submenu' || !entry.disabled);
+}
 
 /**
  * Everything the workspace can add, in three menus: Nodes and Node Groups by
@@ -49,38 +87,9 @@ export function buildNodeContextMenuEntries(sources: NodeContextMenuSources): No
       disabled: controls.disabled, keywords: `control parameter source ${text.keywords}`, onSelect: () => controls.onAdd(operator.id) });
   }
 
-  const target = graphs.effects.find(graph => graph.effectId === graphs.targetEffectId);
-  const layerMenu = (id: string, label: string, groups: boolean, withClipItems: boolean): NodeMenuEntry => {
-    const perGraph = graphs.effects.map(graph => ({ graph, categories: groupOperatorMenu(
-      graph.operators.filter(operator => Boolean(operator.composition) === groups), { advanced: graphs.advanced }) }));
-    const items = (graph: GraphTarget, entries: readonly OperatorDefinition[], category: string): NodeMenuEntry[] => entries.map(operator => {
-      const text = describe(operator.id, operator.description);
-      return { kind: 'item' as const, id: `${id}:${graph.effectId}:${operator.id}`, label: operator.label, title: text.title,
-        keywords: `${operator.id} ${label} ${category} ${graph.effectName} ${text.keywords}`, onSelect: () => graph.onAdd(operator.id) };
-    });
-    const children = NODE_CATEGORIES.flatMap((category): NodeMenuEntry[] => {
-      const local = withClipItems ? clipItems.get(category.id) ?? [] : [];
-      const graphEntries: NodeMenuEntry[] = target
-        ? (() => { const found = perGraph.find(entry => entry.graph === target)?.categories.find(group => group.id === category.id);
-          return found ? [...(local.length ? [{ kind: 'heading' as const, id: `${id}:${category.id}:into`, label: `Into ${target.effectName}` }] : []),
-            ...items(target, found.entries, category.label)] : []; })()
-        // Without a target, each effect graph that offers this category is its own submenu.
-        : perGraph.flatMap(({ graph, categories }) => {
-          const found = categories.find(group => group.id === category.id);
-          return found ? [{ kind: 'submenu' as const, id: `${id}:${category.id}:${graph.effectId}`, label: `Into ${graph.effectName}`,
-            children: items(graph, found.entries, category.label) }] : [];
-        });
-      if (!local.length && !graphEntries.length) return [];
-      return [{ kind: 'submenu', id: `${id}:${category.id}`, label: category.label, children: [...local, ...graphEntries] }];
-    });
-    return { kind: 'submenu', id, label, disabled: !children.length, children,
-      title: children.length ? (target ? `Graph ${label.toLowerCase()} go into ${target.effectName}` : undefined)
-        : target ? `${target.effectName} has no ${label.toLowerCase()} to add` : `Add an effect first; its graph accepts ${label.toLowerCase()}` };
-  };
-
   return [
-    layerMenu('nodes', 'Nodes', false, true),
-    layerMenu('node-groups', 'Node Groups', true, false),
+    layerMenu(graphs.owners, 'nodes', 'Nodes', false, clipItems),
+    layerMenu(graphs.owners, 'node-groups', 'Node Groups', true),
     { kind: 'submenu', id: 'effects', label: 'Effects', children: effects.groups.map(group => ({
       kind: 'submenu' as const, id: `effects:${group.group}`, label: group.category,
       children: group.effects.map(effect => {

@@ -19,7 +19,7 @@ export function NodeCatalog({ width }: { width: number }) {
   const setAdvanced = useSettingsStore(state => state.setNodeAdvancedCatalog);
   const [query, setQuery] = useState(''), [domain, setDomain] = useState('');
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const filtered = entries.filter(e => (e.visibility === 'public' || (advanced && e.visibility === 'advanced'))
+  const filtered = entries.filter(e => e.visibility !== 'internal'
     && (!domain || e.domains.includes(domain))
     && terms.every(term => `${e.id} ${e.label} ${e.description} ${e.category} ${e.tags.join(' ')} ${[...e.inputs, ...e.outputs].map(p => `${p.type} ${p.contract?.formats.map(signalFormatLabel).join(' ')}`).join(' ')}`.toLowerCase().includes(term)));
   const sections = [...new Set(filtered.map(entry => entry.category))].toSorted((a, b) => rank(a) - rank(b) || a.localeCompare(b));
@@ -29,7 +29,7 @@ export function NodeCatalog({ width }: { width: number }) {
     <InspectorSelect ariaLabel="Node catalog graph" value={domain} options={[{ value: '', label: 'All graphs' }, ...DOMAINS.map(value => ({ value, label: value }))]} onChange={setDomain} />
     <label className="node-catalog-advanced">
       <input type="checkbox" checked={advanced} onChange={event => setAdvanced(event.target.checked)} />
-      Advanced nodes and technical details
+      Technical details
     </label>
     <p className="face-cable-hint" role="status">{filtered.length} entries</p>
     {sections.map(section => <div key={section} className="node-catalog-section">

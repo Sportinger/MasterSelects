@@ -220,9 +220,10 @@ Convert, Color & Mask, Coordinates & Lens, Sampling & Filter, Time & Motion, Pat
 Crop & Fade, Shading, Forces & Simulation, Tracking & Depth, Output & Render. Node
 cards show a short form of the same category ("Math", "Color Group").
 
-- **Visibility**: `public` nodes appear in menus, `advanced` ones (effect building
-  parts such as most Fisheye areas, kernel and sequence tools, Cache Image) only with
-  **Advanced nodes**, `internal` ones (anchors, compiler resources) never.
+- **Visibility**: menus list every addable node, including effect building parts
+  (`advanced`: most Fisheye areas, kernel and sequence tools, Cache Image); `internal`
+  ones (anchors, compiler resources) never appear. The Node catalog's **Technical
+  details** switch shows compiler facts such as family, execution and state.
 - **Families** appear as one entry and switch their saved variant in the inspector:
   Value (Float/Integer), Switch (Value, Vector 2, Image), Luminance (Rec.709/Rec.601),
   Primitive (Box/Sphere/Cylinder), Derivative, Smallest Component, Temporal Smooth and

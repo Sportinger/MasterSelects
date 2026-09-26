@@ -20,8 +20,8 @@ import { domainConnectionCatalog } from './domainConnectionCatalog';
 
 export const NEW_CONNECTION_NODE = '__new_connection_node__';
 export function operatorConnectionCandidates(operators: readonly OperatorDefinition[]): ConnectionNodeCandidate[] {
-  // Basic nodes by category, then reusable node groups; effect building parts stay in the Advanced menus.
-  return operatorAddMenu(operators.filter(operator => operatorVisibility(operator) === 'public')).map(operator => {
+  // Basic nodes by category, then reusable node groups.
+  return operatorAddMenu(operators.filter(operator => operatorVisibility(operator) !== 'internal')).map(operator => {
     const category = operatorCategoryId(operator), rank = NODE_CATEGORIES.findIndex(entry => entry.id === category);
     return { id: operator.id, label: operator.label,
     category: `${operator.composition ? 'Node Groups · ' : ''}${operatorCategoryLabel(operator)}`,

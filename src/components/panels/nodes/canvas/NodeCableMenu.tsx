@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { CableMenuState } from './useNodeCableBranches';
 import type { RoutedCable } from './cableBranches';
+import { NodeMenuItems, type NodeMenuEntry } from '../workspace/NodeMenuTree';
 import './NodeGraphBranches.css';
 
 interface Props {
@@ -10,10 +11,12 @@ interface Props {
   onAddBranch: (cableId: string, point: CableMenuState['point']) => void;
   onRemoveBranch: (id: string) => void;
   onDisconnect?: (edgeId: string) => void;
+  /** Nodes and node groups that are placed between the cable's ends when chosen. */
+  insertEntries?: NodeMenuEntry[];
 }
 
 /** Cable context menu: branch the cable at the pointer, remove a branch point, or disconnect. */
-export function NodeCableMenu({ menu, onClose, onAddBranch, onRemoveBranch, onDisconnect }: Props) {
+export function NodeCableMenu({ menu, onClose, onAddBranch, onRemoveBranch, onDisconnect, insertEntries }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const close = (event: Event) => { if (!(event.target instanceof Node) || !ref.current?.contains(event.target)) onClose(); };
@@ -30,5 +33,12 @@ export function NodeCableMenu({ menu, onClose, onAddBranch, onRemoveBranch, onDi
     {!edge?.readOnly && <button type="button" role="menuitem" onClick={act(() => onAddBranch(menu.cableId, menu.point))}>Add branch point here</button>}
     {menu.trunk && <button type="button" role="menuitem" onClick={act(() => onRemoveBranch(menu.trunk!))}>Remove branch point</button>}
     {edge && !edge.readOnly && onDisconnect && <button type="button" role="menuitem" onClick={act(() => onDisconnect(edge.id))}>Disconnect</button>}
+    {!!insertEntries?.length && <>
+      <div className="node-cable-menu-separator" />
+      <div className="node-cable-menu-heading">Insert into cable</div>
+      <div onClick={event => { if (event.target instanceof HTMLElement && event.target.closest('[role="menuitem"]')) onClose(); }}>
+        <NodeMenuItems entries={insertEntries} />
+      </div>
+    </>}
   </div>, document.body);
 }

@@ -1504,7 +1504,8 @@
 }
 
 .node-workspace-context-menu button:hover:not(:disabled),
-.node-workspace-context-submenu:hover > button {
+.node-workspace-context-submenu:hover > button,
+.node-workspace-context-submenu.is-open > button {
   background: rgba(255, 255, 255, 0.08);
 }
 
@@ -1536,7 +1537,9 @@
   display: none;
   width: 210px;
   max-height: min(420px, calc(100vh - 32px));
-  overflow: auto;
+  /* Nested flyouts are DOM children; they must never widen their parent list. */
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 6px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: 6px;
@@ -1545,7 +1548,21 @@
   z-index: 3201;
 }
 
-.node-workspace-context-submenu:hover .node-workspace-context-submenu-list.context-submenu,
+/* Hover-intent menus (NodeMenuTree) open from state only, so CSS hover cannot flash a flyout. */
+.node-workspace-context-submenu.is-hover-intent > .context-submenu {
+  position: fixed;
+}
+
+/* Flyouts never show a scrollbar; overly long lists still scroll with the wheel. */
+.node-workspace-context-submenu-list.context-submenu {
+  scrollbar-width: none;
+}
+
+.node-workspace-context-submenu-list.context-submenu::-webkit-scrollbar {
+  display: none;
+}
+
+.node-workspace-context-submenu:not(.is-hover-intent):hover .node-workspace-context-submenu-list.context-submenu,
 .node-workspace-context-submenu.is-open .node-workspace-context-submenu-list.context-submenu {
   display: flex;
   flex-direction: column;
@@ -2096,3 +2113,11 @@
 .node-workspace-panel button, .node-workspace-panel select { -webkit-tap-highlight-color: transparent; }
 .node-workspace-panel button:focus:not(:focus-visible), .node-workspace-panel select:focus:not(:focus-visible) { outline: none; box-shadow: none; }
 .node-workspace-panel button:focus-visible, .node-workspace-panel select:focus-visible { outline: 2px solid var(--accent-primary, #4a9eff); outline-offset: 2px; }
+
+/* Entry count next to a submenu label: how many nodes, groups or effects it holds. */
+.node-workspace-context-count {
+  margin-left: 6px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}

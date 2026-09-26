@@ -18,6 +18,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import type {
   NodeGraph,
   NodeGraphConnectionRequest,
+  NodeGraphEdge,
   NodeGraphLayout,
   NodeGraphNode,
   NodeGraphPort,
@@ -33,6 +34,7 @@ import { resolveCableBranches, routeCables } from './canvas/cableBranches';
 import { useNodeCableBranches } from './canvas/useNodeCableBranches';
 import { NodeGraphBranchHandles } from './canvas/NodeGraphBranchHandles';
 import { NodeCableMenu } from './canvas/NodeCableMenu';
+import type { NodeMenuEntry } from './workspace/NodeMenuTree';
 import { useNodeDragHandlers, useNodeDragState } from './canvas/useNodeDragGesture';
 import { useActiveNodeCards } from './canvas/useActiveNodeCards';
 import type { NodeGraphPoint, Viewport } from './canvas/canvasGeometry';
@@ -69,6 +71,8 @@ interface NodeGraphCanvasProps {
   onConnectPorts?: (connection: NodeGraphConnectionRequest) => void;
   onDisconnectEdge?: (edgeId: string) => void;
   onDropConnection?: (drop: NodeConnectionDrop) => void;
+  /** Node menu for a right-clicked cable; choosing an entry inserts it between the cable's ends. */
+  cableInsertEntries?: (edge: NodeGraphEdge, point: NodeGraphLayout) => NodeMenuEntry[];
   onReconnectPorts?: (edgeId: string, connection: NodeGraphConnectionRequest) => void;
   onDeleteNode?: (nodeId: string) => void;
   onDeleteNodes?: (nodeIds: string[]) => void;
@@ -105,6 +109,7 @@ export function NodeGraphCanvas({
   onConnectPorts,
   onDisconnectEdge,
   onDropConnection,
+  cableInsertEntries,
   onReconnectPorts,
   onDeleteNode,
   onDeleteNodes,
@@ -600,7 +605,8 @@ export function NodeGraphCanvas({
         </div>
       </div>
       {branchUi.menu && <NodeCableMenu menu={branchUi.menu} onClose={branchUi.closeMenu} onAddBranch={branchUi.insertAt} onRemoveBranch={id => branchUi.remove([id])}
-        onDisconnect={onDisconnectEdge && (id => { onDisconnectEdge(id); setSelectedEdgeId(null); })} />}
+        onDisconnect={onDisconnectEdge && (id => { onDisconnectEdge(id); setSelectedEdgeId(null); })}
+        insertEntries={branchUi.menu.cable.edge && !branchUi.menu.cable.edge.readOnly ? cableInsertEntries?.(branchUi.menu.cable.edge, branchUi.menu.point) : undefined} />}
     </div>
   </Profiler>);
 }
