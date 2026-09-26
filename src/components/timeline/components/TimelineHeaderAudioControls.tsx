@@ -11,6 +11,7 @@ import type { TimelineHeaderAudioPopoverState } from '../hooks/useTimelineHeader
 import {
   AudioTrackTypeIcon,
   MidiTrackTypeIcon,
+  ScoreTrackTypeIcon,
   TrackHeaderIcon,
 } from './TimelineHeaderTrackIcons';
 
@@ -29,13 +30,17 @@ export function TimelineHeaderAudioSummaryMeter() {
   );
 }
 
-export function TimelineHeaderMixerTypeBadge({ isMidiTrack }: { isMidiTrack: boolean }) {
+export function TimelineHeaderMixerTypeBadge({ trackType }: { trackType: 'audio' | 'midi' | 'score' }) {
   return (
     <span
       className="track-type-icon-badge"
-      title={isMidiTrack ? 'MIDI track' : 'Audio track'}
+      title={trackType === 'midi' ? 'MIDI track' : trackType === 'score' ? 'Score track' : 'Audio track'}
     >
-      {isMidiTrack ? <MidiTrackTypeIcon /> : <AudioTrackTypeIcon />}
+      {trackType === 'midi'
+        ? <MidiTrackTypeIcon />
+        : trackType === 'score'
+          ? <ScoreTrackTypeIcon />
+          : <AudioTrackTypeIcon />}
     </span>
   );
 }

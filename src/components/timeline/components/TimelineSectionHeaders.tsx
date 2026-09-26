@@ -2,6 +2,7 @@ import {
   memo,
   useMemo,
   type Dispatch,
+  type MouseEvent as ReactMouseEvent,
   type SetStateAction,
   type WheelEvent as ReactWheelEvent,
 } from 'react';
@@ -180,8 +181,26 @@ const TimelineSectionHeadersContent = memo(function TimelineSectionHeadersConten
     toggleTrackExpanded,
   ]);
 
+  const onEmptyHeaderContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
+    // Row headers own their own context menu; only claim empty column space.
+    if ((event.target as HTMLElement).closest('.track-header')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu(null);
+    setEmptyContextMenu(null);
+    setMarkerContextMenu(null);
+    setInOutContextMenu(null);
+    setTrackContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      trackId: null,
+      trackType: null,
+      trackName: null,
+    });
+  };
+
   return (
-    <div className={`track-headers ${sectionPhaseClass}`}>
+    <div className={`track-headers ${sectionPhaseClass}`} onContextMenu={onEmptyHeaderContextMenu}>
       {isVideoSection && (externalDrag?.showVideoNewTrackZone || clipDragNewTrackType === 'video') && !sectionCollapsed && (
         <TimelineNewTrackHeaderPreview
           active={externalDrag?.newTrackType === 'video' || clipDragNewTrackType === 'video'}

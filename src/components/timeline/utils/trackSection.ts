@@ -10,7 +10,7 @@ import type { TimelineTrack } from '../../../types';
 
 /** Track types that render in the bottom (audio) section of the timeline. */
 export function isAudioSectionTrackType(type: TimelineTrack['type']): boolean {
-  return type === 'audio' || type === 'midi';
+  return type === 'audio' || type === 'midi' || type === 'score';
 }
 
 /** True when the track renders in the bottom (audio) section. */

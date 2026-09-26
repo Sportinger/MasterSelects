@@ -30,7 +30,7 @@ export interface ClipboardClipData {
   trackingBinding?: import('../../../types/trackingBinding').TrackingBinding;
   id: string;
   trackId: string;
-  trackType: 'video' | 'audio' | 'midi';
+  trackType: 'video' | 'audio' | 'midi' | 'score';
   name: string;
   mediaFileId?: string;
   liveInputId?: string;

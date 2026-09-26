@@ -37,7 +37,9 @@ export function useTimelineHeaderResolvePresentation({
     ? `V${resolveTrackOrdinal}`
     : track.type === 'audio'
       ? `A${resolveTrackOrdinal}`
-      : `M${resolveTrackOrdinal}`;
+      : track.type === 'score'
+        ? `S${resolveTrackOrdinal}`
+        : `M${resolveTrackOrdinal}`;
   const isResolvePrimaryTargetFallback = resolveThemeActive && !targetTrackId && (
     (track.type === 'video' && resolveTrackOrdinal === 1)
     || (track.type === 'audio' && resolveTrackOrdinal === 1)

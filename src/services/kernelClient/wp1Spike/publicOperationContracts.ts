@@ -957,6 +957,18 @@ export function canonicalPublicTimelineStateV1(
   });
 }
 
+/**
+ * Track types the pinned v1 fingerprint contract understands. Editor-side
+ * track types outside this set (e.g. 'score') must be filtered out by callers
+ * before fingerprinting; their clips are fingerprint-ineligible anyway, so the
+ * resulting fingerprint is identical to a timeline without those tracks.
+ */
+export function isPublicTimelineFingerprintTrackTypeV1(
+  type: string,
+): type is PublicTimelineFingerprintTrackV1['type'] {
+  return type === 'audio' || type === 'midi' || type === 'video';
+}
+
 export function isPublicTimelineStateFingerprintV1(
   value: unknown,
 ): value is PublicTimelineStateFingerprintV1 {

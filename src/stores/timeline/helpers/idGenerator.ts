@@ -64,6 +64,13 @@ export function generateMidiClipId(): string {
 }
 
 /**
+ * Generate a unique ID for score clips (issue #366).
+ */
+export function generateScoreClipId(): string {
+  return generateClipId('clip-score');
+}
+
+/**
  * Generate a unique ID for MIDI notes (issue #182).
  */
 export function generateMidiNoteId(): string {
@@ -176,7 +183,7 @@ export function isManualLinkedGroupId(groupId: string | undefined): boolean {
 /**
  * Generate a unique ID for tracks.
  */
-export function generateTrackId(type: 'video' | 'audio' | 'midi'): string {
+export function generateTrackId(type: 'video' | 'audio' | 'midi' | 'score'): string {
   return generateClipId(`track-${type}`);
 }
 

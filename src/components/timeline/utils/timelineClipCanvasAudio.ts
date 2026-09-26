@@ -5,7 +5,7 @@ import {
 import { getPreferredSpectrogramTileSetRef } from '../../../utils/audioSpectrogramPresence';
 
 export interface TimelineClipCanvasAudioClipInput extends TimelineWaveformPresenceInput {
-  trackType?: 'video' | 'audio' | 'midi';
+  trackType?: 'video' | 'audio' | 'midi' | 'score';
   source?: {
     type?: string | null;
   } | null;

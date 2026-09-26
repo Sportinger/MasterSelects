@@ -118,6 +118,13 @@ body.track-reordering-active {
     color-mix(in srgb, var(--midi-color, #3a4050) 50%, var(--bg-tertiary));
 }
 
+/* Score tracks mirror the MIDI header treatment with their own identity tint. */
+.track-header.score.score-default-tint {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 34%),
+    color-mix(in srgb, var(--score-color, #4a4433) 50%, var(--bg-tertiary));
+}
+
 .track-header.targeted {
   border-left: 3px solid var(--timeline-toggle-active-color, var(--accent));
   background:

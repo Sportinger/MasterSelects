@@ -46,6 +46,26 @@ export function MidiTrackTypeIcon() {
   );
 }
 
+export function ScoreTrackTypeIcon() {
+  // Beamed eighth-note pair, standing in for notation until the scorewriter lands.
+  return (
+    <svg
+      className="track-type-icon"
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M5.1 2.2 L14.1 1 L14.1 3.4 L5.1 4.6 Z" fill="currentColor" />
+      <rect x="5.1" y="3.1" width="1" height="8.8" fill="currentColor" />
+      <rect x="13.1" y="2.1" width="1" height="8.8" fill="currentColor" />
+      <ellipse cx="3.9" cy="11.9" rx="2.1" ry="1.6" fill="currentColor" />
+      <ellipse cx="11.9" cy="10.9" rx="2.1" ry="1.6" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function AudioTrackTypeIcon() {
   // Symmetric waveform bars mirrored around the vertical center.
   const bars = [3, 6, 11, 7, 13, 5, 9, 4];

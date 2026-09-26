@@ -242,7 +242,7 @@ export interface TimelineClip {
 export interface TimelineTrack {
   id: string;
   name: string;
-  type: 'video' | 'audio' | 'midi';
+  type: 'video' | 'audio' | 'midi' | 'score';
   height: number;
   labelColor?: import('../stores/mediaStore/types').LabelColor;
   muted: boolean;

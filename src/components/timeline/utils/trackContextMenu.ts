@@ -6,7 +6,7 @@ export interface TrackContextMenuCommand {
   key: string;
   label: string;
   kind: TrackContextMenuCommandKind;
-  trackType?: 'video' | 'audio' | 'midi';
+  trackType?: 'video' | 'audio' | 'midi' | 'score';
   disabled?: boolean;
   danger?: boolean;
   title?: string;
@@ -29,13 +29,26 @@ export interface TrackColorSwatchCommand {
 }
 
 export interface ExecuteTrackContextMenuCommandInput {
-  addTrack: (trackType: 'video' | 'audio' | 'midi') => void;
+  addTrack: (trackType: 'video' | 'audio' | 'midi' | 'score') => void;
   duplicateTrack: () => void;
   deleteTrack: () => void;
 }
 
 export interface ExecuteTrackColorSwatchCommandInput {
   setTrackColor: (color: LabelColor) => void;
+}
+
+/**
+ * The add-track commands on their own, for the empty header-column context
+ * menu where no specific track is targeted (no duplicate/delete/color).
+ */
+export function createAddTrackCommands(): TrackContextMenuCommand[] {
+  return [
+    { key: 'add-video-track', label: '+ Add Video Track', kind: 'add-track', trackType: 'video' },
+    { key: 'add-audio-track', label: '+ Add Audio Track', kind: 'add-track', trackType: 'audio' },
+    { key: 'add-midi-track', label: '+ Add MIDI Track', kind: 'add-track', trackType: 'midi' },
+    { key: 'add-score-track', label: '+ Add Score Track', kind: 'add-track', trackType: 'score' },
+  ];
 }
 
 export function createTrackContextMenuModel(input: CreateTrackContextMenuModelInput): TrackContextMenuModel {
@@ -48,11 +61,7 @@ export function createTrackContextMenuModel(input: CreateTrackContextMenuModelIn
   const deleteLabel = `Delete "${input.trackName}"${input.trackClipCount > 0 ? ` (${input.trackClipCount} clips)` : ''}`;
 
   return {
-    addTrackCommands: [
-      { key: 'add-video-track', label: '+ Add Video Track', kind: 'add-track', trackType: 'video' },
-      { key: 'add-audio-track', label: '+ Add Audio Track', kind: 'add-track', trackType: 'audio' },
-      { key: 'add-midi-track', label: '+ Add MIDI Track', kind: 'add-track', trackType: 'midi' },
-    ],
+    addTrackCommands: createAddTrackCommands(),
     duplicateCommand: {
       key: 'duplicate-track',
       label: 'Duplicate Track',

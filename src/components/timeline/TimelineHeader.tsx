@@ -69,7 +69,10 @@ function TimelineHeaderComponent({
   const trackVolumeUnit = Math.max(0, Math.min(1, (trackVolumeDb + 60) / 78));
   const isAudioTrack = track.type === 'audio';
   const isMidiTrack = track.type === 'midi';
-  const isMixerTrack = isAudioTrack || isMidiTrack;
+  const isScoreTrack = track.type === 'score';
+  // Score tracks share the full mixer header (badge, M/S, pan/fader strip) like
+  // MIDI; only the MIDI instrument selector stays MIDI-specific.
+  const isMixerTrack = isAudioTrack || isMidiTrack || isScoreTrack;
   const audioHeaderDensity = isMixerTrack
     ? getAudioTrackHeaderDensity(baseHeight)
     : null;
@@ -94,6 +97,7 @@ function TimelineHeaderComponent({
       showTimelineTrackColor, targetTrackId, track, tracks, trackTypeIndex,
     });
   const isMidiDefaultTint = isMidiTrack && (!track.labelColor || track.labelColor === 'none');
+  const isScoreDefaultTint = isScoreTrack && (!track.labelColor || track.labelColor === 'none');
   const trackHeaderStyle = {
     height: dynamicHeight,
     '--track-color': trackColor,
@@ -177,7 +181,7 @@ function TimelineHeaderComponent({
 
   return (
     <div
-      className={`track-header ${track.type} ${isMixerTrack ? 'mixer' : ''} ${isMidiDefaultTint ? 'midi-default-tint' : ''} ${isDimmed ? 'dimmed' : ''} ${
+      className={`track-header ${track.type} ${isMixerTrack ? 'mixer' : ''} ${isMidiDefaultTint ? 'midi-default-tint' : ''} ${isScoreDefaultTint ? 'score-default-tint' : ''} ${isDimmed ? 'dimmed' : ''} ${
         isExpanded ? 'expanded' : ''
       } ${track.locked ? 'locked' : ''} ${
         isMutedTrack ? 'track-muted' : ''
@@ -225,7 +229,11 @@ function TimelineHeaderComponent({
         {showAudioSummaryMeter && <TimelineHeaderAudioSummaryMeter />}
         <div className="track-header-main">
           <span className="resolve-track-index" aria-hidden="true">{resolveTrackCode}</span>
-          {isMixerTrack && <TimelineHeaderMixerTypeBadge isMidiTrack={isMidiTrack} />}
+          {isMixerTrack && (
+            <TimelineHeaderMixerTypeBadge
+              trackType={isMidiTrack ? 'midi' : isScoreTrack ? 'score' : 'audio'}
+            />
+          )}
           {(track.type === 'video' || isMixerTrack) && (
             <span
               className={`track-expand-arrow ${isExpanded ? 'expanded' : ''} ${

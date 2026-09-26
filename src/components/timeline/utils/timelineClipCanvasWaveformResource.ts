@@ -17,7 +17,7 @@ const MAX_RENDERED_WAVEFORM_CHANNELS = 2;
 export type TimelineClipCanvasWaveformPyramidMap = ReadonlyMap<string, TimelineWaveformPyramid | null>;
 
 export interface TimelineClipCanvasWaveformResourceClipInput {
-  trackType?: 'video' | 'audio' | 'midi';
+  trackType?: 'video' | 'audio' | 'midi' | 'score';
   startTime: number;
   duration: number;
   inPoint?: number;

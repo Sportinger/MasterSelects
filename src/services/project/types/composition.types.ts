@@ -52,7 +52,7 @@ import type {
 export interface ProjectTrack {
   id: string;
   name: string;
-  type: 'video' | 'audio' | 'midi';
+  type: 'video' | 'audio' | 'midi' | 'score';
   height: number;
   labelColor?: ProjectLabelColor;
   locked: boolean;
@@ -136,7 +136,7 @@ export interface ProjectClip {
   parentClipId?: string;
 
   // Additional clip metadata (for restoration)
-  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'light' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'transition-overlay' | 'motion-shape' | 'motion-null' | 'motion-adjustment' | 'storyboard' | 'lottie' | 'rive' | 'midi' | 'flock';
+  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'light' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'transition-overlay' | 'motion-shape' | 'motion-null' | 'motion-adjustment' | 'storyboard' | 'lottie' | 'rive' | 'midi' | 'score' | 'flock';
   // MIDI clip note data (issue #182); wired into save/load in the persistence phase
   midiData?: MidiClipData;
   // MIDI clip automation (issue #298): the four performed CC lanes as breakpoints

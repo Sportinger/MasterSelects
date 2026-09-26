@@ -135,7 +135,7 @@ export const TimelineSectionHeaderRow = memo(function TimelineSectionHeaderRow({
       x: event.clientX,
       y: event.clientY,
       trackId,
-      trackType: track.type as 'video' | 'audio',
+      trackType: track.type,
       trackName: track.name,
     });
   }, [shared, track.name, track.type, trackId]);

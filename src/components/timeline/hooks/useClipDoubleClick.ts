@@ -4,6 +4,7 @@ import { Logger } from '../../../services/logger';
 import { useDockStore } from '../../../stores/dockStore';
 import { requestMediaSourceReveal } from '../../../services/mediaSourceReveal';
 import { openPianoRoll } from '../../pianoRoll/PianoRollBoot';
+import { openScoreEditor } from '../../scoreEditor/ScoreEditorBoot';
 import { useTimelineStore } from '../../../stores/timeline';
 
 const log = Logger.create('useClipDoubleClick');
@@ -47,6 +48,11 @@ export function useClipDoubleClick({
 
       if (clip.source?.type === 'midi') {
         openPianoRoll(clip.id);
+        return;
+      }
+
+      if (clip.source?.type === 'score') {
+        openScoreEditor(clip.id);
         return;
       }
 

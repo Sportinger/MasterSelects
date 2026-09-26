@@ -12,7 +12,7 @@ import type { TimelineClipCanvasWorkerPreparedClipResources } from './timelineCl
 export type TimelineClipCanvasSpectrogramTileSetMap = ReadonlyMap<string, TimelineSpectrogramTileSet | null>;
 
 export interface TimelineClipCanvasSpectrogramResourceClipInput {
-  trackType?: 'video' | 'audio' | 'midi';
+  trackType?: 'video' | 'audio' | 'midi' | 'score';
   startTime: number;
   duration: number;
   inPoint?: number;

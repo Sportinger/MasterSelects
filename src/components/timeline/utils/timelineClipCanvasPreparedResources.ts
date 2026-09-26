@@ -32,7 +32,7 @@ import type { TimelineClipCanvasWorkerPreparedClipResources } from './timelineCl
 
 export interface TimelineClipCanvasPreparedResourceClipInput {
   id: string;
-  trackType?: 'video' | 'audio' | 'midi';
+  trackType?: 'video' | 'audio' | 'midi' | 'score';
   startTime: number;
   duration: number;
   inPoint?: number;

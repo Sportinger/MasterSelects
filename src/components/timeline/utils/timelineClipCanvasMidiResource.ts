@@ -15,7 +15,7 @@ export type TimelineClipCanvasWorkerMidiPreviewResource = NonNullable<
 >;
 
 export interface TimelineClipCanvasMidiResourceClipInput {
-  trackType?: 'video' | 'audio' | 'midi';
+  trackType?: 'video' | 'audio' | 'midi' | 'score';
   duration: number;
   inPoint?: number;
   outPoint?: number;

@@ -47,6 +47,7 @@ export interface SolidClipActions {
 
 export interface MidiClipActions {
   addMidiClip: (trackId: string, startTime: number, duration?: number) => string | null;
+  addScoreClip: (trackId: string, startTime: number, duration?: number) => string | null;
   renameMidiClip: (clipId: string, name: string) => void;
   clipRenameId: string | null;
   setClipRenameId: (clipId: string | null) => void;

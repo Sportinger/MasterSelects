@@ -40,7 +40,7 @@ function clampTrackHeight(value: number): number {
   return Math.max(MIN_TRACK_HEIGHT, Math.min(MAX_TRACK_HEIGHT, value));
 }
 
-type TimelineTrackCreationType = 'video' | 'audio' | 'midi';
+type TimelineTrackCreationType = 'video' | 'audio' | 'midi' | 'score';
 
 function createTrackId(type: TimelineTrackCreationType): string {
   return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -51,7 +51,8 @@ export function createTimelineTrackForType(
   tracks: readonly TimelineTrack[],
 ): TimelineTrack {
   const typeCount = tracks.filter(t => t.type === type).length + 1;
-  const typeLabel = type === 'video' ? 'Video' : type === 'midi' ? 'MIDI' : 'Audio';
+  const typeLabel =
+    type === 'video' ? 'Video' : type === 'midi' ? 'MIDI' : type === 'score' ? 'Score' : 'Audio';
   return {
     id: createTrackId(type),
     name: `${typeLabel} ${typeCount}`,
