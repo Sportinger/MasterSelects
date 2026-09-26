@@ -27,13 +27,14 @@ export const operatorGraphToolDefinitions: ToolDefinition[] = [
       + 'Without position, a node with inputs is placed right of its sources. The whole add changes nothing when any part fails. '
       + 'set uses nodeId, parameter and value; connect uses fromNodeId/toNodeId (fromPortId/toPortId optional with the same inference; a missing toPortId takes the first free compatible input) and replaces an existing single-input cable, for later rewiring and feedback; '
       + 'disconnect uses edgeId; remove and move use nodeId; slider configures a values.number/integer node with label, min, max, step (for an exposed node it sets the Effects tab row range); '
+      + 'group with nodeIds (nodes or compound nodes of this graph) and label wraps them in a named, collapsible stage frame (for example one frame per build step); it does not change the processing; '
       + 'expose with nodeId and exposed true/false toggles whether a values.number/integer node appears as a keyframeable parameter row (optional label) in the clip Effects tab, and its keyframes then drive the node output; add with exposed true exposes the new value node immediately. '
       + 'Explicit caller-chosen nodeId is optional for add (start with a letter; only letters, digits, _ and -, no dots), allowing streamed later references; this includes compound nodes, whose public input/output port IDs (from getNodeDefinitions) are used directly with the compound nodeId. '
       + 'Intermediate incomplete wiring is saved and paused until repaired; inspect incomplete in results. Existing tools remain available.',
     parameters: { type: 'object', additionalProperties: false, properties: {
-      clipId: id, effectId: id, action: { type: 'string', enum: ['add', 'set', 'connect', 'disconnect', 'remove', 'move', 'slider', 'expose'] },
+      clipId: id, effectId: id, action: { type: 'string', enum: ['add', 'set', 'connect', 'disconnect', 'remove', 'move', 'slider', 'expose', 'group'] },
       exposed: { type: 'boolean' },
-      nodeId: nodeRef, operatorId: id, parameter: id,
+      nodeId: nodeRef, nodeIds: { type: 'array', minItems: 1, maxItems: 64, uniqueItems: true, items: nodeRef }, operatorId: id, parameter: id,
       value,
       position, fromNodeId: nodeRef, fromPortId: id, toNodeId: nodeRef, toPortId: id, edgeId: id,
       label: { type: 'string', minLength: 1, maxLength: 80 }, min: { type: 'number' }, max: { type: 'number' }, step: { type: 'number', exclusiveMinimum: 0 },

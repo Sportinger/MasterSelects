@@ -53,6 +53,30 @@ describe('atomic operator graph tools', () => {
     expect(pixel(effectId)).toEqual([0.2, 0.4, 0.8, 0.75]);
   });
 
+  it('shortens an over-long graph name instead of failing the whole build', async () => {
+    const name = 'Thermalkamera – Graustufen · Kontrast · Falschfarben · Scan · Linien · Kanten · Nachleuchten · Vignette';
+    const result = await handleCreateImageNodeGraph({ clipId, name });
+    expect(result.success, result.error).toBe(true);
+    const effect = useTimelineStore.getState().clips[0].effects[0];
+    expect([...effect.name]).toHaveLength(100);
+    expect(name.startsWith(effect.name)).toBe(true);
+    expect((await handleCreateImageNodeGraph({ clipId, name: '   ' })).success).toBe(false);
+  });
+
+  it('wraps nodes and compound nodes into a named stage group', async () => {
+    const effectId = await create();
+    await edit(effectId, { action: 'add', nodeId: 'luma', operatorId: 'color.luminance-rec709.image' });
+    await edit(effectId, { action: 'add', nodeId: 'edges', operatorId: 'field.sobel' });
+    const result = await edit(effectId, { action: 'group', nodeIds: ['luma', 'edges'], label: 'Stage 1 · Grayscale' });
+    const groupId = (result.data as { groupId: string }).groupId;
+    const graph = effectOperatorGraph(useTimelineStore.getState().clips[0].effects[0]);
+    const group = graph.groups!.find(candidate => candidate.id === groupId)!;
+    expect(group.label).toBe('Stage 1 · Grayscale');
+    expect(group.nodeIds).toContain('luma');
+    expect(graph.groups!.some(candidate => candidate.parentId === groupId && candidate.composition?.instance.id === 'edges')).toBe(true);
+    expect((await handleEditOperatorGraph({ clipId, effectId, action: 'group', nodeIds: ['missing'], label: 'x' })).success).toBe(false);
+  });
+
   it('adds a compound node under a caller-chosen ID and wires its public ports', async () => {
     const effectId = await create();
     for (const [nodeId, operatorId] of [['uv', 'image.normalized-uv'], ['bend', 'coordinates.radial-curvature.vec2'],

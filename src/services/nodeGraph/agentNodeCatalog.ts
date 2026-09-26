@@ -139,12 +139,13 @@ function shortPurpose(description: string): string {
 const CONTEXT_ORDER = ['Image', '3D', 'Splat', 'Audio', 'Flock', 'Clip effects', 'Audio effects', 'Controls', 'Color Grade', 'Clip'];
 const CATEGORY_ORDER: readonly string[] = [...NODE_CATEGORIES.map(category => category.label), ...EFFECT_GROUPS.map(group => group.label)];
 const rank = (order: readonly string[], value: string) => { const index = order.indexOf(value); return index < 0 ? order.length : index; };
+const GROUP_IDS = new Set(EFFECT_OPERATORS.filter(operator => operator.composition).map(operator => operator.id));
 export function buildAgentNodeCatalogText(): string {
   const sections = new Map<string, { context: string; category: string; lines: string[] }>();
   for (const entry of getAgentNodeCatalog()) {
     if (entry.availability === 'internal') continue;
     const types = (ports: AgentNodePort[]) => [...new Set(ports.map(p => p.type))].join(',');
-    const anchor = entry.availability === 'fixed-anchor' ? ' [anchor]' : '';
+    const anchor = entry.availability === 'fixed-anchor' ? ' [anchor]' : GROUP_IDS.has(entry.id) ? ' [group]' : '';
     // Multi-domain nodes are listed once, under their first domain.
     const context = entry.context.split(', ')[0], key = `${context} › ${entry.category}`;
     const section = sections.get(key) ?? { context, category: entry.category, lines: [] };

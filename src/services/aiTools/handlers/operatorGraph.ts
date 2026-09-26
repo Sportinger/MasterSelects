@@ -11,6 +11,7 @@ import { AGENT_GRAPH_LEGEND, agentGraphNode, foldCompoundsForAgent } from '../..
 import { getEffectOperator } from '../../operators/operatorRegistry';
 import { EFFECT_GRAPH_PARAM } from '../../operators/effectGraph';
 import { setGraphValueExposed } from '../../operators/exposedGraphValues';
+import { groupOperators } from '../../operators/operatorGroups';
 import { createImageNodeGraphEffect } from '../../operators/imageNodeGraphEffect';
 import type { ToolResult } from '../types';
 import { compoundGroup, connectPublicPorts, nodePosition, openInputs, parseEndpointRef, publicPorts, type ConnectedCable } from './operatorGraphPorts';
@@ -59,9 +60,11 @@ const failure = (error: unknown): ToolResult => ({ success: false, error: error 
 export async function handleCreateImageNodeGraph(args: Record<string, unknown>): Promise<ToolResult> {
   try {
     const { clip } = owner(args, true);
-    if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim() || args.name.length > 100)) throw new Error('Invalid graph name.');
-    const effect = { id: createImageNodeGraphEffect(clip.id, String(args.name ?? 'Image Graph')) };
-    return { success: true, data: { clipId: clip.id, effectId: effect.id, sourceNodeId: 'frame', sourcePortId: 'image', outputNodeId: 'output', outputPortId: 'image' } };
+    if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) throw new Error('Invalid graph name.');
+    // A long descriptive name must not block the whole build: keep the first 100 characters.
+    const name = typeof args.name === 'string' ? [...args.name.trim()].slice(0, 100).join('').trim() : 'Image Graph';
+    const effect = { id: createImageNodeGraphEffect(clip.id, name) };
+    return { success: true, data: { clipId: clip.id, effectId: effect.id, name, sourceNodeId: 'frame', sourcePortId: 'image', outputNodeId: 'output', outputPortId: 'image' } };
   } catch (error) { return failure(error); }
 }
 
@@ -261,6 +264,20 @@ export async function handleEditOperatorGraph(rawArgs: Record<string, unknown>):
       const node = existing(); nodeId = node.id;
       if (typeof args.exposed !== 'boolean') throw new Error('expose requires exposed: true or false.');
       setGraphValueExposed(clip.id, effect.id, node.id, args.exposed, typeof args.label === 'string' ? args.label : undefined);
+    } else if (action === 'group') {
+      // Named stage around existing nodes; a compound member joins as its whole group.
+      const ids = Array.isArray(args.nodeIds) ? args.nodeIds.map(value => String(value).replace(/\./g, '-')) : [];
+      if (!ids.length) throw new Error('group requires nodeIds.');
+      const childIds: string[] = [], nodeIds: string[] = [];
+      for (const id of ids) {
+        const compound = compoundGroup(graph, id);
+        if (compound) childIds.push(compound.id);
+        else if (graph.nodes.some(node => node.id === id)) nodeIds.push(id);
+        else throw new Error(`Node ${id} not found in this graph.`);
+      }
+      let groupId = '';
+      editEffectGraph(clip.id, effect.id, 'Group nodes', next => { groupId = groupOperators(next, nodeIds, childIds, text(args, 'label')); });
+      extra = { groupId, label: text(args, 'label'), members: ids };
     } else if (action === 'slider') {
       nodeId = existing().id;
       text(args, 'label');
