@@ -8,6 +8,7 @@ import { setCanvasContentBounds } from './canvasContentBounds';
 import { markDynamicCanvasUpdated } from './canvasVersion';
 import { isCssGenericFontFamily } from './fontFamily';
 import { googleFontsService } from './googleFontsService';
+import { formatTextValueTemplate, hasTextValueTokens } from './text/textValueTemplate';
 import {
   isAreaTextEnabled,
   measureTextWithLetterSpacing,
@@ -54,7 +55,11 @@ class TextRenderer {
   /**
    * Render text to canvas with full typography support
    */
-  render(props: TextClipProperties, targetCanvas?: HTMLCanvasElement): HTMLCanvasElement {
+  render(inputProps: TextClipProperties, targetCanvas?: HTMLCanvasElement): HTMLCanvasElement {
+    // Static rasters (thumbnails, inactive compositions) show the base Value.
+    const props = hasTextValueTokens(inputProps.text)
+      ? { ...inputProps, text: formatTextValueTemplate(inputProps.text, { value: inputProps.value ?? 0, time: 0 }) }
+      : inputProps;
     const canvas = targetCanvas || this.canvas;
     canvas.dataset.masterselectsDynamic = 'text';
     const ctx = targetCanvas ? targetCanvas.getContext('2d')! : this.ctx;

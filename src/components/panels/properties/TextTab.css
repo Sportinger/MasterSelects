@@ -52,6 +52,15 @@
   resize: none;
 }
 
+/* Number tokens accepted by the Content text */
+.tt-token-hint {
+  padding: 0 var(--sp-2) var(--sp-1);
+  color: var(--text-secondary);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-xs);
+  user-select: text;
+}
+
 /* Full-width select */
 .tt-select-full {
   width: 100%;

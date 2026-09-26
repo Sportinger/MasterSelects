@@ -47,6 +47,8 @@ export interface ProjectTextClipProperties {
   shadowOffsetX: number;
   shadowOffsetY: number;
   shadowBlur: number;
+  value?: number;
+  valueLink?: { clipId: string; property: string };
   pathEnabled: boolean;
   pathPoints: Array<{
     x: number;

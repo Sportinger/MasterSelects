@@ -2,10 +2,18 @@ import type { TextBoundsPath } from './masks';
 
 export type TextNodeStage = 'content' | 'typography' | 'layout' | 'fill' | 'stroke' | 'shadow' | 'render';
 
+/** Drives a text clip's {value} from another clip's numeric property, e.g. a video's speed. */
+export interface TextValueLink {
+  clipId: string;
+  property: string;             // property registry path, e.g. 'speed', 'opacity', 'position.x'
+}
+
 // Text clip typography properties
 export interface TextClipProperties {
   // Content
-  text: string;
+  text: string;                 // may contain {value}/{time} tokens (see textValueTemplate)
+  value?: number;               // keyframeable number substituted into {value} tokens
+  valueLink?: TextValueLink;    // when set, {value} follows another clip's numeric property
 
   // Typography
   fontFamily: string;           // e.g., 'Roboto', 'Open Sans'

@@ -28,7 +28,14 @@ const textPathPointItems = {
 };
 
 const textPropertySchema: Record<string, unknown> = {
-  text: { type: 'string', description: 'Text content. Newlines are supported.' },
+  text: { type: 'string', description: 'Text content. Newlines are supported. Number tokens render live per frame: {value} (up to 2 decimals), {value:N} (N fixed decimals), {value*100:0} (scaled), {time:N} (clip-local seconds); e.g. "{value:2}×" or "{value*100:0}%". Use them for counters instead of many static clips.' },
+  value: { type: 'number', description: 'Number printed by {value} tokens. Animate it with addKeyframe property "text.value" (one clip, any number of keyframes) for counters and rising/falling numbers.' },
+  valueLink: {
+    type: ['object', 'null'],
+    description: 'Make {value} follow another clip’s numeric property at the same timeline time, e.g. { clipId: videoClipId, property: "speed" } to print a video’s speed ramp. Property is any numeric property path of that clip (speed, opacity, position.x, …). null removes the link.',
+    properties: { clipId: { type: 'string' }, property: { type: 'string' } },
+    required: ['clipId', 'property'],
+  },
   fontFamily: { type: 'string', description: 'Font family, for example Arial, Inter, Roboto, or Open Sans.' },
   fontSize: { type: 'number', description: 'Font size in pixels (8-500).' },
   fontWeight: { type: 'number', description: 'Numeric font weight (100-900).' },

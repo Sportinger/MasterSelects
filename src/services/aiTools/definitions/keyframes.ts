@@ -23,7 +23,7 @@ const addKeyframeParameters = {
   type: 'object' as const,
   properties: {
     clipId: { type: 'string', description: 'The clip ID' },
-    property: { type: 'string', description: 'Property to animate: transform/speed paths, any animatable Motion Design path returned by getMotionDesign (for example shape.size.w or appearance.{id}.opacity), or a flock graph path returned by getFlockClip (flock.node.{nodeId}.{param}[.x|.y|.z|.r|.g|.b]).' },
+    property: { type: 'string', description: 'Property to animate: transform/speed paths, any animatable Motion Design path returned by getMotionDesign (for example shape.size.w or appearance.{id}.opacity), a flock graph path returned by getFlockClip (flock.node.{nodeId}.{param}[.x|.y|.z|.r|.g|.b]), or a text clip path (text.fontSize, text.letterSpacing, …, and text.value — the number printed by {value} tokens in the text, for animated counters).' },
     value: { type: 'number', description: KEYFRAME_VALUE_DESCRIPTION },
     time: { type: 'number', description: 'Time in seconds relative to clip start. If omitted, uses current playhead position relative to clip.' },
     sourceTime: { type: 'number', description: FLOCK_SOURCE_TIME_DESCRIPTION },

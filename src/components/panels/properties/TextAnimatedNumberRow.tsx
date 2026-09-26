@@ -15,8 +15,11 @@ export function TextAnimatedNumberRow({ clipId, parameter, baseValue, defaultVal
   });
   const locked = useTimelineStore(state => state.isExporting || state.tracks.some(track => track.locked
     && track.id === state.clips.find(clip => clip.id === clipId)?.trackId));
+  const sliderMin = 'sliderMin' in definition ? definition.sliderMin : definition.min;
+  const sliderMax = 'sliderMax' in definition ? definition.sliderMax : definition.max;
   return <ResolveInspectorNumberRow label={definition.label} value={value} defaultValue={defaultValue}
-    min={definition.min} max={definition.max} hardMin={definition.min} hardMax={definition.max} step={definition.step}
+    min={sliderMin} max={sliderMax} numberMin={definition.min} numberMax={definition.max}
+    hardMin={definition.min} hardMax={definition.max} step={definition.step}
     disabled={disabled || locked} onChange={next => {
       if (disabled || locked) return;
       const state = useTimelineStore.getState();

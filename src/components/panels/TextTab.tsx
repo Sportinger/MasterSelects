@@ -12,6 +12,7 @@ import { DEFAULT_TEXT_PROPERTIES } from '../../stores/timeline/constants';
 import { googleFontsService, POPULAR_FONTS } from '../../services/googleFontsService';
 import { LabeledValue } from './properties/transformTab/ValueControls';
 import { TextAnimatedNumberRow } from './properties/TextAnimatedNumberRow';
+import { TextValueControls } from './properties/TextValueControls';
 import {
   PROPERTY_VALUE_RESET_TITLE,
   resetPropertyValueOnContextMenu,
@@ -368,6 +369,7 @@ export function TextTab({
               value={liveText ? 'Live from transcript' : localText}
             />
           </ResolveInspectorRow>
+          {!liveText && <TextValueControls clipId={clipId} textProperties={textProperties} disabled={disabled} />}
         </ResolveInspectorSection>
       )}
 

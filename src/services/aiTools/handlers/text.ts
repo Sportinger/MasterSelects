@@ -12,6 +12,7 @@ import {
   resolveTextBoxRect,
 } from '../../textLayout';
 import { getTimelineGeneratedCanvasRuntimeDimensions } from '../../timeline/timelineGeneratedCanvasRuntime';
+import { propertyRegistry } from '../../properties';
 import { selectClipAndOpenTab } from '../aiFeedback';
 import type { ToolResult } from '../types';
 import {
@@ -48,6 +49,8 @@ const TEXT_PROPERTY_KEYS = [
   'shadowBlur',
   'pathEnabled',
   'pathPoints',
+  'value',
+  'valueLink',
 ] as const satisfies readonly (keyof TextClipProperties)[];
 
 const BOX_PROPERTY_KEYS = ['boxX', 'boxY', 'boxWidth', 'boxHeight'] as const;
@@ -345,6 +348,9 @@ function buildTextPropertyUpdates(
             handleOut: normalizePointHandle(point.handleOut),
           };
         });
+      } else if (key === 'valueLink') {
+        const link = args.valueLink as { clipId: string; property: string } | null;
+        updates.valueLink = link ? { clipId: link.clipId, property: link.property } : undefined;
       } else {
         Object.assign(updates, { [key]: args[key] });
       }
@@ -453,6 +459,7 @@ function validateTextPropertyInputs(
     ['shadowOffsetX', -50, 50],
     ['shadowOffsetY', -50, 50],
     ['shadowBlur', 0, 50],
+    ['value', -1e9, 1e9],
   ] as const) {
     const error = validateOptionalFiniteRange(args[key], key, min, max);
     if (error) return failure(error);
@@ -476,6 +483,19 @@ function validateTextPropertyInputs(
   for (const key of ['boxEnabled', 'strokeEnabled', 'shadowEnabled', 'pathEnabled']) {
     if (args[key] !== undefined && typeof args[key] !== 'boolean') {
       return failure(`${key} must be a boolean`);
+    }
+  }
+
+  if (args.valueLink !== undefined && args.valueLink !== null) {
+    const link = args.valueLink;
+    if (!isRecord(link) || typeof link.clipId !== 'string' || typeof link.property !== 'string') {
+      return failure('valueLink must be null or { clipId: string, property: string }');
+    }
+    const target = useTimelineStore.getState().clips.find((clip) => clip.id === link.clipId);
+    if (!target) return failure(`valueLink clip not found: ${link.clipId}`);
+    const descriptor = propertyRegistry.getDescriptor(link.property, target);
+    if (!descriptor || descriptor.valueType !== 'number') {
+      return failure(`valueLink property is not a numeric property of ${link.clipId}: ${link.property}`);
     }
   }
 

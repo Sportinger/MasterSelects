@@ -102,6 +102,8 @@ The Color panel can enable every color stopwatch for the active grade version at
 
 Text bounds use `textBounds.path` for the complete bounds shape and `textBounds.position.x` / `textBounds.position.y` for numeric offsets.
 
+Text clips also animate `text.fontSize`, `text.lineHeight`, `text.letterSpacing`, `text.strokeWidth`, `text.shadowOffsetX` / `.Y`, `text.shadowBlur`, and `text.value` — the number printed by `{value}` tokens in the text (see [Text Clips](./Text-Clips.md#animated-numbers-value-tokens)).
+
 Light clips expose `light.intensity`, `light.diameter`, `light.shadowStrength`, and `light.color.r` / `.g` / `.b`. Exposed custom-node parameters use `node.{nodeId}.{paramName}`; color parameters are stored as per-channel paths.
 
 ### Mask Properties
