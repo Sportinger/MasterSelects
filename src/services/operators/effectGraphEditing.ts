@@ -185,7 +185,11 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
     }),
     addNode: (operatorId: string, position?: { x: number; y: number }, connection?: {
       direction: 'input' | 'output'; endpoints: Array<{ nodeId: string; portId: string }>; portId: string; groupId?: string | null;
+    }, options?: {
+      /** Place the node unconnected and outside sub-groups instead of copying a template's wiring. */
+      free?: boolean;
     }) => {
+      const auto = !connection && !options?.free;
       const id = `node-${crypto.randomUUID().slice(0, 8)}`;
       editEffectGraph(clipId, effectId, 'Add node', (graph, params) => {
         const operator = getEffectOperator(operatorId);
@@ -201,16 +205,16 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
           } else { node.bindings[p.id] = key; params[key] = p.default; }
         }
         const template = graph.nodes.find(n => n.operator === operatorId);
-        if (template && !connection) for (const edge of graph.edges.filter(e => e.to === template.id)) graph.edges.push({ ...edge, id: `${edge.from}-${id}-${edge.input}`, to: id });
+        if (template && auto) for (const edge of graph.edges.filter(e => e.to === template.id)) graph.edges.push({ ...edge, id: `${edge.from}-${id}-${edge.input}`, to: id });
         const group = connection?.groupId !== undefined ? graph.groups?.find(g => g.id === connection.groupId)
           : graph.groups?.find(g => g.nodeIds.includes(connection?.endpoints[0]?.nodeId ?? template?.id ?? ''));
         graph.nodes.push(node); graph.layout[id] = position ?? { x: 750, y: 650 + (graph.nodes.length - 13) * 160 };
         if (graph.domain === 'audio' && !position) graph.layout[id] = { x: 290,
           y: Math.max(0, ...Object.entries(graph.layout).filter(([key]) => key !== id).map(([, value]) => value.y)) + 180 };
-        (group ?? (!connection ? graph.groups?.find(g => g.id === 'simulation') : undefined))?.nodeIds.push(id);
+        if (!options?.free) (group ?? (auto ? graph.groups?.find(g => g.id === 'simulation') : undefined))?.nodeIds.push(id);
         const simulation = graph.nodes.find(n => n.operator === 'simulation.rope')!;
         const output = operator.outputs[0];
-        if (!connection && simulation && output && (output.type === 'force' || output.type === 'drag')) graph.edges.push({ id: `${id}-${simulation.id}`, from: id, output: output.id, to: simulation.id, input: output.type === 'force' ? 'forces' : 'drag' });
+        if (auto && simulation && output && (output.type === 'force' || output.type === 'drag')) graph.edges.push({ id: `${id}-${simulation.id}`, from: id, output: output.id, to: simulation.id, input: output.type === 'force' ? 'forces' : 'drag' });
         for (const endpoint of connection?.endpoints ?? []) {
           const link = connection!.direction === 'output'
             ? { from: endpoint.nodeId, output: endpoint.portId, to: id, input: connection!.portId }

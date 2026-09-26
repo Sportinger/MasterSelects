@@ -1,7 +1,9 @@
 import type { NodeGraphNode } from '../../../../types/nodeGraph';
 import { getNodeHeight, NODE_WIDTH } from './canvasGeometry';
 
-const GAP = 56, CELL = 512;
+/** Minimum clearance between placed blocks. */
+export const PREVIEW_BLOCK_GAP = 56;
+const GAP = PREVIEW_BLOCK_GAP, CELL = 512;
 export interface PreviewLayoutBlock { id: string; x: number; y: number; width: number; height: number }
 type Box = PreviewLayoutBlock & { originalX: number; originalY: number };
 

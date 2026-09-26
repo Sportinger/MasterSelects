@@ -1,11 +1,15 @@
 import type { NodeGraph, NodeGraphLayout, NodeGraphNode } from '../../../../types/nodeGraph';
 import { getNodeHeight, NODE_WIDTH } from './canvasGeometry';
 import { encloseNodeGroup } from './groupBounds';
-import { spacePreviewBlocks, spacePreviewNodes, type PreviewLayoutBlock } from './spacePreviewNodes';
+import { PREVIEW_BLOCK_GAP, spacePreviewBlocks, spacePreviewNodes, type PreviewLayoutBlock } from './spacePreviewNodes';
 import { connectedFlowBlocks, flowGroupLayout } from './flowGroupLayout';
 import { compactFlowColumns } from './compactFlowColumns';
 
 interface GroupBlock extends PreviewLayoutBlock { nodeIds: string[]; group: boolean; growing?: boolean; flow?: boolean; source?: boolean; boundary?: 'input' | 'output' }
+
+/** Within the clearance that would make spacePreviewBlocks move one of them. */
+const crowds = (a: PreviewLayoutBlock, b: PreviewLayoutBlock) => a.x < b.x + b.width + PREVIEW_BLOCK_GAP
+  && a.x + a.width + PREVIEW_BLOCK_GAP > b.x && a.y < b.y + b.height + PREVIEW_BLOCK_GAP && a.y + a.height + PREVIEW_BLOCK_GAP > b.y;
 
 /** Pack from the innermost group outward. Siblings must avoid the entire expanded
  * frame, including its empty space, header and nested frames, not just its cards.
@@ -46,9 +50,17 @@ export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<strin
     if (outer?.reflow) for (const blockId of outerFlow) fixed.delete(blockId);
     const source = !id ? blocks.find(block => block.nodeIds.some(nodeId => nodes.get(nodeId)?.binding?.kind === 'clip-source')) : undefined;
     const flowing = !id ? blocks.filter(block => outerFlow.has(block.id)) : blocks;
-    const flowLayout = arrange ? flowGroupLayout(flowing, graph.edges, fixed, source) : flowing;
-    const flowPositions = new Map((!id && arrange && outer?.compactEffects !== false ? compactFlowColumns(flowLayout, fixed) : flowLayout).map(block => [block.id, block]));
-    const arranged = blocks.map(block => flowPositions.get(block.id) ?? block);
+    const arrangeFlow = () => {
+      const flowLayout = arrange ? flowGroupLayout(flowing, graph.edges, fixed, source) : flowing;
+      const flowPositions = new Map((!id && arrange && outer?.compactEffects !== false ? compactFlowColumns(flowLayout, fixed) : flowLayout).map(block => [block.id, block]));
+      return blocks.map(block => flowPositions.get(block.id) ?? block);
+    };
+    let arranged = arrangeFlow();
+    // A pinned clip output must not push a re-flowing effect frame below it:
+    // when the frame grows into the output, the output follows the chain instead.
+    const blocked = !id ? arranged.filter(block => block.boundary === 'output' && fixed.has(block.id) && arranged.some(other =>
+      other.group && !fixed.has(other.id) && outerFlow.has(other.id) && crowds(block, other))) : [];
+    if (blocked.length) { blocked.forEach(block => fixed.delete(block.id)); arranged = arrangeFlow(); }
     const growing = arranged.filter(block => block.growing);
     const displaced = new Set<string>();
     if (growing.length) {

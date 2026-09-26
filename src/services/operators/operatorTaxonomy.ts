@@ -23,7 +23,8 @@ export const NODE_CATEGORIES = [
   { id: 'splat-attributes', label: 'Splat Attributes' },
   { id: 'splat-crop', label: 'Crop & Fade' },
   { id: 'shading', label: 'Shading' },
-  { id: 'simulation', label: 'Forces & Simulation' },
+  { id: 'particles', label: 'Particles' },
+  { id: 'forces', label: 'Forces & Physics' },
   { id: 'tracking', label: 'Tracking & Depth' },
   { id: 'output', label: 'Output & Render' },
 ] as const;
@@ -52,7 +53,8 @@ const EXACT: Record<string, NodeCategoryId> = {
   'splat.limit': 'splat-transform', 'splat.scale': 'splat-transform', 'splat.rotate': 'splat-transform',
   'splat.color': 'splat-attributes', 'splat.noise': 'splat-attributes', 'splat.select': 'splat-attributes', 'splat.merge': 'splat-attributes',
   'splat.camera-fade': 'splat-crop', 'splat.sphere-crop': 'splat-crop',
-  'splat.particles': 'simulation', 'splat.particle-system': 'simulation', 'splat.gravity': 'simulation', 'splat.drag': 'simulation', 'splat.turbulence': 'simulation',
+  'splat.particles': 'particles', 'splat.particle-system': 'particles', 'splat.gravity': 'forces', 'splat.drag': 'forces', 'splat.turbulence': 'forces',
+  'simulation.image-particles': 'particles', 'simulation.particle-release': 'particles', 'simulation.particle-motion': 'particles', 'simulation.rope': 'forces',
   'splat.surface': 'output', 'splat.render': 'output', 'splat.clean-surface': 'output', 'splat.ray-field': 'output', 'splat.mesh-overlay': 'output',
 };
 const PREFIX: ReadonlyArray<[string, NodeCategoryId]> = [
@@ -63,7 +65,7 @@ const PREFIX: ReadonlyArray<[string, NodeCategoryId]> = [
   ['image.sequence', 'time'], ['feedback.', 'time'], ['motion.', 'time'],
   ['noise.', 'patterns'], ['pattern.', 'patterns'], ['field.', 'patterns'], ['glyph.', 'text'], ['analog.', 'signal'],
   ['geometry.', 'geometry'], ['material.', 'shading'], ['texture.', 'shading'], ['camera.', 'shading'], ['light.', 'shading'],
-  ['forces.', 'simulation'], ['collision.', 'simulation'], ['simulation.', 'simulation'],
+  ['forces.', 'forces'], ['collision.', 'forces'], ['simulation.', 'particles'],
   ['tracking.', 'tracking'], ['depth.', 'tracking'], ['render.', 'output'],
 ];
 
@@ -152,7 +154,7 @@ export function groupOperatorMenu<T extends OperatorDefinition>(operators: reado
 const CARD_LABELS: Record<NodeCategoryId, string> = {
   inputs: 'Input', values: 'Value', math: 'Math', logic: 'Logic', vector: 'Vector', color: 'Color', coordinates: 'Coordinates',
   sampling: 'Sampling', time: 'Time', patterns: 'Pattern', text: 'Glyph', signal: 'Analog Signal', geometry: 'Geometry',
-  'splat-transform': 'Splat', 'splat-attributes': 'Splat', 'splat-crop': 'Splat', shading: 'Shading', simulation: 'Simulation',
+  'splat-transform': 'Splat', 'splat-attributes': 'Splat', 'splat-crop': 'Splat', shading: 'Shading', particles: 'Particles', forces: 'Force',
   tracking: 'Tracking', output: 'Output',
 };
 /** Short type badge for node cards; node groups say so. */

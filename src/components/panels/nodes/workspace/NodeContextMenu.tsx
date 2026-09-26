@@ -1,11 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { NodeGraphNode } from '../../../../services/nodeGraph';
 import { NodeMenuItems, searchNodeMenu, type NodeMenuEntry } from './NodeMenuTree';
-
-/** Grace period after the pointer leaves the menu before it closes on its own. */
-const MENU_LEAVE_CLOSE_DELAY_MS = 700;
-/** Grace period for a freshly opened menu the pointer never enters. */
-const MENU_IDLE_CLOSE_DELAY_MS = 1500;
+import { useMenuAutoClose } from './useMenuAutoClose';
 
 export function NodeContextMenu({
   x,
@@ -34,17 +30,7 @@ export function NodeContextMenu({
   const results = useMemo(() => searchNodeMenu(entries, search), [entries, search]);
   const left = typeof window === 'undefined' ? x : Math.min(x, window.innerWidth - 188);
   const top = typeof window === 'undefined' ? y : Math.min(y, window.innerHeight - 220);
-  // Without the pointer over the menu (or any flyout, which are DOM children) it closes shortly:
-  // right after opening if it is never entered, and after the pointer leaves unless it returns.
-  // A typed search or a shown error keeps it open.
-  const leaveTimer = useRef<number | undefined>(undefined);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-  useEffect(() => {
-    leaveTimer.current = window.setTimeout(() => onCloseRef.current(), MENU_IDLE_CLOSE_DELAY_MS);
-    return () => window.clearTimeout(leaveTimer.current);
-  }, []);
-  const keepOpen = Boolean(search.trim() || error);
+  const autoClose = useMenuAutoClose(onClose, Boolean(search.trim() || error));
 
   return (
     <div
@@ -61,11 +47,8 @@ export function NodeContextMenu({
         aria-label="Add node"
         style={{ left: Math.max(8, left), top: Math.max(8, top) }}
         onClick={(event) => event.stopPropagation()}
-        onMouseEnter={() => window.clearTimeout(leaveTimer.current)}
-        onMouseLeave={() => {
-          window.clearTimeout(leaveTimer.current);
-          if (!keepOpen) leaveTimer.current = window.setTimeout(onClose, MENU_LEAVE_CLOSE_DELAY_MS);
-        }}
+        onMouseEnter={autoClose.onMouseEnter}
+        onMouseLeave={autoClose.onMouseLeave}
       >
         <input
           className="node-workspace-context-search"
@@ -73,7 +56,7 @@ export function NodeContextMenu({
           placeholder="Search nodes and effects…"
           aria-label="Search nodes"
           value={search}
-          onChange={(event) => { window.clearTimeout(leaveTimer.current); setSearch(event.target.value); }}
+          onChange={(event) => { autoClose.cancel(); setSearch(event.target.value); }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && results.length) results[0].entry.onSelect();
           }}

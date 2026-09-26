@@ -291,7 +291,9 @@ turning it off restores horizontal effect flow without rearranging effect interi
 Moving any card keeps the grouped arrangement as shown: the move anchors every
 current group member, so other cards and frames do not re-flow around the moved
 card. New nodes are still placed automatically, and ungrouped downstream stages
-such as Clip Output still follow a resized effect.
+such as Clip Output still follow a resized effect. A manually placed Clip Output
+that a re-flowing effect frame grows into moves right of the chain instead of
+pushing the frame below it.
 On either fold direction, the connected outer chain also reflows, leaving 100 graph
 units between Source, complete effect frames or cards, and Clip Output. Source
 stays in place; old outer anchors cannot leave expanded-sized gaps after closing.
@@ -582,8 +584,6 @@ zooming out keeps the sharper image.
 These are bounded preview costs;
 expensive processing in the editor's main render path still affects frame time.
 
-The isolated `/tests/browser/node-previews-probe.html` page exercises color stages,
-portrait aspect ratio, toggles and large graphs without modifying an editor project.
 Timeline playback shares the GPU process with the video preview, so the graph
 yields to it while playing. Image viewers share a budget of about 24 renders per
 second across all visible image previews, capped at the idle rates above. Number
@@ -595,6 +595,8 @@ cables with their overscan, then thumbnails and signal flow cropped to the
 viewport. **Signals** in the toolbar hides the dots that flow along cables during
 playback; scrubbing still shows them. The choice is an editor preference.
 
+The isolated `/tests/browser/node-previews-probe.html` page exercises color stages,
+portrait aspect ratio, toggles and large graphs without modifying an editor project.
 Append `?software` to exercise main-thread canvas fallback. Unit regressions cover
 scheduling/fairness, resource cleanup, atlas limits, stage geometry and placement.
 
