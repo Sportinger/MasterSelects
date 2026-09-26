@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, type RefObject } from 'react';
-import type { NodeGraphPoint, Viewport } from './canvasGeometry';
+import type { NodeGraphNode } from '../../../../types/nodeGraph';
+import { getNodeHeight, NODE_WIDTH, type NodeGraphPoint, type Viewport } from './canvasGeometry';
 import { createEdgeHitIndex } from './edgeHitIndex';
 import { useSettingsStore } from '../../../../stores/settingsStore';
 
@@ -10,6 +11,12 @@ const HIT_TOLERANCE_PX = 6;
 /** A press that moves further than this pans the canvas instead of selecting. */
 const CLICK_SLOP_PX = 4;
 
+/** Cards paint above cables, so a point on a card never touches the cable beneath it. */
+function onCard(point: NodeGraphPoint, nodes: readonly NodeGraphNode[]) {
+  return nodes.some(node => point.x >= node.layout.x && point.x <= node.layout.x + NODE_WIDTH
+    && point.y >= node.layout.y && point.y <= node.layout.y + getNodeHeight(node));
+}
+
 /**
  * Canvas-mode cable hits without DOM hit targets. Hover goes straight to the
  * canvas worker (no React render); click and context menu resolve the cable
@@ -19,17 +26,21 @@ export function useCanvasEdgeHits(options: {
   enabled: boolean;
   /** Painted cable legs, including branch trunks (`branch:<id>`). */
   cables: ReadonlyArray<{ id: string; from: NodeGraphPoint; to: NodeGraphPoint; via?: readonly NodeGraphPoint[] }>;
+  /** Cards that cover cables painted beneath them. */
+  nodes: readonly NodeGraphNode[];
   canvas: RefObject<HTMLDivElement | null>;
   visual: RefObject<Viewport>;
   getGraphPoint: (clientX: number, clientY: number) => NodeGraphPoint;
   hover: RefObject<((edgeId: string | null) => void) | null>;
 }) {
-  const { enabled, cables, canvas, visual, getGraphPoint, hover } = options;
+  const { enabled, cables, nodes, canvas, visual, getGraphPoint, hover } = options;
   const cableStyle = useSettingsStore(state => state.nodeCableStyle);
   const index = useMemo(() => {
     if (!enabled) return null;
     return createEdgeHitIndex(cables, cableStyle);
   }, [enabled, cables, cableStyle]);
+  const cards = useRef(nodes);
+  cards.current = nodes;
   const last = useRef<NodeGraphPoint | null>(null);
   const hovered = useRef<string | null>(null);
 
@@ -46,14 +57,14 @@ export function useCanvasEdgeHits(options: {
   const move = useCallback((clientX: number, clientY: number) => {
     if (!index) return;
     const point = getGraphPoint(clientX, clientY);
-    show(index.query(last.current ?? point, point, tolerance()));
+    show(onCard(point, cards.current) ? null : index.query(last.current ?? point, point, tolerance()));
     last.current = point;
   }, [getGraphPoint, index, show, tolerance]);
 
   const at = useCallback((clientX: number, clientY: number): string | null => {
     if (!index) return null;
     const point = getGraphPoint(clientX, clientY);
-    return index.query(point, point, tolerance());
+    return onCard(point, cards.current) ? null : index.query(point, point, tolerance());
   }, [getGraphPoint, index, tolerance]);
 
   const leave = useCallback(() => { last.current = null; show(null); }, [show]);

@@ -294,7 +294,7 @@ export function NodeGraphCanvas({
     : dom.nodes.filter((node, index) => index < mountedNodeCount || isCardActive(node.id));
   const cablesReady = useDeferredValue(hitTargetsActive);
   const hoverChannel = useRef<((edgeId: string | null) => void) | null>(null); // canvas-mode cable hits from a geometry index
-  const edgeHits = useCanvasEdgeHits({ enabled: canvasRendered && !animating, cables: shownCables, canvas: canvasRef, visual: visualViewportRef, getGraphPoint: getGraphPointFromClient, hover: hoverChannel });
+  const edgeHits = useCanvasEdgeHits({ enabled: canvasRendered && !animating, cables: shownCables, nodes: displayNodes, canvas: canvasRef, visual: visualViewportRef, getGraphPoint: getGraphPointFromClient, hover: hoverChannel });
 
   const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (nodeMarquee.start(event)) return;
