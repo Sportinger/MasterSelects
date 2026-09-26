@@ -526,6 +526,8 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       }
       case 'vector.split.rgba': register = emit({ nodeId: current.id, operation: output === 'alpha' ? 'split-alpha' : 'split-rgb', type: output === 'alpha' ? 'alpha' : 'rgb', inputs: [visitSource(current, 'image')] }); break;
       case 'convert.scalar-to-rgb': register = emit({ nodeId: current.id, operation: 'scalar-to-rgb', type: 'rgb', inputs: [visitSource(current, 'value')] }); break;
+      case 'convert.alpha-to-scalar': register = emit({ nodeId: current.id, operation: 'pass-f32', type: 'scalar', inputs: [visitSource(current, 'alpha')] }); break;
+      case 'convert.scalar-to-alpha': register = emit({ nodeId: current.id, operation: 'pass-f32', type: 'alpha', inputs: [visitSource(current, 'value')] }); break;
       case 'math.subtract.rgb': {
         const b = visitSource(current, 'b');
         register = current.bypassed ? b : emit({ nodeId: current.id, operation: 'subtract-rgb', type: 'rgb', inputs: [visitSource(current, 'a'), b] });

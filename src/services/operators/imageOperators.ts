@@ -358,6 +358,11 @@ export const IMAGE_OPERATORS: readonly OperatorDefinition[] = [
     inputs: [port('value', 'number', 'Value', true)], outputs: [port('value', 'vec2', 'Vector')], parameters: [], addable: true }),
   imageOperator({ id: 'convert.scalar-to-rgb', label: 'Scalar to RGB', description: 'Replicates one scalar into three RGB components.',
     inputs: [port('value', 'number', 'Value', true)], outputs: [port('rgb', 'rgb', 'RGB')], parameters: [], addable: true }),
+  // Alpha is a per-pixel scalar; these make the role change explicit without arithmetic.
+  imageOperator({ id: 'convert.alpha-to-scalar', label: 'Alpha to Scalar', description: 'Uses an alpha channel as a scalar value for math nodes.',
+    inputs: [port('alpha', 'alpha', 'Alpha', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true }),
+  imageOperator({ id: 'convert.scalar-to-alpha', label: 'Scalar to Alpha', description: 'Uses a scalar value as an alpha channel, e.g. for Combine RGB + Alpha. Not clamped.',
+    inputs: [port('value', 'number', 'Value', true)], outputs: [port('alpha', 'alpha', 'Alpha')], parameters: [], addable: true }),
   // Read-only migration definitions. migrateImageOperatorGraph removes them before canonical persistence/compilation.
   imageOperator({ id: 'image.rgb-split', label: 'Legacy Split RGB + Alpha', description: 'Migrates to vector.split.rgba.',
     inputs: [port('image', 'image', 'Image', true)], outputs: [port('rgb', 'rgb', 'RGB'), port('alpha', 'alpha', 'Alpha')], parameters: [], addable: false }),

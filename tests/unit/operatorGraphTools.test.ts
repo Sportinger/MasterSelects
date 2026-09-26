@@ -99,6 +99,21 @@ describe('atomic operator graph tools', () => {
     expect((read.data as { nodes: { id: string }[] }).nodes.map(node => node.id)).toEqual(['key-amount']);
   });
 
+  it('inserts the single alpha/number conversion automatically when connecting mismatched ports', async () => {
+    const effectId = await create();
+    for (const [nodeId, operatorId] of [['split', 'vector.split.rgba'], ['half', 'values.number'], ['mul', 'math.multiply.scalar'], ['join', 'vector.combine.rgba']]) {
+      await edit(effectId, { action: 'add', nodeId, operatorId });
+    }
+    await edit(effectId, { action: 'set', nodeId: 'half', parameter: 'value', value: 0.5 });
+    const toMath = await edit(effectId, { action: 'connect', fromNodeId: 'split', fromPortId: 'alpha', toNodeId: 'mul', toPortId: 'a' });
+    expect(toMath.data).toMatchObject({ insertedConversion: { operatorId: 'convert.alpha-to-scalar' } });
+    const toAlpha = await edit(effectId, { action: 'connect', fromNodeId: 'mul', fromPortId: 'value', toNodeId: 'join', toPortId: 'alpha' });
+    expect(toAlpha.data).toMatchObject({ insertedConversion: { operatorId: 'convert.scalar-to-alpha' } });
+    for (const [fromNodeId, fromPortId, toNodeId, toPortId] of [['frame', 'image', 'split', 'image'], ['half', 'value', 'mul', 'b'],
+      ['split', 'rgb', 'join', 'rgb'], ['join', 'image', 'output', 'image']]) await edit(effectId, { action: 'connect', fromNodeId, fromPortId, toNodeId, toPortId });
+    expect(pixel(effectId)).toEqual([0.2, 0.4, 0.8, 0.375]);
+  });
+
   it('saves an authored slider and enforces its range, locks and ownership', async () => {
     const effectId = await create();
     await edit(effectId, { action: 'add', nodeId: 'percent', operatorId: 'values.number' });
