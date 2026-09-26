@@ -4,7 +4,7 @@ import { SlitScanGeometryControls } from '../../src/components/panels/properties
 import * as graphOwner from '../../src/services/operators/effectGraphOwner';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { getDefaultParams } from '../../src/effects';
-import { createMockClip } from '../helpers/mockData';
+import { createMockClip, createMockTrack } from '../helpers/mockData';
 import { configureInspectorGraphWorker } from '../../src/services/operators/inspectorGraphClient';
 
 const initial = useTimelineStore.getState();
@@ -17,6 +17,24 @@ beforeEach(() => configureInspectorGraphWorker(() => new class {
   }
 }()));
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); useTimelineStore.setState(initial); });
+
+it.each([false, true])('starts new Slit Scan geometry bypassed without changing clip 3D state (%s)', is3D => {
+  const clip = createMockClip({ id: 'new-slit-scan', is3D });
+  useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })] });
+  const effectId = useTimelineStore.getState().addClipEffect(clip.id, 'slit-scan');
+  const updated = useTimelineStore.getState().clips.find(item => item.id === clip.id)!;
+  const effect = updated.effects.find(item => item.id === effectId)!;
+  expect(updated.is3D).toBe(is3D);
+  expect(effect.params).toMatchObject({ geometryMode: '2d', geometryPromoted3D: false, geometrySampler: 'history' });
+  const onChange = vi.fn();
+  render(<SlitScanGeometryControls clipId={clip.id} effectInstanceId={effectId} params={effect.params}
+    operatorGraph={effect.operatorGraph} onChange={onChange} />);
+  const enable = screen.getByRole('switch', { name: 'Enable 3D geometry' });
+  expect(enable).toHaveAttribute('aria-checked', 'false');
+  fireEvent.click(enable);
+  expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ geometryMode: 'motion-surface' }));
+  expect(useTimelineStore.getState().clips.find(item => item.id === clip.id)?.is3D).toBe(true);
+});
 
 it('keeps sampler discovery warm across playhead snapshots and value edits', async () => {
   const params = { ...getDefaultParams('slit-scan'), geometryMode: 'time-surface', geometrySampler: 'history' };

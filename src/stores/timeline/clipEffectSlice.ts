@@ -135,12 +135,7 @@ function reconcileEffectRemovalInNodeGraph(
 export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get) => ({
   addClipEffect: (clipId, effectType) => {
     const { clipKeyframes, invalidateCache } = get();
-    const targetClip = get().clips.find(clip => clip.id === clipId);
-    const was3D = targetClip?.is3D === true;
-    const isVideoTrack = get().tracks.some(track => track.id === targetClip?.trackId && track.type === 'video');
-    if (effectType === 'slit-scan' && isVideoTrack && !was3D) get().toggle3D(clipId);
     const clips = get().clips;
-    const is3D = clips.find(clip => clip.id === clipId)?.is3D === true;
     const effect: Effect = {
       id: generateEffectId(),
       name: effectType,
@@ -148,10 +143,10 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       enabled: true,
       params: { ...getDefaultEffectParams(effectType), ...(effectType === 'slit-scan' ? {
         stabilizationEnabled: false,
-        geometryMode: is3D ? 'motion-surface' : '2d',
+        geometryMode: '2d',
         geometrySampler: 'history',
         geometryLastMode: 'motion-surface',
-        geometryPromoted3D: !was3D && is3D,
+        geometryPromoted3D: false,
       } : {}) },
       ...(effectType === 'slit-scan' ? { operatorGraph: createInitialSlitScanGraph() } : {}),
     };

@@ -4,9 +4,10 @@ title: "Slit Scan 3D"
 
 Slit Scan's **3D geometry** inspector selects the existing 2D image, a reference
 time surface, a motion-deformed surface, or a free motion band. New Slit Scan effects
-start with Motion-deformed surface and the `history` base sampler; existing effects
+start with 3D geometry bypassed (2D image) and the `history` base sampler; existing effects
 retain their saved representation. Selecting a 3D representation enables the clip's
-shared scene participation.
+shared scene participation. Adding the effect preserves the clip's existing 2D/3D state.
+Enabling **3D geometry** selects Motion-deformed surface for a new effect.
 
 The base time sampler is an explicitly saved graph node identity. RGB offsets
 remain color operations: geometry follows the selected base query. A missing
