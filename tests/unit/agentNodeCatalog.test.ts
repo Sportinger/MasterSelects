@@ -35,7 +35,7 @@ describe('agent node discovery', () => {
   it('retains real effect choices and hides internal parameters and implementation bodies', async () => {
     const effect = [...EFFECT_REGISTRY.values()].find(e => Object.values(e.params).some(p => p.options?.length));
     expect(effect).toBeDefined();
-    const response = await handleGetNodeDefinitions({ ids: [`effect:${effect!.id}`, 'control:control.time', 'missing-node'] });
+    const response = await handleGetNodeDefinitions({ ids: [`effect:${effect!.id}`, 'control:control.time', 'missing-node'], detail: 'full' });
     expect(response.success).toBe(true);
     const data = response.data as { definitions: ReturnType<typeof getAgentNodeCatalog>; missingIds: string[] };
     expect(data.missingIds).toEqual(['missing-node']);
@@ -49,6 +49,18 @@ describe('agent node discovery', () => {
       { value: 'clip', label: 'Clip time' }, { value: 'timeline', label: 'Timeline time' },
     ]);
     expect(JSON.stringify(data)).not.toMatch(/"shader"|"composition"|"packUniforms"/);
+  });
+
+  it('returns compact definitions by default and the full inventory as one text list on request', async () => {
+    const compact = await handleGetNodeDefinitions({ ids: ['values.number', 'image.sample'] });
+    const data = compact.data as { legend: string; definitions: Array<{ id: string; in: string[]; out: string[]; params?: string[] }> };
+    expect(data.legend).toContain('id:type');
+    expect(data.definitions[0].params?.[0]).toMatch(/^value:number \[/);
+    expect(data.definitions[1].in).toEqual(expect.arrayContaining(['image:image!', 'uv:vec2!']));
+    const full = await handleGetNodeDefinitions({ ids: ['values.number', 'image.sample'], detail: 'full' });
+    expect(JSON.stringify(compact.data).length).toBeLessThan(JSON.stringify(full.data).length / 1.5);
+    const list = await handleSearchNodeCatalog({ list: true });
+    expect((list.data as { catalog: string }).catalog.split('\n').some(line => line.startsWith('values.number '))).toBe(true);
   });
 
   it('paginates the whole inventory without silently losing entries', async () => {

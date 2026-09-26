@@ -7,11 +7,11 @@ title: "Node Catalog"
 
 ## Agent discovery
 
-Codex Direct and Fast receive a plain-text editor node catalog with the first prompt of a new conversation thread; resumed turns already carry it in their history. It lists every addable registered operator, visual effect, Flock node, audio effect, parameter source, Color node and common field-backed clip stage, one line each: exact catalog ID, input/output signal types and a short purpose, grouped by owning context. Fixed graph anchors are marked; internal-only stages are omitted. Project-local custom definitions are outside this base inventory. (The kernel Fast V2 request keeps its JSON `editorNodeCatalog` contract.)
+Codex Direct and Fast do not carry the node inventory in every conversation. The first prompt of a new thread only states how to fetch it: `searchNodeCatalog({ list: true })` returns every addable registered operator, visual effect, Flock node, audio effect, parameter source, Color node and common field-backed clip stage as a plain-text list, one line each (exact catalog ID, input/output signal types, short purpose), grouped by owning context. Fixed graph anchors are marked; internal-only stages are omitted. Turns without node work therefore skip its ~8k tokens on every model step. Project-local custom definitions are outside this base inventory. (The kernel Fast V2 request keeps its JSON `editorNodeCatalog` contract.)
 
 Two read-only tools provide more detail:
 
-Full definitions (exact ports, parameters, defaults, ranges and choices) are not sent up front; the agent reads them for the IDs it needs with `getNodeDefinitions`. This keeps the first provider request small (previously a node request carried roughly 450 KB of definitions on every turn).
+`getNodeDefinitions` returns compact definitions by default: ports as `id:type` (`!` required, `*` repeated) and parameters as `id:type [min..max] {options} =default`, with a `legend` field; `detail: "full"` returns the complete JSON contracts. The Direct instructions ask the agent to request every needed ID in one call, because each extra model step rereads the whole conversation.
 
 - `searchNodeCatalog({ query?, kind?, context?, inputType?, outputType?, offset?, limit? })` returns compact summaries, a total count and `nextOffset`. The default page has 12 entries, with at most 30. Exact IDs and names rank first; all whitespace-separated search terms must match.
 - `getNodeDefinitions({ ids })` reads up to eight exact IDs together, returning underlying type IDs, ports, parameter defaults, ranges, choices and declared animation support. Unknown IDs appear in `missingIds`.

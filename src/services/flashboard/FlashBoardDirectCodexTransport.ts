@@ -20,7 +20,6 @@ import {
   createDirectCodexTurnToolPolicy,
 } from './FlashBoardDirectCodexTurnPolicy';
 import { useMediaStore } from '../../stores/mediaStore';
-import { buildAgentNodeCatalogText } from '../nodeGraph/agentNodeCatalog';
 import { getToolPolicy } from '../aiTools/policy';
 import { NodeGraphStreamParser, NODE_GRAPH_STREAM_PROTOCOL } from '../nodeGraph/nodeGraphStream';
 import { FlashBoardNodeGraphStream } from './FlashBoardNodeGraphStream';
@@ -275,15 +274,16 @@ export function buildDirectCodexVerifiedResponse(
 }
 
 /** Reference material goes out once per thread; resumed turns already carry it in history. */
+const NODE_CATALOG_ON_DEMAND = 'Before authoring nodes, call searchNodeCatalog with list: true once for the full compact inventory, then getNodeDefinitions once with every ID you need.';
+
 export function directTurnInput(request: FlashBoardChatRequest, includeReference = true): Array<Record<string, unknown>> {
   const input: Array<Record<string, unknown>> = [{
     text: request.prompt,
     type: 'text',
   }];
-  if (includeReference) {
-    input.push({ type: 'text', text: buildAgentNodeCatalogText() });
-    input.push({ type: 'text', text: JSON.stringify({ nodeGraphStream: NODE_GRAPH_STREAM_PROTOCOL }) });
-  }
+  // The ~8k-token inventory is fetched on demand (searchNodeCatalog list), so
+  // turns without node work do not carry it through every model call.
+  if (includeReference) input.push({ type: 'text', text: JSON.stringify({ nodeCatalog: NODE_CATALOG_ON_DEMAND, nodeGraphStream: NODE_GRAPH_STREAM_PROTOCOL }) });
   for (const reference of request.visualReferences ?? []) {
     input.push({ detail: 'auto', type: 'image', url: reference.dataUrl });
   }
@@ -652,9 +652,8 @@ async function runDirectCodexChat(
     const response = finalText.trim() || streamedText.trim();
     if (!response) throw new Error('Codex Direct returned no final message.');
     if (request.resumeMessageId) clearDirectCodexReloadSnapshot(request.resumeMessageId);
-    const answer = nodeParser.active
-      ? `Node-Graph aktualisiert: ${nodeStream.completedOperations} Schritte ausgeführt.`
-      : buildDirectCodexVerifiedResponse(request.prompt, response, executedToolCalls);
+    // The chat collapses stream blocks for display, so the model's own final answer is shown.
+    const answer = buildDirectCodexVerifiedResponse(request.prompt, response, executedToolCalls);
     const notice = nodeStreamUserNotice(nodeStream.failures, streamFeedback, executedToolCalls);
     return notice ? `${answer}\n\n${notice}` : answer;
   } finally {

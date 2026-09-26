@@ -141,3 +141,22 @@ export function buildAgentNodeCatalogText(): string {
   return ['Editor node catalog. Line: id inputTypes>outputTypes purpose. Exact ports, parameters and ranges: getNodeDefinitions(ids). Search: searchNodeCatalog. Show a graph: focusNodeGraph.',
     ...[...contexts].map(([context, lines]) => `## ${context}\n${lines.join('\n')}`)].join('\n');
 }
+
+const compactPort = (port: AgentNodePort) => `${port.id}:${port.type}${port.required ? '!' : ''}${port.repeated ? '*' : ''}`;
+function compactParameter(parameter: AgentNodeParameter): string {
+  const range = parameter.min !== undefined || parameter.max !== undefined ? ` [${parameter.min ?? ''}..${parameter.max ?? ''}]` : '';
+  const options = parameter.options?.length ? ` {${parameter.options.map(option => option.value).join('|')}}` : '';
+  const fallback = parameter.default === undefined ? '' : ` =${typeof parameter.default === 'string' ? parameter.default : JSON.stringify(parameter.default)}`;
+  return `${parameter.id}:${parameter.type}${range}${options}${fallback}`;
+}
+
+/** Same format as agent graph results: a definition costs ~a third of its full contract. */
+export const AGENT_NODE_DEFINITION_LEGEND = 'Ports are id:type (! required, * repeated). Params are id:type [min..max] {options} =default. Use exact port and param IDs.';
+export function compactAgentNodeDefinition(entry: AgentNodeDefinition) {
+  return {
+    id: entry.id, ...(entry.typeId !== entry.id ? { typeId: entry.typeId } : {}), label: entry.label,
+    context: entry.context, availability: entry.availability, description: entry.description,
+    in: entry.inputs.map(compactPort), out: entry.outputs.map(compactPort),
+    ...(entry.parameters.length ? { params: entry.parameters.map(compactParameter) } : {}),
+  };
+}

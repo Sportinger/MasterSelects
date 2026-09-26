@@ -1,11 +1,14 @@
-import { AGENT_NODE_KINDS, getAgentNodeCatalog, summarizeAgentNode } from '../../nodeGraph/agentNodeCatalog';
+import { AGENT_NODE_DEFINITION_LEGEND, AGENT_NODE_KINDS, buildAgentNodeCatalogText, compactAgentNodeDefinition, getAgentNodeCatalog, summarizeAgentNode } from '../../nodeGraph/agentNodeCatalog';
 import type { ToolResult } from '../types';
 
 const fail = (error: string): ToolResult => ({ success: false, error });
 
 export async function handleSearchNodeCatalog(args: Record<string, unknown>): Promise<ToolResult> {
-  const allowed = ['query', 'kind', 'context', 'inputType', 'outputType', 'offset', 'limit'];
+  const allowed = ['query', 'kind', 'context', 'inputType', 'outputType', 'offset', 'limit', 'list'];
   if (Object.keys(args).some(key => !allowed.includes(key))) return fail('Unknown catalog search argument.');
+  if (args.list !== undefined && typeof args.list !== 'boolean') return fail('list must be a boolean.');
+  // The whole inventory as one compact text list, fetched only when a turn authors nodes.
+  if (args.list === true) return { success: true, data: { catalog: buildAgentNodeCatalogText() } };
   for (const [key, max] of [['query', 200], ['context', 100], ['inputType', 80], ['outputType', 80]] as const) {
     if (args[key] !== undefined && (typeof args[key] !== 'string' || (args[key] as string).length > max)) return fail(`Invalid ${key}.`);
   }
@@ -32,11 +35,14 @@ export async function handleSearchNodeCatalog(args: Record<string, unknown>): Pr
 
 export async function handleGetNodeDefinitions(args: Record<string, unknown>): Promise<ToolResult> {
   const ids = args.ids;
-  if (Object.keys(args).some(key => key !== 'ids') || !Array.isArray(ids) || ids.length < 1
+  if (args.detail !== undefined && args.detail !== 'compact' && args.detail !== 'full') return fail('detail must be compact or full.');
+  if (Object.keys(args).some(key => key !== 'ids' && key !== 'detail') || !Array.isArray(ids) || ids.length < 1
     || ids.some(id => typeof id !== 'string' || id.length < 1 || id.length > 160) || new Set(ids).size !== ids.length) {
     return fail('ids must contain unique exact catalog IDs (at least one).');
   }
   const byId = new Map(getAgentNodeCatalog().map(entry => [entry.id, entry]));
-  return { success: true, data: { definitions: ids.flatMap(id => byId.has(id) ? [byId.get(id)!] : []),
+  const found = ids.flatMap(id => byId.has(id) ? [byId.get(id)!] : []);
+  return { success: true, data: { ...(args.detail === 'full' ? { definitions: found }
+    : { legend: AGENT_NODE_DEFINITION_LEGEND, definitions: found.map(compactAgentNodeDefinition) }),
     missingIds: ids.filter(id => !byId.has(id)) } };
 }
