@@ -17,9 +17,14 @@ interface ExportDecoderPumpHooks {
 
 export class ExportDecoderPump {
   private static readonly MAX_DECODE_QUEUE = 2;
+  // Consecutive idle waits after which a non-draining queue is treated as a
+  // decoder waiting for input rather than a busy one.
+  private static readonly STALLED_QUEUE_WAITS = 3;
+  private static readonly MAX_STALLED_DECODE_QUEUE = 16;
 
   private player: ExportModePlayer;
   private hooks: ExportDecoderPumpHooks;
+  private progressWaiters = new Set<() => void>();
 
   constructor(player: ExportModePlayer, hooks: ExportDecoderPumpHooks) {
     this.player = player;
@@ -37,6 +42,30 @@ export class ExportDecoderPump {
     return decoder;
   }
 
+  /** Wakes pending waits as soon as the decoder emits a frame. */
+  notifyDecoderProgress(): void {
+    for (const wake of [...this.progressWaiters]) wake();
+  }
+
+  /**
+   * Resolves on the next decoder output or queue dequeue, or after maxMs.
+   * Returns true when nothing happened before the timeout.
+   */
+  private waitForDecoderProgress(decoder: VideoDecoder, maxMs: number): Promise<boolean> {
+    return new Promise(resolve => {
+      const finish = (timedOut: boolean) => {
+        if (!this.progressWaiters.delete(wake)) return;
+        clearTimeout(timer);
+        decoder.removeEventListener?.('dequeue', wake);
+        resolve(timedOut);
+      };
+      const wake = () => finish(false);
+      const timer = setTimeout(() => finish(true), maxMs);
+      this.progressWaiters.add(wake);
+      decoder.addEventListener?.('dequeue', wake);
+    });
+  }
+
   async waitForBufferedTarget(
     targetCtsUs: number,
     timeoutMs: number,
@@ -46,6 +75,7 @@ export class ExportDecoderPump {
     const startTime = performance.now();
     let previousBufferSize = this.hooks.getBufferedFrameCount();
     let stablePolls = 0;
+    let lastWaitTimedOut = true;
 
     while (performance.now() - startTime < timeoutMs) {
       this.hooks.refreshBufferedFrameIndex();
@@ -56,10 +86,40 @@ export class ExportDecoderPump {
       if (bufferSize !== previousBufferSize || decoder.decodeQueueSize > 0) {
         previousBufferSize = bufferSize;
         stablePolls = 0;
-      } else if (allowIdleExit && ++stablePolls >= 4) {
+      } else if (allowIdleExit && lastWaitTimedOut && ++stablePolls >= 4) {
         break;
       }
-      await new Promise(resolve => setTimeout(resolve, 10));
+      lastWaitTimedOut = await this.waitForDecoderProgress(decoder, 10);
+    }
+    this.hooks.refreshBufferedFrameIndex();
+  }
+
+  /** Waits for lazily loaded samples; returns false after the timeout. */
+  async waitForSamples(maxWaitMs: number): Promise<boolean> {
+    if (this.player.getSamples().length > 0) {
+      log.info(`Samples already loaded: ${this.player.getSamples().length}`);
+      return true;
+    }
+    const endWaitSamples = log.time('waitForSamples');
+    log.info('Waiting for samples to load...');
+    const startWait = performance.now();
+    while (this.player.getSamples().length === 0 && performance.now() - startWait < maxWaitMs) {
+      await new Promise(r => setTimeout(r, 50));
+    }
+    endWaitSamples();
+    const loadedCount = this.player.getSamples().length;
+    if (loadedCount === 0) {
+      log.error('Timeout waiting for samples');
+      return false;
+    }
+    log.info(`Samples ready: ${loadedCount} (waited ${(performance.now() - startWait).toFixed(0)}ms)`);
+    return true;
+  }
+
+  async waitForFirstBufferedFrame(timeoutMs: number): Promise<void> {
+    const startTime = performance.now();
+    while (this.hooks.getBufferedFrameCount() === 0 && performance.now() - startTime < timeoutMs) {
+      await this.waitForDecoderProgress(this.getConfiguredDecoderOrThrow('waitForFirstBufferedFrame'), 20);
     }
     this.hooks.refreshBufferedFrameIndex();
   }
@@ -151,12 +211,20 @@ export class ExportDecoderPump {
       // Backpressure: wait for the decode queue to drain before queuing more, so
       // a software decoder isn't overwhelmed (the main cause of mid-export
       // "Decoding error" closes and the periodic 1fps keyframe restarts).
+      // Hardware decoders can instead hold reordered samples until more input
+      // arrives; the queue then never drains, so feed it once it stops moving.
       let backpressureGuard = 0;
-      while (decoder.decodeQueueSize >= ExportDecoderPump.MAX_DECODE_QUEUE && backpressureGuard < 500) {
+      let stalledWaits = 0;
+      while (
+        decoder.decodeQueueSize >= ExportDecoderPump.MAX_DECODE_QUEUE &&
+        backpressureGuard < 500 &&
+        (stalledWaits < ExportDecoderPump.STALLED_QUEUE_WAITS ||
+          decoder.decodeQueueSize >= ExportDecoderPump.MAX_STALLED_DECODE_QUEUE)
+      ) {
         if (decoder.state === 'closed') {
           throw new Error(`FAST export decoder closed during decodeSampleWindow ${startIndex}-${endIndexExclusive}`);
         }
-        await new Promise(resolve => setTimeout(resolve, 2));
+        stalledWaits = await this.waitForDecoderProgress(decoder, 4) ? stalledWaits + 1 : 0;
         backpressureGuard++;
       }
 

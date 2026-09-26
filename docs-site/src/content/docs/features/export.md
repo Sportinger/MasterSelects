@@ -60,7 +60,9 @@ Canvas-backed sources such as text, solids, Lottie, and Rive are re-rendered for
 - Uses WebCodecs sequential decoding for a single clip.
 - FAST export resolves the requested time to a source sample, waits for that exact decoded frame, and fails if it stays unavailable instead of silently substituting a buffered neighbor. The Windows beta harness verifies the complete exported frame sequence with independently decoded frame counters.
 - When a decoder withholds the exact frame past the first rolling window, FAST export submits a bounded number of later samples while releasing older buffered frames. This lets reordered frames arrive without accepting a neighboring frame in the output.
-- Repeated short source-time jumps, such as frames from a sped-up clip, continue decoding from the current cursor and discard skipped outputs. Distant jumps restart at a keyframe.
+- Repeated source-time jumps, such as frames from a sped-up or speed-ramped clip, continue decoding from the current cursor and discard skipped outputs. A forward jump restarts at a keyframe only when a keyframe lies inside the gap, so skipping is cheaper than decoding through it.
+- Speed ramps: FAST export tracks the source stride between requested frames, decodes the predicted next frame in the background, and immediately closes decoded frames that fall between predicted requests. Hardware decoders therefore keep free output surfaces. If a decelerating ramp requests a frame that was closed, export restarts from the preceding keyframe for that frame.
+- Decoder backpressure waits for decoder progress events instead of fixed sleeps. If a hardware decoder holds reordered samples and its queue stops draining, export submits more input instead of waiting for a timeout.
 - Regular multi-clip exports use source-shared sequential WebCodecs decoders; nested-composition video clips use `ParallelDecodeManager`.
 - Parses source media with MP4Box.
 - Decode, buffer, and unsupported-file failures remain in the selected workflow. Errors are logged and surfaced; Fast mode does not automatically switch to HTMLVideo.
