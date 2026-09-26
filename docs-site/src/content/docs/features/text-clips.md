@@ -43,6 +43,35 @@ Captions without exposing any caption-specific source, timing, line, or word-
 highlight settings.
 Area-text bounds can be keyframed from the Area Text section.
 
+## Animated Numbers (`{value}` tokens)
+
+Text content can print a live number that changes every frame, so counters and
+speed readouts need one clip instead of many static ones.
+
+| Token | Output |
+|---|---|
+| `{value}` | Value with up to 2 decimals, trailing zeros trimmed (`6.83`, `1`) |
+| `{value:N}` | Value with exactly N decimals (0-6), e.g. `{value:2}` → `1.00` |
+| `{value*K:N}` | Value scaled by K first, e.g. `{value*100:0}%` → `683%` |
+| `{time}` / `{time:N}` | Clip-local seconds |
+
+Unknown `{...}` text stays literal. The Content section shows:
+
+- **Value**: a keyframeable number (`text.value`) with slider, numeric field
+  and stopwatch; animate it like any other property for a counting number.
+- **Follow**: optionally drive Value from another clip's numeric property at
+  the same timeline time (`valueLink: { clipId, property }`), e.g. a video's
+  `speed` to show its speed ramp live, or `opacity` / `position.x`. When a link
+  is set, the Property picker lists that clip's animatable numeric properties
+  and the own Value row is hidden. A missing linked clip falls back to Value.
+
+Formatting happens in `src/services/text/textValueTemplate.ts`; per-frame
+resolution (own keyframes or link) happens in `renderTextFrame`
+(`src/services/text/textFrameRuntime.ts` + `textValueLink.ts`), which the
+preview, nested compositions, node previews, and export share. A template clip
+re-rasterizes only when the formatted string or its styling changes. Static
+rasters (thumbnails, inactive compositions) print the base Value.
+
 ## Preview Editing
 
 When a 2D text clip is selected and the preview is in Edit mode, the preview shows an AE-style text bounds editor over the rendered text.
