@@ -1,13 +1,14 @@
 /** Obstacle-avoiding cable routes: orthogonal waypoints around node cards. */
 
 export interface AvoidPoint { x: number; y: number }
-export interface AvoidRect { x: number; y: number; width: number; height: number }
-export interface AvoidCable { id: string; from: AvoidPoint; to: AvoidPoint; source?: string }
+export interface AvoidRect { x: number; y: number; width: number; height: number; groupId?: string; nodeIds?: string[] }
+export interface AvoidCable { id: string; from: AvoidPoint; to: AvoidPoint; source?: string; fromNode?: string; toNode?: string }
 
 /** Graph units per routing cell. */
 const CELL = 24;
 /** Clearance kept around cards, in graph units. */
 const MARGIN = 14;
+const GROUP_MARGIN = 28;
 /** Horizontal run out of an output and into an input before a route may turn. */
 const STUB = 36;
 /** Cells searched beyond the box spanned by both endpoints. */
@@ -60,8 +61,9 @@ function obstacleGrid(obstacles: readonly AvoidRect[]) {
   const BUCKET = 16; // cells per bucket side
   const buckets = new Map<string, AvoidRect[]>();
   for (const rect of obstacles) {
-    const left = Math.floor((rect.x - MARGIN) / CELL / BUCKET), right = Math.floor((rect.x + rect.width + MARGIN) / CELL / BUCKET);
-    const top = Math.floor((rect.y - MARGIN) / CELL / BUCKET), bottom = Math.floor((rect.y + rect.height + MARGIN) / CELL / BUCKET);
+    const margin = rect.groupId ? GROUP_MARGIN : MARGIN;
+    const left = Math.floor((rect.x - margin) / CELL / BUCKET), right = Math.floor((rect.x + rect.width + margin) / CELL / BUCKET);
+    const top = Math.floor((rect.y - margin) / CELL / BUCKET), bottom = Math.floor((rect.y + rect.height + margin) / CELL / BUCKET);
     for (let bx = left; bx <= right; bx++) for (let by = top; by <= bottom; by++) {
       const key = `${bx}:${by}`, list = buckets.get(key);
       if (list) list.push(rect); else buckets.set(key, [rect]);
@@ -72,8 +74,10 @@ function obstacleGrid(obstacles: readonly AvoidRect[]) {
     const key = cellKey(cx, cy), known = memo.get(key);
     if (known !== undefined) return known;
     const x = (cx + 0.5) * CELL, y = (cy + 0.5) * CELL;
-    const blocked = (buckets.get(`${Math.floor(cx / BUCKET)}:${Math.floor(cy / BUCKET)}`) ?? []).some(rect =>
-      x >= rect.x - MARGIN && x <= rect.x + rect.width + MARGIN && y >= rect.y - MARGIN && y <= rect.y + rect.height + MARGIN);
+    const blocked = (buckets.get(`${Math.floor(cx / BUCKET)}:${Math.floor(cy / BUCKET)}`) ?? []).some(rect => {
+      const margin = rect.groupId ? GROUP_MARGIN : MARGIN;
+      return x >= rect.x - margin && x <= rect.x + rect.width + margin && y >= rect.y - margin && y <= rect.y + rect.height + margin;
+    });
     memo.set(key, blocked);
     return blocked;
   };
@@ -81,9 +85,11 @@ function obstacleGrid(obstacles: readonly AvoidRect[]) {
 
 /** Orthogonal A* with a turn penalty between two cells; returns cells or null. */
 function search(start: [number, number], goal: [number, number], blocked: (x: number, y: number) => boolean,
-  shared: ReadonlySet<number> | undefined): Array<[number, number]> | null {
-  const left = Math.min(start[0], goal[0]) - WINDOW, top = Math.min(start[1], goal[1]) - WINDOW;
-  const width = Math.max(start[0], goal[0]) + WINDOW - left + 1, height = Math.max(start[1], goal[1]) + WINDOW - top + 1;
+  shared: ReadonlySet<number> | undefined, groups: readonly AvoidRect[] = []): Array<[number, number]> | null {
+  const left = Math.min(start[0], goal[0], ...groups.map(rect => Math.floor(rect.x / CELL))) - WINDOW;
+  const top = Math.min(start[1], goal[1], ...groups.map(rect => Math.floor(rect.y / CELL))) - WINDOW;
+  const width = Math.max(start[0], goal[0], ...groups.map(rect => Math.ceil((rect.x + rect.width) / CELL))) + WINDOW - left + 1;
+  const height = Math.max(start[1], goal[1], ...groups.map(rect => Math.ceil((rect.y + rect.height) / CELL))) + WINDOW - top + 1;
   // Sparse bookkeeping: memory follows the explored corridor, not the window area.
   const cost = new Map<number, number>(), parent = new Map<number, number>();
   const index = (x: number, y: number, direction: number) => ((y - top) * width + (x - left)) * 4 + direction;
@@ -121,7 +127,7 @@ function search(start: [number, number], goal: [number, number], blocked: (x: nu
 }
 
 /** Corner points only, snapped so the first and last runs stay on the port heights. */
-function waypoints(cells: Array<[number, number]>, from: AvoidPoint, to: AvoidPoint): AvoidPoint[] {
+function waypoints(cells: Array<[number, number]>, from: AvoidPoint, to: AvoidPoint, startStub = STUB, endStub = STUB): AvoidPoint[] {
   const corners: Array<[number, number]> = [cells[0]];
   for (let index = 1; index < cells.length - 1; index++) {
     const [a, b, c] = [cells[index - 1], cells[index], cells[index + 1]];
@@ -130,8 +136,8 @@ function waypoints(cells: Array<[number, number]>, from: AvoidPoint, to: AvoidPo
   corners.push(cells.at(-1)!);
   const startRow = cells[0][1], goalRow = cells.at(-1)![1];
   const points = corners.map(([cx, cy]) => ({ x: (cx + 0.5) * CELL, y: cy === startRow ? from.y : cy === goalRow ? to.y : (cy + 0.5) * CELL }));
-  points[0] = { x: from.x + STUB, y: from.y };
-  points[points.length - 1] = { x: to.x - STUB, y: to.y };
+  points[0] = { x: from.x + startStub, y: from.y };
+  points[points.length - 1] = { x: to.x - endStub, y: to.y };
   // Snapping can leave a vertical leg slanted by less than a cell; square it up.
   for (let index = 1; index < points.length - 1; index++) {
     const previous = points[index - 1], point = points[index];
@@ -142,18 +148,35 @@ function waypoints(cells: Array<[number, number]>, from: AvoidPoint, to: AvoidPo
 
 /** Waypoints (between the ports, excluding them) for every cable that found a clear path. */
 export function routeAroundCards(obstacles: readonly AvoidRect[], cables: readonly AvoidCable[]): Map<string, AvoidPoint[]> {
-  const blocked = obstacleGrid(obstacles), routes = new Map<string, AvoidPoint[]>();
+  const cards = obstacles.filter(rect => !rect.groupId), groups = obstacles.filter(rect => rect.groupId);
+  const cardBlocked = obstacleGrid(cards), routes = new Map<string, AvoidPoint[]>();
+  const grids = new Map<string, ReturnType<typeof obstacleGrid>>();
   const used = new Map<string, Set<number>>();
   const cell = (x: number, y: number): [number, number] => [Math.floor(x / CELL), Math.floor(y / CELL)];
   // Short cables first: they have fewest choices and anchor the bundles.
   for (const cable of [...cables].toSorted((a, b) => Math.abs(a.to.x - a.from.x) - Math.abs(b.to.x - b.from.x))) {
-    if (cable.to.x - cable.from.x < STUB * 3) continue; // backward and tight links keep their own loops
-    const start = cell(cable.from.x + STUB, cable.from.y), goal = cell(cable.to.x - STUB, cable.to.y);
-    if (blocked(start[0], start[1]) || blocked(goal[0], goal[1])) continue;
+    // Endpoint groups must remain accessible; all other expanded frames are solid.
+    const contains = (rect: AvoidRect, point: AvoidPoint, nodeId?: string) => nodeId && rect.nodeIds
+      ? rect.nodeIds.includes(nodeId)
+      : point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height;
+    const blockingGroups = groups.filter(rect => !contains(rect, cable.from, cable.fromNode) && !contains(rect, cable.to, cable.toNode));
+    if (cable.to.x - cable.from.x < STUB * 3 && !blockingGroups.length) continue;
+    const key = JSON.stringify(blockingGroups.map(rect => rect.groupId));
+    let groupBlocked = grids.get(key);
+    if (!groupBlocked) { groupBlocked = obstacleGrid(blockingGroups); grids.set(key, groupBlocked); }
+    const blocked = (x: number, y: number) => cardBlocked(x, y) || groupBlocked(x, y);
+    // A nearby frame can require an earlier turn than the usual port stub.
+    const startStub = [STUB, 24, 12].find(stub => !blocked(...cell(cable.from.x + stub, cable.from.y)));
+    const endStub = [STUB, 24, 12].find(stub => !blocked(...cell(cable.to.x - stub, cable.to.y)));
+    if (startStub === undefined || endStub === undefined) continue;
+    const start = cell(cable.from.x + startStub, cable.from.y), goal = cell(cable.to.x - endStub, cable.to.y);
     const shared = cable.source ? used.get(cable.source) : undefined;
-    const path = search(start, goal, blocked, shared);
+    const nearbyGroups = blockingGroups.filter(rect => rect.x <= Math.max(cable.from.x, cable.to.x) + WINDOW * CELL
+      && rect.x + rect.width >= Math.min(cable.from.x, cable.to.x) - WINDOW * CELL
+      && rect.y <= Math.max(cable.from.y, cable.to.y) + WINDOW * CELL && rect.y + rect.height >= Math.min(cable.from.y, cable.to.y) - WINDOW * CELL);
+    const path = search(start, goal, blocked, shared, nearbyGroups);
     if (!path || path.length < 2) continue;
-    const points = waypoints(path, cable.from, cable.to);
+    const points = waypoints(path, cable.from, cable.to, startStub, endStub);
     // A route that only bends where the direct lane would is not worth replacing.
     if (points.length <= 2 && Math.abs(cable.from.y - cable.to.y) < 1) continue;
     routes.set(cable.id, points);

@@ -76,7 +76,7 @@ export function reconcileCanvasPlacement(graph: NodeGraph, previous?: NodeCanvas
   const displaced = new Map<string, NodeGraphLayout>();
   const flow = graph.groups?.some(group => group.layoutMode === 'flow');
   const growingFlow = previous && graph.nodes.some(node => dynamic.has(node.id) && !previous.nodes[node.id]);
-  const outer = { reflow: addedEffects.size > 0 || (!!flow && (folded || growingFlow || previous?.flowLayoutVersion !== 1)), addedEffects, groupMoves: new Map<string, NodeGraphLayout>() };
+  const outer = { reflow: addedEffects.size > 0 || (!!flow && (folded || growingFlow || previous?.flowLayoutVersion !== 1)), compactEffects: placement.compactEffects, addedEffects, groupMoves: new Map<string, NodeGraphLayout>() };
   const visible = new Set(graph.nodes.map(node => node.id));
   for (const node of spacePreviewGroups({ ...graph, nodes }, fixed, expanding, displaced, outer)) placement.nodes[node.id] = node.layout;
   // Keep hidden interiors and future regenerated layouts in the translated frame.
@@ -134,13 +134,18 @@ export function arrangeFlowPlacement(graph: NodeGraph, placement: NodeCanvasPlac
 }
 
 /** Reset manual anchors and arrange every visible group with the existing flow layout. */
-export function resetCanvasPlacement(graph: NodeGraph): NodeCanvasPlacement {
+export function resetCanvasPlacement(graph: NodeGraph, compactEffects = true): NodeCanvasPlacement {
   const arranged = { ...graph,
     nodes: graph.nodes.map(node => node.binding?.kind === 'clip-source' ? { ...node, layout: { x: 0, y: 0 } } : node),
     groups: graph.groups?.map(group => ({ ...group, layoutMode: 'flow' as const })),
   };
   const nodes = spacePreviewGroups(arranged, new Set(), new Set(), undefined, {
-    reflow: true, addedEffects: new Set(graph.nodes.map(node => node.id)), groupMoves: new Map(),
+    reflow: true, compactEffects, addedEffects: new Set(graph.nodes.map(node => node.id)), groupMoves: new Map(),
   });
-  return reconcileCanvasPlacement({ ...graph, nodes });
+  return reconcileCanvasPlacement({ ...graph, nodes }, { nodes: {}, groups: {}, compactEffects });
+}
+
+/** Change only outer placement; preserve manual interior positions and wiring. */
+export function toggleCompactEffectPlacement(graph: NodeGraph, placement: NodeCanvasPlacement): NodeCanvasPlacement {
+  return reconcileCanvasPlacement(graph, { ...placement, compactEffects: placement.compactEffects === false, flowLayoutVersion: undefined });
 }

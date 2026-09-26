@@ -286,6 +286,8 @@ export interface NodeCableBranch {
 }
 
 export interface NodeCanvasPlacement {
+  /** Wrap top-level effects into compact rows; defaults to enabled. */
+  compactEffects?: boolean;
   /** Cable branch points, keyed by id. Layout data: never read by rendering or export. */
   branches?: Record<string, NodeCableBranch>;
   /** Outer flow chains have been compacted, including legacy saved anchors. */

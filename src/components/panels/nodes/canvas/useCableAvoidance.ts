@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { NodeGraphNode } from '../../../../types/nodeGraph';
+import type { NodeGraph, NodeGraphNode } from '../../../../types/nodeGraph';
 import { useSettingsStore } from '../../../../stores/settingsStore';
-import { getNodeHeight, NODE_WIDTH, type NodeGraphPoint } from './canvasGeometry';
+import { getNodeHeight, NODE_WIDTH, type NodeGraphPoint, type NodeBounds } from './canvasGeometry';
 import type { RoutedCable } from './cableBranches';
 import { routeAroundCards, type AvoidCable, type AvoidRect } from './cableAvoidance';
 
@@ -15,7 +15,8 @@ const same = (a: NodeGraphPoint, b: NodeGraphPoint) => Math.abs(a.x - b.x) < 0.5
  * settles and applied only while a cable's endpoints are unchanged, so moving
  * cards run direct until their reroute arrives.
  */
-export function useCableAvoidance(cables: RoutedCable[], nodes: readonly NodeGraphNode[], paused: boolean): RoutedCable[] {
+export function useCableAvoidance(cables: RoutedCable[], nodes: readonly NodeGraphNode[], paused: boolean,
+  groupBounds?: ReadonlyMap<string, NodeBounds>, groups?: NodeGraph['groups']): RoutedCable[] {
   const enabled = useSettingsStore(state => state.nodeCableAvoid);
   const [routes, setRoutes] = useState<ReadonlyMap<string, Route>>(() => new Map());
   const worker = useRef<Worker | null>(null), revision = useRef(0);
@@ -24,7 +25,16 @@ export function useCableAvoidance(cables: RoutedCable[], nodes: readonly NodeGra
     if (!enabled) { setRoutes(current => current.size ? new Map() : current); return; }
     if (paused) return;
     const obstacles: AvoidRect[] = nodes.map(node => ({ x: node.layout.x, y: node.layout.y, width: NODE_WIDTH, height: getNodeHeight(node) }));
-    const request: AvoidCable[] = cables.map(cable => ({ id: cable.id, from: cable.from, to: cable.to,
+    const members = (id: string): string[] => {
+      const group = groups?.find(candidate => candidate.id === id);
+      return [...new Set([...(group?.nodeIds ?? []), ...(groups ?? []).filter(child => child.parentId === id).flatMap(child => members(child.id))])];
+    };
+    for (const group of groups ?? []) {
+      const bounds = groupBounds?.get(group.id);
+      if (group.collapsed || !bounds) continue;
+      obstacles.push({ groupId: group.id, nodeIds: members(group.id), x: bounds.left, y: bounds.top, width: bounds.right - bounds.left, height: bounds.bottom - bounds.top });
+    }
+    const request: AvoidCable[] = cables.map(cable => ({ id: cable.id, from: cable.from, to: cable.to, fromNode: cable.fromNode, toNode: cable.toNode,
       source: cable.fromBranch ?? (cable.edge ? `${cable.edge.fromNodeId}:${cable.edge.fromPortId}` : undefined) }));
     const endpoints = new Map(cables.map(cable => [cable.id, { from: cable.from, to: cable.to }]));
     const id = ++revision.current;
@@ -40,8 +50,8 @@ export function useCableAvoidance(cables: RoutedCable[], nodes: readonly NodeGra
       };
       worker.current.postMessage({ revision: id, obstacles, cables: request });
     }, DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [enabled, paused, cables, nodes]);
+    return () => { clearTimeout(timer); revision.current++; };
+  }, [enabled, paused, cables, nodes, groupBounds, groups]);
 
   useEffect(() => () => { worker.current?.terminate(); worker.current = null; }, []);
   useEffect(() => { if (!enabled) { worker.current?.terminate(); worker.current = null; } }, [enabled]);

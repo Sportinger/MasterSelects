@@ -3,7 +3,7 @@ import type { NodeCanvasPlacement, NodeGraph, NodeGraphLayout } from '../../../.
 import { useTimelineStore } from '../../../../stores/timeline';
 import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
 import { startBatch, endBatch } from '../../../../stores/historyStore';
-import { arrangeFlowPlacement, moveCanvasPlacement, reconcileCanvasPlacement, resetCanvasPlacement } from './nodeCanvasPlacement';
+import { arrangeFlowPlacement, moveCanvasPlacement, reconcileCanvasPlacement, resetCanvasPlacement, toggleCompactEffectPlacement } from './nodeCanvasPlacement';
 
 export function useNodeCanvasPlacement(graph: NodeGraph, layoutScaleX: number) {
   const saved = useTimelineStore(state => state.clips.find(clip => clip.id === graph.owner.id)?.nodeGraph?.canvasPlacements?.[graph.id]);
@@ -45,6 +45,7 @@ export function useNodeCanvasPlacement(graph: NodeGraph, layoutScaleX: number) {
     if (group) save({ ...placement, groups: { ...placement.groups, [id]: { ...group, locked: group.locked === false } } }, 'Toggle group lock');
   }, [placement, save]);
   const arrange = useCallback(() => save(arrangeFlowPlacement(graph, placement), 'Arrange effect nodes'), [graph, placement, save]);
-  const reset = useCallback(() => { const next = resetCanvasPlacement(graph); save(next, 'Reset node layout'); return next; }, [graph, save]);
-  return { nodes, placement, commit, setBranches, toggleLock, arrange, reset };
+  const reset = useCallback(() => { const next = resetCanvasPlacement(graph, placement.compactEffects !== false); save(next, 'Reset node layout'); return next; }, [graph, placement.compactEffects, save]);
+  const toggleCompact = useCallback(() => save(toggleCompactEffectPlacement(graph, placement), 'Toggle compact effects'), [graph, placement, save]);
+  return { nodes, placement, commit, setBranches, toggleLock, arrange, reset, toggleCompact };
 }

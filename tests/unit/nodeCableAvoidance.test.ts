@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { routeAroundCards, type AvoidPoint, type AvoidRect } from '../../src/components/panels/nodes/canvas/cableAvoidance';
+import { cableRoute, sampleCableRoute } from '../../src/components/panels/nodes/canvas/cableRoute';
 
 const hits = (points: AvoidPoint[], rect: AvoidRect) => points.some((point, index) => {
   if (!index) return false;
@@ -9,6 +10,30 @@ const hits = (points: AvoidPoint[], rect: AvoidRect) => points.some((point, inde
 });
 
 describe('cable obstacle avoidance', () => {
+  it('does not exempt an unrelated group just because a source port is close to its frame', () => {
+    const frame = { groupId: 'effect', nodeIds: ['inside'], x: 250, y: -200, width: 500, height: 500 };
+    const from = { x: 180, y: 0 }, to = { x: 1000, y: 0 };
+    const via = routeAroundCards([frame], [{ id: 'e', from, to, fromNode: 'source', toNode: 'output' }]).get('e');
+    expect(via).toBeDefined();
+    expect(hits(sampleCableRoute(cableRoute(from, to, 'curved', via)), frame)).toBe(false);
+  });
+  it.each([false, true])('avoids whole expanded frames, including rounded and backward links (backward: %s)', backward => {
+    const frame = { groupId: 'effect', x: 350, y: -1000, width: 350, height: 2000 };
+    const from = { x: backward ? 1000 : 100, y: 0 }, to = { x: backward ? 100 : 1000, y: 150 };
+    const via = routeAroundCards([frame], [{ id: 'e', from, to }]).get('e');
+    expect(via).toBeDefined();
+    for (const style of ['angular', 'curved', 'smart'] as const)
+      expect(hits(sampleCableRoute(cableRoute(from, to, style, via)), frame)).toBe(false);
+  });
+
+  it('allows connections within endpoint groups while avoiding unrelated nested frames', () => {
+    const parent = { groupId: 'parent', x: -100, y: -300, width: 1300, height: 700 };
+    const child = { groupId: 'sibling', x: 400, y: -80, width: 200, height: 250 };
+    const from = { x: 100, y: 0 }, to = { x: 1000, y: 0 };
+    const via = routeAroundCards([parent, child], [{ id: 'e', from, to }]).get('e');
+    expect(via).toBeDefined();
+    expect(hits([from, ...via!, to], child)).toBe(false);
+  });
   it('routes around a card that sits on the direct lane, with orthogonal legs and port-height ends', () => {
     const blocker = { x: 400, y: -60, width: 184, height: 160 };
     const from = { x: 200, y: 20 }, to = { x: 900, y: 20 };

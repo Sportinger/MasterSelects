@@ -25,6 +25,7 @@ import type {
 import { NodeGraphEdges } from './canvas/NodeGraphEdges';
 import { NodeGraphNodeCard } from './canvas/NodeGraphNodeCard';
 import { NodeCableAvoidButton, NodeCableStyleButton } from './canvas/NodeCableStyleButton';
+import { NodeCompactLayoutButton } from './canvas/NodeCompactLayoutButton';
 import { useCableAvoidance } from './canvas/useCableAvoidance';
 import { resolveCableBranches, routeCables } from './canvas/cableBranches';
 import { useNodeCableBranches } from './canvas/useNodeCableBranches';
@@ -167,7 +168,7 @@ export function NodeGraphCanvas({
   const multiSelection = useMemo(() => new Set(selectedNodeIds ?? []), [selectedNodeIds]);
   const soleSelectionRef = useRef<string | null>(null); soleSelectionRef.current = multiSelection.size > 1 ? null : selectedNodeId;
 
-  const { nodes: spacedNodes, placement, commit: commitPlacement, setBranches, toggleLock, arrange, reset: resetPlacement } = useNodeCanvasPlacement(targetGraph, layoutScaleX);
+  const { nodes: spacedNodes, placement, commit: commitPlacement, setBranches, toggleLock, arrange, reset: resetPlacement, toggleCompact } = useNodeCanvasPlacement(targetGraph, layoutScaleX);
   const targetNodes = useMemo(() => (
     spacedNodes.map((node) => !draftLayouts[node.id] ? node : ({
       ...node,
@@ -196,7 +197,7 @@ export function NodeGraphCanvas({
   const resolvedBranches = useMemo(() => resolveCableBranches(graph.edges, placement.branches), [graph.edges, placement.branches]);
   const plugs = useMemo(() => getConnectionPlugs(graph.edges, nodesById, resolvedBranches.edgeRoot), [graph.edges, nodesById, resolvedBranches]);
   const routedCables = useMemo(() => routeCables(plugs, resolvedBranches), [plugs, resolvedBranches]);
-  const shownCables = useCableAvoidance(routedCables, displayNodes, animating || nodeDragging);
+  const shownCables = useCableAvoidance(routedCables, displayNodes, animating || nodeDragging, groupBounds, graph.groups);
   const { hoveredPort, hoveredEdgeId, portHoverEvents } = useNodePortHover(nodesById);
   const graphBounds = useMemo(() => {
     const bounds = annotatedGraphBounds(graph, displayNodes, freezeGroupFrames ? undefined : groupBounds);
@@ -413,6 +414,7 @@ export function NodeGraphCanvas({
               if (event.detail > 0) event.currentTarget.blur();
             }}>Previews</button>
           <NodeCableStyleButton /><NodeCableAvoidButton />
+          <NodeCompactLayoutButton enabled={placement.compactEffects !== false} onToggle={toggleCompact} />
           {selectedEdge && !selectedEdge.readOnly && <button type="button" className="node-workspace-toolbar-button" onClick={disconnectSelectedEdge}>Disconnect</button>}
           <button type="button" className="node-workspace-toolbar-button" onClick={event => { fitGraph(); if (event.detail > 0) event.currentTarget.blur(); }}>Fit</button>
           {!!targetGraph.groups?.length && onSetAllGroupsCollapsed && <button type="button" className="node-workspace-toolbar-button"

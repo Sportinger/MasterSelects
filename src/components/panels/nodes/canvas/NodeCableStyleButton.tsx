@@ -13,7 +13,7 @@ export function NodeCableAvoidButton() {
   const enabled = useSettingsStore(state => state.nodeCableAvoid);
   const setEnabled = useSettingsStore(state => state.setNodeCableAvoid);
   return <button type="button" className="node-workspace-toolbar-button" aria-pressed={enabled}
-    title={enabled ? 'Cables route around cards. Click for direct cables.' : 'Route cables around cards instead of across them'}
+    title={enabled ? 'Cables route around cards and unrelated effect groups. Click for direct cables.' : 'Route cables around cards and unrelated effect groups'}
     onClick={event => { setEnabled(!enabled); if (event.detail > 0) event.currentTarget.blur(); }}>
     Avoid
   </button>;

@@ -248,6 +248,14 @@ budgets. All effect groups, including audio graphs, use the common flow layout. 
 Flock and scene groups use it too. Groups arrange nodes by data flow, recursively measure expanded
 subgroups, and move Clip Output after the effect. Added nodes and changed wiring
 participate in layout. Explicitly dragged internal node positions remain anchored.
+At the top level only, automatic placement wraps effect frames into additional rows
+when this reduces the longest side of the layout, aiming for a compact, roughly square
+arrangement. It uses the measured frame sizes and moves each effect as a whole;
+the node arrangement inside effects and nested groups is unchanged. Source and Clip
+Output remain at the sides. Manual group placement is preserved until **Arrange** or **Reset**.
+The **Compact** toolbar toggle enables or disables this wrapping immediately. Its
+state is saved per graph, supports undo, and is retained by **Arrange** and **Reset**;
+turning it off restores horizontal effect flow without rearranging effect interiors.
 Moving any card keeps the grouped arrangement as shown: the move anchors every
 current group member, so other cards and frames do not re-flow around the moved
 card. New nodes are still placed automatically, and ungrouped downstream stages
@@ -322,14 +330,16 @@ leave and enter horizontally and loop around their ports. Painting, flow signals
 hover and click hit testing, and culling all use the same route. The choice is
 an editor preference that persists across sessions, not project data.
 
-**Avoid** is an independent toggle that routes cables around cards instead of
-across them, in every line style: Curved and Smart detours use rounded corners,
+**Avoid** is an independent toggle that routes cables around cards and unrelated
+expanded group frames, in every line style: Curved and Smart detours use rounded corners,
 Angular keeps hard corners. Routes run on a coarse orthogonal grid with a small
 clearance around each card, prefer few bends, and bundle cables from the same
 output into shared lanes. They are computed in a worker once the layout settles
 (about 0.2 s for 700 cables), never per frame. Cables attached to a card being
-dragged run direct until the drop reroutes them; backward links, links without a
-clear path inside the search window and hidden legacy DOM rendering keep direct
+dragged run direct until the drop reroutes them. Groups containing an endpoint remain
+accessible; unrelated groups, including nested frames, are obstacles. Backward links
+also detour around such groups. Links without a
+clear path inside the search budget and hidden legacy DOM rendering keep direct
 routes. Avoid is an editor preference like the line style.
 
 ### Cable branch points

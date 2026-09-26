@@ -56,7 +56,8 @@ export function cableRoute(from: RoutePoint, to: RoutePoint, style: NodeCableSty
   if (via?.length) {
     const points = [from, ...via, to];
     if (style === 'angular') return { from, segments: points.slice(1).map(point => ({ to: point })) };
-    return roundCorners(points, style === 'curved' ? CURVED_DETOUR_RADIUS : CORNER_RADIUS);
+    // Stay inside the routing clearance instead of cutting across obstacle corners.
+    return roundCorners(points, Math.min(24, style === 'curved' ? CURVED_DETOUR_RADIUS : CORNER_RADIUS));
   }
   if (style === 'angular') { const [start, ...rest] = orthogonalPoints(from, to); return { from: start, segments: rest.map(point => ({ to: point })) }; }
   if (style === 'smart') return roundCorners(orthogonalPoints(from, to));

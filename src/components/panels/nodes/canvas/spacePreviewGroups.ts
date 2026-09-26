@@ -3,15 +3,16 @@ import { getNodeHeight, NODE_WIDTH } from './canvasGeometry';
 import { encloseNodeGroup } from './groupBounds';
 import { spacePreviewBlocks, spacePreviewNodes, type PreviewLayoutBlock } from './spacePreviewNodes';
 import { connectedFlowBlocks, flowGroupLayout } from './flowGroupLayout';
+import { compactFlowColumns } from './compactFlowColumns';
 
-interface GroupBlock extends PreviewLayoutBlock { nodeIds: string[]; group: boolean; growing?: boolean; flow?: boolean; source?: boolean }
+interface GroupBlock extends PreviewLayoutBlock { nodeIds: string[]; group: boolean; growing?: boolean; flow?: boolean; source?: boolean; boundary?: 'input' | 'output' }
 
 /** Pack from the innermost group outward. Siblings must avoid the entire expanded
  * frame, including its empty space, header and nested frames, not just its cards.
  * Folding is projected first, so each pass uses the current proxy or contents.
  */
 export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<string> = new Set(), expanding: ReadonlySet<string> = new Set(),
-  displacements?: Map<string, NodeGraphLayout>, outer?: { reflow: boolean; addedEffects?: ReadonlySet<string>; groupMoves: Map<string, NodeGraphLayout> }): NodeGraphNode[] {
+  displacements?: Map<string, NodeGraphLayout>, outer?: { reflow: boolean; compactEffects?: boolean; addedEffects?: ReadonlySet<string>; groupMoves: Map<string, NodeGraphLayout> }): NodeGraphNode[] {
   if (!graph.groups?.length && !fixedIds.size && !outer?.reflow) return spacePreviewNodes(graph.nodes);
   const nodes = new Map(graph.nodes.map(node => [node.id, node]));
   const groups = new Map((graph.groups ?? []).map(group => [group.id, group]));
@@ -29,10 +30,11 @@ export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<strin
     });
     const nestedIds = new Set(nested.flatMap(block => block.nodeIds));
     const memberIds = [...new Set([...listedIds, ...nestedIds])];
-    const blocks: GroupBlock[] = [...nested, ...memberIds.filter(nodeId => !nestedIds.has(nodeId)).map(nodeId => {
+    const blocks: GroupBlock[] = [...nested, ...memberIds.filter(nodeId => !nestedIds.has(nodeId)).map((nodeId): GroupBlock => {
       const node = nodes.get(nodeId)!;
       return { id: `node:${nodeId}`, ...node.layout, width: NODE_WIDTH, height: getNodeHeight(node), nodeIds: [nodeId], group: false,
-        source: !node.inputs.length };
+        source: !node.inputs.length,
+        boundary: node.binding?.kind === 'clip-source' ? 'input' : node.binding?.kind === 'clip-output' ? 'output' : undefined };
     })];
     const fixed = new Set(blocks.filter(block => block.nodeIds.some(nodeId => fixedIds.has(nodeId))).map(block => block.id));
     const arrange = flow || (!id && (outer?.addedEffects?.size || graph.groups?.some(group => group.layoutMode === 'flow')));
@@ -44,7 +46,8 @@ export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<strin
     if (outer?.reflow) for (const blockId of outerFlow) fixed.delete(blockId);
     const source = !id ? blocks.find(block => block.nodeIds.some(nodeId => nodes.get(nodeId)?.binding?.kind === 'clip-source')) : undefined;
     const flowing = !id ? blocks.filter(block => outerFlow.has(block.id)) : blocks;
-    const flowPositions = new Map((arrange ? flowGroupLayout(flowing, graph.edges, fixed, source) : flowing).map(block => [block.id, block]));
+    const flowLayout = arrange ? flowGroupLayout(flowing, graph.edges, fixed, source) : flowing;
+    const flowPositions = new Map((!id && arrange && outer?.compactEffects !== false ? compactFlowColumns(flowLayout, fixed) : flowLayout).map(block => [block.id, block]));
     const arranged = blocks.map(block => flowPositions.get(block.id) ?? block);
     const growing = arranged.filter(block => block.growing);
     const displaced = new Set<string>();
