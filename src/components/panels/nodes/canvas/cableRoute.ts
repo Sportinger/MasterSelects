@@ -50,11 +50,27 @@ function roundCorners(points: RoutePoint[], cornerRadius = CORNER_RADIUS): Cable
   return { from: points[0], segments };
 }
 
+/** Remove repeated points and retraced straight runs before rounding. This only
+ * shortens segments already on the route; it cannot cut across an obstacle. */
+function simplifyWaypoints(points: RoutePoint[]): RoutePoint[] {
+  const result: RoutePoint[] = [];
+  for (const point of points) {
+    if (result.at(-1)?.x === point.x && result.at(-1)?.y === point.y) continue;
+    while (result.length >= 2) {
+      const a = result[result.length - 2], b = result[result.length - 1];
+      if (!((a.x === b.x && b.x === point.x) || (a.y === b.y && b.y === point.y))) break;
+      result.pop();
+    }
+    if (result.at(-1)?.x !== point.x || result.at(-1)?.y !== point.y) result.push(point);
+  }
+  return result;
+}
+
 /** The single description of a cable path shared by painting, hit testing, bounds and flow signals. */
 export function cableRoute(from: RoutePoint, to: RoutePoint, style: NodeCableStyle = 'curved', via?: readonly RoutePoint[]): CableRoute {
   // Obstacle-avoiding waypoints: each style keeps its character along the detour.
   if (via?.length) {
-    const points = [from, ...via, to];
+    const points = simplifyWaypoints([from, ...via, to]);
     if (style === 'angular') return { from, segments: points.slice(1).map(point => ({ to: point })) };
     // Stay inside the routing clearance instead of cutting across obstacle corners.
     return roundCorners(points, Math.min(24, style === 'curved' ? CURVED_DETOUR_RADIUS : CORNER_RADIUS));

@@ -332,7 +332,10 @@ appearance and interaction inside that group.
 
 Short forward connections use the space between their ports without a backward
 loop. Obstacle routing may approach the final horizontal input stub vertically
-without taking an extra lap to face right beforehand.
+without taking an extra lap to face right beforehand. **Avoid** first checks simple
+lanes against card and group clearance before searching the grid. Backward links
+also participate in obstacle routing. Repeated waypoints and retraced straight
+runs are removed before corners are rounded.
 
 The toolbar's **Lines** button cycles the cable routing: **Curved** (the default
 bezier), **Angular** (orthogonal lanes with hard corners) and **Smart** (the same

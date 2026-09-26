@@ -148,6 +148,35 @@ function waypoints(cells: Array<[number, number]>, from: AvoidPoint, to: AvoidPo
   return points;
 }
 
+/** Prefer a clear port-to-port lane before grid snapping or shared lanes can
+ * introduce a dogleg. Check full segments against the real clearance rectangles. */
+function directLane(from: AvoidPoint, to: AvoidPoint, obstacles: readonly AvoidRect[]): AvoidPoint[] | undefined {
+  const clear = (a: AvoidPoint, b: AvoidPoint) => !obstacles.some(rect => {
+    const margin = rect.groupId ? GROUP_MARGIN : MARGIN;
+    return Math.max(a.x, b.x) > rect.x - margin && Math.min(a.x, b.x) < rect.x + rect.width + margin
+      && Math.max(a.y, b.y) > rect.y - margin && Math.min(a.y, b.y) < rect.y + rect.height + margin;
+  });
+  const candidates: AvoidPoint[][] = [];
+  if (to.x > from.x) {
+    // Shrink the horizontal stubs to the available gap; never overshoot an input.
+    const stub = Math.min(STUB, (to.x - from.x) / 2);
+    for (const x of [(from.x + to.x) / 2, to.x - stub, from.x + stub]) {
+      candidates.push([{ x, y: from.y }, { x, y: to.y }]);
+    }
+  } else if (from.y !== to.y) {
+    // A backward link needs a return lane, but not a drop below both ports when
+    // the vertical space between them is already clear of cards.
+    const y = (from.y + to.y) / 2;
+    candidates.push([{ x: from.x + STUB, y: from.y }, { x: from.x + STUB, y },
+      { x: to.x - STUB, y }, { x: to.x - STUB, y: to.y }]);
+  }
+  for (const via of candidates) {
+    const points = [from, ...via, to];
+    if (points.slice(1).every((point, index) => clear(points[index], point))) return via;
+  }
+  return undefined;
+}
+
 /** Waypoints (between the ports, excluding them) for every cable that found a clear path. */
 export function routeAroundCards(obstacles: readonly AvoidRect[], cables: readonly AvoidCable[]): Map<string, AvoidPoint[]> {
   const cards = obstacles.filter(rect => !rect.groupId), groups = obstacles.filter(rect => rect.groupId);
@@ -162,7 +191,8 @@ export function routeAroundCards(obstacles: readonly AvoidRect[], cables: readon
       ? rect.nodeIds.includes(nodeId)
       : point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height;
     const blockingGroups = groups.filter(rect => !contains(rect, cable.from, cable.fromNode) && !contains(rect, cable.to, cable.toNode));
-    if (cable.to.x - cable.from.x < STUB * 3 && !blockingGroups.length) continue;
+    const direct = directLane(cable.from, cable.to, [...cards, ...blockingGroups]);
+    if (direct) { routes.set(cable.id, direct); continue; }
     const key = JSON.stringify(blockingGroups.map(rect => rect.groupId));
     let groupBlocked = grids.get(key);
     if (!groupBlocked) { groupBlocked = obstacleGrid(blockingGroups); grids.set(key, groupBlocked); }
