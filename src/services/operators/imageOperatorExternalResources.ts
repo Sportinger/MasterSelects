@@ -6,4 +6,6 @@ export interface ImageOperatorMemoryWindowOptions {
 export interface ImageOperatorMemoryWindowResource { id: string; kind: 'memory-window'; options: ImageOperatorMemoryWindowOptions }
 export interface ImageOperatorInputHistoryResource { id: string; kind: 'input-history'; part: 'atlas' | 'ages'; owner?: string }
 export interface ImageOperatorSourceMotionResource { id: string; kind: 'source-motion'; part: 'atlas' | 'ages'; owner: string; lookback: number; timeFactor: number; stabilize?: boolean; required?: boolean; denseInverseSearch?: boolean }
-export type ImageOperatorExternalResource = ImageOperatorGlyphAtlasResource | ImageOperatorMemoryWindowResource | ImageOperatorInputHistoryResource | ImageOperatorSourceMotionResource;
+/** Previous result of one Temporal Smooth node, owned by the effect's history scope. */
+export interface ImageOperatorTemporalHistoryResource { id: string; kind: 'temporal-history'; owner: string }
+export type ImageOperatorExternalResource = ImageOperatorGlyphAtlasResource | ImageOperatorMemoryWindowResource | ImageOperatorInputHistoryResource | ImageOperatorSourceMotionResource | ImageOperatorTemporalHistoryResource;

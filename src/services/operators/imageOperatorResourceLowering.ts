@@ -115,6 +115,15 @@ export function createImageOperatorResourceLowering(options: {
         inputs: [options.visitSource(current, 'pixel'), options.visitSource(current, 'depth'), options.visitSource(current, 'floatMode'), options.visitSource(current, 'floatGain')],
         value: memorySlot(linked.node) });
     }
+    if (current.operator === 'image.temporal-history') {
+      const resourceId = current.bindings.resource;
+      if (typeof resourceId !== 'string' || !resourceId.startsWith('temporal-history:')) throw new Error(`Temporal history ${current.id} has no resource id.`);
+      if (!options.state.externalResources.some(resource => resource.id === resourceId)) {
+        options.state.externalResources.push({ id: resourceId, kind: 'temporal-history', owner: resourceId.slice('temporal-history:'.length) });
+      }
+      return options.emit({ nodeId: current.id, operation: options.activePixelLoad() ? 'resource-load-input' : 'resource-input',
+        type: 'image', inputs: [], value: resourceSlot(resourceId, 'hardware-linear-clamp', 'Image') });
+    }
     if (current.operator === 'image.resource-input' || current.operator === 'image.named-input' || current.operator === 'image.frame-history') {
       const resourceId = current.operator === 'image.frame-history' ? IMAGE_FRAME_HISTORY_RESOURCE_ID : current.bindings.resource;
       if (typeof resourceId !== 'string') throw new Error(`Image resource input ${current.id} has no resource id.`);

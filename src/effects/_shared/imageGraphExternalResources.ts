@@ -1,5 +1,16 @@
 import type { ImageOperatorPlan } from '../../services/operators/imageOperatorGraph';
 import type { ImageOperatorInputHistoryResource, ImageOperatorMemoryWindowResource, ImageOperatorSourceMotionResource } from '../../services/operators/imageOperatorExternalResources';
+
+const emptyHistories = new WeakMap<GPUDevice, GPUTextureView>();
+/** Transparent history: Temporal Smooth then passes the current frame through. */
+function emptyHistory(device: GPUDevice): GPUTextureView {
+  let view = emptyHistories.get(device);
+  if (!view) {
+    view = device.createTexture({ label: 'temporal-history-empty', size: [1, 1], format: 'rgba16float', usage: GPUTextureUsage.TEXTURE_BINDING }).createView();
+    emptyHistories.set(device, view);
+  }
+  return view;
+}
 import { getGlyphAtlas, glyphAtlasCacheKey } from './glyphAtlas';
 
 export interface ResolvedImageGraphExternalResource {
@@ -29,13 +40,14 @@ export function resolveImageGraphExternalResources(
 
   for (const descriptor of plan.externalResources ?? []) {
     if (!descriptor.id) throw new Error('Image graph external resource requires a non-empty id.');
-    if (descriptor.kind !== 'glyph-atlas' && descriptor.kind !== 'memory-window' && descriptor.kind !== 'input-history' && descriptor.kind !== 'source-motion') {
+    if (descriptor.kind !== 'glyph-atlas' && descriptor.kind !== 'memory-window' && descriptor.kind !== 'input-history' && descriptor.kind !== 'source-motion' && descriptor.kind !== 'temporal-history') {
       throw new Error(`Unsupported image graph external resource kind: ${String((descriptor as { kind?: unknown }).kind)}.`);
     }
     if (descriptor.kind === 'memory-window' && !context.resolveMemoryWindow) {
       throw new Error('Memory window resources require an explicit runtime resolver.');
     }
-    const identity = descriptor.kind === 'source-motion' ? JSON.stringify(descriptor) : descriptor.kind === 'input-history' ? `input-history:${descriptor.part}` : descriptor.kind === 'glyph-atlas'
+    const identity = descriptor.kind === 'source-motion' ? JSON.stringify(descriptor) : descriptor.kind === 'input-history' ? `input-history:${descriptor.part}`
+      : descriptor.kind === 'temporal-history' ? `temporal-history:${descriptor.owner}` : descriptor.kind === 'glyph-atlas'
       ? `glyph-atlas:${glyphAtlasCacheKey(descriptor.options)}`
       : `memory-window:${JSON.stringify(Object.entries(descriptor.options).toSorted(([a], [b]) => a.localeCompare(b)))}`;
     const previous = identities.get(descriptor.id);
@@ -55,6 +67,11 @@ export function resolveImageGraphExternalResources(
     if (descriptor.kind === 'input-history') {
       if (!context.resolveInputHistory) throw new Error('Input history requires a runtime resolver.');
       resolved.set(descriptor.id, context.resolveInputHistory(descriptor));
+      continue;
+    }
+    if (descriptor.kind === 'temporal-history') {
+      // Runtime owners replace this with the node's committed history.
+      resolved.set(descriptor.id, { view: emptyHistory(device), identity: 'temporal-history:empty' });
       continue;
     }
     if (descriptor.kind === 'memory-window') {

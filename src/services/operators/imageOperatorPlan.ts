@@ -4,6 +4,7 @@ import type { EffectOperatorGraph, OperatorEdge } from '../../types/operatorGrap
 import type { ImageOperatorPlan, ImageOperatorPreviewTarget } from './imageOperatorGraph';
 import { materializeMotionImages } from './motionImagePasses';
 import { bypassIdentityImageFilters } from './imageFilterShortcuts';
+import { expandTemporalSmoothing } from './temporalSmoothPasses';
 
 type CompileSingle = (graph: EffectOperatorGraph, params: Record<string, unknown>, preview?: ImageOperatorPreviewTarget) => ImageOperatorPlan;
 interface Cut { nodeId: string; producerNodeId: string; producerPort: string; resourceId: string; passId: string; edgeId?: string; maxEdge?: number }
@@ -16,7 +17,7 @@ export function compileImageOperatorPassPlan(graph: EffectOperatorGraph, params:
     graph = applyOperatorGroupBypasses(graph);
     graph = { ...graph, groups: graph.groups?.map(group => ({ ...group, bypassed: false })) };
   }
-  graph = materializeMotionImages(bypassIdentityImageFilters(graph, params, context), params);
+  graph = expandTemporalSmoothing(materializeMotionImages(bypassIdentityImageFilters(graph, params, context), params));
   if (preview?.direction === 'output' && preview.portId === 'image'
     && graph.nodes.some(node => node.id === `__motion-field:${preview!.nodeId}`)) {
     preview = { ...preview, nodeId: `__motion-field:${preview.nodeId}` };

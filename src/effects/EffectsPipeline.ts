@@ -37,6 +37,7 @@ import { effectOperatorParams } from '../services/operators/effectGraphOwner';
 import { prepareImageEffect } from '../services/operators/imageEffectRuntimePlan';
 import { compileComputeImageGraph } from '../services/operators/computeImageGraph';
 import { ImageGraphPassRuntime } from './ImageGraphPassRuntime';
+import { TemporalSmoothHistory } from './TemporalSmoothHistory';
 import {
   transitionFrameHistory,
   type FrameHistoryDiscontinuity,
@@ -98,6 +99,7 @@ export class EffectsPipeline {
   private computeRuntime: ComputeEffectRuntime;
   private splitComparePipeline: SplitComparePipeline;
   private imageGraphPassRuntime: ImageGraphPassRuntime;
+  private temporalSmoothing: TemporalSmoothHistory;
   private initialized = false;
   private denseTerrain?: DenseTerrainPipeline;
   private slitScanOutput = new SlitScanOutputProcessing();
@@ -111,6 +113,7 @@ export class EffectsPipeline {
     this.splitComparePipeline = new SplitComparePipeline(device);
     this.byteTextures = new ByteTextureCache(device);
     this.imageGraphPassRuntime = new ImageGraphPassRuntime(device);
+    this.temporalSmoothing = new TemporalSmoothHistory(device);
   }
 
   /**
@@ -127,16 +130,12 @@ export class EffectsPipeline {
   private ensureEffectPipeline(id: string, effect: FullscreenEffectDefinition, compiledGraph = false): boolean {
     return this.pipelineCache.ensure(id, effect, compiledGraph);
   }
-  /**
-   * Get pipeline for an effect type
-   */
+  /** Get pipeline for an effect type */
   getEffectPipeline(effectType: string): GPURenderPipeline | undefined {
     return this.pipelineCache.getPipeline(effectType);
   }
 
-  /**
-   * Get bind group layout for an effect type
-   */
+  /** Get bind group layout for an effect type */
   getEffectBindGroupLayout(effectType: string): GPUBindGroupLayout | undefined {
     return this.pipelineCache.getBindGroupLayout(effectType);
   }
@@ -416,6 +415,8 @@ export class EffectsPipeline {
         view: feedbackState.committedView,
         identity: `effect-history:${feedbackState.committedRevision}`,
       });
+      if (imagePlan?.externalResources?.some(resource => resource.kind === 'temporal-history')) for (const [id, resource] of this.temporalSmoothing
+        .prepare(commandEncoder, imagePlan, effect.id, outputWidth, outputHeight, timelineTimeSeconds, frameHistory)) imageExternalResources?.set(id, resource);
       const imagePassBatch = imagePlan && (imagePlan.passes?.length || imagePlan.resourceInputs?.length) ? this.imageGraphPassRuntime.createBatch() : undefined;
       if (imageGraphEffect) captureImageOperatorPreviews({
         effect,
@@ -447,6 +448,7 @@ export class EffectsPipeline {
             height: outputHeight, timelineTimeSeconds, plan: imagePlan, outputView: effectOutput, outputFormat: 'rgba8unorm',
             instanceId: JSON.stringify([frameHistory?.scopeId ?? 'legacy', effect.id]), batch: imagePassBatch,
             externalResources: imageExternalResources });
+          if (imagePassBatch) this.temporalSmoothing.commit(commandEncoder, imagePlan, effect.id, frameHistory?.scopeId, this.imageGraphPassRuntime, imagePassBatch);
           effectInput = effectOutput;
           if (effect.type === 'slit-scan' && preparedImage && imageExternalResources) {
             effectInput = this.slitScanOutput.process({ effect, graph: preparedImage.graph, device: this.device, encoder: commandEncoder,
@@ -680,20 +682,16 @@ export class EffectsPipeline {
     this.pipelineCache.clear();
     this.computeRuntime.clear();
     this.splitComparePipeline.destroy();
-    this.imageGraphPassRuntime.dispose();
+    this.imageGraphPassRuntime.dispose(); this.temporalSmoothing.destroy();
     this.initialized = false;
   }
 
-  /**
-   * Check if pipeline is initialized
-   */
+  /** Check if pipeline is initialized */
   isInitialized(): boolean {
     return this.initialized;
   }
 
-  /**
-   * Get number of registered effect pipelines
-   */
+  /** Get number of registered effect pipelines */
   getPipelineCount(): number {
     return this.pipelineCache.size;
   }

@@ -209,6 +209,28 @@ primitive patterns can adopt the same definitions across image effects.
 The numeric Value family exposes Float and Integer variants in the inspector;
 Integer truncates toward zero and keeps the number-port contract.
 
+## Temporal smoothing
+
+**Temporal Smooth** (`image.temporal-smooth` for images,
+`image.temporal-smooth.scalar` for per-pixel values such as key masks) blends each
+frame with the node's own previous result: `mix(current, previous, amount)`. Amount
+(0-0.98, default 0.6) is the previous result's share. Higher values calm flicker
+more but follow motion more slowly. A connected Amount input overrides the
+parameter, and the parameter can be bound and keyframed.
+
+Typical use: compressed phone video changes its artifacts at every codec keyframe
+(often once per second), which makes a hard key mask jump. Place the value variant
+between the mask and its threshold.
+
+The compiler lowers each node to ordinary mix and conversion operators plus a
+materialized `rgba16float` result. `TemporalSmoothHistory` in the effect pipeline
+keeps that result per node, effect and history scope. It follows the frame-history
+policy: advance on the next frame, hold on a re-render of the same frame, and
+restart from the current frame after seeks, loops, export start, graph edits or
+reverse steps. Cleared history is transparent and contributes nothing. Contexts
+without a history owner, such as other preview producers, pass the current frame
+through. Node previews read the committed history but never advance it.
+
 ## Face and depth processing
 
 `source.face-landmarks` and `source.saved-depth` are executable references to
