@@ -111,6 +111,37 @@ discarded and surviving source pixels are opaque before clip opacity. This does
 not implement order-independent translucent self-overlap. The back face carries
 the same image and is not a reconstruction of an object's hidden side.
 
+## Space-time slice (observed depth)
+
+Choose **Space-time slice (observed depth)** in **3D geometry**. First bake a
+source depth video using **Tracking → AI Depth Map**, select it in the Slit Scan
+inspector and bake a source window of up to eight seconds. This reuses two shared
+source-frame leases through the existing bounded CPU analysis adapter. It stores
+up to 64,000 colored observations (40 columns, at most 40 rows, 5 time samples/s)
+as a versioned compact value in effect parameters, including source provenance.
+Save/load and undo retain the bake; no video or GPU handles enter project data.
+
+Each timestamp supplies its own observed relative depth and source color. The
+representation is a **2.5D approximation for a fixed source camera**, not metric
+3D reconstruction. Depth-video normalization can vary over time. Hidden surfaces
+remain absent, and disconnected observations are never joined into a closed mesh.
+The baked source colors precede clip effects; downstream projected effects still
+operate on the rendered points. Existing time-map/color controls do not recolor
+these baked observations. Changing the depth video requires rebaking.
+
+**Space axis**, **Tilt**, **Length / second**, **Slice position** and **Slice
+thickness** rotate `(axis coordinate, scaled source time)` and keep only a slab
+around transformed time. Source time is relative to the window midpoint. At 0°
+the slab selects time; at 90° it selects a spatial plane and puts time along the
+chosen spatial axis. Intermediate angles mix them. Camera orbit happens after
+this operation and does not change the cut. **Relative depth** controls the
+nonmetric depth scale; **Point size** controls the rendered splats. Thin cuts may
+fall between the sampled observations and legitimately show gaps.
+
+Moving-camera reconstruction needs additional camera poses and depth registration;
+this version does not perform a COLMAP solve. Source mismatch and missing bakes
+are reported; export rejects missing observations instead of substituting a mesh.
+
 ## Scene and export
 
 The **3D geometry** switch appears at the top of the Slit Scan inspector.

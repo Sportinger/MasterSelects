@@ -5,7 +5,7 @@ import { temporalSourceTime, type TemporalClipSource } from '../temporalClipSour
 /** Persisted values only. The reference projection is fixed in object-local space. */
 export interface SlitScanGeometrySettings {
   version: 1;
-  mode: '2d' | 'time-surface' | 'motion-band' | 'motion-surface';
+  mode: '2d' | 'time-surface' | 'motion-band' | 'motion-surface' | 'space-time';
   baseSamplerId: string;
   reference: {
     projection: 'perspective' | 'orthographic';

@@ -10,9 +10,15 @@ import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNu
 import { DepthEstimationControls } from './DepthEstimationControls';
 import { KeyframeToggle } from './shared';
 import { ParameterSourceNumberRow } from './ParameterSourceNumberRow';
+import { useSyncExternalStore } from 'react';
+import { useTrackingStore } from '../../../stores/trackingStore';
+import { getTemporalStatus, subscribeTemporalStatus } from '../../../effects/time/temporalResourcePreparation';
 
 export function SlitScanTimeFieldControls({ params, onChange, clipId, effectInstanceId }: Omit<EffectControlProps, 'effectId'>) {
   const files = useMediaStore(state => state.files);
+  const tracks = useTrackingStore(state => state.assets);
+  const clip = useTimelineStore(state => state.clips.find(item => item.id === clipId));
+  const shapeStatus = useSyncExternalStore(subscribeTemporalStatus, () => getTemporalStatus(`${effectInstanceId}:shape`));
   const masks = useTimelineStore(state => state.clips.find(clip => clip.id === clipId)?.masks);
   const setPropertyValue = useTimelineStore(state => state.setPropertyValue);
   const source = String(params.mapSource ?? 'external');
@@ -49,6 +55,14 @@ export function SlitScanTimeFieldControls({ params, onChange, clipId, effectInst
         options={[{ value: '', label: 'Apply preset…', disabled: true }, ...slitScanTimeFieldPresets.map(({ value, label }) => ({ value, label }))]}
         onChange={value => { const preset = slitScanTimeFieldPreset(value); if (preset) onChange({ ...params, ...preset }); }} /></ResolveInspectorRow>
       {row('mapSource')}
+      {source === 'shape' && <>
+        <ResolveInspectorRow label="Tracked selection"><InspectorSelect ariaLabel="Shape target tracking" value={String(params.shapeTrackId ?? '')}
+          options={[{ value: '', label: 'Select source tracking…' }, ...tracks.filter(item => item.sourceMediaId === (clip?.source?.mediaFileId ?? clip?.mediaFileId))
+            .map(item => ({ value: item.id, label: item.name }))]} onChange={value => onChange({ ...params, shapeTrackId: value })} /></ResolveInspectorRow>
+        {['shapeAnchorX', 'shapeAnchorY', 'shapeStretch', 'shapeCoherence'].map(row)}
+        <p className="tracking-panel-status">Use a tracked region from Tracking. Straight 2D motion; anchor stays fixed, surrounding source times approximate the target stretch. Outside the stretched selection keeps current time. Disable object stabilization.</p>
+        {shapeStatus && <p className="tracking-panel-status" role="status">{shapeStatus}</p>}
+      </>}
       {source === 'external' && <ResolveInspectorRow label="Image / video"><InspectorSelect ariaLabel="Slit Scan time map source"
         value={String(params.mapMediaId ?? '')} options={[{ value: '', label: 'Profile only' },
           ...(params.mapMediaId && !files.some(file => file.id === params.mapMediaId) ? [{ value: String(params.mapMediaId), label: 'Missing media', disabled: true }] : []),

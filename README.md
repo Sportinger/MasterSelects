@@ -26,6 +26,7 @@ Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in on
 [Time Stack](docs/Features/Time-Stack.md) blends up to 32 delayed instances of a video in an editable node group, with shared source-frame sampling, all 37 timeline blend modes, and mouse-wheel control.
 
 [Slit Scan](docs/Features/Effects.md#slit-scan) can match its time factor to the source frame rate and sample count, and optionally compensate motion between decoded frames in resident GPU history with adjustable flow strength.
+Its [space-time slice](docs/Features/Slit-Scan-3D.md#space-time-slice-observed-depth) tilts and cuts baked color/depth observations from a fixed camera. A tracked 2D shape target can also solve a time field from an anchor and target stretch, with recorded-motion fit errors shown in the inspector.
 
 | Detail view | Full graph |
 | --- | --- |

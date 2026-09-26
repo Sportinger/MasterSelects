@@ -1,5 +1,6 @@
 import { withSlitScanMotionTimeField } from './slitScanMotionTimeFieldGraph';
 import { withSlitScanEdgeTimeField } from './slitScanEdgeTimeFieldGraph';
+import { withSlitScanShapeTimeField } from './slitScanShapeTimeFieldGraph';
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 
 export const SLIT_SCAN_TIME_MASK_RESOURCE = 'slit-scan:time-mask';
@@ -7,7 +8,7 @@ type Ref = { node: string; port: string };
 
 /** Extend only the known map output; preserve authored profile and legacy channel processing. */
 export function withSlitScanTimeFields(graph: EffectOperatorGraph): EffectOperatorGraph {
-  return withSlitScanEdgeTimeField(withSlitScanMotionTimeField(withBaseTimeFields(graph)));
+  return withSlitScanShapeTimeField(withSlitScanEdgeTimeField(withSlitScanMotionTimeField(withBaseTimeFields(graph))));
 }
 
 function withBaseTimeFields(graph: EffectOperatorGraph): EffectOperatorGraph {

@@ -1,5 +1,6 @@
 import type { EffectParam } from '../../types';
 import { slitScanGeometryParams } from './geometryParameters';
+import { spaceTimeParams } from './spaceTimeParameters';
 import { MAX_HYBRID_TEMPORAL_SAMPLES } from '../sourceTemporalLimits';
 import { slitScanTimeFieldParams, timeFieldChannelOptions } from './timeFieldParameters';
 
@@ -8,6 +9,7 @@ const number = (label: string, value: number, min: number, max: number, step: nu
 
 export const slitScanParams: Record<string, EffectParam> = {
   ...slitScanGeometryParams,
+  ...spaceTimeParams,
   ...slitScanTimeFieldParams,
   temporalStorage: { type: 'select', label: 'Frame storage', default: 'resident', group: 'Sampling', options: [
     { value: 'cache', label: 'GPU cache' }, { value: 'hybrid', label: 'Hybrid · bounded GPU memory' },

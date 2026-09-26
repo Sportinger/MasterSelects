@@ -185,7 +185,7 @@ export function collectScene3DLayers(
       sourceMasks: layer.masks,
     };
     const slitGeometry = layer.effects?.find(e => e.enabled && e.type === 'slit-scan'
-      && ['time-surface', 'motion-band', 'motion-surface'].includes(String(e.params.geometryMode)));
+      && ['time-surface', 'motion-band', 'motion-surface', 'space-time'].includes(String(e.params.geometryMode)));
     if (slitGeometry) {
       result.push({ ...base, kind: 'plane', slitScanGeometry: slitGeometry,
         layerSpaceEffects: layer.effects.filter((effect, index) => effect.enabled && index <= layer.effects.indexOf(slitGeometry)),

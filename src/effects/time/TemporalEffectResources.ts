@@ -29,6 +29,7 @@ import { adaptiveTemporalPreview } from './adaptiveTemporalPreview';
 import { TemporalPreviewFrames } from './TemporalPreviewFrames';
 import { SourceMotionHistory } from './SourceMotionHistory';
 import type { ImageOperatorExternalResource } from '../../services/operators/imageOperatorExternalResources';
+import { ShapeTimeRuntime, SHAPE_TIME_RESOURCE } from './slit-scan/ShapeTimeRuntime';
 
 interface ResolvedTemporalHistory {
   atlas: ResolvedImageGraphExternalResource;
@@ -51,6 +52,7 @@ export class TemporalEffectResources {
   private onReady?: () => void;
   readonly previewFrames: TemporalPreviewFrames;
   private motionHistory?: SourceMotionHistory;
+  private shapeTime?: ShapeTimeRuntime;
   constructor(device: GPUDevice, onReady?: () => void) {
     this.masks = new SlitScanMaskRuntime(device);
     this.maps = new TimeMapMediaRuntime(device, onReady);
@@ -216,6 +218,17 @@ export class TemporalEffectResources {
     source?: TemporalClipSource, input?: { view: GPUTextureView; width: number; height: number }, descriptors: readonly ImageOperatorExternalResource[] = [],
     graph?: EffectOperatorGraph) {
     const key = JSON.stringify([scopeId, effect.id]);
+    if (requested.includes(SHAPE_TIME_RESOURCE)) {
+      if (effect.params.mapSource === 'shape' && Number(effect.params.mapAmount ?? 0) > 0) {
+        try {
+          this.shapeTime ??= new ShapeTimeRuntime(this.device);
+          resources.set(SHAPE_TIME_RESOURCE, this.shapeTime.resolve(key, effect.id, effect.params, source, encoder));
+        } catch (error) {
+          setTemporalStatus(`${effect.id}:shape`, error instanceof Error ? error.message : String(error));
+          throw error;
+        }
+      } else resources.set(SHAPE_TIME_RESOURCE, this.masks.resolve('empty-shape', '', undefined, width, height, encoder));
+    }
     if (requested.includes(SLIT_SCAN_TIME_MAP_RESOURCE)) {
       const mediaId = effect.params.mapMediaId;
       let map: ResolvedImageGraphExternalResource | undefined;
@@ -272,5 +285,5 @@ export class TemporalEffectResources {
   }
 
   destroy() { this.timeStacks.destroy(); this.motionHistory?.destroy(); this.native.destroy(); this.hybrid?.destroy(); this.resident?.destroy(); this.interactiveResident?.destroy();
-    this.previewFrames.destroy(); this.residentFallbacks.clear(); this.maps.destroy(); this.masks.destroy(); }
+    this.previewFrames.destroy(); this.residentFallbacks.clear(); this.maps.destroy(); this.masks.destroy(); this.shapeTime?.destroy(); }
 }

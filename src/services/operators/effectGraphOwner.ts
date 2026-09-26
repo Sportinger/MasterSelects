@@ -4,6 +4,7 @@ import { SLIT_SCAN_PROTECTION_RESOURCE } from './slitScanProtectionGraph';
 import { SLIT_SCAN_TIME_MAP_RESOURCE } from './slitScanTimeMapGraph';
 import { createDefaultSlitScanGraph } from './slitScanEffectGraph';
 import { SLIT_SCAN_TIME_MASK_RESOURCE } from './slitScanTimeFieldsGraph';
+import { SHAPE_TIME_RESOURCE } from './slitScanShapeTimeFieldGraph';
 import { composeSplatGraph } from './splatGraphComposition';
 import { SPLAT_SCALAR_OPERATORS } from './splatScalarInputs';
 import { defaultSplatGraph, compileSplatGraph } from './splatGraph';
@@ -97,7 +98,7 @@ export function effectOperatorCompileContext(effect: Pick<EffectGraphOwner, 'typ
   const definition = getEffect(effect.type);
   const context: ImageOperatorCompileContext = {
     parameterSchema: definition?.params,
-    ...(effect.type === 'slit-scan' ? { namedImages: [SLIT_SCAN_PROTECTION_RESOURCE, SLIT_SCAN_TIME_MAP_RESOURCE, SLIT_SCAN_TIME_MASK_RESOURCE]
+    ...(effect.type === 'slit-scan' ? { namedImages: [SLIT_SCAN_PROTECTION_RESOURCE, SLIT_SCAN_TIME_MAP_RESOURCE, SLIT_SCAN_TIME_MASK_RESOURCE, SHAPE_TIME_RESOURCE]
       .map(id => ({ id, sampling: 'hardware-linear-clamp' as const })) } : {}),
     ...(definition && 'usesInputHistory' in definition && definition.usesInputHistory ? { allowInputHistory: true } : {}),
     ...(definition && 'usesFeedback' in definition && definition.usesFeedback ? { allowFrameHistory: true } : {}),

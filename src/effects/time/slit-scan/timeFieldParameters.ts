@@ -23,7 +23,13 @@ export const slitScanTimeFieldParams: Record<string, EffectParam> = {
     { value: 'external', label: 'External image / video' }, { value: 'input', label: 'Effect input' },
     { value: 'noise', label: 'Noise' }, { value: 'mask', label: 'Clip mask' }, { value: 'motion', label: 'Source motion' },
     { value: 'edges', label: 'Edge strength (Sobel)' },
+    { value: 'shape', label: 'Shape target (tracked 2D motion)' },
   ] },
+  shapeTrackId: { type: 'text', label: 'Shape tracking', default: '', hidden: true },
+  shapeAnchorX: number('Anchor X', .5, 0, 1, .01, 'Shape target'),
+  shapeAnchorY: number('Anchor Y', .5, 0, 1, .01, 'Shape target'),
+  shapeStretch: number('Target stretch (×)', 1, .1, 8, .01, 'Shape target'),
+  shapeCoherence: number('Time coherence', .25, 0, 1, .01, 'Shape target'),
   mapMotionMode: { type: 'select', label: 'Motion value', default: 'magnitude', group: 'Motion field', options: [
     { value: 'magnitude', label: 'Magnitude' }, { value: 'direction', label: 'Directed velocity' },
   ] },

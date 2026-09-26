@@ -15,9 +15,10 @@ import { SlitScanColorPyramid } from '../passes/SlitScanColorPyramid';
 import type { SlitScanGeometryFrame } from '../../../effects/time/slit-scan/geometryContract';
 import { SlitScanProjectedEffects } from '../passes/SlitScanProjectedEffects';
 import type { LayerSpaceEffectContext } from './LayerSpaceEffectRenderer';
+import { SpaceTimeGeometry } from '../../../effects/time/slit-scan/SpaceTimeGeometry';
 
 interface SurfaceOwner { device: GPUDevice; query: GeometryQueryOutput; motion: GeometryQueryOutput; age: GeometryAgeField;
-  band: BandTrajectoryField; surface?: MotionSurfaceField; color: SlitScanColorPyramid; lastDraw?: SlitScanSurfaceDraw; lastFrame?: SlitScanGeometryFrame; target: string }
+  band: BandTrajectoryField; surface?: MotionSurfaceField; spaceTime?: SpaceTimeGeometry; color: SlitScanColorPyramid; lastDraw?: SlitScanSurfaceDraw; lastFrame?: SlitScanGeometryFrame; target: string }
 
 /** Device resources are scoped to a scene target and layer, never durable data. */
 export class SlitScanSceneSurfaces {
@@ -47,7 +48,7 @@ export class SlitScanSceneSurfaces {
     if (!layer.slitScanGeometry || frame.effect.id !== layer.slitScanGeometry.id) return;
     if (!frame.source) throw new Error('Slit Scan 3D requires a source video.');
     const samplerId = String(frame.effect.params.geometrySampler ?? '').trim();
-    if (!samplerId || !frame.graph.nodes.some(node => node.id === samplerId && node.operator === 'image.sample-history')) {
+    if (frame.effect.params.geometryMode !== 'space-time' && (!samplerId || !frame.graph.nodes.some(node => node.id === samplerId && node.operator === 'image.sample-history'))) {
       const message = 'Select an explicit Slit Scan geometry base sampler.';
       setTemporalStatus(`${frame.effect.id}:geometry`, message);
       if (isCollectingTemporalPreparations()) throw new Error(message);
@@ -64,6 +65,23 @@ export class SlitScanSceneSurfaces {
       this.owners.set(key, owner);
     }
     const params = frame.effect.params;
+    if (params.geometryMode === 'space-time') {
+      try {
+        const spaceTime = (owner.spaceTime ??= new SpaceTimeGeometry(frame.device)).resolve(params, frame.source.mediaId);
+        const reference = createSlitScanReference('orthographic');
+        const draw = { mvp: buildPlaneMvp(layer, camera), reference: new Float32Array(reference.viewProjection),
+          inverseReference: new Float32Array(reference.inverseViewProjection), color: frame.color, geometry: frame.color,
+          columns: 1, rows: 1, timeDepth: 0, opacity: layer.opacity, spaceTime };
+        owner.lastDraw = draw; this.draws.set(layer.layerId, draw);
+        setTemporalStatus(`${frame.effect.id}:geometry`, `${spaceTime.count.toLocaleString()} observations · relative depth · fixed source camera`);
+      } catch (error) {
+        owner.lastDraw = undefined; this.draws.delete(layer.layerId);
+        setTemporalStatus(`${frame.effect.id}:geometry`, error instanceof Error ? error.message : String(error));
+        if (isCollectingTemporalPreparations()) throw error;
+      }
+      return;
+    }
+    owner.spaceTime?.destroy();
     const historyId = frame.historyResources.find(resource => resource.owner === samplerId && resource.part === 'ages')?.id;
     const sampling = historyId ? frame.resources.get(historyId) : undefined;
     const sampledTime = params.geometryTimeBasis === 'samples';
@@ -168,6 +186,6 @@ export class SlitScanSceneSurfaces {
 
   private release(key: string, owner: SurfaceOwner): void {
     this.projectedEffects.release(key);
-    owner.query.destroy(); owner.motion.destroy(); owner.age.destroy(); owner.band.destroy(); owner.surface?.destroy(); owner.color.destroy(); this.owners.delete(key);
+    owner.query.destroy(); owner.motion.destroy(); owner.age.destroy(); owner.band.destroy(); owner.surface?.destroy(); owner.spaceTime?.destroy(); owner.color.destroy(); this.owners.delete(key);
   }
 }

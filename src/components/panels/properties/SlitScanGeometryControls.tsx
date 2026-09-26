@@ -13,6 +13,7 @@ import { ResolveInspectorIconButton, ResolveInspectorRow, ResolveInspectorSectio
 import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
 import { KeyframeToggle } from './shared';
 import type { AnimatableProperty } from '../../../types/animationProperties';
+import { SlitScanSpaceTimeControls } from './SlitScanSpaceTimeControls';
 
 function isGeometryStatusBusy(message: string): boolean {
   const pairs = /analysed\s+(\d+)\/(\d+)/i.exec(message);
@@ -48,10 +49,11 @@ export function SlitScanGeometryControls({ params, onChange, clipId, effectInsta
       };
   return <ResolveInspectorSection title="3D geometry" defaultOpen={mode !== '2d'} enabled={mode !== '2d'}
     onEnabledChange={enabled => changeMode(enabled
-      ? ['motion-band', 'motion-surface'].includes(String(params.geometryLastMode)) ? String(params.geometryLastMode) : 'time-surface' : '2d')}>
+      ? ['motion-band', 'motion-surface', 'space-time'].includes(String(params.geometryLastMode)) ? String(params.geometryLastMode) : 'time-surface' : '2d')}>
     <ResolveInspectorRow label="Representation"><InspectorSelect ariaLabel="Slit Scan representation" value={mode}
       options={slitScanGeometryParams.geometryMode.options!} onChange={changeMode} /></ResolveInspectorRow>
     {mode !== '2d' && <>
+      {mode === 'space-time' ? <SlitScanSpaceTimeControls params={params} onChange={onChange} clipId={clipId} effectInstanceId={effectInstanceId} /> : <>
       {!prepared.graph && !prepared.error && <p role="status" className="tracking-panel-status">Preparing graph controls…</p>}
       {samplerState.error && <p role="status" className="tracking-panel-status">{samplerState.error}</p>}
       <ResolveInspectorRow label="Base time sampler"><InspectorSelect ariaLabel="Slit Scan base time sampler"
@@ -70,6 +72,7 @@ export function SlitScanGeometryControls({ params, onChange, clipId, effectInsta
           onChange={value => clipId && effectInstanceId
             ? useTimelineStore.getState().setPropertyValue(clipId, `effect.${effectInstanceId}.${key}` as AnimatableProperty, value)
             : onChange({ ...params, [key]: value })} />)}
+      </>}
       {status && <p className={`tracking-panel-status${isGeometryStatusBusy(status) ? ' slit-scan-geometry-status--active' : ''}`} role="status">{status}</p>}
       {motionStatus && (mode === 'motion-surface' || mode === 'motion-band' || Number(params.geometryFlowDepth ?? 0) !== 0)
         && <p className={`tracking-panel-status${isGeometryStatusBusy(motionStatus) ? ' slit-scan-geometry-status--active' : ''}`} role="status">{motionStatus}</p>}

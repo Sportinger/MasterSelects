@@ -1,5 +1,6 @@
 import shader from '../shaders/SlitScanSurface.wgsl?raw';
 import { SCENE_COLOR_FORMAT, SCENE_DEPTH_FORMAT } from '../sceneRenderer/constants';
+import { SpaceTimeSlicePass, type SpaceTimeDraw } from './SpaceTimeSlicePass';
 
 export interface SlitScanSurfaceDraw {
   mvp: Float32Array;
@@ -13,10 +14,12 @@ export interface SlitScanSurfaceDraw {
   opacity: number;
   band?: GPUTextureView;
   premultiplied?: boolean;
+  spaceTime?: SpaceTimeDraw;
 }
 
 /** Native scene mesh with no CPU per-frame geometry readback or extra decoder. */
 export class SlitScanSurfacePass {
+  private spaceTime = new SpaceTimeSlicePass();
   private device?: GPUDevice;
   private pipeline?: GPURenderPipeline;
   private sampler?: GPUSampler;
@@ -31,6 +34,11 @@ export class SlitScanSurfacePass {
     });
     pass.setPipeline(this.pipeline!);
     for (const draw of draws) {
+      if (draw.spaceTime) {
+        this.spaceTime.draw(device, pass, draw.spaceTime, draw.mvp, draw.opacity, temporaryBuffers);
+        continue;
+      }
+      pass.setPipeline(this.pipeline!);
       const columns = Math.max(1, Math.min(2048, Math.round(draw.columns)));
       const rows = Math.max(1, Math.min(512, Math.round(draw.rows)));
       const data = new Float32Array(56);
@@ -52,7 +60,7 @@ export class SlitScanSurfacePass {
     pass.end();
   }
 
-  dispose(): void { this.device = undefined; this.pipeline = undefined; this.sampler = undefined; }
+  dispose(): void { this.spaceTime.dispose(); this.device = undefined; this.pipeline = undefined; this.sampler = undefined; }
 
   private initialize(device: GPUDevice): void {
     if (this.device === device && this.pipeline) return;

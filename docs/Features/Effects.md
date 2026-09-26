@@ -26,6 +26,29 @@ and source. Other effects and structural settings are not implicitly enabled.
 
 ## Slit Scan
 
+**Time field source → Shape target (tracked 2D motion)** reuses a source tracking
+asset from the Tracking workspace. It treats the tracked quadrilateral as a
+planar region with predominantly straight translation. Set **Anchor X/Y**,
+**Target stretch** and **Time coherence**. The solver searches up to 96 recorded
+source times inside Delay, using the clip's existing trim/speed/reverse/Time-factor
+mapping. For each output pixel it finds the time when its target material point
+was closest to that location. The resulting 64×64, 8-bit delay map feeds the
+existing temporal sampler without changing UVs or inventing geometry. Outside
+the stretched selection the map requests the current frame. The anchor cell is
+pinned to current time; stretch 1 is identity. Missing tracking is not extrapolated.
+
+The inspector reports RMS and maximum positional error in normalized image
+coordinates: targets outside recorded motion remain imperfect. Time coherence
+trades positional fit for similar neighboring delays. This is a bounded local
+optimization, not an exact global solve or dense deformable-object reconstruction.
+Enable the Time field source section and use Map mix 1 for the full target;
+field shaping, protection, quantization and temporal interpolation can alter the
+final result. Object stabilization must be disabled because this first version
+uses source coordinates. Shape settings and the tracking asset persist normally.
+
+The separate [Space-time slice](Slit-Scan-3D.md#space-time-slice-observed-depth)
+representation uses baked per-time depth and color rather than a time relief.
+
 **Motion compensation** (section switch, `DIS optical flow · resident history`) removes
 temporal seams at their source instead of blurring them. Each decoded frame the
 sampler picks is shifted along cached DIS optical flow to the exact requested time,

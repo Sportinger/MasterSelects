@@ -3,6 +3,7 @@ import { MAX_HYBRID_TEMPORAL_SAMPLES } from '../sourceTemporalLimits';
 
 /** Numeric query, age and optional motion fields; band vertices and clock table. */
 export function slitScanGeometryBytes(params: Record<string, unknown>, width: number, height: number): number {
+  if (params.geometryMode === 'space-time') return 65536 * 32;
   const seamBytes = Number(params.seamSmoothing) > 0 ? width * height * 20 : 0;
   if (!['time-surface', 'motion-band', 'motion-surface'].includes(String(params.geometryMode))) return seamBytes;
   const band = ['motion-band', 'motion-surface'].includes(String(params.geometryMode));
@@ -43,6 +44,7 @@ export const slitScanGeometryParams: Record<string, EffectParam> = {
     { value: '2d', label: '2D image' }, { value: 'time-surface', label: 'Reference time surface' },
     { value: 'motion-band', label: 'Free motion band' },
     { value: 'motion-surface', label: 'Motion-deformed surface' },
+    { value: 'space-time', label: 'Space-time slice (observed depth)' },
   ] },
   geometryProjection: { type: 'select', label: 'Reference projection', default: 'perspective', group: '3D geometry', options: [
     { value: 'perspective', label: 'Perspective' }, { value: 'orthographic', label: 'Orthographic' },
