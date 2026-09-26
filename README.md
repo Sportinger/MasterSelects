@@ -23,7 +23,7 @@ Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in on
 
 ### Node graphs
 
-The node canvas automatically fits offscreen additions and reframes remaining nodes after deletion, including changes from internal and external AI agents. Agent clip selections preserve the visible panel instead of bringing Properties forward.
+The node canvas automatically fits offscreen additions and reframes remaining nodes after deletion, including changes from internal and external AI agents. Deleting effects also closes the gap in the node chain, including after the last effect is removed. Agent clip selections preserve the visible panel instead of bringing Properties forward.
 
 The **Compact** toggle wraps top-level effects into roughly square arrangements while preserving their internal node layout. Within flow-layout groups, loose and connected nodes share one origin to avoid oversized empty frames. **Avoid** routes cables around unrelated expanded effect groups as well as node cards.
 

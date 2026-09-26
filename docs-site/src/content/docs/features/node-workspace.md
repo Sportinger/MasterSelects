@@ -958,7 +958,7 @@ its typed compiler, Color keeps its grade compiler, and image surfaces use the s
 field-backed. New agent tools should use these validated mutations rather than UI
 coordinates or a separate copy of the graph.
 
-Adding an effect, including through the Effects panel, reflows its connected outer chain to make room. Bypassing an effect collapses its group and its Effects inspector entry; enabling it again preserves the collapsed state. **Reset** arranges node positions again, clears manual canvas anchors and group offsets, and fits the resulting graph with the same bounds and zoom rules as **Fit**.
+Adding an effect, including through the Effects panel, reflows its connected outer chain to make room. Removing an effect through the Effects panel or agent tools reflows the remaining chain from Source and discards the deleted group?s cached placement. Removing the last effect brings Output back beside Source. Bypassing an effect collapses its group and its Effects inspector entry; enabling it again preserves the collapsed state. **Reset** arranges node positions again, clears manual canvas anchors and group offsets, and fits the resulting graph with the same bounds and zoom rules as **Fit**.
 
 Gaussian Splat Exploration uses the shared composition mechanism: **Reusable Nodes ? Space** contains Splat Cleanup, Splat Rays, Particle System and Mesh Overlay. Expand the Particles group to edit its simulation and connected forces.
 

@@ -17,9 +17,23 @@ export function groupPlacementMembers(placement: NodeCanvasPlacement, id: string
   return members;
 }
 
-/** Existing positions are fixed obstacles. Only newly appearing nodes are packed. */
+/** Preserve saved anchors while reflowing dynamic groups and effect-chain changes. */
 export function reconcileCanvasPlacement(graph: NodeGraph, previous?: NodeCanvasPlacement): NodeCanvasPlacement {
   const placement: NodeCanvasPlacement = { ...previous, nodes: { ...previous?.nodes }, groups: { ...previous?.groups }, pinned: { ...previous?.pinned }, displaced: { ...previous?.displaced } };
+  const visible = new Set(graph.nodes.map(node => node.id));
+  const currentGroups = new Set(graph.groups?.map(group => group.id));
+  // A missing outer group was deleted; hidden descendants of a collapsed group
+  // still need their saved placement. Remove only the deleted group's subtree.
+  const removedGroups = new Set(Object.keys(placement.groups).filter(id => !placement.groups[id].parentId && !currentGroups.has(id)));
+  const reflowFromSource = removedGroups.size > 0;
+  for (const id of removedGroups) {
+    for (const [childId, child] of Object.entries(placement.groups)) if (child.parentId === id) removedGroups.add(childId);
+    const group = placement.groups[id];
+    for (const member of [group.proxyId, ...group.nodeIds]) if (!visible.has(member)) {
+      delete placement.nodes[member]; delete placement.pinned![member]; delete placement.displaced![member];
+    }
+    delete placement.groups[id];
+  }
   const addedEffects = new Set<string>();
   if (previous) {
     for (const group of graph.groups ?? []) if (group.effectId && !previous.groups[group.id]) addedEffects.add(group.proxyId);
@@ -76,8 +90,7 @@ export function reconcileCanvasPlacement(graph: NodeGraph, previous?: NodeCanvas
   const displaced = new Map<string, NodeGraphLayout>();
   const flow = graph.groups?.some(group => group.layoutMode === 'flow');
   const growingFlow = previous && graph.nodes.some(node => dynamic.has(node.id) && !previous.nodes[node.id]);
-  const outer = { reflow: addedEffects.size > 0 || (!!flow && (folded || growingFlow || previous?.flowLayoutVersion !== 1)), compactEffects: placement.compactEffects, addedEffects, groupMoves: new Map<string, NodeGraphLayout>() };
-  const visible = new Set(graph.nodes.map(node => node.id));
+  const outer = { reflow: reflowFromSource || addedEffects.size > 0 || (!!flow && (folded || growingFlow || previous?.flowLayoutVersion !== 1)), reflowFromSource, compactEffects: placement.compactEffects, addedEffects, groupMoves: new Map<string, NodeGraphLayout>() };
   for (const node of spacePreviewGroups({ ...graph, nodes }, fixed, expanding, displaced, outer)) placement.nodes[node.id] = node.layout;
   // Keep hidden interiors and future regenerated layouts in the translated frame.
   // Otherwise the next parameter edit would restore the old wide outer spacing.

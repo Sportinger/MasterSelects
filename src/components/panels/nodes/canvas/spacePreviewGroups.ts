@@ -12,7 +12,7 @@ interface GroupBlock extends PreviewLayoutBlock { nodeIds: string[]; group: bool
  * Folding is projected first, so each pass uses the current proxy or contents.
  */
 export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<string> = new Set(), expanding: ReadonlySet<string> = new Set(),
-  displacements?: Map<string, NodeGraphLayout>, outer?: { reflow: boolean; compactEffects?: boolean; addedEffects?: ReadonlySet<string>; groupMoves: Map<string, NodeGraphLayout> }): NodeGraphNode[] {
+  displacements?: Map<string, NodeGraphLayout>, outer?: { reflow: boolean; reflowFromSource?: boolean; compactEffects?: boolean; addedEffects?: ReadonlySet<string>; groupMoves: Map<string, NodeGraphLayout> }): NodeGraphNode[] {
   if (!graph.groups?.length && !fixedIds.size && !outer?.reflow) return spacePreviewNodes(graph.nodes);
   const nodes = new Map(graph.nodes.map(node => [node.id, node]));
   const groups = new Map((graph.groups ?? []).map(group => [group.id, group]));
@@ -37,10 +37,10 @@ export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<strin
         boundary: node.binding?.kind === 'clip-source' ? 'input' : node.binding?.kind === 'clip-output' ? 'output' : undefined };
     })];
     const fixed = new Set(blocks.filter(block => block.nodeIds.some(nodeId => fixedIds.has(nodeId))).map(block => block.id));
-    const arrange = flow || (!id && (outer?.addedEffects?.size || graph.groups?.some(group => group.layoutMode === 'flow')));
+    const arrange = flow || (!id && (outer?.reflowFromSource || outer?.addedEffects?.size || graph.groups?.some(group => group.layoutMode === 'flow')));
     const outerFlow = !id && arrange ? connectedFlowBlocks(blocks.map(block => ({
       ...block,
-      flow: block.flow || block.nodeIds.some(nodeId => outer?.addedEffects?.has(nodeId))
+      flow: block.flow || (outer?.reflowFromSource && block.boundary === 'input') || block.nodeIds.some(nodeId => outer?.addedEffects?.has(nodeId))
         || (block.group && !!outer?.addedEffects?.has(groups.get(block.id.slice('group:'.length))!.proxyId)),
     })), graph.edges) : new Set<string>();
     if (outer?.reflow) for (const blockId of outerFlow) fixed.delete(blockId);
