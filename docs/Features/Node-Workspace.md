@@ -20,7 +20,7 @@ When added nodes extend beyond the visible canvas, the view fits the complete gr
 
 When an agent opens or closes groups, the viewport follows the same animated bounds as the effect and color group outlines, without a separate camera lag or final catch-up jump. New offscreen nodes are framed during their placement animation. Manual pointer or wheel navigation releases the automatic camera follow.
 
-During construction, flow-layout groups arrange unconnected nodes side by side in a compact grid, sized from their card dimensions. Once connected, nodes return to the usual directed flow layout. Explicit manual positions inside the group stay fixed. Each addition reflows the outer chain so the growing group stays between Source on the left and Output on the right, moving Output outward as needed.
+During construction, flow-layout groups arrange unconnected nodes side by side in a compact grid, sized from their card dimensions. Once connected, nodes return to the usual directed flow layout. Loose and connected nodes share one group origin, so old offsets or missing saved positions do not create empty space inside the group frame. Explicit manual positions inside the group stay fixed. Each addition reflows the outer chain so the growing group stays between Source on the left and Output on the right, moving Output outward as needed.
 
 The narrow handle beside the right inspector hides or restores it, giving the graph the full panel width. Pointer interaction does not leave a blue focus ring on editor controls; keyboard Tab navigation still shows focus.
 

@@ -25,7 +25,7 @@ Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in on
 
 The node canvas automatically fits offscreen additions and reframes remaining nodes after deletion, including changes from internal and external AI agents. Agent clip selections preserve the visible panel instead of bringing Properties forward.
 
-The **Compact** toggle wraps top-level effects into roughly square arrangements while preserving their internal node layout. **Avoid** routes cables around unrelated expanded effect groups as well as node cards.
+The **Compact** toggle wraps top-level effects into roughly square arrangements while preserving their internal node layout. Within flow-layout groups, loose and connected nodes share one origin to avoid oversized empty frames. **Avoid** routes cables around unrelated expanded effect groups as well as node cards.
 
 [Time Stack](docs/Features/Time-Stack.md) blends up to 32 delayed instances of a video in an editable node group, with shared source-frame sampling, all 37 timeline blend modes, and mouse-wheel control.
 

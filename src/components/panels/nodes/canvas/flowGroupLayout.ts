@@ -20,6 +20,9 @@ export function connectedFlowBlocks(blocks: Array<PreviewLayoutBlock & { nodeIds
 /** Arrange the current visible hierarchy, using measured child frames as single units. */
 export function flowGroupLayout<T extends PreviewLayoutBlock & { nodeIds: string[]; source?: boolean }>(blocks: T[], edges: NodeGraphEdge[], fixed: ReadonlySet<string>, anchor?: { x: number; y: number }): T[] {
   if (!blocks.length) return blocks;
+  // Resolve the group's origin before separating loose nodes. Otherwise the
+  // connected subset inherits its old offset and leaves a huge empty frame.
+  const origin = anchor ?? { x: Math.min(...blocks.map(block => block.x)), y: Math.min(...blocks.map(block => block.y)) };
   const owner = new Map(blocks.flatMap(block => block.nodeIds.map(id => [id, block.id] as const)));
   const linked = new Set<string>();
   for (const edge of edges) {
@@ -31,12 +34,12 @@ export function flowGroupLayout<T extends PreviewLayoutBlock & { nodeIds: string
   const loose = blocks.filter(block => !linked.has(block.id) && !fixed.has(block.id));
   if (loose.length >= 2) {
     const looseIds = new Set(loose.map(block => block.id));
-    const connected = flowGroupLayout(blocks.filter(block => !looseIds.has(block.id)), edges, fixed, anchor);
+    const connected = flowGroupLayout(blocks.filter(block => !looseIds.has(block.id)), edges, fixed, origin);
     const width = Math.max(...loose.map(block => block.width)), height = Math.max(...loose.map(block => block.height));
     const columns = Math.min(loose.length, Math.max(2, Math.ceil(Math.sqrt(loose.length * (height + 80) / (width + 100)))));
-    const x = anchor?.x ?? Math.min(...blocks.map(block => block.x));
+    const x = origin.x;
     const y = connected.length ? Math.max(...connected.map(block => block.y + block.height)) + 80
-      : anchor?.y ?? Math.min(...blocks.map(block => block.y));
+      : origin.y;
     const placed = new Map(connected.map(block => [block.id, block]));
     loose.forEach((block, index) => placed.set(block.id, { ...block,
       x: x + (index % columns) * (width + 100), y: y + Math.floor(index / columns) * (height + 80) }));
@@ -60,7 +63,6 @@ export function flowGroupLayout<T extends PreviewLayoutBlock & { nodeIds: string
     const consumers = blocks.filter(other => incoming.get(other.id)!.has(block.id));
     if (consumers.length) ranks.set(block.id, Math.max(0, Math.min(...consumers.map(other => ranks.get(other.id)!)) - 1));
   }
-  const origin = anchor ?? { x: Math.min(...blocks.map(block => block.x)), y: Math.min(...blocks.map(block => block.y)) };
   const placed = new Map<string, T>();
   let x = origin.x;
   for (const column of [...new Set(ranks.values())].toSorted((a, b) => a - b)) {
