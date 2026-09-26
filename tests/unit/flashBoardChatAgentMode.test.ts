@@ -35,10 +35,19 @@ describe('FlashBoard chat agent-mode default', () => {
     })).toBe('direct');
   });
 
-  it('shows exactly Fast and Codex Direct without Logic', () => {
+  it('preserves an explicit Medium selection', () => {
+    expect(resolveFlashBoardChatAgentMode({
+      availableAgentModes: ['standard'],
+      currentAgentMode: 'direct-medium',
+      explicitlySelected: true,
+    })).toBe('direct-medium');
+  });
+
+  it('shows exactly Fast, Medium and Slow without Logic', () => {
     expect(FLASHBOARD_CHAT_AGENT_OPTIONS).toEqual([
       expect.objectContaining({ id: 'standard', label: 'Fast' }),
-      expect.objectContaining({ id: 'direct', label: 'Codex Direct' }),
+      expect.objectContaining({ id: 'direct-medium', label: 'Medium' }),
+      expect.objectContaining({ id: 'direct', label: 'Slow' }),
     ]);
   });
 });

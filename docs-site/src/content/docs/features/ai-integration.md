@@ -26,11 +26,15 @@ Model-powered editing through the private hosted-agent kernel and shared public 
 
 ## FlashBoard Chat
 
-> **Two explicit runtimes:** `Codex Direct` is the default in development and
-> production and reaches the isolated Codex app-server through authenticated
-> same-origin relays. `Fast` uses Hosted Agent V2 through the kernel-owned
-> `/api/kernel/normal/*` boundary. In both cases, the browser retains atomic
-> tool validation, policy, confirmation, transactions, undo, and execution.
+> **One Direct workflow, three models:** the Model menu offers `Fast`
+> (DeepSeek V4.1 Flash, `deepseek-flash`), `Medium` (GPT-5.6 Terra, medium
+> reasoning, priority service tier) and `Slow` (GPT-5.6 Sol, high reasoning).
+> All three run the identical Direct workflow (prompt, tools, resumable thread,
+> browser tool execution, streaming) through the isolated Codex app-server and
+> its authenticated same-origin relays; only the model differs. `Slow` is the
+> default. The
+> browser retains atomic tool validation, policy, confirmation, transactions,
+> undo, and execution.
 > See [Kernel Client](/features/kernel-client/) for routes and lifecycles.
 
 ### Location
@@ -40,7 +44,7 @@ Model-powered editing through the private hosted-agent kernel and shared public 
 - Interactive chat interface
 - Development and production default to `Codex Direct`: one resumable Codex thread controls the live editor through the complete approved MasterSelects tool surface
 - The same Direct conversation and active run remain visible when switching between `/chat` and the editor layout
-- Compact Model menu with exactly `Fast` and `Codex Direct`; Direct is the default and Logic is neither shown nor requested by the UI
+- Compact Model menu with exactly `Fast`, `Medium` and `Slow`; all use the Direct workflow, on DeepSeek V4.1 Flash, GPT-5.6 Terra and GPT-5.6 Sol respectively. Slow is the default and Logic is neither shown nor requested by the UI
 - The separate `Story` product workflow remains available from the prompt-path menu
 - Conversation history
 - Clear chat button
@@ -66,7 +70,11 @@ binds the authenticated principal, and relays to the private kernel's bounded
 Codex app-server. In `dev:full`, the same public path resolves to the local
 relay. Its opaque thread ID is retained in tab-scoped session storage, so
 subsequent prompts resume the Codex context without resending the visible
-transcript. The active workspace conversation ID binds the `/chat` and
+transcript. Fast, Medium and Slow keep separate threads per conversation
+because a thread stays bound to its model. Fast receives every editor tool up
+front, since DeepSeek has no hosted tool search for deferred tools; it streams
+reasoning and answer deltas in real time like Codex. The active workspace
+conversation ID binds the `/chat` and
 floating editor projections, while a shared run owner prevents layout unmounts
 from aborting the turn. Explicit Stop/New actions still interrupt or reset the
 session.
@@ -80,9 +88,9 @@ FlashBoard Chat includes a `PromptBook` button for provider-specific system prom
 ### Hosted route choices
 
 The editor does not expose raw provider names, product-model IDs, or the old
-Very Fast/Fast/Slow class selector. Its Model menu contains two choices within
-the Auto path: `Codex Direct`, the default resumable app-server session, and
-`Fast`, which requests the hosted Standard backend through the Normal Path.
+Very Fast/Fast/Slow class selector. Its Model menu contains three choices within
+the Auto path, all on the resumable Direct app-server session: `Fast`
+(DeepSeek), `Medium` (Terra) and `Slow` (Sol, the default).
 The private kernel may retain Logic as an internal compatibility capability,
 but the product UI neither renders nor requests it. The edge and private kernel
 remain authoritative for availability, authentication, billing policy, and

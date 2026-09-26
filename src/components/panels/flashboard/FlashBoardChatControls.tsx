@@ -2,7 +2,7 @@ import type { RefObject } from 'react';
 import type {
   FlashBoardChatAgentMode,
 } from '../../../services/flashboard/FlashBoardChatService';
-import { FLASHBOARD_CHAT_AGENT_OPTIONS } from './flashBoardChatAgentOptions';
+import { FLASHBOARD_CHAT_AGENT_OPTIONS, flashBoardChatAgentModeLabel } from './flashBoardChatAgentOptions';
 
 type ChatControlsPopover = 'chatModelClass';
 type RenderedPopover = string | null;
@@ -47,7 +47,7 @@ export function FlashBoardChatControls({
           className={`fb-pill fb-chat-model-pill ${activePopover === 'chatModelClass' ? 'active' : ''}`}
           type="button"
           onClick={() => onOpenPopover('chatModelClass')}
-          title={`Model: ${chatAgentMode === 'direct' ? 'Codex Direct' : chatAgentMode === 'logic' ? 'Logic' : 'Fast'}`}
+          title={`Model: ${flashBoardChatAgentModeLabel(chatAgentMode)}`}
           aria-haspopup="menu"
           aria-expanded={activePopover === 'chatModelClass'}
           disabled={isChatting}

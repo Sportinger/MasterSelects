@@ -7,8 +7,8 @@ export function resolveFlashBoardChatAgentMode(input: {
   currentAgentMode: FlashBoardChatAgentMode;
   explicitlySelected: boolean;
 }): FlashBoardChatAgentMode {
-  if (input.currentAgentMode === 'standard' && input.explicitlySelected) {
-    return 'standard';
+  if ((input.currentAgentMode === 'standard' || input.currentAgentMode === 'direct-medium') && input.explicitlySelected) {
+    return input.currentAgentMode;
   }
   return 'direct';
 }

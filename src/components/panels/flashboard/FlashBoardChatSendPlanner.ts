@@ -10,7 +10,7 @@ import {
   type FlashBoardOpenAiReasoningEffort,
 } from '../../../services/flashboard/FlashBoardChatService';
 import { buildFlashBoardChatRequestPrompt } from '../../../services/flashboard/FlashBoardChatHistory';
-import { directModelProfileForAgentMode } from '../../../services/flashboard/FlashBoardDirectModelProfile';
+import { directModelProfileForAgentMode, resolveDirectModelProfile } from '../../../services/flashboard/FlashBoardDirectModelProfile';
 import type { FlashBoardChatMessage } from './FlashBoardChatOutput';
 
 export { buildFlashBoardChatRequestPrompt } from '../../../services/flashboard/FlashBoardChatHistory';
@@ -169,7 +169,7 @@ export function buildFlashBoardChatSendPlan({
     return {
       action: 'error',
       dialogTarget: 'auth',
-      errorMessage: `Sign in to use ${directModelProfile === 'deepseek' ? 'Fast' : 'Codex Direct'}.`,
+      errorMessage: `Sign in to use ${resolveDirectModelProfile(directModelProfile).label}.`,
     };
   }
 

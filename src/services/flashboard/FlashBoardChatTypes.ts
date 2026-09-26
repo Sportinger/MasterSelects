@@ -12,7 +12,7 @@ import type {
 
 /** Legacy persisted id for the single public Intelligence/Normal Path entry. */
 export type FlashBoardChatProvider = 'kie';
-export type FlashBoardChatAgentMode = HostedAgentFastV2AgentMode | 'direct';
+export type FlashBoardChatAgentMode = HostedAgentFastV2AgentMode | 'direct' | 'direct-medium';
 export type FlashBoardChatExecutionProfile = HostedAgentFastV2ExecutionProfile;
 export type FlashBoardChatModelClass = HostedAgentFastV2RequestedModelClass;
 export type FlashBoardKieChatProtocol = 'claude-messages' | 'openai-responses';

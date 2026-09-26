@@ -11,7 +11,7 @@ import {
   appendPromptDictationText,
 } from '../../common/PromptDictationButton';
 import { FlashBoardChatOutput } from '../flashboard/FlashBoardChatOutput';
-import { FLASHBOARD_CHAT_AGENT_OPTIONS } from '../flashboard/flashBoardChatAgentOptions';
+import { FLASHBOARD_CHAT_AGENT_OPTIONS, flashBoardChatAgentModeLabel } from '../flashboard/flashBoardChatAgentOptions';
 import { FlashBoardPromptBook } from '../flashboard/FlashBoardPromptBook';
 import { useFlashBoardChatController } from '../flashboard/useFlashBoardChatController';
 import { useFlashBoardChatHistoryScroll } from '../flashboard/useFlashBoardChatHistoryScroll';
@@ -30,9 +30,7 @@ import './AIStudioChat.css';
 type ChatComposerMenu = 'model' | 'route' | null;
 
 function agentModeLabel(mode: FlashBoardChatAgentMode): string {
-  if (mode === 'direct') return 'Codex Direct';
-  if (mode === 'logic') return 'Logic';
-  return 'Fast';
+  return flashBoardChatAgentModeLabel(mode);
 }
 
 export function AIStudioChat() {
