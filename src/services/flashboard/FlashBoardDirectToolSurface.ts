@@ -16,6 +16,14 @@ const CORE_TOOLS = new Set([
   'focusNodeGraph', 'searchNodeCatalog', 'getNodeDefinitions', 'createImageNodeGraph', 'getOperatorGraph', 'editOperatorGraph',
 ]);
 
+/**
+ * Loaded up front even where hosted tool search defers the rest: node authoring
+ * otherwise starts with repeated tool-search steps that reread the conversation.
+ */
+export const DIRECT_EAGER_TOOLS: ReadonlySet<string> = new Set([
+  'getTimelineState', 'searchNodeCatalog', 'getNodeDefinitions', 'createImageNodeGraph', 'editOperatorGraph', 'getOperatorGraph', 'focusNodeGraph',
+]);
+
 /** Diagnostics, QA fixtures and UI automation belong to the dev bridge, not to a chat model. */
 const DEV_ONLY_TOOL = /^(?:(?:run|capture|verify)WorkerFirst|simulate)|^(?:getStats|getStatsHistory|getAudioDiagnostics|getLogs|getPlaybackTrace|getRuntimeDiagnostics|clearRuntimeDiagnostics|purgePlaybackPath|samplePlaybackFramePacing|setRenderHostMode|profileAppInteraction|clickAppControl|fillAppControl|probeSameOriginRequest|captureAppScreenshot|getCaptureState|monitorManualPause|runPixelParticleDisintegrateQa|getNodeWorkspaceDebugState|verifyTimelineInvariants)$/;
 

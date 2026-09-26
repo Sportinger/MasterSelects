@@ -212,7 +212,8 @@ describe('FlashBoard Codex Direct path', () => {
     expect(actualNames).toEqual(expectedNames);
     expect(namespace?.type).toBe('namespace');
     expect(namespacedTools.every((tool) => tool.type === 'function')).toBe(true);
-    expect(namespacedTools.every((tool) => tool.deferLoading === true)).toBe(true);
+    const eager = new Set(['getTimelineState', 'searchNodeCatalog', 'getNodeDefinitions', 'createImageNodeGraph', 'editOperatorGraph', 'getOperatorGraph', 'focusNodeGraph']);
+    expect(namespacedTools.filter((tool) => tool.deferLoading !== true).map((tool) => String(tool.name)).toSorted()).toEqual([...eager].toSorted());
     expect(namespacedTools.every((tool) => tool.inputSchema !== undefined)).toBe(true);
     expect(actualNames).toContain('inspectMediaGenerationModel');
     expect(actualNames).toContain('startMediaGeneration');

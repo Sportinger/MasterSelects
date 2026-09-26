@@ -24,7 +24,7 @@ import { getToolPolicy } from '../aiTools/policy';
 import { NodeGraphStreamParser, NODE_GRAPH_STREAM_PROTOCOL } from '../nodeGraph/nodeGraphStream';
 import { FlashBoardNodeGraphStream } from './FlashBoardNodeGraphStream';
 import { NodeStreamFeedback, nodeStreamUserNotice } from './FlashBoardNodeStreamFeedback';
-import { compactDirectToolEntry, directToolSchemaEntry, localDirectToolResult } from './FlashBoardDirectToolSurface';
+import { DIRECT_EAGER_TOOLS, compactDirectToolEntry, directToolSchemaEntry, localDirectToolResult } from './FlashBoardDirectToolSurface';
 import { CodexStreamDiagnostics } from './CodexStreamDiagnostics';
 import { yieldEditorPresentationFrame } from './yieldEditorPresentationFrame';
 import {
@@ -110,7 +110,7 @@ export function buildDirectCodexDynamicTools(
     // Without hosted tool search, a compact surface replaces deferred loading.
     if (!deferLoading) return compactDirectToolEntry(tool);
     return [{
-      ...(deferLoading ? { deferLoading: true } : {}),
+      ...(deferLoading && !DIRECT_EAGER_TOOLS.has(name) ? { deferLoading: true } : {}),
       description: tool.function.description,
       inputSchema: tool.function.parameters,
       name,
