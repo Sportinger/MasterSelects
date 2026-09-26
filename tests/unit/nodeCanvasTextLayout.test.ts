@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { fitCanvasLabel } from '../../src/components/panels/nodes/canvas/rendering/canvasTextLayout';
+import { fitCanvasLabel, wrapCanvasLabel } from '../../src/components/panels/nodes/canvas/rendering/canvasTextLayout';
 
 function context() {
   return { font: '10px system-ui', measureText: vi.fn((text: string) => ({ width: text.length * 5 } as TextMetrics)) };
@@ -25,4 +25,12 @@ it('separates contexts and font metrics, and bounds retained dynamic labels', ()
   ctx.measureText.mockClear();
   fitCanvasLabel(ctx, 'Label', 20);
   expect(ctx.measureText).toHaveBeenCalled();
+});
+it('wraps overview titles at separators and rejects words or line counts that do not fit', () => {
+  const ctx = context();
+  expect(wrapCanvasLabel(ctx, 'pixel-particle-disintegrate', 65, 3)).toEqual(['pixel-', 'particle-', 'disintegrate']);
+  expect(wrapCanvasLabel(ctx, 'kinetic trace', 70, 2)).toEqual(['kinetic trace']);
+  expect(wrapCanvasLabel(ctx, 'kinetic trace', 40, 2)).toEqual(['kinetic', 'trace']);
+  expect(wrapCanvasLabel(ctx, 'kinetic trace', 40, 1)).toBeUndefined();
+  expect(wrapCanvasLabel(ctx, 'temperature', 40, 3)).toBeUndefined();
 });

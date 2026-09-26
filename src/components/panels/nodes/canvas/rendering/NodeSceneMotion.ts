@@ -1,12 +1,13 @@
 import type { CanvasCable, CanvasNode, CanvasPlug, CanvasScene, Point } from './nodeCanvasTypes';
 import { buildUpStagger, NODE_ENTER_MS } from './buildUpTiming';
+import { MAX_POP_NODES, NODE_POP_MS, nodePopFrame } from './nodePopMotion';
 
 const NODE_EXIT_MS = 210;
 const CABLE_ENTER_MS = 430;
 const CABLE_EXIT_MS = 190;
 const MAX_ENTRY_STAGGER_MS = 1400;
 
-interface Motion<T> { item: T; start: number; exit: boolean }
+interface Motion<T> { item: T; start: number; exit: boolean; pop?: boolean }
 /** One eased move per item; each point pair is interpolated together. */
 interface Glide { from: Point[]; to: Point[]; start: number; duration: number }
 
@@ -63,7 +64,9 @@ export class NodeSceneMotion {
     // Layout build-ups use the sequencer's timing so the next group waits for this wave.
     const nodeStep = scene.glideMs ? buildUpStagger(addedNodes.length)
       : addedNodes.length > 1 ? Math.min(35, MAX_ENTRY_STAGGER_MS / (addedNodes.length - 1)) : 0;
-    addedNodes.forEach((node, index) => this.nodes.set(node.id, { item: node, start: now + index * nodeStep, exit: false }));
+    // A few new nodes pop in individually; bulk build-ups keep the light fade wave.
+    const pop = addedNodes.length <= MAX_POP_NODES;
+    addedNodes.forEach((node, index) => this.nodes.set(node.id, { item: node, start: now + index * nodeStep, exit: false, pop }));
     for (const node of before.nodes) if (!newNodes.has(node.id)) this.nodes.set(node.id, { item: node, start: now, exit: true });
     const oldCables = new Map(before.cables.filter(cable => cable.id).map(cable => [cable.id!, cable]));
     const newCables = new Set(scene.cables.map(cable => cable.id));
@@ -95,7 +98,7 @@ export class NodeSceneMotion {
   }
 
   frame(scene: CanvasScene, now: number): CanvasScene {
-    for (const [id, motion] of this.nodes) if (progress(now, motion, motion.exit ? NODE_EXIT_MS : NODE_ENTER_MS) >= 1) this.nodes.delete(id);
+    for (const [id, motion] of this.nodes) if (progress(now, motion, motion.exit ? NODE_EXIT_MS : motion.pop ? NODE_POP_MS : NODE_ENTER_MS) >= 1) this.nodes.delete(id);
     for (const [id, motion] of this.cables) if (progress(now, motion, motion.exit ? CABLE_EXIT_MS : CABLE_ENTER_MS) >= 1) this.cables.delete(id);
     scene = { ...scene,
       nodes: this.glide(scene.nodes, this.glides.nodes, now, node => node.id, (node, [point]) => ({ ...node, x: point.x, y: point.y })),
@@ -104,6 +107,10 @@ export class NodeSceneMotion {
     const nodes = scene.nodes.map(node => {
       const motion = this.nodes.get(node.id);
       if (!motion || motion.exit) return node;
+      if (motion.pop) {
+        const pop = progress(now, motion, NODE_POP_MS);
+        return { ...node, appearance: nodePopFrame(pop).alpha, pop };
+      }
       const amount = progress(now, motion, NODE_ENTER_MS);
       return { ...node, appearance: easeOut(amount) };
     });

@@ -10,7 +10,7 @@ const SPRITE_BUDGET_BYTES = 48 * 1024 * 1024;
 
 /** Everything a card draws, excluding position and entrance motion. */
 export function cardSignature(node: CanvasNode): string {
-  const { x: _x, y: _y, appearance: _appearance, disappearing: _disappearing, preview: _preview, ...content } = node;
+  const { x: _x, y: _y, appearance: _appearance, disappearing: _disappearing, pop: _pop, preview: _preview, ...content } = node;
   return JSON.stringify(content);
 }
 

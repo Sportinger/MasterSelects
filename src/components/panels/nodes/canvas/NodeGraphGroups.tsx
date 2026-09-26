@@ -49,7 +49,7 @@ export const NodeGraphGroups = memo(function NodeGraphGroups({ graph, nodes, zoo
     };
     const count = new Set(group.nodeIds.filter(id => nodesById.has(id))).size;
     const bypassed = group.bypassed ?? (nodesById.get(group.bypassNodeId ?? '')?.params?.enabled === false);
-    return <section key={group.id} aria-label={`${group.label} node group`} className="node-workspace-group" data-bypassed={bypassed}
+    return <section key={group.id} aria-label={`${group.label} node group`} className="node-workspace-group" data-group-id={group.id} data-bypassed={bypassed}
       style={{ left: box.left, top: box.top, width: box.right - box.left, height: box.bottom - box.top, '--group-color': group.color,
         '--group-header-height': `${header.height}px`, '--group-font-size': `${header.fontSize}px`, '--group-icon-size': `${header.iconSize}px`,
         '--group-control-size': `${header.controlSize}px`, '--group-gap': `${header.gap}px`, '--group-padding': `${header.padding}px`,

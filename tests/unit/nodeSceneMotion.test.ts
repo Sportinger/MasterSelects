@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NodeSceneMotion } from '../../src/components/panels/nodes/canvas/rendering/NodeSceneMotion';
+import { MAX_POP_NODES, nodePopFrame } from '../../src/components/panels/nodes/canvas/rendering/nodePopMotion';
 import type { CanvasCable, CanvasNode, CanvasScene } from '../../src/components/panels/nodes/canvas/rendering/nodeCanvasTypes';
 
 const node = { id: 'new', x: 10, y: 20, width: 100, height: 80 } as CanvasNode;
@@ -34,7 +35,7 @@ describe('node scene edit motion', () => {
     const midway = motion.frame(full, 300);
     expect(midway.nodes[0].appearance).toBeGreaterThan(0);
     expect(midway.cables[0].appearance).toBeGreaterThan(0);
-    motion.frame(full, 600);
+    motion.frame(full, 700);
     expect(motion.active).toBe(false);
     motion.update(empty, 700);
     const leaving = motion.frame(empty, 800);
@@ -53,5 +54,31 @@ describe('node scene edit motion', () => {
     expect(motion.active).toBe(true);
     motion.clear();
     expect(motion.frame(scene([], [], 'other'), 250).nodes).toEqual([]);
+  });
+
+  it('pops a few added nodes with a springy overshoot, but builds bulk additions with the plain wave', () => {
+    const motion = new NodeSceneMotion();
+    const one = scene([node], []);
+    motion.update(scene([], []), 0);
+    motion.update(one, 100);
+    expect(motion.frame(one, 200).nodes[0].pop).toBeGreaterThan(0);
+    const bulk = scene(Array.from({ length: MAX_POP_NODES + 1 }, (_, index) => ({ ...node, id: `bulk-${index}` })), []);
+    const other = new NodeSceneMotion();
+    other.update(scene([], []), 0);
+    other.update(bulk, 100);
+    expect(other.frame(bulk, 200).nodes.every(entry => entry.pop === undefined)).toBe(true);
+  });
+
+  it('starts small and transparent, overshoots, and settles at full size', () => {
+    const start = nodePopFrame(0), end = nodePopFrame(1);
+    expect(start.alpha).toBe(0);
+    expect(start.scaleX).toBeLessThan(0.5);
+    const peak = Math.max(...Array.from({ length: 50 }, (_, index) => nodePopFrame(index / 49).scaleY));
+    expect(peak).toBeGreaterThan(1.02);
+    expect(peak).toBeLessThan(1.12);
+    expect(end.alpha).toBe(1);
+    expect(end.scaleX).toBeCloseTo(1, 2);
+    expect(end.scaleY).toBeCloseTo(1, 2);
+    expect(end.ringAlpha).toBe(0);
   });
 });

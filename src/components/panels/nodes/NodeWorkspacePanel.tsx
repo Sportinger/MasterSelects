@@ -20,9 +20,11 @@ import { NodeContextMenu } from './workspace/NodeContextMenu';
 import { ConnectedNodeMenu } from './workspace/ConnectedNodeMenu';
 import type { NodeConnectionDrop } from '../../../types/nodeGraph';
 import { buildCableInsertEntries, buildNodeContextMenuEntries } from './workspace/nodeContextMenuEntries';
+import { resolveNodeContextDeleteTargets } from './workspace/nodeContextDeleteTargets';
 import { addableEffectOperators } from '../../../services/operators/effectGraphOwner';
 import { addEffectGraphNode } from './workspace/addEffectGraphNode';
 import { createEmptyEffect, createSingleNodeEffect } from '../../../services/operators/imageNodeGraphEffect';
+import { createEffectGraphActions } from '../../../services/operators/effectGraphEditing';
 import { effectGraphId } from '../../../services/nodeGraph/effectGraphProjection';
 import { addControlNode } from '../../../services/parameterSources/parameterSourceActions';
 import { NodeInspector } from './workspace/NodeWorkspaceInspector';
@@ -54,6 +56,7 @@ interface NodeWorkspaceContextMenuState {
   y: number;
   layout: NodeGraphLayout;
   nodeId?: string | null;
+  groupId?: string | null;
 }
 
 interface NodeWorkspaceSelection {
@@ -383,6 +386,17 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
     : contextMenuNode?.binding?.kind === 'operator-group' ? false
     : contextMenuNode?.binding?.kind === 'color-node' ? !['input', 'output'].includes(contextMenuNode.binding.nodeType)
     : canDeleteNodeFromClip(subject.clip, contextMenuNode);
+  const deleteTargets = resolveNodeContextDeleteTargets(subject.clip, subject.graph, contextMenuNode, contextMenu?.groupId);
+  const runContextDelete = (label: string, action: () => void) => {
+    try { batched(label, action); closeContextMenu(); selectFallbackAfterDelete(contextMenuNode ? [contextMenuNode.id] : []); }
+    catch (error) { setContextMenuError(error instanceof Error ? error.message : String(error)); }
+  };
+  const contextDeleteActions = [
+    ...(deleteTargets.group ? [{ id: 'delete-group', label: `Delete Group (${deleteTargets.group.label})`, onSelect: () => runContextDelete('Delete node group',
+      () => createEffectGraphActions(subject.id, deleteTargets.group!.effectId).deleteGroup(deleteTargets.group!.groupId)) }] : []),
+    ...(deleteTargets.effect ? [{ id: 'delete-effect', label: `Delete Effect (${deleteTargets.effect.label})`, onSelect: () => runContextDelete('Delete effect',
+      () => useTimelineStore.getState().removeClipEffect(subject.id, deleteTargets.effect!.effectId)) }] : []),
+  ];
   const viewLabel = activeTheme === 'color' ? 'Color subgraph' : subject.view.label;
   const presetEffectId = selectedNode?.binding && 'effectId' in selectedNode.binding ? selectedNode.binding.effectId
     : subject.graph.groups?.find(group => group.proxyId === selectedNodeId || group.id === selectedNode?.groupId)?.effectId
@@ -640,6 +654,7 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
             } },
           })}
           error={contextMenuError}
+          deleteActions={contextDeleteActions}
           onClose={closeContextMenu}
           onDeleteNode={() => {
             if (contextMenuNode) {

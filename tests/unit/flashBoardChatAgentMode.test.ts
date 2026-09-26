@@ -1,8 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   DEFAULT_FLASHBOARD_CHAT_AGENT_MODE,
+  FLASHBOARD_CHAT_AGENT_MODE_STORAGE_KEY,
+  loadStoredFlashBoardChatAgentMode,
   resolveFlashBoardChatAgentMode,
+  storeFlashBoardChatAgentMode,
 } from '../../src/components/panels/flashboard/FlashBoardChatAgentMode';
 import { FLASHBOARD_CHAT_AGENT_OPTIONS } from '../../src/components/panels/flashboard/flashBoardChatAgentOptions';
 
@@ -49,5 +52,50 @@ describe('FlashBoard chat agent-mode default', () => {
       expect.objectContaining({ id: 'direct-medium', label: 'Medium' }),
       expect.objectContaining({ id: 'direct', label: 'Slow' }),
     ]);
+  });
+});
+
+describe('FlashBoard chat agent-mode persistence', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubStorage(): Map<string, string> {
+    const values = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+    });
+    return values;
+  }
+
+  it('returns null when nothing was stored', () => {
+    stubStorage();
+    expect(loadStoredFlashBoardChatAgentMode()).toBeNull();
+  });
+
+  it('round-trips Fast, Medium and Slow selections', () => {
+    stubStorage();
+    for (const mode of ['standard', 'direct-medium', 'direct'] as const) {
+      storeFlashBoardChatAgentMode(mode);
+      expect(loadStoredFlashBoardChatAgentMode()).toBe(mode);
+    }
+  });
+
+  it('ignores unknown or Logic values', () => {
+    const values = stubStorage();
+    storeFlashBoardChatAgentMode('logic');
+    expect(values.has(FLASHBOARD_CHAT_AGENT_MODE_STORAGE_KEY)).toBe(false);
+    values.set(FLASHBOARD_CHAT_AGENT_MODE_STORAGE_KEY, 'bogus');
+    expect(loadStoredFlashBoardChatAgentMode()).toBeNull();
+  });
+
+  it('survives throwing storage', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => { throw new Error('blocked'); },
+      setItem: () => { throw new Error('blocked'); },
+    });
+    expect(() => storeFlashBoardChatAgentMode('standard')).not.toThrow();
+    expect(loadStoredFlashBoardChatAgentMode()).toBeNull();
   });
 });

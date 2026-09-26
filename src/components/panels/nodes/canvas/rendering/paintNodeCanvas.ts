@@ -2,9 +2,10 @@ import { interpolateKeyframes } from '../../../../../utils/keyframeInterpolation
 import { cableArcLengths, canvasCableRoute, signalPosition } from './cableGeometry';
 import { cableRoutePoint, traceCableRoute } from '../cableRoute';
 import { branchMetrics } from '../cableBranches';
-import { fitCanvasLabel } from './canvasTextLayout';
+import { fitCanvasLabel, wrapCanvasLabel } from './canvasTextLayout';
 import type { CanvasBranch, CanvasCable, CanvasCurve, CanvasNode, CanvasScene, CanvasTheme, CanvasTransport, CanvasView, Rect } from './nodeCanvasTypes';
 import { CARD_SPRITE_PAD } from './nodeCardSprites';
+import { nodePopFrame } from './nodePopMotion';
 import { coveredCableOpacity, coveredGroupDepthClips, groupDepthAt, subtractOccludedRects } from '../edgeGroupOcclusion';
 
 export type DrawContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -161,11 +162,20 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
       ctx.clip(); paint(ctx, coveredCableOpacity(depth)); ctx.restore();
     }
   }
+  const titleBoost = overviewTitleBoost(view.zoom);
   for (const node of scene.nodes) {
     if (!inView(node, view)) continue;
     ctx.save(); ctx.translate(node.x, node.y);
     const appearance = node.appearance ?? 1;
-    if (appearance < 1) {
+    const pop = node.pop !== undefined ? nodePopFrame(node.pop) : undefined;
+    if (pop) {
+      if (pop.ringAlpha > 0) {
+        const spread = pop.ringSpread;
+        ctx.globalAlpha = pop.ringAlpha; ctx.strokeStyle = node.color; ctx.lineWidth = 1.5;
+        box(ctx, -spread, -spread, node.width + spread * 2, node.height + spread * 2, 6 + spread * 0.5); ctx.stroke();
+      }
+      ctx.translate(node.width / 2, node.height / 2); ctx.scale(pop.scaleX, pop.scaleY); ctx.translate(-node.width / 2, -node.height / 2);
+    } else if (appearance < 1) {
       const scale = node.disappearing ? 0.94 + appearance * 0.06 : 0.88 + appearance * 0.12;
       ctx.translate(node.width / 2, node.height / 2); ctx.scale(scale, scale); ctx.translate(-node.width / 2, -node.height / 2);
     }
@@ -173,9 +183,8 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
     const sprite = cardSprite?.(node);
     if (sprite) {
       ctx.drawImage(sprite, -CARD_SPRITE_PAD, -CARD_SPRITE_PAD, node.width + CARD_SPRITE_PAD * 2, node.height + CARD_SPRITE_PAD * 2);
-      ctx.restore(); continue;
-    }
-    drawNodeCard(ctx, node, theme);
+    } else drawNodeCard(ctx, node, theme);
+    if (titleBoost > 1) drawOverviewTitle(ctx, node, theme, titleBoost);
     ctx.restore();
   }
   // Long fan-out stubs first, so their backing stroke cannot cover shorter grips.
@@ -220,6 +229,42 @@ function drawPlug(ctx: DrawContext, offset: number, color: string, highlighted: 
   ctx.beginPath(); ctx.arc(0, 0, 6, -Math.PI / 2, Math.PI / 2); ctx.moveTo(6, 0); ctx.lineTo(offset, 0);
   ctx.strokeStyle = theme.background; ctx.lineWidth = 5; ctx.stroke(); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
   box(ctx, offset - 5, -3, 10, 6, 2); ctx.fillStyle = highlighted ? color : theme.background; ctx.fill(); ctx.lineWidth = 1; ctx.stroke();
+}
+
+/** Zoomed-out titles grow in graph space so they stay legible in overviews. */
+export function overviewTitleBoost(zoom: number) { return Math.max(1, Math.min(4.4, 1.5 / zoom - 1)); }
+
+const OVERVIEW_TITLE_TOP = 30, OVERVIEW_LINE_HEIGHT = 1.12;
+/** Widest word per label at 1px bold, so overview repaints skip re-measuring. */
+const widestWordRatio = new Map<string, number>();
+
+/** Replaces the sprite's text band with a bold title that wraps (up to three
+ * lines) into the free space above the curve, symbol, and ports. */
+function drawOverviewTitle(ctx: DrawContext, node: CanvasNode, theme: CanvasTheme, boost: number) {
+  const left = node.expandable ? 30 : 10, width = node.width - left - 10, target = 13 * boost;
+  const bottom = Math.min(node.height - 6, node.curve?.y ?? Infinity, node.mathSymbol ? node.mathSymbol.y - 26 : Infinity,
+    ...node.ports.map(port => port.y - 8));
+  const band = Math.max(20, bottom - OVERVIEW_TITLE_TOP);
+  // Pick the line count that allows the largest font; shrink words that overflow.
+  const font = (size: number) => `700 ${size}px system-ui, sans-serif`;
+  const half = (size: number) => Math.floor(size * 2) / 2;
+  let widest = widestWordRatio.get(node.label);
+  if (widest === undefined) {
+    ctx.font = font(100);
+    widest = Math.max(1, ...node.label.split(/[\s_-]+/).filter(Boolean).map(word => ctx.measureText(word).width)) / 100;
+    if (widestWordRatio.size > 2048) widestWordRatio.clear();
+    widestWordRatio.set(node.label, widest);
+  }
+  let size = 13, lines: string[] | undefined;
+  for (let count = 1; count <= 3; count++) {
+    let fitted = half(Math.min(target, band / (count * OVERVIEW_LINE_HEIGHT), width / widest));
+    let wrapped: string[] | undefined;
+    while (fitted >= 13 && !(wrapped = (ctx.font = font(fitted), wrapCanvasLabel(ctx, node.label, width, count)))) fitted = half(fitted * 0.92);
+    if (wrapped && fitted > size) { size = fitted; lines = wrapped; }
+  }
+  ctx.fillStyle = theme.card; ctx.fillRect(left - 2, OVERVIEW_TITLE_TOP - 2, node.width - left + 1, band + 2);
+  if (!lines) { text(ctx, node.label, left, OVERVIEW_TITLE_TOP + size * 0.9, width, theme.text, size, 700); return; }
+  lines.forEach((line, index) => text(ctx, line, left, OVERVIEW_TITLE_TOP + size * (0.9 + index * OVERVIEW_LINE_HEIGHT), width, theme.text, size, 700));
 }
 
 /** A complete card at the context's current origin; shared by direct paint and sprites. */

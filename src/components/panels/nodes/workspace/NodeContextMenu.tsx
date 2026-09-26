@@ -13,6 +13,7 @@ export function NodeContextMenu({
   onPublishOutput,
   onClose,
   onDeleteNode,
+  deleteActions = [],
 }: {
   x: number;
   y: number;
@@ -25,6 +26,8 @@ export function NodeContextMenu({
   onPublishOutput?: () => void;
   onClose: () => void;
   onDeleteNode: () => void;
+  /** Wider deletes for the target, e.g. its whole effect or node group. */
+  deleteActions?: ReadonlyArray<{ id: string; label: string; onSelect: () => void }>;
 }) {
   const [search, setSearch] = useState('');
   const results = useMemo(() => searchNodeMenu(entries, search), [entries, search]);
@@ -61,10 +64,13 @@ export function NodeContextMenu({
             if (event.key === 'Enter' && results.length) results[0].entry.onSelect();
           }}
         />
-        {targetNode && !search && (
+        {(targetNode || deleteActions.length > 0) && !search && (
           <>
-            {onPublishOutput && <button type="button" onClick={onPublishOutput}>Show output in timeline</button>}
-            <button type="button" disabled={!canDeleteTarget} onClick={onDeleteNode}>Delete Node</button>
+            {targetNode && onPublishOutput && <button type="button" onClick={onPublishOutput}>Show output in timeline</button>}
+            {targetNode && <button type="button" disabled={!canDeleteTarget} onClick={onDeleteNode}>Delete Node</button>}
+            {deleteActions.map(action => (
+              <button key={action.id} type="button" onClick={action.onSelect}>{action.label}</button>
+            ))}
             <div className="node-workspace-context-separator" />
           </>
         )}

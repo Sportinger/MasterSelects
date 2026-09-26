@@ -183,6 +183,24 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
       graph.nodes = graph.nodes.filter(n => n.id !== id); graph.edges = graph.edges.filter(e => e.from !== id && e.to !== id); delete graph.layout[id];
       graph.groups?.forEach(g => { g.nodeIds = g.nodeIds.filter(nodeId => nodeId !== id); });
     }),
+    /** Removes a node group together with its nested groups and every node they contain. */
+    deleteGroup: (groupId: string) => editEffectGraph(clipId, effectId, 'Delete node group', (graph, params) => {
+      const groups = graph.groups ?? [];
+      if (!groups.some(g => g.id === groupId)) throw new Error('Node group is unavailable.');
+      const groupIds = new Set([groupId]);
+      for (let grew = true; grew;) {
+        grew = false;
+        for (const g of groups) if (g.parentId && groupIds.has(g.parentId) && !groupIds.has(g.id)) { groupIds.add(g.id); grew = true; }
+      }
+      const nodeIds = new Set(groups.filter(g => groupIds.has(g.id)).flatMap(g => g.nodeIds));
+      const members = graph.nodes.filter(n => nodeIds.has(n.id));
+      if (members.some(n => !canRemoveEffectOperator(ownerType(graph.domain), n.id, n.operator))) throw new Error('This effect requires nodes inside that group.');
+      for (const node of members) if (node.exposed && typeof node.bindings.value === 'string') delete params[node.bindings.value];
+      graph.nodes = graph.nodes.filter(n => !nodeIds.has(n.id));
+      graph.edges = graph.edges.filter(e => !nodeIds.has(e.from) && !nodeIds.has(e.to));
+      for (const id of nodeIds) delete graph.layout[id];
+      graph.groups = groups.filter(g => !groupIds.has(g.id));
+    }),
     addNode: (operatorId: string, position?: { x: number; y: number }, connection?: {
       direction: 'input' | 'output'; endpoints: Array<{ nodeId: string; portId: string }>; portId: string; groupId?: string | null;
     }, options?: {

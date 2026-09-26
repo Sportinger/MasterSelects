@@ -20,6 +20,8 @@ export interface CanvasCurve extends Rect {
 export interface CanvasNode extends Rect {
   id: string; label: string; description: string; kind: string; runtime: string;
   appearance?: number; disappearing?: boolean;
+  /** Linear pop-in progress 0..1 while a newly added node springs into place. */
+  pop?: number;
   color: string; selected: boolean; bypassed: boolean; bypassable: boolean;
   badges: Array<{ label: string; tone: string }>; ports: CanvasPort[];
   curve?: CanvasCurve;

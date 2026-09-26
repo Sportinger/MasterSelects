@@ -86,7 +86,9 @@ import {
 } from '../../../services/flashboard/FlashBoardChatBridgeControl';
 import {
   DEFAULT_FLASHBOARD_CHAT_AGENT_MODE,
+  loadStoredFlashBoardChatAgentMode,
   resolveFlashBoardChatAgentMode,
+  storeFlashBoardChatAgentMode,
 } from './FlashBoardChatAgentMode';
 import { createStreamingTextThrottle } from './nodeStreamDisplay';
 
@@ -136,12 +138,12 @@ export function useFlashBoardChatController({
   const resumedHostedTurnIdsRef = useRef(new Set<string>());
   const resumedDirectTurnIdsRef = useRef(new Set<string>());
   const copiedChatResetTimeoutRef = useRef<number | null>(null);
-  const chatAgentModeExplicitlySelectedRef = useRef(false);
+  const chatAgentModeExplicitlySelectedRef = useRef(loadStoredFlashBoardChatAgentMode() !== null);
   const [chatPanelOpen, setChatPanelOpen] = useState(initialMode === 'chat');
   const [chatPrompt, setChatPrompt] = useState(initialChatPrompt ?? storedDraftPrompt ?? '');
   const [chatProvider, setChatProvider] = useState<FlashBoardChatProvider>('kie');
   const [chatAgentMode, setChatAgentMode] = useState<FlashBoardChatAgentMode>(
-    DEFAULT_FLASHBOARD_CHAT_AGENT_MODE,
+    () => loadStoredFlashBoardChatAgentMode() ?? DEFAULT_FLASHBOARD_CHAT_AGENT_MODE,
   );
   const [chatModelClass, setChatModelClass] = useState<FlashBoardChatModelClass>('fast');
   const [availableChatAgentModes, setAvailableChatAgentModes] = useState<
@@ -213,7 +215,8 @@ export function useFlashBoardChatController({
       return;
     }
     if (!canUseHostedChat) {
-      chatAgentModeExplicitlySelectedRef.current = false;
+      // A persisted Fast/Medium/Slow choice survives sign-out and reloads.
+      chatAgentModeExplicitlySelectedRef.current = loadStoredFlashBoardChatAgentMode() !== null;
       setAvailableChatAgentModes(['standard']);
       setAvailableChatModelClasses([]);
       setChatModelClassAvailabilityStatus('idle');
@@ -310,6 +313,7 @@ export function useFlashBoardChatController({
   const handleChatAgentModeSelect = useCallback((agentMode: FlashBoardChatAgentMode) => {
     if (isChatting) return;
     chatAgentModeExplicitlySelectedRef.current = true;
+    storeFlashBoardChatAgentMode(agentMode);
     setChatAgentMode(agentMode);
     setChatError(null);
   }, [isChatting]);

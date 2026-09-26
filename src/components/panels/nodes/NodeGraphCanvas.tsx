@@ -79,7 +79,7 @@ interface NodeGraphCanvasProps {
   onDuplicateSelection?: () => void;
   onGroupSelection?: () => void;
   onToggleNodeBypass?: (nodeId: string) => void;
-  onOpenAddMenu?: (position: { x: number; y: number; layout: NodeGraphLayout; nodeId?: string | null }) => void;
+  onOpenAddMenu?: (position: { x: number; y: number; layout: NodeGraphLayout; nodeId?: string | null; groupId?: string | null }) => void;
   onToggleGroup?: (id: string) => void;
   onSetAllGroupsCollapsed?: (collapsed: boolean) => void;
   onTransferNodes?: (nodeIds: string[], groupId: string) => Record<string, string>;
@@ -532,7 +532,14 @@ export function NodeGraphCanvas({
                 y: Math.round((event.clientY - rect.top - viewport.panY) / viewport.zoom),
               }
             : { x: 0, y: 0 };
-          onOpenAddMenu?.({ x: event.clientX, y: event.clientY, layout, nodeId: targetNodeId });
+          // A group frame (header, border or body) targets its innermost group for group/effect deletes.
+          // Frames ignore pointer events outside the header, so the body is hit-tested geometrically.
+          const targetGroupId = targetNodeId ? null
+            : (event.target as Element).closest<HTMLElement>('.node-workspace-group')?.dataset.groupId
+              ?? [...groupBounds].filter(([, box]) => layout.x >= box.left && layout.x <= box.right && layout.y >= box.top && layout.y <= box.bottom)
+                .toSorted(([, a], [, b]) => (a.right - a.left) * (a.bottom - a.top) - (b.right - b.left) * (b.bottom - b.top))[0]?.[0]
+              ?? null;
+          onOpenAddMenu?.({ x: event.clientX, y: event.clientY, layout, nodeId: targetNodeId, groupId: targetGroupId });
         }}
       >
         <div className="node-workspace-grid" style={gridStyle} aria-hidden="true" />
