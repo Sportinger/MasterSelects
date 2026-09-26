@@ -217,7 +217,20 @@ lower and diagonal neighbors, so they stay on the folded surface; other
 emitters scatter them within Sub-particle Spread. One million simulated
 particles with eight sub-particles draw about 8.4 million points. Emitter
 capacity is 4,194,304 particles per clip; restart checkpoints keep room for at
-least two full states. There is no particle
+least two full states.
+
+**Room, light and shadows.** The **Room** render node draws an open-front
+white gallery box (back wall, floor, ceiling, sides) with an optional flat
+frame ring around the opening, so particles can spill out past the box edge.
+Room also defines the key light (direction in simulation space, ambient,
+shadow strength). Each lit flock clip renders its point and instance branches
+into a 2048² orthographic shadow map framed around the room (or the emitters);
+Points with **Shading: Lit** draw sphere impostors that receive the light and
+3x3 PCF shadows, lit Instances and the Room walls receive them too, and the
+walls darken softly where they meet. Points **Relief** moves each point and
+sub-particle along the emitter normal by Pigment Image brightness. Instances
+keep their previous fixed-light look while no Room or lit Points branch
+enables the key light. There is no particle
 collision. A typical graph is Grid Emitter -> Curl Flow + Home Pull + Drag ->
 Simulation (min speed 0) -> Points in Image color mode.
 

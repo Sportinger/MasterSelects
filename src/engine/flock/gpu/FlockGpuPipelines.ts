@@ -14,13 +14,16 @@ import {
   FLOCK_GLYPHS_WGSL,
   FLOCK_INSTANCES_WGSL,
   FLOCK_LINKS_RENDER_WGSL,
-  FLOCK_POINTS_WGSL,
   FLOCK_VECTORS_WGSL,
 } from '../shaders/flockRenderWgsl';
+import { FLOCK_POINTS_WGSL } from '../shaders/flockPointsWgsl';
+import { FLOCK_ROOM_WGSL } from '../shaders/flockRoomWgsl';
 
 const log = Logger.create('FlockGpuPipelines');
 
-export type FlockRenderKind = 'points' | 'instances' | 'links' | 'vectors' | 'curves' | 'glyphs' | 'glyphCubes';
+export type FlockRenderKind = 'points' | 'instances' | 'links' | 'vectors' | 'curves' | 'glyphs' | 'glyphCubes' | 'room';
+export type FlockShadowKind = 'points' | 'instances';
+export const FLOCK_SHADOW_FORMAT: GPUTextureFormat = 'depth32float';
 export type FlockBlendMode = 'additive' | 'alpha' | 'opaque';
 
 const RENDER_SOURCES: Record<FlockRenderKind, { code: string; vertex: string; fragment: string }> = {
@@ -31,6 +34,12 @@ const RENDER_SOURCES: Record<FlockRenderKind, { code: string; vertex: string; fr
   curves: { code: FLOCK_CURVES_WGSL, vertex: 'vsCurves', fragment: 'fsLines' },
   glyphs: { code: FLOCK_GLYPHS_WGSL, vertex: 'vsGlyphs', fragment: 'fsGlyphs' },
   glyphCubes: { code: FLOCK_GLYPH_CUBES_WGSL, vertex: 'vsGlyphCubes', fragment: 'fsLines' },
+  room: { code: FLOCK_ROOM_WGSL, vertex: 'vsRoom', fragment: 'fsRoom' },
+};
+
+const SHADOW_ENTRIES: Record<FlockShadowKind, { vertex: string; fragment?: string }> = {
+  points: { vertex: 'vsPointsShadow', fragment: 'fsPointsShadow' },
+  instances: { vertex: 'vsInstancesShadow' },
 };
 
 const BRANCH_BUFFER_BINDINGS: Record<FlockRenderKind, number> = {
@@ -41,6 +50,16 @@ const BRANCH_BUFFER_BINDINGS: Record<FlockRenderKind, number> = {
   curves: 2,
   glyphs: 2,
   glyphCubes: 2,
+  room: 0,
+};
+
+const INSTANCE_VERTEX_LAYOUT: GPUVertexBufferLayout = {
+  arrayStride: 24,
+  stepMode: 'vertex',
+  attributes: [
+    { shaderLocation: 0, offset: 0, format: 'float32x3' },
+    { shaderLocation: 1, offset: 12, format: 'float32x3' },
+  ],
 };
 
 function uniform(binding: number, visibility: number, dynamic = false): GPUBindGroupLayoutEntry {
@@ -89,6 +108,7 @@ export class FlockGpuPipelines {
   private readonly branchLayouts = new Map<FlockRenderKind, GPUBindGroupLayout>();
   private readonly renderModules = new Map<FlockRenderKind, GPUShaderModule>();
   private readonly renderPipelines = new Map<string, GPURenderPipeline>();
+  private readonly shadowPipelines = new Map<FlockShadowKind, GPURenderPipeline>();
   private readonly device: GPUDevice;
 
   constructor(device: GPUDevice) {
@@ -135,7 +155,13 @@ export class FlockGpuPipelines {
     const VF = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT;
     this.frameLayout = device.createBindGroupLayout({
       label: 'flock-render-frame-layout',
-      entries: [uniform(0, VF), storage(1, GPUShaderStage.VERTEX, true), storage(2, GPUShaderStage.VERTEX, true)],
+      entries: [
+        uniform(0, VF),
+        storage(1, GPUShaderStage.VERTEX, true),
+        storage(2, GPUShaderStage.VERTEX, true),
+        { binding: 3, visibility: VF, texture: { sampleType: 'depth' } },
+        { binding: 4, visibility: VF, sampler: { type: 'comparison' } },
+      ],
     });
   }
 
@@ -156,16 +182,48 @@ export class FlockGpuPipelines {
     return layout;
   }
 
+  private renderModule(kind: FlockRenderKind): GPUShaderModule {
+    let module = this.renderModules.get(kind);
+    if (!module) {
+      module = createCheckedModule(this.device, RENDER_SOURCES[kind].code, `flock-render-${kind}`);
+      this.renderModules.set(kind, module);
+    }
+    return module;
+  }
+
+  /** Depth-only pipeline that draws a casting branch into the key light's shadow map. */
+  getShadowPipeline(kind: FlockShadowKind): GPURenderPipeline {
+    const existing = this.shadowPipelines.get(kind);
+    if (existing) return existing;
+    const module = this.renderModule(kind);
+    const entries = SHADOW_ENTRIES[kind];
+    const done = watchValidation(this.device, `flock ${kind} shadow pipeline`);
+    const pipeline = this.device.createRenderPipeline({
+      label: `flock-shadow-${kind}`,
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [this.frameLayout, this.getBranchLayout(kind)],
+        label: `flock-shadow-${kind}-layout`,
+      }),
+      vertex: {
+        module,
+        entryPoint: entries.vertex,
+        buffers: kind === 'instances' ? [INSTANCE_VERTEX_LAYOUT] : [],
+      },
+      ...(entries.fragment ? { fragment: { module, entryPoint: entries.fragment, targets: [] } } : {}),
+      primitive: { topology: 'triangle-list', cullMode: 'none' },
+      depthStencil: { format: FLOCK_SHADOW_FORMAT, depthWriteEnabled: true, depthCompare: 'less' },
+    });
+    done();
+    this.shadowPipelines.set(kind, pipeline);
+    return pipeline;
+  }
+
   getRenderPipeline(kind: FlockRenderKind, blend: FlockBlendMode): GPURenderPipeline {
     const key = `${kind}:${blend}`;
     const existing = this.renderPipelines.get(key);
     if (existing) return existing;
     const source = RENDER_SOURCES[kind];
-    let module = this.renderModules.get(kind);
-    if (!module) {
-      module = createCheckedModule(this.device, source.code, `flock-render-${kind}`);
-      this.renderModules.set(kind, module);
-    }
+    const module = this.renderModule(kind);
     const blendState: GPUBlendState | undefined = blend === 'opaque'
       ? undefined
       : blend === 'additive'
@@ -187,16 +245,7 @@ export class FlockGpuPipelines {
       vertex: {
         module,
         entryPoint: source.vertex,
-        buffers: kind === 'instances'
-          ? [{
-              arrayStride: 24,
-              stepMode: 'vertex',
-              attributes: [
-                { shaderLocation: 0, offset: 0, format: 'float32x3' },
-                { shaderLocation: 1, offset: 12, format: 'float32x3' },
-              ],
-            }]
-          : [],
+        buffers: kind === 'instances' ? [INSTANCE_VERTEX_LAYOUT] : [],
       },
       fragment: {
         module,

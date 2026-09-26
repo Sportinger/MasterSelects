@@ -1,11 +1,13 @@
 import type { FlockOperatorDescriptor } from './flockOperatorTypes';
 import {
   assetParam,
+  boolParam,
   colorParam,
   enumParam,
   integerParam,
   numberParam,
   port,
+  vecParam,
 } from './flockParamBuilders';
 
 const sceneOutput = [port('scene', 'Scene', 'scene')];
@@ -47,6 +49,8 @@ export const RENDER_OPERATORS: FlockOperatorDescriptor[] = [
       numberParam('distanceFade', 'Distance Fade', 0.5, 'appearance', { min: 0, max: 1, step: 0.01, advanced: true }),
       integerParam('children', 'Sub-particles', 1, 'appearance', { min: 1, max: 16, description: 'Render-only points per simulated particle; grid emitters fill the surface between neighbors.' }),
       numberParam('childSpread', 'Sub-particle Spread', 1.5, 'appearance', { min: 0, max: 50, step: 0.1, advanced: true, description: 'Scatter radius for non-grid emitters, in simulation units.' }),
+      enumParam('shading', 'Shading', 'flat', ['flat', 'lit'], 'appearance', { description: 'Lit draws sphere impostors that receive the key light and particle shadows.' }),
+      numberParam('relief', 'Relief', 0, 'appearance', { min: -200, max: 200, step: 0.5, description: 'Moves points along the emitter normal by Pigment Image brightness, in simulation units.' }),
       blend('additive'),
     ],
     bypass: { kind: 'mute' },
@@ -190,6 +194,28 @@ export const RENDER_OPERATORS: FlockOperatorDescriptor[] = [
       colorMode('speed'),
       numberParam('opacity', 'Opacity', 0.7, 'appearance', { min: 0, max: 1, step: 0.01 }),
       blend('additive'),
+    ],
+    bypass: { kind: 'mute' },
+  },
+  {
+    id: 'flock.render-room',
+    version: 1,
+    label: 'Room',
+    category: 'render',
+    description: 'Open-front white gallery box with a frame ring. Sets the key light: lit points, instances and the walls receive particle shadows.',
+    phase: 'render',
+    inputs: [],
+    outputs: sceneOutput,
+    params: [
+      vecParam('center', 'Center', [0, 0, -60], 'appearance'),
+      vecParam('size', 'Size', [360, 210, 150], 'appearance', { min: 1 }),
+      numberParam('frame', 'Frame', 60, 'appearance', { min: 0, max: 1000, step: 1, description: 'Width of the flat wall ring around the opening.' }),
+      colorParam('color', 'Wall Color', '#f2f0ec'),
+      numberParam('cornerShade', 'Corner Shade', 0.35, 'appearance', { min: 0, max: 1, step: 0.01 }),
+      vecParam('lightDirection', 'Light Direction', [-0.35, 0.8, 0.55], 'appearance', { description: 'Direction toward the key light, in simulation space.' }),
+      numberParam('ambient', 'Ambient', 0.45, 'appearance', { min: 0, max: 1, step: 0.01 }),
+      numberParam('shadowStrength', 'Shadow Strength', 0.75, 'appearance', { min: 0, max: 1, step: 0.01 }),
+      boolParam('shadows', 'Shadows', true, 'appearance'),
     ],
     bypass: { kind: 'mute' },
   },

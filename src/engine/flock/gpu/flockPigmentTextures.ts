@@ -27,7 +27,7 @@ function devicePigments(device: GPUDevice): DevicePigments {
   if (!state) {
     const fallback = device.createTexture({
       size: [1, 1],
-      format: 'rgba8unorm-srgb',
+      format: 'rgba8unorm',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
       label: 'flock-pigment-fallback',
     });
@@ -73,7 +73,7 @@ export function getFlockPigmentBinding(
   void loadBitmap(file.url).then((bitmap) => {
     const texture = device.createTexture({
       size: [bitmap.width, bitmap.height],
-      format: 'rgba8unorm-srgb',
+      format: 'rgba8unorm',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
       label: `flock-pigment-${file.name}`,
     });

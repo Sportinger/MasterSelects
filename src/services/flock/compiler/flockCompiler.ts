@@ -84,6 +84,7 @@ const BRANCH_KINDS: Record<string, FlockBranchKind> = {
   'flock.render-curves': 'curves',
   'flock.render-glyphs': 'glyphs',
   'flock.render-vectors': 'vectors',
+  'flock.render-room': 'room',
 };
 
 class CompileError extends Error {
@@ -398,10 +399,10 @@ function lowerFlockGraph(definition: FlockDefinition, inheritedDiagnostics: Floc
       } else {
         trailIndex = curvesInput(node, false);
       }
-    } else {
+    } else if (kind !== 'room') {
       requireSimulationParticles(node);
     }
-    const selection = kind === 'glyphs' ? -1 : selectionInput(node);
+    const selection = kind === 'glyphs' || kind === 'room' ? -1 : selectionInput(node);
     const palette = paletteInput(node);
     branches.push({ ...specFor(node), kind, index: branches.length, selection, palette, trailIndex });
     topology[`branch:${branches.length - 1}`] = [kind, selection, palette, trailIndex];

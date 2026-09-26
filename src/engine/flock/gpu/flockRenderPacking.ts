@@ -1,5 +1,6 @@
 import type { FlockBranchSpec, FlockEmitterSpec, FlockResolvedNode, FlockResolvedRender } from '../../../services/flock/compiler/flockProgramTypes';
 import { flockGridDims } from '../shared/flockMath';
+import { LIGHT_PARAMS_FLOATS, packFlockLight, type FlockLightSetup } from './flockLighting';
 import type { SceneCamera } from '../../scene/types';
 import { toCpuSelections } from '../cpu/flockCpuStepParams';
 import { MAX_GPU_SELECTIONS, SELECTION_SIZE, packSelections } from './flockGpuLayout';
@@ -8,7 +9,7 @@ import type { FlockBlendMode, FlockRenderKind } from './FlockGpuPipelines';
 export const FRAME_PARAMS_BYTES = 256;
 const PALETTE_BLOCK_BYTES = 64 * 8;
 const GRID_BLOCK_BYTES = 16 * 8;
-export const RENDER_BLOCK_BYTES = FRAME_PARAMS_BYTES + SELECTION_SIZE * MAX_GPU_SELECTIONS + PALETTE_BLOCK_BYTES + GRID_BLOCK_BYTES;
+export const RENDER_BLOCK_BYTES = FRAME_PARAMS_BYTES + SELECTION_SIZE * MAX_GPU_SELECTIONS + PALETTE_BLOCK_BYTES + GRID_BLOCK_BYTES + LIGHT_PARAMS_FLOATS * 4;
 export const BRANCH_BYTES = 256;
 export const FLOCK_SIM_TO_WORLD = 0.01;
 
@@ -48,6 +49,7 @@ export interface FrameBlockInput {
   layerWorld: Float32Array;
   render: FlockResolvedRender;
   emitters: FlockEmitterSpec[];
+  light: FlockLightSetup;
   alpha: number;
   capacity: number;
   maxSpeed: number;
@@ -108,6 +110,7 @@ export function packRenderBlock(input: FrameBlockInput): ArrayBuffer {
       f[o + 3] = rows;
     }
   });
+  packFlockLight(f, gridOffset + GRID_BLOCK_BYTES / 4, input.light, world);
   return data;
 }
 
@@ -140,7 +143,7 @@ export function packBranch(
   f[5] = second[1];
   f[6] = second[2];
   f[7] = p.n.size ?? 3;
-  f[8] = ['points', 'instances', 'links', 'curves', 'glyphs', 'vectors'].indexOf(spec.kind);
+  f[8] = ['points', 'instances', 'links', 'curves', 'glyphs', 'vectors', 'room'].indexOf(spec.kind);
   f[9] = COLOR_MODES[p.e.colorMode ?? 'constant'] ?? 0;
   f[10] = spec.kind === 'glyphs' ? GLYPH_SHAPES[p.e.glyph ?? 'square'] ?? 2 : POINT_SHAPES[p.e.shape ?? 'soft'] ?? 1;
   f[11] = (p.e.sizeMode ?? 'screen') === 'world' ? 1 : 0;
@@ -163,7 +166,7 @@ export function packBranch(
   f[28] = p.n.swimAmplitude ?? 0;
   f[29] = p.n.swimFrequency ?? 0;
   f[30] = p.n.phaseVariation ?? 0;
-  f[31] = SHADINGS[p.e.shading ?? 'lit'] ?? 0;
+  f[31] = SHADINGS[p.e.shading ?? (spec.kind === 'points' ? 'flat' : 'lit')] ?? 0;
   f[32] = (p.e.orientation ?? 'camera') === 'world' ? 1 : 0;
   f[33] = ANCHORS[p.e.anchor ?? 'trail-head'] ?? 1;
   f[34] = p.n.lineWidth ?? 1;
@@ -172,11 +175,19 @@ export function packBranch(
   f[37] = extras.headRing ?? 0;
   f[38] = extras.slotCount ?? 0;
   f[39] = FORWARD_AXES[p.e.forwardAxis ?? '+z'] ?? 0;
-  const blendName = (p.e.blend ?? 'additive') as FlockBlendMode;
+  const blendName = (spec.kind === 'room' ? 'opaque' : p.e.blend ?? 'additive') as FlockBlendMode;
   f[40] = BLENDS[blendName] ?? 0;
   f[41] = (p.e.widthMode ?? 'screen') === 'world' ? 1 : 0;
   f[42] = spec.kind === 'points' ? flockPointChildren(branch) : 1;
   f[43] = p.n.childSpread ?? 1.5;
+  if (spec.kind === 'room') {
+    const center = p.v.center ?? [0, 0, -60];
+    const size = p.v.size ?? [360, 210, 150];
+    f.set([center[0], center[1], center[2], Math.max(0, p.n.frame ?? 0)], 44);
+    f.set([Math.max(1, size[0]), Math.max(1, size[1]), Math.max(1, size[2]), p.n.cornerShade ?? 0.35], 48);
+  } else {
+    f[44] = spec.kind === 'points' ? p.n.relief ?? 0 : 0;
+  }
   let renderKind: FlockRenderKind = spec.kind === 'glyphs' ? 'glyphs' : spec.kind;
   if (spec.kind === 'glyphs' && p.e.glyph === 'cube') renderKind = 'glyphCubes';
   return { data, renderKind, blend: blendName in BLENDS ? blendName : 'additive' };

@@ -1,6 +1,8 @@
 import type { FlockProgram, FlockResolvedRender } from '../../../services/flock/compiler/flockProgramTypes';
 import type { SceneCamera, SceneFlockLayer } from '../../scene/types';
-import type { FlockGpuPipelines, FlockRenderKind } from './FlockGpuPipelines';
+import { FLOCK_SHADOW_FORMAT, type FlockGpuPipelines, type FlockRenderKind, type FlockShadowKind } from './FlockGpuPipelines';
+import { FLOCK_SHADOW_MAP_SIZE, resolveFlockLight, type FlockLightSetup } from './flockLighting';
+import { ROOM_VERTEX_COUNT } from '../shaders/flockRoomWgsl';
 import type { FlockGpuSession } from './FlockGpuSession';
 import { getFlockMesh } from './flockMeshes';
 import { getFlockModelMesh } from './flockModelMeshes';
@@ -43,11 +45,25 @@ export class FlockBranchRenderer {
   private readonly pipelines: FlockGpuPipelines;
   private readonly meshBuffers = new Map<string, { buffer: GPUBuffer; vertexCount: number }>();
   private readonly placeholder: GPUBuffer;
+  private readonly shadowTextures = new Map<string, GPUTexture>();
+  private readonly shadowPlaceholder: GPUTexture;
+  private readonly shadowPlaceholderView: GPUTextureView;
+  private readonly shadowSampler: GPUSampler;
+  /** Light setup resolved during this frame's opaque pass, reused by the transparent pass. */
+  private readonly lights = new WeakMap<FlockDrawPlan, FlockLightSetup>();
 
   constructor(device: GPUDevice, pipelines: FlockGpuPipelines) {
     this.device = device;
     this.pipelines = pipelines;
     this.placeholder = device.createBuffer({ size: 64, usage: GPUBufferUsage.STORAGE, label: 'flock-placeholder-storage' });
+    this.shadowPlaceholder = device.createTexture({
+      size: [1, 1],
+      format: FLOCK_SHADOW_FORMAT,
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
+      label: 'flock-shadow-placeholder',
+    });
+    this.shadowPlaceholderView = this.shadowPlaceholder.createView();
+    this.shadowSampler = device.createSampler({ compare: 'less-equal', magFilter: 'linear', minFilter: 'linear', label: 'flock-shadow-sampler' });
   }
 
   private meshBuffer(kind: string, modelAssetId: string): { buffer: GPUBuffer; vertexCount: number } {
@@ -120,15 +136,111 @@ export class FlockBranchRenderer {
           case 'points':
             instanceCount = program.capacity * flockPointChildren(branch);
             break;
+          case 'room':
+            vertexCount = ROOM_VERTEX_COUNT;
+            instanceCount = 1;
+            break;
           default:
             break;
         }
         if (instanceCount <= 0) continue;
-        const pigmentAsset = branch.p.e.colorMode === 'image' ? branch.p.a.image ?? '' : '';
+        const usesPigment = branch.p.e.colorMode === 'image' || (branch.p.n.relief ?? 0) !== 0;
+        const pigmentAsset = usesPigment ? branch.p.a.image ?? '' : '';
         draws.push({ plan, kind: packed.renderKind, blend: packed.blend, branchData: packed.data, pigmentAsset, storage, vertexBuffer, vertexCount, instanceCount });
       }
     }
     return draws;
+  }
+
+  private shadowTexture(clipId: string): GPUTexture {
+    let texture = this.shadowTextures.get(clipId);
+    if (!texture) {
+      texture = this.device.createTexture({
+        size: [FLOCK_SHADOW_MAP_SIZE, FLOCK_SHADOW_MAP_SIZE],
+        format: FLOCK_SHADOW_FORMAT,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+        label: `flock-shadow-${clipId}`,
+      });
+      this.shadowTextures.set(clipId, texture);
+    }
+    return texture;
+  }
+
+  private frameGroup(plan: FlockDrawPlan, camera: SceneCamera, light: FlockLightSetup, shadowView: GPUTextureView, temporaryBuffers: GPUBuffer[]): GPUBindGroup {
+    const frameBuffer = this.device.createBuffer({ size: RENDER_BLOCK_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, label: 'flock-render-block' });
+    temporaryBuffers.push(frameBuffer);
+    this.device.queue.writeBuffer(frameBuffer, 0, packRenderBlock({
+      camera,
+      layerWorld: plan.layer.worldMatrix,
+      render: plan.render,
+      emitters: plan.program.emitters,
+      light,
+      alpha: plan.alpha,
+      capacity: plan.program.capacity,
+      maxSpeed: plan.program.simulation.params.numbers.maxSpeed?.base ?? 45,
+      stepRate: plan.program.stepRate,
+      neighborLimit: plan.program.simulation.neighborLimit,
+    }));
+    return this.device.createBindGroup({
+      layout: this.pipelines.frameLayout,
+      entries: [
+        { binding: 0, resource: { buffer: frameBuffer } },
+        { binding: 1, resource: { buffer: plan.session.currentState } },
+        { binding: 2, resource: { buffer: plan.session.previousState } },
+        { binding: 3, resource: shadowView },
+        { binding: 4, resource: this.shadowSampler },
+      ],
+      label: 'flock-frame-group',
+    });
+  }
+
+  private branchGroup(draw: PreparedDraw, temporaryBuffers: GPUBuffer[]): GPUBindGroup {
+    const branchBuffer = this.device.createBuffer({ size: BRANCH_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, label: `flock-branch-${draw.kind}` });
+    temporaryBuffers.push(branchBuffer);
+    this.device.queue.writeBuffer(branchBuffer, 0, draw.branchData);
+    const pigment = getFlockPigmentBinding(this.device, draw.pigmentAsset, () => renderHostPort.requestRender());
+    return this.device.createBindGroup({
+      layout: this.pipelines.getBranchLayout(draw.kind),
+      entries: [
+        { binding: 0, resource: { buffer: branchBuffer } },
+        ...draw.storage.map((buffer, index) => ({ binding: index + 1, resource: { buffer } })),
+        { binding: 8, resource: pigment.view },
+        { binding: 9, resource: pigment.sampler },
+      ],
+      label: `flock-branch-group-${draw.kind}`,
+    });
+  }
+
+  /** Renders every point/instance branch of lit plans into that plan's shadow map (opaque pass only). */
+  private renderShadows(commandEncoder: GPUCommandEncoder, plans: FlockDrawPlan[], camera: SceneCamera, temporaryBuffers: GPUBuffer[]): void {
+    for (const plan of plans) {
+      const light = resolveFlockLight(plan.render, plan.program.emitters);
+      this.lights.set(plan, light);
+      if (!light.enabled) continue;
+      const casters = [...this.collect([plan], 'opaque'), ...this.collect([plan], 'transparent')]
+        .filter((draw) => draw.kind === 'points' || draw.kind === 'instances');
+      const shadowPass = commandEncoder.beginRenderPass({
+        colorAttachments: [],
+        depthStencilAttachment: {
+          view: this.shadowTexture(plan.layer.clipId).createView(),
+          depthClearValue: 1,
+          depthLoadOp: 'clear',
+          depthStoreOp: 'store',
+        },
+        label: 'native-scene-flock-shadow-pass',
+      });
+      if (casters.length > 0) {
+        const frame = this.frameGroup(plan, camera, light, this.shadowPlaceholderView, temporaryBuffers);
+        for (const draw of casters) {
+          shadowPass.setPipeline(this.pipelines.getShadowPipeline(draw.kind as FlockShadowKind));
+          shadowPass.setBindGroup(0, frame);
+          shadowPass.setBindGroup(1, this.branchGroup(draw, temporaryBuffers));
+          if (draw.vertexBuffer) shadowPass.setVertexBuffer(0, draw.vertexBuffer);
+          shadowPass.draw(draw.vertexCount, draw.instanceCount);
+        }
+      }
+      shadowPass.end();
+    }
   }
 
   render(
@@ -140,32 +252,14 @@ export class FlockBranchRenderer {
     pass: FlockPassKind,
     temporaryBuffers: GPUBuffer[],
   ): boolean {
+    if (pass === 'opaque') this.renderShadows(commandEncoder, plans, camera, temporaryBuffers);
     const draws = this.collect(plans, pass);
     if (draws.length === 0) return true;
     const frameGroups = new Map<FlockDrawPlan, GPUBindGroup>();
     for (const plan of new Set(draws.map((draw) => draw.plan))) {
-      const frameBuffer = this.device.createBuffer({ size: RENDER_BLOCK_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, label: 'flock-render-block' });
-      temporaryBuffers.push(frameBuffer);
-      this.device.queue.writeBuffer(frameBuffer, 0, packRenderBlock({
-        camera,
-        layerWorld: plan.layer.worldMatrix,
-        render: plan.render,
-        emitters: plan.program.emitters,
-        alpha: plan.alpha,
-        capacity: plan.program.capacity,
-        maxSpeed: plan.program.simulation.params.numbers.maxSpeed?.base ?? 45,
-        stepRate: plan.program.stepRate,
-        neighborLimit: plan.program.simulation.neighborLimit,
-      }));
-      frameGroups.set(plan, this.device.createBindGroup({
-        layout: this.pipelines.frameLayout,
-        entries: [
-          { binding: 0, resource: { buffer: frameBuffer } },
-          { binding: 1, resource: { buffer: plan.session.currentState } },
-          { binding: 2, resource: { buffer: plan.session.previousState } },
-        ],
-        label: 'flock-frame-group',
-      }));
+      const light = this.lights.get(plan) ?? resolveFlockLight(plan.render, plan.program.emitters);
+      const shadowView = light.enabled ? this.shadowTexture(plan.layer.clipId).createView() : this.shadowPlaceholderView;
+      frameGroups.set(plan, this.frameGroup(plan, camera, light, shadowView, temporaryBuffers));
     }
 
     const renderPass = commandEncoder.beginRenderPass({
@@ -174,23 +268,9 @@ export class FlockBranchRenderer {
       label: `native-scene-flock-${pass}-pass`,
     });
     for (const draw of draws) {
-      const branchBuffer = this.device.createBuffer({ size: BRANCH_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, label: `flock-branch-${draw.kind}` });
-      temporaryBuffers.push(branchBuffer);
-      this.device.queue.writeBuffer(branchBuffer, 0, draw.branchData);
-      const pigment = getFlockPigmentBinding(this.device, draw.pigmentAsset, () => renderHostPort.requestRender());
-      const branchGroup = this.device.createBindGroup({
-        layout: this.pipelines.getBranchLayout(draw.kind),
-        entries: [
-          { binding: 0, resource: { buffer: branchBuffer } },
-          ...draw.storage.map((buffer, index) => ({ binding: index + 1, resource: { buffer } })),
-          { binding: 8, resource: pigment.view },
-          { binding: 9, resource: pigment.sampler },
-        ],
-        label: `flock-branch-group-${draw.kind}`,
-      });
       renderPass.setPipeline(this.pipelines.getRenderPipeline(draw.kind, draw.blend));
       renderPass.setBindGroup(0, frameGroups.get(draw.plan)!);
-      renderPass.setBindGroup(1, branchGroup);
+      renderPass.setBindGroup(1, this.branchGroup(draw, temporaryBuffers));
       if (draw.vertexBuffer) renderPass.setVertexBuffer(0, draw.vertexBuffer);
       renderPass.draw(draw.vertexCount, draw.instanceCount);
     }
@@ -202,5 +282,8 @@ export class FlockBranchRenderer {
     for (const entry of this.meshBuffers.values()) entry.buffer.destroy();
     this.meshBuffers.clear();
     this.placeholder.destroy();
+    for (const texture of this.shadowTextures.values()) texture.destroy();
+    this.shadowTextures.clear();
+    this.shadowPlaceholder.destroy();
   }
 }

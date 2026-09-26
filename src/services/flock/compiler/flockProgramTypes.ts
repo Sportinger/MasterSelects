@@ -128,7 +128,7 @@ export interface FlockTrailSpec extends FlockNodeSpec {
   salt: number;
 }
 
-export type FlockBranchKind = 'points' | 'instances' | 'links' | 'curves' | 'glyphs' | 'vectors';
+export type FlockBranchKind = 'points' | 'instances' | 'links' | 'curves' | 'glyphs' | 'vectors' | 'room';
 
 export interface FlockBranchSpec extends FlockNodeSpec {
   kind: FlockBranchKind;
