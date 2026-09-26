@@ -230,7 +230,22 @@ Points with **Shading: Lit** draw sphere impostors that receive the light and
 walls darken softly where they meet. Points **Relief** moves each point and
 sub-particle along the emitter normal by Pigment Image brightness. Instances
 keep their previous fixed-light look while no Room or lit Points branch
-enables the key light. There is no particle
+enables the key light.
+
+**FLIP Fluid.** The FLIP Fluid behavior turns the particles into an
+incompressible liquid inside a box domain (Domain Center/Size, Cell Size,
+Pressure Iterations, Gravity, FLIP Ratio). Each step, after forces and
+advection, the GPU transfers particle velocities to a staggered MAC grid with
+fixed-point atomics (order independent, so resimulation stays deterministic),
+marks fluid cells, solves pressure with Jacobi iterations, projects the grid
+velocity and transfers it back as a PIC/FLIP blend with a position
+correction; the domain walls are solid. Domain and cell size are topology
+(changing them rebuilds the grid and resimulates). Other forces still apply,
+so Curl Flow adds swirl; bypass Home Pull for a free liquid. Pointing Gravity
+into the box (for example 0, 0, -150) with a matching shallow Room makes the
+liquid pour against the back wall. A CPU reference solver with the same
+discretization backs tests and the low-count fallback. The grid is capped at
+256 cells per axis and about 2 million cells. There is no particle
 collision. A typical graph is Grid Emitter -> Curl Flow + Home Pull + Drag ->
 Simulation (min speed 0) -> Points in Image color mode.
 

@@ -15,6 +15,7 @@ export const OP_KIND_CODES: Record<string, number> = {
   'follow-path': 9,
   curl: 10,
   home: 11,
+  fluid: 12,
 };
 
 export const SELECTION_KIND_CODES: Record<string, number> = {

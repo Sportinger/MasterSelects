@@ -184,6 +184,11 @@ export function accumulateFieldForces(
         acc[0] += flow[0] * f[0]; acc[1] += flow[1] * f[0]; acc[2] += flow[2] * f[0];
         break;
       }
+      case 12:
+        acc[0] += op.v0[0];
+        acc[1] += op.v0[1];
+        acc[2] += op.v0[2];
+        break;
       case 11: {
         const [hx, hy, hz] = homePosition(params, state, index);
         acc[0] += (hx - px) * f[0];

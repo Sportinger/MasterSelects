@@ -23,6 +23,8 @@ import {
   evaluateSelections,
 } from './flockCpuForces';
 import { prepareCpuStepParams, type CpuEmitter, type CpuStepParams } from './flockCpuStepParams';
+import { FlockCpuFluid } from './flockCpuFluid';
+import { OP_KIND_CODES } from '../shared/flockCodes';
 
 /** Gains shared with the WGSL step shader. */
 export const FLOCK_COHESION_GAIN = 0.6;
@@ -67,6 +69,8 @@ export class FlockCpuSolver {
   private readonly cellCursor: Int32Array;
   private readonly keys: Uint32Array;
   private readonly sorted: Uint32Array;
+  /** FLIP grid when the program has a FLIP Fluid node. */
+  readonly fluid: FlockCpuFluid | null;
 
   constructor(program: FlockProgram) {
     this.program = program;
@@ -80,6 +84,7 @@ export class FlockCpuSolver {
     this.cellCursor = new Int32Array(tableSize);
     this.keys = new Uint32Array(this.capacity);
     this.sorted = new Uint32Array(this.capacity);
+    this.fluid = program.fluid ? new FlockCpuFluid(program.fluid) : null;
     this.trailSlots = program.trails.map((trail) => selectTrailSlots(this.capacity, trail.sampleFraction, trail.slotCount, trail.salt));
     this.trailRings = program.trails.map((trail, index) => new Float32Array(this.trailSlots[index].length * trail.samples * 4));
     this.reset();
@@ -353,6 +358,11 @@ export class FlockCpuSolver {
       write[base + P_AGE] = age + params.dt;
       write[base + P_NEIGHBORS] = neighborCount;
       alive += 1;
+    }
+
+    if (this.fluid) {
+      const fluidOp = params.fields.find((field) => field.kind === OP_KIND_CODES.fluid);
+      this.fluid.step(write, this.capacity, fluidOp?.f[0] ?? 0.95, params.dt);
     }
 
     this.previous = read;

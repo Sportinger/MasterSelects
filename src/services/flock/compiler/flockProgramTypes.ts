@@ -92,6 +92,7 @@ export type FlockOpKind =
   | 'turbulence'
   | 'curl'
   | 'home'
+  | 'fluid'
   | 'drag'
   | 'wind'
   | 'cruise'
@@ -138,6 +139,16 @@ export interface FlockBranchSpec extends FlockNodeSpec {
   trailIndex: number;
 }
 
+/** FLIP fluid MAC grid (simulation units). One per program. */
+export interface FlockFluidSpec {
+  nodeId: string;
+  sourceNodeId: string;
+  origin: FlockVec3;
+  cellSize: number;
+  dims: FlockVec3;
+  iterations: number;
+}
+
 export interface FlockSimulationSpec extends FlockNodeSpec {
   stepRate: number;
   neighborLimit: number;
@@ -174,6 +185,7 @@ export interface FlockProgram {
   paths: FlockNodeSpec[];
   obstacles: FlockNodeSpec[];
   boundary: FlockNodeSpec | null;
+  fluid: FlockFluidSpec | null;
   values: FlockValueSpec[];
   trails: FlockTrailSpec[];
   palettes: FlockNodeSpec[];

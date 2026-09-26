@@ -280,6 +280,8 @@ fn fieldForces(sim: SimParams, index: u32, p: Particle, mask: u32) -> vec3f {
       var flow = curlNoise3(q);
       if (op.f3 > 0.0) { flow += curlNoise3(q * 2.07 + vec3f(19.1, -7.3, 11.7)) * (op.f3 * 0.5); }
       acc += flow * op.f0;
+    } else if (kind == 12u) {
+      acc += op.v0;
     } else if (kind == 11u) {
       acc += (homePosition(index, p) - p.pos) * op.f0;
     } else if (kind == 5u) {

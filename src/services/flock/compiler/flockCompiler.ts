@@ -44,6 +44,7 @@ import {
   type FlockValueKind,
   type FlockValueSpec,
 } from './flockProgramTypes';
+import { buildFlockFluidSpec } from './flockFluidSpec';
 
 const OP_KINDS: Record<string, FlockOpKind> = {
   'flock.rules': 'rules',
@@ -52,6 +53,7 @@ const OP_KINDS: Record<string, FlockOpKind> = {
   'flock.turbulence': 'turbulence',
   'flock.curl-flow': 'curl',
   'flock.home': 'home',
+  'flock.fluid': 'fluid',
   'flock.drag': 'drag',
   'flock.wind': 'wind',
   'flock.cruise': 'cruise',
@@ -304,6 +306,10 @@ function lowerFlockGraph(definition: FlockDefinition, inheritedDiagnostics: Floc
     topology[`op:${ops.length - 1}`] = [kind, selection, pathIndex];
   };
   incoming(simulationNode.id, 'behavior').forEach(collectBehavior);
+  const fluidOps = ops.filter((op) => op.kind === 'fluid');
+  if (fluidOps.length > 1) fail('too-many-fluids', 'Only one FLIP Fluid node is supported per simulation.', fluidOps.map((op) => op.sourceNodeId));
+  const fluid = fluidOps[0] ? buildFlockFluidSpec(fluidOps[0]) : null;
+  if (fluid) topology.fluid = [fluid.origin, fluid.cellSize, fluid.dims, fluid.iterations];
 
   // ----- obstacles & boundary -----
   const obstacles: FlockNodeSpec[] = [];
@@ -454,6 +460,7 @@ function lowerFlockGraph(definition: FlockDefinition, inheritedDiagnostics: Floc
     paths,
     obstacles,
     boundary,
+    fluid,
     values,
     trails,
     palettes,

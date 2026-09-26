@@ -1,4 +1,6 @@
 import type { FlockEvaluationContext } from '../../../services/flock/compiler/flockParamEvaluation';
+import { FlockFluidGrid } from './FlockFluidGrid';
+import { OP_KIND_CODES } from '../shared/flockCodes';
 import { resolveFlockStep } from '../../../services/flock/compiler/flockParamEvaluation';
 import { nextPowerOfTwo, selectTrailSlots } from '../../../services/flock/compiler/flockCompilerSupport';
 import { FLOCK_PARTICLE_BYTES, type FlockProgram } from '../../../services/flock/compiler/flockProgramTypes';
@@ -92,6 +94,7 @@ export class FlockGpuSession {
 
   private context: FlockEvaluationContext;
   private readonly states: [GPUBuffer, GPUBuffer];
+  private readonly fluid: FlockFluidGrid | null;
   private currentIndex = 0;
   private readonly keys: GPUBuffer;
   private readonly vals: GPUBuffer;
@@ -132,6 +135,7 @@ export class FlockGpuSession {
       device.createBuffer({ size: stateBytes, usage: stateUsage, label: 'flock-state-a' }),
       device.createBuffer({ size: stateBytes, usage: stateUsage, label: 'flock-state-b' }),
     ];
+    this.fluid = program.fluid ? new FlockFluidGrid(device, program.fluid, this.states, FLOCK_MAX_STEPS_PER_SUBMIT) : null;
     this.keys = device.createBuffer({ size: this.sortCount * 4, usage: GPUBufferUsage.STORAGE, label: 'flock-grid-keys' });
     this.vals = device.createBuffer({ size: this.sortCount * 4, usage: GPUBufferUsage.STORAGE, label: 'flock-grid-vals' });
     this.cells = device.createBuffer({ size: this.tableSize * 16, usage: GPUBufferUsage.STORAGE, label: 'flock-grid-cells' });
@@ -224,7 +228,8 @@ export class FlockGpuSession {
 
     this.resetState();
     this.stats.gpuBytes = stateBytes * 2 + this.sortCount * 8 + this.tableSize * 16
-      + this.trails.reduce((sum, trail) => sum + trail.ring.size + trail.slots.size, 0);
+      + this.trails.reduce((sum, trail) => sum + trail.ring.size + trail.slots.size, 0)
+      + (this.fluid?.gpuBytes ?? 0);
   }
 
   get currentState(): GPUBuffer {
@@ -299,6 +304,10 @@ export class FlockGpuSession {
         neighborLimit: this.program.simulation.neighborLimit,
         cellCandidates: this.program.simulation.cellCandidates,
       });
+      if (this.fluid) {
+        const fluidOp = params.fields.find((field) => field.kind === OP_KIND_CODES.fluid);
+        this.fluid.stageParams(b, { count: this.capacity, flipRatio: fluidOp?.f[0] ?? 0.95, dt: params.dt });
+      }
       if (b === batch - 1) {
         this.lastGridCellSize = params.cellSize;
         this.lastGridStamp = stamp;
@@ -314,6 +323,7 @@ export class FlockGpuSession {
       });
     }
     this.device.queue.writeBuffer(this.stepBlocks, 0, this.stepData, 0, batch * STEP_BLOCK_STRIDE);
+    this.fluid?.uploadParams(batch);
     if (trailWrites.length > 0) this.device.queue.writeBuffer(this.trailParams, 0, this.trailParamData);
     this.device.queue.writeBuffer(this.statsBuffer, 0, new Uint32Array(4));
 
@@ -326,6 +336,8 @@ export class FlockGpuSession {
       pass.setPipeline(this.pipelines.simulatePipeline);
       pass.setBindGroup(0, this.simulateBindGroups[this.currentIndex], [offset]);
       pass.dispatchWorkgroups(particleWorkgroups);
+      // FLIP corrects the step output in place before it becomes the current state.
+      this.fluid?.encode(pass, 1 - this.currentIndex, b, this.capacity);
       this.currentIndex = 1 - this.currentIndex;
       for (const write of trailWrites) {
         if (write.step !== b) continue;
@@ -623,6 +635,7 @@ export class FlockGpuSession {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.fluid?.dispose();
     for (const checkpoint of this.checkpoints.values()) this.destroyCheckpoint(checkpoint);
     this.checkpoints.clear();
     for (const link of this.links.values()) {

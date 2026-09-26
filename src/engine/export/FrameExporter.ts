@@ -236,14 +236,15 @@ export class FrameExporter {
       initialized = await this.encoder.init({ deferVideoEncoder: true });
     } catch (error) {
       exportDiagnostics.recordPhase('encoderInit', performance.now() - encoderInitStart);
-      exportDiagnostics.finish('failed', error);
+      // Release the admitted run job, or every later export is denied (job budget 1).
+      this.abortExportSetup(exportRunId, error);
       throw error;
     }
     exportDiagnostics.recordPhase('encoderInit', performance.now() - encoderInitStart);
     if (!initialized) {
       const error = new Error('Failed to initialize encoder');
       log.error(error.message);
-      exportDiagnostics.finish('failed', error);
+      this.abortExportSetup(exportRunId, error);
       return null;
     }
 
