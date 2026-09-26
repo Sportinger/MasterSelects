@@ -72,6 +72,11 @@ describe('atomic operator graph tools', () => {
     await edit(effectId, { action: 'connect', fromNodeId: 'uv', fromPortId: 'uv', toNodeId: handle, toPortId: 'uv-uv' });
     const wrongPort = await handleEditOperatorGraph({ clipId, effectId, action: 'connect', fromNodeId: 'uv', fromPortId: 'uv', toNodeId: 'bend', toPortId: 'uv' });
     expect(wrongPort.error).toContain('Available: uv-uv');
+    await edit(effectId, { action: 'remove', nodeId: 'bend' });
+    const after = effectOperatorGraph(useTimelineStore.getState().clips[0].effects.find(e => e.id === effectId)!);
+    expect(after.nodes.some(node => node.id === 'bend' || node.id.startsWith('bend--'))).toBe(false);
+    expect(after.groups?.some(group => group.id === 'compound-bend') ?? false).toBe(false);
+    expect(after.edges.some(edge => edge.to === 'sample' && edge.input === 'uv')).toBe(false);
   });
 
   it('saves an authored slider and enforces its range, locks and ownership', async () => {

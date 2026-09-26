@@ -99,14 +99,31 @@ describe('node graph text stream', () => {
     await expect(controller.accept(JSON.parse(operation))).rejects.toThrow('stopped');
     expect(execute).toHaveBeenCalledTimes(2);
   });
-  it('rejects invalid effect contracts and does not continue after a failed tool', async () => {
+  it('records invalid effect contracts as failed steps and stops only when the owner focus fails', async () => {
     const execute = vi.fn().mockResolvedValue({ success: true, data: {} });
     const controller = new FlashBoardNodeGraphStream(execute);
     await controller.accept({ op: 'begin', schemaVersion: 1, clipId: 'clip-a' });
-    await expect(controller.accept(JSON.parse(operation.replace('"radius":8', '"radius":-9')))).rejects.toThrow('Invalid effect parameter');
+    await expect(controller.accept(JSON.parse(operation.replace('"radius":8', '"radius":-9'))))
+      .resolves.toMatchObject({ seq: 1, executed: false, error: expect.stringContaining('Invalid effect parameter') });
     expect(execute).toHaveBeenCalledTimes(1);
+    expect(controller.failures).toHaveLength(1);
     const failure = new FlashBoardNodeGraphStream(vi.fn().mockResolvedValue({ success: false, error: 'denied' }));
     await expect(failure.accept({ op: 'begin', schemaVersion: 1, clipId: 'clip-a' })).rejects.toThrow('denied');
     await expect(failure.accept(JSON.parse(operation))).rejects.toThrow('stopped');
+  });
+
+  it('skips and reports malformed records when a rejection handler is supplied', () => {
+    const received: NodeGraphStreamRecord[] = [], rejected: unknown[] = [];
+    const parser = new NodeGraphStreamParser(record => received.push(record), rejection => rejected.push(rejection));
+    const noRef = '{"op":"tool","seq":1,"tool":"addEffect","args":{"effectType":"gaussian-blur"}}\n';
+    const badTool = '{"op":"tool","seq":"2","ref":"x","tool":"deleteClips","args":{}}\n';
+    const third = '{"op":"tool","seq":3,"ref":"c","tool":"addEffect","args":{"effectType":"gaussian-blur"}}\n';
+    parser.push(`${header}${begin}${noRef}${badTool}{not json}\n${third}{"op":"end","lastSeq":"3"}\n\`\`\`\n`);
+    expect(received.map(record => record.op === 'tool' ? `${record.seq}:${record.ref}` : record.op)).toEqual(['begin', '1:s1', '3:c', 'end']);
+    expect(rejected).toEqual([
+      expect.objectContaining({ seq: 2, tool: 'deleteClips', reason: 'Tool is not allowed in a node stream.' }),
+      expect.objectContaining({ reason: 'Invalid JSON record; it was skipped.' }),
+    ]);
+    expect(() => parser.finish()).not.toThrow();
   });
 });

@@ -376,7 +376,8 @@ async function runDirectCodexChat(
       throw error;
     });
     void toolResponseQueue.catch(() => undefined);
-  });
+  }, rejection => nodeStream.failures.push({ seq: rejection.seq ?? 0, ref: '', tool: rejection.tool ?? 'record',
+    args: rejection.args ?? {}, error: `Record skipped: ${rejection.reason}`, executed: false }));
   const respondToTool = async (message: RpcMessage) => {
     const params = record(message.params);
     const callId = typeof params.callId === 'string' ? params.callId : '';

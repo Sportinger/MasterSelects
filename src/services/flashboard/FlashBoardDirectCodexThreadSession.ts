@@ -113,6 +113,8 @@ export function buildDirectCodexBaseInstructions(): string {
     'Complete the user request by calling the supplied MasterSelects tools directly.',
     'You may inspect and mutate the open project without asking for intermediate approval.',
     'Use tool results as the source of truth and never claim an action succeeded when its tool failed.',
+    'For node graphs, take port IDs and parameter IDs from getNodeDefinitions; never guess them from labels. Every node-stream record needs op, seq (integer), ref, tool and args.',
+    'After a node stream, call getOperatorGraph for each edited effect before the final answer. When a tool result contains a Node stream report or a graph reports incomplete, repair it from the actual graph state, not from your plan; if something cannot be repaired, name the incomplete effect and the reason in the final answer.',
     'If an editor tool fails or times out, stay in the conversation: explain what could not be completed and continue with another available approach when possible.',
     'Call MasterSelects editor tools sequentially. Never run multiple editor tools concurrently or combine them with Promise.all.',
     'For a request to generate a new image, video, speech, or music that does not reference existing project media, do not inspect the timeline, media items, preview frames, or transcripts. Inspect only the requested generator settings, then start the matching generation job.',

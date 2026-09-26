@@ -41,10 +41,13 @@ function graphOwner(args: Record<string, unknown>, mutation = false) {
  * nodes. Resolves a compound ID (or the `@compound-<id>` handle `add` returns)
  * and public port to those inner endpoints; other nodes pass through unchanged.
  */
-function compoundEndpoints(graph: EffectOperatorGraph, nodeId: string, portId: string, side: 'input' | 'output') {
+function compoundGroup(graph: EffectOperatorGraph, nodeId: string) {
   const instanceId = nodeId.startsWith('@compound-') ? nodeId.slice('@compound-'.length) : nodeId;
-  const group = graph.nodes.some(node => node.id === nodeId) ? undefined
+  return graph.nodes.some(node => node.id === nodeId) ? undefined
     : graph.groups?.find(candidate => candidate.id === `compound-${instanceId}` && candidate.composition);
+}
+function compoundEndpoints(graph: EffectOperatorGraph, nodeId: string, portId: string, side: 'input' | 'output') {
+  const group = compoundGroup(graph, nodeId);
   const definition = group?.composition && getOperatorComposition(group.composition.instance.operator);
   if (!group?.composition || !definition?.composition) return [{ nodeId, portId }];
   const ids = compositionNodeIds(group.composition.instance, definition);
@@ -152,7 +155,25 @@ export async function handleEditOperatorGraph(args: Record<string, unknown>): Pr
       else actions.connectPorts({ fromNodeId: from.nodeId, fromPortId: from.portId, toNodeId: targets[0].nodeId, toPortId: targets[0].portId });
     } else if (action === 'disconnect') {
       const edgeId = text(args, 'edgeId'); if (!graph.edges.some(e => e.id === edgeId)) throw new Error('Edge not found.'); actions.disconnectEdge(edgeId);
-    } else if (action === 'remove') { nodeId = existing().id; actions.deleteNode(nodeId);
+    } else if (action === 'remove') {
+      const requested = text(args, 'nodeId'), compound = compoundGroup(graph, requested);
+      if (compound) {
+        nodeId = requested;
+        // An expanded compound is its group: remove every member, nested group, cable and layout entry.
+        editEffectGraph(clip.id, effect.id, 'Delete node', next => {
+          const groupIds = new Set([compound.id]);
+          for (let grown = true; grown;) {
+            grown = false;
+            for (const group of next.groups ?? []) if (group.parentId && groupIds.has(group.parentId) && !groupIds.has(group.id)) { groupIds.add(group.id); grown = true; }
+          }
+          const members = new Set((next.groups ?? []).filter(group => groupIds.has(group.id)).flatMap(group => group.nodeIds));
+          next.nodes = next.nodes.filter(node => !members.has(node.id));
+          next.edges = next.edges.filter(edge => !members.has(edge.from) && !members.has(edge.to));
+          for (const id of members) delete next.layout[id];
+          next.groups = next.groups?.filter(group => !groupIds.has(group.id));
+          next.groups?.forEach(group => { group.nodeIds = group.nodeIds.filter(id => !members.has(id)); });
+        });
+      } else { nodeId = existing().id; actions.deleteNode(nodeId); }
     } else if (action === 'move') { nodeId = existing().id; actions.moveNode(nodeId, position());
     } else if (action === 'expose') {
       const node = existing(); nodeId = node.id;

@@ -9,12 +9,13 @@ export const NODE_GRAPH_STREAM_PROTOCOL = {
   schemaVersion: 1, transport: 'Codex Direct assistant text deltas', fence: 'ms-nodegraph-v1',
   framing: 'JSON object records inside the exact fenced block. Separate records with whitespace (newlines recommended). Each record executes at its closing brace, without waiting for a newline, closing fence or response end. Multiple sequential blocks are supported; each begins with fresh sequence numbers and result aliases.',
   begin: { op: 'begin', schemaVersion: 1, clipId: '<existing active-timeline clip ID>' },
-  operation: { op: 'tool', seq: 1, ref: '<unique result alias>', tool: '<allowed tool>', args: {} },
-  end: { op: 'end', lastSeq: '<last operation sequence number>' },
+  operation: { op: 'tool', seq: 1, ref: 'uniqueAlias', tool: '<allowed tool>', args: {} },
+  end: { op: 'end', lastSeq: 1 },
+  fields: 'seq and lastSeq are integers counting from 1 per block. ref is a unique alias (letters, digits, _ or -) needed to reference that result later with resultReference; a missing ref defaults to s<seq>.',
   resultReference: { $ref: '<earlier result alias>', field: '<top-level result.data field, e.g. nodeId or effectId>' },
   allowedTools: NODE_GRAPH_STREAM_TOOLS,
   ownership: 'begin pins the existing clip. Operation args omit clipId; the browser supplies it. A new clip must already exist before begin.',
-  execution: 'Complete records execute immediately in sequence through normal editor policy and undo. Incomplete records never execute. Failed operations report their errors and later independent operations continue. Failed result aliases remain unavailable. Cancellation, lost ownership or invalid framing stops execution; prior completed operations remain undoable. Reload does not replay a stream.',
+  execution: 'Complete records execute immediately in sequence through normal editor policy and undo. Incomplete records never execute. Failed operations and malformed records are skipped, later records continue, and every skipped step is reported back with your next tool result. Failed result aliases remain unavailable. Cancellation or lost ownership stops execution; prior completed operations remain undoable. Reload does not replay a stream.',
 } as const;
 
 export type NodeGraphStreamRecord =
@@ -28,6 +29,14 @@ function object(value: unknown): value is Record<string, unknown> {
 function keys(value: Record<string, unknown>, allowed: string[]): boolean {
   return Object.keys(value).every(key => allowed.includes(key));
 }
+/** Models occasionally quote sequence numbers; only exact positive integers are accepted. */
+function sequenceNumber(value: unknown): number | undefined {
+  const number = typeof value === 'string' && /^\d{1,6}$/.test(value) ? Number(value) : value;
+  return typeof number === 'number' && Number.isInteger(number) && number > 0 ? number : undefined;
+}
+
+/** A skipped record inside an otherwise continuing stream. */
+export interface NodeGraphStreamRejection { seq?: number; tool?: string; args?: Record<string, unknown>; reason: string }
 
 export class NodeGraphStreamParser {
   private buffer = '';
@@ -41,7 +50,11 @@ export class NodeGraphStreamParser {
   active = false;
 
   private readonly receive: (record: NodeGraphStreamRecord) => void;
-  constructor(receive: (record: NodeGraphStreamRecord) => void) { this.receive = receive; }
+  private readonly onRejected?: (rejection: NodeGraphStreamRejection) => void;
+  /** Without onRejected every malformed record throws; with it, bad operation records are skipped and reported. */
+  constructor(receive: (record: NodeGraphStreamRecord) => void, onRejected?: (rejection: NodeGraphStreamRejection) => void) {
+    this.receive = receive; this.onRejected = onRejected;
+  }
 
   push(delta: string): void {
     for (const character of delta) {
@@ -91,11 +104,15 @@ export class NodeGraphStreamParser {
       return;
     }
     if (this.state === 'close') {
-      if (line !== '```') throw new Error('Expected the node stream closing fence.');
-      this.state = 'done'; return;
+      if (line === '```') { this.state = 'done'; return; }
+      if (!this.onRejected) throw new Error('Expected the node stream closing fence.');
+      this.state = 'done'; this.line(line); return;
     }
     let value: unknown;
-    try { value = JSON.parse(line); } catch { throw new Error('Invalid node stream JSON record.'); }
+    try { value = JSON.parse(line); } catch {
+      if (this.state === 'operations' && this.onRejected) { this.onRejected({ reason: 'Invalid JSON record; it was skipped.' }); return; }
+      throw new Error('Invalid node stream JSON record.');
+    }
     if (!object(value)) throw new Error('Expected a node stream object.');
     if (this.state === 'begin') {
       if (value.op !== 'begin' || value.schemaVersion !== 1 || typeof value.clipId !== 'string'
@@ -104,16 +121,29 @@ export class NodeGraphStreamParser {
       }
       this.state = 'operations';
     } else if (value.op === 'end') {
-      if (value.lastSeq !== this.nextSequence - 1 || !keys(value, ['op', 'lastSeq'])) throw new Error('Node stream end sequence mismatch.');
+      const lastSeq = sequenceNumber(value.lastSeq);
+      if ((lastSeq !== this.nextSequence - 1 || !keys(value, ['op', 'lastSeq'])) && !this.onRejected) throw new Error('Node stream end sequence mismatch.');
       this.state = 'close';
+      value = { op: 'end', lastSeq: this.nextSequence - 1 };
     } else {
-      if (value.op !== 'tool' || value.seq !== this.nextSequence
-        || typeof value.tool !== 'string' || !NODE_GRAPH_STREAM_TOOLS.includes(value.tool as typeof NODE_GRAPH_STREAM_TOOLS[number])
-        || typeof value.ref !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(value.ref) || this.aliases.has(value.ref)
-        || !object(value.args) || 'clipId' in value.args || !keys(value, ['op', 'seq', 'ref', 'tool', 'args'])) {
-        throw new Error('Invalid node operation, sequence, alias or clip ownership.');
+      const seq = sequenceNumber(value.seq);
+      const ref = value.ref === undefined && seq !== undefined ? `s${seq}` : value.ref;
+      const reason = value.op !== 'tool' ? 'Unknown record op.'
+        : seq !== this.nextSequence ? `Expected seq ${this.nextSequence}.`
+        : typeof value.tool !== 'string' || !NODE_GRAPH_STREAM_TOOLS.includes(value.tool as typeof NODE_GRAPH_STREAM_TOOLS[number]) ? 'Tool is not allowed in a node stream.'
+        : typeof ref !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(ref) || this.aliases.has(ref) ? 'Invalid or duplicate ref alias.'
+        : !object(value.args) || 'clipId' in value.args ? 'args must be an object without clipId.'
+        : !keys(value, ['op', 'seq', 'ref', 'tool', 'args']) ? 'Unknown record field.' : undefined;
+      if (reason) {
+        if (!this.onRejected) throw new Error('Invalid node operation, sequence, alias or clip ownership.');
+        // Resynchronize so one bad record does not cascade into every later sequence number.
+        if (seq !== undefined && seq >= this.nextSequence) this.nextSequence = seq + 1;
+        this.onRejected({ ...(seq !== undefined ? { seq } : {}), ...(typeof value.tool === 'string' ? { tool: value.tool } : {}),
+          ...(object(value.args) ? { args: value.args } : {}), reason });
+        return;
       }
-      this.aliases.add(value.ref); this.nextSequence++;
+      value = { op: 'tool', seq, ref, tool: value.tool, args: value.args };
+      this.aliases.add(ref as string); this.nextSequence++;
     }
     this.receive(value as NodeGraphStreamRecord);
   }
