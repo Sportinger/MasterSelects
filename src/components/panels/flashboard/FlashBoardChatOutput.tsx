@@ -1,4 +1,5 @@
 import { useEffect, useState, type RefObject } from 'react';
+import { collapseNodeStreamBlocks } from './nodeStreamDisplay';
 import type { FlashBoardChatMessage as StoredFlashBoardChatMessage } from '../../../stores/flashboardStore';
 import type { AgentActivityEvent } from '../../../services/flashboard/FlashBoardChatTypes';
 import type { StoryboardDecisionSelection } from '../../../services/storyboard/decisions';
@@ -222,7 +223,7 @@ export function FlashBoardChatOutput({
                 className="fb-chat-output-message"
                 aria-live={message.isStreaming ? 'polite' : undefined}
               >
-                {message.text}
+                {message.role === 'user' ? message.text : collapseNodeStreamBlocks(message.text)}
               </div>
             )}
             <ChatActivity message={message} />

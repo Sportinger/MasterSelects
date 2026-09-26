@@ -46,6 +46,8 @@ A `Value` node (`values.number` / `values.integer`) can be published to the clip
 
 The agent uses `editOperatorGraph` with `action: "expose"`, `nodeId`, `exposed: true|false` and an optional `label`, or passes `exposed: true` (and optional `label`) when adding a Value node. `slider` on an exposed node sets the Effects tab row range. `getOperatorGraph` returns the node's `exposed` field.
 
+In the chat, a stream block is shown as one line (`[Node-Stream: N Schritte]`, or `[Node-Stream läuft: …]` while it is still arriving); the stored message and copy keep the raw records. Streamed answer text is applied to the chat at most every 100 ms, so rendering a long answer does not delay the edits waiting for a presentation frame.
+
 The chat Work Log records the received text-delta count, operations applied before `turn/completed`, and relative timestamps for the first operation and provider completion. The `CodexNodeStream` logger adds the first 16 chunk sizes/timestamps without prompt or answer contents. An operation preceding provider completion proves incremental execution; the visible Nodes panel is the rendering check.
 
 Open **Nodes → Catalog** to search current definitions by name, ID or signal type.

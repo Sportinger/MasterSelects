@@ -88,6 +88,7 @@ import {
   DEFAULT_FLASHBOARD_CHAT_AGENT_MODE,
   resolveFlashBoardChatAgentMode,
 } from './FlashBoardChatAgentMode';
+import { createStreamingTextThrottle } from './nodeStreamDisplay';
 
 interface UseFlashBoardChatControllerInput {
   closePopover: () => void;
@@ -448,6 +449,11 @@ export function useFlashBoardChatController({
             : message
         )));
       };
+      const streamedTextUpdate = createStreamingTextThrottle(() => updatePending({
+        isStreaming: true,
+        kernelProgress: undefined,
+        text: streamedResponse,
+      }));
       const appendActivity = (event: AgentActivityEvent | null) => {
         if (!event) return;
         setChatMessages((current) => current.map((message) => (
@@ -517,14 +523,11 @@ export function useFlashBoardChatController({
         onTextDelta: (delta) => {
           if (!delta) return;
           streamedResponse += delta;
-          updatePending({
-            isStreaming: true,
-            kernelProgress: undefined,
-            text: streamedResponse,
-          });
+          streamedTextUpdate.schedule();
         },
         signal: abortController.signal,
       });
+      streamedTextUpdate.cancel();
       if (options?.decisionSelection) {
         if (kernelReport?.decline?.reason === 'staleDecision') {
           markStoryboardDecisionStale(
@@ -707,6 +710,12 @@ export function useFlashBoardChatController({
           : message
       )));
     };
+    // A late flush is harmless: only the still-pending message is ever patched.
+    const streamedTextUpdate = createStreamingTextThrottle(() => updatePending({
+      isStreaming: true,
+      kernelProgress: undefined,
+      text: streamedResponse,
+    }));
     const appendActivity = (event: AgentActivityEvent | null) => {
       if (!event) return;
       setChatMessages((current) => current.map((message) => (
@@ -763,11 +772,7 @@ export function useFlashBoardChatController({
         onTextDelta: (delta) => {
           if (!delta) return;
           streamedResponse += delta;
-          updatePending({
-            isStreaming: true,
-            kernelProgress: undefined,
-            text: streamedResponse,
-          });
+          streamedTextUpdate.schedule();
         },
         prompt: direct
           ? 'Resume the active Codex Direct turn.'
