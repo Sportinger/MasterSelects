@@ -90,6 +90,8 @@ describe('FlashBoard Codex Direct path', () => {
     expect(instructions).toContain('Call MasterSelects editor tools sequentially');
     expect(instructions).toContain('Never run multiple editor tools concurrently or combine them with Promise.all');
     expect(instructions).not.toContain('Before the first editor mutation, inspect the timeline and media once');
+    expect(instructions).toContain('do not fetch media items, preview frames or contact sheets');
+    expect(instructions).toContain('Call them by name instead of searching the tool list');
   });
 
   it('returns a hanging editor tool to Codex as a failed tool result', async () => {
