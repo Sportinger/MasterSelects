@@ -18,7 +18,7 @@ export function connectedFlowBlocks(blocks: Array<PreviewLayoutBlock & { nodeIds
 }
 
 /** Arrange the current visible hierarchy, using measured child frames as single units. */
-export function flowGroupLayout<T extends PreviewLayoutBlock & { nodeIds: string[]; source?: boolean }>(blocks: T[], edges: NodeGraphEdge[], fixed: ReadonlySet<string>, anchor?: { x: number; y: number }): T[] {
+export function flowGroupLayout<T extends PreviewLayoutBlock & { nodeIds: string[]; source?: boolean; group?: boolean }>(blocks: T[], edges: NodeGraphEdge[], fixed: ReadonlySet<string>, anchor?: { x: number; y: number }): T[] {
   if (!blocks.length) return blocks;
   // Resolve the group's origin before separating loose nodes. Otherwise the
   // connected subset inherits its old offset and leaves a huge empty frame.
@@ -30,9 +30,11 @@ export function flowGroupLayout<T extends PreviewLayoutBlock & { nodeIds: string
     if (from && to && from !== to) { linked.add(from); linked.add(to); }
   }
   // During incremental construction most processing nodes have no cables yet.
-  // Pack those beside each other; connected nodes immediately rejoin normal flow.
-  const loose = blocks.filter(block => !linked.has(block.id) && !fixed.has(block.id));
-  if (loose.length >= 2) {
+  // Pack only individual cards here. An unconnected child group may contain a
+  // large graph: its frame must never determine every loose card's grid cell.
+  // Connected cards and child groups retain their measured flow placement.
+  const loose = blocks.filter(block => !block.group && !linked.has(block.id) && !fixed.has(block.id));
+  if (loose.length) {
     const looseIds = new Set(loose.map(block => block.id));
     const connected = flowGroupLayout(blocks.filter(block => !looseIds.has(block.id)), edges, fixed, origin);
     const width = Math.max(...loose.map(block => block.width)), height = Math.max(...loose.map(block => block.height));
