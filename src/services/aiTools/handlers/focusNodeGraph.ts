@@ -21,6 +21,18 @@ function findDockedNodes(node: DockNode): { panel: DockPanel; groupId: string }[
   }
   return [...findDockedNodes(node.children[0]), ...findDockedNodes(node.children[1])];
 }
+/** Nodes panels the user can currently see: active docked tabs, floating panels and detached windows. */
+function visibleNodePanels(): DockPanel[] {
+  const { layout, maximizedPanelId, browserWindowPanels } = useDockStore.getState();
+  const collect = (node: DockNode): DockPanel[] => {
+    if (node.kind === 'split') return [...collect(node.children[0]), ...collect(node.children[1])];
+    const active = node.panels[node.activeIndex];
+    return active?.type === 'node-workspace' && (!maximizedPanelId || maximizedPanelId === active.id) ? [active] : [];
+  };
+  return [...collect(layout.root),
+    ...(maximizedPanelId ? [] : layout.floatingPanels.map(item => item.panel)),
+    ...browserWindowPanels.map(item => item.panel)].filter(panel => panel.type === 'node-workspace');
+}
 
 /** Select the graph owner and reveal Nodes alongside Preview, keeping chat visible. */
 export async function handleFocusNodeGraph(args: Record<string, unknown>): Promise<ToolResult> {
@@ -32,6 +44,14 @@ export async function handleFocusNodeGraph(args: Record<string, unknown>): Promi
   const dock = useDockStore.getState();
   if (dock.activeSavedLayoutId === FACTORY_START_LAYOUT_ID) {
     return { success: false, error: 'Open the editor first to show a node graph.' };
+  }
+  // A graph that is already visible elsewhere is reused in place instead of opening another one.
+  const visible = preferredPanel(visibleNodePanels(), clip.id);
+  if (visible) {
+    dock.updatePanelData(visible.id, { nodeClipId: clip.id });
+    useTimelineStore.getState().selectClips([clip.id]);
+    requestNodeWorkspaceView(clip.id, 'general', visible.id);
+    return { success: true, data: { clipId: clip.id, selectedClipIds: [clip.id], panel: 'node-workspace', panelId: visible.id, pinnedClipId: clip.id, reusedVisiblePanel: true, view: 'general' } };
   }
   let preview = findPanelAndGroup(dock.layout.root, 'preview');
   if (!preview) {
