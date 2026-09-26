@@ -126,4 +126,16 @@ describe('node graph text stream', () => {
     ]);
     expect(() => parser.finish()).not.toThrow();
   });
+
+  it('lets operator-graph records omit effectId after a block created or named its graph', async () => {
+    const execute = vi.fn(async (tool: string) => ({ success: true, data: tool === 'createImageNodeGraph' ? { effectId: 'fx-1' } : {} }));
+    const controller = new FlashBoardNodeGraphStream(execute);
+    await controller.accept({ op: 'begin', schemaVersion: 1, clipId: 'clip-a' });
+    await controller.accept({ op: 'tool', seq: 1, ref: 'g', tool: 'createImageNodeGraph', args: { name: 'Key' } });
+    await controller.accept({ op: 'tool', seq: 2, ref: 'n', tool: 'editOperatorGraph', args: { action: 'add', nodeId: 'a', operatorId: 'values.number' } });
+    await controller.accept({ op: 'tool', seq: 3, ref: 'm', tool: 'editOperatorGraph', args: { effectId: 'fx-2', action: 'add', nodeId: 'b', operatorId: 'values.number' } });
+    await controller.accept({ op: 'tool', seq: 4, ref: 'o', tool: 'editOperatorGraph', args: { action: 'remove', nodeId: 'b' } });
+    const effectIds = execute.mock.calls.filter(([tool]) => tool === 'editOperatorGraph').map(([, args]) => (args as { effectId?: string }).effectId);
+    expect(effectIds).toEqual(['fx-1', 'fx-2', 'fx-2']);
+  });
 });

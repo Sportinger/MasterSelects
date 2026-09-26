@@ -16,6 +16,8 @@ export class FlashBoardNodeGraphStream {
   completedOperations = 0;
   readonly failures: NodeStreamFailure[] = [];
   private block = 0;
+  /** Operator-graph edits may omit effectId; they target the graph this block last created or edited. */
+  private lastEffectId: string | undefined;
   private readonly execute: Execute;
   private readonly signal?: AbortSignal;
   constructor(execute: Execute, signal?: AbortSignal) { this.execute = execute; this.signal = signal; }
@@ -27,6 +29,7 @@ export class FlashBoardNodeGraphStream {
     if (record.op === 'begin') {
       this.clipId = record.clipId;
       this.results.clear();
+      this.lastEffectId = undefined;
       this.block++;
       await this.checked('focusNodeGraph', { clipId: this.clipId }, 'begin');
       return;
@@ -46,6 +49,10 @@ export class FlashBoardNodeGraphStream {
 
   private async operation(record: Extract<NodeGraphStreamRecord, { op: 'tool' }>, clip: ReturnType<typeof useTimelineStore.getState>['clips'][number]): Promise<NodeStreamFailure | undefined> {
     const args = resolveNodeGraphStreamReferences(record.args, this.results) as Record<string, unknown>;
+    if (record.tool === 'editOperatorGraph') {
+      if (args.effectId === undefined && this.lastEffectId) args.effectId = this.lastEffectId;
+      if (typeof args.effectId === 'string') this.lastEffectId = args.effectId;
+    }
     if (record.tool.endsWith('Effect')) {
       const effect = record.tool === 'addEffect' ? undefined : clip.effects.find(e => e.id === args.effectId);
       if (record.tool !== 'addEffect' && !effect) throw new Error('Effect does not belong to the stream clip.');
@@ -66,6 +73,8 @@ export class FlashBoardNodeGraphStream {
     const result = await this.execute(record.tool, { ...args, clipId: this.clipId }, this.operationId(String(record.seq)));
     if (!result.success) return this.failed(record, result.error ?? `${record.tool} failed.`, true);
     this.results.set(record.ref, result.data);
+    const createdEffectId = record.tool === 'createImageNodeGraph' ? (result.data as { effectId?: unknown } | undefined)?.effectId : undefined;
+    if (typeof createdEffectId === 'string') this.lastEffectId = createdEffectId;
     this.completedOperations++;
     await yieldEditorPresentationFrame();
   }
