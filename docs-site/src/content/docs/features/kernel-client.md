@@ -6,15 +6,18 @@ title: "Kernel Client and Auto"
 
 FlashBoard exposes the general-purpose prompt path as **Auto**. Its Model menu
 contains exactly `Codex Direct` and `Fast`, with Direct selected by default in
-development and production. Both runtimes use the same browser-owned atomic
-editor-tool catalog and execution boundary.
+development and production. Both run the Direct workflow described below and
+use the same browser-owned atomic editor-tool catalog and execution boundary;
+`Fast` swaps only the app-server model to DeepSeek V4.1 Flash
+(`modelProvider: "deepseek"`, `model: "deepseek-flash"`, effort `high`).
 
-`Fast` maps to the kernel-owned Normal Path. That path can inspect an editor
-snapshot, plan work, call public atomic tools, inspect results or review
-frames, and refine work in later bounded rounds. The private kernel owns its
-provider prompts, orchestration, sequencing, and Standard backend selection.
+The kernel-owned Normal Path (Hosted Agent V2) remains available to other
+callers such as the bridge. It can inspect an editor snapshot, plan work, call
+public atomic tools, inspect results or review frames, and refine work in later
+bounded rounds. The private kernel owns its provider prompts, orchestration,
+sequencing, and Standard backend selection.
 
-`Codex Direct` instead opens an authenticated same-origin WebSocket relay to
+`Codex Direct` opens an authenticated same-origin WebSocket relay to
 the isolated Codex app-server. It does not create a Normal Path turn, page
 lease, verifier round, or Logic-mode request. Raw provider names, internal
 Logic capability, and the compatibility Very Fast/Fast/Slow model classes are
@@ -97,6 +100,11 @@ or self-harm instruction content are rejected with a message in the chat. The
 kernel logs the rejection category, authenticated principal, time, and the
 Cloudflare client IP for abuse investigation, without logging the prompt text.
 If moderation is unavailable, the turn is rejected until it can be checked.
+The relay also pins the model route: `thread/start` and `thread/resume` may
+name only the default provider or `deepseek` with `deepseek-flash`, and their
+`config` overrides are limited to the feature switches the editor sends, so a
+client cannot redefine a provider's base URL or credential variable. The
+DeepSeek key lives only in the app-server environment.
 The `dev:full` and `dev:lan` WebSocket proxy also goes through this kernel
 relay, using a local development principal and the connecting socket address.
 
@@ -142,9 +150,9 @@ committing a mutation; `read-only` forbids mutation locally.
 
 ## Failure and security rules
 
-- The browser cannot select a raw private provider or model ID. The editor UI
-  exposes only `Codex Direct` and `Fast`; compatibility model-class and Logic
-  fields are not presented as user-facing routes.
+- The browser can select only the two relay-pinned Direct model routes. The
+  editor UI exposes only `Codex Direct` and `Fast`; compatibility model-class
+  and Logic fields are not presented as user-facing routes.
 - Production Direct requires an allowed Origin and a signed-in session at the
   public relay, then a server-injected kernel credential and bounded principal
   at the private relay. The browser never receives either server credential.
