@@ -24,6 +24,7 @@ import { buildAgentNodeCatalogText } from '../nodeGraph/agentNodeCatalog';
 import { getToolPolicy } from '../aiTools/policy';
 import { NodeGraphStreamParser, NODE_GRAPH_STREAM_PROTOCOL } from '../nodeGraph/nodeGraphStream';
 import { FlashBoardNodeGraphStream } from './FlashBoardNodeGraphStream';
+import { NodeStreamFeedback, nodeStreamUserNotice } from './FlashBoardNodeStreamFeedback';
 import { CodexStreamDiagnostics } from './CodexStreamDiagnostics';
 import { yieldEditorPresentationFrame } from './yieldEditorPresentationFrame';
 import {
@@ -368,6 +369,7 @@ async function runDirectCodexChat(
     if (result.success && toolName !== 'focusNodeGraph') streamDiagnostics.operationCompleted();
     return result;
   }, request.signal);
+  const streamFeedback = new NodeStreamFeedback(nodeStream.failures);
   const nodeParser = new NodeGraphStreamParser(record => {
     toolResponseQueue = toolResponseQueue.then(() => nodeStream.accept(record)).catch(error => {
       fail(error instanceof Error ? error : new Error('Node stream failed.'));
@@ -497,7 +499,7 @@ async function runDirectCodexChat(
     send({
       id: message.id,
       result: {
-        contentItems: directToolContentItems(result),
+        contentItems: [...directToolContentItems(result), ...streamFeedback.takeModelContentItems()],
         success: result.success,
       },
     });
@@ -643,9 +645,11 @@ async function runDirectCodexChat(
     const response = finalText.trim() || streamedText.trim();
     if (!response) throw new Error('Codex Direct returned no final message.');
     if (request.resumeMessageId) clearDirectCodexReloadSnapshot(request.resumeMessageId);
-    return nodeParser.active
+    const answer = nodeParser.active
       ? `Node-Graph aktualisiert: ${nodeStream.completedOperations} Schritte ausgeführt.`
       : buildDirectCodexVerifiedResponse(request.prompt, response, executedToolCalls);
+    const notice = nodeStreamUserNotice(nodeStream.failures, streamFeedback, executedToolCalls);
+    return notice ? `${answer}\n\n${notice}` : answer;
   } finally {
     nodeStream.stop();
     if (nodeParser.active) {

@@ -31,6 +31,10 @@ Supported operations are visual-effect add/update/remove, Flock node add/update/
 
 `createImageNodeGraph({ clipId, name? })` creates a neutral source-to-output graph using the existing image-effect runtime. `editOperatorGraph` adds/removes/moves registered operators, sets parameters, connects/disconnects ports and configures local numeric sliders. Each call is one atomic edit, also usable in node-code records. The same tool edits existing effect-owned graphs. Incomplete intermediate wiring is explicitly reported and execution pauses until repaired. Native domains retain their existing owner restrictions.
 
+Compound nodes (registered compositions) accept a caller-chosen `nodeId` like any other node. They are expanded while editing, so `connect` resolves the compound ID, or the `@compound-<id>` handle an automatic `add` returns, together with a public port ID from `getNodeDefinitions` to the matching inner endpoints; an unknown public port is rejected with the available port list.
+
+Streamed records execute from text deltas, so the model does not receive their individual results. Failed stream steps are therefore attached, once, to the model's next editor tool result, with the step number, target and error, and an instruction to inspect and repair the affected graph. If the turn ends with failed stream steps and an edited graph still paused as incomplete (or failures the model never saw), the chat answer gets a visible warning naming the incomplete effect and its reason.
+
 `getOperatorGraph({ clipId })` lists effect graph owners and status. Add `effectId` for actual nodes, values and edges. Add `nodeIds`, `hops: 0..4` and `direction: upstream|downstream|both` to inspect only a region. Boundary cables and omitted-node counts make the selection explicit. It reads saved graph state, not GPU telemetry, and remains available in plan mode.
 
 ### Exposing Value nodes

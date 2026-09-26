@@ -52,6 +52,28 @@ describe('atomic operator graph tools', () => {
     expect(pixel(effectId)).toEqual([0.2, 0.4, 0.8, 0.75]);
   });
 
+  it('adds a compound node under a caller-chosen ID and wires its public ports', async () => {
+    const effectId = await create();
+    for (const [nodeId, operatorId] of [['uv', 'image.normalized-uv'], ['bend', 'coordinates.radial-curvature.vec2'],
+      ['curve', 'values.number'], ['amount', 'values.number'], ['sample', 'image.sample']]) {
+      await edit(effectId, { action: 'add', nodeId, operatorId });
+    }
+    for (const [fromNodeId, fromPortId, toNodeId, toPortId] of [
+      ['uv', 'uv', 'bend', 'uv-uv'], ['curve', 'value', 'bend', 'curve-value'], ['amount', 'value', 'bend', 'amount-value'],
+      ['bend', 'curved-value', 'sample', 'uv'], ['frame', 'image', 'sample', 'image'], ['sample', 'image', 'output', 'image'],
+    ]) await edit(effectId, { action: 'connect', fromNodeId, fromPortId, toNodeId, toPortId });
+    const graph = await handleGetOperatorGraph({ clipId, effectId });
+    expect((graph.data as { incomplete: unknown }).incomplete).toBeNull();
+    const duplicate = await handleEditOperatorGraph({ clipId, effectId, action: 'add', nodeId: 'bend', operatorId: 'coordinates.radial-curvature.vec2' });
+    expect(duplicate.success).toBe(false);
+    const auto = await edit(effectId, { action: 'add', operatorId: 'coordinates.radial-curvature.vec2' });
+    const handle = (auto.data as { nodeId: string }).nodeId;
+    expect(handle.startsWith('@compound-')).toBe(true);
+    await edit(effectId, { action: 'connect', fromNodeId: 'uv', fromPortId: 'uv', toNodeId: handle, toPortId: 'uv-uv' });
+    const wrongPort = await handleEditOperatorGraph({ clipId, effectId, action: 'connect', fromNodeId: 'uv', fromPortId: 'uv', toNodeId: 'bend', toPortId: 'uv' });
+    expect(wrongPort.error).toContain('Available: uv-uv');
+  });
+
   it('saves an authored slider and enforces its range, locks and ownership', async () => {
     const effectId = await create();
     await edit(effectId, { action: 'add', nodeId: 'percent', operatorId: 'values.number' });

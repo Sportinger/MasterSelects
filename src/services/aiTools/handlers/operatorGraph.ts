@@ -7,7 +7,9 @@ import { readTimelineRuntimeState } from '../../timeline/timelineRuntimeCoordina
 import { findClipOperatorEffect } from '../../operators/clipOperatorGraphOwner';
 import { addableEffectOperators, effectOperatorGraph, effectOperatorParams, hasEffectOperatorGraph, validateEffectOwnerGraph } from '../../operators/effectGraphOwner';
 import { selectOperatorGraphSlice } from '../../nodeGraph/operatorGraphSlice';
-import { createEffectGraphActions, editEffectGraph, setOperatorConstant, setOperatorParameter } from '../../operators/effectGraphEditing';
+import { createEffectGraphActions, editCompositionInput, editEffectGraph, setOperatorConstant, setOperatorParameter } from '../../operators/effectGraphEditing';
+import { getOperatorComposition } from '../../operators/operatorCompositionRegistry';
+import { compositionNodeIds } from '../../operators/operatorComposition';
 import { getEffectOperator } from '../../operators/operatorRegistry';
 import { setGraphValueExposed } from '../../operators/exposedGraphValues';
 import { renderHostPort } from '../../render/renderHostPort';
@@ -34,6 +36,27 @@ function graphOwner(args: Record<string, unknown>, mutation = false) {
   if (!effect) throw new Error('Effect does not belong to the specified clip.');
   return { ...context, effect, graph: effectOperatorGraph(effect) };
 }
+/**
+ * Compound nodes are expanded while editing; their public ports live on inner
+ * nodes. Resolves a compound ID (or the `@compound-<id>` handle `add` returns)
+ * and public port to those inner endpoints; other nodes pass through unchanged.
+ */
+function compoundEndpoints(graph: EffectOperatorGraph, nodeId: string, portId: string, side: 'input' | 'output') {
+  const instanceId = nodeId.startsWith('@compound-') ? nodeId.slice('@compound-'.length) : nodeId;
+  const group = graph.nodes.some(node => node.id === nodeId) ? undefined
+    : graph.groups?.find(candidate => candidate.id === `compound-${instanceId}` && candidate.composition);
+  const definition = group?.composition && getOperatorComposition(group.composition.instance.operator);
+  if (!group?.composition || !definition?.composition) return [{ nodeId, portId }];
+  const ids = compositionNodeIds(group.composition.instance, definition);
+  const endpoints = side === 'input' ? definition.composition.inputs[portId]
+    : definition.composition.outputs[portId] && [definition.composition.outputs[portId]];
+  if (!endpoints?.length) {
+    const ports = Object.keys(side === 'input' ? definition.composition.inputs : definition.composition.outputs).join(', ');
+    throw new Error(`${definition.label} has no ${side} ${portId}. Available: ${ports}.`);
+  }
+  return endpoints.map(endpoint => ({ nodeId: ids[endpoint.nodeId], portId: endpoint.portId }));
+}
+
 const failure = (error: unknown): ToolResult => ({ success: false, error: error instanceof Error ? error.message : String(error) });
 
 export async function handleCreateImageNodeGraph(args: Record<string, unknown>): Promise<ToolResult> {
@@ -102,10 +125,13 @@ export async function handleEditOperatorGraph(args: Record<string, unknown>): Pr
       if (args.nodeId !== undefined) {
         nodeId = text(args, 'nodeId');
         if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(nodeId) || graph.nodes.some(n => n.id === nodeId)) throw new Error('Node ID is invalid or already exists.');
-        if (spec.composition) throw new Error('Composition nodes require an automatically allocated ID.');
+        // A compound instance expands to `<id>--<child>` nodes inside group `compound-<id>`; both must be free.
+        if (spec.composition && (graph.groups?.some(group => group.id === `compound-${nodeId}`)
+          || graph.nodes.some(n => n.id.startsWith(`${nodeId}--`)))) throw new Error('Node ID is invalid or already exists.');
         const id = nodeId, layout = args.position ? position() : { x: 300, y: graph.nodes.length * 180 };
         editEffectGraph(clip.id, effect.id, 'Add graph node', next => {
-          next.nodes.push({ id, operator: operatorId, operatorVersion: 1, bindings: {}, constants: Object.fromEntries(spec.parameters.map(p => [p.id, p.default])) });
+          next.nodes.push({ id, operator: operatorId, operatorVersion: 1, bindings: {},
+            ...(spec.composition ? {} : { constants: Object.fromEntries(spec.parameters.map(p => [p.id, p.default])) }) });
           next.layout[id] = layout;
         });
       } else nodeId = actions.addNode(operatorId, args.position ? position() : undefined);
@@ -120,7 +146,10 @@ export async function handleEditOperatorGraph(args: Record<string, unknown>): Pr
       (node.bindings[parameter] === undefined ? setOperatorConstant : setOperatorParameter)(clip.id, effect.id, node.id, parameter, value as OperatorValue);
       nodeId = node.id;
     } else if (action === 'connect') {
-      actions.connectPorts({ fromNodeId: text(args, 'fromNodeId'), fromPortId: text(args, 'fromPortId'), toNodeId: text(args, 'toNodeId'), toPortId: text(args, 'toPortId') });
+      const [from] = compoundEndpoints(graph, text(args, 'fromNodeId'), text(args, 'fromPortId'), 'output');
+      const targets = compoundEndpoints(graph, text(args, 'toNodeId'), text(args, 'toPortId'), 'input');
+      if (targets.length > 1) editCompositionInput(clip.id, effect.id, targets, from);
+      else actions.connectPorts({ fromNodeId: from.nodeId, fromPortId: from.portId, toNodeId: targets[0].nodeId, toPortId: targets[0].portId });
     } else if (action === 'disconnect') {
       const edgeId = text(args, 'edgeId'); if (!graph.edges.some(e => e.id === edgeId)) throw new Error('Edge not found.'); actions.disconnectEdge(edgeId);
     } else if (action === 'remove') { nodeId = existing().id; actions.deleteNode(nodeId);
