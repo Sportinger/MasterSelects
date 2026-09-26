@@ -130,6 +130,20 @@ describe('node graph text stream', () => {
     expect(execute).toHaveBeenCalledTimes(1);
   });
 
+  it('turns one stream keyframe record into an atomic addKeyframe sequence on the effect parameter', async () => {
+    const execute = vi.fn().mockResolvedValue({ success: true, data: {} });
+    const controller = new FlashBoardNodeGraphStream(execute);
+    await controller.accept({ op: 'begin', schemaVersion: 1, clipId: 'clip-a' });
+    await controller.accept({ op: 'tool', seq: 1, ref: 'k', tool: 'addKeyframe',
+      args: { effectId: 'fx-1', param: 'progress', keys: [{ time: 0, value: 0 }, { time: 4, value: 0.8, easing: 'ease-in' }] } });
+    expect(execute).toHaveBeenLastCalledWith('addKeyframe', { sequence: [
+      { clipId: 'clip-a', property: 'effect.fx-1.progress', time: 0, value: 0 },
+      { clipId: 'clip-a', property: 'effect.fx-1.progress', time: 4, value: 0.8, easing: 'ease-in' },
+    ] }, 'node-stream:1');
+    await expect(controller.accept({ op: 'tool', seq: 2, ref: 'bad', tool: 'addKeyframe', args: { effectId: 'fx-1', keys: [] } }))
+      .resolves.toMatchObject({ executed: false, error: expect.stringContaining('needs effectId, param') });
+  });
+
   it('skips and reports malformed records when a rejection handler is supplied', () => {
     const received: NodeGraphStreamRecord[] = [], rejected: unknown[] = [];
     const parser = new NodeGraphStreamParser(record => received.push(record), rejection => rejected.push(rejection));

@@ -196,6 +196,7 @@ function summarizeDirectToolCounts(toolNames: readonly string[]): string {
 
 const GENERIC_RESULT_FIELDS: ReadonlySet<string> = new Set(['to', 'from', 'id', 'type', 'input', 'output', 'value', 'action', 'success']);
 const promptMentionsWord = (text: string, word: string) => text.split(/[^a-z0-9_]+/).includes(word);
+const reportsField = (text: string, word: string) => text.split('\n').some(line => line.trim().replace(/^[-*]\s*/, '').startsWith(`${word}:`));
 
 export function buildDirectCodexVerifiedResponse(
   prompt: string,
@@ -216,9 +217,13 @@ export function buildDirectCodexVerifiedResponse(
     if (call.result.success) collectDirectNamedResultFields(call.result.data, availableFields);
   }
   const promptLower = prompt.toLowerCase();
+  const responseLower = modelResponse.toLowerCase();
   // Whole words only: graph edges carry `to`/`from` fields that prose like "nodes to make" must not select.
+  // A field is only corrected when the model itself reported it as `field: value`; prose such as
+  // "moody color grade" must never replace the whole answer with one result field.
   const requestedFields = [...availableFields.entries()]
-    .filter(([lowerKey]) => !GENERIC_RESULT_FIELDS.has(lowerKey) && promptMentionsWord(promptLower, lowerKey))
+    .filter(([lowerKey]) => !GENERIC_RESULT_FIELDS.has(lowerKey) && promptMentionsWord(promptLower, lowerKey)
+      && reportsField(responseLower, lowerKey))
     .map(([lowerKey, field]) => ({
       ...field,
       position: promptLower.indexOf(lowerKey),
@@ -231,11 +236,9 @@ export function buildDirectCodexVerifiedResponse(
   const successfulNames = toolCalls
     .filter(call => call.result.success)
     .map(call => call.toolCall.name);
-  const parts: string[] = [];
-  if (successfulNames.length > 0) {
-    parts.push(`Tool-verifiziert ausgeführt: ${summarizeDirectToolCounts(successfulNames)}.`);
-  }
-  return parts.join(' ');
+  const summary = successfulNames.length > 0 ? `Tool-verifiziert ausgeführt: ${summarizeDirectToolCounts(successfulNames)}.` : '';
+  // Keep the model's answer: it carries caveats (failed jobs, unverified parts) that tool success alone hides.
+  return [modelResponse.trim(), summary].filter(Boolean).join('\n\n');
 }
 
 /** Reference material goes out once per thread; resumed turns already carry it in history. */

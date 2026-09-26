@@ -75,7 +75,8 @@ export class FlashBoardNodeGraphStream {
         }
       }
     }
-    const result = await this.execute(record.tool, { ...args, clipId: this.clipId }, this.operationId(String(record.seq)));
+    const toolArgs = record.tool === 'addKeyframe' ? streamKeyframeArgs(args, this.clipId) : { ...args, clipId: this.clipId };
+    const result = await this.execute(record.tool, toolArgs, this.operationId(String(record.seq)));
     if (!result.success) return this.failed(record, result.error ?? `${record.tool} failed.`, true);
     this.results.set(record.ref, result.data);
     const createdEffectId = record.tool === 'createImageNodeGraph' ? (result.data as { effectId?: unknown } | undefined)?.effectId : undefined;
@@ -99,4 +100,27 @@ export class FlashBoardNodeGraphStream {
     if (!result.success) { this.stopped = true; throw new Error(result.error ?? `Node stream ${tool} failed.`); }
     return result;
   }
+}
+
+/**
+ * Stream keyframes: `{ effectId, param, keys }` animates one effect parameter as one
+ * atomic addKeyframe sequence; `{ property, value, time, easing? }` sets a single key.
+ */
+function streamKeyframeArgs(args: Record<string, unknown>, clipId: string): Record<string, unknown> {
+  if (args.property !== undefined) {
+    const unknown = Object.keys(args).filter(k => !['property', 'value', 'time', 'easing'].includes(k));
+    if (unknown.length) throw new Error(`addKeyframe does not accept ${unknown.join(', ')} with property; allowed: property, value, time, easing.`);
+    return { ...args, clipId };
+  }
+  const unknown = Object.keys(args).filter(k => !['effectId', 'param', 'keys'].includes(k));
+  if (unknown.length) throw new Error(`addKeyframe does not accept ${unknown.join(', ')}; use { effectId, param, keys } or { property, value, time }.`);
+  if (typeof args.effectId !== 'string' || typeof args.param !== 'string' || !Array.isArray(args.keys) || !args.keys.length) {
+    throw new Error('addKeyframe needs effectId, param and a non-empty keys array.');
+  }
+  const property = `effect.${args.effectId}.${args.param}`;
+  return { sequence: args.keys.map((key: unknown) => {
+    const { time, value, easing } = (key ?? {}) as Record<string, unknown>;
+    if (typeof time !== 'number' || typeof value !== 'number') throw new Error('Every addKeyframe key needs numeric time and value.');
+    return { clipId, property, time, value, ...(typeof easing === 'string' ? { easing } : {}) };
+  }) };
 }

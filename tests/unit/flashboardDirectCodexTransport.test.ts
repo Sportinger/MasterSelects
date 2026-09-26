@@ -344,6 +344,17 @@ describe('FlashBoard Codex Direct path', () => {
     ].join('\n'));
   });
 
+  it('keeps the model answer when a prompt word only matches a result field in prose', () => {
+    const answer = 'Applied a moody grade. The background job failed: no credits.';
+    const response = buildDirectCodexVerifiedResponse('Give the people a moody color grade.', answer, [{
+      modelContent: '',
+      result: { success: true, data: { effectId: 'fx-1', params: { color: '#8d4dff' } } },
+      toolCall: { arguments: '{}', id: 'fx', name: 'addEffect' },
+    }]);
+    expect(response).toContain(answer);
+    expect(response).not.toContain('color: #8d4dff');
+  });
+
   it('keeps the Codex reply when an editor tool fails', () => {
     const modelResponse = 'Das Bild konnte ich diesmal nicht erzeugen. Ich kann es mit anderen Einstellungen erneut versuchen.';
     const response = buildDirectCodexVerifiedResponse(

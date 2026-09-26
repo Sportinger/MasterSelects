@@ -9,7 +9,7 @@ import { handleFocusNodeGraph } from '../aiTools/handlers/focusNodeGraph';
 import type { FlashBoardExecutedToolCall } from './FlashBoardChatTypes';
 
 const log = Logger.create('AgentNodePresentation');
-const graphEditTools = new Set<string>(NODE_GRAPH_STREAM_TOOLS.filter(tool => !['addEffect', 'updateEffect', 'removeEffect'].includes(tool)));
+const graphEditTools = new Set<string>(NODE_GRAPH_STREAM_TOOLS.filter(tool => !['addEffect', 'updateEffect', 'removeEffect', 'addKeyframe'].includes(tool)));
 const nodeTools = new Set<string>([
   ...graphEditTools, 'getOperatorGraph', 'getFlockClip', 'createFlockClip',
   'applyFlockPreset', 'exposeFlockParam', 'unexposeFlockParam',
