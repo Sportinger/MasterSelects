@@ -127,6 +127,21 @@ describe('node graph text stream', () => {
     expect(() => parser.finish()).not.toThrow();
   });
 
+  it('skips a stray closing brace after a record and keeps executing the following records', () => {
+    const received: NodeGraphStreamRecord[] = [], rejected: unknown[] = [];
+    const parser = new NodeGraphStreamParser(record => received.push(record), rejection => rejected.push(rejection));
+    const first = '{"op":"tool","seq":1,"ref":"a","tool":"addEffect","args":{"effectType":"gaussian-blur"}}}\n';
+    const second = '{"op":"tool","seq":2,"ref":"b","tool":"addEffect","args":{"effectType":"gaussian-blur"}}\n';
+    parser.push(`${header}${begin}${first}${second}{"op":"end","lastSeq":2}\n\`\`\`\n`);
+    expect(() => parser.finish()).not.toThrow();
+    expect(received.map(record => record.op === 'tool' ? record.ref : record.op)).toEqual(['begin', 'a', 'b', 'end']);
+    expect(rejected).toEqual([expect.objectContaining({ reason: expect.stringContaining('Stray "}"') })]);
+    // Without a rejection handler the strict contract is unchanged.
+    const strict = new NodeGraphStreamParser(() => undefined);
+    strict.push(header + begin);
+    expect(() => strict.push(first)).toThrow('Expected a node stream object');
+  });
+
   it('lets operator-graph records omit effectId after a block created or named its graph', async () => {
     const execute = vi.fn(async (tool: string) => ({ success: true, data: tool === 'createImageNodeGraph' ? { effectId: 'fx-1' } : {} }));
     const controller = new FlashBoardNodeGraphStream(execute);

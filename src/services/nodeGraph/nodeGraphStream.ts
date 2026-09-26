@@ -62,6 +62,12 @@ export class NodeGraphStreamParser {
     for (const character of delta) {
       if (this.state === 'begin' || this.state === 'operations') {
         if (!this.buffer && /\s/.test(character)) continue;
+        // Models occasionally close a record with one brace too many; the stray `}` (or `]`, `,`)
+        // between two records is reported and skipped instead of ending the whole stream.
+        if (!this.buffer && this.state === 'operations' && this.onRejected && '}],'.includes(character)) {
+          this.onRejected({ reason: `Stray "${character}" between records; it was skipped.` });
+          continue;
+        }
         if (!this.buffer && character !== '{') throw new Error('Expected a node stream object.');
         this.buffer += character;
         if (this.quoted) {
