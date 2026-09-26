@@ -24,6 +24,8 @@ export interface NodeContextMenuSources {
    */
   graphs: { owners: readonly GraphTarget[] };
   controls?: { disabled: boolean; onAdd: (operatorId: string) => void };
+  /** An empty, hand-sized effect space at the pointer; nodes are added into it later. */
+  emptyEffect?: { disabled: boolean; onAdd: () => void };
 }
 
 const describe = (id: string, fallback?: string) => {
@@ -79,7 +81,7 @@ export function buildCableInsertEntries(graph: GraphTarget): NodeMenuEntry[] {
  * pointer, or into a chosen effect graph of the clip.
  */
 export function buildNodeContextMenuEntries(sources: NodeContextMenuSources): NodeMenuEntry[] {
-  const { clipStages: stages, effects, graphs, controls } = sources;
+  const { clipStages: stages, effects, graphs, controls, emptyEffect } = sources;
   const clipItems = new Map<NodeCategoryId, NodeMenuEntry[]>();
   const addClipItem = (category: NodeCategoryId, entry: NodeMenuEntry) => clipItems.set(category, [...(clipItems.get(category) ?? []), entry]);
   const stage = (id: string, label: string, disabled: boolean, onSelect: () => void) =>
@@ -106,5 +108,8 @@ export function buildNodeContextMenuEntries(sources: NodeContextMenuSources): No
           keywords: `${effect.id} ${group.category} ${text.keywords}`, onSelect: () => effects.onAdd(effect.id) };
       }),
     })) },
+    ...(emptyEffect ? [{ kind: 'item' as const, id: 'empty-effect', label: 'Empty Effect', disabled: emptyEffect.disabled,
+      title: 'An empty effect space at the pointer. Resize it by its corner while it is empty, then add nodes into it.',
+      keywords: 'empty effect space frame group blank new container', onSelect: emptyEffect.onAdd }] : []),
   ];
 }

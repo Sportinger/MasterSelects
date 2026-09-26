@@ -63,3 +63,15 @@
 .node-workspace-node-expand:hover { background: rgba(255,255,255,.1); }
 .node-workspace-node-expand:focus:not(:focus-visible) { outline: none; }
 .node-workspace-node-expand:focus-visible { outline: 2px solid var(--accent-color, #79b8fa); outline-offset: 2px; }
+
+/* Resize grip of a still empty effect frame. */
+.node-workspace-group-resize {
+  position: absolute; right: 2px; bottom: 2px;
+  width: var(--group-grip-size, 16px); height: var(--group-grip-size, 16px);
+  display: flex; align-items: flex-end; justify-content: flex-end; padding: calc(var(--group-grip-size, 16px) * .15);
+  border: 0; border-radius: 0 0 8px 0; background: transparent; color: color-mix(in srgb, var(--group-color) 80%, var(--text-primary, #ddd));
+  cursor: nwse-resize; pointer-events: auto; touch-action: none; outline: none; -webkit-tap-highlight-color: transparent;
+}
+.node-workspace-group-resize svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.node-workspace-group-resize:hover { background: rgba(255,255,255,0.08); }
+.node-workspace-group-resize:focus-visible { outline: var(--group-focus-width, 2px) solid var(--text-primary, #eee); outline-offset: -2px; }

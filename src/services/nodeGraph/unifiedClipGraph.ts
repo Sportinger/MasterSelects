@@ -34,6 +34,9 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     const group = { id: groupId, label: effect?.name ?? (groupId === 'text' ? 'Text' : groupId === 'scene3d' ? '3D Scene' : groupId === 'flock' ? 'Flock' : 'Color'),
       color: groupId === 'scene3d' ? '#d7a262' : groupId === 'flock' ? '#7ea65b' : groupId === 'color' ? '#ba8bd6' : '#55a6c4', collapsed, nodeIds: [] as string[], proxyId: rootNode.id, issue: inner.issue,
       ...(effect ? { effectId: effect.id, bypassNodeId: rootNode.id, bypassed: !effect.enabled && !effect.detached, ...(effect.detached ? { detached: true } : {}) } : {}),
+      // Only a still empty image graph (clip input and output anchors) keeps a hand-sized frame.
+      ...(effect && inner.nodes.length && inner.nodes.every(node => node.operatorId === 'image.frame' || node.operatorId === 'image.output')
+        ? { resizable: true, ...(state?.size ? { size: state.size } : {}) } : {}),
       layoutMode: 'flow' as const };
     groups.push(group);
     if (collapsed || !inner.nodes.length) {

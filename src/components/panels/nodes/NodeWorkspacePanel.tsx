@@ -22,7 +22,7 @@ import type { NodeConnectionDrop } from '../../../types/nodeGraph';
 import { buildCableInsertEntries, buildNodeContextMenuEntries } from './workspace/nodeContextMenuEntries';
 import { addableEffectOperators } from '../../../services/operators/effectGraphOwner';
 import { addEffectGraphNode } from './workspace/addEffectGraphNode';
-import { createSingleNodeEffect } from '../../../services/operators/imageNodeGraphEffect';
+import { createEmptyEffect, createSingleNodeEffect } from '../../../services/operators/imageNodeGraphEffect';
 import { effectGraphId } from '../../../services/nodeGraph/effectGraphProjection';
 import { addControlNode } from '../../../services/parameterSources/parameterSourceActions';
 import { NodeInspector } from './workspace/NodeWorkspaceInspector';
@@ -630,6 +630,10 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
                 ...flockOwner,
               ] };
             })(),
+            emptyEffect: { disabled: keyframesLocked || ['audio', 'motion-adjustment'].includes(subject.clip.source?.type ?? ''), onAdd: () => {
+              try { createEmptyEffect(subject.id, contextMenu.layout); closeContextMenu(); }
+              catch (error) { setContextMenuError(error instanceof Error ? error.message : String(error)); }
+            } },
             controls: { disabled: keyframesLocked, onAdd: operatorId => {
               try { selectNode(addControlNode(subject.id, operatorId, contextMenu.layout)); closeContextMenu(); }
               catch (error) { setContextMenuError(error instanceof Error ? error.message : String(error)); }

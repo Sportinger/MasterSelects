@@ -175,6 +175,13 @@ opening if it is never entered; a typed search keeps it open). Insertion is
 one undo step and opens a collapsed destination effect; a locked or exporting clip
 reports the reason in the menu.
 
+**Empty Effect** (last entry of the canvas menu) creates a free-standing, still empty
+effect space at the pointer: only its clip input and output cards, not rendered until it
+is wired into the chain or enabled. While it holds nothing else, drag the grip in its
+lower-right corner (or focus the grip and use the arrow keys, Shift for larger steps) to
+size the frame; the output card follows the right edge and each resize is one undo step.
+Once a node is added, the frame follows its content again.
+
 Free-standing work: an image node added from the menu without a target becomes its
 own free-standing group at the pointer (a detached effect that is not rendered and not
 part of the clip chain; the chain flows around it). Cutting a chain cable frees the

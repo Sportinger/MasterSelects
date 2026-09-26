@@ -1,4 +1,4 @@
-import type { NodeGraph, NodeGraphNode } from '../../../../types/nodeGraph';
+import type { NodeGraph, NodeGraphNode, NodeGroupSize } from '../../../../types/nodeGraph';
 import { getGraphBounds, getNodeHeight, NODE_WIDTH, type NodeBounds } from './canvasGeometry';
 
 export function encloseNodeGroup(members: NodeGraphNode[], children: NodeBounds[]): NodeBounds {
@@ -8,6 +8,11 @@ export function encloseNodeGroup(members: NodeGraphNode[], children: NodeBounds[
     right: Math.max(...members.map(n => n.layout.x + NODE_WIDTH + 22), ...children.map(b => b.right + 16)),
     bottom: Math.max(...members.map(n => n.layout.y + getNodeHeight(n) + 22), ...children.map(b => b.bottom + 16)),
   };
+}
+
+/** A hand-sized empty effect frame grows from its top-left corner; members still enlarge it. */
+export function withGroupSize(box: NodeBounds, size?: NodeGroupSize): NodeBounds {
+  return size ? { ...box, right: Math.max(box.right, box.left + size.width), bottom: Math.max(box.bottom, box.top + size.height) } : box;
 }
 
 export function nodeGroupBounds(graph: NodeGraph, nodes: NodeGraphNode[]): Map<string, NodeBounds> {
@@ -27,7 +32,7 @@ export function nodeGroupBounds(graph: NodeGraph, nodes: NodeGraphNode[]): Map<s
     const value = group?.collapsed
       ? { left: Math.min(...members.map(n => n.layout.x)), top: Math.min(...members.map(n => n.layout.y)),
         right: Math.max(...members.map(n => n.layout.x + NODE_WIDTH)), bottom: Math.max(...members.map(n => n.layout.y + getNodeHeight(n))) }
-      : encloseNodeGroup(members, children);
+      : withGroupSize(encloseNodeGroup(members, children), group?.size);
     bounds.set(id, value); return value;
   };
   graph.groups?.forEach(g => measure(g.id)); return bounds;

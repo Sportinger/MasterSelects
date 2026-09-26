@@ -1,6 +1,6 @@
 import type { NodeGraph, NodeGraphLayout, NodeGraphNode } from '../../../../types/nodeGraph';
 import { getNodeHeight, NODE_WIDTH } from './canvasGeometry';
-import { encloseNodeGroup } from './groupBounds';
+import { encloseNodeGroup, withGroupSize } from './groupBounds';
 import { PREVIEW_BLOCK_GAP, spacePreviewBlocks, spacePreviewNodes, type PreviewLayoutBlock } from './spacePreviewNodes';
 import { connectedFlowBlocks, flowGroupLayout } from './flowGroupLayout';
 import { compactFlowColumns } from './compactFlowColumns';
@@ -92,7 +92,7 @@ export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<strin
     const members = memberIds.map(nodeId => nodes.get(nodeId)!);
     const bounds = group.collapsed ? { left: Math.min(...members.map(node => node.layout.x)), top: Math.min(...members.map(node => node.layout.y)),
       right: Math.max(...members.map(node => node.layout.x + NODE_WIDTH)), bottom: Math.max(...members.map(node => node.layout.y + getNodeHeight(node))) }
-      : encloseNodeGroup(members, childBounds);
+      : withGroupSize(encloseNodeGroup(members, childBounds), group.size);
     return { id: `group:${group.id}`, nodeIds: memberIds, group: true, flow: flow || nested.some(block => block.flow), growing: expanding.has(group.id) || nested.some(block => block.growing),
       x: bounds.left, y: bounds.top, width: bounds.right - bounds.left, height: bounds.bottom - bounds.top };
   };

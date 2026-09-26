@@ -188,6 +188,10 @@ export interface NodeGraph {
     collapsedByDefault?: boolean; layoutMode?: 'flow';
     /** Free-standing effect group outside the clip chain; the outer layout leaves it where it was placed. */
     detached?: boolean;
+    /** Effect group without nodes besides its clip input/output: its frame can be sized by hand. */
+    resizable?: boolean;
+    /** Saved frame size of a still empty effect group; its members still enlarge it. */
+    size?: NodeGroupSize;
     composition?: { operatorId: string; description: string; position: NodeGraphLayout; inputs: Array<OperatorPort & { endpoints: OperatorEndpoint[] }>; outputs: Array<OperatorPort & { endpoints: OperatorEndpoint[] }> } }>;
   /** Uncollapsed nodes used to resolve exposed ports of nested groups. */
   expandedNodes?: NodeGraphNode[];
@@ -331,5 +335,8 @@ export interface ClipNodeGraph {
   forcedBuiltIns?: ClipNodeGraphForcedBuiltIn[];
   manualEdges?: NodeGraphEdge[];
   updatedAt?: number;
-  groups?: Record<string, { collapsed?: boolean; position?: NodeGraphLayout; nodeLayouts?: Record<string, NodeGraphLayout> }>;
+  groups?: Record<string, { collapsed?: boolean; position?: NodeGraphLayout; nodeLayouts?: Record<string, NodeGraphLayout>; size?: NodeGroupSize }>;
 }
+
+/** Canvas frame size of an empty effect group, in workspace units. */
+export interface NodeGroupSize { width: number; height: number }
