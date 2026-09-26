@@ -44,6 +44,8 @@ export interface BoundOperatorNode {
   constants?: Record<string, OperatorValue>;
   /** Authored inspector range for a graph-local numeric value. */
   valueControl?: { label: string; min: number; max: number; step: number };
+  /** Value published as a keyframeable Effects tab parameter through `bindings.value`. */
+  exposed?: { label: string; min?: number; max?: number; step?: number };
   /** Optional parameter backing the node's enable control, shared with the effect form. */
   enabled?: string; enabledDefault?: boolean; bypassed?: boolean;
   /** Stable identities/layout of an instance's interior, including migrated flat nodes. */

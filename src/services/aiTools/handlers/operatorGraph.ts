@@ -9,6 +9,7 @@ import { addableEffectOperators, effectOperatorGraph, effectOperatorParams, hasE
 import { selectOperatorGraphSlice } from '../../nodeGraph/operatorGraphSlice';
 import { createEffectGraphActions, editEffectGraph, setOperatorConstant, setOperatorParameter } from '../../operators/effectGraphEditing';
 import { getEffectOperator } from '../../operators/operatorRegistry';
+import { setGraphValueExposed } from '../../operators/exposedGraphValues';
 import { renderHostPort } from '../../render/renderHostPort';
 import type { ToolResult } from '../types';
 
@@ -76,7 +77,7 @@ export async function handleGetOperatorGraph(args: Record<string, unknown>): Pro
     return { success: true, data: { clipId: clip.id, effectId: effect.id, domain: graph.domain, incomplete: graph.incomplete ?? null,
       ...slice, nodes: slice.nodes.map(node => { const spec = getEffectOperator(node.operator)!; return { ...node,
         position: graph.layout[node.id], inputs: spec.inputs, outputs: spec.outputs,
-        parameters: spec.parameters.map(p => p.id === 'value' && node.valueControl ? { ...p, ...node.valueControl } : p) }; }),
+        parameters: spec.parameters.map(p => p.id === 'value' && (node.valueControl ?? node.exposed) ? { ...p, ...(node.valueControl ?? node.exposed) } : p) }; }),
       params: Object.fromEntries(bindingKeys.map(key => [key, params[key]])) } };
   } catch (error) { return failure(error); }
 }
@@ -95,6 +96,9 @@ export async function handleEditOperatorGraph(args: Record<string, unknown>): Pr
       if (!addableEffectOperators(effect.type).some(op => op.id === operatorId)) {
         throw new Error(`Operator ${operatorId} (${spec.label}) cannot be added to ${effect.type}. ${spec.description}`);
       }
+      if (args.exposed === true && (!['values.number', 'values.integer'].includes(operatorId) || graph.domain === 'audio')) {
+        throw new Error('Only values.number/integer nodes outside audio graphs can be exposed.');
+      }
       if (args.nodeId !== undefined) {
         nodeId = text(args, 'nodeId');
         if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(nodeId) || graph.nodes.some(n => n.id === nodeId)) throw new Error('Node ID is invalid or already exists.');
@@ -105,6 +109,9 @@ export async function handleEditOperatorGraph(args: Record<string, unknown>): Pr
           next.layout[id] = layout;
         });
       } else nodeId = actions.addNode(operatorId, args.position ? position() : undefined);
+      if (args.exposed === true) {
+        setGraphValueExposed(clip.id, effect.id, nodeId, true, typeof args.label === 'string' ? args.label : undefined);
+      }
     } else if (action === 'set') {
       const node = existing(), parameter = text(args, 'parameter');
       const value = args.value;
@@ -118,9 +125,19 @@ export async function handleEditOperatorGraph(args: Record<string, unknown>): Pr
       const edgeId = text(args, 'edgeId'); if (!graph.edges.some(e => e.id === edgeId)) throw new Error('Edge not found.'); actions.disconnectEdge(edgeId);
     } else if (action === 'remove') { nodeId = existing().id; actions.deleteNode(nodeId);
     } else if (action === 'move') { nodeId = existing().id; actions.moveNode(nodeId, position());
+    } else if (action === 'expose') {
+      const node = existing(); nodeId = node.id;
+      if (typeof args.exposed !== 'boolean') throw new Error('expose requires exposed: true or false.');
+      setGraphValueExposed(clip.id, effect.id, node.id, args.exposed, typeof args.label === 'string' ? args.label : undefined);
     } else if (action === 'slider') {
       const node = existing(); nodeId = node.id;
       const label = text(args, 'label'), min = args.min as number, max = args.max as number, step = args.step as number;
+      if (node.exposed) {
+        if (label.length > 80 || ![min, max, step].every(Number.isFinite) || min >= max || step <= 0) throw new Error('Slider requires finite min < max and positive step.');
+        editEffectGraph(clip.id, effect.id, 'Configure exposed value', next => { next.nodes.find(n => n.id === node.id)!.exposed = { label, min, max, step }; });
+        const updated = graphOwner(args).graph;
+        return { success: true, data: { clipId: clip.id, effectId: effect.id, action, nodeId, incomplete: updated.incomplete ?? null, nodeCount: updated.nodes.length, edgeCount: updated.edges.length } };
+      }
       if (!['values.number', 'values.integer'].includes(node.operator) || node.bindings.value || label.length > 80
         || ![min, max, step].every(Number.isFinite) || min >= max || step <= 0
         || typeof node.constants?.value !== 'number' || node.constants.value < min || node.constants.value > max) throw new Error('Slider requires a local numeric value within finite min < max and positive step.');

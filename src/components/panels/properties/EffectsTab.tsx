@@ -28,6 +28,8 @@ import { LabeledValue } from './LabeledValue';
 import { VolumeTab } from './VolumeTab';
 import { ColorGraphEffectEntry } from './ColorGraphEffectEntry';
 import { ParameterSourceNumberRow } from './ParameterSourceNumberRow';
+import { ExposedGraphValueControls } from './ExposedGraphValueControls';
+import { exposedGraphValues } from '../../../services/operators/exposedGraphValues';
 import { getParameterSourceTarget } from '../../../services/parameterSources/parameterSourceTargets';
 import { resolveLinkedAudioClip } from '../../../services/nodeGraph/clipGraphProjectionAudio';
 import { LandmarkTrackingControls } from './LandmarkTrackingControls';
@@ -219,6 +221,7 @@ const EffectParams = memo(function EffectParams(props: EffectParamsViewProps) {
       interaction: inputMethod === 'reset' ? 'reset' : 'change', itemId: effect.type, itemKind: 'effect' });
   };
   return <EffectSectionBypass clipId={clipId} effectId={effect.id}>
+    <ExposedGraphValueControls clipId={clipId} effect={effect} />
     <EffectParamsContent {...props} onChange={onChange} onParamCommit={onParamCommit} />
   </EffectSectionBypass>;
 }, (previous, next) => previous.clipId === next.clipId
@@ -238,7 +241,7 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
   const defaults = getDefaultParams(effect.type);
 
   if (Object.keys(effectDef.params).length === 0) {
-    return <p className="effect-info">No parameters</p>;
+    return exposedGraphValues(effect.operatorGraph).length ? null : <p className="effect-info">No parameters</p>;
   }
 
   if (effect.type === 'time-stack') return <TimeStackControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} onChange={onChange} clipId={clipId} />;

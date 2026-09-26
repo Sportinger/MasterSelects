@@ -14,9 +14,10 @@ export const operatorGraphToolDefinitions: ToolDefinition[] = [
       direction: { type: 'string', enum: ['upstream', 'downstream', 'both'] },
     }, required: ['clipId'] } } },
   { type: 'function', function: { name: 'editOperatorGraph',
-    description: 'Perform ONE undoable atomic edit in an effect-owned operator graph. add uses operatorId from the supplied node catalog and returns nodeId; set uses nodeId, parameter and value; connect uses fromNodeId/fromPortId/toNodeId/toPortId and replaces an existing single-input cable; disconnect uses edgeId; remove and move use nodeId; slider configures a local values.number/integer node with label, min, max, step. Explicit caller-chosen nodeId is optional for add, allowing streamed later references. Intermediate incomplete wiring is saved and paused until repaired; inspect incomplete in results. Existing tools remain available.',
+    description: 'Perform ONE undoable atomic edit in an effect-owned operator graph. add uses operatorId from the supplied node catalog and returns nodeId; set uses nodeId, parameter and value; connect uses fromNodeId/fromPortId/toNodeId/toPortId and replaces an existing single-input cable; disconnect uses edgeId; remove and move use nodeId; slider configures a values.number/integer node with label, min, max, step (for an exposed node it sets the Effects tab row range); expose with nodeId and exposed true/false toggles whether a values.number/integer node appears as a keyframeable parameter row (optional label) in the clip Effects tab, and its keyframes then drive the node output; add with exposed true exposes the new value node immediately. Explicit caller-chosen nodeId is optional for add, allowing streamed later references. Intermediate incomplete wiring is saved and paused until repaired; inspect incomplete in results. Existing tools remain available.',
     parameters: { type: 'object', additionalProperties: false, properties: {
-      clipId: id, effectId: id, action: { type: 'string', enum: ['add', 'set', 'connect', 'disconnect', 'remove', 'move', 'slider'] },
+      clipId: id, effectId: id, action: { type: 'string', enum: ['add', 'set', 'connect', 'disconnect', 'remove', 'move', 'slider', 'expose'] },
+      exposed: { type: 'boolean' },
       nodeId: id, operatorId: id, parameter: id,
       value: { anyOf: [{ type: 'number' }, { type: 'boolean' }, { type: 'string' }, { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 4 }] },
       position, fromNodeId: id, fromPortId: id, toNodeId: id, toPortId: id, edgeId: id,

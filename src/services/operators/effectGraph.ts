@@ -33,6 +33,12 @@ export function validateEffectGraph(graph: EffectOperatorGraph, allowIncomplete 
     if (control && (!['values.number', 'values.integer'].includes(n.operator) || n.bindings.value
       || typeof control.label !== 'string' || !control.label.trim() || control.label.length > 80
       || ![control.min, control.max, control.step].every(Number.isFinite) || control.min >= control.max || control.step <= 0)) errors.push(`Invalid value control: ${n.id}.`);
+    const exposed = n.exposed;
+    if (exposed && (!['values.number', 'values.integer'].includes(n.operator) || typeof n.bindings.value !== 'string'
+      || typeof exposed.label !== 'string' || !exposed.label.trim() || exposed.label.length > 80
+      || [exposed.min, exposed.max, exposed.step].some(v => v !== undefined && !Number.isFinite(v))
+      || (exposed.min !== undefined && exposed.max !== undefined && exposed.min >= exposed.max)
+      || (exposed.step !== undefined && exposed.step <= 0))) errors.push(`Invalid exposed value: ${n.id}.`);
   }
   const connections = operatorConnectionGraph(graph);
   for (let index = 0; index < connections.edges.length; index++) {

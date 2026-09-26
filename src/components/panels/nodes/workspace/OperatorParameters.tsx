@@ -26,6 +26,7 @@ import { operatorConstantNumberPersistenceKey } from '../../../common/EditableDr
 import type { OperatorValue } from '../../../../types/operatorGraph';
 import { getEffect } from '../../../../effects';
 import { OperatorColorInput } from './OperatorColorInput';
+import { ExposeValueControls } from './ExposeValueControls';
 import { resolveImageOperatorChoiceValue } from '../../../../services/operators/imageOperatorChoice';
 import { GlyphAtlasControls } from './GlyphAtlasControls';
 import { ParameterSourceNumberRow } from '../../properties/ParameterSourceNumberRow';
@@ -79,8 +80,9 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
           interpolateKeyframes(keys, `effect.${effectId}.${key}` as Keyframe['property'], time, Number(effect.params[key] ?? spec.default)),
           Number(spec.default), spec.min, spec.max, spec.step, spec.animatable)} />}
       {operator.parameters.map(registrySpec => {
-        const spec = registrySpec.id === 'value' && node.valueControl
-          ? { ...registrySpec, ...node.valueControl } : registrySpec;
+        const authoredRange = node.valueControl ?? node.exposed;
+        const spec = registrySpec.id === 'value' && authoredRange
+          ? { ...registrySpec, ...authoredRange } : registrySpec;
         if (effect.type === 'splat-exploration' && graph.edges.some(e => e.to === node.id && e.input === spec.id))
           return <ResolveInspectorRow key={spec.id} label={spec.label}><span>Connected node</span></ResolveInspectorRow>;
         if (projectedNode && node.operator.startsWith('math.') && graph.edges.some(edge => edge.to === node.id && edge.input === spec.id))
@@ -131,6 +133,7 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
         }
         return numberRow(binding, control?.label ?? spec.label, Number(value), Number(control?.default ?? spec.default), control?.min ?? spec.min, control?.max ?? spec.max, control?.step ?? spec.step, control?.animatable ?? spec.animatable);
       })}
+      <ExposeValueControls clipId={clip.id} effectId={effectId} graph={graph} node={node} safely={safely} />
       {effect.type !== 'audio-math' && projectedNode && node.operator.startsWith('math.') && node.operator !== 'math.constant' &&
         <OperatorLiveValue clipId={clip.id} node={projectedNode} portId="value" label="Result" direction="output" />}
       {!operator.parameters.length && operator.id !== 'glyph.atlas' && <p className="face-cable-hint">{operator.description}</p>}

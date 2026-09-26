@@ -87,7 +87,8 @@ export function setOperatorParameter(clipId: string, effectId: string, nodeId: s
     if (!node || !spec) throw new Error('Parameter unavailable.');
     const binding = node.bindings[name];
     const ownerSpec = typeof binding === 'string' && effectType && (isImageGraphEffectType(effectType) || effectType === 'splat-exploration') ? getEffect(effectType)?.params[binding] : undefined;
-    const min = ownerSpec?.type === 'number' ? ownerSpec.min : spec.min, max = ownerSpec?.type === 'number' ? ownerSpec.max : spec.max;
+    const range = ownerSpec?.type === 'number' ? ownerSpec : name === 'value' && node.exposed ? { min: node.exposed.min ?? spec.min, max: node.exposed.max ?? spec.max } : spec;
+    const min = range.min, max = range.max;
     if (spec.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value) || value < (min ?? -Infinity) || value > (max ?? Infinity))) throw new Error('Parameter is outside its supported range.');
     if (spec.type === 'boolean' && typeof value !== 'boolean') throw new Error('Parameter requires a boolean value.');
     if (spec.type === 'color' && (typeof value !== 'string' || !/^#[\da-f]{6}([\da-f]{2})?$/i.test(value))) throw new Error('Parameter requires a hex color.');
@@ -175,9 +176,10 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
       if (node.enabled) { params[node.enabled] = !operatorEnabled(node, params); node.bypassed = false; }
       else node.bypassed = !node.bypassed;
     }),
-    deleteNode: (id: string) => editEffectGraph(clipId, effectId, 'Delete node', graph => {
+    deleteNode: (id: string) => editEffectGraph(clipId, effectId, 'Delete node', (graph, params) => {
       const node = graph.nodes.find(n => n.id === id);
       if (!node || !canRemoveEffectOperator(ownerType(graph.domain), node.id, node.operator)) throw new Error('This group requires that node.');
+      if (node.exposed && typeof node.bindings.value === 'string') delete params[node.bindings.value];
       graph.nodes = graph.nodes.filter(n => n.id !== id); graph.edges = graph.edges.filter(e => e.from !== id && e.to !== id); delete graph.layout[id];
       graph.groups?.forEach(g => { g.nodeIds = g.nodeIds.filter(nodeId => nodeId !== id); });
     }),

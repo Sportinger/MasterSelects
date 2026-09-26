@@ -36,6 +36,12 @@ Supported operations are visual-effect add/update/remove, Flock node add/update/
 
 `getOperatorGraph({ clipId })` lists effect graph owners and status. Add `effectId` for actual nodes, values and edges. Add `nodeIds`, `hops: 0..4` and `direction: upstream|downstream|both` to inspect only a region. Boundary cables and omitted-node counts make the selection explicit. It reads saved graph state, not GPU telemetry, and remains available in plan mode.
 
+### Exposing Value nodes
+
+A `Value` node (`values.number` / `values.integer`) can be published to the clip's **Effects** tab. Select the node and enable **Effects tab** in its inspector; an optional **Exposed name** labels the row. The effect then shows a **Graph values** section with a keyframeable row per exposed node, and its keyframes drive the node output through the effect parameter `<nodeId>_value` (animatable property `effect.<effectId>.<nodeId>_value`). Turning the toggle off in an image graph writes the current base value back into the node as a literal and removes that parameter's keyframes; the edit is undoable. Audio graphs and values already owned by a built-in effect parameter cannot be exposed.
+
+The agent uses `editOperatorGraph` with `action: "expose"`, `nodeId`, `exposed: true|false` and an optional `label`, or passes `exposed: true` (and optional `label`) when adding a Value node. `slider` on an exposed node sets the Effects tab row range. `getOperatorGraph` returns the node's `exposed` field.
+
 The chat Work Log records the received text-delta count, operations applied before `turn/completed`, and relative timestamps for the first operation and provider completion. The `CodexNodeStream` logger adds the first 16 chunk sizes/timestamps without prompt or answer contents. An operation preceding provider completion proves incremental execution; the visible Nodes panel is the rendering check.
 
 Open **Nodes → Catalog** to search current definitions by name, ID or signal type.
