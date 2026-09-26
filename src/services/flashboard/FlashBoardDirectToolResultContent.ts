@@ -1,7 +1,10 @@
 import type { ToolResult } from '../aiTools/types';
 
-/** In exec the result is a content-item array; stringifying it would dump ~1M tokens of base64. */
-const IMAGE_PLACEHOLDER = '[image attached as the inputImage content item; in exec view it with image(item.imageUrl, "low"), never text() the result]';
+/**
+ * In exec an image result resolves to one string: this JSON, a newline, then the
+ * data:image URL. Printing that string dumps ~1M tokens of base64.
+ */
+const IMAGE_PLACEHOLDER = '[image follows this JSON as a data:image URL; in exec: image(r.slice(r.indexOf("data:image")), "low"); never text() the whole result]';
 
 function serializeToolResult(result: ToolResult): string {
   const serialized = JSON.stringify(result, (_key, value) => (
