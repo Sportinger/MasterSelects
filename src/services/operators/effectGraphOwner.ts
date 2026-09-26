@@ -75,6 +75,10 @@ import { createDefaultContourTypeGraph } from './asciiEffectGraph';
 import { createDefaultGeometryFragmentGraph, type EditableGeometryFragmentEffectType } from './geometryFragmentEffectGraphs';
 import { compileComputeImageGraph } from './computeImageGraph';
 import { VORONOI_OPERATORS } from './voronoiOperators';
+import { compileParticleDisintegrateGraph, particleDisintegrateOperatorGraph, validateParticleDisintegrateGraph } from './particleDisintegrateGraph';
+import { isParticleDisintegrateOperator } from './particleDisintegrateOperators';
+
+const PARTICLE_DISINTEGRATE = 'pixel-particle-disintegrate';
 
 const LOCAL_IMAGE_EFFECTS = new Set(['invert', 'brightness', 'contrast', 'saturation', 'exposure', 'levels', 'hue-shift', 'temperature', 'vibrance', 'threshold', 'posterize']);
 const CONTEXTUAL_IMAGE_EFFECTS = new Set(['time-stack', 'slit-scan', 'vignette', 'scanlines', 'grain', 'ascii', 'number-field', 'grid-glyph', 'pixel-code', 'word-mosaic', 'glyph-matrix', 'data-hatch', 'brand-generator', 'stitch-poster', 'dither-text', 'symbol-matrix', 'pixel-dither', 'retro-matrix', 'capsule-cloud', 'ui-collage', 'matrix', 'ascii-ghost', 'inscribe', 'acuarela', 'crt-screen', 'ribbon-scan', 'wave-lines', 'glitch', 'film-prism', 'crystal', 'glass-dispersion', 'holo', 'halftone', 'pattern-halftone', 'riso', 'riso-glow', 'dither', 'dither-studio', 'paper-print', 'pixel-poster', 'tone-geometry', 'cross-stitch', 'glitch-grid', 'scatter-mosaic', 'drift-lines', 'pixelate', 'mirror', 'rgb-split', 'blockify', 'block-mosaic', 'box-blur', 'gaussian-blur', 'sharpen', 'motion-blur', 'radial-blur', 'zoom-blur', 'edge-detect', 'glow', 'wave', 'twirl', 'bulge', 'kaleidoscope', 'fisheye']);
@@ -84,7 +88,7 @@ export function isImageGraphEffectType(type: string): type is 'time-stack' | 'sl
   return isLocalImageEffectType(type) || CONTEXTUAL_IMAGE_EFFECTS.has(type);
 }
 export const isComputeImageEffectType = (type: string) => type === 'voronoi' || type === 'pixel-sort' || type === 'quadtree-zoom' || type === 'contour';
-export function hasEffectOperatorGraph(type: string): boolean { return type === 'splat-exploration' || type === 'audio-math' || type === 'face-cables' || type === 'voxel-relief' || isComputeImageEffectType(type) || isImageGraphEffectType(type) || type === 'analog-signal-lab'; }
+export function hasEffectOperatorGraph(type: string): boolean { return type === 'splat-exploration' || type === 'audio-math' || type === 'face-cables' || type === 'voxel-relief' || type === PARTICLE_DISINTEGRATE || isComputeImageEffectType(type) || isImageGraphEffectType(type) || type === 'analog-signal-lab'; }
 type EffectGraphOwner = { type: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph };
 
 export function effectOperatorCompileParams(effect: Pick<EffectGraphOwner, 'params' | 'operatorGraph'>): Record<string, unknown> {
@@ -243,6 +247,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
   }
   const params = effectOperatorCompileParams(effect);
   if (effect.type === 'voxel-relief') return voxelOperatorGraph(params);
+  if (effect.type === PARTICLE_DISINTEGRATE) return particleDisintegrateOperatorGraph(params);
   if (effect.type === 'face-cables') return cableOperatorGraph(params);
   throw new Error('This effect has no operator graph.');
 }
@@ -278,6 +283,10 @@ export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: Ef
   if (effect.type === 'splat-exploration') compileSplatGraph({ graph, params: { ...defaultSplatGraph(true).params, ...params } as import('../../types/operatorGraph').SceneOperatorGraph['params'] });
   else if (effect.type === 'audio-math') compileAudioOperatorGraph(graph);
   else if (effect.type === 'voxel-relief') compileVoxelGraph(next);
+  else if (effect.type === PARTICLE_DISINTEGRATE) {
+    const errors = validateParticleDisintegrateGraph(graph); if (errors.length) throw new Error(errors[0]);
+    compileParticleDisintegrateGraph(graph, params);
+  }
   else if (effect.type === 'face-cables') compileCableOperatorGraph(next);
   else if (isImageGraphEffectType(effect.type)) compileImageOperatorGraph(graph, effectOperatorParams({ type: effect.type, params }), effectOperatorCompileContext(effect));
   else if (effect.type === 'analog-signal-lab') compileAnalogSignalGraph(graph, params);
@@ -306,6 +315,7 @@ export function addableEffectOperators(type: string) {
     });
     return [...shared, ...IMAGE_OPERATORS.filter(operator => operator.addable), ...IMAGE_COMPOSITIONS];
   }
+  if (type === PARTICLE_DISINTEGRATE) return EFFECT_OPERATORS.filter(operator => operator.addable && isParticleDisintegrateOperator(operator.id));
   return EFFECT_OPERATORS.filter(operator => operator.addable && (type === 'voxel-relief' ? isVoxelOperator(operator.id)
     // Shared particle forces live with the scene operators but still drive cable physics.
     : type === 'face-cables' && operator.consumers?.includes('Cable physics') ? true
@@ -343,6 +353,7 @@ export function canRemoveEffectOperator(type: string, nodeId: string, operatorId
   if (type === 'audio-math') return !['audio.input', 'audio.output'].includes(operatorId);
   if (isComputeImageEffectType(type)) return !['frame', 'output'].includes(nodeId) && !!getEffectOperator(operatorId)?.addable;
   if (type === 'analog-signal-lab') return !['frame', 'output'].includes(nodeId) && !!getEffectOperator(operatorId)?.addable;
+  if (type === PARTICLE_DISINTEGRATE) return !['image.frame', 'simulation.image-particles', 'render.pixel-particles'].includes(operatorId);
   return type === 'voxel-relief' ? operatorId !== 'render.voxel' && operatorId !== 'image.frame'
     : nodeId !== 'wind' && !!getEffectOperator(operatorId)?.addable;
 }

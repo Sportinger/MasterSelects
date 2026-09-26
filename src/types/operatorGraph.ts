@@ -75,7 +75,7 @@ export interface EffectOperatorGraph {
   gaussianBlurPresentation?: 1;
   /** An editable graph whose execution is paused until its missing wiring is repaired. */
   incomplete?: string;
-  domain?: 'cables' | 'scene' | 'voxel' | 'image' | 'compute-image' | 'analog-signal' | 'audio';
+  domain?: 'cables' | 'scene' | 'voxel' | 'particles' | 'image' | 'compute-image' | 'analog-signal' | 'audio';
   nodes: BoundOperatorNode[]; edges: OperatorEdge[];
   layout: Record<string, { x: number; y: number }>;
   groups?: OperatorGroup[];

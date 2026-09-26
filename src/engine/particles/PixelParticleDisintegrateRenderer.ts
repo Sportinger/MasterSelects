@@ -1,5 +1,6 @@
 import type { Effect } from '../../types/effects';
 import shaderSource from './shaders/PixelParticleDisintegrate.wgsl?raw';
+import { compileParticleDisintegrateGraph } from '../../services/operators/particleDisintegrateGraph';
 
 export interface PixelParticleDisintegrateRenderOptions {
   readonly commandEncoder: GPUCommandEncoder;
@@ -222,7 +223,9 @@ export class PixelParticleDisintegrateRenderer {
     readonly cellSize: number;
     readonly clampedByBudget: boolean;
   } {
-    const raw = options.effect.params as Record<string, unknown>;
+    // The effect's node graph decides which stages and forces reach the renderer.
+    const plan = compileParticleDisintegrateGraph(options.effect.operatorGraph, options.effect.params as Record<string, unknown>);
+    const raw = plan.params;
     const progress = clamp(finiteParam(raw, 'progress', 0), 0, 1);
     const requestedCellSize = clamp(finiteParam(raw, 'cellSize', 8), 1, 256);
     const maxPreviewParticles = Math.floor(clamp(finiteParam(raw, 'maxPreviewParticles', 60000), 1, 1_000_000));
@@ -239,8 +242,9 @@ export class PixelParticleDisintegrateRenderer {
       : requestedCellSize;
     const columns = Math.max(1, Math.ceil(options.outputWidth / cellSize));
     const rows = Math.max(1, Math.ceil(options.outputHeight / cellSize));
-    const particleCount = Math.min(columns * rows, budget, hardMaxInstances);
-    const flatAlpha = 0;
+    // A muted render node or an unconnected particle chain shows the input unchanged.
+    const particleCount = plan.passthrough ? 0 : Math.min(columns * rows, budget, hardMaxInstances);
+    const flatAlpha = plan.passthrough ? 1 : 0;
     const particleAlpha = 1;
 
     const uniformBuffer = new ArrayBuffer(128);

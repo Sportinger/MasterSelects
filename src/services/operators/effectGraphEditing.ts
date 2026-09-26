@@ -157,7 +157,7 @@ function moveTopLevelEffectNode(clipId: string, effectId: string, nodeId: string
 }
 
 export function createEffectGraphActions(clipId: string, effectId: string) {
-  const ownerType = (domain: EffectOperatorGraph['domain']) => domain === 'voxel' ? 'voxel-relief'
+  const ownerType = (domain: EffectOperatorGraph['domain']) => domain === 'voxel' ? 'voxel-relief' : domain === 'particles' ? 'pixel-particle-disintegrate'
     : domain === 'scene' ? 'splat-exploration' : domain === 'audio' ? 'audio-math' : domain === 'image' ? 'invert' : domain === 'analog-signal' ? 'analog-signal-lab' : 'face-cables';
   return {
     moveNode: (nodeId: string, layout: { x: number; y: number }) => {

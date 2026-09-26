@@ -37,7 +37,7 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
       };
       return { id: node.id, operatorId: operator.id, label: operator.label, description: operator.description,
         connectionVariants: operatorAdaptiveVariants(operator, supported),
-        kind: ['media.source', 'image.frame', 'audio.input', 'splat.source'].includes(operator.id) ? 'source' : ['scene.output', 'render.voxel', 'image.output', 'audio.output', 'scene.render'].includes(operator.id) ? 'output' : 'effect',
+        kind: ['media.source', 'image.frame', 'audio.input', 'splat.source'].includes(operator.id) ? 'source' : ['scene.output', 'render.voxel', 'render.pixel-particles', 'image.output', 'audio.output', 'scene.render'].includes(operator.id) ? 'output' : 'effect',
         runtime: operator.runtime, inputs: operator.inputs.map(p => projectPort(p, 'input')), outputs: operator.outputs.map(p => projectPort(p, 'output')),
         params: { targetClipId: clip.id, operatorOwnerType: effect.type, enabled: operatorEnabled(node, effect.params), bypassable: graph.domain === 'voxel' || graph.domain === 'scene' || !!operator.bypass,
           ...(operator.id.startsWith('values.') ? { valueLabel: node.valueControl?.label ?? node.exposed?.label ?? (typeof node.bindings.value === 'string' ? node.bindings.value : node.id)

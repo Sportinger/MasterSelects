@@ -58,6 +58,7 @@ export function validateEffectGraph(graph: EffectOperatorGraph, allowIncomplete 
   }
   if (graphHasCycle(connections.nodes, connections.edges)) errors.push('Cycles are not supported.');
   const outputOperator = graph.domain === 'voxel' ? 'render.voxel'
+    : graph.domain === 'particles' ? 'render.pixel-particles'
     : graph.domain === 'audio' ? 'audio.output'
     : graph.domain === 'scene' ? 'scene.render'
     : graph.domain === 'image' || graph.domain === 'compute-image' || graph.domain === 'analog-signal' ? 'image.output' : 'scene.output';
