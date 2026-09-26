@@ -262,6 +262,11 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
 
     await this.ensureHostAvailable('frame render');
 
+    const outputDimensions = this.host.getOutputDimensions();
+    if (outputDimensions.width !== this.width || outputDimensions.height !== this.height) {
+      this.host.setResolution(this.width, this.height);
+    }
+
     this.host.setRenderTimeOverride(input.time);
     const ensureLayersStart = performance.now();
     await this.host.ensureExportLayersReady(layers);

@@ -44,7 +44,6 @@ export async function seekAllClipsToTime(
   // PARALLEL DECODE MODE - no HTMLVideoElement seeking needed!
   // ParallelDecoder provides VideoFrames directly, much faster than seeking videos
   if (useParallelDecode && parallelDecoder) {
-    await parallelDecoder.prefetchFramesForTime(time);
     const transitionTargets = (ctx.transitionParticipantsByTrack?.size ?? 0) > 0
       ? getRenderableClips(ctx)
         .filter((clip) => {
@@ -57,20 +56,18 @@ export async function seekAllClipsToTime(
         })
       : [];
     const mappedTargets = getMappedVideoSeekTargets(ctx);
-
-    if (mappedTargets.length > 0) {
-      parallelDecoder.advanceToTime(time);
-    }
     const targetsByClipId = new Map<string, VideoSeekTarget>();
     for (const target of [...transitionTargets, ...mappedTargets]) {
       targetsByClipId.set(target.clip.id, target);
     }
+    const sourceTimeOverrides = new Map(
+      [...targetsByClipId].map(([clipId, target]) => [clipId, target.sourceTime] as const),
+    );
+    await parallelDecoder.prefetchFramesForTime(time, sourceTimeOverrides);
+    parallelDecoder.advanceToTime(time, sourceTimeOverrides);
     await Promise.all([...targetsByClipId.values()].map(({ clip, sourceTime }) =>
       parallelDecoder.prefetchFrameForClipSourceTime(clip.id, sourceTime)
     ));
-    if (mappedTargets.length === 0) {
-      parallelDecoder.advanceToTime(time);
-    }
     return;
   }
 

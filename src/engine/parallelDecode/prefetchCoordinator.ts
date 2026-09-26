@@ -83,7 +83,8 @@ export async function prewarmClipStarts(
  */
 export async function prefetchFramesForTime(
   deps: ParallelDecodePrefetchDeps,
-  timelineTime: number
+  timelineTime: number,
+  sourceTimeOverrides?: ReadonlyMap<string, number>,
 ): Promise<void> {
   log.debug(`prefetchFramesForTime(${timelineTime.toFixed(3)}) - isActive=${deps.isActive()}, decoders=${deps.clipDecoders.size}`);
   if (!deps.isActive()) return;
@@ -122,7 +123,8 @@ export async function prefetchFramesForTime(
     }
 
     // Calculate target source time and sample index
-    const sourceTime = timelineToSourceTime(clipInfo, prefetchTarget.timelineTime);
+    const sourceTime = sourceTimeOverrides?.get(clipDecoder.clipId)
+      ?? timelineToSourceTime(clipInfo, prefetchTarget.timelineTime);
     const targetSampleIndex = findSampleIndexForSourceTime(
       clipDecoder.samples,
       sourceTime,
@@ -226,7 +228,8 @@ export async function prefetchFramesForTime(
   // 3. Re-decode with flush as last resort
   for (const clipDecoder of clipsNeedingFlush) {
     const clipInfo = clipDecoder.clipInfo;
-    const sourceTime = timelineToSourceTime(clipInfo, timelineTime);
+    const sourceTime = sourceTimeOverrides?.get(clipDecoder.clipId)
+      ?? timelineToSourceTime(clipInfo, timelineTime);
     const targetTimestamp = sourceTime * 1_000_000;
     const targetSampleIndex = findSampleIndexForSourceTime(
       clipDecoder.samples,

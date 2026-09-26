@@ -64,6 +64,8 @@ Canvas-backed sources such as text, solids, Lottie, and Rive are re-rendered for
 - Speed ramps: FAST export tracks the source stride between requested frames, decodes the predicted next frame in the background, and immediately closes decoded frames that fall between predicted requests. Hardware decoders therefore keep free output surfaces. If a decelerating ramp requests a frame that was closed, export restarts from the preceding keyframe for that frame.
 - Decoder backpressure waits for decoder progress events instead of fixed sleeps. If a hardware decoder holds reordered samples and its queue stops draining, export submits more input instead of waiting for a timeout.
 - Regular multi-clip exports use source-shared sequential WebCodecs decoders; nested-composition video clips use `ParallelDecodeManager`.
+- In parallel exports, speed-keyframed and transition-mapped clips prefetch at their mapped source time and retire old frames using that same time. They do not first seek to the clip's constant-speed time.
+- Preview resolution updates pause during export. Each export frame rechecks its render host dimensions before rendering so an intervening preview resize cannot produce readback pixels at the wrong size.
 - Parses source media with MP4Box.
 - Decode, buffer, and unsupported-file failures remain in the selected workflow. Errors are logged and surfaced; Fast mode does not automatically switch to HTMLVideo.
 

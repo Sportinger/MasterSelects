@@ -3,6 +3,7 @@ import { Logger } from '../../services/logger';
 import { renderHostPort } from '../../services/render/renderHostPort';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useTimelineStore } from '../../stores/timeline';
 
 const log = Logger.create('Engine');
 
@@ -38,6 +39,7 @@ export function useEngineResolutionSync(isEngineReady: boolean): void {
     if (!isEngineReady) return;
 
     const updateResolution = () => {
+      if (useTimelineStore.getState().isExporting) return;
       const { baseWidth, baseHeight, previewQuality } = getEngineResolutionConfig();
       const scaledWidth = Math.round(baseWidth * previewQuality);
       const scaledHeight = Math.round(baseHeight * previewQuality);
@@ -66,10 +68,16 @@ export function useEngineResolutionSync(isEngineReady: boolean): void {
       () => updateResolution()
     );
 
+    const unsubscribeExport = useTimelineStore.subscribe(
+      (state) => state.isExporting,
+      (isExporting) => { if (!isExporting) updateResolution(); },
+    );
+
     return () => {
       unsubscribeActiveComp();
       unsubscribeCompositions();
       unsubscribeSettings();
+      unsubscribeExport();
     };
   }, [isEngineReady]);
 }

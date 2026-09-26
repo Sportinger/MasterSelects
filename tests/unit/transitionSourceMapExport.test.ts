@@ -646,7 +646,7 @@ describe('transition source map export parity', () => {
     expect(nestedSeek).toHaveBeenCalledWith(9.5);
   });
 
-  it('prefetches mapped parallel decoder frames after its legacy timeline cleanup', async () => {
+  it('prefetches mapped parallel frames at their source time before cleanup', async () => {
     const mappedClip = clip({ transitionSourceMap: sourceMap });
     const parallelDecoder = {
       prefetchFramesForTime: vi.fn(async () => undefined),
@@ -662,6 +662,14 @@ describe('transition source map export parity', () => {
     );
 
     expect(parallelDecoder.prefetchFrameForClipSourceTime).toHaveBeenCalledWith(mappedClip.id, 4);
+    expect(parallelDecoder.prefetchFramesForTime).toHaveBeenCalledWith(
+      0.8,
+      new Map([[mappedClip.id, 4]]),
+    );
+    expect(parallelDecoder.advanceToTime).toHaveBeenCalledWith(
+      0.8,
+      new Map([[mappedClip.id, 4]]),
+    );
     expect(parallelDecoder.advanceToTime).toHaveBeenCalledBefore(
       parallelDecoder.prefetchFrameForClipSourceTime,
     );

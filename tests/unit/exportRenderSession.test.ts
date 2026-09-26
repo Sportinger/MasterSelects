@@ -6,6 +6,7 @@ import { recordTemporalPreparation, temporalExportFramesRemaining } from '../../
 const mockFactory = vi.hoisted(() => {
   const calls: string[] = [];
   const originalDimensions = { width: 1280, height: 720 };
+  const currentDimensions = { ...originalDimensions };
   const videoFrame = {
     displayWidth: 1920,
     displayHeight: 1080,
@@ -17,10 +18,12 @@ const mockFactory = vi.hoisted(() => {
   const engine = {
     getOutputDimensions: vi.fn(() => {
       calls.push('getOutputDimensions');
-      return originalDimensions;
+      return { ...currentDimensions };
     }),
     setResolution: vi.fn((width: number, height: number) => {
       calls.push(`setResolution:${width}x${height}`);
+      currentDimensions.width = width;
+      currentDimensions.height = height;
     }),
     setExporting: vi.fn((exporting: boolean) => {
       calls.push(`setExporting:${exporting}`);
@@ -68,6 +71,7 @@ const mockFactory = vi.hoisted(() => {
 
   return {
     calls,
+    currentDimensions,
     engine,
     originalDimensions,
     pixels,
@@ -133,6 +137,7 @@ function createInjectedHost(): ExportRenderHostPort {
 
 beforeEach(() => {
   mockFactory.calls.length = 0;
+  Object.assign(mockFactory.currentDimensions, mockFactory.originalDimensions);
   vi.clearAllMocks();
 });
 
@@ -221,6 +226,7 @@ describe('ExportRenderSessionImpl', () => {
     }));
     expect(mockFactory.calls).toEqual([
       'isDeviceValid',
+      'getOutputDimensions',
       'setRenderTimeOverride:1.25',
       'ensureExportLayersReady',
       'syncExportMaskTextures',
@@ -246,6 +252,7 @@ describe('ExportRenderSessionImpl', () => {
     expect(capture.height).toBe(2160);
     expect(mockFactory.calls).toEqual([
       'isDeviceValid',
+      'getOutputDimensions',
       'setRenderTimeOverride:2',
       'ensureExportLayersReady',
       'syncExportMaskTextures',
@@ -416,6 +423,29 @@ describe('ExportRenderSessionImpl', () => {
     }));
   });
 
+  it('restores export dimensions before rendering after preview changes resolution', async () => {
+    const host = createInjectedHost();
+    let dimensions = { width: 640, height: 360 };
+    vi.mocked(host.getOutputDimensions).mockImplementation(() => ({ ...dimensions }));
+    vi.mocked(host.setResolution).mockImplementation((width, height) => {
+      dimensions = { width, height };
+    });
+    const session = new ExportRenderSessionImpl({
+      runId: 'resolution-restore', compositionId: 'composition-a', width: 320, height: 180,
+      stackedAlpha: false, preferZeroCopy: false, host,
+    });
+    await session.begin();
+    dimensions = { width: 1920, height: 1080 };
+
+    const capture = await session.renderFrame({ time: 1, layers, timestampMicros: 0, durationMicros: 33333 });
+
+    expect(capture.kind).toBe('rgba-pixels');
+    expect(host.setResolution).toHaveBeenCalledTimes(2);
+    expect(dimensions).toEqual({ width: 320, height: 180 });
+    expect(vi.mocked(host.setResolution).mock.invocationCallOrder[1])
+      .toBeLessThan(vi.mocked(host.render).mock.invocationCallOrder[0]);
+  });
+
   it('reports the active export host when frame render cannot recover', async () => {
     const host = createInjectedHost();
     vi.mocked(host.getTelemetry).mockReturnValue({
@@ -468,6 +498,7 @@ describe('ExportRenderSessionImpl', () => {
     expect(capture.height).toBe(2160);
     expect(mockFactory.calls).toEqual([
       'isDeviceValid',
+      'getOutputDimensions',
       'setRenderTimeOverride:3',
       'ensureExportLayersReady',
       'syncExportMaskTextures',

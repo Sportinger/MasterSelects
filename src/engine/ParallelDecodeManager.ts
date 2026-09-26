@@ -356,9 +356,9 @@ export class ParallelDecodeManager {
    * Pre-decode frames for a specific timeline time across all clips
    * Optimized for speed: fires decode ahead in background, only waits if frame is missing
    */
-  async prefetchFramesForTime(timelineTime: number): Promise<void> {
+  async prefetchFramesForTime(timelineTime: number, sourceTimeOverrides?: ReadonlyMap<string, number>): Promise<void> {
     await this.ensureWindowClipsInitialized(timelineTime);
-    return runPrefetchFramesForTime(this.prefetchDeps(), timelineTime);
+    return runPrefetchFramesForTime(this.prefetchDeps(), timelineTime, sourceTimeOverrides);
   }
 
   async prefetchFrameForClipSourceTime(clipId: string, sourceTime: number): Promise<void> {
@@ -802,7 +802,7 @@ export class ParallelDecodeManager {
    * Advance buffer position after rendering a frame
    * Call this after successfully rendering to clean up old frames
    */
-  advanceToTime(timelineTime: number): void {
+  advanceToTime(timelineTime: number, sourceTimeOverrides?: ReadonlyMap<string, number>): void {
     for (const [, clipDecoder] of this.clipDecoders) {
       const clipInfo = clipDecoder.clipInfo;
       const clipEnd =
@@ -826,7 +826,7 @@ export class ParallelDecodeManager {
         continue;
       }
 
-      const sourceTime = timelineToSourceTime(clipInfo, timelineTime);
+      const sourceTime = sourceTimeOverrides?.get(clipDecoder.clipId) ?? timelineToSourceTime(clipInfo, timelineTime);
       const currentTimestamp = sourceTime * 1_000_000;  // Convert to microseconds
 
       // Clean up frames that are significantly behind current position (> 200ms behind)

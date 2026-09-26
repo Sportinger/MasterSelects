@@ -36,7 +36,7 @@ Its [space-time slice](docs/Features/Slit-Scan-3D.md#space-time-slice-observed-d
 | --- | --- |
 | <a href="docs/images/node-graph-detail.png"><img src="docs/images/node-graph-detail.png" alt="Connected nodes with image and depth previews" width="320"></a> | <a href="docs/images/node-graph-overview.png"><img src="docs/images/node-graph-overview.png" alt="Large connected node graph" width="320"></a> |
 
-Import video, audio, images, animations, 3D assets, and Premiere Pro projects. Export video, audio, still frames, and interchange formats. FAST export waits for the exact decoded source frame, including reordered frames that arrive after additional samples. Browser, operating system, and GPU support affect available codecs and performance. See [media import](docs/Features/Media-Panel.md) and [export](docs/Features/Export.md).
+Import video, audio, images, animations, 3D assets, and Premiere Pro projects. Export video, audio, still frames, and interchange formats. FAST export waits for the exact decoded source frame, including reordered frames that arrive after additional samples; multi-clip speed ramps prefetch at their animated source time. Browser, operating system, and GPU support affect available codecs and performance. See [media import](docs/Features/Media-Panel.md) and [export](docs/Features/Export.md).
 
 The [Notebook](docs/Features/Documents.md) is a continuous writing surface for notes and screenplays. Passages can receive labels, scene ranges, comments and media links after writing; imported PDFs retain an original-page view.
 
