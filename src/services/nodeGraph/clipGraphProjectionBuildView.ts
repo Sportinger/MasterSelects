@@ -78,7 +78,7 @@ export function buildClipNodeGraphView(
     depth += 1;
   }
 
-  const visualEffects = clip.effects.filter((candidate) => !isAudioEffect(candidate));
+  const visualEffects = clip.effects.filter((candidate) => !isAudioEffect(candidate) && !candidate.detached);
   const hasColor = isVisualSource(clip) && (hasColorGraph(clip) || hasForcedBuiltInNode(clip, 'color'));
   const colorIndex = Math.min(visualEffects.length, Math.max(0, Math.trunc(clip.colorCorrection?.stackIndex ?? 0)));
   for (const [effectIndex, effect] of visualEffects.entries()) {
@@ -133,6 +133,10 @@ export function buildClipNodeGraphView(
 
   standaloneCustomNodes.forEach((customNode, index) => {
     nodes.push(createCustomNode(customNode, depth + index + 1, customNodeLaneY(customNode)));
+  });
+  // Free-standing effect groups have no chain links until they are wired in.
+  clip.effects.filter((candidate) => candidate.detached && !isAudioEffect(candidate)).forEach((effect, index) => {
+    nodes.push(createEffectNode(effect, depth + standaloneCustomNodes.length + index + 1, MAIN_LANE_Y + 360, primarySignal));
   });
 
   if (audioClip && primarySignal !== 'audio') {

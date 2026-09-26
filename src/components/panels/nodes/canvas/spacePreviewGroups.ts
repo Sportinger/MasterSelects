@@ -17,6 +17,8 @@ const crowds = (a: PreviewLayoutBlock, b: PreviewLayoutBlock) => a.x < b.x + b.w
  */
 export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<string> = new Set(), expanding: ReadonlySet<string> = new Set(),
   displacements?: Map<string, NodeGraphLayout>, outer?: { reflow: boolean; reflowFromSource?: boolean; compactEffects?: boolean; addedEffects?: ReadonlySet<string>; groupMoves: Map<string, NodeGraphLayout> }): NodeGraphNode[] {
+  // Free-standing groups stay where they were placed; the chain flows around them.
+  const detachedBlocks = new Set((graph.groups ?? []).filter(group => group.detached).map(group => `group:${group.id}`));
   if (!graph.groups?.length && !fixedIds.size && !outer?.reflow) return spacePreviewNodes(graph.nodes);
   const nodes = new Map(graph.nodes.map(node => [node.id, node]));
   const groups = new Map((graph.groups ?? []).map(group => [group.id, group]));
@@ -47,6 +49,7 @@ export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<strin
       flow: block.flow || (outer?.reflowFromSource && block.boundary === 'input') || block.nodeIds.some(nodeId => outer?.addedEffects?.has(nodeId))
         || (block.group && !!outer?.addedEffects?.has(groups.get(block.id.slice('group:'.length))!.proxyId)),
     })), graph.edges) : new Set<string>();
+    if (!id) for (const blockId of detachedBlocks) { outerFlow.delete(blockId); if (blocks.some(block => block.id === blockId)) fixed.add(blockId); }
     if (outer?.reflow) for (const blockId of outerFlow) fixed.delete(blockId);
     const source = !id ? blocks.find(block => block.nodeIds.some(nodeId => nodes.get(nodeId)?.binding?.kind === 'clip-source')) : undefined;
     const flowing = !id ? blocks.filter(block => outerFlow.has(block.id)) : blocks;

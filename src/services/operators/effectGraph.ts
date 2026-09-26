@@ -11,6 +11,18 @@ import { resolveAdaptiveGraphConnection } from '../nodeGraph/adaptiveGraphConnec
 import type { OperatorDefinition } from '../../types/operatorGraph';
 
 export const EFFECT_GRAPH_PARAM = 'operatorGraph';
+
+/** Nodes upstream of the image output. Everything else is not evaluated and may stay unconnected. */
+export function loadBearingNodes(graph: Pick<EffectOperatorGraph, 'nodes' | 'edges'>): Set<string> {
+  const feeding = new Set<string>();
+  const visit = (id: string) => {
+    if (feeding.has(id)) return;
+    feeding.add(id);
+    for (const edge of graph.edges) if (edge.to === id) visit(edge.from);
+  };
+  for (const node of graph.nodes) if (node.operator === 'image.output') visit(node.id);
+  return feeding;
+}
 export type OperatorParameters = Record<string, unknown>;
 
 export function validateEffectGraph(graph: EffectOperatorGraph, allowIncomplete = false): string[] {
@@ -53,7 +65,10 @@ export function validateEffectGraph(graph: EffectOperatorGraph, allowIncomplete 
       || duplicateInput || ((!check.ok && !repairableVariantMismatch) || (check.ok && check.replacesEdgeId))) errors.push(`Invalid connection: ${edge.id}.`);
     occupied.add(`${edge.toNodeId}:${edge.toPortId}`); edgeIds.add(edge.id);
   }
+  // Image graphs compile only what feeds their output: loose, free-standing nodes may stay unwired.
+  const feeding = graph.domain === 'image' ? loadBearingNodes(graph) : undefined;
   for (const n of graph.nodes) for (const p of getEffectOperator(n.operator)?.inputs ?? []) {
+    if (feeding && !feeding.has(n.id)) continue;
     if (!allowIncomplete && p.required && !occupied.has(`${n.id}:${p.id}`)) errors.push(`${getEffectOperator(n.operator)!.label}: connect ${p.label}.`);
   }
   if (graphHasCycle(connections.nodes, connections.edges)) errors.push('Cycles are not supported.');

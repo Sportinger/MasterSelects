@@ -238,12 +238,14 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       clips: clips.map(c => {
         if (c.id !== clipId) return c;
         const updatedEffect = c.effects.find(e => e.id === effectId);
+        // A free-standing group renders only once it is in the chain: enabling it attaches it.
+        if (updatedEffect?.detached && !enabled) return c;
         const nextEffect = updatedEffect ? { ...updatedEffect, enabled } : undefined;
         return updateClipEffectState(
           c,
           clip => ({
             ...clip,
-            effects: clip.effects.map(e => e.id === effectId ? { ...e, enabled } : e),
+            effects: clip.effects.map(e => e.id === effectId ? { ...e, enabled, ...(e.detached ? { detached: undefined } : {}) } : e),
             ...(!enabled && updatedEffect ? {
               nodeGraph: {
                 ...(clip.nodeGraph ?? createClipNodeGraphState(clip)),

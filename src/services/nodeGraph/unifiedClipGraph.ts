@@ -32,7 +32,7 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     const collapsed = !expandAllGroups && state?.collapsed !== false;
     const group = { id: groupId, label: effect?.name ?? (groupId === 'text' ? 'Text' : groupId === 'scene3d' ? '3D Scene' : groupId === 'flock' ? 'Flock' : 'Color'),
       color: groupId === 'scene3d' ? '#d7a262' : groupId === 'flock' ? '#7ea65b' : groupId === 'color' ? '#ba8bd6' : '#55a6c4', collapsed, nodeIds: [] as string[], proxyId: rootNode.id, issue: inner.issue,
-      ...(effect ? { effectId: effect.id, bypassNodeId: rootNode.id, bypassed: !effect.enabled } : {}),
+      ...(effect ? { effectId: effect.id, bypassNodeId: rootNode.id, bypassed: !effect.enabled && !effect.detached, ...(effect.detached ? { detached: true } : {}) } : {}),
       layoutMode: 'flow' as const };
     groups.push(group);
     if (collapsed || !inner.nodes.length) {
@@ -65,6 +65,12 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
         if (!exit.outputs.some(p => p.id === id)) exit.outputs = [...exit.outputs, { id, label: 'Clip output', type: edge.type, direction: 'output' }];
         edge.fromNodeId = exit.id; edge.fromPortId = id;
       }
+    }
+    // A free-standing group has no chain links yet; its clip ports let the user wire it in.
+    if (effect?.detached) {
+      const input = rootNode.inputs[0], output = rootNode.outputs[0];
+      if (input && !entrance.inputs.some(p => p.id === `group-in-${input.id}`)) entrance.inputs = [...entrance.inputs, { id: `group-in-${input.id}`, label: 'Clip input', type: input.type, direction: 'input' }];
+      if (output && !exit.outputs.some(p => p.id === `group-out-${output.id}`)) exit.outputs = [...exit.outputs, { id: `group-out-${output.id}`, label: 'Clip output', type: output.type, direction: 'output' }];
     }
     nodes.push(...innerNodes); group.nodeIds.push(...innerNodes.map(n => n.id));
     const children = new Map<string, NonNullable<NodeGraph['groups']>>();

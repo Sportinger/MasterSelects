@@ -175,6 +175,15 @@ opening if it is never entered; a typed search keeps it open). Insertion is
 one undo step and opens a collapsed destination effect; a locked or exporting clip
 reports the reason in the menu.
 
+Free-standing work: an image node added from the menu without a target becomes its
+own free-standing group at the pointer (a detached effect that is not rendered and not
+part of the clip chain; the chain flows around it). Cutting a chain cable frees the
+effect group it feeds, or the last group before the clip output; the chain closes
+around it. Wiring a free group into the chain, or enabling it in the Effects tab,
+attaches it again. Inside an image graph, loose nodes that do not feed the output may
+stay unconnected: only the path to the output has to be complete, so a loose node no
+longer pauses the effect.
+
 Right-clicking a cable inside an effect graph also offers that graph's Nodes and
 Node Groups, without type filtering. The chosen node is placed at the pointer and
 wired between the cable's ends (preferring ports of the cable's type); if a side

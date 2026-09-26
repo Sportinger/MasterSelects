@@ -9,6 +9,11 @@ export interface Effect {
   params: Record<string, AudioEffectParamValue>;
   /** Canonical, versioned operator graph. `params.operatorGraph` is legacy read-only input. */
   operatorGraph?: EffectOperatorGraph;
+  /**
+   * Free-standing node group: kept out of the clip chain and never rendered (stored with
+   * `enabled: false`) until the user wires it into the chain, which attaches it.
+   */
+  detached?: boolean;
   /** Ephemeral render description; resolved once the source texture's PTS is known. */
   surfaceTrack?: import('./planarTracking').PlanarTrack;
   terrainRender?: { track: import('./planarTracking').PlanarTrack; camera: import('./terrainTracking').TerrainCamera };

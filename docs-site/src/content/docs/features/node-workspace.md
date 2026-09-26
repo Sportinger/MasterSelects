@@ -14,7 +14,7 @@ Codex Direct streams graph construction as individual operations: each complete 
 
 Agent clip selections update the timeline and inspector target without bringing Properties to the foreground. This also applies while building or focusing node graphs and adding effects. Clicking a clip manually still opens Properties.
 
-The node inspector starts collapsed. Agent graph reads and edits reveal the affected effect group and its descendants while work proceeds, for both tool calls and streamed records. A successfully completed chat turn collapses all groups in the clips it worked on. Failed, cancelled and planning turns do not apply that final collapse. Unrelated clips retain their group state.
+The node inspector starts collapsed. Agent graph edits reveal the affected effect group while work proceeds, for both tool calls and streamed records. Nested groups open only when the agent edits one of their inner nodes; finished effects, compound nodes and building blocks it merely adds, uses or wires stay folded. A successfully completed chat turn collapses all groups in the clips it worked on. Failed, cancelled and planning turns do not apply that final collapse. Unrelated clips retain their group state.
 
 Adding or removing nodes always fits the complete graph to the available canvas during its layout animation, including nodes arriving through internal or external agent tools and streamed node code. This also refits additions that already lie inside the current view. Adding, removing or reconnecting cables refits the resulting layout too, so later streamed connections do not leave outdated framing. Parameter edits do not reset manual navigation; a pointer or wheel gesture cancels a pending automatic fit. Group folding retains its own focus and restore behavior.
 
@@ -174,6 +174,15 @@ menu closes on its own about a second after the pointer leaves it (or 1.5 s afte
 opening if it is never entered; a typed search keeps it open). Insertion is
 one undo step and opens a collapsed destination effect; a locked or exporting clip
 reports the reason in the menu.
+
+Free-standing work: an image node added from the menu without a target becomes its
+own free-standing group at the pointer (a detached effect that is not rendered and not
+part of the clip chain; the chain flows around it). Cutting a chain cable frees the
+effect group it feeds, or the last group before the clip output; the chain closes
+around it. Wiring a free group into the chain, or enabling it in the Effects tab,
+attaches it again. Inside an image graph, loose nodes that do not feed the output may
+stay unconnected: only the path to the output has to be complete, so a loose node no
+longer pauses the effect.
 
 Right-clicking a cable inside an effect graph also offers that graph's Nodes and
 Node Groups, without type filtering. The chosen node is placed at the pointer and

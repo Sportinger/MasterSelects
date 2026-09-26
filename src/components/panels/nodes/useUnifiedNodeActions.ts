@@ -18,6 +18,14 @@ import { keyframeEdgeId } from '../../../services/nodeGraph/keyframeNodeProjecti
 import { connectControlNodes, deleteControlNode, disconnectControlEdge, moveControlNode, setParameterSourceBinding } from '../../../services/parameterSources/parameterSourceActions';
 import type { AnimatableProperty } from '../../../types/animationProperties';
 import { toggleEffectGroupEnabled } from '../../../services/operators/effectGroupBypassEditing';
+import { chainCutEffect, detachChainEffect } from '../../../services/nodeGraph/clipEffectChain';
+
+function detachEffect(clipId: string, effectId: string) {
+  const state = readTimelineRuntimeState(useTimelineStore), current = state.clips.find(candidate => candidate.id === clipId);
+  if (!current || state.isExporting || state.tracks.find(track => track.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
+  startBatch('Free effect group');
+  try { state.updateClip(clipId, { effects: detachChainEffect(current, effectId).effects }); state.invalidateCache(); } finally { endBatch(); }
+}
 
 interface BaseActions {
   moveNode: (id: string, layout: NodeGraphLayout) => void;
@@ -233,6 +241,9 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
         editCompositionInput(clip.id, node.binding.effectId, targets.map(endpoint => ({ nodeId: endpoint.nodeId.split('/').at(-1)!, portId: endpoint.portId }))); return;
       }
       if (endpoint) node = graph?.expandedNodes?.find(n => n.id === endpoint.nodeId) ?? node;
+      // Cutting a chain cable frees the effect group it feeds (or the last one before the output).
+      const freed = graph ? chainCutEffect(graph, edge) : undefined;
+      if (freed && clip) { detachEffect(clip.id, freed); return; }
       if (edge.toPortId.startsWith('group-') || edge.fromPortId.startsWith('group-')) throw new Error('Reconnect the Clip input/output ports to reorder effects, or bypass an effect to skip it.');
       bindingActions(node)?.disconnectEdge(id.slice(id.lastIndexOf('/') + 1));
     }),

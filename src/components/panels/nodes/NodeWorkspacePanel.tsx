@@ -22,7 +22,8 @@ import type { NodeConnectionDrop } from '../../../types/nodeGraph';
 import { buildCableInsertEntries, buildNodeContextMenuEntries } from './workspace/nodeContextMenuEntries';
 import { addableEffectOperators } from '../../../services/operators/effectGraphOwner';
 import { addEffectGraphNode } from './workspace/addEffectGraphNode';
-import { FREE_NODE_GRAPH_NAME, freeNodeGraphEffectId } from '../../../services/operators/imageNodeGraphEffect';
+import { createSingleNodeEffect } from '../../../services/operators/imageNodeGraphEffect';
+import { effectGraphId } from '../../../services/nodeGraph/effectGraphProjection';
 import { addControlNode } from '../../../services/parameterSources/parameterSourceActions';
 import { NodeInspector } from './workspace/NodeWorkspaceInspector';
 import {
@@ -385,6 +386,10 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
       ?? (selectedNode?.id.startsWith('effect-') ? selectedNode.id.slice(7) : undefined);
   const presetEffect = subject.clip.effects.find(effect => effect.id === presetEffectId);
   const reusableTarget = contextMenu?.nodeId ? contextMenuNode : selectedNode;
+  const addSingleNodeGroup = (operatorId: string, position: NodeGraphLayout, chain?: { beforeEffectId?: string }) => {
+    const { effectId, nodeId } = createSingleNodeEffect(subject.id, operatorId, { groupPosition: position, chain });
+    selectNode(`${effectGraphId(subject.id, effectId)}/${nodeId}`);
+  };
   const reusableEffectId = reusableTarget?.binding && 'effectId' in reusableTarget.binding ? reusableTarget.binding.effectId
     : subject.graph.groups?.find(group => group.proxyId === reusableTarget?.id || group.id === reusableTarget?.groupId)?.effectId;
   const reusableEffect = subject.clip.effects.find(effect => effect.id === reusableEffectId);
@@ -489,7 +494,13 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
             const from = subject.graph.nodes.find(node => node.id === edge.fromNodeId), to = subject.graph.nodes.find(node => node.id === edge.toNodeId);
             const effectId = from?.binding?.kind === 'effect-operator' ? from.binding.effectId : undefined;
             const effect = subject.clip.effects.find(candidate => candidate.id === effectId);
-            if (!effect || to?.binding?.kind !== 'effect-operator' || to.binding.effectId !== effect.id) return [];
+            if (!effect || to?.binding?.kind !== 'effect-operator' || to.binding.effectId !== effect.id) {
+              // Clip chain cables into an effect group or the clip output: a new group with the node joins there.
+              const before = to?.binding?.kind === 'clip-effect' || to?.binding?.kind === 'effect-operator' ? to.binding.effectId : undefined;
+              if (edge.type !== 'texture' || (!before && to?.binding?.kind !== 'clip-output')) return [];
+              return buildCableInsertEntries({ effectId: 'new-group', effectName: 'a new group', operators: addableEffectOperators('invert'),
+                onAdd: operatorId => { try { addSingleNodeGroup(operatorId, point, { beforeEffectId: before }); } catch (error) { console.warn('Insert node into cable failed', error); } } });
+            }
             return buildCableInsertEntries({ effectId: effect.id, effectName: effect.name === effect.type ? getEffect(effect.type)?.name ?? effect.name : effect.name,
               operators: addableEffectOperators(effect.type), onAdd: operatorId => {
                 const batch = startBatch('Insert node into cable');
@@ -580,10 +591,16 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
               const displayName = (effect: { name: string; type: string }) => effect.name === effect.type ? getEffect(effect.type)?.name ?? effect.name : effect.name;
               // Every graph kind: an existing effect of that kind receives the node, otherwise one is added on first use.
               const kinds = imageCapable ? GRAPH_OWNER_TYPES.map(type => {
-                const existing = type === 'invert' ? undefined : subject.clip.effects.find(effect => effect.type === type);
+                // Image nodes each get their own free-standing group at the menu position.
+                if (type === 'invert') return { effectId: 'new-group', operators: addableEffectOperators(type), effectName: 'a new free group',
+                  onAdd: (operatorId: string) => {
+                    try { addSingleNodeGroup(operatorId, contextMenu.layout); closeContextMenu(); }
+                    catch (error) { setContextMenuError(error instanceof Error ? error.message : String(error)); }
+                  } };
+                const existing = subject.clip.effects.find(effect => effect.type === type);
                 return { effectId: existing?.id ?? `new:${type}`, operators: addableEffectOperators(type),
-                  effectName: type === 'invert' ? FREE_NODE_GRAPH_NAME : existing ? displayName(existing) : `new ${getEffect(type)?.name ?? type}`,
-                  onAdd: insert(() => type === 'invert' ? freeNodeGraphEffectId(subject.id) : existing?.id ?? addClipEffect(subject.id, type)) };
+                  effectName: existing ? displayName(existing) : `new ${getEffect(type)?.name ?? type}`,
+                  onAdd: insert(() => existing?.id ?? addClipEffect(subject.id, type)) };
               }) : [];
               return { owners: [
                 ...(reusableEffect ? [{ effectId: reusableEffect.id, operators: addableEffectOperators(reusableEffect.type), onAdd: insert(() => reusableEffect.id),

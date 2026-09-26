@@ -20,7 +20,11 @@ function setup() {
   const template = graph.nodes.find(node => addable.has(node.operator) && graph.edges.some(edge => edge.to === node.id))!;
   return { template };
 }
-const current = () => JSON.parse(String(useTimelineStore.getState().clips[0].effects[0].params[EFFECT_GRAPH_PARAM])) as ReturnType<typeof createDefaultVoxelGraph>;
+// Graphs are stored canonically on the effect; the params string is legacy input only.
+const current = () => {
+  const effect = useTimelineStore.getState().clips[0].effects[0];
+  return (effect.operatorGraph ?? JSON.parse(String(effect.params[EFFECT_GRAPH_PARAM]))) as ReturnType<typeof createDefaultVoxelGraph>;
+};
 
 describe('adding nodes from the workspace menu', () => {
   it('places the node unconnected at the menu position', () => {

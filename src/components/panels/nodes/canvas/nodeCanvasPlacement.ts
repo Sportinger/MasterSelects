@@ -36,8 +36,9 @@ export function reconcileCanvasPlacement(graph: NodeGraph, previous?: NodeCanvas
   }
   const addedEffects = new Set<string>();
   if (previous) {
-    for (const group of graph.groups ?? []) if (group.effectId && !previous.groups[group.id]) addedEffects.add(group.proxyId);
+    for (const group of graph.groups ?? []) if (group.effectId && !group.detached && !previous.groups[group.id]) addedEffects.add(group.proxyId);
     for (const node of graph.nodes) if (node.binding?.kind === 'clip-effect' && !previous.nodes[node.id]
+      && !graph.groups?.some(group => group.detached && group.proxyId === node.id)
       && !Object.values(previous.groups).some(group => group.proxyId === node.id)) addedEffects.add(node.id);
   }
   const expanding = new Set<string>();
@@ -58,7 +59,7 @@ export function reconcileCanvasPlacement(graph: NodeGraph, previous?: NodeCanvas
       proxyId: group.proxyId, parentId: group.parentId, collapsed: !!group.collapsed, offset: before?.offset ?? { x: 0, y: 0 } };
   }
   const dynamic = new Set<string>();
-  for (const group of graph.groups ?? []) if (group.layoutMode === 'flow') {
+  for (const group of graph.groups ?? []) if (group.layoutMode === 'flow' && !group.detached) {
     for (const id of groupPlacementMembers(placement, group.id)) dynamic.add(id);
   }
   // The clip output and following processing stages move with the resized effect.
