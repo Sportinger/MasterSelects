@@ -32,7 +32,12 @@ const mockState = vi.hoisted(() => ({
 }));
 
 vi.mock('../../src/stores/timeline', () => {
-  const buildClip = () => ({
+  const buildClip = () => mockState.sourceType === 'restoring-video' ? {
+    id: 'clip-1',
+    source: null,
+    mediaFileId: 'media-1',
+    wireframe: false,
+  } : ({
     id: 'clip-1',
     source: {
       type: mockState.sourceType,
@@ -365,6 +370,20 @@ describe('TransformTab position units', () => {
     expect(freeRunToggle).toHaveTextContent('LockFree');
     fireEvent.click(freeRunToggle);
     expect(mockState.updateClip).toHaveBeenCalledWith('clip-1', { freeRun: true });
+  });
+
+  it('keeps the video inspector for a video clip whose source is still restoring', () => {
+    mockState.sourceType = 'restoring-video';
+    const { getByRole } = render(
+      <TransformTab
+        clipId="clip-1"
+        transform={makeTransform({ x: 0, y: 0, z: 0 })}
+      />,
+    );
+
+    expect(getByRole('group', { name: 'Video source: Current Source.mp4' })).toBeInTheDocument();
+    expect(getByRole('button', { name: 'Playback Mode: Switch to Free Run' })).toBeInTheDocument();
+    expect(getByRole('button', { name: 'Layer Mode: Switch to 3D layer' })).toBeInTheDocument();
   });
 
   it('renders the Resolve transform section as a collapsible inspector group', () => {

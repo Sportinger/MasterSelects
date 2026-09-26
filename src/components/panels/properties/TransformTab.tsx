@@ -106,7 +106,15 @@ export function TransformTab({
     return pair?.video.id === clipId ? isLinkedAudioFollowingVideo(pair) : undefined;
   });
   const wireframe = clip?.wireframe ?? false;
-  const sourceType = clip?.source?.type;
+  // A media clip that is still restoring has no source yet; keep its video/image
+  // inspector (crop, free run, 3D) instead of the generic fallback layout.
+  const pendingSourceType = useMediaStore((state) => {
+    if (!clip || clip.source) return undefined;
+    if (clip.isComposition) return 'video';
+    const file = clip.mediaFileId ? state.files.find((candidate) => candidate.id === clip.mediaFileId) : undefined;
+    return file?.type === 'video' || file?.type === 'image' ? file.type : undefined;
+  });
+  const sourceType = clip?.source?.type ?? pendingSourceType;
   const supportsFreeRun = sourceType === 'video' && !clip?.source?.liveInputId;
   const freeRun = clip?.freeRun === true;
   const isModel = sourceType === 'model';
