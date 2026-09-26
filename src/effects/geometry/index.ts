@@ -44,9 +44,9 @@ export const contourMap = createCatalogEffect({ id: 'contour-map', name: 'Contou
 export const contourType = createGlyphEffect({ id: 'contour-type', name: 'Contour Type', category: 'geometry', entryPoint: 'contourTypeFragment', defaultRamp: 'numeric', defaultCellSize: 20 });
 export const vectorTiling = createCatalogEffect({ id: 'vector-tiling', name: 'Vector Engraving', category: 'geometry', shader, entryPoint: 'vectorTilingFragment' });
 export const crosshatch = createCatalogEffect({ id: 'crosshatch', name: 'Crosshatch', category: 'geometry', shader, entryPoint: 'crosshatchFragment' });
-export const embroidery = createCatalogEffect({ id: 'embroidery', name: 'Knitted Embroidery', category: 'geometry', shader, entryPoint: 'embroideryFragment', animated: true, clock: 'timeline' });
+export const embroidery = createCatalogEffect({ id: 'embroidery', name: 'Embroidery', category: 'geometry', shader, entryPoint: 'embroideryFragment', animated: true, clock: 'timeline' });
 export const kilim = createCatalogEffect({ id: 'kilim', name: 'Kilim Carpet', category: 'geometry', shader, entryPoint: 'kilimFragment' });
 export const outline = createCatalogEffect({ id: 'outline', name: 'Outline', category: 'geometry', shader, entryPoint: 'outlineFragment', animated: true, clock: 'timeline' });
-export const bricks = createCatalogEffect({ id: 'bricks', name: '3D Toy Bricks', category: 'geometry', shader, entryPoint: 'bricksFragment', animated: true, clock: 'timeline' });
+export const bricks = createCatalogEffect({ id: 'bricks', name: 'Toy Bricks', category: 'geometry', shader, entryPoint: 'bricksFragment', animated: true, clock: 'timeline' });
 
 export { splatExploration } from './splat-exploration';

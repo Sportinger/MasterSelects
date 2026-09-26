@@ -1,3 +1,4 @@
+import { operatorCardLabel } from '../operators/operatorTaxonomy';
 import { projectOperatorPort } from '../operators/operatorPortProjection';
 export { projectOperatorPort } from '../operators/operatorPortProjection';
 import type { Effect } from '../../types/effects';
@@ -43,7 +44,7 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
           ...(operator.id.startsWith('values.') ? { valueLabel: node.valueControl?.label ?? node.exposed?.label ?? (typeof node.bindings.value === 'string' ? node.bindings.value : node.id)
             .replace(/([a-z])([A-Z])/g, '$1 $2').replace(/-/g, ' ') } : {}),
           mathSymbol: mathNodeSymbol(operator.id) ?? '',
-          categoryLabel: ({ values: 'Value', analog: 'Analog Signal', math: 'Math', image: 'Image', texture: 'Texture', geometry: 'Geometry', material: 'Material', camera: 'Camera', light: 'Light', render: 'Render', scene: 'Scene', forces: 'Force', simulation: 'Simulation', tracking: 'Tracking' } as Record<string, string>)[operator.id.split('.')[0]] ?? 'Effect' },
+          categoryLabel: operatorCardLabel(operator) },
         layout: graph.layout[node.id] ?? { x: 0, y: 0 }, domain: 'clip',
         binding: { kind: 'effect-operator', effectId: effect.id, nodeId: node.id, operator: operator.id },
       };

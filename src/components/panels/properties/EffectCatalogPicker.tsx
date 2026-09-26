@@ -1,12 +1,15 @@
 import { useMemo, useRef, useState } from 'react';
 import { getDefaultParams } from '../../../effects';
-import type { EffectCategory, EffectDefinition } from '../../../effects/types';
+import type { EffectDefinition } from '../../../effects/types';
+import { catalogText } from '../../../services/nodeGraph/catalogText';
 import type { LookDefinition } from '../../../effects/looks/types';
 import { LookTile } from '../looks/LookTile';
+import { InspectorSelect } from '../../inspector/InspectorSelect';
 import './EffectCatalogPicker.css';
 
 export interface EffectCatalogGroup {
-  category: EffectCategory;
+  /** Display name of the look group. */
+  category: string;
   effects: EffectDefinition[];
 }
 
@@ -19,7 +22,7 @@ interface EffectCatalogPickerProps {
 export function EffectCatalogPicker({ groups, sourceFrameId, onSelect }: EffectCatalogPickerProps) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<EffectCategory | 'all'>('all');
+  const [category, setCategory] = useState<string>('all');
   const categories = useMemo(() => groups.map((group) => group.category), [groups]);
   const tiles = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -27,7 +30,11 @@ export function EffectCatalogPicker({ groups, sourceFrameId, onSelect }: EffectC
       category !== 'all' && group.category !== category
         ? []
         : group.effects
-          .filter((effect) => !normalizedQuery || `${effect.name} ${effect.id}`.toLocaleLowerCase().includes(normalizedQuery))
+          .filter((effect) => {
+            if (!normalizedQuery) return true;
+            const text = catalogText(`effect:${effect.id}`);
+            return `${effect.name} ${effect.id} ${group.category} ${text.description ?? ''} ${text.tags.join(' ')}`.toLocaleLowerCase().includes(normalizedQuery);
+          })
           .map((effect) => ({
             effect,
             look: {
@@ -36,7 +43,7 @@ export function EffectCatalogPicker({ groups, sourceFrameId, onSelect }: EffectC
               category: 'digital',
               thumbnail: { kind: 'generated' },
               stack: [{ effectId: effect.id, params: getDefaultParams(effect.id), enabled: true }],
-              tags: [effect.category, effect.id],
+              tags: [group.category, effect.id],
               builtIn: true,
             } satisfies LookDefinition,
           }))
@@ -61,14 +68,12 @@ export function EffectCatalogPicker({ groups, sourceFrameId, onSelect }: EffectC
             placeholder="Search effects"
             aria-label="Search effects"
           />
-          <select
+          <InspectorSelect
+            ariaLabel="Effect category"
             value={category}
-            onChange={(event) => setCategory(event.target.value as EffectCategory | 'all')}
-            aria-label="Effect category"
-          >
-            <option value="all">All</option>
-            {categories.map((entry) => <option value={entry} key={entry}>{entry}</option>)}
-          </select>
+            onChange={setCategory}
+            options={[{ value: 'all', label: 'All' }, ...categories.map((entry) => ({ value: entry, label: entry }))]}
+          />
         </div>
         <div className="effect-catalog-grid">
           {tiles.map(({ effect, look }) => (

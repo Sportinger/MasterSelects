@@ -34,7 +34,7 @@ export const risoGlow = createCatalogEffect({
   params: { colorA: { type: 'color', label: 'Shadow Ink', default: '#4f46e5', group: 'Color' }, colorB: { type: 'color', label: 'Glow Ink', default: '#f43f5e', group: 'Color' } },
 });
 export const paperPrint = createCatalogEffect({
-  id: 'paper-print', name: 'Pixel Press', category: 'halftone', shader, entryPoint: 'paperPrintFragment',
+  id: 'paper-print', name: 'Paper Print', category: 'halftone', shader, entryPoint: 'paperPrintFragment',
   params: { scale: { type: 'number', label: 'Press Grain', default: 18, min: 4, max: 80, step: 1, group: 'Pattern' } },
 });
 export const pixelPoster = createCatalogEffect({

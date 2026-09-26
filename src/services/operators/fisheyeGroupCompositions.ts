@@ -52,7 +52,7 @@ export const FISHEYE_GROUP_COMPOSITIONS: readonly OperatorDefinition[] = source.
     const minX = Math.min(...bodyNodes.map(node => source.layout[node.id].x));
     const minY = Math.min(...bodyNodes.map(node => source.layout[node.id].y));
     return {
-      id: `fisheye.${group.id.slice('fisheye-'.length)}`, version: 1, label: group.label,
+      id: `fisheye.${group.id.slice('fisheye-'.length)}`, version: 1, label: group.id === 'fisheye-vignette' ? 'Lens Vignette' : group.label,
       description: `${group.label} from Fisheye Lens. Connect its boundary signals and expand to edit the processing nodes.`,
       inputs, outputs, parameters: [], runtime: 'builtin', invalidates: 'appearance', addable: true,
       state: 'stateless', fusion: 'inline', implementation: 'shared', consumers: ['Image graphs', 'Fisheye Lens'],

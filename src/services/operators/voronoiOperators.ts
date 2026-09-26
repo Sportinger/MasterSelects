@@ -23,7 +23,7 @@ export const VORONOI_OPERATORS: readonly OperatorDefinition[] = [
     family: 'geometry.voronoi-seeds', consumers: ['voronoi'], implementation: 'local', addable: true,
   },
   {
-    id: 'geometry.jump-flood', version: 1, label: 'Jump Flood',
+    id: 'geometry.jump-flood', version: 1, label: 'Distance Field (Jump Flood)',
     description: 'Propagates the nearest valid seed pixel record through the RGBA16F field.',
     inputs: [field('field', 'Seed Field', true)], outputs: [field('field', 'Nearest Seed Field')], parameters: [],
     invalidates: 'appearance', runtime: 'builtin', state: 'stateless', fusion: 'pass-boundary',

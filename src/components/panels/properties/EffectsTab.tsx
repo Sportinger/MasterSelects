@@ -1,3 +1,4 @@
+import { EffectStyleRow } from './EffectStyleRow';
 import { TimeStackControls } from './TimeStackControls';
 import { SlitScanControls } from './SlitScanControls';
 import { EffectSectionBypass } from './resolveInspector/EffectSectionBypass';
@@ -624,6 +625,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                 </div>
                 {!isCollapsed && (
                   <div className="effect-params">
+                    <EffectStyleRow clipId={clipId} effect={effect} />
                     <EffectParams
                       effect={{ ...effect, params: primitiveParams }}
                       onDragStart={handleBatchStart}

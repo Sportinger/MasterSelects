@@ -7,7 +7,11 @@ import { getOperatorPortContract, OPERATOR_SIGNAL_CONTRACTS } from './portContra
 import { describeNodePort } from '../nodeGraph/nodePortPresentation';
 import type { NodePortContract } from '../../types/nodePortContract';
 import { IMAGE_OPERATORS } from './imageOperators';
-import { AUDIO_OPERATORS, AUDIO_SCALAR_OPERATORS } from './audioOperators';
+import { AUDIO_OPERATORS } from './audioOperators';
+import { addableEffectOperators } from './effectGraphOwner';
+import { operatorCategoryLabel, operatorVisibility, type NodeVisibility } from './operatorTaxonomy';
+import { effectGroup, EFFECTS_HIDDEN_FROM_CATALOG } from '../../effects/effectCatalogGroups';
+import { catalogText } from '../nodeGraph/catalogText';
 
 export interface NodeCatalogPort {
   id: string; label: string; type: string; required?: boolean; repeated?: boolean; contract?: NodePortContract;
@@ -15,7 +19,9 @@ export interface NodeCatalogPort {
 }
 
 export interface NodeCatalogEntry {
+  /** `category` is the menu category; `context` names the graphs (domains) that accept the node. */
   id: string; label: string; description: string; category: string; context: string;
+  domains: readonly string[]; visibility: NodeVisibility; tags: readonly string[];
   inputs: NodeCatalogPort[];
   outputs: NodeCatalogPort[];
   parameters: { id: string; label: string; type: string; default: unknown; animatable?: boolean; min?: number; max?: number; step?: number; unit: string; format: string }[];
@@ -32,37 +38,55 @@ export interface NodeCatalogEntry {
 }
 
 const familyOf = (id: string) => id.replace(/\.(scalar|field|rgb|vec[234])$/, '');
-const usersOf = (context: string) => context.split(/\s*\+\s*/).filter(Boolean);
-const operatorContext = (operator: (typeof EFFECT_OPERATORS)[number]) => AUDIO_OPERATORS.includes(operator) ? 'Audio samples'
-  : operator.id.startsWith('splat.') || operator.composition?.graph.domain === 'scene' ? 'Gaussian splat scene graphs'
-  : IMAGE_OPERATORS.includes(operator) || operator.composition
-  ? `Local image graphs${AUDIO_SCALAR_OPERATORS.includes(operator) ? ' + Audio samples' : ''}`
-  : SCENE_OPERATORS.includes(operator) ? `3D image surfaces${isVoxelOperator(operator.id) ? ' + Voxel Relief' : ''}`
-    : isVoxelOperator(operator.id) ? 'Voxel Relief' : operator.id === 'forces.wind' ? 'Face Cables + Flock' : 'Face Cables';
+/** Graph owners that decide which nodes can be added; a node's domains are where it is actually offered. */
+const DOMAIN_OWNERS: ReadonlyArray<[string, readonly string[]]> = [
+  ['Image', ['invert', 'analog-signal-lab', 'voronoi']], ['3D', ['voxel-relief', 'face-cables']],
+  ['Splat', ['splat-exploration']], ['Audio', ['audio-math']],
+];
+let domainIndex: Map<string, string[]> | undefined;
+function operatorDomains(operator: (typeof EFFECT_OPERATORS)[number]): string[] {
+  domainIndex ??= new Map();
+  if (!domainIndex.size) for (const [domain, owners] of DOMAIN_OWNERS) {
+    for (const id of new Set(owners.flatMap(owner => addableEffectOperators(owner).map(candidate => candidate.id)))) {
+      domainIndex.set(id, [...(domainIndex.get(id) ?? []), domain]);
+    }
+  }
+  const offered = domainIndex.get(operator.id);
+  if (offered?.length) return offered;
+  // Anchors and compiler-owned nodes are never offered; attribute them to their graph.
+  return [AUDIO_OPERATORS.includes(operator) ? 'Audio' : operator.id.startsWith('splat.') || operator.composition?.graph.domain === 'scene' ? 'Splat'
+    : IMAGE_OPERATORS.includes(operator) || operator.composition || operator.id.startsWith('analog.') || operator.id.startsWith('image.') ? 'Image'
+      : SCENE_OPERATORS.includes(operator) || isVoxelOperator(operator.id) ? '3D' : '3D'];
+}
+const operatorText = (operator: (typeof EFFECT_OPERATORS)[number]) => {
+  const text = catalogText(operator.id);
+  return { description: text.description ?? operator.description, tags: text.tags };
+};
 
 /** A live inventory, not a second registry. Consumers retain their own validated executors. */
 export function listNodeCatalog(): NodeCatalogEntry[] {
   const legacy = new Set(['surface.hybrid', 'collision.face', 'collision.surface']);
   const operators: NodeCatalogEntry[] = EFFECT_OPERATORS.filter(o => !legacy.has(o.id)).map(o => ({
-    ...o, category: o.id.split('.')[0],
+    ...o, ...operatorText(o), category: operatorCategoryLabel(o), domains: operatorDomains(o), visibility: operatorVisibility(o),
     inputs: o.inputs.map(p => { const contract = getOperatorPortContract(p); return { ...p, contract, formats: contract.formats }; }),
     outputs: o.outputs.map(p => { const contract = getOperatorPortContract(p); return { ...p, contract, formats: contract.formats }; }),
     parameters: o.parameters.map(p => ({ ...p, unit: p.unit ?? 'unknown', format: p.format ?? 'unknown' })),
-    context: operatorContext(o),
+    context: operatorDomains(o).join(', '),
     family: o.family ?? familyOf(o.id), variant: o.variant ?? o.id,
     backend: o.runtime, fusion: o.fusion ?? 'unspecified', state: o.state ?? 'unspecified', invalidation: o.invalidates,
-    users: [...(o.consumers ?? usersOf(operatorContext(o)))],
+    users: [...(o.consumers ?? operatorDomains(o))],
     localImplementations: o.implementation === 'local' ? [`Operator registry: ${o.id}`] : [],
     implementation: o.implementation ?? 'unknown',
   }));
   const flockPort = (p: Omit<NodeCatalogPort, 'formats'>): NodeCatalogPort => { const contract = describeNodePort({ type: p.type, metadata: { semanticKind: `flock:${p.type}` } }); return { ...p, contract, formats: contract.formats }; };
-  const flock: NodeCatalogEntry[] = listFlockOperators().map(o => ({ ...o, inputs: o.inputs.map(flockPort), outputs: o.outputs.map(flockPort), category: `flock / ${o.category}`, context: 'Flock', parameters: o.params.map(p => ({ ...p, unit: 'unknown', format: 'unknown' })),
+  const flock: NodeCatalogEntry[] = listFlockOperators().map(o => ({ ...o, inputs: o.inputs.map(flockPort), outputs: o.outputs.map(flockPort), category: `${o.category[0].toUpperCase()}${o.category.slice(1)}`, context: 'Flock', domains: ['Flock'], visibility: 'public' as const, tags: catalogText(o.id).tags, parameters: o.params.map(p => ({ ...p, unit: 'unknown', format: 'unknown' })),
     family: familyOf(o.sharedOperator ?? o.id), variant: o.id, backend: 'wgsl', fusion: 'compiler-owned',
     state: o.id === 'flock.simulation' || o.id === 'flock.trails' ? 'simulation' : 'stateless', invalidation: o.phase,
     users: ['Flock'], localImplementations: o.sharedOperator ? [] : ['Flock compiler'], implementation: o.sharedOperator ? 'shared' : 'local' }));
   const effects: NodeCatalogEntry[] = [...EFFECT_REGISTRY.values()].map(e => ({
-    id: `effect:${e.id}`, label: e.name, description: e.id === 'face-cables' ? 'A group assembled from tracking, geometry, collision, forces and rendering nodes.' : `${e.name} effect.`,
-    category: `effects / ${e.category}`, context: ['face-cables', 'voxel-relief'].includes(e.id) ? 'Clip group' : 'Clip effect stack',
+    id: `effect:${e.id}`, label: e.name, description: catalogText(`effect:${e.id}`).description ?? `${e.name} effect.`, tags: catalogText(`effect:${e.id}`).tags,
+    category: effectGroup(e.id).label, context: 'Clip effects', domains: ['Clip effects'],
+    visibility: EFFECTS_HIDDEN_FROM_CATALOG.has(e.id) ? 'advanced' as const : 'public' as const,
     inputs: [{ id: 'image', label: 'Image', type: 'texture', contract: OPERATOR_SIGNAL_CONTRACTS.texture, formats: OPERATOR_SIGNAL_CONTRACTS.texture.formats }], outputs: [{ id: 'image', label: 'Image', type: 'texture', contract: OPERATOR_SIGNAL_CONTRACTS.texture, formats: OPERATOR_SIGNAL_CONTRACTS.texture.formats }],
     parameters: Object.entries(e.params).filter(([, p]) => !p.hidden).map(([id, p]) => ({ id, label: p.label, type: p.type, default: p.default, animatable: p.animatable, min: p.min, max: p.max, step: p.step, unit: 'unknown', format: 'unknown' })),
     family: `effect.${e.category}`, variant: e.id, backend: e.pipelineKind ?? 'fullscreen',

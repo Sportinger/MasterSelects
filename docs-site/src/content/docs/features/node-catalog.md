@@ -212,6 +212,49 @@ primitive patterns can adopt the same definitions across image effects.
 The numeric Value family exposes Float and Integer variants in the inspector;
 Integer truncates toward zero and keeps the number-port contract.
 
+## Categories, names and visibility
+
+`src/services/operators/operatorTaxonomy.ts` is the one presentation taxonomy for
+operator nodes; IDs never change for it. Menus are filtered by the owning graph
+first (what `addableEffectOperators` offers for an Image, 3D, Splat or Audio graph),
+then grouped by category: Inputs, Values & Time, Math, Logic & Switch, Vector &
+Convert, Color & Mask, Coordinates & Lens, Sampling & Filter, Time & Motion, Patterns
+& Fields, Text & Glyph, Analog Signal, Geometry, Splat Transform, Splat Attributes,
+Crop & Fade, Shading, Forces & Simulation, Tracking & Depth, Output & Render. Node
+cards show a short form of the same category ("Math", "Color Group").
+
+- **Visibility**: `public` nodes appear in menus, `advanced` ones (effect building
+  parts such as most Fisheye areas, kernel and sequence tools, Cache Image) only with
+  **Advanced nodes**, `internal` ones (anchors, compiler resources) never.
+- **Families** appear as one entry and switch their saved variant in the inspector:
+  Value (Float/Integer), Switch (Value, Vector 2, Image), Luminance (Rec.709/Rec.601),
+  Primitive (Box/Sphere/Cylinder), Derivative, Smallest Component, Temporal Smooth and
+  the adaptive math and vector families.
+- **Names** are English Title Case nouns without type suffixes or implementation
+  terms: Divide instead of "Divide (IEEE)", Split Vector instead of "Split VEC2",
+  Face Tracker instead of "MediaPipe Face Tracker". The same concept has the same name
+  in every graph (Value, Oscillator, Time, Minimum, Sine, Gravity, Drag, Turbulence).
+- **Domains** in the catalog (`context`) are the graphs that actually offer a node.
+  Controls, Color Grade, Clip, Clip effects, Audio effects and Flock complete the list.
+
+Effects are grouped by look in `src/effects/effectCatalogGroups.ts` (Color & Tone,
+Blur & Sharpen, Light & Stylize, Lens & Distort, Pixel & Mosaic, Print & Halftone,
+Lines & Engraving, Textile & Craft, Text & Glyph, Analog & Glitch, Keying, Time,
+Tracking & Overlays, 3D & Particles); the registry `category` stays internal.
+Looks of one engine with identical parameters are styles: the Effects tab shows a
+**Style** selector that switches in place and keeps the effect ID, values and
+keyframes (a customized node graph restarts from the new look's default). Rom1 is
+kept for saved projects and reachable as a style of Acuarela.
+Audio effects use six groups: Level & Channels, EQ & Filter, Dynamics, Repair,
+Time & Space, Character & Advanced.
+
+Descriptions and search synonyms live in `src/services/nodeGraph/catalogText.ts`,
+keyed by catalog ID. Menus, the effect pickers, the Node catalog and
+`searchNodeCatalog` search them; the agent's text inventory is grouped as
+`## <graph> › <category>`. `tests/unit/nodeTaxonomy.test.ts` keeps every operator
+categorized, every effect grouped and described, and graph menus free of duplicate
+names.
+
 ## Temporal smoothing
 
 **Temporal Smooth** (`image.temporal-smooth` for images,

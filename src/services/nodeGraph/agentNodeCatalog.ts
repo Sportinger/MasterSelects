@@ -6,6 +6,10 @@ import { listNodeCatalog } from '../operators/operatorCatalog';
 import { EFFECT_OPERATORS } from '../operators/operatorRegistry';
 import { CONTROL_OPERATORS } from '../parameterSources/controlOperators';
 import { colorNodePorts } from './colorGraphPorts';
+import { catalogText } from './catalogText';
+import { NODE_CATEGORIES } from '../operators/operatorTaxonomy';
+import { EFFECT_GROUPS } from '../../effects/effectCatalogGroups';
+import { AUDIO_EFFECT_CATEGORY_LABELS } from '../../engine/audio/AudioEffectRegistry';
 
 export const AGENT_NODE_KINDS = ['operator', 'effect', 'audio-effect', 'flock', 'control', 'color', 'builtin'] as const;
 export type AgentNodeKind = typeof AGENT_NODE_KINDS[number];
@@ -22,6 +26,8 @@ export interface AgentNodeDefinition {
   id: string; typeId: string; label: string; kind: AgentNodeKind; context: string;
   description: string; category: string;
   availability: 'owner-dependent' | 'fixed-anchor' | 'internal';
+  /** Search synonyms; not part of compact agent output. */
+  tags?: readonly string[];
   inputs: AgentNodePort[]; outputs: AgentNodePort[]; parameters: AgentNodeParameter[];
 }
 
@@ -45,7 +51,7 @@ export function getAgentNodeCatalog(): AgentNodeDefinition[] {
     return {
       id: entry.id, typeId: effect?.id ?? entry.id, label: entry.label,
       kind: effect ? 'effect' : flockOperator ? 'flock' : 'operator',
-      context: entry.context, description: entry.description, category: entry.category,
+      context: entry.context, description: entry.description, category: entry.category, tags: entry.tags,
       availability: effect && 'internal' in effect && effect.internal ? 'internal'
         : operator && !operator.addable && !['image.frame', 'values.number'].includes(operator.id)
           ? (operator.id.endsWith('.output') || operator.id.endsWith('.input') ? 'fixed-anchor' : 'internal')
@@ -56,12 +62,14 @@ export function getAgentNodeCatalog(): AgentNodeDefinition[] {
   for (const operator of CONTROL_OPERATORS) entries.push({
     // Control constants have different ranges than identically named image operators.
     id: `control:${operator.id}`, typeId: operator.id, label: operator.label, kind: 'control',
-    context: 'Parameter sources', description: operator.description, category: 'control', availability: 'owner-dependent',
+    context: 'Controls', description: catalogText(`control:${operator.id}`).description ?? operator.description, tags: catalogText(`control:${operator.id}`).tags,
+    category: 'Controls', availability: 'owner-dependent',
     inputs: operator.inputs.map(port), outputs: operator.outputs.map(port), parameters: operator.parameters.map(parameter),
   });
   for (const effect of getAllAudioEffects()) entries.push({
     id: `audio:${effect.id}`, typeId: effect.id, label: effect.name, kind: 'audio-effect',
-    context: 'Audio effect stack', description: `${effect.name} audio effect.`, category: effect.category ?? 'audio',
+    context: 'Audio effects', description: catalogText(`audio:${effect.id}`).description ?? `${effect.name} audio effect.`, tags: catalogText(`audio:${effect.id}`).tags,
+    category: effect.category ? AUDIO_EFFECT_CATEGORY_LABELS[effect.category] : 'Audio',
     availability: 'owner-dependent',
     inputs: [{ id: 'input', label: 'Audio', type: 'audio' }], outputs: [{ id: 'output', label: 'Audio', type: 'audio' }],
     parameters: Object.entries(effect.params).map(([id, p]) => ({
@@ -72,8 +80,8 @@ export function getAgentNodeCatalog(): AgentNodeDefinition[] {
   const colorTypes: ColorNodeType[] = ['input', 'primary', 'wheels', 'parallel-mixer', 'layer-mixer', 'key-mixer', 'splitter', 'combiner', 'source', 'alpha-output', 'output'];
   for (const type of colorTypes) {
     const node = createColorNode(type, `catalog:${type}`), ports = colorNodePorts(node);
-    entries.push({ id: `color:${type}`, typeId: type, label: node.name, kind: 'color', context: 'Color graph',
-      description: `${node.name} color node.`, category: 'color',
+    entries.push({ id: `color:${type}`, typeId: type, label: node.name, kind: 'color', context: 'Color Grade',
+      description: catalogText(`color:${type}`).description ?? `${node.name} color node.`, tags: catalogText(`color:${type}`).tags, category: 'Color Grade',
       availability: type === 'input' || type === 'output' ? 'fixed-anchor' : 'owner-dependent',
       inputs: ports.inputs.map(port), outputs: ports.outputs.map(port),
       parameters: (type === 'primary' ? PRIMARY_COLOR_PARAM_DEFS : type === 'wheels' ? WHEEL_COLOR_PARAM_DEFS : []).map(p => ({
@@ -83,9 +91,9 @@ export function getAgentNodeCatalog(): AgentNodeDefinition[] {
   }
   // Field-backed clip stages are not freely instantiable operators. Their ports/parameters
   // depend on the selected source; do not invent a generic wiring or parameter contract.
-  for (const [id, label] of [['source', 'Source'], ['transform', 'Transform'], ['mask', 'Mask'], ['color', 'Color'], ['output', 'Output'], ['ai', 'AI Node'], ['keyframes', 'Keyframe Node']]) {
-    entries.push({ id: `builtin:${id}`, typeId: id, label, kind: 'builtin', context: 'Clip graph', category: 'clip',
-      description: `${label}: clip/source-specific ports and parameters are resolved from the owning graph.`,
+  for (const [id, label] of [['source', 'Source'], ['transform', 'Transform'], ['mask', 'Mask'], ['color', 'Color Grade'], ['output', 'Output'], ['ai', 'AI'], ['keyframes', 'Keyframes']]) {
+    entries.push({ id: `builtin:${id}`, typeId: id, label, kind: 'builtin', context: 'Clip', category: 'Clip Stages', tags: catalogText(`builtin:${id}`).tags,
+      description: `${catalogText(`builtin:${id}`).description ?? label} Ports and parameters are resolved from the owning graph.`,
       availability: id === 'source' || id === 'output' ? 'fixed-anchor' : 'owner-dependent', inputs: [], outputs: [], parameters: [] });
   }
   return entries.toSorted((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -128,18 +136,25 @@ function shortPurpose(description: string): string {
  * Plain-text inventory for provider turns: one line per addable node, grouped
  * by context. Ports, parameters and ranges stay behind getNodeDefinitions.
  */
+const CONTEXT_ORDER = ['Image', '3D', 'Splat', 'Audio', 'Flock', 'Clip effects', 'Audio effects', 'Controls', 'Color Grade', 'Clip'];
+const CATEGORY_ORDER: readonly string[] = [...NODE_CATEGORIES.map(category => category.label), ...EFFECT_GROUPS.map(group => group.label)];
+const rank = (order: readonly string[], value: string) => { const index = order.indexOf(value); return index < 0 ? order.length : index; };
 export function buildAgentNodeCatalogText(): string {
-  const contexts = new Map<string, string[]>();
+  const sections = new Map<string, { context: string; category: string; lines: string[] }>();
   for (const entry of getAgentNodeCatalog()) {
     if (entry.availability === 'internal') continue;
     const types = (ports: AgentNodePort[]) => [...new Set(ports.map(p => p.type))].join(',');
     const anchor = entry.availability === 'fixed-anchor' ? ' [anchor]' : '';
-    const lines = contexts.get(entry.context) ?? [];
-    lines.push(`${entry.id} ${types(entry.inputs)}>${types(entry.outputs)} ${shortPurpose(entry.description) || entry.label}${anchor}`);
-    contexts.set(entry.context, lines);
+    // Multi-domain nodes are listed once, under their first domain.
+    const context = entry.context.split(', ')[0], key = `${context} › ${entry.category}`;
+    const section = sections.get(key) ?? { context, category: entry.category, lines: [] };
+    section.lines.push(`${entry.id} ${types(entry.inputs)}>${types(entry.outputs)} ${shortPurpose(entry.description) || entry.label}${anchor}`);
+    sections.set(key, section);
   }
+  const ordered = [...sections.values()].toSorted((a, b) => rank(CONTEXT_ORDER, a.context) - rank(CONTEXT_ORDER, b.context)
+    || rank(CATEGORY_ORDER, a.category) - rank(CATEGORY_ORDER, b.category) || a.category.localeCompare(b.category));
   return ['Editor node catalog. Line: id inputTypes>outputTypes purpose. Exact ports, parameters and ranges: getNodeDefinitions(ids). Search: searchNodeCatalog. Show a graph: focusNodeGraph.',
-    ...[...contexts].map(([context, lines]) => `## ${context}\n${lines.join('\n')}`)].join('\n');
+    ...ordered.map(section => `## ${section.context} › ${section.category}\n${section.lines.join('\n')}`)].join('\n');
 }
 
 const compactPort = (port: AgentNodePort) => `${port.id}:${port.type}${port.required ? '!' : ''}${port.repeated ? '*' : ''}`;

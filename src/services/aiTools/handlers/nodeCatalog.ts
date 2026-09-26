@@ -20,7 +20,7 @@ export async function handleSearchNodeCatalog(args: Record<string, unknown>): Pr
   const terms = query.split(/\s+/).filter(Boolean);
   const context = ((args.context as string | undefined) ?? '').trim().toLowerCase();
   const matches = getAgentNodeCatalog().filter(entry => {
-    const search = `${entry.id} ${entry.typeId} ${entry.label} ${entry.description} ${entry.category} ${entry.context} ${[...entry.inputs, ...entry.outputs].map(p => `${p.type} ${(p.formats ?? []).join(' ')}`).join(' ')}`.toLowerCase();
+    const search = `${entry.id} ${entry.typeId} ${entry.label} ${entry.description} ${(entry.tags ?? []).join(' ')} ${entry.category} ${entry.context} ${[...entry.inputs, ...entry.outputs].map(p => `${p.type} ${(p.formats ?? []).join(' ')}`).join(' ')}`.toLowerCase();
     return (!args.kind || entry.kind === args.kind) && entry.context.toLowerCase().includes(context)
       && (!args.inputType || entry.inputs.some(p => p.type === args.inputType))
       && (!args.outputType || entry.outputs.some(p => p.type === args.outputType))

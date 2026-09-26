@@ -29,7 +29,7 @@ export const SELECTION_OPERATORS: FlockOperatorDescriptor[] = [
   {
     id: 'flock.select-fraction',
     version: 1,
-    label: 'Select ID Fraction',
+    label: 'Select Fraction',
     category: 'selection',
     description: 'Selects a stable fraction of particle identities.',
     phase: 'step',
@@ -180,7 +180,7 @@ export const VALUE_OPERATORS: FlockOperatorDescriptor[] = [
   {
     id: 'flock.time',
     version: 1,
-    label: 'Source Time',
+    label: 'Time',
     category: 'values',
     description: 'The simulation source time in seconds.',
     phase: 'value',

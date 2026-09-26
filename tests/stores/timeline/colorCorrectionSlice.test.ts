@@ -88,7 +88,7 @@ describe('colorCorrectionSlice', () => {
     const clip = store.getState().clips.find(candidate => candidate.id === 'clip-1')!;
     const version = clip.colorCorrection!.versions[0];
     const node = version.nodes.find(candidate => candidate.id === nodeId);
-    expect(node?.name).toBe('Corrector');
+    expect(node?.name).toBe('Primaries');
     expect(version.edges).toEqual(initialEdges);
     expect(version.edges.some(edge => edge.fromNodeId === nodeId || edge.toNodeId === nodeId)).toBe(false);
     expect(version.nodes.find(candidate => candidate.type === 'output')?.position).toEqual(initialOutputPosition);

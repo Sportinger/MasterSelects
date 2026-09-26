@@ -12,10 +12,10 @@ import { InspectorSelect } from '../../inspector/InspectorSelect';
 import '../nodes/NodeWorkspacePanel.css';
 
 const NODE_TYPES: { value: ColorNodeType; label: string }[] = [
-  { value: 'primary', label: 'Corrector' }, { value: 'wheels', label: 'Wheels' },
+  { value: 'primary', label: 'Primaries' }, { value: 'wheels', label: 'Color Wheels' },
   { value: 'parallel-mixer', label: 'Parallel Mixer' }, { value: 'layer-mixer', label: 'Layer Mixer' },
   { value: 'key-mixer', label: 'Key Mixer' }, { value: 'splitter', label: 'Splitter' },
-  { value: 'combiner', label: 'Combiner' }, { value: 'source', label: 'Source' },
+  { value: 'combiner', label: 'Combiner' }, { value: 'source', label: 'External Source' },
   { value: 'alpha-output', label: 'Alpha Output' },
 ];
 

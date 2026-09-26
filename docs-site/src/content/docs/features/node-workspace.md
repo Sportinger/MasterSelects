@@ -143,23 +143,42 @@ cloud-synced or included in project files; inserted effects are saved normally w
 the project. Clip keyframes and external media are not bundled. Locked clips and
 exports prevent insertion. Storage failures are shown without replacing the library.
 
-## Adding reusable processing nodes
+## Adding nodes, node groups and effects
 
-Right-click an image-effect card or one of its internal nodes and open **Reusable
-Nodes**. On empty canvas, the menu uses the selected node's effect; its heading
-shows the destination. The menu supports hover, click/touch and keyboard activation.
-Insertion is one undo step and opens a collapsed destination effect.
+The canvas context menu has three levels, each with nested category submenus:
 
-The **Fisheye** section contains all 15 processing areas and subgroups, including
-Lens Projection, Chromatic Aberration, Frame Edges, Vignette and Average Samples.
-The **Color** section includes **Hue Shift**, built from the existing RGB/HSV
+- **Nodes**: basic building blocks by category (Inputs, Values & Time, Math, Logic &
+  Switch, Vector & Convert, Color & Mask, Coordinates & Lens, Sampling & Filter, Time &
+  Motion, Patterns & Fields, Text & Glyph, Geometry, Shading, Forces & Simulation,
+  Tracking & Depth, Output & Render). Clip stages and controls are filed into the same
+  categories: AI under Inputs, Keyframes and the controls (labelled "(Control)") under
+  Values & Time or Math, Transform under Coordinates & Lens, Mask and Color Grade
+  under Color & Mask.
+- **Node Groups**: reusable compositions of nodes, by the same categories.
+- **Effects**: complete looks by group (Color & Tone, Blur & Sharpen, Lens & Distort,
+  Print & Halftone, Text & Glyph, Analog & Glitch, …).
+
+Graph nodes and node groups go into the effect under the pointer or the selected
+effect node; the submenu names it ("Into Invert"). Without such a target, each
+category lists every effect graph of the clip as its own "Into …" submenu. Search at
+the top matches names, categories, descriptions and synonyms (for example "green
+screen" finds Chroma Key) and shows where each result lives. **Advanced nodes** also
+lists effect building parts and compiler-level nodes; the choice is an editor
+preference shared with the inspector's **Add node** selector and the Node catalog.
+The menu supports hover, click/touch and keyboard activation (Enter or Right opens a
+submenu, Escape or Left closes it). Insertion is one undo step and opens a collapsed
+destination effect; a locked or exporting clip reports the reason in the menu.
+
+The Fisheye node groups include Lens Projection, Chromatic Aberration, Lens Vignette
+and Lens Coverage; its other processing areas are advanced building parts.
+The **Color & Mask** category includes **Hue Shift**, built from the existing RGB/HSV
 conversion, vector and scalar math nodes rather than a separate opaque operator.
 These are also available from the inspector's **Add node** selector in other
 supported image-effect graphs. The parameter and constant folders are organization
 for the original effect, not separate processing blocks.
 
 The **Sampling** section provides **Texel Offset**, **Gaussian Weight**, and
-**Normalize Weighted RGBA**. These expand into existing vector, scalar and
+**Normalize by Weight**. These expand into existing vector, scalar and
 conversion operators. Exact matching formulas in Gaussian Blur, Box Blur and
 Sharpen become shared instances; edited formulas and user group boundaries are
 preserved. Gaussian Blur's original graph is organized into Radius & Sample Count,
@@ -176,7 +195,7 @@ once. Custom wiring, existing user folders and explicitly removed folders are
 not replaced. Interleaved branches stay separate where a folder would make the
 visible signal path cyclic.
 
-**Reusable Nodes** also offers bounded sample count, scale from center, luminance
+**Node Groups** also offers bounded sample count, scale from center, luminance
 saturation, contrast, bright-pass and Sobel blocks. **Glyph** contains cell-grid,
 tone-to-index and atlas-alpha blocks; **Feedback** contains the stateless decay/max
 blend used by ASCII Ghost. Font-atlas and history sources stay outside these
@@ -184,9 +203,9 @@ blocks, so the resource owner and processing inputs remain visible. All blocks
 expand into existing operators; their insertion does not add a render pass.
 
 CRT Screen also organizes its untouched default graph into curvature, sampling,
-scanline, phosphor-mask, flicker and final color/alpha stages. **Reusable Nodes →
-Coordinates** includes Radial UV Curvature, **Color** includes RGB Stripe Mask,
-**Signal** includes Sine Gain, and **Sampling** includes Clamped Image Sample.
+scanline, phosphor-mask, flicker and final color/alpha stages. **Node Groups →
+Coordinates & Lens** includes Radial Curvature, **Sampling & Filter** includes Clamped
+Image Sample, and the advanced building parts include Phosphor Stripes and Sine Wave.
 Both CRT sine branches share one recipe; compatible Glitch clamp/sample pairs
 share another. Their ports name the actual inputs (including radians, pixel
 width and UV bounds), while timeline time and source images stay outside the

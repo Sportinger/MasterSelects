@@ -8,6 +8,8 @@ import { findClipOperatorEffect, resolveClipOperatorOwner } from '../operators/c
 import { operatorConnectionGraph } from '../operators/operatorConnectionGraph';
 import { operatorAdaptiveVariants } from '../operators/operatorAdaptiveVariants';
 import { operatorAddMenu } from '../operators/operatorAddMenu';
+import { NODE_CATEGORIES, operatorCategoryId, operatorCategoryLabel, operatorVisibility } from '../operators/operatorTaxonomy';
+import { catalogText } from './catalogText';
 import { projectOperatorPort } from '../operators/operatorPortProjection';
 import { SCENE_OPERATORS } from '../operators/sceneOperators';
 import { sceneGraphForClip } from '../operators/sceneGraph';
@@ -18,11 +20,17 @@ import { domainConnectionCatalog } from './domainConnectionCatalog';
 
 export const NEW_CONNECTION_NODE = '__new_connection_node__';
 export function operatorConnectionCandidates(operators: readonly OperatorDefinition[]): ConnectionNodeCandidate[] {
-  return operatorAddMenu(operators).map(operator => ({ id: operator.id, label: operator.label,
-    category: operator.composition ? 'Reusable nodes' : operator.id.split('.')[0], description: operator.description,
+  // Basic nodes by category, then reusable node groups; effect building parts stay in the Advanced menus.
+  return operatorAddMenu(operators.filter(operator => operatorVisibility(operator) === 'public')).map(operator => {
+    const category = operatorCategoryId(operator), rank = NODE_CATEGORIES.findIndex(entry => entry.id === category);
+    return { id: operator.id, label: operator.label,
+    category: `${operator.composition ? 'Node Groups · ' : ''}${operatorCategoryLabel(operator)}`,
+    order: (operator.composition ? NODE_CATEGORIES.length : 0) + (rank < 0 ? NODE_CATEGORIES.length - 1 : rank),
+    description: catalogText(operator.id).description ?? operator.description,
     node: { id: NEW_CONNECTION_NODE, operatorId: operator.id, connectionVariants: operatorAdaptiveVariants(operator, operators),
       inputs: operator.inputs.map(port => projectOperatorPort(port, 'input')),
-      outputs: operator.outputs.map(port => projectOperatorPort(port, 'output')) } }));
+      outputs: operator.outputs.map(port => projectOperatorPort(port, 'output')) } };
+  });
 }
 
 /** Resolve a displayed group socket back to the canonical owner's endpoint(s). */

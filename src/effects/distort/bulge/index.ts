@@ -5,7 +5,7 @@ import type { EffectDefinition } from '../../types';
 
 export const bulge: EffectDefinition = {
   id: 'bulge',
-  name: 'Bulge/Pinch',
+  name: 'Bulge & Pinch',
   category: 'distort',
 
   shader,

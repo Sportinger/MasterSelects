@@ -6,7 +6,7 @@ import { EffectPresetLibrary } from './workspace/EffectPresetLibrary';
 import { getEffectOperator } from '../../../services/operators/operatorRegistry';
 import { useUnifiedNodeActions } from './useUnifiedNodeActions';
 import { useCallback, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
-import { getCategoriesWithEffects } from '../../../effects';
+import { getCategoriesWithEffects, getEffect } from '../../../effects';
 import type { NodeGraphConnectionRequest, NodeGraphLayout, NodeGraphViewTheme } from '../../../services/nodeGraph';
 import type { NodeWorkspaceViewRequest } from '../../../services/nodeGraph/nodeWorkspaceNavigation';
 import { useDockStore } from '../../../stores/dockStore';
@@ -19,7 +19,11 @@ import { publishSceneGraphOutput } from '../../../services/nodeGraph/publishScen
 import { NodeContextMenu } from './workspace/NodeContextMenu';
 import { ConnectedNodeMenu } from './workspace/ConnectedNodeMenu';
 import type { NodeConnectionDrop } from '../../../types/nodeGraph';
-import { ReusableNodeMenu } from './workspace/ReusableNodeMenu';
+import { buildNodeContextMenuEntries } from './workspace/nodeContextMenuEntries';
+import { addableEffectOperators } from '../../../services/operators/effectGraphOwner';
+import { addEffectGraphNode } from './workspace/addEffectGraphNode';
+import { addControlNode } from '../../../services/parameterSources/parameterSourceActions';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { NodeInspector } from './workspace/NodeWorkspaceInspector';
 import {
   canDeleteNodeFromClip,
@@ -104,6 +108,9 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
   const selectClip = useTimelineStore((state) => state.selectClip);
   const flockActions = useFlockGraphActions(subject?.clip.source?.type === 'flock' ? subject.clip : null);
   const effectCategories = useMemo(() => getCategoriesWithEffects(), []);
+  const advancedNodes = useSettingsStore(state => state.nodeAdvancedCatalog);
+  const setAdvancedNodes = useSettingsStore(state => state.setNodeAdvancedCatalog);
+  const [contextMenuError, setContextMenuError] = useState('');
   const [contextMenu, setContextMenu] = useState<NodeWorkspaceContextMenuState | null>(null);
   const [connectionMenu, setConnectionMenu] = useState<{ graphId: string; drop: NodeConnectionDrop } | null>(null);
   const [selection, setSelection] = useState<NodeWorkspaceSelection>({ graphId: null, nodeId: null, nodeIds: [] });
@@ -166,6 +173,7 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
 
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
+    setContextMenuError('');
   }, []);
 
   const handleViewRequest = useCallback((request: NodeWorkspaceViewRequest) => {
@@ -522,26 +530,39 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
           onPublishOutput={sceneOutputTarget(subject.clip, subject.graph, contextMenuNode) && !keyframesLocked
             ? () => { const target = sceneOutputTarget(subject.clip, subject.graph, contextMenuNode); if (target) publishSceneGraphOutput(subject.id, target); closeContextMenu(); } : undefined}
           canDeleteTarget={canDeleteContext}
-          canAddVisualBuiltIns={subject.clip.source?.type !== 'audio'}
-          effectCategories={effectCategories}
+          entries={buildNodeContextMenuEntries({
+            clipStages: { canAddVisual: subject.clip.source?.type !== 'audio', canAddKeyframes: !keyframesLocked,
+              onAddAI: addAICustomNode, onAddStage: addBuiltInNode,
+              onAddKeyframes: () => { if (!keyframesLocked) selectNode(addKeyframeNode(subject.id, contextMenu.layout)); closeContextMenu(); } },
+            effects: { groups: effectCategories, onAdd: addEffectNode },
+            graphs: { targetEffectId: reusableEffect?.id, advanced: advancedNodes, effects: subject.clip.effects.map(effect => ({
+              effectId: effect.id, effectName: effect.name === effect.type ? getEffect(effect.type)?.name ?? effect.name : effect.name,
+              operators: addableEffectOperators(effect.type), onAdd: (operatorId: string) => {
+                try {
+                  // Local graph coordinates: offset of the pointer node, or of any card of that effect.
+                  const offset = effect.id === reusableEffect?.id ? reusableTarget?.groupOffset
+                    : subject.graph.nodes.find(node => node.binding && 'effectId' in node.binding && node.binding.effectId === effect.id)?.groupOffset;
+                  const id = addEffectGraphNode(subject.id, effect.id, operatorId,
+                    { x: contextMenu.layout.x - (offset?.x ?? 0), y: contextMenu.layout.y - (offset?.y ?? 0) });
+                  const group = subject.graph.groups?.find(candidate => candidate.id === `effect:${effect.id}`);
+                  if (group?.collapsed) unified.toggleGroup(group.id);
+                  selectNode(id); closeContextMenu();
+                } catch (error) { setContextMenuError(error instanceof Error ? error.message : String(error)); }
+              } })) },
+            controls: { disabled: keyframesLocked, onAdd: operatorId => {
+              try { selectNode(addControlNode(subject.id, operatorId, contextMenu.layout)); closeContextMenu(); }
+              catch (error) { setContextMenuError(error instanceof Error ? error.message : String(error)); }
+            } },
+          })}
+          advanced={advancedNodes}
+          error={contextMenuError}
+          onToggleAdvanced={() => setAdvancedNodes(!advancedNodes)}
           onClose={closeContextMenu}
           onDeleteNode={() => {
             if (contextMenuNode) {
               deleteContextNode(contextMenuNode.id);
             }
           }}
-          onAddAI={addAICustomNode}
-          canAddKeyframes={!keyframesLocked}
-          onAddKeyframes={() => { if (!keyframesLocked) selectNode(addKeyframeNode(subject.id, contextMenu.layout)); closeContextMenu(); }}
-          onAddBuiltIn={addBuiltInNode}
-          onAddEffect={addEffectNode}
-          reusableNodes={<ReusableNodeMenu clipId={subject.id} effect={reusableEffect}
-            position={{ x: contextMenu.layout.x - (reusableTarget?.groupOffset?.x ?? 0), y: contextMenu.layout.y - (reusableTarget?.groupOffset?.y ?? 0) }}
-            onAdded={id => {
-              const group = subject.graph.groups?.find(group => group.id === `effect:${reusableEffectId}`);
-              if (group?.collapsed) unified.toggleGroup(group.id);
-              selectNode(id); closeContextMenu();
-            }} />}
         />
       )}
       {contextMenu && flockMenu && subject.clip.flock && (

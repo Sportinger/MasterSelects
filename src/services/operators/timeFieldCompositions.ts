@@ -74,7 +74,7 @@ function valueNoise() {
       g.node(`offset-${i}`, 'vector.combine.vec2', { x, y }))));
   const interpolated = g.mix('interpolated', g.mix('row-0', hashes[0], hashes[1], sx), g.mix('row-1', hashes[2], hashes[3], sx), sy);
   const result = g.select('result', g.greater('hard-enabled', hard, g.literal('half', .5)), interpolated, hashes[0]);
-  return g.finish('field.noise2d', 'Smooth Value Noise 2D',
+  return g.finish('field.noise2d', 'Value Noise',
     'Deterministic four-corner value noise with cubic interpolation. Explicit UV drift and time, with optional hard grid cells. No playback history or hidden random state.',
     { value: { ref: result } });
 }

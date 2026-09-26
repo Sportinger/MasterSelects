@@ -11,14 +11,14 @@ const source = (id: string, label: string, parameters: OperatorParameter[], inpu
 
 /** Control-only additions plus the canonical scalar Math definitions. No GPU field evaluation. */
 export const CONTROL_OPERATORS: readonly OperatorDefinition[] = [
-  source('values.number', 'Constant', [number('value', 'Value', 0)]),
+  source('values.number', 'Value', [number('value', 'Value', 0)]),
   source('control.time', 'Time', [{ id: 'basis', label: 'Time basis', type: 'select', default: 'clip',
     options: [{ value: 'clip', label: 'Clip time' }, { value: 'timeline', label: 'Timeline time' }] }]),
-  source('control.lfo', 'LFO', [number('frequency', 'Frequency (Hz)', 1, 0, 10),
+  source('control.lfo', 'Oscillator', [number('frequency', 'Frequency (Hz)', 1, 0, 10),
     number('amplitude', 'Amplitude', 1), number('offset', 'Offset', 0), number('phase', 'Phase (cycles)', 0, 0, 1)],
     ['time', 'frequency', 'amplitude', 'offset', 'phase']),
   source('control.keyframes', 'Keyframes', [{ id: 'property', label: 'Source curve', type: 'select', default: '', options: [] }]),
-  source('control.audio-envelope', 'Audio envelope', [
+  source('control.audio-envelope', 'Audio Envelope', [
     { id: 'audioClipId', label: 'Audio source', type: 'select', default: '', options: [] },
     { id: 'basis', label: 'Time basis', type: 'select', default: 'timeline', options: [
       { value: 'timeline', label: 'Timeline seconds' }, { value: 'source', label: 'Source seconds' }] },

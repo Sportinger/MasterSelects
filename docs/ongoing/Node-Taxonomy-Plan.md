@@ -1,6 +1,11 @@
 # Node-Katalog: Kategorien, Benennung und Zusammenfassung
 
-Stand: 2026-09-26. Arbeitsplan, noch nichts umgesetzt. Grundlage ist ein
+Stand: 2026-09-26. **Phasen 1–3 umgesetzt** (System B mit A-Vokabular und C-Tags;
+Effekt-Varianten einzeln mit „Style“-Umschalter; Rom1 als Style von Acuarela;
+Advanced-Schalter als Editor-Einstellung). Abweichung: Zusammenfassungen mit
+unterschiedlichen Ports (Convert, Sample Image + Clamped, Edge Strength, Kernel,
+Sequence) bleiben getrennte Einträge in derselben Kategorie; das Rechtsklick-Menü
+trennt Nodes, Node Groups und Effects. Phase 4 ist offen. Grundlage ist ein
 vollständiger Dump von `getAgentNodeCatalog()`: 493 Einträge. Neu dazu kommen die
 beiden Temporal-Smooth-Nodes (`f6bef294`).
 

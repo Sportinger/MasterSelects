@@ -8,6 +8,8 @@ export interface ConnectionNodeCandidate {
   id: string;
   label: string;
   category: string;
+  /** Catalog position of the category; unordered categories follow alphabetically. */
+  order?: number;
   description?: string;
   node: ConnectableNode;
 }
@@ -16,6 +18,7 @@ export interface ConnectedNodeOption {
   candidateId: string;
   label: string;
   category: string;
+  order?: number;
   description?: string;
   port: NodeGraphPort;
   operatorId?: string;
@@ -38,8 +41,8 @@ export function connectedNodeOptions(graph: ConnectionGraph, origin: ConnectionE
       const node = resolved.graph.nodes.find(node => node.id === candidate.node.id)!;
       const portId = origin.direction === 'output' ? resolved.connection.toPortId : resolved.connection.fromPortId;
       const selected = (origin.direction === 'output' ? node.inputs : node.outputs).find(port => port.id === portId)!;
-      return [{ id: `${candidate.id}:${port.id}`, candidateId: candidate.id, label: candidate.label, category: candidate.category,
+      return [{ id: `${candidate.id}:${port.id}`, candidateId: candidate.id, label: candidate.label, category: candidate.category, order: candidate.order,
         description: candidate.description, port: selected, operatorId: node.operatorId }];
     });
-  }).toSorted((a, b) => a.category.localeCompare(b.category) || a.label.localeCompare(b.label));
+  }).toSorted((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity) || a.category.localeCompare(b.category) || a.label.localeCompare(b.label));
 }

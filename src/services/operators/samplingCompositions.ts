@@ -42,7 +42,7 @@ export const SAMPLING_COMPOSITIONS: readonly OperatorDefinition[] = [
         sigma: [endpoint('two-sigma', 'b'), endpoint('two-sigma-squared', 'b')] },
       outputs: { weight: endpoint('weight', 'value') },
     }),
-  definition('sampling.normalize-rgba', 'Normalize Weighted RGBA',
+  definition('sampling.normalize-rgba', 'Normalize by Weight',
     'Divide an accumulated RGBA sum by its nonzero total weight, then return an image. Reuses any compatible grid or sequence reducer without another sampling pass.',
     [port('sum', 'RGBA sum', 'vec4'), port('weightSum', 'Weight sum', 'number')], [port('image', 'Image', 'image')], {
       graph: graph([node('weight-vec4', 'convert.scalar-to-vec4'), node('average', 'math.divide-ieee.vec4'), node('blurred', 'convert.vec4-to-image')], [

@@ -1,6 +1,5 @@
 import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
 import { findClipOperatorEffect } from '../../../../services/operators/clipOperatorGraphOwner';
-import { operatorAddMenu } from '../../../../services/operators/operatorAddMenu';
 import { interpolateKeyframes } from '../../../../utils/keyframeInterpolation';
 import { useState } from 'react';
 import type { TimelineClip } from '../../../../types/timeline';
@@ -22,6 +21,8 @@ import { mathModeOptions, setMathNodeMode } from '../../../../services/nodeGraph
 import type { NodeGraphNode } from '../../../../types/nodeGraph';
 import { OperatorLiveValue } from './OperatorLiveValue';
 import { operatorFamilyOptions } from './operatorFamilyOptions';
+import { groupOperatorMenu, operatorFamilyChoiceLabel } from '../../../../services/operators/operatorTaxonomy';
+import { useSettingsStore } from '../../../../stores/settingsStore';
 import { operatorConstantNumberPersistenceKey } from '../../../common/EditableDraggableNumberSettings';
 import type { OperatorValue } from '../../../../types/operatorGraph';
 import { getEffect } from '../../../../effects';
@@ -71,8 +72,8 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
         <InspectorSelect ariaLabel="Math operation" value={node.operator} options={mathOptions}
           onChange={mode => safely(() => setMathNodeMode(clip.id, mathNode, mode))} />
       </ResolveInspectorRow>}
-      {familyOptions.length > 1 && <ResolveInspectorRow label={operator.family === 'values.numeric' ? 'Type' : operator.family === 'geometry.primitive' ? 'Shape' : 'Components'}>
-        <InspectorSelect ariaLabel={operator.family === 'values.numeric' ? 'Value type' : operator.family === 'geometry.primitive' ? 'Primitive shape' : `${operator.family} components`} value={node.operator} options={familyOptions}
+      {familyOptions.length > 1 && <ResolveInspectorRow label={operatorFamilyChoiceLabel(operator.family)}>
+        <InspectorSelect ariaLabel={`${operator.label} ${operatorFamilyChoiceLabel(operator.family).toLowerCase()}`} value={node.operator} options={familyOptions}
           onChange={variant => safely(() => setOperatorVariant(clip.id, effectId, node.id, variant))} />
       </ResolveInspectorRow>}
       {operator.id === 'glyph.atlas' && <GlyphAtlasControls bindings={node.bindings} params={evaluatedParams} parameterSchema={parameterSchema}
@@ -160,7 +161,13 @@ export function AdditionalOperatorControls({ clipId, effectId }: { clipId: strin
 export function AddOperatorControl({ clipId, effectId, onAdded }: { clipId: string; effectId: string; onAdded?: (id: string) => void }) {
   const [message, setMessage] = useState('');
   const type = useTimelineStore(state => findClipOperatorEffect(state.clips.find(clip => clip.id === clipId), effectId)?.type ?? '');
-  return <><InspectorSelect ariaLabel="Add reusable node" value="" options={[{ value: '', label: 'Add node…' }, ...operatorAddMenu(addableEffectOperators(type)).map(o => ({ value: o.id, label: o.label }))]}
+  const advanced = useSettingsStore(state => state.nodeAdvancedCatalog);
+  const operators = addableEffectOperators(type);
+  // Basic nodes first, then reusable node groups, each by category.
+  const groups = [false, true].flatMap(compositions => groupOperatorMenu(operators.filter(operator => Boolean(operator.composition) === compositions), { advanced })
+    .map(group => ({ label: compositions ? `Node Groups · ${group.label}` : group.label,
+      options: group.entries.map(operator => ({ value: operator.id, label: operator.label })) })));
+  return <><InspectorSelect ariaLabel="Add reusable node" value="" groups={[{ options: [{ value: '', label: 'Add node…' }] }, ...groups]}
     onChange={value => { if (!value) return; try { const id = createEffectGraphActions(clipId, effectId).addNode(value); setMessage(''); onAdded?.(id); } catch (error) { setMessage(String(error)); } }} />
     {message && <p role="alert">{message}</p>}</>;
 }

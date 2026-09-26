@@ -1452,6 +1452,43 @@
   font-size: 12px;
 }
 
+/* Search results show where each hit lives in the submenus. */
+.node-workspace-context-results button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  height: auto;
+  min-height: 26px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.node-workspace-context-path {
+  flex: 0 1 auto;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-workspace-context-error {
+  max-width: 220px;
+  margin: 6px 4px 2px;
+  color: var(--danger-color, #f87171);
+  font-size: 11px;
+}
+
+.node-workspace-context-menu button:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.node-workspace-context-menu button:focus-visible {
+  outline: 1px solid var(--accent-color, #79b8fa);
+  outline-offset: -1px;
+}
+
 .node-workspace-context-menu button {
   -webkit-tap-highlight-color: transparent;
   width: 100%;

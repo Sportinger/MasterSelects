@@ -10,7 +10,7 @@ export const crystal = createCatalogEffect({
   id: 'crystal', name: 'Crystal Glass', category: 'analog', shader, entryPoint: 'crystalFragment', animated: true,
 });
 export const glassDispersion = createCatalogEffect({
-  id: 'glass-dispersion', name: 'Glass Pixel Dispersion', category: 'analog', shader, entryPoint: 'glassDispersionFragment', animated: true,
+  id: 'glass-dispersion', name: 'Glass Dispersion', category: 'analog', shader, entryPoint: 'glassDispersionFragment', animated: true,
 });
 export const ribbonScan = createCatalogEffect({
   id: 'ribbon-scan', name: 'Ribbon Scan', category: 'analog', shader, entryPoint: 'ribbonScanFragment', animated: true,

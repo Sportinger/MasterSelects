@@ -302,7 +302,7 @@ describe('buildClipNodeGraph', () => {
     ]);
     expect(graph.nodes.find((node) => node.id === 'audio-effect-hp')).toMatchObject({
       kind: 'effect',
-      label: 'High Pass Filter',
+      label: 'High Pass',
       params: {
         enabled: true,
         descriptorId: 'audio-high-pass',

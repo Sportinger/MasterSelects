@@ -321,7 +321,9 @@ export function addableEffectOperators(type: string) {
     : type === 'face-cables' && operator.consumers?.includes('Cable physics') ? true
     : type === 'face-cables' && !operator.composition && operator.id !== 'values.integer'
       && !AUDIO_OPERATORS.includes(operator) && !IMAGE_OPERATORS.includes(operator)
-      && !SCENE_OPERATORS.includes(operator) && !VOXEL_OPERATORS.includes(operator) && !SCALAR_FIELD_OPERATORS.includes(operator)));
+      && !SCENE_OPERATORS.includes(operator) && !VOXEL_OPERATORS.includes(operator) && !SCALAR_FIELD_OPERATORS.includes(operator)
+      // Analog signal stages, Voronoi field passes and particle stages belong to their own effect graphs.
+      && !ANALOG_SIGNAL_OPERATORS.includes(operator) && !VORONOI_OPERATORS.includes(operator) && !isParticleDisintegrateOperator(operator.id)));
 }
 
 export function effectOperatorParams(effect: EffectGraphOwner): Record<string, unknown> {

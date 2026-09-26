@@ -3,3 +3,7 @@
 .node-catalog code { display: block; overflow-wrap: anywhere; color: var(--text-secondary); font-size: 10px; padding: 4px 0; }
 .node-catalog .resolve-inspector-row span { overflow-wrap: anywhere; font-size: 10px; }
 .node-catalog-toggle { margin-left: auto; }
+.node-catalog-advanced { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; color: var(--text-secondary); font-size: 11px; cursor: pointer; }
+.node-catalog-advanced input { margin: 0; accent-color: var(--accent-color, #79b8fa); }
+.node-catalog-advanced input:focus:not(:focus-visible) { outline: none; }
+.node-catalog-section-title { margin: 12px 0 4px; color: var(--text-muted); font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }

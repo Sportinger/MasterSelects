@@ -16,7 +16,7 @@ const graph = (nodes: BoundOperatorNode[], links: [string, string, string, strin
  * float division error (index = columns * n used to fall outside the atlas).
  */
 export const GLYPH_COMPOSITIONS: readonly OperatorDefinition[] = [{
-  id: 'glyph.sample', version: 1, label: 'Glyph Sample',
+  id: 'glyph.sample', version: 1, label: 'Sample Glyph',
   description: 'Coverage of glyph Index at the local cell UV (0–1, top-left origin) in a connected Text Atlas or Glyph Atlas. Index rounds to the nearest glyph.',
   inputs: [port('atlas', 'Atlas', 'image'), port('columns', 'Columns', 'number'), port('rows', 'Rows', 'number'),
     port('index', 'Index', 'number'), port('uv', 'Local UV', 'vec2')],

@@ -3,11 +3,13 @@ import type { BoundOperatorNode, EffectOperatorGraph, OperatorDefinition, Operat
 export const MAX_SCALAR_FIELD_OPS = 32;
 const field = (id: string, label: string): OperatorPort => ({ id, label, type: 'field' });
 export const SCALAR_FIELD_OPS = { constant: 0, luminance: 1, add: 2, subtract: 3, multiply: 4, divide: 5, power: 6, min: 7, max: 8, abs: 9, sin: 10, clamp: 11 } as const;
+// Same names as the image math family: Minimum, not Min.
+const SCALAR_FIELD_LABELS: Record<string, string> = { constant: 'Value', min: 'Minimum', max: 'Maximum', abs: 'Absolute', sin: 'Sine' };
 export const SCALAR_FIELD_OPERATORS: readonly OperatorDefinition[] = [
   { id: 'image.luminance', version: 1, label: 'Luminance', description: 'Reads linear RGB luminance from the connected texture for each grid cell.',
     inputs: [{ id: 'texture', label: 'Texture', type: 'texture' }], outputs: [field('value', 'Luminance')], parameters: [], invalidates: 'appearance', runtime: 'builtin', addable: true },
   ...Object.keys(SCALAR_FIELD_OPS).filter(name => name !== 'luminance').map(name => ({
-    id: `math.${name}`, version: 1 as const, label: name[0].toUpperCase() + name.slice(1),
+    id: `math.${name}`, version: 1 as const, label: SCALAR_FIELD_LABELS[name] ?? name[0].toUpperCase() + name.slice(1),
     description: 'Scalar field arithmetic evaluated for each grid cell in the same GPU pass. Unconnected inputs use the numeric controls.',
     inputs: name === 'constant' ? [] : [field('a', 'A'), ...(['abs', 'sin'].includes(name) ? [] : [field('b', name === 'clamp' ? 'Minimum' : 'B')]), ...(name === 'clamp' ? [field('c', 'Maximum')] : [])],
     outputs: [field('value', 'Value')],

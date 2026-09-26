@@ -5,8 +5,8 @@ import { SCENE_OPERATORS } from './sceneOperators';
 const source = primitiveSplatGraph(true);
 /** Versioned recipes use public signals, never a particular clip or effect's bindings. */
 export const SPLAT_COMPOSITION_REGIONS = [
-  { id: 'splat.clean-surface', label: 'Splat Cleanup', members: ['limit', 'fade'], description: 'Clamp Gaussian radii and fade near the camera.' },
-  { id: 'splat.ray-field', label: 'Splat Rays', members: ['selection', 'stretch', 'motion', 'alpha'], description: 'Select splats, stretch their axes, animate orientation and adjust color and opacity.' },
+  { id: 'splat.clean-surface', label: 'Cleanup', members: ['limit', 'fade'], description: 'Clamp Gaussian radii and fade near the camera.' },
+  { id: 'splat.ray-field', label: 'Rays', members: ['selection', 'stretch', 'motion', 'alpha'], description: 'Select splats, stretch their axes, animate orientation and adjust color and opacity.' },
   { id: 'splat.particle-system', label: 'Particle System', members: ['emit', 'size', 'simulation', 'particle-fade'], description: 'Emit particles from Gaussian centers, integrate connected forces, preserve Gaussian attributes and fade near the camera.' },
   { id: 'splat.mesh-overlay', label: 'Mesh Overlay', members: ['reconstruct', 'wireframe', 'mesh'], description: 'Reconstruct a density isosurface from Gaussian centers and render it with a connected wireframe material.' },
 ] as const;

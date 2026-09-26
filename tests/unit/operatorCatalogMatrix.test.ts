@@ -10,10 +10,10 @@ describe('registry-derived operator matrix', () => {
     expect(subtract).toMatchObject({ family: 'math.subtract', variant: 'rgb', backend: 'builtin', fusion: 'inline', state: 'stateless', invalidation: 'appearance' });
     expect(subtract?.localImplementations).toEqual([]);
     expect(subtract?.implementation).toBe('unknown');
-    expect(subtract?.users).toContain('Local image graphs');
+    expect(subtract?.users).toContain('Image');
     expect(EFFECT_OPERATORS.find(operator => operator.id === subtract?.id)?.fusion).toBe(subtract?.fusion);
     expect(catalog.find(entry => entry.id === 'math.multiply.audio-scalar')).toMatchObject({
-      family: 'math.multiply', variant: 'audio-scalar', context: 'Audio samples', implementation: 'shared', users: ['audio'],
+      family: 'math.multiply', variant: 'audio-scalar', context: 'Audio', implementation: 'shared', users: ['audio'],
     });
   });
 

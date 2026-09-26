@@ -78,10 +78,10 @@ describe('agent node discovery', () => {
   it('matches exact IDs first and combines signal and owner filters', async () => {
     const exact = await handleSearchNodeCatalog({ query: 'VALUES.NUMBER' });
     expect((exact.data as { entries: { id: string }[] }).entries[0].id).toBe('values.number');
-    const response = await handleSearchNodeCatalog({ kind: 'control', context: 'PARAMETER', query: 'time', outputType: 'number' });
+    const response = await handleSearchNodeCatalog({ kind: 'control', context: 'CONTROLS', query: 'time', outputType: 'number' });
     const entries = (response.data as { entries: { kind: string; context: string; outputTypes: string[] }[] }).entries;
     expect(entries.length).toBeGreaterThan(0);
-    for (const e of entries) { expect(e.kind).toBe('control'); expect(e.context).toBe('Parameter sources'); expect(e.outputTypes).toContain('number'); }
+    for (const e of entries) { expect(e.kind).toBe('control'); expect(e.context).toBe('Controls'); expect(e.outputTypes).toContain('number'); }
   });
 
   it('rejects malformed and unbounded calls', async () => {

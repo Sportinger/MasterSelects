@@ -217,7 +217,7 @@ export function createColorNodeId(prefix: string = 'node'): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-export function createPrimaryColorNode(id = 'node_primary', name = 'Corrector'): ColorNode {
+export function createPrimaryColorNode(id = 'node_primary', name = 'Primaries'): ColorNode {
   return {
     id,
     type: 'primary',
@@ -228,7 +228,7 @@ export function createPrimaryColorNode(id = 'node_primary', name = 'Corrector'):
   };
 }
 
-export function createWheelsColorNode(id = 'node_wheels', name = 'Wheels'): ColorNode {
+export function createWheelsColorNode(id = 'node_wheels', name = 'Color Wheels'): ColorNode {
   return {
     id,
     type: 'wheels',
@@ -241,10 +241,10 @@ export function createWheelsColorNode(id = 'node_wheels', name = 'Wheels'): Colo
 
 export function createColorNode(type: ColorNodeType, id?: string, name?: string): ColorNode {
   if (type === 'wheels') {
-    return createWheelsColorNode(id, name ?? 'Wheels');
+    return createWheelsColorNode(id, name ?? 'Color Wheels');
   }
   if (type === 'primary') {
-    return createPrimaryColorNode(id, name ?? 'Corrector');
+    return createPrimaryColorNode(id, name ?? 'Primaries');
   }
 
   const labels: Record<ColorStructureNodeType | 'input' | 'output', string> = {
@@ -255,7 +255,7 @@ export function createColorNode(type: ColorNodeType, id?: string, name?: string)
     'key-mixer': 'Key Mixer',
     splitter: 'Splitter',
     combiner: 'Combiner',
-    source: 'Source',
+    source: 'External Source',
     'alpha-output': 'Alpha Output',
   };
   return {

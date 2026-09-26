@@ -27,6 +27,12 @@ export type AudioEffectId =
   | 'audio-channel-swap'
   | 'audio-stereo-split';
 
+export type AudioEffectCategory = 'level' | 'eq' | 'dynamics' | 'repair' | 'space' | 'character';
+/** Display order and names for the audio effect browser. */
+export const AUDIO_EFFECT_CATEGORY_LABELS: Record<AudioEffectCategory, string> = {
+  level: 'Level & Channels', eq: 'EQ & Filter', dynamics: 'Dynamics', repair: 'Repair', space: 'Time & Space', character: 'Character & Advanced',
+};
+
 export interface AudioEffectParamDescriptor {
   name: string;
   default: AudioEffectParamValue;
@@ -36,7 +42,7 @@ export interface AudioEffectParamDescriptor {
 export interface AudioEffectDescriptor {
   id: AudioEffectId;
   name: string;
-  category?: 'gain' | 'eq' | 'filter' | 'dynamics' | 'time' | 'distortion' | 'utility' | 'repair' | 'spectral';
+  category?: AudioEffectCategory;
   automation?: 'none' | 'clip' | 'track' | 'sample-accurate';
   latencySamples?: number;
   tailSeconds?: number;
@@ -220,7 +226,7 @@ const AUDIO_EFFECT_DESCRIPTORS = [
   Object.freeze({
     id: 'audio-volume',
     name: 'Volume',
-    category: 'gain',
+    category: 'level',
     automation: 'sample-accurate',
     latencySamples: 0,
     tailSeconds: 0,
@@ -230,7 +236,7 @@ const AUDIO_EFFECT_DESCRIPTORS = [
   Object.freeze({
     id: 'audio-pan',
     name: 'Pan',
-    category: 'gain',
+    category: 'level',
     automation: 'sample-accurate',
     latencySamples: 0,
     tailSeconds: 0,
@@ -240,7 +246,7 @@ const AUDIO_EFFECT_DESCRIPTORS = [
   Object.freeze({
     id: 'audio-normalize',
     name: 'Normalize',
-    category: 'gain',
+    category: 'level',
     automation: 'none',
     latencySamples: 0,
     tailSeconds: 0,
@@ -252,7 +258,7 @@ const AUDIO_EFFECT_DESCRIPTORS = [
   }),
   Object.freeze({
     id: 'audio-eq',
-    name: 'EQ',
+    name: 'Graphic EQ',
     category: 'eq',
     automation: 'sample-accurate',
     latencySamples: 0,
@@ -272,8 +278,8 @@ const AUDIO_EFFECT_DESCRIPTORS = [
   }),
   Object.freeze({
     id: 'audio-high-pass',
-    name: 'High Pass Filter',
-    category: 'filter',
+    name: 'High Pass',
+    category: 'eq',
     automation: 'sample-accurate',
     latencySamples: 0,
     tailSeconds: 0,
@@ -282,8 +288,8 @@ const AUDIO_EFFECT_DESCRIPTORS = [
   }),
   Object.freeze({
     id: 'audio-low-pass',
-    name: 'Low Pass Filter',
-    category: 'filter',
+    name: 'Low Pass',
+    category: 'eq',
     automation: 'sample-accurate',
     latencySamples: 0,
     tailSeconds: 0,
@@ -325,7 +331,7 @@ const AUDIO_EFFECT_DESCRIPTORS = [
   Object.freeze({
     id: 'audio-spectral-gate',
     name: 'Spectral Gate',
-    category: 'spectral',
+    category: 'repair',
     automation: 'clip',
     latencySamples: 0,
     tailSeconds: 0,
@@ -385,7 +391,7 @@ const AUDIO_EFFECT_DESCRIPTORS = [
   Object.freeze({
     id: 'audio-delay',
     name: 'Delay',
-    category: 'time',
+    category: 'space',
     automation: 'clip',
     latencySamples: 0,
     tailSeconds: 2,
@@ -395,7 +401,7 @@ const AUDIO_EFFECT_DESCRIPTORS = [
   Object.freeze({
     id: 'audio-reverb',
     name: 'Reverb',
-    category: 'time',
+    category: 'space',
     automation: 'clip',
     latencySamples: 0,
     tailSeconds: 3,
@@ -405,7 +411,7 @@ const AUDIO_EFFECT_DESCRIPTORS = [
   Object.freeze({
     id: 'audio-saturation',
     name: 'Saturation',
-    category: 'distortion',
+    category: 'character',
     automation: 'clip',
     latencySamples: 0,
     tailSeconds: 0,
@@ -415,7 +421,7 @@ const AUDIO_EFFECT_DESCRIPTORS = [
   Object.freeze({
     id: 'audio-polarity-invert',
     name: 'Polarity Invert',
-    category: 'utility',
+    category: 'level',
     automation: 'none',
     latencySamples: 0,
     tailSeconds: 0,
@@ -426,7 +432,7 @@ const AUDIO_EFFECT_DESCRIPTORS = [
   Object.freeze({
     id: 'audio-mono-sum',
     name: 'Mono Sum',
-    category: 'utility',
+    category: 'level',
     automation: 'none',
     latencySamples: 0,
     tailSeconds: 0,
@@ -437,7 +443,7 @@ const AUDIO_EFFECT_DESCRIPTORS = [
   Object.freeze({
     id: 'audio-channel-swap',
     name: 'Channel Swap',
-    category: 'utility',
+    category: 'level',
     automation: 'none',
     latencySamples: 0,
     tailSeconds: 0,
@@ -448,7 +454,7 @@ const AUDIO_EFFECT_DESCRIPTORS = [
   Object.freeze({
     id: 'audio-stereo-split',
     name: 'Stereo Split',
-    category: 'utility',
+    category: 'level',
     automation: 'none',
     latencySamples: 0,
     tailSeconds: 0,
@@ -456,7 +462,7 @@ const AUDIO_EFFECT_DESCRIPTORS = [
     paramNames: Object.freeze(Object.keys(AUDIO_STEREO_SPLIT_DEFAULTS)),
     params: createParamDescriptors(AUDIO_STEREO_SPLIT_DEFAULTS),
   }),
-  Object.freeze({ id: 'audio-math', name: 'Audio Math Graph', category: 'utility', automation: 'none',
+  Object.freeze({ id: 'audio-math', name: 'Audio Math', category: 'character', automation: 'none',
     latencySamples: 0, tailSeconds: 0, defaultAudible: false, paramNames: Object.freeze(['operatorGraph']),
     params: createParamDescriptors({ operatorGraph: '' }) }),
 ] as const satisfies readonly AudioEffectDescriptor[];

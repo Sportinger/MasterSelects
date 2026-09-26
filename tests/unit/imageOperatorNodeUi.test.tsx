@@ -85,7 +85,7 @@ describe('image operator node UI', () => {
     previewTextStore.retain(owner, new Set(['image-color-literal']));
     act(() => previewTextStore.publish(frame));
     render(<NodeValuePreview node={node} />);
-    const picker = screen.getByLabelText('Color Color inline');
+    const picker = screen.getByLabelText('Color Value Color inline');
     fireEvent.change(picker, { target: { value: '#abcdef' } });
     const saved = useTimelineStore.getState().clips[0].effects[0];
     expect(saved.operatorGraph?.nodes.find(item => item.id === 'color-literal')?.constants?.value).toBe('#abcdef');
@@ -102,7 +102,7 @@ describe('image operator node UI', () => {
     act(() => previewTextStore.publish(imageOperatorValuePreview({ key: 'image-color-alpha', revision: '1', time: 0, clipId: clip.id, node,
       width: 164, height: 100, interval: 16, priority: 1 }, clip, effect)!));
     render(<NodeValuePreview node={node} />);
-    fireEvent.change(screen.getByLabelText('Color Color inline'), { target: { value: '#abcdef' } });
+    fireEvent.change(screen.getByLabelText('Color Value Color inline'), { target: { value: '#abcdef' } });
     expect(useTimelineStore.getState().clips[0].effects[0].operatorGraph?.nodes
       .find(item => item.id === 'color-literal')?.constants?.value).toBe('#abcdef80');
   });

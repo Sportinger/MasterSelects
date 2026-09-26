@@ -14,7 +14,7 @@ export const nodeCatalogToolDefinitions: ToolDefinition[] = [
     parameters: { type: 'object', additionalProperties: false, properties: {
       query: { type: 'string', maxLength: 200, description: 'Case-insensitive search terms; all terms must match. Omit to browse.' },
       kind: { type: 'string', enum: ['operator', 'effect', 'audio-effect', 'flock', 'control', 'color', 'builtin'] },
-      context: { type: 'string', maxLength: 100, description: 'Substring of the owning context, e.g. Audio or Parameter sources.' },
+      context: { type: 'string', maxLength: 100, description: 'Substring of the owning context: Image, 3D, Splat, Audio, Flock, Clip effects, Audio effects, Controls, Color Grade or Clip.' },
       inputType: { type: 'string', maxLength: 80 }, outputType: { type: 'string', maxLength: 80 },
       offset: { type: 'integer', minimum: 0, description: 'Pagination offset. Default 0.' },
       limit: { type: 'integer', minimum: 1, description: 'Maximum results. Default 12.' },

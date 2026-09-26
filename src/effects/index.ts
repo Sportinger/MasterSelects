@@ -10,6 +10,8 @@ import {
   type FullscreenEffectDefinition,
 } from './types';
 import { Logger } from '../services/logger';
+import { EFFECT_GROUPS, EFFECTS_HIDDEN_FROM_CATALOG, effectGroup, type EffectGroupId } from './effectCatalogGroups';
+export { effectGroup, effectEngine, effectEngineMembers, EFFECT_GROUPS, EFFECTS_HIDDEN_FROM_CATALOG } from './effectCatalogGroups';
 export * from './types';
 
 const log = Logger.create('Effects');
@@ -155,15 +157,17 @@ export function getEffectsByCategory(category: EffectCategory): EffectDefinition
 }
 
 /**
- * Get all non-empty categories with their effects
+ * Effects offered for adding, grouped by look in catalog order (`category` is
+ * the group's display name). Hidden styles such as Rom1 stay loadable.
  */
-export function getCategoriesWithEffects(): { category: EffectCategory; effects: EffectDefinition[] }[] {
-  return Object.entries(EFFECT_CATEGORIES)
-    .filter(([, effects]) => effects.length > 0)
-    .map(([category, effects]) => ({
-      category: category as EffectCategory,
-      effects,
-    }));
+export function getCategoriesWithEffects(): { category: string; group: EffectGroupId | 'other'; effects: EffectDefinition[] }[] {
+  const offered = [...EFFECT_REGISTRY.values()].filter(effect => !EFFECTS_HIDDEN_FROM_CATALOG.has(effect.id));
+  const groups = [...EFFECT_GROUPS.map(group => ({ id: group.id as EffectGroupId | 'other', label: group.label as string })), { id: 'other' as const, label: 'Other' }];
+  const curated = new Map<string, number>(EFFECT_GROUPS.flatMap(group => group.effects.map((id, index) => [id, index] as const)));
+  return groups.map(group => ({ category: group.label, group: group.id,
+    effects: offered.filter(effect => effectGroup(effect.id).id === group.id)
+      .toSorted((a, b) => (curated.get(a.id) ?? Infinity) - (curated.get(b.id) ?? Infinity)) }))
+    .filter(group => group.effects.length > 0);
 }
 
 /**

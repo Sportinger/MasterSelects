@@ -74,6 +74,6 @@ describe('Color dock panels', () => {
 
     expect(screen.getByText('Keyframes')).toBeInTheDocument();
     expect(screen.getByText('Master')).toBeInTheDocument();
-    expect(screen.getByText('Corrector')).toBeInTheDocument();
+    expect(screen.getByText('Primaries')).toBeInTheDocument();
   });
 });

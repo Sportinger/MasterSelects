@@ -6,7 +6,7 @@ const crt = createDefaultCrtScreenGraph();
 /** V1 contracts retain the source arithmetic/order. Time and textures are always external signals. */
 export const SCREEN_COMPOSITIONS: readonly OperatorDefinition[] = [
   extractImageComposition(crt, {
-    id: 'coordinates.radial-curvature.vec2', label: 'Radial UV Curvature',
+    id: 'coordinates.radial-curvature.vec2', label: 'Radial Curvature',
     description: 'Center UV in [-1, 1], apply the squared-radius curvature and return normalized UV. Curve and amount are explicit; clamping and sampling stay outside.',
     members: ['two-vec2', 'one-vec2', 'uv-two', 'centered', 'radius-squared', 'radius-curve', 'distortion',
       'warp', 'warped', 'curved-half', 'half-vec2', 'curved'],
@@ -15,7 +15,7 @@ export const SCREEN_COMPOSITIONS: readonly OperatorDefinition[] = [
     outputLabels: { 'curved-value': 'Curved UV' }, consumers: ['Image graphs', 'CRT Screen'],
   }),
   extractImageComposition(crt, {
-    id: 'color.rgb-stripe-mask', label: 'RGB Stripe Mask',
+    id: 'color.rgb-stripe-mask', label: 'Phosphor Stripes',
     description: 'Build repeating RGB phosphor stripes from horizontal UV and pixel width. Stripe width is bounded to at least one pixel; low/high channel levels remain explicit.',
     members: ['safe-scale', 'pixel-x', 'mask-cell', 'mask-floor', 'mask-thirds', 'mask-third-floor', 'mask-third-triple',
       'mask-phase', 'is-red', 'is-blue', 'above-half', 'below-one-half', 'is-green', 'mask-r', 'mask-g', 'mask-b', 'mask-vector', 'mask'],
@@ -25,7 +25,7 @@ export const SCREEN_COMPOSITIONS: readonly OperatorDefinition[] = [
     outputLabels: { 'mask-rgb': 'RGB mask' }, consumers: ['Image graphs', 'CRT Screen'],
   }),
   extractImageComposition(crt, {
-    id: 'signal.sine-gain.scalar', label: 'Sine Gain',
+    id: 'signal.sine-gain.scalar', label: 'Sine Wave',
     description: 'Compute base + amplitude * sin(phase), retaining operand order. Phase is in radians; no internal clock, frequency or clamping.',
     members: ['scan-sine', 'scan-wave', 'scan'], captureLiterals: false,
     inputLabels: { 'scan-angle-value': 'Phase (rad)', 'scan-range-value': 'Amplitude', 'scan-base-value': 'Base' },

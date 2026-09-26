@@ -7,7 +7,7 @@ export function edgeTimeFieldComposition() {
   const downstream = new Set(['frame', 'uv', 'resolution', 'strength', 'invert', 'scaled', 'clamped',
     'inverse', 'selected', 'rgba', 'image', 'output']);
   const definition = extractImageComposition(graph, {
-    id: 'field.sobel', label: 'Edge Strength Field',
+    id: 'field.sobel', label: 'Edge Strength',
     description: 'Eight-tap Sobel luminance magnitude. Image, UV and resolution are explicit; normalize the magnitude before using it as a time field.',
     members: graph.nodes.filter(node => !downstream.has(node.id) && !node.operator.startsWith('values.')).map(node => node.id),
     consumers: ['Image graphs', 'Slit Scan'],
