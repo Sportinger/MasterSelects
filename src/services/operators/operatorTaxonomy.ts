@@ -59,7 +59,7 @@ const EXACT: Record<string, NodeCategoryId> = {
   // Flocking swarm graph.
   'flock.emitter': 'particles', 'flock.merge-spawn': 'particles', 'flock.simulation': 'particles', 'flock.rules': 'particles',
   'flock.cruise': 'particles', 'flock.cluster': 'particles', 'flock.compose': 'particles',
-  'flock.attractor': 'forces', 'flock.vortex': 'forces', 'flock.turbulence': 'forces', 'flock.drag': 'forces', 'flock.wind': 'forces',
+  'flock.attractor': 'forces', 'flock.vortex': 'forces', 'flock.turbulence': 'forces', 'flock.curl-flow': 'forces', 'flock.home': 'forces', 'flock.drag': 'forces', 'flock.wind': 'forces',
   'flock.path': 'forces', 'flock.follow-path': 'forces', 'flock.obstacle': 'forces', 'flock.boundary': 'forces',
   'flock.value': 'values', 'flock.oscillator': 'values', 'flock.time': 'values', 'flock.math': 'math', 'flock.remap': 'math',
   'flock.audio': 'inputs', 'flock.palette': 'color', 'flock.trails': 'output', 'flock.output': 'output',

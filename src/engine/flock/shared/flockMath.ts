@@ -83,6 +83,33 @@ export function valueNoise1(t: number, channel: number): number {
   return valueNoise3(t, channel * 17.13, channel * 5.71, channel);
 }
 
+/** Columns and rows of a grid emitter; the aspect follows size.x / size.y. Mirrors WGSL gridDims. */
+export function flockGridDims(count: number, size: Vec3): [number, number] {
+  const cols = Math.max(1, Math.floor(Math.sqrt(count * Math.max(size[0], 1e-3) / Math.max(size[1], 1e-3)) + 0.5));
+  return [cols, Math.max(1, Math.ceil(count / cols))];
+}
+
+const CURL_EPS = 0.25;
+
+function curlPotential(x: number, y: number, z: number): Vec3 {
+  return [valueNoise3(x, y, z, 1), valueNoise3(x + 31.4, y, z, 2), valueNoise3(x, y + 47.2, z, 3)];
+}
+
+/** Curl of a value-noise vector potential via central differences (divergence-free flow). Mirrors WGSL curlNoise3. */
+export function curlNoise3(x: number, y: number, z: number): Vec3 {
+  const inv = 1 / (2 * CURL_EPS);
+  const px1 = curlPotential(x + CURL_EPS, y, z);
+  const px0 = curlPotential(x - CURL_EPS, y, z);
+  const py1 = curlPotential(x, y + CURL_EPS, z);
+  const py0 = curlPotential(x, y - CURL_EPS, z);
+  const pz1 = curlPotential(x, y, z + CURL_EPS);
+  const pz0 = curlPotential(x, y, z - CURL_EPS);
+  const gx = [(px1[0] - px0[0]) * inv, (px1[1] - px0[1]) * inv, (px1[2] - px0[2]) * inv];
+  const gy = [(py1[0] - py0[0]) * inv, (py1[1] - py0[1]) * inv, (py1[2] - py0[2]) * inv];
+  const gz = [(pz1[0] - pz0[0]) * inv, (pz1[1] - pz0[1]) * inv, (pz1[2] - pz0[2]) * inv];
+  return [gy[2] - gz[1], gz[0] - gx[2], gx[1] - gy[0]];
+}
+
 export function length3(x: number, y: number, z: number): number {
   return Math.sqrt(x * x + y * y + z * z);
 }

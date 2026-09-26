@@ -152,6 +152,23 @@ fn valueNoise1(t: f32, channel: u32) -> f32 {
   return valueNoise3(vec3f(t, c * 17.13, c * 5.71), channel);
 }
 
+const CURL_EPS: f32 = 0.25;
+
+fn curlPotential(q: vec3f) -> vec3f {
+  return vec3f(valueNoise3(q, 1u), valueNoise3(q + vec3f(31.4, 0.0, 0.0), 2u), valueNoise3(q + vec3f(0.0, 47.2, 0.0), 3u));
+}
+
+/** Curl of a value-noise vector potential via central differences (divergence-free flow). */
+fn curlNoise3(q: vec3f) -> vec3f {
+  let dx = vec3f(CURL_EPS, 0.0, 0.0);
+  let dy = vec3f(0.0, CURL_EPS, 0.0);
+  let dz = vec3f(0.0, 0.0, CURL_EPS);
+  let gx = (curlPotential(q + dx) - curlPotential(q - dx)) / (2.0 * CURL_EPS);
+  let gy = (curlPotential(q + dy) - curlPotential(q - dy)) / (2.0 * CURL_EPS);
+  let gz = (curlPotential(q + dz) - curlPotential(q - dz)) / (2.0 * CURL_EPS);
+  return vec3f(gy.z - gz.y, gz.x - gx.z, gx.y - gy.x);
+}
+
 fn falloffWeight(mode: f32, x: f32) -> f32 {
   if (x >= 1.0) { return 0.0; }
   let m = u32(mode);

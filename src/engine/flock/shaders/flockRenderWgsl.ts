@@ -34,6 +34,8 @@ struct RenderBlock {
   frame: FrameParams,
   selections: array<Selection, 16>,
   palettes: array<Palette, 8>,
+  // Per emitter: offset, count, grid columns (0 = not a grid), grid rows.
+  grids: array<vec4f, 8>,
 };
 
 struct Branch {
@@ -54,6 +56,8 @@ struct Branch {
 @group(0) @binding(1) var<storage, read> stateCur: array<Particle>;
 @group(0) @binding(2) var<storage, read> statePrev: array<Particle>;
 @group(1) @binding(0) var<uniform> br: Branch;
+@group(1) @binding(8) var pigmentTex: texture_2d<f32>;
+@group(1) @binding(9) var pigmentSampler: sampler;
 
 ${flockSelectionWgsl('rb.selections', 'evalRenderSelections')}
 
@@ -130,6 +134,26 @@ fn particleColor(p: Particle, pos: vec3f) -> vec3f {
   if (mode == 4u) { return br.color * groupTint(p.group); }
   if (mode == 5u) { return mix(br.color2, br.color, clamp(p.neighbors / max(rb.frame.neighborLimit, 1.0), 0.0, 1.0)); }
   return br.color;
+}
+
+/** Source-image coordinate a particle was born on: its grid cell, or a stable random pixel. */
+fn pigmentUv(index: u32, p: Particle) -> vec2f {
+  let g = rb.grids[min(u32(p.emitter), 7u)];
+  if (g.z >= 1.0) {
+    let local = f32(index) - g.x;
+    let row = floor(local / g.z);
+    let col = local - row * g.z;
+    return vec2f((col + 0.5) / g.z, (row + 0.5) / max(g.w, 1.0));
+  }
+  return vec2f(p.rnd, fract(p.rnd * 97.31 + 0.13));
+}
+
+// colorMode 8 samples the branch image at the particle's pigment coordinate.
+fn branchColor(index: u32, p: Particle, pos: vec3f) -> vec3f {
+  if (u32(br.colorMode) == 8u) {
+    return textureSampleLevel(pigmentTex, pigmentSampler, pigmentUv(index, p), 0.0).rgb;
+  }
+  return particleColor(p, pos);
 }
 
 fn distanceFade(w: f32) -> f32 {
@@ -218,7 +242,7 @@ fn vsPoints(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) ->
     coverage = clamp(projectedPx * projectedPx, 0.02, 1.0);
   }
   out.uv = corner;
-  out.color = vec4f(particleColor(p, simPos), br.opacity * distanceFade(clip.w) * coverage);
+  out.color = vec4f(branchColor(ii, p, simPos), br.opacity * distanceFade(clip.w) * coverage);
   return out;
 }
 
@@ -285,7 +309,7 @@ fn vsInstances(mesh: MeshIn, @builtin(instance_index) ii: u32) -> MeshOut {
   out.clip = toClip(simVertex);
   let worldNormal = (rb.frame.world * vec4f(right * n.x + up * n.y + forward * n.z, 0.0)).xyz;
   out.normal = normalize(worldNormal + vec3f(1e-6));
-  out.color = vec4f(particleColor(p, simPos), br.opacity * distanceFade(out.clip.w));
+  out.color = vec4f(branchColor(ii, p, simPos), br.opacity * distanceFade(out.clip.w));
   return out;
 }
 
@@ -377,7 +401,7 @@ fn vsVectors(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -
   let t = ends[corner];
   out.clip = line.clip;
   out.side = line.side;
-  let color = particleColor(p, a);
+  let color = branchColor(ii, p, a);
   out.color = vec4f(mix(color * 0.35, color, t), br.opacity * mix(0.2, 1.0, t) * distanceFade(line.clip.w));
   return out;
 }

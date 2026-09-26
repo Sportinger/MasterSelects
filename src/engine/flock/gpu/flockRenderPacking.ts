@@ -1,15 +1,18 @@
-import type { FlockResolvedNode, FlockResolvedRender, FlockBranchSpec } from '../../../services/flock/compiler/flockProgramTypes';
+import type { FlockBranchSpec, FlockEmitterSpec, FlockResolvedNode, FlockResolvedRender } from '../../../services/flock/compiler/flockProgramTypes';
+import { flockGridDims } from '../shared/flockMath';
 import type { SceneCamera } from '../../scene/types';
 import { toCpuSelections } from '../cpu/flockCpuStepParams';
 import { MAX_GPU_SELECTIONS, SELECTION_SIZE, packSelections } from './flockGpuLayout';
 import type { FlockBlendMode, FlockRenderKind } from './FlockGpuPipelines';
 
 export const FRAME_PARAMS_BYTES = 256;
-export const RENDER_BLOCK_BYTES = FRAME_PARAMS_BYTES + SELECTION_SIZE * MAX_GPU_SELECTIONS + 64 * 8;
+const PALETTE_BLOCK_BYTES = 64 * 8;
+const GRID_BLOCK_BYTES = 16 * 8;
+export const RENDER_BLOCK_BYTES = FRAME_PARAMS_BYTES + SELECTION_SIZE * MAX_GPU_SELECTIONS + PALETTE_BLOCK_BYTES + GRID_BLOCK_BYTES;
 export const BRANCH_BYTES = 256;
 export const FLOCK_SIM_TO_WORLD = 0.01;
 
-const COLOR_MODES: Record<string, number> = { constant: 0, palette: 1, speed: 2, age: 3, group: 4, density: 5, distance: 6, along: 7 };
+const COLOR_MODES: Record<string, number> = { constant: 0, palette: 1, speed: 2, age: 3, group: 4, density: 5, distance: 6, along: 7, image: 8 };
 const POINT_SHAPES: Record<string, number> = { dot: 0, soft: 1, square: 2, ring: 3, star: 4 };
 const GLYPH_SHAPES: Record<string, number> = { dot: 0, ring: 1, square: 2, cube: 3, cross: 4, diamond: 5 };
 const BLENDS: Record<string, number> = { additive: 0, alpha: 1, opaque: 2 };
@@ -44,6 +47,7 @@ export interface FrameBlockInput {
   camera: SceneCamera;
   layerWorld: Float32Array;
   render: FlockResolvedRender;
+  emitters: FlockEmitterSpec[];
   alpha: number;
   capacity: number;
   maxSpeed: number;
@@ -92,6 +96,17 @@ export function packRenderBlock(input: FrameBlockInput): ArrayBuffer {
     f[o + 3] = PALETTE_MODES[p.e.mode ?? 'position'] ?? 2;
     f[o + 7] = p.n.frequency ?? 0.004;
     f[o + 11] = p.n.range ?? 60;
+  });
+  const gridOffset = paletteOffset + PALETTE_BLOCK_BYTES / 4;
+  input.emitters.slice(0, 8).forEach((emitter) => {
+    const o = gridOffset + emitter.index * 4;
+    f[o] = emitter.offset;
+    f[o + 1] = emitter.count;
+    if (emitter.params.enums.shape === 'grid') {
+      const [cols, rows] = flockGridDims(emitter.count, emitter.params.vectors.size?.base ?? [80, 80, 80]);
+      f[o + 2] = cols;
+      f[o + 3] = rows;
+    }
   });
   return data;
 }

@@ -2,6 +2,7 @@ import { windForce } from '../../../services/operators/wind';
 import {
   FLOCK_PARTICLE_STRIDE,
   P_AGE,
+  P_EMITTER,
   P_GROUP,
   P_POS,
   P_RND,
@@ -12,9 +13,11 @@ import {
   FLOCK_PATH_SAMPLES,
   evaluatePath,
   falloffWeight,
+  flockGridDims,
   isClosedPath,
   rotateInverse,
   rotate,
+  curlNoise3,
   valueNoise1,
   valueNoise3,
   type Vec3,
@@ -96,6 +99,22 @@ function nearestPathPoint(op: CpuFieldOp, x: number, y: number, z: number): { po
 }
 
 /** Adds all non-neighbor forces for one particle to `acc`. */
+/** Rest position of a particle: its grid cell for grid emitters, else the emitter center. Mirrors WGSL homePosition. */
+function homePosition(params: CpuStepParams, state: Float32Array, index: number): Vec3 {
+  const emitter = params.emitters[state[index * FLOCK_PARTICLE_STRIDE + P_EMITTER]];
+  if (!emitter) return [0, 0, 0];
+  if (emitter.shape !== 6) return emitter.center;
+  const local = index - emitter.offset;
+  const [cols, rows] = flockGridDims(emitter.count, emitter.size);
+  const row = Math.floor(local / cols);
+  const col = local - row * cols;
+  return [
+    emitter.center[0] + ((col + 0.5) / cols - 0.5) * emitter.size[0],
+    emitter.center[1] + (0.5 - (row + 0.5) / rows) * emitter.size[1],
+    emitter.center[2],
+  ];
+}
+
 export function accumulateFieldForces(
   params: CpuStepParams,
   state: Float32Array,
@@ -157,6 +176,26 @@ export function accumulateFieldForces(
         acc[0] += (valueNoise3(x, y, z, 1) * 2 - 1) * f[0];
         acc[1] += (valueNoise3(x, y, z, 2) * 2 - 1) * f[0];
         acc[2] += (valueNoise3(x, y, z, 3) * 2 - 1) * f[0];
+        break;
+      }
+      case 10: {
+        const t = f[2];
+        const x = px * f[1] + t;
+        const y = py * f[1] + t * 0.7;
+        const z = pz * f[1] - t * 0.4;
+        const flow = curlNoise3(x, y, z);
+        if (f[3] > 0) {
+          const fine = curlNoise3(x * 2.07 + 19.1, y * 2.07 - 7.3, z * 2.07 + 11.7);
+          flow[0] += fine[0] * f[3] * 0.5; flow[1] += fine[1] * f[3] * 0.5; flow[2] += fine[2] * f[3] * 0.5;
+        }
+        acc[0] += flow[0] * f[0]; acc[1] += flow[1] * f[0]; acc[2] += flow[2] * f[0];
+        break;
+      }
+      case 11: {
+        const [hx, hy, hz] = homePosition(params, state, index);
+        acc[0] += (hx - px) * f[0];
+        acc[1] += (hy - py) * f[0];
+        acc[2] += (hz - pz) * f[0];
         break;
       }
       case 5:

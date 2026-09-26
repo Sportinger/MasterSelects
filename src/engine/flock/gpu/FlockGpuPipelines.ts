@@ -146,6 +146,10 @@ export class FlockGpuPipelines {
       for (let binding = 1; binding <= BRANCH_BUFFER_BINDINGS[kind]; binding += 1) {
         entries.push(storage(binding, GPUShaderStage.VERTEX, true));
       }
+      entries.push(
+        { binding: 8, visibility: GPUShaderStage.VERTEX, texture: { sampleType: 'float' } },
+        { binding: 9, visibility: GPUShaderStage.VERTEX, sampler: { type: 'filtering' } },
+      );
       layout = this.device.createBindGroupLayout({ label: `flock-branch-${kind}-layout`, entries });
       this.branchLayouts.set(kind, layout);
     }

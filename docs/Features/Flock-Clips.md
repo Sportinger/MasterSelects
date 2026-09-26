@@ -93,8 +93,8 @@ params, invalidation class, bypass contract, instance limits) and map to
 
 | Category | Operators |
 |---|---|
-| Population | Emitter (sphere/shell/box/disc/point/line, count, group, seed, burst/stagger births, lifetime, active fraction, heading/spread), Merge Emitters |
-| Behavior | Flock Rules (cohesion, separation, alignment, radii, FOV, group interaction), Attractor, Vortex, Turbulence, Drag, Wind, Cruise Speed, Cluster Anchors, Compose Behavior |
+| Population | Emitter (sphere/shell/box/disc/point/line/grid, count, group, seed, burst/stagger births, lifetime, active fraction, heading/spread), Merge Emitters |
+| Behavior | Flock Rules (cohesion, separation, alignment, radii, FOV, group interaction), Attractor, Vortex, Turbulence, Curl Flow, Home Pull, Drag, Wind, Cruise Speed, Cluster Anchors, Compose Behavior |
 | Guidance | Path (circle, figure-8, helix, line, 4-point spline), Follow Path, Obstacle (box/sphere/capsule/plane), Boundary (contain/wrap/reflect/kill) |
 | Selection | Group, ID Fraction, Region, Speed, Age, Combine (and/or/xor) |
 | Values | Value, Math, Remap, Oscillator, Source Time, Audio Level (existing loudness analysis), Palette |
@@ -193,7 +193,24 @@ buffers directly (no per-particle CPU copies):
   simulation);
 - trails are Catmull-Rom ribbons over stable identity subsets with taper, tail
   fade and breaks at rebirths or wraps;
-- palettes map group, identity, position noise, speed or age to four colors.
+- palettes map group, identity, position noise, speed or age to four colors;
+- Points, Instances and Vectors offer an **Image** color mode ("data
+  pigments"): the branch samples a project image (Pigment Image) at each
+  particle's birth coordinate. Grid emitters map one image pixel per particle
+  (row-major, top row first), so the picture stays readable while the
+  particles move; other emitter shapes sample a stable random pixel.
+
+### Data-sculpture canvas (Refik Anadol-style)
+
+A Grid emitter lays its particles out as a flat canvas whose columns and rows
+follow the emitter size aspect. **Curl Flow** is a divergence-free curl-noise
+force (strength, frequency, evolution over source time, optional finer detail
+octave), so neighboring particles move together and the canvas folds into
+sheets instead of clumping. **Home Pull** springs every particle back to its
+grid cell (other emitters: the emitter center), so the canvas breathes around
+its rest pose; combine it with Drag for damping. There is no particle
+collision. A typical graph is Grid Emitter -> Curl Flow + Home Pull + Drag ->
+Simulation (min speed 0) -> Points in Image color mode.
 
 Flock clips render only in the main-thread render host (like all shared-scene
 3D today). Color, masks and 2D clip effects are not offered for flock clips;

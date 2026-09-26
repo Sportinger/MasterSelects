@@ -2,6 +2,7 @@
 
 import { Logger } from '../logger';
 import { preserveUnsavedProjectOnChunkFailure } from '../../runtime/chunkReloadGuard';
+import { saveProjectBeforeDevFullReload } from '../../runtime/devFullReloadSave';
 import { useMediaStore, type MediaFile, type Composition, type MediaFolder } from '../../stores/mediaStore';
 import type { MediaState } from '../../stores/mediaStore/types';
 import { useTimelineStore } from '../../stores/timeline';
@@ -21,6 +22,7 @@ import { useMIDIStore } from '../../stores/midiStore';
 import { projectFileService } from '../projectFileService';
 import {
   isProjectStoreDirtyMarkSuppressed,
+  saveCurrentProject,
   syncStoresToProject,
 } from './projectSave';
 import { loadProjectToStores } from './projectLoad';
@@ -368,6 +370,14 @@ export function setupAutoSync(): void {
   teardownAutoSync();
   registerAutoSyncDisposer(setupTimelineSelectionReloadRecovery());
   registerAutoSyncDisposer(preserveUnsavedProjectOnChunkFailure(hasUnsavedWorkspace));
+  // Source edits force dev full reloads; keep timed-save projects from losing pending work.
+  registerAutoSyncDisposer(saveProjectBeforeDevFullReload({
+    shouldSave: () => projectFileService.isProjectOpen()
+      && projectFileService.hasUnsavedChanges()
+      && useSettingsStore.getState().saveMode !== 'manual',
+    save: () => saveCurrentProject(),
+    onResult: result => log.info(`Dev full reload save: ${result}`),
+  }));
   restoreFlashBoardActiveGenerationRecordsFromRecovery();
 
   const markProjectDirty = () => {

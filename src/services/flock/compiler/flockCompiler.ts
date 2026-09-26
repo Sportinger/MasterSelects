@@ -50,6 +50,8 @@ const OP_KINDS: Record<string, FlockOpKind> = {
   'flock.attractor': 'attractor',
   'flock.vortex': 'vortex',
   'flock.turbulence': 'turbulence',
+  'flock.curl-flow': 'curl',
+  'flock.home': 'home',
   'flock.drag': 'drag',
   'flock.wind': 'wind',
   'flock.cruise': 'cruise',

@@ -4,6 +4,7 @@ import type { FlockGpuPipelines, FlockRenderKind } from './FlockGpuPipelines';
 import type { FlockGpuSession } from './FlockGpuSession';
 import { getFlockMesh } from './flockMeshes';
 import { getFlockModelMesh } from './flockModelMeshes';
+import { getFlockPigmentBinding } from './flockPigmentTextures';
 import { renderHostPort } from '../../../services/render/renderHostPort';
 import { BRANCH_BYTES, RENDER_BLOCK_BYTES, packBranch, packRenderBlock } from './flockRenderPacking';
 
@@ -29,6 +30,7 @@ interface PreparedDraw {
   kind: FlockRenderKind;
   blend: 'additive' | 'alpha' | 'opaque';
   branchData: ArrayBuffer;
+  pigmentAsset: string;
   storage: GPUBuffer[];
   vertexBuffer?: GPUBuffer;
   vertexCount: number;
@@ -119,7 +121,8 @@ export class FlockBranchRenderer {
             break;
         }
         if (instanceCount <= 0) continue;
-        draws.push({ plan, kind: packed.renderKind, blend: packed.blend, branchData: packed.data, storage, vertexBuffer, vertexCount, instanceCount });
+        const pigmentAsset = branch.p.e.colorMode === 'image' ? branch.p.a.image ?? '' : '';
+        draws.push({ plan, kind: packed.renderKind, blend: packed.blend, branchData: packed.data, pigmentAsset, storage, vertexBuffer, vertexCount, instanceCount });
       }
     }
     return draws;
@@ -144,6 +147,7 @@ export class FlockBranchRenderer {
         camera,
         layerWorld: plan.layer.worldMatrix,
         render: plan.render,
+        emitters: plan.program.emitters,
         alpha: plan.alpha,
         capacity: plan.program.capacity,
         maxSpeed: plan.program.simulation.params.numbers.maxSpeed?.base ?? 45,
@@ -170,11 +174,14 @@ export class FlockBranchRenderer {
       const branchBuffer = this.device.createBuffer({ size: BRANCH_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, label: `flock-branch-${draw.kind}` });
       temporaryBuffers.push(branchBuffer);
       this.device.queue.writeBuffer(branchBuffer, 0, draw.branchData);
+      const pigment = getFlockPigmentBinding(this.device, draw.pigmentAsset, () => renderHostPort.requestRender());
       const branchGroup = this.device.createBindGroup({
         layout: this.pipelines.getBranchLayout(draw.kind),
         entries: [
           { binding: 0, resource: { buffer: branchBuffer } },
           ...draw.storage.map((buffer, index) => ({ binding: index + 1, resource: { buffer } })),
+          { binding: 8, resource: pigment.view },
+          { binding: 9, resource: pigment.sampler },
         ],
         label: `flock-branch-group-${draw.kind}`,
       });

@@ -18,7 +18,7 @@ export const POPULATION_OPERATORS: FlockOperatorDescriptor[] = [
     outputs: [port('spawn', 'Spawn', 'spawn')],
     params: [
       integerParam('count', 'Count', 4000, 'topology', { min: 1, max: FLOCK_MAX_CAPACITY }),
-      enumParam('shape', 'Shape', 'sphere', ['sphere', 'shell', 'box', 'disc', 'point', 'line'], 'topology'),
+      enumParam('shape', 'Shape', 'sphere', ['sphere', 'shell', 'box', 'disc', 'point', 'line', 'grid'], 'topology'),
       vecParam('center', 'Center', [0, 0, 0], 'behavior'),
       vecParam('size', 'Size', [80, 80, 80], 'behavior', { min: 0 }),
       integerParam('group', 'Group', 0, 'topology', { min: 0, max: 7 }),

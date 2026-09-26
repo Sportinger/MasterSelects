@@ -106,6 +106,12 @@ fn sphereDirection(a: f32, b: f32) -> vec3f {
   return vec3f(r * cos(phi), r * sin(phi), z);
 }
 
+/** Columns and rows of a grid emitter; the aspect follows size.x / size.y. */
+fn gridDims(count: f32, size: vec3f) -> vec2f {
+  let cols = max(1.0, floor(sqrt(count * max(size.x, 1e-3) / max(size.y, 1e-3)) + 0.5));
+  return vec2f(cols, max(1.0, ceil(count / cols)));
+}
+
 fn spawnParticle(source: Particle, index: u32, e: Emitter, generation: f32, sim: SimParams) -> Particle {
   var p = source;
   let nextGeneration = generation + 1.0;
@@ -129,6 +135,12 @@ fn spawnParticle(source: Particle, index: u32, e: Emitter, generation: f32, sim:
     o = vec3f(cos(angle) * radius * e.size.x, (u3 - 0.5) * e.size.y * 0.05, sin(angle) * radius * e.size.z);
   } else if (shape == 5u) {
     o = vec3f(u1 - 0.5) * e.size;
+  } else if (shape == 6u) {
+    let local = f32(index) - e.offset;
+    let dims = gridDims(e.count, e.size);
+    let col = local - dims.x * floor(local / dims.x);
+    let row = floor(local / dims.x);
+    o = vec3f(((col + 0.5) / dims.x - 0.5) * e.size.x, (0.5 - (row + 0.5) / dims.y) * e.size.y, (u3 - 0.5) * e.size.z);
   }
   let rd = sphereDirection(rand01(index, mixKey(seed, genU, 4u)), rand01(index, mixKey(seed, genU, 5u)));
   var h = rd;
@@ -219,7 +231,18 @@ fn nearestPath(path: PathDef, position: vec3f) -> vec4f {
   return vec4f(bestPoint, bestU);
 }
 
-fn fieldForces(sim: SimParams, p: Particle, mask: u32) -> vec3f {
+/** Rest position of a particle: its grid cell for grid emitters, else the emitter center. */
+fn homePosition(index: u32, p: Particle) -> vec3f {
+  let e = block.emitters[min(u32(p.emitter), max(block.sim.emitterCount, 1u) - 1u)];
+  if (u32(e.shape) != 6u) { return e.center; }
+  let local = f32(index) - e.offset;
+  let dims = gridDims(e.count, e.size);
+  let row = floor(local / dims.x);
+  let col = local - row * dims.x;
+  return e.center + vec3f(((col + 0.5) / dims.x - 0.5) * e.size.x, (0.5 - (row + 0.5) / dims.y) * e.size.y, 0.0);
+}
+
+fn fieldForces(sim: SimParams, index: u32, p: Particle, mask: u32) -> vec3f {
   var acc = vec3f(0.0);
   for (var o = 0u; o < sim.opCount; o++) {
     let op = block.ops[o];
@@ -245,6 +268,14 @@ fn fieldForces(sim: SimParams, p: Particle, mask: u32) -> vec3f {
     } else if (kind == 4u) {
       let x = p.pos * op.f1 + vec3f(op.f2, 0.0, 0.0);
       acc += (vec3f(valueNoise3(x, 1u), valueNoise3(x, 2u), valueNoise3(x, 3u)) * 2.0 - vec3f(1.0)) * op.f0;
+    } else if (kind == 10u) {
+      let t = op.f2;
+      let q = p.pos * op.f1 + vec3f(t, t * 0.7, -t * 0.4);
+      var flow = curlNoise3(q);
+      if (op.f3 > 0.0) { flow += curlNoise3(q * 2.07 + vec3f(19.1, -7.3, 11.7)) * (op.f3 * 0.5); }
+      acc += flow * op.f0;
+    } else if (kind == 11u) {
+      acc += (homePosition(index, p) - p.pos) * op.f0;
     } else if (kind == 5u) {
       acc -= p.vel * op.f0;
     } else if (kind == 6u) {
@@ -443,7 +474,7 @@ fn simulate(@builtin(global_invocation_id) gid: vec3u) {
     }
   }
 
-  acc += fieldForces(sim, p, mask);
+  acc += fieldForces(sim, index, p, mask);
   acc += avoidance(sim, p.pos);
 
   let accLength = length(acc);

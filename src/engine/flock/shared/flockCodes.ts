@@ -1,6 +1,6 @@
 /** Numeric codes shared by the CPU reference solver, GPU packer and WGSL. */
 
-export const EMITTER_SHAPE_CODES: Record<string, number> = { sphere: 0, shell: 1, box: 2, disc: 3, point: 4, line: 5 };
+export const EMITTER_SHAPE_CODES: Record<string, number> = { sphere: 0, shell: 1, box: 2, disc: 3, point: 4, line: 5, grid: 6 };
 export const BIRTH_MODE_CODES: Record<string, number> = { burst: 0, stagger: 1 };
 
 export const OP_KIND_CODES: Record<string, number> = {
@@ -13,6 +13,8 @@ export const OP_KIND_CODES: Record<string, number> = {
   cruise: 7,
   cluster: 8,
   'follow-path': 9,
+  curl: 10,
+  home: 11,
 };
 
 export const SELECTION_KIND_CODES: Record<string, number> = {

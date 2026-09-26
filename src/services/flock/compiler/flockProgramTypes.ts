@@ -90,6 +90,8 @@ export type FlockOpKind =
   | 'attractor'
   | 'vortex'
   | 'turbulence'
+  | 'curl'
+  | 'home'
   | 'drag'
   | 'wind'
   | 'cruise'
