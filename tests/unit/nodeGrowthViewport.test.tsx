@@ -4,14 +4,14 @@ import type { NodeGraph } from '../../src/types/nodeGraph';
 import { useNodeGrowthViewport } from '../../src/components/panels/nodes/canvas/useNodeGrowthViewport';
 
 afterEach(cleanup);
-const graph = (...ids: string[]) => ({ id: 'clip-a', nodes: ids.map(id => ({ id })) }) as NodeGraph;
+const graph = (...ids: string[]) => ({ id: 'clip-a', nodes: ids.map(id => ({ id })), edges: [] }) as unknown as NodeGraph;
 const small = { left: 0, top: 0, right: 100, bottom: 100 };
 const large = { ...small, right: 1400 };
 function setup() {
   const element = document.createElement('div');
   Object.defineProperties(element, { clientWidth: { value: 800 }, clientHeight: { value: 600 } });
-  const canvas = { current: element }, visual = { current: { zoom: 1, panX: 50, panY: 50 } }, fit = vi.fn();
-  const hook = renderHook(({ value, bounds, animating }) => useNodeGrowthViewport(canvas, value, bounds, animating, visual, fit),
+  const canvas = { current: element }, fit = vi.fn();
+  const hook = renderHook(({ value, bounds, animating }) => useNodeGrowthViewport(canvas, value, bounds, animating, fit),
     { initialProps: { value: graph('source'), bounds: small, animating: false } });
   return { ...hook, element, fit };
 }
@@ -61,10 +61,10 @@ describe('node graph growth framing', () => {
     rerender({ value: graph('source'), bounds: small, animating: false });
     expect(fit).not.toHaveBeenCalled();
   });
-  it('keeps visible additions and manual navigation in place', () => {
+  it('refits visible additions and lets manual navigation cancel the follow', () => {
     const { rerender, element, fit } = setup();
     rerender({ value: graph('source', 'mix'), bounds: small, animating: false });
-    expect(fit).not.toHaveBeenCalled();
+    expect(fit).toHaveBeenCalledExactlyOnceWith(small);
     rerender({ value: graph('source', 'mix', 'output'), bounds: large, animating: true });
     fit.mockClear();
     act(() => element.dispatchEvent(new Event('wheel')));

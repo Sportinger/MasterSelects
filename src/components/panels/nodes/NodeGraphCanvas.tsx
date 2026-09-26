@@ -243,7 +243,7 @@ export function NodeGraphCanvas({
     }
   }, [graph.id, graph.groups, initialGroupId, focusGroup, fitGraph]);
 
-  useNodeGrowthViewport(canvasRef, graph, graphBounds, animating, visualViewportRef, fitBounds, foldViewport.following);
+  useNodeGrowthViewport(canvasRef, graph, graphBounds, animating, fitBounds, foldViewport.following);
 
   const resetView = useCallback(() => {
     foldViewport.forget();
