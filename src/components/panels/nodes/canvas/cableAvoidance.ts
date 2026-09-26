@@ -105,7 +105,9 @@ function search(start: [number, number], goal: [number, number], blocked: (x: nu
     closed.add(state); expansions++;
     const direction = state & 3, cell = state >> 2;
     const x = left + (cell % width), y = top + Math.floor(cell / width);
-    if (x === goal[0] && y === goal[1] && direction === 0) {
+    // The final port stub already enters horizontally. A vertical arrival here
+    // is a valid corner, and must not force an extra lap around the goal cell.
+    if (x === goal[0] && y === goal[1] && direction !== 2) {
       const cells: Array<[number, number]> = [];
       for (let at: number | undefined = state; at !== undefined; at = parent.get(at)) { const c = at >> 2; cells.push([left + (c % width), top + Math.floor(c / width)]); }
       return cells.reverse();

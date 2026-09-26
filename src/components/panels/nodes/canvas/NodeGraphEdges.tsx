@@ -9,7 +9,7 @@ import { NodeGraphFlowSignals } from './NodeGraphFlowSignals';
 import './NodeGraphFlow.css';
 import { useSettingsStore } from '../../../../stores/settingsStore';
 import { nodeGroupBounds } from './groupBounds';
-import { createEdgeGroupOcclusion, rectangleClipPath, subtractOccludedRects } from './edgeGroupOcclusion';
+import { coveredCableOpacity, createEdgeGroupOcclusion, groupDepthClips, rectangleClipPath, subtractOccludedRects } from './edgeGroupOcclusion';
 import type { Rect } from './rendering/nodeCanvasTypes';
 
 interface NodeGraphEdgesProps {
@@ -63,12 +63,17 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
   const svgHeight = graphBounds.bottom - graphBounds.top + 192;
 
   const sharedClips = new Map<Rect[], { id: string; d: string }>();
+  const coveredClips = new Map<Rect[], Array<{ id: string; d: string; depth: number }>>();
   const visibleClip = (covers: Rect[]) => {
     let shared = sharedClips.get(covers);
     if (!shared) {
       shared = { id: `${clipPrefix}-visible-${sharedClips.size}`,
         d: rectangleClipPath(subtractOccludedRects({ x: svgLeft, y: svgTop, width: svgWidth, height: svgHeight }, covers)) };
       sharedClips.set(covers, shared);
+      if (!canvasRendered) coveredClips.set(covers,
+        [...groupDepthClips({ x: svgLeft, y: svgTop, width: svgWidth, height: svgHeight }, covers)]
+          .filter(([depth]) => depth > 0)
+          .map(([depth, rects]) => ({ id: `${shared.id}-${depth}`, d: rectangleClipPath(rects), depth })));
     }
     return shared.id;
   };
@@ -111,23 +116,21 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
       {/* Cables behind the same groups share one visible-area clip: it keeps hidden
           cable parts unclickable without one clip path computation per cable. */}
       <defs>{[...sharedClips.values()].map(({ id, d }) => <clipPath key={id} id={id} clipPathUnits="userSpaceOnUse"><path clipRule="nonzero" d={d} /></clipPath>)}</defs>
-      {edges.map((edge, index) => {
+      <defs>{[...coveredClips.values()].flat().map(({ id, d }) => <clipPath key={id} id={id} clipPathUnits="userSpaceOnUse"><path clipRule="nonzero" d={d} /></clipPath>)}</defs>
+      {edges.map(edge => {
         const pair = endpoints.get(edge.id);
         if (!pair?.input || !pair.output || (connectionDraft?.reconnectEdgeId === edge.id && connectionDraft.moved)) return null;
         if (visibleEdgeIds && !visibleEdgeIds.has(edge.id)) return null;
         const path = getConnectionPath(pair.output.tip, pair.input.tip, cableStyle);
         const port = nodesById.get(edge.fromNodeId)?.outputs.find(p => p.id === edge.fromPortId);
         const covers = occlusions(edge);
-        const clip = covers.length ? visibleClip(covers) : '', dimClip = `${clipPrefix}-${index}-dim`;
+        const clip = covers.length ? visibleClip(covers) : '';
         return (
           <Fragment key={edge.id}>
-          {covers.length > 0 && <>
-            {!canvasRendered && <defs>
-              <clipPath id={dimClip} clipPathUnits="userSpaceOnUse"><path clipRule="nonzero" d={rectangleClipPath(covers)} /></clipPath>
-            </defs>}
-            {!canvasRendered && <path d={path} className={`node-workspace-edge port-typed node-workspace-edge-${edge.type}`}
-              clipPath={`url(#${dimClip})`} style={{ '--port-color': port ? describeNodePort(port).color : undefined, opacity: .3, pointerEvents: 'none' } as CSSProperties} />}
-          </>}
+          {!canvasRendered && (coveredClips.get(covers) ?? []).map(({ id, depth }) =>
+            <path key={id} d={path} className={`node-workspace-edge port-typed node-workspace-edge-${edge.type}`}
+              clipPath={`url(#${id})`} style={{ '--port-color': port ? describeNodePort(port).color : undefined,
+                opacity: coveredCableOpacity(depth), pointerEvents: 'none' } as CSSProperties} />)}
           <g
             clipPath={covers.length ? `url(#${clip})` : undefined}
             className="node-workspace-edge-group"

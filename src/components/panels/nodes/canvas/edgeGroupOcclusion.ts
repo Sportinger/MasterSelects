@@ -48,3 +48,30 @@ export const rectangleClipPath = (rects: readonly Rect[]) => rects.map(rect =>
 
 export const pointBehindGroup = (point: { x: number; y: number }, occlusions: readonly Rect[]) => occlusions.some(rect =>
   point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height);
+
+/** Preserve the first covered layer's opacity, then halve it for each extra frame. */
+export const coveredCableOpacity = (depth: number) => 0.3 * 0.5 ** (depth - 1);
+
+export function groupDepthAt(point: { x: number; y: number }, covers: readonly Rect[]): number {
+  return covers.reduce((depth, rect) => depth + Number(point.x >= rect.x && point.x <= rect.x + rect.width
+    && point.y >= rect.y && point.y <= rect.y + rect.height), 0);
+}
+
+/** Disjoint clips ensure an overlap is painted once, at its actual cover depth. */
+export function groupDepthClips(bounds: Rect, covers: readonly Rect[]): Map<number, Rect[]> {
+  let pieces = [{ rect: bounds, depth: 0 }];
+  for (const cover of covers) pieces = pieces.flatMap(({ rect, depth }) => {
+    const x = Math.max(rect.x, cover.x), y = Math.max(rect.y, cover.y);
+    const right = Math.min(rect.x + rect.width, cover.x + cover.width);
+    const bottom = Math.min(rect.y + rect.height, cover.y + cover.height);
+    if (right <= x || bottom <= y) return [{ rect, depth }];
+    return [...subtractOccludedRects(rect, [cover]).map(rest => ({ rect: rest, depth })),
+      { rect: { x, y, width: right - x, height: bottom - y }, depth: depth + 1 }];
+  });
+  const layers = new Map<number, Rect[]>();
+  for (const { rect, depth } of pieces) {
+    const layer = layers.get(depth);
+    if (layer) layer.push(rect); else layers.set(depth, [rect]);
+  }
+  return layers;
+}

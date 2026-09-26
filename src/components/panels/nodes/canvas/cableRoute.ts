@@ -24,7 +24,7 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
  * Backward links leave and enter horizontally and wrap around both ports. */
 function orthogonalPoints(from: RoutePoint, to: RoutePoint): RoutePoint[] {
   const dx = to.x - from.x, dy = to.y - from.y;
-  if (dx >= STUB * 2) {
+  if (dx > 0) {
     const x = from.x + dx / 2;
     return Math.abs(dy) < 0.5 ? [from, to] : [from, { x, y: from.y }, { x, y: to.y }, to];
   }
@@ -61,7 +61,8 @@ export function cableRoute(from: RoutePoint, to: RoutePoint, style: NodeCableSty
   }
   if (style === 'angular') { const [start, ...rest] = orthogonalPoints(from, to); return { from: start, segments: rest.map(point => ({ to: point })) }; }
   if (style === 'smart') return roundCorners(orthogonalPoints(from, to));
-  const h = Math.max(72, Math.abs(to.x - from.x) * 0.42);
+  const dx = to.x - from.x;
+  const h = dx > 0 ? Math.min(dx / 2, Math.max(72, dx * 0.42)) : Math.max(72, Math.abs(dx) * 0.42);
   return { from, segments: [{ c1: { x: from.x + h, y: from.y }, c2: { x: to.x - h, y: to.y }, to }] };
 }
 

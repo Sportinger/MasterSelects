@@ -5,7 +5,7 @@ import { branchMetrics } from '../cableBranches';
 import { fitCanvasLabel } from './canvasTextLayout';
 import type { CanvasBranch, CanvasCable, CanvasCurve, CanvasNode, CanvasScene, CanvasTheme, CanvasTransport, CanvasView, Rect } from './nodeCanvasTypes';
 import { CARD_SPRITE_PAD } from './nodeCardSprites';
-import { pointBehindGroup, subtractOccludedRects } from '../edgeGroupOcclusion';
+import { coveredCableOpacity, groupDepthAt, groupDepthClips } from '../edgeGroupOcclusion';
 
 export type DrawContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 export function inView(rect: Rect, view: CanvasView, margin = 30): boolean {
@@ -120,7 +120,6 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
   if (drawGroups) paintGroupFrames(ctx, scene, view, theme);
   const viewport = { x: -view.panX / view.zoom - 20, y: -view.panY / view.zoom - 20,
     width: view.width / view.zoom + 40, height: view.height / view.zoom + 40 };
-  const clips = new Map<Rect[], Rect[]>();
   // Group backgrounds and headers stay in the DOM: their complete vector
   // bounds follow the immediate viewport even while this bitmap catches up.
   // Cables that pass behind the same groups share one clip per pass. Clipping
@@ -133,14 +132,11 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
   }
   drawCables(ctx, open, view.zoom);
   for (const [occlusions, cables] of occluded) {
-    let visible = clips.get(occlusions);
-    if (!visible) { visible = subtractOccludedRects(viewport, occlusions); clips.set(occlusions, visible); }
-    ctx.save(); ctx.beginPath();
-    for (const rect of visible) ctx.rect(rect.x, rect.y, rect.width, rect.height);
-    ctx.clip(); drawCables(ctx, cables, view.zoom); ctx.restore();
-    ctx.save(); ctx.beginPath();
-    for (const rect of occlusions) ctx.rect(rect.x, rect.y, rect.width, rect.height);
-    ctx.clip(); drawCables(ctx, cables, view.zoom, .3); ctx.restore();
+    for (const [depth, rects] of groupDepthClips(viewport, occlusions)) {
+      ctx.save(); ctx.beginPath();
+      for (const rect of rects) ctx.rect(rect.x, rect.y, rect.width, rect.height);
+      ctx.clip(); drawCables(ctx, cables, view.zoom, depth ? coveredCableOpacity(depth) : undefined); ctx.restore();
+    }
   }
   for (const node of scene.nodes) {
     if (!inView(node, view)) continue;
@@ -254,7 +250,8 @@ export function paintOverlay(ctx: DrawContext, scene: CanvasScene, view: CanvasV
       const envelope = signalEnvelope(fraction);
       if (envelope <= 0) continue;
       const p = signalPosition(cable, fraction);
-      ctx.globalAlpha = flowLevel * envelope * (pointBehindGroup(p, cable.occlusions ?? []) ? .3 : 1);
+      const depth = groupDepthAt(p, cable.occlusions ?? []);
+      ctx.globalAlpha = flowLevel * envelope * (depth ? coveredCableOpacity(depth) : 1);
       ctx.fillStyle = cable.color; ctx.beginPath();
       ctx.arc(p.x, p.y, radius * (0.35 + 0.65 * envelope) * (0.6 + 0.4 * flowLevel), 0, Math.PI * 2); ctx.fill();
     }

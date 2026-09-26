@@ -1,6 +1,6 @@
 import type { NodeGraphPoint } from './canvasGeometry';
 import type { Rect } from './rendering/nodeCanvasTypes';
-import { pointBehindGroup } from './edgeGroupOcclusion';
+import { coveredCableOpacity, groupDepthAt } from './edgeGroupOcclusion';
 import type { NodeCableStyle } from '../../../../types/nodeGraph';
 import { cableRoute, cableRouteBounds, sampleCableRoute } from './cableRoute';
 
@@ -16,10 +16,13 @@ export function flowSignalTrack(from: NodeGraphPoint, to: NodeGraphPoint, zoom: 
   return {
     left, top, width, height,
     duration: Math.max(1300, Math.min(3600, length * zoom / 140 * 1000)),
-    keyframes: points.map((p, i) => ({
-      transform: `translate3d(${p.x - left}px, ${p.y - top}px, 0)`,
-      opacity: pointBehindGroup(p, occlusions) ? .3 : 1,
-      offset: length > 0 ? distances[i] / length : i / (points.length - 1),
-    })),
+    keyframes: points.map((p, i) => {
+      const depth = groupDepthAt(p, occlusions);
+      return {
+        transform: `translate3d(${p.x - left}px, ${p.y - top}px, 0)`,
+        opacity: depth ? coveredCableOpacity(depth) : 1,
+        offset: length > 0 ? distances[i] / length : i / (points.length - 1),
+      };
+    }),
   };
 }

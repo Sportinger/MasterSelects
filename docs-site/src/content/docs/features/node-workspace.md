@@ -321,9 +321,15 @@ The inspector shows those same live connected inputs and results. No additional
 video decoder is opened. Values, operation changes and their bindings support
 undo and project saves; unavailable live values are shown as a dash.
 
-Cable sections passing behind unrelated groups draw at 30% opacity and cannot
+Cable sections passing behind unrelated groups draw at 30% opacity under one
+frame, 15% under two, 7.5% under three, and halve again for each additional
+frame. Flow signals follow the same depth fading. Covered sections cannot
 be hovered or clicked there. Wires belonging to a group retain their normal
 appearance and interaction inside that group.
+
+Short forward connections use the space between their ports without a backward
+loop. Obstacle routing may approach the final horizontal input stub vertically
+without taking an extra lap to face right beforehand.
 
 The toolbar's **Lines** button cycles the cable routing: **Curved** (the default
 bezier), **Angular** (orthogonal lanes with hard corners) and **Smart** (the same
