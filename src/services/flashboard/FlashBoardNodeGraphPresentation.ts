@@ -15,6 +15,18 @@ const nodeTools = new Set<string>([
   'applyFlockPreset', 'exposeFlockParam', 'unexposeFlockParam',
 ]);
 
+/** Inner node IDs a graph call edits; an added compound is used as a whole, not worked inside. */
+function touchedNodeIds(args: Record<string, unknown>, data?: Record<string, unknown>): Set<string> {
+  const ids = new Set<string>();
+  const add = (value: unknown) => { if (typeof value === 'string' && value) ids.add(value.replace(/\./g, '-')); };
+  if (args.action !== 'add') { add(args.nodeId); add(data?.nodeId); }
+  add(args.fromNodeId); add(args.toNodeId);
+  if (Array.isArray(args.nodeIds)) args.nodeIds.forEach(add);
+  const conversion = data?.insertedConversion as Record<string, unknown> | undefined;
+  add(conversion?.nodeId);
+  return ids;
+}
+
 /** Browser presentation only: show actual tool work, then fold the finished graph. */
 export class FlashBoardNodeGraphPresentation {
   private clips = new Set<string>();
@@ -42,7 +54,7 @@ export class FlashBoardNodeGraphPresentation {
           if (!result.success) log.warn('Could not focus agent node work', result.error);
         }).catch(error => log.warn('Could not focus agent node work', error));
         const root = effectId ? `effect:${effectId}` : call.toolCall.name.includes('Flock') ? 'flock' : undefined;
-        if (graphEditTools.has(call.toolCall.name)) this.setCollapsed(clipId, false, root);
+        if (graphEditTools.has(call.toolCall.name) && root) this.reveal(clipId, root, touchedNodeIds(args, data));
       } catch (error) { log.warn('Could not reveal agent node work', error); }
     }
   }
@@ -55,7 +67,13 @@ export class FlashBoardNodeGraphPresentation {
     }
   }
 
-  private setCollapsed(clipId: string, collapsed: boolean, root?: string): void {
+  /** Opens the graph being edited and only the nested groups (compounds, building blocks) the agent works inside. */
+  private reveal(clipId: string, root: string, touched: Set<string>): void {
+    this.setCollapsed(clipId, false, group => group.id === root
+      || group.id.startsWith(`${root}/`) && group.nodeIds.some(id => touched.has(id.slice(id.lastIndexOf('/') + 1))));
+  }
+
+  private setCollapsed(clipId: string, collapsed: boolean, include: (group: { id: string; nodeIds: string[] }) => boolean = () => true): void {
     assertExclusiveTimelineMutationAllowed();
     const state = useTimelineStore.getState(), clip = state.clips.find(item => item.id === clipId);
     if (!clip || state.isExporting || state.tracks.find(track => track.id === clip.trackId)?.locked) return;
@@ -63,7 +81,7 @@ export class FlashBoardNodeGraphPresentation {
     const groups = { ...clip.nodeGraph?.groups };
     let changed = false;
     for (const group of expanded.groups ?? []) {
-      if (root && group.id !== root && !group.id.startsWith(`${root}/`)) continue;
+      if (!include(group)) continue;
       if (groups[group.id]?.collapsed === collapsed) continue;
       groups[group.id] = { ...groups[group.id], collapsed };
       changed = true;
