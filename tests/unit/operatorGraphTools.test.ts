@@ -5,6 +5,7 @@ import { handleCreateImageNodeGraph, handleGetOperatorGraph, handleEditOperatorG
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { getToolPolicy, checkToolAccess } from '../../src/services/aiTools/policy';
+import { exposedGraphValues } from '../../src/services/operators/exposedGraphValues';
 
 const initial = useTimelineStore.getState();
 const clipId = 'graph-test';
@@ -163,6 +164,15 @@ describe('atomic operator graph tools', () => {
     await edit(effectId, { action: 'add', nodeId: 'green', operatorId: 'field.image-channel', inputs: { image: 'frame' } });
     const compare = await edit(effectId, { action: 'add', nodeId: 'isGreen', operatorId: 'compare.greater.scalar', inputs: { a: 'green' } });
     expect((compare.data as { connected: Array<{ from: string }> }).connected[0].from).toBe('green.value');
+  });
+
+  it('turns an exposed add with value, label and range into an Effects tab row', async () => {
+    const effectId = await create();
+    await edit(effectId, { action: 'add', nodeId: 'keyThreshold', operatorId: 'values.number', params: { value: 0.12 },
+      exposed: true, label: 'Key Threshold', min: 0, max: 1, step: 0.01 });
+    const effect = useTimelineStore.getState().clips[0].effects.find(e => e.id === effectId)!;
+    expect(exposedGraphValues(effect.operatorGraph)).toEqual([expect.objectContaining({ nodeId: 'keyThreshold', label: 'Key Threshold', min: 0, max: 1, step: 0.01 })]);
+    expect(effect.params.keyThreshold_value).toBe(0.12);
   });
 
   it('saves an authored slider and enforces its range, locks and ownership', async () => {
