@@ -22,6 +22,7 @@ const CORE_TOOLS = new Set([
  */
 export const DIRECT_EAGER_TOOLS: ReadonlySet<string> = new Set([
   'getTimelineState', 'searchNodeCatalog', 'getNodeDefinitions', 'createImageNodeGraph', 'editOperatorGraph', 'getOperatorGraph', 'focusNodeGraph',
+  'captureFrame',
 ]);
 
 /** Diagnostics, QA fixtures and UI automation belong to the dev bridge, not to a chat model. */

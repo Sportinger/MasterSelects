@@ -76,7 +76,7 @@ one line, described on demand by the browser-local `getToolSchema`, and no
 dev-bridge diagnostics or QA tools (about 14k instead of 58k input tokens per
 model call). Fast uses low reasoning effort; Medium and Slow keep hosted tool
 search and their own effort, except that `getTimelineState` and the node-authoring
-tools are loaded up front so node work does not begin with tool-search steps. All three stream reasoning and answer deltas in
+tools (plus `captureFrame`) are loaded up front so node work does not begin with tool-search steps. After building a visual effect the agent checks one rendered frame against the request (a complete graph can still be wrong, e.g. a key with swapped branches) and exposes the values a user would tune as Effects tab sliders. All three stream reasoning and answer deltas in
 real time. The active workspace
 conversation ID binds the `/chat` and
 floating editor projections, while a shared run owner prevents layout unmounts
