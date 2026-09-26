@@ -79,6 +79,19 @@ describe('atomic operator graph tools', () => {
     expect(after.edges.some(edge => edge.to === 'sample' && edge.input === 'uv')).toBe(false);
   });
 
+  it('maps dotted node IDs to dashes consistently and explains invalid or duplicate IDs', async () => {
+    const effectId = await create();
+    const added = await edit(effectId, { action: 'add', nodeId: 'key.amount', operatorId: 'values.number' });
+    expect(added.data).toMatchObject({ nodeId: 'key-amount', renamedNodeIds: { 'key.amount': 'key-amount' } });
+    await edit(effectId, { action: 'set', nodeId: 'key.amount', parameter: 'value', value: 0.5 });
+    const invalid = await handleEditOperatorGraph({ clipId, effectId, action: 'add', nodeId: '9lives', operatorId: 'values.number' });
+    expect(invalid.error).toContain('start with a letter');
+    const duplicate = await handleEditOperatorGraph({ clipId, effectId, action: 'add', nodeId: 'key-amount', operatorId: 'values.number' });
+    expect(duplicate.error).toContain('already exists');
+    const read = await handleGetOperatorGraph({ clipId, effectId, nodeIds: ['key.amount'] });
+    expect((read.data as { nodes: { id: string }[] }).nodes.map(node => node.id)).toEqual(['key-amount']);
+  });
+
   it('saves an authored slider and enforces its range, locks and ownership', async () => {
     const effectId = await create();
     await edit(effectId, { action: 'add', nodeId: 'percent', operatorId: 'values.number' });

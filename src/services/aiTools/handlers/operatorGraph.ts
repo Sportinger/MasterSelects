@@ -60,6 +60,24 @@ function compoundEndpoints(graph: EffectOperatorGraph, nodeId: string, portId: s
   return endpoints.map(endpoint => ({ nodeId: ids[endpoint.nodeId], portId: endpoint.portId }));
 }
 
+/** Node IDs never contain dots; models often write `key.split`. Mapping dots to `-` keeps add and later references consistent. */
+function normalizeNodeIdArgs(args: Record<string, unknown>): { args: Record<string, unknown>; renamed: Record<string, string> } {
+  const renamed: Record<string, string> = {};
+  const fix = (value: unknown) => {
+    if (typeof value !== 'string' || !value.includes('.')) return value;
+    const next = value.replace(/\./g, '-');
+    renamed[value] = next;
+    return next;
+  };
+  const next = { ...args, nodeId: fix(args.nodeId), fromNodeId: fix(args.fromNodeId), toNodeId: fix(args.toNodeId),
+    ...(Array.isArray(args.nodeIds) ? { nodeIds: args.nodeIds.map(fix) } : {}) };
+  for (const key of ['nodeId', 'fromNodeId', 'toNodeId'] as const) if (next[key] === undefined) delete next[key];
+  return { args: next, renamed };
+}
+
+/** Tells the model the IDs it must use from now on. */
+const renamedField = (renamed: Record<string, string>) => Object.keys(renamed).length ? { renamedNodeIds: renamed } : {};
+
 const failure = (error: unknown): ToolResult => ({ success: false, error: error instanceof Error ? error.message : String(error) });
 
 export async function handleCreateImageNodeGraph(args: Record<string, unknown>): Promise<ToolResult> {
@@ -84,7 +102,8 @@ export async function handleCreateImageNodeGraph(args: Record<string, unknown>):
   } catch (error) { return failure(error); }
 }
 
-export async function handleGetOperatorGraph(args: Record<string, unknown>): Promise<ToolResult> {
+export async function handleGetOperatorGraph(rawArgs: Record<string, unknown>): Promise<ToolResult> {
+  const { args } = normalizeNodeIdArgs(rawArgs);
   try {
     if (args.effectId === undefined) {
       const { clip } = owner(args);
@@ -108,7 +127,8 @@ export async function handleGetOperatorGraph(args: Record<string, unknown>): Pro
   } catch (error) { return failure(error); }
 }
 
-export async function handleEditOperatorGraph(args: Record<string, unknown>): Promise<ToolResult> {
+export async function handleEditOperatorGraph(rawArgs: Record<string, unknown>): Promise<ToolResult> {
+  const { args, renamed } = normalizeNodeIdArgs(rawArgs);
   try {
     const { clip, effect, graph } = graphOwner(args, true), action = text(args, 'action');
     const actions = createEffectGraphActions(clip.id, effect.id);
@@ -127,10 +147,11 @@ export async function handleEditOperatorGraph(args: Record<string, unknown>): Pr
       }
       if (args.nodeId !== undefined) {
         nodeId = text(args, 'nodeId');
-        if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(nodeId) || graph.nodes.some(n => n.id === nodeId)) throw new Error('Node ID is invalid or already exists.');
+        if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(nodeId)) throw new Error(`Node ID ${nodeId} is invalid: start with a letter and use only letters, digits, _ and -.`);
+        if (graph.nodes.some(n => n.id === nodeId)) throw new Error(`Node ID ${nodeId} already exists in this graph.`);
         // A compound instance expands to `<id>--<child>` nodes inside group `compound-<id>`; both must be free.
         if (spec.composition && (graph.groups?.some(group => group.id === `compound-${nodeId}`)
-          || graph.nodes.some(n => n.id.startsWith(`${nodeId}--`)))) throw new Error('Node ID is invalid or already exists.');
+          || graph.nodes.some(n => n.id.startsWith(`${nodeId}--`)))) throw new Error(`Node ID ${nodeId} already exists in this graph.`);
         const id = nodeId, layout = args.position ? position() : { x: 300, y: graph.nodes.length * 180 };
         editEffectGraph(clip.id, effect.id, 'Add graph node', next => {
           next.nodes.push({ id, operator: operatorId, operatorVersion: 1, bindings: {},
@@ -186,7 +207,7 @@ export async function handleEditOperatorGraph(args: Record<string, unknown>): Pr
         if (label.length > 80 || ![min, max, step].every(Number.isFinite) || min >= max || step <= 0) throw new Error('Slider requires finite min < max and positive step.');
         editEffectGraph(clip.id, effect.id, 'Configure exposed value', next => { next.nodes.find(n => n.id === node.id)!.exposed = { label, min, max, step }; });
         const updated = graphOwner(args).graph;
-        return { success: true, data: { clipId: clip.id, effectId: effect.id, action, nodeId, incomplete: updated.incomplete ?? null, nodeCount: updated.nodes.length, edgeCount: updated.edges.length } };
+        return { success: true, data: { clipId: clip.id, effectId: effect.id, action, nodeId, ...renamedField(renamed), incomplete: updated.incomplete ?? null, nodeCount: updated.nodes.length, edgeCount: updated.edges.length } };
       }
       if (!['values.number', 'values.integer'].includes(node.operator) || node.bindings.value || label.length > 80
         || ![min, max, step].every(Number.isFinite) || min >= max || step <= 0
@@ -194,6 +215,6 @@ export async function handleEditOperatorGraph(args: Record<string, unknown>): Pr
       editEffectGraph(clip.id, effect.id, 'Configure value slider', next => { next.nodes.find(n => n.id === node.id)!.valueControl = { label, min, max, step }; });
     } else throw new Error('Unknown graph action.');
     const updated = graphOwner(args).graph;
-    return { success: true, data: { clipId: clip.id, effectId: effect.id, action, ...(nodeId ? { nodeId } : {}), incomplete: updated.incomplete ?? null, nodeCount: updated.nodes.length, edgeCount: updated.edges.length } };
+    return { success: true, data: { clipId: clip.id, effectId: effect.id, action, ...(nodeId ? { nodeId } : {}), ...renamedField(renamed), incomplete: updated.incomplete ?? null, nodeCount: updated.nodes.length, edgeCount: updated.edges.length } };
   } catch (error) { return failure(error); }
 }

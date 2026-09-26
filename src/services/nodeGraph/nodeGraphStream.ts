@@ -11,7 +11,7 @@ export const NODE_GRAPH_STREAM_PROTOCOL = {
   begin: { op: 'begin', schemaVersion: 1, clipId: '<existing active-timeline clip ID>' },
   operation: { op: 'tool', seq: 1, ref: 'uniqueAlias', tool: '<allowed tool>', args: {} },
   end: { op: 'end', lastSeq: 1 },
-  fields: 'seq and lastSeq are integers counting from 1 per block. ref is a unique alias (letters, digits, _ or -) needed to reference that result later with resultReference; a missing ref defaults to s<seq>.',
+  fields: 'seq and lastSeq are integers counting from 1 per block. ref is a unique alias (letters, digits, _ or -) needed to reference that result later with resultReference; a missing ref defaults to s<seq>. Node IDs in args start with a letter and use only letters, digits, _ and - (no dots).',
   resultReference: { $ref: '<earlier result alias>', field: '<top-level result.data field, e.g. nodeId or effectId>' },
   allowedTools: NODE_GRAPH_STREAM_TOOLS,
   ownership: 'begin pins the existing clip. Operation args omit clipId; the browser supplies it. A new clip must already exist before begin.',
