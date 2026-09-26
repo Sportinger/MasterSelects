@@ -4,7 +4,7 @@
   z-index: 0;
   border: 1px solid color-mix(in srgb, var(--group-color) 55%, transparent);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--group-color) 9%, var(--bg-primary, #17191c));
+  background: color-mix(in srgb, var(--group-color) var(--group-fill, 9%), var(--bg-primary, #17191c));
   pointer-events: none;
 }
 .node-workspace-group-header {
@@ -17,7 +17,7 @@
   padding: 0 var(--group-padding, 6px);
   border: 0;
   border-radius: 9px 9px 0 0;
-  background: color-mix(in srgb, var(--group-color) 25%, var(--bg-primary, #17191c));
+  background: color-mix(in srgb, var(--group-color) var(--group-header-fill, 25%), var(--bg-primary, #17191c));
   color: var(--text-primary, #ddd);
   font: inherit;
   font-size: var(--group-font-size, 13px);

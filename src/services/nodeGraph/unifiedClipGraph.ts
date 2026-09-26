@@ -10,6 +10,7 @@ import { collapsedArtifactLinks, projectSourceArtifactLinks } from './sourceArti
 import { projectKeyframeNodes } from './keyframeNodeProjection';
 import { projectParameterSources } from '../parameterSources/parameterSourceProjection';
 import { projectStabilizationGraph } from './stabilizationGraphProjection';
+import { colorEffectGroups } from './effectGroupColors';
 
 /** A single canvas projection of every domain and its executable ownership. */
 export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: TimelineClip, clips: TimelineClip[] = [], keys: readonly Keyframe[] = [], trackingCreatedAt?: number, expandAllGroups = false,
@@ -83,5 +84,5 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     expansion = cursor - rootNode.layout.x - 280;
   }
   const animated = projectKeyframeNodes(projectSourceArtifactLinks({ ...root, nodes, edges, groups }), clip);
-  return foldOperatorGroups(projectStabilizationGraph(projectParameterSources(animated, clip), clip, keys, trackingCreatedAt), clip.nodeGraph, expandAllGroups);
+  return colorEffectGroups(foldOperatorGroups(projectStabilizationGraph(projectParameterSources(animated, clip), clip, keys, trackingCreatedAt), clip.nodeGraph, expandAllGroups));
 }

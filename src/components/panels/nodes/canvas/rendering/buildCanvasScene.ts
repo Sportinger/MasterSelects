@@ -74,6 +74,7 @@ export function buildCanvasScene(options: Options): CanvasScene {
     if (group.collapsed) continue;
     const b = bounds.get(group.id);
     if (b) scene.groups.push({ id: group.id, nodeIds: group.nodeIds, x: b.left, y: b.top, width: b.right - b.left, height: b.bottom - b.top,
+      fillOpacity: group.colorDepth === undefined ? 0.1 : group.colorDepth % 2 ? 0.38 : 0.12,
       label: group.label, color: group.color ?? '#5cbed6', collapsed: !!group.collapsed,
       count: group.collapsed && group.bypassNodeId ? '' : `${group.nodeIds.length} nodes`,
       bypassable: !!group.bypassNodeId, bypassed: group.bypassed ?? (nodes.find(node => node.id === group.bypassNodeId)?.params?.enabled === false) });

@@ -176,7 +176,7 @@ export function AudioEffectStackControl({
                 )
               : [];
             return (
-              <EffectCard key={effect.id} title={descriptor.name}
+              <EffectCard key={effect.id} title={descriptor.name} colorIdentity={`effect:${effect.id}`}
                 className={`audio-effect-inspector-item ${draggedEffectId === effect.id ? 'dragging' : ''} ${dropEffectId === effect.id ? 'drop-target' : ''}`} enabled={enabled}
                 dragHandleProps={{ draggable: true, onDragStart: event => {
                   setDraggedEffectId(effect.id); event.dataTransfer.effectAllowed = 'move';

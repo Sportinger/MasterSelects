@@ -185,7 +185,7 @@ export interface NodeGraph {
   domain?: NodeGraphDomain;
   issue?: string;
   groups?: Array<{ id: string; label: string; color: string; collapsed: boolean; nodeIds: string[]; proxyId: string; parentId?: string; bypassNodeId?: string; effectId?: string; bypassed?: boolean; issue?: string;
-    collapsedByDefault?: boolean; layoutMode?: 'flow';
+    collapsedByDefault?: boolean; layoutMode?: 'flow'; colorDepth?: number;
     composition?: { operatorId: string; description: string; position: NodeGraphLayout; inputs: Array<OperatorPort & { endpoints: OperatorEndpoint[] }>; outputs: Array<OperatorPort & { endpoints: OperatorEndpoint[] }> } }>;
   /** Uncollapsed nodes used to resolve exposed ports of nested groups. */
   expandedNodes?: NodeGraphNode[];

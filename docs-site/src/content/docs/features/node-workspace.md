@@ -321,6 +321,8 @@ The inspector shows those same live connected inputs and results. No additional
 video decoder is opened. Values, operation changes and their bindings support
 undo and project saves; unavailable live values are shown as a dash.
 
+Each effect instance has a stable identifying hue shared by its node group and a thin vertical stripe in its Effects entry (video and audio). Nested frames inherit that hue: immediate subgroups are much lighter, the next level returns to the dark variant, and deeper levels alternate. Reordering an effect preserves its hue. Group fills use the same depth treatment during canvas layout animation.
+
 Cable sections passing behind unrelated groups draw at 30% opacity under one
 frame, 15% under two, 7.5% under three, and halve again for each additional
 frame. Covered regions are cached independently of pan and zoom; cable paths

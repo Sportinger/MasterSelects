@@ -45,7 +45,7 @@ export interface CanvasCable {
 export interface CanvasPlug { id?: string; nodeId?: string; center: Point; tip: Point; input: boolean; color: string; highlighted: boolean; ghost?: boolean }
 /** Presentation-only cable branch point. */
 export interface CanvasBranch extends Point { id: string; color: string; selected: boolean }
-export interface CanvasGroup extends Rect { id?: string; nodeIds?: string[]; label: string; color: string; collapsed: boolean; count: string; bypassable?: boolean; bypassed?: boolean }
+export interface CanvasGroup extends Rect { fillOpacity?: number; id?: string; nodeIds?: string[]; label: string; color: string; collapsed: boolean; count: string; bypassable?: boolean; bypassed?: boolean }
 /** glideMs: the worker eases positions from what it currently shows to this scene. */
 export interface CanvasScene { graphId?: string; nodes: CanvasNode[]; cables: CanvasCable[]; groups: CanvasGroup[]; plugs: CanvasPlug[]; branches?: CanvasBranch[]; glideMs?: number }
 export interface CanvasTransport { playhead: number; playing: boolean; active: boolean; visible: boolean; reducedMotion: boolean; sourceTimes: Record<string, number>; playbackSpeed?: number; timestamp?: number }

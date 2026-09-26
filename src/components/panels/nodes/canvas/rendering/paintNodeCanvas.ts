@@ -118,7 +118,7 @@ function paintGroupFrames(ctx: DrawContext, scene: CanvasScene, view: CanvasView
     if (!inView(group, view)) continue;
     box(ctx, group.x, group.y, group.width, group.height, 10);
     ctx.globalAlpha = 1; ctx.fillStyle = theme.background; ctx.fill();
-    ctx.globalAlpha = 0.1; ctx.fillStyle = group.color; ctx.fill();
+    ctx.globalAlpha = group.fillOpacity ?? 0.1; ctx.fillStyle = group.color; ctx.fill();
     ctx.globalAlpha = 0.6; ctx.strokeStyle = group.color; ctx.lineWidth = 1 / view.zoom; ctx.stroke();
   }
   ctx.globalAlpha = 1;
