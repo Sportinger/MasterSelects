@@ -10,13 +10,26 @@ interface Route { from: NodeGraphPoint; to: NodeGraphPoint; via: NodeGraphPoint[
 const DEBOUNCE_MS = 120;
 const same = (a: NodeGraphPoint, b: NodeGraphPoint) => Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5;
 
+/** Carry the last route with moving ports until the obstacle worker has a new one.
+ * This keeps unchanged links on their established lane during layout animation. */
+function followEndpoints(route: Route, cable: RoutedCable): NodeGraphPoint[] {
+  if (same(route.from, cable.from) && same(route.to, cable.to)) return route.via;
+  const fromDx = cable.from.x - route.from.x, fromDy = cable.from.y - route.from.y;
+  const toDx = cable.to.x - route.to.x, toDy = cable.to.y - route.to.y;
+  return route.via.map((point, index) => {
+    const weight = (index + 1) / (route.via.length + 1);
+    return { x: point.x + fromDx * (1 - weight) + toDx * weight,
+      y: point.y + fromDy * (1 - weight) + toDy * weight };
+  });
+}
+
 /**
  * Optional obstacle avoidance: routes are computed in a worker after the layout
- * settles and applied only while a cable's endpoints are unchanged, so moving
- * cards run direct until their reroute arrives.
+ * settles. Existing routes follow animated endpoints until their reroute arrives;
+ * a pointer-dragged card still uses the direct interactive cable.
  */
 export function useCableAvoidance(cables: RoutedCable[], nodes: readonly NodeGraphNode[], paused: boolean,
-  groupBounds?: ReadonlyMap<string, NodeBounds>, groups?: NodeGraph['groups']): RoutedCable[] {
+  groupBounds?: ReadonlyMap<string, NodeBounds>, groups?: NodeGraph['groups'], dragging = false): RoutedCable[] {
   const enabled = useSettingsStore(state => state.nodeCableAvoid);
   const [routes, setRoutes] = useState<ReadonlyMap<string, Route>>(() => new Map());
   const worker = useRef<Worker | null>(null), revision = useRef(0);
@@ -56,8 +69,8 @@ export function useCableAvoidance(cables: RoutedCable[], nodes: readonly NodeGra
   useEffect(() => () => { worker.current?.terminate(); worker.current = null; }, []);
   useEffect(() => { if (!enabled) { worker.current?.terminate(); worker.current = null; } }, [enabled]);
 
-  return useMemo(() => !enabled || !routes.size ? cables : cables.map(cable => {
+  return useMemo(() => !enabled || dragging || !routes.size ? cables : cables.map(cable => {
     const route = routes.get(cable.id);
-    return route && same(route.from, cable.from) && same(route.to, cable.to) ? { ...cable, via: route.via } : cable;
-  }), [enabled, routes, cables]);
+    return route ? { ...cable, via: followEndpoints(route, cable) } : cable;
+  }), [enabled, dragging, routes, cables]);
 }

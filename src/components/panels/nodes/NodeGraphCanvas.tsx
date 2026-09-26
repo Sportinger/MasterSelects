@@ -197,7 +197,7 @@ export function NodeGraphCanvas({
   const resolvedBranches = useMemo(() => resolveCableBranches(graph.edges, placement.branches), [graph.edges, placement.branches]);
   const plugs = useMemo(() => getConnectionPlugs(graph.edges, nodesById, resolvedBranches.edgeRoot), [graph.edges, nodesById, resolvedBranches]);
   const routedCables = useMemo(() => routeCables(plugs, resolvedBranches), [plugs, resolvedBranches]);
-  const shownCables = useCableAvoidance(routedCables, displayNodes, animating || nodeDragging, groupBounds, graph.groups);
+  const shownCables = useCableAvoidance(routedCables, displayNodes, animating || nodeDragging, groupBounds, graph.groups, nodeDragging);
   const { hoveredPort, hoveredEdgeId, portHoverEvents } = useNodePortHover(nodesById);
   const graphBounds = useMemo(() => {
     const bounds = annotatedGraphBounds(graph, displayNodes, freezeGroupFrames ? undefined : groupBounds);

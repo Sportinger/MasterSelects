@@ -349,8 +349,10 @@ expanded group frames, in every line style: Curved and Smart detours use rounded
 Angular keeps hard corners. Routes run on a coarse orthogonal grid with a small
 clearance around each card, prefer few bends, and bundle cables from the same
 output into shared lanes. They are computed in a worker once the layout settles
-(about 0.2 s for 700 cables), never per frame. Cables attached to a card being
-dragged run direct until the drop reroutes them. Groups containing an endpoint remain
+(about 0.2 s for 700 cables), never per frame. Existing avoided routes follow
+animated endpoints while the worker recalculates, so graph updates do not flash
+a direct cable first. Cables attached to a card being dragged run direct until
+the drop reroutes them. Groups containing an endpoint remain
 accessible; unrelated groups, including nested frames, are obstacles. Backward links
 also detour around such groups. Links without a
 clear path inside the search budget and hidden legacy DOM rendering keep direct
