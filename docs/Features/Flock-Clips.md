@@ -208,7 +208,16 @@ force (strength, frequency, evolution over source time, optional finer detail
 octave), so neighboring particles move together and the canvas folds into
 sheets instead of clumping. **Home Pull** springs every particle back to its
 grid cell (other emitters: the emitter center), so the canvas breathes around
-its rest pose; combine it with Drag for damping. There is no particle
+its rest pose; combine it with Drag for damping. Grid cells carry a stable per-particle
+jitter (Grid Jitter, in cells, default 0.6) so dense canvases do not moire
+against the pixel grid; Home Pull targets the same jittered rest position.
+Points can draw up to 16 render-only **Sub-particles** per simulated particle:
+on grid emitters they are placed bilinearly between a particle and its right,
+lower and diagonal neighbors, so they stay on the folded surface; other
+emitters scatter them within Sub-particle Spread. One million simulated
+particles with eight sub-particles draw about 8.4 million points. Emitter
+capacity is 4,194,304 particles per clip; restart checkpoints keep room for at
+least two full states. There is no particle
 collision. A typical graph is Grid Emitter -> Curl Flow + Home Pull + Drag ->
 Simulation (min speed 0) -> Points in Image color mode.
 

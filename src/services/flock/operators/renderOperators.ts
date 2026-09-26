@@ -45,6 +45,8 @@ export const RENDER_OPERATORS: FlockOperatorDescriptor[] = [
       assetParam('image', 'Pigment Image', 'image', 'appearance', { description: 'Image sampled in Image color mode; grid emitters map one pixel per particle.' }),
       numberParam('opacity', 'Opacity', 0.85, 'appearance', { min: 0, max: 1, step: 0.01 }),
       numberParam('distanceFade', 'Distance Fade', 0.5, 'appearance', { min: 0, max: 1, step: 0.01, advanced: true }),
+      integerParam('children', 'Sub-particles', 1, 'appearance', { min: 1, max: 16, description: 'Render-only points per simulated particle; grid emitters fill the surface between neighbors.' }),
+      numberParam('childSpread', 'Sub-particle Spread', 1.5, 'appearance', { min: 0, max: 50, step: 0.1, advanced: true, description: 'Scatter radius for non-grid emitters, in simulation units.' }),
       blend('additive'),
     ],
     bypass: { kind: 'mute' },

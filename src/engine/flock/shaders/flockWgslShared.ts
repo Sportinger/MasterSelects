@@ -17,7 +17,7 @@ struct Emitter {
   direction: vec3f, spread: f32,
   shape: f32, birthMode: f32, group: f32, seed: f32,
   stagger: f32, activeFraction: f32, lifetime: f32, lifetimeVariance: f32,
-  respawn: f32, initialSpeed: f32, pad0: f32, pad1: f32,
+  respawn: f32, initialSpeed: f32, gridJitter: f32, pad1: f32,
 };
 
 struct Op {

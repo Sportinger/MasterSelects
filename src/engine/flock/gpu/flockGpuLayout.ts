@@ -101,6 +101,7 @@ export function packStepBlock(
     f[o + 19] = emitter.lifetimeVariance;
     f[o + 20] = emitter.respawn ? 1 : 0;
     f[o + 21] = emitter.initialSpeed;
+    f[o + 22] = emitter.gridJitter;
   });
 
   // Rules first (the CPU solver also evaluates up to two rule sets before fields), then field ops.

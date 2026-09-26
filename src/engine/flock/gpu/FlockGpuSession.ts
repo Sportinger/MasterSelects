@@ -124,7 +124,8 @@ export class FlockGpuSession {
     this.sortCount = nextPowerOfTwo(Math.max(2, program.capacity));
     this.tableSize = nextPowerOfTwo(Math.max(4096, program.capacity * 2));
     this.checkpointInterval = Math.max(1, program.stepRate);
-    this.maxCheckpointBytes = 256 * 1024 * 1024;
+    // Keep at least two restart checkpoints even for multi-million canvases.
+    this.maxCheckpointBytes = Math.max(256 * 1024 * 1024, this.capacity * FLOCK_PARTICLE_BYTES * 2);
     const stateBytes = this.capacity * FLOCK_PARTICLE_BYTES;
     const stateUsage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
     this.states = [

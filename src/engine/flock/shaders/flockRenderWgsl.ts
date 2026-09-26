@@ -49,7 +49,7 @@ struct Branch {
   swimAmp: f32, swimFreq: f32, phaseVar: f32, shading: f32,
   orientation: f32, anchor: f32, lineWidth: f32, mode: f32,
   scale: f32, headRing: f32, slotCount: f32, forwardAxis: f32,
-  blend: f32, widthMode: f32, pad0: f32, pad1: f32,
+  blend: f32, widthMode: f32, children: f32, childSpread: f32,
 };
 
 @group(0) @binding(0) var<uniform> rb: RenderBlock;
@@ -149,11 +149,60 @@ fn pigmentUv(index: u32, p: Particle) -> vec2f {
 }
 
 // colorMode 8 samples the branch image at the particle's pigment coordinate.
-fn branchColor(index: u32, p: Particle, pos: vec3f) -> vec3f {
+fn branchColorAt(p: Particle, pos: vec3f, uv: vec2f) -> vec3f {
   if (u32(br.colorMode) == 8u) {
-    return textureSampleLevel(pigmentTex, pigmentSampler, pigmentUv(index, p), 0.0).rgb;
+    return textureSampleLevel(pigmentTex, pigmentSampler, uv, 0.0).rgb;
   }
   return particleColor(p, pos);
+}
+
+fn branchColor(index: u32, p: Particle, pos: vec3f) -> vec3f {
+  return branchColorAt(p, pos, pigmentUv(index, p));
+}
+
+struct ChildSample { pos: vec3f, uv: vec2f, };
+
+fn neighborPos(index: u32, fallback: vec3f, maxGap2: f32) -> vec3f {
+  let q = stateCur[index];
+  if (q.age < 0.0) { return fallback; }
+  let pos = interpolatedPos(index);
+  let d = pos - fallback;
+  if (dot(d, d) > maxGap2) { return fallback; }
+  return pos;
+}
+
+/**
+ * Render-only sub-particle: grid emitters fill the surface bilinearly between a
+ * particle and its right/down neighbors (so folds stay sharp); other emitters
+ * scatter children inside childSpread. Child 0 is the simulated particle.
+ */
+fn childSample(parent: u32, child: u32, p: Particle, parentPos: vec3f) -> ChildSample {
+  var out: ChildSample;
+  out.pos = parentPos;
+  out.uv = pigmentUv(parent, p);
+  if (child == 0u) { return out; }
+  let salt = child * 7919u + 17u;
+  let u = flockHash01(parent, salt);
+  let v = flockHash01(parent, salt + 1u);
+  let g = rb.grids[min(u32(p.emitter), 7u)];
+  if (g.z >= 1.0) {
+    let local = f32(parent) - g.x;
+    let row = floor(local / g.z);
+    let col = local - row * g.z;
+    if (col + 1.0 < g.z && row + 1.0 < g.w) {
+      let cols = u32(g.z);
+      let maxGap2 = br.childSpread * br.childSpread * 64.0 + 1e-3;
+      let right = neighborPos(parent + 1u, parentPos, maxGap2);
+      let down = neighborPos(parent + cols, parentPos, maxGap2);
+      let diag = neighborPos(parent + cols + 1u, parentPos, maxGap2);
+      out.pos = mix(mix(parentPos, right, u), mix(down, diag, u), v);
+      out.uv = out.uv + vec2f(u / g.z, v / max(g.w, 1.0));
+      return out;
+    }
+  }
+  let w = flockHash01(parent, salt + 2u);
+  out.pos = parentPos + (vec3f(u, v, w) - vec3f(0.5)) * br.childSpread;
+  return out;
 }
 
 fn distanceFade(w: f32) -> f32 {
@@ -221,14 +270,18 @@ struct PointOut {
 };
 
 @vertex
-fn vsPoints(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> PointOut {
+fn vsPoints(@builtin(vertex_index) vi: u32, @builtin(instance_index) instIdx: u32) -> PointOut {
   var out: PointOut;
+  let childCount = max(1u, u32(br.children));
+  let ii = instIdx / childCount;
   let p = stateCur[ii];
   if (!isVisibleParticle(ii, p)) { out.clip = HIDDEN; return out; }
-  let simPos = interpolatedPos(ii);
+  let childPoint = childSample(ii, instIdx % childCount, p, interpolatedPos(ii));
+  let simPos = childPoint.pos;
   let clip = toClip(simPos);
   let corner = quadCorner(vi);
-  let size = max(0.0, br.size * (1.0 + br.sizeVariance * (p.rnd * 2.0 - 1.0)));
+  let sizeRnd = select(p.rnd, flockHash01(instIdx, 911u), childCount > 1u);
+  let size = max(0.0, br.size * (1.0 + br.sizeVariance * (sizeRnd * 2.0 - 1.0)));
   var coverage = 1.0;
   if (br.sizeMode < 0.5) {
     let px = max(size, 1.0);
@@ -242,7 +295,7 @@ fn vsPoints(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) ->
     coverage = clamp(projectedPx * projectedPx, 0.02, 1.0);
   }
   out.uv = corner;
-  out.color = vec4f(branchColor(ii, p, simPos), br.opacity * distanceFade(clip.w) * coverage);
+  out.color = vec4f(branchColorAt(p, simPos, childPoint.uv), br.opacity * distanceFade(clip.w) * coverage);
   return out;
 }
 

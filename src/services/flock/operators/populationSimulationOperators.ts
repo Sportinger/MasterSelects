@@ -4,7 +4,7 @@ import { boolParam, enumParam, integerParam, numberParam, port, vecParam } from 
 /** Simulation space uses 100 units per shared-scene world unit (frame height = 2 world units). */
 export const FLOCK_SIM_UNITS_PER_WORLD_UNIT = 100;
 export const FLOCK_MAX_EMITTERS = 8;
-export const FLOCK_MAX_CAPACITY = 1_048_576;
+export const FLOCK_MAX_CAPACITY = 4_194_304;
 
 export const POPULATION_OPERATORS: FlockOperatorDescriptor[] = [
   {
@@ -21,6 +21,7 @@ export const POPULATION_OPERATORS: FlockOperatorDescriptor[] = [
       enumParam('shape', 'Shape', 'sphere', ['sphere', 'shell', 'box', 'disc', 'point', 'line', 'grid'], 'topology'),
       vecParam('center', 'Center', [0, 0, 0], 'behavior'),
       vecParam('size', 'Size', [80, 80, 80], 'behavior', { min: 0 }),
+      numberParam('gridJitter', 'Grid Jitter', 0.6, 'behavior', { min: 0, max: 1, step: 0.01, advanced: true, description: 'Grid shape: random offset per particle, in cells; breaks moire on dense canvases.' }),
       integerParam('group', 'Group', 0, 'topology', { min: 0, max: 7 }),
       integerParam('seed', 'Seed', 1, 'topology', { min: 0, max: 999_999 }),
       enumParam('birthMode', 'Birth', 'burst', ['burst', 'stagger'], 'topology'),

@@ -4,14 +4,14 @@ import { compileFlockDefinition } from '../../src/services/flock/compiler/flockC
 import { indexFlockKeyframes } from '../../src/services/flock/compiler/flockParamEvaluation';
 import { FLOCK_PARTICLE_STRIDE, P_POS, type FlockProgram } from '../../src/services/flock/compiler/flockProgramTypes';
 import { FlockCpuSolver } from '../../src/engine/flock/cpu/flockCpuSolver';
-import { curlNoise3, flockGridDims } from '../../src/engine/flock/shared/flockMath';
+import { curlNoise3, flockGridDims, flockGridRest } from '../../src/engine/flock/shared/flockMath';
 import type { FlockParamValue } from '../../src/types/flock';
 
 const context = { keyframesByProperty: indexFlockKeyframes([]) };
 
-function buildCanvas(behaviors: Array<[string, Record<string, FlockParamValue>]>): FlockProgram {
+function buildCanvas(behaviors: Array<[string, Record<string, FlockParamValue>]>, gridJitter = 0.6): FlockProgram {
   const b = new FlockGraphBuilder();
-  const emitter = b.add('flock.emitter', { count: 64, shape: 'grid', size: [80, 40, 0], initialSpeed: 0 });
+  const emitter = b.add('flock.emitter', { count: 64, shape: 'grid', size: [80, 40, 0], initialSpeed: 0, gridJitter });
   const sim = b.add('flock.simulation', { stepRate: '60', minSpeed: 0, maxSpeed: 200, maxAcceleration: 1000 });
   const points = b.add('flock.render-points');
   const output = b.add('flock.output');
@@ -34,7 +34,7 @@ function position(solver: FlockCpuSolver, index: number): number[] {
 describe('flock pigment canvas', () => {
   it('lays grid emitters out row-major with the emitter aspect', () => {
     expect(flockGridDims(64, [80, 40, 0])).toEqual([11, 6]);
-    const solver = new FlockCpuSolver(buildCanvas([]));
+    const solver = new FlockCpuSolver(buildCanvas([], 0));
     solver.advanceTo(1, context);
     const [cols, rows] = flockGridDims(64, [80, 40, 0]);
     const first = position(solver, 0);
@@ -43,6 +43,21 @@ describe('flock pigment canvas', () => {
     expect(first[2]).toBe(0);
     expect(position(solver, 1)[0]).toBeGreaterThan(position(solver, 0)[0]);
     expect(position(solver, cols)[1]).toBeLessThan(position(solver, 0)[1]);
+  });
+
+  it('jitters grid cells stably within the cell to break moire', () => {
+    const solver = new FlockCpuSolver(buildCanvas([], 0.6));
+    solver.advanceTo(1, context);
+    const [cols, rows] = flockGridDims(64, [80, 40, 0]);
+    for (const index of [0, 5, 23]) {
+      const [x, y] = flockGridRest(64, [80, 40, 0], 1, 0.6, index, index);
+      const [px, py] = position(solver, index);
+      expect(px).toBeCloseTo(x, 4);
+      expect(py).toBeCloseTo(y, 4);
+      const col = index % cols;
+      expect(Math.abs(x - ((col + 0.5) / cols - 0.5) * 80)).toBeLessThanOrEqual(0.3 * 80 / cols + 1e-9);
+    }
+    expect(rows).toBe(6);
   });
 
   it('builds a divergence-free curl flow on its difference stencil', () => {

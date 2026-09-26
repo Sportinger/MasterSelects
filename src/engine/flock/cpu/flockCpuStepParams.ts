@@ -36,6 +36,7 @@ export interface CpuEmitter {
   lifetimeVariance: number;
   respawn: boolean;
   initialSpeed: number;
+  gridJitter: number;
   direction: Vec3;
   spread: number;
 }
@@ -272,6 +273,7 @@ export function prepareCpuStepParams(resolved: FlockResolvedStep): CpuStepParams
       lifetimeVariance: Math.max(0, Math.min(1, p.n.lifetimeVariance ?? 0)),
       respawn: p.b.respawn !== false,
       initialSpeed: p.n.initialSpeed ?? 0,
+      gridJitter: Math.max(0, Math.min(1, p.n.gridJitter ?? 0.6)),
       direction: vec(p.v.direction, [0, 0, 1]),
       spread: Math.max(0, Math.min(1, p.n.spread ?? 1)),
     })),

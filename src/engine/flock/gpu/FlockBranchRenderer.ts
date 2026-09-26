@@ -6,7 +6,7 @@ import { getFlockMesh } from './flockMeshes';
 import { getFlockModelMesh } from './flockModelMeshes';
 import { getFlockPigmentBinding } from './flockPigmentTextures';
 import { renderHostPort } from '../../../services/render/renderHostPort';
-import { BRANCH_BYTES, RENDER_BLOCK_BYTES, packBranch, packRenderBlock } from './flockRenderPacking';
+import { BRANCH_BYTES, RENDER_BLOCK_BYTES, flockPointChildren, packBranch, packRenderBlock } from './flockRenderPacking';
 
 export interface FlockLinkBinding {
   buffer: GPUBuffer;
@@ -117,6 +117,9 @@ export class FlockBranchRenderer {
             vertexCount = packed.renderKind === 'glyphCubes' ? 72 : 6;
             break;
           }
+          case 'points':
+            instanceCount = program.capacity * flockPointChildren(branch);
+            break;
           default:
             break;
         }

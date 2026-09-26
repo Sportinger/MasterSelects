@@ -89,6 +89,23 @@ export function flockGridDims(count: number, size: Vec3): [number, number] {
   return [cols, Math.max(1, Math.ceil(count / cols))];
 }
 
+/** Channel salt for the generation-independent grid jitter. */
+export const GRID_JITTER_SALT = 0x6a7e1d;
+
+/**
+ * Rest offset (x, y) of a grid-emitter particle relative to the emitter center:
+ * its cell center plus a stable per-identity jitter (in cells) that breaks the
+ * lattice so dense canvases do not moire against the pixel grid. Mirrors WGSL gridRest.
+ */
+export function flockGridRest(count: number, size: Vec3, seed: number, jitter: number, index: number, local: number): [number, number] {
+  const [cols, rows] = flockGridDims(count, size);
+  const row = Math.floor(local / cols);
+  const col = local - row * cols;
+  const jx = (rand01(index, mixKey(seed, 0, GRID_JITTER_SALT)) - 0.5) * jitter;
+  const jy = (rand01(index, mixKey(seed, 0, GRID_JITTER_SALT + 1)) - 0.5) * jitter;
+  return [((col + 0.5 + jx) / cols - 0.5) * size[0], (0.5 - (row + 0.5 + jy) / rows) * size[1]];
+}
+
 const CURL_EPS = 0.25;
 
 function curlPotential(x: number, y: number, z: number): Vec3 {

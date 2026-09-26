@@ -13,7 +13,7 @@ import {
   FLOCK_PATH_SAMPLES,
   evaluatePath,
   falloffWeight,
-  flockGridDims,
+  flockGridRest,
   isClosedPath,
   rotateInverse,
   rotate,
@@ -104,15 +104,8 @@ function homePosition(params: CpuStepParams, state: Float32Array, index: number)
   const emitter = params.emitters[state[index * FLOCK_PARTICLE_STRIDE + P_EMITTER]];
   if (!emitter) return [0, 0, 0];
   if (emitter.shape !== 6) return emitter.center;
-  const local = index - emitter.offset;
-  const [cols, rows] = flockGridDims(emitter.count, emitter.size);
-  const row = Math.floor(local / cols);
-  const col = local - row * cols;
-  return [
-    emitter.center[0] + ((col + 0.5) / cols - 0.5) * emitter.size[0],
-    emitter.center[1] + (0.5 - (row + 0.5) / rows) * emitter.size[1],
-    emitter.center[2],
-  ];
+  const [x, y] = flockGridRest(emitter.count, emitter.size, emitter.seed, emitter.gridJitter, index, index - emitter.offset);
+  return [emitter.center[0] + x, emitter.center[1] + y, emitter.center[2]];
 }
 
 export function accumulateFieldForces(

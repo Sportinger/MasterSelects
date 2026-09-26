@@ -15,7 +15,7 @@ import {
   type FlockProgram,
 } from '../../../services/flock/compiler/flockProgramTypes';
 import { buildInitialFlockState } from '../shared/flockInitialState';
-import { NEIGHBOR_CELL_ORDER, cellHash, flockGridDims, mixKey, neighborCandidateBudget, rand01 } from '../shared/flockMath';
+import { NEIGHBOR_CELL_ORDER, cellHash, flockGridRest, mixKey, neighborCandidateBudget, rand01 } from '../shared/flockMath';
 import {
   accumulateAvoidance,
   accumulateFieldForces,
@@ -407,12 +407,7 @@ export class FlockCpuSolver {
         oz = (u1 - 0.5) * emitter.size[2];
         break;
       case 6: {
-        const local = index - emitter.offset;
-        const [cols, rows] = flockGridDims(emitter.count, emitter.size);
-        const col = local % cols;
-        const row = Math.floor(local / cols);
-        ox = ((col + 0.5) / cols - 0.5) * emitter.size[0];
-        oy = (0.5 - (row + 0.5) / rows) * emitter.size[1];
+        [ox, oy] = flockGridRest(emitter.count, emitter.size, emitter.seed, emitter.gridJitter, index, index - emitter.offset);
         oz = (u3 - 0.5) * emitter.size[2];
         break;
       }

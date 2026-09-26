@@ -112,6 +112,20 @@ fn gridDims(count: f32, size: vec3f) -> vec2f {
   return vec2f(cols, max(1.0, ceil(count / cols)));
 }
 
+const GRID_JITTER_SALT: u32 = 0x6a7e1du;
+
+/** Cell center plus a stable per-identity jitter (breaks lattice moire). Mirrors flockGridRest. */
+fn gridRest(e: Emitter, index: u32) -> vec2f {
+  let local = f32(index) - e.offset;
+  let dims = gridDims(e.count, e.size);
+  let row = floor(local / dims.x);
+  let col = local - row * dims.x;
+  let seed = u32(e.seed);
+  let jx = (rand01(index, mixKey(seed, 0u, GRID_JITTER_SALT)) - 0.5) * e.gridJitter;
+  let jy = (rand01(index, mixKey(seed, 0u, GRID_JITTER_SALT + 1u)) - 0.5) * e.gridJitter;
+  return vec2f(((col + 0.5 + jx) / dims.x - 0.5) * e.size.x, (0.5 - (row + 0.5 + jy) / dims.y) * e.size.y);
+}
+
 fn spawnParticle(source: Particle, index: u32, e: Emitter, generation: f32, sim: SimParams) -> Particle {
   var p = source;
   let nextGeneration = generation + 1.0;
@@ -136,11 +150,7 @@ fn spawnParticle(source: Particle, index: u32, e: Emitter, generation: f32, sim:
   } else if (shape == 5u) {
     o = vec3f(u1 - 0.5) * e.size;
   } else if (shape == 6u) {
-    let local = f32(index) - e.offset;
-    let dims = gridDims(e.count, e.size);
-    let col = local - dims.x * floor(local / dims.x);
-    let row = floor(local / dims.x);
-    o = vec3f(((col + 0.5) / dims.x - 0.5) * e.size.x, (0.5 - (row + 0.5) / dims.y) * e.size.y, (u3 - 0.5) * e.size.z);
+    o = vec3f(gridRest(e, index), (u3 - 0.5) * e.size.z);
   }
   let rd = sphereDirection(rand01(index, mixKey(seed, genU, 4u)), rand01(index, mixKey(seed, genU, 5u)));
   var h = rd;
@@ -235,11 +245,7 @@ fn nearestPath(path: PathDef, position: vec3f) -> vec4f {
 fn homePosition(index: u32, p: Particle) -> vec3f {
   let e = block.emitters[min(u32(p.emitter), max(block.sim.emitterCount, 1u) - 1u)];
   if (u32(e.shape) != 6u) { return e.center; }
-  let local = f32(index) - e.offset;
-  let dims = gridDims(e.count, e.size);
-  let row = floor(local / dims.x);
-  let col = local - row * dims.x;
-  return e.center + vec3f(((col + 0.5) / dims.x - 0.5) * e.size.x, (0.5 - (row + 0.5) / dims.y) * e.size.y, 0.0);
+  return e.center + vec3f(gridRest(e, index), 0.0);
 }
 
 fn fieldForces(sim: SimParams, index: u32, p: Particle, mask: u32) -> vec3f {

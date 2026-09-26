@@ -111,6 +111,13 @@ export function packRenderBlock(input: FrameBlockInput): ArrayBuffer {
   return data;
 }
 
+/** Render-only sub-particles per simulated point (1 = off). */
+export function flockPointChildren(branch: FlockResolvedNode<FlockBranchSpec>): number {
+  return Math.max(1, Math.min(FLOCK_MAX_POINT_CHILDREN, Math.round(branch.spec.params.integers.children ?? 1)));
+}
+
+export const FLOCK_MAX_POINT_CHILDREN = 16;
+
 export interface PackedBranch {
   data: ArrayBuffer;
   renderKind: FlockRenderKind;
@@ -168,6 +175,8 @@ export function packBranch(
   const blendName = (p.e.blend ?? 'additive') as FlockBlendMode;
   f[40] = BLENDS[blendName] ?? 0;
   f[41] = (p.e.widthMode ?? 'screen') === 'world' ? 1 : 0;
+  f[42] = spec.kind === 'points' ? flockPointChildren(branch) : 1;
+  f[43] = p.n.childSpread ?? 1.5;
   let renderKind: FlockRenderKind = spec.kind === 'glyphs' ? 'glyphs' : spec.kind;
   if (spec.kind === 'glyphs' && p.e.glyph === 'cube') renderKind = 'glyphCubes';
   return { data, renderKind, blend: blendName in BLENDS ? blendName : 'additive' };
