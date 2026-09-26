@@ -25,10 +25,22 @@ export function applyNodeDrag(visible: CanvasScene, full: CanvasScene, drag: Can
     nodes: [...visible.nodes.filter(node => !ids.has(node.id)),
       ...full.nodes.filter(node => ids.has(node.id)).map(node => ({ ...node, x: node.x + drag.dx, y: node.y + drag.dy }))],
     cables: [...visible.cables.filter(cable => !cable.id || !cables.has(cable.id)),
-      // Moving cables run direct until the drop reroutes them.
-      ...full.cables.filter(cable => cable.id && cables.has(cable.id)).map(cable => ({ ...cable, via: undefined,
-        from: movesFrom(cable) ? shift(cable.from) : cable.from,
-        to: movesTo(cable) ? shift(cable.to) : cable.to }))],
+      ...full.cables.filter(cable => cable.id && cables.has(cable.id)).map(cable => {
+        const fromShift = movesFrom(cable), toShift = movesTo(cable);
+        const from = fromShift ? shift(cable.from) : cable.from;
+        const to = toShift ? shift(cable.to) : cable.to;
+        const centered = cable.via?.length === 2 && cable.via[0].x === cable.via[1].x;
+        const via = centered
+          // Keep adjacent angular lanes together while either card moves.
+          ? [{ x: cable.via![0].x + ((fromShift ? drag.dx : 0) + (toShift ? drag.dx : 0)) / 2, y: from.y },
+            { x: cable.via![0].x + ((fromShift ? drag.dx : 0) + (toShift ? drag.dx : 0)) / 2, y: to.y }]
+          : cable.via?.map((point, index) => {
+            const weight = (index + 1) / (cable.via!.length + 1);
+            return { x: point.x + drag.dx * ((fromShift ? 1 - weight : 0) + (toShift ? weight : 0)),
+              y: point.y + drag.dy * ((fromShift ? 1 - weight : 0) + (toShift ? weight : 0)) };
+          });
+        return { ...cable, from, to, via };
+      })],
     plugs: [...visible.plugs.filter(plug => !movedPlug(plug)),
       ...full.plugs.filter(movedPlug).map(plug => ({ ...plug, center: shift(plug.center), tip: shift(plug.tip) }))],
     ...(full.branches ? { branches: full.branches.map(branch => branches.has(branch.id) ? { ...branch, ...shift(branch) } : branch) } : {}),

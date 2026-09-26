@@ -5,8 +5,8 @@ import type { NodeCableStyle } from '../../../../types/nodeGraph';
 import { cableRoute, cableRouteBounds, sampleCableRoute } from './cableRoute';
 
 /** Sample the same route as the cable into transform-only animation keyframes. */
-export function flowSignalTrack(from: NodeGraphPoint, to: NodeGraphPoint, zoom: number, occlusions: Rect[] = [], style: NodeCableStyle = 'curved') {
-  const route = cableRoute(from, to, style), bounds = cableRouteBounds(route);
+export function flowSignalTrack(from: NodeGraphPoint, to: NodeGraphPoint, zoom: number, occlusions: Rect[] = [], style: NodeCableStyle = 'curved', via?: readonly NodeGraphPoint[]) {
+  const route = cableRoute(from, to, style, via), bounds = cableRouteBounds(route);
   const left = bounds.x, top = bounds.y, width = bounds.width, height = Math.max(1, bounds.height);
   const points = sampleCableRoute(route, route.segments.length === 1 ? 48 : 16);
   const distances = [0];

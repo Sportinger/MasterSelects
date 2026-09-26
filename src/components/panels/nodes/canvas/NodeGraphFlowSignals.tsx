@@ -2,6 +2,7 @@ import { readTimelineRuntimeState } from '../../../../services/timeline/timeline
 import { memo, useCallback, useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import { describeNodePort } from '../../../../services/nodeGraph/nodePortPresentation';
 import type { ConnectionPlug } from './connectionPlugs';
+import type { RoutedCable } from './cableBranches';
 import { flowSignalTrack } from './flowSignalTrack';
 import { useNodeFlowActivity } from './useNodeFlowActivity';
 import { NodeFlowClock } from './rendering/NodeFlowClock';
@@ -12,9 +13,10 @@ import { edgeGroupOcclusion } from './edgeGroupOcclusion';
 import { useSettingsStore } from '../../../../stores/settingsStore';
 
 /** Small HTML layers move along cables; the large SVG stays static during playback. */
-export const NodeGraphFlowSignals = memo(function NodeGraphFlowSignals({ plugs, hiddenEdgeId, zoom, graph, frameNodes }: {
+export const NodeGraphFlowSignals = memo(function NodeGraphFlowSignals({ plugs, hiddenEdgeId, zoom, graph, frameNodes, routedCables }: {
   plugs: ConnectionPlug[]; hiddenEdgeId?: string; zoom: number;
   graph?: NodeGraph; frameNodes?: NodeGraphNode[];
+  routedCables?: readonly RoutedCable[];
 }) {
   const syncRef = useRef(() => {});
   const onActivity = useCallback(() => syncRef.current(), []);
@@ -22,15 +24,22 @@ export const NodeGraphFlowSignals = memo(function NodeGraphFlowSignals({ plugs, 
   const cableStyle = useSettingsStore(state => state.nodeCableStyle);
   const routes = useMemo(() => {
     const bounds = graph ? nodeGroupBounds(graph, frameNodes ?? graph.nodes) : new Map();
+    const routedById = new Map(routedCables?.map(cable => [cable.id, cable] as const));
     const inputs = new Map(plugs.filter(p => p.port.direction === 'input').map(p => [p.edge.id, p]));
     return plugs.flatMap(output => {
       const input = inputs.get(output.edge.id);
+      const routed = routedById.get(output.edge.id);
+      const via = input && routed && Math.abs(routed.from.x - output.tip.x) < 0.5
+        && Math.abs(routed.from.y - output.tip.y) < 0.5
+        && Math.abs(routed.to.x - input.tip.x) < 0.5
+        && Math.abs(routed.to.y - input.tip.y) < 0.5 ? routed.via : undefined;
       return output.port.direction !== 'output' || !input || output.edge.readOnly || output.edge.id === hiddenEdgeId ? [] : [{
         id: output.edge.id, color: describeNodePort(output.port).color,
-        ...flowSignalTrack(output.tip, input.tip, zoom, graph ? edgeGroupOcclusion(output.edge, graph, bounds) : [], cableStyle),
+        ...flowSignalTrack(output.tip, input.tip, zoom, graph ? edgeGroupOcclusion(output.edge, graph, bounds) : [], cableStyle,
+          via),
       }];
     });
-  }, [plugs, hiddenEdgeId, zoom, graph, frameNodes, cableStyle]);
+  }, [plugs, hiddenEdgeId, zoom, graph, frameNodes, cableStyle, routedCables]);
 
   useEffect(() => {
     const root = ref.current;

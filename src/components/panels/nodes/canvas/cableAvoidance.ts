@@ -2,7 +2,7 @@
 
 export interface AvoidPoint { x: number; y: number }
 export interface AvoidRect { x: number; y: number; width: number; height: number; groupId?: string; nodeIds?: string[] }
-export interface AvoidCable { id: string; from: AvoidPoint; to: AvoidPoint; source?: string; fromNode?: string; toNode?: string }
+export interface AvoidCable { id: string; from: AvoidPoint; to: AvoidPoint; source?: string; fromNode?: string; toNode?: string; laneX?: number }
 
 /** Graph units per routing cell. */
 const CELL = 24;
@@ -150,7 +150,7 @@ function waypoints(cells: Array<[number, number]>, from: AvoidPoint, to: AvoidPo
 
 /** Prefer a clear port-to-port lane before grid snapping or shared lanes can
  * introduce a dogleg. Check full segments against the real clearance rectangles. */
-function directLane(from: AvoidPoint, to: AvoidPoint, obstacles: readonly AvoidRect[]): AvoidPoint[] | undefined {
+function directLane(from: AvoidPoint, to: AvoidPoint, obstacles: readonly AvoidRect[], preferredX?: number): AvoidPoint[] | undefined {
   const clear = (a: AvoidPoint, b: AvoidPoint) => !obstacles.some(rect => {
     const margin = rect.groupId ? GROUP_MARGIN : MARGIN;
     return Math.max(a.x, b.x) > rect.x - margin && Math.min(a.x, b.x) < rect.x + rect.width + margin
@@ -160,7 +160,8 @@ function directLane(from: AvoidPoint, to: AvoidPoint, obstacles: readonly AvoidR
   if (to.x > from.x) {
     // Shrink the horizontal stubs to the available gap; never overshoot an input.
     const stub = Math.min(STUB, (to.x - from.x) / 2);
-    for (const x of [(from.x + to.x) / 2, to.x - stub, from.x + stub]) {
+    for (const x of [preferredX, (from.x + to.x) / 2, to.x - stub, from.x + stub]) {
+      if (x === undefined || x <= from.x || x >= to.x) continue;
       candidates.push([{ x, y: from.y }, { x, y: to.y }]);
     }
   } else if (from.y !== to.y) {
@@ -191,7 +192,7 @@ export function routeAroundCards(obstacles: readonly AvoidRect[], cables: readon
       ? rect.nodeIds.includes(nodeId)
       : point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height;
     const blockingGroups = groups.filter(rect => !contains(rect, cable.from, cable.fromNode) && !contains(rect, cable.to, cable.toNode));
-    const direct = directLane(cable.from, cable.to, [...cards, ...blockingGroups]);
+    const direct = directLane(cable.from, cable.to, [...cards, ...blockingGroups], cable.laneX);
     if (direct) { routes.set(cable.id, direct); continue; }
     const key = JSON.stringify(blockingGroups.map(rect => rect.groupId));
     let groupBlocked = grids.get(key);

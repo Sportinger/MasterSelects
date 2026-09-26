@@ -27,6 +27,8 @@ import { NodeGraphNodeCard } from './canvas/NodeGraphNodeCard';
 import { NodeCableAvoidButton, NodeCableStyleButton } from './canvas/NodeCableStyleButton';
 import { NodeCompactLayoutButton } from './canvas/NodeCompactLayoutButton';
 import { useCableAvoidance } from './canvas/useCableAvoidance';
+import { parallelAngularLanes } from './canvas/parallelAngularLanes';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { resolveCableBranches, routeCables } from './canvas/cableBranches';
 import { useNodeCableBranches } from './canvas/useNodeCableBranches';
 import { NodeGraphBranchHandles } from './canvas/NodeGraphBranchHandles';
@@ -197,7 +199,10 @@ export function NodeGraphCanvas({
   const resolvedBranches = useMemo(() => resolveCableBranches(graph.edges, placement.branches), [graph.edges, placement.branches]);
   const plugs = useMemo(() => getConnectionPlugs(graph.edges, nodesById, resolvedBranches.edgeRoot), [graph.edges, nodesById, resolvedBranches]);
   const routedCables = useMemo(() => routeCables(plugs, resolvedBranches), [plugs, resolvedBranches]);
-  const shownCables = useCableAvoidance(routedCables, displayNodes, animating || nodeDragging, groupBounds, graph.groups, nodeDragging);
+  const cableStyle = useSettingsStore(state => state.nodeCableStyle);
+  const styledCables = useMemo(() => cableStyle === 'angular' ? parallelAngularLanes(routedCables) : routedCables,
+    [cableStyle, routedCables]);
+  const shownCables = useCableAvoidance(styledCables, displayNodes, animating || nodeDragging, groupBounds, graph.groups, nodeDragging);
   const { hoveredPort, hoveredEdgeId, portHoverEvents } = useNodePortHover(nodesById);
   const graphBounds = useMemo(() => {
     const bounds = annotatedGraphBounds(graph, displayNodes, freezeGroupFrames ? undefined : groupBounds);
@@ -546,6 +551,7 @@ export function NodeGraphCanvas({
           {(!canvasRendered || cablesReady) && <>
           <NodeGraphEdges
             graph={graph} frameNodes={groupFrameNodes}
+            routedCables={shownCables}
             visibleEdgeIds={canvasRendered ? NO_EDGE_TARGETS : dom.edgeIds}
             canvasRendered={canvasRendered}
             zoom={viewport.zoom}

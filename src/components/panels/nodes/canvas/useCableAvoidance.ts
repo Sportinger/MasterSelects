@@ -5,7 +5,7 @@ import { getNodeHeight, NODE_WIDTH, type NodeGraphPoint, type NodeBounds } from 
 import type { RoutedCable } from './cableBranches';
 import { routeAroundCards, type AvoidCable, type AvoidRect } from './cableAvoidance';
 
-interface Route { from: NodeGraphPoint; to: NodeGraphPoint; via: NodeGraphPoint[] }
+interface Route { from: NodeGraphPoint; to: NodeGraphPoint; via: NodeGraphPoint[]; laneX?: number }
 /** Settle time after a layout change before cables are rerouted. */
 const DEBOUNCE_MS = 120;
 const same = (a: NodeGraphPoint, b: NodeGraphPoint) => Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5;
@@ -47,9 +47,9 @@ export function useCableAvoidance(cables: RoutedCable[], nodes: readonly NodeGra
       if (group.collapsed || !bounds) continue;
       obstacles.push({ groupId: group.id, nodeIds: members(group.id), x: bounds.left, y: bounds.top, width: bounds.right - bounds.left, height: bounds.bottom - bounds.top });
     }
-    const request: AvoidCable[] = cables.map(cable => ({ id: cable.id, from: cable.from, to: cable.to, fromNode: cable.fromNode, toNode: cable.toNode,
+    const request: AvoidCable[] = cables.map(cable => ({ id: cable.id, from: cable.from, to: cable.to, fromNode: cable.fromNode, toNode: cable.toNode, laneX: cable.laneX,
       source: cable.fromBranch ?? (cable.edge ? `${cable.edge.fromNodeId}:${cable.edge.fromPortId}` : undefined) }));
-    const endpoints = new Map(cables.map(cable => [cable.id, { from: cable.from, to: cable.to }]));
+    const endpoints = new Map(cables.map(cable => [cable.id, { from: cable.from, to: cable.to, laneX: cable.laneX }]));
     const id = ++revision.current;
     const apply = (entries: Array<[string, NodeGraphPoint[]]>) => {
       if (id !== revision.current) return;
@@ -71,6 +71,6 @@ export function useCableAvoidance(cables: RoutedCable[], nodes: readonly NodeGra
 
   return useMemo(() => !enabled || dragging || !routes.size ? cables : cables.map(cable => {
     const route = routes.get(cable.id);
-    return route ? { ...cable, via: followEndpoints(route, cable) } : cable;
+    return route && route.laneX === cable.laneX ? { ...cable, via: followEndpoints(route, cable) } : cable;
   }), [enabled, dragging, routes, cables]);
 }

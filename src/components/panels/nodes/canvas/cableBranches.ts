@@ -23,6 +23,8 @@ export interface RoutedCable {
   to: NodeGraphPoint;
   fromNode?: string; toNode?: string;
   fromBranch?: string; toBranch?: string;
+  /** Preferred vertical lane for parallel angular links. */
+  laneX?: number;
   /** Waypoints that route the cable around cards; absent for direct cables. */
   via?: readonly NodeGraphPoint[];
 }

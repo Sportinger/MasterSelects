@@ -338,7 +338,8 @@ also participate in obstacle routing. Repeated waypoints and retraced straight
 runs are removed before corners are rounded.
 
 The toolbar's **Lines** button cycles the cable routing: **Curved** (the default
-bezier), **Angular** (orthogonal lanes with hard corners) and **Smart** (the same
+bezier), **Angular** (orthogonal lanes with hard corners, with parallel links between
+the same cards bundled into very close adjacent lanes) and **Smart** (the same
 orthogonal lanes with rounded corners). Backward links in both orthogonal styles
 leave and enter horizontally and loop around their ports. Painting, flow signals,
 hover and click hit testing, and culling all use the same route. The choice is
@@ -348,11 +349,12 @@ an editor preference that persists across sessions, not project data.
 expanded group frames, in every line style: Curved and Smart detours use rounded corners,
 Angular keeps hard corners. Routes run on a coarse orthogonal grid with a small
 clearance around each card, prefer few bends, and bundle cables from the same
-output into shared lanes. They are computed in a worker once the layout settles
+output into shared lanes. Angular parallel lanes are retained when a clear
+obstacle-avoiding path exists. They are computed in a worker once the layout settles
 (about 0.2 s for 700 cables), never per frame. Existing avoided routes follow
 animated endpoints while the worker recalculates, so graph updates do not flash
-a direct cable first. Cables attached to a card being dragged run direct until
-the drop reroutes them. Groups containing an endpoint remain
+a direct cable first. During a card drag, existing cable lanes move with their ports in real time;
+the obstacle search reruns after the drop. Groups containing an endpoint remain
 accessible; unrelated groups, including nested frames, are obstacles. Backward links
 also detour around such groups. Links without a
 clear path inside the search budget and hidden legacy DOM rendering keep direct

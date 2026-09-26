@@ -4,6 +4,8 @@ import { describeNodePort } from '../../../../services/nodeGraph/nodePortPresent
 import type { ConnectionDraft, NodeBounds } from './canvasGeometry';
 import { getConnectionArrowTransform, getConnectionPath, getPortCenter } from './canvasGeometry';
 import type { ConnectionPlug } from './connectionPlugs';
+import type { RoutedCable } from './cableBranches';
+import { cableRoute, cableRouteMidpoint, cableRouteSvg } from './cableRoute';
 import { useNodeFlowActivity } from './useNodeFlowActivity';
 import { NodeGraphFlowSignals } from './NodeGraphFlowSignals';
 import './NodeGraphFlow.css';
@@ -14,6 +16,7 @@ import type { Rect } from './rendering/nodeCanvasTypes';
 
 interface NodeGraphEdgesProps {
   graph?: NodeGraph;
+  routedCables?: readonly RoutedCable[];
   frameNodes?: NodeGraphNode[];
   visibleEdgeIds?: ReadonlySet<string>;
   graphBounds: NodeBounds;
@@ -31,7 +34,7 @@ interface NodeGraphEdgesProps {
 }
 
 export const NodeGraphEdges = memo(function NodeGraphEdges({
-  graph, frameNodes,
+  graph, frameNodes, routedCables,
   visibleEdgeIds,
   graphBounds,
   edges,
@@ -49,6 +52,7 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
   const flowRef = useNodeFlowActivity();
   const clipPrefix = useId().replace(/:/g, '');
   const cableStyle = useSettingsStore(state => state.nodeCableStyle);
+  const routedById = new Map(routedCables?.map(cable => [cable.id, cable] as const));
   const groupBounds = graph ? nodeGroupBounds(graph, frameNodes ?? [...nodesById.values()]) : new Map<string, NodeBounds>();
   const occlusions = graph ? createEdgeGroupOcclusion(graph, groupBounds) : () => [];
   const endpoints = new Map<string, { input?: ConnectionPlug; output?: ConnectionPlug }>();
@@ -120,7 +124,17 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
         const pair = endpoints.get(edge.id);
         if (!pair?.input || !pair.output || (connectionDraft?.reconnectEdgeId === edge.id && connectionDraft.moved)) return null;
         if (visibleEdgeIds && !visibleEdgeIds.has(edge.id)) return null;
-        const path = getConnectionPath(pair.output.tip, pair.input.tip, cableStyle);
+        const routed = routedById.get(edge.id);
+        const via = routed && Math.abs(routed.from.x - pair.output.tip.x) < 0.5
+          && Math.abs(routed.from.y - pair.output.tip.y) < 0.5
+          && Math.abs(routed.to.x - pair.input.tip.x) < 0.5
+          && Math.abs(routed.to.y - pair.input.tip.y) < 0.5 ? routed.via : undefined;
+        const route = cableRoute(pair.output.tip, pair.input.tip, cableStyle, via);
+        const path = cableRouteSvg(route);
+        const middle = via ? cableRouteMidpoint(route) : undefined;
+        const arrowTransform = middle
+          ? `translate(${middle.point.x} ${middle.point.y}) rotate(${middle.angle * 180 / Math.PI})`
+          : getConnectionArrowTransform(pair.output.tip, pair.input.tip, cableStyle);
         const port = nodesById.get(edge.fromNodeId)?.outputs.find(p => p.id === edge.fromPortId);
         const covers = occlusions(edge);
         const clip = covers.length ? visibleClip(covers) : '';
@@ -159,14 +173,14 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
             />
             <g className="node-workspace-edge-flow">
               <path className="node-workspace-flow-arrow" d="M -4 -4 L 0 0 L -4 4"
-                transform={getConnectionArrowTransform(pair.output.tip, pair.input.tip, cableStyle)} />
+                transform={arrowTransform} />
             </g></>}
           </g>
           </Fragment>
         );
       })}
     </svg>
-    {!canvasRendered && <NodeGraphFlowSignals plugs={plugs} zoom={zoom} graph={graph} frameNodes={frameNodes}
+    {!canvasRendered && <NodeGraphFlowSignals plugs={plugs} zoom={zoom} graph={graph} frameNodes={frameNodes} routedCables={routedCables}
       hiddenEdgeId={connectionDraft?.moved ? connectionDraft.reconnectEdgeId : undefined} />}
     {draftPath && connectionDraft && <svg className="node-workspace-edges node-workspace-edge-drag-layer" width="1" height="1" aria-hidden="true"
       style={{ '--port-color': draftPort ? describeNodePort(draftPort).color : undefined } as CSSProperties}>
