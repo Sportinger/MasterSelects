@@ -167,7 +167,11 @@ matching kind, and otherwise into a new one: image nodes create the clip's free
 on. The tooltip names the destination. Search at the top matches names, categories,
 descriptions and synonyms (for example "green screen" finds Chroma Key) and shows
 where each result lives. The menu supports hover, click/touch and keyboard
-activation (Enter or Right opens a submenu, Escape or Left closes it). Insertion is
+activation (Enter or Right opens a submenu, Escape or Left closes it). Hover is
+forgiving: an open submenu stays open while the pointer crosses sibling rows on its
+way into it or briefly overshoots, submenus never show a scrollbar, and the whole
+menu closes on its own about a second after the pointer leaves it (or 1.5 s after
+opening if it is never entered; a typed search keeps it open). Insertion is
 one undo step and opens a collapsed destination effect; a locked or exporting clip
 reports the reason in the menu.
 

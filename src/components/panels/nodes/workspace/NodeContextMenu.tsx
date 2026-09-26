@@ -4,6 +4,8 @@ import { NodeMenuItems, searchNodeMenu, type NodeMenuEntry } from './NodeMenuTre
 
 /** Grace period after the pointer leaves the menu before it closes on its own. */
 const MENU_LEAVE_CLOSE_DELAY_MS = 700;
+/** Grace period for a freshly opened menu the pointer never enters. */
+const MENU_IDLE_CLOSE_DELAY_MS = 1500;
 
 export function NodeContextMenu({
   x,
@@ -32,10 +34,16 @@ export function NodeContextMenu({
   const results = useMemo(() => searchNodeMenu(entries, search), [entries, search]);
   const left = typeof window === 'undefined' ? x : Math.min(x, window.innerWidth - 188);
   const top = typeof window === 'undefined' ? y : Math.min(y, window.innerHeight - 220);
-  // Once the pointer has left the menu (and every flyout, which are DOM children), it closes shortly
-  // after unless the pointer returns; a typed search or a shown error keeps it open.
+  // Without the pointer over the menu (or any flyout, which are DOM children) it closes shortly:
+  // right after opening if it is never entered, and after the pointer leaves unless it returns.
+  // A typed search or a shown error keeps it open.
   const leaveTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(leaveTimer.current), []);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    leaveTimer.current = window.setTimeout(() => onCloseRef.current(), MENU_IDLE_CLOSE_DELAY_MS);
+    return () => window.clearTimeout(leaveTimer.current);
+  }, []);
   const keepOpen = Boolean(search.trim() || error);
 
   return (
