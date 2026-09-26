@@ -71,9 +71,14 @@ Codex app-server. In `dev:full`, the same public path resolves to the local
 relay. Its opaque thread ID is retained in tab-scoped session storage, so
 subsequent prompts resume the Codex context without resending the visible
 transcript. Fast, Medium and Slow keep separate threads per conversation
-because a thread stays bound to its model. Fast receives every editor tool up
-front, since DeepSeek has no hosted tool search for deferred tools; it streams
-reasoning and answer deltas in real time like Codex. The active workspace
+because a thread stays bound to its model. DeepSeek has no hosted tool search,
+so Fast receives a compact tool surface instead of deferred tools: everyday
+editing and node tools with full schemas, the remaining chat tools by name and
+one line, described on demand by the browser-local `getToolSchema`, and no
+dev-bridge diagnostics or QA tools (about 14k instead of 58k input tokens per
+model call). Fast uses low reasoning effort; Medium and Slow keep hosted tool
+search and their own effort. All three stream reasoning and answer deltas in
+real time. The active workspace
 conversation ID binds the `/chat` and
 floating editor projections, while a shared run owner prevents layout unmounts
 from aborting the turn. Explicit Stop/New actions still interrupt or reset the

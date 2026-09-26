@@ -63,7 +63,14 @@ describe('atomic operator graph tools', () => {
       ['bend', 'curved-value', 'sample', 'uv'], ['frame', 'image', 'sample', 'image'], ['sample', 'image', 'output', 'image'],
     ]) await edit(effectId, { action: 'connect', fromNodeId, fromPortId, toNodeId, toPortId });
     const graph = await handleGetOperatorGraph({ clipId, effectId });
-    expect((graph.data as { incomplete: unknown }).incomplete).toBeNull();
+    const view = graph.data as { incomplete: unknown; nodes: Array<{ id: string; compound?: boolean; in: string[] }>; edges: Array<{ from: string; output: string; to: string; input: string }> };
+    expect(view.incomplete).toBeNull();
+    expect(view.nodes.some(node => node.id.startsWith('bend--'))).toBe(false);
+    expect(view.nodes.find(node => node.id === 'bend')).toMatchObject({ compound: true, in: expect.arrayContaining(['uv-uv:vec2!']) });
+    expect(view.edges).toEqual(expect.arrayContaining([expect.objectContaining({ from: 'uv', output: 'uv', to: 'bend', input: 'uv-uv' })]));
+    const inner = await handleGetOperatorGraph({ clipId, effectId, nodeIds: [(effectOperatorGraph(useTimelineStore.getState().clips[0].effects.find(e => e.id === effectId)!)
+      .nodes.find(node => node.id.startsWith('bend--'))!).id] });
+    expect(inner.success).toBe(true);
     const duplicate = await handleEditOperatorGraph({ clipId, effectId, action: 'add', nodeId: 'bend', operatorId: 'coordinates.radial-curvature.vec2' });
     expect(duplicate.success).toBe(false);
     const auto = await edit(effectId, { action: 'add', operatorId: 'coordinates.radial-curvature.vec2' });

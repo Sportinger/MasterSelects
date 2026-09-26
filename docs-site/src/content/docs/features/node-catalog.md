@@ -38,7 +38,7 @@ Node IDs start with a letter and use only letters, digits, `_` and `-`. Dots are
 
 Streamed records execute from text deltas, so the model does not receive their individual results. Failed stream steps are therefore attached, once, to the model's next editor tool result, with the step number, target and error, and an instruction to inspect and repair the affected graph. If the turn ends with failed stream steps and an edited graph still paused as incomplete (or failures the model never saw), the chat answer gets a visible warning naming the incomplete effect and its reason.
 
-`getOperatorGraph({ clipId })` lists effect graph owners and status. Add `effectId` for actual nodes, values and edges. Add `nodeIds`, `hops: 0..4` and `direction: upstream|downstream|both` to inspect only a region. Boundary cables and omitted-node counts make the selection explicit. It reads saved graph state, not GPU telemetry, and remains available in plan mode.
+`getOperatorGraph({ clipId })` lists effect graph owners and status. Add `effectId` for actual nodes, values and edges. Add `nodeIds`, `hops: 0..4` and `direction: upstream|downstream|both` to inspect only a region. Boundary cables and omitted-node counts make the selection explicit. It reads saved graph state, not GPU telemetry, and remains available in plan mode. Graph results are compact for agents: expanded compounds are folded back into one node with their public ports (unless an inner node ID is requested), ports are `id:type` strings (`!` required, `*` repeated), and parameters are `id:type [min..max] {options}` strings; a `legend` field explains the format.
 
 ### Exposing Value nodes
 

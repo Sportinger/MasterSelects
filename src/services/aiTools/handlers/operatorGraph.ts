@@ -10,6 +10,7 @@ import { selectOperatorGraphSlice } from '../../nodeGraph/operatorGraphSlice';
 import { createEffectGraphActions, editCompositionInput, editEffectGraph, setOperatorConstant, setOperatorParameter } from '../../operators/effectGraphEditing';
 import { getOperatorComposition } from '../../operators/operatorCompositionRegistry';
 import { compositionNodeIds } from '../../operators/operatorComposition';
+import { AGENT_GRAPH_LEGEND, agentGraphNode, foldCompoundsForAgent } from '../../nodeGraph/operatorGraphAgentView';
 import { getEffectOperator } from '../../operators/operatorRegistry';
 import { setGraphValueExposed } from '../../operators/exposedGraphValues';
 import { renderHostPort } from '../../render/renderHostPort';
@@ -117,12 +118,14 @@ export async function handleGetOperatorGraph(rawArgs: Record<string, unknown>): 
       }) } };
     }
     const { clip, effect, graph } = graphOwner(args);
-    const slice = selectOperatorGraphSlice(graph, args), params = effectOperatorParams(effect);
+    // Compounds are folded unless the caller asks for one of their inner nodes.
+    const folded = foldCompoundsForAgent(graph);
+    const requested = Array.isArray(args.nodeIds) ? args.nodeIds : [];
+    const view = requested.some(id => !folded.nodes.some(n => n.id === id) && graph.nodes.some(n => n.id === id)) ? graph : folded;
+    const slice = selectOperatorGraphSlice(view, args), params = effectOperatorParams(effect);
     const bindingKeys = slice.nodes.flatMap(node => Object.values(node.bindings).flatMap(binding => typeof binding === 'string' ? [binding] : Array.isArray(binding) ? binding : Object.values(binding)));
     return { success: true, data: { clipId: clip.id, effectId: effect.id, domain: graph.domain, incomplete: graph.incomplete ?? null,
-      ...slice, nodes: slice.nodes.map(node => { const spec = getEffectOperator(node.operator)!; return { ...node,
-        position: graph.layout[node.id], inputs: spec.inputs, outputs: spec.outputs,
-        parameters: spec.parameters.map(p => p.id === 'value' && (node.valueControl ?? node.exposed) ? { ...p, ...(node.valueControl ?? node.exposed) } : p) }; }),
+      legend: AGENT_GRAPH_LEGEND, ...slice, nodes: slice.nodes.map(node => agentGraphNode(node, view.layout[node.id])),
       params: Object.fromEntries(bindingKeys.map(key => [key, params[key]])) } };
   } catch (error) { return failure(error); }
 }

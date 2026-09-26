@@ -25,6 +25,7 @@ import { getToolPolicy } from '../aiTools/policy';
 import { NodeGraphStreamParser, NODE_GRAPH_STREAM_PROTOCOL } from '../nodeGraph/nodeGraphStream';
 import { FlashBoardNodeGraphStream } from './FlashBoardNodeGraphStream';
 import { NodeStreamFeedback, nodeStreamUserNotice } from './FlashBoardNodeStreamFeedback';
+import { compactDirectToolEntry, directToolSchemaEntry, localDirectToolResult } from './FlashBoardDirectToolSurface';
 import { CodexStreamDiagnostics } from './CodexStreamDiagnostics';
 import { yieldEditorPresentationFrame } from './yieldEditorPresentationFrame';
 import {
@@ -107,6 +108,8 @@ export function buildDirectCodexDynamicTools(
     const name = tool.function.name;
     if (seen.has(name)) return [];
     seen.add(name);
+    // Without hosted tool search, a compact surface replaces deferred loading.
+    if (!deferLoading) return compactDirectToolEntry(tool);
     return [{
       ...(deferLoading ? { deferLoading: true } : {}),
       description: tool.function.description,
@@ -115,6 +118,7 @@ export function buildDirectCodexDynamicTools(
       type: 'function',
     }];
   });
+  if (!deferLoading) definitions.push(directToolSchemaEntry());
   return [{
     description: 'All MasterSelects browser-editor tools for the current Direct Codex session.',
     name: 'masterselects_editor',
@@ -419,6 +423,8 @@ async function runDirectCodexChat(
       return;
     }
     handledToolCallIds.add(callId);
+    const localResult = localDirectToolResult(toolName, params.arguments, toolDefinitions);
+    if (localResult) { send({ id: message.id, result: { contentItems: directToolContentItems(localResult), success: localResult.success } }); return; }
     const definition = toolDefinitions.get(toolName);
     const caller = callerForDirectTool(toolName);
     if (!definition || !caller) {

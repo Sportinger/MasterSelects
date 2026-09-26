@@ -10,10 +10,11 @@ export type DirectModelProfileId = 'codex' | 'terra' | 'deepseek';
 export interface DirectModelProfile {
   /**
    * Deferred tools rely on the provider's hosted tool search. Providers without
-   * it would never see the editor tools, so they receive every tool up front.
+   * it receive a compact surface instead: everyday tools with schemas, the rest
+   * by name and one line, described on demand (FlashBoardDirectToolSurface).
    */
   deferToolLoading: boolean;
-  effort: 'medium' | 'high' | 'xhigh';
+  effort: 'low' | 'medium' | 'high' | 'xhigh';
   label: string;
   model: string;
   /** App-server provider id; omitted for the subscription-backed default provider. */
@@ -43,8 +44,9 @@ const DIRECT_MODEL_PROFILES: Record<DirectModelProfileId, DirectModelProfile> = 
   },
   deepseek: {
     deferToolLoading: false,
-    // DeepSeek-V4.1-Flash supports low/high/max; high is its default.
-    effort: 'high',
+    // DeepSeek-V4.1-Flash supports low/high/max. Low keeps Fast fast: high spent
+    // 14-30k reasoning tokens (20-35 s) per node task before the first edit.
+    effort: 'low',
     label: 'Fast',
     model: 'deepseek-flash',
     modelProvider: 'deepseek',
