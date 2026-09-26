@@ -114,6 +114,57 @@ describe('atomic operator graph tools', () => {
     expect(pixel(effectId)).toEqual([0.2, 0.4, 0.8, 0.375]);
   });
 
+  it('builds linearly: each add carries its inputs, params and slider with inferred ports and placement', async () => {
+    const effectId = await create();
+    const rgba = await edit(effectId, { action: 'add', nodeId: 'rgba', operatorId: 'convert.image-to-vec4', inputs: ['frame'] });
+    expect(rgba.data).toMatchObject({ connected: [{ from: 'frame.image', to: 'rgba.image' }], openInputs: [] });
+    await edit(effectId, { action: 'add', nodeId: 'color', operatorId: 'values.color', params: { value: '#0000ff' } });
+    await edit(effectId, { action: 'add', nodeId: 'amount', operatorId: 'values.number', params: { value: 50 }, label: 'Mix %', min: 0, max: 100, step: 1 });
+    await edit(effectId, { action: 'add', nodeId: 'half', operatorId: 'values.number', params: { value: 0.01 } });
+    const scaled = await edit(effectId, { action: 'add', nodeId: 'scaled', operatorId: 'math.multiply.scalar', inputs: { a: 'amount', b: 'half.value' } });
+    expect(scaled.data).toMatchObject({ openInputs: [] });
+    const mix = await edit(effectId, { action: 'add', nodeId: 'mix', operatorId: 'math.mix.vec4', inputs: ['rgba', 'color', 'scaled'] });
+    expect((mix.data as { connected: Array<{ to: string }> }).connected.map(cable => cable.to)).toEqual(['mix.a', 'mix.b', 'mix.t']);
+    await edit(effectId, { action: 'add', nodeId: 'image', operatorId: 'convert.vec4-to-image', inputs: ['mix'] });
+    const output = await edit(effectId, { action: 'connect', fromNodeId: 'image', toNodeId: 'output' });
+    expect(output.data).toMatchObject({ from: 'image.image', to: 'output.image' });
+    expect(pixel(effectId)).toEqual([0.1, 0.2, 0.9, 0.875]);
+    const graph = effectOperatorGraph(useTimelineStore.getState().clips[0].effects.find(e => e.id === effectId)!);
+    expect(graph.nodes.find(node => node.id === 'amount')?.valueControl).toEqual({ label: 'Mix %', min: 0, max: 100, step: 1 });
+    expect(graph.layout.mix.x).toBeGreaterThan(graph.layout.scaled.x);
+    expect(graph.layout.image.x).toBeGreaterThan(graph.layout.mix.x);
+  });
+
+  it('wires compound ports on add and leaves the graph untouched when any part of an add fails', async () => {
+    const effectId = await create();
+    await edit(effectId, { action: 'add', nodeId: 'uv', operatorId: 'image.normalized-uv' });
+    await edit(effectId, { action: 'add', nodeId: 'curve', operatorId: 'values.number' });
+    await edit(effectId, { action: 'add', nodeId: 'amount', operatorId: 'values.number' });
+    await edit(effectId, { action: 'add', nodeId: 'bend', operatorId: 'coordinates.radial-curvature.vec2',
+      inputs: { 'uv-uv': 'uv', 'curve-value': 'curve', 'amount-value': 'amount' } });
+    await edit(effectId, { action: 'add', nodeId: 'sample', operatorId: 'image.sample', inputs: { uv: 'bend', image: 'frame' } });
+    await edit(effectId, { action: 'connect', fromNodeId: 'sample', toNodeId: 'output' });
+    const view = (await handleGetOperatorGraph({ clipId, effectId })).data as { incomplete: unknown };
+    expect(view.incomplete).toBeNull();
+    const current = () => effectOperatorGraph(useTimelineStore.getState().clips[0].effects.find(e => e.id === effectId)!);
+    const before = current();
+    const missing = await handleEditOperatorGraph({ clipId, effectId, action: 'add', nodeId: 'extra', operatorId: 'math.multiply.scalar', inputs: ['nowhere'] });
+    expect(missing.error).toContain('nowhere');
+    const noInput = await handleEditOperatorGraph({ clipId, effectId, action: 'add', nodeId: 'lonely', operatorId: 'values.number', inputs: ['curve'] });
+    expect(noInput.error).toContain('No compatible');
+    const badValue = await handleEditOperatorGraph({ clipId, effectId, action: 'add', nodeId: 'ranged', operatorId: 'values.number', params: { value: 5 }, min: 0, max: 1, step: 0.1 });
+    expect(badValue.success).toBe(false);
+    expect(current().nodes.map(node => node.id)).toEqual(before.nodes.map(node => node.id));
+    expect(current().edges).toEqual(before.edges);
+  });
+
+  it('uses the first declared output when several same-typed outputs fit an input', async () => {
+    const effectId = await create();
+    await edit(effectId, { action: 'add', nodeId: 'green', operatorId: 'field.image-channel', inputs: { image: 'frame' } });
+    const compare = await edit(effectId, { action: 'add', nodeId: 'isGreen', operatorId: 'compare.greater.scalar', inputs: { a: 'green' } });
+    expect((compare.data as { connected: Array<{ from: string }> }).connected[0].from).toBe('green.value');
+  });
+
   it('saves an authored slider and enforces its range, locks and ownership', async () => {
     const effectId = await create();
     await edit(effectId, { action: 'add', nodeId: 'percent', operatorId: 'values.number' });

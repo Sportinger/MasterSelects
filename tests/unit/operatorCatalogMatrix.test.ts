@@ -22,7 +22,9 @@ describe('registry-derived operator matrix', () => {
     for (const effect of EFFECT_REGISTRY.values()) {
       const entry = catalog.find(candidate => candidate.id === `effect:${effect.id}`);
       expect(entry?.backend).toBe(effect.pipelineKind ?? 'fullscreen');
-      expect(entry?.state).toBe('usesFeedback' in effect && effect.usesFeedback ? 'frame-history' : 'stateless');
+      // Feedback and source-history effects both read earlier frames.
+      const history = ('usesFeedback' in effect && effect.usesFeedback) || ('usesInputHistory' in effect && effect.usesInputHistory);
+      expect(entry?.state).toBe(history ? 'frame-history' : 'stateless');
       expect(entry?.localImplementations).toEqual([`Effect registry: ${effect.id}`]);
     }
   });

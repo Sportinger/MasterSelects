@@ -76,7 +76,7 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
       sharedClips.set(covers, shared);
       if (!canvasRendered) coveredClips.set(covers,
         [...coveredGroupDepthClips(covers)]
-          .map(([depth, rects]) => ({ id: `${shared.id}-${depth}`, d: rectangleClipPath(rects), depth })));
+          .map(([depth, rects]) => ({ id: `${clipPrefix}-visible-${sharedClips.size - 1}-${depth}`, d: rectangleClipPath(rects), depth })));
     }
     return shared.id;
   };

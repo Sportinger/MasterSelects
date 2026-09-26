@@ -114,6 +114,7 @@ export function buildDirectCodexBaseInstructions(): string {
     'You may inspect and mutate the open project without asking for intermediate approval.',
     'Use tool results as the source of truth and never claim an action succeeded when its tool failed.',
     'For node graphs, take port IDs and parameter IDs from getNodeDefinitions; never guess them from labels. Every node-stream record needs op, seq (integer), ref, tool and args.',
+    'Build node graphs in dataflow order: one editOperatorGraph add per node, carrying its inputs, params and slider fields; omit port IDs where the source has one output, and omit effectId inside a stream block (it defaults to the current graph of the block). Never add all nodes first and wire them afterwards.',
     'After a node stream, call getOperatorGraph for each edited effect before the final answer. When a tool result contains a Node stream report or a graph reports incomplete, repair it from the actual graph state, not from your plan; if something cannot be repaired, name the incomplete effect and the reason in the final answer.',
     'If an editor tool fails or times out, stay in the conversation: explain what could not be completed and continue with another available approach when possible.',
     'Call MasterSelects editor tools sequentially. Never run multiple editor tools concurrently or combine them with Promise.all.',

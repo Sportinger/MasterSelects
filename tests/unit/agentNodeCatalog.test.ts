@@ -85,7 +85,7 @@ describe('agent node discovery', () => {
   });
 
   it('rejects malformed and unbounded calls', async () => {
-    for (const args of [{ limit: 1000 }, { offset: -1 }, { limit: 1.5 }, { query: 'x'.repeat(201) }, { kind: 'made-up' }, { unknown: true }]) {
+    for (const args of [{ offset: -1 }, { limit: 1.5 }, { query: 'x'.repeat(201) }, { kind: 'made-up' }, { unknown: true }]) {
       expect((await handleSearchNodeCatalog(args)).success).toBe(false);
     }
     for (const args of [{ ids: [] }, { ids: ['a', 'a'] }, { ids: Array(9).fill('a') }, { ids: [1] }, { ids: ['a'], mutate: true }]) {

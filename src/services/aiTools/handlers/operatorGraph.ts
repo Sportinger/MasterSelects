@@ -1,5 +1,5 @@
 import { useTimelineStore } from '../../../stores/timeline';
-import { startBatch, endBatch } from '../../../stores/historyStore';
+import { startBatch, endBatch, cancelHistoryBatch } from '../../../stores/historyStore';
 import { assertExclusiveTimelineMutationAllowed } from '../../../stores/timeline/exclusiveMutationLease';
 import type { Effect } from '../../../types/effects';
 import type { EffectOperatorGraph, OperatorValue } from '../../../types/operatorGraph';
@@ -7,15 +7,14 @@ import { readTimelineRuntimeState } from '../../timeline/timelineRuntimeCoordina
 import { findClipOperatorEffect } from '../../operators/clipOperatorGraphOwner';
 import { addableEffectOperators, effectOperatorGraph, effectOperatorParams, hasEffectOperatorGraph, validateEffectOwnerGraph } from '../../operators/effectGraphOwner';
 import { selectOperatorGraphSlice } from '../../nodeGraph/operatorGraphSlice';
-import { createEffectGraphActions, editCompositionInput, editEffectGraph, setOperatorConstant, setOperatorParameter } from '../../operators/effectGraphEditing';
-import { getOperatorComposition } from '../../operators/operatorCompositionRegistry';
-import { compositionNodeIds } from '../../operators/operatorComposition';
+import { createEffectGraphActions, editEffectGraph, setOperatorConstant, setOperatorParameter } from '../../operators/effectGraphEditing';
 import { AGENT_GRAPH_LEGEND, agentGraphNode, foldCompoundsForAgent } from '../../nodeGraph/operatorGraphAgentView';
 import { getEffectOperator } from '../../operators/operatorRegistry';
-import { connectEffectGraph } from '../../operators/effectGraph';
+import { EFFECT_GRAPH_PARAM } from '../../operators/effectGraph';
 import { setGraphValueExposed } from '../../operators/exposedGraphValues';
 import { renderHostPort } from '../../render/renderHostPort';
 import type { ToolResult } from '../types';
+import { compoundGroup, connectPublicPorts, nodePosition, openInputs, parseEndpointRef, publicPorts, type ConnectedCable } from './operatorGraphPorts';
 
 function text(args: Record<string, unknown>, key: string): string {
   const value = args[key];
@@ -38,30 +37,6 @@ function graphOwner(args: Record<string, unknown>, mutation = false) {
   if (!effect) throw new Error('Effect does not belong to the specified clip.');
   return { ...context, effect, graph: effectOperatorGraph(effect) };
 }
-/**
- * Compound nodes are expanded while editing; their public ports live on inner
- * nodes. Resolves a compound ID (or the `@compound-<id>` handle `add` returns)
- * and public port to those inner endpoints; other nodes pass through unchanged.
- */
-function compoundGroup(graph: EffectOperatorGraph, nodeId: string) {
-  const instanceId = nodeId.startsWith('@compound-') ? nodeId.slice('@compound-'.length) : nodeId;
-  return graph.nodes.some(node => node.id === nodeId) ? undefined
-    : graph.groups?.find(candidate => candidate.id === `compound-${instanceId}` && candidate.composition);
-}
-function compoundEndpoints(graph: EffectOperatorGraph, nodeId: string, portId: string, side: 'input' | 'output') {
-  const group = compoundGroup(graph, nodeId);
-  const definition = group?.composition && getOperatorComposition(group.composition.instance.operator);
-  if (!group?.composition || !definition?.composition) return [{ nodeId, portId }];
-  const ids = compositionNodeIds(group.composition.instance, definition);
-  const endpoints = side === 'input' ? definition.composition.inputs[portId]
-    : definition.composition.outputs[portId] && [definition.composition.outputs[portId]];
-  if (!endpoints?.length) {
-    const ports = Object.keys(side === 'input' ? definition.composition.inputs : definition.composition.outputs).join(', ');
-    throw new Error(`${definition.label} has no ${side} ${portId}. Available: ${ports}.`);
-  }
-  return endpoints.map(endpoint => ({ nodeId: ids[endpoint.nodeId], portId: endpoint.portId }));
-}
-
 /** Node IDs never contain dots; models often write `key.split`. Mapping dots to `-` keeps add and later references consistent. */
 function normalizeNodeIdArgs(args: Record<string, unknown>): { args: Record<string, unknown>; renamed: Record<string, string> } {
   const renamed: Record<string, string> = {};
@@ -75,49 +50,6 @@ function normalizeNodeIdArgs(args: Record<string, unknown>): { args: Record<stri
     ...(Array.isArray(args.nodeIds) ? { nodeIds: args.nodeIds.map(fix) } : {}) };
   for (const key of ['nodeId', 'fromNodeId', 'toNodeId'] as const) if (next[key] === undefined) delete next[key];
   return { args: next, renamed };
-}
-
-type Endpoint = { nodeId: string; portId: string };
-function portTypes(graph: EffectOperatorGraph, from: Endpoint, to: Endpoint) {
-  const node = (id: string) => graph.nodes.find(candidate => candidate.id === id);
-  return { fromType: getEffectOperator(node(from.nodeId)?.operator ?? '')?.outputs.find(port => port.id === from.portId)?.type,
-    toType: getEffectOperator(node(to.nodeId)?.operator ?? '')?.inputs.find(port => port.id === to.portId)?.type };
-}
-function converters(fromType: string, toType: string, addable: ReturnType<typeof addableEffectOperators>) {
-  return addable.filter(operator => operator.inputs.length === 1 && operator.inputs[0].type === fromType
-    && operator.outputs.length === 1 && operator.outputs[0].type === toType && !operator.parameters.length);
-}
-function singleConverter(graph: EffectOperatorGraph, from: Endpoint, to: Endpoint, addable: ReturnType<typeof addableEffectOperators>) {
-  const { fromType, toType } = portTypes(graph, from, to);
-  if (!fromType || !toType || fromType === toType) return undefined;
-  const found = converters(fromType, toType, addable);
-  return found.length === 1 ? found[0] : undefined;
-}
-function insertConversion(clipId: string, effectId: string, graph: EffectOperatorGraph, from: Endpoint, to: Endpoint,
-  converter: NonNullable<ReturnType<typeof singleConverter>>, addable: ReturnType<typeof addableEffectOperators>): string {
-  const base = `${from.nodeId}-${converter.id.split('.').pop()}`.replace(/[^\w-]/g, '-');
-  let id = base;
-  for (let index = 2; graph.nodes.some(node => node.id === id) || graph.groups?.some(group => group.id === `compound-${id}`); index++) id = `${base}-${index}`;
-  editEffectGraph(clipId, effectId, 'Connect with conversion', next => {
-    next.nodes.push({ id, operator: converter.id, operatorVersion: converter.version, bindings: {}, constants: {} });
-    const a = next.layout[from.nodeId], b = next.layout[to.nodeId];
-    next.layout[id] = a && b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : { x: 300, y: next.nodes.length * 120 };
-    Object.assign(next, connectEffectGraph(next, { id: `${from.nodeId}-${from.portId}-${id}-${converter.inputs[0].id}`,
-      from: from.nodeId, output: from.portId, to: id, input: converter.inputs[0].id }, addable));
-    Object.assign(next, connectEffectGraph(next, { id: `${id}-${converter.outputs[0].id}-${to.nodeId}-${to.portId}`,
-      from: id, output: converter.outputs[0].id, to: to.nodeId, input: to.portId }, addable));
-  });
-  return id;
-}
-
-/** Names the registered single-step conversion for a signal-type mismatch, e.g. alpha -> number. */
-function conversionHint(graph: EffectOperatorGraph, from: { nodeId: string; portId: string }, to: { nodeId: string; portId: string },
-  addable: ReturnType<typeof addableEffectOperators>): string {
-  const { fromType, toType } = portTypes(graph, from, to);
-  if (!fromType || !toType || fromType === toType) return '';
-  const found = converters(fromType, toType, addable);
-  return found.length ? ` ${fromType} -> ${toType}: insert ${found.map(operator => `${operator.id} (${operator.inputs[0].id} -> ${operator.outputs[0].id})`).join(' or ')} between them.`
-    : ` ${fromType} -> ${toType} has no single conversion node; use getNodeDefinitions to pick a compatible source or target.`;
 }
 
 /** Tells the model the IDs it must use from now on. */
@@ -174,64 +106,149 @@ export async function handleGetOperatorGraph(rawArgs: Record<string, unknown>): 
   } catch (error) { return failure(error); }
 }
 
+type GraphContext = ReturnType<typeof graphOwner>;
+const VALUE_OPERATORS = ['values.number', 'values.integer'];
+
+function validValue(value: unknown): value is OperatorValue {
+  return typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number' && Number.isFinite(value)
+    || Array.isArray(value) && value.length >= 2 && value.length <= 4 && value.every(n => typeof n === 'number' && Number.isFinite(n));
+}
+function setValue(context: GraphContext, nodeId: string, parameter: string, value: unknown) {
+  const node = context.graph.nodes.find(n => n.id === nodeId);
+  if (!node) throw new Error(compoundGroup(context.graph, nodeId) ? `${nodeId} is a compound node; set values on the nodes feeding it instead.` : 'Node not found in this graph.');
+  if (!validValue(value)) throw new Error(`Invalid value for ${nodeId}.${parameter}.`);
+  (node.bindings[parameter] === undefined ? setOperatorConstant : setOperatorParameter)(context.clip.id, context.effect.id, node.id, parameter, value);
+}
+function configureSlider(context: GraphContext, nodeId: string, args: Record<string, unknown>) {
+  const node = context.graph.nodes.find(n => n.id === nodeId);
+  if (!node) throw new Error('Node not found in this graph.');
+  const label = args.label !== undefined ? text(args, 'label') : node.exposed?.label ?? node.valueControl?.label ?? node.id;
+  const min = args.min as number, max = args.max as number, step = args.step as number;
+  if (node.exposed) {
+    if (label.length > 80 || ![min, max, step].every(Number.isFinite) || min >= max || step <= 0) throw new Error('Slider requires finite min < max and positive step.');
+    editEffectGraph(context.clip.id, context.effect.id, 'Configure exposed value', next => { next.nodes.find(n => n.id === node.id)!.exposed = { label, min, max, step }; });
+    return;
+  }
+  if (!VALUE_OPERATORS.includes(node.operator) || node.bindings.value || label.length > 80
+    || ![min, max, step].every(Number.isFinite) || min >= max || step <= 0
+    || typeof node.constants?.value !== 'number' || node.constants.value < min || node.constants.value > max) throw new Error('Slider requires a local numeric value within finite min < max and positive step.');
+  editEffectGraph(context.clip.id, context.effect.id, 'Configure value slider', next => { next.nodes.find(n => n.id === node.id)!.valueControl = { label, min, max, step }; });
+}
+
+/** `inputs` is `{ targetPort: "node" | "node.port" }` or an ordered list filling free compatible inputs. */
+function inputRefs(value: unknown): Array<{ toPortId?: string; nodeId: string; portId?: string }> {
+  if (value === undefined) return [];
+  const entries: Array<[string | undefined, unknown]> = Array.isArray(value) ? value.map(ref => [undefined, ref])
+    : value && typeof value === 'object' ? Object.entries(value) : [];
+  if (!entries.length || entries.length > 16) throw new Error('inputs must list 1..16 sources.');
+  return entries.map(([toPortId, ref]) => {
+    if (typeof ref !== 'string' || !ref.trim() || ref.length > 200) throw new Error('Each input is "nodeId" or "nodeId.portId".');
+    const parsed = parseEndpointRef(ref.trim());
+    return { toPortId, nodeId: parsed.nodeId.replace(/\./g, '-'), portId: parsed.portId };
+  });
+}
+/** Right of the rightmost source, at their mean height, stepping down past occupied cards. */
+function besideSources(graph: EffectOperatorGraph, sourceIds: string[]) {
+  const anchors = sourceIds.map(id => nodePosition(graph, id)).filter((p): p is { x: number; y: number } => !!p);
+  if (!anchors.length) return undefined;
+  const x = Math.max(...anchors.map(p => p.x)) + 280;
+  let y = Math.round(anchors.reduce((sum, p) => sum + p.y, 0) / anchors.length);
+  const taken = [...Object.values(graph.layout), ...(graph.groups ?? []).flatMap(group => group.composition ? [group.composition.position] : [])];
+  while (taken.some(p => Math.abs(p.x - x) < 220 && Math.abs(p.y - y) < 150)) y += 160;
+  return { x, y };
+}
+
+function addNode(context: GraphContext, args: Record<string, unknown>, position: () => { x: number; y: number }) {
+  const { clip, effect, graph } = context;
+  const operatorId = text(args, 'operatorId'), spec = getEffectOperator(operatorId);
+  if (!spec) throw new Error(`Unknown operator: ${operatorId}.`);
+  if (!addableEffectOperators(effect.type).some(op => op.id === operatorId)) {
+    throw new Error(`Operator ${operatorId} (${spec.label}) cannot be added to ${effect.type}. ${spec.description}`);
+  }
+  if (args.exposed === true && (!VALUE_OPERATORS.includes(operatorId) || graph.domain === 'audio')) {
+    throw new Error('Only values.number/integer nodes outside audio graphs can be exposed.');
+  }
+  const params = args.params ?? {};
+  if (!params || typeof params !== 'object' || Array.isArray(params)) throw new Error('params must map parameter IDs to values.');
+  const inputs = inputRefs(args.inputs);
+  for (const input of inputs) publicPorts(graph, input.nodeId, 'output');
+  const layout = args.position ? position() : besideSources(graph, inputs.map(input => input.nodeId));
+  let nodeId: string;
+  if (args.nodeId !== undefined) {
+    nodeId = text(args, 'nodeId');
+    if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(nodeId)) throw new Error(`Node ID ${nodeId} is invalid: start with a letter and use only letters, digits, _ and -.`);
+    if (graph.nodes.some(n => n.id === nodeId)) throw new Error(`Node ID ${nodeId} already exists in this graph.`);
+    // A compound instance expands to `<id>--<child>` nodes inside group `compound-<id>`; both must be free.
+    if (spec.composition && (graph.groups?.some(group => group.id === `compound-${nodeId}`)
+      || graph.nodes.some(n => n.id.startsWith(`${nodeId}--`)))) throw new Error(`Node ID ${nodeId} already exists in this graph.`);
+    const id = nodeId, at = layout ?? { x: 300, y: graph.nodes.length * 180 };
+    editEffectGraph(clip.id, effect.id, 'Add graph node', next => {
+      next.nodes.push({ id, operator: operatorId, operatorVersion: 1, bindings: {},
+        ...(spec.composition ? {} : { constants: Object.fromEntries(spec.parameters.map(p => [p.id, p.default])) }) });
+      next.layout[id] = at;
+    });
+  } else nodeId = createEffectGraphActions(clip.id, effect.id).addNode(operatorId, layout);
+  if (args.exposed === true) setGraphValueExposed(clip.id, effect.id, nodeId, true, typeof args.label === 'string' ? args.label : undefined);
+  const fresh = () => graphOwner(args);
+  const slider = args.min !== undefined || args.max !== undefined || args.step !== undefined;
+  // An exposed range bounds its value; a local slider requires its value to be in range already.
+  if (slider && args.exposed === true) configureSlider(fresh(), nodeId, args);
+  for (const [parameter, value] of Object.entries(params)) setValue(fresh(), nodeId, parameter, value);
+  if (slider && args.exposed !== true) configureSlider(fresh(), nodeId, args);
+  const connected: ConnectedCable[] = [];
+  for (const input of inputs) {
+    const { from, to, insertedConversion } = connectPublicPorts(clip.id, effect.id, effect.type, fresh().graph,
+      input.nodeId, input.portId, nodeId, input.toPortId);
+    connected.push({ from, to, ...(insertedConversion ? { insertedConversion } : {}) });
+  }
+  return { nodeId, ...(connected.length ? { connected } : {}), openInputs: openInputs(fresh().graph, nodeId) };
+}
+
+/** Puts an effect's graph and values back exactly, independent of history state. */
+function graphRestorer(context: GraphContext) {
+  const graph = structuredClone(context.graph), params: Record<string, unknown> = { ...context.effect.params };
+  delete params[EFFECT_GRAPH_PARAM];
+  return () => editEffectGraph(context.clip.id, context.effect.id, 'Revert graph node', (next, nextParams) => {
+    for (const key of Object.keys(next)) delete (next as unknown as Record<string, unknown>)[key];
+    Object.assign(next, structuredClone(graph));
+    for (const key of Object.keys(nextParams)) delete nextParams[key];
+    Object.assign(nextParams, params);
+  });
+}
+
+const optionalText = (args: Record<string, unknown>, key: string) => args[key] === undefined ? undefined : text(args, key);
+
 export async function handleEditOperatorGraph(rawArgs: Record<string, unknown>): Promise<ToolResult> {
   const { args, renamed } = normalizeNodeIdArgs(rawArgs);
+  // A composite add (node, values, cables) is one undo step and changes nothing when any part fails.
+  const batch = args.action === 'add' ? startBatch('Add graph node') : undefined;
+  let succeeded = false;
   try {
-    const { clip, effect, graph } = graphOwner(args, true), action = text(args, 'action');
+    const context = graphOwner(args, true), { clip, effect, graph } = context, action = text(args, 'action');
     const actions = createEffectGraphActions(clip.id, effect.id);
     const existing = () => { const id = text(args, 'nodeId'); const node = graph.nodes.find(n => n.id === id); if (!node) throw new Error('Node not found in this graph.'); return node; };
     const position = () => { const p = args.position as { x: number; y: number } | undefined;
       if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) throw new Error('A finite position is required.'); return { x: p.x, y: p.y }; };
     let nodeId: string | undefined;
-    let conversion: { nodeId: string; operatorId: string } | undefined;
+    let extra: Record<string, unknown> = {};
     if (action === 'add') {
-      const operatorId = text(args, 'operatorId'), spec = getEffectOperator(operatorId);
-      if (!spec) throw new Error(`Unknown operator: ${operatorId}.`);
-      if (!addableEffectOperators(effect.type).some(op => op.id === operatorId)) {
-        throw new Error(`Operator ${operatorId} (${spec.label}) cannot be added to ${effect.type}. ${spec.description}`);
-      }
-      if (args.exposed === true && (!['values.number', 'values.integer'].includes(operatorId) || graph.domain === 'audio')) {
-        throw new Error('Only values.number/integer nodes outside audio graphs can be exposed.');
-      }
-      if (args.nodeId !== undefined) {
-        nodeId = text(args, 'nodeId');
-        if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(nodeId)) throw new Error(`Node ID ${nodeId} is invalid: start with a letter and use only letters, digits, _ and -.`);
-        if (graph.nodes.some(n => n.id === nodeId)) throw new Error(`Node ID ${nodeId} already exists in this graph.`);
-        // A compound instance expands to `<id>--<child>` nodes inside group `compound-<id>`; both must be free.
-        if (spec.composition && (graph.groups?.some(group => group.id === `compound-${nodeId}`)
-          || graph.nodes.some(n => n.id.startsWith(`${nodeId}--`)))) throw new Error(`Node ID ${nodeId} already exists in this graph.`);
-        const id = nodeId, layout = args.position ? position() : { x: 300, y: graph.nodes.length * 180 };
-        editEffectGraph(clip.id, effect.id, 'Add graph node', next => {
-          next.nodes.push({ id, operator: operatorId, operatorVersion: 1, bindings: {},
-            ...(spec.composition ? {} : { constants: Object.fromEntries(spec.parameters.map(p => [p.id, p.default])) }) });
-          next.layout[id] = layout;
-        });
-      } else nodeId = actions.addNode(operatorId, args.position ? position() : undefined);
-      if (args.exposed === true) {
-        setGraphValueExposed(clip.id, effect.id, nodeId, true, typeof args.label === 'string' ? args.label : undefined);
+      const restore = graphRestorer(context);
+      try {
+        const added = addNode(context, args, position);
+        nodeId = added.nodeId; extra = added;
+      } catch (error) {
+        // A partly applied add (node without its values or cables) must not survive a failure.
+        if (graphOwner(args).graph.nodes.length !== graph.nodes.length) restore();
+        throw error;
       }
     } else if (action === 'set') {
-      const node = existing(), parameter = text(args, 'parameter');
-      const value = args.value;
-      if (!(typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number' && Number.isFinite(value)
-        || Array.isArray(value) && value.length >= 2 && value.length <= 4 && value.every(n => typeof n === 'number' && Number.isFinite(n)))) throw new Error('Invalid parameter value.');
-      (node.bindings[parameter] === undefined ? setOperatorConstant : setOperatorParameter)(clip.id, effect.id, node.id, parameter, value as OperatorValue);
-      nodeId = node.id;
+      nodeId = existing().id;
+      setValue(context, nodeId, text(args, 'parameter'), args.value);
     } else if (action === 'connect') {
-      const [from] = compoundEndpoints(graph, text(args, 'fromNodeId'), text(args, 'fromPortId'), 'output');
-      const targets = compoundEndpoints(graph, text(args, 'toNodeId'), text(args, 'toPortId'), 'input');
-      const addable = addableEffectOperators(effect.type);
-      const converter = targets.length === 1 ? singleConverter(graph, from, targets[0], addable) : undefined;
-      if (converter) {
-        // A lone registered conversion (e.g. alpha -> number) is inserted in the same undo step.
-        nodeId = insertConversion(clip.id, effect.id, graph, from, targets[0], converter, addable);
-        conversion = { nodeId, operatorId: converter.id };
-      } else try {
-        if (targets.length > 1) editCompositionInput(clip.id, effect.id, targets, from);
-        else actions.connectPorts({ fromNodeId: from.nodeId, fromPortId: from.portId, toNodeId: targets[0].nodeId, toPortId: targets[0].portId });
-      } catch (error) {
-        throw new Error(`${error instanceof Error ? error.message : String(error)}${conversionHint(graph, from, targets[0], addable)}`);
-      }
+      const cable = connectPublicPorts(clip.id, effect.id, effect.type, graph, text(args, 'fromNodeId'), optionalText(args, 'fromPortId'),
+        text(args, 'toNodeId'), optionalText(args, 'toPortId'));
+      if (cable.insertedConversion) nodeId = cable.insertedConversion.nodeId;
+      extra = { from: cable.from, to: cable.to, ...(cable.insertedConversion ? { insertedConversion: cable.insertedConversion } : {}) };
     } else if (action === 'disconnect') {
       const edgeId = text(args, 'edgeId'); if (!graph.edges.some(e => e.id === edgeId)) throw new Error('Edge not found.'); actions.disconnectEdge(edgeId);
     } else if (action === 'remove') {
@@ -259,20 +276,13 @@ export async function handleEditOperatorGraph(rawArgs: Record<string, unknown>):
       if (typeof args.exposed !== 'boolean') throw new Error('expose requires exposed: true or false.');
       setGraphValueExposed(clip.id, effect.id, node.id, args.exposed, typeof args.label === 'string' ? args.label : undefined);
     } else if (action === 'slider') {
-      const node = existing(); nodeId = node.id;
-      const label = text(args, 'label'), min = args.min as number, max = args.max as number, step = args.step as number;
-      if (node.exposed) {
-        if (label.length > 80 || ![min, max, step].every(Number.isFinite) || min >= max || step <= 0) throw new Error('Slider requires finite min < max and positive step.');
-        editEffectGraph(clip.id, effect.id, 'Configure exposed value', next => { next.nodes.find(n => n.id === node.id)!.exposed = { label, min, max, step }; });
-        const updated = graphOwner(args).graph;
-        return { success: true, data: { clipId: clip.id, effectId: effect.id, action, nodeId, ...renamedField(renamed), incomplete: updated.incomplete ?? null, nodeCount: updated.nodes.length, edgeCount: updated.edges.length } };
-      }
-      if (!['values.number', 'values.integer'].includes(node.operator) || node.bindings.value || label.length > 80
-        || ![min, max, step].every(Number.isFinite) || min >= max || step <= 0
-        || typeof node.constants?.value !== 'number' || node.constants.value < min || node.constants.value > max) throw new Error('Slider requires a local numeric value within finite min < max and positive step.');
-      editEffectGraph(clip.id, effect.id, 'Configure value slider', next => { next.nodes.find(n => n.id === node.id)!.valueControl = { label, min, max, step }; });
+      nodeId = existing().id;
+      text(args, 'label');
+      configureSlider(context, nodeId, args);
     } else throw new Error('Unknown graph action.');
     const updated = graphOwner(args).graph;
-    return { success: true, data: { clipId: clip.id, effectId: effect.id, action, ...(nodeId ? { nodeId } : {}), ...(conversion ? { insertedConversion: conversion } : {}), ...renamedField(renamed), incomplete: updated.incomplete ?? null, nodeCount: updated.nodes.length, edgeCount: updated.edges.length } };
+    succeeded = true;
+    return { success: true, data: { clipId: clip.id, effectId: effect.id, action, ...(nodeId ? { nodeId } : {}), ...extra, ...renamedField(renamed), incomplete: updated.incomplete ?? null, nodeCount: updated.nodes.length, edgeCount: updated.edges.length } };
   } catch (error) { return failure(error); }
+  finally { if (batch?.opened) { if (succeeded) endBatch(); else cancelHistoryBatch(); } }
 }

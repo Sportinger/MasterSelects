@@ -57,6 +57,13 @@ describe('FlashBoard Codex Direct path', () => {
       result: { success: true, data: { definitions: [{ id: 'control:control.time', parameters: [{ id: 'basis', default: 'clip' }] }] } },
     }])).toBe(answer);
   });
+  it('does not treat prose words like "to" as requested graph result fields', () => {
+    const response = buildDirectCodexVerifiedResponse('use basic nodes to make a color key', 'Built the key.', [
+      { toolCall: { id: 'edit', name: 'editOperatorGraph', arguments: '{}' },
+        result: { success: true, data: { edges: [{ from: 'frame', to: 'output' }] } } },
+    ]);
+    expect(response).not.toContain('to: output');
+  });
   it('preserves an inspected graph focus answer instead of reporting an unrelated nested clip ID', () => {
     const answer = 'Video clip-a is selected; Nodes is next to Preview.';
     expect(buildDirectCodexVerifiedResponse('Open the video clip node panel.', answer, [

@@ -3,6 +3,9 @@ import type { ToolDefinition } from '../types';
 const id = { type: 'string', minLength: 1, maxLength: 200 };
 /** Node IDs start with a letter and use letters, digits, _ and - (no dots); `@compound-<id>` handles are accepted. */
 const nodeRef = { type: 'string', minLength: 1, maxLength: 200, pattern: '^@?[A-Za-z0-9_-]+$' };
+/** `node` or `node.port`; the last dot separates the port. */
+const sourceRef = { type: 'string', minLength: 1, maxLength: 200 };
+const value = { anyOf: [{ type: 'number' }, { type: 'boolean' }, { type: 'string' }, { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 4 }] };
 const position = { type: 'object', additionalProperties: false, properties: { x: { type: 'number' }, y: { type: 'number' } }, required: ['x', 'y'] };
 export const operatorGraphToolDefinitions: ToolDefinition[] = [
   { type: 'function', function: { name: 'createImageNodeGraph',
@@ -16,13 +19,28 @@ export const operatorGraphToolDefinitions: ToolDefinition[] = [
       direction: { type: 'string', enum: ['upstream', 'downstream', 'both'] },
     }, required: ['clipId'] } } },
   { type: 'function', function: { name: 'editOperatorGraph',
-    description: 'Perform ONE undoable atomic edit in an effect-owned operator graph. add uses operatorId from the supplied node catalog and returns nodeId; set uses nodeId, parameter and value; connect uses fromNodeId/fromPortId/toNodeId/toPortId and replaces an existing single-input cable; disconnect uses edgeId; remove and move use nodeId; slider configures a values.number/integer node with label, min, max, step (for an exposed node it sets the Effects tab row range); expose with nodeId and exposed true/false toggles whether a values.number/integer node appears as a keyframeable parameter row (optional label) in the clip Effects tab, and its keyframes then drive the node output; add with exposed true exposes the new value node immediately. Explicit caller-chosen nodeId is optional for add (start with a letter; only letters, digits, _ and -, no dots), allowing streamed later references; this includes compound nodes, whose public input/output port IDs (from getNodeDefinitions) are used directly with the compound nodeId in connect. Intermediate incomplete wiring is saved and paused until repaired; inspect incomplete in results. Existing tools remain available.',
+    description: 'Perform ONE undoable atomic edit in an effect-owned operator graph. Build in dataflow order: '
+      + 'add each node together with its wiring and values, so it only references nodes that already exist. '
+      + 'add uses operatorId from the supplied node catalog and returns nodeId, connected cables and openInputs; optional inputs wires sources into the new node in the same step, '
+      + 'either as { targetPortId: "sourceNodeId" | "sourceNodeId.outputPortId" } or as an ordered list of sources that fill the first free compatible inputs; '
+      + 'a source port may be omitted when the source has one output or exactly one output fits. params sets parameter values ({ value: 0.2 }); min, max, step (and label) configure a values.number/integer slider. '
+      + 'Without position, a node with inputs is placed right of its sources. The whole add changes nothing when any part fails. '
+      + 'set uses nodeId, parameter and value; connect uses fromNodeId/toNodeId (fromPortId/toPortId optional with the same inference; a missing toPortId takes the first free compatible input) and replaces an existing single-input cable, for later rewiring and feedback; '
+      + 'disconnect uses edgeId; remove and move use nodeId; slider configures a values.number/integer node with label, min, max, step (for an exposed node it sets the Effects tab row range); '
+      + 'expose with nodeId and exposed true/false toggles whether a values.number/integer node appears as a keyframeable parameter row (optional label) in the clip Effects tab, and its keyframes then drive the node output; add with exposed true exposes the new value node immediately. '
+      + 'Explicit caller-chosen nodeId is optional for add (start with a letter; only letters, digits, _ and -, no dots), allowing streamed later references; this includes compound nodes, whose public input/output port IDs (from getNodeDefinitions) are used directly with the compound nodeId. '
+      + 'Intermediate incomplete wiring is saved and paused until repaired; inspect incomplete in results. Existing tools remain available.',
     parameters: { type: 'object', additionalProperties: false, properties: {
       clipId: id, effectId: id, action: { type: 'string', enum: ['add', 'set', 'connect', 'disconnect', 'remove', 'move', 'slider', 'expose'] },
       exposed: { type: 'boolean' },
       nodeId: nodeRef, operatorId: id, parameter: id,
-      value: { anyOf: [{ type: 'number' }, { type: 'boolean' }, { type: 'string' }, { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 4 }] },
+      value,
       position, fromNodeId: nodeRef, fromPortId: id, toNodeId: nodeRef, toPortId: id, edgeId: id,
       label: { type: 'string', minLength: 1, maxLength: 80 }, min: { type: 'number' }, max: { type: 'number' }, step: { type: 'number', exclusiveMinimum: 0 },
+      inputs: { anyOf: [
+        { type: 'object', minProperties: 1, maxProperties: 16, additionalProperties: sourceRef },
+        { type: 'array', minItems: 1, maxItems: 16, items: sourceRef },
+      ] },
+      params: { type: 'object', additionalProperties: value },
     }, required: ['clipId', 'effectId', 'action'] } } },
 ];

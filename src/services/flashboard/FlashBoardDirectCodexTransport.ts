@@ -233,6 +233,9 @@ function summarizeDirectToolCounts(toolNames: readonly string[]): string {
   return [...counts].map(([name, count]) => `${name} ×${count}`).join(', ');
 }
 
+const GENERIC_RESULT_FIELDS: ReadonlySet<string> = new Set(['to', 'from', 'id', 'type', 'input', 'output', 'value', 'action', 'success']);
+const promptMentionsWord = (text: string, word: string) => text.split(/[^a-z0-9_]+/).includes(word);
+
 export function buildDirectCodexVerifiedResponse(
   prompt: string,
   modelResponse: string,
@@ -252,8 +255,9 @@ export function buildDirectCodexVerifiedResponse(
     if (call.result.success) collectDirectNamedResultFields(call.result.data, availableFields);
   }
   const promptLower = prompt.toLowerCase();
+  // Whole words only: graph edges carry `to`/`from` fields that prose like "nodes to make" must not select.
   const requestedFields = [...availableFields.entries()]
-    .filter(([lowerKey]) => promptLower.includes(lowerKey))
+    .filter(([lowerKey]) => !GENERIC_RESULT_FIELDS.has(lowerKey) && promptMentionsWord(promptLower, lowerKey))
     .map(([lowerKey, field]) => ({
       ...field,
       position: promptLower.indexOf(lowerKey),
