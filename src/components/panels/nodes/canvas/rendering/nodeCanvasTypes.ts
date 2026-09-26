@@ -7,7 +7,8 @@ import type { NodeCableStyle } from '../../../../../types/nodeGraph';
 // Only drawing data crosses the worker boundary, never graph params or media handles.
 export interface Point { x: number; y: number }
 export interface Rect extends Point { width: number; height: number }
-export interface CanvasView { zoom: number; panX: number; panY: number; width: number; height: number; ratio: number; moving?: boolean }
+/** inset: CSS pixels of overscan padding on every edge around the visible viewport. */
+export interface CanvasView { zoom: number; panX: number; panY: number; width: number; height: number; ratio: number; moving?: boolean; inset?: number }
 export interface CanvasTheme { background: string; card: string; text: string; muted: string; border: string; accent: string }
 export interface CanvasPort extends Point { id?: string; label: string; type: string; color: string; input: boolean; highlighted?: boolean }
 export interface CanvasCurve extends Rect {
@@ -64,7 +65,8 @@ export type CanvasMessage =
 
 /** Pixels and their coordinate system are presented together on the main thread. */
 export type CanvasWorkerReply =
-  | { type: 'frame'; bitmap: ImageBitmap; revision?: number }
+  /** Unchanged layers are omitted; null clears a viewport-sized preview or animation layer. */
+  | { type: 'frame'; bitmap?: ImageBitmap; previews?: ImageBitmap | null; overlay?: ImageBitmap | null; revision?: number }
   | { type: 'failed' }
   | { type: 'previews-ready'; batchId: number; previewCount: number | undefined }
   | { type: 'previews-evicted'; keys: string[] }

@@ -55,6 +55,8 @@ export class NodeCanvasPainter {
   private previews?: NodePreviewPainter;
   private previewContext?: DrawContext;
   readonly timings = { baseMs: 0, overlayMs: 0, previewMs: 0 };
+  /** Layers repainted by the last draw; presenters only resend changed pixels. */
+  readonly changed = { base: false, previews: false, overlay: false };
   private cards = new NodeCardSprites();
   private hoveredEdgeId: string | null = null;
   private drag: CanvasNodeDrag | undefined;
@@ -105,6 +107,9 @@ export class NodeCanvasPainter {
   }
   get animated() { return this.transport.visible && !this.transport.reducedMotion
     && (this.transport.active || this.sceneMotion.active || this.flowClock.fading(performance.now())); }
+  get playing() { return this.transport.playing; }
+  get viewInset() { return this.view?.inset; }
+  get viewRatio() { return this.view?.ratio ?? 1; }
   get viewRevision() { return this.renderedViewRevision; }
   get layoutMoving() { return this.sceneMotion.active; }
   get previewCount() { return this.previews?.size ?? 0; }
@@ -121,6 +126,7 @@ export class NodeCanvasPainter {
       this.previews?.invalidate();
     }
     const start = import.meta.env.DEV ? performance.now() : 0;
+    this.changed.base = this.baseDirty; this.changed.previews = false; this.changed.overlay = false;
     if (this.baseDirty) {
       const view = this.view, theme = this.theme, pixelScale = view.zoom * view.ratio;
       paintBase(this.base, paintScene, view, theme, moving,
@@ -132,10 +138,10 @@ export class NodeCanvasPainter {
     if (this.overlayDirty || this.animated || (moving && this.hoveredEdgeId)) {
       paintOverlay(this.overlay, moving ? paintScene : scene, this.view, this.theme, this.transport, now, this.curveActivity, this.flowClock.advance(now), this.hoveredEdgeId,
         this.flowClock.level(now));
-      this.overlayDirty = false;
+      this.overlayDirty = false; this.changed.overlay = true;
     }
     const overlayEnd = import.meta.env.DEV ? performance.now() : 0;
-    this.previews?.draw(paintScene, this.view);
+    if (this.previews?.draw(paintScene, this.view)) this.changed.previews = true;
     if (import.meta.env.DEV) {
       this.timings.baseMs = baseEnd - start; this.timings.overlayMs = overlayEnd - baseEnd; this.timings.previewMs = performance.now() - overlayEnd;
     }

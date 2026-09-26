@@ -24,7 +24,7 @@ import type {
 } from '../../../services/nodeGraph';
 import { NodeGraphEdges } from './canvas/NodeGraphEdges';
 import { NodeGraphNodeCard } from './canvas/NodeGraphNodeCard';
-import { NodeCableAvoidButton, NodeCableStyleButton } from './canvas/NodeCableStyleButton';
+import { NodeCableAvoidButton, NodeCableStyleButton, NodePlaybackSignalsButton } from './canvas/NodeCableStyleButton';
 import { NodeCompactLayoutButton } from './canvas/NodeCompactLayoutButton';
 import { useCableAvoidance } from './canvas/useCableAvoidance';
 import { parallelAngularLanes } from './canvas/parallelAngularLanes';
@@ -418,7 +418,7 @@ export function NodeGraphCanvas({
               toggleGlobal(sourceGraph.nodes.map(node => nodePreviewPreferenceKey(sourceGraph.owner.id, node)));
               if (event.detail > 0) event.currentTarget.blur();
             }}>Previews</button>
-          <NodeCableStyleButton /><NodeCableAvoidButton />
+          <NodePlaybackSignalsButton /><NodeCableStyleButton /><NodeCableAvoidButton />
           <NodeCompactLayoutButton enabled={placement.compactEffects !== false} onToggle={toggleCompact} />
           {selectedEdge && !selectedEdge.readOnly && <button type="button" className="node-workspace-toolbar-button" onClick={disconnectSelectedEdge}>Disconnect</button>}
           <button type="button" className="node-workspace-toolbar-button" onClick={event => { fitGraph(); if (event.detail > 0) event.currentTarget.blur(); }}>Fit</button>

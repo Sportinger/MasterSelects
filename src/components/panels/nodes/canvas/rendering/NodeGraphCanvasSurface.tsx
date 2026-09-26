@@ -38,7 +38,7 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
     hoveredEdgeId: null, hoveredPort, draft, clips, keyframes, sourceTime, canBypass, groupFrameNodes, groupBounds, glideMs, cableStyle, cables, edgeRoots, branches }),
   [graph, nodes, groupFrameNodes, groupBounds, plugs, selection, selectedNodeId, selectedEdgeId, hoveredPort, draft, clips, keyframes, sourceTime, canBypass, glideMs, cableStyle, cables, edgeRoots, branches]);
   const sceneRef = useRef(scene); sceneRef.current = scene;
-  const previewSource = useRef({ clipId: graph.owner.id, nodes, selectedNodeId, expanded: graph.expandedNodes }); previewSource.current = { clipId: graph.owner.id, nodes, selectedNodeId, expanded: graph.expandedNodes };
+  const previewSource = useRef({ clipId: graph.owner.id, nodes, selectedNodeId, expanded: graph.expandedNodes, edges: graph.edges }); previewSource.current = { clipId: graph.owner.id, nodes, selectedNodeId, expanded: graph.expandedNodes, edges: graph.edges };
   const viewportRef = useRef(viewport); viewportRef.current = viewport;
   const refreshRef = useRef<() => void>(() => {});
   const viewRef = useRef<() => void>(() => {});
@@ -68,7 +68,7 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
       return true;
     };
     previews.suspend(suspendedRef.current);
-    previews.scene(previewSource.current.clipId, previewSource.current.nodes, previewSource.current.selectedNodeId, previewSource.current.expanded);
+    previews.scene(previewSource.current.clipId, previewSource.current.nodes, previewSource.current.selectedNodeId, previewSource.current.expanded, previewSource.current.edges);
     const motion = matchMedia('(prefers-reduced-motion: reduce)');
     let visible = true, fade: ReturnType<typeof setTimeout> | undefined, frame: number | undefined;
     let lastPosition = readTimelineRuntimeState(useTimelineStore).playheadPosition, scrubUntil = 0;
@@ -82,8 +82,9 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
         const clip = state.clips.find(c => c.id === curve.clipId);
         if (clip) sourceTimes[clip.id] = clipLocalToKeyframeTime(clip, curve.property, Math.max(0, Math.min(clip.duration, state.playheadPosition - clip.startTime)), state.getSourceTimeForClip);
       }
+      const signals = useSettingsStore.getState().nodePlaybackSignals !== false;
       renderer.update({ type: 'transport', transport: { playhead: state.playheadPosition, playing: state.isPlaying,
-        active: state.isPlaying || performance.now() < scrubUntil, visible: visible && !document.hidden, reducedMotion: motion.matches, sourceTimes,
+        active: (state.isPlaying && signals) || performance.now() < scrubUntil, visible: visible && !document.hidden, reducedMotion: motion.matches, sourceTimes,
         playbackSpeed: state.playbackSpeed, timestamp: performance.now() } });
     };
     const queueTransport = () => { if (frame === undefined) frame = requestAnimationFrame(transport); };
@@ -126,10 +127,11 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
       lastPosition = state.playheadPosition;
       if ((visible && !document.hidden) || state.isPlaying !== before.isPlaying) queueTransport();
     });
+    const unsubscribeSignals = useSettingsStore.subscribe((state, before) => { if (state.nodePlaybackSignals !== before.nodePlaybackSignals) queueTransport(); });
     document.addEventListener('visibilitychange', queueTransport); motion.addEventListener('change', queueTransport);
     window.addEventListener('resize', measure);
     return () => {
-      unsubscribe(); resize?.disconnect(); intersection?.disconnect(); themeObserver.disconnect(); clearTimeout(fade); clearTimeout(heldDrag);
+      unsubscribe(); unsubscribeSignals(); resize?.disconnect(); intersection?.disconnect(); themeObserver.disconnect(); clearTimeout(fade); clearTimeout(heldDrag);
       if (frame !== undefined) cancelAnimationFrame(frame);
       document.removeEventListener('visibilitychange', queueTransport); motion.removeEventListener('change', queueTransport);
       window.removeEventListener('resize', measure); previews.dispose(); previewRuntime.current = null; renderer.dispose(); runtime.current = null;
@@ -141,7 +143,7 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
   useLayoutEffect(() => { previewRuntime.current?.suspend(previewsSuspended); }, [previewsSuspended]);
   // Edge hover is drawn on the worker overlay; it never rebuilds or clones the scene.
   useLayoutEffect(() => { runtime.current?.update({ type: 'hover', edgeId: hoveredEdgeId }); }, [hoveredEdgeId]);
-  useLayoutEffect(() => { previewRuntime.current?.scene(graph.owner.id, nodes, selectedNodeId, graph.expandedNodes); }, [graph.owner.id, nodes, selectedNodeId, graph.expandedNodes]);
+  useLayoutEffect(() => { previewRuntime.current?.scene(graph.owner.id, nodes, selectedNodeId, graph.expandedNodes, graph.edges); }, [graph.owner.id, nodes, selectedNodeId, graph.expandedNodes, graph.edges]);
   useLayoutEffect(() => { viewRef.current(); }, [viewport, previewsSuspended]);
   return <>
     {/* Group fills are cheap vector rectangles. Keep their full geometry on the

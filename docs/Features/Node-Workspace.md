@@ -554,6 +554,17 @@ expensive processing in the editor's main render path still affects frame time.
 
 The isolated `/tests/browser/node-previews-probe.html` page exercises color stages,
 portrait aspect ratio, toggles and large graphs without modifying an editor project.
+Timeline playback shares the GPU process with the video preview, so the graph
+yields to it while playing. Image viewers share a budget of about 24 renders per
+second across all visible image previews, capped at the idle rates above. Number
+readouts refresh at 10 Hz. Readouts whose value cannot change during playback
+keep their last sample; that includes pure value, math, vector and conversion
+nodes fed only by constants that are not keyframed. The canvas worker draws at
+15 Hz during playback and sends each layer only when it changed: static cards and
+cables with their overscan, then thumbnails and signal flow cropped to the
+viewport. **Signals** in the toolbar hides the dots that flow along cables during
+playback; scrubbing still shows them. The choice is an editor preference.
+
 Append `?software` to exercise main-thread canvas fallback. Unit regressions cover
 scheduling/fairness, resource cleanup, atlas limits, stage geometry and placement.
 

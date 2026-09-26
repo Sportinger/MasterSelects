@@ -14,7 +14,7 @@ export function bufferedCanvasView(view: Omit<CanvasView, 'ratio'>, dpr: number)
   const width = view.width + NODE_CANVAS_OVERSCAN * 2;
   const height = view.height + NODE_CANVAS_OVERSCAN * 2;
   return { ...view, width, height, panX: view.panX + NODE_CANVAS_OVERSCAN,
-    panY: view.panY + NODE_CANVAS_OVERSCAN, ratio: canvasPixelRatio(width, height, dpr) };
+    panY: view.panY + NODE_CANVAS_OVERSCAN, ratio: canvasPixelRatio(width, height, dpr), inset: NODE_CANVAS_OVERSCAN };
 }
 
 /** Present worker pixels and their viewport correction in one main-thread task. */
@@ -116,25 +116,45 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
   try {
     if (prefersSoftwareTimelineCanvas() || typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') { fallback(); }
     else {
+      // Thumbnails and signal flow arrive as their own viewport-sized bitmaps, so
+      // playback updates do not re-upload the static padded surface.
+      const viewportLayer = (name: string) => {
+        const canvas = document.createElement('canvas');
+        canvas.dataset.layer = name; canvas.dataset.inset = 'viewport'; canvas.setAttribute('aria-hidden', 'true');
+        const context = canvas.getContext('bitmaprenderer');
+        if (!context) throw new Error('Bitmap presentation unavailable');
+        return { canvas, context };
+      };
+      const presentLayer = (layer: ReturnType<typeof viewportLayer>, value: ImageBitmap | null | undefined) => {
+        if (value === undefined) return;
+        if (value && layer.canvas.width !== value.width) layer.canvas.width = value.width;
+        if (value && layer.canvas.height !== value.height) layer.canvas.height = value.height;
+        layer.context.transferFromImageBitmap(value);
+      };
       const presenter = base.getContext('bitmaprenderer');
       if (!presenter) throw new Error('Bitmap presentation unavailable');
-      host.replaceChildren(base);
+      const previewLayer = viewportLayer('previews'), animationLayer = viewportLayer('animation');
+      host.replaceChildren(base, previewLayer.canvas, animationLayer.canvas);
       worker = new Worker(new URL('./nodeCanvas.worker.ts', import.meta.url), { type: 'module' });
       const activeWorker = worker;
       worker.onerror = () => { if (!disposed && worker === activeWorker) fallback(); };
       worker.onmessage = (event: MessageEvent<CanvasWorkerReply>) => {
         if (disposed || worker !== activeWorker) {
-          if (event.data.type === 'frame') event.data.bitmap.close();
+          if (event.data.type === 'frame') { event.data.bitmap?.close(); event.data.previews?.close(); event.data.overlay?.close(); }
           return;
         }
         if (event.data.type === 'frame') {
-          const { bitmap, revision } = event.data;
+          const { bitmap, previews: previewBitmap, overlay: animationBitmap, revision } = event.data;
           try {
             // Both operations happen before the browser's next paint. A bare
             // worker acknowledgement cannot guarantee that for transferred DOM canvases.
-            if (base.width !== bitmap.width) base.width = bitmap.width;
-            if (base.height !== bitmap.height) base.height = bitmap.height;
-            presenter.transferFromImageBitmap(bitmap);
+            if (bitmap) {
+              if (base.width !== bitmap.width) base.width = bitmap.width;
+              if (base.height !== bitmap.height) base.height = bitmap.height;
+              presenter.transferFromImageBitmap(bitmap);
+            }
+            presentLayer(previewLayer, previewBitmap);
+            presentLayer(animationLayer, animationBitmap);
             // Dev probes count what the user actually sees, not main-thread ticks.
             if (import.meta.env.DEV) host.dataset.presentedFrames = String(Number(host.dataset.presentedFrames ?? 0) + 1);
             if (revision !== undefined && revision !== reportedViewRevision) {
@@ -143,7 +163,7 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
             markReady();
             activeWorker.postMessage({ type: 'presented' } satisfies CanvasMessage);
           } catch { fallback(); }
-          finally { bitmap.close(); }
+          finally { bitmap?.close(); previewBitmap?.close(); animationBitmap?.close(); }
         }
         if (event.data.type === 'failed') fallback();
         if (event.data.type === 'previews-evicted') onPreviewsEvicted?.(event.data.keys);

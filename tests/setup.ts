@@ -218,7 +218,7 @@ vi.mock('../src/stores/settingsStore', () => ({
       outputResolution: { width: 1920, height: 1080 },
     })),
     setState: vi.fn(),
-    subscribe: vi.fn(),
+    subscribe: vi.fn(() => () => {}),
   }),
 }))
 

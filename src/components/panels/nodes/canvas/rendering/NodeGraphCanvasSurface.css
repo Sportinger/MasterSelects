@@ -4,6 +4,8 @@
 .node-graph-group-backgrounds > div { position: absolute; box-sizing: border-box; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--group-color) 60%, transparent); background: color-mix(in srgb, var(--group-color) 10%, var(--bg-primary, #181818)); }
 /* The stationary workspace clips the padded pixels, not the moving surface. */
 .node-graph-canvas-surface canvas { position: absolute; left: calc(-1 * var(--node-canvas-overscan)); top: calc(-1 * var(--node-canvas-overscan)); width: calc(100% + 2 * var(--node-canvas-overscan)); height: calc(100% + 2 * var(--node-canvas-overscan)); pointer-events: none; }
+/* The worker's animation layer is cropped to the viewport without overscan padding. */
+.node-graph-canvas-surface canvas[data-inset="viewport"] { left: 0; top: 0; width: 100%; height: 100%; }
 /* DOM remains the interaction/accessibility surface; only its paint is replaced. */
 .node-workspace-canvas.canvas-rendered .node-workspace-node { opacity: 0; box-shadow: none; }
 .node-workspace-canvas.canvas-rendered .node-workspace-group { background: transparent; border-color: transparent; box-shadow: none; }

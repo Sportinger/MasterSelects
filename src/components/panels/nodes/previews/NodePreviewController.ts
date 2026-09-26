@@ -1,5 +1,5 @@
 import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
-import type { NodeGraphNode } from '../../../../types/nodeGraph';
+import type { NodeGraphEdge, NodeGraphNode } from '../../../../types/nodeGraph';
 import type { TimelineClip } from '../../../../types/timeline';
 import type { CanvasView } from '../canvas/rendering/nodeCanvasTypes';
 import { useTimelineStore } from '../../../../stores/timeline';
@@ -14,6 +14,7 @@ import { nodePreviewTextureTap } from '../../../../services/nodePreview/NodePrev
 import { isTextPreview, previewTextStore } from '../../../../services/nodePreview/previewTextStore';
 import { nodeScalarSampleTap } from '../../../../services/nodePreview/NodeScalarSampleTap';
 import { scalarPreviewSamples } from '../../../../services/nodePreview/scalarPreviewSamples';
+import { playbackStaticNodes } from './playbackStaticPreviews';
 
 // Fold state, placement and viewer toggles are graph presentation. Writing them
 // replaces the clip object but never changes a rendered or sampled value.
@@ -53,6 +54,9 @@ interface Sink { preview: (frame: PreviewFrame) => void; readonly software: bool
 export class NodePreviewController {
   private scheduler: NodePreviewScheduler;
   private nodes: NodeGraphNode[] = [];
+  private edges: readonly NodeGraphEdge[] = [];
+  /** Readouts that playback cannot change, keyed by the content revision they were derived from. */
+  private staticNodes?: { revision: number; nodes: NodeGraphNode[]; ids: Set<string> };
   private expanded = new Map<string, NodeGraphNode>();
   private view?: CanvasView;
   private clipId = '';
@@ -117,9 +121,10 @@ export class NodePreviewController {
     this.unsubscribeTracking = useLandmarkTrackingStore.subscribe(() => { this.revision++; this.wake(); });
     this.unsubscribeValues = scalarPreviewSamples.subscribe(() => { this.scheduler.invalidateValues(); this.wake(); });
   }
-  scene(clipId: string, nodes: NodeGraphNode[], selected: string | null, expanded?: NodeGraphNode[]) {
+  scene(clipId: string, nodes: NodeGraphNode[], selected: string | null, expanded?: NodeGraphNode[], edges: readonly NodeGraphEdge[] = []) {
     if (this.clipId !== clipId) { this.scheduler.invalidate(); this.revision++; }
-    this.clipId = clipId; this.nodes = nodes; this.selected = selected; this.wake();
+    if (this.edges !== edges) this.staticNodes = undefined;
+    this.clipId = clipId; this.nodes = nodes; this.edges = edges; this.selected = selected; this.wake();
     const retained = new Set(nodes.filter(node => node.preview?.enabled).map(node => node.preview!.key));
     previewTextStore.retain(this, retained);
     for (const key of this.textKeys) if (!retained.has(key)) this.textKeys.delete(key);
@@ -141,6 +146,13 @@ export class NodePreviewController {
     }
     this.wake();
   }
+  private playbackStatic(keyframes: readonly { property: string }[]): Set<string> {
+    const cached = this.staticNodes;
+    if (cached?.revision === this.revision && cached.nodes === this.nodes) return cached.ids;
+    const ids = playbackStaticNodes(this.nodes, this.edges, new Set(keyframes.map(keyframe => keyframe.property)));
+    this.staticNodes = { revision: this.revision, nodes: this.nodes, ids };
+    return ids;
+  }
   reset() { this.textKeys.clear(); this.resolved.clear(); this.scheduler.invalidate(); this.wake(); }
   private wake() {
     // A retry backoff must not delay fresh content such as a seek or an edit.
@@ -155,7 +167,15 @@ export class NodePreviewController {
     if (this.host.dataset.workerMotion === 'true') { this.timer = setTimeout(() => this.tick(), 150); return; }
     const state = readTimelineRuntimeState(useTimelineStore), view = this.view, requests: PreviewRequest[] = [];
     if (view && this.visible && !this.suspended && !document.hidden && !state.isExporting) {
-      const fps = this.sink.software ? 3 : view.zoom < 0.45 ? 5 : 12;
+      // Each thumbnail is a GPU render plus readback that competes with the playing
+      // preview, so playback shares one budget of ~24 image renders per second.
+      const images = state.isPlaying ? this.nodes.filter(node => node.preview?.enabled && !inlineNumericPorts(node) && !this.textKeys.has(node.preview.key)).length : 0;
+      const idleFps = this.sink.software ? 3 : view.zoom < 0.45 ? 5 : 12;
+      const fps = images ? Math.max(1, Math.min(idleFps, 24 / images)) : idleFps;
+      // Value readouts sample the GPU per request; during playback 10 Hz keeps them live
+      // without costing the preview's frame budget.
+      const numericInterval = state.isPlaying ? 100 : 16;
+      const staticIds = state.isPlaying ? this.playbackStatic(state.clipKeyframes.get(this.clipId) ?? []) : undefined;
       // Half-octave buckets: a new tier re-renders at most ~1.4x the needed pixels.
       const needed = 164 * view.zoom * Math.min(1.5, view.ratio);
       const width = Math.max(48, Math.min(256, Math.ceil(2 ** (Math.ceil(Math.log2(Math.max(1, needed)) * 2) / 2))));
@@ -173,7 +193,9 @@ export class NodePreviewController {
         // per seek, and zooming across that threshold must not re-render either.
         const resolved = this.resolved.get(node.preview.key);
         const held = tiny && resolved?.content.startsWith(`${this.revision}:`) ? resolved.content : undefined;
-        const content = held ?? `${this.revision}:${tiny ? 'held' : state.isPlaying ? Math.floor(state.playheadPosition * fps) : state.playheadPosition}`;
+        // Constant readouts keep their sampled value; only live ones follow playback.
+        const frozen = numeric && !inner && staticIds?.has(node.id);
+        const content = held ?? `${this.revision}:${tiny ? 'held' : frozen ? 'static' : state.isPlaying ? Math.floor(state.playheadPosition * fps) : state.playheadPosition}`;
         // Zooming out keeps the sharper cached image; zooming into a higher
         // resolution tier re-renders once instead of magnifying overview pixels.
         const tier = numeric ? width : Math.max(width, resolved?.content === content ? resolved.tier : 0);
@@ -181,7 +203,7 @@ export class NodePreviewController {
         requests.push({ key: node.preview.key, revision: numeric ? content : `${content}@${tier}`,
           continuity: `${this.revision}:${this.continuity}`,
           clipId: this.clipId, node: inner ? { ...inner, preview: node.preview } : node, port: inner ? previewOutput(inner, endpoint?.portId) : port, time: state.playheadPosition, width: tier, height: Math.max(1, Math.min(256, Math.round(tier / (node.preview.aspectRatio ?? 16 / 9)))),
-          numeric, interval: numeric ? 16 : 1000 / fps, priority: node.id === this.selected ? 2 : 0 });
+          numeric, interval: numeric ? numericInterval : 1000 / fps, priority: node.id === this.selected ? 2 : 0 });
       }
     }
     this.scheduler.setRequests(requests);
@@ -193,7 +215,7 @@ export class NodePreviewController {
     }
     if (!requests.length) { this.artifacts.dispose(); nodePreviewTextureTap.cancelClip(this.clipId); }
     if (requests.length && (state.isPlaying || this.scheduler.unsettled)) {
-      const cadence = requests.some(request => request.numeric) ? 16 : this.sink.software ? 100 : state.isPlaying ? 32 : 100;
+      const cadence = requests.some(request => request.numeric) ? (state.isPlaying ? 50 : 16) : this.sink.software ? 100 : state.isPlaying ? 32 : 100;
       const delay = state.isPlaying ? cadence : Math.max(cadence, this.scheduler.nextRetryIn());
       this.backoffTimer = delay > cadence;
       this.timer = setTimeout(() => this.tick(), delay);

@@ -8,6 +8,17 @@ const DESCRIPTIONS = {
   smart: 'Orthogonal cable lanes with rounded corners',
 } as const;
 
+/** Signal dots are decorative; hiding them during playback frees the preview's frame budget. */
+export function NodePlaybackSignalsButton() {
+  const enabled = useSettingsStore(state => state.nodePlaybackSignals);
+  const setEnabled = useSettingsStore(state => state.setNodePlaybackSignals);
+  return <button type="button" className="node-workspace-toolbar-button" aria-pressed={enabled}
+    title={enabled ? 'Signal dots flow along cables during playback. Click to hide them for smoother playback.' : 'Show signal dots flowing along cables during playback'}
+    onClick={event => { setEnabled(!enabled); if (event.detail > 0) event.currentTarget.blur(); }}>
+    Signals
+  </button>;
+}
+
 /** Toggles cables that route around cards; combines with every cable style. */
 export function NodeCableAvoidButton() {
   const enabled = useSettingsStore(state => state.nodeCableAvoid);

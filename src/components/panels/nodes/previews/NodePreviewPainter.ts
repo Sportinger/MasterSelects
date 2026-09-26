@@ -126,8 +126,9 @@ export class NodePreviewPainter {
   /** Keys whose cached pixels were dropped for capacity since the last call. */
   takeEvicted(): string[] { const keys = [...this.evicted]; this.evicted.clear(); return keys; }
 
-  draw(scene: CanvasScene, view: CanvasView) {
-    if (!this.allDirty && !this.dirty.size) return;
+  /** Returns whether any preview pixels changed. */
+  draw(scene: CanvasScene, view: CanvasView): boolean {
+    if (!this.allDirty && !this.dirty.size) return false;
     const ctx = this.context;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (this.allDirty) ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -162,5 +163,6 @@ export class NodePreviewPainter {
       ctx.restore();
     }
     this.allDirty = false; this.dirty.clear();
+    return true;
   }
 }
