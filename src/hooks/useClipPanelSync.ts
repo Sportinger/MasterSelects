@@ -59,6 +59,10 @@ export function useClipPanelSync() {
       return;
     }
 
+    // Agent selections update the inspector target without taking over the dock.
+    // Keep this intent on the selection: an AI call can finish before this effect runs.
+    if (propertiesSelection?.kind === 'clip' && propertiesSelection.revealPanel === false) return;
+
     // The dedicated Color workspace owns its panel arrangement. Selecting a
     // clip there updates the grading target without replacing the workspace
     // with the generic Properties panel.

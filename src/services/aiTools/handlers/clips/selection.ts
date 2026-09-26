@@ -1,5 +1,4 @@
 import type { ToolResult } from '../../types.ts';
-import { activateDockPanel } from '../../aiFeedback';
 import type { TimelineStore } from './runtime';
 
 export async function handleSelectClips(
@@ -7,10 +6,7 @@ export async function handleSelectClips(
   timelineStore: TimelineStore
 ): Promise<ToolResult> {
   const clipIds = args.clipIds as string[];
-  timelineStore.selectClips(clipIds);
-
-  // Visual feedback: activate properties panel
-  activateDockPanel('clip-properties');
+  timelineStore.selectClips(clipIds, { revealProperties: false });
 
   return { success: true, data: { selectedClipIds: clipIds } };
 }

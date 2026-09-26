@@ -31,19 +31,15 @@ export function openPropertiesTab(tab: string): void {
   });
 }
 
-/** Select a clip and open a specific properties tab */
+/** Select a clip and prepare its inspector tab without taking over the visible dock. */
 export function selectClipAndOpenTab(clipId: string, tab: string): void {
   if (!isAIExecutionActive()) return;
   // Selection is part of the editing result and must land before the owning AI
-  // history batch closes. Dock activation can remain lazy, but deferring the
+  // history batch closes. Inspector tab navigation can remain lazy, but deferring the
   // timeline import made redo restore the clips without their final selection.
-  useTimelineStore.getState().selectClips([clipId]);
-  void import('../../stores/dockStore').then(({ FACTORY_START_LAYOUT_ID, useDockStore }) => {
-    if (useDockStore.getState().activeSavedLayoutId === FACTORY_START_LAYOUT_ID) return;
-    useDockStore.getState().activatePanelType('clip-properties');
-    // Small delay so selection propagates before the tab switch.
-    setTimeout(() => openPropertiesTab(tab), 50);
-  });
+  useTimelineStore.getState().selectClips([clipId], { revealProperties: false });
+  // Small delay so selection propagates before the inspector's own tab switch.
+  setTimeout(() => openPropertiesTab(tab), 50);
 }
 
 /** Flash the preview canvas with a brief overlay effect */

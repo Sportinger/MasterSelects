@@ -78,7 +78,7 @@ export interface ExportActions {
 
 export interface SelectionActions {
   selectClip: (id: string | null, addToSelection?: boolean, setPrimaryOnly?: boolean) => void;
-  selectClips: (ids: string[]) => void;
+  selectClips: (ids: string[], options?: { revealProperties?: boolean }) => void;
   addClipToSelection: (id: string) => void;
   removeClipFromSelection: (id: string) => void;
   clearClipSelection: () => void;

@@ -31,7 +31,7 @@ describe('focusNodeGraph', () => {
       expect(findPanelAndGroup(root, 'node-workspace')?.groupId).toBe('preview');
       expect(preview.panels.find(p => p.type === 'node-workspace')?.data).toMatchObject({ nodeClipId: 'clip-a' });
     }
-    expect(timeline.selectClips).toHaveBeenLastCalledWith(['clip-a']);
+    expect(timeline.selectClips).toHaveBeenLastCalledWith(['clip-a'], { revealProperties: false });
     expect(useNodeWorkspaceNavigation.getState().request).toMatchObject({ clipId: 'clip-a', theme: 'general', panelId: 'nodes-panel' });
   });
   it('creates a missing Nodes tab in the Preview group', async () => {
@@ -45,21 +45,20 @@ describe('focusNodeGraph', () => {
     expect((await handleFocusNodeGraph({ clipId: 'clip-a' })).success).toBe(false);
     expect(timeline.selectClips).not.toHaveBeenCalled();
   });
-  it('reuses an existing pinned Nodes tab for the working clip and brings it forward', async () => {
+  it('reuses a visible detached Nodes panel without moving docked tabs', async () => {
     useDockStore.getState().updatePanelData('nodes-panel', { nodeClipId: 'clip-other' });
     const detached = { id: 'window', returnGroupId: null, panel: { id: 'detached', type: 'node-workspace' as const, title: 'Nodes' } };
     useDockStore.setState({ browserWindowPanels: [detached], maximizedPanelId: 'chat-panel' });
     expect((await handleFocusNodeGraph({ clipId: 'clip-a' })).success).toBe(true);
     const state = useDockStore.getState();
-    expect(findTabGroupById(state.layout.root, 'chat')?.panels.map(p => p.id)).toEqual(['chat-panel']);
+    expect(findTabGroupById(state.layout.root, 'chat')?.panels.map(p => p.id)).toEqual(['chat-panel', 'nodes-panel']);
     const preview = findTabGroupById(state.layout.root, 'preview')!;
-    expect(preview.panels.map(p => p.id)).toEqual(['preview-panel', 'nodes-panel']);
-    expect(preview.panels[preview.activeIndex].id).toBe('nodes-panel');
-    expect(preview.panels[preview.activeIndex].data).toMatchObject({ nodeClipId: 'clip-a' });
-    expect(state.maximizedPanelId).toBeNull();
-    expect(state.browserWindowPanels).toEqual([detached]);
+    expect(preview.panels.map(p => p.id)).toEqual(['preview-panel']);
+    expect(state.maximizedPanelId).toBe('chat-panel');
+    expect(state.browserWindowPanels[0].panel.data).toMatchObject({ nodeClipId: 'clip-a' });
+    expect(timeline.selectClips).toHaveBeenLastCalledWith(['clip-a'], { revealProperties: false });
   });
-  it('prefers an already matching Nodes tab over one pinned beside Preview', async () => {
+  it('reuses visible Nodes beside Preview instead of moving a hidden matching tab', async () => {
     useDockStore.getState().updatePanelData('nodes-panel', { nodeClipId: 'clip-a' });
     useDockStore.getState().addPanelTypeToGroup('node-workspace', 'preview');
     const before = findTabGroupById(useDockStore.getState().layout.root, 'preview')!;
@@ -67,8 +66,9 @@ describe('focusNodeGraph', () => {
     useDockStore.getState().updatePanelData(other.id, { nodeClipId: 'clip-other' });
     expect((await handleFocusNodeGraph({ clipId: 'clip-a' })).success).toBe(true);
     const preview = findTabGroupById(useDockStore.getState().layout.root, 'preview')!;
-    expect(preview.panels[preview.activeIndex].id).toBe('nodes-panel');
-    expect(preview.panels.find(panel => panel.id === other.id)?.data).toMatchObject({ nodeClipId: 'clip-other' });
+    expect(preview.panels[preview.activeIndex].id).toBe(other.id);
+    expect(preview.panels.find(panel => panel.id === other.id)?.data).toMatchObject({ nodeClipId: 'clip-a' });
+    expect(findTabGroupById(useDockStore.getState().layout.root, 'chat')?.panels.map(panel => panel.id)).toEqual(['chat-panel', 'nodes-panel']);
   });
   it('creates a Preview group partner when Preview was closed', async () => {
     useDockStore.getState().closePanel('preview-panel', 'preview');

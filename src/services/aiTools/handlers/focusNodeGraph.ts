@@ -49,7 +49,7 @@ export async function handleFocusNodeGraph(args: Record<string, unknown>): Promi
   const visible = preferredPanel(visibleNodePanels(), clip.id);
   if (visible) {
     dock.updatePanelData(visible.id, { nodeClipId: clip.id });
-    useTimelineStore.getState().selectClips([clip.id]);
+    useTimelineStore.getState().selectClips([clip.id], { revealProperties: false });
     requestNodeWorkspaceView(clip.id, 'general', visible.id);
     return { success: true, data: { clipId: clip.id, selectedClipIds: [clip.id], panel: 'node-workspace', panelId: visible.id, pinnedClipId: clip.id, reusedVisiblePanel: true, view: 'general' } };
   }
@@ -81,7 +81,7 @@ export async function handleFocusNodeGraph(args: Record<string, unknown>): Promi
   const panel = preferredPanel(group.panels, clip.id);
   if (!panel) return { success: false, error: 'Could not create the clip-bound Nodes panel.' };
   useDockStore.getState().updatePanelData(panel.id, { nodeClipId: clip.id });
-  useTimelineStore.getState().selectClips([clip.id]);
+  useTimelineStore.getState().selectClips([clip.id], { revealProperties: false });
   requestNodeWorkspaceView(clip.id, 'general', panel.id);
   useDockStore.getState().setMaximizedPanel(null);
   useDockStore.getState().setActiveTab(preview.groupId, group.panels.findIndex(candidate => candidate.id === panel.id));

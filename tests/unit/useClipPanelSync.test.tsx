@@ -12,6 +12,9 @@ import {
   releaseExclusiveTimelineMutationLease,
 } from '../../src/stores/timeline/exclusiveMutationLease';
 import type { TimelineClip } from '../../src/types/timeline';
+import { handleSelectClips } from '../../src/services/aiTools/handlers/clips/selection';
+import { selectClipAndOpenTab } from '../../src/services/aiTools/aiFeedback';
+import { setAIExecutionActive } from '../../src/services/aiTools/executionState';
 
 const initialTimelineState = useTimelineStore.getState();
 const initialDockState = useDockStore.getState();
@@ -27,6 +30,8 @@ function seedSelectedClip(): void {
 describe('useClipPanelSync', () => {
   afterEach(() => {
     cleanup();
+    setAIExecutionActive(false);
+    vi.useRealTimers();
     vi.restoreAllMocks();
     useTimelineStore.setState(initialTimelineState);
     useDockStore.setState({
@@ -60,6 +65,46 @@ describe('useClipPanelSync', () => {
 
     expect(activatePanelType).toHaveBeenCalledOnce();
     expect(activatePanelType).toHaveBeenCalledWith('clip-properties');
+  });
+
+  it.each(['native', 'bridge', 'off'] as const)('keeps the current panel for %s agent selection even after execution ends', async mode => {
+    seedSelectedClip();
+    const activate = vi.spyOn(useDockStore.getState(), 'activatePanelType').mockImplementation(() => undefined);
+    renderHook(() => useClipPanelSync());
+    activate.mockClear();
+    await act(async () => {
+      setAIExecutionActive(true, mode);
+      await handleSelectClips({ clipIds: ['selected-clip'] }, useTimelineStore.getState());
+      setAIExecutionActive(false);
+    });
+    expect([...useTimelineStore.getState().selectedClipIds]).toEqual(['selected-clip']);
+    expect(useTimelineStore.getState().propertiesSelection).toMatchObject({ kind: 'clip', clipId: 'selected-clip' });
+    expect(activate).not.toHaveBeenCalled();
+    act(() => useTimelineStore.setState({ clips: [...useTimelineStore.getState().clips] }));
+    expect(activate).not.toHaveBeenCalled();
+    act(() => useTimelineStore.getState().selectClip('selected-clip'));
+    expect(activate).toHaveBeenCalledExactlyOnceWith('clip-properties');
+  });
+
+  it('prepares the agent effect inspector tab without bringing Properties in front', async () => {
+    vi.useFakeTimers();
+    seedSelectedClip();
+    const activate = vi.spyOn(useDockStore.getState(), 'activatePanelType').mockImplementation(() => undefined);
+    const tabRequest = vi.fn();
+    window.addEventListener('openPropertiesTab', tabRequest);
+    try {
+      renderHook(() => useClipPanelSync());
+      activate.mockClear();
+      act(() => {
+        setAIExecutionActive(true);
+        selectClipAndOpenTab('selected-clip', 'effects');
+        setAIExecutionActive(false);
+      });
+      await act(async () => { await vi.runAllTimersAsync(); });
+      expect(tabRequest).toHaveBeenCalledOnce();
+      expect((tabRequest.mock.calls[0][0] as CustomEvent).detail).toEqual({ tab: 'effects' });
+      expect(activate).not.toHaveBeenCalled();
+    } finally { window.removeEventListener('openPropertiesTab', tabRequest); }
   });
 
   it('keeps a restored Color workspace open even without an active layout id', () => {

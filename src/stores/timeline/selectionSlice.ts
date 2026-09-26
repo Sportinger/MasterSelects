@@ -60,11 +60,12 @@ export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) =
     }
   },
 
-  selectClips: (ids) => {
+  selectClips: (ids, options) => {
     set({
       selectedClipIds: new Set(ids),
       primarySelectedClipId: ids.length > 0 ? ids[0] : null,
-      propertiesSelection: ids.length > 0 ? { kind: 'clip', clipId: ids[0] } : null,
+      propertiesSelection: ids.length > 0 ? { kind: 'clip', clipId: ids[0],
+        ...(options?.revealProperties === false ? { revealPanel: false } : {}) } : null,
     });
   },
 

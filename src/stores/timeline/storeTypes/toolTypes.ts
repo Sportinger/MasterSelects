@@ -139,7 +139,7 @@ export type TimelineAudioDisplayMode = 'compact' | 'detailed' | 'spectral';
 export type TimelineTrackFocusMode = 'balanced' | 'audio' | 'video';
 
 export type TimelinePropertiesSelection =
-  | { kind: 'clip'; clipId: string }
+  | { kind: 'clip'; clipId: string; revealPanel?: boolean }
   | { kind: 'transition'; clipId: string; edge: 'in' | 'out'; transitionId: string }
   | { kind: 'track'; trackId: string }
   | { kind: 'master' }
