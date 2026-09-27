@@ -1,5 +1,6 @@
 import { FLOCK_WGSL_STRUCTS, FLOCK_WGSL_MATH } from './flockWgslShared';
 import { FLOCK_FLUID_REGULARIZATION_WGSL } from './flockFluidRegularizationWgsl';
+import { FLOCK_FLUID_TRANSFER_BOUNDS_WGSL } from './flockFluidTransferBoundsWgsl';
 import { flockIdentityWgsl } from './flockIdentityWgsl';
 
 /**
@@ -13,6 +14,8 @@ import { flockIdentityWgsl } from './flockIdentityWgsl';
  * nx*(ny+1)*nz, then W faces nx*ny*(nz+1). `acc` holds fixed-point velocity
  * sums [0, nF) and weights [nF, 2nF). `faces` holds projected velocity
  * [0, nF), validity [nF, 2nF), and a matching pair of extrapolation scratch arrays.
+ * `counts` holds liquid occupancy, transfer occupancy, and three unsigned
+ * float-bit velocity bounds (five cell-sized sections).
  * `cells` holds divergence [0, nC) and pressure [nC, 2nC).
  * Mirrors engine/flock/cpu/flockCpuFluid.ts.
  */
@@ -110,6 +113,7 @@ fn fluidIndex(gid: vec3u) -> u32 { return gid.x + gid.y * fp.dispatchWidth; }
 
 export const FLOCK_FLUID_WGSL = /* wgsl */ `
 ${FLOCK_FLUID_COMMON_WGSL}
+${FLOCK_FLUID_TRANSFER_BOUNDS_WGSL}
 
 @compute @workgroup_size(${FLOCK_FLUID_WORKGROUP})
 fn fluidClear(@builtin(global_invocation_id) gid: vec3u) {
@@ -117,8 +121,8 @@ fn fluidClear(@builtin(global_invocation_id) gid: vec3u) {
   let nF = totalFaces();
   if (i < nF * 2u) { atomicStore(&acc[i], 0); }
   let nC = cellCountTotal();
+  if (i < nC * 5u) { atomicStore(&counts[i], 0u); }
   if (i < nC) {
-    atomicStore(&counts[i], 0u);
     cells[i] = 0.0;
     cells[nC + i] = 0.0;
   }
@@ -130,9 +134,6 @@ fn fluidP2G(@builtin(global_invocation_id) gid: vec3u) {
   if (index >= fp.count) { return; }
   let p = particles[index];
   if (p.age < 0.0) { return; }
-  let g = (p.pos - fp.origin) / fp.cellSize;
-  let cell = vec3i(floor(g));
-  if (inCells(cell)) { atomicAdd(&counts[cellIndex(vec3u(cell))], 1u); }
   let nF = totalFaces();
   for (var axis = 0u; axis < 3u; axis++) {
     let row = affineRow(particleIdentity(index), axis, p.age);
@@ -149,8 +150,8 @@ fn fluidP2G(@builtin(global_invocation_id) gid: vec3u) {
       if (w <= 0.0) { continue; }
       let fi = faceIndex(axis, vec3u(c));
       let velocity = p.vel[axis] + dot(row, (vec3f(o) - f) * fp.cellSize);
-      atomicAdd(&acc[fi], i32(round(velocity * w * VS)));
-      atomicAdd(&acc[nF + fi], i32(round(w * WS)));
+      atomicAdd(&acc[fi], i32(round(velocity * w * faces[2u * nF + fi])));
+      atomicAdd(&acc[nF + fi], i32(round(w * faces[3u * nF + fi])));
     }
   }
 }
@@ -180,13 +181,13 @@ fn fluidNormalize(@builtin(global_invocation_id) gid: vec3u) {
   let nF = totalFaces();
   if (f >= nF) { return; }
   let face = decodeFace(f);
-  let weight = f32(atomicLoad(&acc[nF + f])) / WS;
+  let weight = f32(atomicLoad(&acc[nF + f])) / faces[3u * nF + f];
   var value = 0.0;
   var valid = 0.0;
   if (isWallFace(face)) {
     valid = 1.0;
   } else if (weight > 1e-6) {
-    value = (f32(atomicLoad(&acc[f])) / VS) / weight;
+    value = (f32(atomicLoad(&acc[f])) / faces[2u * nF + f]) / weight;
     valid = 1.0;
   }
   faces[f] = value;

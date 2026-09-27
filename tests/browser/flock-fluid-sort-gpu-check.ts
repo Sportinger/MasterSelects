@@ -1,3 +1,4 @@
+import { checkFluidOverflow } from './flock-fluid-overflow-gpu-check';
 import { FlockRadixSort } from '../../src/engine/flock/gpu/FlockRadixSort';
 import { FlockFluidGrid } from '../../src/engine/flock/gpu/FlockFluidGrid';
 import { FlockParticleOrder } from '../../src/engine/flock/gpu/FlockParticleOrder';
@@ -89,6 +90,7 @@ async function check() {
     cases.push(await checkOrderedSessions(device));
     cases.push(await checkGpuCheckpoints(device));
     cases.push(await checkApicTransfer(device));
+    cases.push(await checkFluidOverflow(device));
     cases.push(await checkNeighborLayouts(device));
     await device.queue.onSubmittedWorkDone();
     if (errors.length) throw new Error(errors.join('\n'));

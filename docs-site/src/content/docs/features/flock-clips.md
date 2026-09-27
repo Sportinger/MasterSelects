@@ -345,6 +345,13 @@ from the dispatched row width, so partial final rows preserve identity and do
 not revisit earlier particles. Fluid transfer and radix ordering already use
 two-dimensional dispatch. This removes the one-row dispatch constraint without
 raising the configured population ceiling or bypassing storage-binding limits.
+GPU particle-to-grid transfers select power-of-two fixed-point scales per grid
+face from current local particle counts and conservative velocity bounds,
+including the affine contribution. Dense piles and fast motion therefore retain
+signed sums without int32 wraparound. Both direct and workgroup transfers use the
+same scales; ordinary low-density transfers retain the original precision. Bounds
+use 16 extra bytes per grid cell and reuse existing face scratch for scales.
+
 Affine Strength replaces the former FLIP Ratio; existing fluid nodes now use APIC, and older
 simulation caches are invalidated. The affine matrix remains in identity order
 through particle sorting, is reset on respawn/restart, and is included in CPU/GPU

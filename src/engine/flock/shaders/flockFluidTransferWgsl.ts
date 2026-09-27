@@ -37,8 +37,6 @@ fn fluidP2GBlock(@builtin(global_invocation_id) gid: vec3u, @builtin(local_invoc
   if (index < fp.count) {
     let p = particles[index];
     if (p.age >= 0.0) {
-      let cell = vec3i(floor((p.pos - fp.origin) / fp.cellSize));
-      if (inCells(cell)) { atomicAdd(&counts[cellIndex(vec3u(cell))], 1u); }
       for (var axis = 0u; axis < 3u; axis++) {
         let row = affineRow(particleIdentity(index), axis, p.age);
         let s = sampleCoord(p.pos, axis);
@@ -52,7 +50,11 @@ fn fluidP2GBlock(@builtin(global_invocation_id) gid: vec3u, @builtin(local_invoc
           let wv = mix(1.0 - f, f, vec3f(o));
           let w = wv.x * wv.y * wv.z;
           let velocity = p.vel[axis] + dot(row, (vec3f(o) - f) * fp.cellSize);
-          if (w > 0.0) { addFace(faceIndex(axis, vec3u(c)), i32(round(velocity * w * VS)), i32(round(w * WS))); }
+          if (w > 0.0) {
+            let fi = faceIndex(axis, vec3u(c));
+            let nF = totalFaces();
+            addFace(fi, i32(round(velocity * w * faces[2u * nF + fi])), i32(round(w * faces[3u * nF + fi])));
+          }
         }
       }
     }

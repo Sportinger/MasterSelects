@@ -68,10 +68,10 @@ export function estimateFlockSessionBuffers(program: FlockProgram): { largestBin
   const fluidFaces = (nx + 1) * ny * nz + nx * (ny + 1) * nz + nx * ny * (nz + 1);
   const fluidCells = nx * ny * nz;
   const pressure = program.fluid ? flockPressureMemory(program.fluid.dims) : { total: 0, largestBinding: 0 };
-  const fluidBytes = program.fluid ? program.capacity * FLOCK_AFFINE_BYTES + fluidFaces * 24 + fluidCells * 20
+  const fluidBytes = program.fluid ? program.capacity * FLOCK_AFFINE_BYTES + fluidFaces * 24 + fluidCells * 36
     + state + program.capacity * 24 + Math.ceil(program.capacity / 256) * 64 + 2164 + pressure.total : 0;
   return {
-    largestBinding: Math.max(state, cells, sortCount * 4, ring, fluidFaces * 16, fluidCells * 8, pressure.largestBinding),
+    largestBinding: Math.max(state, cells, sortCount * 4, ring, fluidFaces * 16, fluidCells * 20, pressure.largestBinding),
     total: state * 2 + cells + sortCount * 8 + fluidBytes + program.trails.reduce((sum, trail) => sum + trail.slotCount * (trail.samples * 16 + 4), 0),
   };
 }

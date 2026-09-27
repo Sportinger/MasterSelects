@@ -29,7 +29,9 @@ parent particles for shadows. Optional GPU timestamps expose simulation,
 fluid-transfer, pressure, point-cache, shadow and drawing costs through `getStats`.
 Small opaque points and bounded shadow footprints use compute rasterization,
 with deterministic depth ties and a resolve into the shared 3D depth buffer.
-APIC fluid transfers preserve local rotation and shear with an affine matrix per
+APIC fluid transfers adapt their accumulation precision to local density and
+velocity to avoid integer overflow in dense piles. They preserve local rotation
+and shear with an affine matrix per
 particle, using a stable GPU cell permutation and workgroup accumulation,
 preserving particle identity across rendering, trails and checkpoints.
 Checkpoint persistence remains valid when the GPU cache evicts a snapshot during readback.

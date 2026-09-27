@@ -12,8 +12,8 @@ import {
   FLOCK_FLUID_WORKGROUP,
 } from '../shaders/flockFluidWgsl';
 
-type FluidEntry = 'fluidClear' | 'fluidP2G' | 'fluidP2GBlock' | 'fluidNormalize' | 'fluidExtrapolateAB' | 'fluidExtrapolateBA' | 'fluidDivergence' | 'fluidProject' | 'fluidG2P';
-const ENTRIES: FluidEntry[] = ['fluidClear', 'fluidP2G', 'fluidP2GBlock', 'fluidNormalize', 'fluidExtrapolateAB', 'fluidExtrapolateBA', 'fluidDivergence', 'fluidProject', 'fluidG2P'];
+type FluidEntry = 'fluidClear' | 'fluidTransferBounds' | 'fluidTransferScales' | 'fluidP2G' | 'fluidP2GBlock' | 'fluidNormalize' | 'fluidExtrapolateAB' | 'fluidExtrapolateBA' | 'fluidDivergence' | 'fluidProject' | 'fluidG2P';
+const ENTRIES: FluidEntry[] = ['fluidClear', 'fluidTransferBounds', 'fluidTransferScales', 'fluidP2G', 'fluidP2GBlock', 'fluidNormalize', 'fluidExtrapolateAB', 'fluidExtrapolateBA', 'fluidDivergence', 'fluidProject', 'fluidG2P'];
 
 interface FluidPipelines {
   layout: GPUBindGroupLayout;
@@ -89,7 +89,7 @@ export class FlockFluidGrid {
     const storage = GPUBufferUsage.STORAGE;
     const acc = device.createBuffer({ size: this.faceTotal * 2 * 4, usage: storage, label: 'flock-fluid-acc' });
     const faces = device.createBuffer({ size: this.faceTotal * 4 * 4, usage: storage, label: 'flock-fluid-faces' });
-    const counts = device.createBuffer({ size: this.cellTotal * 4, usage: storage, label: 'flock-fluid-counts' });
+    const counts = device.createBuffer({ size: this.cellTotal * 5 * 4, usage: storage, label: 'flock-fluid-counts' });
     const cells = device.createBuffer({ size: this.cellTotal * 2 * 4, usage: storage, label: 'flock-fluid-cells' });
     this.pressure = new FlockPressureSolver(device, spec.dims, counts, cells, this.dispatchWidth);
     this.params = device.createBuffer({ size: this.paramData.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, label: 'flock-fluid-params' });
@@ -163,7 +163,9 @@ export class FlockFluidGrid {
       pass.dispatchWorkgroups(Math.min(groups(n), this.dispatchWidth), Math.ceil(groups(n) / this.dispatchWidth));
     };
     pass = begin('p2g');
-    run('fluidClear', Math.max(this.faceTotal * 2, this.cellTotal));
+    run('fluidClear', Math.max(this.faceTotal * 2, this.cellTotal * 5));
+    run('fluidTransferBounds', particleCount);
+    run('fluidTransferScales', this.faceTotal);
     run(this.blockTransfer ? 'fluidP2GBlock' : 'fluidP2G', particleCount);
     run('fluidNormalize', this.faceTotal);
     run('fluidExtrapolateAB', this.faceTotal);
