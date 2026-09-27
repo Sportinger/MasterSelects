@@ -42,6 +42,7 @@ export class ScoreMouseController {
   private selection: ScoreSelectionController;
   private render: ScoreRenderCoordinator;
   private getPendingArticulations: () => import('../../types/scoreClip').ArticulationType[] | undefined;
+  private audition: (midi: number) => void;
 
   constructor(
     getEngine: () => ScoreEditorEngine | null,
@@ -51,6 +52,7 @@ export class ScoreMouseController {
     selection: ScoreSelectionController,
     render: ScoreRenderCoordinator,
     getPendingArticulations: () => import('../../types/scoreClip').ArticulationType[] | undefined,
+    audition: (midi: number) => void,
   ) {
     this.getEngine = getEngine;
     this.getSheet = getSheet;
@@ -59,6 +61,7 @@ export class ScoreMouseController {
     this.selection = selection;
     this.render = render;
     this.getPendingArticulations = getPendingArticulations;
+    this.audition = audition;
   }
 
   /** Register document-level listeners on the POPUP document. Call on mount. */
@@ -163,10 +166,14 @@ export class ScoreMouseController {
       this.render.renderScore();
 
       if (picked.type === 'note') {
+        // Click-select audition (piano-roll behavior)
+        const origNote = engine.getNote(picked.noteId);
+        if (origNote?.step) {
+          this.audition(spellingToMidi(origNote.step, origNote.alter!, origNote.octave!));
+        }
         // Arm a pitch drag (150ms threshold separates click from drag)
         this.isDraggingNote = true;
         this.dragChangedPitch = false;
-        const origNote = engine.getNote(picked.noteId);
         this.draggedNoteOriginalPitch = origNote?.step
           ? { step: origNote.step, alter: origNote.alter!, octave: origNote.octave! }
           : null;
@@ -220,6 +227,9 @@ export class ScoreMouseController {
       );
 
       if (note) {
+        if (!note.isRest && note.step) {
+          this.audition(spellingToMidi(note.step, note.alter!, note.octave!));
+        }
         this.selection.selectNote(note.id);
         this.state.selectedTool = 'entry';
         this.render.renderScore();
@@ -246,6 +256,9 @@ export class ScoreMouseController {
         this.getPendingArticulations(),
       );
       if (note) {
+        if (!note.isRest && note.step) {
+          this.audition(spellingToMidi(note.step, note.alter!, note.octave!));
+        }
         this.selection.selectNote(note.id);
         this.state.selectedTool = 'entry';
         this.render.renderScore();
@@ -260,6 +273,10 @@ export class ScoreMouseController {
 
     const result = engine.createTupletAtPosition(coords, this.state.selectedDuration, spelling);
     if (result) {
+      const fn = result.firstNote;
+      if (!fn.isRest && fn.step) {
+        this.audition(spellingToMidi(fn.step, fn.alter!, fn.octave!));
+      }
       this.selection.selectNote(result.firstNote.id);
       this.state.selectedTool = 'entry';
       this.render.renderScore();
@@ -296,6 +313,7 @@ export class ScoreMouseController {
               alter,
               octave: position.spelling.octave,
             }, { transient: true });
+            this.audition(cursorMidi);
             this.dragChangedPitch = true;
             this.render.renderScore();
           }

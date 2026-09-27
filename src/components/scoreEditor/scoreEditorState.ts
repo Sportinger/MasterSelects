@@ -36,6 +36,8 @@ export interface ScoreEditorState {
   showCursor: boolean;
   /** Sheet zoom factor (1 = 100%) */
   zoom: number;
+  /** In-window playback state (ScorePlayer) */
+  playbackState: 'stopped' | 'playing';
 }
 
 export function createScoreEditorState(): ScoreEditorState {
@@ -57,6 +59,7 @@ export function createScoreEditorState(): ScoreEditorState {
     tupletMode: false,
     showCursor: true,
     zoom: 1,
+    playbackState: 'stopped',
   };
 }
 

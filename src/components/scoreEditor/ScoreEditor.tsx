@@ -25,6 +25,8 @@ import { ScoreKeyboardController } from './ScoreKeyboardController';
 import { ScoreMouseController } from './ScoreMouseController';
 import { createScoreShortcuts, type ScoreShortcutManager } from './scoreShortcuts';
 import { ScoreToolbar } from './ScoreToolbar';
+import { ScorePlayer } from './ScorePlayer';
+import { previewMidiNote } from '../../services/audio/midiPlaybackScheduler';
 
 const log = Logger.create('ScoreEditor');
 
@@ -68,6 +70,7 @@ interface EditorStack {
   keyboard: ScoreKeyboardController;
   mouse: ScoreMouseController;
   shortcuts: ScoreShortcutManager;
+  player: ScorePlayer;
 }
 
 export function ScoreEditor({ clipId }: ScoreEditorProps) {
@@ -145,7 +148,18 @@ export function ScoreEditor({ clipId }: ScoreEditorProps) {
     const renderCoordinator = new ScoreRenderCoordinator(renderer, hitTester, () => engine, state, sheetWidth);
     const renderScore = () => renderCoordinator.renderScore();
 
-    const selection = new ScoreSelectionController(() => engine, state, hitTester, () => scrollRef.current, renderScore);
+    // Audition through the exact piano-roll path: the clip's track instrument
+    // (Wavetable/GM by default for score tracks) via its track bus
+    const audition = (midi: number, velocity = 0.85) => {
+      const store = useTimelineStore.getState();
+      const liveClip = store.clips.find(c => c.id === clipId);
+      const track = liveClip ? store.tracks.find(t => t.id === liveClip.trackId) : undefined;
+      previewMidiNote(track?.midiInstrument, midi, velocity, liveClip?.trackId);
+    };
+
+    const player = new ScorePlayer(playbackState => { state.playbackState = playbackState; });
+
+    const selection = new ScoreSelectionController(() => engine, state, hitTester, () => scrollRef.current, renderScore, audition);
 
     let mouse: ScoreMouseController | null = null;
     const palette = new ScorePaletteController(
@@ -166,6 +180,7 @@ export function ScoreEditor({ clipId }: ScoreEditorProps) {
       // palette to the landed note (wrong after tie-chain splits)
       id => { state.selectedNoteId = id; },
       () => selection.getContextPitch(),
+      audition,
     );
 
     mouse = new ScoreMouseController(
@@ -176,6 +191,7 @@ export function ScoreEditor({ clipId }: ScoreEditorProps) {
       selection,
       renderCoordinator,
       () => palette.getPendingArticulations(),
+      audition,
     );
 
     const shortcuts = createScoreShortcuts(
@@ -191,7 +207,7 @@ export function ScoreEditor({ clipId }: ScoreEditorProps) {
 
     mouse.setup();
     shortcuts.enable();
-    stackRef.current = { renderer, engine, hitTester, renderCoordinator, selection, palette, keyboard, mouse, shortcuts };
+    stackRef.current = { renderer, engine, hitTester, renderCoordinator, selection, palette, keyboard, mouse, shortcuts, player };
 
     renderScore();
     setReady(true);
@@ -202,6 +218,7 @@ export function ScoreEditor({ clipId }: ScoreEditorProps) {
     });
 
     return () => {
+      player.dispose();
       mouse?.teardown();
       shortcuts.disable();
       stackRef.current = null;
@@ -298,6 +315,16 @@ export function ScoreEditor({ clipId }: ScoreEditorProps) {
           clearPreview={() => stack.renderCoordinator.clearPreview()}
           zoomBy={direction => stack.renderCoordinator.zoomBy(direction)}
           resetZoom={() => stack.renderCoordinator.resetZoom()}
+          togglePlayback={() => {
+            if (stack.player.getState() === 'playing') {
+              stack.player.stop();
+              return;
+            }
+            const store = useTimelineStore.getState();
+            const liveClip = store.clips.find(c => c.id === clipId);
+            const track = liveClip ? store.tracks.find(t => t.id === liveClip.trackId) : undefined;
+            void stack.player.play(stack.engine.getScore(), track?.midiInstrument);
+          }}
         />
       )}
       <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: 16 }}>

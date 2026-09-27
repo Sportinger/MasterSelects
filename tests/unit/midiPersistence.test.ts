@@ -103,6 +103,10 @@ describe('Score persistence round-trip (issue #366)', () => {
     const clipId = store.addScoreClip(trackId, 2, 6);
     if (!clipId) throw new Error('Failed to create score clip');
 
+    // Score tracks default to the Wavetable Synth (GM) — issue #366 phase 4
+    const created = useTimelineStore.getState().tracks.find(t => t.id === trackId);
+    expect(created?.midiInstrument?.kind).toBe('gm');
+
     const serialized = useTimelineStore.getState().getSerializableState();
     const serializedClip = serialized.clips.find(c => c.id === clipId);
     expect(serialized.tracks.find(t => t.id === trackId)?.type).toBe('score');

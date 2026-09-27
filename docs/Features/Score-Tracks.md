@@ -133,6 +133,27 @@ lazy chunk (`manualChunks` + dynamic import in the boot), so the main bundle
 does not carry the notation stack. Renderers expect measures to be fully
 filled; writers repair gaps (`repairAllMeasureGaps`) before committing.
 
+## Audio: audition and in-window playback
+
+Score tracks default to the **Wavetable Synth** (GM Acoustic Grand Piano) —
+`createTimelineTrack` stamps `midiInstrument` on score tracks like MIDI
+tracks, and `setTrackMidiInstrument` accepts both types. Editing auditions
+through the exact piano-roll path: `previewMidiNote(track.midiInstrument,
+midi, velocity, trackId)` fires on note click-select, every entry (mouse,
+letter keys, chord adds, tuplet placements), and every pitch change (arrows,
+octave jumps, drags). `midiPlaybackScheduler.preview` now routes score tracks
+through their track bus (volume/pan/EQ/FX/master) instead of the bare
+destination fallback.
+
+The toolbar ▶ **Play** button plays the whole sheet in-window:
+`scoreToEvents(score)` (`src/services/score/scoreToEvents.ts`) flattens the
+notation to schedulable events — tuplet-exact timing via `actualDuration`,
+same-pitch tie chains merged into single sustained notes, seconds at
+`score.tempo` — and `ScorePlayer` schedules them on a host synth
+(`createSynthForInstrument` + the shared AudioContext, GM samples preloaded
+before start). ⏹ stops immediately (`stopAll`). Timeline transport/export
+playback of score clips is still a later, separate step.
+
 ## Kernel boundary note
 
 The pinned v1 kernel fingerprint contract only understands

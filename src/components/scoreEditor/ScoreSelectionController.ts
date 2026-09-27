@@ -19,6 +19,7 @@ export class ScoreSelectionController {
   private hitTester: ScoreHitTester;
   private getScrollContainer: () => HTMLElement | null;
   private renderScore: () => void;
+  private audition: (midi: number) => void;
 
   constructor(
     getEngine: () => ScoreEditorEngine | null,
@@ -26,12 +27,14 @@ export class ScoreSelectionController {
     hitTester: ScoreHitTester,
     getScrollContainer: () => HTMLElement | null,
     renderScore: () => void,
+    audition: (midi: number) => void,
   ) {
     this.getEngine = getEngine;
     this.state = state;
     this.hitTester = hitTester;
     this.getScrollContainer = getScrollContainer;
     this.renderScore = renderScore;
+    this.audition = audition;
   }
 
   /**
@@ -158,6 +161,7 @@ export class ScoreSelectionController {
     engine.updateNote(this.state.selectedNoteId, {
       step: next.step, alter: next.alter, octave: next.octave,
     });
+    this.audition(spellingToMidi(next.step, next.alter, next.octave));
     this.renderScore();
   }
 
@@ -170,6 +174,7 @@ export class ScoreSelectionController {
     if (!selectedNote || selectedNote.isRest) return;
 
     engine.updateNote(this.state.selectedNoteId, { octave: selectedNote.octave! + direction });
+    this.audition(spellingToMidi(selectedNote.step!, selectedNote.alter!, selectedNote.octave! + direction));
     this.renderScore();
   }
 

@@ -29,9 +29,10 @@ interface ScoreToolbarProps {
   clearPreview: () => void;
   zoomBy: (direction: 1 | -1) => void;
   resetZoom: () => void;
+  togglePlayback: () => void;
 }
 
-export function ScoreToolbar({ observable, palette, selection, renderScore, clearPreview, zoomBy, resetZoom }: ScoreToolbarProps) {
+export function ScoreToolbar({ observable, palette, selection, renderScore, clearPreview, zoomBy, resetZoom, togglePlayback }: ScoreToolbarProps) {
   // Re-render on every editor-state change (controllers mutate the proxy)
   useSyncExternalStore(observable.subscribe, observable.getVersion);
   const state = observable.state;
@@ -107,7 +108,18 @@ export function ScoreToolbar({ observable, palette, selection, renderScore, clea
         <button type="button" className={btn(palette.noteHasTie())} title="Tie to next note (Numpad Enter)" onClick={() => palette.toggleTie()}>⌒</button>
       </div>
 
-      <div className="se-group" role="group" aria-label="Zoom" style={{ marginLeft: 'auto' }}>
+      <div className="se-group" role="group" aria-label="Playback" style={{ marginLeft: 'auto' }}>
+        <button
+          type="button"
+          className={btn(state.playbackState === 'playing')}
+          title={state.playbackState === 'playing' ? 'Stop' : 'Play the score'}
+          onClick={() => togglePlayback()}
+        >
+          {state.playbackState === 'playing' ? '⏹ Stop' : '▶ Play'}
+        </button>
+      </div>
+
+      <div className="se-group" role="group" aria-label="Zoom">
         <button type="button" className={btn(false)} title="Zoom out (Ctrl+- / Ctrl+wheel)" onClick={() => zoomBy(-1)}>−</button>
         <button
           type="button"

@@ -33,6 +33,7 @@ export class ScoreKeyboardController {
   private renderScore: () => void;
   private setSelectedNote: (id: string | null) => void;
   private getContextPitch: () => number;
+  private audition: (midi: number) => void;
 
   constructor(
     getEngine: () => ScoreEditorEngine | null,
@@ -41,6 +42,7 @@ export class ScoreKeyboardController {
     renderScore: () => void,
     setSelectedNote: (id: string | null) => void,
     getContextPitch: () => number,
+    audition: (midi: number) => void,
   ) {
     this.getEngine = getEngine;
     this.state = state;
@@ -48,6 +50,7 @@ export class ScoreKeyboardController {
     this.renderScore = renderScore;
     this.setSelectedNote = setSelectedNote;
     this.getContextPitch = getContextPitch;
+    this.audition = audition;
   }
 
   /** Nearest octave for a step relative to a reference MIDI pitch. */
@@ -85,6 +88,7 @@ export class ScoreKeyboardController {
       isRest: false,
       ...(this.state.selectedAccidental === 'n' && { forceAccidental: true }),
     });
+    this.audition(spellingToMidi(step, alter, octave));
 
     this.state.selectedAccidental = null;
     this.state.selectedTool = 'entry';
@@ -155,6 +159,10 @@ export class ScoreKeyboardController {
       log.debug('Keyboard entry placement failed');
       this.renderScore();
       return;
+    }
+
+    if (!newNote.isRest && newNote.step) {
+      this.audition(spellingToMidi(newNote.step, newNote.alter!, newNote.octave!));
     }
 
     // Follow the tie chain so the cursor lands after all tied continuations
@@ -271,6 +279,7 @@ export class ScoreKeyboardController {
       isRest: false,
       tupletId: note.tupletId,
     });
+    this.audition(spellingToMidi(step, alter, octave));
     this.setSelectedNote(newNote.id);
     this.renderScore();
   }
