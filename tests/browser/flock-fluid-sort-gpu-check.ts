@@ -3,6 +3,7 @@ import { FlockFluidGrid } from '../../src/engine/flock/gpu/FlockFluidGrid';
 import { FlockParticleOrder } from '../../src/engine/flock/gpu/FlockParticleOrder';
 import type { FlockFluidSpec } from '../../src/services/flock/compiler/flockProgramTypes';
 import { checkOrderedSessions } from './flock-ordered-session-gpu-check';
+import { checkGpuCheckpoints } from './flock-checkpoint-gpu-check';
 
 async function check() {
   const adapter = await navigator.gpu.requestAdapter();
@@ -78,6 +79,7 @@ async function check() {
       reference.dispose(); sorted.dispose(); order.dispose(); canonical.destroy(); states.forEach(state => state.destroy());
     }
     cases.push(await checkOrderedSessions(device));
+    cases.push(await checkGpuCheckpoints(device));
     await device.queue.onSubmittedWorkDone();
     if (errors.length) throw new Error(errors.join('\n'));
     return { success: true, cases, adapter: adapter.info };

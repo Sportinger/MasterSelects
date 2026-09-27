@@ -31,6 +31,7 @@ Small opaque points and bounded shadow footprints use compute rasterization,
 with deterministic depth ties and a resolve into the shared 3D depth buffer.
 FLIP transfers use a stable GPU cell permutation and workgroup accumulation,
 preserving particle identity across rendering, trails and checkpoints.
+Checkpoint persistence remains valid when the GPU cache evicts a snapshot during readback.
 Fluid pressure uses a multigrid-preconditioned conjugate-gradient solver on both
 CPU and GPU, with residual-based convergence and solid domain walls.
 

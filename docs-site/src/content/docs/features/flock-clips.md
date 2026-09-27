@@ -171,6 +171,13 @@ covering solver version, program semantics, behavior keyframes and GPU adapter.
 Quota errors are reported and never touch the editable definition. *Clear
 cache* drops GPU and persisted checkpoints for the clip.
 
+Checkpoint readback submits copies of all state and trail sections before waiting
+for CPU access, so concurrent cache eviction cannot invalidate persistence.
+Snapshots evicted within a simulation batch are released after that batch is
+submitted. The checkpoint owner also supports identity-ordered auxiliary state:
+each section stays in its own GPU buffer and is appended after canonical particle
+bytes in the persisted payload; import and adoption validate section sizes.
+
 ---
 
 ## Rendering

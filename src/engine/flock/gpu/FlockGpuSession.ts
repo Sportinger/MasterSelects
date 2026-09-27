@@ -1,5 +1,6 @@
 import type { FlockEvaluationContext } from '../../../services/flock/compiler/flockParamEvaluation';
 import { FlockFluidGrid } from './FlockFluidGrid';
+import { FlockGpuCheckpoints } from './FlockGpuCheckpoints';
 import { FlockParticleOrder } from './FlockParticleOrder';
 import { flockPressureMemory } from '../shared/flockPressureLayout';
 import { flockGpuTimings } from './FlockGpuTimings';
@@ -36,12 +37,6 @@ interface LinkResources {
   params: GPUBuffer;
   bindGroups: [GPUBindGroup, GPUBindGroup];
   signature: string;
-}
-
-interface Checkpoint {
-  state: GPUBuffer;
-  rings: GPUBuffer[];
-  bytes: number;
 }
 
 export interface FlockLinkRequest {
@@ -99,7 +94,8 @@ export class FlockGpuSession {
   lastGridStamp = 0;
   stats: FlockSessionStats = { alive: 0, sampled: 0, neighborLimited: 0, gpuBytes: 0, checkpointBytes: 0, checkpointSteps: [] };
   checkpointInterval: number;
-  maxCheckpointBytes: number;
+  get maxCheckpointBytes(): number { return this.checkpoints.maxBytes; }
+  set maxCheckpointBytes(bytes: number) { this.checkpoints.maxBytes = bytes; }
 
   private context: FlockEvaluationContext;
   private readonly states: [GPUBuffer, GPUBuffer];
@@ -125,7 +121,7 @@ export class FlockGpuSession {
   private readonly cellsBindGroup: GPUBindGroup;
   private readonly trails: TrailResources[];
   private readonly links = new Map<number, LinkResources>();
-  private readonly checkpoints = new Map<number, Checkpoint>();
+  private readonly checkpoints: FlockGpuCheckpoints;
   private stampCounter = 1;
   private disposed = false;
 
@@ -138,8 +134,6 @@ export class FlockGpuSession {
     this.sortCount = nextPowerOfTwo(Math.max(2, program.capacity));
     this.tableSize = nextPowerOfTwo(Math.max(4096, program.capacity * 2));
     this.checkpointInterval = Math.max(1, program.stepRate);
-    // Keep at least two restart checkpoints even for multi-million canvases.
-    this.maxCheckpointBytes = Math.max(256 * 1024 * 1024, this.capacity * FLOCK_PARTICLE_BYTES * 2);
     const stateBytes = this.capacity * FLOCK_PARTICLE_BYTES;
     const stateUsage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
     this.states = [
@@ -242,6 +236,9 @@ export class FlockGpuSession {
       return { slotCount: slotIndices.length, samples: trail.samples, interval: trail.interval, slots, ring, bindGroups: [trailGroup(0), trailGroup(1)] };
     });
 
+    this.checkpoints = new FlockGpuCheckpoints(device, stateBytes, [], this.trails.map(trail => trail.ring), (checkpointBytes, checkpointSteps) => {
+      this.stats = { ...this.stats, checkpointBytes, checkpointSteps };
+    });
     this.resetState();
     this.stats.gpuBytes = stateBytes * 2 + this.sortCount * 8 + this.tableSize * 16
       + this.trails.reduce((sum, trail) => sum + trail.ring.size + trail.slots.size, 0)
@@ -271,21 +268,11 @@ export class FlockGpuSession {
 
   /** Drops checkpoints after `fromStep` and rewinds if the current state is affected. */
   invalidateFrom(fromStep: number): void {
-    for (const [step, checkpoint] of this.checkpoints) {
-      if (step > fromStep) {
-        this.destroyCheckpoint(checkpoint);
-        this.checkpoints.delete(step);
-      }
-    }
+    this.checkpoints.invalidateFrom(fromStep);
     if (this.step > fromStep) this.restoreAtOrBefore(fromStep);
-    this.updateCheckpointStats();
   }
 
-  hasCheckpointAtOrBefore(step: number): number {
-    let best = 0;
-    for (const key of this.checkpoints.keys()) if (key <= step && key > best) best = key;
-    return best;
-  }
+  hasCheckpointAtOrBefore(step: number): number { return this.checkpoints.atOrBefore(step); }
 
   /** Advances toward `targetStep` using at most `maxSteps`; returns whether it arrived. */
   advanceTo(targetStep: number, maxSteps: number): boolean {
@@ -378,6 +365,7 @@ export class FlockGpuSession {
     if (readStats) encoder.copyBufferToBuffer(this.statsBuffer, 0, this.statsReadback, 0, 16);
     const readTimings = flockGpuTimings(this.device).resolve(encoder, `simulation:${this.program.hashes.topology}`);
     this.device.queue.submit([encoder.finish()]);
+    this.checkpoints.releaseRetired();
     readTimings();
     if (readStats) this.readStats(batch);
   }
@@ -471,58 +459,18 @@ export class FlockGpuSession {
   }
 
   private encodeCheckpoint(encoder: GPUCommandEncoder, step: number): void {
-    const stateSize = this.capacity * FLOCK_PARTICLE_BYTES;
-    const bytes = stateSize + this.trails.reduce((sum, trail) => sum + trail.ring.size, 0);
-    while (this.checkpointBytesTotal() + bytes > this.maxCheckpointBytes && this.checkpoints.size > 0) {
-      this.thinCheckpoints();
-    }
-    const state = this.device.createBuffer({ size: stateSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, label: `flock-checkpoint-${step}` });
-    if (this.order) this.order.canonical(encoder, this.currentState, state);
-    else encoder.copyBufferToBuffer(this.currentState, 0, state, 0, stateSize);
-    const rings = this.trails.map((trail) => {
-      const ring = this.device.createBuffer({ size: trail.ring.size, usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, label: 'flock-checkpoint-ring' });
-      encoder.copyBufferToBuffer(trail.ring, 0, ring, 0, trail.ring.size);
-      return ring;
+    this.checkpoints.capture(encoder, step, destination => {
+      if (this.order) this.order.canonical(encoder, this.currentState, destination);
+      else encoder.copyBufferToBuffer(this.currentState, 0, destination, 0, this.capacity * FLOCK_PARTICLE_BYTES);
     });
-    this.checkpoints.set(step, { state, rings, bytes });
-    this.updateCheckpointStats();
   }
 
-  /** Imports a checkpoint (e.g. from persisted precompute) as raw bytes. */
   importCheckpoint(step: number, state: ArrayBuffer, rings: ArrayBuffer[]): boolean {
-    const stateSize = this.capacity * FLOCK_PARTICLE_BYTES;
-    if (state.byteLength !== stateSize || rings.length !== this.trails.length) return false;
-    if (rings.some((ring, index) => ring.byteLength !== this.trails[index].ring.size)) return false;
-    const existing = this.checkpoints.get(step);
-    if (existing) return true;
-    const stateBuffer = this.device.createBuffer({ size: stateSize, usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, label: `flock-imported-checkpoint-${step}` });
-    this.device.queue.writeBuffer(stateBuffer, 0, state);
-    const ringBuffers = rings.map((ring) => {
-      const buffer = this.device.createBuffer({ size: ring.byteLength, usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, label: 'flock-imported-ring' });
-      this.device.queue.writeBuffer(buffer, 0, ring);
-      return buffer;
-    });
-    this.checkpoints.set(step, { state: stateBuffer, rings: ringBuffers, bytes: stateSize + rings.reduce((sum, ring) => sum + ring.byteLength, 0) });
-    this.updateCheckpointStats();
-    return true;
+    return this.checkpoints.import(step, state, rings);
   }
 
-  /** Reads one checkpoint back to CPU bytes (state + rings) for persistence. */
-  async readCheckpoint(step: number): Promise<{ state: ArrayBuffer; rings: ArrayBuffer[] } | null> {
-    const checkpoint = this.checkpoints.get(step);
-    if (!checkpoint) return null;
-    const read = async (source: GPUBuffer): Promise<ArrayBuffer> => {
-      const staging = this.device.createBuffer({ size: source.size, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST, label: 'flock-checkpoint-readback' });
-      const encoder = this.device.createCommandEncoder();
-      encoder.copyBufferToBuffer(source, 0, staging, 0, source.size);
-      this.device.queue.submit([encoder.finish()]);
-      await staging.mapAsync(GPUMapMode.READ);
-      const copy = staging.getMappedRange().slice(0);
-      staging.unmap();
-      staging.destroy();
-      return copy;
-    };
-    return { state: await read(checkpoint.state), rings: await Promise.all(checkpoint.rings.map(read)) };
+  readCheckpoint(step: number): Promise<{ state: ArrayBuffer; rings: ArrayBuffer[] } | null> {
+    return this.checkpoints.read(step);
   }
 
   /** Bounded identity-ordered sample, optionally from the previous interpolation state. */
@@ -545,7 +493,7 @@ export class FlockGpuSession {
   }
 
   listCheckpointSteps(): number[] {
-    return [...this.checkpoints.keys()].toSorted((a, b) => a - b);
+    return this.checkpoints.steps();
   }
 
   /** Jumps forward to a checkpoint nearer the target than the current state. */
@@ -554,45 +502,19 @@ export class FlockGpuSession {
     if (best > this.step) this.restoreAtOrBefore(targetStep);
   }
 
-  clearCheckpoints(): void {
-    for (const checkpoint of this.checkpoints.values()) this.destroyCheckpoint(checkpoint);
-    this.checkpoints.clear();
-    this.updateCheckpointStats();
-  }
+  clearCheckpoints(): void { this.checkpoints.clear(); }
 
-  /** Copies checkpoints from a compatible session (same program semantics) on the same device. */
+  /** Copies checkpoints from a session with compatible program semantics. */
   adoptCheckpoints(source: FlockGpuSession, steps: number[]): number {
-    if (source.device !== this.device || source.capacity !== this.capacity || source.trails.length !== this.trails.length) return 0;
-    const encoder = this.device.createCommandEncoder({ label: 'flock-adopt-checkpoints' });
-    let adopted = 0;
-    for (const step of steps) {
-      const from = source.checkpoints.get(step);
-      if (!from || this.checkpoints.has(step)) continue;
-      if (from.rings.some((ring, index) => ring.size !== this.trails[index].ring.size)) continue;
-      const state = this.device.createBuffer({ size: from.state.size, usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, label: `flock-adopted-checkpoint-${step}` });
-      encoder.copyBufferToBuffer(from.state, 0, state, 0, from.state.size);
-      const rings = from.rings.map((ring) => {
-        const copy = this.device.createBuffer({ size: ring.size, usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, label: 'flock-adopted-ring' });
-        encoder.copyBufferToBuffer(ring, 0, copy, 0, ring.size);
-        return copy;
-      });
-      this.checkpoints.set(step, { state, rings, bytes: from.bytes });
-      adopted += 1;
-    }
-    this.device.queue.submit([encoder.finish()]);
-    this.updateCheckpointStats();
-    return adopted;
+    return this.checkpoints.adopt(source.checkpoints, steps);
   }
 
   private restoreAtOrBefore(targetStep: number): void {
     const best = this.hasCheckpointAtOrBefore(targetStep);
-    const checkpoint = best > 0 ? this.checkpoints.get(best) : undefined;
-    if (checkpoint) {
+    if (best > 0) {
       const encoder = this.device.createCommandEncoder({ label: 'flock-restore' });
-      encoder.copyBufferToBuffer(checkpoint.state, 0, this.currentState, 0, checkpoint.state.size);
-      encoder.copyBufferToBuffer(checkpoint.state, 0, this.previousState, 0, checkpoint.state.size);
+      this.checkpoints.restore(encoder, best, this.states);
       this.order?.reset(encoder);
-      checkpoint.rings.forEach((ring, index) => encoder.copyBufferToBuffer(ring, 0, this.trails[index].ring, 0, ring.size));
       this.device.queue.submit([encoder.finish()]);
       this.step = best;
     } else {
@@ -633,45 +555,11 @@ export class FlockGpuSession {
     });
   }
 
-  private checkpointBytesTotal(): number {
-    let total = 0;
-    for (const checkpoint of this.checkpoints.values()) total += checkpoint.bytes;
-    return total;
-  }
-
-  private thinCheckpoints(): void {
-    const steps = this.listCheckpointSteps();
-    if (steps.length <= 1) {
-      const only = steps[0];
-      if (only !== undefined) {
-        this.destroyCheckpoint(this.checkpoints.get(only)!);
-        this.checkpoints.delete(only);
-      }
-      return;
-    }
-    steps.forEach((step, index) => {
-      if (index % 2 === 1) {
-        this.destroyCheckpoint(this.checkpoints.get(step)!);
-        this.checkpoints.delete(step);
-      }
-    });
-  }
-
-  private destroyCheckpoint(checkpoint: Checkpoint): void {
-    checkpoint.state.destroy();
-    for (const ring of checkpoint.rings) ring.destroy();
-  }
-
-  private updateCheckpointStats(): void {
-    this.stats = { ...this.stats, checkpointBytes: this.checkpointBytesTotal(), checkpointSteps: this.listCheckpointSteps() };
-  }
-
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.fluid?.dispose();
     if (this.order) this.order.dispose(); else this.identityMapping.destroy();
-    for (const checkpoint of this.checkpoints.values()) this.destroyCheckpoint(checkpoint);
     this.checkpoints.clear();
     for (const link of this.links.values()) {
       link.buffer.destroy();
