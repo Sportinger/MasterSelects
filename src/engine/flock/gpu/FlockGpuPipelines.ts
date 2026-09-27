@@ -16,18 +16,19 @@ import {
   FLOCK_LINKS_RENDER_WGSL,
   FLOCK_VECTORS_WGSL,
 } from '../shaders/flockRenderWgsl';
-import { FLOCK_POINTS_WGSL } from '../shaders/flockPointsWgsl';
+import { FLOCK_POINTS_CACHE_COMPUTE_WGSL, FLOCK_POINTS_CACHED_WGSL, FLOCK_POINTS_WGSL } from '../shaders/flockPointsWgsl';
 import { FLOCK_ROOM_WGSL } from '../shaders/flockRoomWgsl';
 
 const log = Logger.create('FlockGpuPipelines');
 
-export type FlockRenderKind = 'points' | 'instances' | 'links' | 'vectors' | 'curves' | 'glyphs' | 'glyphCubes' | 'room';
-export type FlockShadowKind = 'points' | 'instances';
+export type FlockRenderKind = 'points' | 'pointsCached' | 'instances' | 'links' | 'vectors' | 'curves' | 'glyphs' | 'glyphCubes' | 'room';
+export type FlockShadowKind = 'points' | 'pointsCached' | 'instances';
 export const FLOCK_SHADOW_FORMAT: GPUTextureFormat = 'depth32float';
 export type FlockBlendMode = 'additive' | 'alpha' | 'opaque';
 
 const RENDER_SOURCES: Record<FlockRenderKind, { code: string; vertex: string; fragment: string }> = {
   points: { code: FLOCK_POINTS_WGSL, vertex: 'vsPoints', fragment: 'fsPoints' },
+  pointsCached: { code: FLOCK_POINTS_CACHED_WGSL, vertex: 'vsPointsCached', fragment: 'fsPoints' },
   instances: { code: FLOCK_INSTANCES_WGSL, vertex: 'vsInstances', fragment: 'fsInstances' },
   links: { code: FLOCK_LINKS_RENDER_WGSL, vertex: 'vsLinks', fragment: 'fsLines' },
   vectors: { code: FLOCK_VECTORS_WGSL, vertex: 'vsVectors', fragment: 'fsLines' },
@@ -39,11 +40,13 @@ const RENDER_SOURCES: Record<FlockRenderKind, { code: string; vertex: string; fr
 
 const SHADOW_ENTRIES: Record<FlockShadowKind, { vertex: string; fragment?: string }> = {
   points: { vertex: 'vsPointsShadow', fragment: 'fsPointsShadow' },
+  pointsCached: { vertex: 'vsPointsShadowCached', fragment: 'fsPointsShadow' },
   instances: { vertex: 'vsInstancesShadow' },
 };
 
 const BRANCH_BUFFER_BINDINGS: Record<FlockRenderKind, number> = {
   points: 0,
+  pointsCached: 0,
   instances: 0,
   vectors: 0,
   links: 1,
@@ -105,11 +108,15 @@ export class FlockGpuPipelines {
   readonly trailPipeline: GPUComputePipeline;
   readonly linksPipeline: GPUComputePipeline;
   readonly frameLayout: GPUBindGroupLayout;
+  readonly pointCacheComputeLayout: GPUBindGroupLayout;
+  readonly pointCacheRenderLayout: GPUBindGroupLayout;
+  private readonly pointCachePipelines = new Map<'cachePoints' | 'cacheVisibility', GPUComputePipeline>();
   private readonly branchLayouts = new Map<FlockRenderKind, GPUBindGroupLayout>();
   private readonly renderModules = new Map<FlockRenderKind, GPUShaderModule>();
   private readonly renderPipelines = new Map<string, GPURenderPipeline>();
   private readonly shadowPipelines = new Map<FlockShadowKind, GPURenderPipeline>();
   private readonly device: GPUDevice;
+  private pointCacheModule: GPUShaderModule | null = null;
 
   constructor(device: GPUDevice) {
     this.device = device;
@@ -152,29 +159,43 @@ export class FlockGpuPipelines {
     this.linksPipeline = compute(FLOCK_LINKS_WGSL, 'buildLinks', this.linksLayout, 'flock-links');
     done();
 
-    const VF = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT;
+    // Render layouts are also visible to compute so the point cache prepass can share them.
+    const VFC = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE;
+    const VC = GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE;
     this.frameLayout = device.createBindGroupLayout({
       label: 'flock-render-frame-layout',
       entries: [
-        uniform(0, VF),
-        storage(1, GPUShaderStage.VERTEX, true),
-        storage(2, GPUShaderStage.VERTEX, true),
-        { binding: 3, visibility: VF, texture: { sampleType: 'depth' } },
-        { binding: 4, visibility: VF, sampler: { type: 'comparison' } },
+        uniform(0, VFC),
+        storage(1, VC, true),
+        storage(2, VC, true),
+        { binding: 3, visibility: VFC, texture: { sampleType: 'depth' } },
+        { binding: 4, visibility: VFC, sampler: { type: 'comparison' } },
       ],
+    });
+    this.pointCacheComputeLayout = device.createBindGroupLayout({
+      label: 'flock-point-cache-compute-layout',
+      entries: [storage(0, GPUShaderStage.COMPUTE, false), uniform(1, GPUShaderStage.COMPUTE)],
+    });
+    this.pointCacheRenderLayout = device.createBindGroupLayout({
+      label: 'flock-point-cache-render-layout',
+      entries: [storage(0, GPUShaderStage.VERTEX, true)],
     });
   }
 
-  getBranchLayout(kind: FlockRenderKind): GPUBindGroupLayout {
+  getBranchLayout(requestedKind: FlockRenderKind): GPUBindGroupLayout {
+    // Cached points bind the same branch group as direct points.
+    const kind = requestedKind === 'pointsCached' ? 'points' : requestedKind;
     let layout = this.branchLayouts.get(kind);
     if (!layout) {
-      const entries: GPUBindGroupLayoutEntry[] = [uniform(0, GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT)];
+      const VFC = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE;
+      const VC = GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE;
+      const entries: GPUBindGroupLayoutEntry[] = [uniform(0, VFC)];
       for (let binding = 1; binding <= BRANCH_BUFFER_BINDINGS[kind]; binding += 1) {
-        entries.push(storage(binding, GPUShaderStage.VERTEX, true));
+        entries.push(storage(binding, VC, true));
       }
       entries.push(
-        { binding: 8, visibility: GPUShaderStage.VERTEX, texture: { sampleType: 'float' } },
-        { binding: 9, visibility: GPUShaderStage.VERTEX, sampler: { type: 'filtering' } },
+        { binding: 8, visibility: VC, texture: { sampleType: 'float' } },
+        { binding: 9, visibility: VC, sampler: { type: 'filtering' } },
       );
       layout = this.device.createBindGroupLayout({ label: `flock-branch-${kind}-layout`, entries });
       this.branchLayouts.set(kind, layout);
@@ -191,6 +212,35 @@ export class FlockGpuPipelines {
     return module;
   }
 
+  private renderGroupLayouts(kind: FlockRenderKind): GPUBindGroupLayout[] {
+    const layouts = [this.frameLayout, this.getBranchLayout(kind)];
+    if (kind === 'pointsCached') layouts.push(this.pointCacheRenderLayout);
+    return layouts;
+  }
+
+  /** Compute prepass that writes one record per point (position, color) or its shadow visibility. */
+  getPointCachePipeline(entryPoint: 'cachePoints' | 'cacheVisibility'): GPUComputePipeline {
+    const existing = this.pointCachePipelines.get(entryPoint);
+    if (existing) return existing;
+    let module = this.pointCacheModule;
+    if (!module) {
+      module = createCheckedModule(this.device, FLOCK_POINTS_CACHE_COMPUTE_WGSL, 'flock-point-cache');
+      this.pointCacheModule = module;
+    }
+    const done = watchValidation(this.device, `flock ${entryPoint} pipeline`);
+    const pipeline = this.device.createComputePipeline({
+      label: `flock-${entryPoint}`,
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [this.frameLayout, this.getBranchLayout('points'), this.pointCacheComputeLayout],
+        label: `flock-${entryPoint}-layout`,
+      }),
+      compute: { module, entryPoint },
+    });
+    done();
+    this.pointCachePipelines.set(entryPoint, pipeline);
+    return pipeline;
+  }
+
   /** Depth-only pipeline that draws a casting branch into the key light's shadow map. */
   getShadowPipeline(kind: FlockShadowKind): GPURenderPipeline {
     const existing = this.shadowPipelines.get(kind);
@@ -201,7 +251,7 @@ export class FlockGpuPipelines {
     const pipeline = this.device.createRenderPipeline({
       label: `flock-shadow-${kind}`,
       layout: this.device.createPipelineLayout({
-        bindGroupLayouts: [this.frameLayout, this.getBranchLayout(kind)],
+        bindGroupLayouts: this.renderGroupLayouts(kind),
         label: `flock-shadow-${kind}-layout`,
       }),
       vertex: {
@@ -239,7 +289,7 @@ export class FlockGpuPipelines {
     const pipeline = this.device.createRenderPipeline({
       label: `flock-render-${key}`,
       layout: this.device.createPipelineLayout({
-        bindGroupLayouts: [this.frameLayout, this.getBranchLayout(kind)],
+        bindGroupLayouts: this.renderGroupLayouts(kind),
         label: `flock-render-${kind}-layout`,
       }),
       vertex: {

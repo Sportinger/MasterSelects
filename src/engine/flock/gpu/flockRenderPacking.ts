@@ -121,6 +121,28 @@ export function flockPointChildren(branch: FlockResolvedNode<FlockBranchSpec>): 
 
 export const FLOCK_MAX_POINT_CHILDREN = 16;
 
+/** Sub-particle level of detail: drawn points per render-target pixel before children stop adding detail. */
+const POINTS_PER_PIXEL = 1.5;
+
+/**
+ * Sub-particles actually drawn at this render size: the node's value is the
+ * ceiling, reduced where extra children would only land on sub-pixel overlap
+ * (a 1080p preview needs fewer than a 4K export).
+ */
+export function flockPointChildrenForViewport(branch: FlockResolvedNode<FlockBranchSpec>, capacity: number, viewportPixels: number): number {
+  const requested = flockPointChildren(branch);
+  if (requested <= 1 || capacity <= 0 || viewportPixels <= 0) return requested;
+  const useful = Math.ceil((viewportPixels * POINTS_PER_PIXEL) / capacity);
+  return Math.max(1, Math.min(requested, useful));
+}
+
+/** Screen-space points up to this diameter (px) draw as one triangle instead of a quad. */
+const TRIANGLE_POINT_MAX_PX = 4;
+
+export function flockPointUsesTriangles(branch: FlockResolvedNode<FlockBranchSpec>): boolean {
+  return (branch.p.e.sizeMode ?? 'screen') === 'screen' && (branch.p.n.size ?? 4) <= TRIANGLE_POINT_MAX_PX;
+}
+
 export interface PackedBranch {
   data: ArrayBuffer;
   renderKind: FlockRenderKind;
@@ -130,7 +152,7 @@ export interface PackedBranch {
 /** Branch uniform (layout: `Branch` in flockRenderWgsl.ts). */
 export function packBranch(
   branch: FlockResolvedNode<FlockBranchSpec>,
-  extras: { perParticle?: number; fraction?: number; headRing?: number; slotCount?: number; samples?: number; interval?: number },
+  extras: { perParticle?: number; fraction?: number; headRing?: number; slotCount?: number; samples?: number; interval?: number; pointChildren?: number },
 ): PackedBranch {
   const { spec, p } = branch;
   const data = new ArrayBuffer(BRANCH_BYTES);
@@ -178,7 +200,7 @@ export function packBranch(
   const blendName = (spec.kind === 'room' ? 'opaque' : p.e.blend ?? 'additive') as FlockBlendMode;
   f[40] = BLENDS[blendName] ?? 0;
   f[41] = (p.e.widthMode ?? 'screen') === 'world' ? 1 : 0;
-  f[42] = spec.kind === 'points' ? flockPointChildren(branch) : 1;
+  f[42] = spec.kind === 'points' ? extras.pointChildren ?? flockPointChildren(branch) : 1;
   f[43] = p.n.childSpread ?? 1.5;
   if (spec.kind === 'room') {
     const center = p.v.center ?? [0, 0, -60];
@@ -187,6 +209,7 @@ export function packBranch(
     f.set([Math.max(1, size[0]), Math.max(1, size[1]), Math.max(1, size[2]), p.n.cornerShade ?? 0.35], 48);
   } else {
     f[44] = spec.kind === 'points' ? p.n.relief ?? 0 : 0;
+    f[45] = spec.kind === 'points' && flockPointUsesTriangles(branch) ? 1 : 0;
   }
   let renderKind: FlockRenderKind = spec.kind === 'glyphs' ? 'glyphs' : spec.kind;
   if (spec.kind === 'glyphs' && p.e.glyph === 'cube') renderKind = 'glyphCubes';
