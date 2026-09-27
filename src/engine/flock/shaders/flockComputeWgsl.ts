@@ -17,9 +17,9 @@ struct SortParams { k: u32, j: u32, count: u32, pad0: u32, };
 ${flockIdentityWgsl(4)}
 
 @compute @workgroup_size(256)
-fn hashParticles(@builtin(global_invocation_id) gid: vec3u) {
+fn hashParticles(@builtin(global_invocation_id) gid: vec3u, @builtin(num_workgroups) groups: vec3u) {
   let sim = block.sim;
-  let i = gid.x;
+  let i = gid.x + gid.y * groups.x * 256u;
   if (i >= sim.sortCount) { return; }
   vals[i] = i;
   if (i >= sim.count) { keys[i] = U32_MAX; return; }
@@ -38,8 +38,8 @@ struct SortParams { k: u32, j: u32, count: u32, pad0: u32, };
 @group(0) @binding(2) var<uniform> sp: SortParams;
 
 @compute @workgroup_size(256)
-fn sortStep(@builtin(global_invocation_id) gid: vec3u) {
-  let i = gid.x;
+fn sortStep(@builtin(global_invocation_id) gid: vec3u, @builtin(num_workgroups) groups: vec3u) {
+  let i = gid.x + gid.y * groups.x * 256u;
   if (i >= sp.count) { return; }
   let l = i ^ sp.j;
   if (l <= i || l >= sp.count) { return; }
@@ -66,9 +66,9 @@ ${FLOCK_WGSL_STRUCTS}
 @group(0) @binding(2) var<uniform> block: StepBlock;
 
 @compute @workgroup_size(256)
-fn cellRanges(@builtin(global_invocation_id) gid: vec3u) {
+fn cellRanges(@builtin(global_invocation_id) gid: vec3u, @builtin(num_workgroups) groups: vec3u) {
   let sim = block.sim;
-  let i = gid.x;
+  let i = gid.x + gid.y * groups.x * 256u;
   if (i >= sim.sortCount) { return; }
   let key = keys[i];
   if (key == 0xffffffffu) { return; }
@@ -355,9 +355,9 @@ fn avoidance(sim: SimParams, position: vec3f) -> vec3f {
 }
 
 @compute @workgroup_size(256)
-fn simulate(@builtin(global_invocation_id) gid: vec3u) {
+fn simulate(@builtin(global_invocation_id) gid: vec3u, @builtin(num_workgroups) groups: vec3u) {
   let sim = block.sim;
-  let slot = gid.x;
+  let slot = gid.x + gid.y * groups.x * 256u;
   if (slot >= sim.count) { return; }
   let index = particleIdentity(slot);
   var p = stateIn[slot];
@@ -595,8 +595,8 @@ struct TrailParams { ringIndex: u32, samples: u32, slotCount: u32, pad0: u32, };
 ${flockIdentityWgsl(4)}
 
 @compute @workgroup_size(256)
-fn trailWrite(@builtin(global_invocation_id) gid: vec3u) {
-  let s = gid.x;
+fn trailWrite(@builtin(global_invocation_id) gid: vec3u, @builtin(num_workgroups) groups: vec3u) {
+  let s = gid.x + gid.y * groups.x * 256u;
   if (s >= tp.slotCount) { return; }
   let p = trailState[particleSlot(slots[s])];
   var tag = 0.0;
@@ -624,8 +624,8 @@ struct LinkParams {
 ${flockIdentityWgsl(5)}
 
 @compute @workgroup_size(128)
-fn buildLinks(@builtin(global_invocation_id) gid: vec3u) {
-  let i = gid.x;
+fn buildLinks(@builtin(global_invocation_id) gid: vec3u, @builtin(num_workgroups) groups: vec3u) {
+  let i = gid.x + gid.y * groups.x * 128u;
   if (i >= lp.count) { return; }
   let base = i * lp.perParticle;
   for (var s = 0u; s < lp.perParticle; s++) { links[base + s] = 0u; }

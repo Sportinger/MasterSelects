@@ -40,6 +40,8 @@ jitter to reduce grid-aligned bands; separation bounds dense-neighborhood work
 to 64 candidates per particle.
 Graphs without boid rules or neighbor links use tiny placeholder bindings instead
 of allocating the full boid spatial index.
+Simulation, neighbor sorting, trails and links distribute GPU work across two
+dimensions; population increases remain subject to memory limits.
 
 The node canvas automatically refits the full graph whenever nodes or connections are added or removed, including changes from internal and external AI agents. Deleting effects also closes the gap in the node chain, including after the last effect is removed. Agent clip selections preserve the visible panel instead of bringing Properties forward.
 

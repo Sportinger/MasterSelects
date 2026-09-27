@@ -7,7 +7,7 @@ export async function checkNeighborLayouts(device: GPUDevice) {
   const pipelines = new FlockGpuPipelines(device), context = { keyframesByProperty: indexFlockKeyframes([]) };
   const plain = new FlockGpuSession(device, pipelines, neighborFixture('none'), context);
   const rules = new FlockGpuSession(device, pipelines, neighborFixture('rules'), context);
-  const links = new FlockGpuSession(device, pipelines, neighborFixture('links'), context);
+  const links = new FlockGpuSession(device, pipelines, neighborFixture('links'), context, { dispatchWidth: 1 });
   try {
     if (plain.hasNeighborGrid || !rules.hasNeighborGrid || !links.hasNeighborGrid) throw new Error('Wrong neighbor storage demand');
     for (const session of [plain, rules, links]) session.advanceTo(5, 5);
@@ -38,7 +38,8 @@ export async function checkNeighborLayouts(device: GPUDevice) {
       encoder.copyBufferToBuffer(copy, 0, readback, 0, linked.buffer.size);
       device.queue.submit([encoder.finish()]); await readback.mapAsync(GPUMapMode.READ);
       const values = new Uint32Array(readback.getMappedRange());
-      if (!values.some(value => value < 257)) throw new Error('No neighbors rendered in link-only graph');
+      if (!values.some(value => value > 0 && value <= 257)) throw new Error('No neighbors rendered in link-only graph');
+      if (!values.subarray(128 * 2).some(value => value > 0 && value <= 257)) throw new Error('Link dispatch did not reach its second row');
     } finally { readback.destroy(); copy.destroy(); }
     return { neighborLayouts: 'matched', fluidOnlyBytes: plain.stats.gpuBytes, withRulesBytes: rules.stats.gpuBytes, linksWithoutRules: true };
   } finally { plain.dispose(); rules.dispose(); links.dispose(); }

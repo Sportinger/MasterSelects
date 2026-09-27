@@ -330,6 +330,12 @@ graphs keep 32 bytes of placeholder storage for the shared shader bindings.
 Fluid's own stable cell sorter remains allocated. Adding/removing a neighbor
 consumer changes graph topology and recreates the session with the appropriate
 layout; animated boid weights retain the full index even when currently zero.
+Simulation, boid hashing/sorting/cell ranges, trails and neighbor links support
+two-dimensional compute dispatch. Each shader derives its linear particle index
+from the dispatched row width, so partial final rows preserve identity and do
+not revisit earlier particles. Fluid transfer and radix ordering already use
+two-dimensional dispatch. This removes the one-row dispatch constraint without
+raising the configured population ceiling or bypassing storage-binding limits.
 Affine Strength replaces the former FLIP Ratio; existing fluid nodes now use APIC, and older
 simulation caches are invalidated. The affine matrix remains in identity order
 through particle sorting, is reset on respawn/restart, and is included in CPU/GPU

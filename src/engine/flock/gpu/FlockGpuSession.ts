@@ -103,6 +103,7 @@ export class FlockGpuSession {
   private readonly fluid: FlockFluidGrid | null;
   private readonly order: FlockParticleOrder | null;
   private readonly spatialOrder: boolean;
+  private readonly dispatchWidth: number;
   readonly identityMapping: GPUBuffer;
   private currentIndex = 0;
   private readonly keys: GPUBuffer;
@@ -128,8 +129,10 @@ export class FlockGpuSession {
   private stampCounter = 1;
   private disposed = false;
 
-  constructor(device: GPUDevice, pipelines: FlockGpuPipelines, program: FlockProgram, context: FlockEvaluationContext, options: { spatialOrder?: boolean } = {}) {
+  constructor(device: GPUDevice, pipelines: FlockGpuPipelines, program: FlockProgram, context: FlockEvaluationContext, options: { spatialOrder?: boolean; dispatchWidth?: number } = {}) {
     this.device = device;
+    this.dispatchWidth = Math.max(1, Math.min(device.limits.maxComputeWorkgroupsPerDimension,
+      Math.floor(options.dispatchWidth ?? device.limits.maxComputeWorkgroupsPerDimension)));
     this.pipelines = pipelines;
     this.program = program;
     this.context = context;
@@ -146,9 +149,9 @@ export class FlockGpuSession {
       device.createBuffer({ size: stateBytes, usage: stateUsage, label: 'flock-state-b' }),
     ];
     this.spatialOrder = options.spatialOrder !== false;
-    this.order = program.fluid ? new FlockParticleOrder(device, this.states, program.fluid) : null;
+    this.order = program.fluid ? new FlockParticleOrder(device, this.states, program.fluid, this.dispatchWidth) : null;
     this.identityMapping = this.order?.mapping ?? device.createBuffer({ size: 4, usage: GPUBufferUsage.STORAGE });
-    this.fluid = program.fluid ? new FlockFluidGrid(device, program.fluid, this.states, FLOCK_MAX_STEPS_PER_SUBMIT, { order: this.order! }) : null;
+    this.fluid = program.fluid ? new FlockFluidGrid(device, program.fluid, this.states, FLOCK_MAX_STEPS_PER_SUBMIT, { order: this.order!, dispatchWidth: this.dispatchWidth }) : null;
     this.keys = device.createBuffer({ size: this.sortCount * 4, usage: GPUBufferUsage.STORAGE, label: 'flock-grid-keys' });
     this.vals = device.createBuffer({ size: this.sortCount * 4, usage: GPUBufferUsage.STORAGE, label: 'flock-grid-vals' });
     this.cells = device.createBuffer({ size: this.tableSize * 16, usage: GPUBufferUsage.STORAGE, label: 'flock-grid-cells' });
@@ -361,7 +364,7 @@ export class FlockGpuSession {
       if (needsGrid[b]) this.encodeGrid(pass, offset, sortWorkgroups);
       pass.setPipeline(this.pipelines.simulatePipeline);
       pass.setBindGroup(0, this.simulateBindGroups[this.currentIndex], [offset]);
-      pass.dispatchWorkgroups(particleWorkgroups);
+      this.dispatchGroups(pass, particleWorkgroups);
       // APIC corrects the step output in place before it becomes the current state.
       if (this.fluid) {
         pass.end();
@@ -374,7 +377,7 @@ export class FlockGpuSession {
         const trail = this.trails[write.trail];
         pass.setPipeline(this.pipelines.trailPipeline);
         pass.setBindGroup(0, trail.bindGroups[this.currentIndex], [write.offset]);
-        pass.dispatchWorkgroups(Math.ceil(trail.slotCount / WORKGROUP));
+        this.dispatchGroups(pass, Math.ceil(trail.slotCount / WORKGROUP));
       }
       pass.end();
       this.step += 1;
@@ -392,18 +395,22 @@ export class FlockGpuSession {
     if (readStats) this.readStats(batch);
   }
 
+  private dispatchGroups(pass: GPUComputePassEncoder, groups: number): void {
+    pass.dispatchWorkgroups(Math.min(groups, this.dispatchWidth), Math.ceil(groups / this.dispatchWidth));
+  }
+
   private encodeGrid(pass: GPUComputePassEncoder, blockOffset: number, sortWorkgroups: number): void {
     pass.setPipeline(this.pipelines.hashPipeline);
     pass.setBindGroup(0, this.gridBindGroups[this.currentIndex], [blockOffset]);
-    pass.dispatchWorkgroups(sortWorkgroups);
+    this.dispatchGroups(pass, sortWorkgroups);
     pass.setPipeline(this.pipelines.sortPipeline);
     for (let sortPass = 0; sortPass < this.sortPassCount; sortPass += 1) {
       pass.setBindGroup(0, this.sortBindGroup, [sortPass * SORT_PARAMS_STRIDE]);
-      pass.dispatchWorkgroups(sortWorkgroups);
+      this.dispatchGroups(pass, sortWorkgroups);
     }
     pass.setPipeline(this.pipelines.cellsPipeline);
     pass.setBindGroup(0, this.cellsBindGroup, [blockOffset]);
-    pass.dispatchWorkgroups(sortWorkgroups);
+    this.dispatchGroups(pass, sortWorkgroups);
   }
 
   /** Rebuilds the spatial index for the current state (links after a restore). */
@@ -476,7 +483,7 @@ export class FlockGpuSession {
     const pass = encoder.beginComputePass({ label: 'flock-links-pass' });
     pass.setPipeline(this.pipelines.linksPipeline);
     pass.setBindGroup(0, resources.bindGroups[this.currentIndex]);
-    pass.dispatchWorkgroups(Math.ceil(this.capacity / 128));
+    this.dispatchGroups(pass, Math.ceil(this.capacity / 128));
     pass.end();
     return { buffer: resources.buffer, perParticle };
   }

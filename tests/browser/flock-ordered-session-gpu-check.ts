@@ -13,7 +13,7 @@ export async function checkOrderedSessions(device: GPUDevice) {
   const compose = b.add('flock.compose');
   const fluid = b.add('flock.fluid', { size: [16, 16, 8], cellSize: 2, iterations: 12 });
   const points = b.add('flock.render-points');
-  const trails = b.add('flock.trails', { sampleFraction: 1, maxTrails: 30, samples: 8, interval: 1 });
+  const trails = b.add('flock.trails', { sampleFraction: 1, maxTrails: 257, samples: 8, interval: 1 });
   const curves = b.add('flock.render-curves');
   const output = b.add('flock.output');
   b.connect(emitter, 'spawn', simulation, 'spawn').connect(rules, 'behavior', compose, 'behavior')
@@ -24,7 +24,7 @@ export async function checkOrderedSessions(device: GPUDevice) {
   if (!compiled.ok) throw new Error(JSON.stringify(compiled.diagnostics));
   const pipelines = new FlockGpuPipelines(device), context = { keyframesByProperty: indexFlockKeyframes([]) };
   const canonical = new FlockGpuSession(device, pipelines, compiled.program, context, { spatialOrder: false });
-  const sorted = new FlockGpuSession(device, pipelines, compiled.program, context);
+  const sorted = new FlockGpuSession(device, pipelines, compiled.program, context, { dispatchWidth: 1 });
   const imported = new FlockGpuSession(device, pipelines, compiled.program, context);
   const sessions = [canonical, sorted, imported];
   sessions.forEach(session => { session.checkpointInterval = 4; });
