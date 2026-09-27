@@ -82,6 +82,8 @@ interface HostSourceBase {
 }
 
 export type WorkerGpuFrameStackHostSource =
+  | (HostSourceBase & { readonly kind: 'native-scene'; readonly runtimeSourceKind: 'nativeScene';
+      readonly payload: Extract<WorkerGpuFrameStackPayload, { kind: 'native-scene' }> })
   | (HostSourceBase & {
       readonly kind: 'webcodecs';
       readonly runtimeSourceKind: 'video' | 'motionVideo';
@@ -154,7 +156,7 @@ interface ProjectionContext {
 }
 
 type PreparedPayload =
-  | Extract<WorkerGpuFrameStackPayload, { readonly kind: 'webcodecs' | 'solid' | 'motion' }>
+  | Extract<WorkerGpuFrameStackPayload, { readonly kind: 'webcodecs' | 'solid' | 'motion' | 'native-scene' }>
   | {
       readonly kind: 'bitmap-source';
       readonly source: ImageBitmapSource;
@@ -263,6 +265,7 @@ function hostSourceMatchesLayer(
   layer: Layer,
 ): boolean {
   const runtimeKind = runtimeSourceKindFromLayer(layer);
+  if (source.kind === 'native-scene') return runtimeKind === 'image' && layer.is3D !== true;
   if (runtimeKind === 'nestedComposition') {
     return source.runtimeSourceKind === (
       layer.source?.type === 'motion'
@@ -279,7 +282,7 @@ function isExpectedPayloadKind(
 ): boolean {
   switch (runtimeSourceKind) {
     case 'nativeScene':
-      return false; // Host scene grouping is admitted through its dedicated adapter.
+      return payloadKind === 'native-scene';
     case 'video':
       return payloadKind === 'webcodecs' || payloadKind === 'bitmap';
     case 'motionVideo':
@@ -468,6 +471,10 @@ function preparePayload(
     fail('MD7_FRAME_STACK_PROJECTOR_SOURCE_KIND_MISMATCH', `${path}.kind`);
   }
   switch (source.kind) {
+    case 'native-scene':
+      assertProjectionDimensions(source.payload.width, source.payload.height, path, context);
+      if (source.payload.timelineTime !== request.frame.timelineTime) fail('MD7_FRAME_STACK_PROJECTOR_SOURCE_KIND_MISMATCH', path);
+      return structuredClone(source.payload);
     case 'webcodecs': {
       const evaluatedTime = layer.source?.mediaTime ?? layer.source?.targetMediaTime;
       if (

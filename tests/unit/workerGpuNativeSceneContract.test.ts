@@ -27,4 +27,14 @@ describe('native scene frame-stack admission', () => {
     expect(validateWorkerGpuFrameStackContract(stack, admission).ok).toBe(false);
     expect(called).toBe(false);
   });
+  it.each(['valid', 'duplicate', 'protocol', 'handle'])('validates runtime asset references: %s', kind => {
+    const { stack, admission, payload } = nativeSceneFixture();
+    const asset = { id: 'pigment', kind: 'image', fileName: 'pigment.png', url: 'blob:https://localhost:5173/pigment' };
+    const assets: unknown[] = [asset];
+    if (kind === 'duplicate') assets.push({ ...asset });
+    if (kind === 'protocol') asset.url = 'file:///private/image.png';
+    if (kind === 'handle') Object.assign(asset, { bitmap: new Map() });
+    Object.assign(payload, { assets });
+    expect(validateWorkerGpuFrameStackContract(stack, admission).ok).toBe(kind === 'valid');
+  });
 });

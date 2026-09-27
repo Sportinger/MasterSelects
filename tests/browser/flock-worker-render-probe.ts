@@ -18,6 +18,7 @@ export interface FlockWorkerProbeInput {
   pigment: ImageBitmap;
   definition: FlockDefinition;
   keyframes: Keyframe[];
+  frameStackUrls: string[];
 }
 
 /** Same production simulation/render classes, executed in either realm for comparison. */
@@ -124,7 +125,7 @@ export async function renderFlockProbe(input: FlockWorkerProbeInput) {
     if (!precompute.ok || persisted.length !== 2) throw new Error(`Worker precompute failed: ${JSON.stringify(precompute)}, ${persisted}`);
     const persistedCheckpoints = persisted.length;
     await runtime.clearCache('worker-probe');
-    images.push(...await renderNativeFrameStackProbe(created.surface));
+    images.push(...await renderNativeFrameStackProbe(created.surface, input.frameStackUrls));
     if (errors.length) throw new Error(errors.join('\n'));
     return { nativeFrameStack: true, sharedScene: true, sharedDepth: true, persistedCheckpoints, persistentSession: true, seekReplay: true, keyframeInvalidation: true, renderRequests, statusCount: statuses.size, worker: typeof document === 'undefined', step: session.step, coloredPixels, pigmentPixels, images, particles };
   } finally {

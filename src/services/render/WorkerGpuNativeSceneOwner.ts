@@ -1,6 +1,6 @@
 import { NativeSceneRuntime } from '../../engine/native3d/NativeSceneRuntime';
 import { FlockSimulationRuntime } from '../../engine/flock/runtime/FlockSimulationRuntime';
-import { FlockGpuAssetRegistry } from '../../engine/flock/gpu/FlockGpuAssetRegistry';
+import { WorkerGpuNativeSceneAssets } from './WorkerGpuNativeSceneAssets';
 import type { FlockRuntimeStatus } from '../../engine/flock/runtime/flockRuntimeApi';
 import type { SceneCamera, SceneLayer3DData } from '../../engine/scene/types';
 import type { LayerRenderData } from '../../engine/core/types';
@@ -30,13 +30,13 @@ export function hasWorkerGpuNativeScene(stack: WorkerGpuFrameStackContractV1): b
 /** Persistent scene/simulation state on the EXISTING target's GPU device. */
 export class WorkerGpuNativeSceneOwner {
   private readonly device: GPUDevice;
-  private readonly assets: FlockGpuAssetRegistry;
+  private readonly assets: WorkerGpuNativeSceneAssets;
   private readonly scenes = new Map<string, SceneEntry>();
   private disposed = false;
 
   constructor(device: GPUDevice) {
     this.device = device;
-    this.assets = new FlockGpuAssetRegistry(device);
+    this.assets = new WorkerGpuNativeSceneAssets(device);
   }
 
   private key(stack: WorkerGpuFrameStackContractV1, layerId: string): string {
@@ -49,8 +49,8 @@ export class WorkerGpuNativeSceneOwner {
     const statuses = new Map<string, FlockRuntimeStatus>();
     const simulation = new FlockSimulationRuntime({
       requestRender: () => {}, // Exact requests explicitly await catch-up below.
-      renderAssets: () => this.assets, audioSampler: () => () => null, audioRevision: () => 0,
-      modelState: () => ({ status: 'missing' }),
+      renderAssets: () => this.assets.registry, audioSampler: () => () => null, audioRevision: () => 0,
+      modelState: id => this.assets.modelState(id),
       status: { getStatus: id => statuses.get(id), publishStatus: s => { statuses.set(s.clipId, s); }, clearStatus: id => { statuses.delete(id); } },
     });
     const scene = new NativeSceneRuntime({ flockRuntime: () => simulation, isRealtime: () => false, sourceFingerprint: () => undefined });
@@ -64,6 +64,7 @@ export class WorkerGpuNativeSceneOwner {
   async prepare(stack: WorkerGpuFrameStackContractV1, current: () => boolean): Promise<void> {
     const active = new Set<string>();
     const guard = () => { if (this.disposed || !current()) throw new Error('Native scene frame expired or target was replaced'); };
+    await this.assets.prepare(stack, guard);
     const visit = async (frame: WorkerGpuFrameStackContractV1): Promise<void> => {
       for (const binding of frame.bindings) {
         guard();
@@ -84,14 +85,14 @@ export class WorkerGpuNativeSceneOwner {
           if (!compiled || compiled.signature !== signature) {
             const result = compileFlockDefinition(layer.definition);
             if (!result.ok) throw new Error(`Worker Flock graph failed: ${result.diagnostics.map(d => d.message).join('; ')}`);
-            // Resource snapshots are a separate integration step. Never silently
-            // substitute missing image/model/audio inputs with different pixels.
-            if (result.program.assets.images.length || result.program.assets.models.length || result.program.assets.audioClips.length) {
-              throw new Error('Worker native scene asset/audio snapshots are not available for this graph');
+            if (result.program.assets.audioClips.length) {
+              throw new Error('Worker native scene audio snapshots are not available for this graph');
             }
             compiled = { signature, program: result.program };
             entry.definitions.set(layer.clipId, compiled);
           }
+          for (const id of compiled.program.assets.images) this.assets.require(id, 'image');
+          for (const id of compiled.program.assets.models) this.assets.require(id, 'model');
           const keySignature = JSON.stringify(layer.keyframes);
           let keys = entry.keyframes.get(layer.clipId);
           if (!keys || keys.signature !== keySignature) {

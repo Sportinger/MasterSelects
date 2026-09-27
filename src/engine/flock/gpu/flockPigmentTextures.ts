@@ -1,12 +1,11 @@
 import { useMediaStore } from '../../../stores/mediaStore';
+import { loadFlockPigmentBitmap } from './flockPigmentBitmap';
 
 /**
  * Image assets sampled by render branches in `image` color mode ("data
  * pigments"): every particle keeps the color of the source pixel it was born
  * on. Textures are device-owned runtime handles and never enter project data.
  */
-
-const MAX_PIGMENT_EDGE = 2048;
 
 interface PigmentEntry {
   status: 'loading' | 'ready' | 'failed';
@@ -42,19 +41,6 @@ function devicePigments(device: GPUDevice): DevicePigments {
   return state;
 }
 
-async function loadBitmap(url: string): Promise<ImageBitmap> {
-  const blob = await (await fetch(url)).blob();
-  const probe = await createImageBitmap(blob);
-  const scale = Math.min(1, MAX_PIGMENT_EDGE / Math.max(probe.width, probe.height));
-  if (scale >= 1) return probe;
-  probe.close();
-  return createImageBitmap(blob, {
-    resizeWidth: Math.max(1, Math.round(probe.width * scale)),
-    resizeHeight: Math.max(1, Math.round(probe.height * scale)),
-    resizeQuality: 'high',
-  });
-}
-
 /** Texture view and sampler for an image media file id; a white 1x1 texture until it is loaded. */
 export function getFlockPigmentBinding(
   device: GPUDevice,
@@ -70,7 +56,7 @@ export function getFlockPigmentBinding(
   const existing = state.entries.get(key);
   if (existing) return existing.view ? { view: existing.view, sampler: state.sampler } : fallback;
   state.entries.set(key, { status: 'loading' });
-  void loadBitmap(file.url).then((bitmap) => {
+  void loadFlockPigmentBitmap(file.url).then((bitmap) => {
     const texture = device.createTexture({
       size: [bitmap.width, bitmap.height],
       format: 'rgba8unorm',

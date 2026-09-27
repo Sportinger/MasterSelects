@@ -15,6 +15,14 @@ export type WorkerGpuNativeSceneLayer =
   | (NativeLayerBase & { readonly kind: 'flock'; readonly definition: FlockDefinition;
       readonly keyframes: Keyframe[]; readonly sourceTime: number });
 
+/** Runtime media references, never persisted with project scene data. */
+export interface WorkerGpuNativeSceneAsset {
+  readonly id: string;
+  readonly kind: 'image' | 'model';
+  readonly url: string;
+  readonly fileName: string;
+}
+
 /** Frozen, value-only scene. Media/GPU handles use separate resource owners. */
 export interface WorkerGpuNativeScenePayload {
   readonly kind: 'native-scene';
@@ -27,6 +35,7 @@ export interface WorkerGpuNativeScenePayload {
     readonly projectionMatrix: readonly number[];
   };
   readonly layers: readonly WorkerGpuNativeSceneLayer[];
+  readonly assets?: readonly WorkerGpuNativeSceneAsset[];
 }
 
 const meshes = new Set(['cube', 'sphere', 'plane', 'cylinder', 'torus', 'cone']);
@@ -41,10 +50,23 @@ const size = (v: unknown, w: number, h: number) => record(v) && keys(v, ['width'
 
 /** Called only after the enclosing frame stack's bounded plain-data check. */
 export function isWorkerGpuNativeScenePayload(value: unknown): value is WorkerGpuNativeScenePayload {
-  if (!record(value) || !keys(value, ['kind', 'version', 'width', 'height', 'timelineTime', 'camera', 'layers'])
+  if (!record(value) || !keys(value, ['kind', 'version', 'width', 'height', 'timelineTime', 'camera', 'layers', 'assets'])
     || value.kind !== 'native-scene' || value.version !== 1 || !finite(value.timelineTime)
     || !Number.isSafeInteger(value.width) || !Number.isSafeInteger(value.height)
     || (value.width as number) < 1 || (value.height as number) < 1) return false;
+  if (value.assets !== undefined) {
+    if (!Array.isArray(value.assets) || value.assets.length > 256) return false;
+    const ids = new Set<string>();
+    for (const asset of value.assets) {
+      if (!record(asset) || !keys(asset, ['id', 'kind', 'url', 'fileName']) || !id(asset.id)
+        || ids.has(asset.id) || (asset.kind !== 'image' && asset.kind !== 'model')
+        || typeof asset.fileName !== 'string' || asset.fileName.length > 1024
+        || typeof asset.url !== 'string' || asset.url.length > 8192) return false;
+      try { if (!['blob:', 'https:', 'http:'].includes(new URL(asset.url).protocol)) return false; }
+      catch { return false; }
+      ids.add(asset.id);
+    }
+  }
   const c = value.camera;
   if (!record(c) || !keys(c, ['viewMatrix', 'projectionMatrix', 'cameraPosition', 'cameraTarget', 'cameraUp',
     'fov', 'near', 'far', 'viewport', 'referenceSize', 'applyDefaultDistance', 'projection', 'orthographicScale'])

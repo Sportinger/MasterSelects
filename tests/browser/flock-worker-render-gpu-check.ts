@@ -23,12 +23,23 @@ async function check() {
     { id: 'speed-a', property, time: 0, value: 2, easing: 'linear' },
     { id: 'speed-b', property, time: 0.15, value: 0.2, easing: 'linear' },
   ] as Keyframe[];
+  // Main-owned blob URLs are resolved from the real Worker, like project media.
+  const frameStackUrls: string[] = [];
+  for (const color of ['#20ff40', '#ff2040']) {
+    const pigment = new OffscreenCanvas(2, 2), context = pigment.getContext('2d')!;
+    context.fillStyle = color; context.fillRect(0, 0, 2, 2);
+    frameStackUrls.push(URL.createObjectURL(await pigment.convertToBlob()));
+  }
+  for (const obj of ['v -1 -1 0\nv 1 -1 0\nv 0 1 0\nf 1 2 3',
+    'v -1 -1 0\nv 1 -1 0\nv 1 1 0\nv -1 1 0\nf 1 2 3\nf 1 3 4']) {
+    frameStackUrls.push(URL.createObjectURL(new Blob([obj], { type: 'text/plain' })));
+  }
   const makeInput = async (): Promise<FlockWorkerProbeInput> => {
     const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
     document.querySelector('#canvases')!.append(canvas);
     const pigmentSource = new OffscreenCanvas(2, 2), context = pigmentSource.getContext('2d')!;
     context.fillStyle = '#20ff40'; context.fillRect(0, 0, 2, 2);
-    return { canvas: canvas.transferControlToOffscreen(), program: compiled.program, definition, keyframes, pigment: await createImageBitmap(pigmentSource) };
+    return { canvas: canvas.transferControlToOffscreen(), program: compiled.program, definition, keyframes, frameStackUrls, pigment: await createImageBitmap(pigmentSource) };
   };
   const main = await renderFlockProbe(await makeInput());
   const worker = new Worker(new URL('./flock-worker-render.worker.ts', import.meta.url), { type: 'module' });
@@ -59,10 +70,10 @@ async function check() {
       }
     }
     if (!result.images[0].some((value, i) => value !== result.images[1][i])) throw new Error('Model replacement did not change pixels');
-    return { success: true, nativeFrameStack: result.nativeFrameStack, sharedScene: result.sharedScene, sharedDepth: result.sharedDepth, worker: result.worker, offscreenTransferred: true, steps: result.step,
+    return { success: true, hostProjection: true, frameStackAssets: true, comparedImages: main.images.length, nativeFrameStack: result.nativeFrameStack, sharedScene: result.sharedScene, sharedDepth: result.sharedDepth, worker: result.worker, offscreenTransferred: true, steps: result.step,
       count: compiled.program.capacity, coloredPixels: result.coloredPixels, pigmentPixels: result.pigmentPixels, modelReplacement: 'verified',
       simulation: 'exact', persistedCheckpoints: result.persistedCheckpoints, persistentSession: result.persistentSession, seekReplay: result.seekReplay, keyframeInvalidation: result.keyframeInvalidation, statusCount: result.statusCount, maxPixelDelta, mainThreadHeartbeats: heartbeats };
-  } finally { clearInterval(heartbeat); /* Keep the worker's canvas visible for inspection. */ }
+  } finally { clearInterval(heartbeat); frameStackUrls.forEach(url => URL.revokeObjectURL(url)); /* Keep the worker's canvas visible for inspection. */ }
 }
 
 check().then(result => { document.querySelector('#result')!.textContent = JSON.stringify(result, null, 2); })

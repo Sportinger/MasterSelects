@@ -3,11 +3,14 @@ import type { WorkerGpuFrameStackContractV1 } from '../../src/services/render/wo
 import type { WorkerGpuNativeScenePayload } from '../../src/services/render/workerGpuNativeSceneContract';
 import type { WorkerGpuWebCodecsRenderLayer } from '../../src/services/render/workerGpuRuntimeCommands';
 
-export function nativeSceneFixture(time = 0.2, now = 1000, requestId = 'native-request') {
+export function nativeSceneFixture(time = 0.2, now = 1000, requestId = 'native-request', render?: 'image' | 'model') {
   const graph = new FlockGraphBuilder();
   const emitter = graph.add('flock.emitter', { count: 512, shape: 'grid', center: [0, 0, 0], size: [4, 4, 2], initialSpeed: 1 });
   const simulation = graph.add('flock.simulation', { minSpeed: 0, maxSpeed: 2, stepRate: '60' });
-  const points = graph.add('flock.render-points', { size: 8, blend: 'opaque', colorMode: 'constant', color: '#20ff40', shading: 'flat', distanceFade: 0 });
+  const points = render === 'model'
+    ? graph.add('flock.render-instances', { mesh: 'model', model: 'stack-model', size: 0.2, color: '#ff3030', sizeVariance: 0, swimAmplitude: 0, shading: 'flat' })
+    : graph.add('flock.render-points', { size: 8, blend: 'opaque', colorMode: render === 'image' ? 'image' : 'constant',
+      image: render === 'image' ? 'stack-image' : '', color: render === 'image' ? '#ffffff' : '#20ff40', shading: 'flat', distanceFade: 0 });
   const output = graph.add('flock.output');
   graph.connect(emitter, 'spawn', simulation, 'spawn').connect(simulation, 'particles', points, 'particles').connect(points, 'scene', output, 'scene');
   const definition = graph.build('native-stack-probe');

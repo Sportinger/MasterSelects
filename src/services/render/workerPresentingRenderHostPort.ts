@@ -98,6 +98,7 @@ import {
   type WorkerGpuFrameStackResolvedSource,
 } from './workerGpuFrameStackHostProjection';
 import { projectWorkerGpuFrameStack } from './workerGpuFrameStackProjector';
+import { projectMainNativeScene } from './workerGpuNativeSceneMainProjection';
 import { closeWorkerGpuFrameStackTransferables } from './workerGpuFrameStackContract';
 import { workerGpuOperatorProgramPresentationKey } from './workerGpuOperatorPipeline';
 
@@ -1593,6 +1594,7 @@ class WorkerPresentingRenderHostPortCore {
       exact: true as const,
     };
     const projectionRequest = buildWorkerGpuFrameStackProjectionRequest({
+      projectNativeScene: projectMainNativeScene,
       layers: request.layers,
       width: record.canvas.width,
       height: record.canvas.height,

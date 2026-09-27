@@ -37,6 +37,9 @@ preserving particle identity across rendering, trails and checkpoints.
 Checkpoint persistence remains valid when the GPU cache evicts a snapshot during readback.
 Persistent precompute streams checkpoints to IndexedDB as they are produced;
 capacity-dependent GPU budgets also apply to imported and shared snapshots.
+The opt-in Worker render path groups Flock and primitive scenes and loads their
+image pigments and instance models in the Worker. The default preview remains
+on the main renderer while the remaining scene and control integrations are completed.
 Fluid pressure uses a multigrid-preconditioned conjugate-gradient solver on both
 CPU and GPU, with residual-based convergence and solid domain walls.
 The fluid node exposes particle separation, spacing and deterministic position

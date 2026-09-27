@@ -13,6 +13,7 @@ import type {
 } from './workerGpuFrameStackProjector';
 import type { WorkerGpuRenderIntent } from './workerGpuRuntimeCommands';
 import type { RenderSurfaceFrameContext } from './renderHostTypes';
+import type { WorkerGpuNativeSceneProjection, WorkerGpuNativeSceneProjectionInput } from './workerGpuNativeSceneProjection';
 
 export type WorkerGpuFrameStackResolvedVideoSource =
   | {
@@ -50,6 +51,8 @@ export type WorkerGpuFrameStackResolvedSource =
     };
 
 export interface WorkerGpuFrameStackHostProjectionInput {
+  readonly projectNativeScene?: (input: WorkerGpuNativeSceneProjectionInput) => WorkerGpuNativeSceneProjection | null;
+  readonly sceneContext?: WorkerGpuNativeSceneProjectionInput['sceneContext'];
   /** Evaluated LayerBuilder order is top-to-bottom. */
   readonly layers: readonly Layer[];
   readonly width: number;
@@ -162,12 +165,14 @@ function buildSources(
   input: WorkerGpuFrameStackHostProjectionInput,
   ancestry: ReadonlySet<string>,
   depth: number,
+  nativeSource?: WorkerGpuNativeSceneProjection['source'],
 ): readonly WorkerGpuFrameStackHostSource[] {
   const sources: WorkerGpuFrameStackHostSource[] = [];
   for (const layer of input.layers) {
     if (!layer.visible || layer.opacity <= 0 || !layer.source) continue;
     const source = layer.source;
     if (source.type === 'motion-adjustment') continue;
+    if (nativeSource?.layerId === layer.id) { sources.push(nativeSource); continue; }
 
     if (source.nestedComposition) {
       const nested = source.nestedComposition;
@@ -197,6 +202,7 @@ function buildSources(
             layers: nested.layers,
             width: nested.width,
             height: nested.height,
+            sceneContext: { clips: nested.sceneClips, tracks: nested.sceneTracks, compositionId: nested.compositionId, sceneNavClipId: null, previewCameraOverride: null },
             occurrenceNamespace,
             surface: input.surface === 'export' ? 'export' : 'nested-preview',
             frame: {
@@ -318,9 +324,26 @@ function buildRequest(
   }
   const ancestry = new Set(parentAncestry);
   ancestry.add(input.frame.compositionId);
+  const native = input.projectNativeScene?.(input);
+  const projectedInput = native ? { ...input, layers: native.layers } : input;
+  const sources = buildSources(projectedInput, ancestry, depth, native?.source);
+  // Keep the parent occurrence and its projected child on the same immutable
+  // layer array. The projector's nested identity guard remains authoritative.
+  const children = new Map<string, Layer[]>();
+  for (const source of sources) if (source.kind === 'nested-stack') {
+    const original = projectedInput.layers.find(layer => layer.id === source.layerId)!.source!.nestedComposition!.layers;
+    children.set(source.layerId, original === source.request.layers ? original : [...source.request.layers]);
+  }
+  const layers = projectedInput.layers.map(layer => {
+    const nested = layer.source?.nestedComposition, child = children.get(layer.id);
+    return nested && child && child !== nested.layers
+      ? { ...layer, source: { ...layer.source!, nestedComposition: { ...nested, layers: child } } }
+      : layer;
+  });
   return {
-    layers: input.layers,
-    sources: buildSources(input, ancestry, depth),
+    layers: layers.some((layer, i) => layer !== projectedInput.layers[i]) ? layers : projectedInput.layers,
+    sources: sources.map(source => source.kind === 'nested-stack'
+      ? { ...source, request: { ...source.request, layers: children.get(source.layerId)! } } : source),
     width: input.width,
     height: input.height,
     frame: input.frame,

@@ -377,10 +377,16 @@ Flock and primitive meshes. Its target owns persistent scene and simulation stat
 per composition occurrence, waits for the requested source step, and composites
 the scene texture with other sources using the existing exact-frame/export path.
 Camera matrices, graph definitions, keyframes and clocks are admitted as bounded
-plain data. This initial transport explicitly rejects graphs requiring external
-image/model/audio snapshots until their resource transport is connected. Other
-3D layer kinds and host-side scene grouping are not yet admitted; the editor
-preview remains on the main renderer.
+plain data. The opt-in Worker host groups evaluated Flock and primitive layers
+at the shared scene's original stack position, including nested compositions
+with their own camera context. Image pigments and imported instance models use
+runtime media URLs: the Worker loads and caches them on its device, replaces
+changed URLs, and releases inactive resources. Images share the main renderer's
+2048-pixel decode limit; full model imports are reduced to instance geometry.
+Missing resources fail the exact frame instead of silently using placeholders.
+Audio snapshots, other 3D layer kinds, scene effectors, gizmos and complete
+status/cache control routing remain outstanding. The default editor preview
+remains on the main renderer; this is not yet the full Worker migration.
 
 The GPU fluid, cell-order and separation kernels also accept a 32-byte fluid
 core (`position/age`, `velocity/generation`). Pipeline caches distinguish it

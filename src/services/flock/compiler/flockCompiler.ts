@@ -437,7 +437,7 @@ function lowerFlockGraph(definition: FlockDefinition, inheritedDiagnostics: Floc
 
   const assets = {
     models: branches.map((branch) => branch.params.assets.model).filter((id): id is string => !!id),
-    images: [] as string[],
+    images: branches.map((branch) => branch.params.assets.image).filter((id): id is string => !!id),
     audioClips: values.map((value) => value.params.assets.clipId).filter((id): id is string => !!id),
   };
 
