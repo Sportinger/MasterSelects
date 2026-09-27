@@ -145,6 +145,13 @@ export function flockPointUsesTriangles(branch: FlockResolvedNode<FlockBranchSpe
     && (branch.p.n.size ?? 4) * (1 + Math.abs(branch.p.n.sizeVariance ?? 0)) * viewportHeight / 1080 <= TRIANGLE_POINT_MAX_PX;
 }
 
+/** The bounded 2x2 pixel kernel is only used for opaque screen-space points. */
+export function flockPointUsesCompute(branch: FlockResolvedNode<FlockBranchSpec>, viewportHeight: number): boolean {
+  return branch.spec.kind === 'points' && branch.p.e.blend === 'opaque'
+    && (branch.p.e.sizeMode ?? 'screen') === 'screen'
+    && (branch.p.n.size ?? 4) * (1 + Math.abs(branch.p.n.sizeVariance ?? 0)) * viewportHeight / 1080 <= 2;
+}
+
 export interface PackedBranch {
   data: ArrayBuffer;
   renderKind: FlockRenderKind;

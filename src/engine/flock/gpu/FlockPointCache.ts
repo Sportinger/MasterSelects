@@ -5,16 +5,17 @@ import { flockGpuTimings } from './FlockGpuTimings';
 /** Bytes per cached point: vec3f position + packed rgba8 (color, shadow visibility). */
 export const FLOCK_POINT_RECORD_BYTES = 16;
 /**
- * Largest cache: one 1D dispatch (65535 workgroups), about 16.7 million points
- * and 268 MB. Larger branches keep the direct per-vertex path.
+ * Maximum rendered population. Actual allocation also respects device binding
+ * and buffer limits; two-dimensional dispatch removes the old 16.7M limit.
  */
-export const FLOCK_POINT_CACHE_MAX_POINTS = 65535 * FLOCK_POINT_CACHE_WORKGROUP;
+export const FLOCK_POINT_CACHE_MAX_POINTS = 64 * 1024 * 1024;
 
 /** Caches unused for this many prepared frames are freed (covers multiple render targets per frame). */
 const UNUSED_FRAMES_BEFORE_FREE = 120;
 
 interface CacheEntry {
   total: number;
+  dispatchWidth: number;
   lastUsedFrame: number;
   buffer: GPUBuffer;
   params: GPUBuffer;
@@ -51,9 +52,11 @@ export class FlockPointCache {
     if (existing) this.destroy(key, existing);
     const buffer = this.device.createBuffer({ size: total * FLOCK_POINT_RECORD_BYTES, usage: GPUBufferUsage.STORAGE, label: `flock-point-cache-${key}` });
     const params = this.device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, label: 'flock-point-cache-params' });
-    this.device.queue.writeBuffer(params, 0, new Uint32Array([total, 0, 0, 0]));
+    const dispatchWidth = Math.min(65535, this.device.limits.maxComputeWorkgroupsPerDimension) * FLOCK_POINT_CACHE_WORKGROUP;
+    this.device.queue.writeBuffer(params, 0, new Uint32Array([total, dispatchWidth, 0, 0]));
     const entry: CacheEntry = {
       total,
+      dispatchWidth,
       lastUsedFrame: this.frame,
       buffer,
       params,
@@ -88,7 +91,7 @@ export class FlockPointCache {
     pass.setBindGroup(0, frameGroup);
     pass.setBindGroup(1, branchGroup);
     pass.setBindGroup(2, entry.computeGroup);
-    pass.dispatchWorkgroups(Math.ceil(entry.total / FLOCK_POINT_CACHE_WORKGROUP));
+    pass.dispatchWorkgroups(Math.ceil(Math.min(entry.total, entry.dispatchWidth) / FLOCK_POINT_CACHE_WORKGROUP), Math.ceil(entry.total / entry.dispatchWidth));
     pass.end();
   }
 

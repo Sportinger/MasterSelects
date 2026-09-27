@@ -11,7 +11,7 @@ import { QUAD_CORNERS, RENDER_COMMON } from './flockRenderCommonWgsl';
  * once per frame. Dense sub-particle canvases use the cached variant.
  */
 
-const POINT_BASE = /* wgsl */ `
+export const POINT_BASE = /* wgsl */ `
 struct PointOut {
   @builtin(position) clip: vec4f,
   @location(0) uv: vec2f,
@@ -154,7 +154,7 @@ fn vsPointsShadow(@builtin(vertex_index) vi: u32, @builtin(instance_index) instI
 `;
 
 /** One cached point: simulation position and rgb + shadow visibility packed as unorm8 (0 = hidden). */
-const POINT_RECORD = /* wgsl */ `
+export const POINT_RECORD = /* wgsl */ `
 struct PointRecord { pos: vec3f, packed: u32, };
 const VISIBILITY_FLOOR: f32 = 1.0 / 255.0;
 
@@ -197,14 +197,14 @@ ${RENDER_COMMON}
 ${POINT_BASE}
 ${POINT_RECORD}
 
-struct CacheParams { total: u32, pad0: u32, pad1: u32, pad2: u32, };
+struct CacheParams { total: u32, dispatchWidth: u32, pad1: u32, pad2: u32, };
 
 @group(2) @binding(0) var<storage, read_write> pointCache: array<PointRecord>;
 @group(2) @binding(1) var<uniform> cacheParams: CacheParams;
 
 @compute @workgroup_size(${FLOCK_POINT_CACHE_WORKGROUP})
 fn cachePoints(@builtin(global_invocation_id) gid: vec3u) {
-  let index = gid.x;
+  let index = gid.x + gid.y * cacheParams.dispatchWidth;
   if (index >= cacheParams.total) { return; }
   let s = pointSample(index);
   if (!s.visible) { pointCache[index] = PointRecord(vec3f(0.0), 0u); return; }
@@ -214,7 +214,7 @@ fn cachePoints(@builtin(global_invocation_id) gid: vec3u) {
 
 @compute @workgroup_size(${FLOCK_POINT_CACHE_WORKGROUP})
 fn cacheVisibility(@builtin(global_invocation_id) gid: vec3u) {
-  let index = gid.x;
+  let index = gid.x + gid.y * cacheParams.dispatchWidth;
   if (index >= cacheParams.total) { return; }
   let record = pointCache[index];
   if (record.packed == 0u) { return; }

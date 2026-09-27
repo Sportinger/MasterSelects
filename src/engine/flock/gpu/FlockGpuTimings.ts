@@ -15,6 +15,7 @@ export interface FlockDrawDiagnostics {
   viewport: { width: number; height: number };
   simulated: number;
   points: number;
+  computePoints?: number;
   shadowPoints: number;
   children: number[];
   requestedChildren: number[];

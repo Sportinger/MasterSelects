@@ -224,6 +224,20 @@ sprites and larger points retain quads. Emitter
 capacity is 4,194,304 particles per clip; restart checkpoints keep room for at
 least two full states.
 
+Opaque screen points with a maximum physical diameter of two pixels use compute
+rasterization. Full-precision depth and a separate deterministic point-identity
+pass select each pixel; a fullscreen resolve shades the winning point and writes
+the shared scene depth, so Room, instances and other 3D layers still occlude it.
+Alpha/additive points, world-sized points and larger sprites use the existing
+triangle/quad path. A bounded scratch-buffer budget falls back to that path when
+device limits cannot accommodate the pixel buffers. The point cache and raster
+dispatch support two dimensions, including point populations above 16.7 million
+when device buffer limits permit them.
+
+Parent-particle shadows also use compute for footprints up to eight shadow texels
+in radius; larger footprints and instance geometry keep the triangle path. The
+shadow resolve shares the same shadow-map depth attachment with instance casters.
+
 `getStats().flockGpu` reports the actual scene viewport, requested and drawn
 children, simulated particles and shadow point counts. On devices supporting
 `timestamp-query`, it also reports GPU milliseconds for simulation (including
@@ -233,6 +247,10 @@ Each sample includes pass counts, completion time and a truncation flag; simulat
 batch totals must be divided by their pass counts to compare individual steps.
 Readback uses three bounded slots and skips samples while they are busy, without
 waiting on the GPU. Unsupported devices keep rendering with no timing queries.
+`computePoints` reports the number actually routed through compute. Additional
+GPU pass labels are `clearPixels`, `pointDepth`, `pointWinner` and `shadowDepth`;
+lighting for compute points runs in the main resolve, without a per-point
+`cacheVisibility` pass.
 
 **Room, light and shadows.** The **Room** render node draws an open-front
 white gallery box (back wall, floor, ceiling, sides) with an optional flat

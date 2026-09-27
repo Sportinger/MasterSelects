@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { FlockGraphBuilder } from '../../src/services/flock/presets/flockGraphBuilder';
 import { compileFlockDefinition } from '../../src/services/flock/compiler/flockCompiler';
 import { indexFlockKeyframes, resolveFlockRender } from '../../src/services/flock/compiler/flockParamEvaluation';
-import { flockPointChildrenForViewport, flockPointUsesTriangles, packBranch } from '../../src/engine/flock/gpu/flockRenderPacking';
+import { flockPointChildrenForViewport, flockPointUsesCompute, flockPointUsesTriangles, packBranch } from '../../src/engine/flock/gpu/flockRenderPacking';
 import type { FlockParamValue } from '../../src/types/flock';
 
 function points(params: Record<string, FlockParamValue> = {}) {
@@ -18,6 +18,14 @@ function points(params: Record<string, FlockParamValue> = {}) {
 }
 
 describe('Flock point render quality', () => {
+  it('uses compute only for opaque points fitting the bounded pixel kernel', () => {
+    expect(flockPointUsesCompute(points({ blend: 'opaque', size: 2 }), 1080)).toBe(true);
+    expect(flockPointUsesCompute(points({ blend: 'opaque', size: 2 }), 2160)).toBe(false);
+    expect(flockPointUsesCompute(points({ blend: 'alpha', size: 1 }), 1080)).toBe(false);
+    expect(flockPointUsesCompute(points({ blend: 'additive', size: 1 }), 1080)).toBe(false);
+    expect(flockPointUsesCompute(points({ blend: 'opaque', size: 2, sizeVariance: 0.1 }), 1080)).toBe(false);
+    expect(flockPointUsesCompute(points({ blend: 'opaque', size: 1, sizeMode: 'world' }), 1080)).toBe(false);
+  });
   it('reduces eight children to three at 1080p and preserves eight at 4K', () => {
     const branch = points();
     expect(flockPointChildrenForViewport(branch, 1048576, 1920 * 1080)).toBe(3);

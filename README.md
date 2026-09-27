@@ -27,6 +27,8 @@ Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in on
 to the scene target, scales screen point sizes from a 1080p reference, and uses
 parent particles for shadows. Optional GPU timestamps expose simulation,
 fluid-transfer, pressure, point-cache, shadow and drawing costs through `getStats`.
+Small opaque points and bounded shadow footprints use compute rasterization,
+with deterministic depth ties and a resolve into the shared 3D depth buffer.
 
 The node canvas automatically refits the full graph whenever nodes or connections are added or removed, including changes from internal and external AI agents. Deleting effects also closes the gap in the node chain, including after the last effect is removed. Agent clip selections preserve the visible panel instead of bringing Properties forward.
 

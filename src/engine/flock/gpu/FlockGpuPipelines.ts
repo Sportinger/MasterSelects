@@ -74,7 +74,7 @@ function storage(binding: number, visibility: number, readOnly: boolean): GPUBin
 }
 
 /** Shader compile/validation diagnostics are otherwise invisible to Logger readers. */
-function createCheckedModule(device: GPUDevice, code: string, label: string): GPUShaderModule {
+export function createCheckedModule(device: GPUDevice, code: string, label: string): GPUShaderModule {
   const module = device.createShaderModule({ code, label });
   void module.getCompilationInfo?.().then((info) => {
     const errors = info.messages.filter((message) => message.type === 'error');
@@ -85,7 +85,7 @@ function createCheckedModule(device: GPUDevice, code: string, label: string): GP
   return module;
 }
 
-function watchValidation(device: GPUDevice, label: string): () => void {
+export function watchValidation(device: GPUDevice, label: string): () => void {
   device.pushErrorScope('validation');
   return () => {
     void device.popErrorScope().then((error) => {
@@ -166,7 +166,7 @@ export class FlockGpuPipelines {
       label: 'flock-render-frame-layout',
       entries: [
         uniform(0, VFC),
-        storage(1, VC, true),
+        storage(1, VFC, true),
         storage(2, VC, true),
         { binding: 3, visibility: VFC, texture: { sampleType: 'depth' } },
         { binding: 4, visibility: VFC, sampler: { type: 'comparison' } },
@@ -178,7 +178,7 @@ export class FlockGpuPipelines {
     });
     this.pointCacheRenderLayout = device.createBindGroupLayout({
       label: 'flock-point-cache-render-layout',
-      entries: [storage(0, GPUShaderStage.VERTEX, true)],
+      entries: [storage(0, VFC, true)],
     });
   }
 
