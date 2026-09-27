@@ -55,7 +55,11 @@ export class VideoEncoderWrapper {
     }
 
     // Check codec support
-    const codecString = getCodecString(this.effectiveVideoCodec);
+    const codecString = getCodecString(this.effectiveVideoCodec, {
+      width: this.settings.width,
+      height: this.settings.height,
+      fps: this.settings.fps,
+    });
     const bitratePolicy = resolveVideoEncoderBitrate(
       this.effectiveVideoCodec,
       this.settings.bitrate,

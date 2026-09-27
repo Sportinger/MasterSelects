@@ -8,22 +8,29 @@ import type {
   ContainerFormatOption,
   VideoCodecOption,
 } from './types';
+import { av1LevelToken, avcLevelToken, hevcLevelToken, vp9LevelToken, type CodecFrameSize } from './codecLevels';
 
 // ============ CODEC STRINGS ============
 
 /**
- * Get WebCodecs codec string for VideoEncoder configuration.
+ * Get WebCodecs codec string for VideoEncoder configuration. With a frame
+ * size the level is raised to the smallest one that fits (e.g. 4K60 HEVC
+ * needs Level 5.1); without one the historical default levels are used.
  */
-export function getCodecString(codec: string): string {
+export function getCodecString(codec: string, frame?: CodecFrameSize): string {
   switch (codec) {
     case 'h264':
-      return 'avc1.4d0028'; // Main Profile, Level 4.0 (better VLC compatibility)
+      // Main Profile, Level 4.0 minimum (better VLC compatibility)
+      return `avc1.4d00${frame ? avcLevelToken(frame) : '28'}`;
     case 'h265':
-      return 'hvc1.1.6.L93.B0'; // Main Profile, Level 3.1
+      // Main Profile, Main tier, Level 3.1 minimum
+      return `hvc1.1.6.L${frame ? hevcLevelToken(frame) : '93'}.B0`;
     case 'vp9':
-      return 'vp09.00.10.08'; // Profile 0, Level 1.0, 8-bit
+      // Profile 0, 8-bit, Level 1.0 minimum
+      return `vp09.00.${frame ? vp9LevelToken(frame) : '10'}.08`;
     case 'av1':
-      return 'av01.0.04M.08'; // Main Profile, Level 3.0, 8-bit
+      // Main Profile, 8-bit, Level 3.0 minimum
+      return `av01.0.${frame ? av1LevelToken(frame) : '04'}M.08`;
     default:
       return 'avc1.640028';
   }

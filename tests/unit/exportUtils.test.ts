@@ -41,6 +41,25 @@ describe('getCodecString', () => {
     expect(getCodecString('av1')).toBe('av01.0.04M.08');
   });
 
+  it('keeps the default levels for 1080p30 exports', () => {
+    const frame = { width: 1920, height: 1080, fps: 30 };
+    expect(getCodecString('h264', frame)).toBe('avc1.4d0028');
+    expect(getCodecString('h265', frame)).toBe('hvc1.1.6.L120.B0');
+    expect(getCodecString('av1', frame)).toBe('av01.0.08M.08');
+  });
+
+  it('raises levels so 4K60 encodes are accepted', () => {
+    const frame = { width: 3840, height: 2160, fps: 60 };
+    expect(getCodecString('h264', frame)).toBe('avc1.4d0034');
+    expect(getCodecString('h265', frame)).toBe('hvc1.1.6.L153.B0');
+    expect(getCodecString('vp9', frame)).toBe('vp09.00.51.08');
+    expect(getCodecString('av1', frame)).toBe('av01.0.13M.08');
+  });
+
+  it('keeps HEVC Level 3.1 where it fits', () => {
+    expect(getCodecString('h265', { width: 1280, height: 720, fps: 30 })).toBe('hvc1.1.6.L93.B0');
+  });
+
   it('returns fallback for unknown codec', () => {
     expect(getCodecString('unknown')).toBe('avc1.640028');
   });
