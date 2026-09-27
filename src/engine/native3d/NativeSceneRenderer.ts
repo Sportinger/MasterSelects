@@ -22,6 +22,8 @@ import type { MaskTextureManager } from '../texture/MaskTextureManager';
 import { ModelRuntimeCache } from './assets/ModelRuntimeCache';
 import { EffectorCompute } from './passes/EffectorCompute';
 import { FlockPass } from './passes/FlockPass';
+import { getFlockSimulationRegistry } from '../flock/runtime/FlockSimulationRegistry';
+import type { FlockSimulationRuntime } from '../flock/runtime/FlockSimulationRuntime';
 import { GizmoPass } from './passes/GizmoPass';
 import { MeshPass, type SceneNativeMeshLayer } from './passes/MeshPass';
 import { PlanePass } from './passes/PlanePass';
@@ -71,12 +73,16 @@ export class NativeSceneRenderer {
   private readonly gizmoPass = new GizmoPass();
   private readonly splatPass = new SplatPass();
   private readonly voxelPass = new VoxelPass();
-  private readonly flockPass = new FlockPass();
+  private readonly flockPass: FlockPass;
   private readonly effectorCompute = new EffectorCompute();
   private readonly modelRuntimeCache = new ModelRuntimeCache();
   private readonly lastRenderableModelSequenceUrls = new Map<string, string>();
   private readonly layerSpaceEffectRenderer = new LayerSpaceEffectRenderer();
   private slitScanSurfaces?: SlitScanSceneSurfaces;
+  constructor(flockRuntime: () => FlockSimulationRuntime = getFlockSimulationRegistry) {
+    this.flockPass = new FlockPass(flockRuntime);
+  }
+
   private get geometrySurfaces(): SlitScanSceneSurfaces {
     return this.slitScanSurfaces ??= new SlitScanSceneSurfaces();
   }

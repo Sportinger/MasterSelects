@@ -1,12 +1,13 @@
 import type { FlockDrawPlan } from '../../src/engine/flock/gpu/FlockBranchRenderer';
 import { FlockGpuAssetRegistry } from '../../src/engine/flock/gpu/FlockGpuAssetRegistry';
 import { FlockSimulationRuntime } from '../../src/engine/flock/runtime/FlockSimulationRuntime';
+import { FlockPass } from '../../src/engine/native3d/passes/FlockPass';
 import type { FlockRuntimeStatus } from '../../src/engine/flock/runtime/flockRuntimeApi';
 import type { FlockDefinition } from '../../src/types/flock';
 import type { Keyframe } from '../../src/types/keyframes';
 import { getFlockMesh } from '../../src/engine/flock/gpu/flockMeshes';
 import type { FlockProgram } from '../../src/services/flock/compiler/flockProgramTypes';
-import type { SceneCamera } from '../../src/engine/scene/types';
+import type { SceneCamera, SceneFlockLayer } from '../../src/engine/scene/types';
 import { createWorkerGpuTargetSurface } from '../../src/services/render/workerGpuTargetSurface';
 
 export interface FlockWorkerProbeInput {
@@ -38,7 +39,7 @@ export async function renderFlockProbe(input: FlockWorkerProbeInput) {
     modelState: id => ({ status: assets.model(id).mesh ? 'ready' : 'missing' }),
     status: { getStatus: id => statuses.get(id), publishStatus: status => { statuses.set(status.clipId, status); }, clearStatus: id => { statuses.delete(id); } },
   });
-  const renderer = runtime.getRenderer(device);
+  const scenePass = new FlockPass(() => runtime);
   const depth = device.createTexture({ size: [size, size], format: 'depth24plus', usage: GPUTextureUsage.RENDER_ATTACHMENT });
   const readback = device.createBuffer({ size: size * size * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
   const identity = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -50,13 +51,15 @@ export async function renderFlockProbe(input: FlockWorkerProbeInput) {
   const images: Uint8Array[] = [];
   try {
     const prepareAt = async (sourceTime: number, keyframes = input.keyframes) => {
-      const layer = { clipId: 'worker-probe', worldMatrix: world, flock: {
+      const layer: SceneFlockLayer = { kind: 'flock', layerId: 'worker-probe-layer',
+        opacity: 1, blendMode: 'normal', sourceWidth: size, sourceHeight: size,
+        clipId: 'worker-probe', worldMatrix: world, flock: {
         clipId: 'worker-probe', definition: input.definition, program: input.program, diagnostics: [],
         keyframes, sourceTime, consumer: 'preview' as const,
       } };
       for (let attempt = 0; attempt < 100; attempt++) {
         const encoder = device.createCommandEncoder();
-        const plan = runtime.prepare(device, encoder, layer, { realtime: false });
+        const [plan] = scenePass.prepare(device, encoder, scenePass.collect([layer]), false);
         device.queue.submit([encoder.finish()]); await device.queue.onSubmittedWorkDone();
         if (!plan) throw new Error('Runtime did not prepare the worker layer');
         if (runtime.entries.get('worker-probe|preview')?.caughtUp) return plan;
@@ -84,8 +87,10 @@ export async function renderFlockProbe(input: FlockWorkerProbeInput) {
       clear.end();
       const draw: FlockDrawPlan = { ...plan, alpha: 1 };
       if (frame === 2) draw.render = { ...draw.render, branches: draw.render.branches.filter(branch => branch.spec.kind === 'points') };
-      renderer.render(encoder, view, depth.createView(), [draw], camera, 'opaque', temporary);
-      renderer.render(encoder, view, depth.createView(), [draw], camera, 'transparent', temporary);
+      if (!scenePass.render(device, encoder, view, depth.createView(), [draw], camera, 'opaque', temporary)
+        || !scenePass.render(device, encoder, view, depth.createView(), [draw], camera, 'transparent', temporary)) {
+        throw new Error('Shared scene Flock pass failed');
+      }
       encoder.copyTextureToBuffer({ texture }, { buffer: readback, bytesPerRow: size * 4 }, [size, size]);
       device.queue.submit([encoder.finish()]);
       await readback.mapAsync(GPUMapMode.READ);

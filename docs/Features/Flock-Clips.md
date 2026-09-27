@@ -361,6 +361,11 @@ use the runtime without importing timeline/media stores. This removes duplicate
 simulation orchestration from the migration, but does not yet switch the editor
 preview to the worker host.
 
+The native scene's `FlockPass` also receives its runtime from its scene owner.
+Its collection, simulation preparation and opaque/transparent drawing run in
+either realm with the same device and depth attachments. The editor scene owner
+still defaults to the main-thread adapter.
+
 The GPU fluid, cell-order and separation kernels also accept a 32-byte fluid
 core (`position/age`, `velocity/generation`). Pipeline caches distinguish it
 from the full 64-byte particle state, and sorting scratch uses the same stride.

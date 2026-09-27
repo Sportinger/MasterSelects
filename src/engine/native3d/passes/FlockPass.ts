@@ -1,6 +1,6 @@
 import type { SceneCamera, SceneFlockLayer, SceneLayer3DData } from '../../scene/types';
 import type { FlockDrawPlan, FlockPassKind } from '../../flock/gpu/FlockBranchRenderer';
-import { getFlockSimulationRegistry } from '../../flock/runtime/FlockSimulationRegistry';
+import type { FlockSimulationRuntime } from '../../flock/runtime/FlockSimulationRuntime';
 
 /**
  * Native scene integration for flock clips: advances each flock simulation to
@@ -9,6 +9,12 @@ import { getFlockSimulationRegistry } from '../../flock/runtime/FlockSimulationR
  * transparent geometry.
  */
 export class FlockPass {
+  private readonly runtime: () => FlockSimulationRuntime;
+
+  constructor(runtime: () => FlockSimulationRuntime) {
+    this.runtime = runtime;
+  }
+
   collect(layers: SceneLayer3DData[]): SceneFlockLayer[] {
     return layers.filter((layer): layer is SceneFlockLayer => layer.kind === 'flock');
   }
@@ -20,7 +26,7 @@ export class FlockPass {
     realtimePlayback: boolean,
   ): FlockDrawPlan[] {
     if (layers.length === 0) return [];
-    const registry = getFlockSimulationRegistry();
+    const registry = this.runtime();
     const plans: FlockDrawPlan[] = [];
     for (const layer of layers) {
       const plan = registry.prepare(device, commandEncoder, layer, { realtime: realtimePlayback });
@@ -40,7 +46,7 @@ export class FlockPass {
     temporaryBuffers: GPUBuffer[],
   ): boolean {
     if (plans.length === 0) return true;
-    return getFlockSimulationRegistry()
+    return this.runtime()
       .getRenderer(device)
       .render(commandEncoder, sceneView, sceneDepthView, plans, camera, pass, temporaryBuffers);
   }
