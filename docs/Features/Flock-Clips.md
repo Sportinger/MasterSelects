@@ -353,6 +353,14 @@ renderer to run in a Worker with a transferred OffscreenCanvas. The editor's
 shared 3D path still runs on the main thread until worker-host routing, scene
 transport, audio evaluation and runtime diagnostics are connected.
 
+`FlockSimulationRuntime` now owns the same persistent GPU sessions, source-time
+mapping, keyframe invalidation, checkpoints and precompute in either execution
+realm. Its injected host provides render notifications, status delivery, assets
+and audio analysis access. The main-thread registry is an adapter; a worker can
+use the runtime without importing timeline/media stores. This removes duplicate
+simulation orchestration from the migration, but does not yet switch the editor
+preview to the worker host.
+
 The GPU fluid, cell-order and separation kernels also accept a 32-byte fluid
 core (`position/age`, `velocity/generation`). Pipeline caches distinguish it
 from the full 64-byte particle state, and sorting scratch uses the same stride.

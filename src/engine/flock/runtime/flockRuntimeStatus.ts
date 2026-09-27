@@ -1,7 +1,7 @@
 import type { FlockDiagnostic } from '../../../types/flock';
 import type { FlockProgram } from '../../../services/flock/compiler/flockProgramTypes';
 import type { FlockRuntimeState, FlockRuntimeStatus } from './flockRuntimeApi';
-import type { FlockSessionEntry } from './FlockSimulationRegistry';
+import type { FlockSessionEntry } from './FlockSimulationRuntime';
 import type { FlockPrecomputeJob } from './flockPrecompute';
 
 export interface FlockStatusInput {

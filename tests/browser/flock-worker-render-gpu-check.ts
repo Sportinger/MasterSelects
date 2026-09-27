@@ -1,3 +1,4 @@
+import type { Keyframe } from '../../src/types/keyframes';
 import { renderFlockProbe, type FlockWorkerProbeInput } from './flock-worker-render-probe';
 import { FlockGraphBuilder } from '../../src/services/flock/presets/flockGraphBuilder';
 import { compileFlockDefinition } from '../../src/services/flock/compiler/flockCompiler';
@@ -14,14 +15,20 @@ async function check() {
   const output = builder.add('flock.output');
   builder.connect(emitter, 'spawn', simulation, 'spawn').connect(fluid, 'behavior', simulation, 'behavior');
   for (const branch of [points, instances]) builder.connect(simulation, 'particles', branch, 'particles').connect(branch, 'scene', output, 'scene');
-  const compiled = compileFlockDefinition(builder.build('worker-render-probe'));
+  const definition = builder.build('worker-render-probe');
+  const compiled = compileFlockDefinition(definition);
   if (!compiled.ok) throw new Error(JSON.stringify(compiled.diagnostics));
+  const property = compiled.program.simulation.params.numbers.maxSpeed.property!;
+  const keyframes = [
+    { id: 'speed-a', property, time: 0, value: 2, easing: 'linear' },
+    { id: 'speed-b', property, time: 0.15, value: 0.2, easing: 'linear' },
+  ] as Keyframe[];
   const makeInput = async (): Promise<FlockWorkerProbeInput> => {
     const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
     document.querySelector('#canvases')!.append(canvas);
     const pigmentSource = new OffscreenCanvas(2, 2), context = pigmentSource.getContext('2d')!;
     context.fillStyle = '#20ff40'; context.fillRect(0, 0, 2, 2);
-    return { canvas: canvas.transferControlToOffscreen(), program: compiled.program, pigment: await createImageBitmap(pigmentSource) };
+    return { canvas: canvas.transferControlToOffscreen(), program: compiled.program, definition, keyframes, pigment: await createImageBitmap(pigmentSource) };
   };
   const main = await renderFlockProbe(await makeInput());
   const worker = new Worker(new URL('./flock-worker-render.worker.ts', import.meta.url), { type: 'module' });
@@ -54,7 +61,7 @@ async function check() {
     if (!result.images[0].some((value, i) => value !== result.images[1][i])) throw new Error('Model replacement did not change pixels');
     return { success: true, worker: result.worker, offscreenTransferred: true, steps: result.step,
       count: compiled.program.capacity, coloredPixels: result.coloredPixels, pigmentPixels: result.pigmentPixels, modelReplacement: 'verified',
-      simulation: 'exact', maxPixelDelta, mainThreadHeartbeats: heartbeats };
+      simulation: 'exact', persistedCheckpoints: result.persistedCheckpoints, persistentSession: result.persistentSession, seekReplay: result.seekReplay, keyframeInvalidation: result.keyframeInvalidation, statusCount: result.statusCount, maxPixelDelta, mainThreadHeartbeats: heartbeats };
   } finally { clearInterval(heartbeat); /* Keep the worker's canvas visible for inspection. */ }
 }
 

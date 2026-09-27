@@ -1,10 +1,9 @@
 import { Logger } from '../../../services/logger';
-import { renderHostPort } from '../../../services/render/renderHostPort';
 import { flockStepForSourceTime } from '../../../services/flock/time/flockTimeMapper';
 import { flockCheckpointStore } from './flockCheckpointStore';
-import { flockRuntime, type FlockPrecomputeResult } from './flockRuntimeApi';
+import type { FlockPrecomputeResult } from './flockRuntimeApi';
 import { buildFlockRuntimeStatus } from './flockRuntimeStatus';
-import type { FlockSimulationRegistry } from './FlockSimulationRegistry';
+import type { FlockSimulationRuntime } from './FlockSimulationRuntime';
 
 const log = Logger.create('FlockPrecompute');
 const CHUNK_STEPS = 240;
@@ -24,7 +23,7 @@ export interface FlockPrecomputeJob {
  * before computing the next interval, so VRAM eviction cannot lose earlier ranges.
  */
 export async function runFlockPrecompute(
-  registry: FlockSimulationRegistry,
+  registry: FlockSimulationRuntime,
   clipId: string,
   range: { start: number; end: number },
   options: { persist: boolean },
@@ -46,7 +45,7 @@ export async function runFlockPrecompute(
   const worker = registry.acquire(device, clipId, 'precompute', program, input.keyframes);
   if (!worker) {
     job.finished = true;
-    return { ok: false, message: flockRuntime.getStatus(clipId)?.message ?? 'Flock simulation is not supported on this GPU.' };
+    return { ok: false, message: registry.host.status.getStatus(clipId)?.message ?? 'Flock simulation is not supported on this GPU.' };
   }
   worker.session.checkpointInterval = Math.max(1, Math.round(program.stepRate / 4));
   const endStep = flockStepForSourceTime(program, end).step + 1;
@@ -79,7 +78,7 @@ export async function runFlockPrecompute(
       if (options.persist) await persistCaptured();
       job.progress = Math.min(1, worker.session.step / Math.max(1, endStep));
       const preview = registry.entries.get(`${clipId}|preview`);
-      flockRuntime.publishStatus(buildFlockRuntimeStatus({
+      registry.host.status.publishStatus(buildFlockRuntimeStatus({
         clipId,
         state: 'computing',
         program,
@@ -111,6 +110,6 @@ export async function runFlockPrecompute(
     if (completed) job.progress = 1;
     worker.session.dispose();
     registry.entries.delete(worker.key);
-    renderHostPort.requestRender();
+    registry.host.requestRender();
   }
 }

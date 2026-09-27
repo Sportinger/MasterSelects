@@ -22,6 +22,7 @@ function fixture() {
   const preview = { cacheKey: 'current', persistedSteps: [] as number[], session: { adoptCheckpoints: vi.fn() } };
   const worker = { key: 'clip|precompute', cacheKey: 'current', session };
   const registry = {
+    host: { requestRender: vi.fn(), status: { publishStatus: vi.fn(), getStatus: vi.fn() } },
     device: { queue: { onSubmittedWorkDone: async () => {} } },
     latestInputs: new Map([['clip', { program, keyframes: [] }]]),
     jobs: new Map(), entries: new Map<string, unknown>([['clip|preview', preview], [worker.key, worker]]),
