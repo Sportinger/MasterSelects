@@ -1,16 +1,30 @@
+import type { FlockParticleLayout } from '../shared/flockParticleLayout';
+
 /**
  * WGSL shared by flock compute and render shaders. Mirrors
  * src/engine/flock/shared/flockMath.ts and the CPU reference solver.
  */
 
-export const FLOCK_WGSL_STRUCTS = /* wgsl */ `
-struct Particle {
+const FULL_PARTICLE = /* wgsl */ `struct Particle {
   pos: vec3f, age: f32,
   vel: vec3f, life: f32,
   fwd: vec3f, group: f32,
   rnd: f32, gen: f32, emitter: f32, neighbors: f32,
 };
 
+`;
+const FLUID_PARTICLE = /* wgsl */ `
+struct Particle {
+  pos: vec3f, age: f32,
+  vel: vec3f, gen: f32,
+};
+`;
+
+export function flockWgslStructs(layout: FlockParticleLayout = 'full64'): string {
+  return `${layout === 'fluid32' ? FLUID_PARTICLE : FULL_PARTICLE}${COMMON_STRUCTS}`;
+}
+
+const COMMON_STRUCTS = /* wgsl */ `
 struct Emitter {
   center: vec3f, offset: f32,
   size: vec3f, count: f32,
@@ -79,6 +93,8 @@ struct Cell {
   start: u32, end: u32, stamp: u32, pad0: u32,
 };
 `;
+
+export const FLOCK_WGSL_STRUCTS = flockWgslStructs();
 
 export const FLOCK_WGSL_MATH = /* wgsl */ `
 const TAU: f32 = 6.28318530718;

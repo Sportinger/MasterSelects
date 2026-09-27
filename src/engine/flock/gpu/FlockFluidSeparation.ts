@@ -1,5 +1,6 @@
+import type { FlockParticleLayout } from '../shared/flockParticleLayout';
 import type { FlockFluidSpec } from '../../../services/flock/compiler/flockProgramTypes';
-import { FLOCK_FLUID_SEPARATION_WGSL } from '../shaders/flockFluidSeparationWgsl';
+import { flockFluidSeparationWgsl } from '../shaders/flockFluidSeparationWgsl';
 import { FLOCK_FLUID_PARAMS_STRIDE } from '../shaders/flockFluidWgsl';
 import { FlockParticleOrder } from './FlockParticleOrder';
 import { createCheckedModule, watchValidation } from './FlockGpuPipelines';
@@ -7,9 +8,9 @@ import { flockGpuTimings } from './FlockGpuTimings';
 
 const entries = ['clearRanges', 'buildRanges', 'computeCorrections', 'applyCorrections'] as const;
 interface Pipelines { layout: GPUBindGroupLayout; passes: GPUComputePipeline[] }
-const cache = new WeakMap<GPUDevice, Pipelines>();
-function pipelines(device: GPUDevice): Pipelines {
-  const existing = cache.get(device);
+const cache = new WeakMap<GPUDevice, Map<FlockParticleLayout, Pipelines>>();
+function pipelines(device: GPUDevice, layoutKind: FlockParticleLayout): Pipelines {
+  const existing = cache.get(device)?.get(layoutKind);
   if (existing) return existing;
   const finish = watchValidation(device, 'flock fluid separation');
   const layout = device.createBindGroupLayout({ entries: [
@@ -17,10 +18,11 @@ function pipelines(device: GPUDevice): Pipelines {
       buffer: { type: (binding === 1 || binding === 4 ? 'read-only-storage' : 'storage') as GPUBufferBindingType } })),
     { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform', hasDynamicOffset: true } },
   ] });
-  const module = createCheckedModule(device, FLOCK_FLUID_SEPARATION_WGSL, 'flock-fluid-separation');
+  const module = createCheckedModule(device, flockFluidSeparationWgsl(layoutKind), 'flock-fluid-separation');
   const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [layout] });
   const passes = entries.map(entryPoint => device.createComputePipeline({ layout: pipelineLayout, compute: { module, entryPoint } }));
-  const result = { layout, passes }; cache.set(device, result); finish(); return result;
+  const result = { layout, passes }; const variants = cache.get(device) ?? new Map();
+  variants.set(layoutKind, result); cache.set(device, variants); finish(); return result;
 }
 
 /** Reuses the stable radix index and reorder scratch; only cell ranges are owned. */
@@ -40,7 +42,7 @@ export class FlockFluidSeparation {
     this.cells = spec.dims[0] * spec.dims[1] * spec.dims[2];
     this.ranges = device.createBuffer({ size: this.cells * 8, usage: GPUBufferUsage.STORAGE, label: 'flock-separation-ranges' });
     this.gpuBytes = this.ranges.size;
-    this.pipelines = pipelines(device);
+    this.pipelines = pipelines(device, order.stateLayout);
     this.groups = states.map(state => device.createBindGroup({ layout: this.pipelines.layout, entries: [
       ...[state, order.sortedPairs, this.ranges, order.scratchState, order.mapping].map((buffer, binding) => ({ binding, resource: { buffer } })),
       { binding: 5, resource: { buffer: params, size: 64 } },

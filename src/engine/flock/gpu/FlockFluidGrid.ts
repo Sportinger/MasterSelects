@@ -1,14 +1,15 @@
-import { FLOCK_AFFINE_BYTES, FLOCK_PARTICLE_BYTES, type FlockFluidSpec } from '../../../services/flock/compiler/flockProgramTypes';
+import { flockParticleBytes, type FlockParticleLayout } from '../shared/flockParticleLayout';
+import { FLOCK_AFFINE_BYTES, type FlockFluidSpec } from '../../../services/flock/compiler/flockProgramTypes';
 import { flockGpuTimings } from './FlockGpuTimings';
 import { FlockPressureSolver } from './FlockPressureSolver';
 import { FlockParticleOrder } from './FlockParticleOrder';
 import { FlockFluidSeparation } from './FlockFluidSeparation';
 import type { FlockFluidRegularization } from '../shared/flockFluidRegularization';
-import { FLOCK_FLUID_BLOCK_TRANSFER_WGSL } from '../shaders/flockFluidTransferWgsl';
+import { flockFluidBlockTransferWgsl } from '../shaders/flockFluidTransferWgsl';
 import { createCheckedModule, watchValidation } from './FlockGpuPipelines';
 import {
   FLOCK_FLUID_PARAMS_STRIDE,
-  FLOCK_FLUID_WGSL,
+  flockFluidWgsl,
   FLOCK_FLUID_WORKGROUP,
 } from '../shaders/flockFluidWgsl';
 
@@ -20,10 +21,10 @@ interface FluidPipelines {
   pipelines: Record<FluidEntry, GPUComputePipeline>;
 }
 
-const pipelinesByDevice = new WeakMap<GPUDevice, FluidPipelines>();
+const pipelinesByDevice = new WeakMap<GPUDevice, Map<FlockParticleLayout, FluidPipelines>>();
 
-function fluidPipelines(device: GPUDevice): FluidPipelines {
-  const existing = pipelinesByDevice.get(device);
+function fluidPipelines(device: GPUDevice, layoutKind: FlockParticleLayout): FluidPipelines {
+  const existing = pipelinesByDevice.get(device)?.get(layoutKind);
   if (existing) return existing;
   const C = GPUShaderStage.COMPUTE;
   const layout = device.createBindGroupLayout({
@@ -40,8 +41,8 @@ function fluidPipelines(device: GPUDevice): FluidPipelines {
     ],
   });
   const finish = watchValidation(device, 'flock fluid');
-  const module = createCheckedModule(device, FLOCK_FLUID_WGSL, 'flock-fluid');
-  const blockModule = createCheckedModule(device, FLOCK_FLUID_BLOCK_TRANSFER_WGSL, 'flock-fluid-block-transfer');
+  const module = createCheckedModule(device, flockFluidWgsl(layoutKind), 'flock-fluid');
+  const blockModule = createCheckedModule(device, flockFluidBlockTransferWgsl(layoutKind), 'flock-fluid-block-transfer');
   const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [layout], label: 'flock-fluid-pipeline-layout' });
   const pipelines = Object.fromEntries(ENTRIES.map((entryPoint) => [entryPoint, device.createComputePipeline({
     label: `flock-${entryPoint}`,
@@ -49,7 +50,8 @@ function fluidPipelines(device: GPUDevice): FluidPipelines {
     compute: { module: entryPoint === 'fluidP2GBlock' ? blockModule : module, entryPoint },
   })])) as Record<FluidEntry, GPUComputePipeline>;
   const created = { layout, pipelines };
-  pipelinesByDevice.set(device, created);
+  const variants = pipelinesByDevice.get(device) ?? new Map();
+  variants.set(layoutKind, created); pipelinesByDevice.set(device, variants);
   finish();
   return created;
 }
@@ -60,6 +62,7 @@ function fluidPipelines(device: GPUDevice): FluidPipelines {
  * velocities and positions of the step's output state in place.
  */
 export class FlockFluidGrid {
+  readonly stateLayout: FlockParticleLayout;
   readonly spec: FlockFluidSpec;
   readonly gpuBytes: number;
   readonly affine: GPUBuffer;
@@ -77,11 +80,17 @@ export class FlockFluidGrid {
   private readonly separation: FlockFluidSeparation;
   private readonly ownedOrder: FlockParticleOrder | null;
 
-  constructor(device: GPUDevice, spec: FlockFluidSpec, states: GPUBuffer[], maxSlots: number, options: { blockTransfer?: boolean; dispatchWidth?: number; order?: FlockParticleOrder } = {}) {
+  constructor(device: GPUDevice, spec: FlockFluidSpec, states: GPUBuffer[], maxSlots: number, options: { blockTransfer?: boolean; dispatchWidth?: number; order?: FlockParticleOrder; stateLayout?: FlockParticleLayout } = {}) {
+    this.stateLayout = options.stateLayout ?? options.order?.stateLayout ?? 'full64';
+    const stride = flockParticleBytes(this.stateLayout);
+    if (options.order && options.order.stateLayout !== this.stateLayout) throw new Error('Fluid and particle order layouts differ');
+    if (!states.length || states[0].size === 0 || states.some(state => state.size !== states[0].size || state.size % stride !== 0)) {
+      throw new Error('Fluid requires matching, aligned state buffers');
+    }
     this.device = device;
     this.paramData = new ArrayBuffer(FLOCK_FLUID_PARAMS_STRIDE * maxSlots);
     this.spec = spec;
-    this.pipelines = fluidPipelines(device);
+    this.pipelines = fluidPipelines(device, this.stateLayout);
     const [nx, ny, nz] = spec.dims;
     this.faceTotal = (nx + 1) * ny * nz + nx * (ny + 1) * nz + nx * ny * (nz + 1);
     this.cellTotal = nx * ny * nz;
@@ -94,9 +103,9 @@ export class FlockFluidGrid {
     this.pressure = new FlockPressureSolver(device, spec.dims, counts, cells, this.dispatchWidth);
     this.params = device.createBuffer({ size: this.paramData.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, label: 'flock-fluid-params' });
     this.blockTransfer = options.blockTransfer !== false;
-    this.affine = device.createBuffer({ size: states[0].size / FLOCK_PARTICLE_BYTES * FLOCK_AFFINE_BYTES,
+    this.affine = device.createBuffer({ size: states[0].size / stride * FLOCK_AFFINE_BYTES,
       usage: storage | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, label: 'flock-fluid-affine' });
-    this.ownedOrder = options.order ? null : new FlockParticleOrder(device, states, spec, this.dispatchWidth);
+    this.ownedOrder = options.order ? null : new FlockParticleOrder(device, states, spec, this.dispatchWidth, this.stateLayout);
     const order = options.order ?? this.ownedOrder!;
     if (this.ownedOrder) {
       const encoder = device.createCommandEncoder(); this.ownedOrder.reset(encoder); device.queue.submit([encoder.finish()]);

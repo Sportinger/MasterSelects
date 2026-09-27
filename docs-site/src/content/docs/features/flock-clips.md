@@ -345,6 +345,14 @@ from the dispatched row width, so partial final rows preserve identity and do
 not revisit earlier particles. Fluid transfer and radix ordering already use
 two-dimensional dispatch. This removes the one-row dispatch constraint without
 raising the configured population ceiling or bypassing storage-binding limits.
+The GPU fluid, cell-order and separation kernels also accept a 32-byte fluid
+core (`position/age`, `velocity/generation`). Pipeline caches distinguish it
+from the full 64-byte particle state, and sorting scratch uses the same stride.
+The editor session and renderer still use the full format: lifecycle metadata,
+render attributes and checkpoint integration must be connected before enabling
+compact storage in the preview. This kernel support alone does not reduce the
+current editor's particle memory.
+
 GPU particle-to-grid transfers select power-of-two fixed-point scales per grid
 face from current local particle counts and conservative velocity bounds,
 including the affine contribution. Dense piles and fast motion therefore retain

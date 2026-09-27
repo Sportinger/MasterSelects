@@ -1,7 +1,9 @@
-import { FLOCK_WGSL_STRUCTS } from './flockWgslShared';
+import type { FlockParticleLayout } from '../shared/flockParticleLayout';
+import { flockWgslStructs } from './flockWgslShared';
 
-export const FLOCK_PARTICLE_ORDER_WGSL = /* wgsl */ `
-${FLOCK_WGSL_STRUCTS}
+export function flockParticleOrderWgsl(layout: FlockParticleLayout = 'full64'): string {
+  return /* wgsl */ `
+${flockWgslStructs(layout)}
 struct Pair { key: u32, identity: u32, };
 struct Params {
   origin: vec3f, cellSize: f32,
@@ -60,3 +62,6 @@ fn resetMapping(@builtin(global_invocation_id) gid: vec3u) {
   mapping[1u + params.count + slot] = slot;
 }
 `;
+}
+
+export const FLOCK_PARTICLE_ORDER_WGSL = flockParticleOrderWgsl();

@@ -1,4 +1,5 @@
-import { FLOCK_WGSL_STRUCTS, FLOCK_WGSL_MATH } from './flockWgslShared';
+import type { FlockParticleLayout } from '../shared/flockParticleLayout';
+import { flockWgslStructs, FLOCK_WGSL_MATH } from './flockWgslShared';
 import { FLOCK_FLUID_REGULARIZATION_WGSL } from './flockFluidRegularizationWgsl';
 import { FLOCK_FLUID_TRANSFER_BOUNDS_WGSL } from './flockFluidTransferBoundsWgsl';
 import { flockIdentityWgsl } from './flockIdentityWgsl';
@@ -34,8 +35,9 @@ struct FluidParams {
 };
 `;
 
-export const FLOCK_FLUID_COMMON_WGSL = /* wgsl */ `
-${FLOCK_WGSL_STRUCTS}
+export function flockFluidCommonWgsl(layout: FlockParticleLayout = 'full64'): string {
+  return /* wgsl */ `
+${flockWgslStructs(layout)}
 ${FLOCK_WGSL_MATH}
 ${FLOCK_FLUID_PARAMS_WGSL}
 ${FLOCK_FLUID_REGULARIZATION_WGSL}
@@ -110,9 +112,13 @@ fn sampleCoord(pos: vec3f, axis: u32) -> vec3f {
 
 fn fluidIndex(gid: vec3u) -> u32 { return gid.x + gid.y * fp.dispatchWidth; }
 `;
+}
 
-export const FLOCK_FLUID_WGSL = /* wgsl */ `
-${FLOCK_FLUID_COMMON_WGSL}
+export const FLOCK_FLUID_COMMON_WGSL = flockFluidCommonWgsl();
+
+export function flockFluidWgsl(layout: FlockParticleLayout = 'full64'): string {
+  return /* wgsl */ `
+${flockFluidCommonWgsl(layout)}
 ${FLOCK_FLUID_TRANSFER_BOUNDS_WGSL}
 
 @compute @workgroup_size(${FLOCK_FLUID_WORKGROUP})
@@ -339,3 +345,6 @@ fn fluidG2P(@builtin(global_invocation_id) gid: vec3u) {
   particles[index] = p;
 }
 `;
+}
+
+export const FLOCK_FLUID_WGSL = flockFluidWgsl();

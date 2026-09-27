@@ -1,10 +1,12 @@
-import { FLOCK_WGSL_STRUCTS, FLOCK_WGSL_MATH } from './flockWgslShared';
+import type { FlockParticleLayout } from '../shared/flockParticleLayout';
+import { flockWgslStructs, FLOCK_WGSL_MATH } from './flockWgslShared';
 import { flockIdentityWgsl } from './flockIdentityWgsl';
 import { FLOCK_FLUID_PARAMS_WGSL } from './flockFluidWgsl';
 import { FLOCK_FLUID_REGULARIZATION_WGSL } from './flockFluidRegularizationWgsl';
 
-export const FLOCK_FLUID_SEPARATION_WGSL = /* wgsl */ `
-${FLOCK_WGSL_STRUCTS}
+export function flockFluidSeparationWgsl(layout: FlockParticleLayout = 'full64'): string {
+  return /* wgsl */ `
+${flockWgslStructs(layout)}
 ${FLOCK_WGSL_MATH}
 ${FLOCK_FLUID_PARAMS_WGSL}
 ${FLOCK_FLUID_REGULARIZATION_WGSL}
@@ -94,3 +96,6 @@ fn applyCorrections(@builtin(global_invocation_id) gid: vec3u) {
   particles[slot].pos = clamp(particles[slot].pos + corrections[identity].xyz, low, high);
 }
 `;
+}
+
+export const FLOCK_FLUID_SEPARATION_WGSL = flockFluidSeparationWgsl();

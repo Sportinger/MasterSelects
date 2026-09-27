@@ -1,8 +1,10 @@
-import { FLOCK_FLUID_COMMON_WGSL } from './flockFluidWgsl';
+import type { FlockParticleLayout } from '../shared/flockParticleLayout';
+import { flockFluidCommonWgsl } from './flockFluidWgsl';
 
 /** Fixed-point sums preserve the reference P2G result exactly, including rounding. */
-export const FLOCK_FLUID_BLOCK_TRANSFER_WGSL = /* wgsl */ `
-${FLOCK_FLUID_COMMON_WGSL}
+export function flockFluidBlockTransferWgsl(layout: FlockParticleLayout = 'full64'): string {
+  return /* wgsl */ `
+${flockFluidCommonWgsl(layout)}
 var<workgroup> faceKeys: array<atomic<u32>, 512>;
 var<workgroup> velocities: array<atomic<i32>, 512>;
 var<workgroup> weights: array<atomic<i32>, 512>;
@@ -69,3 +71,6 @@ fn fluidP2GBlock(@builtin(global_invocation_id) gid: vec3u, @builtin(local_invoc
   }
 }
 `;
+}
+
+export const FLOCK_FLUID_BLOCK_TRANSFER_WGSL = flockFluidBlockTransferWgsl();
