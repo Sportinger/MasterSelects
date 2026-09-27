@@ -1,4 +1,4 @@
-import { applySceneEffectorsToObjectTransform } from '../../../scene/SceneEffectorUtils';
+import { applySceneEffectorsToObjectTransform } from '../../../scene/SceneEffectorEvaluation';
 import type { SceneNativeMeshLayer } from '../MeshPass';
 
 interface MeshCameraMatrices {

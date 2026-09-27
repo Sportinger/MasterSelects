@@ -9,6 +9,7 @@ import { getFlockMesh } from '../../src/engine/flock/gpu/flockMeshes';
 import type { FlockProgram } from '../../src/services/flock/compiler/flockProgramTypes';
 import type { SceneCamera, SceneFlockLayer } from '../../src/engine/scene/types';
 import { createWorkerGpuTargetSurface } from '../../src/services/render/workerGpuTargetSurface';
+import { renderNativeSceneProbe } from './flock-worker-scene-probe';
 
 export interface FlockWorkerProbeInput {
   canvas: OffscreenCanvas;
@@ -110,12 +111,19 @@ export async function renderFlockProbe(input: FlockWorkerProbeInput) {
       if (images[2][i + 1] > images[2][i] * 2 && images[2][i + 1] > images[2][i + 2] * 2) pigmentPixels++;
     }
     if (pigmentPixels < 100) throw new Error(`Transferred pigment was not rendered: ${pigmentPixels}`);
+    images.push(...await renderNativeSceneProbe(device, context, runtime, {
+      kind: 'flock', layerId: 'worker-probe-layer', clipId: 'worker-probe', worldMatrix: world,
+      opacity: 1, blendMode: 'normal', sourceWidth: size, sourceHeight: size,
+      flock: { clipId: 'worker-probe', definition: input.definition, program: input.program,
+        diagnostics: [], keyframes: input.keyframes, sourceTime: 11 / 60, consumer: 'preview' },
+    }, camera));
+    if (errors.length) throw new Error(errors.join('\n'));
     const precompute = await runtime.requestPrecompute('worker-probe', { start: 0, end: 0.5 }, { persist: true });
     const persisted = runtime.entries.get('worker-probe|preview')?.persistedSteps ?? [];
     if (!precompute.ok || persisted.length !== 2) throw new Error(`Worker precompute failed: ${JSON.stringify(precompute)}, ${persisted}`);
     const persistedCheckpoints = persisted.length;
     await runtime.clearCache('worker-probe');
-    return { persistedCheckpoints, persistentSession: true, seekReplay: true, keyframeInvalidation: true, renderRequests, statusCount: statuses.size, worker: typeof document === 'undefined', step: session.step, coloredPixels, pigmentPixels, images, particles };
+    return { sharedScene: true, sharedDepth: true, persistedCheckpoints, persistentSession: true, seekReplay: true, keyframeInvalidation: true, renderRequests, statusCount: statuses.size, worker: typeof document === 'undefined', step: session.step, coloredPixels, pigmentPixels, images, particles };
   } finally {
     runtime.dispose(); assets.dispose(); depth.destroy(); readback.destroy();
     temporary.forEach(buffer => buffer.destroy());

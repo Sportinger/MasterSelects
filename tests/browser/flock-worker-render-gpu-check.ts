@@ -59,7 +59,7 @@ async function check() {
       }
     }
     if (!result.images[0].some((value, i) => value !== result.images[1][i])) throw new Error('Model replacement did not change pixels');
-    return { success: true, worker: result.worker, offscreenTransferred: true, steps: result.step,
+    return { success: true, sharedScene: result.sharedScene, sharedDepth: result.sharedDepth, worker: result.worker, offscreenTransferred: true, steps: result.step,
       count: compiled.program.capacity, coloredPixels: result.coloredPixels, pigmentPixels: result.pigmentPixels, modelReplacement: 'verified',
       simulation: 'exact', persistedCheckpoints: result.persistedCheckpoints, persistentSession: result.persistentSession, seekReplay: result.seekReplay, keyframeInvalidation: result.keyframeInvalidation, statusCount: result.statusCount, maxPixelDelta, mainThreadHeartbeats: heartbeats };
   } finally { clearInterval(heartbeat); /* Keep the worker's canvas visible for inspection. */ }

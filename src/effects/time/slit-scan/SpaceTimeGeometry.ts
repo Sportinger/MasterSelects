@@ -1,7 +1,6 @@
 import { decodeSpaceTime } from './spaceTimeData';
 import { slitScanNumber } from './parameters';
 import type { SpaceTimeDraw } from '../../../engine/native3d/passes/SpaceTimeSlicePass';
-import { useMediaStore } from '../../../stores/mediaStore';
 
 export class SpaceTimeGeometry {
   private device: GPUDevice;
@@ -9,11 +8,10 @@ export class SpaceTimeGeometry {
   private buffer?: GPUBuffer;
   private decoded?: ReturnType<typeof decodeSpaceTime>;
   constructor(device: GPUDevice) { this.device = device; }
-  resolve(params: Record<string, unknown>, sourceId: string): SpaceTimeDraw {
+  resolve(params: Record<string, unknown>, sourceId: string, sourceFingerprint: string | undefined): SpaceTimeDraw {
     const encoded = String(params.spaceTimeData ?? '');
     const decoded = encoded === this.encoded && this.decoded ? this.decoded : decodeSpaceTime(encoded);
-    const media = useMediaStore.getState().files.find(item => item.id === sourceId);
-    if (!media || decoded.metadata.sourceId !== sourceId || decoded.metadata.fingerprint !== (media.fileHash ?? '')) {
+    if (sourceFingerprint === undefined || decoded.metadata.sourceId !== sourceId || decoded.metadata.fingerprint !== sourceFingerprint) {
       throw new Error('The space-time observations belong to a different source. Bake this source again.');
     }
     if (encoded !== this.encoded || !this.buffer) {

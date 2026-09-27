@@ -366,6 +366,12 @@ Its collection, simulation preparation and opaque/transparent drawing run in
 either realm with the same device and depth attachments. The editor scene owner
 still defaults to the main-thread adapter.
 
+`NativeSceneRuntime` contains the shared scene graph and GPU passes. The editor's
+`NativeSceneRenderer` supplies live host callbacks for simulation, playback state
+and media fingerprints; worker owners can supply equivalent snapshots. A real
+Worker check renders Flock together with native mesh geometry and verifies their
+shared depth. This boundary does not yet route editor compositions to the Worker.
+
 The GPU fluid, cell-order and separation kernels also accept a 32-byte fluid
 core (`position/age`, `velocity/generation`). Pipeline caches distinguish it
 from the full 64-byte particle state, and sorting scratch uses the same stride.

@@ -1,4 +1,4 @@
-import { resolveSceneEffectorAxis } from '../../scene/SceneEffectorUtils';
+import { resolveSceneEffectorAxis } from '../../scene/SceneEffectorEvaluation';
 import type { SceneLayer3DData, SceneSplatEffectorRuntimeData, SceneVector3 } from '../../scene/types';
 import shaderSource from '../shaders/SplatEffectorCompute.wgsl?raw';
 

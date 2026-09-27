@@ -2,7 +2,7 @@ import { GeometryQueryOutput } from '../../../effects/time/slit-scan/GeometryQue
 import { GeometryAgeField } from '../../../effects/time/slit-scan/GeometryAgeField';
 import { createSlitScanReference, readSlitScanReference } from '../../../effects/time/slit-scan/geometryReference';
 import { slitScanGeometryGrid } from '../../../effects/time/slit-scan/geometryParameters';
-import { useTimelineStore } from '../../../stores/timeline';
+import type { NativeSceneHost } from './NativeSceneHost';
 import type { SlitScanGeometryCapture } from '../../../effects/time/slit-scan/geometryCapture';
 import type { SceneCamera, ScenePlaneLayer } from '../../scene/types';
 import { SlitScanSurfacePass, type SlitScanSurfaceDraw } from '../passes/SlitScanSurfacePass';
@@ -22,6 +22,9 @@ interface SurfaceOwner { device: GPUDevice; query: GeometryQueryOutput; motion: 
 
 /** Device resources are scoped to a scene target and layer, never durable data. */
 export class SlitScanSceneSurfaces {
+  private host: Pick<NativeSceneHost, 'isRealtime' | 'sourceFingerprint'>;
+  constructor(host: Pick<NativeSceneHost, 'isRealtime' | 'sourceFingerprint'>) { this.host = host; }
+  setHost(host: Pick<NativeSceneHost, 'isRealtime' | 'sourceFingerprint'>): void { this.host = host; }
   private owners = new Map<string, SurfaceOwner>();
   private pass = new SlitScanSurfacePass();
   private draws = new Map<string, SlitScanSurfaceDraw>();
@@ -67,7 +70,8 @@ export class SlitScanSceneSurfaces {
     const params = frame.effect.params;
     if (params.geometryMode === 'space-time') {
       try {
-        const spaceTime = (owner.spaceTime ??= new SpaceTimeGeometry(frame.device)).resolve(params, frame.source.mediaId);
+        const spaceTime = (owner.spaceTime ??= new SpaceTimeGeometry(frame.device)).resolve(
+          params, frame.source.mediaId, this.host.sourceFingerprint(frame.source.mediaId));
         const reference = createSlitScanReference('orthographic');
         const draw = { mvp: buildPlaneMvp(layer, camera), reference: new Float32Array(reference.viewProjection),
           inverseReference: new Float32Array(reference.inverseViewProjection), color: frame.color, geometry: frame.color,
@@ -111,9 +115,8 @@ export class SlitScanSceneSurfaces {
     }
     const projection = params.geometryProjection === 'orthographic' ? 'orthographic' : 'perspective';
     const reference = readSlitScanReference(params.geometryReference) ?? createSlitScanReference(projection);
-    const timeline = useTimelineStore.getState();
     const { columns, rows, adaptive } = slitScanGeometryGrid(params, frame.width, frame.height,
-      timeline.isPlaying || timeline.isDraggingPlayhead, isCollectingTemporalPreparations());
+      this.host.isRealtime(), isCollectingTemporalPreparations());
     let band: GPUTextureView | undefined;
     if (isBand) {
       const angle = Number(params.angle ?? 0);
