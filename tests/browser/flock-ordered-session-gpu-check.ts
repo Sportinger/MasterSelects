@@ -33,24 +33,29 @@ export async function checkOrderedSessions(device: GPUDevice) {
     for (let i = 0; i < a.length; i++) if (!Number.isFinite(c[i]) || Math.abs(a[i] - c[i]) > 1e-5) throw new Error(`${label}/${i}: ${a[i]} != ${c[i]}`);
   };
   try {
-    for (const step of [1, 4, 9, 12]) {
+    for (const step of [1, 4, 5, 9, 12]) {
       canonical.advanceTo(step, 24); sorted.advanceTo(step, 24);
       compare(await canonical.sampleParticles(257), await sorted.sampleParticles(257), `step ${step}`);
+      compare(await canonical.sampleParticles(257, 'previous'), await sorted.sampleParticles(257, 'previous'), `interpolation ${step}`);
     }
     const expected = await canonical.sampleParticles(257);
+    const expectedPrevious = await canonical.sampleParticles(257, 'previous');
     const a = await canonical.readCheckpoint(8), c = await sorted.readCheckpoint(8);
     if (!a || !c) throw new Error('Missing checkpoint');
     compare(new Float32Array(a.state), new Float32Array(c.state), 'checkpoint state');
     for (let i = 0; i < a.rings.length; i++) compare(new Float32Array(a.rings[i]), new Float32Array(c.rings[i]), `trail ${i}`);
     sorted.advanceTo(8, 24); sorted.advanceTo(12, 24);
     compare(expected, await sorted.sampleParticles(257), 'rewind/replay');
+    compare(expectedPrevious, await sorted.sampleParticles(257, 'previous'), 'rewind interpolation');
     if (!imported.importCheckpoint(8, c.state, c.rings)) throw new Error('Import failed');
     imported.seekCheckpoint(8); imported.advanceTo(12, 24);
     compare(expected, await imported.sampleParticles(257), 'persisted import');
+    compare(expectedPrevious, await imported.sampleParticles(257, 'previous'), 'import interpolation');
     imported.clearCheckpoints();
     if (imported.adoptCheckpoints(sorted, [8]) !== 1) throw new Error('Adoption failed');
     imported.advanceTo(8, 24); imported.advanceTo(12, 24);
     compare(expected, await imported.sampleParticles(257), 'adopted replay');
-    return { orderedSession: 'matched', count: 257, steps: 12, respawn: true, neighbors: true, trails: true, checkpoint: 'restore/import/adopt' };
+    compare(expectedPrevious, await imported.sampleParticles(257, 'previous'), 'adoption interpolation');
+    return { orderedSession: 'matched', count: 257, steps: 12, interpolation: true, respawn: true, neighbors: true, trails: true, checkpoint: 'restore/import/adopt' };
   } finally { sessions.forEach(session => session.dispose()); }
 }

@@ -274,7 +274,9 @@ links and trails. Workgroups combine fixed-point face contributions before globa
 atomics, with bounded-probe fallback when their local table fills. Checkpoints and
 diagnostic samples retain canonical identity order; checkpoint restore resets the
 maps and rebuilds the spatial order. Ordinary substeps do not copy the complete
-state into and out of an intermediate transfer buffer.
+state into and out of an intermediate transfer buffer. On sort steps, only the
+simulation input is reordered: the next simulation dispatch fully overwrites the
+output, leaving both interpolation states in the same new order.
 
 Sorting uses a reusable 64-byte-per-particle reorder buffer, permutation scratch
 and two identity maps, included in runtime memory estimates. GPU timings separate

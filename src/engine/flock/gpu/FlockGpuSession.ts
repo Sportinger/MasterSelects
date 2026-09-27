@@ -345,7 +345,7 @@ export class FlockGpuSession {
     const particleWorkgroups = Math.ceil(this.capacity / WORKGROUP);
     for (let b = 0; b < batch; b += 1) {
       const offset = b * STEP_BLOCK_STRIDE;
-      this.order?.encode(encoder, this.currentIndex, this.step);
+      this.order?.encodeBeforeStep(encoder, this.currentIndex, this.step);
       let pass = encoder.beginComputePass({ label: 'flock-step-pass', timestampWrites: flockGpuTimings(this.device).writes(encoder, 'simulate') });
       if (needsGrid[b]) this.encodeGrid(pass, offset, sortWorkgroups);
       pass.setPipeline(this.pipelines.simulatePipeline);
@@ -523,15 +523,16 @@ export class FlockGpuSession {
     return { state: await read(checkpoint.state), rings: await Promise.all(checkpoint.rings.map(read)) };
   }
 
-  /** Bounded opt-in particle sample from the current state. */
-  async sampleParticles(maxCount: number): Promise<Float32Array> {
+  /** Bounded identity-ordered sample, optionally from the previous interpolation state. */
+  async sampleParticles(maxCount: number, state: 'current' | 'previous' = 'current'): Promise<Float32Array> {
     const count = Math.max(1, Math.min(this.capacity, maxCount));
     const size = count * FLOCK_PARTICLE_BYTES;
     const staging = this.device.createBuffer({ size, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST, label: 'flock-sample-readback' });
     const encoder = this.device.createCommandEncoder();
     const canonical = this.order ? this.device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }) : null;
-    if (canonical) this.order!.canonical(encoder, this.currentState, canonical);
-    encoder.copyBufferToBuffer(canonical ?? this.currentState, 0, staging, 0, size);
+    const source = state === 'previous' ? this.previousState : this.currentState;
+    if (canonical) this.order!.canonical(encoder, source, canonical);
+    encoder.copyBufferToBuffer(canonical ?? source, 0, staging, 0, size);
     this.device.queue.submit([encoder.finish()]);
     canonical?.destroy();
     await staging.mapAsync(GPUMapMode.READ);

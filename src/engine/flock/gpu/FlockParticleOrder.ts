@@ -60,14 +60,17 @@ export class FlockParticleOrder {
     this.run(encoder, 'resetMapping', this.keyGroups[0]); this.dirty = true;
   }
 
-  /** Reorder before the next simulation step; identity order breaks cell-key ties. */
-  encode(encoder: GPUCommandEncoder, stateIndex: number, completedStep: number): void {
+  /**
+   * Reorder the input immediately before a full simulation step. The step must
+   * overwrite every output slot before either state is exposed to rendering.
+   * Its input becomes the previous interpolation state, so sorting the old
+   * output as well would only copy data that the simulation discards.
+   */
+  encodeBeforeStep(encoder: GPUCommandEncoder, stateIndex: number, completedStep: number): void {
     if (!this.dirty && completedStep % 4 !== 0) return;
     this.run(encoder, 'keys', this.keyGroups[stateIndex]); this.sort.encode(encoder);
-    for (let i = 0; i < this.states.length; i++) {
-      this.run(encoder, 'reorder', this.reorderGroups[i]);
-      encoder.copyBufferToBuffer(this.scratch, 0, this.states[i], 0, this.scratch.size);
-    }
+    this.run(encoder, 'reorder', this.reorderGroups[stateIndex]);
+    encoder.copyBufferToBuffer(this.scratch, 0, this.states[stateIndex], 0, this.scratch.size);
     this.run(encoder, 'updateMapping', this.reorderGroups[0]); this.dirty = false;
   }
 

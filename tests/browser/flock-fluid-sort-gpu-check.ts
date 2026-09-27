@@ -65,7 +65,7 @@ async function check() {
         if (step === 6) for (const state of states) device.queue.writeBuffer(state, 0, data);
         const encoder = device.createCommandEncoder();
         if (step === 0 || step === 6) order.reset(encoder);
-        reference.encode(encoder, 0, 0, count); order.encode(encoder, 0, step); sorted.encode(encoder, 0, 0, count);
+        reference.encode(encoder, 0, 0, count); order.encodeBeforeStep(encoder, 0, step); sorted.encode(encoder, 0, 0, count);
         order.canonical(encoder, states[1], canonical);
         device.queue.submit([encoder.finish()]);
         const a = new Float32Array(await read(states[0])), b = new Float32Array(await read(canonical));
