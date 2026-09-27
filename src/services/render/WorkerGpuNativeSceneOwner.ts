@@ -1,6 +1,7 @@
 import { NativeSceneRuntime } from '../../engine/native3d/NativeSceneRuntime';
 import { FlockSimulationRuntime } from '../../engine/flock/runtime/FlockSimulationRuntime';
 import { WorkerGpuNativeSceneAssets } from './WorkerGpuNativeSceneAssets';
+import { WorkerGpuNativeSceneAudio } from './WorkerGpuNativeSceneAudio';
 import type { FlockRuntimeStatus } from '../../engine/flock/runtime/flockRuntimeApi';
 import type { SceneCamera, SceneLayer3DData } from '../../engine/scene/types';
 import type { LayerRenderData } from '../../engine/core/types';
@@ -12,6 +13,7 @@ import type { WorkerGpuNativeScenePayload } from './workerGpuNativeSceneContract
 import type { WorkerGpuFrameStackNativeSceneInput } from './workerGpuFrameStackMaterializer';
 
 interface SceneEntry {
+  audio: WorkerGpuNativeSceneAudio;
   simulation: FlockSimulationRuntime;
   scene: NativeSceneRuntime;
   statuses: Map<string, FlockRuntimeStatus>;
@@ -47,14 +49,16 @@ export class WorkerGpuNativeSceneOwner {
     const cached = this.scenes.get(key);
     if (cached) return cached;
     const statuses = new Map<string, FlockRuntimeStatus>();
+    const audio = new WorkerGpuNativeSceneAudio();
     const simulation = new FlockSimulationRuntime({
       requestRender: () => {}, // Exact requests explicitly await catch-up below.
-      renderAssets: () => this.assets.registry, audioSampler: () => () => null, audioRevision: () => 0,
+      renderAssets: () => this.assets.registry, audioSampler: id => audio.sampler(id), audioRevision: () => 0,
+      audioFingerprint: (id, audioClipIds) => audio.fingerprint(id, audioClipIds),
       modelState: id => this.assets.modelState(id),
       status: { getStatus: id => statuses.get(id), publishStatus: s => { statuses.set(s.clipId, s); }, clearStatus: id => { statuses.delete(id); } },
     });
     const scene = new NativeSceneRuntime({ flockRuntime: () => simulation, isRealtime: () => false, sourceFingerprint: () => undefined });
-    const entry: SceneEntry = { simulation, scene, statuses, definitions: new Map(), keyframes: new Map(), layers: [], camera: null, payload: null };
+    const entry: SceneEntry = { audio, simulation, scene, statuses, definitions: new Map(), keyframes: new Map(), layers: [], camera: null, payload: null };
     this.scenes.set(key, entry);
     await scene.initialize(1, 1);
     return entry;
@@ -75,6 +79,7 @@ export class WorkerGpuNativeSceneOwner {
         const entry = await this.acquire(key);
         guard();
         entry.payload = null;
+        await entry.audio.prepare(payload.layers, guard);
         entry.camera = { ...payload.camera, viewMatrix: new Float32Array(payload.camera.viewMatrix), projectionMatrix: new Float32Array(payload.camera.projectionMatrix) };
         entry.layers = payload.layers.map(layer => {
           const base = { layerId: layer.layerId, clipId: layer.clipId, worldMatrix: new Float32Array(layer.worldMatrix),
@@ -85,14 +90,12 @@ export class WorkerGpuNativeSceneOwner {
           if (!compiled || compiled.signature !== signature) {
             const result = compileFlockDefinition(layer.definition);
             if (!result.ok) throw new Error(`Worker Flock graph failed: ${result.diagnostics.map(d => d.message).join('; ')}`);
-            if (result.program.assets.audioClips.length) {
-              throw new Error('Worker native scene audio snapshots are not available for this graph');
-            }
             compiled = { signature, program: result.program };
             entry.definitions.set(layer.clipId, compiled);
           }
           for (const id of compiled.program.assets.images) this.assets.require(id, 'image');
           for (const id of compiled.program.assets.models) this.assets.require(id, 'model');
+          entry.audio.require(layer.clipId, compiled.program.assets.audioClips);
           const keySignature = JSON.stringify(layer.keyframes);
           let keys = entry.keyframes.get(layer.clipId);
           if (!keys || keys.signature !== keySignature) {
@@ -128,7 +131,7 @@ export class WorkerGpuNativeSceneOwner {
     await visit(stack);
     guard();
     for (const [key, entry] of this.scenes) if (!active.has(key)) {
-      entry.scene.dispose(); entry.simulation.dispose(); this.scenes.delete(key);
+      entry.scene.dispose(); entry.simulation.dispose(); entry.audio.dispose(); this.scenes.delete(key);
     }
   }
 
@@ -144,7 +147,7 @@ export class WorkerGpuNativeSceneOwner {
 
   dispose(): void {
     this.disposed = true;
-    for (const entry of this.scenes.values()) { entry.scene.dispose(); entry.simulation.dispose(); }
+    for (const entry of this.scenes.values()) { entry.scene.dispose(); entry.simulation.dispose(); entry.audio.dispose(); }
     this.scenes.clear(); this.assets.dispose();
   }
 }

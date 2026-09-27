@@ -2,6 +2,8 @@ import type { Keyframe } from '../../src/types/keyframes';
 import { renderFlockProbe, type FlockWorkerProbeInput } from './flock-worker-render-probe';
 import { FlockGraphBuilder } from '../../src/services/flock/presets/flockGraphBuilder';
 import { compileFlockDefinition } from '../../src/services/flock/compiler/flockCompiler';
+import { encodeLoudnessCurvePayload } from '../../src/services/audio/loudnessEnvelopeManifest';
+import { flockAudioCurveFingerprint } from '../../src/engine/flock/runtime/flockAudioCurve';
 
 async function check() {
   const builder = new FlockGraphBuilder();
@@ -34,12 +36,18 @@ async function check() {
     'v -1 -1 0\nv 1 -1 0\nv 1 1 0\nv -1 1 0\nf 1 2 3\nf 1 3 4']) {
     frameStackUrls.push(URL.createObjectURL(new Blob([obj], { type: 'text/plain' })));
   }
+  const audioCurves = [-60, 0].map(db => {
+    const curve = { values: new Float32Array(32).fill(db), hopDuration: 0.1, pointCount: 32 };
+    const bytes = encodeLoudnessCurvePayload({ header: { schemaVersion: 1, metric: 'momentary-lufs', windowDuration: 0.4,
+      hopDuration: 0.1, pointCount: 32, valueLayout: 'time-series', valueEncoding: 'db' }, values: curve.values });
+    return { url: URL.createObjectURL(new Blob([bytes])), byteLength: bytes.byteLength, fingerprint: flockAudioCurveFingerprint(curve) };
+  });
   const makeInput = async (): Promise<FlockWorkerProbeInput> => {
     const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
     document.querySelector('#canvases')!.append(canvas);
     const pigmentSource = new OffscreenCanvas(2, 2), context = pigmentSource.getContext('2d')!;
     context.fillStyle = '#20ff40'; context.fillRect(0, 0, 2, 2);
-    return { canvas: canvas.transferControlToOffscreen(), program: compiled.program, definition, keyframes, frameStackUrls, pigment: await createImageBitmap(pigmentSource) };
+    return { canvas: canvas.transferControlToOffscreen(), program: compiled.program, definition, keyframes, frameStackUrls, audioCurves, pigment: await createImageBitmap(pigmentSource) };
   };
   const main = await renderFlockProbe(await makeInput());
   const worker = new Worker(new URL('./flock-worker-render.worker.ts', import.meta.url), { type: 'module' });
@@ -70,10 +78,10 @@ async function check() {
       }
     }
     if (!result.images[0].some((value, i) => value !== result.images[1][i])) throw new Error('Model replacement did not change pixels');
-    return { success: true, hostProjection: true, frameStackAssets: true, comparedImages: main.images.length, nativeFrameStack: result.nativeFrameStack, sharedScene: result.sharedScene, sharedDepth: result.sharedDepth, worker: result.worker, offscreenTransferred: true, steps: result.step,
+    return { success: true, audioSnapshots: true, audioResimulation: true, hostProjection: true, frameStackAssets: true, comparedImages: main.images.length, nativeFrameStack: result.nativeFrameStack, sharedScene: result.sharedScene, sharedDepth: result.sharedDepth, worker: result.worker, offscreenTransferred: true, steps: result.step,
       count: compiled.program.capacity, coloredPixels: result.coloredPixels, pigmentPixels: result.pigmentPixels, modelReplacement: 'verified',
       simulation: 'exact', persistedCheckpoints: result.persistedCheckpoints, persistentSession: result.persistentSession, seekReplay: result.seekReplay, keyframeInvalidation: result.keyframeInvalidation, statusCount: result.statusCount, maxPixelDelta, mainThreadHeartbeats: heartbeats };
-  } finally { clearInterval(heartbeat); frameStackUrls.forEach(url => URL.revokeObjectURL(url)); /* Keep the worker's canvas visible for inspection. */ }
+  } finally { clearInterval(heartbeat); [...frameStackUrls, ...audioCurves.map(curve => curve.url)].forEach(url => URL.revokeObjectURL(url)); /* Keep the worker's canvas visible for inspection. */ }
 }
 
 check().then(result => { document.querySelector('#result')!.textContent = JSON.stringify(result, null, 2); })

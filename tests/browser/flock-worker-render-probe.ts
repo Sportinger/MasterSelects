@@ -11,6 +11,7 @@ import type { SceneCamera, SceneFlockLayer } from '../../src/engine/scene/types'
 import { createWorkerGpuTargetSurface } from '../../src/services/render/workerGpuTargetSurface';
 import { renderNativeSceneProbe } from './flock-worker-scene-probe';
 import { renderNativeFrameStackProbe } from './flock-worker-frame-stack-probe';
+import type { WorkerGpuNativeAudioInput } from '../../src/services/render/workerGpuNativeAudioContract';
 
 export interface FlockWorkerProbeInput {
   canvas: OffscreenCanvas;
@@ -19,6 +20,7 @@ export interface FlockWorkerProbeInput {
   definition: FlockDefinition;
   keyframes: Keyframe[];
   frameStackUrls: string[];
+  audioCurves: NonNullable<WorkerGpuNativeAudioInput['curve']>[];
 }
 
 /** Same production simulation/render classes, executed in either realm for comparison. */
@@ -38,7 +40,7 @@ export async function renderFlockProbe(input: FlockWorkerProbeInput) {
   let renderRequests = 0;
   const runtime = new FlockSimulationRuntime({
     requestRender: () => { renderRequests++; }, renderAssets: () => assets,
-    audioSampler: () => () => null, audioRevision: () => 0,
+    audioSampler: () => () => null, audioRevision: () => 0, audioFingerprint: () => 'none',
     modelState: id => ({ status: assets.model(id).mesh ? 'ready' : 'missing' }),
     status: { getStatus: id => statuses.get(id), publishStatus: status => { statuses.set(status.clipId, status); }, clearStatus: id => { statuses.delete(id); } },
   });
@@ -125,7 +127,7 @@ export async function renderFlockProbe(input: FlockWorkerProbeInput) {
     if (!precompute.ok || persisted.length !== 2) throw new Error(`Worker precompute failed: ${JSON.stringify(precompute)}, ${persisted}`);
     const persistedCheckpoints = persisted.length;
     await runtime.clearCache('worker-probe');
-    images.push(...await renderNativeFrameStackProbe(created.surface, input.frameStackUrls));
+    images.push(...await renderNativeFrameStackProbe(created.surface, input.frameStackUrls, input.audioCurves));
     if (errors.length) throw new Error(errors.join('\n'));
     return { nativeFrameStack: true, sharedScene: true, sharedDepth: true, persistedCheckpoints, persistentSession: true, seekReplay: true, keyframeInvalidation: true, renderRequests, statusCount: statuses.size, worker: typeof document === 'undefined', step: session.step, coloredPixels, pigmentPixels, images, particles };
   } finally {

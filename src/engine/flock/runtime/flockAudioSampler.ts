@@ -6,6 +6,7 @@ import {
   loadTimelineLoudnessEnvelope,
   type TimelineLoudnessCurve,
 } from '../../../services/audio/timelineLoudnessEnvelopeCache';
+import { pickFlockAudioCurve, sampleFlockAudioCurve, flockAudioCurveFingerprint } from './flockAudioCurve';
 import type { FlockAudioSampler } from '../../../services/flock/compiler/flockParamEvaluation';
 
 /**
@@ -15,67 +16,50 @@ import type { FlockAudioSampler } from '../../../services/flock/compiler/flockPa
  * flock sessions resimulate with the frozen analysis.
  */
 
-const PREFERRED_METRICS = ['momentary-lufs', 'rms-dbfs', 'short-term-lufs', 'sample-peak-dbfs'];
 const pendingLoads = new Set<string>();
 let audioRevision = 0;
 
-export function getFlockAudioRevision(): number {
-  return audioRevision;
+export function getFlockAudioRevision(): number { return audioRevision; }
+
+export interface FlockAudioInput {
+  curve: TimelineLoudnessCurve | null;
+  sourceOffset: number;
 }
 
-function pickCurve(curves: TimelineLoudnessCurve[]): TimelineLoudnessCurve | null {
-  for (const metric of PREFERRED_METRICS) {
-    const curve = curves.find((candidate) => candidate.metric === metric && candidate.channelIndex === undefined)
-      ?? curves.find((candidate) => candidate.metric === metric);
-    if (curve) return curve;
+/** Resolve against the owning composition's clips; unavailable analysis stays null. */
+export function resolveFlockAudioInput(flockClipId: string, audioClipId: string,
+  clips = useTimelineStore.getState().clips, options: { loadMissing?: boolean } = {}): FlockAudioInput {
+  const audioClip = clips.find(clip => clip.id === audioClipId);
+  if (!audioClip) return { curve: null, sourceOffset: 0 };
+  const flockClip = clips.find(clip => clip.id === flockClipId);
+  const sourceOffset = (flockClip ? flockClip.startTime - flockClip.inPoint : 0) - audioClip.startTime + audioClip.inPoint;
+  const mediaFileId = audioClip.mediaFileId ?? audioClip.source?.mediaFileId;
+  const refId = mediaFileId ? useMediaStore.getState().files.find(file => file.id === mediaFileId)?.audioAnalysisRefs?.loudnessEnvelopeId : undefined;
+  if (!refId) return { curve: null, sourceOffset };
+  const envelope = getCachedTimelineLoudnessEnvelope(refId);
+  if (!envelope) {
+    if (options.loadMissing !== false && !pendingLoads.has(refId)) {
+      pendingLoads.add(refId);
+      void loadTimelineLoudnessEnvelope(refId).then(loaded => {
+        if (loaded) { audioRevision += 1; renderHostPort.requestRender(); }
+      }).catch(() => undefined);
+    }
+    return { curve: null, sourceOffset };
   }
-  return curves[0] ?? null;
-}
-
-function normalizeDb(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(1, (value + 60) / 60));
+  const curve = pickFlockAudioCurve(envelope.curves);
+  return { curve: curve && curve.pointCount > 0 && curve.hopDuration > 0 ? curve : null, sourceOffset };
 }
 
 export function createFlockAudioSampler(flockClipId: string, options: { loadMissing?: boolean } = {}): FlockAudioSampler {
   return (audioClipId, sourceTime, smoothingSeconds) => {
-    const clips = useTimelineStore.getState().clips;
-    const audioClip = clips.find((clip) => clip.id === audioClipId);
-    if (!audioClip) return null;
-    const mediaFileId = audioClip.mediaFileId ?? audioClip.source?.mediaFileId;
-    const refId = mediaFileId
-      ? useMediaStore.getState().files.find((file) => file.id === mediaFileId)?.audioAnalysisRefs?.loudnessEnvelopeId
-      : undefined;
-    if (!refId) return null;
-    const envelope = getCachedTimelineLoudnessEnvelope(refId);
-    if (!envelope) {
-      if (options.loadMissing !== false && !pendingLoads.has(refId)) {
-        pendingLoads.add(refId);
-        void loadTimelineLoudnessEnvelope(refId).then((loaded) => {
-          if (loaded) {
-            audioRevision += 1;
-            renderHostPort.requestRender();
-          }
-        }).catch(() => undefined);
-      }
-      return null;
-    }
-    const curve = pickCurve(envelope.curves);
-    if (!curve || curve.pointCount === 0 || curve.hopDuration <= 0) return null;
-    // Map flock source time -> timeline time -> audio source time (constant-speed placement).
-    const flockClip = clips.find((clip) => clip.id === flockClipId);
-    const timelineTime = flockClip ? flockClip.startTime + (sourceTime - flockClip.inPoint) : sourceTime;
-    const audioTime = timelineTime - audioClip.startTime + audioClip.inPoint;
-    const sampleAt = (time: number) => {
-      const index = Math.max(0, Math.min(curve.pointCount - 1, Math.floor(time / curve.hopDuration)));
-      return normalizeDb(curve.values[index]);
-    };
-    if (smoothingSeconds <= curve.hopDuration) return sampleAt(audioTime);
-    const samples = Math.min(64, Math.ceil(smoothingSeconds / curve.hopDuration));
-    let sum = 0;
-    for (let sample = 0; sample < samples; sample += 1) {
-      sum += sampleAt(audioTime - (sample * smoothingSeconds) / samples);
-    }
-    return sum / samples;
+    const input = resolveFlockAudioInput(flockClipId, audioClipId, undefined, options);
+    return sampleFlockAudioCurve(input.curve, sourceTime + input.sourceOffset, smoothingSeconds);
   };
+}
+
+export function getFlockAudioFingerprint(flockClipId: string, audioClipIds: readonly string[]): string {
+  return JSON.stringify([...new Set(audioClipIds)].toSorted().map(id => {
+    const input = resolveFlockAudioInput(flockClipId, id);
+    return [id, input.sourceOffset, input.curve ? flockAudioCurveFingerprint(input.curve) : null];
+  }));
 }

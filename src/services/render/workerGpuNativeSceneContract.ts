@@ -2,6 +2,7 @@ import type { SceneCamera, ScenePrimitiveLayer } from '../../engine/scene/types'
 import type { FlockDefinition } from '../../types/flock';
 import type { Keyframe } from '../../types/keyframes';
 import { validateFlockDefinition } from '../flock/graph/flockGraphValidation';
+import { isWorkerGpuNativeAudioInputs, type WorkerGpuNativeAudioInput } from './workerGpuNativeAudioContract';
 
 interface NativeLayerBase {
   readonly layerId: string;
@@ -13,7 +14,7 @@ interface NativeLayerBase {
 export type WorkerGpuNativeSceneLayer =
   | (NativeLayerBase & { readonly kind: 'primitive'; readonly meshType: ScenePrimitiveLayer['meshType']; readonly wireframe?: boolean })
   | (NativeLayerBase & { readonly kind: 'flock'; readonly definition: FlockDefinition;
-      readonly keyframes: Keyframe[]; readonly sourceTime: number });
+      readonly keyframes: Keyframe[]; readonly sourceTime: number; readonly audioInputs?: readonly WorkerGpuNativeAudioInput[] });
 
 /** Runtime media references, never persisted with project scene data. */
 export interface WorkerGpuNativeSceneAsset {
@@ -91,8 +92,9 @@ export function isWorkerGpuNativeScenePayload(value: unknown): value is WorkerGp
       if (!keys(layer, [...common, 'meshType', 'wireframe']) || !meshes.has(layer.meshType as string)
         || (layer.wireframe !== undefined && typeof layer.wireframe !== 'boolean')) return false;
     } else if (layer.kind === 'flock') {
-      if (!keys(layer, [...common, 'definition', 'keyframes', 'sourceTime']) || !finite(layer.sourceTime)
+      if (!keys(layer, [...common, 'definition', 'keyframes', 'sourceTime', 'audioInputs']) || !finite(layer.sourceTime)
         || clipIds.has(layer.clipId) || !Array.isArray(layer.keyframes) || layer.keyframes.length > 4096) return false;
+      if (layer.audioInputs !== undefined && !isWorkerGpuNativeAudioInputs(layer.audioInputs)) return false;
       clipIds.add(layer.clipId);
       for (const key of layer.keyframes) {
         if (!record(key) || !keys(key, ['id', 'clipId', 'time', 'property', 'value', 'easing', 'hold', 'handleIn', 'handleOut'])

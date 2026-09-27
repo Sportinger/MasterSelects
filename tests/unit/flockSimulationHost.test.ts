@@ -7,7 +7,7 @@ function host(): FlockSimulationHost {
   return {
     requestRender: vi.fn(), renderAssets: () => { throw new Error('No GPU needed'); },
     audioSampler: clipId => () => clipId === 'a' ? 0.25 : 0.75,
-    audioRevision: () => 0, modelState: () => null,
+    audioRevision: () => 0, audioFingerprint: () => 'test-audio', modelState: () => null,
     status: { getStatus: () => null, publishStatus: vi.fn(), clearStatus: vi.fn() },
   };
 }

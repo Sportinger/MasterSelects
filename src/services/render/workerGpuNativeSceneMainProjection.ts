@@ -2,6 +2,7 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { collectActiveSceneSplatEffectors } from '../../engine/scene/SceneEffectorUtils';
 import { resolveRenderableSharedSceneCamera } from '../../engine/scene/SceneCameraUtils';
 import { projectNativeSceneLayers, type WorkerGpuNativeSceneProjectionInput } from './workerGpuNativeSceneProjection';
+import { projectWorkerFlockAudio } from './workerGpuNativeAudioMainProjection';
 
 /** Main owns timeline/navigation state; Workers receive the evaluated camera. */
 export function projectMainNativeScene(input: WorkerGpuNativeSceneProjectionInput) {
@@ -32,5 +33,12 @@ export function projectMainNativeScene(input: WorkerGpuNativeSceneProjectionInpu
       assets.set(id, { id, kind, url: file.url, fileName: file.name });
     }
   }
-  return { ...projected, source: { ...projected.source, payload: { ...projected.source.payload, assets: [...assets.values()] } } };
+  const layers = projected.source.payload.layers.map(layer => {
+    if (layer.kind !== 'flock') return layer;
+    const program = input.layers.find(source => (source.sourceClipId ?? source.id) === layer.clipId)?.source?.flock?.program;
+    if (!program) throw new Error(`Worker scene lost the evaluated Flock program for '${layer.clipId}'`);
+    return { ...layer, audioInputs: projectWorkerFlockAudio(layer.clipId, program.assets.audioClips,
+      input.frame.expireAfterMs, input.sceneContext?.clips) };
+  });
+  return { ...projected, source: { ...projected.source, payload: { ...projected.source.payload, layers, assets: [...assets.values()] } } };
 }

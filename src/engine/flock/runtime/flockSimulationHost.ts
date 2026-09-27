@@ -8,6 +8,7 @@ export interface FlockSimulationHost {
   renderAssets(device: GPUDevice): FlockRenderAssets;
   audioSampler(clipId: string): FlockAudioSampler;
   audioRevision(): number;
+  audioFingerprint(clipId: string, audioClipIds: readonly string[]): string;
   modelState(assetId: string): {
     status: 'loading' | 'ready' | 'missing' | 'failed';
     message?: string;

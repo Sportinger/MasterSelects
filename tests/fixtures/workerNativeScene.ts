@@ -3,9 +3,9 @@ import type { WorkerGpuFrameStackContractV1 } from '../../src/services/render/wo
 import type { WorkerGpuNativeScenePayload } from '../../src/services/render/workerGpuNativeSceneContract';
 import type { WorkerGpuWebCodecsRenderLayer } from '../../src/services/render/workerGpuRuntimeCommands';
 
-export function nativeSceneFixture(time = 0.2, now = 1000, requestId = 'native-request', render?: 'image' | 'model') {
+export function nativeSceneFixture(time = 0.2, now = 1000, requestId = 'native-request', render?: 'image' | 'model', audio = false) {
   const graph = new FlockGraphBuilder();
-  const emitter = graph.add('flock.emitter', { count: 512, shape: 'grid', center: [0, 0, 0], size: [4, 4, 2], initialSpeed: 1 });
+  const emitter = graph.add('flock.emitter', { count: 512, shape: 'grid', center: [0, 0, 0], size: [4, 4, 2], initialSpeed: audio ? 0 : 1 });
   const simulation = graph.add('flock.simulation', { minSpeed: 0, maxSpeed: 2, stepRate: '60' });
   const points = render === 'model'
     ? graph.add('flock.render-instances', { mesh: 'model', model: 'stack-model', size: 0.2, color: '#ff3030', sizeVariance: 0, swimAmplitude: 0, shading: 'flat' })
@@ -13,6 +13,11 @@ export function nativeSceneFixture(time = 0.2, now = 1000, requestId = 'native-r
       image: render === 'image' ? 'stack-image' : '', color: render === 'image' ? '#ffffff' : '#20ff40', shading: 'flat', distanceFade: 0 });
   const output = graph.add('flock.output');
   graph.connect(emitter, 'spawn', simulation, 'spawn').connect(simulation, 'particles', points, 'particles').connect(points, 'scene', output, 'scene');
+  if (audio) {
+    const level = graph.add('flock.audio', { clipId: 'music', gain: 30, smoothing: 0 });
+    const attractor = graph.add('flock.attractor', { position: [1, 0, 0], radius: 10 });
+    graph.connect(level, 'value', attractor, 'strength').connect(attractor, 'behavior', simulation, 'behavior');
+  }
   const definition = graph.build('native-stack-probe');
   const ids = new Map(definition.nodes.map((node, i) => [node.id, `node${i}`]));
   definition.nodes.forEach(node => { node.id = ids.get(node.id)!; });

@@ -50,6 +50,7 @@ export interface FlockSessionEntry {
   lastStatusAt: number;
   lastState: string;
   audioRevision: number;
+  audioFingerprint: string;
 }
 
 function keyframeEntrySignature(keyframe: Keyframe): string {
@@ -57,8 +58,9 @@ function keyframeEntrySignature(keyframe: Keyframe): string {
 }
 
 export class FlockSimulationRuntime implements FlockRuntimeBackend {
-  readonly host: FlockSimulationHost;
+  host: FlockSimulationHost;
   constructor(host: FlockSimulationHost) { this.host = host; }
+  setHost(host: FlockSimulationHost): void { this.host = host; this.contexts = new WeakMap(); }
 
   device: GPUDevice | null = null;
   readonly entries = new Map<string, FlockSessionEntry>();
@@ -66,7 +68,7 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
   readonly jobs = new Map<string, FlockPrecomputeJob>();
   private readonly lastValidPrograms = new Map<string, FlockProgram>();
   private renderer: FlockBranchRenderer | null = null;
-  private readonly contexts = new WeakMap<Keyframe[], Map<string, FlockEvaluationContext>>();
+  private contexts = new WeakMap<Keyframe[], Map<string, FlockEvaluationContext>>();
   private lastPruneAt = 0;
 
   private ensureDevice(device: GPUDevice): void {
@@ -117,10 +119,12 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
     return result;
   }
 
-  private cacheKeyFor(program: FlockProgram, signatures: Map<string, string[]>): string {
+  private cacheKeyFor(program: FlockProgram, signatures: Map<string, string[]>, audioFingerprint: string): string {
     const keyframes = [...signatures.entries()].toSorted(([a], [b]) => a.localeCompare(b));
     const adapter = (this.device as GPUDevice & { adapterInfo?: { vendor?: string; architecture?: string } } | null)?.adapterInfo;
-    return hashFlockString(JSON.stringify([FLOCK_SOLVER_VERSION, program.hashes.behavior, keyframes, adapter?.vendor ?? '', adapter?.architecture ?? '']));
+    const identity: unknown[] = [FLOCK_SOLVER_VERSION, program.hashes.behavior, keyframes, adapter?.vendor ?? '', adapter?.architecture ?? ''];
+    if (program.assets.audioClips.length) identity.push(['audio/v1', audioFingerprint]);
+    return hashFlockString(JSON.stringify(identity));
   }
 
   /** Earliest source step affected by keyframe edits (the preceding segment boundary for eased curves). */
@@ -173,6 +177,7 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
       entry = undefined;
     }
     const nextSignatures = this.signatures(program, keyframes);
+    const audioFingerprint = program.assets.audioClips.length ? this.host.audioFingerprint(clipId, program.assets.audioClips) : '';
     if (!entry) {
       const admission = this.admit(device, program);
       if (!admission.ok) {
@@ -188,7 +193,7 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
         program,
         behaviorHash: program.hashes.behavior,
         keyframeSignatures: nextSignatures,
-        cacheKey: this.cacheKeyFor(program, nextSignatures),
+        cacheKey: this.cacheKeyFor(program, nextSignatures, audioFingerprint),
         persistedSteps: null,
         persistedLoads: new Set(),
         lastUsedAt: performance.now(),
@@ -201,6 +206,7 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
         lastStatusAt: 0,
         lastState: '',
         audioRevision: this.host.audioRevision(),
+        audioFingerprint,
       };
       this.entries.set(key, entry);
       if (consumer !== 'precompute') void this.loadPersistedIndex(entry);
@@ -209,8 +215,10 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
 
     entry.session.setContext(program, context);
     const audioRevision = this.host.audioRevision();
-    const audioChanged = entry.audioRevision !== audioRevision && program.values.some((value) => value.kind === 'audio');
+    const audioChanged = (entry.audioRevision !== audioRevision || entry.audioFingerprint !== audioFingerprint)
+      && program.values.some((value) => value.kind === 'audio');
     entry.audioRevision = audioRevision;
+    entry.audioFingerprint = audioFingerprint;
     const invalidateStep = program.hashes.behavior !== entry.behaviorHash || audioChanged
       ? 0
       : this.earliestChangedStep(program, entry.keyframeSignatures, nextSignatures);
@@ -219,7 +227,7 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
     entry.keyframeSignatures = nextSignatures;
     if (invalidateStep !== null) {
       entry.session.invalidateFrom(invalidateStep);
-      entry.cacheKey = this.cacheKeyFor(program, nextSignatures);
+      entry.cacheKey = this.cacheKeyFor(program, nextSignatures, audioFingerprint);
       entry.persistedSteps = null;
       entry.persistedLoads.clear();
       if (consumer !== 'precompute') void this.loadPersistedIndex(entry);
@@ -333,11 +341,19 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
         throw new Error(this.host.status.getStatus(data.clipId)?.message ?? 'Flock simulation is not supported on this GPU.');
       }
       const targetStep = flockStepForSourceTime(data.program, data.sourceTime).step + 1;
+      const assertAudioCurrent = () => {
+        if (data.program!.assets.audioClips.length
+          && this.host.audioFingerprint(data.clipId, data.program!.assets.audioClips) !== entry.audioFingerprint) {
+          throw new Error('Audio input changed while preparing Flock export.');
+        }
+      };
       await this.loadPersistedCheckpoint(entry, targetStep, true);
+      assertAudioCurrent();
       entry.session.seekCheckpoint(targetStep);
       while (entry.session.step < targetStep && !entry.session.isDisposed) {
         entry.session.advanceTo(Math.min(targetStep, entry.session.step + 240), 240);
         await device.queue.onSubmittedWorkDone();
+        assertAudioCurrent();
       }
       entry.lastUsedAt = performance.now();
     }

@@ -52,12 +52,22 @@ export async function runFlockPrecompute(
   const startStep = flockStepForSourceTime(program, start).step;
   const persistedSteps = new Set<number>();
   let completed = false;
+  let audioChanged = false;
+  const inputsCurrent = () => {
+    if (program.assets.audioClips.length
+      && registry.host.audioFingerprint(clipId, program.assets.audioClips) !== worker.audioFingerprint) {
+      audioChanged = true;
+      job.cancelled = true;
+    }
+    return !job.cancelled;
+  };
 
   const persistCaptured = async () => {
     for (const step of worker.session.listCheckpointSteps()) {
-      if (job.cancelled) break;
+      if (!inputsCurrent()) break;
       if (step < startStep - worker.session.checkpointInterval || step > endStep || persistedSteps.has(step)) continue;
       const bytes = await worker.session.readCheckpoint(step);
+      if (!inputsCurrent()) break;
       if (!bytes) throw new Error(`Checkpoint ${step} was unavailable before persistence.`);
       const stored = await flockCheckpointStore.put({ cacheKey: worker.cacheKey, clipId, step, state: bytes.state, rings: bytes.rings });
       if (!stored.ok) throw new Error(stored.message ?? 'Could not persist flock checkpoint.');
@@ -70,12 +80,14 @@ export async function runFlockPrecompute(
   };
 
   try {
-    while (worker.session.step < endStep && !job.cancelled && !worker.session.isDisposed) {
+    while (worker.session.step < endStep && inputsCurrent() && !worker.session.isDisposed) {
       const nextCheckpoint = (Math.floor(worker.session.step / worker.session.checkpointInterval) + 1) * worker.session.checkpointInterval;
       const chunkEnd = Math.min(endStep, worker.session.step + CHUNK_STEPS, options.persist ? nextCheckpoint : Infinity);
       worker.session.advanceTo(chunkEnd, CHUNK_STEPS);
       await device.queue.onSubmittedWorkDone();
+      if (!inputsCurrent()) break;
       if (options.persist) await persistCaptured();
+      if (!inputsCurrent()) break;
       job.progress = Math.min(1, worker.session.step / Math.max(1, endStep));
       const preview = registry.entries.get(`${clipId}|preview`);
       registry.host.status.publishStatus(buildFlockRuntimeStatus({
@@ -86,8 +98,8 @@ export async function runFlockPrecompute(
         job,
       }));
     }
-    if (job.cancelled) {
-      return { ok: false, message: 'Precompute cancelled.' };
+    if (!inputsCurrent()) {
+      return { ok: false, message: audioChanged ? 'Audio input changed; restart precompute.' : 'Precompute cancelled.' };
     }
     const steps = worker.session.listCheckpointSteps().filter((step) => step >= startStep - worker.session.checkpointInterval && step <= endStep);
     const preview = registry.entries.get(`${clipId}|preview`);

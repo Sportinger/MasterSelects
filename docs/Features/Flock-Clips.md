@@ -384,7 +384,16 @@ runtime media URLs: the Worker loads and caches them on its device, replaces
 changed URLs, and releases inactive resources. Images share the main renderer's
 2048-pixel decode limit; full model imports are reduced to instance geometry.
 Missing resources fail the exact frame instead of silently using placeholders.
-Audio snapshots, other 3D layer kinds, scene effectors, gizmos and complete
+Audio-driven graphs transport references to the existing loudness analysis,
+with occurrence-local clip placements and explicit unavailable-analysis values.
+Main and Worker share dB normalization and smoothing; analysis changes and clip
+placement changes invalidate simulation state and use distinct persisted
+checkpoint keys. Curve data is loaded once per resource URL using the existing
+loudness payload format. Host URLs remain valid until referencing frames expire.
+An audio change during precompute cancels that run before mixed analysis state
+can be persisted or adopted by the preview. Export preparation also rejects a
+frame if its audio input changes while awaiting checkpoints or GPU completion.
+Other 3D layer kinds, scene effectors, gizmos and complete
 status/cache control routing remain outstanding. The default editor preview
 remains on the main renderer; this is not yet the full Worker migration.
 
