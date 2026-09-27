@@ -450,6 +450,9 @@ export default defineConfig(({ command, mode }) => {
           manualChunks: {
             // Force heavy libs into separate chunks (loaded on demand)
             'mp4box': ['mp4box'],
+            // Notation stack with embedded music fonts — only the score
+            // editor popup pulls it in (dynamic import in ScoreEditorBoot)
+            'vexflow': ['vexflow'],
           },
         },
       },

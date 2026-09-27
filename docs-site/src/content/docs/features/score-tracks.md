@@ -69,8 +69,33 @@ duplicates `scoreData` onto both halves.
 Double-clicking a score clip opens (or focuses) a detached score-editor popup
 bound to that clip (`src/components/scoreEditor/ScoreEditorBoot.ts`, modeled on
 the piano-roll boot: same-origin popup, shared JS heap and Zustand store, one
-window per clip). `ScoreEditor.tsx` currently renders placeholder text with the
-clip name and timing.
+window per clip). The boot lazy-loads `ScoreEditor.tsx`, which renders the
+clip's notation as an engraved sheet; a clip without `scoreData` shows an
+empty four-measure sheet. Editing arrives with the interaction phase.
+
+## Notation rendering (`src/services/score/render/`)
+
+`VexFlowScoreRenderer` re-renders the full score into SVG on every change:
+`scoreLayout` (proportional measure widths and line breaks against the live
+container width), `scoreNoteFactory` (StaveNotes with the custom
+accidental-display rules, diatonic stem direction, dots, articulation order),
+and `scoreSpanners` (beat-boundary beaming with explicit BeamMode overrides,
+bracketed tuplets, stock `StaveTie` ties — same-pitch only, two partial arcs
+across a line break). Selection and the ghost-note preview are applied as
+VexFlow styles *before* drawing (no post-render SVG recoloring or DOM
+surgery); the ghost draws into its own non-interactive overlay group. Each
+slot's StaveNote carries the model slot id as its VexFlow element id, so the
+SVG contains `<g class="vf-stavenote" id="vf-<slotId>">` for the upcoming
+hit-test layer, and the renderer exposes a per-render snapshot (note refs,
+staves, tuplets, measure bounds, line layout).
+
+VexFlow 5 registers its music fonts (Bravura/Academico) on the MAIN
+document's `FontFaceSet` at import; `scoreFonts.ts` copies those FontFaces
+into the popup document and awaits readiness before the first render —
+without this the popup renders tofu glyphs. VexFlow is split into its own
+lazy chunk (`manualChunks` + dynamic import in the boot), so the main bundle
+does not carry the notation stack. Renderers expect measures to be fully
+filled; writers repair gaps (`repairAllMeasureGaps`) before committing.
 
 ## Kernel boundary note
 

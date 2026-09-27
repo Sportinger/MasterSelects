@@ -6,8 +6,10 @@
 
 import { createRoot, type Root } from 'react-dom/client';
 import { createElement } from 'react';
-import { ScoreEditor } from './ScoreEditor';
 import { useTimelineStore } from '../../stores/timeline';
+import { Logger } from '../../services/logger';
+
+const log = Logger.create('ScoreEditorBoot');
 
 interface ScoreEditorWindow {
   win: Window;
@@ -20,7 +22,12 @@ function shouldTransferPopupFocus(): boolean {
   return !useTimelineStore.getState().isPlaying;
 }
 
-function injectScoreEditorUI(win: Window, clipId: string): void {
+async function injectScoreEditorUI(win: Window, clipId: string): Promise<void> {
+  // Lazy-load the editor (and with it VexFlow + its embedded music fonts) so
+  // the main bundle doesn't carry the notation stack until a window opens.
+  const { ScoreEditor } = await import('./ScoreEditor');
+  if (win.closed) return;
+
   win.document.title = 'Score Editor';
 
   // Clear existing DOM (matters if the browser reused a named window).
@@ -84,11 +91,13 @@ export function openScoreEditor(clipId: string): void {
   );
 
   if (!win) {
-    console.error('Failed to open Score Editor (popup blocked?)');
+    log.error('Failed to open Score Editor (popup blocked?)');
     return;
   }
 
-  injectScoreEditorUI(win, clipId);
+  void injectScoreEditorUI(win, clipId).catch((error) => {
+    log.error('Failed to load score editor into popup', { clipId, error: String(error) });
+  });
 }
 
 /** Close a specific clip's score-editor window if open. */
