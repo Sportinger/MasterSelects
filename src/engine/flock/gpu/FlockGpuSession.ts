@@ -6,7 +6,8 @@ import { flockPressureMemory } from '../shared/flockPressureLayout';
 import { flockGpuTimings } from './FlockGpuTimings';
 import { OP_KIND_CODES } from '../shared/flockCodes';
 import { resolveFlockStep } from '../../../services/flock/compiler/flockParamEvaluation';
-import { nextPowerOfTwo, selectTrailSlots } from '../../../services/flock/compiler/flockCompilerSupport';
+import { selectTrailSlots } from '../../../services/flock/compiler/flockCompilerSupport';
+import { flockNeighborLayout } from '../../../services/flock/compiler/flockNeighborLayout';
 import { FLOCK_AFFINE_BYTES, FLOCK_PARTICLE_BYTES, type FlockProgram } from '../../../services/flock/compiler/flockProgramTypes';
 import { prepareCpuStepParams } from '../cpu/flockCpuStepParams';
 import { buildInitialFlockState } from '../shared/flockInitialState';
@@ -59,8 +60,7 @@ export interface FlockSessionStats {
 
 /** Buffer sizes a session would allocate; checked against device limits before creation. */
 export function estimateFlockSessionBuffers(program: FlockProgram): { largestBinding: number; total: number } {
-  const sortCount = nextPowerOfTwo(Math.max(2, program.capacity));
-  const tableSize = nextPowerOfTwo(Math.max(4096, program.capacity * 2));
+  const { sortCount, tableSize } = flockNeighborLayout(program);
   const state = program.capacity * FLOCK_PARTICLE_BYTES;
   const cells = tableSize * 16;
   const ring = Math.max(0, ...program.trails.map((trail) => trail.slotCount * trail.samples * 16));
@@ -88,6 +88,7 @@ export class FlockGpuSession {
   readonly capacity: number;
   readonly sortCount: number;
   readonly tableSize: number;
+  readonly hasNeighborGrid: boolean;
   step = 0;
   gridValid = false;
   lastGridCellSize = 10;
@@ -133,8 +134,10 @@ export class FlockGpuSession {
     this.program = program;
     this.context = context;
     this.capacity = program.capacity;
-    this.sortCount = nextPowerOfTwo(Math.max(2, program.capacity));
-    this.tableSize = nextPowerOfTwo(Math.max(4096, program.capacity * 2));
+    const neighbors = flockNeighborLayout(program);
+    this.hasNeighborGrid = neighbors.required;
+    this.sortCount = neighbors.sortCount;
+    this.tableSize = neighbors.tableSize;
     this.checkpointInterval = Math.max(1, program.stepRate);
     const stateBytes = this.capacity * FLOCK_PARTICLE_BYTES;
     const stateUsage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
@@ -405,6 +408,7 @@ export class FlockGpuSession {
 
   /** Rebuilds the spatial index for the current state (links after a restore). */
   encodeGridOnly(encoder: GPUCommandEncoder): void {
+    if (!this.hasNeighborGrid) throw new Error('This flock graph has no neighbor-grid consumer');
     const params = prepareCpuStepParams(resolveFlockStep(this.program, Math.max(0, this.step - 1), this.context));
     const stamp = this.stampCounter;
     this.stampCounter = (this.stampCounter + 1) >>> 0 || 1;

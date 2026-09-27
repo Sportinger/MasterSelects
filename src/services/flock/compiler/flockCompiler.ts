@@ -6,6 +6,7 @@ import type {
   FlockProperty,
 } from '../../../types/flock';
 import { expandFlockGroups } from '../graph/flockGroupExpansion';
+import { flockNeighborLayout } from './flockNeighborLayout';
 import { isParticipatingFlockNode, validateFlockDefinition } from '../graph/flockGraphValidation';
 import type { FlockInvalidation } from '../operators/flockOperatorTypes';
 import {
@@ -16,7 +17,6 @@ import {
 import {
   buildParamBundle,
   hashFlockString,
-  nextPowerOfTwo,
   selectTrailSlots,
   stableStringify,
 } from './flockCompilerSupport';
@@ -425,10 +425,8 @@ function lowerFlockGraph(definition: FlockDefinition, inheritedDiagnostics: Floc
   }
 
   // ----- estimates, assets and hashes -----
-  const sortCount = nextPowerOfTwo(Math.max(2, capacity));
-  const tableSize = nextPowerOfTwo(Math.max(4096, capacity * 2));
   const stateBytes = capacity * (FLOCK_PARTICLE_BYTES * 2 + (fluid ? FLOCK_AFFINE_BYTES : 0));
-  const gridBytes = sortCount * 8 + tableSize * 12;
+  const gridBytes = flockNeighborLayout({ capacity, ops, branches }).bytes;
   const trailBytes = trails.reduce((sum, trail) => sum + trail.slotCount * (trail.samples * 16 + 4), 0);
   const linkBytes = branches
     .filter((branch) => branch.kind === 'links')

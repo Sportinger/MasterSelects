@@ -324,6 +324,12 @@ simulation waits for its preceding submission to finish before queuing more
 steps, preventing a seek or playback catch-up from building an unbounded GPU
 work backlog. This can leave the simulation behind the playhead on slow GPUs;
 export still computes every required step.
+The separate boid hash/sort buffers are sized for the population only when a
+connected boid-rules node or neighbor-link render branch consumes them. Other
+graphs keep 32 bytes of placeholder storage for the shared shader bindings.
+Fluid's own stable cell sorter remains allocated. Adding/removing a neighbor
+consumer changes graph topology and recreates the session with the appropriate
+layout; animated boid weights retain the full index even when currently zero.
 Affine Strength replaces the former FLIP Ratio; existing fluid nodes now use APIC, and older
 simulation caches are invalidated. The affine matrix remains in identity order
 through particle sorting, is reset on respawn/restart, and is included in CPU/GPU

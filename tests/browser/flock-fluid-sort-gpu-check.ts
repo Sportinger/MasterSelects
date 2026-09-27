@@ -5,6 +5,7 @@ import type { FlockFluidSpec } from '../../src/services/flock/compiler/flockProg
 import { checkOrderedSessions } from './flock-ordered-session-gpu-check';
 import { checkGpuCheckpoints } from './flock-checkpoint-gpu-check';
 import { checkApicTransfer } from './flock-apic-gpu-check';
+import { checkNeighborLayouts } from './flock-neighbor-layout-gpu-check';
 
 async function check() {
   const adapter = await navigator.gpu.requestAdapter();
@@ -88,6 +89,7 @@ async function check() {
     cases.push(await checkOrderedSessions(device));
     cases.push(await checkGpuCheckpoints(device));
     cases.push(await checkApicTransfer(device));
+    cases.push(await checkNeighborLayouts(device));
     await device.queue.onSubmittedWorkDone();
     if (errors.length) throw new Error(errors.join('\n'));
     return { success: true, cases, adapter: adapter.info };
