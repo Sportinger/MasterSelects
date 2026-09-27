@@ -31,6 +31,7 @@ import type {
   WorkerGpuRenderIntent,
   WorkerGpuWebCodecsRenderLayer,
 } from './workerGpuRuntimeCommands';
+import { isWorkerGpuNativeScenePayload, type WorkerGpuNativeScenePayload } from './workerGpuNativeSceneContract';
 
 export const WORKER_GPU_FRAME_STACK_CONTRACT_VERSION =
   'worker-gpu-frame-stack/v1' as const;
@@ -67,6 +68,7 @@ export type WorkerGpuFrameStackExecution =
     };
 
 export type WorkerGpuFrameStackPayload =
+  | WorkerGpuNativeScenePayload
   | {
       readonly kind: 'webcodecs';
       readonly mediaTime: number;
@@ -100,6 +102,7 @@ export type WorkerGpuFrameStackPayload =
     };
 
 export type WorkerGpuFrameStackRuntimeSourceKind =
+  | 'nativeScene'
   | 'video'
   | 'image'
   | 'solid'
@@ -974,11 +977,12 @@ function payloadSupportsSourceKind(
     || (runtimeSourceKind === 'motionVideo' && payloadKind === 'webcodecs')
     || (runtimeSourceKind === 'motionImage' && payloadKind === 'bitmap')
     || (runtimeSourceKind === 'motionNestedComposition' && payloadKind === 'nested-stack')
-    || (runtimeSourceKind === 'nestedComposition' && payloadKind === 'nested-stack');
+    || (runtimeSourceKind === 'nestedComposition' && payloadKind === 'nested-stack')
+    || (runtimeSourceKind === 'nativeScene' && payloadKind === 'native-scene');
 }
 
 function isRuntimeSourceKind(value: unknown): value is WorkerGpuFrameStackRuntimeSourceKind {
-  return value === 'video'
+  return value === 'nativeScene' || value === 'video'
     || value === 'image'
     || value === 'solid'
     || value === 'color'
@@ -994,6 +998,7 @@ function sourceKindForRuntimeKind(
   runtimeSourceKind: WorkerGpuFrameStackRuntimeSourceKind,
 ): MotionAdjustmentSourceKind {
   switch (runtimeSourceKind) {
+    case 'nativeScene':
     case 'video':
     case 'image':
     case 'solid':
@@ -1031,6 +1036,7 @@ function assertPayloadSourceId(
       expectedKind = 'nested-composition';
       break;
     case 'solid':
+    case 'native-scene':
       return fail('MD7_FRAME_STACK_SOURCE_KIND_PAYLOAD_MISMATCH', path);
   }
   try {
@@ -1056,6 +1062,12 @@ function assertPayload(
   const payload = requirePlainRecord(value, path, 'MD7_FRAME_STACK_INVALID_PAYLOAD');
   const kind = dataValue(payload, 'kind', path, 'MD7_FRAME_STACK_INVALID_PAYLOAD');
   switch (kind) {
+    case 'native-scene':
+      assertCloneablePlainData(payload, path, false, budget);
+      if (!isWorkerGpuNativeScenePayload(payload)) fail('MD7_FRAME_STACK_INVALID_PAYLOAD', path);
+      if (payload.timelineTime !== containingFrame.timelineTime) fail('MD7_FRAME_STACK_FRAME_IDENTITY_MISMATCH', `${path}.timelineTime`);
+      assertDimensions({ width: payload.width, height: payload.height }, path, budget);
+      break;
     case 'webcodecs':
       assertExactKeys(payload, ['kind', 'mediaTime', 'width', 'height'], path, 'MD7_FRAME_STACK_INVALID_PAYLOAD');
       if (!isFiniteNumber(dataValue(payload, 'mediaTime', path, 'MD7_FRAME_STACK_INVALID_PAYLOAD'))) {

@@ -372,6 +372,16 @@ and media fingerprints; worker owners can supply equivalent snapshots. A real
 Worker check renders Flock together with native mesh geometry and verifies their
 shared depth. This boundary does not yet route editor compositions to the Worker.
 
+The existing Worker GPU frame stack accepts a versioned native-scene payload for
+Flock and primitive meshes. Its target owns persistent scene and simulation state
+per composition occurrence, waits for the requested source step, and composites
+the scene texture with other sources using the existing exact-frame/export path.
+Camera matrices, graph definitions, keyframes and clocks are admitted as bounded
+plain data. This initial transport explicitly rejects graphs requiring external
+image/model/audio snapshots until their resource transport is connected. Other
+3D layer kinds and host-side scene grouping are not yet admitted; the editor
+preview remains on the main renderer.
+
 The GPU fluid, cell-order and separation kernels also accept a 32-byte fluid
 core (`position/age`, `velocity/generation`). Pipeline caches distinguish it
 from the full 64-byte particle state, and sorting scratch uses the same stride.

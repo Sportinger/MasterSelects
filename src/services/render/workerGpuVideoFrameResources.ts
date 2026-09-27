@@ -4,6 +4,7 @@ import { MotionRenderer } from '../../engine/motion/MotionRenderer';
 import { CompositorPipeline } from '../../engine/pipeline/CompositorPipeline';
 import { Compositor } from '../../engine/render/Compositor';
 import { MaskTextureManager } from '../../engine/texture/MaskTextureManager';
+import { WorkerGpuNativeSceneOwner } from './WorkerGpuNativeSceneOwner';
 import type {
   WorkerGpuPresentDiagnostics,
   WorkerGpuTargetSurface,
@@ -16,6 +17,7 @@ export interface WorkerGpuCompositorResources {
   readonly maskTextureManager: MaskTextureManager;
   readonly compositor: Compositor;
   readonly motionRenderer: MotionRenderer;
+  nativeSceneOwner?: WorkerGpuNativeSceneOwner;
   readonly sampler: GPUSampler;
   readonly displayPipeline: GPURenderPipeline;
   readonly exactFramePipeline: GPURenderPipeline;
@@ -311,4 +313,5 @@ export function releaseWorkerGpuVideoFrameCompositorResources(
   destroyWorkerGpuResource(resources.colorPipeline);
   destroyWorkerGpuResource(resources.maskTextureManager);
   destroyWorkerGpuResource(resources.motionRenderer);
+  resources.nativeSceneOwner?.dispose();
 }

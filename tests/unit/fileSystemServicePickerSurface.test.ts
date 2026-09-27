@@ -24,6 +24,13 @@ function restoreWindowProperty(property: 'showOpenFilePicker' | 'showDirectoryPi
 }
 
 describe('fileSystemService picker surface', () => {
+  it('reports picker support as unavailable in a Worker realm', async () => {
+    const { isFileSystemAccessSupported } = await vi.importActual<typeof import('../../src/services/fileSystemService')>('../../src/services/fileSystemService');
+    vi.stubGlobal('window', undefined);
+    try { expect(isFileSystemAccessSupported()).toBe(false); }
+    finally { vi.unstubAllGlobals(); }
+  });
+
   it('ignores duplicate open requests and allows a new picker after cancellation', async () => {
     let rejectPicker!: (error: Error) => void;
     const showOpenFilePicker = vi.fn()

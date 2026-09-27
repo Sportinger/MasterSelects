@@ -86,7 +86,7 @@ export interface WorkerGpuFrameStackExecution {
 
 type WorkerGpuFrameStackSourceResolvers = Pick<
   WorkerGpuFrameStackMaterializerResolvers,
-  'resolveWebCodecs' | 'renderMotion'
+  'resolveWebCodecs' | 'renderMotion' | 'renderNativeScene'
 >;
 
 export type WorkerGpuFrameStackAdjustmentEncoder = (input: {

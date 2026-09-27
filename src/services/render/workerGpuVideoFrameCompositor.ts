@@ -37,7 +37,8 @@ import type {
   WorkerGpuFrameStackReadbackRequest,
   WorkerGpuPresentFrameStackCommand,
 } from './workerGpuRuntimeCommands';
-import { closeWorkerGpuFrameStackTransferables } from './workerGpuFrameStackContract';
+import { assertWorkerGpuFrameStackContract, closeWorkerGpuFrameStackTransferables } from './workerGpuFrameStackContract';
+import { hasWorkerGpuNativeScene, WorkerGpuNativeSceneOwner } from './WorkerGpuNativeSceneOwner';
 import {
   createWorkerGpuPresentDiagnostics as createPresentDiagnostics,
   destroyWorkerGpuResource,
@@ -233,10 +234,16 @@ export async function presentGpuFrameStack(
     ) {
       throw new Error('Worker GPU frame-stack dimensions do not match the target surface');
     }
+    assertWorkerGpuFrameStackContract(command.stack, { ...command.admission, nowMs: options.clock() });
     const resources = await getWorkerGpuCompositorResources(surface);
     if (options.isSurfaceCurrent && !options.isSurfaceCurrent()) {
       throw new Error('Worker GPU target surface changed before frame-stack encoding');
     }
+    const nativeScenes = hasWorkerGpuNativeScene(command.stack)
+      ? resources.nativeSceneOwner ??= new WorkerGpuNativeSceneOwner(surface.device)
+      : resources.nativeSceneOwner;
+    await nativeScenes?.prepare(command.stack, () => (!options.isSurfaceCurrent || options.isSurfaceCurrent())
+      && options.clock() < command.stack.frame.expireAfterMs);
     executorInvocationStarted = true;
     execution = encodeWorkerGpuFrameStack({
       device: surface.device,
@@ -256,6 +263,10 @@ export async function presentGpuFrameStack(
           input,
         ),
         renderMotion: (input) => renderFrameStackMotionSource(surface, resources, input),
+        renderNativeScene: input => {
+          if (!nativeScenes) throw new Error('Native scene owner is unavailable');
+          return nativeScenes.render(input);
+        },
       },
     });
     if (!resources.exactFrameTexture || !resources.exactFrameView) {

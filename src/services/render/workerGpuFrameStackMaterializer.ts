@@ -22,6 +22,8 @@ export type WorkerGpuFrameStackMaterializerDiagnosticCode =
   | 'MD7_FRAME_STACK_MATERIALIZER_WEBCODECS_RESOLVE_FAILED'
   | 'MD7_FRAME_STACK_MATERIALIZER_MOTION_RENDERER_MISSING'
   | 'MD7_FRAME_STACK_MATERIALIZER_MOTION_RENDER_FAILED'
+  | 'MD7_FRAME_STACK_MATERIALIZER_NATIVE_SCENE_MISSING'
+  | 'MD7_FRAME_STACK_MATERIALIZER_NATIVE_SCENE_FAILED'
   | 'MD7_FRAME_STACK_MATERIALIZER_NESTED_RESOLVER_MISSING'
   | 'MD7_FRAME_STACK_MATERIALIZER_NESTED_RESOLVE_FAILED'
   | 'MD7_FRAME_STACK_MATERIALIZER_RESOLVER_RESULT_INVALID'
@@ -30,6 +32,8 @@ export type WorkerGpuFrameStackMaterializerDiagnosticCode =
   | 'MD7_FRAME_STACK_MATERIALIZER_AFTER_SUBMIT_FAILED';
 
 const DIAGNOSTIC_MESSAGES = {
+  MD7_FRAME_STACK_MATERIALIZER_NATIVE_SCENE_MISSING: 'The Worker GPU materializer has no native scene owner',
+  MD7_FRAME_STACK_MATERIALIZER_NATIVE_SCENE_FAILED: 'The Worker GPU materializer could not render the native scene',
   MD7_FRAME_STACK_MATERIALIZER_DUPLICATE_BINDING: 'The Worker GPU materializer received a duplicate layer binding',
   MD7_FRAME_STACK_MATERIALIZER_ADMISSION_MISMATCH: 'The Worker GPU materializer admission does not match the frozen frame',
   MD7_FRAME_STACK_MATERIALIZER_FRAME_EXPIRED: 'The Worker GPU materializer frame expired before lazy source resolution',
@@ -93,6 +97,10 @@ export interface WorkerGpuFrameStackMotionRendererInput
   readonly payload: Extract<WorkerGpuFrameStackSourceBinding['payload'], { kind: 'motion' }>;
 }
 
+export interface WorkerGpuFrameStackNativeSceneInput extends WorkerGpuFrameStackInjectedResolverInput {
+  readonly payload: Extract<WorkerGpuFrameStackSourceBinding['payload'], { kind: 'native-scene' }>;
+}
+
 export interface WorkerGpuFrameStackNestedResolverInput
   extends WorkerGpuFrameStackInjectedResolverInput {
   readonly payload: Extract<WorkerGpuFrameStackSourceBinding['payload'], { kind: 'nested-stack' }>;
@@ -101,6 +109,7 @@ export interface WorkerGpuFrameStackNestedResolverInput
 }
 
 export interface WorkerGpuFrameStackMaterializerResolvers {
+  readonly renderNativeScene?: (input: WorkerGpuFrameStackNativeSceneInput) => LayerRenderData;
   readonly resolveWebCodecs?: (
     input: WorkerGpuFrameStackWebCodecsResolverInput,
   ) => LayerRenderData;
@@ -339,6 +348,8 @@ function createSourceLayer(
 function sourceLayerForBinding(binding: WorkerGpuFrameStackSourceBinding): Layer {
   const payload = binding.payload;
   switch (payload.kind) {
+    case 'native-scene':
+      return createSourceLayer(binding, { type: 'image', intrinsicWidth: payload.width, intrinsicHeight: payload.height });
     case 'webcodecs':
       return createSourceLayer(binding, { type: 'video', mediaTime: payload.mediaTime });
     case 'bitmap':
@@ -599,6 +610,11 @@ export class WorkerGpuFrameStackMaterializer {
     const payload = binding.payload;
     const layer = sourceLayerForBinding(binding);
     switch (payload.kind) {
+      case 'native-scene':
+        return this.resolveInjected(binding, '$.payload.native-scene',
+          'MD7_FRAME_STACK_MATERIALIZER_NATIVE_SCENE_MISSING', 'MD7_FRAME_STACK_MATERIALIZER_NATIVE_SCENE_FAILED',
+          this.resolvers.renderNativeScene,
+          { ...this.context(commandEncoder), binding, layer, payload, frameStack: this.stack });
       case 'bitmap':
         return this.materializeBitmap(binding, layer, payload);
       case 'solid':

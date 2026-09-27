@@ -422,6 +422,16 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
     await flockCheckpointStore.pruneClip(clipId);
     this.host.requestRender();
   }
+  /** Release transient state without deleting persisted checkpoints. */
+  releaseClip(clipId: string): void {
+    this.cancelPrecompute(clipId);
+    for (const [key, entry] of this.entries) if (entry.clipId === clipId) {
+      entry.session.dispose(); this.entries.delete(key);
+    }
+    this.latestInputs.delete(clipId); this.lastValidPrograms.delete(clipId);
+    this.host.status.clearStatus(clipId);
+  }
+
   dispose(): void {
     for (const job of this.jobs.values()) job.cancelled = true;
     for (const entry of this.entries.values()) {

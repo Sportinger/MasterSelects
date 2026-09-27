@@ -60,7 +60,7 @@ const STORAGE_KEYS = {
 
 // Check if File System Access API is supported
 export function isFileSystemAccessSupported(): boolean {
-  return 'showOpenFilePicker' in window && 'showDirectoryPicker' in window;
+  return typeof window !== 'undefined' && 'showOpenFilePicker' in window && 'showDirectoryPicker' in window;
 }
 
 // Store for file handles (maps file ID to handle)

@@ -32,8 +32,8 @@ interface TextPixelBounds {
 }
 
 class TextRenderer {
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
+  private canvas: HTMLCanvasElement | null = null;
+  private ctx: CanvasRenderingContext2D | null = null;
   private width: number;
   private height: number;
   private renderedBounds: TextPixelBounds | null = null;
@@ -42,14 +42,21 @@ class TextRenderer {
   constructor(width: number = 1920, height: number = 1080) {
     this.width = width;
     this.height = height;
+  }
+
+  /** Importing renderer contracts in a Worker must not allocate DOM resources. */
+  private getCanvas(): HTMLCanvasElement {
+    if (this.canvas) return this.canvas;
+    if (typeof document === 'undefined') throw new Error('Text rasterization requires a host-provided canvas');
     this.canvas = document.createElement('canvas');
     this.canvas.dataset.masterselectsDynamic = 'text';
-    this.canvas.width = width;
-    this.canvas.height = height;
+    this.canvas.width = this.width;
+    this.canvas.height = this.height;
     this.ctx = this.canvas.getContext('2d', {
       alpha: true,
       desynchronized: true,
     })!;
+    return this.canvas;
   }
 
   /**
@@ -60,9 +67,9 @@ class TextRenderer {
     const props = hasTextValueTokens(inputProps.text)
       ? { ...inputProps, text: formatTextValueTemplate(inputProps.text, { value: inputProps.value ?? 0, time: 0 }) }
       : inputProps;
-    const canvas = targetCanvas || this.canvas;
+    const canvas = targetCanvas || this.getCanvas();
     canvas.dataset.masterselectsDynamic = 'text';
-    const ctx = targetCanvas ? targetCanvas.getContext('2d')! : this.ctx;
+    const ctx = targetCanvas ? targetCanvas.getContext('2d')! : this.ctx!;
     const previousWidth = this.width;
     const previousHeight = this.height;
     const renderWidth = targetCanvas ? Math.max(1, targetCanvas.width || this.width) : this.width;
@@ -582,8 +589,10 @@ class TextRenderer {
   setResolution(width: number, height: number): void {
     this.width = width;
     this.height = height;
-    this.canvas.width = width;
-    this.canvas.height = height;
+    if (this.canvas) {
+      this.canvas.width = width;
+      this.canvas.height = height;
+    }
   }
 
   /**

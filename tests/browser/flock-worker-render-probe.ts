@@ -10,6 +10,7 @@ import type { FlockProgram } from '../../src/services/flock/compiler/flockProgra
 import type { SceneCamera, SceneFlockLayer } from '../../src/engine/scene/types';
 import { createWorkerGpuTargetSurface } from '../../src/services/render/workerGpuTargetSurface';
 import { renderNativeSceneProbe } from './flock-worker-scene-probe';
+import { renderNativeFrameStackProbe } from './flock-worker-frame-stack-probe';
 
 export interface FlockWorkerProbeInput {
   canvas: OffscreenCanvas;
@@ -123,7 +124,9 @@ export async function renderFlockProbe(input: FlockWorkerProbeInput) {
     if (!precompute.ok || persisted.length !== 2) throw new Error(`Worker precompute failed: ${JSON.stringify(precompute)}, ${persisted}`);
     const persistedCheckpoints = persisted.length;
     await runtime.clearCache('worker-probe');
-    return { sharedScene: true, sharedDepth: true, persistedCheckpoints, persistentSession: true, seekReplay: true, keyframeInvalidation: true, renderRequests, statusCount: statuses.size, worker: typeof document === 'undefined', step: session.step, coloredPixels, pigmentPixels, images, particles };
+    images.push(...await renderNativeFrameStackProbe(created.surface));
+    if (errors.length) throw new Error(errors.join('\n'));
+    return { nativeFrameStack: true, sharedScene: true, sharedDepth: true, persistedCheckpoints, persistentSession: true, seekReplay: true, keyframeInvalidation: true, renderRequests, statusCount: statuses.size, worker: typeof document === 'undefined', step: session.step, coloredPixels, pigmentPixels, images, particles };
   } finally {
     runtime.dispose(); assets.dispose(); depth.destroy(); readback.destroy();
     temporary.forEach(buffer => buffer.destroy());

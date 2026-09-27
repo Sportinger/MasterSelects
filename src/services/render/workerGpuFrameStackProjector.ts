@@ -240,6 +240,7 @@ function sourceKindFromHostRuntime(
   runtimeSourceKind: WorkerGpuFrameStackRuntimeSourceKind,
 ): MotionAdjustmentSourceKind {
   switch (runtimeSourceKind) {
+    case 'nativeScene':
     case 'video':
     case 'image':
     case 'solid':
@@ -277,6 +278,8 @@ function isExpectedPayloadKind(
   payloadKind: WorkerGpuFrameStackHostSource['kind'],
 ): boolean {
   switch (runtimeSourceKind) {
+    case 'nativeScene':
+      return false; // Host scene grouping is admitted through its dedicated adapter.
     case 'video':
       return payloadKind === 'webcodecs' || payloadKind === 'bitmap';
     case 'motionVideo':
