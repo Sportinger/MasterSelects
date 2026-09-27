@@ -103,6 +103,9 @@ Supported codecs are checked at runtime:
 - The selected bitrate is passed into `VideoEncoder`, but in the WebCodecs path it is a target, not a guaranteed final file bitrate.
 - `rateControl = cbr` maps to `VideoEncoderConfig.bitrateMode = "constant"` and falls back to variable bitrate if constant mode is rejected during encoder configuration.
 - Browser encoders can undershoot the requested bitrate on simple material, so the panel treats file size as a target estimate rather than an exact promise.
+- Codec strings carry the smallest standard level that fits the export size and frame rate (for example HEVC Level 5.1 and H.264 Level 5.2 for 3840x2160 at 60 fps); small exports keep the historical defaults.
+- Chrome on Windows advertises hardware encoders above 1080p with at most 30 fps even when they encode faster. When the real frame rate is rejected, export retries with a 30 fps rate-control hint and a bitrate scaled by 30/fps, so the file keeps the requested bits per second; frame timestamps keep the real rate (verified: 3840x2160 HEVC at 60 fps and 15 Mbps on an RTX 5080 laptop). Hardware configs are preferred over software ones at the real rate.
+- Dense particle material needs far higher bitrates than camera footage; 4K60 HEVC of fine point clouds looks soft below roughly 60 Mbps.
 
 ---
 
