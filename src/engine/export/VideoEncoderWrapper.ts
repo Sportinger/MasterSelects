@@ -10,6 +10,9 @@ import { getCodecString, isCodecSupportedInContainer, getFallbackCodec } from '.
 import { isMobileAppleWebKit } from '../../utils/mobileAppleWebKit';
 import { resolveVideoEncoderBitrate } from './videoEncoderConfigPolicy';
 
+/** Frame-rate hint used when an encoder rejects the real rate (see init). */
+const HARDWARE_FRAMERATE_HINT = 30;
+
 export class VideoEncoderWrapper {
   // VideoEncoder.encode() only enqueues work. Without backpressure each queued
   // 1080p RGBA VideoFrame can retain ~8.3 MB until the codec consumes it,
@@ -72,70 +75,54 @@ export class VideoEncoderWrapper {
     }
     const requestedBitrateMode: VideoEncoderBitrateMode =
       this.settings.rateControl === 'cbr' ? 'constant' : 'variable';
-    const supportCheckConfig = {
-      codec: codecString,
-      width: this.settings.width,
-      height: this.settings.height,
-      bitrate: bitratePolicy.bitrate,
-      framerate: this.settings.fps,
-    };
+    // Chrome's Windows hardware encoders advertise at most 30 fps above 1080p,
+    // although they encode 60 fps timestamps fine. The framerate is only a
+    // rate-control hint, so a second round hints 30 fps with the bitrate scaled
+    // to keep the requested bits per second. Timestamps keep the real frame rate.
+    const framerateRounds: Array<{ framerate: number; bitrate: number }> = [
+      { framerate: this.settings.fps, bitrate: bitratePolicy.bitrate },
+    ];
+    if (this.settings.fps > HARDWARE_FRAMERATE_HINT) {
+      framerateRounds.push({
+        framerate: HARDWARE_FRAMERATE_HINT,
+        bitrate: Math.round(bitratePolicy.bitrate * HARDWARE_FRAMERATE_HINT / this.settings.fps),
+      });
+    }
     // Safari may report realtime H.264 as supported, then close the encoder on
     // the first 1080p frame. Export is offline work, so prefer quality configs.
-    const buildEncoderConfigCandidates = (bitrateMode: VideoEncoderBitrateMode): VideoEncoderConfig[] => [
-      {
-        ...supportCheckConfig,
-        latencyMode: 'quality',
-        hardwareAcceleration: 'prefer-hardware',
+    const buildEncoderConfigCandidates = (
+      bitrateMode: VideoEncoderBitrateMode,
+      round: { framerate: number; bitrate: number },
+    ): VideoEncoderConfig[] => {
+      const base = {
+        codec: codecString,
+        width: this.settings.width,
+        height: this.settings.height,
+        bitrate: round.bitrate,
+        framerate: round.framerate,
         bitrateMode,
         contentHint: 'motion',
-      },
-      {
-        ...supportCheckConfig,
-        latencyMode: 'quality',
-        hardwareAcceleration: 'no-preference',
-        bitrateMode,
-        contentHint: 'motion',
-      },
-      {
-        ...supportCheckConfig,
-        latencyMode: 'quality',
-        hardwareAcceleration: 'prefer-software',
-        bitrateMode,
-        contentHint: 'motion',
-      },
-      {
-        ...supportCheckConfig,
-        latencyMode: 'realtime',
-        hardwareAcceleration: 'prefer-hardware',
-        bitrateMode,
-        contentHint: 'motion',
-      },
-      {
-        ...supportCheckConfig,
-        latencyMode: 'realtime',
-        hardwareAcceleration: 'no-preference',
-        bitrateMode,
-        contentHint: 'motion',
-      },
-      {
-        ...supportCheckConfig,
-        latencyMode: 'realtime',
-        hardwareAcceleration: 'prefer-software',
-        bitrateMode,
-        contentHint: 'motion',
-      },
-    ];
+      };
+      return (['quality', 'realtime'] as const).flatMap((latencyMode) =>
+        (['prefer-hardware', 'no-preference', 'prefer-software'] as const).map((hardwareAcceleration) => ({
+          ...base,
+          latencyMode,
+          hardwareAcceleration,
+        })));
+    };
     const bitrateModesToTry: VideoEncoderBitrateMode[] = requestedBitrateMode === 'constant'
       ? ['constant', 'variable']
       : ['variable'];
-    const supportedEncoderConfigs: VideoEncoderConfig[] = [];
+    const supportedByRound: VideoEncoderConfig[][] = framerateRounds.map(() => []);
 
     try {
-      for (const bitrateMode of bitrateModesToTry) {
-        for (const config of buildEncoderConfigCandidates(bitrateMode)) {
-          const support = await VideoEncoder.isConfigSupported(config);
-          if (support.supported) {
-            supportedEncoderConfigs.push(config);
+      for (const [roundIndex, round] of framerateRounds.entries()) {
+        for (const bitrateMode of bitrateModesToTry) {
+          for (const config of buildEncoderConfigCandidates(bitrateMode, round)) {
+            const support = await VideoEncoder.isConfigSupported(config);
+            if (support.supported) {
+              supportedByRound[roundIndex].push(config);
+            }
           }
         }
       }
@@ -143,6 +130,12 @@ export class VideoEncoderWrapper {
       log.error('Codec support check failed:', e);
       return false;
     }
+    // Hardware encoders first (a hinted hardware config beats a software one at the real rate).
+    const isHardware = (config: VideoEncoderConfig) => config.hardwareAcceleration === 'prefer-hardware';
+    const supportedEncoderConfigs = [
+      ...supportedByRound.flat().filter(isHardware),
+      ...supportedByRound.flat().filter((config) => !isHardware(config)),
+    ];
 
     if (supportedEncoderConfigs.length === 0) {
       log.error(`Codec not supported: ${codecString}`);
@@ -196,7 +189,7 @@ export class VideoEncoderWrapper {
       }
 
       log.info(
-        `Initialized: ${this.settings.width}x${this.settings.height} @ ${this.settings.fps}fps (${this.effectiveVideoCodec.toUpperCase()}, ${(bitratePolicy.bitrate / 1_000_000).toFixed(1)} Mbps, ${this.effectiveBitrateMode}, ${selectedEncoderConfig.latencyMode ?? 'default'} latency, ${selectedEncoderConfig.hardwareAcceleration ?? 'default'} hw)`
+        `Initialized: ${this.settings.width}x${this.settings.height} @ ${this.settings.fps}fps (${this.effectiveVideoCodec.toUpperCase()}, ${(bitratePolicy.bitrate / 1_000_000).toFixed(1)} Mbps, ${this.effectiveBitrateMode}, ${selectedEncoderConfig.latencyMode ?? 'default'} latency, ${selectedEncoderConfig.hardwareAcceleration ?? 'default'} hw${selectedEncoderConfig.framerate !== this.settings.fps ? `, ${selectedEncoderConfig.framerate}fps rate-control hint` : ''})`
       );
     };
     if (!options.deferVideoEncoder) this.ensureEncoderStarted();
