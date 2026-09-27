@@ -66,8 +66,9 @@ fn pointVertex(vi: u32, simPos: vec3f, color: vec3f, sizeRnd: f32, visibility: f
   let size = max(0.0, br.size * (1.0 + br.sizeVariance * (sizeRnd * 2.0 - 1.0)));
   var coverage = 1.0;
   if (br.sizeMode < 0.5) {
-    let px = max(size, 1.0);
-    coverage = min(1.0, size * size);
+    let referenceSize = size * rb.frame.viewport.y / 1080.0;
+    let px = max(referenceSize, 1.0);
+    coverage = min(1.0, referenceSize * referenceSize);
     out.clip = clip + vec4f(corner * px / rb.frame.viewport * clip.w, 0.0, 0.0);
   } else {
     let radius = size * 0.5 * rb.frame.worldUnitsPerSim;
@@ -116,7 +117,7 @@ fn shadowVertex(vi: u32, simPos: vec3f) -> ShadowOut {
   let clip = lightClip(simPos);
   let corner = spriteCorner(vi);
   // Footprint in shadow-map texels, wide enough to close gaps between neighbors.
-  let radius = 1.0 + br.size * 0.35;
+  let radius = (1.0 + br.size * 0.35) * max(1.0, br.ext0.z);
   out.clip = clip + vec4f(corner * radius * 2.0 * rb.light.texel * clip.w, 0.0, 0.0);
   out.uv = corner;
   return out;
@@ -177,7 +178,8 @@ fn vsPointsCached(@builtin(vertex_index) vi: u32, @builtin(instance_index) instI
   if (record.packed == 0u) { var hidden: PointOut; hidden.clip = HIDDEN; return hidden; }
   var visibility = 1.0;
   if (pointsLit()) { visibility = recordVisibility(record.packed); }
-  return pointVertex(vi, record.pos, unpack4x8unorm(record.packed).rgb, flockHash01(instIdx, 911u), visibility);
+  let sizeRnd = select(stateCur[instIdx / max(1u, u32(br.children))].rnd, flockHash01(instIdx, 911u), br.children > 1.0);
+  return pointVertex(vi, record.pos, unpack4x8unorm(record.packed).rgb, sizeRnd, visibility);
 }
 
 @vertex

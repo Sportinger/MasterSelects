@@ -215,9 +215,24 @@ Points can draw up to 16 render-only **Sub-particles** per simulated particle:
 on grid emitters they are placed bilinearly between a particle and its right,
 lower and diagonal neighbors, so they stay on the folded surface; other
 emitters scatter them within Sub-particle Spread. One million simulated
-particles with eight sub-particles draw about 8.4 million points. Emitter
+particles with eight sub-particles can draw about 8.4 million points. The
+actual scene target limits sub-particles to about 1.5 points per pixel:
+1,048,576 simulated particles request eight children but draw three at 1080p
+and eight at 4K. **Screen** point sizes use a 1080p reference, so the same point
+is twice as wide in a 4K frame. Small round sprites use one triangle; square
+sprites and larger points retain quads. Emitter
 capacity is 4,194,304 particles per clip; restart checkpoints keep room for at
 least two full states.
+
+`getStats().flockGpu` reports the actual scene viewport, requested and drawn
+children, simulated particles and shadow point counts. On devices supporting
+`timestamp-query`, it also reports GPU milliseconds for simulation (including
+any neighbor-grid construction), P2G (clear and normalization included), pressure
+(divergence and projection included), G2P, point caches, shadows and main passes.
+Each sample includes pass counts, completion time and a truncation flag; simulation
+batch totals must be divided by their pass counts to compare individual steps.
+Readback uses three bounded slots and skips samples while they are busy, without
+waiting on the GPU. Unsupported devices keep rendering with no timing queries.
 
 **Room, light and shadows.** The **Room** render node draws an open-front
 white gallery box (back wall, floor, ceiling, sides) with an optional flat
@@ -225,6 +240,8 @@ frame ring around the opening, so particles can spill out past the box edge.
 Room also defines the key light (direction in simulation space, ambient,
 shadow strength). Each lit flock clip renders its point and instance branches
 into a 2048² orthographic shadow map framed around the room (or the emitters);
+point shadows use only the simulated parent particles, with a wider footprint
+based on the requested sub-particle count, independent of preview LOD.
 Points with **Shading: Lit** draw sphere impostors that receive the light and
 3x3 PCF shadows, lit Instances and the Room walls receive them too, and the
 walls darken softly where they meet. Points **Relief** moves each point and

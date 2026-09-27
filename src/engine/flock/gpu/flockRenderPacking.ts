@@ -139,8 +139,10 @@ export function flockPointChildrenForViewport(branch: FlockResolvedNode<FlockBra
 /** Screen-space points up to this diameter (px) draw as one triangle instead of a quad. */
 const TRIANGLE_POINT_MAX_PX = 4;
 
-export function flockPointUsesTriangles(branch: FlockResolvedNode<FlockBranchSpec>): boolean {
-  return (branch.p.e.sizeMode ?? 'screen') === 'screen' && (branch.p.n.size ?? 4) <= TRIANGLE_POINT_MAX_PX;
+export function flockPointUsesTriangles(branch: FlockResolvedNode<FlockBranchSpec>, viewportHeight = 1080): boolean {
+  // A triangle enclosing a disc does not enclose the corners of a square.
+  return branch.p.e.shape !== 'square' && (branch.p.e.sizeMode ?? 'screen') === 'screen'
+    && (branch.p.n.size ?? 4) * (1 + Math.abs(branch.p.n.sizeVariance ?? 0)) * viewportHeight / 1080 <= TRIANGLE_POINT_MAX_PX;
 }
 
 export interface PackedBranch {
@@ -152,7 +154,7 @@ export interface PackedBranch {
 /** Branch uniform (layout: `Branch` in flockRenderWgsl.ts). */
 export function packBranch(
   branch: FlockResolvedNode<FlockBranchSpec>,
-  extras: { perParticle?: number; fraction?: number; headRing?: number; slotCount?: number; samples?: number; interval?: number; pointChildren?: number },
+  extras: { perParticle?: number; fraction?: number; headRing?: number; slotCount?: number; samples?: number; interval?: number; pointChildren?: number; viewportHeight?: number },
 ): PackedBranch {
   const { spec, p } = branch;
   const data = new ArrayBuffer(BRANCH_BYTES);
@@ -209,7 +211,8 @@ export function packBranch(
     f.set([Math.max(1, size[0]), Math.max(1, size[1]), Math.max(1, size[2]), p.n.cornerShade ?? 0.35], 48);
   } else {
     f[44] = spec.kind === 'points' ? p.n.relief ?? 0 : 0;
-    f[45] = spec.kind === 'points' && flockPointUsesTriangles(branch) ? 1 : 0;
+    f[45] = spec.kind === 'points' && flockPointUsesTriangles(branch, extras.viewportHeight) ? 1 : 0;
+    f[46] = spec.kind === 'points' ? Math.sqrt(flockPointChildren(branch)) : 1;
   }
   let renderKind: FlockRenderKind = spec.kind === 'glyphs' ? 'glyphs' : spec.kind;
   if (spec.kind === 'glyphs' && p.e.glyph === 'cube') renderKind = 'glyphCubes';

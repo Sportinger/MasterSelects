@@ -1,5 +1,6 @@
 import type { FlockEvaluationContext } from '../../../services/flock/compiler/flockParamEvaluation';
 import { FlockFluidGrid } from './FlockFluidGrid';
+import { flockGpuTimings } from './FlockGpuTimings';
 import { OP_KIND_CODES } from '../shared/flockCodes';
 import { resolveFlockStep } from '../../../services/flock/compiler/flockParamEvaluation';
 import { nextPowerOfTwo, selectTrailSlots } from '../../../services/flock/compiler/flockCompilerSupport';
@@ -331,13 +332,17 @@ export class FlockGpuSession {
     const particleWorkgroups = Math.ceil(this.capacity / WORKGROUP);
     for (let b = 0; b < batch; b += 1) {
       const offset = b * STEP_BLOCK_STRIDE;
-      const pass = encoder.beginComputePass({ label: 'flock-step-pass' });
+      let pass = encoder.beginComputePass({ label: 'flock-step-pass', timestampWrites: flockGpuTimings(this.device).writes(encoder, 'simulate') });
       if (needsGrid[b]) this.encodeGrid(pass, offset, sortWorkgroups);
       pass.setPipeline(this.pipelines.simulatePipeline);
       pass.setBindGroup(0, this.simulateBindGroups[this.currentIndex], [offset]);
       pass.dispatchWorkgroups(particleWorkgroups);
       // FLIP corrects the step output in place before it becomes the current state.
-      this.fluid?.encode(pass, 1 - this.currentIndex, b, this.capacity);
+      if (this.fluid) {
+        pass.end();
+        this.fluid.encode(encoder, 1 - this.currentIndex, b, this.capacity);
+        pass = encoder.beginComputePass({ label: 'flock-trail-pass' });
+      }
       this.currentIndex = 1 - this.currentIndex;
       for (const write of trailWrites) {
         if (write.step !== b) continue;
@@ -355,7 +360,9 @@ export class FlockGpuSession {
     }
     const readStats = !this.statsPending;
     if (readStats) encoder.copyBufferToBuffer(this.statsBuffer, 0, this.statsReadback, 0, 16);
+    const readTimings = flockGpuTimings(this.device).resolve(encoder, `simulation:${this.program.hashes.topology}`);
     this.device.queue.submit([encoder.finish()]);
+    readTimings();
     if (readStats) this.readStats(batch);
   }
 

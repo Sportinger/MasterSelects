@@ -8,8 +8,9 @@ import { getFlockMesh } from './flockMeshes';
 import { getFlockModelMesh } from './flockModelMeshes';
 import { getFlockPigmentBinding } from './flockPigmentTextures';
 import { FlockPointCache } from './FlockPointCache';
+import { flockGpuTimings } from './FlockGpuTimings';
 import { renderHostPort } from '../../../services/render/renderHostPort';
-import { BRANCH_BYTES, RENDER_BLOCK_BYTES, flockPointChildrenForViewport, flockPointUsesTriangles, packBranch, packRenderBlock } from './flockRenderPacking';
+import { BRANCH_BYTES, RENDER_BLOCK_BYTES, flockPointChildren, flockPointChildrenForViewport, flockPointUsesTriangles, packBranch, packRenderBlock } from './flockRenderPacking';
 
 export interface FlockLinkBinding {
   buffer: GPUBuffer;
@@ -94,7 +95,7 @@ export class FlockBranchRenderer {
     return entry;
   }
 
-  private collect(plans: FlockDrawPlan[], pass: FlockPassKind, viewportPixels: number): PreparedDraw[] {
+  private collect(plans: FlockDrawPlan[], pass: FlockPassKind, viewport: SceneCamera['viewport']): PreparedDraw[] {
     const draws: PreparedDraw[] = [];
     for (const plan of plans) {
       const { session, program } = plan;
@@ -102,10 +103,11 @@ export class FlockBranchRenderer {
         const trail = branch.spec.trailIndex >= 0 ? session.trailResources[branch.spec.trailIndex] : undefined;
         const link = branch.spec.kind === 'links' ? plan.links.get(branch.spec.index) : undefined;
         const pointChildren = branch.spec.kind === 'points'
-          ? flockPointChildrenForViewport(branch, program.capacity, viewportPixels)
+          ? flockPointChildrenForViewport(branch, program.capacity, viewport.width * viewport.height)
           : 1;
         const packed = packBranch(branch, {
           pointChildren,
+          viewportHeight: viewport.height,
           perParticle: link?.perParticle,
           fraction: link?.fraction,
           headRing: trail ? Math.floor(session.step / trail.interval) % trail.samples : 0,
@@ -147,7 +149,7 @@ export class FlockBranchRenderer {
           }
           case 'points':
             instanceCount = program.capacity * pointChildren;
-            vertexCount = flockPointUsesTriangles(branch) ? 3 : 6;
+            vertexCount = flockPointUsesTriangles(branch, viewport.height) ? 3 : 6;
             break;
           case 'room':
             vertexCount = ROOM_VERTEX_COUNT;
@@ -241,8 +243,16 @@ export class FlockBranchRenderer {
     for (const plan of plans) {
       const light = resolveFlockLight(plan.render, plan.program.emitters);
       this.lights.set(plan, light);
-      const pixels = camera.viewport.width * camera.viewport.height;
-      const draws = [...this.collect([plan], 'opaque', pixels), ...this.collect([plan], 'transparent', pixels)];
+      const draws = [...this.collect([plan], 'opaque', camera.viewport), ...this.collect([plan], 'transparent', camera.viewport)];
+      const pointDraws = draws.filter((draw) => draw.kind === 'points');
+      flockGpuTimings(this.device).recordDraw({
+        clipId: plan.layer.clipId, viewport: { ...camera.viewport }, simulated: plan.program.capacity,
+        points: pointDraws.reduce((sum, draw) => sum + draw.instanceCount, 0),
+        shadowPoints: light.enabled ? pointDraws.length * plan.program.capacity : 0,
+        children: pointDraws.map((draw) => draw.instanceCount / plan.program.capacity),
+        requestedChildren: plan.render.branches.filter((branch) => branch.spec.kind === 'points').map(flockPointChildren),
+        updatedAt: Date.now(),
+      });
       let prepFrame: GPUBindGroup | null = null;
       const prepFrameGroup = () => {
         prepFrame ??= this.frameGroup(plan, camera, light, this.shadowPlaceholderView, temporaryBuffers);
@@ -265,16 +275,23 @@ export class FlockBranchRenderer {
         colorAttachments: [],
         depthStencilAttachment: { view: shadowView, depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' },
         label: 'native-scene-flock-shadow-pass',
+        timestampWrites: flockGpuTimings(this.device).writes(commandEncoder, 'shadow'),
       });
       for (const draw of casters) {
-        const cacheGroup = this.cachedGroup(draw);
-        const kind: FlockShadowKind = cacheGroup ? 'pointsCached' : draw.kind as FlockShadowKind;
-        shadowPass.setPipeline(this.pipelines.getShadowPipeline(kind));
+        // Shadow density is independent of viewport LOD. Sample each parent
+        // once, with a wider footprint covering its requested children.
+        let caster = draw;
+        if (draw.kind === 'points') {
+          const branchData = draw.branchData.slice(0);
+          const params = new Float32Array(branchData);
+          params[42] = 1;
+          caster = { ...draw, branchData, instanceCount: plan.program.capacity };
+        }
+        shadowPass.setPipeline(this.pipelines.getShadowPipeline(caster.kind as FlockShadowKind));
         shadowPass.setBindGroup(0, prepFrameGroup());
-        shadowPass.setBindGroup(1, this.branchGroup(draw, temporaryBuffers));
-        if (cacheGroup) shadowPass.setBindGroup(2, cacheGroup);
-        if (draw.vertexBuffer) shadowPass.setVertexBuffer(0, draw.vertexBuffer);
-        shadowPass.draw(draw.vertexCount, draw.instanceCount);
+        shadowPass.setBindGroup(1, this.branchGroup(caster, temporaryBuffers));
+        if (caster.vertexBuffer) shadowPass.setVertexBuffer(0, caster.vertexBuffer);
+        shadowPass.draw(caster.vertexCount, caster.instanceCount);
       }
       shadowPass.end();
 
@@ -299,7 +316,7 @@ export class FlockBranchRenderer {
     temporaryBuffers: GPUBuffer[],
   ): boolean {
     if (pass === 'opaque') this.prepareFrame(commandEncoder, plans, camera, temporaryBuffers);
-    const draws = this.collect(plans, pass, camera.viewport.width * camera.viewport.height);
+    const draws = this.collect(plans, pass, camera.viewport);
     if (draws.length === 0) return true;
     const frameGroups = new Map<FlockDrawPlan, GPUBindGroup>();
     for (const plan of new Set(draws.map((draw) => draw.plan))) {
@@ -312,6 +329,7 @@ export class FlockBranchRenderer {
       colorAttachments: [{ view: sceneView, loadOp: 'load', storeOp: 'store' }],
       depthStencilAttachment: { view: sceneDepthView, depthLoadOp: 'load', depthStoreOp: 'store' },
       label: `native-scene-flock-${pass}-pass`,
+      timestampWrites: flockGpuTimings(this.device).writes(commandEncoder, `main-${pass}`),
     });
     for (const draw of draws) {
       const cacheGroup = this.cachedGroup(draw);

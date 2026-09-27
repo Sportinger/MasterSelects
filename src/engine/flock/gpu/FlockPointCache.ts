@@ -1,5 +1,6 @@
 import { FLOCK_POINT_CACHE_WORKGROUP } from '../shaders/flockPointsWgsl';
 import type { FlockGpuPipelines } from './FlockGpuPipelines';
+import { flockGpuTimings } from './FlockGpuTimings';
 
 /** Bytes per cached point: vec3f position + packed rgba8 (color, shadow visibility). */
 export const FLOCK_POINT_RECORD_BYTES = 16;
@@ -40,7 +41,8 @@ export class FlockPointCache {
 
   /** Returns the cache for `key` sized for `total` points, or null when over budget. */
   ensure(key: string, total: number): CacheEntry | null {
-    if (total <= 0 || total > FLOCK_POINT_CACHE_MAX_POINTS) return null;
+    if (total <= 0 || total > FLOCK_POINT_CACHE_MAX_POINTS
+      || total * FLOCK_POINT_RECORD_BYTES > Math.min(this.device.limits.maxStorageBufferBindingSize, this.device.limits.maxBufferSize)) return null;
     const existing = this.entries.get(key);
     if (existing && existing.total === total) {
       existing.lastUsedFrame = this.frame;
@@ -81,7 +83,7 @@ export class FlockPointCache {
     frameGroup: GPUBindGroup,
     branchGroup: GPUBindGroup,
   ): void {
-    const pass = encoder.beginComputePass({ label: `flock-${entryPoint}` });
+    const pass = encoder.beginComputePass({ label: `flock-${entryPoint}`, timestampWrites: flockGpuTimings(this.device).writes(encoder, entryPoint) });
     pass.setPipeline(this.pipelines.getPointCachePipeline(entryPoint));
     pass.setBindGroup(0, frameGroup);
     pass.setBindGroup(1, branchGroup);

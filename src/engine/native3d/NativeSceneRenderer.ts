@@ -1,4 +1,5 @@
 import { Logger } from '../../services/logger';
+import { flockGpuTimings } from '../flock/gpu/FlockGpuTimings';
 import { SlitScanSceneSurfaces } from './sceneRenderer/SlitScanSceneSurfaces';
 import { isCollectingTemporalPreparations } from '../../effects/time/temporalResourcePreparation';
 import { getGaussianSplatGpuRenderer } from '../gaussian/core/GaussianSplatGpuRenderer';
@@ -296,6 +297,8 @@ export class NativeSceneRenderer {
     }
 
     const commandEncoder = device.createCommandEncoder();
+    const gpuTimings = flockGpuTimings(device);
+    try {
     if (layers.length > 0) {
       renderer.beginFrame();
     }
@@ -516,7 +519,9 @@ export class NativeSceneRenderer {
     )) {
       return null;
     }
+    const readTimings = gpuTimings.resolve(commandEncoder, `render:${targetKey}`);
     device.queue.submit([commandEncoder.finish()]);
+    readTimings();
     void device.queue.onSubmittedWorkDone()
       .then(() => {
         for (const buffer of temporaryBuffers) {
@@ -529,6 +534,9 @@ export class NativeSceneRenderer {
         }
       });
     return this.sceneView;
+    } finally {
+      gpuTimings.cancel(commandEncoder);
+    }
   }
 
   private ensureCompositeResources(device: GPUDevice): void {

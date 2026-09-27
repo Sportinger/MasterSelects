@@ -1,4 +1,5 @@
 import type { FlockFluidSpec } from '../../../services/flock/compiler/flockProgramTypes';
+import { flockGpuTimings } from './FlockGpuTimings';
 import {
   FLOCK_FLUID_PARAMS_STRIDE,
   FLOCK_FLUID_WGSL,
@@ -110,19 +111,26 @@ export class FlockFluidGrid {
   }
 
   /** Runs the FLIP substep on state buffer `stateIndex` (the step's output). */
-  encode(pass: GPUComputePassEncoder, stateIndex: number, slot: number, particleCount: number): void {
+  encode(encoder: GPUCommandEncoder, stateIndex: number, slot: number, particleCount: number): void {
     const { pipelines } = this.pipelines;
     const group = this.bindGroups[stateIndex];
     const offset = slot * FLOCK_FLUID_PARAMS_STRIDE;
     const groups = (n: number) => Math.max(1, Math.ceil(n / FLOCK_FLUID_WORKGROUP));
+    let pass: GPUComputePassEncoder;
+    const begin = (label: string) => encoder.beginComputePass({
+      label: `flock-${label}`, timestampWrites: flockGpuTimings(this.device).writes(encoder, label),
+    });
     const run = (entry: FluidEntry, n: number) => {
       pass.setPipeline(pipelines[entry]);
       pass.setBindGroup(0, group, [offset]);
       pass.dispatchWorkgroups(groups(n));
     };
+    pass = begin('p2g');
     run('fluidClear', Math.max(this.faceTotal * 2, this.cellTotal));
     run('fluidP2G', particleCount);
     run('fluidNormalize', this.faceTotal);
+    pass.end();
+    pass = begin('pressure');
     run('fluidDivergence', this.cellTotal);
     const pairs = Math.ceil(this.spec.iterations / 2);
     for (let pair = 0; pair < pairs; pair += 1) {
@@ -130,7 +138,10 @@ export class FlockFluidGrid {
       run('fluidJacobiBA', this.cellTotal);
     }
     run('fluidProject', this.faceTotal);
+    pass.end();
+    pass = begin('g2p');
     run('fluidG2P', particleCount);
+    pass.end();
   }
 
   dispose(): void {

@@ -93,8 +93,8 @@ params, invalidation class, bypass contract, instance limits) and map to
 
 | Category | Operators |
 |---|---|
-| Population | Emitter (sphere/shell/box/disc/point/line, count, group, seed, burst/stagger births, lifetime, active fraction, heading/spread), Merge Emitters |
-| Behavior | Flock Rules (cohesion, separation, alignment, radii, FOV, group interaction), Attractor, Vortex, Turbulence, Drag, Wind, Cruise Speed, Cluster Anchors, Compose Behavior |
+| Population | Emitter (sphere/shell/box/disc/point/line/grid, count, group, seed, burst/stagger births, lifetime, active fraction, heading/spread), Merge Emitters |
+| Behavior | Flock Rules (cohesion, separation, alignment, radii, FOV, group interaction), Attractor, Vortex, Turbulence, Curl Flow, Home Pull, Drag, Wind, Cruise Speed, Cluster Anchors, Compose Behavior |
 | Guidance | Path (circle, figure-8, helix, line, 4-point spline), Follow Path, Obstacle (box/sphere/capsule/plane), Boundary (contain/wrap/reflect/kill) |
 | Selection | Group, ID Fraction, Region, Speed, Age, Combine (and/or/xor) |
 | Values | Value, Math, Remap, Oscillator, Source Time, Audio Level (existing loudness analysis), Palette |
@@ -193,7 +193,78 @@ buffers directly (no per-particle CPU copies):
   simulation);
 - trails are Catmull-Rom ribbons over stable identity subsets with taper, tail
   fade and breaks at rebirths or wraps;
-- palettes map group, identity, position noise, speed or age to four colors.
+- palettes map group, identity, position noise, speed or age to four colors;
+- Points, Instances and Vectors offer an **Image** color mode ("data
+  pigments"): the branch samples a project image (Pigment Image) at each
+  particle's birth coordinate. Grid emitters map one image pixel per particle
+  (row-major, top row first), so the picture stays readable while the
+  particles move; other emitter shapes sample a stable random pixel.
+
+### Data-sculpture canvas (Refik Anadol-style)
+
+A Grid emitter lays its particles out as a flat canvas whose columns and rows
+follow the emitter size aspect. **Curl Flow** is a divergence-free curl-noise
+force (strength, frequency, evolution over source time, optional finer detail
+octave), so neighboring particles move together and the canvas folds into
+sheets instead of clumping. **Home Pull** springs every particle back to its
+grid cell (other emitters: the emitter center), so the canvas breathes around
+its rest pose; combine it with Drag for damping. Grid cells carry a stable per-particle
+jitter (Grid Jitter, in cells, default 0.6) so dense canvases do not moire
+against the pixel grid; Home Pull targets the same jittered rest position.
+Points can draw up to 16 render-only **Sub-particles** per simulated particle:
+on grid emitters they are placed bilinearly between a particle and its right,
+lower and diagonal neighbors, so they stay on the folded surface; other
+emitters scatter them within Sub-particle Spread. One million simulated
+particles with eight sub-particles can draw about 8.4 million points. The
+actual scene target limits sub-particles to about 1.5 points per pixel:
+1,048,576 simulated particles request eight children but draw three at 1080p
+and eight at 4K. **Screen** point sizes use a 1080p reference, so the same point
+is twice as wide in a 4K frame. Small round sprites use one triangle; square
+sprites and larger points retain quads. Emitter
+capacity is 4,194,304 particles per clip; restart checkpoints keep room for at
+least two full states.
+
+`getStats().flockGpu` reports the actual scene viewport, requested and drawn
+children, simulated particles and shadow point counts. On devices supporting
+`timestamp-query`, it also reports GPU milliseconds for simulation (including
+any neighbor-grid construction), P2G (clear and normalization included), pressure
+(divergence and projection included), G2P, point caches, shadows and main passes.
+Each sample includes pass counts, completion time and a truncation flag; simulation
+batch totals must be divided by their pass counts to compare individual steps.
+Readback uses three bounded slots and skips samples while they are busy, without
+waiting on the GPU. Unsupported devices keep rendering with no timing queries.
+
+**Room, light and shadows.** The **Room** render node draws an open-front
+white gallery box (back wall, floor, ceiling, sides) with an optional flat
+frame ring around the opening, so particles can spill out past the box edge.
+Room also defines the key light (direction in simulation space, ambient,
+shadow strength). Each lit flock clip renders its point and instance branches
+into a 2048² orthographic shadow map framed around the room (or the emitters);
+point shadows use only the simulated parent particles, with a wider footprint
+based on the requested sub-particle count, independent of preview LOD.
+Points with **Shading: Lit** draw sphere impostors that receive the light and
+3x3 PCF shadows, lit Instances and the Room walls receive them too, and the
+walls darken softly where they meet. Points **Relief** moves each point and
+sub-particle along the emitter normal by Pigment Image brightness. Instances
+keep their previous fixed-light look while no Room or lit Points branch
+enables the key light.
+
+**FLIP Fluid.** The FLIP Fluid behavior turns the particles into an
+incompressible liquid inside a box domain (Domain Center/Size, Cell Size,
+Pressure Iterations, Gravity, FLIP Ratio). Each step, after forces and
+advection, the GPU transfers particle velocities to a staggered MAC grid with
+fixed-point atomics (order independent, so resimulation stays deterministic),
+marks fluid cells, solves pressure with Jacobi iterations, projects the grid
+velocity and transfers it back as a PIC/FLIP blend with a position
+correction; the domain walls are solid. Domain and cell size are topology
+(changing them rebuilds the grid and resimulates). Other forces still apply,
+so Curl Flow adds swirl; bypass Home Pull for a free liquid. Pointing Gravity
+into the box (for example 0, 0, -150) with a matching shallow Room makes the
+liquid pour against the back wall. A CPU reference solver with the same
+discretization backs tests and the low-count fallback. The grid is capped at
+256 cells per axis and about 2 million cells. There is no particle
+collision. A typical graph is Grid Emitter -> Curl Flow + Home Pull + Drag ->
+Simulation (min speed 0) -> Points in Image color mode.
 
 Flock clips render only in the main-thread render host (like all shared-scene
 3D today). Color, masks and 2D clip effects are not offered for flock clips;

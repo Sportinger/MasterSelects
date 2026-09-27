@@ -449,6 +449,7 @@ export class WebGPUContext {
     // which is particularly unstable on mobile WebKit GPU processes.
     const subgroupFeature = 'subgroups' as GPUFeatureName;
     if (adapter.features?.has(subgroupFeature)) features.push(subgroupFeature);
+    if (adapter.features?.has('timestamp-query')) features.push('timestamp-query');
     return features;
   }
 
