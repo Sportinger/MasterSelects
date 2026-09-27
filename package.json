@@ -104,6 +104,7 @@
     "saxes": "^6.0.0",
     "soundtouch-ts": "^1.1.1",
     "turbores": "1.2.2",
+    "vexflow": "^5.0.0",
     "zustand": "^5.0.9"
   },
   "devDependencies": {

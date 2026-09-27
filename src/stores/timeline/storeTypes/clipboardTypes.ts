@@ -67,6 +67,8 @@ export interface ClipboardClipData {
   transitionOverlay?: TransitionOverlayClipDefinition;
   mathScene?: MathSceneDefinition;
   flock?: import('../../../types/flock').FlockDefinition;
+  // Score clip notation data (issue #366)
+  scoreData?: import('../../../types/scoreClip').ScoreData;
   motion?: MotionLayerDefinition;
   vectorAnimationSettings?: VectorAnimationClipSettings;
   cameraSettings?: SceneCameraSettings;

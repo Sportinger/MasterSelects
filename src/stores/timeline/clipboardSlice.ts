@@ -136,6 +136,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
           ? structuredClone(clip.mathScene)
           : undefined,
         flock: dataOnlySource?.type === 'flock' && clip.flock ? structuredClone(clip.flock) : undefined,
+        scoreData: dataOnlySource?.type === 'score' && clip.scoreData ? structuredClone(clip.scoreData) : undefined,
         motion: clip.motion ? normalizeMotionLayerDefinition(clip.motion) : undefined,
         // Visual data - reuse existing thumbnails and waveforms
         thumbnails: clip.thumbnails ? [...clip.thumbnails] : undefined,

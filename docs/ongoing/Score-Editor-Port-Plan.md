@@ -85,7 +85,8 @@ manual beam modes.
 
 ### MasterSelects host integration
 
-- **Audition:** `previewMidiNote()` (`src/services/audio/midiPlaybackScheduler.ts:429`).
+- **Audition:** `previewMidiNote()` (`src/services/audio/midiPlaybackScheduler.ts:429`);
+  fire-and-forget with a fixed 0.35 s duration (no noteOn/noteOff pair — fine for audition).
   Host fix needed: for score tracks it falls back to a bare synth wired to `destination`
   (bus routing gated on `track.type === 'midi'` at :157) — route score tracks through their
   track bus too.
@@ -97,7 +98,9 @@ manual beam modes.
   document (`ownerDocument`, `shortcutFocusPolicy`); call `undo()`/`redo()` from
   `stores/historyStore` directly; only `<link>` stylesheets are mirrored into the popup, so
   editor chrome uses inline styles or CSS injected into `win.document` (VexFlow SVG is
-  self-styled).
+  self-styled). The boot files have no `import.meta.hot` handling — the `openWindows` map
+  resets on module reload and host unload doesn't close popups; convert client coordinates
+  with `svg.getScreenCTM().inverse()` (kikoromantest already does).
 - **Tempo:** keep `score.tempo` initially; end state is the timeline tempo map — quarters are
   canonical (`secondsToQuarters`/`quartersToSeconds` in `src/timeline/tempo/TempoMap.ts`).
 - **`scoreData` integration points:** `src/types/timeline.ts` (TimelineClip + SerializableClip),

@@ -27,6 +27,7 @@ import type {
   CaptionLayerBinding,
 } from '../../../types/caption';
 import type { MidiClipData, MidiClipAutomation, MidiInstrument } from '../../../types/midiClip';
+import type { ScoreData } from '../../../types/scoreClip';
 import type {
   ProjectClipAnalysis,
   ProjectClipVideoState,
@@ -141,6 +142,8 @@ export interface ProjectClip {
   midiData?: MidiClipData;
   // MIDI clip automation (issue #298): the four performed CC lanes as breakpoints
   automation?: MidiClipAutomation;
+  // Score clip notation data (issue #366)
+  scoreData?: ScoreData;
   naturalDuration?: number;
   liveInputId?: string;
   linkedClipId?: string;

@@ -56,3 +56,14 @@ decoding. Its source code is available from the project link above.
   hosted by MasterSelects. The fixed FP32 artifact is hash-verified before use.
 - Inference uses the existing Apache-2.0 Transformers.js and MIT ONNX Runtime
   dependencies. Runtime assets load from the versioned Transformers.js CDN path.
+
+## VexFlow
+
+- Project: <https://github.com/vexflow/vexflow>
+- Version: 5.0.0
+- Copyright: Mohit Muthanna Cheppudira and the VexFlow contributors
+- License: MIT
+- License text: <https://github.com/vexflow/vexflow/blob/master/LICENSE>
+
+VexFlow is used as an unmodified npm dependency to render music notation in
+the score editor. Its source code is available from the project link above.

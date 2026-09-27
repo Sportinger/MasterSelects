@@ -40,6 +40,30 @@ data-only clips with `source.type === 'score'` and a placeholder file, like
 MIDI/solid/text clips, and they persist through both the in-memory
 serialize/load cycle and project save/load.
 
+## Notation data model (`clip.scoreData`)
+
+A score clip's notation lives in `clip.scoreData` (`ScoreData` in
+`src/types/scoreClip.ts`, `schemaVersion: 1`): plain-JSON measures holding
+Chord/Rest slots with enharmonic pitch spelling (`step/alter/octave`),
+exact-fraction beat positions (tuplet-safe rational time), ties, dots,
+articulations, stem/beam overrides, and per-measure tuplets. The framework-free
+model logic ported from the kikoromantest score editor lives in
+`src/services/score/` — `ScoreModel` (slot CRUD + `toScoreData`/`fromScoreData`),
+`restFill` (measures always fully filled with rests), `tupletOps`,
+`CollisionDetector`, `NoteEntryCoordinator` (beat entry with tie splitting
+across barlines and Sibelius-style erosion), plus `fraction`, `pitchSpelling`,
+`musicUtils`, and `beatMap` utilities. VexFlow 5 is installed for the upcoming
+rendering phase.
+
+`scoreData` is wired through every persistence path like `midiData`: in-memory
+serialize/load, project save/load, copy/paste (deep-cloned), and history —
+score clips are inline-data clips, so undo/redo restores notation without
+scheduling a media reload. Editors commit whole-score snapshots through the
+`updateScoreData(clipId, scoreData, { captureHistory?, description? })` store
+action; live drags pass `captureHistory: false` and the final commit captures
+one undo snapshot (the piano-roll pattern). Splitting a score clip currently
+duplicates `scoreData` onto both halves.
+
 ## Score editor window
 
 Double-clicking a score clip opens (or focuses) a detached score-editor popup

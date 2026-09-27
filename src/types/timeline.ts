@@ -219,6 +219,8 @@ export interface TimelineClip {
   // MIDI clip automation (issue #298): the four performed CC lanes (cutoff/mod/
   // expression/pitchBend) as clip-level breakpoint envelopes. Durable plain JSON.
   automation?: import('./midiClip').MidiClipAutomation;
+  // Score clip support (issue #366): notation data; instrument lives on the track
+  scoreData?: import('./scoreClip').ScoreData;
   // YouTube download support
   isPendingDownload?: boolean;  // True if clip is being downloaded
   downloadProgress?: number;    // 0-100 download progress
@@ -343,6 +345,8 @@ export interface SerializableClip {
   midiData?: import('./midiClip').MidiClipData;
   // MIDI clip automation (issue #298)
   automation?: import('./midiClip').MidiClipAutomation;
+  // Score clip support (issue #366)
+  scoreData?: import('./scoreClip').ScoreData;
   vectorAnimationSettings?: VectorAnimationClipSettings;
   mathScene?: MathSceneDefinition;
   motion?: MotionLayerDefinition;

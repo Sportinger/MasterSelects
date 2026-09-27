@@ -295,6 +295,24 @@ export const createMidiClipSlice: SliceCreator<MidiClipActions> = (set, get) => 
     return clipId;
   },
 
+  updateScoreData: (clipId, scoreData, options) => {
+    const { clips, invalidateCache } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || clip.source?.type !== 'score') {
+      log.warn('Cannot update score data: not a score clip', { clipId });
+      return;
+    }
+
+    // Deep-clone so the durable store never aliases the editor's live ScoreModel.
+    const cloned = structuredClone(scoreData);
+    set({ clips: clips.map(c => (c.id === clipId ? { ...c, scoreData: cloned } : c)) });
+    invalidateCache();
+    // Live drags pass captureHistory:false; the final commit captures one snapshot.
+    if (options?.captureHistory !== false) {
+      captureSnapshot(options?.description ?? 'Edit score');
+    }
+  },
+
   clipRenameId: null,
 
   setClipRenameId: (clipId) => {

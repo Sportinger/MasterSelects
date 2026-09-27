@@ -18,6 +18,7 @@ const SYNC_RESTORED_SOURCE_TYPES = new Set([
   'splat-effector',
   'storyboard',
   'flock',
+  'score',
 ]);
 
 export function canPasteLiveInputInComposition(
@@ -119,6 +120,12 @@ export function createPastedClipSource(
   }
   if (clipData.sourceType === 'solid') {
     return { type: 'solid', mediaFileId: clipData.mediaFileId, naturalDuration: clipData.duration };
+  }
+  if (clipData.sourceType === 'score') {
+    return {
+      type: 'score',
+      naturalDuration: clipData.naturalDuration ?? clipData.duration,
+    };
   }
   if (clipData.sourceType === 'storyboard') {
     return {

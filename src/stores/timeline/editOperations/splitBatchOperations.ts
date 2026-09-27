@@ -60,6 +60,9 @@ export function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
       : {}),
     ...(clip.motion ? { motion: structuredClone(clip.motion) } : {}),
     ...(clip.flock ? { flock: structuredClone(clip.flock) } : {}),
+    // Score notation (issue #366): a split duplicates the full score onto both
+    // halves for now, but each half must own its own copy — never alias.
+    ...(clip.scoreData ? { scoreData: structuredClone(clip.scoreData) } : {}),
   };
 }
 

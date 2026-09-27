@@ -107,6 +107,10 @@ export function convertCompositions(compositions: Composition[]): ProjectComposi
       automation: (c.source?.type === 'midi' || c.sourceType === 'midi') && c.automation
         ? structuredClone(c.automation)
         : undefined,
+      // Score clip notation data (issue #366).
+      scoreData: (c.source?.type === 'score' || c.sourceType === 'score') && c.scoreData
+        ? structuredClone(c.scoreData)
+        : undefined,
       thumbnails: c.thumbnails,
       linkedClipId: c.linkedClipId,
       linkedGroupId: c.linkedGroupId,
