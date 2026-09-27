@@ -5,10 +5,11 @@ import {
   P_VEL,
   type FlockFluidSpec,
 } from '../../../services/flock/compiler/flockProgramTypes';
+import { FlockCpuPressure } from './flockCpuPressure';
 
 /**
  * CPU reference of the FLIP substep in shaders/flockFluidWgsl.ts: the same
- * MAC layout, transfer weights, Jacobi pressure solve, projection and PIC/FLIP
+ * MAC layout, transfer weights, MGPCG pressure solve, projection and PIC/FLIP
  * blend, in float64 and index order (the GPU uses fixed-point atomics, so
  * results agree closely but not bitwise).
  */
@@ -27,8 +28,8 @@ export class FlockCpuFluid {
   private readonly valid: Uint8Array;
   private readonly counts: Uint32Array;
   private readonly divergence: Float64Array;
-  private pressure: Float64Array;
-  private pressureNext: Float64Array;
+  private readonly pressure: Float64Array;
+  readonly pressureSolver: FlockCpuPressure;
 
   constructor(spec: FlockFluidSpec) {
     this.spec = spec;
@@ -47,7 +48,7 @@ export class FlockCpuFluid {
     this.counts = new Uint32Array(this.cellTotal);
     this.divergence = new Float64Array(this.cellTotal);
     this.pressure = new Float64Array(this.cellTotal);
-    this.pressureNext = new Float64Array(this.cellTotal);
+    this.pressureSolver = new FlockCpuPressure(spec.dims);
   }
 
   private faceDims(axis: number): [number, number, number] {
@@ -97,7 +98,6 @@ export class FlockCpuFluid {
     this.weight.fill(0);
     this.counts.fill(0);
     this.pressure.fill(0);
-    this.pressureNext.fill(0);
 
     // Particle -> grid.
     for (let index = 0; index < capacity; index += 1) {
@@ -153,30 +153,7 @@ export class FlockCpuFluid {
       }
     }
 
-    // Jacobi pressure iterations (pairs, like the GPU ping-pong).
-    const neighbors = [[-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1]];
-    const iterations = Math.ceil(this.spec.iterations / 2) * 2;
-    for (let iteration = 0; iteration < iterations; iteration += 1) {
-      for (let z = 0; z < this.nz; z += 1) {
-        for (let y = 0; y < this.ny; y += 1) {
-          for (let x = 0; x < this.nx; x += 1) {
-            const c = this.cellIndex(x, y, z);
-            if (this.counts[c] === 0) { this.pressureNext[c] = 0; continue; }
-            let sum = 0;
-            let n = 0;
-            for (const [ox, oy, oz] of neighbors) {
-              const nx = x + ox; const ny = y + oy; const nz = z + oz;
-              if (!this.inCells(nx, ny, nz)) continue;
-              n += 1;
-              const ni = this.cellIndex(nx, ny, nz);
-              if (this.counts[ni] > 0) sum += this.pressure[ni];
-            }
-            this.pressureNext[c] = (sum - this.divergence[c]) / Math.max(n, 1);
-          }
-        }
-      }
-      [this.pressure, this.pressureNext] = [this.pressureNext, this.pressure];
-    }
+    this.pressureSolver.solve(this.counts, this.divergence, this.pressure, this.spec.iterations);
 
     // Project interior faces next to fluid.
     for (let axis = 0; axis < 3; axis += 1) {

@@ -1,5 +1,6 @@
 import type { FlockFluidSpec } from '../../../services/flock/compiler/flockProgramTypes';
 import { flockGpuTimings } from './FlockGpuTimings';
+import { FlockPressureSolver } from './FlockPressureSolver';
 import { FLOCK_FLUID_BLOCK_TRANSFER_WGSL } from '../shaders/flockFluidTransferWgsl';
 import { createCheckedModule, watchValidation } from './FlockGpuPipelines';
 import {
@@ -8,8 +9,8 @@ import {
   FLOCK_FLUID_WORKGROUP,
 } from '../shaders/flockFluidWgsl';
 
-type FluidEntry = 'fluidClear' | 'fluidP2G' | 'fluidP2GBlock' | 'fluidNormalize' | 'fluidDivergence' | 'fluidJacobiAB' | 'fluidJacobiBA' | 'fluidProject' | 'fluidG2P';
-const ENTRIES: FluidEntry[] = ['fluidClear', 'fluidP2G', 'fluidP2GBlock', 'fluidNormalize', 'fluidDivergence', 'fluidJacobiAB', 'fluidJacobiBA', 'fluidProject', 'fluidG2P'];
+type FluidEntry = 'fluidClear' | 'fluidP2G' | 'fluidP2GBlock' | 'fluidNormalize' | 'fluidDivergence' | 'fluidProject' | 'fluidG2P';
+const ENTRIES: FluidEntry[] = ['fluidClear', 'fluidP2G', 'fluidP2GBlock', 'fluidNormalize', 'fluidDivergence', 'fluidProject', 'fluidG2P'];
 
 interface FluidPipelines {
   layout: GPUBindGroupLayout;
@@ -66,6 +67,7 @@ export class FlockFluidGrid {
   private readonly bindGroups: GPUBindGroup[];
   private readonly blockTransfer: boolean;
   private readonly dispatchWidth: number;
+  private readonly pressure: FlockPressureSolver;
 
   constructor(device: GPUDevice, spec: FlockFluidSpec, states: GPUBuffer[], maxSlots: number, options: { blockTransfer?: boolean; dispatchWidth?: number } = {}) {
     this.device = device;
@@ -80,11 +82,12 @@ export class FlockFluidGrid {
     const acc = device.createBuffer({ size: this.faceTotal * 2 * 4, usage: storage, label: 'flock-fluid-acc' });
     const faces = device.createBuffer({ size: this.faceTotal * 3 * 4, usage: storage, label: 'flock-fluid-faces' });
     const counts = device.createBuffer({ size: this.cellTotal * 4, usage: storage, label: 'flock-fluid-counts' });
-    const cells = device.createBuffer({ size: this.cellTotal * 3 * 4, usage: storage, label: 'flock-fluid-cells' });
+    const cells = device.createBuffer({ size: this.cellTotal * 2 * 4, usage: storage, label: 'flock-fluid-cells' });
+    this.pressure = new FlockPressureSolver(device, spec.dims, counts, cells, this.dispatchWidth);
     this.params = device.createBuffer({ size: this.paramData.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, label: 'flock-fluid-params' });
     this.blockTransfer = options.blockTransfer !== false;
     this.buffers = [acc, faces, counts, cells, this.params];
-    this.gpuBytes = acc.size + faces.size + counts.size + cells.size;
+    this.gpuBytes = acc.size + faces.size + counts.size + cells.size + this.pressure.gpuBytes;
     this.bindGroups = states.map((state, index) => device.createBindGroup({
       layout: this.pipelines.layout,
       entries: [
@@ -142,11 +145,7 @@ export class FlockFluidGrid {
     pass.end();
     pass = begin('pressure');
     run('fluidDivergence', this.cellTotal);
-    const pairs = Math.ceil(this.spec.iterations / 2);
-    for (let pair = 0; pair < pairs; pair += 1) {
-      run('fluidJacobiAB', this.cellTotal);
-      run('fluidJacobiBA', this.cellTotal);
-    }
+    this.pressure.encode(pass, this.spec.iterations);
     run('fluidProject', this.faceTotal);
     pass.end();
     pass = begin('g2p');
@@ -155,6 +154,7 @@ export class FlockFluidGrid {
   }
 
   dispose(): void {
+    this.pressure.dispose();
     for (const buffer of this.buffers) buffer.destroy();
   }
 }

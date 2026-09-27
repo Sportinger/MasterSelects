@@ -1,6 +1,7 @@
 import type { FlockEvaluationContext } from '../../../services/flock/compiler/flockParamEvaluation';
 import { FlockFluidGrid } from './FlockFluidGrid';
 import { FlockParticleOrder } from './FlockParticleOrder';
+import { flockPressureMemory } from '../shared/flockPressureLayout';
 import { flockGpuTimings } from './FlockGpuTimings';
 import { OP_KIND_CODES } from '../shared/flockCodes';
 import { resolveFlockStep } from '../../../services/flock/compiler/flockParamEvaluation';
@@ -71,10 +72,11 @@ export function estimateFlockSessionBuffers(program: FlockProgram): { largestBin
   const [nx, ny, nz] = program.fluid?.dims ?? [0, 0, 0];
   const fluidFaces = (nx + 1) * ny * nz + nx * (ny + 1) * nz + nx * ny * (nz + 1);
   const fluidCells = nx * ny * nz;
-  const fluidBytes = program.fluid ? fluidFaces * 20 + fluidCells * 16
-    + state + program.capacity * 24 + Math.ceil(program.capacity / 256) * 64 + 2164 : 0;
+  const pressure = program.fluid ? flockPressureMemory(program.fluid.dims) : { total: 0, largestBinding: 0 };
+  const fluidBytes = program.fluid ? fluidFaces * 20 + fluidCells * 12
+    + state + program.capacity * 24 + Math.ceil(program.capacity / 256) * 64 + 2164 + pressure.total : 0;
   return {
-    largestBinding: Math.max(state, cells, sortCount * 4, ring, fluidFaces * 12, fluidCells * 12),
+    largestBinding: Math.max(state, cells, sortCount * 4, ring, fluidFaces * 12, fluidCells * 8, pressure.largestBinding),
     total: state * 2 + cells + sortCount * 8 + fluidBytes + program.trails.reduce((sum, trail) => sum + trail.slotCount * (trail.samples * 16 + 4), 0),
   };
 }

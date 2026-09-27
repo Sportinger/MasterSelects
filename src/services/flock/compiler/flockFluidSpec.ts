@@ -33,6 +33,6 @@ export function buildFlockFluidSpec(op: FlockOpSpec): FlockFluidSpec {
     origin: [center[0] - covered[0] / 2, center[1] - covered[1] / 2, center[2] - covered[2] / 2],
     cellSize,
     dims,
-    iterations: Math.max(1, Math.min(200, Math.round(op.params.integers.iterations ?? 40))),
+    iterations: Math.max(1, Math.min(200, Math.round(op.params.integers.iterations ?? 12))),
   };
 }

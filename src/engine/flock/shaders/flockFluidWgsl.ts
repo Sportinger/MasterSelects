@@ -3,15 +3,15 @@ import { FLOCK_WGSL_STRUCTS } from './flockWgslShared';
 /**
  * FLIP liquid on a staggered (MAC) grid, run after the particle step each
  * substep: particle-to-grid transfer with fixed-point atomics (order
- * independent, so deterministic), fluid-cell marking, divergence, Jacobi
- * pressure iterations, pressure projection and grid-to-particle PIC/FLIP
+ * independent, so deterministic), fluid-cell marking, divergence, MGPCG
+ * pressure projection and grid-to-particle PIC/FLIP
  * transfer with position correction. Domain walls are solid.
  *
  * Face layout (global face index f): U faces (nx+1)*ny*nz, then V faces
  * nx*(ny+1)*nz, then W faces nx*ny*(nz+1). `acc` holds fixed-point velocity
  * sums [0, nF) and weights [nF, 2nF). `faces` holds projected velocity
  * [0, nF), pre-projection velocity [nF, 2nF) and validity [2nF, 3nF).
- * `cells` holds divergence [0, nC) and two pressure buffers [nC, 3nC).
+ * `cells` holds divergence [0, nC) and pressure [nC, 2nC).
  * Mirrors engine/flock/cpu/flockCpuFluid.ts.
  */
 
@@ -104,7 +104,6 @@ fn fluidClear(@builtin(global_invocation_id) gid: vec3u) {
     atomicStore(&counts[i], 0u);
     cells[i] = 0.0;
     cells[nC + i] = 0.0;
-    cells[nC * 2u + i] = 0.0;
   }
 }
 
@@ -190,38 +189,6 @@ fn fluidDivergence(@builtin(global_invocation_id) gid: vec3u) {
     div += faces[faceIndex(axis, hi)] - faces[faceIndex(axis, c)];
   }
   cells[ci] = div;
-}
-
-fn jacobi(ci: u32, readOffset: u32, writeOffset: u32) {
-  let nC = cellCountTotal();
-  if (ci >= nC) { return; }
-  if (atomicLoad(&counts[ci]) == 0u) { cells[writeOffset + ci] = 0.0; return; }
-  let c = vec3i(vec3u(ci % fp.dims.x, (ci / fp.dims.x) % fp.dims.y, ci / (fp.dims.x * fp.dims.y)));
-  var sum = 0.0;
-  var n = 0.0;
-  for (var dir = 0u; dir < 6u; dir++) {
-    var o = vec3i(0);
-    o[dir / 2u] = select(-1, 1, (dir & 1u) == 1u);
-    let nb = c + o;
-    // Solid domain walls: zero normal flux (Neumann), no contribution.
-    if (!inCells(nb)) { continue; }
-    n += 1.0;
-    let ni = cellIndex(vec3u(nb));
-    if (atomicLoad(&counts[ni]) > 0u) { sum += cells[readOffset + ni]; }
-  }
-  cells[writeOffset + ci] = (sum - cells[ci]) / max(n, 1.0);
-}
-
-@compute @workgroup_size(${FLOCK_FLUID_WORKGROUP})
-fn fluidJacobiAB(@builtin(global_invocation_id) gid: vec3u) {
-  let nC = cellCountTotal();
-  jacobi(fluidIndex(gid), nC, nC * 2u);
-}
-
-@compute @workgroup_size(${FLOCK_FLUID_WORKGROUP})
-fn fluidJacobiBA(@builtin(global_invocation_id) gid: vec3u) {
-  let nC = cellCountTotal();
-  jacobi(fluidIndex(gid), nC * 2u, nC);
 }
 
 @compute @workgroup_size(${FLOCK_FLUID_WORKGROUP})

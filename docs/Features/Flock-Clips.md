@@ -289,9 +289,16 @@ incompressible liquid inside a box domain (Domain Center/Size, Cell Size,
 Pressure Iterations, Gravity, FLIP Ratio). Each step, after forces and
 advection, the GPU transfers particle velocities to a staggered MAC grid with
 fixed-point atomics (order independent, so resimulation stays deterministic),
-marks fluid cells, solves pressure with Jacobi iterations, projects the grid
+marks fluid cells, solves pressure with multigrid-preconditioned conjugate gradients (MGPCG), projects the grid
 velocity and transfers it back as a PIC/FLIP blend with a position
-correction; the domain walls are solid. Domain and cell size are topology
+correction; the domain walls are solid. Pressure Iterations is the maximum CG
+iteration count (12 for new nodes); updates stop at a relative residual of 1e-5
+or an absolute residual of 1e-6. The symmetric V-cycle uses Galerkin aggregates,
+two damped-Jacobi sweeps before and after coarse correction, and 16 coarse sweeps.
+It retains solid-wall and air boundaries, including odd grid sizes and thin fluid
+regions. CPU and GPU use the same solver. Pressure scratch is included in memory
+checks; changing the solver version invalidates older simulation checkpoints.
+Domain and cell size are topology
 (changing them rebuilds the grid and resimulates). Other forces still apply,
 so Curl Flow adds swirl; bypass Home Pull for a free liquid. Pointing Gravity
 into the box (for example 0, 0, -150) with a matching shallow Room makes the
