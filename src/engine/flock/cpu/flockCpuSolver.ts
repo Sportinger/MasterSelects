@@ -36,6 +36,7 @@ export interface FlockCpuCheckpoint {
   state: Float32Array;
   previous: Float32Array;
   trails: Float32Array[];
+  affine: Float32Array | null;
 }
 
 export interface FlockCpuStats {
@@ -69,7 +70,7 @@ export class FlockCpuSolver {
   private readonly cellCursor: Int32Array;
   private readonly keys: Uint32Array;
   private readonly sorted: Uint32Array;
-  /** FLIP grid when the program has a FLIP Fluid node. */
+  /** APIC grid and persistent affine state when the program has a fluid node. */
   readonly fluid: FlockCpuFluid | null;
 
   constructor(program: FlockProgram) {
@@ -84,7 +85,7 @@ export class FlockCpuSolver {
     this.cellCursor = new Int32Array(tableSize);
     this.keys = new Uint32Array(this.capacity);
     this.sorted = new Uint32Array(this.capacity);
-    this.fluid = program.fluid ? new FlockCpuFluid(program.fluid) : null;
+    this.fluid = program.fluid ? new FlockCpuFluid(program.fluid, this.capacity) : null;
     this.trailSlots = program.trails.map((trail) => selectTrailSlots(this.capacity, trail.sampleFraction, trail.slotCount, trail.salt));
     this.trailRings = program.trails.map((trail, index) => new Float32Array(this.trailSlots[index].length * trail.samples * 4));
     this.reset();
@@ -94,6 +95,7 @@ export class FlockCpuSolver {
     this.step = 0;
     buildInitialFlockState(this.program, this.state);
     this.previous.set(this.state);
+    this.fluid?.affine.fill(0);
     for (const ring of this.trailRings) ring.fill(0);
   }
 
@@ -103,10 +105,13 @@ export class FlockCpuSolver {
       state: this.state.slice(),
       previous: this.previous.slice(),
       trails: this.trailRings.map((ring) => ring.slice()),
+      affine: this.fluid?.affine.slice() ?? null,
     };
   }
 
   restore(checkpoint: FlockCpuCheckpoint): void {
+    if ((checkpoint.affine?.length ?? 0) !== (this.fluid?.affine.length ?? 0)) throw new Error('Incompatible fluid checkpoint');
+    if (this.fluid && checkpoint.affine) this.fluid.affine.set(checkpoint.affine);
     this.step = checkpoint.step;
     this.state.set(checkpoint.state);
     this.previous.set(checkpoint.previous);
@@ -362,7 +367,7 @@ export class FlockCpuSolver {
 
     if (this.fluid) {
       const fluidOp = params.fields.find((field) => field.kind === OP_KIND_CODES.fluid);
-      this.fluid.step(write, this.capacity, fluidOp?.f[0] ?? 0.95, params.dt);
+      this.fluid.step(write, this.capacity, fluidOp?.f[0] ?? 1, params.dt);
     }
 
     this.previous = read;

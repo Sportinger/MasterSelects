@@ -29,6 +29,7 @@ import {
   FLOCK_MAX_SELECTIONS,
   FLOCK_MAX_VALUES,
   FLOCK_PARTICLE_BYTES,
+  FLOCK_AFFINE_BYTES,
   FLOCK_SOLVER_VERSION,
   type FlockBranchKind,
   type FlockBranchSpec,
@@ -307,7 +308,7 @@ function lowerFlockGraph(definition: FlockDefinition, inheritedDiagnostics: Floc
   };
   incoming(simulationNode.id, 'behavior').forEach(collectBehavior);
   const fluidOps = ops.filter((op) => op.kind === 'fluid');
-  if (fluidOps.length > 1) fail('too-many-fluids', 'Only one FLIP Fluid node is supported per simulation.', fluidOps.map((op) => op.sourceNodeId));
+  if (fluidOps.length > 1) fail('too-many-fluids', 'Only one APIC Fluid node is supported per simulation.', fluidOps.map((op) => op.sourceNodeId));
   const fluid = fluidOps[0] ? buildFlockFluidSpec(fluidOps[0]) : null;
   if (fluid) topology.fluid = [fluid.origin, fluid.cellSize, fluid.dims, fluid.iterations];
 
@@ -426,7 +427,7 @@ function lowerFlockGraph(definition: FlockDefinition, inheritedDiagnostics: Floc
   // ----- estimates, assets and hashes -----
   const sortCount = nextPowerOfTwo(Math.max(2, capacity));
   const tableSize = nextPowerOfTwo(Math.max(4096, capacity * 2));
-  const stateBytes = capacity * FLOCK_PARTICLE_BYTES * 2;
+  const stateBytes = capacity * (FLOCK_PARTICLE_BYTES * 2 + (fluid ? FLOCK_AFFINE_BYTES : 0));
   const gridBytes = sortCount * 8 + tableSize * 12;
   const trailBytes = trails.reduce((sum, trail) => sum + trail.slotCount * (trail.samples * 16 + 4), 0);
   const linkBytes = branches

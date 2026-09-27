@@ -4,6 +4,7 @@ import { FlockParticleOrder } from '../../src/engine/flock/gpu/FlockParticleOrde
 import type { FlockFluidSpec } from '../../src/services/flock/compiler/flockProgramTypes';
 import { checkOrderedSessions } from './flock-ordered-session-gpu-check';
 import { checkGpuCheckpoints } from './flock-checkpoint-gpu-check';
+import { checkApicTransfer } from './flock-apic-gpu-check';
 
 async function check() {
   const adapter = await navigator.gpu.requestAdapter();
@@ -54,16 +55,19 @@ async function check() {
         const state = device.createBuffer({ size: data.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
         device.queue.writeBuffer(state, 0, data); return state;
       });
-      const reference = new FlockFluidGrid(device, spec, [states[0]], 1, { blockTransfer: false, dispatchWidth: 2 });
-      const sorted = new FlockFluidGrid(device, spec, [states[1]], 1, { dispatchWidth: 2 });
       const order = new FlockParticleOrder(device, [states[1]], spec, 2);
+      const reference = new FlockFluidGrid(device, spec, [states[0]], 1, { blockTransfer: false, dispatchWidth: 2 });
+      const sorted = new FlockFluidGrid(device, spec, [states[1]], 1, { dispatchWidth: 2, identityMapping: order.mapping });
+      const affine = Float32Array.from({ length: count * 9 }, (_, i) => ((i * 7) % 31 - 15) / 100);
+      for (const grid of [reference, sorted]) device.queue.writeBuffer(grid.affine, 0, affine);
       const canonical = device.createBuffer({ size: data.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
-      for (const grid of [reference, sorted]) { grid.stageParams(0, { count, flipRatio: 0.95, dt: 1 / 60 }); grid.uploadParams(1); }
+      for (const grid of [reference, sorted]) { grid.stageParams(0, { count, affineStrength: 1, dt: 1 / 60 }); grid.uploadParams(1); }
       let maxError = 0;
       for (let step = 0; step < 9; step++) {
         // Restore canonical checkpoint data between sort intervals. Permutation
         // may be stale, but neither identity nor the numerical result may change.
         if (step === 6) for (const state of states) device.queue.writeBuffer(state, 0, data);
+        if (step === 6) for (const grid of [reference, sorted]) device.queue.writeBuffer(grid.affine, 0, affine);
         const encoder = device.createCommandEncoder();
         if (step === 0 || step === 6) order.reset(encoder);
         reference.encode(encoder, 0, 0, count); order.encodeBeforeStep(encoder, 0, step); sorted.encode(encoder, 0, 0, count);
@@ -74,12 +78,15 @@ async function check() {
           const error = Math.abs(a[i] - b[i]); maxError = Math.max(maxError, error);
           if (!Number.isFinite(b[i]) || error > 1e-5) throw new Error(`Fluid identity/numerical mismatch ${dense}/${step}/${i}: ${a[i]} vs ${b[i]}`);
         }
+        const ca = new Float32Array(await read(reference.affine)), cb = new Float32Array(await read(sorted.affine));
+        for (let i = 0; i < ca.length; i++) if (!Number.isFinite(cb[i]) || Math.abs(ca[i] - cb[i]) > 1e-5) throw new Error(`Affine identity mismatch ${dense}/${step}/${i}`);
       }
       cases.push({ fluid: dense ? 'dense' : 'sparse', count, steps: 9, restored: true, maxError });
       reference.dispose(); sorted.dispose(); order.dispose(); canonical.destroy(); states.forEach(state => state.destroy());
     }
     cases.push(await checkOrderedSessions(device));
     cases.push(await checkGpuCheckpoints(device));
+    cases.push(await checkApicTransfer(device));
     await device.queue.onSubmittedWorkDone();
     if (errors.length) throw new Error(errors.join('\n'));
     return { success: true, cases, adapter: adapter.info };

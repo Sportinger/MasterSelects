@@ -1,5 +1,6 @@
 import {
   FLOCK_PARTICLE_STRIDE,
+  FLOCK_AFFINE_STRIDE,
   P_AGE,
   P_POS,
   P_VEL,
@@ -8,9 +9,9 @@ import {
 import { FlockCpuPressure } from './flockCpuPressure';
 
 /**
- * CPU reference of the FLIP substep in shaders/flockFluidWgsl.ts: the same
- * MAC layout, transfer weights, MGPCG pressure solve, projection and PIC/FLIP
- * blend, in float64 and index order (the GPU uses fixed-point atomics, so
+ * CPU reference of the APIC substep in shaders/flockFluidWgsl.ts: the same
+ * MAC layout, transfer weights, MGPCG pressure solve, projection and affine
+ * transfer, in float64 and index order (the GPU uses fixed-point atomics, so
  * results agree closely but not bitwise).
  */
 export class FlockCpuFluid {
@@ -24,14 +25,15 @@ export class FlockCpuFluid {
   private readonly sum: Float64Array;
   private readonly weight: Float64Array;
   private readonly velocity: Float64Array;
-  private readonly previous: Float64Array;
+  /** Packed velocity-gradient rows, indexed by stable particle identity. */
+  readonly affine: Float32Array;
   private readonly valid: Uint8Array;
   private readonly counts: Uint32Array;
   private readonly divergence: Float64Array;
   private readonly pressure: Float64Array;
   readonly pressureSolver: FlockCpuPressure;
 
-  constructor(spec: FlockFluidSpec) {
+  constructor(spec: FlockFluidSpec, capacity: number) {
     this.spec = spec;
     [this.nx, this.ny, this.nz] = spec.dims;
     const nU = (this.nx + 1) * this.ny * this.nz;
@@ -43,7 +45,7 @@ export class FlockCpuFluid {
     this.sum = new Float64Array(this.faceTotal);
     this.weight = new Float64Array(this.faceTotal);
     this.velocity = new Float64Array(this.faceTotal);
-    this.previous = new Float64Array(this.faceTotal);
+    this.affine = new Float32Array(capacity * FLOCK_AFFINE_STRIDE);
     this.valid = new Uint8Array(this.faceTotal);
     this.counts = new Uint32Array(this.cellTotal);
     this.divergence = new Float64Array(this.cellTotal);
@@ -73,7 +75,7 @@ export class FlockCpuFluid {
   }
 
   /** Visits the valid trilinear face corners of one velocity component at `pos`. */
-  private forEachCorner(pos: ArrayLike<number>, axis: number, visit: (face: number, weight: number) => void): void {
+  private forEachCorner(pos: ArrayLike<number>, axis: number, visit: (face: number, weight: number, dx: number, dy: number, dz: number, gx: number, gy: number, gz: number) => void): void {
     const h = this.spec.cellSize;
     const o = this.spec.origin;
     const s = [(pos[0] - o[0]) / h - 0.5, (pos[1] - o[1]) / h - 0.5, (pos[2] - o[2]) / h - 0.5];
@@ -85,13 +87,15 @@ export class FlockCpuFluid {
       const ox = corner & 1; const oy = (corner >> 1) & 1; const oz = (corner >> 2) & 1;
       const cx = bx + ox; const cy = by + oy; const cz = bz + oz;
       if (cx < 0 || cy < 0 || cz < 0 || cx >= dx || cy >= dy || cz >= dz) continue;
-      const w = (ox ? fx : 1 - fx) * (oy ? fy : 1 - fy) * (oz ? fz : 1 - fz);
-      if (w <= 0) continue;
-      visit(this.faceIndex(axis, cx, cy, cz), w);
+      const wx = ox ? fx : 1 - fx, wy = oy ? fy : 1 - fy, wz = oz ? fz : 1 - fz;
+      // Zero-weight corners still contribute derivatives on exact grid facets.
+      visit(this.faceIndex(axis, cx, cy, cz), wx * wy * wz,
+        (ox - fx) * h, (oy - fy) * h, (oz - fz) * h,
+        (ox ? 1 : -1) * wy * wz / h, (oy ? 1 : -1) * wx * wz / h, (oz ? 1 : -1) * wx * wy / h);
     }
   }
 
-  step(state: Float32Array, capacity: number, flipRatio: number, dt: number): void {
+  step(state: Float32Array, capacity: number, affineStrength: number, dt: number): void {
     const h = this.spec.cellSize;
     const o = this.spec.origin;
     this.sum.fill(0);
@@ -108,8 +112,12 @@ export class FlockCpuFluid {
       if (this.inCells(cx, cy, cz)) this.counts[this.cellIndex(cx, cy, cz)] += 1;
       for (let axis = 0; axis < 3; axis += 1) {
         const v = state[base + P_VEL + axis];
-        this.forEachCorner(pos, axis, (face, w) => {
-          this.sum[face] += v * w;
+        const row = index * FLOCK_AFFINE_STRIDE + axis * 3;
+        // A respawn is a new particle, even though it reuses the same identity.
+        const strength = state[base + P_AGE] > 0 ? affineStrength : 0;
+        this.forEachCorner(pos, axis, (face, w, dx, dy, dz) => {
+          const local = v + strength * (this.affine[row] * dx + this.affine[row + 1] * dy + this.affine[row + 2] * dz);
+          this.sum[face] += local * w;
           this.weight[face] += w;
         });
       }
@@ -133,11 +141,32 @@ export class FlockCpuFluid {
               valid = 1;
             }
             this.velocity[f] = value;
-            this.previous[f] = value;
             this.valid[f] = valid;
           }
         }
       }
+    }
+
+    // Complete the interpolation stencil, including derivative-only corners
+    // on exact grid facets. P2G sums/weights are now free to serve as scratch.
+    for (let layer = 0; layer < 2; layer++) {
+      this.sum.set(this.velocity); this.weight.set(this.valid);
+      for (let axis = 0; axis < 3; axis++) {
+        const dims = this.faceDims(axis);
+        for (let z = 0; z < dims[2]; z++) for (let y = 0; y < dims[1]; y++) for (let x = 0; x < dims[0]; x++) {
+          const face = this.faceIndex(axis, x, y, z);
+          if (this.valid[face]) continue;
+          let sum = 0, samples = 0;
+          for (let direction = 0; direction < 3; direction++) for (const side of [-1, 1]) {
+            const neighbor = [x, y, z]; neighbor[direction] += side;
+            if (neighbor[direction] < 0 || neighbor[direction] >= dims[direction]) continue;
+            const other = this.faceIndex(axis, neighbor[0], neighbor[1], neighbor[2]);
+            if (this.valid[other]) { sum += this.velocity[other]; samples++; }
+          }
+          if (samples > 0) { this.sum[face] = sum / samples; this.weight[face] = 1; }
+        }
+      }
+      this.velocity.set(this.sum); this.valid.set(this.weight);
     }
 
     // Divergence of fluid cells.
@@ -187,24 +216,31 @@ export class FlockCpuFluid {
       const pos = [state[base + P_POS], state[base + P_POS + 1], state[base + P_POS + 2]];
       for (let axis = 0; axis < 3; axis += 1) {
         let value = 0;
-        let previous = 0;
         let weight = 0;
-        this.forEachCorner(pos, axis, (face, w) => {
+        let gx = 0, gy = 0, gz = 0, wx = 0, wy = 0, wz = 0;
+        this.forEachCorner(pos, axis, (face, w, _dx, _dy, _dz, dx, dy, dz) => {
           if (!this.valid[face]) return;
-          value += this.velocity[face] * w;
-          previous += this.previous[face] * w;
+          const velocity = this.velocity[face];
+          value += velocity * w;
+          gx += velocity * dx; gy += velocity * dy; gz += velocity * dz;
+          wx += dx; wy += dy; wz += dz;
           weight += w;
         });
         const vStar = state[base + P_VEL + axis];
         let v = vStar;
+        const row = index * FLOCK_AFFINE_STRIDE + axis * 3;
+        this.affine.fill(0, row, row + 3);
         if (weight > 1e-6) {
-          const pic = value / weight;
-          const flip = vStar + (value - previous) / weight;
-          v = pic + (flip - pic) * flipRatio;
+          v = value / weight;
+          // Derivative of normalized interpolation. In a full stencil sum(dw)
+          // is zero; at a truncated wall this preserves a constant velocity.
+          this.affine[row] = (gx - v * wx) / weight;
+          this.affine[row + 1] = (gy - v * wy) / weight;
+          this.affine[row + 2] = (gz - v * wz) / weight;
         }
         let p = pos[axis] + (v - vStar) * dt;
-        if (p < lo[axis]) { p = lo[axis]; v = Math.max(v, 0); }
-        if (p > hi[axis]) { p = hi[axis]; v = Math.min(v, 0); }
+        if (p < lo[axis]) { p = lo[axis]; v = Math.max(v, 0); this.affine.fill(0, row, row + 3); }
+        if (p > hi[axis]) { p = hi[axis]; v = Math.min(v, 0); this.affine.fill(0, row, row + 3); }
         state[base + P_POS + axis] = p;
         state[base + P_VEL + axis] = v;
       }

@@ -1,16 +1,17 @@
 import { FLOCK_WGSL_STRUCTS } from './flockWgslShared';
+import { flockIdentityWgsl } from './flockIdentityWgsl';
 
 /**
- * FLIP liquid on a staggered (MAC) grid, run after the particle step each
+ * APIC liquid on a staggered (MAC) grid, run after the particle step each
  * substep: particle-to-grid transfer with fixed-point atomics (order
  * independent, so deterministic), fluid-cell marking, divergence, MGPCG
- * pressure projection and grid-to-particle PIC/FLIP
+ * pressure projection and grid-to-particle affine
  * transfer with position correction. Domain walls are solid.
  *
  * Face layout (global face index f): U faces (nx+1)*ny*nz, then V faces
  * nx*(ny+1)*nz, then W faces nx*ny*(nz+1). `acc` holds fixed-point velocity
  * sums [0, nF) and weights [nF, 2nF). `faces` holds projected velocity
- * [0, nF), pre-projection velocity [nF, 2nF) and validity [2nF, 3nF).
+ * [0, nF), validity [nF, 2nF), and a matching pair of extrapolation scratch arrays.
  * `cells` holds divergence [0, nC) and pressure [nC, 2nC).
  * Mirrors engine/flock/cpu/flockCpuFluid.ts.
  */
@@ -26,7 +27,7 @@ ${FLOCK_WGSL_STRUCTS}
 struct FluidParams {
   origin: vec3f, cellSize: f32,
   dims: vec3u, count: u32,
-  flipRatio: f32, dt: f32, dispatchWidth: u32, pad1: f32,
+  affineStrength: f32, dt: f32, dispatchWidth: u32, pad1: f32,
 };
 
 @group(0) @binding(0) var<storage, read_write> particles: array<Particle>;
@@ -35,6 +36,15 @@ struct FluidParams {
 @group(0) @binding(3) var<storage, read_write> counts: array<atomic<u32>>;
 @group(0) @binding(4) var<storage, read_write> cells: array<f32>;
 @group(0) @binding(5) var<uniform> fp: FluidParams;
+@group(0) @binding(6) var<storage, read_write> affine: array<f32>;
+${flockIdentityWgsl(7)}
+
+fn affineRow(identity: u32, axis: u32, age: f32) -> vec3f {
+  // Spawned particles reuse storage but have no affine history yet.
+  if (age <= 0.0) { return vec3f(0.0); }
+  let row = identity * 9u + axis * 3u;
+  return vec3f(affine[row], affine[row + 1u], affine[row + 2u]) * fp.affineStrength;
+}
 
 const VS: f32 = ${FLOCK_FLUID_VELOCITY_SCALE}.0;
 const WS: f32 = ${FLOCK_FLUID_WEIGHT_SCALE}.0;
@@ -118,6 +128,7 @@ fn fluidP2G(@builtin(global_invocation_id) gid: vec3u) {
   if (inCells(cell)) { atomicAdd(&counts[cellIndex(vec3u(cell))], 1u); }
   let nF = totalFaces();
   for (var axis = 0u; axis < 3u; axis++) {
+    let row = affineRow(particleIdentity(index), axis, p.age);
     let s = sampleCoord(p.pos, axis);
     let base = vec3i(floor(s));
     let f = s - floor(s);
@@ -130,7 +141,8 @@ fn fluidP2G(@builtin(global_invocation_id) gid: vec3u) {
       let w = wv.x * wv.y * wv.z;
       if (w <= 0.0) { continue; }
       let fi = faceIndex(axis, vec3u(c));
-      atomicAdd(&acc[fi], i32(round(p.vel[axis] * w * VS)));
+      let velocity = p.vel[axis] + dot(row, (vec3f(o) - f) * fp.cellSize);
+      atomicAdd(&acc[fi], i32(round(velocity * w * VS)));
       atomicAdd(&acc[nF + fi], i32(round(w * WS)));
     }
   }
@@ -171,8 +183,42 @@ fn fluidNormalize(@builtin(global_invocation_id) gid: vec3u) {
     valid = 1.0;
   }
   faces[f] = value;
-  faces[nF + f] = value;
-  faces[nF * 2u + f] = valid;
+  faces[nF + f] = valid;
+}
+
+// Two deterministic Jacobi layers fill derivative-only corners on grid facets.
+// Input/output sections never overlap within a dispatch.
+fn extrapolateFace(f: u32, sourceOffset: u32, targetOffset: u32) {
+  let nF = totalFaces();
+  if (f >= nF) { return; }
+  let face = decodeFace(f);
+  var value = faces[sourceOffset + f];
+  var valid = faces[sourceOffset + nF + f];
+  if (valid < 0.5) {
+    var sum = 0.0;
+    var samples = 0.0;
+    let dims = vec3i(faceDims(face.w));
+    for (var direction = 0u; direction < 3u; direction++) {
+      for (var side = -1; side <= 1; side += 2) {
+        var neighbor = vec3i(face.xyz); neighbor[direction] += side;
+        if (neighbor[direction] < 0 || neighbor[direction] >= dims[direction]) { continue; }
+        let other = faceIndex(face.w, vec3u(neighbor));
+        if (faces[sourceOffset + nF + other] > 0.5) { sum += faces[sourceOffset + other]; samples += 1.0; }
+      }
+    }
+    if (samples > 0.0) { value = sum / samples; valid = 1.0; }
+  }
+  faces[targetOffset + f] = value; faces[targetOffset + nF + f] = valid;
+}
+
+@compute @workgroup_size(${FLOCK_FLUID_WORKGROUP})
+fn fluidExtrapolateAB(@builtin(global_invocation_id) gid: vec3u) {
+  extrapolateFace(fluidIndex(gid), 0u, totalFaces() * 2u);
+}
+
+@compute @workgroup_size(${FLOCK_FLUID_WORKGROUP})
+fn fluidExtrapolateBA(@builtin(global_invocation_id) gid: vec3u) {
+  extrapolateFace(fluidIndex(gid), totalFaces() * 2u, 0u);
 }
 
 @compute @workgroup_size(${FLOCK_FLUID_WORKGROUP})
@@ -211,10 +257,10 @@ fn fluidProject(@builtin(global_invocation_id) gid: vec3u) {
   if (fluidLo) { pLo = cells[nC + cellIndex(vec3u(lo))]; }
   if (fluidHi) { pHi = cells[nC + cellIndex(vec3u(hi))]; }
   faces[f] = faces[f] - (pHi - pLo);
-  faces[nF * 2u + f] = 1.0;
+  faces[nF + f] = 1.0;
 }
 
-struct FaceSample { value: vec3f, previous: vec3f, weight: vec3f, };
+struct FaceSample { value: vec3f, weight: vec3f, gradient: array<vec3f, 3>, };
 
 fn sampleFaces(pos: vec3f) -> FaceSample {
   var out: FaceSample;
@@ -225,22 +271,30 @@ fn sampleFaces(pos: vec3f) -> FaceSample {
     let f = s - floor(s);
     let d = vec3i(faceDims(axis));
     var value = 0.0;
-    var previous = 0.0;
+    var gradient = vec3f(0.0);
+    var weightGradient = vec3f(0.0);
     var weight = 0.0;
     for (var corner = 0u; corner < 8u; corner++) {
       let o = vec3i(i32(corner & 1u), i32((corner >> 1u) & 1u), i32((corner >> 2u) & 1u));
       let c = base + o;
       if (any(c < vec3i(0)) || any(c >= d)) { continue; }
       let fi = faceIndex(axis, vec3u(c));
-      if (faces[nF * 2u + fi] < 0.5) { continue; }
+      if (faces[nF + fi] < 0.5) { continue; }
       let wv = mix(1.0 - f, f, vec3f(o));
       let w = wv.x * wv.y * wv.z;
+      // Include zero-weight corners: their derivatives need not be zero.
+      let sign = vec3f(o) * 2.0 - 1.0;
+      let dw = sign * vec3f(wv.y * wv.z, wv.x * wv.z, wv.x * wv.y) / fp.cellSize;
       value += faces[fi] * w;
-      previous += faces[nF + fi] * w;
+      gradient += faces[fi] * dw;
+      weightGradient += dw;
       weight += w;
     }
     out.value[axis] = value;
-    out.previous[axis] = previous;
+    if (weight > 1e-6) {
+      // Differentiate normalized weights at truncated walls/free stencils.
+      out.gradient[axis] = (gradient - (value / weight) * weightGradient) / weight;
+    }
     out.weight[axis] = weight;
   }
   return out;
@@ -258,15 +312,17 @@ fn fluidG2P(@builtin(global_invocation_id) gid: vec3u) {
   for (var axis = 0u; axis < 3u; axis++) {
     if (s.weight[axis] <= 1e-6) { continue; }
     let pic = s.value[axis] / s.weight[axis];
-    let flip = vStar[axis] + (s.value[axis] - s.previous[axis]) / s.weight[axis];
-    v[axis] = mix(pic, flip, fp.flipRatio);
+    v[axis] = pic;
   }
   var pos = p.pos + (v - vStar) * fp.dt;
   let lo = fp.origin + vec3f(fp.cellSize * 0.01);
   let hi = fp.origin + vec3f(fp.dims) * fp.cellSize - vec3f(fp.cellSize * 0.01);
   for (var axis = 0u; axis < 3u; axis++) {
-    if (pos[axis] < lo[axis]) { pos[axis] = lo[axis]; v[axis] = max(v[axis], 0.0); }
-    if (pos[axis] > hi[axis]) { pos[axis] = hi[axis]; v[axis] = min(v[axis], 0.0); }
+    var gradient = s.gradient[axis];
+    if (pos[axis] < lo[axis]) { pos[axis] = lo[axis]; v[axis] = max(v[axis], 0.0); gradient = vec3f(0.0); }
+    if (pos[axis] > hi[axis]) { pos[axis] = hi[axis]; v[axis] = min(v[axis], 0.0); gradient = vec3f(0.0); }
+    let row = particleIdentity(index) * 9u + axis * 3u;
+    affine[row] = gradient.x; affine[row + 1u] = gradient.y; affine[row + 2u] = gradient.z;
   }
   p.pos = pos;
   p.vel = v;

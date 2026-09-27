@@ -42,6 +42,9 @@ export async function checkOrderedSessions(device: GPUDevice) {
     const expectedPrevious = await canonical.sampleParticles(257, 'previous');
     const a = await canonical.readCheckpoint(8), c = await sorted.readCheckpoint(8);
     if (!a || !c) throw new Error('Missing checkpoint');
+    if (c.state.byteLength !== 257 * 100) throw new Error('Missing affine checkpoint section');
+    if (!new Float32Array(c.state, 257 * 64).some(value => Math.abs(value) > 0.001)) throw new Error('Affine state never populated');
+    if (imported.importCheckpoint(8, c.state.slice(0, 257 * 64), c.rings)) throw new Error('Legacy FLIP checkpoint accepted');
     compare(new Float32Array(a.state), new Float32Array(c.state), 'checkpoint state');
     for (let i = 0; i < a.rings.length; i++) compare(new Float32Array(a.rings[i]), new Float32Array(c.rings[i]), `trail ${i}`);
     sorted.advanceTo(8, 24); sorted.advanceTo(12, 24);
@@ -56,6 +59,8 @@ export async function checkOrderedSessions(device: GPUDevice) {
     imported.advanceTo(8, 24); imported.advanceTo(12, 24);
     compare(expected, await imported.sampleParticles(257), 'adopted replay');
     compare(expectedPrevious, await imported.sampleParticles(257, 'previous'), 'adoption interpolation');
+    sorted.invalidateFrom(0); sorted.advanceTo(12, 24);
+    compare(expected, await sorted.sampleParticles(257), 'reset affine/replay');
     return { orderedSession: 'matched', count: 257, steps: 12, interpolation: true, respawn: true, neighbors: true, trails: true, checkpoint: 'restore/import/adopt' };
   } finally { sessions.forEach(session => session.dispose()); }
 }

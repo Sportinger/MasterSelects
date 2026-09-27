@@ -30,7 +30,7 @@ function column(solver: FlockCpuSolver, axis: number, offset = P_POS): number[] 
   return values;
 }
 
-describe('FLIP fluid', () => {
+describe('APIC fluid', () => {
   it('compiles one MAC grid covering the domain', () => {
     const program = buildDam();
     expect(program.fluid).not.toBeNull();
@@ -64,5 +64,22 @@ describe('FLIP fluid', () => {
     const mean = speeds.reduce((sum, v) => sum + v, 0) / speeds.length;
     expect(Number.isFinite(mean)).toBe(true);
     expect(mean).toBeLessThan(120);
+    expect(Array.from(solver.fluid!.affine).every(Number.isFinite)).toBe(true);
+  });
+
+  it('restores affine history exactly across checkpoint replay and resets it for a restart', () => {
+    const solver = new FlockCpuSolver(buildDam());
+    solver.advanceTo(8, context);
+    const checkpoint = solver.checkpoint();
+    expect(checkpoint.affine!.some(value => Math.abs(value) > 0.01)).toBe(true);
+    solver.advanceTo(16, context);
+    const expected = solver.checkpoint();
+    solver.restore(checkpoint); solver.advanceTo(16, context);
+    expect(solver.checkpoint()).toEqual(expected);
+    expect(() => solver.restore({ ...checkpoint, affine: null })).toThrow('Incompatible fluid checkpoint');
+    solver.reset();
+    expect(solver.fluid!.affine.every(value => value === 0)).toBe(true);
+    solver.advanceTo(8, context);
+    expect(solver.checkpoint()).toEqual(checkpoint);
   });
 });

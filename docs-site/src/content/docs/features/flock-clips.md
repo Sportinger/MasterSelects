@@ -291,14 +291,26 @@ and two identity maps, included in runtime memory estimates. GPU timings separat
 pressure and G2P. These pass samples exclude buffer-copy commands; use timestamps
 around the complete command sequence when measuring total step costs.
 
-**FLIP Fluid.** The FLIP Fluid behavior turns the particles into an
+**APIC Fluid.** The APIC Fluid behavior turns the particles into an
 incompressible liquid inside a box domain (Domain Center/Size, Cell Size,
-Pressure Iterations, Gravity, FLIP Ratio). Each step, after forces and
-advection, the GPU transfers particle velocities to a staggered MAC grid with
+Pressure Iterations, Gravity, Affine Strength). Each particle stores a tightly
+packed 3×3 velocity-gradient matrix (36 additional bytes), preserving local
+rotation and shear across transfers. Each step, after forces and
+advection, the GPU transfers particle velocities plus the affine contribution to a staggered MAC grid with
 fixed-point atomics (order independent, so resimulation stays deterministic),
 marks fluid cells, solves pressure with multigrid-preconditioned conjugate gradients (MGPCG), projects the grid
-velocity and transfers it back as a PIC/FLIP blend with a position
-correction; the domain walls are solid. Pressure Iterations is the maximum CG
+velocity and transfers it back with trilinear velocity interpolation and its
+gradient, plus a position correction; the domain walls are solid. Two deterministic
+extrapolation layers fill missing face velocities before pressure projection,
+including corners whose interpolation weight is zero but derivative is nonzero. At truncated
+walls the gradient differentiates normalized weights, so a constant tangential
+velocity does not introduce artificial shear. Affine Strength defaults to 1
+(APIC); 0 removes the affine contribution for more dissipative PIC behavior.
+It replaces the former FLIP Ratio; existing fluid nodes now use APIC, and older
+simulation caches are invalidated. The affine matrix remains in identity order
+through particle sorting, is reset on respawn/restart, and is included in CPU/GPU
+checkpoints, persisted imports and precompute handoff (100 state bytes per
+particle in a GPU checkpoint, before trails). Pressure Iterations is the maximum CG
 iteration count (12 for new nodes); updates stop at a relative residual of 1e-5
 or an absolute residual of 1e-6. The symmetric V-cycle uses Galerkin aggregates,
 two damped-Jacobi sweeps before and after coarse correction, and 16 coarse sweeps.

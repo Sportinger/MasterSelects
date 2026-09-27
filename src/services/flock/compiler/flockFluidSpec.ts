@@ -7,7 +7,7 @@ export const FLOCK_FLUID_MAX_CELLS = 2_097_152;
 export const FLOCK_FLUID_MIN_CELL = 0.5;
 
 /**
- * Fixed MAC grid for the FLIP Fluid node. Domain and resolution are
+ * Fixed MAC grid for the APIC Fluid node. Domain and resolution are
  * topology: changing them rebuilds the grid and resimulates from the start.
  */
 export function buildFlockFluidSpec(op: FlockOpSpec): FlockFluidSpec {

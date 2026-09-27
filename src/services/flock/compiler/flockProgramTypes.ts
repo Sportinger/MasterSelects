@@ -1,7 +1,7 @@
 import type { FlockDiagnostic, FlockProperty, FlockVec3 } from '../../../types/flock';
 
 /** Bumped whenever step semantics or the packed state layout change. */
-export const FLOCK_SOLVER_VERSION = 3;
+export const FLOCK_SOLVER_VERSION = 4;
 
 /**
  * Packed particle state, 16 float32 values (64 bytes) per particle:
@@ -12,6 +12,9 @@ export const FLOCK_SOLVER_VERSION = 3;
  */
 export const FLOCK_PARTICLE_STRIDE = 16;
 export const FLOCK_PARTICLE_BYTES = FLOCK_PARTICLE_STRIDE * 4;
+/** Identity-ordered APIC velocity-gradient rows, tightly packed (no mat3 padding). */
+export const FLOCK_AFFINE_STRIDE = 9;
+export const FLOCK_AFFINE_BYTES = FLOCK_AFFINE_STRIDE * 4;
 export const P_POS = 0;
 export const P_AGE = 3;
 export const P_VEL = 4;
@@ -139,7 +142,7 @@ export interface FlockBranchSpec extends FlockNodeSpec {
   trailIndex: number;
 }
 
-/** FLIP fluid MAC grid (simulation units). One per program. */
+/** APIC fluid MAC grid (simulation units). One per program. */
 export interface FlockFluidSpec {
   nodeId: string;
   sourceNodeId: string;

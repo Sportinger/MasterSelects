@@ -204,7 +204,7 @@ export function prepareCpuStepParams(resolved: FlockResolvedStep): CpuStepParams
         break;
       case 'fluid':
         v0 = vec(p.v.gravity, [0, -120, 0]);
-        f[0] = Math.max(0, Math.min(1, p.n.flipRatio ?? 0.95));
+        f[0] = Math.max(0, Math.min(1, p.n.affineStrength ?? 1));
         break;
       case 'drag':
         f[0] = p.n.amount ?? 0;
