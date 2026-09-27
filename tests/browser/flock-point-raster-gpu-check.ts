@@ -56,9 +56,11 @@ async function check() {
   const branchBuffer = buffer(branch, GPUBufferUsage.UNIFORM);
   const pigment = texture('rgba8unorm', GPUTextureUsage.TEXTURE_BINDING);
   const shadow = texture('depth32float', GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING);
+  const identityMap = buffer(new Uint32Array(count * 2 + 1), GPUBufferUsage.STORAGE);
   const frameGroup = device.createBindGroup({ layout: pipelines.frameLayout, entries: [
     { binding: 0, resource: { buffer: frameBuffer } }, { binding: 1, resource: { buffer: state } }, { binding: 2, resource: { buffer: state } },
     { binding: 3, resource: shadow.createView() }, { binding: 4, resource: device.createSampler({ compare: 'less-equal' }) },
+    { binding: 5, resource: { buffer: identityMap } },
   ] });
   const branchGroup = device.createBindGroup({ layout: pipelines.getBranchLayout('points'), entries: [
     { binding: 0, resource: { buffer: branchBuffer } }, { binding: 8, resource: pigment.createView() }, { binding: 9, resource: device.createSampler() },
@@ -123,9 +125,23 @@ async function check() {
     const direct = new Float32Array((await render(false, true)).buffer);
     const compute = new Float32Array((await render(true, true)).buffer);
     if (direct.some((value, index) => Math.abs(value - compute[index]) > 1e-6)) throw new Error('Compute shadows differ from parent particle sprite shadows');
+    branch[7] = 2 * 1080 / size; branch[12] = 0.5; branch[10] = 0;
+    const canonicalImage = await render(true);
+    const reversed = new Float32Array(states.length), mapping = new Uint32Array(count * 2 + 1);
+    mapping[0] = count;
+    for (let i = 0; i < count; i++) {
+      reversed.set(states.subarray(i * 16, i * 16 + 16), (count - 1 - i) * 16);
+      mapping[1 + i] = count - 1 - i; mapping[1 + count + i] = count - 1 - i;
+    }
+    device.queue.writeBuffer(state, 0, reversed); device.queue.writeBuffer(identityMap, 0, mapping);
+    const reorderedImage = await render(true);
+    if (canonicalImage.some((v, i) => v !== reorderedImage[i])) throw new Error('Physical order changed cached point size/lighting');
+    branch[7] = 2;
+    const reorderedShadow = new Float32Array((await render(true, true)).buffer);
+    if (compute.some((v, i) => v !== reorderedShadow[i])) throw new Error('Physical order changed parent shadows');
     await device.queue.onSubmittedWorkDone();
     if (errors.length) throw new Error(errors.join('\n'));
-    return { passed: results.length + 1, cases: results, shadow: 'matched', adapter: adapter.info };
+    return { passed: results.length + 3, cases: results, shadow: 'matched', reorderedIdentity: 'matched', adapter: adapter.info };
   } finally {
     rasterizer.dispose(); buffers.forEach(b => b.destroy()); textures.forEach(t => t.destroy()); device.destroy();
   }

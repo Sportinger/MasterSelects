@@ -1,3 +1,4 @@
+import { flockIdentityWgsl } from './flockIdentityWgsl';
 import { FLOCK_WGSL_MATH, FLOCK_WGSL_STRUCTS, flockSelectionWgsl } from './flockWgslShared';
 
 /**
@@ -9,6 +10,7 @@ import { FLOCK_WGSL_MATH, FLOCK_WGSL_STRUCTS, flockSelectionWgsl } from './flock
 export const RENDER_COMMON = /* wgsl */ `
 ${FLOCK_WGSL_STRUCTS}
 ${FLOCK_WGSL_MATH}
+${flockIdentityWgsl(5)}
 
 struct Palette {
   c0: vec3f, mode: f32,
@@ -86,8 +88,8 @@ fn isVisibleParticle(index: u32, p: Particle) -> bool {
 }
 
 fn interpolatedPos(index: u32) -> vec3f {
-  let c = stateCur[index];
-  let pr = statePrev[index];
+  let c = stateCur[particleSlot(index)];
+  let pr = statePrev[particleSlot(index)];
   if (pr.age < 0.0 || pr.gen != c.gen) { return c.pos; }
   let d = c.pos - pr.pos;
   if (dot(d, d) > rb.frame.teleport2) { return c.pos; }
@@ -95,8 +97,8 @@ fn interpolatedPos(index: u32) -> vec3f {
 }
 
 fn interpolatedForward(index: u32) -> vec3f {
-  let c = stateCur[index];
-  let pr = statePrev[index];
+  let c = stateCur[particleSlot(index)];
+  let pr = statePrev[particleSlot(index)];
   var f = c.fwd;
   if (pr.age >= 0.0 && pr.gen == c.gen) { f = mix(pr.fwd, c.fwd, rb.frame.alpha); }
   let l = length(f);
@@ -177,7 +179,7 @@ fn branchColor(index: u32, p: Particle, pos: vec3f) -> vec3f {
 struct ChildSample { pos: vec3f, uv: vec2f, };
 
 fn neighborPos(index: u32, fallback: vec3f, maxGap2: f32) -> vec3f {
-  let q = stateCur[index];
+  let q = stateCur[particleSlot(index)];
   if (q.age < 0.0) { return fallback; }
   let pos = interpolatedPos(index);
   let d = pos - fallback;

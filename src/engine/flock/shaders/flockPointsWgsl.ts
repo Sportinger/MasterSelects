@@ -32,7 +32,7 @@ fn pointSample(instIdx: u32) -> PointSample {
   var out: PointSample;
   let childCount = max(1u, u32(br.children));
   let ii = instIdx / childCount;
-  let p = stateCur[ii];
+  let p = stateCur[particleSlot(ii)];
   out.visible = isVisibleParticle(ii, p);
   if (!out.visible) { return out; }
   let child = childSample(ii, instIdx % childCount, p, interpolatedPos(ii));
@@ -139,7 +139,7 @@ ${POINT_VERTEX}
 fn vsPoints(@builtin(vertex_index) vi: u32, @builtin(instance_index) instIdx: u32) -> PointOut {
   let s = pointSample(instIdx);
   if (!s.visible) { var hidden: PointOut; hidden.clip = HIDDEN; return hidden; }
-  let color = branchColorAt(stateCur[s.parent], s.simPos, s.uv);
+  let color = branchColorAt(stateCur[particleSlot(s.parent)], s.simPos, s.uv);
   var visibility = 1.0;
   if (pointsLit()) { visibility = shadowVisibility(s.simPos); }
   return pointVertex(vi, s.simPos, color, s.sizeRnd, visibility);
@@ -178,7 +178,7 @@ fn vsPointsCached(@builtin(vertex_index) vi: u32, @builtin(instance_index) instI
   if (record.packed == 0u) { var hidden: PointOut; hidden.clip = HIDDEN; return hidden; }
   var visibility = 1.0;
   if (pointsLit()) { visibility = recordVisibility(record.packed); }
-  let sizeRnd = select(stateCur[instIdx / max(1u, u32(br.children))].rnd, flockHash01(instIdx, 911u), br.children > 1.0);
+  let sizeRnd = select(stateCur[particleSlot(instIdx / max(1u, u32(br.children)))].rnd, flockHash01(instIdx, 911u), br.children > 1.0);
   return pointVertex(vi, record.pos, unpack4x8unorm(record.packed).rgb, sizeRnd, visibility);
 }
 
@@ -208,7 +208,7 @@ fn cachePoints(@builtin(global_invocation_id) gid: vec3u) {
   if (index >= cacheParams.total) { return; }
   let s = pointSample(index);
   if (!s.visible) { pointCache[index] = PointRecord(vec3f(0.0), 0u); return; }
-  let color = branchColorAt(stateCur[s.parent], s.simPos, s.uv);
+  let color = branchColorAt(stateCur[particleSlot(s.parent)], s.simPos, s.uv);
   pointCache[index] = PointRecord(s.simPos, pack4x8unorm(vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), 1.0)));
 }
 

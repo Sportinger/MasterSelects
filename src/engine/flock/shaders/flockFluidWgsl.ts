@@ -20,13 +20,13 @@ export const FLOCK_FLUID_WEIGHT_SCALE = 65536;
 export const FLOCK_FLUID_PARAMS_STRIDE = 256;
 export const FLOCK_FLUID_WORKGROUP = 256;
 
-export const FLOCK_FLUID_WGSL = /* wgsl */ `
+export const FLOCK_FLUID_COMMON_WGSL = /* wgsl */ `
 ${FLOCK_WGSL_STRUCTS}
 
 struct FluidParams {
   origin: vec3f, cellSize: f32,
   dims: vec3u, count: u32,
-  flipRatio: f32, dt: f32, pad0: f32, pad1: f32,
+  flipRatio: f32, dt: f32, dispatchWidth: u32, pad1: f32,
 };
 
 @group(0) @binding(0) var<storage, read_write> particles: array<Particle>;
@@ -88,9 +88,15 @@ fn sampleCoord(pos: vec3f, axis: u32) -> vec3f {
   return s;
 }
 
+fn fluidIndex(gid: vec3u) -> u32 { return gid.x + gid.y * fp.dispatchWidth; }
+`;
+
+export const FLOCK_FLUID_WGSL = /* wgsl */ `
+${FLOCK_FLUID_COMMON_WGSL}
+
 @compute @workgroup_size(${FLOCK_FLUID_WORKGROUP})
 fn fluidClear(@builtin(global_invocation_id) gid: vec3u) {
-  let i = gid.x;
+  let i = fluidIndex(gid);
   let nF = totalFaces();
   if (i < nF * 2u) { atomicStore(&acc[i], 0); }
   let nC = cellCountTotal();
@@ -104,7 +110,7 @@ fn fluidClear(@builtin(global_invocation_id) gid: vec3u) {
 
 @compute @workgroup_size(${FLOCK_FLUID_WORKGROUP})
 fn fluidP2G(@builtin(global_invocation_id) gid: vec3u) {
-  let index = gid.x;
+  let index = fluidIndex(gid);
   if (index >= fp.count) { return; }
   let p = particles[index];
   if (p.age < 0.0) { return; }
@@ -152,7 +158,7 @@ fn isWallFace(face: vec4u) -> bool {
 
 @compute @workgroup_size(${FLOCK_FLUID_WORKGROUP})
 fn fluidNormalize(@builtin(global_invocation_id) gid: vec3u) {
-  let f = gid.x;
+  let f = fluidIndex(gid);
   let nF = totalFaces();
   if (f >= nF) { return; }
   let face = decodeFace(f);
@@ -172,7 +178,7 @@ fn fluidNormalize(@builtin(global_invocation_id) gid: vec3u) {
 
 @compute @workgroup_size(${FLOCK_FLUID_WORKGROUP})
 fn fluidDivergence(@builtin(global_invocation_id) gid: vec3u) {
-  let ci = gid.x;
+  let ci = fluidIndex(gid);
   let nC = cellCountTotal();
   if (ci >= nC) { return; }
   if (atomicLoad(&counts[ci]) == 0u) { cells[ci] = 0.0; return; }
@@ -209,18 +215,18 @@ fn jacobi(ci: u32, readOffset: u32, writeOffset: u32) {
 @compute @workgroup_size(${FLOCK_FLUID_WORKGROUP})
 fn fluidJacobiAB(@builtin(global_invocation_id) gid: vec3u) {
   let nC = cellCountTotal();
-  jacobi(gid.x, nC, nC * 2u);
+  jacobi(fluidIndex(gid), nC, nC * 2u);
 }
 
 @compute @workgroup_size(${FLOCK_FLUID_WORKGROUP})
 fn fluidJacobiBA(@builtin(global_invocation_id) gid: vec3u) {
   let nC = cellCountTotal();
-  jacobi(gid.x, nC * 2u, nC);
+  jacobi(fluidIndex(gid), nC * 2u, nC);
 }
 
 @compute @workgroup_size(${FLOCK_FLUID_WORKGROUP})
 fn fluidProject(@builtin(global_invocation_id) gid: vec3u) {
-  let f = gid.x;
+  let f = fluidIndex(gid);
   let nF = totalFaces();
   if (f >= nF) { return; }
   let face = decodeFace(f);
@@ -275,7 +281,7 @@ fn sampleFaces(pos: vec3f) -> FaceSample {
 
 @compute @workgroup_size(${FLOCK_FLUID_WORKGROUP})
 fn fluidG2P(@builtin(global_invocation_id) gid: vec3u) {
-  let index = gid.x;
+  let index = fluidIndex(gid);
   if (index >= fp.count) { return; }
   var p = particles[index];
   if (p.age < 0.0) { return; }

@@ -29,6 +29,8 @@ parent particles for shadows. Optional GPU timestamps expose simulation,
 fluid-transfer, pressure, point-cache, shadow and drawing costs through `getStats`.
 Small opaque points and bounded shadow footprints use compute rasterization,
 with deterministic depth ties and a resolve into the shared 3D depth buffer.
+FLIP transfers use a stable GPU cell permutation and workgroup accumulation,
+preserving particle identity across rendering, trails and checkpoints.
 
 The node canvas automatically refits the full graph whenever nodes or connections are added or removed, including changes from internal and external AI agents. Deleting effects also closes the gap in the node chain, including after the last effect is removed. Agent clip selections preserve the visible panel instead of bringing Properties forward.
 

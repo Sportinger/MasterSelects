@@ -1,3 +1,4 @@
+import { flockIdentityWgsl } from './flockIdentityWgsl';
 import { WIND_FORCE_WGSL } from '../../../services/operators/wind';
 import { FLOCK_WGSL_MATH, FLOCK_WGSL_STRUCTS, flockSelectionWgsl } from './flockWgslShared';
 
@@ -13,6 +14,7 @@ struct SortParams { k: u32, j: u32, count: u32, pad0: u32, };
 @group(0) @binding(1) var<storage, read_write> keys: array<u32>;
 @group(0) @binding(2) var<storage, read_write> vals: array<u32>;
 @group(0) @binding(3) var<uniform> block: StepBlock;
+${flockIdentityWgsl(4)}
 
 @compute @workgroup_size(256)
 fn hashParticles(@builtin(global_invocation_id) gid: vec3u) {
@@ -21,7 +23,7 @@ fn hashParticles(@builtin(global_invocation_id) gid: vec3u) {
   if (i >= sim.sortCount) { return; }
   vals[i] = i;
   if (i >= sim.count) { keys[i] = U32_MAX; return; }
-  let p = gridState[i];
+  let p = gridState[particleSlot(i)];
   if (p.age < 0.0) { keys[i] = U32_MAX; return; }
   let c = vec3i(floor(p.pos / sim.cellSize));
   keys[i] = cellHash(c) & sim.tableMask;
@@ -96,6 +98,7 @@ const PATH_SAMPLES: u32 = 48u;
 @group(0) @binding(3) var<storage, read> cells: array<Cell>;
 @group(0) @binding(4) var<uniform> block: StepBlock;
 @group(0) @binding(5) var<storage, read_write> stats: array<atomic<u32>, 4>;
+${flockIdentityWgsl(6)}
 
 ${flockSelectionWgsl('block.selections', 'evalSelections')}
 
@@ -354,11 +357,12 @@ fn avoidance(sim: SimParams, position: vec3f) -> vec3f {
 @compute @workgroup_size(256)
 fn simulate(@builtin(global_invocation_id) gid: vec3u) {
   let sim = block.sim;
-  let index = gid.x;
-  if (index >= sim.count) { return; }
-  var p = stateIn[index];
+  let slot = gid.x;
+  if (slot >= sim.count) { return; }
+  let index = particleIdentity(slot);
+  var p = stateIn[slot];
   let emitterIndex = u32(p.emitter);
-  if (emitterIndex >= sim.emitterCount) { stateOut[index] = p; return; }
+  if (emitterIndex >= sim.emitterCount) { stateOut[slot] = p; return; }
   let e = block.emitters[emitterIndex];
   let localIndex = index - u32(e.offset);
   let isActive = (f32(localIndex) + 0.5) / e.count <= e.activeFraction;
@@ -370,7 +374,7 @@ fn simulate(@builtin(global_invocation_id) gid: vec3u) {
     age = -1.0;
     p.age = -1.0;
     if (isActive && respawn) {
-      stateOut[index] = spawnParticle(p, index, e, generation, sim);
+      stateOut[slot] = spawnParticle(p, index, e, generation, sim);
       atomicAdd(&stats[2], 1u);
       return;
     }
@@ -379,11 +383,11 @@ fn simulate(@builtin(global_invocation_id) gid: vec3u) {
     var birth = 0.0;
     if (e.birthMode > 0.5) { birth = (f32(localIndex) / e.count) * e.stagger; }
     if (isActive && sim.simTime >= birth && (generation == 0.0 || respawn)) {
-      stateOut[index] = spawnParticle(p, index, e, generation, sim);
+      stateOut[slot] = spawnParticle(p, index, e, generation, sim);
       atomicAdd(&stats[2], 1u);
     } else {
       p.age = -1.0;
-      stateOut[index] = p;
+      stateOut[slot] = p;
     }
     return;
   }
@@ -447,7 +451,7 @@ fn simulate(@builtin(global_invocation_id) gid: vec3u) {
       for (var k = cell.start + first; k < cell.end; k += stride) {
         let other = vals[k];
         if (other == index) { continue; }
-        let q = stateIn[other];
+        let q = stateIn[particleSlot(other)];
         let offset = q.pos - p.pos;
         let d2 = dot(offset, offset);
         if (d2 > maxRadius2 || d2 < 1e-12) { continue; }
@@ -521,7 +525,7 @@ fn simulate(@builtin(global_invocation_id) gid: vec3u) {
         if (abs(offsets[axis]) <= ha) { continue; }
         if (sim.boundaryMode == 3u) {
           p.age = -1.0;
-          stateOut[index] = p;
+          stateOut[slot] = p;
           return;
         }
         if (sim.boundaryMode == 1u) {
@@ -541,7 +545,7 @@ fn simulate(@builtin(global_invocation_id) gid: vec3u) {
       if (radius > limit) {
         if (sim.boundaryMode == 3u) {
           p.age = -1.0;
-          stateOut[index] = p;
+          stateOut[slot] = p;
           return;
         }
         let n = d / radius;
@@ -574,7 +578,7 @@ fn simulate(@builtin(global_invocation_id) gid: vec3u) {
   p.fwd = forward;
   p.age = age + sim.dt;
   p.neighbors = f32(neighborCount);
-  stateOut[index] = p;
+  stateOut[slot] = p;
   atomicAdd(&stats[2], 1u);
 }
 `;
@@ -588,12 +592,13 @@ struct TrailParams { ringIndex: u32, samples: u32, slotCount: u32, pad0: u32, };
 @group(0) @binding(1) var<storage, read> slots: array<u32>;
 @group(0) @binding(2) var<storage, read_write> ring: array<vec4f>;
 @group(0) @binding(3) var<uniform> tp: TrailParams;
+${flockIdentityWgsl(4)}
 
 @compute @workgroup_size(256)
 fn trailWrite(@builtin(global_invocation_id) gid: vec3u) {
   let s = gid.x;
   if (s >= tp.slotCount) { return; }
-  let p = trailState[slots[s]];
+  let p = trailState[particleSlot(slots[s])];
   var tag = 0.0;
   if (p.age >= 0.0) { tag = p.gen; }
   ring[s * tp.samples + tp.ringIndex] = vec4f(p.pos, tag);
@@ -616,6 +621,7 @@ struct LinkParams {
 @group(0) @binding(2) var<storage, read> cells: array<Cell>;
 @group(0) @binding(3) var<storage, read_write> links: array<u32>;
 @group(0) @binding(4) var<uniform> lp: LinkParams;
+${flockIdentityWgsl(5)}
 
 @compute @workgroup_size(128)
 fn buildLinks(@builtin(global_invocation_id) gid: vec3u) {
@@ -623,7 +629,7 @@ fn buildLinks(@builtin(global_invocation_id) gid: vec3u) {
   if (i >= lp.count) { return; }
   let base = i * lp.perParticle;
   for (var s = 0u; s < lp.perParticle; s++) { links[base + s] = 0u; }
-  let p = linkState[i];
+  let p = linkState[particleSlot(i)];
   if (p.age < 0.0 || flockHash01(i, lp.salt) >= lp.fraction) { return; }
   let r2 = lp.radius * lp.radius;
   let center = vec3i(floor(p.pos / lp.cellSize));
@@ -651,7 +657,7 @@ fn buildLinks(@builtin(global_invocation_id) gid: vec3u) {
           let j = vals[k];
           if (j == i || j >= lp.count) { continue; }
           if (j < i && flockHash01(j, lp.salt) < lp.fraction) { continue; }
-          let q = linkState[j];
+          let q = linkState[particleSlot(j)];
           if (q.age < 0.0) { continue; }
           let d = q.pos - p.pos;
           if (dot(d, d) >= r2) { continue; }

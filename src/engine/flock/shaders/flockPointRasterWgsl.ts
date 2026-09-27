@@ -16,7 +16,7 @@ const EMPTY: u32 = 0xffffffffu;
 
 fn pointDiameter(index: u32) -> f32 {
   let parent = index / max(1u, u32(br.children));
-  let rnd = select(stateCur[parent].rnd, flockHash01(index, 911u), br.children > 1.0);
+  let rnd = select(stateCur[particleSlot(parent)].rnd, flockHash01(index, 911u), br.children > 1.0);
   return max(1.0, br.size * (1.0 + br.sizeVariance * (rnd * 2.0 - 1.0)) * rb.frame.viewport.y / 1080.0);
 }
 

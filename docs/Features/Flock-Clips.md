@@ -267,6 +267,21 @@ sub-particle along the emitter normal by Pigment Image brightness. Instances
 keep their previous fixed-light look while no Room or lit Points branch
 enables the key light.
 
+Fluid sessions keep both simulation/interpolation states in a stable spatial order,
+refreshed every four steps with a GPU cell-key radix sort. Forward and inverse
+identity maps preserve spawning, pigment UVs, sub-particle neighbors, boid rules,
+links and trails. Workgroups combine fixed-point face contributions before global
+atomics, with bounded-probe fallback when their local table fills. Checkpoints and
+diagnostic samples retain canonical identity order; checkpoint restore resets the
+maps and rebuilds the spatial order. Ordinary substeps do not copy the complete
+state into and out of an intermediate transfer buffer.
+
+Sorting uses a reusable 64-byte-per-particle reorder buffer, permutation scratch
+and two identity maps, included in runtime memory estimates. GPU timings separate
+`fluidSort`, `order-keys`, `order-reorder` and `order-updateMapping` from P2G,
+pressure and G2P. These pass samples exclude buffer-copy commands; use timestamps
+around the complete command sequence when measuring total step costs.
+
 **FLIP Fluid.** The FLIP Fluid behavior turns the particles into an
 incompressible liquid inside a box domain (Domain Center/Size, Cell Size,
 Pressure Iterations, Gravity, FLIP Ratio). Each step, after forces and

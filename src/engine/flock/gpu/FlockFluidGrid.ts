@@ -1,13 +1,15 @@
 import type { FlockFluidSpec } from '../../../services/flock/compiler/flockProgramTypes';
 import { flockGpuTimings } from './FlockGpuTimings';
+import { FLOCK_FLUID_BLOCK_TRANSFER_WGSL } from '../shaders/flockFluidTransferWgsl';
+import { createCheckedModule, watchValidation } from './FlockGpuPipelines';
 import {
   FLOCK_FLUID_PARAMS_STRIDE,
   FLOCK_FLUID_WGSL,
   FLOCK_FLUID_WORKGROUP,
 } from '../shaders/flockFluidWgsl';
 
-type FluidEntry = 'fluidClear' | 'fluidP2G' | 'fluidNormalize' | 'fluidDivergence' | 'fluidJacobiAB' | 'fluidJacobiBA' | 'fluidProject' | 'fluidG2P';
-const ENTRIES: FluidEntry[] = ['fluidClear', 'fluidP2G', 'fluidNormalize', 'fluidDivergence', 'fluidJacobiAB', 'fluidJacobiBA', 'fluidProject', 'fluidG2P'];
+type FluidEntry = 'fluidClear' | 'fluidP2G' | 'fluidP2GBlock' | 'fluidNormalize' | 'fluidDivergence' | 'fluidJacobiAB' | 'fluidJacobiBA' | 'fluidProject' | 'fluidG2P';
+const ENTRIES: FluidEntry[] = ['fluidClear', 'fluidP2G', 'fluidP2GBlock', 'fluidNormalize', 'fluidDivergence', 'fluidJacobiAB', 'fluidJacobiBA', 'fluidProject', 'fluidG2P'];
 
 interface FluidPipelines {
   layout: GPUBindGroupLayout;
@@ -31,15 +33,18 @@ function fluidPipelines(device: GPUDevice): FluidPipelines {
       { binding: 5, visibility: C, buffer: { type: 'uniform', hasDynamicOffset: true } },
     ],
   });
-  const module = device.createShaderModule({ code: FLOCK_FLUID_WGSL, label: 'flock-fluid' });
+  const finish = watchValidation(device, 'flock fluid');
+  const module = createCheckedModule(device, FLOCK_FLUID_WGSL, 'flock-fluid');
+  const blockModule = createCheckedModule(device, FLOCK_FLUID_BLOCK_TRANSFER_WGSL, 'flock-fluid-block-transfer');
   const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [layout], label: 'flock-fluid-pipeline-layout' });
   const pipelines = Object.fromEntries(ENTRIES.map((entryPoint) => [entryPoint, device.createComputePipeline({
     label: `flock-${entryPoint}`,
     layout: pipelineLayout,
-    compute: { module, entryPoint },
+    compute: { module: entryPoint === 'fluidP2GBlock' ? blockModule : module, entryPoint },
   })])) as Record<FluidEntry, GPUComputePipeline>;
   const created = { layout, pipelines };
   pipelinesByDevice.set(device, created);
+  finish();
   return created;
 }
 
@@ -59,8 +64,10 @@ export class FlockFluidGrid {
   private readonly params: GPUBuffer;
   private readonly paramData: ArrayBuffer;
   private readonly bindGroups: GPUBindGroup[];
+  private readonly blockTransfer: boolean;
+  private readonly dispatchWidth: number;
 
-  constructor(device: GPUDevice, spec: FlockFluidSpec, states: GPUBuffer[], maxSlots: number) {
+  constructor(device: GPUDevice, spec: FlockFluidSpec, states: GPUBuffer[], maxSlots: number, options: { blockTransfer?: boolean; dispatchWidth?: number } = {}) {
     this.device = device;
     this.paramData = new ArrayBuffer(FLOCK_FLUID_PARAMS_STRIDE * maxSlots);
     this.spec = spec;
@@ -68,12 +75,14 @@ export class FlockFluidGrid {
     const [nx, ny, nz] = spec.dims;
     this.faceTotal = (nx + 1) * ny * nz + nx * (ny + 1) * nz + nx * ny * (nz + 1);
     this.cellTotal = nx * ny * nz;
+    this.dispatchWidth = Math.max(1, Math.min(options.dispatchWidth ?? device.limits.maxComputeWorkgroupsPerDimension, device.limits.maxComputeWorkgroupsPerDimension));
     const storage = GPUBufferUsage.STORAGE;
     const acc = device.createBuffer({ size: this.faceTotal * 2 * 4, usage: storage, label: 'flock-fluid-acc' });
     const faces = device.createBuffer({ size: this.faceTotal * 3 * 4, usage: storage, label: 'flock-fluid-faces' });
     const counts = device.createBuffer({ size: this.cellTotal * 4, usage: storage, label: 'flock-fluid-counts' });
     const cells = device.createBuffer({ size: this.cellTotal * 3 * 4, usage: storage, label: 'flock-fluid-cells' });
     this.params = device.createBuffer({ size: this.paramData.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, label: 'flock-fluid-params' });
+    this.blockTransfer = options.blockTransfer !== false;
     this.buffers = [acc, faces, counts, cells, this.params];
     this.gpuBytes = acc.size + faces.size + counts.size + cells.size;
     this.bindGroups = states.map((state, index) => device.createBindGroup({
@@ -104,6 +113,7 @@ export class FlockFluidGrid {
     u[7] = input.count;
     f[8] = input.flipRatio;
     f[9] = input.dt;
+    u[10] = this.dispatchWidth * FLOCK_FLUID_WORKGROUP;
   }
 
   uploadParams(slots: number): void {
@@ -123,11 +133,11 @@ export class FlockFluidGrid {
     const run = (entry: FluidEntry, n: number) => {
       pass.setPipeline(pipelines[entry]);
       pass.setBindGroup(0, group, [offset]);
-      pass.dispatchWorkgroups(groups(n));
+      pass.dispatchWorkgroups(Math.min(groups(n), this.dispatchWidth), Math.ceil(groups(n) / this.dispatchWidth));
     };
     pass = begin('p2g');
     run('fluidClear', Math.max(this.faceTotal * 2, this.cellTotal));
-    run('fluidP2G', particleCount);
+    run(this.blockTransfer ? 'fluidP2GBlock' : 'fluidP2G', particleCount);
     run('fluidNormalize', this.faceTotal);
     pass.end();
     pass = begin('pressure');

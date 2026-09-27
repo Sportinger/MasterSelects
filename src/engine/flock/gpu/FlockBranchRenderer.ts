@@ -213,6 +213,7 @@ export class FlockBranchRenderer {
         { binding: 2, resource: { buffer: plan.session.previousState } },
         { binding: 3, resource: shadowView },
         { binding: 4, resource: this.shadowSampler },
+        { binding: 5, resource: { buffer: plan.session.identityMapping } },
       ],
       label: 'flock-frame-group',
     });

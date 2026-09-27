@@ -124,7 +124,7 @@ export class FlockGpuPipelines {
     const done = watchValidation(device, 'flock compute pipelines');
     this.gridLayout = device.createBindGroupLayout({
       label: 'flock-grid-layout',
-      entries: [storage(0, C, true), storage(1, C, false), storage(2, C, false), uniform(3, C, true)],
+      entries: [storage(0, C, true), storage(1, C, false), storage(2, C, false), uniform(3, C, true), storage(4, C, true)],
     });
     this.sortLayout = device.createBindGroupLayout({
       label: 'flock-sort-layout',
@@ -136,15 +136,15 @@ export class FlockGpuPipelines {
     });
     this.simulateLayout = device.createBindGroupLayout({
       label: 'flock-simulate-layout',
-      entries: [storage(0, C, true), storage(1, C, false), storage(2, C, true), storage(3, C, true), uniform(4, C, true), storage(5, C, false)],
+      entries: [storage(0, C, true), storage(1, C, false), storage(2, C, true), storage(3, C, true), uniform(4, C, true), storage(5, C, false), storage(6, C, true)],
     });
     this.trailLayout = device.createBindGroupLayout({
       label: 'flock-trail-layout',
-      entries: [storage(0, C, true), storage(1, C, true), storage(2, C, false), uniform(3, C, true)],
+      entries: [storage(0, C, true), storage(1, C, true), storage(2, C, false), uniform(3, C, true), storage(4, C, true)],
     });
     this.linksLayout = device.createBindGroupLayout({
       label: 'flock-links-layout',
-      entries: [storage(0, C, true), storage(1, C, true), storage(2, C, true), storage(3, C, false), uniform(4, C, false)],
+      entries: [storage(0, C, true), storage(1, C, true), storage(2, C, true), storage(3, C, false), uniform(4, C, false), storage(5, C, true)],
     });
     const compute = (code: string, entryPoint: string, layout: GPUBindGroupLayout, label: string) => device.createComputePipeline({
       label,
@@ -170,6 +170,7 @@ export class FlockGpuPipelines {
         storage(2, VC, true),
         { binding: 3, visibility: VFC, texture: { sampleType: 'depth' } },
         { binding: 4, visibility: VFC, sampler: { type: 'comparison' } },
+        storage(5, VFC, true),
       ],
     });
     this.pointCacheComputeLayout = device.createBindGroupLayout({

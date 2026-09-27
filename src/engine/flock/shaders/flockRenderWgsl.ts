@@ -36,7 +36,7 @@ fn remapAxis(v: vec3f, axis: u32) -> vec3f {
 
 fn instanceVertex(mesh: MeshIn, ii: u32) -> InstanceVertex {
   var out: InstanceVertex;
-  let p = stateCur[ii];
+  let p = stateCur[particleSlot(ii)];
   out.visible = isVisibleParticle(ii, p);
   if (!out.visible) { return out; }
   let simPos = interpolatedPos(ii);
@@ -66,7 +66,7 @@ fn vsInstances(mesh: MeshIn, @builtin(instance_index) ii: u32) -> MeshOut {
   if (!v.visible) { out.clip = HIDDEN; return out; }
   out.clip = toClip(v.simVertex);
   out.normal = v.worldNormal;
-  out.color = vec4f(branchColor(ii, stateCur[ii], v.simPos), br.opacity * distanceFade(out.clip.w));
+  out.color = vec4f(branchColor(ii, stateCur[particleSlot(ii)], v.simPos), br.opacity * distanceFade(out.clip.w));
   out.visibility = shadowVisibility(v.simVertex);
   return out;
 }
@@ -127,8 +127,8 @@ fn vsLinks(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> 
   if (linkTarget == 0u) { out.clip = HIDDEN; return out; }
   let i = ii / perParticle;
   let j = linkTarget - 1u;
-  let pa = stateCur[i];
-  let pb = stateCur[j];
+  let pa = stateCur[particleSlot(i)];
+  let pb = stateCur[particleSlot(j)];
   if (!isVisibleParticle(i, pa) || pb.age < 0.0) { out.clip = HIDDEN; return out; }
   let a = interpolatedPos(i);
   let b = interpolatedPos(j);
@@ -156,7 +156,7 @@ ${LINE_FRAGMENT}
 @vertex
 fn vsVectors(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> LineOut {
   var out: LineOut;
-  let p = stateCur[ii];
+  let p = stateCur[particleSlot(ii)];
   if (!isVisibleParticle(ii, p) || flockHash01(ii, u32(br.salt)) >= br.fraction) { out.clip = HIDDEN; return out; }
   let a = interpolatedPos(ii);
   var delta = p.vel * br.scale;
@@ -182,7 +182,7 @@ const TRAIL_ACCESS = /* wgsl */ `
 // k = 0: live interpolated particle; k >= 1: ring sample of age k - 1.
 fn trailPoint(slot: u32, kIn: i32) -> vec4f {
   let particleIndex = slots[slot];
-  let particle = stateCur[particleIndex];
+  let particle = stateCur[particleSlot(particleIndex)];
   if (kIn <= 0) {
     var tag = 0.0;
     if (particle.age >= 0.0) { tag = particle.gen; }
@@ -217,7 +217,7 @@ fn curvePos(slot: u32, u: f32) -> vec4f {
 fn vsCurves(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> LineOut {
   var out: LineOut;
   let slot = ii;
-  let particle = stateCur[slots[slot]];
+  let particle = stateCur[particleSlot(slots[slot])];
   if (!isVisibleParticle(slots[slot], particle)) { out.clip = HIDDEN; return out; }
   let subdivisions = max(1u, u32(br.subdivisions));
   let samples = max(1u, u32(br.samples));
@@ -265,7 +265,7 @@ fn glyphAnchor(instance: u32) -> GlyphAnchor {
   result.valid = false;
   let anchor = u32(br.anchor);
   if (anchor == 0u) {
-    let p = stateCur[instance];
+    let p = stateCur[particleSlot(instance)];
     if (p.age < 0.0 || flockHash01(instance, 131u) >= br.fraction) { return result; }
     result.pos = interpolatedPos(instance);
     result.particle = instance;
@@ -274,7 +274,7 @@ fn glyphAnchor(instance: u32) -> GlyphAnchor {
   }
   if (instance >= u32(br.slotCount) || flockHash01(instance, 137u) >= br.fraction) { return result; }
   let particleIndex = slots[instance];
-  let p = stateCur[particleIndex];
+  let p = stateCur[particleSlot(particleIndex)];
   if (p.age < 0.0) { return result; }
   result.particle = particleIndex;
   if (anchor == 1u) {
@@ -323,7 +323,7 @@ fn vsGlyphs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) ->
   var out: GlyphOut;
   let anchor = glyphAnchor(ii);
   if (!anchor.valid) { out.clip = HIDDEN; return out; }
-  let p = stateCur[anchor.particle];
+  let p = stateCur[particleSlot(anchor.particle)];
   let clip = toClip(anchor.pos);
   let corner = quadCorner(vi);
   if (br.sizeMode < 0.5 && br.orientation < 0.5) {
@@ -385,7 +385,7 @@ fn vsGlyphCubes(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32
   var out: LineOut;
   let anchor = glyphAnchor(ii);
   if (!anchor.valid) { out.clip = HIDDEN; return out; }
-  let p = stateCur[anchor.particle];
+  let p = stateCur[particleSlot(anchor.particle)];
   let edge = cubeEdge((vi / 6u) % 12u);
   var basis = mat3x3f(vec3f(1.0, 0.0, 0.0), vec3f(0.0, 1.0, 0.0), vec3f(0.0, 0.0, 1.0));
   if (br.orientation > 0.5) { basis = glyphBasis(anchor.particle); }
