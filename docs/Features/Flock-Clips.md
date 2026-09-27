@@ -345,6 +345,14 @@ from the dispatched row width, so partial final rows preserve identity and do
 not revisit earlier particles. Fluid transfer and radix ordering already use
 two-dimensional dispatch. This removes the one-row dispatch constraint without
 raising the configured population ceiling or bypassing storage-binding limits.
+The particle branch renderer receives model and pigment resources through an
+injected runtime asset interface. The editor adapter owns store lookups and
+render requests; a device-local registry accepts uploaded bitmaps and mesh data
+without importing the editor host. This allows the same GPU simulation and
+renderer to run in a Worker with a transferred OffscreenCanvas. The editor's
+shared 3D path still runs on the main thread until worker-host routing, scene
+transport, audio evaluation and runtime diagnostics are connected.
+
 The GPU fluid, cell-order and separation kernels also accept a 32-byte fluid
 core (`position/age`, `velocity/generation`). Pipeline caches distinguish it
 from the full 64-byte particle state, and sorting scratch uses the same stride.

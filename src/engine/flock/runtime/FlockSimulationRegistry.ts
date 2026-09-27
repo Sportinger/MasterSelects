@@ -1,3 +1,4 @@
+import { flockMainRenderAssets } from './flockMainRenderAssets';
 import { Logger } from '../../../services/logger';
 import { renderHostPort } from '../../../services/render/renderHostPort';
 import type { Keyframe } from '../../../types/keyframes';
@@ -90,7 +91,7 @@ export class FlockSimulationRegistry implements FlockRuntimeBackend {
 
   getRenderer(device: GPUDevice): FlockBranchRenderer {
     this.ensureDevice(device);
-    if (!this.renderer) this.renderer = new FlockBranchRenderer(device, getFlockGpuPipelines(device));
+    if (!this.renderer) this.renderer = new FlockBranchRenderer(device, getFlockGpuPipelines(device), flockMainRenderAssets(device));
     return this.renderer;
   }
 

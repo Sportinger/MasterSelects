@@ -5,12 +5,10 @@ import { FLOCK_SHADOW_MAP_SIZE, resolveFlockLight, type FlockLightSetup } from '
 import { ROOM_VERTEX_COUNT } from '../shaders/flockRoomWgsl';
 import type { FlockGpuSession } from './FlockGpuSession';
 import { getFlockMesh } from './flockMeshes';
-import { getFlockModelMesh } from './flockModelMeshes';
-import { getFlockPigmentBinding } from './flockPigmentTextures';
+import type { FlockRenderAssets } from './FlockRenderAssets';
 import { FlockPointCache } from './FlockPointCache';
 import { FlockPointRasterizer, type FlockRasterTarget } from './FlockPointRasterizer';
 import { flockGpuTimings } from './FlockGpuTimings';
-import { renderHostPort } from '../../../services/render/renderHostPort';
 import { BRANCH_BYTES, RENDER_BLOCK_BYTES, flockPointChildren, flockPointChildrenForViewport, flockPointUsesCompute, flockPointUsesTriangles, packBranch, packRenderBlock } from './flockRenderPacking';
 
 export interface FlockLinkBinding {
@@ -20,7 +18,7 @@ export interface FlockLinkBinding {
 }
 
 export interface FlockDrawPlan {
-  layer: SceneFlockLayer;
+  layer: Pick<SceneFlockLayer, 'clipId' | 'worldMatrix'>;
   session: FlockGpuSession;
   program: FlockProgram;
   render: FlockResolvedRender;
@@ -49,8 +47,10 @@ interface PreparedDraw {
 /** Draws every render branch of flock layers into the shared scene targets. */
 export class FlockBranchRenderer {
   private readonly device: GPUDevice;
+  private readonly assets: FlockRenderAssets;
   private readonly pipelines: FlockGpuPipelines;
   private readonly meshBuffers = new Map<string, { buffer: GPUBuffer; vertexCount: number }>();
+  private readonly modelKeys = new Map<string, string>();
   private readonly placeholder: GPUBuffer;
   private readonly shadowTextures = new Map<string, GPUTexture>();
   private readonly shadowPlaceholder: GPUTexture;
@@ -65,8 +65,9 @@ export class FlockBranchRenderer {
   private readonly frameRasterTargets = new Map<string, FlockRasterTarget>();
   private readonly placeholderCache: GPUBindGroup;
 
-  constructor(device: GPUDevice, pipelines: FlockGpuPipelines) {
+  constructor(device: GPUDevice, pipelines: FlockGpuPipelines, assets: FlockRenderAssets) {
     this.device = device;
+    this.assets = assets;
     this.pipelines = pipelines;
     this.placeholder = device.createBuffer({ size: 64, usage: GPUBufferUsage.STORAGE, label: 'flock-placeholder-storage' });
     this.placeholderCache = device.createBindGroup({ layout: pipelines.pointCacheRenderLayout, entries: [{ binding: 0, resource: { buffer: this.placeholder } }] });
@@ -85,10 +86,19 @@ export class FlockBranchRenderer {
     let mesh = getFlockMesh(kind === 'model' ? 'arrow' : kind);
     let key: string = mesh.kind;
     if (kind === 'model') {
-      const model = getFlockModelMesh(modelAssetId, () => renderHostPort.requestRender());
-      if (model.status === 'ready' && model.mesh) {
+      const model = this.assets.model(modelAssetId);
+      if (model.mesh) {
         mesh = model.mesh;
-        key = `model:${modelAssetId}`;
+        key = `model:${modelAssetId}:${model.revision ?? 0}`;
+        const previous = this.modelKeys.get(modelAssetId);
+        if (previous && previous !== key) {
+          const retired = this.meshBuffers.get(previous);
+          this.meshBuffers.delete(previous);
+          if (retired) void this.device.queue.onSubmittedWorkDone().then(
+            () => retired.buffer.destroy(), () => retired.buffer.destroy(),
+          );
+        }
+        this.modelKeys.set(modelAssetId, key);
       }
     }
     let entry = this.meshBuffers.get(key);
@@ -223,7 +233,7 @@ export class FlockBranchRenderer {
     const branchBuffer = this.device.createBuffer({ size: BRANCH_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, label: `flock-branch-${draw.kind}` });
     temporaryBuffers.push(branchBuffer);
     this.device.queue.writeBuffer(branchBuffer, 0, draw.branchData);
-    const pigment = getFlockPigmentBinding(this.device, draw.pigmentAsset, () => renderHostPort.requestRender());
+    const pigment = this.assets.pigment(draw.pigmentAsset);
     return this.device.createBindGroup({
       layout: this.pipelines.getBranchLayout(draw.kind),
       entries: [
@@ -396,6 +406,7 @@ export class FlockBranchRenderer {
   dispose(): void {
     for (const entry of this.meshBuffers.values()) entry.buffer.destroy();
     this.meshBuffers.clear();
+    this.modelKeys.clear();
     this.placeholder.destroy();
     this.pointCache.dispose();
     this.rasterizer?.dispose();
