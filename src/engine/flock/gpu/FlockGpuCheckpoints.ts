@@ -7,6 +7,11 @@ interface Checkpoint {
 
 export interface FlockCheckpointBytes { state: ArrayBuffer; rings: ArrayBuffer[] }
 
+/** Small scenes keep several snapshots; large scenes retain at most a few. */
+export function flockCheckpointBudget(snapshotBytes: number): number {
+  return Math.max(snapshotBytes, Math.min(256 * 1024 * 1024, Math.max(16 * 1024 * 1024, snapshotBytes * 2)));
+}
+
 /**
  * Owns restart snapshots, independent of simulation scheduling and pipelines.
  * Particle bytes are canonical (identity ordered). Persistent auxiliary buffers
@@ -16,7 +21,7 @@ export interface FlockCheckpointBytes { state: ArrayBuffer; rings: ArrayBuffer[]
  * Grid/pressure scratch is deliberately excluded: it is rebuilt every step.
  */
 export class FlockGpuCheckpoints {
-  maxBytes: number;
+  private budget = 0;
   private readonly checkpoints = new Map<number, Checkpoint>();
   private readonly retired: GPUBuffer[] = [];
   private readonly device: GPUDevice;
@@ -37,7 +42,14 @@ export class FlockGpuCheckpoints {
     this.auxiliary = auxiliary;
     this.rings = rings;
     this.changed = changed;
-    this.maxBytes = Math.max(256 * 1024 * 1024, this.stateBytes * 2);
+    this.budget = flockCheckpointBudget(this.stateBytes + rings.reduce((sum, ring) => sum + ring.size, 0));
+  }
+
+  get maxBytes(): number { return this.budget; }
+  set maxBytes(bytes: number) {
+    this.budget = Math.max(0, Number.isFinite(bytes) ? bytes : 0);
+    while (this.bytesTotal() > this.budget && this.checkpoints.size > 0) this.thin();
+    this.notify();
   }
 
   get stateBytes(): number { return this.particleBytes + this.auxiliary.reduce((sum, buffer) => sum + buffer.size, 0); }
@@ -63,7 +75,7 @@ export class FlockGpuCheckpoints {
   capture(encoder: GPUCommandEncoder, step: number, copyParticles: (destination: GPUBuffer) => void): void {
     if (this.has(step)) return;
     const bytes = this.stateBytes + this.rings.reduce((sum, ring) => sum + ring.size, 0);
-    while (this.bytesTotal() + bytes > this.maxBytes && this.checkpoints.size > 0) this.thin();
+    if (!this.makeRoom(bytes)) return;
     const state = this.buffer(this.particleBytes, `flock-checkpoint-${step}`, true);
     copyParticles(state);
     const copy = (source: GPUBuffer) => {
@@ -79,6 +91,8 @@ export class FlockGpuCheckpoints {
     if (state.byteLength !== this.stateBytes || rings.length !== this.rings.length) return false;
     if (rings.some((ring, index) => ring.byteLength !== this.rings[index].size)) return false;
     if (this.has(step)) return true;
+    const bytes = state.byteLength + rings.reduce((sum, ring) => sum + ring.byteLength, 0);
+    if (!this.makeRoom(bytes)) return false;
     const write = (data: ArrayBuffer, offset: number, size: number) => {
       const buffer = this.buffer(size, 'flock-imported-checkpoint');
       this.device.queue.writeBuffer(buffer, 0, data, offset, size);
@@ -93,8 +107,9 @@ export class FlockGpuCheckpoints {
     this.checkpoints.set(step, {
       state: write(state, 0, this.particleBytes), auxiliary,
       rings: rings.map(ring => write(ring, 0, ring.byteLength)),
-      bytes: state.byteLength + rings.reduce((sum, ring) => sum + ring.byteLength, 0),
+      bytes,
     });
+    this.releaseRetired();
     this.notify();
     return true;
   }
@@ -152,10 +167,12 @@ export class FlockGpuCheckpoints {
     for (const step of steps) {
       const from = source.checkpoints.get(step);
       if (!from || this.has(step)) continue;
+      if (!this.makeRoom(from.bytes)) continue;
       this.checkpoints.set(step, { state: copy(from.state), auxiliary: from.auxiliary.map(copy), rings: from.rings.map(copy), bytes: from.bytes });
       adopted += 1;
     }
     this.device.queue.submit([encoder.finish()]);
+    this.releaseRetired();
     this.notify();
     return adopted;
   }
@@ -190,6 +207,12 @@ export class FlockGpuCheckpoints {
       this.destroy(this.checkpoints.get(step)!);
       this.checkpoints.delete(step);
     });
+  }
+
+  private makeRoom(bytes: number): boolean {
+    if (bytes > this.budget) return false;
+    while (this.bytesTotal() + bytes > this.budget && this.checkpoints.size > 0) this.thin();
+    return true;
   }
 
   private destroy(checkpoint: Checkpoint): void {

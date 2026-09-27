@@ -33,6 +33,8 @@ APIC fluid transfers preserve local rotation and shear with an affine matrix per
 particle, using a stable GPU cell permutation and workgroup accumulation,
 preserving particle identity across rendering, trails and checkpoints.
 Checkpoint persistence remains valid when the GPU cache evicts a snapshot during readback.
+Persistent precompute streams checkpoints to IndexedDB as they are produced;
+capacity-dependent GPU budgets also apply to imported and shared snapshots.
 Fluid pressure uses a multigrid-preconditioned conjugate-gradient solver on both
 CPU and GPU, with residual-based convergence and solid domain walls.
 The fluid node exposes particle separation, spacing and deterministic position

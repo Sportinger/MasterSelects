@@ -122,13 +122,24 @@ export const flockCheckpointStore = {
     try {
       const transaction = db.transaction(STORE, 'readwrite');
       const store = transaction.objectStore(STORE);
-      const records = (await requestToPromise(store.index('clipId').getAll(IDBKeyRange.only(clipId)))) as FlockCheckpointRecord[];
       let removed = 0;
-      for (const record of records) {
-        if (record.cacheKey === keepCacheKey) continue;
-        store.delete(record.id);
-        removed += 1;
-      }
+      // Iterate keys only: getAll would deserialize every particle snapshot
+      // into RAM merely to delete obsolete cache entries.
+      const request = store.index('clipId').openKeyCursor(IDBKeyRange.only(clipId));
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+        const id = String(cursor.primaryKey);
+        if (id.slice(0, id.lastIndexOf('|')) !== keepCacheKey) {
+          store.delete(cursor.primaryKey); removed++;
+        }
+        cursor.continue();
+      };
+      await new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      });
       return removed;
     } catch {
       return 0;

@@ -177,6 +177,15 @@ Snapshots evicted within a simulation batch are released after that batch is
 submitted. The checkpoint owner also supports identity-ordered auxiliary state:
 each section stays in its own GPU buffer and is appended after canonical particle
 bytes in the persisted payload; import and adoption validate section sizes.
+Persistent precompute flushes each checkpoint interval to IndexedDB before
+advancing to the next interval, so older checkpoints survive GPU-cache eviction.
+Readback and disk writes are sequential; quota failures stop the job and preserve
+the successfully written prefix without claiming full completion. Cache pruning
+reads only record keys, avoiding deserialization of obsolete particle arrays.
+GPU retention uses a capacity-dependent budget: at least 16 MiB for small
+snapshots, up to 256 MiB for multiple snapshots, or one complete snapshot when
+that alone is larger. Particle, affine and trail bytes all count. Capture,
+import, adoption and budget reductions enforce the same limit.
 
 ---
 
@@ -228,8 +237,8 @@ actual scene target limits sub-particles to about 1.5 points per pixel:
 and eight at 4K. **Screen** point sizes use a 1080p reference, so the same point
 is twice as wide in a 4K frame. Small round sprites use one triangle; square
 sprites and larger points retain quads. Emitter
-capacity is 4,194,304 particles per clip; restart checkpoints keep room for at
-least two full states.
+capacity is 4,194,304 particles per clip; large scenes retain only the restart
+snapshots that fit their GPU budget and reload persisted checkpoints as needed.
 
 Opaque screen points with a maximum physical diameter of two pixels use compute
 rasterization. Full-precision depth and a separate deterministic point-identity

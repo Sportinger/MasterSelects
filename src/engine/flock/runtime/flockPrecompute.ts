@@ -20,8 +20,8 @@ export interface FlockPrecomputeJob {
 
 /**
  * Simulates a source-time range in a dedicated session (so preview scrubbing
- * never fights it), with denser checkpoints, then hands the checkpoints to the
- * preview session and optionally persists them for a reopened project.
+ * never fights it), with denser checkpoints. Persistent runs flush each checkpoint
+ * before computing the next interval, so VRAM eviction cannot lose earlier ranges.
  */
 export async function runFlockPrecompute(
   registry: FlockSimulationRegistry,
@@ -49,14 +49,34 @@ export async function runFlockPrecompute(
     return { ok: false, message: flockRuntime.getStatus(clipId)?.message ?? 'Flock simulation is not supported on this GPU.' };
   }
   worker.session.checkpointInterval = Math.max(1, Math.round(program.stepRate / 4));
-  worker.session.maxCheckpointBytes = 768 * 1024 * 1024;
   const endStep = flockStepForSourceTime(program, end).step + 1;
   const startStep = flockStepForSourceTime(program, start).step;
+  const persistedSteps = new Set<number>();
+  let completed = false;
+
+  const persistCaptured = async () => {
+    for (const step of worker.session.listCheckpointSteps()) {
+      if (job.cancelled) break;
+      if (step < startStep - worker.session.checkpointInterval || step > endStep || persistedSteps.has(step)) continue;
+      const bytes = await worker.session.readCheckpoint(step);
+      if (!bytes) throw new Error(`Checkpoint ${step} was unavailable before persistence.`);
+      const stored = await flockCheckpointStore.put({ cacheKey: worker.cacheKey, clipId, step, state: bytes.state, rings: bytes.rings });
+      if (!stored.ok) throw new Error(stored.message ?? 'Could not persist flock checkpoint.');
+      persistedSteps.add(step);
+      const preview = registry.entries.get(`${clipId}|preview`);
+      if (preview?.cacheKey === worker.cacheKey) {
+        preview.persistedSteps = [...new Set([...(preview.persistedSteps ?? []), step])].toSorted((a, b) => a - b);
+      }
+    }
+  };
 
   try {
     while (worker.session.step < endStep && !job.cancelled && !worker.session.isDisposed) {
-      worker.session.advanceTo(Math.min(endStep, worker.session.step + CHUNK_STEPS), CHUNK_STEPS);
+      const nextCheckpoint = (Math.floor(worker.session.step / worker.session.checkpointInterval) + 1) * worker.session.checkpointInterval;
+      const chunkEnd = Math.min(endStep, worker.session.step + CHUNK_STEPS, options.persist ? nextCheckpoint : Infinity);
+      worker.session.advanceTo(chunkEnd, CHUNK_STEPS);
       await device.queue.onSubmittedWorkDone();
+      if (options.persist) await persistCaptured();
       job.progress = Math.min(1, worker.session.step / Math.max(1, endStep));
       const preview = registry.entries.get(`${clipId}|preview`);
       flockRuntime.publishStatus(buildFlockRuntimeStatus({
@@ -76,26 +96,19 @@ export async function runFlockPrecompute(
       preview.session.adoptCheckpoints(worker.session, steps);
     }
     if (options.persist) {
-      let persisted = 0;
-      for (const step of steps) {
-        if (job.cancelled) break;
-        const bytes = await worker.session.readCheckpoint(step);
-        if (!bytes) continue;
-        const stored = await flockCheckpointStore.put({ cacheKey: worker.cacheKey, clipId, step, state: bytes.state, rings: bytes.rings });
-        if (!stored.ok) return { ok: false, message: stored.message, steps: persisted };
-        persisted += 1;
-      }
-      await flockCheckpointStore.pruneClip(clipId, worker.cacheKey);
-      if (preview && preview.cacheKey === worker.cacheKey) preview.persistedSteps = steps;
+      // A concurrent graph edit may have started a newer cache. Never prune it
+      // merely because this older precompute job has finished.
+      if (preview?.cacheKey === worker.cacheKey) await flockCheckpointStore.pruneClip(clipId, worker.cacheKey);
     }
-    log.info('Flock precompute finished', { clipId, start, end, checkpoints: steps.length, persist: options.persist });
+    log.info('Flock precompute finished', { clipId, start, end, checkpoints: steps.length, persisted: persistedSteps.size, persist: options.persist });
+    completed = true;
     return { ok: true, steps: endStep };
   } catch (error) {
     log.error('Flock precompute failed', error);
     return { ok: false, message: error instanceof Error ? error.message : String(error) };
   } finally {
     job.finished = true;
-    job.progress = job.cancelled ? job.progress : 1;
+    if (completed) job.progress = 1;
     worker.session.dispose();
     registry.entries.delete(worker.key);
     renderHostPort.requestRender();
