@@ -293,7 +293,8 @@ around the complete command sequence when measuring total step costs.
 
 **APIC Fluid.** The APIC Fluid behavior turns the particles into an
 incompressible liquid inside a box domain (Domain Center/Size, Cell Size,
-Pressure Iterations, Gravity, Affine Strength). Each particle stores a tightly
+Pressure Iterations, Gravity, Affine Strength, Separation, Particle Spacing,
+Position Jitter). Each particle stores a tightly
 packed 3×3 velocity-gradient matrix (36 additional bytes), preserving local
 rotation and shear across transfers. Each step, after forces and
 advection, the GPU transfers particle velocities plus the affine contribution to a staggered MAC grid with
@@ -306,7 +307,24 @@ including corners whose interpolation weight is zero but derivative is nonzero. 
 walls the gradient differentiates normalized weights, so a constant tangential
 velocity does not introduce artificial shear. Affine Strength defaults to 1
 (APIC); 0 removes the affine contribution for more dissipative PIC behavior.
-It replaces the former FLIP Ratio; existing fluid nodes now use APIC, and older
+Separation (default 0.15) gently moves overlapping particles apart after G2P;
+Particle Spacing (default 0.1) is measured in grid cells, with a maximum of 0.5.
+Dense neighborhoods use a stable sample of at most 64 candidates per particle.
+All corrections read the same particle state before being applied, are bounded,
+and leave velocity unchanged. Separation zero skips the extra index and neighbor
+passes. Position Jitter (default 0.002 grid cells) adds small, deterministic,
+zero-centered position noise keyed by particle identity, generation and absolute
+simulation step. Its amplitude scales with the square root of the timestep.
+These controls are intended to reduce grid-aligned bands; they do not guarantee exact volume
+preservation. CPU and GPU use the same rules. The GPU reuses the spatial sorter
+and reorder scratch, adding only two cell-range arrays; separation still incurs
+an additional sort and neighbor pass each active substep.
+Fluid submissions scale their step count down with particle capacity. Preview
+simulation waits for its preceding submission to finish before queuing more
+steps, preventing a seek or playback catch-up from building an unbounded GPU
+work backlog. This can leave the simulation behind the playhead on slow GPUs;
+export still computes every required step.
+Affine Strength replaces the former FLIP Ratio; existing fluid nodes now use APIC, and older
 simulation caches are invalidated. The affine matrix remains in identity order
 through particle sorting, is reset on respawn/restart, and is included in CPU/GPU
 checkpoints, persisted imports and precompute handoff (100 state bytes per

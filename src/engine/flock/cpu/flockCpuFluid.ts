@@ -2,11 +2,14 @@ import {
   FLOCK_PARTICLE_STRIDE,
   FLOCK_AFFINE_STRIDE,
   P_AGE,
+  P_GEN,
   P_POS,
   P_VEL,
   type FlockFluidSpec,
 } from '../../../services/flock/compiler/flockProgramTypes';
 import { FlockCpuPressure } from './flockCpuPressure';
+import { FlockCpuSeparation } from './flockCpuSeparation';
+import { fluidJitter, type FlockFluidRegularization } from '../shared/flockFluidRegularization';
 
 /**
  * CPU reference of the APIC substep in shaders/flockFluidWgsl.ts: the same
@@ -32,6 +35,7 @@ export class FlockCpuFluid {
   private readonly divergence: Float64Array;
   private readonly pressure: Float64Array;
   readonly pressureSolver: FlockCpuPressure;
+  private readonly separation: FlockCpuSeparation;
 
   constructor(spec: FlockFluidSpec, capacity: number) {
     this.spec = spec;
@@ -51,6 +55,7 @@ export class FlockCpuFluid {
     this.divergence = new Float64Array(this.cellTotal);
     this.pressure = new Float64Array(this.cellTotal);
     this.pressureSolver = new FlockCpuPressure(spec.dims);
+    this.separation = new FlockCpuSeparation(spec, capacity);
   }
 
   private faceDims(axis: number): [number, number, number] {
@@ -95,7 +100,7 @@ export class FlockCpuFluid {
     }
   }
 
-  step(state: Float32Array, capacity: number, affineStrength: number, dt: number): void {
+  step(state: Float32Array, capacity: number, affineStrength: number, dt: number, regularization?: FlockFluidRegularization): void {
     const h = this.spec.cellSize;
     const o = this.spec.origin;
     this.sum.fill(0);
@@ -239,12 +244,16 @@ export class FlockCpuFluid {
           this.affine[row + 2] = (gz - v * wz) / weight;
         }
         let p = pos[axis] + (v - vStar) * dt;
+        if (regularization) p += fluidJitter(index, state[base + P_GEN], regularization.step, axis)
+          * h * regularization.jitter * Math.sqrt(Math.max(0, dt * 60));
         if (p < lo[axis]) { p = lo[axis]; v = Math.max(v, 0); this.affine.fill(0, row, row + 3); }
         if (p > hi[axis]) { p = hi[axis]; v = Math.min(v, 0); this.affine.fill(0, row, row + 3); }
         state[base + P_POS + axis] = p;
         state[base + P_VEL + axis] = v;
       }
     }
+    if (regularization) this.separation.step(state, capacity,
+      regularization.separationStrength, regularization.separationDistance, dt);
   }
 
   /** Largest absolute divergence over fluid cells after the last projection (diagnostics and tests). */

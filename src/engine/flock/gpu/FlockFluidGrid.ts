@@ -1,6 +1,9 @@
 import { FLOCK_AFFINE_BYTES, FLOCK_PARTICLE_BYTES, type FlockFluidSpec } from '../../../services/flock/compiler/flockProgramTypes';
 import { flockGpuTimings } from './FlockGpuTimings';
 import { FlockPressureSolver } from './FlockPressureSolver';
+import { FlockParticleOrder } from './FlockParticleOrder';
+import { FlockFluidSeparation } from './FlockFluidSeparation';
+import type { FlockFluidRegularization } from '../shared/flockFluidRegularization';
 import { FLOCK_FLUID_BLOCK_TRANSFER_WGSL } from '../shaders/flockFluidTransferWgsl';
 import { createCheckedModule, watchValidation } from './FlockGpuPipelines';
 import {
@@ -71,8 +74,10 @@ export class FlockFluidGrid {
   private readonly blockTransfer: boolean;
   private readonly dispatchWidth: number;
   private readonly pressure: FlockPressureSolver;
+  private readonly separation: FlockFluidSeparation;
+  private readonly ownedOrder: FlockParticleOrder | null;
 
-  constructor(device: GPUDevice, spec: FlockFluidSpec, states: GPUBuffer[], maxSlots: number, options: { blockTransfer?: boolean; dispatchWidth?: number; identityMapping?: GPUBuffer } = {}) {
+  constructor(device: GPUDevice, spec: FlockFluidSpec, states: GPUBuffer[], maxSlots: number, options: { blockTransfer?: boolean; dispatchWidth?: number; order?: FlockParticleOrder } = {}) {
     this.device = device;
     this.paramData = new ArrayBuffer(FLOCK_FLUID_PARAMS_STRIDE * maxSlots);
     this.spec = spec;
@@ -91,9 +96,16 @@ export class FlockFluidGrid {
     this.blockTransfer = options.blockTransfer !== false;
     this.affine = device.createBuffer({ size: states[0].size / FLOCK_PARTICLE_BYTES * FLOCK_AFFINE_BYTES,
       usage: storage | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, label: 'flock-fluid-affine' });
-    const mapping = options.identityMapping ?? device.createBuffer({ size: 4, usage: storage });
-    this.buffers = [acc, faces, counts, cells, this.params, this.affine, ...(options.identityMapping ? [] : [mapping])];
-    this.gpuBytes = this.buffers.reduce((sum, buffer) => sum + buffer.size, 0) + this.pressure.gpuBytes;
+    this.ownedOrder = options.order ? null : new FlockParticleOrder(device, states, spec, this.dispatchWidth);
+    const order = options.order ?? this.ownedOrder!;
+    if (this.ownedOrder) {
+      const encoder = device.createCommandEncoder(); this.ownedOrder.reset(encoder); device.queue.submit([encoder.finish()]);
+    }
+    const mapping = order.mapping;
+    this.separation = new FlockFluidSeparation(device, spec, states, this.params, order, this.dispatchWidth);
+    this.buffers = [acc, faces, counts, cells, this.params, this.affine];
+    this.gpuBytes = this.buffers.reduce((sum, buffer) => sum + buffer.size, 0) + this.pressure.gpuBytes
+      + this.separation.gpuBytes + (this.ownedOrder?.gpuBytes ?? 0);
     this.bindGroups = states.map((state, index) => device.createBindGroup({
       layout: this.pipelines.layout,
       entries: [
@@ -102,7 +114,7 @@ export class FlockFluidGrid {
         { binding: 2, resource: { buffer: faces } },
         { binding: 3, resource: { buffer: counts } },
         { binding: 4, resource: { buffer: cells } },
-        { binding: 5, resource: { buffer: this.params, size: 48 } },
+        { binding: 5, resource: { buffer: this.params, size: 64 } },
         { binding: 6, resource: { buffer: this.affine } },
         { binding: 7, resource: { buffer: mapping } },
       ],
@@ -111,9 +123,9 @@ export class FlockFluidGrid {
   }
 
   /** Stages the per-step uniform for batch slot `slot`. */
-  stageParams(slot: number, input: { count: number; affineStrength: number; dt: number }): void {
-    const f = new Float32Array(this.paramData, slot * FLOCK_FLUID_PARAMS_STRIDE, 12);
-    const u = new Uint32Array(this.paramData, slot * FLOCK_FLUID_PARAMS_STRIDE, 12);
+  stageParams(slot: number, input: { count: number; affineStrength: number; dt: number } & Partial<FlockFluidRegularization>): void {
+    const f = new Float32Array(this.paramData, slot * FLOCK_FLUID_PARAMS_STRIDE, 16);
+    const u = new Uint32Array(this.paramData, slot * FLOCK_FLUID_PARAMS_STRIDE, 16);
     f[0] = this.spec.origin[0];
     f[1] = this.spec.origin[1];
     f[2] = this.spec.origin[2];
@@ -125,6 +137,10 @@ export class FlockFluidGrid {
     f[8] = input.affineStrength;
     f[9] = input.dt;
     u[10] = this.dispatchWidth * FLOCK_FLUID_WORKGROUP;
+    u[11] = input.step ?? 0;
+    f[12] = input.separationStrength ?? 0;
+    f[13] = input.separationDistance ?? 0;
+    f[14] = input.jitter ?? 0;
   }
 
   uploadParams(slots: number): void {
@@ -161,10 +177,14 @@ export class FlockFluidGrid {
     pass = begin('g2p');
     run('fluidG2P', particleCount);
     pass.end();
+    const f = new Float32Array(this.paramData, offset, 16);
+    if (f[9] > 0 && f[12] > 0 && f[13] > 0) this.separation.encode(encoder, stateIndex, slot, particleCount);
   }
 
   dispose(): void {
     this.pressure.dispose();
+    this.separation.dispose();
+    this.ownedOrder?.dispose();
     for (const buffer of this.buffers) buffer.destroy();
   }
 }

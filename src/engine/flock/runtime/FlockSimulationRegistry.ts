@@ -270,7 +270,7 @@ export class FlockSimulationRegistry implements FlockRuntimeBackend {
     entry.session.seekCheckpoint(targetStep);
     const budget = data.consumer === 'export' ? Number.MAX_SAFE_INTEGER : options.realtime ? 12 : 90;
     const stepStarted = performance.now();
-    const caughtUp = entry.session.advanceTo(targetStep, budget);
+    const caughtUp = entry.session.advanceTo(targetStep, budget, data.consumer !== 'export');
     entry.timings.stepsEncode = performance.now() - stepStarted;
     if (!caughtUp && data.consumer !== 'export') renderHostPort.requestRender();
 

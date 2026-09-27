@@ -367,7 +367,10 @@ export class FlockCpuSolver {
 
     if (this.fluid) {
       const fluidOp = params.fields.find((field) => field.kind === OP_KIND_CODES.fluid);
-      this.fluid.step(write, this.capacity, fluidOp?.f[0] ?? 1, params.dt);
+      this.fluid.step(write, this.capacity, fluidOp?.f[0] ?? 1, params.dt, {
+        separationStrength: fluidOp?.f[1] ?? 0, separationDistance: fluidOp?.f[2] ?? 0,
+        jitter: fluidOp?.f[3] ?? 0, step: this.step,
+      });
     }
 
     this.previous = read;

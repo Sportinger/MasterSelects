@@ -61,6 +61,17 @@ export async function checkOrderedSessions(device: GPUDevice) {
     compare(expectedPrevious, await imported.sampleParticles(257, 'previous'), 'adoption interpolation');
     sorted.invalidateFrom(0); sorted.advanceTo(12, 24);
     compare(expected, await sorted.sampleParticles(257), 'reset affine/replay');
+    sorted.invalidateFrom(0);
+    sorted.advanceTo(12, 4, true);
+    const pendingStep = sorted.step;
+    sorted.advanceTo(12, 4, true);
+    if (sorted.step !== pendingStep) throw new Error('Preview queued more simulation before the GPU completed');
+    await device.queue.onSubmittedWorkDone();
+    while (sorted.step < 12) {
+      sorted.advanceTo(12, 4, true);
+      await device.queue.onSubmittedWorkDone();
+    }
+    compare(expected, await sorted.sampleParticles(257), 'bounded preview replay');
     return { orderedSession: 'matched', count: 257, steps: 12, interpolation: true, respawn: true, neighbors: true, trails: true, checkpoint: 'restore/import/adopt' };
   } finally { sessions.forEach(session => session.dispose()); }
 }

@@ -1,7 +1,7 @@
 import type { FlockDiagnostic, FlockProperty, FlockVec3 } from '../../../types/flock';
 
 /** Bumped whenever step semantics or the packed state layout change. */
-export const FLOCK_SOLVER_VERSION = 4;
+export const FLOCK_SOLVER_VERSION = 5;
 
 /**
  * Packed particle state, 16 float32 values (64 bytes) per particle:

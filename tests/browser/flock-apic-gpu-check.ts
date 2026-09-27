@@ -19,7 +19,7 @@ export async function checkApicTransfer(device: GPUDevice) {
     }
     return max;
   };
-  for (const kind of ['affine-half', 'affine-unit', 'affine-double', 'projected', 'respawn', 'pic', 'wall']) {
+  for (const kind of ['affine-half', 'affine-unit', 'affine-double', 'projected', 'respawn', 'pic', 'wall', 'regularized']) {
     const { spec, state, affine, count } = affineFieldFixture(kind === 'affine-half' ? 0.5 : kind === 'affine-double' ? 2 : 1);
     if (kind === 'projected') {
       spec.iterations = 24;
@@ -28,13 +28,17 @@ export async function checkApicTransfer(device: GPUDevice) {
         affine[i * 9] += 0.5;
       }
     }
-    const strength = kind === 'pic' ? 0 : 1, dt = kind === 'projected' ? 1 / 60 : 0;
+    const strength = kind === 'pic' ? 0 : 1, dt = kind === 'projected' || kind === 'regularized' ? 1 / 60 : 0;
     const repeats = kind.startsWith('affine') ? 8 : 3;
     if (kind === 'respawn') for (let i = 0; i < count; i++) state[i * 16 + 3] = 0;
     if (kind === 'wall') {
       for (let i = 0; i < count; i++) {
         state.set([0, -4.99, 0, 1, 2, 0, 3], i * 16);
       }
+      affine.fill(0);
+    }
+    if (kind === 'regularized') {
+      for (let i = 0; i < count; i++) state.set([0, 0, 0, 1, 0, 0, 0], i * 16);
       affine.fill(0);
     }
     const cpu = new FlockCpuFluid(spec, count); cpu.affine.set(affine);
@@ -46,7 +50,10 @@ export async function checkApicTransfer(device: GPUDevice) {
       device.queue.writeBuffer(gpu.affine, 0, kind === 'respawn' ? new Float32Array(affine.length).fill(999) : affine);
       gpu.stageParams(0, { count, affineStrength: strength, dt }); gpu.uploadParams(1);
       for (let i = 0; i < repeats; i++) {
-        cpu.step(expected, count, strength, dt);
+        const regularization = kind === 'regularized'
+          ? { separationStrength: 0.5, separationDistance: 0.1, jitter: 0.002, step: i + 17 } : undefined;
+        gpu.stageParams(0, { count, affineStrength: strength, dt, ...regularization }); gpu.uploadParams(1);
+        cpu.step(expected, count, strength, dt, regularization);
         const encoder = device.createCommandEncoder(); gpu.encode(encoder, 0, 0, count); device.queue.submit([encoder.finish()]);
       }
       const actual = await read(particles), actualAffine = await read(gpu.affine);

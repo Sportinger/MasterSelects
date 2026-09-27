@@ -60,6 +60,15 @@ export class FlockParticleOrder {
     this.run(encoder, 'resetMapping', this.keyGroups[0]); this.dirty = true;
   }
 
+  get sortedPairs(): GPUBuffer { return this.sort.output; }
+  /** Transient workspace; valid only until the next physical reorder. */
+  get scratchState(): GPUBuffer { return this.scratch; }
+
+  /** Fresh cell index without changing either state's physical layout. */
+  encodeIndex(encoder: GPUCommandEncoder, stateIndex: number): void {
+    this.run(encoder, 'keys', this.keyGroups[stateIndex]); this.sort.encode(encoder);
+  }
+
   /**
    * Reorder the input immediately before a full simulation step. The step must
    * overwrite every output slot before either state is exposed to rendering.
@@ -68,7 +77,7 @@ export class FlockParticleOrder {
    */
   encodeBeforeStep(encoder: GPUCommandEncoder, stateIndex: number, completedStep: number): void {
     if (!this.dirty && completedStep % 4 !== 0) return;
-    this.run(encoder, 'keys', this.keyGroups[stateIndex]); this.sort.encode(encoder);
+    this.encodeIndex(encoder, stateIndex);
     this.run(encoder, 'reorder', this.reorderGroups[stateIndex]);
     encoder.copyBufferToBuffer(this.scratch, 0, this.states[stateIndex], 0, this.scratch.size);
     this.run(encoder, 'updateMapping', this.reorderGroups[0]); this.dirty = false;

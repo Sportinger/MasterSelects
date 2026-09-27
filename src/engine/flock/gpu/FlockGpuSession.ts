@@ -68,7 +68,7 @@ export function estimateFlockSessionBuffers(program: FlockProgram): { largestBin
   const fluidFaces = (nx + 1) * ny * nz + nx * (ny + 1) * nz + nx * ny * (nz + 1);
   const fluidCells = nx * ny * nz;
   const pressure = program.fluid ? flockPressureMemory(program.fluid.dims) : { total: 0, largestBinding: 0 };
-  const fluidBytes = program.fluid ? program.capacity * FLOCK_AFFINE_BYTES + fluidFaces * 24 + fluidCells * 12
+  const fluidBytes = program.fluid ? program.capacity * FLOCK_AFFINE_BYTES + fluidFaces * 24 + fluidCells * 20
     + state + program.capacity * 24 + Math.ceil(program.capacity / 256) * 64 + 2164 + pressure.total : 0;
   return {
     largestBinding: Math.max(state, cells, sortCount * 4, ring, fluidFaces * 16, fluidCells * 8, pressure.largestBinding),
@@ -101,6 +101,7 @@ export class FlockGpuSession {
   private readonly states: [GPUBuffer, GPUBuffer];
   private readonly fluid: FlockFluidGrid | null;
   private readonly order: FlockParticleOrder | null;
+  private readonly spatialOrder: boolean;
   readonly identityMapping: GPUBuffer;
   private currentIndex = 0;
   private readonly keys: GPUBuffer;
@@ -115,6 +116,7 @@ export class FlockGpuSession {
   private readonly statsBuffer: GPUBuffer;
   private readonly statsReadback: GPUBuffer;
   private statsPending = false;
+  private previewSubmissionPending = false;
   private readonly gridBindGroups: [GPUBindGroup, GPUBindGroup];
   private readonly simulateBindGroups: [GPUBindGroup, GPUBindGroup];
   private readonly sortBindGroup: GPUBindGroup;
@@ -140,9 +142,10 @@ export class FlockGpuSession {
       device.createBuffer({ size: stateBytes, usage: stateUsage, label: 'flock-state-a' }),
       device.createBuffer({ size: stateBytes, usage: stateUsage, label: 'flock-state-b' }),
     ];
-    this.order = program.fluid && options.spatialOrder !== false ? new FlockParticleOrder(device, this.states, program.fluid) : null;
+    this.spatialOrder = options.spatialOrder !== false;
+    this.order = program.fluid ? new FlockParticleOrder(device, this.states, program.fluid) : null;
     this.identityMapping = this.order?.mapping ?? device.createBuffer({ size: 4, usage: GPUBufferUsage.STORAGE });
-    this.fluid = program.fluid ? new FlockFluidGrid(device, program.fluid, this.states, FLOCK_MAX_STEPS_PER_SUBMIT, { identityMapping: this.identityMapping }) : null;
+    this.fluid = program.fluid ? new FlockFluidGrid(device, program.fluid, this.states, FLOCK_MAX_STEPS_PER_SUBMIT, { order: this.order! }) : null;
     this.keys = device.createBuffer({ size: this.sortCount * 4, usage: GPUBufferUsage.STORAGE, label: 'flock-grid-keys' });
     this.vals = device.createBuffer({ size: this.sortCount * 4, usage: GPUBufferUsage.STORAGE, label: 'flock-grid-vals' });
     this.cells = device.createBuffer({ size: this.tableSize * 16, usage: GPUBufferUsage.STORAGE, label: 'flock-grid-cells' });
@@ -275,14 +278,28 @@ export class FlockGpuSession {
   hasCheckpointAtOrBefore(step: number): number { return this.checkpoints.atOrBefore(step); }
 
   /** Advances toward `targetStep` using at most `maxSteps`; returns whether it arrived. */
-  advanceTo(targetStep: number, maxSteps: number): boolean {
+  advanceTo(targetStep: number, maxSteps: number, boundedPreview = false): boolean {
     if (this.disposed) return false;
+    if (boundedPreview && this.previewSubmissionPending) return this.step === targetStep;
     if (targetStep < this.step) this.restoreAtOrBefore(targetStep);
     let remaining = Math.min(targetStep - this.step, Math.max(0, Math.floor(maxSteps)));
+    // Large fluid neighborhoods can take >100 ms per step. Keep each command
+    // buffer short enough to yield to presentation and the OS GPU watchdog.
+    const batchLimit = this.fluid ? Math.max(1, Math.min(FLOCK_MAX_STEPS_PER_SUBMIT,
+      Math.floor(3_000_000 / this.capacity))) : FLOCK_MAX_STEPS_PER_SUBMIT;
+    if (boundedPreview) remaining = Math.min(remaining, batchLimit);
+    const submitted = remaining > 0;
     while (remaining > 0) {
-      const batch = Math.min(remaining, FLOCK_MAX_STEPS_PER_SUBMIT);
+      const batch = Math.min(remaining, batchLimit);
       this.encodeBatch(batch);
       remaining -= batch;
+    }
+    if (boundedPreview && submitted) {
+      this.previewSubmissionPending = true;
+      void this.device.queue.onSubmittedWorkDone().then(
+        () => { this.previewSubmissionPending = false; },
+        () => { this.previewSubmissionPending = false; },
+      );
     }
     return this.step >= targetStep;
   }
@@ -309,7 +326,9 @@ export class FlockGpuSession {
       });
       if (this.fluid) {
         const fluidOp = params.fields.find((field) => field.kind === OP_KIND_CODES.fluid);
-        this.fluid.stageParams(b, { count: this.capacity, affineStrength: fluidOp?.f[0] ?? 1, dt: params.dt });
+        this.fluid.stageParams(b, { count: this.capacity, affineStrength: fluidOp?.f[0] ?? 1, dt: params.dt,
+          separationStrength: fluidOp?.f[1] ?? 0, separationDistance: fluidOp?.f[2] ?? 0,
+          jitter: fluidOp?.f[3] ?? 0, step: this.step + b });
       }
       if (b === batch - 1) {
         this.lastGridCellSize = params.cellSize;
@@ -334,7 +353,7 @@ export class FlockGpuSession {
     const particleWorkgroups = Math.ceil(this.capacity / WORKGROUP);
     for (let b = 0; b < batch; b += 1) {
       const offset = b * STEP_BLOCK_STRIDE;
-      this.order?.encodeBeforeStep(encoder, this.currentIndex, this.step);
+      if (this.spatialOrder) this.order?.encodeBeforeStep(encoder, this.currentIndex, this.step);
       let pass = encoder.beginComputePass({ label: 'flock-step-pass', timestampWrites: flockGpuTimings(this.device).writes(encoder, 'simulate') });
       if (needsGrid[b]) this.encodeGrid(pass, offset, sortWorkgroups);
       pass.setPipeline(this.pipelines.simulatePipeline);

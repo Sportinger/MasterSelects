@@ -35,6 +35,9 @@ preserving particle identity across rendering, trails and checkpoints.
 Checkpoint persistence remains valid when the GPU cache evicts a snapshot during readback.
 Fluid pressure uses a multigrid-preconditioned conjugate-gradient solver on both
 CPU and GPU, with residual-based convergence and solid domain walls.
+The fluid node exposes particle separation, spacing and deterministic position
+jitter to reduce grid-aligned bands; separation bounds dense-neighborhood work
+to 64 candidates per particle.
 
 The node canvas automatically refits the full graph whenever nodes or connections are added or removed, including changes from internal and external AI agents. Deleting effects also closes the gap in the node chain, including after the last effect is removed. Agent clip selections preserve the visible panel instead of bringing Properties forward.
 

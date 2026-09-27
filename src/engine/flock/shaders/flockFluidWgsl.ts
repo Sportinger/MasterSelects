@@ -1,4 +1,5 @@
-import { FLOCK_WGSL_STRUCTS } from './flockWgslShared';
+import { FLOCK_WGSL_STRUCTS, FLOCK_WGSL_MATH } from './flockWgslShared';
+import { FLOCK_FLUID_REGULARIZATION_WGSL } from './flockFluidRegularizationWgsl';
 import { flockIdentityWgsl } from './flockIdentityWgsl';
 
 /**
@@ -21,14 +22,20 @@ export const FLOCK_FLUID_WEIGHT_SCALE = 65536;
 export const FLOCK_FLUID_PARAMS_STRIDE = 256;
 export const FLOCK_FLUID_WORKGROUP = 256;
 
-export const FLOCK_FLUID_COMMON_WGSL = /* wgsl */ `
-${FLOCK_WGSL_STRUCTS}
-
+export const FLOCK_FLUID_PARAMS_WGSL = /* wgsl */ `
 struct FluidParams {
   origin: vec3f, cellSize: f32,
   dims: vec3u, count: u32,
-  affineStrength: f32, dt: f32, dispatchWidth: u32, pad1: f32,
+  affineStrength: f32, dt: f32, dispatchWidth: u32, step: u32,
+  separationStrength: f32, separationDistance: f32, jitter: f32, pad1: f32,
 };
+`;
+
+export const FLOCK_FLUID_COMMON_WGSL = /* wgsl */ `
+${FLOCK_WGSL_STRUCTS}
+${FLOCK_WGSL_MATH}
+${FLOCK_FLUID_PARAMS_WGSL}
+${FLOCK_FLUID_REGULARIZATION_WGSL}
 
 @group(0) @binding(0) var<storage, read_write> particles: array<Particle>;
 @group(0) @binding(1) var<storage, read_write> acc: array<atomic<i32>>;
@@ -315,6 +322,8 @@ fn fluidG2P(@builtin(global_invocation_id) gid: vec3u) {
     v[axis] = pic;
   }
   var pos = p.pos + (v - vStar) * fp.dt;
+  pos += fluidJitter(particleIdentity(index), u32(p.gen), fp.step)
+    * (fp.cellSize * fp.jitter * sqrt(max(0.0, fp.dt * 60.0)));
   let lo = fp.origin + vec3f(fp.cellSize * 0.01);
   let hi = fp.origin + vec3f(fp.dims) * fp.cellSize - vec3f(fp.cellSize * 0.01);
   for (var axis = 0u; axis < 3u; axis++) {

@@ -57,11 +57,12 @@ async function check() {
       });
       const order = new FlockParticleOrder(device, [states[1]], spec, 2);
       const reference = new FlockFluidGrid(device, spec, [states[0]], 1, { blockTransfer: false, dispatchWidth: 2 });
-      const sorted = new FlockFluidGrid(device, spec, [states[1]], 1, { dispatchWidth: 2, identityMapping: order.mapping });
+      const sorted = new FlockFluidGrid(device, spec, [states[1]], 1, { dispatchWidth: 2, order });
       const affine = Float32Array.from({ length: count * 9 }, (_, i) => ((i * 7) % 31 - 15) / 100);
       for (const grid of [reference, sorted]) device.queue.writeBuffer(grid.affine, 0, affine);
       const canonical = device.createBuffer({ size: data.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
-      for (const grid of [reference, sorted]) { grid.stageParams(0, { count, affineStrength: 1, dt: 1 / 60 }); grid.uploadParams(1); }
+      for (const grid of [reference, sorted]) { grid.stageParams(0, { count, affineStrength: 1, dt: 1 / 60,
+        separationStrength: 0.15, separationDistance: 0.1, jitter: 0.002, step: 17 }); grid.uploadParams(1); }
       let maxError = 0;
       for (let step = 0; step < 9; step++) {
         // Restore canonical checkpoint data between sort intervals. Permutation
