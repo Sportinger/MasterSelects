@@ -364,8 +364,10 @@ export class NoteEntryCoordinator {
   /**
    * Add a note that spans across a bar line by splitting it with a tie.
    * Returns the first note (in current measure) or null if failed.
+   * Public for the pixel-entry path (MouseNoteEntry), which owns its own
+   * overflow handling; keyboard entry reaches it through addNoteAtBeat.
    */
-  private addSplitNoteWithTie(noteParams: NoteParams, overflowAmount: number): Note | null {
+  addSplitNoteWithTie(noteParams: NoteParams, overflowAmount: number): Note | null {
     const totalBeats = durationToBeats(noteParams.duration, noteParams.dots || 0);
     const beatsInCurrentMeasure = totalBeats - overflowAmount;
     const beatsInNextMeasure = overflowAmount;

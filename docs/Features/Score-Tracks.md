@@ -44,7 +44,7 @@ A score clip's notation lives in `clip.scoreData` (`ScoreData` in
 `src/types/scoreClip.ts`, `schemaVersion: 1`): plain-JSON measures holding
 Chord/Rest slots with enharmonic pitch spelling (`step/alter/octave`),
 exact-fraction beat positions (tuplet-safe rational time), ties, dots,
-articulations, stem/beam overrides, and per-measure tuplets. The framework-free
+articulations, stem overrides, and per-measure tuplets. The framework-free
 model logic ported from the kikoromantest score editor lives in
 `src/services/score/` — `ScoreModel` (slot CRUD + `toScoreData`/`fromScoreData`),
 `restFill` (measures always fully filled with rests), `tupletOps`,
@@ -67,19 +67,57 @@ duplicates `scoreData` onto both halves.
 Double-clicking a score clip opens (or focuses) a detached score-editor popup
 bound to that clip (`src/components/scoreEditor/ScoreEditorBoot.ts`, modeled on
 the piano-roll boot: same-origin popup, shared JS heap and Zustand store, one
-window per clip). The boot lazy-loads `ScoreEditor.tsx`, which renders the
-clip's notation as an engraved sheet; a clip without `scoreData` shows an
-empty four-measure sheet. Editing arrives with the interaction phase.
+window per clip). The boot lazy-loads `ScoreEditor.tsx`; a clip without
+`scoreData` opens as an empty four-measure sheet and materializes into the
+store on the first edit.
+
+The editor is a full scorewriter (ported from kikoromantest). Two tools:
+**entry** (default — hover shows a translucent ghost note, click places it
+with overwrite/chord/split-and-tie-overflow semantics; a blue cursor line
+marks the keyboard insertion point) and **selection** (Esc — click notes,
+rests, ties, accidentals, articulations, or tuplet brackets; drag a notehead
+vertically to re-pitch it, one undo step per drag). The toolbar palette and
+the complete Sibelius-style shortcut table drive both: `n`/`Esc`/`Space`
+modes, `a–g` letter entry, `Shift+a–g` chord add, `r` rest, numpad durations/
+accidentals/articulations/tie, `.` dot, `t` triplet mode, `x` stem flip,
+arrows navigation, `Ctrl+arrows` octave, `Alt+arrows` chord navigation, and
+Delete with the priority chain articulation → accidental → tie → tuplet →
+note. Beaming is fully automatic (stock VexFlow per-time-signature groups);
+there is deliberately no manual beam control. The sheet zooms 50–200% via
+the toolbar control, `Ctrl+wheel`, or `Ctrl+=`/`Ctrl+-`/`Ctrl+0` — pure SVG
+viewBox scaling, so hit-testing and layout are zoom-agnostic (layout runs at
+the logical width, container ÷ zoom).
+
+Every mutation commits the whole score to `clip.scoreData` via
+`updateScoreData`, so undo/redo is the HOST history system (`Ctrl+Z` works in
+the popup and on the main window); external changes to the clip's data reload
+the editor live. All listeners and shortcuts bind to the popup's own
+document. Structure: framework-free controllers
+(`ScoreSelectionController`, `ScorePaletteController`,
+`ScoreKeyboardController`, `ScoreMouseController`, `scoreShortcuts`) around
+`ScoreEditorEngine` (`src/services/score/ScoreEditorEngine.ts` — the editing
+semantics: duration changes with rest backfill/erosion and Dorico-style
+overflow tie-splits, ties, articulations, stems) and `MouseNoteEntry`
+(pixel entry). Hit testing is VexFlow-native
+(`src/services/score/render/ScoreHitTester.ts`): live Stave/StaveNote
+geometry plus the model slot ids in the SVG — no harvested bounding-box
+registry.
 
 ## Notation rendering (`src/services/score/render/`)
 
 `VexFlowScoreRenderer` re-renders the full score into SVG on every change:
 `scoreLayout` (proportional measure widths and line breaks against the live
 container width), `scoreNoteFactory` (StaveNotes with the custom
-accidental-display rules, diatonic stem direction, dots, articulation order),
-and `scoreSpanners` (beat-boundary beaming with explicit BeamMode overrides,
-bracketed tuplets, stock `StaveTie` ties — same-pitch only, two partial arcs
-across a line break). Selection and the ghost-note preview are applied as
+accidental-display rules, dots, articulation order), and `scoreSpanners`
+(bracketed tuplets and stock `StaveTie` ties — same-pitch only, two partial
+arcs across a line break). Everything VexFlow can decide is left to VexFlow:
+beaming is `Beam.generateBeams` with the time signature's default groups (no
+manual beam modes), stem direction is `autoStem` (the model's stem-flip
+override is applied through VexFlow's own `setStemDirection`), tie curve
+direction is the StaveTie default, and whole-measure rests center via
+`alignCenter`. The deliberate exception is the accidental-display policy
+(measure-context suppression, courtesy naturals, tie suppression), which is
+editor semantics, not engraving. Selection and the ghost-note preview are applied as
 VexFlow styles *before* drawing (no post-render SVG recoloring or DOM
 surgery); the ghost draws into its own non-interactive overlay group. Each
 slot's StaveNote carries the model slot id as its VexFlow element id, so the

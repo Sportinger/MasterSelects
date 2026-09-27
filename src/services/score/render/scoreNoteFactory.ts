@@ -2,10 +2,11 @@
 //
 // Builds VexFlow StaveNotes from ChordRest slots: accidental-display rules
 // (measure-context suppression, forced/courtesy naturals, tie suppression —
-// deliberate custom behavior stock VexFlow doesn't cover), diatonic stem
-// direction per clef, dots, and articulation ordering. Each slot's StaveNote
-// carries the MODEL SLOT ID as its VexFlow element id, so the SVG contains
-// `<g class="vf-stavenote" id="vf-<slotId>">` — the phase-3 hit-test layer
+// deliberate custom behavior stock VexFlow doesn't cover), dots, and
+// articulation ordering. Stem direction is stock VexFlow (autoStem) unless
+// the model carries the user's explicit stem-flip override. Each slot's
+// StaveNote carries the MODEL SLOT ID as its VexFlow element id, so the SVG
+// contains `<g class="vf-stavenote" id="vf-<slotId>">` — the hit-test layer
 // maps DOM hits back to the model with a plain id lookup.
 
 import { Accidental, Articulation, Dot, Modifier, StaveNote } from 'vexflow';
@@ -16,7 +17,6 @@ import type {
   NoteDuration,
   NotePitch,
   PitchAlter,
-  PitchStep,
 } from '../../../types/scoreClip';
 import { spellingDiatonicPos, spellingToMidi, spellingToVexflowKey } from '../pitchSpelling';
 
@@ -66,28 +66,6 @@ export function convertDuration(duration: NoteDuration, dots: number = 0): strin
   return vexDuration;
 }
 
-/**
- * Diatonic stem direction: the pitch furthest from the clef's middle line
- * decides; at/above middle → stem down, below → stem up.
- */
-export function calculateStemDirection(
-  pitches: ReadonlyArray<{ step: PitchStep; octave: number }>,
-  clef: Clef,
-): number {
-  const middleDiatonic = CLEF_CONFIG[clef].middleLineDiatonicPos;
-  let maxDist = 0;
-  let stemDirection = -1; // default down; middle-line notes follow this convention
-  for (const p of pitches) {
-    const dPos = spellingDiatonicPos(p.step, p.octave);
-    const dist = Math.abs(dPos - middleDiatonic);
-    if (dist > maxDist) {
-      maxDist = dist;
-      stemDirection = dPos >= middleDiatonic ? -1 : 1;
-    }
-  }
-  return stemDirection;
-}
-
 /** Attach articulation modifiers in render order, positioned opposite the stem. */
 export function addArticulations(
   staveNote: StaveNote,
@@ -115,7 +93,7 @@ export function alterToVexSign(alter: PitchAlter): string {
  * suppression tracked per diatonic staff position across the measure.
  *
  * @param slots Slots already sorted by beat position (one measure)
- * @param clef Clef for stem direction calculation
+ * @param clef Clef the keys resolve against (stock VexFlow positioning)
  */
 export function createStaveNotesFromSlots(slots: ChordRest[], clef: Clef = 'treble'): BuiltSlotNote[] {
   const built: BuiltSlotNote[] = [];
@@ -137,6 +115,7 @@ export function createStaveNotesFromSlots(slots: ChordRest[], clef: Clef = 'treb
         keys: [isWholeMeasureRest ? 'd/5' : 'b/4'],
         duration: vexDuration + 'r',
         alignCenter: isWholeMeasureRest,
+        clef,
       });
       for (let d = 0; d < (slot.dots || 0); d++) {
         Dot.buildAndAttach([staveNote], { all: true });
@@ -184,15 +163,12 @@ export function createStaveNotesFromSlots(slots: ChordRest[], clef: Clef = 'treb
     );
     const keys = sortedPitches.map(p => spellingToVexflowKey(p.step, p.alter, p.octave));
 
-    const stemDirection = slot.stemDirection === 'up'
-      ? 1
-      : slot.stemDirection === 'down'
-        ? -1
-        : calculateStemDirection(slot.notes, clef);
-
+    // Stem direction is stock VexFlow (autoStem) unless the user forced it
+    // via the model's stemDirection override (the stem-flip feature)
+    const forcedStem = slot.stemDirection === 'up' ? 1 : slot.stemDirection === 'down' ? -1 : null;
     const vexDuration = convertDuration(slot.duration, slot.dots || 0);
-    const staveNote = new StaveNote({ keys, duration: vexDuration, autoStem: false });
-    staveNote.setStemDirection(stemDirection);
+    const staveNote = new StaveNote({ keys, duration: vexDuration, autoStem: forcedStem === null, clef });
+    if (forcedStem !== null) staveNote.setStemDirection(forcedStem);
     staveNote.setAttribute('id', slot.id);
 
     // Accidental modifiers — VexFlow accepts '#', 'b', 'n', '##', 'bb'
@@ -205,8 +181,9 @@ export function createStaveNotesFromSlots(slots: ChordRest[], clef: Clef = 'treb
       Dot.buildAndAttach([staveNote], { all: true });
     }
 
-    // Articulations are per-chord (stored on slot, not per pitch)
-    addArticulations(staveNote, slot.articulations, stemDirection);
+    // Articulations are per-chord (stored on slot, not per pitch); position
+    // opposite the VexFlow-decided (or forced) stem
+    addArticulations(staveNote, slot.articulations, staveNote.getStemDirection());
 
     built.push({ slot, staveNote, sortedPitches });
   }

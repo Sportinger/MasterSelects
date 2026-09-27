@@ -74,16 +74,6 @@ export type Clef = 'treble' | 'bass' | 'alto' | 'tenor'
 export type StemDirection = 'auto' | 'up' | 'down'
 
 /**
- * Explicit beaming override for a note.
- * - 'auto':     automatic beaming (default — uses beat-boundary rules)
- * - 'single':   force no beam (isolate this note)
- * - 'begin':    start an explicit beam group
- * - 'continue': continue the beam across a boundary (bridge two auto groups)
- * - 'end':      close the current explicit beam group
- */
-export type BeamMode = 'auto' | 'single' | 'begin' | 'continue' | 'end'
-
-/**
  * A single musical note (or rest) in the FLAT backward-compat view used by the
  * editor engine (`getMeasureNotes`, ScoreModel getters). The durable structure
  * stores slots (Chord/Rest); this flattened shape is derived from them.
@@ -122,7 +112,6 @@ export interface Note {
    */
   actualDuration?: Fraction
   articulations?: ArticulationType[]
-  beam?: BeamMode
 }
 
 /** Time signature representation */
@@ -159,7 +148,6 @@ export interface Chord {
   measure: number
   voice?: 0 | 1 | 2 | 3
   stemDirection?: StemDirection
-  beam?: BeamMode
   tupletId?: string
   actualDuration?: Fraction
   articulations?: ArticulationType[]
@@ -248,9 +236,7 @@ export interface NoteParams {
   articulations?: ArticulationType[]
   tiedTo?: string
   tiedFrom?: string
-  stemDirection?: StemDirection
-  beam?: BeamMode
-}
+  stemDirection?: StemDirection}
 
 /**
  * Notation data carried by a score clip (`TimelineClip.scoreData`): the Score

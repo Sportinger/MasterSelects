@@ -21,6 +21,7 @@ import {
 } from './scoreNoteFactory';
 import { LAYOUT_CONFIG, type MeasureWidthInfo, calculateMeasureWidths } from './scoreLayout';
 import {
+  type BuiltTie,
   type BuiltTuplet,
   type RenderedNoteRef,
   buildBeams,
@@ -29,6 +30,7 @@ import {
   buildTuplets,
 } from './scoreSpanners';
 import {
+  type GhostNote,
   type MeasureBounds,
   type ScoreRenderOptions,
   type ScoreRenderSelection,
@@ -45,10 +47,16 @@ export class VexFlowScoreRenderer {
 
   /** Rendered note refs: NotePitch id AND Rest slot id → StaveNote + key index */
   private noteRefs = new Map<string, RenderedNoteRef>();
+  /** Rendered slot refs by ChordRest slot id (chord slots have their own id) */
+  private slotRefs = new Map<string, BuiltSlotNote>();
+  /** Slot ids per measure, in beat order (for nearest-slot searches) */
+  private slotIdsByMeasure = new Map<number, string[]>();
   /** Stave per measure number (native geometry source for hit-testing) */
   private staves = new Map<number, Stave>();
   /** Tuplets rendered per measure, by tuplet id */
   private tuplets = new Map<string, BuiltTuplet>();
+  /** Ties drawn in the last render (for tie hit-testing) */
+  private ties: BuiltTie[] = [];
   /** Bounds per measure number */
   private measureBounds = new Map<number, MeasureBounds>();
   /** Line/width layout of the last render */
@@ -74,6 +82,19 @@ export class VexFlowScoreRenderer {
 
   getNoteRef(noteId: string): RenderedNoteRef | undefined {
     return this.noteRefs.get(noteId);
+  }
+
+  getSlotRef(slotId: string): BuiltSlotNote | undefined {
+    return this.slotRefs.get(slotId);
+  }
+
+  getSlotRefsForMeasure(measureNumber: number): BuiltSlotNote[] {
+    const ids = this.slotIdsByMeasure.get(measureNumber) ?? [];
+    return ids.flatMap(id => this.slotRefs.get(id) ?? []);
+  }
+
+  getTies(): readonly BuiltTie[] {
+    return this.ties;
   }
 
   getStave(measureNumber: number): Stave | undefined {
@@ -166,6 +187,21 @@ export class VexFlowScoreRenderer {
     }
   }
 
+  /**
+   * Replace only the ghost-note overlay, leaving the rendered score intact —
+   * hover previews never trigger a full re-render per mousemove.
+   * Pass null to remove the ghost. Returns true if a ghost was drawn.
+   */
+  updateGhostNote(score: Score, ghostNote: GhostNote | null): boolean {
+    const context = this.context;
+    const svg = this.getSVGElement();
+    if (!context || !svg) return false;
+
+    svg.querySelectorAll('.vf-score-ghost-note').forEach(el => el.remove());
+    if (!ghostNote) return false;
+    return renderGhostNote(context, score, ghostNote, this.layoutInfo, svg);
+  }
+
   /** Clear SVG content and the per-render snapshot. */
   clear(): void {
     // Keep the SVG element itself; only remove its children
@@ -176,8 +212,11 @@ export class VexFlowScoreRenderer {
       }
     }
     this.noteRefs.clear();
+    this.slotRefs.clear();
+    this.slotIdsByMeasure.clear();
     this.staves.clear();
     this.tuplets.clear();
+    this.ties = [];
     this.measureBounds.clear();
     this.layoutInfo.clear();
   }
@@ -234,7 +273,7 @@ export class VexFlowScoreRenderer {
     try {
       voice.addTickables(staveNotes);
 
-      const beams = buildBeams(staveNotes, sortedSlots, clef);
+      const beams = buildBeams(staveNotes, measure.timeSignature);
 
       const noteAreaWidth = stave.getNoteEndX() - stave.getNoteStartX();
       const formatWidth = Math.max(noteAreaWidth - 15, 50);
@@ -254,6 +293,10 @@ export class VexFlowScoreRenderer {
       }
 
       this.recordNoteRefs(builtNotes);
+      this.slotIdsByMeasure.set(measure.number, builtNotes.map(b => b.slot.id));
+      for (const built of builtNotes) {
+        this.slotRefs.set(built.slot.id, built);
+      }
     } catch (error) {
       log.error('Could not render measure', { measure: measure.number, error: String(error) });
     }
@@ -325,6 +368,7 @@ export class VexFlowScoreRenderer {
   private renderTies(score: Score, selection: ScoreRenderSelection | null): void {
     const context = this.context!;
     const ties = buildTies(score, this.noteRefs, this.layoutInfo);
+    this.ties = ties;
     for (const built of ties) {
       try {
         if (selection?.tieFromNoteId && built.fromNoteId === selection.tieFromNoteId) {

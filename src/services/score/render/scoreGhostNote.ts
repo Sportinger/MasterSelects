@@ -10,13 +10,11 @@
 import { Accidental, Dot, Formatter, StaveNote, Stave, Voice, type RenderContext } from 'vexflow';
 import type { Clef, Score } from '../../../types/scoreClip';
 import { Logger } from '../../logger';
-import { fracToNumber } from '../fraction';
 import { spellingToVexflowKey } from '../pitchSpelling';
 import { durationToBeats } from '../musicUtils';
 import {
   addArticulations,
   alterToVexSign,
-  calculateStemDirection,
   convertDuration,
 } from './scoreNoteFactory';
 import { LAYOUT_CONFIG, type MeasureWidthInfo } from './scoreLayout';
@@ -85,23 +83,13 @@ export function renderGhostNote(
     }
     tempStave.setContext(context);
 
-    // Stem direction: include existing chord notes at the same beat so the
-    // ghost matches the chord it would join
-    const pitchesAtBeat: Array<{ step: GhostNote['step']; octave: number }> = [];
-    for (const slot of measure.slots) {
-      if (slot.type === 'chord' && Math.abs(fracToNumber(slot.beat) - ghostNote.beat) < 0.001) {
-        for (const p of slot.notes) pitchesAtBeat.push({ step: p.step, octave: p.octave });
-      }
-    }
-    pitchesAtBeat.push({ step: ghostNote.step, octave: ghostNote.octave });
-    const stemDirection = calculateStemDirection(pitchesAtBeat, clef);
-
+    // Stem direction is stock VexFlow (autoStem), like real notes
     const staveNote = new StaveNote({
       keys: [spellingToVexflowKey(ghostNote.step, ghostNote.alter, ghostNote.octave)],
       duration: convertDuration(ghostNote.duration, ghostNote.dots || 0),
-      autoStem: false,
+      autoStem: true,
+      clef,
     });
-    staveNote.setStemDirection(stemDirection);
 
     for (let d = 0; d < (ghostNote.dots || 0); d++) {
       Dot.buildAndAttach([staveNote], { all: true });
@@ -109,7 +97,7 @@ export function renderGhostNote(
     if (ghostNote.alter !== 0) {
       staveNote.addModifier(new Accidental(alterToVexSign(ghostNote.alter)), 0);
     }
-    addArticulations(staveNote, ghostNote.articulations, stemDirection);
+    addArticulations(staveNote, ghostNote.articulations, staveNote.getStemDirection());
 
     // Pre-draw ghost styling — heads, stem, flag, ledger lines, and modifiers
     staveNote.setStyle(GHOST_STYLE);
