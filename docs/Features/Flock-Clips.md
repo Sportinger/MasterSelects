@@ -393,6 +393,8 @@ loudness payload format. Host URLs remain valid until referencing frames expire.
 An audio change during precompute cancels that run before mixed analysis state
 can be persisted or adopted by the preview. Export preparation also rejects a
 frame if its audio input changes while awaiting checkpoints or GPU completion.
+The comparison uses the audio identity captured when preparation began, even if
+another request refreshes the shared export session during that wait.
 Other 3D layer kinds, scene effectors, gizmos and complete
 status/cache control routing remain outstanding. The default editor preview
 remains on the main renderer; this is not yet the full Worker migration.

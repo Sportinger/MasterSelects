@@ -30,7 +30,9 @@ function program() {
 }
 
 describe('audio simulation checkpoint identity', () => {
-  it.each(['checkpoint', 'gpu'])('rejects an audio change during export %s preparation', async boundary => {
+  it.each([
+    ['checkpoint', false], ['gpu', false], ['checkpoint', true], ['gpu', true],
+  ])('rejects an audio change during export %s preparation (session refreshed: %s)', async (boundary, refreshed) => {
     let fingerprint = 'before';
     const host: FlockSimulationHost = { requestRender: () => {}, renderAssets: () => { throw new Error('unused'); },
       audioRevision: () => 0, audioFingerprint: () => fingerprint, audioSampler: () => () => 0.5, modelState: () => null,
@@ -38,9 +40,15 @@ describe('audio simulation checkpoint identity', () => {
     const runtime = new FlockSimulationRuntime(host), graph = program();
     const session = { step: 0, isDisposed: false, seekCheckpoint: vi.fn(),
       advanceTo: vi.fn((step: number) => { session.step = step; }) };
-    vi.spyOn(runtime, 'acquire').mockReturnValue({ session, audioFingerprint: 'before' } as any);
-    vi.spyOn(runtime, 'loadPersistedCheckpoint').mockImplementation(async () => { if (boundary === 'checkpoint') fingerprint = 'after'; });
-    const device = { queue: { onSubmittedWorkDone: async () => { fingerprint = 'after'; } } } as unknown as GPUDevice;
+    const entry = { session, audioFingerprint: 'before' };
+    const changeAudio = () => {
+      fingerprint = 'after';
+      // Another request can acquire the same export session while this one awaits IO.
+      if (refreshed) entry.audioFingerprint = fingerprint;
+    };
+    vi.spyOn(runtime, 'acquire').mockReturnValue(entry as any);
+    vi.spyOn(runtime, 'loadPersistedCheckpoint').mockImplementation(async () => { if (boundary === 'checkpoint') changeAudio(); });
+    const device = { queue: { onSubmittedWorkDone: async () => { changeAudio(); } } } as unknown as GPUDevice;
     await expect(runtime.prepareForExport(device, [{ clipId: 'flock', program: graph, definition: {} as any,
       diagnostics: [], keyframes: [], consumer: 'export', sourceTime: 0.2 }])).rejects.toThrow('Audio input changed');
     expect(session.advanceTo).toHaveBeenCalledTimes(boundary === 'gpu' ? 1 : 0);

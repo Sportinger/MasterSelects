@@ -341,9 +341,10 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
         throw new Error(this.host.status.getStatus(data.clipId)?.message ?? 'Flock simulation is not supported on this GPU.');
       }
       const targetStep = flockStepForSourceTime(data.program, data.sourceTime).step + 1;
+      const audioFingerprint = entry.audioFingerprint;
       const assertAudioCurrent = () => {
         if (data.program!.assets.audioClips.length
-          && this.host.audioFingerprint(data.clipId, data.program!.assets.audioClips) !== entry.audioFingerprint) {
+          && this.host.audioFingerprint(data.clipId, data.program!.assets.audioClips) !== audioFingerprint) {
           throw new Error('Audio input changed while preparing Flock export.');
         }
       };
