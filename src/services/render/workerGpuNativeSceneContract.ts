@@ -1,6 +1,7 @@
 import type { SceneCamera, ScenePrimitiveLayer } from '../../engine/scene/types';
 import type { FlockDefinition } from '../../types/flock';
 import type { Keyframe } from '../../types/keyframes';
+import type { LightClipSettings } from '../../types/light';
 import { validateFlockDefinition } from '../flock/graph/flockGraphValidation';
 import { isWorkerGpuNativeAudioInputs, type WorkerGpuNativeAudioInput } from './workerGpuNativeAudioContract';
 
@@ -13,6 +14,8 @@ interface NativeLayerBase {
 
 export type WorkerGpuNativeSceneLayer =
   | (NativeLayerBase & { readonly kind: 'primitive'; readonly meshType: ScenePrimitiveLayer['meshType']; readonly wireframe?: boolean })
+  | (NativeLayerBase & { readonly kind: 'light'; readonly lightSettings: Pick<LightClipSettings,
+      'kind' | 'color' | 'intensity' | 'diameter' | 'castsShadows' | 'shadowStrength'> })
   | (NativeLayerBase & { readonly kind: 'flock'; readonly definition: FlockDefinition;
       readonly keyframes: Keyframe[]; readonly sourceTime: number; readonly audioInputs?: readonly WorkerGpuNativeAudioInput[] });
 
@@ -91,6 +94,16 @@ export function isWorkerGpuNativeScenePayload(value: unknown): value is WorkerGp
     if (layer.kind === 'primitive') {
       if (!keys(layer, [...common, 'meshType', 'wireframe']) || !meshes.has(layer.meshType as string)
         || (layer.wireframe !== undefined && typeof layer.wireframe !== 'boolean')) return false;
+    } else if (layer.kind === 'light') {
+      const light = layer.lightSettings;
+      if (!keys(layer, [...common, 'lightSettings']) || !record(light)
+        || !keys(light, ['kind', 'color', 'intensity', 'diameter', 'castsShadows', 'shadowStrength'])
+        || !['point', 'panel', 'environment'].includes(light.kind as string)
+        || typeof light.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(light.color)
+        || !finite(light.intensity) || light.intensity < 0 || !Number.isFinite(Math.fround(light.intensity))
+        || !finite(light.diameter) || light.diameter < 0.01 || !Number.isFinite(Math.fround(light.diameter))
+        || typeof light.castsShadows !== 'boolean' || !finite(light.shadowStrength)
+        || light.shadowStrength < 0 || light.shadowStrength > 1) return false;
     } else if (layer.kind === 'flock') {
       if (!keys(layer, [...common, 'definition', 'keyframes', 'sourceTime', 'audioInputs']) || !finite(layer.sourceTime)
         || clipIds.has(layer.clipId) || !Array.isArray(layer.keyframes) || layer.keyframes.length > 4096) return false;

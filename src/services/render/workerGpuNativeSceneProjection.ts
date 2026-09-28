@@ -35,6 +35,14 @@ export function projectNativeSceneLayers(input: WorkerGpuNativeSceneProjectionIn
     if (layer.layerSpaceEffects?.length || layer.surfacePlan) throw new Error('Worker native scene surface effects are not admitted yet');
     const base = { layerId: layer.layerId, clipId: layer.clipId, worldMatrix: Array.from(layer.worldMatrix), opacity: layer.opacity };
     if (layer.kind === 'primitive') return { ...base, kind: 'primitive', meshType: layer.meshType, wireframe: layer.wireframe };
+    if (layer.kind === 'light') {
+      const settings = layer.lightSettings;
+      if (settings.environmentMapMediaFileId || settings.environmentMapUrl || settings.environmentMapFileName) {
+        throw new Error('Worker native scene environment-map resources are not admitted yet');
+      }
+      const { kind, color, intensity, diameter, castsShadows, shadowStrength } = settings;
+      return { ...base, kind: 'light', lightSettings: { kind, color, intensity, diameter, castsShadows, shadowStrength } };
+    }
     if (layer.kind !== 'flock') throw new Error(`Worker native scene kind '${layer.kind}' is not admitted yet`);
     if (!layer.flock.program) throw new Error('Worker native scene cannot transport an invalid Flock graph');
     return { ...base, kind: 'flock', definition: structuredClone(layer.flock.definition), sourceTime: layer.flock.sourceTime,

@@ -15,6 +15,7 @@ function hostLayers(payload: WorkerGpuNativeScenePayload): Layer[] {
     const matrix = layer.worldMatrix;
     let source: Layer['source'];
     if (layer.kind === 'primitive') source = { type: 'model', meshType: layer.meshType };
+    else if (layer.kind === 'light') source = { type: 'light', lightSettings: { ...layer.lightSettings } };
     else {
       const compiled = compileFlockDefinition(layer.definition);
       if (!compiled.ok) throw new Error('Invalid probe graph');
@@ -34,16 +35,26 @@ function hostLayers(payload: WorkerGpuNativeScenePayload): Layer[] {
 export async function renderNativeFrameStackProbe(surface: WorkerGpuTargetSurface, assetUrls: string[], audioCurves: NonNullable<WorkerGpuNativeAudioInput['curve']>[]): Promise<Uint8Array[]> {
   const images: Uint8Array[] = [];
   try {
-    for (let frame = 0; frame < 13; frame++) {
+    for (let frame = 0; frame < 19; frame++) {
       const time = frame === 3 ? 0.05 : 0.2;
       const mode = frame >= 7 && frame < 9 ? 'model' : frame >= 5 && frame < 7 ? 'image' : undefined;
-      const fixture = nativeSceneFixture(time, Date.now(), `native-frame-${frame}`, mode, frame >= 9);
+      const fixture = nativeSceneFixture(time, Date.now(), `native-frame-${frame}`, mode, frame >= 9 && frame < 13);
       const { payload, admission } = fixture;
-      if (frame >= 9) Object.assign(payload.layers[0], { audioInputs: [{ clipId: 'music', sourceOffset: 0,
+      if (frame >= 9 && frame < 13) Object.assign(payload.layers[0], { audioInputs: [{ clipId: 'music', sourceOffset: 0,
         curve: frame === 12 ? null : audioCurves[frame === 10 ? 1 : 0] }] });
       if (mode) Object.assign(payload, { assets: [{ kind: mode, id: `stack-${mode}`, url: assetUrls[frame - 5], fileName: mode === 'model' ? 'probe.obj' : 'probe.png' }] });
       if (frame > 0 && frame < 5) (payload.layers as WorkerGpuNativeSceneLayer[]).push({ kind: 'primitive', layerId: 'cube', clipId: 'cube',
         meshType: 'cube', opacity: 1, worldMatrix: [4, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0.1, 0, 0, 0, frame === 1 ? 0.12 : 0.85, 1] });
+      if (frame >= 13) Object.assign(payload, { layers: [
+        { kind: 'primitive', layerId: 'cube', clipId: 'cube', meshType: 'cube', opacity: 1,
+          worldMatrix: [4, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0.1, 0, 0, 0, 0.5, 1] },
+        { kind: 'light', layerId: 'light', clipId: 'light', opacity: 1,
+          // Identity projection sees the near (-Z) cube face; aim the panel toward +Z.
+          worldMatrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 0, 0, -2, 1],
+          lightSettings: { kind: frame === 16 ? 'point' : frame === 17 ? 'panel' : 'environment',
+            color: frame === 14 || frame === 18 ? '#ff2020' : '#2020ff', intensity: frame === 13 ? 0 : 2,
+            diameter: 2, castsShadows: false, shadowStrength: 0.5 } },
+      ] });
       const request = buildWorkerGpuFrameStackProjectionRequest({ layers: hostLayers(payload), width: 256, height: 256,
         frame: fixture.stack.frame, occurrenceNamespace: fixture.stack.occurrenceNamespace, intent: 'preview', surface: 'preview',
         nowMs: admission.nowMs, resolveVideoSource: () => null, projectNativeScene: input => {
@@ -84,6 +95,9 @@ export async function renderNativeFrameStackProbe(surface: WorkerGpuTargetSurfac
       || !images[7].some((value, i) => value !== images[8][i])) throw new Error('Model URL replacement did not change instance geometry');
     if (!images[9].some((value, i) => value !== images[10][i])) throw new Error('Audio did not drive particle simulation');
     for (const frame of [11, 12]) if (images[9].some((value, i) => value !== images[frame][i])) throw new Error('Audio change did not reset and replay simulation deterministically');
+    for (const frame of [14, 15, 16, 17]) if (!images[13].some((value, i) => value !== images[frame][i])) throw new Error(`Light did not affect scene pixels: ${frame}`);
+    if (!images[14].some((value, i) => value !== images[15][i])) throw new Error('Light color change did not affect scene pixels');
+    if (images[14].some((value, i) => value !== images[18][i])) throw new Error('Light replay retained stale settings');
     return images;
   } finally { releaseWorkerGpuVideoFrameCompositorResources(surface); }
 }

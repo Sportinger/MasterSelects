@@ -85,6 +85,7 @@ export class WorkerGpuNativeSceneOwner {
           const base = { layerId: layer.layerId, clipId: layer.clipId, worldMatrix: new Float32Array(layer.worldMatrix),
             opacity: layer.opacity, blendMode: 'normal' as const, sourceWidth: payload.width, sourceHeight: payload.height };
           if (layer.kind === 'primitive') return { ...base, kind: 'primitive', meshType: layer.meshType, wireframe: layer.wireframe };
+          if (layer.kind === 'light') return { ...base, kind: 'light', lightSettings: { ...layer.lightSettings } };
           const signature = JSON.stringify(layer.definition);
           let compiled = entry.definitions.get(layer.clipId);
           if (!compiled || compiled.signature !== signature) {

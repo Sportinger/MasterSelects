@@ -373,11 +373,11 @@ Worker check renders Flock together with native mesh geometry and verifies their
 shared depth. This boundary does not yet route editor compositions to the Worker.
 
 The existing Worker GPU frame stack accepts a versioned native-scene payload for
-Flock and primitive meshes. Its target owns persistent scene and simulation state
+Flock, primitive meshes and light layers. Its target owns persistent scene and simulation state
 per composition occurrence, waits for the requested source step, and composites
 the scene texture with other sources using the existing exact-frame/export path.
 Camera matrices, graph definitions, keyframes and clocks are admitted as bounded
-plain data. The opt-in Worker host groups evaluated Flock and primitive layers
+plain data. The opt-in Worker host groups evaluated Flock, primitive and light layers
 at the shared scene's original stack position, including nested compositions
 with their own camera context. Image pigments and imported instance models use
 runtime media URLs: the Worker loads and caches them on its device, replaces
@@ -395,6 +395,10 @@ can be persisted or adopted by the preview. Export preparation also rejects a
 frame if its audio input changes while awaiting checkpoints or GPU completion.
 The comparison uses the audio identity captured when preparation began, even if
 another request refreshes the shared export session during that wait.
+Point, panel and constant-color environment lights carry evaluated transforms,
+color, intensity, diameter and shadow settings into the same native scene renderer.
+Environment-map resource references are rejected until their Worker resource path
+is implemented. Flock's Room-node lighting remains independent of these scene lights.
 Other 3D layer kinds, scene effectors, gizmos and complete
 status/cache control routing remain outstanding. The default editor preview
 remains on the main renderer; this is not yet the full Worker migration.
