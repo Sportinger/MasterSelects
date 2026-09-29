@@ -129,6 +129,49 @@ function createProvider(surfaces: number) {
   });
 }
 
+/**
+ * Synthetic long-GOP source: GOP of 12, stored order I P B B P B B … (display
+ * order reorders each B pair after its anchor), 25 fps.
+ */
+function createSyntheticSource(frameCount: number) {
+  const storedToDisplay: number[] = [];
+  for (let gop = 0; gop < frameCount; gop += 12) {
+    const size = Math.min(12, frameCount - gop);
+    storedToDisplay.push(gop);
+    for (let i = 1; i < size; i += 3) {
+      const anchor = Math.min(gop + i + 2, gop + size - 1);
+      storedToDisplay.push(anchor);
+      for (let b = gop + i; b < anchor; b += 1) storedToDisplay.push(b);
+    }
+  }
+  const displayToStored = new Array<number>(frameCount);
+  storedToDisplay.forEach((display, stored) => { displayToStored[display] = stored; });
+  const packet = (stored: number): MxfPacket => {
+    const display = storedToDisplay[stored]!;
+    return {
+      data: new Uint8Array(1),
+      timestamp: display / FPS,
+      duration: 1 / FPS,
+      microsecondTimestamp: Math.round((display / FPS) * 1e6),
+      microsecondDuration: Math.round(1e6 / FPS),
+      isKeyframe: stored % 12 === 0,
+      storedIndex: stored,
+      displayIndex: display,
+    };
+  };
+  return {
+    metadata: { codecId: 'mxf:avc-lgop', duration: frameCount / FPS, width: 64, height: 64, codedWidth: 64, codedHeight: 64, rotation: 0, fps: FPS },
+    frameCount,
+    mxf: {},
+    getPacketAt: async (t: number) => packet(displayToStored[Math.min(frameCount - 1, Math.floor(t * FPS + 1e-6))]!),
+    getNextPacket: async (p: MxfPacket) => (p.displayIndex + 1 < frameCount ? packet(displayToStored[p.displayIndex + 1]!) : null),
+    getPacketByStoredIndex: async (stored: number) => packet(stored),
+    keyframeStoredIndexFor: (display: number) => Math.floor(displayToStored[display]! / 12) * 12,
+    storedToDisplayIndex: (stored: number) => storedToDisplay[stored]!,
+    dispose: () => undefined,
+  } as unknown as MxfPacketSource;
+}
+
 function frameIndex(provider: TestGopProvider): number {
   const frame = provider.getCurrentFrame() as unknown as FakeVideoFrame;
   return Math.round((frame.timestamp / 1e6) * FPS);
@@ -149,6 +192,25 @@ describe('MxfGopFrameProvider (long GOP reorder, key-frame restart)', () => {
       await provider.seekExact(index / FPS + 0.001);
       expect(frameIndex(provider)).toBe(index);
     }
+    await provider.destroyAsync();
+    expect(liveFrames).toBe(0);
+  });
+
+  it('keeps decoding through key frames during forward playback that falls behind', async () => {
+    TestGopProvider.surfaces = 4;
+    const provider = new TestGopProvider({
+      sourceId: 'synthetic',
+      file: new File([], 'x.mxf'),
+      codecId: 'mxf:avc-lgop',
+      packetSourceFactory: async () => createSyntheticSource(120),
+    });
+    await provider.load();
+    // Playback that lags: every request lags half a second and crosses several GOP boundaries.
+    for (let index = 1; index < 110; index += 13) {
+      await provider.seekExact(index / FPS + 0.001);
+      expect(frameIndex(provider)).toBe(index);
+    }
+    expect(provider.getDebugInfo().decoderResets).toBe(1);
     await provider.destroyAsync();
     expect(liveFrames).toBe(0);
   });

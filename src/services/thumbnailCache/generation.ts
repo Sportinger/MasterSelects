@@ -174,23 +174,31 @@ export class ThumbnailGenerator {
       const sourceCache = this.options.memory.createSourceCache(mediaFileId);
       const captureErrors: string[] = [];
       let batch: StoredSourceThumbnailFrame[] = [];
+      const stride = Math.max(1, Math.floor(provider.getThumbnailStrideSeconds?.(duration) ?? 1));
+      let previousBlob: Blob | null = null;
 
       for (let secondIndex = 0; secondIndex < totalThumbs; secondIndex += 1) {
         if (signal.aborted) return false;
         const requestedTime = Math.max(0, Math.min(secondIndex, duration - 0.01));
         const seekTime = provider.getThumbnailSeekTime?.(requestedTime) ?? requestedTime;
         try {
-          await provider.seekExact(seekTime);
-          const frame = provider.getCurrentFrame();
-          if (!frame) throw new Error('Frame provider returned no current frame');
-          ctx.drawImage(frame, 0, 0, THUMB_WIDTH, THUMB_HEIGHT);
-          const blob = await new Promise<Blob>((resolve, reject) => {
-            canvas.toBlob(
-              (value) => value ? resolve(value) : reject(new Error('toBlob failed')),
-              'image/jpeg',
-              THUMB_QUALITY,
-            );
-          });
+          let blob: Blob;
+          if (previousBlob && secondIndex % stride !== 0) {
+            blob = previousBlob;
+          } else {
+            await provider.seekExact(seekTime);
+            const frame = provider.getCurrentFrame();
+            if (!frame) throw new Error('Frame provider returned no current frame');
+            ctx.drawImage(frame, 0, 0, THUMB_WIDTH, THUMB_HEIGHT);
+            blob = await new Promise<Blob>((resolve, reject) => {
+              canvas.toBlob(
+                (value) => value ? resolve(value) : reject(new Error('toBlob failed')),
+                'image/jpeg',
+                THUMB_QUALITY,
+              );
+            });
+            previousBlob = blob;
+          }
           this.options.memory.setGeneratedFrame(mediaFileId, sourceCache, secondIndex, blob);
           this.options.notify(mediaFileId, 'generating', {
             type: 'frame-ready',

@@ -41,6 +41,8 @@ export interface MxfGopFrameProviderOptions extends CodecFrameProviderBaseOption
  * few output surfaces (4K on D3D11: often 4-5); frames we keep alive stall them.
  */
 const MAX_READY_FRAMES = 3;
+/** Upper bound of decoded timeline thumbnails per long-GOP source. */
+const MAX_DECODED_THUMBNAILS = 600;
 /** Re-check interval while waiting for decoder capacity (never wait unbounded). */
 const CAPACITY_WAIT_MS = 100;
 /** Capacity waits without progress before held frames are released to unstall the decoder. */
@@ -49,6 +51,8 @@ const STALL_WAITS_BEFORE_RELEASE = 5;
 export const MAX_GOP_DECODE_QUEUE = 4;
 /** Jumping further than this many stored units ahead restarts from the target's key frame. */
 const MAX_FORWARD_FEED = 48;
+/** Across a key frame, decode through up to this many units (~1 s) instead of resetting. */
+const MAX_DECODE_THROUGH = 25;
 
 interface PendingTarget {
   displayIndex: number;
@@ -108,6 +112,11 @@ export abstract class MxfGopFrameProvider<
     return (source.storedToDisplayIndex(keyStored) + 0.5) / fps;
   }
 
+  getThumbnailStrideSeconds(durationSeconds: number): number {
+    // Each long-GOP thumbnail reads and decodes a (4K: multi-MB) key frame; cap the count.
+    return Math.max(1, Math.ceil(durationSeconds / MAX_DECODED_THUMBNAILS));
+  }
+
   protected hasDecoder(): boolean {
     return this.decoder !== null;
   }
@@ -130,11 +139,15 @@ export abstract class MxfGopFrameProvider<
     if (ready) return ready;
 
     const keyStored = source.keyframeStoredIndexFor(target);
+    const feedDistance = packet.storedIndex - this.nextStored;
+    // Forward playback that fell a little behind lands in the next GOP: decoding
+    // straight through is far cheaper than a decoder reset plus a GOP re-decode, and
+    // restarting there is what turned slow frames into a restart-per-frame spiral.
     const canContinue = !this.decoderError
       && this.nextStored >= 0
       && target > this.lastEmittedDisplay
-      && keyStored <= this.nextStored
-      && packet.storedIndex - this.nextStored <= MAX_FORWARD_FEED;
+      && (keyStored <= this.nextStored || feedDistance <= MAX_DECODE_THROUGH)
+      && feedDistance <= MAX_FORWARD_FEED;
     if (!canContinue) this.restartAt(keyStored);
 
     const framePromise = new Promise<VideoFrame>((resolve, reject) => {

@@ -111,6 +111,8 @@ export interface RuntimeFrameProvider {
    * previous key frame so a thumbnail costs one decode instead of a GOP).
    */
   getThumbnailSeekTime?(timeSeconds: number): number;
+  /** Seconds between decoded thumbnails; skipped seconds reuse the previous image. */
+  getThumbnailStrideSeconds?(durationSeconds: number): number;
   getSourceRotationDegrees?(): 0 | 90 | 180 | 270;
   seek(timeSeconds: number): void;
   scrubSeek?(timeSeconds: number): void;
