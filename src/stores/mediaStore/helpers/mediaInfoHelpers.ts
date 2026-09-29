@@ -10,6 +10,12 @@ import {
 } from '../../../services/mediaMetadata/isobmffMetadata';
 import { getProResCodecLabel } from '../../../services/mediaRuntime/prores/turboResCodecIdentity';
 import { getHapCodecLabel } from '../../../services/hap/hapCodecIdentity';
+import { flags } from '../../../engine/featureFlags';
+import {
+  getMxfCodecLabel,
+  isMxfFileName,
+  readMxfMediaMetadata,
+} from '../../../services/mediaMetadata/mxf/mxfMediaMetadata';
 
 const log = Logger.create('MediaInfo');
 
@@ -93,6 +99,9 @@ export function parseCodecName(codec: string): string {
   // HAP family (decoded by the browser-local HAP provider).
   const hapLabel = getHapCodecLabel(codec);
   if (hapLabel) return hapLabel;
+  // MXF essence (namespaced ids, see mxfCodecIdentity)
+  const mxfLabel = getMxfCodecLabel(codec);
+  if (mxfLabel) return mxfLabel;
   // DNxHD/DNxHR
   if (codec.startsWith('AVdn')) return 'DNxHD';
   // Audio codecs
@@ -215,6 +224,13 @@ function startVideoElementMetadataProbe(
 
 async function getVideoMediaInfo(file: File, container: string): Promise<MediaInfo> {
   const fileSize = file.size;
+  if (flags.mxfBrowserDecode && isMxfFileName(file.name)) {
+    // The browser cannot play MXF, so the container parser is the only source of truth.
+    const mxfMetadata = await readMxfMediaMetadata(file);
+    return mxfMetadata
+      ? mapIsobmffMediaInfo(file, container, mxfMetadata)
+      : { container, fileSize };
+  }
   const htmlProbe = startVideoElementMetadataProbe(file, container, fileSize);
 
   if (isIsobmffFileName(file.name)) {

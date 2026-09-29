@@ -12,6 +12,7 @@ import { createThumbnailMediaObjectUrl } from '../mediaObjectUrlManager';
 import { yieldToBrowser } from './loadProgress';
 import { restoreCachedClipAnalysis } from '../../faceAnalysis/faceAnalysisPersistence';
 import { isIsobmffFileName } from '../../mediaMetadata/isobmffMetadata';
+import { isMxfFileName } from '../../mediaMetadata/mxf/mxfMediaMetadata';
 
 const log = Logger.create('ProjectSync');
 const CACHED_THUMBNAIL_RESTORE_BATCH_SIZE = 48;
@@ -125,7 +126,7 @@ export async function refreshMediaMetadata(
       f.container === undefined ||
       f.fileSize === undefined ||
       (f.type === 'video' && f.hasAudio === undefined) ||
-      (f.type === 'video' && isIsobmffFileName(f.name) && f.videoCodecId === undefined)
+      (f.type === 'video' && (isIsobmffFileName(f.name) || isMxfFileName(f.name)) && f.videoCodecId === undefined)
     )
   );
 

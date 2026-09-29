@@ -7,6 +7,7 @@ export const flags = {
   useFullWebCodecsPlayback: false,  // Default HTML Video; persisted toggle in settingsStore syncs on rehydrate
   disableHtmlPreviewFallback: false,  // Synced with useFullWebCodecsPlayback via settingsStore
   turboResProRes: true,
+  mxfBrowserDecode: false,  // Browser-local MXF demux/decode (docs/Features/MXF-Browser-Decode.md); off until rollout
   useLiveSlotTrigger: false,  // Slot Grid click triggers live layers without forcing editor switching
   useWarmSlotDecks: false,  // Prepare reusable slot-owned live decks for low-latency triggering
   use3DLayers: true,  // Shared 3D scene support

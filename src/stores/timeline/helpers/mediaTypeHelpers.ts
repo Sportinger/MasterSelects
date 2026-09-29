@@ -2,6 +2,8 @@
 // Eliminates duplication of file type detection logic
 
 import { readLottieJsonFile } from '../../../services/vectorAnimation/lottieJsonSniffer';
+import { flags } from '../../../engine/featureFlags';
+import { isMxfFile, isMxfFileName } from '../../../services/mediaMetadata/mxf/mxfMediaMetadata';
 
 export const AUDIO_EXTENSIONS = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'] as const;
 export const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'wmv', 'm4v', 'flv'] as const;
@@ -18,6 +20,9 @@ export function detectMediaType(file: File): MediaType {
   const ext = file.name.split('.').pop()?.toLowerCase() || '';
 
   if (file.type.startsWith('video/') || VIDEO_EXTENSIONS.includes(ext as typeof VIDEO_EXTENSIONS[number])) {
+    return 'video';
+  }
+  if (flags.mxfBrowserDecode && isMxfFileName(file.name)) {
     return 'video';
   }
   if (file.type.startsWith('audio/') || AUDIO_EXTENSIONS.includes(ext as typeof AUDIO_EXTENSIONS[number])) {
@@ -48,6 +53,10 @@ export async function classifyMediaType(file: File): Promise<MediaType> {
   const syncType = detectMediaType(file);
   if (syncType !== 'unknown') {
     return syncType;
+  }
+
+  if (flags.mxfBrowserDecode && await isMxfFile(file)) {
+    return 'video';
   }
 
   const lottieJson = await readLottieJsonFile(file);

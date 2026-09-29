@@ -41,13 +41,13 @@ gen h264_high10_intra mxf -c:v libx264 -profile:v high10 -pix_fmt yuv420p10le -x
 gen mpeg2_422_interlaced mxf -c:v mpeg2video -pix_fmt yuv422p -b:v 50M -flags +ildct+ilme -top 1 -g 12 -bf 2 -an
 
 # IMX50 / D10 (720x608, MPEG-2 4:2:2 Intra, 4ch AES3). D10 needs constant 250000-byte frames.
-ffmpeg -hide_banner -loglevel error -y -f lavfi -i "testsrc2=size=720x608:rate=25" -f lavfi -i "$AUD"   -frames:v "$N" -c:v mpeg2video -pix_fmt yuv422p -flags +ildct+low_delay -dc 10 -ps 1 -qmin 1 -qmax 3 -top 1 -g 1   -b:v 50000k -minrate 50000k -maxrate 50000k -bufsize 2000000 -rc_init_occupancy 2000000 -intra_vlc 1 -non_linear_quant 1   -c:a pcm_s24le -ar 48000 -ac 4 -shortest -f mxf_d10 "$OUT/imx50_d10.mxf"
-ffprobe -v error -show_format -show_streams -show_packets -show_entries   packet=stream_index,pts,dts,duration,size,pos,flags -of json "$OUT/imx50_d10.mxf" > "$OUT/imx50_d10.golden.json"
+ffmpeg -hide_banner -loglevel error -y -f lavfi -i "testsrc2=size=720x608:rate=25" -f lavfi -i "$AUD"   -frames:v "$N" -c:v mpeg2video -pix_fmt yuv422p -flags +ildct+low_delay -dc 10 -ps 1 -qmin 1 -qmax 3 -top 1 -g 1   -b:v 50000k -minrate 50000k -maxrate 50000k -bufsize 2000000 -rc_init_occupancy 2000000 -intra_vlc 1 -non_linear_quant 1   -c:a pcm_s24le -ar 48000 -ac 4 -shortest -f mxf_d10 "$OUT/imx50_d10${SUFFIX:-}.mxf"
+ffprobe -v error -show_format -show_streams -show_packets -show_entries   packet=stream_index,pts,dts,duration,size,pos,flags -of json "$OUT/imx50_d10${SUFFIX:-}.mxf" > "$OUT/imx50_d10${SUFFIX:-}.golden.json"
 
 # PCM audio variant with video (OP1a, 4 mono tracks)
 ffmpeg -hide_banner -loglevel error -y -f lavfi -i "$SRC" -f lavfi -i "$AUD" -frames:v "$N" \
-  -c:v mpeg2video -pix_fmt yuv422p -b:v 50M -g 12 -bf 2 -c:a pcm_s24le -ar 48000 -ac 2 -shortest -f mxf "$OUT/mpeg2_422_pcm.mxf"
+  -c:v mpeg2video -pix_fmt yuv422p -b:v 50M -g 12 -bf 2 -c:a pcm_s24le -ar 48000 -ac 2 -shortest -f mxf "$OUT/mpeg2_422_pcm${SUFFIX:-}.mxf"
 ffprobe -v error -show_format -show_streams -show_packets -show_entries \
-  packet=stream_index,pts,dts,duration,size,pos,flags -of json "$OUT/mpeg2_422_pcm.mxf" > "$OUT/mpeg2_422_pcm.golden.json"
+  packet=stream_index,pts,dts,duration,size,pos,flags -of json "$OUT/mpeg2_422_pcm${SUFFIX:-}.mxf" > "$OUT/mpeg2_422_pcm${SUFFIX:-}.golden.json"
 
 ls -la "$OUT" | awk '{print $5, $9}'

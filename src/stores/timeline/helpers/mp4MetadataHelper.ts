@@ -10,6 +10,9 @@ import {
   readIsobmffMetadata,
 } from '../../../services/mediaMetadata/isobmffMetadata';
 
+import { flags } from '../../../engine/featureFlags';
+import { isMxfFileName, readMxfMediaMetadata } from '../../../services/mediaMetadata/mxf/mxfMediaMetadata';
+
 const log = Logger.create('MP4Metadata');
 
 export interface MP4Metadata extends MediaVideoTrackMetadata {
@@ -31,8 +34,9 @@ export interface MP4Metadata extends MediaVideoTrackMetadata {
  * Returns null if file is not MP4/MOV or parsing fails.
  */
 export async function getMP4MetadataFast(file: File, timeoutMs = 5000): Promise<MP4Metadata | null> {
-  if (!isIsobmffFileName(file.name)) return null;
-  const probed = await readIsobmffMetadata(file, timeoutMs);
+  const isMxf = flags.mxfBrowserDecode && isMxfFileName(file.name);
+  if (!isIsobmffFileName(file.name) && !isMxf) return null;
+  const probed = isMxf ? await readMxfMediaMetadata(file) : await readIsobmffMetadata(file, timeoutMs);
   if (!probed?.duration) {
     log.debug('MediaBunny: no valid duration', { file: file.name });
     return null;
