@@ -486,6 +486,10 @@ composition pixels, so the strand pass mirrors local Y into it.
 - **Light clips** light the strands like native meshes. Point and panel lights use the
   same falloff and panel direction, up to four direct lights; environment lights add
   ambient color. Without a light clip a fixed upper-left key light applies.
+- **Smooth curves:** in close-ups each segment is split into up to eight Catmull-Rom
+  pieces, depending on how many pixels it spans at the nearest point of the layer.
+  Curves stay round without resampling them, and distant views keep one piece per
+  segment.
 - **Not yet supported:** shadows and a dedicated generator clip.
 
 The cloth simulation runs on the

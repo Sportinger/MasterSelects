@@ -28,7 +28,24 @@ export function strandSceneMatrix(world: Float32Array): Float32Array {
 const KEY_LIGHT = normalize3([-0.4, -0.7, 0.6]);
 const AMBIENT = 0.35;
 
-interface StrandBuffers { signature: string; positions: GPUBuffer; segments: GPUBuffer; segmentCount: number }
+/** `segmentLength`: mean local length of a curve segment; `extent`: largest local distance of a point from the origin. */
+interface StrandBuffers { signature: string; positions: GPUBuffer; segments: GPUBuffer; segmentCount: number; segmentLength: number; extent: number }
+/** Spline pieces per segment in close-ups; one piece covers about this many pixels. */
+const MAX_SUBDIVISIONS = 8;
+const PIXELS_PER_PIECE = 5;
+
+/**
+ * Spline pieces per segment for a layer: segments that span many pixels are split so curves stay
+ * round. The nearest point of the layer bounds decides, so a close-up anywhere on the sheet counts.
+ */
+export function strandSubdivisions(segmentLength: number, extent: number, world: Float32Array, cameraPosition: readonly number[],
+  camera: Pick<SceneCamera, 'projectionMatrix' | 'viewport'>): number {
+  const scale = worldMatrixScale(world);
+  const distance = Math.hypot(world[12] - cameraPosition[0], world[13] - cameraPosition[1], world[14] - cameraPosition[2]);
+  const nearest = Math.max(distance - extent * scale, distance * 0.05, 1e-3);
+  const pixels = segmentLength * scale * Math.abs(camera.projectionMatrix[5]) * camera.viewport.height * 0.5 / nearest;
+  return Math.max(1, Math.min(MAX_SUBDIVISIONS, Math.ceil(pixels / PIXELS_PER_PIECE)));
+}
 export interface PreparedStrandLayer { layer: SceneStrandLayer; buffers: StrandBuffers }
 
 function normalize3(value: [number, number, number]): [number, number, number] {
@@ -127,7 +144,14 @@ export class StrandPass {
           if (data.byteLength) device.queue.writeBuffer(buffer, 0, data.buffer, data.byteOffset, data.byteLength);
           return buffer;
         };
-        buffers = { signature, segmentCount: segments.length,
+        let length = 0, extent = 0;
+        const { positions } = curves;
+        for (const packed of segments) {
+          const index = (packed & 0x3fffffff) * 3;
+          length += Math.hypot(positions[index + 3] - positions[index], positions[index + 4] - positions[index + 1], positions[index + 5] - positions[index + 2]);
+        }
+        for (let index = 0; index < positions.length; index += 3) extent = Math.max(extent, Math.hypot(positions[index], positions[index + 1], positions[index + 2]));
+        buffers = { signature, segmentCount: segments.length, segmentLength: segments.length ? length / segments.length : 0, extent,
           positions: upload(points, `native-strands-points-${layer.layerId}`),
           segments: upload(segments, `native-strands-segments-${layer.layerId}`) };
       }
@@ -165,6 +189,8 @@ export class StrandPass {
       const profile = render.profile;
       data.set(profile ? [profile.plies, profile.fibers, profile.radius, profile.plyTwist, profile.fiberTwist] : [1, 1, 0, 0, 0], 64);
       const flyaways = profile && render.flyaways, channels = flyaways ? FLYAWAY_CHANNELS : 0;
+      const subdivisions = strandSubdivisions(buffers.segmentLength, buffers.extent, layer.worldMatrix, cameraPosition, camera);
+      data[70] = subdivisions;
       if (flyaways) {
         data[69] = flyaways.seed;
         data.set([channels / flyaways.density, flyaways.length, flyaways.lift, flyaways.hair], 72);
@@ -179,7 +205,7 @@ export class StrandPass {
         { binding: 1, resource: { buffer: buffers.positions } },
         { binding: 2, resource: { buffer: buffers.segments } },
       ] }));
-      pass.draw(buffers.segmentCount * 6, (profile ? profile.plies * profile.fibers : 1) + channels);
+      pass.draw(buffers.segmentCount * 6 * subdivisions, (profile ? profile.plies * profile.fibers : 1) + channels);
     }
     pass.end();
     return true;

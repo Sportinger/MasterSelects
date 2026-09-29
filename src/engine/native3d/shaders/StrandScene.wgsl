@@ -21,7 +21,7 @@ struct StrandUniforms {
   params: vec4f,  // x: world fiber width, yz: viewport pixels, w: layer opacity
   light: vec4f,   // xyz: key light direction (world, toward the light), w: ambient
   yarn: vec4f,    // x: plies, y: fibers per ply, z: yarn radius (local), w: ply twist (turns per unit length)
-  twist: vec4f,   // x: fiber twist (turns per unit length), y: flyaway seed
+  twist: vec4f,   // x: fiber twist (turns per unit length), y: flyaway seed, z: spline subdivisions per segment
   fly: vec4f,     // x: flyaway cell length per channel, y: flyaway length, z: lift (yarn radii), w: free-end fraction
   ambient: vec4f, // rgb: ambient from environment lights, w: direct scene lights (-1: none, use the key light)
   lights: array<StrandLight, 4>,
@@ -117,6 +117,16 @@ fn fiberPoint(index: u32, fiber: u32, fly: Flyaway) -> vec3f {
   return (u.world * vec4f(local, 1.0)).xyz;
 }
 
+/** Catmull-Rom point between p1 and p2; neighbouring segments share tangents, so joints stay smooth. */
+fn catmullRom(p0: vec3f, p1: vec3f, p2: vec3f, p3: vec3f, t: f32) -> vec3f {
+  let t2 = t * t;
+  return 0.5 * (2.0 * p1 + (p2 - p0) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 + (3.0 * (p1 - p2) + p3 - p0) * t2 * t);
+}
+
+fn catmullRomTangent(p0: vec3f, p1: vec3f, p2: vec3f, p3: vec3f, t: f32) -> vec3f {
+  return 0.5 * ((p2 - p0) + 2.0 * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t + 3.0 * (3.0 * (p1 - p2) + p3 - p0) * t * t);
+}
+
 fn toPixels(clip: vec4f) -> vec2f {
   return clip.xy / clip.w * 0.5 * u.params.yz;
 }
@@ -124,7 +134,10 @@ fn toPixels(clip: vec4f) -> vec2f {
 @vertex
 fn strandVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index) fiber: u32) -> VertexOutput {
   var out: VertexOutput;
-  let segment = vertexIndex / 6u;
+  // Close-ups split every segment into spline pieces; each piece is two triangles.
+  let subdivisions = max(u32(u.twist.z), 1u);
+  let segment = vertexIndex / (6u * subdivisions);
+  let piece = (vertexIndex / 6u) % subdivisions;
   let corner = vertexIndex % 6u;
   let packed = segments[segment];
   let first = packed & 0x3fffffffu;
@@ -143,17 +156,18 @@ fn strandVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index
   }
   let a = fiberPoint(first, fiber, fly);
   let b = fiberPoint(first + 1u, fiber, fly);
-  // Joint direction between the neighbours of each end, identical for both segments at a joint.
+  // Neighbouring points shape the spline; at a joint both segments derive the same tangent.
   let before = select(a, fiberPoint(first - 1u, fiber, fly), (packed & 0x80000000u) != 0u);
   let after = select(b, fiberPoint(first + 2u, fiber, fly), (packed & 0x40000000u) != 0u);
   // Two triangles per segment: (a-, b-, a+) and (a+, b-, b+).
   let atB = corner == 1u || corner == 4u || corner == 5u;
   let side = select(-1.0, 1.0, corner == 2u || corner == 3u || corner == 5u);
-  let p = select(a, b, atB);
+  let t = (f32(piece) + select(0.0, 1.0, atB)) / f32(subdivisions);
+  let p = catmullRom(before, a, b, after, t);
   // A yarn radius scale of zero hides the strand: fibers thin out with the radius they grow from.
   let scaleA = clamp(points[first * 3u + 1u].w, 0.0, 1.0);
   let scaleB = clamp(points[(first + 1u) * 3u + 1u].w, 0.0, 1.0);
-  let widthScale = select(scaleA, scaleB, atB);
+  let widthScale = mix(scaleA, scaleB, t);
   let viewProjection = u.projection * u.view;
   let clipA = viewProjection * vec4f(a, 1.0);
   let clipB = viewProjection * vec4f(b, 1.0);
@@ -165,13 +179,13 @@ fn strandVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index
   }
   let span = b - a;
   let spanTangent = select(vec3f(1.0, 0.0, 0.0), normalize(span), dot(span, span) > 1e-18);
-  let joint = select(b - before, after - a, atB);
-  let tangent = select(spanTangent, normalize(joint), dot(joint, joint) > 1e-18);
+  let derivative = catmullRomTangent(before, a, b, after, t);
+  let tangent = select(spanTangent, normalize(derivative), dot(derivative, derivative) > 1e-18);
   out.segment = segment ^ (fiber * 0x9e3779b9u);
   out.across = side;
   out.tangent = tangent;
   out.toCamera = u.camera.xyz - p;
-  let clip = select(clipA, clipB, atB);
+  let clip = viewProjection * vec4f(p, 1.0);
   let ahead = viewProjection * vec4f(p + tangent * 1e-3, 1.0);
   let toCamera = normalize(u.camera.xyz - p);
   let widthAxis = cross(tangent, toCamera);

@@ -3,7 +3,7 @@ import { createDefaultWeaveGraph, createWaveStrandsGraph, geometryParameterReade
 import { compileGeometryGraph, type GeometryProgram } from '../../src/services/operators/geometry/geometryProgram';
 import { isGeometryProgram } from '../../src/services/operators/geometry/geometryProgramValidation';
 import { buildStrandsLayerSources } from '../../src/services/operators/geometry/strandsLayerSource';
-import { cameraPositionFromView, parseStrandColor, SEGMENT_HAS_NEXT, SEGMENT_HAS_PREVIOUS, strandSceneMatrix, strandSegmentStarts, worldMatrixScale } from '../../src/engine/native3d/passes/StrandPass';
+import { cameraPositionFromView, parseStrandColor, SEGMENT_HAS_NEXT, SEGMENT_HAS_PREVIOUS, strandSceneMatrix, strandSegmentStarts, strandSubdivisions, worldMatrixScale } from '../../src/engine/native3d/passes/StrandPass';
 import { collectScene3DLayers } from '../../src/engine/scene/SceneLayerCollector';
 import { canRenderNativeScene } from '../../src/engine/native3d/sceneRenderer/drawPlan';
 import { validateWorkerGpuFrameStackContract } from '../../src/services/render/workerGpuFrameStackContract';
@@ -77,5 +77,18 @@ describe('Weave strand rendering', () => {
     expect(Array.from(strandSceneMatrix(world))).toEqual([2, 0, 0, 0, -0, -3, -0, -0, 0, 0, 4, 0, 5, 6, 7, 1]);
     expect(worldMatrixScale(strandSceneMatrix(world))).toBeCloseTo(3, 9);
     expect(Array.from(world)).toEqual([2, 0, 0, 0, 0, 3, 0, 0, 0, 0, 4, 0, 5, 6, 7, 1]);
+  });
+
+  it('splits segments into spline pieces only when they span many pixels', () => {
+    const world = Float32Array.from([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+    const camera = { projectionMatrix: Float32Array.from([1, 0, 0, 0, 0, 1.7320508, 0, 0, 0, 0, -1, -1, 0, 0, -0.01, 0]),
+      viewport: { width: 1920, height: 1080 } };
+    // A 0.00625-long segment of a 1.44-wide sheet seen from 3 units away spans about 2 pixels.
+    expect(strandSubdivisions(0.00625, 1.44, world, [0, 0, 3], camera)).toBe(1);
+    // From 1.6 units the nearest edge is close: the pieces keep curves round.
+    const close = strandSubdivisions(0.00625, 1.44, world, [0, 0, 1.6], camera);
+    expect(close).toBeGreaterThan(1);
+    expect(strandSubdivisions(0.00625, 1.44, world, [0, 0, 1.46], camera)).toBe(8);
+    expect(strandSubdivisions(0.00625, 1.44, Float32Array.from([6, 0, 0, 0, 0, 6, 0, 0, 0, 0, 6, 0, 0, 0, 0, 1]), [0, 0, 3], camera)).toBe(8);
   });
 });
