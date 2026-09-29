@@ -10,6 +10,7 @@ import {
   getRuntimeColorCurves,
   type RuntimeColorCurves,
 } from '../../types/colorCurves';
+import { applyShadowHighlightTone } from '../../engine/color/shadowHighlightTone';
 
 const PREVIEW_WIDTH = 128;
 const PREVIEW_HEIGHT = 72;
@@ -134,14 +135,7 @@ function applyPrimaryNode(
   green *= exposure;
   blue *= exposure;
 
-  const toneY = luma(red, green, blue);
-  const shadowMask = clampUnit(1 - toneY * 2);
-  const highlightMask = clampUnit(toneY * 2 - 1);
-  const toneOffset = params.shadows * 0.35 * shadowMask
-    + params.highlights * 0.35 * highlightMask;
-  red += toneOffset;
-  green += toneOffset;
-  blue += toneOffset;
+  [red, green, blue] = applyShadowHighlightTone(red, green, blue, params.shadows, params.highlights);
 
   const gammaShared = Math.max(0.001, params.gamma * params.gammaY);
   red = Math.max(0, red) ** (1 / Math.max(0.001, gammaShared * params.gammaR));

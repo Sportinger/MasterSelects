@@ -2,6 +2,7 @@ import { MAX_RUNTIME_PRIMARY_NODES, type RuntimeColorGrade } from '../../types';
 import { COLOR_CURVE_CHANNELS, COLOR_CURVE_SAMPLE_COUNT } from '../../types/colorCurves';
 import { Logger } from '../../services/logger';
 import { nodePreviewTextureTap } from '../../services/nodePreview/NodePreviewTextureTap';
+import { SHADOW_HIGHLIGHT_TONE_WGSL } from './shadowHighlightTone';
 
 const log = Logger.create('ColorPipeline');
 const PRIMARY_COLOR_VEC4_ROWS = 8;
@@ -51,7 +52,7 @@ struct ColorUniforms {
 fn luma(rgb: vec3f) -> f32 {
   return dot(rgb, vec3f(0.2126, 0.7152, 0.0722));
 }
-
+${SHADOW_HIGHLIGHT_TONE_WGSL}
 fn hueRotate(rgb: vec3f, degrees: f32) -> vec3f {
   let angle = degrees * 0.01745329252;
   let sine = sin(angle);
@@ -117,10 +118,7 @@ fn applyPrimary(rgbIn: vec3f, nodeIndex: u32) -> vec3f {
   rgb += vec3f(lift + offset) + liftRgb + offsetRgb;
   rgb *= exp2(exposure);
 
-  let toneY = luma(rgb);
-  let shadowMask = clamp(1.0 - toneY * 2.0, 0.0, 1.0);
-  let highlightMask = clamp(toneY * 2.0 - 1.0, 0.0, 1.0);
-  rgb += vec3f(shadows * 0.35 * shadowMask + highlights * 0.35 * highlightMask);
+  rgb = applyShadowHighlightTone(rgb, shadows, highlights);
 
   // Resolve-style midtone gamma keeps black pinned at zero while lifting the
   // complete tonal range continuously, including values close to black.

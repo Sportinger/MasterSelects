@@ -1,5 +1,6 @@
 import type { WorkerRenderSoftwareFrame } from './workerRenderHostRuntimeCommands';
 import type { RuntimePrimaryColorParams } from '../../types/colorCorrection';
+import { applyShadowHighlightTone } from '../../engine/color/shadowHighlightTone';
 import {
   applyWorkerSoftwareSourceResamplingEffects,
   hasWorkerSoftwareSourceResamplingEffects,
@@ -73,13 +74,7 @@ function applyPrimaryColorGrade(
   g *= exposure;
   b *= exposure;
 
-  const toneY = luma(r, g, b);
-  const shadowMask = clamp01(1 - toneY * 2);
-  const highlightMask = clamp01(toneY * 2 - 1);
-  const toneDelta = params.shadows * 0.35 * shadowMask + params.highlights * 0.35 * highlightMask;
-  r += toneDelta;
-  g += toneDelta;
-  b += toneDelta;
+  [r, g, b] = applyShadowHighlightTone(r, g, b, params.shadows, params.highlights);
 
   const gammaR = Math.max(params.gamma * params.gammaR * params.gammaY, 0.001);
   const gammaG = Math.max(params.gamma * params.gammaG * params.gammaY, 0.001);

@@ -39,6 +39,7 @@ duplicate their connected source graphs and curves independently.
 - `getInterpolatedColorCorrection(...)`, nested layer construction and export use the shared pure parameter-source/color evaluator. Keyframes are sampled before the effective grade is compiled; driven values are not overwritten by a second keyframe pass.
 - Color mutations generally replace the clip through `updateColorCorrection(...)` and invalidate the layer cache. `setColorWorkspaceViewport(...)` updates the stored UI viewport without calling `invalidateCache()`.
 - `ColorPipeline` keeps uniform buffers by layer key and uses `queue.writeBuffer(...)`, but creates a bind group for every `applyGrade(...)` call.
+- Primary **Shadows** and **Highlights** reshape luma and rescale RGB by the luma ratio, so colours keep their hue and saturation instead of being greyed. Shadows is a bump below mid grey: black stays at zero and mid grey and above stay untouched. Negative Highlights rolls off above mid grey with a soft shoulder (at -100 even overexposed values stay below white); positive Highlights expands that range. The GPU shader, the worker software path and grade thumbnails share `src/engine/color/shadowHighlightTone.ts`.
 - The `workspaceViewport` field and optional workspace mode belong to `ColorEditor`.
 
 ---
