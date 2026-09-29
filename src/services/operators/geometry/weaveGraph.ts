@@ -8,6 +8,8 @@ import { compileGeometryGraph, type GeometryParameterReader } from './geometryPr
 
 export const WEAVE_EFFECT_TYPE = 'weave';
 const FIELD_SIGNALS = new Set(['number', 'boolean', 'vec2', 'vec3', 'vec4']);
+/** Shared force nodes a Cloth Sheet reads (the same identities cables and particles use). */
+const CLOTH_FORCE_OPERATORS = ['forces.wind', 'forces.gravity', 'forces.turbulence', 'forces.drag'];
 
 /** Pure per-element operators run per curve point; this is the shared family contract, not a Weave copy. */
 const isCurveFieldOperator = (operator: OperatorDefinition) => !operator.composition
@@ -18,7 +20,7 @@ let ownerOperators: OperatorDefinition[] | undefined;
 /** Nodes a geometry graph offers: curve operators, values and every shared pointwise math/vector operator. */
 export function geometryOwnerOperators(): OperatorDefinition[] {
   return ownerOperators ??= EFFECT_OPERATORS.filter(operator => operator.addable && (isCurveOperator(operator.id)
-    || ['values.number', 'values.integer', 'image.timeline-time'].includes(operator.id) || isCurveFieldOperator(operator)));
+    || ['values.number', 'values.integer', 'image.timeline-time', ...CLOTH_FORCE_OPERATORS].includes(operator.id) || isCurveFieldOperator(operator)));
 }
 
 /** Reads literal node values, effect-bound values and their keyframes at `time`. */
@@ -80,9 +82,17 @@ export function createWaveStrandsGraph(): EffectOperatorGraph {
 const FABRIC_NODES: Spec[] = [
   ['pattern', 'weave.pattern', 0, 80, { pattern: 'plain', warps: 24, wefts: 16, width: 2.4, height: 1.6, crimp: 0.03, resolution: 16 }],
   ['yarn', 'geometry.yarn-profile', 1320, 80, { plies: 3, fibers: 5, radius: 0.028, plyTwist: 5, fiberTwist: -11 }],
-  ['render', 'render.strands', 1960, 80, { width: 0.0035, color: '#e8e2d6' }],
-  ['output', 'scene.output', 2280, 80],
+  ['render', 'render.strands', 2280, 80, { width: 0.0035, color: '#e8e2d6' }],
+  ['output', 'scene.output', 2600, 80],
   ['flyaways', 'geometry.flyaways', 1640, 80, { density: 3, length: 0.08, lift: 2.5, hair: 0.35, seed: 0 }],
+];
+/** Wind Cloth: the woven sheet is held at its corners and billows like a sail in gusty, swirling wind (no gravity). */
+const CLOTH_NODES: Spec[] = [
+  ['wind', 'forces.wind', 1320, 620, { direction: [0.2, 0, 1], strength: 0.35, gust: 0.5 }],
+  ['swirl', 'forces.turbulence', 1320, 860, { strength: 0.15, frequency: 1.5 }],
+  ['cloth', 'geometry.cloth-sheet', 1640, 620, { columns: 40, rows: 27, width: 2.4, height: 1.6, pin: 'corners', stretch: 0.9, bend: 0.6,
+    damping: 0.5, substeps: 6, preroll: 2 }],
+  ['bind', 'geometry.surface-bind', 1960, 80, { height: 1 }],
 ];
 /** Reveal by Shape: a growing sphere with a noisy front scales the yarn radius (0 hides, >1 swells the front). */
 const REVEAL_NODES: Spec[] = [
@@ -94,20 +104,21 @@ const REVEAL_NODES: Spec[] = [
   ['reveal-ramp', 'field.ramp', 1040, 460, { x0: -0.12, y0: 1, x1: 0, y1: 1.6, x2: 0.1, y2: 0 }],
 ];
 const FABRIC_LINKS: Array<[from: string, output: string, to: string, input: string]> = [
-  ['pattern', 'curves', 'yarn', 'curves'], ['yarn', 'curves', 'flyaways', 'curves'], ['flyaways', 'curves', 'render', 'curves'],
-  ['render', 'scene', 'output', 'scene'],
+  ['pattern', 'curves', 'yarn', 'curves'], ['yarn', 'curves', 'flyaways', 'curves'], ['flyaways', 'curves', 'bind', 'curves'],
+  ['bind', 'curves', 'render', 'curves'], ['render', 'scene', 'output', 'scene'],
+  ['wind', 'force', 'cloth', 'forces'], ['swirl', 'force', 'cloth', 'forces'], ['cloth', 'surface', 'bind', 'surface'],
   ['reveal', 'value', 'reveal-radius', 'a'], ['reach', 'value', 'reveal-radius', 'b'], ['reveal-radius', 'value', 'reveal-shape', 'size'],
   ['reveal-shape', 'value', 'reveal-edge', 'a'], ['reveal-noise', 'value', 'reveal-edge', 'b'], ['reveal-edge', 'value', 'reveal-ramp', 'value'],
   ['reveal-ramp', 'value', 'yarn', 'radius'],
 ];
 
 /**
- * Default Weave graph: a plain-woven sheet of fuzzy three-ply yarns that grows from its center.
- * The exposed Reveal value (1 = fully grown) is keyframeable in the Effects tab; bypassing the
- * Yarn group draws the bare curves, bypassing Reveal by Shape shows the full sheet.
+ * Default Weave graph: a plain-woven sheet of fuzzy three-ply yarns that grows from its center and
+ * billows in the wind. The exposed Reveal value (1 = fully grown) is keyframeable in the Effects
+ * tab; bypassing Yarn draws the bare curves, Reveal by Shape the full sheet, Wind Cloth a flat one.
  */
 export function createDefaultWeaveGraph(): EffectOperatorGraph {
-  const specs = [...FABRIC_NODES, ...REVEAL_NODES];
+  const specs = [...FABRIC_NODES, ...REVEAL_NODES, ...CLOTH_NODES];
   const nodes: BoundOperatorNode[] = specs.map(([id, operator, , , constants]) =>
     ({ id, operator, operatorVersion: 1, bindings: {}, ...(constants ? { constants: { ...constants } } : {}) }));
   const reveal = nodes.find(node => node.id === 'reveal')!;
@@ -117,7 +128,8 @@ export function createDefaultWeaveGraph(): EffectOperatorGraph {
     edges: FABRIC_LINKS.map(([from, output, to, input]) => ({ id: `${from}-${output}-${to}-${input}`, from, output, to, input })),
     layout: Object.fromEntries(specs.map(([id, , x, y]) => [id, { x, y }])),
     groups: [{ id: 'reveal-by-shape', label: 'Reveal by Shape', color: '#5f9ea0', nodeIds: REVEAL_NODES.map(([id]) => id) },
-      { id: 'yarn', label: 'Yarn', color: '#c8a45a', nodeIds: ['yarn', 'flyaways'] }] };
+      { id: 'yarn', label: 'Yarn', color: '#c8a45a', nodeIds: ['yarn', 'flyaways'] },
+      { id: 'wind-cloth', label: 'Wind Cloth', color: '#6f8fc8', nodeIds: CLOTH_NODES.map(([id]) => id) }] };
 }
 
 export function validateWeaveGraph(graph: EffectOperatorGraph, allowIncomplete = false): string[] {

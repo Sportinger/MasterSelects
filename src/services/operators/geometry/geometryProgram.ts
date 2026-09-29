@@ -5,6 +5,7 @@ import { lowerPointwiseNode, pointwiseLoweringFor, type PointwiseInstruction } f
 import type { PointwiseValueType } from '../fields/pointwiseOperations';
 import { CURVE_POINT_LIMIT, CURVE_STRAND_LIMIT } from './curveOperators';
 import { WEAVE_PATTERNS } from './weaveOperators';
+import { compileClothSpec, type ClothSpec } from './clothProgram';
 
 /** Context values a curve-point field can read, in addition to shared pointwise operations. */
 export const CURVE_CONTEXT_OPERATIONS = ['position', 'curve-u', 'point-index', 'strand-index', 'point-count', 'strand-count'] as const;
@@ -22,7 +23,9 @@ export type GeometryStage =
       crimp: number; resolution: number }
   | { kind: 'strand-array'; nodeId: string; count: number; spacing: number; axis: CurveAxis }
   | { kind: 'set-position'; nodeId: string; position?: GeometryField; offset?: GeometryField }
-  | { kind: 'yarn-profile'; nodeId: string; radius?: GeometryField };
+  | { kind: 'yarn-profile'; nodeId: string; radius?: GeometryField }
+  /** Curves on the cloth simulated by `cloth` at source time `time` (seconds). */
+  | { kind: 'surface-bind'; nodeId: string; height: number; cloth: ClothSpec; time: number };
 /** Render-time yarn: plies around the curve and fibers around each ply, twisted along curve length. */
 export interface YarnProfile { plies: number; fibers: number; radius: number; plyTwist: number; fiberTwist: number }
 /**
@@ -36,7 +39,7 @@ export interface GeometryProgram { stages: GeometryStage[]; render?: GeometryStr
 export type GeometryParameterReader = (node: BoundOperatorNode, parameter: string) => OperatorValue;
 
 const GENERATORS = new Set(['geometry.curve-line', 'weave.pattern']);
-const MODIFIERS = new Set(['geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways']);
+const MODIFIERS = new Set(['geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways', 'geometry.surface-bind']);
 /** Every warp crosses every weft; each thread has `resolution` points per crossing plus its end. */
 export const weavePatternPointCount = (stage: { warps: number; wefts: number; resolution: number }) =>
   stage.warps * (stage.wefts * stage.resolution + 1) + stage.wefts * (stage.warps * stage.resolution + 1);
@@ -51,8 +54,11 @@ const finite = (value: OperatorValue, label: string) => {
  * Lowers a geometry graph. With `target`, only the curve chain feeding that node's
  * curves output is compiled (node previews); otherwise the chain feeding `scene.output`.
  */
-/** Frame context of a lowering; `time` is the composition time read by Time nodes (seconds). */
-export interface GeometryCompileContext { time?: number }
+/**
+ * Frame context of a lowering: `time` is the composition time read by Time nodes, `simulationTime`
+ * the source time of the host clip that drives cloth (seconds).
+ */
+export interface GeometryCompileContext { time?: number; simulationTime?: number }
 
 export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryParameterReader, target?: string,
   context: GeometryCompileContext = {}): GeometryProgram {
@@ -108,6 +114,12 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
         radius: Math.max(0, finite(read(node, 'radius'), 'Yarn radius')), plyTwist: finite(read(node, 'plyTwist'), 'Ply twist'),
         fiberTwist: finite(read(node, 'fiberTwist'), 'Fiber twist') };
       if (profile.plies < 1 || profile.fibers < 1 || profile.plies * profile.fibers > 256) throw new Error('Yarn Profile allows 1 to 256 fibers per yarn.');
+    } else if (node.operator === 'geometry.surface-bind') {
+      const cloth = required(node, 'surface').node;
+      if (cloth.operator !== 'geometry.cloth-sheet') throw new Error('Surface Bind needs a Cloth Sheet.');
+      // A muted sheet leaves the curves on the flat rest sheet.
+      if (!cloth.bypassed) stages.push({ kind: 'surface-bind', nodeId: node.id, height: finite(read(node, 'height'), 'Height scale'),
+        cloth: compileClothSpec(graph, cloth, read), time: Number.isFinite(context.simulationTime) ? context.simulationTime! : 0 });
     } else if (node.operator === 'geometry.flyaways') {
       flyaways = { density: Math.max(0, finite(read(node, 'density'), 'Flyaway density')),
         length: Math.max(0.001, finite(read(node, 'length'), 'Flyaway length')), lift: Math.max(0, finite(read(node, 'lift'), 'Flyaway lift')),

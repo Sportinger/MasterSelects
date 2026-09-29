@@ -66,7 +66,7 @@ describe('Weave geometry graph', () => {
     const offered = new Set(addableEffectOperators('weave').map(operator => operator.id));
     for (const id of ['math.add.scalar', 'math.sin.scalar', 'math.clamp.scalar', 'vector.combine.vec3', 'vector.split.vec3', 'values.number',
       'geometry.curve-line', 'geometry.strand-array', 'geometry.set-position', 'geometry.curve-info', 'render.strands']) expect(offered.has(id), id).toBe(true);
-    for (const id of ['math.add.rgb', 'image.frame', 'forces.gravity', 'image.sample', 'math.gaussian.scalar']) expect(offered.has(id), id).toBe(false);
+    for (const id of ['math.add.rgb', 'image.frame', 'forces.scatter', 'image.sample', 'math.gaussian.scalar']) expect(offered.has(id), id).toBe(false);
     for (const owner of ['face-cables', 'voxel-relief', 'invert', 'splat-exploration']) {
       expect(addableEffectOperators(owner).some(operator => isCurveOperator(operator.id)), owner).toBe(false);
     }

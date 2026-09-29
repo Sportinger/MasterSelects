@@ -2,6 +2,7 @@ import { pointwiseOperation, type PointwiseValueType } from '../fields/pointwise
 import { CURVE_POINT_LIMIT, CURVE_STRAND_LIMIT } from './curveOperators';
 import { CURVE_CONTEXT_OPERATIONS, weavePatternPointCount, type GeometryField, type GeometryProgram } from './geometryProgram';
 import { WEAVE_PATTERNS } from './weaveOperators';
+import { isClothSpec } from './clothProgram';
 
 const FIELD_INSTRUCTION_LIMIT = 256;
 const STAGE_LIMIT = 64;
@@ -50,6 +51,9 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
       if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'count', 'spacing', 'axis']) || !Number.isInteger(stage.count)
         || (stage.count as number) < 1 || !finite(stage.spacing) || !axis(stage.axis)) return false;
       points *= stage.count as number; strands *= stage.count as number;
+    } else if (stage.kind === 'surface-bind') {
+      if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'height', 'cloth', 'time']) || !finite(stage.height) || !finite(stage.time)
+        || !isClothSpec(stage.cloth)) return false;
     } else if (stage.kind === 'set-position') {
       if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'position', 'offset'])
         || (stage.position !== undefined && !isField(stage.position)) || (stage.offset !== undefined && !isField(stage.offset))) return false;

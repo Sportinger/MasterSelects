@@ -381,11 +381,14 @@ node is one node in every graph rather than a per-domain copy.
 | Position, Curve Info | Per-point position, Curve Param (0–1), point/strand index and counts |
 | Yarn Profile | Curves (+ optional per-point Radius Scale) → curves drawn as plies and fibers twisted along curve length |
 | Flyaways | Curves → curves whose Yarn Profile lets single fibers stray: loops arc off and return, free ends stick out (Density, Length, Lift, Free Ends, Seed) |
+| Cloth Sheet | Forces (Wind, Gravity, Turbulence) + Drag → a simulated cloth grid (Columns, Rows, Width, Height, Pin, Stretch/Bend Stiffness, Damping, Substeps, Pre-roll) |
+| Surface Bind | Curves + Cloth → curves placed on the cloth: X/Y of the flat rest sheet find the spot, Z becomes height along its normal |
 | Weave Pattern | Draft (plain, twill 2/2 and 2/1, satin 5, basket), warp/weft counts, size, crimp → interlaced curves |
 | Strand Render | Curves → scene: thin lit ribbons in the shared 3D scene (Width, Color) |
 
-The default Weave graph is Weave Pattern → Yarn Profile → Flyaways → Strand Render:
-a plain weave of fuzzy three-ply yarns. Weave Pattern is the only weave-specific node; crimp is
+The default Weave graph is Weave Pattern → Yarn Profile → Flyaways → Surface Bind →
+Strand Render: a plain weave of fuzzy three-ply yarns on a cloth that billows in the
+wind. Weave Pattern is the only weave-specific node; crimp is
 analytic (cosine transitions between crossings, with the draft deciding which
 thread lies in front). Yarn Profile is general: plies circle the curve and fibers
 circle each ply, with both angles driven by arc length along rotation-minimizing
@@ -407,6 +410,28 @@ from.
 three-key *Ramp* whose front key swells the yarns before they settle. The group
 *Reveal by Shape* exposes **Reveal** (0–1) in the Effects tab; keyframe it to
 animate the growth.
+
+**Wind Cloth.** *Cloth Sheet* simulates a regular grid with XPBD: a fixed number of
+substeps per step, one pass per substep, stretch/shear/bend links and double
+precision. Stretch and shear links barely resist compression, so the fabric buckles
+instead of chattering. Forces are the shared Wind, Gravity, Turbulence and Drag
+nodes that cables and particles use. Wind acts as air speed across the sheet with
+strong air drag, so the cloth follows gusts smoothly. The cloth reads the parameter
+values of these nodes; wiring into their inputs is rejected rather than ignored.
+The clock is the **source time of the host clip**, as with Flock: split and trimmed
+clips continue the motion instead of restarting it. Speed keyframes are not followed
+yet. Time runs at 60 fixed steps per second, and **Pre-roll** starts the simulation
+before the clip. Exact double-precision states are checkpointed every half second.
+Scrubbing therefore resumes from the nearest checkpoint, and every path to a frame
+gives bit-identical positions on the same device. After ten minutes of source time
+the sheet holds still. *Surface Bind* maps the flat rest sheet onto the simulated
+grid with bicubic (Catmull-Rom) interpolation and extrapolates past the edges. Curve
+height becomes offset along the cloth normal, so crimp follows the fabric. Curves
+before the first Surface Bind do not depend on time and are cached, so a new frame
+only advances the cloth and re-binds. With the default 40 × 27 grid and 6 substeps,
+one second of simulation costs about 70 ms of CPU, and a frame about 6 ms. The
+Cloth Sheet's preview shows the simulated grid. The default *Wind Cloth* group holds
+the sheet at its corners like a sail. Bypassing it leaves the weave flat.
 
 **Groups.** Geometry groups can be bypassed from their **Byp** header button or
 their Effects tab section. A curves output passes the group's incoming curves
@@ -432,7 +457,9 @@ strand narrower than one pixel keeps one pixel of geometry with a deterministic
 hashed coverage instead of blending, so dense strands need no sorting and export
 reproduces the preview; width 0 draws nothing. Shading is Kajiya-Kay (tangent
 based) with a fixed key light and ambient term; scene lights, shadows and a
-dedicated generator clip are not connected yet.
+dedicated generator clip are not connected yet. The cloth simulation runs on the
+CPU of the rendering thread (the Worker render host in the default mode); a long
+jump into an unsimulated range blocks that thread while it catches up.
 
 ## Extending the system
 

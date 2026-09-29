@@ -6,7 +6,13 @@ import { isGeometryProgram } from '../../src/services/operators/geometry/geometr
 import { warpOver } from '../../src/services/operators/geometry/weaveOperators';
 import { packStrandPoints, STRAND_POINT_FLOATS } from '../../src/engine/native3d/passes/strandFrames';
 
-const compile = (graph = createDefaultWeaveGraph()) => compileGeometryGraph(graph, geometryParameterReader({}));
+/** The flat sheet: Wind Cloth bypassed, so positions are the analytic draft. */
+const flatWeave = () => {
+  const graph = createDefaultWeaveGraph();
+  graph.groups!.find(group => group.id === 'wind-cloth')!.bypassed = true;
+  return graph;
+};
+const compile = (graph = flatWeave()) => compileGeometryGraph(graph, geometryParameterReader({}));
 const z = (curves: ReturnType<typeof evaluateGeometryProgram>, strand: number, point: number) => curves.positions[(curves.starts[strand] + point) * 3 + 2];
 
 describe('Weave pattern and yarn profile', () => {
@@ -34,7 +40,7 @@ describe('Weave pattern and yarn profile', () => {
   });
 
   it('evaluates a per-point radius field', () => {
-    const graph = createDefaultWeaveGraph();
+    const graph = flatWeave();
     graph.edges = graph.edges.filter(edge => !(edge.to === 'yarn' && edge.input === 'radius'));
     graph.nodes.push({ id: 'half', operator: 'values.number', bindings: {}, operatorVersion: 1, constants: { value: 0.5 } });
     graph.edges.push({ id: 'half-radius', from: 'half', output: 'value', to: 'yarn', input: 'radius' });

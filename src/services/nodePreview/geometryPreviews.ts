@@ -6,6 +6,9 @@ import { effectOperatorGraph, effectOperatorParams } from '../operators/effectGr
 import { compileGeometryGraph } from '../operators/geometry/geometryProgram';
 import { evaluateGeometryProgram, type CurveSet } from '../operators/geometry/geometryEvaluation';
 import { geometryParameterReader } from '../operators/geometry/weaveGraph';
+import { compileClothSpec } from '../operators/geometry/clothProgram';
+import { clothGridAt, type ClothGrid } from '../operators/geometry/clothSurface';
+import { applyOperatorGroupBypasses } from '../operators/operatorGroupBypass';
 import type { PreviewFrame, PreviewRequest } from './previewTypes';
 
 const MAX_DRAWN_POINTS = 4000;
@@ -27,6 +30,28 @@ export function curveWireframe(curves: CurveSet): { points: number[]; edges: num
   return { points, edges };
 }
 
+/** Wireframe of a simulated cloth grid: its rows and columns. */
+export function clothWireframe(grid: ClothGrid): { points: number[]; edges: number[] } {
+  const { columns, rows } = grid, points = Array.from(grid.positions), edges: number[] = [];
+  for (let j = 0; j <= rows; j++) {
+    for (let i = 0; i <= columns; i++) {
+      const index = j * (columns + 1) + i;
+      if (i < columns) edges.push(index, index + 1);
+      if (j < rows) edges.push(index, index + columns + 1);
+    }
+  }
+  return { points, edges };
+}
+
+/** The Cloth Sheet a port shows: the sheet itself or the source of a cloth input. */
+function clothSourceNode(graph: EffectOperatorGraph, nodeId: string, portId: string, direction: 'input' | 'output') {
+  const node = graph.nodes.find(item => item.id === nodeId);
+  if (node?.operator === 'geometry.cloth-sheet') return node;
+  if (direction !== 'input' || portId !== 'surface' || node?.operator !== 'geometry.surface-bind') return undefined;
+  const edge = graph.edges.find(item => item.to === nodeId && item.input === 'surface');
+  return graph.nodes.find(item => item.id === edge?.from && item.operator === 'geometry.cloth-sheet');
+}
+
 /** The curve node whose output a port shows: its own curves output or the source of a curves input. */
 function curveSourceNode(graph: EffectOperatorGraph, nodeId: string, portId: string, direction: 'input' | 'output'): string | undefined {
   const node = graph.nodes.find(item => item.id === nodeId);
@@ -44,18 +69,25 @@ function curveSourceNode(graph: EffectOperatorGraph, nodeId: string, portId: str
 }
 
 /** CPU reference evaluation at the playhead; opening a viewer never touches GPU state. */
-export function geometryPreview(request: PreviewRequest, effect: Effect, keys: Keyframe[], time: number): PreviewFrame {
+export function geometryPreview(request: PreviewRequest, effect: Effect, keys: Keyframe[], time: number, simulationTime = time): PreviewFrame {
   const base = { key: request.key, revision: request.revision, time: request.time };
   const binding = request.node.binding;
   if (binding?.kind !== 'effect-operator') return { ...base, status: 'missing', label: 'Curve node unavailable' };
   try {
     const graph = effectOperatorGraph(effect);
     const port = request.port;
+    const reader = geometryParameterReader(effectOperatorParams(effect), effect.id, keys, time);
+    const cloth = clothSourceNode(graph, binding.nodeId, port?.id ?? '', port?.direction ?? 'output');
+    if (cloth) {
+      const grid = clothGridAt(compileClothSpec(applyOperatorGroupBypasses(graph), cloth, reader), simulationTime);
+      return { ...base, status: 'live', label: `Cloth ${grid.columns} × ${grid.rows} · ${simulationTime.toFixed(2)} s`,
+        drawing: { kind: 'points', dimensions: 3, ...clothWireframe(grid) } };
+    }
     const target = curveSourceNode(graph, binding.nodeId, port?.id ?? '', port?.direction ?? 'output');
     if (!target) return { ...base, status: 'live', label: 'Per-point value', presentation: 'text',
       drawing: { kind: 'text', lines: ['Evaluated once per curve point', 'where a modifier reads it'] } };
-    const program = compileGeometryGraph(graph, geometryParameterReader(effectOperatorParams(effect), effect.id, keys, time), target,
-      { time: request.time });
+    const program = compileGeometryGraph(graph, reader, target,
+      { time: request.time, simulationTime });
     const wireframe = curveWireframe(evaluateGeometryProgram(program));
     return { ...base, status: 'live', label: `${program.strandCount.toLocaleString('en-US')} curves · ${program.pointCount.toLocaleString('en-US')} points`,
       drawing: { kind: 'points', dimensions: 3, ...wireframe } };

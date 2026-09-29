@@ -20,7 +20,7 @@ describe('Weave flyaways and node groups', () => {
     expect(validateWeaveGraph(graph)).toEqual([]);
     const program = compile(graph);
     expect(program.render).toMatchObject({ profile: { plies: 3, fibers: 5 }, flyaways: { density: 3, length: 0.08, lift: 2.5, hair: 0.35, seed: 0 } });
-    expect(program.stages.map(stage => stage.kind)).toEqual(['weave-pattern', 'yarn-profile']);
+    expect(program.stages.map(stage => stage.kind)).toEqual(['weave-pattern', 'yarn-profile', 'surface-bind']);
     expect(isGeometryProgram(structuredClone(program))).toBe(true);
   });
 
@@ -61,9 +61,9 @@ describe('Weave flyaways and node groups', () => {
 
   it('bypasses a curves group by passing the incoming curves through', () => {
     const graph = createDefaultWeaveGraph();
-    expect(operatorGroupBypassRoutes(graph, graph.groups![1])?.get('flyaways-curves-render-curves')).toEqual({ from: 'pattern', output: 'curves' });
+    expect(operatorGroupBypassRoutes(graph, graph.groups![1])?.get('flyaways-curves-bind-curves')).toEqual({ from: 'pattern', output: 'curves' });
     const program = compile(bypass(graph, 'yarn'));
-    expect(program.stages.map(stage => stage.kind)).toEqual(['weave-pattern']);
+    expect(program.stages.map(stage => stage.kind)).toEqual(['weave-pattern', 'surface-bind']);
     expect(program.render).not.toHaveProperty('profile');
     expect(program.render).not.toHaveProperty('flyaways');
     expect(isGeometryProgram(structuredClone(program))).toBe(true);

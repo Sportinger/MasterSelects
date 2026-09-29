@@ -1,6 +1,7 @@
 import { pointwiseOperation, type PointwiseValue } from '../fields/pointwiseOperations';
 import { weavePatternPointCount, type GeometryField, type GeometryProgram, type GeometryStage } from './geometryProgram';
 import { warpOver } from './weaveOperators';
+import { bindToCloth, clothGridAt } from './clothSurface';
 
 /**
  * Polylines as flat XYZ positions; strand `i` owns points `starts[i]` … `starts[i] + counts[i] - 1`.
@@ -74,10 +75,30 @@ function forEachPoint(curves: CurveSet, visit: (index: number, context: CurvePoi
   }
 }
 
-/** Runs the curve stages on the CPU. Modifiers read Position and fields on the incoming points. */
+/** Curves before the first Surface Bind do not change with time; results are kept per stage content. */
+const PREFIX_LIMIT = 4;
+const prefixes = new Map<string, CurveSet>();
+
+/**
+ * Runs the curve stages on the CPU. Modifiers read Position and fields on the incoming points.
+ * With cloth, only the Surface Bind and later stages are evaluated again for a new frame.
+ */
 export function evaluateGeometryProgram(program: GeometryProgram): CurveSet {
-  let curves: CurveSet = { positions: new Float32Array(0), starts: new Uint32Array(0), counts: new Uint32Array(0) };
-  for (const stage of program.stages) {
+  const split = program.stages.findIndex(stage => stage.kind === 'surface-bind');
+  if (split <= 0) return evaluateStages(program.stages);
+  const key = JSON.stringify(program.stages.slice(0, split));
+  let prefix = prefixes.get(key);
+  if (prefix) prefixes.delete(key);
+  else prefix = evaluateStages(program.stages.slice(0, split));
+  prefixes.set(key, prefix);
+  while (prefixes.size > PREFIX_LIMIT) prefixes.delete(prefixes.keys().next().value!);
+  return evaluateStages(program.stages.slice(split), prefix);
+}
+
+/** Stages never modify their input curves, so a cached prefix can be shared. */
+function evaluateStages(stages: readonly GeometryStage[], initial?: CurveSet): CurveSet {
+  let curves: CurveSet = initial ?? { positions: new Float32Array(0), starts: new Uint32Array(0), counts: new Uint32Array(0) };
+  for (const stage of stages) {
     if (stage.kind === 'curve-line') {
       const positions = new Float32Array(stage.points * 3);
       for (let index = 0; index < stage.points; index++) positions[index * 3 + stage.axis] = (index / (stage.points - 1) - 0.5) * stage.length;
@@ -109,6 +130,8 @@ export function evaluateGeometryProgram(program: GeometryProgram): CurveSet {
         for (let component = 0; component < 3; component++) next[index * 3 + component] = target[component] + (offset?.[component] ?? 0);
       });
       curves = { ...curves, positions: next };
+    } else if (stage.kind === 'surface-bind') {
+      curves = { ...curves, positions: bindToCloth(curves.positions, clothGridAt(stage.cloth, stage.time), stage.height) };
     } else if (stage.radius) {
       const field = stage.radius, radius = new Float32Array(curves.positions.length / 3);
       forEachPoint(curves, (index, context) => { radius[index] = Math.max(0, Number(evaluateGeometryField(field, context))); });
