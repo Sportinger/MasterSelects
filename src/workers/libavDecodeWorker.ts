@@ -16,6 +16,8 @@ export type LibavDecodeWorkerRequest =
       visibleRect: { x: number; y: number; width: number; height: number } | null;
       colorMatrix: 'bt709' | 'smpte170m';
       frameDurationUs: number;
+      /** Blend-deinterlace frames the decoder flags as interlaced (plan D3: on by default). */
+      deinterlace: boolean;
     }
   | { type: 'decode'; id: number; packet: ArrayBuffer; timestampUs: number; durationUs: number }
   | { type: 'feed'; packet: ArrayBuffer; timestampUs: number }
@@ -95,6 +97,28 @@ function openDecoder(m: LibavModule, codec: LibavWorkerCodec): number {
   return handle;
 }
 
+/**
+ * Linear-blend deinterlace of one plane in place: each line becomes
+ * (above + 2 * line + below) / 4, which removes field combing on motion.
+ */
+function blendDeinterlacePlane(data: Uint8Array, offset: number, stride: number, rows: number, sixteenBit: boolean): void {
+  if (rows < 3) return;
+  const samples = sixteenBit ? stride / 2 : stride;
+  const view = sixteenBit
+    ? new Uint16Array(data.buffer, data.byteOffset + offset, samples * rows)
+    : data.subarray(offset, offset + stride * rows);
+  const previous = view.slice(0, samples);
+  const current = new (sixteenBit ? Uint16Array : Uint8Array)(samples);
+  for (let y = 1; y < rows - 1; y += 1) {
+    const row = y * samples;
+    current.set(view.subarray(row, row + samples));
+    for (let x = 0; x < samples; x += 1) {
+      view[row + x] = (previous[x]! + 2 * current[x]! + view[row + samples + x]! + 2) >> 2;
+    }
+    previous.set(current);
+  }
+}
+
 function buildFrame(m: LibavModule, timestampUs: number, durationUs: number): VideoFrame {
   const width = m._dec_width(decoder);
   const height = m._dec_height(decoder);
@@ -134,6 +158,11 @@ function buildFrame(m: LibavModule, timestampUs: number, durationUs: number): Vi
         out.set(heap.subarray(row, row + rowBytes), offset);
       }
       offset += rowBytes;
+    }
+  }
+  if (options!.deinterlace && m._dec_interlaced(decoder) === 1) {
+    for (const [plane, { h }] of planeSizes.entries()) {
+      blendDeinterlacePlane(out, layout[plane]!.offset, layout[plane]!.stride, h, bytesPerSample === 2);
     }
   }
   const visible = options!.visibleRect;

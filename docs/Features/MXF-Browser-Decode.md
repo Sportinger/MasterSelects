@@ -33,11 +33,18 @@ MXF path. ProRes keeps its real FourCC (`apch`, …) and therefore the TurboRes 
 |---|---|---|---|
 | ProRes (RDD 44) | `apco`/`apcs`/`apcn`/`apch`/`ap4h`/`ap4x` | TurboRes via `MxfPacketSource` | ✓ preview, scrub, thumbnails |
 | DNxHD / DNxHR | `mxf:dnxhd` | libavcodec WASM worker pool (`mxf-libav`) | ✓ decoder wired |
-| IMX / D-10 (MPEG-2 4:2:2 Intra) | `mxf:mpeg2-intra` | libavcodec WASM worker pool (`mxf-libav`), VBI cropped | ✓ decoder wired; interlaced shown as frames |
-| XDCAM HD422 (MPEG-2 Long GOP) | `mxf:mpeg2-lgop` | one stateful libavcodec worker via `MxfGopFrameProvider` | ✓ decoder wired; interlaced shown as frames |
+| IMX / D-10 (MPEG-2 4:2:2 Intra) | `mxf:mpeg2-intra` | libavcodec WASM worker pool (`mxf-libav`), VBI cropped | ✓ decoder wired; blend-deinterlaced |
+| XDCAM HD422 (MPEG-2 Long GOP) | `mxf:mpeg2-lgop` | one stateful libavcodec worker via `MxfGopFrameProvider` | ✓ decoder wired; blend-deinterlaced |
 | XAVC-I / AVC-Intra | `mxf:avc-intra` | WebCodecs (`mxf-avc` backend) | ✓ decoder wired |
 | XAVC Long GOP | `mxf:avc-lgop` | WebCodecs, decode from previous key frame (`mxf-avc`) | ✓ decoder wired (verified parse of a 38-min Sony XAVC 4K file) |
 | JPEG 2000, unknown | `mxf:unsupported:<reason>` | – | explicit "not supported" |
+
+## Interlaced essence
+
+Frames the libavcodec decoder flags as interlaced (IMX/D-10, XDCAM HD422 1080i) are
+blend-deinterlaced in the decode worker ((above + 2·line + below) / 4 per plane), on by default
+(plan D3). Not yet: per-clip switch, field-rate bob/yadif on the GPU, interlaced H.264 through
+WebCodecs, interlaced ProRes.
 
 ## Audio
 

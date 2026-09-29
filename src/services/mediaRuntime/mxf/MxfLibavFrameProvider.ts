@@ -52,6 +52,7 @@ export function createLibavOpenRequest(
     visibleRect,
     colorMatrix: video.height <= 576 ? 'smpte170m' : 'bt709',
     frameDurationUs: Math.round(1e6 / (video.fps || 25)),
+    deinterlace: true,
   };
 }
 
