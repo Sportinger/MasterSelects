@@ -1,6 +1,7 @@
 import type { ImageOperatorCapability, ImageOperatorSampleScope, ImagePlanInstruction } from './imageOperatorGraph';
 import type { ImageOperatorResourceSampling } from './imageOperatorResources';
 import { emitImageReducerWgsl } from './imageOperatorReducerWgsl';
+import { pointwiseOperation } from './fields/pointwiseOperations';
 import { imageF32 as f32, imageParameterExpression as parameterExpression, IMAGE_COLOR_WGSL, IMAGE_COORDINATE_ROTATION_WGSL, IMAGE_GAUSSIAN_WGSL, IMAGE_HASH2D_WGSL, IMAGE_PARAMETER_WGSL, IMAGE_RADIAL_PROJECTION_WGSL, IMAGE_VECTOR_WGSL } from './imageOperatorWgsl';
 import { INPUT_HISTORY_SAMPLE_WGSL } from './inputHistorySampling';
 import { OPTICAL_FLOW_WGSL, HISTORY_OPTICAL_FLOW_WGSL } from './opticalFlowWgsl';
@@ -34,7 +35,8 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
   };
   const expressions = instructions.map((item, index) => {
     const args = item.inputs.map(input => `v${input}`);
-    const expression = item.operation === 'input' ? 'pixel' : item.operation === 'uv' ? 'inputUv'
+    const pointwise = pointwiseOperation(item.operation);
+    const expression = pointwise ? pointwise.wgsl(args, item.value) : item.operation === 'input' ? 'pixel' : item.operation === 'uv' ? 'inputUv'
       : item.operation === 'sample-input-history' ? `${args.length > 3 ? 'sampleInputHistoryMotion' : 'sampleInputHistory'}(imageGraphResource${item.resourceSlots![0]}, imageGraphResource${item.resourceSlots![1]}, texSampler, ${args.join(', ')}, inputUv)`
       : item.operation === 'optical-flow' ? `imageOpticalFlow(imageGraphResource${item.resourceSlots![0]}, imageGraphResource${item.resourceSlots![1]}, texSampler, inputUv, ${args[0]}, inputResolution)`
       : item.operation === 'source-motion' ? `imageHistoryOpticalFlow(imageGraphResource${item.resourceSlots![0]}, imageGraphResource${item.resourceSlots![1]}, texSampler, ${args.join(', ')}, inputResolution)`
@@ -74,17 +76,7 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
       : item.operation === 'parameter-boolean' ? `${parameterExpression(item.value ?? 0)} > 0.5`
       : item.operation === 'parameter-color' ? `vec4f(${[0, 1, 2, 3].map(offset => parameterExpression((item.value ?? 0) + offset)).join(', ')})`
       : item.operation === 'constant-color' ? `vec4f(${item.color!.map(f32).join(', ')})`
-      : item.operation === 'subtract' ? `${args[0]} - ${args[1]}` : item.operation === 'split-rgb' ? `${args[0]}.rgb`
-      : item.operation === 'add-scalar' ? `${args[0]} + ${args[1]}` : item.operation === 'multiply-scalar' ? `${args[0]} * ${args[1]}`
-      : item.operation === 'divide-ieee-scalar' ? `${args[0]} / ${args[1]}` : item.operation === 'reciprocal-scalar' ? `1.0 / ${args[0]}`
-      : item.operation === 'exp2-scalar' ? `exp2(${args[0]})` : item.operation === 'exp-scalar' ? `exp(${args[0]})` : item.operation === 'fract-scalar' ? `fract(${args[0]})`
-      : item.operation === 'trunc-scalar' ? `trunc(${args[0]})`
-      : item.operation === 'pass-f32' ? args[0]
-      : item.operation === 'floor-scalar' ? `floor(${args[0]})` : item.operation === 'round-even-scalar' ? `round(${args[0]})`
-      : item.operation === 'step-scalar' ? `step(${args[0]}, ${args[1]})`
-      : item.operation === 'gaussian-scalar' ? `imageGraphGaussian(${args[0]}, ${args[1]})` : item.operation === 'sqrt-scalar' ? `sqrt(${args[0]})` : item.operation === 'max-scalar' ? `max(${args[0]}, ${args[1]})`
-      : item.operation === 'min-scalar' ? `min(${args[0]}, ${args[1]})` : item.operation === 'power-scalar' ? `pow(${args[0]}, ${args[1]})` : item.operation === 'atan2-scalar' ? `atan2(${args[0]}, ${args[1]})`
-      : item.operation === 'tan-scalar' ? `tan(${args[0]})` : item.operation === 'atan-scalar' ? `atan(${args[0]})` : item.operation === 'abs-scalar' ? `abs(${args[0]})`
+      : item.operation === 'gaussian-scalar' ? `imageGraphGaussian(${args[0]}, ${args[1]})`
       : item.operation === 'degrees-to-radians' ? `${args[0]} * ${f32(Math.PI)} / 180.0`
       : item.operation === 'rotate-vec2' ? `imageRotate2d(${args[0]}, ${args[1]})`
       : item.operation === 'integer-cell-origin' ? `vec2f((vec2i(${args[0]}) / i32(${args[1]})) * i32(${args[1]}))`
@@ -92,37 +84,8 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
       : item.operation === 'bayer4-vec2' ? `imageGraphBayer4(${args[0]})`
       : item.operation === 'project-radius' ? `imageGraphProjectRadius(${args[0]}, ${args[1]}, ${args[2]})`
       : item.operation === 'unproject-radius' ? `imageGraphUnprojectRadius(${args[0]}, ${args[1]}, ${args[2]})`
-      : item.operation === 'clamp-scalar' ? `clamp(${args[0]}, min(${args[1]}, ${args[2]}), max(${args[1]}, ${args[2]}))` : item.operation === 'greater-scalar' ? `${args[0]} > ${args[1]}`
-      : item.operation === 'and-boolean' ? `${args[0]} && ${args[1]}`
-      : item.operation === 'smoothstep-scalar' ? `smoothstep(${args[0]}, ${args[1]}, ${args[2]})`
-      : item.operation === 'mix-scalar' ? `mix(${args[0]}, ${args[1]}, ${args[2]})`
-      : item.operation === 'add-vec2' ? `${args[0]} + ${args[1]}` : item.operation === 'subtract-vec2' ? `${args[0]} - ${args[1]}` : item.operation === 'multiply-vec2' ? `${args[0]} * ${args[1]}`
-      : item.operation === 'divide-vec2' ? `${args[0]} / ${args[1]}` : item.operation === 'floor-vec2' ? `floor(${args[0]})`
-      : item.operation === 'fract-vec2' ? `fract(${args[0]})` : item.operation === 'clamp-vec2' ? `clamp(${args[0]}, ${args[1]}, ${args[2]})`
-      : item.operation === 'mirror-repeat-vec2' ? `select(${args[0]} - floor(${args[0]} * 0.5) * 2.0, vec2f(2.0) - (${args[0]} - floor(${args[0]} * 0.5) * 2.0), (${args[0]} - floor(${args[0]} * 0.5) * 2.0) > vec2f(1.0))`
-      : item.operation === 'reduce-min-vec2' ? `min(${args[0]}.x, ${args[0]}.y)` : item.operation === 'hash2d-vec2' ? `imageGraphHash2d(${args[0]})`
-      : item.operation === 'dot-vec2' ? `dot(${args[0]}, ${args[1]})` : item.operation === 'length-vec2' ? `length(${args[0]})`
-      : item.operation === 'unit-direction' ? `vec2f(cos(${args[0]}), sin(${args[0]}))`
-      : item.operation === 'sin-scalar' ? `sin(${args[0]})` : item.operation === 'cos-scalar' ? `cos(${args[0]})` : item.operation === 'scalar-to-vec2' ? `vec2f(${args[0]})`
-      : item.operation === 'scalar-to-vec4' ? `vec4f(${args[0]})` : item.operation === 'multiply-vec4' || item.operation === 'multiply-vector-scalar' ? `${args[0]} * ${args[1]}`
-      : item.operation === 'divide-vector-scalar' ? `${args[0]} / ${args[1]}` : item.operation === 'clamp-rgb-scalar' ? `clamp(${args[0]}, vec3f(min(${args[1]}, ${args[2]})), vec3f(max(${args[1]}, ${args[2]})))` : item.operation === 'divide-vec4' ? `${args[0]} / ${args[1]}`
-      : item.operation === 'select-scalar' ? `select(${args[0]}, ${args[1]}, ${args[2]})`
-      : item.operation === 'select-vec2' ? `select(${args[0]}, ${args[1]}, ${args[2]})`
-      : item.operation === 'split-alpha' ? `${args[0]}.a` : item.operation === 'subtract-rgb' ? `${args[0]} - ${args[1]}`
-      : item.operation === 'add-rgb' ? `${args[0]} + ${args[1]}` : item.operation === 'multiply-rgb' ? `${args[0]} * ${args[1]}`
-      : item.operation === 'divide-ieee-rgb' ? `${args[0]} / ${args[1]}` : item.operation === 'max-rgb' ? `max(${args[0]}, ${args[1]})`
-      : item.operation === 'power-rgb' ? `pow(${args[0]}, ${args[1]})`
-      : item.operation === 'floor-rgb' ? `floor(${args[0]})`
-      : item.operation === 'clamp-rgb' ? `clamp(${args[0]}, min(${args[1]}, ${args[2]}), max(${args[1]}, ${args[2]}))` : item.operation === 'mix-rgb' ? `mix(${args[0]}, ${args[1]}, ${args[2]})`
-      : item.operation === 'mix-components-rgb' ? `mix(${args[0]}, ${args[1]}, ${args[2]})`
-      : item.operation === 'reduce-min-rgb' ? `min(min(${args[0]}.r, ${args[0]}.g), ${args[0]}.b)`
-      : item.operation === 'reduce-max-rgb' ? `max(max(${args[0]}.r, ${args[0]}.g), ${args[0]}.b)`
-      : item.operation === 'luminance-rec601' ? `dot(${args[0]}, vec3f(0.299, 0.587, 0.114))`
-      : item.operation === 'luminance-rec709' ? `dot(${args[0]}.rgb, vec3f(0.2126, 0.7152, 0.0722))`
-      : item.operation === 'scalar-to-rgb' ? `vec3f(${args[0]})` : item.operation === 'vec4-to-rgb' ? `${args[0]}.rgb` : item.operation === 'image-to-vec4' || item.operation === 'vec4-to-image' ? args[0]
-      : item.operation === 'rgb-to-vec3' || item.operation === 'vec3-to-rgb' ? args[0]
+      : item.operation === 'hash2d-vec2' ? `imageGraphHash2d(${args[0]})`
       : item.operation === 'rgb-to-hsv' ? `imageGraphRgbToHsv(${args[0]})` : item.operation === 'hsv-to-rgb' ? `imageGraphHsvToRgb(${args[0]})`
-      : item.operation === 'split-component' ? `${args[0]}[${item.value}]` : item.operation === 'combine-vector' ? `vec${item.inputs.length}f(${args.join(', ')})`
       : `vec4f(${args[0]}, ${args[1]})`;
     const type = item.type === 'image' || item.type === 'vec4' ? 'vec4f' : item.type === 'rgb' || item.type === 'vec3' ? 'vec3f' : item.type === 'vec2' ? 'vec2f' : item.type === 'boolean' ? 'bool' : 'f32';
     if (item.operation === 'kernel-sum') return `  let kernelResult${index} = ${expression};\n  let v${index}: vec4f = kernelResult${index}.sum;`;

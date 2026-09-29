@@ -5,6 +5,7 @@ import { IMAGE_EFFECT_GRAPH_LIMITS, IMAGE_SCOPED_INSTRUCTION_LIMIT } from './eff
 import { colorToRgba } from '../../effects/_shared/catalogColor';
 import { compileImageOperatorPassPlan } from './imageOperatorPlan';
 import { emitImageOperatorWgsl } from './imageOperatorWgslEmitter';
+import { lowerPointwiseNode, pointwiseLoweringFor } from './fields/pointwiseLowering';
 import { migrateImageOperatorGraph } from './imageOperatorMigration';
 import { compositionGroupInterface, expandOperatorCompositions } from './operatorComposition';
 import { resolveImageOperatorChoice, type ImageOperatorCompileContext } from './imageOperatorChoice';
@@ -16,7 +17,7 @@ import { lowerMarchingSquaresTopology } from './imageOperatorJointLowering';
 import type { ImageOperatorExternalResource } from './imageOperatorExternalResources';
 import type { ImageOperatorFieldResource } from './imageOperatorFieldResources';
 import { createImageOperatorResourceLowering, validateImageOperatorResourceContext } from './imageOperatorResourceLowering';
-import type { ImageOperatorCapability, ImageOperatorPlan, ImageOperatorSampleScope, ImagePlanInstruction, ImagePlanValue } from './imageOperatorPlanTypes';
+import type { ImageOperatorCapability, ImageOperatorPlan, ImageOperatorSampleScope, ImagePlanInstruction } from './imageOperatorPlanTypes';
 export { createDefaultInvertImageGraph, migrateImageOperatorGraph } from './imageOperatorMigration';
 export { createImageOperatorEvaluator, evaluateImageOperatorPlan } from './imageOperatorEvaluation';
 export type { ImageOperatorCapability, ImageOperatorEvaluationContext, ImageOperatorPlan, ImageOperatorSampleScope, ImagePlanInstruction, ImagePlanValue } from './imageOperatorPlanTypes';
@@ -109,7 +110,9 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     let register: number;
     const resourceRegister = lowerResource(current, output);
     if (resourceRegister !== undefined) { visiting.delete(visitKey); registers.set(cacheKey, resourceRegister); return resourceRegister; }
-    switch (current.operator) {
+    const pointwise = pointwiseLoweringFor(current.operator, output);
+    if (pointwise) register = lowerPointwiseNode(pointwise, current, input => visitSource(current, input), emit);
+    else switch (current.operator) {
       case 'image.frame': register = emit({ nodeId: current.id, operation: 'input', type: 'image', inputs: [] }); break;
       case 'image.normalized-uv': register = emit({ nodeId: current.id, operation: 'uv', type: 'vec2', inputs: [] }); break;
       case 'image.resolution': register = emit({ nodeId: current.id, operation: 'resolution', type: 'vec2', inputs: [] }); break;
@@ -343,52 +346,6 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         }
         register = emit({ nodeId: current.id, operation: 'parameter-color', type: 'vec4', inputs: [], value: slot }); break;
       }
-      case 'math.subtract.scalar': {
-        const b = visitSource(current, 'b');
-        register = current.bypassed ? b : emit({ nodeId: current.id, operation: 'subtract', type: 'scalar', inputs: [visitSource(current, 'a'), b] });
-        break;
-      }
-      case 'math.add.scalar': case 'math.multiply.scalar': case 'math.divide-ieee.scalar': {
-        const a = visitSource(current, 'a');
-        const operation = current.operator === 'math.add.scalar' ? 'add-scalar'
-          : current.operator === 'math.multiply.scalar' ? 'multiply-scalar' : 'divide-ieee-scalar';
-        register = current.bypassed ? a : emit({ nodeId: current.id, operation, type: 'scalar', inputs: [a, visitSource(current, 'b')] });
-        break;
-      }
-      case 'math.reciprocal.scalar': case 'math.exp2.scalar': case 'math.fract.scalar': {
-        const value = visitSource(current, 'value');
-        const operation = current.operator === 'math.reciprocal.scalar' ? 'reciprocal-scalar'
-          : current.operator === 'math.exp2.scalar' ? 'exp2-scalar' : 'fract-scalar';
-        register = current.bypassed ? value : emit({ nodeId: current.id, operation, type: 'scalar', inputs: [value] });
-        break;
-      }
-      case 'math.floor.scalar': {
-        const value = visitSource(current, 'value');
-        register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'floor-scalar', type: 'scalar', inputs: [value] });
-        break;
-      }
-      case 'math.round-even.scalar': {
-        const value = visitSource(current, 'value');
-        register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'round-even-scalar', type: 'scalar', inputs: [value] });
-        break;
-      }
-      case 'math.step.scalar': register = emit({ nodeId: current.id, operation: 'step-scalar', type: 'scalar',
-        inputs: [visitSource(current, 'edge'), visitSource(current, 'value')] }); break;
-      case 'math.max.scalar': {
-        const a = visitSource(current, 'a');
-        register = current.bypassed ? a : emit({ nodeId: current.id, operation: 'max-scalar', type: 'scalar', inputs: [a, visitSource(current, 'b')] });
-        break;
-      }
-      case 'math.min.scalar': case 'math.power.scalar': {
-        const a = visitSource(current, 'a'), operation = current.operator === 'math.min.scalar' ? 'min-scalar' : 'power-scalar';
-        register = current.bypassed ? a : emit({ nodeId: current.id, operation, type: 'scalar', inputs: [a, visitSource(current, 'b')] }); break;
-      }
-      case 'math.atan2.scalar': register = emit({ nodeId: current.id, operation: 'atan2-scalar', type: 'scalar', inputs: [visitSource(current, 'y'), visitSource(current, 'x')] }); break;
-      case 'math.tan.scalar': case 'math.atan.scalar': case 'math.abs.scalar': {
-        const value = visitSource(current, 'value');
-        const operation = current.operator === 'math.tan.scalar' ? 'tan-scalar' : current.operator === 'math.atan.scalar' ? 'atan-scalar' : 'abs-scalar';
-        register = current.bypassed ? value : emit({ nodeId: current.id, operation, type: 'scalar', inputs: [value] }); break;
-      }
       case 'convert.degrees-to-radians.scalar': {
         const linked = source(current, 'value');
         if (current.bypassed) { register = visit(linked.node, linked.output); break; }
@@ -424,168 +381,12 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
       case 'pattern.bayer4.vec2': register = emit({ nodeId: current.id, operation: 'bayer4-vec2', type: 'scalar', inputs: [visitSource(current, 'value')] }); break;
       case 'optics.project-radius.scalar': register = emit({ nodeId: current.id, operation: 'project-radius', type: 'scalar', inputs: [visitSource(current, 'theta'), visitSource(current, 'maxTheta'), visitSource(current, 'model')] }); break;
       case 'optics.unproject-radius.scalar': register = emit({ nodeId: current.id, operation: 'unproject-radius', type: 'scalar', inputs: [visitSource(current, 'radius'), visitSource(current, 'maxTheta'), visitSource(current, 'model')] }); break;
-      case 'math.clamp.scalar': {
-        const value = visitSource(current, 'value');
-        register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'clamp-scalar', type: 'scalar',
-          inputs: [value, visitSource(current, 'min'), visitSource(current, 'max')] });
-        break;
-      }
-      case 'math.sqrt.scalar': {
-        const value = visitSource(current, 'value');
-        register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'sqrt-scalar', type: 'scalar', inputs: [value] });
-        break;
-      }
       case 'math.gaussian.scalar': register = emit({ nodeId: current.id, operation: 'gaussian-scalar', type: 'scalar',
         inputs: [visitSource(current, 'value'), visitSource(current, 'sigma')] }); break;
-      case 'math.smoothstep.scalar': register = emit({ nodeId: current.id, operation: 'smoothstep-scalar', type: 'scalar',
-        inputs: [visitSource(current, 'edge0'), visitSource(current, 'edge1'), visitSource(current, 'value')] }); break;
-      case 'math.mix.scalar': {
-        const a = visitSource(current, 'a');
-        register = current.bypassed ? a : emit({ nodeId: current.id, operation: 'mix-scalar', type: 'scalar',
-          inputs: [a, visitSource(current, 'b'), visitSource(current, 't')] });
-        break;
-      }
-      case 'math.add.vec2': case 'math.subtract.vec2': case 'math.multiply.vec2': case 'math.divide-ieee.vec2': {
-        const a = visitSource(current, 'a');
-        register = current.bypassed ? a : emit({ nodeId: current.id,
-          operation: current.operator === 'math.add.vec2' ? 'add-vec2' : current.operator === 'math.subtract.vec2' ? 'subtract-vec2'
-            : current.operator === 'math.multiply.vec2' ? 'multiply-vec2' : 'divide-vec2', type: 'vec2',
-          inputs: [a, visitSource(current, 'b')] });
-        break;
-      }
-      case 'vector.dot.vec2': register = emit({ nodeId: current.id, operation: 'dot-vec2', type: 'scalar',
-        inputs: [visitSource(current, 'a'), visitSource(current, 'b')] }); break;
-      case 'vector.length.vec2': register = emit({ nodeId: current.id, operation: 'length-vec2', type: 'scalar',
-        inputs: [visitSource(current, 'value')] }); break;
-      case 'vector.unit-direction.scalar': register = emit({ nodeId: current.id, operation: 'unit-direction', type: 'vec2', inputs: [visitSource(current, 'angle')] }); break;
-      case 'math.floor.vec2': {
-        const value = visitSource(current, 'value'); register = current.bypassed ? value
-          : emit({ nodeId: current.id, operation: 'floor-vec2', type: 'vec2', inputs: [value] }); break;
-      }
-      case 'math.fract.vec2': {
-        const value = visitSource(current, 'value'); register = current.bypassed ? value
-          : emit({ nodeId: current.id, operation: 'fract-vec2', type: 'vec2', inputs: [value] }); break;
-      }
-      case 'coordinates.mirror-repeat.vec2': {
-        const value = visitSource(current, 'value'); register = current.bypassed ? value
-          : emit({ nodeId: current.id, operation: 'mirror-repeat-vec2', type: 'vec2', inputs: [value] }); break;
-      }
-      case 'math.clamp.vec2': {
-        const value = visitSource(current, 'value'); register = current.bypassed ? value
-          : emit({ nodeId: current.id, operation: 'clamp-vec2', type: 'vec2', inputs: [value, visitSource(current, 'min'), visitSource(current, 'max')] }); break;
-      }
-      case 'vector.reduce-min.vec2': register = emit({ nodeId: current.id, operation: 'reduce-min-vec2', type: 'scalar',
-        inputs: [visitSource(current, 'value')] }); break;
       case 'noise.hash2d.vec2': register = emit({ nodeId: current.id, operation: 'hash2d-vec2', type: 'scalar',
         inputs: [visitSource(current, 'value')] }); break;
-      case 'math.sin.scalar': case 'math.cos.scalar': case 'math.exp.scalar': {
-        const value = visitSource(current, 'value');
-        register = current.bypassed ? value : emit({ nodeId: current.id,
-          operation: current.operator === 'math.sin.scalar' ? 'sin-scalar' : current.operator === 'math.cos.scalar' ? 'cos-scalar' : 'exp-scalar', type: 'scalar', inputs: [value] });
-        break;
-      }
-      case 'convert.scalar-to-vec2': register = emit({ nodeId: current.id, operation: 'scalar-to-vec2', type: 'vec2',
-        inputs: [visitSource(current, 'value')] }); break;
-      case 'convert.scalar-to-vec4': register = emit({ nodeId: current.id, operation: 'scalar-to-vec4', type: 'vec4', inputs: [visitSource(current, 'value')] }); break;
-      case 'math.divide-ieee.vec4': {
-        const a = visitSource(current, 'a'); register = current.bypassed ? a : emit({ nodeId: current.id, operation: 'divide-vec4', type: 'vec4', inputs: [a, visitSource(current, 'b')] }); break;
-      }
-      case 'math.multiply.vec4': {
-        const a = visitSource(current, 'a'); register = current.bypassed ? a : emit({ nodeId: current.id, operation: 'multiply-vec4', type: 'vec4', inputs: [a, visitSource(current, 'b')] }); break;
-      }
-      case 'math.multiply.image-scalar': case 'math.multiply.rgb-scalar': case 'math.multiply.vec2-scalar': {
-        const a = visitSource(current, 'a'), type = current.operator.includes('.image-') ? 'image' : current.operator.includes('.rgb-') ? 'rgb' : 'vec2';
-        register = current.bypassed ? a : emit({ nodeId: current.id, operation: 'multiply-vector-scalar', type, inputs: [a, visitSource(current, 'b')] }); break;
-      }
-      case 'math.divide-ieee.rgb-scalar': case 'math.divide-ieee.vec2-scalar': {
-        const a = visitSource(current, 'a'); register = current.bypassed ? a : emit({ nodeId: current.id,
-          operation: 'divide-vector-scalar', type: current.operator === 'math.divide-ieee.rgb-scalar' ? 'rgb' : 'vec2',
-          inputs: [a, visitSource(current, 'b')] }); break;
-      }
-      case 'math.clamp.rgb-scalar': { const value = visitSource(current, 'value'); register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'clamp-rgb-scalar', type: 'rgb', inputs: [value, visitSource(current, 'min'), visitSource(current, 'max')] }); break; }
-      case 'convert.vec4-to-rgb': register = emit({ nodeId: current.id, operation: 'vec4-to-rgb', type: 'rgb', inputs: [visitSource(current, 'value')] }); break;
-      case 'compare.greater.scalar': register = emit({ nodeId: current.id, operation: 'greater-scalar', type: 'boolean',
-        inputs: [visitSource(current, 'a'), visitSource(current, 'b')] }); break;
-      case 'logic.and.boolean': register = emit({ nodeId: current.id, operation: 'and-boolean', type: 'boolean',
-        inputs: [visitSource(current, 'a'), visitSource(current, 'b')] }); break;
-      case 'select.scalar': register = emit({ nodeId: current.id, operation: 'select-scalar', type: 'scalar',
-        inputs: [visitSource(current, 'falseValue'), visitSource(current, 'trueValue'), visitSource(current, 'condition')] }); break;
-      case 'select.vec2': register = emit({ nodeId: current.id, operation: 'select-vec2', type: 'vec2',
-        inputs: [visitSource(current, 'falseValue'), visitSource(current, 'trueValue'), visitSource(current, 'condition')] }); break;
-      case 'convert.image-to-vec4': register = emit({ nodeId: current.id, operation: 'image-to-vec4', type: 'vec4', inputs: [visitSource(current, 'image')] }); break;
-      case 'convert.vec4-to-image': register = emit({ nodeId: current.id, operation: 'vec4-to-image', type: 'image', inputs: [visitSource(current, 'value')] }); break;
-      case 'vector.split.vec2': case 'vector.split.vec3': case 'vector.split.vec4': {
-        const component = ['x', 'y', 'z', 'w'].indexOf(output);
-        if (component < 0) throw new Error(`Unsupported vector component: ${output}`);
-        register = emit({ nodeId: current.id, operation: 'split-component', type: 'scalar', inputs: [visitSource(current, 'value')], value: component }); break;
-      }
-      case 'vector.combine.vec2': case 'vector.combine.vec3': case 'vector.combine.vec4': {
-        const size = Number(current.operator.at(-1));
-        register = emit({ nodeId: current.id, operation: 'combine-vector', type: `vec${size}` as ImagePlanValue,
-          inputs: ['x', 'y', 'z', 'w'].slice(0, size).map(id => visitSource(current, id)) }); break;
-      }
-      case 'vector.split.rgba': register = emit({ nodeId: current.id, operation: output === 'alpha' ? 'split-alpha' : 'split-rgb', type: output === 'alpha' ? 'alpha' : 'rgb', inputs: [visitSource(current, 'image')] }); break;
-      case 'convert.scalar-to-rgb': register = emit({ nodeId: current.id, operation: 'scalar-to-rgb', type: 'rgb', inputs: [visitSource(current, 'value')] }); break;
-      case 'convert.alpha-to-scalar': register = emit({ nodeId: current.id, operation: 'pass-f32', type: 'scalar', inputs: [visitSource(current, 'alpha')] }); break;
-      case 'convert.scalar-to-alpha': register = emit({ nodeId: current.id, operation: 'pass-f32', type: 'alpha', inputs: [visitSource(current, 'value')] }); break;
-      case 'math.subtract.rgb': {
-        const b = visitSource(current, 'b');
-        register = current.bypassed ? b : emit({ nodeId: current.id, operation: 'subtract-rgb', type: 'rgb', inputs: [visitSource(current, 'a'), b] });
-        break;
-      }
-      case 'math.add.rgb': {
-        const a = visitSource(current, 'a');
-        register = current.bypassed ? a : emit({ nodeId: current.id, operation: 'add-rgb', type: 'rgb', inputs: [a, visitSource(current, 'b')] });
-        break;
-      }
-      case 'math.multiply.rgb': {
-        const a = visitSource(current, 'a');
-        register = current.bypassed ? a : emit({ nodeId: current.id, operation: 'multiply-rgb', type: 'rgb', inputs: [a, visitSource(current, 'b')] });
-        break;
-      }
-      case 'math.divide-ieee.rgb': case 'math.max.rgb': case 'math.power.rgb': {
-        const a = visitSource(current, 'a');
-        const operation = current.operator === 'math.divide-ieee.rgb' ? 'divide-ieee-rgb'
-          : current.operator === 'math.max.rgb' ? 'max-rgb' : 'power-rgb';
-        register = current.bypassed ? a : emit({ nodeId: current.id, operation, type: 'rgb', inputs: [a, visitSource(current, 'b')] });
-        break;
-      }
-      case 'math.floor.rgb': {
-        const value = visitSource(current, 'value');
-        register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'floor-rgb', type: 'rgb', inputs: [value] });
-        break;
-      }
-      case 'math.clamp.rgb': {
-        const value = visitSource(current, 'value');
-        register = current.bypassed ? value : emit({ nodeId: current.id, operation: 'clamp-rgb', type: 'rgb', inputs: [value, visitSource(current, 'min'), visitSource(current, 'max')] });
-        break;
-      }
-      case 'math.mix.rgb': {
-        const b = visitSource(current, 'b');
-        register = current.bypassed ? b : emit({ nodeId: current.id, operation: 'mix-rgb', type: 'rgb', inputs: [visitSource(current, 'a'), b, visitSource(current, 't')] });
-        break;
-      }
-      case 'math.mix.vec4': {
-        const b = visitSource(current, 'b');
-        register = current.bypassed ? b : emit({ nodeId: current.id, operation: 'mix-rgb', type: 'vec4', inputs: [visitSource(current, 'a'), b, visitSource(current, 't')] });
-        break;
-      }
-      case 'math.mix-components.rgb': {
-        const b = visitSource(current, 'b');
-        register = current.bypassed ? b : emit({ nodeId: current.id, operation: 'mix-components-rgb', type: 'rgb',
-          inputs: [visitSource(current, 'a'), b, visitSource(current, 't')] });
-        break;
-      }
-      case 'vector.reduce-min.rgb': case 'vector.reduce-max.rgb': register = emit({ nodeId: current.id,
-        operation: current.operator === 'vector.reduce-min.rgb' ? 'reduce-min-rgb' : 'reduce-max-rgb', type: 'scalar', inputs: [visitSource(current, 'rgb')] }); break;
-      case 'color.luminance-rec601.rgb': register = emit({ nodeId: current.id, operation: 'luminance-rec601', type: 'scalar', inputs: [visitSource(current, 'rgb')] }); break;
-      case 'color.luminance-rec709.rgb': case 'color.luminance-rec709.image': register = emit({ nodeId: current.id, operation: 'luminance-rec709', type: 'scalar',
-        inputs: [visitSource(current, current.operator.endsWith('.image') ? 'image' : 'rgb')] }); break;
-      case 'convert.rgb-to-vec3': register = emit({ nodeId: current.id, operation: 'rgb-to-vec3', type: 'vec3', inputs: [visitSource(current, 'rgb')] }); break;
-      case 'convert.vec3-to-rgb': register = emit({ nodeId: current.id, operation: 'vec3-to-rgb', type: 'rgb', inputs: [visitSource(current, 'value')] }); break;
       case 'convert.rgb-to-hsv': register = emit({ nodeId: current.id, operation: 'rgb-to-hsv', type: 'vec3', inputs: [visitSource(current, 'rgb')] }); break;
       case 'convert.hsv-to-rgb': register = emit({ nodeId: current.id, operation: 'hsv-to-rgb', type: 'rgb', inputs: [visitSource(current, 'value')] }); break;
-      case 'vector.combine.rgba': register = emit({ nodeId: current.id, operation: 'combine', type: 'image', inputs: [visitSource(current, 'rgb'), visitSource(current, 'alpha')] }); break;
       default: throw new Error(`Unsupported local image operator: ${current.operator}`);
     }
     visiting.delete(visitKey); registers.set(cacheKey, register); return register;
