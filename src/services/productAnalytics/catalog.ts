@@ -408,6 +408,28 @@ export const PRODUCT_ANALYTICS_EVENT_DEFINITIONS = {
       runtime_bucket: durationBucket,
     },
   },
+  preview_health: {
+    properties: {
+      black_longest_s: count(86_400),
+      black_s: count(86_400),
+      decoder: identifier(32),
+      drops: count(1_000_000),
+      first_frame_ms: {
+        integer: true,
+        kind: 'number',
+        maximum: 600_000,
+        minimum: -1,
+      },
+      fps_avg: { kind: 'number', maximum: 1_000, minimum: 0 },
+      fps_min: { kind: 'number', maximum: 1_000, minimum: 0 },
+      fps_target: { kind: 'number', maximum: 1_000, minimum: 0 },
+      frozen_s: count(86_400),
+      kind: choice(['window', 'black_alert', 'black_recovered'] as const),
+      layers: count(1_000),
+      samples: count(86_400),
+      window_s: count(86_400),
+    },
+  },
   panel_opened: {
     properties: {
       panel: identifier(48),

@@ -8,6 +8,7 @@ import {
   type ProductAnalyticsExportFailureStage,
 } from './failureClassification';
 import { productAnalytics } from './index';
+import { startPreviewHealthSession, stopPreviewHealthSession } from '../previewHealth/previewHealthTelemetry';
 import { classifyTimelineEdit } from './timelineEditClassification';
 
 export type AnalyticsDurationBucket =
@@ -122,11 +123,13 @@ export function trackPlaybackStarted(speed: number): void {
         ? 'fast'
         : 'normal';
   productAnalytics.track('playback_started', { speed_bucket: speedBucket });
+  startPreviewHealthSession();
 }
 
 export function trackPlaybackStopped(reason: 'ended' | 'pause' | 'stop'): void {
   if (playbackStartedAt === null) return;
   const startedAt = playbackStartedAt;
+  stopPreviewHealthSession();
   playbackStartedAt = null;
   productAnalytics.track('playback_stopped', {
     reason,
