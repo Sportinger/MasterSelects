@@ -39,17 +39,31 @@ export interface MxfGopEngineStats {
 }
 
 /**
- * Decoded frames kept for upcoming requests. Frames beyond this are dropped, and
- * a later request for a dropped frame forces a key-frame restart, so the cap must
- * stay above READY_AHEAD plus the decoder's reorder depth.
+ * Frame budget (zero-copy): decoder outputs are GPU surfaces from a fixed pool
+ * that also holds the decoder's reference pictures. Chrome's hardware H.264
+ * decoder has 10 at 4K and stops dead when they are all in use (measured: 6 held
+ * -> 225 fps, 10 held -> stall; the DPB takes ~4-5). Ready frames here plus the
+ * consumer's current/prefetched frame must stay within the remainder.
  */
-const MAX_READY_FRAMES = 10;
-/** After serving a request the engine keeps decoding until this many frames are ready. */
-const READY_AHEAD = 6;
+const MAX_READY_FRAMES = 5;
+/**
+ * Packets allowed inside the decoder at once (queued or held for reordering).
+ * Enough for B-frame reordering; more only produces frames nobody asked for yet,
+ * which then overflow the ready window and force restarts when requested.
+ */
+const MAX_IN_DECODER = 4;
+/**
+ * After serving a request the engine keeps decoding until this many frames are
+ * ready or still inside the decoder, so forward playback finds them decoded.
+ */
+const READY_AHEAD = 2;
 /** Re-check interval while waiting for decoder capacity (never wait unbounded). */
 const CAPACITY_WAIT_MS = 100;
-/** Capacity waits without progress before held frames are released to unstall the decoder. */
-const STALL_WAITS_BEFORE_RELEASE = 5;
+/**
+ * Capacity waits without progress before held frames are released (last resort:
+ * releasing ready frames forces restarts, so only after ~2 s of a real stall).
+ */
+const STALL_WAITS_BEFORE_RELEASE = 20;
 /** Keep at most this many packets queued inside the decoder. */
 export const MAX_GOP_DECODE_QUEUE = 4;
 /** Jumping further than this many stored units ahead restarts from the target's key frame. */
@@ -85,6 +99,9 @@ export class MxfGopEngine {
   /** Incremented on every restart; packets read for an older generation are dropped. */
   private generation = 0;
   private pumpActive = false;
+  /** Packets fed minus frames output since the last reset: frames still inside the decoder. */
+  private inDecoder = 0;
+  private outputWaiters: (() => void)[] = [];
   /** Requests are served one at a time; callers may still issue them concurrently. */
   private queue: Promise<unknown> = Promise.resolve();
 
@@ -181,6 +198,8 @@ export class MxfGopEngine {
     this.readyFrames.clear();
     decoder.reset();
     this.generation += 1;
+    this.inDecoder = 0;
+    for (const wake of this.outputWaiters.splice(0)) wake();
     this.decoderError = null;
     this.nextStored = keyStored;
     this.lastEmittedDisplay = -1;
@@ -197,6 +216,8 @@ export class MxfGopEngine {
       return;
     }
     const display = this.displayIndexOf(frame);
+    this.inDecoder = Math.max(0, this.inDecoder - 1);
+    for (const wake of this.outputWaiters.splice(0)) wake();
     this.lastEmittedDisplay = Math.max(this.lastEmittedDisplay, display);
     const pending = this.pending;
     if (pending && display === pending.displayIndex) {
@@ -241,6 +262,7 @@ export class MxfGopEngine {
   private async drainToEnd(decoder: GopDecoder): Promise<void> {
     this.flushes += 1;
     await decoder.flush();
+    this.inDecoder = 0;
     this.nextStored = -1;
     if (this.pending) throw new Error(`${this.label} frame ${this.pending.displayIndex} was not produced`);
   }
@@ -260,15 +282,15 @@ export class MxfGopEngine {
       });
   }
 
-  private wantsMoreFrames(decoder: GopDecoder): boolean {
+  private wantsMoreFrames(): boolean {
     if (this.pending) return true;
-    return this.nextStored >= 0 && this.readyFrames.size + decoder.queueSize < READY_AHEAD;
+    return this.nextStored >= 0 && this.readyFrames.size + this.inDecoder < READY_AHEAD;
   }
 
   private async pump(): Promise<void> {
     let fedPastTarget = 0;
     let stalledWaits = 0;
-    while (!this.closed && this.decoder && this.wantsMoreFrames(this.decoder)) {
+    while (!this.closed && this.decoder && this.wantsMoreFrames()) {
       const decoder = this.decoder;
       if (this.decoderError) {
         if (this.pending) throw this.decoderError;
@@ -278,6 +300,22 @@ export class MxfGopEngine {
       if (this.nextStored >= this.source.frameCount) {
         await this.drainToEnd(decoder);
         return;
+      }
+      if (this.inDecoder >= MAX_IN_DECODER) {
+        // Enough in flight for reordering: wait for the next output instead of overfeeding.
+        const progressed = await Promise.race([
+          new Promise<boolean>((resolve) => this.outputWaiters.push(() => resolve(true))),
+          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), CAPACITY_WAIT_MS)),
+        ]);
+        if (!progressed) {
+          this.stalls += 1;
+          stalledWaits += 1;
+          // A decoder that needs more input to release a frame (deep reorder) must not deadlock.
+          if (stalledWaits >= 3) this.inDecoder = Math.max(0, MAX_IN_DECODER - 1);
+        } else {
+          stalledWaits = 0;
+        }
+        continue;
       }
       if (decoder.queueSize >= MAX_GOP_DECODE_QUEUE) {
         const progressed = await Promise.race([
@@ -305,6 +343,7 @@ export class MxfGopEngine {
       if (!packet) throw new Error(`${this.label} packet ${index} is missing`);
       decoder.decode(packet);
       this.packetsFed += 1;
+      this.inDecoder += 1;
       if (this.pending && packet.displayIndex >= this.pending.displayIndex) {
         fedPastTarget += 1;
         // Reordering never needs more than a GOP of look-ahead; then force the output out.
