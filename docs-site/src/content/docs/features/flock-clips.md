@@ -477,13 +477,15 @@ current editor state; expired frame resources are never reused. A newer seek or
 replaced target suppresses continuation of the old request. Errors without
 completed progress stop instead of triggering an unbounded retry loop.
 Other 3D layer kinds, scene effectors, gizmos and complete
-cache control routing remain outstanding. The default editor preview
-remains on the main renderer; this is not yet the full Worker migration.
+cache control routing remain outstanding; this is not yet the full Worker migration.
 
-For a development-only integration check, open
-`/editor?renderHost=worker-gpu-only`. The host is selected before preview canvases
+Local development defaults to strict `worker-gpu-only`, including `/editor`
+without a query parameter. Automatic main-renderer fallback is disabled, even
+when worker capabilities are unavailable. Explicit `?renderHost=main` is still
+available for diagnostics. Production startup is unchanged.
+The host is selected before preview canvases
 acquire a context, allowing the existing editor preview to register directly with
-the Worker. This explicit URL is ignored in production; ordinary reloads still
+the Worker. Development URL overrides are ignored in production; reloads still
 clear stale experimental host preferences. A live mode switch does not transfer
 canvases that already belong to the main renderer.
 

@@ -9,12 +9,13 @@ describe('explicit development render host startup', () => {
     },
   );
   it('does not reactivate stale experimental storage on ordinary reloads', () => {
-    expect(renderHostStartupMode(true, '', 'worker-gpu-only')).toBeNull();
+    expect(renderHostStartupMode(true, '', 'worker-gpu-only')).toBe('worker-gpu-only');
     expect(renderHostStartupMode(false, '', 'worker-presenting')).toBeNull();
-    expect(renderHostStartupMode(true, '', 'main')).toBe('main');
+    expect(renderHostStartupMode(true, '', 'main')).toBe('worker-gpu-only');
+    expect(renderHostStartupMode(true, '', null)).toBe('worker-gpu-only');
   });
   it('ignores unknown requests and lets an explicit dev URL override a main preference', () => {
-    expect(renderHostStartupMode(true, '?renderHost=unknown', 'main')).toBe('main');
+    expect(renderHostStartupMode(true, '?renderHost=unknown', 'main')).toBe('worker-gpu-only');
     expect(renderHostStartupMode(true, '?renderHost=worker-gpu-only', 'main')).toBe('worker-gpu-only');
     expect(renderHostStartupMode(false, '?renderHost=worker-gpu-only', 'main')).toBe('main');
   });

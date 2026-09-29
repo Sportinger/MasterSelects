@@ -22,6 +22,7 @@ export interface SelectRenderHostOptions<T> {
   readonly preferWorkerPrimary: boolean;
   readonly workerPrimaryAvailable?: boolean;
   readonly workerPrimaryBlockers?: readonly string[];
+  readonly allowMainFallback?: boolean;
 }
 
 function normalizeBlockers(blockers: readonly string[] | undefined): readonly string[] {
@@ -55,7 +56,20 @@ export function selectRenderHost<T>(options: SelectRenderHostOptions<T>): Render
   const workerPrimaryAvailable = workerPrimaryRegistered && options.workerPrimaryAvailable === true;
   const explicitBlockers = normalizeBlockers(options.workerPrimaryBlockers);
 
-  if (options.preferWorkerPrimary && workerPrimaryAvailable && options.workerPrimary) {
+  if (options.allowMainFallback === false && !workerPrimaryAvailable) {
+    if (!options.workerPrimary) throw new Error('Worker render host unavailable; main fallback is disabled');
+    return {
+      host: options.workerPrimary,
+      telemetry: {
+        selectedId: 'worker-primary', selectedRole: 'primary',
+        workerPrimaryRequested: true, workerPrimaryRegistered: true, workerPrimaryAvailable: false,
+        blockers: explicitBlockers.length ? explicitBlockers : ['worker render host unavailable'],
+        reason: 'worker unavailable; main fallback is disabled',
+      },
+    };
+  }
+
+  if ((options.preferWorkerPrimary || options.allowMainFallback === false) && workerPrimaryAvailable && options.workerPrimary) {
     return {
       host: options.workerPrimary,
       telemetry: {

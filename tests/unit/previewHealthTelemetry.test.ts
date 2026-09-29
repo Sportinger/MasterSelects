@@ -13,6 +13,16 @@ const sample = (over: Partial<PreviewHealthSample> = {}): PreviewHealthSample =>
 });
 
 describe('preview health telemetry', () => {
+  it('reports cadence without claiming pixel health when pixels were not sampled', () => {
+    const acc = createPreviewHealthAccumulator(0);
+    recordPreviewHealthSample(acc, sample({ hash: null, nonBlankRatio: null }), 500);
+    const properties = buildPreviewHealthProperties(acc, 'window', 500);
+    expect(properties.fps_avg).toBe(30);
+    for (const key of ['black_s', 'black_longest_s', 'frozen_s', 'first_frame_ms']) {
+      expect(properties).not.toHaveProperty(key);
+    }
+  });
+
   it('alerts after sustained black with layers, recovers, and records time to first frame', () => {
     const acc = createPreviewHealthAccumulator(0);
     const signals = [0, 1, 2, 3].map((i) =>

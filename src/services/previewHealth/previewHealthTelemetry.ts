@@ -1,7 +1,6 @@
-// Samples the real preview canvas during playback: delivered FPS, black/unchanged
-// frames and time to first visible frame. Only aggregate numbers leave the browser.
+// Collects playback cadence without synchronous GPU readback. Pixel-health
+// aggregation supports supplied fingerprints; the live sampler leaves them unknown.
 import { Logger } from '../logger';
-import { fingerprintCanvas, type FrameFingerprint } from '../aiTools/frameFingerprint';
 import type { renderHostPort as RenderHostPort } from '../render/renderHostPort';
 import { productAnalytics } from '../productAnalytics';
 import type { ProductAnalyticsProperties } from '../productAnalytics/catalog';
@@ -41,6 +40,7 @@ export interface PreviewHealthAccumulator {
   windowStartedAt: number;
   firstFrameMs: number;
   samples: number;
+  pixelSamples: number;
   fpsSum: number;
   fpsMin: number;
   targetFps: number;
@@ -58,7 +58,7 @@ export interface PreviewHealthAccumulator {
 
 export function createPreviewHealthAccumulator(now: number): PreviewHealthAccumulator {
   return {
-    startedAt: now, windowStartedAt: now, firstFrameMs: -1, samples: 0, fpsSum: 0,
+    startedAt: now, windowStartedAt: now, firstFrameMs: -1, samples: 0, pixelSamples: 0, fpsSum: 0,
     fpsMin: Number.POSITIVE_INFINITY, targetFps: 0, drops: 0, dropsAtWindowStart: null,
     blackSamples: 0, blackStreak: 0, blackLongest: 0, blackAlerted: false,
     frozenSamples: 0, lastHash: null, layers: 0, decoder: 'none',
@@ -85,6 +85,12 @@ export function recordPreviewHealthSample(
   acc.decoder = sample.decoder;
   if (acc.dropsAtWindowStart === null) acc.dropsAtWindowStart = sample.drops;
   acc.drops = Math.max(0, sample.drops - acc.dropsAtWindowStart);
+
+  if (sample.nonBlankRatio === null) {
+    acc.lastHash = null;
+    return 'none';
+  }
+  acc.pixelSamples += 1;
 
   const black = isBlackPreviewSample(sample);
   let signal: PreviewHealthSignal = 'none';
@@ -123,10 +129,12 @@ export function buildPreviewHealthProperties(
     fps_min: Number.isFinite(acc.fpsMin) ? Math.round(acc.fpsMin * 10) / 10 : 0,
     fps_target: acc.targetFps,
     drops: acc.drops,
-    black_s: Math.round(seconds(acc.blackSamples)),
-    black_longest_s: Math.round(seconds(acc.blackLongest)),
-    frozen_s: Math.round(seconds(acc.frozenSamples)),
-    first_frame_ms: acc.firstFrameMs,
+    ...(acc.pixelSamples > 0 ? {
+      black_s: Math.round(seconds(acc.blackSamples)),
+      black_longest_s: Math.round(seconds(acc.blackLongest)),
+      frozen_s: Math.round(seconds(acc.frozenSamples)),
+      first_frame_ms: acc.firstFrameMs,
+    } : {}),
     layers: acc.layers,
     decoder: acc.decoder.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'none',
   };
@@ -146,15 +154,13 @@ function collectSample(): PreviewHealthSample | null {
   if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return null;
   let stats;
   try { stats = renderHostPort.getStats(); } catch { return null; }
-  let fingerprint: FrameFingerprint | null = null;
-  const canvas = renderHostPort.getCaptureCanvas()?.canvas ?? null;
-  if (canvas && canvas.width > 0 && canvas.height > 0) {
-    try { fingerprint = fingerprintCanvas(canvas, { sampleWidth: 16, sampleHeight: 9 }); } catch { /* unreadable canvas */ }
-  }
+  // Do not read GPU pixels synchronously during playback. Even a 16x9
+  // drawImage/getImageData sample can wait for the entire GPU queue and stall
+  // the UI. Pixel health stays unknown until an asynchronous sample is available.
   return {
     fps: deliveredFps(stats), targetFps: stats.targetFps ?? 0, drops: stats.drops?.count ?? 0,
     layerCount: stats.layerCount ?? 0, decoder: stats.decoder ?? 'none',
-    hash: fingerprint?.hash ?? null, nonBlankRatio: fingerprint?.nonBlankRatio ?? null,
+    hash: null, nonBlankRatio: null,
   };
 }
 
@@ -170,6 +176,7 @@ function resetWindow(acc: PreviewHealthAccumulator, now: number): void {
   acc.windowStartedAt = now; acc.samples = 0; acc.fpsSum = 0; acc.fpsMin = Number.POSITIVE_INFINITY;
   acc.dropsAtWindowStart = null; acc.drops = 0; acc.blackSamples = 0; acc.blackLongest = acc.blackStreak;
   acc.frozenSamples = 0;
+  acc.pixelSamples = 0;
 }
 
 export function startPreviewHealthSession(): void {

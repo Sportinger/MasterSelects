@@ -6,6 +6,11 @@ The system is deliberately separate from runtime debugging telemetry. Product an
 
 ## Privacy contract
 
+Playback health sampling uses cadence counters only. It does not synchronously
+copy or read GPU preview pixels during playback: even tiny pixel samples can
+stall the main thread while waiting for queued GPU work. Black-frame, frozen-frame
+and first-visible-frame properties are omitted when no pixel sample is available.
+
 - Collection can be disabled under **Settings > General > Privacy > Share product usage**.
 - Browser `Do Not Track` and Global Privacy Control signals disable collection.
 - The analytics session identifier exists only in memory. The system creates no analytics cookie and does not persist a cross-browser device identifier.

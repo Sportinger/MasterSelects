@@ -5,6 +5,7 @@ const host = vi.hoisted(() => {
   return {
     loaded: vi.fn(),
     getStats: vi.fn(() => ({ fps: 30, targetFps: 30, layerCount: 0 })),
+    getCaptureCanvas: vi.fn(() => { throw new Error('Synchronous GPU readback during playback'); }),
     ready: new Promise<void>((resolve) => { release = resolve; }),
     release: () => release(),
   };
@@ -13,7 +14,7 @@ const host = vi.hoisted(() => {
 vi.mock('../../src/services/render/renderHostPort', async () => {
   host.loaded();
   await host.ready;
-  return { renderHostPort: { getStats: host.getStats, getCaptureCanvas: () => null } };
+  return { renderHostPort: { getStats: host.getStats, getCaptureCanvas: host.getCaptureCanvas } };
 });
 vi.mock('../../src/services/productAnalytics', () => ({ productAnalytics: { track: vi.fn() } }));
 
@@ -38,6 +39,7 @@ it('defers render initialization and cannot restart a stopped session when loadi
     telemetry.startPreviewHealthSession();
     await vi.advanceTimersByTimeAsync(1000);
     expect(host.getStats).toHaveBeenCalledTimes(2);
+    expect(host.getCaptureCanvas).not.toHaveBeenCalled();
     telemetry.stopPreviewHealthSession();
     expect(vi.getTimerCount()).toBe(0);
   } finally {

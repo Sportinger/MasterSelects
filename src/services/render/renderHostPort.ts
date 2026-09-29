@@ -259,6 +259,7 @@ let instance: RenderHostPort = runtimeState.instance
     preferWorkerPrimary: flags.workerFirstRenderHost,
     workerPrimaryAvailable: workerPrimaryAvailableForMode(initialDevMode),
     workerPrimaryBlockers: workerPrimaryBlockersForMode(initialDevMode),
+    allowMainFallback: !runtimeState.workerPrimaryStrictWorkerOnly,
   }));
 if (!hotData?.renderHostRuntimeState && hotData?.activeRenderHostPort) {
   runtimeState.selectionTelemetry = hotData.activeRenderHostPort.getTelemetry().selection;
@@ -273,6 +274,7 @@ export function configureRenderHostSelection(options: ConfigureRenderHostSelecti
     preferWorkerPrimary: options.preferWorkerPrimary ?? flags.workerFirstRenderHost,
     workerPrimaryAvailable: options.workerPrimaryAvailable ?? workerPrimaryAvailableForMode(currentMode),
     workerPrimaryBlockers: options.workerPrimaryBlockers ?? workerPrimaryBlockersForMode(currentMode),
+    allowMainFallback: !runtimeState.workerPrimaryStrictWorkerOnly,
   }));
 }
 

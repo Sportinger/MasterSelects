@@ -45,10 +45,12 @@ capacity-dependent GPU budgets also apply to imported and shared snapshots.
 The opt-in Worker render path groups Flock, primitive meshes and scene lights and loads their
 image pigments, instance models and audio analysis in the Worker. Audio-driven
 checkpoints distinguish analysis content and clip placement; export preparation pins
-that identity across asynchronous work. The default preview remains
-on the main renderer while the remaining scene and control integrations are completed.
-Development can explicitly boot the Worker preview with
-`/editor?renderHost=worker-gpu-only`; production ignores this URL override.
+that identity across asynchronous work. Local development now starts with the strict
+Worker GPU preview, including ordinary `/editor` reloads. Automatic main-renderer
+fallback is disabled in this mode. An explicit development `?renderHost=main`
+remains available for diagnostics; production startup is unchanged.
+Playback health telemetry avoids synchronous GPU pixel reads, keeping those
+readback stalls off the UI thread; unavailable pixel-health metrics are omitted.
 The Worker preview reports its own Flock simulation, memory and checkpoint status
 to the inspector; nested occurrences remain separate in render-host diagnostics.
 `getStats.flockGpu` identifies the active renderer and includes the Worker's own
